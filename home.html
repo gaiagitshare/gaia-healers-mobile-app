@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <title>Today · Gaia Healers</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="gaia-config.js"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="gaia-shared.css" />
+</head>
+<body class="gaia-app gaia-page">
+  <svg width="0" height="0" aria-hidden="true"><defs><linearGradient id="gaia-ring-gradient" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="#7DD956"/><stop offset="100%" stop-color="#449422"/></linearGradient></defs></svg>
+  <div class="gaia-shell">
+    <header class="gaia-header">
+      <div class="flex items-center justify-between">
+        <a href="profile.html" class="flex items-center gap-3">
+          <div class="gaia-avatar gaia-avatar--md bg-gaia text-white">G</div>
+          <div>
+            <p class="gaia-eyebrow">Client Portal</p>
+            <h1 class="text-title text-ink">Today</h1>
+          </div>
+        </a>
+        <span class="gaia-badge gaia-badge--subtle">1,233</span>
+      </div>
+    </header>
+
+    <main class="gaia-main">
+      <div id="gaia-coach-anchor"></div>
+
+      <section>
+        <p class="gaia-section-label">Overview</p>
+        <div class="grid grid-cols-2 gap-3">
+          <a href="biowell.html" class="gaia-today-tile gaia-card-dark col-span-2 flex items-center gap-5 p-5">
+            <div class="gaia-score-ring gaia-score-ring--sm shrink-0">
+              <svg class="gaia-score-ring__svg" viewBox="0 0 100 100"><circle class="gaia-score-ring__track" cx="50" cy="50" r="42"/><circle class="gaia-score-ring__progress" cx="50" cy="50" r="42"/></svg>
+              <div class="gaia-score-ring__center"><span class="gaia-score-ring__value !text-white">87</span></div>
+            </div>
+            <div class="min-w-0 flex-1">
+              <p class="text-caption text-white/70">Bio-Well readiness</p>
+              <p class="mt-0.5 text-body text-white/90">Sacral focus · scanned 7:42 AM</p>
+              <p class="gaia-link mt-2 text-gaia-light">View analysis</p>
+            </div>
+          </a>
+          <a href="academy.html" class="gaia-today-tile gaia-card gaia-card-pad">
+            <p class="gaia-caption">Certification</p>
+            <p class="mt-1 text-headline text-ink">Advanced L1</p>
+            <p class="mt-0.5 text-micro text-gaia-dark">62% complete</p>
+          </a>
+          <a href="community.html" class="gaia-today-tile gaia-card gaia-card-pad">
+            <p class="gaia-caption">Community</p>
+            <p class="mt-1 text-headline text-ink">Bio-Well</p>
+            <p class="mt-0.5 text-micro text-ink-tertiary">12 new</p>
+          </a>
+        </div>
+      </section>
+
+      <section class="gaia-card gaia-card-pad-lg">
+        <p class="gaia-section-label !mb-2">Next step</p>
+        <h2 class="text-headline text-ink">Bio-Well Advanced Level 1</h2>
+        <p class="gaia-caption mt-1">Module 4 · Live with Dr. Nina Bashkir</p>
+        <div class="gaia-progress gaia-progress--md mt-5"><div class="gaia-progress__fill" style="width:62%"></div></div>
+        <p class="gaia-caption mt-2">18% until exam unlock</p>
+        <a href="academy.html" class="gaia-btn gaia-btn-primary mt-5">Resume training</a>
+      </section>
+
+      <section>
+        <p class="gaia-section-label">Growth journey</p>
+        <div class="gaia-card gaia-card-pad flex gap-2 overflow-x-auto hide-scrollbar">
+          <div class="journey-step done flex shrink-0 flex-col items-center gap-1.5 w-[4.5rem]"><span class="journey-dot h-2 w-2 rounded-full border-2"></span><span class="text-micro text-gaia-dark">Orientation</span></div>
+          <div class="journey-step done flex shrink-0 flex-col items-center gap-1.5 w-[4.5rem]"><span class="journey-dot h-2 w-2 rounded-full border-2"></span><span class="text-micro text-gaia-dark">Basic</span></div>
+          <div class="journey-step current flex shrink-0 flex-col items-center gap-1.5 w-[4.5rem]"><span class="journey-dot h-2.5 w-2.5 rounded-full border-2"></span><span class="text-micro font-semibold text-ink">Adv. L1</span></div>
+          <div class="journey-step locked flex shrink-0 flex-col items-center gap-1.5 w-[4.5rem]"><span class="journey-dot h-2 w-2 rounded-full border-2"></span><span class="text-micro text-ink-tertiary">Adv. L2</span></div>
+        </div>
+      </section>
+
+      <section>
+        <div class="mb-3 flex items-center justify-between">
+          <h2 class="gaia-section-title">Community</h2>
+          <a href="community.html" class="gaia-link">See all</a>
+        </div>
+        <div class="gaia-stack">
+          <a href="community.html" class="gaia-row">
+            <div class="gaia-tile-icon strip-biowell">BW</div>
+            <div class="min-w-0 flex-1"><p class="text-headline text-ink">Bio-Well Practitioners</p><p class="gaia-caption">376 members</p></div>
+            <span class="gaia-badge gaia-badge--live">12</span>
+          </a>
+          <a href="community.html" class="gaia-row">
+            <div class="gaia-tile-icon strip-biopulsar">BP</div>
+            <div class="min-w-0 flex-1"><p class="text-headline text-ink">BioPulsar Practitioners</p><p class="gaia-caption">505 members</p></div>
+          </a>
+        </div>
+      </section>
+
+      <section>
+        <div class="mb-3 flex items-center justify-between">
+          <h2 class="gaia-section-title">Event</h2>
+          <a href="community.html" class="gaia-link">Calendar</a>
+        </div>
+        <article class="gaia-card overflow-hidden">
+          <div class="strip-biowell px-5 py-4"><p class="text-micro text-white/80">Bio-Well Live</p><h3 class="mt-1 text-headline text-white">Advanced L1 Live Training</h3></div>
+          <div class="gaia-card-pad">
+            <p class="gaia-body">Dr. Nina Bashkir · Jun 12, 10:00 AM MT</p>
+            <div class="mt-3 flex items-center justify-between"><span class="gaia-caption">142 registered</span><span class="gaia-badge">RSVP'd</span></div>
+          </div>
+        </article>
+      </section>
+
+      <section class="gaia-card gaia-card-accent gaia-card-pad">
+        <div class="flex justify-between items-baseline">
+          <span class="text-headline text-ink">Continuing education</span>
+          <span class="gaia-tabular text-headline text-gaia-dark">18.5<span class="text-caption font-normal text-ink-tertiary"> / 24</span></span>
+        </div>
+        <div class="gaia-progress gaia-progress--md mt-4"><div class="gaia-progress__fill" style="width:77%"></div></div>
+        <p class="gaia-caption mt-2">Renewal Dec 2026 · <a href="academy.html" class="gaia-link">Catalog</a></p>
+      </section>
+    </main>
+  </div>
+  <script src="gaia-ui.js"></script>
+  <script src="shared-nav.js"></script>
+</body>
+</html>

@@ -1,0 +1,328 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+:root {
+  --gaia: #66cc33;
+  --gaia-dark: #4da626;
+  --gaia-light: #8fd966;
+  --gaia-muted: #e8f7dc;
+  --gaia-wash: #f4fbef;
+  --gaia-glow: rgba(102, 204, 51, 0.22);
+  --ink: #1c1c1e;
+  --ink-secondary: #636366;
+}
+
+html,
+body {
+  overflow: hidden;
+}
+
+body {
+  font-family: Inter, -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+.canvas-carousel {
+  position: relative;
+  width: 392px;
+  height: 440px;
+  overflow: hidden;
+  background: #fff;
+}
+
+.canvas-carousel .bg {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+}
+
+.bg-01 {
+  background:
+    radial-gradient(ellipse 120% 70% at 50% -10%, var(--gaia-glow), transparent 58%),
+    linear-gradient(180deg, #fff 0%, var(--gaia-wash) 100%);
+}
+
+.bg-02 {
+  background:
+    radial-gradient(ellipse 80% 50% at 100% 0%, rgba(102, 204, 51, 0.14), transparent 50%),
+    linear-gradient(165deg, #fff 0%, #f5f5f7 100%);
+}
+
+.bg-03 {
+  background:
+    radial-gradient(ellipse 90% 55% at 50% 0%, var(--gaia-glow), transparent 55%),
+    linear-gradient(180deg, var(--gaia-wash) 0%, #fff 55%, #f5f5f7 100%);
+}
+
+.bg-04 {
+  background:
+    radial-gradient(ellipse 70% 45% at 10% 90%, rgba(99, 102, 241, 0.07), transparent 45%),
+    radial-gradient(ellipse 80% 50% at 90% 10%, var(--gaia-glow), transparent 50%),
+    linear-gradient(180deg, #fafafa 0%, var(--gaia-wash) 100%);
+}
+
+.content {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  padding: 28px 24px 24px;
+}
+
+.mark {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  object-fit: cover;
+  margin-bottom: 14px;
+}
+
+.eyebrow {
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--gaia-dark);
+  margin-bottom: 8px;
+}
+
+.headline {
+  font-size: 20px;
+  font-weight: 700;
+  line-height: 1.12;
+  letter-spacing: -0.03em;
+  color: var(--ink);
+}
+
+.sub {
+  margin-top: 8px;
+  font-size: 12px;
+  font-weight: 400;
+  line-height: 1.4;
+  color: var(--ink-secondary);
+}
+
+.sub strong {
+  font-weight: 600;
+  color: var(--gaia-dark);
+}
+
+.visual {
+  margin-top: auto;
+  padding-top: 16px;
+}
+
+.ring-card {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 14px 16px;
+  border-radius: 14px;
+  background: linear-gradient(165deg, #2a2a2c, #1c1c1e);
+  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.12);
+}
+
+.ring {
+  width: 52px;
+  height: 52px;
+  border-radius: 50%;
+  border: 4px solid rgba(102, 204, 51, 0.35);
+  border-top-color: var(--gaia);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.ring span {
+  font-size: 18px;
+  font-weight: 700;
+  color: #fff;
+}
+
+.ring-card .meta h3 {
+  font-size: 13px;
+  font-weight: 600;
+  color: #fff;
+}
+
+.ring-card .meta p {
+  font-size: 10px;
+  color: rgba(255, 255, 255, 0.55);
+  margin-top: 2px;
+}
+
+.tool-row {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.tool {
+  border-radius: 10px;
+  padding: 10px 12px;
+  color: #fff;
+}
+
+.tool h3 {
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.tool p {
+  font-size: 9px;
+  opacity: 0.88;
+  margin-top: 2px;
+}
+
+.tool-biowell { background: linear-gradient(135deg, #1a2f4a, var(--gaia)); }
+.tool-biopulsar { background: linear-gradient(135deg, #3730a3, #818cf8); }
+.tool-biotekna { background: linear-gradient(135deg, #0d5c56, #2dd4bf); }
+
+.path {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  justify-content: center;
+  padding: 14px 12px;
+  border-radius: 14px;
+  background: #fff;
+  border: 1px solid rgba(0, 0, 0, 0.06);
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.06);
+}
+
+.step {
+  padding: 6px 10px;
+  border-radius: 100px;
+  font-size: 9px;
+  font-weight: 600;
+}
+
+.step.done { background: var(--gaia); color: #fff; }
+.step.current { background: #fff; color: var(--gaia-dark); box-shadow: 0 0 0 2px var(--gaia-muted); }
+.step.locked { background: #efeff0; color: #aeaeb2; }
+
+.network {
+  padding: 16px;
+  border-radius: 14px;
+  background: #fff;
+  border: 1px solid rgba(0, 0, 0, 0.06);
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.06);
+  text-align: center;
+}
+
+.network .stat {
+  font-size: 28px;
+  font-weight: 700;
+  letter-spacing: -0.03em;
+  color: var(--gaia-dark);
+}
+
+.network .label {
+  font-size: 11px;
+  color: var(--ink-secondary);
+  margin-top: 4px;
+}
+
+.dots {
+  display: flex;
+  justify-content: center;
+  gap: 6px;
+  margin-top: 10px;
+}
+
+.dot-node {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--gaia);
+  opacity: 0.35;
+}
+
+.dot-node:nth-child(2) { opacity: 0.55; }
+.dot-node:nth-child(3) { opacity: 0.75; }
+.dot-node:nth-child(4) { opacity: 1; }
+
+/* Play Store banner 1024×500 */
+.canvas-banner {
+  position: relative;
+  width: 1024px;
+  height: 500px;
+  overflow: hidden;
+  background: linear-gradient(115deg, #1c1c1e 0%, #2a3d28 42%, var(--gaia-dark) 100%);
+}
+
+.canvas-banner .glow {
+  position: absolute;
+  width: 520px;
+  height: 520px;
+  right: -80px;
+  top: -120px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(102, 204, 51, 0.35), transparent 68%);
+}
+
+.canvas-banner .inner {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: 100%;
+  padding: 0 72px;
+}
+
+.canvas-banner .copy {
+  max-width: 520px;
+  color: #fff;
+}
+
+.canvas-banner .logo {
+  width: 280px;
+  height: auto;
+  margin-bottom: 20px;
+  filter: brightness(0) invert(1);
+}
+
+.canvas-banner h1 {
+  font-size: 36px;
+  font-weight: 700;
+  letter-spacing: -0.03em;
+  line-height: 1.1;
+}
+
+.canvas-banner p {
+  margin-top: 14px;
+  font-size: 18px;
+  font-weight: 400;
+  line-height: 1.45;
+  color: rgba(255, 255, 255, 0.78);
+}
+
+.canvas-banner .badge {
+  display: inline-block;
+  margin-top: 22px;
+  padding: 10px 18px;
+  border-radius: 100px;
+  background: rgba(102, 204, 51, 0.2);
+  border: 1px solid rgba(143, 217, 102, 0.45);
+  font-size: 13px;
+  font-weight: 600;
+  color: #d4f5b8;
+  letter-spacing: 0.02em;
+}
+
+.canvas-banner .hero-icon {
+  width: 220px;
+  height: 220px;
+  border-radius: 48px;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.35);
+}

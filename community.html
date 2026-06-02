@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <title>Community · Gaia Healers</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="gaia-config.js"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="gaia-shared.css" />
+</head>
+<body class="gaia-app gaia-page">
+  <div class="gaia-shell">
+    <header class="gaia-header">
+      <div class="flex items-center justify-between">
+        <div>
+          <p class="gaia-eyebrow">Practitioner network</p>
+          <h1 class="gaia-page-title mt-0.5">Circle</h1>
+        </div>
+        <button type="button" class="flex h-10 w-10 items-center justify-center rounded-full bg-gaia text-white shadow-soft" aria-label="Compose">
+          <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15" /></svg>
+        </button>
+      </div>
+      <div id="community-tabs" class="mt-4 flex gap-2 overflow-x-auto hide-scrollbar">
+        <button type="button" data-tab="feed" class="shrink-0 rounded-full bg-gaia px-4 py-2 text-micro font-medium text-white">Feed</button>
+        <button type="button" data-tab="groups" class="shrink-0 rounded-full bg-surface-muted px-4 py-2 text-micro font-medium text-ink-secondary">Groups</button>
+        <button type="button" data-tab="directory" class="shrink-0 rounded-full bg-surface-muted px-4 py-2 text-micro font-medium text-ink-secondary">Directory</button>
+        <button type="button" data-tab="events" class="shrink-0 rounded-full bg-surface-muted px-4 py-2 text-micro font-medium text-ink-secondary">Events</button>
+      </div>
+    </header>
+
+    <main class="gaia-main gaia-main--tight">
+      <section class="gaia-card gaia-card-accent gaia-card-pad">
+        <p class="text-headline text-ink">Mentorship</p>
+        <p class="gaia-caption mt-1">Advanced graduates mentor Basic cohort — find a match in Directory.</p>
+      </section>
+
+      <div id="panel-feed" class="space-y-4">
+        <article class="gaia-card gaia-card-pad-lg">
+          <p class="gaia-caption">Bio-Well Practitioners · Pinned</p>
+          <div class="mt-3 flex items-center gap-3">
+            <div class="gaia-avatar gaia-avatar--lg bg-gaia-muted text-gaia-dark">NF</div>
+            <div><p class="text-headline text-ink">Nima Farshid</p><p class="gaia-caption">Faculty</p></div>
+          </div>
+          <p class="gaia-body mt-4">BioPulsar + Bio-Well comparative scan workflow is live in Advanced Level 1. Share anonymized GDV captures in comments.</p>
+          <div class="mt-4 flex gap-6 pt-4 border-t border-[var(--border)]">
+            <button type="button" class="flex items-center gap-1.5 text-caption text-ink-secondary font-medium"><svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5"><path stroke-linecap="round" stroke-linejoin="round" d="M21 8.25c0-2.485-2.099-4.5-4.688-4.5-1.935 0-3.597 1.126-4.312 2.733-.715-1.607-2.377-2.733-4.313-2.733C5.1 3.75 3 5.765 3 8.25c0 7.22 9 12 9 12s9-4.78 9-12z" /></svg>86</button>
+            <button type="button" class="flex items-center gap-1.5 text-caption text-ink-secondary font-medium"><svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5"><path stroke-linecap="round" stroke-linejoin="round" d="M8.625 12a.375.375 0 11-.75 0 .375.375 0 01.75 0zm0 0H8.25m4.125 0a.375.375 0 11-.75 0 .375.375 0 01.75 0zm0 0H12m4.125 0a.375.375 0 11-.75 0 .375.375 0 01.75 0zm0 0h-.375M21 12c0 4.556-4.03 8.25-9 8.25a9.764 9.764 0 01-2.555-.337A5.972 5.972 0 015.41 20.97a5.969 5.969 0 01-.474-.065 4.48 4.48 0 00.978-2.025c.09-.457-.133-.901-.467-1.226C3.93 16.178 3 14.189 3 12c0-4.556 4.03-8.25 9-8.25s9 3.694 9 8.25z" /></svg>24</button>
+          </div>
+        </article>
+        <article class="gaia-card gaia-card-pad-lg">
+          <div class="flex items-center gap-3">
+            <div class="gaia-avatar gaia-avatar--lg bg-indigo-100 text-indigo-700">JM</div>
+            <div><p class="text-headline text-ink">James M.</p><p class="gaia-caption">Bio-Well Basic · BioPulsar</p></div>
+          </div>
+          <p class="gaia-body mt-3">100th client scan after Basic Certification. Mentoring on Healeex + Bio-Well stack.</p>
+        </article>
+      </div>
+
+      <div id="panel-groups" class="hidden gaia-stack">
+        <article class="gaia-card overflow-hidden">
+          <div class="strip-biowell px-5 py-4"><h3 class="text-headline text-white">Bio-Well Practitioners</h3><p class="text-micro text-white/75 mt-0.5">376 members</p></div>
+          <div class="gaia-card-pad flex justify-between items-center"><span class="gaia-caption">Nima Farshid</span><span class="gaia-badge">Joined</span></div>
+        </article>
+        <article class="gaia-card overflow-hidden">
+          <div class="strip-biopulsar px-5 py-4"><h3 class="text-headline text-white">BioPulsar Practitioners</h3><p class="text-micro text-white/75 mt-0.5">505 members</p></div>
+          <div class="gaia-card-pad"><span class="gaia-link">Open</span></div>
+        </article>
+        <article class="gaia-card overflow-hidden">
+          <div class="strip-biotekna px-5 py-4"><h3 class="text-headline text-white">Biotekna Practitioners</h3><p class="text-micro text-white/75 mt-0.5">158 members</p></div>
+          <div class="gaia-card-pad"><span class="gaia-link">Open</span></div>
+        </article>
+        <article class="gaia-card overflow-hidden">
+          <div class="strip-healeex px-5 py-4"><h3 class="text-headline text-white">Healeex Community</h3><p class="text-micro text-white/75 mt-0.5">22 members</p></div>
+          <div class="gaia-card-pad"><span class="gaia-link">Open</span></div>
+        </article>
+        <article class="gaia-card-inset gaia-card-pad rounded-2xl"><p class="text-headline text-ink">All Gaia Healers</p><p class="gaia-caption">232 members</p></article>
+        <article class="gaia-card-inset gaia-card-pad rounded-2xl"><p class="text-headline text-ink">Abundant Healer Collective</p><p class="gaia-caption">117 members</p></article>
+      </div>
+
+      <div id="panel-directory" class="hidden space-y-4">
+        <input type="search" placeholder="Modality, certification, location…" class="w-full rounded-2xl border-0 bg-white px-4 py-3.5 text-body shadow-soft ring-1 ring-[var(--border)] placeholder:text-ink-tertiary focus:outline-none focus:ring-2 focus:ring-gaia/30" />
+        <article class="gaia-row">
+          <div class="gaia-avatar gaia-avatar--lg bg-gaia text-white">NF</div>
+          <div class="flex-1 min-w-0"><p class="text-headline text-ink">Nima Farshid</p><p class="gaia-caption">Bio-Well · Faculty</p></div>
+          <button type="button" class="rounded-xl bg-gaia-muted px-3 py-2 text-micro font-semibold text-gaia-dark">Connect</button>
+        </article>
+        <article class="gaia-row">
+          <div class="gaia-avatar gaia-avatar--lg bg-violet-100 text-violet-700">NB</div>
+          <div class="flex-1 min-w-0"><p class="text-headline text-ink">Dr. Nina Bashkir</p><p class="gaia-caption">Advanced L1 · Live training</p></div>
+          <button type="button" class="rounded-xl bg-surface-muted px-3 py-2 text-micro font-semibold text-ink-secondary">Message</button>
+        </article>
+        <div class="gaia-empty">
+          <svg class="gaia-empty__icon" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5"><path stroke-linecap="round" stroke-linejoin="round" d="M15 19.128a9.38 9.38 0 002.625.372 9.337 9.337 0 004.121-.952 4.125 4.125 0 00-7.533-2.493M15 19.128v-.003c0-1.113-.285-2.16-.786-3.07M15 19.128v.106A12.318 12.318 0 018.624 21c-2.331 0-4.512-.645-6.374-1.766l-.748-.5M4 6v6h4.5m0 0v6H4m4.5-6h9" /></svg>
+          <p class="gaia-empty__title">1,233 practitioners</p>
+          <p class="gaia-empty__text">Directory registration in Profile</p>
+        </div>
+      </div>
+
+      <div id="panel-events" class="hidden gaia-stack">
+        <article class="gaia-card overflow-hidden">
+          <div class="strip-biowell px-5 py-4"><p class="text-micro text-white/80">Live</p><h3 class="text-headline text-white mt-0.5">Advanced L1 Training</h3></div>
+          <div class="gaia-card-pad">
+            <p class="gaia-body">Dr. Nina Bashkir · Jun 12</p>
+            <span class="gaia-badge mt-3 inline-flex">Registered</span>
+          </div>
+        </article>
+        <article class="gaia-card gaia-card-pad">
+          <h3 class="text-headline text-ink">BioTekna Live — June</h3>
+          <p class="gaia-caption">Biotekna Practitioners</p>
+        </article>
+      </div>
+    </main>
+  </div>
+  <script src="gaia-ui.js"></script>
+  <script src="shared-nav.js"></script>
+</body>
+</html>

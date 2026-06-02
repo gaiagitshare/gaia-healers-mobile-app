@@ -1,0 +1,320 @@
+/* GHL Mobile App Branding — export canvases */
+
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+:root {
+  --gaia: #66cc33;
+  --gaia-dark: #4da626;
+  --gaia-light: #8fd966;
+  --gaia-muted: #e8f7dc;
+  --gaia-wash: #f4fbef;
+  --gaia-glow: rgba(102, 204, 51, 0.22);
+  --ink: #1c1c1e;
+  --ink-secondary: #636366;
+  --ink-tertiary: #aeaeb2;
+  --safe-top: 120px;
+  --safe-bottom: 160px;
+}
+
+html,
+body {
+  overflow: hidden;
+}
+
+body {
+  font-family: Inter, -apple-system, BlinkMacSystemFont, 'SF Pro Display', system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* —— App Icon 1024 —— */
+.canvas-icon {
+  width: 1024px;
+  height: 1024px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--gaia);
+}
+
+.canvas-icon img {
+  width: 72%;
+  height: 72%;
+  object-fit: contain;
+}
+
+/* —— Splash & onboarding 1080×1920 (GHL portrait) —— */
+.canvas-mobile {
+  position: relative;
+  width: 1080px;
+  height: 1920px;
+  overflow: hidden;
+  background: #ffffff;
+}
+
+.canvas-mobile .bg {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+}
+
+.bg-splash {
+  background:
+    radial-gradient(ellipse 100% 55% at 50% -5%, var(--gaia-glow), transparent 58%),
+    radial-gradient(ellipse 70% 40% at 50% 95%, rgba(102, 204, 51, 0.08), transparent 50%),
+    linear-gradient(180deg, #ffffff 0%, var(--gaia-wash) 38%, #f5f5f7 100%);
+}
+
+.bg-onboard-1 {
+  background:
+    radial-gradient(ellipse 90% 50% at 50% 0%, var(--gaia-glow), transparent 55%),
+    linear-gradient(180deg, #fff 0%, var(--gaia-wash) 100%);
+}
+
+.bg-onboard-2 {
+  background:
+    radial-gradient(ellipse 65% 45% at 85% 10%, rgba(102, 204, 51, 0.12), transparent 50%),
+    linear-gradient(165deg, #fff 0%, #f5f5f7 100%);
+}
+
+.bg-onboard-3 {
+  background:
+    radial-gradient(ellipse 70% 45% at 15% 85%, rgba(99, 102, 241, 0.06), transparent 45%),
+    linear-gradient(180deg, #fafafa 0%, var(--gaia-wash) 100%);
+}
+
+.bg-onboard-4 {
+  background:
+    radial-gradient(ellipse 80% 50% at 50% 15%, var(--gaia-glow), transparent 55%),
+    linear-gradient(180deg, var(--gaia-wash) 0%, #fff 50%, #f5f5f7 100%);
+}
+
+.content {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  height: 100%;
+  padding: var(--safe-top) 72px var(--safe-bottom);
+  text-align: center;
+}
+
+.logo-full {
+  width: min(520px, 78vw);
+  height: auto;
+  object-fit: contain;
+}
+
+.logo-full--splash {
+  width: 560px;
+  margin-top: 80px;
+}
+
+.eyebrow {
+  font-size: 26px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--gaia-dark);
+  margin-bottom: 20px;
+}
+
+.headline {
+  font-size: 56px;
+  font-weight: 700;
+  line-height: 1.08;
+  letter-spacing: -0.035em;
+  color: var(--ink);
+  max-width: 900px;
+}
+
+.body-copy {
+  margin-top: 28px;
+  font-size: 32px;
+  font-weight: 400;
+  line-height: 1.4;
+  letter-spacing: -0.02em;
+  color: var(--ink-secondary);
+  max-width: 880px;
+}
+
+.body-copy strong {
+  font-weight: 600;
+  color: var(--gaia-dark);
+}
+
+.spacer {
+  flex: 1;
+  min-height: 48px;
+}
+
+/* Visual cards (onboarding) */
+.visual {
+  width: 100%;
+  max-width: 720px;
+  margin-top: 48px;
+}
+
+.card-preview {
+  border-radius: 28px;
+  border: 1px solid rgba(0, 0, 0, 0.06);
+  box-shadow: 0 8px 40px rgba(0, 0, 0, 0.08);
+  overflow: hidden;
+  background: #fff;
+}
+
+.card-preview--dark {
+  background: linear-gradient(165deg, #2a2a2c, #1c1c1e);
+  padding: 40px;
+  display: flex;
+  align-items: center;
+  gap: 32px;
+  text-align: left;
+}
+
+.ring-mini {
+  width: 120px;
+  height: 120px;
+  border-radius: 50%;
+  border: 8px solid rgba(102, 204, 51, 0.35);
+  border-top-color: var(--gaia);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.ring-mini span {
+  font-size: 42px;
+  font-weight: 700;
+  color: #fff;
+  font-variant-numeric: tabular-nums;
+}
+
+.card-preview--dark .text h3 {
+  font-size: 28px;
+  font-weight: 600;
+  color: #fff;
+}
+
+.card-preview--dark .text p {
+  font-size: 22px;
+  color: rgba(255, 255, 255, 0.55);
+  margin-top: 8px;
+}
+
+.strips {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.strip {
+  border-radius: 20px;
+  padding: 28px 32px;
+  text-align: left;
+  color: #fff;
+}
+
+.strip h3 {
+  font-size: 26px;
+  font-weight: 600;
+}
+
+.strip p {
+  font-size: 20px;
+  opacity: 0.85;
+  margin-top: 6px;
+}
+
+.strip-biowell { background: linear-gradient(135deg, #1a2f4a, #66cc33); }
+.strip-biopulsar { background: linear-gradient(135deg, #3730a3, #818cf8); }
+.strip-biotekna { background: linear-gradient(135deg, #0d5c56, #2dd4bf); }
+
+.path-steps {
+  display: flex;
+  justify-content: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding: 32px 24px;
+}
+
+.path-step {
+  padding: 16px 24px;
+  border-radius: 100px;
+  font-size: 20px;
+  font-weight: 600;
+}
+
+.path-step.done {
+  background: var(--gaia);
+  color: #fff;
+}
+
+.path-step.current {
+  background: #fff;
+  color: var(--gaia-dark);
+  box-shadow: 0 0 0 3px var(--gaia-muted);
+}
+
+.path-step.locked {
+  background: #efeff0;
+  color: var(--ink-tertiary);
+}
+
+.pager {
+  display: flex;
+  gap: 12px;
+  margin-top: auto;
+  padding-top: 32px;
+}
+
+.dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: #d1d1d6;
+}
+
+.dot.active {
+  width: 28px;
+  border-radius: 5px;
+  background: var(--gaia);
+}
+
+.cta-fake {
+  margin-top: 40px;
+  width: 100%;
+  max-width: 640px;
+  padding: 28px;
+  border-radius: 20px;
+  background: var(--gaia);
+  color: #fff;
+  font-size: 28px;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  box-shadow: 0 8px 28px var(--gaia-glow);
+}
+
+.tagline-footer {
+  margin-top: 32px;
+  font-size: 24px;
+  color: var(--ink-tertiary);
+  letter-spacing: 0.01em;
+}
+
+.splash-sub {
+  margin-top: 16px;
+  font-size: 28px;
+  font-weight: 500;
+  color: var(--gaia-dark);
+  letter-spacing: 0.02em;
+}

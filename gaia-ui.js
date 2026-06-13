@@ -808,6 +808,9 @@
     let pendingVoice = null;
     let browserVoices = [];
     let hostedVoices = [];
+    let activeChatController = null;
+    let activeTtsController = null;
+    let activeWebAudio = null;
     const isIOS = /iPad|iPhone|iPod/i.test(navigator.userAgent)
       || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
     const isMobileWebKit = isIOS || (/AppleWebKit/i.test(navigator.userAgent) && /Mobile/i.test(navigator.userAgent));
@@ -977,6 +980,7 @@
       pendingVoice = null;
       playButton.hidden = true;
       playButton.classList.remove('is-pending');
+      playButton.textContent = 'Hear Gaia';
     }
 
     function stopSpeaking() {
@@ -988,8 +992,28 @@
       if (window.speechSynthesis?.speaking || window.speechSynthesis?.pending) {
         window.speechSynthesis.cancel();
       }
+      if (activeWebAudio?.source) {
+        try { activeWebAudio.source.stop(0); } catch (err) {
+          assistLog('web audio stop skipped', { error: err.message });
+        }
+        activeWebAudio = null;
+      }
+      activeTtsController?.abort();
+      activeTtsController = null;
       assistLog('speech ended', { reason: 'stopped' });
       status.textContent = 'Speech stopped';
+    }
+
+    function interruptAssistant(reason = 'interrupt') {
+      activeChatController?.abort();
+      activeChatController = null;
+      activeTtsController?.abort();
+      activeTtsController = null;
+      stopSpeaking();
+      clearPendingVoice(true);
+      setError('');
+      setAssistVoiceState('idle', reason === 'voice' ? 'Listening next…' : 'Stopped');
+      assistLog('assistant interrupted', { reason });
     }
 
     function setMuted(nextMuted) {
@@ -1185,15 +1209,9 @@
       let playbackStarted = false;
       const onPlay = () => {
         playbackStarted = true;
-        if (!isMobileWebKit) {
-          clearPendingVoice(false);
-          playButton.hidden = true;
-          playButton.classList.remove('is-pending');
-        } else {
-          playButton.hidden = false;
-          playButton.classList.add('is-pending');
-          playButton.textContent = 'Replay voice';
-        }
+        clearPendingVoice(false);
+        playButton.hidden = true;
+        playButton.classList.remove('is-pending');
         setVoiceHint('');
         setVoiceProvider(provider, voice);
         status.textContent = 'Speaking...';
@@ -1236,10 +1254,12 @@
             const source = ctx.createBufferSource();
             source.buffer = buffer;
             source.connect(ctx.destination);
+            activeWebAudio = { ctx, source };
             source.onended = () => {
               URL.revokeObjectURL(audioUrl);
               status.textContent = 'Ready for next prompt';
               assistLog('speech ended', { provider, mode: 'webaudio' });
+              activeWebAudio = null;
               resolve();
             };
             source.onerror = reject;
@@ -1294,9 +1314,17 @@
       return body;
     }
 
+    function speechPreviewText(text) {
+      const clean = String(text || '').replace(/\s+/g, ' ').trim();
+      if (clean.length <= 760) return clean;
+      const sentenceCut = clean.slice(0, 760).match(/^(.+[.!?])\s+/);
+      return `${(sentenceCut?.[1] || clean.slice(0, 720)).trim()} I can keep going on screen.`;
+    }
+
     async function speakReply(text, options = {}) {
       const cleanText = String(text || '').trim();
       if (!cleanText || muted) return;
+      const voiceText = speechPreviewText(cleanText);
       const fromVoice = options.fromVoice === true;
       stopSpeaking();
       if (!fromVoice || !voiceUnlockIsFresh()) {
@@ -1315,6 +1343,8 @@
       }
 
       try {
+        activeTtsController?.abort();
+        activeTtsController = new AbortController();
         const response = await fetch(`${base}/api/assist/tts`, {
           method: 'POST',
           headers: {
@@ -1322,7 +1352,8 @@
             'Content-Type': 'application/json',
           },
           credentials: 'omit',
-          body: JSON.stringify(buildTtsRequestBody(cleanText, providerSetting)),
+          signal: activeTtsController.signal,
+          body: JSON.stringify(buildTtsRequestBody(voiceText, providerSetting)),
         });
         if (!response.ok) {
           const payload = await response.json().catch(() => ({}));
@@ -1335,13 +1366,6 @@
         const audioUrl = URL.createObjectURL(blob);
         const provider = response.headers.get('X-Gaia-Voice-Provider') || (providerSetting === 'auto' ? 'hosted' : providerSetting);
         const voice = response.headers.get('X-Gaia-Voice-Name') || '';
-        if (isMobileWebKit) {
-          showManualVoicePlayback(audioUrl, provider, voice);
-          return;
-        }
-        if (fromVoice && !voiceUnlockIsFresh()) {
-          showManualVoicePlayback(audioUrl, provider, voice);
-        }
         try {
           await playAudioElement(audioUrl, provider, voice);
         } catch (playError) {
@@ -1349,10 +1373,15 @@
           showManualVoicePlayback(audioUrl, provider, voice);
         }
       } catch (err) {
+        if (err.name === 'AbortError') {
+          assistLog('TTS request aborted', { provider: providerSetting });
+          return;
+        }
         setVoiceProvider('browser');
         assistError('speech error', { provider: providerSetting, error: err.message });
         await speakWithBrowser(cleanText);
       } finally {
+        activeTtsController = null;
         if (!pendingVoice) setAssistVoiceState('idle', 'Tap to speak');
       }
     }
@@ -1466,6 +1495,8 @@
       assistLog('request sent to proxy', { endpoint: `${base}/api/assist/chat`, intent, source });
 
       try {
+        activeChatController?.abort();
+        activeChatController = new AbortController();
         const response = await fetch(`${base}/api/assist/chat`, {
           method: 'POST',
           headers: {
@@ -1473,6 +1504,7 @@
             'Content-Type': 'application/json',
           },
           credentials: 'omit',
+          signal: activeChatController.signal,
           body: JSON.stringify({
             prompt: cleanPrompt,
             intent,
@@ -1488,6 +1520,10 @@
         const reply = payload.reply || resolveLocalReply(cleanPrompt, intent);
         await deliverReply(reply, { warning: payload.warning || '', fromVoice });
       } catch (err) {
+        if (err.name === 'AbortError') {
+          assistLog('proxy request aborted', { intent, source });
+          return;
+        }
         assistError('OpenAI/voice error', err);
         const reply = resolveLocalReply(cleanPrompt, intent);
         await deliverReply(reply, {
@@ -1495,6 +1531,7 @@
           fromVoice,
         });
       } finally {
+        activeChatController = null;
         setBusy(false);
       }
     }
@@ -1769,6 +1806,9 @@
         return;
       }
 
+      if (pendingVoice || activeTtsController || activeChatController || window.speechSynthesis?.speaking || !getSharedAudio().paused) {
+        interruptAssistant('voice');
+      }
       setError('');
       clearLiveTranscript();
       await unlockVoicePlayback(true);

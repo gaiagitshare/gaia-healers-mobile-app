@@ -7,7 +7,15 @@ const OPENROUTER_MODEL = process.env.OPENROUTER_MODEL || 'openrouter/free';
 const OPENAI_MODEL = process.env.OPENAI_MODEL || 'gpt-4o-mini';
 const OPENAI_TTS_MODEL = process.env.OPENAI_TTS_MODEL || 'gpt-4o-mini-tts';
 const OPENAI_TTS_VOICE = process.env.OPENAI_TTS_VOICE || 'alloy';
+const ELEVENLABS_MODEL = process.env.ELEVENLABS_MODEL || 'eleven_multilingual_v2';
+const ELEVENLABS_VOICE_ID = process.env.ELEVENLABS_VOICE_ID || '';
+const COMPAT_TTS_MODEL = process.env.OPENAI_COMPATIBLE_TTS_MODEL || OPENAI_TTS_MODEL;
+const COMPAT_TTS_VOICE = process.env.OPENAI_COMPATIBLE_TTS_VOICE || OPENAI_TTS_VOICE;
 const ASSIST_PROVIDER_ORDER = (process.env.ASSIST_PROVIDER_ORDER || 'groq,openrouter,openai')
+  .split(',')
+  .map((provider) => provider.trim().toLowerCase())
+  .filter(Boolean);
+const TTS_PROVIDER_ORDER = (process.env.TTS_PROVIDER_ORDER || 'openai,elevenlabs,compatible')
   .split(',')
   .map((provider) => provider.trim().toLowerCase())
   .filter(Boolean);
@@ -63,6 +71,30 @@ function sendBuffer(res, status, buffer, contentType, origin) {
     ...corsHeaders(origin),
   });
   res.end(buffer);
+}
+
+function clampNumber(value, min, max, fallback) {
+  const number = Number(value);
+  if (!Number.isFinite(number)) return fallback;
+  return Math.min(max, Math.max(min, number));
+}
+
+function publicTtsOrder() {
+  return [...new Set([...TTS_PROVIDER_ORDER, 'browser'])];
+}
+
+function hasAnyBackendTtsProvider() {
+  return Boolean(
+    process.env.OPENAI_API_KEY
+    || (process.env.ELEVENLABS_API_KEY && ELEVENLABS_VOICE_ID)
+    || (process.env.OPENAI_COMPATIBLE_TTS_API_KEY && process.env.OPENAI_COMPATIBLE_TTS_BASE_URL)
+  );
+}
+
+function safeOpenAiVoice(value, fallback) {
+  const voice = String(value || '').trim().toLowerCase();
+  const allowed = new Set(['alloy', 'ash', 'ballad', 'coral', 'echo', 'fable', 'nova', 'onyx', 'sage', 'shimmer', 'verse']);
+  return allowed.has(voice) ? voice : fallback;
 }
 
 async function fetchJson(url, headers = {}) {
@@ -149,10 +181,11 @@ async function bootstrap() {
           enabled: process.env.GAIA_ASSIST_VOICE_ENABLED === 'true',
           providerOrder: ASSIST_PROVIDER_ORDER,
           tts: {
-            configured: Boolean(process.env.OPENAI_API_KEY),
-            providerOrder: ['openai', 'browser'],
+            configured: hasAnyBackendTtsProvider(),
+            providerOrder: publicTtsOrder(),
             openaiModel: OPENAI_TTS_MODEL,
             openaiVoice: OPENAI_TTS_VOICE,
+            elevenLabsConfigured: Boolean(process.env.ELEVENLABS_API_KEY && ELEVENLABS_VOICE_ID),
           },
         },
       },
@@ -352,33 +385,145 @@ async function assistTts(body) {
   if (!text) {
     return { ok: false, status: 400, error: 'Text is required for TTS' };
   }
-  if (!process.env.OPENAI_API_KEY) {
-    return { ok: false, status: 503, error: 'OpenAI TTS is not configured' };
+  const requestedProvider = String(body.provider || '').trim().toLowerCase();
+  if (requestedProvider === 'browser') {
+    return { ok: false, status: 503, error: 'Browser speech requested; use SpeechSynthesis fallback.', provider: 'browser' };
+  }
+  const providers = requestedProvider && requestedProvider !== 'auto'
+    ? [requestedProvider]
+    : TTS_PROVIDER_ORDER;
+  const attempts = [];
+
+  for (const provider of providers) {
+    const started = Date.now();
+    try {
+      const payload = await callTtsProvider(provider, text, body);
+      if (payload.skipped) {
+        attempts.push({ provider, status: 'skipped', reason: payload.reason });
+        console.log('[Gaia Assist] TTS provider skipped', { provider, reason: payload.reason });
+        continue;
+      }
+      attempts.push({ provider, status: 'ok', latencyMs: Date.now() - started, model: payload.model });
+      console.log('[Gaia Assist] TTS response ready', { provider, bytes: payload.audio.length });
+      return { ...payload, attempts };
+    } catch (error) {
+      attempts.push({
+        provider,
+        status: 'failed',
+        latencyMs: Date.now() - started,
+        error: error.message.replace(/Bearer\s+[A-Za-z0-9._-]+/g, 'Bearer [redacted]').slice(0, 320),
+      });
+      console.error('[Gaia Assist] TTS provider failed', { provider, error: error.message.split('\n')[0] });
+    }
   }
 
-  console.log('[Gaia Assist] TTS provider attempt', { provider: 'openai', model: OPENAI_TTS_MODEL, voice: OPENAI_TTS_VOICE });
-  const response = await fetch('https://api.openai.com/v1/audio/speech', {
+  return {
+    ok: false,
+    status: 503,
+    error: 'Backend TTS providers failed or are not configured; use browser SpeechSynthesis fallback.',
+    provider: 'browser',
+    attempts,
+  };
+}
+
+async function callTtsProvider(provider, text, body = {}) {
+  const speed = clampNumber(body.speed, 0.75, 1.25, 1);
+  if (provider === 'openai') {
+    if (!process.env.OPENAI_API_KEY) return { skipped: true, reason: 'missing-api-key' };
+    const voice = safeOpenAiVoice(body.voice, OPENAI_TTS_VOICE);
+    console.log('[Gaia Assist] TTS provider attempt', { provider: 'openai', model: OPENAI_TTS_MODEL, voice });
+    return openAiCompatibleTts({
+      endpoint: 'https://api.openai.com/v1/audio/speech',
+      apiKey: process.env.OPENAI_API_KEY,
+      model: OPENAI_TTS_MODEL,
+      voice,
+      text,
+      speed,
+      provider: 'openai',
+    });
+  }
+
+  if (provider === 'elevenlabs') {
+    if (!process.env.ELEVENLABS_API_KEY) return { skipped: true, reason: 'missing-api-key' };
+    const voiceId = String(body.voiceId || ELEVENLABS_VOICE_ID).trim();
+    if (!voiceId) return { skipped: true, reason: 'missing-voice-id' };
+    console.log('[Gaia Assist] TTS provider attempt', { provider: 'elevenlabs', model: ELEVENLABS_MODEL, voice: voiceId });
+    const response = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${encodeURIComponent(voiceId)}`, {
+      method: 'POST',
+      headers: {
+        'xi-api-key': process.env.ELEVENLABS_API_KEY,
+        Accept: 'audio/mpeg',
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        text: text.slice(0, 4500),
+        model_id: ELEVENLABS_MODEL,
+        voice_settings: {
+          stability: 0.44,
+          similarity_boost: 0.74,
+          style: 0.18,
+          use_speaker_boost: true,
+        },
+      }),
+    });
+    if (!response.ok) {
+      const details = await response.text();
+      throw new Error(`elevenlabs TTS request failed with ${response.status}: ${details.slice(0, 280)}`);
+    }
+    return {
+      ok: true,
+      provider: 'elevenlabs',
+      model: ELEVENLABS_MODEL,
+      voice: voiceId,
+      audio: Buffer.from(await response.arrayBuffer()),
+    };
+  }
+
+  if (provider === 'compatible') {
+    const base = (process.env.OPENAI_COMPATIBLE_TTS_BASE_URL || '').replace(/\/+$/, '');
+    const apiKey = process.env.OPENAI_COMPATIBLE_TTS_API_KEY;
+    if (!base) return { skipped: true, reason: 'missing-base-url' };
+    if (!apiKey) return { skipped: true, reason: 'missing-api-key' };
+    const endpoint = base.endsWith('/audio/speech') ? base : `${base}/v1/audio/speech`;
+    const voice = safeOpenAiVoice(body.voice, COMPAT_TTS_VOICE);
+    console.log('[Gaia Assist] TTS provider attempt', { provider: 'compatible', model: COMPAT_TTS_MODEL, voice });
+    return openAiCompatibleTts({
+      endpoint,
+      apiKey,
+      model: COMPAT_TTS_MODEL,
+      voice,
+      text,
+      speed,
+      provider: 'compatible',
+    });
+  }
+
+  return { skipped: true, reason: 'unknown-provider' };
+}
+
+async function openAiCompatibleTts({ endpoint, apiKey, model, voice, text, speed, provider }) {
+  const response = await fetch(endpoint, {
     method: 'POST',
     headers: {
-      Authorization: `Bearer ${process.env.OPENAI_API_KEY}`,
+      Authorization: `Bearer ${apiKey}`,
       'Content-Type': 'application/json',
     },
     body: JSON.stringify({
-      model: OPENAI_TTS_MODEL,
-      voice: OPENAI_TTS_VOICE,
+      model,
+      voice,
       input: text.slice(0, 4000),
       response_format: 'mp3',
+      speed,
     }),
   });
 
   if (!response.ok) {
     const details = await response.text();
-    throw new Error(`openai TTS request failed with ${response.status}: ${details.slice(0, 280)}`);
+    throw new Error(`${provider} TTS request failed with ${response.status}: ${details.slice(0, 280)}`);
   }
 
   const audio = Buffer.from(await response.arrayBuffer());
-  console.log('[Gaia Assist] TTS response ready', { provider: 'openai', bytes: audio.length });
-  return { ok: true, provider: 'openai', model: OPENAI_TTS_MODEL, voice: OPENAI_TTS_VOICE, audio };
+  return { ok: true, provider, model, voice, audio };
 }
 
 const server = http.createServer(async (req, res) => {
@@ -429,13 +574,14 @@ const server = http.createServer(async (req, res) => {
         }
         res.setHeader('X-Gaia-Voice-Provider', payload.provider);
         res.setHeader('X-Gaia-Voice-Model', payload.model);
+        res.setHeader('X-Gaia-Voice-Name', payload.voice || '');
         sendBuffer(res, 200, payload.audio, 'audio/mpeg', origin);
       } catch (error) {
-        console.error('[Gaia Assist] TTS provider failed', { provider: 'openai', error: error.message.split('\n')[0] });
+        console.error('[Gaia Assist] TTS chain failed', { error: error.message.split('\n')[0] });
         sendJson(res, 503, {
           ok: false,
-          error: 'OpenAI TTS failed; use browser SpeechSynthesis fallback.',
-          provider: 'openai',
+          error: 'Backend TTS failed; use browser SpeechSynthesis fallback.',
+          provider: 'browser',
         }, origin);
       }
       return;

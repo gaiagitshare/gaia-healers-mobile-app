@@ -8,6 +8,10 @@
 
   const COACH_KEY = 'gaia-coach-v2';
   const THEME_KEY = 'gaia-theme';
+  const DEFAULT_PROXY = 'https://ba2ki.com/gaia-proxy';
+  const VOICE_PROVIDER_KEY = 'gaia-assist-voice-provider';
+  const VOICE_NAME_KEY = 'gaia-assist-voice-name';
+  const VOICE_SPEED_KEY = 'gaia-assist-voice-speed';
 
   function initTheme() {
     if (!document.body.classList.contains('gaia-page') && !document.body.classList.contains('gaia-app')) return;
@@ -117,6 +121,26 @@
     if (requestedButton) activate(requestedButton);
   }
 
+  function initLiveSyncIndicator() {
+    if (!document.body.classList.contains('gaia-page')) return;
+    if (document.querySelector('.gaia-live-sync')) return;
+
+    const indicator = document.createElement('div');
+    indicator.className = 'gaia-live-sync';
+    indicator.hidden = true;
+    indicator.innerHTML = '<span></span>Live sync connected';
+    document.body.appendChild(indicator);
+
+    function refresh() {
+      const live = window.GAIA_SYNC?.status === 'live';
+      indicator.hidden = !live;
+    }
+
+    refresh();
+    document.addEventListener('gaia:sync', refresh);
+    document.addEventListener('gaia:sync-error', refresh);
+  }
+
   function initGaiaAssist() {
     if (!document.body.classList.contains('gaia-page')) return;
     if (document.getElementById('gaia-assist')) return;
@@ -152,6 +176,25 @@
             <span class="gaia-assist__provider">Voice: browser</span>
           </div>
         </div>
+        <details class="gaia-assist__settings">
+          <summary>Voice settings</summary>
+          <div class="gaia-assist__settings-grid">
+            <label>Provider
+              <select class="gaia-assist__voice-provider">
+                <option value="auto">Auto</option>
+                <option value="browser">Browser</option>
+                <option value="openai">OpenAI</option>
+                <option value="elevenlabs">ElevenLabs</option>
+              </select>
+            </label>
+            <label>Voice
+              <select class="gaia-assist__voice-name"></select>
+            </label>
+            <label class="gaia-assist__speed">Speed <span>1.00x</span>
+              <input class="gaia-assist__voice-speed" type="range" min="0.75" max="1.25" step="0.05" value="1" />
+            </label>
+          </div>
+        </details>
         <div class="gaia-assist__transcript">
           <p class="gaia-assist__bubble gaia-assist__bubble--user">What should I focus on today?</p>
           <p class="gaia-assist__bubble gaia-assist__bubble--bot">Your portal is ready. I can help with Bio-Well scans, Academy progress, Elevate event check-in, and GHL follow-up workflows.</p>
@@ -183,11 +226,16 @@
     const muteButton = root.querySelector('.gaia-assist__mute');
     const stopButton = root.querySelector('.gaia-assist__stop');
     const voiceProvider = root.querySelector('.gaia-assist__provider');
+    const voiceProviderSelect = root.querySelector('.gaia-assist__voice-provider');
+    const voiceNameSelect = root.querySelector('.gaia-assist__voice-name');
+    const voiceSpeed = root.querySelector('.gaia-assist__voice-speed');
+    const voiceSpeedLabel = root.querySelector('.gaia-assist__speed span');
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
     let recognition = null;
     let recognizing = false;
     let muted = localStorage.getItem('gaia-assist-muted') === '1';
     let currentAudio = null;
+    let browserVoices = [];
 
     const suggestionMap = [
       { label: assistant.suggestions?.[0] || 'Prepare my badge', reply: assistant.responses?.event, intent: 'event' },
@@ -215,11 +263,11 @@
     }
 
     function proxyBase() {
-      return (window.GAIA_SYNC?.proxyBase || '').replace(/\/+$/, '');
+      return (window.GAIA_SYNC?.proxyBase || DEFAULT_PROXY).replace(/\/+$/, '');
     }
 
-    function setVoiceProvider(provider) {
-      voiceProvider.textContent = `Voice: ${provider}`;
+    function setVoiceProvider(provider, name = '') {
+      voiceProvider.textContent = `Voice: ${provider}${name ? ` · ${name}` : ''}`;
       voiceProvider.dataset.provider = provider;
     }
 
@@ -244,6 +292,61 @@
       if (muted) stopSpeaking();
     }
 
+    function selectedProvider() {
+      return voiceProviderSelect.value || 'auto';
+    }
+
+    function selectedSpeed() {
+      const speed = Number(voiceSpeed.value);
+      return Number.isFinite(speed) ? speed : 1;
+    }
+
+    function naturalVoiceScore(voice) {
+      const name = `${voice.name} ${voice.voiceURI}`.toLowerCase();
+      let score = 0;
+      if (/samantha|ava|allison|susan|victoria|karen|moira|tessa|serena|google us english|microsoft .*natural|zira/.test(name)) score += 50;
+      if (/enhanced|premium|natural|neural/.test(name)) score += 25;
+      if (/en-us|en_us/.test(`${voice.lang} ${voice.name}`.toLowerCase())) score += 12;
+      if (/en/.test(voice.lang.toLowerCase())) score += 6;
+      if (voice.localService) score += 2;
+      return score;
+    }
+
+    function bestBrowserVoice() {
+      if (!browserVoices.length) return null;
+      const saved = localStorage.getItem(VOICE_NAME_KEY);
+      const savedVoice = browserVoices.find((voice) => voice.name === saved);
+      if (savedVoice) return savedVoice;
+      return [...browserVoices].sort((a, b) => naturalVoiceScore(b) - naturalVoiceScore(a))[0] || null;
+    }
+
+    function refreshBrowserVoices() {
+      browserVoices = window.speechSynthesis?.getVoices?.() || [];
+      const best = bestBrowserVoice();
+      const selectedName = localStorage.getItem(VOICE_NAME_KEY) || best?.name || '';
+      const options = browserVoices.length
+        ? browserVoices.map((voice) => {
+            const label = `${voice.name}${voice.lang ? ` (${voice.lang})` : ''}`;
+            return `<option value="${escapeHtml(voice.name)}" ${voice.name === selectedName ? 'selected' : ''}>${escapeHtml(label)}</option>`;
+          }).join('')
+        : '<option value="">System default</option>';
+      voiceNameSelect.innerHTML = options;
+      if (selectedName) voiceNameSelect.value = selectedName;
+    }
+
+    function initVoiceSettings() {
+      voiceProviderSelect.value = localStorage.getItem(VOICE_PROVIDER_KEY) || 'auto';
+      voiceSpeed.value = localStorage.getItem(VOICE_SPEED_KEY) || '1';
+      voiceSpeedLabel.textContent = `${Number(voiceSpeed.value).toFixed(2)}x`;
+      refreshBrowserVoices();
+      window.speechSynthesis?.addEventListener?.('voiceschanged', refreshBrowserVoices);
+    }
+
+    function selectedBrowserVoice() {
+      const selected = voiceNameSelect.value || localStorage.getItem(VOICE_NAME_KEY);
+      return browserVoices.find((voice) => voice.name === selected) || bestBrowserVoice();
+    }
+
     function speakWithBrowser(text) {
       if (!window.speechSynthesis || !window.SpeechSynthesisUtterance) {
         setVoiceProvider('browser');
@@ -253,13 +356,15 @@
       }
       window.speechSynthesis.cancel();
       const utterance = new SpeechSynthesisUtterance(text);
+      const voice = selectedBrowserVoice();
+      if (voice) utterance.voice = voice;
       utterance.lang = 'en-US';
-      utterance.rate = 0.96;
+      utterance.rate = selectedSpeed();
       utterance.pitch = 1;
       utterance.onstart = () => {
-        setVoiceProvider('browser');
+        setVoiceProvider('browser', voice?.name || 'system');
         status.textContent = 'Speaking...';
-        assistLog('speech started', { provider: 'browser' });
+        assistLog('speech started', { provider: 'browser', voice: voice?.name || 'system', speed: selectedSpeed() });
       };
       utterance.onend = () => {
         status.textContent = 'Ready for next prompt';
@@ -277,6 +382,11 @@
       const cleanText = String(text || '').trim();
       if (!cleanText || muted) return;
       stopSpeaking();
+      const providerSetting = selectedProvider();
+      if (providerSetting === 'browser') {
+        speakWithBrowser(cleanText);
+        return;
+      }
       const base = proxyBase();
       if (!base) {
         speakWithBrowser(cleanText);
@@ -291,36 +401,43 @@
             'Content-Type': 'application/json',
           },
           credentials: 'omit',
-          body: JSON.stringify({ text: cleanText }),
+          body: JSON.stringify({
+            text: cleanText,
+            provider: providerSetting,
+            voice: voiceNameSelect.value || undefined,
+            speed: selectedSpeed(),
+          }),
         });
         if (!response.ok || !response.headers.get('content-type')?.includes('audio')) {
           throw new Error(`TTS returned ${response.status}`);
         }
         const blob = await response.blob();
         const audioUrl = URL.createObjectURL(blob);
+        const provider = response.headers.get('X-Gaia-Voice-Provider') || (providerSetting === 'auto' ? 'openai' : providerSetting);
+        const voice = response.headers.get('X-Gaia-Voice-Name') || '';
         currentAudio = new Audio(audioUrl);
         currentAudio.onplay = () => {
-          setVoiceProvider('openai');
+          setVoiceProvider(provider, voice);
           status.textContent = 'Speaking...';
-          assistLog('speech started', { provider: 'openai' });
+          assistLog('speech started', { provider, voice, speed: selectedSpeed() });
         };
         currentAudio.onended = () => {
           URL.revokeObjectURL(audioUrl);
           currentAudio = null;
           status.textContent = 'Ready for next prompt';
-          assistLog('speech ended', { provider: 'openai' });
+          assistLog('speech ended', { provider });
         };
         currentAudio.onerror = () => {
           URL.revokeObjectURL(audioUrl);
           currentAudio = null;
           setVoiceProvider('browser');
-          assistError('speech error', { provider: 'openai', error: 'audio playback failed' });
+          assistError('speech error', { provider, error: 'audio playback failed' });
           speakWithBrowser(cleanText);
         };
         await currentAudio.play();
       } catch (err) {
         setVoiceProvider('browser');
-        assistError('speech error', { provider: 'openai', error: err.message });
+        assistError('speech error', { provider: providerSetting, error: err.message });
         speakWithBrowser(cleanText);
       }
     }
@@ -360,7 +477,7 @@
       }
       const base = proxyBase();
       if (!base) {
-        setError('Gaia Assist needs the staging proxy URL. Open the app with the proxy= query parameter.');
+        setError('Gaia Assist could not find the staging proxy URL.');
         assistError('proxy missing', { prompt: cleanPrompt, intent, source });
         return;
       }
@@ -489,6 +606,17 @@
     mic.addEventListener('click', startVoicePrompt);
     muteButton.addEventListener('click', () => setMuted(!muted));
     stopButton.addEventListener('click', stopSpeaking);
+    voiceProviderSelect.addEventListener('change', () => {
+      localStorage.setItem(VOICE_PROVIDER_KEY, voiceProviderSelect.value);
+      setVoiceProvider(voiceProviderSelect.value === 'auto' ? 'auto' : voiceProviderSelect.value);
+    });
+    voiceNameSelect.addEventListener('change', () => {
+      localStorage.setItem(VOICE_NAME_KEY, voiceNameSelect.value);
+    });
+    voiceSpeed.addEventListener('input', () => {
+      localStorage.setItem(VOICE_SPEED_KEY, voiceSpeed.value);
+      voiceSpeedLabel.textContent = `${Number(voiceSpeed.value).toFixed(2)}x`;
+    });
     form.addEventListener('submit', (event) => {
       event.preventDefault();
       const prompt = promptInput.value;
@@ -506,7 +634,8 @@
       button.addEventListener('click', () => setOpen(true));
     });
     setMuted(muted);
-    setVoiceProvider('browser');
+    initVoiceSettings();
+    setVoiceProvider(selectedProvider() === 'auto' ? 'browser' : selectedProvider());
   }
 
   document.addEventListener('DOMContentLoaded', () => {
@@ -514,6 +643,7 @@
     initCoachMark();
     initSplashSteps();
     initCommunityTabs();
+    initLiveSyncIndicator();
     initGaiaAssist();
   });
 })();

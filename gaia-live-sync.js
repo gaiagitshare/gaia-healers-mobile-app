@@ -2,21 +2,28 @@
  * Reads app data only from the staging proxy. Never call GHL/Event/OpenAI directly here.
  */
 (function () {
+  const DEFAULT_PROXY = 'https://ba2ki.com/gaia-proxy';
   const params = new URLSearchParams(window.location.search);
   const queryProxy = params.get('proxy') || params.get('gaia_proxy') || '';
   const explicit = window.GAIA_SYNC_PROXY_URL || queryProxy || localStorage.getItem('gaia-sync-proxy-url') || '';
-  const proxyBase = explicit.replace(/\/+$/, '');
+  const proxyBase = (explicit || DEFAULT_PROXY).replace(/\/+$/, '');
 
   window.GAIA_SYNC = {
-    enabled: Boolean(proxyBase),
+    enabled: true,
     proxyBase,
-    status: proxyBase ? 'configured' : 'static-fallback',
+    defaultProxy: DEFAULT_PROXY,
+    isDefault: !explicit,
+    status: 'checking',
   };
-
-  if (!proxyBase) return;
 
   async function syncBootstrap() {
     try {
+      const health = await fetch(`${proxyBase}/health`, {
+        headers: { Accept: 'application/json' },
+        credentials: 'omit',
+      });
+      if (!health.ok) throw new Error(`Proxy health returned ${health.status}`);
+
       const response = await fetch(`${proxyBase}/api/app/bootstrap`, {
         headers: { Accept: 'application/json' },
         credentials: 'omit',
@@ -25,10 +32,12 @@
       const payload = await response.json();
       window.GAIA = { ...(window.GAIA || {}), ...(payload.gaia || payload) };
       window.GAIA_SYNC.status = 'live';
+      window.GAIA_SYNC.error = '';
       document.dispatchEvent(new CustomEvent('gaia:sync', { detail: window.GAIA }));
     } catch (error) {
       window.GAIA_SYNC.status = 'error';
       window.GAIA_SYNC.error = error.message;
+      document.dispatchEvent(new CustomEvent('gaia:sync-error', { detail: window.GAIA_SYNC }));
       console.warn('[Gaia] live sync failed; using static fallback.', error);
     }
   }

@@ -20,8 +20,14 @@ Paste these only into your backend host environment variables, never into the st
 | `OPENROUTER_MODEL` | OpenRouter model, e.g. `openrouter/free` | OpenRouter model list |
 | `OPENAI_API_KEY` | Optional OpenAI project key for final hosted provider fallback | OpenAI dashboard |
 | `OPENAI_MODEL` | OpenAI chat model, e.g. `gpt-4o-mini` | OpenAI model picker |
+| `TTS_PROVIDER_ORDER` | Backend voice order, e.g. `openai,elevenlabs,compatible` | Gaia Assist staging config |
 | `OPENAI_TTS_MODEL` | Optional OpenAI TTS model, e.g. `gpt-4o-mini-tts` | OpenAI audio model picker |
 | `OPENAI_TTS_VOICE` | Optional OpenAI TTS voice, e.g. `alloy` | OpenAI audio docs |
+| `ELEVENLABS_API_KEY` | Optional ElevenLabs key for more natural hosted voice | ElevenLabs dashboard |
+| `ELEVENLABS_VOICE_ID` | ElevenLabs voice ID to use for Gaia Assist | ElevenLabs voice library |
+| `ELEVENLABS_MODEL` | ElevenLabs model, e.g. `eleven_multilingual_v2` | ElevenLabs docs |
+| `OPENAI_COMPATIBLE_TTS_BASE_URL` | Optional OpenAI-compatible `/v1/audio/speech` host | TTS provider docs |
+| `OPENAI_COMPATIBLE_TTS_API_KEY` | Optional bearer token for that compatible TTS host | TTS provider dashboard |
 | `APP_PUBLIC_URL` | Final app URL | GitHub Pages URL |
 | `ALLOWED_ORIGINS` | GitHub Pages + GHL origins | Backend host settings |
 
@@ -63,15 +69,24 @@ POST {proxy}/api/assist/tts
 
 `/api/assist/voice` is a staging-safe voice handoff route. The browser captures microphone permission and speech-to-text, then sends the transcript to the proxy. Raw audio upload is not enabled in this static staging build.
 
-`/api/assist/tts` is optional backend TTS. The browser tries OpenAI TTS first through this proxy route and falls back to browser `SpeechSynthesis` if OpenAI is unavailable, out of quota, or not configured. The frontend never receives an OpenAI key.
+`/api/assist/tts` is optional backend TTS. The browser tries backend voice providers through this proxy route and falls back to browser `SpeechSynthesis` if hosted voice is unavailable, out of quota, or not configured. The frontend never receives OpenAI, ElevenLabs, OpenRouter, Groq, or provider keys.
 
 Gaia Assist provider fallback order is controlled by:
 
 ```text
 ASSIST_PROVIDER_ORDER=groq,openrouter,openai
+TTS_PROVIDER_ORDER=openai,elevenlabs,compatible
 ```
 
 The proxy tries each configured provider in order. Quota, rate-limit, auth, or model errors are logged by provider name without printing secrets, then the next provider is attempted. If every provider fails, the proxy returns a local safe fallback response.
+
+The static app now defaults to the deployed staging proxy automatically:
+
+```text
+https://ba2ki.com/gaia-proxy
+```
+
+The `proxy=` query parameter still works when you need to override staging for local or future production testing.
 
 ## Deploy
 
@@ -89,7 +104,7 @@ Current staging proxy deployment:
 https://ba2ki.com/gaia-proxy
 ```
 
-Set the backend deployment URL in `window.GAIA_SYNC_PROXY_URL` when embedding or wrapping the app.
+Set the backend deployment URL in `window.GAIA_SYNC_PROXY_URL` only when embedding or wrapping the app needs to override the default.
 
 For GHL iframe embeds, use the query parameter because the iframe is cross-origin:
 
@@ -137,7 +152,7 @@ For spoken replies, the UI logs:
 - speech ended
 - speech error
 
-The Assist panel also shows the current voice provider: `openai` for backend audio, or `browser` for SpeechSynthesis fallback.
+The Assist panel also shows the current voice provider: `openai`, `elevenlabs`, `compatible`, or `browser` for SpeechSynthesis fallback. Use the panel's voice settings to choose provider, browser voice name, speed, mute, and stop.
 
 In the browser console, Gaia Assist logs:
 

@@ -5,17 +5,20 @@
     { id: 'home', href: 'home.html', label: 'Today' },
     { id: 'biowell', href: 'biowell.html', label: 'Bio-Well' },
     { id: 'academy', href: 'academy.html', label: 'Academy' },
-    { id: 'community', href: 'community.html', label: 'Circle' },
-    { id: 'profile', href: 'profile.html', label: 'You' },
+    { id: 'events', href: 'community.html?tab=events', label: 'Events' },
+    { id: 'profile', href: 'profile.html', label: 'Profile' },
   ];
   const icons = {
     home: '<path stroke-linecap="round" stroke-linejoin="round" d="M3.75 9.75L12 3l8.25 6.75V19.5a1.5 1.5 0 01-1.5 1.5H5.25A1.5 1.5 0 013.75 19.5V9.75z" />',
     biowell: '<path stroke-linecap="round" stroke-linejoin="round" d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09z" />',
     academy: '<path stroke-linecap="round" stroke-linejoin="round" d="M4.26 10.065a8.978 8.978 0 011.614-4.12 9 9 0 1012.152 12.152 8.978 8.978 0 01-4.12 1.614M12 6v6l4 2" />',
-    community: '<path stroke-linecap="round" stroke-linejoin="round" d="M7.5 8.25h9m-9 3H12m-9.75 1.51c0 1.6 1.123 2.994 2.707 3.227 1.087.16 2.185.283 3.293.369V21l4.184-4.183a1.14 1.14 0 01.778-.332 48.294 48.294 0 005.83-.498c1.585-.233 2.708-1.626 2.708-3.228V6.741c0-1.602-1.123-2.995-2.707-3.228A48.394 48.394 0 0012 3c-2.392 0-4.744.175-7.043.513C3.373 3.746 2.25 5.14 2.25 6.741v11.18z" />',
+    events: '<path stroke-linecap="round" stroke-linejoin="round" d="M6.75 3v2.25M17.25 3v2.25M3.75 8.25h16.5M5.25 5.25h13.5A1.5 1.5 0 0120.25 6.75v12A1.5 1.5 0 0118.75 20.25H5.25A1.5 1.5 0 013.75 18.75v-12A1.5 1.5 0 015.25 5.25zM8.25 12h3m-3 3h7.5" />',
     profile: '<path stroke-linecap="round" stroke-linejoin="round" d="M15.75 6a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0zM4.501 20.118a7.5 7.5 0 0114.998 0A17.933 17.933 0 0112 21.75c-2.676 0-5.216-.584-7.499-1.632z" />',
   };
-  const active = path.replace('.html', '') === 'index' ? 'home' : path.replace('.html', '');
+  const query = new URLSearchParams(window.location.search);
+  const active = path === 'community.html' && query.get('tab') === 'events'
+    ? 'events'
+    : (path.replace('.html', '') === 'index' ? 'home' : path.replace('.html', ''));
 
   const nav = document.createElement('nav');
   nav.setAttribute('aria-label', 'Main');

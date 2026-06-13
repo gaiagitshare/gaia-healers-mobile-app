@@ -62,6 +62,7 @@ body.gaia-app {
   -moz-osx-font-smoothing: grayscale;
   color: var(--ink);
   background: var(--surface-subtle);
+  overflow-x: hidden;
 }
 
 .gaia-page {
@@ -203,6 +204,168 @@ body[data-theme="dark"] .gaia-theme-toggle {
 
 .gaia-main--tight {
   gap: var(--space-block);
+}
+
+.gaia-main--today {
+  gap: 1rem;
+  padding-top: 1rem;
+}
+
+.gaia-today-hero {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 1rem;
+  align-items: center;
+  min-height: 7.5rem;
+  border-radius: 1.5rem;
+  padding: 1.25rem;
+  color: #fff;
+  background:
+    radial-gradient(circle at 12% 0%, rgba(125, 217, 86, 0.34), transparent 38%),
+    linear-gradient(145deg, #0c1511 0%, #17281d 62%, #244c24 120%);
+  box-shadow: var(--shadow-lift);
+  overflow: hidden;
+}
+
+.gaia-today-hero__copy {
+  min-width: 0;
+}
+
+.gaia-today-hero h2 {
+  margin-top: 0.2rem;
+  color: #fff;
+  font-size: 1.5rem;
+  font-weight: 700;
+  line-height: 1.1;
+  letter-spacing: -0.03em;
+}
+
+.gaia-today-hero p:not(.gaia-eyebrow) {
+  margin-top: 0.45rem;
+  color: rgba(255, 255, 255, 0.7);
+  font-size: 0.8125rem;
+  line-height: 1.35;
+}
+
+.gaia-today-hero__assist {
+  border: 0;
+  border-radius: 999px;
+  background: var(--gaia);
+  color: #fff;
+  padding: 0.7rem 0.9rem;
+  font-size: 0.75rem;
+  font-weight: 800;
+  white-space: nowrap;
+  box-shadow: 0 8px 22px rgba(92, 184, 46, 0.28);
+}
+
+.gaia-today-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.75rem;
+}
+
+.gaia-today-card {
+  min-width: 0;
+  min-height: 6.3rem;
+  border-radius: 1.125rem;
+  padding: 1rem;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow-soft);
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+
+.gaia-today-card:active {
+  transform: scale(0.985);
+}
+
+.gaia-today-card--primary {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  min-height: 6.75rem;
+  color: #fff;
+  background:
+    radial-gradient(circle at 18% 10%, rgba(125, 217, 86, 0.28), transparent 34%),
+    linear-gradient(150deg, #1b231e 0%, #101512 100%);
+  border-color: rgba(255, 255, 255, 0.08);
+}
+
+.gaia-today-card h3 {
+  margin-top: 0.25rem;
+  color: var(--ink);
+  font-size: 1.02rem;
+  font-weight: 700;
+  line-height: 1.16;
+  letter-spacing: -0.02em;
+}
+
+.gaia-today-card p:not(.gaia-caption) {
+  margin-top: 0.25rem;
+  color: var(--ink-tertiary);
+  font-size: 0.75rem;
+  line-height: 1.3;
+}
+
+.gaia-today-card--primary h3,
+.gaia-today-card--primary p:not(.gaia-caption) {
+  color: #fff;
+}
+
+.gaia-energy-map {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 1rem;
+}
+
+.gaia-energy-map img {
+  display: block;
+  width: 100%;
+  aspect-ratio: 16 / 10;
+  object-fit: contain;
+  border-radius: 1rem;
+  background: #fff;
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow-soft);
+}
+
+.gaia-quick-list {
+  display: grid;
+  gap: 0.625rem;
+}
+
+.gaia-live-sync {
+  position: fixed;
+  top: calc(0.75rem + env(safe-area-inset-top));
+  right: max(1rem, env(safe-area-inset-right));
+  z-index: 70;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  border-radius: 999px;
+  padding: 0.45rem 0.65rem;
+  background: rgba(13, 24, 18, 0.82);
+  color: #fff;
+  box-shadow: var(--shadow-card);
+  backdrop-filter: blur(16px) saturate(160%);
+  -webkit-backdrop-filter: blur(16px) saturate(160%);
+  font-size: 0.625rem;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+}
+
+.gaia-live-sync[hidden] {
+  display: none;
+}
+
+.gaia-live-sync span {
+  width: 0.45rem;
+  height: 0.45rem;
+  border-radius: 999px;
+  background: var(--gaia-light);
+  box-shadow: 0 0 0 4px rgba(125, 217, 86, 0.18);
 }
 
 /* —— Cards —— */
@@ -899,6 +1062,7 @@ body.gaia-has-tabbar {
   padding: 1rem;
   background: rgba(255, 255, 255, 0.92);
   border: 1px solid rgba(255, 255, 255, 0.62);
+  color: #172017;
   box-shadow: 0 18px 60px rgba(0, 0, 0, 0.18), var(--shadow-ring, 0 0 0 1px rgba(0,0,0,0.04));
   backdrop-filter: blur(22px) saturate(170%);
   -webkit-backdrop-filter: blur(22px) saturate(170%);
@@ -923,7 +1087,7 @@ body.gaia-has-tabbar {
 
 .gaia-assist__top h2 {
   margin-top: 0.125rem;
-  color: var(--ink);
+  color: #172017;
   font-size: 1.0625rem;
   font-weight: 700;
   letter-spacing: -0.02em;
@@ -932,9 +1096,9 @@ body.gaia-has-tabbar {
 .gaia-assist__close {
   border: 0;
   border-radius: 999px;
-  background: var(--surface-muted);
+  background: #e9eee7;
   padding: 0.45rem 0.7rem;
-  color: var(--ink-secondary);
+  color: #314033;
   font-size: 0.6875rem;
   font-weight: 700;
 }
@@ -943,8 +1107,8 @@ body.gaia-has-tabbar {
   display: grid;
   justify-items: center;
   gap: 0.625rem;
-  margin: 1rem 0;
-  padding: 1rem;
+  margin: 0.85rem 0;
+  padding: 0.875rem;
   border-radius: 1.125rem;
   background: linear-gradient(180deg, #18221c 0%, #101512 100%);
   color: #fff;
@@ -953,8 +1117,8 @@ body.gaia-has-tabbar {
 .gaia-assist__mic {
   display: grid;
   place-items: center;
-  width: 3.75rem;
-  height: 3.75rem;
+  width: 3.25rem;
+  height: 3.25rem;
   border: 0;
   border-radius: 999px;
   color: #fff;
@@ -1073,11 +1237,11 @@ body.gaia-has-tabbar {
 .gaia-assist__input-row input {
   width: 100%;
   min-width: 0;
-  border: 1px solid var(--line);
+  border: 1px solid rgba(23, 32, 23, 0.08);
   border-radius: 0.875rem;
   background: rgba(255, 255, 255, 0.84);
   padding: 0.7rem 0.75rem;
-  color: var(--ink);
+  color: #172017;
   font-size: 0.8125rem;
   outline: none;
 }
@@ -1109,14 +1273,16 @@ body.gaia-has-tabbar {
 
 .gaia-assist__chips {
   display: flex;
+  flex-wrap: wrap;
   gap: 0.5rem;
-  overflow-x: auto;
+  overflow-x: visible;
   margin-top: 0.875rem;
   padding-bottom: 0.125rem;
 }
 
 .gaia-assist__chips button {
-  flex: 0 0 auto;
+  flex: 1 1 calc(50% - 0.5rem);
+  min-width: min(8rem, 100%);
   border: 0;
   border-radius: 999px;
   background: var(--gaia-muted);
@@ -1125,6 +1291,85 @@ body.gaia-has-tabbar {
   font-size: 0.6875rem;
   font-weight: 800;
   white-space: nowrap;
+}
+
+.gaia-assist__settings {
+  margin: -0.15rem 0 0.75rem;
+  border-radius: 1rem;
+  background: rgba(245, 248, 244, 0.88);
+  border: 1px solid rgba(23, 32, 23, 0.06);
+  color: #172017;
+}
+
+.gaia-assist__settings summary {
+  cursor: pointer;
+  padding: 0.65rem 0.75rem;
+  color: #4b5d4b;
+  font-size: 0.7rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  list-style: none;
+}
+
+.gaia-assist__settings summary::-webkit-details-marker {
+  display: none;
+}
+
+.gaia-assist__settings-grid {
+  display: grid;
+  gap: 0.6rem;
+  padding: 0 0.75rem 0.75rem;
+}
+
+.gaia-assist__settings-grid label {
+  display: grid;
+  gap: 0.3rem;
+  color: #70806f;
+  font-size: 0.68rem;
+  font-weight: 800;
+}
+
+.gaia-assist__settings-grid select,
+.gaia-assist__settings-grid input[type="range"] {
+  width: 100%;
+  min-width: 0;
+}
+
+.gaia-assist__settings-grid select {
+  border: 1px solid rgba(23, 32, 23, 0.08);
+  border-radius: 0.75rem;
+  background: #fff;
+  color: #172017;
+  padding: 0.55rem 0.6rem;
+  font-size: 0.75rem;
+}
+
+.gaia-assist__speed {
+  grid-template-columns: 1fr auto;
+  align-items: center;
+}
+
+.gaia-assist__speed input {
+  grid-column: 1 / -1;
+  accent-color: var(--gaia);
+}
+
+body[data-theme="dark"] .gaia-assist__panel {
+  background: rgba(245, 248, 244, 0.94);
+  border-color: rgba(255, 255, 255, 0.2);
+  color: #172017;
+}
+
+body[data-theme="dark"] .gaia-assist__bubble--bot,
+body[data-theme="dark"] .gaia-assist__settings {
+  background: rgba(235, 241, 232, 0.92);
+  color: #314033;
+}
+
+body[data-theme="dark"] .gaia-assist__label,
+body[data-theme="dark"] .gaia-assist__promise {
+  color: #7a8979;
 }
 
 .gaia-assist__mic:disabled,
@@ -1163,9 +1408,28 @@ body.gaia-has-tabbar {
 
   .gaia-assist__panel {
     position: fixed;
-    left: 1rem;
-    right: 1rem;
-    bottom: calc(10.75rem + env(safe-area-inset-bottom));
+    left: 0.9rem;
+    right: 0.9rem;
+    bottom: calc(9.25rem + env(safe-area-inset-bottom));
     width: auto;
+    max-height: min(74dvh, 40rem);
+    overflow-y: auto;
+    padding: 0.9rem;
+  }
+
+  .gaia-assist__transcript {
+    max-height: 10rem;
+  }
+
+  .gaia-assist__chips button {
+    white-space: normal;
+  }
+
+  .gaia-today-hero {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .gaia-today-hero__assist {
+    justify-self: start;
   }
 }

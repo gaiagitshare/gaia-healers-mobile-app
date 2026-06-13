@@ -51,6 +51,12 @@ Use any Node 18+ host:
 
 Set the backend deployment URL in `window.GAIA_SYNC_PROXY_URL` when embedding or wrapping the app.
 
+For GHL iframe embeds, use the query parameter because the iframe is cross-origin:
+
+```text
+https://gaiagitshare.github.io/gaia-healers-mobile-app/home.html?store=1&proxy=https%3A%2F%2FYOUR-STAGING-PROXY-DOMAIN
+```
+
 ## Production Rules
 
 - No GHL token in `gaia-ecosystem.js`, `gaia-live-sync.js`, or any HTML page.

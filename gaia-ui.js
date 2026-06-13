@@ -802,57 +802,69 @@
     root.id = 'gaia-assist';
     root.className = 'gaia-assist';
     root.innerHTML = `
+      <button type="button" class="gaia-assist__backdrop" hidden aria-label="Close Gaia Assist"></button>
       <div class="gaia-assist__panel" role="dialog" aria-label="${assistant.name || 'Gaia Assist'}" hidden>
-        <div class="gaia-assist__handle"></div>
-        <div class="gaia-assist__top">
-          <div class="min-w-0">
-            <h2>${assistant.name || 'Gaia Assist'}</h2>
-            <p class="gaia-assist__mini">Tap Gaia for chat · hold to talk</p>
-          </div>
+        <div class="gaia-assist__sheet">
+          <div class="gaia-assist__handle" aria-hidden="true"></div>
+          <details class="gaia-assist__settings">
+            <summary aria-label="Voice settings">⚙</summary>
+            <div class="gaia-assist__settings-grid">
+              <label>Provider
+                <select class="gaia-assist__voice-provider">
+                  <option value="auto">Auto</option>
+                  <option value="browser">Browser</option>
+                  <option value="openai">OpenAI</option>
+                  <option value="elevenlabs">ElevenLabs</option>
+                </select>
+              </label>
+              <label>Voice
+                <select class="gaia-assist__voice-name"></select>
+              </label>
+              <label class="gaia-assist__speed">Speed <span>1.00x</span>
+                <input class="gaia-assist__voice-speed" type="range" min="0.75" max="1.25" step="0.05" value="1" />
+              </label>
+            </div>
+          </details>
           <button type="button" class="gaia-assist__close" aria-label="Close Gaia Assist">×</button>
-        </div>
-        <p class="gaia-assist__status" data-assist-state="idle">Tap Gaia for chat · hold to talk</p>
-        <div class="gaia-assist__transcript"></div>
-        <form class="gaia-assist__form">
-          <label class="gaia-assist__label" for="gaia-assist-prompt">Ask Gaia</label>
-          <div class="gaia-assist__input-row">
-            <input id="gaia-assist-prompt" name="prompt" type="text" autocomplete="off" placeholder="Ask about my Elevate badge" />
-            <button type="submit">Send</button>
+          <div class="gaia-assist__aura">
+            <div class="gaia-assist__orb-visual" aria-hidden="true">
+              <span class="gaia-assist__orb-g">G</span>
+            </div>
+            <div class="gaia-assist__wave" aria-hidden="true">
+              <span></span><span></span><span></span><span></span><span></span>
+            </div>
           </div>
-        </form>
-        <p class="gaia-assist__error" role="alert" hidden></p>
-        <div class="gaia-assist__chips"></div>
-        <div class="gaia-assist__voice gaia-assist__voice--fallback" hidden aria-hidden="true">
-          <audio class="gaia-assist__audio" playsinline webkit-playsinline preload="auto"></audio>
-          <button type="button" class="gaia-assist__mic" aria-label="Start voice prompt"></button>
-          <button type="button" class="gaia-assist__mute" aria-pressed="false">Mute</button>
-          <button type="button" class="gaia-assist__stop">Stop</button>
-          <button type="button" class="gaia-assist__play" hidden>Hear Gaia</button>
-          <span class="gaia-assist__provider">Voice: browser</span>
-        </div>
-        <details class="gaia-assist__settings">
-          <summary>Advanced voice settings</summary>
-          <div class="gaia-assist__settings-grid">
-            <label>Provider
-              <select class="gaia-assist__voice-provider">
-                <option value="auto">Auto</option>
-                <option value="browser">Browser</option>
-                <option value="openai">OpenAI</option>
-                <option value="elevenlabs">ElevenLabs</option>
-              </select>
-            </label>
-            <label>Voice
-              <select class="gaia-assist__voice-name"></select>
-            </label>
-            <label class="gaia-assist__speed">Speed <span>1.00x</span>
-              <input class="gaia-assist__voice-speed" type="range" min="0.75" max="1.25" step="0.05" value="1" />
-            </label>
+          <div class="gaia-assist__headline">
+            <h2>${assistant.name || 'Gaia'}</h2>
+            <p class="gaia-assist__status" data-assist-state="idle">Tap center Gaia for chat · hold to talk</p>
           </div>
-        </details>
+          <div class="gaia-assist__transcript"></div>
+          <div class="gaia-assist__chips"></div>
+          <form class="gaia-assist__form">
+            <label class="gaia-assist__label" for="gaia-assist-prompt">Ask Gaia</label>
+            <div class="gaia-assist__input-row">
+              <input id="gaia-assist-prompt" name="prompt" type="text" autocomplete="off" placeholder="Ask about my scan, badge, or course…" />
+              <button type="submit" aria-label="Send">↑</button>
+            </div>
+          </form>
+          <div class="gaia-assist__toolbar">
+            <p class="gaia-assist__hint-line">Hold the green button below to speak</p>
+          </div>
+          <p class="gaia-assist__error" role="alert" hidden></p>
+          <div class="gaia-assist__voice gaia-assist__voice--fallback" hidden aria-hidden="true">
+            <audio class="gaia-assist__audio" playsinline webkit-playsinline preload="auto"></audio>
+            <button type="button" class="gaia-assist__mic" aria-label="Start voice prompt"></button>
+            <button type="button" class="gaia-assist__mute" aria-pressed="false">Mute</button>
+            <button type="button" class="gaia-assist__stop">Stop</button>
+            <button type="button" class="gaia-assist__play" hidden>Hear Gaia</button>
+            <span class="gaia-assist__provider">Voice: browser</span>
+          </div>
+        </div>
       </div>`;
 
     document.body.appendChild(root);
 
+    const backdrop = root.querySelector('.gaia-assist__backdrop');
     const panel = root.querySelector('.gaia-assist__panel');
     const close = root.querySelector('.gaia-assist__close');
     const mic = root.querySelector('.gaia-assist__mic');
@@ -1512,6 +1524,7 @@
 
     function setOpen(open) {
       if (open) unlockVoicePlayback();
+      if (backdrop) backdrop.hidden = !open;
       panel.hidden = !open;
       root.classList.toggle('gaia-assist--open', open);
       document.body.classList.toggle('gaia-assist-panel-open', open);
@@ -1519,17 +1532,23 @@
         button.setAttribute('aria-expanded', String(open));
         button.classList.toggle('is-active', open);
       });
+      if (open) {
+        const voiceStatus = realtimeVoice?.status || 'idle';
+        if (voiceStatus === 'idle' || voiceStatus === 'ready') {
+          setAssistVoiceState(voiceStatus, REALTIME_STATUS_COPY[voiceStatus] || REALTIME_STATUS_COPY.idle);
+        }
+      }
     }
 
     const REALTIME_STATUS_COPY = {
-      idle: 'Tap Gaia for chat · hold to talk',
+      idle: 'Tap center Gaia for chat · hold to talk',
       ready: 'Hold Gaia · release to send',
-      connecting: 'Connecting…',
-      holding: 'Listening… release to send',
-      listening: 'Listening… release to send',
+      connecting: 'Waking up voice…',
+      holding: 'Listening — release to send',
+      listening: 'Listening — release to send',
       thinking: 'Gaia is thinking…',
       speaking: 'Gaia is speaking…',
-      error: 'Voice unavailable — type instead',
+      error: 'Voice unavailable — type your question',
     };
 
     const HOLD_TO_TALK_MS = 280;
@@ -1630,6 +1649,7 @@
       dockButtons().forEach((button) => {
         button.dataset.state = state;
       });
+      if (status) status.dataset.assistState = state;
       if (message && status) status.textContent = message;
     }
 
@@ -2255,6 +2275,11 @@
       }
     });
     close.addEventListener('click', () => {
+      if (realtimeVoice?.isActive()) realtimeVoice.stop();
+      setOpen(false);
+      setAssistVoiceState('idle', REALTIME_STATUS_COPY.idle);
+    });
+    backdrop?.addEventListener('click', () => {
       if (realtimeVoice?.isActive()) realtimeVoice.stop();
       setOpen(false);
       setAssistVoiceState('idle', REALTIME_STATUS_COPY.idle);

@@ -10,11 +10,12 @@
   <script src="gaia-live-sync.js"></script>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
   <script src="gaia-chakra-data.js"></script>
   <link rel="stylesheet" href="gaia-shared.css" />
+  <link rel="stylesheet" href="gaia-ui-v2.css" />
 </head>
-<body class="gaia-app gaia-page gaia-single-app">
+<body class="gaia-app gaia-page gaia-single-app gaia-v2" data-theme="dark">
   <svg width="0" height="0" aria-hidden="true"><defs><linearGradient id="gaia-ring-gradient" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="#7DD956"/><stop offset="100%" stop-color="#449422"/></linearGradient></defs></svg>
   <div class="gaia-shell" id="gaia-app-shell">
     <section class="gaia-screen is-active" data-screen="today" aria-label="Today">
@@ -36,35 +37,33 @@
       <main class="gaia-main gaia-main--today">
         <div id="gaia-coach-anchor"></div>
 
-        <section class="gaia-today-hero gaia-today-hero--simple">
-          <div class="gaia-today-hero__copy">
-            <p class="gaia-eyebrow">Today</p>
-            <h2>Your Gaia workspace</h2>
-            <p>Bio-Well, Academy, and Elevate — one place.</p>
-          </div>
+        <section class="gaia-dash-hero">
+          <p class="gaia-dash-hero__greeting">Client portal</p>
+          <h2 class="gaia-dash-hero__title">Your energy is <em>session-ready</em></h2>
+          <p class="gaia-dash-hero__sub">Sacral focus · Bio-Well scan 7:42 AM · Elevate badge on track</p>
         </section>
 
-        <section class="gaia-today-grid" aria-label="Primary Gaia areas">
-          <a href="home.html?view=wellness&tab=biowell" class="gaia-today-card gaia-today-card--primary">
+        <section class="gaia-bento" aria-label="Primary Gaia areas">
+          <a href="home.html?view=wellness&tab=biowell" class="gaia-bento__tile gaia-bento__tile--wide">
             <div class="gaia-score-ring gaia-score-ring--sm shrink-0">
               <svg class="gaia-score-ring__svg" viewBox="0 0 100 100"><circle class="gaia-score-ring__track" cx="50" cy="50" r="42"/><circle class="gaia-score-ring__progress" cx="50" cy="50" r="42"/></svg>
               <div class="gaia-score-ring__center"><span class="gaia-score-ring__value !text-white">87</span></div>
             </div>
             <div class="min-w-0">
-              <p class="gaia-caption !text-white/70">Bio-Well readiness</p>
-              <h3>Sacral focus</h3>
-              <p>Scanned 7:42 AM</p>
+              <p class="gaia-bento__label">Wellness</p>
+              <p class="gaia-bento__title">Bio-Well readiness</p>
+              <p class="gaia-bento__meta">Sacral focus · tap for scan & chakra map</p>
             </div>
           </a>
-          <a href="home.html?view=academy" class="gaia-today-card">
-            <p class="gaia-caption">Academy</p>
-            <h3>Advanced L1</h3>
-            <p>62% complete</p>
+          <a href="home.html?view=academy" class="gaia-bento__tile">
+            <p class="gaia-bento__label">Academy</p>
+            <p class="gaia-bento__title">Advanced L1</p>
+            <p class="gaia-bento__meta">62% complete</p>
           </a>
-          <a href="home.html?view=community&tab=events" class="gaia-today-card">
-            <p class="gaia-caption">Events</p>
-            <h3>Elevate 2026</h3>
-            <p>Badge ops ready</p>
+          <a href="home.html?view=community&tab=events" class="gaia-bento__tile">
+            <p class="gaia-bento__label">Events</p>
+            <p class="gaia-bento__title">Elevate 2026</p>
+            <p class="gaia-bento__meta">Badge ops ready</p>
           </a>
         </section>
 

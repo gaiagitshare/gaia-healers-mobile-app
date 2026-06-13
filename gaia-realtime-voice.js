@@ -515,15 +515,15 @@
         await startPromise;
         return;
       }
-      if (status === 'idle' || status === 'error') {
-        await start({ prepareOnly: true });
-      }
+      await start();
     }
 
     async function start(startOptions = {}) {
       if (startPromise) return startPromise;
-      if (setupDone && wsRef.current?.readyState === WebSocket.OPEN) return;
-      if (status !== 'idle' && status !== 'error' && status !== 'ready') return;
+      if (setupDone && wsRef.current?.readyState === WebSocket.OPEN) {
+        setStatus(holding ? 'holding' : 'ready');
+        return;
+      }
       if (!navigator.mediaDevices?.getUserMedia) {
         setErrorMessage('Your browser does not allow microphone access here.');
         setStatus('error');
@@ -582,6 +582,7 @@
           await waitForSetup();
           await ensurePlayback();
           await startMicStreaming();
+          setStatus(holding ? 'holding' : 'ready');
 
           const maxSeconds = Number(sessionMeta.maxSessionSeconds) || 300;
           timeoutRef.current = window.setTimeout(() => {
@@ -614,8 +615,7 @@
       }
 
       const wasReady = setupDone && wsRef.current?.readyState === WebSocket.OPEN;
-      if (!wasReady) setStatus('connecting');
-      else setStatus('holding');
+      if (wasReady) setStatus('holding');
 
       try {
         await ensureSession();

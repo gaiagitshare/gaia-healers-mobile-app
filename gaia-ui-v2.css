@@ -1,0 +1,654 @@
+/* Gaia Healers — UI v2 (2026 refresh) */
+
+:root {
+  --gh-bg: #060908;
+  --gh-bg-elevated: #0e1210;
+  --gh-bg-card: rgba(18, 24, 20, 0.72);
+  --gh-border: rgba(125, 217, 86, 0.12);
+  --gh-border-soft: rgba(255, 255, 255, 0.06);
+  --gh-glow: rgba(92, 184, 46, 0.35);
+  --gh-text: #eef4eb;
+  --gh-text-soft: rgba(238, 244, 235, 0.62);
+  --gh-accent: #7dd956;
+  --gh-accent-deep: #449422;
+  --gh-radius-xl: 28px;
+  --gh-radius-lg: 20px;
+  --gh-radius-md: 14px;
+  --gh-font: "Plus Jakarta Sans", Inter, -apple-system, system-ui, sans-serif;
+}
+
+body.gaia-v2.gaia-app {
+  font-family: var(--gh-font);
+  background:
+    radial-gradient(ellipse 120% 80% at 50% -20%, rgba(92, 184, 46, 0.14), transparent 55%),
+    radial-gradient(circle at 100% 0%, rgba(68, 148, 34, 0.08), transparent 40%),
+    var(--gh-bg);
+  color: var(--gh-text);
+}
+
+body.gaia-v2.gaia-page {
+  background: transparent;
+}
+
+body.gaia-v2[data-theme="dark"],
+body.gaia-v2 {
+  --ink: var(--gh-text);
+  --ink-secondary: var(--gh-text-soft);
+  --ink-tertiary: rgba(238, 244, 235, 0.38);
+  --surface: var(--gh-bg-elevated);
+  --surface-subtle: var(--gh-bg);
+  --surface-muted: rgba(255, 255, 255, 0.06);
+  --border: var(--gh-border-soft);
+}
+
+body.gaia-v2 .gaia-header {
+  background: rgba(6, 9, 8, 0.55);
+  backdrop-filter: blur(24px) saturate(160%);
+  -webkit-backdrop-filter: blur(24px) saturate(160%);
+  border-bottom: 1px solid var(--gh-border-soft);
+  padding-top: max(0.65rem, env(safe-area-inset-top));
+}
+
+body.gaia-v2 .gaia-header h1,
+body.gaia-v2 .gaia-page-title {
+  font-weight: 700;
+  letter-spacing: -0.035em;
+}
+
+body.gaia-v2 .gaia-header .gaia-eyebrow {
+  color: var(--gh-accent);
+  text-shadow: none;
+  font-size: 0.625rem;
+  letter-spacing: 0.14em;
+}
+
+body.gaia-v2 .gaia-header-logo {
+  width: 2.5rem;
+  height: 2.5rem;
+  border-radius: 14px;
+  background: linear-gradient(145deg, rgba(125, 217, 86, 0.22), rgba(68, 148, 34, 0.08));
+  border: 1px solid var(--gh-border);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+}
+
+body.gaia-v2 .gaia-login-pill {
+  background: rgba(125, 217, 86, 0.12);
+  border: 1px solid var(--gh-border);
+  color: var(--gh-accent);
+  font-weight: 600;
+  border-radius: 999px;
+}
+
+body.gaia-v2 .gaia-main {
+  padding: 0.75rem 1rem 1.5rem;
+  gap: 0.85rem;
+}
+
+/* —— Today dashboard —— */
+body.gaia-v2 .gaia-dash-hero {
+  position: relative;
+  overflow: hidden;
+  padding: 1.35rem 1.25rem 1.5rem;
+  border-radius: var(--gh-radius-xl);
+  border: 1px solid var(--gh-border);
+  background:
+    radial-gradient(circle at 20% 0%, rgba(125, 217, 86, 0.2), transparent 42%),
+    linear-gradient(155deg, rgba(16, 28, 20, 0.95) 0%, rgba(8, 12, 10, 0.88) 100%);
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.45), inset 0 1px 0 rgba(255, 255, 255, 0.06);
+}
+
+body.gaia-v2 .gaia-dash-hero__greeting {
+  font-size: 0.6875rem;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--gh-accent);
+}
+
+body.gaia-v2 .gaia-dash-hero__title {
+  margin-top: 0.35rem;
+  font-size: clamp(1.45rem, 5vw, 1.75rem);
+  font-weight: 700;
+  line-height: 1.12;
+  letter-spacing: -0.04em;
+  color: var(--gh-text);
+}
+
+body.gaia-v2 .gaia-dash-hero__title em {
+  font-style: normal;
+  color: var(--gh-accent);
+}
+
+body.gaia-v2 .gaia-dash-hero__sub {
+  margin-top: 0.5rem;
+  font-size: 0.8125rem;
+  color: var(--gh-text-soft);
+}
+
+body.gaia-v2 .gaia-bento {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.65rem;
+}
+
+body.gaia-v2 .gaia-bento__tile {
+  display: block;
+  text-decoration: none;
+  color: inherit;
+  min-height: 5.5rem;
+  padding: 1rem;
+  border-radius: var(--gh-radius-lg);
+  border: 1px solid var(--gh-border-soft);
+  background: var(--gh-bg-card);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.28);
+  transition: transform 0.18s ease, border-color 0.18s ease;
+}
+
+body.gaia-v2 .gaia-bento__tile:active {
+  transform: scale(0.98);
+}
+
+body.gaia-v2 .gaia-bento__tile--wide {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  min-height: 6.25rem;
+  border-color: var(--gh-border);
+  background:
+    radial-gradient(circle at 0% 50%, rgba(125, 217, 86, 0.16), transparent 55%),
+    var(--gh-bg-card);
+}
+
+body.gaia-v2 .gaia-bento__label {
+  font-size: 0.625rem;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--gh-text-soft);
+}
+
+body.gaia-v2 .gaia-bento__tile--wide .gaia-bento__label {
+  color: rgba(255, 255, 255, 0.55);
+}
+
+body.gaia-v2 .gaia-bento__title {
+  margin-top: 0.25rem;
+  font-size: 1.0625rem;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+
+body.gaia-v2 .gaia-bento__meta {
+  margin-top: 0.2rem;
+  font-size: 0.75rem;
+  color: var(--gh-text-soft);
+}
+
+body.gaia-v2 .gaia-journey-card {
+  border-radius: var(--gh-radius-lg);
+  border: 1px solid var(--gh-border-soft);
+  background: var(--gh-bg-card);
+  backdrop-filter: blur(12px);
+  box-shadow: none;
+}
+
+body.gaia-v2 .gaia-chakra-teaser {
+  border-radius: var(--gh-radius-lg);
+  border: 1px solid var(--gh-border-soft);
+  background: var(--gh-bg-card);
+}
+
+body.gaia-v2 .gaia-card {
+  border-radius: var(--gh-radius-lg);
+  border: 1px solid var(--gh-border-soft);
+  background: var(--gh-bg-card) !important;
+  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.22);
+}
+
+body.gaia-v2 .gaia-badge {
+  border-radius: 999px;
+  background: rgba(125, 217, 86, 0.14);
+  color: var(--gh-accent);
+  border: 1px solid var(--gh-border);
+}
+
+/* —— Tab bar v2 —— */
+body.gaia-v2.gaia-has-tabbar {
+  padding-bottom: calc(4.75rem + env(safe-area-inset-bottom));
+}
+
+body.gaia-v2 .gaia-tabbar {
+  padding-left: max(1rem, env(safe-area-inset-left)) !important;
+  padding-right: max(1rem, env(safe-area-inset-right)) !important;
+}
+
+body.gaia-v2 .gaia-tabbar__inner {
+  max-width: 26rem !important;
+  min-height: 3.65rem;
+  padding: 0.35rem 0.4rem !important;
+  border-radius: 999px !important;
+  background: rgba(12, 16, 14, 0.82) !important;
+  border: 1px solid var(--gh-border-soft) !important;
+  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.05) !important;
+  backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(24px);
+}
+
+body.gaia-v2 .gaia-tabbar__link {
+  padding: 0.35rem 0.05rem 0.28rem;
+  color: rgba(238, 244, 235, 0.42) !important;
+}
+
+body.gaia-v2 .gaia-tabbar__link.is-active {
+  color: var(--gh-accent) !important;
+}
+
+body.gaia-v2 .gaia-tabbar__link.is-active::before {
+  inset: 0.12rem 0.15rem;
+  background: rgba(125, 217, 86, 0.12);
+  box-shadow: none;
+}
+
+body.gaia-v2 .gaia-tabbar__label {
+  font-size: 0.52rem !important;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+
+body.gaia-v2 .gaia-tabbar__assist {
+  width: 3.5rem;
+  height: 3.5rem;
+  margin: -0.85rem 0.1rem 0;
+  border-radius: 999px;
+  background: linear-gradient(145deg, #8ee862 0%, #5cb82e 45%, #3d8a1f 100%);
+  box-shadow:
+    0 0 0 3px rgba(6, 9, 8, 0.9),
+    0 12px 36px rgba(92, 184, 46, 0.45);
+}
+
+body.gaia-v2 .gaia-tabbar__assist-pulse {
+  inset: -0.25rem;
+  border-color: rgba(125, 217, 86, 0.45);
+}
+
+/* —— Gaia Assist sheet v2 —— */
+body.gaia-v2 .gaia-assist__backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 54;
+  border: 0;
+  background: rgba(0, 0, 0, 0.55);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  pointer-events: auto;
+  animation: gh-fade-in 0.22s ease;
+}
+
+body.gaia-v2 .gaia-assist__panel {
+  left: 0;
+  right: 0;
+  bottom: 0;
+  transform: none;
+  width: 100%;
+  max-height: min(78vh, 36rem);
+  padding: 0;
+  border-radius: var(--gh-radius-xl) var(--gh-radius-xl) 0 0;
+  border: 1px solid var(--gh-border-soft);
+  border-bottom: 0;
+  background:
+    radial-gradient(ellipse 80% 50% at 50% 0%, rgba(125, 217, 86, 0.12), transparent 60%),
+    rgba(10, 14, 12, 0.96);
+  box-shadow: 0 -24px 80px rgba(0, 0, 0, 0.55);
+  animation: gh-sheet-up 0.32s cubic-bezier(0.22, 1, 0.36, 1);
+  overflow: hidden;
+}
+
+body.gaia-v2 .gaia-assist__sheet {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  padding: 0.65rem 1rem calc(1rem + env(safe-area-inset-bottom));
+  max-height: inherit;
+  overflow: hidden;
+}
+
+body.gaia-v2 .gaia-assist__handle {
+  width: 2.5rem;
+  height: 0.28rem;
+  margin: 0.15rem auto 0.35rem;
+  background: rgba(255, 255, 255, 0.16);
+}
+
+body.gaia-v2 .gaia-assist__aura {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.65rem;
+  padding: 0.25rem 0 0.15rem;
+}
+
+body.gaia-v2 .gaia-assist__orb-visual {
+  position: relative;
+  width: 4.25rem;
+  height: 4.25rem;
+  border-radius: 999px;
+  display: grid;
+  place-items: center;
+  background: linear-gradient(145deg, rgba(125, 217, 86, 0.25), rgba(68, 148, 34, 0.08));
+  border: 1px solid var(--gh-border);
+  box-shadow: 0 0 40px var(--gh-glow);
+}
+
+body.gaia-v2 .gaia-assist__orb-visual::before {
+  content: "";
+  position: absolute;
+  inset: -0.35rem;
+  border-radius: inherit;
+  border: 1px solid rgba(125, 217, 86, 0.22);
+  animation: gh-aura-pulse 2.4s ease-in-out infinite;
+}
+
+body.gaia-v2 .gaia-assist__orb-g {
+  font-size: 1.35rem;
+  font-weight: 800;
+  letter-spacing: -0.06em;
+  color: var(--gh-accent);
+}
+
+body.gaia-v2 .gaia-assist__wave {
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  gap: 0.22rem;
+  height: 1.5rem;
+}
+
+body.gaia-v2 .gaia-assist__wave span {
+  width: 0.22rem;
+  height: 0.35rem;
+  border-radius: 999px;
+  background: rgba(125, 217, 86, 0.35);
+  transition: height 0.15s ease;
+}
+
+body.gaia-v2 .gaia-assist--holding .gaia-assist__wave span,
+body.gaia-v2 .gaia-assist--listening .gaia-assist__wave span,
+body.gaia-v2 .gaia-voice-holding .gaia-assist__wave span {
+  animation: gh-wave 0.75s ease-in-out infinite;
+  background: var(--gh-accent);
+}
+
+body.gaia-v2 .gaia-assist--thinking .gaia-assist__wave span,
+body.gaia-v2 .gaia-assist--speaking .gaia-assist__wave span,
+body.gaia-v2 .gaia-voice-speaking .gaia-assist__wave span,
+body.gaia-v2 .gaia-voice-thinking .gaia-assist__wave span {
+  animation: gh-wave 0.5s ease-in-out infinite;
+  background: var(--gh-accent);
+}
+
+body.gaia-v2 .gaia-assist--connecting .gaia-assist__orb-visual {
+  animation: gh-connect 1.2s ease-in-out infinite;
+}
+
+body.gaia-v2 .gaia-assist__wave span:nth-child(2) { animation-delay: 0.08s; }
+body.gaia-v2 .gaia-assist__wave span:nth-child(3) { animation-delay: 0.16s; }
+body.gaia-v2 .gaia-assist__wave span:nth-child(4) { animation-delay: 0.24s; }
+body.gaia-v2 .gaia-assist__wave span:nth-child(5) { animation-delay: 0.32s; }
+
+body.gaia-v2 .gaia-assist__headline {
+  text-align: center;
+}
+
+body.gaia-v2 .gaia-assist__headline h2 {
+  font-size: 1.125rem;
+  font-weight: 700;
+  letter-spacing: -0.03em;
+  color: var(--gh-text);
+}
+
+body.gaia-v2 .gaia-assist__status {
+  margin-top: 0.25rem;
+  font-size: 0.8125rem;
+  font-weight: 500;
+  color: var(--gh-text-soft);
+  text-align: center;
+}
+
+body.gaia-v2 .gaia-assist__status[data-assist-state="holding"],
+body.gaia-v2 .gaia-assist__status[data-assist-state="connecting"] {
+  color: var(--gh-accent);
+}
+
+body.gaia-v2 .gaia-assist__transcript {
+  flex: 1;
+  min-height: 3.5rem;
+  max-height: 9rem;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+  padding: 0.15rem 0.1rem;
+  mask-image: linear-gradient(180deg, transparent, #000 8%, #000 92%, transparent);
+}
+
+body.gaia-v2 .gaia-assist__bubble {
+  max-width: 88%;
+  padding: 0.55rem 0.75rem;
+  border-radius: 1rem;
+  font-size: 0.8125rem;
+  line-height: 1.4;
+}
+
+body.gaia-v2 .gaia-assist__bubble--user {
+  align-self: flex-end;
+  background: linear-gradient(135deg, rgba(125, 217, 86, 0.22), rgba(92, 184, 46, 0.12));
+  border: 1px solid var(--gh-border);
+  color: var(--gh-text);
+}
+
+body.gaia-v2 .gaia-assist__bubble--bot {
+  align-self: flex-start;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid var(--gh-border-soft);
+  color: var(--gh-text-soft);
+}
+
+body.gaia-v2 .gaia-assist__chips {
+  display: flex;
+  gap: 0.45rem;
+  overflow-x: auto;
+  padding-bottom: 0.1rem;
+  scrollbar-width: none;
+}
+
+body.gaia-v2 .gaia-assist__chips::-webkit-scrollbar {
+  display: none;
+}
+
+body.gaia-v2 .gaia-assist__chips button {
+  flex-shrink: 0;
+  border: 1px solid var(--gh-border);
+  border-radius: 999px;
+  padding: 0.45rem 0.85rem;
+  background: rgba(125, 217, 86, 0.08);
+  color: var(--gh-accent);
+  font-size: 0.6875rem;
+  font-weight: 600;
+}
+
+body.gaia-v2 .gaia-assist__form {
+  margin: 0;
+}
+
+body.gaia-v2 .gaia-assist__label {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+}
+
+body.gaia-v2 .gaia-assist__input-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.35rem 0.35rem 0.35rem 1rem;
+  border-radius: 999px;
+  border: 1px solid var(--gh-border-soft);
+  background: rgba(255, 255, 255, 0.04);
+}
+
+body.gaia-v2 .gaia-assist__input-row input {
+  flex: 1;
+  min-width: 0;
+  border: 0;
+  background: transparent;
+  color: var(--gh-text);
+  font-size: 0.9375rem;
+  outline: none;
+}
+
+body.gaia-v2 .gaia-assist__input-row input::placeholder {
+  color: rgba(238, 244, 235, 0.32);
+}
+
+body.gaia-v2 .gaia-assist__input-row button[type="submit"] {
+  flex-shrink: 0;
+  width: 2.35rem;
+  height: 2.35rem;
+  border: 0;
+  border-radius: 999px;
+  background: linear-gradient(145deg, var(--gh-accent), var(--gh-accent-deep));
+  color: #061008;
+  font-size: 1.1rem;
+  font-weight: 700;
+  line-height: 1;
+  box-shadow: 0 8px 20px rgba(92, 184, 46, 0.35);
+}
+
+body.gaia-v2 .gaia-assist__toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+body.gaia-v2 .gaia-assist__hint-line {
+  font-size: 0.6875rem;
+  color: rgba(238, 244, 235, 0.35);
+}
+
+body.gaia-v2 .gaia-assist__close {
+  position: absolute;
+  top: 0.85rem;
+  right: 0.85rem;
+  width: 2rem;
+  height: 2rem;
+  padding: 0;
+  display: grid;
+  place-items: center;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid var(--gh-border-soft);
+  color: var(--gh-text-soft);
+  font-size: 1.1rem;
+  line-height: 1;
+}
+
+body.gaia-v2 .gaia-assist__settings {
+  position: absolute;
+  top: 0.85rem;
+  left: 0.85rem;
+}
+
+body.gaia-v2 .gaia-assist__settings summary {
+  list-style: none;
+  width: 2rem;
+  height: 2rem;
+  display: grid;
+  place-items: center;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid var(--gh-border-soft);
+  color: var(--gh-text-soft);
+  font-size: 0.875rem;
+  cursor: pointer;
+}
+
+body.gaia-v2 .gaia-assist__settings summary::-webkit-details-marker {
+  display: none;
+}
+
+body.gaia-v2 .gaia-assist__settings-grid {
+  position: absolute;
+  top: 2.5rem;
+  left: 0;
+  z-index: 2;
+  min-width: 12rem;
+  padding: 0.75rem;
+  border-radius: var(--gh-radius-md);
+  border: 1px solid var(--gh-border-soft);
+  background: rgba(12, 16, 14, 0.98);
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.45);
+}
+
+body.gaia-v2 .gaia-assist__error {
+  font-size: 0.75rem;
+  color: #ff8a8a;
+  text-align: center;
+  padding: 0.35rem 0.5rem;
+  border-radius: 0.65rem;
+  background: rgba(255, 90, 90, 0.1);
+}
+
+body.gaia-v2 .gaia-assist__top,
+body.gaia-v2 .gaia-assist__mini {
+  display: none;
+}
+
+@keyframes gh-sheet-up {
+  from { transform: translateY(100%); opacity: 0.6; }
+  to { transform: translateY(0); opacity: 1; }
+}
+
+@keyframes gh-fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes gh-wave {
+  0%, 100% { height: 0.35rem; opacity: 0.55; }
+  50% { height: 1.25rem; opacity: 1; }
+}
+
+@keyframes gh-aura-pulse {
+  0%, 100% { transform: scale(1); opacity: 0.5; }
+  50% { transform: scale(1.06); opacity: 1; }
+}
+
+body.gaia-v2 #wellness-tabs button {
+  border-radius: 999px;
+  font-weight: 600;
+}
+
+body.gaia-v2 #wellness-tabs button.bg-gaia {
+  background: rgba(125, 217, 86, 0.18) !important;
+  color: var(--gh-accent) !important;
+  border: 1px solid var(--gh-border);
+}
+
+body.gaia-v2 #community-tabs button.bg-gaia {
+  background: rgba(125, 217, 86, 0.18) !important;
+  color: var(--gh-accent) !important;
+}
+
+body.gaia-v2 .gaia-assist__panel {
+  z-index: 55;
+}
+
+body.gaia-v2 .gaia-score-ring__value {
+  color: var(--gh-accent) !important;
+}

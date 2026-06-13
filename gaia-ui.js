@@ -252,19 +252,38 @@
     const chakras = window.GAIA_CHAKRAS || [];
     if (!chakras.length) return;
 
-    const silhouetteSvg = `<svg class="gaia-chakra-map__silhouette" viewBox="0 0 88 200" aria-hidden="true" focusable="false">
-      <ellipse cx="44" cy="22" rx="14" ry="16" fill="currentColor" opacity="0.92"/>
-      <path d="M30 38 Q44 34 58 38 L54 118 Q44 124 34 118 Z" fill="currentColor" opacity="0.88"/>
-      <path d="M22 118 Q44 128 66 118 L62 168 Q44 182 26 168 Z" fill="currentColor" opacity="0.82"/>
-      <path d="M28 168 Q44 176 60 168 L56 188 Q44 194 32 188 Z" fill="currentColor" opacity="0.78"/>
-    </svg>`;
-
-    document.querySelectorAll('[data-chakra-map]').forEach((root) => {
+    document.querySelectorAll('[data-chakra-map]').forEach((root, mapIndex) => {
       const compact = root.classList.contains('gaia-chakra-map--biowell');
+      const uid = `chakra-map-${mapIndex}`;
       let active = chakras.find((item) => item.id === root.dataset.chakraFocus) || chakras[0];
       const ordered = [...chakras].reverse();
 
       const render = () => {
+        const silhouetteSvg = `<svg class="gaia-chakra-map__silhouette" viewBox="0 0 120 220" aria-hidden="true" focusable="false">
+      <defs>
+        <radialGradient id="${uid}-aura" cx="50%" cy="14%" r="42%">
+          <stop offset="0%" stop-color="currentColor" stop-opacity="0.22"/>
+          <stop offset="100%" stop-color="currentColor" stop-opacity="0"/>
+        </radialGradient>
+        <linearGradient id="${uid}-body" x1="50%" y1="0%" x2="50%" y2="100%">
+          <stop offset="0%" stop-color="currentColor" stop-opacity="0.96"/>
+          <stop offset="100%" stop-color="currentColor" stop-opacity="0.78"/>
+        </linearGradient>
+      </defs>
+      <ellipse cx="60" cy="112" rx="34" ry="58" fill="url(#${uid}-aura)"/>
+      <g fill="url(#${uid}-body)">
+        <ellipse cx="60" cy="27" rx="13" ry="15"/>
+        <path d="M54 42h12v8c0 2-2 4-6 4s-6-2-6-4v-8z"/>
+        <path d="M47 54c0-2 5-4 13-4s13 2 13 4l-3 52c0 3-4 6-10 6s-10-3-10-6l-3-52z"/>
+        <path d="M47 58c-10 4-18 14-22 28-2 8 0 14 6 16l8-4c-2-10 2-22 10-30l-2-10z"/>
+        <path d="M73 58c10 4 18 14 22 28 2 8 0 14-6 16l-8-4c2-10-2-22-10-30l2-10z"/>
+        <path d="M42 108c-4 8-6 18-4 28 2 12 10 22 22 28 12-6 20-16 22-28 2-10 0-20-4-28-8 6-14 8-20 8s-12-2-20-8z"/>
+        <path d="M36 152c8 18 24 28 24 28s16-10 24-28c-6 10-16 16-24 16s-18-6-24-16z"/>
+        <ellipse cx="60" cy="186" rx="28" ry="10" opacity="0.55"/>
+      </g>
+      <line x1="60" y1="18" x2="60" y2="168" stroke="currentColor" stroke-opacity="0.08" stroke-width="1" stroke-dasharray="2 3"/>
+    </svg>`;
+
         const listItems = (compact ? ordered.slice(0, 5) : ordered).map((item) => `
           <button type="button" class="gaia-chakra-map__list-item${item.id === active.id ? ' is-active' : ''}"
             style="--chakra-color:${item.color}" data-chakra-id="${item.id}"

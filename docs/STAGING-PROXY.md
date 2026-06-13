@@ -49,12 +49,30 @@ Use any Node 18+ host:
 - Vercel serverless/function adaptation
 - Your VPS behind Nginx
 
+Current staging proxy deployment:
+
+```text
+https://ba2ki.com/gaia-proxy
+```
+
 Set the backend deployment URL in `window.GAIA_SYNC_PROXY_URL` when embedding or wrapping the app.
 
 For GHL iframe embeds, use the query parameter because the iframe is cross-origin:
 
 ```text
-https://gaiagitshare.github.io/gaia-healers-mobile-app/home.html?store=1&proxy=https%3A%2F%2FYOUR-STAGING-PROXY-DOMAIN
+https://gaiagitshare.github.io/gaia-healers-mobile-app/home.html?store=1&proxy=https%3A%2F%2Fba2ki.com%2Fgaia-proxy
+```
+
+## Deployed VPS Service
+
+The current VPS deployment uses:
+
+```text
+Systemd service: gaia-staging-proxy.service
+App directory: /root/gaia-staging-proxy
+Local port: 8787
+Public route: https://ba2ki.com/gaia-proxy/
+Nginx config: /etc/nginx/sites-available/ba2ki
 ```
 
 ## Production Rules

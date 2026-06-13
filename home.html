@@ -11,8 +11,8 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
-  <script src="gaia-chakra-data.js?v=ui-nav-18"></script>
-  <link rel="stylesheet" href="gaia-shared.css?v=ui-nav-18" />
+  <script src="gaia-chakra-data.js?v=ui-nav-19"></script>
+  <link rel="stylesheet" href="gaia-shared.css?v=ui-nav-19" />
 </head>
 <body class="gaia-app gaia-page gaia-single-app">
   <svg width="0" height="0" aria-hidden="true"><defs><linearGradient id="gaia-ring-gradient" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="#7DD956"/><stop offset="100%" stop-color="#449422"/></linearGradient></defs></svg>
@@ -85,19 +85,17 @@
           </div>
         </section>
 
-        <section class="gaia-card gaia-card-pad-lg gaia-energy-card">
-          <div class="mb-4 flex items-start justify-between gap-3">
-            <div>
-              <p class="gaia-section-label !mb-1">Energy map</p>
-              <h2 class="text-headline text-ink">Chakra + body points</h2>
-              <p class="gaia-caption mt-1">Stored from Bio-Well scans for trend tracking and practitioner review.</p>
-            </div>
-            <span class="gaia-badge gaia-badge--subtle">7 pts</span>
+        <a href="home.html?view=chakras" class="gaia-card gaia-card-pad gaia-chakra-teaser">
+          <div class="gaia-chakra-teaser__thumb" aria-hidden="true">
+            <img src="assets/gaia-chakra-meditation.png" width="621" height="906" alt="" decoding="async" />
           </div>
-          <div class="gaia-energy-map">
-            <div id="gaia-chakra-map-today" class="gaia-chakra-map" data-chakra-map data-chakra-focus="sacral"></div>
+          <div class="gaia-chakra-teaser__copy">
+            <p class="gaia-section-label !mb-1">Energy map</p>
+            <p class="text-headline text-ink">Chakra + body points</p>
+            <p class="gaia-caption mt-1">Sacral focus · open full body map</p>
           </div>
-        </section>
+          <span class="gaia-badge gaia-badge--subtle gaia-chakra-teaser__badge">7</span>
+        </a>
 
         <section class="gaia-quick-list" aria-label="More Gaia actions">
           <a href="home.html?view=community&tab=events" class="gaia-row">
@@ -109,6 +107,23 @@
             <div class="gaia-tile-icon strip-biotekna">GH</div>
             <div class="min-w-0 flex-1"><p class="text-headline text-ink">Devices & membership</p><p class="gaia-caption">Bio-Well kits, renewals, practitioner support</p></div>
           </a>
+        </section>
+      </main>
+    </section>
+
+    <section class="gaia-screen" data-screen="chakras" aria-label="Chakras">
+      <header class="gaia-header">
+        <p class="gaia-eyebrow">Bio-Well energy map</p>
+        <div class="mt-1 flex items-start justify-between gap-3">
+          <h1 class="gaia-page-title">Chakras</h1>
+          <span class="gaia-badge gaia-badge--subtle shrink-0">7 pts</span>
+        </div>
+        <p class="gaia-caption mt-1">Body-point scores from your latest scan · tap a row to inspect</p>
+      </header>
+
+      <main class="gaia-main">
+        <section class="gaia-card gaia-card-pad-lg gaia-chakra-screen-card">
+          <div id="gaia-chakra-map" class="gaia-chakra-map gaia-chakra-map--screen" data-chakra-map data-chakra-focus="sacral"></div>
         </section>
       </main>
     </section>
@@ -177,8 +192,19 @@
         </section>
 
         <section>
-          <h2 class="gaia-section-title mb-3">Chakra trends</h2>
-          <div id="gaia-chakra-map-biowell" class="gaia-chakra-map gaia-chakra-map--biowell" data-chakra-map data-chakra-focus="sacral"></div>
+          <div class="mb-3 flex items-center justify-between gap-3">
+            <h2 class="gaia-section-title">Chakra trends</h2>
+            <a href="home.html?view=chakras" class="gaia-link text-caption">Open map</a>
+          </div>
+          <a href="home.html?view=chakras" class="gaia-card gaia-card-pad gaia-chakra-teaser gaia-chakra-teaser--compact">
+            <div class="gaia-chakra-teaser__thumb" aria-hidden="true">
+              <img src="assets/gaia-chakra-meditation.png" width="621" height="906" alt="" decoding="async" />
+            </div>
+            <div class="gaia-chakra-teaser__copy">
+              <p class="text-headline text-ink">Seven body points</p>
+              <p class="gaia-caption mt-1">Heart 95 · Sacral 71 · view interactive map</p>
+            </div>
+          </a>
         </section>
 
         <section class="gaia-card gaia-card-pad">
@@ -511,7 +537,7 @@
       </main>
     </section>
   </div>
-  <script src="gaia-ui.js?v=ui-nav-18"></script>
-  <script src="shared-nav.js?v=ui-nav-18"></script>
+  <script src="gaia-ui.js?v=ui-nav-19"></script>
+  <script src="shared-nav.js?v=ui-nav-19"></script>
 </body>
 </html>

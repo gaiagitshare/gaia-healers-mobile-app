@@ -1082,7 +1082,7 @@ body[data-theme="dark"] .gaia-tabbar__inner a[aria-current="page"] {
 }
 
 .gaia-tabbar__inner {
-  max-width: 27rem !important;
+  max-width: 29rem !important;
   min-height: 4.25rem;
   border-radius: 1.45rem !important;
   padding: 0.45rem !important;
@@ -1154,7 +1154,7 @@ body[data-theme="dark"] .gaia-tabbar__inner a[aria-current="page"] {
   gap: 0.125rem;
   min-width: 0;
   border-radius: 1.05rem;
-  padding: 0.45rem 0.125rem;
+  padding: 0.4rem 0.1rem 0.32rem;
   color: #6b7b69 !important;
   text-decoration: none;
 }
@@ -1181,7 +1181,7 @@ body[data-theme="dark"] .gaia-tabbar__inner a[aria-current="page"] {
 .gaia-tabbar__label {
   position: relative;
   max-width: 100%;
-  font-size: 0.62rem !important;
+  font-size: 0.58rem !important;
   font-weight: 700;
   line-height: 1;
   white-space: nowrap;
@@ -1672,13 +1672,101 @@ body[data-theme="dark"] .gaia-chakra-map__list-track {
   flex-shrink: 0;
 }
 
-.gaia-chakra-map--biowell .gaia-chakra-map__figure {
-  width: min(100%, 16.5rem);
-  max-width: 16.5rem;
+.gaia-chakra-map--screen .gaia-chakra-map__layout {
+  gap: 0.75rem;
 }
 
-.gaia-chakra-map--biowell .gaia-chakra-map__stage {
-  transform: scale(1.38);
+.gaia-chakra-map--screen .gaia-chakra-map__figure {
+  width: min(100%, 15rem);
+  max-width: 15rem;
+  margin-inline: auto;
+  border-radius: 1.1rem;
+  background:
+    radial-gradient(circle at 50% 18%, rgba(126, 87, 194, 0.28), transparent 42%),
+    radial-gradient(circle at 50% 72%, rgba(30, 136, 229, 0.12), transparent 48%),
+    #050810;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.07);
+}
+
+.gaia-chakra-map--screen .gaia-chakra-map__stage {
+  transform: scale(1.2);
+  transform-origin: 50% 46%;
+}
+
+.gaia-chakra-map--screen .gaia-chakra-map__list {
+  gap: 0.24rem;
+}
+
+.gaia-chakra-map--screen .gaia-chakra-map__list-item {
+  grid-template-columns: 0.5rem minmax(0, 1fr) minmax(0, 2.6rem) 1.85rem;
+  gap: 0.45rem;
+  padding: 0.45rem 0.6rem;
+  border-radius: 0.7rem;
+  border: 1px solid transparent;
+  background: var(--surface-subtle);
+}
+
+.gaia-chakra-map--screen .gaia-chakra-map__list-item.is-active {
+  background: color-mix(in srgb, var(--chakra-color) 10%, var(--surface-subtle));
+}
+
+.gaia-chakra-map--screen .gaia-chakra-map__detail {
+  padding: 0.75rem 0.85rem;
+  border-radius: 0.95rem;
+}
+
+.gaia-chakra-screen-card {
+  padding-top: 0.85rem !important;
+  padding-bottom: 1rem !important;
+}
+
+.gaia-chakra-teaser {
+  display: grid;
+  grid-template-columns: 4.25rem minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 0.85rem;
+  text-decoration: none;
+  color: inherit;
+  transition: transform 0.16s ease, box-shadow 0.16s ease;
+}
+
+.gaia-chakra-teaser:hover,
+.gaia-chakra-teaser:focus-visible {
+  transform: translateY(-1px);
+  box-shadow: var(--shadow-soft);
+}
+
+.gaia-chakra-teaser__thumb {
+  width: 4.25rem;
+  aspect-ratio: 621 / 906;
+  overflow: hidden;
+  border-radius: 0.75rem;
+  background: #050810;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.06);
+}
+
+.gaia-chakra-teaser__thumb img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: 50% 18%;
+}
+
+.gaia-chakra-teaser__copy {
+  min-width: 0;
+}
+
+.gaia-chakra-teaser__badge {
+  align-self: start;
+}
+
+.gaia-chakra-teaser--compact {
+  grid-template-columns: 3.5rem minmax(0, 1fr);
+}
+
+.gaia-chakra-teaser--compact .gaia-chakra-teaser__thumb {
+  width: 3.5rem;
 }
 
 .gaia-body-map__list {

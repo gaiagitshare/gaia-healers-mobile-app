@@ -15,7 +15,8 @@
   const ADMIN_MODE_KEY = 'gaia-admin-mode';
   const ADMIN_UNLOCK_PARAM = 'admin';
   const ADMIN_DEV_PASSCODE = 'gaia2026';
-  const APP_VIEWS = new Set(['today', 'biowell', 'academy', 'community', 'profile', 'admin']);
+  const APP_VIEWS = new Set(['today', 'biowell', 'chakras', 'academy', 'community', 'profile', 'admin']);
+  let refreshChakraMaps = () => {};
 
   function escapeHtml(value) {
     return String(value ?? '')
@@ -312,7 +313,6 @@
     if (!chakras.length) return;
 
     document.querySelectorAll('[data-chakra-map]').forEach((root) => {
-      const compact = root.classList.contains('gaia-chakra-map--biowell');
       let active = chakras.find((item) => item.id === root.dataset.chakraFocus) || chakras[0];
       const ordered = [...chakras].reverse();
       const figureSrc = 'assets/gaia-chakra-meditation.png';
@@ -332,7 +332,7 @@
           </button>`).join('');
 
         root.innerHTML = `
-          <div class="gaia-chakra-map__layout${compact ? ' gaia-chakra-map__layout--compact' : ''}">
+          <div class="gaia-chakra-map__layout">
             <div class="gaia-chakra-map__figure" data-active-chakra="${active.id}" aria-hidden="false">
               <div class="gaia-chakra-map__canvas">
                 <div class="gaia-chakra-map__stage">
@@ -378,11 +378,20 @@
 
       render();
 
-      if (!root.dataset.chakraLayoutBound) {
-        root.dataset.chakraLayoutBound = '1';
-        window.addEventListener('resize', () => layoutChakraNodes(root, chakras));
+    });
+
+    refreshChakraMaps = () => {
+      document.querySelectorAll('[data-chakra-map]').forEach((root) => layoutChakraNodes(root, chakras));
+    };
+
+    window.GaiaChakraMaps = { refresh: refreshChakraMaps };
+    window.addEventListener('resize', refreshChakraMaps);
+    window.addEventListener('gaia:route', (event) => {
+      if (event.detail?.view === 'chakras') {
+        requestAnimationFrame(() => requestAnimationFrame(refreshChakraMaps));
       }
     });
+    refreshChakraMaps();
   }
 
   function initCoachMark() {
@@ -529,6 +538,7 @@
       const labels = {
         today: 'Today',
         biowell: 'Bio-Well',
+        chakras: 'Chakras',
         academy: 'Academy',
         community: 'Community',
         profile: 'Profile',
@@ -564,6 +574,9 @@
       }
       syncAdminUi();
       window.dispatchEvent(new CustomEvent('gaia:route', { detail: { view: nextView, tab: options.tab || '' } }));
+      if (nextView === 'chakras') {
+        requestAnimationFrame(() => requestAnimationFrame(() => refreshChakraMaps()));
+      }
       return nextView;
     }
 
@@ -1440,11 +1453,11 @@
     initTheme();
     initCoachMark();
     initSplashSteps();
+    initChakraMaps();
     initAppShellNavigation();
     initCommunityHub();
     initCommunityTabs();
     initLiveSyncIndicator();
-    initChakraMaps();
     initGaiaAssist();
   });
 })();

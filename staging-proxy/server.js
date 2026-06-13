@@ -132,7 +132,7 @@ function corsHeaders(origin) {
     'Access-Control-Allow-Origin': allowed ? (origin || '*') : 'null',
     'Access-Control-Allow-Methods': 'GET,POST,OPTIONS',
     'Access-Control-Allow-Headers': 'Content-Type,Authorization',
-    'Access-Control-Expose-Headers': 'X-Gaia-Voice-Provider,X-Gaia-Voice-Model,X-Gaia-Voice-Name',
+    'Access-Control-Expose-Headers': 'X-Gaia-Voice-Provider,X-Gaia-Voice-Model,X-Gaia-Voice-Name,X-Gaia-Voice-Max-Seconds',
     'Vary': 'Origin',
   };
 }
@@ -175,6 +175,15 @@ function clampNumber(value, min, max, fallback) {
   return Math.min(max, Math.max(min, number));
 }
 
+const GEMINI_LIVE_MODEL = process.env.GEMINI_LIVE_MODEL || 'gemini-2.0-flash-live-001';
+const GEMINI_LIVE_VOICE = process.env.GEMINI_LIVE_VOICE || 'Puck';
+const GEMINI_LIVE_MAX_SECONDS = clampNumber(
+  Number(process.env.GEMINI_LIVE_MAX_SECONDS || 300),
+  30,
+  900,
+  300,
+);
+
 function publicTtsOrder() {
   return [...new Set([...TTS_PROVIDER_ORDER, 'browser'])];
 }
@@ -211,6 +220,149 @@ async function readJsonBody(req, maxBytes = 1024 * 1024) {
   }
   if (!chunks.length) return {};
   return JSON.parse(Buffer.concat(chunks).toString('utf8'));
+}
+
+async function readRawBody(req, maxBytes = 128 * 1024) {
+  const chunks = [];
+  let size = 0;
+  for await (const chunk of req) {
+    size += chunk.length;
+    if (size > maxBytes) {
+      throw new Error('Request body is too large');
+    }
+    chunks.push(chunk);
+  }
+  if (!chunks.length) return '';
+  return Buffer.concat(chunks).toString('utf8');
+}
+
+function boolFlag(value) {
+  return value === 'true' || value === '1';
+}
+
+function geminiApiKey() {
+  return process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY || '';
+}
+
+function gaiaLiveVoiceConfig() {
+  const geminiReady = Boolean(geminiApiKey());
+  const explicit = process.env.GAIA_LIVE_VOICE_ENABLED ?? process.env.GAIA_REALTIME_VOICE_ENABLED;
+  const enabled = explicit != null && explicit !== ''
+    ? boolFlag(explicit)
+    : (boolFlag(process.env.GAIA_ASSIST_VOICE_ENABLED) && geminiReady);
+  return {
+    enabled: enabled && geminiReady,
+    provider: 'gemini',
+    model: GEMINI_LIVE_MODEL,
+    voice: GEMINI_LIVE_VOICE,
+    maxSessionSeconds: GEMINI_LIVE_MAX_SECONDS,
+  };
+}
+
+function buildGaiaLiveInstructions(context = {}) {
+  const view = String(context.view || 'today').trim() || 'today';
+  return [
+    'You are Gaia Assist, the warm voice guide for Gaia Healers practitioners and Elevate event attendees.',
+    gaiaKnowledgePrompt(),
+    `Current app view: ${view}.`,
+    'Speak in a calm, friendly voice. Keep replies short: one or two sentences unless the user asks for more detail.',
+    'Help with Bio-Well readiness, chakra focus, Academy progress, Elevate badge prep, devices, communities, and GHL follow-up drafts.',
+    'Never claim you saved, imported, emailed, checked in, or changed anything. Draft and ask for confirmation first.',
+    'Do not diagnose or make medical claims.',
+    'Greet the user briefly when the session starts, then listen.',
+  ].join('\n');
+}
+
+function buildGaiaLiveConnectConfig(context = {}) {
+  const cfg = gaiaLiveVoiceConfig();
+  return {
+    responseModalities: ['AUDIO'],
+    temperature: 0.8,
+    speechConfig: {
+      voiceConfig: {
+        prebuiltVoiceConfig: {
+          voiceName: cfg.voice,
+        },
+      },
+    },
+    systemInstruction: {
+      parts: [{ text: buildGaiaLiveInstructions(context) }],
+    },
+    inputAudioTranscription: {},
+    outputAudioTranscription: {},
+  };
+}
+
+async function assistLiveToken(_req, res, origin, url) {
+  const startedAt = Date.now();
+  const cfg = gaiaLiveVoiceConfig();
+  if (!cfg.enabled) {
+    sendJson(res, 200, { ok: false, disabled: true, reason: 'gaia_voice_disabled' }, origin);
+    return;
+  }
+
+  const apiKey = geminiApiKey();
+  if (!apiKey) {
+    sendJson(res, 503, { ok: false, reason: 'missing_gemini_api_key' }, origin);
+    return;
+  }
+
+  const view = String(url.searchParams.get('view') || 'today').trim() || 'today';
+  const expireTime = new Date(Date.now() + 30 * 60 * 1000).toISOString();
+  const newSessionExpireTime = new Date(Date.now() + 60 * 1000).toISOString();
+
+  try {
+    const { GoogleGenAI } = await import('@google/genai');
+    const client = new GoogleGenAI({
+      apiKey,
+      httpOptions: { apiVersion: 'v1alpha' },
+    });
+
+    const authToken = await client.authTokens.create({
+      config: {
+        uses: 1,
+        expireTime,
+        newSessionExpireTime,
+        liveConnectConstraints: {
+          model: cfg.model,
+          config: buildGaiaLiveConnectConfig({ view }),
+        },
+        httpOptions: { apiVersion: 'v1alpha' },
+      },
+    });
+
+    const token = authToken?.name || authToken?.token || '';
+    if (!token) {
+      throw new Error('Gemini auth token missing name');
+    }
+
+    console.log('[Gaia Assist] gemini live token ready', {
+      model: cfg.model,
+      voice: cfg.voice,
+      view,
+      latencyMs: Date.now() - startedAt,
+    });
+
+    sendJson(res, 200, {
+      ok: true,
+      token,
+      provider: cfg.provider,
+      model: cfg.model,
+      voice: cfg.voice,
+      maxSessionSeconds: cfg.maxSessionSeconds,
+      expireTime,
+    }, origin);
+  } catch (error) {
+    console.error('[Gaia Assist] gemini live token failed', {
+      error: error.message,
+      latencyMs: Date.now() - startedAt,
+    });
+    sendJson(res, 502, {
+      ok: false,
+      reason: 'gemini_live_token_failed',
+      error: error.message.split('\n')[0],
+    }, origin);
+  }
 }
 
 async function getEventSummary() {
@@ -289,6 +441,8 @@ async function bootstrap() {
           configured: Boolean(process.env.GROQ_API_KEY || process.env.OPENROUTER_API_KEY || process.env.OPENAI_API_KEY),
           enabled: process.env.GAIA_ASSIST_VOICE_ENABLED === 'true',
           providerOrder: ASSIST_PROVIDER_ORDER,
+          live: gaiaLiveVoiceConfig(),
+          realtime: gaiaLiveVoiceConfig(),
           tts: {
             configured: hasAnyBackendTtsProvider(),
             providerOrder: publicTtsOrder(),
@@ -979,6 +1133,10 @@ const server = http.createServer(async (req, res) => {
     }
     if (req.method === 'GET' && url.pathname === '/api/assist/voices') {
       sendJson(res, 200, await listHostedVoices(), origin);
+      return;
+    }
+    if ((req.method === 'GET' || req.method === 'POST') && url.pathname === '/api/assist/voice/token') {
+      await assistLiveToken(req, res, origin, url);
       return;
     }
     if (req.method === 'POST' && url.pathname === '/api/assist/tts') {

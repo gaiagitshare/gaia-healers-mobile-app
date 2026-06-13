@@ -23,6 +23,10 @@ Paste these only into your backend host environment variables, never into the st
 | `TTS_PROVIDER_ORDER` | Backend voice order, e.g. `openai,elevenlabs,compatible` | Gaia Assist staging config |
 | `OPENAI_TTS_MODEL` | Optional OpenAI TTS model, e.g. `gpt-4o-mini-tts` | OpenAI audio model picker |
 | `OPENAI_TTS_VOICE` | Optional OpenAI TTS voice, e.g. `alloy` | OpenAI audio docs |
+| `GEMINI_API_KEY` | Google AI key for Gemini Live voice (or `GOOGLE_API_KEY`) | Google AI Studio |
+| `GEMINI_LIVE_MODEL` | Live model, e.g. `gemini-2.0-flash-live-001` | Gemini Live docs |
+| `GEMINI_LIVE_VOICE` | Live voice name, e.g. `Puck`, `Charon`, `Kore` | Gemini Live docs |
+| `GAIA_LIVE_VOICE_ENABLED` | Set `true` to enable Gemini Live orb voice | Gaia proxy config |
 | `ELEVENLABS_API_KEY` | Optional ElevenLabs key for more natural hosted voice | ElevenLabs dashboard |
 | `ELEVENLABS_VOICE_ID` | ElevenLabs voice ID to use for Gaia Assist; Adam premade is `pNInz6obpgDQGcFmaJgB` | ElevenLabs voice library |
 | `ELEVENLABS_VOICE_NAME` | Friendly label shown in Gaia Assist, e.g. `Adam` | Your selected ElevenLabs voice |

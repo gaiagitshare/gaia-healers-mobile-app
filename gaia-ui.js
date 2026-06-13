@@ -715,34 +715,25 @@
     root.id = 'gaia-assist';
     root.className = 'gaia-assist';
     root.innerHTML = `
+      <button type="button" class="gaia-assist__orb" aria-label="Talk to Gaia Assist">
+        <span class="gaia-assist__pulse" aria-hidden="true"></span>
+        <svg class="gaia-assist__orb-icon" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M12 18.75a6 6 0 006-6v-1.5m-12 0v1.5a6 6 0 006 6m0 0v3m-3 0h6M12 15a2.25 2.25 0 002.25-2.25v-6a2.25 2.25 0 00-4.5 0v6A2.25 2.25 0 0012 15z"/>
+        </svg>
+      </button>
       <div class="gaia-assist__panel" role="dialog" aria-label="${assistant.name || 'Gaia Assist'}" hidden>
         <div class="gaia-assist__handle"></div>
         <div class="gaia-assist__top">
           <div class="min-w-0">
             <h2>${assistant.name || 'Gaia Assist'}</h2>
-            <p class="gaia-assist__mini">Live captions · Gaia brain · ElevenLabs voice</p>
+            <p class="gaia-assist__mini">Gemini Live · tap orb to talk</p>
           </div>
           <button type="button" class="gaia-assist__close" aria-label="Close Gaia Assist">×</button>
         </div>
-        <div class="gaia-assist__voice" data-assist-state="idle">
-          <button type="button" class="gaia-assist__mic" aria-label="Start voice prompt">
-            <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8"><path stroke-linecap="round" stroke-linejoin="round" d="M12 18.75a6 6 0 006-6v-1.5m-12 0v1.5a6 6 0 006 6m0 0v3m-3 0h6M12 15a2.25 2.25 0 002.25-2.25v-6a2.25 2.25 0 00-4.5 0v6A2.25 2.25 0 0012 15z"/></svg>
-          </button>
-          <div class="gaia-assist__wave" aria-hidden="true"><span></span><span></span><span></span><span></span></div>
-          <p class="gaia-assist__status">Tap to talk</p>
-          <audio class="gaia-assist__audio" playsinline webkit-playsinline preload="auto"></audio>
-          <div class="gaia-assist__speak-controls">
-            <button type="button" class="gaia-assist__mute" aria-pressed="false">Mute</button>
-            <button type="button" class="gaia-assist__stop">Stop</button>
-            <button type="button" class="gaia-assist__play" hidden>Hear Gaia</button>
-            <span class="gaia-assist__provider">Voice: browser</span>
-          </div>
-        </div>
-        <div class="gaia-assist__transcript">
-          <p class="gaia-assist__bubble gaia-assist__bubble--bot">Tap the mic and speak naturally. I will capture the question, stream the answer, and speak it back.</p>
-        </div>
+        <p class="gaia-assist__status" data-assist-state="idle">Ready when you are</p>
+        <div class="gaia-assist__transcript"></div>
         <form class="gaia-assist__form">
-          <label class="gaia-assist__label" for="gaia-assist-prompt">Type a prompt</label>
+          <label class="gaia-assist__label" for="gaia-assist-prompt">Ask Gaia</label>
           <div class="gaia-assist__input-row">
             <input id="gaia-assist-prompt" name="prompt" type="text" autocomplete="off" placeholder="Ask about my Elevate badge" />
             <button type="submit">Send</button>
@@ -750,8 +741,16 @@
         </form>
         <p class="gaia-assist__error" role="alert" hidden></p>
         <div class="gaia-assist__chips"></div>
+        <div class="gaia-assist__voice gaia-assist__voice--fallback" hidden aria-hidden="true">
+          <audio class="gaia-assist__audio" playsinline webkit-playsinline preload="auto"></audio>
+          <button type="button" class="gaia-assist__mic" aria-label="Start voice prompt"></button>
+          <button type="button" class="gaia-assist__mute" aria-pressed="false">Mute</button>
+          <button type="button" class="gaia-assist__stop">Stop</button>
+          <button type="button" class="gaia-assist__play" hidden>Hear Gaia</button>
+          <span class="gaia-assist__provider">Voice: browser</span>
+        </div>
         <details class="gaia-assist__settings">
-          <summary>Voice settings</summary>
+          <summary>Advanced voice settings</summary>
           <div class="gaia-assist__settings-grid">
             <label>Provider
               <select class="gaia-assist__voice-provider">
@@ -769,12 +768,12 @@
             </label>
           </div>
         </details>
-        <p class="gaia-assist__promise">${assistant.promise || 'Review before anything is saved.'}</p>
       </div>`;
 
     document.body.appendChild(root);
 
     const panel = root.querySelector('.gaia-assist__panel');
+    const orb = root.querySelector('.gaia-assist__orb');
     const close = root.querySelector('.gaia-assist__close');
     const mic = root.querySelector('.gaia-assist__mic');
     const status = root.querySelector('.gaia-assist__status');
@@ -888,11 +887,9 @@
     }
 
     const suggestionMap = [
-      { label: 'Gaia services', reply: assistant.responses?.event, intent: 'services' },
-      { label: assistant.suggestions?.[0] || 'Prepare my badge', reply: assistant.responses?.event, intent: 'event' },
-      { label: 'Devices', reply: assistant.responses?.scan, intent: 'devices' },
-      { label: assistant.suggestions?.[2] || 'Next course step', reply: assistant.responses?.academy, intent: 'academy' },
-      { label: assistant.suggestions?.[3] || 'GHL follow-up', reply: assistant.responses?.ghl, intent: 'ghl' },
+      { label: 'Elevate badge', reply: assistant.responses?.event, intent: 'event' },
+      { label: 'Bio-Well scan', reply: assistant.responses?.scan, intent: 'devices' },
+      { label: 'Academy next step', reply: assistant.responses?.academy, intent: 'academy' },
     ];
     chips.innerHTML = suggestionMap.map((item) => `<button type="button" data-intent="${item.intent}">${item.label}</button>`).join('');
 
@@ -998,6 +995,7 @@
     }
 
     function setVoiceProvider(provider, name = '') {
+      if (!voiceProvider) return;
       voiceProvider.textContent = `Voice: ${provider}${name ? ` · ${name}` : ''}`;
       voiceProvider.dataset.provider = provider;
     }
@@ -1005,6 +1003,7 @@
     function clearPendingVoice(revoke = true) {
       if (revoke && pendingVoice?.url) URL.revokeObjectURL(pendingVoice.url);
       pendingVoice = null;
+      if (!playButton) return;
       playButton.hidden = true;
       playButton.classList.remove('is-pending');
       playButton.textContent = 'Hear Gaia';
@@ -1046,8 +1045,10 @@
     function setMuted(nextMuted) {
       muted = nextMuted;
       localStorage.setItem('gaia-assist-muted', muted ? '1' : '0');
-      muteButton.textContent = muted ? 'Unmute' : 'Mute';
-      muteButton.setAttribute('aria-pressed', String(muted));
+      if (muteButton) {
+        muteButton.textContent = muted ? 'Unmute' : 'Mute';
+        muteButton.setAttribute('aria-pressed', String(muted));
+      }
       if (muted) stopSpeaking();
     }
 
@@ -1144,6 +1145,7 @@
     }
 
     function configureVoiceFromBootstrap() {
+      initRealtimeVoice();
       const tts = ttsConfig();
       const savedProvider = localStorage.getItem(VOICE_PROVIDER_KEY);
       if (tts.elevenLabsConfigured) {
@@ -1237,8 +1239,10 @@
       const onPlay = () => {
         playbackStarted = true;
         clearPendingVoice(false);
-        playButton.hidden = true;
-        playButton.classList.remove('is-pending');
+        if (playButton) {
+          playButton.hidden = true;
+          playButton.classList.remove('is-pending');
+        }
         setVoiceHint('');
         setVoiceProvider(provider, voice);
         status.textContent = 'Speaking…';
@@ -1316,12 +1320,14 @@
     function showManualVoicePlayback(audioUrl, provider, voice) {
       clearPendingVoice(true);
       pendingVoice = { url: audioUrl, provider, voice };
-      playButton.hidden = false;
-      playButton.classList.add('is-pending');
-      playButton.textContent = 'Hear Gaia';
+      if (playButton) {
+        playButton.hidden = false;
+        playButton.classList.add('is-pending');
+        playButton.textContent = 'Hear Gaia';
+      }
       setVoiceProvider(provider, voice || 'ready');
       status.textContent = 'Voice ready — tap Hear Gaia';
-      setVoiceHint('iPhone and in-app browsers may require one tap. Tap Hear Gaia to play the ElevenLabs voice.');
+      setVoiceHint('Tap Hear Gaia if playback is blocked.');
     }
 
     function buildTtsRequestBody(cleanText, providerSetting) {
@@ -1450,7 +1456,86 @@
       root.classList.toggle('gaia-assist--listening', state === 'listening');
       root.classList.toggle('gaia-assist--thinking', state === 'thinking');
       root.classList.toggle('gaia-assist--speaking', state === 'speaking');
-      if (message) status.textContent = message;
+      root.classList.toggle('gaia-assist--connecting', state === 'connecting');
+      if (orb) orb.dataset.state = state;
+      if (message && status) status.textContent = message;
+    }
+
+    const REALTIME_STATUS_COPY = {
+      idle: 'Ready when you are',
+      connecting: 'Connecting live voice…',
+      listening: 'Listening…',
+      thinking: 'Thinking…',
+      speaking: 'Speaking…',
+      error: 'Voice unavailable — type instead',
+    };
+
+    let realtimeVoice = null;
+    let realtimeEnabled = false;
+    const streamBubbleMap = { user: null, assistant: null };
+
+    function realtimeConfig() {
+      return window.GAIA?.sync?.voice?.live
+        || window.GAIA?.sync?.voice?.realtime
+        || {};
+    }
+
+    function canUseRealtimeVoice() {
+      return Boolean(window.GaiaRealtimeVoice && realtimeConfig().enabled);
+    }
+
+    function syncRealtimeBubble(role, text, finalize) {
+      const kind = role === 'user' ? 'user' : 'bot';
+      if (streamBubbleMap[role] && !finalize) {
+        const current = streamBubbleMap[role].textContent || '';
+        updateBubble(streamBubbleMap[role], current + text);
+        return;
+      }
+      if (streamBubbleMap[role] && finalize) {
+        updateBubble(streamBubbleMap[role], text);
+        streamBubbleMap[role] = null;
+        return;
+      }
+      streamBubbleMap[role] = appendMessage(kind, text);
+      if (finalize) streamBubbleMap[role] = null;
+    }
+
+    function initRealtimeVoice() {
+      if (!canUseRealtimeVoice() || realtimeVoice) return;
+      realtimeEnabled = true;
+      realtimeVoice = window.GaiaRealtimeVoice.create();
+      realtimeVoice.on('status', (nextStatus) => {
+        setAssistVoiceState(nextStatus, REALTIME_STATUS_COPY[nextStatus] || REALTIME_STATUS_COPY.idle);
+      });
+      realtimeVoice.on('message', ({ role, text, finalize }) => {
+        if (!text) return;
+        if (role === 'user') syncRealtimeBubble('user', text, finalize);
+        else syncRealtimeBubble('assistant', text, finalize);
+      });
+      realtimeVoice.on('error', (message) => {
+        if (message) setError(message);
+      });
+      assistLog('realtime voice ready');
+    }
+
+    async function toggleRealtimeVoice() {
+      await unlockVoicePlayback(true);
+      initRealtimeVoice();
+      if (!realtimeVoice) {
+        await startVoicePrompt();
+        return;
+      }
+      if (realtimeVoice.isActive()) {
+        realtimeVoice.stop();
+        setAssistVoiceState('idle', REALTIME_STATUS_COPY.idle);
+        return;
+      }
+      setOpen(true);
+      setError('');
+      transcript.innerHTML = '';
+      streamBubbleMap.user = null;
+      streamBubbleMap.assistant = null;
+      await realtimeVoice.start({ greeting: true });
     }
 
     function updateLiveTranscript(text) {
@@ -2019,14 +2104,44 @@
         promptInput.focus();
       }
     });
-    close.addEventListener('click', () => setOpen(false));
-    mic.addEventListener('click', async () => {
-      await unlockVoicePlayback(true);
-      await startVoicePrompt();
+    close.addEventListener('click', () => {
+      if (realtimeVoice?.isActive()) realtimeVoice.stop();
+      setOpen(false);
+      setAssistVoiceState('idle', REALTIME_STATUS_COPY.idle);
     });
-    muteButton.addEventListener('click', () => setMuted(!muted));
-    stopButton.addEventListener('click', stopSpeaking);
-    playButton.addEventListener('click', async () => {
+    if (orb) {
+      orb.addEventListener('click', async () => {
+        if (realtimeVoice?.isActive()) {
+          await toggleRealtimeVoice();
+          return;
+        }
+        setOpen(true);
+        await toggleRealtimeVoice();
+      });
+    }
+    if (mic) {
+      mic.addEventListener('click', async () => {
+        await unlockVoicePlayback(true);
+        await startVoicePrompt();
+      });
+    }
+    if (muteButton) muteButton.addEventListener('click', () => {
+      if (realtimeVoice?.isActive()) {
+        const nextMuted = realtimeVoice.toggleMute();
+        setMuted(nextMuted);
+        return;
+      }
+      setMuted(!muted);
+    });
+    if (stopButton) stopButton.addEventListener('click', () => {
+      if (realtimeVoice?.isActive()) {
+        realtimeVoice.stop();
+        setAssistVoiceState('idle', REALTIME_STATUS_COPY.idle);
+        return;
+      }
+      stopSpeaking();
+    });
+    if (playButton) playButton.addEventListener('click', async () => {
       if (!pendingVoice) return;
       setVoiceHint('');
       await unlockVoicePlayback(true);
@@ -2056,12 +2171,23 @@
       unlockVoicePlayback();
       const prompt = promptInput.value;
       promptInput.value = '';
+      if (realtimeVoice?.isActive()) {
+        if (!realtimeVoice.sendText(prompt)) {
+          setError('Voice session is still connecting. Try again in a moment.');
+        }
+        return;
+      }
       sendPrompt(prompt, 'typed', 'text');
     });
     chips.querySelectorAll('button').forEach((button) => {
       button.addEventListener('click', () => {
         unlockVoicePlayback();
         const item = suggestionMap.find((entry) => entry.intent === button.dataset.intent) || suggestionMap[0];
+        if (realtimeVoice?.isActive()) {
+          setOpen(true);
+          realtimeVoice.sendText(item.label);
+          return;
+        }
         sendPrompt(item.label, item.intent, 'quick-action');
       });
     });

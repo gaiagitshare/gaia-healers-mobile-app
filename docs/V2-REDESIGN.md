@@ -4,6 +4,11 @@
 
 Content mapped from Gaia Healers CRM / Client Portal (Memberships, Courses, Communities, Credentials).
 
+Event and voice-helper references added from:
+
+- Event Manager on `/root/event`: GHL CSV import, public event grab/sync, QR check-in, PDF badges, exhibitor scan links, lead notes/ratings.
+- SnapBOS Assist voice work on `/root/projects/whatsipa`: push-to-talk orb, live transcript pattern, suggested actions, explicit review-before-save safety model.
+
 ## Real communities (in prototype)
 
 | Community | Members (CRM) |
@@ -69,6 +74,7 @@ Content mapped from Gaia Healers CRM / Client Portal (Memberships, Courses, Comm
 - Directory (LinkedIn-style)  
 - Events (live trainings)  
 - Mentorship CTA  
+- Elevate 2026 operations tab: GHL import, QR badges, attendee stats, access tiers, exhibitor lead retrieval
 
 ### Profile
 - Full Access membership  
@@ -76,6 +82,8 @@ Content mapped from Gaia Healers CRM / Client Portal (Memberships, Courses, Comm
 - Certifications + Credentials  
 - Activity history  
 - Communities joined  
+- GHL-linked Elevate event pass
+- Gaia Assist safety preference
 
 ## What V2 removed
 
@@ -90,3 +98,5 @@ Content mapped from Gaia Healers CRM / Client Portal (Memberships, Courses, Comm
 - Live Credentials API  
 - Bio-Well device pairing  
 - Gokollab Marketplace entry  
+- Replace static `gaia-ecosystem.js` samples with live GHL/Event Manager API reads
+- Production voice assistant using backend-only OpenAI Realtime credentials and explicit save gates

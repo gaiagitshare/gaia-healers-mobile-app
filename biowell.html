@@ -6,6 +6,8 @@
   <title>Bio-Well · Gaia Healers</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <script src="gaia-config.js"></script>
+  <script src="gaia-ecosystem.js"></script>
+  <script src="gaia-live-sync.js"></script>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
@@ -40,6 +42,20 @@
           <div class="gaia-metric"><p class="gaia-metric__label">Stress</p><p class="gaia-metric__value text-gaia-dark">Low</p></div>
           <div class="gaia-metric"><p class="gaia-metric__label">Vitality</p><p class="gaia-metric__value">High</p></div>
           <div class="gaia-metric"><p class="gaia-metric__label">Coherence</p><p class="gaia-metric__value gaia-tabular">91%</p></div>
+        </div>
+      </section>
+
+      <section class="gaia-card gaia-card-accent gaia-card-pad">
+        <div class="flex items-start gap-3">
+          <div class="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-gaia text-white font-bold shadow-glow">G</div>
+          <div class="min-w-0 flex-1">
+            <div class="flex items-center justify-between gap-2">
+              <h2 class="text-headline text-ink">Gaia Assist insight</h2>
+              <span class="gaia-badge">Voice</span>
+            </div>
+            <p class="gaia-body mt-2">Your energy index is session-ready. Sacral balance is 6 points below baseline, so Gaia Assist recommends hydration, 4 minutes of coherent breathing, and a post-session scan note for Advanced L1 practicum credit.</p>
+            <button type="button" data-gaia-open-assist class="gaia-link mt-3 inline-block">Ask about this scan</button>
+          </div>
         </div>
       </section>
 
@@ -81,6 +97,18 @@
           <div class="flex items-center gap-3"><span class="w-14 gaia-caption">Heart</span><div class="gaia-progress flex-1"><div class="gaia-progress__fill" style="width:95%"></div></div><span class="gaia-tabular w-7 text-right text-micro font-semibold">95</span></div>
           <div class="flex items-center gap-3"><span class="w-14 gaia-caption">Sacral</span><div class="gaia-progress flex-1"><div class="h-full rounded-full bg-orange-400" style="width:71%"></div></div><span class="gaia-tabular w-7 text-right text-micro font-semibold text-orange-600">71</span></div>
           <div class="flex items-center gap-3"><span class="w-14 gaia-caption">Root</span><div class="gaia-progress flex-1"><div class="gaia-progress__fill" style="width:84%"></div></div><span class="gaia-tabular w-7 text-right text-micro font-semibold">84</span></div>
+        </div>
+      </section>
+
+      <section class="gaia-card gaia-card-pad">
+        <div class="mb-4 flex items-center justify-between">
+          <h2 class="gaia-section-title">Technology stack</h2>
+          <span class="gaia-source-pill">Gaia research</span>
+        </div>
+        <div class="grid grid-cols-3 gap-2">
+          <div class="rounded-2xl bg-gaia-wash p-3 text-center"><p class="text-micro font-bold text-gaia-dark">Bio-Well</p><p class="gaia-caption mt-1">Biofield</p></div>
+          <div class="rounded-2xl bg-indigo-50 p-3 text-center"><p class="text-micro font-bold text-indigo-700">Biopulsar</p><p class="gaia-caption mt-1">Aura</p></div>
+          <div class="rounded-2xl bg-teal-50 p-3 text-center"><p class="text-micro font-bold text-teal-700">BioTekna</p><p class="gaia-caption mt-1">ANS</p></div>
         </div>
       </section>
 

@@ -6,6 +6,8 @@
   <title>Community · Gaia Healers</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <script src="gaia-config.js"></script>
+  <script src="gaia-ecosystem.js"></script>
+  <script src="gaia-live-sync.js"></script>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
@@ -100,16 +102,63 @@
       </div>
 
       <div id="panel-events" class="hidden gaia-stack">
-        <article class="gaia-card overflow-hidden">
-          <div class="strip-biowell px-5 py-4"><p class="text-micro text-white/80">Live</p><h3 class="text-headline text-white mt-0.5">Advanced L1 Training</h3></div>
-          <div class="gaia-card-pad">
-            <p class="gaia-body">Dr. Nina Bashkir · Jun 12</p>
-            <span class="gaia-badge mt-3 inline-flex">Registered</span>
+        <article class="gaia-card gaia-event-hero gaia-card-pad-lg">
+          <div class="flex items-start justify-between gap-4">
+            <div>
+              <p class="text-micro font-bold uppercase tracking-[0.08em] text-white/64">Gaia Healers Elevate 2026</p>
+              <h3 class="mt-2 text-title text-white">Event operations</h3>
+              <p class="mt-2 text-caption text-white/72">Registration and payment stay in GHL. This app surfaces the Event Manager layer for check-in, badges, and exhibitors.</p>
+            </div>
+            <div class="gaia-qr shrink-0" aria-hidden="true"></div>
+          </div>
+          <div class="mt-5 grid grid-cols-3 gap-2">
+            <div class="gaia-event-metric"><p class="text-micro text-white/60">Imported</p><p class="gaia-tabular text-headline text-white">428</p></div>
+            <div class="gaia-event-metric"><p class="text-micro text-white/60">Paid</p><p class="gaia-tabular text-headline text-white">301</p></div>
+            <div class="gaia-event-metric"><p class="text-micro text-white/60">Leads</p><p class="gaia-tabular text-headline text-white">0</p></div>
           </div>
         </article>
+
         <article class="gaia-card gaia-card-pad">
-          <h3 class="text-headline text-ink">BioTekna Live — June</h3>
-          <p class="gaia-caption">Biotekna Practitioners</p>
+          <div class="mb-4 flex items-center justify-between">
+            <h3 class="gaia-section-title">Event stack</h3>
+            <span class="gaia-source-pill">ba2ki.com/event</span>
+          </div>
+          <div class="gaia-timeline">
+            <div class="gaia-timeline__item">
+              <span class="gaia-timeline__dot"></span>
+              <div><p class="text-headline text-ink">Sync Gaia page</p><p class="gaia-caption">Auto-imports event name, dates, venue, and pass types from the Elevate landing page.</p></div>
+            </div>
+            <div class="gaia-timeline__item">
+              <span class="gaia-timeline__dot"></span>
+              <div><p class="text-headline text-ink">Import GHL attendees</p><p class="gaia-caption">CSV maps first name, last name, email, phone, company, job title, paid member, and pass type.</p></div>
+            </div>
+            <div class="gaia-timeline__item">
+              <span class="gaia-timeline__dot"></span>
+              <div><p class="text-headline text-ink">Scan, badge, retrieve leads</p><p class="gaia-caption">QR check-in for staff and private exhibitor scan links with notes and ratings.</p></div>
+            </div>
+          </div>
+        </article>
+
+        <article class="gaia-card gaia-card-pad">
+          <div class="mb-3 flex items-center justify-between">
+            <h3 class="gaia-section-title">Access tiers</h3>
+            <span class="gaia-badge">Live page</span>
+          </div>
+          <div class="gaia-stack">
+            <div class="gaia-event-ticket"><div class="flex-1"><p class="text-headline text-ink">VIP Pass</p><p class="gaia-caption">All sessions, exhibit hall, and workshops</p></div><span class="gaia-tabular text-headline text-gaia-dark">$999</span></div>
+            <div class="gaia-event-ticket"><div class="flex-1"><p class="text-headline text-ink">Three Day Event Pass</p><p class="gaia-caption">Conference and exhibit hall access</p></div><span class="gaia-tabular text-headline text-gaia-dark">$650</span></div>
+            <div class="gaia-event-ticket"><div class="flex-1"><p class="text-headline text-ink">Workshop Access</p><p class="gaia-caption">Hands-on workshop track</p></div><span class="gaia-tabular text-headline text-gaia-dark">$449</span></div>
+          </div>
+        </article>
+
+        <article class="gaia-card gaia-card-accent gaia-card-pad">
+          <div class="flex items-center justify-between gap-3">
+            <div>
+              <p class="text-headline text-ink">Gaia Assist can guide event day</p>
+              <p class="gaia-caption mt-1">Ask for badge status, QR check-in help, exhibitor scripts, or GHL follow-up drafts.</p>
+            </div>
+            <button type="button" data-gaia-open-assist class="rounded-xl bg-gaia px-3 py-2 text-micro font-bold text-white">Ask</button>
+          </div>
         </article>
       </div>
     </main>

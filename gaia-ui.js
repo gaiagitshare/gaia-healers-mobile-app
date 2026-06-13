@@ -371,11 +371,10 @@
         <div class="gaia-assist__handle"></div>
         <div class="gaia-assist__top">
           <div class="min-w-0">
-            <p class="gaia-eyebrow">Smart Gaia concierge</p>
             <h2>${assistant.name || 'Gaia Assist'}</h2>
-            <p class="gaia-assist__mini">GHL, courses, devices, events, scans</p>
+            <p class="gaia-assist__mini">Bio-Well · courses · community</p>
           </div>
-          <button type="button" class="gaia-assist__close" aria-label="Close Gaia Assist">Close</button>
+          <button type="button" class="gaia-assist__close" aria-label="Close Gaia Assist">×</button>
         </div>
         <div class="gaia-assist__voice" data-assist-state="idle">
           <button type="button" class="gaia-assist__mic" aria-label="Start voice prompt">
@@ -410,7 +409,7 @@
           </div>
         </details>
         <div class="gaia-assist__transcript">
-          <p class="gaia-assist__bubble gaia-assist__bubble--bot">Ask me about Gaia services, GHL communities, Bio-Well devices, courses, events, badges, or follow-up workflows.</p>
+          <p class="gaia-assist__bubble gaia-assist__bubble--bot">Ask about services, devices, courses, or Elevate 2026.</p>
         </div>
         <form class="gaia-assist__form">
           <label class="gaia-assist__label" for="gaia-assist-prompt">Type a prompt</label>

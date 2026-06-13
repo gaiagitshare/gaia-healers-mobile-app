@@ -1306,11 +1306,42 @@ body[data-theme="dark"] .gaia-tabbar__inner a[aria-current="page"] {
 
 /* —— Voice helper prototype —— */
 .gaia-assist {
+  --assist-panel-bg:
+    radial-gradient(circle at 14% 0%, rgba(125, 217, 86, 0.14), transparent 32%),
+    rgba(251, 253, 249, 0.96);
+  --assist-panel-border: rgba(23, 32, 23, 0.08);
+  --assist-panel-color: #172017;
+  --assist-panel-shadow: 0 18px 50px rgba(0, 0, 0, 0.14);
+  --assist-bubble-bot-bg: rgba(236, 243, 233, 0.88);
+  --assist-bubble-bot-color: #243025;
+  --assist-input-bg: rgba(255, 255, 255, 0.9);
+  --assist-input-border: rgba(23, 32, 23, 0.1);
+  --assist-input-color: #172017;
+  --assist-settings-bg: rgba(245, 248, 244, 0.92);
+  --assist-chip-bg: #12331d;
+  --assist-chip-color: var(--gaia-light);
   position: fixed;
   right: max(1rem, env(safe-area-inset-right));
   bottom: calc(6rem + env(safe-area-inset-bottom));
   z-index: 60;
   pointer-events: none;
+}
+
+body[data-theme="dark"] .gaia-assist {
+  --assist-panel-bg:
+    radial-gradient(circle at 14% 0%, rgba(102, 204, 51, 0.12), transparent 36%),
+    rgba(18, 20, 18, 0.97);
+  --assist-panel-border: rgba(102, 204, 51, 0.18);
+  --assist-panel-color: #f5f5f7;
+  --assist-panel-shadow: 0 22px 56px rgba(0, 0, 0, 0.55);
+  --assist-bubble-bot-bg: rgba(255, 255, 255, 0.07);
+  --assist-bubble-bot-color: rgba(255, 255, 255, 0.84);
+  --assist-input-bg: rgba(0, 0, 0, 0.38);
+  --assist-input-border: rgba(255, 255, 255, 0.12);
+  --assist-input-color: #fff;
+  --assist-settings-bg: rgba(0, 0, 0, 0.32);
+  --assist-chip-bg: rgba(102, 204, 51, 0.14);
+  --assist-chip-color: #b8f090;
 }
 
 .gaia-assist__orb {
@@ -1356,12 +1387,12 @@ body[data-theme="dark"] .gaia-tabbar__inner a[aria-current="page"] {
   max-width: calc(100vw - 2rem);
   border-radius: 1.5rem;
   padding: 1rem;
-  background: rgba(255, 255, 255, 0.92);
-  border: 1px solid rgba(255, 255, 255, 0.62);
-  color: #172017;
-  box-shadow: 0 18px 60px rgba(0, 0, 0, 0.18), var(--shadow-ring, 0 0 0 1px rgba(0,0,0,0.04));
-  backdrop-filter: blur(22px) saturate(170%);
-  -webkit-backdrop-filter: blur(22px) saturate(170%);
+  background: var(--assist-panel-bg);
+  border: 1px solid var(--assist-panel-border);
+  color: var(--assist-panel-color);
+  box-shadow: var(--assist-panel-shadow);
+  backdrop-filter: blur(20px) saturate(160%);
+  -webkit-backdrop-filter: blur(20px) saturate(160%);
   pointer-events: auto;
   animation: gaia-assist-in 0.26s ease-out;
 }
@@ -1653,23 +1684,6 @@ body[data-theme="dark"] .gaia-tabbar__inner a[aria-current="page"] {
   accent-color: var(--gaia);
 }
 
-body[data-theme="dark"] .gaia-assist__panel {
-  background: rgba(245, 248, 244, 0.94);
-  border-color: rgba(255, 255, 255, 0.2);
-  color: #172017;
-}
-
-body[data-theme="dark"] .gaia-assist__bubble--bot,
-body[data-theme="dark"] .gaia-assist__settings {
-  background: rgba(235, 241, 232, 0.92);
-  color: #314033;
-}
-
-body[data-theme="dark"] .gaia-assist__label,
-body[data-theme="dark"] .gaia-assist__promise {
-  color: #7a8979;
-}
-
 .gaia-assist__mic:disabled,
 .gaia-assist__chips button:disabled,
 .gaia-assist__input-row button:disabled {
@@ -1694,86 +1708,101 @@ body[data-theme="dark"] .gaia-assist__promise {
 .gaia-assist__panel {
   display: grid;
   grid-template-rows: auto auto auto minmax(0, 1fr) auto auto auto;
-  gap: 0.65rem;
-  width: min(23rem, calc(100vw - 1.5rem));
-  max-height: min(68dvh, 34rem);
-  padding: 0.82rem;
-  border-radius: 1.35rem;
-  background:
-    radial-gradient(circle at 14% 0%, rgba(125, 217, 86, 0.18), transparent 32%),
-    rgba(251, 253, 249, 0.94);
+  gap: 0.5rem;
+  width: min(21.5rem, calc(100vw - 1.5rem));
+  max-height: min(50dvh, 26rem);
+  padding: 0.65rem 0.7rem 0.7rem;
+  border-radius: 1.2rem;
   overflow: hidden;
 }
 
 .gaia-assist__handle {
   margin-bottom: 0;
+  width: 2rem;
+  height: 0.2rem;
+}
+
+.gaia-assist__top {
+  align-items: center;
+  gap: 0.5rem;
 }
 
 .gaia-assist__mini {
-  margin-top: 0.18rem;
+  margin-top: 0.1rem;
   color: #6f806d;
-  font-size: 0.68rem;
-  font-weight: 700;
-  line-height: 1.25;
+  font-size: 0.625rem;
+  font-weight: 600;
+  line-height: 1.2;
 }
 
 .gaia-assist__top h2 {
-  font-size: 1rem;
+  font-size: 0.9375rem;
+  margin: 0;
 }
 
 .gaia-assist__close {
-  padding: 0.48rem 0.72rem;
-  background: #152118;
-  color: #fff;
+  flex-shrink: 0;
+  width: 1.75rem;
+  height: 1.75rem;
+  padding: 0;
+  display: grid;
+  place-items: center;
+  border-radius: 999px;
+  background: rgba(21, 33, 24, 0.08);
+  color: #314033;
+  font-size: 1.125rem;
+  line-height: 1;
+  font-weight: 400;
 }
 
 .gaia-assist__voice {
   grid-template-columns: auto minmax(0, 1fr);
   justify-items: stretch;
   align-items: center;
-  gap: 0.55rem 0.75rem;
+  gap: 0.35rem 0.6rem;
   margin: 0;
-  padding: 0.65rem;
-  border-radius: 1rem;
+  padding: 0.5rem 0.55rem;
+  border-radius: 0.85rem;
   background:
-    radial-gradient(circle at 12% 50%, rgba(125, 217, 86, 0.24), transparent 36%),
+    radial-gradient(circle at 12% 50%, rgba(125, 217, 86, 0.2), transparent 36%),
     linear-gradient(135deg, #0f1813 0%, #17231a 100%);
 }
 
 .gaia-assist__mic {
-  width: 2.65rem;
-  height: 2.65rem;
+  width: 2.35rem;
+  height: 2.35rem;
   grid-row: span 3;
 }
 
 .gaia-assist__mic svg {
-  width: 1.28rem;
-  height: 1.28rem;
+  width: 1.15rem;
+  height: 1.15rem;
 }
 
 .gaia-assist__wave {
-  height: 0.7rem;
+  height: 0.55rem;
   justify-content: flex-start;
 }
 
 .gaia-assist__wave span {
-  width: 0.22rem;
-  height: 0.38rem;
+  width: 0.18rem;
+  height: 0.32rem;
 }
 
 .gaia-assist__status {
   text-align: left;
-  font-size: 0.72rem;
+  font-size: 0.6875rem;
 }
 
 .gaia-assist__speak-controls {
   justify-content: flex-start;
+  gap: 0.3rem;
 }
 
 .gaia-assist__speak-controls button,
 .gaia-assist__provider {
-  padding: 0.28rem 0.48rem;
-  font-size: 0.62rem;
+  padding: 0.22rem 0.42rem;
+  font-size: 0.58rem;
 }
 
 .gaia-assist__play:not([hidden]) {
@@ -1784,18 +1813,20 @@ body[data-theme="dark"] .gaia-assist__promise {
 
 .gaia-assist__settings {
   margin: 0;
-  border-radius: 0.9rem;
+  border-radius: 0.75rem;
+  background: var(--assist-settings-bg);
+  border: 1px solid var(--assist-panel-border);
 }
 
 .gaia-assist__settings summary {
-  padding: 0.48rem 0.65rem;
-  font-size: 0.64rem;
+  padding: 0.4rem 0.55rem;
+  font-size: 0.6rem;
 }
 
 .gaia-assist__settings-grid {
   grid-template-columns: 1fr 1fr;
-  gap: 0.5rem;
-  padding: 0 0.65rem 0.65rem;
+  gap: 0.45rem;
+  padding: 0 0.55rem 0.55rem;
 }
 
 .gaia-assist__speed {
@@ -1803,26 +1834,31 @@ body[data-theme="dark"] .gaia-assist__promise {
 }
 
 .gaia-assist__transcript {
-  min-height: 5.5rem;
-  max-height: none;
+  min-height: 0;
+  max-height: 7.5rem;
   overflow-y: auto;
-  padding: 0.1rem 0.15rem 0.1rem 0;
+  padding: 0.05rem 0.1rem 0.05rem 0;
   overscroll-behavior: contain;
 }
 
 .gaia-assist__bubble {
   max-width: 92%;
-  padding: 0.62rem 0.72rem;
-  border-radius: 0.95rem;
-  font-size: 0.77rem;
-  line-height: 1.34;
+  padding: 0.5rem 0.62rem;
+  border-radius: 0.85rem;
+  font-size: 0.72rem;
+  line-height: 1.32;
   overflow-wrap: anywhere;
   word-break: normal;
 }
 
 .gaia-assist__bubble--bot {
-  background: rgba(236, 243, 233, 0.88);
-  color: #243025;
+  background: var(--assist-bubble-bot-bg);
+  color: var(--assist-bubble-bot-color);
+  border: 1px solid transparent;
+}
+
+body[data-theme="dark"] .gaia-assist__bubble--bot {
+  border-color: rgba(255, 255, 255, 0.07);
 }
 
 .gaia-assist__form {
@@ -1834,26 +1870,39 @@ body[data-theme="dark"] .gaia-assist__promise {
 }
 
 .gaia-assist__input-row {
-  gap: 0.42rem;
+  gap: 0.38rem;
 }
 
 .gaia-assist__input-row input {
-  border-radius: 0.95rem;
-  padding: 0.74rem 0.82rem;
-  font-size: 0.78rem;
+  border-radius: 0.85rem;
+  padding: 0.58rem 0.68rem;
+  font-size: 0.75rem;
+  background: var(--assist-input-bg);
+  border: 1px solid var(--assist-input-border);
+  color: var(--assist-input-color);
+}
+
+body[data-theme="dark"] .gaia-assist__input-row input::placeholder {
+  color: rgba(255, 255, 255, 0.38);
+}
+
+body[data-theme="dark"] .gaia-assist__input-row button {
+  background: var(--gaia);
+  color: #0f1813;
 }
 
 .gaia-assist__input-row button {
-  border-radius: 0.95rem;
-  padding: 0.74rem 0.82rem;
+  border-radius: 0.85rem;
+  padding: 0.58rem 0.72rem;
+  font-size: 0.72rem;
 }
 
 .gaia-assist__chips {
   flex-wrap: nowrap;
   overflow-x: auto;
   margin-top: 0;
-  gap: 0.42rem;
-  padding-bottom: 0.1rem;
+  gap: 0.35rem;
+  padding-bottom: 0.05rem;
   scrollbar-width: none;
 }
 
@@ -1864,29 +1913,66 @@ body[data-theme="dark"] .gaia-assist__promise {
 .gaia-assist__chips button {
   flex: 0 0 auto;
   min-width: 0;
-  max-width: 12rem;
-  padding: 0.5rem 0.68rem;
+  max-width: 10rem;
+  padding: 0.38rem 0.58rem;
+  font-size: 0.625rem;
   white-space: nowrap;
   text-overflow: ellipsis;
   overflow: hidden;
-  background: #12331d;
-  color: var(--gaia-light);
+  background: var(--assist-chip-bg);
+  color: var(--assist-chip-color);
+  border: 1px solid transparent;
+}
+
+body[data-theme="dark"] .gaia-assist__chips button {
+  border-color: rgba(102, 204, 51, 0.22);
 }
 
 .gaia-assist__promise {
   margin: 0;
-  font-size: 0.62rem;
-  line-height: 1.3;
+  font-size: 0.58rem;
+  line-height: 1.25;
+  opacity: 0.85;
 }
 
-body[data-theme="dark"] .gaia-assist__panel {
-  background:
-    radial-gradient(circle at 14% 0%, rgba(125, 217, 86, 0.2), transparent 32%),
-    rgba(245, 248, 244, 0.96);
+body[data-theme="dark"] .gaia-assist__top h2 {
+  color: #f5f5f7;
 }
 
 body[data-theme="dark"] .gaia-assist__mini {
-  color: #687865;
+  color: rgba(255, 255, 255, 0.45);
+}
+
+body[data-theme="dark"] .gaia-assist__close {
+  background: rgba(255, 255, 255, 0.1);
+  color: rgba(255, 255, 255, 0.9);
+}
+
+body[data-theme="dark"] .gaia-assist__settings summary {
+  color: rgba(255, 255, 255, 0.55);
+}
+
+body[data-theme="dark"] .gaia-assist__settings-grid label {
+  color: rgba(255, 255, 255, 0.5);
+}
+
+body[data-theme="dark"] .gaia-assist__settings-grid select {
+  background: rgba(0, 0, 0, 0.35);
+  border-color: rgba(255, 255, 255, 0.1);
+  color: #fff;
+}
+
+body[data-theme="dark"] .gaia-assist__promise {
+  color: rgba(255, 255, 255, 0.38);
+}
+
+body[data-theme="dark"] .gaia-assist__handle {
+  background: rgba(255, 255, 255, 0.18);
+}
+
+body[data-theme="dark"] .gaia-assist__error {
+  background: rgba(255, 90, 90, 0.12);
+  color: #ffb4b4;
 }
 
 @keyframes gaia-assist-pulse {
@@ -1913,15 +1999,15 @@ body[data-theme="dark"] .gaia-assist__mini {
     position: fixed;
     left: max(0.65rem, env(safe-area-inset-left));
     right: max(0.65rem, env(safe-area-inset-right));
-    bottom: calc(5.65rem + env(safe-area-inset-bottom));
+    bottom: calc(5.35rem + env(safe-area-inset-bottom));
     width: auto;
-    max-height: min(66dvh, 34rem);
+    max-height: min(48dvh, 24rem);
     overflow: hidden;
-    padding: 0.78rem;
+    padding: 0.6rem 0.65rem 0.65rem;
   }
 
   .gaia-assist__transcript {
-    min-height: 4.5rem;
+    max-height: 6.5rem;
   }
 
   .gaia-assist__chips button {

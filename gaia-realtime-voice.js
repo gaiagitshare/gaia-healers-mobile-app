@@ -112,9 +112,15 @@
     const responses = [];
     const serverContent = data?.serverContent;
 
+    if (data?.error) {
+      responses.push({
+        kind: 'error',
+        message: data.error.message || data.error.status || 'Gemini Live error',
+      });
+    }
+
     if (data?.setupComplete) {
       responses.push({ kind: 'setup' });
-      return responses;
     }
 
     if (serverContent?.interrupted) {
@@ -168,6 +174,8 @@
     let streamMessage = null;
     let startPromise = null;
     let sessionMeta = null;
+    let setupDone = false;
+    let setupWaiters = [];
 
     const wsRef = { current: null };
     const streamRef = { current: null };
@@ -304,11 +312,61 @@
       playbackNodeRef.current?.port.postMessage('interrupt');
     }
 
+    function resolveSetup() {
+      if (setupDone) return;
+      setupDone = true;
+      setupWaiters.forEach((fn) => fn());
+      setupWaiters = [];
+    }
+
+    function waitForSetup(timeoutMs = 15000) {
+      if (setupDone) return Promise.resolve();
+      return new Promise((resolve, reject) => {
+        const timer = window.setTimeout(() => {
+          reject(new Error('Gemini setup timed out. Tap the orb to retry.'));
+        }, timeoutMs);
+        setupWaiters.push(() => {
+          window.clearTimeout(timer);
+          resolve();
+        });
+      });
+    }
+
+    function buildSetupMessage(meta) {
+      const model = String(meta.model || 'gemini-2.0-flash-live-001').replace(/^models\//, '');
+      return {
+        setup: {
+          model: `models/${model}`,
+          generationConfig: {
+            responseModalities: ['AUDIO'],
+            temperature: 0.8,
+            speechConfig: {
+              voiceConfig: {
+                prebuiltVoiceConfig: {
+                  voiceName: meta.voice || 'Puck',
+                },
+              },
+            },
+          },
+          systemInstruction: {
+            parts: [{ text: meta.instructions || 'You are Gaia Assist for Gaia Healers.' }],
+          },
+          inputAudioTranscription: {},
+          outputAudioTranscription: {},
+        },
+      };
+    }
+
     function sendWs(payload) {
       const ws = wsRef.current;
       if (!ws || ws.readyState !== WebSocket.OPEN) return false;
       ws.send(JSON.stringify(payload));
       return true;
+    }
+
+    function sendSetupMessage() {
+      if (!sessionMeta) return false;
+      return sendWs(buildSetupMessage(sessionMeta));
     }
 
     function cleanupSession() {
@@ -320,6 +378,8 @@
       streamMessage = null;
       startPromise = null;
       sessionMeta = null;
+      setupDone = false;
+      setupWaiters = [];
 
       try { wsRef.current?.close(); } catch { /* ignore */ }
       wsRef.current = null;
@@ -383,6 +443,7 @@
       for (const event of events) {
         switch (event.kind) {
           case 'setup':
+            resolveSetup();
             setStatus('listening');
             break;
           case 'interrupted':
@@ -450,15 +511,28 @@
 
       const startTask = (async () => {
         try {
+          setupDone = false;
+          setupWaiters = [];
           sessionMeta = await fetchLiveToken();
           const wsUrl = `${WS_BASE}?access_token=${encodeURIComponent(sessionMeta.token)}`;
           const ws = new WebSocket(wsUrl);
           wsRef.current = ws;
 
+          ws.onmessage = async (event) => {
+            let raw = event.data;
+            if (raw instanceof Blob) raw = await raw.text();
+            else if (raw instanceof ArrayBuffer) raw = new TextDecoder().decode(raw);
+            handleGeminiMessage(raw);
+          };
+
           await new Promise((resolve, reject) => {
             const timer = window.setTimeout(() => reject(new Error('Voice connection timed out.')), 20_000);
             ws.onopen = () => {
               window.clearTimeout(timer);
+              if (!sendSetupMessage()) {
+                reject(new Error('Could not send Gemini setup.'));
+                return;
+              }
               resolve();
             };
             ws.onerror = () => {
@@ -467,20 +541,19 @@
             };
           });
 
-          ws.onmessage = async (event) => {
-            let raw = event.data;
-            if (raw instanceof Blob) raw = await raw.text();
-            else if (raw instanceof ArrayBuffer) raw = new TextDecoder().decode(raw);
-            handleGeminiMessage(raw);
-          };
-          ws.onclose = () => {
-            if (status !== 'error') setStatus('idle');
+          ws.onclose = (event) => {
+            if (status !== 'error' && status !== 'idle') {
+              setErrorMessage(event.reason || 'Voice connection closed.');
+              setStatus('error');
+            }
           };
           ws.onerror = () => {
             setErrorMessage('Voice connection failed.');
             setStatus('error');
           };
 
+          await waitForSetup();
+          await ensurePlayback();
           await startMicStreaming();
 
           const maxSeconds = Number(sessionMeta.maxSessionSeconds) || 300;

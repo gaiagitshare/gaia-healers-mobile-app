@@ -323,10 +323,6 @@ async function assistLiveToken(_req, res, origin, url) {
         uses: 1,
         expireTime,
         newSessionExpireTime,
-        liveConnectConstraints: {
-          model: cfg.model,
-          config: buildGaiaLiveConnectConfig({ view }),
-        },
         httpOptions: { apiVersion: 'v1alpha' },
       },
     });
@@ -349,6 +345,7 @@ async function assistLiveToken(_req, res, origin, url) {
       provider: cfg.provider,
       model: cfg.model,
       voice: cfg.voice,
+      instructions: buildGaiaLiveInstructions({ view }),
       maxSessionSeconds: cfg.maxSessionSeconds,
       expireTime,
     }, origin);

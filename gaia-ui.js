@@ -1513,7 +1513,10 @@
         else syncRealtimeBubble('assistant', text, finalize);
       });
       realtimeVoice.on('error', (message) => {
-        if (message) setError(message);
+        if (message) {
+          setError(message);
+          setOpen(true);
+        }
       });
       assistLog('realtime voice ready');
     }

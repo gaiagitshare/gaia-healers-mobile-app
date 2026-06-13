@@ -7,9 +7,10 @@ const OPENROUTER_MODEL = process.env.OPENROUTER_MODEL || 'openrouter/free';
 const OPENAI_MODEL = process.env.OPENAI_MODEL || 'gpt-4o-mini';
 const OPENAI_TTS_MODEL = process.env.OPENAI_TTS_MODEL || 'gpt-4o-mini-tts';
 const OPENAI_TTS_VOICE = process.env.OPENAI_TTS_VOICE || 'alloy';
-const ELEVENLABS_MODEL = process.env.ELEVENLABS_MODEL || 'eleven_multilingual_v2';
+const ELEVENLABS_MODEL = process.env.ELEVENLABS_MODEL || 'eleven_turbo_v2_5';
 const ELEVENLABS_VOICE_ID = process.env.ELEVENLABS_VOICE_ID || '';
 const ELEVENLABS_VOICE_NAME = process.env.ELEVENLABS_VOICE_NAME || 'Adam';
+const ELEVENLABS_OUTPUT_FORMAT = process.env.ELEVENLABS_OUTPUT_FORMAT || 'mp3_22050_32';
 const COMPAT_TTS_MODEL = process.env.OPENAI_COMPATIBLE_TTS_MODEL || OPENAI_TTS_MODEL;
 const COMPAT_TTS_VOICE = process.env.OPENAI_COMPATIBLE_TTS_VOICE || OPENAI_TTS_VOICE;
 const ASSIST_PROVIDER_ORDER = (process.env.ASSIST_PROVIDER_ORDER || 'groq,openrouter,openai')
@@ -339,10 +340,16 @@ function assistSystemPrompt() {
 }
 
 function assistUserPrompt(prompt, context = {}) {
+  const source = String(context.source || '').toLowerCase();
+  const voiceInstruction = source.includes('voice')
+    ? 'Voice mode: answer immediately in 35-55 spoken words. Start with the direct answer. No long preamble.'
+    : 'Screen mode: keep the answer concise but include useful details.';
   return [
     `Prompt: ${prompt}`,
     `Intent: ${context.intent || 'general'}`,
     `Page: ${context.page || 'unknown'}`,
+    `Source: ${context.source || 'unknown'}`,
+    voiceInstruction,
   ].join('\n');
 }
 
@@ -400,7 +407,7 @@ async function callChatProvider(provider, prompt, context = {}) {
         { role: 'user', content: assistUserPrompt(prompt, context) },
       ],
       temperature: 0.35,
-      max_tokens: 520,
+      max_tokens: String(context.source || '').includes('voice') ? 150 : 520,
       presence_penalty: 0.1,
     }),
   });
@@ -441,7 +448,7 @@ async function streamChatProvider(provider, prompt, context = {}, onDelta = () =
         { role: 'user', content: assistUserPrompt(prompt, context) },
       ],
       temperature: 0.35,
-      max_tokens: 520,
+      max_tokens: String(context.source || '').includes('voice') ? 150 : 520,
       presence_penalty: 0.1,
       stream: true,
     }),
@@ -545,6 +552,7 @@ async function assistChat(body) {
     const result = await callAssistProviders(prompt, {
       intent: body.intent,
       page: body.page,
+      source: body.source || 'chat',
     });
     console.log('[Gaia Assist] proxy response ready', { provider: result.provider, model: result.model || 'none' });
     return {
@@ -580,7 +588,7 @@ async function assistChatStream(body, res, origin) {
   sendSseHeaders(res, origin);
   writeSse(res, 'meta', { ok: true, source: body.source || 'stream', generatedAt: new Date().toISOString() });
 
-  const context = { intent: body.intent, page: body.page };
+  const context = { intent: body.intent, page: body.page, source: body.source || 'chat-stream' };
   const attempts = [];
 
   if (process.env.GAIA_ASSIST_VOICE_ENABLED !== 'true') {
@@ -601,7 +609,14 @@ async function assistChatStream(body, res, origin) {
         attempts.push({ provider, status: 'skipped', reason: result.reason });
         continue;
       }
-      attempts.push({ provider, status: 'ok', latencyMs: Date.now() - started, model: result.model });
+      const latencyMs = Date.now() - started;
+      attempts.push({ provider, status: 'ok', latencyMs, model: result.model });
+      console.log('[Gaia Assist] stream response ready', {
+        provider: result.provider,
+        model: result.model,
+        latencyMs,
+        source: body.source || 'chat-stream',
+      });
       writeSse(res, 'done', {
         ok: true,
         provider: result.provider,
@@ -659,8 +674,9 @@ async function assistTts(body) {
         console.log('[Gaia Assist] TTS provider skipped', { provider, reason: payload.reason });
         continue;
       }
-      attempts.push({ provider, status: 'ok', latencyMs: Date.now() - started, model: payload.model });
-      console.log('[Gaia Assist] TTS response ready', { provider, bytes: payload.audio.length });
+      const latencyMs = Date.now() - started;
+      attempts.push({ provider, status: 'ok', latencyMs, model: payload.model });
+      console.log('[Gaia Assist] TTS response ready', { provider, bytes: payload.audio.length, latencyMs, model: payload.model });
       return { ...payload, attempts };
     } catch (error) {
       attempts.push({
@@ -703,8 +719,8 @@ async function callTtsProvider(provider, text, body = {}) {
     if (!process.env.ELEVENLABS_API_KEY) return { skipped: true, reason: 'missing-api-key' };
     const voiceId = String(body.voiceId || ELEVENLABS_VOICE_ID).trim();
     if (!voiceId) return { skipped: true, reason: 'missing-voice-id' };
-    console.log('[Gaia Assist] TTS provider attempt', { provider: 'elevenlabs', model: ELEVENLABS_MODEL, voice: voiceId });
-    const response = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${encodeURIComponent(voiceId)}?output_format=mp3_44100_128`, {
+    console.log('[Gaia Assist] TTS provider attempt', { provider: 'elevenlabs', model: ELEVENLABS_MODEL, voice: voiceId, outputFormat: ELEVENLABS_OUTPUT_FORMAT });
+    const response = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${encodeURIComponent(voiceId)}?output_format=${encodeURIComponent(ELEVENLABS_OUTPUT_FORMAT)}&optimize_streaming_latency=3`, {
       method: 'POST',
       headers: {
         'xi-api-key': process.env.ELEVENLABS_API_KEY,
@@ -783,6 +799,7 @@ async function openAiCompatibleTts({ endpoint, apiKey, model, voice, text, speed
 }
 
 async function assistTranscribe(body) {
+  const started = Date.now();
   const audioBase64 = String(body.audioBase64 || '').trim();
   if (!audioBase64) {
     return { ok: false, status: 400, error: 'audioBase64 is required' };
@@ -794,9 +811,11 @@ async function assistTranscribe(body) {
   const mimeType = String(body.mimeType || 'audio/webm').trim() || 'audio/webm';
   const extension = mimeType.includes('mp4') || mimeType.includes('aac') ? 'voice.m4a' : 'voice.webm';
   const audioBuffer = Buffer.from(audioBase64, 'base64');
+  console.log('[Gaia Assist] STT request received', { bytes: audioBuffer.length, mimeType });
 
   if (process.env.ELEVENLABS_API_KEY) {
     try {
+      const providerStarted = Date.now();
       const form = new FormData();
       form.append('file', new Blob([audioBuffer], { type: mimeType }), extension);
       form.append('model_id', process.env.ELEVENLABS_STT_MODEL || 'scribe_v1');
@@ -809,6 +828,13 @@ async function assistTranscribe(body) {
         const payload = await response.json();
         const transcript = String(payload.text || payload.transcript || '').trim();
         if (transcript) {
+          const latencyMs = Date.now() - started;
+          console.log('[Gaia Assist] STT response ready', {
+            provider: 'elevenlabs',
+            model: process.env.ELEVENLABS_STT_MODEL || 'scribe_v1',
+            latencyMs,
+            providerLatencyMs: Date.now() - providerStarted,
+          });
           return {
             ok: true,
             transcript,
@@ -847,6 +873,11 @@ async function assistTranscribe(body) {
 
   const payload = await response.json();
   const transcript = String(payload.text || '').trim();
+  console.log('[Gaia Assist] STT response ready', {
+    provider: 'openai-whisper',
+    model: process.env.OPENAI_TRANSCRIBE_MODEL || 'whisper-1',
+    latencyMs: Date.now() - started,
+  });
   return {
     ok: true,
     transcript,

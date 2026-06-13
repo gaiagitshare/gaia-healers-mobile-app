@@ -26,7 +26,9 @@ Paste these only into your backend host environment variables, never into the st
 | `ELEVENLABS_API_KEY` | Optional ElevenLabs key for more natural hosted voice | ElevenLabs dashboard |
 | `ELEVENLABS_VOICE_ID` | ElevenLabs voice ID to use for Gaia Assist; Adam premade is `pNInz6obpgDQGcFmaJgB` | ElevenLabs voice library |
 | `ELEVENLABS_VOICE_NAME` | Friendly label shown in Gaia Assist, e.g. `Adam` | Your selected ElevenLabs voice |
-| `ELEVENLABS_MODEL` | ElevenLabs model, e.g. `eleven_multilingual_v2` | ElevenLabs docs |
+| `ELEVENLABS_MODEL` | ElevenLabs TTS model, e.g. `eleven_turbo_v2_5` for lower latency | ElevenLabs docs |
+| `ELEVENLABS_OUTPUT_FORMAT` | ElevenLabs audio format, e.g. `mp3_22050_32` for fast mobile playback | ElevenLabs docs |
+| `ELEVENLABS_STT_MODEL` | ElevenLabs speech-to-text model, e.g. `scribe_v1` | ElevenLabs docs |
 | `OPENAI_COMPATIBLE_TTS_BASE_URL` | Optional OpenAI-compatible `/v1/audio/speech` host | TTS provider docs |
 | `OPENAI_COMPATIBLE_TTS_API_KEY` | Optional bearer token for that compatible TTS host | TTS provider dashboard |
 | `APP_PUBLIC_URL` | Final app URL | GitHub Pages URL |
@@ -54,6 +56,7 @@ The app reads only:
 GET {proxy}/api/app/bootstrap
 POST {proxy}/api/assist/chat
 POST {proxy}/api/assist/voice
+POST {proxy}/api/assist/transcribe
 POST {proxy}/api/assist/tts
 GET {proxy}/api/assist/voices
 ```
@@ -69,7 +72,7 @@ GET {proxy}/api/assist/voices
 }
 ```
 
-`/api/assist/voice` is a staging-safe voice handoff route. The browser captures microphone permission and speech-to-text, then sends the transcript to the proxy. Raw audio upload is not enabled in this static staging build.
+`/api/assist/voice` is a staging-safe voice handoff route for already-transcribed browser text. `/api/assist/transcribe` accepts short browser-recorded audio from the static app and transcribes it on the proxy with ElevenLabs STT first, then OpenAI Whisper if configured. The frontend never receives provider keys.
 
 `/api/assist/tts` is optional backend TTS. The browser tries backend voice providers through this proxy route and falls back to browser `SpeechSynthesis` if hosted voice is unavailable, out of quota, or not configured. The frontend never receives OpenAI, ElevenLabs, OpenRouter, Groq, or provider keys.
 
@@ -78,6 +81,8 @@ Gaia Assist provider fallback order is controlled by:
 ```text
 ASSIST_PROVIDER_ORDER=groq,openrouter,openai
 TTS_PROVIDER_ORDER=openai,elevenlabs,compatible
+ELEVENLABS_MODEL=eleven_turbo_v2_5
+ELEVENLABS_OUTPUT_FORMAT=mp3_22050_32
 ```
 
 The proxy tries each configured provider in order. Quota, rate-limit, auth, or model errors are logged by provider name without printing secrets, then the next provider is attempted. If every provider fails, the proxy returns a local safe fallback response.

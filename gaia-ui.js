@@ -964,6 +964,7 @@
     async function transcribeAudioBlob(blob) {
       const base = proxyBase();
       if (!base) throw new Error('Proxy unavailable for transcription');
+      const started = performance.now();
       const audioBase64 = await blobToBase64(blob);
       const response = await fetch(`${base}/api/assist/transcribe`, {
         method: 'POST',
@@ -975,6 +976,11 @@
       if (!response.ok || payload.ok === false) {
         throw new Error(payload.error || `Transcription returned ${response.status}`);
       }
+      assistLog('transcription received', {
+        provider: payload.provider || 'unknown',
+        model: payload.model || 'unknown',
+        latencyMs: Math.round(performance.now() - started),
+      });
       return String(payload.transcript || '').trim();
     }
 
@@ -1337,9 +1343,9 @@
 
     function speechPreviewText(text) {
       const clean = String(text || '').replace(/\s+/g, ' ').trim();
-      if (clean.length <= 760) return clean;
-      const sentenceCut = clean.slice(0, 760).match(/^(.+[.!?])\s+/);
-      return `${(sentenceCut?.[1] || clean.slice(0, 720)).trim()} I can keep going on screen.`;
+      if (clean.length <= 360) return clean;
+      const sentenceCut = clean.slice(0, 360).match(/^(.+[.!?])\s+/);
+      return `${(sentenceCut?.[1] || clean.slice(0, 320)).trim()} I can keep the full answer on screen.`;
     }
 
     async function speakReply(text, options = {}) {
@@ -1364,6 +1370,7 @@
       }
 
       try {
+        const ttsStarted = performance.now();
         activeTtsController?.abort();
         activeTtsController = new AbortController();
         const response = await fetch(`${base}/api/assist/tts`, {
@@ -1384,6 +1391,11 @@
           throw new Error('TTS returned a non-audio response');
         }
         const blob = await response.blob();
+        assistLog('TTS audio received', {
+          provider: response.headers.get('X-Gaia-Voice-Provider') || providerSetting,
+          bytes: blob.size,
+          latencyMs: Math.round(performance.now() - ttsStarted),
+        });
         const audioUrl = URL.createObjectURL(blob);
         const provider = response.headers.get('X-Gaia-Voice-Provider') || (providerSetting === 'auto' ? 'hosted' : providerSetting);
         const voice = response.headers.get('X-Gaia-Voice-Name') || '';
@@ -1500,6 +1512,8 @@
       let eventName = 'message';
       let fullReply = '';
       let donePayload = null;
+      const started = performance.now();
+      let firstDeltaLogged = false;
 
       const response = await fetch(`${base}/api/assist/chat/stream`, {
         method: 'POST',
@@ -1540,6 +1554,10 @@
           if (!botBubble) botBubble = appendMessage('bot', '');
           fullReply += text;
           updateBubble(botBubble, fullReply);
+          if (!firstDeltaLogged) {
+            firstDeltaLogged = true;
+            assistLog('first streamed token received', { latencyMs: Math.round(performance.now() - started) });
+          }
           setAssistVoiceState('thinking', 'Answering live…');
         } else if (eventName === 'done') {
           donePayload = payload;

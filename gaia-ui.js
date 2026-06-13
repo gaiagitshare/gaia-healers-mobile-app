@@ -1781,8 +1781,8 @@
 
           let speechDetected = false;
           let silenceStart = 0;
-          const speechThreshold = isIOS ? 0.012 : 0.018;
-          const silenceMs = isIOS ? 1400 : 1100;
+          const speechThreshold = isIOS ? 0.006 : 0.018;
+          const silenceMs = isIOS ? 850 : 1100;
 
           setAssistVoiceState('listening', isIOS ? 'Listening — pause or tap mic to send' : 'Recording backup…');
 
@@ -1817,7 +1817,7 @@
           else recorder.start();
           recordStopTimer = window.setTimeout(() => {
             if (recorder.state === 'recording') stopActiveRecording();
-          }, isIOS ? 9000 : 12000);
+          }, isIOS ? 6500 : 12000);
           monitorLevel();
           await waitForRecorderStop(recorder, isIOS ? 200 : 80);
         } else {
@@ -1829,7 +1829,7 @@
           else recorder.start();
           recordStopTimer = window.setTimeout(() => {
             if (recorder.state === 'recording') stopActiveRecording();
-          }, isIOS ? 9000 : 6500);
+          }, isIOS ? 6500 : 6500);
           await waitForRecorderStop(recorder, isIOS ? 200 : 50);
         }
 

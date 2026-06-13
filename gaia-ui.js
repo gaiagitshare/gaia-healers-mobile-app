@@ -370,9 +370,10 @@
       <div class="gaia-assist__panel" role="dialog" aria-label="${assistant.name || 'Gaia Assist'}" hidden>
         <div class="gaia-assist__handle"></div>
         <div class="gaia-assist__top">
-          <div>
-            <p class="gaia-eyebrow">${assistant.mode || 'Push-to-talk'}</p>
+          <div class="min-w-0">
+            <p class="gaia-eyebrow">Smart Gaia concierge</p>
             <h2>${assistant.name || 'Gaia Assist'}</h2>
+            <p class="gaia-assist__mini">GHL, courses, devices, events, scans</p>
           </div>
           <button type="button" class="gaia-assist__close" aria-label="Close Gaia Assist">Close</button>
         </div>
@@ -385,6 +386,7 @@
           <div class="gaia-assist__speak-controls">
             <button type="button" class="gaia-assist__mute" aria-pressed="false">Mute</button>
             <button type="button" class="gaia-assist__stop">Stop</button>
+            <button type="button" class="gaia-assist__play" hidden>Play voice</button>
             <span class="gaia-assist__provider">Voice: browser</span>
           </div>
         </div>
@@ -408,8 +410,7 @@
           </div>
         </details>
         <div class="gaia-assist__transcript">
-          <p class="gaia-assist__bubble gaia-assist__bubble--user">What should I focus on today?</p>
-          <p class="gaia-assist__bubble gaia-assist__bubble--bot">Your portal is ready. I can help with Bio-Well scans, Academy progress, Elevate event check-in, and GHL follow-up workflows.</p>
+          <p class="gaia-assist__bubble gaia-assist__bubble--bot">Ask me about Gaia services, GHL communities, Bio-Well devices, courses, events, badges, or follow-up workflows.</p>
         </div>
         <form class="gaia-assist__form">
           <label class="gaia-assist__label" for="gaia-assist-prompt">Type a prompt</label>
@@ -437,6 +438,7 @@
     const error = root.querySelector('.gaia-assist__error');
     const muteButton = root.querySelector('.gaia-assist__mute');
     const stopButton = root.querySelector('.gaia-assist__stop');
+    const playButton = root.querySelector('.gaia-assist__play');
     const voiceProvider = root.querySelector('.gaia-assist__provider');
     const voiceProviderSelect = root.querySelector('.gaia-assist__voice-provider');
     const voiceNameSelect = root.querySelector('.gaia-assist__voice-name');
@@ -447,11 +449,13 @@
     let recognizing = false;
     let muted = localStorage.getItem('gaia-assist-muted') === '1';
     let currentAudio = null;
+    let pendingVoice = null;
     let browserVoices = [];
 
     const suggestionMap = [
+      { label: 'Gaia services', reply: assistant.responses?.event, intent: 'services' },
       { label: assistant.suggestions?.[0] || 'Prepare my badge', reply: assistant.responses?.event, intent: 'event' },
-      { label: assistant.suggestions?.[1] || 'Explain my scan', reply: assistant.responses?.scan, intent: 'scan' },
+      { label: 'Devices', reply: assistant.responses?.scan, intent: 'devices' },
       { label: assistant.suggestions?.[2] || 'Next course step', reply: assistant.responses?.academy, intent: 'academy' },
       { label: assistant.suggestions?.[3] || 'GHL follow-up', reply: assistant.responses?.ghl, intent: 'ghl' },
     ];
@@ -481,6 +485,12 @@
     function setVoiceProvider(provider, name = '') {
       voiceProvider.textContent = `Voice: ${provider}${name ? ` · ${name}` : ''}`;
       voiceProvider.dataset.provider = provider;
+    }
+
+    function clearPendingVoice(revoke = true) {
+      if (revoke && pendingVoice?.url) URL.revokeObjectURL(pendingVoice.url);
+      pendingVoice = null;
+      playButton.hidden = true;
     }
 
     function stopSpeaking() {
@@ -547,7 +557,9 @@
     }
 
     function initVoiceSettings() {
-      voiceProviderSelect.value = localStorage.getItem(VOICE_PROVIDER_KEY) || 'auto';
+      const savedProvider = localStorage.getItem(VOICE_PROVIDER_KEY);
+      voiceProviderSelect.value = savedProvider && savedProvider !== 'browser' ? savedProvider : 'auto';
+      localStorage.setItem(VOICE_PROVIDER_KEY, voiceProviderSelect.value);
       voiceSpeed.value = localStorage.getItem(VOICE_SPEED_KEY) || '1';
       voiceSpeedLabel.textContent = `${Number(voiceSpeed.value).toFixed(2)}x`;
       refreshBrowserVoices();
@@ -590,6 +602,37 @@
       window.speechSynthesis.speak(utterance);
     }
 
+    async function playAudioElement(audio, provider, voice, audioUrl) {
+      currentAudio = audio;
+      currentAudio.onplay = () => {
+        clearPendingVoice(false);
+        setVoiceProvider(provider, voice);
+        status.textContent = 'Speaking...';
+        assistLog('speech started', { provider, voice, speed: selectedSpeed() });
+      };
+      currentAudio.onended = () => {
+        URL.revokeObjectURL(audioUrl);
+        currentAudio = null;
+        status.textContent = 'Ready for next prompt';
+        assistLog('speech ended', { provider });
+      };
+      currentAudio.onerror = () => {
+        URL.revokeObjectURL(audioUrl);
+        currentAudio = null;
+        setVoiceProvider('browser');
+        assistError('speech error', { provider, error: 'audio playback failed' });
+      };
+      await currentAudio.play();
+    }
+
+    function showManualVoicePlayback(audioUrl, provider, voice) {
+      pendingVoice = { url: audioUrl, provider, voice };
+      playButton.hidden = false;
+      setVoiceProvider(provider, voice || 'ready');
+      status.textContent = 'Tap Play voice';
+      setError('Mobile browser blocked autoplay. Tap Play voice once to hear Gaia.');
+    }
+
     async function speakReply(text) {
       const cleanText = String(text || '').trim();
       if (!cleanText || muted) return;
@@ -625,28 +668,17 @@
         }
         const blob = await response.blob();
         const audioUrl = URL.createObjectURL(blob);
-        const provider = response.headers.get('X-Gaia-Voice-Provider') || (providerSetting === 'auto' ? 'openai' : providerSetting);
+        const provider = response.headers.get('X-Gaia-Voice-Provider') || (providerSetting === 'auto' ? 'hosted' : providerSetting);
         const voice = response.headers.get('X-Gaia-Voice-Name') || '';
-        currentAudio = new Audio(audioUrl);
-        currentAudio.onplay = () => {
-          setVoiceProvider(provider, voice);
-          status.textContent = 'Speaking...';
-          assistLog('speech started', { provider, voice, speed: selectedSpeed() });
-        };
-        currentAudio.onended = () => {
-          URL.revokeObjectURL(audioUrl);
-          currentAudio = null;
-          status.textContent = 'Ready for next prompt';
-          assistLog('speech ended', { provider });
-        };
-        currentAudio.onerror = () => {
-          URL.revokeObjectURL(audioUrl);
-          currentAudio = null;
-          setVoiceProvider('browser');
-          assistError('speech error', { provider, error: 'audio playback failed' });
-          speakWithBrowser(cleanText);
-        };
-        await currentAudio.play();
+        const audio = new Audio(audioUrl);
+        audio.preload = 'auto';
+        audio.playsInline = true;
+        try {
+          await playAudioElement(audio, provider, voice, audioUrl);
+        } catch (playError) {
+          assistError('speech error', { provider, error: playError.message || 'autoplay blocked' });
+          showManualVoicePlayback(audioUrl, provider, voice);
+        }
       } catch (err) {
         setVoiceProvider('browser');
         assistError('speech error', { provider: providerSetting, error: err.message });
@@ -679,6 +711,8 @@
       bubble.className = `gaia-assist__bubble gaia-assist__bubble--${kind}`;
       bubble.innerHTML = escapeHtml(text);
       transcript.appendChild(bubble);
+      const bubbles = transcript.querySelectorAll('.gaia-assist__bubble');
+      if (bubbles.length > 7) bubbles[0].remove();
       transcript.scrollTop = transcript.scrollHeight;
     }
 
@@ -726,7 +760,7 @@
         }
         const reply = payload.reply || 'Gaia Assist received the prompt but did not return a message.';
         appendMessage('bot', reply);
-        speakReply(reply);
+        await speakReply(reply);
       } catch (err) {
         assistError('OpenAI/voice error', err);
         setError(err.message || 'Gaia Assist could not reach the proxy.');
@@ -819,6 +853,19 @@
     mic.addEventListener('click', startVoicePrompt);
     muteButton.addEventListener('click', () => setMuted(!muted));
     stopButton.addEventListener('click', stopSpeaking);
+    playButton.addEventListener('click', async () => {
+      if (!pendingVoice) return;
+      setError('');
+      const audio = new Audio(pendingVoice.url);
+      audio.preload = 'auto';
+      audio.playsInline = true;
+      try {
+        await playAudioElement(audio, pendingVoice.provider, pendingVoice.voice, pendingVoice.url);
+      } catch (err) {
+        assistError('speech error', { provider: pendingVoice.provider, error: err.message });
+        setError('Voice playback is still blocked. Turn off silent mode, raise volume, or try Safari/Chrome microphone permission settings.');
+      }
+    });
     voiceProviderSelect.addEventListener('change', () => {
       localStorage.setItem(VOICE_PROVIDER_KEY, voiceProviderSelect.value);
       setVoiceProvider(voiceProviderSelect.value === 'auto' ? 'auto' : voiceProviderSelect.value);
@@ -848,7 +895,7 @@
     });
     setMuted(muted);
     initVoiceSettings();
-    setVoiceProvider(selectedProvider() === 'auto' ? 'browser' : selectedProvider());
+    setVoiceProvider(selectedProvider() === 'auto' ? 'auto' : selectedProvider());
   }
 
   document.addEventListener('DOMContentLoaded', () => {

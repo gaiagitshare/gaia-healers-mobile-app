@@ -46,8 +46,87 @@ const FALLBACK_GAIA = {
   },
 };
 
+const GAIA_KNOWLEDGE = {
+  brand: 'Gaia Healers',
+  publicWebsite: 'https://gaiahealers.com',
+  clientPortal: 'https://education.gaiahealers.com',
+  crm: {
+    observedLocationId: 'WkKl1K5RuZNQ60xR48k6',
+    configuredLocationId: process.env.GHL_LOCATION_ID || '',
+    sections: ['Client Portal', 'Courses', 'Communities', 'Credentials', 'Gokollab Marketplace', 'Marketing', 'Automation', 'Calendars', 'Contacts'],
+    clientPortalUsers: 1252,
+    adminActions: ['generate magic link', 'invite to client portal', 'send login email'],
+  },
+  services: [
+    'Bio-Well practitioner certification and advanced biofield analysis',
+    'BioPulsar aura and chakra education',
+    'BioTekna nervous-system and stress-mapping education',
+    'Healeex onboarding and practitioner calls',
+    'Quantum sound therapy and frequency-based optimization education',
+    'Continuing education, CE credits, live labs, and credentials',
+    'Practitioner communities, discussion boards, mentoring, and wins wall',
+    'Elevate 2026 event registration, badges, check-in, exhibitors, and lead retrieval',
+    'GHL follow-up workflows, newsletters, marketing segments, and client portal login',
+  ],
+  devices: [
+    'Bio-Well 3.0 wellness and stress assessment device',
+    'Bio-Well Sputnik accessory for environmental and object energy measurements',
+    'Bio-Well Glove, Water Sensor, and Bio Cor support channels',
+    'BioPulsar aura/chakra reporting tools',
+    'BioTekna nervous-system technology',
+    'HeartMath-style coherence monitor products',
+    'Sacred geometry and wellness marketplace products',
+  ],
+  communities: [
+    '[Start Here] All Gaia Healers: public, 254 members, 28 posts, channels Home, Start Here, Healers Lounge, Ask A Mentor, Wins Wall',
+    'Bio-Well Practitioners: public, 381 members, 11 posts, channels Orientation, Tech Support, Case Studies, Bio Cor, Bio-Well, Glove, Sputnik, Water Sensor, Leaderboard',
+    'BioPulsar Practitioners: public, 507 members, aura and chakra practitioner support',
+    'Biotekna Practitioners: public, 154 members, nervous-system and device education',
+    'Healeex: public, 31 members, onboarding, calls, and protocols',
+    'The Abundant Healer Collective: private, 117 members, mentorship and coaching',
+  ],
+  courses: [
+    'BIO-WELL Orientation',
+    'BIO-WELL Basic Certification',
+    'Bio-Well Advanced Level 1',
+    'Gaia Healers Advanced Level 2',
+    'BioPulsar Basic Technical & Business',
+    'BioTekna live trainings',
+    'Healeex Getting Started',
+    '9-Week Chakra Challenge',
+  ],
+  event: {
+    name: 'Gaia Healers Elevate 2026',
+    date: 'November 20-22, 2026',
+    venue: 'Rosen Shingle Creek, Orlando, FL',
+    positioning: 'three-day integrative wellness conference bridging ancient healing traditions and cutting-edge science',
+    operations: ['GHL registration', 'QR badges', 'check-in', 'exhibitor leads', 'attendee import', 'hotel room block', 'speaker/exhibitor/volunteer interest'],
+  },
+  safety: [
+    'Do not diagnose or make medical claims.',
+    'Never claim that data was saved, imported, checked in, emailed, or changed.',
+    'For admin actions, draft and ask for confirmation first.',
+    'Do not expose private GHL, OpenAI, Groq, OpenRouter, Event Manager, or ElevenLabs tokens.',
+  ],
+};
+
+function gaiaKnowledgePrompt() {
+  return [
+    `Gaia ecosystem knowledge: ${GAIA_KNOWLEDGE.brand}. Website ${GAIA_KNOWLEDGE.publicWebsite}. Client portal ${GAIA_KNOWLEDGE.clientPortal}.`,
+    `GHL/CRM: observed location ${GAIA_KNOWLEDGE.crm.observedLocationId}; configured location ${GAIA_KNOWLEDGE.crm.configuredLocationId || 'not set'}; sections ${GAIA_KNOWLEDGE.crm.sections.join(', ')}; ${GAIA_KNOWLEDGE.crm.clientPortalUsers} portal users; admin actions ${GAIA_KNOWLEDGE.crm.adminActions.join(', ')}.`,
+    `Services: ${GAIA_KNOWLEDGE.services.join('; ')}.`,
+    `Devices and products: ${GAIA_KNOWLEDGE.devices.join('; ')}.`,
+    `Communities: ${GAIA_KNOWLEDGE.communities.join('; ')}.`,
+    `Courses: ${GAIA_KNOWLEDGE.courses.join('; ')}.`,
+    `Event: ${GAIA_KNOWLEDGE.event.name}, ${GAIA_KNOWLEDGE.event.date}, ${GAIA_KNOWLEDGE.event.venue}; ${GAIA_KNOWLEDGE.event.positioning}; ops ${GAIA_KNOWLEDGE.event.operations.join(', ')}.`,
+    `Safety rules: ${GAIA_KNOWLEDGE.safety.join(' ')}`,
+  ].join('\n');
+}
+
 function corsHeaders(origin) {
-  const allowed = !origin || ALLOWED_ORIGINS.length === 0 || ALLOWED_ORIGINS.includes(origin);
+  const allowed = !origin
+    || ALLOWED_ORIGINS.length === 0
+    || ALLOWED_ORIGINS.includes(origin);
   return {
     'Access-Control-Allow-Origin': allowed ? (origin || '*') : 'null',
     'Access-Control-Allow-Methods': 'GET,POST,OPTIONS',
@@ -211,6 +290,12 @@ async function bootstrap() {
 
 function fallbackAssistReply(prompt, intent = '') {
   const normalized = `${intent} ${prompt}`.toLowerCase();
+  if (normalized.includes('service') || normalized.includes('what do you do') || normalized.includes('gaia') || normalized.includes('device')) {
+    return 'Gaia Healers connects Bio-Well, BioPulsar, BioTekna, Healeex, certification, practitioner communities, devices, CE progress, and Elevate event operations. I can explain services, compare devices, find the right course, prepare event badge steps, or draft GHL follow-up in review mode.';
+  }
+  if (normalized.includes('community') || normalized.includes('membership') || normalized.includes('login') || normalized.includes('discussion')) {
+    return 'The Gaia member hub is built around GHL Client Portal, courses, credentials, communities, newsletters, and group discussions. The observed groups include All Gaia Healers, Bio-Well Practitioners, BioPulsar, Biotekna, Healeex, and Abundant Healer Collective.';
+  }
   if (normalized.includes('badge') || normalized.includes('elevate') || normalized.includes('event')) {
     return 'I can help prepare your Elevate badge test flow. Confirm the attendee email, verify the GHL registration, then the Event Manager can show QR badge status before anything is changed.';
   }
@@ -228,10 +313,12 @@ function fallbackAssistReply(prompt, intent = '') {
 
 function assistSystemPrompt() {
   return [
-    'You are Gaia Assist for the Gaia Healers mobile app staging prototype.',
-    'Help with Elevate event badges, GHL registration context, Bio-Well scans, Academy progress, and community follow-up.',
-    'Never claim that you saved, imported, checked in, emailed, or changed data. Keep all actions in review/confirm mode.',
-    'Keep responses concise, practical, and wellness-safe. Do not provide medical diagnosis.',
+    'You are Gaia Assist, the smart concierge for the Gaia Healers mobile app.',
+    'Answer with deep awareness of Gaia Healers services, GHL membership/community structure, academy courses, event operations, devices, website offers, Bio-Well scans, and practitioner workflows.',
+    'When asked operational questions, explain what the app can read, what still requires login, and what needs admin approval.',
+    'Never claim that you saved, imported, checked in, emailed, purchased, or changed data. Keep all actions in review/confirm mode.',
+    'Keep responses concise, practical, warm, and wellness-safe. Do not provide medical diagnosis.',
+    gaiaKnowledgePrompt(),
   ].join(' ');
 }
 
@@ -297,7 +384,8 @@ async function callChatProvider(provider, prompt, context = {}) {
         { role: 'user', content: assistUserPrompt(prompt, context) },
       ],
       temperature: 0.35,
-      max_tokens: 360,
+      max_tokens: 520,
+      presence_penalty: 0.1,
     }),
   });
 

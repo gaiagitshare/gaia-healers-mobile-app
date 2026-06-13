@@ -141,6 +141,21 @@ body.gaia-v2 .gaia-header-logo {
   box-shadow: var(--gh-bento-shadow);
 }
 
+body.gaia-v2 .gaia-header-profile.is-active,
+body.gaia-v2 .gaia-header-profile[aria-current="page"] {
+  background: rgba(125, 217, 86, 0.14);
+  border-color: rgba(68, 148, 34, 0.28);
+}
+
+body.gaia-v2 .gaia-coach {
+  background: linear-gradient(145deg, rgba(16, 32, 24, 0.98) 0%, rgba(22, 41, 29, 0.98) 100%);
+  border: 1px solid var(--gh-border);
+}
+
+body.gaia-v2[data-theme="light"] .gaia-coach {
+  box-shadow: var(--gh-bento-shadow);
+}
+
 body.gaia-v2 .gaia-login-pill {
   background: var(--gh-chip-bg);
   border: 1px solid var(--gh-border);

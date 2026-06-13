@@ -4,13 +4,11 @@
     { id: 'today', href: 'home.html?view=today', label: 'Today' },
     { id: 'wellness', href: 'home.html?view=wellness&tab=biowell', label: 'Wellness' },
     { id: 'academy', href: 'home.html?view=academy', label: 'Academy' },
-    { id: 'profile', href: 'home.html?view=profile', label: 'Me' },
   ];
   const icons = {
     today: '<path stroke-linecap="round" stroke-linejoin="round" d="M3.75 9.75L12 3l8.25 6.75V19.5a1.5 1.5 0 01-1.5 1.5H5.25A1.5 1.5 0 013.75 19.5V9.75z" />',
     wellness: '<path stroke-linecap="round" stroke-linejoin="round" d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09zM12 3v18M8.25 6a3.75 3.75 0 107.5 0M8.25 18a3.75 3.75 0 107.5 0" />',
     academy: '<path stroke-linecap="round" stroke-linejoin="round" d="M4.26 10.065a8.978 8.978 0 011.614-4.12 9 9 0 1012.152 12.152 8.978 8.978 0 01-4.12 1.614M12 6v6l4 2" />',
-    profile: '<path stroke-linecap="round" stroke-linejoin="round" d="M15.75 6a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0zM4.501 20.118a7.5 7.5 0 0114.998 0A17.933 17.933 0 0112 21.75c-2.676 0-5.216-.584-7.499-1.632z" />',
   };
 
   function currentView() {
@@ -19,9 +17,9 @@
 
   function activeTabId() {
     const view = currentView();
-    if (view === 'admin' || view === 'community') return 'profile';
     if (view === 'wellness' || view === 'biowell' || view === 'chakras') return 'wellness';
-    return view;
+    if (tabs.some((tab) => tab.id === view)) return view;
+    return null;
   }
 
   function tabLink(t, on) {
@@ -42,7 +40,7 @@
     const inner = nav.querySelector('.gaia-tabbar__inner');
     inner.innerHTML = `
       <div class="gaia-tabbar__group gaia-tabbar__group--left">${left.map((t) => tabLink(t, active === t.id)).join('')}</div>
-      <button type="button" class="gaia-tabbar__assist" data-gaia-tab-assist data-state="idle" aria-label="Open Gaia Assist" aria-expanded="false">
+      <button type="button" class="gaia-tabbar__assist" data-gaia-tab-assist data-state="idle" aria-label="Gaia Assist — tap to open, hold on Today to talk" aria-expanded="false">
         <span class="gaia-tabbar__assist-pulse" aria-hidden="true"></span>
         <svg class="gaia-tabbar__assist-icon" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
           <path stroke-linecap="round" stroke-linejoin="round" d="M12 18.75a6 6 0 006-6v-1.5m-12 0v1.5a6 6 0 006 6m0 0v3m-3 0h6M12 15a2.25 2.25 0 002.25-2.25v-6a2.25 2.25 0 00-4.5 0v6A2.25 2.25 0 0012 15z"/>

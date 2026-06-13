@@ -1,12 +1,12 @@
 /* Gaia Healers V2 — prototype interactions */
 (function () {
   if (new URLSearchParams(window.location.search).has('store')) {
-    sessionStorage.setItem('gaia-coach-v2', '1');
+    sessionStorage.setItem('gaia-coach-v3', '1');
     sessionStorage.setItem('gaia-entered', '1');
     sessionStorage.setItem('gaia-onboarded', '1');
   }
 
-  const COACH_KEY = 'gaia-coach-v2';
+  const COACH_KEY = 'gaia-coach-v3';
   const THEME_KEY = 'gaia-theme';
   const DEFAULT_PROXY = 'https://ba2ki.com/gaia-proxy';
   const VOICE_PROVIDER_KEY = 'gaia-assist-voice-provider';
@@ -438,14 +438,44 @@
     const tip = document.createElement('div');
     tip.className = 'gaia-coach';
     tip.innerHTML = `
-      <p class="gaia-eyebrow !text-gaia-light">Client Portal</p>
-      <p class="mt-2 text-body !text-white/90">Your <strong class="text-white">Today</strong> view unifies Bio-Well, certification, and community.</p>
-      <button type="button" class="mt-4 text-caption font-semibold text-gaia-light">Dismiss</button>`;
+      <p class="gaia-eyebrow !text-gaia-light">Quick guide</p>
+      <p class="mt-2 text-body !text-white/90"><strong class="text-white">Tap</strong> the green Gaia button once to open assist. On <strong class="text-white">Today</strong>, <strong class="text-white">hold</strong> that button to talk — release when you are done.</p>
+      <p class="mt-2 text-caption !text-white/70">Profile and Log in are in the top right. You can also type in the assist panel.</p>
+      <button type="button" class="mt-4 text-caption font-semibold text-gaia-light">Got it</button>`;
     tip.querySelector('button').addEventListener('click', () => {
       sessionStorage.setItem(COACH_KEY, '1');
       tip.remove();
     });
     anchor.before(tip);
+  }
+
+  function initHeaderProfile() {
+    function updateHeaderProfileActive() {
+      const view = window.GaiaAppShell?.currentView?.()
+        || new URLSearchParams(window.location.search).get('view');
+      document.querySelectorAll('[data-gaia-header-profile]').forEach((link) => {
+        const on = view === 'profile' || view === 'admin' || view === 'community';
+        link.classList.toggle('is-active', on);
+        if (on) link.setAttribute('aria-current', 'page');
+        else link.removeAttribute('aria-current');
+      });
+    }
+
+    document.querySelectorAll('[data-gaia-header-actions]').forEach((slot) => {
+      if (slot.querySelector('[data-gaia-header-profile]')) return;
+      const link = document.createElement('a');
+      link.href = 'home.html?view=profile';
+      link.className = 'gaia-header-profile gaia-login-pill gaia-login-pill--compact';
+      link.dataset.gaiaHeaderProfile = '';
+      link.setAttribute('data-app-nav', 'profile');
+      link.textContent = 'Profile';
+      const login = slot.querySelector('a.gaia-login-pill[href*="education"]');
+      if (login) slot.insertBefore(link, login);
+      else slot.appendChild(link);
+    });
+
+    updateHeaderProfileActive();
+    window.addEventListener('gaia:route', updateHeaderProfileActive);
   }
 
   function initSplashSteps() {
@@ -871,7 +901,7 @@
           </div>
           <div class="gaia-assist__headline">
             <h2>${assistant.name || 'Gaia'}</h2>
-            <p class="gaia-assist__status" data-assist-state="idle">Tap Gaia below to start</p>
+            <p class="gaia-assist__status" data-assist-state="idle">Tap Gaia to open assist</p>
           </div>
           <div class="gaia-assist__transcript"></div>
           <div class="gaia-assist__chips"></div>
@@ -883,7 +913,7 @@
             </div>
           </form>
           <div class="gaia-assist__toolbar">
-            <p class="gaia-assist__hint-line">Tap Gaia again to close · type or speak anytime</p>
+            <p class="gaia-assist__hint-line">Tap Gaia again to close · on Today hold to speak</p>
           </div>
           <p class="gaia-assist__error" role="alert" hidden></p>
           <div class="gaia-assist__voice gaia-assist__voice--fallback" hidden aria-hidden="true">
@@ -1569,58 +1599,104 @@
       });
       if (open) {
         const voiceStatus = realtimeVoice?.status || 'idle';
-        if (voiceStatus === 'idle' || voiceStatus === 'error') {
-          setAssistVoiceState(voiceStatus, REALTIME_STATUS_COPY[voiceStatus] || REALTIME_STATUS_COPY.idle);
+        if (voiceStatus === 'idle' || voiceStatus === 'error' || voiceStatus === 'ready') {
+          const copy = isTodayView()
+            ? REALTIME_STATUS_COPY.ready
+            : REALTIME_STATUS_COPY.idle;
+          setAssistVoiceState(voiceStatus === 'ready' ? 'ready' : voiceStatus, copy);
         }
       }
     }
 
     const REALTIME_STATUS_COPY = {
-      idle: 'Tap Gaia below to start',
-      ready: 'Ready — speak anytime',
+      idle: 'Tap Gaia to open assist',
+      ready: 'Hold Gaia on Today · release to send',
       connecting: 'Starting voice…',
-      holding: 'Listening…',
-      listening: 'Listening… speak naturally',
+      holding: 'Listening… release to send',
+      listening: 'Listening… release to send',
       thinking: 'Gaia is thinking…',
       speaking: 'Gaia is speaking…',
       error: 'Voice unavailable — type your question',
     };
 
+    const HOLD_TO_TALK_MS = 300;
+
+    function isTodayView() {
+      return (window.GaiaAppShell?.currentView?.() || new URLSearchParams(window.location.search).get('view') || 'today') === 'today';
+    }
+
     async function onAssistTap() {
       await unlockVoicePlayback(true);
-      initRealtimeVoice();
-
-      if (!realtimeVoice) {
-        if (panel.hidden) {
-          setOpen(true);
-          setError('');
-          await startVoicePrompt();
-        } else {
-          setOpen(false);
-        }
-        return;
-      }
-
       if (!panel.hidden) {
-        realtimeVoice.stop();
+        if (realtimeVoice?.isActive()) realtimeVoice.stop();
         setOpen(false);
         setAssistVoiceState('idle', REALTIME_STATUS_COPY.idle);
         return;
       }
-
       setOpen(true);
       setError('');
-      if (!realtimeVoice.isActive()) {
-        await realtimeVoice.start();
-      }
     }
 
     function wireGaiaDock() {
       dockButtons().forEach((button) => {
         if (button.dataset.gaiaDockWired) return;
         button.dataset.gaiaDockWired = '1';
+
+        let holdTimer = null;
+        let holdEngaged = false;
+        let suppressClick = false;
+
+        const clearHoldTimer = () => {
+          if (holdTimer) {
+            clearTimeout(holdTimer);
+            holdTimer = null;
+          }
+        };
+
+        const finishHold = () => {
+          if (!holdEngaged) return;
+          holdEngaged = false;
+          root.classList.remove('gaia-assist--dock-pressed');
+          realtimeVoice?.holdEnd();
+        };
+
+        button.addEventListener('pointerdown', (event) => {
+          if (!isTodayView()) return;
+          button.setPointerCapture(event.pointerId);
+          clearHoldTimer();
+          holdTimer = window.setTimeout(async () => {
+            holdTimer = null;
+            holdEngaged = true;
+            suppressClick = true;
+            await unlockVoicePlayback(true);
+            initRealtimeVoice();
+            if (panel.hidden) {
+              setOpen(true);
+              setError('');
+            }
+            root.classList.add('gaia-assist--dock-pressed');
+            await realtimeVoice?.holdStart();
+          }, HOLD_TO_TALK_MS);
+        });
+
+        const onPointerEnd = () => {
+          clearHoldTimer();
+          finishHold();
+        };
+
+        button.addEventListener('pointerup', onPointerEnd);
+        button.addEventListener('pointercancel', onPointerEnd);
+        button.addEventListener('lostpointercapture', () => {
+          clearHoldTimer();
+          finishHold();
+        });
+
         button.addEventListener('click', (event) => {
           event.preventDefault();
+          if (suppressClick) {
+            suppressClick = false;
+            return;
+          }
           void onAssistTap();
         });
       });
@@ -2371,6 +2447,7 @@
 
   document.addEventListener('DOMContentLoaded', () => {
     initTheme();
+    initHeaderProfile();
     initCoachMark();
     initSplashSteps();
     initChakraMaps();

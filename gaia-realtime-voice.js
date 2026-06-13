@@ -355,19 +355,8 @@
           },
           inputAudioTranscription: {},
           outputAudioTranscription: {},
-          realtimeInputConfig: {
-            automaticActivityDetection: { disabled: true },
-          },
         },
       };
-    }
-
-    function sendActivityStart() {
-      return sendWs({ realtimeInput: { activityStart: {} } });
-    }
-
-    function sendActivityEnd() {
-      return sendWs({ realtimeInput: { activityEnd: {} } });
     }
 
     function sendWs(payload) {
@@ -459,12 +448,12 @@
         switch (event.kind) {
           case 'setup':
             resolveSetup();
-            setStatus(holding ? 'holding' : 'ready');
+            setStatus('listening');
             break;
           case 'interrupted':
             interruptPlayback();
             streamMessage = null;
-            setStatus(holding ? 'holding' : 'ready');
+            setStatus('listening');
             break;
           case 'audio':
             setStatus('speaking');
@@ -475,7 +464,7 @@
             break;
           case 'inputTranscription':
             upsertStreamingMessage('user', event.text, event.finished);
-            if (!event.finished) setStatus(holding ? 'holding' : 'listening');
+            if (!event.finished) setStatus('listening');
             else setStatus('thinking');
             break;
           case 'outputTranscription':
@@ -484,7 +473,7 @@
             break;
           case 'turnComplete':
             streamMessage = null;
-            setStatus(holding ? 'holding' : 'ready');
+            setStatus('listening');
             break;
           case 'error':
             setErrorMessage(event.message);
@@ -521,8 +510,8 @@
     async function start(startOptions = {}) {
       if (startPromise) return startPromise;
       if (setupDone && wsRef.current?.readyState === WebSocket.OPEN) {
-        maySendAudio = holding;
-        setStatus(holding ? 'holding' : 'ready');
+        maySendAudio = true;
+        setStatus('listening');
         return;
       }
       if (!navigator.mediaDevices?.getUserMedia) {
@@ -583,16 +572,8 @@
           await waitForSetup();
           await ensurePlayback();
           await startMicStreaming();
-          if (holding) {
-            if (!sendActivityStart()) {
-              throw new Error('Could not start voice capture.');
-            }
-            maySendAudio = true;
-            setStatus('holding');
-          } else {
-            maySendAudio = false;
-            setStatus('ready');
-          }
+          maySendAudio = true;
+          setStatus('listening');
 
           const maxSeconds = Number(sessionMeta.maxSessionSeconds) || 300;
           timeoutRef.current = window.setTimeout(() => {
@@ -614,40 +595,11 @@
     }
 
     async function holdStart() {
-      holding = true;
-      try {
-        if (!setupDone || wsRef.current?.readyState !== WebSocket.OPEN) {
-          setStatus('connecting');
-          await ensureSession();
-        }
-        if (!holding) return;
-        if (!setupDone) await waitForSetup();
-        if (!holding) return;
-        interruptPlayback();
-        if (!sendActivityStart()) {
-          throw new Error('Could not start voice capture.');
-        }
-        maySendAudio = true;
-        setStatus('holding');
-      } catch (err) {
-        if (!holding) return;
-        holding = false;
-        setErrorMessage(err instanceof Error ? err.message : 'Could not start live voice.');
-        setStatus('error');
-      }
+      await start();
     }
 
     function holdEnd() {
-      if (!holding) return;
-      holding = false;
-      const wasSending = maySendAudio;
-      maySendAudio = false;
-      if (wasSending && setupDone && wsRef.current?.readyState === WebSocket.OPEN) {
-        sendActivityEnd();
-        setStatus('thinking');
-        return;
-      }
-      if (setupDone) setStatus('ready');
+      /* continuous VAD — no hold-to-talk */
     }
 
     function stop() {

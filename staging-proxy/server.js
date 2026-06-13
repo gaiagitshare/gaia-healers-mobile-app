@@ -5,6 +5,8 @@ const PORT = Number(process.env.PORT || 8787);
 const GROQ_MODEL = process.env.GROQ_MODEL || 'llama-3.3-70b-versatile';
 const OPENROUTER_MODEL = process.env.OPENROUTER_MODEL || 'openrouter/free';
 const OPENAI_MODEL = process.env.OPENAI_MODEL || 'gpt-4o-mini';
+const OPENAI_TTS_MODEL = process.env.OPENAI_TTS_MODEL || 'gpt-4o-mini-tts';
+const OPENAI_TTS_VOICE = process.env.OPENAI_TTS_VOICE || 'alloy';
 const ASSIST_PROVIDER_ORDER = (process.env.ASSIST_PROVIDER_ORDER || 'groq,openrouter,openai')
   .split(',')
   .map((provider) => provider.trim().toLowerCase())
@@ -52,6 +54,15 @@ function sendJson(res, status, data, origin) {
     ...corsHeaders(origin),
   });
   res.end(JSON.stringify(data, null, 2));
+}
+
+function sendBuffer(res, status, buffer, contentType, origin) {
+  res.writeHead(status, {
+    'Content-Type': contentType,
+    'Cache-Control': 'no-store',
+    ...corsHeaders(origin),
+  });
+  res.end(buffer);
 }
 
 async function fetchJson(url, headers = {}) {
@@ -137,6 +148,12 @@ async function bootstrap() {
           configured: Boolean(process.env.GROQ_API_KEY || process.env.OPENROUTER_API_KEY || process.env.OPENAI_API_KEY),
           enabled: process.env.GAIA_ASSIST_VOICE_ENABLED === 'true',
           providerOrder: ASSIST_PROVIDER_ORDER,
+          tts: {
+            configured: Boolean(process.env.OPENAI_API_KEY),
+            providerOrder: ['openai', 'browser'],
+            openaiModel: OPENAI_TTS_MODEL,
+            openaiVoice: OPENAI_TTS_VOICE,
+          },
         },
       },
     },
@@ -330,6 +347,40 @@ async function assistChat(body) {
   }
 }
 
+async function assistTts(body) {
+  const text = String(body.text || '').trim();
+  if (!text) {
+    return { ok: false, status: 400, error: 'Text is required for TTS' };
+  }
+  if (!process.env.OPENAI_API_KEY) {
+    return { ok: false, status: 503, error: 'OpenAI TTS is not configured' };
+  }
+
+  console.log('[Gaia Assist] TTS provider attempt', { provider: 'openai', model: OPENAI_TTS_MODEL, voice: OPENAI_TTS_VOICE });
+  const response = await fetch('https://api.openai.com/v1/audio/speech', {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${process.env.OPENAI_API_KEY}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      model: OPENAI_TTS_MODEL,
+      voice: OPENAI_TTS_VOICE,
+      input: text.slice(0, 4000),
+      response_format: 'mp3',
+    }),
+  });
+
+  if (!response.ok) {
+    const details = await response.text();
+    throw new Error(`openai TTS request failed with ${response.status}: ${details.slice(0, 280)}`);
+  }
+
+  const audio = Buffer.from(await response.arrayBuffer());
+  console.log('[Gaia Assist] TTS response ready', { provider: 'openai', bytes: audio.length });
+  return { ok: true, provider: 'openai', model: OPENAI_TTS_MODEL, voice: OPENAI_TTS_VOICE, audio };
+}
+
 const server = http.createServer(async (req, res) => {
   const origin = req.headers.origin || '';
   if (req.method === 'OPTIONS') {
@@ -366,6 +417,27 @@ const server = http.createServer(async (req, res) => {
       }
       const payload = await assistChat({ ...body, prompt: transcript, transcript, source: body.source || 'voice' });
       sendJson(res, payload.ok === false ? 400 : 200, payload, origin);
+      return;
+    }
+    if (req.method === 'POST' && url.pathname === '/api/assist/tts') {
+      const body = await readJsonBody(req);
+      try {
+        const payload = await assistTts(body);
+        if (!payload.ok) {
+          sendJson(res, payload.status || 503, payload, origin);
+          return;
+        }
+        res.setHeader('X-Gaia-Voice-Provider', payload.provider);
+        res.setHeader('X-Gaia-Voice-Model', payload.model);
+        sendBuffer(res, 200, payload.audio, 'audio/mpeg', origin);
+      } catch (error) {
+        console.error('[Gaia Assist] TTS provider failed', { provider: 'openai', error: error.message.split('\n')[0] });
+        sendJson(res, 503, {
+          ok: false,
+          error: 'OpenAI TTS failed; use browser SpeechSynthesis fallback.',
+          provider: 'openai',
+        }, origin);
+      }
       return;
     }
     sendJson(res, 404, { ok: false, error: 'Not found' }, origin);

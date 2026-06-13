@@ -33,6 +33,27 @@
   --header-h: 3.5rem;
 }
 
+body[data-theme="dark"] {
+  --gaia-muted: #183221;
+  --gaia-wash: #101a13;
+  --gaia-glow: rgba(125, 217, 86, 0.18);
+
+  --ink: #F4F7F2;
+  --ink-secondary: #BDC8BB;
+  --ink-tertiary: #81907E;
+
+  --surface: #111613;
+  --surface-subtle: #090D0B;
+  --surface-muted: #1A211C;
+
+  --border: rgba(255, 255, 255, 0.08);
+  --border-strong: rgba(255, 255, 255, 0.14);
+
+  --shadow-soft: 0 1px 2px rgba(0, 0, 0, 0.24), 0 4px 20px rgba(0, 0, 0, 0.18);
+  --shadow-card: 0 2px 8px rgba(0, 0, 0, 0.22), 0 12px 40px rgba(0, 0, 0, 0.28);
+  --shadow-lift: 0 8px 32px rgba(0, 0, 0, 0.32);
+}
+
 /* —— Base —— */
 body.gaia-app {
   font-family: Inter, -apple-system, BlinkMacSystemFont, 'SF Pro Text', system-ui, sans-serif;
@@ -48,6 +69,56 @@ body.gaia-app {
   min-height: 100dvh;
 }
 
+body[data-theme="dark"] .gaia-header {
+  background: rgba(12, 17, 14, 0.78);
+}
+
+body[data-theme="dark"] .bg-white,
+body[data-theme="dark"] .bg-surface,
+body[data-theme="dark"] .gaia-card {
+  background-color: var(--surface) !important;
+}
+
+body[data-theme="dark"] .bg-surface-muted,
+body[data-theme="dark"] .gaia-card-inset {
+  background-color: var(--surface-muted) !important;
+}
+
+body[data-theme="dark"] .text-ink {
+  color: var(--ink) !important;
+}
+
+body[data-theme="dark"] .text-ink-secondary {
+  color: var(--ink-secondary) !important;
+}
+
+body[data-theme="dark"] .text-ink-tertiary,
+body[data-theme="dark"] .placeholder\:text-ink-tertiary::placeholder {
+  color: var(--ink-tertiary) !important;
+}
+
+.gaia-theme-toggle {
+  position: fixed;
+  left: max(1rem, env(safe-area-inset-left));
+  bottom: calc(6.05rem + env(safe-area-inset-bottom));
+  z-index: 61;
+  display: grid;
+  place-items: center;
+  width: 3rem;
+  height: 3rem;
+  border: 1px solid var(--border);
+  border-radius: 1rem;
+  background: rgba(255, 255, 255, 0.78);
+  color: var(--ink);
+  box-shadow: var(--shadow-card);
+  backdrop-filter: blur(18px) saturate(160%);
+  -webkit-backdrop-filter: blur(18px) saturate(160%);
+}
+
+body[data-theme="dark"] .gaia-theme-toggle {
+  background: rgba(17, 22, 19, 0.78);
+}
+
 .gaia-shell {
   max-width: 28rem;
   margin-left: auto;
@@ -56,6 +127,13 @@ body.gaia-app {
 
 .gaia-tabular {
   font-variant-numeric: tabular-nums lining-nums;
+}
+
+.gaia-logo-img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  padding: 0.18rem;
 }
 
 /* —— Typography —— */
@@ -710,6 +788,64 @@ body.gaia-has-tabbar {
   letter-spacing: 0.02em;
 }
 
+.gaia-body-map {
+  display: grid;
+  grid-template-columns: 6rem minmax(0, 1fr);
+  gap: 1rem;
+  align-items: center;
+}
+
+.gaia-body-map__figure {
+  position: relative;
+  height: 12rem;
+  border-radius: 999px;
+  background:
+    radial-gradient(circle at 50% 14%, rgba(125, 217, 86, 0.28), transparent 18%),
+    linear-gradient(180deg, rgba(92, 184, 46, 0.18), rgba(68, 148, 34, 0.05));
+  box-shadow: inset 0 0 0 1px rgba(92, 184, 46, 0.18);
+}
+
+.gaia-body-map__figure::before {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: 1.15rem;
+  width: 2.2rem;
+  height: 2.2rem;
+  border-radius: 999px;
+  transform: translateX(-50%);
+  background: rgba(18, 27, 23, 0.86);
+  box-shadow:
+    0 3rem 0 0 rgba(18, 27, 23, 0.72),
+    0 6.6rem 0 -0.45rem rgba(18, 27, 23, 0.58);
+}
+
+.gaia-body-map__node {
+  position: absolute;
+  left: 50%;
+  width: 0.7rem;
+  height: 0.7rem;
+  border-radius: 999px;
+  transform: translateX(-50%);
+  background: #fff;
+  box-shadow: 0 0 0 4px rgba(92, 184, 46, 0.18);
+}
+
+.gaia-body-map__node.active {
+  background: var(--gaia-light);
+  box-shadow: 0 0 0 5px rgba(125, 217, 86, 0.22), 0 0 18px rgba(92, 184, 46, 0.5);
+}
+
+.node-crown { top: 0.85rem; }
+.node-heart { top: 4.55rem; }
+.node-sacral { top: 7rem; }
+.node-root { bottom: 1rem; }
+
+.gaia-body-map__list {
+  display: grid;
+  gap: 0.75rem;
+}
+
 /* —— Voice helper prototype —— */
 .gaia-assist {
   position: fixed;
@@ -859,6 +995,29 @@ body.gaia-has-tabbar {
   font-weight: 600;
   text-align: center;
   overflow-wrap: anywhere;
+}
+
+.gaia-assist__speak-controls {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 0.4rem;
+}
+
+.gaia-assist__speak-controls button,
+.gaia-assist__provider {
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.08);
+  color: rgba(255, 255, 255, 0.78);
+  padding: 0.35rem 0.55rem;
+  font-size: 0.6875rem;
+  font-weight: 800;
+}
+
+.gaia-assist__speak-controls button[aria-pressed="true"] {
+  background: rgba(255, 255, 255, 0.18);
+  color: #fff;
 }
 
 .gaia-assist__transcript {

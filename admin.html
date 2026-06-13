@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <title>Admin · Gaia Healers</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="gaia-config.js"></script>
+  <script src="gaia-ecosystem.js"></script>
+  <script src="gaia-live-sync.js"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="gaia-shared.css" />
+</head>
+<body class="gaia-app gaia-page">
+  <div class="gaia-shell">
+    <header class="gaia-header">
+      <div class="flex items-center justify-between gap-3">
+        <a href="profile.html" class="gaia-link">Profile</a>
+        <div class="text-right">
+          <p class="gaia-eyebrow">Operator console</p>
+          <h1 class="text-title text-ink">Admin cockpit</h1>
+        </div>
+      </div>
+    </header>
+
+    <main class="gaia-main">
+      <section class="gaia-card-dark gaia-card-pad-lg rounded-3xl">
+        <p class="text-micro text-gaia-light">Full access system</p>
+        <h2 class="mt-1 text-title text-white">GHL · Academy · Events · Devices · AI</h2>
+        <p class="mt-2 text-caption text-white/60">One operator layer for read/write access, approvals, audit logs, and Gaia Assist tools.</p>
+        <div class="mt-5 grid grid-cols-3 gap-2">
+          <div class="gaia-event-metric"><p class="text-micro text-white/60">GHL</p><p class="text-headline text-white">Live</p></div>
+          <div class="gaia-event-metric"><p class="text-micro text-white/60">Events</p><p class="text-headline text-white">QR</p></div>
+          <div class="gaia-event-metric"><p class="text-micro text-white/60">AI</p><p class="text-headline text-white">Review</p></div>
+        </div>
+      </section>
+
+      <section class="gaia-card gaia-card-pad-lg">
+        <div class="mb-4 flex items-center justify-between">
+          <h2 class="gaia-section-title">Access modules</h2>
+          <span class="gaia-badge">Design</span>
+        </div>
+        <div class="gaia-stack">
+          <div class="gaia-row"><div class="gaia-tile-icon strip-biowell">CRM</div><div class="flex-1"><p class="text-headline text-ink">GHL command</p><p class="gaia-caption">Contacts, opportunities, registrations, tags, campaigns, and follow-up drafts.</p></div></div>
+          <div class="gaia-row"><div class="gaia-tile-icon strip-biopulsar">EDU</div><div class="flex-1"><p class="text-headline text-ink">Classes + lectures</p><p class="gaia-caption">Courses, modules, CE credits, live sessions, quizzes, certificates, and faculty tools.</p></div></div>
+          <div class="gaia-row"><div class="gaia-tile-icon strip-biotekna">EVT</div><div class="flex-1"><p class="text-headline text-ink">Event manager</p><p class="gaia-caption">GHL import, badges, QR check-in, exhibitor lead retrieval, and attendee analytics.</p></div></div>
+          <div class="gaia-row"><div class="gaia-tile-icon strip-healeex">DEV</div><div class="flex-1"><p class="text-headline text-ink">Devices + store</p><p class="gaia-caption">Bio-Well kits, device ownership, warranty, onboarding, and training bundle access.</p></div></div>
+        </div>
+      </section>
+
+      <section class="gaia-card gaia-card-pad">
+        <div class="mb-4 flex items-center justify-between">
+          <h2 class="gaia-section-title">AI controls</h2>
+          <span class="gaia-source-pill">SnapBOS pattern</span>
+        </div>
+        <div class="gaia-timeline">
+          <div class="gaia-timeline__item"><span class="gaia-timeline__dot"></span><div><p class="text-headline text-ink">Context aggregator</p><p class="gaia-caption">Feeds Gaia Assist safe summaries from GHL, academy, event, membership, devices, and scan history.</p></div></div>
+          <div class="gaia-timeline__item"><span class="gaia-timeline__dot"></span><div><p class="text-headline text-ink">Capability registry</p><p class="gaia-caption">Every action is typed: read, draft, propose, or execute-after-approval.</p></div></div>
+          <div class="gaia-timeline__item"><span class="gaia-timeline__dot"></span><div><p class="text-headline text-ink">Audit + flags</p><p class="gaia-caption">Admin controls rollout, voice, model providers, write access, and logs every proposed action.</p></div></div>
+        </div>
+      </section>
+
+      <section class="gaia-card gaia-card-accent gaia-card-pad">
+        <div class="flex items-center justify-between gap-3">
+          <div>
+            <p class="text-headline text-ink">Ask Gaia about operations</p>
+            <p class="gaia-caption mt-1">Use voice for admin questions, but require confirmation before any GHL/event/class write.</p>
+          </div>
+          <button type="button" data-gaia-open-assist class="rounded-xl bg-gaia px-3 py-2 text-micro font-bold text-white">Ask</button>
+        </div>
+      </section>
+    </main>
+  </div>
+  <script src="gaia-ui.js"></script>
+  <script src="shared-nav.js"></script>
+</body>
+</html>

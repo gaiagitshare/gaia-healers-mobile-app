@@ -20,6 +20,8 @@ Paste these only into your backend host environment variables, never into the st
 | `OPENROUTER_MODEL` | OpenRouter model, e.g. `openrouter/free` | OpenRouter model list |
 | `OPENAI_API_KEY` | Optional OpenAI project key for final hosted provider fallback | OpenAI dashboard |
 | `OPENAI_MODEL` | OpenAI chat model, e.g. `gpt-4o-mini` | OpenAI model picker |
+| `OPENAI_TTS_MODEL` | Optional OpenAI TTS model, e.g. `gpt-4o-mini-tts` | OpenAI audio model picker |
+| `OPENAI_TTS_VOICE` | Optional OpenAI TTS voice, e.g. `alloy` | OpenAI audio docs |
 | `APP_PUBLIC_URL` | Final app URL | GitHub Pages URL |
 | `ALLOWED_ORIGINS` | GitHub Pages + GHL origins | Backend host settings |
 
@@ -45,6 +47,7 @@ The app reads only:
 GET {proxy}/api/app/bootstrap
 POST {proxy}/api/assist/chat
 POST {proxy}/api/assist/voice
+POST {proxy}/api/assist/tts
 ```
 
 `/api/assist/chat` accepts JSON:
@@ -59,6 +62,8 @@ POST {proxy}/api/assist/voice
 ```
 
 `/api/assist/voice` is a staging-safe voice handoff route. The browser captures microphone permission and speech-to-text, then sends the transcript to the proxy. Raw audio upload is not enabled in this static staging build.
+
+`/api/assist/tts` is optional backend TTS. The browser tries OpenAI TTS first through this proxy route and falls back to browser `SpeechSynthesis` if OpenAI is unavailable, out of quota, or not configured. The frontend never receives an OpenAI key.
 
 Gaia Assist provider fallback order is controlled by:
 
@@ -125,6 +130,14 @@ curl -fsS \
 ```
 
 The response includes `provider`, `model`, and `attempts` so staging can confirm whether Groq, OpenRouter, OpenAI, or the local fallback answered.
+
+For spoken replies, the UI logs:
+
+- speech started
+- speech ended
+- speech error
+
+The Assist panel also shows the current voice provider: `openai` for backend audio, or `browser` for SpeechSynthesis fallback.
 
 In the browser console, Gaia Assist logs:
 

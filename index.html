@@ -6,6 +6,7 @@
   <title>Gaia Healers</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <script src="gaia-config.js"></script>
+  <script src="gaia-ecosystem.js"></script>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
@@ -14,7 +15,10 @@
 <body class="gaia-app min-h-screen bg-white">
   <div id="splash-flow" class="gaia-shell flex min-h-screen flex-col px-8 pb-12 pt-[max(3rem,env(safe-area-inset-top))]">
     <div class="flex flex-1 flex-col items-center justify-center">
-      <div class="gaia-splash-logo mb-10">G</div>
+      <div class="mb-10 flex flex-col items-center gap-4">
+        <div class="gaia-splash-logo">G</div>
+        <img src="branding/assets/gaia-logo-full.png" alt="Gaia Healers" class="h-8 w-auto object-contain" />
+      </div>
 
       <div class="splash-step active w-full max-w-[20rem] text-center">
         <h1 class="gaia-page-title">Gaia Healers</h1>
@@ -36,11 +40,17 @@
         <h2 class="text-title text-ink mt-3">Credentials</h2>
         <p class="gaia-body mt-4">Orientation through Advanced Level 2 — exams, CE, verified credentials.</p>
       </div>
+      <div class="splash-step w-full max-w-[20rem] text-center">
+        <p class="gaia-eyebrow">Elevate + Assist</p>
+        <h2 class="text-title text-ink mt-3">Events with a voice guide</h2>
+        <p class="gaia-body mt-4">GHL registration, QR check-in, badges, exhibitors, and Gaia Assist in one practitioner flow.</p>
+      </div>
     </div>
 
     <div class="w-full max-w-[20rem] self-center">
       <div class="mb-8 flex justify-center gap-2">
         <span data-splash-dot class="h-1 rounded-full bg-gaia w-6 transition-all"></span>
+        <span data-splash-dot class="h-1 w-1.5 rounded-full bg-surface-muted transition-all"></span>
         <span data-splash-dot class="h-1 w-1.5 rounded-full bg-surface-muted transition-all"></span>
         <span data-splash-dot class="h-1 w-1.5 rounded-full bg-surface-muted transition-all"></span>
         <span data-splash-dot class="h-1 w-1.5 rounded-full bg-surface-muted transition-all"></span>

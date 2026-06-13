@@ -6,6 +6,7 @@
   <title>Profile · Gaia Healers</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <script src="gaia-config.js"></script>
+  <script src="gaia-ecosystem.js"></script>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
@@ -51,6 +52,24 @@
         <div class="gaia-progress gaia-progress--md mt-4"><div class="gaia-progress__fill" style="width:77%"></div></div>
       </section>
 
+      <section class="gaia-card gaia-card-pad">
+        <div class="mb-4 flex items-center justify-between">
+          <div>
+            <p class="gaia-section-label !mb-1">Event pass</p>
+            <h2 class="gaia-section-title">Elevate 2026</h2>
+          </div>
+          <span class="gaia-badge">GHL linked</span>
+        </div>
+        <div class="flex items-center gap-4">
+          <div class="gaia-qr shrink-0" aria-hidden="true"></div>
+          <div class="min-w-0 flex-1">
+            <p class="text-headline text-ink">VIP Pass waitlist</p>
+            <p class="gaia-caption mt-1">Orlando · Nov 20-22, 2026</p>
+            <a href="community.html?tab=events" class="gaia-link mt-2 inline-block">Open event center</a>
+          </div>
+        </div>
+      </section>
+
       <section>
         <div class="mb-3 flex items-center justify-between">
           <h2 class="gaia-section-title">Certifications</h2>
@@ -84,6 +103,16 @@
       <section class="gaia-card-inset gaia-card-pad rounded-2xl">
         <p class="text-headline text-ink">Communities</p>
         <p class="gaia-caption mt-1">Bio-Well · All Gaia Healers · Abundant Healer</p>
+      </section>
+
+      <section class="gaia-card gaia-card-accent gaia-card-pad">
+        <div class="flex items-center justify-between gap-3">
+          <div>
+            <p class="text-headline text-ink">Gaia Assist</p>
+            <p class="gaia-caption mt-1">Push-to-talk · asks before saving, importing, or changing GHL/event data.</p>
+          </div>
+          <button type="button" data-gaia-open-assist class="rounded-xl bg-gaia px-3 py-2 text-micro font-bold text-white">Open</button>
+        </div>
       </section>
 
       <div class="gaia-card overflow-hidden">

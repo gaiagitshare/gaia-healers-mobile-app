@@ -6,6 +6,7 @@
   <title>Today · Gaia Healers</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <script src="gaia-config.js"></script>
+  <script src="gaia-ecosystem.js"></script>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
@@ -54,6 +55,15 @@
             <p class="mt-1 text-headline text-ink">Bio-Well</p>
             <p class="mt-0.5 text-micro text-ink-tertiary">12 new</p>
           </a>
+          <a href="community.html?tab=events" class="gaia-today-tile gaia-card gaia-card-pad col-span-2">
+            <div class="flex items-center justify-between gap-3">
+              <div>
+                <p class="gaia-caption">Event command center</p>
+                <p class="mt-1 text-headline text-ink">Elevate 2026 · Orlando</p>
+              </div>
+              <span class="gaia-source-pill">GHL sync</span>
+            </div>
+          </a>
         </div>
       </section>
 
@@ -96,16 +106,34 @@
 
       <section>
         <div class="mb-3 flex items-center justify-between">
-          <h2 class="gaia-section-title">Event</h2>
-          <a href="community.html" class="gaia-link">Calendar</a>
+          <h2 class="gaia-section-title">Elevate 2026</h2>
+          <a href="community.html?tab=events" class="gaia-link">Operations</a>
         </div>
-        <article class="gaia-card overflow-hidden">
-          <div class="strip-biowell px-5 py-4"><p class="text-micro text-white/80">Bio-Well Live</p><h3 class="mt-1 text-headline text-white">Advanced L1 Live Training</h3></div>
-          <div class="gaia-card-pad">
-            <p class="gaia-body">Dr. Nina Bashkir · Jun 12, 10:00 AM MT</p>
-            <div class="mt-3 flex items-center justify-between"><span class="gaia-caption">142 registered</span><span class="gaia-badge">RSVP'd</span></div>
+        <article class="gaia-card gaia-event-hero gaia-card-pad-lg">
+          <p class="text-micro font-bold uppercase tracking-[0.08em] text-white/64">Nov 20-22, 2026 · Rosen Shingle Creek</p>
+          <h3 class="mt-2 text-title text-white">Gaia Healers Elevate Conference</h3>
+          <p class="mt-2 text-caption text-white/72">GHL manages ticketing. Event Manager handles QR check-in, badge PDFs, and exhibitor lead retrieval.</p>
+          <div class="mt-5 grid grid-cols-3 gap-2">
+            <div class="gaia-event-metric"><p class="text-micro text-white/60">Attendees</p><p class="gaia-tabular text-headline text-white">428</p></div>
+            <div class="gaia-event-metric"><p class="text-micro text-white/60">Exhibitors</p><p class="gaia-tabular text-headline text-white">40</p></div>
+            <div class="gaia-event-metric"><p class="text-micro text-white/60">Badges</p><p class="gaia-tabular text-headline text-white">Ready</p></div>
+          </div>
+          <div class="mt-5 flex gap-2">
+            <a href="community.html?tab=events" class="gaia-btn gaia-btn-primary !w-auto flex-1">View event</a>
+            <button type="button" data-gaia-open-assist class="gaia-btn gaia-btn-ghost !w-auto flex-1">Ask Gaia</button>
           </div>
         </article>
+      </section>
+
+      <section class="gaia-card gaia-card-pad">
+        <div class="flex items-center gap-3">
+          <div class="gaia-qr shrink-0" aria-hidden="true"></div>
+          <div class="min-w-0 flex-1">
+            <p class="text-headline text-ink">Member pass</p>
+            <p class="gaia-caption mt-1">VIP Pass waitlist · badge profile linked to GHL registration email.</p>
+          </div>
+          <span class="gaia-badge">Draft</span>
+        </div>
       </section>
 
       <section class="gaia-card gaia-card-accent gaia-card-pad">

@@ -15,7 +15,8 @@ Built around the real platform — not generic wellness copy:
 | Bio-Well | Energy trends, chakra trends, scan history, practicum progress |
 | Practitioner communities | Bio-Well, BioPulsar, Biotekna, Healeex, All Gaia Healers, Abundant Healer |
 | Certifications | Orientation → Basic → Advanced L1/L2 roadmap, exams, Credentials |
-| Events | Live trainings (e.g. Dr. Nina Bashkir), modality cohorts |
+| Events | Elevate 2026 command center, GHL attendee import, QR check-in, badges, exhibitors |
+| Gaia Assist | Push-to-talk voice helper prototype for scans, events, academy, and GHL follow-up |
 | Continuing education | CE hours, modality courses, catalog |
 | Member growth journey | Visual path on Home |
 
@@ -35,8 +36,8 @@ Built around the real platform — not generic wellness copy:
 ## Shared assets
 
 - `gaia-shared.css` — V2 design tokens
-- `gaia-ui.js` — Onboarding, coach mark, community tabs
-- `gaia-ecosystem.js` — CRM-aligned constants (optional)
+- `gaia-ui.js` — Onboarding, coach mark, community tabs, Gaia Assist prototype
+- `gaia-ecosystem.js` — CRM/GHL/event/assistant constants and future API handoff point
 - `shared-nav.js` — Bottom navigation
 
 ## Run locally

@@ -1419,7 +1419,7 @@
       chips.querySelectorAll('button').forEach((button) => { button.disabled = busy; });
       if (busy) {
         setAssistVoiceState('thinking', label);
-      } else if (!recognizing && activeRecorder?.state !== 'recording') {
+      } else if (!pendingVoice && !recognizing && activeRecorder?.state !== 'recording') {
         setAssistVoiceState('idle', 'Tap to speak');
       }
     }

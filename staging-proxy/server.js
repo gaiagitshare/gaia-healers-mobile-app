@@ -9,6 +9,7 @@ const OPENAI_TTS_MODEL = process.env.OPENAI_TTS_MODEL || 'gpt-4o-mini-tts';
 const OPENAI_TTS_VOICE = process.env.OPENAI_TTS_VOICE || 'alloy';
 const ELEVENLABS_MODEL = process.env.ELEVENLABS_MODEL || 'eleven_multilingual_v2';
 const ELEVENLABS_VOICE_ID = process.env.ELEVENLABS_VOICE_ID || '';
+const ELEVENLABS_VOICE_NAME = process.env.ELEVENLABS_VOICE_NAME || 'Adam';
 const COMPAT_TTS_MODEL = process.env.OPENAI_COMPATIBLE_TTS_MODEL || OPENAI_TTS_MODEL;
 const COMPAT_TTS_VOICE = process.env.OPENAI_COMPATIBLE_TTS_VOICE || OPENAI_TTS_VOICE;
 const ASSIST_PROVIDER_ORDER = (process.env.ASSIST_PROVIDER_ORDER || 'groq,openrouter,openai')
@@ -186,6 +187,7 @@ async function bootstrap() {
             openaiModel: OPENAI_TTS_MODEL,
             openaiVoice: OPENAI_TTS_VOICE,
             elevenLabsConfigured: Boolean(process.env.ELEVENLABS_API_KEY && ELEVENLABS_VOICE_ID),
+            elevenLabsVoice: ELEVENLABS_VOICE_NAME,
           },
         },
       },
@@ -474,7 +476,7 @@ async function callTtsProvider(provider, text, body = {}) {
       ok: true,
       provider: 'elevenlabs',
       model: ELEVENLABS_MODEL,
-      voice: voiceId,
+      voice: ELEVENLABS_VOICE_NAME || voiceId,
       audio: Buffer.from(await response.arrayBuffer()),
     };
   }

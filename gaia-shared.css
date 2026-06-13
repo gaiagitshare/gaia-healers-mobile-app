@@ -71,7 +71,7 @@ body.gaia-app {
 }
 
 body[data-theme="dark"] .gaia-header {
-  background: rgba(12, 17, 14, 0.78);
+  background: rgba(8, 13, 10, 0.9);
 }
 
 body[data-theme="dark"] .bg-white,
@@ -193,6 +193,16 @@ body[data-theme="dark"] .gaia-theme-toggle {
   backdrop-filter: saturate(180%) blur(20px);
   -webkit-backdrop-filter: saturate(180%) blur(20px);
   border-bottom: 1px solid var(--border);
+}
+
+.gaia-header .gaia-eyebrow {
+  color: var(--gaia-light);
+  text-shadow: 0 1px 10px rgba(0, 0, 0, 0.2);
+}
+
+.gaia-header h1 {
+  color: var(--ink) !important;
+  text-shadow: 0 1px 14px rgba(0, 0, 0, 0.16);
 }
 
 .gaia-main {
@@ -338,20 +348,20 @@ body[data-theme="dark"] .gaia-theme-toggle {
 
 .gaia-live-sync {
   position: fixed;
-  top: calc(0.75rem + env(safe-area-inset-top));
+  top: calc(5.25rem + env(safe-area-inset-top));
   right: max(1rem, env(safe-area-inset-right));
   z-index: 70;
   display: inline-flex;
   align-items: center;
   gap: 0.4rem;
   border-radius: 999px;
-  padding: 0.45rem 0.65rem;
-  background: rgba(13, 24, 18, 0.82);
+  padding: 0.38rem 0.55rem;
+  background: rgba(13, 24, 18, 0.9);
   color: #fff;
   box-shadow: var(--shadow-card);
   backdrop-filter: blur(16px) saturate(160%);
   -webkit-backdrop-filter: blur(16px) saturate(160%);
-  font-size: 0.625rem;
+  font-size: 0.58rem;
   font-weight: 800;
   letter-spacing: 0.02em;
 }
@@ -810,11 +820,24 @@ body[data-theme="dark"] .gaia-theme-toggle {
 .gaia-coach {
   margin: 0 0 1rem;
   border-radius: var(--radius-lg);
-  background: var(--ink);
+  background: linear-gradient(145deg, #102018 0%, #16291d 100%);
   color: #fff;
   padding: 1.125rem 1.25rem;
   box-shadow: var(--shadow-lift);
   animation: gaia-coach-in 0.45s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.gaia-coach .gaia-eyebrow {
+  color: var(--gaia-light) !important;
+}
+
+.gaia-coach p,
+.gaia-coach strong {
+  color: rgba(255, 255, 255, 0.9) !important;
+}
+
+.gaia-coach button {
+  color: var(--gaia-light) !important;
 }
 
 @keyframes gaia-coach-in {
@@ -839,6 +862,35 @@ body[data-theme="dark"] .gaia-theme-toggle {
 /* Body padding for floating tab bar */
 body.gaia-has-tabbar {
   padding-bottom: calc(7rem + env(safe-area-inset-bottom));
+}
+
+.gaia-tabbar__inner {
+  background: rgba(250, 252, 249, 0.96) !important;
+  border: 1px solid rgba(35, 52, 36, 0.08);
+}
+
+.gaia-tabbar__inner a {
+  color: #667466 !important;
+}
+
+.gaia-tabbar__inner a[aria-current="page"] {
+  color: var(--gaia-dark) !important;
+}
+
+.gaia-tabbar__inner a span:last-child {
+  font-weight: 700;
+}
+
+body[data-theme="dark"] .gaia-tabbar__inner {
+  background: rgba(245, 248, 244, 0.96) !important;
+}
+
+body[data-theme="dark"] .gaia-tabbar__inner a {
+  color: #657565 !important;
+}
+
+body[data-theme="dark"] .gaia-tabbar__inner a[aria-current="page"] {
+  color: var(--gaia-dark) !important;
 }
 
 /* —— Gaia event command center —— */

@@ -24,7 +24,8 @@ Paste these only into your backend host environment variables, never into the st
 | `OPENAI_TTS_MODEL` | Optional OpenAI TTS model, e.g. `gpt-4o-mini-tts` | OpenAI audio model picker |
 | `OPENAI_TTS_VOICE` | Optional OpenAI TTS voice, e.g. `alloy` | OpenAI audio docs |
 | `ELEVENLABS_API_KEY` | Optional ElevenLabs key for more natural hosted voice | ElevenLabs dashboard |
-| `ELEVENLABS_VOICE_ID` | ElevenLabs voice ID to use for Gaia Assist | ElevenLabs voice library |
+| `ELEVENLABS_VOICE_ID` | ElevenLabs voice ID to use for Gaia Assist; Adam premade is `pNInz6obpgDQGcFmaJgB` | ElevenLabs voice library |
+| `ELEVENLABS_VOICE_NAME` | Friendly label shown in Gaia Assist, e.g. `Adam` | Your selected ElevenLabs voice |
 | `ELEVENLABS_MODEL` | ElevenLabs model, e.g. `eleven_multilingual_v2` | ElevenLabs docs |
 | `OPENAI_COMPATIBLE_TTS_BASE_URL` | Optional OpenAI-compatible `/v1/audio/speech` host | TTS provider docs |
 | `OPENAI_COMPATIBLE_TTS_API_KEY` | Optional bearer token for that compatible TTS host | TTS provider dashboard |

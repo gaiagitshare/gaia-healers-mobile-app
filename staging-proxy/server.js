@@ -640,13 +640,45 @@ async function assistTranscribe(body) {
   if (audioBase64.length > 3 * 1024 * 1024) {
     return { ok: false, status: 413, error: 'Audio payload is too large' };
   }
-  if (!process.env.OPENAI_API_KEY) {
-    return { ok: false, status: 503, error: 'Whisper transcription is not configured on the proxy' };
-  }
 
   const mimeType = String(body.mimeType || 'audio/webm').trim() || 'audio/webm';
-  const extension = mimeType.includes('mp4') ? 'voice.m4a' : 'voice.webm';
+  const extension = mimeType.includes('mp4') || mimeType.includes('aac') ? 'voice.m4a' : 'voice.webm';
   const audioBuffer = Buffer.from(audioBase64, 'base64');
+
+  if (process.env.ELEVENLABS_API_KEY) {
+    try {
+      const form = new FormData();
+      form.append('file', new Blob([audioBuffer], { type: mimeType }), extension);
+      form.append('model_id', process.env.ELEVENLABS_STT_MODEL || 'scribe_v1');
+      const response = await fetch('https://api.elevenlabs.io/v1/speech-to-text', {
+        method: 'POST',
+        headers: { 'xi-api-key': process.env.ELEVENLABS_API_KEY },
+        body: form,
+      });
+      if (response.ok) {
+        const payload = await response.json();
+        const transcript = String(payload.text || payload.transcript || '').trim();
+        if (transcript) {
+          return {
+            ok: true,
+            transcript,
+            provider: 'elevenlabs',
+            model: process.env.ELEVENLABS_STT_MODEL || 'scribe_v1',
+          };
+        }
+      } else {
+        const details = await response.text();
+        console.error('[Gaia Assist] ElevenLabs STT failed', { status: response.status, details: details.slice(0, 180) });
+      }
+    } catch (error) {
+      console.error('[Gaia Assist] ElevenLabs STT error', { error: error.message.split('\n')[0] });
+    }
+  }
+
+  if (!process.env.OPENAI_API_KEY) {
+    return { ok: false, status: 503, error: 'Speech transcription is not configured on the proxy' };
+  }
+
   const form = new FormData();
   form.append('file', new Blob([audioBuffer], { type: mimeType }), extension);
   form.append('model', process.env.OPENAI_TRANSCRIBE_MODEL || 'whisper-1');

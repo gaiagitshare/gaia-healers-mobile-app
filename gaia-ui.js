@@ -798,6 +798,11 @@
     let activeRecorder = null;
     let activeRecordStream = null;
     let recordStopTimer = null;
+    let recordVadFrame = null;
+    let recordAudioCtx = null;
+    let liveBubble = null;
+    let speechFallbackTimer = null;
+    const voiceRegion = root.querySelector('.gaia-assist__voice');
     let muted = localStorage.getItem('gaia-assist-muted') === '1';
     let currentAudio = null;
     let pendingVoice = null;
@@ -1190,7 +1195,7 @@
       audio.onplay = onPlay;
       audio.onended = () => {
         URL.revokeObjectURL(audioUrl);
-        status.textContent = 'Ready for next prompt';
+        setAssistVoiceState('idle', 'Tap to speak');
         assistLog('speech ended', { provider });
       };
       audio.onerror = () => {
@@ -1288,6 +1293,7 @@
       if (!fromVoice || !voiceUnlockIsFresh()) {
         await unlockVoicePlayback(fromVoice);
       }
+      setAssistVoiceState('speaking', 'Speaking with ElevenLabs…');
       const providerSetting = selectedProvider();
       if (providerSetting === 'browser') {
         await speakWithBrowser(cleanText);
@@ -1333,6 +1339,8 @@
         setVoiceProvider('browser');
         assistError('speech error', { provider: providerSetting, error: err.message });
         await speakWithBrowser(cleanText);
+      } finally {
+        if (!pendingVoice) setAssistVoiceState('idle', 'Tap to speak');
       }
     }
 
@@ -1361,12 +1369,46 @@
       error.textContent = message || '';
     }
 
-    function setBusy(busy, label = 'Working...') {
-      mic.disabled = busy;
+    function setAssistVoiceState(state, message = '') {
+      if (voiceRegion) voiceRegion.dataset.assistState = state;
+      root.classList.toggle('gaia-assist--listening', state === 'listening');
+      root.classList.toggle('gaia-assist--thinking', state === 'thinking');
+      root.classList.toggle('gaia-assist--speaking', state === 'speaking');
+      if (message) status.textContent = message;
+    }
+
+    function updateLiveTranscript(text) {
+      const clean = String(text || '').trim();
+      if (!clean) {
+        clearLiveTranscript();
+        return;
+      }
+      if (!liveBubble) {
+        liveBubble = document.createElement('p');
+        liveBubble.className = 'gaia-assist__bubble gaia-assist__bubble--live';
+        transcript.appendChild(liveBubble);
+      }
+      liveBubble.textContent = clean;
+      transcript.scrollTop = transcript.scrollHeight;
+      const preview = clean.length > 52 ? `${clean.slice(0, 52)}…` : clean;
+      status.textContent = `Listening… ${preview}`;
+    }
+
+    function clearLiveTranscript() {
+      if (liveBubble) {
+        liveBubble.remove();
+        liveBubble = null;
+      }
+    }
+
+    function setBusy(busy, label = 'Thinking…') {
       form.querySelector('button').disabled = busy;
       chips.querySelectorAll('button').forEach((button) => { button.disabled = busy; });
-      status.textContent = busy ? label : 'Ready for next prompt';
-      root.classList.toggle('gaia-assist--thinking', busy);
+      if (busy) {
+        setAssistVoiceState('thinking', label);
+      } else if (!recognizing && activeRecorder?.state !== 'recording') {
+        setAssistVoiceState('idle', 'Tap to speak');
+      }
     }
 
     function appendMessage(kind, text) {
@@ -1397,7 +1439,7 @@
       }
       setError('');
       appendMessage('user', cleanPrompt);
-      setBusy(true, fromVoice ? 'Processing voice...' : 'Thinking...');
+      setBusy(true, 'Thinking…');
 
       const base = proxyBase();
       if (!base) {
@@ -1462,23 +1504,41 @@
     }
 
     function cleanupActiveRecording() {
+      if (recordVadFrame) {
+        cancelAnimationFrame(recordVadFrame);
+        recordVadFrame = null;
+      }
       if (recordStopTimer) {
         window.clearTimeout(recordStopTimer);
         recordStopTimer = null;
       }
+      if (speechFallbackTimer) {
+        window.clearTimeout(speechFallbackTimer);
+        speechFallbackTimer = null;
+      }
+      recordAudioCtx?.close?.().catch(() => {});
+      recordAudioCtx = null;
       activeRecordStream?.getTracks?.().forEach((track) => track.stop());
       activeRecordStream = null;
       activeRecorder = null;
       root.classList.remove('gaia-assist--listening');
     }
 
-    async function recordVoicePrompt() {
-      if (activeRecorder?.state === 'recording') {
-        stopActiveRecording();
+    function waitForRecorderStop(recorder, delayMs = 150) {
+      return new Promise((resolve, reject) => {
+        recorder.onerror = () => reject(new Error('Recording failed'));
+        recorder.onstop = () => window.setTimeout(resolve, delayMs);
+      });
+    }
+
+    async function recordLiveVoice() {
+      if (!window.MediaRecorder) {
+        setError('Voice recording is not supported here. Type your prompt below.');
         return;
       }
 
       setError('');
+      clearLiveTranscript();
       try {
         await unlockVoicePlayback(true);
         const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
@@ -1488,60 +1548,188 @@
         activeRecorder = recorder;
         const chunks = [];
 
-        root.classList.add('gaia-assist--listening');
-        status.textContent = isIOS ? 'Recording… speak, then tap mic again' : 'Recording… speak now';
+        const AudioCtx = window.AudioContext || window.webkitAudioContext;
+        if (AudioCtx) {
+          recordAudioCtx = new AudioCtx();
+          const source = recordAudioCtx.createMediaStreamSource(stream);
+          const analyser = recordAudioCtx.createAnalyser();
+          analyser.fftSize = 2048;
+          source.connect(analyser);
 
-        await new Promise((resolve, reject) => {
+          let speechDetected = false;
+          let silenceStart = 0;
+          const speechThreshold = isIOS ? 0.012 : 0.018;
+          const silenceMs = isIOS ? 1400 : 1100;
+
+          setAssistVoiceState('listening', 'Listening…');
+
+          const monitorLevel = () => {
+            if (recorder.state !== 'recording') return;
+            const samples = new Uint8Array(analyser.fftSize);
+            analyser.getByteTimeDomainData(samples);
+            let sum = 0;
+            for (let i = 0; i < samples.length; i += 1) {
+              const sample = (samples[i] - 128) / 128;
+              sum += sample * sample;
+            }
+            const rms = Math.sqrt(sum / samples.length);
+            if (rms > speechThreshold) {
+              speechDetected = true;
+              silenceStart = 0;
+              if (!liveBubble) status.textContent = 'Listening…';
+            } else if (speechDetected) {
+              if (!silenceStart) silenceStart = Date.now();
+              else if (Date.now() - silenceStart >= silenceMs) {
+                stopActiveRecording();
+                return;
+              }
+            }
+            recordVadFrame = requestAnimationFrame(monitorLevel);
+          };
+
           recorder.ondataavailable = (event) => {
             if (event.data?.size) chunks.push(event.data);
-          };
-          recorder.onerror = () => reject(new Error('Recording failed'));
-          recorder.onstop = () => {
-            window.setTimeout(resolve, isIOS ? 200 : 50);
           };
           if (isIOS) recorder.start(100);
           else recorder.start();
           recordStopTimer = window.setTimeout(() => {
             if (recorder.state === 'recording') stopActiveRecording();
-          }, isIOS ? 8000 : 6500);
-        });
+          }, 12000);
+          monitorLevel();
+          await waitForRecorderStop(recorder, isIOS ? 200 : 80);
+        } else {
+          setAssistVoiceState('listening', 'Listening…');
+          recorder.ondataavailable = (event) => {
+            if (event.data?.size) chunks.push(event.data);
+          };
+          if (isIOS) recorder.start(100);
+          else recorder.start();
+          recordStopTimer = window.setTimeout(() => {
+            if (recorder.state === 'recording') stopActiveRecording();
+          }, 6500);
+          await waitForRecorderStop(recorder, isIOS ? 200 : 50);
+        }
 
         if (recordStopTimer) {
           window.clearTimeout(recordStopTimer);
           recordStopTimer = null;
         }
+        if (recordVadFrame) {
+          cancelAnimationFrame(recordVadFrame);
+          recordVadFrame = null;
+        }
         activeRecorder = null;
         stream.getTracks().forEach((track) => track.stop());
         activeRecordStream = null;
-        root.classList.remove('gaia-assist--listening');
+        recordAudioCtx?.close?.().catch(() => {});
+        recordAudioCtx = null;
 
         const blobType = recorder.mimeType || mimeType || (isIOS ? 'audio/mp4' : 'audio/webm');
         const blob = new Blob(chunks, { type: blobType });
         const minSize = isIOS ? 200 : 800;
-        assistLog('voice recorder finished', { bytes: blob.size, type: blobType, isIOS });
+        assistLog('live recorder finished', { bytes: blob.size, type: blobType, isIOS });
         if (blob.size < minSize) {
-          status.textContent = 'No speech captured';
-          setError('No speech captured. Tap mic, speak clearly, then tap mic again to send.');
+          setAssistVoiceState('idle', 'Tap to speak');
+          setError('No speech captured. Try again or type your prompt below.');
           return;
         }
 
-        status.textContent = 'Transcribing...';
+        setAssistVoiceState('thinking', 'Thinking…');
         const transcript = await transcribeAudioBlob(blob);
         if (!transcript) {
-          status.textContent = 'No speech captured';
-          setError('Could not understand that recording. Try again or type your prompt below.');
+          setAssistVoiceState('idle', 'Tap to speak');
+          setError('Could not understand that. Try again or type your prompt below.');
           return;
         }
+        updateLiveTranscript(transcript);
         await sendPrompt(transcript, 'voice', 'voice-recorder');
+        clearLiveTranscript();
       } catch (err) {
         cleanupActiveRecording();
+        clearLiveTranscript();
         assistError('voice recorder error', err);
         setError(`${err.message || 'Voice capture failed'}. Type your prompt below.`);
-        status.textContent = 'Tap to speak';
+        setAssistVoiceState('idle', 'Tap to speak');
       }
     }
 
+    function beginSpeechRecognition() {
+      recognition = new SpeechRecognition();
+      recognition.lang = 'en-US';
+      recognition.interimResults = true;
+      recognition.continuous = false;
+
+      let finalTranscript = '';
+      let recognitionHandled = false;
+
+      if (speechFallbackTimer) window.clearTimeout(speechFallbackTimer);
+      speechFallbackTimer = window.setTimeout(() => {
+        if (!recognizing || finalTranscript || recognitionHandled) return;
+        recognitionHandled = true;
+        assistLog('speech recognition fallback', { reason: 'timeout' });
+        try { recognition.stop(); } catch (err) {
+          assistLog('recognition stop skipped', { error: err.message });
+        }
+        recordLiveVoice();
+      }, isIOS ? 3500 : 8000);
+
+      recognition.onstart = () => {
+        recognizing = true;
+        setAssistVoiceState('listening', 'Listening…');
+        assistLog('recording started');
+      };
+      recognition.onresult = (event) => {
+        let interim = '';
+        let latestFinal = finalTranscript;
+        for (let i = event.resultIndex; i < event.results.length; i += 1) {
+          const piece = event.results[i][0]?.transcript || '';
+          if (!piece) continue;
+          if (event.results[i].isFinal) latestFinal = `${latestFinal} ${piece}`.trim();
+          else interim = `${interim} ${piece}`.trim();
+        }
+        if (latestFinal) finalTranscript = latestFinal;
+        updateLiveTranscript(interim || finalTranscript);
+      };
+      recognition.onerror = (event) => {
+        assistError('OpenAI/voice error', { type: 'speech-recognition', error: event.error });
+        if (event.error === 'network' || event.error === 'service-not-allowed' || event.error === 'aborted') {
+          recognitionHandled = true;
+          recognizing = false;
+          if (speechFallbackTimer) {
+            window.clearTimeout(speechFallbackTimer);
+            speechFallbackTimer = null;
+          }
+          setAssistVoiceState('listening', 'Listening…');
+          recordLiveVoice();
+        } else {
+          setError(`Voice capture failed: ${event.error}. You can type the same prompt below.`);
+        }
+      };
+      recognition.onend = async () => {
+        if (recognitionHandled) return;
+        recognizing = false;
+        if (speechFallbackTimer) {
+          window.clearTimeout(speechFallbackTimer);
+          speechFallbackTimer = null;
+        }
+        assistLog('recording stopped', { hasTranscript: Boolean(finalTranscript) });
+        if (finalTranscript) {
+          clearLiveTranscript();
+          setAssistVoiceState('thinking', 'Thinking…');
+          await sendPrompt(finalTranscript, 'voice', 'voice');
+        } else {
+          await recordLiveVoice();
+        }
+      };
+
+      recognition.start();
+    }
+
     function stopRecognition() {
+      if (speechFallbackTimer) {
+        window.clearTimeout(speechFallbackTimer);
+        speechFallbackTimer = null;
+      }
       if (recognition && recognizing) {
         assistLog('recording stopped', { reason: 'manual-stop' });
         recognition.stop();
@@ -1569,77 +1757,15 @@
       }
 
       setError('');
+      clearLiveTranscript();
       await unlockVoicePlayback(true);
 
-      if (!window.MediaRecorder) {
-        setError('Voice recording is not supported here. Type your prompt below.');
+      if (SpeechRecognition) {
+        beginSpeechRecognition();
         return;
       }
 
-      if (isIOS || !SpeechRecognition) {
-        await recordVoicePrompt();
-        return;
-      }
-
-      try {
-        await ensureMicPermission();
-      } catch (err) {
-        assistError('mic permission error', err);
-        setError('Microphone permission was blocked. Allow microphone access in the browser, or use the text box to test Gaia Assist.');
-        return;
-      }
-
-      recognition = new SpeechRecognition();
-      recognition.lang = 'en-US';
-      recognition.interimResults = true;
-      recognition.continuous = false;
-
-      let finalTranscript = '';
-      let recognitionHandled = false;
-      recognition.onstart = () => {
-        recognizing = true;
-        root.classList.add('gaia-assist--listening');
-        status.textContent = 'Listening...';
-        assistLog('recording started');
-      };
-      recognition.onresult = (event) => {
-        let spoken = '';
-        for (let i = event.resultIndex; i < event.results.length; i += 1) {
-          const piece = event.results[i][0]?.transcript || '';
-          if (event.results[i].isFinal) spoken = `${spoken} ${piece}`.trim();
-          else status.textContent = piece ? `Hearing: ${piece}` : status.textContent;
-        }
-        if (spoken) {
-          finalTranscript = spoken;
-          status.textContent = 'Voice captured';
-        }
-      };
-      recognition.onerror = (event) => {
-        assistError('OpenAI/voice error', { type: 'speech-recognition', error: event.error });
-        if (event.error === 'network' || event.error === 'service-not-allowed' || event.error === 'aborted') {
-          recognitionHandled = true;
-          recognizing = false;
-          root.classList.remove('gaia-assist--listening');
-          status.textContent = 'Switching to recorder...';
-          recordVoicePrompt();
-          return;
-        }
-        setError(`Voice capture failed: ${event.error}. You can type the same prompt below.`);
-      };
-      recognition.onend = async () => {
-        if (recognitionHandled) return;
-        recognizing = false;
-        root.classList.remove('gaia-assist--listening');
-        assistLog('recording stopped', { hasTranscript: Boolean(finalTranscript) });
-        if (finalTranscript) {
-          await sendPrompt(finalTranscript, 'voice', 'voice');
-        } else {
-          status.textContent = 'Switching to recorder...';
-          await recordVoicePrompt();
-        }
-      };
-
-      recognition.start();
+      await recordLiveVoice();
     }
 
     wireTabAssist();

@@ -839,22 +839,49 @@
     const indicator = document.createElement('div');
     indicator.className = 'gaia-live-sync';
     indicator.hidden = true;
-    indicator.innerHTML = '<span></span><strong>Proxy connected</strong>';
-    document.body.appendChild(indicator);
+    indicator.innerHTML = '<span aria-hidden="true"></span><strong>Proxy connected</strong>';
+
+    function placeIndicator() {
+      const view = window.GaiaAppShell?.currentView?.()
+        || new URLSearchParams(window.location.search).get('view')
+        || 'today';
+      const hero = document.querySelector('.gaia-screen[data-screen="today"] .gaia-dash-hero');
+      const headerActions = document.querySelector('.gaia-screen.is-active [data-gaia-header-actions]');
+
+      indicator.classList.remove('gaia-live-sync--hero', 'gaia-live-sync--header');
+
+      if (view === 'today' && hero) {
+        hero.appendChild(indicator);
+        indicator.classList.add('gaia-live-sync--hero');
+        return;
+      }
+
+      if (headerActions) {
+        headerActions.insertBefore(indicator, headerActions.firstChild);
+        indicator.classList.add('gaia-live-sync--header');
+        return;
+      }
+
+      document.body.appendChild(indicator);
+    }
 
     function refresh() {
       const status = window.GAIA_SYNC?.status;
       const connected = status === 'live' || status === 'connected';
       indicator.hidden = !connected;
       indicator.classList.toggle('gaia-live-sync--live', status === 'live');
-      const label = status === 'live' ? 'Live sync connected' : 'Proxy connected';
+      const label = status === 'live' ? 'Live sync' : 'Proxy';
       const text = indicator.querySelector('strong');
       if (text) text.textContent = label;
+      if (connected) placeIndicator();
     }
 
     refresh();
     document.addEventListener('gaia:sync', refresh);
     document.addEventListener('gaia:sync-error', refresh);
+    window.addEventListener('gaia:route', () => {
+      refresh();
+    });
   }
 
   function initGaiaAssist() {

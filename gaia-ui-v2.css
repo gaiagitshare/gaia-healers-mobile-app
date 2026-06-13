@@ -12,92 +12,119 @@ body.gaia-v2 {
 
 /* —— Light theme —— */
 body.gaia-v2[data-theme="light"] {
-  --gh-bg: #eef4ea;
+  --gh-bg: #e4ebe0;
   --gh-bg-elevated: #ffffff;
-  --gh-bg-card: rgba(255, 255, 255, 0.92);
-  --gh-border: rgba(92, 184, 46, 0.22);
-  --gh-border-soft: rgba(28, 42, 30, 0.08);
-  --gh-glow: rgba(92, 184, 46, 0.22);
-  --gh-text: #1a241c;
-  --gh-text-soft: rgba(26, 36, 28, 0.62);
-  --gh-text-faint: rgba(26, 36, 28, 0.38);
-  --gh-header-bg: rgba(255, 255, 255, 0.82);
-  --gh-tabbar-bg: rgba(255, 255, 255, 0.94);
-  --gh-tabbar-link: rgba(26, 36, 28, 0.42);
-  --gh-tabbar-ring: rgba(255, 255, 255, 0.98);
-  --gh-assist-bg: rgba(255, 255, 255, 0.98);
-  --gh-assist-surface: rgba(28, 42, 30, 0.04);
-  --gh-backdrop: rgba(16, 24, 18, 0.32);
+  --gh-bg-card: #ffffff;
+  --gh-border: rgba(68, 148, 34, 0.28);
+  --gh-border-soft: rgba(28, 42, 30, 0.12);
+  --gh-glow: rgba(92, 184, 46, 0.18);
+  --gh-text: #152018;
+  --gh-text-soft: rgba(21, 32, 24, 0.64);
+  --gh-text-faint: rgba(21, 32, 24, 0.42);
+  --gh-header-bg: rgba(255, 255, 255, 0.96);
+  --gh-tabbar-bg: rgba(255, 255, 255, 0.98);
+  --gh-tabbar-link: rgba(21, 32, 24, 0.48);
+  --gh-tabbar-link-active: #449422;
+  --gh-tabbar-ring: rgba(255, 255, 255, 1);
+  --gh-assist-bg: #ffffff;
+  --gh-assist-surface: rgba(21, 32, 24, 0.045);
+  --gh-backdrop: rgba(16, 24, 18, 0.36);
   --gh-dash-hero-bg:
-    radial-gradient(circle at 18% 0%, rgba(125, 217, 86, 0.28), transparent 42%),
-    linear-gradient(155deg, #1b3224 0%, #244c24 52%, #16301f 100%);
+    radial-gradient(circle at 18% 0%, rgba(125, 217, 86, 0.32), transparent 44%),
+    linear-gradient(155deg, #1a3022 0%, #2a5528 52%, #18301f 100%);
   --gh-dash-hero-text: #ffffff;
-  --gh-dash-hero-sub: rgba(255, 255, 255, 0.72);
-  --gh-bento-shadow: 0 10px 28px rgba(28, 42, 30, 0.08);
-  --gh-chip-bg: rgba(92, 184, 46, 0.1);
-  --gh-placeholder: rgba(26, 36, 28, 0.34);
-  --gh-handle: rgba(28, 42, 30, 0.12);
+  --gh-dash-hero-sub: rgba(255, 255, 255, 0.74);
+  --gh-bento-shadow: 0 8px 24px rgba(21, 32, 24, 0.07);
+  --gh-chip-bg: rgba(92, 184, 46, 0.12);
+  --gh-chip-text: #449422;
+  --gh-placeholder: rgba(21, 32, 24, 0.36);
+  --gh-handle: rgba(21, 32, 24, 0.14);
   --gh-settings-bg: #ffffff;
+  --gh-sync-bg: rgba(255, 255, 255, 0.92);
+  --gh-sync-text: rgba(21, 32, 24, 0.72);
 
   --ink: var(--gh-text);
   --ink-secondary: var(--gh-text-soft);
   --ink-tertiary: var(--gh-text-faint);
   --surface: var(--gh-bg-elevated);
   --surface-subtle: var(--gh-bg);
-  --surface-muted: #e4ebe1;
+  --surface-muted: #dce6d8;
   --border: var(--gh-border-soft);
-  --gaia-wash: #f0f7ec;
-  --gaia-muted: #ebf7e4;
+  --gaia-wash: #eef6e9;
+  --gaia-muted: #e8f3e2;
 }
 
-/* —— Dark theme —— */
 body.gaia-v2[data-theme="dark"] {
-  --gh-bg: #060908;
-  --gh-bg-elevated: #0e1210;
-  --gh-bg-card: rgba(22, 28, 24, 0.94);
-  --gh-border: rgba(125, 217, 86, 0.14);
-  --gh-border-soft: rgba(255, 255, 255, 0.06);
-  --gh-glow: rgba(92, 184, 46, 0.35);
+  --gh-bg: #050807;
+  --gh-bg-elevated: #101512;
+  --gh-bg-card: #141a16;
+  --gh-border: rgba(125, 217, 86, 0.2);
+  --gh-border-soft: rgba(255, 255, 255, 0.09);
+  --gh-glow: rgba(92, 184, 46, 0.28);
   --gh-text: #eef4eb;
-  --gh-text-soft: rgba(238, 244, 235, 0.62);
-  --gh-text-faint: rgba(238, 244, 235, 0.38);
-  --gh-header-bg: rgba(6, 9, 8, 0.72);
-  --gh-tabbar-bg: rgba(12, 16, 14, 0.88);
-  --gh-tabbar-link: rgba(238, 244, 235, 0.42);
-  --gh-tabbar-ring: rgba(6, 9, 8, 0.94);
-  --gh-assist-bg: rgba(10, 14, 12, 0.98);
-  --gh-assist-surface: rgba(255, 255, 255, 0.05);
-  --gh-backdrop: rgba(0, 0, 0, 0.58);
+  --gh-text-soft: rgba(238, 244, 235, 0.66);
+  --gh-text-faint: rgba(238, 244, 235, 0.4);
+  --gh-header-bg: rgba(5, 8, 7, 0.94);
+  --gh-tabbar-bg: rgba(10, 14, 12, 0.94);
+  --gh-tabbar-link: rgba(238, 244, 235, 0.46);
+  --gh-tabbar-link-active: #7dd956;
+  --gh-tabbar-ring: rgba(5, 8, 7, 0.98);
+  --gh-assist-bg: #0c100e;
+  --gh-assist-surface: rgba(255, 255, 255, 0.055);
+  --gh-backdrop: rgba(0, 0, 0, 0.62);
   --gh-dash-hero-bg:
-    radial-gradient(circle at 20% 0%, rgba(125, 217, 86, 0.2), transparent 42%),
-    linear-gradient(155deg, rgba(16, 28, 20, 0.98) 0%, rgba(8, 12, 10, 0.94) 100%);
+    radial-gradient(circle at 20% 0%, rgba(125, 217, 86, 0.18), transparent 44%),
+    linear-gradient(155deg, #121f17 0%, #0a0f0c 100%);
   --gh-dash-hero-text: #eef4eb;
-  --gh-dash-hero-sub: rgba(238, 244, 235, 0.62);
-  --gh-bento-shadow: 0 12px 32px rgba(0, 0, 0, 0.28);
-  --gh-chip-bg: rgba(125, 217, 86, 0.1);
-  --gh-placeholder: rgba(238, 244, 235, 0.32);
-  --gh-handle: rgba(255, 255, 255, 0.16);
-  --gh-settings-bg: rgba(12, 16, 14, 0.98);
+  --gh-dash-hero-sub: rgba(238, 244, 235, 0.64);
+  --gh-bento-shadow: 0 10px 28px rgba(0, 0, 0, 0.34);
+  --gh-chip-bg: rgba(125, 217, 86, 0.12);
+  --gh-chip-text: #7dd956;
+  --gh-placeholder: rgba(238, 244, 235, 0.34);
+  --gh-handle: rgba(255, 255, 255, 0.14);
+  --gh-settings-bg: #101512;
+  --gh-sync-bg: rgba(20, 26, 22, 0.92);
+  --gh-sync-text: rgba(238, 244, 235, 0.72);
 
   --ink: var(--gh-text);
   --ink-secondary: var(--gh-text-soft);
   --ink-tertiary: var(--gh-text-faint);
   --surface: var(--gh-bg-elevated);
   --surface-subtle: var(--gh-bg);
-  --surface-muted: rgba(255, 255, 255, 0.06);
+  --surface-muted: rgba(255, 255, 255, 0.07);
   --border: var(--gh-border-soft);
-  --gaia-wash: #101a13;
-  --gaia-muted: #183221;
+  --gaia-wash: #0e1611;
+  --gaia-muted: #152019;
 }
 
 /* —— App shell —— */
 body.gaia-v2.gaia-app {
   font-family: var(--gh-font);
-  background:
-    radial-gradient(ellipse 120% 80% at 50% -20%, rgba(92, 184, 46, 0.1), transparent 55%),
-    radial-gradient(circle at 100% 0%, rgba(68, 148, 34, 0.06), transparent 40%),
-    var(--gh-bg);
+  background: var(--gh-bg);
   color: var(--gh-text);
+}
+
+body.gaia-v2.gaia-app::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+  background:
+    radial-gradient(ellipse 120% 70% at 50% -18%, rgba(92, 184, 46, 0.11), transparent 58%),
+    radial-gradient(circle at 100% 0%, rgba(68, 148, 34, 0.05), transparent 38%);
+}
+
+body.gaia-v2[data-theme="dark"].gaia-app::before {
+  background:
+    radial-gradient(ellipse 120% 70% at 50% -18%, rgba(92, 184, 46, 0.07), transparent 58%),
+    radial-gradient(circle at 100% 0%, rgba(68, 148, 34, 0.04), transparent 38%);
+}
+
+body.gaia-v2 .gaia-shell,
+body.gaia-v2 .gaia-screen {
+  position: relative;
+  z-index: 1;
 }
 
 body.gaia-v2.gaia-page {
@@ -106,10 +133,24 @@ body.gaia-v2.gaia-page {
 
 body.gaia-v2 .gaia-header {
   background: var(--gh-header-bg);
-  backdrop-filter: blur(24px) saturate(160%);
-  -webkit-backdrop-filter: blur(24px) saturate(160%);
+  backdrop-filter: blur(20px) saturate(160%);
+  -webkit-backdrop-filter: blur(20px) saturate(160%);
   border-bottom: 1px solid var(--gh-border-soft);
   padding-top: max(0.65rem, env(safe-area-inset-top));
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.04);
+}
+
+body.gaia-v2[data-theme="light"] .gaia-header {
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.65);
+}
+
+body.gaia-v2 .gaia-header .gaia-eyebrow,
+body.gaia-v2 .gaia-header h1 {
+  text-shadow: none !important;
+}
+
+body.gaia-v2 .gaia-header-actions {
+  gap: 0.35rem;
 }
 
 body.gaia-v2 .gaia-header h1,
@@ -143,8 +184,9 @@ body.gaia-v2 .gaia-header-logo {
 
 body.gaia-v2 .gaia-header-profile.is-active,
 body.gaia-v2 .gaia-header-profile[aria-current="page"] {
-  background: rgba(125, 217, 86, 0.14);
-  border-color: rgba(68, 148, 34, 0.28);
+  background: var(--gh-chip-bg);
+  border-color: var(--gh-border);
+  color: var(--gh-chip-text);
 }
 
 body.gaia-v2 .gaia-coach {
@@ -207,15 +249,18 @@ body.gaia-v2[data-theme="dark"] .gaia-coach__btn {
 }
 
 body.gaia-v2 .gaia-login-pill {
-  background: var(--gh-chip-bg);
-  border: 1px solid var(--gh-border);
-  color: var(--gh-accent-deep);
+  background: var(--gh-bg-elevated);
+  border: 1px solid var(--gh-border-soft);
+  color: var(--gh-chip-text);
   font-weight: 600;
   border-radius: 999px;
 }
 
-body.gaia-v2[data-theme="dark"] .gaia-login-pill {
-  color: var(--gh-accent-bright);
+body.gaia-v2 .gaia-header-profile.is-active,
+body.gaia-v2 .gaia-header-profile[aria-current="page"] {
+  background: var(--gh-chip-bg);
+  border-color: var(--gh-border);
+  color: var(--gh-chip-text);
 }
 
 body.gaia-v2 .gaia-theme-toggle {
@@ -370,12 +415,14 @@ body.gaia-v2 .gaia-chakra-teaser {
 body.gaia-v2 .gaia-badge {
   border-radius: 999px;
   background: var(--gh-chip-bg);
-  color: var(--gh-accent-deep);
+  color: var(--gh-chip-text);
   border: 1px solid var(--gh-border);
 }
 
-body.gaia-v2[data-theme="dark"] .gaia-badge {
-  color: var(--gh-accent-bright);
+body.gaia-v2 .gaia-badge--live {
+  background: rgba(92, 184, 46, 0.16);
+  color: var(--gh-chip-text);
+  border-color: var(--gh-border);
 }
 
 body.gaia-v2 .gaia-badge--subtle {
@@ -588,17 +635,19 @@ body.gaia-v2 .gaia-tabbar__inner {
 
 
 body.gaia-v2 .gaia-tabbar__link.is-active {
-  color: var(--gh-accent-deep) !important;
-}
-
-body.gaia-v2[data-theme="dark"] .gaia-tabbar__link.is-active {
-  color: var(--gh-accent-bright) !important;
+  color: var(--gh-tabbar-link-active) !important;
 }
 
 body.gaia-v2 .gaia-tabbar__link.is-active::before {
   inset: 0.1rem 0.05rem;
   background: var(--gh-chip-bg);
+  border: 1px solid var(--gh-border-soft);
   box-shadow: none;
+}
+
+body.gaia-v2 .gaia-tabbar__icon {
+  color: inherit;
+  filter: none;
 }
 
 body.gaia-v2 .gaia-tabbar__label {
@@ -1123,10 +1172,58 @@ body.gaia-v2 .gaia-card-dark .text-caption {
 }
 
 body.gaia-v2 .gaia-live-sync {
-  background: var(--gh-tabbar-bg) !important;
-  color: var(--gh-text) !important;
+  position: static;
+  top: auto;
+  right: auto;
+  z-index: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  margin: 0;
+  padding: 0.32rem 0.55rem;
+  border-radius: 999px;
+  background: var(--gh-sync-bg) !important;
+  color: var(--gh-sync-text) !important;
   border: 1px solid var(--gh-border-soft);
   box-shadow: var(--gh-bento-shadow);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  font-size: 0.5625rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  line-height: 1;
+}
+
+body.gaia-v2 .gaia-live-sync--hero {
+  position: absolute;
+  top: 0.9rem;
+  right: 0.9rem;
+  z-index: 2;
+}
+
+body.gaia-v2 .gaia-live-sync--header {
+  order: -1;
+  margin-right: 0.15rem;
+}
+
+body.gaia-v2 .gaia-live-sync strong {
+  font-weight: 700;
+  color: var(--gh-sync-text);
+}
+
+body.gaia-v2 .gaia-live-sync span {
+  width: 0.4rem;
+  height: 0.4rem;
+  box-shadow: 0 0 0 3px rgba(245, 196, 81, 0.16);
+}
+
+body.gaia-v2 .gaia-live-sync--live span {
+  background: var(--gh-accent-bright);
+  box-shadow: 0 0 0 3px rgba(125, 217, 86, 0.18);
+}
+
+body.gaia-v2 .gaia-live-sync--live strong {
+  color: var(--gh-chip-text);
 }
 
 body.gaia-v2 .gaia-theme-toggle {
@@ -1172,4 +1269,105 @@ body.gaia-v2 .gaia-link {
 
 body.gaia-v2[data-theme="dark"] .gaia-link {
   color: var(--gh-accent-bright);
+}
+
+/* —— Community, feed, misc —— */
+body.gaia-v2 .gaia-section-label {
+  color: var(--gh-text-soft);
+}
+
+body.gaia-v2 .gaia-section-title,
+body.gaia-v2 .gaia-body {
+  color: var(--gh-text);
+}
+
+body.gaia-v2 .gaia-card-inset {
+  background: var(--gh-assist-surface) !important;
+  border: 1px solid var(--gh-border-soft);
+  color: var(--gh-text);
+}
+
+body.gaia-v2 .gaia-group-chip {
+  background: var(--gh-bg-card);
+  border: 1px solid var(--gh-border-soft);
+  color: var(--gh-text);
+  box-shadow: var(--gh-bento-shadow);
+}
+
+body.gaia-v2 .gaia-group-chip.is-active {
+  background: var(--gh-chip-bg);
+  border-color: var(--gh-border);
+  color: var(--gh-chip-text);
+}
+
+body.gaia-v2 .gaia-group-chip__meta,
+body.gaia-v2 .gaia-group-chip__privacy {
+  color: var(--gh-text-soft);
+}
+
+body.gaia-v2 .gaia-feed-card,
+body.gaia-v2 .gaia-feed article {
+  background: var(--gh-bg-card) !important;
+  border: 1px solid var(--gh-border-soft);
+  color: var(--gh-text);
+  box-shadow: var(--gh-bento-shadow);
+}
+
+body.gaia-v2 .gaia-feed-card__title,
+body.gaia-v2 .gaia-community-panel__title,
+body.gaia-v2 .gaia-community-panel__eyebrow {
+  color: var(--gh-text);
+}
+
+body.gaia-v2 .gaia-feed-card__meta,
+body.gaia-v2 .gaia-feed-card__time,
+body.gaia-v2 .gaia-community-panel__sub {
+  color: var(--gh-text-soft);
+}
+
+body.gaia-v2 .gaia-event-ticket,
+body.gaia-v2 .gaia-event-metric {
+  background: var(--gh-assist-surface);
+  border: 1px solid var(--gh-border-soft);
+  color: var(--gh-text);
+}
+
+body.gaia-v2 .gaia-timeline__dot {
+  background: var(--gh-accent);
+  box-shadow: 0 0 0 4px var(--gh-chip-bg);
+}
+
+body.gaia-v2 .gaia-score-ring__track {
+  stroke: var(--gh-assist-surface);
+}
+
+body.gaia-v2 .gaia-score-ring__progress {
+  stroke: url(#gaia-ring-gradient);
+}
+
+body.gaia-v2 .gaia-source-pill {
+  background: var(--gh-chip-bg);
+  color: var(--gh-chip-text);
+  border: 1px solid var(--gh-border-soft);
+}
+
+body.gaia-v2 .gaia-tile-icon {
+  border: 1px solid var(--gh-border-soft);
+}
+
+body.gaia-v2 .gaia-chart__label {
+  color: var(--gh-text-soft);
+}
+
+body.gaia-v2 .gaia-metric__label {
+  color: var(--gh-text-soft);
+}
+
+body.gaia-v2 .gaia-metric__value {
+  color: var(--gh-text);
+}
+
+body.gaia-v2 .gaia-card-dark .gaia-btn-primary,
+body.gaia-v2 .rounded-xl.bg-gaia {
+  color: #061008 !important;
 }

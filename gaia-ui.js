@@ -730,9 +730,6 @@
           </button>
           <div class="gaia-assist__wave" aria-hidden="true"><span></span><span></span><span></span><span></span></div>
           <p class="gaia-assist__status">Tap to speak</p>
-          <button type="button" class="gaia-assist__play-bar" hidden aria-label="Tap to hear Gaia reply">
-            <span aria-hidden="true">▶</span> Tap to hear Gaia
-          </button>
           <audio class="gaia-assist__audio" playsinline webkit-playsinline preload="auto"></audio>
           <div class="gaia-assist__speak-controls">
             <button type="button" class="gaia-assist__mute" aria-pressed="false">Mute</button>
@@ -789,7 +786,6 @@
     const muteButton = root.querySelector('.gaia-assist__mute');
     const stopButton = root.querySelector('.gaia-assist__stop');
     const playButton = root.querySelector('.gaia-assist__play');
-    const playBar = root.querySelector('.gaia-assist__play-bar');
     const voiceAudioEl = root.querySelector('.gaia-assist__audio');
     const voiceProvider = root.querySelector('.gaia-assist__provider');
     const voiceProviderSelect = root.querySelector('.gaia-assist__voice-provider');
@@ -806,11 +802,7 @@
     let hostedVoices = [];
     const isIOS = /iPad|iPhone|iPod/i.test(navigator.userAgent)
       || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
-    const isMobile = isIOS || /Android/i.test(navigator.userAgent);
     let voiceUnlocked = false;
-    let voiceAudioContext = null;
-    let activeVoiceSource = null;
-    let voiceMediaElementNode = null;
     const SILENT_WAV = 'data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQAAAAA=';
 
     function getSharedAudio() {
@@ -830,65 +822,24 @@
       return currentAudio;
     }
 
-    function wireVoiceMediaElement() {
-      if (voiceMediaElementNode || !isIOS) return;
-      const ctx = voiceAudioContext;
-      const audio = getSharedAudio();
-      if (!ctx || !audio) return;
-      try {
-        voiceMediaElementNode = ctx.createMediaElementSource(audio);
-        voiceMediaElementNode.connect(ctx.destination);
-        assistLog('media element wired', { contextState: ctx.state });
-      } catch (err) {
-        assistLog('media element wire skipped', { error: err.message });
-      }
-    }
-
-    async function getVoiceAudioContext() {
-      const AudioCtx = window.AudioContext || window.webkitAudioContext;
-      if (!AudioCtx) return null;
-      if (!voiceAudioContext) voiceAudioContext = new AudioCtx();
-      wireVoiceMediaElement();
-      if (voiceAudioContext.state === 'suspended') {
-        try {
-          await voiceAudioContext.resume();
-        } catch (err) {
-          assistLog('audio context resume pending', { error: err.message });
-        }
-      }
-      return voiceAudioContext;
-    }
-
     async function unlockVoicePlayback() {
-      const ctx = await getVoiceAudioContext();
-      if (ctx?.state === 'suspended') {
-        try {
-          await ctx.resume();
-        } catch (err) {
-          assistLog('audio context resume retry', { error: err.message });
-        }
-      }
+      if (voiceUnlocked) return true;
       try {
         const audio = getSharedAudio();
         const previousSrc = audio.src;
-        audio.muted = false;
-        audio.volume = 0.001;
         audio.src = SILENT_WAV;
+        audio.volume = 0.001;
+        audio.muted = false;
         await audio.play();
         audio.pause();
         audio.currentTime = 0;
         audio.volume = 1;
-        if (previousSrc && previousSrc !== SILENT_WAV) audio.src = previousSrc;
+        audio.src = previousSrc || '';
         voiceUnlocked = true;
-        assistLog('voice unlocked', {
-          userAgent: navigator.userAgent,
-          isIOS,
-          isMobile,
-          contextState: ctx?.state || 'none',
-        });
+        assistLog('voice unlocked', { userAgent: navigator.userAgent });
         return true;
       } catch (err) {
-        assistLog('voice unlock pending', { error: err.message, contextState: ctx?.state || 'none' });
+        assistLog('voice unlock pending', { error: err.message });
         return false;
       }
     }
@@ -1007,30 +958,9 @@
       pendingVoice = null;
       playButton.hidden = true;
       playButton.classList.remove('is-pending');
-      if (playBar) {
-        playBar.hidden = true;
-        playBar.classList.remove('is-pending');
-      }
-    }
-
-    function showPendingVoiceControls() {
-      playButton.hidden = false;
-      playButton.classList.add('is-pending');
-      if (playBar) {
-        playBar.hidden = false;
-        playBar.classList.add('is-pending');
-      }
     }
 
     function stopSpeaking() {
-      if (activeVoiceSource) {
-        try {
-          activeVoiceSource.stop(0);
-        } catch (err) {
-          assistLog('voice source stop skipped', { error: err.message });
-        }
-        activeVoiceSource = null;
-      }
       const audio = getSharedAudio();
       if (!audio.paused) {
         audio.pause();
@@ -1227,109 +1157,58 @@
       window.speechSynthesis.speak(utterance);
     }
 
-    async function playWithWebAudioFromUrl(audioUrl, provider, voice) {
-      const ctx = await getVoiceAudioContext();
-      if (!ctx) throw new Error('Web Audio unavailable');
-      if (ctx.state === 'suspended') await ctx.resume();
-      if (activeVoiceSource) {
-        try {
-          activeVoiceSource.stop(0);
-        } catch (err) {
-          assistLog('voice source stop skipped', { error: err.message });
-        }
-        activeVoiceSource = null;
-      }
-      const buffer = await fetch(audioUrl)
-        .then((res) => res.arrayBuffer())
-        .then((data) => ctx.decodeAudioData(data));
-      setVoiceProvider(provider, voice);
-      status.textContent = 'Speaking...';
-      assistLog('speech started', { provider, voice, mode: 'webaudio' });
-      await new Promise((resolve, reject) => {
-        const source = ctx.createBufferSource();
-        activeVoiceSource = source;
-        source.buffer = buffer;
-        source.connect(ctx.destination);
-        source.onended = () => {
-          activeVoiceSource = null;
-          resolve();
-        };
-        try {
-          source.start(0);
-        } catch (err) {
-          activeVoiceSource = null;
-          reject(err);
-        }
-      });
-    }
-
-    async function playHtml5FromUrl(audioUrl, provider, voice) {
+    async function playAudioElement(audioUrl, provider, voice) {
       const audio = getSharedAudio();
       audio.muted = false;
       audio.volume = 1;
       audio.src = audioUrl;
       audio.load();
-      setVoiceProvider(provider, voice);
-      status.textContent = 'Speaking...';
-      assistLog('speech started', { provider, voice, mode: 'html5' });
-      await new Promise((resolve, reject) => {
-        const finishOk = () => resolve();
-        const finishErr = () => reject(new Error('audio playback failed'));
-        audio.addEventListener('ended', finishOk, { once: true });
-        audio.addEventListener('error', finishErr, { once: true });
-        audio.play().catch(reject);
-      });
-    }
-
-    async function playHostedAudio(audioUrl, provider, voice) {
-      setVoiceHint('');
-      try {
-        await playHtml5FromUrl(audioUrl, provider, voice);
-      } catch (html5Error) {
-        assistLog('html5 play failed', { error: html5Error.message });
-        await playWithWebAudioFromUrl(audioUrl, provider, voice);
-      }
-      URL.revokeObjectURL(audioUrl);
-      clearPendingVoice(false);
-      status.textContent = 'Ready for next prompt';
-      assistLog('speech ended', { provider });
-    }
-
-    async function playPendingVoiceFromTap() {
-      if (!pendingVoice || playPendingVoiceFromTap.busy) return;
-      playPendingVoiceFromTap.busy = true;
-      try {
-        const { url, provider, voice } = pendingVoice;
-        stopSpeaking();
+      audio.onplay = () => {
+        clearPendingVoice(false);
+        playButton.hidden = true;
+        playButton.classList.remove('is-pending');
         setVoiceHint('');
-        setError('');
-        await unlockVoicePlayback();
-        try {
-          await playHtml5FromUrl(url, provider, voice);
-          URL.revokeObjectURL(url);
-          clearPendingVoice(false);
-          status.textContent = 'Ready for next prompt';
-          assistLog('speech ended', { provider, mode: 'tap-html5' });
-        } catch (html5Error) {
-          assistLog('tap html5 failed', { error: html5Error.message });
-          try {
-            await playWithWebAudioFromUrl(url, provider, voice);
-            URL.revokeObjectURL(url);
-            clearPendingVoice(false);
-            status.textContent = 'Ready for next prompt';
-            assistLog('speech ended', { provider, mode: 'tap-webaudio' });
-          } catch (err) {
-            assistError('speech error', { provider, error: err.message });
-            setError('Turn off silent mode, raise volume, then tap Hear Gaia again.');
-          }
+        setVoiceProvider(provider, voice);
+        status.textContent = 'Speaking...';
+        assistLog('speech started', { provider, voice, speed: selectedSpeed() });
+      };
+      audio.onended = () => {
+        URL.revokeObjectURL(audioUrl);
+        status.textContent = 'Ready for next prompt';
+        assistLog('speech ended', { provider });
+      };
+      audio.onerror = () => {
+        URL.revokeObjectURL(audioUrl);
+        setVoiceProvider('browser');
+        assistError('speech error', { provider, error: 'audio playback failed' });
+      };
+      try {
+        await audio.play();
+      } catch (playError) {
+        if (window.AudioContext || window.webkitAudioContext) {
+          const AudioCtx = window.AudioContext || window.webkitAudioContext;
+          const ctx = new AudioCtx();
+          if (ctx.state === 'suspended') await ctx.resume();
+          const buffer = await fetch(audioUrl).then((res) => res.arrayBuffer()).then((data) => ctx.decodeAudioData(data));
+          await new Promise((resolve, reject) => {
+            const source = ctx.createBufferSource();
+            source.buffer = buffer;
+            source.connect(ctx.destination);
+            source.onended = () => {
+              URL.revokeObjectURL(audioUrl);
+              status.textContent = 'Ready for next prompt';
+              assistLog('speech ended', { provider, mode: 'webaudio' });
+              resolve();
+            };
+            source.onerror = reject;
+            setVoiceProvider(provider, voice);
+            status.textContent = 'Speaking...';
+            source.start(0);
+          });
+          return;
         }
-      } finally {
-        playPendingVoiceFromTap.busy = false;
+        throw playError;
       }
-    }
-
-    async function playAudioElement(audioUrl, provider, voice) {
-      await playHostedAudio(audioUrl, provider, voice);
     }
 
     function setVoiceHint(message) {
@@ -1345,16 +1224,12 @@
     }
 
     function showManualVoicePlayback(audioUrl, provider, voice) {
-      if (pendingVoice?.url && pendingVoice.url !== audioUrl) {
-        URL.revokeObjectURL(pendingVoice.url);
-      }
       pendingVoice = { url: audioUrl, provider, voice };
-      showPendingVoiceControls();
+      playButton.hidden = false;
+      playButton.classList.add('is-pending');
       setVoiceProvider(provider, voice || 'ready');
-      status.textContent = 'Voice ready — tap to hear';
-      setVoiceHint(isMobile
-        ? 'Tap the green Hear Gaia button. Turn off silent mode if you hear nothing.'
-        : 'Tap Hear Gaia to listen on this device.');
+      status.textContent = 'Voice ready — tap Hear Gaia';
+      setVoiceHint('Tap Hear Gaia to listen on this device.');
     }
 
     function buildTtsRequestBody(cleanText, providerSetting) {
@@ -1376,11 +1251,7 @@
 
     async function speakReply(text) {
       const cleanText = String(text || '').trim();
-      if (!cleanText) return;
-      if (muted) {
-        setVoiceHint('Voice is muted — tap Unmute to hear replies.');
-        return;
-      }
+      if (!cleanText || muted) return;
       stopSpeaking();
       await unlockVoicePlayback();
       const providerSetting = selectedProvider();
@@ -1415,17 +1286,6 @@
         const audioUrl = URL.createObjectURL(blob);
         const provider = response.headers.get('X-Gaia-Voice-Provider') || (providerSetting === 'auto' ? 'hosted' : providerSetting);
         const voice = response.headers.get('X-Gaia-Voice-Name') || '';
-
-        if (isMobile) {
-          showManualVoicePlayback(audioUrl, provider, voice);
-          try {
-            await playHostedAudio(audioUrl, provider, voice);
-          } catch (playError) {
-            assistError('speech error', { provider, error: playError.message || 'autoplay blocked' });
-          }
-          return;
-        }
-
         try {
           await playAudioElement(audioUrl, provider, voice);
         } catch (playError) {
@@ -1435,11 +1295,7 @@
       } catch (err) {
         setVoiceProvider('browser');
         assistError('speech error', { provider: providerSetting, error: err.message });
-        if (!isMobile) {
-          await speakWithBrowser(cleanText);
-        } else {
-          setError('Voice download failed. Check connection and try again, or read the reply above.');
-        }
+        await speakWithBrowser(cleanText);
       }
     }
 
@@ -1556,7 +1412,6 @@
 
     async function recordVoicePrompt() {
       setError('');
-      await unlockVoicePlayback();
       try {
         await ensureMicPermission();
       } catch (err) {
@@ -1586,7 +1441,8 @@
           };
           recorder.onerror = () => reject(new Error('Recording failed'));
           recorder.onstop = resolve;
-          recorder.start(250);
+          if (isIOS) recorder.start(250);
+          else recorder.start();
           window.setTimeout(() => {
             if (recorder.state === 'recording') recorder.stop();
           }, 6500);
@@ -1643,7 +1499,6 @@
       }
 
       setError('');
-      await unlockVoicePlayback();
       try {
         await ensureMicPermission();
       } catch (err) {
@@ -1652,7 +1507,7 @@
         return;
       }
 
-      if (isMobile || !SpeechRecognition) {
+      if (!SpeechRecognition) {
         await recordVoicePrompt();
         return;
       }
@@ -1726,13 +1581,20 @@
       unlockVoicePlayback();
       startVoicePrompt();
     });
-    mic.addEventListener('touchstart', () => { unlockVoicePlayback(); }, { passive: true });
     muteButton.addEventListener('click', () => setMuted(!muted));
     stopButton.addEventListener('click', stopSpeaking);
-    const onPlayTap = () => { playPendingVoiceFromTap(); };
-    playButton.addEventListener('click', onPlayTap);
-    if (playBar) playBar.addEventListener('click', onPlayTap);
-    panel.addEventListener('touchstart', () => { unlockVoicePlayback(); }, { passive: true });
+    playButton.addEventListener('click', async () => {
+      if (!pendingVoice) return;
+      setVoiceHint('');
+      await unlockVoicePlayback();
+      try {
+        await playAudioElement(pendingVoice.url, pendingVoice.provider, pendingVoice.voice);
+        clearPendingVoice(false);
+      } catch (err) {
+        assistError('speech error', { provider: pendingVoice.provider, error: err.message });
+        setError('Voice playback is still blocked. Turn off silent mode or raise volume, then tap Hear Gaia again.');
+      }
+    });
     voiceProviderSelect.addEventListener('change', () => {
       localStorage.setItem(VOICE_PROVIDER_KEY, voiceProviderSelect.value);
       refreshVoiceOptions();

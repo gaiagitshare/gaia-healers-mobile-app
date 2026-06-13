@@ -94,6 +94,24 @@ window.GAIA = {
     adminSections: ['Client Portal', 'Courses', 'Communities', 'Credentials', 'Gokollab Marketplace'],
     actions: ['Generate magic link', 'Invite to client portal', 'Send login email'],
   },
+  communityCourses: [
+    { groupId: 'all', title: 'BIO-WELL Orientation', detail: 'Starter lessons and device setup', href: 'home.html?view=academy' },
+    { groupId: 'biowell', title: 'Bio-Well Basic Certification', detail: 'Core practitioner path', href: 'home.html?view=academy' },
+    { groupId: 'biowell', title: 'Advanced Level 1', detail: '62% complete · live calls', href: 'home.html?view=academy' },
+    { groupId: 'biopulsar', title: 'BioPulsar Basic Technical & Business', detail: 'Aura reporting fundamentals', href: 'home.html?view=academy' },
+    { groupId: 'biotekna', title: 'BioTekna live trainings', detail: 'Nervous-system mapping', href: 'home.html?view=academy' },
+    { groupId: 'healeex', title: 'Healeex Getting Started', detail: 'Onboarding and protocols', href: 'home.html?view=academy' },
+  ],
+  communityEvents: [
+    { day: 16, month: 'Jun', title: 'Colour Vibrational Energy', time: '2:30 AM', group: 'All Gaia Healers', tz: 'Community calendar' },
+    { day: 19, month: 'Jun', title: 'Bio-Well Advanced Level 1', time: '2:00 AM', group: 'Bio-Well Practitioners', tz: 'Training room' },
+    { day: 23, month: 'Jun', title: 'Marketing Master Your Follow-Up', time: '11:00 PM', group: 'Practitioner growth', tz: 'Live session' },
+  ],
+  communityMembers: [
+    { name: 'Gaia Healers', initials: 'GH', role: 'Admin', activity: 'active 1d ago', group: 'All groups' },
+    { name: 'Practitioner member', initials: 'KP', role: 'Bio-Well', activity: 'active 2d ago', group: 'Bio-Well Practitioners' },
+    { name: 'Community contributor', initials: 'RC', role: 'Contributor', activity: 'active 1w ago', group: 'Chakra challenge' },
+  ],
   communityFeed: [
     { group: '[Start Here] All Gaia Healers', channel: 'Featured', title: 'Which Path Will You Take?', author: 'Faculty', time: '5mo ago', type: 'Welcome', replies: 0, likes: 3 },
     { group: '[Start Here] All Gaia Healers', channel: 'Featured', title: 'Welcome! Start Here', author: 'Faculty', time: '6mo ago', type: 'Start', replies: 0, likes: 7 },

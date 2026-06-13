@@ -17,6 +17,208 @@
   const ADMIN_DEV_PASSCODE = 'gaia2026';
   const APP_VIEWS = new Set(['today', 'biowell', 'academy', 'community', 'profile', 'admin']);
 
+  function escapeHtml(value) {
+    return String(value ?? '')
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;');
+  }
+
+  function initCommunityHub() {
+    const data = window.GAIA;
+    if (!data) return;
+
+    const groupsEl = document.getElementById('community-groups');
+    const feedEl = document.getElementById('community-feed');
+    const learningEl = document.getElementById('community-learning');
+    const eventsEl = document.getElementById('community-events');
+    const membersEl = document.getElementById('community-members');
+    const newsletterEl = document.getElementById('community-newsletter');
+    if (!groupsEl && !feedEl && !learningEl) return;
+
+    const portalUrl = data.clientPortal?.url || data.portalUrl || 'https://education.gaiahealers.com/';
+    const communities = data.communities || [];
+    const nameById = Object.fromEntries(communities.map((c) => [c.id, c.name]));
+    let activeGroupId = 'all';
+
+    const strip = document.querySelector('.gaia-community-strip');
+    if (strip) {
+      const stats = strip.querySelectorAll('.gaia-community-strip__stat strong');
+      if (stats[0]) stats[0].textContent = Number(data.members || 1252).toLocaleString();
+      if (stats[1]) stats[1].textContent = String(communities.length);
+      if (stats[2]) stats[2].textContent = `${(data.communityCourses || []).length}+`;
+    }
+
+    const postsBadge = document.querySelector('#panel-discussion .gaia-badge--live');
+    if (postsBadge) {
+      const totalPosts = communities.reduce((sum, c) => sum + (c.posts || 0), 0);
+      postsBadge.textContent = `${totalPosts || 39}+ posts`;
+    }
+
+    function renderGroups() {
+      if (!groupsEl) return;
+      const allChip = `<button type="button" class="gaia-group-chip${activeGroupId === 'all' ? ' is-active' : ''}" data-group-id="all"><span class="gaia-group-chip__name">All groups</span><span class="gaia-group-chip__meta">${communities.length} communities</span></button>`;
+      const chips = communities.map((c) => {
+        const shortName = c.name.replace(/^\[Start Here\]\s*/, '');
+        const tags = (c.channels || []).slice(0, 3).map((ch) => `<span class="gaia-group-chip__tag">${escapeHtml(ch)}</span>`).join('');
+        const badge = c.badge ? `<span class="gaia-group-chip__badge">${escapeHtml(c.badge)}</span>` : '';
+        return `<button type="button" class="gaia-group-chip${activeGroupId === c.id ? ' is-active' : ''}" data-group-id="${escapeHtml(c.id)}">
+          <span class="gaia-group-chip__top">${badge}<span class="gaia-group-chip__privacy">${escapeHtml(c.privacy)}</span></span>
+          <span class="gaia-group-chip__name">${escapeHtml(shortName)}</span>
+          <span class="gaia-group-chip__meta">${c.members} members · ${c.posts || 0} posts</span>
+          <span class="gaia-group-chip__tags">${tags}</span>
+        </button>`;
+      }).join('');
+      groupsEl.innerHTML = allChip + chips;
+      groupsEl.querySelectorAll('[data-group-id]').forEach((btn) => {
+        btn.addEventListener('click', () => {
+          activeGroupId = btn.getAttribute('data-group-id') || 'all';
+          renderGroups();
+          renderFeed();
+        });
+      });
+    }
+
+    function renderFeed() {
+      if (!feedEl) return;
+      const feed = data.communityFeed || [];
+      const filtered = activeGroupId === 'all'
+        ? feed
+        : feed.filter((post) => post.group === nameById[activeGroupId]);
+      if (!filtered.length) {
+        feedEl.innerHTML = '<div class="gaia-feed-empty">No posts in this group yet. Log in to the client portal to join the discussion.</div>';
+        return;
+      }
+      feedEl.innerHTML = filtered.map((post) => `
+        <article class="gaia-feed-card">
+          <header class="gaia-feed-card__head">
+            <span class="gaia-feed-card__type">${escapeHtml(post.type)}</span>
+            <time class="gaia-feed-card__time">${escapeHtml(post.time)}</time>
+          </header>
+          <h3 class="gaia-feed-card__title">${escapeHtml(post.title)}</h3>
+          <p class="gaia-feed-card__meta">${escapeHtml(post.group)} · ${escapeHtml(post.channel)} · ${escapeHtml(post.author)}</p>
+          <footer class="gaia-feed-card__foot">
+            <span>${post.replies} replies</span>
+            <span>${post.likes} likes</span>
+            <a href="${escapeHtml(portalUrl)}" class="gaia-feed-card__link">Open in portal</a>
+          </footer>
+        </article>
+      `).join('');
+    }
+
+    function renderLearning() {
+      if (!learningEl) return;
+      const courses = data.communityCourses || [];
+      const byGroup = courses.reduce((acc, course) => {
+        const key = course.groupId || 'all';
+        if (!acc[key]) acc[key] = [];
+        acc[key].push(course);
+        return acc;
+      }, {});
+      learningEl.innerHTML = Object.entries(byGroup).map(([groupId, items]) => {
+        const label = groupId === 'all' ? 'All Gaia Healers' : (communities.find((c) => c.id === groupId)?.name || groupId);
+        const rows = items.map((course) => `
+          <a href="${escapeHtml(course.href || 'home.html?view=academy')}" class="gaia-row gaia-row--link">
+            <div class="min-w-0 flex-1">
+              <p class="text-micro font-semibold text-gaia">${escapeHtml(label.replace(/^\[Start Here\]\s*/, ''))}</p>
+              <p class="text-headline text-ink mt-0.5">${escapeHtml(course.title)}</p>
+              <p class="gaia-caption mt-0.5">${escapeHtml(course.detail)}</p>
+            </div>
+            <span class="gaia-link shrink-0">Open</span>
+          </a>
+        `).join('');
+        return `<div class="gaia-learning-group">${rows}</div>`;
+      }).join('');
+    }
+
+    function renderEvents() {
+      if (!eventsEl) return;
+      const event = data.event;
+      const items = data.communityEvents || [];
+      const hero = event ? `
+        <a href="${escapeHtml(event.sourceUrl || 'https://elevate.gaiahealers.com/')}" class="gaia-event-hero gaia-row gaia-row--link">
+          <div class="gaia-event-hero__date"><strong>${escapeHtml(event.date?.split(',')[0] || 'Nov 20')}</strong><span>2026</span></div>
+          <div class="min-w-0 flex-1">
+            <p class="text-micro font-semibold text-gaia">Flagship event</p>
+            <p class="text-headline text-ink mt-0.5">${escapeHtml(event.name)}</p>
+            <p class="gaia-caption mt-0.5">${escapeHtml(event.venue || '')} · ${escapeHtml(event.location || '')}</p>
+          </div>
+          <span class="gaia-link shrink-0">Register</span>
+        </a>
+      ` : '';
+      const rows = items.map((item) => `
+        <article class="gaia-row">
+          <div class="gaia-event-date"><strong>${item.day}</strong><span>${escapeHtml(item.month)}</span></div>
+          <div class="min-w-0 flex-1">
+            <p class="text-headline text-ink">${escapeHtml(item.title)}</p>
+            <p class="gaia-caption mt-0.5">${escapeHtml(item.time)} · ${escapeHtml(item.group)}</p>
+            <p class="gaia-caption">${escapeHtml(item.tz)}</p>
+          </div>
+        </article>
+      `).join('');
+      eventsEl.innerHTML = hero + rows;
+    }
+
+    function renderMembers() {
+      if (!membersEl) return;
+      const members = data.communityMembers || [];
+      membersEl.innerHTML = members.map((member) => `
+        <article class="gaia-row">
+          <div class="gaia-avatar gaia-avatar--md bg-gaia-muted text-gaia-dark">${escapeHtml(member.initials)}</div>
+          <div class="min-w-0 flex-1">
+            <p class="text-headline text-ink">${escapeHtml(member.name)}</p>
+            <p class="gaia-caption mt-0.5">${escapeHtml(member.role)} · ${escapeHtml(member.group)}</p>
+            <p class="gaia-caption">${escapeHtml(member.activity)}</p>
+          </div>
+          <span class="gaia-badge gaia-badge--subtle">${escapeHtml(member.role)}</span>
+        </article>
+      `).join('') + `
+        <a href="${escapeHtml(portalUrl)}" class="gaia-row gaia-row--link gaia-row--cta">
+          <div class="min-w-0 flex-1">
+            <p class="text-headline text-ink">Search full directory</p>
+            <p class="gaia-caption mt-0.5">Member list syncs after GHL login</p>
+          </div>
+          <span class="gaia-link shrink-0">Log in</span>
+        </a>
+      `;
+    }
+
+    function renderNewsletter() {
+      if (!newsletterEl) return;
+      const segments = [
+        { title: 'Weekly practitioner digest', detail: 'Training reminders, community highlights, and CE deadlines', on: true },
+        { title: 'Bio-Well device updates', detail: 'Firmware, calibration tips, and support announcements', on: true },
+        { title: 'Elevate & event alerts', detail: 'Registration windows, agenda drops, and check-in codes', on: false },
+        { title: 'Marketing & growth lab', detail: 'Follow-up templates and campaign ideas from faculty', on: false },
+      ];
+      newsletterEl.innerHTML = segments.map((seg) => `
+        <article class="gaia-row">
+          <div class="min-w-0 flex-1">
+            <p class="text-headline text-ink">${escapeHtml(seg.title)}</p>
+            <p class="gaia-caption mt-0.5">${escapeHtml(seg.detail)}</p>
+          </div>
+          <span class="gaia-badge ${seg.on ? 'gaia-badge--live' : 'gaia-badge--subtle'}">${seg.on ? 'Subscribed' : 'Off'}</span>
+        </article>
+      `).join('') + `
+        <a href="${escapeHtml(portalUrl)}" class="gaia-row gaia-row--link gaia-row--cta">
+          <div class="min-w-0 flex-1">
+            <p class="text-headline text-ink">Manage in client portal</p>
+            <p class="gaia-caption mt-0.5">Preferences map to GHL Marketing segments</p>
+          </div>
+          <span class="gaia-link shrink-0">Open</span>
+        </a>
+      `;
+    }
+
+    renderGroups();
+    renderFeed();
+    renderLearning();
+    renderEvents();
+    renderMembers();
+    renderNewsletter();
+  }
+
   function initTheme() {
     if (!document.body.classList.contains('gaia-page') && !document.body.classList.contains('gaia-app')) return;
     const saved = localStorage.getItem(THEME_KEY);
@@ -349,7 +551,6 @@
     const panels = {
       feed: 'panel-discussion',
       discussion: 'panel-discussion',
-      groups: 'panel-groups',
       learning: 'panel-learning',
       events: 'panel-events',
       directory: 'panel-members',
@@ -979,6 +1180,7 @@
     initCoachMark();
     initSplashSteps();
     initAppShellNavigation();
+    initCommunityHub();
     initCommunityTabs();
     initLiveSyncIndicator();
     initChakraMaps();

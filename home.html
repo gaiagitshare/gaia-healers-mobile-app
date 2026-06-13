@@ -12,7 +12,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
   <script src="gaia-chakra-data.js"></script>
-  <link rel="stylesheet" href="gaia-shared.css?v=ui-nav-2" />
+  <link rel="stylesheet" href="gaia-shared.css?v=ui-nav-3" />
 </head>
 <body class="gaia-app gaia-page gaia-single-app">
   <svg width="0" height="0" aria-hidden="true"><defs><linearGradient id="gaia-ring-gradient" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="#7DD956"/><stop offset="100%" stop-color="#449422"/></linearGradient></defs></svg>
@@ -306,126 +306,77 @@
         </div>
       </header>
 
-      <main class="gaia-main gaia-main--tight">
-        <section class="gaia-card-dark gaia-card-pad-lg rounded-3xl">
-          <div class="flex items-start justify-between gap-4">
+      <main class="gaia-main gaia-main--tight gaia-community-main">
+        <section class="gaia-community-strip" aria-label="Client portal summary">
+          <a href="https://education.gaiahealers.com/" class="gaia-community-strip__portal">
+            <span class="gaia-community-strip__label">Client portal</span>
+            <span class="gaia-community-strip__url">education.gaiahealers.com</span>
+          </a>
+          <div class="gaia-community-strip__stats">
+            <a href="https://education.gaiahealers.com/" class="gaia-community-strip__stat"><strong>1,252</strong><span>members</span></a>
+            <a href="home.html?view=community&tab=discussion" class="gaia-community-strip__stat" data-community-stat="groups"><strong>6</strong><span>groups</span></a>
+            <a href="home.html?view=academy" class="gaia-community-strip__stat"><strong>8+</strong><span>courses</span></a>
+          </div>
+        </section>
+
+        <section id="panel-discussion" class="gaia-community-panel space-y-3">
+          <header class="gaia-community-panel__head">
             <div>
-              <p class="text-micro font-bold uppercase tracking-[0.08em] text-gaia-light">Client portal</p>
-              <h2 class="mt-1 text-title text-white">Membership, courses, community</h2>
-              <p class="mt-2 text-caption text-white/68">Synced from GHL Memberships: Client Portal, Courses, Communities, Credentials, and Marketplace.</p>
+              <p class="gaia-community-panel__eyebrow">Discussion</p>
+              <h2 class="gaia-community-panel__title">Community feed</h2>
+              <p class="gaia-community-panel__sub">Threads from GHL Communities · tap a group to filter</p>
             </div>
-            <a href="https://education.gaiahealers.com/" class="gaia-stat-link gaia-stat-link--hero shrink-0 rounded-2xl bg-white/10 px-3 py-2 text-center">
-              <p class="gaia-tabular text-headline text-white">1,252</p>
-              <p class="text-micro text-white/56">users</p>
-            </a>
-          </div>
-          <div class="mt-5 grid grid-cols-3 gap-2">
-            <a href="home.html?view=community#community-groups" class="gaia-stat-link gaia-event-metric">
-              <p class="text-micro text-white/60">Groups</p>
-              <p class="text-headline text-white">6</p>
-            </a>
-            <a href="home.html?view=community&tab=discussion" class="gaia-stat-link gaia-event-metric">
-              <p class="text-micro text-white/60">Posts</p>
-              <p class="text-headline text-white">39+</p>
-            </a>
-            <a href="home.html?view=academy" class="gaia-stat-link gaia-event-metric">
-              <p class="text-micro text-white/60">Courses</p>
-              <p class="text-headline text-white">8+</p>
-            </a>
-          </div>
+            <span class="gaia-badge gaia-badge--live">39+ posts</span>
+          </header>
+          <div id="community-groups" class="gaia-group-rail" aria-label="Community groups"></div>
+          <div id="community-feed" class="gaia-feed space-y-3"></div>
         </section>
 
-        <section id="community-groups" class="gaia-card gaia-card-pad">
-          <div class="mb-3 flex items-center justify-between gap-3">
-            <h2 class="gaia-section-title">Groups</h2>
-            <span class="gaia-source-pill">education.gaiahealers.com</span>
-          </div>
-          <div class="flex gap-3 overflow-x-auto hide-scrollbar pb-1">
-            <article class="min-w-[15.5rem] rounded-2xl border border-[var(--border)] bg-surface-muted p-4"><p class="gaia-eyebrow">Public · Start</p><h3 class="mt-2 text-headline text-ink">All Gaia Healers</h3><p class="gaia-caption mt-1">254 members · 28 posts</p><div class="mt-3 flex flex-wrap gap-1.5"><span class="gaia-badge">Start Here</span><span class="gaia-badge">Lounge</span><span class="gaia-badge">Wins</span></div></article>
-            <article class="min-w-[15.5rem] rounded-2xl border border-[var(--border)] bg-surface-muted p-4"><p class="gaia-eyebrow">Public · Primary</p><h3 class="mt-2 text-headline text-ink">Bio-Well Practitioners</h3><p class="gaia-caption mt-1">381 members · 11 posts</p><div class="mt-3 flex flex-wrap gap-1.5"><span class="gaia-badge">Tech Support</span><span class="gaia-badge">Case Studies</span></div></article>
-            <article class="min-w-[15.5rem] rounded-2xl border border-[var(--border)] bg-surface-muted p-4"><p class="gaia-eyebrow">Private</p><h3 class="mt-2 text-headline text-ink">Abundant Healer Collective</h3><p class="gaia-caption mt-1">117 members · membership access</p><div class="mt-3 flex flex-wrap gap-1.5"><span class="gaia-badge">Mentorship</span><span class="gaia-badge">Coaching</span></div></article>
-          </div>
-        </section>
-
-        <section id="panel-discussion" class="space-y-4">
-          <article class="gaia-card gaia-card-pad-lg">
-            <div class="mb-3 flex items-center justify-between"><span class="gaia-badge">Featured</span><span class="gaia-caption">[Start Here] All Gaia Healers</span></div>
-            <h2 class="gaia-section-title">Which Path Will You Take?</h2>
-            <p class="gaia-body mt-2">A guided first post that helps new members choose their Gaia pillar and understand where to begin.</p>
-            <div class="mt-4 flex gap-4 border-t border-[var(--border)] pt-4 text-caption text-ink-secondary"><span>3 likes</span><span>0 comments</span><span>Start Here</span></div>
-          </article>
-          <article class="gaia-card gaia-card-pad-lg">
-            <div class="mb-3 flex items-center gap-3"><div class="gaia-avatar gaia-avatar--lg bg-gaia text-white">GH</div><div><p class="text-headline text-ink">Community Team</p><p class="gaia-caption">1w ago · Start Here</p></div></div>
-            <h2 class="gaia-section-title">Coming Soon Inside the Gaiahealers Community</h2>
-            <p class="gaia-body mt-2">8-Week Chakra Challenge: awaken, align, and transform your energy with weekly education and discussion prompts.</p>
-          </article>
-          <article class="gaia-card gaia-card-pad-lg">
-            <div class="mb-3 flex items-center gap-3"><div class="gaia-avatar gaia-avatar--lg bg-gaia-muted text-gaia-dark">BW</div><div><p class="text-headline text-ink">Bio-Well Practitioners</p><p class="gaia-caption">Tech Support · active thread</p></div></div>
-            <h2 class="gaia-section-title">Device support and case-study channels</h2>
-            <p class="gaia-body mt-2">Orientation, Tech Support, Case Studies, Glove, Sputnik, Water Sensor, and Bio-Well workflow channels are ready for mobile sync.</p>
-            <button type="button" data-gaia-open-assist class="mt-4 rounded-xl bg-gaia px-4 py-2.5 text-caption font-bold text-white">Ask Gaia to summarize</button>
-          </article>
-        </section>
-
-        <section id="panel-learning" class="hidden space-y-4">
-          <article class="gaia-card gaia-card-pad-lg">
-            <div class="mb-4 flex items-center justify-between"><div><p class="gaia-section-label !mb-1">Courses</p><h2 class="gaia-section-title">Learning inside each group</h2></div><span class="gaia-badge">GHL Courses</span></div>
-            <div class="gaia-stack">
-              <a href="home.html?view=academy" class="gaia-row"><div class="gaia-tile-icon strip-biowell">B</div><div class="flex-1"><p class="text-headline text-ink">Bio-Well Orientation</p><p class="gaia-caption">Starter lessons and device setup</p></div></a>
-              <a href="home.html?view=academy" class="gaia-row"><div class="gaia-tile-icon strip-biopulsar">A1</div><div class="flex-1"><p class="text-headline text-ink">Advanced Level 1</p><p class="gaia-caption">62% complete · live calls and documented scans</p></div></a>
+        <section id="panel-learning" class="gaia-community-panel hidden space-y-3">
+          <header class="gaia-community-panel__head">
+            <div>
+              <p class="gaia-community-panel__eyebrow">Learning</p>
+              <h2 class="gaia-community-panel__title">Courses & modules</h2>
+              <p class="gaia-community-panel__sub">GHL Courses tab inside each community group</p>
             </div>
-          </article>
-          <article class="gaia-empty"><svg class="gaia-empty__icon" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5"><path stroke-linecap="round" stroke-linejoin="round" d="M12 6.75v10.5m5.25-5.25H6.75M4.5 19.5h15A2.25 2.25 0 0021.75 17.25V6.75A2.25 2.25 0 0019.5 4.5h-15A2.25 2.25 0 002.25 6.75v10.5A2.25 2.25 0 004.5 19.5Z"/></svg><p class="gaia-empty__title">Empty states are supported</p><p class="gaia-empty__text">Some GHL group Learning tabs currently show no modules; the app should say that clearly instead of looking broken.</p></article>
+            <a href="home.html?view=academy" class="gaia-badge">Open Academy</a>
+          </header>
+          <div id="community-learning" class="gaia-stack"></div>
         </section>
 
-        <section id="panel-events" class="hidden gaia-stack">
-          <article class="gaia-card gaia-event-hero gaia-card-pad-lg"><div class="flex items-start justify-between gap-4"><div><p class="text-micro font-bold uppercase tracking-[0.08em] text-white/64">Global calendar</p><h3 class="mt-2 text-title text-white">June 2026 training</h3><p class="mt-2 text-caption text-white/72">GHL shows group calendars with month/week views, upcoming lists, and empty per-group states.</p></div><div class="rounded-2xl bg-white/10 px-3 py-2 text-center"><p class="text-headline text-white">+04</p><p class="text-micro text-white/56">Dubai</p></div></div></article>
-          <div class="gaia-card gaia-list-divider overflow-hidden">
-            <div class="gaia-card-pad flex gap-3"><div class="gaia-date-pill"><span>16</span><small>Jun</small></div><div><p class="text-headline text-ink">Colour Vibrational Energy</p><p class="gaia-caption">2:30 AM · community calendar</p></div></div>
-            <div class="gaia-card-pad flex gap-3"><div class="gaia-date-pill"><span>19</span><small>Jun</small></div><div><p class="text-headline text-ink">Bio-Well Advanced Level 1</p><p class="gaia-caption">2:00 AM · training room</p></div></div>
-            <div class="gaia-card-pad flex gap-3"><div class="gaia-date-pill"><span>23</span><small>Jun</small></div><div><p class="text-headline text-ink">Marketing Master Your Follow-Up</p><p class="gaia-caption">11:00 PM · practitioner growth</p></div></div>
-          </div>
-          <article class="gaia-card gaia-card-pad">
-            <div class="flex items-center justify-between gap-3">
-              <div class="min-w-0">
-                <p class="text-headline text-ink">Live meeting links</p>
-                <p class="gaia-caption mt-1">Google Meet, Zoom, or custom rooms should sync from GHL calendar/course sessions and stay hidden until member login.</p>
-              </div>
-              <span class="gaia-badge">Meet</span>
+        <section id="panel-events" class="gaia-community-panel hidden space-y-3">
+          <header class="gaia-community-panel__head">
+            <div>
+              <p class="gaia-community-panel__eyebrow">Events</p>
+              <h2 class="gaia-community-panel__title">Calendars & live sessions</h2>
+              <p class="gaia-community-panel__sub">Group calendars, trainings, and Elevate 2026</p>
             </div>
-          </article>
-          <article class="gaia-card gaia-card-accent gaia-card-pad"><p class="text-headline text-ink">Elevate 2026 event ops</p><p class="gaia-caption mt-1">Registration stays in GHL. Badges, QR check-in, exhibitor leads, and attendee imports stay behind the staging proxy.</p><a href="home.html?view=profile" class="gaia-link mt-3 inline-block">Open my pass</a></article>
+            <a href="home.html?view=profile" class="gaia-badge">My pass</a>
+          </header>
+          <div id="community-events" class="gaia-stack"></div>
         </section>
 
-        <section id="panel-members" class="hidden space-y-4">
-          <article class="gaia-card gaia-card-pad">
-            <div class="grid grid-cols-3 gap-2">
-              <a href="home.html?view=community&tab=members" class="gaia-stat-link rounded-2xl bg-gaia px-3 py-3 text-center text-white">
-                <p class="gaia-tabular text-headline">381</p>
-                <p class="text-micro text-white/70">Active</p>
-              </a>
-              <a href="home.html?view=community&tab=events" class="gaia-stat-link rounded-2xl bg-surface-muted px-3 py-3 text-center">
-                <p class="gaia-tabular text-headline text-ink">12+</p>
-                <p class="gaia-caption">Events</p>
-              </a>
-              <a href="home.html?view=academy" class="gaia-stat-link rounded-2xl bg-surface-muted px-3 py-3 text-center">
-                <p class="gaia-tabular text-headline text-ink">8+</p>
-                <p class="gaia-caption">Courses</p>
-              </a>
+        <section id="panel-members" class="gaia-community-panel hidden space-y-3">
+          <header class="gaia-community-panel__head">
+            <div>
+              <p class="gaia-community-panel__eyebrow">Members</p>
+              <h2 class="gaia-community-panel__title">Practitioner directory</h2>
+              <p class="gaia-community-panel__sub">GHL Members tab · search after login</p>
             </div>
-            <input type="search" placeholder="Search members" class="mt-4 w-full rounded-2xl border-0 bg-surface-muted px-4 py-3 text-body placeholder:text-ink-tertiary focus:outline-none focus:ring-2 focus:ring-gaia/30" />
-          </article>
-          <div class="gaia-card gaia-list-divider overflow-hidden">
-            <div class="gaia-card-pad flex items-center gap-3"><div class="gaia-avatar gaia-avatar--lg bg-gaia text-white">GH</div><div class="min-w-0 flex-1"><p class="text-headline text-ink">Gaia Healers</p><p class="gaia-caption">Admin · active 1d ago · joined Jun 2026</p></div></div>
-            <div class="gaia-card-pad flex items-center gap-3"><div class="gaia-avatar gaia-avatar--lg bg-gaia-muted text-gaia-dark">KP</div><div class="min-w-0 flex-1"><p class="text-headline text-ink">Practitioner member</p><p class="gaia-caption">Active 2d ago · Bio-Well group</p></div></div>
-            <div class="gaia-card-pad flex items-center gap-3"><div class="gaia-avatar gaia-avatar--lg bg-surface-muted text-ink-secondary">RC</div><div class="min-w-0 flex-1"><p class="text-headline text-ink">Community contributor</p><p class="gaia-caption">Chakra challenge post · active 1w ago</p></div></div>
-          </div>
-          <article class="gaia-card gaia-card-pad"><p class="text-headline text-ink">Membership login</p><p class="gaia-caption mt-1">The real app should authenticate through GHL Client Portal or a backend-issued member session. Static GitHub Pages must never store passwords or GHL tokens.</p><a href="https://education.gaiahealers.com/" class="gaia-btn gaia-btn-primary mt-4">Open GHL client portal</a></article>
+            <a href="https://education.gaiahealers.com/" class="gaia-login-pill gaia-login-pill--compact">Log in</a>
+          </header>
+          <div id="community-members" class="gaia-stack"></div>
         </section>
 
-        <section id="panel-newsletter" class="hidden space-y-4">
-          <article class="gaia-card gaia-card-pad-lg"><p class="gaia-section-label !mb-1">Newsletter</p><h2 class="gaia-section-title">Gaia weekly dispatch</h2><p class="gaia-body mt-2">A mobile newsletter center should pull from GHL Marketing segments and show unread education, events, product updates, and community highlights.</p><div class="mt-4 grid gap-2"><label class="flex items-center justify-between rounded-2xl bg-surface-muted px-4 py-3"><span class="text-headline text-ink">Training reminders</span><input type="checkbox" checked /></label><label class="flex items-center justify-between rounded-2xl bg-surface-muted px-4 py-3"><span class="text-headline text-ink">Chakra challenge</span><input type="checkbox" checked /></label><label class="flex items-center justify-between rounded-2xl bg-surface-muted px-4 py-3"><span class="text-headline text-ink">Device offers</span><input type="checkbox" /></label></div></article>
-          <article class="gaia-card gaia-card-accent gaia-card-pad"><p class="text-headline text-ink">Next sync step</p><p class="gaia-caption mt-1">Add a proxy endpoint for GHL newsletters/campaigns, then show personalized dispatches after member login.</p></article>
+        <section id="panel-newsletter" class="gaia-community-panel hidden space-y-3">
+          <header class="gaia-community-panel__head">
+            <div>
+              <p class="gaia-community-panel__eyebrow">Newsletter</p>
+              <h2 class="gaia-community-panel__title">Gaia dispatch</h2>
+              <p class="gaia-community-panel__sub">GHL Marketing segments & email preferences</p>
+            </div>
+          </header>
+          <div id="community-newsletter" class="gaia-stack"></div>
         </section>
       </main>
     </section>
@@ -560,7 +511,7 @@
       </main>
     </section>
   </div>
-  <script src="gaia-ui.js?v=ui-nav-2"></script>
-  <script src="shared-nav.js?v=ui-nav-2"></script>
+  <script src="gaia-ui.js?v=ui-nav-3"></script>
+  <script src="shared-nav.js?v=ui-nav-3"></script>
 </body>
 </html>

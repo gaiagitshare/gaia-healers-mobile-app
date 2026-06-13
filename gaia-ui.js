@@ -1382,7 +1382,8 @@
         await speakWithBrowser(cleanText);
       } finally {
         activeTtsController = null;
-        if (!pendingVoice) setAssistVoiceState('idle', 'Tap to speak');
+        const audio = getSharedAudio();
+        if (!pendingVoice && audio.paused && !activeWebAudio) setAssistVoiceState('idle', 'Tap to speak');
       }
     }
 

@@ -1061,17 +1061,21 @@
 
     function configureVoiceFromBootstrap() {
       const tts = ttsConfig();
-      if (!tts.configured) return;
       const savedProvider = localStorage.getItem(VOICE_PROVIDER_KEY);
-      if ((!savedProvider || savedProvider === 'auto') && tts.elevenLabsConfigured) {
-        voiceProviderSelect.value = 'elevenlabs';
-        localStorage.setItem(VOICE_PROVIDER_KEY, 'elevenlabs');
+      if (tts.elevenLabsConfigured) {
+        if (!savedProvider || savedProvider === 'auto' || savedProvider === 'browser') {
+          voiceProviderSelect.value = 'elevenlabs';
+          localStorage.setItem(VOICE_PROVIDER_KEY, 'elevenlabs');
+        }
+      } else if (tts.configured && (!savedProvider || savedProvider === 'browser')) {
+        voiceProviderSelect.value = 'auto';
+        localStorage.setItem(VOICE_PROVIDER_KEY, 'auto');
       }
       refreshVoiceOptions();
       const provider = voiceProviderSelect.value;
       const label = tts.elevenLabsVoice || tts.openaiVoice || 'hosted';
       setVoiceProvider(provider === 'browser' ? 'browser' : provider, provider === 'auto' ? 'auto' : label);
-      loadHostedVoices();
+      if (tts.configured) loadHostedVoices();
     }
 
     function refreshBrowserVoices() {
@@ -1080,9 +1084,7 @@
 
     function initVoiceSettings() {
       const savedProvider = localStorage.getItem(VOICE_PROVIDER_KEY);
-      const tts = ttsConfig();
-      const defaultProvider = tts.configured ? (savedProvider && savedProvider !== 'browser' ? savedProvider : 'auto') : 'browser';
-      voiceProviderSelect.value = defaultProvider;
+      voiceProviderSelect.value = savedProvider || 'auto';
       localStorage.setItem(VOICE_PROVIDER_KEY, voiceProviderSelect.value);
       voiceSpeed.value = localStorage.getItem(VOICE_SPEED_KEY) || '1';
       voiceSpeedLabel.textContent = `${Number(voiceSpeed.value).toFixed(2)}x`;
@@ -1221,7 +1223,7 @@
         provider: providerSetting,
         speed: selectedSpeed(),
       };
-      if (providerSetting === 'elevenlabs' || (providerSetting === 'auto' && tts.elevenLabsConfigured)) {
+      if (providerSetting === 'elevenlabs' || providerSetting === 'auto') {
         body.voiceId = voiceNameSelect.value || tts.elevenLabsVoiceId || undefined;
       } else if (providerSetting === 'openai') {
         body.voice = voiceNameSelect.value || tts.openaiVoice || undefined;
@@ -1237,8 +1239,7 @@
       stopSpeaking();
       await unlockVoicePlayback();
       const providerSetting = selectedProvider();
-      const tts = ttsConfig();
-      if (providerSetting === 'browser' || !tts.configured) {
+      if (providerSetting === 'browser') {
         await speakWithBrowser(cleanText);
         return;
       }

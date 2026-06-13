@@ -2,140 +2,16 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
-  <title>Bio-Well · Gaia Healers</title>
-  <script src="https://cdn.tailwindcss.com"></script>
-  <script src="gaia-config.js"></script>
-  <script src="gaia-ecosystem.js"></script>
-  <script src="gaia-live-sync.js"></script>
-  <link rel="preconnect" href="https://fonts.googleapis.com" />
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="gaia-shared.css" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Redirecting · Gaia Healers</title>
+  <meta http-equiv="refresh" content="0; url=home.html?view=biowell" />
+  <script>
+    const params = new URLSearchParams(window.location.search);
+    params.set('view', 'biowell');
+    window.location.replace(`home.html?${params.toString()}`);
+  </script>
 </head>
-<body class="gaia-app gaia-page">
-  <svg width="0" height="0" aria-hidden="true"><defs><linearGradient id="gaia-ring-gradient" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="#7DD956"/><stop offset="100%" stop-color="#449422"/></linearGradient></defs></svg>
-  <div class="gaia-shell">
-    <header class="gaia-header">
-      <p class="gaia-eyebrow">Bio-Well™ GDV</p>
-      <div class="mt-1 flex items-start justify-between gap-3">
-        <h1 class="gaia-page-title">Biofield</h1>
-        <span class="gaia-badge shrink-0">Connected</span>
-      </div>
-      <p class="gaia-caption mt-1">Bio-Well Practitioners · 376 members</p>
-    </header>
-
-    <main class="gaia-main">
-      <section class="gaia-card gaia-score-hero">
-        <div class="gaia-score-ring">
-          <svg class="gaia-score-ring__svg" viewBox="0 0 100 100">
-            <circle class="gaia-score-ring__track" cx="50" cy="50" r="42"/>
-            <circle class="gaia-score-ring__progress" cx="50" cy="50" r="42"/>
-          </svg>
-          <div class="gaia-score-ring__center">
-            <span class="gaia-score-ring__value">87</span>
-            <span class="gaia-score-ring__label">Energy index</span>
-          </div>
-        </div>
-        <p class="gaia-body relative mt-4">Optimal for sessions · <span class="font-semibold text-gaia-dark">+5</span> vs 7-day avg (82)</p>
-        <div class="gaia-metrics relative">
-          <div class="gaia-metric"><p class="gaia-metric__label">Stress</p><p class="gaia-metric__value text-gaia-dark">Low</p></div>
-          <div class="gaia-metric"><p class="gaia-metric__label">Vitality</p><p class="gaia-metric__value">High</p></div>
-          <div class="gaia-metric"><p class="gaia-metric__label">Coherence</p><p class="gaia-metric__value gaia-tabular">91%</p></div>
-        </div>
-      </section>
-
-      <section class="gaia-card gaia-card-accent gaia-card-pad">
-        <div class="flex items-start gap-3">
-          <div class="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-gaia text-white font-bold shadow-glow">G</div>
-          <div class="min-w-0 flex-1">
-            <div class="flex items-center justify-between gap-2">
-              <h2 class="text-headline text-ink">Gaia Assist insight</h2>
-              <span class="gaia-badge">Voice</span>
-            </div>
-            <p class="gaia-body mt-2">Your energy index is session-ready. Sacral balance is 6 points below baseline, so Gaia Assist recommends hydration, 4 minutes of coherent breathing, and a post-session scan note for Advanced L1 practicum credit.</p>
-            <button type="button" data-gaia-open-assist class="gaia-link mt-3 inline-block">Ask about this scan</button>
-          </div>
-        </div>
-      </section>
-
-      <section class="gaia-card gaia-card-pad-lg">
-        <div class="flex items-center justify-between">
-          <h2 class="gaia-section-title">Energy trends</h2>
-          <div class="gaia-segment"><span class="gaia-segment__item gaia-segment__item--active">7D</span><span class="gaia-segment__item">30D</span></div>
-        </div>
-        <div class="gaia-chart mt-5">
-          <div class="flex flex-1 flex-col items-center"><div class="gaia-chart__bar w-full" style="height:48%"></div><span class="gaia-chart__label">M</span></div>
-          <div class="flex flex-1 flex-col items-center"><div class="gaia-chart__bar w-full" style="height:52%"></div><span class="gaia-chart__label">T</span></div>
-          <div class="flex flex-1 flex-col items-center"><div class="gaia-chart__bar w-full" style="height:58%"></div><span class="gaia-chart__label">W</span></div>
-          <div class="flex flex-1 flex-col items-center"><div class="gaia-chart__bar w-full" style="height:65%"></div><span class="gaia-chart__label">T</span></div>
-          <div class="flex flex-1 flex-col items-center"><div class="gaia-chart__bar w-full" style="height:74%"></div><span class="gaia-chart__label">F</span></div>
-          <div class="flex flex-1 flex-col items-center"><div class="gaia-chart__bar w-full" style="height:80%"></div><span class="gaia-chart__label">S</span></div>
-          <div class="flex flex-1 flex-col items-center"><div class="gaia-chart__bar gaia-chart__bar--active w-full" style="height:87%"></div><span class="gaia-chart__label font-semibold text-gaia-dark">Today</span></div>
-        </div>
-        <p class="gaia-caption mt-4">Weekly average <span class="gaia-tabular font-medium text-ink">82</span></p>
-      </section>
-
-      <section>
-        <h2 class="gaia-section-title mb-3">Chakra trends</h2>
-        <div class="gaia-card gaia-card-pad grid grid-cols-2 gap-4">
-          <div class="relative flex items-center justify-center">
-            <svg viewBox="0 0 120 200" class="h-36 text-surface-muted" fill="currentColor" aria-hidden="true">
-              <ellipse cx="60" cy="24" rx="14" ry="16"/><rect x="52" y="38" width="16" height="22" rx="6"/>
-              <path d="M40 58 Q60 68 80 58 L75 120 Q60 128 45 120 Z"/><rect x="48" y="118" width="24" height="28" rx="8"/><rect x="50" y="148" width="20" height="36" rx="6"/>
-            </svg>
-            <span class="chakra-dot chakra-dot--focus absolute left-[52%] top-[58%] h-2.5 w-2.5 rounded-full bg-orange-400 ring-2 ring-white"></span>
-            <span class="chakra-dot absolute left-[52%] top-[36%] h-2 w-2 rounded-full bg-gaia ring-2 ring-white"></span>
-          </div>
-          <div class="flex flex-col justify-center gap-2">
-            <p class="text-headline text-ink">Sacral focus</p>
-            <p class="gaia-caption">71 · 6 pts below baseline</p>
-            <a href="#recs" class="gaia-link">Harmonization</a>
-          </div>
-        </div>
-        <div class="gaia-card gaia-card-pad mt-3 space-y-3">
-          <div class="flex items-center gap-3"><span class="w-14 gaia-caption">Heart</span><div class="gaia-progress flex-1"><div class="gaia-progress__fill" style="width:95%"></div></div><span class="gaia-tabular w-7 text-right text-micro font-semibold">95</span></div>
-          <div class="flex items-center gap-3"><span class="w-14 gaia-caption">Sacral</span><div class="gaia-progress flex-1"><div class="h-full rounded-full bg-orange-400" style="width:71%"></div></div><span class="gaia-tabular w-7 text-right text-micro font-semibold text-orange-600">71</span></div>
-          <div class="flex items-center gap-3"><span class="w-14 gaia-caption">Root</span><div class="gaia-progress flex-1"><div class="gaia-progress__fill" style="width:84%"></div></div><span class="gaia-tabular w-7 text-right text-micro font-semibold">84</span></div>
-        </div>
-      </section>
-
-      <section class="gaia-card gaia-card-pad">
-        <div class="mb-4 flex items-center justify-between">
-          <h2 class="gaia-section-title">Technology stack</h2>
-          <span class="gaia-source-pill">Gaia research</span>
-        </div>
-        <div class="grid grid-cols-3 gap-2">
-          <div class="rounded-2xl bg-gaia-wash p-3 text-center"><p class="text-micro font-bold text-gaia-dark">Bio-Well</p><p class="gaia-caption mt-1">Biofield</p></div>
-          <div class="rounded-2xl bg-indigo-50 p-3 text-center"><p class="text-micro font-bold text-indigo-700">Biopulsar</p><p class="gaia-caption mt-1">Aura</p></div>
-          <div class="rounded-2xl bg-teal-50 p-3 text-center"><p class="text-micro font-bold text-teal-700">BioTekna</p><p class="gaia-caption mt-1">ANS</p></div>
-        </div>
-      </section>
-
-      <section>
-        <div class="mb-3 flex items-center justify-between">
-          <h2 class="gaia-section-title">Scan history</h2>
-          <span class="gaia-caption">47 total</span>
-        </div>
-        <div class="flex gap-2 overflow-x-auto hide-scrollbar">
-          <div class="shrink-0 rounded-2xl bg-gaia px-4 py-3 text-white shadow-glow"><p class="text-micro opacity-80">Today</p><p class="gaia-tabular text-2xl font-semibold">87</p></div>
-          <div class="shrink-0 gaia-card gaia-card-pad !py-3"><p class="text-micro text-ink-tertiary">Jun 1</p><p class="gaia-tabular text-2xl font-semibold text-ink">84</p></div>
-          <div class="shrink-0 gaia-card gaia-card-pad !py-3"><p class="text-micro text-ink-tertiary">May 30</p><p class="gaia-tabular text-2xl font-semibold text-ink">82</p></div>
-          <div class="shrink-0 gaia-card gaia-card-pad !py-3"><p class="text-micro text-ink-tertiary">May 28</p><p class="gaia-tabular text-2xl font-semibold text-ink">80</p></div>
-        </div>
-      </section>
-
-      <section class="gaia-card gaia-card-accent gaia-card-pad" id="recs">
-        <p class="gaia-section-label !mb-1">Practicum</p>
-        <p class="gaia-body">14 of 20 scans toward <strong class="text-ink">Advanced Level 1</strong></p>
-        <div class="gaia-progress gaia-progress--md mt-3"><div class="gaia-progress__fill" style="width:70%"></div></div>
-        <a href="academy.html" class="gaia-link mt-3 inline-block">Requirements</a>
-      </section>
-
-      <button type="button" class="gaia-btn gaia-btn-primary">New scan</button>
-    </main>
-  </div>
-  <script src="gaia-ui.js"></script>
-  <script src="shared-nav.js"></script>
+<body>
+  <p>Opening Gaia Healers app...</p>
 </body>
 </html>

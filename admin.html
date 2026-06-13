@@ -2,103 +2,16 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
-  <title>Admin · Gaia Healers</title>
-  <script src="https://cdn.tailwindcss.com"></script>
-  <script src="gaia-config.js"></script>
-  <script src="gaia-ecosystem.js"></script>
-  <script src="gaia-live-sync.js"></script>
-  <link rel="preconnect" href="https://fonts.googleapis.com" />
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="gaia-shared.css" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Redirecting · Gaia Healers</title>
+  <meta http-equiv="refresh" content="0; url=home.html?view=profile" />
+  <script>
+    const params = new URLSearchParams(window.location.search);
+    params.set('view', 'admin');
+    window.location.replace(`home.html?${params.toString()}`);
+  </script>
 </head>
-<body class="gaia-app gaia-page">
-  <div class="gaia-shell">
-    <header class="gaia-header">
-      <div class="flex items-center justify-between gap-3">
-        <a href="profile.html" class="gaia-link">Profile</a>
-        <div class="text-right">
-          <p class="gaia-eyebrow">Operator console</p>
-          <h1 class="text-title text-ink">Admin cockpit</h1>
-        </div>
-      </div>
-    </header>
-
-    <main class="gaia-main">
-      <section class="gaia-card-dark gaia-card-pad-lg rounded-3xl">
-        <p class="text-micro text-gaia-light">Full access system</p>
-        <h2 class="mt-1 text-title text-white">GHL · Academy · Events · Devices · AI</h2>
-        <p class="mt-2 text-caption text-white/60">One operator layer for read/write access, approvals, audit logs, and Gaia Assist tools.</p>
-        <div class="mt-5 grid grid-cols-3 gap-2">
-          <div class="gaia-event-metric"><p class="text-micro text-white/60">GHL</p><p class="text-headline text-white">Live</p></div>
-          <div class="gaia-event-metric"><p class="text-micro text-white/60">Events</p><p class="text-headline text-white">QR</p></div>
-          <div class="gaia-event-metric"><p class="text-micro text-white/60">AI</p><p class="text-headline text-white">Review</p></div>
-        </div>
-      </section>
-
-      <section class="gaia-card gaia-card-pad-lg">
-        <div class="mb-4 flex items-center justify-between">
-          <h2 class="gaia-section-title">GHL sync map</h2>
-          <span class="gaia-badge">Observed</span>
-        </div>
-        <div class="gaia-stack">
-          <div class="gaia-row"><div class="gaia-tile-icon strip-biowell">CP</div><div class="flex-1"><p class="text-headline text-ink">Client Portal</p><p class="gaia-caption">1,252 users · 1 invited · magic link, invite, and login email actions in GHL.</p></div></div>
-          <div class="gaia-row"><div class="gaia-tile-icon strip-biopulsar">CM</div><div class="flex-1"><p class="text-headline text-ink">Communities</p><p class="gaia-caption">6 groups with tabs for Discussion, Learning, Events, Members, About, and Leaderboard where available.</p></div></div>
-          <div class="gaia-row"><div class="gaia-tile-icon strip-biotekna">EDU</div><div class="flex-1"><p class="text-headline text-ink">Courses + credentials</p><p class="gaia-caption">Courses, modules, CE credits, live sessions, certificates, and credential status.</p></div></div>
-          <div class="gaia-row"><div class="gaia-tile-icon strip-healeex">MK</div><div class="flex-1"><p class="text-headline text-ink">Newsletter + marketing</p><p class="gaia-caption">Training reminders, chakra challenge, device offers, event campaigns, and segment preferences.</p></div></div>
-        </div>
-      </section>
-
-      <section class="gaia-card gaia-card-pad">
-        <div class="mb-4 flex items-center justify-between">
-          <h2 class="gaia-section-title">Community groups</h2>
-          <span class="gaia-source-pill">GHL Memberships</span>
-        </div>
-        <div class="gaia-stack">
-          <div class="gaia-event-ticket"><div><p class="text-headline text-ink">[Start Here] All Gaia Healers</p><p class="gaia-caption">Public · 28 posts · 3 admins</p></div><span class="gaia-tabular text-headline text-gaia-dark">254</span></div>
-          <div class="gaia-event-ticket"><div><p class="text-headline text-ink">Bio-Well Practitioners</p><p class="gaia-caption">Public · 11 posts · leaderboard</p></div><span class="gaia-tabular text-headline text-gaia-dark">381</span></div>
-          <div class="gaia-event-ticket"><div><p class="text-headline text-ink">BioPulsar Practitioners</p><p class="gaia-caption">Public group</p></div><span class="gaia-tabular text-headline text-gaia-dark">507</span></div>
-          <div class="gaia-event-ticket"><div><p class="text-headline text-ink">Biotekna · Healeex · Abundant</p><p class="gaia-caption">154 · 31 · 117 members</p></div><span class="gaia-tabular text-headline text-gaia-dark">302</span></div>
-        </div>
-      </section>
-
-      <section class="gaia-card gaia-card-pad">
-        <div class="mb-4 flex items-center justify-between">
-          <h2 class="gaia-section-title">Admin write gates</h2>
-          <span class="gaia-badge">Required</span>
-        </div>
-        <div class="gaia-timeline">
-          <div class="gaia-timeline__item"><span class="gaia-timeline__dot"></span><div><p class="text-headline text-ink">Role-based login</p><p class="gaia-caption">Member, practitioner, faculty, event staff, admin, and super-admin roles must come from the backend.</p></div></div>
-          <div class="gaia-timeline__item"><span class="gaia-timeline__dot"></span><div><p class="text-headline text-ink">Approval before writes</p><p class="gaia-caption">Gaia Assist can draft GHL messages, tags, imports, and class updates, but admin approval is required before execution.</p></div></div>
-          <div class="gaia-timeline__item"><span class="gaia-timeline__dot"></span><div><p class="text-headline text-ink">Audit log</p><p class="gaia-caption">Every action stores actor, source, payload summary, provider, result, and rollback notes.</p></div></div>
-        </div>
-      </section>
-
-      <section class="gaia-card gaia-card-pad">
-        <div class="mb-4 flex items-center justify-between">
-          <h2 class="gaia-section-title">AI controls</h2>
-          <span class="gaia-source-pill">SnapBOS pattern</span>
-        </div>
-        <div class="gaia-timeline">
-          <div class="gaia-timeline__item"><span class="gaia-timeline__dot"></span><div><p class="text-headline text-ink">Context aggregator</p><p class="gaia-caption">Feeds Gaia Assist safe summaries from GHL, academy, event, membership, devices, and scan history.</p></div></div>
-          <div class="gaia-timeline__item"><span class="gaia-timeline__dot"></span><div><p class="text-headline text-ink">Capability registry</p><p class="gaia-caption">Every action is typed: read, draft, propose, or execute-after-approval.</p></div></div>
-          <div class="gaia-timeline__item"><span class="gaia-timeline__dot"></span><div><p class="text-headline text-ink">Audit + flags</p><p class="gaia-caption">Admin controls rollout, voice, model providers, write access, and logs every proposed action.</p></div></div>
-        </div>
-      </section>
-
-      <section class="gaia-card gaia-card-accent gaia-card-pad">
-        <div class="flex items-center justify-between gap-3">
-          <div>
-            <p class="text-headline text-ink">Ask Gaia about operations</p>
-            <p class="gaia-caption mt-1">Use voice for admin questions, but require confirmation before any GHL/event/class write.</p>
-          </div>
-          <button type="button" data-gaia-open-assist class="rounded-xl bg-gaia px-3 py-2 text-micro font-bold text-white">Ask</button>
-        </div>
-      </section>
-    </main>
-  </div>
-  <script src="gaia-ui.js"></script>
-  <script src="shared-nav.js"></script>
+<body>
+  <p>Opening Gaia Healers app...</p>
 </body>
 </html>

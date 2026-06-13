@@ -126,6 +126,20 @@ body[data-theme="dark"] .gaia-theme-toggle {
   margin-right: auto;
 }
 
+.gaia-screen {
+  display: none;
+}
+
+.gaia-screen.is-active {
+  display: block;
+  animation: gaia-screen-in 0.22s ease-out;
+}
+
+@keyframes gaia-screen-in {
+  from { opacity: 0; transform: translateY(0.45rem); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
 .gaia-tabular {
   font-variant-numeric: tabular-nums lining-nums;
 }
@@ -376,6 +390,10 @@ body[data-theme="dark"] .gaia-theme-toggle {
   border-radius: 999px;
   background: var(--gaia-light);
   box-shadow: 0 0 0 4px rgba(125, 217, 86, 0.18);
+}
+
+.gaia-assist-panel-open .gaia-live-sync {
+  display: none;
 }
 
 /* —— Cards —— */
@@ -1141,6 +1159,7 @@ body[data-theme="dark"] .gaia-tabbar__inner a[aria-current="page"] {
   right: 0;
   bottom: 4.25rem;
   width: min(22rem, calc(100vw - 2rem));
+  max-width: calc(100vw - 2rem);
   border-radius: 1.5rem;
   padding: 1rem;
   background: rgba(255, 255, 255, 0.92);
@@ -1366,6 +1385,7 @@ body[data-theme="dark"] .gaia-tabbar__inner a[aria-current="page"] {
 .gaia-assist__chips button {
   flex: 1 1 calc(50% - 0.5rem);
   min-width: min(8rem, 100%);
+  max-width: 100%;
   border: 0;
   border-radius: 999px;
   background: var(--gaia-muted);
@@ -1374,6 +1394,7 @@ body[data-theme="dark"] .gaia-tabbar__inner a[aria-current="page"] {
   font-size: 0.6875rem;
   font-weight: 800;
   white-space: nowrap;
+  overflow-wrap: anywhere;
 }
 
 .gaia-assist__settings {
@@ -1491,13 +1512,13 @@ body[data-theme="dark"] .gaia-assist__promise {
 
   .gaia-assist__panel {
     position: fixed;
-    left: 0.9rem;
-    right: 0.9rem;
+    left: max(0.75rem, env(safe-area-inset-left));
+    right: max(0.75rem, env(safe-area-inset-right));
     bottom: calc(9.25rem + env(safe-area-inset-bottom));
     width: auto;
-    max-height: min(74dvh, 40rem);
+    max-height: min(72dvh, 38rem);
     overflow-y: auto;
-    padding: 0.9rem;
+    padding: 0.85rem;
   }
 
   .gaia-assist__transcript {
@@ -1505,6 +1526,8 @@ body[data-theme="dark"] .gaia-assist__promise {
   }
 
   .gaia-assist__chips button {
+    flex-basis: 100%;
+    min-width: 0;
     white-space: normal;
   }
 

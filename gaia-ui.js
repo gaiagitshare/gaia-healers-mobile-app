@@ -12,6 +12,8 @@
   const VOICE_PROVIDER_KEY = 'gaia-assist-voice-provider';
   const VOICE_NAME_KEY = 'gaia-assist-voice-name';
   const VOICE_SPEED_KEY = 'gaia-assist-voice-speed';
+  const ADMIN_MODE_KEY = 'gaia-admin-mode';
+  const APP_VIEWS = new Set(['today', 'biowell', 'academy', 'community', 'profile', 'admin']);
 
   function initTheme() {
     if (!document.body.classList.contains('gaia-page') && !document.body.classList.contains('gaia-app')) return;
@@ -92,6 +94,157 @@
     show(0);
   }
 
+  function initAppShellNavigation() {
+    const shell = document.getElementById('gaia-app-shell');
+    if (!shell) return;
+
+    const screens = Array.from(shell.querySelectorAll('[data-screen]'));
+    const screenMap = new Map(screens.map((screen) => [screen.dataset.screen, screen]));
+    const adminEntries = Array.from(document.querySelectorAll('[data-admin-entry]'));
+    const adminToggles = Array.from(document.querySelectorAll('[data-admin-toggle]'));
+    const signOut = document.querySelector('[data-sign-out]');
+    let activeView = 'today';
+
+    function adminMode() {
+      return localStorage.getItem(ADMIN_MODE_KEY) === '1';
+    }
+
+    function setAdminMode(enabled) {
+      localStorage.setItem(ADMIN_MODE_KEY, enabled ? '1' : '0');
+      syncAdminUi();
+    }
+
+    function syncAdminUi() {
+      const enabled = adminMode();
+      adminEntries.forEach((entry) => { entry.hidden = !enabled; });
+      adminToggles.forEach((button) => {
+        button.textContent = enabled ? 'Disable admin mode' : 'Enable admin mode';
+        button.setAttribute('aria-pressed', String(enabled));
+      });
+      document.body.classList.toggle('gaia-admin-mode', enabled);
+    }
+
+    function normalizeView(value) {
+      const view = String(value || 'today').toLowerCase();
+      if (view === 'home') return 'today';
+      if (view === 'events') return 'community';
+      return APP_VIEWS.has(view) ? view : 'today';
+    }
+
+    function routeFromUrl() {
+      const params = new URLSearchParams(window.location.search);
+      const hash = window.location.hash.replace(/^#/, '');
+      const view = normalizeView(params.get('view') || hash || 'today');
+      const tab = params.get('tab') || (view === 'community' ? 'discussion' : '');
+      return { view, tab };
+    }
+
+    function urlFor(view, options = {}) {
+      const params = new URLSearchParams(window.location.search);
+      if (view === 'today') params.delete('view');
+      else params.set('view', view);
+      if (options.tab) params.set('tab', options.tab);
+      else params.delete('tab');
+      params.delete('screen');
+      const query = params.toString();
+      return `${window.location.pathname}${query ? `?${query}` : ''}`;
+    }
+
+    function setDocumentTitle(view) {
+      const labels = {
+        today: 'Today',
+        biowell: 'Bio-Well',
+        academy: 'Academy',
+        community: 'Community',
+        profile: 'Profile',
+        admin: 'Admin',
+      };
+      document.title = `${labels[view] || 'Gaia'} · Gaia Healers`;
+    }
+
+    function showView(view, options = {}) {
+      let nextView = normalizeView(view);
+      if (nextView === 'admin' && !adminMode()) {
+        nextView = 'profile';
+        options = { ...options, adminBlocked: true };
+      }
+
+      screens.forEach((screen) => {
+        const on = screen.dataset.screen === nextView;
+        screen.classList.toggle('is-active', on);
+        screen.setAttribute('aria-hidden', String(!on));
+      });
+
+      activeView = nextView;
+      setDocumentTitle(nextView);
+      if (nextView === 'community') {
+        window.GaiaCommunityTabs?.activate(options.tab || 'discussion');
+      }
+      if (options.adminBlocked) {
+        const entry = document.querySelector('[data-admin-entry]');
+        entry?.scrollIntoView?.({ block: 'center' });
+      } else {
+        window.scrollTo({ top: 0, behavior: options.replace ? 'auto' : 'smooth' });
+      }
+      window.dispatchEvent(new CustomEvent('gaia:route', { detail: { view: nextView, tab: options.tab || '' } }));
+      return nextView;
+    }
+
+    function navigate(view, options = {}) {
+      const nextView = showView(view, options);
+      const nextUrl = urlFor(nextView, { tab: nextView === 'community' ? options.tab : '' });
+      if (options.replace) window.history.replaceState({ view: nextView, tab: options.tab || '' }, '', nextUrl);
+      else window.history.pushState({ view: nextView, tab: options.tab || '' }, '', nextUrl);
+    }
+
+    function routeClick(event) {
+      const link = event.target.closest('a[href]');
+      if (!link) return;
+      if (link.target || link.hasAttribute('download')) return;
+      const url = new URL(link.href, window.location.href);
+      if (url.origin !== window.location.origin) return;
+
+      const file = url.pathname.split('/').pop() || 'home.html';
+      const routeMap = {
+        'home.html': url.searchParams.get('view') || 'today',
+        'biowell.html': 'biowell',
+        'academy.html': 'academy',
+        'community.html': 'community',
+        'profile.html': 'profile',
+        'admin.html': 'admin',
+      };
+      if (!routeMap[file]) return;
+
+      event.preventDefault();
+      const tab = url.searchParams.get('tab') || '';
+      navigate(routeMap[file], { tab });
+    }
+
+    document.addEventListener('click', routeClick);
+    adminToggles.forEach((button) => {
+      button.addEventListener('click', () => setAdminMode(!adminMode()));
+    });
+    signOut?.addEventListener('click', () => {
+      sessionStorage.clear();
+      setAdminMode(false);
+      navigate('today');
+    });
+    window.addEventListener('popstate', () => {
+      const route = routeFromUrl();
+      showView(route.view, { tab: route.tab, replace: true });
+    });
+
+    syncAdminUi();
+    const route = routeFromUrl();
+    navigate(route.view, { tab: route.tab, replace: true });
+
+    window.GaiaAppShell = {
+      go: navigate,
+      currentView: () => activeView,
+      adminMode,
+    };
+  }
+
   function initCommunityTabs() {
     const bar = document.getElementById('community-tabs');
     if (!bar) return;
@@ -106,7 +259,7 @@
       newsletter: 'panel-newsletter',
     };
     const buttons = bar.querySelectorAll('[data-tab]');
-    function activate(btn) {
+    function activateButton(btn, updateHistory = false) {
         const tab = btn.getAttribute('data-tab');
         buttons.forEach((b) => {
           const on = b === btn;
@@ -120,15 +273,22 @@
           const el = document.getElementById(id);
           if (el) el.classList.toggle('hidden', id !== activePanel);
         });
+        if (updateHistory && window.GaiaAppShell?.currentView?.() === 'community') {
+          window.GaiaAppShell.go('community', { tab });
+        }
     }
     buttons.forEach((btn) => {
       btn.addEventListener('click', () => {
-        activate(btn);
+        activateButton(btn, true);
       });
     });
-    const requestedTab = new URLSearchParams(window.location.search).get('tab');
-    const requestedButton = requestedTab && bar.querySelector(`[data-tab="${requestedTab}"]`);
-    if (requestedButton) activate(requestedButton);
+    window.GaiaCommunityTabs = {
+      activate(tab = 'discussion') {
+        const requestedButton = bar.querySelector(`[data-tab="${tab}"]`) || bar.querySelector('[data-tab="discussion"]');
+        if (requestedButton) activateButton(requestedButton, false);
+      },
+    };
+    window.GaiaCommunityTabs.activate(new URLSearchParams(window.location.search).get('tab') || 'discussion');
   }
 
   function initLiveSyncIndicator() {
@@ -456,6 +616,7 @@
       panel.hidden = !open;
       orb.setAttribute('aria-expanded', String(open));
       root.classList.toggle('gaia-assist--open', open);
+      document.body.classList.toggle('gaia-assist-panel-open', open);
     }
 
     function setError(message) {
@@ -652,6 +813,7 @@
     initTheme();
     initCoachMark();
     initSplashSteps();
+    initAppShellNavigation();
     initCommunityTabs();
     initLiveSyncIndicator();
     initGaiaAssist();

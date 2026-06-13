@@ -2,9 +2,9 @@
 
 Mobile-first prototype of the **Gaia Healers Client Portal** — aligned with the live ecosystem at `crm.gaiahealers.com` / `education.gaiahealers.com`.
 
-**1,233+ practitioners** · Bio-Well certification · Modality communities · Continuing education
+**1,252 portal users** · Bio-Well certification · Modality communities · Continuing education
 
-No backend. Static HTML + Tailwind CSS (CDN).
+No backend in the public prototype. Static HTML + Tailwind CSS (CDN), with live data and voice routed through the staging proxy when configured.
 
 ## V2 focus
 
@@ -22,23 +22,31 @@ Built around the real platform — not generic wellness copy:
 
 **Experience targets:** Oura (biofield metrics) · LinkedIn (practitioner network) · Coursera (certification paths)
 
-## Screens
+## App entry
 
-| File | Role |
-|------|------|
-| `index.html` | Client Portal intro (4-step) |
-| `home.html` | Today dashboard |
-| `biowell.html` | Bio-Well GDV analysis |
-| `academy.html` | Certification Academy |
-| `community.html` | Communities, directory, events |
-| `profile.html` | Membership, CE, credentials, activity |
+`home.html` is the only public application entry point. It renders the app shell and internal screens:
+
+- Today
+- Bio-Well
+- Academy
+- Community
+- Profile
+- Admin, hidden behind Profile admin mode
+
+Legacy public files redirect into `home.html`:
+
+- `biowell.html` → `home.html?view=biowell`
+- `academy.html` → `home.html?view=academy`
+- `community.html` → `home.html?view=community`
+- `profile.html` → `home.html?view=profile`
+- `admin.html` → `home.html?view=admin`, then Profile unless admin mode is enabled
 
 ## Shared assets
 
 - `gaia-shared.css` — V2 design tokens
-- `gaia-ui.js` — Onboarding, coach mark, community tabs, Gaia Assist prototype
+- `gaia-ui.js` — Onboarding, single-app routing, community tabs, Gaia Assist prototype
 - `gaia-ecosystem.js` — CRM/GHL/event/assistant constants and future API handoff point
-- `shared-nav.js` — Bottom navigation
+- `shared-nav.js` — Single-app bottom navigation
 
 ## Run locally
 
@@ -47,7 +55,7 @@ cd Gaia-Healers-App
 python3 -m http.server 8080
 ```
 
-Open http://localhost:8080 — use a private window or clear `sessionStorage` to see onboarding.
+Open http://localhost:8080/home.html — use a private window or clear `sessionStorage` to see onboarding.
 
 ## GHL mobile branding (upload-ready PNGs)
 

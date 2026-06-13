@@ -11,7 +11,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="gaia-shared.css?v=single-app-1" />
+  <link rel="stylesheet" href="gaia-shared.css?v=final-polish-1" />
 </head>
 <body class="gaia-app gaia-page gaia-single-app">
   <svg width="0" height="0" aria-hidden="true"><defs><linearGradient id="gaia-ring-gradient" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="#7DD956"/><stop offset="100%" stop-color="#449422"/></linearGradient></defs></svg>
@@ -20,7 +20,7 @@
       <header class="gaia-header">
         <div class="flex items-center justify-between gap-3">
           <a href="home.html?view=profile" class="flex min-w-0 items-center gap-3">
-            <div class="gaia-avatar gaia-avatar--md bg-white text-white overflow-hidden"><img src="https://gaiahealers.com/cdn/shop/files/logo-10_1.png?v=1718920392&width=128" alt="Gaia Healers" class="gaia-logo-img" /></div>
+            <div class="gaia-header-logo"><img src="assets/gaia-logo.png" alt="Gaia Healers" class="gaia-logo-img" /></div>
             <div class="min-w-0">
               <p class="gaia-eyebrow">Client Portal</p>
               <h1 class="text-title text-ink">Today</h1>
@@ -307,7 +307,7 @@
             <p class="gaia-eyebrow">GHL community hub</p>
             <h1 class="gaia-page-title mt-0.5">Gaia Healers</h1>
           </div>
-          <a href="https://education.gaiahealers.com/" class="rounded-full bg-gaia px-4 py-2 text-caption font-bold text-white shadow-soft">Log in</a>
+          <a href="https://education.gaiahealers.com/" class="gaia-login-pill">Log in</a>
         </div>
         <div id="community-tabs" class="mt-4 flex gap-2 overflow-x-auto hide-scrollbar">
           <button type="button" data-tab="discussion" class="shrink-0 rounded-full bg-gaia px-4 py-2 text-micro font-medium text-white">Discussion</button>
@@ -388,6 +388,15 @@
             <div class="gaia-card-pad flex gap-3"><div class="gaia-date-pill"><span>19</span><small>Jun</small></div><div><p class="text-headline text-ink">Bio-Well Advanced Level 1</p><p class="gaia-caption">2:00 AM · training room</p></div></div>
             <div class="gaia-card-pad flex gap-3"><div class="gaia-date-pill"><span>23</span><small>Jun</small></div><div><p class="text-headline text-ink">Marketing Master Your Follow-Up</p><p class="gaia-caption">11:00 PM · practitioner growth</p></div></div>
           </div>
+          <article class="gaia-card gaia-card-pad">
+            <div class="flex items-center justify-between gap-3">
+              <div class="min-w-0">
+                <p class="text-headline text-ink">Live meeting links</p>
+                <p class="gaia-caption mt-1">Google Meet, Zoom, or custom rooms should sync from GHL calendar/course sessions and stay hidden until member login.</p>
+              </div>
+              <span class="gaia-badge">Meet</span>
+            </div>
+          </article>
           <article class="gaia-card gaia-card-accent gaia-card-pad"><p class="text-headline text-ink">Elevate 2026 event ops</p><p class="gaia-caption mt-1">Registration stays in GHL. Badges, QR check-in, exhibitor leads, and attendee imports stay behind the staging proxy.</p><a href="home.html?view=profile" class="gaia-link mt-3 inline-block">Open my pass</a></article>
         </section>
 
@@ -413,14 +422,21 @@
 
     <section class="gaia-screen" data-screen="profile" aria-label="Profile">
       <header class="gaia-header !border-0">
-        <div class="flex justify-end">
-          <button type="button" class="rounded-full bg-surface-muted px-4 py-2 text-caption font-medium text-ink-secondary" data-admin-toggle>Enable admin mode</button>
+        <div class="flex items-center justify-between gap-3">
+          <div class="flex min-w-0 items-center gap-3">
+            <div class="gaia-header-logo"><img src="assets/gaia-logo.png" alt="Gaia Healers" class="gaia-logo-img" /></div>
+            <div class="min-w-0">
+              <p class="gaia-eyebrow">Client Portal</p>
+              <h1 class="text-title text-ink">Profile</h1>
+            </div>
+          </div>
+          <button type="button" class="rounded-full bg-surface-muted px-4 py-2 text-caption font-medium text-ink-secondary" data-admin-unlock hidden>Unlock admin</button>
         </div>
       </header>
 
       <main class="gaia-main">
-        <section class="text-center -mt-2">
-          <div class="relative mx-auto mb-4 h-[4.5rem] w-[4.5rem]"><div class="flex h-full w-full items-center justify-center overflow-hidden rounded-full bg-white text-2xl font-semibold text-white shadow-glow ring-1 ring-[var(--border)]"><img src="https://gaiahealers.com/cdn/shop/files/logo-10_1.png?v=1718920392&width=160" alt="Gaia Healers" class="gaia-logo-img" /></div><span class="absolute -bottom-0.5 -right-0.5 flex h-7 w-7 items-center justify-center rounded-full bg-white shadow-soft ring-2 ring-gaia"><svg class="h-3.5 w-3.5 text-gaia" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.704 4.153a.75.75 0 01.143 1.052l-8 10.5a.75.75 0 01-1.127.075l-4.5-4.5a.75.75 0 011.06-1.06l3.894 3.893 7.48-9.817a.75.75 0 011.05-.143z" clip-rule="evenodd"/></svg></span></div>
+        <section class="gaia-profile-hero text-center">
+          <div class="gaia-profile-logo-wrap"><div class="gaia-profile-logo"><img src="assets/gaia-logo.png" alt="Gaia Healers" class="gaia-logo-img" /></div><span class="gaia-profile-check"><svg class="h-3.5 w-3.5 text-gaia" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.704 4.153a.75.75 0 01.143 1.052l-8 10.5a.75.75 0 01-1.127.075l-4.5-4.5a.75.75 0 011.06-1.06l3.894 3.893 7.48-9.817a.75.75 0 011.05-.143z" clip-rule="evenodd"/></svg></span></div>
           <h1 class="gaia-page-title">Practitioner</h1>
           <p class="gaia-caption mt-1">Bio-Well Practitioners · Since 2024</p>
         </section>
@@ -430,10 +446,15 @@
           <h2 class="mt-1 text-title text-white">Member access</h2>
           <p class="gaia-caption mt-2 !text-white/60">Courses · Communities · Credentials · Marketplace</p>
           <div class="mt-5 flex justify-between rounded-2xl bg-white/10 px-4 py-3.5"><span class="text-caption text-white/70">Portal users</span><span class="gaia-tabular text-headline text-white">1,252</span></div>
-          <div class="mt-3 grid grid-cols-2 gap-2">
-            <a href="https://education.gaiahealers.com/" class="gaia-btn gaia-btn-primary">Log in</a>
-            <button type="button" class="gaia-btn gaia-btn-ghost" data-admin-toggle>Admin mode</button>
+          <div class="gaia-login-actions mt-3">
+            <a href="https://education.gaiahealers.com/" class="gaia-btn gaia-btn-primary gaia-login-btn">Log in to member portal</a>
+            <button type="button" class="gaia-btn gaia-btn-ghost" data-admin-unlock hidden>Unlock admin</button>
           </div>
+        </section>
+
+        <section class="gaia-card gaia-card-pad" data-admin-locked hidden>
+          <p class="text-headline text-ink">Admin not available</p>
+          <p class="gaia-caption mt-1">Admin tools are hidden for client demos. Add <span class="gaia-code">admin=1</span> to the URL and enter the dev passcode for internal testing.</p>
         </section>
 
         <section class="gaia-card gaia-card-pad" data-admin-entry hidden>
@@ -528,7 +549,7 @@
       </main>
     </section>
   </div>
-  <script src="gaia-ui.js?v=single-app-1"></script>
-  <script src="shared-nav.js?v=single-app-1"></script>
+  <script src="gaia-ui.js?v=final-polish-1"></script>
+  <script src="shared-nav.js?v=final-polish-1"></script>
 </body>
 </html>

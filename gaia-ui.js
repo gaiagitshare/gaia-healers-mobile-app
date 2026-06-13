@@ -13,6 +13,8 @@
   const VOICE_NAME_KEY = 'gaia-assist-voice-name';
   const VOICE_SPEED_KEY = 'gaia-assist-voice-speed';
   const ADMIN_MODE_KEY = 'gaia-admin-mode';
+  const ADMIN_UNLOCK_PARAM = 'admin';
+  const ADMIN_DEV_PASSCODE = 'gaia2026';
   const APP_VIEWS = new Set(['today', 'biowell', 'academy', 'community', 'profile', 'admin']);
 
   function initTheme() {
@@ -101,27 +103,60 @@
     const screens = Array.from(shell.querySelectorAll('[data-screen]'));
     const screenMap = new Map(screens.map((screen) => [screen.dataset.screen, screen]));
     const adminEntries = Array.from(document.querySelectorAll('[data-admin-entry]'));
-    const adminToggles = Array.from(document.querySelectorAll('[data-admin-toggle]'));
+    const adminUnlockButtons = Array.from(document.querySelectorAll('[data-admin-unlock]'));
+    const adminLockedPanels = Array.from(document.querySelectorAll('[data-admin-locked]'));
     const signOut = document.querySelector('[data-sign-out]');
     let activeView = 'today';
+    let adminBlocked = false;
 
     function adminMode() {
-      return localStorage.getItem(ADMIN_MODE_KEY) === '1';
+      return sessionStorage.getItem(ADMIN_MODE_KEY) === '1';
+    }
+
+    function adminUnlockAvailable() {
+      const params = new URLSearchParams(window.location.search);
+      return params.get(ADMIN_UNLOCK_PARAM) === '1' || adminMode();
     }
 
     function setAdminMode(enabled) {
-      localStorage.setItem(ADMIN_MODE_KEY, enabled ? '1' : '0');
+      if (enabled) sessionStorage.setItem(ADMIN_MODE_KEY, '1');
+      else sessionStorage.removeItem(ADMIN_MODE_KEY);
+      adminBlocked = false;
       syncAdminUi();
     }
 
     function syncAdminUi() {
       const enabled = adminMode();
+      const unlockAvailable = adminUnlockAvailable();
       adminEntries.forEach((entry) => { entry.hidden = !enabled; });
-      adminToggles.forEach((button) => {
-        button.textContent = enabled ? 'Disable admin mode' : 'Enable admin mode';
+      adminUnlockButtons.forEach((button) => {
+        button.hidden = !unlockAvailable;
+        button.textContent = enabled ? 'Lock admin' : 'Unlock admin';
         button.setAttribute('aria-pressed', String(enabled));
       });
+      adminLockedPanels.forEach((panel) => {
+        panel.hidden = enabled || (!unlockAvailable && !adminBlocked);
+      });
       document.body.classList.toggle('gaia-admin-mode', enabled);
+    }
+
+    function handleAdminUnlock() {
+      if (adminMode()) {
+        setAdminMode(false);
+        if (activeView === 'admin') navigate('profile', { replace: true });
+        return;
+      }
+
+      const passcode = window.prompt('Enter Gaia admin passcode');
+      if (passcode === null) return;
+      if (passcode.trim() === ADMIN_DEV_PASSCODE) {
+        setAdminMode(true);
+        navigate('admin');
+        return;
+      }
+      adminBlocked = true;
+      syncAdminUi();
+      window.alert('Admin is not available.');
     }
 
     function normalizeView(value) {
@@ -168,6 +203,7 @@
         nextView = 'profile';
         options = { ...options, adminBlocked: true };
       }
+      adminBlocked = Boolean(options.adminBlocked);
 
       screens.forEach((screen) => {
         const on = screen.dataset.screen === nextView;
@@ -181,11 +217,12 @@
         window.GaiaCommunityTabs?.activate(options.tab || 'discussion');
       }
       if (options.adminBlocked) {
-        const entry = document.querySelector('[data-admin-entry]');
-        entry?.scrollIntoView?.({ block: 'center' });
+        const lockedPanel = document.querySelector('[data-admin-locked]');
+        lockedPanel?.scrollIntoView?.({ block: 'center' });
       } else {
         window.scrollTo({ top: 0, behavior: options.replace ? 'auto' : 'smooth' });
       }
+      syncAdminUi();
       window.dispatchEvent(new CustomEvent('gaia:route', { detail: { view: nextView, tab: options.tab || '' } }));
       return nextView;
     }
@@ -221,8 +258,8 @@
     }
 
     document.addEventListener('click', routeClick);
-    adminToggles.forEach((button) => {
-      button.addEventListener('click', () => setAdminMode(!adminMode()));
+    adminUnlockButtons.forEach((button) => {
+      button.addEventListener('click', handleAdminUnlock);
     });
     signOut?.addEventListener('click', () => {
       sessionStorage.clear();
@@ -298,12 +335,17 @@
     const indicator = document.createElement('div');
     indicator.className = 'gaia-live-sync';
     indicator.hidden = true;
-    indicator.innerHTML = '<span></span>Live sync connected';
+    indicator.innerHTML = '<span></span><strong>Proxy connected</strong>';
     document.body.appendChild(indicator);
 
     function refresh() {
-      const live = window.GAIA_SYNC?.status === 'live';
-      indicator.hidden = !live;
+      const status = window.GAIA_SYNC?.status;
+      const connected = status === 'live' || status === 'connected';
+      indicator.hidden = !connected;
+      indicator.classList.toggle('gaia-live-sync--live', status === 'live');
+      const label = status === 'live' ? 'Live sync connected' : 'Proxy connected';
+      const text = indicator.querySelector('strong');
+      if (text) text.textContent = label;
     }
 
     refresh();

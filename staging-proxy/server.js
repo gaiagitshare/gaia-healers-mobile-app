@@ -25,8 +25,8 @@ const ALLOWED_ORIGINS = (process.env.ALLOWED_ORIGINS || '')
   .map((origin) => origin.trim())
   .filter(Boolean);
 
-const STATIC_GAIA = {
-  members: 1233,
+const FALLBACK_GAIA = {
+  members: 1252,
   portalUrl: 'https://education.gaiahealers.com',
   event: {
     id: 'elevate-2026',
@@ -122,7 +122,14 @@ async function readJsonBody(req) {
 async function getEventSummary() {
   const base = (process.env.EVENT_MANAGER_BASE_URL || '').replace(/\/+$/, '');
   const eventId = process.env.EVENT_MANAGER_EVENT_ID || '';
-  if (!base || !eventId) return STATIC_GAIA.event;
+  if (!base || !eventId) {
+    return {
+      ...FALLBACK_GAIA.event,
+      source: 'not-connected',
+      liveData: false,
+      note: 'Event Manager endpoint is not configured.',
+    };
+  }
 
   const headers = {};
   if (process.env.EVENT_MANAGER_TOKEN) {
@@ -132,11 +139,12 @@ async function getEventSummary() {
   const event = await fetchJson(`${base}/public/events/${encodeURIComponent(eventId)}`, headers);
   return {
     id: `event-${event.id || eventId}`,
-    name: event.name || STATIC_GAIA.event.name,
-    date: event.start_date && event.end_date ? `${event.start_date} - ${event.end_date}` : STATIC_GAIA.event.date,
-    venue: event.location || STATIC_GAIA.event.venue,
-    location: event.location || STATIC_GAIA.event.location,
+    name: event.name || FALLBACK_GAIA.event.name,
+    date: event.start_date && event.end_date ? `${event.start_date} - ${event.end_date}` : FALLBACK_GAIA.event.date,
+    venue: event.location || FALLBACK_GAIA.event.venue,
+    location: event.location || FALLBACK_GAIA.event.location,
     source: 'event-manager',
+    liveData: true,
     stats: {
       attendees: event.attendee_count || 0,
       paidMembers: 0,
@@ -158,6 +166,8 @@ async function getGhlSummary() {
 
   return {
     configured: true,
+    normalized: false,
+    liveData: false,
     locationId,
     apiBaseUrl: base,
     note: 'GHL credentials are configured backend-side. Add normalized reads here after staging auth is approved.',
@@ -166,17 +176,20 @@ async function getGhlSummary() {
 
 async function bootstrap() {
   const [event, ghl] = await Promise.all([
-    getEventSummary().catch((error) => ({ ...STATIC_GAIA.event, source: 'event-manager-error', error: error.message })),
+    getEventSummary().catch((error) => ({ ...FALLBACK_GAIA.event, source: 'event-manager-error', liveData: false, error: error.message })),
     getGhlSummary().catch((error) => ({ configured: false, error: error.message })),
   ]);
+  const liveData = Boolean(event.liveData || ghl.liveData || ghl.normalized);
 
   return {
     ok: true,
     gaia: {
-      ...STATIC_GAIA,
+      ...FALLBACK_GAIA,
       event,
       sync: {
         generatedAt: new Date().toISOString(),
+        liveData,
+        mode: liveData ? 'live' : 'proxy-connected',
         ghl,
         voice: {
           configured: Boolean(process.env.GROQ_API_KEY || process.env.OPENROUTER_API_KEY || process.env.OPENAI_API_KEY),

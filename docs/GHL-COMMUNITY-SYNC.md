@@ -85,3 +85,17 @@ Newsletter preferences should map to GHL Marketing segments:
 - Practitioner community highlights
 
 The app can show preferences now, but saving preferences needs an authenticated proxy route.
+
+## Live Meetings
+
+Use GHL calendar/course/session records as the source of truth for live meeting links.
+
+Recommended normalized fields:
+
+- `meetingProvider`: `google_meet`, `zoom`, or `custom`
+- `meetingUrl`: stored only in the backend or returned to verified members
+- `startsAt`, `endsAt`, `timezone`
+- `hostName`, `hostRole`
+- `visibility`: member-only, cohort-only, staff-only, or public preview
+
+The static prototype can show a "Live meeting links" placeholder, but real Google Meet or Zoom URLs should only render after member login through the staging proxy.

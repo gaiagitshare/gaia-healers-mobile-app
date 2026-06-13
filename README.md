@@ -31,7 +31,7 @@ Built around the real platform — not generic wellness copy:
 - Academy
 - Community
 - Profile
-- Admin, hidden behind Profile admin mode
+- Admin, hidden behind an internal Profile unlock
 
 Legacy public files redirect into `home.html`:
 
@@ -39,7 +39,15 @@ Legacy public files redirect into `home.html`:
 - `academy.html` → `home.html?view=academy`
 - `community.html` → `home.html?view=community`
 - `profile.html` → `home.html?view=profile`
-- `admin.html` → `home.html?view=admin`, then Profile unless admin mode is enabled
+- `admin.html` → `home.html?view=admin`, then Profile unless admin is unlocked
+
+Internal demo admin:
+
+- Open `home.html?view=profile&admin=1`
+- Tap `Unlock admin`
+- Enter the local demo passcode
+
+This is a prototype-only visibility gate. Production admin access must come from backend roles, not a static passcode.
 
 ## Shared assets
 

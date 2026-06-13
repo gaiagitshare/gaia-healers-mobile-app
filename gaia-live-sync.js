@@ -31,14 +31,17 @@
       if (!response.ok) throw new Error(`Proxy returned ${response.status}`);
       const payload = await response.json();
       window.GAIA = { ...(window.GAIA || {}), ...(payload.gaia || payload) };
-      window.GAIA_SYNC.status = 'live';
+      window.GAIA_SYNC.status = payload.gaia?.sync?.liveData ? 'live' : 'connected';
+      window.GAIA_SYNC.liveData = Boolean(payload.gaia?.sync?.liveData);
+      window.GAIA_SYNC.mode = payload.gaia?.sync?.mode || window.GAIA_SYNC.status;
       window.GAIA_SYNC.error = '';
       document.dispatchEvent(new CustomEvent('gaia:sync', { detail: window.GAIA }));
     } catch (error) {
       window.GAIA_SYNC.status = 'error';
+      window.GAIA_SYNC.liveData = false;
       window.GAIA_SYNC.error = error.message;
       document.dispatchEvent(new CustomEvent('gaia:sync-error', { detail: window.GAIA_SYNC }));
-      console.warn('[Gaia] live sync failed; using static fallback.', error);
+      console.warn('[Gaia] staging proxy sync failed; live app data is unavailable.', error);
     }
   }
 

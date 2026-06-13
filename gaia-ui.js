@@ -798,21 +798,41 @@
     let pendingVoice = null;
     let browserVoices = [];
     let hostedVoices = [];
-    const prefersManualVoice = /iPhone|iPad|iPod/i.test(navigator.userAgent);
+    const isIOS = /iPad|iPhone|iPod/i.test(navigator.userAgent)
+      || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+    const isMobile = isIOS || /Android/i.test(navigator.userAgent);
     let voiceUnlocked = false;
+    let voiceAudioContext = null;
+    let activeVoiceSource = null;
     const SILENT_WAV = 'data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQAAAAA=';
 
     function getSharedAudio() {
       if (!currentAudio) {
         currentAudio = new Audio();
         currentAudio.preload = 'auto';
+        currentAudio.playsInline = true;
         currentAudio.setAttribute('playsinline', '');
-        currentAudio.setAttribute('webkit-playsinline', '');
+        currentAudio.setAttribute('webkit-playsinline', 'true');
       }
       return currentAudio;
     }
 
+    async function getVoiceAudioContext() {
+      const AudioCtx = window.AudioContext || window.webkitAudioContext;
+      if (!AudioCtx) return null;
+      if (!voiceAudioContext) voiceAudioContext = new AudioCtx();
+      if (voiceAudioContext.state === 'suspended') {
+        try {
+          await voiceAudioContext.resume();
+        } catch (err) {
+          assistLog('audio context resume pending', { error: err.message });
+        }
+      }
+      return voiceAudioContext;
+    }
+
     async function unlockVoicePlayback() {
+      await getVoiceAudioContext();
       if (voiceUnlocked) return true;
       try {
         const audio = getSharedAudio();
@@ -826,7 +846,7 @@
         audio.volume = 1;
         audio.src = previousSrc || '';
         voiceUnlocked = true;
-        assistLog('voice unlocked', { userAgent: navigator.userAgent });
+        assistLog('voice unlocked', { userAgent: navigator.userAgent, isIOS, isMobile });
         return true;
       } catch (err) {
         assistLog('voice unlock pending', { error: err.message });
@@ -845,6 +865,10 @@
 
     function assistLog(event, detail = {}) {
       console.info(`[Gaia Assist] ${event}`, detail);
+    }
+
+    function assistError(event, err) {
+      console.error(`[Gaia Assist] ${event}`, err);
     }
 
     function resolveLocalReply(prompt, intent = 'general') {
@@ -947,6 +971,14 @@
     }
 
     function stopSpeaking() {
+      if (activeVoiceSource) {
+        try {
+          activeVoiceSource.stop(0);
+        } catch (err) {
+          assistLog('voice source stop skipped', { error: err.message });
+        }
+        activeVoiceSource = null;
+      }
       const audio = getSharedAudio();
       if (!audio.paused) {
         audio.pause();
@@ -1143,33 +1175,82 @@
       window.speechSynthesis.speak(utterance);
     }
 
-    async function playAudioElement(audioUrl, provider, voice) {
-      const audio = getSharedAudio();
-      audio.src = audioUrl;
-      audio.load();
-      audio.onplay = () => {
-        clearPendingVoice(false);
-        playButton.hidden = true;
-        playButton.classList.remove('is-pending');
-        setVoiceHint('');
-        setVoiceProvider(provider, voice);
-        status.textContent = 'Speaking...';
-        assistLog('speech started', { provider, voice, speed: selectedSpeed() });
-      };
-      audio.onended = () => {
+    async function playHostedAudio(audioUrl, provider, voice) {
+      clearPendingVoice(false);
+      playButton.hidden = true;
+      playButton.classList.remove('is-pending');
+      setVoiceHint('');
+      setVoiceProvider(provider, voice);
+      status.textContent = 'Speaking...';
+      assistLog('speech started', {
+        provider,
+        voice,
+        speed: selectedSpeed(),
+        mode: isMobile ? 'webaudio' : 'html5',
+      });
+
+      const finish = () => {
         URL.revokeObjectURL(audioUrl);
         status.textContent = 'Ready for next prompt';
         assistLog('speech ended', { provider });
       };
-      audio.onerror = () => {
-        URL.revokeObjectURL(audioUrl);
-        setVoiceProvider('browser');
-        assistError('speech error', { provider, error: 'audio playback failed' });
-      };
+
+      if (isMobile) {
+        const ctx = await getVoiceAudioContext();
+        if (!ctx) throw new Error('Web Audio unavailable');
+        if (ctx.state === 'suspended') await ctx.resume();
+        if (activeVoiceSource) {
+          try {
+            activeVoiceSource.stop(0);
+          } catch (err) {
+            assistLog('voice source stop skipped', { error: err.message });
+          }
+          activeVoiceSource = null;
+        }
+        const buffer = await fetch(audioUrl)
+          .then((res) => res.arrayBuffer())
+          .then((data) => ctx.decodeAudioData(data));
+        await new Promise((resolve, reject) => {
+          const source = ctx.createBufferSource();
+          activeVoiceSource = source;
+          source.buffer = buffer;
+          source.connect(ctx.destination);
+          source.onended = () => {
+            activeVoiceSource = null;
+            finish();
+            resolve();
+          };
+          try {
+            source.start(0);
+          } catch (err) {
+            activeVoiceSource = null;
+            reject(err);
+          }
+        });
+        return;
+      }
+
+      const audio = getSharedAudio();
+      audio.src = audioUrl;
+      audio.load();
+      await new Promise((resolve, reject) => {
+        audio.onended = () => {
+          finish();
+          resolve();
+        };
+        audio.onerror = () => {
+          finish();
+          reject(new Error('audio playback failed'));
+        };
+        audio.play().then(resolve).catch(reject);
+      });
+    }
+
+    async function playAudioElement(audioUrl, provider, voice) {
       try {
-        await audio.play();
+        await playHostedAudio(audioUrl, provider, voice);
       } catch (playError) {
-        if (window.AudioContext || window.webkitAudioContext) {
+        if (!isMobile && (window.AudioContext || window.webkitAudioContext)) {
           const AudioCtx = window.AudioContext || window.webkitAudioContext;
           const ctx = new AudioCtx();
           if (ctx.state === 'suspended') await ctx.resume();
@@ -1181,7 +1262,7 @@
             source.onended = () => {
               URL.revokeObjectURL(audioUrl);
               status.textContent = 'Ready for next prompt';
-              assistLog('speech ended', { provider, mode: 'webaudio' });
+              assistLog('speech ended', { provider, mode: 'webaudio-fallback' });
               resolve();
             };
             source.onerror = reject;
@@ -1270,10 +1351,6 @@
         const audioUrl = URL.createObjectURL(blob);
         const provider = response.headers.get('X-Gaia-Voice-Provider') || (providerSetting === 'auto' ? 'hosted' : providerSetting);
         const voice = response.headers.get('X-Gaia-Voice-Name') || '';
-        if (prefersManualVoice) {
-          showManualVoicePlayback(audioUrl, provider, voice);
-          return;
-        }
         try {
           await playAudioElement(audioUrl, provider, voice);
         } catch (playError) {
@@ -1391,8 +1468,16 @@
       }
     }
 
+    function pickRecorderMimeType() {
+      const preferred = isIOS
+        ? ['audio/mp4', 'audio/aac', 'audio/webm;codecs=opus', 'audio/webm']
+        : ['audio/webm;codecs=opus', 'audio/webm', 'audio/mp4'];
+      return preferred.find((type) => MediaRecorder.isTypeSupported(type)) || '';
+    }
+
     async function recordVoicePrompt() {
       setError('');
+      await unlockVoicePlayback();
       try {
         await ensureMicPermission();
       } catch (err) {
@@ -1409,7 +1494,7 @@
       let stream;
       try {
         stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-        const mimeType = ['audio/webm;codecs=opus', 'audio/webm', 'audio/mp4'].find((type) => MediaRecorder.isTypeSupported(type)) || '';
+        const mimeType = pickRecorderMimeType();
         const recorder = mimeType ? new MediaRecorder(stream, { mimeType }) : new MediaRecorder(stream);
         const chunks = [];
 
@@ -1422,7 +1507,7 @@
           };
           recorder.onerror = () => reject(new Error('Recording failed'));
           recorder.onstop = resolve;
-          recorder.start();
+          recorder.start(250);
           window.setTimeout(() => {
             if (recorder.state === 'recording') recorder.stop();
           }, 6500);
@@ -1479,6 +1564,7 @@
       }
 
       setError('');
+      await unlockVoicePlayback();
       try {
         await ensureMicPermission();
       } catch (err) {
@@ -1487,9 +1573,8 @@
         return;
       }
 
-      if (!SpeechRecognition) {
-        setError('Speech recognition is not available in this browser. Use the text box to test the same proxy path.');
-        assistError('speech recognition unavailable', { userAgent: navigator.userAgent });
+      if (isMobile || !SpeechRecognition) {
+        await recordVoicePrompt();
         return;
       }
 

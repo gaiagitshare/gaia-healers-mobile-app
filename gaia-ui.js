@@ -738,6 +738,18 @@
             <span class="gaia-assist__provider">Voice: browser</span>
           </div>
         </div>
+        <div class="gaia-assist__transcript">
+          <p class="gaia-assist__bubble gaia-assist__bubble--bot">Tap the mic and speak naturally. I will capture the question, stream the answer, and speak it back.</p>
+        </div>
+        <form class="gaia-assist__form">
+          <label class="gaia-assist__label" for="gaia-assist-prompt">Type a prompt</label>
+          <div class="gaia-assist__input-row">
+            <input id="gaia-assist-prompt" name="prompt" type="text" autocomplete="off" placeholder="Ask about my Elevate badge" />
+            <button type="submit">Send</button>
+          </div>
+        </form>
+        <p class="gaia-assist__error" role="alert" hidden></p>
+        <div class="gaia-assist__chips"></div>
         <details class="gaia-assist__settings">
           <summary>Voice settings</summary>
           <div class="gaia-assist__settings-grid">
@@ -757,18 +769,6 @@
             </label>
           </div>
         </details>
-        <div class="gaia-assist__transcript">
-          <p class="gaia-assist__bubble gaia-assist__bubble--bot">Tap the mic and speak naturally. I show live captions, answer as I think, then speak with Gaia voice.</p>
-        </div>
-        <form class="gaia-assist__form">
-          <label class="gaia-assist__label" for="gaia-assist-prompt">Type a prompt</label>
-          <div class="gaia-assist__input-row">
-            <input id="gaia-assist-prompt" name="prompt" type="text" autocomplete="off" placeholder="Ask about my Elevate badge" />
-            <button type="submit">Send</button>
-          </div>
-        </form>
-        <p class="gaia-assist__error" role="alert" hidden></p>
-        <div class="gaia-assist__chips"></div>
         <p class="gaia-assist__promise">${assistant.promise || 'Review before anything is saved.'}</p>
       </div>`;
 
@@ -811,9 +811,13 @@
     let activeChatController = null;
     let activeTtsController = null;
     let activeWebAudio = null;
-    const isIOS = /iPad|iPhone|iPod/i.test(navigator.userAgent)
+    const userAgent = navigator.userAgent || '';
+    const isIOS = /iPad|iPhone|iPod/i.test(userAgent)
       || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
-    const isMobileWebKit = isIOS || (/AppleWebKit/i.test(navigator.userAgent) && /Mobile/i.test(navigator.userAgent));
+    const isMobileWebKit = isIOS || (/AppleWebKit/i.test(userAgent) && /Mobile/i.test(userAgent));
+    const isIosInAppBrowser = isIOS && /(CriOS|FxiOS|EdgiOS|OPiOS|Instagram|FBAN|FBAV|Line|WhatsApp|GSA)/i.test(userAgent);
+    const preferRecorderFirst = isIOS || isIosInAppBrowser;
+    let sharedAudioCtx = null;
     let voiceUnlocked = false;
     let voiceUnlockAt = 0;
     const SILENT_WAV = 'data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQAAAAA=';
@@ -844,9 +848,26 @@
       return currentAudio;
     }
 
+    async function unlockAudioContext() {
+      const AudioCtx = window.AudioContext || window.webkitAudioContext;
+      if (!AudioCtx) return null;
+      if (!sharedAudioCtx || sharedAudioCtx.state === 'closed') {
+        sharedAudioCtx = new AudioCtx();
+      }
+      if (sharedAudioCtx.state === 'suspended') {
+        try {
+          await sharedAudioCtx.resume();
+        } catch (err) {
+          assistLog('audio context unlock pending', { error: err.message });
+        }
+      }
+      return sharedAudioCtx;
+    }
+
     async function unlockVoicePlayback(force = false) {
       if (!force && voiceUnlockIsFresh()) return true;
       try {
+        await unlockAudioContext();
         const audio = getSharedAudio();
         const previousSrc = audio.src;
         audio.src = SILENT_WAV;
@@ -858,7 +879,7 @@
         audio.volume = 1;
         audio.src = previousSrc || '';
         markVoiceUnlocked();
-        assistLog('voice unlocked', { userAgent: navigator.userAgent, forced: force });
+        assistLog('voice unlocked', { userAgent, forced: force });
         return true;
       } catch (err) {
         assistLog('voice unlock pending', { error: err.message });
@@ -1247,7 +1268,7 @@
       } catch (playError) {
         if (window.AudioContext || window.webkitAudioContext) {
           const AudioCtx = window.AudioContext || window.webkitAudioContext;
-          const ctx = new AudioCtx();
+          const ctx = await unlockAudioContext() || new AudioCtx();
           if (ctx.state === 'suspended') await ctx.resume();
           const buffer = await fetch(audioUrl).then((res) => res.arrayBuffer()).then((data) => ctx.decodeAudioData(data));
           await new Promise((resolve, reject) => {
@@ -1709,7 +1730,7 @@
 
     async function recordLiveVoice() {
       if (!window.MediaRecorder) {
-        setError('This in-app browser cannot record audio. Tap the text box and use the iPhone keyboard microphone, or open in Safari.');
+        setError('This browser blocks recording. Tap the text box and use the iPhone keyboard microphone, or open the app in Safari.');
         promptInput.focus();
         return;
       }
@@ -1745,7 +1766,7 @@
           const speechThreshold = isIOS ? 0.012 : 0.018;
           const silenceMs = isIOS ? 1400 : 1100;
 
-          setAssistVoiceState('listening', 'Recording backup…');
+          setAssistVoiceState('listening', isIOS ? 'Listening — pause or tap mic to send' : 'Recording backup…');
 
           const monitorLevel = () => {
             if (recorder.state !== 'recording') return;
@@ -1760,7 +1781,7 @@
             if (rms > speechThreshold) {
               speechDetected = true;
               silenceStart = 0;
-              if (!liveBubble) status.textContent = 'Listening…';
+              if (!liveBubble) status.textContent = isIOS ? 'Listening — pause to send' : 'Listening…';
             } else if (speechDetected) {
               if (!silenceStart) silenceStart = Date.now();
               else if (Date.now() - silenceStart >= silenceMs) {
@@ -1778,11 +1799,11 @@
           else recorder.start();
           recordStopTimer = window.setTimeout(() => {
             if (recorder.state === 'recording') stopActiveRecording();
-          }, 12000);
+          }, isIOS ? 9000 : 12000);
           monitorLevel();
           await waitForRecorderStop(recorder, isIOS ? 200 : 80);
         } else {
-          setAssistVoiceState('listening', 'Recording backup…');
+          setAssistVoiceState('listening', isIOS ? 'Listening — tap mic when done' : 'Recording backup…');
           recorder.ondataavailable = (event) => {
             if (event.data?.size) chunks.push(event.data);
           };
@@ -1790,7 +1811,7 @@
           else recorder.start();
           recordStopTimer = window.setTimeout(() => {
             if (recorder.state === 'recording') stopActiveRecording();
-          }, 6500);
+          }, isIOS ? 9000 : 6500);
           await waitForRecorderStop(recorder, isIOS ? 200 : 50);
         }
 
@@ -1810,15 +1831,15 @@
 
         const blobType = recorder.mimeType || mimeType || (isIOS ? 'audio/mp4' : 'audio/webm');
         const blob = new Blob(chunks, { type: blobType });
-        const minSize = isIOS ? 200 : 800;
+        const minSize = isIOS ? 80 : 800;
         assistLog('live recorder finished', { bytes: blob.size, type: blobType, isIOS });
         if (blob.size < minSize) {
           setAssistVoiceState('idle', 'Tap to talk');
-          setError('I could not hear enough audio. Hold the phone close, allow microphone access, or tap the text box and use iPhone dictation.');
+          setError('I could not hear enough audio. Hold the phone close, tap mic again, or use the iPhone keyboard microphone in the text box.');
           return;
         }
 
-        setAssistVoiceState('thinking', 'Thinking with Gaia…');
+        setAssistVoiceState('thinking', 'Transcribing…');
         const transcript = await transcribeAudioBlob(blob);
         if (!transcript) {
           setAssistVoiceState('idle', 'Tap to talk');
@@ -1834,7 +1855,7 @@
         assistError('voice recorder error', err);
         const message = err.name === 'NotAllowedError'
           ? 'Microphone access is blocked. In Safari, allow Microphone for this website, then try again.'
-          : `${err.message || 'Voice capture failed'}. Tap the text box and use iPhone dictation if this browser blocks recording.`;
+          : `${err.message || 'Voice capture failed'}. If this is an in-app browser, open Safari or tap the text box and use iPhone dictation.`;
         setError(message);
         promptInput.focus();
         setAssistVoiceState('idle', 'Tap to talk');
@@ -1958,7 +1979,7 @@
       clearLiveTranscript();
       await unlockVoicePlayback(true);
 
-      if (SpeechRecognition) {
+      if (SpeechRecognition && !preferRecorderFirst) {
         beginSpeechRecognition();
         return;
       }

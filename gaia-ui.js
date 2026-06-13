@@ -871,7 +871,7 @@
           </div>
           <div class="gaia-assist__headline">
             <h2>${assistant.name || 'Gaia'}</h2>
-            <p class="gaia-assist__status" data-assist-state="idle">Tap center Gaia for chat · hold to talk</p>
+            <p class="gaia-assist__status" data-assist-state="idle">Tap Gaia below to start</p>
           </div>
           <div class="gaia-assist__transcript"></div>
           <div class="gaia-assist__chips"></div>
@@ -883,7 +883,7 @@
             </div>
           </form>
           <div class="gaia-assist__toolbar">
-            <p class="gaia-assist__hint-line">Hold the green button below to speak</p>
+            <p class="gaia-assist__hint-line">Tap Gaia again to close · type or speak anytime</p>
           </div>
           <p class="gaia-assist__error" role="alert" hidden></p>
           <div class="gaia-assist__voice gaia-assist__voice--fallback" hidden aria-hidden="true">
@@ -1569,92 +1569,60 @@
       });
       if (open) {
         const voiceStatus = realtimeVoice?.status || 'idle';
-        if (voiceStatus === 'idle' || voiceStatus === 'ready') {
+        if (voiceStatus === 'idle' || voiceStatus === 'error') {
           setAssistVoiceState(voiceStatus, REALTIME_STATUS_COPY[voiceStatus] || REALTIME_STATUS_COPY.idle);
         }
       }
     }
 
     const REALTIME_STATUS_COPY = {
-      idle: 'Tap center Gaia for chat · hold to talk',
-      ready: 'Hold Gaia · release to send',
-      connecting: 'Waking up voice…',
-      holding: 'Listening — release to send',
-      listening: 'Listening — release to send',
+      idle: 'Tap Gaia below to start',
+      ready: 'Ready — speak anytime',
+      connecting: 'Starting voice…',
+      holding: 'Listening…',
+      listening: 'Listening… speak naturally',
       thinking: 'Gaia is thinking…',
       speaking: 'Gaia is speaking…',
       error: 'Voice unavailable — type your question',
     };
 
-    const HOLD_TO_TALK_MS = 280;
+    async function onAssistTap() {
+      await unlockVoicePlayback(true);
+      initRealtimeVoice();
+
+      if (!realtimeVoice) {
+        if (panel.hidden) {
+          setOpen(true);
+          setError('');
+          await startVoicePrompt();
+        } else {
+          setOpen(false);
+        }
+        return;
+      }
+
+      if (!panel.hidden) {
+        realtimeVoice.stop();
+        setOpen(false);
+        setAssistVoiceState('idle', REALTIME_STATUS_COPY.idle);
+        return;
+      }
+
+      setOpen(true);
+      setError('');
+      if (!realtimeVoice.isActive()) {
+        await realtimeVoice.start();
+      }
+    }
 
     function wireGaiaDock() {
       dockButtons().forEach((button) => {
         if (button.dataset.gaiaDockWired) return;
         button.dataset.gaiaDockWired = '1';
-
-        let holdTimer = null;
-        let voiceStarted = false;
-
-        const clearHoldTimer = () => {
-          if (holdTimer != null) {
-            window.clearTimeout(holdTimer);
-            holdTimer = null;
-          }
-        };
-
-        const startVoiceHold = async () => {
-          if (voiceStarted) return;
-          voiceStarted = true;
-          button.classList.add('is-pressed');
-          document.body.classList.add('gaia-assist--dock-pressed');
-          setOpen(true);
-          setError('');
-          await unlockVoicePlayback(true);
-          initRealtimeVoice();
-          if (!realtimeVoice) {
-            await startVoicePrompt();
-            return;
-          }
-          await realtimeVoice.holdStart();
-        };
-
-        const onPointerDown = (event) => {
-          if (event.pointerType === 'mouse' && event.button !== 0) return;
+        button.addEventListener('click', (event) => {
           event.preventDefault();
-          voiceStarted = false;
-          clearHoldTimer();
-          if (button.setPointerCapture) {
-            try { button.setPointerCapture(event.pointerId); } catch { /* ignore */ }
-          }
-          holdTimer = window.setTimeout(() => {
-            holdTimer = null;
-            void startVoiceHold();
-          }, HOLD_TO_TALK_MS);
-        };
-
-        const onPointerUp = (event) => {
-          clearHoldTimer();
-          if (button.releasePointerCapture) {
-            try { button.releasePointerCapture(event.pointerId); } catch { /* ignore */ }
-          }
-          button.classList.remove('is-pressed');
-          document.body.classList.remove('gaia-assist--dock-pressed');
-
-          if (voiceStarted || realtimeVoice?.isHolding) {
-            releaseRealtimeVoice();
-            voiceStarted = false;
-            return;
-          }
-
-          setOpen(panel.hidden);
-        };
-
-        button.addEventListener('pointerdown', onPointerDown);
-        button.addEventListener('pointerup', onPointerUp);
-        button.addEventListener('pointercancel', onPointerUp);
-        button.addEventListener('lostpointercapture', onPointerUp);
-        button.addEventListener('contextmenu', (event) => event.preventDefault());
+          void onAssistTap();
+        });
       });
       syncDockVoiceState();
     }
@@ -1737,10 +1705,6 @@
         }
       });
       assistLog('realtime voice ready');
-    }
-
-    function releaseRealtimeVoice() {
-      realtimeVoice?.holdEnd();
     }
 
     function updateLiveTranscript(text) {

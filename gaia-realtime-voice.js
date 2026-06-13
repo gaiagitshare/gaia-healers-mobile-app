@@ -355,19 +355,8 @@
           },
           inputAudioTranscription: {},
           outputAudioTranscription: {},
-          realtimeInputConfig: {
-            automaticActivityDetection: { disabled: true },
-          },
         },
       };
-    }
-
-    function sendActivityStart() {
-      return sendWs({ realtimeInput: { activityStart: {} } });
-    }
-
-    function sendActivityEnd() {
-      return sendWs({ realtimeInput: { activityEnd: {} } });
     }
 
     function sendWs(payload) {
@@ -459,12 +448,12 @@
         switch (event.kind) {
           case 'setup':
             resolveSetup();
-            setStatus(holding ? 'holding' : 'ready');
+            setStatus('listening');
             break;
           case 'interrupted':
             interruptPlayback();
             streamMessage = null;
-            setStatus(holding ? 'holding' : 'ready');
+            setStatus('listening');
             break;
           case 'audio':
             setStatus('speaking');
@@ -475,8 +464,8 @@
             break;
           case 'inputTranscription':
             upsertStreamingMessage('user', event.text, event.finished);
-            if (holding) setStatus('holding');
-            else if (event.finished) setStatus('thinking');
+            if (!event.finished) setStatus('listening');
+            else setStatus('thinking');
             break;
           case 'outputTranscription':
             upsertStreamingMessage('assistant', event.text, event.finished);
@@ -484,7 +473,7 @@
             break;
           case 'turnComplete':
             streamMessage = null;
-            setStatus(holding ? 'holding' : 'ready');
+            setStatus('listening');
             break;
           case 'error':
             setErrorMessage(event.message);
@@ -521,7 +510,8 @@
     async function start(startOptions = {}) {
       if (startPromise) return startPromise;
       if (setupDone && wsRef.current?.readyState === WebSocket.OPEN) {
-        setStatus(holding ? 'holding' : 'ready');
+        maySendAudio = true;
+        setStatus('listening');
         return;
       }
       if (!navigator.mediaDevices?.getUserMedia) {
@@ -582,7 +572,8 @@
           await waitForSetup();
           await ensurePlayback();
           await startMicStreaming();
-          setStatus(holding ? 'holding' : 'ready');
+          maySendAudio = true;
+          setStatus('listening');
 
           const maxSeconds = Number(sessionMeta.maxSessionSeconds) || 300;
           timeoutRef.current = window.setTimeout(() => {
@@ -604,50 +595,11 @@
     }
 
     async function holdStart() {
-      if (holding) return;
-      holding = true;
-      setErrorMessage(null);
-      if (!navigator.mediaDevices?.getUserMedia) {
-        holding = false;
-        setErrorMessage('Your browser does not allow microphone access here.');
-        setStatus('error');
-        return;
-      }
-
-      const wasReady = setupDone && wsRef.current?.readyState === WebSocket.OPEN;
-      if (wasReady) setStatus('holding');
-
-      try {
-        await ensureSession();
-        if (!holding) return;
-        if (!setupDone) await waitForSetup();
-        if (!holding) return;
-        interruptPlayback();
-        if (!sendActivityStart()) {
-          throw new Error('Could not start voice capture.');
-        }
-        maySendAudio = true;
-        setStatus('holding');
-      } catch (err) {
-        if (!holding) return;
-        holding = false;
-        maySendAudio = false;
-        setErrorMessage(err instanceof Error ? err.message : 'Could not start live voice.');
-        setStatus('error');
-      }
+      await start();
     }
 
     function holdEnd() {
-      if (!holding) return;
-      holding = false;
-      const wasSending = maySendAudio;
-      maySendAudio = false;
-      if (wasSending && setupDone && wsRef.current?.readyState === WebSocket.OPEN) {
-        sendActivityEnd();
-        setStatus('thinking');
-        return;
-      }
-      if (setupDone) setStatus('ready');
+      /* tap mode uses automatic voice detection */
     }
 
     function stop() {
@@ -662,7 +614,7 @@
     function cancel() {
       interruptPlayback();
       streamMessage = null;
-      setStatus(holding ? 'holding' : 'ready');
+      setStatus('listening');
     }
 
     function toggleMute() {

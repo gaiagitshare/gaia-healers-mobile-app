@@ -39,7 +39,7 @@ Event and voice-helper references added from:
 
 ## Platform facts used in UI
 
-- **1,233** Client Portal users (dashboard metric)  
+- **1,252** Client Portal users (dashboard metric)
 - **education.gaiahealers.com** — portal URL  
 - **Credentials** — new platform feature (badge in Academy/Profile)  
 - **Nima Farshid** — community owner (feed pin)  

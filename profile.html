@@ -34,14 +34,38 @@
       </section>
 
       <section class="gaia-card-dark gaia-card-pad-lg rounded-3xl">
-        <p class="text-micro text-gaia-light">Membership</p>
-        <h2 class="mt-1 text-title text-white">Full Access</h2>
-        <p class="gaia-caption mt-2 !text-white/50">Courses · Communities · Credentials</p>
+        <p class="text-micro text-gaia-light">GHL client portal</p>
+        <h2 class="mt-1 text-title text-white">Member access</h2>
+        <p class="gaia-caption mt-2 !text-white/60">Courses · Communities · Credentials · Marketplace</p>
         <div class="mt-5 flex justify-between rounded-2xl bg-white/10 px-4 py-3.5">
-          <span class="text-caption text-white/70">Network</span>
-          <span class="gaia-tabular text-headline text-white">1,233</span>
+          <span class="text-caption text-white/70">Portal users</span>
+          <span class="gaia-tabular text-headline text-white">1,252</span>
         </div>
-        <a href="admin.html" class="gaia-btn gaia-btn-ghost mt-4">Admin cockpit</a>
+        <div class="mt-3 grid grid-cols-2 gap-2">
+          <a href="https://education.gaiahealers.com/" class="gaia-btn gaia-btn-primary">Log in</a>
+          <a href="admin.html" class="gaia-btn gaia-btn-ghost">Admin</a>
+        </div>
+      </section>
+
+      <section class="gaia-card gaia-card-pad">
+        <div class="mb-4 flex items-center justify-between gap-3">
+          <div>
+            <p class="gaia-section-label !mb-1">Membership login</p>
+            <h2 class="gaia-section-title">Use GHL as identity</h2>
+          </div>
+          <span class="gaia-badge">No passwords here</span>
+        </div>
+        <p class="gaia-body">The production app should open GHL Client Portal login or request a backend-generated magic link. GitHub Pages should only receive a safe member session from the staging proxy.</p>
+        <div class="mt-4 grid gap-2">
+          <a href="https://education.gaiahealers.com/" class="gaia-row">
+            <div class="gaia-tile-icon strip-biowell">CP</div>
+            <div class="flex-1"><p class="text-headline text-ink">Open client portal</p><p class="gaia-caption">education.gaiahealers.com</p></div>
+          </a>
+          <div class="gaia-row">
+            <div class="gaia-tile-icon strip-biotekna">ML</div>
+            <div class="flex-1"><p class="text-headline text-ink">Magic-link request</p><p class="gaia-caption">Backend route needed before sending login emails</p></div>
+          </div>
+        </div>
       </section>
 
       <section class="gaia-card gaia-card-pad-lg">
@@ -103,7 +127,20 @@
 
       <section class="gaia-card-inset gaia-card-pad rounded-2xl">
         <p class="text-headline text-ink">Communities</p>
-        <p class="gaia-caption mt-1">Bio-Well · All Gaia Healers · Abundant Healer</p>
+        <p class="gaia-caption mt-1">All Gaia Healers · Bio-Well · BioPulsar · Biotekna · Healeex · Abundant Healer</p>
+        <a href="community.html" class="gaia-link mt-2 inline-block">Open discussion board</a>
+      </section>
+
+      <section class="gaia-card gaia-card-pad">
+        <div class="mb-3 flex items-center justify-between">
+          <h2 class="gaia-section-title">Newsletter</h2>
+          <span class="gaia-badge">GHL Marketing</span>
+        </div>
+        <div class="gaia-stack">
+          <label class="flex items-center justify-between rounded-2xl bg-surface-muted px-4 py-3"><span class="text-headline text-ink">Training reminders</span><input type="checkbox" checked /></label>
+          <label class="flex items-center justify-between rounded-2xl bg-surface-muted px-4 py-3"><span class="text-headline text-ink">Events + Elevate</span><input type="checkbox" checked /></label>
+          <label class="flex items-center justify-between rounded-2xl bg-surface-muted px-4 py-3"><span class="text-headline text-ink">Device offers</span><input type="checkbox" /></label>
+        </div>
       </section>
 
       <section class="gaia-card gaia-card-accent gaia-card-pad">

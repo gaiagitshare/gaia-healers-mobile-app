@@ -729,6 +729,9 @@ body[data-theme="dark"] .gaia-theme-toggle {
   font-weight: 700;
   color: #fff;
   flex-shrink: 0;
+  text-align: center;
+  line-height: 1;
+  overflow: hidden;
 }
 
 /* —— Community strips (refined) —— */
@@ -928,11 +931,39 @@ body[data-theme="dark"] .gaia-tabbar__inner a[aria-current="page"] {
 .gaia-event-ticket {
   display: flex;
   align-items: center;
+  justify-content: space-between;
   gap: 0.875rem;
   padding: 0.875rem;
   border-radius: var(--radius-md);
   background: var(--surface);
   border: 1px solid var(--border);
+}
+
+.gaia-date-pill {
+  flex-shrink: 0;
+  width: 3rem;
+  min-height: 3.25rem;
+  display: grid;
+  place-items: center;
+  border-radius: var(--radius-md);
+  background: var(--surface-muted);
+  color: var(--ink);
+  border: 1px solid var(--border);
+}
+
+.gaia-date-pill span {
+  margin-bottom: -0.3rem;
+  font-size: 1rem;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.gaia-date-pill small {
+  font-size: 0.625rem;
+  font-weight: 700;
+  line-height: 1;
+  color: var(--ink-tertiary);
+  text-transform: uppercase;
 }
 
 .gaia-qr {

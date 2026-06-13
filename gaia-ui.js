@@ -95,7 +95,16 @@
   function initCommunityTabs() {
     const bar = document.getElementById('community-tabs');
     if (!bar) return;
-    const panels = { feed: 'panel-feed', groups: 'panel-groups', events: 'panel-events', directory: 'panel-directory' };
+    const panels = {
+      feed: 'panel-discussion',
+      discussion: 'panel-discussion',
+      groups: 'panel-groups',
+      learning: 'panel-learning',
+      events: 'panel-events',
+      directory: 'panel-members',
+      members: 'panel-members',
+      newsletter: 'panel-newsletter',
+    };
     const buttons = bar.querySelectorAll('[data-tab]');
     function activate(btn) {
         const tab = btn.getAttribute('data-tab');
@@ -106,9 +115,10 @@
           b.classList.toggle('bg-surface-muted', !on);
           b.classList.toggle('text-ink-secondary', !on);
         });
-        Object.entries(panels).forEach(([k, id]) => {
+        const activePanel = panels[tab];
+        [...new Set(Object.values(panels))].forEach((id) => {
           const el = document.getElementById(id);
-          if (el) el.classList.toggle('hidden', k !== tab);
+          if (el) el.classList.toggle('hidden', id !== activePanel);
         });
     }
     buttons.forEach((btn) => {

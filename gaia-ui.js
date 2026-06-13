@@ -1462,6 +1462,91 @@
       const bubbles = transcript.querySelectorAll('.gaia-assist__bubble');
       if (bubbles.length > 7) bubbles[0].remove();
       transcript.scrollTop = transcript.scrollHeight;
+      return bubble;
+    }
+
+    function updateBubble(bubble, text) {
+      if (!bubble) return;
+      bubble.innerHTML = escapeHtml(text);
+      transcript.scrollTop = transcript.scrollHeight;
+    }
+
+    async function streamAssistantReply(base, cleanPrompt, intent, source, fromVoice) {
+      const controller = new AbortController();
+      activeChatController?.abort();
+      activeChatController = controller;
+      let botBubble = null;
+      let eventName = 'message';
+      let fullReply = '';
+      let donePayload = null;
+
+      const response = await fetch(`${base}/api/assist/chat/stream`, {
+        method: 'POST',
+        headers: {
+          Accept: 'text/event-stream',
+          'Content-Type': 'application/json',
+        },
+        credentials: 'omit',
+        signal: controller.signal,
+        body: JSON.stringify({
+          prompt: cleanPrompt,
+          intent,
+          source,
+          page: window.location.pathname.split('/').pop() || 'home.html',
+        }),
+      });
+
+      if (!response.ok || !response.body) return false;
+      assistLog('proxy stream opened', { status: response.status });
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = '';
+
+      const consumeEvent = (raw) => {
+        const line = raw.trim();
+        if (!line) return;
+        if (line.startsWith('event:')) {
+          eventName = line.slice(6).trim() || 'message';
+          return;
+        }
+        if (!line.startsWith('data:')) return;
+        const data = line.slice(5).trim();
+        if (!data) return;
+        const payload = JSON.parse(data);
+        if (eventName === 'delta') {
+          const text = payload.text || '';
+          if (!text) return;
+          if (!botBubble) botBubble = appendMessage('bot', '');
+          fullReply += text;
+          updateBubble(botBubble, fullReply);
+          setAssistVoiceState('thinking', 'Answering…');
+        } else if (eventName === 'done') {
+          donePayload = payload;
+        }
+      };
+
+      try {
+        for (;;) {
+          const { value, done } = await reader.read();
+          if (done) break;
+          buffer += decoder.decode(value, { stream: true });
+          const lines = buffer.split(/\r?\n/);
+          buffer = lines.pop() || '';
+          lines.forEach(consumeEvent);
+        }
+        if (buffer) buffer.split(/\r?\n/).forEach(consumeEvent);
+      } finally {
+        if (activeChatController === controller) activeChatController = null;
+      }
+
+      if (!fullReply && donePayload?.reply) {
+        fullReply = donePayload.reply;
+        botBubble = appendMessage('bot', fullReply);
+      }
+      if (!fullReply) return false;
+      await speakReply(fullReply, { fromVoice });
+      if (donePayload?.warning) setError(donePayload.warning);
+      return true;
     }
 
     async function deliverReply(reply, options = {}) {
@@ -1494,6 +1579,17 @@
       }
 
       assistLog('request sent to proxy', { endpoint: `${base}/api/assist/chat`, intent, source });
+
+      try {
+        const streamed = await streamAssistantReply(base, cleanPrompt, intent, source, fromVoice);
+        if (streamed) return;
+      } catch (err) {
+        if (err.name === 'AbortError') {
+          assistLog('proxy stream aborted', { intent, source });
+          return;
+        }
+        assistLog('proxy stream unavailable', { error: err.message });
+      }
 
       try {
         activeChatController?.abort();
@@ -1773,7 +1869,14 @@
         }
       };
 
-      recognition.start();
+      try {
+        recognition.start();
+      } catch (err) {
+        recognitionHandled = true;
+        recognizing = false;
+        assistLog('speech recognition start failed', { error: err.message });
+        recordLiveVoice();
+      }
     }
 
     function stopRecognition() {
@@ -1814,7 +1917,7 @@
       clearLiveTranscript();
       await unlockVoicePlayback(true);
 
-      if (SpeechRecognition && !isIOS) {
+      if (SpeechRecognition) {
         beginSpeechRecognition();
         return;
       }

@@ -154,6 +154,20 @@ function sendBuffer(res, status, buffer, contentType, origin) {
   res.end(buffer);
 }
 
+function sendSseHeaders(res, origin) {
+  res.writeHead(200, {
+    'Content-Type': 'text/event-stream; charset=utf-8',
+    'Cache-Control': 'no-store, no-transform',
+    Connection: 'keep-alive',
+    ...corsHeaders(origin),
+  });
+}
+
+function writeSse(res, event, data = {}) {
+  res.write(`event: ${event}\n`);
+  res.write(`data: ${JSON.stringify(data)}\n\n`);
+}
+
 function clampNumber(value, min, max, fallback) {
   const number = Number(value);
   if (!Number.isFinite(number)) return fallback;
@@ -404,6 +418,76 @@ async function callChatProvider(provider, prompt, context = {}) {
   };
 }
 
+async function streamChatProvider(provider, prompt, context = {}, onDelta = () => {}) {
+  const config = providerConfig(provider);
+  if (!config) {
+    return { skipped: true, reason: 'unknown-provider' };
+  }
+  if (!config.key) {
+    return { skipped: true, reason: 'missing-api-key' };
+  }
+
+  const response = await fetch(config.endpoint, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${config.key}`,
+      'Content-Type': 'application/json',
+      ...config.headers,
+    },
+    body: JSON.stringify({
+      model: config.model,
+      messages: [
+        { role: 'system', content: assistSystemPrompt() },
+        { role: 'user', content: assistUserPrompt(prompt, context) },
+      ],
+      temperature: 0.35,
+      max_tokens: 520,
+      presence_penalty: 0.1,
+      stream: true,
+    }),
+  });
+
+  if (!response.ok || !response.body) {
+    const details = await response.text();
+    throw new Error(`${provider} stream request failed with ${response.status}: ${details.slice(0, 280)}`);
+  }
+
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = '';
+  let reply = '';
+
+  for (;;) {
+    const { value, done } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+    const lines = buffer.split(/\r?\n/);
+    buffer = lines.pop() || '';
+    for (const line of lines) {
+      const trimmed = line.trim();
+      if (!trimmed.startsWith('data:')) continue;
+      const data = trimmed.slice(5).trim();
+      if (!data || data === '[DONE]') continue;
+      try {
+        const payload = JSON.parse(data);
+        const delta = payload.choices?.[0]?.delta?.content || '';
+        if (delta) {
+          reply += delta;
+          onDelta(delta);
+        }
+      } catch {
+        // Ignore malformed provider keepalive chunks.
+      }
+    }
+  }
+
+  return {
+    provider,
+    model: config.model,
+    reply: reply.trim() || fallbackAssistReply(prompt, context.intent),
+  };
+}
+
 async function callAssistProviders(prompt, context = {}) {
   const attempts = [];
   if (process.env.GAIA_ASSIST_VOICE_ENABLED !== 'true') {
@@ -484,6 +568,72 @@ async function assistChat(body) {
       generatedAt: new Date().toISOString(),
     };
   }
+}
+
+async function assistChatStream(body, res, origin) {
+  const prompt = String(body.prompt || body.transcript || '').trim();
+  if (!prompt) {
+    sendJson(res, 400, { ok: false, error: 'Prompt is required' }, origin);
+    return;
+  }
+
+  sendSseHeaders(res, origin);
+  writeSse(res, 'meta', { ok: true, source: body.source || 'stream', generatedAt: new Date().toISOString() });
+
+  const context = { intent: body.intent, page: body.page };
+  const attempts = [];
+
+  if (process.env.GAIA_ASSIST_VOICE_ENABLED !== 'true') {
+    const reply = fallbackAssistReply(prompt, body.intent);
+    writeSse(res, 'delta', { text: reply });
+    writeSse(res, 'done', { ok: true, provider: 'local-fallback', reply, attempts: [{ provider: 'assist', status: 'disabled' }] });
+    res.end();
+    return;
+  }
+
+  for (const provider of ASSIST_PROVIDER_ORDER) {
+    const started = Date.now();
+    try {
+      const result = await streamChatProvider(provider, prompt, context, (text) => {
+        writeSse(res, 'delta', { text });
+      });
+      if (result.skipped) {
+        attempts.push({ provider, status: 'skipped', reason: result.reason });
+        continue;
+      }
+      attempts.push({ provider, status: 'ok', latencyMs: Date.now() - started, model: result.model });
+      writeSse(res, 'done', {
+        ok: true,
+        provider: result.provider,
+        model: result.model,
+        reply: result.reply,
+        attempts,
+        generatedAt: new Date().toISOString(),
+      });
+      res.end();
+      return;
+    } catch (error) {
+      attempts.push({
+        provider,
+        status: 'failed',
+        latencyMs: Date.now() - started,
+        error: error.message.replace(/Bearer\s+[A-Za-z0-9._-]+/g, 'Bearer [redacted]').slice(0, 320),
+      });
+      console.error('[Gaia Assist] stream provider failed', { provider, error: error.message.split('\n')[0] });
+    }
+  }
+
+  const reply = fallbackAssistReply(prompt, body.intent);
+  writeSse(res, 'delta', { text: reply });
+  writeSse(res, 'done', {
+    ok: true,
+    provider: 'local-fallback',
+    reply,
+    warning: 'All configured assistant providers failed; showing safe local fallback.',
+    attempts,
+    generatedAt: new Date().toISOString(),
+  });
+  res.end();
 }
 
 async function assistTts(body) {
@@ -764,6 +914,11 @@ const server = http.createServer(async (req, res) => {
       const body = await readJsonBody(req);
       const payload = await assistChat({ ...body, source: body.source || 'chat' });
       sendJson(res, payload.ok === false ? 400 : 200, payload, origin);
+      return;
+    }
+    if (req.method === 'POST' && url.pathname === '/api/assist/chat/stream') {
+      const body = await readJsonBody(req);
+      await assistChatStream({ ...body, source: body.source || 'chat-stream' }, res, origin);
       return;
     }
     if (req.method === 'POST' && url.pathname === '/api/assist/voice') {

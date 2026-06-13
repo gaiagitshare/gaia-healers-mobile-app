@@ -1017,7 +1017,12 @@ body[data-theme="dark"] .gaia-profile-check {
 
 .gaia-coach p,
 .gaia-coach strong {
-  color: rgba(255, 255, 255, 0.9) !important;
+  color: inherit;
+}
+
+body.gaia-v2 .gaia-coach p,
+body.gaia-v2 .gaia-coach strong {
+  color: inherit;
 }
 
 .gaia-coach button {

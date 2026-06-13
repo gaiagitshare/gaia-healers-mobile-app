@@ -55,7 +55,7 @@
   nav.setAttribute('aria-label', 'Main');
   nav.className = 'gaia-tabbar fixed bottom-0 left-0 right-0 z-50 px-4 pointer-events-none';
   nav.style.paddingBottom = 'max(0.75rem, env(safe-area-inset-bottom))';
-  nav.innerHTML = '<div class="gaia-tabbar__inner mx-auto flex max-w-md items-end justify-between gap-1 rounded-2xl bg-white/90 px-1 py-1.5 shadow-[0_4px_24px_rgba(0,0,0,0.08),0_0_0_1px_rgba(0,0,0,0.04)] backdrop-blur-xl pointer-events-auto"></div>';
+  nav.innerHTML = '<div class="gaia-tabbar__inner mx-auto flex max-w-md items-end justify-between gap-1 rounded-2xl px-1 py-1.5 backdrop-blur-xl pointer-events-auto"></div>';
 
   document.body.appendChild(nav);
   document.body.classList.add('gaia-has-tabbar');

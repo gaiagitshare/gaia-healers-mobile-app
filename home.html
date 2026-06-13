@@ -3,7 +3,24 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <meta name="color-scheme" content="light dark" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+  <meta name="theme-color" content="#eef4ea" />
   <title>Gaia Healers App</title>
+  <script>
+    (function () {
+      try {
+        var saved = localStorage.getItem('gaia-theme');
+        var theme = saved
+          || (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+        document.documentElement.dataset.theme = theme;
+        document.documentElement.style.colorScheme = theme;
+        var meta = document.querySelector('meta[name="theme-color"]');
+        if (meta) meta.content = theme === 'dark' ? '#060908' : '#eef4ea';
+      } catch (e) { /* ignore */ }
+    })();
+  </script>
   <script src="https://cdn.tailwindcss.com"></script>
   <script src="gaia-config.js"></script>
   <script src="gaia-ecosystem.js"></script>
@@ -15,7 +32,7 @@
   <link rel="stylesheet" href="gaia-shared.css" />
   <link rel="stylesheet" href="gaia-ui-v2.css" />
 </head>
-<body class="gaia-app gaia-page gaia-single-app gaia-v2" data-theme="dark">
+<body class="gaia-app gaia-page gaia-single-app gaia-v2">
   <svg width="0" height="0" aria-hidden="true"><defs><linearGradient id="gaia-ring-gradient" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="#7DD956"/><stop offset="100%" stop-color="#449422"/></linearGradient></defs></svg>
   <div class="gaia-shell" id="gaia-app-shell">
     <section class="gaia-screen is-active" data-screen="today" aria-label="Today">
@@ -47,7 +64,7 @@
           <a href="home.html?view=wellness&tab=biowell" class="gaia-bento__tile gaia-bento__tile--wide">
             <div class="gaia-score-ring gaia-score-ring--sm shrink-0">
               <svg class="gaia-score-ring__svg" viewBox="0 0 100 100"><circle class="gaia-score-ring__track" cx="50" cy="50" r="42"/><circle class="gaia-score-ring__progress" cx="50" cy="50" r="42"/></svg>
-              <div class="gaia-score-ring__center"><span class="gaia-score-ring__value !text-white">87</span></div>
+              <div class="gaia-score-ring__center"><span class="gaia-score-ring__value">87</span></div>
             </div>
             <div class="min-w-0">
               <p class="gaia-bento__label">Wellness</p>
@@ -110,7 +127,9 @@
         <p class="gaia-eyebrow">Bio-Well · energy map</p>
         <div class="mt-1 flex items-start justify-between gap-3">
           <h1 class="gaia-page-title">Wellness</h1>
-          <span class="gaia-badge shrink-0" data-wellness-badge>Connected</span>
+          <div class="gaia-header-actions" data-gaia-header-actions>
+            <span class="gaia-badge shrink-0" data-wellness-badge>Connected</span>
+          </div>
         </div>
         <p class="gaia-caption mt-1">Scans, biofield trends, and seven body-point scores</p>
         <div id="wellness-tabs" class="mt-4 flex gap-2 overflow-x-auto hide-scrollbar" role="tablist" aria-label="Wellness views">

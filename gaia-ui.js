@@ -222,31 +222,66 @@
 
   function initTheme() {
     if (!document.body.classList.contains('gaia-page') && !document.body.classList.contains('gaia-app')) return;
-    const saved = localStorage.getItem(THEME_KEY);
-    const prefersDark = window.matchMedia?.('(prefers-color-scheme: dark)').matches;
-    const initial = saved || (prefersDark ? 'dark' : 'light');
+
+    function themeColorFor(theme) {
+      return theme === 'dark' ? '#060908' : '#eef4ea';
+    }
+
+    function updateThemeColorMeta(theme) {
+      let meta = document.querySelector('meta[name="theme-color"]:not([media])');
+      if (!meta) {
+        meta = document.createElement('meta');
+        meta.name = 'theme-color';
+        document.head.appendChild(meta);
+      }
+      meta.content = themeColorFor(theme);
+    }
+
+    function renderToggleIcon(button, theme) {
+      button.setAttribute('aria-label', theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode');
+      button.setAttribute('aria-pressed', String(theme === 'dark'));
+      button.innerHTML = theme === 'dark'
+        ? '<svg aria-hidden="true" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8"><path stroke-linecap="round" stroke-linejoin="round" d="M12 3v2.25m0 13.5V21m9-9h-2.25M5.25 12H3m15.364 6.364-1.591-1.591M7.227 7.227 5.636 5.636m12.728 0-1.591 1.591M7.227 16.773l-1.591 1.591M15.75 12a3.75 3.75 0 1 1-7.5 0 3.75 3.75 0 0 1 7.5 0Z"/></svg>'
+        : '<svg aria-hidden="true" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8"><path stroke-linecap="round" stroke-linejoin="round" d="M21.752 15.002A9.718 9.718 0 0 1 18 15.75c-5.385 0-9.75-4.365-9.75-9.75 0-1.33.266-2.597.748-3.752A9.753 9.753 0 0 0 3 11.25C3 16.635 7.365 21 12.75 21a9.753 9.753 0 0 0 9.002-5.998Z"/></svg>';
+    }
 
     function apply(theme) {
-      document.body.dataset.theme = theme;
-      localStorage.setItem(THEME_KEY, theme);
+      const next = theme === 'dark' ? 'dark' : 'light';
+      document.documentElement.dataset.theme = next;
+      document.body.dataset.theme = next;
+      document.documentElement.style.colorScheme = next;
+      localStorage.setItem(THEME_KEY, next);
+      updateThemeColorMeta(next);
+      const appleMeta = document.querySelector('meta[name="apple-mobile-web-app-status-bar-style"]');
+      if (appleMeta) appleMeta.content = next === 'dark' ? 'black-translucent' : 'default';
       document.querySelectorAll('.gaia-theme-toggle').forEach((button) => {
-        button.setAttribute('aria-label', theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode');
-        button.innerHTML = theme === 'dark'
-          ? '<svg aria-hidden="true" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8"><path stroke-linecap="round" stroke-linejoin="round" d="M12 3v2.25m0 13.5V21m9-9h-2.25M5.25 12H3m15.364 6.364-1.591-1.591M7.227 7.227 5.636 5.636m12.728 0-1.591 1.591M7.227 16.773l-1.591 1.591M15.75 12a3.75 3.75 0 1 1-7.5 0 3.75 3.75 0 0 1 7.5 0Z"/></svg>'
-          : '<svg aria-hidden="true" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8"><path stroke-linecap="round" stroke-linejoin="round" d="M21.752 15.002A9.718 9.718 0 0 1 18 15.75c-5.385 0-9.75-4.365-9.75-9.75 0-1.33.266-2.597.748-3.752A9.753 9.753 0 0 0 3 11.25C3 16.635 7.365 21 12.75 21a9.753 9.753 0 0 0 9.002-5.998Z"/></svg>';
+        renderToggleIcon(button, next);
       });
     }
 
-    document.querySelectorAll('[data-gaia-header-actions]').forEach((slot) => {
-      if (slot.querySelector('.gaia-theme-toggle')) return;
-      const button = document.createElement('button');
-      button.type = 'button';
-      button.className = 'gaia-theme-toggle';
-      button.addEventListener('click', () => apply(document.body.dataset.theme === 'dark' ? 'light' : 'dark'));
-      slot.insertBefore(button, slot.firstChild);
+    function wireThemeToggles() {
+      document.querySelectorAll('[data-gaia-header-actions]').forEach((slot) => {
+        if (slot.querySelector('.gaia-theme-toggle')) return;
+        const button = document.createElement('button');
+        button.type = 'button';
+        button.className = 'gaia-theme-toggle';
+        button.addEventListener('click', () => {
+          apply(document.body.dataset.theme === 'dark' ? 'light' : 'dark');
+        });
+        slot.insertBefore(button, slot.firstChild);
+      });
+      document.body.querySelector(':scope > .gaia-theme-toggle')?.remove();
+    }
+
+    const saved = localStorage.getItem(THEME_KEY);
+    const prefersDark = window.matchMedia?.('(prefers-color-scheme: dark)').matches;
+    wireThemeToggles();
+    apply(saved || (prefersDark ? 'dark' : 'light'));
+
+    window.matchMedia?.('(prefers-color-scheme: dark)').addEventListener('change', (event) => {
+      if (localStorage.getItem(THEME_KEY)) return;
+      apply(event.matches ? 'dark' : 'light');
     });
-    document.body.querySelector(':scope > .gaia-theme-toggle')?.remove();
-    apply(initial);
   }
 
   function layoutChakraNodes(root, chakras) {

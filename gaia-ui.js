@@ -847,8 +847,78 @@
       console.info(`[Gaia Assist] ${event}`, detail);
     }
 
-    function assistError(event, err) {
-      console.error(`[Gaia Assist] ${event}`, err);
+    function resolveLocalReply(prompt, intent = 'general') {
+      const responses = assistant.responses || {};
+      const intentReplies = {
+        event: responses.event,
+        devices: responses.scan,
+        scan: responses.scan,
+        biowell: responses.scan,
+        chakra: responses.scan,
+        academy: responses.academy,
+        ghl: responses.ghl,
+        services: responses.event,
+        voice: responses.scan,
+        general: null,
+      };
+      if (intentReplies[intent]) return intentReplies[intent];
+
+      const normalized = `${intent} ${prompt}`.toLowerCase();
+      if (/service|what do you do|device|bio-well|biowell|scan|chakra|energy/.test(normalized)) {
+        return responses.scan || responses.event || 'Gaia Healers connects Bio-Well, certification, communities, and Elevate event operations.';
+      }
+      if (/badge|elevate|event|check-in/.test(normalized)) {
+        return responses.event || 'I can help prepare your Elevate badge flow and check QR status in review mode.';
+      }
+      if (/course|academy|certification|module|exam/.test(normalized)) {
+        return responses.academy || 'You are progressing through Advanced Level 1. I can point to the next module and practicum requirement.';
+      }
+      if (/ghl|follow-up|crm|registration/.test(normalized)) {
+        return responses.ghl || 'GHL handles registration and tickets. I can draft follow-up copy for your review before anything is sent.';
+      }
+      return responses.scan || 'Gaia Assist is ready. Ask about Bio-Well scans, Academy progress, Elevate badges, or GHL follow-up.';
+    }
+
+    function ensureBrowserVoices() {
+      return new Promise((resolve) => {
+        browserVoices = window.speechSynthesis?.getVoices?.() || [];
+        if (browserVoices.length) {
+          resolve(browserVoices);
+          return;
+        }
+        const finish = () => {
+          browserVoices = window.speechSynthesis?.getVoices?.() || [];
+          resolve(browserVoices);
+        };
+        window.speechSynthesis?.addEventListener?.('voiceschanged', finish, { once: true });
+        setTimeout(finish, 300);
+      });
+    }
+
+    function blobToBase64(blob) {
+      return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(String(reader.result || '').split(',')[1] || '');
+        reader.onerror = reject;
+        reader.readAsDataURL(blob);
+      });
+    }
+
+    async function transcribeAudioBlob(blob) {
+      const base = proxyBase();
+      if (!base) throw new Error('Proxy unavailable for transcription');
+      const audioBase64 = await blobToBase64(blob);
+      const response = await fetch(`${base}/api/assist/transcribe`, {
+        method: 'POST',
+        headers: { Accept: 'application/json', 'Content-Type': 'application/json' },
+        credentials: 'omit',
+        body: JSON.stringify({ audioBase64, mimeType: blob.type || 'audio/webm' }),
+      });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok || payload.ok === false) {
+        throw new Error(payload.error || `Transcription returned ${response.status}`);
+      }
+      return String(payload.transcript || '').trim();
     }
 
     function escapeHtml(value) {
@@ -1010,12 +1080,15 @@
 
     function initVoiceSettings() {
       const savedProvider = localStorage.getItem(VOICE_PROVIDER_KEY);
-      voiceProviderSelect.value = savedProvider && savedProvider !== 'browser' ? savedProvider : 'auto';
+      const tts = ttsConfig();
+      const defaultProvider = tts.configured ? (savedProvider && savedProvider !== 'browser' ? savedProvider : 'auto') : 'browser';
+      voiceProviderSelect.value = defaultProvider;
       localStorage.setItem(VOICE_PROVIDER_KEY, voiceProviderSelect.value);
       voiceSpeed.value = localStorage.getItem(VOICE_SPEED_KEY) || '1';
       voiceSpeedLabel.textContent = `${Number(voiceSpeed.value).toFixed(2)}x`;
       refreshVoiceOptions();
       window.speechSynthesis?.addEventListener?.('voiceschanged', refreshBrowserVoicesOnly);
+      ensureBrowserVoices().then(refreshBrowserVoicesOnly);
       configureVoiceFromBootstrap();
     }
 
@@ -1024,30 +1097,43 @@
       return browserVoices.find((voice) => voice.name === selected) || bestBrowserVoice();
     }
 
-    function speakWithBrowser(text) {
+    async function speakWithBrowser(text) {
       if (!window.speechSynthesis || !window.SpeechSynthesisUtterance) {
         setVoiceProvider('browser');
         setError('This browser cannot speak responses aloud. You can still read the reply.');
         assistError('speech error', { provider: 'browser', error: 'speechSynthesis unavailable' });
         return;
       }
+      await ensureBrowserVoices();
       window.speechSynthesis.cancel();
       const utterance = new SpeechSynthesisUtterance(text);
       const voice = selectedBrowserVoice();
       if (voice) utterance.voice = voice;
-      utterance.lang = 'en-US';
+      utterance.lang = voice?.lang || 'en-US';
       utterance.rate = selectedSpeed();
       utterance.pitch = 1;
+      let resumeTimer = null;
       utterance.onstart = () => {
         setVoiceProvider('browser', voice?.name || 'system');
         status.textContent = 'Speaking...';
         assistLog('speech started', { provider: 'browser', voice: voice?.name || 'system', speed: selectedSpeed() });
+        resumeTimer = window.setInterval(() => {
+          if (!window.speechSynthesis.speaking) {
+            window.clearInterval(resumeTimer);
+            resumeTimer = null;
+            return;
+          }
+          window.speechSynthesis.pause();
+          window.speechSynthesis.resume();
+        }, 8000);
       };
       utterance.onend = () => {
+        if (resumeTimer) window.clearInterval(resumeTimer);
         status.textContent = 'Ready for next prompt';
         assistLog('speech ended', { provider: 'browser' });
       };
       utterance.onerror = (event) => {
+        if (resumeTimer) window.clearInterval(resumeTimer);
         setVoiceProvider('browser');
         setError(`Speech failed: ${event.error || 'browser speech error'}`);
         assistError('speech error', { provider: 'browser', error: event.error });
@@ -1151,13 +1237,14 @@
       stopSpeaking();
       await unlockVoicePlayback();
       const providerSetting = selectedProvider();
-      if (providerSetting === 'browser') {
-        speakWithBrowser(cleanText);
+      const tts = ttsConfig();
+      if (providerSetting === 'browser' || !tts.configured) {
+        await speakWithBrowser(cleanText);
         return;
       }
       const base = proxyBase();
       if (!base) {
-        speakWithBrowser(cleanText);
+        await speakWithBrowser(cleanText);
         return;
       }
 
@@ -1195,7 +1282,7 @@
       } catch (err) {
         setVoiceProvider('browser');
         assistError('speech error', { provider: providerSetting, error: err.message });
-        speakWithBrowser(cleanText);
+        await speakWithBrowser(cleanText);
       }
     }
 
@@ -1242,23 +1329,32 @@
       transcript.scrollTop = transcript.scrollHeight;
     }
 
+    async function deliverReply(reply, options = {}) {
+      appendMessage('bot', reply);
+      await speakReply(reply);
+      if (options.warning) setError(options.warning);
+    }
+
     async function sendPrompt(prompt, intent = 'general', source = 'text') {
       const cleanPrompt = String(prompt || '').trim();
       if (!cleanPrompt) {
         setError('Type or speak a prompt first.');
         return;
       }
-      unlockVoicePlayback();
+      await unlockVoicePlayback();
+      setError('');
+      appendMessage('user', cleanPrompt);
+      setBusy(true, source === 'voice' || source === 'voice-recorder' ? 'Processing voice...' : 'Thinking...');
+
       const base = proxyBase();
       if (!base) {
-        setError('Gaia Assist could not find the staging proxy URL.');
-        assistError('proxy missing', { prompt: cleanPrompt, intent, source });
+        const reply = resolveLocalReply(cleanPrompt, intent);
+        assistLog('local reply (no proxy)', { intent, source });
+        await deliverReply(reply);
+        setBusy(false);
         return;
       }
 
-      setError('');
-      appendMessage('user', cleanPrompt);
-      setBusy(true, 'Sending to Gaia proxy...');
       assistLog('request sent to proxy', { endpoint: `${base}/api/assist/chat`, intent, source });
 
       try {
@@ -1281,19 +1377,80 @@
         if (!response.ok || payload.ok === false) {
           throw new Error(payload.error || `Proxy returned ${response.status}`);
         }
-        if (payload.warning) {
-          setError(payload.warning);
-          assistLog('OpenAI/voice warning', { warning: payload.warning, provider: payload.provider });
-        }
-        const reply = payload.reply || 'Gaia Assist received the prompt but did not return a message.';
-        appendMessage('bot', reply);
-        await speakReply(reply);
+        const reply = payload.reply || resolveLocalReply(cleanPrompt, intent);
+        await deliverReply(reply, { warning: payload.warning || '' });
       } catch (err) {
         assistError('OpenAI/voice error', err);
-        setError(err.message || 'Gaia Assist could not reach the proxy.');
-        appendMessage('bot', 'I could not complete that request. The proxy or voice backend returned an error, and no data was changed.');
+        const reply = resolveLocalReply(cleanPrompt, intent);
+        await deliverReply(reply, {
+          warning: 'Proxy unavailable — using local Gaia voice responses.',
+        });
       } finally {
         setBusy(false);
+      }
+    }
+
+    async function recordVoicePrompt() {
+      setError('');
+      try {
+        await ensureMicPermission();
+      } catch (err) {
+        assistError('mic permission error', err);
+        setError('Microphone permission was blocked. Allow microphone access, or type your prompt below.');
+        return;
+      }
+
+      if (!window.MediaRecorder) {
+        setError('Voice recording is not supported here. Type your prompt below.');
+        return;
+      }
+
+      let stream;
+      try {
+        stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        const mimeType = ['audio/webm;codecs=opus', 'audio/webm', 'audio/mp4'].find((type) => MediaRecorder.isTypeSupported(type)) || '';
+        const recorder = mimeType ? new MediaRecorder(stream, { mimeType }) : new MediaRecorder(stream);
+        const chunks = [];
+
+        root.classList.add('gaia-assist--listening');
+        status.textContent = 'Recording... speak now';
+
+        await new Promise((resolve, reject) => {
+          recorder.ondataavailable = (event) => {
+            if (event.data?.size) chunks.push(event.data);
+          };
+          recorder.onerror = () => reject(new Error('Recording failed'));
+          recorder.onstop = resolve;
+          recorder.start();
+          window.setTimeout(() => {
+            if (recorder.state === 'recording') recorder.stop();
+          }, 6500);
+        });
+
+        stream.getTracks().forEach((track) => track.stop());
+        root.classList.remove('gaia-assist--listening');
+
+        const blob = new Blob(chunks, { type: recorder.mimeType || mimeType || 'audio/webm' });
+        if (blob.size < 800) {
+          status.textContent = 'No speech captured';
+          setError('No speech captured. Try again or type your prompt below.');
+          return;
+        }
+
+        status.textContent = 'Transcribing...';
+        const transcript = await transcribeAudioBlob(blob);
+        if (!transcript) {
+          status.textContent = 'No speech captured';
+          setError('Could not understand that recording. Try again or type your prompt below.');
+          return;
+        }
+        await sendPrompt(transcript, 'voice', 'voice-recorder');
+      } catch (err) {
+        root.classList.remove('gaia-assist--listening');
+        stream?.getTracks?.().forEach((track) => track.stop());
+        assistError('voice recorder error', err);
+        setError(`${err.message || 'Voice capture failed'}. Type your prompt below.`);
+        status.textContent = 'Tap to speak';
       }
     }
 
@@ -1341,6 +1498,7 @@
       recognition.continuous = false;
 
       let finalTranscript = '';
+      let recognitionHandled = false;
       recognition.onstart = () => {
         recognizing = true;
         root.classList.add('gaia-assist--listening');
@@ -1359,9 +1517,18 @@
       };
       recognition.onerror = (event) => {
         assistError('OpenAI/voice error', { type: 'speech-recognition', error: event.error });
+        if (event.error === 'network' || event.error === 'service-not-allowed' || event.error === 'aborted') {
+          recognitionHandled = true;
+          recognizing = false;
+          root.classList.remove('gaia-assist--listening');
+          status.textContent = 'Switching to recorder...';
+          recordVoicePrompt();
+          return;
+        }
         setError(`Voice capture failed: ${event.error}. You can type the same prompt below.`);
       };
       recognition.onend = () => {
+        if (recognitionHandled) return;
         recognizing = false;
         root.classList.remove('gaia-assist--listening');
         assistLog('recording stopped', { hasTranscript: Boolean(finalTranscript) });

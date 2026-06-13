@@ -184,12 +184,12 @@ async function fetchJson(url, headers = {}) {
   return response.json();
 }
 
-async function readJsonBody(req) {
+async function readJsonBody(req, maxBytes = 1024 * 1024) {
   const chunks = [];
   let size = 0;
   for await (const chunk of req) {
     size += chunk.length;
-    if (size > 1024 * 1024) {
+    if (size > maxBytes) {
       throw new Error('Request body is too large');
     }
     chunks.push(chunk);
@@ -632,6 +632,47 @@ async function openAiCompatibleTts({ endpoint, apiKey, model, voice, text, speed
   return { ok: true, provider, model, voice, audio };
 }
 
+async function assistTranscribe(body) {
+  const audioBase64 = String(body.audioBase64 || '').trim();
+  if (!audioBase64) {
+    return { ok: false, status: 400, error: 'audioBase64 is required' };
+  }
+  if (audioBase64.length > 3 * 1024 * 1024) {
+    return { ok: false, status: 413, error: 'Audio payload is too large' };
+  }
+  if (!process.env.OPENAI_API_KEY) {
+    return { ok: false, status: 503, error: 'Whisper transcription is not configured on the proxy' };
+  }
+
+  const mimeType = String(body.mimeType || 'audio/webm').trim() || 'audio/webm';
+  const extension = mimeType.includes('mp4') ? 'voice.m4a' : 'voice.webm';
+  const audioBuffer = Buffer.from(audioBase64, 'base64');
+  const form = new FormData();
+  form.append('file', new Blob([audioBuffer], { type: mimeType }), extension);
+  form.append('model', process.env.OPENAI_TRANSCRIBE_MODEL || 'whisper-1');
+  form.append('language', 'en');
+
+  const response = await fetch('https://api.openai.com/v1/audio/transcriptions', {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${process.env.OPENAI_API_KEY}` },
+    body: form,
+  });
+
+  if (!response.ok) {
+    const details = await response.text();
+    throw new Error(`Whisper transcription failed with ${response.status}: ${details.slice(0, 280)}`);
+  }
+
+  const payload = await response.json();
+  const transcript = String(payload.text || '').trim();
+  return {
+    ok: true,
+    transcript,
+    provider: 'openai-whisper',
+    model: process.env.OPENAI_TRANSCRIBE_MODEL || 'whisper-1',
+  };
+}
+
 async function listHostedVoices() {
   if (!process.env.ELEVENLABS_API_KEY) {
     return {
@@ -705,6 +746,17 @@ const server = http.createServer(async (req, res) => {
       }
       const payload = await assistChat({ ...body, prompt: transcript, transcript, source: body.source || 'voice' });
       sendJson(res, payload.ok === false ? 400 : 200, payload, origin);
+      return;
+    }
+    if (req.method === 'POST' && url.pathname === '/api/assist/transcribe') {
+      const body = await readJsonBody(req, 3 * 1024 * 1024);
+      try {
+        const payload = await assistTranscribe(body);
+        sendJson(res, payload.ok === false ? (payload.status || 503) : 200, payload, origin);
+      } catch (error) {
+        console.error('[Gaia Assist] transcription failed', { error: error.message.split('\n')[0] });
+        sendJson(res, 503, { ok: false, error: error.message }, origin);
+      }
       return;
     }
     if (req.method === 'GET' && url.pathname === '/api/assist/voices') {

@@ -252,46 +252,57 @@
     const chakras = window.GAIA_CHAKRAS || [];
     if (!chakras.length) return;
 
+    const silhouetteSvg = `<svg class="gaia-chakra-map__silhouette" viewBox="0 0 88 200" aria-hidden="true" focusable="false">
+      <ellipse cx="44" cy="22" rx="14" ry="16" fill="currentColor" opacity="0.92"/>
+      <path d="M30 38 Q44 34 58 38 L54 118 Q44 124 34 118 Z" fill="currentColor" opacity="0.88"/>
+      <path d="M22 118 Q44 128 66 118 L62 168 Q44 182 26 168 Z" fill="currentColor" opacity="0.82"/>
+      <path d="M28 168 Q44 176 60 168 L56 188 Q44 194 32 188 Z" fill="currentColor" opacity="0.78"/>
+    </svg>`;
+
     document.querySelectorAll('[data-chakra-map]').forEach((root) => {
       const compact = root.classList.contains('gaia-chakra-map--biowell');
       let active = chakras.find((item) => item.id === root.dataset.chakraFocus) || chakras[0];
+      const ordered = [...chakras].reverse();
 
       const render = () => {
+        const listItems = (compact ? ordered.slice(0, 5) : ordered).map((item) => `
+          <button type="button" class="gaia-chakra-map__list-item${item.id === active.id ? ' is-active' : ''}"
+            style="--chakra-color:${item.color}" data-chakra-id="${item.id}"
+            aria-selected="${item.id === active.id}">
+            <span class="gaia-chakra-map__list-dot" aria-hidden="true"></span>
+            <span class="gaia-chakra-map__list-label">
+              <span class="gaia-chakra-map__list-name">${item.name}</span>
+              <span class="gaia-chakra-map__list-theme">${item.theme || item.element}</span>
+            </span>
+            <span class="gaia-chakra-map__list-track"><i style="width:${item.score}%"></i></span>
+            <span class="gaia-chakra-map__list-score gaia-tabular">${item.score}</span>
+          </button>`).join('');
+
         root.innerHTML = `
-          <div class="gaia-chakra-map__figure" aria-hidden="false">
-            ${chakras.map((item) => `
-              <button type="button" class="gaia-chakra-map__node${item.id === active.id ? ' is-active' : ''}"
-                style="top:${item.top}%;left:${item.left}%;--chakra-color:${item.color}"
-                data-chakra-id="${item.id}" aria-label="${item.name} chakra, score ${item.score}">
-                <span></span>
-              </button>`).join('')}
-          </div>
-          <div class="gaia-chakra-map__detail">
-            <p class="gaia-chakra-map__name">${active.name} <span>${active.sanskrit}</span></p>
-            <p class="gaia-chakra-map__score gaia-tabular">${active.score} · ${active.element}</p>
-            <p class="gaia-caption">${active.location}</p>
-            <p class="gaia-body">${active.focus}</p>
-            <div class="gaia-chakra-map__actions">
-              <a href="${active.learnHref}" class="gaia-link">Learn more</a>
-              <button type="button" class="gaia-link" data-chakra-assist>Ask Gaia</button>
+          <div class="gaia-chakra-map__layout${compact ? ' gaia-chakra-map__layout--compact' : ''}">
+            <div class="gaia-chakra-map__figure" aria-hidden="false">
+              ${silhouetteSvg}
+              ${chakras.map((item) => `
+                <button type="button" class="gaia-chakra-map__node${item.id === active.id ? ' is-active' : ''}"
+                  style="top:${item.top}%;left:${item.left}%;--chakra-color:${item.color}"
+                  data-chakra-id="${item.id}" aria-label="${item.name} chakra, score ${item.score}">
+                  <span></span>
+                </button>`).join('')}
             </div>
-          </div>
-          ${compact ? '' : `<div class="gaia-chakra-map__bars">
-            ${[...chakras].reverse().map((item) => `
-              <button type="button" class="gaia-chakra-map__bar${item.id === active.id ? ' is-active' : ''}" data-chakra-id="${item.id}">
-                <span>${item.name}</span>
-                <span class="gaia-chakra-map__bar-track"><i style="width:${item.score}%;background:${item.color}"></i></span>
-                <span class="gaia-tabular">${item.score}</span>
-              </button>`).join('')}
-          </div>`}
-          ${compact ? `<div class="gaia-chakra-map__bars gaia-chakra-map__bars--compact">
-            ${chakras.slice(0, 4).map((item) => `
-              <button type="button" class="gaia-chakra-map__bar${item.id === active.id ? ' is-active' : ''}" data-chakra-id="${item.id}">
-                <span>${item.name}</span>
-                <span class="gaia-chakra-map__bar-track"><i style="width:${item.score}%;background:${item.color}"></i></span>
-                <span class="gaia-tabular">${item.score}</span>
-              </button>`).join('')}
-          </div>` : ''}`;
+            <div class="gaia-chakra-map__list" role="listbox" aria-label="Chakra scores">${listItems}</div>
+            <div class="gaia-chakra-map__detail">
+              <div class="gaia-chakra-map__detail-main">
+                <p class="gaia-chakra-map__name">${active.name} <span>${active.sanskrit}</span></p>
+                <p class="gaia-chakra-map__score gaia-tabular">${active.score} · ${active.element}</p>
+                <p class="gaia-caption">${active.location}</p>
+                <p class="gaia-chakra-map__focus">${active.focus}</p>
+              </div>
+              <div class="gaia-chakra-map__actions">
+                <a href="${active.learnHref}" class="gaia-link">Learn more</a>
+                <button type="button" class="gaia-link" data-chakra-assist>Ask Gaia</button>
+              </div>
+            </div>
+          </div>`;
 
         root.querySelectorAll('[data-chakra-id]').forEach((button) => {
           button.addEventListener('click', () => {
@@ -300,7 +311,7 @@
           });
         });
         root.querySelector('[data-chakra-assist]')?.addEventListener('click', () => {
-          window.dispatchEvent(new CustomEvent('gaia:open-assist', { detail: { prompt: active.assistPrompt } }));
+          window.dispatchEvent(new CustomEvent('gaia:open-assist', { detail: { prompt: active.assistPrompt, speak: true } }));
         });
       };
 
@@ -707,6 +718,40 @@
     let currentAudio = null;
     let pendingVoice = null;
     let browserVoices = [];
+    let voiceUnlocked = false;
+    const SILENT_WAV = 'data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQAAAAA=';
+
+    function getSharedAudio() {
+      if (!currentAudio) {
+        currentAudio = new Audio();
+        currentAudio.preload = 'auto';
+        currentAudio.setAttribute('playsinline', '');
+        currentAudio.setAttribute('webkit-playsinline', '');
+      }
+      return currentAudio;
+    }
+
+    async function unlockVoicePlayback() {
+      if (voiceUnlocked) return true;
+      try {
+        const audio = getSharedAudio();
+        const previousSrc = audio.src;
+        audio.src = SILENT_WAV;
+        audio.volume = 0.001;
+        audio.muted = false;
+        await audio.play();
+        audio.pause();
+        audio.currentTime = 0;
+        audio.volume = 1;
+        audio.src = previousSrc || '';
+        voiceUnlocked = true;
+        assistLog('voice unlocked', { userAgent: navigator.userAgent });
+        return true;
+      } catch (err) {
+        assistLog('voice unlock pending', { error: err.message });
+        return false;
+      }
+    }
 
     const suggestionMap = [
       { label: 'Gaia services', reply: assistant.responses?.event, intent: 'services' },
@@ -747,13 +792,14 @@
       if (revoke && pendingVoice?.url) URL.revokeObjectURL(pendingVoice.url);
       pendingVoice = null;
       playButton.hidden = true;
+      playButton.classList.remove('is-pending');
     }
 
     function stopSpeaking() {
-      if (currentAudio) {
-        currentAudio.pause();
-        currentAudio.currentTime = 0;
-        currentAudio = null;
+      const audio = getSharedAudio();
+      if (!audio.paused) {
+        audio.pause();
+        audio.currentTime = 0;
       }
       if (window.speechSynthesis?.speaking || window.speechSynthesis?.pending) {
         window.speechSynthesis.cancel();
@@ -858,41 +904,57 @@
       window.speechSynthesis.speak(utterance);
     }
 
-    async function playAudioElement(audio, provider, voice, audioUrl) {
-      currentAudio = audio;
-      currentAudio.onplay = () => {
+    async function playAudioElement(audioUrl, provider, voice) {
+      const audio = getSharedAudio();
+      audio.src = audioUrl;
+      audio.onplay = () => {
         clearPendingVoice(false);
+        playButton.hidden = true;
+        playButton.classList.remove('is-pending');
+        setVoiceHint('');
         setVoiceProvider(provider, voice);
         status.textContent = 'Speaking...';
         assistLog('speech started', { provider, voice, speed: selectedSpeed() });
       };
-      currentAudio.onended = () => {
+      audio.onended = () => {
         URL.revokeObjectURL(audioUrl);
-        currentAudio = null;
         status.textContent = 'Ready for next prompt';
         assistLog('speech ended', { provider });
       };
-      currentAudio.onerror = () => {
+      audio.onerror = () => {
         URL.revokeObjectURL(audioUrl);
-        currentAudio = null;
         setVoiceProvider('browser');
         assistError('speech error', { provider, error: 'audio playback failed' });
       };
-      await currentAudio.play();
+      await audio.play();
+    }
+
+    function setVoiceHint(message) {
+      if (!message) {
+        error.hidden = true;
+        error.classList.remove('gaia-assist__hint');
+        error.textContent = '';
+        return;
+      }
+      error.hidden = false;
+      error.classList.add('gaia-assist__hint');
+      error.textContent = message;
     }
 
     function showManualVoicePlayback(audioUrl, provider, voice) {
       pendingVoice = { url: audioUrl, provider, voice };
       playButton.hidden = false;
+      playButton.classList.add('is-pending');
       setVoiceProvider(provider, voice || 'ready');
-      status.textContent = 'Tap Play voice';
-      setError('Mobile browser blocked autoplay. Tap Play voice once to hear Gaia.');
+      status.textContent = 'Voice ready — tap Play';
+      setVoiceHint('Tap Play voice to hear Gaia on this device.');
     }
 
     async function speakReply(text) {
       const cleanText = String(text || '').trim();
       if (!cleanText || muted) return;
       stopSpeaking();
+      await unlockVoicePlayback();
       const providerSetting = selectedProvider();
       if (providerSetting === 'browser') {
         speakWithBrowser(cleanText);
@@ -926,11 +988,8 @@
         const audioUrl = URL.createObjectURL(blob);
         const provider = response.headers.get('X-Gaia-Voice-Provider') || (providerSetting === 'auto' ? 'hosted' : providerSetting);
         const voice = response.headers.get('X-Gaia-Voice-Name') || '';
-        const audio = new Audio(audioUrl);
-        audio.preload = 'auto';
-        audio.playsInline = true;
         try {
-          await playAudioElement(audio, provider, voice, audioUrl);
+          await playAudioElement(audioUrl, provider, voice);
         } catch (playError) {
           assistError('speech error', { provider, error: playError.message || 'autoplay blocked' });
           showManualVoicePlayback(audioUrl, provider, voice);
@@ -943,6 +1002,7 @@
     }
 
     function setOpen(open) {
+      if (open) unlockVoicePlayback();
       panel.hidden = !open;
       root.classList.toggle('gaia-assist--open', open);
       document.body.classList.toggle('gaia-assist-panel-open', open);
@@ -961,6 +1021,7 @@
     }
 
     function setError(message) {
+      error.classList.remove('gaia-assist__hint');
       error.hidden = !message;
       error.textContent = message || '';
     }
@@ -989,6 +1050,7 @@
         setError('Type or speak a prompt first.');
         return;
       }
+      unlockVoicePlayback();
       const base = proxyBase();
       if (!base) {
         setError('Gaia Assist could not find the staging proxy URL.');
@@ -1118,27 +1180,34 @@
     wireTabAssist();
     window.addEventListener('gaia:route', wireTabAssist);
     window.addEventListener('gaia:open-assist', (event) => {
+      unlockVoicePlayback();
       setOpen(true);
       if (event.detail?.prompt) {
+        if (event.detail.speak) {
+          sendPrompt(event.detail.prompt, 'chakra', 'quick-action');
+          return;
+        }
         promptInput.value = event.detail.prompt;
         promptInput.focus();
       }
     });
     close.addEventListener('click', () => setOpen(false));
-    mic.addEventListener('click', startVoicePrompt);
+    mic.addEventListener('click', () => {
+      unlockVoicePlayback();
+      startVoicePrompt();
+    });
     muteButton.addEventListener('click', () => setMuted(!muted));
     stopButton.addEventListener('click', stopSpeaking);
     playButton.addEventListener('click', async () => {
       if (!pendingVoice) return;
-      setError('');
-      const audio = new Audio(pendingVoice.url);
-      audio.preload = 'auto';
-      audio.playsInline = true;
+      setVoiceHint('');
+      await unlockVoicePlayback();
       try {
-        await playAudioElement(audio, pendingVoice.provider, pendingVoice.voice, pendingVoice.url);
+        await playAudioElement(pendingVoice.url, pendingVoice.provider, pendingVoice.voice);
+        clearPendingVoice(false);
       } catch (err) {
         assistError('speech error', { provider: pendingVoice.provider, error: err.message });
-        setError('Voice playback is still blocked. Turn off silent mode, raise volume, or try Safari/Chrome microphone permission settings.');
+        setError('Voice playback is still blocked. Turn off silent mode or raise volume, then tap Play voice again.');
       }
     });
     voiceProviderSelect.addEventListener('change', () => {
@@ -1154,19 +1223,24 @@
     });
     form.addEventListener('submit', (event) => {
       event.preventDefault();
+      unlockVoicePlayback();
       const prompt = promptInput.value;
       promptInput.value = '';
       sendPrompt(prompt, 'typed', 'text');
     });
     chips.querySelectorAll('button').forEach((button) => {
       button.addEventListener('click', () => {
+        unlockVoicePlayback();
         const item = suggestionMap.find((entry) => entry.intent === button.dataset.intent) || suggestionMap[0];
         sendPrompt(item.label, item.intent, 'quick-action');
       });
     });
 
     document.querySelectorAll('[data-gaia-open-assist]').forEach((button) => {
-      button.addEventListener('click', () => setOpen(true));
+      button.addEventListener('click', () => {
+        unlockVoicePlayback();
+        setOpen(true);
+      });
     });
     setMuted(muted);
     initVoiceSettings();

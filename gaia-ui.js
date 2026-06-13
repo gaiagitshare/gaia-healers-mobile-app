@@ -795,6 +795,9 @@
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
     let recognition = null;
     let recognizing = false;
+    let activeRecorder = null;
+    let activeRecordStream = null;
+    let recordStopTimer = null;
     let muted = localStorage.getItem('gaia-assist-muted') === '1';
     let currentAudio = null;
     let pendingVoice = null;
@@ -1448,52 +1451,77 @@
       return preferred.find((type) => MediaRecorder.isTypeSupported(type)) || '';
     }
 
+    function stopActiveRecording() {
+      if (!activeRecorder || activeRecorder.state !== 'recording') return;
+      try {
+        activeRecorder.requestData?.();
+      } catch (err) {
+        assistLog('recorder requestData skipped', { error: err.message });
+      }
+      activeRecorder.stop();
+    }
+
+    function cleanupActiveRecording() {
+      if (recordStopTimer) {
+        window.clearTimeout(recordStopTimer);
+        recordStopTimer = null;
+      }
+      activeRecordStream?.getTracks?.().forEach((track) => track.stop());
+      activeRecordStream = null;
+      activeRecorder = null;
+      root.classList.remove('gaia-assist--listening');
+    }
+
     async function recordVoicePrompt() {
+      if (activeRecorder?.state === 'recording') {
+        stopActiveRecording();
+        return;
+      }
+
       setError('');
       try {
-        await ensureMicPermission();
         await unlockVoicePlayback(true);
-      } catch (err) {
-        assistError('mic permission error', err);
-        setError('Microphone permission was blocked. Allow microphone access, or type your prompt below.');
-        return;
-      }
-
-      if (!window.MediaRecorder) {
-        setError('Voice recording is not supported here. Type your prompt below.');
-        return;
-      }
-
-      let stream;
-      try {
-        stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        activeRecordStream = stream;
         const mimeType = pickRecorderMimeType();
         const recorder = mimeType ? new MediaRecorder(stream, { mimeType }) : new MediaRecorder(stream);
+        activeRecorder = recorder;
         const chunks = [];
 
         root.classList.add('gaia-assist--listening');
-        status.textContent = 'Recording... speak now';
+        status.textContent = isIOS ? 'Recording… speak, then tap mic again' : 'Recording… speak now';
 
         await new Promise((resolve, reject) => {
           recorder.ondataavailable = (event) => {
             if (event.data?.size) chunks.push(event.data);
           };
           recorder.onerror = () => reject(new Error('Recording failed'));
-          recorder.onstop = resolve;
-          if (isIOS) recorder.start(250);
+          recorder.onstop = () => {
+            window.setTimeout(resolve, isIOS ? 200 : 50);
+          };
+          if (isIOS) recorder.start(100);
           else recorder.start();
-          window.setTimeout(() => {
-            if (recorder.state === 'recording') recorder.stop();
-          }, 6500);
+          recordStopTimer = window.setTimeout(() => {
+            if (recorder.state === 'recording') stopActiveRecording();
+          }, isIOS ? 8000 : 6500);
         });
 
+        if (recordStopTimer) {
+          window.clearTimeout(recordStopTimer);
+          recordStopTimer = null;
+        }
+        activeRecorder = null;
         stream.getTracks().forEach((track) => track.stop());
+        activeRecordStream = null;
         root.classList.remove('gaia-assist--listening');
 
-        const blob = new Blob(chunks, { type: recorder.mimeType || mimeType || 'audio/webm' });
-        if (blob.size < 800) {
+        const blobType = recorder.mimeType || mimeType || (isIOS ? 'audio/mp4' : 'audio/webm');
+        const blob = new Blob(chunks, { type: blobType });
+        const minSize = isIOS ? 200 : 800;
+        assistLog('voice recorder finished', { bytes: blob.size, type: blobType, isIOS });
+        if (blob.size < minSize) {
           status.textContent = 'No speech captured';
-          setError('No speech captured. Try again or type your prompt below.');
+          setError('No speech captured. Tap mic, speak clearly, then tap mic again to send.');
           return;
         }
 
@@ -1506,8 +1534,7 @@
         }
         await sendPrompt(transcript, 'voice', 'voice-recorder');
       } catch (err) {
-        root.classList.remove('gaia-assist--listening');
-        stream?.getTracks?.().forEach((track) => track.stop());
+        cleanupActiveRecording();
         assistError('voice recorder error', err);
         setError(`${err.message || 'Voice capture failed'}. Type your prompt below.`);
         status.textContent = 'Tap to speak';
@@ -1536,19 +1563,29 @@
         stopRecognition();
         return;
       }
-
-      setError('');
-      try {
-        await ensureMicPermission();
-        await unlockVoicePlayback(true);
-      } catch (err) {
-        assistError('mic permission error', err);
-        setError('Microphone permission was blocked. Allow microphone access in the browser, or use the text box to test Gaia Assist.');
+      if (activeRecorder?.state === 'recording') {
+        stopActiveRecording();
         return;
       }
 
-      if (!SpeechRecognition) {
+      setError('');
+      await unlockVoicePlayback(true);
+
+      if (!window.MediaRecorder) {
+        setError('Voice recording is not supported here. Type your prompt below.');
+        return;
+      }
+
+      if (isIOS || !SpeechRecognition) {
         await recordVoicePrompt();
+        return;
+      }
+
+      try {
+        await ensureMicPermission();
+      } catch (err) {
+        assistError('mic permission error', err);
+        setError('Microphone permission was blocked. Allow microphone access in the browser, or use the text box to test Gaia Assist.');
         return;
       }
 
@@ -1566,13 +1603,15 @@
         assistLog('recording started');
       };
       recognition.onresult = (event) => {
-        const spoken = Array.from(event.results)
-          .map((result) => result[0]?.transcript || '')
-          .join(' ')
-          .trim();
+        let spoken = '';
+        for (let i = event.resultIndex; i < event.results.length; i += 1) {
+          const piece = event.results[i][0]?.transcript || '';
+          if (event.results[i].isFinal) spoken = `${spoken} ${piece}`.trim();
+          else status.textContent = piece ? `Hearing: ${piece}` : status.textContent;
+        }
         if (spoken) {
-          status.textContent = event.results[event.results.length - 1].isFinal ? 'Voice captured' : `Hearing: ${spoken}`;
           finalTranscript = spoken;
+          status.textContent = 'Voice captured';
         }
       };
       recognition.onerror = (event) => {
@@ -1595,7 +1634,8 @@
         if (finalTranscript) {
           await sendPrompt(finalTranscript, 'voice', 'voice');
         } else {
-          status.textContent = 'No speech captured';
+          status.textContent = 'Switching to recorder...';
+          await recordVoicePrompt();
         }
       };
 

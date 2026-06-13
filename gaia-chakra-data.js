@@ -1,6 +1,6 @@
 /**
  * Seven-chakra reference data for Bio-Well body-point UI.
- * Positions follow anterior midline on the Gaia meditation silhouette (viewBox 120×240).
+ * Overlay positions tuned for assets/gaia-chakra-meditation.png (682×1024, object-fit contain).
  */
 window.GAIA_CHAKRAS = [
   {
@@ -8,7 +8,7 @@ window.GAIA_CHAKRAS = [
     name: 'Root',
     sanskrit: 'Muladhara',
     color: '#E53935',
-    top: 60,
+    top: 71,
     left: 50,
     score: 84,
     element: 'Earth',
@@ -23,7 +23,7 @@ window.GAIA_CHAKRAS = [
     name: 'Sacral',
     sanskrit: 'Svadhisthana',
     color: '#FB8C00',
-    top: 51,
+    top: 62,
     left: 50,
     score: 71,
     element: 'Water',
@@ -38,7 +38,7 @@ window.GAIA_CHAKRAS = [
     name: 'Solar Plexus',
     sanskrit: 'Manipura',
     color: '#FDD835',
-    top: 42,
+    top: 53,
     left: 50,
     score: 79,
     element: 'Fire',
@@ -53,7 +53,7 @@ window.GAIA_CHAKRAS = [
     name: 'Heart',
     sanskrit: 'Anahata',
     color: '#43A047',
-    top: 33,
+    top: 44,
     left: 50,
     score: 95,
     element: 'Air',
@@ -68,7 +68,7 @@ window.GAIA_CHAKRAS = [
     name: 'Throat',
     sanskrit: 'Vishuddha',
     color: '#1E88E5',
-    top: 23,
+    top: 34,
     left: 50,
     score: 88,
     element: 'Sound',
@@ -83,7 +83,7 @@ window.GAIA_CHAKRAS = [
     name: 'Third Eye',
     sanskrit: 'Ajna',
     color: '#5E35B1',
-    top: 15,
+    top: 24,
     left: 50,
     score: 82,
     element: 'Light',
@@ -98,7 +98,7 @@ window.GAIA_CHAKRAS = [
     name: 'Crown',
     sanskrit: 'Sahasrara',
     color: '#8E24AA',
-    top: 8,
+    top: 14,
     left: 50,
     score: 90,
     element: 'Consciousness',

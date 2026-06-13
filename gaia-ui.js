@@ -252,16 +252,13 @@
     const chakras = window.GAIA_CHAKRAS || [];
     if (!chakras.length) return;
 
-    document.querySelectorAll('[data-chakra-map]').forEach((root, mapIndex) => {
+    document.querySelectorAll('[data-chakra-map]').forEach((root) => {
       const compact = root.classList.contains('gaia-chakra-map--biowell');
-      const uid = `chakra-map-${mapIndex}`;
       let active = chakras.find((item) => item.id === root.dataset.chakraFocus) || chakras[0];
       const ordered = [...chakras].reverse();
+      const figureSrc = 'assets/gaia-chakra-meditation.png';
 
       const render = () => {
-        const renderSilhouette = window.renderGaiaChakraSilhouette || (() => '');
-        const silhouetteSvg = renderSilhouette(uid);
-
         const listItems = (compact ? ordered.slice(0, 5) : ordered).map((item) => `
           <button type="button" class="gaia-chakra-map__list-item${item.id === active.id ? ' is-active' : ''}"
             style="--chakra-color:${item.color}" data-chakra-id="${item.id}"
@@ -278,12 +275,12 @@
         root.innerHTML = `
           <div class="gaia-chakra-map__layout${compact ? ' gaia-chakra-map__layout--compact' : ''}">
             <div class="gaia-chakra-map__figure" aria-hidden="false">
-              ${silhouetteSvg}
+              <img class="gaia-chakra-map__photo" src="${figureSrc}" width="682" height="1024" alt="" decoding="async" loading="lazy" />
               ${chakras.map((item) => `
                 <button type="button" class="gaia-chakra-map__node${item.id === active.id ? ' is-active' : ''}"
                   style="top:${item.top}%;left:${item.left}%;--chakra-color:${item.color}"
                   data-chakra-id="${item.id}" aria-label="${item.name} chakra, score ${item.score}">
-                  <span></span>
+                  <span aria-hidden="true"></span>
                 </button>`).join('')}
             </div>
             <div class="gaia-chakra-map__list" role="listbox" aria-label="Chakra scores">${listItems}</div>

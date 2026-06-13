@@ -2,7 +2,9 @@
  * Reads app data only from the staging proxy. Never call GHL/Event/OpenAI directly here.
  */
 (function () {
-  const explicit = window.GAIA_SYNC_PROXY_URL || localStorage.getItem('gaia-sync-proxy-url') || '';
+  const params = new URLSearchParams(window.location.search);
+  const queryProxy = params.get('proxy') || params.get('gaia_proxy') || '';
+  const explicit = window.GAIA_SYNC_PROXY_URL || queryProxy || localStorage.getItem('gaia-sync-proxy-url') || '';
   const proxyBase = explicit.replace(/\/+$/, '');
 
   window.GAIA_SYNC = {

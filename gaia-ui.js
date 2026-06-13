@@ -803,7 +803,17 @@
     const isIOS = /iPad|iPhone|iPod/i.test(navigator.userAgent)
       || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
     let voiceUnlocked = false;
+    let voiceUnlockAt = 0;
     const SILENT_WAV = 'data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQAAAAA=';
+
+    function markVoiceUnlocked() {
+      voiceUnlocked = true;
+      voiceUnlockAt = Date.now();
+    }
+
+    function voiceUnlockIsFresh(maxAgeMs = 12000) {
+      return voiceUnlocked && (Date.now() - voiceUnlockAt) <= maxAgeMs;
+    }
 
     function getSharedAudio() {
       if (voiceAudioEl) {
@@ -822,8 +832,8 @@
       return currentAudio;
     }
 
-    async function unlockVoicePlayback() {
-      if (voiceUnlocked) return true;
+    async function unlockVoicePlayback(force = false) {
+      if (!force && voiceUnlockIsFresh()) return true;
       try {
         const audio = getSharedAudio();
         const previousSrc = audio.src;
@@ -835,8 +845,8 @@
         audio.currentTime = 0;
         audio.volume = 1;
         audio.src = previousSrc || '';
-        voiceUnlocked = true;
-        assistLog('voice unlocked', { userAgent: navigator.userAgent });
+        markVoiceUnlocked();
+        assistLog('voice unlocked', { userAgent: navigator.userAgent, forced: force });
         return true;
       } catch (err) {
         assistLog('voice unlock pending', { error: err.message });
@@ -1163,7 +1173,9 @@
       audio.volume = 1;
       audio.src = audioUrl;
       audio.load();
-      audio.onplay = () => {
+      let playbackStarted = false;
+      const onPlay = () => {
+        playbackStarted = true;
         clearPendingVoice(false);
         playButton.hidden = true;
         playButton.classList.remove('is-pending');
@@ -1172,6 +1184,7 @@
         status.textContent = 'Speaking...';
         assistLog('speech started', { provider, voice, speed: selectedSpeed() });
       };
+      audio.onplay = onPlay;
       audio.onended = () => {
         URL.revokeObjectURL(audioUrl);
         status.textContent = 'Ready for next prompt';
@@ -1184,6 +1197,20 @@
       };
       try {
         await audio.play();
+        await new Promise((resolve, reject) => {
+          if (playbackStarted) {
+            resolve();
+            return;
+          }
+          const timer = window.setTimeout(() => {
+            if (playbackStarted) resolve();
+            else reject(new Error('autoplay blocked'));
+          }, 450);
+          audio.addEventListener('playing', () => {
+            window.clearTimeout(timer);
+            resolve();
+          }, { once: true });
+        });
       } catch (playError) {
         if (window.AudioContext || window.webkitAudioContext) {
           const AudioCtx = window.AudioContext || window.webkitAudioContext;
@@ -1203,6 +1230,7 @@
             source.onerror = reject;
             setVoiceProvider(provider, voice);
             status.textContent = 'Speaking...';
+            playbackStarted = true;
             source.start(0);
           });
           return;
@@ -1249,11 +1277,14 @@
       return body;
     }
 
-    async function speakReply(text) {
+    async function speakReply(text, options = {}) {
       const cleanText = String(text || '').trim();
       if (!cleanText || muted) return;
+      const fromVoice = options.fromVoice === true;
       stopSpeaking();
-      await unlockVoicePlayback();
+      if (!fromVoice || !voiceUnlockIsFresh()) {
+        await unlockVoicePlayback(fromVoice);
+      }
       const providerSetting = selectedProvider();
       if (providerSetting === 'browser') {
         await speakWithBrowser(cleanText);
@@ -1286,6 +1317,9 @@
         const audioUrl = URL.createObjectURL(blob);
         const provider = response.headers.get('X-Gaia-Voice-Provider') || (providerSetting === 'auto' ? 'hosted' : providerSetting);
         const voice = response.headers.get('X-Gaia-Voice-Name') || '';
+        if (fromVoice && !voiceUnlockIsFresh()) {
+          showManualVoicePlayback(audioUrl, provider, voice);
+        }
         try {
           await playAudioElement(audioUrl, provider, voice);
         } catch (playError) {
@@ -1344,7 +1378,7 @@
 
     async function deliverReply(reply, options = {}) {
       appendMessage('bot', reply);
-      await speakReply(reply);
+      await speakReply(reply, options);
       if (options.warning) setError(options.warning);
     }
 
@@ -1354,16 +1388,19 @@
         setError('Type or speak a prompt first.');
         return;
       }
-      await unlockVoicePlayback();
+      const fromVoice = source === 'voice' || source === 'voice-recorder';
+      if (!fromVoice) {
+        await unlockVoicePlayback();
+      }
       setError('');
       appendMessage('user', cleanPrompt);
-      setBusy(true, source === 'voice' || source === 'voice-recorder' ? 'Processing voice...' : 'Thinking...');
+      setBusy(true, fromVoice ? 'Processing voice...' : 'Thinking...');
 
       const base = proxyBase();
       if (!base) {
         const reply = resolveLocalReply(cleanPrompt, intent);
         assistLog('local reply (no proxy)', { intent, source });
-        await deliverReply(reply);
+        await deliverReply(reply, { fromVoice });
         setBusy(false);
         return;
       }
@@ -1391,12 +1428,13 @@
           throw new Error(payload.error || `Proxy returned ${response.status}`);
         }
         const reply = payload.reply || resolveLocalReply(cleanPrompt, intent);
-        await deliverReply(reply, { warning: payload.warning || '' });
+        await deliverReply(reply, { warning: payload.warning || '', fromVoice });
       } catch (err) {
         assistError('OpenAI/voice error', err);
         const reply = resolveLocalReply(cleanPrompt, intent);
         await deliverReply(reply, {
           warning: 'Proxy unavailable — using local Gaia voice responses.',
+          fromVoice,
         });
       } finally {
         setBusy(false);
@@ -1414,6 +1452,7 @@
       setError('');
       try {
         await ensureMicPermission();
+        await unlockVoicePlayback(true);
       } catch (err) {
         assistError('mic permission error', err);
         setError('Microphone permission was blocked. Allow microphone access, or type your prompt below.');
@@ -1501,6 +1540,7 @@
       setError('');
       try {
         await ensureMicPermission();
+        await unlockVoicePlayback(true);
       } catch (err) {
         assistError('mic permission error', err);
         setError('Microphone permission was blocked. Allow microphone access in the browser, or use the text box to test Gaia Assist.');
@@ -1547,13 +1587,13 @@
         }
         setError(`Voice capture failed: ${event.error}. You can type the same prompt below.`);
       };
-      recognition.onend = () => {
+      recognition.onend = async () => {
         if (recognitionHandled) return;
         recognizing = false;
         root.classList.remove('gaia-assist--listening');
         assistLog('recording stopped', { hasTranscript: Boolean(finalTranscript) });
         if (finalTranscript) {
-          sendPrompt(finalTranscript, 'voice', 'voice');
+          await sendPrompt(finalTranscript, 'voice', 'voice');
         } else {
           status.textContent = 'No speech captured';
         }
@@ -1577,16 +1617,16 @@
       }
     });
     close.addEventListener('click', () => setOpen(false));
-    mic.addEventListener('click', () => {
-      unlockVoicePlayback();
-      startVoicePrompt();
+    mic.addEventListener('click', async () => {
+      await unlockVoicePlayback(true);
+      await startVoicePrompt();
     });
     muteButton.addEventListener('click', () => setMuted(!muted));
     stopButton.addEventListener('click', stopSpeaking);
     playButton.addEventListener('click', async () => {
       if (!pendingVoice) return;
       setVoiceHint('');
-      await unlockVoicePlayback();
+      await unlockVoicePlayback(true);
       try {
         await playAudioElement(pendingVoice.url, pendingVoice.provider, pendingVoice.voice);
         clearPendingVoice(false);

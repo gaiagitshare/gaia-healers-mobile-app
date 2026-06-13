@@ -2303,6 +2303,18 @@ body[data-theme="dark"] .gaia-assist {
   animation: gaia-assist-play-pulse 1.4s ease-in-out infinite;
 }
 
+.gaia-assist__play.is-pending:not([hidden]) {
+  flex: 1 0 100%;
+  width: 100%;
+  margin-top: 0.15rem;
+  padding: 0.52rem 0.7rem;
+  border-radius: 0.7rem;
+  background: linear-gradient(135deg, var(--gaia), var(--gaia-dark));
+  color: #fff;
+  font-size: 0.7rem;
+  box-shadow: 0 0.55rem 1.2rem rgba(92, 184, 46, 0.22);
+}
+
 .gaia-assist__audio {
   position: absolute;
   width: 0;

@@ -810,6 +810,7 @@
     let hostedVoices = [];
     const isIOS = /iPad|iPhone|iPod/i.test(navigator.userAgent)
       || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+    const isMobileWebKit = isIOS || (/AppleWebKit/i.test(navigator.userAgent) && /Mobile/i.test(navigator.userAgent));
     let voiceUnlocked = false;
     let voiceUnlockAt = 0;
     const SILENT_WAV = 'data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQAAAAA=';
@@ -1184,9 +1185,15 @@
       let playbackStarted = false;
       const onPlay = () => {
         playbackStarted = true;
-        clearPendingVoice(false);
-        playButton.hidden = true;
-        playButton.classList.remove('is-pending');
+        if (!isMobileWebKit) {
+          clearPendingVoice(false);
+          playButton.hidden = true;
+          playButton.classList.remove('is-pending');
+        } else {
+          playButton.hidden = false;
+          playButton.classList.add('is-pending');
+          playButton.textContent = 'Replay voice';
+        }
         setVoiceHint('');
         setVoiceProvider(provider, voice);
         status.textContent = 'Speaking...';
@@ -1194,12 +1201,12 @@
       };
       audio.onplay = onPlay;
       audio.onended = () => {
-        URL.revokeObjectURL(audioUrl);
+        if (!isMobileWebKit) URL.revokeObjectURL(audioUrl);
         setAssistVoiceState('idle', 'Tap to speak');
         assistLog('speech ended', { provider });
       };
       audio.onerror = () => {
-        URL.revokeObjectURL(audioUrl);
+        if (!isMobileWebKit) URL.revokeObjectURL(audioUrl);
         setVoiceProvider('browser');
         assistError('speech error', { provider, error: 'audio playback failed' });
       };
@@ -1260,12 +1267,14 @@
     }
 
     function showManualVoicePlayback(audioUrl, provider, voice) {
+      clearPendingVoice(true);
       pendingVoice = { url: audioUrl, provider, voice };
       playButton.hidden = false;
       playButton.classList.add('is-pending');
+      playButton.textContent = 'Hear Gaia';
       setVoiceProvider(provider, voice || 'ready');
       status.textContent = 'Voice ready — tap Hear Gaia';
-      setVoiceHint('Tap Hear Gaia to listen on this device.');
+      setVoiceHint('iPhone and in-app browsers may require one tap. Tap Hear Gaia to play the ElevenLabs voice.');
     }
 
     function buildTtsRequestBody(cleanText, providerSetting) {
@@ -1326,6 +1335,10 @@
         const audioUrl = URL.createObjectURL(blob);
         const provider = response.headers.get('X-Gaia-Voice-Provider') || (providerSetting === 'auto' ? 'hosted' : providerSetting);
         const voice = response.headers.get('X-Gaia-Voice-Name') || '';
+        if (isMobileWebKit) {
+          showManualVoicePlayback(audioUrl, provider, voice);
+          return;
+        }
         if (fromVoice && !voiceUnlockIsFresh()) {
           showManualVoicePlayback(audioUrl, provider, voice);
         }
@@ -1760,7 +1773,7 @@
       clearLiveTranscript();
       await unlockVoicePlayback(true);
 
-      if (SpeechRecognition) {
+      if (SpeechRecognition && !isIOS) {
         beginSpeechRecognition();
         return;
       }

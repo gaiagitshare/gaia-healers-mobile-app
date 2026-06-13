@@ -1460,8 +1460,8 @@ body[data-theme="dark"] .gaia-tabbar__link.is-active {
 .gaia-chakra-map__node {
   position: absolute;
   z-index: 2;
-  width: 0.45rem;
-  height: 0.45rem;
+  width: 0.52rem;
+  height: 0.52rem;
   border: 0;
   border-radius: 999px;
   transform: translate(-50%, -50%);
@@ -1476,18 +1476,23 @@ body[data-theme="dark"] .gaia-tabbar__link.is-active {
   height: 100%;
   border-radius: inherit;
   background: var(--chakra-color, var(--gaia));
-  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.9);
-  opacity: 0.9;
+  box-shadow:
+    0 0 0 1px rgba(255, 255, 255, 0.88),
+    0 0 4px var(--chakra-color),
+    0 0 10px color-mix(in srgb, var(--chakra-color) 72%, transparent);
+  opacity: 0.94;
   transition: transform 0.16s ease, opacity 0.16s ease, box-shadow 0.16s ease;
 }
 
 .gaia-chakra-map__node.is-active span,
 .gaia-chakra-map__node:focus-visible span {
   opacity: 1;
-  transform: scale(1.45);
+  transform: scale(1.55);
   box-shadow:
-    0 0 0 2px rgba(255, 255, 255, 0.95),
-    0 0 10px color-mix(in srgb, var(--chakra-color) 75%, transparent);
+    0 0 0 2px rgba(255, 255, 255, 0.96),
+    0 0 6px var(--chakra-color),
+    0 0 14px var(--chakra-color),
+    0 0 22px color-mix(in srgb, var(--chakra-color) 55%, transparent);
 }
 
 .gaia-chakra-map__list {

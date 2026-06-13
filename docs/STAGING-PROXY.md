@@ -55,6 +55,7 @@ GET {proxy}/api/app/bootstrap
 POST {proxy}/api/assist/chat
 POST {proxy}/api/assist/voice
 POST {proxy}/api/assist/tts
+GET {proxy}/api/assist/voices
 ```
 
 `/api/assist/chat` accepts JSON:

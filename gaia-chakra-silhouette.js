@@ -1,30 +1,22 @@
 /**
- * Custom Gaia Healers — meditating body SVG for chakra maps.
- * Transparent background, no mandala. viewBox 120×240 (~120×240px on mobile).
+ * Gaia Healers — seated lotus meditation silhouette (120×240 viewBox).
+ * Dark navy body, transparent canvas, chakra glows via HTML overlay buttons.
  */
 window.renderGaiaChakraSilhouette = function renderGaiaChakraSilhouette(uid = 'gaia-chakra') {
   return `<svg class="gaia-chakra-map__silhouette" viewBox="0 0 120 240" xmlns="http://www.w3.org/2000/svg" aria-hidden="true" focusable="false">
     <defs>
       <linearGradient id="${uid}-body" x1="60" y1="4" x2="60" y2="236" gradientUnits="userSpaceOnUse">
-        <stop offset="0%" stop-color="#C8F5A8" stop-opacity="0.78"/>
-        <stop offset="22%" stop-color="#7DD956" stop-opacity="0.62"/>
-        <stop offset="55%" stop-color="#5CB82E" stop-opacity="0.5"/>
-        <stop offset="100%" stop-color="#162318" stop-opacity="0.82"/>
+        <stop offset="0%" stop-color="#2A3D5C"/>
+        <stop offset="40%" stop-color="#101A2A"/>
+        <stop offset="100%" stop-color="#04070D"/>
       </linearGradient>
-      <linearGradient id="${uid}-sheen" x1="24" y1="20" x2="96" y2="220" gradientUnits="userSpaceOnUse">
-        <stop offset="0%" stop-color="#FFFFFF" stop-opacity="0"/>
-        <stop offset="42%" stop-color="#FFFFFF" stop-opacity="0.16"/>
-        <stop offset="100%" stop-color="#FFFFFF" stop-opacity="0"/>
+      <linearGradient id="${uid}-rim" x1="12" y1="20" x2="108" y2="220" gradientUnits="userSpaceOnUse">
+        <stop offset="0%" stop-color="#7EB8FF" stop-opacity="0"/>
+        <stop offset="46%" stop-color="#A8D4FF" stop-opacity="0.16"/>
+        <stop offset="100%" stop-color="#7EB8FF" stop-opacity="0"/>
       </linearGradient>
     </defs>
-    <g fill="url(#${uid}-body)">
-      <ellipse cx="60" cy="22" rx="10" ry="12"/>
-      <path d="M54.5 34h11c0 2.8-2.4 5-5.5 5s-5.5-2.2-5.5-5z"/>
-      <path d="M48 40c-2 0-4 1.6-4 4v2.5C34 47 24 58 20 74c-2.5 10 0.5 16 7 17.5l5.5-1.5c-1.5-11 1.5-22 9.5-29.5v31c-3.5 2.8-7 8.5-8.5 15-3.5 11-0.5 24 10 31.5 5.5 4.5 13 6.5 20.5 6.5s15-2 20.5-6.5c10.5-7.5 13.5-20.5 10-31.5-1.5-6.5-5-12.2-8.5-15V63.5c8 7.5 11 18.5 9.5 29.5l5.5 1.5c6.5-1.5 9.5-7.5 7-17.5-4-16-14-27-24-28.5V44c0-2.4-2-4-4-4H48z"/>
-      <path d="M38 162c5 12 14 19.5 22 21.5 0 0 0 0 0 0 8-2 17-9.5 22-21.5-4.5 7-12.5 11.5-22 11.5S42.5 169 38 162z" opacity="0.82"/>
-      <ellipse cx="60" cy="204" rx="22" ry="6.5" opacity="0.28"/>
-    </g>
-    <path fill="url(#${uid}-sheen)" d="M48 40c-2 0-4 1.6-4 4v2.5C34 47 24 58 20 74c-2.5 10 0.5 16 7 17.5l5.5-1.5c-1.5-11 1.5-22 9.5-29.5v31c-3.5 2.8-7 8.5-8.5 15-3.5 11-0.5 24 10 31.5 5.5 4.5 13 6.5 20.5 6.5s15-2 20.5-6.5c10.5-7.5 13.5-20.5 10-31.5-1.5-6.5-5-12.2-8.5-15V63.5c8 7.5 11 18.5 9.5 29.5l5.5 1.5c6.5-1.5 9.5-7.5 7-17.5-4-16-14-27-24-28.5V44c0-2.4-2-4-4-4H48z" opacity="0.45"/>
-    <line x1="60" y1="12" x2="60" y2="196" stroke="#7DD956" stroke-opacity="0.06" stroke-width="0.65" stroke-dasharray="2 4"/>
+    <path fill="url(#${uid}-body)" d="M60 8.5C67.2 8.5 71 13.8 71 19.6c0 4.8-2.8 8.8-6.6 10.1 7.8 1.2 14.6 5.4 18.8 11.8 4.8 7.2 6.4 15.8 4.6 24.2-1 4.8-3.4 9-6.8 12.2 5.2 5.4 8.8 12.4 10 19.8 1.6 9.6-.6 19.4-6.2 27-4.2 5.6-10 9.6-16.6 11.4 5.4 6.2 8.4 14 8.4 22.2 0 16.2-13.2 29.4-29.4 29.4S23.4 151.3 23.4 135c0-8.2 3-16 8.4-22.2-6.6-1.8-12.4-5.8-16.6-11.4-5.6-7.6-7.8-17.4-6.2-27 1.2-7.4 4.8-14.4 10-19.8-3.4-3.2-5.8-7.4-6.8-12.2-1.8-8.4-.2-17 4.6-24.2 4.2-6.4 11-10.6 18.8-11.8C51.8 28.4 49 24.4 49 19.6 49 13.8 52.8 8.5 60 8.5z"/>
+    <path fill="none" stroke="url(#${uid}-rim)" stroke-width="0.55" d="M60 8.5C67.2 8.5 71 13.8 71 19.6c0 4.8-2.8 8.8-6.6 10.1 7.8 1.2 14.6 5.4 18.8 11.8 4.8 7.2 6.4 15.8 4.6 24.2-1 4.8-3.4 9-6.8 12.2 5.2 5.4 8.8 12.4 10 19.8 1.6 9.6-.6 19.4-6.2 27-4.2 5.6-10 9.6-16.6 11.4 5.4 6.2 8.4 14 8.4 22.2 0 16.2-13.2 29.4-29.4 29.4S23.4 151.3 23.4 135c0-8.2 3-16 8.4-22.2-6.6-1.8-12.4-5.8-16.6-11.4-5.6-7.6-7.8-17.4-6.2-27 1.2-7.4 4.8-14.4 10-19.8-3.4-3.2-5.8-7.4-6.8-12.2-1.8-8.4-.2-17 4.6-24.2 4.2-6.4 11-10.6 18.8-11.8C51.8 28.4 49 24.4 49 19.6 49 13.8 52.8 8.5 60 8.5z" opacity="0.65"/>
   </svg>`;
 };

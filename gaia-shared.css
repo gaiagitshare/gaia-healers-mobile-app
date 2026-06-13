@@ -1045,7 +1045,7 @@ body[data-theme="dark"] .gaia-profile-check {
 
 /* Body padding for floating tab bar */
 body.gaia-has-tabbar {
-  padding-bottom: calc(7rem + env(safe-area-inset-bottom));
+  padding-bottom: calc(5.25rem + env(safe-area-inset-bottom));
 }
 
 .gaia-tabbar__inner {
@@ -1193,31 +1193,91 @@ body[data-theme="dark"] .gaia-tabbar__inner a[aria-current="page"] {
 
 .gaia-tabbar__assist {
   position: relative;
+  z-index: 2;
   flex-shrink: 0;
-  width: 3.15rem;
-  height: 3.15rem;
-  margin: -1.05rem 0.15rem 0;
+  display: grid;
+  place-items: center;
+  width: 3.65rem;
+  height: 3.65rem;
+  margin: -1.15rem 0.15rem 0;
   border: 0;
-  border-radius: 1.1rem;
+  border-radius: 999px;
   color: #fff;
-  background: linear-gradient(145deg, #0e1713 0%, #1f3326 56%, #5CB82E 140%);
-  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.22), 0 0 24px rgba(92, 184, 46, 0.28);
-  transform: rotate(45deg);
+  background: linear-gradient(145deg, #7DD956 0%, #5CB82E 52%, #449422 100%);
+  box-shadow:
+    0 12px 32px rgba(0, 0, 0, 0.24),
+    0 0 0 1px rgba(255, 255, 255, 0.12) inset,
+    0 0 36px rgba(92, 184, 46, 0.38);
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+  transition: transform 0.18s ease, box-shadow 0.18s ease;
+}
+
+.gaia-tabbar__assist:active {
+  transform: scale(0.94);
+}
+
+.gaia-tabbar__assist.is-pressed,
+.gaia-assist--dock-pressed .gaia-tabbar__assist,
+.gaia-tabbar__assist[data-state="holding"] {
+  transform: scale(1.06);
+  box-shadow:
+    0 14px 36px rgba(0, 0, 0, 0.28),
+    0 0 0 4px rgba(125, 217, 86, 0.42),
+    0 0 48px rgba(92, 184, 46, 0.52);
+  animation: gaia-assist-orb-listen 0.85s ease-in-out infinite;
 }
 
 .gaia-tabbar__assist.is-active {
-  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.28), 0 0 32px rgba(92, 184, 46, 0.42);
+  box-shadow:
+    0 12px 32px rgba(0, 0, 0, 0.28),
+    0 0 0 2px rgba(125, 217, 86, 0.32),
+    0 0 40px rgba(92, 184, 46, 0.45);
+}
+
+.gaia-tabbar__assist[data-state="ready"] {
+  box-shadow:
+    0 12px 32px rgba(0, 0, 0, 0.24),
+    0 0 0 2px rgba(125, 217, 86, 0.28),
+    0 0 32px rgba(92, 184, 46, 0.35);
+}
+
+.gaia-tabbar__assist[data-state="thinking"] {
+  background: linear-gradient(145deg, #5CB82E 0%, #449422 100%);
+}
+
+.gaia-tabbar__assist[data-state="speaking"] {
+  animation: gaia-assist-orb-speak 0.9s ease-in-out infinite;
+}
+
+.gaia-tabbar__assist[data-state="connecting"] {
+  opacity: 0.88;
+  animation: gaia-assist-orb-connect 1.1s ease-in-out infinite;
+}
+
+.gaia-tabbar__assist-icon {
+  position: relative;
+  width: 1.45rem;
+  height: 1.45rem;
+}
+
+.gaia-tabbar__assist-pulse {
+  position: absolute;
+  inset: -0.35rem;
+  border-radius: 999px;
+  border: 1px solid rgba(125, 217, 86, 0.34);
+  animation: gaia-assist-pulse 2.8s ease-in-out infinite;
+  pointer-events: none;
+}
+
+.gaia-tabbar__assist.is-active .gaia-tabbar__assist-pulse,
+.gaia-assist--open ~ .gaia-tabbar .gaia-tabbar__assist-pulse {
+  animation-duration: 1.8s;
 }
 
 .gaia-tabbar__assist-mark {
-  display: grid;
-  place-items: center;
-  width: 100%;
-  height: 100%;
-  transform: rotate(-45deg);
-  font-weight: 800;
-  font-size: 1rem;
-  letter-spacing: -0.04em;
+  display: none;
 }
 
 body[data-theme="dark"] .gaia-tabbar__link {
@@ -1816,33 +1876,39 @@ body[data-theme="dark"] .gaia-assist {
 }
 
 .gaia-assist__orb {
-  position: fixed;
-  right: 1rem;
-  bottom: calc(5.5rem + env(safe-area-inset-bottom));
-  z-index: 56;
-  display: grid;
-  place-items: center;
-  width: 3.75rem;
-  height: 3.75rem;
-  border: 0;
-  border-radius: 999px;
-  color: #fff;
-  background: linear-gradient(145deg, #7DD956 0%, #5CB82E 52%, #449422 100%);
-  box-shadow:
-    0 12px 32px rgba(0, 0, 0, 0.28),
-    0 0 0 1px rgba(255, 255, 255, 0.12) inset,
-    0 0 40px rgba(92, 184, 46, 0.42);
-  pointer-events: auto;
-  transition: transform 0.18s ease, box-shadow 0.18s ease;
+  display: none !important;
 }
 
 .gaia-assist__orb:active {
   transform: scale(0.94);
 }
 
+.gaia-assist--orb-pressed .gaia-assist__orb:active,
+.gaia-assist--holding .gaia-assist__orb:active {
+  transform: scale(1.08);
+}
+
 .gaia-assist__orb-icon {
   width: 1.45rem;
   height: 1.45rem;
+}
+
+.gaia-assist--holding .gaia-assist__orb,
+.gaia-assist__orb[data-state="holding"],
+.gaia-assist--orb-pressed .gaia-assist__orb {
+  transform: scale(1.08);
+  box-shadow:
+    0 14px 36px rgba(0, 0, 0, 0.32),
+    0 0 0 4px rgba(125, 217, 86, 0.45),
+    0 0 48px rgba(92, 184, 46, 0.55);
+  animation: gaia-assist-orb-listen 0.85s ease-in-out infinite;
+}
+
+.gaia-assist__orb[data-state="ready"] {
+  box-shadow:
+    0 12px 32px rgba(0, 0, 0, 0.28),
+    0 0 0 2px rgba(125, 217, 86, 0.28),
+    0 0 32px rgba(92, 184, 46, 0.35);
 }
 
 .gaia-assist--listening .gaia-assist__orb,
@@ -1901,10 +1967,10 @@ body[data-theme="dark"] .gaia-assist {
   position: fixed;
   left: 50%;
   right: auto;
-  bottom: calc(5rem + env(safe-area-inset-bottom));
+  bottom: calc(4.85rem + env(safe-area-inset-bottom));
   transform: translateX(-50%);
   width: min(21.5rem, calc(100vw - 1.5rem));
-  max-height: min(22rem, calc(100vh - 7rem - env(safe-area-inset-top)));
+  max-height: min(24rem, calc(100vh - 6rem - env(safe-area-inset-top)));
   display: flex;
   flex-direction: column;
   gap: 0.55rem;

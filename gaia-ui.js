@@ -15,7 +15,7 @@
   const ADMIN_MODE_KEY = 'gaia-admin-mode';
   const ADMIN_UNLOCK_PARAM = 'admin';
   const ADMIN_DEV_PASSCODE = 'gaia2026';
-  const APP_VIEWS = new Set(['today', 'biowell', 'chakras', 'academy', 'community', 'profile', 'admin']);
+  const APP_VIEWS = new Set(['today', 'wellness', 'academy', 'community', 'profile', 'admin']);
   let refreshChakraMaps = () => {};
 
   function escapeHtml(value) {
@@ -387,7 +387,7 @@
     window.GaiaChakraMaps = { refresh: refreshChakraMaps };
     window.addEventListener('resize', refreshChakraMaps);
     window.addEventListener('gaia:route', (event) => {
-      if (event.detail?.view === 'chakras') {
+      if (event.detail?.view === 'wellness' && event.detail?.tab === 'chakras') {
         requestAnimationFrame(() => requestAnimationFrame(refreshChakraMaps));
       }
     });
@@ -518,9 +518,27 @@
     function routeFromUrl() {
       const params = new URLSearchParams(window.location.search);
       const hash = window.location.hash.replace(/^#/, '');
-      const view = normalizeView(params.get('view') || hash || 'today');
-      const tab = params.get('tab') || (view === 'community' ? 'discussion' : '');
+      const rawView = String(params.get('view') || hash || 'today').toLowerCase();
+      let view = normalizeView(rawView);
+      let tab = params.get('tab') || '';
+      if (rawView === 'biowell') {
+        view = 'wellness';
+        tab = tab || 'biowell';
+      } else if (rawView === 'chakras') {
+        view = 'wellness';
+        tab = tab || 'chakras';
+      } else if (view === 'wellness' && !tab) {
+        tab = 'biowell';
+      } else if (view === 'community' && !tab) {
+        tab = 'discussion';
+      }
       return { view, tab };
+    }
+
+    function tabForView(view, tab) {
+      if (view === 'community') return tab || 'discussion';
+      if (view === 'wellness') return tab || 'biowell';
+      return '';
     }
 
     function urlFor(view, options = {}) {
@@ -537,8 +555,9 @@
     function setDocumentTitle(view) {
       const labels = {
         today: 'Today',
-        biowell: 'Bio-Well',
-        chakras: 'Chakras',
+        wellness: 'Wellness',
+        biowell: 'Wellness',
+        chakras: 'Wellness',
         academy: 'Academy',
         community: 'Community',
         profile: 'Profile',
@@ -548,6 +567,9 @@
     }
 
     function showView(view, options = {}) {
+      if (view === 'biowell' || view === 'chakras') {
+        return showView('wellness', { ...options, tab: options.tab || view });
+      }
       let nextView = normalizeView(view);
       if (nextView === 'admin' && !adminMode()) {
         nextView = 'profile';
@@ -566,6 +588,9 @@
       if (nextView === 'community') {
         window.GaiaCommunityTabs?.activate(options.tab || 'discussion');
       }
+      if (nextView === 'wellness') {
+        window.GaiaWellnessTabs?.activate(options.tab || 'biowell');
+      }
       if (options.adminBlocked) {
         const lockedPanel = document.querySelector('[data-admin-locked]');
         lockedPanel?.scrollIntoView?.({ block: 'center' });
@@ -573,8 +598,9 @@
         window.scrollTo({ top: 0, behavior: options.replace ? 'auto' : 'smooth' });
       }
       syncAdminUi();
-      window.dispatchEvent(new CustomEvent('gaia:route', { detail: { view: nextView, tab: options.tab || '' } }));
-      if (nextView === 'chakras') {
+      const routeTab = options.tab || tabForView(nextView, options.tab);
+      window.dispatchEvent(new CustomEvent('gaia:route', { detail: { view: nextView, tab: routeTab } }));
+      if (nextView === 'wellness' && (options.tab || 'biowell') === 'chakras') {
         requestAnimationFrame(() => requestAnimationFrame(() => refreshChakraMaps()));
       }
       return nextView;
@@ -582,7 +608,7 @@
 
     function navigate(view, options = {}) {
       const nextView = showView(view, options);
-      const nextUrl = urlFor(nextView, { tab: nextView === 'community' ? options.tab : '' });
+      const nextUrl = urlFor(nextView, { tab: tabForView(nextView, options.tab) });
       if (options.replace) window.history.replaceState({ view: nextView, tab: options.tab || '' }, '', nextUrl);
       else window.history.pushState({ view: nextView, tab: options.tab || '' }, '', nextUrl);
     }
@@ -595,8 +621,9 @@
       if (url.origin !== window.location.origin) return;
 
       const file = url.pathname.split('/').pop() || 'home.html';
+      const rawView = file === 'home.html' ? (url.searchParams.get('view') || 'today') : null;
       const routeMap = {
-        'home.html': url.searchParams.get('view') || 'today',
+        'home.html': rawView || 'today',
         'biowell.html': 'biowell',
         'academy.html': 'academy',
         'community.html': 'community',
@@ -606,8 +633,16 @@
       if (!routeMap[file]) return;
 
       event.preventDefault();
-      const tab = url.searchParams.get('tab') || '';
-      navigate(routeMap[file], { tab });
+      let view = routeMap[file];
+      let tab = url.searchParams.get('tab') || '';
+      if (view === 'biowell') {
+        view = 'wellness';
+        tab = tab || 'biowell';
+      } else if (view === 'chakras') {
+        view = 'wellness';
+        tab = tab || 'chakras';
+      }
+      navigate(view, { tab });
     }
 
     document.addEventListener('click', routeClick);
@@ -633,6 +668,58 @@
       currentView: () => activeView,
       adminMode,
     };
+  }
+
+  function initWellnessTabs() {
+    const bar = document.getElementById('wellness-tabs');
+    if (!bar) return;
+    const panels = {
+      biowell: 'panel-biowell',
+      chakras: 'panel-chakras',
+    };
+    const badge = document.querySelector('[data-wellness-badge]');
+    const buttons = bar.querySelectorAll('[data-tab]');
+
+    function activateButton(btn, updateHistory = false) {
+      const tab = btn.getAttribute('data-tab');
+      buttons.forEach((b) => {
+        const on = b === btn;
+        b.classList.toggle('bg-gaia', on);
+        b.classList.toggle('text-white', on);
+        b.classList.toggle('bg-surface-muted', !on);
+        b.classList.toggle('text-ink-secondary', !on);
+        b.setAttribute('aria-selected', String(on));
+      });
+      Object.entries(panels).forEach(([id, panelId]) => {
+        const el = document.getElementById(panelId);
+        if (!el) return;
+        const on = id === tab;
+        el.classList.toggle('hidden', !on);
+        el.hidden = !on;
+      });
+      if (badge) {
+        badge.textContent = tab === 'chakras' ? '7 pts' : 'Connected';
+        badge.classList.toggle('gaia-badge--subtle', tab === 'chakras');
+      }
+      if (tab === 'chakras') {
+        requestAnimationFrame(() => requestAnimationFrame(() => refreshChakraMaps()));
+      }
+      if (updateHistory && window.GaiaAppShell?.currentView?.() === 'wellness') {
+        window.GaiaAppShell.go('wellness', { tab });
+      }
+    }
+
+    buttons.forEach((btn) => {
+      btn.addEventListener('click', () => activateButton(btn, true));
+    });
+
+    window.GaiaWellnessTabs = {
+      activate(tab = 'biowell') {
+        const requestedButton = bar.querySelector(`[data-tab="${tab}"]`) || bar.querySelector('[data-tab="biowell"]');
+        if (requestedButton) activateButton(requestedButton, false);
+      },
+    };
+    window.GaiaWellnessTabs.activate(new URLSearchParams(window.location.search).get('tab') || 'biowell');
   }
 
   function initCommunityTabs() {
@@ -715,22 +802,16 @@
     root.id = 'gaia-assist';
     root.className = 'gaia-assist';
     root.innerHTML = `
-      <button type="button" class="gaia-assist__orb" aria-label="Talk to Gaia Assist">
-        <span class="gaia-assist__pulse" aria-hidden="true"></span>
-        <svg class="gaia-assist__orb-icon" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
-          <path stroke-linecap="round" stroke-linejoin="round" d="M12 18.75a6 6 0 006-6v-1.5m-12 0v1.5a6 6 0 006 6m0 0v3m-3 0h6M12 15a2.25 2.25 0 002.25-2.25v-6a2.25 2.25 0 00-4.5 0v6A2.25 2.25 0 0012 15z"/>
-        </svg>
-      </button>
       <div class="gaia-assist__panel" role="dialog" aria-label="${assistant.name || 'Gaia Assist'}" hidden>
         <div class="gaia-assist__handle"></div>
         <div class="gaia-assist__top">
           <div class="min-w-0">
             <h2>${assistant.name || 'Gaia Assist'}</h2>
-            <p class="gaia-assist__mini">Gemini Live · tap orb to talk</p>
+            <p class="gaia-assist__mini">Tap Gaia for chat · hold to talk</p>
           </div>
           <button type="button" class="gaia-assist__close" aria-label="Close Gaia Assist">×</button>
         </div>
-        <p class="gaia-assist__status" data-assist-state="idle">Ready when you are</p>
+        <p class="gaia-assist__status" data-assist-state="idle">Tap Gaia for chat · hold to talk</p>
         <div class="gaia-assist__transcript"></div>
         <form class="gaia-assist__form">
           <label class="gaia-assist__label" for="gaia-assist-prompt">Ask Gaia</label>
@@ -773,7 +854,6 @@
     document.body.appendChild(root);
 
     const panel = root.querySelector('.gaia-assist__panel');
-    const orb = root.querySelector('.gaia-assist__orb');
     const close = root.querySelector('.gaia-assist__close');
     const mic = root.querySelector('.gaia-assist__mic');
     const status = root.querySelector('.gaia-assist__status');
@@ -1251,7 +1331,7 @@
       audio.onplay = onPlay;
       audio.onended = () => {
         if (!isMobileWebKit) URL.revokeObjectURL(audioUrl);
-        setAssistVoiceState('idle', 'Tap to talk');
+        setAssistVoiceState('idle', REALTIME_STATUS_COPY.idle);
         assistLog('speech ended', { provider });
       };
       audio.onerror = () => {
@@ -1422,8 +1502,12 @@
       } finally {
         activeTtsController = null;
         const audio = getSharedAudio();
-        if (!pendingVoice && audio.paused && !activeWebAudio) setAssistVoiceState('idle', 'Tap to talk');
+        if (!pendingVoice && audio.paused && !activeWebAudio) setAssistVoiceState('idle', REALTIME_STATUS_COPY.idle);
       }
+    }
+
+    function dockButtons() {
+      return document.querySelectorAll('[data-gaia-tab-assist]');
     }
 
     function setOpen(open) {
@@ -1431,18 +1515,99 @@
       panel.hidden = !open;
       root.classList.toggle('gaia-assist--open', open);
       document.body.classList.toggle('gaia-assist-panel-open', open);
-      document.querySelectorAll('[data-gaia-tab-assist]').forEach((button) => {
+      dockButtons().forEach((button) => {
         button.setAttribute('aria-expanded', String(open));
         button.classList.toggle('is-active', open);
       });
     }
 
-    function wireTabAssist() {
-      document.querySelectorAll('[data-gaia-tab-assist]').forEach((button) => {
-        if (button.dataset.gaiaAssistWired) return;
-        button.dataset.gaiaAssistWired = '1';
-        button.addEventListener('click', () => setOpen(panel.hidden));
+    const REALTIME_STATUS_COPY = {
+      idle: 'Tap Gaia for chat · hold to talk',
+      ready: 'Hold Gaia · release to send',
+      connecting: 'Connecting…',
+      holding: 'Listening… release to send',
+      listening: 'Listening… release to send',
+      thinking: 'Gaia is thinking…',
+      speaking: 'Gaia is speaking…',
+      error: 'Voice unavailable — type instead',
+    };
+
+    const HOLD_TO_TALK_MS = 280;
+
+    function wireGaiaDock() {
+      dockButtons().forEach((button) => {
+        if (button.dataset.gaiaDockWired) return;
+        button.dataset.gaiaDockWired = '1';
+
+        let holdTimer = null;
+        let voiceStarted = false;
+
+        const clearHoldTimer = () => {
+          if (holdTimer != null) {
+            window.clearTimeout(holdTimer);
+            holdTimer = null;
+          }
+        };
+
+        const startVoiceHold = async () => {
+          if (voiceStarted) return;
+          voiceStarted = true;
+          button.classList.add('is-pressed');
+          document.body.classList.add('gaia-assist--dock-pressed');
+          setOpen(true);
+          setError('');
+          await unlockVoicePlayback(true);
+          initRealtimeVoice();
+          if (!realtimeVoice) {
+            await startVoicePrompt();
+            return;
+          }
+          await realtimeVoice.holdStart();
+        };
+
+        const onPointerDown = (event) => {
+          if (event.pointerType === 'mouse' && event.button !== 0) return;
+          event.preventDefault();
+          voiceStarted = false;
+          clearHoldTimer();
+          if (button.setPointerCapture) {
+            try { button.setPointerCapture(event.pointerId); } catch { /* ignore */ }
+          }
+          holdTimer = window.setTimeout(() => {
+            holdTimer = null;
+            void startVoiceHold();
+          }, HOLD_TO_TALK_MS);
+        };
+
+        const onPointerUp = (event) => {
+          clearHoldTimer();
+          if (button.releasePointerCapture) {
+            try { button.releasePointerCapture(event.pointerId); } catch { /* ignore */ }
+          }
+          button.classList.remove('is-pressed');
+          document.body.classList.remove('gaia-assist--dock-pressed');
+
+          if (voiceStarted || realtimeVoice?.isHolding) {
+            releaseRealtimeVoice();
+            voiceStarted = false;
+            return;
+          }
+
+          setOpen(panel.hidden);
+        };
+
+        button.addEventListener('pointerdown', onPointerDown);
+        button.addEventListener('pointerup', onPointerUp);
+        button.addEventListener('pointercancel', onPointerUp);
+        button.addEventListener('lostpointercapture', onPointerUp);
+        button.addEventListener('contextmenu', (event) => event.preventDefault());
       });
+      syncDockVoiceState();
+    }
+
+    function syncDockVoiceState() {
+      const nextStatus = realtimeVoice?.status || 'idle';
+      setAssistVoiceState(nextStatus, REALTIME_STATUS_COPY[nextStatus] || REALTIME_STATUS_COPY.idle);
     }
 
     function setError(message) {
@@ -1457,18 +1622,16 @@
       root.classList.toggle('gaia-assist--thinking', state === 'thinking');
       root.classList.toggle('gaia-assist--speaking', state === 'speaking');
       root.classList.toggle('gaia-assist--connecting', state === 'connecting');
-      if (orb) orb.dataset.state = state;
+      root.classList.toggle('gaia-assist--holding', state === 'holding');
+      root.classList.toggle('gaia-assist--ready', state === 'ready');
+      document.body.classList.toggle('gaia-voice-holding', state === 'holding');
+      document.body.classList.toggle('gaia-voice-speaking', state === 'speaking');
+      document.body.classList.toggle('gaia-voice-thinking', state === 'thinking');
+      dockButtons().forEach((button) => {
+        button.dataset.state = state;
+      });
       if (message && status) status.textContent = message;
     }
-
-    const REALTIME_STATUS_COPY = {
-      idle: 'Ready when you are',
-      connecting: 'Connecting live voice…',
-      listening: 'Listening…',
-      thinking: 'Thinking…',
-      speaking: 'Speaking…',
-      error: 'Voice unavailable — type instead',
-    };
 
     let realtimeVoice = null;
     let realtimeEnabled = false;
@@ -1521,24 +1684,8 @@
       assistLog('realtime voice ready');
     }
 
-    async function toggleRealtimeVoice() {
-      await unlockVoicePlayback(true);
-      initRealtimeVoice();
-      if (!realtimeVoice) {
-        await startVoicePrompt();
-        return;
-      }
-      if (realtimeVoice.isActive()) {
-        realtimeVoice.stop();
-        setAssistVoiceState('idle', REALTIME_STATUS_COPY.idle);
-        return;
-      }
-      setOpen(true);
-      setError('');
-      transcript.innerHTML = '';
-      streamBubbleMap.user = null;
-      streamBubbleMap.assistant = null;
-      await realtimeVoice.start({ greeting: true });
+    function releaseRealtimeVoice() {
+      realtimeVoice?.holdEnd();
     }
 
     function updateLiveTranscript(text) {
@@ -1571,7 +1718,7 @@
       if (busy) {
         setAssistVoiceState('thinking', label);
       } else if (!pendingVoice && getSharedAudio().paused && !activeWebAudio && !recognizing && activeRecorder?.state !== 'recording') {
-        setAssistVoiceState('idle', 'Tap to talk');
+        setAssistVoiceState('idle', REALTIME_STATUS_COPY.idle);
       }
     }
 
@@ -1940,7 +2087,7 @@
         const minSize = isIOS ? 80 : 800;
         assistLog('live recorder finished', { bytes: blob.size, type: blobType, isIOS });
         if (blob.size < minSize) {
-          setAssistVoiceState('idle', 'Tap to talk');
+          setAssistVoiceState('idle', REALTIME_STATUS_COPY.idle);
           setError('I could not hear enough audio. Hold the phone close, tap mic again, or use the iPhone keyboard microphone in the text box.');
           return;
         }
@@ -1948,7 +2095,7 @@
         setAssistVoiceState('thinking', 'Transcribing…');
         const transcript = await transcribeAudioBlob(blob);
         if (!transcript) {
-          setAssistVoiceState('idle', 'Tap to talk');
+          setAssistVoiceState('idle', REALTIME_STATUS_COPY.idle);
           setError('Could not understand that. Try again or type your prompt below.');
           return;
         }
@@ -1964,7 +2111,7 @@
           : `${err.message || 'Voice capture failed'}. If this is an in-app browser, open Safari or tap the text box and use iPhone dictation.`;
         setError(message);
         promptInput.focus();
-        setAssistVoiceState('idle', 'Tap to talk');
+        setAssistVoiceState('idle', REALTIME_STATUS_COPY.idle);
       }
     }
 
@@ -2093,8 +2240,8 @@
       await recordLiveVoice();
     }
 
-    wireTabAssist();
-    window.addEventListener('gaia:route', wireTabAssist);
+    wireGaiaDock();
+    window.addEventListener('gaia:route', wireGaiaDock);
     window.addEventListener('gaia:open-assist', (event) => {
       unlockVoicePlayback();
       setOpen(true);
@@ -2112,16 +2259,6 @@
       setOpen(false);
       setAssistVoiceState('idle', REALTIME_STATUS_COPY.idle);
     });
-    if (orb) {
-      orb.addEventListener('click', async () => {
-        if (realtimeVoice?.isActive()) {
-          await toggleRealtimeVoice();
-          return;
-        }
-        setOpen(true);
-        await toggleRealtimeVoice();
-      });
-    }
     if (mic) {
       mic.addEventListener('click', async () => {
         await unlockVoicePlayback(true);
@@ -2204,8 +2341,8 @@
     setMuted(muted);
     initVoiceSettings();
     setVoiceProvider(selectedProvider() === 'auto' ? 'auto' : selectedProvider());
-    requestAnimationFrame(wireTabAssist);
-    setTimeout(wireTabAssist, 0);
+    requestAnimationFrame(wireGaiaDock);
+    setTimeout(wireGaiaDock, 0);
   }
 
   document.addEventListener('DOMContentLoaded', () => {
@@ -2213,9 +2350,10 @@
     initCoachMark();
     initSplashSteps();
     initChakraMaps();
+    initWellnessTabs();
+    initCommunityTabs();
     initAppShellNavigation();
     initCommunityHub();
-    initCommunityTabs();
     initLiveSyncIndicator();
     initGaiaAssist();
   });

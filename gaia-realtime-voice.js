@@ -176,6 +176,8 @@
     let sessionMeta = null;
     let setupDone = false;
     let setupWaiters = [];
+    let holding = false;
+    let maySendAudio = false;
 
     const wsRef = { current: null };
     const streamRef = { current: null };
@@ -353,8 +355,19 @@
           },
           inputAudioTranscription: {},
           outputAudioTranscription: {},
+          realtimeInputConfig: {
+            automaticActivityDetection: { disabled: true },
+          },
         },
       };
+    }
+
+    function sendActivityStart() {
+      return sendWs({ realtimeInput: { activityStart: {} } });
+    }
+
+    function sendActivityEnd() {
+      return sendWs({ realtimeInput: { activityEnd: {} } });
     }
 
     function sendWs(payload) {
@@ -380,6 +393,8 @@
       sessionMeta = null;
       setupDone = false;
       setupWaiters = [];
+      holding = false;
+      maySendAudio = false;
 
       try { wsRef.current?.close(); } catch { /* ignore */ }
       wsRef.current = null;
@@ -418,7 +433,7 @@
       await ctx.audioWorklet.addModule(url);
       const node = new AudioWorkletNode(ctx, 'gaia-audio-capture');
       node.port.onmessage = (event) => {
-        if (!event.data || event.data.type !== 'audio' || muted) return;
+        if (!event.data || event.data.type !== 'audio' || muted || !maySendAudio) return;
         if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) return;
         const pcm = floatToPcm16(event.data.data);
         sendWs({
@@ -444,12 +459,12 @@
         switch (event.kind) {
           case 'setup':
             resolveSetup();
-            setStatus('listening');
+            setStatus(holding ? 'holding' : 'ready');
             break;
           case 'interrupted':
             interruptPlayback();
             streamMessage = null;
-            setStatus('listening');
+            setStatus(holding ? 'holding' : 'ready');
             break;
           case 'audio':
             setStatus('speaking');
@@ -460,8 +475,8 @@
             break;
           case 'inputTranscription':
             upsertStreamingMessage('user', event.text, event.finished);
-            if (event.finished) setStatus('thinking');
-            else setStatus('listening');
+            if (holding) setStatus('holding');
+            else if (event.finished) setStatus('thinking');
             break;
           case 'outputTranscription':
             upsertStreamingMessage('assistant', event.text, event.finished);
@@ -469,7 +484,7 @@
             break;
           case 'turnComplete':
             streamMessage = null;
-            setStatus('listening');
+            setStatus(holding ? 'holding' : 'ready');
             break;
           case 'error':
             setErrorMessage(event.message);
@@ -494,9 +509,21 @@
       return payload;
     }
 
+    async function ensureSession() {
+      if (setupDone && wsRef.current?.readyState === WebSocket.OPEN) return;
+      if (startPromise) {
+        await startPromise;
+        return;
+      }
+      if (status === 'idle' || status === 'error') {
+        await start({ prepareOnly: true });
+      }
+    }
+
     async function start(startOptions = {}) {
-      if (status !== 'idle' && status !== 'error') return;
       if (startPromise) return startPromise;
+      if (setupDone && wsRef.current?.readyState === WebSocket.OPEN) return;
+      if (status !== 'idle' && status !== 'error' && status !== 'ready') return;
       if (!navigator.mediaDevices?.getUserMedia) {
         setErrorMessage('Your browser does not allow microphone access here.');
         setStatus('error');
@@ -575,7 +602,57 @@
       return startTask;
     }
 
+    async function holdStart() {
+      if (holding) return;
+      holding = true;
+      setErrorMessage(null);
+      if (!navigator.mediaDevices?.getUserMedia) {
+        holding = false;
+        setErrorMessage('Your browser does not allow microphone access here.');
+        setStatus('error');
+        return;
+      }
+
+      const wasReady = setupDone && wsRef.current?.readyState === WebSocket.OPEN;
+      if (!wasReady) setStatus('connecting');
+      else setStatus('holding');
+
+      try {
+        await ensureSession();
+        if (!holding) return;
+        if (!setupDone) await waitForSetup();
+        if (!holding) return;
+        interruptPlayback();
+        if (!sendActivityStart()) {
+          throw new Error('Could not start voice capture.');
+        }
+        maySendAudio = true;
+        setStatus('holding');
+      } catch (err) {
+        if (!holding) return;
+        holding = false;
+        maySendAudio = false;
+        setErrorMessage(err instanceof Error ? err.message : 'Could not start live voice.');
+        setStatus('error');
+      }
+    }
+
+    function holdEnd() {
+      if (!holding) return;
+      holding = false;
+      const wasSending = maySendAudio;
+      maySendAudio = false;
+      if (wasSending && setupDone && wsRef.current?.readyState === WebSocket.OPEN) {
+        sendActivityEnd();
+        setStatus('thinking');
+        return;
+      }
+      if (setupDone) setStatus('ready');
+    }
+
     function stop() {
+      holding = false;
+      maySendAudio = false;
       cleanupSession();
       interruptPlayback();
       setStatus('idle');
@@ -585,7 +662,7 @@
     function cancel() {
       interruptPlayback();
       streamMessage = null;
-      setStatus('listening');
+      setStatus(holding ? 'holding' : 'ready');
     }
 
     function toggleMute() {
@@ -615,6 +692,10 @@
       return status !== 'idle' && status !== 'error';
     }
 
+    function isHolding() {
+      return holding;
+    }
+
     function on(event, fn) {
       if (listeners[event]) listeners[event].add(fn);
       return () => listeners[event].delete(fn);
@@ -625,8 +706,11 @@
       get error() { return error; },
       get messages() { return [...messages]; },
       get muted() { return muted; },
+      get isHolding() { return holding; },
       isActive,
       start,
+      holdStart,
+      holdEnd,
       stop,
       cancel,
       toggleMute,

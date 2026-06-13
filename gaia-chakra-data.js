@@ -45,7 +45,7 @@ window.GAIA_CHAKRAS = [
     location: 'Upper abdomen · diaphragm',
     focus: 'Confidence, digestion, personal power',
     theme: 'Wisdom & power',
-    learnHref: 'home.html?view=biowell',
+    learnHref: 'home.html?view=wellness&tab=biowell',
     assistPrompt: 'How do I improve Solar Plexus balance before sessions?',
   },
   {
@@ -60,7 +60,7 @@ window.GAIA_CHAKRAS = [
     location: 'Center chest · thymus region',
     focus: 'Coherence, compassion, connection',
     theme: 'Love & healing',
-    learnHref: 'home.html?view=biowell',
+    learnHref: 'home.html?view=wellness&tab=biowell',
     assistPrompt: 'Summarize Heart chakra stability from my last scans',
   },
   {

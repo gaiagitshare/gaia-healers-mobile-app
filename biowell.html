@@ -4,10 +4,11 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Redirecting · Gaia Healers</title>
-  <meta http-equiv="refresh" content="0; url=home.html?view=biowell" />
+  <meta http-equiv="refresh" content="0; url=home.html?view=wellness&tab=biowell" />
   <script>
     const params = new URLSearchParams(window.location.search);
-    params.set('view', 'biowell');
+    params.set('view', 'wellness');
+    if (!params.get('tab')) params.set('tab', 'biowell');
     window.location.replace(`home.html?${params.toString()}`);
   </script>
 </head>

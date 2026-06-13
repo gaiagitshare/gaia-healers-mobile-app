@@ -16,7 +16,7 @@ const ASSIST_PROVIDER_ORDER = (process.env.ASSIST_PROVIDER_ORDER || 'groq,openro
   .split(',')
   .map((provider) => provider.trim().toLowerCase())
   .filter(Boolean);
-const TTS_PROVIDER_ORDER = (process.env.TTS_PROVIDER_ORDER || 'openai,elevenlabs,compatible')
+const TTS_PROVIDER_ORDER = (process.env.TTS_PROVIDER_ORDER || 'elevenlabs,openai,compatible')
   .split(',')
   .map((provider) => provider.trim().toLowerCase())
   .filter(Boolean);
@@ -281,6 +281,8 @@ async function bootstrap() {
             openaiVoice: OPENAI_TTS_VOICE,
             elevenLabsConfigured: Boolean(process.env.ELEVENLABS_API_KEY && ELEVENLABS_VOICE_ID),
             elevenLabsVoice: ELEVENLABS_VOICE_NAME,
+            elevenLabsVoiceId: ELEVENLABS_VOICE_ID || '',
+            elevenLabsModel: ELEVENLABS_MODEL,
           },
         },
       },
@@ -552,7 +554,7 @@ async function callTtsProvider(provider, text, body = {}) {
     const voiceId = String(body.voiceId || ELEVENLABS_VOICE_ID).trim();
     if (!voiceId) return { skipped: true, reason: 'missing-voice-id' };
     console.log('[Gaia Assist] TTS provider attempt', { provider: 'elevenlabs', model: ELEVENLABS_MODEL, voice: voiceId });
-    const response = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${encodeURIComponent(voiceId)}`, {
+    const response = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${encodeURIComponent(voiceId)}?output_format=mp3_44100_128`, {
       method: 'POST',
       headers: {
         'xi-api-key': process.env.ELEVENLABS_API_KEY,
@@ -630,6 +632,43 @@ async function openAiCompatibleTts({ endpoint, apiKey, model, voice, text, speed
   return { ok: true, provider, model, voice, audio };
 }
 
+async function listHostedVoices() {
+  if (!process.env.ELEVENLABS_API_KEY) {
+    return {
+      ok: true,
+      provider: 'none',
+      voices: ELEVENLABS_VOICE_ID
+        ? [{ id: ELEVENLABS_VOICE_ID, name: ELEVENLABS_VOICE_NAME, provider: 'elevenlabs' }]
+        : [],
+    };
+  }
+  try {
+    const response = await fetch('https://api.elevenlabs.io/v1/voices', {
+      headers: { 'xi-api-key': process.env.ELEVENLABS_API_KEY, Accept: 'application/json' },
+    });
+    if (!response.ok) throw new Error(`voices ${response.status}`);
+    const payload = await response.json();
+    const voices = (payload.voices || [])
+      .map((voice) => ({
+        id: voice.voice_id,
+        name: voice.name,
+        provider: 'elevenlabs',
+        category: voice.category || '',
+      }))
+      .sort((a, b) => a.name.localeCompare(b.name));
+    return { ok: true, provider: 'elevenlabs', voices };
+  } catch (error) {
+    return {
+      ok: true,
+      provider: 'elevenlabs',
+      voices: ELEVENLABS_VOICE_ID
+        ? [{ id: ELEVENLABS_VOICE_ID, name: ELEVENLABS_VOICE_NAME, provider: 'elevenlabs' }]
+        : [],
+      warning: error.message,
+    };
+  }
+}
+
 const server = http.createServer(async (req, res) => {
   const origin = req.headers.origin || '';
   if (req.method === 'OPTIONS') {
@@ -666,6 +705,10 @@ const server = http.createServer(async (req, res) => {
       }
       const payload = await assistChat({ ...body, prompt: transcript, transcript, source: body.source || 'voice' });
       sendJson(res, payload.ok === false ? 400 : 200, payload, origin);
+      return;
+    }
+    if (req.method === 'GET' && url.pathname === '/api/assist/voices') {
+      sendJson(res, 200, await listHostedVoices(), origin);
       return;
     }
     if (req.method === 'POST' && url.pathname === '/api/assist/tts') {

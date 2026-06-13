@@ -1,7 +1,6 @@
 /**
  * Seven-chakra reference data for Bio-Well body-point UI.
- * Positions follow anterior midline mapping used in GDV/chakra wellness charts.
- * Open taxonomy — compatible with public chakra education (cf. community 8-Week Chakra Challenge).
+ * Positions follow anterior midline on the Gaia meditation silhouette (viewBox 120×240).
  */
 window.GAIA_CHAKRAS = [
   {
@@ -24,7 +23,7 @@ window.GAIA_CHAKRAS = [
     name: 'Sacral',
     sanskrit: 'Svadhisthana',
     color: '#FB8C00',
-    top: 56,
+    top: 58,
     left: 50,
     score: 71,
     element: 'Water',
@@ -39,7 +38,7 @@ window.GAIA_CHAKRAS = [
     name: 'Solar Plexus',
     sanskrit: 'Manipura',
     color: '#FDD835',
-    top: 46,
+    top: 48,
     left: 50,
     score: 79,
     element: 'Fire',
@@ -54,7 +53,7 @@ window.GAIA_CHAKRAS = [
     name: 'Heart',
     sanskrit: 'Anahata',
     color: '#43A047',
-    top: 36,
+    top: 37,
     left: 50,
     score: 95,
     element: 'Air',

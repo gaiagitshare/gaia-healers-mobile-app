@@ -259,30 +259,8 @@
       const ordered = [...chakras].reverse();
 
       const render = () => {
-        const silhouetteSvg = `<svg class="gaia-chakra-map__silhouette" viewBox="0 0 120 220" aria-hidden="true" focusable="false">
-      <defs>
-        <radialGradient id="${uid}-aura" cx="50%" cy="14%" r="42%">
-          <stop offset="0%" stop-color="currentColor" stop-opacity="0.22"/>
-          <stop offset="100%" stop-color="currentColor" stop-opacity="0"/>
-        </radialGradient>
-        <linearGradient id="${uid}-body" x1="50%" y1="0%" x2="50%" y2="100%">
-          <stop offset="0%" stop-color="currentColor" stop-opacity="0.96"/>
-          <stop offset="100%" stop-color="currentColor" stop-opacity="0.78"/>
-        </linearGradient>
-      </defs>
-      <ellipse cx="60" cy="112" rx="34" ry="58" fill="url(#${uid}-aura)"/>
-      <g fill="url(#${uid}-body)">
-        <ellipse cx="60" cy="27" rx="13" ry="15"/>
-        <path d="M54 42h12v8c0 2-2 4-6 4s-6-2-6-4v-8z"/>
-        <path d="M47 54c0-2 5-4 13-4s13 2 13 4l-3 52c0 3-4 6-10 6s-10-3-10-6l-3-52z"/>
-        <path d="M47 58c-10 4-18 14-22 28-2 8 0 14 6 16l8-4c-2-10 2-22 10-30l-2-10z"/>
-        <path d="M73 58c10 4 18 14 22 28 2 8 0 14-6 16l-8-4c2-10-2-22-10-30l2-10z"/>
-        <path d="M42 108c-4 8-6 18-4 28 2 12 10 22 22 28 12-6 20-16 22-28 2-10 0-20-4-28-8 6-14 8-20 8s-12-2-20-8z"/>
-        <path d="M36 152c8 18 24 28 24 28s16-10 24-28c-6 10-16 16-24 16s-18-6-24-16z"/>
-        <ellipse cx="60" cy="186" rx="28" ry="10" opacity="0.55"/>
-      </g>
-      <line x1="60" y1="18" x2="60" y2="168" stroke="currentColor" stroke-opacity="0.08" stroke-width="1" stroke-dasharray="2 3"/>
-    </svg>`;
+        const renderSilhouette = window.renderGaiaChakraSilhouette || (() => '');
+        const silhouetteSvg = renderSilhouette(uid);
 
         const listItems = (compact ? ordered.slice(0, 5) : ordered).map((item) => `
           <button type="button" class="gaia-chakra-map__list-item${item.id === active.id ? ' is-active' : ''}"
@@ -673,7 +651,7 @@
           <div class="gaia-assist__speak-controls">
             <button type="button" class="gaia-assist__mute" aria-pressed="false">Mute</button>
             <button type="button" class="gaia-assist__stop">Stop</button>
-            <button type="button" class="gaia-assist__play" hidden>Play voice</button>
+            <button type="button" class="gaia-assist__play" hidden>Hear Gaia</button>
             <span class="gaia-assist__provider">Voice: browser</span>
           </div>
         </div>
@@ -737,6 +715,8 @@
     let currentAudio = null;
     let pendingVoice = null;
     let browserVoices = [];
+    let hostedVoices = [];
+    const prefersManualVoice = /iPhone|iPad|iPod/i.test(navigator.userAgent);
     let voiceUnlocked = false;
     const SILENT_WAV = 'data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQAAAAA=';
 
@@ -863,7 +843,11 @@
       return [...browserVoices].sort((a, b) => naturalVoiceScore(b) - naturalVoiceScore(a))[0] || null;
     }
 
-    function refreshBrowserVoices() {
+    function ttsConfig() {
+      return window.GAIA?.sync?.voice?.tts || {};
+    }
+
+    function refreshBrowserVoicesOnly() {
       browserVoices = window.speechSynthesis?.getVoices?.() || [];
       const best = bestBrowserVoice();
       const selectedName = localStorage.getItem(VOICE_NAME_KEY) || best?.name || '';
@@ -877,14 +861,80 @@
       if (selectedName) voiceNameSelect.value = selectedName;
     }
 
+    function refreshVoiceOptions() {
+      const provider = selectedProvider();
+      const tts = ttsConfig();
+      if (provider === 'elevenlabs' || (provider === 'auto' && tts.elevenLabsConfigured)) {
+        const voices = hostedVoices.length
+          ? hostedVoices
+          : (tts.elevenLabsVoiceId
+            ? [{ id: tts.elevenLabsVoiceId, name: tts.elevenLabsVoice || 'Gaia voice' }]
+            : []);
+        if (voices.length) {
+          const saved = localStorage.getItem(VOICE_NAME_KEY);
+          voiceNameSelect.innerHTML = voices.map((voice) => {
+            const selected = voice.id === saved || voice.name === saved;
+            return `<option value="${escapeHtml(voice.id)}" ${selected ? 'selected' : ''}>${escapeHtml(voice.name)}</option>`;
+          }).join('');
+          return;
+        }
+      }
+      if (provider === 'openai') {
+        const openaiVoice = tts.openaiVoice || 'alloy';
+        const saved = localStorage.getItem(VOICE_NAME_KEY) || openaiVoice;
+        voiceNameSelect.innerHTML = ['alloy', 'ash', 'coral', 'echo', 'fable', 'nova', 'onyx', 'sage', 'shimmer'].map(
+          (name) => `<option value="${name}" ${name === saved ? 'selected' : ''}>${name}</option>`,
+        ).join('');
+        return;
+      }
+      refreshBrowserVoicesOnly();
+    }
+
+    async function loadHostedVoices() {
+      const base = proxyBase();
+      if (!base) return;
+      try {
+        const response = await fetch(`${base}/api/assist/voices`, {
+          headers: { Accept: 'application/json' },
+          credentials: 'omit',
+        });
+        if (!response.ok) return;
+        const payload = await response.json();
+        hostedVoices = payload.voices || [];
+        refreshVoiceOptions();
+      } catch (err) {
+        assistLog('hosted voices unavailable', { error: err.message });
+      }
+    }
+
+    function configureVoiceFromBootstrap() {
+      const tts = ttsConfig();
+      if (!tts.configured) return;
+      const savedProvider = localStorage.getItem(VOICE_PROVIDER_KEY);
+      if ((!savedProvider || savedProvider === 'auto') && tts.elevenLabsConfigured) {
+        voiceProviderSelect.value = 'elevenlabs';
+        localStorage.setItem(VOICE_PROVIDER_KEY, 'elevenlabs');
+      }
+      refreshVoiceOptions();
+      const provider = voiceProviderSelect.value;
+      const label = tts.elevenLabsVoice || tts.openaiVoice || 'hosted';
+      setVoiceProvider(provider === 'browser' ? 'browser' : provider, provider === 'auto' ? 'auto' : label);
+      loadHostedVoices();
+    }
+
+    function refreshBrowserVoices() {
+      refreshVoiceOptions();
+    }
+
     function initVoiceSettings() {
       const savedProvider = localStorage.getItem(VOICE_PROVIDER_KEY);
       voiceProviderSelect.value = savedProvider && savedProvider !== 'browser' ? savedProvider : 'auto';
       localStorage.setItem(VOICE_PROVIDER_KEY, voiceProviderSelect.value);
       voiceSpeed.value = localStorage.getItem(VOICE_SPEED_KEY) || '1';
       voiceSpeedLabel.textContent = `${Number(voiceSpeed.value).toFixed(2)}x`;
-      refreshBrowserVoices();
-      window.speechSynthesis?.addEventListener?.('voiceschanged', refreshBrowserVoices);
+      refreshVoiceOptions();
+      window.speechSynthesis?.addEventListener?.('voiceschanged', refreshBrowserVoicesOnly);
+      configureVoiceFromBootstrap();
     }
 
     function selectedBrowserVoice() {
@@ -926,6 +976,7 @@
     async function playAudioElement(audioUrl, provider, voice) {
       const audio = getSharedAudio();
       audio.src = audioUrl;
+      audio.load();
       audio.onplay = () => {
         clearPendingVoice(false);
         playButton.hidden = true;
@@ -945,7 +996,33 @@
         setVoiceProvider('browser');
         assistError('speech error', { provider, error: 'audio playback failed' });
       };
-      await audio.play();
+      try {
+        await audio.play();
+      } catch (playError) {
+        if (window.AudioContext || window.webkitAudioContext) {
+          const AudioCtx = window.AudioContext || window.webkitAudioContext;
+          const ctx = new AudioCtx();
+          if (ctx.state === 'suspended') await ctx.resume();
+          const buffer = await fetch(audioUrl).then((res) => res.arrayBuffer()).then((data) => ctx.decodeAudioData(data));
+          await new Promise((resolve, reject) => {
+            const source = ctx.createBufferSource();
+            source.buffer = buffer;
+            source.connect(ctx.destination);
+            source.onended = () => {
+              URL.revokeObjectURL(audioUrl);
+              status.textContent = 'Ready for next prompt';
+              assistLog('speech ended', { provider, mode: 'webaudio' });
+              resolve();
+            };
+            source.onerror = reject;
+            setVoiceProvider(provider, voice);
+            status.textContent = 'Speaking...';
+            source.start(0);
+          });
+          return;
+        }
+        throw playError;
+      }
     }
 
     function setVoiceHint(message) {
@@ -965,8 +1042,25 @@
       playButton.hidden = false;
       playButton.classList.add('is-pending');
       setVoiceProvider(provider, voice || 'ready');
-      status.textContent = 'Voice ready — tap Play';
-      setVoiceHint('Tap Play voice to hear Gaia on this device.');
+      status.textContent = 'Voice ready — tap Hear Gaia';
+      setVoiceHint('Tap Hear Gaia to listen on this device.');
+    }
+
+    function buildTtsRequestBody(cleanText, providerSetting) {
+      const tts = ttsConfig();
+      const body = {
+        text: cleanText,
+        provider: providerSetting,
+        speed: selectedSpeed(),
+      };
+      if (providerSetting === 'elevenlabs' || (providerSetting === 'auto' && tts.elevenLabsConfigured)) {
+        body.voiceId = voiceNameSelect.value || tts.elevenLabsVoiceId || undefined;
+      } else if (providerSetting === 'openai') {
+        body.voice = voiceNameSelect.value || tts.openaiVoice || undefined;
+      } else if (voiceNameSelect.value && providerSetting !== 'browser') {
+        body.voice = voiceNameSelect.value;
+      }
+      return body;
     }
 
     async function speakReply(text) {
@@ -993,20 +1087,23 @@
             'Content-Type': 'application/json',
           },
           credentials: 'omit',
-          body: JSON.stringify({
-            text: cleanText,
-            provider: providerSetting,
-            voice: voiceNameSelect.value || undefined,
-            speed: selectedSpeed(),
-          }),
+          body: JSON.stringify(buildTtsRequestBody(cleanText, providerSetting)),
         });
-        if (!response.ok || !response.headers.get('content-type')?.includes('audio')) {
-          throw new Error(`TTS returned ${response.status}`);
+        if (!response.ok) {
+          const payload = await response.json().catch(() => ({}));
+          throw new Error(payload.error || `TTS returned ${response.status}`);
+        }
+        if (!response.headers.get('content-type')?.includes('audio')) {
+          throw new Error('TTS returned a non-audio response');
         }
         const blob = await response.blob();
         const audioUrl = URL.createObjectURL(blob);
         const provider = response.headers.get('X-Gaia-Voice-Provider') || (providerSetting === 'auto' ? 'hosted' : providerSetting);
         const voice = response.headers.get('X-Gaia-Voice-Name') || '';
+        if (prefersManualVoice) {
+          showManualVoicePlayback(audioUrl, provider, voice);
+          return;
+        }
         try {
           await playAudioElement(audioUrl, provider, voice);
         } catch (playError) {
@@ -1226,16 +1323,18 @@
         clearPendingVoice(false);
       } catch (err) {
         assistError('speech error', { provider: pendingVoice.provider, error: err.message });
-        setError('Voice playback is still blocked. Turn off silent mode or raise volume, then tap Play voice again.');
+        setError('Voice playback is still blocked. Turn off silent mode or raise volume, then tap Hear Gaia again.');
       }
     });
     voiceProviderSelect.addEventListener('change', () => {
       localStorage.setItem(VOICE_PROVIDER_KEY, voiceProviderSelect.value);
+      refreshVoiceOptions();
       setVoiceProvider(voiceProviderSelect.value === 'auto' ? 'auto' : voiceProviderSelect.value);
     });
     voiceNameSelect.addEventListener('change', () => {
       localStorage.setItem(VOICE_NAME_KEY, voiceNameSelect.value);
     });
+    document.addEventListener('gaia:sync', configureVoiceFromBootstrap);
     voiceSpeed.addEventListener('input', () => {
       localStorage.setItem(VOICE_SPEED_KEY, voiceSpeed.value);
       voiceSpeedLabel.textContent = `${Number(voiceSpeed.value).toFixed(2)}x`;

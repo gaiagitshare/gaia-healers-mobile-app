@@ -122,6 +122,14 @@
           <p class="gaia-assist__bubble gaia-assist__bubble--user">What should I focus on today?</p>
           <p class="gaia-assist__bubble gaia-assist__bubble--bot">Your portal is ready. I can help with Bio-Well scans, Academy progress, Elevate event check-in, and GHL follow-up workflows.</p>
         </div>
+        <form class="gaia-assist__form">
+          <label class="gaia-assist__label" for="gaia-assist-prompt">Type a prompt</label>
+          <div class="gaia-assist__input-row">
+            <input id="gaia-assist-prompt" name="prompt" type="text" autocomplete="off" placeholder="Ask about my Elevate badge" />
+            <button type="submit">Send</button>
+          </div>
+        </form>
+        <p class="gaia-assist__error" role="alert" hidden></p>
         <div class="gaia-assist__chips"></div>
         <p class="gaia-assist__promise">${assistant.promise || 'Review before anything is saved.'}</p>
       </div>`;
@@ -135,6 +143,12 @@
     const status = root.querySelector('.gaia-assist__status');
     const transcript = root.querySelector('.gaia-assist__transcript');
     const chips = root.querySelector('.gaia-assist__chips');
+    const form = root.querySelector('.gaia-assist__form');
+    const promptInput = root.querySelector('#gaia-assist-prompt');
+    const error = root.querySelector('.gaia-assist__error');
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    let recognition = null;
+    let recognizing = false;
 
     const suggestionMap = [
       { label: assistant.suggestions?.[0] || 'Prepare my badge', reply: assistant.responses?.event, intent: 'event' },
@@ -144,33 +158,198 @@
     ];
     chips.innerHTML = suggestionMap.map((item) => `<button type="button" data-intent="${item.intent}">${item.label}</button>`).join('');
 
+    function assistLog(event, detail = {}) {
+      console.info(`[Gaia Assist] ${event}`, detail);
+    }
+
+    function assistError(event, err) {
+      console.error(`[Gaia Assist] ${event}`, err);
+    }
+
+    function escapeHtml(value) {
+      return String(value)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#039;');
+    }
+
+    function proxyBase() {
+      return (window.GAIA_SYNC?.proxyBase || '').replace(/\/+$/, '');
+    }
+
     function setOpen(open) {
       panel.hidden = !open;
       orb.setAttribute('aria-expanded', String(open));
       root.classList.toggle('gaia-assist--open', open);
     }
 
-    function answer(intent) {
-      const item = suggestionMap.find((entry) => entry.intent === intent) || suggestionMap[0];
-      transcript.innerHTML = `
-        <p class="gaia-assist__bubble gaia-assist__bubble--user">${item.label}</p>
-        <p class="gaia-assist__bubble gaia-assist__bubble--bot">${item.reply || 'I can guide that workflow and ask before making changes.'}</p>`;
-      status.textContent = 'Ready for next prompt';
+    function setError(message) {
+      error.hidden = !message;
+      error.textContent = message || '';
+    }
+
+    function setBusy(busy, label = 'Working...') {
+      mic.disabled = busy;
+      form.querySelector('button').disabled = busy;
+      chips.querySelectorAll('button').forEach((button) => { button.disabled = busy; });
+      status.textContent = busy ? label : 'Ready for next prompt';
+      root.classList.toggle('gaia-assist--thinking', busy);
+    }
+
+    function appendMessage(kind, text) {
+      const bubble = document.createElement('p');
+      bubble.className = `gaia-assist__bubble gaia-assist__bubble--${kind}`;
+      bubble.innerHTML = escapeHtml(text);
+      transcript.appendChild(bubble);
+      transcript.scrollTop = transcript.scrollHeight;
+    }
+
+    async function sendPrompt(prompt, intent = 'general', source = 'text') {
+      const cleanPrompt = String(prompt || '').trim();
+      if (!cleanPrompt) {
+        setError('Type or speak a prompt first.');
+        return;
+      }
+      const base = proxyBase();
+      if (!base) {
+        setError('Gaia Assist needs the staging proxy URL. Open the app with the proxy= query parameter.');
+        assistError('proxy missing', { prompt: cleanPrompt, intent, source });
+        return;
+      }
+
+      setError('');
+      appendMessage('user', cleanPrompt);
+      setBusy(true, 'Sending to Gaia proxy...');
+      assistLog('request sent to proxy', { endpoint: `${base}/api/assist/chat`, intent, source });
+
+      try {
+        const response = await fetch(`${base}/api/assist/chat`, {
+          method: 'POST',
+          headers: {
+            Accept: 'application/json',
+            'Content-Type': 'application/json',
+          },
+          credentials: 'omit',
+          body: JSON.stringify({
+            prompt: cleanPrompt,
+            intent,
+            source,
+            page: window.location.pathname.split('/').pop() || 'home.html',
+          }),
+        });
+        assistLog('proxy response received', { status: response.status });
+        const payload = await response.json().catch(() => ({}));
+        if (!response.ok || payload.ok === false) {
+          throw new Error(payload.error || `Proxy returned ${response.status}`);
+        }
+        if (payload.warning) {
+          setError(payload.warning);
+          assistLog('OpenAI/voice warning', { warning: payload.warning, provider: payload.provider });
+        }
+        appendMessage('bot', payload.reply || 'Gaia Assist received the prompt but did not return a message.');
+      } catch (err) {
+        assistError('OpenAI/voice error', err);
+        setError(err.message || 'Gaia Assist could not reach the proxy.');
+        appendMessage('bot', 'I could not complete that request. The proxy or voice backend returned an error, and no data was changed.');
+      } finally {
+        setBusy(false);
+      }
+    }
+
+    function stopRecognition() {
+      if (recognition && recognizing) {
+        assistLog('recording stopped', { reason: 'manual-stop' });
+        recognition.stop();
+      }
+    }
+
+    async function ensureMicPermission() {
+      if (!navigator.mediaDevices?.getUserMedia) {
+        throw new Error('This browser does not expose microphone permissions. Use the text box to test Gaia Assist.');
+      }
+      assistLog('mic permission requested');
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      stream.getTracks().forEach((track) => track.stop());
+      assistLog('mic permission granted');
+    }
+
+    async function startVoicePrompt() {
+      if (recognizing) {
+        stopRecognition();
+        return;
+      }
+
+      setError('');
+      try {
+        await ensureMicPermission();
+      } catch (err) {
+        assistError('mic permission error', err);
+        setError('Microphone permission was blocked. Allow microphone access in the browser, or use the text box to test Gaia Assist.');
+        return;
+      }
+
+      if (!SpeechRecognition) {
+        setError('Speech recognition is not available in this browser. Use the text box to test the same proxy path.');
+        assistError('speech recognition unavailable', { userAgent: navigator.userAgent });
+        return;
+      }
+
+      recognition = new SpeechRecognition();
+      recognition.lang = 'en-US';
+      recognition.interimResults = true;
+      recognition.continuous = false;
+
+      let finalTranscript = '';
+      recognition.onstart = () => {
+        recognizing = true;
+        root.classList.add('gaia-assist--listening');
+        status.textContent = 'Listening...';
+        assistLog('recording started');
+      };
+      recognition.onresult = (event) => {
+        const spoken = Array.from(event.results)
+          .map((result) => result[0]?.transcript || '')
+          .join(' ')
+          .trim();
+        if (spoken) {
+          status.textContent = event.results[event.results.length - 1].isFinal ? 'Voice captured' : `Hearing: ${spoken}`;
+          finalTranscript = spoken;
+        }
+      };
+      recognition.onerror = (event) => {
+        assistError('OpenAI/voice error', { type: 'speech-recognition', error: event.error });
+        setError(`Voice capture failed: ${event.error}. You can type the same prompt below.`);
+      };
+      recognition.onend = () => {
+        recognizing = false;
+        root.classList.remove('gaia-assist--listening');
+        assistLog('recording stopped', { hasTranscript: Boolean(finalTranscript) });
+        if (finalTranscript) {
+          sendPrompt(finalTranscript, 'voice', 'voice');
+        } else {
+          status.textContent = 'No speech captured';
+        }
+      };
+
+      recognition.start();
     }
 
     orb.addEventListener('click', () => setOpen(panel.hidden));
     close.addEventListener('click', () => setOpen(false));
-    mic.addEventListener('click', () => {
-      root.classList.add('gaia-assist--listening');
-      status.textContent = 'Listening...';
-      window.setTimeout(() => {
-        root.classList.remove('gaia-assist--listening');
-        status.textContent = 'Analyzing Gaia context...';
-      }, 900);
-      window.setTimeout(() => answer('event'), 1600);
+    mic.addEventListener('click', startVoicePrompt);
+    form.addEventListener('submit', (event) => {
+      event.preventDefault();
+      const prompt = promptInput.value;
+      promptInput.value = '';
+      sendPrompt(prompt, 'typed', 'text');
     });
     chips.querySelectorAll('button').forEach((button) => {
-      button.addEventListener('click', () => answer(button.dataset.intent));
+      button.addEventListener('click', () => {
+        const item = suggestionMap.find((entry) => entry.intent === button.dataset.intent) || suggestionMap[0];
+        sendPrompt(item.label, item.intent, 'quick-action');
+      });
     });
 
     document.querySelectorAll('[data-gaia-open-assist]').forEach((button) => {

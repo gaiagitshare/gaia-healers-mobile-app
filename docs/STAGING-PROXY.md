@@ -13,7 +13,13 @@ Paste these only into your backend host environment variables, never into the st
 | `EVENT_MANAGER_BASE_URL` | Event API base URL, e.g. `https://ba2ki.com/event-api` | Event Manager deployment |
 | `EVENT_MANAGER_TOKEN` | Event Manager admin/read token, if enabled | Event Manager backend/admin setup |
 | `EVENT_MANAGER_EVENT_ID` | Elevate event numeric ID | Event Manager admin event detail URL/API |
-| `OPENAI_API_KEY` | OpenAI project key for Gaia Assist voice backend | OpenAI dashboard |
+| `ASSIST_PROVIDER_ORDER` | Comma-separated provider order, e.g. `groq,openrouter,openai` | Gaia Assist staging config |
+| `GROQ_API_KEY` | Groq API key for first-choice Gaia Assist responses | Groq console |
+| `GROQ_MODEL` | Groq chat model, e.g. `llama-3.3-70b-versatile` | Groq model list |
+| `OPENROUTER_API_KEY` | OpenRouter API key for second-choice Gaia Assist responses | OpenRouter dashboard |
+| `OPENROUTER_MODEL` | OpenRouter model, e.g. `openrouter/free` | OpenRouter model list |
+| `OPENAI_API_KEY` | Optional OpenAI project key for final hosted provider fallback | OpenAI dashboard |
+| `OPENAI_MODEL` | OpenAI chat model, e.g. `gpt-4o-mini` | OpenAI model picker |
 | `APP_PUBLIC_URL` | Final app URL | GitHub Pages URL |
 | `ALLOWED_ORIGINS` | GitHub Pages + GHL origins | Backend host settings |
 
@@ -37,7 +43,30 @@ The app reads only:
 
 ```text
 GET {proxy}/api/app/bootstrap
+POST {proxy}/api/assist/chat
+POST {proxy}/api/assist/voice
 ```
+
+`/api/assist/chat` accepts JSON:
+
+```json
+{
+  "prompt": "Prepare my Elevate badge",
+  "intent": "event",
+  "source": "quick-action",
+  "page": "home.html"
+}
+```
+
+`/api/assist/voice` is a staging-safe voice handoff route. The browser captures microphone permission and speech-to-text, then sends the transcript to the proxy. Raw audio upload is not enabled in this static staging build.
+
+Gaia Assist provider fallback order is controlled by:
+
+```text
+ASSIST_PROVIDER_ORDER=groq,openrouter,openai
+```
+
+The proxy tries each configured provider in order. Quota, rate-limit, auth, or model errors are logged by provider name without printing secrets, then the next provider is attempted. If every provider fails, the proxy returns a local safe fallback response.
 
 ## Deploy
 
@@ -79,5 +108,28 @@ Nginx config: /etc/nginx/sites-available/ba2ki
 
 - No GHL token in `gaia-ecosystem.js`, `gaia-live-sync.js`, or any HTML page.
 - No OpenAI key in browser code.
+- No Groq or OpenRouter key in browser code.
 - Event Manager admin writes require authenticated backend endpoints.
 - Start with read-only sync until member identity and admin roles are tested.
+
+## Assistant Smoke Tests
+
+```bash
+curl -fsS https://ba2ki.com/gaia-proxy/health
+
+curl -fsS \
+  -H 'Origin: https://gaiagitshare.github.io' \
+  -H 'Content-Type: application/json' \
+  -d '{"prompt":"Prepare my Elevate badge","intent":"event","source":"curl"}' \
+  https://ba2ki.com/gaia-proxy/api/assist/chat
+```
+
+The response includes `provider`, `model`, and `attempts` so staging can confirm whether Groq, OpenRouter, OpenAI, or the local fallback answered.
+
+In the browser console, Gaia Assist logs:
+
+- mic permission requested/granted or denied
+- recording started/stopped
+- request sent to proxy
+- proxy response received
+- OpenAI/voice warnings or errors

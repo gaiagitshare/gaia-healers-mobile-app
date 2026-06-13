@@ -857,11 +857,16 @@ body.gaia-has-tabbar {
   font-size: 0.75rem;
   color: rgba(255, 255, 255, 0.72);
   font-weight: 600;
+  text-align: center;
+  overflow-wrap: anywhere;
 }
 
 .gaia-assist__transcript {
   display: grid;
   gap: 0.5rem;
+  max-height: 14rem;
+  overflow-y: auto;
+  padding-right: 0.125rem;
 }
 
 .gaia-assist__bubble {
@@ -885,6 +890,64 @@ body.gaia-has-tabbar {
   color: var(--ink-secondary);
 }
 
+.gaia-assist__form {
+  display: grid;
+  gap: 0.4rem;
+  margin-top: 0.875rem;
+}
+
+.gaia-assist__label {
+  color: var(--ink-tertiary);
+  font-size: 0.6875rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.gaia-assist__input-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+.gaia-assist__input-row input {
+  width: 100%;
+  min-width: 0;
+  border: 1px solid var(--line);
+  border-radius: 0.875rem;
+  background: rgba(255, 255, 255, 0.84);
+  padding: 0.7rem 0.75rem;
+  color: var(--ink);
+  font-size: 0.8125rem;
+  outline: none;
+}
+
+.gaia-assist__input-row input:focus {
+  border-color: var(--gaia);
+  box-shadow: 0 0 0 3px rgba(92, 184, 46, 0.14);
+}
+
+.gaia-assist__input-row button {
+  border: 0;
+  border-radius: 0.875rem;
+  background: var(--ink);
+  color: #fff;
+  padding: 0.72rem 0.85rem;
+  font-size: 0.75rem;
+  font-weight: 800;
+}
+
+.gaia-assist__error {
+  margin: 0.625rem 0 0;
+  border-radius: 0.875rem;
+  background: rgba(176, 54, 54, 0.1);
+  color: #9f2f2f;
+  padding: 0.65rem 0.75rem;
+  font-size: 0.75rem;
+  line-height: 1.35;
+}
+
 .gaia-assist__chips {
   display: flex;
   gap: 0.5rem;
@@ -903,6 +966,13 @@ body.gaia-has-tabbar {
   font-size: 0.6875rem;
   font-weight: 800;
   white-space: nowrap;
+}
+
+.gaia-assist__mic:disabled,
+.gaia-assist__chips button:disabled,
+.gaia-assist__input-row button:disabled {
+  cursor: wait;
+  opacity: 0.65;
 }
 
 .gaia-assist__promise {

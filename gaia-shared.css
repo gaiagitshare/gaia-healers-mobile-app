@@ -1084,7 +1084,8 @@ body[data-theme="dark"] .gaia-tabbar__inner a[aria-current="page"] {
 }
 
 .gaia-tabbar__inner {
-  max-width: 29rem !important;
+  max-width: 100% !important;
+  width: 100%;
   min-height: 4.25rem;
   border-radius: 1.45rem !important;
   padding: 0.45rem !important;

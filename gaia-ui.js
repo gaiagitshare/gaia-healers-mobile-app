@@ -440,7 +440,7 @@
     tip.innerHTML = `
       <p class="gaia-eyebrow !text-gaia-light">Quick guide</p>
       <p class="mt-2 text-body !text-white/90"><strong class="text-white">Tap Gaia</strong> once for live voice — just speak naturally, like a phone call. Tap again to close.</p>
-      <p class="mt-2 text-caption !text-white/70">Use <strong class="text-white">Community</strong> in the bottom bar for discussion & events. <strong class="text-white">Profile</strong> and <strong class="text-white">Log in</strong> are top right.</p>
+      <p class="mt-2 text-caption !text-white/70">Use <strong class="text-white">Community</strong> and <strong class="text-white">Profile</strong> in the bottom bar. <strong class="text-white">Log in</strong> is top right.</p>
       <button type="button" class="mt-4 text-caption font-semibold text-gaia-light">Got it</button>`;
     tip.querySelector('button').addEventListener('click', () => {
       sessionStorage.setItem(COACH_KEY, '1');

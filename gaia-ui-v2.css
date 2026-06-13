@@ -483,40 +483,49 @@ body.gaia-v2 .gaia-tabbar {
 }
 
 body.gaia-v2 .gaia-tabbar__inner {
-  max-width: 26rem !important;
+  max-width: 100% !important;
+  width: 100%;
   min-height: 3.65rem;
-  padding: 0.35rem 0.4rem !important;
+  padding: 0.35rem 0.25rem !important;
   border-radius: 999px !important;
   background: var(--gh-tabbar-bg) !important;
   border: 1px solid var(--gh-border-soft) !important;
   box-shadow: var(--gh-bento-shadow), inset 0 1px 0 rgba(255, 255, 255, 0.04) !important;
   backdrop-filter: blur(24px);
   -webkit-backdrop-filter: blur(24px);
+  overflow: visible;
 }
 
 body.gaia-v2 .gaia-tabbar__group {
-  flex: 1;
+  flex: 1 1 0;
   display: flex;
   align-items: end;
-  gap: 0.125rem;
+  gap: 0;
   min-width: 0;
+  overflow: visible;
 }
 
 body.gaia-v2 .gaia-tabbar__group--left {
   justify-content: flex-end;
-  padding-right: 0.15rem;
+  padding-right: 0.05rem;
 }
 
 body.gaia-v2 .gaia-tabbar__group--right {
   justify-content: flex-start;
-  padding-left: 0.15rem;
+  padding-left: 0.05rem;
 }
 
 body.gaia-v2 .gaia-tabbar__link {
-  flex: 1;
-  max-width: 4.25rem;
-  padding: 0.35rem 0.05rem 0.28rem;
+  flex: 1 1 0;
+  min-width: 2.65rem;
+  max-width: none;
+  padding: 0.32rem 0.02rem 0.24rem;
   color: var(--gh-tabbar-link) !important;
+}
+
+body.gaia-v2 .gaia-tabbar__icon {
+  width: 1.15rem;
+  height: 1.15rem;
 }
 
 body.gaia-v2 .gaia-tabbar__assist {
@@ -524,7 +533,7 @@ body.gaia-v2 .gaia-tabbar__assist {
 }
 
 body.gaia-v2 .gaia-tabbar__inner {
-  gap: 0.25rem !important;
+  gap: 0.12rem !important;
 }
 
 
@@ -537,20 +546,21 @@ body.gaia-v2[data-theme="dark"] .gaia-tabbar__link.is-active {
 }
 
 body.gaia-v2 .gaia-tabbar__link.is-active::before {
-  inset: 0.12rem 0.15rem;
+  inset: 0.1rem 0.05rem;
   background: var(--gh-chip-bg);
   box-shadow: none;
 }
 
 body.gaia-v2 .gaia-tabbar__label {
-  font-size: 0.52rem !important;
+  font-size: 0.48rem !important;
   font-weight: 600;
+  letter-spacing: -0.01em;
 }
 
 body.gaia-v2 .gaia-tabbar__assist {
-  width: 3.5rem;
-  height: 3.5rem;
-  margin: -0.85rem 0.1rem 0;
+  width: 3.25rem;
+  height: 3.25rem;
+  margin: -0.75rem 0.02rem 0;
   border-radius: 999px;
   background: linear-gradient(145deg, #8ee862 0%, #5cb82e 45%, #3d8a1f 100%);
   box-shadow:

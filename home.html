@@ -11,7 +11,8 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="gaia-shared.css?v=assist-compact-3" />
+  <script src="gaia-chakra-data.js"></script>
+  <link rel="stylesheet" href="gaia-shared.css?v=ui-nav-2" />
 </head>
 <body class="gaia-app gaia-page gaia-single-app">
   <svg width="0" height="0" aria-hidden="true"><defs><linearGradient id="gaia-ring-gradient" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="#7DD956"/><stop offset="100%" stop-color="#449422"/></linearGradient></defs></svg>
@@ -26,7 +27,9 @@
               <h1 class="text-title text-ink">Today</h1>
             </div>
           </a>
-          <span class="gaia-badge gaia-badge--subtle">1,252</span>
+          <div class="gaia-header-actions" data-gaia-header-actions>
+            <a href="https://education.gaiahealers.com/" class="gaia-login-pill gaia-login-pill--compact">Log in</a>
+          </div>
         </div>
       </header>
 
@@ -92,12 +95,7 @@
             <span class="gaia-badge gaia-badge--subtle">7 pts</span>
           </div>
           <div class="gaia-energy-map">
-            <img src="assets/chakra-all-in-one.webp" alt="Chakra body points map" />
-            <div class="gaia-body-map__list">
-              <div><p class="text-headline text-ink">Sacral focus</p><p class="gaia-caption">Hydration + breathwork before client sessions</p></div>
-              <div><p class="text-headline text-ink">Heart stable</p><p class="gaia-caption">Trend improved across last 3 scans</p></div>
-              <button type="button" data-gaia-open-assist class="gaia-btn gaia-btn-primary !w-auto">Ask about map</button>
-            </div>
+            <div id="gaia-chakra-map-today" class="gaia-chakra-map" data-chakra-map data-chakra-focus="sacral"></div>
           </div>
         </section>
 
@@ -120,7 +118,9 @@
         <p class="gaia-eyebrow">Bio-Well GDV</p>
         <div class="mt-1 flex items-start justify-between gap-3">
           <h1 class="gaia-page-title">Biofield</h1>
-          <span class="gaia-badge shrink-0">Connected</span>
+          <div class="gaia-header-actions" data-gaia-header-actions>
+            <span class="gaia-badge shrink-0">Connected</span>
+          </div>
         </div>
         <p class="gaia-caption mt-1">Bio-Well Practitioners · 381 members</p>
       </header>
@@ -178,26 +178,7 @@
 
         <section>
           <h2 class="gaia-section-title mb-3">Chakra trends</h2>
-          <div class="gaia-card gaia-card-pad grid grid-cols-2 gap-4">
-            <div class="relative flex items-center justify-center">
-              <svg viewBox="0 0 120 200" class="h-36 text-surface-muted" fill="currentColor" aria-hidden="true">
-                <ellipse cx="60" cy="24" rx="14" ry="16"/><rect x="52" y="38" width="16" height="22" rx="6"/>
-                <path d="M40 58 Q60 68 80 58 L75 120 Q60 128 45 120 Z"/><rect x="48" y="118" width="24" height="28" rx="8"/><rect x="50" y="148" width="20" height="36" rx="6"/>
-              </svg>
-              <span class="chakra-dot chakra-dot--focus absolute left-[52%] top-[58%] h-2.5 w-2.5 rounded-full bg-orange-400 ring-2 ring-white"></span>
-              <span class="chakra-dot absolute left-[52%] top-[36%] h-2 w-2 rounded-full bg-gaia ring-2 ring-white"></span>
-            </div>
-            <div class="flex flex-col justify-center gap-2">
-              <p class="text-headline text-ink">Sacral focus</p>
-              <p class="gaia-caption">71 · 6 pts below baseline</p>
-              <a href="home.html?view=academy" class="gaia-link">Harmonization</a>
-            </div>
-          </div>
-          <div class="gaia-card gaia-card-pad mt-3 space-y-3">
-            <div class="flex items-center gap-3"><span class="w-14 gaia-caption">Heart</span><div class="gaia-progress flex-1"><div class="gaia-progress__fill" style="width:95%"></div></div><span class="gaia-tabular w-7 text-right text-micro font-semibold">95</span></div>
-            <div class="flex items-center gap-3"><span class="w-14 gaia-caption">Sacral</span><div class="gaia-progress flex-1"><div class="h-full rounded-full bg-orange-400" style="width:71%"></div></div><span class="gaia-tabular w-7 text-right text-micro font-semibold text-orange-600">71</span></div>
-            <div class="flex items-center gap-3"><span class="w-14 gaia-caption">Root</span><div class="gaia-progress flex-1"><div class="gaia-progress__fill" style="width:84%"></div></div><span class="gaia-tabular w-7 text-right text-micro font-semibold">84</span></div>
-          </div>
+          <div id="gaia-chakra-map-biowell" class="gaia-chakra-map gaia-chakra-map--biowell" data-chakra-map data-chakra-focus="sacral"></div>
         </section>
 
         <section class="gaia-card gaia-card-pad">
@@ -225,9 +206,14 @@
 
     <section class="gaia-screen" data-screen="academy" aria-label="Academy">
       <header class="gaia-header">
-        <p class="gaia-eyebrow">Courses & credentials</p>
-        <h1 class="gaia-page-title mt-1">Academy</h1>
-        <p class="gaia-caption mt-1">Bio-Well Basic · 37.5% avg completion</p>
+        <div class="flex items-start justify-between gap-3">
+          <div>
+            <p class="gaia-eyebrow">Courses & credentials</p>
+            <h1 class="gaia-page-title mt-1">Academy</h1>
+            <p class="gaia-caption mt-1">Bio-Well Basic · 37.5% avg completion</p>
+          </div>
+          <div class="gaia-header-actions" data-gaia-header-actions></div>
+        </div>
       </header>
 
       <main class="gaia-main">
@@ -307,7 +293,9 @@
             <p class="gaia-eyebrow">GHL community hub</p>
             <h1 class="gaia-page-title mt-0.5">Gaia Healers</h1>
           </div>
-          <a href="https://education.gaiahealers.com/" class="gaia-login-pill">Log in</a>
+          <div class="gaia-header-actions" data-gaia-header-actions>
+            <a href="https://education.gaiahealers.com/" class="gaia-login-pill">Log in</a>
+          </div>
         </div>
         <div id="community-tabs" class="mt-4 flex gap-2 overflow-x-auto hide-scrollbar">
           <button type="button" data-tab="discussion" class="shrink-0 rounded-full bg-gaia px-4 py-2 text-micro font-medium text-white">Discussion</button>
@@ -326,19 +314,28 @@
               <h2 class="mt-1 text-title text-white">Membership, courses, community</h2>
               <p class="mt-2 text-caption text-white/68">Synced from GHL Memberships: Client Portal, Courses, Communities, Credentials, and Marketplace.</p>
             </div>
-            <div class="shrink-0 rounded-2xl bg-white/10 px-3 py-2 text-center">
+            <a href="https://education.gaiahealers.com/" class="gaia-stat-link gaia-stat-link--hero shrink-0 rounded-2xl bg-white/10 px-3 py-2 text-center">
               <p class="gaia-tabular text-headline text-white">1,252</p>
               <p class="text-micro text-white/56">users</p>
-            </div>
+            </a>
           </div>
           <div class="mt-5 grid grid-cols-3 gap-2">
-            <div class="gaia-event-metric"><p class="text-micro text-white/60">Groups</p><p class="text-headline text-white">6</p></div>
-            <div class="gaia-event-metric"><p class="text-micro text-white/60">Posts</p><p class="text-headline text-white">39+</p></div>
-            <div class="gaia-event-metric"><p class="text-micro text-white/60">Admins</p><p class="text-headline text-white">3</p></div>
+            <a href="home.html?view=community#community-groups" class="gaia-stat-link gaia-event-metric">
+              <p class="text-micro text-white/60">Groups</p>
+              <p class="text-headline text-white">6</p>
+            </a>
+            <a href="home.html?view=community&tab=discussion" class="gaia-stat-link gaia-event-metric">
+              <p class="text-micro text-white/60">Posts</p>
+              <p class="text-headline text-white">39+</p>
+            </a>
+            <a href="home.html?view=academy" class="gaia-stat-link gaia-event-metric">
+              <p class="text-micro text-white/60">Courses</p>
+              <p class="text-headline text-white">8+</p>
+            </a>
           </div>
         </section>
 
-        <section class="gaia-card gaia-card-pad">
+        <section id="community-groups" class="gaia-card gaia-card-pad">
           <div class="mb-3 flex items-center justify-between gap-3">
             <h2 class="gaia-section-title">Groups</h2>
             <span class="gaia-source-pill">education.gaiahealers.com</span>
@@ -402,7 +399,20 @@
 
         <section id="panel-members" class="hidden space-y-4">
           <article class="gaia-card gaia-card-pad">
-            <div class="grid grid-cols-3 gap-2"><div class="rounded-2xl bg-gaia px-3 py-3 text-center text-white"><p class="gaia-tabular text-headline">381</p><p class="text-micro text-white/70">Active</p></div><div class="rounded-2xl bg-surface-muted px-3 py-3 text-center"><p class="gaia-tabular text-headline text-ink">3</p><p class="gaia-caption">Admins</p></div><div class="rounded-2xl bg-surface-muted px-3 py-3 text-center"><p class="gaia-tabular text-headline text-ink">+</p><p class="gaia-caption">Contributors</p></div></div>
+            <div class="grid grid-cols-3 gap-2">
+              <a href="home.html?view=community&tab=members" class="gaia-stat-link rounded-2xl bg-gaia px-3 py-3 text-center text-white">
+                <p class="gaia-tabular text-headline">381</p>
+                <p class="text-micro text-white/70">Active</p>
+              </a>
+              <a href="home.html?view=community&tab=events" class="gaia-stat-link rounded-2xl bg-surface-muted px-3 py-3 text-center">
+                <p class="gaia-tabular text-headline text-ink">12+</p>
+                <p class="gaia-caption">Events</p>
+              </a>
+              <a href="home.html?view=academy" class="gaia-stat-link rounded-2xl bg-surface-muted px-3 py-3 text-center">
+                <p class="gaia-tabular text-headline text-ink">8+</p>
+                <p class="gaia-caption">Courses</p>
+              </a>
+            </div>
             <input type="search" placeholder="Search members" class="mt-4 w-full rounded-2xl border-0 bg-surface-muted px-4 py-3 text-body placeholder:text-ink-tertiary focus:outline-none focus:ring-2 focus:ring-gaia/30" />
           </article>
           <div class="gaia-card gaia-list-divider overflow-hidden">
@@ -430,8 +440,9 @@
               <h1 class="text-title text-ink">Profile</h1>
             </div>
           </div>
-          <button type="button" class="rounded-full bg-surface-muted px-4 py-2 text-caption font-medium text-ink-secondary" data-admin-unlock hidden>Unlock admin</button>
-        </div>
+          <div class="gaia-header-actions" data-gaia-header-actions>
+            <button type="button" class="rounded-full bg-surface-muted px-4 py-2 text-caption font-medium text-ink-secondary" data-admin-unlock hidden>Unlock admin</button>
+          </div>
       </header>
 
       <main class="gaia-main">
@@ -549,7 +560,7 @@
       </main>
     </section>
   </div>
-  <script src="gaia-ui.js?v=assist-compact-3"></script>
-  <script src="shared-nav.js?v=assist-redesign-1"></script>
+  <script src="gaia-ui.js?v=ui-nav-2"></script>
+  <script src="shared-nav.js?v=ui-nav-2"></script>
 </body>
 </html>

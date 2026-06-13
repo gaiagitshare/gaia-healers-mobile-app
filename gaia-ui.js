@@ -26,23 +26,84 @@
     function apply(theme) {
       document.body.dataset.theme = theme;
       localStorage.setItem(THEME_KEY, theme);
-      const button = document.querySelector('.gaia-theme-toggle');
-      if (button) {
+      document.querySelectorAll('.gaia-theme-toggle').forEach((button) => {
         button.setAttribute('aria-label', theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode');
         button.innerHTML = theme === 'dark'
           ? '<svg aria-hidden="true" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8"><path stroke-linecap="round" stroke-linejoin="round" d="M12 3v2.25m0 13.5V21m9-9h-2.25M5.25 12H3m15.364 6.364-1.591-1.591M7.227 7.227 5.636 5.636m12.728 0-1.591 1.591M7.227 16.773l-1.591 1.591M15.75 12a3.75 3.75 0 1 1-7.5 0 3.75 3.75 0 0 1 7.5 0Z"/></svg>'
           : '<svg aria-hidden="true" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8"><path stroke-linecap="round" stroke-linejoin="round" d="M21.752 15.002A9.718 9.718 0 0 1 18 15.75c-5.385 0-9.75-4.365-9.75-9.75 0-1.33.266-2.597.748-3.752A9.753 9.753 0 0 0 3 11.25C3 16.635 7.365 21 12.75 21a9.753 9.753 0 0 0 9.002-5.998Z"/></svg>';
-      }
+      });
     }
 
-    if (!document.querySelector('.gaia-theme-toggle')) {
+    document.querySelectorAll('[data-gaia-header-actions]').forEach((slot) => {
+      if (slot.querySelector('.gaia-theme-toggle')) return;
       const button = document.createElement('button');
       button.type = 'button';
       button.className = 'gaia-theme-toggle';
       button.addEventListener('click', () => apply(document.body.dataset.theme === 'dark' ? 'light' : 'dark'));
-      document.body.appendChild(button);
-    }
+      slot.insertBefore(button, slot.firstChild);
+    });
+    document.body.querySelector(':scope > .gaia-theme-toggle')?.remove();
     apply(initial);
+  }
+
+  function initChakraMaps() {
+    const chakras = window.GAIA_CHAKRAS || [];
+    if (!chakras.length) return;
+
+    document.querySelectorAll('[data-chakra-map]').forEach((root) => {
+      const compact = root.classList.contains('gaia-chakra-map--biowell');
+      let active = chakras.find((item) => item.id === root.dataset.chakraFocus) || chakras[0];
+
+      const render = () => {
+        root.innerHTML = `
+          <div class="gaia-chakra-map__figure" aria-hidden="false">
+            ${chakras.map((item) => `
+              <button type="button" class="gaia-chakra-map__node${item.id === active.id ? ' is-active' : ''}"
+                style="top:${item.top}%;left:${item.left}%;--chakra-color:${item.color}"
+                data-chakra-id="${item.id}" aria-label="${item.name} chakra, score ${item.score}">
+                <span></span>
+              </button>`).join('')}
+          </div>
+          <div class="gaia-chakra-map__detail">
+            <p class="gaia-chakra-map__name">${active.name} <span>${active.sanskrit}</span></p>
+            <p class="gaia-chakra-map__score gaia-tabular">${active.score} · ${active.element}</p>
+            <p class="gaia-caption">${active.location}</p>
+            <p class="gaia-body">${active.focus}</p>
+            <div class="gaia-chakra-map__actions">
+              <a href="${active.learnHref}" class="gaia-link">Learn more</a>
+              <button type="button" class="gaia-link" data-chakra-assist>Ask Gaia</button>
+            </div>
+          </div>
+          ${compact ? '' : `<div class="gaia-chakra-map__bars">
+            ${[...chakras].reverse().map((item) => `
+              <button type="button" class="gaia-chakra-map__bar${item.id === active.id ? ' is-active' : ''}" data-chakra-id="${item.id}">
+                <span>${item.name}</span>
+                <span class="gaia-chakra-map__bar-track"><i style="width:${item.score}%;background:${item.color}"></i></span>
+                <span class="gaia-tabular">${item.score}</span>
+              </button>`).join('')}
+          </div>`}
+          ${compact ? `<div class="gaia-chakra-map__bars gaia-chakra-map__bars--compact">
+            ${chakras.slice(0, 4).map((item) => `
+              <button type="button" class="gaia-chakra-map__bar${item.id === active.id ? ' is-active' : ''}" data-chakra-id="${item.id}">
+                <span>${item.name}</span>
+                <span class="gaia-chakra-map__bar-track"><i style="width:${item.score}%;background:${item.color}"></i></span>
+                <span class="gaia-tabular">${item.score}</span>
+              </button>`).join('')}
+          </div>` : ''}`;
+
+        root.querySelectorAll('[data-chakra-id]').forEach((button) => {
+          button.addEventListener('click', () => {
+            active = chakras.find((item) => item.id === button.dataset.chakraId) || active;
+            render();
+          });
+        });
+        root.querySelector('[data-chakra-assist]')?.addEventListener('click', () => {
+          window.dispatchEvent(new CustomEvent('gaia:open-assist', { detail: { prompt: active.assistPrompt } }));
+        });
+      };
+
+      render();
+    });
   }
 
   function initCoachMark() {
@@ -363,10 +424,6 @@
     root.id = 'gaia-assist';
     root.className = 'gaia-assist';
     root.innerHTML = `
-      <button type="button" class="gaia-assist__orb" aria-label="Open Gaia Assist" aria-expanded="false">
-        <span class="gaia-assist__pulse"></span>
-        <span class="gaia-assist__mark">G</span>
-      </button>
       <div class="gaia-assist__panel" role="dialog" aria-label="${assistant.name || 'Gaia Assist'}" hidden>
         <div class="gaia-assist__handle"></div>
         <div class="gaia-assist__top">
@@ -425,7 +482,6 @@
 
     document.body.appendChild(root);
 
-    const orb = root.querySelector('.gaia-assist__orb');
     const panel = root.querySelector('.gaia-assist__panel');
     const close = root.querySelector('.gaia-assist__close');
     const mic = root.querySelector('.gaia-assist__mic');
@@ -687,9 +743,20 @@
 
     function setOpen(open) {
       panel.hidden = !open;
-      orb.setAttribute('aria-expanded', String(open));
       root.classList.toggle('gaia-assist--open', open);
       document.body.classList.toggle('gaia-assist-panel-open', open);
+      document.querySelectorAll('[data-gaia-tab-assist]').forEach((button) => {
+        button.setAttribute('aria-expanded', String(open));
+        button.classList.toggle('is-active', open);
+      });
+    }
+
+    function wireTabAssist() {
+      document.querySelectorAll('[data-gaia-tab-assist]').forEach((button) => {
+        if (button.dataset.gaiaAssistWired) return;
+        button.dataset.gaiaAssistWired = '1';
+        button.addEventListener('click', () => setOpen(panel.hidden));
+      });
     }
 
     function setError(message) {
@@ -847,7 +914,15 @@
       recognition.start();
     }
 
-    orb.addEventListener('click', () => setOpen(panel.hidden));
+    wireTabAssist();
+    window.addEventListener('gaia:route', wireTabAssist);
+    window.addEventListener('gaia:open-assist', (event) => {
+      setOpen(true);
+      if (event.detail?.prompt) {
+        promptInput.value = event.detail.prompt;
+        promptInput.focus();
+      }
+    });
     close.addEventListener('click', () => setOpen(false));
     mic.addEventListener('click', startVoicePrompt);
     muteButton.addEventListener('click', () => setMuted(!muted));
@@ -895,6 +970,8 @@
     setMuted(muted);
     initVoiceSettings();
     setVoiceProvider(selectedProvider() === 'auto' ? 'auto' : selectedProvider());
+    requestAnimationFrame(wireTabAssist);
+    setTimeout(wireTabAssist, 0);
   }
 
   document.addEventListener('DOMContentLoaded', () => {
@@ -904,6 +981,7 @@
     initAppShellNavigation();
     initCommunityTabs();
     initLiveSyncIndicator();
+    initChakraMaps();
     initGaiaAssist();
   });
 })();

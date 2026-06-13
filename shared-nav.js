@@ -19,26 +19,35 @@
     return window.GaiaAppShell?.currentView?.() || new URLSearchParams(window.location.search).get('view') || 'today';
   }
 
+  function tabLink(t, on) {
+    return `
+      <a href="${t.href}" data-app-nav="${t.id}" class="gaia-tabbar__link ${on ? 'is-active' : ''}" ${on ? 'aria-current="page"' : ''}>
+        <svg class="gaia-tabbar__icon" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="${on ? '2' : '1.5'}">${icons[t.id]}</svg>
+        <span class="gaia-tabbar__label">${t.label}</span>
+      </a>`;
+  }
+
   function render() {
     const active = currentView() === 'admin' ? 'profile' : currentView();
     const nav = document.querySelector('.gaia-tabbar');
     if (!nav) return;
-    nav.querySelector('.gaia-tabbar__inner').innerHTML = tabs.map((t) => {
-      const on = active === t.id;
-      return `
-        <a href="${t.href}" data-app-nav="${t.id}" class="relative flex flex-1 flex-col items-center gap-0.5 rounded-xl py-2 transition-colors ${on ? 'text-gaia' : 'text-ink-tertiary'}" ${on ? 'aria-current="page"' : ''}>
-          ${on ? '<span class="absolute inset-x-1.5 inset-y-1 rounded-xl bg-gaia/10"></span>' : ''}
-          <svg class="relative h-[22px] w-[22px]" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="${on ? '2' : '1.5'}">${icons[t.id]}</svg>
-          <span class="relative text-[10px] font-medium tracking-tight">${t.label}</span>
-        </a>`;
-    }).join('');
+
+    const left = tabs.slice(0, 2);
+    const right = tabs.slice(2);
+    const inner = nav.querySelector('.gaia-tabbar__inner');
+    inner.innerHTML = `
+      <div class="gaia-tabbar__group">${left.map((t) => tabLink(t, active === t.id)).join('')}</div>
+      <button type="button" class="gaia-tabbar__assist" data-gaia-tab-assist aria-label="Open Gaia Assist" aria-expanded="false">
+        <span class="gaia-tabbar__assist-mark">G</span>
+      </button>
+      <div class="gaia-tabbar__group">${right.map((t) => tabLink(t, active === t.id)).join('')}</div>`;
   }
 
   const nav = document.createElement('nav');
   nav.setAttribute('aria-label', 'Main');
   nav.className = 'gaia-tabbar fixed bottom-0 left-0 right-0 z-50 px-4 pointer-events-none';
   nav.style.paddingBottom = 'max(0.75rem, env(safe-area-inset-bottom))';
-  nav.innerHTML = '<div class="gaia-tabbar__inner mx-auto flex max-w-md items-center justify-between rounded-2xl bg-white/90 px-1 py-1.5 shadow-[0_4px_24px_rgba(0,0,0,0.08),0_0_0_1px_rgba(0,0,0,0.04)] backdrop-blur-xl pointer-events-auto" style="backdrop-filter:saturate(180%) blur(20px)"></div>';
+  nav.innerHTML = '<div class="gaia-tabbar__inner mx-auto flex max-w-md items-end justify-between gap-1 rounded-2xl bg-white/90 px-1 py-1.5 shadow-[0_4px_24px_rgba(0,0,0,0.08),0_0_0_1px_rgba(0,0,0,0.04)] backdrop-blur-xl pointer-events-auto"></div>';
 
   document.body.appendChild(nav);
   document.body.classList.add('gaia-has-tabbar');

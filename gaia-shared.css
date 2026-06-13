@@ -2279,6 +2279,45 @@ body[data-theme="dark"] .gaia-assist {
   animation: gaia-assist-play-pulse 1.4s ease-in-out infinite;
 }
 
+.gaia-assist__play-bar {
+  display: none;
+  width: 100%;
+  margin-top: 0.35rem;
+  padding: 0.62rem 0.85rem;
+  border: 0;
+  border-radius: 0.75rem;
+  background: var(--gaia);
+  color: #fff;
+  font-size: 0.78rem;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  cursor: pointer;
+  box-shadow: 0 4px 14px rgba(92, 184, 46, 0.35);
+}
+
+.gaia-assist__play-bar:not([hidden]) {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.45rem;
+}
+
+.gaia-assist__play-bar.is-pending {
+  animation: gaia-assist-play-pulse 1.4s ease-in-out infinite;
+}
+
+.gaia-assist__play-bar span {
+  font-size: 0.85rem;
+}
+
+.gaia-assist__audio {
+  position: absolute;
+  width: 0;
+  height: 0;
+  opacity: 0;
+  pointer-events: none;
+}
+
 @keyframes gaia-assist-play-pulse {
   0%, 100% { box-shadow: 0 0 0 0 rgba(92, 184, 46, 0.35); }
   50% { box-shadow: 0 0 0 6px rgba(92, 184, 46, 0); }

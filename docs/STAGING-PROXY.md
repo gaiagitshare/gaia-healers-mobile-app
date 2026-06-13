@@ -24,7 +24,7 @@ Paste these only into your backend host environment variables, never into the st
 | `OPENAI_TTS_MODEL` | Optional OpenAI TTS model, e.g. `gpt-4o-mini-tts` | OpenAI audio model picker |
 | `OPENAI_TTS_VOICE` | Optional OpenAI TTS voice, e.g. `alloy` | OpenAI audio docs |
 | `GEMINI_API_KEY` | Google AI key for Gemini Live voice (or `GOOGLE_API_KEY`) | Google AI Studio |
-| `GEMINI_LIVE_MODEL` | Live model, e.g. `gemini-2.0-flash-live-001` | Gemini Live docs |
+| `GEMINI_LIVE_MODEL` | Live model, e.g. `gemini-2.5-flash-native-audio-preview-12-2025` | Gemini Live docs |
 | `GEMINI_LIVE_VOICE` | Live voice name, e.g. `Puck`, `Charon`, `Kore` | Gemini Live docs |
 | `GAIA_LIVE_VOICE_ENABLED` | Set `true` to enable Gemini Live orb voice | Gaia proxy config |
 | `ELEVENLABS_API_KEY` | Optional ElevenLabs key for more natural hosted voice | ElevenLabs dashboard |

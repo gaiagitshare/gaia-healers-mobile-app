@@ -333,7 +333,7 @@
     }
 
     function buildSetupMessage(meta) {
-      const model = String(meta.model || 'gemini-2.0-flash-live-001').replace(/^models\//, '');
+      const model = String(meta.model || 'gemini-2.5-flash-native-audio-preview-12-2025').replace(/^models\//, '');
       return {
         setup: {
           model: `models/${model}`,

@@ -175,7 +175,7 @@ function clampNumber(value, min, max, fallback) {
   return Math.min(max, Math.max(min, number));
 }
 
-const GEMINI_LIVE_MODEL = process.env.GEMINI_LIVE_MODEL || 'gemini-2.0-flash-live-001';
+const GEMINI_LIVE_MODEL = process.env.GEMINI_LIVE_MODEL || 'gemini-2.5-flash-native-audio-preview-12-2025';
 const GEMINI_LIVE_VOICE = process.env.GEMINI_LIVE_VOICE || 'Puck';
 const GEMINI_LIVE_MAX_SECONDS = clampNumber(
   Number(process.env.GEMINI_LIVE_MAX_SECONDS || 300),

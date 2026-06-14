@@ -47,6 +47,165 @@ const FALLBACK_GAIA = {
   },
 };
 
+const FALLBACK_ACADEMY = {
+  ok: true,
+  configured: false,
+  liveData: false,
+  source: 'staging-snapshot',
+  generatedAt: '',
+  member: {
+    name: 'Gaia member',
+    email: '',
+    portalUrl: 'https://education.gaiahealers.com',
+  },
+  summary: {
+    enrolled: 8,
+    completed: 2,
+    inProgress: 1,
+    averageProgress: 38,
+    nextCourseTitle: 'Bio-Well Advanced Level 1',
+    nextLessonTitle: 'Module 4 · Scan interpretation lab',
+    nextLessonUrl: '',
+    ceCreditsEarned: 18.5,
+    ceCreditsRequired: 24,
+  },
+  activeCourseId: 'biowell-advanced-l1',
+  courses: [
+    {
+      id: 'biowell-orientation',
+      title: 'BIO-WELL Orientation',
+      category: 'Bio-Well',
+      status: 'completed',
+      progressPercent: 100,
+      completedLessons: 8,
+      totalLessons: 8,
+      instructor: 'Gaia Faculty',
+      lastActivity: 'Credential issued',
+      nextLessonTitle: 'Complete',
+      continueUrl: '',
+      credential: 'BIO-WELL Orientation Training',
+      ceCredits: 2,
+    },
+    {
+      id: 'biowell-basic',
+      title: 'BIO-WELL Basic Certification',
+      category: 'Bio-Well',
+      status: 'completed',
+      progressPercent: 100,
+      completedLessons: 18,
+      totalLessons: 18,
+      instructor: 'Gaia Faculty',
+      lastActivity: 'Credential issued',
+      nextLessonTitle: 'Complete',
+      continueUrl: '',
+      credential: 'BIO-WELL Basic Certification',
+      ceCredits: 8,
+    },
+    {
+      id: 'biowell-advanced-l1',
+      title: 'Bio-Well Advanced Level 1',
+      category: 'Bio-Well',
+      status: 'in_progress',
+      progressPercent: 62,
+      completedLessons: 9,
+      totalLessons: 15,
+      instructor: 'Dr. Nina Bashkir',
+      lastActivity: 'Scanned 7:42 AM',
+      nextLessonTitle: 'Module 4 · Scan interpretation lab',
+      continueUrl: '',
+      credential: 'Advanced Level 1',
+      ceCredits: 8.5,
+    },
+    {
+      id: 'biowell-advanced-l2',
+      title: 'Bio-Well Advanced Level 2',
+      category: 'Bio-Well',
+      status: 'locked',
+      progressPercent: 0,
+      completedLessons: 0,
+      totalLessons: 12,
+      instructor: 'Gaia Faculty',
+      lastActivity: 'Unlocks at 80% Level 1',
+      nextLessonTitle: 'Locked',
+      continueUrl: '',
+      credential: 'Advanced Level 2',
+      ceCredits: 10,
+    },
+    {
+      id: 'biopulsar-basic',
+      title: 'BioPulsar Basic Technical & Business',
+      category: 'BioPulsar',
+      status: 'available',
+      progressPercent: 0,
+      completedLessons: 0,
+      totalLessons: 10,
+      instructor: 'BioPulsar Faculty',
+      lastActivity: '105 enrolled',
+      nextLessonTitle: 'Start course',
+      continueUrl: '',
+      credential: '',
+      ceCredits: 4,
+    },
+    {
+      id: 'biotekna-live',
+      title: 'BioTekna Live Trainings',
+      category: 'BioTekna',
+      status: 'available',
+      progressPercent: 0,
+      completedLessons: 0,
+      totalLessons: 6,
+      instructor: 'BioTekna Practitioners',
+      lastActivity: 'Live sessions',
+      nextLessonTitle: 'Join next training',
+      continueUrl: '',
+      credential: '',
+      ceCredits: 4,
+    },
+    {
+      id: 'healeex-start',
+      title: 'Healeex Getting Started',
+      category: 'Healeex',
+      status: 'available',
+      progressPercent: 0,
+      completedLessons: 0,
+      totalLessons: 5,
+      instructor: 'Healeex Community',
+      lastActivity: 'Onboarding',
+      nextLessonTitle: 'Start course',
+      continueUrl: '',
+      credential: '',
+      ceCredits: 2,
+    },
+    {
+      id: 'chakra-challenge',
+      title: '9-Week Chakra Challenge',
+      category: 'Chakras',
+      status: 'available',
+      progressPercent: 0,
+      completedLessons: 0,
+      totalLessons: 9,
+      instructor: 'Gaia Community',
+      lastActivity: 'Self-paced',
+      nextLessonTitle: 'Start week 1',
+      continueUrl: '',
+      credential: '',
+      ceCredits: 0,
+    },
+  ],
+  credentials: [
+    { title: 'BIO-WELL Basic', issuer: 'Gaia Credentials', status: 'issued', issuedAt: '2024' },
+    { title: 'BIO-WELL Orientation', issuer: 'Gaia Credentials', status: 'issued', issuedAt: '2024' },
+  ],
+  requirements: {
+    title: 'Level 1 proctored exam',
+    description: '20 documented scans · 80% course completion',
+    scansCompleted: 14,
+    scansRequired: 20,
+    courseRequiredPercent: 80,
+    currentCoursePercent: 62,
+  },
+};
+
 const GAIA_KNOWLEDGE = {
   brand: 'Gaia Healers',
   publicWebsite: 'https://gaiahealers.com',
@@ -425,18 +584,135 @@ async function getGhlSummary() {
   };
 }
 
+function clampPercent(value) {
+  return clampNumber(value, 0, 100, 0);
+}
+
+function normalizeCourse(raw = {}, index = 0) {
+  const completedLessons = Number(raw.completedLessons ?? raw.lessonsCompleted ?? raw.completed_lessons ?? 0);
+  const totalLessons = Number(raw.totalLessons ?? raw.lessonsTotal ?? raw.total_lessons ?? raw.lessonCount ?? 0);
+  const computedProgress = totalLessons > 0 ? Math.round((completedLessons / totalLessons) * 100) : 0;
+  const progressPercent = clampPercent(raw.progressPercent ?? raw.progress ?? raw.percentComplete ?? raw.completionPercentage ?? computedProgress);
+  const status = String(raw.status || (progressPercent >= 100 ? 'completed' : progressPercent > 0 ? 'in_progress' : 'available')).toLowerCase();
+  return {
+    id: String(raw.id || raw.courseId || raw.course_id || `course-${index + 1}`),
+    title: String(raw.title || raw.name || raw.courseName || 'Untitled course'),
+    category: String(raw.category || raw.group || raw.track || 'Academy'),
+    status,
+    progressPercent,
+    completedLessons: Number.isFinite(completedLessons) ? completedLessons : 0,
+    totalLessons: Number.isFinite(totalLessons) ? totalLessons : 0,
+    instructor: String(raw.instructor || raw.faculty || ''),
+    lastActivity: String(raw.lastActivity || raw.last_activity || raw.updatedAt || raw.updated_at || ''),
+    nextLessonTitle: String(raw.nextLessonTitle || raw.nextLesson || raw.next_lesson || raw.currentLesson || raw.current_lesson || ''),
+    continueUrl: String(raw.continueUrl || raw.url || raw.href || raw.deepLink || raw.deep_link || ''),
+    credential: String(raw.credential || raw.certificate || ''),
+    ceCredits: Number(raw.ceCredits ?? raw.ce_credits ?? 0) || 0,
+  };
+}
+
+function normalizeAcademyProgress(payload = {}) {
+  const sourceCourses = Array.isArray(payload.courses)
+    ? payload.courses
+    : Array.isArray(payload.enrollments)
+      ? payload.enrollments
+      : [];
+  const courses = sourceCourses.map(normalizeCourse);
+  const activeCourse = courses.find((course) => course.status === 'in_progress')
+    || courses.find((course) => course.progressPercent > 0 && course.progressPercent < 100)
+    || courses[0]
+    || FALLBACK_ACADEMY.courses[2];
+  const completed = courses.filter((course) => course.status === 'completed' || course.progressPercent >= 100).length;
+  const inProgress = courses.filter((course) => course.progressPercent > 0 && course.progressPercent < 100).length;
+  const averageProgress = courses.length
+    ? Math.round(courses.reduce((sum, course) => sum + course.progressPercent, 0) / courses.length)
+    : 0;
+
+  return {
+    ok: true,
+    configured: Boolean(payload.configured ?? true),
+    liveData: Boolean(payload.liveData ?? payload.live_data ?? true),
+    source: String(payload.source || 'academy-connector'),
+    generatedAt: String(payload.generatedAt || payload.generated_at || new Date().toISOString()),
+    member: {
+      name: String(payload.member?.name || payload.contact?.name || 'Gaia member'),
+      email: String(payload.member?.email || payload.contact?.email || ''),
+      portalUrl: String(payload.member?.portalUrl || payload.portalUrl || FALLBACK_ACADEMY.member.portalUrl),
+    },
+    summary: {
+      enrolled: Number(payload.summary?.enrolled ?? courses.length) || courses.length,
+      completed: Number(payload.summary?.completed ?? completed) || completed,
+      inProgress: Number(payload.summary?.inProgress ?? inProgress) || inProgress,
+      averageProgress: clampPercent(payload.summary?.averageProgress ?? averageProgress),
+      nextCourseTitle: String(payload.summary?.nextCourseTitle || activeCourse.title),
+      nextLessonTitle: String(payload.summary?.nextLessonTitle || activeCourse.nextLessonTitle || 'Continue course'),
+      nextLessonUrl: String(payload.summary?.nextLessonUrl || activeCourse.continueUrl || ''),
+      ceCreditsEarned: Number(payload.summary?.ceCreditsEarned ?? payload.summary?.ce_credits_earned ?? FALLBACK_ACADEMY.summary.ceCreditsEarned) || 0,
+      ceCreditsRequired: Number(payload.summary?.ceCreditsRequired ?? payload.summary?.ce_credits_required ?? FALLBACK_ACADEMY.summary.ceCreditsRequired) || 0,
+    },
+    activeCourseId: String(payload.activeCourseId || payload.active_course_id || activeCourse.id),
+    courses,
+    credentials: Array.isArray(payload.credentials) ? payload.credentials : FALLBACK_ACADEMY.credentials,
+    requirements: payload.requirements || FALLBACK_ACADEMY.requirements,
+  };
+}
+
+async function getAcademyProgress(url = new URL('http://localhost')) {
+  const configuredUrl = String(process.env.ACADEMY_PROGRESS_BASE_URL || process.env.GHL_COURSE_PROGRESS_URL || '').replace(/\/+$/, '');
+  const token = process.env.ACADEMY_PROGRESS_TOKEN || process.env.GHL_COURSE_PROGRESS_TOKEN || '';
+  const inlineJson = process.env.ACADEMY_PROGRESS_JSON || '';
+  const memberId = String(url.searchParams.get('memberId') || url.searchParams.get('contactId') || process.env.ACADEMY_PROGRESS_MEMBER_ID || '').trim();
+  const email = String(url.searchParams.get('email') || process.env.ACADEMY_PROGRESS_EMAIL || '').trim();
+
+  if (inlineJson) {
+    try {
+      const parsed = JSON.parse(inlineJson);
+      return normalizeAcademyProgress({
+        ...parsed,
+        configured: true,
+        liveData: Boolean(parsed.liveData ?? parsed.live_data ?? true),
+        source: parsed.source || 'academy-progress-json',
+      });
+    } catch (error) {
+      return { ...FALLBACK_ACADEMY, error: `ACADEMY_PROGRESS_JSON is invalid: ${error.message}` };
+    }
+  }
+
+  if (configuredUrl) {
+    const apiUrl = new URL(configuredUrl);
+    if (memberId) apiUrl.searchParams.set('memberId', memberId);
+    if (email) apiUrl.searchParams.set('email', email);
+    const headers = { Accept: 'application/json' };
+    if (token) headers.Authorization = `Bearer ${token}`;
+    const payload = await fetchJson(apiUrl.toString(), headers);
+    return normalizeAcademyProgress({
+      ...payload,
+      configured: true,
+      liveData: true,
+      source: payload.source || 'academy-progress-api',
+    });
+  }
+
+  return {
+    ...FALLBACK_ACADEMY,
+    generatedAt: new Date().toISOString(),
+  };
+}
+
 async function bootstrap() {
-  const [event, ghl] = await Promise.all([
+  const [event, ghl, academy] = await Promise.all([
     getEventSummary().catch((error) => ({ ...FALLBACK_GAIA.event, source: 'event-manager-error', liveData: false, error: error.message })),
     getGhlSummary().catch((error) => ({ configured: false, error: error.message })),
+    getAcademyProgress().catch((error) => ({ ...FALLBACK_ACADEMY, source: 'academy-error', error: error.message })),
   ]);
-  const liveData = Boolean(event.liveData || ghl.liveData || ghl.normalized);
+  const liveData = Boolean(event.liveData || ghl.liveData || ghl.normalized || academy.liveData);
 
   return {
     ok: true,
     gaia: {
       ...FALLBACK_GAIA,
       event,
+      academy,
       sync: {
         generatedAt: new Date().toISOString(),
         liveData,
@@ -1100,6 +1376,10 @@ const server = http.createServer(async (req, res) => {
     }
     if (req.method === 'GET' && url.pathname === '/api/app/bootstrap') {
       sendJson(res, 200, await bootstrap(), origin);
+      return;
+    }
+    if (req.method === 'GET' && url.pathname === '/api/academy/progress') {
+      sendJson(res, 200, await getAcademyProgress(url), origin);
       return;
     }
     if (req.method === 'POST' && url.pathname === '/api/assist/chat') {

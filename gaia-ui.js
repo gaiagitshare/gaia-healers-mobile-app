@@ -52,6 +52,10 @@
     return `home.html${query ? `?${query}` : ''}`;
   }
 
+  function syncProxyBase() {
+    return (window.GAIA_SYNC?.proxyBase || DEFAULT_PROXY).replace(/\/+$/, '');
+  }
+
   function embeddedPortalTarget(label = '') {
     const text = String(label || '').toLowerCase();
     if (/course|academy|learning|module|credential|certification/.test(text)) {
@@ -67,6 +71,12 @@
       return appHref('community', { tab: 'newsletter' });
     }
     return appHref('community', { tab: 'discussion' });
+  }
+
+  function percentLabel(value) {
+    const number = Number(value);
+    if (!Number.isFinite(number)) return '0%';
+    return `${Math.round(Math.max(0, Math.min(100, number)))}%`;
   }
 
   function wireEmbeddedPortalLinks(root = document) {
@@ -286,6 +296,166 @@
     renderMembers();
     renderNewsletter();
     wireEmbeddedPortalLinks(document);
+  }
+
+  function initAcademyProgress() {
+    const summaryCaption = document.getElementById('academy-summary-caption');
+    const activeTitle = document.getElementById('academy-active-title');
+    const activeDetail = document.getElementById('academy-active-detail');
+    const activeProgress = document.getElementById('academy-active-progress');
+    const activePercent = document.getElementById('academy-active-percent');
+    const activeLessons = document.getElementById('academy-active-lessons');
+    const continueLink = document.getElementById('academy-continue-link');
+    const sourceNote = document.getElementById('academy-source-note');
+    const roadmap = document.getElementById('academy-roadmap');
+    const examCard = document.getElementById('academy-exam-card');
+    const credentialsEl = document.getElementById('academy-credentials');
+    const courseList = document.getElementById('academy-course-list');
+    if (!summaryCaption || !activeTitle || !courseList) return;
+
+    function courseStatusLabel(course) {
+      const status = String(course.status || '').toLowerCase();
+      if (status === 'completed') return 'Completed';
+      if (status === 'locked') return 'Locked';
+      if (Number(course.progressPercent) > 0) return `${percentLabel(course.progressPercent)} complete`;
+      return 'Available';
+    }
+
+    function courseHref(course, academy) {
+      const url = String(course.continueUrl || academy?.summary?.nextLessonUrl || '').trim();
+      if (url) return url;
+      return appHref('profile');
+    }
+
+    function renderRoadmap(courses = [], activeId = '') {
+      if (!roadmap) return;
+      const visible = courses.slice(0, 5);
+      roadmap.innerHTML = visible.map((course, index) => {
+        const status = String(course.status || '').toLowerCase();
+        const done = status === 'completed' || Number(course.progressPercent) >= 100;
+        const active = course.id === activeId || (Number(course.progressPercent) > 0 && Number(course.progressPercent) < 100);
+        const locked = status === 'locked';
+        const marker = done ? '✓' : locked ? String(index + 1) : String(index + 1);
+        const markerClass = done
+          ? 'bg-gaia text-white'
+          : active
+            ? 'border-2 border-gaia bg-white text-gaia'
+            : 'bg-surface-muted text-ink-tertiary';
+        const line = index < visible.length - 1
+          ? '<span class="mt-2 w-px flex-1 bg-gaia/25 min-h-[1rem]"></span>'
+          : '';
+        return `<div class="flex gap-4">
+          <div class="flex flex-col items-center"><span class="flex h-8 w-8 items-center justify-center rounded-full ${markerClass} text-micro font-bold">${marker}</span>${line}</div>
+          <div class="pb-1 min-w-0">
+            <p class="text-headline ${locked ? 'text-ink-tertiary' : 'text-ink'}">${escapeHtml(course.title)}</p>
+            <p class="gaia-caption ${active ? 'text-gaia-dark' : ''}">${escapeHtml(courseStatusLabel(course))}${course.nextLessonTitle ? ` · ${escapeHtml(course.nextLessonTitle)}` : ''}</p>
+          </div>
+        </div>`;
+      }).join('');
+    }
+
+    function renderRequirements(requirements = {}, activeCourse = {}) {
+      if (!examCard) return;
+      const scansCompleted = Number(requirements.scansCompleted || 0);
+      const scansRequired = Number(requirements.scansRequired || 0);
+      const currentCoursePercent = Number(requirements.currentCoursePercent ?? activeCourse.progressPercent ?? 0);
+      const courseRequiredPercent = Number(requirements.courseRequiredPercent || 80);
+      examCard.innerHTML = `<p class="text-headline text-ink">${escapeHtml(requirements.title || 'Proctored exam')}</p>
+        <p class="gaia-caption mt-1">${escapeHtml(requirements.description || `${scansRequired} documented scans · ${courseRequiredPercent}% course completion`)}</p>
+        <p class="text-micro text-gaia-dark mt-2 font-medium">${scansCompleted} / ${scansRequired} scans · ${percentLabel(currentCoursePercent)} course</p>
+        <div class="gaia-progress gaia-progress--md mt-3"><div class="gaia-progress__fill" style="width:${Math.min(100, scansRequired ? (scansCompleted / scansRequired) * 100 : 0)}%"></div></div>`;
+    }
+
+    function renderCredentials(credentials = []) {
+      if (!credentialsEl) return;
+      if (!credentials.length) {
+        credentialsEl.innerHTML = '<article class="gaia-row"><div class="flex-1 min-w-0"><p class="text-headline text-ink">No issued credentials yet</p><p class="gaia-caption">Complete eligible courses to unlock certificates.</p></div></article>';
+        return;
+      }
+      credentialsEl.innerHTML = credentials.map((credential) => `
+        <article class="gaia-row">
+          <div class="flex h-11 w-11 items-center justify-center rounded-xl bg-gaia text-white font-semibold">✓</div>
+          <div class="flex-1 min-w-0">
+            <p class="text-headline text-ink">${escapeHtml(credential.title || credential.name || 'Credential')}</p>
+            <p class="gaia-caption">${escapeHtml(credential.issuer || 'Gaia Credentials')}${credential.issuedAt ? ` · ${escapeHtml(credential.issuedAt)}` : ''}</p>
+          </div>
+        </article>
+      `).join('');
+    }
+
+    function renderCourseList(courses = [], academy = {}) {
+      if (!courseList) return;
+      const items = courses.filter((course) => course.id !== academy.activeCourseId).slice(0, 6);
+      courseList.innerHTML = items.map((course) => `
+        <a href="${escapeHtml(courseHref(course, academy))}" class="gaia-card gaia-card-pad gaia-course-card" ${course.continueUrl ? '' : 'data-app-nav'}>
+          <div class="flex items-start justify-between gap-3">
+            <div class="min-w-0">
+              <p class="text-micro font-semibold text-gaia">${escapeHtml(course.category || 'Academy')}</p>
+              <h3 class="text-headline text-ink mt-0.5">${escapeHtml(course.title)}</h3>
+              <p class="gaia-caption mt-1">${escapeHtml(courseStatusLabel(course))}${course.ceCredits ? ` · +${course.ceCredits} CE` : ''}</p>
+            </div>
+            <span class="gaia-badge ${course.status === 'completed' ? 'gaia-badge--live' : 'gaia-badge--subtle'}">${percentLabel(course.progressPercent)}</span>
+          </div>
+          <div class="gaia-progress gaia-progress--md mt-3"><div class="gaia-progress__fill" style="width:${Number(course.progressPercent || 0)}%"></div></div>
+        </a>
+      `).join('');
+    }
+
+    function renderAcademy(academy = window.GAIA?.academy) {
+      if (!academy) return;
+      const courses = Array.isArray(academy.courses) ? academy.courses : [];
+      const activeCourse = courses.find((course) => course.id === academy.activeCourseId)
+        || courses.find((course) => Number(course.progressPercent) > 0 && Number(course.progressPercent) < 100)
+        || courses[0]
+        || {};
+      const summary = academy.summary || {};
+      summaryCaption.textContent = `${summary.enrolled ?? courses.length} courses · ${percentLabel(summary.averageProgress)} avg completion`;
+      activeTitle.textContent = activeCourse.title || summary.nextCourseTitle || 'Academy progress';
+      activeDetail.textContent = `${summary.nextLessonTitle || activeCourse.nextLessonTitle || 'Continue learning'}${activeCourse.instructor ? ` · ${activeCourse.instructor}` : ''}`;
+      if (activeProgress) activeProgress.style.width = percentLabel(activeCourse.progressPercent || summary.averageProgress || 0);
+      if (activePercent) activePercent.textContent = `${percentLabel(activeCourse.progressPercent || 0)} complete`;
+      if (activeLessons) activeLessons.textContent = activeCourse.totalLessons ? `${activeCourse.completedLessons || 0} / ${activeCourse.totalLessons} lessons` : 'Progress synced';
+      if (continueLink) {
+        continueLink.href = courseHref(activeCourse, academy);
+        if (!activeCourse.continueUrl && !summary.nextLessonUrl) continueLink.dataset.appNav = '';
+        else continueLink.removeAttribute('data-app-nav');
+        continueLink.textContent = activeCourse.status === 'locked' ? 'View unlock steps' : 'Continue where I left off';
+      }
+      if (sourceNote) {
+        sourceNote.textContent = academy.liveData
+          ? `Live course sync · ${academy.source || 'academy'}`
+          : 'Staging snapshot · connect Academy/GHL progress feed for per-member live data';
+      }
+      renderRoadmap(courses, academy.activeCourseId);
+      renderRequirements(academy.requirements, activeCourse);
+      renderCredentials(academy.credentials || []);
+      renderCourseList(courses, academy);
+      wireEmbeddedPortalLinks(document);
+      window.GaiaAppShell?.wireLinks?.();
+    }
+
+    async function refreshAcademy() {
+      renderAcademy(window.GAIA?.academy);
+      try {
+        const response = await fetch(`${syncProxyBase()}/api/academy/progress`, {
+          headers: { Accept: 'application/json' },
+          credentials: 'omit',
+        });
+        if (!response.ok) throw new Error(`Academy progress returned ${response.status}`);
+        const payload = await response.json();
+        window.GAIA = { ...(window.GAIA || {}), academy: payload };
+        renderAcademy(payload);
+      } catch (error) {
+        if (sourceNote) sourceNote.textContent = `Course sync unavailable · ${error.message}`;
+      }
+    }
+
+    renderAcademy(window.GAIA?.academy);
+    document.addEventListener('gaia:sync', () => refreshAcademy());
+    window.addEventListener('gaia:route', () => {
+      if (window.GaiaAppShell?.currentView?.() === 'academy') refreshAcademy();
+    });
+    if (window.GAIA_SYNC?.status === 'live' || window.GAIA_SYNC?.status === 'connected') refreshAcademy();
   }
 
   function initTheme() {
@@ -2676,6 +2846,7 @@
     initChakraMaps();
     initWellnessTabs();
     initCommunityTabs();
+    initAcademyProgress();
     initAppShellNavigation();
     initCommunityHub();
     initLiveSyncIndicator();

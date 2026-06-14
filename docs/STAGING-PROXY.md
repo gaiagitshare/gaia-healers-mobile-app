@@ -10,6 +10,11 @@ Paste these only into your backend host environment variables, never into the st
 | --- | --- | --- |
 | `GHL_API_TOKEN` | LeadConnector/GHL private integration token | GHL/LeadConnector private integration settings |
 | `GHL_LOCATION_ID` | Gaia Healers location ID | GHL location URL or API settings |
+| `ACADEMY_PROGRESS_BASE_URL` | Backend-only normalized course progress endpoint | Your GHL/Courses connector, membership export service, or internal academy API |
+| `ACADEMY_PROGRESS_TOKEN` | Bearer token for `ACADEMY_PROGRESS_BASE_URL` | Your academy connector backend |
+| `ACADEMY_PROGRESS_JSON` | Optional staging-only normalized course progress JSON | Temporary backend env var from a GHL Courses/member progress export |
+| `ACADEMY_PROGRESS_MEMBER_ID` | Optional staging member/contact id used by the academy connector | GHL contact/member record |
+| `ACADEMY_PROGRESS_EMAIL` | Optional staging member email used by the academy connector | GHL contact/member record |
 | `EVENT_MANAGER_BASE_URL` | Event API base URL, e.g. `https://ba2ki.com/event-api` | Event Manager deployment |
 | `EVENT_MANAGER_TOKEN` | Event Manager admin/read token, if enabled | Event Manager backend/admin setup |
 | `EVENT_MANAGER_EVENT_ID` | Elevate event numeric ID | Event Manager admin event detail URL/API |
@@ -58,6 +63,7 @@ The app reads only:
 
 ```text
 GET {proxy}/api/app/bootstrap
+GET {proxy}/api/academy/progress
 POST {proxy}/api/assist/chat
 POST {proxy}/api/assist/voice
 POST {proxy}/api/assist/transcribe
@@ -77,6 +83,47 @@ GET {proxy}/api/assist/voices
 ```
 
 `/api/assist/voice` is a staging-safe voice handoff route for already-transcribed browser text. `/api/assist/transcribe` accepts short browser-recorded audio from the static app and transcribes it on the proxy with ElevenLabs STT first, then OpenAI Whisper if configured. The frontend never receives provider keys.
+
+## Academy Course Progress
+
+The public app reads course progress from:
+
+```text
+GET {proxy}/api/academy/progress
+```
+
+That route returns a safe, normalized shape only:
+
+```json
+{
+  "ok": true,
+  "configured": true,
+  "liveData": true,
+  "source": "academy-progress-api",
+  "summary": {
+    "enrolled": 8,
+    "completed": 2,
+    "inProgress": 1,
+    "averageProgress": 38,
+    "nextCourseTitle": "Bio-Well Advanced Level 1",
+    "nextLessonTitle": "Module 4 · Scan interpretation lab",
+    "nextLessonUrl": "https://..."
+  },
+  "courses": [
+    {
+      "id": "biowell-advanced-l1",
+      "title": "Bio-Well Advanced Level 1",
+      "status": "in_progress",
+      "progressPercent": 62,
+      "completedLessons": 9,
+      "totalLessons": 15,
+      "continueUrl": "https://..."
+    }
+  ]
+}
+```
+
+Use `ACADEMY_PROGRESS_BASE_URL` for the real connector. If the live GHL membership/course API is not available for direct reads, use a backend job/webhook/export to normalize GHL course progress into this shape. For staging only, paste a real exported normalized payload into `ACADEMY_PROGRESS_JSON`; do not commit it.
 
 `/api/assist/tts` is optional backend TTS. The browser tries backend voice providers through this proxy route and falls back to browser `SpeechSynthesis` if hosted voice is unavailable, out of quota, or not configured. The frontend never receives OpenAI, ElevenLabs, OpenRouter, Groq, or provider keys.
 

@@ -30,8 +30,8 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
   <script src="gaia-chakra-data.js"></script>
-  <link rel="stylesheet" href="gaia-shared.css?v=20260614n" />
-  <link rel="stylesheet" href="gaia-ui-v2.css?v=20260614n" />
+  <link rel="stylesheet" href="gaia-shared.css?v=20260614o" />
+  <link rel="stylesheet" href="gaia-ui-v2.css?v=20260614o" />
 </head>
 <body class="gaia-app gaia-page gaia-single-app gaia-v2">
   <script>try{document.body.dataset.theme=document.documentElement.dataset.theme||'light';}catch(e){}</script>
@@ -245,25 +245,29 @@
           <div>
             <p class="gaia-eyebrow">Courses & credentials</p>
             <h1 class="gaia-page-title mt-1">Academy</h1>
-            <p class="gaia-caption mt-1">Bio-Well Basic · 37.5% avg completion</p>
+            <p id="academy-summary-caption" class="gaia-caption mt-1">Loading course progress…</p>
           </div>
           <div class="gaia-header-actions" data-gaia-header-actions></div>
         </div>
       </header>
 
       <main class="gaia-main">
-        <section class="gaia-card-dark gaia-card-pad-lg rounded-3xl">
+        <section id="academy-continue-card" class="gaia-card-dark gaia-card-pad-lg rounded-3xl">
           <p class="text-micro text-gaia-light">In progress</p>
-          <h2 class="mt-2 text-title text-white">Bio-Well Advanced Level 1</h2>
-          <p class="gaia-caption mt-1 !text-white/55">Module 4 · Dr. Nina Bashkir</p>
-          <div class="gaia-progress gaia-progress--md mt-5 bg-white/10"><div class="gaia-progress__fill" style="width:62%"></div></div>
-          <button type="button" class="gaia-btn gaia-btn-primary mt-5">Continue</button>
-          <p class="gaia-caption mt-3 text-center !text-white/40">education.gaiahealers.com</p>
+          <h2 id="academy-active-title" class="mt-2 text-title text-white">Bio-Well Advanced Level 1</h2>
+          <p id="academy-active-detail" class="gaia-caption mt-1 !text-white/55">Module 4 · Dr. Nina Bashkir</p>
+          <div class="gaia-progress gaia-progress--md mt-5 bg-white/10"><div id="academy-active-progress" class="gaia-progress__fill" style="width:62%"></div></div>
+          <div class="mt-4 flex items-center justify-between gap-3">
+            <p id="academy-active-percent" class="text-micro font-bold text-white/70">62% complete</p>
+            <p id="academy-active-lessons" class="text-micro font-semibold text-white/45">9 / 15 lessons</p>
+          </div>
+          <a id="academy-continue-link" href="home.html?view=profile" class="gaia-btn gaia-btn-primary mt-5">Continue where I left off</a>
+          <p id="academy-source-note" class="gaia-caption mt-3 text-center !text-white/40">Connecting to course progress…</p>
         </section>
 
         <section>
           <h2 class="gaia-section-title mb-4">Certification roadmap</h2>
-          <div class="gaia-card gaia-card-pad-lg space-y-5">
+          <div id="academy-roadmap" class="gaia-card gaia-card-pad-lg space-y-5">
             <div class="flex gap-4"><div class="flex flex-col items-center"><span class="flex h-8 w-8 items-center justify-center rounded-full bg-gaia text-micro font-bold text-white">✓</span><span class="mt-2 w-px flex-1 bg-gaia/25 min-h-[1rem]"></span></div><div class="pb-1"><p class="text-headline text-ink">BIO-WELL Orientation</p><p class="gaia-caption text-gaia-dark">Credential issued</p></div></div>
             <div class="flex gap-4"><div class="flex flex-col items-center"><span class="flex h-8 w-8 items-center justify-center rounded-full bg-gaia text-micro font-bold text-white">✓</span><span class="mt-2 w-px flex-1 bg-gaia/25 min-h-[1rem]"></span></div><div class="pb-1"><p class="text-headline text-ink">BIO-WELL Basic Certification</p><p class="gaia-caption">Completed</p></div></div>
             <div class="flex gap-4"><div class="flex flex-col items-center"><span class="flex h-8 w-8 items-center justify-center rounded-full border-2 border-gaia bg-white text-micro font-bold text-gaia">4</span><span class="mt-2 w-px flex-1 bg-surface-muted min-h-[1rem]"></span></div><div class="pb-1"><p class="text-headline text-ink">Advanced Level 1</p><p class="gaia-caption text-gaia-dark">62% · Exam at 80%</p></div></div>
@@ -271,7 +275,7 @@
           </div>
         </section>
 
-        <section class="gaia-card gaia-card-pad border-dashed border-2 border-gaia/25 bg-gaia-wash/50">
+        <section id="academy-exam-card" class="gaia-card gaia-card-pad border-dashed border-2 border-gaia/25 bg-gaia-wash/50">
           <p class="text-headline text-ink">Level 1 proctored exam</p>
           <p class="gaia-caption mt-1">20 documented scans · 80% course completion</p>
           <p class="text-micro text-gaia-dark mt-2 font-medium">14 / 20 scans · 62% course</p>
@@ -293,7 +297,7 @@
             <h2 class="gaia-section-title">Credentials</h2>
             <span class="gaia-badge">Verified</span>
           </div>
-          <div class="gaia-stack">
+          <div id="academy-credentials" class="gaia-stack">
             <article class="gaia-row"><div class="flex h-11 w-11 items-center justify-center rounded-xl bg-gaia text-white font-semibold">✓</div><div class="flex-1 min-w-0"><p class="text-headline text-ink">BIO-WELL Basic</p><p class="gaia-caption">Gaia Credentials</p></div></article>
             <article class="gaia-row"><div class="flex h-11 w-11 items-center justify-center rounded-xl bg-gaia-muted text-gaia-dark font-semibold">✓</div><div class="flex-1 min-w-0"><p class="text-headline text-ink">BIO-WELL Orientation</p><p class="gaia-caption">Gaia Credentials</p></div></article>
           </div>
@@ -301,7 +305,7 @@
 
         <section>
           <h2 class="gaia-section-title mb-3">Continuing education</h2>
-          <div class="gaia-stack">
+          <div id="academy-course-list" class="gaia-stack">
             <article class="gaia-card gaia-card-pad"><p class="text-micro font-semibold text-indigo-600">BioPulsar</p><h3 class="text-headline text-ink mt-0.5">Basic Technical & Business</h3><p class="gaia-caption">105 enrolled · +4 CE</p></article>
             <article class="gaia-card gaia-card-pad"><p class="text-micro font-semibold text-teal-600">BioTekna</p><h3 class="text-headline text-ink mt-0.5">Live Trainings</h3><p class="gaia-caption">Biotekna Practitioners</p></article>
             <article class="gaia-card gaia-card-pad"><p class="text-micro font-semibold text-violet-600">Healeex</p><h3 class="text-headline text-ink mt-0.5">Getting Started</h3><p class="gaia-caption">Healeex Community</p></article>
@@ -551,8 +555,8 @@
       </main>
     </section>
   </div>
-  <script src="gaia-realtime-voice.js?v=20260614n"></script>
-  <script src="gaia-ui.js?v=20260614n"></script>
-  <script src="shared-nav.js?v=20260614n"></script>
+  <script src="gaia-realtime-voice.js?v=20260614o"></script>
+  <script src="gaia-ui.js?v=20260614o"></script>
+  <script src="shared-nav.js?v=20260614o"></script>
 </body>
 </html>

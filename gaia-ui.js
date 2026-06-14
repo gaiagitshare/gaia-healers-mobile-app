@@ -1064,7 +1064,7 @@
     let activeWebAudio = null;
     let realtimeWelcomeSent = false;
     let passiveWelcomeShown = false;
-    let passiveSpeechAttempted = false;
+    let autoGeminiStarted = false;
     const userAgent = navigator.userAgent || '';
     const isIOS = /iPad|iPhone|iPod/i.test(userAgent)
       || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
@@ -1283,6 +1283,11 @@
       voiceProvider.dataset.provider = provider;
     }
 
+    function setRealtimeVoiceProvider() {
+      const live = realtimeConfig();
+      setVoiceProvider('gemini live', live.voice || 'Puck');
+    }
+
     function clearPendingVoice(revoke = true) {
       if (revoke && pendingVoice?.url) URL.revokeObjectURL(pendingVoice.url);
       pendingVoice = null;
@@ -1429,6 +1434,9 @@
 
     function configureVoiceFromBootstrap() {
       initRealtimeVoice();
+      if (canUseRealtimeVoice()) {
+        setRealtimeVoiceProvider();
+      }
       const tts = ttsConfig();
       const savedProvider = localStorage.getItem(VOICE_PROVIDER_KEY);
       if (tts.elevenLabsConfigured) {
@@ -1443,7 +1451,9 @@
       refreshVoiceOptions();
       const provider = voiceProviderSelect.value;
       const label = tts.elevenLabsVoice || tts.openaiVoice || 'hosted';
-      setVoiceProvider(provider === 'browser' ? 'browser' : provider, provider === 'auto' ? 'auto' : label);
+      if (!canUseRealtimeVoice()) {
+        setVoiceProvider(provider === 'browser' ? 'browser' : provider, provider === 'auto' ? 'auto' : label);
+      }
       if (tts.configured) loadHostedVoices();
     }
 
@@ -1732,7 +1742,7 @@
     }
 
     const REALTIME_STATUS_COPY = {
-      idle: 'Tap Gaia for live voice',
+      idle: 'Tap Gaia to start Gemini Live',
       ready: 'Listening… speak naturally',
       connecting: 'Connecting…',
       holding: 'Listening…',
@@ -1753,25 +1763,8 @@
         const bubble = appendMessage('bot', welcomeText);
         bubble.dataset.gaiaWelcomeBubble = '1';
       }
-      setAssistVoiceState('idle', canUseRealtimeVoice() ? 'Tap Gaia to start live welcome' : REALTIME_STATUS_COPY.idle);
-      if (!passiveSpeechAttempted && !muted && window.speechSynthesis && window.SpeechSynthesisUtterance) {
-        passiveSpeechAttempted = true;
-        window.setTimeout(() => {
-          try {
-            const utterance = new SpeechSynthesisUtterance('Welcome to Gaia Healers. I am Gaia Assist. Tap Gaia when you are ready and I can help with courses, community, events, Bio-Well, and member support.');
-            utterance.lang = 'en-US';
-            utterance.rate = 1;
-            utterance.pitch = 1;
-            utterance.onstart = () => assistLog('passive welcome speech started', { provider: 'browser' });
-            utterance.onend = () => assistLog('passive welcome speech ended', { provider: 'browser' });
-            utterance.onerror = (event) => assistLog('passive welcome speech blocked', { error: event.error || 'blocked' });
-            window.speechSynthesis.cancel();
-            window.speechSynthesis.speak(utterance);
-          } catch (err) {
-            assistLog('passive welcome speech blocked', { error: err.message });
-          }
-        }, 180);
-      }
+      setAssistVoiceState('idle', canUseRealtimeVoice() ? 'Starting Gemini Live…' : 'Gemini Live is loading…');
+      if (canUseRealtimeVoice()) setRealtimeVoiceProvider();
     }
 
     function sendRealtimeWelcome(reason = 'start') {
@@ -1784,9 +1777,36 @@
       return sent;
     }
 
+    function shouldAutoStartGemini() {
+      const params = new URLSearchParams(window.location.search);
+      if (params.has('no_autostart') || params.has('no_welcome')) return false;
+      return true;
+    }
+
+    async function autoStartGeminiWelcome(reason = 'auto') {
+      if (!shouldAutoStartGemini() || autoGeminiStarted || realtimeWelcomeSent) return;
+      initRealtimeVoice();
+      if (!realtimeVoice) return;
+      autoGeminiStarted = true;
+      setOpen(true, { passive: true });
+      setError('');
+      setRealtimeVoiceProvider();
+      setAssistVoiceState('connecting', 'Starting Gemini Live…');
+      try {
+        await realtimeVoice.start();
+        sendRealtimeWelcome(reason);
+      } catch (err) {
+        autoGeminiStarted = false;
+        assistError('gemini live autostart failed', err);
+        setError('Tap Gaia once to start Gemini Live. Some iPhone browsers block automatic microphone/audio until the first tap.');
+        setAssistVoiceState('idle', 'Tap Gaia to start Gemini Live');
+      }
+    }
+
     async function onAssistTap() {
       await unlockVoicePlayback(true);
       initRealtimeVoice();
+      if (canUseRealtimeVoice()) setRealtimeVoiceProvider();
 
       if (!realtimeVoice) {
         if (panel.hidden) {
@@ -1898,6 +1918,7 @@
       realtimeEnabled = true;
       realtimeVoice = window.GaiaRealtimeVoice.create();
       realtimeVoice.on('status', (nextStatus) => {
+        setRealtimeVoiceProvider();
         setAssistVoiceState(nextStatus, REALTIME_STATUS_COPY[nextStatus] || REALTIME_STATUS_COPY.idle);
         if ((nextStatus === 'listening' || nextStatus === 'ready') && !realtimeWelcomeSent && !panel.hidden) {
           window.setTimeout(() => sendRealtimeWelcome('status-ready'), 120);
@@ -2540,6 +2561,9 @@
       localStorage.setItem(VOICE_NAME_KEY, voiceNameSelect.value);
     });
     document.addEventListener('gaia:sync', configureVoiceFromBootstrap);
+    document.addEventListener('gaia:sync', () => {
+      if (passiveWelcomeShown) window.setTimeout(() => autoStartGeminiWelcome('sync'), 120);
+    });
     voiceSpeed.addEventListener('input', () => {
       localStorage.setItem(VOICE_SPEED_KEY, voiceSpeed.value);
       voiceSpeedLabel.textContent = `${Number(voiceSpeed.value).toFixed(2)}x`;
@@ -2582,7 +2606,10 @@
     requestAnimationFrame(wireGaiaDock);
     setTimeout(wireGaiaDock, 0);
     if (!new URLSearchParams(window.location.search).has('no_welcome')) {
-      window.setTimeout(showPassiveWelcome, isGhlEmbeddedMode() ? 650 : 950);
+      window.setTimeout(() => {
+        showPassiveWelcome();
+        window.setTimeout(() => autoStartGeminiWelcome('entry'), 180);
+      }, isGhlEmbeddedMode() ? 650 : 950);
     }
   }
 

@@ -1206,7 +1206,11 @@
       const embedded = isGhlEmbeddedMode()
         ? 'You are inside the Gaia Healers GHL custom menu.'
         : 'The app is running from GitHub Pages with the staging proxy.';
-      return `Start the live app session now. Speak directly to the member only, without mentioning instructions, planning, or drafting. Say a short welcome for Gaia Healers: you are Gaia Assist, live inside the app; you can help with Bio-Well scans, chakra body points, Academy courses, community, events, devices, memberships, and GHL follow-up drafts; they are on the ${view} screen; ask what they would like to handle first. ${embedded}`;
+      return `Start the live app session now. Speak directly to the member only, without mentioning instructions, planning, or drafting. Say this welcome in your own natural voice: ${welcomeTranscriptText()}. ${embedded}`;
+    }
+
+    function welcomeTranscriptText() {
+      return `Hello, I'm Gaia Assist, live inside the app. You're on the ${currentAssistView()} screen. I can help with Bio-Well scans, chakra body points, Academy courses, community, events, devices, memberships, and GHL follow-up drafts. What would you like to handle first?`;
     }
 
     function ensureBrowserVoices() {
@@ -1936,13 +1940,24 @@
       let clean = String(text || '').trim();
       if (!clean) return '';
       if (role !== 'assistant') return clean;
+      const compact = clean.replace(/\s+/g, '').toLowerCase();
+
+      if (/^\*\*(?:initiating|commencing|formulating|acknowledge|delivering|crafting|creating|finalizing|refining|thinking|analyzing)/i.test(clean)) {
+        return '';
+      }
+      if (/^(?:I(?:'| a)m|I have|I've)\s+(?:starting|started|crafted|created|structured|introducing|noted|ready|now)|^The goal is/i.test(clean)) {
+        return '';
+      }
+      if (compact.includes('gaiaassist') && compact.includes('biowell') && compact.includes('whatwould')) {
+        return welcomeTranscriptText();
+      }
 
       clean = clean
-        .replace(/^\*\*(?:acknowledge|delivering|crafting|creating|finalizing|refining|thinking|analyzing)[^*]{0,100}\*\*\s*/i, '')
+        .replace(/^\*\*(?:initiating|commencing|formulating|acknowledge|delivering|crafting|creating|finalizing|refining|thinking|analyzing)[^*]{0,100}\*\*\s*/i, '')
         .replace(/^I must (?:say|acknowledge)[\s\S]*?(?=Welcome to Gaia Healers\.|$)/i, '')
         .replace(/^The user wants me[\s\S]*?(?=Welcome to Gaia Healers\.|$)/i, '')
         .replace(/^\*\*(?:delivering|crafting|creating|finalizing|refining|thinking|analyzing)[^*]{0,90}\*\*\s*/i, '')
-        .replace(/^(?:acknowledging|acknowledge|delivering|crafting|creating|finalizing|refining|thinking|analyzing)(?: the)?(?: instructions| request| welcome| response)?[:.\-\s]+/i, '')
+        .replace(/^(?:initiating|commencing|formulating|acknowledging|acknowledge|delivering|crafting|creating|finalizing|refining|thinking|analyzing)(?: the)?(?: live session| initial greeting| app introduction| instructions| request| welcome| response)?[:.\-\s]+/i, '')
         .trim();
 
       const welcomeIndex = clean.indexOf('Welcome to Gaia Healers.');

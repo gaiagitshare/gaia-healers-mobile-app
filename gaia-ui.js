@@ -1064,6 +1064,7 @@
     let activeWebAudio = null;
     let realtimeWelcomeSent = false;
     let passiveWelcomeShown = false;
+    let passiveSpeechAttempted = false;
     const userAgent = navigator.userAgent || '';
     const isIOS = /iPad|iPhone|iPod/i.test(userAgent)
       || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
@@ -1747,11 +1748,30 @@
       passiveWelcomeShown = true;
       sessionStorage.setItem(ASSIST_WELCOME_KEY, '1');
       setOpen(true, { passive: true });
+      const welcomeText = passiveWelcomeText();
       if (!transcript.querySelector('[data-gaia-welcome-bubble]')) {
-        const bubble = appendMessage('bot', passiveWelcomeText());
+        const bubble = appendMessage('bot', welcomeText);
         bubble.dataset.gaiaWelcomeBubble = '1';
       }
       setAssistVoiceState('idle', canUseRealtimeVoice() ? 'Tap Gaia to start live welcome' : REALTIME_STATUS_COPY.idle);
+      if (!passiveSpeechAttempted && !muted && window.speechSynthesis && window.SpeechSynthesisUtterance) {
+        passiveSpeechAttempted = true;
+        window.setTimeout(() => {
+          try {
+            const utterance = new SpeechSynthesisUtterance('Welcome to Gaia Healers. I am Gaia Assist. Tap Gaia when you are ready and I can help with courses, community, events, Bio-Well, and member support.');
+            utterance.lang = 'en-US';
+            utterance.rate = 1;
+            utterance.pitch = 1;
+            utterance.onstart = () => assistLog('passive welcome speech started', { provider: 'browser' });
+            utterance.onend = () => assistLog('passive welcome speech ended', { provider: 'browser' });
+            utterance.onerror = (event) => assistLog('passive welcome speech blocked', { error: event.error || 'blocked' });
+            window.speechSynthesis.cancel();
+            window.speechSynthesis.speak(utterance);
+          } catch (err) {
+            assistLog('passive welcome speech blocked', { error: err.message });
+          }
+        }, 180);
+      }
     }
 
     function sendRealtimeWelcome(reason = 'start') {

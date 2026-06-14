@@ -54,9 +54,12 @@ const GAIA_KNOWLEDGE = {
   crm: {
     observedLocationId: 'WkKl1K5RuZNQ60xR48k6',
     configuredLocationId: process.env.GHL_LOCATION_ID || '',
-    sections: ['Client Portal', 'Courses', 'Communities', 'Credentials', 'Gokollab Marketplace', 'Marketing', 'Automation', 'Calendars', 'Contacts'],
+    customMenuLink: 'https://crm.gaiahealers.com/v2/location/WkKl1K5RuZNQ60xR48k6/custom-menu-link/328efaea-4e94-42ec-9ce2-4358a64657db',
+    embeddedAppUrl: 'https://gaiagitshare.github.io/gaia-healers-mobile-app/home.html?store=1&embedded=ghl',
+    sections: ['Client Portal', 'Courses', 'Communities', 'Credentials', 'Gokollab Marketplace', 'Marketing', 'Automation', 'Calendars', 'Contacts', 'Custom Menu Links'],
     clientPortalUsers: 1252,
     adminActions: ['generate magic link', 'invite to client portal', 'send login email'],
+    embeddedRule: 'When the app is embedded in GHL, keep users inside the Gaia app first. Route course questions to Academy, discussions/members/events/newsletter to Community, and account/login issues to Profile. Mention external client portal login only when the user asks to open gated portal content or needs identity verification.',
   },
   services: [
     'Bio-Well practitioner certification and advanced biofield analysis',
@@ -114,7 +117,8 @@ const GAIA_KNOWLEDGE = {
 function gaiaKnowledgePrompt() {
   return [
     `Gaia ecosystem knowledge: ${GAIA_KNOWLEDGE.brand}. Website ${GAIA_KNOWLEDGE.publicWebsite}. Client portal ${GAIA_KNOWLEDGE.clientPortal}.`,
-    `GHL/CRM: observed location ${GAIA_KNOWLEDGE.crm.observedLocationId}; configured location ${GAIA_KNOWLEDGE.crm.configuredLocationId || 'not set'}; sections ${GAIA_KNOWLEDGE.crm.sections.join(', ')}; ${GAIA_KNOWLEDGE.crm.clientPortalUsers} portal users; admin actions ${GAIA_KNOWLEDGE.crm.adminActions.join(', ')}.`,
+    `GHL/CRM: observed location ${GAIA_KNOWLEDGE.crm.observedLocationId}; configured location ${GAIA_KNOWLEDGE.crm.configuredLocationId || 'not set'}; custom menu ${GAIA_KNOWLEDGE.crm.customMenuLink}; embedded app ${GAIA_KNOWLEDGE.crm.embeddedAppUrl}; sections ${GAIA_KNOWLEDGE.crm.sections.join(', ')}; ${GAIA_KNOWLEDGE.crm.clientPortalUsers} portal users; admin actions ${GAIA_KNOWLEDGE.crm.adminActions.join(', ')}.`,
+    `GHL embedded app rule: ${GAIA_KNOWLEDGE.crm.embeddedRule}`,
     `Services: ${GAIA_KNOWLEDGE.services.join('; ')}.`,
     `Devices and products: ${GAIA_KNOWLEDGE.devices.join('; ')}.`,
     `Communities: ${GAIA_KNOWLEDGE.communities.join('; ')}.`,
@@ -267,6 +271,8 @@ function buildGaiaLiveInstructions(context = {}) {
     `Current app view: ${view}.`,
     'Speak in a calm, friendly voice. Keep replies short: one or two sentences unless the user asks for more detail.',
     'Help with Bio-Well readiness, chakra focus, Academy progress, Elevate badge prep, devices, communities, and GHL follow-up drafts.',
+    'If the user mentions courses, login, client portal, or GHL, first guide them to the internal app screen that helps: Academy for courses, Community for discussions/events/members/newsletter, Profile for account access. Only mention external login for gated content or identity verification.',
+    'Act like a smart in-app concierge: understand Gaia website offers, GHL communities, courses, device ecosystem, memberships, events, and admin workflows.',
     'Never claim you saved, imported, emailed, checked in, or changed anything. Draft and ask for confirmation first.',
     'Do not diagnose or make medical claims.',
     'Greet the user briefly when the session starts, then listen.',
@@ -483,6 +489,8 @@ function assistSystemPrompt() {
   return [
     'You are Gaia Assist, the smart concierge for the Gaia Healers mobile app.',
     'Answer with deep awareness of Gaia Healers services, GHL membership/community structure, academy courses, event operations, devices, website offers, Bio-Well scans, and practitioner workflows.',
+    'The app can run embedded inside the Gaia Healers GHL custom menu. In that mode, never push users out to education.gaiahealers.com as the first answer. Keep them inside the app: Academy for courses, Community for discussions/events/members/newsletter, Wellness for Bio-Well/chakras/devices, Profile for account access, and Admin only after internal unlock.',
+    'If a member says courses ask for login, explain that the app should show course guidance internally and use Profile/member access only for gated lessons, certificates, purchases, or personal records.',
     'When asked operational questions, explain what the app can read, what still requires login, and what needs admin approval.',
     'Never claim that you saved, imported, checked in, emailed, purchased, or changed data. Keep all actions in review/confirm mode.',
     'Keep responses concise, practical, warm, and wellness-safe. Do not provide medical diagnosis.',

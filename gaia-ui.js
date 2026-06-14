@@ -15,6 +15,8 @@
   const ADMIN_MODE_KEY = 'gaia-admin-mode';
   const ADMIN_UNLOCK_PARAM = 'admin';
   const ADMIN_DEV_PASSCODE = 'gaia2026';
+  const ASSIST_WELCOME_KEY = 'gaia-assist-welcome-v1';
+  const GHL_CUSTOM_MENU_URL = 'https://crm.gaiahealers.com/v2/location/WkKl1K5RuZNQ60xR48k6/custom-menu-link/328efaea-4e94-42ec-9ce2-4358a64657db';
   const APP_VIEWS = new Set(['today', 'wellness', 'academy', 'community', 'profile', 'admin']);
   let refreshChakraMaps = () => {};
 
@@ -24,6 +26,71 @@
       .replace(/</g, '&lt;')
       .replace(/>/g, '&gt;')
       .replace(/"/g, '&quot;');
+  }
+
+  function isGhlEmbeddedMode() {
+    const params = new URLSearchParams(window.location.search);
+    const mode = String(params.get('embedded') || params.get('host') || params.get('mode') || '').toLowerCase();
+    if (['ghl', 'crm', 'gohighlevel', '1', 'true'].includes(mode)) return true;
+    try {
+      const referrer = document.referrer || '';
+      return window.self !== window.top
+        && /crm\.gaiahealers\.com|gohighlevel|leadconnectorhq|msgsndr/i.test(referrer);
+    } catch {
+      return false;
+    }
+  }
+
+  function appHref(view = 'today', options = {}) {
+    const params = new URLSearchParams(window.location.search);
+    if (view === 'today') params.delete('view');
+    else params.set('view', view);
+    if (options.tab) params.set('tab', options.tab);
+    else params.delete('tab');
+    params.delete('screen');
+    const query = params.toString();
+    return `home.html${query ? `?${query}` : ''}`;
+  }
+
+  function embeddedPortalTarget(label = '') {
+    const text = String(label || '').toLowerCase();
+    if (/course|academy|learning|module|credential|certification/.test(text)) {
+      return appHref('academy');
+    }
+    if (/event|calendar|elevate|badge|ticket/.test(text)) {
+      return appHref('community', { tab: 'events' });
+    }
+    if (/member|directory|profile|login|portal|client/.test(text)) {
+      return appHref('profile');
+    }
+    if (/newsletter|marketing|digest|email/.test(text)) {
+      return appHref('community', { tab: 'newsletter' });
+    }
+    return appHref('community', { tab: 'discussion' });
+  }
+
+  function wireEmbeddedPortalLinks(root = document) {
+    if (!isGhlEmbeddedMode()) return;
+    document.body.classList.add('gaia-ghl-embedded');
+    root.querySelectorAll('a[href*="education.gaiahealers.com"]').forEach((link) => {
+      if (link.dataset.gaiaEmbeddedWired) return;
+      const label = `${link.textContent || ''} ${link.getAttribute('aria-label') || ''} ${link.href || ''}`;
+      link.href = embeddedPortalTarget(label);
+      link.dataset.gaiaEmbeddedWired = '1';
+      link.dataset.appNav = '';
+      link.removeAttribute('target');
+    });
+    root.querySelectorAll('[data-ghl-custom-menu-link]').forEach((link) => {
+      link.setAttribute('href', GHL_CUSTOM_MENU_URL);
+    });
+  }
+
+  function initGhlEmbeddedMode() {
+    if (!isGhlEmbeddedMode()) return;
+    document.body.classList.add('gaia-ghl-embedded');
+    wireEmbeddedPortalLinks(document);
+    document.addEventListener('gaia:sync', () => wireEmbeddedPortalLinks(document));
+    window.addEventListener('gaia:route', () => wireEmbeddedPortalLinks(document));
   }
 
   function initCommunityHub() {
@@ -218,6 +285,7 @@
     renderEvents();
     renderMembers();
     renderNewsletter();
+    wireEmbeddedPortalLinks(document);
   }
 
   function initTheme() {
@@ -994,6 +1062,8 @@
     let activeChatController = null;
     let activeTtsController = null;
     let activeWebAudio = null;
+    let realtimeWelcomeSent = false;
+    let passiveWelcomeShown = false;
     const userAgent = navigator.userAgent || '';
     const isIOS = /iPad|iPhone|iPod/i.test(userAgent)
       || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
@@ -1115,6 +1185,34 @@
         return responses.ghl || 'GHL handles registration and tickets. I can draft follow-up copy for your review before anything is sent.';
       }
       return responses.scan || 'Gaia Assist is ready. Ask about Bio-Well scans, Academy progress, Elevate badges, or GHL follow-up.';
+    }
+
+    function currentAssistView() {
+      return window.GaiaAppShell?.currentView?.()
+        || new URLSearchParams(window.location.search).get('view')
+        || 'today';
+    }
+
+    function passiveWelcomeText() {
+      const embedded = isGhlEmbeddedMode();
+      return embedded
+        ? 'Welcome to the Gaia Healers app inside GHL. Tap Gaia once and I can guide courses, community, events, Bio-Well, devices, and member support without sending you to another portal.'
+        : 'Welcome to Gaia Healers. Tap Gaia once for live voice, or ask about Bio-Well, Academy, communities, events, devices, or your member profile.';
+    }
+
+    function liveWelcomePrompt() {
+      const view = currentAssistView();
+      const embedded = isGhlEmbeddedMode()
+        ? 'The app is embedded inside the Gaia Healers GHL custom menu, so keep users inside the app and do not tell them to open a separate portal unless they ask.'
+        : 'The app is running from GitHub Pages with the staging proxy.';
+      return [
+        'Start this live voice session with a warm, very short Gaia Healers welcome.',
+        embedded,
+        `The current app screen is ${view}.`,
+        'Mention you can help with Bio-Well scans, chakra/body points, Academy courses, community discussions, events, devices, memberships, and GHL follow-up drafts.',
+        'Ask one concise question: what would you like to handle first?',
+        'Keep it under 18 seconds and sound natural.',
+      ].join(' ');
     }
 
     function ensureBrowserVoices() {
@@ -1614,8 +1712,8 @@
       return document.querySelectorAll('[data-gaia-tab-assist]');
     }
 
-    function setOpen(open) {
-      if (open) unlockVoicePlayback();
+    function setOpen(open, options = {}) {
+      if (open && !options.passive) unlockVoicePlayback();
       if (backdrop) backdrop.hidden = !open;
       panel.hidden = !open;
       root.classList.toggle('gaia-assist--open', open);
@@ -1643,6 +1741,29 @@
       error: 'Voice unavailable — type your question',
     };
 
+    function showPassiveWelcome() {
+      if (passiveWelcomeShown || sessionStorage.getItem(ASSIST_WELCOME_KEY) === '1') return;
+      if (!document.body.classList.contains('gaia-v2')) return;
+      passiveWelcomeShown = true;
+      sessionStorage.setItem(ASSIST_WELCOME_KEY, '1');
+      setOpen(true, { passive: true });
+      if (!transcript.querySelector('[data-gaia-welcome-bubble]')) {
+        const bubble = appendMessage('bot', passiveWelcomeText());
+        bubble.dataset.gaiaWelcomeBubble = '1';
+      }
+      setAssistVoiceState('idle', canUseRealtimeVoice() ? 'Tap Gaia to start live welcome' : REALTIME_STATUS_COPY.idle);
+    }
+
+    function sendRealtimeWelcome(reason = 'start') {
+      if (!realtimeVoice || realtimeWelcomeSent) return false;
+      realtimeWelcomeSent = true;
+      const prompt = liveWelcomePrompt();
+      const sent = realtimeVoice.sendText(prompt);
+      if (!sent) realtimeWelcomeSent = false;
+      else assistLog('realtime welcome sent', { reason, view: currentAssistView(), embedded: isGhlEmbeddedMode() });
+      return sent;
+    }
+
     async function onAssistTap() {
       await unlockVoicePlayback(true);
       initRealtimeVoice();
@@ -1659,9 +1780,15 @@
       }
 
       if (!panel.hidden) {
-        realtimeVoice.stop();
-        setOpen(false);
-        setAssistVoiceState('idle', REALTIME_STATUS_COPY.idle);
+        if (realtimeVoice.isActive()) {
+          realtimeVoice.stop();
+          setOpen(false);
+          setAssistVoiceState('idle', REALTIME_STATUS_COPY.idle);
+          return;
+        }
+        setError('');
+        await realtimeVoice.start();
+        sendRealtimeWelcome('panel-open');
         return;
       }
 
@@ -1669,6 +1796,9 @@
       setError('');
       if (!realtimeVoice.isActive()) {
         await realtimeVoice.start();
+        sendRealtimeWelcome('first-open');
+      } else {
+        sendRealtimeWelcome('resume');
       }
     }
 
@@ -1749,6 +1879,9 @@
       realtimeVoice = window.GaiaRealtimeVoice.create();
       realtimeVoice.on('status', (nextStatus) => {
         setAssistVoiceState(nextStatus, REALTIME_STATUS_COPY[nextStatus] || REALTIME_STATUS_COPY.idle);
+        if ((nextStatus === 'listening' || nextStatus === 'ready') && !realtimeWelcomeSent && !panel.hidden) {
+          window.setTimeout(() => sendRealtimeWelcome('status-ready'), 120);
+        }
       });
       realtimeVoice.on('message', ({ role, text, finalize }) => {
         if (!text) return;
@@ -2321,6 +2454,10 @@
     window.addEventListener('gaia:open-assist', (event) => {
       unlockVoicePlayback();
       setOpen(true);
+      if (event.detail?.welcome) {
+        if (realtimeVoice?.isActive()) sendRealtimeWelcome('event');
+        return;
+      }
       if (event.detail?.prompt) {
         if (event.detail.speak) {
           sendPrompt(event.detail.prompt, 'chakra', 'quick-action');
@@ -2424,6 +2561,9 @@
     setVoiceProvider(selectedProvider() === 'auto' ? 'auto' : selectedProvider());
     requestAnimationFrame(wireGaiaDock);
     setTimeout(wireGaiaDock, 0);
+    if (!new URLSearchParams(window.location.search).has('no_welcome')) {
+      window.setTimeout(showPassiveWelcome, isGhlEmbeddedMode() ? 650 : 950);
+    }
   }
 
   document.addEventListener('DOMContentLoaded', () => {
@@ -2437,6 +2577,7 @@
     initAppShellNavigation();
     initCommunityHub();
     initLiveSyncIndicator();
+    initGhlEmbeddedMode();
     initGaiaAssist();
   });
 })();

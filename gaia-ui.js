@@ -1940,7 +1940,7 @@
       let clean = String(text || '').trim();
       if (!clean) return '';
       if (role !== 'assistant') return clean;
-      const compact = clean.replace(/\s+/g, '').toLowerCase();
+      const alphaCompact = clean.replace(/[^a-z0-9]+/gi, '').toLowerCase();
 
       if (/^\*\*(?:initiating|commencing|formulating|acknowledge|delivering|crafting|creating|finalizing|refining|thinking|analyzing)/i.test(clean)) {
         return '';
@@ -1948,7 +1948,7 @@
       if (/^(?:I(?:'| a)m|I have|I've)\s+(?:starting|started|crafted|created|structured|introducing|noted|ready|now)|^The goal is/i.test(clean)) {
         return '';
       }
-      if (compact.includes('gaiaassist') && compact.includes('biowell') && compact.includes('whatwould')) {
+      if (alphaCompact.includes('gaiaassist') && alphaCompact.includes('biowell') && alphaCompact.includes('whatwould')) {
         return welcomeTranscriptText();
       }
 

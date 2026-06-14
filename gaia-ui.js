@@ -1751,8 +1751,8 @@
       passiveWelcomeShown = true;
       sessionStorage.setItem(ASSIST_WELCOME_KEY, '1');
       setOpen(true, { passive: true });
-      const welcomeText = passiveWelcomeText();
-      if (!transcript.querySelector('[data-gaia-welcome-bubble]')) {
+      if (!canUseRealtimeVoice() && !transcript.querySelector('[data-gaia-welcome-bubble]')) {
+        const welcomeText = passiveWelcomeText();
         const bubble = appendMessage('bot', welcomeText);
         bubble.dataset.gaiaWelcomeBubble = '1';
       }
@@ -1918,9 +1918,10 @@
         }
       });
       realtimeVoice.on('message', ({ role, text, finalize }) => {
-        if (!text) return;
-        if (role === 'user') syncRealtimeBubble('user', text, finalize);
-        else syncRealtimeBubble('assistant', text, finalize);
+        const cleanText = sanitizeRealtimeTranscript(role, text, finalize);
+        if (!cleanText) return;
+        if (role === 'user') syncRealtimeBubble('user', cleanText, finalize);
+        else syncRealtimeBubble('assistant', cleanText, finalize);
       });
       realtimeVoice.on('error', (message) => {
         if (message) {
@@ -1929,6 +1930,29 @@
         }
       });
       assistLog('realtime voice ready');
+    }
+
+    function sanitizeRealtimeTranscript(role, text, finalize) {
+      let clean = String(text || '').trim();
+      if (!clean) return '';
+      if (role !== 'assistant') return clean;
+
+      clean = clean
+        .replace(/^\*\*(?:delivering|crafting|creating|finalizing|refining|thinking|analyzing)[^*]{0,90}\*\*\s*/i, '')
+        .replace(/^(?:delivering|crafting|creating|finalizing|refining|thinking|analyzing)(?: the)?(?: request| welcome| response)?[:.\-\s]+/i, '')
+        .trim();
+
+      const welcomeIndex = clean.indexOf('Welcome to Gaia Healers.');
+      if (welcomeIndex > 0 && /deliver|craft|request|analysis|finaliz|refin/i.test(clean.slice(0, welcomeIndex))) {
+        clean = clean.slice(welcomeIndex).trim();
+      }
+
+      if (finalize) {
+        clean = clean
+          .replace(/\s*Context:\s*(?:You are inside|The app is running)[\s\S]*$/i, '')
+          .trim();
+      }
+      return clean;
     }
 
     function updateLiveTranscript(text) {

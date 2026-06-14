@@ -514,12 +514,6 @@
         setStatus('listening');
         return;
       }
-      if (!navigator.mediaDevices?.getUserMedia) {
-        setErrorMessage('Your browser does not allow microphone access here.');
-        setStatus('error');
-        return;
-      }
-
       setErrorMessage(null);
       messages = [];
       streamMessage = null;
@@ -571,8 +565,19 @@
 
           await waitForSetup();
           await ensurePlayback();
-          await startMicStreaming();
-          maySendAudio = true;
+          if (navigator.mediaDevices?.getUserMedia) {
+            try {
+              await startMicStreaming();
+              maySendAudio = true;
+              setErrorMessage(null);
+            } catch (micError) {
+              maySendAudio = false;
+              setErrorMessage('Microphone permission is needed for live listening. Gemini Live can still answer typed prompts here.');
+            }
+          } else {
+            maySendAudio = false;
+            setErrorMessage('This browser does not expose microphone capture. Gemini Live can still answer typed prompts here.');
+          }
           setStatus('listening');
 
           const maxSeconds = Number(sessionMeta.maxSessionSeconds) || 300;

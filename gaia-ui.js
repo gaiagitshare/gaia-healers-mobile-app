@@ -1206,7 +1206,7 @@
       const embedded = isGhlEmbeddedMode()
         ? 'You are inside the Gaia Healers GHL custom menu.'
         : 'The app is running from GitHub Pages with the staging proxy.';
-      return `Say exactly this aloud now, with no analysis and no extra words: "Welcome to Gaia Healers. I am Gaia Assist, live inside your app. I can help with Bio-Well scans, chakra body points, Academy courses, community, events, devices, memberships, and GHL follow-up drafts. You are on the ${view} screen. What would you like to handle first?" Context: ${embedded}`;
+      return `Start the live app session now. Speak directly to the member only, without mentioning instructions, planning, or drafting. Say a short welcome for Gaia Healers: you are Gaia Assist, live inside the app; you can help with Bio-Well scans, chakra body points, Academy courses, community, events, devices, memberships, and GHL follow-up drafts; they are on the ${view} screen; ask what they would like to handle first. ${embedded}`;
     }
 
     function ensureBrowserVoices() {
@@ -1751,7 +1751,7 @@
       passiveWelcomeShown = true;
       sessionStorage.setItem(ASSIST_WELCOME_KEY, '1');
       setOpen(true, { passive: true });
-      if (!canUseRealtimeVoice() && !transcript.querySelector('[data-gaia-welcome-bubble]')) {
+      if (!shouldAutoStartGemini() && !canUseRealtimeVoice() && !transcript.querySelector('[data-gaia-welcome-bubble]')) {
         const welcomeText = passiveWelcomeText();
         const bubble = appendMessage('bot', welcomeText);
         bubble.dataset.gaiaWelcomeBubble = '1';
@@ -1938,14 +1938,18 @@
       if (role !== 'assistant') return clean;
 
       clean = clean
+        .replace(/^\*\*(?:acknowledge|delivering|crafting|creating|finalizing|refining|thinking|analyzing)[^*]{0,100}\*\*\s*/i, '')
+        .replace(/^I must (?:say|acknowledge)[\s\S]*?(?=Welcome to Gaia Healers\.|$)/i, '')
+        .replace(/^The user wants me[\s\S]*?(?=Welcome to Gaia Healers\.|$)/i, '')
         .replace(/^\*\*(?:delivering|crafting|creating|finalizing|refining|thinking|analyzing)[^*]{0,90}\*\*\s*/i, '')
-        .replace(/^(?:delivering|crafting|creating|finalizing|refining|thinking|analyzing)(?: the)?(?: request| welcome| response)?[:.\-\s]+/i, '')
+        .replace(/^(?:acknowledging|acknowledge|delivering|crafting|creating|finalizing|refining|thinking|analyzing)(?: the)?(?: instructions| request| welcome| response)?[:.\-\s]+/i, '')
         .trim();
 
       const welcomeIndex = clean.indexOf('Welcome to Gaia Healers.');
       if (welcomeIndex > 0 && /deliver|craft|request|analysis|finaliz|refin/i.test(clean.slice(0, welcomeIndex))) {
         clean = clean.slice(welcomeIndex).trim();
       }
+      if (/^(?:I must|The user wants me|provided text|strict instructions)/i.test(clean)) return '';
 
       if (finalize) {
         clean = clean

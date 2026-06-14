@@ -217,6 +217,15 @@
       return items.slice(-maxMessages);
     }
 
+    function joinTranscriptText(previous, next) {
+      const left = String(previous || '');
+      const right = String(next || '');
+      if (!left) return right;
+      if (!right) return left;
+      if (/[\s"'([{/<-]$/.test(left) || /^[\s.,!?;:)'"\]}]/.test(right)) return `${left}${right}`;
+      return `${left} ${right}`;
+    }
+
     function upsertStreamingMessage(role, chunk, finalize) {
       const text = String(chunk || '').trim();
       if (!text && finalize) {
@@ -228,7 +237,7 @@
       if (streamMessage && streamMessage.role === role) {
         messages = trimMessages(messages.map((item) => (
           item.id === streamMessage.id
-            ? { ...item, text: finalize ? text : `${item.text}${chunk}` }
+            ? { ...item, text: finalize ? text : joinTranscriptText(item.text, chunk) }
             : item
         )));
         if (finalize) streamMessage = null;

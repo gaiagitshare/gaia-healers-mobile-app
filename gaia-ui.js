@@ -1898,16 +1898,35 @@
       const kind = role === 'user' ? 'user' : 'bot';
       if (streamBubbleMap[role] && !finalize) {
         const current = streamBubbleMap[role].textContent || '';
-        updateBubble(streamBubbleMap[role], current + text);
+        updateBubble(streamBubbleMap[role], normalizeRealtimeBubbleText(role, joinRealtimeText(current, text)));
         return;
       }
       if (streamBubbleMap[role] && finalize) {
-        updateBubble(streamBubbleMap[role], text);
+        updateBubble(streamBubbleMap[role], normalizeRealtimeBubbleText(role, text));
         streamBubbleMap[role] = null;
         return;
       }
-      streamBubbleMap[role] = appendMessage(kind, text);
+      streamBubbleMap[role] = appendMessage(kind, normalizeRealtimeBubbleText(role, text));
       if (finalize) streamBubbleMap[role] = null;
+    }
+
+    function joinRealtimeText(previous, next) {
+      const left = String(previous || '');
+      const right = String(next || '');
+      if (!left) return right;
+      if (!right) return left;
+      if (/[\s"'([{/<-]$/.test(left) || /^[\s.,!?;:)'"\]}]/.test(right)) return `${left}${right}`;
+      return `${left} ${right}`;
+    }
+
+    function normalizeRealtimeBubbleText(role, text) {
+      const clean = String(text || '').trim();
+      if (role !== 'assistant' || !clean) return clean;
+      const alphaCompact = clean.replace(/[^a-z0-9]+/gi, '').toLowerCase();
+      if (alphaCompact.includes('gaiaassist') && alphaCompact.includes('biowell') && alphaCompact.includes('whatwould')) {
+        return welcomeTranscriptText();
+      }
+      return clean;
     }
 
     function initRealtimeVoice() {

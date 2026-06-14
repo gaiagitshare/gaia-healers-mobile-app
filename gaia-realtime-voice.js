@@ -626,16 +626,18 @@
       return muted;
     }
 
-    function sendText(raw) {
+    function sendText(raw, options = {}) {
       const text = raw.trim();
       if (!text) return false;
       streamMessage = null;
-      messages = trimMessages([...messages, {
-        id: `user-${Date.now()}`,
-        role: 'user',
-        text,
-      }]);
-      emit('message', { messages: [...messages], role: 'user', text, finalize: true });
+      if (!options.silent) {
+        messages = trimMessages([...messages, {
+          id: `user-${Date.now()}`,
+          role: 'user',
+          text,
+        }]);
+        emit('message', { messages: [...messages], role: 'user', text, finalize: true });
+      }
       setStatus('thinking');
       return sendWs({ realtimeInput: { text } });
     }

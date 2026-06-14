@@ -1204,16 +1204,9 @@
     function liveWelcomePrompt() {
       const view = currentAssistView();
       const embedded = isGhlEmbeddedMode()
-        ? 'The app is embedded inside the Gaia Healers GHL custom menu, so keep users inside the app and do not tell them to open a separate portal unless they ask.'
+        ? 'You are inside the Gaia Healers GHL custom menu.'
         : 'The app is running from GitHub Pages with the staging proxy.';
-      return [
-        'Start this live voice session with a warm, very short Gaia Healers welcome.',
-        embedded,
-        `The current app screen is ${view}.`,
-        'Mention you can help with Bio-Well scans, chakra/body points, Academy courses, community discussions, events, devices, memberships, and GHL follow-up drafts.',
-        'Ask one concise question: what would you like to handle first?',
-        'Keep it under 18 seconds and sound natural.',
-      ].join(' ');
+      return `Say exactly this aloud now, with no analysis and no extra words: "Welcome to Gaia Healers. I am Gaia Assist, live inside your app. I can help with Bio-Well scans, chakra body points, Academy courses, community, events, devices, memberships, and GHL follow-up drafts. You are on the ${view} screen. What would you like to handle first?" Context: ${embedded}`;
     }
 
     function ensureBrowserVoices() {
@@ -1771,7 +1764,7 @@
       if (!realtimeVoice || realtimeWelcomeSent) return false;
       realtimeWelcomeSent = true;
       const prompt = liveWelcomePrompt();
-      const sent = realtimeVoice.sendText(prompt);
+      const sent = realtimeVoice.sendText(prompt, { silent: true });
       if (!sent) realtimeWelcomeSent = false;
       else assistLog('realtime welcome sent', { reason, view: currentAssistView(), embedded: isGhlEmbeddedMode() });
       return sent;

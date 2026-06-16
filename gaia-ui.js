@@ -565,14 +565,32 @@
       if (todayHeroGreeting) todayHeroGreeting.textContent = hub.member?.cohort || 'Client portal';
       if (todayHeroTitle) todayHeroTitle.innerHTML = escapeHtml(dashboard.welcomeTitle || 'Your Gaia dashboard is ready');
       if (todayHeroSub) todayHeroSub.textContent = dashboard.welcomeDetail || 'Courses, communities, live sessions, credentials, and products from GHL Memberships.';
-      if (todayAcademyTitle) todayAcademyTitle.textContent = activeCourse.title || dashboard.topCourse || 'Academy';
-      if (todayAcademyMeta) todayAcademyMeta.textContent = activeCourse.progressPercent ? `${percentLabel(activeCourse.progressPercent)} complete` : (dashboard.topCourseMeta || 'Continue learning');
+      if (todayAcademyTitle) {
+        todayAcademyTitle.textContent = activeCourse.title
+          || academy.summary?.nextCourseTitle
+          || dashboard.topCourse
+          || 'Academy';
+      }
+      if (todayAcademyMeta) {
+        if (Number(activeCourse.progressPercent) > 0) {
+          todayAcademyMeta.textContent = `${percentLabel(activeCourse.progressPercent)} complete`;
+        } else if (Number(academy.summary?.averageProgress) > 0) {
+          todayAcademyMeta.textContent = `${percentLabel(academy.summary.averageProgress)} avg completion`;
+        } else {
+          todayAcademyMeta.textContent = dashboard.topCourseMeta || 'Continue learning';
+        }
+      }
       if (todayEventsTitle) todayEventsTitle.textContent = dashboard.eventPassTitle || data.event?.shortName || 'Events';
       if (todayEventsMeta) todayEventsMeta.textContent = dashboard.eventPassDetail || 'Badge ops ready';
-      if (todayJourneyTitle) todayJourneyTitle.textContent = activeCourse.title || 'Growth journey';
+      if (todayJourneyTitle) {
+        todayJourneyTitle.textContent = activeCourse.title
+          || academy.summary?.nextCourseTitle
+          || dashboard.topCourse
+          || 'Growth journey';
+      }
       if (todayJourneyBadge) todayJourneyBadge.textContent = percentLabel(activeCourse.progressPercent || academy.summary?.averageProgress || 0);
       if (todayHubTitle) todayHubTitle.textContent = `${portal.adminSections?.length || 5} synced membership areas`;
-      if (todayHubBadge) todayHubBadge.textContent = portal.users ? `${portal.users.toLocaleString()} users` : 'GHL';
+      if (todayHubBadge) todayHubBadge.textContent = (portal.users || data.members) ? `${Number(portal.users || data.members).toLocaleString()} users` : 'GHL';
       if (todayNextLesson) todayNextLesson.textContent = dashboard.nextLessonTitle || academy.summary?.nextLessonTitle || 'Continue your active course';
       if (todayNextMeeting) {
         const meeting = meetings[0];
@@ -586,7 +604,7 @@
           : 'Bio-Well kits · Gokollab store · event passes';
       }
 
-      if (profilePortalUsers) profilePortalUsers.textContent = Number(portal.users || 0).toLocaleString();
+      if (profilePortalUsers) profilePortalUsers.textContent = Number(portal.users || data.members || 0).toLocaleString();
       if (profileAccessNote) {
         const notes = hub.access?.notes || [];
         profileAccessNote.textContent = notes[0]
@@ -599,7 +617,12 @@
       if (profileEventPassDetail) profileEventPassDetail.textContent = dashboard.eventPassDetail || data.event?.date || 'Badge ops ready';
 
       if (profileMeetings) {
-        profileMeetings.innerHTML = meetings.map((meeting) => `
+        profileMeetings.innerHTML = (meetings.length ? meetings : [{
+          title: dashboard.nextMeetingTitle || 'No live session scheduled',
+          startsAt: dashboard.nextMeetingTime || '',
+          provider: 'ghl',
+          group: 'Client portal',
+        }]).map((meeting) => `
           <a href="${escapeHtml(appHref('community', { tab: 'events' }))}" class="gaia-row gaia-row--link">
             <div class="gaia-tile-icon strip-biotekna">${escapeHtml((meeting.provider || 'ME').slice(0, 2).toUpperCase())}</div>
             <div class="min-w-0 flex-1">
@@ -612,7 +635,13 @@
       }
 
       if (profileMarketplace) {
-        profileMarketplace.innerHTML = products.map((item) => `
+        profileMarketplace.innerHTML = (products.length ? products : [{
+          title: 'Client portal storefront',
+          category: 'Store',
+          detail: marketplace.note || 'Products and member checkout routes live inside GHL Memberships.',
+          href: portal.url || appHref('community', { tab: 'products' }),
+          cta: 'Open',
+        }]).map((item) => `
           <a href="${escapeHtml(item.href || appHref('community', { tab: 'products' }))}" class="gaia-row gaia-row--link">
             <div class="gaia-tile-icon strip-biowell">${escapeHtml((item.category || 'GH').slice(0, 2).toUpperCase())}</div>
             <div class="min-w-0 flex-1">

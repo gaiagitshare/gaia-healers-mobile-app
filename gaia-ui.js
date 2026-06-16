@@ -2100,17 +2100,29 @@
         audio.src = SILENT_WAV;
         audio.volume = 0.001;
         audio.muted = false;
+        audio.setAttribute('playsinline', '');
+        audio.setAttribute('webkit-playsinline', 'true');
         await audio.play();
         audio.pause();
         audio.currentTime = 0;
         audio.volume = 1;
         audio.src = previousSrc || '';
         markVoiceUnlocked();
+        if (realtimeVoice?.resumePlayback) {
+          await realtimeVoice.resumePlayback();
+        }
         assistLog('voice unlocked', { userAgent, forced: force });
         return true;
       } catch (err) {
         assistLog('voice unlock pending', { error: err.message });
         return false;
+      }
+    }
+
+    async function ensureMobileVoiceReady() {
+      await unlockVoicePlayback(true);
+      if (realtimeVoice?.resumePlayback) {
+        await realtimeVoice.resumePlayback();
       }
     }
 
@@ -2493,6 +2505,7 @@
     }
 
     async function playAudioElement(audioUrl, provider, voice) {
+      await unlockVoicePlayback(true);
       const audio = getSharedAudio();
       audio.muted = false;
       audio.volume = 1;
@@ -2623,9 +2636,7 @@
       const voiceText = speechPreviewText(cleanText);
       const fromVoice = options.fromVoice === true;
       stopSpeaking();
-      if (!fromVoice || !voiceUnlockIsFresh()) {
-        await unlockVoicePlayback(fromVoice);
-      }
+      await unlockVoicePlayback(isMobileWebKit || fromVoice);
       setAssistVoiceState('speaking', 'Speaking with ElevenLabs…');
       const providerSetting = selectedProvider();
       if (providerSetting === 'browser') {
@@ -2672,6 +2683,7 @@
           await playAudioElement(audioUrl, provider, voice);
         } catch (playError) {
           assistError('speech error', { provider, error: playError.message || 'autoplay blocked' });
+          if (playButton) playButton.hidden = false;
           showManualVoicePlayback(audioUrl, provider, voice);
         }
       } catch (err) {
@@ -2694,7 +2706,9 @@
     }
 
     function setOpen(open, options = {}) {
-      if (open && !options.passive) unlockVoicePlayback();
+      if (open && !options.passive) {
+        void ensureMobileVoiceReady();
+      }
       if (backdrop) backdrop.hidden = !open;
       panel.hidden = !open;
       root.classList.toggle('gaia-assist--open', open);
@@ -2799,7 +2813,7 @@
           setOpen(true);
           setError('');
           setAssistVoiceState('connecting', 'Opening Gaia Assist…');
-          void unlockVoicePlayback(true);
+          await ensureMobileVoiceReady();
           try {
             await startVoicePrompt();
           } finally {
@@ -2827,7 +2841,7 @@
       setOpen(true);
       setAssistVoiceState('connecting', REALTIME_STATUS_COPY.connecting);
       setError('');
-      void unlockVoicePlayback(true);
+      await ensureMobileVoiceReady();
 
       try {
         if (!realtimeVoice.isActive()) {
@@ -3018,6 +3032,9 @@
       realtimeVoice.on('status', (nextStatus) => {
         setRealtimeVoiceProvider();
         setAssistVoiceState(nextStatus, REALTIME_STATUS_COPY[nextStatus] || REALTIME_STATUS_COPY.idle);
+        if (nextStatus === 'speaking') {
+          void realtimeVoice.resumePlayback();
+        }
         if ((nextStatus === 'listening' || nextStatus === 'ready') && !realtimeWelcomeSent && !panel.hidden) {
           window.setTimeout(() => sendRealtimeWelcome('status-ready'), 120);
         }

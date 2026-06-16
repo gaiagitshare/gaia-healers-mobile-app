@@ -2654,6 +2654,22 @@ body[data-theme="dark"] .gaia-assist__error.gaia-assist__hint {
 }
 
 @media (max-width: 520px) {
+  .gaia-shell {
+    width: 100%;
+    max-width: 100%;
+    overflow-x: clip;
+  }
+
+  .gaia-main {
+    padding-left: max(1rem, env(safe-area-inset-left));
+    padding-right: max(1rem, env(safe-area-inset-right));
+  }
+
+  .gaia-header {
+    padding-left: max(1rem, env(safe-area-inset-left));
+    padding-right: max(1rem, env(safe-area-inset-right));
+  }
+
   .gaia-assist__panel {
     left: max(0.65rem, env(safe-area-inset-left));
     right: max(0.65rem, env(safe-area-inset-right));

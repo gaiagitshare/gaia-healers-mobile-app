@@ -1586,3 +1586,147 @@ body.gaia-v2 .gaia-portal-workspace__frame {
     min-height: 68vh;
   }
 }
+
+/* —— Mobile layout guard (overflow / safe areas) —— */
+@media (max-width: 520px) {
+  html,
+  body.gaia-v2.gaia-app {
+    overflow-x: clip;
+    max-width: 100%;
+  }
+
+  body.gaia-v2 .gaia-shell {
+    width: 100%;
+    max-width: 100%;
+    overflow-x: clip;
+  }
+
+  body.gaia-v2 .gaia-header,
+  body.gaia-v2 .gaia-main {
+    padding-left: max(1rem, env(safe-area-inset-left));
+    padding-right: max(1rem, env(safe-area-inset-right));
+    overflow-x: clip;
+  }
+
+  body.gaia-v2 .gaia-header .flex,
+  body.gaia-v2 .gaia-row,
+  body.gaia-v2 .gaia-card,
+  body.gaia-v2 .gaia-bento,
+  body.gaia-v2 .gaia-wellness-panel,
+  body.gaia-v2 .gaia-community-panel,
+  body.gaia-v2 .gaia-community-strip,
+  body.gaia-v2 .gaia-dash-hero,
+  body.gaia-v2 .gaia-score-hero,
+  body.gaia-v2 .gaia-chakra-map,
+  body.gaia-v2 .gaia-feed-card,
+  body.gaia-v2 .gaia-event-ticket,
+  body.gaia-v2 .gaia-group-rail,
+  body.gaia-v2 .gaia-stack {
+    max-width: 100%;
+    min-width: 0;
+  }
+
+  body.gaia-v2 .gaia-header-actions {
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    max-width: 58%;
+  }
+
+  body.gaia-v2 .gaia-page-title,
+  body.gaia-v2 .text-title,
+  body.gaia-v2 .gaia-section-title,
+  body.gaia-v2 .text-headline {
+    overflow-wrap: anywhere;
+    word-break: break-word;
+  }
+
+  body.gaia-v2 .gaia-community-strip {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0.65rem;
+  }
+
+  body.gaia-v2 .gaia-community-strip__stats {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 0.35rem;
+    width: 100%;
+  }
+
+  body.gaia-v2 .gaia-community-strip__stat {
+    min-width: 0;
+    text-align: center;
+  }
+
+  body.gaia-v2 .gaia-bento {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  body.gaia-v2 .gaia-bento__tile--wide {
+    grid-column: auto;
+  }
+
+  body.gaia-v2 .gaia-chakra-map__layout,
+  body.gaia-v2 .gaia-chakra-map__figure,
+  body.gaia-v2 .gaia-chakra-teaser__thumb {
+    max-width: 100%;
+    overflow: hidden;
+  }
+
+  body.gaia-v2 .gaia-chakra-map__photo,
+  body.gaia-v2 .gaia-chakra-teaser__thumb img {
+    max-width: 100%;
+    height: auto;
+  }
+
+  body.gaia-v2 .gaia-chart {
+    min-width: 0;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  body.gaia-v2 .gaia-assist__panel {
+    left: 0;
+    right: 0;
+    width: 100%;
+    max-width: 100%;
+    border-radius: var(--gh-radius-xl) var(--gh-radius-xl) 0 0;
+  }
+
+  body.gaia-v2 .gaia-assist__input-row {
+    min-width: 0;
+  }
+
+  body.gaia-v2 .gaia-assist__input-row input {
+    min-width: 0;
+    width: 100%;
+  }
+
+  body.gaia-v2 .gaia-tabbar {
+    overflow-x: clip;
+  }
+
+  body.gaia-v2 .gaia-login-pill,
+  body.gaia-v2 .gaia-btn,
+  body.gaia-v2 .gaia-badge {
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  body.gaia-v2 #community-tabs,
+  body.gaia-v2 #wellness-tabs {
+    margin-left: calc(-1 * max(1rem, env(safe-area-inset-left)));
+    margin-right: calc(-1 * max(1rem, env(safe-area-inset-right)));
+    padding-left: max(1rem, env(safe-area-inset-left));
+    padding-right: max(1rem, env(safe-area-inset-right));
+  }
+}
+
+body.gaia-v2 .gaia-assist__audio {
+  position: absolute;
+  width: 0;
+  height: 0;
+  opacity: 0;
+  pointer-events: none;
+}

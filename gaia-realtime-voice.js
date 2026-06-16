@@ -293,7 +293,11 @@
     }
 
     async function ensurePlayback() {
-      if (playbackNodeRef.current) return;
+      if (playbackNodeRef.current) {
+        const ctx = playbackCtxRef.current;
+        if (ctx?.state === 'suspended') await ctx.resume();
+        return;
+      }
       const AudioContextCtor = window.AudioContext || window.webkitAudioContext;
       if (!AudioContextCtor) throw new Error('Web Audio is unavailable');
       const ctx = new AudioContextCtor({ sampleRate: 24000 });
@@ -304,6 +308,14 @@
       node.connect(ctx.destination);
       playbackCtxRef.current = ctx;
       playbackNodeRef.current = node;
+      if (ctx.state === 'suspended') await ctx.resume();
+    }
+
+    async function resumePlayback() {
+      const ctx = playbackCtxRef.current;
+      if (ctx?.state === 'suspended') {
+        await ctx.resume();
+      }
     }
 
     async function playPcmChunk(base64Audio) {
@@ -683,6 +695,7 @@
       cancel,
       toggleMute,
       sendText,
+      resumePlayback,
       on,
     };
   }

@@ -60,5 +60,9 @@
   document.body.appendChild(nav);
   document.body.classList.add('gaia-has-tabbar');
   render();
-  window.addEventListener('gaia:route', render);
+  window.dispatchEvent(new CustomEvent('gaia:tabbar-ready'));
+  window.addEventListener('gaia:route', () => {
+    render();
+    window.dispatchEvent(new CustomEvent('gaia:tabbar-ready'));
+  });
 })();

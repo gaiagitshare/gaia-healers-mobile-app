@@ -728,6 +728,9 @@ body.gaia-v2 .gaia-assist__backdrop {
 }
 
 body.gaia-v2 .gaia-assist__panel {
+  position: fixed;
+  display: flex;
+  flex-direction: column;
   z-index: 55;
   left: 0;
   right: 0;
@@ -879,10 +882,21 @@ body.gaia-v2 .gaia-assist__transcript {
 
 body.gaia-v2 .gaia-assist__bubble {
   max-width: 88%;
+  margin: 0;
   padding: 0.55rem 0.75rem;
   border-radius: 1rem;
   font-size: 0.8125rem;
   line-height: 1.4;
+  word-break: break-word;
+}
+
+body.gaia-v2 .gaia-assist__bubble--live {
+  align-self: flex-end;
+  max-width: 88%;
+  border: 1px dashed var(--gh-border);
+  background: transparent;
+  color: var(--gh-text-soft);
+  font-style: italic;
 }
 
 body.gaia-v2 .gaia-assist__bubble--user {

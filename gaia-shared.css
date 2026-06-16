@@ -2949,6 +2949,20 @@ body[data-theme="dark"] .gaia-assist__error.gaia-assist__hint {
   text-align: center;
 }
 
+body.gaia-v2 .gaia-assist__panel[hidden],
+body.gaia-v2 .gaia-assist__backdrop[hidden] {
+  display: none !important;
+}
+
+body.gaia-v2 .gaia-event-flagship {
+  margin-bottom: 0.25rem;
+}
+
+body.gaia-v2 .gaia-event-date {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 .gaia-event-date,
 .gaia-event-hero__date {
   display: flex;

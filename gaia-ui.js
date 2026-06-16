@@ -227,6 +227,38 @@
     }
   }
 
+  function parseEventHeroDate(event) {
+    const raw = String(
+      event?.startDate
+      || event?.start_date
+      || String(event?.date || '').split(' - ')[0]?.trim()
+      || String(event?.date || '').split(',')[0]?.trim()
+      || '',
+    ).trim();
+    const iso = raw.match(/^(\d{4})-(\d{2})-(\d{2})/);
+    if (iso) {
+      const [, year, monthNum, dayNum] = iso;
+      const date = new Date(Number(year), Number(monthNum) - 1, Number(dayNum));
+      if (!Number.isNaN(date.getTime())) {
+        return {
+          day: String(Number(dayNum)),
+          month: date.toLocaleString('en', { month: 'short' }),
+          year,
+        };
+      }
+    }
+    const friendly = raw.match(/([A-Za-z]{3,})\s+(\d{1,2})/);
+    const yearMatch = String(event?.date || raw).match(/(20\d{2})/);
+    if (friendly) {
+      return {
+        day: String(Number(friendly[2])),
+        month: friendly[1].slice(0, 3),
+        year: yearMatch?.[1] || String(new Date().getFullYear()),
+      };
+    }
+    return { day: '20', month: 'Nov', year: '2026' };
+  }
+
   function wireEmbeddedPortalLinks(root = document) {
     root.querySelectorAll('a[href*="education.gaiahealers.com"]').forEach((link) => {
       if (link.dataset.gaiaEmbeddedWired) return;
@@ -369,9 +401,10 @@
       if (!eventsEl) return;
       const event = data.event;
       const items = data.communityEvents || [];
+      const heroDate = event ? parseEventHeroDate(event) : null;
       const hero = event ? `
-        <a href="${escapeHtml(event.sourceUrl || 'https://elevate.gaiahealers.com/')}" class="gaia-event-hero gaia-row gaia-row--link">
-          <div class="gaia-event-hero__date"><strong>${escapeHtml(event.date?.split(',')[0] || 'Nov 20')}</strong><span>2026</span></div>
+        <a href="${escapeHtml(event.sourceUrl || 'https://elevate.gaiahealers.com/')}" class="gaia-row gaia-row--link gaia-event-flagship">
+          <div class="gaia-event-date"><strong>${escapeHtml(heroDate.day)}</strong><span>${escapeHtml(heroDate.month)}</span></div>
           <div class="min-w-0 flex-1">
             <p class="text-micro font-semibold text-gaia">Flagship event</p>
             <p class="text-headline text-ink mt-0.5">${escapeHtml(event.name)}</p>
@@ -2594,26 +2627,27 @@
         return;
       }
 
-      if (!panel.hidden) {
-        if (realtimeVoice.isActive()) {
-          realtimeVoice.stop();
-          setOpen(false);
-          setAssistVoiceState('idle', REALTIME_STATUS_COPY.idle);
-          return;
-        }
-        setError('');
-        await realtimeVoice.start();
-        sendRealtimeWelcome('panel-open');
+      if (!panel.hidden && realtimeVoice.isActive()) {
+        realtimeVoice.stop();
+        setOpen(false);
+        setAssistVoiceState('idle', REALTIME_STATUS_COPY.idle);
         return;
       }
 
+      const wasClosed = panel.hidden;
       setOpen(true);
       setError('');
-      if (!realtimeVoice.isActive()) {
-        await realtimeVoice.start();
-        sendRealtimeWelcome('first-open');
-      } else {
-        sendRealtimeWelcome('resume');
+      try {
+        if (!realtimeVoice.isActive()) {
+          await realtimeVoice.start();
+          sendRealtimeWelcome(wasClosed ? 'first-open' : 'resume');
+        } else {
+          sendRealtimeWelcome('resume');
+        }
+      } catch (err) {
+        assistError('assist start failed', err);
+        setError('Voice is unavailable right now. You can still type your question below.');
+        setAssistVoiceState('idle', 'Type your question below');
       }
     }
 
@@ -2623,6 +2657,7 @@
         button.dataset.gaiaDockWired = '1';
         button.addEventListener('click', (event) => {
           event.preventDefault();
+          event.stopPropagation();
           void onAssistTap();
         });
       });
@@ -2661,6 +2696,7 @@
     let realtimeVoice = null;
     let realtimeEnabled = false;
     const streamBubbleMap = { user: null, assistant: null };
+    const MAX_ASSIST_TURNS = 24;
 
     function realtimeConfig() {
       return window.GAIA?.sync?.voice?.live
@@ -2670,6 +2706,69 @@
 
     function canUseRealtimeVoice() {
       return Boolean(window.GaiaRealtimeVoice && realtimeConfig().enabled);
+    }
+
+    function trimAssistBubbles() {
+      const turnBubbles = [...transcript.querySelectorAll('.gaia-assist__bubble[data-turn-id]')];
+      const genericBubbles = [...transcript.querySelectorAll(
+        '.gaia-assist__bubble:not([data-turn-id]):not([data-gaia-welcome-bubble]):not(.gaia-assist__bubble--live)',
+      )];
+      const excessTurns = turnBubbles.length - MAX_ASSIST_TURNS;
+      if (excessTurns > 0) {
+        for (let i = 0; i < excessTurns; i += 1) turnBubbles[i].remove();
+      }
+      const excessGeneric = genericBubbles.length - MAX_ASSIST_TURNS;
+      if (excessGeneric > 0) {
+        for (let i = 0; i < excessGeneric; i += 1) genericBubbles[i].remove();
+      }
+    }
+
+    function renderAssistMessageList(messages, options = {}) {
+      clearLiveTranscript();
+      streamBubbleMap.user = null;
+      streamBubbleMap.assistant = null;
+
+      const existing = new Map();
+      transcript.querySelectorAll('.gaia-assist__bubble[data-turn-id]').forEach((node) => {
+        existing.set(node.dataset.turnId, node);
+      });
+
+      const activeIds = new Set();
+      for (let index = 0; index < messages.length; index += 1) {
+        const item = messages[index];
+        const rawText = String(item?.text || '').trim();
+        if (!item?.id || !rawText) continue;
+        const role = item.role === 'user' ? 'user' : 'assistant';
+        const isLast = index === messages.length - 1;
+        const stillStreaming = isLast
+          && !options.finalize
+          && options.streamingRole === item.role;
+        const clean = role === 'user'
+          ? rawText
+          : sanitizeRealtimeTranscript('assistant', rawText, !stillStreaming);
+        if (!clean) continue;
+
+        activeIds.add(item.id);
+        const kind = role === 'user' ? 'user' : 'bot';
+        let bubble = existing.get(item.id);
+        if (!bubble) {
+          bubble = document.createElement('p');
+          bubble.className = `gaia-assist__bubble gaia-assist__bubble--${kind}`;
+          bubble.dataset.turnId = item.id;
+          transcript.appendChild(bubble);
+          existing.set(item.id, bubble);
+        } else {
+          bubble.className = `gaia-assist__bubble gaia-assist__bubble--${kind}`;
+        }
+        bubble.textContent = clean;
+      }
+
+      existing.forEach((node, id) => {
+        if (!activeIds.has(id)) node.remove();
+      });
+
+      trimAssistBubbles();
+      transcript.scrollTop = transcript.scrollHeight;
     }
 
     function syncRealtimeBubble(role, text, finalize) {
@@ -2718,7 +2817,11 @@
           window.setTimeout(() => sendRealtimeWelcome('status-ready'), 120);
         }
       });
-      realtimeVoice.on('message', ({ role, text, finalize }) => {
+      realtimeVoice.on('message', ({ role, text, finalize, messages }) => {
+        if (Array.isArray(messages) && messages.length) {
+          renderAssistMessageList(messages, { streamingRole: role, finalize });
+          return;
+        }
         const cleanText = sanitizeRealtimeTranscript(role, text, finalize);
         if (!cleanText) return;
         if (role === 'user') syncRealtimeBubble('user', cleanText, finalize);
@@ -2810,8 +2913,7 @@
       bubble.className = `gaia-assist__bubble gaia-assist__bubble--${kind}`;
       bubble.innerHTML = escapeHtml(text);
       transcript.appendChild(bubble);
-      const bubbles = transcript.querySelectorAll('.gaia-assist__bubble');
-      if (bubbles.length > 7) bubbles[0].remove();
+      trimAssistBubbles();
       transcript.scrollTop = transcript.scrollHeight;
       return bubble;
     }
@@ -3429,15 +3531,24 @@
 
     document.querySelectorAll('[data-gaia-open-assist]').forEach((button) => {
       button.addEventListener('click', () => {
-        if (!panel.hidden) return;
         void onAssistTap();
       });
+    });
+    document.addEventListener('click', (event) => {
+      const assistBtn = event.target.closest('[data-gaia-tab-assist]');
+      if (!assistBtn || assistBtn.dataset.gaiaDockWired) return;
+      event.preventDefault();
+      event.stopPropagation();
+      void onAssistTap();
     });
     setMuted(muted);
     initVoiceSettings();
     setVoiceProvider(selectedProvider() === 'auto' ? 'auto' : selectedProvider());
+    wireGaiaDock();
+    window.addEventListener('gaia:tabbar-ready', wireGaiaDock);
     requestAnimationFrame(wireGaiaDock);
     setTimeout(wireGaiaDock, 0);
+    setTimeout(wireGaiaDock, 250);
     if (!new URLSearchParams(window.location.search).has('no_welcome')) {
       window.setTimeout(() => {
         showPassiveWelcome();

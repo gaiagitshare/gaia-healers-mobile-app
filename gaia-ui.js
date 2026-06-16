@@ -259,6 +259,10 @@
     return { day: '20', month: 'Nov', year: '2026' };
   }
 
+  function isCoarsePointer() {
+    return window.matchMedia?.('(pointer: coarse)')?.matches ?? false;
+  }
+
   function wireEmbeddedPortalLinks(root = document) {
     root.querySelectorAll('a[href*="education.gaiahealers.com"]').forEach((link) => {
       if (link.dataset.gaiaEmbeddedWired) return;
@@ -1538,7 +1542,9 @@
         const lockedPanel = document.querySelector('[data-admin-locked]');
         lockedPanel?.scrollIntoView?.({ block: 'center' });
       } else {
-        window.scrollTo({ top: 0, behavior: options.replace ? 'auto' : 'smooth' });
+        const useInstantScroll = isCoarsePointer()
+          || window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+        window.scrollTo({ top: 0, behavior: options.replace || useInstantScroll ? 'auto' : 'smooth' });
       }
       syncAdminUi();
       const routeTab = options.tab || tabForView(nextView, options.tab);
@@ -2565,13 +2571,15 @@
       if (!document.body.classList.contains('gaia-v2')) return;
       passiveWelcomeShown = true;
       sessionStorage.setItem(ASSIST_WELCOME_KEY, '1');
-      setOpen(true, { passive: true });
+      if (!isCoarsePointer()) {
+        setOpen(true, { passive: true });
+      }
       if (!shouldAutoStartGemini() && !canUseRealtimeVoice() && !transcript.querySelector('[data-gaia-welcome-bubble]')) {
         const welcomeText = passiveWelcomeText();
         const bubble = appendMessage('bot', welcomeText);
         bubble.dataset.gaiaWelcomeBubble = '1';
       }
-      setAssistVoiceState('idle', canUseRealtimeVoice() ? 'Starting Gemini Live…' : 'Gemini Live is loading…');
+      setAssistVoiceState('idle', canUseRealtimeVoice() ? 'Starting Gemini Live…' : 'Tap Gaia to start Gemini Live');
       if (canUseRealtimeVoice()) setRealtimeVoiceProvider();
     }
 
@@ -2588,6 +2596,7 @@
     function shouldAutoStartGemini() {
       const params = new URLSearchParams(window.location.search);
       if (params.has('no_autostart') || params.has('no_welcome')) return false;
+      if (isCoarsePointer()) return false;
       return true;
     }
 
@@ -2611,56 +2620,96 @@
       }
     }
 
+    let assistSessionBusy = false;
+
+    function canCloseAssistSession() {
+      if (!realtimeVoice?.isActive()) return !panel.hidden;
+      const voiceStatus = realtimeVoice.status;
+      return voiceStatus === 'listening'
+        || voiceStatus === 'ready'
+        || voiceStatus === 'speaking'
+        || voiceStatus === 'thinking';
+    }
+
     async function onAssistTap() {
-      await unlockVoicePlayback(true);
+      if (assistSessionBusy) return;
+
       initRealtimeVoice();
       if (canUseRealtimeVoice()) setRealtimeVoiceProvider();
 
       if (!realtimeVoice) {
         if (panel.hidden) {
+          assistSessionBusy = true;
           setOpen(true);
           setError('');
-          await startVoicePrompt();
+          setAssistVoiceState('connecting', 'Opening Gaia Assist…');
+          void unlockVoicePlayback(true);
+          try {
+            await startVoicePrompt();
+          } finally {
+            assistSessionBusy = false;
+          }
         } else {
           setOpen(false);
         }
         return;
       }
 
-      if (!panel.hidden && realtimeVoice.isActive()) {
+      if (!panel.hidden && canCloseAssistSession()) {
         realtimeVoice.stop();
         setOpen(false);
         setAssistVoiceState('idle', REALTIME_STATUS_COPY.idle);
         return;
       }
 
+      if (!panel.hidden && realtimeVoice.status === 'connecting') {
+        return;
+      }
+
+      assistSessionBusy = true;
       const wasClosed = panel.hidden;
       setOpen(true);
+      setAssistVoiceState('connecting', REALTIME_STATUS_COPY.connecting);
       setError('');
+      void unlockVoicePlayback(true);
+
       try {
         if (!realtimeVoice.isActive()) {
           await realtimeVoice.start();
           sendRealtimeWelcome(wasClosed ? 'first-open' : 'resume');
-        } else {
+        } else if (realtimeVoice.status !== 'connecting') {
           sendRealtimeWelcome('resume');
         }
       } catch (err) {
         assistError('assist start failed', err);
         setError('Voice is unavailable right now. You can still type your question below.');
         setAssistVoiceState('idle', 'Type your question below');
+      } finally {
+        assistSessionBusy = false;
       }
     }
 
+    function bindAssistDock() {
+      if (root.dataset.gaiaAssistDockBound) return;
+      root.dataset.gaiaAssistDockBound = '1';
+
+      const handleAssistTap = (event) => {
+        const button = event.target.closest('[data-gaia-tab-assist]');
+        if (!button) return;
+        event.preventDefault();
+        event.stopPropagation();
+        void onAssistTap();
+      };
+
+      document.addEventListener('pointerup', handleAssistTap, { capture: true, passive: false });
+      document.addEventListener('click', (event) => {
+        if (!event.target.closest('[data-gaia-tab-assist]')) return;
+        event.preventDefault();
+        event.stopPropagation();
+      }, { capture: true });
+    }
+
     function wireGaiaDock() {
-      dockButtons().forEach((button) => {
-        if (button.dataset.gaiaDockWired) return;
-        button.dataset.gaiaDockWired = '1';
-        button.addEventListener('click', (event) => {
-          event.preventDefault();
-          event.stopPropagation();
-          void onAssistTap();
-        });
-      });
       syncDockVoiceState();
     }
 
@@ -3425,8 +3474,7 @@
       await recordLiveVoice();
     }
 
-    wireGaiaDock();
-    window.addEventListener('gaia:route', wireGaiaDock);
+    bindAssistDock();
     window.addEventListener('gaia:open-assist', (event) => {
       unlockVoicePlayback();
       setOpen(true);
@@ -3534,21 +3582,13 @@
         void onAssistTap();
       });
     });
-    document.addEventListener('click', (event) => {
-      const assistBtn = event.target.closest('[data-gaia-tab-assist]');
-      if (!assistBtn || assistBtn.dataset.gaiaDockWired) return;
-      event.preventDefault();
-      event.stopPropagation();
-      void onAssistTap();
-    });
+    bindAssistDock();
+    wireGaiaDock();
+    window.addEventListener('gaia:tabbar-ready', wireGaiaDock);
+    window.addEventListener('gaia:route', wireGaiaDock);
     setMuted(muted);
     initVoiceSettings();
     setVoiceProvider(selectedProvider() === 'auto' ? 'auto' : selectedProvider());
-    wireGaiaDock();
-    window.addEventListener('gaia:tabbar-ready', wireGaiaDock);
-    requestAnimationFrame(wireGaiaDock);
-    setTimeout(wireGaiaDock, 0);
-    setTimeout(wireGaiaDock, 250);
     if (!new URLSearchParams(window.location.search).has('no_welcome')) {
       window.setTimeout(() => {
         showPassiveWelcome();

@@ -32,14 +32,17 @@
       </a>`;
   }
 
-  function render() {
-    const active = activeTabId();
-    const nav = document.querySelector('.gaia-tabbar');
-    if (!nav) return;
+  function setLinkActive(link, on) {
+    link.classList.toggle('is-active', on);
+    if (on) link.setAttribute('aria-current', 'page');
+    else link.removeAttribute('aria-current');
+    const svg = link.querySelector('.gaia-tabbar__icon');
+    if (svg) svg.setAttribute('stroke-width', on ? '2' : '1.5');
+  }
 
+  function buildTabbar(inner, active) {
     const left = tabs.slice(0, 2);
     const right = tabs.slice(2);
-    const inner = nav.querySelector('.gaia-tabbar__inner');
     inner.innerHTML = `
       <div class="gaia-tabbar__group gaia-tabbar__group--left">${left.map((t) => tabLink(t, active === t.id)).join('')}</div>
       <button type="button" class="gaia-tabbar__assist" data-gaia-tab-assist data-state="idle" aria-label="Open Gaia Assist — live voice" aria-expanded="false">
@@ -49,6 +52,23 @@
         </svg>
       </button>
       <div class="gaia-tabbar__group gaia-tabbar__group--right">${right.map((t) => tabLink(t, active === t.id)).join('')}</div>`;
+  }
+
+  function render() {
+    const active = activeTabId();
+    const inner = document.querySelector('.gaia-tabbar__inner');
+    if (!inner) return;
+
+    const assist = inner.querySelector('[data-gaia-tab-assist]');
+    if (!assist) {
+      buildTabbar(inner, active);
+      window.dispatchEvent(new CustomEvent('gaia:tabbar-ready'));
+      return;
+    }
+
+    inner.querySelectorAll('.gaia-tabbar__link').forEach((link) => {
+      setLinkActive(link, link.dataset.appNav === active);
+    });
   }
 
   const nav = document.createElement('nav');
@@ -61,8 +81,5 @@
   document.body.classList.add('gaia-has-tabbar');
   render();
   window.dispatchEvent(new CustomEvent('gaia:tabbar-ready'));
-  window.addEventListener('gaia:route', () => {
-    render();
-    window.dispatchEvent(new CustomEvent('gaia:tabbar-ready'));
-  });
+  window.addEventListener('gaia:route', render);
 })();

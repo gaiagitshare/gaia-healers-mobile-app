@@ -206,6 +206,168 @@ const FALLBACK_ACADEMY = {
   },
 };
 
+const FALLBACK_MEMBER_HUB = {
+  ok: true,
+  configured: false,
+  liveData: false,
+  source: 'observed-ghl-memberships',
+  generatedAt: '',
+  member: {
+    displayName: 'Gaia member',
+    role: 'Practitioner',
+    cohort: 'Bio-Well Practitioners',
+    portalUrl: 'https://education.gaiahealers.com',
+  },
+  portal: {
+    url: 'https://education.gaiahealers.com',
+    users: 1254,
+    invited: 1,
+    adminSections: ['Client Portal', 'Courses', 'Communities', 'Credentials', 'Gokollab Marketplace'],
+    actions: ['Generate magic link', 'Invite to client portal', 'Send login email'],
+  },
+  dashboard: {
+    welcomeTitle: 'Your Gaia dashboard is ready',
+    welcomeDetail: 'Courses, communities, live sessions, credentials, and products from GHL Memberships.',
+    nextLessonTitle: 'Module 4 · Scan interpretation lab',
+    nextLessonUrl: '',
+    nextMeetingTitle: 'Colour Vibrational Energy',
+    nextMeetingTime: 'Jun 16 · 2:30 AM',
+    eventPassTitle: 'Elevate 2026',
+    eventPassDetail: 'Badge ops ready',
+    ceCreditsEarned: 18.5,
+    ceCreditsRequired: 24,
+    topCourse: 'GaiaPractitioners CRM Mastery',
+    topCourseMeta: '0.53% completion · 377 enrollments',
+    revenueGenerated: '$8,400',
+    averageOrderValue: '$1,200',
+    totalCheckouts: 7,
+  },
+  communities: [
+    {
+      id: 'all',
+      name: '[Start Here] All Gaia Healers',
+      members: 255,
+      posts: 28,
+      admins: 3,
+      owner: 'Nima Farshid',
+      privacy: 'Public',
+      badge: 'Start here',
+      channels: ['Home', 'Start Here', 'Healers Lounge', 'Ask A Mentor', 'Wins Wall'],
+      tabs: ['Discussion', 'Learning', 'Events', 'Members', 'About'],
+    },
+    {
+      id: 'abundant',
+      name: 'The Abundant Healer Collective',
+      members: 117,
+      posts: 0,
+      admins: 3,
+      owner: 'Nima Farshid',
+      privacy: 'Private',
+      badge: 'Membership',
+      channels: ['Home', 'Mentorship', 'Resources', 'Wins'],
+      tabs: ['Discussion', 'Learning', 'Events', 'Members', 'About'],
+    },
+    {
+      id: 'biowell',
+      name: 'Bio-Well Practitioners',
+      members: 382,
+      posts: 11,
+      admins: 3,
+      owner: 'Nima Farshid',
+      privacy: 'Public',
+      badge: 'Primary',
+      channels: ['Orientation', 'Tech Support', 'Case Studies', 'Bio Cor', 'Bio-Well', 'Glove', 'Sputnik', 'Water Sensor', 'Leaderboard'],
+      tabs: ['Discussion', 'Learning', 'Events', 'Members', 'About', 'Leaderboard'],
+    },
+    {
+      id: 'biopulsar',
+      name: 'BioPulsar Practitioners',
+      members: 508,
+      posts: 0,
+      admins: 3,
+      owner: 'Nima Farshid',
+      privacy: 'Public',
+      badge: null,
+      channels: ['Aura', 'Chakra', 'Reports'],
+      tabs: ['Discussion', 'Learning', 'Events', 'Members', 'About'],
+    },
+    {
+      id: 'biotekna',
+      name: 'Biotekna Practitioners',
+      members: 154,
+      posts: 0,
+      admins: 3,
+      owner: 'Nima Farshid',
+      privacy: 'Public',
+      badge: null,
+      channels: ['Biotekna', 'Nervous System', 'Case Notes'],
+      tabs: ['Discussion', 'Learning', 'Events', 'Members', 'About'],
+    },
+    {
+      id: 'healeex',
+      name: 'Healeex',
+      members: 31,
+      posts: 0,
+      admins: 3,
+      owner: 'Nima Farshid',
+      privacy: 'Public',
+      badge: 'New',
+      channels: ['Introductions', 'Calls', 'Protocols'],
+      tabs: ['Discussion', 'Learning', 'Events', 'Members', 'About'],
+    },
+  ],
+  discussions: [
+    { group: '[Start Here] All Gaia Healers', channel: 'Featured', title: 'Which Path Will You Take?', author: 'Nima Farshid', time: '5mo ago', type: 'Welcome', replies: 0, likes: 3 },
+    { group: '[Start Here] All Gaia Healers', channel: 'Featured', title: 'Welcome! Start Here', author: 'Nima Farshid', time: '6mo ago', type: 'Start', replies: 0, likes: 7 },
+    { group: '[Start Here] All Gaia Healers', channel: 'Start Here', title: 'Coming Soon Inside the Gaiahealers Community', author: 'Ruffa C.', time: '1w ago', type: 'Chakra Challenge', replies: 0, likes: 1 },
+    { group: 'Bio-Well Practitioners', channel: 'Tech Support', title: 'My Bio-Well is giving me an error', author: 'Practitioner', time: '2w ago', type: 'Support', replies: 4, likes: 2 },
+    { group: 'Bio-Well Practitioners', channel: 'Orientation', title: 'Happening Today: Advanced Level 1 Live Training', author: 'Faculty', time: '1mo ago', type: 'Training', replies: 1, likes: 5 },
+  ],
+  events: [
+    { day: 16, month: 'Jun', title: 'Colour Vibrational Energy', time: '2:30 AM', group: 'All Gaia Healers', tz: 'Community calendar', provider: 'google_meet' },
+    { day: 16, month: 'Jun', title: 'GaiaPractitioners CRM Mastery', time: '10:00 PM', group: 'All Gaia Healers', tz: 'Community calendar', provider: 'google_meet' },
+    { day: 19, month: 'Jun', title: '[Bio-Well] Advanced Level 1', time: '2:00 AM', group: 'Bio-Well Practitioners', tz: 'Training room', provider: 'google_meet' },
+    { day: 23, month: 'Jun', title: '[Marketing] Master Your Follow-Up', time: '11:00 PM', group: 'Practitioner growth', tz: 'Live session', provider: 'google_meet' },
+  ],
+  members: [
+    { name: 'Gaia Healers', initials: 'GH', role: 'Admin', activity: 'active 1d ago', group: 'All Gaia Healers' },
+    { name: 'Kellie Putman', initials: 'KP', role: 'Bio-Well', activity: 'active 2d ago', group: 'Bio-Well Practitioners' },
+    { name: 'Isabel Azprua-Sosa', initials: 'IA', role: 'Contributor', activity: 'active 4d ago', group: 'All Gaia Healers' },
+    { name: 'Pari Mahinpey', initials: 'PM', role: 'Contributor', activity: 'active 3d ago', group: 'All Gaia Healers' },
+  ],
+  newsletters: [
+    { id: 'training', title: 'Training reminders', detail: 'Course launches, live labs, CE deadlines', on: true },
+    { id: 'chakra', title: 'Chakra challenge', detail: 'Weekly challenge prompts and community highlights', on: true },
+    { id: 'events', title: 'Events and Elevate', detail: 'Badge status, room blocks, and event updates', on: true },
+    { id: 'offers', title: 'Device and store offers', detail: 'Bio-Well kits, renewals, and bundle pricing', on: false },
+  ],
+  products: [
+    { id: 'biowell-kit', title: 'Bio-Well device kits', category: 'Devices', detail: 'Bio-Well 3.0, Sputnik, Glove, Water Sensor', href: 'home.html?view=wellness&tab=biowell', cta: 'Open wellness' },
+    { id: 'biopulsar', title: 'BioPulsar practitioner tools', category: 'Devices', detail: 'Aura and chakra reporting workflows', href: 'home.html?view=wellness&tab=chakras', cta: 'Explore map' },
+    { id: 'biotekna', title: 'BioTekna nervous-system programs', category: 'Training', detail: 'Live trainings and certification bundles', href: 'home.html?view=academy', cta: 'Open academy' },
+    { id: 'event-pass', title: 'Elevate 2026 passes', category: 'Events', detail: 'VIP, 3-day, workshop, and conference access', href: 'home.html?view=community&tab=events', cta: 'Open events' },
+    { id: 'gokollab', title: 'Gokollab Marketplace', category: 'Store', detail: 'Digital offers and member checkout surface inside GHL', href: 'home.html?view=profile', cta: 'Open profile' },
+  ],
+  meetings: [
+    { id: 'colour-vibrational-energy', title: 'Colour Vibrational Energy', startsAt: '2026-06-16T02:30:00+04:00', timezone: 'Asia/Dubai', provider: 'google_meet', visibility: 'community', group: 'All Gaia Healers' },
+    { id: 'crm-mastery', title: 'GaiaPractitioners CRM Mastery', startsAt: '2026-06-16T22:00:00+04:00', timezone: 'Asia/Dubai', provider: 'google_meet', visibility: 'community', group: 'All Gaia Healers' },
+    { id: 'advanced-level-1', title: '[Bio-Well] Advanced Level 1', startsAt: '2026-06-19T02:00:00+04:00', timezone: 'Asia/Dubai', provider: 'google_meet', visibility: 'cohort', group: 'Bio-Well Practitioners' },
+  ],
+  marketplace: {
+    enabled: true,
+    provider: 'Gokollab Marketplace',
+    status: 'activation',
+    note: 'Digital products, device bundles, and member checkout routes live inside GHL Memberships.',
+  },
+  access: {
+    notes: [
+      'Member login should use GHL Client Portal or a backend-generated magic link.',
+      'Lessons, certificates, purchases, and private records stay behind the proxy and verified member session.',
+      'Discussion, events, product previews, and course guidance can stay inside the embedded app shell.',
+    ],
+  },
+};
+
 const GAIA_KNOWLEDGE = {
   brand: 'Gaia Healers',
   publicWebsite: 'https://gaiahealers.com',
@@ -657,6 +819,145 @@ function normalizeAcademyProgress(payload = {}) {
   };
 }
 
+function academyCourseToCommunityCourse(course = {}) {
+  return {
+    groupId: String(course.category || '').toLowerCase().includes('bio-well') ? 'biowell' : 'all',
+    title: String(course.title || 'Course'),
+    detail: `${course.progressPercent ? `${course.progressPercent}% complete` : 'Available'}${course.nextLessonTitle ? ` · ${course.nextLessonTitle}` : ''}`,
+    href: String(course.continueUrl || 'home.html?view=academy'),
+  };
+}
+
+function normalizeMemberHub(payload = {}, academy = FALLBACK_ACADEMY) {
+  const sourceCourses = Array.isArray(payload.courses) && payload.courses.length
+    ? payload.courses.map(normalizeCourse)
+    : (Array.isArray(academy.courses) ? academy.courses.map((course, index) => normalizeCourse(course, index)) : []);
+  const credentials = Array.isArray(payload.credentials) && payload.credentials.length
+    ? payload.credentials
+    : (Array.isArray(academy.credentials) ? academy.credentials : []);
+
+  return {
+    ok: true,
+    configured: Boolean(payload.configured ?? true),
+    liveData: Boolean(payload.liveData ?? payload.live_data ?? true),
+    source: String(payload.source || 'member-hub'),
+    generatedAt: String(payload.generatedAt || payload.generated_at || new Date().toISOString()),
+    member: {
+      displayName: String(payload.member?.displayName || payload.member?.name || 'Gaia member'),
+      role: String(payload.member?.role || 'Practitioner'),
+      cohort: String(payload.member?.cohort || 'Bio-Well Practitioners'),
+      portalUrl: String(payload.member?.portalUrl || payload.portal?.url || FALLBACK_MEMBER_HUB.portal.url),
+    },
+    portal: {
+      url: String(payload.portal?.url || FALLBACK_MEMBER_HUB.portal.url),
+      users: Number(payload.portal?.users ?? FALLBACK_MEMBER_HUB.portal.users) || FALLBACK_MEMBER_HUB.portal.users,
+      invited: Number(payload.portal?.invited ?? FALLBACK_MEMBER_HUB.portal.invited) || FALLBACK_MEMBER_HUB.portal.invited,
+      adminSections: Array.isArray(payload.portal?.adminSections) ? payload.portal.adminSections : FALLBACK_MEMBER_HUB.portal.adminSections,
+      actions: Array.isArray(payload.portal?.actions) ? payload.portal.actions : FALLBACK_MEMBER_HUB.portal.actions,
+    },
+    dashboard: {
+      welcomeTitle: String(payload.dashboard?.welcomeTitle || payload.overview?.welcomeTitle || FALLBACK_MEMBER_HUB.dashboard.welcomeTitle),
+      welcomeDetail: String(payload.dashboard?.welcomeDetail || payload.overview?.welcomeDetail || FALLBACK_MEMBER_HUB.dashboard.welcomeDetail),
+      nextLessonTitle: String(payload.dashboard?.nextLessonTitle || academy.summary?.nextLessonTitle || FALLBACK_MEMBER_HUB.dashboard.nextLessonTitle),
+      nextLessonUrl: String(payload.dashboard?.nextLessonUrl || academy.summary?.nextLessonUrl || ''),
+      nextMeetingTitle: String(payload.dashboard?.nextMeetingTitle || FALLBACK_MEMBER_HUB.dashboard.nextMeetingTitle),
+      nextMeetingTime: String(payload.dashboard?.nextMeetingTime || FALLBACK_MEMBER_HUB.dashboard.nextMeetingTime),
+      eventPassTitle: String(payload.dashboard?.eventPassTitle || FALLBACK_MEMBER_HUB.dashboard.eventPassTitle),
+      eventPassDetail: String(payload.dashboard?.eventPassDetail || FALLBACK_MEMBER_HUB.dashboard.eventPassDetail),
+      ceCreditsEarned: Number(payload.dashboard?.ceCreditsEarned ?? academy.summary?.ceCreditsEarned ?? FALLBACK_MEMBER_HUB.dashboard.ceCreditsEarned) || 0,
+      ceCreditsRequired: Number(payload.dashboard?.ceCreditsRequired ?? academy.summary?.ceCreditsRequired ?? FALLBACK_MEMBER_HUB.dashboard.ceCreditsRequired) || 0,
+      topCourse: String(payload.dashboard?.topCourse || FALLBACK_MEMBER_HUB.dashboard.topCourse),
+      topCourseMeta: String(payload.dashboard?.topCourseMeta || FALLBACK_MEMBER_HUB.dashboard.topCourseMeta),
+      revenueGenerated: String(payload.dashboard?.revenueGenerated || FALLBACK_MEMBER_HUB.dashboard.revenueGenerated),
+      averageOrderValue: String(payload.dashboard?.averageOrderValue || FALLBACK_MEMBER_HUB.dashboard.averageOrderValue),
+      totalCheckouts: Number(payload.dashboard?.totalCheckouts ?? FALLBACK_MEMBER_HUB.dashboard.totalCheckouts) || 0,
+    },
+    communities: Array.isArray(payload.communities) && payload.communities.length ? payload.communities : FALLBACK_MEMBER_HUB.communities,
+    discussions: Array.isArray(payload.discussions) && payload.discussions.length ? payload.discussions : FALLBACK_MEMBER_HUB.discussions,
+    events: Array.isArray(payload.events) && payload.events.length ? payload.events : FALLBACK_MEMBER_HUB.events,
+    members: Array.isArray(payload.members) && payload.members.length ? payload.members : FALLBACK_MEMBER_HUB.members,
+    newsletters: Array.isArray(payload.newsletters) && payload.newsletters.length ? payload.newsletters : FALLBACK_MEMBER_HUB.newsletters,
+    products: Array.isArray(payload.products) && payload.products.length ? payload.products : FALLBACK_MEMBER_HUB.products,
+    meetings: Array.isArray(payload.meetings) && payload.meetings.length ? payload.meetings : FALLBACK_MEMBER_HUB.meetings,
+    marketplace: payload.marketplace || FALLBACK_MEMBER_HUB.marketplace,
+    access: payload.access || FALLBACK_MEMBER_HUB.access,
+    credentials,
+    courses: sourceCourses,
+    communityCourses: sourceCourses.map(academyCourseToCommunityCourse),
+  };
+}
+
+async function getMemberHub(url = new URL('http://localhost'), academy = FALLBACK_ACADEMY) {
+  const configuredUrl = String(process.env.MEMBER_HUB_BASE_URL || '').replace(/\/+$/, '');
+  const token = process.env.MEMBER_HUB_TOKEN || '';
+  const inlineJson = process.env.MEMBER_HUB_JSON || '';
+  const memberId = String(url.searchParams.get('memberId') || process.env.MEMBER_HUB_MEMBER_ID || '').trim();
+  const email = String(url.searchParams.get('email') || process.env.MEMBER_HUB_EMAIL || '').trim();
+
+  if (inlineJson) {
+    try {
+      const parsed = JSON.parse(inlineJson);
+      return normalizeMemberHub({
+        ...parsed,
+        configured: true,
+        liveData: Boolean(parsed.liveData ?? parsed.live_data ?? true),
+        source: parsed.source || 'member-hub-json',
+      }, academy);
+    } catch (error) {
+      return { ...FALLBACK_MEMBER_HUB, error: `MEMBER_HUB_JSON is invalid: ${error.message}` };
+    }
+  }
+
+  if (configuredUrl) {
+    const apiUrl = new URL(configuredUrl);
+    if (memberId) apiUrl.searchParams.set('memberId', memberId);
+    if (email) apiUrl.searchParams.set('email', email);
+    const headers = { Accept: 'application/json' };
+    if (token) headers.Authorization = `Bearer ${token}`;
+    const payload = await fetchJson(apiUrl.toString(), headers);
+    return normalizeMemberHub({
+      ...payload,
+      configured: true,
+      liveData: true,
+      source: payload.source || 'member-hub-api',
+    }, academy);
+  }
+
+  return normalizeMemberHub({
+    ...FALLBACK_MEMBER_HUB,
+    generatedAt: new Date().toISOString(),
+  }, academy);
+}
+
+function buildGaiaAppData(event, academy, memberHub) {
+  return {
+    members: memberHub.portal?.users || FALLBACK_GAIA.members,
+    invited: memberHub.portal?.invited || 1,
+    portalUrl: memberHub.portal?.url || FALLBACK_MEMBER_HUB.portal.url,
+    clientPortal: {
+      url: memberHub.portal?.url || FALLBACK_MEMBER_HUB.portal.url,
+      users: memberHub.portal?.users || FALLBACK_MEMBER_HUB.portal.users,
+      invited: memberHub.portal?.invited || FALLBACK_MEMBER_HUB.portal.invited,
+      adminSections: memberHub.portal?.adminSections || FALLBACK_MEMBER_HUB.portal.adminSections,
+      actions: memberHub.portal?.actions || FALLBACK_MEMBER_HUB.portal.actions,
+    },
+    communities: memberHub.communities || FALLBACK_MEMBER_HUB.communities,
+    communityFeed: memberHub.discussions || FALLBACK_MEMBER_HUB.discussions,
+    communityCourses: memberHub.communityCourses || memberHub.courses?.map(academyCourseToCommunityCourse) || [],
+    communityEvents: memberHub.events || FALLBACK_MEMBER_HUB.events,
+    communityMembers: memberHub.members || FALLBACK_MEMBER_HUB.members,
+    communityNewsletter: memberHub.newsletters || FALLBACK_MEMBER_HUB.newsletters,
+    marketplace: memberHub.marketplace || FALLBACK_MEMBER_HUB.marketplace,
+    products: memberHub.products || FALLBACK_MEMBER_HUB.products,
+    meetings: memberHub.meetings || FALLBACK_MEMBER_HUB.meetings,
+    certifications: memberHub.credentials || academy.credentials || FALLBACK_ACADEMY.credentials,
+    topCourse: memberHub.dashboard?.topCourse || FALLBACK_MEMBER_HUB.dashboard.topCourse,
+    event,
+    academy,
+    memberHub,
+  };
+}
+
 async function getAcademyProgress(url = new URL('http://localhost')) {
   const configuredUrl = String(process.env.ACADEMY_PROGRESS_BASE_URL || process.env.GHL_COURSE_PROGRESS_URL || '').replace(/\/+$/, '');
   const token = process.env.ACADEMY_PROGRESS_TOKEN || process.env.GHL_COURSE_PROGRESS_TOKEN || '';
@@ -705,14 +1006,15 @@ async function bootstrap() {
     getGhlSummary().catch((error) => ({ configured: false, error: error.message })),
     getAcademyProgress().catch((error) => ({ ...FALLBACK_ACADEMY, source: 'academy-error', error: error.message })),
   ]);
-  const liveData = Boolean(event.liveData || ghl.liveData || ghl.normalized || academy.liveData);
+  const memberHub = await getMemberHub(new URL('http://localhost'), academy).catch((error) => ({ ...FALLBACK_MEMBER_HUB, source: 'member-hub-error', error: error.message }));
+  const liveData = Boolean(event.liveData || ghl.liveData || ghl.normalized || academy.liveData || memberHub.liveData);
+  const gaiaData = buildGaiaAppData(event, academy, memberHub);
 
   return {
     ok: true,
     gaia: {
       ...FALLBACK_GAIA,
-      event,
-      academy,
+      ...gaiaData,
       sync: {
         generatedAt: new Date().toISOString(),
         liveData,
@@ -1380,6 +1682,11 @@ const server = http.createServer(async (req, res) => {
     }
     if (req.method === 'GET' && url.pathname === '/api/academy/progress') {
       sendJson(res, 200, await getAcademyProgress(url), origin);
+      return;
+    }
+    if (req.method === 'GET' && url.pathname === '/api/member/hub') {
+      const academy = await getAcademyProgress(url).catch(() => FALLBACK_ACADEMY);
+      sendJson(res, 200, await getMemberHub(url, academy), origin);
       return;
     }
     if (req.method === 'POST' && url.pathname === '/api/assist/chat') {

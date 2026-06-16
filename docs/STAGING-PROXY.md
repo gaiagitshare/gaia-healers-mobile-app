@@ -15,6 +15,11 @@ Paste these only into your backend host environment variables, never into the st
 | `ACADEMY_PROGRESS_JSON` | Optional staging-only normalized course progress JSON | Temporary backend env var from a GHL Courses/member progress export |
 | `ACADEMY_PROGRESS_MEMBER_ID` | Optional staging member/contact id used by the academy connector | GHL contact/member record |
 | `ACADEMY_PROGRESS_EMAIL` | Optional staging member email used by the academy connector | GHL contact/member record |
+| `MEMBER_HUB_BASE_URL` | Backend-only normalized member hub endpoint | Your GHL membership/community connector or internal member portal API |
+| `MEMBER_HUB_TOKEN` | Bearer token for `MEMBER_HUB_BASE_URL` | Your member hub connector backend |
+| `MEMBER_HUB_JSON` | Optional staging-only normalized member hub JSON | Temporary backend env var from a GHL membership/community export |
+| `MEMBER_HUB_MEMBER_ID` | Optional staging member/contact id used by the member hub connector | GHL contact/member record |
+| `MEMBER_HUB_EMAIL` | Optional staging member email used by the member hub connector | GHL contact/member record |
 | `EVENT_MANAGER_BASE_URL` | Event API base URL, e.g. `https://ba2ki.com/event-api` | Event Manager deployment |
 | `EVENT_MANAGER_TOKEN` | Event Manager admin/read token, if enabled | Event Manager backend/admin setup |
 | `EVENT_MANAGER_EVENT_ID` | Elevate event numeric ID | Event Manager admin event detail URL/API |
@@ -64,6 +69,7 @@ The app reads only:
 ```text
 GET {proxy}/api/app/bootstrap
 GET {proxy}/api/academy/progress
+GET {proxy}/api/member/hub
 POST {proxy}/api/assist/chat
 POST {proxy}/api/assist/voice
 POST {proxy}/api/assist/transcribe
@@ -124,6 +130,26 @@ That route returns a safe, normalized shape only:
 ```
 
 Use `ACADEMY_PROGRESS_BASE_URL` for the real connector. If the live GHL membership/course API is not available for direct reads, use a backend job/webhook/export to normalize GHL course progress into this shape. For staging only, paste a real exported normalized payload into `ACADEMY_PROGRESS_JSON`; do not commit it.
+
+## Member Hub Sync
+
+The app shell now expects one normalized member-hub payload for the rest of the GHL memberships surface:
+
+```text
+GET {proxy}/api/member/hub
+```
+
+That route is intended to unify:
+
+- client portal summary
+- communities and discussion previews
+- course/dashboard cards
+- live meetings and calendar sessions
+- newsletter preferences
+- marketplace/device/product cards
+- credentials and access notes
+
+Use `MEMBER_HUB_BASE_URL` for the real connector. If GHL does not expose everything cleanly through one read API, normalize the data in your backend first, then return one safe JSON payload to the static app. For staging only, paste a real exported normalized payload into `MEMBER_HUB_JSON`; do not commit it.
 
 `/api/assist/tts` is optional backend TTS. The browser tries backend voice providers through this proxy route and falls back to browser `SpeechSynthesis` if hosted voice is unavailable, out of quota, or not configured. The frontend never receives OpenAI, ElevenLabs, OpenRouter, Groq, or provider keys.
 

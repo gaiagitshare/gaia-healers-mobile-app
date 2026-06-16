@@ -2,7 +2,7 @@
  * Prototype note: this is the single handoff point for future GHL/event API wiring.
  */
 window.GAIA = {
-  members: 1252,
+  members: 1254,
   invited: 1,
   portalUrl: 'https://education.gaiahealers.com',
   sources: {
@@ -17,7 +17,7 @@ window.GAIA = {
     {
       id: 'all',
       name: '[Start Here] All Gaia Healers',
-      members: 254,
+      members: 255,
       posts: 28,
       admins: 3,
       privacy: 'Public',
@@ -41,7 +41,7 @@ window.GAIA = {
     {
       id: 'biowell',
       name: 'Bio-Well Practitioners',
-      members: 381,
+      members: 382,
       posts: 11,
       admins: 3,
       privacy: 'Public',
@@ -53,7 +53,7 @@ window.GAIA = {
     {
       id: 'biopulsar',
       name: 'BioPulsar Practitioners',
-      members: 507,
+      members: 508,
       posts: 0,
       admins: 3,
       privacy: 'Public',
@@ -89,7 +89,7 @@ window.GAIA = {
   ],
   clientPortal: {
     url: 'https://education.gaiahealers.com/',
-    users: 1252,
+    users: 1254,
     invited: 1,
     adminSections: ['Client Portal', 'Courses', 'Communities', 'Credentials', 'Gokollab Marketplace'],
     actions: ['Generate magic link', 'Invite to client portal', 'Send login email'],
@@ -119,6 +119,12 @@ window.GAIA = {
     { group: 'Bio-Well Practitioners', channel: 'Tech Support', title: 'My Bio-Well is giving me an error', author: 'Practitioner', time: '2w ago', type: 'Support', replies: 4, likes: 2 },
     { group: 'Bio-Well Practitioners', channel: 'Bio-Well Orientation', title: 'Happening Today: Advanced Level 1 Live Training', author: 'Faculty', time: '1mo ago', type: 'Training', replies: 1, likes: 5 },
   ],
+  communityNewsletter: [
+    { title: 'Training reminders', detail: 'Course launches, live labs, and CE deadlines', on: true },
+    { title: 'Chakra challenge', detail: 'Weekly prompts and community highlights', on: true },
+    { title: 'Events and Elevate', detail: 'Badge status, room blocks, and agenda drops', on: true },
+    { title: 'Device and store offers', detail: 'Bio-Well kits, renewals, and bundle pricing', on: false },
+  ],
   certifications: [
     { name: 'BIO-WELL Basic Certification', status: 'earned', year: '2024' },
     { name: 'BIO-WELL Orientation Training', status: 'earned', year: '2024' },
@@ -126,6 +132,24 @@ window.GAIA = {
     { name: 'Bio-Well Advanced Level 2', status: 'locked', unlock: '80% L1' },
   ],
   topCourse: 'Bio-Well Basic Certification Training',
+  products: [
+    { id: 'biowell-kit', title: 'Bio-Well device kits', category: 'Devices', detail: 'Bio-Well 3.0, Sputnik, Glove, Water Sensor', href: 'home.html?view=wellness&tab=biowell', cta: 'Open wellness' },
+    { id: 'biopulsar', title: 'BioPulsar practitioner tools', category: 'Devices', detail: 'Aura and chakra reporting workflows', href: 'home.html?view=wellness&tab=chakras', cta: 'Explore map' },
+    { id: 'biotekna', title: 'BioTekna nervous-system programs', category: 'Training', detail: 'Live trainings and certification bundles', href: 'home.html?view=academy', cta: 'Open academy' },
+    { id: 'event-pass', title: 'Elevate 2026 passes', category: 'Events', detail: 'VIP, 3-day, workshop, and conference access', href: 'home.html?view=community&tab=events', cta: 'Open events' },
+    { id: 'gokollab', title: 'Gokollab Marketplace', category: 'Store', detail: 'Digital offers and member checkout surface inside GHL', href: 'home.html?view=profile', cta: 'Open profile' },
+  ],
+  meetings: [
+    { id: 'colour-vibrational-energy', title: 'Colour Vibrational Energy', startsAt: '2026-06-16T02:30:00+04:00', timezone: 'Asia/Dubai', provider: 'google_meet', visibility: 'community', group: 'All Gaia Healers' },
+    { id: 'crm-mastery', title: 'GaiaPractitioners CRM Mastery', startsAt: '2026-06-16T22:00:00+04:00', timezone: 'Asia/Dubai', provider: 'google_meet', visibility: 'community', group: 'All Gaia Healers' },
+    { id: 'advanced-level-1', title: '[Bio-Well] Advanced Level 1', startsAt: '2026-06-19T02:00:00+04:00', timezone: 'Asia/Dubai', provider: 'google_meet', visibility: 'cohort', group: 'Bio-Well Practitioners' },
+  ],
+  marketplace: {
+    enabled: true,
+    provider: 'Gokollab Marketplace',
+    status: 'activation',
+    note: 'Digital products, device bundles, and member checkout routes live inside GHL Memberships.',
+  },
   event: {
     id: 'elevate-2026',
     name: 'Gaia Healers Elevate 2026',

@@ -61,6 +61,9 @@
     if (/course|academy|learning|module|credential|certification/.test(text)) {
       return appHref('academy');
     }
+    if (/market|product|bundle|store|gokollab/.test(text)) {
+      return appHref('community', { tab: 'products' });
+    }
     if (/event|calendar|elevate|badge|ticket/.test(text)) {
       return appHref('community', { tab: 'events' });
     }
@@ -77,6 +80,22 @@
     const number = Number(value);
     if (!Number.isFinite(number)) return '0%';
     return `${Math.round(Math.max(0, Math.min(100, number)))}%`;
+  }
+
+  function compactDateTime(value) {
+    if (!value) return '';
+    try {
+      const date = new Date(value);
+      if (Number.isNaN(date.getTime())) return String(value);
+      return new Intl.DateTimeFormat('en', {
+        month: 'short',
+        day: 'numeric',
+        hour: 'numeric',
+        minute: '2-digit',
+      }).format(date);
+    } catch {
+      return String(value);
+    }
   }
 
   function wireEmbeddedPortalLinks(root = document) {
@@ -104,7 +123,7 @@
   }
 
   function initCommunityHub() {
-    const data = window.GAIA;
+    let data = window.GAIA;
     if (!data) return;
 
     const groupsEl = document.getElementById('community-groups');
@@ -113,12 +132,20 @@
     const eventsEl = document.getElementById('community-events');
     const membersEl = document.getElementById('community-members');
     const newsletterEl = document.getElementById('community-newsletter');
+    const productsEl = document.getElementById('community-products');
     if (!groupsEl && !feedEl && !learningEl) return;
 
-    const portalUrl = data.clientPortal?.url || data.portalUrl || 'https://education.gaiahealers.com/';
-    const communities = data.communities || [];
-    const nameById = Object.fromEntries(communities.map((c) => [c.id, c.name]));
+    let portalUrl = data.clientPortal?.url || data.portalUrl || 'https://education.gaiahealers.com/';
+    let communities = data.communities || [];
+    let nameById = Object.fromEntries(communities.map((c) => [c.id, c.name]));
     let activeGroupId = 'all';
+
+    function refreshState() {
+      data = window.GAIA || data || {};
+      portalUrl = data.clientPortal?.url || data.portalUrl || 'https://education.gaiahealers.com/';
+      communities = data.communities || [];
+      nameById = Object.fromEntries(communities.map((c) => [c.id, c.name]));
+    }
 
     const strip = document.querySelector('.gaia-community-strip');
     if (strip) {
@@ -264,7 +291,7 @@
 
     function renderNewsletter() {
       if (!newsletterEl) return;
-      const segments = [
+      const segments = data.communityNewsletter || data.memberHub?.newsletters || [
         { title: 'Weekly practitioner digest', detail: 'Training reminders, community highlights, and CE deadlines', on: true },
         { title: 'Bio-Well device updates', detail: 'Firmware, calibration tips, and support announcements', on: true },
         { title: 'Elevate & event alerts', detail: 'Registration windows, agenda drops, and check-in codes', on: false },
@@ -273,8 +300,8 @@
       newsletterEl.innerHTML = segments.map((seg) => `
         <article class="gaia-row">
           <div class="min-w-0 flex-1">
-            <p class="text-headline text-ink">${escapeHtml(seg.title)}</p>
-            <p class="gaia-caption mt-0.5">${escapeHtml(seg.detail)}</p>
+            <p class="text-headline text-ink">${escapeHtml(seg.title || 'Newsletter segment')}</p>
+            <p class="gaia-caption mt-0.5">${escapeHtml(seg.detail || '')}</p>
           </div>
           <span class="gaia-badge ${seg.on ? 'gaia-badge--live' : 'gaia-badge--subtle'}">${seg.on ? 'Subscribed' : 'Off'}</span>
         </article>
@@ -289,12 +316,46 @@
       `;
     }
 
-    renderGroups();
-    renderFeed();
-    renderLearning();
-    renderEvents();
-    renderMembers();
-    renderNewsletter();
+    function renderProducts() {
+      if (!productsEl) return;
+      const products = data.products || data.memberHub?.products || [];
+      const marketplace = data.marketplace || data.memberHub?.marketplace || {};
+      productsEl.innerHTML = products.map((item) => `
+        <a href="${escapeHtml(item.href || appHref('profile'))}" class="gaia-row gaia-row--link">
+          <div class="gaia-tile-icon strip-biowell">${escapeHtml((item.category || 'GH').slice(0, 2).toUpperCase())}</div>
+          <div class="min-w-0 flex-1">
+            <p class="text-micro font-semibold text-gaia">${escapeHtml(item.category || 'Marketplace')}</p>
+            <p class="text-headline text-ink mt-0.5">${escapeHtml(item.title || 'Offer')}</p>
+            <p class="gaia-caption mt-0.5">${escapeHtml(item.detail || '')}</p>
+          </div>
+          <span class="gaia-link shrink-0">${escapeHtml(item.cta || 'Open')}</span>
+        </a>
+      `).join('') + `
+        <article class="gaia-row">
+          <div class="gaia-tile-icon strip-healeex">GK</div>
+          <div class="min-w-0 flex-1">
+            <p class="text-headline text-ink">${escapeHtml(marketplace.provider || 'Marketplace')}</p>
+            <p class="gaia-caption mt-0.5">${escapeHtml(marketplace.note || 'Member products and digital offers sync from GHL Memberships.')}</p>
+          </div>
+          <span class="gaia-badge gaia-badge--subtle">${escapeHtml(marketplace.status || 'Live')}</span>
+        </article>
+      `;
+    }
+
+    function renderAll() {
+      refreshState();
+      renderGroups();
+      renderFeed();
+      renderLearning();
+      renderEvents();
+      renderMembers();
+      renderNewsletter();
+      renderProducts();
+      wireEmbeddedPortalLinks(document);
+    }
+
+    renderAll();
+    document.addEventListener('gaia:sync', renderAll);
     wireEmbeddedPortalLinks(document);
   }
 
@@ -424,7 +485,7 @@
       if (sourceNote) {
         sourceNote.textContent = academy.liveData
           ? `Live course sync · ${academy.source || 'academy'}`
-          : 'Staging snapshot · connect Academy/GHL progress feed for per-member live data';
+          : 'Read-only membership snapshot · connect per-member Academy feed for live progress';
       }
       renderRoadmap(courses, academy.activeCourseId);
       renderRequirements(academy.requirements, activeCourse);
@@ -456,6 +517,127 @@
       if (window.GaiaAppShell?.currentView?.() === 'academy') refreshAcademy();
     });
     if (window.GAIA_SYNC?.status === 'live' || window.GAIA_SYNC?.status === 'connected') refreshAcademy();
+  }
+
+  function initMemberHub() {
+    const todayHeroGreeting = document.getElementById('today-hero-greeting');
+    const todayHeroTitle = document.getElementById('today-hero-title');
+    const todayHeroSub = document.getElementById('today-hero-sub');
+    const todayAcademyTitle = document.getElementById('today-academy-title');
+    const todayAcademyMeta = document.getElementById('today-academy-meta');
+    const todayEventsTitle = document.getElementById('today-events-title');
+    const todayEventsMeta = document.getElementById('today-events-meta');
+    const todayJourneyTitle = document.getElementById('today-journey-title');
+    const todayJourneyBadge = document.getElementById('today-journey-badge');
+    const todayHubTitle = document.getElementById('today-hub-title');
+    const todayHubBadge = document.getElementById('today-hub-badge');
+    const todayNextLesson = document.getElementById('today-next-lesson');
+    const todayNextMeeting = document.getElementById('today-next-meeting');
+    const todayProductsSummary = document.getElementById('today-products-summary');
+    const profilePortalUsers = document.getElementById('profile-portal-users');
+    const profileAccessNote = document.getElementById('profile-access-note');
+    const profileCeCredits = document.getElementById('profile-ce-credits');
+    const profileCeDetail = document.getElementById('profile-ce-detail');
+    const profileCeProgress = document.getElementById('profile-ce-progress');
+    const profileMeetings = document.getElementById('profile-meetings');
+    const profileEventPassTitle = document.getElementById('profile-event-pass-title');
+    const profileEventPassDetail = document.getElementById('profile-event-pass-detail');
+    const profileMarketplace = document.getElementById('profile-marketplace');
+    if (!todayHeroGreeting && !profilePortalUsers) return;
+
+    function renderHub() {
+      const data = window.GAIA || {};
+      const hub = data.memberHub || {};
+      const academy = data.academy || {};
+      const activeCourse = (academy.courses || []).find((course) => course.id === academy.activeCourseId)
+        || (academy.courses || []).find((course) => Number(course.progressPercent) > 0 && Number(course.progressPercent) < 100)
+        || (academy.courses || [])[0]
+        || {};
+      const dashboard = hub.dashboard || {};
+      const products = data.products || hub.products || [];
+      const meetings = data.meetings || hub.meetings || [];
+      const portal = data.clientPortal || hub.portal || {};
+      const communities = data.communities || hub.communities || [];
+      const ceEarned = Number(dashboard.ceCreditsEarned ?? academy.summary?.ceCreditsEarned ?? 0);
+      const ceRequired = Number(dashboard.ceCreditsRequired ?? academy.summary?.ceCreditsRequired ?? 24) || 24;
+      const cePercent = ceRequired > 0 ? Math.max(0, Math.min(100, Math.round((ceEarned / ceRequired) * 100))) : 0;
+
+      if (todayHeroGreeting) todayHeroGreeting.textContent = hub.member?.cohort || 'Client portal';
+      if (todayHeroTitle) todayHeroTitle.innerHTML = escapeHtml(dashboard.welcomeTitle || 'Your Gaia dashboard is ready');
+      if (todayHeroSub) todayHeroSub.textContent = dashboard.welcomeDetail || 'Courses, communities, live sessions, credentials, and products from GHL Memberships.';
+      if (todayAcademyTitle) todayAcademyTitle.textContent = activeCourse.title || dashboard.topCourse || 'Academy';
+      if (todayAcademyMeta) todayAcademyMeta.textContent = activeCourse.progressPercent ? `${percentLabel(activeCourse.progressPercent)} complete` : (dashboard.topCourseMeta || 'Continue learning');
+      if (todayEventsTitle) todayEventsTitle.textContent = dashboard.eventPassTitle || data.event?.shortName || 'Events';
+      if (todayEventsMeta) todayEventsMeta.textContent = dashboard.eventPassDetail || 'Badge ops ready';
+      if (todayJourneyTitle) todayJourneyTitle.textContent = activeCourse.title || 'Growth journey';
+      if (todayJourneyBadge) todayJourneyBadge.textContent = percentLabel(activeCourse.progressPercent || academy.summary?.averageProgress || 0);
+      if (todayHubTitle) todayHubTitle.textContent = `${portal.adminSections?.length || 5} synced membership areas`;
+      if (todayHubBadge) todayHubBadge.textContent = portal.users ? `${portal.users.toLocaleString()} users` : 'GHL';
+      if (todayNextLesson) todayNextLesson.textContent = dashboard.nextLessonTitle || academy.summary?.nextLessonTitle || 'Continue your active course';
+      if (todayNextMeeting) {
+        const meeting = meetings[0];
+        todayNextMeeting.textContent = meeting
+          ? `${meeting.title} · ${compactDateTime(meeting.startsAt) || dashboard.nextMeetingTime || ''}`
+          : `${dashboard.nextMeetingTitle || 'No meeting scheduled'}${dashboard.nextMeetingTime ? ` · ${dashboard.nextMeetingTime}` : ''}`;
+      }
+      if (todayProductsSummary) {
+        todayProductsSummary.textContent = products.length
+          ? products.slice(0, 3).map((item) => item.title).join(' · ')
+          : 'Bio-Well kits · Gokollab store · event passes';
+      }
+
+      if (profilePortalUsers) profilePortalUsers.textContent = Number(portal.users || 0).toLocaleString();
+      if (profileAccessNote) {
+        const notes = hub.access?.notes || [];
+        profileAccessNote.textContent = notes[0]
+          || 'Member login should use GHL Client Portal or a backend-generated magic link through the staging proxy.';
+      }
+      if (profileCeCredits) profileCeCredits.textContent = String(ceEarned || 0);
+      if (profileCeDetail) profileCeDetail.textContent = `of ${ceRequired} required · live Academy sync when member identity is verified`;
+      if (profileCeProgress) profileCeProgress.style.width = `${cePercent}%`;
+      if (profileEventPassTitle) profileEventPassTitle.textContent = dashboard.eventPassTitle || 'Elevate 2026';
+      if (profileEventPassDetail) profileEventPassDetail.textContent = dashboard.eventPassDetail || data.event?.date || 'Badge ops ready';
+
+      if (profileMeetings) {
+        profileMeetings.innerHTML = meetings.map((meeting) => `
+          <a href="${escapeHtml(appHref('community', { tab: 'events' }))}" class="gaia-row gaia-row--link">
+            <div class="gaia-tile-icon strip-biotekna">${escapeHtml((meeting.provider || 'ME').slice(0, 2).toUpperCase())}</div>
+            <div class="min-w-0 flex-1">
+              <p class="text-headline text-ink">${escapeHtml(meeting.title || 'Live session')}</p>
+              <p class="gaia-caption mt-0.5">${escapeHtml(compactDateTime(meeting.startsAt) || '')}${meeting.group ? ` · ${escapeHtml(meeting.group)}` : ''}</p>
+            </div>
+            <span class="gaia-badge gaia-badge--subtle">${escapeHtml((meeting.provider || 'live').replace('_', ' '))}</span>
+          </a>
+        `).join('');
+      }
+
+      if (profileMarketplace) {
+        profileMarketplace.innerHTML = products.map((item) => `
+          <a href="${escapeHtml(item.href || appHref('community', { tab: 'products' }))}" class="gaia-row gaia-row--link">
+            <div class="gaia-tile-icon strip-biowell">${escapeHtml((item.category || 'GH').slice(0, 2).toUpperCase())}</div>
+            <div class="min-w-0 flex-1">
+              <p class="text-micro font-semibold text-gaia">${escapeHtml(item.category || 'Offer')}</p>
+              <p class="text-headline text-ink mt-0.5">${escapeHtml(item.title || 'Product')}</p>
+              <p class="gaia-caption mt-0.5">${escapeHtml(item.detail || '')}</p>
+            </div>
+            <span class="gaia-link shrink-0">${escapeHtml(item.cta || 'Open')}</span>
+          </a>
+        `).join('') + `
+          <article class="gaia-row">
+            <div class="gaia-tile-icon strip-healeex">GH</div>
+            <div class="min-w-0 flex-1">
+              <p class="text-headline text-ink">Community access</p>
+              <p class="gaia-caption mt-0.5">${communities.length} active groups inside GHL Memberships</p>
+            </div>
+            <span class="gaia-badge">${communities.length}</span>
+          </article>
+        `;
+      }
+    }
+
+    renderHub();
+    document.addEventListener('gaia:sync', renderHub);
+    window.addEventListener('gaia:route', renderHub);
   }
 
   function initTheme() {
@@ -1036,6 +1218,7 @@
       directory: 'panel-members',
       members: 'panel-members',
       newsletter: 'panel-newsletter',
+      products: 'panel-products',
     };
     const buttons = bar.querySelectorAll('[data-tab]');
     function activateButton(btn, updateHistory = false) {
@@ -2847,6 +3030,7 @@
     initWellnessTabs();
     initCommunityTabs();
     initAcademyProgress();
+    initMemberHub();
     initAppShellNavigation();
     initCommunityHub();
     initLiveSyncIndicator();

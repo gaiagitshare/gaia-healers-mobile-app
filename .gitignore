@@ -8,6 +8,7 @@ build/
 .vercel/
 .wrangler/
 .playwright-cli/
+.tmp-gaia.cookies
 *.log
 *.pem
 *.key

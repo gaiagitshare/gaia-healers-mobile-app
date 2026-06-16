@@ -20,13 +20,13 @@
     try {
       const health = await fetch(`${proxyBase}/health`, {
         headers: { Accept: 'application/json' },
-        credentials: 'omit',
+        credentials: 'include',
       });
       if (!health.ok) throw new Error(`Proxy health returned ${health.status}`);
 
       const response = await fetch(`${proxyBase}/api/app/bootstrap`, {
         headers: { Accept: 'application/json' },
-        credentials: 'omit',
+        credentials: 'include',
       });
       if (!response.ok) throw new Error(`Proxy returned ${response.status}`);
       const payload = await response.json();
@@ -45,5 +45,6 @@
     }
   }
 
+  window.GAIA_SYNC.refresh = syncBootstrap;
   document.addEventListener('DOMContentLoaded', syncBootstrap);
 })();

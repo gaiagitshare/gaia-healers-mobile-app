@@ -1,4 +1,5 @@
 import http from 'node:http';
+import crypto from 'node:crypto';
 import { URL } from 'node:url';
 
 const PORT = Number(process.env.PORT || 8787);
@@ -25,6 +26,28 @@ const ALLOWED_ORIGINS = (process.env.ALLOWED_ORIGINS || '')
   .split(',')
   .map((origin) => origin.trim())
   .filter(Boolean);
+const APP_PUBLIC_URL = (process.env.APP_PUBLIC_URL || 'https://gaiagitshare.github.io/gaia-healers-mobile-app/home.html').trim();
+const PROXY_PUBLIC_URL = (process.env.PROXY_PUBLIC_URL || 'https://ba2ki.com/gaia-proxy').trim().replace(/\/+$/, '');
+const AUTH_SESSION_COOKIE = process.env.AUTH_SESSION_COOKIE || 'gaia_member_session';
+const AUTH_SESSION_TTL_SECONDS = Math.min(
+  Math.max(Number(process.env.AUTH_SESSION_TTL_SECONDS || 60 * 60 * 24 * 7) || (60 * 60 * 24 * 7), 900),
+  60 * 60 * 24 * 30,
+);
+const AUTH_MAGIC_LINK_TTL_SECONDS = Math.min(Math.max(Number(process.env.AUTH_MAGIC_LINK_TTL_SECONDS || 900) || 900, 300), 3600);
+const AUTH_ALLOW_DEBUG_LINKS = process.env.AUTH_ALLOW_DEBUG_LINKS === 'true';
+const AUTH_ALLOW_UNVERIFIED_EMAIL_MAGIC_LINK = process.env.AUTH_ALLOW_UNVERIFIED_EMAIL_MAGIC_LINK === 'true';
+const AUTH_EMBED_SHARED_SECRET = process.env.AUTH_EMBED_SHARED_SECRET || process.env.APP_PROXY_SHARED_SECRET || '';
+const AUTH_TRUSTED_REFERRERS = (process.env.AUTH_TRUSTED_REFERRERS || 'https://crm.gaiahealers.com,https://education.gaiahealers.com')
+  .split(',')
+  .map((item) => item.trim())
+  .filter(Boolean);
+const AUTH_ALLOWED_LOCATION_IDS = new Set(
+  [
+    process.env.GHL_LOCATION_ID,
+    'WkKl1K5RuZNQ60xR48k6',
+    'hPqC08CFLJmUALiMjHir',
+  ].filter(Boolean),
+);
 
 const FALLBACK_GAIA = {
   members: 1252,
@@ -450,32 +473,36 @@ function gaiaKnowledgePrompt() {
 }
 
 function corsHeaders(origin) {
-  const allowed = !origin
-    || ALLOWED_ORIGINS.length === 0
-    || ALLOWED_ORIGINS.includes(origin);
+  const allowOrigin = origin
+    ? (ALLOWED_ORIGINS.length === 0 || ALLOWED_ORIGINS.includes(origin) ? origin : 'null')
+    : '*';
+  const allowCredentials = Boolean(origin && allowOrigin !== 'null');
   return {
-    'Access-Control-Allow-Origin': allowed ? (origin || '*') : 'null',
+    'Access-Control-Allow-Origin': allowOrigin,
     'Access-Control-Allow-Methods': 'GET,POST,OPTIONS',
     'Access-Control-Allow-Headers': 'Content-Type,Authorization',
     'Access-Control-Expose-Headers': 'X-Gaia-Voice-Provider,X-Gaia-Voice-Model,X-Gaia-Voice-Name,X-Gaia-Voice-Max-Seconds',
+    ...(allowCredentials ? { 'Access-Control-Allow-Credentials': 'true' } : {}),
     'Vary': 'Origin',
   };
 }
 
-function sendJson(res, status, data, origin) {
+function sendJson(res, status, data, origin, extraHeaders = {}) {
   res.writeHead(status, {
     'Content-Type': 'application/json; charset=utf-8',
     'Cache-Control': 'no-store',
     ...corsHeaders(origin),
+    ...extraHeaders,
   });
   res.end(JSON.stringify(data, null, 2));
 }
 
-function sendBuffer(res, status, buffer, contentType, origin) {
+function sendBuffer(res, status, buffer, contentType, origin, extraHeaders = {}) {
   res.writeHead(status, {
     'Content-Type': contentType,
     'Cache-Control': 'no-store',
     ...corsHeaders(origin),
+    ...extraHeaders,
   });
   res.end(buffer);
 }
@@ -559,6 +586,241 @@ async function readRawBody(req, maxBytes = 128 * 1024) {
   }
   if (!chunks.length) return '';
   return Buffer.concat(chunks).toString('utf8');
+}
+
+function base64UrlEncode(value) {
+  return Buffer.from(value).toString('base64url');
+}
+
+function base64UrlDecode(value) {
+  return Buffer.from(String(value || ''), 'base64url').toString('utf8');
+}
+
+function authSessionSecret() {
+  return process.env.AUTH_SESSION_SECRET
+    || process.env.APP_PROXY_SHARED_SECRET
+    || process.env.GHL_API_TOKEN
+    || 'gaia-staging-session-secret';
+}
+
+function signTokenPayload(payload) {
+  const body = base64UrlEncode(JSON.stringify(payload));
+  const sig = crypto.createHmac('sha256', authSessionSecret()).update(body).digest('base64url');
+  return `${body}.${sig}`;
+}
+
+function readSignedToken(token) {
+  if (!token || !String(token).includes('.')) return null;
+  const [body, sig] = String(token).split('.', 2);
+  const expected = crypto.createHmac('sha256', authSessionSecret()).update(body).digest('base64url');
+  const left = Buffer.from(sig || '', 'utf8');
+  const right = Buffer.from(expected, 'utf8');
+  if (left.length !== right.length || !crypto.timingSafeEqual(left, right)) return null;
+  try {
+    const payload = JSON.parse(base64UrlDecode(body));
+    if (payload.exp && Date.now() > Number(payload.exp)) return null;
+    return payload;
+  } catch {
+    return null;
+  }
+}
+
+function parseCookies(cookieHeader = '') {
+  const entries = String(cookieHeader || '')
+    .split(';')
+    .map((part) => part.trim())
+    .filter(Boolean)
+    .map((part) => {
+      const idx = part.indexOf('=');
+      return idx === -1 ? [part, ''] : [part.slice(0, idx), part.slice(idx + 1)];
+    });
+  return Object.fromEntries(entries);
+}
+
+function cookieForRequest(req) {
+  const cookies = parseCookies(req.headers.cookie || '');
+  return readSignedToken(cookies[AUTH_SESSION_COOKIE] || '');
+}
+
+function requestIsSecure(req) {
+  return req.headers['x-forwarded-proto'] === 'https' || req.socket?.encrypted || false;
+}
+
+function buildSetCookie(req, value, expiresAtMs) {
+  const parts = [
+    `${AUTH_SESSION_COOKIE}=${value}`,
+    'Path=/',
+    'HttpOnly',
+    'SameSite=None',
+    'Secure',
+    `Max-Age=${Math.max(0, Math.floor((expiresAtMs - Date.now()) / 1000))}`,
+  ];
+  return parts.join('; ');
+}
+
+function buildClearCookie() {
+  return [
+    `${AUTH_SESSION_COOKIE}=`,
+    'Path=/',
+    'HttpOnly',
+    'SameSite=None',
+    'Secure',
+    'Max-Age=0',
+  ].join('; ');
+}
+
+function normalizeMemberIdentity(input = {}) {
+  const displayName = String(
+    input.displayName
+    || input.name
+    || input.fullName
+    || [input.firstName, input.lastName].filter(Boolean).join(' ')
+    || 'Gaia member',
+  ).trim();
+  return {
+    memberId: String(input.memberId || input.member_id || input.contactId || input.contact_id || '').trim(),
+    contactId: String(input.contactId || input.contact_id || input.memberId || input.member_id || '').trim(),
+    email: String(input.email || '').trim().toLowerCase(),
+    displayName,
+    role: String(input.role || 'Member').trim() || 'Member',
+    cohort: String(input.cohort || input.group || '').trim(),
+    locationId: String(input.locationId || input.location_id || '').trim(),
+    source: String(input.source || 'unknown').trim() || 'unknown',
+  };
+}
+
+function createMemberSession(identity = {}, source = 'auth') {
+  const member = normalizeMemberIdentity({ ...identity, source });
+  const exp = Date.now() + (AUTH_SESSION_TTL_SECONDS * 1000);
+  return {
+    sub: member.memberId || member.contactId || member.email || member.displayName,
+    member,
+    source,
+    iat: Date.now(),
+    exp,
+  };
+}
+
+function sessionPublicShape(session) {
+  if (!session?.member) return { authenticated: false };
+  return {
+    authenticated: true,
+    source: session.source || 'session',
+    member: session.member,
+    expiresAt: session.exp || null,
+  };
+}
+
+function trustedReferrer(referrer = '') {
+  const value = String(referrer || '').trim();
+  if (!value) return false;
+  return AUTH_TRUSTED_REFERRERS.some((prefix) => value.startsWith(prefix));
+}
+
+function safeReturnUrl(returnTo = '') {
+  const fallback = `${APP_PUBLIC_URL}${String(APP_PUBLIC_URL).includes('?') ? '&' : '?'}auth=1`;
+  const value = String(returnTo || '').trim();
+  if (!value) return fallback;
+  try {
+    const url = new URL(value);
+    const allowed = [
+      'gaiagitshare.github.io',
+      'crm.gaiahealers.com',
+      'education.gaiahealers.com',
+      'ba2ki.com',
+    ];
+    return allowed.includes(url.host) ? value : fallback;
+  } catch {
+    return fallback;
+  }
+}
+
+function sendRedirect(res, location, origin, extraHeaders = {}) {
+  res.writeHead(302, {
+    Location: location,
+    'Cache-Control': 'no-store',
+    ...corsHeaders(origin),
+    ...extraHeaders,
+  });
+  res.end();
+}
+
+async function resolveMemberRecord({ email = '', memberId = '', contactId = '' } = {}) {
+  const normalizedEmail = String(email || '').trim().toLowerCase();
+  const normalizedMemberId = String(memberId || contactId || '').trim();
+  if (!normalizedEmail && !normalizedMemberId) return null;
+
+  const baseContextUrl = new URL('http://localhost');
+  if (normalizedEmail) baseContextUrl.searchParams.set('email', normalizedEmail);
+  if (normalizedMemberId) {
+    baseContextUrl.searchParams.set('memberId', normalizedMemberId);
+    baseContextUrl.searchParams.set('contactId', normalizedMemberId);
+  }
+
+  try {
+    const academy = await getAcademyProgress(baseContextUrl);
+    if (academy?.configured && (academy?.liveData || academy?.member?.email || normalizedEmail)) {
+      return normalizeMemberIdentity({
+        memberId: normalizedMemberId,
+        contactId: normalizedMemberId,
+        email: academy.member?.email || normalizedEmail,
+        name: academy.member?.name || 'Gaia member',
+        source: academy.source || 'academy-progress',
+      });
+    }
+  } catch {}
+
+  try {
+    const hub = await getMemberHub(baseContextUrl, FALLBACK_ACADEMY);
+    if (hub?.configured && (hub?.liveData || hub?.member?.displayName || normalizedEmail)) {
+      return normalizeMemberIdentity({
+        memberId: normalizedMemberId,
+        contactId: normalizedMemberId,
+        email: normalizedEmail,
+        displayName: hub.member?.displayName || 'Gaia member',
+        role: hub.member?.role || 'Member',
+        cohort: hub.member?.cohort || '',
+        source: hub.source || 'member-hub',
+      });
+    }
+  } catch {}
+
+  if (AUTH_ALLOW_UNVERIFIED_EMAIL_MAGIC_LINK && normalizedEmail) {
+    return normalizeMemberIdentity({
+      memberId: normalizedMemberId,
+      contactId: normalizedMemberId,
+      email: normalizedEmail,
+      displayName: normalizedEmail.split('@')[0].replace(/[._-]+/g, ' '),
+      source: 'unverified-email',
+    });
+  }
+
+  return null;
+}
+
+function memberContextFromRequest(req, url) {
+  const session = cookieForRequest(req);
+  if (session?.member) {
+    return { ...session.member, authenticated: true, source: session.source || 'session' };
+  }
+  const email = String(url.searchParams.get('email') || '').trim().toLowerCase();
+  const memberId = String(url.searchParams.get('memberId') || url.searchParams.get('contactId') || '').trim();
+  if (email || memberId) {
+    return normalizeMemberIdentity({ email, memberId, contactId: memberId, source: 'query' });
+  }
+  return null;
+}
+
+function withMemberContext(url, memberContext) {
+  const scoped = new URL(url.toString());
+  if (!memberContext) return scoped;
+  if (memberContext.memberId || memberContext.contactId) {
+    const value = memberContext.memberId || memberContext.contactId;
+    scoped.searchParams.set('memberId', value);
+    scoped.searchParams.set('contactId', value);
+  }
+  if (memberContext.email) scoped.searchParams.set('email', memberContext.email);
+  return scoped;
 }
 
 function boolFlag(value) {
@@ -1000,15 +1262,48 @@ async function getAcademyProgress(url = new URL('http://localhost')) {
   };
 }
 
-async function bootstrap() {
+function applyMemberContextToAcademy(payload, memberContext) {
+  if (!payload || !memberContext) return payload;
+  const currentName = String(payload.member?.name || '').trim();
+  return {
+    ...payload,
+    member: {
+      ...(payload.member || {}),
+      name: !currentName || currentName === 'Gaia member' ? (memberContext.displayName || 'Gaia member') : currentName,
+      email: payload.member?.email || memberContext.email || '',
+    },
+  };
+}
+
+function applyMemberContextToMemberHub(payload, memberContext) {
+  if (!payload || !memberContext) return payload;
+  const currentName = String(payload.member?.displayName || '').trim();
+  return {
+    ...payload,
+    member: {
+      ...(payload.member || {}),
+      displayName: !currentName || currentName === 'Gaia member' ? (memberContext.displayName || 'Gaia member') : currentName,
+      role: payload.member?.role || memberContext.role || 'Member',
+      cohort: payload.member?.cohort || memberContext.cohort || '',
+      portalUrl: payload.member?.portalUrl || FALLBACK_MEMBER_HUB.member.portalUrl,
+    },
+  };
+}
+
+async function bootstrap(req, url) {
+  const memberContext = memberContextFromRequest(req, url);
+  const academyUrl = withMemberContext(url, memberContext);
   const [event, ghl, academy] = await Promise.all([
     getEventSummary().catch((error) => ({ ...FALLBACK_GAIA.event, source: 'event-manager-error', liveData: false, error: error.message })),
     getGhlSummary().catch((error) => ({ configured: false, error: error.message })),
-    getAcademyProgress().catch((error) => ({ ...FALLBACK_ACADEMY, source: 'academy-error', error: error.message })),
+    getAcademyProgress(academyUrl).catch((error) => ({ ...FALLBACK_ACADEMY, source: 'academy-error', error: error.message })),
   ]);
-  const memberHub = await getMemberHub(new URL('http://localhost'), academy).catch((error) => ({ ...FALLBACK_MEMBER_HUB, source: 'member-hub-error', error: error.message }));
-  const liveData = Boolean(event.liveData || ghl.liveData || ghl.normalized || academy.liveData || memberHub.liveData);
-  const gaiaData = buildGaiaAppData(event, academy, memberHub);
+  const academyScoped = applyMemberContextToAcademy(academy, memberContext);
+  const memberHub = await getMemberHub(academyUrl, academyScoped).catch((error) => ({ ...FALLBACK_MEMBER_HUB, source: 'member-hub-error', error: error.message }));
+  const memberHubScoped = applyMemberContextToMemberHub(memberHub, memberContext);
+  const liveData = Boolean(event.liveData || ghl.liveData || ghl.normalized || academyScoped.liveData || memberHubScoped.liveData);
+  const gaiaData = buildGaiaAppData(event, academyScoped, memberHubScoped);
+  const session = cookieForRequest(req);
 
   return {
     ok: true,
@@ -1020,6 +1315,7 @@ async function bootstrap() {
         liveData,
         mode: liveData ? 'live' : 'proxy-connected',
         ghl,
+        auth: sessionPublicShape(session),
         voice: {
           configured: Boolean(process.env.GROQ_API_KEY || process.env.OPENROUTER_API_KEY || process.env.OPENAI_API_KEY),
           enabled: process.env.GAIA_ASSIST_VOICE_ENABLED === 'true',
@@ -1040,6 +1336,135 @@ async function bootstrap() {
       },
     },
   };
+}
+
+async function authSession(req, res, origin, url) {
+  const session = cookieForRequest(req);
+  sendJson(res, 200, {
+    ok: true,
+    ...sessionPublicShape(session),
+    methods: {
+      embeddedClaim: true,
+      magicLinkRequest: true,
+      externalPortal: FALLBACK_MEMBER_HUB.portal.url,
+    },
+    hintedMember: memberContextFromRequest(req, url),
+  }, origin);
+}
+
+async function authLogout(_req, res, origin) {
+  sendJson(res, 200, { ok: true, authenticated: false }, origin, {
+    'Set-Cookie': buildClearCookie(),
+  });
+}
+
+async function authMagicLinkRequest(req, res, origin) {
+  const body = await readJsonBody(req);
+  const email = String(body.email || '').trim().toLowerCase();
+  const returnTo = safeReturnUrl(body.returnTo || APP_PUBLIC_URL);
+  if (!email || !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) {
+    sendJson(res, 400, { ok: false, error: 'Valid email required.' }, origin);
+    return;
+  }
+
+  const member = await resolveMemberRecord({
+    email,
+    memberId: body.memberId || body.contactId || '',
+    contactId: body.contactId || body.memberId || '',
+  });
+
+  if (!member) {
+    sendJson(res, 503, {
+      ok: false,
+      error: 'Member verification is not configured yet. Use the GHL portal login or launch the app from the embedded GHL portal.',
+      code: 'member_verification_unavailable',
+    }, origin);
+    return;
+  }
+
+  const token = signTokenPayload({
+    type: 'magic-link',
+    member,
+    returnTo,
+    iat: Date.now(),
+    exp: Date.now() + (AUTH_MAGIC_LINK_TTL_SECONDS * 1000),
+  });
+  const consumeUrl = `${PROXY_PUBLIC_URL}/api/auth/magic-link/consume?token=${encodeURIComponent(token)}&returnTo=${encodeURIComponent(returnTo)}`;
+
+  if (AUTH_ALLOW_DEBUG_LINKS) {
+    sendJson(res, 200, {
+      ok: true,
+      delivery: 'debug-link',
+      authUrl: consumeUrl,
+      member: { email: member.email, displayName: member.displayName },
+      expiresInSeconds: AUTH_MAGIC_LINK_TTL_SECONDS,
+    }, origin);
+    return;
+  }
+
+  sendJson(res, 503, {
+    ok: false,
+    error: 'Magic-link email delivery is not configured yet. Use the embedded GHL portal flow for now.',
+    code: 'magic_link_delivery_unavailable',
+  }, origin);
+}
+
+async function authMagicLinkConsume(req, res, origin, url) {
+  const payload = readSignedToken(url.searchParams.get('token') || '');
+  if (!payload?.member) {
+    sendRedirect(res, safeReturnUrl(url.searchParams.get('returnTo')), origin);
+    return;
+  }
+  const session = createMemberSession(payload.member, 'magic-link');
+  const token = signTokenPayload(session);
+  sendRedirect(res, safeReturnUrl(payload.returnTo || url.searchParams.get('returnTo')), origin, {
+    'Set-Cookie': buildSetCookie(req, token, session.exp),
+  });
+}
+
+async function authEmbeddedClaim(req, res, origin) {
+  const body = await readJsonBody(req);
+  const email = String(body.email || '').trim().toLowerCase();
+  const referrer = String(body.referrer || '').trim();
+  const locationId = String(body.locationId || '').trim();
+  if (!email) {
+    sendJson(res, 400, { ok: false, error: 'Email required for embedded claim.' }, origin);
+    return;
+  }
+  const sharedSecret = String(body.sharedSecret || body.bridge || '').trim();
+  if (AUTH_EMBED_SHARED_SECRET && sharedSecret !== AUTH_EMBED_SHARED_SECRET) {
+    sendJson(res, 403, { ok: false, error: 'Embedded bridge secret mismatch.' }, origin);
+    return;
+  }
+  if (!trustedReferrer(referrer)) {
+    sendJson(res, 403, { ok: false, error: 'Embedded claim rejected: untrusted referrer.' }, origin);
+    return;
+  }
+  if (locationId && !AUTH_ALLOWED_LOCATION_IDS.has(locationId)) {
+    sendJson(res, 403, { ok: false, error: 'Embedded claim rejected: unknown location.' }, origin);
+    return;
+  }
+
+  const member = normalizeMemberIdentity({
+    email,
+    memberId: body.memberId || body.contactId || '',
+    contactId: body.contactId || body.memberId || '',
+    displayName: body.displayName || body.name || '',
+    role: body.role || body.userRole || 'Member',
+    cohort: body.cohort || body.group || '',
+    locationId,
+    source: 'ghl-embedded-claim',
+  });
+  const session = createMemberSession(member, 'ghl-embedded-claim');
+  const token = signTokenPayload(session);
+  sendJson(res, 200, {
+    ok: true,
+    authenticated: true,
+    member: session.member,
+    source: session.source,
+  }, origin, {
+    'Set-Cookie': buildSetCookie(req, token, session.exp),
+  });
 }
 
 function fallbackAssistReply(prompt, intent = '') {
@@ -1676,17 +2101,42 @@ const server = http.createServer(async (req, res) => {
       sendJson(res, 200, { ok: true }, origin);
       return;
     }
+    if (req.method === 'GET' && url.pathname === '/api/auth/session') {
+      await authSession(req, res, origin, url);
+      return;
+    }
+    if (req.method === 'POST' && url.pathname === '/api/auth/logout') {
+      await authLogout(req, res, origin);
+      return;
+    }
+    if (req.method === 'POST' && url.pathname === '/api/auth/magic-link/request') {
+      await authMagicLinkRequest(req, res, origin);
+      return;
+    }
+    if (req.method === 'GET' && url.pathname === '/api/auth/magic-link/consume') {
+      await authMagicLinkConsume(req, res, origin, url);
+      return;
+    }
+    if (req.method === 'POST' && url.pathname === '/api/auth/embedded/claim') {
+      await authEmbeddedClaim(req, res, origin);
+      return;
+    }
     if (req.method === 'GET' && url.pathname === '/api/app/bootstrap') {
-      sendJson(res, 200, await bootstrap(), origin);
+      sendJson(res, 200, await bootstrap(req, url), origin);
       return;
     }
     if (req.method === 'GET' && url.pathname === '/api/academy/progress') {
-      sendJson(res, 200, await getAcademyProgress(url), origin);
+      const memberContext = memberContextFromRequest(req, url);
+      const payload = applyMemberContextToAcademy(await getAcademyProgress(withMemberContext(url, memberContext)), memberContext);
+      sendJson(res, 200, payload, origin);
       return;
     }
     if (req.method === 'GET' && url.pathname === '/api/member/hub') {
-      const academy = await getAcademyProgress(url).catch(() => FALLBACK_ACADEMY);
-      sendJson(res, 200, await getMemberHub(url, academy), origin);
+      const memberContext = memberContextFromRequest(req, url);
+      const scopedUrl = withMemberContext(url, memberContext);
+      const academy = applyMemberContextToAcademy(await getAcademyProgress(scopedUrl).catch(() => FALLBACK_ACADEMY), memberContext);
+      const hub = applyMemberContextToMemberHub(await getMemberHub(scopedUrl, academy), memberContext);
+      sendJson(res, 200, hub, origin);
       return;
     }
     if (req.method === 'POST' && url.pathname === '/api/assist/chat') {

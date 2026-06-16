@@ -18,6 +18,12 @@
   const ASSIST_WELCOME_KEY = 'gaia-assist-welcome-v1';
   const GHL_CUSTOM_MENU_URL = 'https://crm.gaiahealers.com/v2/location/WkKl1K5RuZNQ60xR48k6/custom-menu-link/328efaea-4e94-42ec-9ce2-4358a64657db';
   const APP_VIEWS = new Set(['today', 'wellness', 'academy', 'community', 'profile', 'admin']);
+  const AUTH_HINT_KEYS = ['memberId', 'contactId', 'email', 'name', 'displayName', 'role', 'cohort', 'locationId', 'bridge', 'sharedSecret'];
+  const AUTH_STATE = {
+    authenticated: false,
+    checked: false,
+    member: null,
+  };
   let refreshChakraMaps = () => {};
 
   function escapeHtml(value) {
@@ -54,6 +60,23 @@
 
   function syncProxyBase() {
     return (window.GAIA_SYNC?.proxyBase || DEFAULT_PROXY).replace(/\/+$/, '');
+  }
+
+  function authState() {
+    return AUTH_STATE;
+  }
+
+  function authHintParams() {
+    const params = new URLSearchParams(window.location.search);
+    return AUTH_HINT_KEYS.reduce((acc, key) => {
+      const value = String(params.get(key) || '').trim();
+      if (value) acc[key] = value;
+      return acc;
+    }, {});
+  }
+
+  function hasAuthHints() {
+    return Object.keys(authHintParams()).length > 0;
   }
 
   function embeddedPortalTarget(label = '') {
@@ -500,7 +523,7 @@
       try {
         const response = await fetch(`${syncProxyBase()}/api/academy/progress`, {
           headers: { Accept: 'application/json' },
-          credentials: 'omit',
+          credentials: 'include',
         });
         if (!response.ok) throw new Error(`Academy progress returned ${response.status}`);
         const payload = await response.json();
@@ -667,6 +690,206 @@
     renderHub();
     document.addEventListener('gaia:sync', renderHub);
     window.addEventListener('gaia:route', renderHub);
+  }
+
+  function initMemberAuth() {
+    const portalOrigin = 'https://education.gaiahealers.com/';
+    const profileTitle = document.querySelector('.gaia-profile-hero .gaia-page-title');
+    const profileCaption = document.querySelector('.gaia-profile-hero .gaia-caption');
+    const signOutBtn = document.querySelector('[data-sign-out]');
+    const accessNote = document.getElementById('profile-access-note');
+    let modal;
+    let emailInput;
+    let statusEl;
+    let submitBtn;
+
+    function ensureModal() {
+      if (modal) return modal;
+      modal = document.createElement('div');
+      modal.className = 'fixed inset-0 z-[90] hidden items-end justify-center bg-black/45 px-4 pb-6 pt-16';
+      modal.innerHTML = `
+        <div class="gaia-card gaia-card-pad w-full max-w-md rounded-[28px] shadow-lift">
+          <div class="flex items-start justify-between gap-3">
+            <div>
+              <p class="gaia-section-label !mb-1">Member access</p>
+              <h2 class="gaia-section-title">Sign in to Gaia</h2>
+              <p class="gaia-caption mt-1">Use your Gaia member email. If the app is launched from GHL, access can be claimed automatically.</p>
+            </div>
+            <button type="button" class="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-surface-muted text-xl text-ink-secondary" data-auth-close aria-label="Close sign in">&times;</button>
+          </div>
+          <form class="mt-4 space-y-3" data-auth-form>
+            <label class="block">
+              <span class="gaia-caption mb-1.5 block">Member email</span>
+              <input type="email" class="w-full rounded-2xl border border-black/8 bg-white px-4 py-3 text-body text-ink outline-none" placeholder="you@gaiahealers.com" autocomplete="email" required />
+            </label>
+            <button type="submit" class="gaia-btn gaia-btn-primary w-full">Send Gaia access link</button>
+          </form>
+          <p class="gaia-caption mt-3" data-auth-status>We will verify your member access through the Gaia proxy.</p>
+          <a href="${portalOrigin}" class="gaia-link mt-3 inline-block">Open the current client portal</a>
+        </div>`;
+      document.body.appendChild(modal);
+      emailInput = modal.querySelector('input');
+      statusEl = modal.querySelector('[data-auth-status]');
+      submitBtn = modal.querySelector('button[type="submit"]');
+      modal.querySelector('[data-auth-close]').addEventListener('click', () => {
+        modal.classList.add('hidden');
+        modal.classList.remove('flex');
+      });
+      modal.addEventListener('click', (event) => {
+        if (event.target === modal) {
+          modal.classList.add('hidden');
+          modal.classList.remove('flex');
+        }
+      });
+      modal.querySelector('[data-auth-form]').addEventListener('submit', async (event) => {
+        event.preventDefault();
+        const email = emailInput.value.trim();
+        if (!email) return;
+        submitBtn.disabled = true;
+        statusEl.textContent = 'Requesting your Gaia access link...';
+        try {
+          const response = await fetch(`${syncProxyBase()}/api/auth/magic-link/request`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+            credentials: 'include',
+            body: JSON.stringify({
+              email,
+              returnTo: window.location.href,
+            }),
+          });
+          const payload = await response.json();
+          if (!response.ok || payload.ok === false) throw new Error(payload.error || 'Sign-in request failed.');
+          statusEl.textContent = payload.delivery === 'debug-link'
+            ? 'Opening your Gaia access link...'
+            : 'Check your email for the Gaia access link.';
+          if (payload.authUrl) window.location.href = payload.authUrl;
+        } catch (error) {
+          statusEl.textContent = error.message || 'Unable to request access right now.';
+        } finally {
+          submitBtn.disabled = false;
+        }
+      });
+      return modal;
+    }
+
+    function openModal(prefill = '') {
+      ensureModal();
+      if (prefill) emailInput.value = prefill;
+      modal.classList.remove('hidden');
+      modal.classList.add('flex');
+      requestAnimationFrame(() => emailInput?.focus());
+    }
+
+    function cleanAuthHintsFromUrl() {
+      const url = new URL(window.location.href);
+      let changed = false;
+      AUTH_HINT_KEYS.forEach((key) => {
+        if (url.searchParams.has(key)) {
+          url.searchParams.delete(key);
+          changed = true;
+        }
+      });
+      if (changed) history.replaceState({}, '', url.toString());
+    }
+
+    function renderAuthUi() {
+      const session = authState();
+      document.querySelectorAll('a.gaia-login-pill, a.gaia-login-btn').forEach((link) => {
+        if (!link.dataset.gaiaAuthBound) return;
+        link.textContent = session.authenticated ? 'Member access' : 'Log in';
+      });
+      if (profileTitle) profileTitle.textContent = session.authenticated ? (session.member?.displayName || 'Gaia member') : 'Practitioner';
+      if (profileCaption) {
+        profileCaption.textContent = session.authenticated
+          ? `${session.member?.cohort || session.member?.role || 'Member'}${session.member?.email ? ` · ${session.member.email}` : ''}`
+          : 'Bio-Well Practitioners · Since 2024';
+      }
+      if (accessNote && session.authenticated) {
+        accessNote.textContent = `Signed in as ${session.member?.displayName || 'Gaia member'}${session.member?.email ? ` (${session.member.email})` : ''}. Member-specific lessons, purchases, certificates, and gated access now resolve through the Gaia proxy session.`;
+      }
+      if (signOutBtn) signOutBtn.hidden = !session.authenticated;
+    }
+
+    async function refreshSession() {
+      try {
+        const response = await fetch(`${syncProxyBase()}/api/auth/session`, {
+          headers: { Accept: 'application/json' },
+          credentials: 'include',
+        });
+        const payload = await response.json();
+        AUTH_STATE.authenticated = Boolean(payload.authenticated);
+        AUTH_STATE.checked = true;
+        AUTH_STATE.member = payload.member || null;
+        document.dispatchEvent(new CustomEvent('gaia:auth', { detail: { ...AUTH_STATE } }));
+        renderAuthUi();
+        return AUTH_STATE;
+      } catch {
+        AUTH_STATE.checked = true;
+        AUTH_STATE.authenticated = false;
+        AUTH_STATE.member = null;
+        renderAuthUi();
+        return AUTH_STATE;
+      }
+    }
+
+    async function maybeClaimEmbeddedSession() {
+      if (!hasAuthHints()) return false;
+      if (!document.referrer || !/crm\.gaiahealers\.com|education\.gaiahealers\.com/i.test(document.referrer)) return false;
+      const hints = authHintParams();
+      if (!hints.email) return false;
+      try {
+        const response = await fetch(`${syncProxyBase()}/api/auth/embedded/claim`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+          credentials: 'include',
+          body: JSON.stringify({
+            ...hints,
+            sharedSecret: hints.sharedSecret || hints.bridge || '',
+            referrer: document.referrer,
+          }),
+        });
+        const payload = await response.json();
+        if (!response.ok || payload.ok === false) return false;
+        AUTH_STATE.authenticated = true;
+        AUTH_STATE.checked = true;
+        AUTH_STATE.member = payload.member || null;
+        cleanAuthHintsFromUrl();
+        document.dispatchEvent(new CustomEvent('gaia:auth', { detail: { ...AUTH_STATE } }));
+        renderAuthUi();
+        return true;
+      } catch {
+        return false;
+      }
+    }
+
+    async function handleLogout(event) {
+      event?.preventDefault?.();
+      await fetch(`${syncProxyBase()}/api/auth/logout`, {
+        method: 'POST',
+        headers: { Accept: 'application/json' },
+        credentials: 'include',
+      }).catch(() => null);
+      AUTH_STATE.authenticated = false;
+      AUTH_STATE.member = null;
+      renderAuthUi();
+      window.GAIA_SYNC?.refresh?.();
+    }
+
+    document.querySelectorAll('a.gaia-login-pill, a.gaia-login-btn').forEach((link) => {
+      link.dataset.gaiaAuthBound = '1';
+      link.addEventListener('click', (event) => {
+        if (authState().authenticated) return;
+        event.preventDefault();
+        openModal(authState().member?.email || authHintParams().email || '');
+      });
+    });
+    signOutBtn?.addEventListener('click', handleLogout);
+
+    (async () => {
+      const claimed = await maybeClaimEmbeddedSession();
+      await refreshSession();
+      if (claimed || AUTH_STATE.authenticated) window.GAIA_SYNC?.refresh?.();
+    })();
   }
 
   function initTheme() {
@@ -1628,7 +1851,7 @@
       const response = await fetch(`${base}/api/assist/transcribe`, {
         method: 'POST',
         headers: { Accept: 'application/json', 'Content-Type': 'application/json' },
-        credentials: 'omit',
+        credentials: 'include',
         body: JSON.stringify({ audioBase64, mimeType: blob.type || 'audio/webm' }),
       });
       const payload = await response.json().catch(() => ({}));
@@ -1800,7 +2023,7 @@
       try {
         const response = await fetch(`${base}/api/assist/voices`, {
           headers: { Accept: 'application/json' },
-          credentials: 'omit',
+          credentials: 'include',
         });
         if (!response.ok) return;
         const payload = await response.json();
@@ -2057,7 +2280,7 @@
             Accept: 'audio/mpeg,application/json',
             'Content-Type': 'application/json',
           },
-          credentials: 'omit',
+          credentials: 'include',
           signal: activeTtsController.signal,
           body: JSON.stringify(buildTtsRequestBody(voiceText, providerSetting)),
         });
@@ -2443,7 +2666,7 @@
           Accept: 'text/event-stream',
           'Content-Type': 'application/json',
         },
-        credentials: 'omit',
+        credentials: 'include',
         signal: controller.signal,
         body: JSON.stringify({
           prompt: cleanPrompt,
@@ -2561,7 +2784,7 @@
             Accept: 'application/json',
             'Content-Type': 'application/json',
           },
-          credentials: 'omit',
+          credentials: 'include',
           signal: activeChatController.signal,
           body: JSON.stringify({
             prompt: cleanPrompt,
@@ -3052,6 +3275,7 @@
 
   document.addEventListener('DOMContentLoaded', () => {
     initTheme();
+    initMemberAuth();
     initHeaderProfile();
     initCoachMark();
     initSplashSteps();

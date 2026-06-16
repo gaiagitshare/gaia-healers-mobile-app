@@ -47,6 +47,15 @@ Paste these only into your backend host environment variables, never into the st
 | `OPENAI_COMPATIBLE_TTS_API_KEY` | Optional bearer token for that compatible TTS host | TTS provider dashboard |
 | `APP_PUBLIC_URL` | Final app URL | GitHub Pages URL |
 | `ALLOWED_ORIGINS` | GitHub Pages + GHL origins | Backend host settings |
+| `PROXY_PUBLIC_URL` | Public proxy base URL, e.g. `https://ba2ki.com/gaia-proxy` | Your deployed proxy URL |
+| `AUTH_SESSION_SECRET` | Strong random secret used to sign Gaia member sessions | Generate server-side |
+| `AUTH_SESSION_COOKIE` | Session cookie name, default `gaia_member_session` | Backend config |
+| `AUTH_SESSION_TTL_SECONDS` | Session lifetime in seconds | Backend config |
+| `AUTH_MAGIC_LINK_TTL_SECONDS` | One-time Gaia access link lifetime in seconds | Backend config |
+| `AUTH_ALLOW_DEBUG_LINKS` | Set `true` only for staging if you want the proxy to return a direct auth link instead of sending email | Backend config |
+| `AUTH_ALLOW_UNVERIFIED_EMAIL_MAGIC_LINK` | Set `true` only for unsafe staging if you want email-only sign-in without connector verification | Backend config |
+| `AUTH_EMBED_SHARED_SECRET` | Optional shared secret used by the embedded GHL app to claim session | Backend config + GHL custom menu URL |
+| `AUTH_TRUSTED_REFERRERS` | Comma-separated GHL / client portal origins allowed to auto-claim embedded sessions | Backend config |
 
 ## Local Test
 
@@ -70,6 +79,11 @@ The app reads only:
 GET {proxy}/api/app/bootstrap
 GET {proxy}/api/academy/progress
 GET {proxy}/api/member/hub
+GET {proxy}/api/auth/session
+GET {proxy}/api/auth/magic-link/consume
+POST {proxy}/api/auth/magic-link/request
+POST {proxy}/api/auth/embedded/claim
+POST {proxy}/api/auth/logout
 POST {proxy}/api/assist/chat
 POST {proxy}/api/assist/voice
 POST {proxy}/api/assist/transcribe
@@ -150,6 +164,46 @@ That route is intended to unify:
 - credentials and access notes
 
 Use `MEMBER_HUB_BASE_URL` for the real connector. If GHL does not expose everything cleanly through one read API, normalize the data in your backend first, then return one safe JSON payload to the static app. For staging only, paste a real exported normalized payload into `MEMBER_HUB_JSON`; do not commit it.
+
+## Member Auth Flow
+
+The app now supports a real Gaia proxy session layer.
+
+Preferred production flow:
+
+1. Member is already authenticated in GHL Client Portal or receives a Gaia access link.
+2. Gaia proxy verifies or receives trusted member identity.
+3. Gaia proxy sets an HTTP-only session cookie on `ba2ki.com`.
+4. GitHub Pages frontend calls the proxy with `credentials: include`.
+5. Proxy resolves the current member and fetches member-specific academy / hub data.
+
+Routes:
+
+- `GET {proxy}/api/auth/session`
+- `POST {proxy}/api/auth/logout`
+- `POST {proxy}/api/auth/magic-link/request`
+- `GET {proxy}/api/auth/magic-link/consume?token=...`
+- `POST {proxy}/api/auth/embedded/claim`
+
+### Embedded GHL mode
+
+When the app is launched from a GHL custom menu or client portal surface, pass member context in the app URL when possible, for example:
+
+```text
+https://gaiagitshare.github.io/gaia-healers-mobile-app/home.html?store=1&embedded=ghl&email={{contact.email}}&contactId={{contact.id}}&name={{contact.full_name}}&locationId={{location.id}}&bridge=YOUR_SHARED_SECRET
+```
+
+The frontend will post those values to `POST /api/auth/embedded/claim` and the proxy will set the member session cookie if:
+
+- the referrer is trusted
+- the location id is allowed
+- optional `AUTH_EMBED_SHARED_SECRET` matches the `bridge` or `sharedSecret` query param
+
+This is the fastest way to make the app feel seamless inside GHL.
+
+### Standalone magic-link mode
+
+For the public hosted app, `POST /api/auth/magic-link/request` is the right pattern. The proxy must verify the member first through `MEMBER_HUB_BASE_URL`, `ACADEMY_PROGRESS_BASE_URL`, or another backend connector before sending or returning a one-time Gaia access link.
 
 `/api/assist/tts` is optional backend TTS. The browser tries backend voice providers through this proxy route and falls back to browser `SpeechSynthesis` if hosted voice is unavailable, out of quota, or not configured. The frontend never receives OpenAI, ElevenLabs, OpenRouter, Groq, or provider keys.
 

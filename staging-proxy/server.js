@@ -28,6 +28,7 @@ const ALLOWED_ORIGINS = (process.env.ALLOWED_ORIGINS || '')
   .filter(Boolean);
 const APP_PUBLIC_URL = (process.env.APP_PUBLIC_URL || 'https://gaiagitshare.github.io/gaia-healers-mobile-app/home.html').trim();
 const PROXY_PUBLIC_URL = (process.env.PROXY_PUBLIC_URL || 'https://ba2ki.com/gaia-proxy').trim().replace(/\/+$/, '');
+const GHL_CLIENT_PORTAL_BASE_URL = (process.env.GHL_CLIENT_PORTAL_BASE_URL || 'https://education.gaiahealers.com').trim().replace(/\/+$/, '');
 const AUTH_SESSION_COOKIE = process.env.AUTH_SESSION_COOKIE || 'gaia_member_session';
 const AUTH_SESSION_TTL_SECONDS = Math.min(
   Math.max(Number(process.env.AUTH_SESSION_TTL_SECONDS || 60 * 60 * 24 * 7) || (60 * 60 * 24 * 7), 900),
@@ -560,6 +561,28 @@ async function fetchJson(url, headers = {}) {
   return response.json();
 }
 
+async function fetchJsonIfOk(url, headers = {}) {
+  const response = await fetch(url, { headers });
+  if (!response.ok) return null;
+  try {
+    return await response.json();
+  } catch {
+    return null;
+  }
+}
+
+function firstNonEmptyString(...values) {
+  for (const value of values) {
+    const next = String(value || '').trim();
+    if (next) return next;
+  }
+  return '';
+}
+
+function uniqueStrings(values = []) {
+  return [...new Set(values.map((value) => String(value || '').trim()).filter(Boolean))];
+}
+
 async function readJsonBody(req, maxBytes = 1024 * 1024) {
   const chunks = [];
   let size = 0;
@@ -711,6 +734,15 @@ function sessionPublicShape(session) {
   };
 }
 
+function sessionMemberContext(req) {
+  const session = cookieForRequest(req);
+  if (!session?.member) return null;
+  return normalizeMemberIdentity({
+    ...session.member,
+    source: session.source || 'session',
+  });
+}
+
 function trustedReferrer(referrer = '') {
   const value = String(referrer || '').trim();
   if (!value) return false;
@@ -749,6 +781,25 @@ async function resolveMemberRecord({ email = '', memberId = '', contactId = '' }
   const normalizedEmail = String(email || '').trim().toLowerCase();
   const normalizedMemberId = String(memberId || contactId || '').trim();
   if (!normalizedEmail && !normalizedMemberId) return null;
+
+  try {
+    const ghlMember = await getMemberFromGhl({
+      email: normalizedEmail,
+      memberId: normalizedMemberId,
+      contactId: normalizedMemberId,
+    });
+    if (ghlMember?.memberResolved) {
+      return normalizeMemberIdentity({
+        memberId: ghlMember.member?.memberId || normalizedMemberId,
+        contactId: ghlMember.member?.contactId || normalizedMemberId,
+        email: ghlMember.member?.email || normalizedEmail,
+        displayName: ghlMember.member?.displayName || 'Gaia member',
+        role: ghlMember.member?.role || 'Member',
+        cohort: ghlMember.member?.cohort || '',
+        source: 'ghl-contact',
+      });
+    }
+  } catch {}
 
   const baseContextUrl = new URL('http://localhost');
   if (normalizedEmail) baseContextUrl.searchParams.set('email', normalizedEmail);
@@ -799,10 +850,8 @@ async function resolveMemberRecord({ email = '', memberId = '', contactId = '' }
 }
 
 function memberContextFromRequest(req, url) {
-  const session = cookieForRequest(req);
-  if (session?.member) {
-    return { ...session.member, authenticated: true, source: session.source || 'session' };
-  }
+  const sessionMember = sessionMemberContext(req);
+  if (sessionMember) return { ...sessionMember, authenticated: true };
   const email = String(url.searchParams.get('email') || '').trim().toLowerCase();
   const memberId = String(url.searchParams.get('memberId') || url.searchParams.get('contactId') || '').trim();
   if (email || memberId) {
@@ -821,6 +870,148 @@ function withMemberContext(url, memberContext) {
   }
   if (memberContext.email) scoped.searchParams.set('email', memberContext.email);
   return scoped;
+}
+
+function ghlConfig() {
+  const base = (process.env.GHL_API_BASE_URL || '').replace(/\/+$/, '');
+  const token = String(process.env.GHL_API_TOKEN || '').trim();
+  const locationId = String(process.env.GHL_LOCATION_ID || '').trim();
+  const version = String(process.env.GHL_API_VERSION || '2021-07-28').trim();
+  return {
+    base,
+    token,
+    locationId,
+    version,
+    enabled: Boolean(base && token && locationId),
+  };
+}
+
+function ghlHeaders(token, version) {
+  return {
+    Accept: 'application/json',
+    Authorization: `Bearer ${token}`,
+    Version: version,
+  };
+}
+
+async function ghlGet(path, params = {}) {
+  const cfg = ghlConfig();
+  if (!cfg.enabled) return null;
+  const query = new URLSearchParams(
+    Object.entries(params).reduce((acc, [key, value]) => {
+      if (value === undefined || value === null || value === '') return acc;
+      acc[key] = String(value);
+      return acc;
+    }, {}),
+  );
+  const url = `${cfg.base}${path}${query.toString() ? `?${query.toString()}` : ''}`;
+  return fetchJsonIfOk(url, ghlHeaders(cfg.token, cfg.version));
+}
+
+function normalizeGhlContact(raw = {}, fallback = {}) {
+  const tags = Array.isArray(raw.tags)
+    ? raw.tags
+    : Array.isArray(raw.contactTags)
+      ? raw.contactTags
+      : [];
+  const customFieldsRaw = Array.isArray(raw.customFields)
+    ? raw.customFields
+    : Array.isArray(raw.customField)
+      ? raw.customField
+      : [];
+  const customFields = customFieldsRaw
+    .map((field) => ({
+      id: firstNonEmptyString(field.id, field.fieldId, field.key),
+      key: firstNonEmptyString(field.key, field.name, field.fieldName, field.id),
+      value: firstNonEmptyString(field.value, field.fieldValue, field.val),
+    }))
+    .filter((field) => field.key);
+
+  return normalizeMemberIdentity({
+    memberId: firstNonEmptyString(raw.id, raw.contactId, fallback.memberId, fallback.contactId),
+    contactId: firstNonEmptyString(raw.id, raw.contactId, fallback.contactId, fallback.memberId),
+    email: firstNonEmptyString(raw.email, fallback.email),
+    displayName: firstNonEmptyString(raw.name, `${raw.firstName || ''} ${raw.lastName || ''}`, fallback.displayName, fallback.name),
+    role: firstNonEmptyString(raw.role, fallback.role, 'Member'),
+    cohort: firstNonEmptyString(raw.cohort, raw.group, fallback.cohort),
+    locationId: firstNonEmptyString(raw.locationId, fallback.locationId),
+    source: 'ghl-contact',
+    tags: uniqueStrings(tags),
+    customFields,
+  });
+}
+
+async function getMemberFromGhl({ email = '', memberId = '', contactId = '' } = {}) {
+  const cfg = ghlConfig();
+  if (!cfg.enabled) {
+    return {
+      configured: false,
+      memberResolved: false,
+      liveData: false,
+      source: 'ghl-not-configured',
+      member: null,
+      rawContact: null,
+      portalOnlyFields: ['academyProgress', 'courses', 'purchases', 'communities'],
+    };
+  }
+
+  const normalizedEmail = String(email || '').trim().toLowerCase();
+  const normalizedId = String(contactId || memberId || '').trim();
+  let contactPayload = null;
+
+  if (normalizedId) {
+    const byId = await ghlGet(`/contacts/${encodeURIComponent(normalizedId)}`);
+    contactPayload = byId?.contact || byId?.data?.contact || byId?.data || byId || null;
+  }
+
+  if (!contactPayload && normalizedEmail) {
+    const candidates = [
+      await ghlGet('/contacts', { locationId: cfg.locationId, query: normalizedEmail, limit: 20 }),
+      await ghlGet('/contacts', { locationId: cfg.locationId, email: normalizedEmail, limit: 20 }),
+    ];
+    for (const candidate of candidates) {
+      const list = candidate?.contacts
+        || candidate?.data?.contacts
+        || candidate?.data
+        || candidate?.results
+        || [];
+      if (!Array.isArray(list) || !list.length) continue;
+      const exact = list.find((item) => String(item.email || '').trim().toLowerCase() === normalizedEmail) || list[0];
+      if (exact) {
+        contactPayload = exact;
+        break;
+      }
+    }
+  }
+
+  if (!contactPayload) {
+    return {
+      configured: true,
+      memberResolved: false,
+      liveData: false,
+      source: 'ghl-contact-not-found',
+      member: null,
+      rawContact: null,
+      portalOnlyFields: ['academyProgress', 'courses', 'purchases', 'communities'],
+    };
+  }
+
+  const member = normalizeGhlContact(contactPayload, {
+    email: normalizedEmail,
+    memberId: normalizedId,
+    contactId: normalizedId,
+  });
+  return {
+    configured: true,
+    memberResolved: Boolean(member.email || member.memberId || member.contactId),
+    liveData: true,
+    source: 'ghl-contact',
+    member,
+    tags: uniqueStrings([...(contactPayload.tags || []), ...(contactPayload.contactTags || [])]),
+    customFields: Array.isArray(contactPayload.customFields) ? contactPayload.customFields : [],
+    rawContact: contactPayload,
+    portalOnlyFields: ['academyProgress', 'courses', 'purchases', 'communities'],
+  };
 }
 
 function boolFlag(value) {
@@ -991,20 +1182,27 @@ async function getEventSummary() {
 }
 
 async function getGhlSummary() {
-  const base = (process.env.GHL_API_BASE_URL || '').replace(/\/+$/, '');
-  const token = process.env.GHL_API_TOKEN;
-  const locationId = process.env.GHL_LOCATION_ID;
-  if (!base || !token || !locationId) {
+  const cfg = ghlConfig();
+  if (!cfg.enabled) {
     return { configured: false };
   }
 
+  const lookup = await ghlGet('/contacts', { locationId: cfg.locationId, limit: 1 });
+  const contactsPreview = Array.isArray(lookup?.contacts)
+    ? lookup.contacts.length
+    : Array.isArray(lookup?.data?.contacts)
+      ? lookup.data.contacts.length
+      : 0;
   return {
     configured: true,
     normalized: false,
-    liveData: false,
-    locationId,
-    apiBaseUrl: base,
-    note: 'GHL credentials are configured backend-side. Add normalized reads here after staging auth is approved.',
+    liveData: Boolean(lookup),
+    locationId: cfg.locationId,
+    apiBaseUrl: cfg.base,
+    contactsPreview,
+    note: lookup
+      ? 'GHL contact endpoint is reachable. Using direct contact/member reads with portal-only fallback for unavailable resources.'
+      : 'GHL credentials are configured, but contact endpoint probe failed.',
   };
 }
 
@@ -1078,6 +1276,9 @@ function normalizeAcademyProgress(payload = {}) {
     courses,
     credentials: Array.isArray(payload.credentials) ? payload.credentials : FALLBACK_ACADEMY.credentials,
     requirements: payload.requirements || FALLBACK_ACADEMY.requirements,
+    portalOnlyFields: Array.isArray(payload.portalOnlyFields) ? payload.portalOnlyFields : [],
+    memberResolved: Boolean(payload.memberResolved ?? false),
+    authenticated: Boolean(payload.authenticated ?? false),
   };
 }
 
@@ -1146,6 +1347,9 @@ function normalizeMemberHub(payload = {}, academy = FALLBACK_ACADEMY) {
     credentials,
     courses: sourceCourses,
     communityCourses: sourceCourses.map(academyCourseToCommunityCourse),
+    portalOnlyFields: Array.isArray(payload.portalOnlyFields) ? payload.portalOnlyFields : [],
+    memberResolved: Boolean(payload.memberResolved ?? false),
+    authenticated: Boolean(payload.authenticated ?? false),
   };
 }
 
@@ -1185,9 +1389,54 @@ async function getMemberHub(url = new URL('http://localhost'), academy = FALLBAC
     }, academy);
   }
 
+  const member = await getMemberFromGhl({
+    email,
+    memberId,
+    contactId: memberId,
+  });
+  if (member.configured && member.memberResolved) {
+    const role = firstNonEmptyString(
+      member.member.role,
+      member.tags.find((tag) => /admin|faculty|staff|mentor/i.test(String(tag || ''))),
+      'Member',
+    );
+    const cohort = firstNonEmptyString(
+      member.member.cohort,
+      member.tags.find((tag) => /bio-well|biopulsar|biotekna|healeex|abundant/i.test(String(tag || ''))),
+      '',
+    );
+    return normalizeMemberHub({
+      configured: true,
+      liveData: true,
+      source: 'ghl-contact-profile',
+      generatedAt: new Date().toISOString(),
+      memberResolved: true,
+      authenticated: true,
+      member: {
+        displayName: member.member.displayName,
+        role,
+        cohort,
+        portalUrl: GHL_CLIENT_PORTAL_BASE_URL || FALLBACK_MEMBER_HUB.portal.url,
+      },
+      portal: {
+        ...FALLBACK_MEMBER_HUB.portal,
+        url: GHL_CLIENT_PORTAL_BASE_URL || FALLBACK_MEMBER_HUB.portal.url,
+      },
+      access: {
+        notes: [
+          `Member resolved via GHL contact ${member.member.contactId || member.member.memberId || '(no id)'}.`,
+          'Community posts, purchases, and membership-gated details remain portal-only until verified read APIs are mapped.',
+          'Use secure portal links for gated content.',
+        ],
+      },
+      portalOnlyFields: ['communitiesPrivateData', 'purchases', 'credentialsSourceOfTruth', 'courseProgress'],
+    }, academy);
+  }
+
   return normalizeMemberHub({
     ...FALLBACK_MEMBER_HUB,
     generatedAt: new Date().toISOString(),
+    portalOnlyFields: ['communitiesPrivateData', 'purchases', 'credentialsSourceOfTruth', 'courseProgress'],
   }, academy);
 }
 
@@ -1256,9 +1505,52 @@ async function getAcademyProgress(url = new URL('http://localhost')) {
     });
   }
 
+  const member = await getMemberFromGhl({
+    email,
+    memberId,
+    contactId: memberId,
+  });
+  if (member.configured && member.memberResolved) {
+    return normalizeAcademyProgress({
+      ok: true,
+      configured: true,
+      liveData: false,
+      memberResolved: true,
+      authenticated: true,
+      source: 'ghl-portal-only',
+      generatedAt: new Date().toISOString(),
+      member: {
+        name: member.member.displayName || 'Gaia member',
+        email: member.member.email || email,
+        portalUrl: GHL_CLIENT_PORTAL_BASE_URL || FALLBACK_ACADEMY.member.portalUrl,
+      },
+      summary: {
+        enrolled: 0,
+        completed: 0,
+        inProgress: 0,
+        averageProgress: 0,
+        nextCourseTitle: 'Open your secure Academy workspace',
+        nextLessonTitle: 'Continue live lessons and locked content in the in-app GHL portal',
+        nextLessonUrl: GHL_CLIENT_PORTAL_BASE_URL || FALLBACK_ACADEMY.member.portalUrl,
+      },
+      courses: [],
+      credentials: [],
+      requirements: {
+        title: 'Portal verification required',
+        description: 'Direct GHL lesson/progress API is not available in this integration yet. Use your secure portal session for progress.',
+        scansCompleted: 0,
+        scansRequired: 0,
+        courseRequiredPercent: 0,
+        currentCoursePercent: 0,
+      },
+      portalOnlyFields: ['academyProgress', 'courseLessons', 'certificateIssuance'],
+    });
+  }
+
   return {
     ...FALLBACK_ACADEMY,
     generatedAt: new Date().toISOString(),
+    portalOnlyFields: ['academyProgress', 'courseLessons', 'certificateIssuance'],
   };
 }
 
@@ -1291,7 +1583,7 @@ function applyMemberContextToMemberHub(payload, memberContext) {
 }
 
 async function bootstrap(req, url) {
-  const memberContext = memberContextFromRequest(req, url);
+  const memberContext = sessionMemberContext(req);
   const academyUrl = withMemberContext(url, memberContext);
   const [event, ghl, academy] = await Promise.all([
     getEventSummary().catch((error) => ({ ...FALLBACK_GAIA.event, source: 'event-manager-error', liveData: false, error: error.message })),
@@ -1304,6 +1596,12 @@ async function bootstrap(req, url) {
   const liveData = Boolean(event.liveData || ghl.liveData || ghl.normalized || academyScoped.liveData || memberHubScoped.liveData);
   const gaiaData = buildGaiaAppData(event, academyScoped, memberHubScoped);
   const session = cookieForRequest(req);
+  const authenticated = Boolean(session?.member);
+  const memberResolved = Boolean(memberContext?.email || memberContext?.memberId || memberContext?.contactId);
+  const portalOnlyFields = uniqueStrings([
+    ...(academyScoped.portalOnlyFields || []),
+    ...(memberHubScoped.portalOnlyFields || []),
+  ]);
 
   return {
     ok: true,
@@ -1314,6 +1612,13 @@ async function bootstrap(req, url) {
         generatedAt: new Date().toISOString(),
         liveData,
         mode: liveData ? 'live' : 'proxy-connected',
+        authenticated,
+        memberResolved,
+        academyConfigured: Boolean(academyScoped.configured),
+        academyLive: Boolean(academyScoped.liveData),
+        hubConfigured: Boolean(memberHubScoped.configured),
+        hubLive: Boolean(memberHubScoped.liveData),
+        portalOnlyFields,
         ghl,
         auth: sessionPublicShape(session),
         voice: {
@@ -1340,13 +1645,15 @@ async function bootstrap(req, url) {
 
 async function authSession(req, res, origin, url) {
   const session = cookieForRequest(req);
+  const memberResolved = Boolean(session?.member?.email || session?.member?.memberId || session?.member?.contactId);
   sendJson(res, 200, {
     ok: true,
     ...sessionPublicShape(session),
+    memberResolved,
     methods: {
       embeddedClaim: true,
       magicLinkRequest: true,
-      externalPortal: FALLBACK_MEMBER_HUB.portal.url,
+      externalPortal: GHL_CLIENT_PORTAL_BASE_URL || FALLBACK_MEMBER_HUB.portal.url,
     },
     hintedMember: memberContextFromRequest(req, url),
   }, origin);
@@ -1425,10 +1732,11 @@ async function authMagicLinkConsume(req, res, origin, url) {
 async function authEmbeddedClaim(req, res, origin) {
   const body = await readJsonBody(req);
   const email = String(body.email || '').trim().toLowerCase();
+  const contactId = String(body.contactId || body.memberId || '').trim();
   const referrer = String(body.referrer || '').trim();
   const locationId = String(body.locationId || '').trim();
-  if (!email) {
-    sendJson(res, 400, { ok: false, error: 'Email required for embedded claim.' }, origin);
+  if (!email && !contactId) {
+    sendJson(res, 400, { ok: false, error: 'Email or contactId required for embedded claim.' }, origin);
     return;
   }
   const sharedSecret = String(body.sharedSecret || body.bridge || '').trim();
@@ -1440,26 +1748,53 @@ async function authEmbeddedClaim(req, res, origin) {
     sendJson(res, 403, { ok: false, error: 'Embedded claim rejected: untrusted referrer.' }, origin);
     return;
   }
-  if (locationId && !AUTH_ALLOWED_LOCATION_IDS.has(locationId)) {
+  const cfg = ghlConfig();
+  if (cfg.locationId && locationId && locationId !== cfg.locationId) {
+    sendJson(res, 403, { ok: false, error: 'Embedded claim rejected: location mismatch.' }, origin);
+    return;
+  }
+  if (!cfg.locationId && locationId && !AUTH_ALLOWED_LOCATION_IDS.has(locationId)) {
     sendJson(res, 403, { ok: false, error: 'Embedded claim rejected: unknown location.' }, origin);
     return;
   }
 
-  const member = normalizeMemberIdentity({
+  let member = null;
+  const verified = await getMemberFromGhl({
     email,
-    memberId: body.memberId || body.contactId || '',
-    contactId: body.contactId || body.memberId || '',
-    displayName: body.displayName || body.name || '',
-    role: body.role || body.userRole || 'Member',
-    cohort: body.cohort || body.group || '',
-    locationId,
-    source: 'ghl-embedded-claim',
+    memberId: contactId,
+    contactId,
   });
+  if (verified.memberResolved && verified.member) {
+    member = normalizeMemberIdentity({
+      ...verified.member,
+      locationId: cfg.locationId || locationId || verified.member.locationId,
+      source: 'ghl-embedded-claim',
+    });
+  } else if (AUTH_ALLOW_UNVERIFIED_EMAIL_MAGIC_LINK && email) {
+    member = normalizeMemberIdentity({
+      email,
+      memberId: contactId,
+      contactId,
+      displayName: body.displayName || body.name || '',
+      role: body.role || body.userRole || 'Member',
+      cohort: body.cohort || body.group || '',
+      locationId: cfg.locationId || locationId,
+      source: 'ghl-embedded-claim-unverified',
+    });
+  } else {
+    sendJson(res, 403, {
+      ok: false,
+      error: 'Embedded claim rejected: member could not be verified by GHL.',
+    }, origin);
+    return;
+  }
+
   const session = createMemberSession(member, 'ghl-embedded-claim');
   const token = signTokenPayload(session);
   sendJson(res, 200, {
     ok: true,
     authenticated: true,
+    memberResolved: true,
     member: session.member,
     source: session.source,
   }, origin, {
@@ -2105,6 +2440,10 @@ const server = http.createServer(async (req, res) => {
       await authSession(req, res, origin, url);
       return;
     }
+    if (req.method === 'GET' && url.pathname === '/api/auth/me') {
+      await authSession(req, res, origin, url);
+      return;
+    }
     if (req.method === 'POST' && url.pathname === '/api/auth/logout') {
       await authLogout(req, res, origin);
       return;
@@ -2126,16 +2465,20 @@ const server = http.createServer(async (req, res) => {
       return;
     }
     if (req.method === 'GET' && url.pathname === '/api/academy/progress') {
-      const memberContext = memberContextFromRequest(req, url);
+      const memberContext = sessionMemberContext(req);
       const payload = applyMemberContextToAcademy(await getAcademyProgress(withMemberContext(url, memberContext)), memberContext);
+      payload.authenticated = Boolean(memberContext);
+      payload.memberResolved = Boolean(memberContext?.email || memberContext?.memberId || memberContext?.contactId);
       sendJson(res, 200, payload, origin);
       return;
     }
     if (req.method === 'GET' && url.pathname === '/api/member/hub') {
-      const memberContext = memberContextFromRequest(req, url);
+      const memberContext = sessionMemberContext(req);
       const scopedUrl = withMemberContext(url, memberContext);
       const academy = applyMemberContextToAcademy(await getAcademyProgress(scopedUrl).catch(() => FALLBACK_ACADEMY), memberContext);
       const hub = applyMemberContextToMemberHub(await getMemberHub(scopedUrl, academy), memberContext);
+      hub.authenticated = Boolean(memberContext);
+      hub.memberResolved = Boolean(memberContext?.email || memberContext?.memberId || memberContext?.contactId);
       sendJson(res, 200, hub, origin);
       return;
     }

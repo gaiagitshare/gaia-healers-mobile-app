@@ -70,13 +70,119 @@
     const params = new URLSearchParams(window.location.search);
     return AUTH_HINT_KEYS.reduce((acc, key) => {
       const value = String(params.get(key) || '').trim();
-      if (value) acc[key] = value;
+      if (!value) return acc;
+      if (/^\{\{.*\}\}$/.test(value) || /^YOUR_[A-Z0-9_]+$/i.test(value)) return acc;
+      acc[key] = value;
       return acc;
     }, {});
   }
 
   function hasAuthHints() {
     return Object.keys(authHintParams()).length > 0;
+  }
+
+  function portalBaseUrl() {
+    return String(window.GAIA?.clientPortal?.url || window.GAIA?.portalUrl || 'https://education.gaiahealers.com').replace(/\/+$/, '');
+  }
+
+  function inferPortalSection(label = '') {
+    const text = String(label || '').toLowerCase();
+    if (/course|academy|learning|module|lesson|credential|certification/.test(text)) return 'academy';
+    if (/community|discussion|member|directory|newsletter|event|calendar|badge|ticket/.test(text)) return 'community';
+    if (/profile|portal|client|account|login|purchase|order|product|store|market/.test(text)) return 'profile';
+    return 'home';
+  }
+
+  function portalWorkspaceUrl(section = 'home', explicitUrl = '') {
+    const explicit = String(explicitUrl || '').trim();
+    if (/^https:\/\/education\.gaiahealers\.com/i.test(explicit)) return explicit;
+    const base = portalBaseUrl();
+    const authenticated = authState().authenticated;
+    const routes = {
+      academy: authenticated ? '/products' : '/login',
+      community: authenticated ? '/communities' : '/login',
+      profile: authenticated ? '' : '/login',
+      home: authenticated ? '' : '/login',
+    };
+    return `${base}${routes[section] || routes.home}`;
+  }
+
+  function ensurePortalWorkspace() {
+    let root = document.getElementById('gaia-portal-workspace');
+    if (root) return root;
+    root = document.createElement('div');
+    root.id = 'gaia-portal-workspace';
+    root.className = 'gaia-portal-workspace hidden';
+    root.innerHTML = `
+      <button type="button" class="gaia-portal-workspace__backdrop" aria-label="Close member workspace"></button>
+      <section class="gaia-portal-workspace__sheet" role="dialog" aria-label="Gaia member workspace">
+        <div class="gaia-portal-workspace__handle" aria-hidden="true"></div>
+        <div class="gaia-portal-workspace__top">
+          <div>
+            <p class="gaia-mini-label">Member workspace</p>
+            <h3 class="gaia-portal-workspace__title">Gaia Client Portal</h3>
+            <p class="gaia-portal-workspace__note">Use your Gaia member login to continue secure courses, communities, purchases, and certificates without leaving the app shell.</p>
+          </div>
+          <button type="button" class="gaia-portal-workspace__close" aria-label="Close member workspace">×</button>
+        </div>
+        <div class="gaia-portal-workspace__actions">
+          <button type="button" class="gaia-portal-workspace__chip" data-portal-shortcut="academy">Courses</button>
+          <button type="button" class="gaia-portal-workspace__chip" data-portal-shortcut="community">Community</button>
+          <button type="button" class="gaia-portal-workspace__chip" data-portal-shortcut="profile">Profile</button>
+          <a class="gaia-portal-workspace__external" href="https://education.gaiahealers.com/login" target="_blank" rel="noreferrer">Open outside</a>
+        </div>
+        <div class="gaia-portal-workspace__frame-wrap">
+          <iframe class="gaia-portal-workspace__frame" title="Gaia client portal" loading="eager" referrerpolicy="strict-origin-when-cross-origin" allow="clipboard-read; clipboard-write; fullscreen"></iframe>
+        </div>
+      </section>`;
+    document.body.appendChild(root);
+    const close = () => {
+      root.classList.add('hidden');
+      document.body.classList.remove('gaia-portal-workspace-open');
+    };
+    root.querySelector('.gaia-portal-workspace__backdrop')?.addEventListener('click', close);
+    root.querySelector('.gaia-portal-workspace__close')?.addEventListener('click', close);
+    root.querySelectorAll('[data-portal-shortcut]').forEach((button) => {
+      button.addEventListener('click', () => {
+        openPortalWorkspace(button.dataset.portalShortcut || 'home');
+      });
+    });
+    return root;
+  }
+
+  function openPortalWorkspace(section = 'home', explicitUrl = '') {
+    const root = ensurePortalWorkspace();
+    const title = root.querySelector('.gaia-portal-workspace__title');
+    const note = root.querySelector('.gaia-portal-workspace__note');
+    const frame = root.querySelector('.gaia-portal-workspace__frame');
+    const external = root.querySelector('.gaia-portal-workspace__external');
+    const targetUrl = portalWorkspaceUrl(section, explicitUrl);
+    const labels = {
+      academy: 'Gaia Academy',
+      community: 'Gaia Community',
+      profile: 'Gaia Member Access',
+      home: 'Gaia Client Portal',
+    };
+    if (title) title.textContent = labels[section] || labels.home;
+    if (note) {
+      note.textContent = authState().authenticated
+        ? 'Your Gaia proxy session is active. Use the secure portal below for member-only lessons, community access, purchases, and certificates.'
+        : 'Log in with your existing Gaia member account below. Once authenticated, your courses and gated portal content stay inside this app experience.';
+    }
+    if (external) external.href = targetUrl;
+    if (frame && frame.src !== targetUrl) frame.src = targetUrl;
+    root.classList.remove('hidden');
+    document.body.classList.add('gaia-portal-workspace-open');
+  }
+
+  function wirePortalWorkspaceLinks(root = document) {
+    root.querySelectorAll('a[href*="education.gaiahealers.com"]').forEach((link) => {
+      if (link.dataset.gaiaPortalLaunch) return;
+      const label = `${link.textContent || ''} ${link.getAttribute('aria-label') || ''} ${link.href || ''}`;
+      link.dataset.gaiaPortalLaunch = '1';
+      link.dataset.gaiaPortalSection = inferPortalSection(label);
+      link.removeAttribute('target');
+    });
   }
 
   function embeddedPortalTarget(label = '') {
@@ -122,19 +228,18 @@
   }
 
   function wireEmbeddedPortalLinks(root = document) {
-    if (!isGhlEmbeddedMode()) return;
-    document.body.classList.add('gaia-ghl-embedded');
     root.querySelectorAll('a[href*="education.gaiahealers.com"]').forEach((link) => {
       if (link.dataset.gaiaEmbeddedWired) return;
       const label = `${link.textContent || ''} ${link.getAttribute('aria-label') || ''} ${link.href || ''}`;
-      link.href = embeddedPortalTarget(label);
       link.dataset.gaiaEmbeddedWired = '1';
-      link.dataset.appNav = '';
+      link.dataset.gaiaPortalLaunch = '1';
+      link.dataset.gaiaPortalSection = inferPortalSection(label);
       link.removeAttribute('target');
     });
     root.querySelectorAll('[data-ghl-custom-menu-link]').forEach((link) => {
       link.setAttribute('href', GHL_CUSTOM_MENU_URL);
     });
+    wirePortalWorkspaceLinks(root);
   }
 
   function initGhlEmbeddedMode() {
@@ -408,7 +513,7 @@
     function courseHref(course, academy) {
       const url = String(course.continueUrl || academy?.summary?.nextLessonUrl || '').trim();
       if (url) return url;
-      return appHref('profile');
+      return portalWorkspaceUrl('academy');
     }
 
     function renderRoadmap(courses = [], activeId = '') {
@@ -470,8 +575,19 @@
     function renderCourseList(courses = [], academy = {}) {
       if (!courseList) return;
       const items = courses.filter((course) => course.id !== academy.activeCourseId).slice(0, 6);
+      if (!items.length) {
+        courseList.innerHTML = `
+          <article class="gaia-row">
+            <div class="flex-1 min-w-0">
+              <p class="text-headline text-ink">${academy.memberResolved || academy.authenticated ? 'Secure Academy workspace ready' : 'Member login needed'}</p>
+              <p class="gaia-caption">${academy.memberResolved || academy.authenticated ? 'Open the in-app GHL workspace for live lessons, locked modules, purchases, and certificates.' : 'Sign in once to open your secure course workspace inside the app.'}</p>
+            </div>
+            <a href="${escapeHtml(portalWorkspaceUrl('academy'))}" class="gaia-link shrink-0" data-gaia-portal-launch="1" data-gaia-portal-section="academy">${academy.memberResolved || academy.authenticated ? 'Open' : 'Log in'}</a>
+          </article>`;
+        return;
+      }
       courseList.innerHTML = items.map((course) => `
-        <a href="${escapeHtml(courseHref(course, academy))}" class="gaia-card gaia-card-pad gaia-course-card" ${course.continueUrl ? '' : 'data-app-nav'}>
+        <a href="${escapeHtml(courseHref(course, academy))}" class="gaia-card gaia-card-pad gaia-course-card" ${course.continueUrl ? '' : 'data-gaia-portal-launch="1" data-gaia-portal-section="academy"'}>
           <div class="flex items-start justify-between gap-3">
             <div class="min-w-0">
               <p class="text-micro font-semibold text-gaia">${escapeHtml(course.category || 'Academy')}</p>
@@ -487,6 +603,50 @@
 
     function renderAcademy(academy = window.GAIA?.academy) {
       if (!academy) return;
+      const portalWorkspaceOnly = !academy.liveData
+        && Array.isArray(academy.portalOnlyFields)
+        && academy.portalOnlyFields.includes('academyProgress');
+      const memberReady = Boolean(academy.memberResolved || academy.authenticated);
+      if (portalWorkspaceOnly) {
+        summaryCaption.textContent = memberReady
+          ? 'Secure courses · GHL member workspace'
+          : 'Sign in required · secure Academy workspace';
+        activeTitle.textContent = memberReady ? 'Open your secure Academy workspace' : 'Log in to view your courses';
+        activeDetail.textContent = memberReady
+          ? 'Live lessons, locked modules, and certificates stay inside the in-app GHL portal.'
+          : 'Use your Gaia member login once, then continue lessons and gated modules inside the in-app GHL portal.';
+        if (activeProgress) activeProgress.style.width = '0%';
+        if (activePercent) activePercent.textContent = memberReady ? 'Portal ready' : 'Log in';
+        if (activeLessons) activeLessons.textContent = memberReady ? 'GHL member workspace' : 'Secure member access';
+        if (continueLink) {
+          continueLink.href = portalWorkspaceUrl('academy');
+          continueLink.dataset.gaiaPortalLaunch = '1';
+          continueLink.dataset.gaiaPortalSection = 'academy';
+          continueLink.removeAttribute('data-app-nav');
+          continueLink.textContent = memberReady ? 'Open Academy workspace' : 'Log in to Academy';
+        }
+        if (sourceNote) {
+          sourceNote.textContent = memberReady
+            ? 'Member verified · open the secure Academy workspace below for live lessons, locked modules, and certificates.'
+            : 'Gaia courses stay protected by member login. Open the secure Academy workspace below to continue.';
+        }
+        renderRoadmap([], '');
+        renderRequirements({
+          title: memberReady ? 'Member workspace' : 'Member login required',
+          description: memberReady
+            ? 'Course progress and gated lessons stay inside the secure GHL member workspace.'
+            : 'Sign in with your existing Gaia portal account to unlock your course progress, purchases, and credentials.',
+          scansCompleted: 0,
+          scansRequired: 0,
+          currentCoursePercent: 0,
+          courseRequiredPercent: 0,
+        }, {});
+        renderCredentials([]);
+        renderCourseList([], { ...academy, authenticated: memberReady, memberResolved: memberReady });
+        wireEmbeddedPortalLinks(document);
+        window.GaiaAppShell?.wireLinks?.();
+        return;
+      }
       const courses = Array.isArray(academy.courses) ? academy.courses : [];
       const activeCourse = courses.find((course) => course.id === academy.activeCourseId)
         || courses.find((course) => Number(course.progressPercent) > 0 && Number(course.progressPercent) < 100)
@@ -501,14 +661,27 @@
       if (activeLessons) activeLessons.textContent = activeCourse.totalLessons ? `${activeCourse.completedLessons || 0} / ${activeCourse.totalLessons} lessons` : 'Progress synced';
       if (continueLink) {
         continueLink.href = courseHref(activeCourse, academy);
-        if (!activeCourse.continueUrl && !summary.nextLessonUrl) continueLink.dataset.appNav = '';
-        else continueLink.removeAttribute('data-app-nav');
-        continueLink.textContent = activeCourse.status === 'locked' ? 'View unlock steps' : 'Continue where I left off';
+        if (!activeCourse.continueUrl && !summary.nextLessonUrl) {
+          continueLink.dataset.gaiaPortalLaunch = '1';
+          continueLink.dataset.gaiaPortalSection = 'academy';
+          continueLink.removeAttribute('data-app-nav');
+        } else {
+          continueLink.removeAttribute('data-gaia-portal-launch');
+          continueLink.removeAttribute('data-gaia-portal-section');
+          continueLink.removeAttribute('data-app-nav');
+        }
+        continueLink.textContent = academy.liveData
+          ? (activeCourse.status === 'locked' ? 'View unlock steps' : 'Continue where I left off')
+          : 'Open secure Academy workspace';
       }
       if (sourceNote) {
-        sourceNote.textContent = academy.liveData
-          ? `Live course sync · ${academy.source || 'academy'}`
-          : 'Read-only membership snapshot · connect per-member Academy feed for live progress';
+        if (academy.liveData) {
+          sourceNote.textContent = `Live course sync · ${academy.source || 'academy'}`;
+        } else if (academy.memberResolved || academy.authenticated) {
+          sourceNote.textContent = 'Member verified · open the secure Academy workspace below for live lessons, locked modules, and certificates.';
+        } else {
+          sourceNote.textContent = 'Log in to open your secure Academy workspace inside the app.';
+        }
       }
       renderRoadmap(courses, academy.activeCourseId);
       renderRequirements(academy.requirements, activeCourse);
@@ -836,7 +1009,7 @@
       if (!hasAuthHints()) return false;
       if (!document.referrer || !/crm\.gaiahealers\.com|education\.gaiahealers\.com/i.test(document.referrer)) return false;
       const hints = authHintParams();
-      if (!hints.email) return false;
+      if (!hints.email && !hints.contactId && !hints.memberId) return false;
       try {
         const response = await fetch(`${syncProxyBase()}/api/auth/embedded/claim`, {
           method: 'POST',
@@ -3274,6 +3447,12 @@
   }
 
   document.addEventListener('DOMContentLoaded', () => {
+    document.addEventListener('click', (event) => {
+      const trigger = event.target.closest('a[data-gaia-portal-launch], button[data-gaia-portal-launch]');
+      if (!trigger) return;
+      event.preventDefault();
+      openPortalWorkspace(trigger.dataset.gaiaPortalSection || 'home', trigger.getAttribute('href') || '');
+    });
     initTheme();
     initMemberAuth();
     initHeaderProfile();
@@ -3287,6 +3466,8 @@
     initAppShellNavigation();
     initCommunityHub();
     initLiveSyncIndicator();
+    ensurePortalWorkspace();
+    wirePortalWorkspaceLinks(document);
     initGhlEmbeddedMode();
     initGaiaAssist();
   });

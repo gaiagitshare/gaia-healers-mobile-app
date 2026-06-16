@@ -10,6 +10,7 @@ Paste these only into your backend host environment variables, never into the st
 | --- | --- | --- |
 | `GHL_API_TOKEN` | LeadConnector/GHL private integration token | GHL/LeadConnector private integration settings |
 | `GHL_LOCATION_ID` | Gaia Healers location ID | GHL location URL or API settings |
+| `GHL_CLIENT_PORTAL_BASE_URL` | Client portal base URL, e.g. `https://education.gaiahealers.com` | GHL membership/client portal URL |
 | `ACADEMY_PROGRESS_BASE_URL` | Backend-only normalized course progress endpoint | Your GHL/Courses connector, membership export service, or internal academy API |
 | `ACADEMY_PROGRESS_TOKEN` | Bearer token for `ACADEMY_PROGRESS_BASE_URL` | Your academy connector backend |
 | `ACADEMY_PROGRESS_JSON` | Optional staging-only normalized course progress JSON | Temporary backend env var from a GHL Courses/member progress export |
@@ -80,6 +81,7 @@ GET {proxy}/api/app/bootstrap
 GET {proxy}/api/academy/progress
 GET {proxy}/api/member/hub
 GET {proxy}/api/auth/session
+GET {proxy}/api/auth/me
 GET {proxy}/api/auth/magic-link/consume
 POST {proxy}/api/auth/magic-link/request
 POST {proxy}/api/auth/embedded/claim
@@ -143,7 +145,7 @@ That route returns a safe, normalized shape only:
 }
 ```
 
-Use `ACADEMY_PROGRESS_BASE_URL` for the real connector. If the live GHL membership/course API is not available for direct reads, use a backend job/webhook/export to normalize GHL course progress into this shape. For staging only, paste a real exported normalized payload into `ACADEMY_PROGRESS_JSON`; do not commit it.
+Use `ACADEMY_PROGRESS_BASE_URL` for the real connector. If the live GHL membership/course API is not available for direct reads, the proxy now returns `portalOnlyFields` and a secure portal URL instead of fake progress. For staging only, paste a real exported normalized payload into `ACADEMY_PROGRESS_JSON`; do not commit it.
 
 ## Member Hub Sync
 
@@ -163,7 +165,7 @@ That route is intended to unify:
 - marketplace/device/product cards
 - credentials and access notes
 
-Use `MEMBER_HUB_BASE_URL` for the real connector. If GHL does not expose everything cleanly through one read API, normalize the data in your backend first, then return one safe JSON payload to the static app. For staging only, paste a real exported normalized payload into `MEMBER_HUB_JSON`; do not commit it.
+Use `MEMBER_HUB_BASE_URL` for the real connector. If unset, the proxy attempts direct GHL contact/profile reads using `GHL_API_TOKEN` + `GHL_LOCATION_ID`, then marks unavailable areas with `portalOnlyFields` instead of faking gated data. For staging only, paste a real exported normalized payload into `MEMBER_HUB_JSON`; do not commit it.
 
 ## Member Auth Flow
 

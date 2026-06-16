@@ -759,6 +759,11 @@ body:not(.gaia-v2) .gaia-live-sync {
   font-weight: 500;
   border-radius: 100px;
   color: var(--ink-tertiary);
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
 }
 
 .gaia-segment__item--active {
@@ -2957,8 +2962,16 @@ body.gaia-v2 .gaia-assist__backdrop[hidden] {
   display: none !important;
 }
 
-body.gaia-v2 .gaia-event-flagship {
-  margin-bottom: 0.25rem;
+body.gaia-v2 [data-wellness-tech] {
+  border: 0;
+  cursor: pointer;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+
+body.gaia-v2 [data-wellness-tech]:active {
+  transform: scale(0.97);
 }
 
 body.gaia-v2 .gaia-event-date {

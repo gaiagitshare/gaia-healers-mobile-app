@@ -1671,6 +1671,162 @@
     window.GaiaWellnessTabs.activate(new URLSearchParams(window.location.search).get('tab') || 'biowell');
   }
 
+  function initWellnessPanel() {
+    const panel = document.getElementById('panel-biowell');
+    if (!panel || panel.dataset.gaiaWellnessWired) return;
+    panel.dataset.gaiaWellnessWired = '1';
+
+    const WELLNESS_TRENDS = {
+      '7d': {
+        labels: ['M', 'T', 'W', 'T', 'F', 'S', 'Today'],
+        values: [48, 52, 58, 65, 74, 80, 87],
+        avg: 82,
+      },
+      '30d': {
+        labels: ['W1', 'W2', 'W3', 'W4', 'Now'],
+        values: [68, 72, 76, 79, 87],
+        avg: 76,
+      },
+    };
+
+    let activeRange = '7d';
+    const chartEl = panel.querySelector('[data-wellness-chart]');
+    const avgEl = panel.querySelector('[data-wellness-trend-avg]');
+    const ringEl = panel.querySelector('[data-wellness-ring]');
+    const sourceNote = document.getElementById('wellness-source-note');
+
+    function renderTrendChart(range) {
+      const trend = WELLNESS_TRENDS[range];
+      if (!chartEl || !trend) return;
+      chartEl.innerHTML = trend.labels.map((label, index) => {
+        const value = trend.values[index];
+        const active = index === trend.labels.length - 1;
+        return `<div class="flex flex-1 flex-col items-center">
+          <div class="gaia-chart__bar w-full${active ? ' gaia-chart__bar--active' : ''}" style="height:${value}%"></div>
+          <span class="gaia-chart__label${active ? ' font-semibold text-gaia-dark' : ''}">${label}</span>
+        </div>`;
+      }).join('');
+      if (avgEl) avgEl.textContent = String(trend.avg);
+    }
+
+    function updateEnergyRing(score) {
+      if (!ringEl) return;
+      const circumference = 2 * Math.PI * 42;
+      const offset = circumference - (Math.max(0, Math.min(100, score)) / 100) * circumference;
+      ringEl.style.strokeDasharray = `${circumference}`;
+      ringEl.style.strokeDashoffset = `${offset}`;
+    }
+
+    function refreshWellness() {
+      const gaia = window.GAIA || {};
+      const wellness = gaia.wellness || {};
+      const academy = gaia.academy || {};
+      const requirements = academy.requirements || {};
+      const responses = gaia.assistant?.responses || {};
+      const authenticated = Boolean(gaia.sync?.authenticated || gaia.sync?.memberResolved);
+      const live = Boolean(wellness.liveData);
+
+      const energyIndex = wellness.energyIndex ?? 87;
+      const delta = wellness.deltaVsAvg ?? 5;
+      const avg7 = wellness.avg7Day ?? 82;
+
+      const energyEl = panel.querySelector('[data-wellness-energy-index]');
+      const heroCopy = panel.querySelector('[data-wellness-hero-copy]');
+      const insight = panel.querySelector('[data-wellness-insight]');
+      const practicum = panel.querySelector('[data-wellness-practicum]');
+      const practicumProgress = panel.querySelector('[data-wellness-practicum-progress]');
+      const stressEl = panel.querySelector('[data-wellness-stress]');
+      const vitalityEl = panel.querySelector('[data-wellness-vitality]');
+      const coherenceEl = panel.querySelector('[data-wellness-coherence]');
+      const badge = document.querySelector('[data-wellness-badge]');
+
+      if (energyEl) energyEl.textContent = String(energyIndex);
+      updateEnergyRing(energyIndex);
+      if (heroCopy) {
+        heroCopy.innerHTML = `Optimal for sessions · <span class="font-semibold text-gaia-dark">+${delta}</span> vs 7-day avg (${avg7})`;
+      }
+      if (stressEl && wellness.stress) stressEl.textContent = wellness.stress;
+      if (vitalityEl && wellness.vitality) vitalityEl.textContent = wellness.vitality;
+      if (coherenceEl && wellness.coherence != null) coherenceEl.textContent = `${wellness.coherence}%`;
+      if (insight && responses.scan) insight.textContent = responses.scan;
+
+      const scansDone = Number(requirements.scansCompleted ?? wellness.scansCompleted ?? 14);
+      const scansReq = Number(requirements.scansRequired ?? wellness.scansRequired ?? 20);
+      if (practicum && scansReq > 0) {
+        practicum.innerHTML = `${scansDone} of ${scansReq} scans toward <strong class="text-ink">Advanced Level 1</strong>`;
+      }
+      if (practicumProgress && scansReq > 0) {
+        practicumProgress.style.width = `${Math.round((scansDone / scansReq) * 100)}%`;
+      }
+
+      if (badge) {
+        badge.textContent = live ? 'Live sync' : (authenticated ? 'Member · demo scans' : 'Demo data');
+        badge.classList.toggle('gaia-badge--live', live);
+        badge.classList.toggle('gaia-badge--subtle', !live);
+      }
+
+      if (sourceNote) {
+        sourceNote.hidden = false;
+        if (live) {
+          sourceNote.textContent = 'Bio-Well scan readings synced from your device account.';
+        } else if (authenticated) {
+          sourceNote.textContent = 'Energy trends use sample readings. GHL tracks your courses and practicum scans — not live Bio-Well charts yet.';
+        } else {
+          sourceNote.textContent = 'Sample wellness data shown. Log in for your practicum progress from Academy; live Bio-Well charts need device sync.';
+        }
+      }
+
+      renderTrendChart(activeRange);
+    }
+
+    panel.querySelectorAll('[data-wellness-range]').forEach((button) => {
+      button.addEventListener('click', () => {
+        activeRange = button.dataset.wellnessRange || '7d';
+        panel.querySelectorAll('[data-wellness-range]').forEach((item) => {
+          const on = item === button;
+          item.classList.toggle('gaia-segment__item--active', on);
+          item.setAttribute('aria-selected', String(on));
+        });
+        renderTrendChart(activeRange);
+      });
+    });
+
+    panel.querySelector('[data-wellness-new-scan]')?.addEventListener('click', () => {
+      window.dispatchEvent(new CustomEvent('gaia:open-assist', {
+        detail: {
+          prompt: 'Guide me through documenting a new Bio-Well scan for my practicum: prep, capture, and what to log for Advanced Level 1.',
+          speak: true,
+        },
+      }));
+    });
+
+    panel.querySelectorAll('[data-wellness-tech]').forEach((button) => {
+      button.addEventListener('click', () => {
+        const tech = button.dataset.wellnessTech;
+        if (tech === 'biowell') {
+          panel.querySelector('[data-wellness-new-scan]')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          return;
+        }
+        if (tech === 'biopulsar') {
+          window.GaiaAppShell?.go('wellness', { tab: 'chakras' });
+          return;
+        }
+        window.dispatchEvent(new CustomEvent('gaia:open-assist', {
+          detail: {
+            prompt: 'Explain how BioTekna ANS mapping fits into my Gaia practitioner workflow.',
+          },
+        }));
+      });
+    });
+
+    document.addEventListener('gaia:sync', refreshWellness);
+    window.addEventListener('gaia:route', (event) => {
+      if (event.detail?.view === 'wellness') refreshWellness();
+    });
+
+    refreshWellness();
+  }
+
   function initCommunityTabs() {
     const bar = document.getElementById('community-tabs');
     if (!bar) return;
@@ -3611,6 +3767,7 @@
     initSplashSteps();
     initChakraMaps();
     initWellnessTabs();
+    initWellnessPanel();
     initCommunityTabs();
     initAcademyProgress();
     initMemberHub();

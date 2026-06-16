@@ -1466,6 +1466,19 @@ function buildGaiaAppData(event, academy, memberHub) {
     event,
     academy,
     memberHub,
+    wellness: {
+      liveData: false,
+      source: 'demo-readings',
+      energyIndex: 87,
+      deltaVsAvg: 5,
+      avg7Day: 82,
+      stress: 'Low',
+      vitality: 'High',
+      coherence: 91,
+      scansCompleted: academy?.requirements?.scansCompleted ?? FALLBACK_ACADEMY.requirements.scansCompleted,
+      scansRequired: academy?.requirements?.scansRequired ?? FALLBACK_ACADEMY.requirements.scansRequired,
+      note: 'Bio-Well device readings are not stored in GHL. Practicum scan counts come from Academy when member login is available.',
+    },
   };
 }
 

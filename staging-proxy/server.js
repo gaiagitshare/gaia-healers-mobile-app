@@ -1590,14 +1590,92 @@ async function bootstrap(req, url) {
     getGhlSummary().catch((error) => ({ configured: false, error: error.message })),
     getAcademyProgress(academyUrl).catch((error) => ({ ...FALLBACK_ACADEMY, source: 'academy-error', error: error.message })),
   ]);
-  const academyScoped = applyMemberContextToAcademy(academy, memberContext);
-  const memberHub = await getMemberHub(academyUrl, academyScoped).catch((error) => ({ ...FALLBACK_MEMBER_HUB, source: 'member-hub-error', error: error.message }));
-  const memberHubScoped = applyMemberContextToMemberHub(memberHub, memberContext);
-  const liveData = Boolean(event.liveData || ghl.liveData || ghl.normalized || academyScoped.liveData || memberHubScoped.liveData);
-  const gaiaData = buildGaiaAppData(event, academyScoped, memberHubScoped);
   const session = cookieForRequest(req);
   const authenticated = Boolean(session?.member);
   const memberResolved = Boolean(memberContext?.email || memberContext?.memberId || memberContext?.contactId);
+  let academyScoped = applyMemberContextToAcademy(academy, memberContext);
+  let memberHub = await getMemberHub(academyUrl, academyScoped).catch((error) => ({ ...FALLBACK_MEMBER_HUB, source: 'member-hub-error', error: error.message }));
+  let memberHubScoped = applyMemberContextToMemberHub(memberHub, memberContext);
+
+  if (!authenticated && !memberResolved) {
+    academyScoped = normalizeAcademyProgress({
+      configured: true,
+      liveData: false,
+      authenticated: false,
+      memberResolved: false,
+      source: 'anonymous-portal-login',
+      member: {
+        name: 'Gaia member',
+        email: '',
+        portalUrl: GHL_CLIENT_PORTAL_BASE_URL || FALLBACK_ACADEMY.member.portalUrl,
+      },
+      summary: {
+        enrolled: 0,
+        completed: 0,
+        inProgress: 0,
+        averageProgress: 0,
+        nextCourseTitle: 'Open your secure Academy workspace',
+        nextLessonTitle: 'Member login unlocks your live lessons and course progress in-app',
+        nextLessonUrl: GHL_CLIENT_PORTAL_BASE_URL || FALLBACK_ACADEMY.member.portalUrl,
+        ceCreditsEarned: 0,
+        ceCreditsRequired: FALLBACK_ACADEMY.summary.ceCreditsRequired,
+      },
+      courses: [],
+      credentials: [],
+      requirements: {
+        title: 'Member login required',
+        description: 'Sign in with your Gaia portal account to unlock your own course progress, certificates, and gated lessons.',
+        scansCompleted: 0,
+        scansRequired: 0,
+        courseRequiredPercent: 0,
+        currentCoursePercent: 0,
+      },
+      portalOnlyFields: ['academyProgress', 'courseLessons', 'certificateIssuance'],
+    });
+
+    memberHubScoped = normalizeMemberHub({
+      ...memberHubScoped,
+      configured: true,
+      liveData: false,
+      authenticated: false,
+      memberResolved: false,
+      source: 'anonymous-portal-login',
+      member: {
+        displayName: 'Gaia member',
+        role: 'Member',
+        cohort: 'Client portal',
+        portalUrl: GHL_CLIENT_PORTAL_BASE_URL || FALLBACK_MEMBER_HUB.portal.url,
+      },
+      dashboard: {
+        ...(memberHubScoped.dashboard || {}),
+        welcomeTitle: 'Your Gaia dashboard is ready',
+        welcomeDetail: 'Sign in once to load your own courses, communities, products, and certificates inside the app.',
+        topCourse: 'Secure Academy workspace',
+        topCourseMeta: 'Member login unlocks your course progress',
+        nextLessonTitle: 'Log in to continue your live lessons',
+        eventPassTitle: event?.shortName || 'Elevate 2026',
+        eventPassDetail: 'Badge ops ready',
+        ceCreditsEarned: 0,
+        ceCreditsRequired: FALLBACK_ACADEMY.summary.ceCreditsRequired,
+      },
+      access: {
+        notes: [
+          'Public app shell is ready.',
+          'Member-specific courses, purchases, communities, and certificates unlock after Gaia portal login.',
+        ],
+      },
+      portalOnlyFields: uniqueStrings([
+        ...(memberHubScoped.portalOnlyFields || []),
+        'communitiesPrivateData',
+        'purchases',
+        'credentialsSourceOfTruth',
+        'courseProgress',
+      ]),
+    }, academyScoped);
+  }
+
+  const liveData = Boolean(event.liveData || ghl.liveData || ghl.normalized || academyScoped.liveData || memberHubScoped.liveData);
+  const gaiaData = buildGaiaAppData(event, academyScoped, memberHubScoped);
   const portalOnlyFields = uniqueStrings([
     ...(academyScoped.portalOnlyFields || []),
     ...(memberHubScoped.portalOnlyFields || []),

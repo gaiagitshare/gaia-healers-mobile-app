@@ -24,7 +24,7 @@ Built around the real platform — not generic wellness copy:
 
 ## App entry
 
-**Production:** https://app.gaiahealers.app/home.html  
+**Production:** https://gaiahealers.app/home.html  
 **Staging:** https://gaiagitshare.github.io/gaia-healers-mobile-app/home.html
 
 Domain setup: [`docs/DOMAIN-SETUP.md`](docs/DOMAIN-SETUP.md)

@@ -26,7 +26,7 @@ const ALLOWED_ORIGINS = (process.env.ALLOWED_ORIGINS || '')
   .split(',')
   .map((origin) => origin.trim())
   .filter(Boolean);
-const APP_PUBLIC_URL = (process.env.APP_PUBLIC_URL || 'https://app.gaiahealers.app/home.html').trim();
+const APP_PUBLIC_URL = (process.env.APP_PUBLIC_URL || 'https://gaiahealers.app/home.html').trim();
 const PROXY_PUBLIC_URL = (process.env.PROXY_PUBLIC_URL || 'https://api.gaiahealers.app').trim().replace(/\/+$/, '');
 const GHL_CLIENT_PORTAL_BASE_URL = (process.env.GHL_CLIENT_PORTAL_BASE_URL || 'https://education.gaiahealers.com').trim().replace(/\/+$/, '');
 const AUTH_SESSION_COOKIE = process.env.AUTH_SESSION_COOKIE || 'gaia_member_session';
@@ -400,7 +400,7 @@ const GAIA_KNOWLEDGE = {
     observedLocationId: 'WkKl1K5RuZNQ60xR48k6',
     configuredLocationId: process.env.GHL_LOCATION_ID || '',
     customMenuLink: 'https://crm.gaiahealers.com/v2/location/WkKl1K5RuZNQ60xR48k6/custom-menu-link/328efaea-4e94-42ec-9ce2-4358a64657db',
-    embeddedAppUrl: 'https://app.gaiahealers.app/home.html?store=1&embedded=ghl',
+    embeddedAppUrl: 'https://gaiahealers.app/home.html?store=1&embedded=ghl',
     sections: ['Client Portal', 'Courses', 'Communities', 'Credentials', 'Gokollab Marketplace', 'Marketing', 'Automation', 'Calendars', 'Contacts', 'Custom Menu Links'],
     clientPortalUsers: 1252,
     adminActions: ['generate magic link', 'invite to client portal', 'send login email'],

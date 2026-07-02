@@ -2007,9 +2007,11 @@
           </details>
           <button type="button" class="gaia-assist__close" aria-label="Close Gaia Assist">×</button>
           <div class="gaia-assist__aura">
-            <div class="gaia-assist__orb-visual" aria-hidden="true">
+            <button type="button" class="gaia-assist__orb-visual" data-gaia-orb-tap aria-label="Start voice conversation with Gaia">
+              <span class="gaia-assist__orb-ring gaia-assist__orb-ring--1" aria-hidden="true"></span>
+              <span class="gaia-assist__orb-ring gaia-assist__orb-ring--2" aria-hidden="true"></span>
               <span class="gaia-assist__orb-g">G</span>
-            </div>
+            </button>
             <div class="gaia-assist__wave" aria-hidden="true">
               <span></span><span></span><span></span><span></span><span></span>
             </div>
@@ -2773,7 +2775,7 @@
     }
 
     const REALTIME_STATUS_COPY = {
-      idle: 'Tap Gaia to start Gemini Live',
+      idle: isCoarsePointer() ? 'Tap Gaia above to begin' : 'Tap Gaia to start Gemini Live',
       ready: 'Listening… speak naturally',
       connecting: 'Connecting…',
       holding: 'Listening…',
@@ -2788,15 +2790,19 @@
       if (!document.body.classList.contains('gaia-v2')) return;
       passiveWelcomeShown = true;
       sessionStorage.setItem(ASSIST_WELCOME_KEY, '1');
-      if (!isCoarsePointer()) {
-        setOpen(true, { passive: true });
-      }
-      if (!shouldAutoStartGemini() && !canUseRealtimeVoice() && !transcript.querySelector('[data-gaia-welcome-bubble]')) {
+      // Always open the panel so the assistant greets first — on touch devices
+      // the orb shows a "tap to begin" state (iOS blocks auto-audio until gesture).
+      setOpen(true, { passive: true });
+      if (!canUseRealtimeVoice() && !transcript.querySelector('[data-gaia-welcome-bubble]')) {
         const welcomeText = passiveWelcomeText();
         const bubble = appendMessage('bot', welcomeText);
         bubble.dataset.gaiaWelcomeBubble = '1';
       }
-      setAssistVoiceState('idle', canUseRealtimeVoice() ? 'Starting Gemini Live…' : 'Tap Gaia to start Gemini Live');
+      const onMobile = isCoarsePointer();
+      const idleCopy = onMobile
+        ? (canUseRealtimeVoice() ? 'Tap Gaia to begin' : 'Tap Gaia to start')
+        : (canUseRealtimeVoice() ? 'Starting Gemini Live…' : 'Tap Gaia to start Gemini Live');
+      setAssistVoiceState('idle', idleCopy);
       if (canUseRealtimeVoice()) setRealtimeVoiceProvider();
     }
 
@@ -3720,6 +3726,12 @@
       if (realtimeVoice?.isActive()) realtimeVoice.stop();
       setOpen(false);
       setAssistVoiceState('idle', REALTIME_STATUS_COPY.idle);
+    });
+    // The big orb inside the panel is the primary tap target on mobile —
+    // it doubles as the iOS audio-unlock gesture and starts Gemini Live.
+    root.querySelector('[data-gaia-orb-tap]')?.addEventListener('click', (event) => {
+      event.stopPropagation();
+      onAssistTap();
     });
     if (mic) {
       mic.addEventListener('click', async () => {

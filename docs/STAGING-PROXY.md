@@ -192,8 +192,10 @@ Routes:
 When the app is launched from a GHL custom menu or client portal surface, pass member context in the app URL when possible, for example:
 
 ```text
-https://gaiagitshare.github.io/gaia-healers-mobile-app/home.html?store=1&embedded=ghl&email={{contact.email}}&contactId={{contact.id}}&name={{contact.full_name}}&locationId={{location.id}}&bridge=YOUR_SHARED_SECRET
+https://gaiahealers.app/home.html?store=1&embedded=ghl&proxy=https%3A%2F%2Fapi.gaiahealers.app&email={{contact.email}}&contactId={{contact.id}}&name={{contact.full_name}}&locationId={{location.id}}
 ```
+
+`bridge=YOUR_SHARED_SECRET` may be appended for an extra check, but only takes effect once `AUTH_EMBED_SHARED_SECRET` is set on the proxy (it is optional/unset by default, in which case the claim is gated by trusted referrer + GHL contact verification).
 
 The frontend will post those values to `POST /api/auth/embedded/claim` and the proxy will set the member session cookie if:
 

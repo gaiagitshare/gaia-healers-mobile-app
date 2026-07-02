@@ -153,14 +153,16 @@ body.gaia-v2.gaia-app::before {
   pointer-events: none;
   z-index: 0;
   background:
-    radial-gradient(ellipse 120% 70% at 50% -18%, rgba(92, 184, 46, 0.11), transparent 58%),
-    radial-gradient(circle at 100% 0%, rgba(68, 148, 34, 0.05), transparent 38%);
+    radial-gradient(ellipse 140% 80% at 50% -14%, rgba(92, 184, 46, 0.16), transparent 60%),
+    radial-gradient(circle at 100% 0%, rgba(68, 148, 34, 0.08), transparent 42%),
+    radial-gradient(circle at 0% 100%, rgba(125, 217, 86, 0.06), transparent 45%);
 }
 
 body.gaia-v2[data-theme="dark"].gaia-app::before {
   background:
-    radial-gradient(ellipse 120% 70% at 50% -18%, rgba(92, 184, 46, 0.07), transparent 58%),
-    radial-gradient(circle at 100% 0%, rgba(68, 148, 34, 0.04), transparent 38%);
+    radial-gradient(ellipse 140% 80% at 50% -14%, rgba(92, 184, 46, 0.11), transparent 60%),
+    radial-gradient(circle at 100% 0%, rgba(68, 148, 34, 0.06), transparent 42%),
+    radial-gradient(circle at 0% 100%, rgba(125, 217, 86, 0.04), transparent 45%);
 }
 
 body.gaia-v2 .gaia-shell,
@@ -751,8 +753,8 @@ body.gaia-v2 .gaia-assist__backdrop {
   z-index: 54;
   border: 0;
   background: var(--gh-backdrop);
-  backdrop-filter: blur(8px);
-  -webkit-backdrop-filter: blur(8px);
+  backdrop-filter: blur(16px) saturate(140%);
+  -webkit-backdrop-filter: blur(16px) saturate(140%);
   pointer-events: auto;
   animation: gh-fade-in 0.22s ease;
 }
@@ -767,7 +769,7 @@ body.gaia-v2 .gaia-assist__panel {
   bottom: 0;
   transform: none;
   width: 100%;
-  max-height: min(82vh, 40rem);
+  max-height: min(65vh, 36rem);
   padding: 0;
   border-radius: var(--gh-radius-xl) var(--gh-radius-xl) 0 0;
   border: 1px solid var(--gh-border-soft);
@@ -784,8 +786,8 @@ body.gaia-v2 .gaia-assist__panel {
 body.gaia-v2 .gaia-assist__sheet {
   display: flex;
   flex-direction: column;
-  gap: 0.85rem;
-  padding: 0.5rem 1.15rem calc(1.2rem + env(safe-area-inset-bottom));
+  gap: 0.55rem;
+  padding: 0.4rem 1rem calc(0.9rem + env(safe-area-inset-bottom));
   max-height: inherit;
   overflow: hidden;
 }
@@ -801,15 +803,15 @@ body.gaia-v2 .gaia-assist__aura {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 0.7rem;
-  padding: 0.4rem 0 0.25rem;
+  gap: 0.5rem;
+  padding: 0.2rem 0 0.1rem;
 }
 
 /* The orb is now a button — the primary tap target to start voice. */
 body.gaia-v2 .gaia-assist__orb-visual {
   position: relative;
-  width: 5.5rem;
-  height: 5.5rem;
+  width: 5rem;
+  height: 5rem;
   border-radius: 999px;
   display: grid;
   place-items: center;
@@ -852,8 +854,8 @@ body.gaia-v2 .gaia-assist__orb-ring--2 {
 body.gaia-v2 .gaia-assist__orb-icon {
   position: relative;
   z-index: 1;
-  width: 3.2rem;
-  height: 3.2rem;
+  width: 2.8rem;
+  height: 2.8rem;
   object-fit: contain;
   filter: drop-shadow(0 2px 4px rgba(68, 148, 34, 0.45));
   pointer-events: none;
@@ -960,13 +962,13 @@ body.gaia-v2[data-theme="dark"] .gaia-assist__status[data-assist-state="ready"] 
 
 body.gaia-v2 .gaia-assist__transcript {
   flex: 1;
-  min-height: 3.5rem;
-  max-height: 9rem;
+  min-height: 2.5rem;
+  max-height: 7rem;
   overflow-y: auto;
   display: flex;
   flex-direction: column;
-  gap: 0.45rem;
-  padding: 0.15rem 0.1rem;
+  gap: 0.4rem;
+  padding: 0.1rem 0.1rem;
 }
 
 body.gaia-v2 .gaia-assist__bubble {

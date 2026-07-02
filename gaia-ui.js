@@ -2777,7 +2777,7 @@
     const REALTIME_STATUS_COPY = {
       idle: isCoarsePointer() ? 'Tap Gaia above to begin' : 'Tap Gaia to start Gemini Live',
       ready: 'Listening… speak naturally',
-      connecting: 'Connecting…',
+      connecting: 'Connecting to Gemini Live…',
       holding: 'Listening…',
       listening: 'Listening… speak naturally',
       thinking: 'Gaia is thinking…',
@@ -2912,7 +2912,8 @@
         }
       } catch (err) {
         assistError('assist start failed', err);
-        setError('Voice is unavailable right now. You can still type your question below.');
+        const reason = err instanceof Error ? err.message : 'Voice is unavailable right now.';
+        setError(`${reason}. You can still type your question below.`);
         setAssistVoiceState('idle', 'Type your question below');
       } finally {
         assistSessionBusy = false;

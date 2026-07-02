@@ -215,10 +215,11 @@ body.gaia-v2[data-theme="dark"] .gaia-header .gaia-eyebrow {
 body.gaia-v2 .gaia-header-logo {
   width: 2.5rem;
   height: 2.5rem;
-  border-radius: 14px;
+  border-radius: 50%;
   background: linear-gradient(145deg, rgba(125, 217, 86, 0.18), rgba(68, 148, 34, 0.06));
   border: 1px solid var(--gh-border);
   box-shadow: var(--gh-bento-shadow);
+  overflow: hidden;
 }
 
 body.gaia-v2 .gaia-header-profile.is-active,
@@ -728,14 +729,23 @@ body.gaia-v2 .gaia-tabbar__label {
 }
 
 body.gaia-v2 .gaia-tabbar__assist {
+  position: relative;
   width: 3.5rem;
   height: 3.5rem;
   margin: -0.85rem 0.08rem 0;
   border-radius: 999px;
-  background: linear-gradient(145deg, #8ee862 0%, #5cb82e 45%, #3d8a1f 100%);
+  background: transparent;
   box-shadow:
     0 0 0 3px var(--gh-tabbar-ring),
     0 12px 36px rgba(92, 184, 46, 0.4);
+  overflow: hidden;
+}
+
+body.gaia-v2 .gaia-tabbar__assist-icon {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: 999px;
 }
 
 body.gaia-v2 .gaia-tabbar__assist-pulse {
@@ -1119,9 +1129,7 @@ body.gaia-v2 .gaia-assist__close {
 }
 
 body.gaia-v2 .gaia-assist__settings {
-  position: absolute;
-  top: 0.85rem;
-  left: 0.85rem;
+  display: none;
 }
 
 body.gaia-v2 .gaia-assist__settings summary {

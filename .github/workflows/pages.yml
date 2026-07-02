@@ -36,3 +36,29 @@ jobs:
       - name: Deploy to GitHub Pages
         id: deployment
         uses: actions/deploy-pages@v4
+
+      - name: Register gaiahealers.app and request HTTPS certificate
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          API="https://api.github.com/repos/${{ github.repository }}/pages"
+          HDR=(-H "Authorization: Bearer ${GH_TOKEN}" -H "Accept: application/vnd.github+json" -H "X-GitHub-Api-Version: 2022-11-28")
+
+          echo "Pages config before:"
+          curl -fsS "${HDR[@]}" "$API" | tee pages-before.json
+
+          echo "Re-registering custom domain gaiahealers.app..."
+          curl -fsS -X PATCH "${HDR[@]}" "$API" \
+            -d '{"cname":"gaiahealers.app","build_type":"workflow"}' | tee pages-after.json
+
+          STATE="$(python3 -c "import json; d=json.load(open('pages-after.json')); print((d.get('https_certificate') or {}).get('state',''))")"
+          echo "Certificate state: ${STATE:-unknown}"
+
+          if [ "$STATE" = "approved" ] || [ "$STATE" = "issued" ]; then
+            curl -fsS -X PATCH "${HDR[@]}" "$API" \
+              -d '{"cname":"gaiahealers.app","build_type":"workflow","https_enforced":true}'
+            echo "HTTPS enforcement enabled."
+          else
+            echo "Certificate still provisioning. Enforce HTTPS unlocks after GitHub shows a checkmark beside the domain."
+          fi

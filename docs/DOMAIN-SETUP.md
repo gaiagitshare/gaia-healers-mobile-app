@@ -134,7 +134,51 @@ Wrap this same codebase with **Capacitor**. Native apps use the same `https://ga
 
 ---
 
-## Troubleshooting
+## HTTPS / Enforce HTTPS greyed out
+
+GitHub provisions the Let's Encrypt certificate **after** DNS is correct. Until then, **Enforce HTTPS** stays disabled.
+
+**Current checks for gaiahealers.app:**
+
+| Check | Status |
+| --- | --- |
+| Four A records → GitHub IPs | Required |
+| `http://gaiahealers.app` loads | Should return 200 |
+| TLS certificate for `gaiahealers.app` | GitHub must issue (not `*.github.io`) |
+| Enforce HTTPS in GitHub Pages | Enabled only after certificate is issued |
+
+**Squarespace DNS — apex must have only these four A records on `@`:**
+
+`185.199.108.153` · `185.199.109.153` · `185.199.110.153` · `185.199.111.153`
+
+Remove any other **A / ALIAS / ANAME** records on `@`. Do **not** add `api` or other subdomains until HTTPS shows a checkmark (only `www` is allowed with apex).
+
+**Optional CAA record** (if HTTPS stays stuck after 24h):
+
+| Type | Host | Value |
+| --- | --- | --- |
+| `CAA` | `@` | `0 issue "letsencrypt.org"` |
+
+**Retrigger certificate in GitHub:**
+
+1. **Settings → Pages → Custom domain** → clear the field → Save.
+2. Wait 2–5 minutes.
+3. Enter `gaiahealers.app` again → Save.
+4. Wait for a **green checkmark** beside the domain (15 min – 24 h).
+5. Turn on **Enforce HTTPS**.
+
+Each deploy also re-registers the domain via GitHub API to restart certificate provisioning.
+
+**Verify HTTPS is ready:**
+
+```bash
+curl -sI https://gaiahealers.app/home.html | head -5
+echo | openssl s_client -connect gaiahealers.app:443 -servername gaiahealers.app 2>/dev/null | openssl x509 -noout -subject
+```
+
+When ready, the certificate subject should include `gaiahealers.app` (not only `*.github.io`).
+
+---
 
 | Symptom | Fix |
 | --- | --- |

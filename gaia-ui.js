@@ -2803,7 +2803,14 @@
         ? (canUseRealtimeVoice() ? 'Tap Gaia to begin' : 'Tap Gaia to start')
         : (canUseRealtimeVoice() ? 'Starting Gemini Live…' : 'Tap Gaia to start Gemini Live');
       setAssistVoiceState('idle', idleCopy);
-      if (canUseRealtimeVoice()) setRealtimeVoiceProvider();
+      if (canUseRealtimeVoice()) {
+        setRealtimeVoiceProvider();
+        // Pre-warm: fetch the Gemini token + init the audio worklet NOW, before
+        // the user taps the orb. When they do tap, start() skips the token
+        // round-trip and audio setup, going straight to the WebSocket connect.
+        initRealtimeVoice();
+        realtimeVoice?.prewarm?.();
+      }
     }
 
     function sendRealtimeWelcome(reason = 'start') {

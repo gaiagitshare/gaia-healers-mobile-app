@@ -6,6 +6,7 @@
     gaia_voice_disabled: 'Live voice is not enabled yet. Type your question instead.',
     missing_gemini_api_key: 'Live voice is not configured yet. Type your question instead.',
     gemini_live_token_failed: 'Voice is temporarily unavailable. Type your question instead.',
+    sign_in_required: 'Sign in to use live voice. Tap the profile icon to log in.',
   };
 
   const WS_BASE = 'wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1alpha.GenerativeService.BidiGenerateContentConstrained';
@@ -82,6 +83,7 @@
     const reason = typeof payload?.reason === 'string' ? payload.reason : '';
     if (reason && TOKEN_ERRORS[reason]) return TOKEN_ERRORS[reason];
     if (payload?.disabled === true) return TOKEN_ERRORS.gaia_voice_disabled;
+    if (status === 401 || reason === 'auth_required') return TOKEN_ERRORS.sign_in_required;
     if (status === 503) return TOKEN_ERRORS.missing_gemini_api_key;
     return payload?.error || TOKEN_ERRORS.gemini_live_token_failed;
   }
@@ -511,6 +513,7 @@
       const response = await fetch(`${proxyBase()}/api/assist/voice/token?view=${view}`, {
         method: 'POST',
         headers: { Accept: 'application/json' },
+        credentials: 'include',
       });
       const payload = await response.json().catch(() => ({}));
       if (!response.ok || !payload.ok || !payload.token) {

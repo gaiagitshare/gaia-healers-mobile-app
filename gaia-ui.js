@@ -2010,7 +2010,7 @@
             <button type="button" class="gaia-assist__orb-visual" data-gaia-orb-tap aria-label="Start voice conversation with Gaia">
               <span class="gaia-assist__orb-ring gaia-assist__orb-ring--1" aria-hidden="true"></span>
               <span class="gaia-assist__orb-ring gaia-assist__orb-ring--2" aria-hidden="true"></span>
-              <img class="gaia-assist__orb-icon" src="assets/gaia-logo.png" alt="Gaia" />
+              <img class="gaia-assist__orb-icon" src="assets/gaia-g-icon.png" alt="Gaia" />
             </button>
             <div class="gaia-assist__wave" aria-hidden="true">
               <span></span><span></span><span></span><span></span><span></span>

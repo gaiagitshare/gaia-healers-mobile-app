@@ -47,7 +47,9 @@
       <div class="gaia-tabbar__group gaia-tabbar__group--left">${left.map((t) => tabLink(t, active === t.id)).join('')}</div>
       <button type="button" class="gaia-tabbar__assist" data-gaia-tab-assist data-state="idle" aria-label="Open Gaia Assist — live voice" aria-expanded="false">
         <span class="gaia-tabbar__assist-pulse" aria-hidden="true"></span>
-        <img class="gaia-tabbar__assist-icon" src="assets/gaia-logo.png" alt="Gaia Assist" aria-hidden="true" />
+        <svg class="gaia-tabbar__assist-icon" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M12 18.75a6 6 0 006-6v-1.5m-12 0v1.5a6 6 0 006 6m0 0v3m-3 0h6M12 15a2.25 2.25 0 002.25-2.25v-6a2.25 2.25 0 00-4.5 0v6A2.25 2.25 0 0012 15z"/>
+        </svg>
       </button>
       <div class="gaia-tabbar__group gaia-tabbar__group--right">${right.map((t) => tabLink(t, active === t.id)).join('')}</div>`;
   }

@@ -1,8 +1,14 @@
-<!-- Gaia Healers mobile app prototype embed for GHL Custom JS/HTML -->
+<!-- Gaia Healers mobile app embed for GHL Custom JS/HTML.
+     The {{contact.*}} / {{location.*}} tokens are GHL Custom Values: GHL
+     server-renders them with the logged-in member's data when the portal
+     page is built. The Gaia app reads them from the URL and posts them to
+     /api/auth/embedded/claim, which verifies the contact against the GHL
+     API and sets a member session cookie. No token is ever seen by JS. -->
 <div style="width:100%;min-height:100vh;margin:0;padding:0;background:#f5f5f7;overflow:hidden;">
   <iframe
+    id="gaia-healers-app"
     title="Gaia Healers Mobile App"
-    src="https://gaiahealers.app/home.html?store=1&embedded=ghl&proxy=https%3A%2F%2Fapi.gaiahealers.app"
+    src="https://gaiahealers.app/home.html?store=1&embedded=ghl&proxy=https%3A%2F%2Fapi.gaiahealers.app&email={{contact.email}}&contactId={{contact.id}}&name={{contact.full_name}}&locationId={{location.id}}"
     style="width:100%;height:100vh;min-height:820px;border:0;display:block;background:#f5f5f7;"
     loading="lazy"
     referrerpolicy="no-referrer-when-downgrade"
@@ -11,10 +17,24 @@
 </div>
 
 <!--
-Production app + API:
-https://gaiahealers.app/home.html
-https://api.gaiahealers.app
+  How this works:
+  1. GHL replaces {{contact.email}}, {{contact.id}}, etc. with the real
+     member values when it serves the portal page (server-side template).
+  2. The Gaia app's authHintParams() picks up email/contactId/name/locationId
+     from the query string.
+  3. If document.referrer is a trusted GHL host (crm/education.gaiahealers.com),
+     the app POSTs those values to /api/auth/embedded/claim.
+  4. The proxy verifies the contact via the GHL contacts API and issues a
+     signed session cookie. The member lands authenticated — no login click.
 
-Staging fallback (until api.gaiahealers.app DNS is live):
-https://ba2ki.com/gaia-proxy
+  Production app + API:
+  https://gaiahealers.app/home.html
+  https://api.gaiahealers.app
+
+  Staging fallback (used automatically by gaia-live-sync.js if api.* is down):
+  https://ba2ki.com/gaia-proxy
+
+  Optional hardening: set AUTH_EMBED_SHARED_SECRET on the proxy and append
+  &bridge=YOUR_SECRET to the src above. The secret is then required on every
+  claim. Leave unset to rely on referrer + GHL contact verification only.
 -->

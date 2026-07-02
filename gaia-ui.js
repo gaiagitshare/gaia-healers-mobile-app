@@ -454,6 +454,25 @@
       `;
     }
 
+    const NEWSLETTER_PREFS_KEY = 'gaia-newsletter-prefs';
+
+    function loadNewsletterPrefs() {
+      try {
+        const raw = localStorage.getItem(NEWSLETTER_PREFS_KEY);
+        return raw ? JSON.parse(raw) : {};
+      } catch (_) {
+        return {};
+      }
+    }
+
+    function saveNewsletterPrefs(prefs) {
+      try {
+        localStorage.setItem(NEWSLETTER_PREFS_KEY, JSON.stringify(prefs));
+      } catch (_) {
+        /* storage unavailable (private mode) — prefs stay session-only */
+      }
+    }
+
     function renderNewsletter() {
       if (!newsletterEl) return;
       const segments = data.communityNewsletter || data.memberHub?.newsletters || [
@@ -462,13 +481,28 @@
         { title: 'Elevate & event alerts', detail: 'Registration windows, agenda drops, and check-in codes', on: false },
         { title: 'Marketing & growth lab', detail: 'Follow-up templates and campaign ideas from faculty', on: false },
       ];
-      newsletterEl.innerHTML = segments.map((seg) => `
-        <article class="gaia-row">
+      const prefs = loadNewsletterPrefs();
+      const segmentsWithPrefs = segments.map((seg) => {
+        const title = seg.title || 'Newsletter segment';
+        const stored = prefs[title];
+        return { ...seg, title, on: stored === undefined ? !!seg.on : stored };
+      });
+      newsletterEl.innerHTML = segmentsWithPrefs.map((seg) => `
+        <article class="gaia-row" data-newsletter-segment="${escapeHtml(seg.title)}">
           <div class="min-w-0 flex-1">
-            <p class="text-headline text-ink">${escapeHtml(seg.title || 'Newsletter segment')}</p>
+            <p class="text-headline text-ink">${escapeHtml(seg.title)}</p>
             <p class="gaia-caption mt-0.5">${escapeHtml(seg.detail || '')}</p>
           </div>
-          <span class="gaia-badge ${seg.on ? 'gaia-badge--live' : 'gaia-badge--subtle'}">${seg.on ? 'Subscribed' : 'Off'}</span>
+          <button
+            type="button"
+            role="switch"
+            aria-checked="${seg.on ? 'true' : 'false'}"
+            aria-label="Toggle ${escapeHtml(seg.title)}"
+            class="gaia-newsletter-toggle ${seg.on ? 'gaia-newsletter-toggle--on' : ''}"
+            data-segment="${escapeHtml(seg.title)}"
+          >
+            <span class="gaia-newsletter-toggle__label">${seg.on ? 'Subscribed' : 'Off'}</span>
+          </button>
         </article>
       `).join('') + `
         <a href="${escapeHtml(portalUrl)}" class="gaia-row gaia-row--link gaia-row--cta">
@@ -479,6 +513,19 @@
           <span class="gaia-link shrink-0">Open</span>
         </a>
       `;
+      // Persist on toggle.
+      newsletterEl.querySelectorAll('.gaia-newsletter-toggle').forEach((btn) => {
+        btn.addEventListener('click', () => {
+          const segment = btn.dataset.segment;
+          const next = btn.getAttribute('aria-checked') !== 'true';
+          const current = loadNewsletterPrefs();
+          current[segment] = next;
+          saveNewsletterPrefs(current);
+          btn.setAttribute('aria-checked', next ? 'true' : 'false');
+          btn.classList.toggle('gaia-newsletter-toggle--on', next);
+          btn.querySelector('.gaia-newsletter-toggle__label').textContent = next ? 'Subscribed' : 'Off';
+        });
+      });
     }
 
     function renderProducts() {
@@ -1960,9 +2007,11 @@
           </details>
           <button type="button" class="gaia-assist__close" aria-label="Close Gaia Assist">×</button>
           <div class="gaia-assist__aura">
-            <div class="gaia-assist__orb-visual" aria-hidden="true">
+            <button type="button" class="gaia-assist__orb-visual" data-gaia-orb-tap aria-label="Start voice conversation with Gaia">
+              <span class="gaia-assist__orb-ring gaia-assist__orb-ring--1" aria-hidden="true"></span>
+              <span class="gaia-assist__orb-ring gaia-assist__orb-ring--2" aria-hidden="true"></span>
               <span class="gaia-assist__orb-g">G</span>
-            </div>
+            </button>
             <div class="gaia-assist__wave" aria-hidden="true">
               <span></span><span></span><span></span><span></span><span></span>
             </div>
@@ -2726,7 +2775,7 @@
     }
 
     const REALTIME_STATUS_COPY = {
-      idle: 'Tap Gaia to start Gemini Live',
+      idle: isCoarsePointer() ? 'Tap Gaia above to begin' : 'Tap Gaia to start Gemini Live',
       ready: 'Listening… speak naturally',
       connecting: 'Connecting…',
       holding: 'Listening…',
@@ -2741,16 +2790,27 @@
       if (!document.body.classList.contains('gaia-v2')) return;
       passiveWelcomeShown = true;
       sessionStorage.setItem(ASSIST_WELCOME_KEY, '1');
-      if (!isCoarsePointer()) {
-        setOpen(true, { passive: true });
-      }
-      if (!shouldAutoStartGemini() && !canUseRealtimeVoice() && !transcript.querySelector('[data-gaia-welcome-bubble]')) {
+      // Always open the panel so the assistant greets first — on touch devices
+      // the orb shows a "tap to begin" state (iOS blocks auto-audio until gesture).
+      setOpen(true, { passive: true });
+      if (!canUseRealtimeVoice() && !transcript.querySelector('[data-gaia-welcome-bubble]')) {
         const welcomeText = passiveWelcomeText();
         const bubble = appendMessage('bot', welcomeText);
         bubble.dataset.gaiaWelcomeBubble = '1';
       }
-      setAssistVoiceState('idle', canUseRealtimeVoice() ? 'Starting Gemini Live…' : 'Tap Gaia to start Gemini Live');
-      if (canUseRealtimeVoice()) setRealtimeVoiceProvider();
+      const onMobile = isCoarsePointer();
+      const idleCopy = onMobile
+        ? (canUseRealtimeVoice() ? 'Tap Gaia to begin' : 'Tap Gaia to start')
+        : (canUseRealtimeVoice() ? 'Starting Gemini Live…' : 'Tap Gaia to start Gemini Live');
+      setAssistVoiceState('idle', idleCopy);
+      if (canUseRealtimeVoice()) {
+        setRealtimeVoiceProvider();
+        // Pre-warm: fetch the Gemini token + init the audio worklet NOW, before
+        // the user taps the orb. When they do tap, start() skips the token
+        // round-trip and audio setup, going straight to the WebSocket connect.
+        initRealtimeVoice();
+        realtimeVoice?.prewarm?.();
+      }
     }
 
     function sendRealtimeWelcome(reason = 'start') {
@@ -3673,6 +3733,12 @@
       if (realtimeVoice?.isActive()) realtimeVoice.stop();
       setOpen(false);
       setAssistVoiceState('idle', REALTIME_STATUS_COPY.idle);
+    });
+    // The big orb inside the panel is the primary tap target on mobile —
+    // it doubles as the iOS audio-unlock gesture and starts Gemini Live.
+    root.querySelector('[data-gaia-orb-tap]')?.addEventListener('click', (event) => {
+      event.stopPropagation();
+      onAssistTap();
     });
     if (mic) {
       mic.addEventListener('click', async () => {

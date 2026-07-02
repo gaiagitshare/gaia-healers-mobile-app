@@ -6,6 +6,7 @@
     gaia_voice_disabled: 'Live voice is not enabled yet. Type your question instead.',
     missing_gemini_api_key: 'Live voice is not configured yet. Type your question instead.',
     gemini_live_token_failed: 'Voice is temporarily unavailable. Type your question instead.',
+    sign_in_required: 'Sign in to use live voice. Tap the profile icon to log in.',
   };
 
   const WS_BASE = 'wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1alpha.GenerativeService.BidiGenerateContentConstrained';
@@ -82,6 +83,7 @@
     const reason = typeof payload?.reason === 'string' ? payload.reason : '';
     if (reason && TOKEN_ERRORS[reason]) return TOKEN_ERRORS[reason];
     if (payload?.disabled === true) return TOKEN_ERRORS.gaia_voice_disabled;
+    if (status === 401 || reason === 'auth_required') return TOKEN_ERRORS.sign_in_required;
     if (status === 503) return TOKEN_ERRORS.missing_gemini_api_key;
     return payload?.error || TOKEN_ERRORS.gemini_live_token_failed;
   }
@@ -506,17 +508,36 @@
       }
     }
 
-    async function fetchLiveToken() {
+    let cachedToken = null;
+    let cachedTokenExpireAt = 0;
+
+    async function fetchLiveToken({ force = false } = {}) {
+      // Reuse a still-valid token (valid for 30 min from the proxy) to skip
+      // the round-trip on reconnects within a session.
+      if (!force && cachedToken && Date.now() < cachedTokenExpireAt) {
+        return cachedToken;
+      }
       const view = encodeURIComponent(currentView());
       const response = await fetch(`${proxyBase()}/api/assist/voice/token?view=${view}`, {
         method: 'POST',
         headers: { Accept: 'application/json' },
+        credentials: 'include',
       });
       const payload = await response.json().catch(() => ({}));
       if (!response.ok || !payload.ok || !payload.token) {
         throw new Error(tokenErrorMessage(payload, response.status));
       }
+      cachedToken = payload;
+      // Expire 2 minutes early as a safety margin.
+      const expireMs = payload.expireTime ? new Date(payload.expireTime).getTime() : 0;
+      cachedTokenExpireAt = expireMs ? expireMs - 120000 : Date.now() + 25 * 60 * 1000;
       return payload;
+    }
+
+    /** Pre-warm: fetch token + prepare audio in the background (before first tap). */
+    function prewarm() {
+      fetchLiveToken().catch(() => null);
+      ensurePlayback().catch(() => null);
     }
 
     async function ensureSession() {
@@ -545,60 +566,73 @@
         try {
           setupDone = false;
           setupWaiters = [];
+          // Token is cached from prewarm if available — near-instant on repeat.
           sessionMeta = await fetchLiveToken();
-          const wsUrl = `${WS_BASE}?access_token=${encodeURIComponent(sessionMeta.token)}`;
-          const ws = new WebSocket(wsUrl);
-          wsRef.current = ws;
 
-          ws.onmessage = async (event) => {
-            let raw = event.data;
-            if (raw instanceof Blob) raw = await raw.text();
-            else if (raw instanceof ArrayBuffer) raw = new TextDecoder().decode(raw);
-            handleGeminiMessage(raw);
-          };
-
-          await new Promise((resolve, reject) => {
-            const timer = window.setTimeout(() => reject(new Error('Voice connection timed out.')), 20_000);
-            ws.onopen = () => {
-              window.clearTimeout(timer);
-              if (!sendSetupMessage()) {
-                reject(new Error('Could not send Gemini setup.'));
-                return;
+          // Run three independent setup legs IN PARALLEL instead of serially.
+          // This is the main speedup: previously WS+setup → audio → mic was
+          // sequential (~2-4s); now the slowest leg wins (~0.5-1.5s).
+          const [wsReady, , micOk] = await Promise.all([
+            // Leg 1: WebSocket connect + Gemini setup
+            (async () => {
+              const wsUrl = `${WS_BASE}?access_token=${encodeURIComponent(sessionMeta.token)}`;
+              const ws = new WebSocket(wsUrl);
+              wsRef.current = ws;
+              ws.onmessage = async (event) => {
+                let raw = event.data;
+                if (raw instanceof Blob) raw = await raw.text();
+                else if (raw instanceof ArrayBuffer) raw = new TextDecoder().decode(raw);
+                handleGeminiMessage(raw);
+              };
+              await new Promise((resolve, reject) => {
+                const timer = window.setTimeout(() => reject(new Error('Voice connection timed out.')), 15_000);
+                ws.onopen = () => {
+                  window.clearTimeout(timer);
+                  if (!sendSetupMessage()) {
+                    reject(new Error('Could not send Gemini setup.'));
+                    return;
+                  }
+                  resolve();
+                };
+                ws.onerror = () => {
+                  window.clearTimeout(timer);
+                  reject(new Error('Voice connection failed.'));
+                };
+              });
+              await waitForSetup();
+              ws.onclose = (event) => {
+                if (status !== 'error' && status !== 'idle') {
+                  setErrorMessage(event.reason || 'Voice connection closed.');
+                  setStatus('error');
+                }
+              };
+              ws.onerror = () => {
+                setErrorMessage('Voice connection failed.');
+                setStatus('error');
+              };
+            })(),
+            // Leg 2: audio playback worklet (independent of WS)
+            ensurePlayback(),
+            // Leg 3: microphone (independent of WS and audio worklet)
+            (async () => {
+              if (!navigator.mediaDevices?.getUserMedia) {
+                maySendAudio = false;
+                setErrorMessage('This browser does not expose microphone capture. Gemini Live can still answer typed prompts here.');
+                return false;
               }
-              resolve();
-            };
-            ws.onerror = () => {
-              window.clearTimeout(timer);
-              reject(new Error('Voice connection failed.'));
-            };
-          });
+              try {
+                await startMicStreaming();
+                maySendAudio = true;
+                setErrorMessage(null);
+                return true;
+              } catch (micError) {
+                maySendAudio = false;
+                setErrorMessage('Microphone permission is needed for live listening. Gemini Live can still answer typed prompts here.');
+                return false;
+              }
+            })(),
+          ]);
 
-          ws.onclose = (event) => {
-            if (status !== 'error' && status !== 'idle') {
-              setErrorMessage(event.reason || 'Voice connection closed.');
-              setStatus('error');
-            }
-          };
-          ws.onerror = () => {
-            setErrorMessage('Voice connection failed.');
-            setStatus('error');
-          };
-
-          await waitForSetup();
-          await ensurePlayback();
-          if (navigator.mediaDevices?.getUserMedia) {
-            try {
-              await startMicStreaming();
-              maySendAudio = true;
-              setErrorMessage(null);
-            } catch (micError) {
-              maySendAudio = false;
-              setErrorMessage('Microphone permission is needed for live listening. Gemini Live can still answer typed prompts here.');
-            }
-          } else {
-            maySendAudio = false;
-            setErrorMessage('This browser does not expose microphone capture. Gemini Live can still answer typed prompts here.');
-          }
           setStatus('listening');
 
           const maxSeconds = Number(sessionMeta.maxSessionSeconds) || 300;
@@ -696,6 +730,7 @@
       toggleMute,
       sendText,
       resumePlayback,
+      prewarm,
       on,
     };
   }

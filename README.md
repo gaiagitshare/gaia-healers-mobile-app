@@ -24,6 +24,11 @@ Built around the real platform — not generic wellness copy:
 
 ## App entry
 
+**Production:** https://app.gaiahealers.app/home.html  
+**Staging:** https://gaiagitshare.github.io/gaia-healers-mobile-app/home.html
+
+Domain setup: [`docs/DOMAIN-SETUP.md`](docs/DOMAIN-SETUP.md)
+
 `home.html` is the only public application entry point. It renders the app shell and internal screens:
 
 - Today

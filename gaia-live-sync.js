@@ -2,27 +2,54 @@
  * Reads app data only from the staging proxy. Never call GHL/Event/OpenAI directly here.
  */
 (function () {
-  const DEFAULT_PROXY = 'https://ba2ki.com/gaia-proxy';
+  const STAGING_PROXY = 'https://ba2ki.com/gaia-proxy';
   const params = new URLSearchParams(window.location.search);
   const queryProxy = params.get('proxy') || params.get('gaia_proxy') || '';
   const explicit = window.GAIA_SYNC_PROXY_URL || queryProxy || localStorage.getItem('gaia-sync-proxy-url') || '';
-  const proxyBase = (explicit || DEFAULT_PROXY).replace(/\/+$/, '');
+  const urls = window.GAIA_APP_URLS || {};
+  const productionProxy = urls.production?.proxy || 'https://api.gaiahealers.app';
+  const productionFallback = urls.production?.proxyFallback || STAGING_PROXY;
+  const defaultProxy = urls.isProductionApp ? productionProxy : (urls.staging?.proxy || STAGING_PROXY);
+  let proxyBase = (explicit || defaultProxy).replace(/\/+$/, '');
 
   window.GAIA_SYNC = {
     enabled: true,
     proxyBase,
-    defaultProxy: DEFAULT_PROXY,
+    defaultProxy,
+    proxyFallback: productionFallback,
     isDefault: !explicit,
     status: 'checking',
+    host: urls.isProductionApp ? 'production' : 'staging',
   };
+
+  async function probeProxy(base) {
+    const response = await fetch(`${base}/health`, {
+      headers: { Accept: 'application/json' },
+      credentials: 'include',
+    });
+    if (!response.ok) throw new Error(`Proxy health returned ${response.status}`);
+    return base;
+  }
+
+  async function resolveProxyBase() {
+    if (explicit) return proxyBase;
+    if (!urls.isProductionApp) return proxyBase;
+    try {
+      return await probeProxy(productionProxy);
+    } catch (error) {
+      console.warn('[Gaia] production API proxy unavailable; using staging fallback.', error);
+      try {
+        return await probeProxy(productionFallback);
+      } catch (fallbackError) {
+        throw fallbackError;
+      }
+    }
+  }
 
   async function syncBootstrap() {
     try {
-      const health = await fetch(`${proxyBase}/health`, {
-        headers: { Accept: 'application/json' },
-        credentials: 'include',
-      });
-      if (!health.ok) throw new Error(`Proxy health returned ${health.status}`);
+      proxyBase = await resolveProxyBase();
+      window.GAIA_SYNC.proxyBase = proxyBase;
 
       const response = await fetch(`${proxyBase}/api/app/bootstrap`, {
         headers: { Accept: 'application/json' },

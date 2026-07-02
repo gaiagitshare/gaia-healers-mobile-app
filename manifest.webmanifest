@@ -1,0 +1,27 @@
+{
+  "name": "Gaia Healers",
+  "short_name": "Gaia",
+  "description": "Client portal for Bio-Well practitioners — wellness, academy, community, and Gaia Assist.",
+  "start_url": "/home.html",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#eef4ea",
+  "theme_color": "#eef4ea",
+  "lang": "en-US",
+  "icons": [
+    {
+      "src": "assets/gaia-logo.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "assets/gaia-logo.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ],
+  "categories": ["health", "education", "lifestyle"]
+}

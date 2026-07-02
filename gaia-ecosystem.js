@@ -7,6 +7,7 @@ window.GAIA = {
   portalUrl: 'https://education.gaiahealers.com',
   sources: {
     website: 'https://gaiahealers.com',
+    app: 'https://app.gaiahealers.app',
     ghl: 'https://crm.gaiahealers.com/v2/location/WkKl1K5RuZNQ60xR48k6/dashboard',
     ghlLocationId: 'WkKl1K5RuZNQ60xR48k6',
     eventApi: '/event-api',

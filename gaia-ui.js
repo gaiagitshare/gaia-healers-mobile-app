@@ -454,6 +454,25 @@
       `;
     }
 
+    const NEWSLETTER_PREFS_KEY = 'gaia-newsletter-prefs';
+
+    function loadNewsletterPrefs() {
+      try {
+        const raw = localStorage.getItem(NEWSLETTER_PREFS_KEY);
+        return raw ? JSON.parse(raw) : {};
+      } catch (_) {
+        return {};
+      }
+    }
+
+    function saveNewsletterPrefs(prefs) {
+      try {
+        localStorage.setItem(NEWSLETTER_PREFS_KEY, JSON.stringify(prefs));
+      } catch (_) {
+        /* storage unavailable (private mode) — prefs stay session-only */
+      }
+    }
+
     function renderNewsletter() {
       if (!newsletterEl) return;
       const segments = data.communityNewsletter || data.memberHub?.newsletters || [
@@ -462,13 +481,28 @@
         { title: 'Elevate & event alerts', detail: 'Registration windows, agenda drops, and check-in codes', on: false },
         { title: 'Marketing & growth lab', detail: 'Follow-up templates and campaign ideas from faculty', on: false },
       ];
-      newsletterEl.innerHTML = segments.map((seg) => `
-        <article class="gaia-row">
+      const prefs = loadNewsletterPrefs();
+      const segmentsWithPrefs = segments.map((seg) => {
+        const title = seg.title || 'Newsletter segment';
+        const stored = prefs[title];
+        return { ...seg, title, on: stored === undefined ? !!seg.on : stored };
+      });
+      newsletterEl.innerHTML = segmentsWithPrefs.map((seg) => `
+        <article class="gaia-row" data-newsletter-segment="${escapeHtml(seg.title)}">
           <div class="min-w-0 flex-1">
-            <p class="text-headline text-ink">${escapeHtml(seg.title || 'Newsletter segment')}</p>
+            <p class="text-headline text-ink">${escapeHtml(seg.title)}</p>
             <p class="gaia-caption mt-0.5">${escapeHtml(seg.detail || '')}</p>
           </div>
-          <span class="gaia-badge ${seg.on ? 'gaia-badge--live' : 'gaia-badge--subtle'}">${seg.on ? 'Subscribed' : 'Off'}</span>
+          <button
+            type="button"
+            role="switch"
+            aria-checked="${seg.on ? 'true' : 'false'}"
+            aria-label="Toggle ${escapeHtml(seg.title)}"
+            class="gaia-newsletter-toggle ${seg.on ? 'gaia-newsletter-toggle--on' : ''}"
+            data-segment="${escapeHtml(seg.title)}"
+          >
+            <span class="gaia-newsletter-toggle__label">${seg.on ? 'Subscribed' : 'Off'}</span>
+          </button>
         </article>
       `).join('') + `
         <a href="${escapeHtml(portalUrl)}" class="gaia-row gaia-row--link gaia-row--cta">
@@ -479,6 +513,19 @@
           <span class="gaia-link shrink-0">Open</span>
         </a>
       `;
+      // Persist on toggle.
+      newsletterEl.querySelectorAll('.gaia-newsletter-toggle').forEach((btn) => {
+        btn.addEventListener('click', () => {
+          const segment = btn.dataset.segment;
+          const next = btn.getAttribute('aria-checked') !== 'true';
+          const current = loadNewsletterPrefs();
+          current[segment] = next;
+          saveNewsletterPrefs(current);
+          btn.setAttribute('aria-checked', next ? 'true' : 'false');
+          btn.classList.toggle('gaia-newsletter-toggle--on', next);
+          btn.querySelector('.gaia-newsletter-toggle__label').textContent = next ? 'Subscribed' : 'Off';
+        });
+      });
     }
 
     function renderProducts() {

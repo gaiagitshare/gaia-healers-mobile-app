@@ -463,6 +463,29 @@ body.gaia-v2 .gaia-badge--subtle {
   border-color: var(--gh-border-soft);
 }
 
+/* Newsletter segment toggle (community > newsletter panel). */
+body.gaia-v2 .gaia-newsletter-toggle {
+  flex-shrink: 0;
+  min-width: 5.5rem;
+  padding: 0.4rem 0.9rem;
+  border-radius: 999px;
+  border: 1px solid var(--gh-border);
+  background: var(--gh-assist-surface);
+  color: var(--gh-text-soft);
+  font-size: var(--gh-text-micro, 0.75rem);
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+}
+body.gaia-v2 .gaia-newsletter-toggle--on {
+  background: rgba(92, 184, 46, 0.16);
+  color: var(--gh-chip-text);
+  border-color: var(--gh-border);
+}
+body.gaia-v2 .gaia-newsletter-toggle:active {
+  transform: scale(0.97);
+}
+
 body.gaia-v2 .gaia-row {
   border-radius: var(--gh-radius-md);
   border: 1px solid var(--gh-border-soft);

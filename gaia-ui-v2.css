@@ -842,19 +842,14 @@ body.gaia-v2 .gaia-assist__orb-ring--2 {
   animation: gh-orb-ripple 2.8s ease-out infinite 1.4s;
 }
 
-body.gaia-v2 .gaia-assist__orb-g {
+body.gaia-v2 .gaia-assist__orb-icon {
   position: relative;
   z-index: 1;
-  font-size: 1.6rem;
-  font-weight: 800;
-  letter-spacing: -0.06em;
-  color: #ffffff;
-  text-shadow: 0 1px 3px rgba(68, 148, 34, 0.5);
+  width: 2.4rem;
+  height: 2.4rem;
+  object-fit: contain;
+  filter: drop-shadow(0 1px 3px rgba(68, 148, 34, 0.5));
   pointer-events: none;
-}
-
-body.gaia-v2[data-theme="dark"] .gaia-assist__orb-g {
-  color: #ffffff;
 }
 
 /* State-driven orb transformations. */

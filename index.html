@@ -16,56 +16,74 @@
   <script src="gaia-live-sync.js"></script>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="gaia-shared.css" />
+  <link rel="stylesheet" href="gaia-splash.css" />
 </head>
-<body class="gaia-app min-h-screen bg-white">
-  <div id="splash-flow" class="gaia-shell flex min-h-screen flex-col px-8 pb-12 pt-[max(3rem,env(safe-area-inset-top))]">
-    <div class="flex flex-1 flex-col items-center justify-center">
-      <div class="mb-10 flex flex-col items-center gap-4">
-        <div class="gaia-splash-logo">G</div>
-        <img src="branding/assets/gaia-logo-full.png" alt="Gaia Healers" class="h-8 w-auto object-contain" />
-      </div>
-
-      <div class="splash-step active w-full max-w-[20rem] text-center">
-        <h1 class="gaia-page-title">Gaia Healers</h1>
-        <p class="gaia-body mt-4">Client Portal for <span class="font-semibold text-ink">1,200+ practitioners</span> — certification, biofield analysis, and modality communities.</p>
-        <p class="gaia-caption mt-6">education.gaiahealers.com</p>
-      </div>
-      <div class="splash-step w-full max-w-[20rem] text-center">
-        <p class="gaia-eyebrow">Bio-Well™</p>
-        <h2 class="text-title text-ink mt-3">Biofield analysis</h2>
-        <p class="gaia-body mt-4">Energy readiness, chakra trends, and scan history for certified operators.</p>
-      </div>
-      <div class="splash-step w-full max-w-[20rem] text-center">
-        <p class="gaia-eyebrow">Network</p>
-        <h2 class="text-title text-ink mt-3">Practitioner communities</h2>
-        <p class="gaia-body mt-4">Bio-Well, BioPulsar, Biotekna, and Healeex — case studies and live training.</p>
-      </div>
-      <div class="splash-step w-full max-w-[20rem] text-center">
-        <p class="gaia-eyebrow">Academy</p>
-        <h2 class="text-title text-ink mt-3">Credentials</h2>
-        <p class="gaia-body mt-4">Orientation through Advanced Level 2 — exams, CE, verified credentials.</p>
-      </div>
-      <div class="splash-step w-full max-w-[20rem] text-center">
-        <p class="gaia-eyebrow">Elevate + Assist</p>
-        <h2 class="text-title text-ink mt-3">Events with a voice guide</h2>
-        <p class="gaia-body mt-4">GHL registration, QR check-in, badges, exhibitors, and Gaia Assist in one practitioner flow.</p>
-      </div>
+<body class="gaia-app min-h-screen">
+  <div id="splash-flow" class="gaia-splash-shell">
+    <div class="gaia-splash-bg" aria-hidden="true">
+      <div class="gaia-splash-orb gaia-splash-orb-1"></div>
+      <div class="gaia-splash-orb gaia-splash-orb-2"></div>
+      <div class="gaia-splash-orb gaia-splash-orb-3"></div>
+      <div class="gaia-splash-grid"></div>
     </div>
 
-    <div class="w-full max-w-[20rem] self-center">
-      <div class="mb-8 flex justify-center gap-2">
-        <span data-splash-dot class="h-1 rounded-full bg-gaia w-6 transition-all"></span>
-        <span data-splash-dot class="h-1 w-1.5 rounded-full bg-surface-muted transition-all"></span>
-        <span data-splash-dot class="h-1 w-1.5 rounded-full bg-surface-muted transition-all"></span>
-        <span data-splash-dot class="h-1 w-1.5 rounded-full bg-surface-muted transition-all"></span>
-        <span data-splash-dot class="h-1 w-1.5 rounded-full bg-surface-muted transition-all"></span>
+    <header class="gaia-splash-header">
+      <div class="gaia-splash-logo-mark">
+        <img src="assets/gaia-logo.png" alt="Gaia Healers" />
       </div>
-      <button type="button" data-splash-next class="gaia-btn gaia-btn-primary">Continue</button>
-      <a href="home.html" data-splash-enter class="gaia-btn gaia-btn-primary hidden mt-3">Open portal</a>
-      <a href="home.html" class="mt-5 block text-center gaia-caption" onclick="sessionStorage.setItem('gaia-entered','1');sessionStorage.setItem('gaia-onboarded','1')">Skip intro</a>
-    </div>
+      <span class="gaia-splash-brand">Gaia Healers</span>
+    </header>
+
+    <main class="gaia-splash-content">
+      <div class="gaia-splash-hero">
+        <div class="gaia-splash-icon">
+          <img src="assets/gaia-logo.png" alt="Gaia Healers" />
+        </div>
+      </div>
+
+      <div class="gaia-splash-steps">
+        <div class="splash-step active" data-step="0">
+          <p class="gaia-splash-eyebrow">Welcome</p>
+          <h1 class="gaia-splash-title">Your wellness<br />journey starts here</h1>
+          <p class="gaia-splash-body">Client portal for 1,200+ practitioners — certification, biofield analysis, and modality communities.</p>
+        </div>
+        <div class="splash-step" data-step="1">
+          <p class="gaia-splash-eyebrow">Bio-Well</p>
+          <h2 class="gaia-splash-title">Biofield analysis</h2>
+          <p class="gaia-splash-body">Energy readiness, chakra trends, and scan history for certified operators.</p>
+        </div>
+        <div class="splash-step" data-step="2">
+          <p class="gaia-splash-eyebrow">Network</p>
+          <h2 class="gaia-splash-title">Practitioner communities</h2>
+          <p class="gaia-splash-body">Bio-Well, BioPulsar, Biotekna, and Healeex — case studies and live training.</p>
+        </div>
+        <div class="splash-step" data-step="3">
+          <p class="gaia-splash-eyebrow">Academy</p>
+          <h2 class="gaia-splash-title">Credentials</h2>
+          <p class="gaia-splash-body">Orientation through Advanced Level 2 — exams, CE, verified credentials.</p>
+        </div>
+        <div class="splash-step" data-step="4">
+          <p class="gaia-splash-eyebrow">Elevate + Assist</p>
+          <h2 class="gaia-splash-title">Events with a voice guide</h2>
+          <p class="gaia-splash-body">GHL registration, QR check-in, badges, exhibitors, and Gaia Assist in one practitioner flow.</p>
+        </div>
+      </div>
+    </main>
+
+    <footer class="gaia-splash-footer">
+      <div class="gaia-splash-progress">
+        <span data-splash-dot class="bg-gaia w-6"></span>
+        <span data-splash-dot class="bg-neutral-200 w-1.5"></span>
+        <span data-splash-dot class="bg-neutral-200 w-1.5"></span>
+        <span data-splash-dot class="bg-neutral-200 w-1.5"></span>
+        <span data-splash-dot class="bg-neutral-200 w-1.5"></span>
+      </div>
+      <button type="button" data-splash-next class="gaia-splash-btn">Continue</button>
+      <a href="home.html" data-splash-enter class="gaia-splash-btn hidden" onclick="sessionStorage.setItem('gaia-entered','1');sessionStorage.setItem('gaia-onboarded','1')">Enter portal</a>
+      <a href="home.html" class="gaia-splash-skip" onclick="sessionStorage.setItem('gaia-entered','1');sessionStorage.setItem('gaia-onboarded','1')">Skip intro</a>
+    </footer>
   </div>
   <script src="gaia-ui.js"></script>
   <script>

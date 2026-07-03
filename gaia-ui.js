@@ -1091,9 +1091,15 @@
 
     async function maybeClaimEmbeddedSession() {
       if (!hasAuthHints()) return false;
-      if (!document.referrer || !/crm\.gaiahealers\.com|education\.gaiahealers\.com/i.test(document.referrer)) return false;
       const hints = authHintParams();
       if (!hints.email && !hints.contactId && !hints.memberId) return false;
+      // Proceed when either the click came from a trusted GHL page OR the link
+      // carries the shared secret (e.g. an "Open Gaia" button in a GHL
+      // email/SMS/workflow, where the referrer is the mail client). The proxy
+      // verifies the secret and the member against GHL before signing in.
+      const hasSecret = Boolean(hints.sharedSecret || hints.bridge);
+      const ghlReferrer = Boolean(document.referrer) && /crm\.gaiahealers\.com|education\.gaiahealers\.com/i.test(document.referrer);
+      if (!hasSecret && !ghlReferrer) return false;
       try {
         const response = await fetch(`${syncProxyBase()}/api/auth/embedded/claim`, {
           method: 'POST',

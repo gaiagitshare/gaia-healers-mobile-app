@@ -1911,11 +1911,16 @@ async function authEmbeddedClaim(req, res, origin) {
     return;
   }
   const sharedSecret = String(body.sharedSecret || body.bridge || '').trim();
-  if (AUTH_EMBED_SHARED_SECRET && sharedSecret !== AUTH_EMBED_SHARED_SECRET) {
+  const secretOk = Boolean(AUTH_EMBED_SHARED_SECRET) && sharedSecret === AUTH_EMBED_SHARED_SECRET;
+  if (AUTH_EMBED_SHARED_SECRET && !secretOk) {
     sendJson(res, 403, { ok: false, error: 'Embedded bridge secret mismatch.' }, origin);
     return;
   }
-  if (!trustedReferrer(referrer)) {
+  // A valid shared secret is sufficient authorization on its own — this lets the
+  // auto-login link work when clicked from a GHL email/SMS/workflow, where the
+  // referrer is the mail client, not a GHL page. Only fall back to requiring a
+  // trusted referrer when no shared secret is configured.
+  if (!secretOk && !trustedReferrer(referrer)) {
     sendJson(res, 403, { ok: false, error: 'Embedded claim rejected: untrusted referrer.' }, origin);
     return;
   }

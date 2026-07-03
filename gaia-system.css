@@ -156,8 +156,21 @@
 .g-chakra-hero__caption{font-size:14px;color:var(--g-text-muted);margin:0;min-height:1.3em}
 .g-chakra-hero__caption strong{color:var(--g-text);font-weight:600}
 .g-chakra-hero__caption a{color:var(--g-accent);font-weight:600;text-decoration:none;pointer-events:auto}
+/* tapped-centre info: a floating card anchored right next to the node */
+.g-chakra-hero__pop{position:absolute;z-index:4;left:50%;top:50%;
+  transform:translate(-50%,16px);width:min(62vw,224px);
+  background:rgba(9,14,11,.9);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);
+  border:1px solid var(--ck,var(--g-line));border-radius:14px;padding:11px 13px;
+  box-shadow:0 12px 36px rgba(0,0,0,.6);opacity:0;pointer-events:none;
+  transition:opacity .26s ease,transform .26s ease}
+.g-chakra-hero__pop.is-open{opacity:1;pointer-events:auto}
+.g-chakra-hero__pop.is-above{transform:translate(-50%,calc(-100% - 16px))}
+.g-chakra-hero__pop strong{display:block;font-family:var(--g-font-serif);font-weight:600;font-size:16px;color:var(--g-text)}
+.g-chakra-hero__pop span{display:block;font-size:12.5px;color:var(--g-text-muted);margin-top:2px;line-height:1.35}
+.g-chakra-hero__pop a{display:inline-block;margin-top:7px;font-size:12.5px;font-weight:600;color:var(--ck,var(--g-accent));text-decoration:none}
 @media (prefers-reduced-motion:reduce){
   .g-chakra-hero__fig img,.g-chakra-hero__hit::after{animation:none}
+  .g-chakra-hero__pop{transition:opacity .26s ease}
 }
 
 /* ---------- Home layout (the only Home-specific scaffolding) ---------- */

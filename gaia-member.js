@@ -69,21 +69,29 @@
     box.innerHTML =
       '<div class="g-chakra-hero__stage"><div class="g-chakra-hero__fig">'
       + '<img src="assets/gaia-chakra-meditation.png" alt="A meditating figure with seven glowing energy centres" />'
-      + hits + '</div></div>'
+      + hits
+      + '<div class="g-chakra-hero__pop" id="chakra-pop" aria-live="polite"></div>'
+      + '</div></div>'
       + '<div class="g-chakra-hero__scrim"></div>'
       + '<div class="g-chakra-hero__overlay">'
       + '<p class="g-chakra-hero__kicker">' + esc(g.kicker) + '</p>'
       + '<h1 class="g-chakra-hero__title">' + g.title + '</h1>'
       + '<p class="g-chakra-hero__caption" id="chakra-caption">Tap a centre to explore your energy →</p>'
       + '</div>';
+    const pop = el('chakra-pop');
     box.querySelectorAll('.g-chakra-hero__hit').forEach((n) => {
       n.addEventListener('click', () => {
-        const c = chs.find((x) => x.id === n.dataset.ck); if (!c) return;
+        const c = chs.find((x) => x.id === n.dataset.ck); if (!c || !pop) return;
         box.querySelectorAll('.g-chakra-hero__hit').forEach((x) => x.classList.toggle('is-active', x === n));
-        const cap = el('chakra-caption'); if (!cap) return;
         const shop = (window.GaiaStore && window.GaiaStore.chakraShopUrl && window.GaiaStore.chakraShopUrl(c.id)) || '';
-        cap.innerHTML = '<strong>' + esc(c.name) + '</strong> · ' + esc(c.focus || '')
-          + (shop ? ' · <a href="' + esc(shop) + '" target="_blank" rel="noopener noreferrer">Shop this centre →</a>' : '');
+        pop.style.setProperty('--ck', c.color);
+        pop.style.left = c.left + '%';
+        pop.style.top = c.top + '%';
+        pop.classList.toggle('is-above', Number(c.top) > 50);
+        pop.innerHTML = '<strong>' + esc(c.name) + '</strong>'
+          + '<span>' + esc(c.focus || '') + (c.element ? ' · ' + esc(c.element) : '') + '</span>'
+          + (shop ? '<a href="' + esc(shop) + '" target="_blank" rel="noopener noreferrer">Shop this centre →</a>' : '');
+        pop.classList.add('is-open');
       });
     });
   }

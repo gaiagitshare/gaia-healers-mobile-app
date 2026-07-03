@@ -79,9 +79,16 @@
       + '<p class="g-chakra-hero__caption" id="chakra-caption">Tap a centre to explore your energy →</p>'
       + '</div>';
     const pop = el('chakra-pop');
+    const closePop = () => {
+      if (pop) pop.classList.remove('is-open');
+      box.querySelectorAll('.g-chakra-hero__hit').forEach((x) => x.classList.remove('is-active'));
+    };
     box.querySelectorAll('.g-chakra-hero__hit').forEach((n) => {
-      n.addEventListener('click', () => {
+      n.addEventListener('click', (e) => {
+        e.stopPropagation();
         const c = chs.find((x) => x.id === n.dataset.ck); if (!c || !pop) return;
+        // Re-tapping the open centre closes it.
+        if (n.classList.contains('is-active') && pop.classList.contains('is-open')) { closePop(); return; }
         box.querySelectorAll('.g-chakra-hero__hit').forEach((x) => x.classList.toggle('is-active', x === n));
         const shop = (window.GaiaStore && window.GaiaStore.chakraShopUrl && window.GaiaStore.chakraShopUrl(c.id)) || '';
         pop.style.setProperty('--ck', c.color);
@@ -93,6 +100,10 @@
           + (shop ? '<a href="' + esc(shop) + '" target="_blank" rel="noopener noreferrer">Shop this centre →</a>' : '');
         pop.classList.add('is-open');
       });
+    });
+    // Tapping empty space in the hero (not a centre, not the card link) dismisses.
+    box.addEventListener('click', (e) => {
+      if (!e.target.closest('.g-chakra-hero__hit') && !e.target.closest('.g-chakra-hero__pop')) closePop();
     });
   }
 

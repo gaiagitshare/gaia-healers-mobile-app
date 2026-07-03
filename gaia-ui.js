@@ -1111,17 +1111,21 @@
             referrer: document.referrer,
           }),
         });
-        const payload = await response.json();
+        const payload = await response.json().catch(() => ({}));
         if (!response.ok || payload.ok === false) return false;
         AUTH_STATE.authenticated = true;
         AUTH_STATE.checked = true;
         AUTH_STATE.member = payload.member || null;
-        cleanAuthHintsFromUrl();
         document.dispatchEvent(new CustomEvent('gaia:auth', { detail: { ...AUTH_STATE } }));
         renderAuthUi();
         return true;
       } catch {
         return false;
+      } finally {
+        // Always strip the sensitive auth params (sharedSecret, email, contactId, …)
+        // from the URL + history after an auth attempt — success or failure — so the
+        // shared secret never lingers where it could be copied, bookmarked, or logged.
+        cleanAuthHintsFromUrl();
       }
     }
 

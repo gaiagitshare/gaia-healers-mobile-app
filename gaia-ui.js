@@ -17,7 +17,7 @@
   const ADMIN_DEV_PASSCODE = 'gaia2026';
   const ASSIST_WELCOME_KEY = 'gaia-assist-welcome-v1';
   const GHL_CUSTOM_MENU_URL = 'https://crm.gaiahealers.com/v2/location/WkKl1K5RuZNQ60xR48k6/custom-menu-link/328efaea-4e94-42ec-9ce2-4358a64657db';
-  const APP_VIEWS = new Set(['today', 'wellness', 'academy', 'community', 'profile', 'admin']);
+  const APP_VIEWS = new Set(['today', 'wellness', 'academy', 'community', 'profile', 'store', 'admin']);
   const AUTH_HINT_KEYS = ['memberId', 'contactId', 'email', 'name', 'displayName', 'role', 'cohort', 'locationId', 'bridge', 'sharedSecret'];
   const AUTH_STATE = {
     authenticated: false,

@@ -69,9 +69,14 @@
 
         <section id="member-dashboard" class="gaia-member-grid" aria-label="Your Gaia" hidden></section>
 
-        <!-- Public, no-login features: next event, birth-date chakra, chakra explorer.
-             Rendered by gaia-member.js for everyone (signed-in and out). -->
-        <section id="public-features" class="gaia-me-stack" aria-label="Explore Gaia"></section>
+        <!-- Chakra BODY MAP — Gaia's flagship public experience, on the discovery
+             page. Built at init by gaia-ui.js into [data-chakra-map]; kept static. -->
+        <section id="home-chakra" class="gaia-me-stack" aria-label="Chakra map">
+          <article class="gaia-card gaia-card-pad gaia-me-card">
+            <p class="gaia-me-card__label">Chakra map</p>
+            <div class="gaia-chakra-map" data-chakra-map></div>
+          </article>
+        </section>
       </main>
     </section>
 
@@ -145,15 +150,9 @@
 
         <section id="member-me" class="gaia-me-stack" aria-label="My Gaia"></section>
 
-        <!-- Personal wellness: birth-date chakra (JS) + chakra BODY MAP (built at
-             init by gaia-ui.js into [data-chakra-map]; kept static so it builds). -->
+        <!-- Personal: birth-date → chakra reading (client-side). The full chakra
+             body map now lives on Home (discovery page). -->
         <section id="me-wellness" class="gaia-me-stack" aria-label="Your birth-date chakra"></section>
-        <section id="me-chakra" class="gaia-me-stack" aria-label="Chakra map">
-          <article class="gaia-card gaia-card-pad gaia-me-card">
-            <p class="gaia-me-card__label">Chakra map</p>
-            <div class="gaia-chakra-map" data-chakra-map></div>
-          </article>
-        </section>
 
         <section class="gaia-card gaia-card-pad" data-admin-locked hidden>
           <p class="text-headline text-ink">Admin not available</p>
@@ -245,9 +244,9 @@
       </main>
     </section>
   </div>
-  <script src="shared-nav.js?v=20260703h"></script>
+  <script src="shared-nav.js?v=20260703m"></script>
   <script src="gaia-realtime-voice.js?v=20260703a"></script>
-  <script src="gaia-member.js?v=20260703l"></script>
-  <script src="gaia-ui.js?v=20260703j"></script>
+  <script src="gaia-member.js?v=20260703m"></script>
+  <script src="gaia-ui.js?v=20260703m"></script>
 </body>
 </html>

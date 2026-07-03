@@ -67,37 +67,35 @@
 
   function card(inner) { return '<article class="gaia-card gaia-card-pad gaia-member-card">' + inner + '</article>'; }
 
-  function memberCards(d) {
-    const out = [];
-    const unlocked = (d.access && d.access.communities && d.access.communities.unlocked) || [];
-    out.push(card(
-      '<p class="gaia-member-card__label">My memberships</p>'
-      + '<p class="gaia-member-card__value">' + unlocked.length + ' unlocked</p>'
-      + '<p class="gaia-member-card__meta">' + (unlocked.map((c) => esc(c.name)).slice(0, 3).join(', ') || 'No communities yet') + '</p>'
-      + '<a class="gaia-member-card__cta" href="home.html?view=community">View access →</a>',
-    ));
-
-    const appts = (d.appts && d.appts.appointments) || [];
-    const now = Date.now();
-    const upcoming = appts
-      .filter((a) => { const x = Date.parse(a.startTime || ''); return isFinite(x) && x > now; })
-      .sort((a, b) => Date.parse(a.startTime) - Date.parse(b.startTime))[0];
-    const booking = (d.appts && d.appts.bookingLinks && d.appts.bookingLinks[0]) || null;
-    if (upcoming) {
-      out.push(card('<p class="gaia-member-card__label">Next appointment</p><p class="gaia-member-card__value">' + esc(upcoming.title || 'Appointment') + '</p><p class="gaia-member-card__meta">' + esc(new Date(upcoming.startTime).toLocaleString()) + '</p>'));
-    } else if (booking) {
-      out.push(card('<p class="gaia-member-card__label">Book a session</p><p class="gaia-member-card__value">' + esc(booking.name) + '</p><a class="gaia-member-card__cta" href="' + esc(booking.openUrl) + '" target="_blank" rel="noopener noreferrer">Book now →</a>'));
+  // Home = discovery page: two equal cards side by side — Members + Next Event.
+  function membersCard() {
+    if (state.authed && state.data.profile) {
+      const unlocked = (state.data.access && state.data.access.communities && state.data.access.communities.unlocked) || [];
+      return card(
+        '<p class="gaia-member-card__label">Members</p>'
+        + '<p class="gaia-member-card__value">' + unlocked.length + ' unlocked</p>'
+        + '<p class="gaia-member-card__meta">' + (unlocked.map((c) => esc(c.name)).slice(0, 2).join(', ') || 'Your memberships') + '</p>'
+        + '<a class="gaia-member-card__cta" href="home.html?view=community">View access →</a>');
     }
-
-    const unread = (d.notif && d.notif.counts && d.notif.counts.unread) || 0;
-    out.push(card('<p class="gaia-member-card__label">Messages</p><p class="gaia-member-card__value">' + (unread ? unread + ' unread' : 'All caught up') + '</p><a class="gaia-member-card__cta" href="home.html?view=community">Open →</a>'));
-    // No "Gaia AI" card here — the assistant is always reachable from the orb.
-    return out.join('');
+    return card(
+      '<p class="gaia-member-card__label">Members</p>'
+      + '<p class="gaia-member-card__value">Unlock your Gaia</p>'
+      + '<p class="gaia-member-card__meta">Profile, memberships, courses, bookings, and a Gaia that knows you.</p>'
+      + '<a class="gaia-member-card__cta" href="' + esc(portalBase()) + '" target="_blank" rel="noopener noreferrer">Sign in →</a>');
   }
 
-  function publicCards() {
-    // One clear member CTA. The assistant lives in the orb, not a Home card.
-    return card('<p class="gaia-member-card__label">Members</p><p class="gaia-member-card__value">Unlock your Gaia</p><p class="gaia-member-card__meta">Your profile, memberships, courses, bookings, and a personalized Gaia — all in one place.</p><a class="gaia-member-card__cta" href="' + esc(portalBase()) + '" target="_blank" rel="noopener noreferrer">Sign in →</a>');
+  function homeEventCard() {
+    const ev = state.event;
+    if (!ev || !ev.name) {
+      return card('<p class="gaia-member-card__label">Next event</p><p class="gaia-member-card__value">Coming soon</p><p class="gaia-member-card__meta">The next Gaia Healers event will appear here.</p>');
+    }
+    const when = fmtEventDate(ev);
+    const url = esc(ev.sourceUrl || 'https://elevate.gaiahealers.com/gaia-healers-elevate-conference-page');
+    return card(
+      '<p class="gaia-member-card__label">Next event</p>'
+      + '<p class="gaia-member-card__value">' + esc(ev.name) + '</p>'
+      + '<p class="gaia-member-card__meta">' + [when && esc(when), ev.venue && esc(ev.venue)].filter(Boolean).join(' · ') + '</p>'
+      + '<a class="gaia-member-card__cta" href="' + url + '" target="_blank" rel="noopener noreferrer">Register →</a>');
   }
 
   function renderHome() {
@@ -105,17 +103,14 @@
     const main = document.querySelector('.gaia-main--today');
     if (main) {
       Array.from(main.children).forEach((ch) => {
-        if (ch === dash || ch.id === 'gaia-coach-anchor' || ch.id === 'public-features' || ch.classList.contains('gaia-dash-hero')) return;
+        if (ch === dash || ch.id === 'gaia-coach-anchor' || ch.id === 'home-chakra' || ch.classList.contains('gaia-dash-hero')) return;
         ch.style.display = 'none';
       });
     }
-    if (state.authed && state.data.profile) {
-      heroMember((state.data.profile && state.data.profile.profile) || {}, state.data.access);
-      if (dash) { dash.innerHTML = memberCards(state.data); dash.hidden = false; }
-    } else {
-      heroPublic();
-      if (dash) { dash.innerHTML = publicCards(); dash.hidden = false; }
-    }
+    if (state.authed && state.data.profile) heroMember((state.data.profile && state.data.profile.profile) || {}, state.data.access);
+    else heroPublic();
+    if (dash) { dash.innerHTML = membersCard() + homeEventCard(); dash.hidden = false; }
+    refreshChakraMap(); // position the statically-built body map on Home
   }
 
   function meSection(title, inner) {
@@ -132,7 +127,7 @@
     if (!main || !box) return;
     Array.from(main.children).forEach((ch) => {
       const keep = ch.classList.contains('gaia-profile-hero') || ch.id === 'member-me'
-        || ch.id === 'me-wellness' || ch.id === 'me-chakra'
+        || ch.id === 'me-wellness'
         || ch.hasAttribute('data-sign-out') || ch.hasAttribute('data-admin-locked')
         || ch.hasAttribute('data-admin-entry') || ch.tagName === 'P';
       if (!keep) ch.style.display = 'none';
@@ -233,18 +228,6 @@
     return (ev && ev.date) || '';
   }
 
-  function nextEventCard() {
-    const ev = state.event;
-    if (!ev || !ev.name) return '';
-    const when = fmtEventDate(ev);
-    const url = esc(ev.sourceUrl || 'https://elevate.gaiahealers.com/gaia-healers-elevate-conference-page');
-    return meSection('Next event',
-      '<p class="gaia-me-card__value">' + esc(ev.name) + '</p>'
-      + (when ? meRow('When', when) : '')
-      + (ev.venue ? meRow('Where', ev.venue) : '')
-      + '<a class="gaia-member-card__cta" href="' + url + '" target="_blank" rel="noopener noreferrer">View event &amp; register →</a>');
-  }
-
   function digitRoot(n) { n = Math.abs(n); while (n > 9) { n = String(n).split('').reduce((a, d) => a + (+d), 0); } return n; }
   function chakraForDate(str) {
     const chs = chakras(); if (!chs.length || !str) return null;
@@ -266,24 +249,17 @@
       + '<p class="gaia-me-hint">Wellness guidance, not medical advice.</p>');
   }
 
-  // Home shows ONLY the live Next Event (kept simple).
-  function renderHomeEvent() {
-    const box = el('public-features'); if (!box) return;
-    box.innerHTML = nextEventCard();
-  }
-
-  // Me (personal) birth-date chakra reading. The chakra BODY MAP is static markup
-  // (#me-chakra) built by gaia-ui.js; we only re-position it when Profile is shown.
+  // Me (personal): birth-date → chakra reading only. The chakra BODY MAP lives on
+  // Home now.
   function renderMeWellness() {
     const box = el('me-wellness'); if (!box) return;
     if (!chakras().length) { box.innerHTML = ''; return; }
     const dob = (el('dob-input') && el('dob-input').value) || '';
     box.innerHTML = chakraReadingCard(dob);
-    refreshChakraMap(); // position the (statically built) body map, incl. direct load
   }
 
-  // The body map's nodes are positioned off the image size, which is 0 while the
-  // Profile screen is hidden OR the 417KB image is still loading — so retry the
+  // The body map (on Home) positions its nodes off the image size, which is 0
+  // while Home is hidden OR the 417KB image is still loading — retry the
   // re-layout until the photo actually has width.
   function refreshChakraMap() {
     const api = window.GaiaChakraMaps;
@@ -291,7 +267,7 @@
     let tries = 0;
     const tick = () => {
       api.refresh();
-      const img = document.querySelector('#me-chakra .gaia-chakra-map__photo');
+      const img = document.querySelector('#home-chakra .gaia-chakra-map__photo');
       const ready = img && img.clientWidth > 10;
       if (!ready && tries++ < 20) setTimeout(tick, 150);
     };
@@ -309,14 +285,14 @@
     // Re-position the chakra body map whenever the Profile view is opened.
     window.addEventListener('gaia:route', () => {
       const view = (window.GaiaAppShell && window.GaiaAppShell.currentView && window.GaiaAppShell.currentView()) || '';
-      if (view === 'profile') refreshChakraMap();
+      if (view === 'today') refreshChakraMap();
     });
   }
 
   async function loadEvent() {
     const boot = await getJson('/api/app/bootstrap');
     const ev = boot && boot.gaia && boot.gaia.event;
-    if (ev && ev.name) { state.event = ev; renderHomeEvent(); renderStore(); }
+    if (ev && ev.name) { state.event = ev; renderHome(); renderStore(); }
   }
 
   /* ---------- Store / sale surfaces (structure + live wiring) ---------- */
@@ -381,7 +357,7 @@
     box.innerHTML = rows.join('');
   }
 
-  function render() { renderHome(); renderHomeEvent(); renderMe(); renderMeWellness(); renderStore(); renderAcademy(); renderCommunity(); }
+  function render() { renderHome(); renderMe(); renderMeWellness(); renderStore(); renderAcademy(); renderCommunity(); }
 
   document.addEventListener('DOMContentLoaded', () => {
     render(); // public first paint

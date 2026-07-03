@@ -1079,12 +1079,7 @@
         if (!link.dataset.gaiaAuthBound) return;
         link.textContent = session.authenticated ? 'My profile' : 'Sign in';
       });
-      if (profileTitle) profileTitle.textContent = session.authenticated ? (session.member?.displayName || 'Gaia member') : 'Practitioner';
-      if (profileCaption) {
-        profileCaption.textContent = session.authenticated
-          ? `${session.member?.cohort || session.member?.role || 'Member'}${session.member?.email ? ` · ${session.member.email}` : ''}`
-          : 'Bio-Well Practitioners · Since 2024';
-      }
+      // Profile hero is owned by gaia-member.js (Phase 5c). No demo text here.
       if (accessNote && session.authenticated) {
         accessNote.textContent = `Signed in as ${session.member?.displayName || 'Gaia member'}${session.member?.email ? ` (${session.member.email})` : ''}. Member-specific lessons, purchases, certificates, and gated access now resolve through the Gaia proxy session.`;
       }

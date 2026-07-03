@@ -36,7 +36,7 @@
   <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
   <script src="gaia-chakra-data.js?v=20260703a"></script>
   <link rel="stylesheet" href="gaia-shared.css?v=20260703a" />
-  <link rel="stylesheet" href="gaia-ui-v2.css?v=20260703l" />
+  <link rel="stylesheet" href="gaia-ui-v2.css?v=20260703n" />
 </head>
 <body class="gaia-app gaia-page gaia-single-app gaia-v2">
   <script>try{document.body.dataset.theme=document.documentElement.dataset.theme||'light';}catch(e){}</script>
@@ -180,9 +180,12 @@
         </div>
       </header>
       <main class="gaia-main">
-        <!-- Sale surfaces (structure + live wiring): memberships, products,
-             subscriptions, event tickets, booking. Minimal UI for now. -->
-        <section id="store-body" class="gaia-me-stack" aria-label="Store"></section>
+        <!-- Shop: LIVE gaiahealers.com Shopify catalog (gaia-store.js, public);
+             Buy deep-links to Shopify checkout. -->
+        <section id="store-shop" class="gaia-me-stack" aria-label="Shop"></section>
+        <!-- Your Gaia: member entitlements from GHL — memberships, subscriptions,
+             event ticket, booking (gaia-member.js). -->
+        <section id="store-body" class="gaia-me-stack" aria-label="Your Gaia"></section>
       </main>
     </section>
 
@@ -247,6 +250,7 @@
   <script src="shared-nav.js?v=20260703m"></script>
   <script src="gaia-realtime-voice.js?v=20260703a"></script>
   <script src="gaia-member.js?v=20260703m"></script>
+  <script src="gaia-store.js?v=20260703o"></script>
   <script src="gaia-ui.js?v=20260703m"></script>
 </body>
 </html>

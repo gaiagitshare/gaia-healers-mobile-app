@@ -1905,3 +1905,59 @@ body.gaia-v2 .gaia-assist__audio {
   opacity: 0;
   pointer-events: none;
 }
+
+/* —— Phase 1: My Access grid (signed-in member memberships) —— */
+.gaia-access-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(9.5rem, 1fr));
+  gap: 0.6rem;
+}
+.gaia-access-card {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  padding: 0.85rem;
+  border-radius: 18px;
+  border: 1px solid var(--gh-border-soft, rgba(28, 42, 30, 0.12));
+  background: var(--gh-assist-surface, rgba(21, 32, 24, 0.045));
+  min-height: 6.5rem;
+}
+.gaia-access-card--unlocked {
+  border-color: rgba(125, 217, 86, 0.55);
+  background: rgba(92, 184, 46, 0.10);
+}
+.gaia-access-card--locked,
+.gaia-access-card--unknown { opacity: 0.7; }
+.gaia-access-card__badge {
+  align-self: flex-start;
+  font-size: 0.625rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  padding: 0.15rem 0.5rem;
+  border-radius: 999px;
+  background: var(--gh-chip-bg, rgba(0, 0, 0, 0.06));
+  color: var(--gh-text-soft, #636366);
+}
+.gaia-access-card__badge--on { background: var(--gh-accent, #5cb82e); color: #fff; }
+.gaia-access-card__title {
+  font-size: 0.875rem;
+  font-weight: 600;
+  line-height: 1.25;
+  color: var(--gh-text, #1c1c1e);
+}
+.gaia-access-card__note {
+  font-size: 0.75rem;
+  color: var(--gh-text-soft, #636366);
+  margin-top: auto;
+}
+.gaia-access-card__cta {
+  margin-top: auto;
+  align-self: flex-start;
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: var(--gh-accent-deep, #449422);
+  text-decoration: none;
+}
+.gaia-access-card__cta::after { content: " \2192"; }
+.gaia-access-empty { font-size: 0.8125rem; color: var(--gh-text-soft, #636366); }

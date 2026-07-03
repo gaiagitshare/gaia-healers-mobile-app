@@ -34,6 +34,74 @@
       .replace(/"/g, '&quot;');
   }
 
+  // Phase 1 — "My Access" grid. Fallback portal URL until per-community deep
+  // links are provided. HealeeX/Abundant arrive as state:"unknown" from the API.
+  const MY_ACCESS_PORTAL_FALLBACK = 'https://education.gaiahealers.com';
+
+  function accessCardHtml(card, state) {
+    const name = escapeHtml(card.name || 'Community');
+    if (state === 'unlocked') {
+      return `<article class="gaia-access-card gaia-access-card--unlocked">
+        <span class="gaia-access-card__badge gaia-access-card__badge--on">Unlocked</span>
+        <h3 class="gaia-access-card__title">${name}</h3>
+        <a href="${MY_ACCESS_PORTAL_FALLBACK}" target="_blank" rel="noopener noreferrer" class="gaia-access-card__cta">Open in Portal</a>
+      </article>`;
+    }
+    if (state === 'unknown') {
+      return `<article class="gaia-access-card gaia-access-card--unknown">
+        <span class="gaia-access-card__badge">Coming soon</span>
+        <h3 class="gaia-access-card__title">${name}</h3>
+        <p class="gaia-access-card__note">Ask Gaia Healers to unlock this.</p>
+      </article>`;
+    }
+    return `<article class="gaia-access-card gaia-access-card--locked">
+      <span class="gaia-access-card__badge">Locked</span>
+      <h3 class="gaia-access-card__title">${name}</h3>
+      <p class="gaia-access-card__note">${escapeHtml(card.reason || 'Not included in your membership')}</p>
+    </article>`;
+  }
+
+  async function renderMyAccess() {
+    const section = document.getElementById('my-access');
+    const grid = document.getElementById('my-access-grid');
+    if (!section || !grid) return;
+    // Signed-out users keep the public community view untouched.
+    if (!authState().authenticated) { section.hidden = true; return; }
+    try {
+      const response = await fetch(`${syncProxyBase()}/api/member/access`, {
+        headers: { Accept: 'application/json' },
+        credentials: 'include',
+      });
+      if (!response.ok) { section.hidden = true; return; }
+      const data = await response.json();
+      if (!data || data.ok === false || !data.authenticated) { section.hidden = true; return; }
+      const communities = data.communities || {};
+      const unlocked = Array.isArray(communities.unlocked) ? communities.unlocked : [];
+      const locked = Array.isArray(communities.locked) ? communities.locked : [];
+      const cards = [
+        ...unlocked.map((c) => accessCardHtml(c, 'unlocked')),
+        ...locked.map((c) => accessCardHtml(c, c.state === 'unknown' ? 'unknown' : 'locked')),
+      ];
+      grid.innerHTML = cards.join('') || '<p class="gaia-access-empty">No memberships detected yet.</p>';
+
+      const member = data.member || {};
+      const subParts = [member.name || 'Member'];
+      if (member.membershipTier) subParts.push(`${member.membershipTier} member`);
+      if (member.practitioner) subParts.push('Practitioner');
+      const sub = section.querySelector('[data-my-access-sub]');
+      if (sub) sub.textContent = subParts.join(' · ');
+      const count = section.querySelector('[data-my-access-count]');
+      if (count) {
+        const n = (data.counts && data.counts.unlocked) || unlocked.length;
+        count.textContent = `${n} unlocked`;
+        count.hidden = false;
+      }
+      section.hidden = false;
+    } catch {
+      section.hidden = true;
+    }
+  }
+
   function isGhlEmbeddedMode() {
     const params = new URLSearchParams(window.location.search);
     const mode = String(params.get('embedded') || params.get('host') || params.get('mode') || '').toLowerCase();
@@ -1109,10 +1177,14 @@
     });
     signOutBtn?.addEventListener('click', handleLogout);
 
+    // Phase 1: re-render "My Access" whenever auth state changes (login/logout).
+    document.addEventListener('gaia:auth', () => { renderMyAccess(); });
+
     (async () => {
       const claimed = await maybeClaimEmbeddedSession();
       await refreshSession();
       if (claimed || AUTH_STATE.authenticated) window.GAIA_SYNC?.refresh?.();
+      renderMyAccess();
     })();
   }
 

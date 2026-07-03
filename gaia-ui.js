@@ -1402,7 +1402,7 @@
     tip.innerHTML = `
       <p class="gaia-coach__eyebrow">Quick guide</p>
       <p class="gaia-coach__body"><strong>Tap Gaia</strong> once for live voice — just speak naturally, like a phone call. Tap again to close.</p>
-      <p class="gaia-coach__sub"><strong>Community</strong> is in the bottom bar. <strong>Profile</strong> and <strong>Log in</strong> are top right.</p>
+      <p class="gaia-coach__sub">Explore <strong>Home</strong>, <strong>Academy</strong>, <strong>Community</strong>, and <strong>Me</strong> in the bottom bar. Sign in to unlock your data.</p>
       <button type="button" class="gaia-coach__btn">Got it</button>`;
     tip.querySelector('button').addEventListener('click', () => {
       sessionStorage.setItem(COACH_KEY, '1');
@@ -2233,9 +2233,16 @@
     }
 
     async function ensureMobileVoiceReady() {
-      await unlockVoicePlayback(true);
+      // Never let audio unlock hang the tap handler (e.g. missing user gesture);
+      // race against a short timeout so onAssistTap always finishes and the
+      // busy flag resets — the Gaia orb can never get stuck.
+      const withTimeout = (promise, ms) => Promise.race([
+        Promise.resolve(promise).catch(() => undefined),
+        new Promise((resolve) => window.setTimeout(resolve, ms)),
+      ]);
+      await withTimeout(unlockVoicePlayback(true), 2500);
       if (realtimeVoice?.resumePlayback) {
-        await realtimeVoice.resumePlayback();
+        await withTimeout(realtimeVoice.resumePlayback(), 1500);
       }
     }
 

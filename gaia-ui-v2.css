@@ -2023,3 +2023,21 @@ body.gaia-v2 .gaia-assist__audio {
 .gaia-me-row__meta { font-size: 0.78rem; font-weight: 500; color: var(--gh-text-soft, #636366); }
 .gaia-me-row--link { text-decoration: none; }
 .gaia-me-empty { font-size: 0.85rem; color: var(--gh-text-soft, #636366); }
+
+/* —— Phase 5: full responsive shell (mobile-first; desktop centered, not stretched) —— */
+html, body { overflow-x: hidden; }
+body.gaia-v2 .gaia-main > *, body.gaia-v2 .gaia-member-grid, body.gaia-v2 .gaia-me-stack { max-width: 100%; }
+
+@media (min-width: 700px) {
+  body.gaia-v2 {
+    background-image: radial-gradient(1100px 520px at 50% -6%, rgba(92, 184, 46, 0.12), transparent 62%);
+    background-attachment: fixed;
+  }
+  body.gaia-v2 .gaia-shell { max-width: 30rem; margin-left: auto; margin-right: auto; }
+  /* keep the fixed bottom nav aligned to the app column, not the full viewport */
+  body.gaia-v2 .gaia-tabbar__inner {
+    max-width: 30rem !important;
+    margin-left: auto !important;
+    margin-right: auto !important;
+  }
+}

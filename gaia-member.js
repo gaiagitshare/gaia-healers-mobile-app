@@ -207,32 +207,16 @@
   }
 
   function renderCommunity() {
-    const main = document.querySelector('.gaia-community-main');
-    if (!main) return;
-    // Remove legacy demo content (fake posts + stale member/group counts). The
-    // live "My Access" grid (#my-access, rendered by gaia-ui) stays.
-    ['#community-feed', '#community-groups', '#community-learning'].forEach((sel) => {
-      const e = main.querySelector(sel); if (e) e.style.display = 'none';
-    });
-    const stats = main.querySelector('.gaia-community-strip__stats');
-    if (stats) stats.style.display = 'none';
+    const box = el('community-public');
+    if (!box) return;
+    if (state.authed && state.data.profile) {
+      box.innerHTML = meSection('Community', '<a class="gaia-me-row gaia-me-row--link" href="' + esc(portalBase()) + '" target="_blank" rel="noopener noreferrer"><span>Open the community portal</span><span class="gaia-me-row__meta">education.gaiahealers.com</span></a>');
+    } else {
+      box.innerHTML = meSection('Communities', '<p class="gaia-me-empty">Sign in to see which Gaia Healers communities you are part of and open them.</p><a class="gaia-member-card__cta" href="' + esc(portalBase()) + '" target="_blank" rel="noopener noreferrer">Sign in →</a>');
+    }
   }
 
-  function renderWellness() {
-    const main = document.querySelector('.gaia-screen[data-screen="wellness"] .gaia-main');
-    const box = el('member-wellness');
-    if (!main || !box) return;
-    Array.from(main.children).forEach((ch) => { if (ch.id !== 'member-wellness') ch.style.display = 'none'; });
-    const tabs = el('wellness-tabs'); if (tabs) tabs.style.display = 'none';
-    const wb = document.querySelector('.gaia-screen[data-screen="wellness"] [data-wellness-badge]'); if (wb) wb.style.display = 'none';
-    const booking = (state.data.appts && state.data.appts.bookingLinks) || [];
-    const bookHtml = booking[0] ? '<a class="gaia-member-card__cta" href="' + esc(booking[0].openUrl) + '" target="_blank" rel="noopener noreferrer">Book a ' + esc(booking[0].name) + ' →</a>' : '';
-    box.innerHTML = meSection('Bio-Well',
-      '<p class="gaia-me-empty">Book a Bio-Well scan to capture your biofield reading. Your scan history and devices live in your Gaia Healers account.</p>' + bookHtml)
-      + meSection('My devices', '<a class="gaia-me-row gaia-me-row--link" href="home.html?view=profile"><span>See my devices</span><span class="gaia-me-row__meta">Me →</span></a>');
-  }
-
-  function render() { renderHome(); renderMe(); renderAcademy(); renderCommunity(); renderWellness(); }
+  function render() { renderHome(); renderMe(); renderAcademy(); renderCommunity(); }
 
   document.addEventListener('DOMContentLoaded', render); // public first paint
   document.addEventListener('gaia:auth', (e) => {

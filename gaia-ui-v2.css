@@ -768,6 +768,9 @@ body.gaia-v2 .gaia-assist__panel {
   right: 0;
   bottom: calc(0.9rem + env(safe-area-inset-bottom));
   margin: 0 auto;
+  /* v2 centers via left/right/margin; cancel the base rule's translateX(-50%)
+     (gaia-shared.css) so the panel isn't double-shifted off-center on desktop. */
+  transform: none;
   width: min(100% - 1.6rem, 26rem);
   max-height: min(56vh, 27rem);
   padding: 0;

@@ -2923,47 +2923,35 @@
 
     let assistSessionBusy = false;
 
-    function canCloseAssistSession() {
-      if (!realtimeVoice?.isActive()) return !panel.hidden;
-      const voiceStatus = realtimeVoice.status;
-      return voiceStatus === 'listening'
-        || voiceStatus === 'ready'
-        || voiceStatus === 'speaking'
-        || voiceStatus === 'thinking';
-    }
-
     async function onAssistTap() {
+      // An open panel must ALWAYS be closeable by a tap on the orb, regardless
+      // of voice state (idle, connecting, error) or an in-flight open. This
+      // prevents the panel from ever being stranded open if a voice connect
+      // hangs. The busy guard only protects the OPEN/start path below.
+      if (!panel.hidden) {
+        assistSessionBusy = false;
+        try { realtimeVoice?.stop?.(); } catch (_) {}
+        setOpen(false);
+        setAssistVoiceState('idle', REALTIME_STATUS_COPY.idle);
+        return;
+      }
+
       if (assistSessionBusy) return;
 
       initRealtimeVoice();
       if (canUseRealtimeVoice()) setRealtimeVoiceProvider();
 
       if (!realtimeVoice) {
-        if (panel.hidden) {
-          assistSessionBusy = true;
-          setOpen(true);
-          setError('');
-          setAssistVoiceState('connecting', 'Opening Gaia Assist…');
-          await ensureMobileVoiceReady();
-          try {
-            await startVoicePrompt();
-          } finally {
-            assistSessionBusy = false;
-          }
-        } else {
-          setOpen(false);
+        assistSessionBusy = true;
+        setOpen(true);
+        setError('');
+        setAssistVoiceState('connecting', 'Opening Gaia Assist…');
+        await ensureMobileVoiceReady();
+        try {
+          await startVoicePrompt();
+        } finally {
+          assistSessionBusy = false;
         }
-        return;
-      }
-
-      if (!panel.hidden && canCloseAssistSession()) {
-        realtimeVoice.stop();
-        setOpen(false);
-        setAssistVoiceState('idle', REALTIME_STATUS_COPY.idle);
-        return;
-      }
-
-      if (!panel.hidden && realtimeVoice.status === 'connecting') {
         return;
       }
 

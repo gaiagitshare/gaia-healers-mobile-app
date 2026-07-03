@@ -1444,6 +1444,7 @@
     const root = document.getElementById('splash-flow');
     if (!root) return;
     const steps = root.querySelectorAll('.splash-step');
+    const scenes = root.querySelectorAll('.splash-scene');
     const dots = root.querySelectorAll('[data-splash-dot]');
     const nextBtn = root.querySelector('[data-splash-next]');
     const enterLink = root.querySelector('[data-splash-enter]');
@@ -1451,6 +1452,7 @@
 
     function show(n) {
       steps.forEach((s, idx) => s.classList.toggle('active', idx === n));
+      scenes.forEach((s, idx) => s.classList.toggle('active', idx === n));
       dots.forEach((d, idx) => {
         d.classList.toggle('bg-gaia', idx === n);
         d.classList.toggle('bg-neutral-200', idx !== n);
@@ -2924,50 +2926,42 @@
     let assistSessionBusy = false;
 
     async function onAssistTap() {
-      // An open panel must ALWAYS be closeable by a tap on the orb, regardless
-      // of voice state (idle, connecting, error) or an in-flight open. This
-      // prevents the panel from ever being stranded open if a voice connect
-      // hangs. The busy guard only protects the OPEN/start path below.
-      if (!panel.hidden) {
+      initRealtimeVoice();
+      if (canUseRealtimeVoice()) setRealtimeVoiceProvider();
+
+      // A tap TOGGLES OFF only when a voice session is genuinely live (or
+      // connecting) — then it stops and closes. This also lets a user abort a
+      // slow/hung connect with a second tap.
+      const voiceLive = !!realtimeVoice?.isActive?.();
+      if (voiceLive) {
         assistSessionBusy = false;
-        try { realtimeVoice?.stop?.(); } catch (_) {}
+        try { realtimeVoice.stop(); } catch (_) {}
         setOpen(false);
         setAssistVoiceState('idle', REALTIME_STATUS_COPY.idle);
         return;
       }
 
+      // Otherwise a tap always OPENS (if needed) and STARTS voice. Critically,
+      // this means a tap on the passively-opened welcome panel STARTS Gemini
+      // Live instead of closing it — so the very first tap works, every time.
       if (assistSessionBusy) return;
-
-      initRealtimeVoice();
-      if (canUseRealtimeVoice()) setRealtimeVoiceProvider();
-
-      if (!realtimeVoice) {
-        assistSessionBusy = true;
-        setOpen(true);
-        setError('');
-        setAssistVoiceState('connecting', 'Opening Gaia Assist…');
-        await ensureMobileVoiceReady();
-        try {
-          await startVoicePrompt();
-        } finally {
-          assistSessionBusy = false;
-        }
-        return;
-      }
-
       assistSessionBusy = true;
       const wasClosed = panel.hidden;
       setOpen(true);
-      setAssistVoiceState('connecting', REALTIME_STATUS_COPY.connecting);
       setError('');
+      setAssistVoiceState('connecting', REALTIME_STATUS_COPY.connecting);
       await ensureMobileVoiceReady();
 
       try {
-        if (!realtimeVoice.isActive()) {
-          await realtimeVoice.start();
-          sendRealtimeWelcome(wasClosed ? 'first-open' : 'resume');
-        } else if (realtimeVoice.status !== 'connecting') {
-          sendRealtimeWelcome('resume');
+        if (realtimeVoice) {
+          if (!realtimeVoice.isActive()) {
+            await realtimeVoice.start();
+            sendRealtimeWelcome(wasClosed ? 'first-open' : 'resume');
+          } else if (realtimeVoice.status !== 'connecting') {
+            sendRealtimeWelcome('resume');
+          }
+        } else {
+          await startVoicePrompt();
         }
       } catch (err) {
         assistError('assist start failed', err);

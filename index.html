@@ -17,8 +17,8 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="gaia-shared.css" />
-  <link rel="stylesheet" href="gaia-splash.css" />
+  <link rel="stylesheet" href="gaia-shared.css?v=20260703j" />
+  <link rel="stylesheet" href="gaia-splash.css?v=20260703j" />
 </head>
 <body class="gaia-app min-h-screen">
   <div id="splash-flow" class="gaia-splash-shell">
@@ -37,9 +37,127 @@
     </header>
 
     <main class="gaia-splash-content">
-      <div class="gaia-splash-hero">
-        <div class="gaia-splash-icon">
-          <img src="assets/gaia-logo.png" alt="Gaia Healers" />
+      <div class="gaia-splash-stage" data-splash-stage>
+        <div class="splash-halo" aria-hidden="true"></div>
+
+        <!-- Scene 0 · Welcome -->
+        <div class="splash-scene active" data-scene="0" aria-hidden="true">
+          <div class="splash-brand-orb">
+            <span class="splash-ring splash-ring--a"></span>
+            <span class="splash-ring splash-ring--b"></span>
+            <span class="splash-orb-core">
+              <svg viewBox="0 0 48 48" fill="none" aria-hidden="true">
+                <path d="M38 24a14 14 0 1 0-4.9 10.65" stroke="#fff" stroke-width="5" stroke-linecap="round"/>
+                <path d="M24 24h9.5" stroke="#fff" stroke-width="5" stroke-linecap="round"/>
+              </svg>
+            </span>
+            <span class="splash-spark splash-spark--1"></span>
+            <span class="splash-spark splash-spark--2"></span>
+            <span class="splash-spark splash-spark--3"></span>
+          </div>
+        </div>
+
+        <!-- Scene 1 · Bio-Well biofield -->
+        <div class="splash-scene" data-scene="1" aria-hidden="true">
+          <svg viewBox="0 0 200 200" class="splash-svg" fill="none">
+            <g class="s-aura">
+              <circle cx="100" cy="100" r="46" stroke="url(#gGrad)" stroke-width="1.5" opacity="0.9"/>
+              <circle cx="100" cy="100" r="64" stroke="url(#gGrad)" stroke-width="1.2" opacity="0.55"/>
+              <circle cx="100" cy="100" r="82" stroke="url(#gGrad)" stroke-width="1" opacity="0.3"/>
+            </g>
+            <line x1="100" y1="46" x2="100" y2="154" stroke="rgba(167,233,126,0.25)" stroke-width="1.5"/>
+            <g class="s-chakra">
+              <circle class="c-dot" style="--i:0" cx="100" cy="52" r="6"/>
+              <circle class="c-dot" style="--i:1" cx="100" cy="69" r="6"/>
+              <circle class="c-dot" style="--i:2" cx="100" cy="86" r="6"/>
+              <circle class="c-dot" style="--i:3" cx="100" cy="103" r="7"/>
+              <circle class="c-dot" style="--i:4" cx="100" cy="120" r="6"/>
+              <circle class="c-dot" style="--i:5" cx="100" cy="137" r="6"/>
+              <circle class="c-dot" style="--i:6" cx="100" cy="152" r="6"/>
+            </g>
+            <defs>
+              <linearGradient id="gGrad" x1="0" y1="0" x2="1" y2="1">
+                <stop offset="0" stop-color="#a7e97e"/><stop offset="1" stop-color="#5cb82e"/>
+              </linearGradient>
+            </defs>
+          </svg>
+        </div>
+
+        <!-- Scene 2 · Practitioner network -->
+        <div class="splash-scene" data-scene="2" aria-hidden="true">
+          <svg viewBox="0 0 200 200" class="splash-svg" fill="none">
+            <g class="s-links" stroke="url(#gGrad2)" stroke-width="1.4">
+              <line x1="100" y1="100" x2="46" y2="52"/>
+              <line x1="100" y1="100" x2="158" y2="60"/>
+              <line x1="100" y1="100" x2="40" y2="130"/>
+              <line x1="100" y1="100" x2="150" y2="146"/>
+              <line x1="100" y1="100" x2="100" y2="40"/>
+            </g>
+            <g class="s-nodes">
+              <circle class="n-dot" style="--i:0" cx="46" cy="52" r="11"/>
+              <circle class="n-dot" style="--i:1" cx="158" cy="60" r="11"/>
+              <circle class="n-dot" style="--i:2" cx="40" cy="130" r="11"/>
+              <circle class="n-dot" style="--i:3" cx="150" cy="146" r="11"/>
+              <circle class="n-dot" style="--i:4" cx="100" cy="40" r="10"/>
+            </g>
+            <circle class="n-hub" cx="100" cy="100" r="20"/>
+            <path class="n-hub-mark" d="M92 100l6 6 12-13" stroke="#052b0a" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+            <defs>
+              <linearGradient id="gGrad2" x1="0" y1="0" x2="1" y2="1">
+                <stop offset="0" stop-color="#7dd956"/><stop offset="1" stop-color="#449422"/>
+              </linearGradient>
+            </defs>
+          </svg>
+        </div>
+
+        <!-- Scene 3 · Academy credentials -->
+        <div class="splash-scene" data-scene="3" aria-hidden="true">
+          <svg viewBox="0 0 200 200" class="splash-svg" fill="none">
+            <g class="s-bars">
+              <rect style="--i:0" x="42" y="118" width="26" height="42" rx="6"/>
+              <rect style="--i:1" x="87" y="96" width="26" height="64" rx="6"/>
+              <rect style="--i:2" x="132" y="70" width="26" height="90" rx="6"/>
+            </g>
+            <g class="s-seal">
+              <circle cx="100" cy="78" r="30" fill="url(#gGrad3)"/>
+              <circle cx="100" cy="78" r="30" stroke="rgba(255,255,255,0.5)" stroke-width="1.5"/>
+              <path d="M90 79l7 7 14-16" stroke="#053009" stroke-width="4.5" stroke-linecap="round" stroke-linejoin="round"/>
+              <path class="seal-ribbon" d="M88 104l-6 24 18-9 18 9-6-24z" fill="#449422"/>
+            </g>
+            <defs>
+              <linearGradient id="gGrad3" x1="0" y1="0" x2="1" y2="1">
+                <stop offset="0" stop-color="#a7e97e"/><stop offset="1" stop-color="#5cb82e"/>
+              </linearGradient>
+            </defs>
+          </svg>
+        </div>
+
+        <!-- Scene 4 · Events + Gaia Assist voice -->
+        <div class="splash-scene" data-scene="4" aria-hidden="true">
+          <svg viewBox="0 0 200 200" class="splash-svg" fill="none">
+            <rect x="40" y="46" width="120" height="80" rx="14" fill="rgba(255,255,255,0.06)" stroke="rgba(167,233,126,0.35)" stroke-width="1.5"/>
+            <line x1="40" y1="70" x2="160" y2="70" stroke="rgba(167,233,126,0.28)" stroke-width="1.5"/>
+            <circle cx="58" cy="58" r="3.5" fill="#a7e97e"/><circle cx="72" cy="58" r="3.5" fill="rgba(167,233,126,0.5)"/>
+            <g class="s-wave" fill="url(#gGrad4)">
+              <rect style="--i:0" x="67" y="86" width="6" height="24" rx="3"/>
+              <rect style="--i:1" x="82" y="86" width="6" height="24" rx="3"/>
+              <rect style="--i:2" x="97" y="86" width="6" height="24" rx="3"/>
+              <rect style="--i:3" x="112" y="86" width="6" height="24" rx="3"/>
+              <rect style="--i:4" x="127" y="86" width="6" height="24" rx="3"/>
+            </g>
+            <circle class="s-mic" cx="100" cy="150" r="20" fill="url(#gGrad4)"/>
+            <g stroke="#052b0a" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" fill="none">
+              <rect x="96" y="141" width="8" height="11" rx="4" fill="#052b0a" stroke="none"/>
+              <path d="M92 149a8 8 0 0 0 16 0"/>
+              <path d="M100 157v4"/>
+              <path d="M95 161h10"/>
+            </g>
+            <defs>
+              <linearGradient id="gGrad4" x1="0" y1="0" x2="1" y2="1">
+                <stop offset="0" stop-color="#7dd956"/><stop offset="1" stop-color="#5cb82e"/>
+              </linearGradient>
+            </defs>
+          </svg>
         </div>
       </div>
 
@@ -47,27 +165,27 @@
         <div class="splash-step active" data-step="0">
           <p class="gaia-splash-eyebrow">Welcome</p>
           <h1 class="gaia-splash-title">Your wellness<br />journey starts here</h1>
-          <p class="gaia-splash-body">Client portal for 1,200+ practitioners — certification, biofield analysis, and modality communities.</p>
+          <p class="gaia-splash-body">The client portal for 1,200+ practitioners — certification, biofield analysis, and modality communities in one place.</p>
         </div>
         <div class="splash-step" data-step="1">
           <p class="gaia-splash-eyebrow">Bio-Well</p>
           <h2 class="gaia-splash-title">Biofield analysis</h2>
-          <p class="gaia-splash-body">Energy readiness, chakra trends, and scan history for certified operators.</p>
+          <p class="gaia-splash-body">Energy readiness, chakra trends, and scan history — read at a glance for certified operators.</p>
         </div>
         <div class="splash-step" data-step="2">
           <p class="gaia-splash-eyebrow">Network</p>
           <h2 class="gaia-splash-title">Practitioner communities</h2>
-          <p class="gaia-splash-body">Bio-Well, BioPulsar, Biotekna, and Healeex — case studies and live training.</p>
+          <p class="gaia-splash-body">Bio-Well, BioPulsar, Biotekna, and Healeex — case studies, peers, and live training.</p>
         </div>
         <div class="splash-step" data-step="3">
           <p class="gaia-splash-eyebrow">Academy</p>
-          <h2 class="gaia-splash-title">Credentials</h2>
-          <p class="gaia-splash-body">Orientation through Advanced Level 2 — exams, CE, verified credentials.</p>
+          <h2 class="gaia-splash-title">Credentials that count</h2>
+          <p class="gaia-splash-body">Orientation through Advanced Level 2 — exams, CE, and verified credentials you can share.</p>
         </div>
         <div class="splash-step" data-step="4">
           <p class="gaia-splash-eyebrow">Elevate + Assist</p>
           <h2 class="gaia-splash-title">Events with a voice guide</h2>
-          <p class="gaia-splash-body">GHL registration, QR check-in, badges, exhibitors, and Gaia Assist in one practitioner flow.</p>
+          <p class="gaia-splash-body">Registration, QR check-in, badges, exhibitors — and Gaia Assist to guide you, just by talking.</p>
         </div>
       </div>
     </main>
@@ -85,7 +203,7 @@
       <a href="home.html" class="gaia-splash-skip" onclick="sessionStorage.setItem('gaia-entered','1');sessionStorage.setItem('gaia-onboarded','1')">Skip intro</a>
     </footer>
   </div>
-  <script src="gaia-ui.js"></script>
+  <script src="gaia-ui.js?v=20260703j"></script>
   <script>
     if (sessionStorage.getItem('gaia-entered') && sessionStorage.getItem('gaia-onboarded')) location.replace('home.html');
   </script>

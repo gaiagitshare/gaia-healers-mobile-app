@@ -124,66 +124,193 @@
   z-index: 10;
 }
 
-/* Hero icon */
-.gaia-splash-hero {
+/* ============================================================
+   Scene stage — a distinct animated illustration per slide
+   ============================================================ */
+.gaia-splash-stage {
   position: relative;
-  margin-bottom: 2.5rem;
-}
-
-.gaia-splash-icon {
-  position: relative;
-  width: 9rem;
-  height: 9rem;
-  border-radius: 50%;
-  background: rgba(255, 255, 255, 0.08);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
-  border: 1px solid rgba(255, 255, 255, 0.12);
+  width: 13rem;
+  height: 13rem;
+  margin-bottom: 2.25rem;
   display: grid;
   place-items: center;
-  box-shadow:
-    0 24px 80px rgba(0, 0, 0, 0.35),
-    0 0 0 1px rgba(255, 255, 255, 0.06) inset,
-    0 0 60px rgba(92, 184, 46, 0.25);
+}
+
+/* soft glow behind every scene */
+.splash-halo {
+  position: absolute;
+  inset: -12%;
+  border-radius: 50%;
+  background: radial-gradient(circle at 50% 45%, rgba(92, 184, 46, 0.32), transparent 62%);
+  filter: blur(14px);
   animation: splash-icon-breathe 5s ease-in-out infinite;
-}
-
-.gaia-splash-icon::before {
-  content: '';
-  position: absolute;
-  inset: -4px;
-  border-radius: 50%;
-  background: conic-gradient(from 180deg, transparent, rgba(125, 217, 86, 0.4), transparent 30%);
-  opacity: 0.6;
-  animation: splash-icon-rotate 8s linear infinite;
-  z-index: -1;
-  filter: blur(6px);
-}
-
-.gaia-splash-icon::after {
-  content: '';
-  position: absolute;
-  inset: 0;
-  border-radius: 50%;
-  background: radial-gradient(circle at 30% 30%, rgba(255, 255, 255, 0.12), transparent 60%);
   pointer-events: none;
 }
 
-.gaia-splash-icon img {
-  width: 70%;
-  height: 70%;
-  object-fit: contain;
-  filter: drop-shadow(0 4px 16px rgba(0, 0, 0, 0.25));
+.splash-scene {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  opacity: 0;
+  transform: scale(0.9) translateY(6px);
+  transition: opacity 0.55s cubic-bezier(0.22, 1, 0.36, 1),
+              transform 0.55s cubic-bezier(0.22, 1, 0.36, 1);
+  pointer-events: none;
 }
+
+.splash-scene.active {
+  opacity: 1;
+  transform: scale(1) translateY(0);
+}
+
+.splash-svg {
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+  filter: drop-shadow(0 8px 30px rgba(0, 0, 0, 0.4));
+}
+
+/* ---- Scene 0 · brand orb ---- */
+.splash-brand-orb {
+  position: relative;
+  width: 8.5rem;
+  height: 8.5rem;
+  display: grid;
+  place-items: center;
+}
+
+.splash-orb-core {
+  position: relative;
+  width: 6rem;
+  height: 6rem;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  background: linear-gradient(150deg, #6fce3a, #3f8c1f);
+  box-shadow: 0 0 44px rgba(92, 184, 46, 0.55), 0 0 0 1px rgba(255, 255, 255, 0.14) inset;
+  animation: splash-icon-breathe 4.5s ease-in-out infinite;
+}
+
+.splash-orb-core svg {
+  width: 62%;
+  height: 62%;
+  filter: drop-shadow(0 3px 10px rgba(0, 0, 0, 0.28));
+}
+
+.splash-ring {
+  position: absolute;
+  border-radius: 50%;
+  border: 1.5px solid rgba(167, 233, 126, 0.35);
+}
+
+.splash-ring--a {
+  inset: 0;
+  animation: splash-ring-pulse 3.2s ease-out infinite;
+}
+
+.splash-ring--b {
+  inset: -1.1rem;
+  border-color: rgba(167, 233, 126, 0.2);
+  animation: splash-ring-pulse 3.2s ease-out 1.6s infinite;
+}
+
+.splash-spark {
+  position: absolute;
+  width: 0.55rem;
+  height: 0.55rem;
+  border-radius: 50%;
+  background: #a7e97e;
+  box-shadow: 0 0 10px rgba(167, 233, 126, 0.9);
+  top: 50%;
+  left: 50%;
+  margin: -0.275rem;
+  transform-origin: 0.275rem 0.275rem;
+  animation: splash-orbit 9s linear infinite;
+}
+
+.splash-spark--1 { --r: 4.6rem; animation-duration: 8s; }
+.splash-spark--2 { --r: 3.6rem; animation-duration: 11s; animation-direction: reverse; opacity: 0.75; }
+.splash-spark--3 { --r: 5.2rem; animation-duration: 14s; opacity: 0.5; }
+
+@keyframes splash-orbit {
+  from { transform: rotate(0deg) translateX(var(--r, 4.6rem)); }
+  to { transform: rotate(360deg) translateX(var(--r, 4.6rem)); }
+}
+
+@keyframes splash-ring-pulse {
+  0% { transform: scale(0.82); opacity: 0.9; }
+  100% { transform: scale(1.35); opacity: 0; }
+}
+
+/* ---- Scene 1 · biofield aura + chakra dots ---- */
+.s-aura circle { transform-origin: 100px 100px; animation: splash-breathe-soft 4s ease-in-out infinite; }
+.s-aura circle:nth-child(2) { animation-delay: 0.5s; }
+.s-aura circle:nth-child(3) { animation-delay: 1s; }
+.c-dot {
+  fill: #a7e97e;
+  transform-origin: center;
+  animation: chakra-glow 2.8s ease-in-out infinite;
+  animation-delay: calc(var(--i) * 0.16s);
+}
+@keyframes chakra-glow {
+  0%, 100% { opacity: 0.35; filter: drop-shadow(0 0 0 rgba(167,233,126,0)); }
+  50% { opacity: 1; filter: drop-shadow(0 0 6px rgba(167,233,126,0.9)); }
+}
+@keyframes splash-breathe-soft {
+  0%, 100% { transform: scale(1); opacity: inherit; }
+  50% { transform: scale(1.06); }
+}
+
+/* ---- Scene 2 · network ---- */
+.s-links line { stroke-dasharray: 6 6; animation: dash-flow 1.6s linear infinite; opacity: 0.6; }
+@keyframes dash-flow { to { stroke-dashoffset: -24; } }
+.n-dot {
+  fill: rgba(125, 217, 86, 0.9);
+  stroke: rgba(255,255,255,0.25); stroke-width: 1;
+  transform-origin: center;
+  animation: node-pop 3s ease-in-out infinite;
+  animation-delay: calc(var(--i) * 0.22s);
+}
+@keyframes node-pop {
+  0%, 100% { transform: scale(0.85); opacity: 0.7; }
+  50% { transform: scale(1.12); opacity: 1; }
+}
+.n-hub { fill: #6fce3a; filter: drop-shadow(0 0 12px rgba(92,184,46,0.7)); animation: splash-icon-breathe 3s ease-in-out infinite; transform-origin: 100px 100px; }
+
+/* ---- Scene 3 · credentials ---- */
+.s-bars rect {
+  fill: rgba(125, 217, 86, 0.28);
+  stroke: rgba(167,233,126,0.4); stroke-width: 1;
+  transform-origin: bottom;
+  transform-box: fill-box;
+  animation: bar-rise 3.2s ease-in-out infinite;
+  animation-delay: calc(var(--i) * 0.2s);
+}
+@keyframes bar-rise {
+  0%, 100% { transform: scaleY(0.72); opacity: 0.6; }
+  50% { transform: scaleY(1); opacity: 1; }
+}
+.s-seal { transform-origin: 100px 82px; animation: splash-icon-breathe 4s ease-in-out infinite; filter: drop-shadow(0 6px 18px rgba(0,0,0,0.35)); }
+.seal-ribbon { animation: ribbon-sway 3.5s ease-in-out infinite; transform-origin: 100px 104px; }
+@keyframes ribbon-sway { 0%,100%{transform:rotate(-3deg);} 50%{transform:rotate(3deg);} }
+
+/* ---- Scene 4 · events + voice ---- */
+.s-wave rect {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: wave-bounce 1s ease-in-out infinite;
+  animation-delay: calc(var(--i) * 0.11s);
+}
+@keyframes wave-bounce {
+  0%, 100% { transform: scaleY(0.35); opacity: 0.7; }
+  50% { transform: scaleY(1); opacity: 1; }
+}
+.s-mic { filter: drop-shadow(0 0 14px rgba(92,184,46,0.7)); transform-origin: 100px 150px; animation: splash-icon-breathe 2.4s ease-in-out infinite; }
 
 @keyframes splash-icon-breathe {
   0%, 100% { transform: scale(1); }
-  50% { transform: scale(1.03); }
-}
-
-@keyframes splash-icon-rotate {
-  from { transform: rotate(0deg); }
-  to { transform: rotate(360deg); }
+  50% { transform: scale(1.04); }
 }
 
 /* Steps */
@@ -334,9 +461,9 @@
     padding: 2rem 2rem 3rem;
   }
 
-  .gaia-splash-icon {
-    width: 10.5rem;
-    height: 10.5rem;
+  .gaia-splash-stage {
+    width: 14.5rem;
+    height: 14.5rem;
   }
 
   .gaia-splash-body {
@@ -344,14 +471,21 @@
   }
 }
 
-@media (max-height: 700px) {
-  .gaia-splash-hero {
-    margin-bottom: 1.75rem;
+@media (max-height: 720px) {
+  .gaia-splash-stage {
+    width: 10.5rem;
+    height: 10.5rem;
+    margin-bottom: 1.5rem;
   }
 
-  .gaia-splash-icon {
+  .splash-brand-orb {
     width: 7rem;
     height: 7rem;
+  }
+
+  .splash-orb-core {
+    width: 5rem;
+    height: 5rem;
   }
 
   .gaia-splash-steps {

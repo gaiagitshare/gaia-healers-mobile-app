@@ -910,9 +910,8 @@
       const ceRequired = Number(dashboard.ceCreditsRequired ?? academy.summary?.ceCreditsRequired ?? 24) || 24;
       const cePercent = ceRequired > 0 ? Math.max(0, Math.min(100, Math.round((ceEarned / ceRequired) * 100))) : 0;
 
-      if (todayHeroGreeting) todayHeroGreeting.textContent = hub.member?.cohort || 'Client portal';
-      if (todayHeroTitle) todayHeroTitle.innerHTML = escapeHtml(dashboard.welcomeTitle || 'Your Gaia dashboard is ready');
-      if (todayHeroSub) todayHeroSub.textContent = dashboard.welcomeDetail || 'Courses, communities, live sessions, credentials, and products from GHL Memberships.';
+      // Home hero is owned by gaia-member.js (Phase 5) — public vs personalized.
+      // (Left greeting/title/sub untouched here to avoid overwriting real data.)
       if (todayAcademyTitle) {
         todayAcademyTitle.textContent = activeCourse.title
           || academy.summary?.nextCourseTitle

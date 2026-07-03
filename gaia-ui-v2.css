@@ -1961,3 +1961,49 @@ body.gaia-v2 .gaia-assist__audio {
 }
 .gaia-access-card__cta::after { content: " \2192"; }
 .gaia-access-empty { font-size: 0.8125rem; color: var(--gh-text-soft, #636366); }
+
+/* —— Phase 5: Home member dashboard —— */
+.gaia-member-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.7rem;
+  margin-top: 0.9rem;
+}
+.gaia-member-card {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  min-height: 7rem;
+}
+.gaia-member-card__label {
+  font-size: 0.6875rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--gh-accent-deep, #449422);
+}
+.gaia-member-card__value {
+  font-size: 1.02rem;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  color: var(--gh-text, #1c1c1e);
+  line-height: 1.2;
+}
+.gaia-member-card__meta {
+  font-size: 0.75rem;
+  color: var(--gh-text-soft, #636366);
+  line-height: 1.35;
+}
+.gaia-member-card__cta {
+  margin-top: auto;
+  align-self: flex-start;
+  padding: 0;
+  border: 0;
+  background: none;
+  cursor: pointer;
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: var(--gh-accent-deep, #449422);
+  text-decoration: none;
+}
+.gaia-member-grid[hidden] { display: none; }

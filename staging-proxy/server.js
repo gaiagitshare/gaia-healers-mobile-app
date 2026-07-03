@@ -1099,9 +1099,11 @@ function gaiaLiveVoiceConfig() {
 
 function buildGaiaLiveInstructions(context = {}) {
   const view = String(context.view || 'today').trim() || 'today';
+  const memberContext = String(context.memberContext || '').trim();
   return [
     'You are Gaia Assist, the warm, knowledgeable voice concierge built into the Gaia Healers app. You know every screen and feature of this app and the whole Gaia ecosystem, and you help members get things done without leaving the app.',
     gaiaKnowledgePrompt(),
+    memberContext,
     `The member is currently on the ${view} screen. Assume questions relate to what they are looking at unless they say otherwise, and tailor your help to that screen first.`,
     'Speak in a calm, friendly, natural voice, like a helpful friend on a phone call. Keep replies short: one or two sentences, then a quick question or a clear next step. Give more detail only when asked.',
     'Be proactive and specific: when a member asks for something, tell them exactly which screen and tab to open (e.g. "Open Wellness, Bio-Well tab" or "That is in Community, Events tab"), and offer the natural next step.',
@@ -1112,7 +1114,40 @@ function buildGaiaLiveInstructions(context = {}) {
     'Never claim you saved, imported, emailed, checked in, or changed anything. Draft and ask for confirmation first.',
     'Do not diagnose or make medical claims.',
     'Greet the member warmly in one short sentence when the session starts, mention you can help with anything in the app, then listen.',
-  ].join('\n');
+  ].filter(Boolean).join('\n');
+}
+
+// Builds a private, per-member context block from the signed-in session so Gaia
+// can greet by name and speak to the member's own courses/progress. Returns ''
+// for anonymous visitors (Gaia stays generic). Never throws — personalization
+// must never block the voice token.
+async function buildMemberVoiceContext(req) {
+  try {
+    const member = sessionMemberContext(req);
+    if (!member) return '';
+    const ctxUrl = withMemberContext(new URL('http://localhost'), member);
+    const [academy, hub] = await Promise.all([
+      getAcademyProgress(ctxUrl).catch(() => null),
+      getMemberHub(ctxUrl, FALLBACK_ACADEMY).catch(() => null),
+    ]);
+    const firstName = String(member.displayName || academy?.member?.name || 'there').trim().split(/\s+/)[0];
+    const lines = [
+      'MEMBER CONTEXT (private — this is the signed-in member; use it to personalize, never read it aloud to anyone else):',
+      `You are speaking with ${member.displayName || firstName}. Greet them by first name ("${firstName}").`,
+    ];
+    const roleCohort = [member.role, member.cohort].filter(Boolean).join(' · ');
+    if (roleCohort) lines.push(`Their role/cohort: ${roleCohort}.`);
+    if (academy?.summary) {
+      const s = academy.summary;
+      lines.push(`Their Academy progress: ${s.enrolled} courses enrolled, ${s.completed} completed, about ${s.averageProgress}% average. Next up: ${s.nextCourseTitle}${s.nextLessonTitle ? ` — ${s.nextLessonTitle}` : ''}. CE credits ${s.ceCreditsEarned}/${s.ceCreditsRequired}.`);
+      lines.push(`(This progress data is ${academy.liveData ? 'live from the education system' : 'not yet live — treat as approximate and say so if asked for exact figures'}.)`);
+    }
+    if (hub?.member?.role && !roleCohort) lines.push(`Membership: ${hub.member.role}.`);
+    lines.push('If the member asks about their courses, badge, or scans, use this context and point them to the exact screen (Academy, Wellness, Community, or Profile).');
+    return lines.join('\n');
+  } catch {
+    return '';
+  }
 }
 
 function buildGaiaLiveConnectConfig(context = {}) {
@@ -1135,7 +1170,7 @@ function buildGaiaLiveConnectConfig(context = {}) {
   };
 }
 
-async function assistLiveToken(_req, res, origin, url) {
+async function assistLiveToken(req, res, origin, url) {
   const startedAt = Date.now();
   const cfg = gaiaLiveVoiceConfig();
   if (!cfg.enabled) {
@@ -1150,6 +1185,7 @@ async function assistLiveToken(_req, res, origin, url) {
   }
 
   const view = String(url.searchParams.get('view') || 'today').trim() || 'today';
+  const memberContext = await buildMemberVoiceContext(req);
   const expireTime = new Date(Date.now() + 30 * 60 * 1000).toISOString();
   const newSessionExpireTime = new Date(Date.now() + 60 * 1000).toISOString();
 
@@ -1183,7 +1219,8 @@ async function assistLiveToken(_req, res, origin, url) {
       provider: cfg.provider,
       model: cfg.model,
       voice: cfg.voice,
-      instructions: buildGaiaLiveInstructions({ view }),
+      instructions: buildGaiaLiveInstructions({ view, memberContext }),
+      personalized: Boolean(memberContext),
       maxSessionSeconds: cfg.maxSessionSeconds,
       expireTime,
     }, origin);

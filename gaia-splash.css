@@ -97,9 +97,10 @@
   overflow: hidden;
 }
 
-.gaia-splash-logo-mark img {
-  width: 70%;
-  height: 70%;
+.gaia-splash-logo-mark img,
+.gaia-splash-logo-mark svg {
+  width: 68%;
+  height: 68%;
   object-fit: contain;
 }
 

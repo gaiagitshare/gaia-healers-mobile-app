@@ -55,7 +55,7 @@
       const g = h < 12 ? 'Good morning' : h < 18 ? 'Good afternoon' : 'Good evening';
       return { kicker: g, title: 'Hi <em>' + esc(first) + '</em>' };
     }
-    return { kicker: 'Your energy', title: 'Welcome to <em>Gaia</em>' };
+    return { kicker: 'Your energy', title: 'Welcome to <em>Gaia&nbsp;Healers</em>' };
   }
 
   // The signature hero: the living chakra body (image carries the glowing
@@ -328,14 +328,14 @@
   // Membership presented as UNLOCKED ABILITIES, not invented paid tiers.
   // Real model: Explorer (free/public, not a GHL tier) · Silver (the one paid
   // GHL membership tag) · Practitioner (earned via certification, not bought).
+  // Membership tier card = g-card composition (g-tier list + g-badge).
   function tierCard(o) {
-    return '<article class="gaia-card gaia-card-pad gaia-tier' + (o.active ? ' gaia-tier--active' : '') + '">'
-      + '<div class="gaia-tier__head"><p class="gaia-me-card__label">' + esc(o.name) + '</p>'
-      + (o.statusLabel ? '<span class="gaia-tier__badge' + (o.active ? ' is-active' : '') + '">' + esc(o.statusLabel) + '</span>' : '')
-      + '</div>'
-      + '<ul class="gaia-tier__list">' + o.abilities.map((a) => '<li>' + esc(a) + '</li>').join('') + '</ul>'
-      + (o.note ? '<p class="gaia-me-hint">' + esc(o.note) + '</p>' : '')
-      + (o.ctaHref ? '<a class="gaia-member-card__cta" href="' + esc(o.ctaHref) + '" target="_blank" rel="noopener noreferrer">' + esc(o.ctaLabel) + ' →</a>' : '')
+    return '<article class="g-card' + (o.active ? ' g-card--feature' : '') + '">'
+      + '<div class="g-tier__head"><p class="g-card__label">' + esc(o.name) + '</p>'
+      + (o.statusLabel ? '<span class="g-badge' + (o.active ? ' g-badge--on' : '') + '">' + esc(o.statusLabel) + '</span>' : '') + '</div>'
+      + '<ul class="g-tier__list">' + o.abilities.map((a) => '<li>' + esc(a) + '</li>').join('') + '</ul>'
+      + (o.note ? '<p class="g-card__meta">' + esc(o.note) + '</p>' : '')
+      + (o.ctaHref ? '<div class="g-card__actions"><a class="g-btn ' + (o.active ? 'g-btn--secondary' : 'g-btn--primary') + ' g-btn--sm" href="' + esc(o.ctaHref) + '" target="_blank" rel="noopener noreferrer">' + esc(o.ctaLabel) + '</a></div>' : '')
       + '</article>';
   }
   function membershipCards() {
@@ -347,12 +347,11 @@
     const shopBase = (window.GaiaStore && window.GaiaStore.shopBase) || 'https://gaiahealers.com';
     const baseline = !authed || (!hasSilver && !isPract);
 
-    const intro = '<article class="gaia-card gaia-card-pad gaia-me-card"><p class="gaia-me-card__label">Membership</p>'
-      + '<p class="gaia-me-empty">Your Gaia unlocks more as you grow — here’s what each level opens. No fake tiers: this reflects your real access.</p></article>';
-
+    const intro = '<article class="g-card"><p class="g-card__label">Membership</p>'
+      + '<p class="g-card__meta">Gaia Healers unlocks more as you grow — here’s what each level opens. This reflects your real access, not invented tiers.</p></article>';
     const explorer = tierCard({
       name: 'Explorer', statusLabel: baseline ? 'Current' : 'Included', active: baseline,
-      abilities: ['Public Gaia Assist', 'Chakra map & birth-date reading', 'Public events & articles', 'Browse the store'],
+      abilities: ['Public Gaia Assist', 'Chakra experience & birth-date reading', 'Public events & articles', 'Browse the store'],
     });
     const silver = tierCard({
       name: 'Silver member', statusLabel: hasSilver ? 'Active' : '', active: hasSilver,
@@ -368,43 +367,11 @@
     return intro + explorer + silver + practitioner;
   }
 
+  // Store "Membership" tab. Products live in the "Shop" tab (gaia-store.js);
+  // personal entitlements (orders, bookings) move to Profile in its redesign.
   function renderStore() {
-    const box = el('store-body'); if (!box) return;
-    const d = state.data; const portal = portalBase();
-    const rows = [];
-
-    // 1) Membership — real ability-unlock model (Explorer / Silver / Practitioner)
-    rows.push(membershipCards());
-
-    // 2) Products (Bio-Well devices, tools)
-    const prod = d.products || {};
-    const owned = prod.ownedProducts || [];
-    rows.push(meSection('Products',
-      (owned.length ? owned.map((p) => meRow(p.name, 'Owned')).join('') : meEmpty('Bio-Well devices, add-ons, and practitioner tools.'))
-      + storeCta('Browse the store', prod.storeUrl || portal, true)));
-
-    // 3) Subscriptions
-    const subs = (prod.subscriptions && prod.subscriptions.length) ? prod.subscriptions : ((d.purchases && d.purchases.subscriptions) || []);
-    rows.push(meSection('Subscriptions',
-      (subs.length ? subs.map((s) => meRow(s.status || 'Subscription', money(s.amount, s.currency))).join('') : meEmpty('No active subscriptions.'))
-      + storeCta('Manage in portal', portal, true)));
-
-    // 4) Event tickets / registration (live event)
-    const ev = state.event;
-    rows.push(meSection('Event tickets',
-      (ev && ev.name)
-        ? ('<p class="gaia-me-card__value">' + esc(ev.name) + '</p>' + (fmtEventDate(ev) ? meRow('When', fmtEventDate(ev)) : '')
-           + storeCta('Register', ev.sourceUrl || 'https://elevate.gaiahealers.com/gaia-healers-elevate-conference-page', true))
-        : meEmpty('No upcoming event on sale right now.')));
-
-    // 5) Booking a scan / session (live booking links)
-    const booking = (d.appts && d.appts.bookingLinks) || [];
-    rows.push(meSection('Book a scan or session',
-      booking.length
-        ? booking.map((b) => '<a class="gaia-me-row gaia-me-row--link" href="' + esc(b.openUrl) + '" target="_blank" rel="noopener noreferrer"><span>' + esc(b.name) + '</span><span class="gaia-me-row__meta">Book →</span></a>').join('')
-        : (meEmpty('Bio-Well scans and 1:1 sessions.') + storeCta('See booking options', portal, true))));
-
-    box.innerHTML = rows.join('');
+    const box = el('store-memberships'); if (!box) return;
+    box.innerHTML = membershipCards();
   }
 
   function render() { renderHome(); renderMe(); renderMeWellness(); renderStore(); renderAcademy(); renderCommunity(); }

@@ -7,8 +7,7 @@
  */
 (function () {
   'use strict';
-  const shop = document.getElementById('store-shop');
-  if (!shop) return; // store screen only
+  if (!document.getElementById('store-products') && !document.getElementById('home-store')) return;
 
   const SHOP = 'https://gaiahealers.com';
   // Curated categories → real Shopify collection handles (verified live).
@@ -36,14 +35,15 @@
   // consistent ~3.7x inflation, e.g. json $8,573 vs page $2,299). Correct
   // in-app pricing needs the Shopify Storefront API @inContext(country). Until
   // then we link out and the accurate price shows on the Shopify page.
-  function productCard(p) {
+  // Canonical product tile (g-* system). Image + title + "View →"; no price
+  // until the Storefront API returns correct market prices. Links to Shopify.
+  function gTile(p) {
     const src = firstImage(p);
     const url = SHOP + '/products/' + p.handle;
-    return '<a class="gaia-shop-card" href="' + esc(url) + '" target="_blank" rel="noopener noreferrer">'
-      + '<span class="gaia-shop-card__imgwrap">' + (src ? '<img loading="lazy" src="' + esc(src) + '" alt="" />' : '') + '</span>'
-      + '<span class="gaia-shop-card__title">' + esc(p.title) + '</span>'
-      + '<span class="gaia-shop-card__price">View →</span>'
-      + '</a>';
+    return '<a class="g-tile" href="' + esc(url) + '" target="_blank" rel="noopener noreferrer">'
+      + '<span class="g-tile__media">' + (src ? '<img loading="lazy" src="' + esc(src) + '" alt="" />' : '') + '</span>'
+      + '<span class="g-tile__title">' + esc(p.title) + '</span>'
+      + '<span class="g-tile__meta">View →</span></a>';
   }
 
   async function fetchCollection(handle, limit) {
@@ -55,42 +55,34 @@
     } catch (_) { return []; }
   }
 
-  async function loadShop() {
-    if (loaded) return;
+  // STORE — "Shop" tab: full catalogue by category, g-* rails (galleries on desktop).
+  async function loadStoreProducts() {
+    const box = document.getElementById('store-products');
+    if (!box || loaded) return;
     loaded = true;
-    shop.innerHTML = '<p class="gaia-me-empty">Loading the Gaia store…</p>';
+    box.innerHTML = '<div class="g-store-cat"><div class="g-sk"><div class="g-sk-b big"></div><div class="g-sk-b w8"></div></div></div>';
     const results = await Promise.all(COLLECTIONS.map((c) => fetchCollection(c.handle, c.limit)));
-
     const seen = new Set();
     const html = [];
     COLLECTIONS.forEach((c, i) => {
-      const ps = (results[i] || []).filter((p) => {
-        if (!p || !p.handle || seen.has(p.handle)) return false;   // de-dupe across categories
-        const buyable = (p.variants || []).some((v) => v.available !== false);
-        return buyable;
-      });
-      // keep at most `limit`, mark seen so a product shows once
-      const take = ps.slice(0, c.limit);
+      const take = (results[i] || [])
+        .filter((p) => p && p.handle && !seen.has(p.handle) && (p.variants || []).some((v) => v.available !== false))
+        .slice(0, c.limit);
       take.forEach((p) => seen.add(p.handle));
       if (!take.length) return;
-      html.push(
-        '<section class="gaia-shop-cat">'
-        + '<div class="gaia-shop-cat__head">'
-        + '<p class="gaia-me-card__label">' + esc(c.title) + '</p>'
-        + '<a class="gaia-shop-cat__all" href="' + SHOP + '/collections/' + esc(c.handle) + '" target="_blank" rel="noopener noreferrer">All →</a>'
-        + '</div>'
-        + '<div class="gaia-shop-row">' + take.map(productCard).join('') + '</div>'
-        + '</section>');
+      html.push('<section class="g-store-cat">'
+        + '<div class="g-section"><div class="g-section__lead">'
+        + '<h2 class="g-section__title">' + esc(c.title) + '</h2></div>'
+        + '<a class="g-btn g-btn--ghost g-btn--sm g-section__action" href="' + SHOP + '/collections/' + esc(c.handle) + '" target="_blank" rel="noopener noreferrer">All →</a></div>'
+        + '<div class="g-rail g-store-rail">' + take.map(gTile).join('') + '</div></section>');
     });
-
     if (html.length) {
-      shop.innerHTML = html.join('');
+      box.innerHTML = html.join('');
     } else {
-      // network/blocked — never leave a dead section; link out to the shop.
       loaded = false;
-      shop.innerHTML = '<article class="gaia-card gaia-card-pad gaia-me-card"><p class="gaia-me-card__label">Shop</p>'
-        + '<p class="gaia-me-empty">Browse Bio-Well devices, courses, Colour Energy, crystals, and more at the Gaia Healers store.</p>'
-        + '<a class="gaia-member-card__cta" href="' + SHOP + '" target="_blank" rel="noopener noreferrer">Open the store →</a></article>';
+      box.innerHTML = '<article class="g-card"><p class="g-card__value">The Gaia Healers store</p>'
+        + '<p class="g-card__meta">Bio-Well devices, courses, Colour Energy, crystals, and more.</p>'
+        + '<div class="g-card__actions"><a class="g-btn g-btn--primary g-btn--sm" href="' + SHOP + '" target="_blank" rel="noopener noreferrer">Open the store</a></div></article>';
     }
     window.dispatchEvent(new CustomEvent('gaia:shop-loaded', { detail: { categories: html.length } }));
   }
@@ -99,13 +91,26 @@
     return (window.GaiaAppShell && window.GaiaAppShell.currentView && window.GaiaAppShell.currentView())
       || new URLSearchParams(window.location.search).get('view') || 'today';
   }
-  function maybeLoad() { if (currentView() === 'store') loadShop(); }
+  function maybeLoad() { if (currentView() === 'store') loadStoreProducts(); }
+
+  // Store tabs: Shop | Membership (only one panel visible → shorter page).
+  function bindStoreTabs() {
+    const tabs = document.querySelectorAll('.g-store [data-store-tab]');
+    if (!tabs.length) return;
+    tabs.forEach((tab) => tab.addEventListener('click', () => {
+      const key = tab.dataset.storeTab;
+      tabs.forEach((t) => { const on = t === tab; t.classList.toggle('is-active', on); t.setAttribute('aria-selected', String(on)); });
+      const products = document.getElementById('store-products');
+      const members = document.getElementById('store-memberships');
+      if (products) products.hidden = key !== 'shop';
+      if (members) members.hidden = key !== 'membership';
+    }));
+  }
 
   window.addEventListener('gaia:route', maybeLoad);
-  document.addEventListener('DOMContentLoaded', maybeLoad);
+  document.addEventListener('DOMContentLoaded', () => { maybeLoad(); bindStoreTabs(); });
 
-  // HOME "From the store" rail — real product tiles (new g-* system, image only,
-  // no price). Lightweight: one collection, lazy after first paint.
+  // HOME "From the store" rail — a few real tiles, lazy after first paint.
   let homeLoaded = false;
   async function loadHomeFeatured() {
     const box = document.getElementById('home-store');
@@ -115,18 +120,10 @@
       .filter((p) => p && p.handle && (p.variants || []).some((v) => v.available !== false))
       .slice(0, 8);
     if (!ps.length) { homeLoaded = false; return; }
-    const tiles = ps.map((p) => {
-      const src = firstImage(p);
-      const url = SHOP + '/products/' + p.handle;
-      return '<a class="g-tile" href="' + esc(url) + '" target="_blank" rel="noopener noreferrer">'
-        + '<span class="g-tile__media">' + (src ? '<img loading="lazy" src="' + esc(src) + '" alt="" />' : '') + '</span>'
-        + '<span class="g-tile__title">' + esc(p.title) + '</span>'
-        + '<span class="g-tile__meta">View →</span></a>';
-    }).join('');
     box.innerHTML = '<div class="g-section"><div class="g-section__lead">'
       + '<span class="g-section__kicker">Discover</span><h2 class="g-section__title">From the store</h2></div>'
       + '<a class="g-btn g-btn--ghost g-btn--sm g-section__action" href="home.html?view=store">All →</a></div>'
-      + '<div class="g-rail">' + tiles + '</div>';
+      + '<div class="g-rail">' + ps.map(gTile).join('') + '</div>';
     box.hidden = false;
   }
   document.addEventListener('DOMContentLoaded', () => { window.setTimeout(loadHomeFeatured, 300); });
@@ -146,5 +143,5 @@
   }
 
   // expose for the chakra→Colour-Energy cross-sell and future callers
-  window.GaiaStore = { load: loadShop, shopBase: SHOP, chakraShopUrl: chakraShopUrl, colourFor: (id) => CHAKRA_COLOUR[String(id || '').toLowerCase()] || '' };
+  window.GaiaStore = { load: loadStoreProducts, shopBase: SHOP, chakraShopUrl: chakraShopUrl, colourFor: (id) => CHAKRA_COLOUR[String(id || '').toLowerCase()] || '' };
 })();

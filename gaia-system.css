@@ -184,12 +184,62 @@
    (the #gaia-coach-anchor is also removed, so initCoachMark returns early) */
 .g-home .gaia-coach{display:none}
 
+/* g-skeleton (calm loading; the only loading pattern) --------- */
+.g-sk{display:flex;flex-direction:column;gap:var(--g-s2)}
+.g-sk-b{height:14px;border-radius:var(--g-r-sm);
+  background:linear-gradient(90deg,var(--g-surface),var(--g-surface-hi),var(--g-surface));
+  animation:g-sk 1.4s var(--g-ease) infinite}
+.g-sk-b.big{height:120px}.g-sk-b.w8{width:80%}.g-sk-b.w6{width:60%}
+@keyframes g-sk{0%,100%{opacity:.6}50%{opacity:1}}
+@media (prefers-reduced-motion:reduce){.g-sk-b{animation:none}}
+
+/* g-badge ---------------------------------------------------- */
+.g-badge{display:inline-block;font:600 11px/1 var(--g-font-mono);letter-spacing:.05em;
+  text-transform:uppercase;padding:4px 9px;border-radius:var(--g-r-sm);
+  color:var(--g-text-muted);border:1px solid var(--g-line);white-space:nowrap}
+.g-badge--on{color:var(--g-on-accent);background:var(--g-accent);border-color:transparent}
+
+/* g-tabs (segmented control) --------------------------------- */
+.g-tabs{display:grid;grid-template-columns:1fr 1fr;gap:4px;padding:4px;width:100%;max-width:360px;
+  background:var(--g-surface);border:1px solid var(--g-line);border-radius:var(--g-r-pill)}
+.g-tab{appearance:none;border:none;background:transparent;color:var(--g-text-muted);
+  font:600 14px/1 var(--g-font);padding:10px 16px;border-radius:var(--g-r-pill);cursor:pointer;
+  min-height:38px;transition:background var(--g-dur-1) var(--g-ease),color var(--g-dur-1) var(--g-ease)}
+.g-tab.is-active{background:var(--g-accent);color:var(--g-on-accent)}
+.g-tab:focus-visible{outline:none;box-shadow:var(--g-focus)}
+
+/* g-tier (membership card composition of g-card) -------------- */
+.g-tier__head{display:flex;align-items:center;justify-content:space-between;gap:var(--g-s3)}
+.g-tier__list{list-style:none;margin:var(--g-s2) 0 0;padding:0;display:flex;flex-direction:column;gap:6px}
+.g-tier__list li{position:relative;padding-left:22px;font-size:14px;color:var(--g-text);line-height:1.4}
+.g-tier__list li::before{content:"✓";position:absolute;left:0;top:0;color:var(--g-accent);font-weight:700}
+
+/* Store layout ---------------------------------------------- */
+.g-store{background:var(--g-bg);color:var(--g-text);font-family:var(--g-font);
+  display:flex;flex-direction:column;gap:var(--g-s5);
+  padding:var(--g-s3) var(--g-s4) calc(var(--g-s9) + env(safe-area-inset-bottom))}
+.g-store__head{display:flex;flex-direction:column;gap:var(--g-s1)}
+.g-store__kicker{font:600 11px/1 var(--g-font-mono);letter-spacing:.14em;text-transform:uppercase;color:var(--g-accent)}
+.g-store__title{font-family:var(--g-font-serif);font-weight:600;font-size:clamp(28px,7vw,40px);
+  line-height:1;letter-spacing:-.02em;margin:0;color:var(--g-text)}
+.g-store-panel{display:flex;flex-direction:column;gap:var(--g-s5)}
+.g-store-panel[hidden]{display:none}
+.g-store-cat{display:flex;flex-direction:column;gap:var(--g-s3)}
+.g-store-cat .g-section{margin-bottom:0}
+.g-store-cat .g-section__title{font-size:17px}
+
 /* ---------- Desktop: use the width, don't stretch a phone ---------- */
 @media (min-width:900px){
-  /* widen the shell ONLY while Home is the active screen */
-  body.gaia-v2 .gaia-shell:has(.gaia-screen[data-screen="today"].is-active){
+  /* widen the shell ONLY while a redesigned (g-*) screen is active */
+  body.gaia-v2 .gaia-shell:has(.gaia-screen[data-screen="today"].is-active),
+  body.gaia-v2 .gaia-shell:has(.gaia-screen[data-screen="store"].is-active){
     max-width:1000px !important;
   }
+  /* Store: horizontal rails become full galleries on desktop */
+  .g-store{padding-left:var(--g-s7);padding-right:var(--g-s7)}
+  .g-store-rail{display:grid;grid-template-columns:repeat(auto-fill,minmax(11rem,1fr));
+    overflow:visible;gap:var(--g-s4)}
+  .g-store-rail .g-tile{flex:auto}
   .g-home{padding-left:var(--g-s7);padding-right:var(--g-s7);gap:var(--g-s7)}
   .g-topbar{padding-left:var(--g-s7);padding-right:var(--g-s7)}
   .g-hero{min-height:280px;padding:var(--g-s8) var(--g-s7)}

@@ -37,7 +37,7 @@
   <script src="gaia-chakra-data.js?v=20260703a"></script>
   <link rel="stylesheet" href="gaia-shared.css?v=20260703a" />
   <link rel="stylesheet" href="gaia-ui-v2.css?v=20260703p" />
-  <link rel="stylesheet" href="gaia-system.css?v=20260703r" />
+  <link rel="stylesheet" href="gaia-system.css?v=20260703t" />
 </head>
 <body class="gaia-app gaia-page gaia-single-app gaia-v2">
   <script>try{document.body.dataset.theme=document.documentElement.dataset.theme||'light';}catch(e){}</script>
@@ -49,7 +49,7 @@
          ============================================================ -->
     <section class="gaia-screen is-active" data-screen="today" aria-label="Home">
       <header class="g-topbar">
-        <a href="home.html?view=today" class="g-topbar__brand"><img src="assets/gaia-logo.png" alt="" /> Gaia</a>
+        <a href="home.html?view=today" class="g-topbar__brand"><img src="assets/gaia-logo.png" alt="" /> Gaia Healers</a>
         <div class="g-topbar__actions gaia-header-actions" data-gaia-header-actions>
           <a href="https://education.gaiahealers.com/" class="g-btn g-btn--pill g-btn--sm">Log in</a>
         </div>
@@ -157,23 +157,26 @@
       </main>
     </section>
 
+    <!-- STORE — rebuilt on the g-* design system with two in-page tabs
+         (Shop = live Shopify catalog · Membership = tiers) so it isn't one long scroll. -->
     <section class="gaia-screen" data-screen="store" aria-label="Store">
-      <header class="gaia-header">
-        <div class="flex items-center justify-between gap-3">
-          <div>
-            <p class="gaia-eyebrow">Shop</p>
-            <h1 class="gaia-page-title mt-0.5">Store &amp; memberships</h1>
-          </div>
-          <div class="gaia-header-actions" data-gaia-header-actions></div>
-        </div>
+      <header class="g-topbar">
+        <a href="home.html?view=today" class="g-topbar__brand"><img src="assets/gaia-logo.png" alt="" /> Gaia Healers</a>
+        <div class="g-topbar__actions gaia-header-actions" data-gaia-header-actions></div>
       </header>
-      <main class="gaia-main">
-        <!-- Shop: LIVE gaiahealers.com Shopify catalog (gaia-store.js, public);
-             Buy deep-links to Shopify checkout. -->
-        <section id="store-shop" class="gaia-me-stack" aria-label="Shop"></section>
-        <!-- Your Gaia: member entitlements from GHL — memberships, subscriptions,
-             event ticket, booking (gaia-member.js). -->
-        <section id="store-body" class="gaia-me-stack" aria-label="Your Gaia"></section>
+      <main class="gaia-main g-store">
+        <div class="g-store__head">
+          <p class="g-store__kicker">Shop</p>
+          <h1 class="g-store__title">Store</h1>
+        </div>
+        <div class="g-tabs" role="tablist" aria-label="Store sections">
+          <button type="button" class="g-tab is-active" data-store-tab="shop" role="tab" aria-selected="true" aria-controls="store-products">Shop</button>
+          <button type="button" class="g-tab" data-store-tab="membership" role="tab" aria-selected="false" aria-controls="store-memberships">Membership</button>
+        </div>
+        <!-- Shop panel: LIVE Shopify catalog by category (gaia-store.js) -->
+        <div id="store-products" class="g-store-panel" role="tabpanel" aria-label="Shop"></div>
+        <!-- Membership panel: real tiers (gaia-member.js) -->
+        <div id="store-memberships" class="g-store-panel" role="tabpanel" aria-label="Membership" hidden></div>
       </main>
     </section>
 
@@ -237,8 +240,8 @@
   </div>
   <script src="shared-nav.js?v=20260703m"></script>
   <script src="gaia-realtime-voice.js?v=20260703a"></script>
-  <script src="gaia-member.js?v=20260703r"></script>
-  <script src="gaia-store.js?v=20260703q"></script>
+  <script src="gaia-member.js?v=20260703t"></script>
+  <script src="gaia-store.js?v=20260703t"></script>
   <script src="gaia-ui.js?v=20260703p"></script>
 </body>
 </html>

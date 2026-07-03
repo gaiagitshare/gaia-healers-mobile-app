@@ -224,6 +224,7 @@
     if (!main || !box) return;
     Array.from(main.children).forEach((ch) => { if (ch.id !== 'member-wellness') ch.style.display = 'none'; });
     const tabs = el('wellness-tabs'); if (tabs) tabs.style.display = 'none';
+    const wb = document.querySelector('.gaia-screen[data-screen="wellness"] [data-wellness-badge]'); if (wb) wb.style.display = 'none';
     const booking = (state.data.appts && state.data.appts.bookingLinks) || [];
     const bookHtml = booking[0] ? '<a class="gaia-member-card__cta" href="' + esc(booking[0].openUrl) + '" target="_blank" rel="noopener noreferrer">Book a ' + esc(booking[0].name) + ' →</a>' : '';
     box.innerHTML = meSection('Bio-Well',

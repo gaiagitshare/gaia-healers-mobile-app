@@ -1315,37 +1315,116 @@ async function memberActivity(req, res, origin) {
   sendJson(res, 200, { ...memberEnvelope(b, {}), source: 'ghl-live', activity: items.slice(0, 25), count: items.length }, origin);
 }
 
-// —— Documented placeholders (GHL scope-blocked or no-API) — never mock ——
+// —— Phase 2b: member-scoped GHL reads. Scopes are location-wide (admin), so
+// every helper restricts to the signed-in member by contactId. Never mock. ——
+async function ghlMemberOrders(cid, limit = 20) {
+  const cfg = ghlConfig();
+  const r = await ghlGet('/payments/orders', { altId: cfg.locationId, altType: 'location', contactId: cid, limit }).catch(() => null);
+  return Array.isArray(r?.data) ? r.data : [];
+}
+async function ghlMemberSubscriptions(cid, limit = 20) {
+  const cfg = ghlConfig();
+  const r = await ghlGet('/payments/subscriptions', { altId: cfg.locationId, altType: 'location', contactId: cid, limit }).catch(() => null);
+  return Array.isArray(r?.data) ? r.data : [];
+}
+async function ghlMemberTransactions(cid, limit = 20) {
+  const cfg = ghlConfig();
+  const r = await ghlGet('/payments/transactions', { altId: cfg.locationId, altType: 'location', contactId: cid, limit }).catch(() => null);
+  return Array.isArray(r?.data) ? r.data : [];
+}
+async function ghlMemberSubmissions(cid, kind, limit = 100) {
+  const cfg = ghlConfig();
+  const r = await ghlGet(`/${kind}/submissions`, { locationId: cfg.locationId, contactId: cid, page: 1, limit }).catch(() => null);
+  const rows = Array.isArray(r?.submissions) ? r.submissions : [];
+  return cid ? rows.filter((s) => String(s.contactId || '') === String(cid)) : rows;
+}
+async function ghlMemberConversations(cid, limit = 20) {
+  const cfg = ghlConfig();
+  const r = await ghlGet('/conversations/search', { locationId: cfg.locationId, contactId: cid, limit }).catch(() => null);
+  return Array.isArray(r?.conversations) ? r.conversations : [];
+}
+function orderIsPaid(o) { return /paid|success|complete|active|delivered/i.test(String(o.paymentStatus || o.status || '')); }
+
 async function memberProducts(req, res, origin) {
   const sm = requireSessionMember(req, res, origin); if (!sm) return;
   const b = await fetchMemberBundle(sm);
-  const owned = [];
-  for (const t of b.tags) { const m = ACCESS_CATALOG.productOwnerPattern.exec(t); if (m) owned.push({ id: m[1].toLowerCase(), name: friendlyProductName(m[1]), owned: true, matchedBy: t }); }
+  const ownedFromTags = [];
+  for (const t of b.tags) { const m = ACCESS_CATALOG.productOwnerPattern.exec(t); if (m) ownedFromTags.push({ id: m[1].toLowerCase(), name: friendlyProductName(m[1]), source: 'tag', matchedBy: t }); }
+  const [orders, subs] = await Promise.all([
+    b.contactId ? ghlMemberOrders(b.contactId, 50) : [],
+    b.contactId ? ghlMemberSubscriptions(b.contactId, 50) : [],
+  ]);
+  const purchased = orders.filter(orderIsPaid).map((o) => ({ orderId: o._id || o.id, name: o.name || 'Order', amount: o.amount, currency: o.currency, status: o.paymentStatus || o.status, source: 'order' }));
   sendJson(res, 200, {
-    ok: true, authenticated: true, source: 'ghl-tags',
-    reason: 'Owned products derived live from product_*_owner tags. Full product catalog + purchase history need the GHL products/payments token scopes.',
-    generatedAt: new Date().toISOString(), products: owned, count: owned.length,
+    ok: true, authenticated: true, source: 'ghl-live', generatedAt: new Date().toISOString(),
+    ownedProducts: ownedFromTags,
+    purchases: purchased,
+    subscriptions: subs.map((s) => ({ id: s._id || s.id, status: s.status, amount: s.amount, currency: s.currency })),
+    counts: { ownedFromTags: ownedFromTags.length, purchases: purchased.length, subscriptions: subs.length },
   }, origin);
 }
+
+async function memberPurchases(req, res, origin) {
+  const sm = requireSessionMember(req, res, origin); if (!sm) return;
+  const b = await fetchMemberBundle(sm);
+  const [orders, subs, tx] = await Promise.all([
+    b.contactId ? ghlMemberOrders(b.contactId, 50) : [],
+    b.contactId ? ghlMemberSubscriptions(b.contactId, 50) : [],
+    b.contactId ? ghlMemberTransactions(b.contactId, 50) : [],
+  ]);
+  sendJson(res, 200, {
+    ok: true, authenticated: true, source: 'ghl-live', generatedAt: new Date().toISOString(),
+    orders: orders.map((o) => ({ id: o._id || o.id, name: o.name, amount: o.amount, currency: o.currency, status: o.status, paymentStatus: o.paymentStatus, createdAt: o.createdAt || o.updatedAt || '' })),
+    subscriptions: subs.map((s) => ({ id: s._id || s.id, status: s.status, amount: s.amount, currency: s.currency, createdAt: s.createdAt || '' })),
+    transactions: tx.map((t) => ({ id: t._id || t.id, amount: t.amount, currency: t.currency, status: t.status || t.paymentStatus, createdAt: t.createdAt || t.updatedAt || '' })),
+    counts: { orders: orders.length, subscriptions: subs.length, transactions: tx.length },
+  }, origin);
+}
+
+async function memberForms(req, res, origin) {
+  const sm = requireSessionMember(req, res, origin); if (!sm) return;
+  const b = await fetchMemberBundle(sm);
+  const [forms, surveys] = await Promise.all([
+    b.contactId ? ghlMemberSubmissions(b.contactId, 'forms', 100) : [],
+    b.contactId ? ghlMemberSubmissions(b.contactId, 'surveys', 100) : [],
+  ]);
+  const norm = (s, type) => ({ id: s.id, type, formId: s.formId || s.surveyId || '', name: s.name || '', email: s.email || '', submittedAt: s.createdAt || '' });
+  sendJson(res, 200, {
+    ok: true, authenticated: true, source: 'ghl-live', generatedAt: new Date().toISOString(),
+    formSubmissions: forms.map((s) => norm(s, 'form')),
+    surveySubmissions: surveys.map((s) => norm(s, 'survey')),
+    tagState: b.tags.filter((t) => /form_complete|form_incomplete/i.test(t)),
+    counts: { forms: forms.length, surveys: surveys.length },
+  }, origin);
+}
+
+async function memberNotifications(req, res, origin) {
+  const sm = requireSessionMember(req, res, origin); if (!sm) return;
+  const b = await fetchMemberBundle(sm);
+  const convos = b.contactId ? await ghlMemberConversations(b.contactId, 20) : [];
+  const notifications = convos.map((c) => ({
+    id: c.id, type: c.type || c.lastMessageType || 'conversation',
+    unread: Number(c.unreadCount || 0),
+    lastMessage: String(c.lastMessageBody || '').slice(0, 160),
+    updatedAt: c.dateUpdated || c.lastMessageDate || '',
+  }));
+  sendJson(res, 200, {
+    ok: true, authenticated: true, source: 'ghl-live', generatedAt: new Date().toISOString(),
+    notifications,
+    counts: { conversations: notifications.length, unread: notifications.reduce((n, x) => n + x.unread, 0) },
+  }, origin);
+}
+
+// Courses & community events remain impossible via GHL API (no endpoint).
 async function memberCourses(req, res, origin) {
   const sm = requireSessionMember(req, res, origin); if (!sm) return;
   const b = await fetchMemberBundle(sm);
   const tagHints = b.tags.filter((t) => /course|enrolled/i.test(t));
-  sendJson(res, 200, placeholderEnvelope('GHL exposes no Courses/LMS API — course enrollment and lesson progress cannot be read. Tag hints only.', { courses: [], tagHints }), origin);
+  sendJson(res, 200, placeholderEnvelope('GHL exposes no Courses/LMS API — course enrollment and lesson progress cannot be read (verified: all course endpoints 404). Tag hints only.', { courses: [], tagHints }), origin);
 }
 async function memberEvents(req, res, origin) {
   if (!requireSessionMember(req, res, origin)) return;
-  sendJson(res, 200, placeholderEnvelope('Community/live-session events live in GHL Communities (no API). 1:1 bookings are at /api/member/appointments; Elevate events come from the Event Manager.', { events: [] }), origin);
-}
-async function memberForms(req, res, origin) {
-  const sm = requireSessionMember(req, res, origin); if (!sm) return;
-  const b = await fetchMemberBundle(sm);
-  const tagState = b.tags.filter((t) => /form_complete|form_incomplete/i.test(t));
-  sendJson(res, 200, placeholderEnvelope('Forms/submissions need the GHL forms scope. Form-completion state is available via tags today.', { forms: [], tagState }), origin);
-}
-async function memberNotifications(req, res, origin) {
-  if (!requireSessionMember(req, res, origin)) return;
-  sendJson(res, 200, placeholderEnvelope('Notifications need the GHL conversations scope or webhook wiring. None surfaced yet.', { notifications: [] }), origin);
+  sendJson(res, 200, placeholderEnvelope('Community/live-session events live in GHL Communities (no API). Member 1:1 bookings are live at /api/member/appointments.', { events: [] }), origin);
 }
 
 function boolFlag(value) {
@@ -2965,6 +3044,7 @@ const server = http.createServer(async (req, res) => {
     if (req.method === 'GET' && url.pathname === '/api/member/appointments') { await memberAppointments(req, res, origin); return; }
     if (req.method === 'GET' && url.pathname === '/api/member/activity') { await memberActivity(req, res, origin); return; }
     if (req.method === 'GET' && url.pathname === '/api/member/products') { await memberProducts(req, res, origin); return; }
+    if (req.method === 'GET' && url.pathname === '/api/member/purchases') { await memberPurchases(req, res, origin); return; }
     if (req.method === 'GET' && url.pathname === '/api/member/courses') { await memberCourses(req, res, origin); return; }
     if (req.method === 'GET' && url.pathname === '/api/member/events') { await memberEvents(req, res, origin); return; }
     if (req.method === 'GET' && url.pathname === '/api/member/forms') { await memberForms(req, res, origin); return; }

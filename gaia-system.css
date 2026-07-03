@@ -228,15 +228,90 @@
 .g-store-cat .g-section{margin-bottom:0}
 .g-store-cat .g-section__title{font-size:17px}
 
+/* Generic screen shell (Community / Academy / Profile) ------ */
+.g-page{background:var(--g-bg);color:var(--g-text);font-family:var(--g-font);
+  display:flex;flex-direction:column;gap:var(--g-s5);
+  padding:var(--g-s3) var(--g-s4) calc(var(--g-s9) + env(safe-area-inset-bottom))}
+.g-page__head{display:flex;flex-direction:column;gap:var(--g-s1)}
+.g-page__kicker{font:600 11px/1 var(--g-font-mono);letter-spacing:.14em;text-transform:uppercase;color:var(--g-accent)}
+.g-page__title{font-family:var(--g-font-serif);font-weight:600;font-size:clamp(28px,7vw,40px);
+  line-height:1;letter-spacing:-.02em;margin:0;color:var(--g-text)}
+.g-page__sub{color:var(--g-text-muted);font-size:14px;margin:0;max-width:60ch}
+.g-page-sec{display:flex;flex-direction:column;gap:var(--g-s3)}
+
+/* Summary stat strip ---------------------------------------- */
+.g-stats{display:grid;grid-template-columns:repeat(3,1fr);gap:var(--g-s2)}
+.g-stat{background:var(--g-surface);border:1px solid var(--g-line);border-radius:var(--g-r-md);
+  padding:var(--g-s3) var(--g-s4);display:flex;flex-direction:column;gap:3px}
+.g-stat__n{font:700 22px/1 var(--g-font);letter-spacing:-.02em;color:var(--g-text)}
+.g-stat__n--accent{color:var(--g-accent)}
+.g-stat__l{font:600 10.5px/1.1 var(--g-font-mono);letter-spacing:.05em;text-transform:uppercase;color:var(--g-text-muted)}
+
+/* Access list (communities / entitlements) ------------------ */
+.g-access-grid{display:flex;flex-direction:column;gap:var(--g-s3)}
+.g-access{position:relative;display:flex;gap:var(--g-s3);align-items:center;
+  background:var(--g-surface);border:1px solid var(--g-line);border-radius:var(--g-r-lg);
+  padding:var(--g-s4) var(--g-s4) var(--g-s4) calc(var(--g-s4) + 3px);overflow:hidden}
+.g-access::before{content:"";position:absolute;left:0;top:0;bottom:0;width:3px;background:var(--st,var(--g-text-muted))}
+.g-access--unlocked{--st:var(--g-accent)}
+.g-access--locked{--st:#F5C518}
+.g-access--soon{--st:rgba(236,243,233,.22)}
+.g-access__ic{flex:none;width:38px;height:38px;border-radius:var(--g-r-md);display:grid;place-items:center;
+  background:var(--g-surface-hi);color:var(--st,var(--g-text-muted));font-size:17px}
+.g-access__body{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px}
+.g-access__name{font:700 15px/1.2 var(--g-font);letter-spacing:-.01em;color:var(--g-text);
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.g-access__meta{font-size:12.5px;color:var(--g-text-muted);line-height:1.35}
+.g-access__act{flex:none}
+
+/* status chip ----------------------------------------------- */
+.g-chip{display:inline-flex;align-items:center;gap:5px;font:600 10.5px/1 var(--g-font-mono);
+  letter-spacing:.05em;text-transform:uppercase;padding:5px 9px;border-radius:var(--g-r-pill);
+  border:1px solid var(--g-line);color:var(--g-text-muted);white-space:nowrap}
+.g-chip--on{color:var(--g-accent);border-color:transparent;background:rgba(125,217,86,.14)}
+.g-chip--lock{color:#F5C518;border-color:transparent;background:rgba(245,197,24,.13)}
+
+/* Rows inside a g-card (account / lists) --------------------- */
+.g-rows{display:flex;flex-direction:column;margin-top:var(--g-s2)}
+.g-rows>*{display:flex;align-items:center;justify-content:space-between;gap:var(--g-s3);
+  padding:11px 0;border-top:1px solid var(--g-line);font-size:14px;color:var(--g-text);
+  text-decoration:none;min-width:0}
+.g-rows>*:first-child{border-top:0}
+.g-rows>* span:first-child{min-width:0;overflow:hidden;text-overflow:ellipsis}
+.g-row__meta{color:var(--g-text-muted);font-size:13px;text-align:right;white-space:nowrap;flex:none}
+a.g-row--link:hover,a.g-row--link:hover .g-row__meta{color:var(--g-accent)}
+a.g-row--link .g-row__meta{color:var(--g-accent)}
+.g-empty{color:var(--g-text-muted);font-size:13.5px;margin:var(--g-s2) 0 0;line-height:1.5}
+.g-profile-signout{align-self:center;margin-top:var(--g-s2)}
+
+/* g-access as a link (Academy tracks) ----------------------- */
+a.g-access{text-decoration:none;transition:border-color var(--g-motion,.2s) ease}
+a.g-access:hover{border-color:rgba(125,217,86,.4)}
+
+/* Birth-date chakra reading (Profile) ----------------------- */
+.g-dob{margin-top:var(--g-s3);appearance:none;width:100%;background:var(--g-surface-hi);
+  border:1px solid var(--g-line);border-radius:var(--g-r-md);color:var(--g-text);
+  padding:11px 14px;font:500 15px var(--g-font)}
+.g-dob::-webkit-calendar-picker-indicator{filter:invert(1) opacity(.55);cursor:pointer}
+.g-chakra-read{display:flex;align-items:center;gap:var(--g-s3);margin-top:var(--g-s3);min-height:44px}
+.g-chakra-dot{flex:none;width:34px;height:34px;border-radius:var(--g-r-pill);box-shadow:0 0 16px currentColor}
+.g-hint{color:var(--g-text-muted);font-size:12px;margin:var(--g-s3) 0 0}
+
 /* ---------- Desktop: use the width, don't stretch a phone ---------- */
 @media (min-width:900px){
   /* widen the shell ONLY while a redesigned (g-*) screen is active */
   body.gaia-v2 .gaia-shell:has(.gaia-screen[data-screen="today"].is-active),
-  body.gaia-v2 .gaia-shell:has(.gaia-screen[data-screen="store"].is-active){
+  body.gaia-v2 .gaia-shell:has(.gaia-screen[data-screen="store"].is-active),
+  body.gaia-v2 .gaia-shell:has(.gaia-screen[data-screen="community"].is-active),
+  body.gaia-v2 .gaia-shell:has(.gaia-screen[data-screen="academy"].is-active),
+  body.gaia-v2 .gaia-shell:has(.gaia-screen[data-screen="profile"].is-active){
     max-width:1000px !important;
   }
   /* Store: horizontal rails become full galleries on desktop */
   .g-store{padding-left:var(--g-s7);padding-right:var(--g-s7)}
+  /* generic g-* pages breathe on desktop; access lists go 2-up */
+  .g-page{padding-left:var(--g-s7);padding-right:var(--g-s7)}
+  .g-access-grid{display:grid;grid-template-columns:1fr 1fr;gap:var(--g-s3)}
   .g-store-rail{display:grid;grid-template-columns:repeat(auto-fill,minmax(11rem,1fr));
     overflow:visible;gap:var(--g-s4)}
   .g-store-rail .g-tile{flex:auto}

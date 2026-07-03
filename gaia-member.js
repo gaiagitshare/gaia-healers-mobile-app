@@ -137,98 +137,216 @@
   }
   function meEmpty(t) { return '<p class="gaia-me-empty">' + esc(t) + '</p>'; }
 
+  // ── g-* account helpers (Profile) ───────────────────────────
+  function gMeCard(label, inner) {
+    return '<article class="g-card"><p class="g-card__label">' + esc(label) + '</p>' + inner + '</article>';
+  }
+  function gRows(items) { return '<div class="g-rows">' + items.join('') + '</div>'; }
+  function gRow(label, meta) {
+    return '<div class="g-row"><span>' + esc(label) + '</span>' + (meta ? '<span class="g-row__meta">' + esc(meta) + '</span>' : '') + '</div>';
+  }
+  function gRowLink(label, meta, href, ext) {
+    return '<a class="g-row g-row--link" href="' + esc(href) + '"' + (ext ? ' target="_blank" rel="noopener noreferrer"' : '')
+      + '><span>' + esc(label) + '</span><span class="g-row__meta">' + esc(meta) + '</span></a>';
+  }
+
+  // Profile = live account from /api/member/*. Signed-out shows a sign-in card
+  // + a preview of what appears; the birth-date chakra (below) is public.
   function renderMe() {
-    const main = document.querySelector('.gaia-screen[data-screen="profile"] .gaia-main');
     const box = el('member-me');
-    if (!main || !box) return;
-    Array.from(main.children).forEach((ch) => {
-      const keep = ch.classList.contains('gaia-profile-hero') || ch.id === 'member-me'
-        || ch.id === 'me-wellness'
-        || ch.hasAttribute('data-sign-out') || ch.hasAttribute('data-admin-locked')
-        || ch.hasAttribute('data-admin-entry') || ch.tagName === 'P';
-      if (!keep) ch.style.display = 'none';
-    });
-    const heroTitle = main.querySelector('.gaia-profile-hero .gaia-page-title');
-    const heroSub = main.querySelector('.gaia-profile-hero .gaia-caption');
+    if (!box) return;
     const d = state.data;
-    const storeRow = '<a class="gaia-me-row gaia-me-row--link" href="home.html?view=store"><span>Store &amp; memberships</span><span class="gaia-me-row__meta">Shop →</span></a>';
+    const title = el('profile-title');
+    const sub = el('profile-sub');
+    const kicker = el('profile-kicker');
 
     if (!(state.authed && d.profile)) {
-      if (heroTitle) heroTitle.textContent = 'Your profile';
-      if (heroSub) heroSub.textContent = 'Sign in to see your memberships, devices, bookings, and more.';
-      box.innerHTML = meSection('Members', '<p class="gaia-me-empty">Sign in to open your personal Gaia — profile, devices, purchases, bookings, and messages.</p><a class="gaia-member-card__cta" href="' + esc(portalBase()) + '" target="_blank" rel="noopener noreferrer">Sign in →</a>')
-        + meSection('Shop', storeRow);
+      if (kicker) kicker.textContent = 'Your account';
+      if (title) title.textContent = 'Profile';
+      if (sub) sub.textContent = 'Sign in to see your memberships, devices, bookings, and messages.';
+      box.innerHTML =
+        '<article class="g-card g-card--feature"><p class="g-card__label">Members</p>'
+        + '<p class="g-card__value g-card__value--lg">Your personal Gaia</p>'
+        + '<p class="g-card__meta">Sign in to open your profile, devices, purchases, bookings, and a Gaia Assist that knows you.</p>'
+        + '<div class="g-card__actions"><a class="g-btn g-btn--primary g-btn--sm" href="' + esc(portalBase()) + '" target="_blank" rel="noopener noreferrer">Sign in</a></div></article>'
+        + gMeCard('What you’ll see', gRows([
+          gRow('Membership & communities', ''),
+          gRow('Your devices', ''),
+          gRow('Purchases & subscriptions', ''),
+          gRow('Bookings', ''),
+          gRow('Messages', ''),
+        ]))
+        + gMeCard('Shop', gRows([gRowLink('Store & memberships', 'Shop →', 'home.html?view=store', false)]));
       return;
     }
 
     const p = (d.profile && d.profile.profile) || {};
-    if (heroTitle) heroTitle.textContent = p.name || 'Member';
+    const first = String(p.name || 'Member').trim();
+    if (kicker) kicker.textContent = 'Your account';
+    if (title) title.textContent = first;
     const bits = [];
-    if (p.membershipTier) bits.push(esc(p.membershipTier) + ' member');
+    if (p.membershipTier) bits.push(p.membershipTier + ' member');
+    else bits.push('Member');
     if (p.practitioner) bits.push(p.practitionerCertified ? 'Certified practitioner' : 'Practitioner');
-    if (p.email) bits.push(esc(p.email));
-    if (heroSub) heroSub.innerHTML = bits.join(' · ') || 'Gaia member';
+    if (p.email) bits.push(p.email);
+    if (sub) sub.textContent = bits.join(' · ');
 
-    const rows = [];
+    const cards = [];
+
+    // Membership status (feature card)
+    const tierName = p.membershipTier ? p.membershipTier + ' member' : 'Free member';
+    cards.push('<article class="g-card g-card--feature"><div class="g-tier__head"><p class="g-card__label">Membership</p>'
+      + (p.membershipTier ? '<span class="g-badge g-badge--on">Active</span>' : '') + '</div>'
+      + '<p class="g-card__value g-card__value--lg">' + esc(tierName) + '</p>'
+      + (p.practitioner ? '<p class="g-card__meta">' + (p.practitionerCertified ? 'Certified Bio-Well practitioner' : 'Practitioner') + '</p>' : '')
+      + '<div class="g-card__actions"><a class="g-btn g-btn--secondary g-btn--sm" href="home.html?view=store">View memberships →</a>'
+      + '<a class="g-btn g-btn--ghost g-btn--sm" href="home.html?view=community">My access →</a></div></article>');
+
     const devices = (d.devices && d.devices.devices) || [];
-    rows.push(meSection('My devices', devices.length
-      ? devices.map((x) => meRow(x.name, x.serialNumber ? 'SN ' + x.serialNumber : '')).join('')
-      : meEmpty('No devices on record yet.')));
+    cards.push(gMeCard('My devices', devices.length
+      ? gRows(devices.map((x) => gRow(x.name, x.serialNumber ? 'SN ' + x.serialNumber : '')))
+      : '<p class="g-empty">No devices on record yet.</p>'));
 
     const pcnt = (d.purchases && d.purchases.counts) || {};
-    rows.push(meSection('Purchases & subscriptions', (pcnt.orders || pcnt.subscriptions)
-      ? meRow((pcnt.orders || 0) + ' order' + ((pcnt.orders === 1) ? '' : 's'), (pcnt.subscriptions || 0) + ' subscription' + ((pcnt.subscriptions === 1) ? '' : 's'))
-      : meEmpty('No purchases yet.')));
+    cards.push(gMeCard('Purchases & subscriptions', (pcnt.orders || pcnt.subscriptions)
+      ? gRows([gRow((pcnt.orders || 0) + ' order' + ((pcnt.orders === 1) ? '' : 's'), (pcnt.subscriptions || 0) + ' subscription' + ((pcnt.subscriptions === 1) ? '' : 's'))])
+      : '<p class="g-empty">No purchases yet.</p>'));
 
     const appts = (d.appts && d.appts.appointments) || [];
     const now = Date.now();
     const upcoming = appts.filter((a) => { const x = Date.parse(a.startTime || ''); return isFinite(x) && x > now; });
     const booking = (d.appts && d.appts.bookingLinks) || [];
-    rows.push(meSection('My bookings',
+    cards.push(gMeCard('My bookings',
       (upcoming.length
-        ? upcoming.slice(0, 3).map((a) => meRow(a.title || 'Appointment', new Date(a.startTime).toLocaleDateString())).join('')
-        : meEmpty('No upcoming appointments.'))
-      + (booking[0] ? '<a class="gaia-member-card__cta" href="' + esc(booking[0].openUrl) + '" target="_blank" rel="noopener noreferrer">Book a ' + esc(booking[0].name) + ' →</a>' : '')));
+        ? gRows(upcoming.slice(0, 3).map((a) => gRow(a.title || 'Appointment', new Date(a.startTime).toLocaleDateString())))
+        : '<p class="g-empty">No upcoming appointments.</p>')
+      + (booking[0] ? '<div class="g-card__actions"><a class="g-btn g-btn--secondary g-btn--sm" href="' + esc(booking[0].openUrl) + '" target="_blank" rel="noopener noreferrer">Book a ' + esc(booking[0].name) + ' →</a></div>' : '')));
 
     const fcnt = (d.forms && d.forms.counts) || {};
-    rows.push(meSection('Forms & surveys', (fcnt.forms || fcnt.surveys)
-      ? meRow((fcnt.forms || 0) + ' form' + ((fcnt.forms === 1) ? '' : 's') + ' submitted', (fcnt.surveys || 0) + ' survey' + ((fcnt.surveys === 1) ? '' : 's'))
-      : meEmpty('No submissions yet.')));
+    cards.push(gMeCard('Forms & surveys', (fcnt.forms || fcnt.surveys)
+      ? gRows([gRow((fcnt.forms || 0) + ' form' + ((fcnt.forms === 1) ? '' : 's') + ' submitted', (fcnt.surveys || 0) + ' survey' + ((fcnt.surveys === 1) ? '' : 's'))])
+      : '<p class="g-empty">No submissions yet.</p>'));
 
     const ncnt = (d.notif && d.notif.counts) || {};
-    rows.push(meSection('Messages', meRow(ncnt.unread ? ncnt.unread + ' unread' : 'All caught up', (ncnt.conversations || 0) + ' conversation' + ((ncnt.conversations === 1) ? '' : 's'))));
+    cards.push(gMeCard('Messages', gRows([gRow(ncnt.unread ? ncnt.unread + ' unread' : 'All caught up', (ncnt.conversations || 0) + ' conversation' + ((ncnt.conversations === 1) ? '' : 's'))])));
 
-    rows.push(meSection('Account',
-      storeRow
-      + '<a class="gaia-me-row gaia-me-row--link" href="' + esc(portalBase()) + '" target="_blank" rel="noopener noreferrer"><span>Open Gaia Healers portal</span><span class="gaia-me-row__meta">education.gaiahealers.com</span></a>'));
+    cards.push(gMeCard('Account', gRows([
+      gRowLink('Store & memberships', 'Shop →', 'home.html?view=store', false),
+      gRowLink('Open Gaia Healers portal', 'education.gaiahealers.com', portalBase(), true),
+    ])));
 
-    box.innerHTML = rows.join('');
+    box.innerHTML = cards.join('');
   }
 
+  // Academy = honest course portal. Lesson progress isn't exposed by GHL, so we
+  // deep-link into the portal instead of faking progress bars.
   function renderAcademy() {
-    const main = document.querySelector('.gaia-screen[data-screen="academy"] .gaia-main');
     const box = el('member-academy');
-    if (!main || !box) return;
-    Array.from(main.children).forEach((ch) => { if (ch.id !== 'member-academy') ch.style.display = 'none'; });
-    const cap = document.getElementById('academy-summary-caption');
-    if (cap) cap.textContent = 'Your courses live in the Gaia Healers portal.';
+    if (!box) return;
+    const cap = el('academy-summary-caption');
+    if (cap) cap.textContent = state.authed ? 'Your courses live in the Gaia Healers portal.' : 'Sign in to continue where you left off.';
     const courses = state.data.courses || {};
     const hub = courses.portalUrl || (portalBase() + '/courses');
-    const rows = [meSection('Academy',
-      '<p class="gaia-me-empty">Your courses, lessons, and certificates live in the Gaia Healers portal. Open the Academy to continue where you left off — Gaia can guide you, but lesson progress opens in the portal.</p>'
-      + '<a class="gaia-member-card__cta" href="' + esc(hub) + '" target="_blank" rel="noopener noreferrer">Open Academy →</a>')];
-    if (!state.authed) rows.push(meSection('Members', '<p class="gaia-me-empty">Sign in to see which courses are included in your membership.</p>'));
-    box.innerHTML = rows.join('');
+    const tracks = [
+      { name: 'Bio-Well Certification', desc: 'Become a certified Bio-Well practitioner.' },
+      { name: 'Colour Energy', desc: 'Colour therapy foundations & practitioner path.' },
+      { name: 'BioPulsar Training', desc: 'Aura imaging & biofeedback device training.' },
+    ];
+    const trackCard = (t) => '<a class="g-access g-access--unlocked g-access--link" href="' + esc(hub) + '" target="_blank" rel="noopener noreferrer">'
+      + '<div class="g-access__body"><span class="g-access__name">' + esc(t.name) + '</span><span class="g-access__meta">' + esc(t.desc) + '</span></div>'
+      + '<span class="g-chip g-chip--on g-access__act">Open →</span></a>';
+    const parts = [
+      '<article class="g-card g-card--feature"><p class="g-card__label">Academy</p>'
+      + '<p class="g-card__value g-card__value--lg">Continue learning</p>'
+      + '<p class="g-card__meta">Your courses, lessons, and certificates live in the Gaia Healers portal. Gaia can guide you — lesson progress opens in the portal.</p>'
+      + '<div class="g-card__actions"><a class="g-btn g-btn--primary g-btn--sm" href="' + esc(hub) + '" target="_blank" rel="noopener noreferrer">Open Academy →</a></div></article>',
+      gSec('Explore tracks', '<div class="g-access-grid">' + tracks.map(trackCard).join('') + '</div>'),
+    ];
+    if (!state.authed) {
+      parts.push('<article class="g-card"><p class="g-card__label">Members</p>'
+        + '<p class="g-card__meta">Sign in to see which courses are included in your membership.</p>'
+        + '<div class="g-card__actions"><a class="g-btn g-btn--secondary g-btn--sm" href="' + esc(portalBase()) + '" target="_blank" rel="noopener noreferrer">Sign in</a></div></article>');
+    }
+    box.innerHTML = parts.join('');
   }
 
-  function renderCommunity() {
-    const box = el('community-public');
-    if (!box) return;
-    if (state.authed && state.data.profile) {
-      box.innerHTML = meSection('Community', '<a class="gaia-me-row gaia-me-row--link" href="' + esc(portalBase()) + '" target="_blank" rel="noopener noreferrer"><span>Open the community portal</span><span class="gaia-me-row__meta">education.gaiahealers.com</span></a>');
+  // ── g-* page helpers (Community / Academy) ──────────────────
+  function gSec(title, inner, action) {
+    return '<section class="g-page-sec">'
+      + '<div class="g-section"><div class="g-section__lead"><h2 class="g-section__title">' + esc(title) + '</h2></div>'
+      + (action || '') + '</div>' + inner + '</section>';
+  }
+  function accessItem(c, kind) {
+    const cls = kind === 'unlocked' ? 'g-access--unlocked' : (kind === 'soon' ? 'g-access--soon' : 'g-access--locked');
+    let meta;
+    let act;
+    if (kind === 'unlocked') {
+      meta = c.openUrlIsFallback ? 'Opens in the Gaia portal' : 'Your community';
+      act = '<a class="g-btn g-btn--secondary g-btn--sm g-access__act" href="' + esc(c.openUrl || portalBase()) + '" target="_blank" rel="noopener noreferrer">Open →</a>';
+    } else if (kind === 'soon') {
+      meta = c.reason || 'Coming soon to Gaia Healers';
+      act = '<span class="g-chip g-access__act">Soon</span>';
     } else {
-      box.innerHTML = meSection('Communities', '<p class="gaia-me-empty">Sign in to see which Gaia Healers communities you are part of and open them.</p><a class="gaia-member-card__cta" href="' + esc(portalBase()) + '" target="_blank" rel="noopener noreferrer">Sign in →</a>');
+      meta = c.reason || 'Not included in your membership';
+      act = '<span class="g-chip g-chip--lock g-access__act">Members</span>';
     }
+    return '<div class="g-access ' + cls + '"><div class="g-access__body">'
+      + '<span class="g-access__name">' + esc(c.name) + '</span>'
+      + '<span class="g-access__meta">' + esc(meta) + '</span></div>' + act + '</div>';
+  }
+
+  // Community = the live "My Access" unlock grid (real GHL tags via
+  // /api/member/access). Signed-out visitors see what circles exist + a
+  // sign-in CTA; no fake unlocks.
+  function renderCommunity() {
+    const box = el('community-body');
+    if (!box) return;
+    const sub = el('community-sub');
+    const acc = state.data.access;
+
+    if (!(state.authed && acc && acc.communities)) {
+      if (sub) sub.textContent = 'Sign in to see which circles your membership opens.';
+      const preview = ['All Gaia Healers', 'Bio-Well Practitioners', 'BioPulsar Practitioners', 'BioTekna Practitioners', 'HealeeX Community', 'Abundant Healer Collective']
+        .map((name) => accessItem({ name: name, reason: 'Sign in to check your access' }, 'locked')).join('');
+      box.innerHTML =
+        '<article class="g-card g-card--feature"><p class="g-card__label">Community</p>'
+        + '<p class="g-card__value g-card__value--lg">Open your circles</p>'
+        + '<p class="g-card__meta">Sign in to see which Gaia Healers communities your membership unlocks — and open them in one tap.</p>'
+        + '<div class="g-card__actions"><a class="g-btn g-btn--primary g-btn--sm" href="' + esc(portalBase()) + '" target="_blank" rel="noopener noreferrer">Sign in</a></div></article>'
+        + gSec('What’s inside', '<div class="g-access-grid">' + preview + '</div>');
+      return;
+    }
+
+    const cm = acc.communities;
+    const unlocked = cm.unlocked || [];
+    const locked = (cm.locked || []).filter((x) => x.state !== 'unknown');
+    const soon = (cm.locked || []).filter((x) => x.state === 'unknown');
+    const m = acc.member || {};
+    if (sub) {
+      const bits = [m.name || 'Member'];
+      if (m.membershipTier) bits.push(m.membershipTier + ' member');
+      if (m.practitioner) bits.push(m.practitionerCertified ? 'Certified practitioner' : 'Practitioner');
+      sub.textContent = bits.join(' · ');
+    }
+
+    const parts = ['<div class="g-stats">'
+      + '<div class="g-stat"><span class="g-stat__n g-stat__n--accent">' + unlocked.length + '</span><span class="g-stat__l">Unlocked</span></div>'
+      + '<div class="g-stat"><span class="g-stat__n">' + locked.length + '</span><span class="g-stat__l">To unlock</span></div>'
+      + '<div class="g-stat"><span class="g-stat__n">' + soon.length + '</span><span class="g-stat__l">Coming soon</span></div></div>'];
+
+    if (unlocked.length) {
+      parts.push(gSec('Your communities', '<div class="g-access-grid">' + unlocked.map((x) => accessItem(x, 'unlocked')).join('') + '</div>'));
+    } else {
+      parts.push('<article class="g-card"><p class="g-card__label">Your communities</p><p class="g-card__meta">No communities unlocked yet — your membership will light them up here.</p></article>');
+    }
+    if (locked.length) {
+      parts.push(gSec('Unlock with membership', '<div class="g-access-grid">' + locked.map((x) => accessItem(x, 'locked')).join('') + '</div>',
+        '<a class="g-btn g-btn--ghost g-btn--sm g-section__action" href="' + esc(portalBase()) + '" target="_blank" rel="noopener noreferrer">Become a member →</a>'));
+    }
+    if (soon.length) {
+      parts.push(gSec('Coming soon', '<div class="g-access-grid">' + soon.map((x) => accessItem(x, 'soon')).join('') + '</div>'));
+    }
+    box.innerHTML = parts.join('');
   }
 
   /* ---------- Public, no-login features ---------- */
@@ -252,17 +370,18 @@
     return chs[(sum - 1) % chs.length];
   }
   function readingInner(c) {
-    if (!c) return '<p class="gaia-me-empty">Enter your birth date to see your chakra focus.</p>';
-    return '<span class="gaia-chakra-dot" style="background:' + esc(c.color) + '"></span>'
-      + '<div><p class="gaia-me-card__label" style="margin:0">' + esc(c.name) + (c.sanskrit ? ' · ' + esc(c.sanskrit) : '') + '</p>'
-      + '<p class="gaia-me-empty" style="margin:.15rem 0 0">' + esc(c.focus || '') + (c.element ? ' · ' + esc(c.element) : '') + '</p></div>';
+    if (!c) return '<p class="g-empty">Enter your birth date to see your chakra focus.</p>';
+    const col = esc(c.color);
+    return '<span class="g-chakra-dot" style="background:' + col + ';color:' + col + '"></span>'
+      + '<div><p class="g-card__label" style="margin:0">' + esc(c.name) + (c.sanskrit ? ' · ' + esc(c.sanskrit) : '') + '</p>'
+      + '<p class="g-empty" style="margin:.15rem 0 0">' + esc(c.focus || '') + (c.element ? ' · ' + esc(c.element) : '') + '</p></div>';
   }
   function chakraReadingCard(dobVal) {
     if (!chakras().length) return '';
-    return meSection('Your birth-date chakra',
-      '<input type="date" id="dob-input" class="gaia-dob-input" value="' + esc(dobVal || '') + '" max="2035-12-31" aria-label="Your date of birth" />'
-      + '<div id="chakra-read-out" class="gaia-chakra-read">' + readingInner(chakraForDate(dobVal)) + '</div>'
-      + '<p class="gaia-me-hint">Wellness guidance, not medical advice.</p>');
+    return '<article class="g-card"><p class="g-card__label">Your birth-date chakra</p>'
+      + '<input type="date" id="dob-input" class="g-dob" value="' + esc(dobVal || '') + '" max="2035-12-31" aria-label="Your date of birth" />'
+      + '<div id="chakra-read-out" class="g-chakra-read">' + readingInner(chakraForDate(dobVal)) + '</div>'
+      + '<p class="g-hint">Wellness guidance, not medical advice.</p></article>';
   }
 
   // Me (personal): birth-date → chakra reading only. The chakra BODY MAP lives on

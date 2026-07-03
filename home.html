@@ -37,7 +37,7 @@
   <script src="gaia-chakra-data.js?v=20260703a"></script>
   <link rel="stylesheet" href="gaia-shared.css?v=20260703a" />
   <link rel="stylesheet" href="gaia-ui-v2.css?v=20260703p" />
-  <link rel="stylesheet" href="gaia-system.css?v=20260703t" />
+  <link rel="stylesheet" href="gaia-system.css?v=20260703u" />
 </head>
 <body class="gaia-app gaia-page gaia-single-app gaia-v2">
   <script>try{document.body.dataset.theme=document.documentElement.dataset.theme||'light';}catch(e){}</script>
@@ -68,92 +68,71 @@
       </main>
     </section>
 
+    <!-- ACADEMY — rebuilt on the g-* system: honest course portal (deep-links
+         into education.gaiahealers.com; no fabricated progress). -->
     <section class="gaia-screen" data-screen="academy" aria-label="Academy">
-      <header class="gaia-header">
-        <div class="flex items-start justify-between gap-3">
-          <div>
-            <p class="gaia-eyebrow">Courses & credentials</p>
-            <h1 class="gaia-page-title mt-1">Academy</h1>
-            <p id="academy-summary-caption" class="gaia-caption mt-1">Loading course progress…</p>
-          </div>
-          <div class="gaia-header-actions" data-gaia-header-actions></div>
-        </div>
+      <header class="g-topbar">
+        <a href="home.html?view=today" class="g-topbar__brand"><img src="assets/gaia-logo.png" alt="" /> Gaia Healers</a>
+        <div class="g-topbar__actions gaia-header-actions" data-gaia-header-actions></div>
       </header>
-
-      <main class="gaia-main">
-        <section id="member-academy" class="gaia-me-stack" aria-label="Academy"></section>
+      <main class="gaia-main g-page g-academy">
+        <div class="g-page__head">
+          <p class="g-page__kicker">Courses &amp; credentials</p>
+          <h1 class="g-page__title">Academy</h1>
+          <p class="g-page__sub" id="academy-summary-caption">Your courses live in the Gaia Healers portal.</p>
+        </div>
+        <div id="member-academy" class="g-page-sec" aria-live="polite"></div>
       </main>
     </section>
 
+    <!-- COMMUNITY — rebuilt on the g-* system: live "My Access" unlock grid
+         (unlocked / locked / coming-soon) from /api/member/access. -->
     <section class="gaia-screen" data-screen="community" aria-label="Community">
-      <header class="gaia-header">
-        <div class="flex items-center justify-between gap-3">
-          <div>
-            <p class="gaia-eyebrow">GHL community hub</p>
-            <h1 class="gaia-page-title mt-0.5">Gaia Healers</h1>
-          </div>
-          <div class="gaia-header-actions" data-gaia-header-actions>
-            <a href="https://education.gaiahealers.com/" class="gaia-login-pill">Log in</a>
-          </div>
-        </div>
+      <header class="g-topbar">
+        <a href="home.html?view=today" class="g-topbar__brand"><img src="assets/gaia-logo.png" alt="" /> Gaia Healers</a>
+        <div class="g-topbar__actions gaia-header-actions" data-gaia-header-actions></div>
       </header>
-
-      <main class="gaia-main gaia-main--tight gaia-community-main">
-        <section id="my-access" class="gaia-community-panel gaia-access-panel space-y-3" aria-label="My access" hidden>
-          <header class="gaia-community-panel__head">
-            <div>
-              <p class="gaia-community-panel__eyebrow">My access</p>
-              <h2 class="gaia-community-panel__title">My Memberships</h2>
-              <p class="gaia-community-panel__sub" data-my-access-sub>Your live Gaia Healers access</p>
-            </div>
-            <span class="gaia-badge gaia-badge--live" data-my-access-count hidden></span>
-          </header>
-          <div id="my-access-grid" class="gaia-access-grid" aria-live="polite"></div>
-        </section>
-        <section id="community-public" class="gaia-me-stack" aria-label="Communities"></section>
+      <main class="gaia-main g-page g-community">
+        <div class="g-page__head">
+          <p class="g-page__kicker">Community</p>
+          <h1 class="g-page__title">Your circles</h1>
+          <p class="g-page__sub" id="community-sub">The Gaia Healers communities you can open — and what unlocks next.</p>
+        </div>
+        <div id="community-body" class="g-page-sec" aria-live="polite"></div>
       </main>
     </section>
 
+    <!-- PROFILE — rebuilt on the g-* system: live account (devices, purchases,
+         bookings, forms, messages) from /api/member/*, plus birth-date chakra. -->
     <section class="gaia-screen" data-screen="profile" aria-label="Profile">
-      <header class="gaia-header !border-0">
-        <div class="flex items-center justify-between gap-3">
-          <div class="flex min-w-0 items-center gap-3">
-            <div class="gaia-header-logo"><img src="assets/gaia-logo.png" alt="Gaia Healers" class="gaia-logo-img" /></div>
-            <div class="min-w-0">
-              <p class="gaia-eyebrow">Client Portal</p>
-              <h1 class="text-title text-ink">Profile</h1>
-            </div>
-          </div>
-          <div class="gaia-header-actions" data-gaia-header-actions>
-            <button type="button" class="rounded-full bg-surface-muted px-4 py-2 text-caption font-medium text-ink-secondary" data-admin-unlock hidden>Unlock admin</button>
-          </div>
+      <header class="g-topbar">
+        <a href="home.html?view=today" class="g-topbar__brand"><img src="assets/gaia-logo.png" alt="" /> Gaia Healers</a>
+        <div class="g-topbar__actions gaia-header-actions" data-gaia-header-actions>
+          <button type="button" class="g-btn g-btn--ghost g-btn--sm" data-admin-unlock hidden>Unlock admin</button>
+        </div>
       </header>
+      <main class="gaia-main g-page g-profile">
+        <div class="g-page__head">
+          <p class="g-page__kicker" id="profile-kicker">Your account</p>
+          <h1 class="g-page__title" id="profile-title">Profile</h1>
+          <p class="g-page__sub" id="profile-sub">Sign in to see your memberships, devices, and bookings.</p>
+        </div>
 
-      <main class="gaia-main">
-        <section class="gaia-profile-hero text-center">
-          <div class="gaia-profile-logo-wrap"><div class="gaia-profile-logo"><img src="assets/gaia-logo.png" alt="Gaia Healers" class="gaia-logo-img" /></div><span class="gaia-profile-check"><svg class="h-3.5 w-3.5 text-gaia" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.704 4.153a.75.75 0 01.143 1.052l-8 10.5a.75.75 0 01-1.127.075l-4.5-4.5a.75.75 0 011.06-1.06l3.894 3.893 7.48-9.817a.75.75 0 011.05-.143z" clip-rule="evenodd"/></svg></span></div>
-          <h1 class="gaia-page-title">Your profile</h1>
-          <p class="gaia-caption mt-1">Sign in to see your memberships, devices, and bookings.</p>
-        </section>
+        <div id="member-me" class="g-page-sec"></div>
 
-        <section id="member-me" class="gaia-me-stack" aria-label="My Gaia"></section>
+        <!-- Personal: birth-date → chakra reading (client-side, public). -->
+        <section id="me-wellness" class="g-page-sec" aria-label="Your birth-date chakra"></section>
 
-        <!-- Personal: birth-date → chakra reading (client-side). The full chakra
-             body map now lives on Home (discovery page). -->
-        <section id="me-wellness" class="gaia-me-stack" aria-label="Your birth-date chakra"></section>
+        <article class="g-card" data-admin-locked hidden>
+          <p class="g-card__label">Admin</p>
+          <p class="g-card__meta">Admin tools are hidden. Add <code>admin=1</code> to the URL and enter the dev passcode.</p>
+        </article>
+        <article class="g-card" data-admin-entry hidden>
+          <div class="g-tier__head"><div><p class="g-card__label">Admin cockpit</p><p class="g-card__meta">Internal operator console.</p></div>
+          <a class="g-btn g-btn--primary g-btn--sm" href="home.html?view=admin">Open</a></div>
+        </article>
 
-        <section class="gaia-card gaia-card-pad" data-admin-locked hidden>
-          <p class="text-headline text-ink">Admin not available</p>
-          <p class="gaia-caption mt-1">Admin tools are hidden. Add <span class="gaia-code">admin=1</span> to the URL and enter the dev passcode.</p>
-        </section>
-        <section class="gaia-card gaia-card-pad" data-admin-entry hidden>
-          <div class="flex items-center justify-between gap-3">
-            <div><p class="text-headline text-ink">Admin cockpit</p><p class="gaia-caption mt-1">Internal operator screen.</p></div>
-            <a href="home.html?view=admin" class="rounded-xl bg-gaia px-3 py-2 text-micro font-bold text-white">Open</a>
-          </div>
-        </section>
-
-        <button type="button" class="block w-full text-center gaia-caption py-2" data-sign-out hidden>Sign out</button>
+        <button type="button" class="g-btn g-btn--ghost g-btn--sm g-profile-signout" data-sign-out hidden>Sign out</button>
       </main>
     </section>
 
@@ -240,8 +219,8 @@
   </div>
   <script src="shared-nav.js?v=20260703m"></script>
   <script src="gaia-realtime-voice.js?v=20260703a"></script>
-  <script src="gaia-member.js?v=20260703t"></script>
-  <script src="gaia-store.js?v=20260703t"></script>
+  <script src="gaia-member.js?v=20260703u"></script>
+  <script src="gaia-store.js?v=20260703u"></script>
   <script src="gaia-ui.js?v=20260703p"></script>
 </body>
 </html>

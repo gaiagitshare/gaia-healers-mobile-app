@@ -2071,7 +2071,7 @@
             <button type="button" class="gaia-assist__orb-visual" data-gaia-orb-tap aria-label="Start voice conversation with Gaia">
               <span class="gaia-assist__orb-ring gaia-assist__orb-ring--1" aria-hidden="true"></span>
               <span class="gaia-assist__orb-ring gaia-assist__orb-ring--2" aria-hidden="true"></span>
-              <img class="gaia-assist__orb-icon" src="assets/gaia-logo.png" alt="Gaia" />
+              <img class="gaia-assist__orb-icon" src="assets/gaia-mark.svg" alt="Gaia" />
             </button>
             <div class="gaia-assist__wave" aria-hidden="true">
               <span></span><span></span><span></span><span></span><span></span>
@@ -2391,7 +2391,7 @@
 
     function setRealtimeVoiceProvider() {
       const live = realtimeConfig();
-      setVoiceProvider('gemini live', live.voice || 'Puck');
+      setVoiceProvider('Gaia', live.voice || 'Puck');
     }
 
     function clearPendingVoice(revoke = true) {
@@ -2850,9 +2850,9 @@
     }
 
     const REALTIME_STATUS_COPY = {
-      idle: isCoarsePointer() ? 'Tap Gaia above to begin' : 'Tap Gaia to start Gemini Live',
+      idle: isCoarsePointer() ? 'Tap Gaia above to begin' : 'Tap Gaia to start',
       ready: 'Listening… speak naturally',
-      connecting: 'Connecting to Gemini Live…',
+      connecting: 'Connecting…',
       holding: 'Listening…',
       listening: 'Listening… speak naturally',
       thinking: 'Gaia is thinking…',
@@ -2876,7 +2876,7 @@
       const onMobile = isCoarsePointer();
       const idleCopy = onMobile
         ? (canUseRealtimeVoice() ? 'Tap Gaia to begin' : 'Tap Gaia to start')
-        : (canUseRealtimeVoice() ? 'Starting Gemini Live…' : 'Tap Gaia to start Gemini Live');
+        : (canUseRealtimeVoice() ? 'Starting…' : 'Tap Gaia to start');
       setAssistVoiceState('idle', idleCopy);
       if (canUseRealtimeVoice()) {
         setRealtimeVoiceProvider();
@@ -2913,15 +2913,15 @@
       setOpen(true, { passive: true });
       setError('');
       setRealtimeVoiceProvider();
-      setAssistVoiceState('connecting', 'Starting Gemini Live…');
+      setAssistVoiceState('connecting', 'Starting…');
       try {
         await realtimeVoice.start();
         sendRealtimeWelcome(reason);
       } catch (err) {
         autoGeminiStarted = false;
         assistError('gemini live autostart failed', err);
-        setError('Tap Gaia once to start Gemini Live. Some iPhone browsers block automatic microphone/audio until the first tap.');
-        setAssistVoiceState('idle', 'Tap Gaia to start Gemini Live');
+        setError('Tap Gaia once to start. Some iPhone browsers block automatic microphone/audio until the first tap.');
+        setAssistVoiceState('idle', 'Tap Gaia to start');
       }
     }
 

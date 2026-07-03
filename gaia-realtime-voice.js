@@ -116,7 +116,7 @@
     if (data?.error) {
       responses.push({
         kind: 'error',
-        message: data.error.message || data.error.status || 'Gemini Live error',
+        message: data.error.message || data.error.status || 'Gaia voice error',
       });
     }
 
@@ -160,7 +160,7 @@
     }
 
     if (data?.error) {
-      responses.push({ kind: 'error', message: data.error.message || 'Gemini Live error' });
+      responses.push({ kind: 'error', message: data.error.message || 'Gaia voice error' });
     }
 
     return responses;
@@ -347,7 +347,7 @@
       if (setupDone) return Promise.resolve();
       return new Promise((resolve, reject) => {
         const timer = window.setTimeout(() => {
-          reject(new Error('Gemini setup timed out. Tap the orb to retry.'));
+          reject(new Error('Voice setup timed out. Tap the orb to retry.'));
         }, timeoutMs);
         setupWaiters.push(() => {
           window.clearTimeout(timer);
@@ -588,7 +588,7 @@
                 ws.onopen = () => {
                   window.clearTimeout(timer);
                   if (!sendSetupMessage()) {
-                    reject(new Error('Could not send Gemini setup.'));
+                    reject(new Error('Could not start Gaia voice.'));
                     return;
                   }
                   resolve();
@@ -616,7 +616,7 @@
             (async () => {
               if (!navigator.mediaDevices?.getUserMedia) {
                 maySendAudio = false;
-                setErrorMessage('This browser does not expose microphone capture. Gemini Live can still answer typed prompts here.');
+                setErrorMessage('This browser does not expose microphone capture. Gaia can still answer typed prompts here.');
                 return false;
               }
               try {

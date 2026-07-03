@@ -46,71 +46,71 @@
     render();
   }
 
-  function heroPublic() {
-    const g = el('today-hero-greeting'), t = el('today-hero-title'), s = el('today-hero-sub');
-    if (g) g.textContent = 'Gaia Healers';
-    if (t) t.innerHTML = 'Welcome to <em>Gaia</em>';
-    if (s) s.textContent = 'Explore freely — sign in to unlock your profile, memberships, courses, and a Gaia that knows you.';
-  }
-  function heroMember(p, access) {
-    const g = el('today-hero-greeting'), t = el('today-hero-title'), s = el('today-hero-sub');
-    const first = String(p.name || 'there').trim().split(/\s+/)[0] || 'there';
-    const bits = [];
-    if (p.membershipTier) bits.push(esc(p.membershipTier) + ' member');
-    if (p.practitioner) bits.push(p.practitionerCertified ? 'Certified practitioner' : 'Practitioner');
-    const nUnlocked = ((access && access.communities && access.communities.unlocked) || []).length;
-    if (nUnlocked) bits.push(nUnlocked + (nUnlocked === 1 ? ' community' : ' communities'));
-    if (g) g.textContent = 'Welcome back';
-    if (t) t.innerHTML = 'Hi <em>' + esc(first) + '</em>';
-    if (s) s.textContent = bits.join(' · ') || 'Your Gaia member hub';
-  }
-
-  function card(inner) { return '<article class="gaia-card gaia-card-pad gaia-member-card">' + inner + '</article>'; }
-
-  // Home = discovery page: two equal cards side by side — Members + Next Event.
-  function membersCard() {
+  // ── HOME (new g-* design system) ─────────────────────────────
+  function renderHomeHero() {
+    const k = el('home-hero-kicker'), t = el('home-hero-title'), s = el('home-hero-sub');
+    if (!t) return;
     if (state.authed && state.data.profile) {
-      const unlocked = (state.data.access && state.data.access.communities && state.data.access.communities.unlocked) || [];
-      return card(
-        '<p class="gaia-member-card__label">Members</p>'
-        + '<p class="gaia-member-card__value">' + unlocked.length + ' unlocked</p>'
-        + '<p class="gaia-member-card__meta">' + (unlocked.map((c) => esc(c.name)).slice(0, 2).join(', ') || 'Your memberships') + '</p>'
-        + '<a class="gaia-member-card__cta" href="home.html?view=community">View access →</a>');
+      const p = (state.data.profile && state.data.profile.profile) || {};
+      const first = String(p.name || 'there').trim().split(/\s+/)[0] || 'there';
+      const h = new Date().getHours();
+      const greet = h < 12 ? 'Good morning' : h < 18 ? 'Good afternoon' : 'Good evening';
+      if (k) k.textContent = greet;
+      t.innerHTML = 'Hi <em>' + esc(first) + '</em>';
+      if (s) {
+        const bits = [];
+        if (p.membershipTier) bits.push(esc(p.membershipTier) + ' member');
+        const n = ((state.data.access && state.data.access.communities && state.data.access.communities.unlocked) || []).length;
+        if (n) bits.push(n + (n === 1 ? ' community' : ' communities'));
+        s.textContent = bits.join(' · ') || 'Your energy, your circle, your day.';
+      }
+    } else {
+      if (k) k.textContent = 'Welcome';
+      t.innerHTML = 'Welcome to <em>Gaia</em>';
+      if (s) s.textContent = 'Your energy, your circle, your day.';
     }
-    return card(
-      '<p class="gaia-member-card__label">Members</p>'
-      + '<p class="gaia-member-card__value">Unlock your Gaia</p>'
-      + '<p class="gaia-member-card__meta">Profile, memberships, courses, bookings, and a Gaia that knows you.</p>'
-      + '<a class="gaia-member-card__cta" href="' + esc(portalBase()) + '" target="_blank" rel="noopener noreferrer">Sign in →</a>');
   }
 
   function homeEventCard() {
     const ev = state.event;
     if (!ev || !ev.name) {
-      return card('<p class="gaia-member-card__label">Next event</p><p class="gaia-member-card__value">Coming soon</p><p class="gaia-member-card__meta">The next Gaia Healers event will appear here.</p>');
+      return '<article class="g-card g-card--feature"><p class="g-card__label">Next event</p>'
+        + '<p class="g-card__value g-card__value--lg">Coming soon</p>'
+        + '<p class="g-card__meta">The next Gaia gathering will appear here.</p></article>';
     }
     const when = fmtEventDate(ev);
     const url = esc(ev.sourceUrl || 'https://elevate.gaiahealers.com/gaia-healers-elevate-conference-page');
-    return card(
-      '<p class="gaia-member-card__label">Next event</p>'
-      + '<p class="gaia-member-card__value">' + esc(ev.name) + '</p>'
-      + '<p class="gaia-member-card__meta">' + [when && esc(when), ev.venue && esc(ev.venue)].filter(Boolean).join(' · ') + '</p>'
-      + '<a class="gaia-member-card__cta" href="' + url + '" target="_blank" rel="noopener noreferrer">Register →</a>');
+    return '<article class="g-card g-card--feature">'
+      + '<p class="g-card__label">Next event</p>'
+      + '<p class="g-card__value g-card__value--lg">' + esc(ev.name) + '</p>'
+      + '<p class="g-card__meta">' + [when && esc(when), ev.venue && esc(ev.venue)].filter(Boolean).join(' · ') + '</p>'
+      + '<div class="g-card__actions"><a class="g-btn g-btn--primary" href="' + url + '" target="_blank" rel="noopener noreferrer">Register</a></div>'
+      + '</article>';
+  }
+
+  function membersCard() {
+    if (state.authed && state.data.profile) {
+      const unlocked = (state.data.access && state.data.access.communities && state.data.access.communities.unlocked) || [];
+      return '<article class="g-card">'
+        + '<p class="g-card__label">Your membership</p>'
+        + '<p class="g-card__value">' + (unlocked.length ? unlocked.length + (unlocked.length === 1 ? ' community' : ' communities') : 'Member') + '</p>'
+        + '<p class="g-card__meta">' + (unlocked.map((c) => esc(c.name)).slice(0, 2).join(', ') || 'Explore your circle') + '</p>'
+        + '<div class="g-card__actions"><a class="g-btn g-btn--secondary g-btn--sm" href="home.html?view=community">View access →</a></div>'
+        + '</article>';
+    }
+    return '<article class="g-card">'
+      + '<p class="g-card__label">Members</p>'
+      + '<p class="g-card__value">Unlock your Gaia</p>'
+      + '<p class="g-card__meta">Communities, courses, bookings, and a Gaia that knows you.</p>'
+      + '<div class="g-card__actions"><a class="g-btn g-btn--primary g-btn--sm" href="' + esc(portalBase()) + '" target="_blank" rel="noopener noreferrer">Sign in</a></div>'
+      + '</article>';
   }
 
   function renderHome() {
-    const dash = el('member-dashboard');
-    const main = document.querySelector('.gaia-main--today');
-    if (main) {
-      Array.from(main.children).forEach((ch) => {
-        if (ch === dash || ch.id === 'gaia-coach-anchor' || ch.id === 'home-chakra' || ch.classList.contains('gaia-dash-hero')) return;
-        ch.style.display = 'none';
-      });
-    }
-    if (state.authed && state.data.profile) heroMember((state.data.profile && state.data.profile.profile) || {}, state.data.access);
-    else heroPublic();
-    if (dash) { dash.innerHTML = membersCard() + homeEventCard(); dash.hidden = false; }
-    refreshChakraMap(); // position the statically-built body map on Home
+    renderHomeHero();
+    const cards = el('home-cards');
+    if (cards) cards.innerHTML = homeEventCard() + membersCard();
+    refreshChakraMap(); // re-position the chakra body map on Home once visible
   }
 
   function meSection(title, inner) {

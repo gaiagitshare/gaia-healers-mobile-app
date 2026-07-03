@@ -1,0 +1,165 @@
+/* ============================================================
+   GAIA DESIGN SYSTEM — v1 (Home reference screen)
+   Additive & scoped: only the Home screen (.g-home) and the new
+   g-* components use these tokens. Old screens keep their old CSS.
+   Home is intentionally dark ("dark-first"); light mode is a later phase.
+   ============================================================ */
+
+/* ---------- @layer tokens ---------- */
+:root{
+  --g-bg:#0B120E; --g-surface:#16211A; --g-surface-hi:#1C2A20;
+  --g-line:rgba(255,255,255,.09); --g-line-strong:rgba(255,255,255,.16);
+  --g-text:#ECF3E9; --g-text-muted:#95A491; --g-text-faint:#5D6D59;
+  --g-accent:#7DD956; --g-accent-deep:#5CB82E; --g-on-accent:#052B0A;
+  --g-good:#5CB82E; --g-warn:#E8B04B; --g-danger:#E5715A;
+  --g-ck-root:#E53935; --g-ck-sacral:#FB8C00; --g-ck-solar:#FDD835;
+  --g-ck-heart:#43A047; --g-ck-throat:#29A8F2; --g-ck-brow:#4F46E5; --g-ck-crown:#8E24AA;
+
+  --g-r-sm:10px; --g-r-md:14px; --g-r-lg:18px; --g-r-xl:24px; --g-r-pill:999px;
+  --g-s1:4px; --g-s2:8px; --g-s3:12px; --g-s4:16px; --g-s5:24px;
+  --g-s6:32px; --g-s7:48px; --g-s8:64px; --g-s9:96px;
+
+  --g-font:"Plus Jakarta Sans",system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+  --g-font-serif:ui-serif,Georgia,"Times New Roman",serif;
+  --g-font-mono:ui-monospace,SFMono-Regular,Menlo,monospace;
+
+  --g-shadow-card:0 10px 30px -18px rgba(0,0,0,.55);
+  --g-shadow-pop:0 24px 60px -20px rgba(0,0,0,.6);
+  --g-glow:0 0 26px rgba(125,217,86,.45);
+  --g-ease:cubic-bezier(.22,1,.36,1);
+  --g-dur-1:140ms; --g-dur-2:260ms; --g-dur-3:420ms;
+  --g-focus:0 0 0 2px var(--g-bg),0 0 0 4px var(--g-accent);
+  --g-tap:44px;
+}
+@media (prefers-reduced-motion:reduce){
+  :root{--g-dur-1:0ms;--g-dur-2:0ms;--g-dur-3:0ms}
+}
+
+/* ---------- @layer components ---------- */
+
+/* g-btn ------------------------------------------------------ */
+.g-btn{
+  --pad-x:var(--g-s4);--pad-y:12px;
+  display:inline-flex;align-items:center;justify-content:center;gap:var(--g-s2);
+  min-height:var(--g-tap);padding:var(--pad-y) var(--pad-x);
+  font:600 15px/1 var(--g-font);letter-spacing:-.01em;
+  border:1px solid transparent;border-radius:var(--g-r-md);
+  cursor:pointer;white-space:nowrap;user-select:none;text-decoration:none;
+  transition:transform var(--g-dur-1) var(--g-ease),filter var(--g-dur-1) var(--g-ease),
+             background var(--g-dur-1) var(--g-ease),border-color var(--g-dur-1) var(--g-ease)}
+.g-btn:focus-visible{outline:none;box-shadow:var(--g-focus)}
+.g-btn--primary{background:var(--g-accent);color:var(--g-on-accent);font-weight:700}
+.g-btn--primary:hover{filter:brightness(1.06)}
+.g-btn--secondary{background:var(--g-surface-hi);color:var(--g-text);border-color:var(--g-line)}
+.g-btn--secondary:hover{border-color:var(--g-line-strong)}
+.g-btn--ghost{background:transparent;color:var(--g-accent);padding-inline:var(--g-s1);min-height:auto}
+.g-btn--ghost:hover{filter:brightness(1.12)}
+.g-btn--pill{border-radius:var(--g-r-pill);background:transparent;color:var(--g-text);
+  border-color:var(--g-line);font-weight:600}
+.g-btn--pill:hover{background:var(--g-surface-hi)}
+.g-btn--sm{--pad-y:8px;--pad-x:var(--g-s3);min-height:36px;font-size:13px}
+.g-btn--block{display:flex;width:100%}
+.g-btn:active{transform:translateY(1px) scale(.99)}
+.g-btn[disabled]{opacity:.45;pointer-events:none}
+
+/* g-section -------------------------------------------------- */
+.g-section{display:flex;align-items:flex-end;justify-content:space-between;
+  gap:var(--g-s3);margin-bottom:var(--g-s3)}
+.g-section__lead{display:flex;flex-direction:column;gap:var(--g-s1);min-width:0}
+.g-section__kicker{font:600 11px/1 var(--g-font-mono);letter-spacing:.12em;
+  text-transform:uppercase;color:var(--g-accent)}
+.g-section__title{font:600 20px/1.1 var(--g-font);letter-spacing:-.015em;margin:0;color:var(--g-text)}
+.g-section--display .g-section__title{font-family:var(--g-font-serif);font-size:clamp(30px,7vw,42px);
+  font-weight:600;line-height:1;letter-spacing:-.02em}
+.g-section__action{flex:none}
+
+/* g-card ----------------------------------------------------- */
+.g-card{display:flex;flex-direction:column;gap:var(--g-s2);
+  background:var(--g-surface);border:1px solid var(--g-line);
+  border-radius:var(--g-r-lg);padding:var(--g-s4);color:var(--g-text);box-shadow:var(--g-shadow-card)}
+.g-card--lg{padding:var(--g-s5);border-radius:var(--g-r-xl)}
+.g-card--flush{padding:0;overflow:hidden}
+.g-card--feature{background:
+  radial-gradient(160px 120px at 100% 0,rgba(125,217,86,.18),transparent 62%),
+  linear-gradient(150deg,#1a3520,#0e1c12);border-color:var(--g-line-strong)}
+.g-card__label{font:600 11px/1 var(--g-font-mono);letter-spacing:.09em;
+  text-transform:uppercase;color:var(--g-accent)}
+.g-card__value{font:600 20px/1.15 var(--g-font);letter-spacing:-.01em}
+.g-card__value--lg{font-size:clamp(22px,5vw,28px)}
+.g-card__meta{font-size:13px;color:var(--g-text-muted);line-height:1.45}
+.g-card__actions{display:flex;flex-wrap:wrap;gap:var(--g-s2);margin-top:var(--g-s2)}
+.g-card--interactive{cursor:pointer;text-decoration:none;
+  transition:transform var(--g-dur-2) var(--g-ease),border-color var(--g-dur-2) var(--g-ease)}
+.g-card--interactive:hover{border-color:var(--g-line-strong);transform:translateY(-2px)}
+
+/* g-tile + rail --------------------------------------------- */
+.g-rail{display:flex;gap:var(--g-s3);overflow-x:auto;overflow-y:hidden;
+  scroll-snap-type:x mandatory;-webkit-overflow-scrolling:touch;
+  padding-bottom:var(--g-s2);scrollbar-width:thin}
+.g-tile{flex:0 0 9rem;scroll-snap-align:start;display:flex;flex-direction:column;
+  gap:var(--g-s2);text-decoration:none;color:inherit}
+.g-tile__media{aspect-ratio:1;border-radius:var(--g-r-md);overflow:hidden;
+  background:var(--g-surface-hi);border:1px solid var(--g-line);display:block;
+  transition:transform var(--g-dur-2) var(--g-ease),border-color var(--g-dur-2) var(--g-ease)}
+.g-tile__media img{width:100%;height:100%;object-fit:cover;display:block}
+.g-tile:hover .g-tile__media{transform:scale(1.02);border-color:var(--g-line-strong)}
+.g-tile__title{font-size:13px;line-height:1.25;color:var(--g-text);
+  display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.g-tile__meta{font:700 11px/1 var(--g-font);color:var(--g-accent)}
+
+/* g-hero ----------------------------------------------------- */
+.g-hero{position:relative;overflow:hidden;border-radius:var(--g-r-xl);
+  padding:var(--g-s6) var(--g-s5);min-height:200px;display:flex;flex-direction:column;
+  justify-content:flex-end;gap:var(--g-s2);border:1px solid var(--g-line);
+  background:
+    radial-gradient(220px 220px at 82% 24%,rgba(125,217,86,.20),transparent 60%),
+    radial-gradient(260px 200px at 12% 96%,rgba(41,168,242,.10),transparent 62%),
+    linear-gradient(160deg,#12281a,#0a140d)}
+.g-hero__spectrum{position:absolute;top:0;left:0;right:0;height:4px;display:flex;opacity:.9}
+.g-hero__spectrum span{flex:1}
+.g-hero__kicker{font:600 11px/1 var(--g-font-mono);letter-spacing:.14em;
+  text-transform:uppercase;color:var(--g-accent)}
+.g-hero__title{font-family:var(--g-font-serif);font-weight:600;
+  font-size:clamp(30px,8vw,46px);line-height:1;letter-spacing:-.02em;margin:0;color:var(--g-text);text-wrap:balance}
+.g-hero__title em{font-style:italic;color:var(--g-accent)}
+.g-hero__sub{font-size:15px;color:var(--g-text-muted);max-width:34ch;margin:0}
+
+/* ---------- Home layout (the only Home-specific scaffolding) ---------- */
+.g-home{background:var(--g-bg);color:var(--g-text);font-family:var(--g-font);
+  display:flex;flex-direction:column;gap:var(--g-s6);
+  padding:var(--g-s2) var(--g-s4) calc(var(--g-s9) + env(safe-area-inset-bottom))}
+.g-home>section{scroll-margin-top:var(--g-s5)}
+.g-home-cards{display:grid;grid-template-columns:1fr;gap:var(--g-s3)}
+.g-chakra__frame{margin-top:var(--g-s3);border-radius:var(--g-r-xl);overflow:hidden;
+  border:1px solid var(--g-line);background:
+    radial-gradient(200px 240px at 50% 30%,rgba(125,217,86,.10),transparent 62%),var(--g-surface);
+  padding:var(--g-s3)}
+/* clean Home header (today screen only) */
+.g-topbar{display:flex;align-items:center;justify-content:space-between;
+  padding:var(--g-s4) var(--g-s4) var(--g-s2);background:var(--g-bg)}
+.g-topbar__brand{display:flex;align-items:center;gap:var(--g-s2);
+  font:700 17px/1 var(--g-font);letter-spacing:-.01em;color:var(--g-text);text-decoration:none}
+.g-topbar__brand img{width:26px;height:26px;border-radius:50%}
+.g-topbar__actions{display:flex;align-items:center;gap:var(--g-s2)}
+
+/* Make the old chakra map read on the dark Home canvas + breathe */
+.g-chakra__frame .gaia-chakra-map{--chakra-frame:transparent}
+/* Belt-and-braces: legacy coach card never shows on the new Home
+   (the #gaia-coach-anchor is also removed, so initCoachMark returns early) */
+.g-home .gaia-coach{display:none}
+
+/* ---------- Desktop: use the width, don't stretch a phone ---------- */
+@media (min-width:900px){
+  /* widen the shell ONLY while Home is the active screen */
+  body.gaia-v2 .gaia-shell:has(.gaia-screen[data-screen="today"].is-active){
+    max-width:1000px !important;
+  }
+  .g-home{padding-left:var(--g-s7);padding-right:var(--g-s7);gap:var(--g-s7)}
+  .g-topbar{padding-left:var(--g-s7);padding-right:var(--g-s7)}
+  .g-hero{min-height:280px;padding:var(--g-s8) var(--g-s7)}
+  .g-hero__title{font-size:clamp(40px,4vw,60px)}
+  /* event + member CTA sit side by side */
+  .g-home-cards{grid-template-columns:1.35fr 1fr;gap:var(--g-s4);align-items:stretch}
+  .g-home-cards>*{height:100%}
+  .g-tile{flex-basis:11rem}
+}

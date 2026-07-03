@@ -104,6 +104,33 @@
   window.addEventListener('gaia:route', maybeLoad);
   document.addEventListener('DOMContentLoaded', maybeLoad);
 
+  // HOME "From the store" rail — real product tiles (new g-* system, image only,
+  // no price). Lightweight: one collection, lazy after first paint.
+  let homeLoaded = false;
+  async function loadHomeFeatured() {
+    const box = document.getElementById('home-store');
+    if (!box || homeLoaded) return;
+    homeLoaded = true;
+    const ps = (await fetchCollection('avada-best-sellers', 12))
+      .filter((p) => p && p.handle && (p.variants || []).some((v) => v.available !== false))
+      .slice(0, 8);
+    if (!ps.length) { homeLoaded = false; return; }
+    const tiles = ps.map((p) => {
+      const src = firstImage(p);
+      const url = SHOP + '/products/' + p.handle;
+      return '<a class="g-tile" href="' + esc(url) + '" target="_blank" rel="noopener noreferrer">'
+        + '<span class="g-tile__media">' + (src ? '<img loading="lazy" src="' + esc(src) + '" alt="" />' : '') + '</span>'
+        + '<span class="g-tile__title">' + esc(p.title) + '</span>'
+        + '<span class="g-tile__meta">View →</span></a>';
+    }).join('');
+    box.innerHTML = '<div class="g-section"><div class="g-section__lead">'
+      + '<span class="g-section__kicker">Discover</span><h2 class="g-section__title">From the store</h2></div>'
+      + '<a class="g-btn g-btn--ghost g-btn--sm g-section__action" href="home.html?view=store">All →</a></div>'
+      + '<div class="g-rail">' + tiles + '</div>';
+    box.hidden = false;
+  }
+  document.addEventListener('DOMContentLoaded', () => { window.setTimeout(loadHomeFeatured, 300); });
+
   // Chakra → Colour Energy cross-sell. Maps a chakra id to its Colour Energy
   // spray colour, and returns a Shopify link to the matching products (search is
   // robust regardless of what colours are in stock; falls back to the collection).

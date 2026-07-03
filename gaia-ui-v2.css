@@ -766,19 +766,23 @@ body.gaia-v2 .gaia-assist__panel {
   z-index: 55;
   left: 0;
   right: 0;
-  bottom: 0;
-  transform: none;
-  width: 100%;
-  max-height: min(65vh, 36rem);
+  bottom: calc(0.9rem + env(safe-area-inset-bottom));
+  margin: 0 auto;
+  width: min(100% - 1.6rem, 26rem);
+  max-height: min(56vh, 27rem);
   padding: 0;
-  border-radius: var(--gh-radius-xl) var(--gh-radius-xl) 0 0;
+  border-radius: var(--gh-radius-xl);
   border: 1px solid var(--gh-border-soft);
-  border-bottom: 0;
   background:
-    radial-gradient(ellipse 70% 40% at 50% 0%, rgba(125, 217, 86, 0.14), transparent 65%),
+    radial-gradient(ellipse 80% 45% at 50% 0%, rgba(125, 217, 86, 0.16), transparent 62%),
     var(--gh-assist-bg);
-  box-shadow: 0 -16px 64px rgba(0, 0, 0, 0.18);
-  animation: gh-sheet-up 0.38s cubic-bezier(0.22, 1, 0.36, 1);
+  box-shadow:
+    0 1px 0 rgba(255, 255, 255, 0.35) inset,
+    0 24px 70px -12px rgba(20, 46, 12, 0.42),
+    0 4px 16px rgba(0, 0, 0, 0.1);
+  backdrop-filter: blur(20px) saturate(150%);
+  -webkit-backdrop-filter: blur(20px) saturate(150%);
+  animation: gh-sheet-up 0.42s cubic-bezier(0.22, 1, 0.36, 1);
   overflow: hidden;
   color: var(--gh-text);
 }
@@ -786,16 +790,16 @@ body.gaia-v2 .gaia-assist__panel {
 body.gaia-v2 .gaia-assist__sheet {
   display: flex;
   flex-direction: column;
-  gap: 0.55rem;
-  padding: 0.4rem 1rem calc(0.9rem + env(safe-area-inset-bottom));
+  gap: 0.5rem;
+  padding: 0.35rem 0.9rem 0.9rem;
   max-height: inherit;
   overflow: hidden;
 }
 
 body.gaia-v2 .gaia-assist__handle {
-  width: 2.5rem;
-  height: 0.28rem;
-  margin: 0.15rem auto 0.35rem;
+  width: 2.25rem;
+  height: 0.25rem;
+  margin: 0.1rem auto 0.15rem;
   background: var(--gh-handle);
 }
 
@@ -803,15 +807,15 @@ body.gaia-v2 .gaia-assist__aura {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 0.5rem;
-  padding: 0.2rem 0 0.1rem;
+  gap: 0.4rem;
+  padding: 0.1rem 0 0;
 }
 
 /* The orb is now a button — the primary tap target to start voice. */
 body.gaia-v2 .gaia-assist__orb-visual {
   position: relative;
-  width: 5rem;
-  height: 5rem;
+  width: 3.5rem;
+  height: 3.5rem;
   border-radius: 999px;
   display: grid;
   place-items: center;
@@ -854,8 +858,8 @@ body.gaia-v2 .gaia-assist__orb-ring--2 {
 body.gaia-v2 .gaia-assist__orb-icon {
   position: relative;
   z-index: 1;
-  width: 2.8rem;
-  height: 2.8rem;
+  width: 1.95rem;
+  height: 1.95rem;
   object-fit: contain;
   filter: drop-shadow(0 2px 4px rgba(68, 148, 34, 0.45));
   pointer-events: none;
@@ -901,7 +905,7 @@ body.gaia-v2 .gaia-assist__wave {
   align-items: center;
   justify-content: center;
   gap: 0.28rem;
-  height: 1.6rem;
+  height: 1.05rem;
 }
 
 body.gaia-v2 .gaia-assist__wave span {
@@ -931,15 +935,15 @@ body.gaia-v2 .gaia-assist__headline {
 }
 
 body.gaia-v2 .gaia-assist__headline h2 {
-  font-size: 1.15rem;
+  font-size: 1.02rem;
   font-weight: 700;
   letter-spacing: -0.03em;
   color: var(--gh-text);
 }
 
 body.gaia-v2 .gaia-assist__status {
-  margin-top: 0.3rem;
-  font-size: 0.8375rem;
+  margin-top: 0.15rem;
+  font-size: 0.8125rem;
   font-weight: 600;
   color: var(--gh-text-soft);
   text-align: center;
@@ -962,13 +966,13 @@ body.gaia-v2[data-theme="dark"] .gaia-assist__status[data-assist-state="ready"] 
 
 body.gaia-v2 .gaia-assist__transcript {
   flex: 1;
-  min-height: 2.5rem;
-  max-height: 7rem;
+  min-height: 1.75rem;
+  max-height: 5.5rem;
   overflow-y: auto;
   display: flex;
   flex-direction: column;
-  gap: 0.4rem;
-  padding: 0.1rem 0.1rem;
+  gap: 0.35rem;
+  padding: 0.05rem;
 }
 
 body.gaia-v2 .gaia-assist__bubble {
@@ -1171,6 +1175,10 @@ body.gaia-v2 .gaia-assist__error {
   flex-direction: column;
   align-items: center;
   gap: 0.4rem;
+}
+
+body.gaia-v2 .gaia-assist__error[hidden] {
+  display: none;
 }
 
 body.gaia-v2[data-theme="dark"] .gaia-assist__error {
@@ -1855,9 +1863,9 @@ body.gaia-v2 .gaia-portal-workspace__frame {
   body.gaia-v2 .gaia-assist__panel {
     left: 0;
     right: 0;
-    width: 100%;
-    max-width: 100%;
-    border-radius: var(--gh-radius-xl) var(--gh-radius-xl) 0 0;
+    width: min(100% - 1.4rem, 25rem);
+    max-width: 25rem;
+    border-radius: var(--gh-radius-xl);
   }
 
   body.gaia-v2 .gaia-assist__input-row {

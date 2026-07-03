@@ -967,13 +967,13 @@
           <div class="flex items-start justify-between gap-3">
             <div>
               <p class="gaia-section-label !mb-1">Member access</p>
-              <h2 class="gaia-section-title">Access my profile</h2>
-              <p class="gaia-caption mt-1">You can explore Gaia's public features without signing in. Sign in with your existing Gaia Healers account to open your own courses, progress, certificates, and profile.</p>
+              <h2 class="gaia-section-title">Sign in to unlock your Gaia</h2>
+              <p class="gaia-caption mt-1">Public features are open to everyone. To unlock your own profile, courses, wellness data, and a Gaia that knows you personally, open Gaia from your <strong>member sign-in link</strong> — it's in your Gaia Healers emails. One click signs you in here and keeps you signed in for a week.</p>
             </div>
             <button type="button" class="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-surface-muted text-xl text-ink-secondary" data-auth-close aria-label="Close sign in">&times;</button>
           </div>
-          <a href="${portalOrigin}" target="_blank" rel="noopener noreferrer" class="gaia-btn gaia-btn-primary w-full mt-4">Sign in at Gaia Healers portal</a>
-          <p class="gaia-caption mt-3" data-auth-status>If you opened Gaia from your Gaia Healers portal or member link, your profile loads automatically — no need to sign in again.</p>
+          <a href="${portalOrigin}" target="_blank" rel="noopener noreferrer" class="gaia-btn gaia-btn-primary w-full mt-4">Open the Gaia Healers portal</a>
+          <p class="gaia-caption mt-3" data-auth-status>Already opened Gaia from your member link? You're signed in automatically — nothing to do here.</p>
         </div>`;
       document.body.appendChild(modal);
       statusEl = modal.querySelector('[data-auth-status]');

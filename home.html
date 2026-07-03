@@ -36,7 +36,7 @@
   <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
   <script src="gaia-chakra-data.js?v=20260703a"></script>
   <link rel="stylesheet" href="gaia-shared.css?v=20260703a" />
-  <link rel="stylesheet" href="gaia-ui-v2.css?v=20260703k" />
+  <link rel="stylesheet" href="gaia-ui-v2.css?v=20260703l" />
 </head>
 <body class="gaia-app gaia-page gaia-single-app gaia-v2">
   <script>try{document.body.dataset.theme=document.documentElement.dataset.theme||'light';}catch(e){}</script>
@@ -145,6 +145,16 @@
 
         <section id="member-me" class="gaia-me-stack" aria-label="My Gaia"></section>
 
+        <!-- Personal wellness: birth-date chakra (JS) + chakra BODY MAP (built at
+             init by gaia-ui.js into [data-chakra-map]; kept static so it builds). -->
+        <section id="me-wellness" class="gaia-me-stack" aria-label="Your birth-date chakra"></section>
+        <section id="me-chakra" class="gaia-me-stack" aria-label="Chakra map">
+          <article class="gaia-card gaia-card-pad gaia-me-card">
+            <p class="gaia-me-card__label">Chakra map</p>
+            <div class="gaia-chakra-map" data-chakra-map></div>
+          </article>
+        </section>
+
         <section class="gaia-card gaia-card-pad" data-admin-locked hidden>
           <p class="text-headline text-ink">Admin not available</p>
           <p class="gaia-caption mt-1">Admin tools are hidden. Add <span class="gaia-code">admin=1</span> to the URL and enter the dev passcode.</p>
@@ -157,6 +167,23 @@
         </section>
 
         <button type="button" class="block w-full text-center gaia-caption py-2" data-sign-out hidden>Sign out</button>
+      </main>
+    </section>
+
+    <section class="gaia-screen" data-screen="store" aria-label="Store">
+      <header class="gaia-header">
+        <div class="flex items-center justify-between gap-3">
+          <div>
+            <p class="gaia-eyebrow">Shop</p>
+            <h1 class="gaia-page-title mt-0.5">Store &amp; memberships</h1>
+          </div>
+          <div class="gaia-header-actions" data-gaia-header-actions></div>
+        </div>
+      </header>
+      <main class="gaia-main">
+        <!-- Sale surfaces (structure + live wiring): memberships, products,
+             subscriptions, event tickets, booking. Minimal UI for now. -->
+        <section id="store-body" class="gaia-me-stack" aria-label="Store"></section>
       </main>
     </section>
 
@@ -220,7 +247,7 @@
   </div>
   <script src="shared-nav.js?v=20260703h"></script>
   <script src="gaia-realtime-voice.js?v=20260703a"></script>
-  <script src="gaia-member.js?v=20260703k"></script>
+  <script src="gaia-member.js?v=20260703l"></script>
   <script src="gaia-ui.js?v=20260703j"></script>
 </body>
 </html>

@@ -33,14 +33,15 @@
   }
 
   async function loadMember() {
-    const [profile, access, appts, notif, devices, purchases, forms, courses] = await Promise.all([
+    const [profile, access, appts, notif, devices, purchases, forms, courses, products] = await Promise.all([
       getJson('/api/member/profile'), getJson('/api/member/access'),
       getJson('/api/member/appointments'), getJson('/api/member/notifications'),
       getJson('/api/member/devices'), getJson('/api/member/purchases'),
       getJson('/api/member/forms'), getJson('/api/member/courses'),
+      getJson('/api/member/products'),
     ]);
     state.authed = !!(profile && profile.ok && profile.authenticated);
-    state.data = { profile, access, appts, notif, devices, purchases, forms, courses };
+    state.data = { profile, access, appts, notif, devices, purchases, forms, courses, products };
     document.dispatchEvent(new CustomEvent('gaia:member', { detail: state.data }));
     render();
   }
@@ -90,14 +91,13 @@
 
     const unread = (d.notif && d.notif.counts && d.notif.counts.unread) || 0;
     out.push(card('<p class="gaia-member-card__label">Messages</p><p class="gaia-member-card__value">' + (unread ? unread + ' unread' : 'All caught up') + '</p><a class="gaia-member-card__cta" href="home.html?view=community">Open →</a>'));
-
-    out.push(card('<p class="gaia-member-card__label">Gaia AI</p><p class="gaia-member-card__value">Ask me anything</p><button type="button" class="gaia-member-card__cta" data-gaia-open-assist>Talk to Gaia →</button>'));
+    // No "Gaia AI" card here — the assistant is always reachable from the orb.
     return out.join('');
   }
 
   function publicCards() {
-    return card('<p class="gaia-member-card__label">Members</p><p class="gaia-member-card__value">Unlock your Gaia</p><p class="gaia-member-card__meta">Your profile, memberships, courses, bookings, and a personalized Gaia — all in one place.</p><a class="gaia-member-card__cta" href="' + esc(portalBase()) + '" target="_blank" rel="noopener noreferrer">Sign in →</a>')
-      + card('<p class="gaia-member-card__label">Gaia AI</p><p class="gaia-member-card__value">Try the assistant</p><button type="button" class="gaia-member-card__cta" data-gaia-open-assist>Ask Gaia →</button>');
+    // One clear member CTA. The assistant lives in the orb, not a Home card.
+    return card('<p class="gaia-member-card__label">Members</p><p class="gaia-member-card__value">Unlock your Gaia</p><p class="gaia-member-card__meta">Your profile, memberships, courses, bookings, and a personalized Gaia — all in one place.</p><a class="gaia-member-card__cta" href="' + esc(portalBase()) + '" target="_blank" rel="noopener noreferrer">Sign in →</a>');
   }
 
   function renderHome() {
@@ -132,6 +132,7 @@
     if (!main || !box) return;
     Array.from(main.children).forEach((ch) => {
       const keep = ch.classList.contains('gaia-profile-hero') || ch.id === 'member-me'
+        || ch.id === 'me-wellness' || ch.id === 'me-chakra'
         || ch.hasAttribute('data-sign-out') || ch.hasAttribute('data-admin-locked')
         || ch.hasAttribute('data-admin-entry') || ch.tagName === 'P';
       if (!keep) ch.style.display = 'none';
@@ -139,11 +140,13 @@
     const heroTitle = main.querySelector('.gaia-profile-hero .gaia-page-title');
     const heroSub = main.querySelector('.gaia-profile-hero .gaia-caption');
     const d = state.data;
+    const storeRow = '<a class="gaia-me-row gaia-me-row--link" href="home.html?view=store"><span>Store &amp; memberships</span><span class="gaia-me-row__meta">Shop →</span></a>';
 
     if (!(state.authed && d.profile)) {
       if (heroTitle) heroTitle.textContent = 'Your profile';
       if (heroSub) heroSub.textContent = 'Sign in to see your memberships, devices, bookings, and more.';
-      box.innerHTML = meSection('Members', '<p class="gaia-me-empty">Sign in to open your personal Gaia — profile, devices, purchases, bookings, and messages.</p><a class="gaia-member-card__cta" href="' + esc(portalBase()) + '" target="_blank" rel="noopener noreferrer">Sign in →</a>');
+      box.innerHTML = meSection('Members', '<p class="gaia-me-empty">Sign in to open your personal Gaia — profile, devices, purchases, bookings, and messages.</p><a class="gaia-member-card__cta" href="' + esc(portalBase()) + '" target="_blank" rel="noopener noreferrer">Sign in →</a>')
+        + meSection('Shop', storeRow);
       return;
     }
 
@@ -185,7 +188,8 @@
     rows.push(meSection('Messages', meRow(ncnt.unread ? ncnt.unread + ' unread' : 'All caught up', (ncnt.conversations || 0) + ' conversation' + ((ncnt.conversations === 1) ? '' : 's'))));
 
     rows.push(meSection('Account',
-      '<a class="gaia-me-row gaia-me-row--link" href="' + esc(portalBase()) + '" target="_blank" rel="noopener noreferrer"><span>Open Gaia Healers portal</span><span class="gaia-me-row__meta">education.gaiahealers.com</span></a>'));
+      storeRow
+      + '<a class="gaia-me-row gaia-me-row--link" href="' + esc(portalBase()) + '" target="_blank" rel="noopener noreferrer"><span>Open Gaia Healers portal</span><span class="gaia-me-row__meta">education.gaiahealers.com</span></a>'));
 
     box.innerHTML = rows.join('');
   }
@@ -262,55 +266,126 @@
       + '<p class="gaia-me-hint">Wellness guidance, not medical advice.</p>');
   }
 
-  function chakraDetailInner(i) {
-    const c = chakras()[i]; if (!c) return '';
-    return '<span class="gaia-chakra-dot" style="background:' + esc(c.color) + '"></span>'
-      + '<div><p class="gaia-me-card__label" style="margin:0">' + esc(c.name) + (c.sanskrit ? ' · ' + esc(c.sanskrit) : '') + '</p>'
-      + '<p class="gaia-me-empty" style="margin:.15rem 0 0">' + esc(c.focus || '') + '</p>'
-      + (c.location ? '<p class="gaia-me-row__meta">' + esc(c.location) + '</p>' : '') + '</div>';
-  }
-  function chakraExplorerCard() {
-    const chs = chakras(); if (!chs.length) return '';
-    const chips = chs.map((c, i) => '<button type="button" class="gaia-chakra-chip" data-chakra="' + i + '"><span class="gaia-chakra-dot" style="background:' + esc(c.color) + '"></span>' + esc(c.name) + '</button>').join('');
-    return meSection('Chakra explorer',
-      '<div class="gaia-chakra-grid">' + chips + '</div>'
-      + '<div id="chakra-detail" class="gaia-chakra-read">' + chakraDetailInner(0) + '</div>');
-  }
-
-  function renderPublicFeatures() {
+  // Home shows ONLY the live Next Event (kept simple).
+  function renderHomeEvent() {
     const box = el('public-features'); if (!box) return;
-    const dob = (el('dob-input') && el('dob-input').value) || '';
-    box.innerHTML = nextEventCard() + chakraReadingCard(dob) + chakraExplorerCard();
+    box.innerHTML = nextEventCard();
   }
 
-  function bindPublicFeatures() {
-    const box = el('public-features'); if (!box || box.dataset.bound) return; box.dataset.bound = '1';
-    box.addEventListener('input', (e) => {
+  // Me (personal) birth-date chakra reading. The chakra BODY MAP is static markup
+  // (#me-chakra) built by gaia-ui.js; we only re-position it when Profile is shown.
+  function renderMeWellness() {
+    const box = el('me-wellness'); if (!box) return;
+    if (!chakras().length) { box.innerHTML = ''; return; }
+    const dob = (el('dob-input') && el('dob-input').value) || '';
+    box.innerHTML = chakraReadingCard(dob);
+    refreshChakraMap(); // position the (statically built) body map, incl. direct load
+  }
+
+  // The body map's nodes are positioned off the image size, which is 0 while the
+  // Profile screen is hidden OR the 417KB image is still loading — so retry the
+  // re-layout until the photo actually has width.
+  function refreshChakraMap() {
+    const api = window.GaiaChakraMaps;
+    if (!api || !api.refresh) return;
+    let tries = 0;
+    const tick = () => {
+      api.refresh();
+      const img = document.querySelector('#me-chakra .gaia-chakra-map__photo');
+      const ready = img && img.clientWidth > 10;
+      if (!ready && tries++ < 20) setTimeout(tick, 150);
+    };
+    requestAnimationFrame(() => requestAnimationFrame(tick));
+  }
+
+  function bindWellness() {
+    if (document.body.dataset.wellnessBound) return; document.body.dataset.wellnessBound = '1';
+    document.addEventListener('input', (e) => {
       if (e.target && e.target.id === 'dob-input') {
         const out = el('chakra-read-out');
         if (out) out.innerHTML = readingInner(chakraForDate(e.target.value));
       }
     });
-    box.addEventListener('click', (e) => {
-      const chip = e.target.closest && e.target.closest('[data-chakra]');
-      if (chip) {
-        const d = el('chakra-detail'); if (d) d.innerHTML = chakraDetailInner(chip.dataset.chakra);
-        box.querySelectorAll('.gaia-chakra-chip').forEach((b) => b.classList.toggle('is-active', b === chip));
-      }
+    // Re-position the chakra body map whenever the Profile view is opened.
+    window.addEventListener('gaia:route', () => {
+      const view = (window.GaiaAppShell && window.GaiaAppShell.currentView && window.GaiaAppShell.currentView()) || '';
+      if (view === 'profile') refreshChakraMap();
     });
   }
 
   async function loadEvent() {
     const boot = await getJson('/api/app/bootstrap');
     const ev = boot && boot.gaia && boot.gaia.event;
-    if (ev && ev.name) { state.event = ev; renderPublicFeatures(); }
+    if (ev && ev.name) { state.event = ev; renderHomeEvent(); renderStore(); }
   }
 
-  function render() { renderHome(); renderPublicFeatures(); renderMe(); renderAcademy(); renderCommunity(); }
+  /* ---------- Store / sale surfaces (structure + live wiring) ---------- */
+  function storeCta(label, href, ext) {
+    return '<a class="gaia-member-card__cta" href="' + esc(href) + '"' + (ext ? ' target="_blank" rel="noopener noreferrer"' : '') + '>' + esc(label) + ' →</a>';
+  }
+  function money(amt, cur) {
+    if (amt == null || amt === '') return '';
+    const n = Number(amt); if (!isFinite(n)) return '';
+    try { return new Intl.NumberFormat(undefined, { style: 'currency', currency: cur || 'USD' }).format(n); }
+    catch (_) { return (cur || '$') + n; }
+  }
+  function saleRowLink(name, href) {
+    return '<a class="gaia-me-row gaia-me-row--link" href="' + esc(href) + '" target="_blank" rel="noopener noreferrer"><span>' + esc(name) + '</span><span class="gaia-me-row__meta">Open →</span></a>';
+  }
+
+  function renderStore() {
+    const box = el('store-body'); if (!box) return;
+    const d = state.data; const portal = portalBase();
+    const rows = [];
+
+    // 1) Memberships (from live access)
+    const comm = (d.access && d.access.communities) || {};
+    const unlocked = comm.unlocked || [];
+    const joinable = (comm.locked || []).filter((c) => c.state !== 'unknown');
+    if (state.authed) {
+      const inner = unlocked.map((c) => meRow(c.name, 'Member')).join('')
+        + joinable.map((c) => '<a class="gaia-me-row gaia-me-row--link" href="' + esc(c.openUrl || portal) + '" target="_blank" rel="noopener noreferrer"><span>' + esc(c.name) + '</span><span class="gaia-me-row__meta">Join →</span></a>').join('');
+      rows.push(meSection('Memberships', inner || meEmpty('No memberships on record yet.')));
+    } else {
+      rows.push(meSection('Memberships', meEmpty('Practitioner communities and membership tiers.') + storeCta('Sign in to join', portal, true)));
+    }
+
+    // 2) Products (Bio-Well devices, tools)
+    const prod = d.products || {};
+    const owned = prod.ownedProducts || [];
+    rows.push(meSection('Products',
+      (owned.length ? owned.map((p) => meRow(p.name, 'Owned')).join('') : meEmpty('Bio-Well devices, add-ons, and practitioner tools.'))
+      + storeCta('Browse the store', prod.storeUrl || portal, true)));
+
+    // 3) Subscriptions
+    const subs = (prod.subscriptions && prod.subscriptions.length) ? prod.subscriptions : ((d.purchases && d.purchases.subscriptions) || []);
+    rows.push(meSection('Subscriptions',
+      (subs.length ? subs.map((s) => meRow(s.status || 'Subscription', money(s.amount, s.currency))).join('') : meEmpty('No active subscriptions.'))
+      + storeCta('Manage in portal', portal, true)));
+
+    // 4) Event tickets / registration (live event)
+    const ev = state.event;
+    rows.push(meSection('Event tickets',
+      (ev && ev.name)
+        ? ('<p class="gaia-me-card__value">' + esc(ev.name) + '</p>' + (fmtEventDate(ev) ? meRow('When', fmtEventDate(ev)) : '')
+           + storeCta('Register', ev.sourceUrl || 'https://elevate.gaiahealers.com/gaia-healers-elevate-conference-page', true))
+        : meEmpty('No upcoming event on sale right now.')));
+
+    // 5) Booking a scan / session (live booking links)
+    const booking = (d.appts && d.appts.bookingLinks) || [];
+    rows.push(meSection('Book a scan or session',
+      booking.length
+        ? booking.map((b) => '<a class="gaia-me-row gaia-me-row--link" href="' + esc(b.openUrl) + '" target="_blank" rel="noopener noreferrer"><span>' + esc(b.name) + '</span><span class="gaia-me-row__meta">Book →</span></a>').join('')
+        : (meEmpty('Bio-Well scans and 1:1 sessions.') + storeCta('See booking options', portal, true))));
+
+    box.innerHTML = rows.join('');
+  }
+
+  function render() { renderHome(); renderHomeEvent(); renderMe(); renderMeWellness(); renderStore(); renderAcademy(); renderCommunity(); }
 
   document.addEventListener('DOMContentLoaded', () => {
     render(); // public first paint
-    bindPublicFeatures();
+    bindWellness();
     loadEvent(); // live Next Event from the Event Manager (public)
   });
   document.addEventListener('gaia:auth', (e) => {

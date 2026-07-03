@@ -956,9 +956,7 @@
     const signOutBtn = document.querySelector('[data-sign-out]');
     const accessNote = document.getElementById('profile-access-note');
     let modal;
-    let emailInput;
     let statusEl;
-    let submitBtn;
 
     function ensureModal() {
       if (modal) return modal;
@@ -969,72 +967,31 @@
           <div class="flex items-start justify-between gap-3">
             <div>
               <p class="gaia-section-label !mb-1">Member access</p>
-              <h2 class="gaia-section-title">Sign in to Gaia</h2>
-              <p class="gaia-caption mt-1">Use your Gaia member email. If the app is launched from GHL, access can be claimed automatically.</p>
+              <h2 class="gaia-section-title">Access my profile</h2>
+              <p class="gaia-caption mt-1">You can explore Gaia's public features without signing in. Sign in with your existing Gaia Healers account to open your own courses, progress, certificates, and profile.</p>
             </div>
             <button type="button" class="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-surface-muted text-xl text-ink-secondary" data-auth-close aria-label="Close sign in">&times;</button>
           </div>
-          <form class="mt-4 space-y-3" data-auth-form>
-            <label class="block">
-              <span class="gaia-caption mb-1.5 block">Member email</span>
-              <input type="email" class="w-full rounded-2xl border border-black/8 bg-white px-4 py-3 text-body text-ink outline-none" placeholder="you@gaiahealers.com" autocomplete="email" required />
-            </label>
-            <button type="submit" class="gaia-btn gaia-btn-primary w-full">Send Gaia access link</button>
-          </form>
-          <p class="gaia-caption mt-3" data-auth-status>We will verify your member access through the Gaia proxy.</p>
-          <a href="${portalOrigin}" class="gaia-link mt-3 inline-block">Open the current client portal</a>
+          <a href="${portalOrigin}" target="_blank" rel="noopener noreferrer" class="gaia-btn gaia-btn-primary w-full mt-4">Sign in at Gaia Healers portal</a>
+          <p class="gaia-caption mt-3" data-auth-status>If you opened Gaia from your Gaia Healers portal or member link, your profile loads automatically — no need to sign in again.</p>
         </div>`;
       document.body.appendChild(modal);
-      emailInput = modal.querySelector('input');
       statusEl = modal.querySelector('[data-auth-status]');
-      submitBtn = modal.querySelector('button[type="submit"]');
-      modal.querySelector('[data-auth-close]').addEventListener('click', () => {
+      const closeModal = () => {
         modal.classList.add('hidden');
         modal.classList.remove('flex');
-      });
+      };
+      modal.querySelector('[data-auth-close]').addEventListener('click', closeModal);
       modal.addEventListener('click', (event) => {
-        if (event.target === modal) {
-          modal.classList.add('hidden');
-          modal.classList.remove('flex');
-        }
-      });
-      modal.querySelector('[data-auth-form]').addEventListener('submit', async (event) => {
-        event.preventDefault();
-        const email = emailInput.value.trim();
-        if (!email) return;
-        submitBtn.disabled = true;
-        statusEl.textContent = 'Requesting your Gaia access link...';
-        try {
-          const response = await fetch(`${syncProxyBase()}/api/auth/magic-link/request`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
-            credentials: 'include',
-            body: JSON.stringify({
-              email,
-              returnTo: window.location.href,
-            }),
-          });
-          const payload = await response.json();
-          if (!response.ok || payload.ok === false) throw new Error(payload.error || 'Sign-in request failed.');
-          statusEl.textContent = payload.delivery === 'debug-link'
-            ? 'Opening your Gaia access link...'
-            : 'Check your email for the Gaia access link.';
-          if (payload.authUrl) window.location.href = payload.authUrl;
-        } catch (error) {
-          statusEl.textContent = error.message || 'Unable to request access right now.';
-        } finally {
-          submitBtn.disabled = false;
-        }
+        if (event.target === modal) closeModal();
       });
       return modal;
     }
 
-    function openModal(prefill = '') {
+    function openModal() {
       ensureModal();
-      if (prefill) emailInput.value = prefill;
       modal.classList.remove('hidden');
       modal.classList.add('flex');
-      requestAnimationFrame(() => emailInput?.focus());
     }
 
     function cleanAuthHintsFromUrl() {
@@ -1053,7 +1010,7 @@
       const session = authState();
       document.querySelectorAll('a.gaia-login-pill, a.gaia-login-btn').forEach((link) => {
         if (!link.dataset.gaiaAuthBound) return;
-        link.textContent = session.authenticated ? 'Member access' : 'Log in';
+        link.textContent = session.authenticated ? 'My profile' : 'Sign in';
       });
       if (profileTitle) profileTitle.textContent = session.authenticated ? (session.member?.displayName || 'Gaia member') : 'Practitioner';
       if (profileCaption) {

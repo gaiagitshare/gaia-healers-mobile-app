@@ -309,22 +309,56 @@
     return '<a class="gaia-me-row gaia-me-row--link" href="' + esc(href) + '" target="_blank" rel="noopener noreferrer"><span>' + esc(name) + '</span><span class="gaia-me-row__meta">Open →</span></a>';
   }
 
+  // Membership presented as UNLOCKED ABILITIES, not invented paid tiers.
+  // Real model: Explorer (free/public, not a GHL tier) · Silver (the one paid
+  // GHL membership tag) · Practitioner (earned via certification, not bought).
+  function tierCard(o) {
+    return '<article class="gaia-card gaia-card-pad gaia-tier' + (o.active ? ' gaia-tier--active' : '') + '">'
+      + '<div class="gaia-tier__head"><p class="gaia-me-card__label">' + esc(o.name) + '</p>'
+      + (o.statusLabel ? '<span class="gaia-tier__badge' + (o.active ? ' is-active' : '') + '">' + esc(o.statusLabel) + '</span>' : '')
+      + '</div>'
+      + '<ul class="gaia-tier__list">' + o.abilities.map((a) => '<li>' + esc(a) + '</li>').join('') + '</ul>'
+      + (o.note ? '<p class="gaia-me-hint">' + esc(o.note) + '</p>' : '')
+      + (o.ctaHref ? '<a class="gaia-member-card__cta" href="' + esc(o.ctaHref) + '" target="_blank" rel="noopener noreferrer">' + esc(o.ctaLabel) + ' →</a>' : '')
+      + '</article>';
+  }
+  function membershipCards() {
+    const acc = (state.data.access && state.data.access.member) || {};
+    const authed = state.authed;
+    const hasSilver = /silver/i.test(acc.membershipTier || '');
+    const isCert = !!acc.practitionerCertified;
+    const isPract = isCert || !!acc.practitioner;
+    const shopBase = (window.GaiaStore && window.GaiaStore.shopBase) || 'https://gaiahealers.com';
+    const baseline = !authed || (!hasSilver && !isPract);
+
+    const intro = '<article class="gaia-card gaia-card-pad gaia-me-card"><p class="gaia-me-card__label">Membership</p>'
+      + '<p class="gaia-me-empty">Your Gaia unlocks more as you grow — here’s what each level opens. No fake tiers: this reflects your real access.</p></article>';
+
+    const explorer = tierCard({
+      name: 'Explorer', statusLabel: baseline ? 'Current' : 'Included', active: baseline,
+      abilities: ['Public Gaia Assist', 'Chakra map & birth-date reading', 'Public events & articles', 'Browse the store'],
+    });
+    const silver = tierCard({
+      name: 'Silver member', statusLabel: hasSilver ? 'Active' : '', active: hasSilver,
+      abilities: ['Everything in Explorer', 'Your practitioner communities', 'Member pricing & event discounts', 'Personalized Gaia Assist', 'Bio-Well device sync', 'Exclusive content'],
+      ctaLabel: hasSilver ? '' : 'Become a member', ctaHref: hasSilver ? '' : portalBase(),
+    });
+    const practitioner = tierCard({
+      name: 'Practitioner', statusLabel: isCert ? 'Certified' : (isPract ? 'Practitioner' : ''), active: isPract,
+      abilities: ['Everything in Silver', 'Practitioner directory listing', 'Practitioner communities', 'Certified badge'],
+      note: 'Earned through Bio-Well certification — not a paid tier.',
+      ctaLabel: isPract ? '' : 'Get certified', ctaHref: isPract ? '' : (shopBase + '/collections/biowell-courses'),
+    });
+    return intro + explorer + silver + practitioner;
+  }
+
   function renderStore() {
     const box = el('store-body'); if (!box) return;
     const d = state.data; const portal = portalBase();
     const rows = [];
 
-    // 1) Memberships (from live access)
-    const comm = (d.access && d.access.communities) || {};
-    const unlocked = comm.unlocked || [];
-    const joinable = (comm.locked || []).filter((c) => c.state !== 'unknown');
-    if (state.authed) {
-      const inner = unlocked.map((c) => meRow(c.name, 'Member')).join('')
-        + joinable.map((c) => '<a class="gaia-me-row gaia-me-row--link" href="' + esc(c.openUrl || portal) + '" target="_blank" rel="noopener noreferrer"><span>' + esc(c.name) + '</span><span class="gaia-me-row__meta">Join →</span></a>').join('');
-      rows.push(meSection('Memberships', inner || meEmpty('No memberships on record yet.')));
-    } else {
-      rows.push(meSection('Memberships', meEmpty('Practitioner communities and membership tiers.') + storeCta('Sign in to join', portal, true)));
-    }
+    // 1) Membership — real ability-unlock model (Explorer / Silver / Practitioner)
+    rows.push(membershipCards());
 
     // 2) Products (Bio-Well devices, tools)
     const prod = d.products || {};

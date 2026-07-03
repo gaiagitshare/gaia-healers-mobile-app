@@ -103,6 +103,21 @@
 
   window.addEventListener('gaia:route', maybeLoad);
   document.addEventListener('DOMContentLoaded', maybeLoad);
+
+  // Chakra → Colour Energy cross-sell. Maps a chakra id to its Colour Energy
+  // spray colour, and returns a Shopify link to the matching products (search is
+  // robust regardless of what colours are in stock; falls back to the collection).
+  const CHAKRA_COLOUR = {
+    root: 'Red', sacral: 'Orange', solar: 'Yellow', heart: 'Green',
+    throat: 'Blue', 'third-eye': 'Indigo', crown: 'Violet',
+  };
+  function chakraShopUrl(id) {
+    const colour = CHAKRA_COLOUR[String(id || '').toLowerCase()];
+    return colour
+      ? SHOP + '/search?q=' + encodeURIComponent(colour + ' spray') + '&type=product'
+      : SHOP + '/collections/colour-energy';
+  }
+
   // expose for the chakra→Colour-Energy cross-sell and future callers
-  window.GaiaStore = { load: loadShop, shopBase: SHOP };
+  window.GaiaStore = { load: loadShop, shopBase: SHOP, chakraShopUrl: chakraShopUrl, colourFor: (id) => CHAKRA_COLOUR[String(id || '').toLowerCase()] || '' };
 })();

@@ -1298,6 +1298,7 @@
       </div>
       <div class="gaia-chakra-map__actions">
         <a href="${active.learnHref}" class="gaia-link">Learn more</a>
+        <a href="${(window.GaiaStore && window.GaiaStore.chakraShopUrl(active.id)) || 'https://gaiahealers.com/collections/colour-energy'}" class="gaia-link" target="_blank" rel="noopener noreferrer">Shop this chakra</a>
         <button type="button" class="gaia-link" data-chakra-assist>Ask Gaia</button>
       </div>`;
     detail.querySelector('[data-chakra-assist]')?.addEventListener('click', () => {
@@ -1355,6 +1356,7 @@
               </div>
               <div class="gaia-chakra-map__actions">
                 <a href="${active.learnHref}" class="gaia-link">Learn more</a>
+                <a href="${(window.GaiaStore && window.GaiaStore.chakraShopUrl(active.id)) || 'https://gaiahealers.com/collections/colour-energy'}" class="gaia-link" target="_blank" rel="noopener noreferrer">Shop this chakra</a>
                 <button type="button" class="gaia-link" data-chakra-assist>Ask Gaia</button>
               </div>
             </div>
@@ -2082,6 +2084,7 @@
             <p class="gaia-assist__status" data-assist-state="idle">Tap Gaia for live voice</p>
           </div>
           <div class="gaia-assist__transcript"></div>
+          <div class="gaia-assist__route" hidden></div>
           <div class="gaia-assist__chips"></div>
           <form class="gaia-assist__form">
             <label class="gaia-assist__label" for="gaia-assist-prompt">Ask Gaia</label>
@@ -2116,6 +2119,7 @@
     const mic = root.querySelector('.gaia-assist__mic');
     const status = root.querySelector('.gaia-assist__status');
     const transcript = root.querySelector('.gaia-assist__transcript');
+    const routeBox = root.querySelector('.gaia-assist__route');
     const chips = root.querySelector('.gaia-assist__chips');
     const form = root.querySelector('.gaia-assist__form');
     const promptInput = root.querySelector('#gaia-assist-prompt');
@@ -3866,11 +3870,61 @@
       localStorage.setItem(VOICE_SPEED_KEY, voiceSpeed.value);
       voiceSpeedLabel.textContent = `${Number(voiceSpeed.value).toFixed(2)}x`;
     });
+    // —— Gaia Assist as router ——
+    // Detect what the user is trying to DO and offer a one-tap deep-link to the
+    // right place in the app. Client-side keyword match; augments (never
+    // replaces) the assistant's answer. No backend/prompt changes.
+    function routeIntent(text) {
+      const t = String(text || '').toLowerCase();
+      if (!t.trim()) return null;
+      const go = (view) => () => { window.GaiaAppShell?.go?.(view); setOpen(false); };
+      const open = (url) => () => { if (url) window.open(url, '_blank', 'noopener'); };
+      if (/\b(scan|book|booking|appointment|session)\b/.test(t)) {
+        return { label: 'Book a Bio-Well scan', run: open('https://api.leadconnectorhq.com/widget/bookings/scans') };
+      }
+      if (/(chakra|colou?r energy)/.test(t) && /(spray|colou?r|product|shop|buy|balance|heal|align)/.test(t)) {
+        const ch = ['root', 'sacral', 'solar', 'heart', 'throat', 'third', 'crown'].find((c) => t.includes(c));
+        const id = ch === 'third' ? 'third-eye' : ch;
+        const url = (id && window.GaiaStore?.chakraShopUrl) ? window.GaiaStore.chakraShopUrl(id) : 'https://gaiahealers.com/collections/colour-energy';
+        return { label: 'Shop Colour Energy', run: open(url) };
+      }
+      // Specific destinations before the membership/store catch-alls, so e.g.
+      // "join a community" / "join the event" route to the right place.
+      if (/\b(event|ticket|elevate|register|conference|summit)\b/.test(t)) {
+        const ev = window.GaiaMember?.event;
+        return ev?.sourceUrl ? { label: 'Register for the event', run: open(ev.sourceUrl) } : { label: 'See the next event', run: go('today') };
+      }
+      if (/\b(course|courses|certif\w*|academy|class|lesson|training|learn)\b/.test(t)) {
+        return { label: 'Open Academy', run: go('academy') };
+      }
+      if (/\b(community|communities|group|forum|discussion)\b/.test(t)) {
+        return { label: 'Open Community', run: go('community') };
+      }
+      if (/\b(member|membership|upgrade|join|silver|subscribe|subscription)\b/.test(t)) {
+        return { label: 'See membership', run: go('store') };
+      }
+      if (/\b(product|products|device|buy|shop|store|purchase|bio-?well|biopulsar|biotekna|price|cost)\b/.test(t)) {
+        return { label: 'Open the Store', run: go('store') };
+      }
+      return null;
+    }
+    function showRoute(text) {
+      if (!routeBox) return;
+      const r = routeIntent(text);
+      if (!r) { routeBox.hidden = true; routeBox.innerHTML = ''; return; }
+      routeBox.hidden = false;
+      routeBox.innerHTML = '<button type="button" class="gaia-assist__route-btn"></button>';
+      const btn = routeBox.querySelector('button');
+      btn.textContent = r.label + ' →';
+      btn.addEventListener('click', () => { routeBox.hidden = true; routeBox.innerHTML = ''; r.run(); });
+    }
+
     form.addEventListener('submit', (event) => {
       event.preventDefault();
       unlockVoicePlayback();
       const prompt = promptInput.value;
       promptInput.value = '';
+      showRoute(prompt);
       if (realtimeVoice?.isActive()) {
         if (!realtimeVoice.sendText(prompt)) {
           setError('Voice session is still connecting. Try again in a moment.');
@@ -3883,6 +3937,7 @@
       button.addEventListener('click', () => {
         unlockVoicePlayback();
         const item = suggestionMap.find((entry) => entry.intent === button.dataset.intent) || suggestionMap[0];
+        showRoute(item.label);
         if (realtimeVoice?.isActive()) {
           setOpen(true);
           realtimeVoice.sendText(item.label);

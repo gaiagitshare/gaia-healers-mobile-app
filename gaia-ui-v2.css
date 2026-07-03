@@ -2044,3 +2044,32 @@ body.gaia-v2 .gaia-main > *, body.gaia-v2 .gaia-member-grid, body.gaia-v2 .gaia-
     margin-right: auto !important;
   }
 }
+
+/* ---- Public Home features: next event, birth-date chakra, chakra explorer ---- */
+body.gaia-v2 .gaia-me-hint { font-size: 0.72rem; color: var(--gh-text-faint, rgba(120,140,120,.8)); margin: 0.5rem 0 0; }
+body.gaia-v2 .gaia-dob-input {
+  width: 100%; margin: 0.15rem 0 0.75rem; padding: 0.65rem 0.75rem;
+  border-radius: 0.75rem; border: 1px solid var(--gh-border-soft, rgba(255,255,255,.12));
+  background: rgba(0,0,0,.18); color: var(--gh-text, #eef4ec);
+  font: inherit; font-size: 0.95rem; color-scheme: dark;
+}
+body.gaia-v2 .gaia-dob-input:focus { outline: 2px solid var(--gh-accent, #5cb82e); outline-offset: 1px; border-color: transparent; }
+body.gaia-v2 .gaia-chakra-dot {
+  width: 0.85rem; height: 0.85rem; border-radius: 50%; flex: none; display: inline-block;
+  box-shadow: 0 0 0 1px rgba(255,255,255,.22) inset;
+}
+body.gaia-v2 .gaia-chakra-read {
+  display: flex; align-items: center; gap: 0.7rem; min-height: 2.4rem;
+  padding: 0.6rem 0.7rem; border-radius: 0.75rem; background: rgba(0,0,0,.16);
+  border: 1px solid var(--gh-border-soft, rgba(255,255,255,.1));
+}
+body.gaia-v2 .gaia-chakra-grid { display: flex; flex-wrap: wrap; gap: 0.4rem; margin-bottom: 0.7rem; }
+body.gaia-v2 .gaia-chakra-chip {
+  display: inline-flex; align-items: center; gap: 0.4rem; cursor: pointer;
+  padding: 0.4rem 0.7rem; border-radius: 999px; font-size: 0.82rem;
+  color: var(--gh-text, #eef4ec); background: rgba(255,255,255,.05);
+  border: 1px solid var(--gh-border-soft, rgba(255,255,255,.12));
+  transition: background .15s, border-color .15s;
+}
+body.gaia-v2 .gaia-chakra-chip:hover { background: rgba(255,255,255,.09); }
+body.gaia-v2 .gaia-chakra-chip.is-active { border-color: var(--gh-accent, #5cb82e); background: rgba(92,184,46,.14); }

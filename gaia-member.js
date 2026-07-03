@@ -7,7 +7,7 @@
   'use strict';
   if (!document.querySelector('.gaia-main--today')) return; // home.html only
 
-  const state = { authed: false, data: {} };
+  const state = { authed: false, data: {}, event: null };
   window.GaiaMember = state;
 
   function proxyBase() {
@@ -105,7 +105,7 @@
     const main = document.querySelector('.gaia-main--today');
     if (main) {
       Array.from(main.children).forEach((ch) => {
-        if (ch === dash || ch.id === 'gaia-coach-anchor' || ch.classList.contains('gaia-dash-hero')) return;
+        if (ch === dash || ch.id === 'gaia-coach-anchor' || ch.id === 'public-features' || ch.classList.contains('gaia-dash-hero')) return;
         ch.style.display = 'none';
       });
     }
@@ -216,9 +216,103 @@
     }
   }
 
-  function render() { renderHome(); renderMe(); renderAcademy(); renderCommunity(); }
+  /* ---------- Public, no-login features ---------- */
+  function chakras() { return (window.GAIA_CHAKRAS || []); }
 
-  document.addEventListener('DOMContentLoaded', render); // public first paint
+  function fmtEventDate(ev) {
+    const s = ev && ev.startDate ? new Date(ev.startDate) : null;
+    const e = ev && ev.endDate ? new Date(ev.endDate) : null;
+    if (s && e && isFinite(+s) && isFinite(+e)) {
+      const md = { month: 'short', day: 'numeric' };
+      return s.toLocaleDateString(undefined, md) + ' – ' + e.toLocaleDateString(undefined, md) + ', ' + e.getFullYear();
+    }
+    return (ev && ev.date) || '';
+  }
+
+  function nextEventCard() {
+    const ev = state.event;
+    if (!ev || !ev.name) return '';
+    const when = fmtEventDate(ev);
+    const url = esc(ev.sourceUrl || 'https://elevate.gaiahealers.com/gaia-healers-elevate-conference-page');
+    return meSection('Next event',
+      '<p class="gaia-me-card__value">' + esc(ev.name) + '</p>'
+      + (when ? meRow('When', when) : '')
+      + (ev.venue ? meRow('Where', ev.venue) : '')
+      + '<a class="gaia-member-card__cta" href="' + url + '" target="_blank" rel="noopener noreferrer">View event &amp; register →</a>');
+  }
+
+  function digitRoot(n) { n = Math.abs(n); while (n > 9) { n = String(n).split('').reduce((a, d) => a + (+d), 0); } return n; }
+  function chakraForDate(str) {
+    const chs = chakras(); if (!chs.length || !str) return null;
+    const d = new Date(str + 'T00:00:00'); if (isNaN(+d)) return null;
+    const sum = digitRoot(d.getFullYear() + (d.getMonth() + 1) + d.getDate());
+    return chs[(sum - 1) % chs.length];
+  }
+  function readingInner(c) {
+    if (!c) return '<p class="gaia-me-empty">Enter your birth date to see your chakra focus.</p>';
+    return '<span class="gaia-chakra-dot" style="background:' + esc(c.color) + '"></span>'
+      + '<div><p class="gaia-me-card__label" style="margin:0">' + esc(c.name) + (c.sanskrit ? ' · ' + esc(c.sanskrit) : '') + '</p>'
+      + '<p class="gaia-me-empty" style="margin:.15rem 0 0">' + esc(c.focus || '') + (c.element ? ' · ' + esc(c.element) : '') + '</p></div>';
+  }
+  function chakraReadingCard(dobVal) {
+    if (!chakras().length) return '';
+    return meSection('Your birth-date chakra',
+      '<input type="date" id="dob-input" class="gaia-dob-input" value="' + esc(dobVal || '') + '" max="2035-12-31" aria-label="Your date of birth" />'
+      + '<div id="chakra-read-out" class="gaia-chakra-read">' + readingInner(chakraForDate(dobVal)) + '</div>'
+      + '<p class="gaia-me-hint">Wellness guidance, not medical advice.</p>');
+  }
+
+  function chakraDetailInner(i) {
+    const c = chakras()[i]; if (!c) return '';
+    return '<span class="gaia-chakra-dot" style="background:' + esc(c.color) + '"></span>'
+      + '<div><p class="gaia-me-card__label" style="margin:0">' + esc(c.name) + (c.sanskrit ? ' · ' + esc(c.sanskrit) : '') + '</p>'
+      + '<p class="gaia-me-empty" style="margin:.15rem 0 0">' + esc(c.focus || '') + '</p>'
+      + (c.location ? '<p class="gaia-me-row__meta">' + esc(c.location) + '</p>' : '') + '</div>';
+  }
+  function chakraExplorerCard() {
+    const chs = chakras(); if (!chs.length) return '';
+    const chips = chs.map((c, i) => '<button type="button" class="gaia-chakra-chip" data-chakra="' + i + '"><span class="gaia-chakra-dot" style="background:' + esc(c.color) + '"></span>' + esc(c.name) + '</button>').join('');
+    return meSection('Chakra explorer',
+      '<div class="gaia-chakra-grid">' + chips + '</div>'
+      + '<div id="chakra-detail" class="gaia-chakra-read">' + chakraDetailInner(0) + '</div>');
+  }
+
+  function renderPublicFeatures() {
+    const box = el('public-features'); if (!box) return;
+    const dob = (el('dob-input') && el('dob-input').value) || '';
+    box.innerHTML = nextEventCard() + chakraReadingCard(dob) + chakraExplorerCard();
+  }
+
+  function bindPublicFeatures() {
+    const box = el('public-features'); if (!box || box.dataset.bound) return; box.dataset.bound = '1';
+    box.addEventListener('input', (e) => {
+      if (e.target && e.target.id === 'dob-input') {
+        const out = el('chakra-read-out');
+        if (out) out.innerHTML = readingInner(chakraForDate(e.target.value));
+      }
+    });
+    box.addEventListener('click', (e) => {
+      const chip = e.target.closest && e.target.closest('[data-chakra]');
+      if (chip) {
+        const d = el('chakra-detail'); if (d) d.innerHTML = chakraDetailInner(chip.dataset.chakra);
+        box.querySelectorAll('.gaia-chakra-chip').forEach((b) => b.classList.toggle('is-active', b === chip));
+      }
+    });
+  }
+
+  async function loadEvent() {
+    const boot = await getJson('/api/app/bootstrap');
+    const ev = boot && boot.gaia && boot.gaia.event;
+    if (ev && ev.name) { state.event = ev; renderPublicFeatures(); }
+  }
+
+  function render() { renderHome(); renderPublicFeatures(); renderMe(); renderAcademy(); renderCommunity(); }
+
+  document.addEventListener('DOMContentLoaded', () => {
+    render(); // public first paint
+    bindPublicFeatures();
+    loadEvent(); // live Next Event from the Event Manager (public)
+  });
   document.addEventListener('gaia:auth', (e) => {
     if (e && e.detail && e.detail.authenticated) loadMember();
     else { state.authed = false; state.data = {}; render(); }

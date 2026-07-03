@@ -36,7 +36,7 @@
   <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
   <script src="gaia-chakra-data.js?v=20260703a"></script>
   <link rel="stylesheet" href="gaia-shared.css?v=20260703a" />
-  <link rel="stylesheet" href="gaia-ui-v2.css?v=20260703j" />
+  <link rel="stylesheet" href="gaia-ui-v2.css?v=20260703k" />
 </head>
 <body class="gaia-app gaia-page gaia-single-app gaia-v2">
   <script>try{document.body.dataset.theme=document.documentElement.dataset.theme||'light';}catch(e){}</script>
@@ -68,6 +68,10 @@
         </section>
 
         <section id="member-dashboard" class="gaia-member-grid" aria-label="Your Gaia" hidden></section>
+
+        <!-- Public, no-login features: next event, birth-date chakra, chakra explorer.
+             Rendered by gaia-member.js for everyone (signed-in and out). -->
+        <section id="public-features" class="gaia-me-stack" aria-label="Explore Gaia"></section>
       </main>
     </section>
 
@@ -216,7 +220,7 @@
   </div>
   <script src="shared-nav.js?v=20260703h"></script>
   <script src="gaia-realtime-voice.js?v=20260703a"></script>
-  <script src="gaia-member.js?v=20260703h"></script>
+  <script src="gaia-member.js?v=20260703k"></script>
   <script src="gaia-ui.js?v=20260703j"></script>
 </body>
 </html>

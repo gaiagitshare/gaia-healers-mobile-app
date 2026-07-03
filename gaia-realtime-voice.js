@@ -627,7 +627,14 @@
                 return true;
               } catch (micError) {
                 maySendAudio = false;
-                setErrorMessage('Microphone permission is needed for live listening. Gemini Live can still answer typed prompts here.');
+                const isSafari = /^((?!chrome|android).)*safari/i.test(navigator.userAgent);
+                const isInApp = /(instagram|facebook|twitter|linkedin|tiktok|snapchat|whatsapp|wechat)/i.test(navigator.userAgent);
+                const message = isInApp
+                  ? 'Open this page in Safari, then allow Microphone when asked. In-app browsers block microphone access.'
+                  : isSafari
+                    ? 'Microphone access is blocked. iPhone Settings → Safari → Microphone → Allow gaiahealers.app.'
+                    : 'Microphone permission is needed for live listening. Check your browser site settings and allow microphone.';
+                setErrorMessage(message);
                 return false;
               }
             })(),

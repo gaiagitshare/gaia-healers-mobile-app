@@ -2032,7 +2032,10 @@
           <div class="gaia-assist__toolbar">
             <p class="gaia-assist__hint-line">Speak naturally · tap Gaia again to close</p>
           </div>
-          <p class="gaia-assist__error" role="alert" hidden></p>
+          <div class="gaia-assist__error" role="alert" hidden>
+            <span class="gaia-assist__error-text"></span>
+            <button type="button" class="gaia-assist__error-retry" hidden>Try again</button>
+          </div>
           <div class="gaia-assist__voice gaia-assist__voice--fallback" hidden aria-hidden="true">
             <audio class="gaia-assist__audio" playsinline webkit-playsinline preload="auto"></audio>
             <button type="button" class="gaia-assist__mic" aria-label="Start voice prompt"></button>
@@ -2056,6 +2059,8 @@
     const form = root.querySelector('.gaia-assist__form');
     const promptInput = root.querySelector('#gaia-assist-prompt');
     const error = root.querySelector('.gaia-assist__error');
+    const errorText = root.querySelector('.gaia-assist__error-text');
+    const errorRetry = root.querySelector('.gaia-assist__error-retry');
     const muteButton = root.querySelector('.gaia-assist__mute');
     const stopButton = root.querySelector('.gaia-assist__stop');
     const playButton = root.querySelector('.gaia-assist__play');
@@ -2949,10 +2954,24 @@
       setAssistVoiceState(nextStatus, REALTIME_STATUS_COPY[nextStatus] || REALTIME_STATUS_COPY.idle);
     }
 
-    function setError(message) {
+    function setError(message, { retryAction = null } = {}) {
       error.classList.remove('gaia-assist__hint');
-      error.hidden = !message;
-      error.textContent = message || '';
+      if (!message) {
+        error.hidden = true;
+        errorText.textContent = '';
+        errorRetry.hidden = true;
+        errorRetry.onclick = null;
+        return;
+      }
+      error.hidden = false;
+      errorText.textContent = message;
+      if (retryAction) {
+        errorRetry.hidden = false;
+        errorRetry.onclick = () => { retryAction(); };
+      } else {
+        errorRetry.hidden = true;
+        errorRetry.onclick = null;
+      }
     }
 
     function setAssistVoiceState(state, message = '') {
@@ -3574,10 +3593,18 @@
         cleanupActiveRecording();
         clearLiveTranscript();
         assistError('voice recorder error', err);
-        const message = err.name === 'NotAllowedError'
-          ? 'Microphone access is blocked. In Safari, allow Microphone for this website, then try again.'
-          : `${err.message || 'Voice capture failed'}. If this is an in-app browser, open Safari or tap the text box and use iPhone dictation.`;
-        setError(message);
+        const isSafari = /^((?!chrome|android).)*safari/i.test(navigator.userAgent);
+        const isInApp = /(instagram|facebook|twitter|linkedin|tiktok|snapchat|whatsapp|wechat)/i.test(navigator.userAgent);
+        if (err.name === 'NotAllowedError') {
+          const instructions = isInApp
+            ? 'Open this page in Safari, then allow Microphone when asked. In-app browsers block microphone access.'
+            : isSafari
+              ? 'Microphone access is blocked. iPhone Settings → Safari → Microphone → Allow. Then tap Try again.'
+              : 'Microphone access is blocked. Check your browser site settings and allow microphone, then tap Try again.';
+          setError(instructions, { retryAction: () => recordLiveVoice() });
+        } else {
+          setError(`${err.message || 'Voice capture failed'}. If this is an in-app browser, open Safari or tap the text box and use iPhone dictation.`);
+        }
         promptInput.focus();
         setAssistVoiceState('idle', REALTIME_STATUS_COPY.idle);
       }

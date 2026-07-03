@@ -1164,14 +1164,46 @@ body.gaia-v2 .gaia-assist__error {
   font-size: 0.75rem;
   color: #c62828;
   text-align: center;
-  padding: 0.35rem 0.5rem;
+  padding: 0.4rem 0.6rem;
   border-radius: 0.65rem;
   background: rgba(198, 40, 40, 0.1);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.4rem;
 }
 
 body.gaia-v2[data-theme="dark"] .gaia-assist__error {
   color: #ff8a8a;
   background: rgba(255, 90, 90, 0.1);
+}
+
+body.gaia-v2 .gaia-assist__error-retry {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: #c62828;
+  background: #ffffff;
+  border: 1px solid rgba(198, 40, 40, 0.25);
+  border-radius: 999px;
+  padding: 0.35rem 0.85rem;
+  cursor: pointer;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+
+body.gaia-v2 .gaia-assist__error-retry:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.12);
+}
+
+body.gaia-v2 .gaia-assist__error-retry:active {
+  transform: scale(0.96);
+}
+
+body.gaia-v2[data-theme="dark"] .gaia-assist__error-retry {
+  color: #ff8a8a;
+  background: rgba(255, 255, 255, 0.08);
+  border-color: rgba(255, 138, 138, 0.35);
 }
 
 body.gaia-v2 .gaia-assist__label {

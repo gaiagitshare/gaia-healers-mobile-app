@@ -1188,6 +1188,166 @@ async function memberAccess(req, res, origin) {
   }, origin);
 }
 
+// ————————————————————————————————————————————————————————————————
+// Phase 2 — Normalized member data layer.
+// The frontend only ever calls /api/member/*; GHL concepts stay server-side.
+// Every endpoint is session-gated (401 anon) and returns LIVE GHL data OR a
+// documented placeholder (source + reason) — never mock. Read-only.
+// ————————————————————————————————————————————————————————————————
+function requireSessionMember(req, res, origin) {
+  const m = sessionMemberContext(req);
+  if (!m) {
+    sendJson(res, 401, { ok: false, authenticated: false, reason: 'auth_required', error: 'Sign in required.' }, origin);
+    return null;
+  }
+  return m;
+}
+
+async function fetchMemberBundle(sessionMember) {
+  try {
+    const v = await getMemberFromGhl({ email: sessionMember.email, contactId: sessionMember.contactId, memberId: sessionMember.memberId });
+    if (v?.memberResolved) {
+      const contactId = v.member?.contactId || v.member?.memberId || sessionMember.contactId || sessionMember.memberId || '';
+      return { resolved: true, member: v.member || sessionMember, tags: v.tags || [], customFields: v.customFields || [], contactId };
+    }
+  } catch (err) {
+    console.error('[Gaia Member] bundle fetch failed', { error: err.message.split('\n')[0] });
+  }
+  return { resolved: false, member: sessionMember, tags: Array.isArray(sessionMember.tags) ? sessionMember.tags : [], customFields: [], contactId: sessionMember.contactId || sessionMember.memberId || '' };
+}
+
+const BIOWELL_SERIAL_FIELD_ID = '9oJPmsGmdbhca85SeBbl';
+function customFieldValue(customFields, fieldId) {
+  const f = (customFields || []).find((x) => String(x.id || x.key || '') === fieldId);
+  if (!f) return '';
+  const v = f.value;
+  return Array.isArray(v) ? v.join(', ') : String(v ?? '');
+}
+function memberEnvelope(b, extra) {
+  return { ok: true, authenticated: true, source: b.resolved ? 'ghl-live' : 'session', generatedAt: new Date().toISOString(), ...extra };
+}
+function placeholderEnvelope(reason, extra) {
+  return { ok: true, authenticated: true, source: 'placeholder', reason, generatedAt: new Date().toISOString(), ...extra };
+}
+
+async function memberProfile(req, res, origin) {
+  const sm = requireSessionMember(req, res, origin); if (!sm) return;
+  const b = await fetchMemberBundle(sm);
+  const access = buildMemberAccess(b.tags, b.customFields, b.member);
+  sendJson(res, 200, memberEnvelope(b, {
+    profile: {
+      name: b.member.displayName || b.member.name || 'Gaia member',
+      email: b.member.email || '',
+      role: b.member.role || 'Member',
+      cohort: b.member.cohort || '',
+      practitioner: access.member.practitioner,
+      practitionerCertified: access.member.practitionerCertified,
+      membershipTier: access.member.membershipTier,
+      bioWellSerial: customFieldValue(b.customFields, BIOWELL_SERIAL_FIELD_ID) || null,
+      tagCount: b.tags.length,
+      customFieldCount: Array.isArray(b.customFields) ? b.customFields.length : 0,
+    },
+  }), origin);
+}
+
+async function memberCommunities(req, res, origin) {
+  const sm = requireSessionMember(req, res, origin); if (!sm) return;
+  const b = await fetchMemberBundle(sm);
+  const access = buildMemberAccess(b.tags, b.customFields, b.member);
+  sendJson(res, 200, memberEnvelope(b, { communities: access.communities, unknownAccessTags: access.unknownAccessTags }), origin);
+}
+
+const DEVICE_SLUGS = new Set(['biowell', 'biowell_biocor', 'biowell_sputnik', 'biowell_water', 'biowell_water_sensor', 'biopulsar', 'biotekna', 'braintap', 'healy', 'asea', 'ans_control', 'bia', 'heg']);
+async function memberDevices(req, res, origin) {
+  const sm = requireSessionMember(req, res, origin); if (!sm) return;
+  const b = await fetchMemberBundle(sm);
+  const devices = [];
+  for (const t of b.tags) {
+    const m = ACCESS_CATALOG.productOwnerPattern.exec(t);
+    if (m && DEVICE_SLUGS.has(m[1].toLowerCase())) devices.push({ id: m[1].toLowerCase(), name: friendlyProductName(m[1]), owned: true, matchedBy: t });
+  }
+  const serial = customFieldValue(b.customFields, BIOWELL_SERIAL_FIELD_ID);
+  if (serial) { const bw = devices.find((d) => d.id === 'biowell'); if (bw) bw.serialNumber = serial; }
+  sendJson(res, 200, memberEnvelope(b, { devices, count: devices.length }), origin);
+}
+
+function normalizeAppointment(a = {}) {
+  return {
+    id: String(a.id || ''),
+    title: String(a.title || 'Appointment'),
+    startTime: a.startTime || '',
+    endTime: a.endTime || '',
+    status: String(a.appointmentStatus || a.status || ''),
+    calendarId: String(a.calendarId || ''),
+    address: String(a.address || ''),
+  };
+}
+async function memberAppointments(req, res, origin) {
+  const sm = requireSessionMember(req, res, origin); if (!sm) return;
+  const b = await fetchMemberBundle(sm);
+  let appointments = [];
+  if (b.contactId) {
+    try {
+      const r = await ghlGet(`/contacts/${encodeURIComponent(b.contactId)}/appointments`);
+      const list = r?.events || r?.appointments || r?.data || [];
+      appointments = (Array.isArray(list) ? list : []).map(normalizeAppointment);
+    } catch (err) { console.error('[Gaia Member] appointments failed', { error: err.message.split('\n')[0] }); }
+  }
+  sendJson(res, 200, { ...memberEnvelope(b, {}), source: 'ghl-live', appointments, count: appointments.length }, origin);
+}
+
+async function memberActivity(req, res, origin) {
+  const sm = requireSessionMember(req, res, origin); if (!sm) return;
+  const b = await fetchMemberBundle(sm);
+  const cfg = ghlConfig();
+  const items = [];
+  if (b.contactId) {
+    const [notesR, tasksR, oppsR] = await Promise.all([
+      ghlGet(`/contacts/${encodeURIComponent(b.contactId)}/notes`).catch(() => null),
+      ghlGet(`/contacts/${encodeURIComponent(b.contactId)}/tasks`).catch(() => null),
+      ghlGet('/opportunities/search', { location_id: cfg.locationId, contact_id: b.contactId, limit: 10 }).catch(() => null),
+    ]);
+    for (const n of (notesR?.notes || [])) items.push({ type: 'note', at: n.dateAdded || n.createdAt || '', text: String(n.body || '').slice(0, 200) });
+    for (const t of (tasksR?.tasks || [])) items.push({ type: 'task', at: t.dueDate || t.dateAdded || '', text: String(t.title || t.body || '') });
+    for (const o of (oppsR?.opportunities || [])) items.push({ type: 'opportunity', at: o.updatedAt || o.createdAt || '', text: `${o.name || 'Opportunity'}${o.status ? ` · ${o.status}` : ''}` });
+  }
+  items.sort((a, z) => String(z.at).localeCompare(String(a.at)));
+  sendJson(res, 200, { ...memberEnvelope(b, {}), source: 'ghl-live', activity: items.slice(0, 25), count: items.length }, origin);
+}
+
+// —— Documented placeholders (GHL scope-blocked or no-API) — never mock ——
+async function memberProducts(req, res, origin) {
+  const sm = requireSessionMember(req, res, origin); if (!sm) return;
+  const b = await fetchMemberBundle(sm);
+  const owned = [];
+  for (const t of b.tags) { const m = ACCESS_CATALOG.productOwnerPattern.exec(t); if (m) owned.push({ id: m[1].toLowerCase(), name: friendlyProductName(m[1]), owned: true, matchedBy: t }); }
+  sendJson(res, 200, {
+    ok: true, authenticated: true, source: 'ghl-tags',
+    reason: 'Owned products derived live from product_*_owner tags. Full product catalog + purchase history need the GHL products/payments token scopes.',
+    generatedAt: new Date().toISOString(), products: owned, count: owned.length,
+  }, origin);
+}
+async function memberCourses(req, res, origin) {
+  const sm = requireSessionMember(req, res, origin); if (!sm) return;
+  const b = await fetchMemberBundle(sm);
+  const tagHints = b.tags.filter((t) => /course|enrolled/i.test(t));
+  sendJson(res, 200, placeholderEnvelope('GHL exposes no Courses/LMS API — course enrollment and lesson progress cannot be read. Tag hints only.', { courses: [], tagHints }), origin);
+}
+async function memberEvents(req, res, origin) {
+  if (!requireSessionMember(req, res, origin)) return;
+  sendJson(res, 200, placeholderEnvelope('Community/live-session events live in GHL Communities (no API). 1:1 bookings are at /api/member/appointments; Elevate events come from the Event Manager.', { events: [] }), origin);
+}
+async function memberForms(req, res, origin) {
+  const sm = requireSessionMember(req, res, origin); if (!sm) return;
+  const b = await fetchMemberBundle(sm);
+  const tagState = b.tags.filter((t) => /form_complete|form_incomplete/i.test(t));
+  sendJson(res, 200, placeholderEnvelope('Forms/submissions need the GHL forms scope. Form-completion state is available via tags today.', { forms: [], tagState }), origin);
+}
+async function memberNotifications(req, res, origin) {
+  if (!requireSessionMember(req, res, origin)) return;
+  sendJson(res, 200, placeholderEnvelope('Notifications need the GHL conversations scope or webhook wiring. None surfaced yet.', { notifications: [] }), origin);
+}
+
 function boolFlag(value) {
   return value === 'true' || value === '1';
 }
@@ -2799,6 +2959,16 @@ const server = http.createServer(async (req, res) => {
       await memberAccess(req, res, origin);
       return;
     }
+    if (req.method === 'GET' && url.pathname === '/api/member/profile') { await memberProfile(req, res, origin); return; }
+    if (req.method === 'GET' && url.pathname === '/api/member/communities') { await memberCommunities(req, res, origin); return; }
+    if (req.method === 'GET' && url.pathname === '/api/member/devices') { await memberDevices(req, res, origin); return; }
+    if (req.method === 'GET' && url.pathname === '/api/member/appointments') { await memberAppointments(req, res, origin); return; }
+    if (req.method === 'GET' && url.pathname === '/api/member/activity') { await memberActivity(req, res, origin); return; }
+    if (req.method === 'GET' && url.pathname === '/api/member/products') { await memberProducts(req, res, origin); return; }
+    if (req.method === 'GET' && url.pathname === '/api/member/courses') { await memberCourses(req, res, origin); return; }
+    if (req.method === 'GET' && url.pathname === '/api/member/events') { await memberEvents(req, res, origin); return; }
+    if (req.method === 'GET' && url.pathname === '/api/member/forms') { await memberForms(req, res, origin); return; }
+    if (req.method === 'GET' && url.pathname === '/api/member/notifications') { await memberNotifications(req, res, origin); return; }
     // Gaia Assist routes are member-only: they proxy paid LLM/voice/tts calls,
     // so every request must carry a valid Gaia member session cookie.
     if (url.pathname.startsWith('/api/assist/')) {

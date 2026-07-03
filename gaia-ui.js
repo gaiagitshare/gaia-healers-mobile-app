@@ -1436,6 +1436,32 @@
       sessionStorage.setItem('gaia-entered', '1');
       sessionStorage.setItem('gaia-onboarded', '1');
     });
+
+    // Swipe navigation for mobile splash intro.
+    let touchStartX = 0;
+    let touchStartY = 0;
+    let touchStartAt = 0;
+    const swipeZone = root.querySelector('.gaia-splash-content') || root;
+    swipeZone.addEventListener('touchstart', (e) => {
+      const touch = e.changedTouches[0];
+      touchStartX = touch.clientX;
+      touchStartY = touch.clientY;
+      touchStartAt = Date.now();
+    }, { passive: true });
+    swipeZone.addEventListener('touchend', (e) => {
+      const touch = e.changedTouches[0];
+      const deltaX = touch.clientX - touchStartX;
+      const deltaY = touch.clientY - touchStartY;
+      const elapsed = Date.now() - touchStartAt;
+      const minDistance = 50;
+      const maxDistance = 280;
+      const maxTime = 400;
+      if (Math.abs(deltaX) < minDistance || Math.abs(deltaX) > maxDistance || elapsed > maxTime) return;
+      if (Math.abs(deltaY) > Math.abs(deltaX) * 0.8) return;
+      if (deltaX < 0 && i < steps.length - 1) { i += 1; show(i); }
+      if (deltaX > 0 && i > 0) { i -= 1; show(i); }
+    }, { passive: true });
+
     show(0);
   }
 

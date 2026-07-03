@@ -1537,30 +1537,60 @@ function buildGaiaLiveInstructions(context = {}) {
 // can greet by name and speak to the member's own courses/progress. Returns ''
 // for anonymous visitors (Gaia stays generic). Never throws — personalization
 // must never block the voice token.
+// Phase 4 — builds the private, per-member AI context from the LIVE normalized
+// data layer. Privacy-safe (no amounts/PII beyond first name + status), and
+// honest: never fabricates course progress or community posts (not in the API).
+// Returns '' for anonymous visitors (Gaia stays generic/public). Cached ~60s
+// per contact so prewarm+start don't double-hit GHL.
+const _memberAiCtxCache = new Map();
 async function buildMemberVoiceContext(req) {
   try {
     const member = sessionMemberContext(req);
-    if (!member) return '';
-    const ctxUrl = withMemberContext(new URL('http://localhost'), member);
-    const [academy, hub] = await Promise.all([
-      getAcademyProgress(ctxUrl).catch(() => null),
-      getMemberHub(ctxUrl, FALLBACK_ACADEMY).catch(() => null),
+    if (!member) return ''; // anonymous / public → generic Gaia
+    const b = await fetchMemberBundle(member);
+    const cid = b.contactId;
+    const cached = cid && _memberAiCtxCache.get(cid);
+    if (cached && (Date.now() - cached.at) < 60000) return cached.text;
+
+    const access = buildMemberAccess(b.tags, b.customFields, b.member);
+    const [apptsRaw, convos, orders, subs, formSubs, surveySubs] = await Promise.all([
+      cid ? ghlGet(`/contacts/${encodeURIComponent(cid)}/appointments`).then((r) => r?.events || r?.appointments || []).catch(() => []) : [],
+      cid ? ghlMemberConversations(cid, 5).catch(() => []) : [],
+      cid ? ghlMemberOrders(cid, 20).catch(() => []) : [],
+      cid ? ghlMemberSubscriptions(cid, 20).catch(() => []) : [],
+      cid ? ghlMemberSubmissions(cid, 'forms', 100).catch(() => []) : [],
+      cid ? ghlMemberSubmissions(cid, 'surveys', 100).catch(() => []) : [],
     ]);
-    const firstName = String(member.displayName || academy?.member?.name || 'there').trim().split(/\s+/)[0];
+    const firstName = (String(b.member.displayName || 'there').trim().split(/\s+/)[0]) || 'there';
+    const unlocked = access.communities.unlocked.map((c) => c.name);
+    const lockedNames = access.communities.locked.filter((c) => c.state === 'locked').map((c) => c.name);
+    const owned = access.products.map((p) => p.name);
+    const paid = (Array.isArray(orders) ? orders : []).filter(orderIsPaid);
+    const now = Date.now();
+    const upcoming = (Array.isArray(apptsRaw) ? apptsRaw : []).filter((a) => { const t = Date.parse(a.startTime || ''); return Number.isFinite(t) && t > now; });
+    const unread = (Array.isArray(convos) ? convos : []).reduce((n, c) => n + Number(c.unreadCount || 0), 0);
+
     const lines = [
-      'MEMBER CONTEXT (private — this is the signed-in member; use it to personalize, never read it aloud to anyone else):',
-      `You are speaking with ${member.displayName || firstName}. Greet them by first name ("${firstName}").`,
+      'MEMBER CONTEXT (private — this is the currently signed-in member). Use it ONLY to personalize answers for this person. Never read it aloud verbatim, never disclose it to anyone else, and never reference data belonging to other members.',
+      `You are speaking with ${b.member.displayName || firstName}. Greet them by first name ("${firstName}").`,
     ];
-    const roleCohort = [member.role, member.cohort].filter(Boolean).join(' · ');
-    if (roleCohort) lines.push(`Their role/cohort: ${roleCohort}.`);
-    if (academy?.summary) {
-      const s = academy.summary;
-      lines.push(`Their Academy progress: ${s.enrolled} courses enrolled, ${s.completed} completed, about ${s.averageProgress}% average. Next up: ${s.nextCourseTitle}${s.nextLessonTitle ? ` — ${s.nextLessonTitle}` : ''}. CE credits ${s.ceCreditsEarned}/${s.ceCreditsRequired}.`);
-      lines.push(`(This progress data is ${academy.liveData ? 'live from the education system' : 'not yet live — treat as approximate and say so if asked for exact figures'}.)`);
-    }
-    if (hub?.member?.role && !roleCohort) lines.push(`Membership: ${hub.member.role}.`);
-    lines.push('If the member asks about their courses, badge, or scans, use this context and point them to the exact screen (Academy, Wellness, Community, or Profile).');
-    return lines.join('\n');
+    const status = [b.member.role, b.member.cohort, access.member.membershipTier ? `${access.member.membershipTier} member` : '', access.member.practitioner ? (access.member.practitionerCertified ? 'certified practitioner' : 'practitioner') : ''].filter(Boolean).join(' · ');
+    if (status) lines.push(`Status: ${status}.`);
+    if (unlocked.length) lines.push(`Community access (unlocked): ${unlocked.join(', ')}.`);
+    if (lockedNames.length) lines.push(`Not included yet: ${lockedNames.join(', ')} — if asked, offer to help them get access; never claim they already have it.`);
+    if (owned.length) lines.push(`Owns/uses: ${owned.join(', ')}.`);
+    if (paid.length || subs.length) lines.push(`Account: ${paid.length} completed purchase(s), ${subs.length} subscription(s) on file. Do NOT say amounts, prices, or card details out loud.`);
+    if (upcoming.length) lines.push(`Has ${upcoming.length} upcoming appointment(s) booked.`);
+    if (formSubs.length || surveySubs.length) lines.push(`Has submitted ${formSubs.length} form(s) and ${surveySubs.length} survey(s).`);
+    if (unread) lines.push(`Has ${unread} unread message(s) in their Gaia Healers conversations.`);
+
+    lines.push('WHAT YOU CAN SEE: their profile, memberships/communities, products/devices, purchases & subscriptions (counts only), appointments, forms/surveys submitted, and conversation notifications.');
+    lines.push('WHAT YOU CANNOT SEE: individual course lesson progress or community post/discussion content — the backend does not expose these. If asked about a specific lesson, grade, community post, or a detailed scan reading, say plainly that you can OPEN the course or community in the portal but cannot read the lesson/post details from here, and offer to take them there. NEVER invent progress, grades, posts, scan numbers, or history.');
+    lines.push('Privacy: discuss only THIS member’s own data, and only when they ask about it. Do not proactively recite sensitive details.');
+
+    const text = lines.join('\n');
+    if (cid) _memberAiCtxCache.set(cid, { at: Date.now(), text });
+    return text;
   } catch {
     return '';
   }
@@ -2417,7 +2447,7 @@ function fallbackAssistReply(prompt, intent = '') {
   return 'Gaia Assist is connected to the staging proxy. Ask about badges, Bio-Well scans, Academy progress, or GHL follow-up and I will keep changes in review mode.';
 }
 
-function assistSystemPrompt() {
+function assistSystemPrompt(memberContext = '') {
   return [
     'You are Gaia Assist, the smart concierge for the Gaia Healers mobile app.',
     'Answer with deep awareness of Gaia Healers services, GHL membership/community structure, academy courses, event operations, devices, website offers, Bio-Well scans, and practitioner workflows.',
@@ -2427,7 +2457,8 @@ function assistSystemPrompt() {
     'Never claim that you saved, imported, checked in, emailed, purchased, or changed data. Keep all actions in review/confirm mode.',
     'Keep responses concise, practical, warm, and wellness-safe. Do not provide medical diagnosis.',
     gaiaKnowledgePrompt(),
-  ].join(' ');
+    String(memberContext || '').trim(),
+  ].filter(Boolean).join(' ');
 }
 
 function assistUserPrompt(prompt, context = {}) {
@@ -2494,7 +2525,7 @@ async function callChatProvider(provider, prompt, context = {}) {
     body: JSON.stringify({
       model: config.model,
       messages: [
-        { role: 'system', content: assistSystemPrompt() },
+        { role: 'system', content: assistSystemPrompt(context.memberContext) },
         { role: 'user', content: assistUserPrompt(prompt, context) },
       ],
       temperature: 0.35,
@@ -2535,7 +2566,7 @@ async function streamChatProvider(provider, prompt, context = {}, onDelta = () =
     body: JSON.stringify({
       model: config.model,
       messages: [
-        { role: 'system', content: assistSystemPrompt() },
+        { role: 'system', content: assistSystemPrompt(context.memberContext) },
         { role: 'user', content: assistUserPrompt(prompt, context) },
       ],
       temperature: 0.35,
@@ -2644,6 +2675,7 @@ async function assistChat(body) {
       intent: body.intent,
       page: body.page,
       source: body.source || 'chat',
+      memberContext: body.memberContext,
     });
     console.log('[Gaia Assist] proxy response ready', { provider: result.provider, model: result.model || 'none' });
     return {
@@ -2679,7 +2711,7 @@ async function assistChatStream(body, res, origin) {
   sendSseHeaders(res, origin);
   writeSse(res, 'meta', { ok: true, source: body.source || 'stream', generatedAt: new Date().toISOString() });
 
-  const context = { intent: body.intent, page: body.page, source: body.source || 'chat-stream' };
+  const context = { intent: body.intent, page: body.page, source: body.source || 'chat-stream', memberContext: body.memberContext };
   const attempts = [];
 
   if (process.env.GAIA_ASSIST_VOICE_ENABLED !== 'true') {
@@ -3096,13 +3128,15 @@ const server = http.createServer(async (req, res) => {
     }
     if (req.method === 'POST' && url.pathname === '/api/assist/chat') {
       const body = await readJsonBody(req);
-      const payload = await assistChat({ ...body, source: body.source || 'chat' });
+      const memberContext = await buildMemberVoiceContext(req);
+      const payload = await assistChat({ ...body, source: body.source || 'chat', memberContext });
       sendJson(res, payload.ok === false ? 400 : 200, payload, origin);
       return;
     }
     if (req.method === 'POST' && url.pathname === '/api/assist/chat/stream') {
       const body = await readJsonBody(req);
-      await assistChatStream({ ...body, source: body.source || 'chat-stream' }, res, origin);
+      const memberContext = await buildMemberVoiceContext(req);
+      await assistChatStream({ ...body, source: body.source || 'chat-stream', memberContext }, res, origin);
       return;
     }
     if (req.method === 'POST' && url.pathname === '/api/assist/voice') {
@@ -3115,7 +3149,8 @@ const server = http.createServer(async (req, res) => {
         }, origin);
         return;
       }
-      const payload = await assistChat({ ...body, prompt: transcript, transcript, source: body.source || 'voice' });
+      const memberContext = await buildMemberVoiceContext(req);
+      const payload = await assistChat({ ...body, prompt: transcript, transcript, source: body.source || 'voice', memberContext });
       sendJson(res, payload.ok === false ? 400 : 200, payload, origin);
       return;
     }

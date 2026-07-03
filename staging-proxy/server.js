@@ -1,6 +1,7 @@
 import http from 'node:http';
 import crypto from 'node:crypto';
 import { URL } from 'node:url';
+import * as adminRouter from './admin-router.js';
 
 const PORT = Number(process.env.PORT || 8787);
 const GROQ_MODEL = process.env.GROQ_MODEL || 'llama-3.3-70b-versatile';
@@ -3085,7 +3086,31 @@ const server = http.createServer(async (req, res) => {
       return;
     }
     if (req.method === 'GET' && url.pathname === '/api/app/bootstrap') {
-      sendJson(res, 200, await bootstrap(req, url), origin);
+      const boot = await bootstrap(req, url);
+      // Merge admin-published content so it surfaces in the app.
+      try {
+        if (boot && boot.gaia) {
+          boot.gaia.announcements = adminRouter.publishedAnnouncements();
+          boot.gaia.adminEvents = adminRouter.publishedEvents();
+        }
+      } catch (_) { /* admin store optional */ }
+      sendJson(res, 200, boot, origin);
+      return;
+    }
+    // Admin panel (events / content / members). Self-contained, gated by the
+    // gaia_admin cookie; all helpers injected so admin-router stays decoupled.
+    if (url.pathname.startsWith('/api/admin/')) {
+      await adminRouter.handle(req, res, url, {
+        origin,
+        sendJson,
+        readJsonBody,
+        signTokenPayload,
+        readSignedToken,
+        parseCookies,
+        ghlGet,
+        ghlConfig,
+        ghlHeaders,
+      });
       return;
     }
     if (req.method === 'GET' && url.pathname === '/api/academy/progress') {

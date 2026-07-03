@@ -159,61 +159,34 @@
       </main>
     </section>
 
+    <!-- ADMIN — real operator console on the g-* system. Password-gated by the
+         server (gaia-admin.js ↔ /api/admin/*). Reachable at ?view=admin. -->
     <section class="gaia-screen" data-screen="admin" aria-label="Admin">
-      <header class="gaia-header">
-        <div class="flex items-center justify-between gap-3">
-          <a href="home.html?view=profile" class="gaia-link">Profile</a>
-          <div class="text-right"><p class="gaia-eyebrow">Operator console</p><h1 class="text-title text-ink">Admin cockpit</h1></div>
+      <header class="g-topbar">
+        <a href="home.html?view=today" class="g-topbar__brand"><img src="assets/gaia-logo.png" alt="" /> Gaia Healers · Admin</a>
+        <div class="g-topbar__actions">
+          <button type="button" class="g-btn g-btn--ghost g-btn--sm" id="admin-logout" hidden>Sign out</button>
         </div>
       </header>
-
-      <main class="gaia-main">
-        <section class="gaia-card-dark gaia-card-pad-lg rounded-3xl">
-          <p class="text-micro text-gaia-light">Full access system</p>
-          <h2 class="mt-1 text-title text-white">GHL · Academy · Events · Devices · AI</h2>
-          <p class="mt-2 text-caption text-white/60">One operator layer for read/write access, approvals, audit logs, and Gaia Assist tools.</p>
-          <div class="mt-5 grid grid-cols-3 gap-2"><div class="gaia-event-metric"><p class="text-micro text-white/60">GHL</p><p class="text-headline text-white">Live</p></div><div class="gaia-event-metric"><p class="text-micro text-white/60">Events</p><p class="text-headline text-white">QR</p></div><div class="gaia-event-metric"><p class="text-micro text-white/60">AI</p><p class="text-headline text-white">Review</p></div></div>
-        </section>
-
-        <section class="gaia-card gaia-card-pad-lg">
-          <div class="mb-4 flex items-center justify-between"><h2 class="gaia-section-title">GHL sync map</h2><span class="gaia-badge">Observed</span></div>
-          <div class="gaia-stack">
-            <div class="gaia-row"><div class="gaia-tile-icon strip-biowell">CP</div><div class="flex-1"><p class="text-headline text-ink">Client Portal</p><p class="gaia-caption">1,254 users · 1 invited · magic link, invite, and login email actions in GHL.</p></div></div>
-            <div class="gaia-row"><div class="gaia-tile-icon strip-biopulsar">CM</div><div class="flex-1"><p class="text-headline text-ink">Communities</p><p class="gaia-caption">6 groups with tabs for Discussion, Learning, Events, Members, About, and Leaderboard where available.</p></div></div>
-            <div class="gaia-row"><div class="gaia-tile-icon strip-biotekna">EDU</div><div class="flex-1"><p class="text-headline text-ink">Courses + credentials</p><p class="gaia-caption">Courses, modules, CE credits, live sessions, certificates, and credential status.</p></div></div>
-            <div class="gaia-row"><div class="gaia-tile-icon strip-healeex">MK</div><div class="flex-1"><p class="text-headline text-ink">Newsletter + marketing</p><p class="gaia-caption">Training reminders, chakra challenge, device offers, event campaigns, and segment preferences.</p></div></div>
+      <main class="gaia-main g-page g-admin">
+        <div class="g-page__head">
+          <p class="g-page__kicker">Operator console</p>
+          <h1 class="g-page__title">Admin</h1>
+          <p class="g-page__sub" id="admin-sub">Manage events, announcements, and members.</p>
+        </div>
+        <!-- login gate (rendered by gaia-admin.js) -->
+        <div id="admin-login" class="g-page-sec" hidden></div>
+        <!-- authed console -->
+        <div id="admin-console" class="g-page-sec" hidden>
+          <div class="g-tabs g-tabs--3" role="tablist" aria-label="Admin sections">
+            <button type="button" class="g-tab is-active" data-admin-tab="events" role="tab" aria-selected="true">Events</button>
+            <button type="button" class="g-tab" data-admin-tab="content" role="tab" aria-selected="false">Content</button>
+            <button type="button" class="g-tab" data-admin-tab="members" role="tab" aria-selected="false">Members</button>
           </div>
-        </section>
-
-        <section class="gaia-card gaia-card-pad">
-          <div class="mb-4 flex items-center justify-between"><h2 class="gaia-section-title">Community groups</h2><span class="gaia-source-pill">GHL Memberships</span></div>
-          <div class="gaia-stack">
-            <div class="gaia-event-ticket"><div><p class="text-headline text-ink">[Start Here] All Gaia Healers</p><p class="gaia-caption">Public · 28 posts · 3 admins</p></div><span class="gaia-tabular text-headline text-gaia-dark">254</span></div>
-            <div class="gaia-event-ticket"><div><p class="text-headline text-ink">Bio-Well Practitioners</p><p class="gaia-caption">Public · 11 posts · leaderboard</p></div><span class="gaia-tabular text-headline text-gaia-dark">381</span></div>
-            <div class="gaia-event-ticket"><div><p class="text-headline text-ink">BioPulsar Practitioners</p><p class="gaia-caption">Public group</p></div><span class="gaia-tabular text-headline text-gaia-dark">507</span></div>
-            <div class="gaia-event-ticket"><div><p class="text-headline text-ink">Biotekna · Healeex · Abundant</p><p class="gaia-caption">154 · 31 · 117 members</p></div><span class="gaia-tabular text-headline text-gaia-dark">302</span></div>
-          </div>
-        </section>
-
-        <section class="gaia-card gaia-card-pad">
-          <div class="mb-4 flex items-center justify-between"><h2 class="gaia-section-title">Admin write gates</h2><span class="gaia-badge">Required</span></div>
-          <div class="gaia-timeline">
-            <div class="gaia-timeline__item"><span class="gaia-timeline__dot"></span><div><p class="text-headline text-ink">Role-based login</p><p class="gaia-caption">Member, practitioner, faculty, event staff, admin, and super-admin roles must come from the backend.</p></div></div>
-            <div class="gaia-timeline__item"><span class="gaia-timeline__dot"></span><div><p class="text-headline text-ink">Approval before writes</p><p class="gaia-caption">Gaia Assist can draft GHL messages, tags, imports, and class updates, but admin approval is required before execution.</p></div></div>
-            <div class="gaia-timeline__item"><span class="gaia-timeline__dot"></span><div><p class="text-headline text-ink">Audit log</p><p class="gaia-caption">Every action stores actor, source, payload summary, provider, result, and rollback notes.</p></div></div>
-          </div>
-        </section>
-
-        <section class="gaia-card gaia-card-pad">
-          <div class="mb-4 flex items-center justify-between"><h2 class="gaia-section-title">AI controls</h2><span class="gaia-source-pill">SnapBOS pattern</span></div>
-          <div class="gaia-timeline">
-            <div class="gaia-timeline__item"><span class="gaia-timeline__dot"></span><div><p class="text-headline text-ink">Context aggregator</p><p class="gaia-caption">Feeds Gaia Assist safe summaries from GHL, academy, event, membership, devices, and scan history.</p></div></div>
-            <div class="gaia-timeline__item"><span class="gaia-timeline__dot"></span><div><p class="text-headline text-ink">Capability registry</p><p class="gaia-caption">Every action is typed: read, draft, propose, or execute-after-approval.</p></div></div>
-            <div class="gaia-timeline__item"><span class="gaia-timeline__dot"></span><div><p class="text-headline text-ink">Audit + flags</p><p class="gaia-caption">Admin controls rollout, voice, model providers, write access, and logs every proposed action.</p></div></div>
-          </div>
-        </section>
-
-        <section class="gaia-card gaia-card-accent gaia-card-pad"><div class="flex items-center justify-between gap-3"><div><p class="text-headline text-ink">Ask Gaia about operations</p><p class="gaia-caption mt-1">Use voice for admin questions, but require confirmation before any GHL/event/class write.</p></div><button type="button" data-gaia-open-assist class="rounded-xl bg-gaia px-3 py-2 text-micro font-bold text-white">Ask</button></div></section>
+          <div id="admin-panel-events" class="g-admin-panel" role="tabpanel"></div>
+          <div id="admin-panel-content" class="g-admin-panel" role="tabpanel" hidden></div>
+          <div id="admin-panel-members" class="g-admin-panel" role="tabpanel" hidden></div>
+        </div>
       </main>
     </section>
   </div>
@@ -221,6 +194,7 @@
   <script src="gaia-realtime-voice.js?v=20260703a"></script>
   <script src="gaia-member.js?v=20260703u"></script>
   <script src="gaia-store.js?v=20260703u"></script>
-  <script src="gaia-ui.js?v=20260703p"></script>
+  <script src="gaia-admin.js?v=20260703u"></script>
+  <script src="gaia-ui.js?v=20260703u"></script>
 </body>
 </html>

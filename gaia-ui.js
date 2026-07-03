@@ -1628,10 +1628,8 @@
         return showView('wellness', { ...options, tab: options.tab || view });
       }
       let nextView = normalizeView(view);
-      if (nextView === 'admin' && !adminMode()) {
-        nextView = 'profile';
-        options = { ...options, adminBlocked: true };
-      }
+      // Admin is protected by a server-side password (gaia-admin.js) — it's
+      // reachable directly (not in the nav), and the login form gates it.
       adminBlocked = Boolean(options.adminBlocked);
 
       screens.forEach((screen) => {

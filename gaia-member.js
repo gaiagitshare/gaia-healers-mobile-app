@@ -162,6 +162,7 @@
     if (anns) anns.innerHTML = announcementsHtml(state.announcements);
     const cards = el('home-cards');
     if (cards) cards.innerHTML = homeEventCard() + membersCard();
+    renderHomeWellness();
   }
 
   function meSection(title, inner) {
@@ -412,21 +413,24 @@
       + '<div><p class="g-card__label" style="margin:0">' + esc(c.name) + (c.sanskrit ? ' · ' + esc(c.sanskrit) : '') + '</p>'
       + '<p class="g-empty" style="margin:.15rem 0 0">' + esc(c.focus || '') + (c.element ? ' · ' + esc(c.element) : '') + '</p></div>';
   }
+  // Birth-date chakra reading — a self-contained card that can appear in more
+  // than one place (Home + Profile), so it uses classes/data-attrs (not ids)
+  // and a shared lastDob so both instances stay in sync.
+  let lastDob = '';
   function chakraReadingCard(dobVal) {
     if (!chakras().length) return '';
-    return '<article class="g-card"><p class="g-card__label">Your birth-date chakra</p>'
-      + '<input type="date" id="dob-input" class="g-dob" value="' + esc(dobVal || '') + '" max="2035-12-31" aria-label="Your date of birth" />'
-      + '<div id="chakra-read-out" class="g-chakra-read">' + readingInner(chakraForDate(dobVal)) + '</div>'
+    return '<article class="g-card gaia-chakra-reading"><p class="g-card__label">Your birth-date chakra</p>'
+      + '<input type="date" class="g-dob" data-dob value="' + esc(dobVal || '') + '" max="2035-12-31" aria-label="Your date of birth" />'
+      + '<div class="g-chakra-read" data-chakra-out>' + readingInner(chakraForDate(dobVal)) + '</div>'
       + '<p class="g-hint">Wellness guidance, not medical advice.</p></article>';
   }
-
-  // Me (personal): birth-date → chakra reading only. The chakra BODY MAP lives on
-  // Home now.
   function renderMeWellness() {
     const box = el('me-wellness'); if (!box) return;
-    if (!chakras().length) { box.innerHTML = ''; return; }
-    const dob = (el('dob-input') && el('dob-input').value) || '';
-    box.innerHTML = chakraReadingCard(dob);
+    box.innerHTML = chakras().length ? chakraReadingCard(lastDob) : '';
+  }
+  function renderHomeWellness() {
+    const box = el('home-wellness'); if (!box) return;
+    box.innerHTML = chakras().length ? chakraReadingCard(lastDob) : '';
   }
 
   // The body map (on Home) positions its nodes off the image size, which is 0
@@ -448,9 +452,14 @@
   function bindWellness() {
     if (document.body.dataset.wellnessBound) return; document.body.dataset.wellnessBound = '1';
     document.addEventListener('input', (e) => {
-      if (e.target && e.target.id === 'dob-input') {
-        const out = el('chakra-read-out');
-        if (out) out.innerHTML = readingInner(chakraForDate(e.target.value));
+      if (e.target && e.target.matches && e.target.matches('[data-dob]')) {
+        lastDob = e.target.value;
+        const reading = readingInner(chakraForDate(lastDob));
+        // update every reading card + keep the other date input in sync
+        document.querySelectorAll('.gaia-chakra-reading').forEach((c) => {
+          const out = c.querySelector('[data-chakra-out]'); if (out) out.innerHTML = reading;
+          const inp = c.querySelector('[data-dob]'); if (inp && inp !== e.target) inp.value = lastDob;
+        });
       }
     });
     // Re-position the chakra body map whenever the Profile view is opened.

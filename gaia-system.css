@@ -129,7 +129,7 @@
    reveal their essence. No scores, no list, no fake data. -------------------- */
 .g-chakra-hero{position:relative;border-radius:var(--g-r-xl);overflow:hidden;
   background:#05070a;border:1px solid var(--g-line)}
-.g-chakra-hero__stage{height:min(64vh,560px);display:flex;justify-content:center;align-items:center}
+.g-chakra-hero__stage{height:min(52vh,460px);display:flex;justify-content:center;align-items:center}
 .g-chakra-hero__fig{position:relative;height:100%}
 .g-chakra-hero__fig img{height:100%;width:auto;display:block;
   animation:g-breathe 8s var(--g-ease) infinite}
@@ -187,12 +187,15 @@
     radial-gradient(200px 240px at 50% 30%,rgba(125,217,86,.10),transparent 62%),var(--g-surface);
   padding:var(--g-s3)}
 /* clean Home header (today screen only) */
-.g-topbar{display:flex;align-items:center;justify-content:space-between;
-  padding:var(--g-s4) var(--g-s4) var(--g-s2);background:var(--g-bg)}
-.g-topbar__brand{display:flex;align-items:center;gap:var(--g-s2);
+.g-topbar{display:flex;align-items:center;justify-content:space-between;gap:var(--g-s2);
+  flex-wrap:nowrap;padding:var(--g-s4) var(--g-s4) var(--g-s2);background:var(--g-bg)}
+.g-topbar__brand{display:flex;align-items:center;gap:var(--g-s2);flex:none;
   font:700 17px/1 var(--g-font);letter-spacing:-.01em;color:var(--g-text);text-decoration:none}
 .g-topbar__brand img{width:26px;height:26px;border-radius:50%}
-.g-topbar__actions{display:flex;align-items:center;gap:var(--g-s2)}
+.g-topbar__actions{display:flex;align-items:center;gap:var(--g-s2);flex:none;flex-wrap:nowrap}
+/* the injected "Live sync" status pill clutters the small top bar — hide it
+   on phones (it stays on desktop where there's room) */
+@media (max-width:640px){ .g-topbar .gaia-live-sync--header{display:none} }
 
 /* Make the old chakra map read on the dark Home canvas + breathe */
 .g-chakra__frame .gaia-chakra-map{--chakra-frame:transparent}

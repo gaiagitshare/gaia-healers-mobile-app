@@ -110,9 +110,7 @@
     <section class="gaia-screen" data-screen="profile" aria-label="Profile">
       <header class="g-topbar">
         <a href="home.html?view=today" class="g-topbar__brand"><img src="assets/gaia-mark.svg" alt="" /> Gaia Healers</a>
-        <div class="g-topbar__actions gaia-header-actions" data-gaia-header-actions>
-          <button type="button" class="g-btn g-btn--ghost g-btn--sm" data-admin-unlock hidden>Unlock admin</button>
-        </div>
+        <div class="g-topbar__actions gaia-header-actions" data-gaia-header-actions></div>
       </header>
       <main class="gaia-main g-page g-profile">
         <div class="g-page__head">
@@ -125,15 +123,6 @@
 
         <!-- Personal: birth-date → chakra reading (client-side, public). -->
         <section id="me-wellness" class="g-page-sec" aria-label="Your birth-date chakra"></section>
-
-        <article class="g-card" data-admin-locked hidden>
-          <p class="g-card__label">Admin</p>
-          <p class="g-card__meta">Admin tools are hidden. Add <code>admin=1</code> to the URL and enter the dev passcode.</p>
-        </article>
-        <article class="g-card" data-admin-entry hidden>
-          <div class="g-tier__head"><div><p class="g-card__label">Admin cockpit</p><p class="g-card__meta">Internal operator console.</p></div>
-          <a class="g-btn g-btn--primary g-btn--sm" href="home.html?view=admin">Open</a></div>
-        </article>
 
         <button type="button" class="g-btn g-btn--ghost g-btn--sm g-profile-signout" data-sign-out hidden>Sign out</button>
       </main>

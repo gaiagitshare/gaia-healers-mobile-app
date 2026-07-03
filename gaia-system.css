@@ -335,6 +335,20 @@ a.g-access:hover{border-color:rgba(125,217,86,.4)}
 .g-admin-status--ok{color:var(--g-accent)}
 .g-admin-status--err{color:#F5C518}
 
+/* Announcements (admin-published) --------------------------- */
+.g-anns{display:flex;flex-direction:column;gap:var(--g-s3)}
+.g-anns:empty{display:none}
+.g-ann{display:block;text-decoration:none;background:var(--g-surface);border:1px solid var(--g-line);
+  border-radius:var(--g-r-lg);padding:var(--g-s4) var(--g-s4) var(--g-s4) calc(var(--g-s4) + 3px);
+  position:relative;overflow:hidden}
+.g-ann::before{content:"";position:absolute;left:0;top:0;bottom:0;width:3px;background:var(--tone,var(--g-accent))}
+.g-ann--info{--tone:#3BA7E0}
+.g-ann--success{--tone:var(--g-accent)}
+.g-ann--warn{--tone:#F5C518}
+.g-ann__title{display:block;font:700 15px/1.3 var(--g-font);color:var(--g-text)}
+.g-ann__body{display:block;font-size:13px;color:var(--g-text-muted);margin-top:3px;line-height:1.45}
+a.g-ann:hover{border-color:rgba(125,217,86,.4)}
+
 /* ---------- Desktop: use the width, don't stretch a phone ---------- */
 @media (min-width:900px){
   /* widen the shell ONLY while a redesigned (g-*) screen is active */

@@ -7,7 +7,7 @@
   'use strict';
   if (!document.querySelector('.gaia-main--today')) return; // home.html only
 
-  const state = { authed: false, data: {}, event: null };
+  const state = { authed: false, data: {}, event: null, announcements: [], adminEvents: [] };
   window.GaiaMember = state;
 
   function proxyBase() {
@@ -123,8 +123,24 @@
       + '</article>';
   }
 
+  // Admin-published announcements (from /api/app/bootstrap → gaia.announcements).
+  function announcementsHtml(list) {
+    if (!list || !list.length) return '';
+    const item = (a) => {
+      const inner = '<span class="g-ann__title">' + esc(a.title) + '</span>'
+        + (a.body ? '<span class="g-ann__body">' + esc(a.body) + '</span>' : '');
+      const cls = 'g-ann g-ann--' + (['info', 'success', 'warn'].includes(a.tone) ? a.tone : 'info');
+      return a.link
+        ? '<a class="' + cls + '" href="' + esc(a.link) + '" target="_blank" rel="noopener noreferrer">' + inner + '</a>'
+        : '<div class="' + cls + '">' + inner + '</div>';
+    };
+    return '<div class="g-anns">' + list.map(item).join('') + '</div>';
+  }
+
   function renderHome() {
     renderChakraHero();
+    const anns = el('home-announcements');
+    if (anns) anns.innerHTML = announcementsHtml(state.announcements);
     const cards = el('home-cards');
     if (cards) cards.innerHTML = homeEventCard() + membersCard();
   }
@@ -309,7 +325,8 @@
       const preview = ['All Gaia Healers', 'Bio-Well Practitioners', 'BioPulsar Practitioners', 'BioTekna Practitioners', 'HealeeX Community', 'Abundant Healer Collective']
         .map((name) => accessItem({ name: name, reason: 'Sign in to check your access' }, 'locked')).join('');
       box.innerHTML =
-        '<article class="g-card g-card--feature"><p class="g-card__label">Community</p>'
+        announcementsHtml(state.announcements)
+        + '<article class="g-card g-card--feature"><p class="g-card__label">Community</p>'
         + '<p class="g-card__value g-card__value--lg">Open your circles</p>'
         + '<p class="g-card__meta">Sign in to see which Gaia Healers communities your membership unlocks — and open them in one tap.</p>'
         + '<div class="g-card__actions"><a class="g-btn g-btn--primary g-btn--sm" href="' + esc(portalBase()) + '" target="_blank" rel="noopener noreferrer">Sign in</a></div></article>'
@@ -329,7 +346,7 @@
       sub.textContent = bits.join(' · ');
     }
 
-    const parts = ['<div class="g-stats">'
+    const parts = [announcementsHtml(state.announcements), '<div class="g-stats">'
       + '<div class="g-stat"><span class="g-stat__n g-stat__n--accent">' + unlocked.length + '</span><span class="g-stat__l">Unlocked</span></div>'
       + '<div class="g-stat"><span class="g-stat__n">' + locked.length + '</span><span class="g-stat__l">To unlock</span></div>'
       + '<div class="g-stat"><span class="g-stat__n">' + soon.length + '</span><span class="g-stat__l">Coming soon</span></div></div>'];
@@ -426,8 +443,18 @@
 
   async function loadEvent() {
     const boot = await getJson('/api/app/bootstrap');
-    const ev = boot && boot.gaia && boot.gaia.event;
-    if (ev && ev.name) { state.event = ev; renderHome(); renderStore(); }
+    const g = (boot && boot.gaia) || {};
+    state.announcements = Array.isArray(g.announcements) ? g.announcements : [];
+    state.adminEvents = Array.isArray(g.adminEvents) ? g.adminEvents : [];
+    // A featured admin event takes the Home card; else fall back to the
+    // auto-synced (scraped) event from the Event Manager.
+    const featured = state.adminEvents.find((e) => e.featured && e.title);
+    if (featured) {
+      state.event = { name: featured.title, date: featured.date, venue: featured.venue, summary: featured.summary, sourceUrl: featured.registerUrl, live: featured.live };
+    } else if (g.event && g.event.name) {
+      state.event = g.event;
+    }
+    renderHome(); renderStore(); renderCommunity();
   }
 
   /* ---------- Store / sale surfaces (structure + live wiring) ---------- */

@@ -1051,6 +1051,143 @@ async function getMemberFromGhl({ email = '', memberId = '', contactId = '' } = 
   };
 }
 
+// ————————————————————————————————————————————————————————————————
+// Phase 0 — Live member access map (read-only).
+// Turns a signed-in member's LIVE GHL tags into a normalized access catalog
+// result. No LMS clone, no course-content scraping: we only report which
+// communities/products the member's tags grant, plus evidence (matchedBy).
+// HealeeX + Abundant are placeholders (locked/unknown) until final tags exist.
+// ————————————————————————————————————————————————————————————————
+const ACCESS_CATALOG = {
+  communities: [
+    { id: 'all-gaia',  name: 'All Gaia Healers',           matchTags: ['community-active', 'community-starthere-access'] },
+    { id: 'biowell',   name: 'Bio-Well Practitioners',     matchTags: ['community-biowell-member'] },
+    { id: 'biopulsar', name: 'BioPulsar Practitioners',    matchTags: ['community-biopulsar-member'] },
+    { id: 'biotekna',  name: 'Biotekna Practitioners',     matchTags: ['community-biotekna-member'] },
+    { id: 'healeex',   name: 'HealeeX Community',           matchTags: [], placeholder: true },
+    { id: 'abundant',  name: 'Abundant Healer Collective',  matchTags: [], placeholder: true },
+  ],
+  productOwnerPattern: /^product_(.+)_owner$/i,
+  productNames: {
+    biowell: 'Bio-Well', biowell_biocor: 'Bio-Well BioCor', biowell_sputnik: 'Bio-Well Sputnik',
+    biowell_water: 'Bio-Well Water Sensor', biowell_water_sensor: 'Bio-Well Water Sensor',
+    biopulsar: 'BioPulsar', biotekna: 'BioTekna', braintap: 'BrainTap', healy: 'Healy',
+    asea: 'ASEA', lifewave: 'LifeWave', ans_control: 'ANS Control', bia: 'BIA', heg: 'HEG',
+  },
+  membershipTierTags: { membership_silver: 'Silver', 'silver-membership': 'Silver' },
+  practitionerCertifiedTags: ['bio-well certified practitioner'],
+  practitionerTags: ['bio-well practitioner', 'gaiapractitioner', 'gaia practitioner directory', 'goldenpractitionermember', 'gaia_practitioner_form_complete'],
+  // Access-like tags used to surface "unknown access" the catalog did not map.
+  accessLikePatterns: [/^community[-_]/i, /_owner$/i, /^membership/i, /-membership$/i, /-member$/i, /^enrolled/i, /course/i],
+};
+
+function friendlyProductName(slug) {
+  const key = String(slug || '').toLowerCase();
+  if (ACCESS_CATALOG.productNames[key]) return ACCESS_CATALOG.productNames[key];
+  return key.split(/[_-]/).filter(Boolean).map((w) => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
+}
+
+function buildMemberAccess(rawTags = [], customFields = [], member = {}) {
+  const tags = uniqueStrings((rawTags || []).map((t) => String(t || '').trim()).filter(Boolean));
+  const lower = new Map(tags.map((t) => [t.toLowerCase(), t]));
+  const has = (tag) => lower.has(String(tag).toLowerCase());
+  const matched = new Set();
+
+  const unlocked = [];
+  const locked = [];
+  for (const c of ACCESS_CATALOG.communities) {
+    if (c.placeholder || !c.matchTags.length) {
+      locked.push({ id: c.id, name: c.name, state: 'unknown', reason: 'Membership tag not configured yet — ask Gaia Healers to unlock this.', matchedBy: null });
+      continue;
+    }
+    // Mark every present match tag as "known" (not just the first hit) so a
+    // secondary signal like community-starthere-access isn't mislabeled unknown.
+    c.matchTags.forEach((t) => { if (has(t)) matched.add(t.toLowerCase()); });
+    const hit = c.matchTags.find((t) => has(t));
+    if (hit) {
+      unlocked.push({ id: c.id, name: c.name, state: 'unlocked', matchedBy: lower.get(hit.toLowerCase()) || hit });
+    } else {
+      locked.push({ id: c.id, name: c.name, state: 'locked', reason: 'Not included in your membership', matchedBy: null });
+    }
+  }
+
+  const products = [];
+  for (const t of tags) {
+    const m = ACCESS_CATALOG.productOwnerPattern.exec(t);
+    if (m) {
+      matched.add(t.toLowerCase());
+      products.push({ id: m[1].toLowerCase(), name: friendlyProductName(m[1]), owned: true, matchedBy: t });
+    }
+  }
+
+  let membershipTier = null;
+  for (const [tag, tier] of Object.entries(ACCESS_CATALOG.membershipTierTags)) {
+    if (has(tag)) { membershipTier = tier; matched.add(tag.toLowerCase()); break; }
+  }
+
+  const certified = ACCESS_CATALOG.practitionerCertifiedTags.some((t) => has(t));
+  const practitioner = certified || ACCESS_CATALOG.practitionerTags.some((t) => has(t));
+  [...ACCESS_CATALOG.practitionerCertifiedTags, ...ACCESS_CATALOG.practitionerTags].forEach((t) => { if (has(t)) matched.add(t.toLowerCase()); });
+
+  const unknownAccessTags = tags.filter((t) =>
+    !matched.has(t.toLowerCase())
+    && !/_interest$/i.test(t)
+    && ACCESS_CATALOG.accessLikePatterns.some((re) => re.test(t)));
+
+  return {
+    member: {
+      name: member.displayName || member.name || 'Gaia member',
+      email: member.email || '',
+      practitioner,
+      practitionerCertified: certified,
+      membershipTier,
+    },
+    communities: { unlocked, locked },
+    products,
+    unknownAccessTags,
+    counts: {
+      unlocked: unlocked.length, locked: locked.length,
+      products: products.length, unknown: unknownAccessTags.length, totalTags: tags.length,
+    },
+    customFieldsCount: Array.isArray(customFields) ? customFields.length : 0,
+  };
+}
+
+async function memberAccess(req, res, origin) {
+  const sessionMember = sessionMemberContext(req);
+  if (!sessionMember) {
+    sendJson(res, 401, { ok: false, authenticated: false, reason: 'auth_required', error: 'Sign in to view your access.' }, origin);
+    return;
+  }
+  let tags = Array.isArray(sessionMember.tags) ? sessionMember.tags : [];
+  let customFields = [];
+  let liveMember = sessionMember;
+  let live = false;
+  try {
+    const verified = await getMemberFromGhl({
+      email: sessionMember.email,
+      contactId: sessionMember.contactId,
+      memberId: sessionMember.memberId,
+    });
+    if (verified?.memberResolved) {
+      tags = verified.tags || tags;
+      customFields = verified.customFields || [];
+      liveMember = verified.member || sessionMember;
+      live = true;
+    }
+  } catch (err) {
+    console.error('[Gaia Access] live tag read failed', { error: err.message.split('\n')[0] });
+  }
+  const access = buildMemberAccess(tags, customFields, liveMember);
+  sendJson(res, 200, {
+    ok: true,
+    authenticated: true,
+    source: live ? 'ghl-live' : 'session-fallback',
+    generatedAt: new Date().toISOString(),
+    ...access,
+  }, origin);
+}
+
 function boolFlag(value) {
   return value === 'true' || value === '1';
 }
@@ -2656,6 +2793,10 @@ const server = http.createServer(async (req, res) => {
       hub.authenticated = Boolean(memberContext);
       hub.memberResolved = Boolean(memberContext?.email || memberContext?.memberId || memberContext?.contactId);
       sendJson(res, 200, hub, origin);
+      return;
+    }
+    if (req.method === 'GET' && url.pathname === '/api/member/access') {
+      await memberAccess(req, res, origin);
       return;
     }
     // Gaia Assist routes are member-only: they proxy paid LLM/voice/tts calls,

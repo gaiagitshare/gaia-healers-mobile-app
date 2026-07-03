@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <meta name="robots" content="noindex, nofollow" />
+  <meta name="color-scheme" content="dark" />
+  <title>Gaia Healers · Admin</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="gaia-system.css" />
+  <style>
+    *{box-sizing:border-box}
+    html,body{margin:0}
+    body{background:var(--g-bg,#0B120E);color:var(--g-text,#ECF3E9);
+      font-family:"Plus Jakarta Sans",system-ui,-apple-system,sans-serif;
+      min-height:100vh;-webkit-font-smoothing:antialiased}
+    /* standalone: centre the operator console */
+    .g-topbar,.g-page{max-width:780px;margin-left:auto;margin-right:auto}
+    .g-page{padding-bottom:64px}
+  </style>
+</head>
+<body>
+  <header class="g-topbar">
+    <a href="/admin/" class="g-topbar__brand"><img src="gaia-mark.svg" alt="" /> Gaia Healers · Admin</a>
+    <div class="g-topbar__actions">
+      <button type="button" class="g-btn g-btn--ghost g-btn--sm" id="admin-logout" hidden>Sign out</button>
+    </div>
+  </header>
+  <main class="g-page g-admin">
+    <div class="g-page__head">
+      <p class="g-page__kicker">Operator console</p>
+      <h1 class="g-page__title">Admin</h1>
+      <p class="g-page__sub" id="admin-sub">Manage events, announcements, and members.</p>
+    </div>
+    <!-- login gate (rendered by admin.js) -->
+    <div id="admin-login" class="g-page-sec" hidden></div>
+    <!-- authed console -->
+    <div id="admin-console" class="g-page-sec" hidden>
+      <div class="g-tabs g-tabs--3" role="tablist" aria-label="Admin sections">
+        <button type="button" class="g-tab is-active" data-admin-tab="events" role="tab" aria-selected="true">Events</button>
+        <button type="button" class="g-tab" data-admin-tab="content" role="tab" aria-selected="false">Content</button>
+        <button type="button" class="g-tab" data-admin-tab="members" role="tab" aria-selected="false">Members</button>
+      </div>
+      <div id="admin-panel-events" class="g-admin-panel" role="tabpanel"></div>
+      <div id="admin-panel-content" class="g-admin-panel" role="tabpanel" hidden></div>
+      <div id="admin-panel-members" class="g-admin-panel" role="tabpanel" hidden></div>
+    </div>
+  </main>
+  <script src="admin.js"></script>
+</body>
+</html>

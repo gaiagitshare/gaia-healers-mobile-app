@@ -151,42 +151,13 @@
       </main>
     </section>
 
-    <!-- ADMIN — real operator console on the g-* system. Password-gated by the
-         server (gaia-admin.js ↔ /api/admin/*). Reachable at ?view=admin. -->
-    <section class="gaia-screen" data-screen="admin" aria-label="Admin">
-      <header class="g-topbar">
-        <a href="home.html?view=today" class="g-topbar__brand"><img src="assets/gaia-mark.svg" alt="" /> Gaia Healers · Admin</a>
-        <div class="g-topbar__actions">
-          <button type="button" class="g-btn g-btn--ghost g-btn--sm" id="admin-logout" hidden>Sign out</button>
-        </div>
-      </header>
-      <main class="gaia-main g-page g-admin">
-        <div class="g-page__head">
-          <p class="g-page__kicker">Operator console</p>
-          <h1 class="g-page__title">Admin</h1>
-          <p class="g-page__sub" id="admin-sub">Manage events, announcements, and members.</p>
-        </div>
-        <!-- login gate (rendered by gaia-admin.js) -->
-        <div id="admin-login" class="g-page-sec" hidden></div>
-        <!-- authed console -->
-        <div id="admin-console" class="g-page-sec" hidden>
-          <div class="g-tabs g-tabs--3" role="tablist" aria-label="Admin sections">
-            <button type="button" class="g-tab is-active" data-admin-tab="events" role="tab" aria-selected="true">Events</button>
-            <button type="button" class="g-tab" data-admin-tab="content" role="tab" aria-selected="false">Content</button>
-            <button type="button" class="g-tab" data-admin-tab="members" role="tab" aria-selected="false">Members</button>
-          </div>
-          <div id="admin-panel-events" class="g-admin-panel" role="tabpanel"></div>
-          <div id="admin-panel-content" class="g-admin-panel" role="tabpanel" hidden></div>
-          <div id="admin-panel-members" class="g-admin-panel" role="tabpanel" hidden></div>
-        </div>
-      </main>
-    </section>
+    <!-- Admin is NOT part of the public app. It lives on a separate,
+         password-gated surface served by the proxy: api.gaiahealers.app/admin -->
   </div>
   <script src="shared-nav.js?v=20260703m"></script>
   <script src="gaia-realtime-voice.js?v=20260703x"></script>
   <script src="gaia-member.js?v=20260703z"></script>
   <script src="gaia-store.js?v=20260703x"></script>
-  <script src="gaia-admin.js?v=20260703x"></script>
-  <script src="gaia-ui.js?v=20260703y"></script>
+  <script src="gaia-ui.js?v=20260704a"></script>
 </body>
 </html>

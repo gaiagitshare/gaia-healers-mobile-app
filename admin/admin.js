@@ -1,6 +1,7 @@
-/** Gaia — Admin panel controller (operator-only).
- * Talks to /api/admin/* (password-gated by the server). Runs only when the
- * admin screen is opened. Manages events, announcements, and member tags.
+/** Gaia — Standalone Admin controller (operator-only).
+ * Served by the proxy at api.gaiahealers.app/admin (NOT part of the public app).
+ * Talks to /api/admin/* (password-gated by the server), same-origin.
+ * Manages events, announcements, and member tags.
  */
 (function () {
   'use strict';
@@ -9,11 +10,10 @@
   if (!console_ || !loginBox) return;
 
   function proxyBase() {
-    return String(
-      (window.GAIA_SYNC && window.GAIA_SYNC.proxyBase)
-      || (window.GAIA_APP_URLS && window.GAIA_APP_URLS.production && window.GAIA_APP_URLS.production.proxy)
-      || 'https://api.gaiahealers.app',
-    ).replace(/\/+$/, '');
+    // Served from the API host itself → same-origin (first-party cookie, no CORS).
+    // Anywhere else (e.g. local testing) → talk to the production API.
+    try { if (window.location.hostname === 'api.gaiahealers.app') return ''; } catch (_) { /* ignore */ }
+    return 'https://api.gaiahealers.app';
   }
   function esc(s) {
     return String(s == null ? '' : s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
@@ -299,13 +299,8 @@
     }
   }
 
-  // ── open only when the admin view is active ─────────────────
-  function currentView() {
-    return (window.GaiaAppShell && window.GaiaAppShell.currentView && window.GaiaAppShell.currentView())
-      || new URLSearchParams(window.location.search).get('view') || 'today';
-  }
-  function maybeBoot() { if (!booted && currentView() === 'admin') { booted = true; boot(); } }
-  window.addEventListener('gaia:route', maybeBoot);
-  document.addEventListener('DOMContentLoaded', maybeBoot);
-  maybeBoot();
+  // ── standalone: this page IS the admin, so boot on load ─────
+  function start() { if (!booted) { booted = true; boot(); } }
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', start);
+  else start();
 })();

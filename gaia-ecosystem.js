@@ -11,7 +11,7 @@ window.GAIA = {
     ghl: 'https://crm.gaiahealers.com/v2/location/WkKl1K5RuZNQ60xR48k6/dashboard',
     ghlLocationId: 'WkKl1K5RuZNQ60xR48k6',
     eventApi: '/event-api',
-    eventPublic: 'https://ba2ki.com/event',
+    eventPublic: 'https://elevate.gaiahealers.com/',
     elevate: 'https://elevate.gaiahealers.com/',
   },
   communities: [

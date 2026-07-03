@@ -14,12 +14,12 @@
       app: 'https://gaiahealers.app',
       home: 'https://gaiahealers.app/home.html',
       proxy: 'https://api.gaiahealers.app',
-      proxyFallback: 'https://ba2ki.com/gaia-proxy',
+      proxyFallback: 'https://api.gaiahealers.app',
     },
     staging: {
       app: 'https://gaiagitshare.github.io/gaia-healers-mobile-app',
       home: 'https://gaiagitshare.github.io/gaia-healers-mobile-app/home.html',
-      proxy: 'https://ba2ki.com/gaia-proxy',
+      proxy: 'https://api.gaiahealers.app',
     },
     isProductionApp,
     current: {

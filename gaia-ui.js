@@ -8,7 +8,7 @@
 
   const COACH_KEY = 'gaia-coach-v5';
   const THEME_KEY = 'gaia-theme';
-  const DEFAULT_PROXY = 'https://ba2ki.com/gaia-proxy';
+  const DEFAULT_PROXY = 'https://api.gaiahealers.app';
   const VOICE_PROVIDER_KEY = 'gaia-assist-voice-provider';
   const VOICE_NAME_KEY = 'gaia-assist-voice-name';
   const VOICE_SPEED_KEY = 'gaia-assist-voice-speed';

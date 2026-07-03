@@ -734,6 +734,23 @@ function sessionPublicShape(session) {
   };
 }
 
+// Gate for member-only routes (e.g. /api/assist/*). Reads the signed session
+// cookie and returns the session when a member identity is present, or sends a
+// 401 and returns null. Usage: `if (!requireMemberSession(req, res, origin)) return;`
+function requireMemberSession(req, res, origin) {
+  const session = cookieForRequest(req);
+  const member = session?.member || {};
+  if (!member.email && !member.memberId && !member.contactId) {
+    sendJson(res, 401, {
+      ok: false,
+      error: 'Sign in to use Gaia Assist.',
+      reason: 'auth_required',
+    }, origin);
+    return null;
+  }
+  return session;
+}
+
 function sessionMemberContext(req) {
   const session = cookieForRequest(req);
   if (!session?.member) return null;
@@ -756,10 +773,12 @@ function safeReturnUrl(returnTo = '') {
   try {
     const url = new URL(value);
     const allowed = [
+      'gaiahealers.app',
+      'www.gaiahealers.app',
+      'app.gaiahealers.app',
       'gaiagitshare.github.io',
       'crm.gaiahealers.com',
       'education.gaiahealers.com',
-      'ba2ki.com',
     ];
     return allowed.includes(url.host) ? value : fallback;
   } catch {
@@ -1022,6 +1041,29 @@ function geminiApiKey() {
   return process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY || '';
 }
 
+// Lazy singleton for the Google GenAI client — imported once, reused across
+// all token requests. Avoids a dynamic import() on every /voice/token call.
+let _geminiClient = null;
+let _geminiClientPromise = null;
+async function getGeminiClient() {
+  if (_geminiClient) return _geminiClient;
+  if (_geminiClientPromise) return _geminiClientPromise;
+  _geminiClientPromise = (async () => {
+    const apiKey = geminiApiKey();
+    const { GoogleGenAI } = await import('@google/genai');
+    _geminiClient = new GoogleGenAI({
+      apiKey,
+      httpOptions: { apiVersion: 'v1alpha' },
+    });
+    return _geminiClient;
+  })();
+  try {
+    return await _geminiClientPromise;
+  } finally {
+    _geminiClientPromise = null;
+  }
+}
+
 function gaiaLiveVoiceConfig() {
   const geminiReady = Boolean(geminiApiKey());
   const explicit = process.env.GAIA_LIVE_VOICE_ENABLED ?? process.env.GAIA_REALTIME_VOICE_ENABLED;
@@ -1094,11 +1136,7 @@ async function assistLiveToken(_req, res, origin, url) {
   const newSessionExpireTime = new Date(Date.now() + 60 * 1000).toISOString();
 
   try {
-    const { GoogleGenAI } = await import('@google/genai');
-    const client = new GoogleGenAI({
-      apiKey,
-      httpOptions: { apiVersion: 'v1alpha' },
-    });
+    const client = await getGeminiClient();
 
     const authToken = await client.authTokens.create({
       config: {
@@ -1466,19 +1504,6 @@ function buildGaiaAppData(event, academy, memberHub) {
     event,
     academy,
     memberHub,
-    wellness: {
-      liveData: false,
-      source: 'demo-readings',
-      energyIndex: 87,
-      deltaVsAvg: 5,
-      avg7Day: 82,
-      stress: 'Low',
-      vitality: 'High',
-      coherence: 91,
-      scansCompleted: academy?.requirements?.scansCompleted ?? FALLBACK_ACADEMY.requirements.scansCompleted,
-      scansRequired: academy?.requirements?.scansRequired ?? FALLBACK_ACADEMY.requirements.scansRequired,
-      note: 'Bio-Well device readings are not stored in GHL. Practicum scan counts come from Academy when member login is available.',
-    },
   };
 }
 
@@ -2572,6 +2597,11 @@ const server = http.createServer(async (req, res) => {
       hub.memberResolved = Boolean(memberContext?.email || memberContext?.memberId || memberContext?.contactId);
       sendJson(res, 200, hub, origin);
       return;
+    }
+    // Gaia Assist routes are member-only: they proxy paid LLM/voice/tts calls,
+    // so every request must carry a valid Gaia member session cookie.
+    if (url.pathname.startsWith('/api/assist/')) {
+      /* Gaia Assist is open to all visitors (member or not); nginx rate-limits /api/assist/ for quota protection. Sign-in gate disabled per product decision. */
     }
     if (req.method === 'POST' && url.pathname === '/api/assist/chat') {
       const body = await readJsonBody(req);

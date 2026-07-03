@@ -69,7 +69,7 @@
   `;
 
   function proxyBase() {
-    return (window.GAIA_SYNC?.proxyBase || 'https://ba2ki.com/gaia-proxy').replace(/\/+$/, '');
+    return (window.GAIA_SYNC?.proxyBase || 'https://api.gaiahealers.app').replace(/\/+$/, '');
   }
 
   function currentView() {

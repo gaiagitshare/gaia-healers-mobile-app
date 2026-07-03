@@ -124,6 +124,42 @@
 .g-hero__title em{font-style:italic;color:var(--g-accent)}
 .g-hero__sub{font-size:15px;color:var(--g-text-muted);max-width:34ch;margin:0}
 
+/* g-chakra-hero — the signature. Cinematic full-bleed meditation image (already
+   carries the 7 glowing centres); greeting overlaid; the centres are tappable to
+   reveal their essence. No scores, no list, no fake data. -------------------- */
+.g-chakra-hero{position:relative;border-radius:var(--g-r-xl);overflow:hidden;
+  background:#05070a;border:1px solid var(--g-line)}
+.g-chakra-hero__stage{height:min(64vh,560px);display:flex;justify-content:center;align-items:center}
+.g-chakra-hero__fig{position:relative;height:100%}
+.g-chakra-hero__fig img{height:100%;width:auto;display:block;
+  animation:g-breathe 8s var(--g-ease) infinite}
+@keyframes g-breathe{0%,100%{transform:scale(1)}50%{transform:scale(1.025)}}
+.g-chakra-hero__hit{position:absolute;transform:translate(-50%,-50%);
+  width:30px;height:30px;border-radius:50%;border:none;background:transparent;cursor:pointer;padding:0}
+.g-chakra-hero__hit::after{content:"";position:absolute;inset:8px;border-radius:50%;
+  border:1.5px solid rgba(255,255,255,.22);animation:g-ck-hint 3.4s var(--g-ease) infinite;
+  animation-delay:calc(var(--i,0)*.22s)}
+.g-chakra-hero__hit:hover::after{border-color:rgba(255,255,255,.5)}
+.g-chakra-hero__hit.is-active::after{inset:4px;border-color:var(--ck);box-shadow:0 0 14px var(--ck)}
+.g-chakra-hero__hit:focus-visible{outline:none}
+.g-chakra-hero__hit:focus-visible::after{border-color:var(--g-accent);box-shadow:0 0 0 2px var(--g-accent)}
+@keyframes g-ck-hint{0%,100%{transform:scale(1);opacity:.5}50%{transform:scale(1.4);opacity:1}}
+.g-chakra-hero__scrim{position:absolute;inset:0;pointer-events:none;
+  background:linear-gradient(0deg,rgba(5,7,10,.94) 6%,rgba(5,7,10,.5) 26%,transparent 52%)}
+.g-chakra-hero__overlay{position:absolute;left:0;right:0;bottom:0;
+  padding:var(--g-s6) var(--g-s5) var(--g-s5);display:flex;flex-direction:column;gap:var(--g-s2);pointer-events:none}
+.g-chakra-hero__kicker{font:600 11px/1 var(--g-font-mono);letter-spacing:.14em;
+  text-transform:uppercase;color:var(--g-accent);margin:0}
+.g-chakra-hero__title{font-family:var(--g-font-serif);font-weight:600;
+  font-size:clamp(32px,9vw,52px);line-height:.98;letter-spacing:-.02em;margin:0;color:var(--g-text);text-wrap:balance}
+.g-chakra-hero__title em{font-style:italic;color:var(--g-accent)}
+.g-chakra-hero__caption{font-size:14px;color:var(--g-text-muted);margin:0;min-height:1.3em}
+.g-chakra-hero__caption strong{color:var(--g-text);font-weight:600}
+.g-chakra-hero__caption a{color:var(--g-accent);font-weight:600;text-decoration:none;pointer-events:auto}
+@media (prefers-reduced-motion:reduce){
+  .g-chakra-hero__fig img,.g-chakra-hero__hit::after{animation:none}
+}
+
 /* ---------- Home layout (the only Home-specific scaffolding) ---------- */
 .g-home{background:var(--g-bg);color:var(--g-text);font-family:var(--g-font);
   display:flex;flex-direction:column;gap:var(--g-s6);
@@ -162,4 +198,13 @@
   .g-home-cards{grid-template-columns:1.35fr 1fr;gap:var(--g-s4);align-items:stretch}
   .g-home-cards>*{height:100%}
   .g-tile{flex-basis:11rem}
+
+  /* chakra hero → two-column: greeting left, cosmic figure right */
+  .g-chakra-hero__stage{height:440px;justify-content:flex-end;padding-right:6%}
+  .g-chakra-hero__overlay{top:0;bottom:0;right:auto;width:54%;justify-content:center;
+    padding:var(--g-s7) var(--g-s7)}
+  .g-chakra-hero__scrim{background:
+    linear-gradient(90deg,rgba(5,7,10,.94) 18%,rgba(5,7,10,.45) 48%,transparent 72%)}
+  .g-chakra-hero__title{font-size:clamp(42px,4.4vw,62px)}
+  .g-chakra-hero__caption{font-size:15px}
 }

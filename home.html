@@ -37,7 +37,7 @@
   <script src="gaia-chakra-data.js?v=20260703a"></script>
   <link rel="stylesheet" href="gaia-shared.css?v=20260703a" />
   <link rel="stylesheet" href="gaia-ui-v2.css?v=20260703p" />
-  <link rel="stylesheet" href="gaia-system.css?v=20260703q" />
+  <link rel="stylesheet" href="gaia-system.css?v=20260703r" />
 </head>
 <body class="gaia-app gaia-page gaia-single-app gaia-v2">
   <script>try{document.body.dataset.theme=document.documentElement.dataset.theme||'light';}catch(e){}</script>
@@ -56,35 +56,14 @@
       </header>
 
       <main class="gaia-main gaia-main--today g-home">
-        <!-- 1 · Emotional hero -->
-        <section class="g-hero" aria-label="Welcome">
-          <div class="g-hero__spectrum" aria-hidden="true">
-            <span style="background:var(--g-ck-root)"></span><span style="background:var(--g-ck-sacral)"></span>
-            <span style="background:var(--g-ck-solar)"></span><span style="background:var(--g-ck-heart)"></span>
-            <span style="background:var(--g-ck-throat)"></span><span style="background:var(--g-ck-brow)"></span>
-            <span style="background:var(--g-ck-crown)"></span>
-          </div>
-          <p class="g-hero__kicker" id="home-hero-kicker">Welcome</p>
-          <h1 class="g-hero__title" id="home-hero-title">Welcome to <em>Gaia</em></h1>
-          <p class="g-hero__sub" id="home-hero-sub">Your energy, your circle, your day.</p>
-        </section>
+        <!-- 1 · Signature hero — the living chakra body + greeting.
+             Rendered by gaia-member.js (renderChakraHero). No scores, no list. -->
+        <section id="home-chakra-hero" class="g-chakra-hero" aria-label="Your energy"></section>
 
         <!-- 2 · Next event  ·  3 · Member CTA (rendered by gaia-member.js) -->
         <div id="home-cards" class="g-home-cards"></div>
 
-        <!-- 4 · Chakra body experience — the signature. The map is built into
-             [data-chakra-map] by gaia-ui.js (kept as-is; re-laid-out by gaia-member.js). -->
-        <section id="home-chakra" aria-label="Your energy centres">
-          <div class="g-section">
-            <div class="g-section__lead">
-              <span class="g-section__kicker">Your energy</span>
-              <h2 class="g-section__title">Explore your chakras</h2>
-            </div>
-          </div>
-          <div class="g-chakra__frame"><div class="gaia-chakra-map" data-chakra-map></div></div>
-        </section>
-
-        <!-- 5 · From the store (real Shopify tiles, rendered by gaia-store.js) -->
+        <!-- 4 · From the store (real Shopify tiles, rendered by gaia-store.js) -->
         <section id="home-store" aria-label="From the store" hidden></section>
       </main>
     </section>
@@ -258,7 +237,7 @@
   </div>
   <script src="shared-nav.js?v=20260703m"></script>
   <script src="gaia-realtime-voice.js?v=20260703a"></script>
-  <script src="gaia-member.js?v=20260703q"></script>
+  <script src="gaia-member.js?v=20260703r"></script>
   <script src="gaia-store.js?v=20260703q"></script>
   <script src="gaia-ui.js?v=20260703p"></script>
 </body>

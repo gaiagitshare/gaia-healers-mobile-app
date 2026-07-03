@@ -47,28 +47,45 @@
   }
 
   // ── HOME (new g-* design system) ─────────────────────────────
-  function renderHomeHero() {
-    const k = el('home-hero-kicker'), t = el('home-hero-title'), s = el('home-hero-sub');
-    if (!t) return;
+  function heroGreeting() {
     if (state.authed && state.data.profile) {
       const p = (state.data.profile && state.data.profile.profile) || {};
       const first = String(p.name || 'there').trim().split(/\s+/)[0] || 'there';
       const h = new Date().getHours();
-      const greet = h < 12 ? 'Good morning' : h < 18 ? 'Good afternoon' : 'Good evening';
-      if (k) k.textContent = greet;
-      t.innerHTML = 'Hi <em>' + esc(first) + '</em>';
-      if (s) {
-        const bits = [];
-        if (p.membershipTier) bits.push(esc(p.membershipTier) + ' member');
-        const n = ((state.data.access && state.data.access.communities && state.data.access.communities.unlocked) || []).length;
-        if (n) bits.push(n + (n === 1 ? ' community' : ' communities'));
-        s.textContent = bits.join(' · ') || 'Your energy, your circle, your day.';
-      }
-    } else {
-      if (k) k.textContent = 'Welcome';
-      t.innerHTML = 'Welcome to <em>Gaia</em>';
-      if (s) s.textContent = 'Your energy, your circle, your day.';
+      const g = h < 12 ? 'Good morning' : h < 18 ? 'Good afternoon' : 'Good evening';
+      return { kicker: g, title: 'Hi <em>' + esc(first) + '</em>' };
     }
+    return { kicker: 'Your energy', title: 'Welcome to <em>Gaia</em>' };
+  }
+
+  // The signature hero: the living chakra body (image carries the glowing
+  // centres) + greeting; the centres are tappable to reveal their essence.
+  function renderChakraHero() {
+    const box = el('home-chakra-hero'); if (!box) return;
+    const chs = window.GAIA_CHAKRAS || [];
+    const g = heroGreeting();
+    const hits = chs.map((c, i) => '<button type="button" class="g-chakra-hero__hit" data-ck="' + esc(c.id)
+      + '" style="top:' + c.top + '%;left:' + c.left + '%;--ck:' + esc(c.color) + ';--i:' + i + '" aria-label="' + esc(c.name) + ' chakra"></button>').join('');
+    box.innerHTML =
+      '<div class="g-chakra-hero__stage"><div class="g-chakra-hero__fig">'
+      + '<img src="assets/gaia-chakra-meditation.png" alt="A meditating figure with seven glowing energy centres" />'
+      + hits + '</div></div>'
+      + '<div class="g-chakra-hero__scrim"></div>'
+      + '<div class="g-chakra-hero__overlay">'
+      + '<p class="g-chakra-hero__kicker">' + esc(g.kicker) + '</p>'
+      + '<h1 class="g-chakra-hero__title">' + g.title + '</h1>'
+      + '<p class="g-chakra-hero__caption" id="chakra-caption">Tap a centre to explore your energy →</p>'
+      + '</div>';
+    box.querySelectorAll('.g-chakra-hero__hit').forEach((n) => {
+      n.addEventListener('click', () => {
+        const c = chs.find((x) => x.id === n.dataset.ck); if (!c) return;
+        box.querySelectorAll('.g-chakra-hero__hit').forEach((x) => x.classList.toggle('is-active', x === n));
+        const cap = el('chakra-caption'); if (!cap) return;
+        const shop = (window.GaiaStore && window.GaiaStore.chakraShopUrl && window.GaiaStore.chakraShopUrl(c.id)) || '';
+        cap.innerHTML = '<strong>' + esc(c.name) + '</strong> · ' + esc(c.focus || '')
+          + (shop ? ' · <a href="' + esc(shop) + '" target="_blank" rel="noopener noreferrer">Shop this centre →</a>' : '');
+      });
+    });
   }
 
   function homeEventCard() {
@@ -107,10 +124,9 @@
   }
 
   function renderHome() {
-    renderHomeHero();
+    renderChakraHero();
     const cards = el('home-cards');
     if (cards) cards.innerHTML = homeEventCard() + membersCard();
-    refreshChakraMap(); // re-position the chakra body map on Home once visible
   }
 
   function meSection(title, inner) {

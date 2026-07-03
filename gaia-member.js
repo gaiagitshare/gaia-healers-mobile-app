@@ -190,7 +190,35 @@
     box.innerHTML = rows.join('');
   }
 
-  function render() { renderHome(); renderMe(); }
+  function renderAcademy() {
+    const main = document.querySelector('.gaia-screen[data-screen="academy"] .gaia-main');
+    const box = el('member-academy');
+    if (!main || !box) return;
+    Array.from(main.children).forEach((ch) => { if (ch.id !== 'member-academy') ch.style.display = 'none'; });
+    const cap = document.getElementById('academy-summary-caption');
+    if (cap) cap.textContent = 'Your courses live in the Gaia Healers portal.';
+    const courses = state.data.courses || {};
+    const hub = courses.portalUrl || (portalBase() + '/courses');
+    const rows = [meSection('Academy',
+      '<p class="gaia-me-empty">Your courses, lessons, and certificates live in the Gaia Healers portal. Open the Academy to continue where you left off — Gaia can guide you, but lesson progress opens in the portal.</p>'
+      + '<a class="gaia-member-card__cta" href="' + esc(hub) + '" target="_blank" rel="noopener noreferrer">Open Academy →</a>')];
+    if (!state.authed) rows.push(meSection('Members', '<p class="gaia-me-empty">Sign in to see which courses are included in your membership.</p>'));
+    box.innerHTML = rows.join('');
+  }
+
+  function renderCommunity() {
+    const main = document.querySelector('.gaia-community-main');
+    if (!main) return;
+    // Remove legacy demo content (fake posts + stale member/group counts). The
+    // live "My Access" grid (#my-access, rendered by gaia-ui) stays.
+    ['#community-feed', '#community-groups', '#community-learning'].forEach((sel) => {
+      const e = main.querySelector(sel); if (e) e.style.display = 'none';
+    });
+    const stats = main.querySelector('.gaia-community-strip__stats');
+    if (stats) stats.style.display = 'none';
+  }
+
+  function render() { renderHome(); renderMe(); renderAcademy(); renderCommunity(); }
 
   document.addEventListener('DOMContentLoaded', render); // public first paint
   document.addEventListener('gaia:auth', (e) => {

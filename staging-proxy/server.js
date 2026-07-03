@@ -1089,10 +1089,18 @@ const ACCESS_CATALOG = {
 const DEEPLINK = {
   widgetBase: 'https://api.leadconnectorhq.com',
   portalFallback: (process.env.GHL_CLIENT_PORTAL_BASE_URL || 'https://education.gaiahealers.com').replace(/\/+$/, ''),
-  // Fill these later (empty string => portal fallback is used):
-  communityUrls: { 'all-gaia': '', biowell: '', biopulsar: '', biotekna: '', healeex: '', abundant: '' },
-  courseUrls: {},        // e.g. { 'advanced-l1': 'https://…' }
-  productStoreUrl: '',   // e.g. 'https://…/store'
+  // Confirmed high-confidence URLs wired; empty string => portal fallback.
+  communityUrls: {
+    'all-gaia': 'https://education.gaiahealers.com/gaia-healers-community', // confirmed
+    biowell: '',                                                           // pending
+    biopulsar: 'https://education.gaiahealers.com/biopulsar-community',    // confirmed
+    biotekna: '',                                                         // pending
+    healeex: '',                                                          // pending
+    abundant: '',                                                        // pending
+  },
+  courseUrls: {},                                                          // per-course, pending
+  academyHubUrl: 'https://education.gaiahealers.com/courses',             // confirmed (Academy hub)
+  productStoreUrl: '',                                                    // pending
   // Curated member-bookable calendars (widgetSlug verified live, active):
   bookings: [
     { id: 'biowell-scan', name: 'Bio-Well Scan', slug: 'scans' },
@@ -1452,7 +1460,7 @@ async function memberCourses(req, res, origin) {
   const sm = requireSessionMember(req, res, origin); if (!sm) return;
   const b = await fetchMemberBundle(sm);
   const tagHints = b.tags.filter((t) => /course|enrolled/i.test(t));
-  sendJson(res, 200, placeholderEnvelope('GHL exposes no Courses/LMS API — course enrollment and lesson progress cannot be read (verified: all course endpoints 404). Tag hints only.', { courses: [], tagHints, portalUrl: DEEPLINK.portalFallback, catalogReady: true }), origin);
+  sendJson(res, 200, placeholderEnvelope('GHL exposes no Courses/LMS API — course enrollment and lesson progress cannot be read (verified: all course endpoints 404). Tag hints only.', { courses: [], tagHints, portalUrl: DEEPLINK.academyHubUrl || DEEPLINK.portalFallback, portalUrlIsFallback: !DEEPLINK.academyHubUrl, catalogReady: true }), origin);
 }
 async function memberEvents(req, res, origin) {
   if (!requireSessionMember(req, res, origin)) return;

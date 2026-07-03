@@ -1081,6 +1081,32 @@ const ACCESS_CATALOG = {
   accessLikePatterns: [/^community[-_]/i, /_owner$/i, /^membership/i, /-membership$/i, /-member$/i, /^enrolled/i, /course/i],
 };
 
+// —— Phase 3: deep-link catalog ——
+// Generated links (bookings/forms/surveys) come straight from live GHL ids/slugs
+// (patterns verified live). Communities/courses/products/portal URLs are
+// CONFIG-READY: fill the exact member-facing URLs below when provided; until
+// then they fall back to the client portal. Never guess a URL.
+const DEEPLINK = {
+  widgetBase: 'https://api.leadconnectorhq.com',
+  portalFallback: (process.env.GHL_CLIENT_PORTAL_BASE_URL || 'https://education.gaiahealers.com').replace(/\/+$/, ''),
+  // Fill these later (empty string => portal fallback is used):
+  communityUrls: { 'all-gaia': '', biowell: '', biopulsar: '', biotekna: '', healeex: '', abundant: '' },
+  courseUrls: {},        // e.g. { 'advanced-l1': 'https://…' }
+  productStoreUrl: '',   // e.g. 'https://…/store'
+  // Curated member-bookable calendars (widgetSlug verified live, active):
+  bookings: [
+    { id: 'biowell-scan', name: 'Bio-Well Scan', slug: 'scans' },
+    { id: 'biowell-demo', name: 'Bio-Well Demo', slug: 'bio-welldemo' },
+    { id: 'healeex-combo', name: 'Healeex Bio-Well Combo', slug: 'healeex-bio-well-combo' },
+  ],
+};
+function bookingUrl(slug) { return slug ? `${DEEPLINK.widgetBase}/widget/bookings/${encodeURIComponent(slug)}` : ''; }
+function formWidgetUrl(id) { return id ? `${DEEPLINK.widgetBase}/widget/form/${encodeURIComponent(id)}` : ''; }
+function surveyWidgetUrl(id) { return id ? `${DEEPLINK.widgetBase}/widget/survey/${encodeURIComponent(id)}` : ''; }
+function communityOpenUrl(id) { const u = DEEPLINK.communityUrls[id]; return { openUrl: u || DEEPLINK.portalFallback, openUrlIsFallback: !u }; }
+function courseOpenUrl(id) { const u = DEEPLINK.courseUrls[id]; return { openUrl: u || DEEPLINK.portalFallback, openUrlIsFallback: !u }; }
+function memberBookingLinks() { return DEEPLINK.bookings.map((b) => ({ id: b.id, name: b.name, type: 'booking', openUrl: bookingUrl(b.slug) })); }
+
 function friendlyProductName(slug) {
   const key = String(slug || '').toLowerCase();
   if (ACCESS_CATALOG.productNames[key]) return ACCESS_CATALOG.productNames[key];
@@ -1096,8 +1122,9 @@ function buildMemberAccess(rawTags = [], customFields = [], member = {}) {
   const unlocked = [];
   const locked = [];
   for (const c of ACCESS_CATALOG.communities) {
+    const link = communityOpenUrl(c.id);
     if (c.placeholder || !c.matchTags.length) {
-      locked.push({ id: c.id, name: c.name, state: 'unknown', reason: 'Membership tag not configured yet — ask Gaia Healers to unlock this.', matchedBy: null });
+      locked.push({ id: c.id, name: c.name, state: 'unknown', reason: 'Membership tag not configured yet — ask Gaia Healers to unlock this.', matchedBy: null, ...link });
       continue;
     }
     // Mark every present match tag as "known" (not just the first hit) so a
@@ -1105,9 +1132,9 @@ function buildMemberAccess(rawTags = [], customFields = [], member = {}) {
     c.matchTags.forEach((t) => { if (has(t)) matched.add(t.toLowerCase()); });
     const hit = c.matchTags.find((t) => has(t));
     if (hit) {
-      unlocked.push({ id: c.id, name: c.name, state: 'unlocked', matchedBy: lower.get(hit.toLowerCase()) || hit });
+      unlocked.push({ id: c.id, name: c.name, state: 'unlocked', matchedBy: lower.get(hit.toLowerCase()) || hit, ...link });
     } else {
-      locked.push({ id: c.id, name: c.name, state: 'locked', reason: 'Not included in your membership', matchedBy: null });
+      locked.push({ id: c.id, name: c.name, state: 'locked', reason: 'Not included in your membership', matchedBy: null, ...link });
     }
   }
 
@@ -1293,7 +1320,7 @@ async function memberAppointments(req, res, origin) {
       appointments = (Array.isArray(list) ? list : []).map(normalizeAppointment);
     } catch (err) { console.error('[Gaia Member] appointments failed', { error: err.message.split('\n')[0] }); }
   }
-  sendJson(res, 200, { ...memberEnvelope(b, {}), source: 'ghl-live', appointments, count: appointments.length }, origin);
+  sendJson(res, 200, { ...memberEnvelope(b, {}), source: 'ghl-live', appointments, count: appointments.length, bookingLinks: memberBookingLinks() }, origin);
 }
 
 async function memberActivity(req, res, origin) {
@@ -1360,6 +1387,8 @@ async function memberProducts(req, res, origin) {
     ownedProducts: ownedFromTags,
     purchases: purchased,
     subscriptions: subs.map((s) => ({ id: s._id || s.id, status: s.status, amount: s.amount, currency: s.currency })),
+    storeUrl: DEEPLINK.productStoreUrl || DEEPLINK.portalFallback,
+    storeUrlIsFallback: !DEEPLINK.productStoreUrl,
     counts: { ownedFromTags: ownedFromTags.length, purchases: purchased.length, subscriptions: subs.length },
   }, origin);
 }
@@ -1388,7 +1417,10 @@ async function memberForms(req, res, origin) {
     b.contactId ? ghlMemberSubmissions(b.contactId, 'forms', 100) : [],
     b.contactId ? ghlMemberSubmissions(b.contactId, 'surveys', 100) : [],
   ]);
-  const norm = (s, type) => ({ id: s.id, type, formId: s.formId || s.surveyId || '', name: s.name || '', email: s.email || '', submittedAt: s.createdAt || '' });
+  const norm = (s, type) => {
+    const fid = s.formId || s.surveyId || '';
+    return { id: s.id, type, formId: fid, name: s.name || '', email: s.email || '', submittedAt: s.createdAt || '', openUrl: type === 'survey' ? surveyWidgetUrl(fid) : formWidgetUrl(fid) };
+  };
   sendJson(res, 200, {
     ok: true, authenticated: true, source: 'ghl-live', generatedAt: new Date().toISOString(),
     formSubmissions: forms.map((s) => norm(s, 'form')),
@@ -1420,7 +1452,7 @@ async function memberCourses(req, res, origin) {
   const sm = requireSessionMember(req, res, origin); if (!sm) return;
   const b = await fetchMemberBundle(sm);
   const tagHints = b.tags.filter((t) => /course|enrolled/i.test(t));
-  sendJson(res, 200, placeholderEnvelope('GHL exposes no Courses/LMS API — course enrollment and lesson progress cannot be read (verified: all course endpoints 404). Tag hints only.', { courses: [], tagHints }), origin);
+  sendJson(res, 200, placeholderEnvelope('GHL exposes no Courses/LMS API — course enrollment and lesson progress cannot be read (verified: all course endpoints 404). Tag hints only.', { courses: [], tagHints, portalUrl: DEEPLINK.portalFallback, catalogReady: true }), origin);
 }
 async function memberEvents(req, res, origin) {
   if (!requireSessionMember(req, res, origin)) return;

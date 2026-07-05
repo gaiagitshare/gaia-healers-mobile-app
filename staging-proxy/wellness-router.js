@@ -123,6 +123,31 @@ async function dailyFor(profile, deps) {
 
 function publicProfile(p) { return { name: p.name, firstName: firstName(p.name), location: p.location, email: p.email }; }
 
+// ---- GHL sync (best-effort; needs contacts.write on the PIT) ----
+function splitName(name) { const parts = String(name || '').trim().split(/\s+/); return { firstName: parts[0] || '', lastName: parts.slice(1).join(' ') }; }
+async function syncGhl(profile, deps) {
+  if (!deps.ghlUpsertContact) return { ok: false, reason: 'no_helper' };
+  const { firstName: fn, lastName: ln } = splitName(profile.name);
+  const r = await deps.ghlUpsertContact({
+    firstName: fn, lastName: ln, email: profile.email,
+    dateOfBirth: profile.dob, // GHL standard contact field
+    city: profile.location || undefined,
+    tags: ['gaia-app', 'gaia-wellness-signup'],
+    source: 'Gaia Healers app — wellness sign-up',
+  });
+  profile.ghl = { synced: !!r.ok, contactId: r.contactId || (profile.ghl && profile.ghl.contactId) || '', reason: r.reason || '', at: new Date().toISOString() };
+  saveProfile(profile);
+  return r;
+}
+// Retry sync at most once every 6h while unsynced (so it catches up once the
+// scope is enabled, without hammering GHL on every page load).
+async function maybeSyncGhl(profile, deps) {
+  const g = profile.ghl || {};
+  if (g.synced) return;
+  if (g.at && Date.now() - Date.parse(g.at) < 6 * 60 * 60 * 1000) return;
+  await syncGhl(profile, deps).catch(() => {});
+}
+
 // ---- handler ----
 async function handle(req, res, url, deps) {
   const { origin, sendJson } = deps;
@@ -132,6 +157,7 @@ async function handle(req, res, url, deps) {
   if (p === '/api/wellness/me' && method === 'GET') {
     const profile = profileFromReq(req, deps);
     if (!profile) return sendJson(res, 200, { ok: true, signedUp: false }, origin);
+    await maybeSyncGhl(profile, deps); // catches up once contacts.write is enabled
     const today = await dailyFor(profile, deps);
     return sendJson(res, 200, { ok: true, signedUp: true, profile: publicProfile(profile), today }, origin);
   }
@@ -161,7 +187,9 @@ async function handle(req, res, url, deps) {
         createdAt: new Date().toISOString(), lastDaily: null,
       };
     }
+    if (profile.ghl && profile.ghl.synced) profile.ghl = null; // re-sync on any change
     saveProfile(profile);
+    await syncGhl(profile, deps).catch(() => {}); // best-effort push to GHL
 
     const token = deps.signTokenPayload({ wpid: profile.id, iat: Date.now(), exp: Date.now() + TTL_MS });
     const today = await dailyFor(profile, deps);

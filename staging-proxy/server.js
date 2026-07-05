@@ -947,6 +947,24 @@ async function ghlGet(path, params = {}) {
   return fetchJsonIfOk(url, ghlHeaders(cfg.token, cfg.version));
 }
 
+// Upsert a contact into GHL (create or update by email). Requires the PIT to
+// carry contacts.write — returns scope_required until that scope is enabled.
+async function ghlUpsertContact(fields = {}) {
+  const cfg = ghlConfig();
+  if (!cfg.enabled) return { ok: false, reason: 'ghl_unconfigured' };
+  try {
+    const r = await fetch(`${cfg.base}/contacts/upsert`, {
+      method: 'POST',
+      headers: { ...ghlHeaders(cfg.token, cfg.version), 'Content-Type': 'application/json' },
+      body: JSON.stringify({ locationId: cfg.locationId, ...fields }),
+    });
+    if (r.status === 401 || r.status === 403) return { ok: false, reason: 'scope_required' };
+    if (!r.ok) return { ok: false, reason: 'ghl_error', status: r.status };
+    const d = await r.json().catch(() => ({}));
+    return { ok: true, contactId: (d && (d.contact?.id || d.id)) || '' };
+  } catch (e) { return { ok: false, reason: 'network', error: String((e && e.message) || e) }; }
+}
+
 function normalizeGhlContact(raw = {}, fallback = {}) {
   const tags = Array.isArray(raw.tags)
     ? raw.tags
@@ -3142,7 +3160,7 @@ const server = http.createServer(async (req, res) => {
     // Wellness profiles + daily body-point / horoscope (self-serve sign-up).
     if (url.pathname.startsWith('/api/wellness/')) {
       await wellnessRouter.handle(req, res, url, {
-        origin, sendJson, readJsonBody, signTokenPayload, readSignedToken, parseCookies, aiComplete,
+        origin, sendJson, readJsonBody, signTokenPayload, readSignedToken, parseCookies, aiComplete, ghlUpsertContact,
       });
       return;
     }

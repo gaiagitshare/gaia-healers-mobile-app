@@ -29,12 +29,12 @@
     return chs[(s - 1) % chs.length];
   }
 
-  const state = { loaded: false, signedUp: false, profile: null, today: null, dob: '' };
+  const state = { loaded: false, signedUp: false, profile: null, today: null, challenge: null, dob: '' };
 
   async function load() {
     const r = await api('GET', '/api/wellness/me');
     state.loaded = true;
-    if (r && r.signedUp) { state.signedUp = true; state.profile = r.profile; state.today = r.today; }
+    if (r && r.signedUp) { state.signedUp = true; state.profile = r.profile; state.today = r.today; state.challenge = r.challenge || { joined: false }; }
     renderAll();
   }
   function renderAll() { boxes.forEach(renderInto); updateHeaderName(); }
@@ -93,8 +93,34 @@
       + '<p class="g-daily-card__kicker">Wellness horoscope' + (t.sunSign ? ' · ' + esc(t.sunSign) : '') + '</p>'
       + '<p class="g-daily-card__tip">' + esc(t.tip || '') + '</p></article>'
       + '</div>'
+      + challengeHtml()
       + '<button type="button" class="g-btn g-btn--ghost g-btn--sm g-well__signout" data-wsignout>Not you? Sign out</button>'
       + '</section>';
+  }
+
+  // ── 8-week chakra challenge ──────────────────────────────
+  function challengeHtml() {
+    const c = state.challenge || {};
+    if (!c.joined) {
+      return '<article class="g-card g-chal"><p class="g-daily-card__kicker" style="--ck:var(--g-accent)">8-Week Chakra Challenge</p>'
+        + '<p class="g-chal__title">One chakra a week</p>'
+        + '<p class="g-card__meta">A gentle daily practice that moves through all seven centres — bringing your whole system into balance over eight weeks.</p>'
+        + '<div class="g-card__actions"><button type="button" class="g-btn g-btn--primary g-btn--sm" data-chal-join>Join the challenge →</button></div></article>';
+    }
+    const dots = Array.from({ length: 8 }, (_, i) => '<span class="g-chal-dot' + ((i + 1) <= c.week ? ' is-on' : '') + '"' + ((i + 1) === c.week ? ' data-now' : '') + '></span>').join('');
+    return '<article class="g-card g-chal" style="--ck:' + esc(c.color || '#7DD956') + '">'
+      + '<p class="g-daily-card__kicker">Chakra Challenge · Week ' + esc(c.week) + ' of 8</p>'
+      + '<p class="g-chal__title">' + esc(c.chakra) + (c.sanskrit ? ' · <span>' + esc(c.sanskrit) + '</span>' : '') + '</p>'
+      + '<p class="g-card__meta">' + esc(c.focus || '') + '</p>'
+      + '<div class="g-chal-dots">' + dots + '</div>'
+      + '<p class="g-chal__practice"><strong>Today:</strong> ' + esc(c.practice || '') + '</p>'
+      + '<p class="g-chal__aff">“' + esc(c.affirmation || '') + '”</p>'
+      + '<div class="g-card__actions">'
+      + (c.doneToday ? '<span class="g-chip g-chip--on">✓ Done today</span>'
+        : '<button type="button" class="g-btn g-btn--primary g-btn--sm" data-chal-checkin>Mark today complete</button>')
+      + '<span class="g-chal__count">' + (c.totalDone === 1 ? '1 day' : (c.totalDone || 0) + ' days') + ' practised</span></div>'
+      + (c.complete ? '<p class="g-hint">You completed the 8-week journey — beautiful work.</p>' : '')
+      + '</article>';
   }
 
   function renderInto(box) { box.innerHTML = state.signedUp ? signedUpHtml() : publicHtml(); bind(box); }
@@ -126,6 +152,17 @@
     if (btn) btn.addEventListener('click', () => signup(box));
     const out = box.querySelector('[data-wsignout]');
     if (out) out.addEventListener('click', signout);
+    const cj = box.querySelector('[data-chal-join]');
+    if (cj) cj.addEventListener('click', () => challengeCall(cj, '/api/wellness/challenge/join'));
+    const cc = box.querySelector('[data-chal-checkin]');
+    if (cc) cc.addEventListener('click', () => challengeCall(cc, '/api/wellness/challenge/checkin'));
+  }
+
+  async function challengeCall(btn, path) {
+    btn.disabled = true;
+    const r = await api('POST', path);
+    if (r && r.ok && r.challenge) { state.challenge = r.challenge; renderAll(); }
+    else btn.disabled = false;
   }
 
   const val = (box, sel) => { const e = box.querySelector(sel); return e ? e.value : ''; };
@@ -142,7 +179,7 @@
     if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) return set('Please enter a valid email.', true);
     set('Aligning your energy…');
     const r = await api('POST', '/api/wellness/signup', { name, dob, location, email });
-    if (r && r.ok && r.signedUp) { state.signedUp = true; state.profile = r.profile; state.today = r.today; renderAll(); return; }
+    if (r && r.ok && r.signedUp) { state.signedUp = true; state.profile = r.profile; state.today = r.today; state.challenge = r.challenge || { joined: false }; renderAll(); return; }
     set(r && r.reason === 'email_invalid' ? 'That email looks off — please check it.'
       : r && r.reason === 'dob_invalid' ? 'That birth date looks off — please check it.'
         : 'Could not save just now. Please try again.', true);

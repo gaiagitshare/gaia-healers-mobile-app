@@ -148,6 +148,35 @@ async function maybeSyncGhl(profile, deps) {
   await syncGhl(profile, deps).catch(() => {});
 }
 
+// ---- 8-week chakra challenge (real chakra practices; one centre per week) ----
+const CHALLENGE = [
+  { week: 1, chakra: 'Root', sanskrit: 'Muladhara', color: '#E53935', focus: 'Grounding & safety', practice: 'Stand or sit with bare feet for five minutes and feel the ground hold you.', affirmation: 'I am safe, supported and grounded.' },
+  { week: 2, chakra: 'Sacral', sanskrit: 'Svadhisthana', color: '#FB8C00', focus: 'Creativity & emotion', practice: 'Move your body freely for a few minutes — sway, stretch or dance.', affirmation: 'I allow myself to feel and to create.' },
+  { week: 3, chakra: 'Solar Plexus', sanskrit: 'Manipura', color: '#FDD835', focus: 'Confidence & willpower', practice: 'Name one thing you did well today and one small step for tomorrow.', affirmation: 'I trust my own strength.' },
+  { week: 4, chakra: 'Heart', sanskrit: 'Anahata', color: '#43A047', focus: 'Love & compassion', practice: 'Place a hand on your heart and breathe, or send someone a kind message.', affirmation: 'I give and receive love freely.' },
+  { week: 5, chakra: 'Throat', sanskrit: 'Vishuddha', color: '#1E88E5', focus: 'Expression & truth', practice: 'Say or write one honest thing you have been holding back.', affirmation: 'I express my truth with ease.' },
+  { week: 6, chakra: 'Third Eye', sanskrit: 'Ajna', color: '#3949AB', focus: 'Intuition & clarity', practice: 'Sit quietly for five minutes and notice the first thought that brings you calm.', affirmation: 'I trust my inner knowing.' },
+  { week: 7, chakra: 'Crown', sanskrit: 'Sahasrara', color: '#8E24AA', focus: 'Connection & awareness', practice: 'Spend a few minutes in stillness or gratitude, open to something larger.', affirmation: 'I am connected to all that is.' },
+  { week: 8, chakra: 'Integration', sanskrit: 'Sarva', color: '#7DD956', focus: 'Whole-system harmony', practice: 'Breathe slowly from root to crown, one breath for each centre.', affirmation: 'My energy flows freely and in balance.' },
+];
+function dayNumber(dateKey) { return Math.floor(Date.parse(dateKey + 'T00:00:00Z') / 86400000); }
+function challengeState(profile) {
+  const c = profile.challenge;
+  if (!c || !c.joinedAt) return { joined: false };
+  const dateKey = todayKey();
+  const days = Math.max(0, dayNumber(dateKey) - dayNumber(c.joinedAt)); // 0-based
+  const week = Math.min(8, Math.floor(days / 7) + 1);
+  const info = CHALLENGE[week - 1];
+  const checkins = Array.isArray(c.checkins) ? c.checkins : [];
+  return {
+    joined: true, joinedAt: c.joinedAt, week, totalWeeks: 8,
+    chakra: info.chakra, sanskrit: info.sanskrit, color: info.color, focus: info.focus,
+    practice: info.practice, affirmation: info.affirmation,
+    doneToday: checkins.includes(dateKey), totalDone: checkins.length,
+    complete: days >= 56,
+  };
+}
+
 // ---- handler ----
 async function handle(req, res, url, deps) {
   const { origin, sendJson } = deps;
@@ -159,7 +188,30 @@ async function handle(req, res, url, deps) {
     if (!profile) return sendJson(res, 200, { ok: true, signedUp: false }, origin);
     await maybeSyncGhl(profile, deps); // catches up once contacts.write is enabled
     const today = await dailyFor(profile, deps);
-    return sendJson(res, 200, { ok: true, signedUp: true, profile: publicProfile(profile), today }, origin);
+    return sendJson(res, 200, { ok: true, signedUp: true, profile: publicProfile(profile), today, challenge: challengeState(profile) }, origin);
+  }
+
+  // Chakra Challenge: join (tags the GHL contact) + daily check-in.
+  if (p === '/api/wellness/challenge/join' && method === 'POST') {
+    const profile = profileFromReq(req, deps);
+    if (!profile) return sendJson(res, 401, { ok: false, reason: 'not_signed_up' }, origin);
+    if (!profile.challenge || !profile.challenge.joinedAt) profile.challenge = { joinedAt: todayKey(), checkins: [] };
+    saveProfile(profile);
+    // fire the GHL 'chakra-challenge' tag (best-effort → your workflow)
+    if (deps.ghlUpsertContact) {
+      const { firstName: fn, lastName: ln } = splitName(profile.name);
+      deps.ghlUpsertContact({ firstName: fn, lastName: ln, email: profile.email, tags: ['gaia-app', 'chakra-challenge'] }).catch(() => {});
+    }
+    return sendJson(res, 200, { ok: true, challenge: challengeState(profile) }, origin);
+  }
+  if (p === '/api/wellness/challenge/checkin' && method === 'POST') {
+    const profile = profileFromReq(req, deps);
+    if (!profile || !profile.challenge || !profile.challenge.joinedAt) return sendJson(res, 200, { ok: false, reason: 'not_joined' }, origin);
+    const dateKey = todayKey();
+    if (!Array.isArray(profile.challenge.checkins)) profile.challenge.checkins = [];
+    if (!profile.challenge.checkins.includes(dateKey)) profile.challenge.checkins.push(dateKey);
+    saveProfile(profile);
+    return sendJson(res, 200, { ok: true, challenge: challengeState(profile) }, origin);
   }
 
   if (p === '/api/wellness/signup' && method === 'POST') {
@@ -193,7 +245,7 @@ async function handle(req, res, url, deps) {
 
     const token = deps.signTokenPayload({ wpid: profile.id, iat: Date.now(), exp: Date.now() + TTL_MS });
     const today = await dailyFor(profile, deps);
-    return sendJson(res, 200, { ok: true, signedUp: true, profile: publicProfile(profile), today }, origin, { 'Set-Cookie': buildSetCookie(token) });
+    return sendJson(res, 200, { ok: true, signedUp: true, profile: publicProfile(profile), today, challenge: challengeState(profile) }, origin, { 'Set-Cookie': buildSetCookie(token) });
   }
 
   if (p === '/api/wellness/logout' && method === 'POST') {

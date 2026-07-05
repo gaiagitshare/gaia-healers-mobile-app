@@ -412,6 +412,20 @@ body.gaia-v2,body.gaia-v2[data-theme="light"]{background:var(--g-bg) !important;
 .g-daily-card__meta{font-size:12.5px;color:var(--g-text-muted);margin:4px 0 0}
 .g-daily-card__tip{font-size:14.5px;color:var(--g-text);line-height:1.55;margin:8px 0 0}
 
+/* 8-week chakra challenge ----------------------------------- */
+.g-chal{position:relative;overflow:hidden;padding-left:calc(var(--g-s5) + 3px)}
+.g-chal::before{content:"";position:absolute;left:0;top:0;bottom:0;width:3px;background:var(--ck,var(--g-accent))}
+.g-chal__title{font-family:var(--g-font-serif);font-weight:600;font-size:20px;color:var(--g-text);margin:6px 0 0}
+.g-chal__title span{color:var(--g-text-muted);font-size:14px;font-style:italic}
+.g-chal-dots{display:flex;gap:6px;margin:var(--g-s3) 0 0}
+.g-chal-dot{flex:1;height:6px;border-radius:99px;background:var(--g-line);max-width:34px}
+.g-chal-dot.is-on{background:var(--ck,var(--g-accent))}
+.g-chal-dot[data-now]{box-shadow:0 0 8px var(--ck,var(--g-accent))}
+.g-chal__practice{font-size:14px;color:var(--g-text);line-height:1.5;margin:var(--g-s3) 0 0}
+.g-chal__practice strong{color:var(--ck,var(--g-accent))}
+.g-chal__aff{font-family:var(--g-font-serif);font-style:italic;font-size:15px;color:var(--g-text-muted);margin:8px 0 0}
+.g-chal__count{font-size:12px;color:var(--g-text-muted);align-self:center;margin-left:auto}
+
 /* ---------- Desktop: use the width, don't stretch a phone ---------- */
 @media (min-width:900px){
   /* widen the shell ONLY while a redesigned (g-*) screen is active */

@@ -133,11 +133,20 @@
     if (!lm) return '';
     if (window.GaiaMember && window.GaiaMember.authed) return ''; // already signed in → already synced
     const nm = lm.name ? esc(String(lm.name).split(/\s+/)[0]) : 'there';
-    return '<article class="g-card" style="--ck:var(--g-accent);border-color:color-mix(in srgb,var(--g-accent) 45%,transparent)">'
+    if (lm.member) {
+      // Real member with access → offer the sign-in that syncs their profile.
+      return '<article class="g-card" style="--ck:var(--g-accent);border-color:color-mix(in srgb,var(--g-accent) 45%,transparent)">'
+        + '<p class="g-daily-card__kicker" style="--ck:var(--g-accent)">✨ Welcome back, ' + nm + '</p>'
+        + '<p class="g-chal__title">You’re already a Gaia member</p>'
+        + '<p class="g-card__meta">Sign in to sync your courses, communities, and membership into your profile.</p>'
+        + '<div class="g-card__actions"><button type="button" class="g-btn g-btn--primary g-btn--sm" data-well-signin>Sign in to sync →</button></div></article>';
+    }
+    // Existing contact without member access → a warm, honest welcome (no
+    // membership claim), with a soft sign-in in case they do have an account.
+    return '<article class="g-card" style="--ck:var(--g-accent);border-color:color-mix(in srgb,var(--g-accent) 30%,transparent)">'
       + '<p class="g-daily-card__kicker" style="--ck:var(--g-accent)">✨ Welcome back, ' + nm + '</p>'
-      + '<p class="g-chal__title">You’re already a Gaia member</p>'
-      + '<p class="g-card__meta">Sign in to sync your courses, communities, and membership into your profile.</p>'
-      + '<div class="g-card__actions"><button type="button" class="g-btn g-btn--primary g-btn--sm" data-well-signin>Sign in to sync →</button></div></article>';
+      + '<p class="g-card__meta">Lovely to see you at Gaia again — your daily wellness is ready below.</p>'
+      + '<div class="g-card__actions"><button type="button" class="g-btn g-btn--ghost g-btn--sm" data-well-signin>Already a member? Sign in</button></div></article>';
   }
 
   function renderInto(box) { box.innerHTML = state.signedUp ? signedUpHtml() : publicHtml(); bind(box); }
@@ -205,7 +214,7 @@
     if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) return set('Please enter a valid email.', true);
     set('Aligning your energy…');
     const r = await api('POST', '/api/wellness/signup', { name, dob, location, email });
-    if (r && r.ok && r.signedUp) { state.signedUp = true; state.profile = r.profile; state.today = r.today; state.challenge = r.challenge || { joined: false }; state.linkedMember = r.existingMember ? { name: r.memberName || name, email } : null; renderAll(); return; }
+    if (r && r.ok && r.signedUp) { state.signedUp = true; state.profile = r.profile; state.today = r.today; state.challenge = r.challenge || { joined: false }; state.linkedMember = (r.existingMember || r.existingContact) ? { name: r.memberName || name, email, member: !!r.existingMember } : null; renderAll(); return; }
     set(r && r.reason === 'email_invalid' ? 'That email looks off — please check it.'
       : r && r.reason === 'dob_invalid' ? 'That birth date looks off — please check it.'
         : 'Could not save just now. Please try again.', true);

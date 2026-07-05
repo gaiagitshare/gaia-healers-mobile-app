@@ -224,6 +224,15 @@ async function handle(req, res, url, deps) {
     if (!validEmail(email)) return sendJson(res, 200, { ok: false, reason: 'email_invalid' }, origin);
     if (!dob) return sendJson(res, 200, { ok: false, reason: 'dob_invalid' }, origin);
 
+    // Recognise the person BEFORE we upsert, so it reflects their PRE-signup
+    // state: an existing GHL contact → a warm "welcome back"; a contact that is
+    // already a real member (with access) → offer a sign-in that syncs their
+    // full profile. We never expose private access from an unverified email.
+    let existingContact = false; let existingMember = false; let memberName = '';
+    if (deps.memberLookup) {
+      try { const m = await deps.memberLookup(email); if (m && m.existing) { existingContact = true; existingMember = !!m.member; memberName = m.name || ''; } } catch (_) {}
+    }
+
     const list = readStore();
     // one profile per email (update if returning with the same email)
     let profile = list.find((x) => x.email === email);
@@ -243,17 +252,9 @@ async function handle(req, res, url, deps) {
     saveProfile(profile);
     await syncGhl(profile, deps).catch(() => {}); // best-effort push to GHL
 
-    // If this email is already a real Gaia member, flag it so the app can
-    // offer a one-tap sign-in that securely syncs their full member profile.
-    // (We never expose their private access here — email is not proof.)
-    let existingMember = false; let memberName = '';
-    if (deps.memberLookup) {
-      try { const m = await deps.memberLookup(email); if (m && m.member) { existingMember = true; memberName = m.name || ''; } } catch (_) {}
-    }
-
     const token = deps.signTokenPayload({ wpid: profile.id, iat: Date.now(), exp: Date.now() + TTL_MS });
     const today = await dailyFor(profile, deps);
-    return sendJson(res, 200, { ok: true, signedUp: true, profile: publicProfile(profile), today, challenge: challengeState(profile), existingMember, memberName }, origin, { 'Set-Cookie': buildSetCookie(token) });
+    return sendJson(res, 200, { ok: true, signedUp: true, profile: publicProfile(profile), today, challenge: challengeState(profile), existingMember, existingContact, memberName }, origin, { 'Set-Cookie': buildSetCookie(token) });
   }
 
   if (p === '/api/wellness/logout' && method === 'POST') {

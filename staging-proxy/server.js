@@ -2,6 +2,7 @@ import http from 'node:http';
 import crypto from 'node:crypto';
 import { URL } from 'node:url';
 import * as adminRouter from './admin-router.js';
+import * as wellnessRouter from './wellness-router.js';
 
 const PORT = Number(process.env.PORT || 8787);
 const GROQ_MODEL = process.env.GROQ_MODEL || 'llama-3.3-70b-versatile';
@@ -2507,6 +2508,31 @@ function providerConfig(provider) {
   return configs[provider];
 }
 
+// Lean text completion for internal features (e.g. daily wellness tips).
+// Tries the configured providers in order; returns '' if none are available.
+async function aiComplete(system, user, { maxTokens = 160, temperature = 0.6 } = {}) {
+  for (const provider of ASSIST_PROVIDER_ORDER) {
+    const config = providerConfig(provider);
+    if (!config || !config.key) continue;
+    try {
+      const r = await fetch(config.endpoint, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${config.key}`, 'Content-Type': 'application/json', ...config.headers },
+        body: JSON.stringify({
+          model: config.model,
+          messages: [{ role: 'system', content: system }, { role: 'user', content: user }],
+          temperature,
+          max_tokens: maxTokens,
+        }),
+      });
+      if (!r.ok) continue;
+      const text = chatOutputText(await r.json());
+      if (text) return text;
+    } catch (_) { /* try next provider */ }
+  }
+  return '';
+}
+
 async function callChatProvider(provider, prompt, context = {}) {
   const config = providerConfig(provider);
   if (!config) {
@@ -3110,6 +3136,13 @@ const server = http.createServer(async (req, res) => {
         ghlGet,
         ghlConfig,
         ghlHeaders,
+      });
+      return;
+    }
+    // Wellness profiles + daily body-point / horoscope (self-serve sign-up).
+    if (url.pathname.startsWith('/api/wellness/')) {
+      await wellnessRouter.handle(req, res, url, {
+        origin, sendJson, readJsonBody, signTokenPayload, readSignedToken, parseCookies, aiComplete,
       });
       return;
     }

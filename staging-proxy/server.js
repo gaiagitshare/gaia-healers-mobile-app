@@ -1102,6 +1102,14 @@ const ACCESS_CATALOG = {
     miracleqst: 'Miracle QST', ppg: 'PPG Stress Flow', regmatex: 'RegMaTex', spiro: 'Spiro',
     tomeex: 'ToMeEx', other_devices: 'Other devices', healeex: 'HealeeX',
   },
+  // Non-standard ownership tags (not in product_*_owner form). Only ones WITHOUT
+  // a product_*_owner equivalent are listed, so they never double-count.
+  productTagMap: {
+    'glove owner': { id: 'glove', name: 'Bio-Well Glove' },
+    'healeex owner': { id: 'healeex', name: 'HealeeX' },
+    'healeex-owner': { id: 'healeex', name: 'HealeeX' },
+    'smart ring owner': { id: 'smart_ring', name: 'Smart Ring' },
+  },
   // Membership tiers — first match wins, so higher tiers are listed first.
   // Cancelled (ahc-gold-cancel) is intentionally NOT mapped.
   membershipTierTags: {
@@ -1182,12 +1190,16 @@ function buildMemberAccess(rawTags = [], customFields = [], member = {}) {
   }
 
   const products = [];
+  const productIds = new Set();
+  const addProduct = (id, name, tag) => { if (productIds.has(id)) return; productIds.add(id); matched.add(tag.toLowerCase()); products.push({ id, name, owned: true, matchedBy: tag }); };
   for (const t of tags) {
     const m = ACCESS_CATALOG.productOwnerPattern.exec(t);
-    if (m) {
-      matched.add(t.toLowerCase());
-      products.push({ id: m[1].toLowerCase(), name: friendlyProductName(m[1]), owned: true, matchedBy: t });
-    }
+    if (m) addProduct(m[1].toLowerCase(), friendlyProductName(m[1]), t);
+  }
+  // Non-standard ownership tags (e.g. "glove owner") without a product_*_owner form.
+  for (const t of tags) {
+    const p = ACCESS_CATALOG.productTagMap[t.toLowerCase()];
+    if (p) addProduct(p.id, p.name, t);
   }
 
   let membershipTier = null;

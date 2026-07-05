@@ -965,6 +965,54 @@ async function ghlUpsertContact(fields = {}) {
   } catch (e) { return { ok: false, reason: 'network', error: String((e && e.message) || e) }; }
 }
 
+// Send a transactional email to a GHL contact via the conversations API.
+// The PIT carries conversations/messages scope; returns { ok, reason } so
+// callers can branch precisely (keeps all email inside GHL).
+async function ghlSendEmail({ contactId = '', subject = '', html = '' } = {}) {
+  const cfg = ghlConfig();
+  if (!cfg.enabled) return { ok: false, reason: 'ghl_unconfigured' };
+  if (!contactId) return { ok: false, reason: 'missing_contact' };
+  try {
+    const r = await fetch(`${cfg.base}/conversations/messages`, {
+      method: 'POST',
+      headers: { ...ghlHeaders(cfg.token, cfg.version), 'Content-Type': 'application/json' },
+      body: JSON.stringify({ type: 'Email', contactId, subject, html }),
+    });
+    if (r.status === 401 || r.status === 403) return { ok: false, reason: 'scope_required' };
+    if (r.status < 200 || r.status >= 300) {
+      const b = await r.text().catch(() => '');
+      return { ok: false, reason: 'ghl_error', status: r.status, detail: b.slice(0, 200) };
+    }
+    const d = await r.json().catch(() => ({}));
+    return { ok: true, messageId: (d && (d.messageId || d.emailMessageId)) || '' };
+  } catch (e) { return { ok: false, reason: 'network', error: String((e && e.message) || e) }; }
+}
+
+function maskEmailAddress(email = '') {
+  const parts = String(email).split('@');
+  const user = parts[0] || '';
+  const domain = parts[1] || '';
+  if (!domain) return email;
+  const masked = user.length <= 2 ? (user[0] || '') + '*' : user[0] + '*'.repeat(Math.max(1, user.length - 2)) + user[user.length - 1];
+  return masked + '@' + domain;
+}
+
+function magicLinkEmailHtml(member = {}, consumeUrl = '') {
+  const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  const name = (String(member.displayName || '').trim().split(/\s+/)[0]) || 'there';
+  const mins = Math.round(AUTH_MAGIC_LINK_TTL_SECONDS / 60);
+  return [
+    '<div style="font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;max-width:480px;margin:0 auto;padding:24px;color:#1a2b20">',
+    '<h2 style="margin:0 0 10px;font-size:20px;color:#12281c">Sign in to Gaia Healers</h2>',
+    '<p style="margin:0 0 18px;font-size:15px;line-height:1.55">Hi ' + esc(name) + ', tap the button below to sign in to the Gaia Healers app. This link is just for you and expires in ' + mins + ' minutes.</p>',
+    '<p style="margin:0 0 22px"><a href="' + consumeUrl + '" style="display:inline-block;background:#2e7d32;color:#ffffff;text-decoration:none;padding:13px 24px;border-radius:999px;font-weight:600;font-size:15px">Sign in to Gaia Healers</a></p>',
+    '<p style="margin:0 0 6px;font-size:12px;color:#66766c">If the button does not work, copy this link into your browser:</p>',
+    '<p style="margin:0;font-size:12px;color:#2e7d32;word-break:break-all">' + consumeUrl + '</p>',
+    '<p style="margin:22px 0 0;font-size:12px;color:#8a978f">If you did not request this, you can safely ignore this email.</p>',
+    '</div>',
+  ].join('');
+}
+
 function normalizeGhlContact(raw = {}, fallback = {}) {
   const tags = Array.isArray(raw.tags)
     ? raw.tags
@@ -2361,6 +2409,34 @@ async function authMagicLinkRequest(req, res, origin) {
     exp: Date.now() + (AUTH_MAGIC_LINK_TTL_SECONDS * 1000),
   });
   const consumeUrl = `${PROXY_PUBLIC_URL}/api/auth/magic-link/consume?token=${encodeURIComponent(token)}&returnTo=${encodeURIComponent(returnTo)}`;
+
+  // Deliver the sign-in link by email through GHL (email stays in GHL).
+  if (member.contactId) {
+    const sent = await ghlSendEmail({
+      contactId: member.contactId,
+      subject: 'Your Gaia Healers sign-in link',
+      html: magicLinkEmailHtml(member, consumeUrl),
+    });
+    if (sent.ok) {
+      sendJson(res, 200, {
+        ok: true,
+        delivery: 'email',
+        email: maskEmailAddress(member.email),
+        member: { email: member.email, displayName: member.displayName },
+        expiresInSeconds: AUTH_MAGIC_LINK_TTL_SECONDS,
+      }, origin);
+      return;
+    }
+    if (!AUTH_ALLOW_DEBUG_LINKS) {
+      sendJson(res, 502, {
+        ok: false,
+        error: 'We could not send your sign-in email just now. Please try again in a moment.',
+        code: 'magic_link_send_failed',
+        reason: sent.reason || 'ghl_error',
+      }, origin);
+      return;
+    }
+  }
 
   if (AUTH_ALLOW_DEBUG_LINKS) {
     sendJson(res, 200, {

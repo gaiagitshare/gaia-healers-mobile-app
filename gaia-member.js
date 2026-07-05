@@ -156,18 +156,20 @@
     return '<div class="g-anns">' + list.map(item).join('') + '</div>';
   }
 
-  // Book a session — real GHL booking widgets (public; anyone can book).
+  // Book a session / work with us — real GHL booking + form widgets (public).
   function bookCard() {
-    const base = 'https://api.leadconnectorhq.com/widget/bookings/';
+    const bk = 'https://api.leadconnectorhq.com/widget/bookings/';
+    const fm = 'https://api.leadconnectorhq.com/widget/form/';
     const items = [
-      { name: 'Bio-Well energy scan', slug: 'scans', meta: 'Biofield reading' },
-      { name: 'Bio-Well demo', slug: 'bio-welldemo', meta: 'See it in action' },
-      { name: 'Healeex + Bio-Well combo', slug: 'healeex-bio-well-combo', meta: 'Combined session' },
+      { name: 'Bio-Well energy scan', href: bk + 'scans', meta: 'Biofield reading' },
+      { name: 'Bio-Well demo', href: bk + 'bio-welldemo', meta: 'See it in action' },
+      { name: 'Free discovery call', href: fm + 'mgf6oviyhPwrLBi03gzq', meta: 'Intro chat' },
+      { name: 'Wellness coaching', href: fm + 'gVzfo7sRfbLnMzQqSnJL', meta: 'Work with us' },
     ];
     return '<article class="g-card"><p class="g-card__label">Book a session</p>'
       + '<div class="g-rows">'
-      + items.map((b) => '<a class="g-row g-row--link" href="' + esc(base + b.slug) + '" target="_blank" rel="noopener noreferrer">'
-        + '<span>' + esc(b.name) + '</span><span class="g-row__meta">' + esc(b.meta) + ' · Book →</span></a>').join('')
+      + items.map((b) => '<a class="g-row g-row--link" href="' + esc(b.href) + '" target="_blank" rel="noopener noreferrer">'
+        + '<span>' + esc(b.name) + '</span><span class="g-row__meta">' + esc(b.meta) + ' →</span></a>').join('')
       + '</div></article>';
   }
 

@@ -426,6 +426,21 @@ body.gaia-v2,body.gaia-v2[data-theme="light"]{background:var(--g-bg) !important;
 .g-chal__aff{font-family:var(--g-font-serif);font-style:italic;font-size:15px;color:var(--g-text-muted);margin:8px 0 0}
 .g-chal__count{font-size:12px;color:var(--g-text-muted);align-self:center;margin-left:auto}
 
+/* Colour Personality Test ----------------------------------- */
+.g-quiz__title,.g-quiz__q{font-family:var(--g-font-serif);font-weight:600;font-size:20px;color:var(--g-text);margin:6px 0 0}
+.g-quiz__q{margin:8px 0 0}
+.g-quiz-opts{display:flex;flex-direction:column;gap:8px;margin-top:var(--g-s3)}
+.g-quiz-opt{display:flex;align-items:center;gap:10px;width:100%;text-align:left;
+  background:var(--g-surface-hi);border:1px solid var(--g-line);border-radius:var(--g-r-md);
+  color:var(--g-text);font:500 15px var(--g-font);padding:12px 14px;cursor:pointer;
+  transition:border-color .15s ease,background .15s ease}
+.g-quiz-opt:hover{border-color:var(--g-accent);background:var(--g-surface)}
+.g-quiz-opt:focus-visible{outline:none;box-shadow:var(--g-focus)}
+.g-quiz-dot{flex:none;width:16px;height:16px;border-radius:50%;box-shadow:0 0 8px -1px currentColor}
+.g-quiz-result{display:flex;align-items:center;gap:var(--g-s4);margin-top:var(--g-s2)}
+.g-quiz__kicker{font:600 10.5px/1 var(--g-font-mono);letter-spacing:.12em;text-transform:uppercase;color:var(--ck,var(--g-accent));margin:0}
+.g-quiz__result-name{font-family:var(--g-font-serif);font-weight:600;font-size:26px;color:var(--g-text);margin:4px 0 0}
+
 /* ---------- Desktop: use the width, don't stretch a phone ---------- */
 @media (min-width:900px){
   /* widen the shell ONLY while a redesigned (g-*) screen is active */

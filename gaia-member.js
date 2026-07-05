@@ -156,12 +156,29 @@
     return '<div class="g-anns">' + list.map(item).join('') + '</div>';
   }
 
+  // Book a session — real GHL booking widgets (public; anyone can book).
+  function bookCard() {
+    const base = 'https://api.leadconnectorhq.com/widget/bookings/';
+    const items = [
+      { name: 'Bio-Well energy scan', slug: 'scans', meta: 'Biofield reading' },
+      { name: 'Bio-Well demo', slug: 'bio-welldemo', meta: 'See it in action' },
+      { name: 'Healeex + Bio-Well combo', slug: 'healeex-bio-well-combo', meta: 'Combined session' },
+    ];
+    return '<article class="g-card"><p class="g-card__label">Book a session</p>'
+      + '<div class="g-rows">'
+      + items.map((b) => '<a class="g-row g-row--link" href="' + esc(base + b.slug) + '" target="_blank" rel="noopener noreferrer">'
+        + '<span>' + esc(b.name) + '</span><span class="g-row__meta">' + esc(b.meta) + ' · Book →</span></a>').join('')
+      + '</div></article>';
+  }
+
   function renderHome() {
     renderChakraHero();
     const anns = el('home-announcements');
     if (anns) anns.innerHTML = announcementsHtml(state.announcements);
     const cards = el('home-cards');
     if (cards) cards.innerHTML = homeEventCard() + membersCard();
+    const book = el('home-book');
+    if (book) book.innerHTML = bookCard();
     // #home-wellness is owned by gaia-wellness.js
   }
 
@@ -334,6 +351,14 @@
   // Community = the live "My Access" unlock grid (real GHL tags via
   // /api/member/access). Signed-out visitors see what circles exist + a
   // sign-in CTA; no fake unlocks.
+  // Find a Healer — opens the real Gaia Healers practitioner directory.
+  function findHealerCard() {
+    return '<article class="g-card"><div class="g-tier__head"><p class="g-card__label">Find a Healer</p></div>'
+      + '<p class="g-card__value">Connect with a practitioner</p>'
+      + '<p class="g-card__meta">Browse the Gaia Healers practitioner directory to find a certified healer.</p>'
+      + '<div class="g-card__actions"><a class="g-btn g-btn--secondary g-btn--sm" href="https://gaiapractitioners.com" target="_blank" rel="noopener noreferrer">Open the directory →</a></div></article>';
+  }
+
   function renderCommunity() {
     const box = el('community-body');
     if (!box) return;
@@ -346,6 +371,7 @@
         .map((name) => accessItem({ name: name, reason: 'Sign in to check your access' }, 'locked')).join('');
       box.innerHTML =
         announcementsHtml(state.announcements)
+        + findHealerCard()
         + '<article class="g-card g-card--feature"><p class="g-card__label">Community</p>'
         + '<p class="g-card__value g-card__value--lg">Open your circles</p>'
         + '<p class="g-card__meta">Sign in to see which Gaia Healers communities your membership unlocks — and open them in one tap.</p>'
@@ -366,7 +392,7 @@
       sub.textContent = bits.join(' · ');
     }
 
-    const parts = [announcementsHtml(state.announcements), '<div class="g-stats">'
+    const parts = [announcementsHtml(state.announcements), findHealerCard(), '<div class="g-stats">'
       + '<div class="g-stat"><span class="g-stat__n g-stat__n--accent">' + unlocked.length + '</span><span class="g-stat__l">Unlocked</span></div>'
       + '<div class="g-stat"><span class="g-stat__n">' + locked.length + '</span><span class="g-stat__l">To unlock</span></div>'
       + '<div class="g-stat"><span class="g-stat__n">' + soon.length + '</span><span class="g-stat__l">Coming soon</span></div></div>'];

@@ -82,5 +82,7 @@
     box.querySelectorAll('.g-quiz-opt').forEach((b) => b.addEventListener('click', () => answer(b.dataset.ck)));
   }
 
+  // Let Gaia Assist start the test for the member (benign — no data collected).
+  window.GaiaQuiz = { start };
   render();
 })();

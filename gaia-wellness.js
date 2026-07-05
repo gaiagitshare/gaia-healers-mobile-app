@@ -195,6 +195,31 @@
   document.addEventListener('gaia:member', updateHeaderName);
   document.addEventListener('gaia:auth', () => setTimeout(updateHeaderName, 300));
 
+  // Let Gaia Assist perform wellness actions on the member's behalf. Join/check-in
+  // click the real buttons (so they keep their confirm-by-tap + state handling);
+  // if the member is not signed up yet, they are guided to the sign-up form.
+  function focusSignup() {
+    const f = document.querySelector('[data-wname]');
+    if (!f) return false;
+    try { f.scrollIntoView({ behavior: 'smooth', block: 'center' }); } catch (_) {}
+    f.focus();
+    return true;
+  }
+  window.GaiaWellness = {
+    isSignedUp: () => !!state.signedUp,
+    focusSignup,
+    joinChallenge: () => {
+      const b = document.querySelector('[data-chal-join]');
+      if (b) { b.click(); return true; }
+      return focusSignup();
+    },
+    checkIn: () => {
+      const b = document.querySelector('[data-chal-checkin]');
+      if (b) { b.click(); return true; }
+      return focusSignup();
+    },
+  };
+
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', load);
   else load();
 })();

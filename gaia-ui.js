@@ -3887,10 +3887,15 @@
       }
       // Find a Healer — external directory
       if (/(find|search|browse|looking for|need)[^.]{0,24}(healer|practitioner)|practitioner directory/.test(t)) return { label: 'Find a Healer', url: 'https://gaiapractitioners.com' };
-      // Home features (all on the Home/today screen)
-      if (/(colou?r|personality)[^.]{0,12}(test|quiz)|personality test/.test(t)) return { label: 'Take the Colour Test', view: 'today' };
+      // Home features / actions (all on the Home screen). Routes with a `run`
+      // are ACTIONS — they surface a one-tap chip and never fire from a raw
+      // voice transcript. `run` executes after navigating Home.
+      if (/(colou?r|personality)[^.]{0,12}(test|quiz)|personality test/.test(t)) return { label: 'Start the Colour Test', view: 'today', run: () => window.GaiaQuiz?.start?.() };
+      if (/check[ -]?in/.test(t) && /(challenge|chakra|today)/.test(t)) return { label: 'Check in for today', view: 'today', run: () => window.GaiaWellness?.checkIn?.() };
+      if (/(join|start|begin|enroll|do)[^.]{0,20}(8[- ]?week|chakra challenge|challenge)/.test(t)) return { label: 'Join the 8-week challenge', view: 'today', run: () => window.GaiaWellness?.joinChallenge?.() };
       if (/(8[- ]?week|chakra challenge|\bchallenge\b)/.test(t)) return { label: 'Open the Chakra Challenge', view: 'today' };
-      if (/(horoscope|body point|wellness tip|my chakra|birth chakra|chakra reading|daily wellness|sign ?up)/.test(t)) return { label: 'Open your daily wellness', view: 'today' };
+      if (/(sign\s*(?:me\s*)?up|register|unlock)[^.]{0,24}(wellness|daily|horoscope|chakra|body point)|(wellness|daily|horoscope)[^.]{0,16}(sign\s*(?:me\s*)?up|register)/.test(t)) return { label: 'Start your wellness sign-up', view: 'today', run: () => window.GaiaWellness?.focusSignup?.() };
+      if (/(horoscope|body point|wellness tip|my chakra|birth chakra|chakra reading|daily wellness)/.test(t)) return { label: 'Open your daily wellness', view: 'today' };
       // Destinations — specific before the store/membership catch-alls
       if (/\b(event|ticket|elevate|register|conference|summit)\b/.test(t)) {
         const ev = window.GaiaMember?.event;
@@ -3907,13 +3912,15 @@
     function runRoute(r, opts) {
       if (!r) return;
       const closePanel = !opts || opts.closePanel !== false;
-      if (r.url) window.open(r.url, '_blank', 'noopener');
-      else if (r.view) {
+      if (r.url) { window.open(r.url, '_blank', 'noopener'); if (closePanel) setOpen(false); return; }
+      if (r.view) {
         window.GaiaAppShell?.go?.(r.view, r.tab ? { tab: r.tab } : undefined);
         // Store's Shop/Membership sub-tabs are driven by their own tab buttons,
         // so click the target so a membership request lands on the right tab.
         if (r.tab) window.setTimeout(() => { document.querySelector(`[data-store-tab="${r.tab}"]`)?.click(); }, 60);
       }
+      // Actions run after navigating to their screen (buttons live on Home).
+      if (typeof r.run === 'function') window.setTimeout(() => { try { r.run(); } catch (_) {} }, r.view ? 160 : 0);
       if (closePanel) setOpen(false);
     }
     function showRoute(text) {
@@ -3934,6 +3941,10 @@
     function maybeRouteVoice(text) {
       const r = routeIntent(text);
       if (!r) return;
+      // Actions (run) and external links always need a real tap — never fire
+      // them from a raw voice transcript. Only internal screen moves go
+      // hands-free, and only on an explicit command.
+      if (r.run || r.url) { showRoute(text); return; }
       const commanded = /\b(take me|bring me|open|go to|show me|navigate|jump to|switch to|head to|pull up|let'?s go|can you open|i want to see)\b/.test(String(text || '').toLowerCase());
       if (r.view && commanded) { runRoute(r, { closePanel: false }); return; }
       showRoute(text);

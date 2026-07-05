@@ -369,7 +369,7 @@
 
     if (!(state.authed && acc && acc.communities)) {
       if (sub) sub.textContent = 'Sign in to see which circles your membership opens.';
-      const preview = ['All Gaia Healers', 'Bio-Well Practitioners', 'BioPulsar Practitioners', 'BioTekna Practitioners', 'HealeeX Community', 'Abundant Healer Collective']
+      const preview = ['All Gaia Healers', 'Bio-Well Practitioners', 'BioPulsar Practitioners', 'BioTekna Practitioners', 'ASEA Community', 'BrainTap Community', 'LifeWave Community', 'Golden Practitioner Circle']
         .map((name) => accessItem({ name: name, reason: 'Sign in to check your access' }, 'locked')).join('');
       box.innerHTML =
         announcementsHtml(state.announcements)

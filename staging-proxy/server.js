@@ -1078,14 +1078,20 @@ async function getMemberFromGhl({ email = '', memberId = '', contactId = '' } = 
 // communities/products the member's tags grant, plus evidence (matchedBy).
 // HealeeX + Abundant are placeholders (locked/unknown) until final tags exist.
 // ————————————————————————————————————————————————————————————————
+// Community tags, membership tiers, and product-owner tags below are synced to
+// the LIVE GHL location taxonomy (audited 2026-07-05). HealeeX is a PRODUCT (not
+// a community); "Abundant Healer Collective" (AHC) is a MEMBERSHIP with Gold/
+// Silver tiers (ahc-gold-active / ahc-silver-active) — not a community.
 const ACCESS_CATALOG = {
   communities: [
-    { id: 'all-gaia',  name: 'All Gaia Healers',           matchTags: ['community-active', 'community-starthere-access'] },
-    { id: 'biowell',   name: 'Bio-Well Practitioners',     matchTags: ['community-biowell-member'] },
-    { id: 'biopulsar', name: 'BioPulsar Practitioners',    matchTags: ['community-biopulsar-member'] },
-    { id: 'biotekna',  name: 'Biotekna Practitioners',     matchTags: ['community-biotekna-member'] },
-    { id: 'healeex',   name: 'HealeeX Community',           matchTags: [], placeholder: true },
-    { id: 'abundant',  name: 'Abundant Healer Collective',  matchTags: [], placeholder: true },
+    { id: 'all-gaia',  name: 'All Gaia Healers',            matchTags: ['community-active', 'community-starthere-access'] },
+    { id: 'biowell',   name: 'Bio-Well Practitioners',      matchTags: ['community-biowell-member', 'community_biowell'] },
+    { id: 'biopulsar', name: 'BioPulsar Practitioners',     matchTags: ['community-biopulsar-member'] },
+    { id: 'biotekna',  name: 'Biotekna Practitioners',      matchTags: ['community-biotekna-member'] },
+    { id: 'asea',      name: 'ASEA Community',               matchTags: ['community-asea-member'] },
+    { id: 'braintap',  name: 'BrainTap Community',           matchTags: ['community-braintap-member'] },
+    { id: 'lifewave',  name: 'LifeWave Community',           matchTags: ['community-lifewave-member'] },
+    { id: 'golden-practitioner', name: 'Golden Practitioner Circle', matchTags: ['goldenpractitioner-community-member'] },
   ],
   productOwnerPattern: /^product_(.+)_owner$/i,
   productNames: {
@@ -1093,12 +1099,19 @@ const ACCESS_CATALOG = {
     biowell_water: 'Bio-Well Water Sensor', biowell_water_sensor: 'Bio-Well Water Sensor',
     biopulsar: 'BioPulsar', biotekna: 'BioTekna', braintap: 'BrainTap', healy: 'Healy',
     asea: 'ASEA', lifewave: 'LifeWave', ans_control: 'ANS Control', bia: 'BIA', heg: 'HEG',
+    miracleqst: 'Miracle QST', ppg: 'PPG Stress Flow', regmatex: 'RegMaTex', spiro: 'Spiro',
+    tomeex: 'ToMeEx', other_devices: 'Other devices', healeex: 'HealeeX',
   },
-  membershipTierTags: { membership_silver: 'Silver', 'silver-membership': 'Silver' },
+  // Membership tiers — first match wins, so higher tiers are listed first.
+  // Cancelled (ahc-gold-cancel) is intentionally NOT mapped.
+  membershipTierTags: {
+    'ahc-gold-active': 'Gold', 'ahc-gold-trial': 'Gold',
+    'ahc-silver-active': 'Silver', membership_silver: 'Silver', 'silver-membership': 'Silver',
+  },
   practitionerCertifiedTags: ['bio-well certified practitioner'],
   practitionerTags: ['bio-well practitioner', 'gaiapractitioner', 'gaia practitioner directory', 'goldenpractitionermember', 'gaia_practitioner_form_complete'],
   // Access-like tags used to surface "unknown access" the catalog did not map.
-  accessLikePatterns: [/^community[-_]/i, /_owner$/i, /^membership/i, /-membership$/i, /-member$/i, /^enrolled/i, /course/i],
+  accessLikePatterns: [/^community[-_]/i, /_owner$/i, /^membership/i, /-membership$/i, /-member$/i, /^ahc-/i, /^enrolled/i, /course/i],
 };
 
 // —— Phase 3: deep-link catalog ——
@@ -1112,11 +1125,13 @@ const DEEPLINK = {
   // Confirmed high-confidence URLs wired; empty string => portal fallback.
   communityUrls: {
     'all-gaia': 'https://education.gaiahealers.com/gaia-healers-community', // confirmed
-    biowell: '',                                                           // pending
+    biowell: '',                                                           // pending → portal
     biopulsar: 'https://education.gaiahealers.com/biopulsar-community',    // confirmed
-    biotekna: '',                                                         // pending
-    healeex: '',                                                          // pending
-    abundant: '',                                                        // pending
+    biotekna: '',                                                         // pending → portal
+    asea: '',                                                             // pending → portal
+    braintap: '',                                                         // pending → portal
+    lifewave: '',                                                         // pending → portal
+    'golden-practitioner': '',                                            // pending → portal
   },
   courseUrls: {},                                                          // per-course, pending
   academyHubUrl: 'https://education.gaiahealers.com/courses',             // confirmed (Academy hub)

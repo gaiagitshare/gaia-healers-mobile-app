@@ -35,7 +35,7 @@
   <script src="gaia-chakra-data.js?v=20260703a"></script>
   <link rel="stylesheet" href="gaia-shared.css?v=20260703a" />
   <link rel="stylesheet" href="gaia-ui-v2.css?v=20260703p" />
-  <link rel="stylesheet" href="gaia-system.css?v=20260705c" />
+  <link rel="stylesheet" href="gaia-system.css?v=20260705e" />
 </head>
 <body class="gaia-app gaia-page gaia-single-app gaia-v2">
   <script>try{document.body.dataset.theme=document.documentElement.dataset.theme||'light';}catch(e){}</script>
@@ -64,11 +64,11 @@
         <!-- 2 · Next event  ·  3 · Member CTA (rendered by gaia-member.js) -->
         <div id="home-cards" class="g-home-cards"></div>
 
-        <!-- 4 · Book a session (real GHL calendars, rendered by gaia-member.js) -->
-        <section id="home-book" class="g-page-sec" aria-label="Book a session"></section>
-
-        <!-- 5 · Colour Personality Test (rendered by gaia-quiz.js) -->
-        <section id="home-colourtest" class="g-page-sec" aria-label="Colour personality test"></section>
+        <!-- 4 · Book a session + 5 · Colour Personality Test (side-by-side on desktop) -->
+        <div class="g-home-pair">
+          <section id="home-book" class="g-page-sec" aria-label="Book a session"></section>
+          <section id="home-colourtest" class="g-page-sec" aria-label="Colour personality test"></section>
+        </div>
 
         <!-- 6 · Birth-date chakra + wellness (rendered by gaia-wellness.js) -->
         <section id="home-wellness" class="g-page-sec" aria-label="Your birth-date chakra"></section>

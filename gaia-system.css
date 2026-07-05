@@ -371,8 +371,33 @@ a.g-ann:hover{border-color:rgba(125,217,86,.4)}
 /* Dark-first: the g-* app is designed dark. Keep the canvas dark on every
    theme and retire the half-broken light toggle. */
 html{background:#0B120E}
-body.gaia-v2,body.gaia-v2[data-theme="light"]{background:var(--g-bg) !important;color:var(--g-text)}
+/* faint brand aura at the top of the canvas gives the dark app depth */
+body.gaia-v2,body.gaia-v2[data-theme="light"]{
+  background:radial-gradient(900px 460px at 50% -90px,rgba(125,217,86,.055),transparent 72%),var(--g-bg) !important;
+  background-attachment:fixed;color:var(--g-text)}
 .gaia-theme-toggle{display:none !important}
+
+/* ===== Polish: depth, aura, hover/tap feedback ===== */
+/* feature cards get a soft aura so wide desktop cards feel intentional */
+.g-card--feature{position:relative;overflow:hidden}
+.g-card--feature::after{content:"";position:absolute;top:-45%;right:-6%;width:min(320px,58%);aspect-ratio:1;
+  background:radial-gradient(circle at 58% 42%,rgba(125,217,86,.15),transparent 66%);pointer-events:none;z-index:0}
+.g-card--feature>*{position:relative;z-index:1}
+.g-card--feature .g-card__meta{max-width:56ch}
+/* motion for interactive surfaces */
+.g-card,.g-tile,.g-access,.g-quiz-opt,.g-btn,.g-row--link{
+  transition:transform .18s ease,border-color .18s ease,box-shadow .2s ease,filter .15s ease,background .18s ease}
+@media (hover:hover){
+  a.g-card:hover,.g-tile:hover,a.g-access:hover{transform:translateY(-2px);border-color:rgba(125,217,86,.38);
+    box-shadow:0 16px 36px -18px rgba(0,0,0,.75)}
+  .g-btn--primary:hover{filter:brightness(1.06);box-shadow:0 10px 26px -12px rgba(125,217,86,.5)}
+  .g-btn--secondary:hover,.g-btn--ghost:hover{border-color:var(--g-accent)}
+  .g-quiz-opt:hover{transform:translateY(-1px)}
+}
+.g-btn:active{transform:translateY(1px)}
+a.g-card:active,.g-tile:active,.g-quiz-opt:active{transform:scale(.99)}
+/* Home: book + colour-test pair (stacks on mobile, 2-up on desktop) */
+.g-home-pair{display:flex;flex-direction:column;gap:var(--g-s5)}
 
 /* Birth-date chakra + daily wellness ------------------------ */
 .g-well{display:flex;flex-direction:column;gap:var(--g-s3)}
@@ -457,6 +482,7 @@ body.gaia-v2,body.gaia-v2[data-theme="light"]{background:var(--g-bg) !important;
   .g-page{padding-left:var(--g-s7);padding-right:var(--g-s7)}
   .g-access-grid{display:grid;grid-template-columns:1fr 1fr;gap:var(--g-s3)}
   .g-daily{display:grid;grid-template-columns:1fr 1fr;gap:var(--g-s3);align-items:start}
+  .g-home-pair{display:grid;grid-template-columns:1fr 1fr;gap:var(--g-s4);align-items:start}
   .g-store-rail{display:grid;grid-template-columns:repeat(auto-fill,minmax(11rem,1fr));
     overflow:visible;gap:var(--g-s4)}
   .g-store-rail .g-tile{flex:auto}

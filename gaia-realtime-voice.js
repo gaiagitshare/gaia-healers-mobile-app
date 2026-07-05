@@ -375,6 +375,16 @@
           systemInstruction: {
             parts: [{ text: meta.instructions || 'You are Gaia Assist for Gaia Healers.' }],
           },
+          // Tighter turn-taking so Gaia replies quickly after you stop talking
+          // (the default end-of-speech pause is what makes voice feel laggy).
+          realtimeInputConfig: {
+            automaticActivityDetection: {
+              startOfSpeechSensitivity: 'START_SENSITIVITY_HIGH',
+              endOfSpeechSensitivity: 'END_SENSITIVITY_HIGH',
+              prefixPaddingMs: 20,
+              silenceDurationMs: 500,
+            },
+          },
           inputAudioTranscription: {},
           outputAudioTranscription: {},
         },

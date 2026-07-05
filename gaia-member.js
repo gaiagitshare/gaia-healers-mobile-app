@@ -120,7 +120,7 @@
       + '<p class="g-card__label">Next event</p>'
       + '<p class="g-card__value g-card__value--lg">' + esc(ev.name) + '</p>'
       + '<p class="g-card__meta">' + [when && esc(when), ev.venue && esc(ev.venue)].filter(Boolean).join(' · ') + '</p>'
-      + '<div class="g-card__actions"><a class="g-btn g-btn--primary" href="' + url + '" target="_blank" rel="noopener noreferrer">Register</a></div>'
+      + '<div class="g-card__actions"><a class="g-btn g-btn--primary g-btn--sm" href="' + url + '" target="_blank" rel="noopener noreferrer">Register</a></div>'
       + '</article>';
   }
 

@@ -162,7 +162,7 @@
     if (anns) anns.innerHTML = announcementsHtml(state.announcements);
     const cards = el('home-cards');
     if (cards) cards.innerHTML = homeEventCard() + membersCard();
-    renderHomeWellness();
+    // #home-wellness is owned by gaia-wellness.js
   }
 
   function meSection(title, inner) {
@@ -548,11 +548,10 @@
     box.innerHTML = membershipCards();
   }
 
-  function render() { renderHome(); renderMe(); renderMeWellness(); renderStore(); renderAcademy(); renderCommunity(); }
+  function render() { renderHome(); renderMe(); renderStore(); renderAcademy(); renderCommunity(); }
 
   document.addEventListener('DOMContentLoaded', () => {
     render(); // public first paint
-    bindWellness();
     loadEvent(); // live Next Event from the Event Manager (public)
   });
   document.addEventListener('gaia:auth', (e) => {

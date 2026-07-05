@@ -368,6 +368,44 @@ a.g-access:hover{border-color:rgba(125,217,86,.4)}
 .g-ann__body{display:block;font-size:13px;color:var(--g-text-muted);margin-top:3px;line-height:1.45}
 a.g-ann:hover{border-color:rgba(125,217,86,.4)}
 
+/* Birth-date chakra + daily wellness ------------------------ */
+.g-well{display:flex;flex-direction:column;gap:var(--g-s3)}
+.g-well__lead{color:var(--g-text-muted);font-size:13.5px;margin:2px 0 var(--g-s2);line-height:1.5}
+.g-well__lead strong{color:var(--g-text);font-weight:600}
+.g-well__welcome{display:flex;flex-direction:column;gap:2px}
+.g-well__name{font-family:var(--g-font-serif);font-weight:600;font-size:clamp(26px,7vw,34px);line-height:1;color:var(--g-text)}
+.g-well__signout{align-self:flex-start;margin-top:var(--g-s1)}
+.g-well-reveal{min-height:20px}
+
+/* chakra energy card + orb */
+.g-energy{display:flex;align-items:center;gap:var(--g-s4);background:var(--g-surface-hi);
+  border:1px solid var(--g-line);border-radius:var(--g-r-lg);padding:var(--g-s4)}
+.g-energy--empty{background:var(--g-surface)}
+.g-well-orb{position:relative;flex:none;width:60px;height:60px;border-radius:50%;
+  background:var(--ck,#7DD956);box-shadow:0 0 26px -3px var(--ck,#7DD956),0 0 0 1px rgba(255,255,255,.14) inset;
+  animation:g-well-pulse 4.2s ease-in-out infinite}
+.g-well-orb span{position:absolute;inset:0;border-radius:50%;
+  background:radial-gradient(circle at 34% 28%,rgba(255,255,255,.6),transparent 46%)}
+.g-well-orb--empty{background:var(--g-surface);box-shadow:0 0 0 1px var(--g-line) inset;animation:none}
+@keyframes g-well-pulse{0%,100%{transform:scale(1)}50%{transform:scale(1.06)}}
+.g-energy__body{min-width:0}
+.g-energy__kicker{font:600 10.5px/1 var(--g-font-mono);letter-spacing:.12em;text-transform:uppercase;color:var(--ck,var(--g-accent));margin:0}
+.g-energy__name{font-family:var(--g-font-serif);font-weight:600;font-size:20px;color:var(--g-text);margin:5px 0 0}
+.g-energy__name span{color:var(--g-text-muted);font-size:15px;font-style:italic}
+.g-energy__meta{font-size:12.5px;color:var(--g-text-muted);margin:3px 0 0}
+
+/* daily body-point + horoscope cards */
+.g-daily{display:flex;flex-direction:column;gap:var(--g-s3)}
+.g-daily-card{position:relative;overflow:hidden;padding-left:calc(var(--g-s5) + 3px)}
+.g-daily-card::before{content:"";position:absolute;left:0;top:0;bottom:0;width:3px;background:var(--ck,var(--g-accent))}
+.g-daily-card__kicker{font:600 10.5px/1 var(--g-font-mono);letter-spacing:.1em;text-transform:uppercase;color:var(--ck,var(--g-accent));margin:0}
+.g-daily-card--horo{--ck:var(--g-accent)}
+.g-daily-card__title{font-family:var(--g-font-serif);font-weight:600;font-size:22px;color:var(--g-text);margin:6px 0 0}
+.g-daily-card__title span{color:var(--g-text-muted);font-size:15px;font-style:italic}
+.g-daily-card__area{font-size:14px;color:var(--g-text);margin:5px 0 0}
+.g-daily-card__meta{font-size:12.5px;color:var(--g-text-muted);margin:4px 0 0}
+.g-daily-card__tip{font-size:14.5px;color:var(--g-text);line-height:1.55;margin:8px 0 0}
+
 /* ---------- Desktop: use the width, don't stretch a phone ---------- */
 @media (min-width:900px){
   /* widen the shell ONLY while a redesigned (g-*) screen is active */
@@ -383,6 +421,7 @@ a.g-ann:hover{border-color:rgba(125,217,86,.4)}
   /* generic g-* pages breathe on desktop; access lists go 2-up */
   .g-page{padding-left:var(--g-s7);padding-right:var(--g-s7)}
   .g-access-grid{display:grid;grid-template-columns:1fr 1fr;gap:var(--g-s3)}
+  .g-daily{display:grid;grid-template-columns:1fr 1fr;gap:var(--g-s3);align-items:start}
   .g-store-rail{display:grid;grid-template-columns:repeat(auto-fill,minmax(11rem,1fr));
     overflow:visible;gap:var(--g-s4)}
   .g-store-rail .g-tile{flex:auto}

@@ -1235,15 +1235,10 @@
       document.body.querySelector(':scope > .gaia-theme-toggle')?.remove();
     }
 
-    const saved = localStorage.getItem(THEME_KEY);
-    const prefersDark = window.matchMedia?.('(prefers-color-scheme: dark)').matches;
-    wireThemeToggles();
-    apply(saved || (prefersDark ? 'dark' : 'light'));
-
-    window.matchMedia?.('(prefers-color-scheme: dark)').addEventListener('change', (event) => {
-      if (localStorage.getItem(THEME_KEY)) return;
-      apply(event.matches ? 'dark' : 'light');
-    });
+    // Dark-first app: the redesigned g-* UI is designed dark, so the light
+    // theme (and its toggle) is retired. Always apply dark.
+    void wireThemeToggles; // kept for reference; not wired
+    apply('dark');
   }
 
   function layoutChakraNodes(root, chakras) {

@@ -15,9 +15,7 @@
   <script>
     (function () {
       try {
-        var saved = localStorage.getItem('gaia-theme');
-        var theme = saved
-          || (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+        var theme = 'dark'; // the redesigned g-* app is dark-first
         document.documentElement.dataset.theme = theme;
         document.documentElement.style.colorScheme = theme;
         if (document.body) document.body.dataset.theme = theme;
@@ -37,7 +35,7 @@
   <script src="gaia-chakra-data.js?v=20260703a"></script>
   <link rel="stylesheet" href="gaia-shared.css?v=20260703a" />
   <link rel="stylesheet" href="gaia-ui-v2.css?v=20260703p" />
-  <link rel="stylesheet" href="gaia-system.css?v=20260704b" />
+  <link rel="stylesheet" href="gaia-system.css?v=20260705a" />
 </head>
 <body class="gaia-app gaia-page gaia-single-app gaia-v2">
   <script>try{document.body.dataset.theme=document.documentElement.dataset.theme||'light';}catch(e){}</script>
@@ -157,8 +155,8 @@
   <script src="shared-nav.js?v=20260703m"></script>
   <script src="gaia-realtime-voice.js?v=20260703x"></script>
   <script src="gaia-member.js?v=20260704b"></script>
-  <script src="gaia-wellness.js?v=20260704a"></script>
+  <script src="gaia-wellness.js?v=20260705a"></script>
   <script src="gaia-store.js?v=20260703x"></script>
-  <script src="gaia-ui.js?v=20260704a"></script>
+  <script src="gaia-ui.js?v=20260705a"></script>
 </body>
 </html>

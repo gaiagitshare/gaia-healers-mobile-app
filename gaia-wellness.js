@@ -37,7 +37,7 @@
     if (r && r.signedUp) { state.signedUp = true; state.profile = r.profile; state.today = r.today; }
     renderAll();
   }
-  function renderAll() { boxes.forEach(renderInto); }
+  function renderAll() { boxes.forEach(renderInto); updateHeaderName(); }
 
   // ── visuals ──────────────────────────────────────────────
   function orb(color) {
@@ -99,6 +99,17 @@
 
   function renderInto(box) { box.innerHTML = state.signedUp ? signedUpHtml() : publicHtml(); bind(box); }
 
+  // Show the member's first name in the header (where "Profile" sits). Prefers a
+  // signed-in GHL member name, else the wellness profile name.
+  function updateHeaderName() {
+    const member = window.GaiaMember && window.GaiaMember.authed
+      && window.GaiaMember.data && window.GaiaMember.data.profile && window.GaiaMember.data.profile.profile;
+    const memberName = member && String(member.name || '').trim().split(/\s+/)[0];
+    const wellName = state.signedUp && state.profile ? (state.profile.firstName || String(state.profile.name || '').trim().split(/\s+/)[0]) : '';
+    const name = memberName || wellName || '';
+    document.querySelectorAll('[data-gaia-header-profile]').forEach((a) => { a.textContent = name || 'Profile'; });
+  }
+
   function bind(box) {
     const dob = box.querySelector('[data-wdob]');
     if (dob) {
@@ -141,6 +152,11 @@
     await api('POST', '/api/wellness/logout');
     state.signedUp = false; state.profile = null; state.today = null; renderAll();
   }
+
+  // Keep the header name correct as the profile injects late / member signs in.
+  window.addEventListener('gaia:route', updateHeaderName);
+  document.addEventListener('gaia:member', updateHeaderName);
+  document.addEventListener('gaia:auth', () => setTimeout(updateHeaderName, 300));
 
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', load);
   else load();

@@ -368,6 +368,12 @@ a.g-access:hover{border-color:rgba(125,217,86,.4)}
 .g-ann__body{display:block;font-size:13px;color:var(--g-text-muted);margin-top:3px;line-height:1.45}
 a.g-ann:hover{border-color:rgba(125,217,86,.4)}
 
+/* Dark-first: the g-* app is designed dark. Keep the canvas dark on every
+   theme and retire the half-broken light toggle. */
+html{background:#0B120E}
+body.gaia-v2,body.gaia-v2[data-theme="light"]{background:var(--g-bg) !important;color:var(--g-text)}
+.gaia-theme-toggle{display:none !important}
+
 /* Birth-date chakra + daily wellness ------------------------ */
 .g-well{display:flex;flex-direction:column;gap:var(--g-s3)}
 .g-well__lead{color:var(--g-text-muted);font-size:13.5px;margin:2px 0 var(--g-s2);line-height:1.5}

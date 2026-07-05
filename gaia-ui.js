@@ -3171,8 +3171,10 @@
         }
         const cleanText = sanitizeRealtimeTranscript(role, text, finalize);
         if (!cleanText) return;
-        if (role === 'user') syncRealtimeBubble('user', cleanText, finalize);
-        else syncRealtimeBubble('assistant', cleanText, finalize);
+        if (role === 'user') {
+          syncRealtimeBubble('user', cleanText, finalize);
+          if (finalize) { try { maybeRouteVoice(cleanText); } catch (_) {} }
+        } else syncRealtimeBubble('assistant', cleanText, finalize);
       });
       realtimeVoice.on('error', (message) => {
         if (message) {
@@ -3864,42 +3866,55 @@
       voiceSpeedLabel.textContent = `${Number(voiceSpeed.value).toFixed(2)}x`;
     });
     // —— Gaia Assist as router ——
-    // Detect what the user is trying to DO and offer a one-tap deep-link to the
-    // right place in the app. Client-side keyword match; augments (never
-    // replaces) the assistant's answer. No backend/prompt changes.
+    // Detect what the member wants to DO and take them there. routeIntent returns
+    // a destination as data ({label, view|url, tab?}); internal screens navigate
+    // via GaiaAppShell, external links open a new tab. Used by the typed shortcut
+    // chip AND by spoken voice requests (see maybeRouteVoice).
     function routeIntent(text) {
       const t = String(text || '').toLowerCase();
       if (!t.trim()) return null;
-      const go = (view) => () => { window.GaiaAppShell?.go?.(view); setOpen(false); };
-      const open = (url) => () => { if (url) window.open(url, '_blank', 'noopener'); };
-      if (/\b(scan|book|booking|appointment|session)\b/.test(t)) {
-        return { label: 'Book a Bio-Well scan', run: open('https://api.leadconnectorhq.com/widget/bookings/scans') };
-      }
+      // Booking — external GHL widgets (specific before the generic "book/scan")
+      if (/\b(coaching|coach)\b/.test(t)) return { label: 'Book wellness coaching', url: 'https://api.leadconnectorhq.com/widget/form/gVzfo7sRfbLnMzQqSnJL' };
+      if (/discovery|free call|consult/.test(t)) return { label: 'Book a free discovery call', url: 'https://api.leadconnectorhq.com/widget/form/mgf6oviyhPwrLBi03gzq' };
+      if (/\bdemo\b/.test(t)) return { label: 'Book a Bio-Well demo', url: 'https://api.leadconnectorhq.com/widget/bookings/bio-welldemo' };
+      if (/\b(scan|book|booking|appointment|session)\b/.test(t)) return { label: 'Book a Bio-Well scan', url: 'https://api.leadconnectorhq.com/widget/bookings/scans' };
+      // Colour Energy shop cross-sell (chakra + a shopping word)
       if (/(chakra|colou?r energy)/.test(t) && /(spray|colou?r|product|shop|buy|balance|heal|align)/.test(t)) {
         const ch = ['root', 'sacral', 'solar', 'heart', 'throat', 'third', 'crown'].find((c) => t.includes(c));
         const id = ch === 'third' ? 'third-eye' : ch;
         const url = (id && window.GaiaStore?.chakraShopUrl) ? window.GaiaStore.chakraShopUrl(id) : 'https://gaiahealers.com/collections/colour-energy';
-        return { label: 'Shop Colour Energy', run: open(url) };
+        return { label: 'Shop Colour Energy', url };
       }
-      // Specific destinations before the membership/store catch-alls, so e.g.
-      // "join a community" / "join the event" route to the right place.
+      // Find a Healer — external directory
+      if (/(find|search|browse|looking for|need)[^.]{0,24}(healer|practitioner)|practitioner directory/.test(t)) return { label: 'Find a Healer', url: 'https://gaiapractitioners.com' };
+      // Home features (all on the Home/today screen)
+      if (/(colou?r|personality)[^.]{0,12}(test|quiz)|personality test/.test(t)) return { label: 'Take the Colour Test', view: 'today' };
+      if (/(8[- ]?week|chakra challenge|\bchallenge\b)/.test(t)) return { label: 'Open the Chakra Challenge', view: 'today' };
+      if (/(horoscope|body point|wellness tip|my chakra|birth chakra|chakra reading|daily wellness|sign ?up)/.test(t)) return { label: 'Open your daily wellness', view: 'today' };
+      // Destinations — specific before the store/membership catch-alls
       if (/\b(event|ticket|elevate|register|conference|summit)\b/.test(t)) {
         const ev = window.GaiaMember?.event;
-        return ev?.sourceUrl ? { label: 'Register for the event', run: open(ev.sourceUrl) } : { label: 'See the next event', run: go('today') };
+        return ev?.sourceUrl ? { label: 'Register for the event', url: ev.sourceUrl } : { label: 'See the next event', view: 'today' };
       }
-      if (/\b(course|courses|certif\w*|academy|class|lesson|training|learn)\b/.test(t)) {
-        return { label: 'Open Academy', run: go('academy') };
-      }
-      if (/\b(community|communities|group|forum|discussion)\b/.test(t)) {
-        return { label: 'Open Community', run: go('community') };
-      }
-      if (/\b(member|membership|upgrade|join|silver|subscribe|subscription)\b/.test(t)) {
-        return { label: 'See membership', run: go('store') };
-      }
-      if (/\b(product|products|device|buy|shop|store|purchase|bio-?well|biopulsar|biotekna|price|cost)\b/.test(t)) {
-        return { label: 'Open the Store', run: go('store') };
-      }
+      if (/\b(course|courses|certif\w*|academy|class|lesson|training|learn)\b/.test(t)) return { label: 'Open Academy', view: 'academy' };
+      if (/\b(community|communities|group|forum|discussion|circle)\b/.test(t)) return { label: 'Open Community', view: 'community' };
+      if (/\b(member|membership|upgrade|silver|subscribe|subscription|tier|plan)\b/.test(t)) return { label: 'See membership', view: 'store', tab: 'membership' };
+      if (/\b(product|products|device|buy|shop|store|purchase|bio-?well|biopulsar|biotekna|price|cost|spray|crystal)\b/.test(t)) return { label: 'Open the Store', view: 'store' };
+      if (/\b(profile|account|my devices|my purchases|my bookings|my account|settings)\b/.test(t)) return { label: 'Open your Profile', view: 'profile' };
+      if (/\b(home|dashboard|main screen|start screen|the start)\b/.test(t)) return { label: 'Go Home', view: 'today' };
       return null;
+    }
+    function runRoute(r, opts) {
+      if (!r) return;
+      const closePanel = !opts || opts.closePanel !== false;
+      if (r.url) window.open(r.url, '_blank', 'noopener');
+      else if (r.view) {
+        window.GaiaAppShell?.go?.(r.view, r.tab ? { tab: r.tab } : undefined);
+        // Store's Shop/Membership sub-tabs are driven by their own tab buttons,
+        // so click the target so a membership request lands on the right tab.
+        if (r.tab) window.setTimeout(() => { document.querySelector(`[data-store-tab="${r.tab}"]`)?.click(); }, 60);
+      }
+      if (closePanel) setOpen(false);
     }
     function showRoute(text) {
       if (!routeBox) return;
@@ -3909,7 +3924,19 @@
       routeBox.innerHTML = '<button type="button" class="gaia-assist__route-btn"></button>';
       const btn = routeBox.querySelector('button');
       btn.textContent = r.label + ' →';
-      btn.addEventListener('click', () => { routeBox.hidden = true; routeBox.innerHTML = ''; r.run(); });
+      btn.addEventListener('click', () => { routeBox.hidden = true; routeBox.innerHTML = ''; runRoute(r, { closePanel: true }); });
+    }
+    // Voice: act on what the member SAYS. When they clearly command a move
+    // ("take me to…", "open…", "go to…"), navigate internal screens hands-free
+    // and keep the panel open so the conversation continues. External links
+    // (booking, shop, directory) still surface the tap chip, because opening a
+    // new tab reliably needs a real click.
+    function maybeRouteVoice(text) {
+      const r = routeIntent(text);
+      if (!r) return;
+      const commanded = /\b(take me|bring me|open|go to|show me|navigate|jump to|switch to|head to|pull up|let'?s go|can you open|i want to see)\b/.test(String(text || '').toLowerCase());
+      if (r.view && commanded) { runRoute(r, { closePanel: false }); return; }
+      showRoute(text);
     }
 
     form.addEventListener('submit', (event) => {

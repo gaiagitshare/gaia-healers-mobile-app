@@ -128,7 +128,14 @@
    carries the 7 glowing centres); greeting overlaid; the centres are tappable to
    reveal their essence. No scores, no list, no fake data. -------------------- */
 .g-chakra-hero{position:relative;border-radius:var(--g-r-xl);overflow:hidden;
-  background:#05070a;border:1px solid var(--g-line)}
+  background:#05070a;border:1px solid var(--g-line);
+  box-shadow:0 34px 90px -52px rgba(0,0,0,.95),0 0 70px -38px rgba(125,217,86,.2)}
+
+/* editorial section headers on Home ------------------------- */
+.g-sec-head{display:flex;flex-direction:column;gap:3px;margin-bottom:calc(var(--g-s2) * -1)}
+.g-sec-head__kicker{font:600 11px/1 var(--g-font-mono);letter-spacing:.16em;text-transform:uppercase;color:var(--g-accent);margin:0}
+.g-sec-head__title{font-family:var(--g-font-serif);font-weight:600;font-size:clamp(24px,6vw,30px);
+  line-height:1;letter-spacing:-.02em;color:var(--g-text);margin:0;text-wrap:balance}
 .g-chakra-hero__stage{height:min(52vh,460px);display:flex;justify-content:center;align-items:center}
 .g-chakra-hero__fig{position:relative;height:100%}
 .g-chakra-hero__fig img{height:100%;width:auto;display:block;

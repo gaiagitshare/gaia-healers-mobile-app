@@ -35,7 +35,7 @@
   <script src="gaia-chakra-data.js?v=20260703a"></script>
   <link rel="stylesheet" href="gaia-shared.css?v=20260703a" />
   <link rel="stylesheet" href="gaia-ui-v2.css?v=20260703p" />
-  <link rel="stylesheet" href="gaia-system.css?v=20260705e" />
+  <link rel="stylesheet" href="gaia-system.css?v=20260705f" />
 </head>
 <body class="gaia-app gaia-page gaia-single-app gaia-v2">
   <script>try{document.body.dataset.theme=document.documentElement.dataset.theme||'light';}catch(e){}</script>
@@ -54,24 +54,26 @@
       </header>
 
       <main class="gaia-main gaia-main--today g-home">
-        <!-- 1 · Signature hero — the living chakra body + greeting.
-             Rendered by gaia-member.js (renderChakraHero). No scores, no list. -->
+        <!-- Signature hero — living chakra body + greeting (gaia-member.js) -->
         <section id="home-chakra-hero" class="g-chakra-hero" aria-label="Your energy"></section>
 
         <!-- Admin-published announcements (gaia-member.js ← bootstrap) -->
         <div id="home-announcements" class="g-anns" aria-live="polite"></div>
 
-        <!-- 2 · Next event  ·  3 · Member CTA (rendered by gaia-member.js) -->
+        <!-- Your energy today — the personalized core (gaia-wellness.js) -->
+        <header class="g-sec-head"><p class="g-sec-head__kicker">Personalised</p><h2 class="g-sec-head__title">Your day</h2></header>
+        <section id="home-wellness" class="g-page-sec" aria-label="Your energy today"></section>
+
+        <!-- What’s on — next event + member CTA (gaia-member.js) -->
+        <header class="g-sec-head"><p class="g-sec-head__kicker">At Gaia Healers</p><h2 class="g-sec-head__title">What’s on</h2></header>
         <div id="home-cards" class="g-home-cards"></div>
 
-        <!-- 4 · Book a session + 5 · Colour Personality Test (side-by-side on desktop) -->
+        <!-- Explore — book a session + colour test (gaia-member.js / gaia-quiz.js) -->
+        <header class="g-sec-head"><p class="g-sec-head__kicker">Explore</p><h2 class="g-sec-head__title">Go deeper</h2></header>
         <div class="g-home-pair">
           <section id="home-book" class="g-page-sec" aria-label="Book a session"></section>
           <section id="home-colourtest" class="g-page-sec" aria-label="Colour personality test"></section>
         </div>
-
-        <!-- 6 · Birth-date chakra + wellness (rendered by gaia-wellness.js) -->
-        <section id="home-wellness" class="g-page-sec" aria-label="Your birth-date chakra"></section>
       </main>
     </section>
 

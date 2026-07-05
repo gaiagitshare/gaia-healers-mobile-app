@@ -81,6 +81,7 @@
     const greet = h < 12 ? 'Good morning' : h < 18 ? 'Good afternoon' : 'Good evening';
     return '<section class="g-well">'
       + '<div class="g-well__welcome"><p class="g-card__label">' + esc(greet) + '</p><p class="g-well__name">' + esc(pr.firstName || pr.name || 'friend') + '</p></div>'
+      + memberBridgeHtml()
       + energyCard(bc, 'Your birth chakra')
       + '<div class="g-daily">'
       + '<article class="g-card g-daily-card" style="--ck:' + esc(bp.color || '#7DD956') + '">'
@@ -123,6 +124,22 @@
       + '</article>';
   }
 
+  // Bridge for people who sign up with an email that is ALREADY a real Gaia
+  // member. We never expose their private access from an unverified email —
+  // we invite them to sign in (one tap), which securely syncs their full
+  // member profile (courses, communities, membership).
+  function memberBridgeHtml() {
+    const lm = state.linkedMember;
+    if (!lm) return '';
+    if (window.GaiaMember && window.GaiaMember.authed) return ''; // already signed in → already synced
+    const nm = lm.name ? esc(String(lm.name).split(/\s+/)[0]) : 'there';
+    return '<article class="g-card" style="--ck:var(--g-accent);border-color:color-mix(in srgb,var(--g-accent) 45%,transparent)">'
+      + '<p class="g-daily-card__kicker" style="--ck:var(--g-accent)">✨ Welcome back, ' + nm + '</p>'
+      + '<p class="g-chal__title">You’re already a Gaia member</p>'
+      + '<p class="g-card__meta">Sign in to sync your courses, communities, and membership into your profile.</p>'
+      + '<div class="g-card__actions"><button type="button" class="g-btn g-btn--primary g-btn--sm" data-well-signin>Sign in to sync →</button></div></article>';
+  }
+
   function renderInto(box) { box.innerHTML = state.signedUp ? signedUpHtml() : publicHtml(); bind(box); }
 
   // Show the member's first name in the header (where "Profile" sits). Prefers a
@@ -160,6 +177,11 @@
     if (cj) cj.addEventListener('click', () => challengeCall(cj, '/api/wellness/challenge/join'));
     const cc = box.querySelector('[data-chal-checkin]');
     if (cc) cc.addEventListener('click', () => challengeCall(cc, '/api/wellness/challenge/checkin'));
+    const si = box.querySelector('[data-well-signin]');
+    if (si) si.addEventListener('click', () => {
+      const email = (state.linkedMember && state.linkedMember.email) || (state.profile && state.profile.email) || '';
+      if (window.GaiaAuth && window.GaiaAuth.open) window.GaiaAuth.open(email);
+    });
   }
 
   async function challengeCall(btn, path) {
@@ -183,7 +205,7 @@
     if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) return set('Please enter a valid email.', true);
     set('Aligning your energy…');
     const r = await api('POST', '/api/wellness/signup', { name, dob, location, email });
-    if (r && r.ok && r.signedUp) { state.signedUp = true; state.profile = r.profile; state.today = r.today; state.challenge = r.challenge || { joined: false }; renderAll(); return; }
+    if (r && r.ok && r.signedUp) { state.signedUp = true; state.profile = r.profile; state.today = r.today; state.challenge = r.challenge || { joined: false }; state.linkedMember = r.existingMember ? { name: r.memberName || name, email } : null; renderAll(); return; }
     set(r && r.reason === 'email_invalid' ? 'That email looks off — please check it.'
       : r && r.reason === 'dob_invalid' ? 'That birth date looks off — please check it.'
         : 'Could not save just now. Please try again.', true);

@@ -243,9 +243,17 @@ async function handle(req, res, url, deps) {
     saveProfile(profile);
     await syncGhl(profile, deps).catch(() => {}); // best-effort push to GHL
 
+    // If this email is already a real Gaia member, flag it so the app can
+    // offer a one-tap sign-in that securely syncs their full member profile.
+    // (We never expose their private access here — email is not proof.)
+    let existingMember = false; let memberName = '';
+    if (deps.memberLookup) {
+      try { const m = await deps.memberLookup(email); if (m && m.member) { existingMember = true; memberName = m.name || ''; } } catch (_) {}
+    }
+
     const token = deps.signTokenPayload({ wpid: profile.id, iat: Date.now(), exp: Date.now() + TTL_MS });
     const today = await dailyFor(profile, deps);
-    return sendJson(res, 200, { ok: true, signedUp: true, profile: publicProfile(profile), today, challenge: challengeState(profile) }, origin, { 'Set-Cookie': buildSetCookie(token) });
+    return sendJson(res, 200, { ok: true, signedUp: true, profile: publicProfile(profile), today, challenge: challengeState(profile), existingMember, memberName }, origin, { 'Set-Cookie': buildSetCookie(token) });
   }
 
   if (p === '/api/wellness/logout' && method === 'POST') {

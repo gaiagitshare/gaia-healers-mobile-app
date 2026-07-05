@@ -1047,6 +1047,32 @@ function normalizeGhlContact(raw = {}, fallback = {}) {
   });
 }
 
+// Privacy-safe check for the wellness sign-up: is this email ALREADY a real
+// Gaia member (existing GHL contact with membership / community / product
+// access)? Returns only { existing, member, name } — NEVER private access
+// details, because an unverified email is not proof of ownership. The real
+// profile sync only happens after the person signs in (magic link) and proves
+// they own the email.
+async function wellnessMemberLookup(email) {
+  try {
+    const v = await getMemberFromGhl({ email: String(email || '').trim().toLowerCase() });
+    if (!v || !v.memberResolved || !v.member) return { existing: false, member: false, name: '' };
+    let hasAccess = false;
+    try {
+      const access = buildMemberAccess(v.tags || [], v.customFields || [], v.member);
+      hasAccess = Boolean(
+        access?.member?.membershipTier
+        || access?.member?.practitioner
+        || (access?.communities?.unlocked || []).length
+        || (access?.products || []).length,
+      );
+    } catch (_) {}
+    return { existing: true, member: hasAccess, name: String(v.member.displayName || '').trim() };
+  } catch (_) {
+    return { existing: false, member: false, name: '' };
+  }
+}
+
 async function getMemberFromGhl({ email = '', memberId = '', contactId = '' } = {}) {
   const cfg = ghlConfig();
   if (!cfg.enabled) {
@@ -3263,7 +3289,7 @@ const server = http.createServer(async (req, res) => {
     // Wellness profiles + daily body-point / horoscope (self-serve sign-up).
     if (url.pathname.startsWith('/api/wellness/')) {
       await wellnessRouter.handle(req, res, url, {
-        origin, sendJson, readJsonBody, signTokenPayload, readSignedToken, parseCookies, aiComplete, ghlUpsertContact,
+        origin, sendJson, readJsonBody, signTokenPayload, readSignedToken, parseCookies, aiComplete, ghlUpsertContact, memberLookup: wellnessMemberLookup,
       });
       return;
     }

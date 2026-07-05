@@ -1193,6 +1193,10 @@
       window.GAIA_SYNC?.refresh?.();
     }
 
+    // Let other modules (e.g. the wellness sign-up member bridge) open the
+    // sign-in modal, optionally pre-filling the email.
+    window.GaiaAuth = { open: (email) => openModal(email) };
+
     document.querySelectorAll('a.gaia-login-pill, a.gaia-login-btn').forEach((link) => {
       link.dataset.gaiaAuthBound = '1';
       link.addEventListener('click', (event) => {

@@ -133,7 +133,11 @@
     const memberName = member && String(member.name || '').trim().split(/\s+/)[0];
     const wellName = state.signedUp && state.profile ? (state.profile.firstName || String(state.profile.name || '').trim().split(/\s+/)[0]) : '';
     const name = memberName || wellName || '';
-    document.querySelectorAll('[data-gaia-header-profile]').forEach((a) => { a.textContent = name || 'Profile'; });
+    // Signed out → "Sign in" (the pill opens the sign-in modal); signed in →
+    // the member's first name, or "Profile" if we don't have a name yet.
+    const signedIn = !!(window.GaiaMember && window.GaiaMember.authed) || !!state.signedUp;
+    const label = name || (signedIn ? 'Profile' : 'Sign in');
+    document.querySelectorAll('[data-gaia-header-profile]').forEach((a) => { a.textContent = label; });
   }
 
   function bind(box) {

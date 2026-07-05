@@ -1024,6 +1024,7 @@
     const accessNote = document.getElementById('profile-access-note');
     let modal;
     let statusEl;
+    let emailInput;
 
     function ensureModal() {
       if (modal) return modal;
@@ -1034,16 +1035,22 @@
           <div class="flex items-start justify-between gap-3">
             <div>
               <p class="gaia-section-label !mb-1">Member access</p>
-              <h2 class="gaia-section-title">Sign in to unlock your Gaia</h2>
-              <p class="gaia-caption mt-1">Public features are open to everyone. To unlock your own profile, courses, wellness data, and a Gaia that knows you personally, open Gaia from your <strong>member sign-in link</strong> — it's in your Gaia Healers emails. One click signs you in here and keeps you signed in for a week.</p>
+              <h2 class="gaia-section-title">Sign in to Gaia</h2>
+              <p class="gaia-caption mt-1">Enter your Gaia member email and we'll send you a one-tap sign-in link. It keeps you signed in for a week. (Already opened Gaia from a member link in your email? You're signed in automatically.)</p>
             </div>
             <button type="button" class="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-surface-muted text-xl text-ink-secondary" data-auth-close aria-label="Close sign in">&times;</button>
           </div>
-          <a href="${portalOrigin}" target="_blank" rel="noopener noreferrer" class="gaia-btn gaia-btn-primary w-full mt-4">Open the Gaia Healers portal</a>
-          <p class="gaia-caption mt-3" data-auth-status>Already opened Gaia from your member link? You're signed in automatically — nothing to do here.</p>
+          <form class="mt-4 space-y-3" data-auth-form>
+            <input type="email" data-auth-email class="w-full rounded-2xl border border-black/10 bg-white px-4 py-3 text-body text-ink outline-none" placeholder="you@example.com" autocomplete="email" required />
+            <button type="submit" class="gaia-btn gaia-btn-primary w-full" data-auth-submit>Email me a sign-in link</button>
+          </form>
+          <p class="gaia-caption mt-3" data-auth-status>Your link goes straight to your inbox.</p>
+          <a href="${portalOrigin}" target="_blank" rel="noopener noreferrer" class="gaia-link mt-3 inline-block">Or open the Gaia Healers course portal →</a>
         </div>`;
       document.body.appendChild(modal);
       statusEl = modal.querySelector('[data-auth-status]');
+      emailInput = modal.querySelector('[data-auth-email]');
+      const submitBtn = modal.querySelector('[data-auth-submit]');
       const closeModal = () => {
         modal.classList.add('hidden');
         modal.classList.remove('flex');
@@ -1052,13 +1059,38 @@
       modal.addEventListener('click', (event) => {
         if (event.target === modal) closeModal();
       });
+      modal.querySelector('[data-auth-form]').addEventListener('submit', async (event) => {
+        event.preventDefault();
+        const email = (emailInput.value || '').trim();
+        if (!email) return;
+        submitBtn.disabled = true;
+        statusEl.textContent = 'Sending your sign-in link…';
+        try {
+          const response = await fetch(`${syncProxyBase()}/api/auth/magic-link/request`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+            credentials: 'include',
+            body: JSON.stringify({ email, returnTo: window.location.href }),
+          });
+          const payload = await response.json().catch(() => ({}));
+          if (response.ok && payload.ok) statusEl.textContent = 'Check your email — your Gaia sign-in link is on its way.';
+          else if (payload.error) statusEl.textContent = payload.error;
+          else statusEl.textContent = 'Could not send your link right now. Please try again in a moment.';
+        } catch {
+          statusEl.textContent = 'Could not reach the server. Please try again.';
+        } finally {
+          submitBtn.disabled = false;
+        }
+      });
       return modal;
     }
 
-    function openModal() {
+    function openModal(prefill) {
       ensureModal();
+      if (prefill && emailInput && !emailInput.value) emailInput.value = prefill;
       modal.classList.remove('hidden');
       modal.classList.add('flex');
+      setTimeout(() => { try { emailInput?.focus(); } catch (_) {} }, 50);
     }
 
     function cleanAuthHintsFromUrl() {
@@ -1166,6 +1198,7 @@
       link.addEventListener('click', (event) => {
         if (authState().authenticated) return;
         event.preventDefault();
+        event.stopPropagation();
         openModal(authState().member?.email || authHintParams().email || '');
       });
     });
@@ -4006,8 +4039,8 @@
       openPortalWorkspace(trigger.dataset.gaiaPortalSection || 'home', trigger.getAttribute('href') || '');
     });
     initTheme();
-    initMemberAuth();
     initHeaderProfile();
+    initMemberAuth();
     initCoachMark();
     initSplashSteps();
     initChakraMaps();

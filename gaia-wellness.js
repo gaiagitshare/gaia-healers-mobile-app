@@ -29,7 +29,7 @@
     return chs[(s - 1) % chs.length];
   }
 
-  const state = { loaded: false, signedUp: false, profile: null, today: null, challenge: null, dob: '' };
+  const state = { loaded: false, signedUp: false, profile: null, today: null, challenge: null, dob: '', expandSignup: false };
 
   async function load() {
     const r = await api('GET', '/api/wellness/me');
@@ -56,7 +56,21 @@
   }
 
   // ── public (not signed up): live reveal + sign-up ────────
+  // Compact reminder shown when the member has NOT set up their wellness
+  // profile yet. One line + one button — keeps the Home screen uncluttered.
+  // Tapping "Set up" expands the full sign-up form in place.
   function publicHtml() {
+    if (state.expandSignup) return signupFormHtml();
+    return '<article class="g-card g-well g-well--nudge">'
+      + '<p class="g-card__label">Personalise your day</p>'
+      + '<p class="g-well__lead">Set up your birth-date chakra to unlock your <strong>daily body point</strong> and <strong>wellness horoscope</strong>.</p>'
+      + '<div class="g-card__actions"><button type="button" class="g-btn g-btn--primary g-btn--sm" data-wexpand>Set up my wellness →</button></div>'
+      + '</article>';
+  }
+
+  // The full sign-up form (birth date, name, location, email). Shown when the
+  // member taps "Set up" on the compact reminder, or via Gaia Assist.
+  function signupFormHtml() {
     const c = birthChakra(state.dob);
     return '<article class="g-card g-well">'
       + '<p class="g-card__label">Your birth-date chakra</p>'
@@ -149,7 +163,14 @@
       + '<div class="g-card__actions"><button type="button" class="g-btn g-btn--ghost g-btn--sm" data-well-signin>Already a member? Sign in</button></div></article>';
   }
 
-  function renderInto(box) { box.innerHTML = state.signedUp ? signedUpHtml() : publicHtml(); bind(box); }
+  function renderInto(box) {
+    box.innerHTML = state.signedUp ? signedUpHtml() : publicHtml();
+    bind(box);
+    // Show/hide the "Your day" section header: only when there is personalised
+    // content to show (signed up). The compact reminder has its own mini-label.
+    const head = document.getElementById('home-wellness-head');
+    if (head) head.hidden = !state.signedUp;
+  }
 
   // Show the member's first name in the header (where "Profile" sits). Prefers a
   // signed-in GHL member name, else the wellness profile name.
@@ -178,6 +199,13 @@
         });
       });
     }
+    // "Set up my wellness" on the compact reminder → expand the full form.
+    const exp = box.querySelector('[data-wexpand]');
+    if (exp) exp.addEventListener('click', () => {
+      state.expandSignup = true;
+      renderAll();
+      setTimeout(() => { try { box.querySelector('[data-wdob]')?.focus(); } catch (_) {} }, 50);
+    });
     const btn = box.querySelector('[data-wsignup]');
     if (btn) btn.addEventListener('click', () => signup(box));
     const out = box.querySelector('[data-wsignout]');
@@ -222,7 +250,7 @@
 
   async function signout() {
     await api('POST', '/api/wellness/logout');
-    state.signedUp = false; state.profile = null; state.today = null; renderAll();
+    state.signedUp = false; state.profile = null; state.today = null; state.expandSignup = false; renderAll();
   }
 
   // Keep the header name correct as the profile injects late / member signs in.
@@ -234,6 +262,11 @@
   // click the real buttons (so they keep their confirm-by-tap + state handling);
   // if the member is not signed up yet, they are guided to the sign-up form.
   function focusSignup() {
+    // If the compact reminder is showing, expand the full form first.
+    if (!state.signedUp && !state.expandSignup) {
+      state.expandSignup = true;
+      renderAll();
+    }
     const f = document.querySelector('[data-wname]');
     if (!f) return false;
     try { f.scrollIntoView({ behavior: 'smooth', block: 'center' }); } catch (_) {}

@@ -58,8 +58,10 @@
         <!-- Admin-published announcements (gaia-member.js ← bootstrap) -->
         <div id="home-announcements" class="g-anns" aria-live="polite"></div>
 
-        <!-- Your energy today — the personalized core (gaia-wellness.js) -->
-        <header class="g-sec-head"><p class="g-sec-head__kicker">Personalised</p><h2 class="g-sec-head__title">Your day</h2></header>
+        <!-- Your energy today — the personalized core (gaia-wellness.js).
+             Header + section are hidden until the member sets up their wellness
+             profile (birth date etc.); until then a compact reminder shows. -->
+        <header class="g-sec-head" id="home-wellness-head" hidden><p class="g-sec-head__kicker">Personalised</p><h2 class="g-sec-head__title">Your day</h2></header>
         <section id="home-wellness" class="g-page-sec" aria-label="Your energy today"></section>
 
         <!-- What’s on — next event + member CTA (gaia-member.js) -->

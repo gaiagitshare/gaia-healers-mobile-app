@@ -398,28 +398,80 @@
               silenceDurationMs: 500,
             },
           },
-          // Expose the in-app navigation as a callable tool. When a member asks
-          // to go somewhere, the model emits a functionCall(name='navigate').
+          // Expose in-app actions as callable tools. When a member asks to do
+          // something, the model emits a functionCall; handleGeminiMessage runs
+          // it locally and sends a toolResponse back so Gaia can confirm aloud.
           tools: [{
-            functionDeclarations: [{
-              name: 'navigate',
-              description: 'Navigate the member to a screen in the Gaia Healers app. Call this whenever the member asks to open, go to, show, or see a specific screen, tab, or feature — for example "take me to my courses", "open the store", "show my profile", "find a healer", "go to wellness". Do not just describe the path; call this tool to actually move them there.',
-              parameters: {
-                type: 'object',
-                properties: {
-                  screen: {
-                    type: 'string',
-                    description: 'The destination screen. today=Home, academy=Courses, community=Communities & Find a Healer, store=Shop & Membership, profile=Account, wellness=Wellness scans & chakras.',
-                    enum: ['today', 'academy', 'community', 'store', 'profile', 'wellness'],
+            functionDeclarations: [
+              {
+                name: 'navigate',
+                description: 'Navigate the member to a screen in the Gaia Healers app. Call this whenever the member asks to open, go to, show, or see a specific screen, tab, or feature — for example "take me to my courses", "open the store", "show my profile", "find a healer", "go to wellness". Do not just describe the path; call this tool to actually move them there.',
+                parameters: {
+                  type: 'object',
+                  properties: {
+                    screen: {
+                      type: 'string',
+                      description: 'The destination screen. today=Home, academy=Courses, community=Communities & Find a Healer, store=Shop & Membership, profile=Account, wellness=Wellness scans & chakras.',
+                      enum: ['today', 'academy', 'community', 'store', 'profile', 'wellness'],
+                    },
+                    tab: {
+                      type: 'string',
+                      description: 'Optional tab within the screen. store: "shop" or "membership". wellness: "biowell" or "chakras". community: "discussion", "members", or "events". Omit if unsure.',
+                    },
                   },
-                  tab: {
-                    type: 'string',
-                    description: 'Optional tab within the screen. store: "shop" or "membership". wellness: "biowell" or "chakras". community: "discussion", "members", or "events". Omit if unsure.',
+                  required: ['screen'],
+                },
+              },
+              {
+                name: 'book_session',
+                description: 'Open a booking or session widget so the member can book an appointment, scan, demo, or call. Call this when the member asks to book, schedule, or reserve a session — for example "book a Bio-Well scan", "I want a demo", "book a discovery call", "schedule wellness coaching". Opens the real booking form in a new tab; the member completes the booking there.',
+                parameters: {
+                  type: 'object',
+                  properties: {
+                    session: {
+                      type: 'string',
+                      description: 'Which session to book.',
+                      enum: ['scan', 'demo', 'discovery', 'coaching'],
+                    },
+                  },
+                  required: ['session'],
+                },
+              },
+              {
+                name: 'open_community',
+                description: 'Open a specific Gaia Healers community in the member portal. Call this when the member asks to open, visit, or go to a community — for example "open the Bio-Well community", "take me to BioPulsar", "show me the All Gaia Healers group". Opens the community page in a new tab.',
+                parameters: {
+                  type: 'object',
+                  properties: {
+                    community: {
+                      type: 'string',
+                      description: 'Which community to open.',
+                      enum: ['all-gaia', 'biowell', 'biopulsar', 'biotekna', 'asea', 'braintap', 'lifewave', 'golden-practitioner'],
+                    },
+                  },
+                  required: ['community'],
+                },
+              },
+              {
+                name: 'open_portal',
+                description: 'Open the Gaia Healers member portal (education.gaiahealers.com) or a specific part of it. Call this when the member wants to go to the portal itself — for example "open the portal", "take me to the member portal", "open my courses in the portal", "go to the education site". For course videos and community discussions this is where they actually live.',
+                parameters: {
+                  type: 'object',
+                  properties: {
+                    section: {
+                      type: 'string',
+                      description: 'Optional section of the portal. Omit for the portal home.',
+                      enum: ['home', 'courses', 'login'],
+                    },
                   },
                 },
-                required: ['screen'],
               },
-            }],
+              {
+                name: 'sign_in',
+                description: 'Open the in-app sign-in form so the member can sign in with their email (a one-tap magic link is sent). Call this when the member asks to sign in, log in, access their account, or says they are not signed in — for example "sign me in", "I want to log in", "help me sign in", "let me access my account". Do not call this if the member is already signed in.',
+                parameters: { type: 'object', properties: {} },
+              },
+            ],
           }],
           inputAudioTranscription: {},
           outputAudioTranscription: {},
@@ -449,6 +501,101 @@
         return { ok: true, message: `Opening ${screen}${tab ? ' / ' + tab : ''} now.` };
       } catch (e) {
         return { ok: false, message: 'Could not open that screen. Tell the member where to tap instead.' };
+      }
+    }
+
+    // Real booking widget URLs (verified live GHL slugs/ids, same as bookCard()
+    // in gaia-member.js). Opens in a new tab; the member completes booking there.
+    const BOOKING_URLS = {
+      scan: { url: 'https://api.leadconnectorhq.com/widget/bookings/scans', label: 'Bio-Well energy scan' },
+      demo: { url: 'https://api.leadconnectorhq.com/widget/bookings/bio-welldemo', label: 'Bio-Well demo' },
+      discovery: { url: 'https://api.leadconnectorhq.com/widget/form/mgf6oviyhPwrLBi03gzq', label: 'free discovery call' },
+      coaching: { url: 'https://api.leadconnectorhq.com/widget/form/gVzfo7sRfbLnMzQqSnJL', label: 'wellness coaching' },
+    };
+
+    function handleBookSessionToolCall(args = {}) {
+      const key = String(args.session || '').trim().toLowerCase();
+      const item = BOOKING_URLS[key];
+      if (!item) {
+        return { ok: false, message: 'I can book a Bio-Well scan, a demo, a free discovery call, or wellness coaching. Which one?' };
+      }
+      try {
+        window.open(item.url, '_blank', 'noopener,noreferrer');
+        return { ok: true, message: `Opening the booking form for the ${item.label}. Complete your details there to confirm.` };
+      } catch (e) {
+        return { ok: false, message: `I could not open the booking form. The member can book a ${item.label} from the Home screen.` };
+      }
+    }
+
+    // Community portal URLs. Confirmed ones open directly; pending ones fall
+    // back to the portal home (matches communityOpenUrl() in the backend).
+    const COMMUNITY_URLS = {
+      'all-gaia': 'https://education.gaiahealers.com/gaia-healers-community',
+      biopulsar: 'https://education.gaiahealers.com/biopulsar-community',
+    };
+    const COMMUNITY_NAMES = {
+      'all-gaia': 'All Gaia Healers', biowell: 'Bio-Well Practitioners', biopulsar: 'BioPulsar Practitioners',
+      biotekna: 'BioTekna Practitioners', asea: 'ASEA Community', braintap: 'BrainTap Community',
+      lifewave: 'LifeWave Community', 'golden-practitioner': 'Golden Practitioner Circle',
+    };
+    const PORTAL_FALLBACK = 'https://education.gaiahealers.com';
+
+    function handleOpenCommunityToolCall(args = {}) {
+      const key = String(args.community || '').trim().toLowerCase();
+      const name = COMMUNITY_NAMES[key];
+      if (!name) {
+        return { ok: false, message: 'I can open All Gaia Healers, Bio-Well, BioPulsar, BioTekna, ASEA, BrainTap, LifeWave, or the Golden Practitioner Circle. Which one?' };
+      }
+      const url = COMMUNITY_URLS[key] || PORTAL_FALLBACK;
+      const isFallback = !COMMUNITY_URLS[key];
+      try {
+        window.open(url, '_blank', 'noopener,noreferrer');
+        return { ok: true, message: isFallback
+          ? `Opening the ${name} community in the Gaia portal.`
+          : `Opening the ${name} community now.` };
+      } catch (e) {
+        return { ok: false, message: `I could not open the ${name} community. The member can reach it from the Community screen.` };
+      }
+    }
+
+    function handleOpenPortalToolCall(args = {}) {
+      const section = String(args.section || 'home').trim().toLowerCase();
+      const urls = {
+        home: PORTAL_FALLBACK,
+        courses: 'https://education.gaiahealers.com/courses',
+        login: 'https://education.gaiahealers.com/login',
+      };
+      const url = urls[section] || urls.home;
+      try {
+        window.open(url, '_blank', 'noopener,noreferrer');
+        return { ok: true, message: `Opening the Gaia member portal${section === 'courses' ? ' courses' : section === 'login' ? ' login' : ''} now.` };
+      } catch (e) {
+        return { ok: false, message: 'I could not open the portal. The member can visit education.gaiahealers.com directly.' };
+      }
+    }
+
+    function handleSignInToolCall() {
+      const auth = window.GaiaAuth;
+      if (!auth || typeof auth.open !== 'function') {
+        return { ok: false, message: 'Sign-in is still loading. Tell the member to tap Sign in at the top right.' };
+      }
+      try {
+        auth.open();
+        return { ok: true, message: 'Opening the sign-in form. Enter your member email and I will send you a one-tap link.' };
+      } catch (e) {
+        return { ok: false, message: 'I could not open sign-in. Tell the member to tap Sign in at the top right.' };
+      }
+    }
+
+    // Central tool dispatcher: routes a toolCall to the right handler.
+    function runToolCall(name, args = {}) {
+      switch (name) {
+        case 'navigate': return handleNavigateToolCall(args);
+        case 'book_session': return handleBookSessionToolCall(args);
+        case 'open_community': return handleOpenCommunityToolCall(args);
+        case 'open_portal': return handleOpenPortalToolCall(args);
+        case 'sign_in': return handleSignInToolCall();
+        default: return { ok: false, message: 'That action is not available yet.' };
       }
     }
 
@@ -571,9 +718,7 @@
           case 'toolCall': {
             // Run the requested tool locally, then send the result back so the
             // model can confirm the action aloud and finish its turn.
-            const result = event.name === 'navigate'
-              ? handleNavigateToolCall(event.args || {})
-              : { ok: false, message: 'That action is not available yet.' };
+            const result = runToolCall(event.name, event.args || {});
             // toolResponse lets the Live session continue after a function call.
             sendWs({
               toolResponse: {

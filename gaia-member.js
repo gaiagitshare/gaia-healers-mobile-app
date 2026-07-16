@@ -428,11 +428,14 @@ body.gaia-booking-open{overflow:hidden;}
 
   // Academy = honest course portal. Lesson progress isn't exposed by GHL, so we
   // deep-link into the portal instead of faking progress bars.
+  // Signed-in members → "Open" the course in the portal (in-app modal).
+  // Signed-out visitors → "Get access" routes them to buy a membership first,
+  //   so they never hit a portal login wall with no context.
   function renderAcademy() {
     const box = el('member-academy');
     if (!box) return;
     const cap = el('academy-summary-caption');
-    if (cap) cap.textContent = state.authed ? 'Your courses live in the Gaia Healers portal.' : 'Sign in to continue where you left off.';
+    if (cap) cap.textContent = state.authed ? 'Your courses live in the Gaia Healers portal.' : 'Become a member to unlock the full Academy.';
     const courses = state.data.courses || {};
     const hub = courses.portalUrl || (portalBase() + '/courses');
     const tracks = [
@@ -440,22 +443,40 @@ body.gaia-booking-open{overflow:hidden;}
       { name: 'Colour Energy', desc: 'Colour therapy foundations & practitioner path.' },
       { name: 'BioPulsar Training', desc: 'Aura imaging & biofeedback device training.' },
     ];
-    const trackCard = (t) => '<a class="g-access g-access--unlocked g-access--link" href="' + esc(hub) + '" target="_blank" rel="noopener noreferrer">'
-      + '<div class="g-access__body"><span class="g-access__name">' + esc(t.name) + '</span><span class="g-access__meta">' + esc(t.desc) + '</span></div>'
-      + '<span class="g-chip g-chip--on g-access__act">Open →</span></a>';
+    // Member: link to the course hub (interceptor opens it in the in-app modal).
+    // Non-member: button navigates to Store → Membership tab (in-app).
+    const trackCard = (t) => state.authed
+      ? '<a class="g-access g-access--unlocked g-access--link" href="' + esc(hub) + '">'
+        + '<div class="g-access__body"><span class="g-access__name">' + esc(t.name) + '</span><span class="g-access__meta">' + esc(t.desc) + '</span></div>'
+        + '<span class="g-chip g-chip--on g-access__act">Open →</span></a>'
+      : '<div class="g-access g-access--locked g-access--link" data-track-cta>'
+        + '<div class="g-access__body"><span class="g-access__name">' + esc(t.name) + '</span><span class="g-access__meta">' + esc(t.desc) + '</span></div>'
+        + '<span class="g-chip g-access__act">Get access →</span></div>';
+    const academyHead = state.authed
+      ? '<article class="g-card g-card--feature"><p class="g-card__label">Academy</p>'
+        + '<p class="g-card__value g-card__value--lg">Continue learning</p>'
+        + '<p class="g-card__meta">Your courses, lessons, and certificates live in the Gaia Healers portal. Gaia can guide you — lesson progress opens in the portal.</p>'
+        + '<div class="g-card__actions"><a class="g-btn g-btn--primary g-btn--sm" href="' + esc(hub) + '">Open Academy →</a></div></article>'
+      : '<article class="g-card g-card--feature"><p class="g-card__label">Academy</p>'
+        + '<p class="g-card__value g-card__value--lg">Learn & get certified</p>'
+        + '<p class="g-card__meta">Bio-Well certification, Colour Energy therapy, BioPulsar training, and more. Become a Silver member to unlock the full Academy — courses, certificates, and practitioner communities.</p>'
+        + '<div class="g-card__actions"><button type="button" class="g-btn g-btn--primary g-btn--sm" data-track-cta>View memberships →</button></div></article>';
     const parts = [
-      '<article class="g-card g-card--feature"><p class="g-card__label">Academy</p>'
-      + '<p class="g-card__value g-card__value--lg">Continue learning</p>'
-      + '<p class="g-card__meta">Your courses, lessons, and certificates live in the Gaia Healers portal. Gaia can guide you — lesson progress opens in the portal.</p>'
-      + '<div class="g-card__actions"><a class="g-btn g-btn--primary g-btn--sm" href="' + esc(hub) + '" target="_blank" rel="noopener noreferrer">Open Academy →</a></div></article>',
+      academyHead,
       gSec('Explore tracks', '<div class="g-access-grid">' + tracks.map(trackCard).join('') + '</div>'),
     ];
     if (!state.authed) {
-      parts.push('<article class="g-card"><p class="g-card__label">Members</p>'
-        + '<p class="g-card__meta">Sign in to see which courses are included in your membership.</p>'
-        + '<div class="g-card__actions"><a class="g-btn g-btn--secondary g-btn--sm" href="' + esc(portalBase()) + '" target="_blank" rel="noopener noreferrer">Sign in</a></div></article>');
+      parts.push('<article class="g-card"><p class="g-card__label">Already a member?</p>'
+        + '<p class="g-card__meta">Sign in with your Gaia email to open your courses and see what your membership unlocks.</p>'
+        + '<div class="g-card__actions"><button type="button" class="g-btn g-btn--secondary g-btn--sm" data-academy-signin>Sign in</button></div></article>');
     }
     box.innerHTML = parts.join('');
+    // Wire the membership / sign-in CTAs for non-members.
+    box.querySelectorAll('[data-track-cta]').forEach((b) => {
+      b.addEventListener('click', () => window.GaiaAppShell?.go?.('store', { tab: 'membership' }));
+    });
+    const si = box.querySelector('[data-academy-signin]');
+    if (si) si.addEventListener('click', () => window.GaiaAuth?.open?.());
   }
 
   // ── g-* page helpers (Community / Academy) ──────────────────

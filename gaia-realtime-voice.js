@@ -523,6 +523,12 @@
         return { ok: false, message: 'I can book a 1:1 with Dr. Nima, a Bio-Well scan, a demo, a free discovery call, or wellness coaching. Which one?' };
       }
       try {
+        // Open in-app (modal iframe) so the member never leaves the app.
+        // Falls back to a new tab if GaiaBooking is unavailable.
+        if (window.GaiaBooking && typeof window.GaiaBooking.open === 'function') {
+          window.GaiaBooking.open(item.url, 'Book ' + item.label);
+          return { ok: true, message: `Opening the booking calendar for the ${item.label} right here. Pick a time that works for you.` };
+        }
         window.open(item.url, '_blank', 'noopener,noreferrer');
         return { ok: true, message: `Opening the booking form for the ${item.label}. Complete your details there to confirm.` };
       } catch (e) {

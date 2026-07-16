@@ -7,6 +7,35 @@
   'use strict';
   if (!document.querySelector('.gaia-main--today')) return; // home.html only
 
+  // Self-contained styles for the in-app booking modal (avoids touching shared CSS).
+  if (!document.getElementById('gaia-booking-modal-styles')) {
+    const st = document.createElement('style');
+    st.id = 'gaia-booking-modal-styles';
+    st.textContent = `
+.gaia-booking-modal{position:fixed;inset:0;z-index:100;display:flex;align-items:flex-end;justify-content:center;}
+.gaia-booking-modal__backdrop{position:absolute;inset:0;background:rgba(0,0,0,.5);backdrop-filter:blur(2px);}
+.gaia-booking-modal__sheet{position:relative;width:100%;max-width:480px;height:92vh;display:flex;flex-direction:column;
+  background:#fff;border-radius:20px 20px 0 0;box-shadow:0 -8px 40px rgba(0,0,0,.18);overflow:hidden;
+  animation:gaia-booking-up .25s ease-out;}
+@keyframes gaia-booking-up{from{transform:translateY(100%)}to{transform:translateY(0)}}
+.gaia-booking-modal__head{display:flex;align-items:center;justify-content:space-between;padding:14px 16px;
+  border-bottom:1px solid rgba(0,0,0,.07);flex-shrink:0;}
+.gaia-booking-modal__title{font-size:1.05rem;font-weight:600;color:#1C1C1E;margin:0;}
+.gaia-booking-modal__close{flex-shrink:0;width:36px;height:36px;border:none;border-radius:50%;background:#F5F5F7;
+  color:#636366;font-size:1.4rem;line-height:1;cursor:pointer;display:flex;align-items:center;justify-content:center;}
+.gaia-booking-modal__close:active{background:#EFEFF0;}
+.gaia-booking-modal__body{flex:1;position:relative;overflow:hidden;}
+.gaia-booking-modal__body iframe{position:absolute;inset:0;width:100%;height:100%;border:none;}
+.gaia-booking-modal__loading{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;
+  color:#AEAEB2;font-size:.9rem;background:#fff;}
+.gaia-booking-modal__fallback{display:block;text-align:center;padding:10px;font-size:.85rem;color:#5CB82E;
+  background:#F6FBF3;border-top:1px solid rgba(92,184,46,.15);text-decoration:none;flex-shrink:0;}
+body.gaia-booking-open{overflow:hidden;}
+@media(min-width:640px){.gaia-booking-modal{align-items:center;}.gaia-booking-modal__sheet{height:88vh;border-radius:20px;}}
+`;
+    document.head.appendChild(st);
+  }
+
   const state = { authed: false, data: {}, event: null, announcements: [], adminEvents: [] };
   window.GaiaMember = state;
 
@@ -168,7 +197,7 @@
       + '<p class="g-card__value g-card__value--lg">Meet the founder</p>'
       + '<p class="g-card__meta">Schedule a personal call with Dr. Nima Farshid — founder of Gaia Healers, Bio-Well educator, and mentor to our practitioner community.</p>'
       + '<div class="g-card__actions">'
-      + '<a class="g-btn g-btn--primary g-btn--sm" href="' + esc(nima) + '" target="_blank" rel="noopener noreferrer">Book with Nima →</a>'
+      + '<button type="button" class="g-btn g-btn--primary g-btn--sm" data-book-inline="' + esc(nima) + '" data-book-title="Book with Dr. Nima">Book with Nima →</button>'
       + '</div></article>';
   }
 
@@ -183,10 +212,65 @@
     ];
     return '<article class="g-card"><p class="g-card__label">Book a session</p>'
       + '<div class="g-rows">'
-      + items.map((b) => '<a class="g-row g-row--link" href="' + esc(b.href) + '" target="_blank" rel="noopener noreferrer">'
-        + '<span>' + esc(b.name) + '</span><span class="g-row__meta">' + esc(b.meta) + ' →</span></a>').join('')
+      + items.map((b) => '<button type="button" class="g-row g-row--link" data-book-inline="' + esc(b.href) + '" data-book-title="' + esc(b.name) + '">'
+        + '<span>' + esc(b.name) + '</span><span class="g-row__meta">' + esc(b.meta) + ' →</span></button>').join('')
       + '</div></article>';
   }
+
+  // ── In-app booking modal ────────────────────────────────────
+  // Opens any booking widget (Calendly or GHL) inside a full-screen overlay so
+  // members complete the booking without leaving the app. Falls back to opening
+  // in a new tab if iframes are blocked or the widget refuses to embed.
+  let bookingModal = null;
+  function openBookingModal(rawUrl, title) {
+    const url = String(rawUrl || '').trim();
+    if (!url) return;
+    // Calendly inline embeds via /{url}/?embed flags; GHL widgets are designed
+    // to be iframed. We use the raw URL in an iframe and let the host render.
+    const embedUrl = url.includes('calendly.com')
+      ? url + (url.includes('?') ? '&' : '?') + 'embed_logo=false&embed_type=Inline'
+      : url;
+    closeBookingModal();
+    bookingModal = document.createElement('div');
+    bookingModal.className = 'gaia-booking-modal';
+    bookingModal.innerHTML =
+      '<div class="gaia-booking-modal__backdrop" data-book-close></div>'
+      + '<div class="gaia-booking-modal__sheet" role="dialog" aria-label="' + esc(title || 'Book a session') + '">'
+      + '<div class="gaia-booking-modal__head">'
+      + '<h2 class="gaia-booking-modal__title">' + esc(title || 'Book a session') + '</h2>'
+      + '<button type="button" class="gaia-booking-modal__close" data-book-close aria-label="Close">&times;</button>'
+      + '</div>'
+      + '<div class="gaia-booking-modal__body">'
+      + '<iframe src="' + esc(embedUrl) + '" title="' + esc(title || 'Booking') + '" allow="camera; microphone; fullscreen" loading="lazy"></iframe>'
+      + '<div class="gaia-booking-modal__loading">Loading booking calendar…</div>'
+      + '<a class="gaia-booking-modal__fallback" href="' + esc(url) + '" target="_blank" rel="noopener noreferrer">Open in a new tab →</a>'
+      + '</div></div>';
+    document.body.appendChild(bookingModal);
+    document.body.classList.add('gaia-booking-open');
+    const iframe = bookingModal.querySelector('iframe');
+    if (iframe) {
+      iframe.addEventListener('load', () => {
+        const ld = bookingModal.querySelector('.gaia-booking-modal__loading');
+        if (ld) ld.style.display = 'none';
+      });
+    }
+    bookingModal.querySelectorAll('[data-book-close]').forEach((el) => {
+      el.addEventListener('click', closeBookingModal);
+    });
+  }
+  function closeBookingModal() {
+    if (bookingModal) { bookingModal.remove(); bookingModal = null; }
+    document.body.classList.remove('gaia-booking-open');
+  }
+  // Delegate: any element with data-book-inline opens the in-app modal.
+  document.addEventListener('click', (event) => {
+    const trigger = event.target.closest('[data-book-inline]');
+    if (!trigger) return;
+    event.preventDefault();
+    openBookingModal(trigger.getAttribute('data-book-inline'), trigger.getAttribute('data-book-title') || 'Book a session');
+  });
+  // Expose so Gaia Assist voice (book_session tool) can open the same modal.
+  window.GaiaBooking = { open: openBookingModal, close: closeBookingModal };
 
   function renderHome() {
     renderChakraHero();

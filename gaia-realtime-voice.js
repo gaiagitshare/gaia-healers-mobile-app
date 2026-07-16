@@ -159,6 +159,19 @@
       responses.push({ kind: 'turnComplete' });
     }
 
+    // Function calling: when the model decides to navigate, it sends a
+    // toolCall with one or more functionCall parts. Surface each as a
+    // toolCall event so handleGeminiMessage can run it + reply.
+    const toolCalls = data?.toolCall?.functionCalls;
+    if (Array.isArray(toolCalls) && toolCalls.length) {
+      for (const call of toolCalls) {
+        const id = String(call.id || call.name || '');
+        const name = String(call.name || '');
+        const args = (call.args && typeof call.args === 'object') ? call.args : {};
+        responses.push({ kind: 'toolCall', id, name, args });
+      }
+    }
+
     if (data?.error) {
       responses.push({ kind: 'error', message: data.error.message || 'Gaia voice error' });
     }
@@ -385,10 +398,58 @@
               silenceDurationMs: 500,
             },
           },
+          // Expose the in-app navigation as a callable tool. When a member asks
+          // to go somewhere, the model emits a functionCall(name='navigate').
+          tools: [{
+            functionDeclarations: [{
+              name: 'navigate',
+              description: 'Navigate the member to a screen in the Gaia Healers app. Call this whenever the member asks to open, go to, show, or see a specific screen, tab, or feature — for example "take me to my courses", "open the store", "show my profile", "find a healer", "go to wellness". Do not just describe the path; call this tool to actually move them there.',
+              parameters: {
+                type: 'object',
+                properties: {
+                  screen: {
+                    type: 'string',
+                    description: 'The destination screen. today=Home, academy=Courses, community=Communities & Find a Healer, store=Shop & Membership, profile=Account, wellness=Wellness scans & chakras.',
+                    enum: ['today', 'academy', 'community', 'store', 'profile', 'wellness'],
+                  },
+                  tab: {
+                    type: 'string',
+                    description: 'Optional tab within the screen. store: "shop" or "membership". wellness: "biowell" or "chakras". community: "discussion", "members", or "events". Omit if unsure.',
+                  },
+                },
+                required: ['screen'],
+              },
+            }],
+          }],
           inputAudioTranscription: {},
           outputAudioTranscription: {},
         },
       };
+    }
+
+    // Voice-driven navigation: the navigate tool lets Gaia actually move the
+    // member to a screen instead of only describing where to go. Gemini Live
+    // calls it as a functionCall; handleGeminiMessage routes it to
+    // window.GaiaAppShell.go(), then sends a toolResponse back so the model
+    // can confirm the move aloud.
+    const NAVIGATE_SCREENS = ['today', 'academy', 'community', 'store', 'profile', 'wellness'];
+
+    function handleNavigateToolCall(args = {}) {
+      const screen = String(args.screen || '').trim().toLowerCase();
+      const tab = String(args.tab || '').trim().toLowerCase();
+      if (!screen || !NAVIGATE_SCREENS.includes(screen)) {
+        return { ok: false, message: 'That screen is not available. Tell the member where to tap instead.' };
+      }
+      const shell = window.GaiaAppShell;
+      if (!shell || typeof shell.go !== 'function') {
+        return { ok: false, message: 'The app navigation is still loading. Tell the member where to tap for now.' };
+      }
+      try {
+        shell.go(screen, tab ? { tab } : {});
+        return { ok: true, message: `Opening ${screen}${tab ? ' / ' + tab : ''} now.` };
+      } catch (e) {
+        return { ok: false, message: 'Could not open that screen. Tell the member where to tap instead.' };
+      }
     }
 
     function sendWs(payload) {
@@ -507,6 +568,24 @@
             streamMessage = null;
             setStatus('listening');
             break;
+          case 'toolCall': {
+            // Run the requested tool locally, then send the result back so the
+            // model can confirm the action aloud and finish its turn.
+            const result = event.name === 'navigate'
+              ? handleNavigateToolCall(event.args || {})
+              : { ok: false, message: 'That action is not available yet.' };
+            // toolResponse lets the Live session continue after a function call.
+            sendWs({
+              toolResponse: {
+                functionResponses: [{
+                  id: event.id || '',
+                  name: event.name || '',
+                  response: { result: result.message || (result.ok ? 'Done.' : 'Unavailable.') },
+                }],
+              },
+            });
+            break;
+          }
           case 'error':
             setErrorMessage(event.message);
             setStatus('error');

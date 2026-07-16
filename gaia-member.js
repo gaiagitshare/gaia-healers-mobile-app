@@ -404,9 +404,23 @@ body.gaia-booking-open{overflow:hidden;}
     const now = Date.now();
     const upcoming = appts.filter((a) => { const x = Date.parse(a.startTime || ''); return isFinite(x) && x > now; });
     const booking = (d.appts && d.appts.bookingLinks) || [];
+    // Render each upcoming appointment with date/time +, if it has a video
+    // meeting link (Zoom/Google Meet), a "Join meeting" button.
+    const apptRow = (a) => {
+      const dt = new Date(a.startTime);
+      const dateStr = isFinite(dt) ? dt.toLocaleDateString([], { month: 'short', day: 'numeric' }) + ' · ' + dt.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }) : '';
+      const meet = a.meetingLocation || '';
+      const isVideo = a.isVideo || /^(https?:)?\/\//.test(meet);
+      const meetType = a.meetingLocationType || '';
+      const meetLabel = meetType === 'zoom' ? 'Join Zoom' : meetType === 'gmeet' ? 'Join Google Meet' : meetType === 'phone' ? 'Phone call' : isVideo ? 'Join meeting' : '';
+      const joinBtn = (isVideo && meet)
+        ? '<a class="g-btn g-btn--primary g-btn--sm" href="' + esc(meet) + '" target="_blank" rel="noopener noreferrer">' + esc(meetLabel) + ' →</a>'
+        : (meetType === 'phone' && meet) ? '<span class="g-row__meta">' + esc(meet) + '</span>' : '';
+      return '<div class="g-row"><div class="flex-1"><p class="text-headline text-ink">' + esc(a.title || 'Appointment') + '</p><p class="gaia-caption">' + esc(dateStr) + (a.address ? ' · ' + esc(a.address) : '') + '</p></div>' + joinBtn + '</div>';
+    };
     cards.push(gMeCard('My bookings',
       (upcoming.length
-        ? gRows(upcoming.slice(0, 3).map((a) => gRow(a.title || 'Appointment', new Date(a.startTime).toLocaleDateString())))
+        ? upcoming.slice(0, 3).map(apptRow).join('')
         : '<p class="g-empty">No upcoming appointments.</p>')
       + (booking[0] ? '<div class="g-card__actions"><a class="g-btn g-btn--secondary g-btn--sm" href="' + esc(booking[0].openUrl) + '" target="_blank" rel="noopener noreferrer">Book a ' + esc(booking[0].name) + ' →</a></div>' : '')));
 

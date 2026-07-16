@@ -524,9 +524,9 @@
       }
       try {
         // Open in-app (modal iframe) so the member never leaves the app.
-        // Falls back to a new tab if GaiaBooking is unavailable.
-        if (window.GaiaBooking && typeof window.GaiaBooking.open === 'function') {
-          window.GaiaBooking.open(item.url, 'Book ' + item.label);
+        // Falls back to a new tab if GaiaInApp is unavailable.
+        if (window.GaiaInApp && typeof window.GaiaInApp.open === 'function') {
+          window.GaiaInApp.open(item.url, 'Book ' + item.label);
           return { ok: true, message: `Opening the booking calendar for the ${item.label} right here. Pick a time that works for you.` };
         }
         window.open(item.url, '_blank', 'noopener,noreferrer');
@@ -558,6 +558,12 @@
       const url = COMMUNITY_URLS[key] || PORTAL_FALLBACK;
       const isFallback = !COMMUNITY_URLS[key];
       try {
+        if (window.GaiaInApp && typeof window.GaiaInApp.open === 'function') {
+          window.GaiaInApp.open(url, name + ' community');
+          return { ok: true, message: isFallback
+            ? `Opening the ${name} community right here in the app.`
+            : `Opening the ${name} community now.` };
+        }
         window.open(url, '_blank', 'noopener,noreferrer');
         return { ok: true, message: isFallback
           ? `Opening the ${name} community in the Gaia portal.`
@@ -576,6 +582,10 @@
       };
       const url = urls[section] || urls.home;
       try {
+        if (window.GaiaInApp && typeof window.GaiaInApp.open === 'function') {
+          window.GaiaInApp.open(url, 'Gaia Member Portal');
+          return { ok: true, message: `Opening the Gaia member portal${section === 'courses' ? ' courses' : section === 'login' ? ' login' : ''} right here in the app.` };
+        }
         window.open(url, '_blank', 'noopener,noreferrer');
         return { ok: true, message: `Opening the Gaia member portal${section === 'courses' ? ' courses' : section === 'login' ? ' login' : ''} now.` };
       } catch (e) {

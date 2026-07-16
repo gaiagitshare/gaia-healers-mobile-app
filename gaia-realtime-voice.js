@@ -424,14 +424,14 @@
               },
               {
                 name: 'book_session',
-                description: 'Open a booking or session widget so the member can book an appointment, scan, demo, or call. Call this when the member asks to book, schedule, or reserve a session — for example "book a Bio-Well scan", "I want a demo", "book a discovery call", "schedule wellness coaching". Opens the real booking form in a new tab; the member completes the booking there.',
+                description: 'Open a booking or session widget so the member can book an appointment, scan, demo, call, or a 1:1 with the founder. Call this when the member asks to book, schedule, or reserve a session — for example "book a Bio-Well scan", "I want a demo", "book a discovery call", "schedule wellness coaching", or "book a call with Dr. Nima". Opens the real booking form in a new tab; the member completes the booking there.',
                 parameters: {
                   type: 'object',
                   properties: {
                     session: {
                       type: 'string',
-                      description: 'Which session to book.',
-                      enum: ['scan', 'demo', 'discovery', 'coaching'],
+                      description: 'Which session to book. nima = book a 1:1 meeting with Dr. Nima Farshid (the founder) via Calendly.',
+                      enum: ['nima', 'scan', 'demo', 'discovery', 'coaching'],
                     },
                   },
                   required: ['session'],
@@ -505,8 +505,11 @@
     }
 
     // Real booking widget URLs (verified live GHL slugs/ids, same as bookCard()
-    // in gaia-member.js). Opens in a new tab; the member completes booking there.
+    // in gaia-member.js) + the founder Dr. Nima's Calendly (verified on
+    // gaiahealers.com/pages/bio-well-demo). Opens in a new tab; the member
+    // completes booking there.
     const BOOKING_URLS = {
+      nima: { url: 'https://calendly.com/nimafarshid/gaia-healers-meeting', label: '1:1 with Dr. Nima' },
       scan: { url: 'https://api.leadconnectorhq.com/widget/bookings/scans', label: 'Bio-Well energy scan' },
       demo: { url: 'https://api.leadconnectorhq.com/widget/bookings/bio-welldemo', label: 'Bio-Well demo' },
       discovery: { url: 'https://api.leadconnectorhq.com/widget/form/mgf6oviyhPwrLBi03gzq', label: 'free discovery call' },
@@ -517,7 +520,7 @@
       const key = String(args.session || '').trim().toLowerCase();
       const item = BOOKING_URLS[key];
       if (!item) {
-        return { ok: false, message: 'I can book a Bio-Well scan, a demo, a free discovery call, or wellness coaching. Which one?' };
+        return { ok: false, message: 'I can book a 1:1 with Dr. Nima, a Bio-Well scan, a demo, a free discovery call, or wellness coaching. Which one?' };
       }
       try {
         window.open(item.url, '_blank', 'noopener,noreferrer');

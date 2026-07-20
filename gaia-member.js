@@ -39,6 +39,19 @@ body.gaia-booking-open{overflow:hidden;}
 /* iOS safe-area so the modal clears the notch/home indicator. */
 .gaia-booking-modal__sheet{padding-bottom:env(safe-area-inset-bottom,0);}
 .gaia-booking-modal__head{padding-top:max(14px,env(safe-area-inset-top,0));}
+/* Auth overlay — shown when an auth-dependent portal iframe stays blank (the
+   portal couldn't establish its session inside the iframe). Replaces the blank
+   screen with a clear, in-app sign-in path. */
+.gaia-booking-modal__auth{position:absolute;inset:0;background:#FAFCF7;display:flex;align-items:center;justify-content:center;padding:24px;text-align:center;}
+.gaia-booking-modal__auth[hidden]{display:none;}
+.gaia-booking-modal__auth-card{max-width:320px;display:flex;flex-direction:column;gap:12px;align-items:stretch;}
+.gaia-booking-modal__auth-title{font-size:1.15rem;font-weight:700;color:#1C1C1E;margin:0;}
+.gaia-booking-modal__auth-body{font-size:.95rem;color:#545458; line-height:1.5;margin:0;}
+.gaia-booking-modal__auth-hint{font-size:.8rem;color:#86868B;margin:0;}
+.gaia-btn{display:inline-flex;align-items:center;justify-content:center;min-height:48px;padding:12px 18px;border-radius:12px;
+  background:#5CB82E;color:#fff;font-weight:600;font-size:1rem;text-decoration:none;-webkit-tap-highlight-color:transparent;
+  border:none;cursor:pointer;}
+.gaia-btn:active{background:#4A9324;}
 @media(min-width:640px){.gaia-booking-modal{align-items:center;}.gaia-booking-modal__sheet{height:88vh;height:88dvh;border-radius:20px;}}
 `;
     document.head.appendChild(st);
@@ -232,29 +245,13 @@ body.gaia-booking-open{overflow:hidden;}
   // allow iframe embedding; a new-tab fallback is always shown at the bottom.
   let inAppModal = null;
 
-  // Detect browsers that are KNOWN to block third-party cookies inside iframes.
-  // iOS Safari (Intelligent Tracking Prevention) is the main offender — it
-  // refuses to let education.gaiahealers.com read its own login cookie when the
-  // iframe host is gaiahealers.app. Firefox's strict mode does the same. For
-  // these browsers, auth-dependent portals MUST open in a real new tab; trying
-  // the iframe first and falling back just shows the user a blank screen.
-  // (Chrome's cookie-blocking is rolled out gradually, so for Chrome we keep
-  // the iframe attempt and rely on the in-modal timeout fallback below.)
-  function blocksThirdPartyIframeCookies() {
-    try {
-      const ua = navigator.userAgent || '';
-      const isIOS = /iPad|iPhone|iPod/.test(ua) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
-      const isSafari = /^((?!chrome|android|crios|fxios).)*safari/i.test(ua);
-      if (isIOS || isSafari) return true;
-      if (ua.includes('Firefox')) return true;
-    } catch (_) {}
-    return false;
-  }
 
-  // Hosts whose pages REQUIRE their own auth cookies (login/session). These CANNOT
-  // be reliably embedded in an iframe on iOS/Safari because the browser blocks
-  // third-party cookies → the page can't log in → blank screen. For these, we
-  // open a real new tab on cookie-blocking browsers.
+
+  // Hosts whose pages REQUIRE their own auth (login/session). When embedded as
+  // a cross-origin iframe, the portal's session cookies may be partitioned or
+  // blocked (iOS Safari ITP, Firefox strict mode). We STILL try the iframe
+  // first — the user wants to stay in-app — but we request Storage Access and
+  // surface a clear "Sign in to continue" prompt if the page stays blank.
   const AUTH_DEPENDENT_HOSTS = [
     'education.gaiahealers.com',
     'gaiapractitioners.com',
@@ -265,37 +262,65 @@ body.gaia-booking-open{overflow:hidden;}
     try { return new URL(u, window.location.href).hostname.replace(/^www\./, ''); } catch (_) { return ''; }
   }
 
+  // Ask Safari/Firefox to grant this cross-origin iframe access to its own
+  // first-party storage. Resolves true if granted (or unsupported = best effort).
+  // Must be called from a user gesture (which openInApp is).
+  function requestStorageAccessForHost(host) {
+    return new Promise((resolve) => {
+      try {
+        const doc = document;
+        if (typeof doc.requestStorageAccess === 'function') {
+          // Modern API: per-host.
+          Promise.resolve(doc.requestStorageAccess(host)).then(() => resolve(true)).catch(() => resolve(false));
+          return;
+        }
+        if (typeof document.requestStorageAccess === 'function') {
+          Promise.resolve(document.requestStorageAccess()).then(() => resolve(true)).catch(() => resolve(false));
+          return;
+        }
+      } catch (_) {}
+      resolve(false);
+    });
+  }
+
   function openInApp(rawUrl, title) {
     const url = String(rawUrl || '').trim();
     if (!url) return;
     const host = hostOf(url);
-
-    // Decision: iframe modal vs. real new tab.
-    // - Auth-dependent portal on a browser that blocks 3rd-party iframe cookies
-    //   → open in a new tab (the portal's cookies work there).
-    // - Everything else (Calendly widgets, etc.) → iframe modal.
-    const needsExternal = AUTH_DEPENDENT_HOSTS.includes(host) && blocksThirdPartyIframeCookies();
-    if (needsExternal) {
-      try {
-        const w = window.open(url, '_blank', 'noopener,noreferrer');
-        if (w) { w.focus(); return; }
-      } catch (_) {}
-      // window.open blocked (popup blocker / standalone PWA) → location fallback
-      // to a named target so it still leaves the session intact.
-      const a = document.createElement('a');
-      a.href = url; a.target = '_blank'; a.rel = 'noopener noreferrer';
-      document.body.appendChild(a); a.click(); a.remove();
-      return;
-    }
+    const isAuthPortal = AUTH_DEPENDENT_HOSTS.includes(host);
 
     // Calendly inline embeds use query flags; everything else embeds as-is.
     const embedUrl = url.includes('calendly.com')
       ? url + (url.includes('?') ? '&' : '?') + 'embed_logo=false&embed_type=Inline'
       : url;
+
+    // For auth-dependent portals, ask the browser to grant the iframe access to
+    // its own cookies BEFORE we render it. This is the modern (Safari 16.4+,
+    // Firefox 118+) way to make cross-domain iframes work in-app. If the user
+    // grants it, the portal can read its session cookie inside the modal.
+    if (isAuthPortal) {
+      requestStorageAccessForHost(host).finally(() => actuallyOpenInApp(url, embedUrl, title, isAuthPortal));
+    } else {
+      actuallyOpenInApp(url, embedUrl, title, isAuthPortal);
+    }
+  }
+
+  function actuallyOpenInApp(url, embedUrl, title, isAuthPortal) {
     closeInApp();
     const lastTrigger = document.activeElement; // for focus restore on close
     inAppModal = document.createElement('div');
     inAppModal.className = 'gaia-booking-modal';
+    // The auth overlay is hidden initially — only shown if the iframe stays
+    // blank past a grace period (i.e. the portal couldn't establish a session).
+    const authOverlay = isAuthPortal
+      ? '<div class="gaia-booking-modal__auth" data-auth-overlay hidden>'
+        + '<div class="gaia-booking-modal__auth-card">'
+        + '<p class="gaia-booking-modal__auth-title">Sign in to continue</p>'
+        + '<p class="gaia-booking-modal__auth-body">Your courses live in the Gaia Healers portal, which needs its own sign-in. Tap below to sign in once — you\'ll come right back to the app.</p>'
+        + '<a class="gaia-btn gaia-btn--primary" href="' + esc(url) + '" target="_blank" rel="noopener noreferrer">Sign in to the portal →</a>'
+        + '<p class="gaia-booking-modal__auth-hint">After signing in, return to the Gaia app and tap the course again.</p>'
+        + '</div></div>'
+      : '';
     inAppModal.innerHTML =
       '<div class="gaia-booking-modal__backdrop" data-book-close></div>'
       + '<div class="gaia-booking-modal__sheet" role="dialog" aria-modal="true" aria-label="' + esc(title || 'Open') + '">'
@@ -304,9 +329,10 @@ body.gaia-booking-open{overflow:hidden;}
       + '<button type="button" class="gaia-booking-modal__close" data-book-close aria-label="Close">&times;</button>'
       + '</div>'
       + '<div class="gaia-booking-modal__body">'
-      + '<iframe src="' + esc(embedUrl) + '" title="' + esc(title || 'Content') + '" scrolling="yes" allow="camera; microphone; fullscreen" loading="lazy"></iframe>'
+      + '<iframe src="' + esc(embedUrl) + '" title="' + esc(title || 'Content') + '" scrolling="yes" allow="camera; microphone; fullscreen; storage-access" loading="lazy"></iframe>'
       + '<div class="gaia-booking-modal__loading"><span class="gaia-booking-modal__spinner"></span>Loading…</div>'
-      + '<a class="gaia-booking-modal__fallback" href="' + esc(url) + '" target="_blank" rel="noopener noreferrer">Not loading? Open in a new tab →</a>'
+      + authOverlay
+      + '<a class="gaia-booking-modal__fallback" href="' + esc(url) + '" target="_blank" rel="noopener noreferrer">Open in a new tab →</a>'
       + '</div></div>';
     document.body.appendChild(inAppModal);
     document.body.classList.add('gaia-booking-open');
@@ -334,21 +360,35 @@ body.gaia-booking-open{overflow:hidden;}
     };
 
     const iframe = inAppModal.querySelector('iframe');
+    let loaded = false;
     if (iframe) {
       iframe.addEventListener('load', () => {
+        loaded = true;
         const ld = inAppModal.querySelector('.gaia-booking-modal__loading');
         if (ld) ld.style.display = 'none';
       });
-      // Safety net: if the iframe hasn't fired `load` after 8s, surface the
-      // "open in new tab" fallback prominently (likely an auth/cookie failure).
-      setTimeout(() => {
-        if (!inAppModal) return;
-        const ld = inAppModal.querySelector('.gaia-booking-modal__loading');
-        if (ld && ld.style.display !== 'none') {
+      // For auth portals: if the iframe hasn't fired `load` after 4s (likely a
+      // blocked cookie / silent auth failure), surface the "Sign in" overlay so
+      // the user isn't stuck staring at a blank page. We DON'T auto-redirect —
+      // the user asked to stay in-app — but we make the path forward obvious.
+      if (isAuthPortal) {
+        setTimeout(() => {
+          if (!inAppModal || loaded) return;
+          const overlay = inAppModal.querySelector('[data-auth-overlay]');
+          if (overlay) {
+            overlay.hidden = false;
+            const ld = inAppModal.querySelector('.gaia-booking-modal__loading');
+            if (ld) ld.style.display = 'none';
+          }
+        }, 4000);
+      } else {
+        // Non-auth iframe (Calendly etc.): just promote the fallback if it's slow.
+        setTimeout(() => {
+          if (!inAppModal || loaded) return;
           const fb = inAppModal.querySelector('.gaia-booking-modal__fallback');
-          if (fb) { fb.style.padding = '16px'; fb.style.fontWeight = '600'; fb.textContent = 'This page needs to open outside the app. Tap here →'; }
-        }
-      }, 8000);
+          if (fb) { fb.style.padding = '16px'; fb.style.fontWeight = '600'; fb.textContent = 'Taking a while? Open in a new tab →'; }
+        }, 8000);
+      }
     }
     inAppModal.querySelectorAll('[data-book-close]').forEach((el) => {
       el.addEventListener('click', closeInApp);

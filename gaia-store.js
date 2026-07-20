@@ -94,18 +94,34 @@
   function maybeLoad() { if (currentView() === 'store') loadStoreProducts(); }
 
   // Store tabs: Shop | Membership (only one panel visible → shorter page).
+  // `activate(key)` programatically selects a tab; `bindStoreTabs()` wires clicks.
+  function activateStoreTab(key) {
+    if (!key) return;
+    const tabs = document.querySelectorAll('.g-store [data-store-tab]');
+    if (!tabs.length) return;
+    let target = null;
+    tabs.forEach((t) => { if (t.dataset.storeTab === key) target = t; });
+    if (!target) return; // requested tab doesn't exist → leave current
+    tabs.forEach((t) => { const on = t === target; t.classList.toggle('is-active', on); t.setAttribute('aria-selected', String(on)); });
+    const products = document.getElementById('store-products');
+    const members = document.getElementById('store-memberships');
+    if (products) products.hidden = key !== 'shop';
+    if (members) members.hidden = key !== 'membership';
+  }
   function bindStoreTabs() {
     const tabs = document.querySelectorAll('.g-store [data-store-tab]');
     if (!tabs.length) return;
-    tabs.forEach((tab) => tab.addEventListener('click', () => {
-      const key = tab.dataset.storeTab;
-      tabs.forEach((t) => { const on = t === tab; t.classList.toggle('is-active', on); t.setAttribute('aria-selected', String(on)); });
-      const products = document.getElementById('store-products');
-      const members = document.getElementById('store-memberships');
-      if (products) products.hidden = key !== 'shop';
-      if (members) members.hidden = key !== 'membership';
-    }));
+    tabs.forEach((tab) => tab.addEventListener('click', () => activateStoreTab(tab.dataset.storeTab)));
   }
+  // Respond to programmatic navigation (e.g. Academy "Get access" → store/membership).
+  // Without this, navigate('store', { tab: 'membership' }) opened the Store screen
+  // but left the Shop tab active.
+  window.addEventListener('gaia:route', (e) => {
+    const d = (e && e.detail) || {};
+    if (d.view === 'store' && d.tab) activateStoreTab(d.tab);
+  });
+  // Expose for other modules to call directly.
+  window.GaiaStoreTabs = { activate: activateStoreTab };
 
   window.addEventListener('gaia:route', maybeLoad);
   document.addEventListener('DOMContentLoaded', () => { maybeLoad(); bindStoreTabs(); });

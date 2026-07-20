@@ -442,14 +442,25 @@ body.gaia-booking-open{overflow:hidden;}
 
   // Academy = honest course portal. Lesson progress isn't exposed by GHL, so we
   // deep-link into the portal instead of faking progress bars.
-  // Signed-in members → "Open" the course in the portal (in-app modal).
-  // Signed-out visitors → "Get access" routes them to buy a membership first,
-  //   so they never hit a portal login wall with no context.
+  // ACCESS GATING: only paid members (Silver/Gold) or Practitioners see "Open"
+  //   on courses. Everyone else (signed-out OR signed-in free users) sees
+  //   "Get access" → buy membership, plus "Sign in" if not signed in.
+  //   This prevents free users from hitting the portal's login wall, which
+  //   happens because the app session and the GHL Client Portal session are
+  //   separate — only paid members should be sent there.
   function renderAcademy() {
     const box = el('member-academy');
     if (!box) return;
     const cap = el('academy-summary-caption');
-    if (cap) cap.textContent = state.authed ? 'Your courses live in the Gaia Healers portal.' : 'Become a member to unlock the full Academy.';
+    const acc = (state.data.access && state.data.access.member) || {};
+    const tier = String(acc.membershipTier || '').toLowerCase();
+    // hasAccess = a paying member (Silver/Gold) or an earned practitioner.
+    // A signed-in free Explorer does NOT get course access — they'd just hit
+    // the portal login wall.
+    const hasAccess = state.authed && (tier === 'silver' || tier === 'gold' || acc.practitioner);
+    if (cap) cap.textContent = hasAccess
+      ? 'Your courses live in the Gaia Healers portal.'
+      : 'Become a member to unlock the full Academy.';
     const courses = state.data.courses || {};
     const hub = courses.portalUrl || (portalBase() + '/courses');
     const tracks = [
@@ -457,19 +468,19 @@ body.gaia-booking-open{overflow:hidden;}
       { name: 'Colour Energy', desc: 'Colour therapy foundations & practitioner path.' },
       { name: 'BioPulsar Training', desc: 'Aura imaging & biofeedback device training.' },
     ];
-    // Member: link to the course hub (interceptor opens it in the in-app modal).
-    // Non-member: button navigates to Store → Membership tab (in-app).
-    const trackCard = (t) => state.authed
+    // Paid member / practitioner → "Open" the course in the portal (in-app modal).
+    // Everyone else → "Get access" routes to Store → Membership tab (in-app).
+    const trackCard = (t) => hasAccess
       ? '<a class="g-access g-access--unlocked g-access--link" href="' + esc(hub) + '">'
         + '<div class="g-access__body"><span class="g-access__name">' + esc(t.name) + '</span><span class="g-access__meta">' + esc(t.desc) + '</span></div>'
         + '<span class="g-chip g-chip--on g-access__act">Open →</span></a>'
       : '<div class="g-access g-access--locked g-access--link" data-track-cta>'
         + '<div class="g-access__body"><span class="g-access__name">' + esc(t.name) + '</span><span class="g-access__meta">' + esc(t.desc) + '</span></div>'
         + '<span class="g-chip g-access__act">Get access →</span></div>';
-    const academyHead = state.authed
+    const academyHead = hasAccess
       ? '<article class="g-card g-card--feature"><p class="g-card__label">Academy</p>'
         + '<p class="g-card__value g-card__value--lg">Continue learning</p>'
-        + '<p class="g-card__meta">Your courses, lessons, and certificates live in the Gaia Healers portal. Gaia can guide you — lesson progress opens in the portal.</p>'
+        + '<p class="g-card__meta">Your courses, lessons, and certificates live in the Gaia Healers portal. You will sign in there with your Gaia email to open your lessons.</p>'
         + '<div class="g-card__actions"><a class="g-btn g-btn--primary g-btn--sm" href="' + esc(hub) + '">Open Academy →</a></div></article>'
       : '<article class="g-card g-card--feature"><p class="g-card__label">Academy</p>'
         + '<p class="g-card__value g-card__value--lg">Learn & get certified</p>'
@@ -479,10 +490,17 @@ body.gaia-booking-open{overflow:hidden;}
       academyHead,
       gSec('Explore tracks', '<div class="g-access-grid">' + tracks.map(trackCard).join('') + '</div>'),
     ];
+    // The bottom card adapts to the user's state:
+    //  - Not signed in → "Already a member? Sign in"
+    //  - Signed in but no paid access → "Upgrade to unlock the Academy"
     if (!state.authed) {
       parts.push('<article class="g-card"><p class="g-card__label">Already a member?</p>'
         + '<p class="g-card__meta">Sign in with your Gaia email to open your courses and see what your membership unlocks.</p>'
         + '<div class="g-card__actions"><button type="button" class="g-btn g-btn--secondary g-btn--sm" data-academy-signin>Sign in</button></div></article>');
+    } else if (!hasAccess) {
+      parts.push('<article class="g-card"><p class="g-card__label">Unlock the Academy</p>'
+        + '<p class="g-card__meta">You are signed in on a free account. Upgrade to Silver to unlock all courses, certificates, and practitioner communities.</p>'
+        + '<div class="g-card__actions"><button type="button" class="g-btn g-btn--primary g-btn--sm" data-track-cta>View memberships →</button></div></article>');
     }
     box.innerHTML = parts.join('');
     // Wire the membership / sign-in CTAs for non-members.

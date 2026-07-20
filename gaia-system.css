@@ -136,7 +136,7 @@
 .g-sec-head__kicker{font:600 11px/1 var(--g-font-mono);letter-spacing:.16em;text-transform:uppercase;color:var(--g-accent);margin:0}
 .g-sec-head__title{font-family:var(--g-font-serif);font-weight:600;font-size:clamp(24px,6vw,30px);
   line-height:1;letter-spacing:-.02em;color:var(--g-text);margin:0;text-wrap:balance}
-.g-chakra-hero__stage{height:min(52vh,460px);display:flex;justify-content:center;align-items:center}
+.g-chakra-hero__stage{height:min(52vh,460px);height:min(52dvh,460px);display:flex;justify-content:center;align-items:center}
 .g-chakra-hero__fig{position:relative;height:100%}
 .g-chakra-hero__fig img{height:100%;width:auto;display:block;
   animation:g-breathe 8s var(--g-ease) infinite}
@@ -317,7 +317,7 @@ a.g-access:hover{border-color:rgba(125,217,86,.4)}
 /* Birth-date chakra reading (Profile) ----------------------- */
 .g-dob{margin-top:var(--g-s3);appearance:none;width:100%;background:var(--g-surface-hi);
   border:1px solid var(--g-line);border-radius:var(--g-r-md);color:var(--g-text);
-  padding:11px 14px;font:500 15px var(--g-font)}
+  padding:11px 14px;font:500 16px var(--g-font)}
 .g-dob::-webkit-calendar-picker-indicator{filter:invert(1) opacity(.55);cursor:pointer}
 .g-chakra-read{display:flex;align-items:center;gap:var(--g-s3);margin-top:var(--g-s3);min-height:44px}
 .g-chakra-dot{flex:none;width:34px;height:34px;border-radius:var(--g-r-pill);box-shadow:0 0 16px currentColor}
@@ -332,7 +332,7 @@ a.g-access:hover{border-color:rgba(125,217,86,.4)}
 .g-field:first-child{margin-top:0}
 .g-label{font:600 12px/1 var(--g-font-mono);letter-spacing:.05em;text-transform:uppercase;color:var(--g-text-muted)}
 .g-input,.g-textarea{appearance:none;width:100%;background:var(--g-surface-hi);border:1px solid var(--g-line);
-  border-radius:var(--g-r-md);color:var(--g-text);padding:11px 13px;font:500 15px var(--g-font)}
+  border-radius:var(--g-r-md);color:var(--g-text);padding:11px 13px;font:500 16px var(--g-font)}
 .g-input:focus,.g-textarea:focus{outline:none;border-color:var(--g-accent);box-shadow:var(--g-focus)}
 .g-textarea{min-height:84px;resize:vertical;line-height:1.45}
 .g-input::placeholder,.g-textarea::placeholder{color:var(--g-text-muted)}
@@ -473,9 +473,12 @@ a.g-card:active,.g-tile:active,.g-quiz-opt:active{transform:scale(.99)}
 .g-quiz__kicker{font:600 10.5px/1 var(--g-font-mono);letter-spacing:.12em;text-transform:uppercase;color:var(--ck,var(--g-accent));margin:0}
 .g-quiz__result-name{font-family:var(--g-font-serif);font-weight:600;font-size:26px;color:var(--g-text);margin:4px 0 0}
 
-/* ---------- Desktop: use the width, don't stretch a phone ---------- */
-@media (min-width:900px){
-  /* widen the shell ONLY while a redesigned (g-*) screen is active */
+/* ---------- Tablet (≥768px): fill the screen, don't float a tiny phone column ---------- */
+@media (min-width:768px){
+  /* widen the shell when a redesigned (g-*) screen is active. The non-:has()
+     line is a fallback for Safari <15.4 / older browsers that don't support
+     :has() — without it the desktop layout silently stays at phone width. */
+  body.gaia-v2 .gaia-shell{max-width:1000px !important;}
   body.gaia-v2 .gaia-shell:has(.gaia-screen[data-screen="today"].is-active),
   body.gaia-v2 .gaia-shell:has(.gaia-screen[data-screen="store"].is-active),
   body.gaia-v2 .gaia-shell:has(.gaia-screen[data-screen="community"].is-active),
@@ -483,16 +486,23 @@ a.g-card:active,.g-tile:active,.g-quiz-opt:active{transform:scale(.99)}
   body.gaia-v2 .gaia-shell:has(.gaia-screen[data-screen="profile"].is-active){
     max-width:1000px !important;
   }
-  /* Store: horizontal rails become full galleries on desktop */
-  .g-store{padding-left:var(--g-s7);padding-right:var(--g-s7)}
-  /* generic g-* pages breathe on desktop; access lists go 2-up */
-  .g-page{padding-left:var(--g-s7);padding-right:var(--g-s7)}
+  /* Keep the floating tabbar pill centered under the widened shell. */
+  body.gaia-v2 .gaia-tabbar,
+  body.gaia-v2 .gaia-tabbar__inner{max-width:1000px !important;margin-left:auto !important;margin-right:auto !important;}
+  /* 2-up grids breathe on tablet & desktop. */
   .g-access-grid{display:grid;grid-template-columns:1fr 1fr;gap:var(--g-s3)}
   .g-daily{display:grid;grid-template-columns:1fr 1fr;gap:var(--g-s3);align-items:start}
   .g-home-pair{display:grid;grid-template-columns:1fr 1fr;gap:var(--g-s4);align-items:start}
-  .g-store-rail{display:grid;grid-template-columns:repeat(auto-fill,minmax(11rem,1fr));
-    overflow:visible;gap:var(--g-s4)}
+  .g-store-rail{display:grid;grid-template-columns:repeat(auto-fill,minmax(11rem,1fr));overflow:visible;gap:var(--g-s4)}
   .g-store-rail .g-tile{flex:auto}
+}
+
+/* ---------- Desktop (≥900px): chakra hero, side-by-side CTAs, wider gaps ---------- */
+@media (min-width:900px){
+  /* Store: horizontal rails become full galleries on desktop */
+  .g-store{padding-left:var(--g-s7);padding-right:var(--g-s7)}
+  /* generic g-* pages breathe on desktop */
+  .g-page{padding-left:var(--g-s7);padding-right:var(--g-s7)}
   .g-home{padding-left:var(--g-s7);padding-right:var(--g-s7);gap:var(--g-s7)}
   .g-topbar{padding-left:var(--g-s7);padding-right:var(--g-s7)}
   .g-hero{min-height:280px;padding:var(--g-s8) var(--g-s7)}
@@ -510,4 +520,70 @@ a.g-card:active,.g-tile:active,.g-quiz-opt:active{transform:scale(.99)}
     linear-gradient(90deg,rgba(5,7,10,.94) 18%,rgba(5,7,10,.45) 48%,transparent 72%)}
   .g-chakra-hero__title{font-size:clamp(42px,4.4vw,62px)}
   .g-chakra-hero__caption{font-size:15px}
+}
+
+/* ============================================================
+   iOS / mobile polish (2026-07-21)
+   - Global tap-highlight removal (no more gray flash on buttons)
+   - :hover rules gated to real hover-capable pointers (no sticky hover on touch)
+   - 44px minimum tap targets for tabs, buttons, chakra hits
+   - position:sticky vendor prefix
+   - color-scheme: dark on form controls so native widgets match the dark UI
+   ============================================================ */
+html { -webkit-tap-highlight-color: transparent; }
+a, button, [role="button"], input[type="submit"], input[type="button"], input[type="reset"],
+.g-btn, .g-tab, .g-card--interactive, .g-tile, .g-quiz-opt, .g-access, .g-ann,
+.g-chakra-hero__hit, [data-open-in-app], [data-book-inline], [data-track-cta] {
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* Global dark color-scheme so native form controls render dark to match the UI. */
+html { color-scheme: dark; }
+
+/* Sticky vendor prefix (older iOS Safari ≤13). */
+.gaia-header { position: -webkit-sticky; position: sticky; }
+
+/* 44px minimum tap targets (Apple HIG). */
+.g-tab { min-height: 44px; }
+.g-btn--sm { min-height: 40px; }
+
+/* Larger, easier-to-tap chakra hotspots on the body map. */
+.g-chakra-hero__hit { width: 44px; height: 44px; }
+.g-chakra-hero__hit::after { inset: 11px; }
+
+/* data-track-cta is now a <button>; reset native button chrome so it still
+   looks like the g-access card it replaced. */
+button.g-access.g-access--link {
+  text-align: left; width: 100%;
+  font: inherit; color: inherit; background: none; border: 1px solid var(--g-line);
+  cursor: pointer;
+}
+
+/* Real-pointer-only hover effects. On iOS, bare :hover gets "stuck" after a
+   tap, so buttons/links look permanently lifted/highlighted. Re-declare the
+   hover styling here inside @media (hover:hover) so touch devices never apply it. */
+@media (hover: hover) {
+  .g-btn--primary:hover { filter: brightness(1.06); }
+  .g-btn--secondary:hover { border-color: var(--g-line-strong); }
+  .g-btn--ghost:hover { filter: brightness(1.12); }
+  .g-btn--pill:hover { background: var(--g-surface-hi); }
+  .g-card--interactive:hover { border-color: var(--g-line-strong); transform: translateY(-2px); }
+  .g-tile:hover .g-tile__media { transform: scale(1.02); border-color: var(--g-line-strong); }
+  .g-chakra-hero__hit:hover::after { border-color: rgba(255,255,255,.5); }
+  a.g-row--link:hover, a.g-row--link:hover .g-row__meta { color: var(--g-accent); }
+  a.g-access:hover { border-color: rgba(125,217,86,.4); }
+  .g-tag button:hover { color: #F5C518; }
+  a.g-ann:hover { border-color: rgba(125,217,86,.4); }
+  .g-quiz-opt:hover { border-color: var(--g-accent); background: var(--g-surface); }
+}
+
+/* Suppress the inherited "stuck" hover on touch devices by overriding the
+   transform/filter changes back to neutral when the pointer can't hover. */
+@media (hover: none) {
+  .g-card--interactive:hover,
+  .g-tile:hover .g-tile__media,
+  .g-access:hover,
+  .gaia-chakra-teaser:hover,
+  .gaia-bento__tile:hover,
+  .gaia-assist__chips button:hover { transform: none !important; filter: none !important; }
 }

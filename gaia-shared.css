@@ -2013,7 +2013,7 @@ body[data-theme="dark"] .gaia-assist {
   bottom: calc(4.85rem + env(safe-area-inset-bottom));
   transform: translateX(-50%);
   width: min(21.5rem, calc(100vw - 1.5rem));
-  max-height: min(24rem, calc(100vh - 6rem - env(safe-area-inset-top)));
+  max-height: min(24rem, calc(100vh - 6rem - env(safe-area-inset-top))); max-height: min(24rem, calc(100dvh - 6rem - env(safe-area-inset-top)));
   display: flex;
   flex-direction: column;
   gap: 0.55rem;

@@ -13,31 +13,33 @@
     st.id = 'gaia-booking-modal-styles';
     st.textContent = `
 .gaia-booking-modal{position:fixed;inset:0;z-index:100;display:flex;align-items:flex-end;justify-content:center;}
-.gaia-booking-modal__backdrop{position:absolute;inset:0;background:rgba(0,0,0,.5);backdrop-filter:blur(2px);}
-.gaia-booking-modal__sheet{position:relative;width:100%;max-width:480px;height:92vh;display:flex;flex-direction:column;
+.gaia-booking-modal__backdrop{position:absolute;inset:0;background:rgba(0,0,0,.5);-webkit-backdrop-filter:blur(2px);backdrop-filter:blur(2px);}
+.gaia-booking-modal__sheet{position:relative;width:100%;max-width:480px;height:92vh;height:92dvh;display:flex;flex-direction:column;
   background:#fff;border-radius:20px 20px 0 0;box-shadow:0 -8px 40px rgba(0,0,0,.18);overflow:hidden;
   animation:gaia-booking-up .25s ease-out;}
 @keyframes gaia-booking-up{from{transform:translateY(100%)}to{transform:translateY(0)}}
 .gaia-booking-modal__head{display:flex;align-items:center;justify-content:space-between;padding:14px 16px;
   border-bottom:1px solid rgba(0,0,0,.07);flex-shrink:0;}
 .gaia-booking-modal__title{font-size:1.05rem;font-weight:600;color:#1C1C1E;margin:0;}
-.gaia-booking-modal__close{flex-shrink:0;width:36px;height:36px;border:none;border-radius:50%;background:#F5F5F7;
-  color:#636366;font-size:1.4rem;line-height:1;cursor:pointer;display:flex;align-items:center;justify-content:center;}
+.gaia-booking-modal__close{flex-shrink:0;width:44px;height:44px;border:none;border-radius:50%;background:#F5F5F7;
+  color:#636366;font-size:1.4rem;line-height:1;cursor:pointer;display:flex;align-items:center;justify-content:center;
+  -webkit-tap-highlight-color:transparent;}
 .gaia-booking-modal__close:active{background:#EFEFF0;}
-.gaia-booking-modal__body{flex:1;position:relative;overflow:hidden;}
+.gaia-booking-modal__body{flex:1;position:relative;overflow:auto;-webkit-overflow-scrolling:touch;}
 .gaia-booking-modal__body iframe{position:absolute;inset:0;width:100%;height:100%;border:none;}
 .gaia-booking-modal__loading{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;gap:10px;
   color:#AEAEB2;font-size:.9rem;background:#fff;}
 .gaia-booking-modal__spinner{width:18px;height:18px;border:2px solid #E5E5EA;border-top-color:#5CB82E;border-radius:50%;animation:gaia-spin .8s linear infinite;}
 @keyframes gaia-spin{to{transform:rotate(360deg)}}
 .gaia-booking-modal__fallback{display:block;text-align:center;padding:12px;font-size:.9rem;color:#5CB82E;
-  background:#F6FBF3;border-top:1px solid rgba(92,184,46,.25);text-decoration:none;flex-shrink:0;font-weight:500;}
+  background:#F6FBF3;border-top:1px solid rgba(92,184,46,.25);text-decoration:none;flex-shrink:0;font-weight:500;
+  -webkit-tap-highlight-color:transparent;}
 .gaia-booking-modal__fallback:active{background:#ECF7E6;}
 body.gaia-booking-open{overflow:hidden;}
 /* iOS safe-area so the modal clears the notch/home indicator. */
 .gaia-booking-modal__sheet{padding-bottom:env(safe-area-inset-bottom,0);}
 .gaia-booking-modal__head{padding-top:max(14px,env(safe-area-inset-top,0));}
-@media(min-width:640px){.gaia-booking-modal{align-items:center;}.gaia-booking-modal__sheet{height:88vh;border-radius:20px;}}
+@media(min-width:640px){.gaia-booking-modal{align-items:center;}.gaia-booking-modal__sheet{height:88vh;height:88dvh;border-radius:20px;}}
 `;
     document.head.appendChild(st);
   }
@@ -291,22 +293,46 @@ body.gaia-booking-open{overflow:hidden;}
       ? url + (url.includes('?') ? '&' : '?') + 'embed_logo=false&embed_type=Inline'
       : url;
     closeInApp();
+    const lastTrigger = document.activeElement; // for focus restore on close
     inAppModal = document.createElement('div');
     inAppModal.className = 'gaia-booking-modal';
     inAppModal.innerHTML =
       '<div class="gaia-booking-modal__backdrop" data-book-close></div>'
-      + '<div class="gaia-booking-modal__sheet" role="dialog" aria-label="' + esc(title || 'Open') + '">'
+      + '<div class="gaia-booking-modal__sheet" role="dialog" aria-modal="true" aria-label="' + esc(title || 'Open') + '">'
       + '<div class="gaia-booking-modal__head">'
       + '<h2 class="gaia-booking-modal__title">' + esc(title || 'Open') + '</h2>'
       + '<button type="button" class="gaia-booking-modal__close" data-book-close aria-label="Close">&times;</button>'
       + '</div>'
       + '<div class="gaia-booking-modal__body">'
-      + '<iframe src="' + esc(embedUrl) + '" title="' + esc(title || 'Content') + '" allow="camera; microphone; fullscreen" loading="lazy"></iframe>'
+      + '<iframe src="' + esc(embedUrl) + '" title="' + esc(title || 'Content') + '" scrolling="yes" allow="camera; microphone; fullscreen" loading="lazy"></iframe>'
       + '<div class="gaia-booking-modal__loading"><span class="gaia-booking-modal__spinner"></span>Loading…</div>'
       + '<a class="gaia-booking-modal__fallback" href="' + esc(url) + '" target="_blank" rel="noopener noreferrer">Not loading? Open in a new tab →</a>'
       + '</div></div>';
     document.body.appendChild(inAppModal);
     document.body.classList.add('gaia-booking-open');
+
+    // A11y: focus the close button on open, trap Tab inside the modal, restore
+    // focus to the trigger element on close, and allow ESC to dismiss.
+    const sheet = inAppModal.querySelector('.gaia-booking-modal__sheet');
+    const closeBtn = inAppModal.querySelector('.gaia-booking-modal__close');
+    if (closeBtn) closeBtn.focus();
+    const onKey = (e) => {
+      if (e.key === 'Escape') { e.preventDefault(); closeInApp(); return; }
+      if (e.key !== 'Tab' || !sheet) return;
+      const focusables = sheet.querySelectorAll('a[href],button:not([disabled]),input:not([disabled]),[tabindex]:not([tabindex="-1"])');
+      if (!focusables.length) return;
+      const first = focusables[0], last = focusables[focusables.length - 1];
+      if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
+      else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
+    };
+    document.addEventListener('keydown', onKey);
+    inAppModal._cleanup = () => {
+      document.removeEventListener('keydown', onKey);
+      if (lastTrigger && typeof lastTrigger.focus === 'function') {
+        try { lastTrigger.focus(); } catch (_) {}
+      }
+    };
+
     const iframe = inAppModal.querySelector('iframe');
     if (iframe) {
       iframe.addEventListener('load', () => {
@@ -329,7 +355,10 @@ body.gaia-booking-open{overflow:hidden;}
     });
   }
   function closeInApp() {
-    if (inAppModal) { inAppModal.remove(); inAppModal = null; }
+    if (inAppModal) {
+      if (typeof inAppModal._cleanup === 'function') inAppModal._cleanup();
+      inAppModal.remove(); inAppModal = null;
+    }
     document.body.classList.remove('gaia-booking-open');
   }
   // Delegate: any element with data-open-in-app (or the legacy data-book-inline)
@@ -473,7 +502,7 @@ body.gaia-booking-open{overflow:hidden;}
     const appts = (d.appts && d.appts.appointments) || [];
     const now = Date.now();
     const upcoming = appts.filter((a) => { const x = Date.parse(a.startTime || ''); return isFinite(x) && x > now; });
-    const booking = (d.appts && d.appts.bookingLinks) || [];
+    const booking = Array.isArray(d.appts && d.appts.bookingLinks) ? d.appts.bookingLinks : [];
     // Render each upcoming appointment with date/time +, if it has a video
     // meeting link (Zoom/Google Meet), a "Join meeting" button.
     const apptRow = (a) => {
@@ -562,10 +591,10 @@ body.gaia-booking-open{overflow:hidden;}
           + img
           + '<div class="g-access__body"><span class="g-access__name">' + esc(t.name) + badge + countChip + '</span><span class="g-access__meta">' + esc(t.desc) + '</span></div>'
           + '<span class="g-chip g-chip--on g-access__act">Open →</span></a>'
-        : '<div class="g-access g-access--locked g-access--link" data-track-cta>'
+        : '<button type="button" class="g-access g-access--locked g-access--link" data-track-cta>'
           + img
           + '<div class="g-access__body"><span class="g-access__name">' + esc(t.name) + badge + countChip + '</span><span class="g-access__meta">' + esc(t.desc) + '</span></div>'
-          + '<span class="g-chip g-access__act">' + (t.price ? '$' + esc(t.price) + ' · ' : '') + 'Get access →</span></div>';
+          + '<span class="g-chip g-access__act">' + (t.price ? '$' + esc(t.price) + ' · ' : '') + 'Get access →</span></button>';
     };
     const academyHead = hasAccess
       ? '<article class="g-card g-card--feature"><p class="g-card__label">Academy</p>'
@@ -723,8 +752,9 @@ body.gaia-booking-open{overflow:hidden;}
   let lastDob = '';
   function chakraReadingCard(dobVal) {
     if (!chakras().length) return '';
+    const todayISO = new Date().toISOString().slice(0, 10);
     return '<article class="g-card gaia-chakra-reading"><p class="g-card__label">Your birth-date chakra</p>'
-      + '<input type="date" class="g-dob" data-dob value="' + esc(dobVal || '') + '" max="2035-12-31" aria-label="Your date of birth" />'
+      + '<input type="date" class="g-dob" data-dob name="bday" autocomplete="bday" value="' + esc(dobVal || '') + '" max="' + todayISO + '" aria-label="Your date of birth" />'
       + '<div class="g-chakra-read" data-chakra-out>' + readingInner(chakraForDate(dobVal)) + '</div>'
       + '<p class="g-hint">Wellness guidance, not medical advice.</p></article>';
   }
@@ -852,7 +882,10 @@ body.gaia-booking-open{overflow:hidden;}
     box.innerHTML = membershipCards();
   }
 
-  function render() { renderHome(); renderMe(); renderStore(); renderAcademy(); renderCommunity(); }
+  function render() {
+    renderHome(); renderMe(); renderStore(); renderAcademy(); renderCommunity();
+    renderHomeWellness(); renderMeWellness();
+  }
 
   // Public course catalog (synced from GHL via the daily workflow webhook).
   // Fetch on load so the Academy shows real courses whether signed in or not.
@@ -866,6 +899,7 @@ body.gaia-booking-open{overflow:hidden;}
 
   document.addEventListener('DOMContentLoaded', () => {
     render(); // public first paint
+    bindWellness(); // wire the DOB input → chakra reading (was missing → input was dead)
     loadEvent(); // live Next Event from the Event Manager (public)
     loadCatalog(); // live course catalog from the GHL webhook sync (public)
   });

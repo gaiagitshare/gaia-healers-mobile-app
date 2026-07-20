@@ -36,7 +36,7 @@ body.gaia-booking-open{overflow:hidden;}
     document.head.appendChild(st);
   }
 
-  const state = { authed: false, data: {}, event: null, announcements: [], adminEvents: [] };
+  const state = { authed: false, data: {}, event: null, announcements: [], adminEvents: [], catalog: null };
   window.GaiaMember = state;
 
   function proxyBase() {
@@ -463,20 +463,37 @@ body.gaia-booking-open{overflow:hidden;}
       : 'Become a member to unlock the full Academy.';
     const courses = state.data.courses || {};
     const hub = courses.portalUrl || (portalBase() + '/courses');
-    const tracks = [
-      { name: 'Bio-Well Certification', desc: 'Become a certified Bio-Well practitioner.' },
-      { name: 'Colour Energy', desc: 'Colour therapy foundations & practitioner path.' },
-      { name: 'BioPulsar Training', desc: 'Aura imaging & biofeedback device training.' },
-    ];
+    // Dynamic catalog: real courses synced from GHL via the daily webhook.
+    // Falls back to static tracks when no catalog data yet (before first sync).
+    const cat = (state.catalog && Array.isArray(state.catalog.courses) && state.catalog.courses.length)
+      ? state.catalog.courses.slice().sort((a, b) => (Number(a.order) || 0) - (Number(b.order) || 0))
+      : null;
+    const tracks = cat
+      ? cat.map((c) => ({ id: c.id, name: c.title, desc: c.description, image: c.image, category: c.category, accessLevel: c.accessLevel, price: c.price, portalUrl: c.portalUrl }))
+      : [
+        { name: 'Bio-Well Certification', desc: 'Become a certified Bio-Well practitioner.' },
+        { name: 'Colour Energy', desc: 'Colour therapy foundations & practitioner path.' },
+        { name: 'BioPulsar Training', desc: 'Aura imaging & biofeedback device training.' },
+      ];
     // Paid member / practitioner → "Open" the course in the portal (in-app modal).
     // Everyone else → "Get access" routes to Store → Membership tab (in-app).
-    const trackCard = (t) => hasAccess
-      ? '<a class="g-access g-access--unlocked g-access--link" href="' + esc(hub) + '">'
-        + '<div class="g-access__body"><span class="g-access__name">' + esc(t.name) + '</span><span class="g-access__meta">' + esc(t.desc) + '</span></div>'
-        + '<span class="g-chip g-chip--on g-access__act">Open →</span></a>'
-      : '<div class="g-access g-access--locked g-access--link" data-track-cta>'
-        + '<div class="g-access__body"><span class="g-access__name">' + esc(t.name) + '</span><span class="g-access__meta">' + esc(t.desc) + '</span></div>'
-        + '<span class="g-chip g-access__act">Get access →</span></div>';
+    // Free-tier courses (accessLevel === 'free') are openable by anyone.
+    const trackCard = (t) => {
+      const isFree = t.accessLevel === 'free';
+      const openable = hasAccess || isFree;
+      const url = t.portalUrl || hub;
+      const badge = t.accessLevel ? '<span class="g-chip ' + (isFree ? 'g-chip--on' : '') + '" style="margin-left:.5rem">' + (isFree ? 'Free' : esc(t.accessLevel.charAt(0).toUpperCase() + t.accessLevel.slice(1))) + '</span>' : '';
+      const img = t.image ? '<img src="' + esc(t.image) + '" alt="" class="g-access__img" style="width:48px;height:48px;border-radius:8px;object-fit:cover;flex-shrink:0" />' : '';
+      return openable
+        ? '<a class="g-access g-access--unlocked g-access--link" href="' + esc(url) + '">'
+          + img
+          + '<div class="g-access__body"><span class="g-access__name">' + esc(t.name) + badge + '</span><span class="g-access__meta">' + esc(t.desc) + '</span></div>'
+          + '<span class="g-chip g-chip--on g-access__act">Open →</span></a>'
+        : '<div class="g-access g-access--locked g-access--link" data-track-cta>'
+          + img
+          + '<div class="g-access__body"><span class="g-access__name">' + esc(t.name) + badge + '</span><span class="g-access__meta">' + esc(t.desc) + '</span></div>'
+          + '<span class="g-chip g-access__act">' + (t.price ? '$' + esc(t.price) + ' · ' : '') + 'Get access →</span></div>';
+    };
     const academyHead = hasAccess
       ? '<article class="g-card g-card--feature"><p class="g-card__label">Academy</p>'
         + '<p class="g-card__value g-card__value--lg">Continue learning</p>'
@@ -488,7 +505,7 @@ body.gaia-booking-open{overflow:hidden;}
         + '<div class="g-card__actions"><button type="button" class="g-btn g-btn--primary g-btn--sm" data-track-cta>View memberships →</button></div></article>';
     const parts = [
       academyHead,
-      gSec('Explore tracks', '<div class="g-access-grid">' + tracks.map(trackCard).join('') + '</div>'),
+      gSec(cat ? 'Courses' : 'Explore tracks', '<div class="g-access-grid">' + tracks.map(trackCard).join('') + '</div>'),
     ];
     // The bottom card adapts to the user's state:
     //  - Not signed in → "Already a member? Sign in"
@@ -764,9 +781,20 @@ body.gaia-booking-open{overflow:hidden;}
 
   function render() { renderHome(); renderMe(); renderStore(); renderAcademy(); renderCommunity(); }
 
+  // Public course catalog (synced from GHL via the daily workflow webhook).
+  // Fetch on load so the Academy shows real courses whether signed in or not.
+  async function loadCatalog() {
+    const r = await getJson('/api/courses');
+    if (r && r.ok && Array.isArray(r.courses)) {
+      state.catalog = r;
+      renderAcademy();
+    }
+  }
+
   document.addEventListener('DOMContentLoaded', () => {
     render(); // public first paint
     loadEvent(); // live Next Event from the Event Manager (public)
+    loadCatalog(); // live course catalog from the GHL webhook sync (public)
   });
   document.addEventListener('gaia:auth', (e) => {
     if (e && e.detail && e.detail.authenticated) loadMember();

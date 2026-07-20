@@ -26,11 +26,17 @@
 .gaia-booking-modal__close:active{background:#EFEFF0;}
 .gaia-booking-modal__body{flex:1;position:relative;overflow:hidden;}
 .gaia-booking-modal__body iframe{position:absolute;inset:0;width:100%;height:100%;border:none;}
-.gaia-booking-modal__loading{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;
+.gaia-booking-modal__loading{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;gap:10px;
   color:#AEAEB2;font-size:.9rem;background:#fff;}
-.gaia-booking-modal__fallback{display:block;text-align:center;padding:10px;font-size:.85rem;color:#5CB82E;
-  background:#F6FBF3;border-top:1px solid rgba(92,184,46,.15);text-decoration:none;flex-shrink:0;}
+.gaia-booking-modal__spinner{width:18px;height:18px;border:2px solid #E5E5EA;border-top-color:#5CB82E;border-radius:50%;animation:gaia-spin .8s linear infinite;}
+@keyframes gaia-spin{to{transform:rotate(360deg)}}
+.gaia-booking-modal__fallback{display:block;text-align:center;padding:12px;font-size:.9rem;color:#5CB82E;
+  background:#F6FBF3;border-top:1px solid rgba(92,184,46,.25);text-decoration:none;flex-shrink:0;font-weight:500;}
+.gaia-booking-modal__fallback:active{background:#ECF7E6;}
 body.gaia-booking-open{overflow:hidden;}
+/* iOS safe-area so the modal clears the notch/home indicator. */
+.gaia-booking-modal__sheet{padding-bottom:env(safe-area-inset-bottom,0);}
+.gaia-booking-modal__head{padding-top:max(14px,env(safe-area-inset-top,0));}
 @media(min-width:640px){.gaia-booking-modal{align-items:center;}.gaia-booking-modal__sheet{height:88vh;border-radius:20px;}}
 `;
     document.head.appendChild(st);
@@ -223,9 +229,63 @@ body.gaia-booking-open{overflow:hidden;}
   // never leave the app. Calendly/GHL widgets and education.gaiahealers.com all
   // allow iframe embedding; a new-tab fallback is always shown at the bottom.
   let inAppModal = null;
+
+  // Detect browsers that are KNOWN to block third-party cookies inside iframes.
+  // iOS Safari (Intelligent Tracking Prevention) is the main offender — it
+  // refuses to let education.gaiahealers.com read its own login cookie when the
+  // iframe host is gaiahealers.app. Firefox's strict mode does the same. For
+  // these browsers, auth-dependent portals MUST open in a real new tab; trying
+  // the iframe first and falling back just shows the user a blank screen.
+  // (Chrome's cookie-blocking is rolled out gradually, so for Chrome we keep
+  // the iframe attempt and rely on the in-modal timeout fallback below.)
+  function blocksThirdPartyIframeCookies() {
+    try {
+      const ua = navigator.userAgent || '';
+      const isIOS = /iPad|iPhone|iPod/.test(ua) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+      const isSafari = /^((?!chrome|android|crios|fxios).)*safari/i.test(ua);
+      if (isIOS || isSafari) return true;
+      if (ua.includes('Firefox')) return true;
+    } catch (_) {}
+    return false;
+  }
+
+  // Hosts whose pages REQUIRE their own auth cookies (login/session). These CANNOT
+  // be reliably embedded in an iframe on iOS/Safari because the browser blocks
+  // third-party cookies → the page can't log in → blank screen. For these, we
+  // open a real new tab on cookie-blocking browsers.
+  const AUTH_DEPENDENT_HOSTS = [
+    'education.gaiahealers.com',
+    'gaiapractitioners.com',
+    'elevate.gaiahealers.com',
+  ];
+
+  function hostOf(u) {
+    try { return new URL(u, window.location.href).hostname.replace(/^www\./, ''); } catch (_) { return ''; }
+  }
+
   function openInApp(rawUrl, title) {
     const url = String(rawUrl || '').trim();
     if (!url) return;
+    const host = hostOf(url);
+
+    // Decision: iframe modal vs. real new tab.
+    // - Auth-dependent portal on a browser that blocks 3rd-party iframe cookies
+    //   → open in a new tab (the portal's cookies work there).
+    // - Everything else (Calendly widgets, etc.) → iframe modal.
+    const needsExternal = AUTH_DEPENDENT_HOSTS.includes(host) && blocksThirdPartyIframeCookies();
+    if (needsExternal) {
+      try {
+        const w = window.open(url, '_blank', 'noopener,noreferrer');
+        if (w) { w.focus(); return; }
+      } catch (_) {}
+      // window.open blocked (popup blocker / standalone PWA) → location fallback
+      // to a named target so it still leaves the session intact.
+      const a = document.createElement('a');
+      a.href = url; a.target = '_blank'; a.rel = 'noopener noreferrer';
+      document.body.appendChild(a); a.click(); a.remove();
+      return;
+    }
+
     // Calendly inline embeds use query flags; everything else embeds as-is.
     const embedUrl = url.includes('calendly.com')
       ? url + (url.includes('?') ? '&' : '?') + 'embed_logo=false&embed_type=Inline'
@@ -242,8 +302,8 @@ body.gaia-booking-open{overflow:hidden;}
       + '</div>'
       + '<div class="gaia-booking-modal__body">'
       + '<iframe src="' + esc(embedUrl) + '" title="' + esc(title || 'Content') + '" allow="camera; microphone; fullscreen" loading="lazy"></iframe>'
-      + '<div class="gaia-booking-modal__loading">Loading…</div>'
-      + '<a class="gaia-booking-modal__fallback" href="' + esc(url) + '" target="_blank" rel="noopener noreferrer">Open in a new tab →</a>'
+      + '<div class="gaia-booking-modal__loading"><span class="gaia-booking-modal__spinner"></span>Loading…</div>'
+      + '<a class="gaia-booking-modal__fallback" href="' + esc(url) + '" target="_blank" rel="noopener noreferrer">Not loading? Open in a new tab →</a>'
       + '</div></div>';
     document.body.appendChild(inAppModal);
     document.body.classList.add('gaia-booking-open');
@@ -253,6 +313,16 @@ body.gaia-booking-open{overflow:hidden;}
         const ld = inAppModal.querySelector('.gaia-booking-modal__loading');
         if (ld) ld.style.display = 'none';
       });
+      // Safety net: if the iframe hasn't fired `load` after 8s, surface the
+      // "open in new tab" fallback prominently (likely an auth/cookie failure).
+      setTimeout(() => {
+        if (!inAppModal) return;
+        const ld = inAppModal.querySelector('.gaia-booking-modal__loading');
+        if (ld && ld.style.display !== 'none') {
+          const fb = inAppModal.querySelector('.gaia-booking-modal__fallback');
+          if (fb) { fb.style.padding = '16px'; fb.style.fontWeight = '600'; fb.textContent = 'This page needs to open outside the app. Tap here →'; }
+        }
+      }, 8000);
     }
     inAppModal.querySelectorAll('[data-book-close]').forEach((el) => {
       el.addEventListener('click', closeInApp);

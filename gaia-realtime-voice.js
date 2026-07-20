@@ -370,13 +370,16 @@
     }
 
     function buildSetupMessage(meta) {
-      const model = String(meta.model || 'gemini-2.5-flash-native-audio-preview-12-2025').replace(/^models\//, '');
+      const model = String(meta.model || 'gemini-3.1-flash-live-preview').replace(/^models\//, '');
       return {
         setup: {
           model: `models/${model}`,
           generationConfig: {
             responseModalities: ['AUDIO'],
             temperature: 0.8,
+            // Gemini 3.x replaces thinkingBudget with thinkingLevel. 'minimal'
+            // keeps voice latency low (no extra reasoning delay before speech).
+            thinkingLevel: 'minimal',
             speechConfig: {
               voiceConfig: {
                 prebuiltVoiceConfig: {
@@ -852,15 +855,73 @@
                 };
               });
               await waitForSetup();
+              // Auto-reconnect on an UNEXPECTED close (network blip, server
+              // idle drop, tab backgrounding) — the user asked for Gaia to
+              // "stay and help", so we try one silent reconnect before giving
+              // up. Skip when the user explicitly stopped (status === 'idle')
+              // or we're already in an error state from another failure.
+              let reconnectAttempted = false;
+              const attemptReconnect = () => {
+                if (reconnectAttempted) return false;          // only once
+                if (status === 'idle' || status === 'error') return false;
+                if (!sessionMeta || !sessionMeta.token) return false;
+                const expiresAt = sessionMeta.expireTime
+                  ? new Date(sessionMeta.expireTime).getTime()
+                  : Date.now() + 25 * 60 * 1000;
+                if (Date.now() >= expiresAt) return false;     // token expired
+                reconnectAttempted = true;
+                setStatus('connecting');
+                // Reuse the cached token (still valid up to 30 min) and the
+                // already-open mic stream; just open a fresh WS + setup.
+                try {
+                  const wsUrl = `${WS_BASE}?access_token=${encodeURIComponent(sessionMeta.token)}`;
+                  const ws2 = new WebSocket(wsUrl);
+                  wsRef.current = ws2;
+                  ws2.onmessage = async (event2) => {
+                    let raw = event2.data;
+                    if (raw instanceof Blob) raw = await raw.text();
+                    else if (raw instanceof ArrayBuffer) raw = new TextDecoder().decode(raw);
+                    handleGeminiMessage(raw);
+                  };
+                  ws2.onopen = () => {
+                    if (sendSetupMessage()) {
+                      setupDone = false;
+                      // After reconnect, the new setup reply flips status
+                      // back to 'listening' via the existing setup handler.
+                    }
+                  };
+                  ws2.onclose = () => {
+                    // Second close → give up with a friendly error.
+                    if (status !== 'idle') {
+                      setErrorMessage('Voice connection dropped. Tap the orb to resume.');
+                      setStatus('error');
+                    }
+                  };
+                  ws2.onerror = () => {
+                    if (status !== 'idle') {
+                      setErrorMessage('Voice connection failed. Tap the orb to resume.');
+                      setStatus('error');
+                    }
+                  };
+                  return true;
+                } catch (_) {
+                  return false;
+                }
+              };
               ws.onclose = (event) => {
-                if (status !== 'error' && status !== 'idle') {
-                  setErrorMessage(event.reason || 'Voice connection closed.');
-                  setStatus('error');
+                if (status === 'idle') return;                 // user stopped — stay quiet
+                // Try one silent reconnect; if that path is taken, don't surface
+                // an error yet. Otherwise show the normal close message.
+                if (!attemptReconnect()) {
+                  if (status !== 'error') {
+                    setErrorMessage(event?.reason || 'Voice connection closed. Tap the orb to resume.');
+                    setStatus('error');
+                  }
                 }
               };
               ws.onerror = () => {
-                setErrorMessage('Voice connection failed.');
-                setStatus('error');
+                // onclose will fire immediately after; let it decide whether to
+                // reconnect or surface the error.
               };
             })(),
             // Leg 2: audio playback worklet (independent of WS)

@@ -469,7 +469,7 @@ body.gaia-booking-open{overflow:hidden;}
       ? state.catalog.courses.slice().sort((a, b) => (Number(a.order) || 0) - (Number(b.order) || 0))
       : null;
     const tracks = cat
-      ? cat.map((c) => ({ id: c.id, name: c.title, desc: c.description, image: c.image, category: c.category, accessLevel: c.accessLevel, price: c.price, portalUrl: c.portalUrl }))
+      ? cat.map((c) => ({ id: c.id, name: c.title, desc: c.description, image: c.image, category: c.category, accessLevel: c.accessLevel, price: c.price, portalUrl: c.portalUrl, memberCount: Number(c.memberCount) || 0 }))
       : [
         { name: 'Bio-Well Certification', desc: 'Become a certified Bio-Well practitioner.' },
         { name: 'Colour Energy', desc: 'Colour therapy foundations & practitioner path.' },
@@ -483,15 +483,18 @@ body.gaia-booking-open{overflow:hidden;}
       const openable = hasAccess || isFree;
       const url = t.portalUrl || hub;
       const badge = t.accessLevel ? '<span class="g-chip ' + (isFree ? 'g-chip--on' : '') + '" style="margin-left:.5rem">' + (isFree ? 'Free' : esc(t.accessLevel.charAt(0).toUpperCase() + t.accessLevel.slice(1))) + '</span>' : '';
+      // Member count from GHL — shown only when the catalog is live (dynamic).
+      const count = Number(t.memberCount) || 0;
+      const countChip = count > 0 ? '<span class="g-chip" style="margin-left:.35rem;opacity:.85">👥 ' + count + '</span>' : '';
       const img = t.image ? '<img src="' + esc(t.image) + '" alt="" class="g-access__img" style="width:48px;height:48px;border-radius:8px;object-fit:cover;flex-shrink:0" />' : '';
       return openable
         ? '<a class="g-access g-access--unlocked g-access--link" href="' + esc(url) + '">'
           + img
-          + '<div class="g-access__body"><span class="g-access__name">' + esc(t.name) + badge + '</span><span class="g-access__meta">' + esc(t.desc) + '</span></div>'
+          + '<div class="g-access__body"><span class="g-access__name">' + esc(t.name) + badge + countChip + '</span><span class="g-access__meta">' + esc(t.desc) + '</span></div>'
           + '<span class="g-chip g-chip--on g-access__act">Open →</span></a>'
         : '<div class="g-access g-access--locked g-access--link" data-track-cta>'
           + img
-          + '<div class="g-access__body"><span class="g-access__name">' + esc(t.name) + badge + '</span><span class="g-access__meta">' + esc(t.desc) + '</span></div>'
+          + '<div class="g-access__body"><span class="g-access__name">' + esc(t.name) + badge + countChip + '</span><span class="g-access__meta">' + esc(t.desc) + '</span></div>'
           + '<span class="g-chip g-access__act">' + (t.price ? '$' + esc(t.price) + ' · ' : '') + 'Get access →</span></div>';
     };
     const academyHead = hasAccess
@@ -505,7 +508,7 @@ body.gaia-booking-open{overflow:hidden;}
         + '<div class="g-card__actions"><button type="button" class="g-btn g-btn--primary g-btn--sm" data-track-cta>View memberships →</button></div></article>';
     const parts = [
       academyHead,
-      gSec(cat ? 'Courses' : 'Explore tracks', '<div class="g-access-grid">' + tracks.map(trackCard).join('') + '</div>'),
+      gSec(cat ? ('Courses · ' + tracks.length + ' live') : 'Explore tracks', '<div class="g-access-grid">' + tracks.map(trackCard).join('') + '</div>'),
     ];
     // The bottom card adapts to the user's state:
     //  - Not signed in → "Already a member? Sign in"

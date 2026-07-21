@@ -1102,6 +1102,63 @@
       if (changed) history.replaceState({}, '', url.toString());
     }
 
+    function magicLinkTokenFromUrl() {
+      const fragment = new URLSearchParams(String(window.location.hash || '').replace(/^#/, ''));
+      return String(fragment.get('gaia_magic') || '').trim();
+    }
+
+    function cleanMagicLinkFromUrl() {
+      const url = new URL(window.location.href);
+      url.searchParams.delete('auth');
+      const fragment = new URLSearchParams(String(url.hash || '').replace(/^#/, ''));
+      fragment.delete('gaia_magic');
+      const nextHash = fragment.toString();
+      url.hash = nextHash ? `#${nextHash}` : '';
+      history.replaceState({}, '', url.toString());
+    }
+
+    async function maybeConsumeMagicLink() {
+      const token = magicLinkTokenFromUrl();
+      const authResult = new URLSearchParams(window.location.search).get('auth');
+      if (!token) {
+        if (authResult === 'invalid') {
+          cleanMagicLinkFromUrl();
+          openModal('');
+          statusEl.textContent = 'That sign-in link is invalid, expired, or already used. Request a new link below.';
+        }
+        return false;
+      }
+
+      try {
+        const response = await fetch(`${syncProxyBase()}/api/auth/magic-link/consume`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+          credentials: 'include',
+          body: JSON.stringify({ token }),
+        });
+        const payload = await response.json().catch(() => ({}));
+        if (!response.ok || payload.ok === false || !payload.authenticated) {
+          openModal('');
+          statusEl.textContent = payload.error || 'That sign-in link could not be verified. Request a new link below.';
+          return false;
+        }
+        AUTH_STATE.authenticated = true;
+        AUTH_STATE.checked = true;
+        AUTH_STATE.member = payload.member || null;
+        document.dispatchEvent(new CustomEvent('gaia:auth', { detail: { ...AUTH_STATE } }));
+        renderAuthUi();
+        return true;
+      } catch {
+        openModal('');
+        statusEl.textContent = 'Could not verify your sign-in link. Check your connection and try the link again.';
+        return false;
+      } finally {
+        // Remove the bearer token before the URL can be copied, bookmarked, or
+        // retained in browser history. It was never sent as a referrer.
+        cleanMagicLinkFromUrl();
+      }
+    }
+
     function renderAuthUi() {
       const session = authState();
       document.querySelectorAll('a.gaia-login-pill, a.gaia-login-btn').forEach((link) => {
@@ -1209,9 +1266,10 @@
     document.addEventListener('gaia:auth', () => { renderMyAccess(); });
 
     (async () => {
-      const claimed = await maybeClaimEmbeddedSession();
+      const magicLinked = await maybeConsumeMagicLink();
+      const claimed = magicLinked ? false : await maybeClaimEmbeddedSession();
       await refreshSession();
-      if (claimed || AUTH_STATE.authenticated) window.GAIA_SYNC?.refresh?.();
+      if (magicLinked || claimed || AUTH_STATE.authenticated) window.GAIA_SYNC?.refresh?.();
       renderMyAccess();
     })();
   }

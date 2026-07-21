@@ -1332,6 +1332,25 @@ async function ghlGet(path, params = {}) {
   return fetchJsonIfOk(url, ghlHeaders(cfg.token, cfg.version));
 }
 
+async function ghlPost(path, body = {}, version = '') {
+  const cfg = ghlConfig();
+  if (!cfg.enabled) return null;
+  const response = await fetch(`${cfg.base}${path}`, {
+    method: 'POST',
+    headers: {
+      ...ghlHeaders(cfg.token, version || cfg.version),
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(body),
+  });
+  if (!response.ok) return null;
+  try {
+    return await response.json();
+  } catch {
+    return null;
+  }
+}
+
 // Upsert a contact into GHL (create or update by email). Requires the PIT to
 // carry contacts.write — returns scope_required until that scope is enabled.
 async function ghlUpsertContact(fields = {}) {
@@ -1360,8 +1379,11 @@ async function ghlSendEmail({ contactId = '', subject = '', html = '' } = {}) {
   try {
     const r = await fetch(`${cfg.base}/conversations/messages`, {
       method: 'POST',
-      headers: { ...ghlHeaders(cfg.token, cfg.version), 'Content-Type': 'application/json' },
-      body: JSON.stringify({ type: 'Email', contactId, subject, html }),
+      headers: {
+        ...ghlHeaders(cfg.token, process.env.GHL_CONVERSATIONS_API_VERSION || 'v3'),
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ type: 'Email', contactId, subject, html, status: 'pending' }),
     });
     if (r.status === 401 || r.status === 403) return { ok: false, reason: 'scope_required' };
     if (r.status < 200 || r.status >= 300) {
@@ -1396,6 +1418,36 @@ function magicLinkEmailHtml(member = {}, consumeUrl = '') {
     '<p style="margin:22px 0 0;font-size:12px;color:#8a978f">If you did not request this, you can safely ignore this email.</p>',
     '</div>',
   ].join('');
+}
+
+function magicLinkAppUrl(token = '', returnTo = '') {
+  // The exchange page lives on the API origin so it can set the HttpOnly API
+  // session cookie before returning to the static app. The token remains in the
+  // fragment, which is never included in the scanner's HTTP request.
+  const target = new URL(`${PROXY_PUBLIC_URL}/api/auth/magic-link/start`);
+  const fragment = new URLSearchParams();
+  fragment.set('gaia_magic', token);
+  target.hash = fragment.toString();
+  return target.toString();
+}
+
+function authMagicLinkStart(_req, res) {
+  const nonce = crypto.randomBytes(18).toString('base64url');
+  const fallback = JSON.stringify(safeReturnUrl(APP_PUBLIC_URL));
+  const html = `<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Signing in · Gaia Healers</title>
+<style>body{margin:0;min-height:100vh;display:grid;place-items:center;background:#f7faf5;color:#173323;font:16px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}.card{width:min(88vw,420px);padding:32px;border-radius:22px;background:#fff;box-shadow:0 18px 55px rgba(22,61,36,.12);text-align:center}h1{font-size:24px;margin:0 0 10px}p{color:#65756b;margin:0}.dot{display:inline-block;width:10px;height:10px;margin:0 3px;border-radius:50%;background:#5cb82e;animation:p 1s infinite alternate}.dot:nth-child(2){animation-delay:.2s}.dot:nth-child(3){animation-delay:.4s}@keyframes p{to{opacity:.25;transform:translateY(-4px)}}a{color:#2f7d32}</style>
+</head><body><main class="card"><h1 id="title">Signing you in</h1><p id="status">Verifying your Gaia membership…</p><p id="loader" aria-hidden="true" style="margin-top:20px"><span class="dot"></span><span class="dot"></span><span class="dot"></span></p></main>
+<script nonce="${nonce}">(async()=>{const fallback=${fallback};const status=document.getElementById('status');const title=document.getElementById('title');const loader=document.getElementById('loader');const fragment=new URLSearchParams(location.hash.slice(1));const token=fragment.get('gaia_magic')||'';history.replaceState({},'',location.pathname);if(!token){title.textContent='Sign-in link unavailable';status.innerHTML='Return to <a href="'+fallback+'">Gaia Healers</a> and request a new link.';loader.hidden=true;return}try{const response=await fetch('/api/auth/magic-link/consume',{method:'POST',headers:{'Content-Type':'application/json','Accept':'application/json'},credentials:'include',body:JSON.stringify({token})});const data=await response.json();if(!response.ok||!data.authenticated)throw new Error(data.error||'This link could not be verified.');status.textContent='Verified. Opening your Gaia…';location.replace(data.returnTo||fallback)}catch(error){title.textContent='Please request a new link';status.textContent=error.message||'This sign-in link is invalid or expired.';loader.hidden=true;}})();</script></body></html>`;
+  res.writeHead(200, {
+    'Content-Type': 'text/html; charset=utf-8',
+    'Cache-Control': 'no-store',
+    'Content-Security-Policy': `default-src 'none'; script-src 'nonce-${nonce}'; style-src 'unsafe-inline'; connect-src 'self'; base-uri 'none'; frame-ancestors 'none'`,
+    'Referrer-Policy': 'no-referrer',
+    'X-Content-Type-Options': 'nosniff',
+  });
+  res.end(html);
 }
 
 function normalizeGhlContact(raw = {}, fallback = {}) {
@@ -1478,12 +1530,53 @@ async function getMemberFromGhl({ email = '', memberId = '', contactId = '' } = 
   if (normalizedId) {
     const byId = await ghlGet(`/contacts/${encodeURIComponent(normalizedId)}`);
     contactPayload = byId?.contact || byId?.data?.contact || byId?.data || byId || null;
+    const resolvedEmail = String(contactPayload?.email || '').trim().toLowerCase();
+    if (contactPayload && normalizedEmail && resolvedEmail !== normalizedEmail) {
+      return {
+        configured: true,
+        memberResolved: false,
+        liveData: false,
+        source: 'ghl-contact-identity-mismatch',
+        member: null,
+        rawContact: null,
+        portalOnlyFields: ['academyProgress', 'courses', 'purchases', 'communities'],
+      };
+    }
   }
 
   if (!contactPayload && normalizedEmail) {
-    const candidates = [
-      await ghlGet('/contacts', { locationId: cfg.locationId, query: normalizedEmail, limit: 20 }),
-      await ghlGet('/contacts', { locationId: cfg.locationId, email: normalizedEmail, limit: 20 }),
+    // Use GHL's current advanced-search endpoint first. Login must resolve to
+    // exactly one contact: silently choosing the first duplicate email could
+    // expose the wrong member's profile or entitlements.
+    const advanced = await ghlPost('/contacts/search', {
+      page: 1,
+      pageLimit: 100,
+      locationId: cfg.locationId,
+      filters: [{ operator: 'eq', field: 'email', value: normalizedEmail }],
+    }, '2021-07-28');
+    const advancedList = advanced?.contacts || advanced?.data?.contacts || advanced?.data || advanced?.results || [];
+    const exactAdvanced = Array.isArray(advancedList)
+      ? advancedList.filter((item) => String(item?.email || '').trim().toLowerCase() === normalizedEmail)
+      : [];
+    if (exactAdvanced.length > 1) {
+      return {
+        configured: true,
+        memberResolved: false,
+        liveData: false,
+        source: 'ghl-contact-ambiguous-email',
+        member: null,
+        rawContact: null,
+        portalOnlyFields: ['academyProgress', 'courses', 'purchases', 'communities'],
+      };
+    }
+    if (exactAdvanced.length === 1) contactPayload = exactAdvanced[0];
+
+    // Compatibility fallback while older GHL locations still expose GET
+    // /contacts. It is intentionally used only when advanced search did not
+    // return a match, and it keeps the same exact-one rule.
+    const candidates = contactPayload ? [] : [
+      await ghlGet('/contacts', { locationId: cfg.locationId, query: normalizedEmail, limit: 100 }),
+      await ghlGet('/contacts', { locationId: cfg.locationId, email: normalizedEmail, limit: 100 }),
     ];
     for (const candidate of candidates) {
       const list = candidate?.contacts
@@ -1492,9 +1585,20 @@ async function getMemberFromGhl({ email = '', memberId = '', contactId = '' } = 
         || candidate?.results
         || [];
       if (!Array.isArray(list) || !list.length) continue;
-      const exact = list.find((item) => String(item.email || '').trim().toLowerCase() === normalizedEmail) || list[0];
-      if (exact) {
-        contactPayload = exact;
+      const exact = list.filter((item) => String(item?.email || '').trim().toLowerCase() === normalizedEmail);
+      if (exact.length > 1) {
+        return {
+          configured: true,
+          memberResolved: false,
+          liveData: false,
+          source: 'ghl-contact-ambiguous-email',
+          member: null,
+          rawContact: null,
+          portalOnlyFields: ['academyProgress', 'courses', 'purchases', 'communities'],
+        };
+      }
+      if (exact.length === 1) {
+        contactPayload = exact[0];
         break;
       }
     }
@@ -2964,7 +3068,10 @@ async function authMagicLinkRequest(req, res, origin) {
     iat: Date.now(),
     exp: Date.now() + (AUTH_MAGIC_LINK_TTL_SECONDS * 1000),
   });
-  const consumeUrl = `${PROXY_PUBLIC_URL}/api/auth/magic-link/consume?token=${encodeURIComponent(token)}&returnTo=${encodeURIComponent(returnTo)}`;
+  // Keep the bearer token in the app URL fragment. Fragments are not sent in
+  // HTTP requests or referrer headers, and most email-security link scanners do
+  // not execute the app JavaScript that exchanges it for the HttpOnly session.
+  const consumeUrl = magicLinkAppUrl(token, returnTo);
 
   // Deliver the sign-in link by email through GHL (email stays in GHL).
   if (member.contactId) {
@@ -3000,7 +3107,12 @@ async function authMagicLinkRequest(req, res, origin) {
 }
 
 async function authMagicLinkConsume(req, res, origin, url) {
-  const rawToken = url.searchParams.get('token') || '';
+  const jsonMode = req.method === 'POST';
+  let rawToken = url.searchParams.get('token') || '';
+  if (jsonMode) {
+    const body = await readJsonBody(req);
+    rawToken = String(body.token || '').trim();
+  }
   const payload = readSignedToken(rawToken);
   const tokenHash = crypto.createHash('sha256').update(rawToken).digest('hex');
   const now = Date.now();
@@ -3008,15 +3120,31 @@ async function authMagicLinkConsume(req, res, origin, url) {
     if (expiresAt <= now) CONSUMED_MAGIC_LINKS.delete(hash);
   }
   if (payload?.type !== 'magic-link' || !payload?.member || CONSUMED_MAGIC_LINKS.has(tokenHash)) {
-    sendRedirect(res, safeReturnUrl(url.searchParams.get('returnTo')), origin);
+    if (jsonMode) {
+      sendJson(res, 401, { ok: false, authenticated: false, error: 'This sign-in link is invalid, expired, or already used.' }, origin);
+    } else {
+      const invalidReturn = new URL(safeReturnUrl(url.searchParams.get('returnTo')));
+      invalidReturn.searchParams.set('auth', 'invalid');
+      sendRedirect(res, invalidReturn.toString(), origin);
+    }
     return;
   }
   CONSUMED_MAGIC_LINKS.set(tokenHash, Number(payload.exp) || (now + AUTH_MAGIC_LINK_TTL_SECONDS * 1000));
   const session = createMemberSession(payload.member, 'magic-link');
   const token = signTokenPayload(session);
-  sendRedirect(res, safeReturnUrl(payload.returnTo || url.searchParams.get('returnTo')), origin, {
-    'Set-Cookie': buildSetCookie(req, token, session.exp),
-  });
+  const sessionCookie = { 'Set-Cookie': buildSetCookie(req, token, session.exp) };
+  if (jsonMode) {
+    sendJson(res, 200, {
+      ok: true,
+      authenticated: true,
+      memberResolved: true,
+      member: session.member,
+      expiresAt: session.exp,
+      returnTo: safeReturnUrl(payload.returnTo),
+    }, origin, sessionCookie);
+  } else {
+    sendRedirect(res, safeReturnUrl(payload.returnTo || url.searchParams.get('returnTo')), origin, sessionCookie);
+  }
 }
 
 async function authEmbeddedClaim(req, res, origin) {
@@ -3785,7 +3913,11 @@ const server = http.createServer(async (req, res) => {
       await authMagicLinkRequest(req, res, origin);
       return;
     }
-    if (req.method === 'GET' && url.pathname === '/api/auth/magic-link/consume') {
+    if (req.method === 'GET' && url.pathname === '/api/auth/magic-link/start') {
+      authMagicLinkStart(req, res);
+      return;
+    }
+    if ((req.method === 'GET' || req.method === 'POST') && url.pathname === '/api/auth/magic-link/consume') {
       await authMagicLinkConsume(req, res, origin, url);
       return;
     }

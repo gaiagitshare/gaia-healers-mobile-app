@@ -860,10 +860,28 @@ body.gaia-booking-open{overflow:hidden;}
       + '<p class="g-hint">Wellness guidance, not medical advice.</p></article>';
   }
   function renderMeWellness() {
-    // Intentionally a no-op. #me-wellness is owned by gaia-wellness.js,
-    // which writes the daily body point, wellness horoscope, 8-week Chakra
-    // Challenge, and signup form. Calling this from render() previously
-    // clobbered that rich content with a bare chakra card on every sign-in.
+    const box = el('me-wellness'); if (!box) return;
+    box.innerHTML = chakras().length ? chakraReadingCard(lastDob) : '';
+  }
+  function renderHomeWellness() {
+    const box = el('home-wellness'); if (!box) return;
+    box.innerHTML = chakras().length ? chakraReadingCard(lastDob) : '';
+  }
+
+  // The body map (on Home) positions its nodes off the image size, which is 0
+  // while Home is hidden OR the 417KB image is still loading — retry the
+  // re-layout until the photo actually has width.
+  function refreshChakraMap() {
+    const api = window.GaiaChakraMaps;
+    if (!api || !api.refresh) return;
+    let tries = 0;
+    const tick = () => {
+      api.refresh();
+      const img = document.querySelector('#home-chakra .gaia-chakra-map__photo');
+      const ready = img && img.clientWidth > 10;
+      if (!ready && tries++ < 20) setTimeout(tick, 150);
+    };
+    requestAnimationFrame(() => requestAnimationFrame(tick));
   }
 
   function bindWellness() {
@@ -878,6 +896,11 @@ body.gaia-booking-open{overflow:hidden;}
           const inp = c.querySelector('[data-dob]'); if (inp && inp !== e.target) inp.value = lastDob;
         });
       }
+    });
+    // Re-position the chakra body map whenever the Profile view is opened.
+    window.addEventListener('gaia:route', () => {
+      const view = (window.GaiaAppShell && window.GaiaAppShell.currentView && window.GaiaAppShell.currentView()) || '';
+      if (view === 'today') refreshChakraMap();
     });
   }
 
@@ -972,8 +995,7 @@ body.gaia-booking-open{overflow:hidden;}
 
   function render() {
     renderHome(); renderMe(); renderStore(); renderAcademy(); renderCommunity();
-    // NOTE: do NOT call renderHomeWellness / renderMeWellness here.
-    // #me-wellness (and the legacy #home-wellness) are owned by gaia-wellness.js.
+    renderHomeWellness(); renderMeWellness();
   }
 
   // Public course catalog (synced from GHL via the daily workflow webhook).

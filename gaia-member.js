@@ -639,38 +639,36 @@ body.gaia-booking-open{overflow:hidden;}
     const box = el('member-academy');
     if (!box) return;
     const cap = el('academy-summary-caption');
-    const acc = (state.data.access && state.data.access.member) || {};
-    const tier = String(acc.membershipTier || '').toLowerCase();
-    // hasAccess = a paying member (Silver/Gold) or an earned practitioner.
-    // A signed-in free Explorer does NOT get course access — they'd just hit
-    // the portal login wall.
-    const hasAccess = state.authed && (tier === 'silver' || tier === 'gold' || acc.practitioner);
-    if (cap) cap.textContent = hasAccess
-      ? 'Your courses live in the Gaia Healers portal.'
-      : 'Become a member to unlock the full Academy.';
     const courses = state.data.courses || {};
+    const grants = state.authed && Array.isArray(courses.courses) ? courses.courses : [];
+    const hasAccess = grants.length > 0;
+    if (cap) cap.textContent = hasAccess
+      ? grants.length + ' course' + (grants.length === 1 ? '' : 's') + ' available from your GHL access.'
+      : (state.authed ? 'No course access is currently attached to your GHL account.' : 'Sign in to see your GHL course access.');
     const hub = courses.portalUrl || (portalBase() + '/courses');
-    // Dynamic catalog: real courses synced from GHL via the daily webhook.
-    // Falls back to static tracks when no catalog data yet (before first sync).
     const cat = (state.catalog && Array.isArray(state.catalog.courses) && state.catalog.courses.length)
       ? state.catalog.courses.slice().sort((a, b) => (Number(a.order) || 0) - (Number(b.order) || 0))
-      : null;
-    const tracks = cat
-      ? cat.map((c) => ({ id: c.id, name: c.title, desc: c.description, image: c.image, category: c.category, accessLevel: c.accessLevel, price: c.price, portalUrl: c.portalUrl, memberCount: Number(c.memberCount) || 0 }))
-      : [
-        { name: 'Bio-Well Certification', desc: 'Become a certified Bio-Well practitioner.' },
-        { name: 'Colour Energy', desc: 'Colour therapy foundations & practitioner path.' },
-        { name: 'BioPulsar Training', desc: 'Aura imaging & biofeedback device training.' },
-      ];
-    // Paid member / practitioner → "Open" the course in the portal (in-app modal).
-    // Everyone else → "Get access" routes to Store → Membership tab (in-app).
-    // Free-tier courses (accessLevel === 'free') are openable by anyone.
+      : [];
+    const key = (value) => String(value || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+    const findGrant = (course) => grants.find((grant) =>
+      (grant.id && course.id && String(grant.id) === String(course.id))
+      || (key(grant.title || grant.name) && key(grant.title || grant.name) === key(course.title || course.name)));
+    const tracks = cat.map((c) => ({
+      id: c.id, name: c.title, desc: c.description, image: c.image, category: c.category,
+      accessLevel: c.accessLevel, price: c.price, portalUrl: c.portalUrl,
+      memberCount: Number(c.memberCount) || 0, grant: findGrant(c),
+    }));
+    grants.forEach((grant) => {
+      if (!tracks.some((track) => track.grant === grant)) {
+        tracks.unshift({ id: grant.id, name: grant.title || grant.name, desc: grant.description || 'Available in your Gaia Academy.', image: grant.image, grant });
+      }
+    });
     const trackCard = (t) => {
-      const isFree = t.accessLevel === 'free';
-      const openable = hasAccess || isFree;
-      const url = t.portalUrl || hub;
-      const badge = t.accessLevel ? '<span class="g-chip ' + (isFree ? 'g-chip--on' : '') + '" style="margin-left:.5rem">' + (isFree ? 'Free' : esc(t.accessLevel.charAt(0).toUpperCase() + t.accessLevel.slice(1))) + '</span>' : '';
-      // Member count from GHL — shown only when the catalog is live (dynamic).
+      const openable = Boolean(state.authed && t.grant);
+      const url = t.grant?.openUrl || t.portalUrl || hub;
+      const badge = openable
+        ? '<span class="g-chip g-chip--on" style="margin-left:.5rem">Your access</span>'
+        : (t.accessLevel ? '<span class="g-chip" style="margin-left:.5rem">' + esc(t.accessLevel.charAt(0).toUpperCase() + t.accessLevel.slice(1)) + '</span>' : '');
       const count = Number(t.memberCount) || 0;
       const countChip = count > 0 ? '<span class="g-chip" style="margin-left:.35rem;opacity:.85">' + count + ' learners</span>' : '';
       const img = t.image ? '<img src="' + esc(t.image) + '" alt="" class="g-access__img" style="width:48px;height:48px;border-radius:8px;object-fit:cover;flex-shrink:0" />' : '';
@@ -679,43 +677,39 @@ body.gaia-booking-open{overflow:hidden;}
           + img
           + '<div class="g-access__body"><span class="g-access__name">' + esc(t.name) + badge + countChip + '</span><span class="g-access__meta">' + esc(t.desc) + '</span></div>'
           + '<span class="g-chip g-chip--on g-access__act">Open →</span></button>'
-        : '<button type="button" class="g-access g-access--locked g-access--link" data-track-cta>'
+        : '<button type="button" class="g-access g-access--locked g-access--link" ' + (state.authed ? 'data-track-cta' : 'data-academy-signin') + '>'
           + img
           + '<div class="g-access__body"><span class="g-access__name">' + esc(t.name) + badge + countChip + '</span><span class="g-access__meta">' + esc(t.desc) + '</span></div>'
-          + '<span class="g-chip g-access__act">' + (t.price ? '$' + esc(t.price) + ' · ' : '') + 'Get access →</span></button>';
+          + '<span class="g-chip g-access__act">' + (state.authed ? 'Get access →' : 'Sign in →') + '</span></button>';
     };
     const academyHead = hasAccess
       ? '<article class="g-card g-card--feature"><p class="g-card__label">Academy</p>'
         + '<p class="g-card__value g-card__value--lg">Continue learning</p>'
-        + '<p class="g-card__meta">Your courses, lessons, and certificates live in the Gaia Healers portal. You will sign in there with your Gaia email to open your lessons.</p>'
+        + '<p class="g-card__meta">These courses come directly from the access attached to your GHL contact. Lessons and certificates open in the Gaia Healers portal.</p>'
         + '<div class="g-card__actions"><button type="button" class="g-btn g-btn--primary g-btn--sm" data-course-open="' + esc(hub) + '" data-course-title="Gaia Academy">Open Academy →</button></div></article>'
       : '<article class="g-card g-card--feature"><p class="g-card__label">Academy</p>'
         + '<p class="g-card__value g-card__value--lg">Learn & get certified</p>'
-        + '<p class="g-card__meta">Bio-Well certification, Colour Energy therapy, BioPulsar training, and more. Become a Silver member to unlock the full Academy — courses, certificates, and practitioner communities.</p>'
-        + '<div class="g-card__actions"><button type="button" class="g-btn g-btn--primary g-btn--sm" data-track-cta>View memberships →</button></div></article>';
+        + '<p class="g-card__meta">Sign in to see exactly what your GHL account can open. Gaia reflects your existing access; it does not assign a tier or course.</p>'
+        + '<div class="g-card__actions"><button type="button" class="g-btn g-btn--primary g-btn--sm" ' + (state.authed ? 'data-track-cta' : 'data-academy-signin') + '>' + (state.authed ? 'View memberships →' : 'Sign in →') + '</button></div></article>';
     const parts = [
       academyHead,
-      gSec(cat ? ('Courses · ' + tracks.length + ' live') : 'Explore tracks', '<div class="g-access-grid">' + tracks.map(trackCard).join('') + '</div>'),
+      gSec(hasAccess ? ('Your courses · ' + grants.length) : (cat.length ? ('Course catalog · ' + tracks.length) : 'Course catalog'),
+        tracks.length ? '<div class="g-access-grid">' + tracks.map(trackCard).join('') + '</div>' : '<article class="g-card"><p class="g-card__meta">The catalog is being synchronized from GHL.</p></article>'),
     ];
-    // The bottom card adapts to the user's state:
-    //  - Not signed in → "Already a member? Sign in"
-    //  - Signed in but no paid access → "Upgrade to unlock the Academy"
     if (!state.authed) {
       parts.push('<article class="g-card"><p class="g-card__label">Already a member?</p>'
         + '<p class="g-card__meta">Sign in with your Gaia email to open your courses and see what your membership unlocks.</p>'
         + '<div class="g-card__actions"><button type="button" class="g-btn g-btn--secondary g-btn--sm" data-academy-signin>Sign in</button></div></article>');
     } else if (!hasAccess) {
-      parts.push('<article class="g-card"><p class="g-card__label">Unlock the Academy</p>'
-        + '<p class="g-card__meta">You are signed in on a free account. Upgrade to Silver to unlock all courses, certificates, and practitioner communities.</p>'
+      parts.push('<article class="g-card"><p class="g-card__label">No course grant found</p>'
+        + '<p class="g-card__meta">Your account is signed in, but GHL has not granted a course or offer to this contact. If you recently joined, access may still be synchronizing.</p>'
         + '<div class="g-card__actions"><button type="button" class="g-btn g-btn--primary g-btn--sm" data-track-cta>View memberships →</button></div></article>');
     }
     box.innerHTML = parts.join('');
-    // Wire the membership / sign-in CTAs for non-members.
     box.querySelectorAll('[data-track-cta]').forEach((b) => {
       b.addEventListener('click', () => window.GaiaAppShell?.go?.('store', { tab: 'membership' }));
     });
-    const si = box.querySelector('[data-academy-signin]');
-    if (si) si.addEventListener('click', () => window.GaiaAuth?.open?.());
+    box.querySelectorAll('[data-academy-signin]').forEach((button) => button.addEventListener('click', () => window.GaiaAuth?.open?.()));
     box.querySelectorAll('[data-course-open]').forEach((button) => {
       button.addEventListener('click', () => {
         if (!state.authed) {

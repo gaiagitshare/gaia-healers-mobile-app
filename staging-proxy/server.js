@@ -1,10 +1,13 @@
 import http from 'node:http';
 import crypto from 'node:crypto';
+import fs from 'node:fs';
+import path from 'node:path';
 import { URL } from 'node:url';
 import * as adminRouter from './admin-router.js';
 import * as wellnessRouter from './wellness-router.js';
 
 const PORT = Number(process.env.PORT || 8787);
+const HOST = String(process.env.HOST || '127.0.0.1').trim();
 const GROQ_MODEL = process.env.GROQ_MODEL || 'llama-3.3-70b-versatile';
 const OPENROUTER_MODEL = process.env.OPENROUTER_MODEL || 'openrouter/free';
 const OPENAI_MODEL = process.env.OPENAI_MODEL || 'gpt-4o-mini';
@@ -37,6 +40,8 @@ const AUTH_SESSION_TTL_SECONDS = Math.min(
   60 * 60 * 24 * 30,
 );
 const AUTH_MAGIC_LINK_TTL_SECONDS = Math.min(Math.max(Number(process.env.AUTH_MAGIC_LINK_TTL_SECONDS || 900) || 900, 300), 3600);
+const CONSUMED_MAGIC_LINKS = new Map();
+const MAGIC_LINK_REQUESTS = new Map();
 const AUTH_ALLOW_DEBUG_LINKS = process.env.AUTH_ALLOW_DEBUG_LINKS === 'true';
 const AUTH_ALLOW_UNVERIFIED_EMAIL_MAGIC_LINK = process.env.AUTH_ALLOW_UNVERIFIED_EMAIL_MAGIC_LINK === 'true';
 const AUTH_EMBED_SHARED_SECRET = process.env.AUTH_EMBED_SHARED_SECRET || process.env.APP_PROXY_SHARED_SECRET || '';
@@ -405,12 +410,13 @@ const GAIA_KNOWLEDGE = {
     'education.gaiahealers.com — the course + community portal (GoHighLevel). Course videos and community discussions live here and it has its own login.',
     'gaiapractitioners.com — the Find-a-Practitioner directory.',
     'elevate.gaiahealers.com — the Elevate conference site.',
+    'join.gaiahealers.com/membership — the official Gaia 2.0 Practitioners membership page and enrolment destination.',
   ],
   crm: {
     observedLocationId: 'WkKl1K5RuZNQ60xR48k6',
     configuredLocationId: process.env.GHL_LOCATION_ID || '',
     embeddedAppUrl: 'https://gaiahealers.app/home.html?embedded=ghl',
-    embeddedRule: 'When the app is embedded in the GHL menu, keep members inside the Gaia app: Academy for courses, Community for communities and Find a Healer, Store for shop and membership, Profile for account. Only send them to education.gaiahealers.com for the actual course videos, community discussions, or portal login.',
+    embeddedRule: 'When the app is embedded in the GHL menu, keep people inside the Gaia app: Home for the next event and member access, Energy for public daily chakra guidance, the top Menu for Academy and Community, Store for shop and membership, and Profile for account and bookings. Only send them to education.gaiahealers.com for actual course videos, community discussions, or portal login.',
   },
   services: [
     'Certification and training on biofield devices: Bio-Well, BioPulsar, BioTekna, HealeeX.',
@@ -420,6 +426,7 @@ const GAIA_KNOWLEDGE = {
     'In-app wellness tools: a birth-chakra reading, a daily body-point and wellness horoscope, an 8-week chakra challenge, and a colour personality test.',
     'Session booking: Bio-Well energy scans, Bio-Well demos, a free discovery call, and wellness coaching.',
     'A directory to find certified practitioners.',
+    'Public resources from gaiahealers.com: product collections, Bio-Well research, practitioner certification requests, blogs, affiliate access, Bio-Well demos, GaiaPractitioners CRM/software/marketplace, education, community, contact, and Dr. Nima’s story.',
   ],
   devices: [
     'Bio-Well 3.0 — biofield / GDV imaging for stress and energy assessment (plus Sputnik, Glove, Water Sensor, and Bio Cor accessories).',
@@ -431,7 +438,7 @@ const GAIA_KNOWLEDGE = {
   communities: [
     'All Gaia Healers', 'Bio-Well Practitioners', 'BioPulsar Practitioners', 'BioTekna Practitioners', 'ASEA', 'BrainTap', 'LifeWave', 'Golden Practitioner',
   ],
-  memberships: 'Membership is the Abundant Healer Collective. In Store, Membership tab, the tiers are Explorer (free / public), Silver (paid member — unlocks communities, member pricing, a personalized Gaia Assist, and exclusive content), and Practitioner (earned by completing certification — adds a directory listing, practitioner communities, and a certified badge).',
+  memberships: 'The official Gaia 2.0 Practitioners membership has four tiers: Free ($0 forever, enrol at https://join.gaiahealers.com/onboarding), Silver ($97/month or $997/year, enrol at https://join.gaiahealers.com/silver), Gold ($497/month or $4,997/year, enrol at https://join.gaiahealers.com/gold), and Diamond ($997/month or $9,997/year, enrol at https://join.gaiahealers.com/diamond). Benefits expand from community resources through education, directory exposure, software/CRM, implementation support, lead generation, accelerator benefits, and early-access opportunities. Each tier must open its own exact enrolment page inside the app.',
   courses: [
     'Bio-Well Orientation, Basic Certification, Advanced Level 1, and Advanced Level 2',
     'BioPulsar Basic Technical & Business',
@@ -446,25 +453,26 @@ const GAIA_KNOWLEDGE = {
     positioning: 'a three-day integrative wellness conference bridging ancient healing traditions and modern energy science',
   },
   app: {
-    shell: 'The app is gaiahealers.app (home.html). The bottom bar, left to right, is: Home, Academy, the centre Gaia orb (this is Gaia Assist / you, live voice), Community, Store. Profile / account is the top-right link, not a bottom tab, and Sign in is top-right.',
+    shell: 'The app is gaiahealers.app (home.html). The bottom bar, left to right, is: Home, Energy, the centre Gaia orb (this is Gaia Assist / you, live voice), Store, Profile. The top-right Menu opens Academy, Community, Membership, Meet the Founder, Find a Practitioner, and Member sign in.',
     screens: [
-      'Home (view=today): the default screen. A living chakra meditation figure (tap a centre for a one-line reading), admin announcements, "your wellness today" (a birth-date chakra reveal, and after a free wellness sign-up: the daily body-point, a wellness horoscope tip, and the 8-Week Chakra Challenge), a "What is on / Next event" card, a "Book a session" block, and the Colour Personality Test.',
-      'Academy (view=academy): courses and certification. It opens the education.gaiahealers.com portal for the actual lessons and never shows fake progress.',
-      'Community (view=community): "My Access" — which communities you have unlocked versus still locked — plus "Find a Healer" which opens the practitioner directory. Communities: All Gaia Healers, Bio-Well, BioPulsar, BioTekna, ASEA, BrainTap, LifeWave, Golden Practitioner.',
-      'Store (view=store): two tabs — Shop (the Shopify catalogue by category: Featured, Colour Energy, Courses, Bio-Well, BioPulsar, BioTekna, Crystals; tap a product to see its price and buy on Shopify) and Membership (the Explorer / Silver / Practitioner tiers).',
-      'Profile (view=profile, top-right): your account — devices, purchases, bookings, messages, membership status, and your birth-date chakra reading.',
+      'Home (view=today): the calm default screen with the dynamically fetched next event, admin announcements when present, member access / sign-in, and a compact Meet Dr. Nima card that opens his appointment calendar inside the app. The next-event button opens the specific event destination rather than a generic events page.',
+      'Energy (view=wellness): public wellness guidance with the birth-date chakra chart and interactive seven-centre guide. It does not require sign-in. It is wellness guidance, not medical advice.',
+      'Academy (view=academy, opened from the top Menu): courses and certification. It opens the education.gaiahealers.com portal for the actual lessons and never shows fake progress.',
+      'Community (view=community, opened from the top Menu): "My Access" — which communities you have unlocked versus still locked — plus Find a Practitioner. Communities: All Gaia Healers, Bio-Well, BioPulsar, BioTekna, ASEA, BrainTap, LifeWave, Golden Practitioner.',
+      'Store (view=store): two tabs — Shop (the live Shopify catalogue by category: Featured, Colour Energy, Courses, Bio-Well, BioPulsar, BioTekna, Crystals; tapping a product opens its image, description, and purchase action in a native in-app sheet; Shopify opens only for the final current-price and secure-payment step) and Membership (the official Free / Silver / Gold / Diamond Gaia 2.0 tiers).',
+      'Profile (view=profile, bottom-right): your account — devices, purchases, bookings, messages, membership status, booking tools, and the Colour Personality Test.',
     ],
     features: [
-      'Birth-date chakra reveal — free, on Home and Profile; enter your birth date to see your chakra.',
+      'Birth-date chakra chart — free on Energy; enter your birth date to see your chakra focus.',
       'Wellness sign-up (name, birth date, location, email) — unlocks your daily body-point and a daily wellness horoscope tip.',
       '8-Week Chakra Challenge — join, then check in daily; one chakra per week with a practice and an affirmation.',
       'Book a session — a Bio-Well energy scan, a Bio-Well demo, a free discovery call, or wellness coaching (real booking links).',
       'Colour Personality Test — 5 questions reveal your chakra colour and suggest the matching Colour Energy spray.',
       'Find a Healer — opens gaiapractitioners.com to browse certified practitioners.',
     ],
-    navigation: 'To guide someone, name the screen plainly, e.g. "Open the Store and tap the Membership tab" or "Go to Community to find a healer." Deep links: home.html?view=today|academy|community|store|profile (the Store also takes &tab=shop or &tab=membership). Keep members inside the app; only send them to education.gaiahealers.com for actual course videos, community discussions, or the portal login.',
+    navigation: 'To guide someone, use the exact current structure: bottom Home, Energy, Gaia Assist, Store, Profile; top Menu for Academy, Community, Membership, Meet the Founder, Find a Practitioner, and sign-in. Gaia Assist can route requests to these destinations and can offer the direct founder or booking action. Deep links: home.html?view=today|wellness|academy|community|store|profile (the Store also takes &tab=shop or &tab=membership). Keep people inside the app; only send them to education.gaiahealers.com for actual course videos, community discussions, or portal login.',
   },
-  signIn: 'In-app sign-in: on Home or Profile tap "Sign in", enter your member email, and you receive a one-tap sign-in link by email; tapping it signs you into your member area (My Access, personalized data, and a personalized Gaia Assist). Course videos and community discussions live in the separate education.gaiahealers.com portal, which has its own login.',
+  signIn: 'In-app sign-in: on Home use Member access, or open the top Menu and tap Member sign in. Enter your member email and receive a one-tap sign-in link by email; tapping it signs you into your member area. Course videos and community discussions live in the separate education.gaiahealers.com portal, which has its own login.',
   safety: [
     'Do not diagnose or make medical claims; give wellness guidance only.',
     'Never claim you saved, booked, bought, emailed, checked in, or changed anything — explain how the member can do it.',
@@ -496,7 +504,7 @@ function gaiaKnowledgePrompt() {
 
 function corsHeaders(origin) {
   const allowOrigin = origin
-    ? (ALLOWED_ORIGINS.length === 0 || ALLOWED_ORIGINS.includes(origin) ? origin : 'null')
+    ? (ALLOWED_ORIGINS.includes(origin) ? origin : 'null')
     : '*';
   const allowCredentials = Boolean(origin && allowOrigin !== 'null');
   return {
@@ -529,6 +537,376 @@ function sendBuffer(res, status, buffer, contentType, origin, extraHeaders = {})
   res.end(buffer);
 }
 
+// ── Dynamic course catalog (synced from GHL via webhook) ─────────────────
+// GHL has no public Courses/LMS API, so we receive the course catalog from a
+// daily GHL workflow that pushes it here. The data is stored to disk so it
+// survives restarts, and served at GET /api/courses for the app to render.
+const COURSES_FILE = path.join(process.cwd(), 'data', 'courses.json');
+const COURSES_SYNC_SECRET = String(process.env.COURSES_SYNC_SECRET || '').trim();
+const MEMBER_ENTITLEMENTS_FILE = String(process.env.MEMBER_ENTITLEMENTS_FILE || path.join(process.cwd(), 'data', 'member-entitlements.json')).trim();
+const GHL_WORKFLOW_WEBHOOK_SECRET = String(process.env.GHL_WORKFLOW_WEBHOOK_SECRET || COURSES_SYNC_SECRET).trim();
+const GHL_WEBHOOK_ED25519_PUBLIC_KEY = String(process.env.GHL_WEBHOOK_ED25519_PUBLIC_KEY || '').replace(/\\n/g, '\n').trim();
+if (COURSES_SYNC_SECRET.length < 32) {
+  throw new Error('COURSES_SYNC_SECRET must be set and at least 32 characters.');
+}
+let _coursesCache = null;
+let _memberEntitlementsCache = null;
+
+function safeSecretEqual(left, right) {
+  const a = Buffer.from(String(left || ''), 'utf8');
+  const b = Buffer.from(String(right || ''), 'utf8');
+  return a.length === b.length && crypto.timingSafeEqual(a, b);
+}
+
+function ensureCoursesDataDir() {
+  const dir = path.dirname(COURSES_FILE);
+  try { fs.mkdirSync(dir, { recursive: true }); } catch (_) { /* exists */ }
+}
+
+function writeJsonAtomic(file, payload) {
+  const dir = path.dirname(file);
+  fs.mkdirSync(dir, { recursive: true });
+  const temp = `${file}.${process.pid}.${Date.now()}.tmp`;
+  fs.writeFileSync(temp, JSON.stringify(payload, null, 2), { mode: 0o600 });
+  fs.renameSync(temp, file);
+}
+
+function emptyEntitlementStore() {
+  return { version: 1, contacts: {}, processedWebhookIds: [], updatedAt: null };
+}
+
+function loadMemberEntitlements() {
+  if (_memberEntitlementsCache) return _memberEntitlementsCache;
+  try {
+    const parsed = JSON.parse(fs.readFileSync(MEMBER_ENTITLEMENTS_FILE, 'utf8'));
+    _memberEntitlementsCache = {
+      ...emptyEntitlementStore(), ...parsed,
+      contacts: parsed?.contacts && typeof parsed.contacts === 'object' ? parsed.contacts : {},
+      processedWebhookIds: Array.isArray(parsed?.processedWebhookIds) ? parsed.processedWebhookIds : [],
+    };
+  } catch (_) {
+    _memberEntitlementsCache = emptyEntitlementStore();
+  }
+  return _memberEntitlementsCache;
+}
+
+function saveMemberEntitlements(store) {
+  store.updatedAt = new Date().toISOString();
+  store.processedWebhookIds = uniqueStrings(store.processedWebhookIds || []).slice(-5000);
+  writeJsonAtomic(MEMBER_ENTITLEMENTS_FILE, store);
+  _memberEntitlementsCache = store;
+}
+
+function entitlementForContact(contactId) {
+  const id = String(contactId || '').trim();
+  return id ? loadMemberEntitlements().contacts[id] || null : null;
+}
+
+function loadCourses() {
+  if (_coursesCache) return _coursesCache;
+  try {
+    const raw = fs.readFileSync(COURSES_FILE, 'utf8');
+    _coursesCache = JSON.parse(raw);
+    return _coursesCache;
+  } catch (_) {
+    return { courses: [], syncedAt: null, source: 'none' };
+  }
+}
+
+function saveCourses(payload) {
+  ensureCoursesDataDir();
+  _coursesCache = payload;
+  try {
+    fs.writeFileSync(COURSES_FILE, JSON.stringify(payload, null, 2));
+  } catch (err) {
+    console.error('[Gaia Courses] save failed', { error: err.message.split('\n')[0] });
+  }
+}
+
+// Normalize whatever shape GHL sends into our canonical course object.
+// Minimum enrolled members for a course to show in the app catalog. Courses
+// with fewer members are considered "under development" and hidden. Set via
+// env COURSES_MIN_MEMBERS (default 2).
+const COURSES_MIN_MEMBERS = Math.max(0, Number(process.env.COURSES_MIN_MEMBERS || 2));
+
+function normalizeCatalogCourse(c = {}) {
+  const accessLevel = String(c.accessLevel || c.access_level || c.tier || '').toLowerCase();
+  const price = Number(c.price);
+  const memberCountRaw = Number(c.memberCount ?? c.members ?? c.enrolledCount ?? c.enrollment ?? c.students);
+  return {
+    id: String(c.id || c._id || c.productId || ''),
+    title: String(c.title || c.name || 'Course'),
+    description: String(c.description || c.desc || c.summary || ''),
+    image: String(c.image || c.imageUrl || c.thumbnail || ''),
+    category: String(c.category || c.track || c.group || ''),
+    accessLevel: ['free', 'silver', 'gold', 'practitioner'].includes(accessLevel)
+      ? accessLevel
+      : (isFinite(price) && price > 0 ? 'silver' : 'free'),
+    price: isFinite(price) ? price : 0,
+    memberCount: isFinite(memberCountRaw) ? memberCountRaw : null,
+    portalUrl: String(c.portalUrl || c.url || c.courseUrl || c.link || ''),
+    order: Number(c.order) || 0,
+  };
+}
+
+// Normalize a raw course title into a grouping key so payment variants of the
+// same course collapse into one entry. e.g. "Bio-Well Advanced Level 1
+// Certification (Payment over 4 months)" → "bio-well advanced level 1".
+function courseGroupKey(title = '') {
+  let t = String(title).toLowerCase().trim();
+  // Strip payment-plan / variant noise.
+  t = t.replace(/\(.*?(payment|installment|pay |month|st|nd|rd|th|recording|vip|zoom|in-person|virtual|online|recording|swag|free).*?\)/g, ' ');
+  t = t.replace(/\b(payment|installment|1st|2nd|3rd|4th|st payment|nd payment|over \d+ months|recording|vip package|swag bag|second person|group)\b/g, ' ');
+  // Strip event/prefix wrappers.
+  t = t.replace(/^(events?\s*-\s*|learning\s*-\s*|in-person\s*-\s*|virtual\s*-\s*|online\s*-\s*)/g, ' ');
+  // Collapse device bundles ("bio-well 3.0 + ...") → just the course part.
+  t = t.replace(/(bio-well\s*\d\.\d.*?\+|device.*?\+)/g, ' ');
+  // Collapse to canonical: remove punctuation, extra spaces.
+  t = t.replace(/[^a-z0-9 ]/g, ' ').replace(/\s+/g, ' ').trim();
+  return t;
+}
+
+// Human-friendly display title for a group (picks the shortest, cleanest name).
+function cleanGroupTitle(group) {
+  const names = group.map((c) => String(c.title || '').trim()).filter(Boolean);
+  if (!names.length) return 'Course';
+  // Prefer names that start with a capital letter and have no "(" suffix.
+  const clean = names.filter((n) => /^[A-Z]/.test(n) && !/\b(payment|installment|1st|2nd)\b/i.test(n));
+  const pool = clean.length ? clean : names;
+  // Shortest non-trivial name wins.
+  return pool.sort((a, b) => a.length - b.length)[0] || names[0];
+}
+
+// POST /api/courses/sync — receiver for the GHL daily workflow webhook.
+// Deduplicates payment variants of the same course into one catalog entry, and
+// (best-effort) fetches each product's live status from GHL so drafts and
+// retired products are filtered out.
+async function coursesSync(req, res, origin) {
+  const secret = String(req.headers['x-sync-secret'] || '').trim();
+  if (!safeSecretEqual(secret, COURSES_SYNC_SECRET)) {
+    console.warn('[Gaia Courses] sync rejected: bad secret');
+    sendJson(res, 403, { ok: false, error: 'Invalid sync secret.' }, origin);
+    return;
+  }
+  let body;
+  try {
+    body = await readJsonBody(req);
+  } catch (_) {
+    sendJson(res, 400, { ok: false, error: 'Invalid JSON body.' }, origin);
+    return;
+  }
+  let rawCourses = [];
+  if (Array.isArray(body)) rawCourses = body;
+  else if (Array.isArray(body.courses)) rawCourses = body.courses;
+  else if (Array.isArray(body.data)) rawCourses = body.data;
+  const normalized = rawCourses.map(normalizeCatalogCourse).filter((c) => c.id || c.title !== 'Course');
+
+  // Group variants by normalized key, then pick one representative per group.
+  const groups = new Map();
+  for (const c of normalized) {
+    const key = courseGroupKey(c.title);
+    if (!key || key.length < 4) continue; // drop noise
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key).push(c);
+  }
+  let courses = [];
+  let hiddenCount = 0;
+  for (const [, group] of groups) {
+    const rep = group[0];
+    const title = cleanGroupTitle(group);
+    // Member count: prefer the max across variants (a course sold via multiple
+    // SKUs still has one real enrollment count).
+    const memberCount = group.reduce((max, c) => Math.max(max, Number(c.memberCount) || 0), 0);
+    // Only show courses with enough enrolled members — courses below the
+    // threshold are considered "under development" and hidden from the app.
+    if (memberCount > 0 && memberCount <= COURSES_MIN_MEMBERS) {
+      hiddenCount += 1;
+      continue;
+    }
+    // Detect access level from the representative + the group's titles.
+    const allText = group.map((c) => (c.title + ' ' + c.accessLevel).toLowerCase()).join(' ');
+    const accessLevel = rep.accessLevel !== 'free' ? rep.accessLevel
+      : (/certif|level|advanced|expert|master/.test(allText) ? 'silver' : 'free');
+    courses.push({
+      id: rep.id,
+      title,
+      description: rep.description,
+      image: rep.image,
+      category: rep.category,
+      accessLevel,
+      price: group.reduce((max, c) => Math.max(max, Number(c.price) || 0), 0),
+      memberCount,
+      portalUrl: rep.portalUrl,
+      order: rep.order,
+      variantCount: group.length,
+    });
+  }
+  // Sort: most members first (popular courses surface to the top), then by name.
+  courses.sort((a, b) => {
+    const am = Number(a.memberCount) || 0;
+    const bm = Number(b.memberCount) || 0;
+    if (am !== bm) return bm - am; // descending member count
+    return a.title.localeCompare(b.title);
+  });
+
+  const payload = {
+    ok: true,
+    courses,
+    syncedAt: body.syncedAt && body.syncedAt !== 'null' ? body.syncedAt : new Date().toISOString(),
+    locationId: String(body.locationId && body.locationId !== 'null' ? body.locationId : ''),
+    count: courses.length,
+    rawCount: normalized.length,
+    source: 'ghl-workflow',
+  };
+  saveCourses(payload);
+  console.log('[Gaia Courses] sync received', { raw: normalized.length, deduped: courses.length, hidden: hiddenCount, syncedAt: payload.syncedAt });
+  sendJson(res, 200, { ok: true, count: courses.length, rawCount: normalized.length, hidden: hiddenCount, syncedAt: payload.syncedAt }, origin);
+}
+
+// GET /api/courses — public catalog for the app to render.
+async function coursesList(req, res, origin) {
+  const data = loadCourses();
+  sendJson(res, 200, {
+    ok: true,
+    courses: data.courses || [],
+    syncedAt: data.syncedAt || null,
+    count: (data.courses || []).length,
+    source: data.source || 'none',
+    stale: data.syncedAt ? (Date.now() - new Date(data.syncedAt).getTime()) > 48 * 60 * 60 * 1000 : true,
+  }, origin);
+}
+
+function memberWebhookAuthorized(req, rawBody) {
+  const suppliedSecret = String(req.headers['x-webhook-secret'] || req.headers['x-sync-secret'] || '').trim();
+  if (GHL_WORKFLOW_WEBHOOK_SECRET.length >= 32 && safeSecretEqual(suppliedSecret, GHL_WORKFLOW_WEBHOOK_SECRET)) {
+    return 'workflow-secret';
+  }
+  const suppliedSignature = String(req.headers['x-ghl-signature'] || '').trim();
+  if (GHL_WEBHOOK_ED25519_PUBLIC_KEY && suppliedSignature) {
+    try {
+      const signature = /^[a-f0-9]{128}$/i.test(suppliedSignature)
+        ? Buffer.from(suppliedSignature, 'hex')
+        : Buffer.from(suppliedSignature, 'base64');
+      if (crypto.verify(null, Buffer.from(rawBody, 'utf8'), GHL_WEBHOOK_ED25519_PUBLIC_KEY, signature)) return 'ghl-ed25519';
+    } catch (err) {
+      console.warn('[Gaia Entitlements] signature verification failed', { error: err.message.split('\n')[0] });
+    }
+  }
+  return '';
+}
+
+function nestedValue(body, ...keys) {
+  const containers = [body, body?.data, body?.contact, body?.customData, body?.workflow];
+  for (const container of containers) {
+    if (!container || typeof container !== 'object') continue;
+    for (const key of keys) {
+      if (container[key] != null && String(container[key]).trim()) return container[key];
+    }
+  }
+  return '';
+}
+
+function normalizeEntitlementResource(body, resourceType) {
+  const source = (body?.resource && typeof body.resource === 'object') ? body.resource : body;
+  const idKeys = resourceType === 'community'
+    ? ['communityId', 'groupId', 'resourceId', 'offerId']
+    : ['courseId', 'offerId', 'productId', 'resourceId'];
+  const nameKeys = resourceType === 'community'
+    ? ['communityName', 'groupName', 'resourceName', 'offerName', 'name']
+    : ['courseName', 'offerName', 'productName', 'resourceName', 'name'];
+  const id = firstNonEmptyString(source !== body ? source?.id : '', ...idKeys.map((key) => source?.[key]), ...idKeys.map((key) => body?.data?.[key]));
+  const name = firstNonEmptyString(...nameKeys.map((key) => source?.[key]), ...nameKeys.map((key) => body?.data?.[key]), id);
+  const openUrl = firstNonEmptyString(source?.openUrl, source?.portalUrl, source?.url, body?.data?.openUrl, body?.data?.portalUrl, body?.data?.url);
+  return { id: id || courseGroupKey(name), name, openUrl };
+}
+
+function normalizeTierName(value) {
+  const tier = String(value || '').trim().toLowerCase();
+  return ['free', 'silver', 'gold', 'diamond'].includes(tier) ? tier.charAt(0).toUpperCase() + tier.slice(1) : null;
+}
+
+function classifyEntitlementEvent(body) {
+  const raw = firstNonEmptyString(body.type, body.event, body.eventType, body.action, body.customData?.event).toLowerCase().replace(/[\s.-]+/g, '_');
+  if (/contact.*tag/.test(raw)) return { kind: 'tags', grant: null, raw };
+  if (/(community|group).*(remove|removed|revoke|revoked|delete|deleted)/.test(raw)) return { kind: 'community', grant: false, raw };
+  if (/(community|group).*(grant|granted|add|added|access)/.test(raw)) return { kind: 'community', grant: true, raw };
+  if (/(course|offer).*(remove|removed|revoke|revoked|delete|deleted)/.test(raw)) return { kind: 'course', grant: false, raw };
+  if (/(course|offer).*(grant|granted|add|added|access|enroll|enrolled)/.test(raw)) return { kind: 'course', grant: true, raw };
+  if (/tier|membership/.test(raw)) return { kind: 'tier', grant: !/(remove|cancel|expire|revoke)/.test(raw), raw };
+  const resourceType = firstNonEmptyString(body.resourceType, body.data?.resourceType).toLowerCase();
+  const action = firstNonEmptyString(body.action, body.data?.action).toLowerCase();
+  if (['course', 'offer'].includes(resourceType)) return { kind: 'course', grant: !/(remove|revoke|delete|cancel)/.test(action), raw };
+  if (['community', 'group'].includes(resourceType)) return { kind: 'community', grant: !/(remove|revoke|delete|cancel)/.test(action), raw };
+  return { kind: '', grant: null, raw };
+}
+
+async function memberAccessWebhook(req, res, origin) {
+  let rawBody = '';
+  try { rawBody = await readRawBody(req, 512 * 1024); }
+  catch (_) { sendJson(res, 413, { ok: false, error: 'Request body is too large.' }, origin); return; }
+  const authMethod = memberWebhookAuthorized(req, rawBody);
+  if (!authMethod) {
+    console.warn('[Gaia Entitlements] webhook rejected: invalid authentication');
+    sendJson(res, 403, { ok: false, error: 'Invalid webhook authentication.' }, origin);
+    return;
+  }
+  let body;
+  try { body = rawBody ? JSON.parse(rawBody) : {}; }
+  catch (_) { sendJson(res, 400, { ok: false, error: 'Invalid JSON body.' }, origin); return; }
+
+  const contactId = firstNonEmptyString(nestedValue(body, 'contactId', 'contact_id'), body.contact?.id, body.data?.contact?.id);
+  if (!contactId) { sendJson(res, 422, { ok: false, error: 'contactId is required.' }, origin); return; }
+  const event = classifyEntitlementEvent(body);
+  if (!event.kind) { sendJson(res, 422, { ok: false, error: 'Unsupported entitlement event type.' }, origin); return; }
+
+  const webhookId = firstNonEmptyString(req.headers['x-ghl-webhook-id'], body.webhookId, body.idempotencyKey, body.eventId);
+  const store = loadMemberEntitlements();
+  if (webhookId && store.processedWebhookIds.includes(webhookId)) {
+    sendJson(res, 200, { ok: true, duplicate: true, contactId }, origin);
+    return;
+  }
+  const now = new Date().toISOString();
+  const record = store.contacts[contactId] || { contactId, tags: [], tier: null, courses: [], communities: [], updatedAt: now };
+  record.tags = uniqueStrings(record.tags || []);
+  record.courses = Array.isArray(record.courses) ? record.courses : [];
+  record.communities = Array.isArray(record.communities) ? record.communities : [];
+
+  if (event.kind === 'tags') {
+    const tags = body.tags || body.contact?.tags || body.data?.tags || body.data?.contact?.tags;
+    if (Array.isArray(tags)) record.tags = uniqueStrings(tags);
+  } else if (event.kind === 'tier') {
+    const tier = normalizeTierName(nestedValue(body, 'tier', 'membershipTier', 'membership'));
+    record.tier = event.grant && tier ? { name: tier, matchedBy: `webhook:${event.raw || 'tier'}`, updatedAt: now } : null;
+  } else {
+    const resource = normalizeEntitlementResource(body, event.kind);
+    if (!resource.id && !resource.name) { sendJson(res, 422, { ok: false, error: `${event.kind} id or name is required.` }, origin); return; }
+    const listName = event.kind === 'course' ? 'courses' : 'communities';
+    const list = record[listName];
+    const match = (item) => (resource.id && String(item.id) === String(resource.id))
+      || (resource.name && String(item.name || '').toLowerCase() === resource.name.toLowerCase());
+    const index = list.findIndex(match);
+    if (event.grant) {
+      const item = { id: resource.id, name: resource.name, state: 'unlocked', openUrl: resource.openUrl, matchedBy: `webhook:${event.raw}`, updatedAt: now };
+      if (index >= 0) list[index] = { ...list[index], ...item };
+      else list.push(item);
+    } else if (index >= 0) {
+      list.splice(index, 1);
+    }
+  }
+
+  record.updatedAt = now;
+  store.contacts[contactId] = record;
+  if (webhookId) store.processedWebhookIds.push(webhookId);
+  try { saveMemberEntitlements(store); }
+  catch (err) {
+    console.error('[Gaia Entitlements] save failed', { error: err.message.split('\n')[0] });
+    sendJson(res, 500, { ok: false, error: 'Unable to persist entitlement update.' }, origin);
+    return;
+  }
+  console.log('[Gaia Entitlements] access updated', { contactId, event: event.raw, kind: event.kind, grant: event.grant, authMethod });
+  sendJson(res, 200, { ok: true, contactId, kind: event.kind, grant: event.grant, updatedAt: now }, origin);
+}
+
 function sendSseHeaders(res, origin) {
   res.writeHead(200, {
     'Content-Type': 'text/event-stream; charset=utf-8',
@@ -549,13 +927,13 @@ function clampNumber(value, min, max, fallback) {
   return Math.min(max, Math.max(min, number));
 }
 
-const GEMINI_LIVE_MODEL = process.env.GEMINI_LIVE_MODEL || 'gemini-2.5-flash-native-audio-preview-12-2025';
+const GEMINI_LIVE_MODEL = process.env.GEMINI_LIVE_MODEL || 'gemini-3.1-flash-live-preview';
 const GEMINI_LIVE_VOICE = process.env.GEMINI_LIVE_VOICE || 'Puck';
 const GEMINI_LIVE_MAX_SECONDS = clampNumber(
-  Number(process.env.GEMINI_LIVE_MAX_SECONDS || 300),
+  Number(process.env.GEMINI_LIVE_MAX_SECONDS || 900),
   30,
   900,
-  300,
+  900,
 );
 
 function publicTtsOrder() {
@@ -641,10 +1019,11 @@ function base64UrlDecode(value) {
 }
 
 function authSessionSecret() {
-  return process.env.AUTH_SESSION_SECRET
-    || process.env.APP_PROXY_SHARED_SECRET
-    || process.env.GHL_API_TOKEN
-    || 'gaia-staging-session-secret';
+  const secret = String(process.env.AUTH_SESSION_SECRET || '').trim();
+  if (secret.length < 32) {
+    throw new Error('AUTH_SESSION_SECRET must be set and at least 32 characters.');
+  }
+  return secret;
 }
 
 function signTokenPayload(payload) {
@@ -902,6 +1281,11 @@ function memberContextFromRequest(req, url) {
 
 function withMemberContext(url, memberContext) {
   const scoped = new URL(url.toString());
+  // Identity always comes from the signed session. Never pass caller-supplied
+  // member identifiers through to an upstream service.
+  scoped.searchParams.delete('memberId');
+  scoped.searchParams.delete('contactId');
+  scoped.searchParams.delete('email');
   if (!memberContext) return scoped;
   if (memberContext.memberId || memberContext.contactId) {
     const value = memberContext.memberId || memberContext.contactId;
@@ -1059,7 +1443,7 @@ async function wellnessMemberLookup(email) {
     if (!v || !v.memberResolved || !v.member) return { existing: false, member: false, name: '' };
     let hasAccess = false;
     try {
-      const access = buildMemberAccess(v.tags || [], v.customFields || [], v.member);
+      const access = buildMemberAccess(v.tags || [], v.customFields || [], v.member, entitlementForContact(v.member.contactId || v.member.memberId));
       hasAccess = Boolean(
         access?.member?.membershipTier
         || access?.member?.practitioner
@@ -1153,22 +1537,23 @@ async function getMemberFromGhl({ email = '', memberId = '', contactId = '' } = 
 // communities/products the member's tags grant, plus evidence (matchedBy).
 // HealeeX + Abundant are placeholders (locked/unknown) until final tags exist.
 // ————————————————————————————————————————————————————————————————
-// Community tags, membership tiers, and product-owner tags below are synced to
-// the LIVE GHL location taxonomy (audited 2026-07-05). HealeeX is a PRODUCT (not
-// a community); "Abundant Healer Collective" (AHC) is a MEMBERSHIP with Gold/
-// Silver tiers (ahc-gold-active / ahc-silver-active) — not a community.
 const ACCESS_CATALOG = {
   communities: [
     { id: 'all-gaia',  name: 'All Gaia Healers',            matchTags: ['community-active', 'community-starthere-access'] },
-    { id: 'biowell',   name: 'Bio-Well Practitioners',      matchTags: ['community-biowell-member', 'community_biowell'] },
-    { id: 'biopulsar', name: 'BioPulsar Practitioners',     matchTags: ['community-biopulsar-member'] },
+    { id: 'biowell',   name: 'Bio-Well Practitioners',      matchTags: ['community-biowell-member', 'community_biowell', 'product_biowell_interest'] },
+    { id: 'biopulsar', name: 'BioPulsar Practitioners',     matchTags: ['community-biopulsar-member', 'product_biopulsar_interest'] },
     { id: 'biotekna',  name: 'Biotekna Practitioners',      matchTags: ['community-biotekna-member'] },
-    { id: 'asea',      name: 'ASEA Community',               matchTags: ['community-asea-member'] },
+    { id: 'asea',      name: 'ASEA Community',               matchTags: ['community-asea-member', 'product_asea_interest'] },
     { id: 'braintap',  name: 'BrainTap Community',           matchTags: ['community-braintap-member'] },
-    { id: 'lifewave',  name: 'LifeWave Community',           matchTags: ['community-lifewave-member'] },
+    { id: 'lifewave',  name: 'LifeWave Community',           matchTags: ['community-lifewave-member', 'product_lifewave_interest'] },
     { id: 'golden-practitioner', name: 'Golden Practitioner Circle', matchTags: ['goldenpractitioner-community-member'] },
   ],
   productOwnerPattern: /^product_(.+)_owner$/i,
+  // Product interest tags (product_*_interest) are how this GHL location marks
+  // product interest/ownership today; owner tags (product_*_owner) are not used
+  // yet. Matched interest tags surface a product as "interested" (owned: false)
+  // — see addProduct() below. Owner tags still map to owned: true when present.
+  productInterestPattern: /^product_(.+)_interest$/i,
   productNames: {
     biowell: 'Bio-Well', biowell_biocor: 'Bio-Well BioCor', biowell_sputnik: 'Bio-Well Sputnik',
     biowell_water: 'Bio-Well Water Sensor', biowell_water_sensor: 'Bio-Well Water Sensor',
@@ -1176,6 +1561,10 @@ const ACCESS_CATALOG = {
     asea: 'ASEA', lifewave: 'LifeWave', ans_control: 'ANS Control', bia: 'BIA', heg: 'HEG',
     miracleqst: 'Miracle QST', ppg: 'PPG Stress Flow', regmatex: 'RegMaTex', spiro: 'Spiro',
     tomeex: 'ToMeEx', other_devices: 'Other devices', healeex: 'HealeeX',
+    // Keys observed as *_interest tags in the live GHL location.
+    biocor: 'BioCor', jiva: 'Jiva', kangan: 'Kangan',
+    quantum_sound_therapy: 'Quantum Sound Therapy', general_water: 'Water (general)',
+    quantum_sound: 'Quantum Sound Therapy',
   },
   // Non-standard ownership tags (not in product_*_owner form). Only ones WITHOUT
   // a product_*_owner equivalent are listed, so they never double-count.
@@ -1188,8 +1577,10 @@ const ACCESS_CATALOG = {
   // Membership tiers — first match wins, so higher tiers are listed first.
   // Cancelled (ahc-gold-cancel) is intentionally NOT mapped.
   membershipTierTags: {
+    'gaia-diamond-active': 'Diamond', 'ahc-diamond-active': 'Diamond', membership_diamond: 'Diamond', 'diamond-membership': 'Diamond',
     'ahc-gold-active': 'Gold', 'ahc-gold-trial': 'Gold',
     'ahc-silver-active': 'Silver', membership_silver: 'Silver', 'silver-membership': 'Silver',
+    'gaia-free-active': 'Free', 'ahc-free-active': 'Free', membership_free: 'Free', 'free-membership': 'Free',
   },
   practitionerCertifiedTags: ['bio-well certified practitioner'],
   practitionerTags: ['bio-well practitioner', 'gaiapractitioner', 'gaia practitioner directory', 'goldenpractitionermember', 'gaia_practitioner_form_complete'],
@@ -1239,7 +1630,7 @@ function friendlyProductName(slug) {
   return key.split(/[_-]/).filter(Boolean).map((w) => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
 }
 
-function buildMemberAccess(rawTags = [], customFields = [], member = {}) {
+function buildMemberAccess(rawTags = [], customFields = [], member = {}, entitlements = null) {
   const tags = uniqueStrings((rawTags || []).map((t) => String(t || '').trim()).filter(Boolean));
   const lower = new Map(tags.map((t) => [t.toLowerCase(), t]));
   const has = (tag) => lower.has(String(tag).toLowerCase());
@@ -1266,7 +1657,25 @@ function buildMemberAccess(rawTags = [], customFields = [], member = {}) {
 
   const products = [];
   const productIds = new Set();
-  const addProduct = (id, name, tag) => { if (productIds.has(id)) return; productIds.add(id); matched.add(tag.toLowerCase()); products.push({ id, name, owned: true, matchedBy: tag }); };
+  // addProduct: owned=true only for real ownership signals (product_*_owner,
+  // productTagMap). Interest tags (product_*_interest) call addInterestProduct
+  // so they show as owned=false and never overwrite a true owner entry.
+  const addProduct = (id, name, tag) => {
+    if (productIds.has(id)) {
+      // An interest entry already added this product — upgrade it to owned.
+      const existing = products.find((p) => p.id === id);
+      if (existing) { existing.owned = true; existing.matchedBy = tag; }
+      matched.add(tag.toLowerCase());
+      return;
+    }
+    productIds.add(id); matched.add(tag.toLowerCase());
+    products.push({ id, name, owned: true, matchedBy: tag });
+  };
+  const addInterestProduct = (id, name, tag) => {
+    if (productIds.has(id)) { matched.add(tag.toLowerCase()); return; } // owned entry wins
+    productIds.add(id); matched.add(tag.toLowerCase());
+    products.push({ id, name, owned: false, matchedBy: tag, state: 'interested' });
+  };
   for (const t of tags) {
     const m = ACCESS_CATALOG.productOwnerPattern.exec(t);
     if (m) addProduct(m[1].toLowerCase(), friendlyProductName(m[1]), t);
@@ -1276,10 +1685,42 @@ function buildMemberAccess(rawTags = [], customFields = [], member = {}) {
     const p = ACCESS_CATALOG.productTagMap[t.toLowerCase()];
     if (p) addProduct(p.id, p.name, t);
   }
+  // Product interest tags (product_*_interest) — how this GHL location currently
+  // marks product interest. Surfaced as owned:false / state:'interested'. A later
+  // owner tag for the same product id upgrades it to owned:true (see addProduct).
+  for (const t of tags) {
+    const m = ACCESS_CATALOG.productInterestPattern.exec(t);
+    if (m) addInterestProduct(m[1].toLowerCase(), friendlyProductName(m[1]), t);
+  }
 
   let membershipTier = null;
+  let tierMatchedBy = null;
+  // 1) Tag-based tier detection (original path).
   for (const [tag, tier] of Object.entries(ACCESS_CATALOG.membershipTierTags)) {
-    if (has(tag)) { membershipTier = tier; matched.add(tag.toLowerCase()); break; }
+    if (has(tag)) { membershipTier = tier; tierMatchedBy = 'tag:' + tag; matched.add(tag.toLowerCase()); break; }
+  }
+  // GHL tags or an explicit membership workflow are the only tier evidence.
+  // Never infer access from a payment amount: products, discounts, and annual
+  // plans make amount-based authorization unsafe.
+  const mirroredTier = normalizeTierName(entitlements?.tier?.name);
+  if (mirroredTier) {
+    membershipTier = mirroredTier;
+    tierMatchedBy = entitlements.tier.matchedBy || 'ghl-workflow';
+  }
+
+  // Merge exact GHL Group/Community grants delivered by access workflows.
+  // These grants are authoritative and may exist even when a matching contact
+  // tag has not been configured.
+  for (const granted of (Array.isArray(entitlements?.communities) ? entitlements.communities : [])) {
+    const id = String(granted.id || courseGroupKey(granted.name || '')).trim();
+    const name = String(granted.name || id || 'Community').trim();
+    if (!id && !name) continue;
+    const already = unlocked.find((item) => (id && item.id === id) || item.name.toLowerCase() === name.toLowerCase());
+    const link = granted.openUrl ? { openUrl: granted.openUrl, openUrlIsFallback: false } : communityOpenUrl(id);
+    if (already) Object.assign(already, link, { matchedBy: granted.matchedBy || 'ghl-workflow' });
+    else unlocked.push({ id, name, state: 'unlocked', matchedBy: granted.matchedBy || 'ghl-workflow', ...link });
+    const lockedIndex = locked.findIndex((item) => (id && item.id === id) || item.name.toLowerCase() === name.toLowerCase());
+    if (lockedIndex >= 0) locked.splice(lockedIndex, 1);
   }
 
   const certified = ACCESS_CATALOG.practitionerCertifiedTags.some((t) => has(t));
@@ -1298,6 +1739,7 @@ function buildMemberAccess(rawTags = [], customFields = [], member = {}) {
       practitioner,
       practitionerCertified: certified,
       membershipTier,
+      tierMatchedBy,
     },
     communities: { unlocked, locked },
     products,
@@ -1307,6 +1749,7 @@ function buildMemberAccess(rawTags = [], customFields = [], member = {}) {
       products: products.length, unknown: unknownAccessTags.length, totalTags: tags.length,
     },
     customFieldsCount: Array.isArray(customFields) ? customFields.length : 0,
+    entitlementSource: entitlements ? 'ghl-workflow-mirror' : 'ghl-tags',
   };
 }
 
@@ -1320,6 +1763,7 @@ async function memberAccess(req, res, origin) {
   let customFields = [];
   let liveMember = sessionMember;
   let live = false;
+  let entitlements = entitlementForContact(sessionMember.contactId || sessionMember.memberId);
   try {
     const verified = await getMemberFromGhl({
       email: sessionMember.email,
@@ -1331,11 +1775,13 @@ async function memberAccess(req, res, origin) {
       customFields = verified.customFields || [];
       liveMember = verified.member || sessionMember;
       live = true;
+      const cid = liveMember.contactId || liveMember.memberId || sessionMember.contactId || '';
+      entitlements = entitlementForContact(cid) || entitlements;
     }
   } catch (err) {
     console.error('[Gaia Access] live tag read failed', { error: err.message.split('\n')[0] });
   }
-  const access = buildMemberAccess(tags, customFields, liveMember);
+  const access = buildMemberAccess(tags, customFields, liveMember, entitlements);
   sendJson(res, 200, {
     ok: true,
     authenticated: true,
@@ -1365,12 +1811,20 @@ async function fetchMemberBundle(sessionMember) {
     const v = await getMemberFromGhl({ email: sessionMember.email, contactId: sessionMember.contactId, memberId: sessionMember.memberId });
     if (v?.memberResolved) {
       const contactId = v.member?.contactId || v.member?.memberId || sessionMember.contactId || sessionMember.memberId || '';
-      return { resolved: true, member: v.member || sessionMember, tags: v.tags || [], customFields: v.customFields || [], contactId };
+      return {
+        resolved: true,
+        member: v.member || sessionMember,
+        tags: v.tags || [],
+        customFields: v.customFields || [],
+        contactId,
+        entitlements: entitlementForContact(contactId),
+      };
     }
   } catch (err) {
     console.error('[Gaia Member] bundle fetch failed', { error: err.message.split('\n')[0] });
   }
-  return { resolved: false, member: sessionMember, tags: Array.isArray(sessionMember.tags) ? sessionMember.tags : [], customFields: [], contactId: sessionMember.contactId || sessionMember.memberId || '' };
+  const contactId = sessionMember.contactId || sessionMember.memberId || '';
+  return { resolved: false, member: sessionMember, tags: Array.isArray(sessionMember.tags) ? sessionMember.tags : [], customFields: [], contactId, entitlements: entitlementForContact(contactId) };
 }
 
 const BIOWELL_SERIAL_FIELD_ID = '9oJPmsGmdbhca85SeBbl';
@@ -1390,7 +1844,7 @@ function placeholderEnvelope(reason, extra) {
 async function memberProfile(req, res, origin) {
   const sm = requireSessionMember(req, res, origin); if (!sm) return;
   const b = await fetchMemberBundle(sm);
-  const access = buildMemberAccess(b.tags, b.customFields, b.member);
+  const access = buildMemberAccess(b.tags, b.customFields, b.member, b.entitlements);
   sendJson(res, 200, memberEnvelope(b, {
     profile: {
       name: b.member.displayName || b.member.name || 'Gaia member',
@@ -1410,7 +1864,7 @@ async function memberProfile(req, res, origin) {
 async function memberCommunities(req, res, origin) {
   const sm = requireSessionMember(req, res, origin); if (!sm) return;
   const b = await fetchMemberBundle(sm);
-  const access = buildMemberAccess(b.tags, b.customFields, b.member);
+  const access = buildMemberAccess(b.tags, b.customFields, b.member, b.entitlements);
   sendJson(res, 200, memberEnvelope(b, { communities: access.communities, unknownAccessTags: access.unknownAccessTags }), origin);
 }
 
@@ -1429,6 +1883,12 @@ async function memberDevices(req, res, origin) {
 }
 
 function normalizeAppointment(a = {}) {
+  // GHL stores the video call link in `meeting_location` (e.g. the Zoom URL
+  // when the calendar's meetingLocationType is 'zoom'). The `address` field
+  // holds the location for in-person appointments. Surface both so the app can
+  // show a "Join meeting" button for video calls and an address for in-person.
+  const meetingLocation = String(a.meeting_location || a.meetingLocation || a.meetingLink || '').trim();
+  const meetingLocationType = String(a.meetingLocationType || a.meetingLinkType || '').trim().toLowerCase();
   return {
     id: String(a.id || ''),
     title: String(a.title || 'Appointment'),
@@ -1437,6 +1897,9 @@ function normalizeAppointment(a = {}) {
     status: String(a.appointmentStatus || a.status || ''),
     calendarId: String(a.calendarId || ''),
     address: String(a.address || ''),
+    meetingLocation,
+    meetingLocationType,
+    isVideo: Boolean(meetingLocation && /^(https?:)?\/\//.test(meetingLocation)),
   };
 }
 async function memberAppointments(req, res, origin) {
@@ -1577,12 +2040,43 @@ async function memberNotifications(req, res, origin) {
   }, origin);
 }
 
-// Courses & community events remain impossible via GHL API (no endpoint).
 async function memberCourses(req, res, origin) {
   const sm = requireSessionMember(req, res, origin); if (!sm) return;
   const b = await fetchMemberBundle(sm);
   const tagHints = b.tags.filter((t) => /course|enrolled/i.test(t));
-  sendJson(res, 200, placeholderEnvelope('GHL exposes no Courses/LMS API — course enrollment and lesson progress cannot be read (verified: all course endpoints 404). Tag hints only.', { courses: [], tagHints, portalUrl: DEEPLINK.academyHubUrl || DEEPLINK.portalFallback, portalUrlIsFallback: !DEEPLINK.academyHubUrl, catalogReady: true }), origin);
+  const catalog = loadCourses().courses || [];
+  const grants = Array.isArray(b.entitlements?.courses) ? b.entitlements.courses : [];
+  const courses = grants.map((grant) => {
+    const grantKey = courseGroupKey(grant.name || '');
+    const catalogCourse = catalog.find((course) => String(course.id || '') === String(grant.id || ''))
+      || catalog.find((course) => grantKey && courseGroupKey(course.title || '') === grantKey);
+    const openUrl = firstNonEmptyString(grant.openUrl, catalogCourse?.portalUrl, DEEPLINK.courseUrls[grant.id], DEEPLINK.academyHubUrl, DEEPLINK.portalFallback);
+    return {
+      id: String(grant.id || catalogCourse?.id || grantKey),
+      title: String(grant.name || catalogCourse?.title || 'Course'),
+      description: String(catalogCourse?.description || ''),
+      image: String(catalogCourse?.image || ''),
+      category: String(catalogCourse?.category || ''),
+      state: 'unlocked',
+      openUrl,
+      openUrlIsFallback: !grant.openUrl && !catalogCourse?.portalUrl && !DEEPLINK.courseUrls[grant.id],
+      matchedBy: grant.matchedBy || 'ghl-workflow',
+      updatedAt: grant.updatedAt || b.entitlements?.updatedAt || null,
+      progressAvailable: false,
+    };
+  });
+  sendJson(res, 200, memberEnvelope(b, {
+    source: b.entitlements ? 'ghl-workflow-mirror' : (b.resolved ? 'ghl-live-no-course-grants' : 'session-no-course-grants'),
+    reason: b.entitlements
+      ? 'Exact GHL course/offer access mirrored by access-granted and access-removed workflows. Lesson progress is not exposed by the public GHL API.'
+      : 'No GHL course access workflow event has been mirrored for this contact yet.',
+    courses,
+    count: courses.length,
+    tagHints,
+    portalUrl: DEEPLINK.academyHubUrl || DEEPLINK.portalFallback,
+    portalUrlIsFallback: !DEEPLINK.academyHubUrl,
+    catalogReady: true,
+  }), origin);
 }
 async function memberEvents(req, res, origin) {
   if (!requireSessionMember(req, res, origin)) return;
@@ -1645,12 +2139,15 @@ function buildGaiaLiveInstructions(context = {}) {
     `The member is currently on the ${view} screen. Assume questions relate to what they are looking at unless they say otherwise, and tailor your help to that screen first.`,
     'Speak in a calm, friendly, natural voice, like a helpful friend on a phone call. Keep replies short: one or two sentences, then a quick question or a clear next step. Give more detail only when asked.',
     'Be proactive and specific: when a member asks for something, tell them exactly where to go (for example "Open the Store and tap Membership" or "Go to Community to find a healer"), and offer the natural next step.',
-    'You can help with anything in the app: Home (chakra reading, the daily body-point and wellness horoscope, the 8-week chakra challenge, booking a session, the colour test), Academy (courses via the education portal), Community (which communities you have unlocked, and Find a Healer), Store (Shop and Membership), and Profile (your account, devices, purchases, bookings, membership). If you are unsure of a live number or detail, say so plainly instead of inventing one.',
+    'You can help with anything in the app: Home (the dynamically fetched next event and member access), Energy (public birth-date chakra chart and interactive seven-centre guide), Academy (courses via the education portal), Community (which communities are unlocked and Find a Practitioner), Store (Shop and the official Gaia 2.0 Free/Silver/Gold/Diamond membership paths), and Profile (account, devices, purchases, bookings, founder access, and the colour test). If you are unsure of a live number or detail, say so plainly instead of inventing one.',
     'Keep members in-app first. Course videos and community discussions open the separate education.gaiahealers.com portal, which has its own login — mention it only when they want the actual lessons or discussions, or need to sign in.',
     'Never narrate your reasoning, planning, hidden analysis, or drafting process. Do not say phrases like "I have crafted", "I am refining", or "finalizing".',
     'When asked to say exact words, say only those words and no extra explanation.',
     'Never claim you saved, booked, bought, imported, emailed, checked in, or changed anything. Explain how the member can do it instead.',
     'Do not diagnose or make medical claims.',
+    'You have a navigate tool. When a member asks to go to, open, show, see, or view a specific screen, tab, or feature — call the navigate tool to actually move them there. Examples: "show today’s event" → navigate(screen=today); "open my energy chart" → navigate(screen=wellness); "take me to my courses" → navigate(screen=academy); "open the store" → navigate(screen=store); "show me membership options" → navigate(screen=store, tab=membership); "go to my profile" → navigate(screen=profile); "find a practitioner" → navigate(screen=community). Navigation is the start of helping on that screen, not the finish: point out what is now available and keep listening.',
+    'You also have action tools. Use them to actually do things for the member, not just describe how. book_session: when the member asks to book, schedule, or reserve something — "book a call with Dr. Nima" or "I want to meet the founder" → book_session(session=nima); "book a Bio-Well scan" → book_session(session=scan); "I want a demo" → book_session(session=demo); "book a discovery call" → book_session(session=discovery); "schedule coaching" → book_session(session=coaching). It opens the real booking form (Nima uses Calendly, the others use GHL widgets); tell them to complete it there. open_community: when the member asks to open or visit a community — "open the Bio-Well community" → open_community(community=biowell); "take me to BioPulsar" → open_community(community=biopulsar); "all gaia healers group" → open_community(community=all-gaia). Some open directly, others open in the portal. open_portal: when the member wants the portal itself — "open the portal" → open_portal(section=home); "open my courses in the portal" → open_portal(section=courses); "portal login" → open_portal(section=login). sign_in: when the member says they want to sign in, log in, or access their account and they are not signed in — "sign me in" → sign_in(). Never call sign_in if the member is already signed in. After ANY action tool, STAY ENGAGED: confirm what you opened, then guide them through the next step and keep listening. Do not go silent after opening something — the conversation continues until the member says goodbye.',
+    'This is an ongoing conversation, not a single request-response. After every action — navigating, opening a booking form, opening a community, signing in — you are STILL their assistant on that screen. Keep helping: point out what they can do, answer follow-ups, navigate elsewhere if asked, and only go quiet when the member clearly ends the conversation. Never end your turn with just a confirmation and silence; end with either a useful observation about what is now on screen, or a concrete next step they can take, or a question.',
     'Greet the member warmly in one short sentence when the session starts, mention you can help with anything in the app, then listen.',
   ].filter(Boolean).join('\n');
 }
@@ -1674,7 +2171,7 @@ async function buildMemberVoiceContext(req) {
     const cached = cid && _memberAiCtxCache.get(cid);
     if (cached && (Date.now() - cached.at) < 60000) return cached.text;
 
-    const access = buildMemberAccess(b.tags, b.customFields, b.member);
+    const access = buildMemberAccess(b.tags, b.customFields, b.member, b.entitlements);
     const [apptsRaw, convos, orders, subs, formSubs, surveySubs] = await Promise.all([
       cid ? ghlGet(`/contacts/${encodeURIComponent(cid)}/appointments`).then((r) => r?.events || r?.appointments || []).catch(() => []) : [],
       cid ? ghlMemberConversations(cid, 5).catch(() => []) : [],
@@ -1808,7 +2305,7 @@ async function assistLiveToken(req, res, origin, url) {
 async function getEventSummary() {
   const base = (process.env.EVENT_MANAGER_BASE_URL || '').replace(/\/+$/, '');
   const eventId = process.env.EVENT_MANAGER_EVENT_ID || '';
-  if (!base || !eventId) {
+  if (!base) {
     return {
       ...FALLBACK_GAIA.event,
       source: 'not-connected',
@@ -1822,13 +2319,25 @@ async function getEventSummary() {
     headers.Authorization = `Bearer ${process.env.EVENT_MANAGER_TOKEN}`;
   }
 
-  const event = await fetchJson(`${base}/public/events/${encodeURIComponent(eventId)}`, headers);
+  let event;
+  try {
+    event = await fetchJson(`${base}/public/events/next`, headers);
+  } catch (error) {
+    // Transitional fallback for older Event Manager deployments only. Once the
+    // dynamic endpoint exists, Home no longer depends on a pinned event id.
+    if (!eventId) throw error;
+    event = await fetchJson(`${base}/public/events/${encodeURIComponent(eventId)}`, headers);
+  }
   return {
-    id: `event-${event.id || eventId}`,
+    id: `event-${event.id || eventId || 'next'}`,
     name: event.name || FALLBACK_GAIA.event.name,
     date: event.start_date && event.end_date ? `${event.start_date} - ${event.end_date}` : FALLBACK_GAIA.event.date,
+    startDate: event.start_date || null,
+    endDate: event.end_date || null,
+    description: event.description || '',
     venue: event.location || FALLBACK_GAIA.event.venue,
     location: event.location || FALLBACK_GAIA.event.location,
+    sourceUrl: event.source_url || 'https://elevate.gaiahealers.com/gaia-healers-elevate-conference-page',
     source: 'event-manager',
     liveData: true,
     stats: {
@@ -2413,6 +2922,29 @@ async function authMagicLinkRequest(req, res, origin) {
     return;
   }
 
+  const requestIp = firstNonEmptyString(req.headers['cf-connecting-ip'], String(req.headers['x-forwarded-for'] || '').split(',')[0], req.socket?.remoteAddress, 'unknown');
+  const rateKey = crypto.createHash('sha256').update(`${requestIp}|${email}`).digest('hex');
+  const cutoff = Date.now() - (15 * 60 * 1000);
+  const attempts = (MAGIC_LINK_REQUESTS.get(rateKey) || []).filter((time) => time > cutoff);
+  if (attempts.length >= 5) {
+    sendJson(res, 429, { ok: false, error: 'Too many sign-in requests. Please wait 15 minutes and try again.', code: 'rate_limited' }, origin, { 'Retry-After': '900' });
+    return;
+  }
+  attempts.push(Date.now());
+  MAGIC_LINK_REQUESTS.set(rateKey, attempts);
+  if (MAGIC_LINK_REQUESTS.size > 10000) {
+    for (const [key, times] of MAGIC_LINK_REQUESTS) {
+      if (!times.some((time) => time > cutoff)) MAGIC_LINK_REQUESTS.delete(key);
+    }
+  }
+
+  const genericResponse = {
+    ok: true,
+    delivery: 'email-if-member',
+    message: 'If this email belongs to a Gaia member, a secure sign-in link will arrive shortly.',
+    expiresInSeconds: AUTH_MAGIC_LINK_TTL_SECONDS,
+  };
+
   const member = await resolveMemberRecord({
     email,
     memberId: body.memberId || body.contactId || '',
@@ -2420,11 +2952,8 @@ async function authMagicLinkRequest(req, res, origin) {
   });
 
   if (!member) {
-    sendJson(res, 503, {
-      ok: false,
-      error: 'Member verification is not configured yet. Use the GHL portal login or launch the app from the embedded GHL portal.',
-      code: 'member_verification_unavailable',
-    }, origin);
+    // Do not reveal whether an email exists in GHL.
+    sendJson(res, 200, genericResponse, origin);
     return;
   }
 
@@ -2445,22 +2974,12 @@ async function authMagicLinkRequest(req, res, origin) {
       html: magicLinkEmailHtml(member, consumeUrl),
     });
     if (sent.ok) {
-      sendJson(res, 200, {
-        ok: true,
-        delivery: 'email',
-        email: maskEmailAddress(member.email),
-        member: { email: member.email, displayName: member.displayName },
-        expiresInSeconds: AUTH_MAGIC_LINK_TTL_SECONDS,
-      }, origin);
+      sendJson(res, 200, genericResponse, origin);
       return;
     }
     if (!AUTH_ALLOW_DEBUG_LINKS) {
-      sendJson(res, 502, {
-        ok: false,
-        error: 'We could not send your sign-in email just now. Please try again in a moment.',
-        code: 'magic_link_send_failed',
-        reason: sent.reason || 'ghl_error',
-      }, origin);
+      console.error('[Gaia Auth] magic-link delivery failed', { reason: sent.reason || 'ghl_error', contactId: member.contactId });
+      sendJson(res, 200, genericResponse, origin);
       return;
     }
   }
@@ -2476,19 +2995,23 @@ async function authMagicLinkRequest(req, res, origin) {
     return;
   }
 
-  sendJson(res, 503, {
-    ok: false,
-    error: 'Magic-link email delivery is not configured yet. Use the embedded GHL portal flow for now.',
-    code: 'magic_link_delivery_unavailable',
-  }, origin);
+  console.error('[Gaia Auth] magic-link delivery unavailable', { contactId: member.contactId || '' });
+  sendJson(res, 200, genericResponse, origin);
 }
 
 async function authMagicLinkConsume(req, res, origin, url) {
-  const payload = readSignedToken(url.searchParams.get('token') || '');
-  if (!payload?.member) {
+  const rawToken = url.searchParams.get('token') || '';
+  const payload = readSignedToken(rawToken);
+  const tokenHash = crypto.createHash('sha256').update(rawToken).digest('hex');
+  const now = Date.now();
+  for (const [hash, expiresAt] of CONSUMED_MAGIC_LINKS) {
+    if (expiresAt <= now) CONSUMED_MAGIC_LINKS.delete(hash);
+  }
+  if (payload?.type !== 'magic-link' || !payload?.member || CONSUMED_MAGIC_LINKS.has(tokenHash)) {
     sendRedirect(res, safeReturnUrl(url.searchParams.get('returnTo')), origin);
     return;
   }
+  CONSUMED_MAGIC_LINKS.set(tokenHash, Number(payload.exp) || (now + AUTH_MAGIC_LINK_TTL_SECONDS * 1000));
   const session = createMemberSession(payload.member, 'magic-link');
   const token = signTokenPayload(session);
   sendRedirect(res, safeReturnUrl(payload.returnTo || url.searchParams.get('returnTo')), origin, {
@@ -2507,7 +3030,7 @@ async function authEmbeddedClaim(req, res, origin) {
     return;
   }
   const sharedSecret = String(body.sharedSecret || body.bridge || '').trim();
-  const secretOk = Boolean(AUTH_EMBED_SHARED_SECRET) && sharedSecret === AUTH_EMBED_SHARED_SECRET;
+  const secretOk = Boolean(AUTH_EMBED_SHARED_SECRET) && safeSecretEqual(sharedSecret, AUTH_EMBED_SHARED_SECRET);
   if (AUTH_EMBED_SHARED_SECRET && !secretOk) {
     sendJson(res, 403, { ok: false, error: 'Embedded bridge secret mismatch.' }, origin);
     return;
@@ -2579,11 +3102,11 @@ function fallbackAssistReply(prompt, intent = '') {
   if (normalized.includes('book') || normalized.includes('scan') || normalized.includes('appointment') || normalized.includes('session') || normalized.includes('demo')) {
     return 'You can book a session from the Home screen — there are options for a Bio-Well energy scan, a Bio-Well demo, a free discovery call, and wellness coaching. Want me to point you to the right one?';
   }
-  if (normalized.includes('chakra') || normalized.includes('wellness') || normalized.includes('horoscope') || normalized.includes('challenge') || normalized.includes('colour') || normalized.includes('color')) {
-    return 'On the Home screen you can get your birth-date chakra reading, unlock a daily body-point and wellness horoscope with a quick free sign-up, join the 8-Week Chakra Challenge, and take the Colour Personality Test. Which would you like?';
+  if (normalized.includes('chakra') || normalized.includes('wellness') || normalized.includes('energy') || normalized.includes('chart') || normalized.includes('colour') || normalized.includes('color')) {
+    return 'Open Energy for the public birth-date chakra chart and interactive seven-centre guide. The Colour Personality Test is in Profile. Which would you like?';
   }
   if (normalized.includes('community') || normalized.includes('membership') || normalized.includes('healer') || normalized.includes('practitioner')) {
-    return 'Community shows which Gaia communities you have unlocked plus a Find a Healer link to the practitioner directory; membership tiers (Explorer, Silver, Practitioner) live in the Store under the Membership tab. Want a hand getting there?';
+    return 'Community shows which Gaia circles you have unlocked and links to the practitioner directory. The Store’s Membership tab shows the official Free, Silver, Gold, and Diamond Gaia 2.0 paths and opens enrolment inside the app. Want me to guide you there?';
   }
   if (normalized.includes('course') || normalized.includes('academy') || normalized.includes('certification') || normalized.includes('login') || normalized.includes('sign in') || normalized.includes('portal')) {
     return 'Academy has your courses — the lessons open in the education.gaiahealers.com portal, which has its own login. To sign in to the app, tap Sign in and use the one-tap link we email to your member address.';
@@ -2594,14 +3117,14 @@ function fallbackAssistReply(prompt, intent = '') {
   if (normalized.includes('event') || normalized.includes('elevate') || normalized.includes('conference')) {
     return 'The Gaia Healers Elevate Conference 2026 is November 20-22 at Rosen Shingle Creek in Orlando. You can see it on the Home screen and register from there.';
   }
-  return 'I can help with anything in the Gaia Healers app — your chakra and daily wellness, booking a session, courses, communities, membership, the store, or the Elevate event. What would you like to do?';
+  return 'I can help with Home events, Energy guidance, Academy courses, Community, Gaia 2.0 membership, the Store, Profile, practitioners, bookings, or meeting the founder. What would you like to do?';
 }
 
 function assistSystemPrompt(memberContext = '') {
   return [
     'You are Gaia Assist, the smart concierge for the Gaia Healers mobile app. You help members with ANYTHING in the app and the wider Gaia ecosystem.',
     'Answer with deep, accurate awareness of the Gaia Healers app screens and features, the products and devices, the communities and membership, the courses, the events, and the store.',
-    'The app can run embedded inside the Gaia Healers GHL menu. Keep users inside the app first: Home for the daily wellness tools, chakra reading, booking, and colour test; Academy for courses; Community for communities and Find a Healer; Store for shop and membership; Profile for account and sign-in. Course videos and community discussions open the education.gaiahealers.com portal, which has its own login.',
+    'The app can run embedded inside the Gaia Healers GHL menu. Keep users inside the app first: bottom Home for the next event and member access, Energy for public chakra guidance, Store for shop and membership, Profile for account and bookings; top Menu for Academy, Community, Membership, Meet the Founder, Find a Practitioner, and sign-in. Course videos and community discussions open the education.gaiahealers.com portal, which has its own login.',
     'When asked how to do something, name the exact screen and step. Never invent course progress, scan numbers, community posts, prices, or personal history.',
     'Never claim that you saved, imported, checked in, emailed, booked, purchased, or changed data. Explain how the member can do it.',
     'Keep responses concise, practical, warm, and wellness-safe. Do not provide medical diagnosis.',
@@ -3234,6 +3757,18 @@ const server = http.createServer(async (req, res) => {
       sendJson(res, 200, { ok: true }, origin);
       return;
     }
+    if (req.method === 'GET' && url.pathname === '/api/courses') {
+      await coursesList(req, res, origin);
+      return;
+    }
+    if (req.method === 'POST' && url.pathname === '/api/courses/sync') {
+      await coursesSync(req, res, origin);
+      return;
+    }
+    if (req.method === 'POST' && url.pathname === '/api/webhooks/ghl/member-access') {
+      await memberAccessWebhook(req, res, origin);
+      return;
+    }
     if (req.method === 'GET' && url.pathname === '/api/auth/session') {
       await authSession(req, res, origin, url);
       return;
@@ -3260,7 +3795,6 @@ const server = http.createServer(async (req, res) => {
     }
     if (req.method === 'GET' && url.pathname === '/api/app/bootstrap') {
       const boot = await bootstrap(req, url);
-      // Merge admin-published content so it surfaces in the app.
       try {
         if (boot && boot.gaia) {
           boot.gaia.announcements = adminRouter.publishedAnnouncements();
@@ -3270,23 +3804,13 @@ const server = http.createServer(async (req, res) => {
       sendJson(res, 200, boot, origin);
       return;
     }
-    // Admin panel (events / content / members). Self-contained, gated by the
-    // gaia_admin cookie; all helpers injected so admin-router stays decoupled.
     if (url.pathname.startsWith('/api/admin/')) {
       await adminRouter.handle(req, res, url, {
-        origin,
-        sendJson,
-        readJsonBody,
-        signTokenPayload,
-        readSignedToken,
-        parseCookies,
-        ghlGet,
-        ghlConfig,
-        ghlHeaders,
+        origin, sendJson, readJsonBody, signTokenPayload, readSignedToken,
+        parseCookies, ghlGet, ghlConfig, ghlHeaders,
       });
       return;
     }
-    // Wellness profiles + daily body-point / horoscope (self-serve sign-up).
     if (url.pathname.startsWith('/api/wellness/')) {
       await wellnessRouter.handle(req, res, url, {
         origin, sendJson, readJsonBody, signTokenPayload, readSignedToken, parseCookies, aiComplete, ghlUpsertContact, memberLookup: wellnessMemberLookup,
@@ -3294,7 +3818,8 @@ const server = http.createServer(async (req, res) => {
       return;
     }
     if (req.method === 'GET' && url.pathname === '/api/academy/progress') {
-      const memberContext = sessionMemberContext(req);
+      const memberContext = requireSessionMember(req, res, origin);
+      if (!memberContext) return;
       const payload = applyMemberContextToAcademy(await getAcademyProgress(withMemberContext(url, memberContext)), memberContext);
       payload.authenticated = Boolean(memberContext);
       payload.memberResolved = Boolean(memberContext?.email || memberContext?.memberId || memberContext?.contactId);
@@ -3302,7 +3827,8 @@ const server = http.createServer(async (req, res) => {
       return;
     }
     if (req.method === 'GET' && url.pathname === '/api/member/hub') {
-      const memberContext = sessionMemberContext(req);
+      const memberContext = requireSessionMember(req, res, origin);
+      if (!memberContext) return;
       const scopedUrl = withMemberContext(url, memberContext);
       const academy = applyMemberContextToAcademy(await getAcademyProgress(scopedUrl).catch(() => FALLBACK_ACADEMY), memberContext);
       const hub = applyMemberContextToMemberHub(await getMemberHub(scopedUrl, academy), memberContext);
@@ -3406,6 +3932,6 @@ const server = http.createServer(async (req, res) => {
   }
 });
 
-server.listen(PORT, () => {
-  console.log(`Gaia staging proxy listening on :${PORT}`);
+server.listen(PORT, HOST, () => {
+  console.log(`Gaia staging proxy listening on ${HOST}:${PORT}`);
 });

@@ -233,6 +233,7 @@ body.gaia-v2 .gaia-shell {
 .g-member-access__title { margin: 6px 0 0; font: 600 25px/1 var(--g-font-serif); }
 .g-member-access__meta { margin: 5px 0 0; color: var(--g-text-muted); font-size: 13px; line-height: 1.4; }
 .g-member-access .g-btn { flex: none; border-radius: 999px; }
+.g-member-access__actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; }
 
 .g-chakra-hero { border-radius: var(--g-r-xl); background: #050906; }
 .g-chakra-hero__stage { height: min(44vh, 370px); height: min(44dvh, 370px); }
@@ -538,6 +539,7 @@ body.gaia-v2 .gaia-assist--welcome .gaia-assist__bubble--bot {
   .g-priority strong { font-size: 23px; }
   .g-member-access { align-items: flex-start; flex-direction: column; }
   .g-member-access .g-btn { width: 100%; }
+  .g-member-access__actions { width: 100%; }
   .g-chakra-guide { grid-template-columns: 1fr; }
   .g-chakra-guide__shop { width: 100%; }
   body.gaia-v2 .gaia-tabbar__label { display: none; }

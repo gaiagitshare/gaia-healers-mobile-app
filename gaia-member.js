@@ -224,16 +224,24 @@ body.gaia-booking-open{overflow:hidden;}
 
   function membersCard() {
     if (state.authed && state.data.profile) {
+      const profile = (state.data.profile && state.data.profile.profile) || {};
       const unlocked = (state.data.access && state.data.access.communities && state.data.access.communities.unlocked) || [];
+      const courses = (state.data.courses && state.data.courses.courses) || [];
+      const accessSummary = [];
+      if (courses.length) accessSummary.push(courses.length + (courses.length === 1 ? ' course' : ' courses'));
+      if (unlocked.length) accessSummary.push(unlocked.length + (unlocked.length === 1 ? ' community' : ' communities'));
       return '<div class="g-member-access__body"><p class="g-member-access__kicker">Your Gaia</p>'
-        + '<p class="g-member-access__title">' + (unlocked.length ? unlocked.length + (unlocked.length === 1 ? ' circle' : ' circles') : 'Member access') + '</p>'
-        + '<p class="g-member-access__meta">' + (unlocked.map((c) => esc(c.name)).slice(0, 2).join(', ') || 'Your practitioner network is ready.') + '</p></div>'
+        + '<p class="g-member-access__title">' + esc(profile.membershipTier ? profile.membershipTier + ' member' : 'Member access') + '</p>'
+        + '<p class="g-member-access__meta">' + esc(accessSummary.join(' · ') || 'No course or community grants are attached to this GHL contact yet.') + '</p></div>'
         + '<a class="g-btn g-btn--secondary g-btn--sm" href="home.html?view=community">View access →</a>';
     }
     return '<div class="g-member-access__body"><p class="g-member-access__kicker">Unlock your Gaia</p>'
       + '<p class="g-member-access__title">Member access</p>'
-      + '<p class="g-member-access__meta">Courses, communities, bookings, and a Gaia that knows you.</p></div>'
-      + '<button type="button" class="g-btn g-btn--secondary g-btn--sm" data-native-signin>Sign in →</button>';
+      + '<p class="g-member-access__meta">Join free, choose a membership, or sign in to see only the access attached to your GHL account.</p></div>'
+      + '<div class="g-member-access__actions">'
+      + '<button type="button" class="g-btn g-btn--primary g-btn--sm" data-native-signin>Sign in</button>'
+      + '<button type="button" class="g-btn g-btn--secondary g-btn--sm" data-open-in-app="https://join.gaiahealers.com/onboarding" data-in-app-title="Free Gaia Membership">Join free</button>'
+      + '<a class="g-btn g-btn--ghost g-btn--sm" href="home.html?view=store&tab=membership">Memberships</a></div>';
   }
 
   // Admin-published announcements (from /api/app/bootstrap → gaia.announcements).
@@ -569,7 +577,7 @@ body.gaia-booking-open{overflow:hidden;}
     const cards = [];
 
     // Membership status (feature card)
-    const tierName = p.membershipTier ? p.membershipTier + ' member' : 'Free member';
+    const tierName = p.membershipTier ? p.membershipTier + ' member' : 'Membership not detected';
     cards.push('<article class="g-card g-card--feature"><div class="g-tier__head"><p class="g-card__label">Membership</p>'
       + (p.membershipTier ? '<span class="g-badge g-badge--on">Active</span>' : '') + '</div>'
       + '<p class="g-card__value g-card__value--lg">' + esc(tierName) + '</p>'
@@ -948,18 +956,17 @@ body.gaia-booking-open{overflow:hidden;}
   }
   function membershipCards() {
     const acc = (state.data.access && state.data.access.member) || {};
-    const authed = state.authed;
     const hasSilver = /silver/i.test(acc.membershipTier || '');
     const hasGold = /gold/i.test(acc.membershipTier || '');
     const hasDiamond = /diamond/i.test(acc.membershipTier || '');
-    const baseline = !authed || (!hasSilver && !hasGold && !hasDiamond);
+    const hasFree = /free/i.test(acc.membershipTier || '');
 
     const intro = '<article class="g-card"><p class="g-card__label">Gaia 2.0 Practitioners</p>'
       + '<p class="g-card__meta">Choose a practitioner path that matches your stage. Official membership enrolment opens here inside the app.</p></article>';
     const free = tierCard({
-      name: 'Free', statusLabel: baseline ? 'Available' : 'Included', active: baseline,
+      name: 'Free', statusLabel: hasFree ? 'Active' : '$0', active: hasFree,
       abilities: ['Online community access', 'State of the Union calls', 'Lightworker Creed resources', 'Monthly community newsletter'],
-      ctaLabel: baseline ? 'Join free' : '', ctaAction: baseline ? 'membership' : '', ctaUrl: 'https://join.gaiahealers.com/onboarding',
+      ctaLabel: hasFree ? '' : 'Join free', ctaAction: hasFree ? '' : 'membership', ctaUrl: 'https://join.gaiahealers.com/onboarding',
     });
     const silver = tierCard({
       name: 'Silver', statusLabel: hasSilver ? 'Active' : '$97/mo', active: hasSilver,

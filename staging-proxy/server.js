@@ -545,9 +545,13 @@ const COURSES_FILE = path.join(process.cwd(), 'data', 'courses.json');
 const COURSES_SYNC_SECRET = String(process.env.COURSES_SYNC_SECRET || '').trim();
 const MEMBER_ENTITLEMENTS_FILE = String(process.env.MEMBER_ENTITLEMENTS_FILE || path.join(process.cwd(), 'data', 'member-entitlements.json')).trim();
 const GHL_WORKFLOW_WEBHOOK_SECRET = String(process.env.GHL_WORKFLOW_WEBHOOK_SECRET || COURSES_SYNC_SECRET).trim();
+const GHL_BACKFILL_SECRET = String(process.env.GHL_BACKFILL_SECRET || GHL_WORKFLOW_WEBHOOK_SECRET).trim();
 const GHL_WEBHOOK_ED25519_PUBLIC_KEY = String(process.env.GHL_WEBHOOK_ED25519_PUBLIC_KEY || '').replace(/\\n/g, '\n').trim();
 if (COURSES_SYNC_SECRET.length < 32) {
   throw new Error('COURSES_SYNC_SECRET must be set and at least 32 characters.');
+}
+if (GHL_BACKFILL_SECRET.length < 32) {
+  throw new Error('GHL_BACKFILL_SECRET must be set and at least 32 characters.');
 }
 let _coursesCache = null;
 let _memberEntitlementsCache = null;
@@ -600,6 +604,21 @@ function saveMemberEntitlements(store) {
 function entitlementForContact(contactId) {
   const id = String(contactId || '').trim();
   return id ? loadMemberEntitlements().contacts[id] || null : null;
+}
+
+function entitlementDomainTimestamp(record, domain) {
+  const explicit = Date.parse(record?.domainUpdatedAt?.[domain] || '');
+  if (Number.isFinite(explicit)) return explicit;
+  if (domain === 'tier') return Date.parse(record?.tier?.updatedAt || '') || 0;
+  if (domain === 'subscriptions') {
+    return Math.max(0, ...(Array.isArray(record?.subscriptions) ? record.subscriptions : [])
+      .map((item) => Date.parse(item?.updatedAt || item?.createdAt || '') || 0));
+  }
+  if (domain === 'courses' || domain === 'communities') {
+    return Math.max(0, ...(Array.isArray(record?.[domain]) ? record[domain] : [])
+      .map((item) => Date.parse(item?.updatedAt || '') || 0));
+  }
+  return 0;
 }
 
 function loadCourses() {
@@ -866,10 +885,12 @@ async function memberAccessWebhook(req, res, origin) {
     return;
   }
   const now = new Date().toISOString();
-  const record = store.contacts[contactId] || { contactId, tags: [], tier: null, courses: [], communities: [], updatedAt: now };
+  const record = store.contacts[contactId] || { contactId, tags: [], tier: null, courses: [], communities: [], subscriptions: [], domainUpdatedAt: {}, updatedAt: now };
   record.tags = uniqueStrings(record.tags || []);
   record.courses = Array.isArray(record.courses) ? record.courses : [];
   record.communities = Array.isArray(record.communities) ? record.communities : [];
+  record.subscriptions = Array.isArray(record.subscriptions) ? record.subscriptions : [];
+  record.domainUpdatedAt = record.domainUpdatedAt && typeof record.domainUpdatedAt === 'object' ? record.domainUpdatedAt : {};
 
   if (event.kind === 'tags') {
     const tags = body.tags || body.contact?.tags || body.data?.tags || body.data?.contact?.tags;
@@ -894,6 +915,9 @@ async function memberAccessWebhook(req, res, origin) {
     }
   }
 
+  const eventDomain = event.kind === 'course' ? 'courses'
+    : (event.kind === 'community' ? 'communities' : event.kind);
+  record.domainUpdatedAt[eventDomain] = now;
   record.updatedAt = now;
   store.contacts[contactId] = record;
   if (webhookId) store.processedWebhookIds.push(webhookId);
@@ -905,6 +929,135 @@ async function memberAccessWebhook(req, res, origin) {
   }
   console.log('[Gaia Entitlements] access updated', { contactId, event: event.raw, kind: event.kind, grant: event.grant, authMethod });
   sendJson(res, 200, { ok: true, contactId, kind: event.kind, grant: event.grant, updatedAt: now }, origin);
+}
+
+function backfillAuthorized(req) {
+  // This route is for a trusted server-side import only, never a browser.
+  if (req.headers.origin || req.headers['sec-fetch-site']) return false;
+  const supplied = String(req.headers['x-backfill-secret'] || req.headers['x-webhook-secret'] || '').trim();
+  return GHL_BACKFILL_SECRET.length >= 32 && safeSecretEqual(supplied, GHL_BACKFILL_SECRET);
+}
+
+function normalizedBackfillResources(items, resourceType, snapshotAt) {
+  if (!Array.isArray(items)) return [];
+  const seen = new Set();
+  const normalized = [];
+  for (const raw of items) {
+    const source = typeof raw === 'string' ? { name: raw } : (raw && typeof raw === 'object' ? raw : {});
+    const resource = normalizeEntitlementResource(source, resourceType);
+    const key = String(resource.id || resource.name || '').trim().toLowerCase();
+    if (!key || seen.has(key)) continue;
+    seen.add(key);
+    normalized.push({
+      id: resource.id,
+      name: resource.name,
+      state: 'unlocked',
+      openUrl: resource.openUrl,
+      matchedBy: 'backfill:ghl',
+      updatedAt: snapshotAt,
+    });
+  }
+  return normalized;
+}
+
+function normalizedBackfillSubscriptions(value, snapshotAt) {
+  const items = Array.isArray(value) ? value : (value && typeof value === 'object' ? [value] : []);
+  return items.map((raw) => ({
+    id: firstNonEmptyString(raw.id, raw._id, raw.subscriptionId),
+    status: firstNonEmptyString(raw.status, raw.subscriptionStatus),
+    name: firstNonEmptyString(raw.name, raw.plan, raw.planName, raw.offerName, raw.productName),
+    entitySourceName: firstNonEmptyString(raw.entitySourceName, raw.offerName, raw.plan, raw.planName),
+    renewalDate: firstNonEmptyString(raw.renewalDate, raw.nextBillingDate, raw.currentPeriodEnd),
+    createdAt: firstNonEmptyString(raw.createdAt, raw.subscriptionStartDate),
+    updatedAt: firstNonEmptyString(raw.updatedAt, snapshotAt),
+  })).filter((item) => item.id || item.name || item.entitySourceName);
+}
+
+async function memberBackfill(req, res, origin) {
+  if (!backfillAuthorized(req)) {
+    console.warn('[Gaia Entitlements] backfill rejected: invalid authentication or browser request');
+    sendJson(res, 403, { ok: false, error: 'Invalid backfill authentication.' }, origin);
+    return;
+  }
+  let rawBody = '';
+  try { rawBody = await readRawBody(req, 2 * 1024 * 1024); }
+  catch (_) { sendJson(res, 413, { ok: false, error: 'Request body is too large.' }, origin); return; }
+  let body;
+  try { body = rawBody ? JSON.parse(rawBody) : {}; }
+  catch (_) { sendJson(res, 400, { ok: false, error: 'Invalid JSON body.' }, origin); return; }
+
+  const contacts = Array.isArray(body.contacts) ? body.contacts : [body];
+  if (!contacts.length || contacts.length > 250) {
+    sendJson(res, 422, { ok: false, error: 'Provide between 1 and 250 contacts per request.' }, origin);
+    return;
+  }
+  const defaultSnapshotAt = firstNonEmptyString(body.snapshotAt);
+  const defaultSource = firstNonEmptyString(body.snapshotSource, 'ghl');
+  const store = loadMemberEntitlements();
+  const result = { applied: 0, stale: 0, duplicate: 0, rejected: 0 };
+
+  for (const item of contacts) {
+    const contactId = firstNonEmptyString(item?.contactId, item?.contact_id);
+    const snapshotAt = firstNonEmptyString(item?.snapshotAt, defaultSnapshotAt);
+    const snapshotMs = Date.parse(snapshotAt);
+    const snapshotSource = firstNonEmptyString(item?.snapshotSource, defaultSource, 'ghl');
+    if (!contactId || !Number.isFinite(snapshotMs)) { result.rejected += 1; continue; }
+    const snapshotDomains = ['courses', 'communities', 'subscriptions', 'subscription', 'tags']
+      .filter((domain) => Object.prototype.hasOwnProperty.call(item, domain))
+      .map((domain) => domain === 'subscription' ? 'subscriptions' : domain);
+    const snapshotKey = `backfill:${snapshotSource}:${snapshotAt}:${contactId}:${uniqueStrings(snapshotDomains).sort().join(',')}`;
+    if (store.processedWebhookIds.includes(snapshotKey)) { result.duplicate += 1; continue; }
+
+    const now = new Date().toISOString();
+    const record = store.contacts[contactId] || { contactId, tags: [], tier: null, courses: [], communities: [], subscriptions: [], domainUpdatedAt: {}, updatedAt: now };
+    record.tags = uniqueStrings(record.tags || []);
+    record.courses = Array.isArray(record.courses) ? record.courses : [];
+    record.communities = Array.isArray(record.communities) ? record.communities : [];
+    record.subscriptions = Array.isArray(record.subscriptions) ? record.subscriptions : [];
+    record.domainUpdatedAt = record.domainUpdatedAt && typeof record.domainUpdatedAt === 'object' ? record.domainUpdatedAt : {};
+    let contactApplied = false;
+    let contactStale = false;
+    const applyDomain = (domain, value) => {
+      if (snapshotMs < entitlementDomainTimestamp(record, domain)) { contactStale = true; return; }
+      record[domain] = value;
+      record.domainUpdatedAt[domain] = snapshotAt;
+      contactApplied = true;
+    };
+
+    if (Object.prototype.hasOwnProperty.call(item, 'courses')) {
+      applyDomain('courses', normalizedBackfillResources(item.courses, 'course', snapshotAt));
+    }
+    if (Object.prototype.hasOwnProperty.call(item, 'communities')) {
+      applyDomain('communities', normalizedBackfillResources(item.communities, 'community', snapshotAt));
+    }
+    if (Object.prototype.hasOwnProperty.call(item, 'subscriptions') || Object.prototype.hasOwnProperty.call(item, 'subscription')) {
+      applyDomain('subscriptions', normalizedBackfillSubscriptions(item.subscriptions ?? item.subscription, snapshotAt));
+    }
+    if (Object.prototype.hasOwnProperty.call(item, 'tags')) {
+      applyDomain('tags', uniqueStrings(Array.isArray(item.tags) ? item.tags : []));
+    }
+
+    if (contactApplied) {
+      record.updatedAt = now;
+      record.lastSnapshot = { source: snapshotSource, snapshotAt, importedAt: now };
+      store.contacts[contactId] = record;
+      result.applied += 1;
+    } else if (contactStale) {
+      result.stale += 1;
+    } else {
+      result.rejected += 1;
+    }
+    store.processedWebhookIds.push(snapshotKey);
+  }
+
+  try { saveMemberEntitlements(store); }
+  catch (err) {
+    console.error('[Gaia Entitlements] backfill save failed', { error: err.message.split('\n')[0] });
+    sendJson(res, 500, { ok: false, error: 'Unable to persist backfill.' }, origin);
+    return;
+  }
+  console.log('[Gaia Entitlements] GHL backfill processed', result);
+  sendJson(res, result.rejected ? 207 : 200, { ok: result.rejected === 0, ...result }, origin);
 }
 
 function sendSseHeaders(res, origin) {
@@ -1645,7 +1798,7 @@ async function getMemberFromGhl({ email = '', memberId = '', contactId = '' } = 
 // ————————————————————————————————————————————————————————————————
 const ACCESS_CATALOG = {
   communities: [
-    { id: 'all-gaia',  name: 'All Gaia Healers',            matchTags: ['community-active', 'community-starthere-access'] },
+    { id: 'all-gaia',  name: 'All Gaia Healers',            matchTags: ['gaia-community-all-gaia', 'community-active', 'community-starthere-access'] },
     { id: 'biowell',   name: 'Bio-Well Practitioners',      matchTags: ['community-biowell-member', 'community_biowell', 'product_biowell_interest'] },
     { id: 'biopulsar', name: 'BioPulsar Practitioners',     matchTags: ['community-biopulsar-member', 'product_biopulsar_interest'] },
     { id: 'biotekna',  name: 'Biotekna Practitioners',      matchTags: ['community-biotekna-member'] },
@@ -1780,6 +1933,11 @@ function resolveSubscriptionTier(subscriptions = []) {
 }
 
 function buildMemberAccess(rawTags = [], customFields = [], member = {}, entitlements = null, subscriptions = []) {
+  // Prefer live GHL subscription data. A GHL-exported backfill snapshot is only
+  // used when the live payments lookup is unavailable or returns no records.
+  const effectiveSubscriptions = Array.isArray(subscriptions) && subscriptions.length
+    ? subscriptions
+    : (Array.isArray(entitlements?.subscriptions) ? entitlements.subscriptions : []);
   const tags = uniqueStrings((rawTags || []).map((t) => String(t || '').trim()).filter(Boolean));
   const lower = new Map(tags.map((t) => [t.toLowerCase(), t]));
   const has = (tag) => lower.has(String(tag).toLowerCase());
@@ -1875,7 +2033,7 @@ function buildMemberAccess(rawTags = [], customFields = [], member = {}, entitle
 
   // Primary source: a currently active/trialing GHL subscription whose offer
   // name explicitly contains Free/Silver/Gold/Diamond. Amounts are never used.
-  const subscriptionTier = resolveSubscriptionTier(subscriptions);
+  const subscriptionTier = resolveSubscriptionTier(effectiveSubscriptions);
   if (subscriptionTier.tier) {
     membershipTier = subscriptionTier.tier;
     tierMatchedBy = subscriptionTier.matchedBy;
@@ -3984,6 +4142,10 @@ const server = http.createServer(async (req, res) => {
     }
     if (req.method === 'POST' && url.pathname === '/api/webhooks/ghl/member-access') {
       await memberAccessWebhook(req, res, origin);
+      return;
+    }
+    if (req.method === 'POST' && url.pathname === '/api/webhooks/ghl/member-backfill') {
+      await memberBackfill(req, res, origin);
       return;
     }
     if (req.method === 'GET' && url.pathname === '/api/auth/session') {

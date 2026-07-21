@@ -61,7 +61,32 @@ Allowed tier values are Free, Silver, Gold, and Diamond. Contact tags are also r
 
 ## Existing-member backfill
 
-Publishing workflows handles future grants and removals. Existing contacts must be enrolled once into a backfill workflow (or have their access re-granted) so GHL emits the same payloads. Backfill must use the actual offer/group IDs for each member; do not bulk-assign a tier or product in Gaia.
+Publishing workflows handles future grants and removals. Existing access must be exported from GHL Member Analytics, Payments subscriptions, and Community group members, joined by GHL Contact ID, and imported into Gaia. Gaia never writes the result back to GHL.
+
+`POST https://api.gaiahealers.app/api/webhooks/ghl/member-backfill`
+
+This route is server-to-server only and requires `X-Backfill-Secret: <GHL_BACKFILL_SECRET>`. Browser-originated requests are rejected. It accepts one contact or a `contacts` array of up to 250 contacts. Every item requires a GHL `contactId` and valid `snapshotAt`. An older snapshot cannot overwrite a newer course, community, subscription, or tag event.
+
+```json
+{
+  "snapshotSource": "ghl",
+  "snapshotAt": "2026-07-21T00:00:00Z",
+  "contacts": [
+    {
+      "contactId": "GHL_CONTACT_ID",
+      "courses": [{ "courseId": "offer-1", "courseName": "Bio-Well Orientation" }],
+      "communities": [{ "groupId": "all-gaia", "groupName": "All Gaia Healers" }],
+      "subscriptions": [{ "id": "sub-1", "status": "active", "offerName": "Gaia Gold Membership" }]
+    }
+  ]
+}
+```
+
+Repeated imports of the same `snapshotSource`, `snapshotAt`, and `contactId` are idempotent. Empty arrays intentionally clear that domain only when the snapshot is at least as new as its last GHL event.
+
+## Temporary community proxy tags
+
+While GHL's native Group Access triggers fail validation, GHL may add/remove a dedicated `gaia-community-*` mirror tag in the same automation that grants/revokes the real GHL group. Two focused tag workflows should send explicit `community_access_granted` and `community_access_revoked` payloads to the member-access receiver. Gaia reads these events but never changes GHL membership.
 
 ## GHL Workflow AI prompt
 

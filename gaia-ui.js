@@ -3959,6 +3959,11 @@
       if (!t.trim()) return null;
       // Founder and booking routes — specific before the generic "book/scan".
       if (/\b(founder|dr\.? nima|nima farshid|meet nima)\b/.test(t)) return { label: 'Meet the founder', url: 'https://calendly.com/nimafarshid/gaia-healers-meeting' };
+      if (/\b(free|silver|gold|diamond)\b/.test(t) && /\b(join|choose|member|membership|tier|plan|enroll|subscribe)\b/.test(t)) {
+        const tier = ['free', 'silver', 'gold', 'diamond'].find((name) => t.includes(name));
+        const path = tier === 'free' ? 'onboarding' : tier;
+        return { label: tier === 'free' ? 'Join free' : `Choose ${tier[0].toUpperCase()}${tier.slice(1)}`, url: `https://join.gaiahealers.com/${path}` };
+      }
       if (/(become|join|start|sign\s*up|enroll|subscribe)[^.]{0,24}(member|membership)|(member|membership)[^.]{0,24}(become|join|start|sign\s*up|enroll|subscribe)/.test(t)) return { label: 'Join Gaia 2.0', url: 'https://join.gaiahealers.com/membership' };
       if (/\b(coaching|coach)\b/.test(t)) return { label: 'Book wellness coaching', url: 'https://api.leadconnectorhq.com/widget/form/gVzfo7sRfbLnMzQqSnJL' };
       if (/discovery|free call|consult/.test(t)) return { label: 'Book a free discovery call', url: 'https://api.leadconnectorhq.com/widget/form/mgf6oviyhPwrLBi03gzq' };

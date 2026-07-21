@@ -946,7 +946,7 @@ body.gaia-booking-open{overflow:hidden;}
       + (o.statusLabel ? '<span class="g-badge' + (o.active ? ' g-badge--on' : '') + '">' + esc(o.statusLabel) + '</span>' : '') + '</div>'
       + '<ul class="g-tier__list">' + o.abilities.map((a) => '<li>' + esc(a) + '</li>').join('') + '</ul>'
       + (o.note ? '<p class="g-card__meta">' + esc(o.note) + '</p>' : '')
-      + (o.ctaAction ? '<div class="g-card__actions"><button type="button" class="g-btn ' + (o.active ? 'g-btn--secondary' : 'g-btn--primary') + ' g-btn--sm" data-open-in-app="https://join.gaiahealers.com/membership" data-in-app-title="Gaia 2.0 Membership">' + esc(o.ctaLabel) + '</button></div>' : '')
+      + (o.ctaAction ? '<div class="g-card__actions"><button type="button" class="g-btn ' + (o.active ? 'g-btn--secondary' : 'g-btn--primary') + ' g-btn--sm" data-open-in-app="' + esc(o.ctaUrl) + '" data-in-app-title="' + esc(o.name + ' Membership') + '">' + esc(o.ctaLabel) + '</button></div>' : '')
       + (o.ctaHref ? '<div class="g-card__actions"><a class="g-btn ' + (o.active ? 'g-btn--secondary' : 'g-btn--primary') + ' g-btn--sm" href="' + esc(o.ctaHref) + '" target="_blank" rel="noopener noreferrer">' + esc(o.ctaLabel) + '</a></div>' : '')
       + '</article>';
   }
@@ -963,22 +963,22 @@ body.gaia-booking-open{overflow:hidden;}
     const free = tierCard({
       name: 'Free', statusLabel: baseline ? 'Available' : 'Included', active: baseline,
       abilities: ['Online community access', 'State of the Union calls', 'Lightworker Creed resources', 'Monthly community newsletter'],
-      ctaLabel: baseline ? 'Join free' : '', ctaAction: baseline ? 'membership' : '',
+      ctaLabel: baseline ? 'Join free' : '', ctaAction: baseline ? 'membership' : '', ctaUrl: 'https://join.gaiahealers.com/onboarding',
     });
     const silver = tierCard({
       name: 'Silver', statusLabel: hasSilver ? 'Active' : '$97/mo', active: hasSilver,
       abilities: ['Everything in Free', 'Practitioner education', 'Directory listing', 'Practice-growth training', 'GaiaPractitioners Software + CRM access'],
-      ctaLabel: hasSilver ? '' : 'Choose Silver', ctaAction: hasSilver ? '' : 'membership',
+      ctaLabel: hasSilver ? '' : 'Choose Silver', ctaAction: hasSilver ? '' : 'membership', ctaUrl: 'https://join.gaiahealers.com/silver',
     });
     const gold = tierCard({
       name: 'Gold', statusLabel: hasGold ? 'Active' : '$497/mo', active: hasGold,
       abilities: ['Everything in Silver', 'Premium sales education', 'Custom landing page', 'Managed CRM support', 'Starter AI leads', '20% off certification programs'],
-      ctaLabel: hasGold ? '' : 'Choose Gold', ctaAction: hasGold ? '' : 'membership',
+      ctaLabel: hasGold ? '' : 'Choose Gold', ctaAction: hasGold ? '' : 'membership', ctaUrl: 'https://join.gaiahealers.com/gold',
     });
     const diamond = tierCard({
       name: 'Diamond', statusLabel: hasDiamond ? 'Active' : '$997/mo', active: hasDiamond,
       abilities: ['Everything in Gold', 'Prosperity engine', 'Level 1 directory exposure', 'Business accelerator', 'Conference benefits', 'Speaking and early-access opportunities'],
-      ctaLabel: hasDiamond ? '' : 'Choose Diamond', ctaAction: hasDiamond ? '' : 'membership',
+      ctaLabel: hasDiamond ? '' : 'Choose Diamond', ctaAction: hasDiamond ? '' : 'membership', ctaUrl: 'https://join.gaiahealers.com/diamond',
     });
     return intro + free + silver + gold + diamond;
   }

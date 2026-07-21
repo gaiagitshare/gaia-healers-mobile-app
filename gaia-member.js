@@ -69,7 +69,11 @@ body.gaia-booking-open{overflow:hidden;}
   }
   async function getJson(path) {
     try {
-      const r = await fetch(proxyBase() + path, { headers: { Accept: 'application/json' }, credentials: 'include' });
+      const r = await fetch(proxyBase() + path, {
+        headers: { Accept: 'application/json' },
+        credentials: 'include',
+        cache: 'no-store',
+      });
       if (!r.ok) return null;
       return await r.json();
     } catch { return null; }
@@ -895,8 +899,14 @@ body.gaia-booking-open{overflow:hidden;}
     });
   }
 
-  async function loadEvent() {
-    const boot = await getJson('/api/app/bootstrap');
+  let lastEventRefreshAt = 0;
+  let eventRefreshTimer = 0;
+  async function loadEvent(force = false) {
+    const now = Date.now();
+    if (!force && now - lastEventRefreshAt < 30000) return;
+    lastEventRefreshAt = now;
+    const boot = await getJson('/api/app/bootstrap?eventRefresh=' + now);
+    if (!boot) return;
     const g = (boot && boot.gaia) || {};
     state.announcements = Array.isArray(g.announcements) ? g.announcements : [];
     state.adminEvents = Array.isArray(g.adminEvents) ? g.adminEvents : [];
@@ -907,6 +917,8 @@ body.gaia-booking-open{overflow:hidden;}
       state.event = { name: featured.title, date: featured.date, venue: featured.venue, summary: featured.summary, sourceUrl: featured.registerUrl, live: featured.live };
     } else if (g.event && g.event.name) {
       state.event = g.event;
+    } else {
+      state.event = null;
     }
     renderHome(); renderStore(); renderCommunity();
   }
@@ -995,6 +1007,11 @@ body.gaia-booking-open{overflow:hidden;}
     render(); // public first paint
     bindWellness(); // wire the DOB input → chakra reading (was missing → input was dead)
     loadEvent(); // live Next Event from the Event Manager (public)
+    eventRefreshTimer = window.setInterval(() => loadEvent(true), 5 * 60 * 1000);
+    window.addEventListener('focus', () => loadEvent());
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'visible') loadEvent();
+    });
     loadCatalog(); // live course catalog from the GHL webhook sync (public)
   });
   document.addEventListener('gaia:auth', (e) => {

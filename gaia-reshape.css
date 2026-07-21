@@ -710,3 +710,84 @@ body.gaia-v2 .gaia-tabbar__assist { width: 52px; height: 52px; margin: -0.55rem 
     padding-top: max(8px, env(safe-area-inset-top));
   }
 }
+
+/* Premium consistency pass -------------------------------------------- */
+.g-btn,
+.g-btn--sm,
+.g-event-hero__actions .g-btn,
+.g-member-access .g-btn,
+.g-card__actions .g-btn,
+.g-founder-row .g-btn,
+.g-chakra-guide__shop,
+.g-profile-signout {
+  min-height: 44px;
+  padding: 10px 16px;
+  border-radius: 999px;
+  font-size: 13px;
+}
+
+.g-btn--ghost {
+  min-height: 44px;
+  padding-inline: 14px;
+}
+
+.gaia-menu-button,
+.g-tab {
+  min-height: 44px;
+  height: 44px;
+}
+
+.g-card,
+.g-member-access,
+.g-founder-row--home,
+.g-page__head,
+.g-store__head {
+  border-color: rgba(232, 242, 230, 0.14);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.025), 0 14px 32px -28px rgba(0, 0, 0, 0.9);
+}
+
+.g-card { border-radius: 20px; }
+.g-access { border-radius: 18px; }
+.g-row--link { min-height: 48px; }
+.g-profile-signout { min-width: 120px; }
+
+.g-tile[type="button"] {
+  gap: 8px;
+  padding: 7px 7px 10px;
+  overflow: hidden;
+  border: 1px solid rgba(232, 242, 230, 0.12);
+  border-radius: 18px;
+  background: linear-gradient(155deg, rgba(158, 229, 101, 0.045), transparent 48%), #0d1710;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.025);
+}
+
+.g-tile[type="button"] .g-tile__media { border-radius: 13px; }
+.g-tile[type="button"] .g-tile__title,
+.g-tile[type="button"] .g-tile__meta { margin-inline: 3px; }
+
+@media (hover: hover) {
+  .g-btn:hover { transform: translateY(-1px); }
+  .g-btn--primary:hover { box-shadow: 0 10px 24px -14px rgba(158, 229, 101, 0.75); }
+  .g-tile[type="button"]:hover { box-shadow: 0 18px 34px -24px rgba(0, 0, 0, 0.9); }
+}
+
+@media (max-width: 560px) {
+  body.gaia-v2 .g-page,
+  body.gaia-v2 .g-store {
+    gap: 12px;
+    padding: 6px 10px calc(86px + env(safe-area-inset-bottom));
+  }
+
+  .g-event-hero { min-height: clamp(316px, 37svh, 332px); }
+  .g-member-access .g-member-access__actions .g-btn { min-height: 44px; }
+
+  .g-page__head,
+  .g-store__head {
+    min-height: 132px;
+    padding: 16px;
+  }
+
+  .g-card { padding: 16px; }
+  .g-access { padding: 13px 13px 13px 17px; }
+  .g-tabs { top: 66px; }
+}

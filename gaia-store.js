@@ -1,8 +1,8 @@
 /** Gaia — live Shopify shop (public, no login).
  * Reads the gaiahealers.com Shopify catalog DIRECTLY from the browser (its
  * products.json is CORS-open, access-control-allow-origin: *), categorises it,
- * and renders scrollable product rows into #store-shop. "Buy" deep-links to the
- * Shopify product page — Shopify owns cart/checkout/payment, we don't rebuild it.
+ * and renders scrollable product rows into #store-shop. Product details stay in
+ * the Gaia app; only the final secure Shopify purchase step leaves the app.
  * No backend, no API keys. Lazy-loads the first time the Store view opens.
  */
 (function () {
@@ -22,6 +22,9 @@
   ];
 
   let loaded = false;
+  const productsByHandle = new Map();
+  let productModal = null;
+  let productKeyHandler = null;
 
   function esc(s) {
     return String(s == null ? '' : s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
@@ -35,15 +38,58 @@
   // consistent ~3.7x inflation, e.g. json $8,573 vs page $2,299). Correct
   // in-app pricing needs the Shopify Storefront API @inContext(country). Until
   // then we link out and the accurate price shows on the Shopify page.
-  // Canonical product tile (g-* system). Image + title + "View →"; no price
-  // until the Storefront API returns correct market prices. Links to Shopify.
+  // Canonical product tile (g-* system). Product details open in a native app
+  // sheet because Shopify blocks iframe embedding.
   function gTile(p) {
     const src = firstImage(p);
-    const url = SHOP + '/products/' + p.handle;
-    return '<a class="g-tile" href="' + esc(url) + '" target="_blank" rel="noopener noreferrer">'
+    productsByHandle.set(p.handle, p);
+    return '<button type="button" class="g-tile" data-store-product="' + esc(p.handle) + '">'
       + '<span class="g-tile__media">' + (src ? '<img loading="lazy" src="' + esc(src) + '" alt="" />' : '') + '</span>'
       + '<span class="g-tile__title">' + esc(p.title) + '</span>'
-      + '<span class="g-tile__meta">View →</span></a>';
+      + '<span class="g-tile__meta">View in app →</span></button>';
+  }
+
+  function plainDescription(html) {
+    try {
+      const text = new DOMParser().parseFromString(String(html || ''), 'text/html').body.textContent.replace(/\s+/g, ' ').trim();
+      return text.length > 900 ? text.slice(0, 900).replace(/\s+\S*$/, '') + '…' : text;
+    } catch (_) { return ''; }
+  }
+
+  function closeProduct() {
+    if (productKeyHandler) document.removeEventListener('keydown', productKeyHandler);
+    productKeyHandler = null;
+    if (productModal) productModal.remove();
+    productModal = null;
+    document.body.classList.remove('gaia-booking-open');
+  }
+
+  function openProduct(p) {
+    if (!p || !p.handle) return;
+    closeProduct();
+    const image = firstImage(p);
+    const description = plainDescription(p.body_html);
+    const url = SHOP + '/products/' + p.handle;
+    productModal = document.createElement('div');
+    productModal.className = 'gaia-booking-modal gaia-product-modal';
+    productModal.innerHTML = '<div class="gaia-booking-modal__backdrop" data-product-close></div>'
+      + '<section class="gaia-booking-modal__sheet" role="dialog" aria-modal="true" aria-labelledby="gaia-product-title">'
+      + '<div class="gaia-booking-modal__head"><p class="gaia-booking-modal__title">Gaia Store</p>'
+      + '<button type="button" class="gaia-booking-modal__close" data-product-close aria-label="Close product">&times;</button></div>'
+      + '<div class="gaia-product-modal__body">'
+      + (image ? '<img class="gaia-product-modal__image" src="' + esc(image) + '" alt="" />' : '')
+      + '<div class="gaia-product-modal__content"><p class="gaia-product-modal__kicker">Gaia Healers</p>'
+      + '<h2 class="gaia-product-modal__title" id="gaia-product-title">' + esc(p.title) + '</h2>'
+      + (description ? '<p class="gaia-product-modal__description">' + esc(description) + '</p>' : '')
+      + '<p class="gaia-product-modal__note">Product details stay here. Shopify handles current local pricing and secure payment.</p>'
+      + '<a class="g-btn g-btn--primary gaia-product-modal__buy" href="' + esc(url) + '" target="_blank" rel="noopener noreferrer" data-external>Continue to secure purchase →</a>'
+      + '</div></div></section>';
+    document.body.appendChild(productModal);
+    document.body.classList.add('gaia-booking-open');
+    productModal.querySelectorAll('[data-product-close]').forEach((button) => button.addEventListener('click', closeProduct));
+    productKeyHandler = (event) => { if (event.key === 'Escape') closeProduct(); };
+    document.addEventListener('keydown', productKeyHandler);
+    productModal.querySelector('.gaia-booking-modal__close')?.focus();
   }
 
   async function fetchCollection(handle, limit) {
@@ -72,8 +118,7 @@
       if (!take.length) return;
       html.push('<section class="g-store-cat">'
         + '<div class="g-section"><div class="g-section__lead">'
-        + '<h2 class="g-section__title">' + esc(c.title) + '</h2></div>'
-        + '<a class="g-btn g-btn--ghost g-btn--sm g-section__action" href="' + SHOP + '/collections/' + esc(c.handle) + '" target="_blank" rel="noopener noreferrer">All →</a></div>'
+        + '<h2 class="g-section__title">' + esc(c.title) + '</h2></div></div>'
         + '<div class="g-rail g-store-rail">' + take.map(gTile).join('') + '</div></section>');
     });
     if (html.length) {
@@ -82,7 +127,7 @@
       loaded = false;
       box.innerHTML = '<article class="g-card"><p class="g-card__value">The Gaia Healers store</p>'
         + '<p class="g-card__meta">Bio-Well devices, courses, Colour Energy, crystals, and more.</p>'
-        + '<div class="g-card__actions"><a class="g-btn g-btn--primary g-btn--sm" href="' + SHOP + '" target="_blank" rel="noopener noreferrer">Open the store</a></div></article>';
+        + '<div class="g-card__actions"><button type="button" class="g-btn g-btn--primary g-btn--sm" data-store-retry>Try again</button></div></article>';
     }
     window.dispatchEvent(new CustomEvent('gaia:shop-loaded', { detail: { categories: html.length } }));
   }
@@ -125,6 +170,15 @@
 
   window.addEventListener('gaia:route', maybeLoad);
   document.addEventListener('DOMContentLoaded', () => { maybeLoad(); bindStoreTabs(); });
+  document.addEventListener('click', (event) => {
+    const tile = event.target.closest('[data-store-product]');
+    if (tile) {
+      event.preventDefault();
+      openProduct(productsByHandle.get(tile.dataset.storeProduct));
+      return;
+    }
+    if (event.target.closest('[data-store-retry]')) loadStoreProducts();
+  });
 
   // HOME "From the store" rail — a few real tiles, lazy after first paint.
   let homeLoaded = false;
@@ -159,5 +213,5 @@
   }
 
   // expose for the chakra→Colour-Energy cross-sell and future callers
-  window.GaiaStore = { load: loadStoreProducts, shopBase: SHOP, chakraShopUrl: chakraShopUrl, colourFor: (id) => CHAKRA_COLOUR[String(id || '').toLowerCase()] || '' };
+  window.GaiaStore = { load: loadStoreProducts, shopBase: SHOP, chakraShopUrl: chakraShopUrl, colourFor: (id) => CHAKRA_COLOUR[String(id || '').toLowerCase()] || '', openProduct, closeProduct };
 })();

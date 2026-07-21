@@ -282,6 +282,35 @@ body.gaia-v2 .gaia-shell {
 .g-founder-row__title { margin: 7px 0 0; font: 600 27px/1 var(--g-font-serif); }
 .g-founder-row__meta { margin: 5px 0 0; color: var(--g-text-muted); font-size: 13px; line-height: 1.45; }
 .g-founder-row .g-btn { border-radius: 999px; }
+.g-founder-row--home {
+  padding: 18px;
+  border: 1px solid var(--g-line);
+  border-radius: var(--g-r-lg);
+  background: linear-gradient(145deg, rgba(125, 217, 86, 0.08), transparent 62%), var(--g-surface);
+}
+
+.g-tile[type="button"] {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.gaia-product-modal__body {
+  flex: 1;
+  overflow: auto;
+  background: var(--g-bg);
+  -webkit-overflow-scrolling: touch;
+}
+.gaia-product-modal__image { width: 100%; aspect-ratio: 1; display: block; object-fit: cover; background: var(--g-surface); }
+.gaia-product-modal__content { display: grid; gap: 14px; padding: 24px 20px calc(32px + env(safe-area-inset-bottom)); }
+.gaia-product-modal__kicker { margin: 0; color: var(--g-accent); font: 700 10px/1 var(--g-font-mono); letter-spacing: .14em; text-transform: uppercase; }
+.gaia-product-modal__title { margin: 0; color: var(--g-text); font: 600 34px/1 var(--g-font-serif); }
+.gaia-product-modal__description { margin: 0; color: var(--g-text-muted); font-size: 14px; line-height: 1.65; }
+.gaia-product-modal__note { margin: 0; color: var(--g-text-muted); font-size: 12px; line-height: 1.5; }
+.gaia-product-modal__buy { width: 100%; min-height: 50px; margin-top: 4px; text-align: center; }
 
 /* Shared page treatment ------------------------------------------------ */
 .g-page__head,

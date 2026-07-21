@@ -254,9 +254,9 @@ body.gaia-booking-open{overflow:hidden;}
   // Book a 1:1 with Dr. Nima Farshid (founder) via Calendly. Sits at the top of
   // the "Book a session" section on Home so it is the first booking members see.
   // Links verified live on gaiahealers.com/pages/bio-well-demo.
-  function nimaBookingCard() {
+  function nimaBookingCard(home) {
     const nima = 'https://calendly.com/nimafarshid/gaia-healers-meeting';
-    return '<article class="g-founder-row"><div><p class="g-founder-row__kicker">Meet the founder</p>'
+    return '<article class="g-founder-row' + (home ? ' g-founder-row--home' : '') + '"><div><p class="g-founder-row__kicker">Meet the founder</p>'
       + '<p class="g-founder-row__title">Dr. Nima Farshid</p>'
       + '<p class="g-founder-row__meta">Personal guidance from Gaia Healers’ founder and Bio-Well educator.</p></div>'
       + '<button type="button" class="g-btn g-btn--secondary g-btn--sm" data-book-inline="' + esc(nima) + '" data-book-title="Book with Dr. Nima">Book →</button></article>';
@@ -496,6 +496,8 @@ body.gaia-booking-open{overflow:hidden;}
       access.innerHTML = membersCard();
       access.querySelector('[data-native-signin]')?.addEventListener('click', () => window.GaiaAuth?.open?.());
     }
+    const founder = el('home-founder');
+    if (founder) founder.innerHTML = nimaBookingCard(true);
     const book = el('home-book');
     if (book) book.innerHTML = nimaBookingCard() + bookCard();
     // #home-wellness is owned by gaia-wellness.js

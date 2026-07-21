@@ -1230,11 +1230,11 @@
             <div><p class="gaia-menu-sheet__kicker">Membership</p><h2 class="gaia-menu-sheet__title" id="gaia-membership-title">Unlock your Gaia</h2></div>
             <button type="button" class="gaia-sheet-close" data-membership-close aria-label="Close membership">&times;</button>
           </div>
-          <p class="gaia-auth-modal__body">Silver membership opens practitioner communities, member pricing, personalized Gaia Assist, Bio-Well sync, and exclusive learning. Choose the path that fits you.</p>
+          <p class="gaia-auth-modal__body">Gaia 2.0 offers Free, Silver, Gold, and Diamond paths for practitioners at every stage.</p>
           <nav class="gaia-menu-sheet__nav" aria-label="Membership actions">
+            <button type="button" class="gaia-menu-sheet__link" data-book-inline="https://join.gaiahealers.com/membership" data-book-title="Gaia 2.0 Membership">View membership options</button>
             <button type="button" class="gaia-menu-sheet__link" data-membership-signin>Already a member? Sign in</button>
             <button type="button" class="gaia-menu-sheet__link" data-membership-assist>Ask Gaia about membership</button>
-            <button type="button" class="gaia-menu-sheet__link" data-book-inline="https://api.leadconnectorhq.com/widget/form/mgf6oviyhPwrLBi03gzq" data-book-title="Talk with Gaia Healers">Book a discovery call</button>
           </nav>
         </section>`;
       document.body.appendChild(sheet);
@@ -1243,7 +1243,7 @@
       sheet.querySelector('[data-membership-signin]')?.addEventListener('click', () => { close(); window.GaiaAuth?.open?.(); });
       sheet.querySelector('[data-membership-assist]')?.addEventListener('click', () => {
         close();
-        window.dispatchEvent(new CustomEvent('gaia:open-assist', { detail: { prompt: 'I want to become a Silver member. Please explain the benefits and help me with the next step.', speak: false } }));
+        window.dispatchEvent(new CustomEvent('gaia:open-assist', { detail: { prompt: 'Please explain the Free, Silver, Gold, and Diamond Gaia 2.0 membership paths and help me choose.', speak: false } }));
       });
       sheet.querySelector('[data-book-inline]')?.addEventListener('click', close);
       return sheet;
@@ -1478,16 +1478,55 @@
   }
 
   function initHeaderProfile() {
-    document.getElementById('gaia-main-menu')?.remove();
+    let sheet = document.getElementById('gaia-main-menu');
+    if (!sheet) {
+      sheet = document.createElement('div');
+      sheet.id = 'gaia-main-menu';
+      sheet.className = 'gaia-menu-sheet';
+      sheet.hidden = true;
+      sheet.innerHTML = `
+        <section class="gaia-menu-sheet__panel" role="dialog" aria-modal="true" aria-labelledby="gaia-menu-title">
+          <div class="gaia-menu-sheet__top">
+            <div><p class="gaia-menu-sheet__kicker">Explore Gaia</p><h2 class="gaia-menu-sheet__title" id="gaia-menu-title">Menu</h2></div>
+            <button type="button" class="gaia-sheet-close" data-menu-close aria-label="Close menu">&times;</button>
+          </div>
+          <p class="gaia-auth-modal__body">Learning, community, membership, and personal guidance from the Gaia Healers network.</p>
+          <nav class="gaia-menu-sheet__nav" aria-label="Gaia menu">
+            <a class="gaia-menu-sheet__link" href="home.html?view=academy" data-app-nav="academy">Academy <span>Learn →</span></a>
+            <a class="gaia-menu-sheet__link" href="home.html?view=community" data-app-nav="community">Community <span>Connect →</span></a>
+            <button type="button" class="gaia-menu-sheet__link" data-menu-membership>Membership <span>Explore →</span></button>
+            <button type="button" class="gaia-menu-sheet__link" data-book-inline="https://calendly.com/nimafarshid/gaia-healers-meeting" data-book-title="Meet Dr. Nima Farshid">Meet the founder <span>Book →</span></button>
+            <a class="gaia-menu-sheet__link" href="https://gaiapractitioners.com" target="_blank" rel="noopener">Find a practitioner <span>Browse →</span></a>
+            <button type="button" class="gaia-menu-sheet__link" data-menu-signin>Member sign in <span>Open →</span></button>
+          </nav>
+        </section>`;
+      document.body.appendChild(sheet);
+    }
+    const close = () => { sheet.hidden = true; document.body.classList.remove('gaia-menu-open'); };
+    const open = () => {
+      sheet.hidden = false;
+      document.body.classList.add('gaia-menu-open');
+      sheet.querySelector('[data-menu-close]')?.focus();
+    };
+    sheet.querySelector('[data-menu-close]')?.addEventListener('click', close);
+    sheet.addEventListener('click', (event) => { if (event.target === sheet) close(); });
+    sheet.querySelectorAll('a[href]').forEach((link) => link.addEventListener('click', close));
+    sheet.querySelector('[data-menu-membership]')?.addEventListener('click', () => {
+      close();
+      window.GaiaAppShell?.go?.('store', { tab: 'membership' });
+    });
+    sheet.querySelector('[data-menu-signin]')?.addEventListener('click', () => { close(); window.GaiaAuth?.open?.(); });
+    sheet.querySelector('[data-book-inline]')?.addEventListener('click', close);
     document.querySelectorAll('[data-gaia-header-actions]').forEach((slot) => {
       slot.replaceChildren();
-      const link = document.createElement('a');
-      link.className = 'gaia-profile-button';
-      link.href = 'home.html?view=profile';
-      link.dataset.appNav = 'profile';
-      link.setAttribute('aria-label', 'Open profile and bookings');
-      link.textContent = 'Profile';
-      slot.appendChild(link);
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.className = 'gaia-menu-button';
+      button.dataset.gaiaMenuButton = '';
+      button.setAttribute('aria-label', 'Open Gaia menu');
+      button.textContent = 'Menu';
+      button.addEventListener('click', open);
+      slot.appendChild(button);
     });
   }
 
@@ -1661,12 +1700,13 @@
     function setDocumentTitle(view) {
       const labels = {
         today: 'Today',
-        wellness: 'Wellness',
-        biowell: 'Wellness',
-        chakras: 'Wellness',
+        wellness: 'Energy',
+        biowell: 'Energy',
+        chakras: 'Energy',
         academy: 'Academy',
         community: 'Community',
         profile: 'Profile',
+        store: 'Store',
         admin: 'Admin',
       };
       document.title = `${labels[view] || 'Gaia'} · Gaia Healers`;
@@ -2136,7 +2176,7 @@
           <form class="gaia-assist__form">
             <label class="gaia-assist__label" for="gaia-assist-prompt">Ask Gaia</label>
             <div class="gaia-assist__input-row">
-              <input id="gaia-assist-prompt" name="prompt" type="text" autocomplete="off" placeholder="Ask about my scan, badge, or course…" />
+              <input id="gaia-assist-prompt" name="prompt" type="text" autocomplete="off" placeholder="Ask about energy, courses, or membership…" />
               <button type="submit" aria-label="Send">↑</button>
             </div>
           </form>
@@ -2300,9 +2340,9 @@
     }
 
     const suggestionMap = [
-      { label: 'Elevate badge', reply: assistant.responses?.event, intent: 'event' },
-      { label: 'Bio-Well scan', reply: assistant.responses?.scan, intent: 'devices' },
-      { label: 'Academy next step', reply: assistant.responses?.academy, intent: 'academy' },
+      { label: 'Today’s energy', reply: assistant.responses?.scan, intent: 'energy' },
+      { label: 'Find a course', reply: assistant.responses?.academy, intent: 'academy' },
+      { label: 'Meet the founder', reply: assistant.responses?.event, intent: 'founder' },
     ];
     chips.innerHTML = suggestionMap.map((item) => `<button type="button" data-intent="${item.intent}">${item.label}</button>`).join('');
 
@@ -2343,7 +2383,7 @@
       if (/ghl|follow-up|crm|registration/.test(normalized)) {
         return responses.ghl || 'GHL handles registration and tickets. I can draft follow-up copy for your review before anything is sent.';
       }
-      return responses.scan || 'Gaia Assist is ready. Ask about Bio-Well scans, Academy progress, Elevate badges, or GHL follow-up.';
+      return responses.scan || 'Gaia Assist is ready. Ask about today’s energy, Academy, community, events, membership, products, your profile, or meeting the founder.';
     }
 
     function currentAssistView() {
@@ -2355,8 +2395,8 @@
     function passiveWelcomeText() {
       const embedded = isGhlEmbeddedMode();
       return embedded
-        ? 'Welcome to Gaia Healers. I’m Gaia Assist. I can help you find courses, communities, events, Bio-Well support, products, and bookings without leaving the app. What can I help with?'
-        : 'Welcome to Gaia Healers. I’m Gaia Assist. I can help you find an event, course, community, practitioner, product, or booking. What can I help with?';
+        ? 'Welcome to Gaia Healers. I’m Gaia Assist. I can help with your daily energy, courses, communities, events, membership, products, profile, and bookings without leaving the app. What can I help with?'
+        : 'Welcome to Gaia Healers. I’m Gaia Assist. I can help with your daily energy, an event, course, community, practitioner, product, profile, or booking. What can I help with?';
     }
 
     function liveWelcomePrompt() {
@@ -2368,7 +2408,7 @@
     }
 
     function welcomeTranscriptText() {
-      return `Hello, I'm Gaia Assist, live inside the app. You're on the ${currentAssistView()} screen. I can help with Bio-Well scans, chakra body points, Academy courses, community, events, devices, memberships, and GHL follow-up drafts. What would you like to handle first?`;
+      return `Hello, I'm Gaia Assist, live inside the app. You're on the ${currentAssistView()} screen. I can guide you to Energy, Academy, Community, Store, Profile, membership, events, practitioners, bookings, or a meeting with our founder. What would you like to explore?`;
     }
 
     function ensureBrowserVoices() {
@@ -3917,7 +3957,9 @@
     function routeIntent(text) {
       const t = String(text || '').toLowerCase();
       if (!t.trim()) return null;
-      // Booking — external GHL widgets (specific before the generic "book/scan")
+      // Founder and booking routes — specific before the generic "book/scan".
+      if (/\b(founder|dr\.? nima|nima farshid|meet nima)\b/.test(t)) return { label: 'Meet the founder', url: 'https://calendly.com/nimafarshid/gaia-healers-meeting' };
+      if (/(become|join|start|sign\s*up|enroll|subscribe)[^.]{0,24}(member|membership)|(member|membership)[^.]{0,24}(become|join|start|sign\s*up|enroll|subscribe)/.test(t)) return { label: 'Join Gaia 2.0', url: 'https://join.gaiahealers.com/membership' };
       if (/\b(coaching|coach)\b/.test(t)) return { label: 'Book wellness coaching', url: 'https://api.leadconnectorhq.com/widget/form/gVzfo7sRfbLnMzQqSnJL' };
       if (/discovery|free call|consult/.test(t)) return { label: 'Book a free discovery call', url: 'https://api.leadconnectorhq.com/widget/form/mgf6oviyhPwrLBi03gzq' };
       if (/\bdemo\b/.test(t)) return { label: 'Book a Bio-Well demo', url: 'https://api.leadconnectorhq.com/widget/bookings/bio-welldemo' };
@@ -3934,12 +3976,12 @@
       // Home features / actions (all on the Home screen). Routes with a `run`
       // are ACTIONS — they surface a one-tap chip and never fire from a raw
       // voice transcript. `run` executes after navigating Home.
-      if (/(colou?r|personality)[^.]{0,12}(test|quiz)|personality test/.test(t)) return { label: 'Start the Colour Test', view: 'today', run: () => window.GaiaQuiz?.start?.() };
-      if (/check[ -]?in/.test(t) && /(challenge|chakra|today)/.test(t)) return { label: 'Check in for today', view: 'today', run: () => window.GaiaWellness?.checkIn?.() };
-      if (/(join|start|begin|enroll|do)[^.]{0,20}(8[- ]?week|chakra challenge|challenge)/.test(t)) return { label: 'Join the 8-week challenge', view: 'today', run: () => window.GaiaWellness?.joinChallenge?.() };
-      if (/(8[- ]?week|chakra challenge|\bchallenge\b)/.test(t)) return { label: 'Open the Chakra Challenge', view: 'today' };
-      if (/(sign\s*(?:me\s*)?up|register|unlock)[^.]{0,24}(wellness|daily|horoscope|chakra|body point)|(wellness|daily|horoscope)[^.]{0,16}(sign\s*(?:me\s*)?up|register)/.test(t)) return { label: 'Start your wellness sign-up', view: 'today', run: () => window.GaiaWellness?.focusSignup?.() };
-      if (/(horoscope|body point|wellness tip|my chakra|birth chakra|chakra reading|daily wellness)/.test(t)) return { label: 'Open your daily wellness', view: 'today' };
+      if (/(colou?r|personality)[^.]{0,12}(test|quiz)|personality test/.test(t)) return { label: 'Start the Colour Test', view: 'profile', run: () => window.GaiaQuiz?.start?.() };
+      if (/check[ -]?in/.test(t) && /(challenge|chakra|today)/.test(t)) return { label: 'Check in for today', view: 'wellness', run: () => window.GaiaWellness?.checkIn?.() };
+      if (/(join|start|begin|enroll|do)[^.]{0,20}(8[- ]?week|chakra challenge|challenge)/.test(t)) return { label: 'Join the 8-week challenge', view: 'wellness', run: () => window.GaiaWellness?.joinChallenge?.() };
+      if (/(8[- ]?week|chakra challenge|\bchallenge\b)/.test(t)) return { label: 'Open the Chakra Challenge', view: 'wellness' };
+      if (/(sign\s*(?:me\s*)?up|register|unlock)[^.]{0,24}(wellness|daily|horoscope|chakra|body point)|(wellness|daily|horoscope)[^.]{0,16}(sign\s*(?:me\s*)?up|register)/.test(t)) return { label: 'Start your wellness sign-up', view: 'wellness', run: () => window.GaiaWellness?.focusSignup?.() };
+      if (/(energy|daily chart|energy chart|horoscope|body point|wellness tip|my chakra|birth chakra|chakra reading|daily wellness|aura)/.test(t)) return { label: 'Open Energy', view: 'wellness' };
       // Destinations — specific before the store/membership catch-alls
       if (/\b(event|ticket|elevate|register|conference|summit)\b/.test(t)) {
         const ev = window.GaiaMember?.event;

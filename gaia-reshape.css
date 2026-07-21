@@ -304,6 +304,24 @@ body.gaia-v2 .gaia-shell {
 .g-page__head--academy { background-color: #111a13; }
 .g-page__head--community { background-color: #0e1913; }
 .g-page__head--profile { background-color: #111913; }
+.g-page__head--energy {
+  background:
+    radial-gradient(circle at 84% 12%, rgba(125, 217, 86, 0.13), transparent 35%),
+    #101a13;
+}
+
+.g-energy { gap: 16px; }
+.g-energy-note {
+  display: grid;
+  gap: 5px;
+  padding: 16px 17px;
+  border: 1px solid var(--g-line);
+  border-radius: var(--g-r-md);
+  background: var(--g-surface);
+  color: var(--g-text);
+}
+.g-energy-note strong { font: 600 18px/1.2 var(--g-font-serif); }
+.g-energy-note span { color: var(--g-text-muted); font-size: 12px; line-height: 1.55; }
 
 .g-card {
   gap: 10px;

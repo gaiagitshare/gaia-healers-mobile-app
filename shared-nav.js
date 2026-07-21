@@ -7,9 +7,9 @@
 
   const tabs = [
     { id: 'today', href: 'home.html?view=today', label: 'Home' },
-    { id: 'academy', href: 'home.html?view=academy', label: 'Academy' },
-    { id: 'community', href: 'home.html?view=community', label: 'Community' },
+    { id: 'wellness', href: 'home.html?view=wellness', label: 'Energy' },
     { id: 'store', href: 'home.html?view=store', label: 'Store' },
+    { id: 'profile', href: 'home.html?view=profile', label: 'Profile' },
   ];
   const icons = {
     today: '<path stroke-linecap="round" stroke-linejoin="round" d="M3.75 9.75L12 3l8.25 6.75V19.5a1.5 1.5 0 01-1.5 1.5H5.25A1.5 1.5 0 013.75 19.5V9.75z" />',

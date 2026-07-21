@@ -43,7 +43,7 @@
   <link rel="stylesheet" href="gaia-shared.css?v=20260721a" />
   <link rel="stylesheet" href="gaia-ui-v2.css?v=20260721a" />
   <link rel="stylesheet" href="gaia-system.css?v=20260721a" />
-  <link rel="stylesheet" href="gaia-reshape.css?v=20260721e" />
+  <link rel="stylesheet" href="gaia-reshape.css?v=20260721f" />
 </head>
 <body class="gaia-app gaia-page gaia-single-app gaia-v2">
   <a class="gaia-skip-link" href="#gaia-app-shell">Skip to app content</a>
@@ -69,8 +69,31 @@
 
         <section id="home-member-access" class="g-member-access" aria-label="Member access"></section>
 
-        <!-- Interactive chakra experience now supports the event-led hero. -->
-        <header class="g-sec-head"><p class="g-sec-head__kicker">Today’s energy</p><h2 class="g-sec-head__title">Explore your energy</h2></header>
+      </main>
+    </section>
+
+    <!-- ENERGY — public daily guidance, kept separate so Home stays calm. -->
+    <section class="gaia-screen" data-screen="wellness" aria-label="Energy">
+      <header class="g-topbar">
+        <a href="home.html?view=today" class="g-topbar__brand"><img src="assets/gaia-mark.svg" alt="" /> Gaia Healers</a>
+        <div class="g-topbar__actions gaia-header-actions" data-gaia-header-actions></div>
+      </header>
+      <main class="gaia-main g-page g-energy">
+        <div class="g-page__head g-page__head--energy">
+          <p class="g-page__kicker">Daily guidance</p>
+          <h1 class="g-page__title">Energy</h1>
+          <p class="g-page__sub">Your birth-date chakra and seven-centre guide — open to everyone.</p>
+        </div>
+
+        <aside class="g-energy-note" aria-label="Wellness guidance notice">
+          <strong>Take a mindful moment.</strong>
+          <span>Explore what your energy may need today. Wellness guidance, not medical advice.</span>
+        </aside>
+
+        <header class="g-sec-head"><p class="g-sec-head__kicker">Your daily chart</p><h2 class="g-sec-head__title">Birth-date chakra</h2></header>
+        <section id="me-wellness" class="g-page-sec" aria-label="Your birth-date chakra"></section>
+
+        <header class="g-sec-head"><p class="g-sec-head__kicker">Seven-centre guide</p><h2 class="g-sec-head__title">Explore your energy</h2></header>
         <section id="home-chakra-hero" class="g-chakra-hero" aria-label="Your energy"></section>
       </main>
     </section>
@@ -125,9 +148,6 @@
 
         <div id="member-me" class="g-page-sec"></div>
 
-        <!-- Personal: birth-date → chakra reading (client-side, public). -->
-        <section id="me-wellness" class="g-page-sec" aria-label="Your birth-date chakra"></section>
-
         <header class="g-sec-head"><p class="g-sec-head__kicker">Guidance &amp; tools</p><h2 class="g-sec-head__title">Continue your journey</h2></header>
         <div class="g-home-pair">
           <section id="home-book" class="g-page-sec" aria-label="Book a session"></section>
@@ -164,13 +184,13 @@
     <!-- Admin is NOT part of the public app. It lives on a separate,
          password-gated surface served by the proxy: api.gaiahealers.app/admin -->
   </div>
-  <script defer src="shared-nav.js?v=20260721c"></script>
+  <script defer src="shared-nav.js?v=20260721f"></script>
   <script defer src="gaia-realtime-voice.js?v=20260721c"></script>
-  <script defer src="gaia-member.js?v=20260721d"></script>
+  <script defer src="gaia-member.js?v=20260721f"></script>
   <script defer src="gaia-wellness.js?v=20260721c"></script>
   <script defer src="gaia-quiz.js?v=20260721c"></script>
   <script defer src="gaia-store.js?v=20260721c"></script>
-  <script defer src="gaia-ui.js?v=20260721e"></script>
+  <script defer src="gaia-ui.js?v=20260721f"></script>
   <script>
     if ('serviceWorker' in navigator) {
       window.addEventListener('load', function () { navigator.serviceWorker.register('/sw.js').catch(function () {}); });

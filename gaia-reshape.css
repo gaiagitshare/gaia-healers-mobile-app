@@ -921,3 +921,183 @@ body.gaia-v2 .gaia-tabbar__assist { width: 52px; height: 52px; margin: -0.55rem 
   .g-member-access__title { font-size: 32px; line-height: 1; }
   .g-founder-row__title { font-size: 25px; line-height: 1; }
 }
+
+/* Cross-device app shell ------------------------------------------------
+   Keep the phone experience compact, let tablets breathe, and turn the
+   mobile dock into a proper header navigation on wide desktop screens. */
+
+/* `.g-energy` is also the name of the compact energy-result component in
+   gaia-system.css. On the Energy page that component rule was centring every
+   direct child at its intrinsic width. The page modifier must win. */
+body.gaia-v2 .g-page.g-energy {
+  align-items: stretch;
+}
+
+body.gaia-v2 .g-page.g-energy > *,
+body.gaia-v2 .g-page > *,
+body.gaia-v2 .g-store > * {
+  min-width: 0;
+}
+
+@media (min-width: 700px) and (max-width: 1099px) {
+  body.gaia-v2 #gaia-app-shell.gaia-shell {
+    width: 100%;
+    max-width: 960px !important;
+  }
+
+  body.gaia-v2 .g-home,
+  body.gaia-v2 .g-page,
+  body.gaia-v2 .g-store {
+    padding-inline: clamp(24px, 4vw, 40px);
+  }
+
+  body.gaia-v2 .gaia-tabbar {
+    left: 50% !important;
+    right: auto !important;
+    width: min(720px, calc(100% - 32px));
+    max-width: 720px !important;
+    padding: 0 0 max(8px, env(safe-area-inset-bottom)) !important;
+    transform: translateX(-50%);
+  }
+
+  body.gaia-v2 .gaia-tabbar__inner {
+    width: 100%;
+    max-width: none !important;
+  }
+
+  .g-page__head,
+  .g-store__head,
+  .g-energy-note,
+  .g-page-sec,
+  .g-sec-head,
+  .g-chakra-hero {
+    width: 100%;
+  }
+}
+
+@media (min-width: 1100px) {
+  body.gaia-v2 {
+    padding-bottom: 0;
+  }
+
+  body.gaia-v2 #gaia-app-shell.gaia-shell {
+    width: 100%;
+    max-width: 1320px !important;
+  }
+
+  body.gaia-v2 .g-topbar {
+    min-height: 68px;
+    padding: 10px 28px;
+  }
+
+  body.gaia-v2 .g-home,
+  body.gaia-v2 .g-page,
+  body.gaia-v2 .g-store {
+    padding: 28px 40px 56px;
+  }
+
+  body.gaia-v2 .gaia-tabbar {
+    top: 8px !important;
+    bottom: auto !important;
+    left: 50% !important;
+    right: auto !important;
+    width: min(640px, calc(100vw - 400px));
+    max-width: 640px !important;
+    padding: 0 !important;
+    transform: translateX(-50%);
+  }
+
+  body.gaia-v2 .gaia-tabbar__inner {
+    width: 100%;
+    min-height: 52px;
+    max-width: none !important;
+    align-items: center;
+    padding: 4px !important;
+    border-radius: 999px !important;
+  }
+
+  body.gaia-v2 .gaia-tabbar__group {
+    flex: 1 1 0;
+    justify-content: center;
+    gap: 2px;
+  }
+
+  body.gaia-v2 .gaia-tabbar__link {
+    max-width: none;
+    min-width: 0;
+    min-height: 44px;
+    flex-direction: row;
+    gap: 7px;
+    padding: 0 12px;
+  }
+
+  body.gaia-v2 .gaia-tabbar__icon {
+    width: 18px;
+    height: 18px;
+  }
+
+  body.gaia-v2 .gaia-tabbar__label {
+    display: inline !important;
+    font-size: 11px !important;
+  }
+
+  body.gaia-v2 .gaia-tabbar__assist {
+    width: 46px;
+    height: 46px;
+    margin: 0 5px;
+  }
+
+  .g-page__head,
+  .g-store__head {
+    width: 100%;
+    min-height: 190px;
+    padding: 30px 32px;
+  }
+
+  .g-page__title,
+  .g-store__title {
+    font-size: clamp(50px, 5vw, 68px);
+  }
+
+  /* Energy becomes a balanced two-column workspace on desktop while the
+     source order remains linear and accessible on phones and tablets. */
+  body.gaia-v2 .g-page.g-energy {
+    display: grid;
+    grid-template-columns: minmax(320px, 0.82fr) minmax(0, 1.45fr);
+    grid-template-rows: auto auto auto auto;
+    align-items: start;
+    gap: 22px 28px;
+  }
+
+  .g-energy > .g-page__head,
+  .g-energy > .g-energy-note {
+    grid-column: 1 / -1;
+    width: 100%;
+  }
+
+  .g-energy > .g-sec-head:first-of-type {
+    grid-column: 1;
+    grid-row: 3;
+  }
+
+  .g-energy > #me-wellness {
+    grid-column: 1;
+    grid-row: 4;
+    width: 100%;
+  }
+
+  .g-energy > .g-sec-head:last-of-type {
+    grid-column: 2;
+    grid-row: 3;
+  }
+
+  .g-energy > #home-chakra-hero {
+    grid-column: 2;
+    grid-row: 4;
+    width: 100%;
+  }
+
+  .g-energy .g-chakra-hero__stage {
+    height: 440px;
+  }
+}

@@ -231,12 +231,12 @@ body.gaia-booking-open{overflow:hidden;}
       if (courses.length) accessSummary.push(courses.length + (courses.length === 1 ? ' course' : ' courses'));
       if (unlocked.length) accessSummary.push(unlocked.length + (unlocked.length === 1 ? ' community' : ' communities'));
       return '<div class="g-member-access__body"><p class="g-member-access__kicker">Your Gaia</p>'
-        + '<p class="g-member-access__title">' + esc(profile.membershipTier ? profile.membershipTier + ' member' : 'Member access') + '</p>'
+        + '<p class="g-member-access__title">' + esc(profile.membershipTier ? profile.membershipTier + ' Member' : 'Member Access') + '</p>'
         + '<p class="g-member-access__meta">' + esc(accessSummary.join(' · ') || 'No course or community grants are attached to this GHL contact yet.') + '</p></div>'
         + '<a class="g-btn g-btn--secondary g-btn--sm" href="home.html?view=community">View access →</a>';
     }
     return '<div class="g-member-access__body"><p class="g-member-access__kicker">Unlock your Gaia</p>'
-      + '<p class="g-member-access__title">Member access</p>'
+      + '<p class="g-member-access__title">Member Access</p>'
       + '<p class="g-member-access__meta">New here? Join free or explore membership. Already a member? Sign in to see the courses and communities attached to your GHL account.</p></div>'
       + '<div class="g-member-access__actions">'
       + '<button type="button" class="g-btn g-btn--primary g-btn--sm" data-native-signin>Sign in</button>'

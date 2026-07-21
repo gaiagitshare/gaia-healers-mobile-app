@@ -769,7 +769,7 @@
           : 'Use your Gaia member login once, then continue lessons and gated modules inside the in-app GHL portal.';
         if (activeProgress) activeProgress.style.width = '0%';
         if (activePercent) activePercent.textContent = memberReady ? 'Portal ready' : 'Log in';
-        if (activeLessons) activeLessons.textContent = memberReady ? 'GHL member workspace' : 'Secure member access';
+        if (activeLessons) activeLessons.textContent = memberReady ? 'GHL member workspace' : 'Secure Member Access';
         if (continueLink) {
           continueLink.href = portalWorkspaceUrl('academy');
           continueLink.dataset.gaiaPortalLaunch = '1';
@@ -1034,7 +1034,7 @@
         <section class="gaia-auth-modal__panel" role="dialog" aria-modal="true" aria-labelledby="gaia-auth-title">
           <div class="gaia-auth-modal__top">
             <div>
-              <p class="gaia-auth-modal__kicker">Member access</p>
+              <p class="gaia-auth-modal__kicker">Member Access</p>
               <h2 class="gaia-auth-modal__title" id="gaia-auth-title">Sign in to Gaia</h2>
             </div>
             <button type="button" class="gaia-sheet-close" data-auth-close aria-label="Close sign in">&times;</button>

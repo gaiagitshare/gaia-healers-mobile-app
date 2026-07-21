@@ -1495,7 +1495,9 @@ async function wellnessMemberLookup(email) {
     if (!v || !v.memberResolved || !v.member) return { existing: false, member: false, name: '' };
     let hasAccess = false;
     try {
-      const access = buildMemberAccess(v.tags || [], v.customFields || [], v.member, entitlementForContact(v.member.contactId || v.member.memberId));
+      const contactId = v.member.contactId || v.member.memberId;
+      const subscriptions = contactId ? await ghlMemberSubscriptions(contactId, 100) : [];
+      const access = buildMemberAccess(v.tags || [], v.customFields || [], v.member, entitlementForContact(contactId), subscriptions);
       hasAccess = Boolean(
         access?.member?.membershipTier
         || access?.member?.practitioner
@@ -1734,7 +1736,50 @@ function friendlyProductName(slug) {
   return key.split(/[_-]/).filter(Boolean).map((w) => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
 }
 
-function buildMemberAccess(rawTags = [], customFields = [], member = {}, entitlements = null) {
+function subscriptionNames(subscription = {}) {
+  return uniqueStrings([
+    subscription.entitySourceName,
+    subscription.name,
+    subscription.recurringProduct?.name,
+    ...(Array.isArray(subscription.products) ? subscription.products.map((item) => item?.name || item?.title) : []),
+    ...(Array.isArray(subscription.lineItemDetails) ? subscription.lineItemDetails.map((item) => item?.name || item?.title) : []),
+  ].map((value) => String(value || '').trim()).filter(Boolean));
+}
+
+function explicitTierFromOfferName(value = '') {
+  const name = String(value || '').trim();
+  // A tier word must be explicit in the subscribed offer/product name. The
+  // surrounding membership/access wording prevents unrelated products whose
+  // marketing copy happens to contain words such as "gold" from becoming a
+  // membership signal.
+  if (!/(gaia|ahc|member|membership|access|community)/i.test(name)) return null;
+  const match = name.match(/\b(diamond|gold|silver|free)\b/i);
+  return match ? normalizeTierName(match[1]) : null;
+}
+
+function resolveSubscriptionTier(subscriptions = []) {
+  const candidates = [];
+  for (const subscription of (Array.isArray(subscriptions) ? subscriptions : [])) {
+    if (!/^(active|trial|trialing)$/i.test(String(subscription?.status || '').trim())) continue;
+    for (const name of subscriptionNames(subscription)) {
+      const tier = explicitTierFromOfferName(name);
+      if (!tier) continue;
+      const at = Date.parse(subscription.updatedAt || subscription.createdAt || subscription.subscriptionStartDate || '') || 0;
+      candidates.push({ tier, name, at });
+    }
+  }
+  candidates.sort((a, b) => b.at - a.at);
+  const tiers = uniqueStrings(candidates.map((item) => item.tier));
+  const chosen = candidates[0] || null;
+  return {
+    tier: chosen?.tier || null,
+    matchedBy: chosen ? `subscription:${chosen.name}` : null,
+    conflict: tiers.length > 1,
+    candidates: tiers,
+  };
+}
+
+function buildMemberAccess(rawTags = [], customFields = [], member = {}, entitlements = null, subscriptions = []) {
   const tags = uniqueStrings((rawTags || []).map((t) => String(t || '').trim()).filter(Boolean));
   const lower = new Map(tags.map((t) => [t.toLowerCase(), t]));
   const has = (tag) => lower.has(String(tag).toLowerCase());
@@ -1799,17 +1844,44 @@ function buildMemberAccess(rawTags = [], customFields = [], member = {}, entitle
 
   let membershipTier = null;
   let tierMatchedBy = null;
-  // 1) Tag-based tier detection (original path).
+  let tierConflict = false;
+  let tierCandidates = [];
+  // Secondary source: current GHL contact tags. Preserve the configured order
+  // (Diamond, Gold, Silver, Free) only for the display label; course/community
+  // authorization never depends on this choice.
+  const tagTierCandidates = [];
   for (const [tag, tier] of Object.entries(ACCESS_CATALOG.membershipTierTags)) {
-    if (has(tag)) { membershipTier = tier; tierMatchedBy = 'tag:' + tag; matched.add(tag.toLowerCase()); break; }
+    if (has(tag)) {
+      tagTierCandidates.push({ tag, tier });
+      matched.add(tag.toLowerCase());
+    }
   }
-  // GHL tags or an explicit membership workflow are the only tier evidence.
-  // Never infer access from a payment amount: products, discounts, and annual
-  // plans make amount-based authorization unsafe.
+  if (tagTierCandidates.length) {
+    membershipTier = tagTierCandidates[0].tier;
+    tierMatchedBy = 'tag:' + tagTierCandidates[0].tag;
+    tierCandidates = uniqueStrings(tagTierCandidates.map((item) => item.tier));
+    tierConflict = tierCandidates.length > 1;
+  }
+
+  // Tertiary fallback: an explicit membership workflow mirror. It is useful
+  // when tags have not caught up, but it must not override current live GHL
+  // subscription or tag evidence.
   const mirroredTier = normalizeTierName(entitlements?.tier?.name);
-  if (mirroredTier) {
+  if (!membershipTier && mirroredTier) {
     membershipTier = mirroredTier;
     tierMatchedBy = entitlements.tier.matchedBy || 'ghl-workflow';
+    tierCandidates = [mirroredTier];
+  }
+
+  // Primary source: a currently active/trialing GHL subscription whose offer
+  // name explicitly contains Free/Silver/Gold/Diamond. Amounts are never used.
+  const subscriptionTier = resolveSubscriptionTier(subscriptions);
+  if (subscriptionTier.tier) {
+    membershipTier = subscriptionTier.tier;
+    tierMatchedBy = subscriptionTier.matchedBy;
+    tierCandidates = uniqueStrings([...subscriptionTier.candidates, ...tagTierCandidates.map((item) => item.tier)]);
+    tierConflict = subscriptionTier.conflict
+      || tagTierCandidates.some((item) => item.tier !== subscriptionTier.tier);
   }
 
   // Merge exact GHL Group/Community grants delivered by access workflows.
@@ -1844,6 +1916,8 @@ function buildMemberAccess(rawTags = [], customFields = [], member = {}, entitle
       practitionerCertified: certified,
       membershipTier,
       tierMatchedBy,
+      tierConflict,
+      tierCandidates,
     },
     communities: { unlocked, locked },
     products,
@@ -1853,7 +1927,9 @@ function buildMemberAccess(rawTags = [], customFields = [], member = {}, entitle
       products: products.length, unknown: unknownAccessTags.length, totalTags: tags.length,
     },
     customFieldsCount: Array.isArray(customFields) ? customFields.length : 0,
-    entitlementSource: entitlements ? 'ghl-workflow-mirror' : 'ghl-tags',
+    entitlementSource: subscriptionTier.tier
+      ? 'ghl-live-subscription'
+      : (entitlements ? 'ghl-workflow-mirror' : 'ghl-tags'),
   };
 }
 
@@ -1868,6 +1944,7 @@ async function memberAccess(req, res, origin) {
   let liveMember = sessionMember;
   let live = false;
   let entitlements = entitlementForContact(sessionMember.contactId || sessionMember.memberId);
+  let subscriptions = [];
   try {
     const verified = await getMemberFromGhl({
       email: sessionMember.email,
@@ -1881,11 +1958,12 @@ async function memberAccess(req, res, origin) {
       live = true;
       const cid = liveMember.contactId || liveMember.memberId || sessionMember.contactId || '';
       entitlements = entitlementForContact(cid) || entitlements;
+      subscriptions = cid ? await ghlMemberSubscriptions(cid, 100) : [];
     }
   } catch (err) {
     console.error('[Gaia Access] live tag read failed', { error: err.message.split('\n')[0] });
   }
-  const access = buildMemberAccess(tags, customFields, liveMember, entitlements);
+  const access = buildMemberAccess(tags, customFields, liveMember, entitlements, subscriptions);
   sendJson(res, 200, {
     ok: true,
     authenticated: true,
@@ -1915,6 +1993,7 @@ async function fetchMemberBundle(sessionMember) {
     const v = await getMemberFromGhl({ email: sessionMember.email, contactId: sessionMember.contactId, memberId: sessionMember.memberId });
     if (v?.memberResolved) {
       const contactId = v.member?.contactId || v.member?.memberId || sessionMember.contactId || sessionMember.memberId || '';
+      const subscriptions = contactId ? await ghlMemberSubscriptions(contactId, 100) : [];
       return {
         resolved: true,
         member: v.member || sessionMember,
@@ -1922,13 +2001,15 @@ async function fetchMemberBundle(sessionMember) {
         customFields: v.customFields || [],
         contactId,
         entitlements: entitlementForContact(contactId),
+        subscriptions,
       };
     }
   } catch (err) {
     console.error('[Gaia Member] bundle fetch failed', { error: err.message.split('\n')[0] });
   }
   const contactId = sessionMember.contactId || sessionMember.memberId || '';
-  return { resolved: false, member: sessionMember, tags: Array.isArray(sessionMember.tags) ? sessionMember.tags : [], customFields: [], contactId, entitlements: entitlementForContact(contactId) };
+  const subscriptions = contactId ? await ghlMemberSubscriptions(contactId, 100).catch(() => []) : [];
+  return { resolved: false, member: sessionMember, tags: Array.isArray(sessionMember.tags) ? sessionMember.tags : [], customFields: [], contactId, entitlements: entitlementForContact(contactId), subscriptions };
 }
 
 const BIOWELL_SERIAL_FIELD_ID = '9oJPmsGmdbhca85SeBbl';
@@ -1948,7 +2029,7 @@ function placeholderEnvelope(reason, extra) {
 async function memberProfile(req, res, origin) {
   const sm = requireSessionMember(req, res, origin); if (!sm) return;
   const b = await fetchMemberBundle(sm);
-  const access = buildMemberAccess(b.tags, b.customFields, b.member, b.entitlements);
+  const access = buildMemberAccess(b.tags, b.customFields, b.member, b.entitlements, b.subscriptions);
   sendJson(res, 200, memberEnvelope(b, {
     profile: {
       name: b.member.displayName || b.member.name || 'Gaia member',
@@ -1958,6 +2039,8 @@ async function memberProfile(req, res, origin) {
       practitioner: access.member.practitioner,
       practitionerCertified: access.member.practitionerCertified,
       membershipTier: access.member.membershipTier,
+      tierMatchedBy: access.member.tierMatchedBy,
+      tierConflict: access.member.tierConflict,
       bioWellSerial: customFieldValue(b.customFields, BIOWELL_SERIAL_FIELD_ID) || null,
       tagCount: b.tags.length,
       customFieldCount: Array.isArray(b.customFields) ? b.customFields.length : 0,
@@ -1968,7 +2051,7 @@ async function memberProfile(req, res, origin) {
 async function memberCommunities(req, res, origin) {
   const sm = requireSessionMember(req, res, origin); if (!sm) return;
   const b = await fetchMemberBundle(sm);
-  const access = buildMemberAccess(b.tags, b.customFields, b.member, b.entitlements);
+  const access = buildMemberAccess(b.tags, b.customFields, b.member, b.entitlements, b.subscriptions);
   sendJson(res, 200, memberEnvelope(b, { communities: access.communities, unknownAccessTags: access.unknownAccessTags }), origin);
 }
 
@@ -2237,12 +2320,15 @@ function buildGaiaLiveInstructions(context = {}) {
   const view = String(context.view || 'today').trim() || 'today';
   const memberContext = String(context.memberContext || '').trim();
   return [
-    'You are Gaia Assist, the warm, knowledgeable voice concierge built into the Gaia Healers app. You know every screen, feature, product, community, and course in the Gaia ecosystem, and you help members get anything done without leaving the app.',
+    'You are Gaia Assist, the warm, knowledgeable voice concierge built into the Gaia Healers app. You help both first-time visitors and signed-in members from arrival through their next useful step.',
     gaiaKnowledgePrompt(),
     memberContext,
-    `The member is currently on the ${view} screen. Assume questions relate to what they are looking at unless they say otherwise, and tailor your help to that screen first.`,
+    `The person is currently on the ${view} screen. Assume questions relate to what they are looking at unless they say otherwise, and tailor your help to that screen first.`,
+    memberContext
+      ? 'SIGNED-IN MEMBER JOURNEY: use only the supplied private member context for personalization. Their active GHL subscription/offer is primary tier evidence; live tier tags are secondary. Course and community access comes only from exact GHL grants mirrored to Gaia. Never infer a course or community from a tier, price, product-interest tag, or ownership tag.'
+      : 'VISITOR JOURNEY: welcome them, discover whether they want to explore, join free, compare memberships, sign in, find a practitioner, or book a session, then guide them to that exact next step. Do not imply they have an account, tier, course, or community access. If they already belong, offer sign-in with the email on their GHL contact.',
     'Speak in a calm, friendly, natural voice, like a helpful friend on a phone call. Keep replies short: one or two sentences, then a quick question or a clear next step. Give more detail only when asked.',
-    'Be proactive and specific: when a member asks for something, tell them exactly where to go (for example "Open the Store and tap Membership" or "Go to Community to find a healer"), and offer the natural next step.',
+    'Be proactive and specific: ask one short intent question when needed, tell them exactly where to go (for example "Open the Store and tap Membership" or "Go to Community to find a healer"), and after each answer or tool action offer the natural next step.',
     'You can help with anything in the app: Home (the dynamically fetched next event and member access), Energy (public birth-date chakra chart and interactive seven-centre guide), Academy (courses via the education portal), Community (which communities are unlocked and Find a Practitioner), Store (Shop and the official Gaia 2.0 Free/Silver/Gold/Diamond membership paths), and Profile (account, devices, purchases, bookings, founder access, and the colour test). If you are unsure of a live number or detail, say so plainly instead of inventing one.',
     'Keep members in-app first. Course videos and community discussions open the separate education.gaiahealers.com portal, which has its own login — mention it only when they want the actual lessons or discussions, or need to sign in.',
     'Never narrate your reasoning, planning, hidden analysis, or drafting process. Do not say phrases like "I have crafted", "I am refining", or "finalizing".',
@@ -2252,7 +2338,7 @@ function buildGaiaLiveInstructions(context = {}) {
     'You have a navigate tool. When a member asks to go to, open, show, see, or view a specific screen, tab, or feature — call the navigate tool to actually move them there. Examples: "show today’s event" → navigate(screen=today); "open my energy chart" → navigate(screen=wellness); "take me to my courses" → navigate(screen=academy); "open the store" → navigate(screen=store); "show me membership options" → navigate(screen=store, tab=membership); "go to my profile" → navigate(screen=profile); "find a practitioner" → navigate(screen=community). Navigation is the start of helping on that screen, not the finish: point out what is now available and keep listening.',
     'You also have action tools. Use them to actually do things for the member, not just describe how. book_session: when the member asks to book, schedule, or reserve something — "book a call with Dr. Nima" or "I want to meet the founder" → book_session(session=nima); "book a Bio-Well scan" → book_session(session=scan); "I want a demo" → book_session(session=demo); "book a discovery call" → book_session(session=discovery); "schedule coaching" → book_session(session=coaching). It opens the real booking form (Nima uses Calendly, the others use GHL widgets); tell them to complete it there. open_community: when the member asks to open or visit a community — "open the Bio-Well community" → open_community(community=biowell); "take me to BioPulsar" → open_community(community=biopulsar); "all gaia healers group" → open_community(community=all-gaia). Some open directly, others open in the portal. open_portal: when the member wants the portal itself — "open the portal" → open_portal(section=home); "open my courses in the portal" → open_portal(section=courses); "portal login" → open_portal(section=login). sign_in: when the member says they want to sign in, log in, or access their account and they are not signed in — "sign me in" → sign_in(). Never call sign_in if the member is already signed in. After ANY action tool, STAY ENGAGED: confirm what you opened, then guide them through the next step and keep listening. Do not go silent after opening something — the conversation continues until the member says goodbye.',
     'This is an ongoing conversation, not a single request-response. After every action — navigating, opening a booking form, opening a community, signing in — you are STILL their assistant on that screen. Keep helping: point out what they can do, answer follow-ups, navigate elsewhere if asked, and only go quiet when the member clearly ends the conversation. Never end your turn with just a confirmation and silence; end with either a useful observation about what is now on screen, or a concrete next step they can take, or a question.',
-    'Greet the member warmly in one short sentence when the session starts, mention you can help with anything in the app, then listen.',
+    'Start every new visit with one warm, short welcome suited to visitor or signed-in-member status. Offer two or three relevant paths, ask what they want, and stay with them until they finish.',
   ].filter(Boolean).join('\n');
 }
 
@@ -2275,12 +2361,12 @@ async function buildMemberVoiceContext(req) {
     const cached = cid && _memberAiCtxCache.get(cid);
     if (cached && (Date.now() - cached.at) < 60000) return cached.text;
 
-    const access = buildMemberAccess(b.tags, b.customFields, b.member, b.entitlements);
+    const access = buildMemberAccess(b.tags, b.customFields, b.member, b.entitlements, b.subscriptions);
     const [apptsRaw, convos, orders, subs, formSubs, surveySubs] = await Promise.all([
       cid ? ghlGet(`/contacts/${encodeURIComponent(cid)}/appointments`).then((r) => r?.events || r?.appointments || []).catch(() => []) : [],
       cid ? ghlMemberConversations(cid, 5).catch(() => []) : [],
       cid ? ghlMemberOrders(cid, 20).catch(() => []) : [],
-      cid ? ghlMemberSubscriptions(cid, 20).catch(() => []) : [],
+      Array.isArray(b.subscriptions) ? b.subscriptions : [],
       cid ? ghlMemberSubmissions(cid, 'forms', 100).catch(() => []) : [],
       cid ? ghlMemberSubmissions(cid, 'surveys', 100).catch(() => []) : [],
     ]);
@@ -3250,12 +3336,15 @@ function fallbackAssistReply(prompt, intent = '') {
 
 function assistSystemPrompt(memberContext = '') {
   return [
-    'You are Gaia Assist, the smart concierge for the Gaia Healers mobile app. You help members with ANYTHING in the app and the wider Gaia ecosystem.',
+    'You are Gaia Assist, the smart concierge for the Gaia Healers mobile app. You guide first-time visitors and signed-in members from arrival through their next useful step.',
+    memberContext
+      ? 'This is a signed-in member. Personalize only from the supplied member context. Treat active GHL subscriptions/offers as primary tier evidence and tags as secondary. Show courses and communities only from exact GHL entitlements; never infer them from tier.'
+      : 'This is a visitor unless they say otherwise. Help them explore, join free, compare memberships, sign in with their GHL-contact email, find a practitioner, or book a session. Never imply they already own access.',
     'Answer with deep, accurate awareness of the Gaia Healers app screens and features, the products and devices, the communities and membership, the courses, the events, and the store.',
     'The app can run embedded inside the Gaia Healers GHL menu. Keep users inside the app first: bottom Home for the next event and member access, Energy for public chakra guidance, Store for shop and membership, Profile for account and bookings; top Menu for Academy, Community, Membership, Meet the Founder, Find a Practitioner, and sign-in. Course videos and community discussions open the education.gaiahealers.com portal, which has its own login.',
     'When asked how to do something, name the exact screen and step. Never invent course progress, scan numbers, community posts, prices, or personal history.',
     'Never claim that you saved, imported, checked in, emailed, booked, purchased, or changed data. Explain how the member can do it.',
-    'Keep responses concise, practical, warm, and wellness-safe. Do not provide medical diagnosis.',
+    'Keep responses concise, practical, warm, proactive, and wellness-safe. End with one useful next step or a short question, and continue helping until they are finished. Do not provide medical diagnosis.',
     gaiaKnowledgePrompt(),
     String(memberContext || '').trim(),
   ].filter(Boolean).join(' ');

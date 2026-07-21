@@ -237,7 +237,7 @@ body.gaia-booking-open{overflow:hidden;}
     }
     return '<div class="g-member-access__body"><p class="g-member-access__kicker">Unlock your Gaia</p>'
       + '<p class="g-member-access__title">Member access</p>'
-      + '<p class="g-member-access__meta">Join free, choose a membership, or sign in to see only the access attached to your GHL account.</p></div>'
+      + '<p class="g-member-access__meta">New here? Join free or explore membership. Already a member? Sign in to see the courses and communities attached to your GHL account.</p></div>'
       + '<div class="g-member-access__actions">'
       + '<button type="button" class="g-btn g-btn--primary g-btn--sm" data-native-signin>Sign in</button>'
       + '<button type="button" class="g-btn g-btn--secondary g-btn--sm" data-open-in-app="https://join.gaiahealers.com/onboarding" data-in-app-title="Free Gaia Membership">Join free</button>'

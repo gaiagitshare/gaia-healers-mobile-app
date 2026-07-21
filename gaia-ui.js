@@ -15,7 +15,7 @@
   const ADMIN_MODE_KEY = 'gaia-admin-mode';
   const ADMIN_UNLOCK_PARAM = 'admin';
   const ADMIN_DEV_PASSCODE = 'gaia2026';
-  const ASSIST_WELCOME_KEY = 'gaia-assist-welcome-v2';
+  const ASSIST_WELCOME_KEY = 'gaia-assist-welcome-v3';
   const GHL_CUSTOM_MENU_URL = 'https://crm.gaiahealers.com/v2/location/WkKl1K5RuZNQ60xR48k6/custom-menu-link/328efaea-4e94-42ec-9ce2-4358a64657db';
   const APP_VIEWS = new Set(['today', 'wellness', 'academy', 'community', 'profile', 'store']);
   const AUTH_HINT_KEYS = ['memberId', 'contactId', 'email', 'name', 'displayName', 'role', 'cohort', 'locationId', 'bridge', 'sharedSecret'];
@@ -2397,12 +2397,28 @@
       }
     }
 
-    const suggestionMap = [
-      { label: 'Today’s energy', reply: assistant.responses?.scan, intent: 'energy' },
-      { label: 'Find a course', reply: assistant.responses?.academy, intent: 'academy' },
-      { label: 'Meet the founder', reply: assistant.responses?.event, intent: 'founder' },
-    ];
-    chips.innerHTML = suggestionMap.map((item) => `<button type="button" data-intent="${item.intent}">${item.label}</button>`).join('');
+    let suggestionMap = [];
+
+    function assistSuggestions() {
+      if (AUTH_STATE.authenticated) {
+        return [
+          { label: 'My access', reply: assistant.responses?.academy, intent: 'access' },
+          { label: 'Find a course', reply: assistant.responses?.academy, intent: 'academy' },
+          { label: 'Book a session', reply: assistant.responses?.event, intent: 'booking' },
+        ];
+      }
+      return [
+        { label: 'Join free', reply: assistant.responses?.ghl, intent: 'join-free' },
+        { label: 'Memberships', reply: assistant.responses?.ghl, intent: 'membership' },
+        { label: 'Sign in', reply: assistant.responses?.academy, intent: 'sign-in' },
+      ];
+    }
+
+    function renderAssistSuggestions() {
+      suggestionMap = assistSuggestions();
+      chips.innerHTML = suggestionMap.map((item) => `<button type="button" data-intent="${item.intent}">${item.label}</button>`).join('');
+    }
+    renderAssistSuggestions();
 
     function assistLog(event, detail = {}) {
       console.info(`[Gaia Assist] ${event}`, detail);
@@ -2421,6 +2437,11 @@
         biowell: responses.scan,
         chakra: responses.scan,
         academy: responses.academy,
+        access: responses.academy,
+        booking: responses.event,
+        'join-free': 'You can join Gaia for free from the Home member card. Tap Join free, complete the secure enrollment, then return here and sign in with the same email.',
+        membership: 'Open Store and choose Memberships to compare the official Free, Silver, Gold, and Diamond paths. Your app access will always mirror what GHL grants to your account.',
+        'sign-in': 'Tap Sign in and enter the email on your GHL contact. I will send a secure one-time link so you can open your own courses and communities.',
         ghl: responses.ghl,
         services: responses.event,
         voice: responses.scan,
@@ -2436,7 +2457,7 @@
         return responses.event || 'I can help prepare your Elevate badge flow and check QR status in review mode.';
       }
       if (/course|academy|certification|module|exam/.test(normalized)) {
-        return responses.academy || 'You are progressing through Advanced Level 1. I can point to the next module and practicum requirement.';
+        return responses.academy || 'Open Academy to see the courses attached to your signed-in GHL contact. I can guide you there, but I will not guess a course or progress level.';
       }
       if (/ghl|follow-up|crm|registration/.test(normalized)) {
         return responses.ghl || 'GHL handles registration and tickets. I can draft follow-up copy for your review before anything is sent.';
@@ -2451,10 +2472,12 @@
     }
 
     function passiveWelcomeText() {
-      const embedded = isGhlEmbeddedMode();
-      return embedded
-        ? 'Welcome to Gaia Healers. I’m Gaia Assist. I can help with your daily energy, courses, communities, events, membership, products, profile, and bookings without leaving the app. What can I help with?'
-        : 'Welcome to Gaia Healers. I’m Gaia Assist. I can help with your daily energy, an event, course, community, practitioner, product, profile, or booking. What can I help with?';
+      if (AUTH_STATE.authenticated) {
+        const fullName = String(AUTH_STATE.member?.displayName || AUTH_STATE.member?.name || '').trim();
+        const firstName = fullName.split(/\s+/)[0] || 'there';
+        return `Welcome back, ${firstName}. I’m Gaia Assist. I can help open your GHL-linked courses and communities, check your membership access, book a session, or guide you anywhere in the app. What would you like to do?`;
+      }
+      return 'Welcome to Gaia Healers. I’m Gaia Assist. I can help you explore, join free, compare memberships, sign in, find a practitioner, or book a session. What brings you here today?';
     }
 
     function liveWelcomePrompt() {
@@ -2466,7 +2489,12 @@
     }
 
     function welcomeTranscriptText() {
-      return `Hello, I'm Gaia Assist, live inside the app. You're on the ${currentAssistView()} screen. I can guide you to Energy, Academy, Community, Store, Profile, membership, events, practitioners, bookings, or a meeting with our founder. What would you like to explore?`;
+      if (AUTH_STATE.authenticated) {
+        const fullName = String(AUTH_STATE.member?.displayName || AUTH_STATE.member?.name || '').trim();
+        const firstName = fullName.split(/\s+/)[0] || 'there';
+        return `Welcome back, ${firstName}. I'm Gaia Assist. I can help with your access, courses, communities, membership, bookings, and anything on the ${currentAssistView()} screen. What would you like to do?`;
+      }
+      return `Welcome to Gaia Healers. I'm Gaia Assist. I can help you explore, join free, compare memberships, sign in, find a practitioner, or book a session. What brings you here today?`;
     }
 
     function ensureBrowserVoices() {
@@ -3009,10 +3037,10 @@
     };
 
     function showPassiveWelcome() {
-      if (passiveWelcomeShown || localStorage.getItem(ASSIST_WELCOME_KEY) === '1') return;
+      if (passiveWelcomeShown || sessionStorage.getItem(ASSIST_WELCOME_KEY) === '1') return;
       if (!document.body.classList.contains('gaia-v2')) return;
       passiveWelcomeShown = true;
-      localStorage.setItem(ASSIST_WELCOME_KEY, '1');
+      sessionStorage.setItem(ASSIST_WELCOME_KEY, '1');
       // Always open the panel so the assistant greets first — on touch devices
       // the orb shows a "tap to begin" state (iOS blocks auto-audio until gesture).
       setOpen(true, { passive: true });
@@ -4113,18 +4141,68 @@
       }
       sendPrompt(prompt, 'typed', 'text');
     });
-    chips.querySelectorAll('button').forEach((button) => {
-      button.addEventListener('click', () => {
-        unlockVoicePlayback();
-        const item = suggestionMap.find((entry) => entry.intent === button.dataset.intent) || suggestionMap[0];
-        showRoute(item.label);
-        if (realtimeVoice?.isActive()) {
-          setOpen(true);
-          realtimeVoice.sendText(item.label);
-          return;
-        }
-        sendPrompt(item.label, item.intent, 'quick-action');
-      });
+
+    function runSuggestionAction(intent) {
+      if (intent === 'join-free') {
+        setOpen(false);
+        const enrollment = document.querySelector('[data-open-in-app="https://join.gaiahealers.com/onboarding"]');
+        enrollment?.click();
+        return Boolean(enrollment);
+      }
+      if (intent === 'membership') {
+        setOpen(false);
+        window.GaiaMembership?.open?.();
+        return true;
+      }
+      if (intent === 'sign-in') {
+        setOpen(false);
+        window.GaiaAuth?.open?.();
+        return true;
+      }
+      if (intent === 'access') {
+        setOpen(false);
+        window.GaiaAppShell?.go?.('community');
+        return true;
+      }
+      if (intent === 'academy') {
+        setOpen(false);
+        window.GaiaAppShell?.go?.('academy');
+        return true;
+      }
+      if (intent === 'booking') {
+        setOpen(false);
+        window.GaiaAppShell?.go?.('today');
+        window.setTimeout(() => {
+          const label = [...document.querySelectorAll('.g-card__label')]
+            .find((node) => /book a session/i.test(node.textContent || ''));
+          label?.closest('.g-card')?.scrollIntoView?.({ behavior: 'smooth', block: 'center' });
+        }, 80);
+        return true;
+      }
+      return false;
+    }
+
+    chips.addEventListener('click', (event) => {
+      const button = event.target.closest('button[data-intent]');
+      if (!button) return;
+      unlockVoicePlayback();
+      const item = suggestionMap.find((entry) => entry.intent === button.dataset.intent) || suggestionMap[0];
+      showRoute(item.label);
+      // These chips are explicit user commands, so complete the obvious app
+      // action immediately. Free-form questions still go through Gaia's model.
+      if (runSuggestionAction(item.intent)) return;
+      if (realtimeVoice?.isActive()) {
+        setOpen(true);
+        realtimeVoice.sendText(item.label);
+        return;
+      }
+      sendPrompt(item.label, item.intent, 'quick-action');
+    });
+
+    document.addEventListener('gaia:auth', () => {
+      renderAssistSuggestions();
+      const bubble = transcript.querySelector('[data-gaia-welcome-bubble]');
+      if (bubble && root.classList.contains('gaia-assist--welcome')) bubble.textContent = passiveWelcomeText();
     });
 
     document.querySelectorAll('[data-gaia-open-assist]').forEach((button) => {

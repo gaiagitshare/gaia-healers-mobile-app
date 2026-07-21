@@ -506,7 +506,8 @@ body.gaia-v2 .gaia-tabbar__assist {
   box-shadow: 0 0 0 3px #07100b, 0 12px 28px rgba(114, 198, 63, 0.34);
 }
 
-/* First entrance: a compact, one-time welcome—not a persistent takeover. */
+/* First entrance: a compact welcome once per browsing session, not a
+   persistent takeover on every screen. */
 body.gaia-v2 .gaia-assist--welcome .gaia-assist__panel {
   max-height: min(64vh, 31rem);
   max-height: min(64dvh, 31rem);
@@ -531,15 +532,31 @@ body.gaia-v2 .gaia-assist--welcome .gaia-assist__bubble--bot {
   font-size: 13px;
 }
 
+@media (max-width: 560px) {
+  /* Long live event names need more vertical room than the original fixed
+     card. Without it the flex-end content can overflow behind the sticky
+     header on common 390–430px phones. */
+  .g-event-hero { min-height: 460px; }
+  .g-event-hero__content { width: 92%; padding: 24px 20px 22px; }
+  .g-event-hero__title--long { font-size: clamp(35px, 10vw, 44px); line-height: 0.92; }
+
+  /* Keep copy readable and actions thumb-sized on every normal phone, not
+     only on devices narrower than 359px. */
+  .g-member-access { min-height: 0; align-items: stretch; flex-direction: column; gap: 16px; padding: 20px; }
+  .g-member-access__body { width: 100%; }
+  .g-member-access__meta { max-width: 36ch; }
+  .g-member-access__actions { width: 100%; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .g-member-access .g-btn { width: 100%; min-height: 46px; justify-content: center; text-align: center; }
+  .g-member-access__actions .g-btn:last-child { grid-column: 1 / -1; }
+}
+
 @media (max-width: 359px) {
-  .g-event-hero { min-height: 410px; }
   .g-event-hero__content { width: 92%; padding: 22px 18px; }
   .g-event-hero__title { font-size: 46px; }
   .g-priority { min-height: 164px; padding: 20px 12px; }
   .g-priority strong { font-size: 23px; }
-  .g-member-access { align-items: flex-start; flex-direction: column; }
-  .g-member-access .g-btn { width: 100%; }
-  .g-member-access__actions { width: 100%; }
+  .g-member-access__actions { grid-template-columns: 1fr; }
+  .g-member-access__actions .g-btn:last-child { grid-column: auto; }
   .g-chakra-guide { grid-template-columns: 1fr; }
   .g-chakra-guide__shop { width: 100%; }
   body.gaia-v2 .gaia-tabbar__label { display: none; }

@@ -5,11 +5,20 @@
   display: flex;
   flex-direction: column;
   min-height: 100dvh;
-  padding: calc(1.5rem + env(safe-area-inset-top)) 1.5rem calc(2rem + env(safe-area-inset-bottom));
+  padding: 1rem 1.25rem 1.25rem;
   overflow: hidden;
   color: #fff;
   background: radial-gradient(ellipse at 50% 0%, #0f2418 0%, #070f0b 60%, #030603 100%);
   isolation: isolate;
+}
+
+@media (display-mode: standalone) {
+  .gaia-splash-shell {
+    padding-top: calc(1rem + env(safe-area-inset-top));
+    padding-right: max(1.25rem, env(safe-area-inset-right));
+    padding-bottom: calc(1.25rem + env(safe-area-inset-bottom));
+    padding-left: max(1.25rem, env(safe-area-inset-left));
+  }
 }
 
 /* Animated background */

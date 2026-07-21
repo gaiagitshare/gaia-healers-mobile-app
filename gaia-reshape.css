@@ -589,3 +589,119 @@ body.gaia-v2 .gaia-assist--welcome .gaia-assist__bubble--bot {
 @media (prefers-reduced-motion: reduce) {
   html { scroll-behavior: auto; }
 }
+
+/* Responsive fit pass --------------------------------------------------
+   Safari already lays normal browser tabs below its chrome. Only installed
+   PWAs add the full safe-area inset to the header, avoiding a doubled gap. */
+.g-topbar {
+  min-height: 64px;
+  padding: 8px max(14px, env(safe-area-inset-right)) 8px max(14px, env(safe-area-inset-left));
+}
+.g-topbar__brand { font-size: 17px; }
+.g-topbar__brand img { width: 32px; height: 32px; }
+.gaia-menu-button { height: 44px; }
+
+.g-home,
+.g-page,
+.g-store {
+  gap: 16px;
+  padding: 8px 14px calc(92px + env(safe-area-inset-bottom));
+}
+
+body.gaia-v2.gaia-has-tabbar { padding-bottom: calc(4.75rem + env(safe-area-inset-bottom)); }
+body.gaia-v2 .gaia-tabbar {
+  padding: 0 max(8px, env(safe-area-inset-right)) max(6px, env(safe-area-inset-bottom)) max(8px, env(safe-area-inset-left)) !important;
+}
+body.gaia-v2 .gaia-tabbar__inner { min-height: 58px; padding: 4px !important; }
+body.gaia-v2 .gaia-tabbar__link { min-height: 44px; }
+body.gaia-v2 .gaia-tabbar__assist { width: 52px; height: 52px; margin: -0.55rem auto -0.1rem; }
+
+@media (max-width: 560px) {
+  .g-topbar { min-height: 60px; padding-block: 7px; }
+  .g-topbar__brand { gap: 9px; font-size: 16px; }
+  .g-topbar__brand img { width: 30px; height: 30px; }
+  .gaia-menu-button { height: 42px; padding-inline: 15px; }
+
+  .g-home,
+  .g-page,
+  .g-store {
+    gap: 12px;
+    padding: 7px 10px calc(86px + env(safe-area-inset-bottom));
+  }
+
+  .g-event-hero { min-height: clamp(360px, 56svh, 420px); border-radius: 20px; }
+  .g-event-hero__content { width: 94%; gap: 8px; padding: 18px 16px; }
+  .g-event-hero__title--long { font-size: clamp(31px, 9.5vw, 40px); line-height: 0.95; }
+  .g-event-hero__meta { font-size: 13px; line-height: 1.35; }
+  .g-event-hero__actions .g-btn { min-height: 44px; padding-inline: 17px; }
+
+  .g-member-access { gap: 14px; padding: 16px; border-radius: 20px; }
+  .g-member-access__title { font-size: clamp(30px, 9vw, 38px); }
+  .g-member-access__meta { font-size: 13px; line-height: 1.45; }
+  .g-member-access__actions { gap: 8px; }
+  .g-member-access__actions .g-btn:last-child { min-height: 36px; }
+
+  .g-founder-row { gap: 12px; padding: 16px; border-radius: 20px; }
+  .g-page__head,
+  .g-store__head { min-height: 132px; padding: 18px; border-radius: 20px; }
+  .g-page__title,
+  .g-store__title { font-size: clamp(38px, 11vw, 48px); }
+  .g-card,
+  .g-community-card,
+  .g-course-card,
+  .g-store-card { border-radius: 18px; }
+  body.gaia-v2 .gaia-tabbar__label { font-size: 8px !important; }
+}
+
+@media (min-width: 700px) {
+  body.gaia-v2 .gaia-shell,
+  body.gaia-v2 .gaia-tabbar__inner { max-width: 880px !important; }
+  .g-home,
+  .g-page,
+  .g-store { padding: 18px 24px calc(98px + env(safe-area-inset-bottom)); }
+  .g-event-hero { min-height: min(540px, 64svh); }
+  .g-home {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    align-items: stretch;
+  }
+  #home-event-hero,
+  #home-announcements { grid-column: 1 / -1; }
+  #home-announcements:empty { display: none; }
+  #home-member-access,
+  #home-founder { height: 100%; }
+  #home-founder .g-founder-row { height: 100%; }
+  .g-member-access { flex-direction: column; align-items: stretch; }
+  .g-member-access__actions { justify-content: flex-start; }
+}
+
+@media (min-width: 980px) {
+  body.gaia-v2 .gaia-shell,
+  body.gaia-v2 .gaia-tabbar__inner { max-width: 1180px !important; }
+  .g-home,
+  .g-page,
+  .g-store { padding: 24px 36px calc(98px + env(safe-area-inset-bottom)); }
+  .g-home {
+    grid-template-columns: minmax(0, 1.65fr) minmax(310px, 0.75fr);
+    grid-template-areas:
+      "hero announcements"
+      "hero access"
+      "hero founder";
+    gap: 18px;
+  }
+  #home-event-hero { grid-area: hero; }
+  #home-announcements { grid-area: announcements; }
+  #home-member-access { grid-area: access; }
+  #home-founder { grid-area: founder; }
+  .g-event-hero { min-height: clamp(540px, calc(100dvh - 130px), 700px); }
+  .g-event-hero__content { width: 48%; padding: 46px 42px; }
+  .g-member-access { flex-direction: column; align-items: stretch; gap: 18px; }
+  .g-member-access__actions { justify-content: flex-start; }
+}
+
+@media (display-mode: standalone) {
+  .g-topbar {
+    min-height: calc(64px + env(safe-area-inset-top));
+    padding-top: max(8px, env(safe-area-inset-top));
+  }
+}

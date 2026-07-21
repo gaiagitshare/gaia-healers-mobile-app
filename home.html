@@ -43,7 +43,7 @@
   <link rel="stylesheet" href="gaia-shared.css?v=20260721a" />
   <link rel="stylesheet" href="gaia-ui-v2.css?v=20260721a" />
   <link rel="stylesheet" href="gaia-system.css?v=20260721a" />
-  <link rel="stylesheet" href="gaia-reshape.css?v=20260721c" />
+  <link rel="stylesheet" href="gaia-reshape.css?v=20260721e" />
 </head>
 <body class="gaia-app gaia-page gaia-single-app gaia-v2">
   <a class="gaia-skip-link" href="#gaia-app-shell">Skip to app content</a>
@@ -67,37 +67,11 @@
         <!-- Admin-published announcements (gaia-member.js ← bootstrap) -->
         <div id="home-announcements" class="g-anns" aria-live="polite"></div>
 
-        <section class="g-home-priorities" aria-label="Today and Academy">
-          <a class="g-priority" href="#home-chakra-hero">
-            <span class="g-priority__kicker">Today’s energy</span>
-            <strong>Ground. Open. Align.</strong>
-            <span>Check now →</span>
-          </a>
-          <a class="g-priority" href="home.html?view=academy" data-app-nav="academy">
-            <span class="g-priority__kicker">Academy</span>
-            <strong>Learn. Heal. Evolve.</strong>
-            <span>Explore Academy →</span>
-          </a>
-        </section>
-
         <section id="home-member-access" class="g-member-access" aria-label="Member access"></section>
 
-        <!-- Your energy today — the personalized core (gaia-wellness.js).
-             Header + section are hidden until the member sets up their wellness
-             profile (birth date etc.); until then a compact reminder shows. -->
-        <header class="g-sec-head" id="home-wellness-head" hidden><p class="g-sec-head__kicker">Personalised</p><h2 class="g-sec-head__title">Your day</h2></header>
-        <section id="home-wellness" class="g-page-sec" aria-label="Your energy today"></section>
-
         <!-- Interactive chakra experience now supports the event-led hero. -->
-        <header class="g-sec-head"><p class="g-sec-head__kicker">Today’s energy</p><h2 class="g-sec-head__title">Check in with yourself</h2></header>
+        <header class="g-sec-head"><p class="g-sec-head__kicker">Today’s energy</p><h2 class="g-sec-head__title">Explore your energy</h2></header>
         <section id="home-chakra-hero" class="g-chakra-hero" aria-label="Your energy"></section>
-
-        <!-- Explore — book a session + colour test (gaia-member.js / gaia-quiz.js) -->
-        <header class="g-sec-head"><p class="g-sec-head__kicker">Personal guidance</p><h2 class="g-sec-head__title">Go deeper</h2></header>
-        <div class="g-home-pair">
-          <section id="home-book" class="g-page-sec" aria-label="Book a session"></section>
-          <section id="home-colourtest" class="g-page-sec" aria-label="Colour personality test"></section>
-        </div>
       </main>
     </section>
 
@@ -154,6 +128,12 @@
         <!-- Personal: birth-date → chakra reading (client-side, public). -->
         <section id="me-wellness" class="g-page-sec" aria-label="Your birth-date chakra"></section>
 
+        <header class="g-sec-head"><p class="g-sec-head__kicker">Guidance &amp; tools</p><h2 class="g-sec-head__title">Continue your journey</h2></header>
+        <div class="g-home-pair">
+          <section id="home-book" class="g-page-sec" aria-label="Book a session"></section>
+          <section id="home-colourtest" class="g-page-sec" aria-label="Colour personality test"></section>
+        </div>
+
         <button type="button" class="g-btn g-btn--ghost g-btn--sm g-profile-signout" data-sign-out hidden>Sign out</button>
       </main>
     </section>
@@ -190,7 +170,7 @@
   <script defer src="gaia-wellness.js?v=20260721c"></script>
   <script defer src="gaia-quiz.js?v=20260721c"></script>
   <script defer src="gaia-store.js?v=20260721c"></script>
-  <script defer src="gaia-ui.js?v=20260721c"></script>
+  <script defer src="gaia-ui.js?v=20260721e"></script>
   <script>
     if ('serviceWorker' in navigator) {
       window.addEventListener('load', function () { navigator.serviceWorker.register('/sw.js').catch(function () {}); });

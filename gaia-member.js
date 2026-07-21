@@ -212,9 +212,10 @@ body.gaia-booking-open{overflow:hidden;}
     const words = String(ev.name || '').trim().split(/\s+/);
     const last = words.length > 1 ? words.pop() : '';
     const title = esc(words.join(' ')) + (last ? ' <em>' + esc(last) + '</em>' : '');
+    const titleClass = String(ev.name || '').length > 28 ? ' g-event-hero__title--long' : '';
     return '<div class="g-event-hero__content">'
       + '<p class="g-event-hero__kicker">Upcoming gathering</p>'
-      + '<h1 class="g-event-hero__title">' + title + '</h1>'
+      + '<h1 class="g-event-hero__title' + titleClass + '">' + title + '</h1>'
       + (ev.summary ? '<p class="g-event-hero__summary">' + esc(ev.summary) + '</p>' : '')
       + '<p class="g-event-hero__meta">' + [when && esc(when), ev.venue && esc(ev.venue)].filter(Boolean).join(' · ') + '</p>'
       + (url ? '<div class="g-event-hero__actions"><button type="button" class="g-btn g-btn--primary" data-open-in-app="' + esc(url) + '" data-in-app-title="' + esc(ev.name) + '">View event →</button></div>' : '')

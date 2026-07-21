@@ -15,7 +15,7 @@
   const ADMIN_MODE_KEY = 'gaia-admin-mode';
   const ADMIN_UNLOCK_PARAM = 'admin';
   const ADMIN_DEV_PASSCODE = 'gaia2026';
-  const ASSIST_WELCOME_KEY = 'gaia-assist-welcome-v1';
+  const ASSIST_WELCOME_KEY = 'gaia-assist-welcome-v2';
   const GHL_CUSTOM_MENU_URL = 'https://crm.gaiahealers.com/v2/location/WkKl1K5RuZNQ60xR48k6/custom-menu-link/328efaea-4e94-42ec-9ce2-4358a64657db';
   const APP_VIEWS = new Set(['today', 'wellness', 'academy', 'community', 'profile', 'store']);
   const AUTH_HINT_KEYS = ['memberId', 'contactId', 'email', 'name', 'displayName', 'role', 'cohort', 'locationId', 'bridge', 'sharedSecret'];
@@ -1478,56 +1478,16 @@
   }
 
   function initHeaderProfile() {
-    let sheet = document.getElementById('gaia-main-menu');
-    if (!sheet) {
-      sheet = document.createElement('div');
-      sheet.id = 'gaia-main-menu';
-      sheet.className = 'gaia-menu-sheet';
-      sheet.hidden = true;
-      sheet.innerHTML = `
-        <section class="gaia-menu-sheet__panel" role="dialog" aria-modal="true" aria-labelledby="gaia-menu-title">
-          <div class="gaia-menu-sheet__top">
-            <div><p class="gaia-menu-sheet__kicker">Gaia Healers</p><h2 class="gaia-menu-sheet__title" id="gaia-menu-title">Your menu</h2></div>
-            <button type="button" class="gaia-sheet-close" data-menu-close aria-label="Close menu">&times;</button>
-          </div>
-          <nav class="gaia-menu-sheet__nav" aria-label="Gaia menu">
-            <a class="gaia-menu-sheet__link" href="home.html?view=profile" data-app-nav="profile">Profile and bookings</a>
-            <a class="gaia-menu-sheet__link" href="home.html?view=academy" data-app-nav="academy">Academy</a>
-            <button type="button" class="gaia-menu-sheet__link" data-menu-membership>Membership</button>
-            <a class="gaia-menu-sheet__link" href="home.html?view=community" data-app-nav="community">Practitioner community</a>
-            <a class="gaia-menu-sheet__link" href="home.html?view=store" data-app-nav="store">Store</a>
-            <button type="button" class="gaia-menu-sheet__link" data-book-inline="https://calendly.com/nimafarshid/gaia-healers-meeting" data-book-title="Book with Dr. Nima">Meet the founder</button>
-            <button type="button" class="gaia-menu-sheet__link" data-menu-signin>Sign in securely</button>
-          </nav>
-        </section>`;
-      document.body.appendChild(sheet);
-    }
-    const close = () => { sheet.hidden = true; document.body.classList.remove('gaia-menu-open'); };
-    const open = () => {
-      sheet.hidden = false;
-      document.body.classList.add('gaia-menu-open');
-      sheet.querySelector('[data-menu-close]')?.focus();
-    };
-    sheet.querySelector('[data-menu-close]')?.addEventListener('click', close);
-    sheet.addEventListener('click', (event) => { if (event.target === sheet) close(); });
-    sheet.querySelectorAll('a[href]').forEach((link) => link.addEventListener('click', close));
-    sheet.querySelector('[data-menu-membership]')?.addEventListener('click', () => {
-      close();
-      window.GaiaAppShell?.go?.('store', { tab: 'membership' });
-    });
-    sheet.querySelector('[data-menu-signin]')?.addEventListener('click', () => { close(); window.GaiaAuth?.open?.(); });
-    sheet.querySelector('[data-book-inline]')?.addEventListener('click', close);
+    document.getElementById('gaia-main-menu')?.remove();
     document.querySelectorAll('[data-gaia-header-actions]').forEach((slot) => {
-      if (slot.querySelector('[data-gaia-menu-button]')) return;
       slot.replaceChildren();
-      const button = document.createElement('button');
-      button.type = 'button';
-      button.className = 'gaia-menu-button';
-      button.dataset.gaiaMenuButton = '';
-      button.setAttribute('aria-label', 'Open Gaia menu');
-      button.textContent = 'Menu';
-      button.addEventListener('click', open);
-      slot.appendChild(button);
+      const link = document.createElement('a');
+      link.className = 'gaia-profile-button';
+      link.href = 'home.html?view=profile';
+      link.dataset.appNav = 'profile';
+      link.setAttribute('aria-label', 'Open profile and bookings');
+      link.textContent = 'Profile';
+      slot.appendChild(link);
     });
   }
 
@@ -2395,8 +2355,8 @@
     function passiveWelcomeText() {
       const embedded = isGhlEmbeddedMode();
       return embedded
-        ? 'Welcome to the Gaia Healers app inside GHL. Tap Gaia once and I can guide courses, community, events, Bio-Well, devices, and member support without sending you to another portal.'
-        : 'Welcome to Gaia Healers. Tap Gaia once for live voice, or ask about Bio-Well, Academy, communities, events, devices, or your member profile.';
+        ? 'Welcome to Gaia Healers. I’m Gaia Assist. I can help you find courses, communities, events, Bio-Well support, products, and bookings without leaving the app. What can I help with?'
+        : 'Welcome to Gaia Healers. I’m Gaia Assist. I can help you find an event, course, community, practitioner, product, or booking. What can I help with?';
     }
 
     function liveWelcomePrompt() {
@@ -2925,6 +2885,7 @@
       if (backdrop) backdrop.hidden = !open;
       panel.hidden = !open;
       root.classList.toggle('gaia-assist--open', open);
+      root.classList.toggle('gaia-assist--welcome', Boolean(open && options.passive));
       document.body.classList.toggle('gaia-assist-panel-open', open);
       dockButtons().forEach((button) => {
         button.setAttribute('aria-expanded', String(open));
@@ -2950,14 +2911,14 @@
     };
 
     function showPassiveWelcome() {
-      if (passiveWelcomeShown || sessionStorage.getItem(ASSIST_WELCOME_KEY) === '1') return;
+      if (passiveWelcomeShown || localStorage.getItem(ASSIST_WELCOME_KEY) === '1') return;
       if (!document.body.classList.contains('gaia-v2')) return;
       passiveWelcomeShown = true;
-      sessionStorage.setItem(ASSIST_WELCOME_KEY, '1');
+      localStorage.setItem(ASSIST_WELCOME_KEY, '1');
       // Always open the panel so the assistant greets first — on touch devices
       // the orb shows a "tap to begin" state (iOS blocks auto-audio until gesture).
       setOpen(true, { passive: true });
-      if (!canUseRealtimeVoice() && !transcript.querySelector('[data-gaia-welcome-bubble]')) {
+      if (!transcript.querySelector('[data-gaia-welcome-bubble]')) {
         const welcomeText = passiveWelcomeText();
         const bubble = appendMessage('bot', welcomeText);
         bubble.dataset.gaiaWelcomeBubble = '1';
@@ -2967,14 +2928,6 @@
         ? (canUseRealtimeVoice() ? 'Tap Gaia to begin' : 'Tap Gaia to start')
         : (canUseRealtimeVoice() ? 'Starting…' : 'Tap Gaia to start');
       setAssistVoiceState('idle', idleCopy);
-      if (canUseRealtimeVoice()) {
-        setRealtimeVoiceProvider();
-        // Pre-warm: fetch the Gemini token + init the audio worklet NOW, before
-        // the user taps the orb. When they do tap, start() skips the token
-        // round-trip and audio setup, going straight to the WebSocket connect.
-        initRealtimeVoice();
-        realtimeVoice?.prewarm?.();
-      }
     }
 
     function sendRealtimeWelcome(reason = 'start') {
@@ -4081,9 +4034,10 @@
     setMuted(muted);
     initVoiceSettings();
     setVoiceProvider(selectedProvider() === 'auto' ? 'auto' : selectedProvider());
-    // Keep Home visible on entry. Gaia Assist now opens only after an explicit
-    // tap on the centre voice control; this avoids covering the app on iPhone
-    // and prevents an unsolicited realtime session from consuming tokens.
+    const entryParams = new URLSearchParams(window.location.search);
+    if (!entryParams.has('no_welcome')) {
+      window.setTimeout(showPassiveWelcome, 850);
+    }
   }
 
   document.addEventListener('DOMContentLoaded', () => {

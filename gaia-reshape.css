@@ -622,26 +622,30 @@ body.gaia-v2 .gaia-tabbar__assist { width: 52px; height: 52px; margin: -0.55rem 
   .g-topbar__brand img { width: 30px; height: 30px; }
   .gaia-menu-button { height: 42px; padding-inline: 15px; }
 
-  .g-home,
+  body.gaia-v2 .g-home,
   .g-page,
   .g-store {
-    gap: 12px;
-    padding: 7px 10px calc(86px + env(safe-area-inset-bottom));
+    gap: 10px;
+    padding: 6px 10px 20px;
   }
 
-  .g-event-hero { min-height: clamp(360px, 56svh, 420px); border-radius: 20px; }
-  .g-event-hero__content { width: 94%; gap: 8px; padding: 18px 16px; }
-  .g-event-hero__title--long { font-size: clamp(31px, 9.5vw, 40px); line-height: 0.95; }
-  .g-event-hero__meta { font-size: 13px; line-height: 1.35; }
-  .g-event-hero__actions .g-btn { min-height: 44px; padding-inline: 17px; }
+  .g-event-hero { min-height: clamp(332px, 40svh, 350px); border-radius: 20px; }
+  .g-event-hero__content { width: 94%; gap: 7px; padding: 14px 16px; }
+  .g-event-hero__title--long { font-size: clamp(30px, 8.6vw, 36px); line-height: 0.94; }
+  .g-event-hero__meta { font-size: 12px; line-height: 1.3; }
+  .g-event-hero__actions { margin-top: 1px; }
+  .g-event-hero__actions .g-btn { min-height: 42px; padding-inline: 16px; }
 
-  .g-member-access { gap: 14px; padding: 16px; border-radius: 20px; }
-  .g-member-access__title { font-size: clamp(30px, 9vw, 38px); }
-  .g-member-access__meta { font-size: 13px; line-height: 1.45; }
-  .g-member-access__actions { gap: 8px; }
-  .g-member-access__actions .g-btn:last-child { min-height: 36px; }
+  .g-member-access { gap: 10px; padding: 14px; border-radius: 20px; }
+  .g-member-access__title { font-size: clamp(29px, 8vw, 33px); }
+  .g-member-access__meta { margin-top: 4px; font-size: 12px; line-height: 1.4; }
+  .g-member-access__actions { gap: 7px; }
+  .g-member-access .g-btn { min-height: 42px; }
+  .g-member-access__actions .g-btn:last-child { min-height: 32px; }
 
-  .g-founder-row { gap: 12px; padding: 16px; border-radius: 20px; }
+  .g-founder-row { gap: 9px; padding: 13px 14px; border-radius: 20px; }
+  .g-founder-row__title { font-size: 24px; }
+  .g-founder-row__meta { margin-top: 3px; font-size: 12px; line-height: 1.35; }
   .g-page__head,
   .g-store__head { min-height: 132px; padding: 18px; border-radius: 20px; }
   .g-page__title,
@@ -651,6 +655,7 @@ body.gaia-v2 .gaia-tabbar__assist { width: 52px; height: 52px; margin: -0.55rem 
   .g-course-card,
   .g-store-card { border-radius: 18px; }
   body.gaia-v2 .gaia-tabbar__label { font-size: 8px !important; }
+  body.gaia-v2.gaia-has-tabbar { padding-bottom: calc(4.25rem + env(safe-area-inset-bottom)); }
 }
 
 @media (min-width: 700px) {

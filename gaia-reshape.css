@@ -629,7 +629,7 @@ body.gaia-v2 .gaia-tabbar__assist { width: 52px; height: 52px; margin: -0.55rem 
     padding: 6px 10px 20px;
   }
 
-  .g-event-hero { min-height: clamp(332px, 40svh, 350px); border-radius: 20px; }
+  .g-event-hero { min-height: clamp(332px, 40svh, 350px); align-items: center; border-radius: 20px; }
   .g-event-hero__content { width: 94%; gap: 7px; padding: 14px 16px; }
   .g-event-hero__title--long { font-size: clamp(30px, 8.6vw, 36px); line-height: 0.94; }
   .g-event-hero__meta { font-size: 12px; line-height: 1.3; }

@@ -44,7 +44,7 @@
       return `<article class="gaia-access-card gaia-access-card--unlocked">
         <span class="gaia-access-card__badge gaia-access-card__badge--on">Unlocked</span>
         <h3 class="gaia-access-card__title">${name}</h3>
-        <a href="${MY_ACCESS_PORTAL_FALLBACK}" target="_blank" rel="noopener noreferrer" class="gaia-access-card__cta">Open in Portal</a>
+        <button type="button" data-open-in-app="${MY_ACCESS_PORTAL_FALLBACK}" data-open-label="${name}" class="gaia-access-card__cta">Open securely</button>
       </article>`;
     }
     if (state === 'unknown') {
@@ -1017,7 +1017,6 @@
   }
 
   function initMemberAuth() {
-    const portalOrigin = 'https://education.gaiahealers.com/';
     const profileTitle = document.querySelector('.gaia-profile-hero .gaia-page-title');
     const profileCaption = document.querySelector('.gaia-profile-hero .gaia-caption');
     const signOutBtn = document.querySelector('[data-sign-out]');
@@ -1029,31 +1028,30 @@
     function ensureModal() {
       if (modal) return modal;
       modal = document.createElement('div');
-      modal.className = 'fixed inset-0 z-[90] hidden items-end justify-center bg-black/45 px-4 pb-6 pt-16';
+      modal.className = 'gaia-auth-modal';
+      modal.hidden = true;
       modal.innerHTML = `
-        <div class="gaia-card gaia-card-pad w-full max-w-md rounded-[28px] shadow-lift">
-          <div class="flex items-start justify-between gap-3">
+        <section class="gaia-auth-modal__panel" role="dialog" aria-modal="true" aria-labelledby="gaia-auth-title">
+          <div class="gaia-auth-modal__top">
             <div>
-              <p class="gaia-section-label !mb-1">Member access</p>
-              <h2 class="gaia-section-title">Sign in to Gaia</h2>
-              <p class="gaia-caption mt-1">Enter your Gaia member email and we'll send you a one-tap sign-in link. It keeps you signed in for a week. (Already opened Gaia from a member link in your email? You're signed in automatically.)</p>
+              <p class="gaia-auth-modal__kicker">Member access</p>
+              <h2 class="gaia-auth-modal__title" id="gaia-auth-title">Sign in to Gaia</h2>
             </div>
-            <button type="button" class="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-surface-muted text-xl text-ink-secondary" data-auth-close aria-label="Close sign in">&times;</button>
+            <button type="button" class="gaia-sheet-close" data-auth-close aria-label="Close sign in">&times;</button>
           </div>
-          <form class="mt-4 space-y-3" data-auth-form>
-            <input type="email" data-auth-email class="w-full rounded-2xl border border-black/10 bg-white px-4 py-3 text-body text-ink outline-none" placeholder="you@example.com" autocomplete="email" required />
-            <button type="submit" class="gaia-btn gaia-btn-primary w-full" data-auth-submit>Email me a sign-in link</button>
+          <p class="gaia-auth-modal__body">Enter your Gaia member email. We’ll send a secure one-tap link that returns directly to this app and keeps you signed in for one week.</p>
+          <form class="gaia-auth-modal__form" data-auth-form>
+            <input type="email" data-auth-email class="gaia-auth-modal__input" placeholder="you@example.com" autocomplete="email" inputmode="email" required />
+            <button type="submit" class="g-btn g-btn--primary gaia-auth-modal__submit" data-auth-submit>Email me a sign-in link</button>
           </form>
-          <p class="gaia-caption mt-3" data-auth-status>Your link goes straight to your inbox.</p>
-          <a href="${portalOrigin}" target="_blank" rel="noopener noreferrer" class="gaia-link mt-3 inline-block">Or open the Gaia Healers course portal →</a>
-        </div>`;
+          <p class="gaia-auth-modal__status" data-auth-status>Your link goes straight to your inbox.</p>
+        </section>`;
       document.body.appendChild(modal);
       statusEl = modal.querySelector('[data-auth-status]');
       emailInput = modal.querySelector('[data-auth-email]');
       const submitBtn = modal.querySelector('[data-auth-submit]');
       const closeModal = () => {
-        modal.classList.add('hidden');
-        modal.classList.remove('flex');
+        modal.hidden = true;
       };
       modal.querySelector('[data-auth-close]').addEventListener('click', closeModal);
       modal.addEventListener('click', (event) => {
@@ -1088,8 +1086,7 @@
     function openModal(prefill) {
       ensureModal();
       if (prefill && emailInput && !emailInput.value) emailInput.value = prefill;
-      modal.classList.remove('hidden');
-      modal.classList.add('flex');
+      modal.hidden = false;
       setTimeout(() => { try { emailInput?.focus(); } catch (_) {} }, 50);
     }
 
@@ -1217,6 +1214,41 @@
       if (claimed || AUTH_STATE.authenticated) window.GAIA_SYNC?.refresh?.();
       renderMyAccess();
     })();
+  }
+
+  function initMembershipAccess() {
+    let sheet;
+    const close = () => { if (sheet) sheet.hidden = true; };
+    const ensure = () => {
+      if (sheet) return sheet;
+      sheet = document.createElement('div');
+      sheet.className = 'gaia-menu-sheet';
+      sheet.hidden = true;
+      sheet.innerHTML = `
+        <section class="gaia-menu-sheet__panel" role="dialog" aria-modal="true" aria-labelledby="gaia-membership-title">
+          <div class="gaia-menu-sheet__top">
+            <div><p class="gaia-menu-sheet__kicker">Membership</p><h2 class="gaia-menu-sheet__title" id="gaia-membership-title">Unlock your Gaia</h2></div>
+            <button type="button" class="gaia-sheet-close" data-membership-close aria-label="Close membership">&times;</button>
+          </div>
+          <p class="gaia-auth-modal__body">Silver membership opens practitioner communities, member pricing, personalized Gaia Assist, Bio-Well sync, and exclusive learning. Choose the path that fits you.</p>
+          <nav class="gaia-menu-sheet__nav" aria-label="Membership actions">
+            <button type="button" class="gaia-menu-sheet__link" data-membership-signin>Already a member? Sign in</button>
+            <button type="button" class="gaia-menu-sheet__link" data-membership-assist>Ask Gaia about membership</button>
+            <button type="button" class="gaia-menu-sheet__link" data-book-inline="https://api.leadconnectorhq.com/widget/form/mgf6oviyhPwrLBi03gzq" data-book-title="Talk with Gaia Healers">Book a discovery call</button>
+          </nav>
+        </section>`;
+      document.body.appendChild(sheet);
+      sheet.querySelector('[data-membership-close]')?.addEventListener('click', close);
+      sheet.addEventListener('click', (event) => { if (event.target === sheet) close(); });
+      sheet.querySelector('[data-membership-signin]')?.addEventListener('click', () => { close(); window.GaiaAuth?.open?.(); });
+      sheet.querySelector('[data-membership-assist]')?.addEventListener('click', () => {
+        close();
+        window.dispatchEvent(new CustomEvent('gaia:open-assist', { detail: { prompt: 'I want to become a Silver member. Please explain the benefits and help me with the next step.', speak: false } }));
+      });
+      sheet.querySelector('[data-book-inline]')?.addEventListener('click', close);
+      return sheet;
+    };
+    window.GaiaMembership = { open() { ensure().hidden = false; }, close };
   }
 
   function initTheme() {
@@ -1446,32 +1478,57 @@
   }
 
   function initHeaderProfile() {
-    function updateHeaderProfileActive() {
-      const view = window.GaiaAppShell?.currentView?.()
-        || new URLSearchParams(window.location.search).get('view');
-      document.querySelectorAll('[data-gaia-header-profile]').forEach((link) => {
-        const on = view === 'profile' || view === 'admin';
-        link.classList.toggle('is-active', on);
-        if (on) link.setAttribute('aria-current', 'page');
-        else link.removeAttribute('aria-current');
-      });
+    let sheet = document.getElementById('gaia-main-menu');
+    if (!sheet) {
+      sheet = document.createElement('div');
+      sheet.id = 'gaia-main-menu';
+      sheet.className = 'gaia-menu-sheet';
+      sheet.hidden = true;
+      sheet.innerHTML = `
+        <section class="gaia-menu-sheet__panel" role="dialog" aria-modal="true" aria-labelledby="gaia-menu-title">
+          <div class="gaia-menu-sheet__top">
+            <div><p class="gaia-menu-sheet__kicker">Gaia Healers</p><h2 class="gaia-menu-sheet__title" id="gaia-menu-title">Your menu</h2></div>
+            <button type="button" class="gaia-sheet-close" data-menu-close aria-label="Close menu">&times;</button>
+          </div>
+          <nav class="gaia-menu-sheet__nav" aria-label="Gaia menu">
+            <a class="gaia-menu-sheet__link" href="home.html?view=profile" data-app-nav="profile">Profile and bookings</a>
+            <a class="gaia-menu-sheet__link" href="home.html?view=academy" data-app-nav="academy">Academy</a>
+            <button type="button" class="gaia-menu-sheet__link" data-menu-membership>Membership</button>
+            <a class="gaia-menu-sheet__link" href="home.html?view=community" data-app-nav="community">Practitioner community</a>
+            <a class="gaia-menu-sheet__link" href="home.html?view=store" data-app-nav="store">Store</a>
+            <button type="button" class="gaia-menu-sheet__link" data-book-inline="https://calendly.com/nimafarshid/gaia-healers-meeting" data-book-title="Book with Dr. Nima">Meet the founder</button>
+            <button type="button" class="gaia-menu-sheet__link" data-menu-signin>Sign in securely</button>
+          </nav>
+        </section>`;
+      document.body.appendChild(sheet);
     }
-
-    document.querySelectorAll('[data-gaia-header-actions]').forEach((slot) => {
-      if (slot.querySelector('[data-gaia-header-profile]')) return;
-      const link = document.createElement('a');
-      link.href = 'home.html?view=profile';
-      link.className = 'gaia-header-profile gaia-login-pill gaia-login-pill--compact';
-      link.dataset.gaiaHeaderProfile = '';
-      link.setAttribute('data-app-nav', 'profile');
-      link.textContent = 'Profile';
-      const login = slot.querySelector('a.gaia-login-pill[href*="education"]');
-      if (login) slot.insertBefore(link, login);
-      else slot.appendChild(link);
+    const close = () => { sheet.hidden = true; document.body.classList.remove('gaia-menu-open'); };
+    const open = () => {
+      sheet.hidden = false;
+      document.body.classList.add('gaia-menu-open');
+      sheet.querySelector('[data-menu-close]')?.focus();
+    };
+    sheet.querySelector('[data-menu-close]')?.addEventListener('click', close);
+    sheet.addEventListener('click', (event) => { if (event.target === sheet) close(); });
+    sheet.querySelectorAll('a[href]').forEach((link) => link.addEventListener('click', close));
+    sheet.querySelector('[data-menu-membership]')?.addEventListener('click', () => {
+      close();
+      window.GaiaAppShell?.go?.('store', { tab: 'membership' });
     });
-
-    updateHeaderProfileActive();
-    window.addEventListener('gaia:route', updateHeaderProfileActive);
+    sheet.querySelector('[data-menu-signin]')?.addEventListener('click', () => { close(); window.GaiaAuth?.open?.(); });
+    sheet.querySelector('[data-book-inline]')?.addEventListener('click', close);
+    document.querySelectorAll('[data-gaia-header-actions]').forEach((slot) => {
+      if (slot.querySelector('[data-gaia-menu-button]')) return;
+      slot.replaceChildren();
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.className = 'gaia-menu-button';
+      button.dataset.gaiaMenuButton = '';
+      button.setAttribute('aria-label', 'Open Gaia menu');
+      button.textContent = 'Menu';
+      button.addEventListener('click', open);
+      slot.appendChild(button);
+    });
   }
 
   function initSplashSteps() {
@@ -3895,9 +3952,6 @@
       localStorage.setItem(VOICE_NAME_KEY, voiceNameSelect.value);
     });
     document.addEventListener('gaia:sync', configureVoiceFromBootstrap);
-    document.addEventListener('gaia:sync', () => {
-      if (passiveWelcomeShown) window.setTimeout(() => autoStartGeminiWelcome('sync'), 120);
-    });
     voiceSpeed.addEventListener('input', () => {
       localStorage.setItem(VOICE_SPEED_KEY, voiceSpeed.value);
       voiceSpeedLabel.textContent = `${Number(voiceSpeed.value).toFixed(2)}x`;
@@ -4027,12 +4081,9 @@
     setMuted(muted);
     initVoiceSettings();
     setVoiceProvider(selectedProvider() === 'auto' ? 'auto' : selectedProvider());
-    if (!new URLSearchParams(window.location.search).has('no_welcome')) {
-      window.setTimeout(() => {
-        showPassiveWelcome();
-        window.setTimeout(() => autoStartGeminiWelcome('entry'), 180);
-      }, isGhlEmbeddedMode() ? 650 : 950);
-    }
+    // Keep Home visible on entry. Gaia Assist now opens only after an explicit
+    // tap on the centre voice control; this avoids covering the app on iPhone
+    // and prevents an unsolicited realtime session from consuming tokens.
   }
 
   document.addEventListener('DOMContentLoaded', () => {
@@ -4045,6 +4096,7 @@
     initTheme();
     initHeaderProfile();
     initMemberAuth();
+    initMembershipAccess();
     initCoachMark();
     initSplashSteps();
     initChakraMaps();

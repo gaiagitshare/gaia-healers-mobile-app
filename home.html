@@ -9,9 +9,16 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
   <meta name="apple-mobile-web-app-title" content="Gaia Healers" />
   <meta name="theme-color" content="#eef4ea" />
+  <meta name="description" content="Gaia Healers brings practitioner events, Academy courses, community access, bookings, and personalized wellness guidance into one mobile-first app." />
+  <meta property="og:type" content="website" />
+  <meta property="og:title" content="Gaia Healers" />
+  <meta property="og:description" content="Events, Academy, practitioner communities, bookings, and Gaia Assist in one mobile-first experience." />
+  <meta property="og:url" content="https://gaiahealers.app/home.html" />
+  <meta property="og:image" content="https://gaiahealers.app/assets/gaia-event-hero.webp" />
+  <meta name="twitter:card" content="summary_large_image" />
   <link rel="canonical" href="https://gaiahealers.app/home.html" />
   <link rel="manifest" href="manifest.webmanifest" />
-  <link rel="apple-touch-icon" href="assets/gaia-logo.png" />
+  <link rel="apple-touch-icon" href="assets/apple-touch-icon.png" />
   <title>Gaia Healers App</title>
   <script>
     (function () {
@@ -25,20 +32,21 @@
       } catch (e) { /* ignore */ }
     })();
   </script>
-  <script src="https://cdn.tailwindcss.com"></script>
-  <script src="gaia-config.js?v=20260703a"></script>
-  <script src="gaia-app-urls.js?v=20260703a"></script>
-  <script src="gaia-ecosystem.js?v=20260703a"></script>
-  <script src="gaia-live-sync.js?v=20260703a"></script>
+  <script defer src="gaia-app-urls.js?v=20260721c"></script>
+  <script defer src="gaia-ecosystem.js?v=20260721c"></script>
+  <script defer src="gaia-live-sync.js?v=20260721c"></script>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
-  <script src="gaia-chakra-data.js?v=20260703a"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600;700&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+  <script defer src="gaia-chakra-data.js?v=20260721c"></script>
+  <link rel="stylesheet" href="gaia-utilities.css?v=20260721c" />
   <link rel="stylesheet" href="gaia-shared.css?v=20260721a" />
   <link rel="stylesheet" href="gaia-ui-v2.css?v=20260721a" />
   <link rel="stylesheet" href="gaia-system.css?v=20260721a" />
+  <link rel="stylesheet" href="gaia-reshape.css?v=20260721c" />
 </head>
 <body class="gaia-app gaia-page gaia-single-app gaia-v2">
+  <a class="gaia-skip-link" href="#gaia-app-shell">Skip to app content</a>
   <script>try{document.body.dataset.theme=document.documentElement.dataset.theme||'light';}catch(e){}</script>
   <svg width="0" height="0" aria-hidden="true"><defs><linearGradient id="gaia-ring-gradient" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="#7DD956"/><stop offset="100%" stop-color="#449422"/></linearGradient></defs></svg>
   <div class="gaia-shell" id="gaia-app-shell">
@@ -53,11 +61,26 @@
       </header>
 
       <main class="gaia-main gaia-main--today g-home">
-        <!-- Signature hero — living chakra body + greeting (gaia-member.js) -->
-        <section id="home-chakra-hero" class="g-chakra-hero" aria-label="Your energy"></section>
+        <!-- Event-led hero from the selected Living Network direction. -->
+        <section id="home-event-hero" class="g-event-hero" aria-label="Upcoming Gaia gathering"></section>
 
         <!-- Admin-published announcements (gaia-member.js ← bootstrap) -->
         <div id="home-announcements" class="g-anns" aria-live="polite"></div>
+
+        <section class="g-home-priorities" aria-label="Today and Academy">
+          <a class="g-priority" href="#home-chakra-hero">
+            <span class="g-priority__kicker">Today’s energy</span>
+            <strong>Ground. Open. Align.</strong>
+            <span>Check now →</span>
+          </a>
+          <a class="g-priority" href="home.html?view=academy" data-app-nav="academy">
+            <span class="g-priority__kicker">Academy</span>
+            <strong>Learn. Heal. Evolve.</strong>
+            <span>Explore Academy →</span>
+          </a>
+        </section>
+
+        <section id="home-member-access" class="g-member-access" aria-label="Member access"></section>
 
         <!-- Your energy today — the personalized core (gaia-wellness.js).
              Header + section are hidden until the member sets up their wellness
@@ -65,12 +88,12 @@
         <header class="g-sec-head" id="home-wellness-head" hidden><p class="g-sec-head__kicker">Personalised</p><h2 class="g-sec-head__title">Your day</h2></header>
         <section id="home-wellness" class="g-page-sec" aria-label="Your energy today"></section>
 
-        <!-- What’s on — next event + member CTA (gaia-member.js) -->
-        <header class="g-sec-head"><p class="g-sec-head__kicker">At Gaia Healers</p><h2 class="g-sec-head__title">What’s on</h2></header>
-        <div id="home-cards" class="g-home-cards"></div>
+        <!-- Interactive chakra experience now supports the event-led hero. -->
+        <header class="g-sec-head"><p class="g-sec-head__kicker">Today’s energy</p><h2 class="g-sec-head__title">Check in with yourself</h2></header>
+        <section id="home-chakra-hero" class="g-chakra-hero" aria-label="Your energy"></section>
 
         <!-- Explore — book a session + colour test (gaia-member.js / gaia-quiz.js) -->
-        <header class="g-sec-head"><p class="g-sec-head__kicker">Explore</p><h2 class="g-sec-head__title">Go deeper</h2></header>
+        <header class="g-sec-head"><p class="g-sec-head__kicker">Personal guidance</p><h2 class="g-sec-head__title">Go deeper</h2></header>
         <div class="g-home-pair">
           <section id="home-book" class="g-page-sec" aria-label="Book a session"></section>
           <section id="home-colourtest" class="g-page-sec" aria-label="Colour personality test"></section>
@@ -86,9 +109,9 @@
         <div class="g-topbar__actions gaia-header-actions" data-gaia-header-actions></div>
       </header>
       <main class="gaia-main g-page g-academy">
-        <div class="g-page__head">
-          <p class="g-page__kicker">Courses &amp; credentials</p>
-          <h1 class="g-page__title">Academy</h1>
+        <div class="g-page__head g-page__head--academy">
+          <p class="g-page__kicker">Learn · heal · evolve</p>
+          <h1 class="g-page__title">Gaia Academy</h1>
           <p class="g-page__sub" id="academy-summary-caption">Your courses live in the Gaia Healers portal.</p>
         </div>
         <div id="member-academy" class="g-page-sec" aria-live="polite"></div>
@@ -103,8 +126,8 @@
         <div class="g-topbar__actions gaia-header-actions" data-gaia-header-actions></div>
       </header>
       <main class="gaia-main g-page g-community">
-        <div class="g-page__head">
-          <p class="g-page__kicker">Community</p>
+        <div class="g-page__head g-page__head--community">
+          <p class="g-page__kicker">Living network</p>
           <h1 class="g-page__title">Your circles</h1>
           <p class="g-page__sub" id="community-sub">The Gaia Healers communities you can open — and what unlocks next.</p>
         </div>
@@ -120,8 +143,8 @@
         <div class="g-topbar__actions gaia-header-actions" data-gaia-header-actions></div>
       </header>
       <main class="gaia-main g-page g-profile">
-        <div class="g-page__head">
-          <p class="g-page__kicker" id="profile-kicker">Your account</p>
+        <div class="g-page__head g-page__head--profile">
+          <p class="g-page__kicker" id="profile-kicker">Your Gaia</p>
           <h1 class="g-page__title" id="profile-title">Profile</h1>
           <p class="g-page__sub" id="profile-sub">Sign in to see your memberships, devices, and bookings.</p>
         </div>
@@ -144,8 +167,8 @@
       </header>
       <main class="gaia-main g-store">
         <div class="g-store__head">
-          <p class="g-store__kicker">Shop</p>
-          <h1 class="g-store__title">Store</h1>
+          <p class="g-store__kicker">Tools for your practice</p>
+          <h1 class="g-store__title">Gaia Store</h1>
         </div>
         <div class="g-tabs" role="tablist" aria-label="Store sections">
           <button type="button" class="g-tab is-active" data-store-tab="shop" role="tab" aria-selected="true" aria-controls="store-products">Shop</button>
@@ -161,12 +184,17 @@
     <!-- Admin is NOT part of the public app. It lives on a separate,
          password-gated surface served by the proxy: api.gaiahealers.app/admin -->
   </div>
-  <script src="shared-nav.js?v=20260703m"></script>
-  <script src="gaia-realtime-voice.js?v=20260721c"></script>
-  <script src="gaia-member.js?v=20260721b"></script>
-  <script src="gaia-wellness.js?v=20260705m"></script>
-  <script src="gaia-quiz.js?v=20260705j"></script>
-  <script src="gaia-store.js?v=20260721b"></script>
-  <script src="gaia-ui.js?v=20260705l"></script>
+  <script defer src="shared-nav.js?v=20260721c"></script>
+  <script defer src="gaia-realtime-voice.js?v=20260721c"></script>
+  <script defer src="gaia-member.js?v=20260721c"></script>
+  <script defer src="gaia-wellness.js?v=20260721c"></script>
+  <script defer src="gaia-quiz.js?v=20260721c"></script>
+  <script defer src="gaia-store.js?v=20260721c"></script>
+  <script defer src="gaia-ui.js?v=20260721c"></script>
+  <script>
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', function () { navigator.serviceWorker.register('/sw.js').catch(function () {}); });
+    }
+  </script>
 </body>
 </html>

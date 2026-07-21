@@ -1,0 +1,477 @@
+/* Gaia Healers — Living Network production reshape (2026-07-21)
+   Event-led, mobile-first, and deliberately calm. This layer sits last so the
+   existing data integrations keep working while every public screen shares one
+   visual system. */
+
+:root {
+  --g-bg: #07100b;
+  --g-surface: #101a13;
+  --g-surface-hi: #152219;
+  --g-line: rgba(232, 242, 230, 0.12);
+  --g-line-strong: rgba(232, 242, 230, 0.22);
+  --g-text: #f1f5ef;
+  --g-text-muted: #aeb9ab;
+  --g-text-faint: #869383;
+  --g-accent: #9ee565;
+  --g-accent-deep: #72c63f;
+  --g-on-accent: #071309;
+  --g-font: "Plus Jakarta Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --g-font-serif: "Cormorant Garamond", Georgia, serif;
+  --g-r-md: 16px;
+  --g-r-lg: 20px;
+  --g-r-xl: 26px;
+}
+
+html { background: var(--g-bg); scroll-behavior: smooth; }
+body.gaia-v2 {
+  min-width: 0;
+  background: var(--g-bg);
+  color: var(--g-text);
+  font-family: var(--g-font);
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+}
+
+.gaia-skip-link {
+  position: fixed;
+  left: 16px;
+  top: 12px;
+  z-index: 200;
+  transform: translateY(-160%);
+  padding: 11px 15px;
+  border-radius: 12px;
+  background: var(--g-accent);
+  color: var(--g-on-accent);
+  font-weight: 700;
+}
+.gaia-skip-link:focus { transform: translateY(0); }
+
+body.gaia-v2 .gaia-shell {
+  width: 100%;
+  max-width: 100%;
+  margin: 0 auto;
+  background: var(--g-bg);
+}
+
+.g-topbar {
+  position: sticky;
+  top: 0;
+  z-index: 40;
+  padding: max(16px, env(safe-area-inset-top)) 18px 12px;
+  background: rgba(7, 16, 11, 0.94);
+  border-bottom: 1px solid rgba(232, 242, 230, 0.06);
+  -webkit-backdrop-filter: blur(20px);
+  backdrop-filter: blur(20px);
+}
+.g-topbar__brand { font-size: 18px; letter-spacing: -0.025em; }
+.g-topbar__brand img { width: 34px; height: 34px; }
+.g-topbar__actions { min-width: 48px; justify-content: flex-end; }
+
+.gaia-menu-button {
+  width: auto;
+  min-width: 66px;
+  height: 48px;
+  padding: 0 15px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--g-line);
+  border-radius: 999px;
+  background: var(--g-surface);
+  color: var(--g-accent);
+  font-size: 12px;
+  font-weight: 750;
+  letter-spacing: 0.02em;
+  cursor: pointer;
+}
+.gaia-menu-button svg { width: 23px; height: 23px; }
+.gaia-menu-button:focus-visible { outline: none; box-shadow: var(--g-focus); }
+
+.g-home,
+.g-page,
+.g-store {
+  gap: 28px;
+  padding: 12px 16px calc(116px + env(safe-area-inset-bottom));
+  background: var(--g-bg);
+}
+
+/* Event-first Home ------------------------------------------------------ */
+.g-event-hero {
+  position: relative;
+  min-height: 420px;
+  display: flex;
+  align-items: flex-end;
+  overflow: hidden;
+  border: 1px solid var(--g-line);
+  border-radius: var(--g-r-xl);
+  background-color: #08100b;
+  background-image: url("assets/gaia-event-hero.webp");
+  background-size: cover;
+  background-position: 58% center;
+  box-shadow: 0 28px 70px rgba(0, 0, 0, 0.34);
+}
+.g-event-hero::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: rgba(2, 7, 4, 0.24);
+  pointer-events: none;
+}
+.g-event-hero__content {
+  position: relative;
+  z-index: 1;
+  width: min(86%, 390px);
+  padding: 24px 22px 22px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 12px;
+}
+.g-event-hero__kicker,
+.g-priority__kicker,
+.g-member-access__kicker,
+.g-founder-row__kicker {
+  margin: 0;
+  color: var(--g-accent);
+  font: 700 11px/1.1 var(--g-font-mono);
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+}
+.g-event-hero__title {
+  margin: 0;
+  max-width: 7ch;
+  color: var(--g-text);
+  font: 600 clamp(46px, 13vw, 64px) / 0.86 var(--g-font-serif);
+  letter-spacing: -0.045em;
+  text-wrap: balance;
+}
+.g-event-hero__title em { color: var(--g-accent); font-style: normal; }
+.g-event-hero__summary {
+  max-width: 30ch;
+  margin: 0;
+  color: #d7ded4;
+  font-size: 15px;
+  line-height: 1.55;
+}
+.g-event-hero__meta {
+  margin: 2px 0 0;
+  color: var(--g-text);
+  font-size: 13px;
+  font-weight: 650;
+  line-height: 1.5;
+}
+.g-event-hero__actions { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 4px; }
+.g-event-hero__actions .g-btn { min-height: 48px; border-radius: 999px; padding-inline: 20px; }
+.g-event-hero__status {
+  display: inline-flex;
+  min-height: 42px;
+  align-items: center;
+  color: var(--g-text-muted);
+  font-size: 13px;
+}
+
+.g-home-priorities {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  border-top: 1px solid var(--g-line);
+  border-bottom: 1px solid var(--g-line);
+}
+.g-priority {
+  min-width: 0;
+  min-height: 188px;
+  padding: 24px 16px;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  gap: 9px;
+  color: var(--g-text);
+  text-decoration: none;
+}
+.g-priority + .g-priority { border-left: 1px solid var(--g-line); }
+.g-priority strong {
+  font: 600 clamp(25px, 7.4vw, 35px) / 0.98 var(--g-font-serif);
+  letter-spacing: -0.025em;
+  text-wrap: balance;
+}
+.g-priority > span:last-child { color: var(--g-accent); font-size: 13px; font-weight: 700; }
+.g-priority:focus-visible { outline: 2px solid var(--g-accent); outline-offset: -3px; }
+
+.g-member-access {
+  min-height: 112px;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 18px;
+  border: 1px solid var(--g-line);
+  border-radius: var(--g-r-lg);
+  background: var(--g-surface);
+}
+.g-member-access__body { min-width: 0; flex: 1; }
+.g-member-access__title { margin: 6px 0 0; font: 600 25px/1 var(--g-font-serif); }
+.g-member-access__meta { margin: 5px 0 0; color: var(--g-text-muted); font-size: 13px; line-height: 1.4; }
+.g-member-access .g-btn { flex: none; border-radius: 999px; }
+
+.g-chakra-hero { border-radius: var(--g-r-xl); background: #050906; }
+.g-chakra-hero__stage { height: min(44vh, 370px); height: min(44dvh, 370px); }
+.g-chakra-hero__fig img { content: url("assets/gaia-chakra-meditation.webp"); }
+.g-chakra-hero__overlay { padding: 26px 22px 22px; }
+.g-chakra-hero__title { font-family: var(--g-font-serif); font-size: clamp(36px, 10vw, 52px); }
+.g-chakra-guide {
+  position: relative;
+  z-index: 5;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 14px;
+  padding: 17px 18px 18px;
+  border-top: 1px solid var(--g-line);
+  background: #0d1710;
+}
+.g-chakra-guide__body { min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+.g-chakra-guide__kicker { margin: 0; color: var(--active-chakra, var(--g-accent)); font: 700 10px/1 var(--g-font-mono); letter-spacing: 0.13em; text-transform: uppercase; }
+.g-chakra-guide__name { font: 600 26px/1 var(--g-font-serif); color: var(--g-text); }
+.g-chakra-guide__meta { color: var(--g-text-muted); font-size: 12px; line-height: 1.4; }
+.g-chakra-guide__shop { border-color: var(--active-chakra, var(--g-line)); white-space: normal; text-align: center; }
+.g-chakra-guide__steps { grid-column: 1 / -1; display: grid; grid-template-columns: repeat(7, 1fr); gap: 6px; }
+.g-chakra-guide__steps button {
+  min-height: 24px;
+  padding: 0;
+  border: 0;
+  border-radius: 999px;
+  background: var(--g-line);
+  cursor: pointer;
+}
+.g-chakra-guide__steps button.is-active { background: var(--ck, var(--g-accent)); box-shadow: 0 0 12px var(--ck, var(--g-accent)); }
+.g-chakra-guide__steps button:focus-visible { outline: 2px solid var(--g-accent); outline-offset: 2px; }
+
+.g-sec-head { gap: 6px; margin-bottom: -12px; }
+.g-sec-head__title { font-family: var(--g-font-serif); font-size: 34px; }
+
+.g-founder-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 16px;
+  padding: 18px 2px;
+  border-top: 1px solid var(--g-line);
+  border-bottom: 1px solid var(--g-line);
+}
+.g-founder-row__title { margin: 7px 0 0; font: 600 27px/1 var(--g-font-serif); }
+.g-founder-row__meta { margin: 5px 0 0; color: var(--g-text-muted); font-size: 13px; line-height: 1.45; }
+.g-founder-row .g-btn { border-radius: 999px; }
+
+/* Shared page treatment ------------------------------------------------ */
+.g-page__head,
+.g-store__head {
+  min-height: 172px;
+  justify-content: flex-end;
+  padding: 24px;
+  border: 1px solid var(--g-line);
+  border-radius: var(--g-r-xl);
+  background: var(--g-surface);
+}
+.g-page__title,
+.g-store__title {
+  font-family: var(--g-font-serif);
+  font-size: clamp(43px, 13vw, 62px);
+  line-height: 0.9;
+  letter-spacing: -0.04em;
+}
+.g-page__sub { max-width: 36ch; margin-top: 8px; font-size: 14px; line-height: 1.5; }
+.g-page__head--academy { background-color: #111a13; }
+.g-page__head--community { background-color: #0e1913; }
+.g-page__head--profile { background-color: #111913; }
+
+.g-card {
+  gap: 10px;
+  padding: 18px;
+  border-radius: var(--g-r-lg);
+  background: var(--g-surface);
+  box-shadow: none;
+}
+.g-card--feature { background: #142319; border-color: var(--g-line-strong); }
+.g-card__value,
+.g-card__value--lg { font-family: var(--g-font-serif); font-size: clamp(25px, 7vw, 34px); font-weight: 600; }
+.g-card__meta { color: var(--g-text-muted); font-size: 14px; line-height: 1.55; }
+.g-card__actions .g-btn { border-radius: 999px; }
+
+.g-access-grid { gap: 10px; }
+.g-access {
+  min-height: 82px;
+  padding: 14px 14px 14px 18px;
+  border-radius: var(--g-r-md);
+  background: var(--g-surface);
+}
+.g-access::before { width: 2px; }
+.g-access__name { white-space: normal; overflow: visible; font-size: 14px; line-height: 1.35; }
+.g-access__meta { font-size: 12px; }
+.g-access__act { max-width: 42%; white-space: normal; text-align: right; }
+
+.g-section__title { font-family: var(--g-font-serif); font-size: 26px; }
+.g-stats { gap: 7px; }
+.g-stat { padding: 13px 11px; background: var(--g-surface); }
+.g-stat__n { font-family: var(--g-font-serif); font-size: 28px; }
+.g-stat__l { font-size: 9px; }
+
+.g-tabs { position: sticky; top: 72px; z-index: 20; max-width: none; background: #0d1710; }
+.g-tab { min-height: 46px; font-size: 13px; }
+.g-store-panel { gap: 28px; }
+.g-store-rail { gap: 12px; }
+.g-tile { flex-basis: 10rem; }
+.g-tile__media { border-radius: var(--g-r-md); }
+.g-tile__title { font-size: 13px; line-height: 1.4; }
+
+/* Native auth and membership sheets ----------------------------------- */
+.gaia-auth-modal,
+.gaia-menu-sheet {
+  position: fixed;
+  inset: 0;
+  z-index: 120;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  padding: 18px 14px max(14px, env(safe-area-inset-bottom));
+  background: rgba(0, 0, 0, 0.66);
+  -webkit-backdrop-filter: blur(12px);
+  backdrop-filter: blur(12px);
+}
+.gaia-auth-modal[hidden],
+.gaia-menu-sheet[hidden] { display: none; }
+.gaia-auth-modal__panel,
+.gaia-menu-sheet__panel {
+  width: min(100%, 480px);
+  max-height: min(88vh, 720px);
+  max-height: min(88dvh, 720px);
+  overflow: auto;
+  padding: 22px;
+  border: 1px solid var(--g-line-strong);
+  border-radius: 28px;
+  background: #0d1710;
+  color: var(--g-text);
+  box-shadow: 0 24px 80px rgba(0, 0, 0, 0.58);
+}
+.gaia-auth-modal__top,
+.gaia-menu-sheet__top { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }
+.gaia-auth-modal__kicker,
+.gaia-menu-sheet__kicker { margin: 0 0 7px; color: var(--g-accent); font: 700 11px/1 var(--g-font-mono); letter-spacing: 0.14em; text-transform: uppercase; }
+.gaia-auth-modal__title,
+.gaia-menu-sheet__title { margin: 0; font: 600 36px/0.95 var(--g-font-serif); }
+.gaia-auth-modal__body { margin: 12px 0 0; color: var(--g-text-muted); font-size: 14px; line-height: 1.55; }
+.gaia-sheet-close {
+  flex: none;
+  width: 44px;
+  height: 44px;
+  border: 1px solid var(--g-line);
+  border-radius: 50%;
+  background: var(--g-surface-hi);
+  color: var(--g-text);
+  font-size: 23px;
+  cursor: pointer;
+}
+.gaia-auth-modal__form { display: flex; flex-direction: column; gap: 10px; margin-top: 20px; }
+.gaia-auth-modal__input {
+  width: 100%;
+  min-height: 52px;
+  padding: 13px 15px;
+  border: 1px solid var(--g-line-strong);
+  border-radius: 15px;
+  background: #07100b;
+  color: var(--g-text);
+  font: 500 16px var(--g-font);
+}
+.gaia-auth-modal__input:focus { outline: none; border-color: var(--g-accent); box-shadow: var(--g-focus); }
+.gaia-auth-modal__submit { width: 100%; border-radius: 15px; }
+.gaia-auth-modal__status { min-height: 20px; margin: 12px 0 0; color: var(--g-text-muted); font-size: 13px; line-height: 1.45; }
+
+.gaia-menu-sheet__nav { display: grid; gap: 8px; margin-top: 22px; }
+.gaia-menu-sheet__link {
+  min-height: 56px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 12px 3px;
+  border: 0;
+  border-bottom: 1px solid var(--g-line);
+  background: transparent;
+  color: var(--g-text);
+  font: 600 16px var(--g-font);
+  text-align: left;
+  text-decoration: none;
+  cursor: pointer;
+}
+.gaia-menu-sheet__link span { color: var(--g-accent); }
+
+/* Existing reusable iframe sheet, recolored to the selected direction. */
+.gaia-booking-modal__sheet { background: #0d1710 !important; border: 1px solid var(--g-line-strong); }
+.gaia-booking-modal__head { background: #0d1710; border-color: var(--g-line) !important; }
+.gaia-booking-modal__title { color: var(--g-text) !important; font-family: var(--g-font-serif); font-size: 24px !important; }
+.gaia-booking-modal__close { background: var(--g-surface-hi) !important; color: var(--g-text) !important; }
+.gaia-booking-modal__loading,
+.gaia-booking-modal__auth { background: #0d1710 !important; color: var(--g-text-muted) !important; }
+.gaia-booking-modal__auth-title { color: var(--g-text) !important; font-family: var(--g-font-serif); font-size: 28px !important; }
+.gaia-booking-modal__auth-body,
+.gaia-booking-modal__auth-hint { color: var(--g-text-muted) !important; }
+.gaia-booking-modal__fallback { background: #111e15 !important; border-color: var(--g-line) !important; color: var(--g-accent) !important; }
+
+/* Bottom navigation ----------------------------------------------------- */
+body.gaia-v2.gaia-has-tabbar { padding-bottom: calc(5.5rem + env(safe-area-inset-bottom)); }
+body.gaia-v2 .gaia-tabbar { padding-inline: max(12px, env(safe-area-inset-left)) !important; }
+body.gaia-v2 .gaia-tabbar__inner {
+  min-height: 66px;
+  padding: 6px 4px !important;
+  border-color: var(--g-line-strong) !important;
+  background: rgba(7, 13, 9, 0.96) !important;
+  box-shadow: 0 18px 46px rgba(0, 0, 0, 0.48) !important;
+}
+body.gaia-v2 .gaia-tabbar__link { min-height: 48px; color: #a9b3a6 !important; }
+body.gaia-v2 .gaia-tabbar__link.is-active { color: var(--g-accent) !important; }
+body.gaia-v2 .gaia-tabbar__link.is-active::before { background: #142118; border-color: var(--g-line); }
+body.gaia-v2 .gaia-tabbar__label { font-size: 9px !important; }
+body.gaia-v2 .gaia-tabbar__assist {
+  width: 58px;
+  height: 58px;
+  background: var(--g-accent);
+  box-shadow: 0 0 0 3px #07100b, 0 12px 28px rgba(114, 198, 63, 0.34);
+}
+
+@media (max-width: 359px) {
+  .g-event-hero { min-height: 410px; }
+  .g-event-hero__content { width: 92%; padding: 22px 18px; }
+  .g-event-hero__title { font-size: 46px; }
+  .g-priority { min-height: 164px; padding: 20px 12px; }
+  .g-priority strong { font-size: 23px; }
+  .g-member-access { align-items: flex-start; flex-direction: column; }
+  .g-member-access .g-btn { width: 100%; }
+  .g-chakra-guide { grid-template-columns: 1fr; }
+  .g-chakra-guide__shop { width: 100%; }
+  body.gaia-v2 .gaia-tabbar__label { display: none; }
+  body.gaia-v2 .gaia-tabbar__link { min-width: 40px; }
+}
+
+@media (min-width: 700px) {
+  body.gaia-v2 .gaia-shell,
+  body.gaia-v2 .gaia-tabbar__inner { max-width: 720px !important; }
+  .g-home,
+  .g-page,
+  .g-store { padding-inline: 28px; }
+  .g-event-hero { min-height: 590px; }
+  .g-event-hero__content { padding: 42px; }
+  .g-home-pair { grid-template-columns: 1fr 1fr; }
+}
+
+@media (min-width: 980px) {
+  body.gaia-v2 .gaia-shell,
+  body.gaia-v2 .gaia-tabbar__inner { max-width: 1080px !important; }
+  .g-home,
+  .g-page,
+  .g-store { padding-inline: 48px; }
+  .g-event-hero { min-height: 620px; background-position: center; }
+  .g-event-hero__content { width: 48%; }
+  .g-home-priorities { grid-template-columns: 1fr 1fr; }
+  .g-access-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto; }
+}

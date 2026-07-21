@@ -112,84 +112,123 @@ body.gaia-booking-open{overflow:hidden;}
   // centres) + greeting; the centres are tappable to reveal their essence.
   function renderChakraHero() {
     const box = el('home-chakra-hero'); if (!box) return;
+    if (box._chakraTimer) clearInterval(box._chakraTimer);
+    if (box._chakraRestart) clearTimeout(box._chakraRestart);
     const chs = window.GAIA_CHAKRAS || [];
-    const g = heroGreeting();
     const hits = chs.map((c, i) => '<button type="button" class="g-chakra-hero__hit" data-ck="' + esc(c.id)
       + '" style="top:' + c.top + '%;left:' + c.left + '%;--ck:' + esc(c.color) + ';--i:' + i + '" aria-label="' + esc(c.name) + ' chakra"></button>').join('');
     box.innerHTML =
       '<div class="g-chakra-hero__stage"><div class="g-chakra-hero__fig">'
-      + '<img src="assets/gaia-chakra-meditation.png" alt="A meditating figure with seven glowing energy centres" />'
+      + '<picture><source srcset="assets/gaia-chakra-meditation.webp" type="image/webp" />'
+      + '<img src="assets/gaia-chakra-meditation.png" width="621" height="906" loading="lazy" alt="A meditating figure with seven glowing energy centres" /></picture>'
       + hits
-      + '<div class="g-chakra-hero__pop" id="chakra-pop" aria-live="polite"></div>'
       + '</div></div>'
       + '<div class="g-chakra-hero__scrim"></div>'
       + '<div class="g-chakra-hero__overlay">'
-      + '<p class="g-chakra-hero__kicker">' + esc(g.kicker) + '</p>'
-      + '<h1 class="g-chakra-hero__title">' + g.title + '</h1>'
-      + '<p class="g-chakra-hero__caption" id="chakra-caption">Tap a centre to explore your energy →</p>'
-      + '</div>';
-    const pop = el('chakra-pop');
-    const closePop = () => {
-      if (pop) pop.classList.remove('is-open');
-      box.querySelectorAll('.g-chakra-hero__hit').forEach((x) => x.classList.remove('is-active'));
+      + '<p class="g-chakra-hero__kicker">Guided chakra focus</p>'
+      + '<h2 class="g-chakra-hero__title">Explore your <em>energy</em></h2>'
+      + '<p class="g-chakra-hero__caption">Tap a centre or let Gaia guide you.</p>'
+      + '</div>'
+      + '<div class="g-chakra-guide" aria-live="polite">'
+      + '<div class="g-chakra-guide__body"><p class="g-chakra-guide__kicker">Current focus</p>'
+      + '<strong class="g-chakra-guide__name"></strong><span class="g-chakra-guide__meta"></span></div>'
+      + '<a class="g-btn g-btn--secondary g-btn--sm g-chakra-guide__shop" href="#" data-external>Support this centre →</a>'
+      + '<div class="g-chakra-guide__steps" role="group" aria-label="Choose chakra">'
+      + chs.map((c) => '<button type="button" data-guide-ck="' + esc(c.id) + '" aria-label="Show ' + esc(c.name) + '"></button>').join('')
+      + '</div></div>';
+
+    const guideName = box.querySelector('.g-chakra-guide__name');
+    const guideMeta = box.querySelector('.g-chakra-guide__meta');
+    const guideShop = box.querySelector('.g-chakra-guide__shop');
+    let activeIndex = Math.max(0, chs.findIndex((c) => c.id === 'heart'));
+
+    const selectChakra = (c) => {
+      if (!c) return;
+      activeIndex = Math.max(0, chs.findIndex((x) => x.id === c.id));
+      box.style.setProperty('--active-chakra', c.color || 'var(--g-accent)');
+      box.querySelectorAll('.g-chakra-hero__hit').forEach((x) => x.classList.toggle('is-active', x.dataset.ck === c.id));
+      box.querySelectorAll('[data-guide-ck]').forEach((x) => {
+        const on = x.dataset.guideCk === c.id;
+        x.classList.toggle('is-active', on);
+        x.setAttribute('aria-pressed', String(on));
+        x.style.setProperty('--ck', c.color || 'var(--g-accent)');
+      });
+      if (guideName) guideName.textContent = c.name;
+      if (guideMeta) guideMeta.textContent = [c.focus, c.element].filter(Boolean).join(' · ');
+      const shop = (window.GaiaStore && window.GaiaStore.chakraShopUrl && window.GaiaStore.chakraShopUrl(c.id)) || '';
+      if (guideShop) {
+        guideShop.href = shop || 'home.html?view=store';
+        guideShop.textContent = shop ? 'Support this centre →' : 'Explore the store →';
+      }
     };
+
+    const startAuto = () => {
+      if (box._chakraTimer) clearInterval(box._chakraTimer);
+      if (chs.length < 2) return;
+      box._chakraTimer = setInterval(() => {
+        activeIndex = (activeIndex + 1) % chs.length;
+        selectChakra(chs[activeIndex]);
+      }, 4400);
+    };
+    const pauseForExploration = () => {
+      if (box._chakraTimer) clearInterval(box._chakraTimer);
+      if (box._chakraRestart) clearTimeout(box._chakraRestart);
+      box._chakraRestart = setTimeout(startAuto, 12000);
+    };
+
     box.querySelectorAll('.g-chakra-hero__hit').forEach((n) => {
       n.addEventListener('click', (e) => {
         e.stopPropagation();
-        const c = chs.find((x) => x.id === n.dataset.ck); if (!c || !pop) return;
-        // Re-tapping the open centre closes it.
-        if (n.classList.contains('is-active') && pop.classList.contains('is-open')) { closePop(); return; }
-        box.querySelectorAll('.g-chakra-hero__hit').forEach((x) => x.classList.toggle('is-active', x === n));
-        const shop = (window.GaiaStore && window.GaiaStore.chakraShopUrl && window.GaiaStore.chakraShopUrl(c.id)) || '';
-        pop.style.setProperty('--ck', c.color);
-        pop.style.left = c.left + '%';
-        pop.style.top = c.top + '%';
-        pop.classList.toggle('is-above', Number(c.top) > 50);
-        pop.innerHTML = '<strong>' + esc(c.name) + '</strong>'
-          + '<span>' + esc(c.focus || '') + (c.element ? ' · ' + esc(c.element) : '') + '</span>'
-          + (shop ? '<a href="' + esc(shop) + '" target="_blank" rel="noopener noreferrer">Shop this centre →</a>' : '');
-        pop.classList.add('is-open');
+        const c = chs.find((x) => x.id === n.dataset.ck); if (!c) return;
+        selectChakra(c);
+        pauseForExploration();
       });
     });
-    // Tapping empty space in the hero (not a centre, not the card link) dismisses.
-    box.addEventListener('click', (e) => {
-      if (!e.target.closest('.g-chakra-hero__hit') && !e.target.closest('.g-chakra-hero__pop')) closePop();
+    box.querySelectorAll('[data-guide-ck]').forEach((n) => {
+      n.addEventListener('click', () => {
+        selectChakra(chs.find((x) => x.id === n.dataset.guideCk));
+        pauseForExploration();
+      });
     });
+    selectChakra(chs[activeIndex] || chs[0]);
+    startAuto();
   }
 
   function homeEventCard() {
     const ev = state.event;
     if (!ev || !ev.name) {
-      return '<article class="g-card g-card--feature"><p class="g-card__label">Next event</p>'
-        + '<p class="g-card__value g-card__value--lg">Coming soon</p>'
-        + '<p class="g-card__meta">The next Gaia gathering will appear here.</p></article>';
+      return '<div class="g-event-hero__content">'
+        + '<p class="g-event-hero__kicker">Upcoming gathering</p>'
+        + '<h1 class="g-event-hero__title">Gaia <em>gatherings</em></h1>'
+        + '<p class="g-event-hero__summary">Connect with healers, practitioners, and conscious leaders. The next confirmed gathering will appear here.</p>'
+        + '<span class="g-event-hero__status">Event details coming soon</span></div>';
     }
     const when = fmtEventDate(ev);
-    const url = esc(ev.sourceUrl || 'https://elevate.gaiahealers.com/gaia-healers-elevate-conference-page');
-    return '<article class="g-card g-card--feature">'
-      + '<p class="g-card__label">Next event</p>'
-      + '<p class="g-card__value g-card__value--lg">' + esc(ev.name) + '</p>'
-      + '<p class="g-card__meta">' + [when && esc(when), ev.venue && esc(ev.venue)].filter(Boolean).join(' · ') + '</p>'
-      + '<div class="g-card__actions"><a class="g-btn g-btn--primary g-btn--sm" href="' + url + '" target="_blank" rel="noopener noreferrer">Register</a></div>'
-      + '</article>';
+    const url = String(ev.sourceUrl || '').trim();
+    const words = String(ev.name || '').trim().split(/\s+/);
+    const last = words.length > 1 ? words.pop() : '';
+    const title = esc(words.join(' ')) + (last ? ' <em>' + esc(last) + '</em>' : '');
+    return '<div class="g-event-hero__content">'
+      + '<p class="g-event-hero__kicker">Upcoming gathering</p>'
+      + '<h1 class="g-event-hero__title">' + title + '</h1>'
+      + (ev.summary ? '<p class="g-event-hero__summary">' + esc(ev.summary) + '</p>' : '')
+      + '<p class="g-event-hero__meta">' + [when && esc(when), ev.venue && esc(ev.venue)].filter(Boolean).join(' · ') + '</p>'
+      + (url ? '<div class="g-event-hero__actions"><button type="button" class="g-btn g-btn--primary" data-open-in-app="' + esc(url) + '" data-in-app-title="' + esc(ev.name) + '">View event →</button></div>' : '')
+      + '</div>';
   }
 
   function membersCard() {
     if (state.authed && state.data.profile) {
       const unlocked = (state.data.access && state.data.access.communities && state.data.access.communities.unlocked) || [];
-      return '<article class="g-card">'
-        + '<p class="g-card__label">Your membership</p>'
-        + '<p class="g-card__value">' + (unlocked.length ? unlocked.length + (unlocked.length === 1 ? ' community' : ' communities') : 'Member') + '</p>'
-        + '<p class="g-card__meta">' + (unlocked.map((c) => esc(c.name)).slice(0, 2).join(', ') || 'Explore your circle') + '</p>'
-        + '<div class="g-card__actions"><a class="g-btn g-btn--secondary g-btn--sm" href="home.html?view=community">View access →</a></div>'
-        + '</article>';
+      return '<div class="g-member-access__body"><p class="g-member-access__kicker">Your Gaia</p>'
+        + '<p class="g-member-access__title">' + (unlocked.length ? unlocked.length + (unlocked.length === 1 ? ' circle' : ' circles') : 'Member access') + '</p>'
+        + '<p class="g-member-access__meta">' + (unlocked.map((c) => esc(c.name)).slice(0, 2).join(', ') || 'Your practitioner network is ready.') + '</p></div>'
+        + '<a class="g-btn g-btn--secondary g-btn--sm" href="home.html?view=community">View access →</a>';
     }
-    return '<article class="g-card">'
-      + '<p class="g-card__label">Members</p>'
-      + '<p class="g-card__value">Unlock your Gaia</p>'
-      + '<p class="g-card__meta">Communities, courses, bookings, and a Gaia that knows you.</p>'
-      + '<div class="g-card__actions"><a class="g-btn g-btn--primary g-btn--sm" href="' + esc(portalBase()) + '" target="_blank" rel="noopener noreferrer">Sign in</a></div>'
-      + '</article>';
+    return '<div class="g-member-access__body"><p class="g-member-access__kicker">Unlock your Gaia</p>'
+      + '<p class="g-member-access__title">Member access</p>'
+      + '<p class="g-member-access__meta">Courses, communities, bookings, and a Gaia that knows you.</p></div>'
+      + '<button type="button" class="g-btn g-btn--secondary g-btn--sm" data-native-signin>Sign in →</button>';
   }
 
   // Admin-published announcements (from /api/app/bootstrap → gaia.announcements).
@@ -212,14 +251,10 @@ body.gaia-booking-open{overflow:hidden;}
   // Links verified live on gaiahealers.com/pages/bio-well-demo.
   function nimaBookingCard() {
     const nima = 'https://calendly.com/nimafarshid/gaia-healers-meeting';
-    return '<article class="g-card g-card--feature">'
-      + '<div class="g-tier__head"><p class="g-card__label">Book with Dr. Nima</p>'
-      + '<span class="g-badge g-badge--on">1:1</span></div>'
-      + '<p class="g-card__value g-card__value--lg">Meet the founder</p>'
-      + '<p class="g-card__meta">Schedule a personal call with Dr. Nima Farshid — founder of Gaia Healers, Bio-Well educator, and mentor to our practitioner community.</p>'
-      + '<div class="g-card__actions">'
-      + '<button type="button" class="g-btn g-btn--primary g-btn--sm" data-book-inline="' + esc(nima) + '" data-book-title="Book with Dr. Nima">Book with Nima →</button>'
-      + '</div></article>';
+    return '<article class="g-founder-row"><div><p class="g-founder-row__kicker">Meet the founder</p>'
+      + '<p class="g-founder-row__title">Dr. Nima Farshid</p>'
+      + '<p class="g-founder-row__meta">Personal guidance from Gaia Healers’ founder and Bio-Well educator.</p></div>'
+      + '<button type="button" class="g-btn g-btn--secondary g-btn--sm" data-book-inline="' + esc(nima) + '" data-book-title="Book with Dr. Nima">Book →</button></article>';
   }
 
   function bookCard() {
@@ -254,8 +289,6 @@ body.gaia-booking-open{overflow:hidden;}
   // surface a clear "Sign in to continue" prompt if the page stays blank.
   const AUTH_DEPENDENT_HOSTS = [
     'education.gaiahealers.com',
-    'gaiapractitioners.com',
-    'elevate.gaiahealers.com',
   ];
 
   function hostOf(u) {
@@ -313,12 +346,16 @@ body.gaia-booking-open{overflow:hidden;}
     // The auth overlay is hidden initially — only shown if the iframe stays
     // blank past a grace period (i.e. the portal couldn't establish a session).
     const authOverlay = isAuthPortal
-      ? '<div class="gaia-booking-modal__auth" data-auth-overlay hidden>'
+      ? '<div class="gaia-booking-modal__auth" data-auth-overlay>'
         + '<div class="gaia-booking-modal__auth-card">'
-        + '<p class="gaia-booking-modal__auth-title">Sign in to continue</p>'
-        + '<p class="gaia-booking-modal__auth-body">Your courses live in the Gaia Healers portal, which needs its own sign-in. Tap below to sign in once — you\'ll come right back to the app.</p>'
-        + '<a class="gaia-btn gaia-btn--primary" href="' + esc(url) + '" target="_blank" rel="noopener noreferrer">Sign in to the portal →</a>'
-        + '<p class="gaia-booking-modal__auth-hint">After signing in, return to the Gaia app and tap the course again.</p>'
+        + '<p class="gaia-booking-modal__auth-title">' + (state.authed ? 'Secure Academy access' : 'Sign in to continue') + '</p>'
+        + '<p class="gaia-booking-modal__auth-body">' + (state.authed
+          ? 'Your Gaia membership is verified. Protected lesson content remains in the Academy workspace; this in-app view prevents the blank external portal page while that connection is restored.'
+          : 'Verify your Gaia email here in the app to see the courses and membership access connected to your account.') + '</p>'
+        + (state.authed
+          ? '<button type="button" class="gaia-btn gaia-btn--primary" data-portal-membership>View my membership →</button>'
+          : '<button type="button" class="gaia-btn gaia-btn--primary" data-portal-native-signin>Sign in securely →</button>')
+        + '<p class="gaia-booking-modal__auth-hint">You will stay inside the Gaia Healers app.</p>'
         + '</div></div>'
       : '';
     inAppModal.innerHTML =
@@ -329,10 +366,10 @@ body.gaia-booking-open{overflow:hidden;}
       + '<button type="button" class="gaia-booking-modal__close" data-book-close aria-label="Close">&times;</button>'
       + '</div>'
       + '<div class="gaia-booking-modal__body">'
-      + '<iframe src="' + esc(embedUrl) + '" title="' + esc(title || 'Content') + '" scrolling="yes" allow="camera; microphone; fullscreen; storage-access" loading="lazy"></iframe>'
-      + '<div class="gaia-booking-modal__loading"><span class="gaia-booking-modal__spinner"></span>Loading…</div>'
+      + '<iframe ' + (isAuthPortal ? 'hidden ' : '') + 'src="' + esc(embedUrl) + '" title="' + esc(title || 'Content') + '" scrolling="yes" allow="camera; microphone; fullscreen; storage-access" loading="lazy"></iframe>'
+      + '<div class="gaia-booking-modal__loading"' + (isAuthPortal ? ' hidden' : '') + '><span class="gaia-booking-modal__spinner"></span>Loading…</div>'
       + authOverlay
-      + '<a class="gaia-booking-modal__fallback" href="' + esc(url) + '" target="_blank" rel="noopener noreferrer">Open in a new tab →</a>'
+      + (!isAuthPortal ? '<a class="gaia-booking-modal__fallback" href="' + esc(url) + '" target="_blank" rel="noopener noreferrer">Open in a new tab →</a>' : '')
       + '</div></div>';
     document.body.appendChild(inAppModal);
     document.body.classList.add('gaia-booking-open');
@@ -371,17 +408,7 @@ body.gaia-booking-open{overflow:hidden;}
       // blocked cookie / silent auth failure), surface the "Sign in" overlay so
       // the user isn't stuck staring at a blank page. We DON'T auto-redirect —
       // the user asked to stay in-app — but we make the path forward obvious.
-      if (isAuthPortal) {
-        setTimeout(() => {
-          if (!inAppModal || loaded) return;
-          const overlay = inAppModal.querySelector('[data-auth-overlay]');
-          if (overlay) {
-            overlay.hidden = false;
-            const ld = inAppModal.querySelector('.gaia-booking-modal__loading');
-            if (ld) ld.style.display = 'none';
-          }
-        }, 4000);
-      } else {
+      if (!isAuthPortal) {
         // Non-auth iframe (Calendly etc.): just promote the fallback if it's slow.
         setTimeout(() => {
           if (!inAppModal || loaded) return;
@@ -390,6 +417,14 @@ body.gaia-booking-open{overflow:hidden;}
         }, 8000);
       }
     }
+    inAppModal.querySelector('[data-portal-native-signin]')?.addEventListener('click', () => {
+      closeInApp();
+      window.GaiaAuth?.open?.();
+    });
+    inAppModal.querySelector('[data-portal-membership]')?.addEventListener('click', () => {
+      closeInApp();
+      window.GaiaAppShell?.go?.('store', { tab: 'membership' });
+    });
     inAppModal.querySelectorAll('[data-book-close]').forEach((el) => {
       el.addEventListener('click', closeInApp);
     });
@@ -447,10 +482,15 @@ body.gaia-booking-open{overflow:hidden;}
 
   function renderHome() {
     renderChakraHero();
+    const eventHero = el('home-event-hero');
+    if (eventHero) eventHero.innerHTML = homeEventCard();
     const anns = el('home-announcements');
     if (anns) anns.innerHTML = announcementsHtml(state.announcements);
-    const cards = el('home-cards');
-    if (cards) cards.innerHTML = homeEventCard() + membersCard();
+    const access = el('home-member-access');
+    if (access) {
+      access.innerHTML = membersCard();
+      access.querySelector('[data-native-signin]')?.addEventListener('click', () => window.GaiaAuth?.open?.());
+    }
     const book = el('home-book');
     if (book) book.innerHTML = nimaBookingCard() + bookCard();
     // #home-wellness is owned by gaia-wellness.js
@@ -495,7 +535,7 @@ body.gaia-booking-open{overflow:hidden;}
         '<article class="g-card g-card--feature"><p class="g-card__label">Members</p>'
         + '<p class="g-card__value g-card__value--lg">Your personal Gaia</p>'
         + '<p class="g-card__meta">Sign in to open your profile, devices, purchases, bookings, and a Gaia Assist that knows you.</p>'
-        + '<div class="g-card__actions"><a class="g-btn g-btn--primary g-btn--sm" href="' + esc(portalBase()) + '" target="_blank" rel="noopener noreferrer">Sign in</a></div></article>'
+        + '<div class="g-card__actions"><button type="button" class="g-btn g-btn--primary g-btn--sm" data-native-signin>Sign in securely →</button></div></article>'
         + gMeCard('What you’ll see', gRows([
           gRow('Membership & communities', ''),
           gRow('Your devices', ''),
@@ -504,6 +544,7 @@ body.gaia-booking-open{overflow:hidden;}
           gRow('Messages', ''),
         ]))
         + gMeCard('Shop', gRows([gRowLink('Store & memberships', 'Shop →', 'home.html?view=store', false)]));
+      box.querySelector('[data-native-signin]')?.addEventListener('click', () => window.GaiaAuth?.open?.());
       return;
     }
 
@@ -624,13 +665,13 @@ body.gaia-booking-open{overflow:hidden;}
       const badge = t.accessLevel ? '<span class="g-chip ' + (isFree ? 'g-chip--on' : '') + '" style="margin-left:.5rem">' + (isFree ? 'Free' : esc(t.accessLevel.charAt(0).toUpperCase() + t.accessLevel.slice(1))) + '</span>' : '';
       // Member count from GHL — shown only when the catalog is live (dynamic).
       const count = Number(t.memberCount) || 0;
-      const countChip = count > 0 ? '<span class="g-chip" style="margin-left:.35rem;opacity:.85">👥 ' + count + '</span>' : '';
+      const countChip = count > 0 ? '<span class="g-chip" style="margin-left:.35rem;opacity:.85">' + count + ' learners</span>' : '';
       const img = t.image ? '<img src="' + esc(t.image) + '" alt="" class="g-access__img" style="width:48px;height:48px;border-radius:8px;object-fit:cover;flex-shrink:0" />' : '';
       return openable
-        ? '<a class="g-access g-access--unlocked g-access--link" href="' + esc(url) + '">'
+        ? '<button type="button" class="g-access g-access--unlocked g-access--link" data-course-open="' + esc(url) + '" data-course-title="' + esc(t.name) + '">'
           + img
           + '<div class="g-access__body"><span class="g-access__name">' + esc(t.name) + badge + countChip + '</span><span class="g-access__meta">' + esc(t.desc) + '</span></div>'
-          + '<span class="g-chip g-chip--on g-access__act">Open →</span></a>'
+          + '<span class="g-chip g-chip--on g-access__act">Open →</span></button>'
         : '<button type="button" class="g-access g-access--locked g-access--link" data-track-cta>'
           + img
           + '<div class="g-access__body"><span class="g-access__name">' + esc(t.name) + badge + countChip + '</span><span class="g-access__meta">' + esc(t.desc) + '</span></div>'
@@ -640,7 +681,7 @@ body.gaia-booking-open{overflow:hidden;}
       ? '<article class="g-card g-card--feature"><p class="g-card__label">Academy</p>'
         + '<p class="g-card__value g-card__value--lg">Continue learning</p>'
         + '<p class="g-card__meta">Your courses, lessons, and certificates live in the Gaia Healers portal. You will sign in there with your Gaia email to open your lessons.</p>'
-        + '<div class="g-card__actions"><a class="g-btn g-btn--primary g-btn--sm" href="' + esc(hub) + '">Open Academy →</a></div></article>'
+        + '<div class="g-card__actions"><button type="button" class="g-btn g-btn--primary g-btn--sm" data-course-open="' + esc(hub) + '" data-course-title="Gaia Academy">Open Academy →</button></div></article>'
       : '<article class="g-card g-card--feature"><p class="g-card__label">Academy</p>'
         + '<p class="g-card__value g-card__value--lg">Learn & get certified</p>'
         + '<p class="g-card__meta">Bio-Well certification, Colour Energy therapy, BioPulsar training, and more. Become a Silver member to unlock the full Academy — courses, certificates, and practitioner communities.</p>'
@@ -668,6 +709,15 @@ body.gaia-booking-open{overflow:hidden;}
     });
     const si = box.querySelector('[data-academy-signin]');
     if (si) si.addEventListener('click', () => window.GaiaAuth?.open?.());
+    box.querySelectorAll('[data-course-open]').forEach((button) => {
+      button.addEventListener('click', () => {
+        if (!state.authed) {
+          window.GaiaAuth?.open?.();
+          return;
+        }
+        window.GaiaInApp?.open?.(button.dataset.courseOpen, button.dataset.courseTitle || 'Gaia Academy');
+      });
+    });
   }
 
   // ── g-* page helpers (Community / Academy) ──────────────────
@@ -682,7 +732,7 @@ body.gaia-booking-open{overflow:hidden;}
     let act;
     if (kind === 'unlocked') {
       meta = c.openUrlIsFallback ? 'Opens in the Gaia portal' : 'Your community';
-      act = '<a class="g-btn g-btn--secondary g-btn--sm g-access__act" href="' + esc(c.openUrl || portalBase()) + '" target="_blank" rel="noopener noreferrer">Open →</a>';
+      act = '<button type="button" class="g-btn g-btn--secondary g-btn--sm g-access__act" data-open-in-app="' + esc(c.openUrl || portalBase()) + '" data-in-app-title="' + esc(c.name) + '">Open →</button>';
     } else if (kind === 'soon') {
       meta = c.reason || 'Coming soon to Gaia Healers';
       act = '<span class="g-chip g-access__act">Soon</span>';
@@ -722,8 +772,9 @@ body.gaia-booking-open{overflow:hidden;}
         + '<article class="g-card g-card--feature"><p class="g-card__label">Community</p>'
         + '<p class="g-card__value g-card__value--lg">Open your circles</p>'
         + '<p class="g-card__meta">Sign in to see which Gaia Healers communities your membership unlocks — and open them in one tap.</p>'
-        + '<div class="g-card__actions"><a class="g-btn g-btn--primary g-btn--sm" href="' + esc(portalBase()) + '" target="_blank" rel="noopener noreferrer">Sign in</a></div></article>'
+        + '<div class="g-card__actions"><button type="button" class="g-btn g-btn--primary g-btn--sm" data-native-signin>Sign in securely →</button></div></article>'
         + gSec('What’s inside', '<div class="g-access-grid">' + preview + '</div>');
+      box.querySelector('[data-native-signin]')?.addEventListener('click', () => window.GaiaAuth?.open?.());
       return;
     }
 
@@ -751,12 +802,13 @@ body.gaia-booking-open{overflow:hidden;}
     }
     if (locked.length) {
       parts.push(gSec('Unlock with membership', '<div class="g-access-grid">' + locked.map((x) => accessItem(x, 'locked')).join('') + '</div>',
-        '<a class="g-btn g-btn--ghost g-btn--sm g-section__action" href="' + esc(portalBase()) + '" target="_blank" rel="noopener noreferrer">Become a member →</a>'));
+        '<button type="button" class="g-btn g-btn--ghost g-btn--sm g-section__action" data-membership-cta>Become a member →</button>'));
     }
     if (soon.length) {
       parts.push(gSec('Coming soon', '<div class="g-access-grid">' + soon.map((x) => accessItem(x, 'soon')).join('') + '</div>'));
     }
     box.innerHTML = parts.join('');
+    box.querySelector('[data-membership-cta]')?.addEventListener('click', () => window.GaiaMembership?.open?.());
   }
 
   /* ---------- Public, no-login features ---------- */
@@ -883,6 +935,7 @@ body.gaia-booking-open{overflow:hidden;}
       + (o.statusLabel ? '<span class="g-badge' + (o.active ? ' g-badge--on' : '') + '">' + esc(o.statusLabel) + '</span>' : '') + '</div>'
       + '<ul class="g-tier__list">' + o.abilities.map((a) => '<li>' + esc(a) + '</li>').join('') + '</ul>'
       + (o.note ? '<p class="g-card__meta">' + esc(o.note) + '</p>' : '')
+      + (o.ctaAction ? '<div class="g-card__actions"><button type="button" class="g-btn ' + (o.active ? 'g-btn--secondary' : 'g-btn--primary') + ' g-btn--sm" data-membership-interest>' + esc(o.ctaLabel) + '</button></div>' : '')
       + (o.ctaHref ? '<div class="g-card__actions"><a class="g-btn ' + (o.active ? 'g-btn--secondary' : 'g-btn--primary') + ' g-btn--sm" href="' + esc(o.ctaHref) + '" target="_blank" rel="noopener noreferrer">' + esc(o.ctaLabel) + '</a></div>' : '')
       + '</article>';
   }
@@ -904,7 +957,7 @@ body.gaia-booking-open{overflow:hidden;}
     const silver = tierCard({
       name: 'Silver member', statusLabel: hasSilver ? 'Active' : '', active: hasSilver,
       abilities: ['Everything in Explorer', 'Your practitioner communities', 'Member pricing & event discounts', 'Personalized Gaia Assist', 'Bio-Well device sync', 'Exclusive content'],
-      ctaLabel: hasSilver ? '' : 'Become a member', ctaHref: hasSilver ? '' : portalBase(),
+      ctaLabel: hasSilver ? '' : 'Become a member', ctaAction: hasSilver ? '' : 'membership',
     });
     const practitioner = tierCard({
       name: 'Practitioner', statusLabel: isCert ? 'Certified' : (isPract ? 'Practitioner' : ''), active: isPract,
@@ -920,6 +973,7 @@ body.gaia-booking-open{overflow:hidden;}
   function renderStore() {
     const box = el('store-memberships'); if (!box) return;
     box.innerHTML = membershipCards();
+    box.querySelector('[data-membership-interest]')?.addEventListener('click', () => window.GaiaMembership?.open?.());
   }
 
   function render() {

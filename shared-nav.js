@@ -1,5 +1,10 @@
 /* Floating tab bar — single-app mobile nav */
 (function () {
+  // Each tab is a fresh app screen. Prevent mobile Safari from restoring the
+  // previous screen's scroll position when users move between query routes.
+  if ('scrollRestoration' in history) history.scrollRestoration = 'manual';
+  if (!window.location.hash) window.scrollTo({ top: 0, left: 0, behavior: 'instant' });
+
   const tabs = [
     { id: 'today', href: 'home.html?view=today', label: 'Home' },
     { id: 'academy', href: 'home.html?view=academy', label: 'Academy' },

@@ -661,6 +661,8 @@
       streamMessage = null;
       startPromise = null;
       sessionMeta = null;
+      cachedToken = null;
+      cachedTokenExpireAt = 0;
       setupDone = false;
       setupWaiters = [];
       holding = false;
@@ -785,9 +787,16 @@
     let cachedToken = null;
     let cachedTokenExpireAt = 0;
 
+    function consumeCachedToken(payload) {
+      if (cachedToken !== payload) return;
+      cachedToken = null;
+      cachedTokenExpireAt = 0;
+    }
+
     async function fetchLiveToken({ force = false } = {}) {
-      // Reuse a still-valid token (valid for 30 min from the proxy) to skip
-      // the round-trip on reconnects within a session.
+      // Cache only an unused pre-warmed token. Gemini ephemeral tokens are
+      // single-use, so the token is removed from this cache as soon as a
+      // WebSocket connection consumes it.
       if (!force && cachedToken && Date.now() < cachedTokenExpireAt) {
         return cachedToken;
       }
@@ -850,6 +859,7 @@
             // Leg 1: WebSocket connect + Gemini setup
             (async () => {
               const wsUrl = `${WS_BASE}?access_token=${encodeURIComponent(sessionMeta.token)}`;
+              consumeCachedToken(sessionMeta);
               const ws = new WebSocket(wsUrl);
               wsRef.current = ws;
               ws.onmessage = async (event) => {
@@ -883,49 +893,51 @@
               const attemptReconnect = () => {
                 if (reconnectAttempted) return false;          // only once
                 if (status === 'idle' || status === 'error') return false;
-                if (!sessionMeta || !sessionMeta.token) return false;
-                const expiresAt = sessionMeta.expireTime
-                  ? new Date(sessionMeta.expireTime).getTime()
-                  : Date.now() + 25 * 60 * 1000;
-                if (Date.now() >= expiresAt) return false;     // token expired
                 reconnectAttempted = true;
                 setStatus('connecting');
-                // Reuse the cached token (still valid up to 30 min) and the
-                // already-open mic stream; just open a fresh WS + setup.
-                try {
-                  const wsUrl = `${WS_BASE}?access_token=${encodeURIComponent(sessionMeta.token)}`;
-                  const ws2 = new WebSocket(wsUrl);
-                  wsRef.current = ws2;
-                  ws2.onmessage = async (event2) => {
-                    let raw = event2.data;
-                    if (raw instanceof Blob) raw = await raw.text();
-                    else if (raw instanceof ArrayBuffer) raw = new TextDecoder().decode(raw);
-                    handleGeminiMessage(raw);
-                  };
-                  ws2.onopen = () => {
-                    if (sendSetupMessage()) {
-                      setupDone = false;
-                      // After reconnect, the new setup reply flips status
-                      // back to 'listening' via the existing setup handler.
-                    }
-                  };
-                  ws2.onclose = () => {
-                    // Second close → give up with a friendly error.
-                    if (status !== 'idle') {
-                      setErrorMessage('Voice connection dropped. Tap the orb to resume.');
-                      setStatus('error');
-                    }
-                  };
-                  ws2.onerror = () => {
+                // Ephemeral Gemini tokens are single-use. Fetch a new token
+                // for the replacement socket while keeping the existing mic
+                // stream alive.
+                void (async () => {
+                  try {
+                    const nextSessionMeta = await fetchLiveToken({ force: true });
+                    if (status === 'idle' || status === 'error') return;
+                    sessionMeta = nextSessionMeta;
+                    consumeCachedToken(nextSessionMeta);
+                    setupDone = false;
+                    const wsUrl = `${WS_BASE}?access_token=${encodeURIComponent(nextSessionMeta.token)}`;
+                    const ws2 = new WebSocket(wsUrl);
+                    wsRef.current = ws2;
+                    ws2.onmessage = async (event2) => {
+                      let raw = event2.data;
+                      if (raw instanceof Blob) raw = await raw.text();
+                      else if (raw instanceof ArrayBuffer) raw = new TextDecoder().decode(raw);
+                      handleGeminiMessage(raw);
+                    };
+                    ws2.onopen = () => {
+                      sendSetupMessage();
+                    };
+                    ws2.onclose = () => {
+                      // Second close → give up with a friendly error.
+                      if (status !== 'idle') {
+                        setErrorMessage('Voice connection dropped. Tap the orb to resume.');
+                        setStatus('error');
+                      }
+                    };
+                    ws2.onerror = () => {
+                      if (status !== 'idle') {
+                        setErrorMessage('Voice connection failed. Tap the orb to resume.');
+                        setStatus('error');
+                      }
+                    };
+                  } catch (_) {
                     if (status !== 'idle') {
                       setErrorMessage('Voice connection failed. Tap the orb to resume.');
                       setStatus('error');
                     }
-                  };
-                  return true;
-                } catch (_) {
-                  return false;
-                }
+                  }
+                })();
+                return true;
               };
               ws.onclose = (event) => {
                 if (status === 'idle') return;                 // user stopped — stay quiet

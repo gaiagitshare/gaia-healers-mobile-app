@@ -2213,6 +2213,7 @@
               </label>
             </div>
           </details>
+          <button type="button" class="gaia-assist__minimize" aria-label="Minimize Gaia Assist">—</button>
           <button type="button" class="gaia-assist__close" aria-label="Close Gaia Assist">×</button>
           <div class="gaia-assist__aura">
             <button type="button" class="gaia-assist__orb-visual" data-gaia-orb-tap aria-label="Start voice conversation with Gaia">
@@ -2260,6 +2261,7 @@
 
     const backdrop = root.querySelector('.gaia-assist__backdrop');
     const panel = root.querySelector('.gaia-assist__panel');
+    const minimizeButton = root.querySelector('.gaia-assist__minimize');
     const close = root.querySelector('.gaia-assist__close');
     const mic = root.querySelector('.gaia-assist__mic');
     const status = root.querySelector('.gaia-assist__status');
@@ -3004,6 +3006,18 @@
       return document.querySelectorAll('[data-gaia-tab-assist]');
     }
 
+    function setMinimized(minimized) {
+      if (panel.hidden) return;
+      root.classList.toggle('gaia-assist--minimized', minimized);
+      if (backdrop) backdrop.hidden = minimized;
+      document.body.classList.toggle('gaia-assist-panel-open', !minimized);
+      if (minimizeButton) {
+        minimizeButton.textContent = minimized ? '↗' : '—';
+        minimizeButton.setAttribute('aria-label', minimized ? 'Expand Gaia Assist' : 'Minimize Gaia Assist');
+        minimizeButton.setAttribute('title', minimized ? 'Expand Gaia Assist' : 'Minimize Gaia Assist');
+      }
+    }
+
     function setOpen(open, options = {}) {
       if (open && !options.passive) {
         void ensureMobileVoiceReady();
@@ -3012,6 +3026,14 @@
       panel.hidden = !open;
       root.classList.toggle('gaia-assist--open', open);
       root.classList.toggle('gaia-assist--welcome', Boolean(open && options.passive));
+      if (!open || !options.preserveMinimized) {
+        root.classList.remove('gaia-assist--minimized');
+        if (minimizeButton) {
+          minimizeButton.textContent = '—';
+          minimizeButton.setAttribute('aria-label', 'Minimize Gaia Assist');
+          minimizeButton.setAttribute('title', 'Minimize Gaia Assist');
+        }
+      }
       document.body.classList.toggle('gaia-assist-panel-open', open);
       dockButtons().forEach((button) => {
         button.setAttribute('aria-expanded', String(open));
@@ -3982,6 +4004,10 @@
       setOpen(false);
       setAssistVoiceState('idle', REALTIME_STATUS_COPY.idle);
     });
+    minimizeButton?.addEventListener('click', () => {
+      setMinimized(!root.classList.contains('gaia-assist--minimized'));
+    });
+    window.addEventListener('gaia:assist-minimize', () => setMinimized(true));
     // The big orb inside the panel is the primary tap target on mobile —
     // it doubles as the iOS audio-unlock gesture and starts Gemini Live.
     root.querySelector('[data-gaia-orb-tap]')?.addEventListener('click', (event) => {
@@ -4099,6 +4125,7 @@
       // Actions run after navigating to their screen (buttons live on Home).
       if (typeof r.run === 'function') window.setTimeout(() => { try { r.run(); } catch (_) {} }, r.view ? 160 : 0);
       if (closePanel) setOpen(false);
+      else setMinimized(true);
     }
     function showRoute(text) {
       if (!routeBox) return;

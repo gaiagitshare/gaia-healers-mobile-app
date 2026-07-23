@@ -653,7 +653,7 @@ body.gaia-booking-open{overflow:hidden;}
     if (cap) cap.textContent = hasAccess
       ? grants.length + ' course' + (grants.length === 1 ? '' : 's') + ' available from your GHL access.'
       : (state.authed ? 'No course access is currently attached to your GHL account.' : 'Sign in to see your GHL course access.');
-    const hub = courses.portalUrl || (portalBase() + '/courses');
+    const hub = courses.portalUrl || (portalBase() + '/courses/library-v2');
     const cat = (state.catalog && Array.isArray(state.catalog.courses) && state.catalog.courses.length)
       ? state.catalog.courses.slice().sort((a, b) => (Number(a.order) || 0) - (Number(b.order) || 0))
       : [];

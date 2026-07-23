@@ -790,6 +790,98 @@ body.gaia-v2 .gaia-assist__panel {
   color: var(--gh-text);
 }
 
+body.gaia-v2 .gaia-assist__minimize {
+  position: absolute;
+  z-index: 3;
+  top: 0.7rem;
+  right: 3.1rem;
+  width: 2.25rem;
+  height: 2.25rem;
+  display: grid;
+  place-items: center;
+  border: 1px solid var(--gh-border-soft);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--gh-text);
+  font: 700 1rem/1 system-ui, sans-serif;
+  cursor: pointer;
+}
+
+body.gaia-v2 .gaia-assist--minimized .gaia-assist__panel {
+  left: auto;
+  right: max(0.75rem, env(safe-area-inset-right));
+  bottom: calc(5.7rem + env(safe-area-inset-bottom));
+  width: min(16rem, calc(100% - 1.5rem));
+  max-width: 16rem;
+  max-height: none;
+  border-radius: 1.15rem;
+  animation: gh-fade-in 0.2s ease;
+}
+
+body.gaia-v2 .gaia-assist--minimized .gaia-assist__sheet {
+  min-height: 4.8rem;
+  display: grid;
+  grid-template-columns: 3.25rem minmax(0, 1fr) 2rem;
+  align-items: center;
+  gap: 0.65rem;
+  padding: 0.75rem;
+  overflow: visible;
+}
+
+body.gaia-v2 .gaia-assist--minimized .gaia-assist__aura {
+  grid-column: 1;
+  padding: 0;
+}
+
+body.gaia-v2 .gaia-assist--minimized .gaia-assist__orb-visual {
+  width: 3rem;
+  height: 3rem;
+}
+
+body.gaia-v2 .gaia-assist--minimized .gaia-assist__orb-icon {
+  width: 1.65rem;
+  height: 1.65rem;
+}
+
+body.gaia-v2 .gaia-assist--minimized .gaia-assist__headline {
+  grid-column: 2;
+  min-width: 0;
+  text-align: left;
+}
+
+body.gaia-v2 .gaia-assist--minimized .gaia-assist__headline h2 {
+  font-size: 0.95rem;
+}
+
+body.gaia-v2 .gaia-assist--minimized .gaia-assist__status {
+  max-width: 12rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+body.gaia-v2 .gaia-assist--minimized .gaia-assist__minimize {
+  position: static;
+  grid-column: 3;
+  grid-row: 1;
+  width: 2rem;
+  height: 2rem;
+}
+
+body.gaia-v2 .gaia-assist--minimized .gaia-assist__handle,
+body.gaia-v2 .gaia-assist--minimized .gaia-assist__settings,
+body.gaia-v2 .gaia-assist--minimized .gaia-assist__close,
+body.gaia-v2 .gaia-assist--minimized .gaia-assist__wave,
+body.gaia-v2 .gaia-assist--minimized .gaia-assist__transcript,
+body.gaia-v2 .gaia-assist--minimized .gaia-assist__route,
+body.gaia-v2 .gaia-assist--minimized .gaia-assist__chips,
+body.gaia-v2 .gaia-assist--minimized .gaia-assist__form,
+body.gaia-v2 .gaia-assist--minimized .gaia-assist__toolbar,
+body.gaia-v2 .gaia-assist--minimized .gaia-assist__error,
+body.gaia-v2 .gaia-assist--minimized .gaia-assist__voice {
+  display: none !important;
+}
+
 body.gaia-v2 .gaia-assist__sheet {
   display: flex;
   flex-direction: column;

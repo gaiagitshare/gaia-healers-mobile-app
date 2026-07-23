@@ -520,6 +520,9 @@
       }
       try {
         shell.go(screen, tab ? { tab } : {});
+        window.dispatchEvent(new CustomEvent('gaia:assist-minimize', {
+          detail: { screen, tab: tab || '' },
+        }));
         return { ok: true, message: `Opening ${screen}${tab ? ' / ' + tab : ''} now.` };
       } catch (e) {
         return { ok: false, message: 'Could not open that screen. Tell the member where to tap instead.' };
@@ -599,7 +602,7 @@
       const section = String(args.section || 'home').trim().toLowerCase();
       const urls = {
         home: PORTAL_FALLBACK,
-        courses: 'https://education.gaiahealers.com/courses',
+        courses: 'https://education.gaiahealers.com/courses/library-v2',
         login: 'https://education.gaiahealers.com/login',
       };
       const url = urls[section] || urls.home;

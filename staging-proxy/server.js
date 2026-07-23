@@ -643,11 +643,6 @@ function saveCourses(payload) {
 }
 
 // Normalize whatever shape GHL sends into our canonical course object.
-// Minimum enrolled members for a course to show in the app catalog. Courses
-// with fewer members are considered "under development" and hidden. Set via
-// env COURSES_MIN_MEMBERS (default 2).
-const COURSES_MIN_MEMBERS = Math.max(0, Number(process.env.COURSES_MIN_MEMBERS || 2));
-
 function normalizeCatalogCourse(c = {}) {
   const accessLevel = String(c.accessLevel || c.access_level || c.tier || '').toLowerCase();
   const price = Number(c.price);
@@ -665,7 +660,55 @@ function normalizeCatalogCourse(c = {}) {
     memberCount: isFinite(memberCountRaw) ? memberCountRaw : null,
     portalUrl: String(c.portalUrl || c.url || c.courseUrl || c.link || ''),
     order: Number(c.order) || 0,
+    status: String(c.status || c.publicationStatus || '').trim().toLowerCase(),
+    portalPublished: c.portalPublished === true || c.isPublished === true || c.published === true,
+    availableInStore: c.availableInStore === true,
+    processing: c.processing ?? null,
+    deletedAt: String(c.deletedAt || c.deleted_at || ''),
+    productType: String(c.productType || c.type || ''),
   };
+}
+
+function catalogCourseIsPublic(course = {}) {
+  if (course.deletedAt) return false;
+  if (course.processing && !/^(false|complete|completed|ready)$/i.test(String(course.processing))) return false;
+  if (course.status && !/^(active|published|live)$/i.test(course.status)) return false;
+  return course.portalPublished || course.availableInStore;
+}
+
+async function enrichCatalogPublication(rawCourses = []) {
+  const cfg = ghlConfig();
+  if (!cfg.enabled || !rawCourses.length) return rawCourses;
+  try {
+    const products = [];
+    for (let offset = 0; offset < 1000; offset += 100) {
+      const page = await ghlGet('/products/', {
+        locationId: cfg.locationId,
+        limit: 100,
+        offset,
+      });
+      const items = Array.isArray(page?.products) ? page.products : [];
+      products.push(...items);
+      if (items.length < 100 || (Number.isFinite(Number(page?.total)) && products.length >= Number(page.total))) break;
+    }
+    const byId = new Map(products.map((product) => [String(product._id || product.id || ''), product]));
+    return rawCourses.map((course) => {
+      const id = String(course?.id || course?._id || course?.productId || '');
+      const product = byId.get(id);
+      if (!product) return course;
+      return {
+        ...course,
+        status: product.status ?? course.status,
+        availableInStore: product.availableInStore === true,
+        processing: product.processing ?? course.processing ?? null,
+        deletedAt: product.deletedAt || course.deletedAt || '',
+        productType: product.productType || course.productType || '',
+      };
+    });
+  } catch (error) {
+    console.warn('[Gaia Courses] publication enrichment failed', { error: error.message.split('\n')[0] });
+    return rawCourses;
+  }
 }
 
 // Normalize a raw course title into a grouping key so payment variants of the
@@ -718,30 +761,26 @@ async function coursesSync(req, res, origin) {
   if (Array.isArray(body)) rawCourses = body;
   else if (Array.isArray(body.courses)) rawCourses = body.courses;
   else if (Array.isArray(body.data)) rawCourses = body.data;
-  const normalized = rawCourses.map(normalizeCatalogCourse).filter((c) => c.id || c.title !== 'Course');
+  const enrichedCourses = await enrichCatalogPublication(rawCourses);
+  const normalized = enrichedCourses.map(normalizeCatalogCourse).filter((c) => c.id || c.title !== 'Course');
+  const publicCourses = normalized.filter(catalogCourseIsPublic);
 
   // Group variants by normalized key, then pick one representative per group.
   const groups = new Map();
-  for (const c of normalized) {
+  for (const c of publicCourses) {
     const key = courseGroupKey(c.title);
     if (!key || key.length < 4) continue; // drop noise
     if (!groups.has(key)) groups.set(key, []);
     groups.get(key).push(c);
   }
   let courses = [];
-  let hiddenCount = 0;
+  let hiddenCount = normalized.length - publicCourses.length;
   for (const [, group] of groups) {
     const rep = group[0];
     const title = cleanGroupTitle(group);
     // Member count: prefer the max across variants (a course sold via multiple
     // SKUs still has one real enrollment count).
     const memberCount = group.reduce((max, c) => Math.max(max, Number(c.memberCount) || 0), 0);
-    // Only show courses with enough enrolled members — courses below the
-    // threshold are considered "under development" and hidden from the app.
-    if (memberCount > 0 && memberCount <= COURSES_MIN_MEMBERS) {
-      hiddenCount += 1;
-      continue;
-    }
     // Detect access level from the representative + the group's titles.
     const allText = group.map((c) => (c.title + ' ' + c.accessLevel).toLowerCase()).join(' ');
     const accessLevel = rep.accessLevel !== 'free' ? rep.accessLevel
@@ -758,6 +797,7 @@ async function coursesSync(req, res, origin) {
       portalUrl: rep.portalUrl,
       order: rep.order,
       variantCount: group.length,
+      portalPublished: true,
     });
   }
   // Sort: most members first (popular courses surface to the top), then by name.
@@ -1867,7 +1907,7 @@ const DEEPLINK = {
     'golden-practitioner': '',                                            // pending → portal
   },
   courseUrls: {},                                                          // per-course, pending
-  academyHubUrl: 'https://education.gaiahealers.com/courses',             // confirmed (Academy hub)
+  academyHubUrl: 'https://education.gaiahealers.com/courses/library-v2',  // confirmed Client Portal course library
   productStoreUrl: '',                                                    // pending
   // Curated member-bookable calendars (widgetSlug verified live, active):
   bookings: [

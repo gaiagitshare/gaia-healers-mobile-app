@@ -356,16 +356,38 @@
       setupWaiters = [];
     }
 
-    function waitForSetup(timeoutMs = 15000) {
+    function waitForSetup(ws, timeoutMs = 15000) {
       if (setupDone) return Promise.resolve();
       return new Promise((resolve, reject) => {
-        const timer = window.setTimeout(() => {
-          reject(new Error('Voice setup timed out. Tap the orb to retry.'));
-        }, timeoutMs);
-        setupWaiters.push(() => {
+        let settled = false;
+        const cleanup = () => {
           window.clearTimeout(timer);
+          ws?.removeEventListener?.('close', handleClose);
+          ws?.removeEventListener?.('error', handleError);
+          setupWaiters = setupWaiters.filter((waiter) => waiter !== handleSetup);
+        };
+        const handleSetup = () => {
+          if (settled) return;
+          settled = true;
+          cleanup();
           resolve();
-        });
+        };
+        const fail = (message) => {
+          if (settled) return;
+          settled = true;
+          cleanup();
+          reject(new Error(message));
+        };
+        const handleClose = (event) => fail(
+          event?.reason || 'Voice setup was rejected. Tap the orb to retry.',
+        );
+        const handleError = () => fail('Voice connection failed during setup.');
+        const timer = window.setTimeout(() => {
+          fail('Voice setup timed out. Tap the orb to retry.');
+        }, timeoutMs);
+        ws?.addEventListener?.('close', handleClose, { once: true });
+        ws?.addEventListener?.('error', handleError, { once: true });
+        setupWaiters.push(handleSetup);
       });
     }
 
@@ -377,9 +399,6 @@
           generationConfig: {
             responseModalities: ['AUDIO'],
             temperature: 0.8,
-            // Gemini 3.x replaces thinkingBudget with thinkingLevel. 'minimal'
-            // keeps voice latency low (no extra reasoning delay before speech).
-            thinkingLevel: 'minimal',
             speechConfig: {
               voiceConfig: {
                 prebuiltVoiceConfig: {
@@ -854,7 +873,7 @@
                   reject(new Error('Voice connection failed.'));
                 };
               });
-              await waitForSetup();
+              await waitForSetup(ws);
               // Auto-reconnect on an UNEXPECTED close (network blip, server
               // idle drop, tab backgrounding) — the user asked for Gaia to
               // "stay and help", so we try one silent reconnect before giving

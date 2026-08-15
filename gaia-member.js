@@ -142,12 +142,16 @@ body.gaia-booking-open{overflow:hidden;}
       + '<div class="g-chakra-hero__overlay">'
       + '<p class="g-chakra-hero__kicker">Guided chakra focus</p>'
       + '<h2 class="g-chakra-hero__title">Explore your <em>energy</em></h2>'
-      + '<p class="g-chakra-hero__caption">Tap a centre or let Gaia guide you.</p>'
+      + '<p class="g-chakra-hero__caption">Tap a centre for its practice and journal prompt.</p>'
       + '</div>'
       + '<div class="g-chakra-guide" aria-live="polite">'
       + '<div class="g-chakra-guide__body"><p class="g-chakra-guide__kicker">Current focus</p>'
       + '<strong class="g-chakra-guide__name"></strong><span class="g-chakra-guide__meta"></span></div>'
       + '<a class="g-btn g-btn--secondary g-btn--sm g-chakra-guide__shop" href="#" data-external>Support this centre →</a>'
+      + '<div class="g-chakra-guide__rituals">'
+      + '<div><span><i class="ph ph-sparkle" aria-hidden="true"></i> Try now</span><p data-guide-practice></p></div>'
+      + '<div><span><i class="ph ph-note-pencil" aria-hidden="true"></i> Journal</span><p data-guide-journal></p></div>'
+      + '</div><button type="button" class="g-btn g-btn--ghost g-btn--sm g-chakra-guide__ask" data-guide-ask>Ask Gaia about this centre</button>'
       + '<div class="g-chakra-guide__steps" role="group" aria-label="Choose chakra">'
       + chs.map((c) => '<button type="button" data-guide-ck="' + esc(c.id) + '" aria-label="Show ' + esc(c.name) + '"></button>').join('')
       + '</div></div>';
@@ -155,10 +159,15 @@ body.gaia-booking-open{overflow:hidden;}
     const guideName = box.querySelector('.g-chakra-guide__name');
     const guideMeta = box.querySelector('.g-chakra-guide__meta');
     const guideShop = box.querySelector('.g-chakra-guide__shop');
+    const guidePractice = box.querySelector('[data-guide-practice]');
+    const guideJournal = box.querySelector('[data-guide-journal]');
+    const guideAsk = box.querySelector('[data-guide-ask]');
     let activeIndex = Math.max(0, chs.findIndex((c) => c.id === 'heart'));
+    let activeChakra = chs[activeIndex] || chs[0];
 
     const selectChakra = (c) => {
       if (!c) return;
+      activeChakra = c;
       activeIndex = Math.max(0, chs.findIndex((x) => x.id === c.id));
       box.style.setProperty('--active-chakra', c.color || 'var(--g-accent)');
       box.querySelectorAll('.g-chakra-hero__hit').forEach((x) => x.classList.toggle('is-active', x.dataset.ck === c.id));
@@ -170,6 +179,8 @@ body.gaia-booking-open{overflow:hidden;}
       });
       if (guideName) guideName.textContent = c.name;
       if (guideMeta) guideMeta.textContent = [c.focus, c.element].filter(Boolean).join(' · ');
+      if (guidePractice) guidePractice.textContent = c.practice || 'Pause and take five slow breaths.';
+      if (guideJournal) guideJournal.textContent = c.journalPrompt || 'What would bring me toward balance today?';
       const shop = (window.GaiaStore && window.GaiaStore.chakraShopUrl && window.GaiaStore.chakraShopUrl(c.id)) || '';
       if (guideShop) {
         guideShop.href = shop || 'home.html?view=store';
@@ -177,36 +188,25 @@ body.gaia-booking-open{overflow:hidden;}
       }
     };
 
-    const startAuto = () => {
-      if (box._chakraTimer) clearInterval(box._chakraTimer);
-      if (chs.length < 2) return;
-      box._chakraTimer = setInterval(() => {
-        activeIndex = (activeIndex + 1) % chs.length;
-        selectChakra(chs[activeIndex]);
-      }, 4400);
-    };
-    const pauseForExploration = () => {
-      if (box._chakraTimer) clearInterval(box._chakraTimer);
-      if (box._chakraRestart) clearTimeout(box._chakraRestart);
-      box._chakraRestart = setTimeout(startAuto, 12000);
-    };
-
     box.querySelectorAll('.g-chakra-hero__hit').forEach((n) => {
       n.addEventListener('click', (e) => {
         e.stopPropagation();
         const c = chs.find((x) => x.id === n.dataset.ck); if (!c) return;
         selectChakra(c);
-        pauseForExploration();
       });
     });
     box.querySelectorAll('[data-guide-ck]').forEach((n) => {
       n.addEventListener('click', () => {
         selectChakra(chs.find((x) => x.id === n.dataset.guideCk));
-        pauseForExploration();
       });
     });
+    guideAsk?.addEventListener('click', () => {
+      if (!activeChakra) return;
+      window.dispatchEvent(new CustomEvent('gaia:open-assist', {
+        detail: { prompt: 'Guide me through the ' + activeChakra.name + ' chakra theme. Use this practice: ' + (activeChakra.practice || 'a gentle breathing pause') + ' Then ask me one reflective question.' },
+      }));
+    });
     selectChakra(chs[activeIndex] || chs[0]);
-    startAuto();
   }
 
   function homeEventCard() {

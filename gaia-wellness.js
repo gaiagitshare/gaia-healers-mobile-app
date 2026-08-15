@@ -21,15 +21,57 @@
   }
   const CH = () => window.GAIA_CHAKRAS || [];
   function digitRoot(n) { n = Math.abs(n); while (n > 9) { n = String(n).split('').reduce((a, c) => a + (+c), 0); } return n; }
+  const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+  const ZODIAC = {
+    Aries: { element: 'Fire', theme: 'Initiative', practice: 'Choose one small action and begin before you overthink it.', journal: 'Where is my energy asking for a clear first step?' },
+    Taurus: { element: 'Earth', theme: 'Steadiness', practice: 'Slow one ordinary moment down and notice all five senses.', journal: 'What deserves patient, grounded attention?' },
+    Gemini: { element: 'Air', theme: 'Curiosity', practice: 'Write three uncensored lines before deciding what you think.', journal: 'What new perspective wants to be heard?' },
+    Cancer: { element: 'Water', theme: 'Nourishment', practice: 'Create one quiet boundary that protects your energy.', journal: 'What would feeling cared for look like today?' },
+    Leo: { element: 'Fire', theme: 'Expression', practice: 'Share one sincere appreciation—with yourself or someone else.', journal: 'Where can I lead with warmth instead of performance?' },
+    Virgo: { element: 'Earth', theme: 'Discernment', practice: 'Improve one small thing, then let “enough” be enough.', journal: 'What can I simplify with kindness?' },
+    Libra: { element: 'Air', theme: 'Harmony', practice: 'Pause before agreeing and notice what feels mutually fair.', journal: 'What would balanced connection ask of me?' },
+    Scorpio: { element: 'Water', theme: 'Transformation', practice: 'Name the feeling beneath the first feeling—without fixing it.', journal: 'What am I ready to meet honestly?' },
+    Sagittarius: { element: 'Fire', theme: 'Meaning', practice: 'Step outside or look farther than your usual horizon.', journal: 'What possibility makes me feel more alive?' },
+    Capricorn: { element: 'Earth', theme: 'Devotion', practice: 'Choose the one task that serves your longer journey.', journal: 'What am I willing to build steadily?' },
+    Aquarius: { element: 'Air', theme: 'Vision', practice: 'Imagine one kinder way the system around you could work.', journal: 'How can my difference become a contribution?' },
+    Pisces: { element: 'Water', theme: 'Sensitivity', practice: 'Take two quiet minutes with music, breath, or water.', journal: 'What is my intuition whispering beneath the noise?' },
+  };
+
+  function parseDob(str) {
+    const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(str || ''));
+    if (!match) return null;
+    const y = Number(match[1]); const m = Number(match[2]); const d = Number(match[3]);
+    const date = new Date(Date.UTC(y, m - 1, d));
+    if (y < 1900 || y > new Date().getFullYear() || m < 1 || m > 12 || d < 1
+      || date.getUTCFullYear() !== y || date.getUTCMonth() !== m - 1 || date.getUTCDate() !== d
+      || date.getTime() > Date.now()) return null;
+    return { y, m, d };
+  }
+  function dobParts(str) {
+    const parsed = parseDob(str);
+    return parsed ? { month: String(parsed.m), day: String(parsed.d), year: String(parsed.y) } : { month: '', day: '', year: '' };
+  }
+  function dobFromParts(parts) {
+    const month = Number(parts.month); const day = Number(parts.day); const year = Number(parts.year);
+    if (!month || !day || String(parts.year || '').length !== 4) return '';
+    const value = `${String(year).padStart(4, '0')}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+    return parseDob(value) ? value : '';
+  }
+  function sunSignFromDob(str) {
+    const parsed = parseDob(str); if (!parsed) return '';
+    const cutoff = [20, 19, 21, 20, 21, 21, 23, 23, 23, 23, 22, 22];
+    const from = ['Capricorn', 'Aquarius', 'Pisces', 'Aries', 'Taurus', 'Gemini', 'Cancer', 'Leo', 'Virgo', 'Libra', 'Scorpio', 'Sagittarius'];
+    const to = ['Aquarius', 'Pisces', 'Aries', 'Taurus', 'Gemini', 'Cancer', 'Leo', 'Virgo', 'Libra', 'Scorpio', 'Sagittarius', 'Capricorn'];
+    return parsed.d < cutoff[parsed.m - 1] ? from[parsed.m - 1] : to[parsed.m - 1];
+  }
   // Client-side birth chakra for the live reveal (same numerology as the server).
   function birthChakra(str) {
-    const chs = CH(); if (!chs.length || !str) return null;
-    const d = new Date(str + 'T00:00:00'); if (isNaN(+d)) return null;
-    const s = digitRoot(d.getFullYear() + (d.getMonth() + 1) + d.getDate());
+    const chs = CH(); const d = parseDob(str); if (!chs.length || !d) return null;
+    const s = digitRoot(d.y + d.m + d.d);
     return chs[(s - 1) % chs.length];
   }
 
-  const state = { loaded: false, signedUp: false, profile: null, today: null, challenge: null, dob: '', expandSignup: false };
+  const state = { loaded: false, signedUp: false, profile: null, today: null, challenge: null, dob: '', dobParts: { month: '', day: '', year: '' }, expandSignup: false };
 
   async function load() {
     const r = await api('GET', '/api/wellness/me');
@@ -52,7 +94,34 @@
       + '<p class="g-energy__meta">' + esc(c.focus || '') + (c.element ? ' · ' + esc(c.element) : '') + '</p></div></div>';
   }
   function revealHtml(c) {
-    return c ? energyCard(c, 'Your birth chakra') : '<div class="g-energy g-energy--empty">' + orb('') + '<p class="g-empty">Pick your date and your chakra lights up.</p></div>';
+    if (!c) return '<div class="g-energy g-energy--empty">' + orb('') + '<p class="g-empty">Your chakra and sun-sign reflection will appear here.</p></div>';
+    const sign = sunSignFromDob(state.dob); const zodiac = ZODIAC[sign] || {};
+    const shop = (window.GaiaStore && window.GaiaStore.chakraShopUrl)
+      ? window.GaiaStore.chakraShopUrl(c.id) : 'https://gaiahealers.com/collections/all';
+    return '<article class="g-birth-map" style="--ck:' + esc(c.color || '#7DD956') + '">'
+      + '<div class="g-birth-map__top">' + orb(c.color)
+      + '<div><p class="g-energy__kicker">Your Gaia birth map</p><p class="g-birth-map__title">' + esc(c.name) + ' <span>· ' + esc(c.sanskrit || '') + '</span></p></div></div>'
+      + '<div class="g-birth-map__chips"><span>' + esc(sign) + '</span><span>' + esc(zodiac.element || c.element) + '</span><span>' + esc(c.theme || c.focus) + '</span></div>'
+      + '<p class="g-birth-map__context">Your birth-date number points to the <strong>' + esc(c.name) + '</strong> centre; your sun sign adds a ' + esc((zodiac.theme || 'reflective').toLowerCase()) + ' lens. Use this as a personal reflection, not a scan or prediction.</p>'
+      + '<div class="g-birth-map__grid">'
+      + '<div><span><i class="ph ph-sparkle" aria-hidden="true"></i> Try now</span><p>' + esc(c.practice || zodiac.practice || 'Pause and take five slow breaths.') + '</p></div>'
+      + '<div><span><i class="ph ph-note-pencil" aria-hidden="true"></i> Journal</span><p>' + esc(c.journalPrompt || zodiac.journal || 'What would bring me toward balance today?') + '</p></div>'
+      + '</div><div class="g-birth-map__actions">'
+      + '<button type="button" class="g-btn g-btn--secondary g-btn--sm" data-gaia-ask-birth>Ask Gaia about my map</button>'
+      + '<a class="g-btn g-btn--ghost g-btn--sm" href="' + esc(shop) + '" target="_blank" rel="noopener noreferrer">Matching Gaia support</a>'
+      + '</div></article>';
+  }
+
+  function dobInputHtml() {
+    const parts = state.dobParts || dobParts(state.dob);
+    const options = MONTHS.map((name, index) => '<option value="' + (index + 1) + '"' + (String(index + 1) === String(parts.month) ? ' selected' : '') + '>' + name + '</option>').join('');
+    return '<fieldset class="g-dob-builder" data-wdob-group><legend class="g-label">Date of birth</legend>'
+      + '<p class="g-dob-builder__hint">No calendar scrolling. Choose the month, then type the day and 4-digit year.</p>'
+      + '<div class="g-dob-builder__fields">'
+      + '<label><span>Month</span><select class="g-input" data-wdob-month autocomplete="bday-month"><option value="">Month</option>' + options + '</select></label>'
+      + '<label><span>Day</span><input class="g-input" data-wdob-day type="text" inputmode="numeric" autocomplete="bday-day" maxlength="2" placeholder="DD" value="' + esc(parts.day) + '"></label>'
+      + '<label><span>Year</span><input class="g-input" data-wdob-year type="text" inputmode="numeric" autocomplete="bday-year" maxlength="4" placeholder="YYYY" value="' + esc(parts.year) + '"></label>'
+      + '</div><p class="g-dob-builder__error" data-wdob-error aria-live="polite"></p></fieldset>';
   }
 
   // ── public (not signed up): live reveal + sign-up ────────
@@ -75,8 +144,7 @@
     return '<article class="g-card g-well">'
       + '<p class="g-card__label">Your birth-date chakra</p>'
       + '<p class="g-well__lead">Enter your birth date to reveal your chakra — then unlock your <strong>daily body point</strong> and <strong>wellness horoscope</strong>.</p>'
-      + '<div class="g-field"><label class="g-label">Date of birth</label>'
-      + '<input type="date" class="g-input g-dob" data-wdob value="' + esc(state.dob) + '" max="2035-12-31" aria-label="Date of birth" /></div>'
+      + dobInputHtml()
       + '<div class="g-well-reveal" data-reveal>' + revealHtml(c) + '</div>'
       + '<div class="g-field"><label class="g-label">Full name</label><input class="g-input" data-wname autocomplete="name" placeholder="Your name" /></div>'
       + '<div class="g-field"><label class="g-label">Location</label><input class="g-input" data-wloc autocomplete="address-level2" placeholder="City, country" /></div>'
@@ -139,14 +207,18 @@
         + '<div class="g-card__actions"><button type="button" class="g-btn g-btn--primary g-btn--sm" data-wexpand>Set up my horoscope →</button></div>'
         + '<p class="g-hint">No scan or paid membership is required.</p></article>';
     }
-    const t = state.today || {};
+    const t = state.today || {}; const guide = ZODIAC[t.sunSign] || {};
     return '<section class="g-well">' + memberBridgeHtml()
       + '<article class="g-card g-daily-card g-daily-card--horo g-horoscope-card">'
       + '<div class="g-horoscope-card__mark" aria-hidden="true"><i class="ph ph-moon-stars"></i></div>'
       + '<p class="g-daily-card__kicker">Today’s wellness horoscope' + (t.sunSign ? ' · ' + esc(t.sunSign) : '') + '</p>'
+      + (guide.element ? '<div class="g-horoscope-card__chips"><span>' + esc(guide.element) + '</span><span>' + esc(guide.theme) + '</span></div>' : '')
       + '<p class="g-daily-card__tip">' + esc(t.tip || 'Your daily guidance is preparing.') + '</p>'
-      + '<p class="g-hint">Use this as a journaling prompt. It is not a medical or predictive reading.</p></article>'
-      + '<div class="g-card__actions"><button type="button" class="g-btn g-btn--secondary g-btn--sm" data-gaia-ask-horoscope>Ask Gaia about this guidance</button></div>'
+      + '<p class="g-hint">A sun-sign reflection for journaling—not a birth chart, prediction, or medical reading.</p></article>'
+      + '<div class="g-cosmic-checkin">'
+      + '<article><i class="ph ph-wind" aria-hidden="true"></i><span>Energy reset</span><p>' + esc(guide.practice || 'Take three slow breaths and choose one gentle next step.') + '</p></article>'
+      + '<article><i class="ph ph-note-pencil" aria-hidden="true"></i><span>Journal prompt</span><p>' + esc(guide.journal || 'What deserves my clearest attention today?') + '</p></article>'
+      + '</div><div class="g-card__actions"><button type="button" class="g-btn g-btn--secondary g-btn--sm" data-gaia-ask-horoscope>Turn this into a 2-minute ritual with Gaia</button></div>'
       + '<button type="button" class="g-btn g-btn--ghost g-btn--sm g-well__signout" data-wsignout>Not you? Sign out</button></section>';
   }
 
@@ -228,23 +300,27 @@
   }
 
   function bind(box) {
-    const dob = box.querySelector('[data-wdob]');
-    if (dob) {
-      dob.addEventListener('input', () => {
-        state.dob = dob.value;
-        const html = revealHtml(birthChakra(state.dob));
-        boxes.forEach((b) => {
-          const inp = b.querySelector('[data-wdob]'); if (inp && inp.value !== state.dob) inp.value = state.dob;
-          const rev = b.querySelector('[data-reveal]'); if (rev) rev.innerHTML = html;
-        });
+    const dobFields = ['month', 'day', 'year'].map((part) => box.querySelector('[data-wdob-' + part + ']'));
+    if (dobFields.some(Boolean)) dobFields.forEach((field) => field && field.addEventListener(field.tagName === 'SELECT' ? 'change' : 'input', () => {
+      const month = val(box, '[data-wdob-month]');
+      const day = val(box, '[data-wdob-day]').replace(/\D/g, '').slice(0, 2);
+      const year = val(box, '[data-wdob-year]').replace(/\D/g, '').slice(0, 4);
+      state.dobParts = { month, day, year }; state.dob = dobFromParts(state.dobParts);
+      const complete = Boolean(month && day && year.length === 4);
+      boxes.forEach((b) => {
+        const mm = b.querySelector('[data-wdob-month]'); if (mm && mm.value !== month) mm.value = month;
+        const dd = b.querySelector('[data-wdob-day]'); if (dd && dd.value !== day) dd.value = day;
+        const yy = b.querySelector('[data-wdob-year]'); if (yy && yy.value !== year) yy.value = year;
+        const error = b.querySelector('[data-wdob-error]'); if (error) error.textContent = complete && !state.dob ? 'Please check that this is a real date in the past.' : '';
+        const rev = b.querySelector('[data-reveal]'); if (rev) { rev.innerHTML = revealHtml(birthChakra(state.dob)); bindBirthMap(rev); }
       });
-    }
+    }));
     // "Set up my wellness" on the compact reminder → expand the full form.
     const exp = box.querySelector('[data-wexpand]');
     if (exp) exp.addEventListener('click', () => {
       state.expandSignup = true;
       renderAll();
-      setTimeout(() => { try { box.querySelector('[data-wdob]')?.focus(); } catch (_) {} }, 50);
+      setTimeout(() => { try { box.querySelector('[data-wdob-month]')?.focus(); } catch (_) {} }, 50);
     });
     const btn = box.querySelector('[data-wsignup]');
     if (btn) btn.addEventListener('click', () => signup(box));
@@ -265,6 +341,16 @@
         detail: { prompt: 'Help me reflect on today’s wellness horoscope and suggest one gentle action.' },
       }));
     });
+    bindBirthMap(box);
+  }
+
+  function bindBirthMap(root) {
+    root.querySelector('[data-gaia-ask-birth]')?.addEventListener('click', () => {
+      const chakra = birthChakra(state.dob); const sign = sunSignFromDob(state.dob);
+      window.dispatchEvent(new CustomEvent('gaia:open-assist', {
+        detail: { prompt: 'Help me reflect on my ' + (chakra ? chakra.name + ' birth chakra' : 'birth chakra') + (sign ? ' and ' + sign + ' sun sign' : '') + '. Give me one gentle practice and one journal question.' },
+      }));
+    });
   }
 
   async function challengeCall(btn, path) {
@@ -282,9 +368,9 @@
     const name = val(box, '[data-wname]').trim();
     const email = val(box, '[data-wemail]').trim();
     const location = val(box, '[data-wloc]').trim();
-    const dob = val(box, '[data-wdob]') || state.dob;
+    const dob = dobFromParts({ month: val(box, '[data-wdob-month]'), day: val(box, '[data-wdob-day]'), year: val(box, '[data-wdob-year]') }) || state.dob;
     if (!name) return set('Please enter your name.', true);
-    if (!dob) return set('Please pick your birth date.', true);
+    if (!dob) return set('Please enter a real birth date using month, day, and a 4-digit year.', true);
     if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) return set('Please enter a valid email.', true);
     set('Aligning your energy…');
     const r = await api('POST', '/api/wellness/signup', { name, dob, location, email });
@@ -313,7 +399,7 @@
       state.expandSignup = true;
       renderAll();
     }
-    const f = document.querySelector('[data-wname]');
+    const f = document.querySelector('[data-wdob-month]') || document.querySelector('[data-wname]');
     if (!f) return false;
     try { f.scrollIntoView({ behavior: 'smooth', block: 'center' }); } catch (_) {}
     f.focus();

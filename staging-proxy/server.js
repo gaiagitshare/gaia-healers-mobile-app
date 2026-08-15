@@ -250,16 +250,16 @@ const GAIA_KNOWLEDGE = {
       'Events (view=events): the confirmed public Gaia event plus authenticated member appointments; unavailable community live-session feeds are never invented.',
       'Bookings (view=bookings): real GHL appointments plus verified Gaia booking forms.',
       'Inbox (view=inbox): read-only GHL conversation summaries for the authenticated contact.',
-      'Energy Studio (view=wellness): three distinct public tools. Energy Check (tab=check) uses the saved birth-date profile for today’s body point and chakra practice; Wellness Horoscope (tab=horoscope) is a reflective daily prompt based on the saved birth date and sun sign; Chakra Match (tab=chakras) is the interactive seven-centre guide with relevant Colour Energy support. These are wellness reflection tools, not medical advice or device scans.',
+      'Energy Studio (view=wellness): three distinct public tools. Energy Check (tab=check) uses an easy Month / Day / typed 4-digit Year form—never a long calendar scroll—to reveal a birth-date-number chakra and sun-sign reflection before sign-up, then a saved profile unlocks today’s body point and chakra practice. Wellness Horoscope (tab=horoscope) is a reflective sun-sign prompt with a two-minute practice and journal question. Chakra Match (tab=chakras) is an interactive seven-centre guide with traditional themes, practices, prompts, and relevant Colour Energy support. These are wellness reflection tools, not medical advice, predictions, birth charts, device scans, or measured chakra scores.',
       'Academy (view=academy, opened from the top Menu): courses and certification. It opens the education.gaiahealers.com portal for the actual lessons and never shows fake progress.',
       'Community (view=community, opened from the top Menu): "My Access" — which communities you have unlocked versus still locked — plus Find a Practitioner. Communities: All Gaia Healers, Bio-Well, BioPulsar, BioTekna, ASEA, BrainTap, LifeWave, Golden Practitioner.',
       'Store (view=store): two tabs — Shop (the live Shopify catalogue by category: Featured, Colour Energy, Courses, Bio-Well, BioPulsar, BioTekna, Crystals; tapping a product opens its image, description, and purchase action in a native in-app sheet; Shopify opens only for the final current-price and secure-payment step) and Membership (the official Free / Silver / Gold / Diamond Gaia 2.0 tiers).',
       'Profile (view=profile, bottom-right): your account — devices, purchases, bookings, messages, membership status, booking tools, and the Colour Personality Test.',
     ],
     features: [
-      'Energy Check — free at view=wellness&tab=check; enter your birth date to see the birth chakra, today’s body point and challenge practice.',
+      'Energy Check — free at view=wellness&tab=check; choose a month and type the day and 4-digit year to see a birth-date-number chakra, sun-sign reflection, gentle practice, journal prompt, and relevant Gaia support. Saving the profile unlocks today’s body point and challenge practice.',
       'Wellness Horoscope — free at view=wellness&tab=horoscope; a reflective prompt based on the saved birth date and sun sign, not a prediction.',
-      'Chakra Match — free at view=wellness&tab=chakras; an interactive seven-centre guide with matching Colour Energy support.',
+      'Chakra Match — free at view=wellness&tab=chakras; an interactive seven-centre guide with traditional themes, two-minute practices, journal prompts, and matching Colour Energy support. It deliberately shows no fake percentages or scan scores.',
       'Wellness sign-up (name, birth date, location, email) — unlocks your daily body-point and a daily wellness horoscope tip.',
       '8-Week Chakra Challenge — join, then check in daily; one chakra per week with a practice and an affirmation.',
       'Book a session — a Bio-Well energy scan, a Bio-Well demo, a free discovery call, or wellness coaching (real booking links).',
@@ -3374,7 +3374,10 @@ function fallbackAssistReply(prompt, intent = '') {
     return 'You can book a session from the Home screen — there are options for a Bio-Well energy scan, a Bio-Well demo, a free discovery call, and wellness coaching. Want me to point you to the right one?';
   }
   if (normalized.includes('horoscope') || normalized.includes('sun sign')) {
-    return 'Open Energy Studio and choose Horoscope for today’s reflective wellness prompt based on your saved birth date and sun sign. It is guidance for reflection, not prediction or medical advice.';
+    return 'Open Energy Studio and choose Horoscope for a sun-sign reflection, a two-minute practice, and a journal question based on your saved birth date. It is not a birth chart, prediction, or medical advice.';
+  }
+  if (normalized.includes('birth map') || normalized.includes('birth date') || normalized.includes('birthday') || normalized.includes('year')) {
+    return 'In Energy Check, choose your birth month and type the day and 4-digit year—there is no calendar to scroll through. Your Gaia birth map combines a birth-date-number chakra with a sun-sign reflection, then offers a gentle practice, journal prompt, and matching Gaia support. It is reflective guidance, not a scan or prediction.';
   }
   if (normalized.includes('chakra match') || normalized.includes('seven centre') || normalized.includes('seven center')) {
     return 'Open Energy Studio and choose Chakra match to explore all seven centres and the matching Colour Energy support. You can tap any centre without signing in.';

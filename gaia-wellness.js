@@ -147,17 +147,34 @@
     if (loading) return '<article class="g-cosmic-map g-cosmic-map--loading" aria-live="polite"><i class="ph ph-spinner-gap" aria-hidden="true"></i><p>Reading the sky for your birth place…</p></article>';
     if (!map || !Array.isArray(map.placements)) return '<div class="g-cosmic-map g-cosmic-map--empty" data-cosmic-empty><p>Choose your birth city to reveal your seven-planet chakra reflection.</p></div>';
     const spotlight = map.spotlight || {};
+    const path = map.energyPath || {};
     const planets = map.placements.map((planet) => '<li><span>' + esc(planet.name) + '</span><strong>' + esc(planet.sign) + ' ' + esc(planet.degree) + '°</strong><small>' + esc((CH().find((c) => c.id === planet.chakraId) || {}).name || '') + '</small></li>').join('');
     const shop = (window.GaiaStore && window.GaiaStore.chakraShopUrl && spotlight.id)
       ? window.GaiaStore.chakraShopUrl(spotlight.id) : 'https://gaiahealers.com/collections/all';
+    const colour = path.colour || (window.GaiaStore && window.GaiaStore.colourFor ? window.GaiaStore.colourFor(spotlight.id) : '') || 'chakra';
     return '<article class="g-cosmic-map" style="--ck:' + esc(spotlight.color || '#7DD956') + '">'
       + '<div class="g-cosmic-map__head"><div><p class="g-energy__kicker">Your sky-to-chakra map</p><h3>' + esc(spotlight.name || 'Gaia') + ' spotlight</h3></div><i class="ph ph-planet" aria-hidden="true"></i></div>'
       + '<div class="g-birth-map__chips"><span>' + esc(map.dominantSign) + ' emphasis</span><span>' + esc(map.representedElement) + ' represented</span><span>Invite ' + esc(map.elementToInvite) + '</span></div>'
       + '<p class="g-birth-map__context">Seven astronomical planet positions are mapped through Gaia’s symbolic chakra lens. This is a reflective tradition—not a measured energy score, diagnosis, or prediction.</p>'
-      + '<ul class="g-cosmic-map__planets">' + planets + '</ul>'
+      + '<section class="g-energy-path" aria-labelledby="gaia-energy-path-title">'
+      + '<div class="g-energy-path__head"><div><p class="g-energy__kicker">Your Gaia energy path</p><h4 id="gaia-energy-path-title">' + esc(path.intention || 'Pause, notice, choose') + '</h4></div><span>Reflection → action</span></div>'
+      + '<p class="g-energy-path__summary">' + esc(path.summary || ('Use the ' + (spotlight.name || 'chakra') + ' spotlight as a prompt for one gentle action today.')) + '</p>'
+      + '<ol class="g-energy-path__steps">'
+      + '<li><span>1</span><div><strong>Begin with two minutes</strong><p>' + esc(path.practice || 'Take five slow breaths and notice what changes.') + '</p></div></li>'
+      + '<li><span>2</span><div><strong>Invite ' + esc(map.elementToInvite) + '</strong><p>' + esc(path.invitation || 'Bring one balancing quality into the moment.') + '</p></div></li>'
+      + '<li><span>3</span><div><strong>Carry one question</strong><p>' + esc(path.journal || 'What would bring me toward balance today?') + '</p></div></li>'
+      + '</ol>'
+      + '<div class="g-energy-path__support">'
+      + '<a href="' + esc(shop) + '" target="_blank" rel="noopener noreferrer"><i class="ph ph-drop" aria-hidden="true"></i><span><strong>Explore ' + esc(colour) + ' Colour Energy</strong><small>Matching Gaia store support</small></span><i class="ph ph-arrow-up-right" aria-hidden="true"></i></a>'
+      + '<a href="home.html?view=bookings"><i class="ph ph-wave-sine" aria-hidden="true"></i><span><strong>Choose a measured next step</strong><small>Book a Bio-Well scan, demo, or time with Dr. Nima</small></span><i class="ph ph-caret-right" aria-hidden="true"></i></a>'
+      + '<a href="home.html?view=events"><i class="ph ph-calendar-dots" aria-hidden="true"></i><span><strong>Experience the work live</strong><small>Gaia Healers Elevate · Nov 20–22, 2026</small></span><i class="ph ph-caret-right" aria-hidden="true"></i></a>'
+      + '</div>'
+      + '<p class="g-energy-path__note"><i class="ph ph-info" aria-hidden="true"></i><span>This chart is for reflection. A Bio-Well session is the app’s separate route for device-based biofield measurement with a trained practitioner.</span></p>'
+      + '</section>'
+      + '<details class="g-cosmic-map__details"><summary><span>See all seven planet positions</span><i class="ph ph-caret-down" aria-hidden="true"></i></summary><ul class="g-cosmic-map__planets">' + planets + '</ul></details>'
       + '<p class="g-cosmic-map__basis"><i class="ph ph-clock" aria-hidden="true"></i> ' + (map.timeBasis === 'exact-local-time' ? 'Calculated from the birth time you entered' : 'Birth time unknown: calculated at local noon and labelled as an estimate') + ' · ' + esc(map.place || '') + '</p>'
-      + '<div class="g-birth-map__actions"><button type="button" class="g-btn g-btn--secondary g-btn--sm" data-gaia-ask-cosmic>Ask Gaia about this map</button>'
-      + '<a class="g-btn g-btn--ghost g-btn--sm" href="' + esc(shop) + '" target="_blank" rel="noopener noreferrer">Explore matching support</a></div></article>';
+      + '<div class="g-birth-map__actions"><button type="button" class="g-btn g-btn--secondary g-btn--sm" data-gaia-ask-cosmic>Build my 7-day path with Gaia</button>'
+      + '<a class="g-btn g-btn--ghost g-btn--sm" href="home.html?view=community">Join the free community</a></div></article>';
   }
 
   // ── public (not signed up): live reveal + sign-up ────────
@@ -358,7 +375,20 @@
     }));
     bindLocationSearch(box);
     const birthTime = box.querySelector('[data-wtime]');
-    if (birthTime) birthTime.addEventListener('change', () => { state.birthTime = birthTime.value || ''; if (state.dob && state.location) loadCosmicMap(box); });
+    if (birthTime) {
+      let birthTimeTimer = 0;
+      const updateBirthTime = () => {
+        state.birthTime = birthTime.value || '';
+        document.querySelectorAll('[data-wtime]').forEach((field) => { if (field !== birthTime && field.value !== state.birthTime) field.value = state.birthTime; });
+        clearTimeout(birthTimeTimer);
+        if (state.dob && state.location) birthTimeTimer = setTimeout(() => loadCosmicMap(box), 180);
+      };
+      // Android and iOS time pickers do not always emit `change` before the
+      // result is viewed. `input` keeps the exact-time label and chart current.
+      birthTime.addEventListener('input', updateBirthTime);
+      birthTime.addEventListener('change', updateBirthTime);
+      birthTime.addEventListener('blur', updateBirthTime);
+    }
     // "Set up my wellness" on the compact reminder → expand the full form.
     const exp = box.querySelector('[data-wexpand]');
     if (exp) exp.addEventListener('click', () => {
@@ -399,7 +429,7 @@
       const map = state.cosmicMap || (state.today && state.today.cosmicMap);
       if (!map) return;
       window.dispatchEvent(new CustomEvent('gaia:open-assist', {
-        detail: { prompt: 'Help me reflect on my sky-to-chakra map. My symbolic spotlight is ' + map.spotlight.name + ', my most represented element is ' + map.representedElement + ', and the element to gently invite is ' + map.elementToInvite + '. Give me one two-minute practice and one journal question. Do not diagnose or predict.' },
+        detail: { prompt: 'Build a gentle 7-day Gaia energy path from my sky-to-chakra map. My symbolic spotlight is ' + map.spotlight.name + ', my most represented element is ' + map.representedElement + ', and the element to gently invite is ' + map.elementToInvite + '. Include one two-minute daily practice, a journal prompt, and explain when a Bio-Well scan, Colour Energy support, a session with Dr. Nima, the free community, or Elevate could be a relevant optional next step. Clearly separate symbolic reflection from device measurement, and do not diagnose or predict.' },
       }));
     });
   }
@@ -458,7 +488,8 @@
   async function loadCosmicMap(box) {
     if (!state.dob || !state.location) return;
     const request = ++state.chartRequest;
-    state.birthTime = val(box, '[data-wtime]') || state.birthTime || '';
+    const timeField = box.querySelector('[data-wtime]');
+    state.birthTime = timeField ? (timeField.value || '') : (state.birthTime || '');
     document.querySelectorAll('[data-cosmic-chart]').forEach((target) => { target.innerHTML = cosmicMapHtml(null, true); });
     const response = await api('POST', '/api/wellness/chart', { dob: state.dob, birthTime: state.birthTime, place: state.location });
     if (request !== state.chartRequest) return;

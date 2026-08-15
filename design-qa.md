@@ -12,6 +12,10 @@
 - Previous birth-map target: `work/audit-birthday/after-birthday-map.png`
 - Completed city and cosmic map: `work/audit-birthday/city-cosmic-map.png`
 - Combined before/current comparison: `work/audit-birthday/city-cosmic-qa-composite.png`
+- User result reference: `work/audit-energy-path/01-reference.png`
+- Upgraded action-first result: `work/audit-energy-path/02-upgraded-desktop.png`
+- Mobile action card: `work/audit-energy-path/03-upgraded-mobile.png`
+- Reference/current comparison: `work/audit-energy-path/comparison.png`
 
 ## Viewports and state
 
@@ -36,6 +40,10 @@
 - The new sky-to-chakra card uses calculated Sun, Moon, Mercury, Venus, Mars, Jupiter, and Saturn sign positions. It separately identifies the chakra interpretation as symbolic.
 - Unknown birth time uses local noon and is visibly labelled as an estimate; an entered time changes the label to exact local time.
 - The new card follows the existing Gaia green/orange card system, type scale, borders, buttons, and mobile one-column layout.
+- P1 resolved: mobile time inputs now recalculate on `input`, `change`, and `blur`, so an entered `07:00` can no longer leave the stale “birth time unknown” result behind.
+- P2 resolved: the long raw planet list is collapsed behind “See all seven planet positions”; the first result is now a three-step Gaia Energy Path.
+- The pathway connects symbolic reflection to a two-minute practice, balancing-element prompt, journal question, matching Colour Energy, the real Bookings screen (Bio-Well / Dr. Nima), the confirmed Elevate event, free Community, and Gaia Assist.
+- The pathway explicitly distinguishes astrology/chakra reflection from device-based Bio-Well measurement and avoids diagnosis, deficiency, or prediction language.
 
 ## Interaction checks
 
@@ -54,6 +62,10 @@
 - Unknown-time and exact-time labels: passed.
 - Cosmic-map action opens Gaia Assist with the same spotlight and safety instruction: passed.
 - Open-Meteo lookup, graceful unavailable state, and 24-hour server cache behavior: passed.
+- Entered time (`07:00`) → exact-local-time result after mobile input: passed.
+- Energy Path renders at desktop and 390 × 844 mobile without horizontal overflow: passed.
+- Product, Bookings, Events, Community, and Gaia Assist actions expose real destinations: passed.
+- Gaia Assist receives the full spotlight/element context and its provider-independent fallback returns a safe seven-day pathway: passed.
 
 ## Evidence limits
 

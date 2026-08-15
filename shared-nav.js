@@ -6,19 +6,11 @@
   if (!window.location.hash) window.scrollTo({ top: 0, left: 0, behavior: 'instant' });
 
   const tabs = [
-    { id: 'today', href: 'home.html?view=today', label: 'Home' },
-    { id: 'wellness', href: 'home.html?view=wellness', label: 'Energy' },
-    { id: 'store', href: 'home.html?view=store', label: 'Store' },
-    { id: 'profile', href: 'home.html?view=profile', label: 'Profile' },
+    { id: 'today', href: 'home.html?view=today', label: 'Today', icon: 'ph-house' },
+    { id: 'journey', href: 'home.html?view=journey', label: 'Journey', icon: 'ph-path' },
+    { id: 'inbox', href: 'home.html?view=inbox', label: 'Inbox', icon: 'ph-chat-circle-dots' },
+    { id: 'profile', href: 'home.html?view=profile', label: 'Profile', icon: 'ph-user-circle' },
   ];
-  const icons = {
-    today: '<path stroke-linecap="round" stroke-linejoin="round" d="M3.75 9.75L12 3l8.25 6.75V19.5a1.5 1.5 0 01-1.5 1.5H5.25A1.5 1.5 0 013.75 19.5V9.75z" />',
-    store: '<path stroke-linecap="round" stroke-linejoin="round" d="M15.75 10.5V6a3.75 3.75 0 10-7.5 0v4.5m11.356-1.993l1.263 12A1.125 1.125 0 0119.743 21H4.257a1.125 1.125 0 01-1.121-1.243l1.264-12A1.125 1.125 0 015.513 7.5h12.974c.576 0 1.059.435 1.119 1.007z" />',
-    profile: '<path stroke-linecap="round" stroke-linejoin="round" d="M15.75 6a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0zM4.501 20.118a7.5 7.5 0 0114.998 0A17.933 17.933 0 0112 21.75c-2.676 0-5.216-.584-7.499-1.632z" />',
-    wellness: '<path stroke-linecap="round" stroke-linejoin="round" d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09zM12 3v18M8.25 6a3.75 3.75 0 107.5 0M8.25 18a3.75 3.75 0 107.5 0" />',
-    academy: '<path stroke-linecap="round" stroke-linejoin="round" d="M4.26 10.065a8.978 8.978 0 011.614-4.12 9 9 0 1012.152 12.152 8.978 8.978 0 01-4.12 1.614M12 6v6l4 2" />',
-    community: '<path stroke-linecap="round" stroke-linejoin="round" d="M8.625 12a.375.375 0 11-.75 0 .375.375 0 01.75 0zm3.75 0a.375.375 0 11-.75 0 .375.375 0 01.75 0zm3.75 0a.375.375 0 11-.75 0 .375.375 0 01.75 0zM21 12c0 4.142-4.03 7.5-9 7.5a10.6 10.6 0 01-2.62-.322L4.5 20.25l1.248-3.12C4.055 15.782 3 13.983 3 12c0-4.142 4.03-7.5 9-7.5s9 3.358 9 7.5z" />',
-  };
 
   function currentView() {
     return window.GaiaAppShell?.currentView?.() || new URLSearchParams(window.location.search).get('view') || 'today';
@@ -26,7 +18,6 @@
 
   function activeTabId() {
     const view = currentView();
-    if (view === 'wellness' || view === 'biowell' || view === 'chakras') return 'wellness';
     if (tabs.some((tab) => tab.id === view)) return view;
     return null;
   }
@@ -34,7 +25,7 @@
   function tabLink(t, on) {
     return `
       <a href="${t.href}" data-app-nav="${t.id}" class="gaia-tabbar__link ${on ? 'is-active' : ''}" ${on ? 'aria-current="page"' : ''}>
-        <svg class="gaia-tabbar__icon" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="${on ? '2' : '1.5'}">${icons[t.id]}</svg>
+        <i class="ph ${t.icon} gaia-tabbar__icon" aria-hidden="true"></i>
         <span class="gaia-tabbar__label">${t.label}</span>
       </a>`;
   }
@@ -43,8 +34,6 @@
     link.classList.toggle('is-active', on);
     if (on) link.setAttribute('aria-current', 'page');
     else link.removeAttribute('aria-current');
-    const svg = link.querySelector('.gaia-tabbar__icon');
-    if (svg) svg.setAttribute('stroke-width', on ? '2' : '1.5');
   }
 
   function buildTabbar(inner, active) {
@@ -54,9 +43,7 @@
       <div class="gaia-tabbar__group gaia-tabbar__group--left">${left.map((t) => tabLink(t, active === t.id)).join('')}</div>
       <button type="button" class="gaia-tabbar__assist" data-gaia-tab-assist data-state="idle" aria-label="Open Gaia Assist — live voice" aria-expanded="false">
         <span class="gaia-tabbar__assist-pulse" aria-hidden="true"></span>
-        <svg class="gaia-tabbar__assist-icon" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
-          <path stroke-linecap="round" stroke-linejoin="round" d="M12 18.75a6 6 0 006-6v-1.5m-12 0v1.5a6 6 0 006 6m0 0v3m-3 0h6M12 15a2.25 2.25 0 002.25-2.25v-6a2.25 2.25 0 00-4.5 0v6A2.25 2.25 0 0012 15z"/>
-        </svg>
+        <i class="ph ph-microphone gaia-tabbar__assist-icon" aria-hidden="true"></i>
       </button>
       <div class="gaia-tabbar__group gaia-tabbar__group--right">${right.map((t) => tabLink(t, active === t.id)).join('')}</div>`;
   }

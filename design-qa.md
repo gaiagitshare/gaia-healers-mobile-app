@@ -1,40 +1,33 @@
-# Gaia Healers redesign QA
+# Gaia Super App — Design QA
 
-Status: Passed for production deployment on 2026-07-21.
+- Selected source: combined Option 1 structure with Option 2 bottom navigation
+- Source image: `/Users/ba2ki-goldvest/.codex/generated_images/01a00543-0f8f-7b33-b480-cfd0984618c8/exec-81940b33-ef49-4363-a27b-489261b274de.png`
+- Implementation capture: `/Users/ba2ki-goldvest/Documents/Codex/2026-08-15/i/outputs/gaia-superapp/local-mobile.png`
+- Side-by-side comparison: `/Users/ba2ki-goldvest/Documents/Codex/2026-08-15/i/outputs/gaia-superapp/design-comparison.png`
+- Viewports checked: 375 × 812 mobile and 1440 × 1024 desktop
 
-## Grounding
+## Visual comparison
 
-- Selected direction: “Living Network” event-led mobile experience.
-- Reference: `/Users/ba2ki-goldvest/.codex/generated_images/019f81e3-d8c4-7f22-a881-c9bef56bea12/exec-e08033a0-7355-40a1-a709-42825eb3d565.png`
-- Browser: the user’s Chrome session.
-- QA viewport: 390 × 844 CSS pixels (iPhone-class portrait).
+The implementation preserves the selected dark botanical palette, serif-led
+hierarchy, compact service launcher, circular Phosphor icons, luminous Gaia
+accent, persistent five-action navigation, and centered Assist control. The
+comparison intentionally shows different data states: the selected source is an
+authenticated member with real entitlements; the captured implementation is a
+signed-out visitor and therefore renders the real sign-in/join state instead of
+inventing course progress.
 
-## Comparison history
+## Findings
 
-1. Initial build: `work/gaia-qa/05-home-final.png`
-   - Event hero was visually strong but too tall, delaying Today, Academy, and member access.
-2. Side-by-side comparison: `work/gaia-qa/06-reference-vs-build.png`
-   - Confirmed the selected palette, typography, imagery, navigation, and event-first hierarchy.
-   - Identified the oversized hero as the principal mismatch.
-3. Final iteration: `work/gaia-qa/07-home-iteration2.png`
-   - Reduced the mobile event hero and type scale.
-   - Today, Academy, and the beginning of member access now appear in the first viewport.
-4. Final side-by-side: `work/gaia-qa/08-reference-vs-iteration2.png`
-   - Passed: visual hierarchy, spacing, card radii, contrast, bottom navigation, safe-area behavior, and selected direction are coherent.
+- P0: none
+- P1: none
+- P2: none
+- Corrected during QA: desktop content was constrained by the legacy two-column
+  Home grid; the new shell now occupies the full responsive content area.
+- Corrected during QA: the desktop navigation retained a legacy horizontal
+  transform; it is now pinned completely inside the left rail.
+- Corrected during QA: legacy fallback member progress, feeds, wellness scores,
+  attendee counts, and member names were removed from client and server sources.
+- Mobile navigation, Journey, Inbox, Profile, Events, Bookings, menu, and Gaia
+  Assist open/close behavior were exercised in the browser.
 
-## Functional checks
-
-- Menu opens as a native sheet and exposes every main destination.
-- Sign in opens a native email magic-link sheet; no blank education portal page.
-- Membership opens in-app with sign-in, Gaia Assist, and discovery-call paths.
-- Academy cards respond and route locked access to Membership.
-- Community and Profile signed-out states open native sign in.
-- Store tabs and live product catalog render at mobile width.
-- Chakra guide auto-advances through all seven centres, updates the purpose-specific shop link, and pauses after a manual selection.
-- Event action uses the exact live event URL inside the app when an event is published.
-- Every route starts at the top instead of restoring the previous screen’s scroll position on mobile Safari.
-
-## Notes
-
-- The local build cannot read the production API because localhost is intentionally excluded from the production CORS allowlist. Production-origin validation is completed after deployment.
-- The event hero intentionally shows an honest “details coming soon” state when no live event is published; it never fabricates a date or destination.
+final result: passed

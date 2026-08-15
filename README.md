@@ -1,98 +1,80 @@
-# Gaia Healers Client Portal — Mobile Prototype V2
+# Gaia Healers Super App
 
-Mobile-first prototype of the **Gaia Healers Client Portal** — aligned with the live ecosystem at `crm.gaiahealers.com` / `education.gaiahealers.com`.
+Production PWA for Gaia Healers members: [gaiahealers.app](https://gaiahealers.app/home.html).
 
-**1,252 portal users** · Bio-Well certification · Modality communities · Continuing education
+The app is a responsive service hub for membership access, courses, communities,
+events, bookings, purchases, messages, wellness tools, and Gaia Assist. GoHighLevel
+(GHL) remains the source of truth for member identity and entitlements.
 
-No backend in the public prototype. Static HTML + Tailwind CSS (CDN), with live data and voice routed through the staging proxy when configured.
+## Architecture
 
-## V2 focus
+- `home.html` is the single public app shell.
+- `gaia-superapp.js` renders Today, Journey, Events, Bookings, and Inbox.
+- `gaia-member.js` reads normalized authenticated `/api/member/*` contracts.
+- `gaia-live-sync.js` reads public bootstrap data from `api.gaiahealers.app`.
+- `staging-proxy/server.js` is the production API/proxy and the only layer that
+  communicates with GHL, the event service, and AI providers.
+- `shared-nav.js` provides the responsive Today / Journey / Assist / Inbox /
+  Profile navigation.
+- `gaia-ecosystem.js` contains public, non-personal defaults only. It must never
+  contain sample progress, member records, feeds, purchases, or wellness readings.
 
-Built around the real platform — not generic wellness copy:
+## Data truth
 
-| Pillar | In-app |
-|--------|--------|
-| Bio-Well | Energy trends, chakra trends, scan history, practicum progress |
-| Practitioner communities | Bio-Well, BioPulsar, Biotekna, Healeex, All Gaia Healers, Abundant Healer |
-| Certifications | Orientation → Basic → Advanced L1/L2 roadmap, exams, Credentials |
-| Events | Elevate 2026 command center, GHL attendee import, QR check-in, badges, exhibitors |
-| Gaia Assist | Push-to-talk voice helper prototype for scans, events, academy, and GHL follow-up |
-| Continuing education | CE hours, modality courses, catalog |
-| Member growth journey | Visual path on Home |
+The app shows authenticated data only when the corresponding member API returns it:
 
-**Experience targets:** Oura (biofield metrics) · LinkedIn (practitioner network) · Coursera (certification paths)
+- membership and access: `/api/member/access`
+- profile: `/api/member/profile`
+- course grants: `/api/member/courses`
+- communities: `/api/member/communities`
+- appointments: `/api/member/appointments`
+- conversations: `/api/member/notifications`
+- devices, purchases, products, forms, and activity: their matching member routes
+- confirmed public event: `/api/app/bootstrap` and `/api/member/events`
 
-## App entry
+GHL does not expose lesson-level course progress, community post feeds, or
+community live-session feeds through the public API. Those experiences open the
+authorized GHL workspace; the app does not fabricate them.
 
-**Production:** https://gaiahealers.app/home.html  
-**Staging:** https://gaiagitshare.github.io/gaia-healers-mobile-app/home.html
+## App routes
 
-Domain setup: [`docs/DOMAIN-SETUP.md`](docs/DOMAIN-SETUP.md)
+- `?view=today` — service hub and confirmed next event
+- `?view=journey` — verified Learn / Practice / Connect access
+- `?view=academy` — real course grants and authorized Academy workspace
+- `?view=community` — real community entitlements
+- `?view=events` — confirmed event and member appointments
+- `?view=bookings` — GHL appointments and verified booking forms
+- `?view=inbox` — read-only GHL conversation summaries
+- `?view=wellness` — public chakra tools and verified wellness profile data
+- `?view=store` — live catalog and official membership tiers
+- `?view=profile` — member account, purchases, devices, forms, and sign-out
 
-`home.html` is the only public application entry point. It renders the app shell and internal screens:
+## Local verification
 
-- Today
-- Bio-Well
-- Academy
-- Community
-- Profile
-- Admin, hidden behind an internal Profile unlock
-
-Legacy public files redirect into `home.html`:
-
-- `biowell.html` → `home.html?view=biowell`
-- `academy.html` → `home.html?view=academy`
-- `community.html` → `home.html?view=community`
-- `profile.html` → `home.html?view=profile`
-- `admin.html` → `home.html?view=admin`, then Profile unless admin is unlocked
-
-Internal demo admin:
-
-- Open `home.html?view=profile&admin=1`
-- Tap `Unlock admin`
-- Enter the local demo passcode
-
-This is a prototype-only visibility gate. Production admin access must come from backend roles, not a static passcode.
-
-## Shared assets
-
-- `gaia-shared.css` — V2 design tokens
-- `gaia-ui.js` — Onboarding, single-app routing, community tabs, Gaia Assist prototype
-- `gaia-ecosystem.js` — CRM/GHL/event/assistant constants and future API handoff point
-- `shared-nav.js` — Single-app bottom navigation
-
-## Run locally
+Run the static app:
 
 ```bash
-cd Gaia-Healers-App
-python3 -m http.server 8080
+python3 -m http.server 8765
 ```
 
-Open http://localhost:8080/home.html — use a private window or clear `sessionStorage` to see onboarding.
+Run the API separately from `staging-proxy/` with the required secrets and
+`ALLOWED_ORIGINS=http://127.0.0.1:8765`, then open:
 
-## GHL mobile branding (upload-ready PNGs)
+```text
+http://127.0.0.1:8765/home.html?view=today&proxy=http://127.0.0.1:8787
+```
 
-**Folder:** [`branding/export/`](branding/export/) · Guide: [`branding/GHL-UPLOAD.md`](branding/GHL-UPLOAD.md)
+Minimum release checks:
 
-| Asset | File |
-|-------|------|
-| App Icon | `app-icon-1024x1024.png` |
-| Splash | `splash-screen-1080x1920.png` (+ optional `splash-screen-1284x2778.png`) |
-| Onboarding ×4 | `onboarding-01-welcome.png` … `onboarding-04-certification.png` |
+```bash
+git diff --check
+node --check gaia-superapp.js
+node --check gaia-member.js
+node --check gaia-ui.js
+node --check shared-nav.js
+node --check staging-proxy/server.js
+curl -fsS https://api.gaiahealers.app/health
+```
 
-Re-export: `./branding/export.sh`
-
-## App Store screenshots (1290 × 2796)
-
-- Preview: [`app-store/index.html`](app-store/index.html)
-- Marketing copy: [`app-store/CAPTIONS.md`](app-store/CAPTIONS.md)
-- Exported PNGs: [`app-store/export/`](app-store/export/) — run `./app-store/export.sh` (requires local server + Playwright)
-
-## Docs
-
-- [`docs/UX-AUDIT.md`](docs/UX-AUDIT.md) — V1 audit & benchmarks
-- [`docs/V2-REDESIGN.md`](docs/V2-REDESIGN.md) — V2 source mapping from CRM
-
-## Version
-
-**v2.0** — Ecosystem-accurate content · **v2.1 visual** — Premium UI pass (Oura / Apple Health / Linear-inspired design system via `gaia-shared.css` + `gaia-config.js`)
+Test mobile and desktop navigation, signed-out states, authenticated member
+entitlements, PWA installation, and production API responses before each release.

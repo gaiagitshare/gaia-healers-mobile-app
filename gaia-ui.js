@@ -1,4 +1,4 @@
-/* Gaia Healers V2 — prototype interactions */
+/* Gaia Healers — production app shell, routing, authentication, and Gaia Assist. */
 (function () {
   if (new URLSearchParams(window.location.search).has('store')) {
     sessionStorage.setItem('gaia-coach-v5', '1');
@@ -17,7 +17,7 @@
   const ADMIN_DEV_PASSCODE = 'gaia2026';
   const ASSIST_WELCOME_KEY = 'gaia-assist-welcome-v3';
   const GHL_CUSTOM_MENU_URL = 'https://crm.gaiahealers.com/v2/location/WkKl1K5RuZNQ60xR48k6/custom-menu-link/328efaea-4e94-42ec-9ce2-4358a64657db';
-  const APP_VIEWS = new Set(['today', 'wellness', 'academy', 'community', 'profile', 'store']);
+  const APP_VIEWS = new Set(['today', 'journey', 'wellness', 'academy', 'community', 'events', 'bookings', 'inbox', 'profile', 'store']);
   const AUTH_HINT_KEYS = ['memberId', 'contactId', 'email', 'name', 'displayName', 'role', 'cohort', 'locationId', 'bridge', 'sharedSecret'];
   const AUTH_STATE = {
     authenticated: false,
@@ -1564,8 +1564,14 @@
           </div>
           <p class="gaia-auth-modal__body">Learning, community, membership, and personal guidance from the Gaia Healers network.</p>
           <nav class="gaia-menu-sheet__nav" aria-label="Gaia menu">
+            <a class="gaia-menu-sheet__link" href="home.html?view=journey" data-app-nav="journey">Journey <span>Continue →</span></a>
             <a class="gaia-menu-sheet__link" href="home.html?view=academy" data-app-nav="academy">Academy <span>Learn →</span></a>
             <a class="gaia-menu-sheet__link" href="home.html?view=community" data-app-nav="community">Community <span>Connect →</span></a>
+            <a class="gaia-menu-sheet__link" href="home.html?view=events" data-app-nav="events">Events <span>Gather →</span></a>
+            <a class="gaia-menu-sheet__link" href="home.html?view=bookings" data-app-nav="bookings">Bookings <span>Schedule →</span></a>
+            <a class="gaia-menu-sheet__link" href="home.html?view=inbox" data-app-nav="inbox">Inbox <span>Messages →</span></a>
+            <a class="gaia-menu-sheet__link" href="home.html?view=wellness" data-app-nav="wellness">Energy <span>Explore →</span></a>
+            <a class="gaia-menu-sheet__link" href="home.html?view=store" data-app-nav="store">Store <span>Shop →</span></a>
             <button type="button" class="gaia-menu-sheet__link" data-menu-membership>Membership <span>Explore →</span></button>
             <button type="button" class="gaia-menu-sheet__link" data-book-inline="https://calendly.com/nimafarshid/gaia-healers-meeting" data-book-title="Meet Dr. Nima Farshid">Meet the founder <span>Book →</span></button>
             <a class="gaia-menu-sheet__link" href="https://gaiapractitioners.com" target="_blank" rel="noopener">Find a practitioner <span>Browse →</span></a>
@@ -1728,7 +1734,6 @@
     function normalizeView(value) {
       const view = String(value || 'today').toLowerCase();
       if (view === 'home') return 'today';
-      if (view === 'events') return 'community';
       return APP_VIEWS.has(view) ? view : 'today';
     }
 
@@ -1772,11 +1777,15 @@
     function setDocumentTitle(view) {
       const labels = {
         today: 'Today',
+        journey: 'Journey',
         wellness: 'Energy',
         biowell: 'Energy',
         chakras: 'Energy',
         academy: 'Academy',
         community: 'Community',
+        events: 'Events',
+        bookings: 'Bookings',
+        inbox: 'Inbox',
         profile: 'Profile',
         store: 'Store',
         admin: 'Admin',
@@ -1945,18 +1954,7 @@
     if (!panel || panel.dataset.gaiaWellnessWired) return;
     panel.dataset.gaiaWellnessWired = '1';
 
-    const WELLNESS_TRENDS = {
-      '7d': {
-        labels: ['M', 'T', 'W', 'T', 'F', 'S', 'Today'],
-        values: [48, 52, 58, 65, 74, 80, 87],
-        avg: 82,
-      },
-      '30d': {
-        labels: ['W1', 'W2', 'W3', 'W4', 'Now'],
-        values: [68, 72, 76, 79, 87],
-        avg: 76,
-      },
-    };
+    const WELLNESS_TRENDS = {};
 
     let activeRange = '7d';
     const chartEl = panel.querySelector('[data-wellness-chart]');
@@ -1966,7 +1964,12 @@
 
     function renderTrendChart(range) {
       const trend = WELLNESS_TRENDS[range];
-      if (!chartEl || !trend) return;
+      if (!chartEl) return;
+      if (!trend) {
+        chartEl.innerHTML = '<p class="gaia-caption">Connect a supported Bio-Well source to display verified trends.</p>';
+        if (avgEl) avgEl.textContent = '—';
+        return;
+      }
       chartEl.innerHTML = trend.labels.map((label, index) => {
         const value = trend.values[index];
         const active = index === trend.labels.length - 1;
@@ -1995,9 +1998,9 @@
       const authenticated = Boolean(gaia.sync?.authenticated || gaia.sync?.memberResolved);
       const live = Boolean(wellness.liveData);
 
-      const energyIndex = wellness.energyIndex ?? 87;
-      const delta = wellness.deltaVsAvg ?? 5;
-      const avg7 = wellness.avg7Day ?? 82;
+      const energyIndex = live && wellness.energyIndex != null ? Number(wellness.energyIndex) : null;
+      const delta = live && wellness.deltaVsAvg != null ? Number(wellness.deltaVsAvg) : null;
+      const avg7 = live && wellness.avg7Day != null ? Number(wellness.avg7Day) : null;
 
       const energyEl = panel.querySelector('[data-wellness-energy-index]');
       const heroCopy = panel.querySelector('[data-wellness-hero-copy]');
@@ -2009,27 +2012,33 @@
       const coherenceEl = panel.querySelector('[data-wellness-coherence]');
       const badge = document.querySelector('[data-wellness-badge]');
 
-      if (energyEl) energyEl.textContent = String(energyIndex);
-      updateEnergyRing(energyIndex);
+      if (energyEl) energyEl.textContent = energyIndex == null ? '—' : String(energyIndex);
+      updateEnergyRing(energyIndex == null ? 0 : energyIndex);
       if (heroCopy) {
-        heroCopy.innerHTML = `Optimal for sessions · <span class="font-semibold text-gaia-dark">+${delta}</span> vs 7-day avg (${avg7})`;
+        heroCopy.textContent = live && delta != null && avg7 != null
+          ? `${delta >= 0 ? '+' : ''}${delta} vs 7-day average (${avg7})`
+          : 'No verified Bio-Well reading is connected yet.';
       }
-      if (stressEl && wellness.stress) stressEl.textContent = wellness.stress;
-      if (vitalityEl && wellness.vitality) vitalityEl.textContent = wellness.vitality;
-      if (coherenceEl && wellness.coherence != null) coherenceEl.textContent = `${wellness.coherence}%`;
-      if (insight && responses.scan) insight.textContent = responses.scan;
+      if (stressEl) stressEl.textContent = live && wellness.stress ? wellness.stress : '—';
+      if (vitalityEl) vitalityEl.textContent = live && wellness.vitality ? wellness.vitality : '—';
+      if (coherenceEl) coherenceEl.textContent = live && wellness.coherence != null ? `${wellness.coherence}%` : '—';
+      if (insight) insight.textContent = live && responses.scan
+        ? responses.scan
+        : 'Personal scan insights appear only from a verified device reading.';
 
-      const scansDone = Number(requirements.scansCompleted ?? wellness.scansCompleted ?? 14);
-      const scansReq = Number(requirements.scansRequired ?? wellness.scansRequired ?? 20);
+      const scansDone = Number(requirements.scansCompleted ?? wellness.scansCompleted ?? 0);
+      const scansReq = Number(requirements.scansRequired ?? wellness.scansRequired ?? 0);
       if (practicum && scansReq > 0) {
         practicum.innerHTML = `${scansDone} of ${scansReq} scans toward <strong class="text-ink">Advanced Level 1</strong>`;
       }
       if (practicumProgress && scansReq > 0) {
         practicumProgress.style.width = `${Math.round((scansDone / scansReq) * 100)}%`;
       }
+      if (practicum && scansReq <= 0) practicum.textContent = 'Practicum progress is available in your authorized Academy workspace.';
+      if (practicumProgress && scansReq <= 0) practicumProgress.style.width = '0%';
 
       if (badge) {
-        badge.textContent = live ? 'Live sync' : (authenticated ? 'Member · demo scans' : 'Demo data');
+        badge.textContent = live ? 'Live sync' : 'Device not connected';
         badge.classList.toggle('gaia-badge--live', live);
         badge.classList.toggle('gaia-badge--subtle', !live);
       }
@@ -2038,10 +2047,10 @@
         sourceNote.hidden = false;
         if (live) {
           sourceNote.textContent = 'Bio-Well scan readings synced from your device account.';
-        } else if (authenticated) {
-          sourceNote.textContent = 'Energy trends use sample readings. GHL tracks your courses and practicum scans — not live Bio-Well charts yet.';
         } else {
-          sourceNote.textContent = 'Sample wellness data shown. Log in for your practicum progress from Academy; live Bio-Well charts need device sync.';
+          sourceNote.textContent = authenticated
+            ? 'Your GHL member record is connected, but Bio-Well readings require a separate verified device integration.'
+            : 'Sign in for member access. Bio-Well charts remain empty until a verified device source is connected.';
         }
       }
 
@@ -4094,7 +4103,7 @@
       if (/\b(coaching|coach)\b/.test(t)) return { label: 'Book wellness coaching', url: 'https://api.leadconnectorhq.com/widget/form/gVzfo7sRfbLnMzQqSnJL' };
       if (/discovery|free call|consult/.test(t)) return { label: 'Book a free discovery call', url: 'https://api.leadconnectorhq.com/widget/form/mgf6oviyhPwrLBi03gzq' };
       if (/\bdemo\b/.test(t)) return { label: 'Book a Bio-Well demo', url: 'https://api.leadconnectorhq.com/widget/bookings/bio-welldemo' };
-      if (/\b(scan|book|booking|appointment|session)\b/.test(t)) return { label: 'Book a Bio-Well scan', url: 'https://api.leadconnectorhq.com/widget/bookings/scans' };
+      if (/\b(scan|book|booking|appointment|session)\b/.test(t)) return { label: 'Open bookings', view: 'bookings' };
       // Colour Energy shop cross-sell (chakra + a shopping word)
       if (/(chakra|colou?r energy)/.test(t) && /(spray|colou?r|product|shop|buy|balance|heal|align)/.test(t)) {
         const ch = ['root', 'sacral', 'solar', 'heart', 'throat', 'third', 'crown'].find((c) => t.includes(c));
@@ -4116,13 +4125,15 @@
       // Destinations — specific before the store/membership catch-alls
       if (/\b(event|ticket|elevate|register|conference|summit)\b/.test(t)) {
         const ev = window.GaiaMember?.event;
-        return ev?.sourceUrl ? { label: 'Register for the event', url: ev.sourceUrl } : { label: 'See the next event', view: 'today' };
+        return { label: 'Open events', view: 'events' };
       }
       if (/\b(course|courses|certif\w*|academy|class|lesson|training|learn)\b/.test(t)) return { label: 'Open Academy', view: 'academy' };
       if (/\b(community|communities|group|forum|discussion|circle)\b/.test(t)) return { label: 'Open Community', view: 'community' };
       if (/\b(member|membership|upgrade|silver|subscribe|subscription|tier|plan)\b/.test(t)) return { label: 'See membership', view: 'store', tab: 'membership' };
       if (/\b(product|products|device|buy|shop|store|purchase|bio-?well|biopulsar|biotekna|price|cost|spray|crystal)\b/.test(t)) return { label: 'Open the Store', view: 'store' };
       if (/\b(profile|account|my devices|my purchases|my bookings|my account|settings)\b/.test(t)) return { label: 'Open your Profile', view: 'profile' };
+      if (/\b(inbox|message|messages|conversation|notifications?)\b/.test(t)) return { label: 'Open Inbox', view: 'inbox' };
+      if (/\b(journey|continue|next step|what next)\b/.test(t)) return { label: 'Open your Journey', view: 'journey' };
       if (/\b(home|dashboard|main screen|start screen|the start)\b/.test(t)) return { label: 'Go Home', view: 'today' };
       return null;
     }

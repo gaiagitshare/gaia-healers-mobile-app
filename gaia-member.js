@@ -97,15 +97,16 @@ body.gaia-booking-open{overflow:hidden;}
   }
 
   async function loadMember() {
-    const [profile, access, appts, notif, devices, purchases, forms, courses, products] = await Promise.all([
+    const [profile, access, appts, notif, devices, purchases, forms, courses, products, activity, events] = await Promise.all([
       getJson('/api/member/profile'), getJson('/api/member/access'),
       getJson('/api/member/appointments'), getJson('/api/member/notifications'),
       getJson('/api/member/devices'), getJson('/api/member/purchases'),
       getJson('/api/member/forms'), getJson('/api/member/courses'),
-      getJson('/api/member/products'),
+      getJson('/api/member/products'), getJson('/api/member/activity'),
+      getJson('/api/member/events'),
     ]);
     state.authed = !!(profile && profile.ok && profile.authenticated);
-    state.data = { profile, access, appts, notif, devices, purchases, forms, courses, products };
+    state.data = { profile, access, appts, notif, devices, purchases, forms, courses, products, activity, events };
     document.dispatchEvent(new CustomEvent('gaia:member', { detail: state.data }));
     render();
   }
@@ -504,6 +505,7 @@ body.gaia-booking-open{overflow:hidden;}
   window.GaiaBooking = { open: openInApp, close: closeInApp };
 
   function renderHome() {
+    window.GaiaSuperApp?.render?.();
     renderChakraHero();
     const eventHero = el('home-event-hero');
     if (eventHero) eventHero.innerHTML = homeEventCard();
@@ -912,6 +914,7 @@ body.gaia-booking-open{overflow:hidden;}
     } else {
       state.event = null;
     }
+    document.dispatchEvent(new CustomEvent('gaia:event', { detail: { event: state.event, announcements: state.announcements } }));
     renderHome(); renderStore(); renderCommunity();
   }
 

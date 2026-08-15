@@ -192,6 +192,12 @@
     let setupWaiters = [];
     let holding = false;
     let maySendAudio = false;
+    let playbackGraceUntil = 0;
+    let localSpeechActive = false;
+    let speechCandidateAt = 0;
+    let localSilenceAt = 0;
+    let noiseFloor = 0.004;
+    let audioPrebuffer = [];
 
     const wsRef = { current: null };
     const streamRef = { current: null };
@@ -200,6 +206,7 @@
     const playbackCtxRef = { current: null };
     const playbackNodeRef = { current: null };
     const timeoutRef = { current: null };
+    const listenResumeRef = { current: null };
     const meterContextRef = { current: null };
     const meterRafRef = { current: null };
     const workletUrls = [];
@@ -342,6 +349,8 @@
       const pcm = new Int16Array(bytes.buffer);
       const float32 = new Float32Array(pcm.length);
       for (let i = 0; i < pcm.length; i += 1) float32[i] = pcm[i] / 32768;
+      const durationMs = (pcm.length / 24000) * 1000;
+      playbackGraceUntil = Math.max(Date.now(), playbackGraceUntil) + durationMs;
       playbackNodeRef.current.port.postMessage(float32);
     }
 
@@ -410,15 +419,18 @@
           systemInstruction: {
             parts: [{ text: meta.instructions || 'You are Gaia Assist for Gaia Healers.' }],
           },
-          // Tighter turn-taking so Gaia replies quickly after you stop talking
-          // (the default end-of-speech pause is what makes voice feel laggy).
+          // Balanced turn-taking: tolerate natural pauses and ordinary room
+          // noise instead of treating every small sound as a new turn.
           realtimeInputConfig: {
             automaticActivityDetection: {
-              startOfSpeechSensitivity: 'START_SENSITIVITY_HIGH',
-              endOfSpeechSensitivity: 'END_SENSITIVITY_HIGH',
-              prefixPaddingMs: 20,
-              silenceDurationMs: 500,
+              startOfSpeechSensitivity: 'START_SENSITIVITY_LOW',
+              endOfSpeechSensitivity: 'END_SENSITIVITY_LOW',
+              prefixPaddingMs: 180,
+              silenceDurationMs: 1250,
             },
+            // Background activity must never cut off Gaia mid-answer. The mic
+            // reopens after playback, and the user can still stop or pause it.
+            activityHandling: 'NO_INTERRUPTION',
           },
           // Expose in-app actions as callable tools. When a member asks to do
           // something, the model emits a functionCall; handleGeminiMessage runs
@@ -670,6 +682,17 @@
       setupWaiters = [];
       holding = false;
       maySendAudio = false;
+      playbackGraceUntil = 0;
+      localSpeechActive = false;
+      speechCandidateAt = 0;
+      localSilenceAt = 0;
+      noiseFloor = 0.004;
+      audioPrebuffer = [];
+
+      if (listenResumeRef.current != null) {
+        window.clearTimeout(listenResumeRef.current);
+        listenResumeRef.current = null;
+      }
 
       try { wsRef.current?.close(); } catch { /* ignore */ }
       wsRef.current = null;
@@ -710,7 +733,57 @@
       node.port.onmessage = (event) => {
         if (!event.data || event.data.type !== 'audio' || muted || !maySendAudio) return;
         if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) return;
-        const pcm = floatToPcm16(event.data.data);
+        const samples = event.data.data;
+        const now = Date.now();
+
+        // Keep the microphone logically closed while Gaia's audio is playing,
+        // including a short tail for speaker echo. It reopens automatically.
+        if (status === 'speaking' || now < playbackGraceUntil + 320) {
+          localSpeechActive = false;
+          speechCandidateAt = 0;
+          localSilenceAt = 0;
+          audioPrebuffer = [];
+          return;
+        }
+
+        let sum = 0;
+        for (let i = 0; i < samples.length; i += 1) sum += samples[i] * samples[i];
+        const rms = Math.sqrt(sum / Math.max(1, samples.length));
+        const startThreshold = Math.max(0.012, noiseFloor * 2.8);
+        const continueThreshold = Math.max(0.008, noiseFloor * 1.8);
+
+        if (!localSpeechActive) {
+          noiseFloor = Math.min(0.03, Math.max(0.0025, (noiseFloor * 0.985) + (Math.min(rms, 0.03) * 0.015)));
+          audioPrebuffer.push(samples.slice(0));
+          if (audioPrebuffer.length > 32) audioPrebuffer.shift();
+          if (rms >= startThreshold) {
+            if (!speechCandidateAt) speechCandidateAt = now;
+            if (now - speechCandidateAt >= 160) {
+              localSpeechActive = true;
+              localSilenceAt = 0;
+              audioPrebuffer.forEach(sendAudioSamples);
+              audioPrebuffer = [];
+            }
+          } else {
+            speechCandidateAt = 0;
+          }
+          return;
+        }
+
+        sendAudioSamples(samples);
+        if (rms >= continueThreshold) {
+          localSilenceAt = 0;
+        } else if (!localSilenceAt) {
+          localSilenceAt = now;
+        } else if (now - localSilenceAt >= 1700) {
+          localSpeechActive = false;
+          speechCandidateAt = 0;
+          localSilenceAt = 0;
+        }
+      };
+
+      function sendAudioSamples(samples) {
+        const pcm = floatToPcm16(samples);
         sendWs({
           realtimeInput: {
             audio: {
@@ -719,7 +792,7 @@
             },
           },
         });
-      };
+      }
       const source = ctx.createMediaStreamSource(stream);
       source.connect(node);
       captureCtxRef.current = ctx;
@@ -742,6 +815,10 @@
             setStatus('listening');
             break;
           case 'audio':
+            if (listenResumeRef.current != null) {
+              window.clearTimeout(listenResumeRef.current);
+              listenResumeRef.current = null;
+            }
             setStatus('speaking');
             void playPcmChunk(event.data).catch(() => undefined);
             break;
@@ -759,7 +836,13 @@
             break;
           case 'turnComplete':
             streamMessage = null;
-            setStatus('listening');
+            // Gemini can finish sending before the queued PCM finishes playing.
+            // Keep echo protection active through the actual playback tail.
+            if (listenResumeRef.current != null) window.clearTimeout(listenResumeRef.current);
+            listenResumeRef.current = window.setTimeout(() => {
+              listenResumeRef.current = null;
+              if (status !== 'idle' && status !== 'error') setStatus('listening');
+            }, Math.max(0, playbackGraceUntil + 360 - Date.now()));
             break;
           case 'toolCall': {
             // Run the requested tool locally, then send the result back so the
@@ -1036,7 +1119,11 @@
       streamRef.current?.getAudioTracks().forEach((track) => {
         track.enabled = !muted;
       });
-      if (muted) interruptPlayback();
+      if (muted) {
+        // Flush a partially captured turn before a long microphone pause, as
+        // required by Gemini Live automatic VAD.
+        sendWs({ realtimeInput: { audioStreamEnd: true } });
+      }
       return muted;
     }
 

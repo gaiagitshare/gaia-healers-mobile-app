@@ -319,69 +319,37 @@ body.gaia-booking-open{overflow:hidden;}
     try { return new URL(u, window.location.href).hostname.replace(/^www\./, ''); } catch (_) { return ''; }
   }
 
-  // Ask Safari/Firefox to grant this cross-origin iframe access to its own
-  // first-party storage. Resolves true if granted (or unsupported = best effort).
-  // Must be called from a user gesture (which openInApp is).
-  function requestStorageAccessForHost(host) {
-    return new Promise((resolve) => {
-      try {
-        const doc = document;
-        if (typeof doc.requestStorageAccess === 'function') {
-          // Modern API: per-host.
-          Promise.resolve(doc.requestStorageAccess(host)).then(() => resolve(true)).catch(() => resolve(false));
-          return;
-        }
-        if (typeof document.requestStorageAccess === 'function') {
-          Promise.resolve(document.requestStorageAccess()).then(() => resolve(true)).catch(() => resolve(false));
-          return;
-        }
-      } catch (_) {}
-      resolve(false);
-    });
-  }
-
   function openInApp(rawUrl, title) {
     const url = String(rawUrl || '').trim();
     if (!url) return;
     const host = hostOf(url);
     const isAuthPortal = AUTH_DEPENDENT_HOSTS.includes(host);
 
+    // GHL's portal owns its own authentication cookie. Opening it inside a
+    // cross-origin iframe makes that cookie third-party storage, which is
+    // blocked or partitioned by many mobile browsers. Course grant webhooks can
+    // also supply a contact-specific GHL magic-login URL; that URL must be
+    // opened as a top-level page so GHL can establish the member session and
+    // enforce the offer/course access attached to that contact.
+    if (isAuthPortal) {
+      const opened = window.open(url, '_blank', 'noopener,noreferrer');
+      if (!opened) window.location.assign(url);
+      return;
+    }
+
     // Calendly inline embeds use query flags; everything else embeds as-is.
     const embedUrl = url.includes('calendly.com')
       ? url + (url.includes('?') ? '&' : '?') + 'embed_logo=false&embed_type=Inline'
       : url;
 
-    // For auth-dependent portals, ask the browser to grant the iframe access to
-    // its own cookies BEFORE we render it. This is the modern (Safari 16.4+,
-    // Firefox 118+) way to make cross-domain iframes work in-app. If the user
-    // grants it, the portal can read its session cookie inside the modal.
-    if (isAuthPortal) {
-      requestStorageAccessForHost(host).finally(() => actuallyOpenInApp(url, embedUrl, title, isAuthPortal));
-    } else {
-      actuallyOpenInApp(url, embedUrl, title, isAuthPortal);
-    }
+    actuallyOpenInApp(url, embedUrl, title);
   }
 
-  function actuallyOpenInApp(url, embedUrl, title, isAuthPortal) {
+  function actuallyOpenInApp(url, embedUrl, title) {
     closeInApp();
     const lastTrigger = document.activeElement; // for focus restore on close
     inAppModal = document.createElement('div');
     inAppModal.className = 'gaia-booking-modal';
-    // The auth overlay is hidden initially — only shown if the iframe stays
-    // blank past a grace period (i.e. the portal couldn't establish a session).
-    const authOverlay = isAuthPortal
-      ? '<div class="gaia-booking-modal__auth" data-auth-overlay>'
-        + '<div class="gaia-booking-modal__auth-card">'
-        + '<p class="gaia-booking-modal__auth-title">' + (state.authed ? 'Secure Academy access' : 'Sign in to continue') + '</p>'
-        + '<p class="gaia-booking-modal__auth-body">' + (state.authed
-          ? 'Your Gaia membership is verified. Protected lesson content remains in the Academy workspace; this in-app view prevents the blank external portal page while that connection is restored.'
-          : 'Verify your Gaia email here in the app to see the courses and membership access connected to your account.') + '</p>'
-        + (state.authed
-          ? '<button type="button" class="gaia-btn gaia-btn--primary" data-portal-membership>View my membership →</button>'
-          : '<button type="button" class="gaia-btn gaia-btn--primary" data-portal-native-signin>Sign in securely →</button>')
-        + '<p class="gaia-booking-modal__auth-hint">You will stay inside the Gaia Healers app.</p>'
-        + '</div></div>'
-      : '';
     inAppModal.innerHTML =
       '<div class="gaia-booking-modal__backdrop" data-book-close></div>'
       + '<div class="gaia-booking-modal__sheet" role="dialog" aria-modal="true" aria-label="' + esc(title || 'Open') + '">'
@@ -390,10 +358,9 @@ body.gaia-booking-open{overflow:hidden;}
       + '<button type="button" class="gaia-booking-modal__close" data-book-close aria-label="Close">&times;</button>'
       + '</div>'
       + '<div class="gaia-booking-modal__body">'
-      + '<iframe ' + (isAuthPortal ? 'hidden ' : '') + 'src="' + esc(embedUrl) + '" title="' + esc(title || 'Content') + '" scrolling="yes" allow="camera; microphone; fullscreen; storage-access" loading="lazy"></iframe>'
-      + '<div class="gaia-booking-modal__loading"' + (isAuthPortal ? ' hidden' : '') + '><span class="gaia-booking-modal__spinner"></span>Loading…</div>'
-      + authOverlay
-      + (!isAuthPortal ? '<a class="gaia-booking-modal__fallback" href="' + esc(url) + '" target="_blank" rel="noopener noreferrer">Open in a new tab →</a>' : '')
+      + '<iframe src="' + esc(embedUrl) + '" title="' + esc(title || 'Content') + '" scrolling="yes" allow="camera; microphone; fullscreen" loading="lazy"></iframe>'
+      + '<div class="gaia-booking-modal__loading"><span class="gaia-booking-modal__spinner"></span>Loading…</div>'
+      + '<a class="gaia-booking-modal__fallback" href="' + esc(url) + '" target="_blank" rel="noopener noreferrer">Open in a new tab →</a>'
       + '</div></div>';
     document.body.appendChild(inAppModal);
     document.body.classList.add('gaia-booking-open');
@@ -428,27 +395,12 @@ body.gaia-booking-open{overflow:hidden;}
         const ld = inAppModal.querySelector('.gaia-booking-modal__loading');
         if (ld) ld.style.display = 'none';
       });
-      // For auth portals: if the iframe hasn't fired `load` after 4s (likely a
-      // blocked cookie / silent auth failure), surface the "Sign in" overlay so
-      // the user isn't stuck staring at a blank page. We DON'T auto-redirect —
-      // the user asked to stay in-app — but we make the path forward obvious.
-      if (!isAuthPortal) {
-        // Non-auth iframe (Calendly etc.): just promote the fallback if it's slow.
-        setTimeout(() => {
-          if (!inAppModal || loaded) return;
-          const fb = inAppModal.querySelector('.gaia-booking-modal__fallback');
-          if (fb) { fb.style.padding = '16px'; fb.style.fontWeight = '600'; fb.textContent = 'Taking a while? Open in a new tab →'; }
-        }, 8000);
-      }
+      setTimeout(() => {
+        if (!inAppModal || loaded) return;
+        const fb = inAppModal.querySelector('.gaia-booking-modal__fallback');
+        if (fb) { fb.style.padding = '16px'; fb.style.fontWeight = '600'; fb.textContent = 'Taking a while? Open in a new tab →'; }
+      }, 8000);
     }
-    inAppModal.querySelector('[data-portal-native-signin]')?.addEventListener('click', () => {
-      closeInApp();
-      window.GaiaAuth?.open?.();
-    });
-    inAppModal.querySelector('[data-portal-membership]')?.addEventListener('click', () => {
-      closeInApp();
-      window.GaiaAppShell?.go?.('store', { tab: 'membership' });
-    });
     inAppModal.querySelectorAll('[data-book-close]').forEach((el) => {
       el.addEventListener('click', closeInApp);
     });
@@ -470,12 +422,10 @@ body.gaia-booking-open{overflow:hidden;}
     const title = trigger.getAttribute('data-book-title') || trigger.getAttribute('data-in-app-title') || 'Open';
     openInApp(url, title);
   });
-  // Global interceptor: catch clicks on <a> links to embeddable external sites
-  // (the education portal, the practitioner directory, the event page) and open
-  // them in the in-app modal instead of a new tab. Domains verified embeddable
-  // (no X-Frame-Options restrictions). Shopify (gaiahealers.com) and the GHL CRM
-  // (crm.gaiahealers.com) are NOT intercepted — they block iframes and must
-  // open externally.
+  // Global interceptor: route supported external links through one safe opener.
+  // Public tools can use the in-app modal; authentication-dependent GHL links
+  // are promoted to a top-level tab by openInApp so their login cookie works.
+  // Shopify and the GHL CRM are not intercepted.
   const IN_APP_HOSTS = [
     'education.gaiahealers.com',
     'gaiapractitioners.com',
@@ -643,12 +593,9 @@ body.gaia-booking-open{overflow:hidden;}
 
   // Academy = honest course portal. Lesson progress isn't exposed by GHL, so we
   // deep-link into the portal instead of faking progress bars.
-  // ACCESS GATING: only paid members (Silver/Gold) or Practitioners see "Open"
-  //   on courses. Everyone else (signed-out OR signed-in free users) sees
-  //   "Get access" → buy membership, plus "Sign in" if not signed in.
-  //   This prevents free users from hitting the portal's login wall, which
-  //   happens because the app session and the GHL Client Portal session are
-  //   separate — only paid members should be sent there.
+  // ACCESS GATING: a course opens only when the signed-in contact has an exact
+  // GHL offer/course grant mirrored to Gaia. Tier labels never imply course
+  // authorization; GHL remains the source of truth for the actual grant.
   function renderAcademy() {
     const box = el('member-academy');
     if (!box) return;
@@ -660,6 +607,7 @@ body.gaia-booking-open{overflow:hidden;}
       ? grants.length + ' course' + (grants.length === 1 ? '' : 's') + ' available from your GHL access.'
       : (state.authed ? 'No course access is currently attached to your GHL account.' : 'Sign in to see your GHL course access.');
     const hub = courses.portalUrl || (portalBase() + '/courses/library-v2');
+    const academyEntry = grants.find((grant) => grant && grant.openUrl)?.openUrl || hub;
     const cat = (state.catalog && Array.isArray(state.catalog.courses) && state.catalog.courses.length)
       ? state.catalog.courses.slice().sort((a, b) => (Number(a.order) || 0) - (Number(b.order) || 0))
       : [];
@@ -699,8 +647,8 @@ body.gaia-booking-open{overflow:hidden;}
     const academyHead = hasAccess
       ? '<article class="g-card g-card--feature"><p class="g-card__label">Academy</p>'
         + '<p class="g-card__value g-card__value--lg">Continue learning</p>'
-        + '<p class="g-card__meta">These courses come directly from the access attached to your GHL contact. Lessons and certificates open in the Gaia Healers portal.</p>'
-        + '<div class="g-card__actions"><button type="button" class="g-btn g-btn--primary g-btn--sm" data-course-open="' + esc(hub) + '" data-course-title="Gaia Academy">Open Academy →</button></div></article>'
+        + '<p class="g-card__meta">These courses come directly from the access attached to your GHL contact. Lessons and certificates open securely in the Gaia Healers Academy.</p>'
+        + '<div class="g-card__actions"><button type="button" class="g-btn g-btn--primary g-btn--sm" data-course-open="' + esc(academyEntry) + '" data-course-title="Gaia Academy">Open Academy →</button></div></article>'
       : '<article class="g-card g-card--feature"><p class="g-card__label">Academy</p>'
         + '<p class="g-card__value g-card__value--lg">Learn & get certified</p>'
         + '<p class="g-card__meta">Sign in to see exactly what your GHL account can open. Gaia reflects your existing access; it does not assign a tier or course.</p>'

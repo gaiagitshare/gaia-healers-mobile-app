@@ -73,15 +73,29 @@
 
   function freeTools() {
     const tools = [
-      ['wellness', 'sparkle', 'Energy check', 'Birth chakra and today’s wellness'],
-      ['wellness', 'moon-stars', 'Horoscope', 'Your daily wellness guidance'],
-      ['wellness', 'circles-three-plus', 'Chakra match', 'Find your colour and products'],
+      ['wellness&tab=check', 'sparkle', 'Energy check', 'Today’s body point and practice'],
+      ['wellness&tab=horoscope', 'moon-stars', 'Horoscope', 'Your reflective daily guidance'],
+      ['wellness&tab=chakras', 'circles-three-plus', 'Chakra match', 'Explore centres and products'],
       ['profile&tool=colour', 'palette', 'Colour test', 'Five free questions'],
       ['events', 'calendar-dots', 'Events', 'Gatherings and live sessions'],
       ['store', 'bag', 'Gaia Store', 'Sprays, tools and memberships'],
     ];
     return '<section class="g-free-tools"><div class="g-super-section-head"><div><p class="g-super-kicker">Explore free</p><h2>Try Gaia today</h2></div></div><div class="g-free-tools__grid">'
       + tools.map((item) => '<a class="g-free-tool" href="home.html?view=' + item[0] + '"><span>' + icon(item[1]) + '</span><strong>' + esc(item[2]) + '</strong><small>' + esc(item[3]) + '</small></a>').join('')
+      + '</div></section>';
+  }
+
+  function discoverGaia() {
+    const items = [
+      ['heartbeat', 'Bio-Well demo', 'See energy technology in action', 'https://api.leadconnectorhq.com/widget/bookings/bio-welldemo'],
+      ['map-pin', 'Find a practitioner', 'Browse the verified Gaia directory', 'https://gaiapractitioners.com'],
+      ['flask', 'Bio-Well research', 'Explore Gaia’s public research library', 'https://gaiahealers.com/pages/bio-well-research'],
+      ['newspaper', 'Gaia articles', 'Read current wellness and technology insights', 'https://gaiahealers.com/blogs/news'],
+      ['book-open', 'Education & community', 'Start free or enter the learning portal', 'https://join.gaiahealers.com/'],
+      ['briefcase', 'Practitioner tools', 'Open CRM, software and practice support', 'https://nextlevel.gaiahealers.com/'],
+    ];
+    return '<section class="g-super-discover-gaia"><div class="g-super-section-head"><div><p class="g-super-kicker">Across Gaia Healers</p><h2>Discover the ecosystem</h2></div></div><div class="g-super-discover-gaia__grid">'
+      + items.map((item) => '<button type="button" class="g-super-resource" data-open-in-app="' + esc(item[3]) + '" data-in-app-title="' + esc(item[1]) + '"><span>' + icon(item[0]) + '</span><strong>' + esc(item[1]) + '</strong><small>' + esc(item[2]) + '</small>' + icon('arrow-up-right') + '</button>').join('')
       + '</div></section>';
   }
 
@@ -147,9 +161,10 @@
     root.innerHTML = '<div class="g-super-home">'
       + '<section class="g-super-hero"><div class="g-super-hero__intro"><p class="g-super-date">' + esc(dateLabel()) + '</p>'
       + '<h1>' + greeting + '</h1><p>' + (authed ? 'Your healing journey is waiting.' : 'What does your energy need today?') + '</p>'
-      + (authed ? journeyRail() + primaryMemberAction() : '<div class="g-super-discover"><a class="g-btn g-btn--primary" href="home.html?view=wellness">' + icon('sparkle') + ' Check my energy</a><button type="button" class="g-btn g-btn--secondary" data-gaia-open-assist>' + icon('microphone') + ' Ask Gaia</button></div>') + '</div><div class="g-super-hero__art" aria-hidden="true"></div></section>'
+      + (authed ? journeyRail() + primaryMemberAction() : '<div class="g-super-discover"><a class="g-btn g-btn--primary" href="home.html?view=wellness&tab=check">' + icon('sparkle') + ' Check my energy</a><button type="button" class="g-btn g-btn--secondary" data-gaia-open-assist>' + icon('microphone') + ' Ask Gaia</button></div>') + '</div><div class="g-super-hero__art" aria-hidden="true"></div></section>'
       + freeTools()
       + (authed ? '<section class="g-super-services"><div class="g-super-section-head"><div><p class="g-super-kicker">Your access</p><h2>Everything Gaia</h2></div><a href="home.html?view=journey">View journey</a></div><div class="g-super-services__grid">' + services + '</div></section>' : '')
+      + discoverGaia()
       + eventRow()
       + (!authed ? authPrompt(true) : '')
       + (authed ? '<section class="g-super-sync">' + icon('check-circle') + '<div><strong>Your access is synced</strong><span>Courses, communities, plans and purchases reflect your GHL member record.</span></div></section>' : '')

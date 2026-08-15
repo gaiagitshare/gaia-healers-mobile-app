@@ -5,7 +5,7 @@
  */
 (function () {
   'use strict';
-  const boxes = ['home-wellness', 'me-wellness'].map((id) => document.getElementById(id)).filter(Boolean);
+  const boxes = ['home-wellness', 'me-wellness', 'horoscope-wellness'].map((id) => document.getElementById(id)).filter(Boolean);
   if (!boxes.length) return;
 
   function proxyBase() {
@@ -113,6 +113,43 @@
       + '</section>';
   }
 
+  function energyCheckHtml() {
+    if (!state.signedUp) return publicHtml();
+    const t = state.today || {}; const pr = state.profile || {};
+    const bc = t.birthChakra || {}; const bp = t.bodyPoint || {};
+    return '<section class="g-well">'
+      + '<div class="g-well__welcome"><p class="g-card__label">Today’s energy check</p><p class="g-well__name">' + esc(pr.firstName || pr.name || 'Your day') + '</p></div>'
+      + memberBridgeHtml()
+      + energyCard(bc, 'Your birth chakra')
+      + '<article class="g-card g-daily-card" style="--ck:' + esc(bp.color || '#7DD956') + '">'
+      + '<p class="g-daily-card__kicker">Today’s body point</p>'
+      + '<p class="g-daily-card__title">' + esc(bp.chakra || '') + (bp.sanskrit ? ' · <span>' + esc(bp.sanskrit) + '</span>' : '') + '</p>'
+      + '<p class="g-daily-card__area">' + esc(bp.area || '') + '</p>'
+      + (bp.focus ? '<p class="g-daily-card__meta">Give attention to ' + esc(bp.focus) + '.</p>' : '')
+      + '</article>' + challengeHtml()
+      + '<button type="button" class="g-btn g-btn--ghost g-btn--sm g-well__signout" data-wsignout>Not you? Sign out</button></section>';
+  }
+
+  function horoscopeHtml() {
+    if (!state.signedUp) {
+      if (state.expandSignup) return signupFormHtml();
+      return '<article class="g-card g-well g-well--nudge">'
+        + '<p class="g-card__label">Your sign, your daily reflection</p>'
+        + '<p class="g-well__lead">Add your birth date once to unlock a <strong>wellness horoscope</strong> made for reflection, not prediction.</p>'
+        + '<div class="g-card__actions"><button type="button" class="g-btn g-btn--primary g-btn--sm" data-wexpand>Set up my horoscope →</button></div>'
+        + '<p class="g-hint">No scan or paid membership is required.</p></article>';
+    }
+    const t = state.today || {};
+    return '<section class="g-well">' + memberBridgeHtml()
+      + '<article class="g-card g-daily-card g-daily-card--horo g-horoscope-card">'
+      + '<div class="g-horoscope-card__mark" aria-hidden="true"><i class="ph ph-moon-stars"></i></div>'
+      + '<p class="g-daily-card__kicker">Today’s wellness horoscope' + (t.sunSign ? ' · ' + esc(t.sunSign) : '') + '</p>'
+      + '<p class="g-daily-card__tip">' + esc(t.tip || 'Your daily guidance is preparing.') + '</p>'
+      + '<p class="g-hint">Use this as a journaling prompt. It is not a medical or predictive reading.</p></article>'
+      + '<div class="g-card__actions"><button type="button" class="g-btn g-btn--secondary g-btn--sm" data-gaia-ask-horoscope>Ask Gaia about this guidance</button></div>'
+      + '<button type="button" class="g-btn g-btn--ghost g-btn--sm g-well__signout" data-wsignout>Not you? Sign out</button></section>';
+  }
+
   // ── 8-week chakra challenge ──────────────────────────────
   function challengeHtml() {
     const c = state.challenge || {};
@@ -164,7 +201,10 @@
   }
 
   function renderInto(box) {
-    box.innerHTML = state.signedUp ? signedUpHtml() : publicHtml();
+    const mode = box.dataset.wellnessMode || '';
+    box.innerHTML = mode === 'check' ? energyCheckHtml()
+      : mode === 'horoscope' ? horoscopeHtml()
+        : (state.signedUp ? signedUpHtml() : publicHtml());
     bind(box);
     // Show/hide the "Your day" section header: only when there is personalised
     // content to show (signed up). The compact reminder has its own mini-label.
@@ -218,6 +258,12 @@
     if (si) si.addEventListener('click', () => {
       const email = (state.linkedMember && state.linkedMember.email) || (state.profile && state.profile.email) || '';
       if (window.GaiaAuth && window.GaiaAuth.open) window.GaiaAuth.open(email);
+    });
+    const askHoroscope = box.querySelector('[data-gaia-ask-horoscope]');
+    if (askHoroscope) askHoroscope.addEventListener('click', () => {
+      window.dispatchEvent(new CustomEvent('gaia:open-assist', {
+        detail: { prompt: 'Help me reflect on today’s wellness horoscope and suggest one gentle action.' },
+      }));
     });
   }
 

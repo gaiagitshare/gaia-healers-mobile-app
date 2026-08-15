@@ -1745,12 +1745,12 @@
       let tab = params.get('tab') || '';
       if (rawView === 'biowell') {
         view = 'wellness';
-        tab = tab || 'biowell';
+        tab = tab || 'check';
       } else if (rawView === 'chakras') {
         view = 'wellness';
         tab = tab || 'chakras';
       } else if (view === 'wellness' && !tab) {
-        tab = 'biowell';
+        tab = 'check';
       } else if (view === 'community' && !tab) {
         tab = 'discussion';
       }
@@ -1759,7 +1759,7 @@
 
     function tabForView(view, tab) {
       if (view === 'community') return tab || 'discussion';
-      if (view === 'wellness') return tab || 'biowell';
+      if (view === 'wellness') return tab || 'check';
       return '';
     }
 
@@ -1795,7 +1795,7 @@
 
     function showView(view, options = {}) {
       if (view === 'biowell' || view === 'chakras') {
-        return showView('wellness', { ...options, tab: options.tab || view });
+        return showView('wellness', { ...options, tab: options.tab || (view === 'biowell' ? 'check' : view) });
       }
       let nextView = normalizeView(view);
       // Admin is protected by a server-side password (gaia-admin.js) — it's
@@ -1814,7 +1814,7 @@
         window.GaiaCommunityTabs?.activate(options.tab || 'discussion');
       }
       if (nextView === 'wellness') {
-        window.GaiaWellnessTabs?.activate(options.tab || 'biowell');
+        window.GaiaWellnessTabs?.activate(options.tab || 'check');
       }
       if (options.adminBlocked) {
         const lockedPanel = document.querySelector('[data-admin-locked]');
@@ -1827,7 +1827,7 @@
       syncAdminUi();
       const routeTab = options.tab || tabForView(nextView, options.tab);
       window.dispatchEvent(new CustomEvent('gaia:route', { detail: { view: nextView, tab: routeTab } }));
-      if (nextView === 'wellness' && (options.tab || 'biowell') === 'chakras') {
+      if (nextView === 'wellness' && (options.tab || 'check') === 'chakras') {
         requestAnimationFrame(() => requestAnimationFrame(() => refreshChakraMaps()));
       }
       return nextView;
@@ -1864,7 +1864,7 @@
       let tab = url.searchParams.get('tab') || '';
       if (view === 'biowell') {
         view = 'wellness';
-        tab = tab || 'biowell';
+        tab = tab || 'check';
       } else if (view === 'chakras') {
         view = 'wellness';
         tab = tab || 'chakras';
@@ -1901,7 +1901,8 @@
     const bar = document.getElementById('wellness-tabs');
     if (!bar) return;
     const panels = {
-      biowell: 'panel-biowell',
+      check: 'panel-energy',
+      horoscope: 'panel-horoscope',
       chakras: 'panel-chakras',
     };
     const badge = document.querySelector('[data-wellness-badge]');
@@ -1925,8 +1926,8 @@
         el.hidden = !on;
       });
       if (badge) {
-        badge.textContent = tab === 'chakras' ? '7 pts' : 'Connected';
-        badge.classList.toggle('gaia-badge--subtle', tab === 'chakras');
+        badge.textContent = tab === 'chakras' ? '7 pts' : tab === 'horoscope' ? 'Daily' : 'Energy';
+        badge.classList.toggle('gaia-badge--subtle', tab !== 'check');
       }
       if (tab === 'chakras') {
         requestAnimationFrame(() => requestAnimationFrame(() => refreshChakraMaps()));
@@ -1941,12 +1942,13 @@
     });
 
     window.GaiaWellnessTabs = {
-      activate(tab = 'biowell') {
-        const requestedButton = bar.querySelector(`[data-tab="${tab}"]`) || bar.querySelector('[data-tab="biowell"]');
+      activate(tab = 'check') {
+        const normalized = tab === 'biowell' ? 'check' : tab;
+        const requestedButton = bar.querySelector(`[data-tab="${normalized}"]`) || bar.querySelector('[data-tab="check"]');
         if (requestedButton) activateButton(requestedButton, false);
       },
     };
-    window.GaiaWellnessTabs.activate(new URLSearchParams(window.location.search).get('tab') || 'biowell');
+    window.GaiaWellnessTabs.activate(new URLSearchParams(window.location.search).get('tab') || 'check');
   }
 
   function initWellnessPanel() {
@@ -2430,14 +2432,16 @@
       if (AUTH_STATE.authenticated) {
         return [
           { label: 'My access', reply: assistant.responses?.academy, intent: 'access' },
-          { label: 'Find a course', reply: assistant.responses?.academy, intent: 'academy' },
+          { label: 'Today’s guidance', reply: assistant.responses?.scan, intent: 'energy' },
           { label: 'Book a session', reply: assistant.responses?.event, intent: 'booking' },
+          { label: 'Explore all Gaia', reply: assistant.responses?.scan, intent: 'ecosystem' },
         ];
       }
       return [
+        { label: 'Energy check', reply: assistant.responses?.scan, intent: 'energy' },
+        { label: 'Explore all Gaia', reply: assistant.responses?.scan, intent: 'ecosystem' },
         { label: 'Join free', reply: assistant.responses?.ghl, intent: 'join-free' },
         { label: 'Memberships', reply: assistant.responses?.ghl, intent: 'membership' },
-        { label: 'Sign in', reply: assistant.responses?.academy, intent: 'sign-in' },
       ];
     }
 
@@ -2472,11 +2476,18 @@
         ghl: responses.ghl,
         services: responses.event,
         voice: responses.scan,
+        ecosystem: 'Gaia includes Energy Studio, Academy, practitioner communities, events, bookings, memberships and the live store — plus Bio-Well research, articles, demos, the practitioner directory, certification, affiliate access and practitioner software. Tell me what you want and I’ll open the verified source.',
         general: null,
       };
       if (intentReplies[intent]) return intentReplies[intent];
 
       const normalized = `${intent} ${prompt}`.toLowerCase();
+      if (/research|study|studies|article|blog|scientific/.test(normalized)) {
+        return 'Gaia Healers has a public Bio-Well research library plus current wellness and technology articles. I can open the verified research page or the Gaia articles for you.';
+      }
+      if (/affiliate|marketplace|software|contact|support|practitioner tools?/.test(normalized)) {
+        return 'I can open the verified Gaia destination for affiliate access, practitioner CRM/software/marketplace, certification requests, or contact support. Which one do you need?';
+      }
       if (/service|what do you do|device|bio-well|biowell|scan|chakra|energy/.test(normalized)) {
         return responses.scan || responses.event || 'Gaia Healers connects Bio-Well, certification, communities, and Elevate event operations.';
       }
@@ -2504,7 +2515,7 @@
         const firstName = fullName.split(/\s+/)[0] || 'there';
         return `Welcome back, ${firstName}. I’m Gaia Assist. I can help open your GHL-linked courses and communities, check your membership access, book a session, or guide you anywhere in the app. What would you like to do?`;
       }
-      return 'Welcome to Gaia Healers. I’m Gaia Assist. I can help you explore, join free, compare memberships, sign in, find a practitioner, or book a session. What brings you here today?';
+      return 'Welcome to Gaia Healers. I’m Gaia Assist. I can guide you through every app feature and verified Gaia resource — energy tools, products, learning, events, research, practitioners, membership, bookings, and support. What brings you here today?';
     }
 
     function liveWelcomePrompt() {
@@ -2521,7 +2532,7 @@
         const firstName = fullName.split(/\s+/)[0] || 'there';
         return `Welcome back, ${firstName}. I'm Gaia Assist. I can help with your access, courses, communities, membership, bookings, and anything on the ${currentAssistView()} screen. What would you like to do?`;
       }
-      return `Welcome to Gaia Healers. I'm Gaia Assist. I can help you explore, join free, compare memberships, sign in, find a practitioner, or book a session. What brings you here today?`;
+      return `Welcome to Gaia Healers. I'm Gaia Assist. I can guide you through every app feature and verified Gaia resource — energy tools, products, learning, events, research, practitioners, membership, bookings, and support. What brings you here today?`;
     }
 
     function ensureBrowserVoices() {
@@ -4128,7 +4139,16 @@
       if (/(join|start|begin|enroll|do)[^.]{0,20}(8[- ]?week|chakra challenge|challenge)/.test(t)) return { label: 'Join the 8-week challenge', view: 'wellness', run: () => window.GaiaWellness?.joinChallenge?.() };
       if (/(8[- ]?week|chakra challenge|\bchallenge\b)/.test(t)) return { label: 'Open the Chakra Challenge', view: 'wellness' };
       if (/(sign\s*(?:me\s*)?up|register|unlock)[^.]{0,24}(wellness|daily|horoscope|chakra|body point)|(wellness|daily|horoscope)[^.]{0,16}(sign\s*(?:me\s*)?up|register)/.test(t)) return { label: 'Start your wellness sign-up', view: 'wellness', run: () => window.GaiaWellness?.focusSignup?.() };
-      if (/(energy|daily chart|energy chart|horoscope|body point|wellness tip|my chakra|birth chakra|chakra reading|daily wellness|aura)/.test(t)) return { label: 'Open Energy', view: 'wellness' };
+      if (/horoscope|sun sign|daily guidance/.test(t)) return { label: 'Open your horoscope', view: 'wellness', tab: 'horoscope' };
+      if (/chakra match|seven centres?|seven centers?|chakra guide|match my chakra/.test(t)) return { label: 'Open Chakra match', view: 'wellness', tab: 'chakras' };
+      if (/(energy check|daily chart|energy chart|body point|birth chakra|daily wellness|aura)/.test(t)) return { label: 'Open Energy check', view: 'wellness', tab: 'check' };
+      // Verified public Gaia ecosystem resources.
+      if (/\bresearch\b|scientific studies|study library/.test(t)) return { label: 'Open Bio-Well research', url: 'https://gaiahealers.com/pages/bio-well-research' };
+      if (/\b(blog|blogs|articles|wellness insights|read more)\b/.test(t)) return { label: 'Open Gaia articles', url: 'https://gaiahealers.com/blogs/news' };
+      if (/\b(affiliate|referral partner|become an affiliate)\b/.test(t)) return { label: 'Become an affiliate', url: 'https://af.uppromote.com/gaia/register' };
+      if (/request certification|certification request|submit certification/.test(t)) return { label: 'Request certification', url: 'https://form.jotform.com/250512881268055' };
+      if (/\b(crm|practice software|practitioner software|marketplace)\b/.test(t)) return { label: 'Open practitioner tools', url: 'https://gaiapractitioners.com' };
+      if (/\b(contact|support|help desk|email gaia)\b/.test(t)) return { label: 'Contact Gaia Healers', url: 'https://gaiahealers.com/pages/contact-us' };
       // Destinations — specific before the store/membership catch-alls
       if (/\b(event|ticket|elevate|register|conference|summit)\b/.test(t)) {
         const ev = window.GaiaMember?.event;

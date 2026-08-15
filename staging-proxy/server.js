@@ -204,6 +204,20 @@ const GAIA_KNOWLEDGE = {
     'A directory to find certified practitioners.',
     'Public resources from gaiahealers.com: product collections, Bio-Well research, practitioner certification requests, blogs, affiliate access, Bio-Well demos, GaiaPractitioners CRM/software/marketplace, education, community, contact, and Dr. Nima’s story.',
   ],
+  publicResources: [
+    'Live store and product collections: https://gaiahealers.com/collections — includes Bio-Well, BioPulsar, BioTekna, Colour Energy, courses, crystals, HealeeX, water, sound, supplements and other current collections. Prices and availability must be checked live; never quote a remembered price as current.',
+    'Bio-Well demo booking: https://api.leadconnectorhq.com/widget/bookings/bio-welldemo.',
+    'Find a Practitioner directory: https://gaiapractitioners.com.',
+    'Bio-Well research: https://gaiahealers.com/pages/bio-well-research.',
+    'Gaia articles and wellness insights: https://gaiahealers.com/blogs/news.',
+    'Free community and ecosystem orientation: https://join.gaiahealers.com/.',
+    'Practitioner education and community portal: https://education.gaiahealers.com.',
+    'Bio-Well Level 1 certificate request: https://form.jotform.com/250512881268055.',
+    'Affiliate registration: https://af.uppromote.com/gaia/register.',
+    'Practitioner CRM, software and marketplace: https://gaiapractitioners.com and https://nextlevel.gaiahealers.com.',
+    'Contact Gaia Healers: https://gaiahealers.com/pages/contact-us.',
+    'Elevate Conference: https://elevate.gaiahealers.com.',
+  ],
   devices: [
     'Bio-Well 3.0 — biofield / GDV imaging for stress and energy assessment (plus Sputnik, Glove, Water Sensor, and Bio Cor accessories).',
     'BioPulsar — aura and chakra imaging.',
@@ -236,21 +250,23 @@ const GAIA_KNOWLEDGE = {
       'Events (view=events): the confirmed public Gaia event plus authenticated member appointments; unavailable community live-session feeds are never invented.',
       'Bookings (view=bookings): real GHL appointments plus verified Gaia booking forms.',
       'Inbox (view=inbox): read-only GHL conversation summaries for the authenticated contact.',
-      'Energy (view=wellness): public wellness guidance with the birth-date chakra chart and interactive seven-centre guide. It does not require sign-in. It is wellness guidance, not medical advice.',
+      'Energy Studio (view=wellness): three distinct public tools. Energy Check (tab=check) uses the saved birth-date profile for today’s body point and chakra practice; Wellness Horoscope (tab=horoscope) is a reflective daily prompt based on the saved birth date and sun sign; Chakra Match (tab=chakras) is the interactive seven-centre guide with relevant Colour Energy support. These are wellness reflection tools, not medical advice or device scans.',
       'Academy (view=academy, opened from the top Menu): courses and certification. It opens the education.gaiahealers.com portal for the actual lessons and never shows fake progress.',
       'Community (view=community, opened from the top Menu): "My Access" — which communities you have unlocked versus still locked — plus Find a Practitioner. Communities: All Gaia Healers, Bio-Well, BioPulsar, BioTekna, ASEA, BrainTap, LifeWave, Golden Practitioner.',
       'Store (view=store): two tabs — Shop (the live Shopify catalogue by category: Featured, Colour Energy, Courses, Bio-Well, BioPulsar, BioTekna, Crystals; tapping a product opens its image, description, and purchase action in a native in-app sheet; Shopify opens only for the final current-price and secure-payment step) and Membership (the official Free / Silver / Gold / Diamond Gaia 2.0 tiers).',
       'Profile (view=profile, bottom-right): your account — devices, purchases, bookings, messages, membership status, booking tools, and the Colour Personality Test.',
     ],
     features: [
-      'Birth-date chakra chart — free on Energy; enter your birth date to see your chakra focus.',
+      'Energy Check — free at view=wellness&tab=check; enter your birth date to see the birth chakra, today’s body point and challenge practice.',
+      'Wellness Horoscope — free at view=wellness&tab=horoscope; a reflective prompt based on the saved birth date and sun sign, not a prediction.',
+      'Chakra Match — free at view=wellness&tab=chakras; an interactive seven-centre guide with matching Colour Energy support.',
       'Wellness sign-up (name, birth date, location, email) — unlocks your daily body-point and a daily wellness horoscope tip.',
       '8-Week Chakra Challenge — join, then check in daily; one chakra per week with a practice and an affirmation.',
       'Book a session — a Bio-Well energy scan, a Bio-Well demo, a free discovery call, or wellness coaching (real booking links).',
       'Colour Personality Test — 5 questions reveal your chakra colour and suggest the matching Colour Energy spray.',
       'Find a Healer — opens gaiapractitioners.com to browse certified practitioners.',
     ],
-    navigation: 'To guide someone, use the exact current structure: bottom Today, Journey, Gaia Assist, Inbox, Profile; top Menu for Journey, Academy, Community, Events, Bookings, Inbox, Energy, Store, Membership, Meet the Founder, Find a Practitioner, and sign-in. Deep links: home.html?view=today|journey|academy|community|events|bookings|inbox|wellness|store|profile (Store also takes &tab=shop or &tab=membership). Keep people inside the app; only send them to education.gaiahealers.com for actual course videos, community discussions, or portal login.',
+    navigation: 'To guide someone, use the exact current structure: bottom Today, Journey, Gaia Assist, Inbox, Profile; top Menu for Journey, Academy, Community, Events, Bookings, Inbox, Energy, Store, Membership, Meet the Founder, Find a Practitioner, and sign-in. Deep links: home.html?view=today|journey|academy|community|events|bookings|inbox|wellness|store|profile. Energy tabs: &tab=check|horoscope|chakras. Store tabs: &tab=shop|membership. Keep people inside the app; only send them to education.gaiahealers.com for actual course videos, community discussions, or portal login.',
   },
   signIn: 'In-app sign-in: on Home use Member access, or open the top Menu and tap Member sign in. Enter your member email and receive a one-tap sign-in link by email; tapping it signs you into your member area. Course videos and community discussions live in the separate education.gaiahealers.com portal, which has its own login.',
   safety: [
@@ -267,6 +283,7 @@ function gaiaKnowledgePrompt() {
     `About Gaia Healers: ${K.brand}`,
     `Ecosystem (these are different sites — do not confuse them):\n- ${K.ecosystem.join('\n- ')}`,
     `What Gaia Healers offers:\n- ${K.services.join('\n- ')}`,
+    `Verified public resources:\n- ${K.publicResources.join('\n- ')}`,
     `Devices & products:\n- ${K.devices.join('\n- ')}`,
     `Communities (8): ${K.communities.join(', ')}.`,
     `Membership: ${K.memberships}`,
@@ -2352,13 +2369,13 @@ function buildGaiaLiveInstructions(context = {}) {
       : 'VISITOR JOURNEY: welcome them, discover whether they want to explore, join free, compare memberships, sign in, find a practitioner, or book a session, then guide them to that exact next step. Do not imply they have an account, tier, course, or community access. If they already belong, offer sign-in with the email on their GHL contact.',
     'Speak in a calm, friendly, natural voice, like a helpful friend on a phone call. Keep replies short: one or two sentences, then a quick question or a clear next step. Give more detail only when asked.',
     'Be proactive and specific: ask one short intent question when needed, tell them exactly where to go (for example "Open the Store and tap Membership" or "Go to Community to find a healer"), and after each answer or tool action offer the natural next step.',
-    'You can help with anything in the app: Home (the dynamically fetched next event and member access), Energy (public birth-date chakra chart and interactive seven-centre guide), Academy (courses via the education portal), Community (which communities are unlocked and Find a Practitioner), Store (Shop and the official Gaia 2.0 Free/Silver/Gold/Diamond membership paths), and Profile (account, devices, purchases, bookings, founder access, and the colour test). If you are unsure of a live number or detail, say so plainly instead of inventing one.',
+    'You can help with anything in the app and verified Gaia ecosystem: Today, Journey, the three Energy Studio tools, Academy, Community, Events, Bookings, Inbox, Store, Membership and Profile, plus Bio-Well research, articles, demos, the practitioner directory, certification requests, affiliate access, CRM/software/marketplace, contact and the Elevate conference. If a live number, price, inventory count or member fact is not in the supplied context, say so plainly and open the correct live source instead of inventing one.',
     'Keep members in-app first. Course videos and community discussions open the separate education.gaiahealers.com portal, which has its own login — mention it only when they want the actual lessons or discussions, or need to sign in.',
     'Never narrate your reasoning, planning, hidden analysis, or drafting process. Do not say phrases like "I have crafted", "I am refining", or "finalizing".',
     'When asked to say exact words, say only those words and no extra explanation.',
     'Never claim you saved, booked, bought, imported, emailed, checked in, or changed anything. Explain how the member can do it instead.',
     'Do not diagnose or make medical claims.',
-    'You have a navigate tool. When a member asks to go to, open, show, see, or view a specific screen, tab, or feature — call the navigate tool to actually move them there. Examples: "show today’s event" → navigate(screen=today); "open my energy chart" → navigate(screen=wellness); "take me to my courses" → navigate(screen=academy); "open the store" → navigate(screen=store); "show me membership options" → navigate(screen=store, tab=membership); "go to my profile" → navigate(screen=profile); "find a practitioner" → navigate(screen=community). Navigation is the start of helping on that screen, not the finish: point out what is now available and keep listening.',
+    'You have a navigate tool. When a member asks to open a screen or feature, call it. Energy routes are distinct: energy/body point → navigate(screen=wellness, tab=check); horoscope/daily guidance → navigate(screen=wellness, tab=horoscope); chakra match/seven centres → navigate(screen=wellness, tab=chakras). Other examples: event → events; session → bookings; messages → inbox; course → academy; community/practitioner access → community; shop → store; membership → store/membership; profile → profile. Navigation is the start of helping, not the finish: explain what is available there and keep listening.',
     'You also have action tools. Use them to actually do things for the member, not just describe how. book_session: when the member asks to book, schedule, or reserve something — "book a call with Dr. Nima" or "I want to meet the founder" → book_session(session=nima); "book a Bio-Well scan" → book_session(session=scan); "I want a demo" → book_session(session=demo); "book a discovery call" → book_session(session=discovery); "schedule coaching" → book_session(session=coaching). It opens the real booking form (Nima uses Calendly, the others use GHL widgets); tell them to complete it there. open_community: when the member asks to open or visit a community — "open the Bio-Well community" → open_community(community=biowell); "take me to BioPulsar" → open_community(community=biopulsar); "all gaia healers group" → open_community(community=all-gaia). Some open directly, others open in the portal. open_portal: when the member wants the portal itself — "open the portal" → open_portal(section=home); "open my courses in the portal" → open_portal(section=courses); "portal login" → open_portal(section=login). sign_in: when the member says they want to sign in, log in, or access their account and they are not signed in — "sign me in" → sign_in(). Never call sign_in if the member is already signed in. After ANY action tool, STAY ENGAGED: confirm what you opened, then guide them through the next step and keep listening. Do not go silent after opening something — the conversation continues until the member says goodbye.',
     'This is an ongoing conversation, not a single request-response. After every action — navigating, opening a booking form, opening a community, signing in — you are STILL their assistant on that screen. Keep helping: point out what they can do, answer follow-ups, navigate elsewhere if asked, and only go quiet when the member clearly ends the conversation. Never end your turn with just a confirmation and silence; end with either a useful observation about what is now on screen, or a concrete next step they can take, or a question.',
     'Start every new visit with one warm, short welcome suited to visitor or signed-in-member status. Offer two or three relevant paths, ask what they want, and stay with them until they finish.',
@@ -3341,11 +3358,29 @@ async function authEmbeddedClaim(req, res, origin) {
 
 function fallbackAssistReply(prompt, intent = '') {
   const normalized = `${intent} ${prompt}`.toLowerCase();
+  if (normalized.includes('difference') && (normalized.includes('bio-well') || normalized.includes('biowell')) && normalized.includes('biopulsar') && normalized.includes('biotekna')) {
+    return 'Bio-Well uses electrophotonic imaging for biofield and stress-oriented assessment; BioPulsar shows live aura, chakra and organ-zone biofeedback; BioTekna focuses on nervous-system, stress, recovery and physiology-related measurements. Open the Store for current device details or ask which goal you have.';
+  }
+  if ((normalized.includes('bio-well') || normalized.includes('biowell')) && normalized.includes('research')) {
+    return 'Bio-Well is Gaia Healers’ electrophotonic biofield-imaging system. Gaia maintains a public Bio-Well research library at gaiahealers.com/pages/bio-well-research; use research as background information, not personal medical diagnosis.';
+  }
+  if (normalized.includes('join free') || normalized.includes('free member') || normalized.includes('free membership')) {
+    return 'Open the Store’s Membership tab and choose Free, or use Join free on Today. Enrol with the same email you will use for your Gaia Member Pass so GHL can connect your access.';
+  }
+  if (normalized.includes('crm') || normalized.includes('software') || normalized.includes('marketplace') || normalized.includes('affiliate') || normalized.includes('contact support') || normalized.includes('certification request')) {
+    return 'Gaia’s verified public tools include practitioner CRM at nextlevel.gaiahealers.com, software and marketplace through GaiaPractitioners, affiliate registration, certification requests, and the contact page. Tell me which one and I’ll point you to the exact source.';
+  }
   if (normalized.includes('book') || normalized.includes('scan') || normalized.includes('appointment') || normalized.includes('session') || normalized.includes('demo')) {
     return 'You can book a session from the Home screen — there are options for a Bio-Well energy scan, a Bio-Well demo, a free discovery call, and wellness coaching. Want me to point you to the right one?';
   }
+  if (normalized.includes('horoscope') || normalized.includes('sun sign')) {
+    return 'Open Energy Studio and choose Horoscope for today’s reflective wellness prompt based on your saved birth date and sun sign. It is guidance for reflection, not prediction or medical advice.';
+  }
+  if (normalized.includes('chakra match') || normalized.includes('seven centre') || normalized.includes('seven center')) {
+    return 'Open Energy Studio and choose Chakra match to explore all seven centres and the matching Colour Energy support. You can tap any centre without signing in.';
+  }
   if (normalized.includes('chakra') || normalized.includes('wellness') || normalized.includes('energy') || normalized.includes('chart') || normalized.includes('colour') || normalized.includes('color')) {
-    return 'Open Energy for the public birth-date chakra chart and interactive seven-centre guide. The Colour Personality Test is in Profile. Which would you like?';
+    return 'Energy Studio has three separate tools: Energy check for today’s body point and practice, Horoscope for reflective daily guidance, and Chakra match for the seven-centre guide. The five-question Colour Test is in Profile.';
   }
   if (normalized.includes('community') || normalized.includes('membership') || normalized.includes('healer') || normalized.includes('practitioner')) {
     return 'Community shows which Gaia circles you have unlocked and links to the practitioner directory. The Store’s Membership tab shows the official Free, Silver, Gold, and Diamond Gaia 2.0 paths and opens enrolment inside the app. Want me to guide you there?';
@@ -3359,7 +3394,10 @@ function fallbackAssistReply(prompt, intent = '') {
   if (normalized.includes('event') || normalized.includes('elevate') || normalized.includes('conference')) {
     return 'The Gaia Healers Elevate Conference 2026 is November 20-22 at Rosen Shingle Creek in Orlando. You can see it on the Home screen and register from there.';
   }
-  return 'I can help with Home events, Energy guidance, Academy courses, Community, Gaia 2.0 membership, the Store, Profile, practitioners, bookings, or meeting the founder. What would you like to do?';
+  if (normalized.includes('research') || normalized.includes('blog') || normalized.includes('article') || normalized.includes('contact')) {
+    return 'I can open the verified Gaia source for Bio-Well research, articles, affiliate access, practitioner CRM/software/marketplace, certification requests, or contact support. Tell me which one you need.';
+  }
+  return 'I can help across the full Gaia ecosystem: Energy Studio, Academy, Community, events, bookings, membership, live products, practitioners, research, articles, demos, certification, practitioner tools, contact, or Dr. Nima. What would you like to explore?';
 }
 
 function assistSystemPrompt(memberContext = '') {
@@ -3369,7 +3407,7 @@ function assistSystemPrompt(memberContext = '') {
       ? 'This is a signed-in member. Personalize only from the supplied member context. Treat active GHL subscriptions/offers as primary tier evidence and tags as secondary. Show courses and communities only from exact GHL entitlements; never infer them from tier.'
       : 'This is a visitor unless they say otherwise. Help them explore, join free, compare memberships, sign in with their GHL-contact email, find a practitioner, or book a session. Never imply they already own access.',
     'Answer with deep, accurate awareness of the Gaia Healers app screens and features, the products and devices, the communities and membership, the courses, the events, and the store.',
-    'The app can run embedded inside the Gaia Healers GHL menu. Keep users inside the app first: Today for free energy tools and events, Journey for Learn-Practice-Connect, Energy for chakra and horoscope guidance, Store for products and plans, Bookings for real sessions, and Profile for the GHL-linked Member Pass. Course videos and community discussions open the authorized education.gaiahealers.com portal.',
+    'The app can run embedded inside the Gaia Healers GHL menu. Keep users inside the app first: Today for free tools and verified ecosystem links, Journey for Learn-Practice-Connect, Energy Studio for the distinct Energy Check / Horoscope / Chakra Match tabs, Store for live products and plans, Bookings for real sessions, and Profile for the GHL-linked Member Pass. Course videos and community discussions open the authorized education.gaiahealers.com portal.',
     'When asked how to do something, name the exact screen and step. Never invent course progress, scan numbers, community posts, prices, or personal history.',
     'Never claim that you saved, imported, checked in, emailed, booked, purchased, or changed data. Explain how the member can do it.',
     'Keep responses concise, practical, warm, proactive, and wellness-safe. End with one useful next step or a short question, and continue helping until they are finished. Do not provide medical diagnosis.',

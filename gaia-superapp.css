@@ -197,9 +197,11 @@ body.gaia-v2 .gaia-tabbar__assist-icon { font-size: 27px; }
   body.gaia-v2 .gaia-tabbar__group { width: 100%; display: contents; }
   body.gaia-v2 .gaia-tabbar__link { width: 100%; min-height: 68px; flex: 0 0 auto; display: flex; flex-direction: column; gap: 6px; padding: 10px 4px; }
   body.gaia-v2 .gaia-tabbar__label { display: block !important; font-size: 10px !important; }
-  body.gaia-v2 .gaia-tabbar__assist { order: 2; width: 60px; height: 60px; margin: 8px auto; flex: none; }
-  body.gaia-v2 .gaia-tabbar__group--left { order: 1; }
-  body.gaia-v2 .gaia-tabbar__group--right { order: 3; }
+  body.gaia-v2 .gaia-tabbar__group--left .gaia-tabbar__link:nth-child(1) { order: 1; }
+  body.gaia-v2 .gaia-tabbar__group--left .gaia-tabbar__link:nth-child(2) { order: 2; }
+  body.gaia-v2 .gaia-tabbar__assist { order: 3; width: 60px; height: 60px; margin: 8px auto; flex: none; }
+  body.gaia-v2 .gaia-tabbar__group--right .gaia-tabbar__link:nth-child(1) { order: 4; }
+  body.gaia-v2 .gaia-tabbar__group--right .gaia-tabbar__link:nth-child(2) { order: 5; }
   body.gaia-v2 .g-topbar { padding-left: max(30px, calc((100vw - 112px - 1240px) / 2)); padding-right: max(30px, calc((100vw - 112px - 1240px) / 2)); }
   .gaia-tabbar__badge { top: 5px; right: 18px; }
 }

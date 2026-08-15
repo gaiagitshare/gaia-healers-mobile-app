@@ -2282,7 +2282,8 @@
             </div>
           </form>
           <div class="gaia-assist__toolbar">
-            <p class="gaia-assist__hint-line">Speak naturally · tap Gaia again to close</p>
+            <p class="gaia-assist__hint-line">Speak naturally · Gaia waits through short pauses</p>
+            <button type="button" class="gaia-assist__listen-toggle" aria-pressed="false"><i class="ph ph-microphone-slash" aria-hidden="true"></i><span>Pause listening</span></button>
           </div>
           <div class="gaia-assist__error" role="alert" hidden>
             <span class="gaia-assist__error-text"></span>
@@ -2308,6 +2309,7 @@
     const mic = root.querySelector('.gaia-assist__mic');
     const status = root.querySelector('.gaia-assist__status');
     const soundToggle = root.querySelector('.gaia-assist__sound-toggle');
+    const listenToggle = root.querySelector('.gaia-assist__listen-toggle');
     const transcript = root.querySelector('.gaia-assist__transcript');
     const routeBox = root.querySelector('.gaia-assist__route');
     const chips = root.querySelector('.gaia-assist__chips');
@@ -3115,7 +3117,7 @@
       holding: 'Listening…',
       listening: 'Listening… speak naturally',
       thinking: 'Gaia is thinking…',
-      speaking: 'Gaia is speaking…',
+      speaking: 'Gaia is speaking… listening pauses automatically',
       error: 'Voice unavailable — type your question',
     };
 
@@ -3410,6 +3412,9 @@
         setAssistVoiceState(nextStatus, REALTIME_STATUS_COPY[nextStatus] || REALTIME_STATUS_COPY.idle);
         if (nextStatus === 'speaking') {
           void realtimeVoice.resumePlayback();
+        }
+        if (listenToggle && !realtimeVoice.muted) {
+          listenToggle.disabled = nextStatus === 'connecting';
         }
         if ((nextStatus === 'listening' || nextStatus === 'ready') && !realtimeWelcomeSent && !panel.hidden) {
           window.setTimeout(() => sendRealtimeWelcome('status-ready'), 120);
@@ -4070,6 +4075,19 @@
     root.querySelector('[data-gaia-orb-tap]')?.addEventListener('click', (event) => {
       event.stopPropagation();
       onAssistTap();
+    });
+    listenToggle?.addEventListener('click', () => {
+      if (!realtimeVoice?.isActive()) {
+        void onAssistTap();
+        return;
+      }
+      const paused = realtimeVoice.toggleMute();
+      listenToggle.classList.toggle('is-paused', paused);
+      listenToggle.setAttribute('aria-pressed', String(paused));
+      listenToggle.innerHTML = paused
+        ? '<i class="ph ph-microphone" aria-hidden="true"></i><span>Resume listening</span>'
+        : '<i class="ph ph-microphone-slash" aria-hidden="true"></i><span>Pause listening</span>';
+      setAssistVoiceState(paused ? 'ready' : 'listening', paused ? 'Microphone paused' : REALTIME_STATUS_COPY.listening);
     });
     if (mic) {
       mic.addEventListener('click', async () => {

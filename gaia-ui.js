@@ -3176,6 +3176,10 @@
     let assistSessionBusy = false;
 
     async function onAssistTap() {
+      // A fast first tap can arrive before the public bootstrap finishes.
+      // Wait briefly so it starts Gemini Live instead of falling into the
+      // recorder fallback for the whole conversation.
+      await waitForRealtimeBootstrap();
       initRealtimeVoice();
       if (canUseRealtimeVoice()) setRealtimeVoiceProvider();
 
@@ -3303,6 +3307,24 @@
 
     function canUseRealtimeVoice() {
       return Boolean(window.GaiaRealtimeVoice && realtimeConfig().enabled);
+    }
+
+    async function waitForRealtimeBootstrap(timeoutMs = 1800) {
+      if (canUseRealtimeVoice() || window.GAIA_SYNC?.status !== 'checking') return;
+      await new Promise((resolve) => {
+        let settled = false;
+        const finish = () => {
+          if (settled) return;
+          settled = true;
+          window.clearTimeout(timer);
+          document.removeEventListener('gaia:sync', finish);
+          document.removeEventListener('gaia:sync-error', finish);
+          resolve();
+        };
+        const timer = window.setTimeout(finish, timeoutMs);
+        document.addEventListener('gaia:sync', finish, { once: true });
+        document.addEventListener('gaia:sync-error', finish, { once: true });
+      });
     }
 
     function trimAssistBubbles() {

@@ -31,6 +31,7 @@
   --g-focus:0 0 0 2px var(--g-bg),0 0 0 4px var(--g-accent);
   --g-tap:44px;
 }
+[hidden]{display:none!important}
 @media (prefers-reduced-motion:reduce){
   :root{--g-dur-1:0ms;--g-dur-2:0ms;--g-dur-3:0ms}
 }

@@ -1,33 +1,18 @@
-# Gaia Super App — Design QA
+# Gaia Healers super-app design QA
 
-- Selected source: combined Option 1 structure with Option 2 bottom navigation
-- Source image: `/Users/ba2ki-goldvest/.codex/generated_images/01a00543-0f8f-7b33-b480-cfd0984618c8/exec-81940b33-ef49-4363-a27b-489261b274de.png`
-- Implementation capture: `/Users/ba2ki-goldvest/Documents/Codex/2026-08-15/i/outputs/gaia-superapp/local-mobile.png`
-- Side-by-side comparison: `/Users/ba2ki-goldvest/Documents/Codex/2026-08-15/i/outputs/gaia-superapp/design-comparison.png`
-- Viewports checked: 375 × 812 mobile and 1440 × 1024 desktop
+Reference evidence: the supplied Android photos, especially `IMG_4346.JPG`, plus the supplied bottom-navigation crop. Implementation evidence: `work/audit/gaia-mobile-after.png`; combined comparison: `work/audit/mobile-comparison.png`.
 
-## Visual comparison
+Viewport and state checked: 390 × 844 responsive iframe, signed-out Today screen, 2026-08-15. Desktop was also checked in the in-app browser.
 
-The implementation preserves the selected dark botanical palette, serif-led
-hierarchy, compact service launcher, circular Phosphor icons, luminous Gaia
-accent, persistent five-action navigation, and centered Assist control. The
-comparison intentionally shows different data states: the selected source is an
-authenticated member with real entitlements; the captured implementation is a
-signed-out visitor and therefore renders the real sign-in/join state instead of
-inventing course progress.
-
-## Findings
-
-- P0: none
-- P1: none
-- P2: none
-- Corrected during QA: desktop content was constrained by the legacy two-column
-  Home grid; the new shell now occupies the full responsive content area.
-- Corrected during QA: the desktop navigation retained a legacy horizontal
-  transform; it is now pinned completely inside the left rail.
-- Corrected during QA: legacy fallback member progress, feeds, wellness scores,
-  attendee counts, and member names were removed from client and server sources.
-- Mobile navigation, Journey, Inbox, Profile, Events, Bookings, menu, and Gaia
-  Assist open/close behavior were exercised in the browser.
+- P0: none.
+- P1: none.
+- P2: none after fixes.
+- Visitor value now appears before authentication; the old large member wall is removed from the first screen.
+- Text, tool tiles, primary actions, and icon containers align consistently at mobile width.
+- Bottom navigation uses the requested sun, target, central Gaia mark, message, and profile language and preserves safe-area padding.
+- Gaia Assist no longer auto-opens silently; a compact nudge explains that sound begins after a tap. The dialog exposes live voice status and a working sound control.
+- Booking icons render from the installed Phosphor set.
+- Free Journey, Bookings, Colour Test, Store, and event routes were exercised without authentication.
+- Private member endpoints return 401 without a valid session; no locked access is simulated.
 
 final result: passed

@@ -72,6 +72,12 @@ function buildAdminClearCookie() {
 
 // ---------- normalizers ----------
 function normalizeEvent(input = {}, existing = {}) {
+  const timelineInput = Array.isArray(input.timeline) ? input.timeline : [];
+  const timeline = timelineInput.slice(0, 40).map((item) => ({
+    time: clean(item && item.time, 40),
+    title: clean(item && item.title, 140),
+    detail: clean(item && item.detail, 260),
+  })).filter((item) => item.time || item.title || item.detail);
   return {
     id: existing.id || id(),
     title: clean(input.title, 160),
@@ -79,6 +85,7 @@ function normalizeEvent(input = {}, existing = {}) {
     venue: clean(input.venue, 160),
     registerUrl: clean(input.registerUrl, 500),
     summary: clean(input.summary, 600),
+    timeline,
     live: Boolean(input.live),            // "happening now" flag
     published: input.published !== false, // default published
     featured: Boolean(input.featured),    // becomes the Home event card
@@ -109,7 +116,7 @@ function publishedAnnouncements() {
 function publishedEvents() {
   return readStore(EVENTS_FILE)
     .filter((e) => e.published)
-    .map((e) => ({ id: e.id, title: e.title, date: e.date, venue: e.venue, registerUrl: e.registerUrl, summary: e.summary, live: e.live, featured: e.featured }));
+    .map((e) => ({ id: e.id, title: e.title, date: e.date, venue: e.venue, registerUrl: e.registerUrl, summary: e.summary, timeline: Array.isArray(e.timeline) ? e.timeline : [], live: e.live, featured: e.featured }));
 }
 
 // ---------- GHL members (read + guarded write) ----------

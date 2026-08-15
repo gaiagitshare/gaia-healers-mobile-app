@@ -85,4 +85,8 @@
   // Let Gaia Assist start the test for the member (benign — no data collected).
   window.GaiaQuiz = { start };
   render();
+  if (new URLSearchParams(window.location.search).get('tool') === 'colour') {
+    start();
+    window.requestAnimationFrame(() => box.scrollIntoView({ behavior: 'smooth', block: 'center' }));
+  }
 })();

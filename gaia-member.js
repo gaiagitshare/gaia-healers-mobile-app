@@ -544,8 +544,8 @@ body.gaia-booking-open{overflow:hidden;}
       + '><span>' + esc(label) + '</span><span class="g-row__meta">' + esc(meta) + '</span></a>';
   }
 
-  // Profile = live account from /api/member/*. Signed-out shows a sign-in card
-  // + a preview of what appears; the birth-date chakra (below) is public.
+  // Profile = the member pass. Free discovery belongs on Today/Journey;
+  // this screen keeps GHL identity and entitlements in one intentional place.
   function renderMe() {
     const box = el('member-me');
     if (!box) return;
@@ -555,22 +555,16 @@ body.gaia-booking-open{overflow:hidden;}
     const kicker = el('profile-kicker');
 
     if (!(state.authed && d.profile)) {
-      if (kicker) kicker.textContent = 'Your account';
-      if (title) title.textContent = 'Profile';
-      if (sub) sub.textContent = 'Sign in to see your memberships, devices, bookings, and messages.';
+      if (kicker) kicker.textContent = 'Gaia member pass';
+      if (title) title.textContent = 'Member Pass';
+      if (sub) sub.textContent = 'One secure sign-in for the access attached to your GHL member record.';
       box.innerHTML =
-        '<article class="g-card g-card--feature"><p class="g-card__label">Members</p>'
-        + '<p class="g-card__value g-card__value--lg">Your personal Gaia</p>'
-        + '<p class="g-card__meta">Sign in to open your profile, devices, purchases, bookings, and a Gaia Assist that knows you.</p>'
-        + '<div class="g-card__actions"><button type="button" class="g-btn g-btn--primary g-btn--sm" data-native-signin>Sign in securely →</button></div></article>'
-        + gMeCard('What you’ll see', gRows([
-          gRow('Membership & communities', ''),
-          gRow('Your devices', ''),
-          gRow('Purchases & subscriptions', ''),
-          gRow('Bookings', ''),
-          gRow('Messages', ''),
-        ]))
-        + gMeCard('Shop', gRows([gRowLink('Store & memberships', 'Shop →', 'home.html?view=store', false)]));
+        '<article class="g-card g-card--feature"><p class="g-card__label">Existing members</p>'
+        + '<p class="g-card__value g-card__value--lg">Sync your Gaia access</p>'
+        + '<p class="g-card__meta">Courses, communities, devices, purchases, bookings and messages appear according to your real GHL plan.</p>'
+        + '<div class="g-card__actions"><button type="button" class="g-btn g-btn--primary g-btn--sm" data-native-signin>Sign in securely →</button>'
+        + '<button type="button" class="g-btn g-btn--secondary g-btn--sm" data-open-in-app="https://join.gaiahealers.com/onboarding" data-in-app-title="Join Gaia Healers">Join free</button>'
+        + '<a class="g-btn g-btn--ghost g-btn--sm" href="home.html?view=store&tab=membership">Compare plans</a></div></article>';
       box.querySelector('[data-native-signin]')?.addEventListener('click', () => window.GaiaAuth?.open?.());
       return;
     }
@@ -908,7 +902,7 @@ body.gaia-booking-open{overflow:hidden;}
     // auto-synced (scraped) event from the Event Manager.
     const featured = state.adminEvents.find((e) => e.featured && e.title);
     if (featured) {
-      state.event = { name: featured.title, date: featured.date, venue: featured.venue, summary: featured.summary, sourceUrl: featured.registerUrl, live: featured.live };
+      state.event = { name: featured.title, date: featured.date, venue: featured.venue, summary: featured.summary, sourceUrl: featured.registerUrl, timeline: Array.isArray(featured.timeline) ? featured.timeline : [], live: featured.live };
     } else if (g.event && g.event.name) {
       state.event = g.event;
     } else {

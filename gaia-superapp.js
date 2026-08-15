@@ -63,11 +63,26 @@
 
   function authPrompt(compact) {
     return '<section class="g-super-auth' + (compact ? ' g-super-auth--compact' : '') + '">'
-      + '<div><p class="g-super-kicker">Member access</p><h2>Bring your Gaia journey together</h2>'
-      + '<p>Sign in with the email on your GHL member record, or join Gaia free to begin.</p></div>'
+      + '<div><p class="g-super-kicker">Member Pass</p><h2>Already part of Gaia?</h2>'
+      + '<p>Sign in once to sync the courses, communities and plan access attached to your GHL record.</p></div>'
       + '<div class="g-super-actions"><button type="button" class="g-btn g-btn--primary" data-super-signin>Sign in</button>'
-      + '<button type="button" class="g-btn g-btn--secondary" data-open-in-app="https://join.gaiahealers.com/onboarding" data-in-app-title="Join Gaia Healers">Join free</button></div>'
+      + '<button type="button" class="g-btn g-btn--secondary" data-open-in-app="https://join.gaiahealers.com/onboarding" data-in-app-title="Join Gaia Healers">Join free</button>'
+      + '<a class="g-btn g-btn--ghost" href="home.html?view=store&tab=membership">Compare plans</a></div>'
       + '</section>';
+  }
+
+  function freeTools() {
+    const tools = [
+      ['wellness', 'sparkle', 'Energy check', 'Birth chakra and today’s wellness'],
+      ['wellness', 'moon-stars', 'Horoscope', 'Your daily wellness guidance'],
+      ['wellness', 'circles-three-plus', 'Chakra match', 'Find your colour and products'],
+      ['profile&tool=colour', 'palette', 'Colour test', 'Five free questions'],
+      ['events', 'calendar-dots', 'Events', 'Gatherings and live sessions'],
+      ['store', 'bag', 'Gaia Store', 'Sprays, tools and memberships'],
+    ];
+    return '<section class="g-free-tools"><div class="g-super-section-head"><div><p class="g-super-kicker">Explore free</p><h2>Try Gaia today</h2></div></div><div class="g-free-tools__grid">'
+      + tools.map((item) => '<a class="g-free-tool" href="home.html?view=' + item[0] + '"><span>' + icon(item[1]) + '</span><strong>' + esc(item[2]) + '</strong><small>' + esc(item[3]) + '</small></a>').join('')
+      + '</div></section>';
   }
 
   function journeyRail() {
@@ -77,7 +92,7 @@
     const item = (label, iconName, active) => '<div class="g-journey-step' + (active ? ' is-ready' : '') + '">'
       + '<span>' + icon(iconName) + '</span><strong>' + esc(label) + '</strong><small>' + (active ? 'Ready' : 'Explore') + '</small></div>';
     return '<div class="g-journey-rail" aria-label="Your Gaia journey">'
-      + item('Learn', 'book-open', learn) + item('Practice', 'lotus', practice) + item('Connect', 'users-three', connect) + '</div>';
+      + item('Learn', 'book-open', learn) + item('Practice', 'sparkle', practice) + item('Connect', 'users-three', connect) + '</div>';
   }
 
   function primaryMemberAction() {
@@ -121,19 +136,22 @@
     const authed = memberState().authed;
     const p = profile();
     const firstName = String(p.name || '').trim().split(/\s+/)[0];
-    const greeting = authed ? ('Welcome back' + (firstName ? ', ' + esc(firstName) : '')) : 'Your Gaia, in one place';
+    const hour = new Date().getHours();
+    const dayGreeting = hour < 12 ? 'Good morning' : hour < 18 ? 'Good afternoon' : 'Good evening';
+    const greeting = authed ? ('Welcome back' + (firstName ? ', ' + esc(firstName) : '')) : dayGreeting;
     const services = serviceLink('academy', 'graduation-cap', 'Academy', stateMeta('Courses and certifications', courseGrants().length, 'course', 'courses'))
       + serviceLink('community', 'users-three', 'Community', stateMeta('Boards and circles', communities().length, 'community', 'communities'))
       + serviceLink('events', 'calendar-dots', 'Events', eventData()?.name ? 'Upcoming gathering available' : 'Gatherings and live sessions')
-      + serviceLink('bookings', 'lotus', 'Bookings', stateMeta('Sessions and consultations', upcomingAppointments().length, 'upcoming booking', 'upcoming bookings'));
+      + serviceLink('bookings', 'calendar-check', 'Bookings', stateMeta('Sessions and consultations', upcomingAppointments().length, 'upcoming booking', 'upcoming bookings'));
 
     root.innerHTML = '<div class="g-super-home">'
       + '<section class="g-super-hero"><div class="g-super-hero__intro"><p class="g-super-date">' + esc(dateLabel()) + '</p>'
-      + '<h1>' + greeting + '</h1><p>' + (authed ? 'Your healing journey is waiting.' : 'Courses, communities, events and support—connected to your Gaia membership.') + '</p>'
-      + (authed ? journeyRail() + primaryMemberAction() : authPrompt(true)) + '</div><div class="g-super-hero__art" aria-hidden="true"></div></section>'
-      + '<section class="g-super-services"><div class="g-super-section-head"><div><p class="g-super-kicker">Your services</p><h2>Everything Gaia</h2></div><a href="home.html?view=journey">View journey</a></div>'
-      + '<div class="g-super-services__grid">' + services + '</div></section>'
+      + '<h1>' + greeting + '</h1><p>' + (authed ? 'Your healing journey is waiting.' : 'What does your energy need today?') + '</p>'
+      + (authed ? journeyRail() + primaryMemberAction() : '<div class="g-super-discover"><a class="g-btn g-btn--primary" href="home.html?view=wellness">' + icon('sparkle') + ' Check my energy</a><button type="button" class="g-btn g-btn--secondary" data-gaia-open-assist>' + icon('microphone') + ' Ask Gaia</button></div>') + '</div><div class="g-super-hero__art" aria-hidden="true"></div></section>'
+      + freeTools()
+      + (authed ? '<section class="g-super-services"><div class="g-super-section-head"><div><p class="g-super-kicker">Your access</p><h2>Everything Gaia</h2></div><a href="home.html?view=journey">View journey</a></div><div class="g-super-services__grid">' + services + '</div></section>' : '')
       + eventRow()
+      + (!authed ? authPrompt(true) : '')
       + (authed ? '<section class="g-super-sync">' + icon('check-circle') + '<div><strong>Your access is synced</strong><span>Courses, communities, plans and purchases reflect your GHL member record.</span></div></section>' : '')
       + '</div>';
     bind(root);
@@ -143,7 +161,13 @@
     const root = $('journey-body');
     if (!root) return;
     if (!memberState().authed) {
-      root.innerHTML = '<div class="g-super-page-head"><p class="g-super-kicker">Learn · practice · connect</p><h1>Your journey</h1><p>Sign in to assemble your real GHL access in one calm path.</p></div>' + authPrompt(false);
+      root.innerHTML = '<div class="g-super-page-head"><p class="g-super-kicker">Learn · practice · connect</p><h1>Choose your path</h1><p>Explore Gaia freely. Your Member Pass adds the courses and communities included with your plan.</p></div>'
+        + '<section class="g-super-services"><div class="g-super-services__grid">'
+        + serviceLink('academy', 'book-open', 'Learn', 'Preview Academy and certifications')
+        + serviceLink('wellness', 'sparkle', 'Practice', 'Energy, chakra and wellness tools')
+        + serviceLink('events', 'users-three', 'Connect', 'Events, circles and practitioners')
+        + serviceLink('bookings', 'calendar-check', 'Book', 'Sessions and consultations')
+        + '</div></section>' + authPrompt(true);
       bind(root); return;
     }
     const courses = courseGrants();
@@ -164,14 +188,15 @@
     const root = $('events-body');
     if (!root) return;
     const event = eventData();
+    const timeline = Array.isArray(event?.timeline) && event.timeline.length ? '<section class="g-event-timeline"><p class="g-super-kicker">Published schedule</p><h2>Event timeline</h2>' + event.timeline.map((item) => '<div class="g-event-timeline__item"><time>' + esc(item.time) + '</time><div><strong>' + esc(item.title) + '</strong>' + (item.detail ? '<span>' + esc(item.detail) + '</span>' : '') + '</div></div>').join('') + '</section>' : '';
     const publicEvent = event?.name ? '<article class="g-event-detail"><img src="assets/gaia-event-hero.webp" alt="" width="1200" height="720" />'
       + '<div><p class="g-super-kicker">Featured gathering</p><h2>' + esc(event.name) + '</h2><p>' + esc(event.summary || event.description || '') + '</p>'
       + '<dl><div><dt>Date</dt><dd>' + esc(eventDate(event) || 'To be announced') + '</dd></div><div><dt>Location</dt><dd>' + esc([event.venue, event.location].filter(Boolean).join(', ') || 'To be announced') + '</dd></div></dl>'
-      + (event.sourceUrl ? '<button type="button" class="g-btn g-btn--primary" data-open-in-app="' + esc(event.sourceUrl) + '" data-in-app-title="' + esc(event.name) + '">View event details ' + icon('arrow-right') + '</button>' : '') + '</div></article>'
+      + (event.sourceUrl ? '<button type="button" class="g-btn g-btn--primary" data-open-in-app="' + esc(event.sourceUrl) + '" data-in-app-title="' + esc(event.name) + '">View event details ' + icon('arrow-right') + '</button>' : '') + '</div></article>' + timeline
       : '<section class="g-super-empty-panel"><h2>No event is currently published</h2><p>Confirmed event details will appear here from Gaia’s live event service.</p></section>';
     root.innerHTML = '<div class="g-super-page-head"><p class="g-super-kicker">Gather in person and online</p><h1>Events</h1><p>Confirmed Gaia gatherings and your member appointments, without placeholder schedules.</p></div>'
       + publicEvent + (memberState().authed ? '<section class="g-super-list"><div class="g-super-section-head"><div><p class="g-super-kicker">Your calendar</p><h2>Member sessions</h2></div><a href="home.html?view=bookings">View bookings</a></div>'
-      + (upcomingAppointments().length ? upcomingAppointments().slice(0, 3).map((item) => '<a class="g-super-row" href="home.html?view=bookings"><span class="g-super-row__icon">' + icon('calendar-check') + '</span><span><strong>' + esc(item.title || 'Appointment') + '</strong><em>' + esc(appointmentWhen(item)) + '</em></span>' + icon('caret-right') + '</a>').join('') : '<p class="g-super-empty">No upcoming member sessions.</p>') + '</section>' : authPrompt(true));
+      + (upcomingAppointments().length ? upcomingAppointments().slice(0, 3).map((item) => '<a class="g-super-row" href="home.html?view=bookings"><span class="g-super-row__icon">' + icon('calendar-check') + '</span><span><strong>' + esc(item.title || 'Appointment') + '</strong><em>' + esc(appointmentWhen(item)) + '</em></span>' + icon('caret-right') + '</a>').join('') : '<p class="g-super-empty">No upcoming member sessions.</p>') + '</section>' : '');
     bind(root);
   }
 
@@ -179,7 +204,7 @@
     const root = $('bookings-body');
     if (!root) return;
     if (!memberState().authed) {
-      root.innerHTML = '<div class="g-super-page-head"><p class="g-super-kicker">Sessions and consultations</p><h1>Bookings</h1><p>Sign in to see your real GHL appointments and join links.</p></div>' + authPrompt(false) + bookingCatalog();
+      root.innerHTML = '<div class="g-super-page-head"><p class="g-super-kicker">Sessions and consultations</p><h1>Book your next step</h1><p>Explore real Gaia sessions now. Member appointments appear after you connect your Member Pass.</p></div>' + bookingCatalog() + authPrompt(true);
       bind(root); return;
     }
     const rows = upcomingAppointments().length ? upcomingAppointments().map((item) => {
@@ -234,6 +259,9 @@
 
   function bind(root) {
     root.querySelectorAll('[data-super-signin]').forEach((button) => button.addEventListener('click', () => window.GaiaAuth?.open?.()));
+    root.querySelectorAll('[data-gaia-open-assist]').forEach((button) => button.addEventListener('click', () => {
+      document.querySelector('[data-gaia-tab-assist]')?.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, cancelable: true }));
+    }));
     root.querySelectorAll('[data-super-course]').forEach((button) => button.addEventListener('click', () => {
       const url = button.dataset.superCourse;
       if (!url) return;

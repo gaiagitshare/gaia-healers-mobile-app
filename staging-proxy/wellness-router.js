@@ -15,12 +15,14 @@ import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import { fileURLToPath } from 'node:url';
+import { Body, Ecliptic, GeoVector } from 'astronomy-engine';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const COOKIE = process.env.GAIA_WELLNESS_COOKIE || 'gaia_wellness';
 const TTL_MS = 400 * 24 * 60 * 60 * 1000; // ~13 months
 const DATA_DIR = path.join(__dirname, 'data');
 const STORE = path.join(DATA_DIR, 'wellness-profiles.json');
+const LOCATION_CACHE = new Map();
 
 // ---- reference chakra data (mirrors gaia-chakra-data.js; real correspondences) ----
 const CHAKRAS = [
@@ -31,6 +33,23 @@ const CHAKRAS = [
   { id: 'throat', name: 'Throat', sanskrit: 'Vishuddha', color: '#1E88E5', element: 'Sound', area: 'your throat, neck and thyroid', focus: 'expression and truth' },
   { id: 'third-eye', name: 'Third Eye', sanskrit: 'Ajna', color: '#3949AB', element: 'Light', area: 'your forehead, eyes and head', focus: 'intuition and clarity' },
   { id: 'crown', name: 'Crown', sanskrit: 'Sahasrara', color: '#8E24AA', element: 'Consciousness', area: 'the crown of your head and nervous system', focus: 'awareness and spiritual connection' },
+];
+
+const ZODIAC_SIGNS = ['Aries', 'Taurus', 'Gemini', 'Cancer', 'Leo', 'Virgo', 'Libra', 'Scorpio', 'Sagittarius', 'Capricorn', 'Aquarius', 'Pisces'];
+const ZODIAC_ELEMENTS = ['Fire', 'Earth', 'Air', 'Water'];
+const SIGN_CHAKRA = {
+  Aries: 'solar', Taurus: 'heart', Gemini: 'throat', Cancer: 'third-eye',
+  Leo: 'crown', Virgo: 'throat', Libra: 'heart', Scorpio: 'solar',
+  Sagittarius: 'sacral', Capricorn: 'root', Aquarius: 'root', Pisces: 'sacral',
+};
+const PLANETS = [
+  { name: 'Sun', body: Body.Sun, chakraId: 'crown' },
+  { name: 'Moon', body: Body.Moon, chakraId: 'third-eye' },
+  { name: 'Mercury', body: Body.Mercury, chakraId: 'throat' },
+  { name: 'Venus', body: Body.Venus, chakraId: 'heart' },
+  { name: 'Mars', body: Body.Mars, chakraId: 'solar' },
+  { name: 'Jupiter', body: Body.Jupiter, chakraId: 'sacral' },
+  { name: 'Saturn', body: Body.Saturn, chakraId: 'root' },
 ];
 
 // ---- tiny JSON store ----
@@ -67,6 +86,102 @@ function sunSign(month, day) {
   const from = ['Capricorn', 'Aquarius', 'Pisces', 'Aries', 'Taurus', 'Gemini', 'Cancer', 'Leo', 'Virgo', 'Libra', 'Scorpio', 'Sagittarius'];
   const to = ['Aquarius', 'Pisces', 'Aries', 'Taurus', 'Gemini', 'Cancer', 'Leo', 'Virgo', 'Libra', 'Scorpio', 'Sagittarius', 'Capricorn'];
   return day < cutoff[month - 1] ? from[month - 1] : to[month - 1];
+}
+
+function normalizePlace(raw) {
+  if (!raw || typeof raw !== 'object') return null;
+  const label = str(raw.label, 160);
+  const latitude = Number(raw.latitude);
+  const longitude = Number(raw.longitude);
+  const timezone = str(raw.timezone, 80);
+  if (!label || !Number.isFinite(latitude) || !Number.isFinite(longitude) || !timezone) return null;
+  if (latitude < -90 || latitude > 90 || longitude < -180 || longitude > 180) return null;
+  try { new Intl.DateTimeFormat('en', { timeZone: timezone }).format(new Date()); } catch (_) { return null; }
+  return { label, latitude, longitude, timezone };
+}
+
+function localBirthInstant(dob, birthTime, timezone) {
+  const match = /^(\d{2}):(\d{2})$/.exec(String(birthTime || '12:00'));
+  const hour = match ? Math.min(23, Number(match[1])) : 12;
+  const minute = match ? Math.min(59, Number(match[2])) : 0;
+  const target = Date.UTC(dob.y, dob.m - 1, dob.d, hour, minute, 0);
+  let guess = target;
+  const formatter = new Intl.DateTimeFormat('en-CA', {
+    timeZone: timezone, year: 'numeric', month: '2-digit', day: '2-digit',
+    hour: '2-digit', minute: '2-digit', second: '2-digit', hourCycle: 'h23',
+  });
+  for (let i = 0; i < 3; i += 1) {
+    const values = Object.fromEntries(formatter.formatToParts(new Date(guess)).filter((p) => p.type !== 'literal').map((p) => [p.type, p.value]));
+    const shownAsUtc = Date.UTC(Number(values.year), Number(values.month) - 1, Number(values.day), Number(values.hour), Number(values.minute), Number(values.second));
+    guess += target - shownAsUtc;
+  }
+  return new Date(guess);
+}
+
+function zodiacPlacement(longitude) {
+  const normalized = ((longitude % 360) + 360) % 360;
+  const index = Math.floor(normalized / 30);
+  return { sign: ZODIAC_SIGNS[index], element: ZODIAC_ELEMENTS[index % 4], degree: Math.floor(normalized % 30) };
+}
+
+function buildCosmicMap(dob, birthTime, place) {
+  const timeKnown = /^\d{2}:\d{2}$/.test(String(birthTime || ''));
+  const instant = localBirthInstant(dob, timeKnown ? birthTime : '12:00', place.timezone);
+  const placements = PLANETS.map((planet) => {
+    const vector = GeoVector(planet.body, instant, true);
+    const placement = zodiacPlacement(Ecliptic(vector).elon);
+    return { name: planet.name, chakraId: planet.chakraId, ...placement };
+  });
+  const signCounts = Object.fromEntries(ZODIAC_SIGNS.map((sign) => [sign, 0]));
+  const elementCounts = Object.fromEntries(ZODIAC_ELEMENTS.map((element) => [element, 0]));
+  placements.forEach((planet) => { signCounts[planet.sign] += 1; elementCounts[planet.element] += 1; });
+  const sun = placements.find((planet) => planet.name === 'Sun');
+  const dominantSign = Object.entries(signCounts).sort((a, b) => b[1] - a[1] || (a[0] === sun.sign ? -1 : 1))[0][0];
+  const rankedElements = Object.entries(elementCounts).sort((a, b) => b[1] - a[1]);
+  const spotlight = CHAKRAS.find((chakra) => chakra.id === SIGN_CHAKRA[dominantSign]) || CHAKRAS[0];
+  return {
+    source: 'astronomy-engine',
+    calculatedAt: instant.toISOString(),
+    timeBasis: timeKnown ? 'exact-local-time' : 'local-noon-estimate',
+    place: place.label,
+    timezone: place.timezone,
+    placements,
+    dominantSign,
+    representedElement: rankedElements[0][0],
+    elementToInvite: rankedElements[rankedElements.length - 1][0],
+    spotlight: { id: spotlight.id, name: spotlight.name, color: spotlight.color, focus: spotlight.focus },
+  };
+}
+
+async function searchLocations(query) {
+  const key = query.toLocaleLowerCase('en');
+  const cached = LOCATION_CACHE.get(key);
+  if (cached && Date.now() - cached.at < 24 * 60 * 60 * 1000) return cached.items;
+  const endpoint = new URL('https://geocoding-api.open-meteo.com/v1/search');
+  endpoint.searchParams.set('name', query);
+  endpoint.searchParams.set('count', '8');
+  endpoint.searchParams.set('language', 'en');
+  endpoint.searchParams.set('format', 'json');
+  const response = await fetch(endpoint, { headers: { Accept: 'application/json', 'User-Agent': 'GaiaHealersApp/1.0' }, signal: AbortSignal.timeout(6000) });
+  if (!response.ok) throw new Error(`Location lookup failed (${response.status})`);
+  const payload = await response.json();
+  const items = (Array.isArray(payload.results) ? payload.results : []).map((item) => {
+    const parts = [item.name, item.admin1, item.country].filter(Boolean).filter((part, index, list) => list.indexOf(part) === index);
+    return {
+      id: String(item.id || `${item.latitude},${item.longitude}`),
+      label: parts.join(', '),
+      name: str(item.name, 100),
+      region: str(item.admin1, 100),
+      country: str(item.country, 100),
+      countryCode: str(item.country_code, 2),
+      latitude: Number(item.latitude),
+      longitude: Number(item.longitude),
+      timezone: str(item.timezone, 80),
+    };
+  }).filter((item) => item.label && item.timezone && Number.isFinite(item.latitude) && Number.isFinite(item.longitude));
+  LOCATION_CACHE.set(key, { at: Date.now(), items });
+  if (LOCATION_CACHE.size > 250) LOCATION_CACHE.delete(LOCATION_CACHE.keys().next().value);
+  return items;
 }
 // today's focus chakra: a personal daily cycle from birth chakra + the date.
 function todayChakra(birthIdx, dateKey) {
@@ -118,10 +233,11 @@ async function dailyFor(profile, deps) {
     birthChakra: { id: birth.id, name: birth.name, sanskrit: birth.sanskrit, color: birth.color, element: birth.element, focus: birth.focus },
     bodyPoint: { chakra: chakra.name, sanskrit: chakra.sanskrit, area: chakra.area, focus: chakra.focus, element: chakra.element, color: chakra.color },
     tip,
+    cosmicMap: profile.place ? buildCosmicMap(dob, profile.birthTime, profile.place) : null,
   };
 }
 
-function publicProfile(p) { return { name: p.name, firstName: firstName(p.name), location: p.location, email: p.email }; }
+function publicProfile(p) { return { name: p.name, firstName: firstName(p.name), location: p.location, birthTime: p.birthTime || '', email: p.email }; }
 
 // ---- GHL sync (best-effort; needs contacts.write on the PIT) ----
 function splitName(name) { const parts = String(name || '').trim().split(/\s+/); return { firstName: parts[0] || '', lastName: parts.slice(1).join(' ') }; }
@@ -183,6 +299,23 @@ async function handle(req, res, url, deps) {
   const p = url.pathname.replace(/\/+$/, '') || url.pathname;
   const method = req.method;
 
+  if (p === '/api/wellness/locations' && method === 'GET') {
+    const query = str(url.searchParams.get('q'), 80);
+    if (query.length < 3) return sendJson(res, 200, { ok: true, results: [] }, origin);
+    try { return sendJson(res, 200, { ok: true, results: await searchLocations(query), attribution: 'Open-Meteo geocoding / GeoNames' }, origin); }
+    catch (_) { return sendJson(res, 200, { ok: false, reason: 'location_lookup_unavailable', results: [] }, origin); }
+  }
+
+  if (p === '/api/wellness/chart' && method === 'POST') {
+    const body = await deps.readJsonBody(req).catch(() => ({}));
+    const dob = parseDob(body.dob);
+    const place = normalizePlace(body.place);
+    const birthTime = str(body.birthTime, 5);
+    if (!dob) return sendJson(res, 200, { ok: false, reason: 'dob_invalid' }, origin);
+    if (!place) return sendJson(res, 200, { ok: false, reason: 'place_invalid' }, origin);
+    return sendJson(res, 200, { ok: true, cosmicMap: buildCosmicMap(dob, birthTime, place) }, origin);
+  }
+
   if (p === '/api/wellness/me' && method === 'GET') {
     const profile = profileFromReq(req, deps);
     if (!profile) return sendJson(res, 200, { ok: true, signedUp: false }, origin);
@@ -219,10 +352,13 @@ async function handle(req, res, url, deps) {
     const name = str(body.name, 100);
     const email = str(body.email, 160).toLowerCase();
     const location = str(body.location, 120);
+    const place = normalizePlace(body.place);
+    const birthTime = /^\d{2}:\d{2}$/.test(str(body.birthTime, 5)) ? str(body.birthTime, 5) : '';
     const dob = parseDob(body.dob);
     if (!name) return sendJson(res, 200, { ok: false, reason: 'name_required' }, origin);
     if (!validEmail(email)) return sendJson(res, 200, { ok: false, reason: 'email_invalid' }, origin);
     if (!dob) return sendJson(res, 200, { ok: false, reason: 'dob_invalid' }, origin);
+    if (!place) return sendJson(res, 200, { ok: false, reason: 'place_invalid' }, origin);
 
     // Recognise the person BEFORE we upsert, so it reflects their PRE-signup
     // state: an existing GHL contact → a warm "welcome back"; a contact that is
@@ -237,13 +373,13 @@ async function handle(req, res, url, deps) {
     // one profile per email (update if returning with the same email)
     let profile = list.find((x) => x.email === email);
     if (profile) {
-      profile.name = name; profile.location = location;
+      profile.name = name; profile.location = place.label || location; profile.place = place; profile.birthTime = birthTime;
       profile.dob = `${dob.y}-${String(dob.m).padStart(2, '0')}-${String(dob.d).padStart(2, '0')}`;
       profile.updatedAt = new Date().toISOString();
       profile.lastDaily = null; // recompute for possibly-changed dob
     } else {
       profile = {
-        id: newId(), name, email, location,
+        id: newId(), name, email, location: place.label || location, place, birthTime,
         dob: `${dob.y}-${String(dob.m).padStart(2, '0')}-${String(dob.d).padStart(2, '0')}`,
         createdAt: new Date().toISOString(), lastDaily: null,
       };

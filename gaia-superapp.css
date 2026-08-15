@@ -205,6 +205,43 @@ body.gaia-v2 .gaia-assist__sound-toggle .ph { color: var(--super-accent); font-s
 .g-dob-builder__fields select.g-input { color-scheme: dark; cursor: pointer; }
 .g-dob-builder__error { min-height: 17px; margin: 6px 0 0; color: #ff9d90; font-size: 11px; line-height: 1.4; }
 
+.g-location-field { position: relative; z-index: 6; }
+.g-location-combobox { position: relative; }
+.g-location-combobox > .ph { position: absolute; z-index: 2; top: 50%; left: 15px; transform: translateY(-50%); color: var(--super-accent); font-size: 18px; pointer-events: none; }
+.g-location-combobox .g-input { padding-left: 44px; padding-right: 42px; }
+.g-location-combobox__state { position: absolute; top: 50%; right: 16px; width: 16px; height: 16px; transform: translateY(-50%); border-radius: 50%; pointer-events: none; }
+.g-location-combobox__state.is-loading { border: 2px solid rgba(166,237,104,.22); border-top-color: var(--super-accent); animation: g-spin-center .7s linear infinite; }
+.g-location-results { position: absolute; z-index: 30; top: calc(100% - 22px); right: 0; left: 0; max-height: 290px; overflow: auto; padding: 6px; border: 1px solid rgba(166,237,104,.28); border-radius: 16px; background: #0b1710; box-shadow: 0 18px 45px rgba(0,0,0,.48); }
+.g-location-results[hidden] { display: none; }
+.g-location-results button { width: 100%; min-height: 58px; display: grid; grid-template-columns: 30px minmax(0,1fr) auto; align-items: center; gap: 10px; padding: 9px 10px; color: var(--g-text); text-align: left; border: 0; border-radius: 11px; background: transparent; }
+.g-location-results button:hover, .g-location-results button.is-active { background: rgba(166,237,104,.1); }
+.g-location-results button > .ph { color: var(--super-accent); font-size: 19px; }
+.g-location-results button span { min-width: 0; display: grid; gap: 3px; }
+.g-location-results button strong { overflow: hidden; font-size: 13px; text-overflow: ellipsis; white-space: nowrap; }
+.g-location-results button small { overflow: hidden; color: var(--super-muted); font-size: 10px; text-overflow: ellipsis; white-space: nowrap; }
+.g-location-results button em { color: var(--super-accent); font-size: 9px; font-style: normal; font-weight: 800; }
+.g-location-results__empty { margin: 0; padding: 14px; color: var(--super-muted); font-size: 12px; line-height: 1.45; }
+.g-birth-time .g-label { display: flex; align-items: center; gap: 8px; }
+.g-birth-time .g-label span { color: var(--super-muted); font-size: 9px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; }
+
+.g-cosmic-map { position: relative; overflow: hidden; margin-top: 14px; padding: 19px; border: 1px solid color-mix(in srgb,var(--ck,#7DD956) 40%,transparent); border-radius: 20px; background: radial-gradient(circle at 94% 4%,color-mix(in srgb,var(--ck,#7DD956) 16%,transparent),transparent 34%),rgba(255,255,255,.025); }
+.g-cosmic-map--empty { min-height: 76px; display: grid; place-items: center; color: var(--super-muted); text-align: center; border-style: dashed; font-size: 12px; line-height: 1.5; }
+.g-cosmic-map--empty p { margin: 0; max-width: 300px; }
+.g-cosmic-map--loading { min-height: 90px; display: flex; align-items: center; justify-content: center; gap: 10px; color: var(--super-muted); font-size: 12px; }
+.g-cosmic-map--loading .ph { color: var(--super-accent); font-size: 22px; animation: g-spin .8s linear infinite; }
+.g-cosmic-map__head { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }
+.g-cosmic-map__head h3 { margin: 5px 0 0; color: var(--g-text); font: 600 25px/1.05 var(--g-font-serif); }
+.g-cosmic-map__head > .ph { flex: none; width: 44px; height: 44px; display: grid; place-items: center; color: var(--ck,var(--super-accent)); border: 1px solid color-mix(in srgb,var(--ck,#7DD956) 34%,transparent); border-radius: 50%; background: color-mix(in srgb,var(--ck,#7DD956) 8%,transparent); font-size: 23px; }
+.g-cosmic-map__planets { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 1px; margin: 14px 0 0; padding: 0; list-style: none; border: 1px solid var(--super-line); border-radius: 14px; overflow: hidden; background: var(--super-line); }
+.g-cosmic-map__planets li { min-width: 0; display: grid; grid-template-columns: minmax(0,1fr) auto; gap: 3px 8px; padding: 11px 12px; background: #0c1911; }
+.g-cosmic-map__planets span { color: var(--super-muted); font-size: 10px; font-weight: 700; text-transform: uppercase; }
+.g-cosmic-map__planets strong { color: var(--g-text); font-size: 11px; }
+.g-cosmic-map__planets small { grid-column: 1 / -1; color: var(--ck,var(--super-accent)); font-size: 9px; }
+.g-cosmic-map__basis { display: flex; align-items: flex-start; gap: 7px; margin: 12px 0 0; color: var(--super-muted); font-size: 10px; line-height: 1.45; }
+.g-cosmic-map__basis .ph { flex: none; margin-top: 1px; color: var(--super-accent); font-size: 14px; }
+@keyframes g-spin { to { transform: rotate(360deg); } }
+@keyframes g-spin-center { to { transform: translateY(-50%) rotate(360deg); } }
+
 .g-birth-map { overflow: hidden; padding: 19px; border: 1px solid color-mix(in srgb,var(--ck) 42%,transparent); border-radius: 20px; background: radial-gradient(circle at 92% 5%,color-mix(in srgb,var(--ck) 16%,transparent),transparent 35%),rgba(255,255,255,.025); box-shadow: inset 0 1px rgba(255,255,255,.03); }
 .g-birth-map__top { display: flex; align-items: center; gap: 14px; }
 .g-birth-map__top .g-well-orb { width: 54px; height: 54px; }
@@ -295,6 +332,7 @@ body.gaia-v2 .gaia-chakra-map__list-item, body.gaia-v2 .gaia-chakra-map--screen 
   .g-dob-builder__fields { grid-template-columns: minmax(112px,1.25fr) 68px 92px; gap: 6px; }
   .g-dob-builder__fields .g-input { padding-inline: 10px; }
   .g-birth-map__grid, .g-cosmic-checkin, .g-chakra-guide__rituals { grid-template-columns: 1fr; }
+  .g-cosmic-map__planets { grid-template-columns: 1fr; }
   .g-birth-map__actions .g-btn { width: 100%; }
   .gaia-chakra-map__detail { display: grid; }
   .gaia-chakra-map__actions { align-items: flex-start; flex-direction: row; flex-wrap: wrap; }

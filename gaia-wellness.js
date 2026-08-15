@@ -9,6 +9,9 @@
   if (!boxes.length) return;
 
   function proxyBase() {
+    const localOverride = /^(127\.0\.0\.1|localhost)$/.test(window.location.hostname)
+      ? new URLSearchParams(window.location.search).get('apiBase') : '';
+    if (localOverride && /^https?:\/\/127\.0\.0\.1(?::\d+)?$/.test(localOverride)) return localOverride.replace(/\/+$/, '');
     return String((window.GAIA_SYNC && window.GAIA_SYNC.proxyBase)
       || (window.GAIA_APP_URLS && window.GAIA_APP_URLS.production && window.GAIA_APP_URLS.production.proxy)
       || 'https://api.gaiahealers.app').replace(/\/+$/, '');
@@ -22,6 +25,7 @@
   const CH = () => window.GAIA_CHAKRAS || [];
   function digitRoot(n) { n = Math.abs(n); while (n > 9) { n = String(n).split('').reduce((a, c) => a + (+c), 0); } return n; }
   const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+  let locationUid = 0;
   const ZODIAC = {
     Aries: { element: 'Fire', theme: 'Initiative', practice: 'Choose one small action and begin before you overthink it.', journal: 'Where is my energy asking for a clear first step?' },
     Taurus: { element: 'Earth', theme: 'Steadiness', practice: 'Slow one ordinary moment down and notice all five senses.', journal: 'What deserves patient, grounded attention?' },
@@ -71,7 +75,11 @@
     return chs[(s - 1) % chs.length];
   }
 
-  const state = { loaded: false, signedUp: false, profile: null, today: null, challenge: null, dob: '', dobParts: { month: '', day: '', year: '' }, expandSignup: false };
+  const state = {
+    loaded: false, signedUp: false, profile: null, today: null, challenge: null,
+    dob: '', dobParts: { month: '', day: '', year: '' }, expandSignup: false,
+    location: null, locationQuery: '', birthTime: '', cosmicMap: null, chartRequest: 0,
+  };
 
   async function load() {
     const r = await api('GET', '/api/wellness/me');
@@ -124,6 +132,34 @@
       + '</div><p class="g-dob-builder__error" data-wdob-error aria-live="polite"></p></fieldset>';
   }
 
+  function locationInputHtml() {
+    const value = state.location ? state.location.label : state.locationQuery;
+    const uid = 'gaia-birth-city-' + (++locationUid); const resultsUid = uid + '-results';
+    return '<div class="g-field g-location-field"><label class="g-label" for="' + uid + '">Birth city</label>'
+      + '<div class="g-location-combobox"><i class="ph ph-map-pin" aria-hidden="true"></i>'
+      + '<input class="g-input" id="' + uid + '" data-wloc role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="' + resultsUid + '" autocomplete="off" placeholder="Start typing a city…" value="' + esc(value || '') + '" />'
+      + '<span class="g-location-combobox__state" data-wloc-state aria-hidden="true"></span></div>'
+      + '<div class="g-location-results" id="' + resultsUid + '" data-wloc-results role="listbox" hidden></div>'
+      + '<p class="g-hint" data-wloc-hint>Type at least 3 letters, then choose your city. Worldwide search via Open-Meteo / GeoNames sets the correct time zone.</p></div>';
+  }
+
+  function cosmicMapHtml(map, loading) {
+    if (loading) return '<article class="g-cosmic-map g-cosmic-map--loading" aria-live="polite"><i class="ph ph-spinner-gap" aria-hidden="true"></i><p>Reading the sky for your birth place…</p></article>';
+    if (!map || !Array.isArray(map.placements)) return '<div class="g-cosmic-map g-cosmic-map--empty" data-cosmic-empty><p>Choose your birth city to reveal your seven-planet chakra reflection.</p></div>';
+    const spotlight = map.spotlight || {};
+    const planets = map.placements.map((planet) => '<li><span>' + esc(planet.name) + '</span><strong>' + esc(planet.sign) + ' ' + esc(planet.degree) + '°</strong><small>' + esc((CH().find((c) => c.id === planet.chakraId) || {}).name || '') + '</small></li>').join('');
+    const shop = (window.GaiaStore && window.GaiaStore.chakraShopUrl && spotlight.id)
+      ? window.GaiaStore.chakraShopUrl(spotlight.id) : 'https://gaiahealers.com/collections/all';
+    return '<article class="g-cosmic-map" style="--ck:' + esc(spotlight.color || '#7DD956') + '">'
+      + '<div class="g-cosmic-map__head"><div><p class="g-energy__kicker">Your sky-to-chakra map</p><h3>' + esc(spotlight.name || 'Gaia') + ' spotlight</h3></div><i class="ph ph-planet" aria-hidden="true"></i></div>'
+      + '<div class="g-birth-map__chips"><span>' + esc(map.dominantSign) + ' emphasis</span><span>' + esc(map.representedElement) + ' represented</span><span>Invite ' + esc(map.elementToInvite) + '</span></div>'
+      + '<p class="g-birth-map__context">Seven astronomical planet positions are mapped through Gaia’s symbolic chakra lens. This is a reflective tradition—not a measured energy score, diagnosis, or prediction.</p>'
+      + '<ul class="g-cosmic-map__planets">' + planets + '</ul>'
+      + '<p class="g-cosmic-map__basis"><i class="ph ph-clock" aria-hidden="true"></i> ' + (map.timeBasis === 'exact-local-time' ? 'Calculated from the birth time you entered' : 'Birth time unknown: calculated at local noon and labelled as an estimate') + ' · ' + esc(map.place || '') + '</p>'
+      + '<div class="g-birth-map__actions"><button type="button" class="g-btn g-btn--secondary g-btn--sm" data-gaia-ask-cosmic>Ask Gaia about this map</button>'
+      + '<a class="g-btn g-btn--ghost g-btn--sm" href="' + esc(shop) + '" target="_blank" rel="noopener noreferrer">Explore matching support</a></div></article>';
+  }
+
   // ── public (not signed up): live reveal + sign-up ────────
   // Compact reminder shown when the member has NOT set up their wellness
   // profile yet. One line + one button — keeps the Home screen uncluttered.
@@ -147,7 +183,10 @@
       + dobInputHtml()
       + '<div class="g-well-reveal" data-reveal>' + revealHtml(c) + '</div>'
       + '<div class="g-field"><label class="g-label">Full name</label><input class="g-input" data-wname autocomplete="name" placeholder="Your name" /></div>'
-      + '<div class="g-field"><label class="g-label">Location</label><input class="g-input" data-wloc autocomplete="address-level2" placeholder="City, country" /></div>'
+      + locationInputHtml()
+      + '<div class="g-field g-birth-time"><label class="g-label">Birth time <span>Optional</span></label><input class="g-input" type="time" data-wtime aria-label="Birth time" autocomplete="bday" value="' + esc(state.birthTime) + '" />'
+      + '<p class="g-hint">If you do not know it, Gaia uses local noon and clearly labels the map as an estimate.</p></div>'
+      + '<div data-cosmic-chart>' + cosmicMapHtml(state.cosmicMap, false) + '</div>'
       + '<div class="g-field"><label class="g-label">Email</label><input class="g-input" type="email" data-wemail autocomplete="email" placeholder="you@email.com" /></div>'
       + '<p class="g-admin-status" data-wstatus></p>'
       + '<div class="g-card__actions"><button type="button" class="g-btn g-btn--primary g-btn--sm" data-wsignup>Unlock my daily wellness →</button></div>'
@@ -215,6 +254,7 @@
       + (guide.element ? '<div class="g-horoscope-card__chips"><span>' + esc(guide.element) + '</span><span>' + esc(guide.theme) + '</span></div>' : '')
       + '<p class="g-daily-card__tip">' + esc(t.tip || 'Your daily guidance is preparing.') + '</p>'
       + '<p class="g-hint">A sun-sign reflection for journaling—not a birth chart, prediction, or medical reading.</p></article>'
+      + (t.cosmicMap ? cosmicMapHtml(t.cosmicMap, false) : '')
       + '<div class="g-cosmic-checkin">'
       + '<article><i class="ph ph-wind" aria-hidden="true"></i><span>Energy reset</span><p>' + esc(guide.practice || 'Take three slow breaths and choose one gentle next step.') + '</p></article>'
       + '<article><i class="ph ph-note-pencil" aria-hidden="true"></i><span>Journal prompt</span><p>' + esc(guide.journal || 'What deserves my clearest attention today?') + '</p></article>'
@@ -314,7 +354,11 @@
         const error = b.querySelector('[data-wdob-error]'); if (error) error.textContent = complete && !state.dob ? 'Please check that this is a real date in the past.' : '';
         const rev = b.querySelector('[data-reveal]'); if (rev) { rev.innerHTML = revealHtml(birthChakra(state.dob)); bindBirthMap(rev); }
       });
+      if (state.dob && state.location) loadCosmicMap(box);
     }));
+    bindLocationSearch(box);
+    const birthTime = box.querySelector('[data-wtime]');
+    if (birthTime) birthTime.addEventListener('change', () => { state.birthTime = birthTime.value || ''; if (state.dob && state.location) loadCosmicMap(box); });
     // "Set up my wellness" on the compact reminder → expand the full form.
     const exp = box.querySelector('[data-wexpand]');
     if (exp) exp.addEventListener('click', () => {
@@ -351,6 +395,75 @@
         detail: { prompt: 'Help me reflect on my ' + (chakra ? chakra.name + ' birth chakra' : 'birth chakra') + (sign ? ' and ' + sign + ' sun sign' : '') + '. Give me one gentle practice and one journal question.' },
       }));
     });
+    root.querySelector('[data-gaia-ask-cosmic]')?.addEventListener('click', () => {
+      const map = state.cosmicMap || (state.today && state.today.cosmicMap);
+      if (!map) return;
+      window.dispatchEvent(new CustomEvent('gaia:open-assist', {
+        detail: { prompt: 'Help me reflect on my sky-to-chakra map. My symbolic spotlight is ' + map.spotlight.name + ', my most represented element is ' + map.representedElement + ', and the element to gently invite is ' + map.elementToInvite + '. Give me one two-minute practice and one journal question. Do not diagnose or predict.' },
+      }));
+    });
+  }
+
+  function closeLocationResults(box) {
+    const list = box.querySelector('[data-wloc-results]'); const input = box.querySelector('[data-wloc]');
+    if (list) { list.hidden = true; list.innerHTML = ''; }
+    if (input) input.setAttribute('aria-expanded', 'false');
+  }
+
+  function renderLocationResults(box, results) {
+    const list = box.querySelector('[data-wloc-results]'); const input = box.querySelector('[data-wloc]');
+    if (!list || !input) return;
+    if (!results.length) {
+      list.innerHTML = '<p class="g-location-results__empty">No matching city yet. Try the city name plus country.</p>';
+    } else {
+      list.innerHTML = results.map((item, index) => '<button type="button" role="option" data-city-index="' + index + '"><i class="ph ph-map-pin" aria-hidden="true"></i><span><strong>' + esc(item.name) + '</strong><small>' + esc([item.region, item.country].filter(Boolean).join(', ')) + '</small></span><em>' + esc(item.countryCode) + '</em></button>').join('');
+      list.querySelectorAll('[data-city-index]').forEach((button) => button.addEventListener('click', () => {
+        const item = results[Number(button.dataset.cityIndex)]; if (!item) return;
+        state.location = item; state.locationQuery = item.label; input.value = item.label;
+        document.querySelectorAll('[data-wloc]').forEach((field) => { field.value = item.label; field.setAttribute('aria-invalid', 'false'); });
+        closeLocationResults(box); loadCosmicMap(box);
+      }));
+    }
+    list.hidden = false; input.setAttribute('aria-expanded', 'true');
+  }
+
+  function bindLocationSearch(box) {
+    const input = box.querySelector('[data-wloc]'); if (!input) return;
+    let timer = 0; let active = -1;
+    input.addEventListener('input', () => {
+      state.location = null; state.cosmicMap = null; state.locationQuery = input.value.trim(); active = -1;
+      document.querySelectorAll('[data-cosmic-chart]').forEach((target) => { target.innerHTML = cosmicMapHtml(null, false); });
+      clearTimeout(timer);
+      if (state.locationQuery.length < 3) return closeLocationResults(box);
+      timer = setTimeout(async () => {
+        const query = state.locationQuery; const stateMark = box.querySelector('[data-wloc-state]');
+        if (stateMark) stateMark.className = 'g-location-combobox__state is-loading';
+        const response = await api('GET', '/api/wellness/locations?q=' + encodeURIComponent(query));
+        if (stateMark) stateMark.className = 'g-location-combobox__state';
+        if (query !== state.locationQuery) return;
+        renderLocationResults(box, response && Array.isArray(response.results) ? response.results : []);
+      }, 260);
+    });
+    input.addEventListener('keydown', (event) => {
+      const options = Array.from(box.querySelectorAll('[data-city-index]')); if (!options.length) return;
+      if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+        event.preventDefault(); active = (active + (event.key === 'ArrowDown' ? 1 : -1) + options.length) % options.length;
+        options.forEach((option, index) => option.classList.toggle('is-active', index === active)); options[active].scrollIntoView({ block: 'nearest' });
+      } else if (event.key === 'Enter' && active >= 0) { event.preventDefault(); options[active].click(); }
+      else if (event.key === 'Escape') closeLocationResults(box);
+    });
+    input.addEventListener('blur', () => setTimeout(() => closeLocationResults(box), 160));
+  }
+
+  async function loadCosmicMap(box) {
+    if (!state.dob || !state.location) return;
+    const request = ++state.chartRequest;
+    state.birthTime = val(box, '[data-wtime]') || state.birthTime || '';
+    document.querySelectorAll('[data-cosmic-chart]').forEach((target) => { target.innerHTML = cosmicMapHtml(null, true); });
+    const response = await api('POST', '/api/wellness/chart', { dob: state.dob, birthTime: state.birthTime, place: state.location });
+    if (request !== state.chartRequest) return;
+    state.cosmicMap = response && response.ok ? response.cosmicMap : null;
+    document.querySelectorAll('[data-cosmic-chart]').forEach((target) => { target.innerHTML = cosmicMapHtml(state.cosmicMap, false); bindBirthMap(target); });
   }
 
   async function challengeCall(btn, path) {
@@ -368,15 +481,18 @@
     const name = val(box, '[data-wname]').trim();
     const email = val(box, '[data-wemail]').trim();
     const location = val(box, '[data-wloc]').trim();
+    const birthTime = val(box, '[data-wtime]') || '';
     const dob = dobFromParts({ month: val(box, '[data-wdob-month]'), day: val(box, '[data-wdob-day]'), year: val(box, '[data-wdob-year]') }) || state.dob;
     if (!name) return set('Please enter your name.', true);
     if (!dob) return set('Please enter a real birth date using month, day, and a 4-digit year.', true);
+    if (!state.location || state.location.label !== location) return set('Please choose your birth city from the suggestions.', true);
     if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) return set('Please enter a valid email.', true);
     set('Aligning your energy…');
-    const r = await api('POST', '/api/wellness/signup', { name, dob, location, email });
+    const r = await api('POST', '/api/wellness/signup', { name, dob, location, place: state.location, birthTime, email });
     if (r && r.ok && r.signedUp) { state.signedUp = true; state.profile = r.profile; state.today = r.today; state.challenge = r.challenge || { joined: false }; state.linkedMember = (r.existingMember || r.existingContact) ? { name: r.memberName || name, email, member: !!r.existingMember } : null; renderAll(); return; }
     set(r && r.reason === 'email_invalid' ? 'That email looks off — please check it.'
       : r && r.reason === 'dob_invalid' ? 'That birth date looks off — please check it.'
+        : r && r.reason === 'place_invalid' ? 'Please choose your birth city from the suggestions.'
         : 'Could not save just now. Please try again.', true);
   }
 

@@ -92,6 +92,7 @@
       + '<div class="g-field"><label class="g-label" for="ev-venue">Venue</label><input class="g-input" id="ev-venue" placeholder="Online / city" /></div>'
       + '<div class="g-field"><label class="g-label" for="ev-url">Register URL</label><input class="g-input" id="ev-url" placeholder="https://…" /></div>'
       + '<div class="g-field"><label class="g-label" for="ev-summary">Summary</label><textarea class="g-textarea" id="ev-summary" placeholder="One or two lines shown on the card."></textarea></div>'
+      + '<div class="g-field"><label class="g-label" for="ev-timeline">Timeline</label><textarea class="g-textarea" id="ev-timeline" placeholder="9:00 AM | Opening circle | Doors open 30 minutes before\n10:30 AM | Energy session | Main hall"></textarea><p class="g-card__meta">One item per line: time | title | optional detail</p></div>'
       + '<div class="g-checks">'
       + '<label class="g-check"><input type="checkbox" id="ev-featured" /> Feature on Home</label>'
       + '<label class="g-check"><input type="checkbox" id="ev-live" /> Happening now</label>'
@@ -108,6 +109,7 @@
     el('ev-venue').value = ev ? ev.venue : '';
     el('ev-url').value = ev ? ev.registerUrl : '';
     el('ev-summary').value = ev ? ev.summary : '';
+    el('ev-timeline').value = ev && Array.isArray(ev.timeline) ? ev.timeline.map((item) => [item.time, item.title, item.detail].filter(Boolean).join(' | ')).join('\n') : '';
     el('ev-featured').checked = ev ? !!ev.featured : false;
     el('ev-live').checked = ev ? !!ev.live : false;
     el('ev-published').checked = ev ? ev.published !== false : true;
@@ -147,6 +149,7 @@
         id: editEventId || undefined,
         title: el('ev-title').value, date: el('ev-date').value, venue: el('ev-venue').value,
         registerUrl: el('ev-url').value, summary: el('ev-summary').value,
+        timeline: el('ev-timeline').value.split(/\n/).map((line) => { const parts = line.split('|').map((part) => part.trim()); return { time: parts[0] || '', title: parts[1] || '', detail: parts.slice(2).join(' | ') }; }).filter((item) => item.time || item.title || item.detail),
         featured: el('ev-featured').checked, live: el('ev-live').checked, published: el('ev-published').checked,
       };
       if (!payload.title.trim()) { status.textContent = 'Title is required.'; status.className = 'g-admin-status g-admin-status--err'; return; }

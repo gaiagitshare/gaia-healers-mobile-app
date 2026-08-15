@@ -2250,7 +2250,8 @@
           </div>
           <div class="gaia-assist__headline">
             <h2>${assistant.name || 'Gaia'}</h2>
-            <p class="gaia-assist__status" data-assist-state="idle">Tap Gaia for live voice</p>
+            <p class="gaia-assist__status" data-assist-state="idle" role="status" aria-live="polite">Tap Gaia for live voice</p>
+            <button type="button" class="gaia-assist__sound-toggle" aria-pressed="false"><i class="ph ph-speaker-high" aria-hidden="true"></i><span>Sound on</span></button>
           </div>
           <div class="gaia-assist__transcript"></div>
           <div class="gaia-assist__route" hidden></div>
@@ -2288,6 +2289,7 @@
     const close = root.querySelector('.gaia-assist__close');
     const mic = root.querySelector('.gaia-assist__mic');
     const status = root.querySelector('.gaia-assist__status');
+    const soundToggle = root.querySelector('.gaia-assist__sound-toggle');
     const transcript = root.querySelector('.gaia-assist__transcript');
     const routeBox = root.querySelector('.gaia-assist__route');
     const chips = root.querySelector('.gaia-assist__chips');
@@ -2643,7 +2645,16 @@
         muteButton.textContent = muted ? 'Unmute' : 'Mute';
         muteButton.setAttribute('aria-pressed', String(muted));
       }
-      if (muted) stopSpeaking();
+      if (soundToggle) {
+        soundToggle.setAttribute('aria-pressed', String(muted));
+        soundToggle.innerHTML = '<i class="ph ph-' + (muted ? 'speaker-slash' : 'speaker-high') + '" aria-hidden="true"></i><span>' + (muted ? 'Sound off' : 'Sound on') + '</span>';
+      }
+      if (muted) {
+        stopSpeaking();
+        setAssistVoiceState('idle', 'Sound is off — tap Sound on to hear Gaia');
+      } else if (!realtimeVoice?.isActive?.()) {
+        setAssistVoiceState('idle', 'Sound on — tap Gaia to talk');
+      }
     }
 
     function selectedProvider() {
@@ -3086,19 +3097,14 @@
       if (!document.body.classList.contains('gaia-v2')) return;
       passiveWelcomeShown = true;
       sessionStorage.setItem(ASSIST_WELCOME_KEY, '1');
-      // Always open the panel so the assistant greets first — on touch devices
-      // the orb shows a "tap to begin" state (iOS blocks auto-audio until gesture).
-      setOpen(true, { passive: true });
-      if (!transcript.querySelector('[data-gaia-welcome-bubble]')) {
-        const welcomeText = passiveWelcomeText();
-        const bubble = appendMessage('bot', welcomeText);
-        bubble.dataset.gaiaWelcomeBubble = '1';
-      }
-      const onMobile = isCoarsePointer();
-      const idleCopy = onMobile
-        ? (canUseRealtimeVoice() ? 'Tap Gaia to begin' : 'Tap Gaia to start')
-        : (canUseRealtimeVoice() ? 'Starting…' : 'Tap Gaia to start');
-      setAssistVoiceState('idle', idleCopy);
+      const nudge = document.createElement('button');
+      nudge.type = 'button';
+      nudge.className = 'gaia-assist-nudge';
+      nudge.innerHTML = '<img src="assets/gaia-mark.svg" alt="" /><span><strong>Gaia Assist is ready</strong><small>Tap to talk — sound starts after your tap.</small></span><i class="ph ph-caret-right" aria-hidden="true"></i>';
+      nudge.addEventListener('click', () => { nudge.remove(); void onAssistTap(); });
+      document.body.appendChild(nudge);
+      window.setTimeout(() => nudge.remove(), 8500);
+      setAssistVoiceState('idle', REALTIME_STATUS_COPY.idle);
     }
 
     function sendRealtimeWelcome(reason = 'start') {
@@ -4001,6 +4007,7 @@
     }
 
     bindAssistDock();
+    soundToggle?.addEventListener('click', () => setMuted(!muted));
     window.addEventListener('gaia:open-assist', (event) => {
       unlockVoicePlayback();
       setOpen(true);

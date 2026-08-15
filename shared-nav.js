@@ -6,10 +6,10 @@
   if (!window.location.hash) window.scrollTo({ top: 0, left: 0, behavior: 'instant' });
 
   const tabs = [
-    { id: 'today', href: 'home.html?view=today', label: 'Today', icon: 'ph-house' },
-    { id: 'journey', href: 'home.html?view=journey', label: 'Journey', icon: 'ph-path' },
+    { id: 'today', href: 'home.html?view=today', label: 'Today', icon: 'ph-sun' },
+    { id: 'journey', href: 'home.html?view=journey', label: 'Journey', icon: 'ph-target' },
     { id: 'inbox', href: 'home.html?view=inbox', label: 'Inbox', icon: 'ph-chat-circle-dots' },
-    { id: 'profile', href: 'home.html?view=profile', label: 'Profile', icon: 'ph-user-circle' },
+    { id: 'profile', href: 'home.html?view=profile', label: 'Profile', icon: 'ph-user' },
   ];
 
   function currentView() {
@@ -43,7 +43,8 @@
       <div class="gaia-tabbar__group gaia-tabbar__group--left">${left.map((t) => tabLink(t, active === t.id)).join('')}</div>
       <button type="button" class="gaia-tabbar__assist" data-gaia-tab-assist data-state="idle" aria-label="Open Gaia Assist — live voice" aria-expanded="false">
         <span class="gaia-tabbar__assist-pulse" aria-hidden="true"></span>
-        <i class="ph ph-microphone gaia-tabbar__assist-icon" aria-hidden="true"></i>
+        <img class="gaia-tabbar__assist-mark" src="assets/gaia-mark.svg" alt="" aria-hidden="true" />
+        <span class="sr-only">Gaia Assist</span>
       </button>
       <div class="gaia-tabbar__group gaia-tabbar__group--right">${right.map((t) => tabLink(t, active === t.id)).join('')}</div>`;
   }

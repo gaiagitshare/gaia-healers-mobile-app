@@ -14,6 +14,7 @@ body.gaia-v2 .gaia-main--today { max-width: 1240px; padding-top: 24px; }
 body.gaia-v2 .g-home { width: 100%; max-width: none; display: block; }
 .g-super-home, .g-journey, .g-events, .g-bookings, .g-inbox { width: 100%; }
 .g-super-home { display: grid; gap: 22px; }
+.sr-only { position: absolute !important; width: 1px !important; height: 1px !important; padding: 0 !important; margin: -1px !important; overflow: hidden !important; clip: rect(0, 0, 0, 0) !important; white-space: nowrap !important; border: 0 !important; }
 
 .g-super-hero {
   position: relative;
@@ -72,6 +73,16 @@ body.gaia-v2 .g-home { width: 100%; max-width: none; display: block; }
 .g-super-primary h2 { margin: 0; color: var(--g-text); font-family: var(--g-font-serif); font-size: clamp(30px, 4vw, 48px); line-height: 1; font-weight: 600; }
 .g-super-primary > p:not(.g-super-kicker) { margin: 12px 0 0; color: var(--super-muted); line-height: 1.55; }
 .g-super-primary__button { width: fit-content; min-width: 230px; margin-top: 20px; gap: 10px; }
+.g-super-discover { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 26px; }
+.g-super-discover .g-btn { gap: 8px; }
+
+.g-free-tools { padding: 28px; border: 1px solid var(--super-line); border-radius: 24px; background: var(--super-panel); }
+.g-free-tools__grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+.g-free-tool { min-height: 132px; display: grid; align-content: center; justify-items: center; gap: 8px; padding: 18px 12px; color: inherit; text-align: center; text-decoration: none; border: 1px solid var(--super-line); border-radius: 18px; background: #0a150e; }
+.g-free-tool:hover, .g-free-tool:focus-visible { background: var(--super-panel-2); outline: 2px solid rgba(166, 237, 104, .35); }
+.g-free-tool > span { display: grid; place-items: center; width: 42px; height: 42px; color: var(--super-accent); border-radius: 50%; background: rgba(166, 237, 104, .09); font-size: 21px; }
+.g-free-tool strong { color: var(--g-text); font-size: 14px; }
+.g-free-tool small { max-width: 150px; color: var(--super-muted); font-size: 11px; line-height: 1.4; }
 
 .g-super-auth { display: flex; align-items: center; justify-content: space-between; gap: 24px; padding: 28px; border: 1px solid var(--super-line); border-radius: 22px; background: var(--super-panel); }
 .g-super-auth--compact { margin-top: 34px; padding: 0; border: 0; background: transparent; align-items: flex-end; }
@@ -136,23 +147,39 @@ body.gaia-v2 .g-home { width: 100%; max-width: none; display: block; }
 .g-event-detail dt { color: var(--super-muted); font-size: 12px; }
 .g-event-detail dd { margin: 0; color: var(--g-text); font-size: 13px; }
 .g-event-detail .g-btn { gap: 8px; }
+.g-event-timeline { margin-top: 18px; padding: 26px; border: 1px solid var(--super-line); border-radius: 22px; background: var(--super-panel); }
+.g-event-timeline h2 { margin: 0 0 18px; color: var(--g-text); font-family: var(--g-font-serif); font-size: 30px; font-weight: 600; }
+.g-event-timeline__item { display: grid; grid-template-columns: minmax(78px, auto) minmax(0, 1fr); gap: 18px; padding: 15px 0; border-top: 1px solid var(--super-line); }
+.g-event-timeline__item time { color: var(--super-accent); font-size: 12px; font-weight: 800; }
+.g-event-timeline__item div { display: grid; gap: 4px; }
+.g-event-timeline__item strong { color: var(--g-text); font-size: 14px; }
+.g-event-timeline__item span { color: var(--super-muted); font-size: 12px; line-height: 1.45; }
 
 .g-booking-item, .g-super-empty-panel { margin-top: 16px; display: flex; align-items: center; justify-content: space-between; gap: 22px; padding: 24px; border: 1px solid var(--super-line); border-radius: 22px; background: var(--super-panel); }
 .g-booking-item h2, .g-super-empty-panel h2 { margin: 0; color: var(--g-text); font-family: var(--g-font-serif); font-size: 30px; font-weight: 600; }
 .g-booking-item p:not(.g-super-kicker), .g-super-empty-panel p { margin: 8px 0 0; color: var(--super-muted); line-height: 1.55; }
 
-body.gaia-v2 .gaia-tabbar__icon, body.gaia-v2 .gaia-tabbar__assist-icon { width: auto; height: auto; font-size: 22px; line-height: 1; }
-body.gaia-v2 .gaia-tabbar__assist-icon { font-size: 27px; }
+body.gaia-v2 .gaia-tabbar__icon { width: auto; height: auto; font-size: 22px; line-height: 1; }
+body.gaia-v2 .gaia-tabbar__assist-mark { position: relative; z-index: 2; display: block; width: 62%; height: 62%; object-fit: contain; filter: drop-shadow(0 0 8px rgba(166, 237, 104, .42)); }
 .gaia-tabbar__badge { position: absolute; top: 0; right: calc(50% - 22px); min-width: 17px; height: 17px; display: grid; place-items: center; padding: 0 4px; border-radius: 999px; color: var(--super-accent-ink); background: var(--super-accent); font-size: 9px; font-weight: 900; }
+
+.gaia-assist-nudge { position: fixed; z-index: 70; left: 50%; bottom: max(108px, calc(env(safe-area-inset-bottom) + 94px)); width: min(360px, calc(100vw - 28px)); min-height: 66px; transform: translateX(-50%); display: grid; grid-template-columns: 42px minmax(0, 1fr) 18px; align-items: center; gap: 11px; padding: 10px 13px; color: var(--g-text); text-align: left; border: 1px solid rgba(166, 237, 104, .42); border-radius: 18px; background: rgba(10, 22, 14, .97); box-shadow: 0 18px 55px rgba(0, 0, 0, .42); }
+.gaia-assist-nudge img { width: 42px; height: 42px; }
+.gaia-assist-nudge span { min-width: 0; display: grid; gap: 3px; }
+.gaia-assist-nudge strong { font-size: 13px; }
+.gaia-assist-nudge small { color: var(--super-muted); font-size: 11px; line-height: 1.35; }
+.gaia-assist-nudge > .ph { color: var(--super-accent); }
+body.gaia-v2 .gaia-assist__sound-toggle { display: inline-flex; align-items: center; justify-content: center; gap: 6px; min-height: 34px; margin: 8px auto 0; padding: 6px 11px; color: var(--super-muted); border: 1px solid var(--super-line); border-radius: 999px; background: rgba(255,255,255,.03); font-size: 11px; }
+body.gaia-v2 .gaia-assist__sound-toggle .ph { color: var(--super-accent); font-size: 15px; }
 
 @media (max-width: 760px) {
   body.gaia-v2 .gaia-main--today { padding-top: 12px; }
   .g-super-home { gap: 14px; }
   .g-super-hero { min-height: 0; display: block; border-radius: 22px; }
-  .g-super-hero__art { position: absolute; z-index: 0; inset: 0 0 auto 42%; height: 360px; border: 0; opacity: .55; }
-  .g-super-hero__intro { padding: 26px 20px 22px; }
+  .g-super-hero__art { position: absolute; z-index: 0; inset: 0 0 auto 48%; height: 260px; border: 0; opacity: .4; }
+  .g-super-hero__intro { min-height: 252px; padding: 24px 18px 20px; display: grid; align-content: center; }
   .g-super-hero__intro::before { content: ""; position: absolute; z-index: -1; inset: 0; background: rgba(7, 16, 10, .72); }
-  .g-super-hero h1 { max-width: 270px; font-size: 46px; }
+  .g-super-hero h1 { max-width: 285px; font-size: clamp(36px, 10vw, 44px); line-height: 1; }
   .g-super-hero__intro > p:not(.g-super-date) { max-width: 290px; margin-top: 12px; font-size: 14px; }
   .g-journey-rail { margin-top: 24px; }
   .g-journey-step > span { width: 46px; height: 46px; font-size: 20px; }
@@ -161,11 +188,16 @@ body.gaia-v2 .gaia-tabbar__assist-icon { font-size: 27px; }
   .g-super-primary h2 { max-width: 315px; font-size: 34px; }
   .g-super-primary > p:not(.g-super-kicker) { font-size: 13px; }
   .g-super-primary__button { width: 100%; min-width: 0; }
+  .g-super-discover { display: grid; grid-template-columns: 1fr 1fr; width: 100%; margin-top: 20px; }
+  .g-super-discover .g-btn { width: 100%; min-width: 0; padding-inline: 12px; font-size: 12px; }
   .g-super-auth, .g-super-auth--compact { display: grid; align-items: start; padding: 22px; border: 1px solid var(--super-line); background: rgba(7, 16, 10, .82); }
   .g-super-auth h2 { font-size: 30px; }
   .g-super-actions { width: 100%; }
   .g-super-actions .g-btn { flex: 1; }
   .g-super-services, .g-super-list { padding: 20px 16px; border-radius: 20px; }
+  .g-free-tools { padding: 20px 14px; border-radius: 20px; }
+  .g-free-tools__grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+  .g-free-tool { min-height: 116px; padding: 14px 8px; border-radius: 15px; }
   .g-super-section-head h2 { font-size: 27px; }
   .g-super-services__grid { display: block; border: 0; }
   .g-super-service { min-height: 90px; grid-template-columns: 46px minmax(0, 1fr) 18px; gap: 14px; padding: 15px 0; border: 0; border-top: 1px solid var(--super-line); background: transparent; }
@@ -178,7 +210,7 @@ body.gaia-v2 .gaia-tabbar__assist-icon { font-size: 27px; }
   .g-super-event--empty { grid-template-columns: 1fr; }
   .g-super-sync { padding: 16px 4px; }
   .g-super-page-head { padding: 22px 0 4px; }
-  .g-super-page-head h1 { font-size: 52px; }
+  .g-super-page-head h1 { font-size: clamp(40px, 12vw, 52px); line-height: .98; }
   .g-super-page-head > p:last-child { margin-top: 12px; font-size: 14px; }
   .g-journey > .g-journey-rail { padding: 18px 10px; }
   .g-super-row { grid-template-columns: 44px minmax(0, 1fr) 18px; gap: 12px; padding: 15px 0; }
@@ -186,6 +218,7 @@ body.gaia-v2 .gaia-tabbar__assist-icon { font-size: 27px; }
   .g-event-detail > img { height: 250px; min-height: 0; }
   .g-event-detail > div { padding: 24px 20px; }
   .g-event-detail h2 { font-size: 42px; }
+  .g-event-timeline { padding: 20px 16px; }
   .g-booking-item, .g-super-empty-panel { display: grid; padding: 20px; }
   .g-booking-item .g-btn { width: 100%; }
 }
@@ -204,6 +237,7 @@ body.gaia-v2 .gaia-tabbar__assist-icon { font-size: 27px; }
   body.gaia-v2 .gaia-tabbar__group--right .gaia-tabbar__link:nth-child(2) { order: 5; }
   body.gaia-v2 .g-topbar { padding-left: max(30px, calc((100vw - 112px - 1240px) / 2)); padding-right: max(30px, calc((100vw - 112px - 1240px) / 2)); }
   .gaia-tabbar__badge { top: 5px; right: 18px; }
+  .gaia-assist-nudge { left: 132px; bottom: 28px; transform: none; }
 }
 
 @media (prefers-reduced-motion: reduce) {

@@ -46,7 +46,7 @@
   <link rel="stylesheet" href="vendor/phosphor/phosphor.css?v=2.1.2" />
   <link rel="stylesheet" href="gaia-system.css?v=20260815b" />
   <link rel="stylesheet" href="gaia-reshape.css?v=20260722b" />
-  <link rel="stylesheet" href="gaia-superapp.css?v=20260815e" />
+  <link rel="stylesheet" href="gaia-superapp.css?v=20260815g" />
 </head>
 <body class="gaia-app gaia-page gaia-single-app gaia-v2">
   <a class="gaia-skip-link" href="#gaia-app-shell">Skip to app content</a>
@@ -106,21 +106,48 @@
       </header>
       <main class="gaia-main g-page g-energy">
         <div class="g-page__head g-page__head--energy">
-          <p class="g-page__kicker">Daily guidance</p>
-          <h1 class="g-page__title">Energy</h1>
-          <p class="g-page__sub">Your birth-date chakra and seven-centre guide — open to everyone.</p>
+          <p class="g-page__kicker">Your wellness compass</p>
+          <h1 class="g-page__title">Energy Studio</h1>
+          <p class="g-page__sub">Three different tools, one calm place. Choose what you need today.</p>
         </div>
 
+        <nav id="wellness-tabs" class="g-energy-switcher" aria-label="Energy tools">
+          <button type="button" data-tab="check" aria-selected="true"><i class="ph ph-sparkle" aria-hidden="true"></i><span>Energy check</span></button>
+          <button type="button" data-tab="horoscope" aria-selected="false"><i class="ph ph-moon-stars" aria-hidden="true"></i><span>Horoscope</span></button>
+          <button type="button" data-tab="chakras" aria-selected="false"><i class="ph ph-circles-three-plus" aria-hidden="true"></i><span>Chakra match</span></button>
+        </nav>
+
+        <section id="panel-energy" class="g-energy-panel" data-energy-panel="check">
+          <div class="g-energy-intro">
+            <p class="g-sec-head__kicker">Energy check</p>
+            <h2>What needs your attention?</h2>
+            <p>Use your birth-date profile to reveal today’s body point and a simple practice.</p>
+          </div>
+          <section id="me-wellness" class="g-page-sec" data-wellness-mode="check" aria-label="Your daily energy check"></section>
+        </section>
+
+        <section id="panel-horoscope" class="g-energy-panel" data-energy-panel="horoscope" hidden>
+          <div class="g-energy-intro">
+            <p class="g-sec-head__kicker">Wellness horoscope</p>
+            <h2>Your guidance for today</h2>
+            <p>A reflective daily prompt based on your saved birth date and sun sign.</p>
+          </div>
+          <section id="horoscope-wellness" class="g-page-sec" data-wellness-mode="horoscope" aria-label="Your wellness horoscope"></section>
+        </section>
+
+        <section id="panel-chakras" class="g-energy-panel" data-energy-panel="chakras" hidden>
+          <div class="g-energy-intro">
+            <p class="g-sec-head__kicker">Chakra match</p>
+            <h2>Explore the seven centres</h2>
+            <p>Choose a centre to understand its focus and open matching Colour Energy support.</p>
+          </div>
+          <section id="home-chakra-hero" class="g-chakra-hero" aria-label="Interactive chakra match"></section>
+        </section>
+
         <aside class="g-energy-note" aria-label="Wellness guidance notice">
-          <strong>Take a mindful moment.</strong>
-          <span>Explore what your energy may need today. Wellness guidance, not medical advice.</span>
+          <strong>Guidance, not diagnosis.</strong>
+          <span>These tools support reflection and do not replace professional medical care.</span>
         </aside>
-
-        <header class="g-sec-head"><p class="g-sec-head__kicker">Your daily chart</p><h2 class="g-sec-head__title">Birth-date chakra</h2></header>
-        <section id="me-wellness" class="g-page-sec" aria-label="Your birth-date chakra"></section>
-
-        <header class="g-sec-head"><p class="g-sec-head__kicker">Seven-centre guide</p><h2 class="g-sec-head__title">Explore your energy</h2></header>
-        <section id="home-chakra-hero" class="g-chakra-hero" aria-label="Your energy"></section>
       </main>
     </section>
 
@@ -211,13 +238,13 @@
          password-gated surface served by the proxy: api.gaiahealers.app/admin -->
   </div>
   <script defer src="shared-nav.js?v=20260815b"></script>
-  <script defer src="gaia-realtime-voice.js?v=20260721c"></script>
+  <script defer src="gaia-realtime-voice.js?v=20260815b"></script>
   <script defer src="gaia-member.js?v=20260815b"></script>
-  <script defer src="gaia-wellness.js?v=20260721c"></script>
+  <script defer src="gaia-wellness.js?v=20260815b"></script>
   <script defer src="gaia-quiz.js?v=20260815b"></script>
   <script defer src="gaia-store.js?v=20260721h"></script>
-  <script defer src="gaia-ui.js?v=20260815b"></script>
-  <script defer src="gaia-superapp.js?v=20260815b"></script>
+  <script defer src="gaia-ui.js?v=20260815f"></script>
+  <script defer src="gaia-superapp.js?v=20260815d"></script>
   <script>
     if ('serviceWorker' in navigator) {
       window.addEventListener('load', function () { navigator.serviceWorker.register('/sw.js').catch(function () {}); });

@@ -1,49 +1,45 @@
-# Gaia Healers super-app design QA — Energy Studio and ecosystem pass
+# Gaia Energy Studio design QA — birthday and reflection upgrade
 
-## Source paths
+## Current-run evidence
 
-- Live app before: `work/audit-round2/live-energy-before.png`
-- GaiaHealers.com mobile capture: `work/audit-round2/gaiahealers-com-home.png`
-- User reference photos: `/Users/ba2ki-goldvest/Downloads/IMG_4345.JPG` through `IMG_4349.JPG`
+- Before birthday form: `work/audit-birthday/before-birthday-form.png`
+- After birthday form: `work/audit-birthday/after-birthday-form-blank.png`
+- Combined comparison: `work/audit-birthday/birthday-before-after.png`
+- Completed Gaia birth map: `work/audit-birthday/after-birthday-map.png`
+- Chakra practice view: `work/audit-birthday/after-chakra-practice.png`
+- Chakra-to-Gaia Assist handoff: `work/audit-birthday/after-chakra-assist.png`
+- Desktop birthday form: `work/audit-birthday/after-birthday-desktop.png`
 
-## Implementation paths
+## Viewports and state
 
-- Mobile Energy Check: `work/audit-round2/local-energy-check.png`
-- Mobile Horoscope: `work/audit-round2/local-horoscope.png`
-- Mobile Chakra Match: `work/audit-round2/local-chakra-match.png`
-- Desktop Energy Studio: `work/audit-round2/local-energy-desktop.png`
-- Combined before/after comparison: `work/audit-round2/energy-before-after-comparison.png`
-
-## Viewport and state
-
-- Mobile: 390 × 844, signed-out
-- Desktop: 1280 × 900, signed-out
+- Mobile: 390 × 844, signed-out visitor
+- Desktop: 1280 × 900, signed-out visitor
 - Review date: 2026-08-15
 
-## Full-screen comparison
+## Findings and fixes
 
-- The old mixed wellness page is replaced with a clear Energy Studio and three explicit modes.
-- Each Today card now deep-links to its matching Energy Check, Horoscope, or Chakra Match panel.
-- Typography, borders, radii, and green/cream palette remain consistent with the existing Gaia design language.
-- The fixed five-icon mobile navigation keeps safe-area spacing and does not obscure primary actions.
+- P0: none.
+- P1: none.
+- P2 resolved: the native date picker made older birth years difficult to reach. It is replaced with labelled Month, Day, and typed 4-digit Year controls, with birthday autofill metadata.
+- P2 resolved: impossible and future dates now show a clear inline error and do not reveal a result.
+- P2 resolved: static chakra percentages in the older map were removed because they could be mistaken for measured Bio-Well results.
+- The birth map appears before profile creation and clearly describes itself as reflection—not a scan or prediction.
+- Each chakra selection now provides a stable two-minute practice, journal prompt, matching Gaia store route, and Gaia Assist continuation. Automatic rotation was removed so content does not change while someone is reading.
+- Mobile fields fit on one row with large touch targets; desktop preserves the existing Energy Studio rail and card hierarchy.
+- Bottom navigation remains reachable with safe-area spacing.
 
-## Focused comparison
+## Interaction checks
 
-- Energy Check exposes birth-date setup, birth chakra, daily body point, and an actionable prompt.
-- Horoscope has its own reflective daily guidance state and does not present medical or predictive certainty.
-- Chakra Match exposes seven selectable energy centres and links recommendations to the product catalog.
-- Desktop uses a persistent Energy Studio rail and a wider content canvas without horizontal clipping.
+- Direct 4-digit year entry: passed.
+- Month selection and two-digit day entry: passed.
+- Valid date calculation (`March 14 1990` → Pisces, Sacral): passed.
+- Invalid date validation (`February 31 1990`): passed.
+- Chakra selection updates practice and journal prompt: passed.
+- Chakra action opens Gaia Assist with the selected reflection context: passed.
+- JavaScript syntax and repository diff checks: passed.
 
-## Responsive and interaction history
+## Evidence limits
 
-- Verified direct routes and tab switching at 390 × 844 and 1280 × 900.
-- Verified Today, Journey, Academy, Community, Events, Bookings, Inbox, Store, Profile, and Gaia Assist entry points.
-- Verified the colour test, membership store tab, birth-date calculation, external ecosystem links, and Gaia Assist research routing.
-
-## Console and data notes
-
-- JavaScript syntax checks and repository diff checks pass.
-- Production API warnings seen from the localhost origin are expected; no client JavaScript exceptions were observed.
-- Private course, community, message, and entitlement data remains gated by the verified GHL member record.
+- Visual QA confirms responsive layout and browser interaction states; it does not claim clinical validity or accessibility conformance beyond the inspected labels, focus states, touch targets, and error messaging.
 
 final result: passed

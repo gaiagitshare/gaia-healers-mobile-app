@@ -1428,9 +1428,17 @@
     detail.innerHTML = `
       <div class="gaia-chakra-map__detail-main">
         <p class="gaia-chakra-map__name">${active.name} <span>${active.sanskrit}</span></p>
-        <p class="gaia-chakra-map__score gaia-tabular">${active.score} · ${active.element}</p>
+        <p class="gaia-chakra-map__score">${active.element} · ${active.theme || 'Reflection'}</p>
         <p class="gaia-caption">${active.location}</p>
         <p class="gaia-chakra-map__focus">${active.focus}</p>
+        <div class="gaia-chakra-map__ritual">
+          <span><i class="ph ph-sparkle" aria-hidden="true"></i> 2-minute practice</span>
+          <p>${active.practice || 'Pause, breathe slowly, and notice what is present.'}</p>
+        </div>
+        <div class="gaia-chakra-map__ritual">
+          <span><i class="ph ph-note-pencil" aria-hidden="true"></i> Journal</span>
+          <p>${active.journalPrompt || 'What would bring me back into balance today?'}</p>
+        </div>
       </div>
       <div class="gaia-chakra-map__actions">
         <a href="${active.learnHref}" class="gaia-link">Learn more</a>
@@ -1461,11 +1469,11 @@
               <span class="gaia-chakra-map__list-name">${item.name}</span>
               <span class="gaia-chakra-map__list-theme">${item.theme || item.element}</span>
             </span>
-            <span class="gaia-chakra-map__list-track"><i style="width:${item.score}%"></i></span>
-            <span class="gaia-chakra-map__list-score gaia-tabular">${item.score}</span>
+            <span class="gaia-chakra-map__list-element">${item.element}</span>
           </button>`).join('');
 
         root.innerHTML = `
+          <div class="gaia-chakra-map__notice"><i class="ph ph-hand-tap" aria-hidden="true"></i><span>Choose a centre to explore its traditional theme and a gentle practice. This guide is not a scan or score.</span></div>
           <div class="gaia-chakra-map__layout">
             <div class="gaia-chakra-map__figure" data-active-chakra="${active.id}" aria-hidden="false">
               <div class="gaia-chakra-map__canvas">
@@ -1476,19 +1484,27 @@
                   ${chakras.map((item) => `
                     <button type="button" class="gaia-chakra-map__node${item.id === active.id ? ' is-active' : ''}"
                       style="--chakra-color:${item.color}"
-                      data-chakra-id="${item.id}" aria-label="${item.name} chakra, score ${item.score}">
+                      data-chakra-id="${item.id}" aria-label="Explore ${item.name} chakra">
                       <span aria-hidden="true"></span>
                     </button>`).join('')}
                 </div>
               </div>
             </div>
-            <div class="gaia-chakra-map__list" role="listbox" aria-label="Chakra scores">${listItems}</div>
+            <div class="gaia-chakra-map__list" role="listbox" aria-label="Explore the seven chakra centres">${listItems}</div>
             <div class="gaia-chakra-map__detail">
               <div class="gaia-chakra-map__detail-main">
                 <p class="gaia-chakra-map__name">${active.name} <span>${active.sanskrit}</span></p>
-                <p class="gaia-chakra-map__score gaia-tabular">${active.score} · ${active.element}</p>
+                <p class="gaia-chakra-map__score">${active.element} · ${active.theme || 'Reflection'}</p>
                 <p class="gaia-caption">${active.location}</p>
                 <p class="gaia-chakra-map__focus">${active.focus}</p>
+                <div class="gaia-chakra-map__ritual">
+                  <span><i class="ph ph-sparkle" aria-hidden="true"></i> 2-minute practice</span>
+                  <p>${active.practice || 'Pause, breathe slowly, and notice what is present.'}</p>
+                </div>
+                <div class="gaia-chakra-map__ritual">
+                  <span><i class="ph ph-note-pencil" aria-hidden="true"></i> Journal</span>
+                  <p>${active.journalPrompt || 'What would bring me back into balance today?'}</p>
+                </div>
               </div>
               <div class="gaia-chakra-map__actions">
                 <a href="${active.learnHref}" class="gaia-link">Learn more</a>

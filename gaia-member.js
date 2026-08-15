@@ -81,6 +81,16 @@ body.gaia-booking-open{overflow:hidden;}
   function esc(s) {
     return String(s == null ? '' : s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
   }
+  function plainDescription(html, maxLength = 220) {
+    try {
+      const doc = new DOMParser().parseFromString(String(html || ''), 'text/html');
+      const text = String(doc.body.textContent || '').replace(/\s+/g, ' ').trim();
+      if (text.length <= maxLength) return text;
+      return text.slice(0, maxLength).replace(/\s+\S*$/, '').trimEnd() + '…';
+    } catch (_) {
+      return '';
+    }
+  }
   function el(id) { return document.getElementById(id); }
   function portalBase() {
     return String((window.GAIA && (window.GAIA.clientPortal && window.GAIA.clientPortal.url || window.GAIA.portalUrl)) || 'https://education.gaiahealers.com').replace(/\/+$/, '');
@@ -662,13 +672,13 @@ body.gaia-booking-open{overflow:hidden;}
       (grant.id && course.id && String(grant.id) === String(course.id))
       || (key(grant.title || grant.name) && key(grant.title || grant.name) === key(course.title || course.name)));
     const tracks = cat.map((c) => ({
-      id: c.id, name: c.title, desc: c.description, image: c.image, category: c.category,
+      id: c.id, name: c.title, desc: plainDescription(c.description), image: c.image, category: c.category,
       accessLevel: c.accessLevel, price: c.price, portalUrl: c.portalUrl,
       memberCount: Number(c.memberCount) || 0, grant: findGrant(c),
     }));
     grants.forEach((grant) => {
       if (!tracks.some((track) => track.grant === grant)) {
-        tracks.unshift({ id: grant.id, name: grant.title || grant.name, desc: grant.description || 'Available in your Gaia Academy.', image: grant.image, grant });
+        tracks.unshift({ id: grant.id, name: grant.title || grant.name, desc: plainDescription(grant.description) || 'Available in your Gaia Academy.', image: grant.image, grant });
       }
     });
     const trackCard = (t) => {

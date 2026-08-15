@@ -1041,10 +1041,10 @@
           </div>
           <p class="gaia-auth-modal__body">Enter your Gaia member email. We’ll send a secure one-tap link that returns directly to this app and keeps you signed in for one week.</p>
           <form class="gaia-auth-modal__form" data-auth-form>
-            <input type="email" data-auth-email class="gaia-auth-modal__input" placeholder="you@example.com" autocomplete="email" inputmode="email" required />
+            <input type="email" data-auth-email class="gaia-auth-modal__input" placeholder="you@example.com" autocomplete="email" inputmode="email" aria-label="Email address" aria-describedby="gaia-auth-status" required />
             <button type="submit" class="g-btn g-btn--primary gaia-auth-modal__submit" data-auth-submit>Email me a sign-in link</button>
           </form>
-          <p class="gaia-auth-modal__status" data-auth-status>Your link goes straight to your inbox.</p>
+          <p class="gaia-auth-modal__status" id="gaia-auth-status" data-auth-status role="status" aria-live="polite">Your link goes straight to your inbox.</p>
         </section>`;
       document.body.appendChild(modal);
       statusEl = modal.querySelector('[data-auth-status]');
@@ -1057,10 +1057,24 @@
       modal.addEventListener('click', (event) => {
         if (event.target === modal) closeModal();
       });
+      emailInput.addEventListener('invalid', (event) => {
+        event.preventDefault();
+        emailInput.setAttribute('aria-invalid', 'true');
+        statusEl.textContent = emailInput.value.trim()
+          ? 'Enter a valid email address.'
+          : 'Enter your Gaia member email.';
+        emailInput.focus();
+      });
+      emailInput.addEventListener('input', () => {
+        if (emailInput.getAttribute('aria-invalid') !== 'true') return;
+        emailInput.removeAttribute('aria-invalid');
+        statusEl.textContent = 'Your link goes straight to your inbox.';
+      });
       modal.querySelector('[data-auth-form]').addEventListener('submit', async (event) => {
         event.preventDefault();
         const email = (emailInput.value || '').trim();
         if (!email) return;
+        emailInput.removeAttribute('aria-invalid');
         submitBtn.disabled = true;
         statusEl.textContent = 'Sending your sign-in link…';
         try {

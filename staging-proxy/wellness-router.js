@@ -52,6 +52,42 @@ const PLANETS = [
   { name: 'Saturn', body: Body.Saturn, chakraId: 'root' },
 ];
 
+// The astronomy remains factual; this layer is deliberately framed as a
+// reflective wellness pathway. It never claims to measure or diagnose energy.
+const CHAKRA_PATHS = {
+  root: { intention: 'Ground and steady', practice: 'Plant both feet, lengthen your exhale, and name one thing that feels dependable right now.', journal: 'What would help me feel supported enough to take the next step?', colour: 'Red' },
+  sacral: { intention: 'Restore creative flow', practice: 'Place a hand over your lower belly and let your hips or shoulders move gently for two minutes.', journal: 'What wants to move, be felt, or be created today?', colour: 'Orange' },
+  solar: { intention: 'Choose with confidence', practice: 'Sit tall, take five steady breaths, and choose one small action you can complete today.', journal: 'Where can I trust my own decision without forcing the outcome?', colour: 'Yellow' },
+  heart: { intention: 'Open with boundaries', practice: 'Rest a hand on your chest and breathe slowly while offering yourself one kind sentence.', journal: 'What would compassionate connection look like with a clear boundary?', colour: 'Green' },
+  throat: { intention: 'Express what is true', practice: 'Hum softly on the exhale, then write one honest sentence you have been avoiding.', journal: 'What needs a clear, kind voice today?', colour: 'Blue' },
+  'third-eye': { intention: 'Make space for clarity', practice: 'Soften your gaze, breathe quietly, and notice the first calm observation—not the loudest thought.', journal: 'What becomes clearer when I stop trying to solve everything?', colour: 'Indigo' },
+  crown: { intention: 'Reconnect to meaning', practice: 'Sit in stillness for two minutes and name three things that place today in a larger perspective.', journal: 'What helps me remember that I am part of something larger?', colour: 'Violet' },
+};
+const ELEMENT_INVITATIONS = {
+  Air: 'Give the feeling language: say it aloud, write one sentence, or take three breaths by an open window.',
+  Earth: 'Add one physical anchor: feel your feet, hold a warm cup, or complete one small practical task.',
+  Fire: 'Add gentle momentum: choose one energising song, a brisk two-minute walk, or one clear next action.',
+  Water: 'Add softness and flow: drink water slowly, move without a goal, or let one emotion be present without fixing it.',
+};
+
+function buildEnergyPath(spotlight, representedElement, elementToInvite) {
+  const base = CHAKRA_PATHS[spotlight.id] || CHAKRA_PATHS.heart;
+  return {
+    intention: base.intention,
+    summary: `${spotlight.name} is the symbolic spotlight, with ${representedElement} most represented. Invite ${elementToInvite} as a balancing reflection—not as a diagnosis or deficiency.`,
+    practice: base.practice,
+    invitation: ELEMENT_INVITATIONS[elementToInvite] || 'Choose one gentle action that brings a different quality into the moment.',
+    journal: base.journal,
+    colour: base.colour,
+    routes: {
+      measured: 'home.html?view=bookings',
+      product: 'home.html?view=store',
+      event: 'home.html?view=events',
+      community: 'home.html?view=community',
+    },
+  };
+}
+
 // ---- tiny JSON store ----
 function ensureDir() { try { fs.mkdirSync(DATA_DIR, { recursive: true }); } catch (_) { /* ignore */ } }
 function readStore() { try { const d = JSON.parse(fs.readFileSync(STORE, 'utf8')); return Array.isArray(d) ? d : []; } catch (_) { return []; } }
@@ -125,7 +161,7 @@ function zodiacPlacement(longitude) {
 }
 
 function buildCosmicMap(dob, birthTime, place) {
-  const timeKnown = /^\d{2}:\d{2}$/.test(String(birthTime || ''));
+  const timeKnown = /^(?:[01]\d|2[0-3]):[0-5]\d$/.test(String(birthTime || ''));
   const instant = localBirthInstant(dob, timeKnown ? birthTime : '12:00', place.timezone);
   const placements = PLANETS.map((planet) => {
     const vector = GeoVector(planet.body, instant, true);
@@ -139,6 +175,8 @@ function buildCosmicMap(dob, birthTime, place) {
   const dominantSign = Object.entries(signCounts).sort((a, b) => b[1] - a[1] || (a[0] === sun.sign ? -1 : 1))[0][0];
   const rankedElements = Object.entries(elementCounts).sort((a, b) => b[1] - a[1]);
   const spotlight = CHAKRAS.find((chakra) => chakra.id === SIGN_CHAKRA[dominantSign]) || CHAKRAS[0];
+  const representedElement = rankedElements[0][0];
+  const elementToInvite = rankedElements[rankedElements.length - 1][0];
   return {
     source: 'astronomy-engine',
     calculatedAt: instant.toISOString(),
@@ -147,9 +185,10 @@ function buildCosmicMap(dob, birthTime, place) {
     timezone: place.timezone,
     placements,
     dominantSign,
-    representedElement: rankedElements[0][0],
-    elementToInvite: rankedElements[rankedElements.length - 1][0],
+    representedElement,
+    elementToInvite,
     spotlight: { id: spotlight.id, name: spotlight.name, color: spotlight.color, focus: spotlight.focus },
+    energyPath: buildEnergyPath(spotlight, representedElement, elementToInvite),
   };
 }
 
@@ -353,7 +392,7 @@ async function handle(req, res, url, deps) {
     const email = str(body.email, 160).toLowerCase();
     const location = str(body.location, 120);
     const place = normalizePlace(body.place);
-    const birthTime = /^\d{2}:\d{2}$/.test(str(body.birthTime, 5)) ? str(body.birthTime, 5) : '';
+    const birthTime = /^(?:[01]\d|2[0-3]):[0-5]\d$/.test(str(body.birthTime, 5)) ? str(body.birthTime, 5) : '';
     const dob = parseDob(body.dob);
     if (!name) return sendJson(res, 200, { ok: false, reason: 'name_required' }, origin);
     if (!validEmail(email)) return sendJson(res, 200, { ok: false, reason: 'email_invalid' }, origin);

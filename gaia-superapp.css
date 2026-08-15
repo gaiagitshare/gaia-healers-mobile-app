@@ -232,6 +232,32 @@ body.gaia-v2 .gaia-assist__sound-toggle .ph { color: var(--super-accent); font-s
 .g-cosmic-map__head { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }
 .g-cosmic-map__head h3 { margin: 5px 0 0; color: var(--g-text); font: 600 25px/1.05 var(--g-font-serif); }
 .g-cosmic-map__head > .ph { flex: none; width: 44px; height: 44px; display: grid; place-items: center; color: var(--ck,var(--super-accent)); border: 1px solid color-mix(in srgb,var(--ck,#7DD956) 34%,transparent); border-radius: 50%; background: color-mix(in srgb,var(--ck,#7DD956) 8%,transparent); font-size: 23px; }
+.g-energy-path { margin-top: 17px; padding: 16px; border: 1px solid color-mix(in srgb,var(--ck,#7DD956) 34%,transparent); border-radius: 17px; background: linear-gradient(145deg,color-mix(in srgb,var(--ck,#7DD956) 10%,transparent),rgba(0,0,0,.14) 52%); }
+.g-energy-path__head { display: flex; align-items: flex-start; justify-content: space-between; gap: 14px; }
+.g-energy-path__head h4 { margin: 4px 0 0; color: var(--g-text); font: 600 21px/1.1 var(--g-font-serif); }
+.g-energy-path__head > span { flex: none; padding: 6px 8px; color: var(--ck,var(--super-accent)); border: 1px solid color-mix(in srgb,var(--ck,#7DD956) 28%,transparent); border-radius: 999px; background: rgba(0,0,0,.16); font-size: 9px; font-weight: 800; letter-spacing: .04em; text-transform: uppercase; }
+.g-energy-path__summary { margin: 11px 0 0; color: var(--super-muted); font-size: 12px; line-height: 1.55; }
+.g-energy-path__steps { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 8px; margin: 14px 0 0; padding: 0; list-style: none; }
+.g-energy-path__steps li { min-width: 0; display: flex; align-items: flex-start; gap: 9px; padding: 12px; border: 1px solid var(--super-line); border-radius: 13px; background: rgba(2,12,7,.38); }
+.g-energy-path__steps li > span { flex: none; width: 23px; height: 23px; display: grid; place-items: center; color: #081108; border-radius: 50%; background: var(--ck,var(--super-accent)); font-size: 10px; font-weight: 900; }
+.g-energy-path__steps strong { display: block; color: var(--g-text); font-size: 11px; line-height: 1.25; }
+.g-energy-path__steps p { margin: 6px 0 0; color: var(--super-muted); font-size: 10px; line-height: 1.5; }
+.g-energy-path__support { display: grid; margin-top: 10px; border: 1px solid var(--super-line); border-radius: 13px; overflow: hidden; background: rgba(2,12,7,.3); }
+.g-energy-path__support a { min-width: 0; display: grid; grid-template-columns: 28px minmax(0,1fr) 18px; align-items: center; gap: 10px; padding: 11px 12px; color: var(--g-text); text-decoration: none; }
+.g-energy-path__support a + a { border-top: 1px solid var(--super-line); }
+.g-energy-path__support a:hover, .g-energy-path__support a:focus-visible { background: color-mix(in srgb,var(--ck,#7DD956) 8%,transparent); }
+.g-energy-path__support a > .ph:first-child { width: 28px; height: 28px; display: grid; place-items: center; color: var(--ck,var(--super-accent)); border-radius: 9px; background: color-mix(in srgb,var(--ck,#7DD956) 10%,transparent); font-size: 15px; }
+.g-energy-path__support strong, .g-energy-path__support small { display: block; }
+.g-energy-path__support strong { font-size: 11px; line-height: 1.25; }
+.g-energy-path__support small { margin-top: 3px; color: var(--super-muted); font-size: 9px; line-height: 1.35; }
+.g-energy-path__support a > .ph:last-child { color: var(--super-muted); font-size: 14px; }
+.g-energy-path__note { display: flex; align-items: flex-start; gap: 7px; margin: 11px 0 0; color: var(--super-muted); font-size: 9px; line-height: 1.45; }
+.g-energy-path__note .ph { flex: none; margin-top: 1px; color: var(--ck,var(--super-accent)); font-size: 13px; }
+.g-cosmic-map__details { margin-top: 13px; }
+.g-cosmic-map__details summary { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 11px 12px; color: var(--g-text); border: 1px solid var(--super-line); border-radius: 13px; background: rgba(0,0,0,.11); cursor: pointer; font-size: 11px; font-weight: 750; list-style: none; }
+.g-cosmic-map__details summary::-webkit-details-marker { display: none; }
+.g-cosmic-map__details summary .ph { color: var(--super-muted); transition: transform .2s ease; }
+.g-cosmic-map__details[open] summary .ph { transform: rotate(180deg); }
 .g-cosmic-map__planets { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 1px; margin: 14px 0 0; padding: 0; list-style: none; border: 1px solid var(--super-line); border-radius: 14px; overflow: hidden; background: var(--super-line); }
 .g-cosmic-map__planets li { min-width: 0; display: grid; grid-template-columns: minmax(0,1fr) auto; gap: 3px 8px; padding: 11px 12px; background: #0c1911; }
 .g-cosmic-map__planets span { color: var(--super-muted); font-size: 10px; font-weight: 700; text-transform: uppercase; }
@@ -331,7 +357,9 @@ body.gaia-v2 .gaia-chakra-map__list-item, body.gaia-v2 .gaia-chakra-map--screen 
   .g-booking-item .g-btn { width: 100%; }
   .g-dob-builder__fields { grid-template-columns: minmax(112px,1.25fr) 68px 92px; gap: 6px; }
   .g-dob-builder__fields .g-input { padding-inline: 10px; }
-  .g-birth-map__grid, .g-cosmic-checkin, .g-chakra-guide__rituals { grid-template-columns: 1fr; }
+  .g-birth-map__grid, .g-cosmic-checkin, .g-chakra-guide__rituals, .g-energy-path__steps { grid-template-columns: 1fr; }
+  .g-energy-path__head { display: block; }
+  .g-energy-path__head > span { display: inline-flex; margin-top: 9px; }
   .g-cosmic-map__planets { grid-template-columns: 1fr; }
   .g-birth-map__actions .g-btn { width: 100%; }
   .gaia-chakra-map__detail { display: grid; }

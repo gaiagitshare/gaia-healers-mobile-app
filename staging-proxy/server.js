@@ -177,6 +177,7 @@ const FALLBACK_MEMBER_HUB = {
 
 const GAIA_KNOWLEDGE = {
   brand: 'Gaia Healers — a holistic wellness network combining biofield / energy-science devices, practitioner certification, a member community, live events, and a wellness store. Founded by Dr. Nima Farshid.',
+  founder: 'Official Gaia sources describe Dr. Nima Farshid as Gaia Healers’ founder, a doctor of natural medicine, software engineer, and Bio-Well educator whose work connects biofield technology, practitioner education, community, and live events. His research interests include people, places, and water. Never use his story or titles to turn a symbolic horoscope into a medical claim; offer verified education, booking, device-measurement, community, and event routes as optional next steps.',
   publicWebsite: 'https://gaiahealers.com',
   clientPortal: 'https://education.gaiahealers.com',
   practitionerDirectory: 'https://gaiapractitioners.com',
@@ -217,6 +218,7 @@ const GAIA_KNOWLEDGE = {
     'Practitioner CRM, software and marketplace: https://gaiapractitioners.com and https://nextlevel.gaiahealers.com.',
     'Contact Gaia Healers: https://gaiahealers.com/pages/contact-us.',
     'Elevate Conference: https://elevate.gaiahealers.com.',
+    'Dr. Nima Farshid and Gaia’s biofield education story: https://gaiahealers.com and https://workshop.gaiahealers.com/.',
   ],
   devices: [
     'Bio-Well 3.0 — biofield / GDV imaging for stress and energy assessment (plus Sputnik, Glove, Water Sensor, and Bio Cor accessories).',
@@ -250,7 +252,7 @@ const GAIA_KNOWLEDGE = {
       'Events (view=events): the confirmed public Gaia event plus authenticated member appointments; unavailable community live-session feeds are never invented.',
       'Bookings (view=bookings): real GHL appointments plus verified Gaia booking forms.',
       'Inbox (view=inbox): read-only GHL conversation summaries for the authenticated contact.',
-      'Energy Studio (view=wellness): three distinct public tools. Energy Check (tab=check) uses an easy Month / Day / typed 4-digit Year form—never a long calendar scroll—to reveal a birth-date-number chakra and sun-sign reflection before sign-up. Worldwide birth-city autocomplete resolves the city and time zone; an optional birth time then powers a seven-planet sky-to-chakra map calculated with Astronomy Engine. It shows actual astronomical sign placements, a symbolic Gaia chakra spotlight, the most represented element, and an element to gently invite. If birth time is unknown it uses local noon and labels the result as an estimate. Wellness Horoscope (tab=horoscope) adds a reflective daily practice and journal question. Chakra Match (tab=chakras) is an interactive seven-centre guide with traditional themes, practices, prompts, and relevant Colour Energy support. These are symbolic wellness reflection tools, not medical advice, predictions, device scans, or measured chakra scores.',
+      'Energy Studio (view=wellness): three distinct public tools. Energy Check (tab=check) uses an easy Month / Day / typed 4-digit Year form—never a long calendar scroll—to reveal a birth-date-number chakra and sun-sign reflection before sign-up. Worldwide birth-city autocomplete resolves the city and time zone; an optional birth time then powers a seven-planet sky-to-chakra map calculated with Astronomy Engine. It shows actual astronomical sign placements, a symbolic Gaia chakra spotlight, the most represented element, and an element to gently invite. The result now becomes a Gaia Energy Path: a two-minute practice, a balancing element invitation, a journal question, matching Colour Energy support, and verified routes to Bio-Well sessions, Dr. Nima, community, and Elevate. Planet details remain available in a disclosure. If birth time is unknown it uses local noon and labels the result as an estimate. Wellness Horoscope (tab=horoscope) adds a reflective daily practice and journal question. Chakra Match (tab=chakras) is an interactive seven-centre guide with traditional themes, practices, prompts, and relevant Colour Energy support. These are symbolic wellness reflection tools, not medical advice, predictions, device scans, or measured chakra scores.',
       'Academy (view=academy, opened from the top Menu): courses and certification. It opens the education.gaiahealers.com portal for the actual lessons and never shows fake progress.',
       'Community (view=community, opened from the top Menu): "My Access" — which communities you have unlocked versus still locked — plus Find a Practitioner. Communities: All Gaia Healers, Bio-Well, BioPulsar, BioTekna, ASEA, BrainTap, LifeWave, Golden Practitioner.',
       'Store (view=store): two tabs — Shop (the live Shopify catalogue by category: Featured, Colour Energy, Courses, Bio-Well, BioPulsar, BioTekna, Crystals; tapping a product opens its image, description, and purchase action in a native in-app sheet; Shopify opens only for the final current-price and secure-payment step) and Membership (the official Free / Silver / Gold / Diamond Gaia 2.0 tiers).',
@@ -258,7 +260,7 @@ const GAIA_KNOWLEDGE = {
     ],
     features: [
       'Energy Check — free at view=wellness&tab=check; choose a month and type the day and 4-digit year to see a birth-date-number chakra, sun-sign reflection, gentle practice, journal prompt, and relevant Gaia support. Saving the profile unlocks today’s body point and challenge practice.',
-      'Wellness Horoscope — free at view=wellness&tab=horoscope; type and select a worldwide birth city, optionally add birth time, and receive a seven-planet sky-to-chakra map plus daily reflection. The astronomy placements are calculated; the chakra interpretation is symbolic and not a prediction.',
+      'Wellness Horoscope — free at view=wellness&tab=horoscope; type and select a worldwide birth city, optionally add birth time, and receive a seven-planet sky-to-chakra map plus a personal Gaia Energy Path. Gaia Assist can turn it into a gentle 7-day plan and explain optional verified routes to Colour Energy, a Bio-Well scan or demo, Dr. Nima, community, and Elevate. The astronomy placements are calculated; the chakra interpretation is symbolic and not a prediction or measurement.',
       'Chakra Match — free at view=wellness&tab=chakras; an interactive seven-centre guide with traditional themes, two-minute practices, journal prompts, and matching Colour Energy support. It deliberately shows no fake percentages or scan scores.',
       'Wellness sign-up (name, birth date, location, email) — unlocks your daily body-point and a daily wellness horoscope tip.',
       '8-Week Chakra Challenge — join, then check in daily; one chakra per week with a practice and an affirmation.',
@@ -281,6 +283,7 @@ function gaiaKnowledgePrompt() {
   const K = GAIA_KNOWLEDGE;
   return [
     `About Gaia Healers: ${K.brand}`,
+    `About Dr. Nima Farshid: ${K.founder}`,
     `Ecosystem (these are different sites — do not confuse them):\n- ${K.ecosystem.join('\n- ')}`,
     `What Gaia Healers offers:\n- ${K.services.join('\n- ')}`,
     `Verified public resources:\n- ${K.publicResources.join('\n- ')}`,
@@ -3358,6 +3361,30 @@ async function authEmbeddedClaim(req, res, origin) {
 
 function fallbackAssistReply(prompt, intent = '') {
   const normalized = `${intent} ${prompt}`.toLowerCase();
+  if (normalized.includes('sky-to-chakra') || normalized.includes('symbolic spotlight') || normalized.includes('7-day gaia energy path')) {
+    const spotlight = (normalized.match(/spotlight (?:is )?(root|sacral|solar plexus|heart|throat|third eye|crown)/) || [])[1] || 'chakra';
+    const represented = (normalized.match(/represented element is (air|earth|fire|water)|most represented element is (air|earth|fire|water)/) || []).slice(1).find(Boolean) || 'your strongest element';
+    const invite = (normalized.match(/invite (?:is )?(air|earth|fire|water)|gently invite is (air|earth|fire|water)/) || []).slice(1).find(Boolean) || 'a balancing quality';
+    const practices = {
+      root: 'feel both feet and lengthen your exhale',
+      sacral: 'place a hand over your lower belly and move gently',
+      'solar plexus': 'sit tall, breathe steadily, and choose one small action',
+      heart: 'rest a hand on your chest and offer yourself one kind sentence',
+      throat: 'hum softly, then write one honest sentence',
+      'third eye': 'soften your gaze and notice the first calm observation',
+      crown: 'sit in stillness and name three points of gratitude',
+      chakra: 'take five slow breaths and notice what shifts',
+    };
+    const invitations = {
+      air: 'give the feeling language in one spoken or written sentence',
+      earth: 'add a physical anchor such as your feet, a warm cup, or one practical task',
+      fire: 'add gentle momentum with a short walk, one song, or one clear next action',
+      water: 'add softness through slow hydration, free movement, or allowing one feeling without fixing it',
+      'a balancing quality': 'choose one gentle quality that feels absent from the moment',
+    };
+    const colour = { root: 'Red', sacral: 'Orange', 'solar plexus': 'Yellow', heart: 'Green', throat: 'Blue', 'third eye': 'Indigo', crown: 'Violet' }[spotlight] || 'matching';
+    return `Use this as reflection, not a measured energy result: your ${spotlight} spotlight and ${represented} emphasis suggest starting with two minutes to ${practices[spotlight]}; to invite ${invite}, ${invitations[invite] || invitations['a balancing quality']}. Repeat that once daily for seven days and journal: “What changed when I made room for this quality?” Optional next steps are ${colour} Colour Energy in Store, a Bio-Well scan or demo in Bookings if you want device-based measurement, time with Dr. Nima for guidance, the free Community for support, or Elevate for live learning and technology experiences. None of those is required, and this pathway does not diagnose or predict.`;
+  }
   if (normalized.includes('difference') && (normalized.includes('bio-well') || normalized.includes('biowell')) && normalized.includes('biopulsar') && normalized.includes('biotekna')) {
     return 'Bio-Well uses electrophotonic imaging for biofield and stress-oriented assessment; BioPulsar shows live aura, chakra and organ-zone biofeedback; BioTekna focuses on nervous-system, stress, recovery and physiology-related measurements. Open the Store for current device details or ask which goal you have.';
   }

@@ -669,6 +669,32 @@ function normalizeCatalogCourse(c = {}) {
   };
 }
 
+function plainCourseDescription(value, maxLength = 220) {
+  let text = String(value || '')
+    .replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, ' ')
+    .replace(/<style\b[^>]*>[\s\S]*?<\/style>/gi, ' ')
+    .replace(/<\/?(?:p|div|li|ul|ol|br|h[1-6]|blockquote|section|article)\b[^>]*>/gi, ' ')
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/&nbsp;|&#160;/gi, ' ')
+    .replace(/&amp;/gi, '&')
+    .replace(/&quot;/gi, '"')
+    .replace(/&#39;|&apos;/gi, "'")
+    .replace(/&lt;/gi, '<')
+    .replace(/&gt;/gi, '>')
+    .replace(/&#(\d+);/g, (_, code) => {
+      const point = Number(code);
+      return Number.isInteger(point) && point >= 0 && point <= 0x10ffff ? String.fromCodePoint(point) : ' ';
+    })
+    .replace(/&#x([0-9a-f]+);/gi, (_, code) => {
+      const point = Number.parseInt(code, 16);
+      return Number.isInteger(point) && point >= 0 && point <= 0x10ffff ? String.fromCodePoint(point) : ' ';
+    })
+    .replace(/\s+/g, ' ')
+    .trim();
+  if (text.length > maxLength) text = text.slice(0, maxLength).replace(/\s+\S*$/, '').trimEnd() + '…';
+  return text;
+}
+
 function catalogCourseIsPublic(course = {}) {
   if (course.deletedAt) return false;
   if (course.processing && !/^(false|complete|completed|ready)$/i.test(String(course.processing))) return false;
@@ -825,11 +851,15 @@ async function coursesSync(req, res, origin) {
 // GET /api/courses — public catalog for the app to render.
 async function coursesList(req, res, origin) {
   const data = loadCourses();
+  const courses = (data.courses || []).map((course) => ({
+    ...course,
+    description: plainCourseDescription(course.description),
+  }));
   sendJson(res, 200, {
     ok: true,
-    courses: data.courses || [],
+    courses,
     syncedAt: data.syncedAt || null,
-    count: (data.courses || []).length,
+    count: courses.length,
     source: data.source || 'none',
     stale: data.syncedAt ? (Date.now() - new Date(data.syncedAt).getTime()) > 48 * 60 * 60 * 1000 : true,
   }, origin);

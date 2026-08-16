@@ -2600,12 +2600,12 @@ async function getEventSummary() {
 const EVENT_PUBLIC_CACHE_MS = 60 * 1000;
 const _eventPublicCache = new Map();
 
-async function eventManagerGet(path) {
+async function eventManagerGet(path, maxAgeMs = EVENT_PUBLIC_CACHE_MS) {
   const base = (process.env.EVENT_MANAGER_BASE_URL || '').replace(/\/+$/, '');
   if (!base) return null;
 
   const hit = _eventPublicCache.get(path);
-  if (hit && Date.now() - hit.at < EVENT_PUBLIC_CACHE_MS) return hit.value;
+  if (hit && Date.now() - hit.at < maxAgeMs) return hit.value;
 
   const headers = {};
   if (process.env.EVENT_MANAGER_TOKEN) {
@@ -2671,6 +2671,20 @@ async function eventDetail(req, res, origin, eventId) {
     speakers: Array.isArray(speakers) ? speakers : [],
     exhibitors: Array.isArray(exhibitors) ? exhibitors : [],
   }, origin);
+}
+
+// The live surface changes minute to minute during an event, so it gets a much
+// shorter cache than the agenda — but still enough to absorb a hall full of
+// phones polling at once.
+const EVENT_LIVE_CACHE_MS = 10 * 1000;
+
+async function eventLive(req, res, origin, eventId) {
+  const live = await eventManagerGet(`/public/events/${eventId}/live`, EVENT_LIVE_CACHE_MS);
+  if (!live) {
+    sendJson(res, 404, { ok: false, error: 'event_not_found' }, origin);
+    return;
+  }
+  sendJson(res, 200, { ok: true, source: 'event-manager', live }, origin);
 }
 
 async function getGhlSummary() {
@@ -4169,6 +4183,10 @@ const server = http.createServer(async (req, res) => {
     }
     if (req.method === 'GET' && /^\/api\/events\/\d+$/.test(url.pathname)) {
       await eventDetail(req, res, origin, url.pathname.split('/').pop());
+      return;
+    }
+    if (req.method === 'GET' && /^\/api\/events\/\d+\/live$/.test(url.pathname)) {
+      await eventLive(req, res, origin, url.pathname.split('/')[3]);
       return;
     }
     if (req.method === 'POST' && url.pathname === '/api/courses/sync') {

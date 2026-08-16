@@ -3,15 +3,19 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Redirecting · Gaia Healers</title>
-  <meta http-equiv="refresh" content="0; url=home.html?view=admin" />
+  <meta name="robots" content="noindex, nofollow" />
+  <title>Redirecting to Admin · Gaia Healers</title>
+  <!-- The operator console is NOT part of the public app. It is served, and
+       password-gated, by the proxy at api.gaiahealers.app/admin/ so its session
+       cookie is first-party. Anything else lands on a cross-site cookie that
+       Chrome and Safari discard, which looks exactly like a wrong password. -->
+  <meta http-equiv="refresh" content="0; url=https://api.gaiahealers.app/admin/" />
   <script>
-    const params = new URLSearchParams(window.location.search);
-    params.set('view', 'admin');
-    window.location.replace(`home.html?${params.toString()}`);
+    window.location.replace('https://api.gaiahealers.app/admin/');
   </script>
 </head>
 <body>
-  <p>Opening Gaia Healers app...</p>
+  <p>Opening the Gaia Healers operator console at
+    <a href="https://api.gaiahealers.app/admin/">api.gaiahealers.app/admin/</a>...</p>
 </body>
 </html>

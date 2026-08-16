@@ -21,7 +21,7 @@ Paste these only into your backend host environment variables, never into the st
 | `MEMBER_HUB_JSON` | Optional staging-only normalized member hub JSON | Temporary backend env var from a GHL membership/community export |
 | `MEMBER_HUB_MEMBER_ID` | Optional staging member/contact id used by the member hub connector | GHL contact/member record |
 | `MEMBER_HUB_EMAIL` | Optional staging member email used by the member hub connector | GHL contact/member record |
-| `EVENT_MANAGER_BASE_URL` | Event API base URL, e.g. `https://ba2ki.com/event-api` | Event Manager deployment |
+| `EVENT_MANAGER_BASE_URL` | Event API base URL, e.g. `http://127.0.0.1:8002` | Event Manager deployment |
 | `EVENT_MANAGER_TOKEN` | Event Manager admin/read token, if enabled | Event Manager backend/admin setup |
 | `EVENT_MANAGER_EVENT_ID` | Elevate event numeric ID | Event Manager admin event detail URL/API |
 | `ASSIST_PROVIDER_ORDER` | Comma-separated provider order, e.g. `groq,openrouter,openai` | Gaia Assist staging config |
@@ -48,7 +48,7 @@ Paste these only into your backend host environment variables, never into the st
 | `OPENAI_COMPATIBLE_TTS_API_KEY` | Optional bearer token for that compatible TTS host | TTS provider dashboard |
 | `APP_PUBLIC_URL` | Final app URL | GitHub Pages URL |
 | `ALLOWED_ORIGINS` | GitHub Pages + GHL origins | Backend host settings |
-| `PROXY_PUBLIC_URL` | Public proxy base URL, e.g. `https://ba2ki.com/gaia-proxy` | Your deployed proxy URL |
+| `PROXY_PUBLIC_URL` | Public proxy base URL, e.g. `https://api.gaiahealers.app` | Your deployed proxy URL |
 | `AUTH_SESSION_SECRET` | Strong random secret used to sign Gaia member sessions | Generate server-side |
 | `AUTH_SESSION_COOKIE` | Session cookie name, default `gaia_member_session` | Backend config |
 | `AUTH_SESSION_TTL_SECONDS` | Session lifetime in seconds | Backend config |
@@ -175,7 +175,7 @@ Preferred production flow:
 
 1. Member is already authenticated in GHL Client Portal or receives a Gaia access link.
 2. Gaia proxy verifies or receives trusted member identity.
-3. Gaia proxy sets an HTTP-only session cookie on `ba2ki.com`.
+3. Gaia proxy sets an HTTP-only session cookie on `api.gaiahealers.app`.
 4. GitHub Pages frontend calls the proxy with `credentials: include`.
 5. Proxy resolves the current member and fetches member-specific academy / hub data.
 
@@ -225,7 +225,7 @@ The proxy tries each configured provider in order. Quota, rate-limit, auth, or m
 The static app now defaults to the deployed staging proxy automatically:
 
 ```text
-https://ba2ki.com/gaia-proxy
+https://api.gaiahealers.app
 ```
 
 The `proxy=` query parameter still works when you need to override staging for local or future production testing.
@@ -243,7 +243,7 @@ Use any Node 18+ host:
 Current staging proxy deployment:
 
 ```text
-https://ba2ki.com/gaia-proxy
+https://api.gaiahealers.app
 ```
 
 Set the backend deployment URL in `window.GAIA_SYNC_PROXY_URL` only when embedding or wrapping the app needs to override the default.
@@ -251,7 +251,7 @@ Set the backend deployment URL in `window.GAIA_SYNC_PROXY_URL` only when embeddi
 For GHL iframe embeds, use the query parameter because the iframe is cross-origin:
 
 ```text
-https://gaiagitshare.github.io/gaia-healers-mobile-app/home.html?store=1&proxy=https%3A%2F%2Fba2ki.com%2Fgaia-proxy
+https://gaiahealers.app/home.html?store=1
 ```
 
 ## Deployed VPS Service
@@ -262,8 +262,8 @@ The current VPS deployment uses:
 Systemd service: gaia-staging-proxy.service
 App directory: /root/gaia-staging-proxy
 Local port: 8787
-Public route: https://ba2ki.com/gaia-proxy/
-Nginx config: /etc/nginx/sites-available/ba2ki
+Public route: https://api.gaiahealers.app/
+Nginx config: /etc/nginx/sites-available/api.gaiahealers.app
 ```
 
 ## Production Rules
@@ -277,13 +277,13 @@ Nginx config: /etc/nginx/sites-available/ba2ki
 ## Assistant Smoke Tests
 
 ```bash
-curl -fsS https://ba2ki.com/gaia-proxy/health
+curl -fsS https://api.gaiahealers.app/health
 
 curl -fsS \
   -H 'Origin: https://gaiagitshare.github.io' \
   -H 'Content-Type: application/json' \
   -d '{"prompt":"Prepare my Elevate badge","intent":"event","source":"curl"}' \
-  https://ba2ki.com/gaia-proxy/api/assist/chat
+  https://api.gaiahealers.app/api/assist/chat
 ```
 
 The response includes `provider`, `model`, and `attempts` so staging can confirm whether Groq, OpenRouter, OpenAI, or the local fallback answered.

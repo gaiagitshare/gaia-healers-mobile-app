@@ -54,6 +54,36 @@ function passwordOk(input) {
   return crypto.timingSafeEqual(a, b);
 }
 
+// ---------- login throttle (per client IP) ----------
+const LOGIN_WINDOW_MS = 15 * 60 * 1000; // 15m
+const LOGIN_MAX_ATTEMPTS = 8;           // failures per window before lockout
+const loginAttempts = new Map();        // ip -> { count, firstAt }
+
+function clientIp(req) {
+  const fwd = String(req.headers['x-forwarded-for'] || '').split(',')[0].trim();
+  return String(req.headers['cf-connecting-ip'] || '').trim() || fwd || req.socket?.remoteAddress || 'unknown';
+}
+
+function loginBlockedFor(ip) {
+  const rec = loginAttempts.get(ip);
+  if (!rec) return 0;
+  const age = Date.now() - rec.firstAt;
+  if (age >= LOGIN_WINDOW_MS) { loginAttempts.delete(ip); return 0; }
+  if (rec.count < LOGIN_MAX_ATTEMPTS) return 0;
+  return Math.ceil((LOGIN_WINDOW_MS - age) / 1000);
+}
+
+function noteLoginFailure(ip) {
+  const now = Date.now();
+  const rec = loginAttempts.get(ip);
+  if (!rec || now - rec.firstAt >= LOGIN_WINDOW_MS) loginAttempts.set(ip, { count: 1, firstAt: now });
+  else rec.count += 1;
+  // keep the map small; drop anything already outside its window
+  if (loginAttempts.size > 500) {
+    for (const [key, val] of loginAttempts) if (now - val.firstAt >= LOGIN_WINDOW_MS) loginAttempts.delete(key);
+  }
+}
+
 function adminCookieFromReq(req, deps) {
   const cookies = deps.parseCookies(req.headers.cookie || '');
   const payload = deps.readSignedToken(cookies[ADMIN_COOKIE] || '');
@@ -180,8 +210,18 @@ async function handle(req, res, url, deps) {
   }
   if (p === '/api/admin/login' && method === 'POST') {
     if (!adminConfigured()) return sendJson(res, 200, { ok: false, reason: 'not_configured' }, origin);
+    const ip = clientIp(req);
+    const blockedFor = loginBlockedFor(ip);
+    if (blockedFor > 0) {
+      return sendJson(res, 429, { ok: false, reason: 'rate_limited', retryAfterSeconds: blockedFor }, origin,
+        { 'Retry-After': String(blockedFor) });
+    }
     const body = await deps.readJsonBody(req).catch(() => ({}));
-    if (!passwordOk(body && body.password)) return sendJson(res, 200, { ok: false, reason: 'bad_password' }, origin);
+    if (!passwordOk(body && body.password)) {
+      noteLoginFailure(ip);
+      return sendJson(res, 200, { ok: false, reason: 'bad_password' }, origin);
+    }
+    loginAttempts.delete(ip);
     const exp = Date.now() + ADMIN_TTL_MS;
     const token = deps.signTokenPayload({ role: 'admin', iat: Date.now(), exp });
     return sendJson(res, 200, { ok: true }, origin, { 'Set-Cookie': buildAdminSetCookie(token, exp) });

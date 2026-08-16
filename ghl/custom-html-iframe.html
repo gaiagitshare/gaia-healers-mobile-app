@@ -31,8 +31,8 @@
   https://gaiahealers.app/home.html
   https://api.gaiahealers.app
 
-  Staging fallback (used automatically by gaia-live-sync.js if api.* is down):
-  https://ba2ki.com/gaia-proxy
+  The app talks to api.gaiahealers.app only (see gaia-app-urls.js). It has no
+  fallback onto any other domain.
 
   Optional hardening: set AUTH_EMBED_SHARED_SECRET on the proxy and append
   &bridge=YOUR_SECRET to the src above. The secret is then required on every

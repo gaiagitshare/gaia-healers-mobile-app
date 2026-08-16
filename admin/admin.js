@@ -57,7 +57,11 @@
       status.textContent = 'Signing in…'; status.className = 'g-admin-status';
       const r = await api('POST', '/api/admin/login', { password: input.value });
       if (r && r.ok) { showConsole(); return; }
-      status.textContent = r && r.reason === 'not_configured' ? 'Admin isn’t configured on the server.' : 'Incorrect password.';
+      status.textContent = r && r.reason === 'not_configured'
+        ? 'Admin isn’t configured on the server.'
+        : r && r.reason === 'rate_limited'
+          ? `Too many attempts. Try again in ${Math.ceil((r.retryAfterSeconds || 900) / 60)} minutes.`
+          : 'Incorrect password.';
       status.className = 'g-admin-status g-admin-status--err';
     };
     el('admin-login-btn').addEventListener('click', submit);
@@ -303,7 +307,26 @@
   }
 
   // ── standalone: this page IS the admin, so boot on load ─────
-  function start() { if (!booted) { booted = true; boot(); } }
+  // The admin session cookie is SameSite=None and is set on the API host, so any
+  // other origin (e.g. a published copy at gaiahealers.app/admin/) receives it as
+  // a third-party cookie that Chrome and Safari discard. Login then "succeeds"
+  // and immediately bounces back to this form, which reads as a wrong password.
+  // Send those visitors to the real console instead of letting them fail.
+  function redirectedFromWrongOrigin() {
+    try {
+      const host = window.location.hostname;
+      if (host === 'api.gaiahealers.app') return false;
+      if (host === 'localhost' || host === '127.0.0.1' || host === '::1') return false; // local dev
+      window.location.replace('https://api.gaiahealers.app/admin/');
+      return true;
+    } catch (_) { return false; }
+  }
+  function start() {
+    if (booted) return;
+    booted = true;
+    if (redirectedFromWrongOrigin()) return;
+    boot();
+  }
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', start);
   else start();
 })();

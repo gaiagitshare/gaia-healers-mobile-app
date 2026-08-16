@@ -7,7 +7,7 @@ This guide connects **gaiahealers.app** (apex — no `app.` subdomain) to the mo
 | URL | Role | Host |
 | --- | --- | --- |
 | `https://gaiahealers.app` | Mobile web app (this repo) | GitHub Pages |
-| `https://api.gaiahealers.app` | Backend API proxy (GHL, voice, auth) | Your server (today: same host as `ba2ki.com/gaia-proxy`) |
+| `https://api.gaiahealers.app` | Backend API proxy (GHL, voice, auth) | Your server (nginx → 127.0.0.1:8787) |
 | `https://education.gaiahealers.com` | GHL member portal (courses, login) | GoHighLevel |
 | `https://crm.gaiahealers.com` | GHL CRM + embedded app menu | GoHighLevel |
 | `https://gaiahealers.com` | Public marketing site | Existing site |
@@ -74,7 +74,7 @@ Expected: four GitHub IPs above, then HTTP 200 from the app.
 
 ### Step 3: Allow the new origin on the API proxy
 
-On the server that runs `staging-proxy/` (currently `ba2ki.com`), update environment variables and restart:
+On the server that runs `staging-proxy/` (the Gaia API VPS), update environment variables and restart:
 
 ```env
 APP_PUBLIC_URL=https://gaiahealers.app/home.html
@@ -82,13 +82,13 @@ PROXY_PUBLIC_URL=https://api.gaiahealers.app
 ALLOWED_ORIGINS=https://gaiahealers.app,https://www.gaiahealers.app,https://gaiagitshare.github.io,https://gaiagitshare.github.io/gaia-healers-mobile-app,https://crm.gaiahealers.com
 ```
 
-Until `api.gaiahealers.app` is live, the app **automatically falls back** to `https://ba2ki.com/gaia-proxy`.
+`api.gaiahealers.app` is live and is the only backend the app uses. There is no fallback onto any other domain.
 
 ### Step 4: API subdomain (optional, recommended)
 
 | Type | Host | Alias Data |
 | --- | --- | --- |
-| `CNAME` | `api` | `ba2ki.com` |
+| `A` | `api` | your server IP (nginx terminates TLS for `api.gaiahealers.app`) |
 
 Configure TLS on your server so `https://api.gaiahealers.app` serves the proxy routes.
 

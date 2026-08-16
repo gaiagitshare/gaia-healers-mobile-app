@@ -25,6 +25,10 @@
   // What an operator publishes should show up while the app is open, not only
   // after a reload. The proxy caches for 60s, so polling faster buys nothing.
   const EVENT_DETAIL_TTL_MS = 60 * 1000;
+  // The live panel carries countdowns and check-in numbers, so it refreshes far
+  // more often than the agenda it sits above.
+  const eventLive = { id: null, data: null, loading: false, fetchedAt: 0 };
+  const EVENT_LIVE_TTL_MS = 30 * 1000;
 
   function proxyBase() {
     return String(
@@ -72,6 +76,106 @@
     return (hour % 12 === 0 ? 12 : hour % 12) + ':' + minute + ' ' + suffix;
   }
 
+  function loadEventLive(event) {
+    const id = eventNumericId(event);
+    if (!id || !/^\d+$/.test(id)) return;
+    const fresh = eventLive.id === id && (Date.now() - eventLive.fetchedAt) < EVENT_LIVE_TTL_MS;
+    if (eventLive.loading || fresh) return;
+    eventLive.loading = true;
+    fetch(proxyBase() + '/api/events/' + encodeURIComponent(id) + '/live', {
+      headers: { Accept: 'application/json' },
+      cache: 'no-store',
+    })
+      .then((response) => (response.ok ? response.json() : null))
+      .then((payload) => {
+        if (payload && payload.ok) {
+          eventLive.id = id;
+          eventLive.data = payload.live;
+          eventLive.fetchedAt = Date.now();
+          render();
+        }
+      })
+      .catch(() => { /* the rest of the Events view still renders */ })
+      .finally(() => { eventLive.loading = false; });
+  }
+
+  function minutesLabel(minutes) {
+    if (minutes == null) return '';
+    if (minutes < 1) return 'now';
+    if (minutes < 60) return minutes + ' min';
+    const hours = Math.floor(minutes / 60);
+    const rest = minutes % 60;
+    return hours + 'h' + (rest ? ' ' + rest + 'm' : '');
+  }
+
+  // Only rendered once an operator switches the live page on, so a half-built
+  // agenda never shows up as "happening now".
+  function liveSection(live) {
+    if (!live || !live.live_enabled) return '';
+    const counters = live.counters || {};
+    const banner = live.live_message
+      ? '<p class="g-live-banner">' + esc(live.live_message) + '</p>' : '';
+
+    const nowCards = (live.now || []).map((session) => {
+      const who = (session.speakers || []).map((s) => s.name).filter(Boolean).join(', ');
+      const meta = [session.room, session.track].filter(Boolean).join(' · ');
+      const left = session.minutes_remaining;
+      return '<article class="g-live-now"><p class="g-super-kicker">Happening now</p>'
+        + '<h3>' + esc(session.title) + '</h3>'
+        + (who ? '<p>' + esc(who) + '</p>' : '')
+        + (meta ? '<p>' + esc(meta) + '</p>' : '')
+        + (left != null ? '<p class="g-live-remaining">' + esc(minutesLabel(left)) + ' remaining</p>' : '')
+        + '</article>';
+    }).join('');
+
+    const betweenSessions = live.status === 'ended'
+      ? 'This gathering has finished.'
+      : live.status === 'before'
+        ? 'The programme has not started yet.'
+        : 'Between sessions — the exhibit hall is open.';
+    const nowBlock = nowCards || '<article class="g-live-now"><p class="g-super-kicker">Happening now</p><p>' + esc(betweenSessions) + '</p></article>';
+
+    const nextBlock = (live.next || []).length
+      ? '<div class="g-live-next"><p class="g-super-kicker">Up next</p>'
+        + live.next.map((session) => {
+          const when = session.minutes_until != null && session.minutes_until < 90
+            ? 'in ' + minutesLabel(session.minutes_until)
+            : sessionTime(session.start_time);
+          const meta = [session.room, (session.speakers || []).map((s) => s.name).join(', ')].filter(Boolean).join(' · ');
+          return '<div class="g-live-next__item"><time>' + esc(when) + '</time><div><strong>' + esc(session.title) + '</strong>'
+            + (meta ? '<span>' + esc(meta) + '</span>' : '') + '</div></div>';
+        }).join('') + '</div>'
+      : '';
+
+    const tiles = [
+      { value: counters.checked_in, label: 'Checked in' },
+      { value: counters.attendees, label: 'Registered' },
+      { value: counters.exhibitors, label: 'Exhibitors' },
+      { value: counters.sessions_today, label: 'Today' },
+    ].map((tile) => '<div class="g-live-stat"><b>' + esc(tile.value == null ? 0 : tile.value) + '</b><span>' + esc(tile.label) + '</span></div>').join('');
+
+    const announcements = (live.announcements || []).length
+      ? '<div class="g-live-notes">' + live.announcements.map((item) => '<div class="g-live-note"><strong>'
+        + esc(item.title) + '</strong>' + (item.body ? '<span>' + esc(item.body) + '</span>' : '') + '</div>').join('') + '</div>'
+      : '';
+
+    const sponsors = (live.sponsors || []).length
+      ? '<div class="g-live-sponsors"><p class="g-super-kicker">With thanks to our sponsors</p><div class="g-live-sponsor-row">'
+        + live.sponsors.map((sponsor) => {
+          const inner = (sponsor.logo_url ? '<img src="' + esc(sponsor.logo_url) + '" alt="' + esc(sponsor.name) + '" loading="lazy" />' : '')
+            + '<span><strong>' + esc(sponsor.name) + '</strong><em>' + esc(sponsor.tier || 'partner') + '</em></span>';
+          return sponsor.website
+            ? '<a class="g-live-sponsor" href="' + esc(sponsor.website) + '" target="_blank" rel="noopener noreferrer">' + inner + '</a>'
+            : '<div class="g-live-sponsor">' + inner + '</div>';
+        }).join('') + '</div></div>'
+      : '';
+
+    return '<section class="g-live-panel"><div class="g-live-head"><span class="g-live-dot" aria-hidden="true"></span>'
+      + '<p class="g-super-kicker">Live now · ' + esc((live.timezone || '').replace(/_/g, ' ')) + '</p></div>'
+      + banner + nowBlock + nextBlock + '<div class="g-live-stats">' + tiles + '</div>' + announcements + sponsors
+      + '</section>';
+  }
+
   // Refresh while the Events view is on screen and the tab is in the foreground,
   // so a backgrounded app is not making requests for nothing. The loop keeps
   // rescheduling either way: a phone that locks and wakes must start refreshing
@@ -80,9 +184,12 @@
     if (eventDetail.timer) clearTimeout(eventDetail.timer);
     eventDetail.timer = setTimeout(() => {
       if (!root.isConnected) return; // view was replaced; the next render re-arms this
-      if (root.offsetParent !== null && document.visibilityState === 'visible') loadEventDetail(event);
+      if (root.offsetParent !== null && document.visibilityState === 'visible') {
+        loadEventDetail(event);
+        loadEventLive(event);
+      }
       scheduleEventRefresh(root, event);
-    }, EVENT_DETAIL_TTL_MS);
+    }, EVENT_LIVE_TTL_MS);
   }
 
   // Coming back to the app should show what changed while it was away, without
@@ -92,6 +199,7 @@
     const root = $('events-body');
     if (!root || !root.isConnected || root.offsetParent === null) return;
     loadEventDetail(eventData());
+    loadEventLive(eventData());
   });
 
   function agendaSection(detail) {
@@ -323,6 +431,7 @@
     if (!root) return;
     const event = eventData();
     loadEventDetail(event);
+    loadEventLive(event);
     scheduleEventRefresh(root, event);
     const detail = eventDetail.data && eventDetail.id === eventNumericId(event) ? eventDetail.data : null;
     const timeline = Array.isArray(event?.timeline) && event.timeline.length ? '<section class="g-event-timeline"><p class="g-super-kicker">Published schedule</p><h2>Event timeline</h2>' + event.timeline.map((item) => '<div class="g-event-timeline__item"><time>' + esc(item.time) + '</time><div><strong>' + esc(item.title) + '</strong>' + (item.detail ? '<span>' + esc(item.detail) + '</span>' : '') + '</div></div>').join('') + '</section>' : '';
@@ -332,6 +441,7 @@
       + (event.sourceUrl ? '<button type="button" class="g-btn g-btn--primary" data-open-in-app="' + esc(event.sourceUrl) + '" data-in-app-title="' + esc(event.name) + '">View event details ' + icon('arrow-right') + '</button>' : '') + '</div></article>' + timeline
       : '<section class="g-super-empty-panel"><h2>No event is currently published</h2><p>Confirmed event details will appear here from Gaia’s live event service.</p></section>';
     root.innerHTML = '<div class="g-super-page-head"><p class="g-super-kicker">Gather in person and online</p><h1>Events</h1><p>Confirmed Gaia gatherings and your member appointments, without placeholder schedules.</p></div>'
+      + liveSection(eventLive.id === eventNumericId(event) ? eventLive.data : null)
       + publicEvent + agendaSection(detail) + speakersSection(detail) + directorySection(detail)
       + (memberState().authed ? '<section class="g-super-list"><div class="g-super-section-head"><div><p class="g-super-kicker">Your calendar</p><h2>Member sessions</h2></div><a href="home.html?view=bookings">View bookings</a></div>'
       + (upcomingAppointments().length ? upcomingAppointments().slice(0, 3).map((item) => '<a class="g-super-row" href="home.html?view=bookings"><span class="g-super-row__icon">' + icon('calendar-check') + '</span><span><strong>' + esc(item.title || 'Appointment') + '</strong><em>' + esc(appointmentWhen(item)) + '</em></span>' + icon('caret-right') + '</a>').join('') : '<p class="g-super-empty">No upcoming member sessions.</p>') + '</section>' : '');

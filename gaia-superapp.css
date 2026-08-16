@@ -154,6 +154,8 @@ body.gaia-v2 .g-home { width: 100%; max-width: none; display: block; }
 .g-event-timeline__item div { display: grid; gap: 4px; }
 .g-event-timeline__item strong { color: var(--g-text); font-size: 14px; }
 .g-event-timeline__item span { color: var(--super-muted); font-size: 12px; line-height: 1.45; }
+.g-event-day + .g-event-day { margin-top: 22px; }
+.g-event-day h3 { margin: 0; padding-top: 6px; color: var(--g-text); font-family: var(--g-font-serif); font-size: 20px; font-weight: 600; }
 
 .g-booking-item, .g-super-empty-panel { margin-top: 16px; display: flex; align-items: center; justify-content: space-between; gap: 22px; padding: 24px; border: 1px solid var(--super-line); border-radius: 22px; background: var(--super-panel); }
 .g-booking-item h2, .g-super-empty-panel h2 { margin: 0; color: var(--g-text); font-family: var(--g-font-serif); font-size: 30px; font-weight: 600; }

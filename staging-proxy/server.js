@@ -2586,6 +2586,78 @@ async function getEventSummary() {
   };
 }
 
+// --- Event Manager public surface -------------------------------------------
+// Agenda, speakers and the exhibitor directory, read from the Event Manager and
+// re-served to the app. Only published rows ever leave the Event Manager, and
+// its exhibitor payload already omits organiser-only contact details.
+const EVENT_PUBLIC_CACHE_MS = 60 * 1000;
+const _eventPublicCache = new Map();
+
+async function eventManagerGet(path) {
+  const base = (process.env.EVENT_MANAGER_BASE_URL || '').replace(/\/+$/, '');
+  if (!base) return null;
+
+  const hit = _eventPublicCache.get(path);
+  if (hit && Date.now() - hit.at < EVENT_PUBLIC_CACHE_MS) return hit.value;
+
+  const headers = {};
+  if (process.env.EVENT_MANAGER_TOKEN) {
+    headers.Authorization = `Bearer ${process.env.EVENT_MANAGER_TOKEN}`;
+  }
+  const value = await fetchJsonIfOk(`${base}${path}`, headers);
+  if (value !== null) _eventPublicCache.set(path, { at: Date.now(), value });
+  return value;
+}
+
+function normalizeEventCard(event = {}) {
+  return {
+    id: event.id,
+    name: event.name || '',
+    description: event.description || '',
+    startDate: event.start_date || null,
+    endDate: event.end_date || null,
+    venue: event.location || '',
+    location: event.location || '',
+    // Session times are local to this zone — clients must not re-offset them.
+    timezone: event.timezone || 'UTC',
+    sourceUrl: event.source_url || '',
+  };
+}
+
+async function eventsList(req, res, origin) {
+  const events = await eventManagerGet('/public/events');
+  if (events === null) {
+    sendJson(res, 200, { ok: true, events: [], source: 'not-connected' }, origin);
+    return;
+  }
+  sendJson(res, 200, {
+    ok: true,
+    source: 'event-manager',
+    events: (Array.isArray(events) ? events : []).map(normalizeEventCard),
+  }, origin);
+}
+
+async function eventDetail(req, res, origin, eventId) {
+  const [event, agenda, speakers, exhibitors] = await Promise.all([
+    eventManagerGet(`/public/events/${eventId}`),
+    eventManagerGet(`/public/events/${eventId}/agenda`),
+    eventManagerGet(`/public/events/${eventId}/speakers`),
+    eventManagerGet(`/public/events/${eventId}/exhibitors`),
+  ]);
+  if (!event) {
+    sendJson(res, 404, { ok: false, error: 'event_not_found' }, origin);
+    return;
+  }
+  sendJson(res, 200, {
+    ok: true,
+    source: 'event-manager',
+    event: normalizeEventCard(event),
+    agenda: agenda && Array.isArray(agenda.days) ? agenda : { days: [] },
+    speakers: Array.isArray(speakers) ? speakers : [],
+    exhibitors: Array.isArray(exhibitors) ? exhibitors : [],
+  }, origin);
+}
+
 async function getGhlSummary() {
   const cfg = ghlConfig();
   if (!cfg.enabled) {
@@ -4074,6 +4146,14 @@ const server = http.createServer(async (req, res) => {
     }
     if (req.method === 'GET' && url.pathname === '/api/courses') {
       await coursesList(req, res, origin);
+      return;
+    }
+    if (req.method === 'GET' && url.pathname === '/api/events') {
+      await eventsList(req, res, origin);
+      return;
+    }
+    if (req.method === 'GET' && /^\/api\/events\/\d+$/.test(url.pathname)) {
+      await eventDetail(req, res, origin, url.pathname.split('/').pop());
       return;
     }
     if (req.method === 'POST' && url.pathname === '/api/courses/sync') {

@@ -19,6 +19,98 @@
   const notifications = () => Array.isArray(memberState().data?.notif?.notifications) ? memberState().data.notif.notifications : [];
   const eventData = () => memberState().event || window.GAIA?.event || null;
 
+  // Agenda, speakers and the exhibitor directory come from the Event Manager
+  // through the proxy. Published rows only — drafts never reach this app.
+  const eventDetail = { id: null, data: null, loading: false };
+
+  function proxyBase() {
+    return String(
+      (window.GAIA_SYNC && window.GAIA_SYNC.proxyBase)
+      || (window.GAIA_APP_URLS && window.GAIA_APP_URLS.production && window.GAIA_APP_URLS.production.proxy)
+      || 'https://api.gaiahealers.app',
+    ).replace(/\/+$/, '');
+  }
+
+  // Bootstrap ids look like "event-1"; the API wants the number.
+  const eventNumericId = (event) => String(event?.id || '').replace(/^event-/, '').trim();
+
+  function loadEventDetail(event) {
+    const id = eventNumericId(event);
+    if (!id || !/^\d+$/.test(id)) return;
+    if (eventDetail.loading || eventDetail.id === id) return;
+    eventDetail.loading = true;
+    fetch(proxyBase() + '/api/events/' + encodeURIComponent(id), {
+      headers: { Accept: 'application/json' },
+      cache: 'no-store',
+    })
+      .then((response) => (response.ok ? response.json() : null))
+      .then((payload) => {
+        if (payload && payload.ok) {
+          eventDetail.id = id;
+          eventDetail.data = payload;
+          render();
+        }
+      })
+      .catch(() => { /* the event card still renders without the agenda */ })
+      .finally(() => { eventDetail.loading = false; });
+  }
+
+  // Session times are venue-local and must be shown as written — re-offsetting
+  // them into the reader's timezone would move a 9:00 AM talk in Orlando.
+  function sessionTime(value) {
+    const time = String(value || '').split('T')[1];
+    if (!time) return '';
+    const [hourText, minute] = time.split(':');
+    const hour = Number(hourText);
+    if (!Number.isFinite(hour)) return '';
+    const suffix = hour >= 12 ? 'PM' : 'AM';
+    return (hour % 12 === 0 ? 12 : hour % 12) + ':' + minute + ' ' + suffix;
+  }
+
+  function agendaSection(detail) {
+    const days = Array.isArray(detail?.agenda?.days) ? detail.agenda.days : [];
+    if (!days.length) return '';
+    const zone = detail?.event?.timezone ? ' · times shown in ' + esc(detail.event.timezone.replace(/_/g, ' ')) : '';
+    return '<section class="g-event-timeline"><p class="g-super-kicker">Published schedule' + zone + '</p><h2>Agenda</h2>'
+      + days.map((day) => '<div class="g-event-day"><h3>' + esc(day.label || day.date) + '</h3>'
+        + (day.sessions || []).map((session) => {
+          const when = [sessionTime(session.start_time), sessionTime(session.end_time)].filter(Boolean).join(' – ');
+          const meta = [session.room, session.track].filter(Boolean).join(' · ');
+          const who = (session.speakers || []).map((speaker) => speaker.name).filter(Boolean).join(', ');
+          return '<div class="g-event-timeline__item"><time>' + esc(when) + '</time><div><strong>' + esc(session.title) + '</strong>'
+            + (who ? '<span>' + esc(who) + '</span>' : '')
+            + (meta ? '<span>' + esc(meta) + '</span>' : '')
+            + (session.description ? '<span>' + esc(session.description) + '</span>' : '')
+            + '</div></div>';
+        }).join('')
+        + '</div>').join('')
+      + '</section>';
+  }
+
+  function speakersSection(detail) {
+    const speakers = Array.isArray(detail?.speakers) ? detail.speakers : [];
+    if (!speakers.length) return '';
+    return '<section class="g-super-list"><div class="g-super-section-head"><div><p class="g-super-kicker">Who is speaking</p><h2>Speakers</h2></div></div>'
+      + speakers.map((speaker) => '<div class="g-super-row"><span class="g-super-row__icon">' + icon('microphone-stage') + '</span>'
+        + '<span><strong>' + esc(speaker.name) + '</strong><em>' + esc([speaker.role, speaker.company].filter(Boolean).join(' · ')) + '</em></span></div>').join('')
+      + '</section>';
+  }
+
+  function directorySection(detail) {
+    const exhibitors = Array.isArray(detail?.exhibitors) ? detail.exhibitors : [];
+    if (!exhibitors.length) return '';
+    return '<section class="g-super-list"><div class="g-super-section-head"><div><p class="g-super-kicker">Exhibit hall</p><h2>Vendor directory</h2></div></div>'
+      + exhibitors.map((vendor) => {
+        const meta = [vendor.booth_number ? 'Booth ' + vendor.booth_number : '', vendor.category].filter(Boolean).join(' · ');
+        const row = '<span class="g-super-row__icon">' + icon('storefront') + '</span>'
+          + '<span><strong>' + esc(vendor.company_name) + '</strong><em>' + esc(meta || vendor.description || '') + '</em></span>';
+        return vendor.website
+          ? '<a class="g-super-row" href="' + esc(vendor.website) + '" target="_blank" rel="noopener noreferrer">' + row + icon('arrow-up-right') + '</a>'
+          : '<div class="g-super-row">' + row + '</div>';
+      }).join('')
+      + '</section>';
+  }
+
   function dateLabel() {
     return new Intl.DateTimeFormat(undefined, { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' }).format(new Date());
   }
@@ -203,6 +295,8 @@
     const root = $('events-body');
     if (!root) return;
     const event = eventData();
+    loadEventDetail(event);
+    const detail = eventDetail.data && eventDetail.id === eventNumericId(event) ? eventDetail.data : null;
     const timeline = Array.isArray(event?.timeline) && event.timeline.length ? '<section class="g-event-timeline"><p class="g-super-kicker">Published schedule</p><h2>Event timeline</h2>' + event.timeline.map((item) => '<div class="g-event-timeline__item"><time>' + esc(item.time) + '</time><div><strong>' + esc(item.title) + '</strong>' + (item.detail ? '<span>' + esc(item.detail) + '</span>' : '') + '</div></div>').join('') + '</section>' : '';
     const publicEvent = event?.name ? '<article class="g-event-detail"><img src="assets/gaia-event-hero.webp" alt="" width="1200" height="720" />'
       + '<div><p class="g-super-kicker">Featured gathering</p><h2>' + esc(event.name) + '</h2><p>' + esc(event.summary || event.description || '') + '</p>'
@@ -210,7 +304,8 @@
       + (event.sourceUrl ? '<button type="button" class="g-btn g-btn--primary" data-open-in-app="' + esc(event.sourceUrl) + '" data-in-app-title="' + esc(event.name) + '">View event details ' + icon('arrow-right') + '</button>' : '') + '</div></article>' + timeline
       : '<section class="g-super-empty-panel"><h2>No event is currently published</h2><p>Confirmed event details will appear here from Gaia’s live event service.</p></section>';
     root.innerHTML = '<div class="g-super-page-head"><p class="g-super-kicker">Gather in person and online</p><h1>Events</h1><p>Confirmed Gaia gatherings and your member appointments, without placeholder schedules.</p></div>'
-      + publicEvent + (memberState().authed ? '<section class="g-super-list"><div class="g-super-section-head"><div><p class="g-super-kicker">Your calendar</p><h2>Member sessions</h2></div><a href="home.html?view=bookings">View bookings</a></div>'
+      + publicEvent + agendaSection(detail) + speakersSection(detail) + directorySection(detail)
+      + (memberState().authed ? '<section class="g-super-list"><div class="g-super-section-head"><div><p class="g-super-kicker">Your calendar</p><h2>Member sessions</h2></div><a href="home.html?view=bookings">View bookings</a></div>'
       + (upcomingAppointments().length ? upcomingAppointments().slice(0, 3).map((item) => '<a class="g-super-row" href="home.html?view=bookings"><span class="g-super-row__icon">' + icon('calendar-check') + '</span><span><strong>' + esc(item.title || 'Appointment') + '</strong><em>' + esc(appointmentWhen(item)) + '</em></span>' + icon('caret-right') + '</a>').join('') : '<p class="g-super-empty">No upcoming member sessions.</p>') + '</section>' : '');
     bind(root);
   }

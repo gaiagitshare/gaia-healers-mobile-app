@@ -21,7 +21,10 @@
 
   // Agenda, speakers and the exhibitor directory come from the Event Manager
   // through the proxy. Published rows only — drafts never reach this app.
-  const eventDetail = { id: null, data: null, loading: false };
+  const eventDetail = { id: null, data: null, loading: false, fetchedAt: 0, timer: null };
+  // What an operator publishes should show up while the app is open, not only
+  // after a reload. The proxy caches for 60s, so polling faster buys nothing.
+  const EVENT_DETAIL_TTL_MS = 60 * 1000;
 
   function proxyBase() {
     return String(
@@ -37,7 +40,8 @@
   function loadEventDetail(event) {
     const id = eventNumericId(event);
     if (!id || !/^\d+$/.test(id)) return;
-    if (eventDetail.loading || eventDetail.id === id) return;
+    const fresh = eventDetail.id === id && (Date.now() - eventDetail.fetchedAt) < EVENT_DETAIL_TTL_MS;
+    if (eventDetail.loading || fresh) return;
     eventDetail.loading = true;
     fetch(proxyBase() + '/api/events/' + encodeURIComponent(id), {
       headers: { Accept: 'application/json' },
@@ -48,6 +52,7 @@
         if (payload && payload.ok) {
           eventDetail.id = id;
           eventDetail.data = payload;
+          eventDetail.fetchedAt = Date.now();
           render();
         }
       })
@@ -66,6 +71,28 @@
     const suffix = hour >= 12 ? 'PM' : 'AM';
     return (hour % 12 === 0 ? 12 : hour % 12) + ':' + minute + ' ' + suffix;
   }
+
+  // Refresh while the Events view is on screen and the tab is in the foreground,
+  // so a backgrounded app is not making requests for nothing. The loop keeps
+  // rescheduling either way: a phone that locks and wakes must start refreshing
+  // again, not stay frozen on whatever it last saw.
+  function scheduleEventRefresh(root, event) {
+    if (eventDetail.timer) clearTimeout(eventDetail.timer);
+    eventDetail.timer = setTimeout(() => {
+      if (!root.isConnected) return; // view was replaced; the next render re-arms this
+      if (root.offsetParent !== null && document.visibilityState === 'visible') loadEventDetail(event);
+      scheduleEventRefresh(root, event);
+    }, EVENT_DETAIL_TTL_MS);
+  }
+
+  // Coming back to the app should show what changed while it was away, without
+  // waiting out the poll interval.
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState !== 'visible') return;
+    const root = $('events-body');
+    if (!root || !root.isConnected || root.offsetParent === null) return;
+    loadEventDetail(eventData());
+  });
 
   function agendaSection(detail) {
     const days = Array.isArray(detail?.agenda?.days) ? detail.agenda.days : [];
@@ -296,6 +323,7 @@
     if (!root) return;
     const event = eventData();
     loadEventDetail(event);
+    scheduleEventRefresh(root, event);
     const detail = eventDetail.data && eventDetail.id === eventNumericId(event) ? eventDetail.data : null;
     const timeline = Array.isArray(event?.timeline) && event.timeline.length ? '<section class="g-event-timeline"><p class="g-super-kicker">Published schedule</p><h2>Event timeline</h2>' + event.timeline.map((item) => '<div class="g-event-timeline__item"><time>' + esc(item.time) + '</time><div><strong>' + esc(item.title) + '</strong>' + (item.detail ? '<span>' + esc(item.detail) + '</span>' : '') + '</div></div>').join('') + '</section>' : '';
     const publicEvent = event?.name ? '<article class="g-event-detail"><img src="assets/gaia-event-hero.webp" alt="" width="1200" height="720" />'

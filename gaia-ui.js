@@ -960,8 +960,9 @@
       if (profileCeCredits) profileCeCredits.textContent = String(ceEarned || 0);
       if (profileCeDetail) profileCeDetail.textContent = `of ${ceRequired} required · live Academy sync when member identity is verified`;
       if (profileCeProgress) profileCeProgress.style.width = `${cePercent}%`;
-      if (profileEventPassTitle) profileEventPassTitle.textContent = dashboard.eventPassTitle || 'Elevate 2026';
-      if (profileEventPassDetail) profileEventPassDetail.textContent = dashboard.eventPassDetail || data.event?.date || 'Badge ops ready';
+      // Name the live event, never a hardcoded one — this app will run more events than Elevate.
+      if (profileEventPassTitle) profileEventPassTitle.textContent = dashboard.eventPassTitle || data.event?.name || 'No event pass yet';
+      if (profileEventPassDetail) profileEventPassDetail.textContent = dashboard.eventPassDetail || data.event?.date || '';
 
       if (profileMeetings) {
         profileMeetings.innerHTML = (meetings.length ? meetings : [{

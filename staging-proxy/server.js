@@ -57,25 +57,28 @@ const AUTH_ALLOWED_LOCATION_IDS = new Set(
   ].filter(Boolean),
 );
 
+// No event details are hardcoded here. When the Event Manager cannot be reached
+// the app must show its empty state, not a remembered event that reads as live.
+const EMPTY_EVENT = {
+  id: null,
+  name: '',
+  date: '',
+  startDate: null,
+  endDate: null,
+  description: '',
+  venue: '',
+  location: '',
+  timezone: 'UTC',
+  sourceUrl: '',
+  source: 'unavailable',
+  liveData: false,
+  stats: { attendees: 0, paidMembers: 0, checkedIn: 0, exhibitors: 0, leads: 0, sessions: 0, speakers: 0, checkInRate: 0 },
+};
+
 const FALLBACK_GAIA = {
   members: 0,
   portalUrl: 'https://education.gaiahealers.com',
-  event: {
-    id: 'elevate-2026',
-    name: 'Gaia Healers Elevate 2026',
-    date: 'Nov 20-22, 2026',
-    venue: 'Rosen Shingle Creek',
-    location: 'Orlando, FL',
-    source: 'staging-proxy',
-    stats: {
-      attendees: 0,
-      paidMembers: 0,
-      checkedIn: 0,
-      exhibitors: 0,
-      leads: 0,
-      checkInRate: 0,
-    },
-  },
+  event: EMPTY_EVENT,
 };
 
 const FALLBACK_ACADEMY = {
@@ -2541,12 +2544,10 @@ async function getEventSummary() {
   const base = (process.env.EVENT_MANAGER_BASE_URL || '').replace(/\/+$/, '');
   const eventId = process.env.EVENT_MANAGER_EVENT_ID || '';
   if (!base) {
-    return {
-      ...FALLBACK_GAIA.event,
-      source: 'not-connected',
-      liveData: false,
-      note: 'Event Manager endpoint is not configured.',
-    };
+    // Deliberately empty. Returning a remembered event name/venue here would
+    // render a card that looks live while the Event Manager is unreachable; the
+    // app shows its "no event published" state instead.
+    return { ...EMPTY_EVENT, source: 'not-connected', note: 'Event Manager endpoint is not configured.' };
   }
 
   const headers = {};
@@ -2563,24 +2564,30 @@ async function getEventSummary() {
     if (!eventId) throw error;
     event = await fetchJson(`${base}/public/events/${encodeURIComponent(eventId)}`, headers);
   }
+  // Every field below comes from the Event Manager. Empty stays empty: the app
+  // renders "to be announced" rather than a plausible-looking invention, and
+  // nothing here is tied to one particular event.
   return {
     id: `event-${event.id || eventId || 'next'}`,
-    name: event.name || FALLBACK_GAIA.event.name,
-    date: event.start_date && event.end_date ? `${event.start_date} - ${event.end_date}` : FALLBACK_GAIA.event.date,
+    name: event.name || '',
+    date: event.start_date && event.end_date ? `${event.start_date} - ${event.end_date}` : '',
     startDate: event.start_date || null,
     endDate: event.end_date || null,
     description: event.description || '',
-    venue: event.location || FALLBACK_GAIA.event.venue,
-    location: event.location || FALLBACK_GAIA.event.location,
-    sourceUrl: event.source_url || 'https://elevate.gaiahealers.com/gaia-healers-elevate-conference-page',
+    venue: event.location || '',
+    location: event.location || '',
+    timezone: event.timezone || 'UTC',
+    sourceUrl: event.source_url || '',
     source: 'event-manager',
     liveData: true,
     stats: {
       attendees: event.attendee_count || 0,
       paidMembers: 0,
       checkedIn: event.checked_in_count || 0,
-      exhibitors: 0,
-      leads: 0,
+      exhibitors: event.exhibitor_count || 0,
+      leads: event.lead_count || 0,
+      sessions: event.session_count || 0,
+      speakers: event.speaker_count || 0,
       checkInRate: event.attendee_count ? Math.round(((event.checked_in_count || 0) / event.attendee_count) * 100) : 0,
     },
   };
@@ -2604,7 +2611,15 @@ async function eventManagerGet(path) {
   if (process.env.EVENT_MANAGER_TOKEN) {
     headers.Authorization = `Bearer ${process.env.EVENT_MANAGER_TOKEN}`;
   }
-  const value = await fetchJsonIfOk(`${base}${path}`, headers);
+  let value = null;
+  try {
+    value = await fetchJsonIfOk(`${base}${path}`, headers);
+  } catch (_) {
+    // Service down or refusing connections: fetch throws rather than returning a
+    // response. Callers render an empty state; a 500 here would break the app's
+    // Events view entirely.
+    return null;
+  }
   if (value !== null) _eventPublicCache.set(path, { at: Date.now(), value });
   return value;
 }
@@ -3068,7 +3083,7 @@ async function bootstrap(req, url) {
   const memberContext = sessionMemberContext(req);
   const academyUrl = withMemberContext(url, memberContext);
   const [event, ghl, academy] = await Promise.all([
-    getEventSummary().catch((error) => ({ ...FALLBACK_GAIA.event, source: 'event-manager-error', liveData: false, error: error.message })),
+    getEventSummary().catch((error) => ({ ...EMPTY_EVENT, source: 'event-manager-error', error: error.message })),
     getGhlSummary().catch((error) => ({ configured: false, error: error.message })),
     getAcademyProgress(academyUrl).catch((error) => ({ ...FALLBACK_ACADEMY, source: 'academy-error', error: error.message })),
   ]);

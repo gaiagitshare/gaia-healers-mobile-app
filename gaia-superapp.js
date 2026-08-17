@@ -543,7 +543,10 @@
       ? { ...featured, ...detail.event, id: 'event-' + detail.event.id, timeline: featured?.timeline }
       : featured;
     const timeline = Array.isArray(event?.timeline) && event.timeline.length ? '<section class="g-event-timeline"><p class="g-super-kicker">Published schedule</p><h2>Event timeline</h2>' + event.timeline.map((item) => '<div class="g-event-timeline__item"><time>' + esc(item.time) + '</time><div><strong>' + esc(item.title) + '</strong>' + (item.detail ? '<span>' + esc(item.detail) + '</span>' : '') + '</div></div>').join('') + '</section>' : '';
-    const publicEvent = event?.name ? '<article class="g-event-detail"><img src="assets/gaia-event-hero.webp" alt="" width="1200" height="720" />'
+    // Each event carries its own artwork; the bundled image is only the fallback
+    // for an event that has not supplied one.
+    const heroImage = detail?.event?.heroImageUrl || event?.heroImageUrl || 'assets/gaia-event-hero.webp';
+    const publicEvent = event?.name ? '<article class="g-event-detail"><img src="' + esc(heroImage) + '" alt="" width="1200" height="720" loading="lazy" />'
       + '<div><p class="g-super-kicker">Featured gathering</p><h2>' + esc(event.name) + '</h2><p>' + esc(event.summary || event.description || '') + '</p>'
       + '<dl><div><dt>Date</dt><dd>' + esc(eventDate(event) || 'To be announced') + '</dd></div><div><dt>Location</dt><dd>' + esc([event.venue, event.location].filter(Boolean).join(', ') || 'To be announced') + '</dd></div></dl>'
       + (event.sourceUrl ? '<button type="button" class="g-btn g-btn--primary" data-open-in-app="' + esc(event.sourceUrl) + '" data-in-app-title="' + esc(event.name) + '">View event details ' + icon('arrow-right') + '</button>' : '') + '</div></article>' + timeline

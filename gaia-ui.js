@@ -475,7 +475,7 @@
       const items = data.communityEvents || [];
       const heroDate = event ? parseEventHeroDate(event) : null;
       const hero = event ? `
-        <a href="${escapeHtml(event.sourceUrl || 'https://elevate.gaiahealers.com/')}" class="gaia-row gaia-row--link gaia-event-flagship">
+        <a href="${escapeHtml(event.sourceUrl || `home.html?view=events${event.id ? `&event=${String(event.id).replace(/^event-/, '')}` : ''}`)}" class="gaia-row gaia-row--link gaia-event-flagship">
           <div class="gaia-event-date"><strong>${escapeHtml(heroDate.day)}</strong><span>${escapeHtml(heroDate.month)}</span></div>
           <div class="min-w-0 flex-1">
             <p class="text-micro font-semibold text-gaia">Flagship event</p>

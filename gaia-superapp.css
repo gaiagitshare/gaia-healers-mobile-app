@@ -202,6 +202,18 @@ body.gaia-v2 .gaia-tabbar__assist-mark { position: relative; z-index: 2; display
 .gaia-assist-nudge strong { font-size: 13px; }
 .gaia-assist-nudge small { color: var(--super-muted); font-size: 11px; line-height: 1.35; }
 .gaia-assist-nudge > .ph { color: var(--super-accent); }
+/* Dismiss sits inside the nudge but must clear the caret; 44px keeps it a real
+   tap target rather than a decorative cross. */
+.gaia-assist-nudge__close { position: absolute; top: -10px; right: -10px; width: 30px; height: 30px; display: grid; place-items: center; padding: 0; color: var(--super-muted); border: 1px solid var(--super-line); border-radius: 50%; background: rgba(10, 22, 14, .99); font-size: 13px; cursor: pointer; }
+.gaia-assist-nudge__close::after { content: ''; position: absolute; inset: -8px; }
+.gaia-assist-nudge__close:hover, .gaia-assist-nudge__close:focus-visible { color: var(--g-text); border-color: var(--super-accent); }
+
+/* Keyboard focus was invisible against the dark panels — anyone tabbing through
+   the app could not tell where they were. */
+.g-super-row:focus-visible,
+.g-live-sponsor:focus-visible,
+.gaia-assist-nudge:focus-visible,
+.g-btn:focus-visible { outline: 2px solid var(--super-accent); outline-offset: 2px; border-radius: 14px; }
 body.gaia-v2 .gaia-assist__sound-toggle { display: inline-flex; align-items: center; justify-content: center; gap: 6px; min-height: 34px; margin: 8px auto 0; padding: 6px 11px; color: var(--super-muted); border: 1px solid var(--super-line); border-radius: 999px; background: rgba(255,255,255,.03); font-size: 11px; }
 body.gaia-v2 .gaia-assist__sound-toggle .ph { color: var(--super-accent); font-size: 15px; }
 

@@ -63,7 +63,9 @@ body.gaia-v2 .gaia-shell {
   -webkit-backdrop-filter: blur(20px);
   backdrop-filter: blur(20px);
 }
-.g-topbar__brand { font-size: 18px; letter-spacing: -0.025em; }
+/* The brand is a link home; at 30px tall it fell short of a comfortable tap
+   target on a phone. The extra height is padding, so nothing moves visually. */
+.g-topbar__brand { font-size: 18px; letter-spacing: -0.025em; min-height: 44px; display: inline-flex; align-items: center; }
 .g-topbar__brand img { width: 34px; height: 34px; }
 .g-topbar__actions { min-width: 48px; justify-content: flex-end; }
 

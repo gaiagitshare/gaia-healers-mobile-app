@@ -78,8 +78,13 @@ const UNRESOLVED_BILLING_IDS = [
   {
     id: 'prod_TRnOnug03GBUhM',
     seenOn: 'join.gaiahealers.com/diamond-cart-page',
-    status: 'unresolved',
-    note: 'Second Stripe product observed on the Diamond checkout. Not canonical. Never use as billing evidence.',
+    status: 'identified_not_approved',
+    evidence: 'Appears in the cart payload immediately against price_1SUtnHC410ERaitemgUNuCgK '
+      + '(the canonical Diamond monthly price), on GHL price-mapping record 691cbd1fb09bc275002cbcb2 — '
+      + 'a different record from 691cbd1e48ca08990aa1ebbc, which carries prod_TRnOA5TGsiC6fx. '
+      + 'Diamond monthly and annual therefore appear to sit on two separate Stripe products.',
+    note: 'Deliberately NOT canonical pending owner confirmation. Resolution does not depend on it: '
+      + 'a real Diamond subscription carries the price id, which is already mapped.',
   },
 ];
 

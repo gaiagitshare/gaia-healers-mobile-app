@@ -69,7 +69,12 @@ const EMPTY_EVENT = {
   venue: '',
   location: '',
   timezone: 'UTC',
+  startAt: null,
+  endAt: null,
+  serverTime: null,
   heroImageUrl: '',
+  registrationUrl: '',
+  registrationLabel: '',
   sourceUrl: '',
   source: 'unavailable',
   liveData: false,
@@ -2578,7 +2583,12 @@ async function getEventSummary() {
     venue: event.location || '',
     location: event.location || '',
     timezone: event.timezone || 'UTC',
+    startAt: event.start_at || null,
+    endAt: event.end_at || null,
+    serverTime: event.server_time || null,
     heroImageUrl: event.hero_image_url || '',
+    registrationUrl: event.registration_url || event.source_url || '',
+    registrationLabel: event.registration_label || 'Buy ticket',
     sourceUrl: event.source_url || '',
     source: 'event-manager',
     liveData: true,
@@ -2639,7 +2649,16 @@ function normalizeEventCard(event = {}) {
     location: event.location || '',
     // Session times are local to this zone — clients must not re-offset them.
     timezone: event.timezone || 'UTC',
+    // Unambiguous instants from the server. startDate/endDate above stay
+    // venue-local for display; these are what a countdown must use.
+    startAt: event.start_at || null,
+    endAt: event.end_at || null,
+    serverTime: event.server_time || null,
     heroImageUrl: event.hero_image_url || '',
+    // Where to buy. Falls back to the import source only while an operator has
+    // not set a destination — the two are different things.
+    registrationUrl: event.registration_url || event.source_url || '',
+    registrationLabel: event.registration_label || 'Buy ticket',
     sourceUrl: event.source_url || '',
   };
 }

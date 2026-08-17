@@ -147,25 +147,24 @@ test('webhook rejects an invalid secret', async () => {
 });
 
 // ── 14. out-of-order events ─────────────────────────────────────────────────
-test('14. out-of-order webhook delivery is last-write-wins (documented limitation)', async () => {
+test('14. a late-arriving stale revoke can no longer delete a newer grant', async () => {
   await webhook({
     type: 'course_access_granted', contactId: CONTACT_ID,
     courseId: 'offer-order-1', courseName: 'Order Course', webhookId: 'hook-order-grant',
     timestamp: '2026-08-17T10:00:00Z',
   });
-  // A *stale* revoke, generated before the grant, arriving after it.
-  await webhook({
+  // A revoke generated BEFORE the grant, delivered after it. Phase 1 let this
+  // win; Phase 3 must reject it as stale.
+  const stale = await webhook({
     type: 'course_access_removed', contactId: CONTACT_ID,
     courseId: 'offer-order-1', courseName: 'Order Course', webhookId: 'hook-order-revoke',
     timestamp: '2026-08-17T09:00:00Z',
   });
-  const present = readStore().contacts[CONTACT_ID].courses.some((c) => c.id === 'offer-order-1');
-  // This asserts the CURRENT behaviour so a future ordering guard is a
-  // deliberate change with a failing test, not a silent one. The webhook path
-  // writes domainUpdatedAt but does not compare event timestamps, so the last
-  // delivery wins regardless of when the event was produced.
-  assert.equal(present, false,
-    'known limitation: a late-arriving stale revoke still wins; see the Phase 1 report');
+  assert.equal(stale.json.applied, false);
+  assert.equal(stale.json.stale, true);
+  assert.equal(stale.json.reason, 'stale_timestamp');
+  assert.ok(readStore().contacts[CONTACT_ID].courses.some((c) => c.id === 'offer-order-1'),
+    'the newer grant survives the delayed revoke');
 });
 
 // ── 16/17. existing endpoints and legacy fields ─────────────────────────────

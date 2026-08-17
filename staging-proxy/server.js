@@ -10,6 +10,10 @@ import { resolveMemberAccess } from './membership/resolver.js';
 import { UNRESOLVED_BILLING_IDS } from './membership/config.js';
 import { membershipPlans } from './membership/plans.js';
 import {
+  resourceKey, eventTimestamp, eventSequence, decideOrder, watermark,
+  noteRejection, domainWatermarkMs,
+} from './membership/ordering.js';
+import {
   fixturesAvailable, fixtureKeyMatches, fixtureAccessGranted,
   requestedFixtureId, fixtureProfile, fixtureIds,
 } from './membership/fixture-gate.js';
@@ -800,13 +804,51 @@ async function memberAccessWebhook(req, res, origin) {
     sendJson(res, 200, { ok: true, duplicate: true, contactId }, origin);
     return;
   }
-  const now = new Date().toISOString();
+  const arrivalMs = Date.now();
+  const now = new Date(arrivalMs).toISOString();
   const record = store.contacts[contactId] || { contactId, tags: [], tier: null, courses: [], communities: [], subscriptions: [], domainUpdatedAt: {}, updatedAt: now };
   record.tags = uniqueStrings(record.tags || []);
   record.courses = Array.isArray(record.courses) ? record.courses : [];
   record.communities = Array.isArray(record.communities) ? record.communities : [];
   record.subscriptions = Array.isArray(record.subscriptions) ? record.subscriptions : [];
   record.domainUpdatedAt = record.domainUpdatedAt && typeof record.domainUpdatedAt === 'object' ? record.domainUpdatedAt : {};
+  record.order = record.order && typeof record.order === 'object' ? record.order : {};
+
+  // ── ordering guard ────────────────────────────────────────────────────────
+  // Delivery order is not event order. Each resource carries its own watermark
+  // so a delayed revoke cannot delete a newer grant, and so an event about one
+  // course never blocks an event about another.
+  const stamp = eventTimestamp(body, req.headers, arrivalMs);
+  const seq = eventSequence(body);
+  const orderResource = event.kind === 'course' || event.kind === 'community'
+    ? normalizeEntitlementResource(body, event.kind)
+    : null;
+  const key = resourceKey(event.kind, orderResource);
+  const decision = decideOrder(
+    { ms: stamp.ms, basis: stamp.basis, eventId: webhookId, seq },
+    record.order[key],
+  );
+
+  if (!decision.accept) {
+    noteRejection(record, {
+      at: now, resource: key, eventId: webhookId || null,
+      action: event.grant === null ? event.kind : (event.grant ? 'grant' : 'revoke'),
+      reason: decision.reason,
+      incomingAt: new Date(stamp.ms).toISOString(), incomingBasis: stamp.basis,
+      storedAt: record.order[key]?.at || null,
+    });
+    store.contacts[contactId] = record;
+    if (webhookId) store.processedWebhookIds.push(webhookId);
+    try { saveMemberEntitlements(store); } catch (_) { /* reported below */ }
+    console.log('[Gaia Entitlements] event ignored as out of order', {
+      contactId, resource: key, reason: decision.reason, eventId: webhookId,
+    });
+    sendJson(res, 200, {
+      ok: true, applied: false, stale: true, contactId,
+      resource: key, reason: decision.reason,
+    }, origin);
+    return;
+  }
 
   if (event.kind === 'tags') {
     const tags = body.tags || body.contact?.tags || body.data?.tags || body.data?.contact?.tags;
@@ -834,6 +876,14 @@ async function memberAccessWebhook(req, res, origin) {
   const eventDomain = event.kind === 'course' ? 'courses'
     : (event.kind === 'community' ? 'communities' : event.kind);
   record.domainUpdatedAt[eventDomain] = now;
+  // The accepted watermark is the SOURCE time, not the arrival time, so a later
+  // comparison asks "which event happened first" rather than "which arrived first".
+  record.order[key] = watermark({
+    ms: stamp.ms, basis: stamp.basis, eventId: webhookId, seq,
+    action: event.grant === null ? event.kind : (event.grant ? 'grant' : 'revoke'),
+    appliedAt: now,
+  });
+  if (decision.lowConfidence) record.order[key].lowConfidence = true;
   record.updatedAt = now;
   store.contacts[contactId] = record;
   if (webhookId) store.processedWebhookIds.push(webhookId);
@@ -844,7 +894,12 @@ async function memberAccessWebhook(req, res, origin) {
     return;
   }
   console.log('[Gaia Entitlements] access updated', { contactId, event: event.raw, kind: event.kind, grant: event.grant, authMethod });
-  sendJson(res, 200, { ok: true, contactId, kind: event.kind, grant: event.grant, updatedAt: now }, origin);
+  sendJson(res, 200, {
+    ok: true, applied: true, contactId, kind: event.kind, grant: event.grant,
+    resource: key, orderBasis: stamp.basis, orderReason: decision.reason,
+    ...(decision.lowConfidence ? { lowConfidence: true } : {}),
+    updatedAt: now,
+  }, origin);
 }
 
 function backfillAuthorized(req) {
@@ -934,6 +989,12 @@ async function memberBackfill(req, res, origin) {
     let contactApplied = false;
     let contactStale = false;
     const applyDomain = (domain, value) => {
+      // A snapshot must lose to fresher live evidence. Two guards: the legacy
+      // domain timestamp, and the newest per-resource watermark accepted from a
+      // webhook — the latter is source time, so a snapshot taken before a live
+      // event cannot overwrite it even if it was uploaded afterwards.
+      const kind = domain === 'courses' ? 'course' : (domain === 'communities' ? 'community' : domain);
+      if (snapshotMs < domainWatermarkMs(record, kind)) { contactStale = true; return; }
       if (snapshotMs < entitlementDomainTimestamp(record, domain)) { contactStale = true; return; }
       record[domain] = value;
       record.domainUpdatedAt[domain] = snapshotAt;

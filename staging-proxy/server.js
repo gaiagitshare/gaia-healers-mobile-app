@@ -8,6 +8,11 @@ import * as wellnessRouter from './wellness-router.js';
 import { migrateStore, migrateContactRecord } from './membership/ledger.js';
 import { resolveMemberAccess } from './membership/resolver.js';
 import { UNRESOLVED_BILLING_IDS } from './membership/config.js';
+import { membershipPlans } from './membership/plans.js';
+import {
+  fixturesAvailable, fixtureKeyMatches, fixtureAccessGranted,
+  requestedFixtureId, fixtureProfile, fixtureIds,
+} from './membership/fixture-gate.js';
 
 const PORT = Number(process.env.PORT || 8787);
 const HOST = String(process.env.HOST || '127.0.0.1').trim();
@@ -2002,12 +2007,47 @@ function buildMemberAccess(rawTags = [], customFields = [], member = {}, entitle
   };
 }
 
-async function memberAccess(req, res, origin) {
+async function memberAccess(req, res, origin, url) {
   const sessionMember = sessionMemberContext(req);
   if (!sessionMember) {
     sendJson(res, 401, { ok: false, authenticated: false, reason: 'auth_required', error: 'Sign in to view your access.' }, origin);
     return;
   }
+
+  // ── synthetic profiles, for UI development only ───────────────────────────
+  // Requires the process flag, a configured key AND a session that was minted
+  // with fixture authority. On production none of those hold, so this branch is
+  // unreachable and the request continues exactly as it did before.
+  const rawSession = cookieForRequest(req);
+  if (fixtureAccessGranted(rawSession)) {
+    const fixtureId = requestedFixtureId(rawSession, url);
+    const profile = fixtureProfile(fixtureId);
+    if (!profile) {
+      sendJson(res, 404, { ok: false, error: `Unknown fixture: ${fixtureId}`, available: fixtureIds() }, origin);
+      return;
+    }
+    const resolvedFixture = resolveMemberAccess({
+      record: profile.record,
+      subscriptions: profile.subscriptions,
+      tags: profile.tags,
+    });
+    const emptyAccess = buildMemberAccess(profile.tags, [], { name: profile.id, email: `${profile.id}@fixture.invalid` }, profile.record, profile.subscriptions);
+    sendJson(res, 200, {
+      ok: true,
+      authenticated: true,
+      source: 'fixture',
+      generatedAt: new Date().toISOString(),
+      ...emptyAccess,
+      member: { ...emptyAccess.member, contactId: profile.id },
+      membership: resolvedFixture.membership,
+      entitlements: resolvedFixture.entitlements,
+      sections: resolvedFixture.sections,
+      upgrade: resolvedFixture.upgrade,
+      meta: { ...resolvedFixture.meta, fixture: profile.id, live_source: 'fixture' },
+    }, origin);
+    return;
+  }
+
   let tags = Array.isArray(sessionMember.tags) ? sessionMember.tags : [];
   let customFields = [];
   let liveMember = sessionMember;
@@ -4364,7 +4404,33 @@ const server = http.createServer(async (req, res) => {
       return;
     }
     if (req.method === 'GET' && url.pathname === '/api/member/access') {
-      await memberAccess(req, res, origin);
+      await memberAccess(req, res, origin, url);
+      return;
+    }
+    // Public plan catalogue. Presentation data only — this endpoint has no
+    // access to the ledger and nothing it returns can grant anything.
+    if (req.method === 'GET' && url.pathname === '/api/membership/plans') {
+      sendJson(res, 200, { ok: true, plans: membershipPlans() }, origin);
+      return;
+    }
+    // Dev-only: mint a session carrying fixture authority. Inert unless the
+    // process has fixtures enabled AND the caller presents the fixture key.
+    if (req.method === 'POST' && url.pathname === '/api/dev/fixture-session') {
+      if (!fixturesAvailable() || !fixtureKeyMatches(req.headers['x-gaia-fixture-key'])) {
+        sendJson(res, 404, { ok: false, error: 'Not found.' }, origin);
+        return;
+      }
+      const requested = String(url.searchParams.get('fixture') || 'fixture-gold-annual').trim();
+      const fixture = requested.startsWith('fixture-') ? requested : `fixture-${requested}`;
+      const token = signTokenPayload({
+        member: { contactId: fixture, email: `${fixture}@fixture.invalid`, name: fixture },
+        source: 'fixture',
+        fixtureAccess: true,
+        fixture,
+        exp: Date.now() + 8 * 60 * 60 * 1000,
+      });
+      res.setHeader('Set-Cookie', buildSetCookie(req, token, Date.now() + 8 * 60 * 60 * 1000));
+      sendJson(res, 200, { ok: true, fixture, available: fixtureIds() }, origin);
       return;
     }
     if (req.method === 'GET' && url.pathname === '/api/member/profile') { await memberProfile(req, res, origin); return; }

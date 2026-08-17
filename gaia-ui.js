@@ -4188,6 +4188,9 @@
       if (!t.trim()) return null;
       // Founder and booking routes — specific before the generic "book/scan".
       if (/\b(founder|dr\.? nima|nima farshid|meet nima)\b/.test(t)) return { label: 'Meet the founder', url: 'https://calendly.com/nimafarshid/gaia-healers-meeting' };
+      // tier-name-ok: matches what the USER typed or said ("join gold"), to pick a
+      // signup link. This is intent routing on user input, never an access decision —
+      // nothing here reads membership state or grants anything.
       if (/\b(free|silver|gold|diamond)\b/.test(t) && /\b(join|choose|member|membership|tier|plan|enroll|subscribe)\b/.test(t)) {
         const tier = ['free', 'silver', 'gold', 'diamond'].find((name) => t.includes(name));
         const path = tier === 'free' ? 'onboarding' : tier;
@@ -4232,6 +4235,8 @@
       }
       if (/\b(course|courses|certif\w*|academy|class|lesson|training|learn)\b/.test(t)) return { label: 'Open Academy', view: 'academy' };
       if (/\b(community|communities|group|forum|discussion|circle)\b/.test(t)) return { label: 'Open Community', view: 'community' };
+      // tier-name-ok: user-typed intent again — routes someone who asked about
+      // membership to the store view. Reads no membership state.
       if (/\b(member|membership|upgrade|silver|subscribe|subscription|tier|plan)\b/.test(t)) return { label: 'See membership', view: 'store', tab: 'membership' };
       if (/\b(product|products|device|buy|shop|store|purchase|bio-?well|biopulsar|biotekna|price|cost|spray|crystal)\b/.test(t)) return { label: 'Open the Store', view: 'store' };
       if (/\b(profile|account|my devices|my purchases|my bookings|my account|settings)\b/.test(t)) return { label: 'Open your Profile', view: 'profile' };

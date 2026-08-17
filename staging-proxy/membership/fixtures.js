@@ -127,6 +127,10 @@ function buildFixtures({ now = Date.now() } = {}) {
         status: 'expired', source: 'fixture', evidence_id: null, starts_at: iso(now - 48 * day), expires_at: iso(now - 10 * day), observed_at: observed },
       { type: 'directory_level', key: '2', value: { level: 2 }, status: 'revoked',
         source: 'membership_policy', evidence_id: null, starts_at: iso(now - 400 * day), expires_at: null, observed_at: observed },
+      // Owned hardware is not a membership benefit and must outlive the
+      // cancellation exactly as a lifetime course does.
+      { type: 'device_owner', key: 'biowell-3', value: { name: 'Bio-Well 3.0' }, status: 'active',
+        source: 'fixture', evidence_id: 'fixture-order-4', starts_at: iso(now - 500 * day), expires_at: null, observed_at: observed },
     ],
   });
 

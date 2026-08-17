@@ -105,6 +105,11 @@ body.gaia-booking-open{overflow:hidden;}
       getJson('/api/member/products'), getJson('/api/member/activity'),
       getJson('/api/member/events'),
     ]);
+    // Presentation-only plan catalogue. Never consulted for access decisions —
+    // it exists so prices and plan copy live in one server-side source instead
+    // of as literals in this file.
+    const plans = await getJson('/api/membership/plans').catch(() => null);
+    state.plans = (plans && Array.isArray(plans.plans)) ? plans.plans : [];
     state.authed = !!(profile && profile.ok && profile.authenticated);
     state.data = { profile, access, appts, notif, devices, purchases, forms, courses, products, activity, events };
     document.dispatchEvent(new CustomEvent('gaia:member', { detail: state.data }));
@@ -532,14 +537,11 @@ body.gaia-booking-open{overflow:hidden;}
 
     const cards = [];
 
-    // Membership status (feature card)
-    const tierName = p.membershipTier ? p.membershipTier + ' member' : 'Membership not detected';
-    cards.push('<article class="g-card g-card--feature"><div class="g-tier__head"><p class="g-card__label">Membership</p>'
-      + (p.membershipTier ? '<span class="g-badge g-badge--on">Active</span>' : '') + '</div>'
-      + '<p class="g-card__value g-card__value--lg">' + esc(tierName) + '</p>'
-      + (p.practitioner ? '<p class="g-card__meta">' + (p.practitionerCertified ? 'Certified Bio-Well practitioner' : 'Practitioner') + '</p>' : '')
-      + '<div class="g-card__actions"><a class="g-btn g-btn--secondary g-btn--sm" href="home.html?view=store">View memberships →</a>'
-      + '<a class="g-btn g-btn--ghost g-btn--sm" href="home.html?view=community">My access →</a></div></article>');
+    // Member Pass + My Access + Included + Next Level, rendered entirely from
+    // the v2 read model. Nothing below infers a benefit from the tier name.
+    if (window.GaiaMembershipUI) {
+      cards.push(window.GaiaMembershipUI.renderMembershipScreen(state.data.access, state.plans));
+    }
 
     const devices = (d.devices && d.devices.devices) || [];
     cards.push(gMeCard('My devices', devices.length
@@ -589,6 +591,7 @@ body.gaia-booking-open{overflow:hidden;}
     ])));
 
     box.innerHTML = cards.join('');
+    window.GaiaMembershipUI?.bind?.(box);
   }
 
   // Academy = honest course portal. Lesson progress isn't exposed by GHL, so we
@@ -886,36 +889,31 @@ body.gaia-booking-open{overflow:hidden;}
       + (o.ctaHref ? '<div class="g-card__actions"><a class="g-btn ' + (o.active ? 'g-btn--secondary' : 'g-btn--primary') + ' g-btn--sm" href="' + esc(o.ctaHref) + '" target="_blank" rel="noopener noreferrer">' + esc(o.ctaLabel) + '</a></div>' : '')
       + '</article>';
   }
+  // Store "Membership" tab content. Plan copy, prices and checkout links come
+  // from GET /api/membership/plans so there is exactly one source for them.
+  // `membership.key` is used only to mark which card is the member's current
+  // plan — it never decides what any plan contains.
   function membershipCards() {
-    const acc = (state.data.access && state.data.access.member) || {};
-    const hasSilver = /silver/i.test(acc.membershipTier || '');
-    const hasGold = /gold/i.test(acc.membershipTier || '');
-    const hasDiamond = /diamond/i.test(acc.membershipTier || '');
-    const hasFree = /free/i.test(acc.membershipTier || '');
-
+    const currentKey = (state.data.access && state.data.access.membership && state.data.access.membership.key) || null;
+    const plans = Array.isArray(state.plans) ? state.plans : [];
+    if (!plans.length) {
+      return '<article class="g-card"><p class="g-card__meta">Membership plans are unavailable right now.</p></article>';
+    }
     const intro = '<article class="g-card"><p class="g-card__label">Gaia 2.0 Practitioners</p>'
-      + '<p class="g-card__meta">Choose a practitioner path that matches your stage. Official membership enrolment opens here inside the app.</p></article>';
-    const free = tierCard({
-      name: 'Free', statusLabel: hasFree ? 'Active' : '$0', active: hasFree,
-      abilities: ['Online community access', 'State of the Union calls', 'Lightworker Creed resources', 'Monthly community newsletter'],
-      ctaLabel: hasFree ? '' : 'Join free', ctaAction: hasFree ? '' : 'membership', ctaUrl: 'https://join.gaiahealers.com/onboarding',
-    });
-    const silver = tierCard({
-      name: 'Silver', statusLabel: hasSilver ? 'Active' : '$97/mo', active: hasSilver,
-      abilities: ['Everything in Free', 'Practitioner education', 'Directory listing', 'Practice-growth training', 'GaiaPractitioners Software + CRM access'],
-      ctaLabel: hasSilver ? '' : 'Choose Silver', ctaAction: hasSilver ? '' : 'membership', ctaUrl: 'https://join.gaiahealers.com/silver',
-    });
-    const gold = tierCard({
-      name: 'Gold', statusLabel: hasGold ? 'Active' : '$497/mo', active: hasGold,
-      abilities: ['Everything in Silver', 'Premium sales education', 'Custom landing page', 'Managed CRM support', 'Starter AI leads', '20% off certification programs'],
-      ctaLabel: hasGold ? '' : 'Choose Gold', ctaAction: hasGold ? '' : 'membership', ctaUrl: 'https://join.gaiahealers.com/gold',
-    });
-    const diamond = tierCard({
-      name: 'Diamond', statusLabel: hasDiamond ? 'Active' : '$997/mo', active: hasDiamond,
-      abilities: ['Everything in Gold', 'Prosperity engine', 'Level 1 directory exposure', 'Business accelerator', 'Conference benefits', 'Speaking and early-access opportunities'],
-      ctaLabel: hasDiamond ? '' : 'Choose Diamond', ctaAction: hasDiamond ? '' : 'membership', ctaUrl: 'https://join.gaiahealers.com/diamond',
-    });
-    return intro + free + silver + gold + diamond;
+      + '<p class="g-card__meta">Choose a practitioner path that matches your stage.</p></article>';
+    return intro + plans.map((plan) => {
+      const isCurrent = currentKey && plan.key === currentKey;
+      const price = (plan.prices && (plan.prices.monthly || plan.prices.annual)) || '';
+      return tierCard({
+        name: plan.label,
+        statusLabel: isCurrent ? 'Current plan' : price,
+        active: isCurrent,
+        abilities: Array.isArray(plan.displayBenefits) ? plan.displayBenefits : [],
+        ctaLabel: isCurrent ? '' : ('Choose ' + plan.label),
+        ctaAction: isCurrent ? '' : 'membership',
+        ctaUrl: plan.checkoutUrl || '',
+      });
+    }).join('');
   }
 
   // Store "Membership" tab. Products live in the "Shop" tab (gaia-store.js);

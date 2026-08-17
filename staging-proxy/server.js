@@ -5,6 +5,9 @@ import path from 'node:path';
 import { URL } from 'node:url';
 import * as adminRouter from './admin-router.js';
 import * as wellnessRouter from './wellness-router.js';
+import { migrateStore, migrateContactRecord } from './membership/ledger.js';
+import { resolveMemberAccess } from './membership/resolver.js';
+import { UNRESOLVED_BILLING_IDS } from './membership/config.js';
 
 const PORT = Number(process.env.PORT || 8787);
 const HOST = String(process.env.HOST || '127.0.0.1').trim();
@@ -398,11 +401,22 @@ function loadMemberEntitlements() {
   if (_memberEntitlementsCache) return _memberEntitlementsCache;
   try {
     const parsed = JSON.parse(fs.readFileSync(MEMBER_ENTITLEMENTS_FILE, 'utf8'));
-    _memberEntitlementsCache = {
+    const base = {
       ...emptyEntitlementStore(), ...parsed,
       contacts: parsed?.contacts && typeof parsed.contacts === 'object' ? parsed.contacts : {},
       processedWebhookIds: Array.isArray(parsed?.processedWebhookIds) ? parsed.processedWebhookIds : [],
     };
+    // Bring the document up to the ledger schema in memory only. A read must
+    // never rewrite the store: the new shape reaches disk the next time a
+    // webhook saves, so a bad deploy can be rolled back with the file intact.
+    const { store, report } = migrateStore(base);
+    if (report.changed || report.failed.length || report.fixturesSkipped.length) {
+      console.log('[Gaia Ledger] migrated in memory', {
+        total: report.total, changed: report.changed,
+        failed: report.failed.length, fixturesSkipped: report.fixturesSkipped.length,
+      });
+    }
+    _memberEntitlementsCache = store;
   } catch (_) {
     _memberEntitlementsCache = emptyEntitlementStore();
   }
@@ -418,7 +432,19 @@ function saveMemberEntitlements(store) {
 
 function entitlementForContact(contactId) {
   const id = String(contactId || '').trim();
-  return id ? loadMemberEntitlements().contacts[id] || null : null;
+  if (!id) return null;
+  const record = loadMemberEntitlements().contacts[id] || null;
+  if (!record) return null;
+  // Migrate on read, per contact, in memory. The webhook path writes the store
+  // in its original shape and refreshes the cache, so a record can be newer
+  // than the last store-wide migration — deriving here means a course granted
+  // one second ago is already visible in the v2 entitlement list.
+  try {
+    return migrateContactRecord(record).record;
+  } catch (err) {
+    console.error('[Gaia Ledger] record migration failed', { contactId: id, error: err.message.split('\n')[0] });
+    return record;
+  }
 }
 
 function entitlementDomainTimestamp(record, domain) {
@@ -1988,6 +2014,7 @@ async function memberAccess(req, res, origin) {
   let live = false;
   let entitlements = entitlementForContact(sessionMember.contactId || sessionMember.memberId);
   let subscriptions = [];
+  let sourceError = false;
   try {
     const verified = await getMemberFromGhl({
       email: sessionMember.email,
@@ -2005,14 +2032,40 @@ async function memberAccess(req, res, origin) {
     }
   } catch (err) {
     console.error('[Gaia Access] live tag read failed', { error: err.message.split('\n')[0] });
+    sourceError = true;
   }
   const access = buildMemberAccess(tags, customFields, liveMember, entitlements, subscriptions);
+
+  // ── v2 read model, added alongside the legacy shape ───────────────────────
+  // Every key the current frontend reads is left exactly where it was; the
+  // canonical membership/entitlement view is added next to it so the UI can be
+  // migrated screen by screen instead of in one breaking release.
+  const contactId = liveMember.contactId || liveMember.memberId || sessionMember.contactId || '';
+  const resolved = resolveMemberAccess({
+    record: entitlements,
+    subscriptions,
+    tags,
+    sourceError,
+  });
+
   sendJson(res, 200, {
     ok: true,
     authenticated: true,
     source: live ? 'ghl-live' : 'session-fallback',
     generatedAt: new Date().toISOString(),
     ...access,
+    member: { ...access.member, contactId },
+    membership: resolved.membership,
+    entitlements: resolved.entitlements,
+    sections: resolved.sections,
+    upgrade: resolved.upgrade,
+    meta: {
+      ...resolved.meta,
+      // `source` above describes how the live read went; this says plainly
+      // whether the member is looking at data we consider current.
+      live_source: live ? 'ghl-live' : 'session-fallback',
+      unresolved_billing_ids: UNRESOLVED_BILLING_IDS.map((item) => item.id),
+    },
   }, origin);
 }
 

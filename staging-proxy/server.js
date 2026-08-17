@@ -69,6 +69,7 @@ const EMPTY_EVENT = {
   venue: '',
   location: '',
   timezone: 'UTC',
+  heroImageUrl: '',
   sourceUrl: '',
   source: 'unavailable',
   liveData: false,
@@ -142,7 +143,7 @@ const FALLBACK_MEMBER_HUB = {
     nextLessonUrl: '',
     nextMeetingTitle: '',
     nextMeetingTime: '',
-    eventPassTitle: 'Elevate 2026',
+    eventPassTitle: '',
     eventPassDetail: 'Open the confirmed event details',
     ceCreditsEarned: 0,
     ceCreditsRequired: 0,
@@ -241,12 +242,8 @@ const GAIA_KNOWLEDGE = {
     'HealeeX getting started',
     '(Course videos are watched in the education.gaiahealers.com portal; the app does not track lesson-by-lesson progress.)',
   ],
-  event: {
-    name: 'Gaia Healers Elevate Conference 2026',
-    date: 'November 20-22, 2026',
-    venue: 'Rosen Shingle Creek, Orlando, FL',
-    positioning: 'a three-day integrative wellness conference bridging ancient healing traditions and modern energy science',
-  },
+  // No event is described here. Event facts come from the Event Manager at
+  // request time via gaiaKnowledgePrompt(event) — this app runs many events.
   app: {
     shell: 'The app is gaiahealers.app (home.html). The bottom bar, left to right, is: Today, Journey, the centre Gaia Assist microphone, Inbox, Profile. The top-right Menu opens Journey, Academy, Community, Events, Bookings, Inbox, Energy, Store, Membership, Meet the Founder, Find a Practitioner, and Member sign in.',
     screens: [
@@ -282,8 +279,18 @@ const GAIA_KNOWLEDGE = {
   ],
 };
 
-function gaiaKnowledgePrompt() {
+let _lastPublishedEvent = null;
+
+function gaiaKnowledgePrompt(event) {
   const K = GAIA_KNOWLEDGE;
+  event = event || _lastPublishedEvent;
+  // Whatever the Event Manager currently publishes, described in its own words.
+  const eventLine = event && event.name
+    ? `Current event: ${event.name}${event.date ? ` — ${event.date}` : ''}`
+      + `${event.venue ? `, ${event.venue}` : ''}.`
+      + `${event.description ? ` ${String(event.description).slice(0, 400)}` : ''}`
+      + ' Say only what this states; if asked something it does not cover, open the event page rather than inventing detail.'
+    : 'No event is currently published. Say so plainly rather than describing a past or expected one.';
   return [
     `About Gaia Healers: ${K.brand}`,
     `About Dr. Nima Farshid: ${K.founder}`,
@@ -294,7 +301,7 @@ function gaiaKnowledgePrompt() {
     `Communities (8): ${K.communities.join(', ')}.`,
     `Membership: ${K.memberships}`,
     `Courses: ${K.courses.join('; ')}.`,
-    `Event: ${K.event.name} — ${K.event.date}, ${K.event.venue}. ${K.event.positioning}.`,
+    eventLine,
     `The app: ${K.app.shell}`,
     `Screens:\n- ${K.app.screens.join('\n- ')}`,
     `Key features:\n- ${K.app.features.join('\n- ')}`,
@@ -2542,11 +2549,11 @@ async function assistLiveToken(req, res, origin, url) {
 
 async function getEventSummary() {
   const base = (process.env.EVENT_MANAGER_BASE_URL || '').replace(/\/+$/, '');
-  const eventId = process.env.EVENT_MANAGER_EVENT_ID || '';
   if (!base) {
     // Deliberately empty. Returning a remembered event name/venue here would
     // render a card that looks live while the Event Manager is unreachable; the
     // app shows its "no event published" state instead.
+    _lastPublishedEvent = null;
     return { ...EMPTY_EVENT, source: 'not-connected', note: 'Event Manager endpoint is not configured.' };
   }
 
@@ -2555,20 +2562,14 @@ async function getEventSummary() {
     headers.Authorization = `Bearer ${process.env.EVENT_MANAGER_TOKEN}`;
   }
 
-  let event;
-  try {
-    event = await fetchJson(`${base}/public/events/next`, headers);
-  } catch (error) {
-    // Transitional fallback for older Event Manager deployments only. Once the
-    // dynamic endpoint exists, Home no longer depends on a pinned event id.
-    if (!eventId) throw error;
-    event = await fetchJson(`${base}/public/events/${encodeURIComponent(eventId)}`, headers);
-  }
+  // Whichever published event is next. No pinned id: the featured event follows
+  // the data, so a new event becomes the featured one by being published.
+  const event = await fetchJson(`${base}/public/events/next`, headers);
   // Every field below comes from the Event Manager. Empty stays empty: the app
   // renders "to be announced" rather than a plausible-looking invention, and
   // nothing here is tied to one particular event.
-  return {
-    id: `event-${event.id || eventId || 'next'}`,
+  const summary = {
+    id: `event-${event.id || 'next'}`,
     name: event.name || '',
     date: event.start_date && event.end_date ? `${event.start_date} - ${event.end_date}` : '',
     startDate: event.start_date || null,
@@ -2577,6 +2578,7 @@ async function getEventSummary() {
     venue: event.location || '',
     location: event.location || '',
     timezone: event.timezone || 'UTC',
+    heroImageUrl: event.hero_image_url || '',
     sourceUrl: event.source_url || '',
     source: 'event-manager',
     liveData: true,
@@ -2591,6 +2593,8 @@ async function getEventSummary() {
       checkInRate: event.attendee_count ? Math.round(((event.checked_in_count || 0) / event.attendee_count) * 100) : 0,
     },
   };
+  _lastPublishedEvent = summary;
+  return summary;
 }
 
 // --- Event Manager public surface -------------------------------------------
@@ -2635,6 +2639,7 @@ function normalizeEventCard(event = {}) {
     location: event.location || '',
     // Session times are local to this zone — clients must not re-offset them.
     timezone: event.timezone || 'UTC',
+    heroImageUrl: event.hero_image_url || '',
     sourceUrl: event.source_url || '',
   };
 }
@@ -3168,7 +3173,7 @@ async function bootstrap(req, url) {
         topCourse: 'Secure Academy workspace',
         topCourseMeta: 'Member login unlocks your course progress',
         nextLessonTitle: 'Log in to continue your live lessons',
-        eventPassTitle: event?.shortName || 'Elevate 2026',
+        eventPassTitle: event?.shortName || event?.name || '',
         eventPassDetail: 'Badge ops ready',
         ceCreditsEarned: 0,
         ceCreditsRequired: FALLBACK_ACADEMY.summary.ceCreditsRequired,
@@ -3528,8 +3533,15 @@ function fallbackAssistReply(prompt, intent = '') {
   if (normalized.includes('store') || normalized.includes('shop') || normalized.includes('buy') || normalized.includes('product') || normalized.includes('device') || normalized.includes('price')) {
     return 'The Store has a Shop tab (Bio-Well and devices, Colour Energy sprays, crystals, courses) where prices and checkout live on the Gaia Healers shop, plus a Membership tab. What are you looking for?';
   }
-  if (normalized.includes('event') || normalized.includes('elevate') || normalized.includes('conference')) {
-    return 'The Gaia Healers Elevate Conference 2026 is November 20-22 at Rosen Shingle Creek in Orlando. You can see it on the Home screen and register from there.';
+  if (normalized.includes('event') || normalized.includes('conference') || normalized.includes('gathering')) {
+    // Describe whatever is published now, not a remembered event.
+    const current = _lastPublishedEvent;
+    if (current && current.name) {
+      const when = current.date ? ` is ${current.date}` : '';
+      const where = current.venue ? ` at ${current.venue}` : '';
+      return `${current.name}${when}${where}. You can see it on the Events screen and register from there.`;
+    }
+    return 'No event is published right now. When one is, it appears on the Events screen with its agenda, speakers and exhibitors.';
   }
   if (normalized.includes('research') || normalized.includes('blog') || normalized.includes('article') || normalized.includes('contact')) {
     return 'I can open the verified Gaia source for Bio-Well research, articles, affiliate access, practitioner CRM/software/marketplace, certification requests, or contact support. Tell me which one you need.';

@@ -1771,7 +1771,9 @@
       } else if (view === 'community' && !tab) {
         tab = 'discussion';
       }
-      return { view, tab };
+      // The event id is part of the route: boot and popstate must preserve it,
+      // or a direct link to an event silently becomes the events hub.
+      return { view, tab, event: params.get('event') || '' };
     }
 
     function tabForView(view, tab) {
@@ -1912,7 +1914,7 @@
 
     syncAdminUi();
     const route = routeFromUrl();
-    navigate(route.view, { tab: route.tab, replace: true });
+    navigate(route.view, { tab: route.tab, event: route.event, replace: true });
 
     window.GaiaAppShell = {
       go: navigate,

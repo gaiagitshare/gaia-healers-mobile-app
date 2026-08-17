@@ -1786,6 +1786,11 @@
       else params.set('view', view);
       if (options.tab) params.set('tab', options.tab);
       else params.delete('tab');
+      // The event id belongs to the link that was clicked, not to the page we
+      // happen to be standing on. Without this, opening an event kept the old
+      // query string and leaving one kept ?event= forever.
+      if (options.event) params.set('event', options.event);
+      else params.delete('event');
       params.delete('screen');
       const query = params.toString();
       return `${window.location.pathname}${query ? `?${query}` : ''}`;
@@ -1851,10 +1856,12 @@
     }
 
     function navigate(view, options = {}) {
-      const nextView = showView(view, options);
-      const nextUrl = urlFor(nextView, { tab: tabForView(nextView, options.tab) });
-      if (options.replace) window.history.replaceState({ view: nextView, tab: options.tab || '' }, '', nextUrl);
-      else window.history.pushState({ view: nextView, tab: options.tab || '' }, '', nextUrl);
+      const nextView = normalizeView(view === 'biowell' || view === 'chakras' ? 'wellness' : view);
+      const nextUrl = urlFor(nextView, { tab: tabForView(nextView, options.tab), event: options.event });
+      const state = { view: nextView, tab: options.tab || '', event: options.event || '' };
+      if (options.replace) window.history.replaceState(state, '', nextUrl);
+      else window.history.pushState(state, '', nextUrl);
+      showView(view, options);
     }
 
     function routeClick(event) {
@@ -1886,7 +1893,7 @@
         view = 'wellness';
         tab = tab || 'chakras';
       }
-      navigate(view, { tab });
+      navigate(view, { tab, event: url.searchParams.get('event') || '' });
     }
 
     document.addEventListener('click', routeClick);

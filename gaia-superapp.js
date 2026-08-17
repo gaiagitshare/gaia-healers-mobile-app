@@ -99,6 +99,38 @@
       + '</section>';
   }
 
+  function timeAgo(value) {
+    const then = new Date(value);
+    if (!Number.isFinite(+then)) return '';
+    const minutes = Math.round((Date.now() - then.getTime()) / 60000);
+    if (minutes < 1) return 'just now';
+    if (minutes < 60) return minutes + ' min ago';
+    const hours = Math.round(minutes / 60);
+    if (hours < 24) return hours + (hours === 1 ? ' hour ago' : ' hours ago');
+    const days = Math.round(hours / 24);
+    if (days < 7) return days + (days === 1 ? ' day ago' : ' days ago');
+    return new Intl.DateTimeFormat(undefined, { month: 'short', day: 'numeric' }).format(then);
+  }
+
+  // Organiser updates, shown whether or not live mode is on. The useful ones —
+  // travel, hotel block, "the schedule is up" — go out weeks beforehand.
+  function updatesSection(detail, live) {
+    const items = Array.isArray(detail?.announcements) ? detail.announcements : [];
+    if (!items.length) return '';
+    // While the live panel is up it already carries the latest few; repeating
+    // them immediately below would just be noise.
+    const skip = live && live.live_enabled ? new Set((live.announcements || []).map((a) => a.id)) : new Set();
+    const rest = items.filter((item) => !skip.has(item.id));
+    if (!rest.length) return '';
+    return '<section class="g-super-list"><div class="g-super-section-head"><div><p class="g-super-kicker">From the organisers</p><h2>Event updates</h2></div></div>'
+      + rest.map((item) => '<div class="g-live-note">'
+        + (item.is_pinned ? '<em class="g-update-pin">' + icon('push-pin') + ' Pinned</em>' : '')
+        + '<strong>' + esc(item.title) + '</strong>'
+        + (item.body ? '<span>' + esc(item.body) + '</span>' : '')
+        + '<time>' + esc(timeAgo(item.created_at)) + '</time></div>').join('')
+      + '</section>';
+  }
+
   function sponsorsSection(detail) {
     const sponsors = Array.isArray(detail?.sponsors) ? detail.sponsors : [];
     if (!sponsors.length) return '';
@@ -518,7 +550,8 @@
       : '<section class="g-super-empty-panel"><h2>No event is currently published</h2><p>Confirmed event details will appear here from Gaia’s live event service.</p></section>';
     root.innerHTML = '<div class="g-super-page-head"><p class="g-super-kicker">Gather in person and online</p><h1>Events</h1><p>Confirmed Gaia gatherings and your member appointments, without placeholder schedules.</p></div>'
       + liveSection(eventLive.id === eventId ? eventLive.data : null)
-      + publicEvent + agendaSection(detail) + speakersSection(detail)
+      + publicEvent + updatesSection(detail, eventLive.id === eventId ? eventLive.data : null)
+      + agendaSection(detail) + speakersSection(detail)
       + sponsorsSection(detail) + directorySection(detail) + upcomingEventsSection(eventId)
       + (memberState().authed ? '<section class="g-super-list"><div class="g-super-section-head"><div><p class="g-super-kicker">Your calendar</p><h2>Member sessions</h2></div><a href="home.html?view=bookings">View bookings</a></div>'
       + (upcomingAppointments().length ? upcomingAppointments().slice(0, 3).map((item) => '<a class="g-super-row" href="home.html?view=bookings"><span class="g-super-row__icon">' + icon('calendar-check') + '</span><span><strong>' + esc(item.title || 'Appointment') + '</strong><em>' + esc(appointmentWhen(item)) + '</em></span>' + icon('caret-right') + '</a>').join('') : '<p class="g-super-empty">No upcoming member sessions.</p>') + '</section>' : '');

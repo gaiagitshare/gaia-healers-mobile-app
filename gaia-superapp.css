@@ -434,3 +434,6 @@ body.gaia-v2 .gaia-chakra-map__list-item, body.gaia-v2 .gaia-chakra-map--screen 
 @media (prefers-reduced-motion: reduce) {
   .g-super-service { transition: none; }
 }
+
+.g-live-note time { display: block; margin-top: 6px; color: var(--super-muted); font-size: 11px; }
+.g-update-pin { display: block; margin-bottom: 4px; color: var(--super-accent); font-size: 10px; font-style: normal; font-weight: 800; letter-spacing: .1em; text-transform: uppercase; }

@@ -373,7 +373,18 @@ const COURSES_SYNC_SECRET = String(process.env.COURSES_SYNC_SECRET || '').trim()
 const MEMBER_ENTITLEMENTS_FILE = String(process.env.MEMBER_ENTITLEMENTS_FILE || path.join(process.cwd(), 'data', 'member-entitlements.json')).trim();
 const GHL_WORKFLOW_WEBHOOK_SECRET = String(process.env.GHL_WORKFLOW_WEBHOOK_SECRET || COURSES_SYNC_SECRET).trim();
 const GHL_BACKFILL_SECRET = String(process.env.GHL_BACKFILL_SECRET || GHL_WORKFLOW_WEBHOOK_SECRET).trim();
-const GHL_WEBHOOK_ED25519_PUBLIC_KEY = String(process.env.GHL_WEBHOOK_ED25519_PUBLIC_KEY || '').replace(/\\n/g, '\n').trim();
+const GHL_WEBHOOK_ED25519_PUBLIC_KEY = normalizeEd25519PublicKey(process.env.GHL_WEBHOOK_ED25519_PUBLIC_KEY);
+// Once real signed deliveries are observed on every event source, set this to
+// reject a delivery whose signature does not verify instead of falling back.
+const GHL_WEBHOOK_ED25519_STRICT = String(process.env.GHL_WEBHOOK_ED25519_STRICT || '').trim() === '1';
+
+/** Accept the key as bare base64 DER (as GHL publishes it) or as full PEM. */
+function normalizeEd25519PublicKey(value) {
+  const raw = String(value || '').replace(/\\n/g, '\n').trim();
+  if (!raw) return '';
+  if (raw.includes('BEGIN PUBLIC KEY')) return raw;
+  return `-----BEGIN PUBLIC KEY-----\n${raw}\n-----END PUBLIC KEY-----\n`;
+}
 if (COURSES_SYNC_SECRET.length < 32) {
   throw new Error('COURSES_SYNC_SECRET must be set and at least 32 characters.');
 }
@@ -716,20 +727,37 @@ async function coursesList(req, res, origin) {
 }
 
 function memberWebhookAuthorized(req, rawBody) {
-  const suppliedSecret = String(req.headers['x-webhook-secret'] || req.headers['x-sync-secret'] || '').trim();
-  if (GHL_WORKFLOW_WEBHOOK_SECRET.length >= 32 && safeSecretEqual(suppliedSecret, GHL_WORKFLOW_WEBHOOK_SECRET)) {
-    return 'workflow-secret';
-  }
   const suppliedSignature = String(req.headers['x-ghl-signature'] || '').trim();
+
+  // Ed25519 first when the platform actually signed the delivery: a verified
+  // signature is stronger evidence than a shared secret, because it proves the
+  // body was not altered as well as who sent it.
   if (GHL_WEBHOOK_ED25519_PUBLIC_KEY && suppliedSignature) {
     try {
       const signature = /^[a-f0-9]{128}$/i.test(suppliedSignature)
         ? Buffer.from(suppliedSignature, 'hex')
         : Buffer.from(suppliedSignature, 'base64');
-      if (crypto.verify(null, Buffer.from(rawBody, 'utf8'), GHL_WEBHOOK_ED25519_PUBLIC_KEY, signature)) return 'ghl-ed25519';
+      if (crypto.verify(null, Buffer.from(rawBody, 'utf8'), GHL_WEBHOOK_ED25519_PUBLIC_KEY, signature)) {
+        return 'ghl-ed25519';
+      }
+      // Present but not verifiable. Loud, because it is either the wrong key or
+      // a forgery attempt — but not yet fatal: we have not observed a real
+      // signed delivery on this path, and hard-rejecting an unrecognised
+      // signature would silently drop legitimate events. Flip
+      // GHL_WEBHOOK_ED25519_STRICT=1 once signed deliveries are confirmed.
+      console.warn('[Gaia Entitlements] X-GHL-Signature present but did NOT verify', {
+        strict: GHL_WEBHOOK_ED25519_STRICT, bytes: signature.length,
+      });
+      if (GHL_WEBHOOK_ED25519_STRICT) return '';
     } catch (err) {
       console.warn('[Gaia Entitlements] signature verification failed', { error: err.message.split('\n')[0] });
+      if (GHL_WEBHOOK_ED25519_STRICT) return '';
     }
+  }
+
+  const suppliedSecret = String(req.headers['x-webhook-secret'] || req.headers['x-sync-secret'] || '').trim();
+  if (GHL_WORKFLOW_WEBHOOK_SECRET.length >= 32 && safeSecretEqual(suppliedSecret, GHL_WORKFLOW_WEBHOOK_SECRET)) {
+    return 'workflow-secret';
   }
   return '';
 }

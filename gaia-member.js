@@ -540,13 +540,18 @@ body.gaia-booking-open{overflow:hidden;}
     // Member Pass + My Access + Included + Next Level, rendered entirely from
     // the v2 read model. Nothing below infers a benefit from the tier name.
     if (window.GaiaMembershipUI) {
-      cards.push(window.GaiaMembershipUI.renderMembershipScreen(state.data.access, state.plans));
+      const serials = {};
+      for (const device of ((d.devices && d.devices.devices) || [])) {
+        if (device && device.serialNumber) serials[String(device.name || device.id || '').toLowerCase()] = device.serialNumber;
+      }
+      cards.push(window.GaiaMembershipUI.renderMembershipScreen(state.data.access, state.plans, { serials }));
     }
 
-    const devices = (d.devices && d.devices.devices) || [];
-    cards.push(gMeCard('My devices', devices.length
-      ? gRows(devices.map((x) => gRow(x.name, x.serialNumber ? 'SN ' + x.serialNumber : '')))
-      : '<p class="g-empty">No devices on record yet.</p>'));
+    // The legacy "My devices" card used to read /api/member/devices directly,
+    // which meant this screen could show two different answers about the same
+    // hardware — My Access saying "1 owned" while this card said "none". The
+    // ledger is now the single authority; serial numbers, which the ledger does
+    // not carry yet, are passed through as display enrichment only.
 
     const pcnt = (d.purchases && d.purchases.counts) || {};
     cards.push(gMeCard('Purchases & subscriptions', (pcnt.orders || pcnt.subscriptions)
@@ -894,7 +899,12 @@ body.gaia-booking-open{overflow:hidden;}
   // `membership.key` is used only to mark which card is the member's current
   // plan — it never decides what any plan contains.
   function membershipCards() {
-    const currentKey = (state.data.access && state.data.access.membership && state.data.access.membership.key) || null;
+    // Only a live membership marks a plan as "current". A cancelled or expired
+    // Gold should show Gold's price again, because buying it back is exactly
+    // what that member may want to do.
+    const membership = (state.data.access && state.data.access.membership) || null;
+    const currentKey = membership && ['active', 'trialing', 'past_due'].includes(membership.status)
+      ? membership.key : null;
     const plans = Array.isArray(state.plans) ? state.plans : [];
     if (!plans.length) {
       return '<article class="g-card"><p class="g-card__meta">Membership plans are unavailable right now.</p></article>';

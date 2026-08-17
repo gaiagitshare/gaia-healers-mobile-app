@@ -139,9 +139,14 @@
     },
     device_owner: {
       summary: (items) => plural(activeCount(items), 'owned'),
-      detail: (items) => list(items.map((item) => row(
-        item.value?.name || item.key, ENTITLEMENT_STATUS_TEXT[item.status], item.status, 'Owned',
-      ))),
+      detail: (items) => list(items.map((item) => {
+        const name = item.value?.name || item.key;
+        // Serial numbers are enrichment from the member record; the ledger
+        // decides WHICH devices exist, this only adds detail to them.
+        const serial = (ENRICHMENT.serials || {})[String(name).toLowerCase()];
+        return row(name, ENTITLEMENT_STATUS_TEXT[item.status], item.status,
+          serial ? `Owned · SN ${serial}` : 'Owned');
+      })),
     },
     device_software: {
       summary: (items) => plural(activeCount(items), 'active'),
@@ -371,7 +376,9 @@
   }
 
   /** The whole signed-in membership screen. */
-  function renderMembershipScreen(access, plans) {
+  let ENRICHMENT = {};
+  function renderMembershipScreen(access, plans, enrichment) {
+    ENRICHMENT = (enrichment && typeof enrichment === 'object') ? enrichment : {};
     return degradedNotice(access)
       + memberPass(access)
       + myAccess(access)

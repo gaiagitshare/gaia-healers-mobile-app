@@ -185,6 +185,9 @@ body.gaia-v2 .g-home { width: 100%; max-width: none; display: block; }
 .g-live-sponsor strong { display: block; color: var(--g-text); font-size: 13px; }
 .g-live-sponsor em { color: var(--super-accent); font-size: 10px; font-style: normal; letter-spacing: .1em; text-transform: uppercase; }
 
+.g-super-row.is-active { border-color: var(--super-accent); }
+.g-event-current { color: var(--super-accent); font-size: 11px; font-weight: 800; letter-spacing: .1em; text-transform: uppercase; }
+
 .g-event-day + .g-event-day { margin-top: 22px; }
 .g-event-day h3 { margin: 0; padding-top: 6px; color: var(--g-text); font-family: var(--g-font-serif); font-size: 20px; font-weight: 600; }
 

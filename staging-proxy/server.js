@@ -2653,11 +2653,12 @@ async function eventsList(req, res, origin) {
 }
 
 async function eventDetail(req, res, origin, eventId) {
-  const [event, agenda, speakers, exhibitors] = await Promise.all([
+  const [event, agenda, speakers, exhibitors, sponsors] = await Promise.all([
     eventManagerGet(`/public/events/${eventId}`),
     eventManagerGet(`/public/events/${eventId}/agenda`),
     eventManagerGet(`/public/events/${eventId}/speakers`),
     eventManagerGet(`/public/events/${eventId}/exhibitors`),
+    eventManagerGet(`/public/events/${eventId}/sponsors`),
   ]);
   if (!event) {
     sendJson(res, 404, { ok: false, error: 'event_not_found' }, origin);
@@ -2670,6 +2671,7 @@ async function eventDetail(req, res, origin, eventId) {
     agenda: agenda && Array.isArray(agenda.days) ? agenda : { days: [] },
     speakers: Array.isArray(speakers) ? speakers : [],
     exhibitors: Array.isArray(exhibitors) ? exhibitors : [],
+    sponsors: Array.isArray(sponsors) ? sponsors : [],
   }, origin);
 }
 

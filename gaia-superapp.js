@@ -41,8 +41,78 @@
   // Bootstrap ids look like "event-1"; the API wants the number.
   const eventNumericId = (event) => String(event?.id || '').replace(/^event-/, '').trim();
 
-  function loadEventDetail(event) {
-    const id = eventNumericId(event);
+  // Every published event, so the app is a hub rather than a page pinned to one
+  // conference. ?event=N chooses which one is open.
+  const eventsList = { data: null, loading: false, fetchedAt: 0 };
+  const EVENTS_LIST_TTL_MS = 5 * 60 * 1000;
+
+  function activeEventId() {
+    try {
+      const wanted = new URLSearchParams(window.location.search).get('event');
+      if (wanted && /^\d+$/.test(wanted)) return wanted;
+    } catch (_) { /* fall through to the featured event */ }
+    return eventNumericId(eventData());
+  }
+
+  function loadEventsList() {
+    const fresh = eventsList.data && (Date.now() - eventsList.fetchedAt) < EVENTS_LIST_TTL_MS;
+    if (eventsList.loading || fresh) return;
+    eventsList.loading = true;
+    fetch(proxyBase() + '/api/events', { headers: { Accept: 'application/json' }, cache: 'no-store' })
+      .then((response) => (response.ok ? response.json() : null))
+      .then((payload) => {
+        if (payload && payload.ok) {
+          eventsList.data = Array.isArray(payload.events) ? payload.events : [];
+          eventsList.fetchedAt = Date.now();
+          render();
+        }
+      })
+      .catch(() => { /* the featured event still renders */ })
+      .finally(() => { eventsList.loading = false; });
+  }
+
+  function eventDateRange(item) {
+    const start = item.startDate ? new Date(item.startDate) : null;
+    const end = item.endDate ? new Date(item.endDate) : null;
+    if (!start || !Number.isFinite(+start)) return '';
+    const fmt = (date, withYear) => new Intl.DateTimeFormat(undefined, {
+      month: 'short', day: 'numeric', ...(withYear ? { year: 'numeric' } : {}),
+    }).format(date);
+    if (!end || !Number.isFinite(+end)) return fmt(start, true);
+    return fmt(start, false) + ' – ' + fmt(end, true);
+  }
+
+  // Only rendered when there is more than one event to choose between; a single
+  // event needs no picker above its own page.
+  function upcomingEventsSection(currentId) {
+    const items = Array.isArray(eventsList.data) ? eventsList.data : [];
+    if (items.length < 2) return '';
+    return '<section class="g-super-list"><div class="g-super-section-head"><div><p class="g-super-kicker">Gaia gatherings</p><h2>Upcoming events</h2></div></div>'
+      + items.map((item) => {
+        const active = String(item.id) === String(currentId);
+        const meta = [eventDateRange(item), item.venue].filter(Boolean).join(' · ');
+        return '<a class="g-super-row' + (active ? ' is-active' : '') + '" href="home.html?view=events&event=' + esc(item.id) + '">'
+          + '<span class="g-super-row__icon">' + icon('calendar-blank') + '</span>'
+          + '<span><strong>' + esc(item.name) + '</strong><em>' + esc(meta) + '</em></span>'
+          + (active ? '<span class="g-event-current">Open</span>' : icon('caret-right')) + '</a>';
+      }).join('')
+      + '</section>';
+  }
+
+  function sponsorsSection(detail) {
+    const sponsors = Array.isArray(detail?.sponsors) ? detail.sponsors : [];
+    if (!sponsors.length) return '';
+    return '<section class="g-super-list"><div class="g-super-section-head"><div><p class="g-super-kicker">Made possible by</p><h2>Sponsors</h2></div></div>'
+      + '<div class="g-live-sponsor-row">' + sponsors.map((sponsor) => {
+        const inner = (sponsor.logo_url ? '<img src="' + esc(sponsor.logo_url) + '" alt="' + esc(sponsor.name) + '" loading="lazy" />' : '')
+          + '<span><strong>' + esc(sponsor.name) + '</strong><em>' + esc(sponsor.tier || 'partner') + '</em></span>';
+        return sponsor.website
+          ? '<a class="g-live-sponsor" href="' + esc(sponsor.website) + '" target="_blank" rel="noopener noreferrer">' + inner + '</a>'
+          : '<div class="g-live-sponsor">' + inner + '</div>';
+      }).join('') + '</div></section>';
+  }
+
+  function loadEventDetail(id) {
     if (!id || !/^\d+$/.test(id)) return;
     const fresh = eventDetail.id === id && (Date.now() - eventDetail.fetchedAt) < EVENT_DETAIL_TTL_MS;
     if (eventDetail.loading || fresh) return;
@@ -76,8 +146,7 @@
     return (hour % 12 === 0 ? 12 : hour % 12) + ':' + minute + ' ' + suffix;
   }
 
-  function loadEventLive(event) {
-    const id = eventNumericId(event);
+  function loadEventLive(id) {
     if (!id || !/^\d+$/.test(id)) return;
     const fresh = eventLive.id === id && (Date.now() - eventLive.fetchedAt) < EVENT_LIVE_TTL_MS;
     if (eventLive.loading || fresh) return;
@@ -180,15 +249,15 @@
   // so a backgrounded app is not making requests for nothing. The loop keeps
   // rescheduling either way: a phone that locks and wakes must start refreshing
   // again, not stay frozen on whatever it last saw.
-  function scheduleEventRefresh(root, event) {
+  function scheduleEventRefresh(root, id) {
     if (eventDetail.timer) clearTimeout(eventDetail.timer);
     eventDetail.timer = setTimeout(() => {
       if (!root.isConnected) return; // view was replaced; the next render re-arms this
       if (root.offsetParent !== null && document.visibilityState === 'visible') {
-        loadEventDetail(event);
-        loadEventLive(event);
+        loadEventDetail(id);
+        loadEventLive(id);
       }
-      scheduleEventRefresh(root, event);
+      scheduleEventRefresh(root, id);
     }, EVENT_LIVE_TTL_MS);
   }
 
@@ -198,8 +267,8 @@
     if (document.visibilityState !== 'visible') return;
     const root = $('events-body');
     if (!root || !root.isConnected || root.offsetParent === null) return;
-    loadEventDetail(eventData());
-    loadEventLive(eventData());
+    loadEventDetail(activeEventId());
+    loadEventLive(activeEventId());
   });
 
   function agendaSection(detail) {
@@ -429,11 +498,18 @@
   function renderEvents() {
     const root = $('events-body');
     if (!root) return;
-    const event = eventData();
-    loadEventDetail(event);
-    loadEventLive(event);
-    scheduleEventRefresh(root, event);
-    const detail = eventDetail.data && eventDetail.id === eventNumericId(event) ? eventDetail.data : null;
+    const featured = eventData();
+    const eventId = activeEventId();
+    loadEventsList();
+    loadEventDetail(eventId);
+    loadEventLive(eventId);
+    scheduleEventRefresh(root, eventId);
+    const detail = eventDetail.data && eventDetail.id === eventId ? eventDetail.data : null;
+    // When a specific event is open, its own record leads the page; otherwise
+    // fall back to whatever the bootstrap feed features.
+    const event = detail?.event
+      ? { ...featured, ...detail.event, id: 'event-' + detail.event.id, timeline: featured?.timeline }
+      : featured;
     const timeline = Array.isArray(event?.timeline) && event.timeline.length ? '<section class="g-event-timeline"><p class="g-super-kicker">Published schedule</p><h2>Event timeline</h2>' + event.timeline.map((item) => '<div class="g-event-timeline__item"><time>' + esc(item.time) + '</time><div><strong>' + esc(item.title) + '</strong>' + (item.detail ? '<span>' + esc(item.detail) + '</span>' : '') + '</div></div>').join('') + '</section>' : '';
     const publicEvent = event?.name ? '<article class="g-event-detail"><img src="assets/gaia-event-hero.webp" alt="" width="1200" height="720" />'
       + '<div><p class="g-super-kicker">Featured gathering</p><h2>' + esc(event.name) + '</h2><p>' + esc(event.summary || event.description || '') + '</p>'
@@ -441,8 +517,9 @@
       + (event.sourceUrl ? '<button type="button" class="g-btn g-btn--primary" data-open-in-app="' + esc(event.sourceUrl) + '" data-in-app-title="' + esc(event.name) + '">View event details ' + icon('arrow-right') + '</button>' : '') + '</div></article>' + timeline
       : '<section class="g-super-empty-panel"><h2>No event is currently published</h2><p>Confirmed event details will appear here from Gaia’s live event service.</p></section>';
     root.innerHTML = '<div class="g-super-page-head"><p class="g-super-kicker">Gather in person and online</p><h1>Events</h1><p>Confirmed Gaia gatherings and your member appointments, without placeholder schedules.</p></div>'
-      + liveSection(eventLive.id === eventNumericId(event) ? eventLive.data : null)
-      + publicEvent + agendaSection(detail) + speakersSection(detail) + directorySection(detail)
+      + liveSection(eventLive.id === eventId ? eventLive.data : null)
+      + publicEvent + agendaSection(detail) + speakersSection(detail)
+      + sponsorsSection(detail) + directorySection(detail) + upcomingEventsSection(eventId)
       + (memberState().authed ? '<section class="g-super-list"><div class="g-super-section-head"><div><p class="g-super-kicker">Your calendar</p><h2>Member sessions</h2></div><a href="home.html?view=bookings">View bookings</a></div>'
       + (upcomingAppointments().length ? upcomingAppointments().slice(0, 3).map((item) => '<a class="g-super-row" href="home.html?view=bookings"><span class="g-super-row__icon">' + icon('calendar-check') + '</span><span><strong>' + esc(item.title || 'Appointment') + '</strong><em>' + esc(appointmentWhen(item)) + '</em></span>' + icon('caret-right') + '</a>').join('') : '<p class="g-super-empty">No upcoming member sessions.</p>') + '</section>' : '');
     bind(root);

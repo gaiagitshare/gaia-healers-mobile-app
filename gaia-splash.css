@@ -324,15 +324,19 @@
 }
 
 /* Steps */
+/* Steps are stacked in a single grid cell rather than absolutely positioned, so
+   the container grows to fit the tallest copy. With a fixed min-height the
+   longest step overflowed and its last line collided with the progress dots. */
 .gaia-splash-steps {
   position: relative;
   width: 100%;
   min-height: 12rem;
+  display: grid;
+  align-items: center;
 }
 
 .splash-step {
-  position: absolute;
-  inset: 0;
+  grid-area: 1 / 1;
   display: flex;
   flex-direction: column;
   align-items: center;

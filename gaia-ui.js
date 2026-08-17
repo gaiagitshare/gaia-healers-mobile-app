@@ -3132,6 +3132,16 @@
       nudge.className = 'gaia-assist-nudge';
       nudge.innerHTML = '<img src="assets/gaia-mark.svg" alt="" /><span><strong>Gaia Assist is ready</strong><small>Tap to talk — sound starts after your tap.</small></span><i class="ph ph-caret-right" aria-hidden="true"></i>';
       nudge.addEventListener('click', () => { nudge.remove(); void onAssistTap(); });
+      // The nudge covers a card or two while it is up. Without this, the only way
+      // to clear it is to launch Assist — which is not what someone reaching for
+      // the card underneath wants.
+      const dismiss = document.createElement('button');
+      dismiss.type = 'button';
+      dismiss.className = 'gaia-assist-nudge__close';
+      dismiss.setAttribute('aria-label', 'Dismiss');
+      dismiss.innerHTML = '<i class="ph ph-x" aria-hidden="true"></i>';
+      dismiss.addEventListener('click', (event) => { event.stopPropagation(); nudge.remove(); });
+      nudge.appendChild(dismiss);
       document.body.appendChild(nudge);
       window.setTimeout(() => nudge.remove(), 8500);
       setAssistVoiceState('idle', REALTIME_STATUS_COPY.idle);

@@ -527,39 +527,253 @@
     bind(root);
   }
 
-  function renderEvents() {
-    const root = $('events-body');
-    if (!root) return;
-    const featured = eventData();
-    const eventId = activeEventId();
+  // ---- Events: hub and per-event page -------------------------------------
+  // The hub lists whatever the Event Manager publishes; ?event=N opens one.
+  // Nothing about any particular event is written here.
+  const eventUI = { tab: 'overview', past: null, pastLoading: false, live: {} };
+  const EVENT_TABS = [
+    ['overview', 'Overview'], ['agenda', 'Agenda'], ['speakers', 'Speakers'],
+    ['exhibitors', 'Exhibitors'], ['sponsors', 'Sponsors'], ['updates', 'Updates'],
+  ];
+
+  // The server states the time; the device only measures elapsed time since.
+  const clock = { base: null, capturedAt: 0 };
+  function noteServerTime(iso) {
+    if (!iso) return;
+    const parsed = new Date(iso).getTime();
+    if (Number.isFinite(parsed)) { clock.base = parsed; clock.capturedAt = Date.now(); }
+  }
+  function serverNow() {
+    return clock.base ? clock.base + (Date.now() - clock.capturedAt) : Date.now();
+  }
+
+  const instant = (value) => {
+    const ms = value ? new Date(value).getTime() : NaN;
+    return Number.isFinite(ms) ? ms : null;
+  };
+
+  function eventPhase(item) {
+    const start = instant(item.startAt);
+    const end = instant(item.endAt);
+    const now = serverNow();
+    if (start && now < start) return 'upcoming';
+    if (end && now > end) return 'past';
+    if (start || end) return 'running';
+    return 'upcoming';
+  }
+
+  // Countdown from authoritative instants only — never from the naive display dates.
+  function countdownLabel(item) {
+    const start = instant(item.startAt);
+    if (!start) return '';
+    const diff = start - serverNow();
+    if (diff <= 0) return '';
+    const minutes = Math.floor(diff / 60000);
+    const days = Math.floor(minutes / 1440);
+    const hours = Math.floor((minutes % 1440) / 60);
+    if (days > 0) return 'in ' + days + (days === 1 ? ' day' : ' days') + (hours ? ' ' + hours + 'h' : '');
+    if (hours > 0) return 'in ' + hours + 'h ' + (minutes % 60) + 'm';
+    return 'in ' + Math.max(1, minutes) + ' min';
+  }
+
+  function humanDates(item) {
+    // Display only: these are venue-local wall-clock values.
+    const start = item.startDate ? new Date(item.startDate) : null;
+    const end = item.endDate ? new Date(item.endDate) : null;
+    if (!start || !Number.isFinite(+start)) return '';
+    const fmt = (date, withYear) => new Intl.DateTimeFormat(undefined, {
+      month: 'short', day: 'numeric', ...(withYear ? { year: 'numeric' } : {}),
+    }).format(date);
+    if (!end || !Number.isFinite(+end)) return fmt(start, true);
+    return fmt(start, false) + ' – ' + fmt(end, true);
+  }
+
+  function registrationCta(item, extraClass) {
+    if (!item || !item.registrationUrl) return '';
+    const label = item.registrationLabel || 'Buy ticket';
+    return '<a class="g-btn g-btn--primary' + (extraClass ? ' ' + extraClass : '') + '" href="'
+      + esc(item.registrationUrl) + '" target="_blank" rel="noopener noreferrer">' + esc(label) + ' ' + icon('arrow-up-right') + '</a>';
+  }
+
+  function eventHero(item) {
+    return item && item.heroImageUrl
+      ? '<img src="' + esc(item.heroImageUrl) + '" alt="" loading="lazy" />'
+      : '<img src="assets/gaia-event-hero.webp" alt="" loading="lazy" />';
+  }
+
+  function loadPastEvents() {
+    if (eventUI.past || eventUI.pastLoading) return;
+    eventUI.pastLoading = true;
+    fetch(proxyBase() + '/api/events?include_past=1', { headers: { Accept: 'application/json' }, cache: 'no-store' })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((payload) => {
+        if (payload && payload.ok) { eventUI.past = payload.events || []; render(); }
+      })
+      .catch(() => { eventUI.past = []; })
+      .finally(() => { eventUI.pastLoading = false; });
+  }
+
+  // Live state for an event that is currently inside its own window. At most one
+  // or two calls, and only while something could actually be running.
+  function loadLiveFor(id) {
+    if (!id || eventUI.live[id]) return;
+    eventUI.live[id] = { loading: true };
+    fetch(proxyBase() + '/api/events/' + encodeURIComponent(id) + '/live', { headers: { Accept: 'application/json' }, cache: 'no-store' })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((payload) => {
+        eventUI.live[id] = payload && payload.ok ? payload.live : {};
+        if (payload && payload.ok) noteServerTime(payload.live.server_time);
+        render();
+      })
+      .catch(() => { eventUI.live[id] = {}; });
+  }
+
+  function eventCard(item, opts = {}) {
+    const meta = [humanDates(item), item.venue].filter(Boolean).join(' · ');
+    const countdown = opts.countdown === false ? '' : countdownLabel(item);
+    return '<article class="g-event-card">'
+      + '<a class="g-event-card__art" href="home.html?view=events&event=' + esc(item.id) + '">' + eventHero(item) + '</a>'
+      + '<div class="g-event-card__body">'
+      + (opts.kicker ? '<p class="g-super-kicker">' + esc(opts.kicker) + '</p>' : '')
+      + '<h3>' + esc(item.name) + '</h3>'
+      + (meta ? '<p class="g-event-card__meta">' + esc(meta) + '</p>' : '')
+      + (countdown ? '<p class="g-event-card__countdown">' + icon('clock') + ' ' + esc(countdown) + '</p>' : '')
+      + '<div class="g-event-card__actions">'
+      + '<a class="g-btn g-btn--ghost g-btn--sm" href="home.html?view=events&event=' + esc(item.id) + '">View event ' + icon('arrow-right') + '</a>'
+      + registrationCta(item, 'g-btn--sm')
+      + '</div></div></article>';
+  }
+
+  function renderEventsHub(root) {
     loadEventsList();
+    loadPastEvents();
+    const all = Array.isArray(eventsList.data) ? eventsList.data : [];
+    all.forEach((item) => noteServerTime(item.serverTime));
+
+    const running = all.filter((item) => eventPhase(item) === 'running');
+    running.forEach((item) => loadLiveFor(item.id));
+    const upcoming = all.filter((item) => eventPhase(item) === 'upcoming');
+    const knownIds = new Set(all.map((item) => String(item.id)));
+    const past = (eventUI.past || []).filter((item) => !knownIds.has(String(item.id)) || eventPhase(item) === 'past');
+
+    const liveCards = running.map((item) => {
+      const live = eventUI.live[item.id];
+      if (!live || !live.live_enabled) return eventCard(item, { kicker: 'Happening now' });
+      const nowTitles = (live.now || []).map((s) => s.title).filter(Boolean);
+      return '<article class="g-event-card g-event-card--live">'
+        + '<a class="g-event-card__art" href="home.html?view=events&event=' + esc(item.id) + '">' + eventHero(item) + '</a>'
+        + '<div class="g-event-card__body"><p class="g-super-kicker"><span class="g-live-dot" aria-hidden="true"></span> Live now</p>'
+        + '<h3>' + esc(item.name) + '</h3>'
+        + (nowTitles.length ? '<p class="g-event-card__meta">' + esc(nowTitles.join(' · ')) + '</p>'
+          : '<p class="g-event-card__meta">' + esc(item.venue || '') + '</p>')
+        + '<div class="g-event-card__actions">'
+        + '<a class="g-btn g-btn--primary g-btn--sm" href="home.html?view=events&event=' + esc(item.id) + '">Open live ' + icon('arrow-right') + '</a>'
+        + '</div></div></article>';
+    }).join('');
+
+    const section = (kicker, title, body) => body
+      ? '<section class="g-super-list"><div class="g-super-section-head"><div><p class="g-super-kicker">' + esc(kicker)
+        + '</p><h2>' + esc(title) + '</h2></div></div><div class="g-event-grid">' + body + '</div></section>'
+      : '';
+
+    const empty = !all.length && !past.length
+      ? '<section class="g-super-empty-panel"><h2>No events published yet</h2><p>Gatherings appear here as soon as they are published.</p></section>'
+      : '';
+
+    root.innerHTML = '<div class="g-super-page-head"><p class="g-super-kicker">Gather in person and online</p><h1>Events</h1>'
+      + '<p>Every Gaia gathering, its programme and who you will meet there.</p></div>'
+      + (liveCards ? '<section class="g-super-list g-super-list--live"><div class="g-super-section-head"><div><p class="g-super-kicker">On now</p><h2>Live</h2></div></div><div class="g-event-grid">' + liveCards + '</div></section>' : '')
+      + section('Coming up', 'Upcoming events', upcoming.map((item) => eventCard(item)).join(''))
+      + section('Archive', 'Past events', past.map((item) => eventCard(item, { countdown: false })).join(''))
+      + empty;
+    bind(root);
+  }
+
+  function eventTabPanel(tab, detail, live) {
+    if (tab === 'agenda') return agendaSection(detail);
+    if (tab === 'speakers') return speakersSection(detail);
+    if (tab === 'exhibitors') return directorySection(detail);
+    if (tab === 'sponsors') return sponsorsSection(detail);
+    if (tab === 'updates') return updatesSection(detail, live);
+    return '';
+  }
+
+  function tabHasContent(tab, detail) {
+    if (tab === 'overview') return true;
+    if (tab === 'agenda') return Boolean(detail?.agenda?.days?.length);
+    if (tab === 'speakers') return Boolean(detail?.speakers?.length);
+    if (tab === 'exhibitors') return Boolean(detail?.exhibitors?.length);
+    if (tab === 'sponsors') return Boolean(detail?.sponsors?.length);
+    if (tab === 'updates') return Boolean(detail?.announcements?.length);
+    return false;
+  }
+
+  function renderEventDetail(root, eventId) {
     loadEventDetail(eventId);
     loadEventLive(eventId);
     scheduleEventRefresh(root, eventId);
     const detail = eventDetail.data && eventDetail.id === eventId ? eventDetail.data : null;
-    // When a specific event is open, its own record leads the page; otherwise
-    // fall back to whatever the bootstrap feed features.
-    const event = detail?.event
-      ? { ...featured, ...detail.event, id: 'event-' + detail.event.id, timeline: featured?.timeline }
-      : featured;
-    const timeline = Array.isArray(event?.timeline) && event.timeline.length ? '<section class="g-event-timeline"><p class="g-super-kicker">Published schedule</p><h2>Event timeline</h2>' + event.timeline.map((item) => '<div class="g-event-timeline__item"><time>' + esc(item.time) + '</time><div><strong>' + esc(item.title) + '</strong>' + (item.detail ? '<span>' + esc(item.detail) + '</span>' : '') + '</div></div>').join('') + '</section>' : '';
-    // Each event carries its own artwork; the bundled image is only the fallback
-    // for an event that has not supplied one.
-    const heroImage = detail?.event?.heroImageUrl || event?.heroImageUrl || 'assets/gaia-event-hero.webp';
-    const publicEvent = event?.name ? '<article class="g-event-detail"><img src="' + esc(heroImage) + '" alt="" width="1200" height="720" loading="lazy" />'
-      + '<div><p class="g-super-kicker">Featured gathering</p><h2>' + esc(event.name) + '</h2><p>' + esc(event.summary || event.description || '') + '</p>'
-      + '<dl><div><dt>Date</dt><dd>' + esc(eventDate(event) || 'To be announced') + '</dd></div><div><dt>Location</dt><dd>' + esc([event.venue, event.location].filter(Boolean).join(', ') || 'To be announced') + '</dd></div></dl>'
-      + (event.sourceUrl ? '<button type="button" class="g-btn g-btn--primary" data-open-in-app="' + esc(event.sourceUrl) + '" data-in-app-title="' + esc(event.name) + '">View event details ' + icon('arrow-right') + '</button>' : '') + '</div></article>' + timeline
-      : '<section class="g-super-empty-panel"><h2>No event is currently published</h2><p>Confirmed event details will appear here from Gaia’s live event service.</p></section>';
-    root.innerHTML = '<div class="g-super-page-head"><p class="g-super-kicker">Gather in person and online</p><h1>Events</h1><p>Confirmed Gaia gatherings and your member appointments, without placeholder schedules.</p></div>'
-      + liveSection(eventLive.id === eventId ? eventLive.data : null)
-      + publicEvent + updatesSection(detail, eventLive.id === eventId ? eventLive.data : null)
-      + agendaSection(detail) + speakersSection(detail)
-      + sponsorsSection(detail) + directorySection(detail) + upcomingEventsSection(eventId)
-      + (memberState().authed ? '<section class="g-super-list"><div class="g-super-section-head"><div><p class="g-super-kicker">Your calendar</p><h2>Member sessions</h2></div><a href="home.html?view=bookings">View bookings</a></div>'
-      + (upcomingAppointments().length ? upcomingAppointments().slice(0, 3).map((item) => '<a class="g-super-row" href="home.html?view=bookings"><span class="g-super-row__icon">' + icon('calendar-check') + '</span><span><strong>' + esc(item.title || 'Appointment') + '</strong><em>' + esc(appointmentWhen(item)) + '</em></span>' + icon('caret-right') + '</a>').join('') : '<p class="g-super-empty">No upcoming member sessions.</p>') + '</section>' : '');
+    const live = eventLive.id === eventId ? eventLive.data : null;
+    const item = detail?.event;
+    noteServerTime(item?.serverTime || live?.server_time);
+
+    if (!item) {
+      root.innerHTML = '<div class="g-super-page-head"><p class="g-super-kicker">Gather in person and online</p><h1>Events</h1></div>'
+        + '<section class="g-super-empty-panel"><h2>Loading this event…</h2>'
+        + '<p><a href="home.html?view=events">Back to all events</a></p></section>';
+      bind(root); return;
+    }
+
+    // Sections with nothing in them are not offered as tabs at all.
+    const tabs = EVENT_TABS.filter(([key]) => tabHasContent(key, detail));
+    if (!tabs.some(([key]) => key === eventUI.tab)) eventUI.tab = 'overview';
+
+    const phase = eventPhase(item);
+    const countdown = countdownLabel(item);
+    const statusChip = live && live.live_enabled
+      ? '<span class="g-event-status is-live"><span class="g-live-dot" aria-hidden="true"></span> Live now</span>'
+      : phase === 'past' ? '<span class="g-event-status">Finished</span>'
+        : countdown ? '<span class="g-event-status">' + esc(countdown) + '</span>' : '';
+
+    const overview = '<section class="g-event-overview">'
+      + (item.description ? '<p>' + esc(item.description) + '</p>' : '')
+      + '<dl><div><dt>Dates</dt><dd>' + esc(humanDates(item) || 'To be announced') + '</dd></div>'
+      + '<div><dt>Venue</dt><dd>' + esc(item.venue || 'To be announced') + '</dd></div>'
+      + (item.timezone ? '<div><dt>Local time</dt><dd>' + esc(String(item.timezone).replace(/_/g, ' ')) + '</dd></div>' : '')
+      + '</dl>' + registrationCta(item) + '</section>';
+
+    const tabBar = tabs.length > 1
+      ? '<nav class="g-event-tabs" role="tablist">' + tabs.map(([key, label]) =>
+        '<button type="button" role="tab" class="g-event-tab' + (eventUI.tab === key ? ' is-active' : '')
+        + '" data-event-tab="' + key + '" aria-selected="' + (eventUI.tab === key) + '">' + esc(label) + '</button>').join('') + '</nav>'
+      : '';
+
+    root.innerHTML = '<div class="g-super-page-head"><a class="g-event-back" href="home.html?view=events">' + icon('arrow-left') + ' All events</a>'
+      + '<h1>' + esc(item.name) + '</h1>'
+      + '<p class="g-event-headmeta">' + esc([humanDates(item), item.venue].filter(Boolean).join(' · ')) + ' ' + statusChip + '</p></div>'
+      + '<div class="g-eventpage-hero">' + eventHero(item) + '</div>'
+      + liveSection(live)
+      + tabBar
+      + '<div class="g-event-panel">' + (eventUI.tab === 'overview' ? overview : eventTabPanel(eventUI.tab, detail, live)) + '</div>';
+
+    root.querySelectorAll('[data-event-tab]').forEach((button) => {
+      button.addEventListener('click', () => { eventUI.tab = button.getAttribute('data-event-tab'); render(); });
+    });
     bind(root);
   }
+
+  function renderEvents() {
+    const root = $('events-body');
+    if (!root) return;
+    let explicit = '';
+    try {
+      const wanted = new URLSearchParams(window.location.search).get('event');
+      if (wanted && /^\d+$/.test(wanted)) explicit = wanted;
+    } catch (_) { /* hub */ }
+    if (explicit) renderEventDetail(root, explicit);
+    else renderEventsHub(root);
+  }
+
 
   function renderBookings() {
     const root = $('bookings-body');

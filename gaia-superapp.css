@@ -437,3 +437,45 @@ body.gaia-v2 .gaia-chakra-map__list-item, body.gaia-v2 .gaia-chakra-map--screen 
 
 .g-live-note time { display: block; margin-top: 6px; color: var(--super-muted); font-size: 11px; }
 .g-update-pin { display: block; margin-bottom: 4px; color: var(--super-accent); font-size: 10px; font-style: normal; font-weight: 800; letter-spacing: .1em; text-transform: uppercase; }
+
+/* ---- Events hub + event page ------------------------------------------- */
+.g-event-grid { display: grid; gap: 14px; }
+.g-event-card { display: grid; grid-template-columns: 108px minmax(0, 1fr); gap: 14px; padding: 12px; border: 1px solid var(--super-line); border-radius: 20px; background: #0b160f; }
+.g-event-card--live { border-color: var(--super-accent); }
+.g-event-card__art { display: block; }
+.g-event-card__art img { width: 108px; height: 108px; border-radius: 14px; object-fit: cover; border: 1px solid var(--super-line); }
+.g-event-card__body { min-width: 0; display: grid; align-content: start; gap: 6px; }
+.g-event-card__body h3 { margin: 0; color: var(--g-text); font-family: var(--g-font-serif); font-size: 21px; line-height: 1.1; font-weight: 600; }
+.g-event-card__meta { margin: 0; color: var(--super-muted); font-size: 12.5px; line-height: 1.45; }
+.g-event-card__countdown { margin: 0; color: var(--super-accent); font-size: 12px; font-weight: 700; }
+.g-event-card__actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 4px; }
+.g-super-list--live { border-color: var(--super-accent); }
+
+.g-event-back { display: inline-flex; align-items: center; gap: 6px; min-height: 44px; color: var(--super-accent); font-size: 13px; font-weight: 700; text-decoration: none; }
+.g-event-headmeta { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 10px !important; color: var(--super-muted); font-size: 13px; }
+.g-event-status { display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; border: 1px solid var(--super-line); border-radius: 999px; color: var(--super-muted); font-size: 11px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; }
+.g-event-status.is-live { color: var(--super-accent); border-color: var(--super-accent); }
+.g-eventpage-hero { margin-top: 16px; border: 1px solid var(--super-line); border-radius: 22px; overflow: hidden; }
+.g-eventpage-hero img { display: block; width: 100%; aspect-ratio: 16 / 9; object-fit: cover; }
+
+/* Horizontal-scroll tabs on narrow screens; the row never wraps the layout. */
+.g-event-tabs { margin-top: 18px; display: flex; gap: 8px; overflow-x: auto; scrollbar-width: none; -webkit-overflow-scrolling: touch; padding-bottom: 4px; }
+.g-event-tabs::-webkit-scrollbar { display: none; }
+.g-event-tab { flex: 0 0 auto; min-height: 44px; padding: 0 16px; color: var(--super-muted); border: 1px solid var(--super-line); border-radius: 999px; background: #0b160f; font-size: 13px; font-weight: 700; cursor: pointer; }
+.g-event-tab.is-active { color: var(--super-accent-ink); background: var(--super-accent); border-color: var(--super-accent); }
+.g-event-tab:focus-visible { outline: 2px solid var(--super-accent); outline-offset: 2px; }
+.g-event-panel { margin-top: 4px; }
+.g-event-panel > section { margin-top: 16px; }
+
+.g-event-overview { margin-top: 16px; padding: 24px; border: 1px solid var(--super-line); border-radius: 22px; background: var(--super-panel); }
+.g-event-overview p { margin: 0 0 16px; color: var(--super-muted); font-size: 14px; line-height: 1.65; }
+.g-event-overview dl { display: grid; gap: 12px; margin: 0 0 18px; }
+.g-event-overview dt { color: var(--super-accent); font-size: 10px; font-weight: 800; letter-spacing: .14em; text-transform: uppercase; }
+.g-event-overview dd { margin: 4px 0 0; color: var(--g-text); font-size: 14px; }
+
+@media (min-width: 720px) {
+  .g-event-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .g-event-card { grid-template-columns: 132px minmax(0, 1fr); }
+  .g-event-card__art img { width: 132px; height: 132px; }
+  .g-event-overview dl { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}

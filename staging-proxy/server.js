@@ -2663,8 +2663,10 @@ function normalizeEventCard(event = {}) {
   };
 }
 
-async function eventsList(req, res, origin) {
-  const events = await eventManagerGet('/public/events');
+async function eventsList(req, res, origin, url) {
+  // The hub asks for past events too, to show a "Past events" section.
+  const includePast = url && /^(1|true|yes)$/i.test(String(url.searchParams.get('include_past') || ''));
+  const events = await eventManagerGet(`/public/events${includePast ? '?include_past=true' : ''}`);
   if (events === null) {
     sendJson(res, 200, { ok: true, events: [], source: 'not-connected' }, origin);
     return;
@@ -4213,7 +4215,7 @@ const server = http.createServer(async (req, res) => {
       return;
     }
     if (req.method === 'GET' && url.pathname === '/api/events') {
-      await eventsList(req, res, origin);
+      await eventsList(req, res, origin, url);
       return;
     }
     if (req.method === 'GET' && /^\/api\/events\/\d+$/.test(url.pathname)) {

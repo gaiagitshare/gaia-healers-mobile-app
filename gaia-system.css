@@ -634,7 +634,7 @@ button.g-access.g-access--link {
   border:1px solid rgba(255,255,255,.10);border-radius:18px;
   box-shadow:0 24px 60px rgba(0,0,0,.55)}
 .gaia-product-modal .gaia-booking-modal__close{position:absolute;top:12px;right:12px;
-  width:36px;height:36px;border-radius:999px;border:1px solid rgba(255,255,255,.14);
+  width:44px;height:44px;border-radius:999px;border:1px solid rgba(255,255,255,.14);
   background:rgba(0,0,0,.35);color:inherit;font-size:20px;line-height:1;cursor:pointer;z-index:2}
 .gaia-product-modal .gaia-booking-modal__close:focus-visible{outline:2px solid var(--g-accent,#A8E063);outline-offset:2px}
 .g-store-sheet__media{aspect-ratio:16/10;overflow:hidden;border-radius:12px;background:rgba(255,255,255,.04)}

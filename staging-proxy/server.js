@@ -443,10 +443,17 @@ function saveStoreCatalog(catalog) {
  * could mutate the shop. Shopify remains the authority for price and checkout;
  * this is Gaia keeping a copy of the shelf so the app can browse it.
  */
+const STORE_MARKET = process.env.STORE_MARKET_COUNTRY || 'US';
+
 async function fetchShopifyCatalogue({ maxPages = 6, pageSize = 250 } = {}) {
   const products = [];
   for (let page = 1; page <= maxPages; page += 1) {
-    const url = `${SHOPIFY_STOREFRONT}/products.json?limit=${pageSize}&page=${page}`;
+    // The market is pinned. Shopify Markets otherwise serves whichever currency
+    // suits the caller's location — this proxy sits in Germany, and an
+    // unpinned fetch returned EUR prices that would have been rendered as
+    // dollars. products.json carries no currency field, so nothing downstream
+    // could have caught it.
+    const url = `${SHOPIFY_STOREFRONT}/products.json?limit=${pageSize}&page=${page}&country=${STORE_MARKET}`;
     const response = await fetch(url, { headers: { Accept: 'application/json' } });
     if (!response.ok) throw new Error(`shopify ${response.status}`);
     const batch = await response.json();
@@ -455,6 +462,39 @@ async function fetchShopifyCatalogue({ maxPages = 6, pageSize = 250 } = {}) {
     if (list.length < pageSize) break;
   }
   return products;
+}
+
+/**
+ * Confirm the market actually gave us the currency we asked for.
+ *
+ * Pinning the country is a request, not a guarantee, and the feed cannot tell
+ * us what it answered with. So one product is checked against its own retail
+ * page, which does declare a currency, and the price must agree to the cent.
+ * If it does not, prices are marked unverified and the store shows none rather
+ * than showing a number that will not match checkout.
+ */
+async function verifyCatalogueCurrency(products) {
+  const sample = products.find((p) => p?.handle && Number(p?.variants?.[0]?.price) > 0);
+  if (!sample) return { verified: false, reason: 'no_sample' };
+  try {
+    const response = await fetch(
+      `${SHOPIFY_STOREFRONT}/products/${sample.handle}?country=${STORE_MARKET}`,
+    );
+    if (!response.ok) return { verified: false, reason: `page_${response.status}` };
+    const html = await response.text();
+    const currency = (html.match(/"currency":"([A-Z]{3})"/) || [])[1] || null;
+    const cents = Number((html.match(/"price":(\d{3,})/) || [])[1] || NaN);
+    const feedCents = Math.round(Number(sample.variants[0].price) * 100);
+    const matches = Number.isFinite(cents) && cents === feedCents;
+    return {
+      verified: Boolean(currency) && matches,
+      currency,
+      reason: matches ? 'ok' : `price_mismatch_feed_${feedCents}_page_${cents}`,
+      sample: sample.handle,
+    };
+  } catch (error) {
+    return { verified: false, reason: 'verify_failed' };
+  }
 }
 
 /**
@@ -468,7 +508,16 @@ async function runStoreSync({ reason = 'scheduled' } = {}) {
       console.log('[Gaia Store] sync returned no products; keeping the existing catalogue');
       return { ok: false, reason: 'empty_response' };
     }
-    const { catalog, diff } = syncCatalog(loadStoreCatalog(), fetched, { now: new Date() });
+    const check = await verifyCatalogueCurrency(fetched);
+    if (!check.verified) {
+      console.log(`[Gaia Store] currency unverified (${check.reason}); prices will be withheld`);
+    }
+    const { catalog, diff } = syncCatalog(loadStoreCatalog(), fetched, {
+      now: new Date(),
+      currency: check.currency || null,
+      market: STORE_MARKET,
+      priceVerified: check.verified,
+    });
     saveStoreCatalog(catalog);
     const messages = diffMessages(diff);
     if (messages.length) {
@@ -481,7 +530,7 @@ async function runStoreSync({ reason = 'scheduled' } = {}) {
       }
       if (messages.length) saveMemberEntitlements(ledger);
     } catch (_) { /* the audit is a courtesy, never a reason to fail a sync */ }
-    return { ok: true, diff, counts: {
+    return { ok: true, diff, currency: check.currency, priceVerified: check.verified, counts: {
       products: Object.keys(catalog.products).length,
       added: diff.added.length, priceChanged: diff.priceChanged.length, unobserved: diff.unobserved.length,
     } };

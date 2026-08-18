@@ -44,12 +44,13 @@
     const img = (p.images || [])[0];
     return img && img.src ? img.src : '';
   }
-  // Prices are shown again. The old note here recorded a ~3.7x inflation
-  // between products.json and the retail page (json $8,573 vs page $2,299),
-  // so prices were suppressed. Re-verified 18 Aug 2026 from two origins: the
-  // feed now returns $2,299 and the retail page reports 229900 cents — they
-  // agree. The daily sync reports any price change, so a future divergence
-  // shows up as a diff rather than as a wrong number on a card.
+  // Prices come from Gaia's synced catalogue and are always rendered with
+  // their currency. The old note here warned that products.json disagreed with
+  // the retail page; the cause turned out to be Shopify Markets serving a
+  // different currency by region, and the feed carrying no currency field at
+  // all. The proxy now pins a market and verifies it against the retail page —
+  // and when it cannot, the catalogue sends no price and the card says so
+  // rather than showing a figure that would not match checkout.
   // Canonical product tile (g-* system). Product details open in a native app
   // sheet because Shopify blocks iframe embedding.
   function gTile(p) {
@@ -127,14 +128,26 @@
   }
 
   function gaiaTile(card) {
+    // Long Shopify titles are common here — 31 of 102 exceed 60 characters,
+    // one runs to 200. The card clamps the visible title and keeps the full
+    // text available to screen readers and on hover.
+    const title = esc(card.title);
     return '<article class="g-tile g-store-tile">'
-      + (card.image ? '<div class="g-tile__media"><img src="' + esc(card.image) + '" alt="" loading="lazy" /></div>' : '')
-      + '<div class="g-tile__body"><p class="g-tile__title">' + esc(card.title) + '</p>'
-      + (card.price ? '<p class="g-tile__meta">' + esc(card.price)
-          + (card.compareAt ? ' <s>' + esc(card.compareAt) + '</s>' : '') + '</p>' : '')
+      + (card.image
+        ? '<div class="g-tile__media"><img src="' + esc(card.image) + '" alt="' + title + '" loading="lazy" /></div>'
+        : '<div class="g-tile__media g-tile__media--empty" aria-hidden="true"></div>')
+      + '<div class="g-tile__body">'
+      + '<h3 class="g-tile__title g-clamp-2" title="' + title + '">' + title + '</h3>'
+      + (card.price
+        ? '<p class="g-tile__price">' + esc(card.price)
+          + (card.compareAt ? ' <s class="g-tile__was">' + esc(card.compareAt) + '</s>' : '') + '</p>'
+        : '<p class="g-tile__price g-tile__price--muted">Price shown on Shopify</p>')
       + (card.available === false ? '<p class="g-tile__meta">Currently unavailable</p>' : '')
       + '<div class="g-card__actions">'
-      + '<a class="g-btn g-btn--primary g-btn--sm" href="' + esc(card.url) + '" target="_blank" rel="noopener noreferrer">Buy on Shopify</a>'
+      + '<a class="g-btn g-btn--primary g-btn--sm" href="' + esc(card.url) + '"'
+      + ' target="_blank" rel="noopener noreferrer">'
+      + (card.available === false ? 'View on Shopify' : 'Buy on Shopify')
+      + '<span class="g-sr-only"> — ' + title + ', opens gaiahealers.com in a new tab</span></a>'
       + '</div></div></article>';
   }
 
@@ -149,8 +162,13 @@
     if (gaia) {
       box.innerHTML = gaia.sections.map((section) => '<section class="g-store-cat">'
         + '<div class="g-section"><div class="g-section__lead">'
-        + '<h2 class="g-section__title">' + esc(section.label) + '</h2></div></div>'
-        + '<div class="g-rail g-store-rail">' + section.products.map(gaiaTile).join('') + '</div></section>').join('');
+        + '<h2 class="g-section__title">' + esc(section.label) + '</h2>'
+        + '<p class="g-section__meta">' + section.products.length + ' item'
+        + (section.products.length === 1 ? '' : 's') + '</p></div></div>'
+        + '<div class="g-rail g-store-rail">' + section.products.map(gaiaTile).join('') + '</div></section>').join('')
+        + (gaia.priceNote
+          ? '<p class="g-store-note">' + esc(gaia.priceNote) + '</p>'
+          : '<p class="g-store-note">Prices and availability are confirmed on Shopify at checkout.</p>');
       window.dispatchEvent(new CustomEvent('gaia:shop-loaded', { detail: { categories: gaia.sections.length } }));
       return;
     }

@@ -36,7 +36,14 @@ const STORE_CATEGORIES = [
   { key: 'training', label: 'Courses & Training', family: 'training', order: 5 },
   { key: 'events', label: 'Events', family: 'event', order: 6 },
   { key: 'accessories', label: 'Accessories', family: 'accessory', order: 7 },
-  { key: 'wellbeing', label: 'Wellbeing & Tools', family: 'retail', order: 8 },
+  { key: 'therapy-tools', label: 'Light & Sound Therapy', family: 'therapy', order: 8 },
+  { key: 'colour-energy', label: 'Colour Energy', family: 'colour', order: 9 },
+  { key: 'oils', label: 'Essential Oils & Blends', family: 'oils', order: 10 },
+  { key: 'sprays', label: 'Sprays & Mists', family: 'sprays', order: 11 },
+  { key: 'crystals', label: 'Crystals & Malas', family: 'crystals', order: 12 },
+  { key: 'supplements', label: 'Supplements', family: 'supplements', order: 13 },
+  { key: 'jiva', label: 'Jiva & Water', family: 'jiva', order: 14 },
+  { key: 'wellbeing', label: 'Wellbeing & Tools', family: 'retail', order: 15 },
 ];
 
 /**
@@ -49,12 +56,21 @@ const STORE_CATEGORIES = [
  * from a title is how somebody gets a device they never bought.
  */
 const DISPLAY_FAMILY_HINTS = [
+  // Ordered: the device families win before the generic words. "Bio-Well Water
+  // Sensor" must shelve under Bio-Well, not under water.
   ['bio-well', /bio-?well|bio-?cor|sputnik/i],
   ['biopulsar', /biopulsar/i],
   ['biotekna', /biotekna|regmatex|bia-acc|tomeex/i],
   ['healeex', /healeex/i],
   ['event', /elevate|conference|admission|\bvip\b/i],
   ['training', /certificat|course|training/i],
+  ['colour', /colour|chakra (tool|kit)|personality test|booklet/i],
+  ['therapy', /chromalight|light therapy|tachyon|braintap|sound|biophoton|heartmath|smart ring|pointoselect|auriculo/i],
+  ['supplements', /stemregen|gematria|phyto|nitroxx|methusalife|systema|micro daily/i],
+  ['sprays', /spray|mist|inhaler/i],
+  ['oils', /essential oil|roll-on|blend/i],
+  ['crystals', /crystal|mala|geometry|necklace|quartz/i],
+  ['jiva', /jiva|yami|dihanga|jahnavi|vipasa|water/i],
 ];
 
 function displayFamily(product) {
@@ -63,6 +79,19 @@ function displayFamily(product) {
     if (pattern.test(haystack)) return family;
   }
   return null;
+}
+
+/**
+ * Ask Shopify's CDN for an image the size we actually render.
+ *
+ * The feed links full-resolution originals — the first product's photo is
+ * 3,360px wide for a card that displays it at about 200. Shopify resizes on
+ * request, so asking costs nothing and saves the member megabytes per shelf.
+ */
+function sizedImage(src, width = 600) {
+  const url = clean(src, 400);
+  if (!url || !url.includes('cdn.shopify.com')) return url;
+  return url + (url.includes('?') ? '&' : '?') + `width=${width}`;
 }
 
 /** A price string from Shopify, normalised to a number of cents. */
@@ -76,7 +105,20 @@ function toCents(value) {
   return Number.isFinite(amount) ? Math.round(amount * 100) : null;
 }
 
-const money = (cents) => (cents == null ? null : `$${(cents / 100).toFixed(2).replace(/\.00$/, '')}`);
+/**
+ * Format a price WITH its currency, always.
+ *
+ * Shopify Markets serves a different currency depending on where the request
+ * comes from, and products.json carries no currency field at all — so a bare
+ * "2036.95" is genuinely ambiguous. The sync pins a market and records which,
+ * and every rendered price says so, because an unlabelled number that turns
+ * into a different figure at checkout is worse than no number.
+ */
+const money = (cents, currency = 'USD') => {
+  if (cents == null) return null;
+  const amount = (cents / 100).toFixed(2).replace(/\.00$/, '');
+  return currency === 'USD' ? `$${amount} USD` : `${amount} ${currency}`;
+};
 
 /**
  * Normalise one Shopify product into the shape Gaia stores.
@@ -103,9 +145,22 @@ function normalizeShopifyProduct(product, { now = new Date() } = {}) {
     vendor: clean(product.vendor, 120),
     productType: clean(product.product_type, 120),
     tags: Array.isArray(product.tags) ? product.tags.slice(0, 20).map((t) => clean(t, 60)) : [],
-    images: images.slice(0, 6).map((img) => clean(img?.src, 400)).filter(Boolean),
-    priceCents: toCents(first.price),
-    compareAtCents: toCents(first.compare_at_price),
+    images: images.slice(0, 6).map((img) => sizedImage(img?.src)).filter(Boolean),
+    // The lowest variant price, not merely the first. "Aura Cleanser 30ml /
+    // 120ml" lists at 7.99 and 19.99; showing whichever happened to come first
+    // would quote a price the customer may not be able to get.
+    priceCents: (() => {
+      const all = variants.map((v) => toCents(v.price)).filter((c) => c != null);
+      return all.length ? Math.min(...all) : toCents(first.price);
+    })(),
+    priceVaries: (() => {
+      const all = variants.map((v) => toCents(v.price)).filter((c) => c != null);
+      return all.length > 1 && Math.min(...all) !== Math.max(...all);
+    })(),
+    // Shopify writes 0 when there is no "was" price. Rendering that gives a
+    // struck-through "$0 USD" beside the real figure, which reads as broken at
+    // best and deceptive at worst.
+    compareAtCents: toCents(first.compare_at_price) || null,
     // Shopify's public feed reports availability per variant; absent means we
     // do not know, which is different from out of stock.
     available: variants.some((v) => v.available === true) ? true
@@ -124,7 +179,12 @@ function normalizeShopifyProduct(product, { now = new Date() } = {}) {
 }
 
 function emptyCatalog() {
-  return { version: 1, syncedAt: null, origin: null, products: {}, lastDiff: null };
+  return {
+    version: 1, syncedAt: null, origin: null, products: {}, lastDiff: null,
+    // Which market the prices belong to, and whether we confirmed it against
+    // the storefront rather than assuming.
+    currency: null, market: null, priceVerified: false,
+  };
 }
 
 /**
@@ -134,7 +194,10 @@ function emptyCatalog() {
  * diff is the point: an operator should hear "Shopify raised Bio-Well by $200"
  * rather than discover it later in a customer complaint.
  */
-function syncCatalog(previous, fetched, { now = new Date(), origin = 'public-storefront' } = {}) {
+function syncCatalog(previous, fetched, {
+  now = new Date(), origin = 'public-storefront',
+  currency = null, market = null, priceVerified = false,
+} = {}) {
   const catalog = {
     ...emptyCatalog(),
     ...previous,
@@ -189,6 +252,9 @@ function syncCatalog(previous, fetched, { now = new Date(), origin = 'public-sto
 
   catalog.syncedAt = now.toISOString();
   catalog.origin = clean(origin, 60);
+  catalog.currency = currency ? clean(currency, 8) : null;
+  catalog.market = market ? clean(market, 8) : null;
+  catalog.priceVerified = Boolean(priceVerified);
   catalog.lastDiff = diff;
   return { catalog, diff };
 }
@@ -203,6 +269,11 @@ function syncCatalog(previous, fetched, { now = new Date(), origin = 'public-sto
  * because an operator has not filed it yet.
  */
 function storeView(catalog, registry, { includeUnobserved = false } = {}) {
+  // An unverified price is withheld rather than guessed at. The card still
+  // sells the product; the figure simply comes from Shopify at the point it
+  // can be trusted.
+  const showPrices = catalog.priceVerified === true && Boolean(catalog.currency);
+  const currency = catalog.currency || 'USD';
   const canonicalOf = (externalId) => {
     const mapping = registry?.mappings?.[`shopify:${externalId}`];
     return mapping?.canonical || null;
@@ -227,8 +298,18 @@ function storeView(catalog, registry, { includeUnobserved = false } = {}) {
     const card = {
       externalId: product.externalId,
       title: product.title,
-      price: money(product.priceCents),
-      compareAt: money(product.compareAtCents),
+      // "From" is the honest word when the shelf cannot show every variant.
+      price: showPrices
+        ? (product.priceVaries
+          ? `From ${money(product.priceCents, currency)}`
+          : money(product.priceCents, currency))
+        : null,
+      // A "was" price is only shown when it is genuinely higher than the price,
+      // and without repeating the currency — "$2500 USD $2648 USD" wrapped on a
+      // phone and left a stray "USD" on its own line.
+      compareAt: showPrices && product.compareAtCents > (product.priceCents || 0)
+        ? money(product.compareAtCents, currency).replace(` ${currency}`, '') : null,
+      priceUnavailable: !showPrices,
       image: product.images?.[0] || null,
       available: product.available,
       url: product.url,
@@ -245,7 +326,14 @@ function storeView(catalog, registry, { includeUnobserved = false } = {}) {
     .filter((section) => section.products.length)
     .sort((a, b) => a.order - b.order);
   for (const section of list) section.products.sort((a, b) => a.title.localeCompare(b.title));
-  return { sections: list, syncedAt: catalog.syncedAt || null };
+  return {
+    sections: list,
+    syncedAt: catalog.syncedAt || null,
+    currency: showPrices ? currency : null,
+    // Shopify localises at checkout, so a member outside the synced market
+    // will see their own currency there. Saying so is the honest framing.
+    priceNote: showPrices ? `Prices shown in ${currency}. Your total is confirmed at checkout.` : null,
+  };
 }
 
 /** A short, human sentence per change, for the audit log. */
@@ -255,6 +343,7 @@ function diffMessages(diff) {
   for (const item of diff.priceChanged) {
     out.push(`price changed for ${item.title}: ${money(item.fromCents)} to ${money(item.toCents)}`);
   }
+
   for (const item of diff.returned) out.push(`${item.title} is listed again`);
   for (const item of diff.unobserved) out.push(`${item.title} no longer appears on Shopify — kept, marked unobserved`);
   return out;
@@ -263,6 +352,7 @@ function diffMessages(diff) {
 export {
   STORE_CATEGORIES,
   displayFamily,
+  sizedImage,
   emptyCatalog,
   normalizeShopifyProduct,
   syncCatalog,

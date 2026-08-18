@@ -509,6 +509,9 @@
       + '<p class="g-text-muted">Gaia keeps its own copy of the Shopify shelf so the store works even when '
       + 'Shopify is slow, and can be grouped Gaia\'s way. <b>Shopify still takes every payment</b> — '
       + 'buying always opens the real product page.</p>'
+      + '<p class="g-text-muted"><b>Display shelf</b> is where a card appears in the store — a title may decide it. '
+      + '<b>Canonical mapping</b> is what a purchase will eventually mean — only a person decides that. '
+      + 'They are not the same thing and a sync never changes the second.</p>'
       + '<p>' + (c.total || 0) + ' products · ' + (c.unmapped || 0) + ' not yet classified'
       + ((c.unobserved || 0) ? ' · ' + c.unobserved + ' no longer listed on Shopify' : '') + '</p>'
       + '<p class="g-text-muted">Last synced ' + esc(store.syncedAt ? store.syncedAt.replace('T', ' ').slice(0, 16) : 'never')

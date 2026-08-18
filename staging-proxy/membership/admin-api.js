@@ -464,6 +464,23 @@ async function handle(req, res, url, deps) {
         image: item.images?.[0] || null,
         lastObservedAt: item.lastObservedAt || null,
         canonical: mapping?.canonical || null,
+        // Two different things, never to be confused:
+        //   displayShelf — where the card appears in the store. Presentation.
+        //   canonical    — what a purchase would eventually mean. Authorization.
+        // A title may decide the first. Only a person decides the second.
+        displayShelf: (() => {
+          const family = mapping?.canonical
+            ? null
+            : displayFamily({ title: item.title, productType: item.productType });
+          const byRegistry = mapping?.canonical
+            ? STORE_CATEGORIES.find((c) => c.family === registry.canonical[mapping.canonical]?.family)
+            : null;
+          const byHint = family ? STORE_CATEGORIES.find((c) => c.family === family) : null;
+          const shelf = byRegistry || byHint;
+          return shelf
+            ? { label: shelf.label, decidedBy: byRegistry ? 'registry' : 'title_hint' }
+            : { label: 'More from Gaia', decidedBy: 'none' };
+        })(),
         mappingStatus: mapping?.canonical
           ? (mapping.confidence === 'confirmed' ? 'confirmed' : 'needs_review')
           : 'unmapped',

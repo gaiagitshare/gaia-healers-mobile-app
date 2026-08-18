@@ -36,7 +36,7 @@ test('a Shopify product normalises to only what the storefront exposes', () => {
   assert.equal(p.system, 'shopify');
   assert.equal(p.externalId, '8337764876575');
   assert.equal(p.priceCents, 229900);
-  assert.equal(money(p.priceCents), '$2299');
+  assert.equal(money(p.priceCents), '$2299 USD', 'a price always carries its currency');
   assert.equal(p.variants[0].variantId, '45269826765087', 'the variant id a future orders adapter needs');
   assert.equal(p.url, 'https://gaiahealers.com/products/biowell-3-0');
   assert.equal(p.description, 'The Bio-Well camera.', 'markup stripped, text kept');
@@ -72,7 +72,7 @@ test('a price change is reported, not silently applied', () => {
   const product = second.catalog.products['8337764876575'];
   assert.equal(product.priceCents, 249900, 'the store shows the current price');
   assert.equal(product.previousPriceCents, 229900, 'and remembers what it was');
-  assert.match(diffMessages(second.diff)[0], /price changed .* \$2299 to \$2499/);
+  assert.match(diffMessages(second.diff)[0], /price changed .* \$2299 USD to \$2499 USD/);
 });
 
 test('a product that stops appearing is kept and marked unobserved', () => {
@@ -122,7 +122,7 @@ test('the store is organised by Gaia categories, not by Shopify structure', () =
     shopifyProduct({ id: 1, handle: 'bw3', title: 'Bio-Well 3.0' }),
     shopifyProduct({ id: 2, handle: 'bwe', title: 'Bio-Well Element', price: '5000.00' }),
     shopifyProduct({ id: 3, handle: 'bp', title: 'Biopulsar Organ Package', price: '9997.00' }),
-    shopifyProduct({ id: 4, handle: 'oil', title: 'Chakra Essential Oil' }),
+    shopifyProduct({ id: 4, handle: 'nectar', title: 'Golden Facial Nectar w/24K Gold Flakes' }),
   ];
   for (const p of products) observeProduct(registry, { system: 'shopify', externalId: String(p.id), title: p.title });
   mapProduct(registry, { system: 'shopify', externalId: '1', canonical: 'biowell-3' });
@@ -139,15 +139,17 @@ test('the store is organised by Gaia categories, not by Shopify structure', () =
   const other = view.sections.find((s) => s.key === 'other');
   assert.equal(other.products.length, 1,
     'an unclassified product is still sold, under a general heading — never hidden from the customer');
+  assert.equal(other.products[0].title, 'Golden Facial Nectar w/24K Gold Flakes');
 });
 
 test('every card sends the buyer to Shopify, and Gaia never takes a payment', () => {
-  const { catalog } = syncCatalog(emptyCatalog(), [shopifyProduct()], { now: NOW });
+  const { catalog } = syncCatalog(emptyCatalog(), [shopifyProduct()],
+    { now: NOW, currency: 'USD', market: 'US', priceVerified: true });
   const view = storeView(catalog, emptyRegistry());
   const card = view.sections[0].products[0];
   assert.equal(card.checkout, 'shopify');
   assert.equal(card.url, 'https://gaiahealers.com/products/biowell-3-0');
-  assert.equal(card.price, '$2299');
+  assert.equal(card.price, '$2299 USD');
   const serialized = JSON.stringify(view);
   assert.ok(!/card|payment|token|checkout_url|cart/i.test(serialized.replace(/"checkout":"shopify"/g, '')),
     'the shelf carries no payment machinery of any kind');
@@ -181,8 +183,9 @@ test('price parsing is exact and survives odd input', () => {
   assert.equal(toCents('$1,316.00'), 131600);
   assert.equal(toCents(null), null);
   assert.equal(toCents('free'), null);
-  assert.equal(money(229900), '$2299');
-  assert.equal(money(131650), '$1316.50');
+  assert.equal(money(229900), '$2299 USD');
+  assert.equal(money(131650), '$1316.50 USD');
+  assert.equal(money(203695, 'EUR'), '2036.95 EUR', 'a non-USD market is never dressed as dollars');
 });
 
 test('a display shelf may be guessed from a title; an entitlement may never be', () => {
@@ -190,7 +193,7 @@ test('a display shelf may be guessed from a title; an entitlement may never be',
   const products = [
     shopifyProduct({ id: 1, handle: 'a', title: 'Bio-Well Sputnik Sensor' }),
     shopifyProduct({ id: 2, handle: 'b', title: 'BioTekna TomEEX' }),
-    shopifyProduct({ id: 3, handle: 'c', title: 'Lavender Roll-On' }),
+    shopifyProduct({ id: 3, handle: 'c', title: 'Golden Facial Nectar w/24K Gold Flakes' }),
   ];
   const { catalog } = syncCatalog(emptyCatalog(), products, { now: NOW });
   const view = storeView(catalog, registry);
@@ -202,7 +205,8 @@ test('a display shelf may be guessed from a title; an entitlement may never be',
     'but the card carries no canonical product, so no purchase could resolve from it');
 
   assert.equal(view.sections.find((s) => s.key === 'devices-biotekna').products.length, 1);
-  assert.equal(view.sections.find((s) => s.key === 'other').products[0].title, 'Lavender Roll-On');
+  assert.equal(view.sections.find((s) => s.key === 'other').products[0].title,
+    'Golden Facial Nectar w/24K Gold Flakes');
 });
 
 test('a confirmed mapping outranks the title hint', () => {
@@ -214,4 +218,180 @@ test('a confirmed mapping outranks the title hint', () => {
   const card = storeView(catalog, registry).sections.find((s) => s.key === 'devices-biopulsar').products[0];
   assert.equal(card.shelvedBy, 'registry');
   assert.equal(card.canonical, 'biopulsar-organ');
+});
+
+// ── currency, the thing that nearly shipped wrong ───────────────────────────
+test('an unverified currency withholds every price rather than guessing', () => {
+  // Found before release: this proxy runs in Germany, and an unpinned
+  // products.json fetch returned EUR prices — 2036.95 for a device that sells
+  // for $2,299. The feed carries no currency field, so nothing downstream could
+  // have caught it. Withholding is the only honest answer.
+  const { catalog } = syncCatalog(emptyCatalog(), [shopifyProduct()],
+    { now: NOW, currency: null, priceVerified: false });
+  const view = storeView(catalog, emptyRegistry());
+  const card = view.sections[0].products[0];
+
+  assert.equal(card.price, null, 'no number is better than a wrong number');
+  assert.equal(card.priceUnavailable, true);
+  assert.equal(view.currency, null);
+  assert.equal(view.priceNote, null);
+  assert.ok(card.url, 'the product is still sold — the price just comes from Shopify');
+});
+
+test('a verified market shows prices, labelled, with checkout stated plainly', () => {
+  const { catalog } = syncCatalog(emptyCatalog(), [shopifyProduct()],
+    { now: NOW, currency: 'USD', market: 'US', priceVerified: true });
+  const view = storeView(catalog, emptyRegistry());
+  assert.equal(view.sections[0].products[0].price, '$2299 USD');
+  assert.equal(view.sections[0].products[0].priceUnavailable, false);
+  assert.equal(view.currency, 'USD');
+  assert.match(view.priceNote, /confirmed at checkout/,
+    'a member outside the synced market sees their own currency at Shopify');
+});
+
+test('the catalogue records which market its prices came from', () => {
+  const { catalog } = syncCatalog(emptyCatalog(), [shopifyProduct()],
+    { now: NOW, currency: 'USD', market: 'US', priceVerified: true });
+  assert.equal(catalog.currency, 'USD');
+  assert.equal(catalog.market, 'US');
+  assert.equal(catalog.priceVerified, true);
+});
+
+test('a zero or lower "was" price is never struck through beside the real one', () => {
+  // Shopify writes 0 when there is no compare-at price. Five live products do,
+  // and the card was rendering "$3499 USD $0 USD".
+  const zero = normalizeShopifyProduct(shopifyProduct({ compareAt: '0.00' }));
+  assert.equal(zero.compareAtCents, null);
+
+  const lower = syncCatalog(emptyCatalog(), [shopifyProduct({ price: '2299.00', compareAt: '1000.00' })],
+    { now: NOW, currency: 'USD', priceVerified: true });
+  assert.equal(storeView(lower.catalog, emptyRegistry()).sections[0].products[0].compareAt, null,
+    'a "was" price below the price is not a discount');
+
+  const real = syncCatalog(emptyCatalog(), [shopifyProduct({ price: '2299.00', compareAt: '2648.00' })],
+    { now: NOW, currency: 'USD', priceVerified: true });
+  assert.equal(storeView(real.catalog, emptyRegistry()).sections[0].products[0].compareAt, '$2648',
+    'the currency is stated once, on the price that matters');
+});
+
+test('images are requested at the size the card renders them', () => {
+  const p = normalizeShopifyProduct({
+    id: 1, handle: 'h', title: 't', variants: [{ id: 2, price: '1.00' }],
+    images: [{ src: 'https://cdn.shopify.com/s/files/1/x/IMGS1191.jpg?v=1736629260' }],
+  });
+  assert.match(p.images[0], /width=600/, 'the feed links 3360px originals');
+  assert.ok(p.images[0].startsWith('https://cdn.shopify.com/'));
+
+  const foreign = normalizeShopifyProduct({
+    id: 2, handle: 'h', title: 't', variants: [{ id: 3, price: '1.00' }],
+    images: [{ src: 'https://example.org/pic.jpg' }],
+  });
+  assert.equal(foreign.images[0], 'https://example.org/pic.jpg', 'a non-Shopify URL is left alone');
+});
+
+test('the long tail is broken into real shelves rather than one endless rail', () => {
+  // The live catalogue put 70 of 102 products under a single heading, which on
+  // a phone is a 70-card horizontal scroll. These are display shelves only.
+  const titles = [
+    'Therapeutic Blend Roll-On — Pain Buster 10ml',
+    'Aura Cleanser Spray 30ml',
+    'Sacred Geometry Jap Mala – Angelite',
+    'StemRegen Mobilize - 1 Bag',
+    'One (1) Colour Energy Personality Test',
+    'HeartMath Inner Balance Coherence Plus Monitor',
+    'Jiva Yami',
+  ];
+  const products = titles.map((title, i) => shopifyProduct({ id: i + 1, handle: `h${i}`, title }));
+  const { catalog } = syncCatalog(emptyCatalog(), products, { now: NOW });
+  const view = storeView(catalog, emptyRegistry());
+
+  const other = view.sections.find((s) => s.key === 'other');
+  assert.equal(other, undefined, 'none of these belong in a catch-all');
+  assert.deepEqual(view.sections.map((s) => s.key).sort(), [
+    'colour-energy', 'crystals', 'jiva', 'oils', 'sprays', 'supplements', 'therapy-tools',
+  ]);
+  for (const section of view.sections) {
+    assert.ok(section.products.every((p) => p.canonical === null),
+      'a display shelf still grants nothing');
+  }
+});
+
+test('a device family keeps its own products even when a generic word matches', () => {
+  const { catalog } = syncCatalog(emptyCatalog(), [
+    shopifyProduct({ id: 1, handle: 'a', title: 'Bio-Well Water Sensor' }),
+    shopifyProduct({ id: 2, handle: 'b', title: 'Water Sensor + Sputnik' }),
+  ], { now: NOW });
+  const view = storeView(catalog, emptyRegistry());
+  assert.equal(view.sections.length, 1);
+  assert.equal(view.sections[0].key, 'devices-biowell',
+    'the Bio-Well hint runs before the generic water hint');
+});
+
+// ── the boundary that must never blur ───────────────────────────────────────
+test('the store speaks about products; only the ledger speaks about access', async () => {
+  const fs = await import('node:fs');
+  const source = fs.readFileSync(new URL('../../gaia-store.js', import.meta.url), 'utf8');
+
+  // A card may say what a product is and what it costs. It may never tell a
+  // signed-in member what they hold — that sentence belongs to My Access,
+  // which reads the ledger. A catalogue has no idea who is looking at it.
+  const forbidden = [
+    /you\s+own/i,
+    /you\s+have\s+access/i,
+    /your\s+licen[cs]e/i,
+    /you'?re\s+(gold|silver|diamond)/i,
+    /already\s+owned/i,
+    /included\s+in\s+your/i,
+    /unlocked/i,
+  ];
+  for (const pattern of forbidden) {
+    assert.ok(!pattern.test(source), `the store must not claim entitlement: ${pattern}`);
+  }
+
+  // and it must not be reading the member's access to decide what to render
+  assert.ok(!/\/api\/member\/access/.test(source),
+    'the store has no business knowing what a member holds');
+  assert.ok(!/entitlement/i.test(source));
+});
+
+test('a catalogue card carries no member-specific field at all', () => {
+  const { catalog } = syncCatalog(emptyCatalog(), [shopifyProduct()],
+    { now: NOW, currency: 'USD', priceVerified: true });
+  const card = storeView(catalog, emptyRegistry()).sections[0].products[0];
+  for (const key of ['owned', 'hasAccess', 'entitled', 'contactId', 'member', 'licensed']) {
+    assert.equal(card[key], undefined, `a card must not carry ${key}`);
+  }
+  assert.deepEqual(Object.keys(card).sort(), [
+    'available', 'canonical', 'checkout', 'compareAt', 'externalId',
+    'handle', 'image', 'price', 'priceUnavailable', 'shelvedBy', 'title', 'url',
+  ], 'the card surface is a closed set — nothing member-specific can creep in');
+});
+
+test('a product with variant prices quotes the lowest, and says "From"', () => {
+  // Live example: "Aura Cleanser Spray 30ml / 120ml" lists 7.99 and 19.99. The
+  // card previously showed whichever variant came first in the feed.
+  const varied = shopifyProduct({
+    variants: [
+      { id: 1, title: '120ml', price: '19.99', available: true },
+      { id: 2, title: '30ml', price: '7.99', available: true },
+    ],
+  });
+  const p = normalizeShopifyProduct(varied);
+  assert.equal(p.priceCents, 799, 'the lowest price a customer can actually pay');
+  assert.equal(p.priceVaries, true);
+
+  const { catalog } = syncCatalog(emptyCatalog(), [varied], { now: NOW, currency: 'USD', priceVerified: true });
+  assert.equal(storeView(catalog, emptyRegistry()).sections[0].products[0].price, 'From $7.99 USD');
+});
+
+test('identical variant prices are quoted plainly, with no "From"', () => {
+  const same = shopifyProduct({
+    variants: [
+      { id: 1, title: 'A', price: '99.00', available: true },
+      { id: 2, title: 'B', price: '99.00', available: true },
+    ],
+  });
+  assert.equal(normalizeShopifyProduct(same).priceVaries, false);
+  const { catalog } = syncCatalog(emptyCatalog(), [same], { now: NOW, currency: 'USD', priceVerified: true });
+  assert.equal(storeView(catalog, emptyRegistry()).sections[0].products[0].price, '$99 USD');
 });

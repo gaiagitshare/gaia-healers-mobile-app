@@ -1262,7 +1262,6 @@ body.gaia-v2 .g-super-home .g-super-hero{border:1px solid var(--g-line);
     text-shadow:0 2px 14px rgba(0,0,0,.65)}
   .g-super-hero__intro > p:not(.g-super-date){margin:0 0 18px;font-size:15px;
     color:rgba(255,255,255,.82);text-shadow:0 1px 10px rgba(0,0,0,.6)}
-  .g-super-discover{display:flex;gap:10px;flex-wrap:wrap}
 
   /* Elevate: the banner shows the poster, the body gets real padding. */
   .g-feature-event .g-feature-event__art{height:172px}
@@ -1302,4 +1301,54 @@ body.gaia-v2 .g-super-home .g-super-hero{border:1px solid var(--g-line);
   /* Section heads: kicker small, serif calm, consistent rhythm. */
   .g-super-section-head{margin-bottom:14px}
   .g-super-section-head h2{font-size:26px}
+}
+
+
+/* CTA pair: a row wherever it lives. */
+.g-super-discover{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+
+/* ── Desktop: the template, composed for a wide screen ────────────────────
+   The phone layout stretched wide read as boxes in a void: the moon art sat
+   in a bordered side panel, and the 760px poster smeared across 1240px.
+   Here the hero is one cinematic card with the words seated bottom-left,
+   and the poster becomes a true side panel at a size it stays sharp. */
+@media (min-width: 1060px){
+  /* Hero: full-bleed art, words bottom-left, air everywhere. */
+  body.gaia-v2 .g-super-home .g-super-hero{position:relative;display:block;
+    min-height:460px;border-radius:26px}
+  .g-super-home .g-super-hero__art{position:absolute;inset:0;border-left:0;
+    background-position:center 26%;opacity:.9}
+  .g-super-home .g-super-hero__art::after{
+    background:linear-gradient(100deg,rgba(4,7,10,.82) 0%,rgba(4,7,10,.35) 45%,rgba(4,7,10,.05) 75%),
+      linear-gradient(180deg,transparent 45%,rgba(4,7,10,.8) 100%)}
+  body.gaia-v2 .g-super-home .g-super-hero .g-super-hero__intro{position:relative;
+    z-index:1;min-height:460px;max-width:620px;display:grid;align-content:end;
+    padding:40px 44px;row-gap:0}
+  .g-super-home .g-super-hero__intro h1{font-size:56px;line-height:1.02;margin:0 0 10px;
+    text-shadow:0 2px 18px rgba(0,0,0,.6)}
+  .g-super-home .g-super-hero__intro .g-super-date{margin:0 0 10px}
+  .g-super-home .g-super-hero__intro > p:not(.g-super-date){margin:0 0 22px;
+    font-size:17px;color:rgba(255,255,255,.85);text-shadow:0 1px 12px rgba(0,0,0,.55)}
+
+  /* Elevate: poster left at a width it stays sharp; details centred right. */
+  .g-feature-event{flex-direction:row;align-items:stretch;min-height:270px}
+  .g-feature-event__art{flex:0 0 440px;height:auto;border-radius:0}
+  .g-feature-event__art img{object-position:center 35%}
+  .g-feature-event__art::after{
+    background:linear-gradient(90deg,transparent 55%,var(--g-surface) 100%)}
+  .g-feature-event__body{flex:1;justify-content:center;padding:28px 34px;gap:10px}
+  .g-feature-event__title{font-size:1.7rem}
+  .g-feature-event__meta{font-size:.95rem}
+  .g-feature-event__actions{margin-top:12px;gap:12px}
+
+  /* Sky beside the hero: give its pieces desktop sizes. */
+  .g-sky{padding:20px}
+  .g-sky__row .g-sky__art{width:76px;height:76px}
+  .g-sky__phase{font-size:1.4rem}
+  .g-sky__ring{width:66px;height:66px}
+
+  /* Doors and the journey card breathe a little wider. */
+  .g-free-tool{min-height:118px}
+  .g-free-tool strong{font-size:13px}
+  .g-free-tool > span{width:46px;height:46px;font-size:22px}
 }

@@ -14,3 +14,8 @@ build/
 *.key
 secrets/
 staging-proxy/data/
+
+# Not part of the app: an embedded clone and a 2026-06 design audit.
+# Swept in once by a careless `git add -A`; ignored so it cannot recur.
+NEW/
+audits/

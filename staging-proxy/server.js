@@ -4623,9 +4623,10 @@ const server = http.createServer(async (req, res) => {
     if (req.method === 'GET' && /^\/api\/events\/\d+\/schedule$/.test(url.pathname)) {
       const session = cookieForRequest(req);
       const result = await eventIdentity.mySchedule(session, url.pathname.split('/')[3]);
-      sendJson(res, result.authenticated === false ? 401 : 200, result, origin, {
-        'Cache-Control': 'private, no-store',
-      });
+      // A signed-out reader is a normal state, not an error: every anonymous
+      // event view asks this question, and answering 401 painted three red
+      // lines in the console per visit. 401 stays for the POST actions.
+      sendJson(res, 200, result, origin, { 'Cache-Control': 'private, no-store' });
       return;
     }
     if (req.method === 'POST' && /^\/api\/events\/\d+\/schedule$/.test(url.pathname)) {
@@ -4662,7 +4663,10 @@ const server = http.createServer(async (req, res) => {
       const result = await eventIdentity.networking(
         session, url.pathname.split('/')[3], String(body.action || ''), extra,
       );
-      sendJson(res, result.authenticated === false ? 401 : 200, result, origin, {
+      // Reads (directory, connections) run on every event view and answer 200
+      // for the signed-out; mutations still refuse with 401.
+      const isRead = body.action === 'directory' || body.action === 'connections';
+      sendJson(res, result.authenticated === false && !isRead ? 401 : 200, result, origin, {
         'Cache-Control': 'private, no-store',
       });
       return;

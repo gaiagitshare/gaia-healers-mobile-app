@@ -24,6 +24,49 @@ const IDENTITY_FIELDS = ['ghl_contact_id', 'shopify_customer_id', 'stripe_custom
 
 const EMAIL_SHAPE = /^[^@\s]+@[^@\s.]+\.[^@\s]+$/;
 
+/**
+ * Identities that are not people.
+ *
+ * GHL's point-of-sale flow attaches counter sales to a generated contact whose
+ * email is literally `auto.generated@pos.payment`. In the live account that one
+ * placeholder carries 45 orders worth $37,826 — a $5,000 Bio-Well Element and
+ * several $3,499 Healeex units among them — and the real buyer survives nowhere
+ * in the order, the transaction or the contact snapshot.
+ *
+ * Left alone, an orders adapter would hand every device Gaia has ever sold in
+ * person to a single phantom contact. So a placeholder resolves to nobody, by
+ * force, no matter which adapter is asking.
+ */
+const PLACEHOLDER_EMAIL_PATTERNS = [
+  // Exactly what the live account contains. GHL generates this address itself,
+  // so the prefix is matched rather than the one literal string — a second
+  // terminal would produce another `auto.generated@…` in the same shape.
+  /^auto\.generated@/i,
+];
+// Deliberately NOT listed: no-reply@, pos@, and the RFC-reserved example/test
+// domains. No order in the account uses them, and blocking addresses on a hunch
+// would both break ordinary fixtures and imply we had handled a class of
+// problem we have never actually observed.
+
+/** Contact ids known to be counter/walk-in placeholders rather than people. */
+const PLACEHOLDER_CONTACT_IDS = new Set([
+  '5oIseYl3sDBKZm9vtxHf',   // GHL point-of-sale, auto.generated@pos.payment
+]);
+
+/**
+ * Is this claim about a real person?
+ *
+ * Returns a reason string when it is not, so the unresolved queue can say why
+ * rather than just refusing.
+ */
+function placeholderReason(claim = {}) {
+  const contactId = clean(claim.ghl_contact_id || claim.contactId, 120);
+  if (contactId && PLACEHOLDER_CONTACT_IDS.has(contactId)) return 'placeholder_contact';
+  const address = lower(claim.email);
+  if (address && PLACEHOLDER_EMAIL_PATTERNS.some((rx) => rx.test(address))) return 'placeholder_email';
+  return null;
+}
+
 function emptyIdentity(contactId, now) {
   return {
     contactId,
@@ -91,6 +134,11 @@ function linkIdentity(store, contactId, { field, value, email, verified = false,
  * operator must decide — the caller must not apply anything on that basis.
  */
 function resolveIdentity(store, claim = {}, { allowEmailFallback = true } = {}) {
+  // Checked before anything else: a placeholder must not resolve even when it
+  // is a perfectly valid, already-linked contact id.
+  const placeholder = placeholderReason(claim);
+  if (placeholder) return { contactId: null, method: placeholder, confidence: 'unresolved' };
+
   const identities = (store.identities && typeof store.identities === 'object') ? store.identities : {};
   const contacts = (store.contacts && typeof store.contacts === 'object') ? store.contacts : {};
 
@@ -174,6 +222,9 @@ function unresolvedCount(store) {
 
 export {
   IDENTITY_FIELDS,
+  PLACEHOLDER_EMAIL_PATTERNS,
+  PLACEHOLDER_CONTACT_IDS,
+  placeholderReason,
   identityFor,
   linkIdentity,
   resolveIdentity,

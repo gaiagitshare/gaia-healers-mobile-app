@@ -60,10 +60,10 @@
   // ── shell ───────────────────────────────────────────────────
   function render() {
     panel.innerHTML =
-      '<div class="g-tabs g-tabs--4" role="tablist" aria-label="Membership sections">'
-      + ['members', 'plans', 'sources', 'audit'].map((key) => '<button type="button" class="g-tab'
+      '<div class="g-tabs g-tabs--5" role="tablist" aria-label="Membership sections">'
+      + ['members', 'plans', 'products', 'sources', 'audit'].map((key) => '<button type="button" class="g-tab'
         + (view === key ? ' is-active' : '') + '" data-ms-view="' + key + '" role="tab" aria-selected="'
-        + (view === key) + '">' + ({ plans: 'Plans &amp; Benefits', sources: 'Integrations' }[key]
+        + (view === key) + '">' + ({ plans: 'Plans &amp; Benefits', sources: 'Integrations', products: 'Products' }[key]
         || key[0].toUpperCase() + key.slice(1)) + '</button>').join('')
       + '</div><div id="ms-body"></div>';
     panel.querySelectorAll('[data-ms-view]').forEach((tab) => tab.addEventListener('click', () => {
@@ -71,6 +71,7 @@
     }));
     if (view === 'members') renderMembers();
     else if (view === 'plans') renderPlans();
+    else if (view === 'products') renderProducts();
     else if (view === 'sources') renderSources();
     else renderAudit();
   }
@@ -423,6 +424,92 @@
       + 'Save ' + esc(plan.label) + '</button></div></article>';
   }
 
+
+
+  // ── canonical product registry ───────────────────────────────
+  let registry = { canonical: [], implications: {} };
+
+  async function renderProducts() {
+    const body = el('ms-body');
+    body.innerHTML = '<p class="g-empty">Loading products…</p>';
+    const res = await api('GET', '/api/admin/membership/products');
+    if (!res || !res.ok) { body.innerHTML = '<p class="g-empty">Could not load the product registry.</p>'; return; }
+    registry = res;
+    const h = res.health || {};
+
+    body.innerHTML =
+      '<article class="g-card"><p class="g-card__label">What each product means</p>'
+      + '<p class="g-text-muted">One device can be sold under many product ids across Shopify and GHL. '
+      + 'Mapping them to a single Gaia product is what lets a purchase become access. '
+      + '<b>Nothing here grants anything on its own</b> — an unmapped product is silent, and so is one still '
+      + 'waiting on a decision.</p>'
+      + '<div class="g-tagrow">'
+      + '<span class="g-tag">' + (h.mapped || 0) + ' mapped</span>'
+      + '<span class="g-tag">' + (h.unmapped || 0) + ' unmapped</span>'
+      + '<span class="g-tag">' + (h.ordersCovered || 0) + ' orders covered</span>'
+      + '<span class="g-tag">' + (h.ordersUncovered || 0) + ' orders not yet covered</span>'
+      + '</div><p class="g-admin-status" id="ms-prod-status"></p></article>'
+      + clusterCard(h.clusters || [])
+      + '<article class="g-card"><p class="g-card__label">Needs a decision — biggest sellers first</p>'
+      + ((res.products || []).filter((p) => !p.canonical).length
+        ? (res.products || []).filter((p) => !p.canonical).slice(0, 40).map(productRow).join('')
+        : '<p class="g-empty">Everything observed has been classified.</p>')
+      + '</article>'
+      + '<article class="g-card"><p class="g-card__label">Already mapped</p>'
+      + ((res.products || []).filter((p) => p.canonical).length
+        ? (res.products || []).filter((p) => p.canonical).slice(0, 60).map(productRow).join('')
+        : '<p class="g-empty">Nothing mapped yet.</p>')
+      + '</article>';
+
+    (res.products || []).slice(0, 100).forEach((p) => {
+      on('ms-map-' + rowId(p), 'click', async () => {
+        const select = el('ms-canon-' + rowId(p));
+        status('ms-prod-status', 'Saving ' + p.title + '…');
+        const r = await api('POST', '/api/admin/membership/products/map', {
+          system: p.system, externalId: p.externalId,
+          canonical: select && select.value ? select.value : null,
+          confidence: 'confirmed',
+        });
+        if (!r.ok) { status('ms-prod-status', 'Refused: ' + esc(r.reason || 'unknown'), 'err'); return; }
+        renderProducts();
+      });
+    });
+  }
+
+  const rowId = (p) => (p.system + '-' + p.externalId).replace(/[^a-zA-Z0-9-]/g, '');
+
+  function productRow(p) {
+    const options = '<option value="">— not mapped —</option>'
+      + (registry.canonical || []).map((c) => '<option value="' + esc(c.key) + '"'
+        + (c.key === p.canonical ? ' selected' : '') + '>' + esc(c.label) + '</option>').join('');
+    const implied = p.canonical ? (registry.implications[p.canonical] || []) : [];
+    return '<div class="g-admin-item" style="display:block">'
+      + '<div><b>' + esc(p.title || '(untitled)') + '</b> <span class="g-tag">' + esc(p.system) + '</span>'
+      + '<br><span class="g-text-muted">' + esc(p.externalId)
+      + (p.orders ? ' · ' + p.orders + ' orders · ' + p.customers + ' customers' : ' · never ordered')
+      + (p.domain ? ' · ' + esc(p.domain) : '') + '</span></div>'
+      + '<div class="g-field" style="margin-top:8px"><select class="g-input" id="ms-canon-' + rowId(p) + '">'
+      + options + '</select></div>'
+      + (implied.length
+        ? '<p class="g-text-muted">Would propose: '
+          + implied.map((i) => esc(i.type) + ':' + esc(i.key)
+            + (i.state === 'verified' ? '' : ' <b>(' + esc(i.state.replace("_", " ")) + ')</b>')).join(', ')
+          + '</p>'
+        : '')
+      + '<div class="g-card__actions"><button class="g-btn g-btn--secondary g-btn--sm" id="ms-map-' + rowId(p) + '">Save</button></div>'
+      + '</div>';
+  }
+
+  function clusterCard(clusters) {
+    if (!clusters.length) return '';
+    return '<article class="g-card"><p class="g-card__label">One product, many ids</p>'
+      + '<p class="g-text-muted">These external products all mean the same thing to Gaia. '
+      + 'That is the point of the registry.</p>'
+      + clusters.map((c) => '<div class="g-admin-item"><div><b>' + esc(c.canonical) + '</b><br>'
+        + '<span class="g-text-muted">' + c.external.length + ' ids — ' + esc(c.external.slice(0, 6).join(", "))
+        + (c.external.length > 6 ? ' …' : '') + '</span></div></div>').join('')
+      + '</article>';
+  }
 
   // ── integrations ────────────────────────────────────────────
   const STATE_COPY = {

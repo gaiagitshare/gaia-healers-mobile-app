@@ -31,12 +31,18 @@ import { sourceSummary, setSourceState, getSource } from './sources.js';
 import { proposalsFor } from './proposals.js';
 import { linkIdentity, takeUnresolved, unresolvedCount } from './identity.js';
 import { MEMBERSHIP_BILLING, UNRESOLVED_BILLING_IDS } from './config.js';
+import {
+  normalizeRegistry, emptyRegistry, observeProduct, mapProduct,
+  entitlementsForPurchase, registryHealth,
+} from './product-registry.js';
 import { resolveMemberAccess } from './resolver.js';
 import { migrateContactRecord } from './ledger.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const POLICY_FILE = process.env.MEMBERSHIP_POLICY_FILE
   || path.join(__dirname, '..', 'data', 'membership-policy.json');
+const REGISTRY_FILE = process.env.PRODUCT_REGISTRY_FILE
+  || path.join(__dirname, '..', 'data', 'product-registry.json');
 
 /**
  * The audit actor.
@@ -72,6 +78,28 @@ function savePolicy(policy) {
 
 function auditEntry(store, entry) {
   return audit(store, { actor: ACTOR, source: 'admin', ...entry });
+}
+
+let _registryCache = null;
+
+function loadRegistry() {
+  if (_registryCache) return _registryCache;
+  try {
+    _registryCache = normalizeRegistry(JSON.parse(fs.readFileSync(REGISTRY_FILE, 'utf8')));
+  } catch (_) {
+    _registryCache = emptyRegistry();
+  }
+  return _registryCache;
+}
+
+function saveRegistry(registry) {
+  const next = { ...registry, updatedAt: new Date().toISOString() };
+  fs.mkdirSync(path.dirname(REGISTRY_FILE), { recursive: true });
+  const temp = `${REGISTRY_FILE}.${process.pid}.tmp`;
+  fs.writeFileSync(temp, JSON.stringify(next, null, 2), { mode: 0o600 });
+  fs.renameSync(temp, REGISTRY_FILE);
+  _registryCache = next;
+  return next;
 }
 
 const text = (value, max = 200) => String(value ?? '').replace(/[\x00-\x1F\x7F]/g, '').trim().slice(0, max);
@@ -344,6 +372,77 @@ async function handle(req, res, url, deps) {
     if (!result.ok) return bad(result.error);
     saveLedger(store);
     return ok({ result, member: memberView(store, guard.id, policy) });
+  }
+
+  // ---- canonical product registry ----
+  if (p === '/api/admin/membership/products' && method === 'GET') {
+    const registry = loadRegistry();
+    const filter = text(url.searchParams.get('state'), 20);
+    let rows = Object.values(registry.mappings);
+    if (filter === 'unmapped') rows = rows.filter((m) => !m.canonical);
+    if (filter === 'mapped') rows = rows.filter((m) => m.canonical);
+    rows.sort((a, b) => b.orders - a.orders);
+    return ok({
+      products: rows.slice(0, 300),
+      canonical: Object.values(registry.canonical),
+      implications: registry.implications,
+      health: registryHealth(registry),
+      updatedAt: registry.updatedAt,
+    });
+  }
+
+  if (p === '/api/admin/membership/products/map' && method === 'POST') {
+    const body = await readJsonBody(req).catch(() => ({}));
+    const registry = loadRegistry();
+    const result = mapProduct(registry, {
+      system: text(body.system, 20),
+      externalId: text(body.externalId, 80),
+      canonical: body.canonical ? text(body.canonical, 60) : null,
+      confidence: text(body.confidence, 20) || 'confirmed',
+      note: text(body.note, 300),
+    });
+    if (!result.ok) return bad(result.reason);
+    saveRegistry(registry);
+    const store = loadLedger();
+    auditEntry(store, {
+      action: 'product.map',
+      note: `${body.system}:${body.externalId} ${result.from || 'unmapped'} to ${result.to || 'unmapped'}`,
+    });
+    saveLedger(store);
+    return ok({ mapping: result.mapping, health: registryHealth(registry) });
+  }
+
+  // A preview of what a purchase WOULD propose. Read-only; grants nothing.
+  if (p === '/api/admin/membership/products/preview' && method === 'GET') {
+    const registry = loadRegistry();
+    return ok(entitlementsForPurchase(registry, {
+      system: text(url.searchParams.get('system'), 20),
+      externalId: text(url.searchParams.get('id'), 80),
+    }));
+  }
+
+  // Ingest a catalogue snapshot. Observation only — every new product lands
+  // unmapped and proposes nothing until a person classifies it.
+  if (p === '/api/admin/membership/products/observe' && method === 'POST') {
+    const body = await readJsonBody(req).catch(() => ({}));
+    const list = Array.isArray(body.products) ? body.products.slice(0, 2000) : [];
+    if (!list.length) return bad('products_required');
+    const registry = loadRegistry();
+    let added = 0;
+    for (const item of list) {
+      const result = observeProduct(registry, {
+        system: text(item.system, 20),
+        externalId: text(item.externalId, 80),
+        variantId: text(item.variantId, 80),
+        title: text(item.title, 200),
+        orders: Number(item.orders) || 0,
+        customers: Number(item.customers) || 0,
+        domain: text(item.domain, 120),
+      });
+      if (result.ok && result.isNew) added += 1;
+    }
+    saveRegistry(registry);
+    return ok({ observed: list.length, added, health: registryHealth(registry) });
   }
 
   // ---- audit ----

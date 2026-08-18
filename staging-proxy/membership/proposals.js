@@ -19,7 +19,7 @@ import {
   normalizeMembership, normalizeEntitlement, entitlementIdentity, emptyContactRecord,
 } from './ledger.js';
 import { decideOrder, watermark, noteRejection } from './ordering.js';
-import { resolveIdentity, queueUnresolved } from './identity.js';
+import { resolveIdentity, queueUnresolved, placeholderReason } from './identity.js';
 import { getSource, noteOutcome } from './sources.js';
 import { audit } from './audit-log.js';
 
@@ -190,6 +190,14 @@ function validateProposal(store, proposal, { now = new Date() } = {}) {
   }
 
   // ── identity ──────────────────────────────────────────────────────────────
+  // A placeholder is refused even when an adapter hands us the id outright.
+  // Admin is exempt: an operator correcting a counter sale by hand is exactly
+  // how these are meant to be resolved.
+  if (proposal.source !== 'admin') {
+    const placeholder = placeholderReason({ ...proposal.identity, contactId: proposal.contactId });
+    if (placeholder) return fail('unresolved', placeholder);
+  }
+
   let contactId = proposal.contactId;
   if (!contactId) {
     const resolved = resolveIdentity(store, proposal.identity);

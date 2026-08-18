@@ -7,10 +7,13 @@
 
 /* ---------- @layer tokens ---------- */
 :root{
-  --g-bg:#0B120E; --g-surface:#16211A; --g-surface-hi:#1C2A20;
-  --g-line:rgba(255,255,255,.09); --g-line-strong:rgba(255,255,255,.16);
-  --g-text:#ECF3E9; --g-text-muted:#95A491; --g-text-faint:#5D6D59;
-  --g-accent:#7DD956; --g-accent-deep:#5CB82E; --g-on-accent:#052B0A;
+  /* Template v2 palette (gaia-home-redesign): blue-black ground, lime accent,
+     glassy cards. One change here restyles every screen that reads tokens. */
+  --g-bg:#04070A; --g-surface:#0C1117; --g-surface-hi:#131A22;
+  --g-line:rgba(255,255,255,.09); --g-line-strong:rgba(255,255,255,.15);
+  --g-text:#FFFFFF; --g-text-muted:rgba(255,255,255,.62); --g-text-faint:rgba(255,255,255,.40);
+  --g-accent:#B6F25C; --g-accent-deep:#8FE03F; --g-on-accent:#0B1408;
+  --g-purple:#A78BFA; --g-purple-deep:#6D4FD6; --g-teal:#5CE1E6; --g-gold:#F5C451;
   --g-good:#5CB82E; --g-warn:#E8B04B; --g-danger:#E5715A;
   --g-ck-root:#E53935; --g-ck-sacral:#FB8C00; --g-ck-solar:#FDD835;
   --g-ck-heart:#43A047; --g-ck-throat:#29A8F2; --g-ck-brow:#4F46E5; --g-ck-crown:#8E24AA;
@@ -25,7 +28,7 @@
 
   --g-shadow-card:0 10px 30px -18px rgba(0,0,0,.55);
   --g-shadow-pop:0 24px 60px -20px rgba(0,0,0,.6);
-  --g-glow:0 0 26px rgba(125,217,86,.45);
+  --g-glow:0 0 26px rgba(182,242,92,.4);
   --g-ease:cubic-bezier(.22,1,.36,1);
   --g-dur-1:140ms; --g-dur-2:260ms; --g-dur-3:420ms;
   --g-focus:0 0 0 2px var(--g-bg),0 0 0 4px var(--g-accent);
@@ -1142,3 +1145,100 @@ body{overscroll-behavior-y:none;-webkit-tap-highlight-color:transparent}
   .g-sky__foot { padding-top: 8px; font-size: .72rem; }
   .g-sky__source { display: none; }         /* charming, not essential */
 }
+
+/* ── Template v2: the redesign proposal, applied ──────────────────────────
+   Blue-black ground and lime accent arrive via the tokens above. Below: the
+   hero as one card with the artwork actually visible, the Elevate art as a
+   real banner, the sky card in indigo at one screen height, and the four
+   colour-coded doors. Menu stays top-right — the proposal's own call. */
+
+/* Hero: one card. The artwork is the card; the words sit on it. */
+body.gaia-v2 .g-super-home .g-super-hero{border:1px solid var(--g-line);
+  border-radius:24px;overflow:hidden;background:var(--g-surface)}
+.g-super-home .g-super-hero__art{opacity:.85;
+  -webkit-mask-image:none;mask-image:none}
+.g-super-home .g-super-hero__art::after{content:"";position:absolute;inset:0;
+  background:linear-gradient(180deg,rgba(4,7,10,.18) 0%,rgba(4,7,10,.55) 55%,rgba(4,7,10,.9) 100%)}
+@media (max-width:480px){
+  .g-super-home .g-super-hero__art{inset:0;height:auto;opacity:.8}
+  body.gaia-v2 .g-super-hero__intro{min-height:330px;display:grid;align-content:end;
+    padding:18px 16px 18px}
+  body.gaia-v2 .g-super-hero__intro::before{background:transparent}
+}
+
+/* Elevate: the artwork gets a real banner on top; the details sit under it. */
+.g-feature-event{flex-direction:column;min-height:0}
+.g-feature-event__art{position:relative;inset:auto;height:150px;border-radius:0}
+.g-feature-event__art img{opacity:1;transform:none;filter:none;object-position:center 32%}
+.g-feature-event__art::after{background:linear-gradient(180deg,transparent 40%,rgba(4,7,10,.75) 100%)}
+.g-feature-event__body{margin-top:0;padding:14px 16px 16px}
+.g-feature-event__where{display:flex;align-items:center;gap:5px}
+.g-feature-event__where svg{width:14px;height:14px;color:var(--g-accent)}
+@media (max-width:480px){
+  .g-feature-event .g-feature-event__art img{opacity:1}
+  .g-feature-event__title{font-size:1.2rem}
+}
+
+/* Sky: indigo, one screen. Head row · moon+phase+ring · chips · reading. */
+.g-sky{gap:10px;padding:16px;border-color:rgba(167,139,250,.3);
+  background:radial-gradient(130% 100% at 85% 0%,rgba(109,79,214,.22) 0%,transparent 62%),#0B0A18}
+.g-sky__head{display:flex;justify-content:space-between;align-items:center;gap:8px}
+.g-sky__head .g-sky__kicker{margin:0;color:#B9A8FF}
+.g-sky__tofull{font-size:.7rem;font-weight:700;padding:3px 10px;border-radius:999px;
+  color:#0B0A18;background:var(--g-purple);white-space:nowrap}
+.g-sky__row{display:flex;align-items:center;gap:14px}
+.g-sky__row .g-sky__art{flex:0 0 auto;width:70px;height:70px}
+.g-sky__lede{flex:1;min-width:0}
+.g-sky__phase{font-family:var(--g-font-serif);font-weight:600;font-size:1.3rem}
+.g-sky__day{margin:2px 0 0;font-size:.8rem;color:rgba(255,255,255,.55)}
+.g-sky__ring{flex:0 0 auto;width:62px;height:62px}
+.g-sky__ring-track{fill:none;stroke:rgba(255,255,255,.1);stroke-width:5}
+.g-sky__ring-fill{fill:none;stroke:var(--g-purple);stroke-width:5;stroke-linecap:round}
+.g-sky__ring-num{fill:#fff;font-size:13px;font-weight:700;text-anchor:middle;
+  font-variant-numeric:tabular-nums}
+.g-sky__ring-cap{fill:rgba(255,255,255,.5);font-size:8px;text-anchor:middle;
+  letter-spacing:.08em;text-transform:uppercase}
+.g-sky__facts{margin:0;display:flex;flex-wrap:wrap;gap:6px}
+.g-sky__facts span{font-size:.74rem;font-weight:600;padding:3px 10px;border-radius:999px;
+  color:rgba(255,255,255,.8);background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.1)}
+.g-sky__facts .g-sky__chakra{color:var(--ck,#FDD835);
+  background:color-mix(in srgb,var(--ck,#FDD835) 13%,transparent);
+  border-color:color-mix(in srgb,var(--ck,#FDD835) 32%,transparent)}
+.g-sky__theme{display:block;margin:2px 0 0;font-size:.7rem;letter-spacing:.13em;
+  text-transform:uppercase;font-weight:700;color:#B9A8FF}
+.g-sky__invitation{font-size:.9rem;line-height:1.5}
+.g-sky__practice{border-left-color:var(--g-purple)}
+.g-sky__practice strong{color:#B9A8FF}
+.g-sky__invite{border-color:rgba(167,139,250,.35)}
+.g-sky__invite-head{font-size:.88rem}
+.g-sky__personal-line{margin:0;padding:10px 12px;border-radius:12px;font-size:.86rem;
+  line-height:1.5;color:color-mix(in srgb,var(--own,#B6F25C) 78%,#fff);
+  background:color-mix(in srgb,var(--own,#B6F25C) 10%,transparent);
+  border:1px solid color-mix(in srgb,var(--own,#B6F25C) 28%,transparent)}
+
+/* Four doors, one row, each in its own colour. */
+.g-free-tools__grid{grid-template-columns:repeat(4,minmax(0,1fr));gap:8px}
+.g-free-tool{--tool:var(--g-accent);
+  border-color:color-mix(in srgb,var(--tool) 22%,transparent);
+  background:linear-gradient(165deg,color-mix(in srgb,var(--tool) 9%,transparent),transparent 70%),var(--g-surface)}
+.g-free-tool > span{color:var(--tool);background:color-mix(in srgb,var(--tool) 13%,transparent)}
+@media (max-width:480px){
+  .g-free-tools__grid{grid-template-columns:repeat(4,minmax(0,1fr));gap:6px}
+  .g-free-tool{min-height:92px;grid-template-columns:none;grid-auto-flow:row;
+    align-content:center;justify-items:center;gap:6px;padding:10px 4px;text-align:center}
+  .g-free-tool > span{width:38px;height:38px;font-size:19px}
+  .g-free-tool strong{font-size:11.5px;line-height:1.15}
+  .g-free-tool small{display:none}
+}
+
+/* Continue your journey — members with a real course grant. Purple family. */
+.g-continue{border:1px solid rgba(167,139,250,.3);border-radius:20px;padding:16px;
+  background:radial-gradient(120% 100% at 15% 0%,rgba(109,79,214,.16) 0%,transparent 60%),var(--g-surface);
+  display:flex;flex-direction:column;gap:10px}
+.g-continue .g-super-kicker{color:#B9A8FF;margin:0}
+.g-continue__row{display:flex;align-items:center;gap:12px}
+.g-continue__art{flex:0 0 auto;display:grid;place-items:center;width:52px;height:52px;
+  border-radius:14px;color:#B9A8FF;background:rgba(167,139,250,.13);font-size:24px}
+.g-continue__body{flex:1;min-width:0}
+.g-continue__body h3{margin:0;font-family:var(--g-font-serif);font-size:1.08rem;font-weight:600;color:#fff}
+.g-continue__body p{margin:2px 0 0;font-size:.82rem;color:rgba(255,255,255,.6)}

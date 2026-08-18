@@ -529,8 +529,12 @@
       ['events', 'calendar-dots', 'Events', 'Gatherings and live sessions'],
       ['store', 'bag', 'Gaia Store', 'Sprays, tools and memberships'],
     ];
+    // The template's four doors, colour-coded: the icons are the wayfinding.
+    const TINT = { 'Energy check': 'var(--g-accent)', Horoscope: 'var(--g-teal)',
+      'Chakra match': 'var(--g-purple)', 'Colour test': 'var(--g-gold)' };
+    const four = tools.filter((t) => TINT[t[2]]);
     return '<section class="g-free-tools"><div class="g-super-section-head"><div><p class="g-super-kicker">Explore free</p><h2>Try Gaia today</h2></div></div><div class="g-free-tools__grid">'
-      + tools.map((item) => '<a class="g-free-tool" href="home.html?view=' + item[0] + '"><span>' + icon(item[1]) + '</span><strong>' + esc(item[2]) + '</strong><small>' + esc(item[3]) + '</small></a>').join('')
+      + four.map((item) => '<a class="g-free-tool" style="--tool:' + TINT[item[2]] + '" href="home.html?view=' + item[0] + '"><span>' + icon(item[1]) + '</span><strong>' + esc(item[2]) + '</strong><small>' + esc(item[3]) + '</small></a>').join('')
       + '</div></section>';
   }
 
@@ -657,6 +661,7 @@
       // Today's sky sits high on the page precisely because it needs nothing
       // from the visitor: it is the first thing a stranger can actually read.
       + '<div data-sky-host></div>'
+      + continueJourney(authed)
       + freeTools()
       + (authed ? '<section class="g-super-services"><div class="g-super-section-head"><div><p class="g-super-kicker">Your access</p><h2>Everything Gaia</h2></div><a href="home.html?view=journey">View journey</a></div><div class="g-super-services__grid">' + services + '</div></section>' : '')
       + discoverGaia()
@@ -667,6 +672,24 @@
     // Panels that live inside the home screen but are owned by their own files
     // follow this rather than the superapp having to know they exist.
     document.dispatchEvent(new CustomEvent('gaia:superapp-rendered', { detail: { authed } }));
+  }
+
+  /** The member's way back into their course — real grants only. No invented
+   * lesson counts or progress bars until real progress data exists. */
+  function continueJourney(authed) {
+    if (!authed) return '';
+    const course = courseGrants()[0];
+    if (!course) return '';
+    const title = course.title || course.name || 'Your course';
+    const url = course.openUrl || memberState().data?.courses?.portalUrl || '';
+    return '<section class="g-continue">'
+      + '<p class="g-super-kicker">Continue your journey</p>'
+      + '<div class="g-continue__row">'
+      + '<span class="g-continue__art" aria-hidden="true">' + icon('book-open') + '</span>'
+      + '<div class="g-continue__body"><h3>' + esc(title) + '</h3>'
+      + '<p>Pick up where you left off</p></div>'
+      + (url ? '<button type="button" class="g-btn g-btn--secondary g-btn--sm" data-super-course="' + esc(url) + '" data-super-course-title="' + esc(title) + '">Continue</button>' : '')
+      + '</div></section>';
   }
 
   function renderJourney() {

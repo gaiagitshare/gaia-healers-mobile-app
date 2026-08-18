@@ -100,54 +100,62 @@
     return soonest.days + ' days to the ' + soonest.what + '.';
   }
 
+  /** Illumination as a ring — the number with its shape around it. */
+  function ringSvg(pct) {
+    const r = 24, c = 2 * Math.PI * r;
+    const lit = Math.max(0, Math.min(100, Number(pct) || 0));
+    return '<svg class="g-sky__ring" viewBox="0 0 60 60" role="img" aria-label="'
+      + esc(lit + '% illuminated') + '">'
+      + '<circle cx="30" cy="30" r="' + r + '" class="g-sky__ring-track"/>'
+      + '<circle cx="30" cy="30" r="' + r + '" class="g-sky__ring-fill"'
+      + ' stroke-dasharray="' + (c * lit / 100).toFixed(1) + ' ' + c.toFixed(1) + '"'
+      + ' transform="rotate(-90 30 30)"/>'
+      + '<text x="30" y="28" class="g-sky__ring-num">' + Math.round(lit) + '%</text>'
+      + '<text x="30" y="40" class="g-sky__ring-cap">Lit</text>'
+      + '</svg>';
+  }
+
   function cardHtml(sky) {
     const tint = (sky.moon.chakra && sky.moon.chakra.colour) || '#8E4EC6';
     const pct = sky.moon.illumination;
     const personal = sky.personal;
 
+    // The moon's age in days: its angle from the sun over the ~29.53-day cycle.
+    const lunarDay = Math.max(1, Math.min(30, Math.round((sky.moon.angle || 0) / 12.19)));
+    const toFull = sky.upcoming && sky.upcoming.daysToFullMoon;
+
     return '<article class="g-card g-sky" style="--sky-tint:' + esc(tint) + '">'
       + '<div class="g-sky__head">'
-      + '<div class="g-sky__art">' + moonSvg(pct, sky.moon.waxing, tint) + '</div>'
+      + '<p class="g-sky__kicker">Today’s sky · ' + (personal ? 'Your chart' : 'Everyone') + '</p>'
+      + (toFull != null ? '<span class="g-sky__tofull">' + (toFull === 0 ? 'Full tonight'
+        : toFull + (toFull === 1 ? ' day' : ' days') + ' to full') + '</span>' : '')
+      + '</div>'
+      + '<div class="g-sky__row">'
+      + '<div class="g-sky__art">' + moonSvg(pct, sky.moon.waxing, '#A78BFA') + '</div>'
       + '<div class="g-sky__lede">'
-      + '<p class="g-sky__kicker">Today’s sky · everyone</p>'
       + '<h2 class="g-sky__phase">' + esc(sky.moon.phaseLabel) + '</h2>'
+      + '<p class="g-sky__day">Day ' + lunarDay + ' of the lunar cycle</p>'
+      + '</div>'
+      + ringSvg(pct)
+      + '</div>'
       + '<p class="g-sky__facts">'
-      + '<span>' + esc(pct) + '% lit</span>'
-      + '<span>in ' + esc(sky.moon.sign) + '</span>'
-      + (sky.moon.chakra ? '<span class="g-sky__chakra">' + esc(sky.moon.chakra.name) + '</span>' : '')
+      + '<span>Moon in ' + esc(sky.moon.sign) + '</span>'
+      + (sky.moon.chakra ? '<span class="g-sky__chakra" style="--ck:' + esc(tint) + '">' + esc(sky.moon.chakra.name) + '</span>' : '')
       + '</p>'
-      + '</div></div>'
-
       + '<p class="g-sky__theme">' + esc(sky.guidance.theme) + '</p>'
       + '<p class="g-sky__invitation">' + esc(sky.guidance.invitation) + '</p>'
       + '<p class="g-sky__practice"><strong>Try this</strong> ' + esc(sky.guidance.practice) + '</p>'
-
       + (personal
-        // Signed up: the sky read against their own chart. No call to action —
-        // they already did the thing we would be asking for.
-        ? '<div class="g-sky__personal" style="--own:' + esc(personal.birthChakra.colour) + '">'
-          + '<p class="g-sky__personal-head">'
-          + (personal.resonant ? 'Your centre is lit today' : 'For you, ' + esc(personal.firstName))
-          + '</p>'
-          + '<p>' + esc(personal.note) + '</p>'
-          + '<a class="g-sky__personal-link" href="home.html?view=wellness&amp;tab=horoscope">'
-          + 'See your full chart today →</a>'
-          + '</div>'
-        // Not signed up: the honest version of the offer. It names exactly what
-        // is added and what it costs — a birth date — rather than dangling a
-        // vague "unlock more".
+        ? '<p class="g-sky__personal-line" style="--own:' + esc(personal.birthChakra.colour) + '">'
+          + esc(personal.resonant
+            ? 'The moon meets your ' + personal.birthChakra.name.toLowerCase() + ' centre directly today.'
+            : 'Today asks for the ' + ((sky.moon.chakra && sky.moon.chakra.name) || 'whole system').toLowerCase()
+              + ' — your own centre is the ' + personal.birthChakra.name.toLowerCase() + '.') + '</p>'
         : '<div class="g-sky__invite">'
           + '<p class="g-sky__invite-head">This is the sky for everyone today.</p>'
           + '<p>Add your birth date to see which of your centres this moon meets.</p>'
-          + '<a class="g-btn g-btn--primary g-btn--sm" href="home.html?view=wellness&amp;tab=check">'
-          + 'Read my chart</a>'
+          + '<a class="g-btn g-btn--primary g-btn--sm" href="home.html?view=wellness&amp;tab=check">Read my chart</a>'
           + '</div>')
-
-      + '<p class="g-sky__foot">'
-      + '<span>' + esc(countdownLine(sky.upcoming)) + '</span>'
-      // Said out loud, because the entire appeal is that it is checkable.
-      + '<span class="g-sky__source">Calculated, not written in advance.</span>'
-      + '</p>'
       + '</article>';
   }
 

@@ -3659,6 +3659,17 @@ async function authMagicLinkRequest(req, res, origin) {
     expiresInSeconds: AUTH_MAGIC_LINK_TTL_SECONDS,
   };
 
+  // Every sign-in attempt is recorded. The response is deliberately identical
+  // whether or not the email belongs to a member, which is right for the
+  // caller and useless for an operator — so the outcome goes to the log, where
+  // the answer to "did the link actually go out?" has to live. Emails are
+  // hashed: enough to correlate one person's repeated attempts, not enough to
+  // read their address out of a log file.
+  const trace = crypto.createHash('sha256').update(email).digest('hex').slice(0, 10);
+  const logOutcome = (outcome, extra = {}) => {
+    console.log('[Gaia Auth] magic-link', JSON.stringify({ trace, outcome, ...extra }));
+  };
+
   const member = await resolveMemberRecord({
     email,
     memberId: body.memberId || body.contactId || '',
@@ -3667,6 +3678,7 @@ async function authMagicLinkRequest(req, res, origin) {
 
   if (!member) {
     // Do not reveal whether an email exists in GHL.
+    logOutcome('no_member_for_email');
     sendJson(res, 200, genericResponse, origin);
     return;
   }
@@ -3691,11 +3703,17 @@ async function authMagicLinkRequest(req, res, origin) {
       html: magicLinkEmailHtml(member, consumeUrl),
     });
     if (sent.ok) {
+      logOutcome('sent', { contactId: member.contactId, messageId: sent.messageId || null });
       sendJson(res, 200, genericResponse, origin);
       return;
     }
     if (!AUTH_ALLOW_DEBUG_LINKS) {
-      console.error('[Gaia Auth] magic-link delivery failed', { reason: sent.reason || 'ghl_error', contactId: member.contactId });
+      logOutcome('delivery_failed', {
+        contactId: member.contactId,
+        reason: sent.reason || 'ghl_error',
+        status: sent.status || null,
+        detail: sent.detail || null,
+      });
       sendJson(res, 200, genericResponse, origin);
       return;
     }
@@ -3712,7 +3730,9 @@ async function authMagicLinkRequest(req, res, origin) {
     return;
   }
 
-  console.error('[Gaia Auth] magic-link delivery unavailable', { contactId: member.contactId || '' });
+  // A member with no contact id cannot be emailed at all — worth naming
+  // distinctly, because it is a data problem rather than a delivery one.
+  logOutcome('no_contact_to_email', { contactId: member.contactId || null });
   sendJson(res, 200, genericResponse, origin);
 }
 

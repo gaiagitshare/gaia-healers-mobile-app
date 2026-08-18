@@ -117,3 +117,24 @@ test("GHL's published public key parses as a usable Ed25519 key", () => {
 });
 
 // The proxy holds a listener open; the runner uses --test-force-exit.
+
+// ── sign-in observability ───────────────────────────────────────────────────
+test('every magic-link outcome is logged, and no email address is written to the log', async () => {
+  // Production had zero evidence either way about whether sign-in links were
+  // ever delivered: success logged nothing, so "users cannot log in" was
+  // undiagnosable from the server side.
+  const source = fs.readFileSync(new URL('../server.js', import.meta.url), 'utf8');
+  const fn = source.slice(source.indexOf('async function authMagicLinkRequest'));
+  const body = fn.slice(0, fn.indexOf('\n}\n'));
+
+  for (const outcome of ['no_member_for_email', 'sent', 'delivery_failed', 'no_contact_to_email']) {
+    assert.ok(body.includes(`'${outcome}'`), `the ${outcome} path must be logged`);
+  }
+  // The response stays identical whatever happened — the log is where the
+  // difference lives, not the reply.
+  assert.ok(body.includes('genericResponse'), 'the caller is told the same thing either way');
+  // and the address itself is hashed rather than printed
+  assert.ok(/createHash\('sha256'\)\.update\(email\)/.test(body),
+    'the email must be hashed into a trace id, never logged in the clear');
+  assert.ok(!/console\.log\([^)]*\bemail\b[^)]*\)/.test(body), 'no raw email in a log call');
+});

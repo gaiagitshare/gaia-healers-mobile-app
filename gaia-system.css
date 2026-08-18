@@ -1024,3 +1024,33 @@ body{overscroll-behavior-y:none;-webkit-tap-highlight-color:transparent}
   border-color:rgba(255,255,255,.18)}
 .g-reg.is-refused{color:#FF8A80;background:rgba(255,138,128,.1);
   border-color:rgba(255,138,128,.35);cursor:default}
+
+/* ── Venue map ────────────────────────────────────────────────────────────
+   Pins are positioned in percentages of the plan image, so the same pin lands
+   on the same wall at every screen size. The legend is the accessible route to
+   the same information — a list is findable when a crowded plan is not. */
+.g-map{display:flex;flex-direction:column;gap:14px}
+.g-map__plan{position:relative;border-radius:18px;overflow:hidden;
+  border:1px solid rgba(255,255,255,.12);background:#0E1712}
+.g-map__plan img{display:block;width:100%;height:auto}
+.g-map__pin{position:absolute;transform:translate(-50%,-100%);
+  display:flex;flex-direction:column;align-items:center;gap:2px;
+  background:none;border:0;cursor:pointer;padding:6px;
+  /* comfortably tappable even when pins sit close */
+  min-width:44px;min-height:44px;justify-content:flex-end}
+.g-map__glyph{font-size:1.15rem;line-height:1;
+  filter:drop-shadow(0 2px 4px rgba(0,0,0,.8))}
+.g-map__pin .g-map__name{font-size:.66rem;font-weight:700;color:#fff;
+  background:rgba(7,16,11,.82);padding:2px 7px;border-radius:999px;white-space:nowrap;
+  border:1px solid rgba(255,255,255,.15)}
+.g-map__pin.is-active .g-map__name{color:#07100b;background:var(--g-accent,#A8E063);
+  border-color:transparent}
+.g-map__pin.is-active .g-map__glyph{transform:scale(1.35)}
+.g-map__legend{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:8px}
+.g-map__row{display:flex;align-items:center;gap:10px;text-align:left;cursor:pointer;
+  min-height:52px;padding:10px 12px;border-radius:14px;
+  border:1px solid rgba(255,255,255,.09);background:rgba(255,255,255,.04);color:inherit}
+.g-map__row:hover{border-color:rgba(168,224,99,.35)}
+.g-map__row .g-map__glyph{font-size:1rem}
+.g-map__row strong{display:block;font-size:.9rem;color:#fff}
+.g-map__row em{display:block;font-style:normal;font-size:.78rem;color:rgba(255,255,255,.6)}

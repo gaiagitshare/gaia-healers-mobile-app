@@ -334,6 +334,49 @@
       + '</section>';
   }
 
+  // Pin glyphs by kind — text labels ride along, the glyph is just a landmark.
+  const PLACE_GLYPHS = {
+    room: '🚪', booth: '🛍', stage: '🎤', registration: '🎫',
+    restroom: '🚻', food: '🍽', entrance: '⬆', help: 'ℹ', other: '📍',
+  };
+
+  function mapSection(detail) {
+    const venue = detail?.map;
+    if (!venue) return '';
+    const places = Array.isArray(venue.places) ? venue.places : [];
+    const exhibitorsById = {};
+    (detail.exhibitors || []).forEach((v) => { exhibitorsById[v.id] = v; });
+
+    const pins = places.map((place) => {
+      const exhibitor = place.exhibitor_id ? exhibitorsById[place.exhibitor_id] : null;
+      const label = place.name + (exhibitor ? ' · ' + exhibitor.company_name : '');
+      return '<button type="button" class="g-map__pin" style="left:' + Number(place.x)
+        + '%;top:' + Number(place.y) + '%" data-map-place="' + esc(place.id) + '"'
+        + ' aria-label="' + esc(label) + '">'
+        + '<span class="g-map__glyph">' + (PLACE_GLYPHS[place.kind] || PLACE_GLYPHS.other) + '</span>'
+        + '<span class="g-map__name">' + esc(place.name) + '</span>'
+        + '</button>';
+    }).join('');
+
+    const legend = places.map((place) => {
+      const exhibitor = place.exhibitor_id ? exhibitorsById[place.exhibitor_id] : null;
+      return '<button type="button" class="g-map__row" data-map-place="' + esc(place.id) + '">'
+        + '<span class="g-map__glyph">' + (PLACE_GLYPHS[place.kind] || PLACE_GLYPHS.other) + '</span>'
+        + '<span><strong>' + esc(place.name) + '</strong>'
+        + (exhibitor ? '<em>' + esc(exhibitor.company_name) + '</em>'
+          : (place.description ? '<em>' + esc(place.description) + '</em>' : ''))
+        + '</span></button>';
+    }).join('');
+
+    return '<section class="g-map"><p class="g-super-kicker">Find your way</p><h2>Venue map</h2>'
+      + (venue.map_image_url
+        ? '<div class="g-map__plan"><img src="' + esc(venue.map_image_url) + '" alt="Venue floor plan" />' + pins + '</div>'
+        // No plan image yet: the list of places still answers the question.
+        : '')
+      + (legend ? '<div class="g-map__legend">' + legend + '</div>' : '')
+      + '</section>';
+  }
+
   function speakersSection(detail) {
     const speakers = Array.isArray(detail?.speakers) ? detail.speakers : [];
     if (!speakers.length) return '';
@@ -592,7 +635,7 @@
   const eventUI = { tab: 'overview', past: null, pastLoading: false, live: {} };
   const EVENT_TABS = [
     ['overview', 'Overview'], ['agenda', 'Agenda'], ['speakers', 'Speakers'],
-    ['exhibitors', 'Exhibitors'], ['sponsors', 'Sponsors'], ['updates', 'Updates'],
+    ['exhibitors', 'Exhibitors'], ['map', 'Map'], ['sponsors', 'Sponsors'], ['updates', 'Updates'],
   ];
 
   // The server states the time; the device only measures elapsed time since.
@@ -754,6 +797,7 @@
 
   function eventTabPanel(tab, detail, live) {
     if (tab === 'agenda') return agendaSection(detail);
+    if (tab === 'map') return mapSection(detail);
     if (tab === 'speakers') return speakersSection(detail);
     if (tab === 'exhibitors') return directorySection(detail);
     if (tab === 'sponsors') return sponsorsSection(detail);
@@ -766,6 +810,7 @@
     if (tab === 'agenda') return Boolean(detail?.agenda?.days?.length);
     if (tab === 'speakers') return Boolean(detail?.speakers?.length);
     if (tab === 'exhibitors') return Boolean(detail?.exhibitors?.length);
+    if (tab === 'map') return Boolean(detail?.map);
     if (tab === 'sponsors') return Boolean(detail?.sponsors?.length);
     if (tab === 'updates') return Boolean(detail?.announcements?.length);
     return false;
@@ -836,6 +881,18 @@
     // finger that tapped it. The My Schedule panel is refreshed on the next
     // visit to the tab rather than mid-tap.
     if (window.GaiaMySchedule) window.GaiaMySchedule.bind(root, eventId);
+    // Tapping a legend row (or a pin) highlights that pin and scrolls it into
+    // view — the closest a flat plan gets to "take me there".
+    root.querySelectorAll('[data-map-place]').forEach((el) => {
+      el.addEventListener('click', () => {
+        const id = el.dataset.mapPlace;
+        root.querySelectorAll('.g-map__pin').forEach((pin) => {
+          pin.classList.toggle('is-active', pin.dataset.mapPlace === id);
+        });
+        const pin = root.querySelector('.g-map__pin[data-map-place="' + id + '"]');
+        if (pin) pin.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'center' });
+      });
+    });
     bind(root);
   }
 

@@ -534,11 +534,12 @@
     const tint = (name) => ({ 'Energy check': '#7DD956', Horoscope: '#4ED6E0',
       'Chakra match': '#9E8CFC', 'Colour test': '#FFC53D', Events: '#A8E063', 'Gaia Store': '#F76B15' }[name] || '#A8E063');
     const [primary, secondary] = [tools.slice(0, 4), tools.slice(4)];
-    return '<section class="g-free-tools"><div class="g-super-section-head"><div><p class="g-super-kicker">Explore free</p><h2>Try Gaia today</h2></div></div>'
-      + '<div class="g-free-tools__grid">'
+    void secondary; // Events and the Store live behind View all (the menu) and the tab bar
+    return '<section class="g-free-tools"><div class="g-free-tools__head">'
+      + '<p class="g-super-kicker">Try Gaia today</p>'
+      + '<button type="button" class="g-free-tools__all" data-open-menu>View all <span aria-hidden="true">›</span></button>'
+      + '</div><div class="g-free-tools__grid">'
       + primary.map((item) => '<a class="g-free-tool" style="--tool:' + tint(item[2]) + '" href="home.html?view=' + item[0] + '"><span>' + icon(item[1]) + '</span><strong>' + esc(item[2]) + '</strong><small>' + esc(item[3]) + '</small></a>').join('')
-      + '</div><div class="g-free-tools__wide">'
-      + secondary.map((item) => '<a class="g-free-tool g-free-tool--wide" style="--tool:' + tint(item[2]) + '" href="home.html?view=' + item[0] + '"><span>' + icon(item[1]) + '</span><strong>' + esc(item[2]) + '</strong><small>' + esc(item[3]) + '</small></a>').join('')
       + '</div></section>';
   }
 
@@ -637,7 +638,7 @@
       + (when ? '<p class="g-feature-event__meta">' + esc(when) + '</p>' : '')
       + (location ? '<p class="g-feature-event__meta g-feature-event__where">' + icon('map-pin') + ' ' + esc(location) + '</p>' : '')
       + '<div class="g-feature-event__actions">'
-      + '<a class="g-btn g-btn--secondary g-btn--sm" href="home.html?view=events">Event details</a>'
+      + '<a class="g-btn g-btn--secondary g-btn--sm" href="home.html?view=events">Details</a>'
       + register
       + '</div></div></section>';
   }
@@ -660,9 +661,10 @@
 
     root.innerHTML = '<div class="g-super-home">'
       + '<section class="g-super-hero"><div class="g-super-hero__intro"><p class="g-super-date">' + esc(dateLabel()) + '</p>'
-      + '<h1>' + greeting + '</h1><p>' + (authed ? 'Your healing journey is waiting.' : 'What does your energy need today?') + '</p>'
-      + (authed ? journeyRail() + primaryMemberAction() : '<div class="g-super-discover"><a class="g-btn g-btn--primary" href="home.html?view=wellness&tab=check">' + icon('sparkle') + ' Check my energy</a><button type="button" class="g-btn g-btn--secondary" data-gaia-open-assist>' + icon('microphone') + ' Ask Gaia</button></div>') + '</div><div class="g-super-hero__art" aria-hidden="true"></div></section>'
+      + '<h1>' + greeting + ' <span class="g-hero-spark" aria-hidden="true">✦</span></h1><p>' + (authed ? 'Your healing journey is waiting.' : 'What does your energy need today?') + '</p>'
+      + (authed ? journeyRail() + primaryMemberAction() : '<div class="g-super-discover"><a class="g-btn g-btn--primary" href="home.html?view=wellness&tab=check">' + icon('sparkle') + ' Check my energy</a><button type="button" class="g-btn g-btn--secondary" data-gaia-open-assist>' + icon('waveform') + ' Ask Gaia</button></div>') + '</div><div class="g-super-hero__art" aria-hidden="true"></div></section>'
       + eventFeature()
+      + continueJourney(authed)
       // Today's sky sits high on the page precisely because it needs nothing
       // from the visitor: it is the first thing a stranger can actually read.
       + '<div data-sky-host></div>'
@@ -672,10 +674,33 @@
       + (!authed ? authPrompt(true) : '')
       + (authed ? '<section class="g-super-sync">' + icon('check-circle') + '<div><strong>Your access is synced</strong><span>Courses, communities, plans and purchases reflect your GHL member record.</span></div></section>' : '')
       + '</div>';
+    // View all opens the same sheet as the avatar — one menu, two doors.
+    root.querySelector('[data-open-menu]')?.addEventListener('click', () => {
+      document.querySelector('.gaia-avatar')?.click();
+    });
     bind(root);
     // Panels that live inside the home screen but are owned by their own files
     // follow this rather than the superapp having to know they exist.
     document.dispatchEvent(new CustomEvent('gaia:superapp-rendered', { detail: { authed } }));
+  }
+
+  /** The member's next step back into their course — real grants only.
+   * No lesson counts or progress bars until real progress data exists:
+   * an invented "60%" is worse than none. */
+  function continueJourney(authed) {
+    if (!authed) return '';
+    const course = courseGrants()[0];
+    if (!course) return '';
+    const title = course.title || course.name || 'Your course';
+    const url = course.openUrl || memberState().data?.courses?.portalUrl || '';
+    return '<section class="g-continue">'
+      + '<p class="g-super-kicker">Continue your journey</p>'
+      + '<div class="g-continue__row">'
+      + '<span class="g-continue__art" aria-hidden="true">' + icon('book-open') + '</span>'
+      + '<div class="g-continue__body"><h3>' + esc(title) + '</h3>'
+      + '<p>Pick up where you left off</p></div>'
+      + (url ? '<button type="button" class="g-btn g-btn--secondary g-btn--sm" data-super-course="' + esc(url) + '" data-super-course-title="' + esc(title) + '">Continue</button>' : '')
+      + '</div></section>';
   }
 
   function renderJourney() {

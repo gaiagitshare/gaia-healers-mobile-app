@@ -1617,14 +1617,25 @@
     sheet.querySelector('[data-book-inline]')?.addEventListener('click', close);
     document.querySelectorAll('[data-gaia-header-actions]').forEach((slot) => {
       slot.replaceChildren();
-      const button = document.createElement('button');
-      button.type = 'button';
-      button.className = 'gaia-menu-button';
-      button.dataset.gaiaMenuButton = '';
-      button.setAttribute('aria-label', 'Open Gaia menu');
-      button.textContent = 'Menu';
-      button.addEventListener('click', open);
-      slot.appendChild(button);
+      // Bell → Inbox; avatar → the menu. The word "Menu" is gone but nothing
+      // behind it is: the avatar is the menu button, which is also where a
+      // person expects account things to live.
+      const bell = document.createElement('a');
+      bell.className = 'gaia-bell';
+      bell.href = 'home.html?view=inbox';
+      bell.setAttribute('aria-label', 'Inbox');
+      bell.innerHTML = '<svg viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M221.8 175.94c-5.55-9.56-13.8-36.61-13.8-71.94a80 80 0 0 0-160 0c0 35.34-8.26 62.38-13.81 71.94A16 16 0 0 0 48 200h40.81a40 40 0 0 0 78.38 0H208a16 16 0 0 0 13.8-24.06ZM128 216a24 24 0 0 1-22.62-16h45.24A24 24 0 0 1 128 216Z"/></svg>';
+      const avatar = document.createElement('button');
+      avatar.type = 'button';
+      avatar.className = 'gaia-avatar';
+      avatar.dataset.gaiaMenuButton = '';
+      avatar.setAttribute('aria-label', 'Open Gaia menu');
+      const member = (window.GAIA_MEMBER && window.GAIA_MEMBER.displayName) || '';
+      avatar.textContent = member ? member.trim()[0].toUpperCase() : '';
+      if (!member) avatar.innerHTML = '<svg viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M230.92 212c-15.23-26.33-38.7-45.21-66.09-54.16a72 72 0 1 0-73.66 0c-27.39 8.95-50.86 27.83-66.09 54.16a8 8 0 1 0 13.85 8c18.84-32.56 52.14-52 89.07-52s70.23 19.44 89.07 52a8 8 0 1 0 13.85-8Z"/></svg>';
+      avatar.addEventListener('click', open);
+      slot.appendChild(bell);
+      slot.appendChild(avatar);
     });
   }
 

@@ -1226,3 +1226,67 @@ body.gaia-v2 .g-super-home .g-super-hero{border:0;background:transparent;overflo
   .g-free-tool strong{font-size:11.5px;line-height:1.15}
   .g-free-tool small{display:none}
 }
+
+/* ── Exact-match pass ─────────────────────────────────────────────────────
+   Bell + avatar header, indigo sky, tinted tool tiles with View all, the
+   member's continue-journey card, and the sparkle after the greeting. */
+
+/* Header: the bell is a link, the avatar IS the menu button — the word
+   "Menu" is gone but every destination behind it is not. */
+.gaia-bell{display:grid;place-items:center;width:42px;height:42px;border-radius:50%;
+  color:rgba(255,255,255,.85);border:1px solid rgba(255,255,255,.14);
+  background:rgba(255,255,255,.04);position:relative}
+.gaia-bell svg{width:20px;height:20px}
+.gaia-bell::after{content:"";position:absolute;top:9px;right:10px;width:7px;height:7px;
+  border-radius:50%;background:var(--g-accent,#A8E063)}
+.gaia-avatar{display:grid;place-items:center;width:42px;height:42px;border-radius:50%;
+  cursor:pointer;font-weight:750;font-size:1rem;color:#0B1408;
+  background:linear-gradient(135deg,var(--g-accent,#A8E063),#D9F36B);
+  border:2px solid rgba(255,255,255,.25)}
+.gaia-avatar svg{width:20px;height:20px;color:#0B1408}
+.gaia-header-actions{display:flex;align-items:center;gap:10px}
+
+/* The sparkle beside the greeting. */
+.g-hero-spark{font-size:.5em;color:var(--g-accent,#A8E063);vertical-align:middle}
+
+/* Sky card: indigo, like a night sky — the mockup's call, and honestly the
+   better one. The chakra colour still tints the ring and moon rim. */
+.g-sky{border-color:rgba(126,116,235,.32);
+  background:radial-gradient(130% 100% at 85% 0%,rgba(126,116,235,.17) 0%,transparent 60%),
+    #10121F}
+.g-sky__kicker{color:#A79EF5}
+.g-sky__phase{font-family:var(--g-font-serif,Georgia,serif);font-weight:600}
+.g-sky__gauge{flex:0 0 auto;display:flex;flex-direction:column;align-items:center;gap:2px}
+.g-sky__gauge em{font-style:normal;font-size:.62rem;letter-spacing:.06em;
+  color:rgba(255,255,255,.55)}
+.g-sky__ring{width:60px;height:60px}
+.g-sky__invite{color:#A79EF5}
+
+/* Tool tiles: each door tinted with its own colour, like the mockup. */
+.g-free-tools__head{display:flex;justify-content:space-between;align-items:center;margin-bottom:10px}
+.g-free-tools__head .g-super-kicker{margin:0}
+.g-free-tools__all{display:inline-flex;align-items:center;gap:4px;min-height:44px;
+  border:0;background:none;cursor:pointer;padding:0 4px;
+  color:var(--g-accent,#A8E063);font-size:13px;font-weight:700}
+.g-free-tool{border-color:color-mix(in srgb,var(--tool) 22%,transparent);
+  background:linear-gradient(160deg,color-mix(in srgb,var(--tool) 8%,transparent),rgba(255,255,255,.02)),#0a150e}
+
+/* Continue your journey — real course grants only, so no fake progress. */
+.g-continue{border:1px solid rgba(158,140,252,.3);border-radius:20px;padding:16px;
+  background:radial-gradient(120% 100% at 15% 0%,rgba(158,140,252,.14) 0%,transparent 60%),#111020;
+  display:flex;flex-direction:column;gap:10px}
+.g-continue .g-super-kicker{color:#B7A9FF;margin:0}
+.g-continue__row{display:flex;align-items:center;gap:12px}
+.g-continue__art{flex:0 0 auto;display:grid;place-items:center;width:52px;height:52px;
+  border-radius:14px;color:#B7A9FF;background:rgba(158,140,252,.12);font-size:24px}
+.g-continue__body{flex:1;min-width:0}
+.g-continue__body h3{margin:0;font-family:var(--g-font-serif,Georgia,serif);
+  font-size:1.1rem;font-weight:600;color:#fff}
+.g-continue__body p{margin:2px 0 0;font-size:.82rem;color:rgba(255,255,255,.6)}
+
+/* The centre tab says its name, like its four neighbours. */
+body.gaia-v2 .gaia-tabbar__assist{position:relative}
+body.gaia-v2 .gaia-tabbar__assist::after{content:"Gaia";position:absolute;
+  bottom:-15px;left:50%;transform:translateX(-50%);
+  font-size:10px;font-weight:650;color:rgba(255,255,255,.75);letter-spacing:.02em}
+@media (min-width:1000px){body.gaia-v2 .gaia-tabbar__assist::after{display:none}}

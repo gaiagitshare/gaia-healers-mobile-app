@@ -123,8 +123,7 @@
       + '<circle cx="30" cy="30" r="' + r + '" class="g-sky__ring-fill" stroke="' + esc(tint) + '"'
       + ' stroke-dasharray="' + (c * lit / 100).toFixed(1) + ' ' + c.toFixed(1) + '"'
       + ' transform="rotate(-90 30 30)"/>'
-      + '<text x="30" y="29" class="g-sky__ring-num">' + Math.round(lit) + '%</text>'
-      + '<text x="30" y="40" class="g-sky__ring-label">lit</text>'
+      + '<text x="30" y="33" class="g-sky__ring-num">' + Math.round(lit) + '%</text>'
       + '</svg>';
   }
 
@@ -142,11 +141,8 @@
       + '<div class="g-sky__lede">'
       + '<h2 class="g-sky__phase">' + esc(sky.moon.phaseLabel) + '</h2>'
       + '<p class="g-sky__motto">' + esc(PHASE_MOTTO[sky.moon.phase] || sky.guidance.theme) + '</p>'
-      + '<p class="g-sky__facts"><span>in ' + esc(sky.moon.sign) + '</span>'
-      + (sky.moon.chakra ? '<span class="g-sky__chakra">' + esc(sky.moon.chakra.name) + '</span>' : '')
-      + '</p>'
       + '</div>'
-      + ringSvg(pct, tint)
+      + '<span class="g-sky__gauge">' + ringSvg(pct, tint) + '<em>Illumination</em></span>'
       + '</div>'
       + (personal
         ? '<p class="g-sky__personal-line" style="--own:' + esc(personal.birthChakra.colour) + '">'

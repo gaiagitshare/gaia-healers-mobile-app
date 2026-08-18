@@ -1258,6 +1258,9 @@
       }).catch(() => null);
       AUTH_STATE.authenticated = false;
       AUTH_STATE.member = null;
+      // Anything holding per-person copies (offline tickets, schedules) listens
+      // for this and clears itself: the session is gone, so are its answers.
+      document.defaultView?.dispatchEvent?.(new CustomEvent('gaia:signed-out'));
       renderAuthUi();
       window.GAIA_SYNC?.refresh?.();
     }

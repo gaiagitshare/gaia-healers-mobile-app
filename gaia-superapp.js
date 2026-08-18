@@ -183,16 +183,39 @@
       headers: { Accept: 'application/json' },
       cache: 'no-store',
     })
-      .then((response) => (response.ok ? response.json() : null))
+      // A gateway 502 RESOLVES rather than rejects, and at a venue that is the
+      // common failure — the phone has wifi, the upstream does not. Thrown here
+      // so both kinds of unreachable land in the same fallback below.
+      .then((response) => { if (!response.ok) throw new Error('http ' + response.status); return response.json(); })
       .then((payload) => {
         if (payload && payload.ok) {
           eventDetail.id = id;
           eventDetail.data = payload;
           eventDetail.fetchedAt = Date.now();
+          // Snapshot for the hall with no signal: the agenda, the map and the
+          // programme keep working from the last good copy. Same pattern and
+          // same reasoning as the offline ticket in gaia-myevents.js.
+          try {
+            localStorage.setItem('gaia:event:' + id,
+              JSON.stringify({ at: Date.now(), value: payload }));
+          } catch (_) { /* storage full: offline degrades, nothing else */ }
           render();
         }
       })
-      .catch(() => { /* the event card still renders without the agenda */ })
+      .catch(() => {
+        // Unreachable — a venue basement, not a missing event. Fall back to the
+        // snapshot so the person can still read where they need to be.
+        if (eventDetail.id === id && eventDetail.data) return;
+        try {
+          const raw = JSON.parse(localStorage.getItem('gaia:event:' + id) || 'null');
+          if (raw && raw.value) {
+            eventDetail.id = id;
+            eventDetail.data = { ...raw.value, offline: true, offlineAt: raw.at };
+            eventDetail.fetchedAt = Date.now();
+            render();
+          }
+        } catch (_) { /* no snapshot; the loading card stays */ }
+      })
       .finally(() => { eventDetail.loading = false; });
   }
 
@@ -919,10 +942,13 @@
         + '</button>').join('') + '</nav>'
       : '';
 
+    const offlineLine = detail?.offline
+      ? '<p class="g-mye__offline">Shown from a saved copy — no connection right now. Times and rooms may have changed.</p>' : '';
     root.innerHTML = '<div class="g-super-page-head"><a class="g-event-back" href="home.html?view=events">' + icon('arrow-left') + ' All events</a>'
       + '<h1>' + esc(item.name) + '</h1>'
       + '<p class="g-event-headmeta">' + esc([humanDates(item), item.venue].filter(Boolean).join(' · ')) + ' ' + statusChip + '</p></div>'
       + '<div class="g-eventpage-hero">' + eventHero(item) + '</div>'
+      + offlineLine
       + liveSection(live)
       + tabBar
       + '<div class="g-event-panel">' + (eventUI.tab === 'overview' ? overview : eventTabPanel(eventUI.tab, detail, live)) + '</div>';

@@ -12,8 +12,10 @@
  *
  *   1. The browser never names an attendee. It asks "what is mine?" and the
  *      proxy answers from the session cookie. There is no id to tamper with.
- *   2. The QR is fetched only when a ticket is opened, never with the list, and
- *      never written anywhere that outlives the screen.
+ *   2. The QR is fetched only when a ticket is opened, never with the list.
+ *      The one place it persists is the deliberate offline copy below — kept
+ *      so the ticket still renders in a hall with no signal, and removed the
+ *      moment the person signs out.
  */
 (function () {
   'use strict';
@@ -33,6 +35,40 @@
   const state = { mine: null, loading: false, fetchedAt: 0, ticket: null };
   const MINE_TTL_MS = 60 * 1000;
 
+  /* Offline copies.
+   *
+   * Originally the ticket was held only for the life of the sheet — the safest
+   * possible handling. But the moment a QR is needed most is a concrete hall
+   * with two thousand phones on one access point, and a ticket that needs the
+   * network right then is not a ticket. So the last successfully loaded ticket
+   * is kept on the device, the same trust model as a boarding pass in a wallet
+   * app (the code is printed on physical badges anyway), and every copy is
+   * removed the moment the person signs out.
+   */
+  const TICKET_KEY = (eventId) => 'gaia:ticket:' + eventId;
+  const MINE_KEY = 'gaia:myevents';
+
+  function keepCopy(key, value) {
+    try { localStorage.setItem(key, JSON.stringify({ at: Date.now(), value })); }
+    catch (_) { /* full or private-mode storage loses offline, nothing else */ }
+  }
+  function readCopy(key) {
+    try {
+      const raw = JSON.parse(localStorage.getItem(key) || 'null');
+      return raw && raw.value ? raw : null;
+    } catch (_) { return null; }
+  }
+  function clearOfflineCopies() {
+    try {
+      Object.keys(localStorage)
+        .filter((k) => k.startsWith('gaia:ticket:') || k === MINE_KEY)
+        .forEach((k) => localStorage.removeItem(k));
+    } catch (_) { /* nothing to clear */ }
+  }
+  // Signing out removes every saved ticket: they are copies of a session's
+  // answers, and the session is gone.
+  window.addEventListener('gaia:signed-out', clearOfflineCopies);
+
   async function api(path) {
     try {
       const response = await fetch(proxyBase() + path, {
@@ -51,7 +87,17 @@
     if (state.loading || (fresh && !force)) return state.mine;
     state.loading = true;
     try {
-      state.mine = await api('/api/events/mine');
+      const result = await api('/api/events/mine');
+      if (result && result.ok === true && result.authenticated) {
+        keepCopy(MINE_KEY, result);
+        state.mine = result;
+      } else if (result && result.ok === false && result.authenticated !== false) {
+        // Could not reach the event system. A saved list beats an apology.
+        const copy = readCopy(MINE_KEY);
+        state.mine = copy ? { ...copy.value, offline: true, offlineAt: copy.at } : result;
+      } else {
+        state.mine = result;
+      }
       state.fetchedAt = Date.now();
       return state.mine;
     } finally {
@@ -149,6 +195,8 @@
         + '</section>';
     }
 
+    const offlineNote = data.offline
+      ? '<p class="g-mye__offline">Shown from a saved copy — no connection right now.</p>' : '';
     const events = Array.isArray(data.events) ? data.events : [];
     if (!events.length) {
       return '<section class="g-mye g-mye--empty">'
@@ -162,7 +210,7 @@
     const upcoming = events.filter((e) => e.phase === 'upcoming');
     const past = events.filter((e) => e.phase === 'past');
 
-    return '<div class="g-mye">'
+    return '<div class="g-mye">' + offlineNote
       + group('Happening now', live)
       + group('Coming up', upcoming)
       + group('Past events', past)
@@ -229,7 +277,14 @@
     shell.innerHTML = '<div class="g-ticket__panel g-ticket__panel--loading"><p>Loading your ticket…</p></div>';
     document.body.appendChild(shell);
 
-    const data = await api('/api/events/' + encodeURIComponent(eventId) + '/ticket');
+    let data = await api('/api/events/' + encodeURIComponent(eventId) + '/ticket');
+    if (data && data.ok === true) {
+      keepCopy(TICKET_KEY(eventId), data);
+    } else if (data && data.reason !== 'no_ticket_for_event' && data.authenticated !== false) {
+      // Unreachable, not refused: the saved copy is the whole point of keeping one.
+      const copy = readCopy(TICKET_KEY(eventId));
+      if (copy) data = { ...copy.value, offline: true, offlineAt: copy.at };
+    }
     if (!data || data.ok !== true) {
       shell.innerHTML = '<div class="g-ticket__panel">'
         + '<button type="button" class="g-ticket__close" data-ticket-close aria-label="Close">&times;</button>'
@@ -242,6 +297,12 @@
     } else {
       state.ticket = data;
       shell.innerHTML = ticketHtml(data);
+      if (data.offline) {
+        const note = document.createElement('p');
+        note.className = 'g-ticket__offline';
+        note.textContent = 'Saved copy — shown without a connection. Check-in status may be out of date.';
+        shell.querySelector('.g-ticket__panel')?.appendChild(note);
+      }
     }
 
     shell.addEventListener('click', (event) => {

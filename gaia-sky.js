@@ -100,61 +100,54 @@
     return soonest.days + ' days to the ' + soonest.what + '.';
   }
 
-  /** One line per phase — the strip's whole reading. Reflective, not predictive. */
-  const PHASE_MOTTO = {
-    'new': 'A dark sky is a blank one — name a beginning.',
-    'waxing-crescent': 'A time for intention and planting new seeds.',
-    'first-quarter': 'Beginnings meet friction here. Keep going.',
-    'waxing-gibbous': 'Nearly full — refine what is already moving.',
-    'full': 'Everything is lit. A night for seeing clearly.',
-    'waning-gibbous': 'Pass on what this cycle taught you.',
-    'last-quarter': 'The question turns to what to put down.',
-    'waning-crescent': 'The fallow days. Do less, on purpose.',
-  };
-
-  /** The illumination, as a ring — the number with its shape around it. */
-  function ringSvg(pct, tint) {
-    const r = 24;
-    const c = 2 * Math.PI * r;
-    const lit = Math.max(0, Math.min(100, Number(pct) || 0));
-    return '<svg class="g-sky__ring" viewBox="0 0 60 60" role="img" aria-label="'
-      + esc(lit + '% illuminated') + '">'
-      + '<circle cx="30" cy="30" r="' + r + '" class="g-sky__ring-track"/>'
-      + '<circle cx="30" cy="30" r="' + r + '" class="g-sky__ring-fill" stroke="' + esc(tint) + '"'
-      + ' stroke-dasharray="' + (c * lit / 100).toFixed(1) + ' ' + c.toFixed(1) + '"'
-      + ' transform="rotate(-90 30 30)"/>'
-      + '<text x="30" y="33" class="g-sky__ring-num">' + Math.round(lit) + '%</text>'
-      + '</svg>';
-  }
-
   function cardHtml(sky) {
     const tint = (sky.moon.chakra && sky.moon.chakra.colour) || '#8E4EC6';
     const pct = sky.moon.illumination;
     const personal = sky.personal;
 
     return '<article class="g-card g-sky" style="--sky-tint:' + esc(tint) + '">'
-      + '<a class="g-sky__open" href="home.html?view=wellness&amp;tab=horoscope" aria-label="Open your full reading">'
-      + '<p class="g-sky__kicker">Today’s sky</p>'
-      + '<span class="g-sky__chev" aria-hidden="true">›</span></a>'
-      + '<div class="g-sky__row">'
+      + '<div class="g-sky__head">'
       + '<div class="g-sky__art">' + moonSvg(pct, sky.moon.waxing, tint) + '</div>'
       + '<div class="g-sky__lede">'
+      + '<p class="g-sky__kicker">Today’s sky · everyone</p>'
       + '<h2 class="g-sky__phase">' + esc(sky.moon.phaseLabel) + '</h2>'
-      + '<p class="g-sky__motto">' + esc(PHASE_MOTTO[sky.moon.phase] || sky.guidance.theme) + '</p>'
-      + '</div>'
-      + '<span class="g-sky__gauge">' + ringSvg(pct, tint) + '<em>Illumination</em></span>'
-      + '</div>'
+      + '<p class="g-sky__facts">'
+      + '<span>' + esc(pct) + '% lit</span>'
+      + '<span>in ' + esc(sky.moon.sign) + '</span>'
+      + (sky.moon.chakra ? '<span class="g-sky__chakra">' + esc(sky.moon.chakra.name) + '</span>' : '')
+      + '</p>'
+      + '</div></div>'
+
+      + '<p class="g-sky__theme">' + esc(sky.guidance.theme) + '</p>'
+      + '<p class="g-sky__invitation">' + esc(sky.guidance.invitation) + '</p>'
+      + '<p class="g-sky__practice"><strong>Try this</strong> ' + esc(sky.guidance.practice) + '</p>'
+
       + (personal
-        ? '<p class="g-sky__personal-line" style="--own:' + esc(personal.birthChakra.colour) + '">'
-          + esc(personal.resonant
-            ? 'Your ' + personal.birthChakra.name.toLowerCase() + ' centre is lit today.'
-            : 'Today asks for your ' + ((sky.moon.chakra && sky.moon.chakra.name) || 'whole system').toLowerCase()
-              + ' — yours is the ' + personal.birthChakra.name.toLowerCase() + '.')
+        // Signed up: the sky read against their own chart. No call to action —
+        // they already did the thing we would be asking for.
+        ? '<div class="g-sky__personal" style="--own:' + esc(personal.birthChakra.colour) + '">'
+          + '<p class="g-sky__personal-head">'
+          + (personal.resonant ? 'Your centre is lit today' : 'For you, ' + esc(personal.firstName))
           + '</p>'
-        // The signup hook, one quiet line. The g-sky__invite class stays: it is
-        // the contract the tests hold — the card offers more, never withholds.
-        : '<a class="g-sky__invite" href="home.html?view=wellness&amp;tab=check">'
-          + 'Add your birth date to see which of your centres this moon meets ›</a>')
+          + '<p>' + esc(personal.note) + '</p>'
+          + '<a class="g-sky__personal-link" href="home.html?view=wellness&amp;tab=horoscope">'
+          + 'See your full chart today →</a>'
+          + '</div>'
+        // Not signed up: the honest version of the offer. It names exactly what
+        // is added and what it costs — a birth date — rather than dangling a
+        // vague "unlock more".
+        : '<div class="g-sky__invite">'
+          + '<p class="g-sky__invite-head">This is the sky for everyone today.</p>'
+          + '<p>Add your birth date to see which of your centres this moon meets.</p>'
+          + '<a class="g-btn g-btn--primary g-btn--sm" href="home.html?view=wellness&amp;tab=check">'
+          + 'Read my chart</a>'
+          + '</div>')
+
+      + '<p class="g-sky__foot">'
+      + '<span>' + esc(countdownLine(sky.upcoming)) + '</span>'
+      // Said out loud, because the entire appeal is that it is checkable.
+      + '<span class="g-sky__source">Calculated, not written in advance.</span>'
+      + '</p>'
       + '</article>';
   }
 

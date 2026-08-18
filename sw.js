@@ -1,4 +1,4 @@
-const CACHE_NAME = 'gaia-healers-20260818a';
+const CACHE_NAME = 'gaia-healers-20260818b';
 const APP_SHELL = [
   '/',
   '/home.html',
@@ -24,11 +24,14 @@ const APP_SHELL = [
   '/gaia-store.js',
   '/gaia-ui.js',
   '/gaia-superapp.js',
+  '/gaia-install.js',
   '/assets/gaia-mark.svg',
   '/assets/gaia-event-hero.webp',
   '/assets/gaia-chakra-meditation.webp',
   '/assets/icon-192.png',
-  '/assets/icon-512.png'
+  '/assets/icon-512.png',
+  '/assets/icon-maskable-512.png',
+  '/assets/apple-touch-icon.png'
 ];
 
 self.addEventListener('install', (event) => {

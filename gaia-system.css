@@ -655,3 +655,38 @@ button.g-access.g-access--link {
   text-align:left;cursor:pointer;width:100%}
 .g-tile__open:focus-visible{outline:2px solid var(--g-accent,#A8E063);outline-offset:3px;border-radius:6px}
 @media (max-width:640px){.g-store-sheet{max-width:100%;border-radius:16px 16px 0 0;max-height:90vh}}
+
+/* ── Add to Home Screen ──
+   A quiet sheet at the bottom, above the tab bar and clear of the home
+   indicator. It only ever appears when it can actually help. */
+.g-install{position:fixed;left:0;right:0;z-index:120;
+  /* clear of the floating tab bar and the home indicator below it */
+  bottom:calc(72px + env(safe-area-inset-bottom,0px));
+  padding:0 12px;
+  display:flex;justify-content:center;pointer-events:none}
+.g-install__panel{pointer-events:auto;width:100%;max-width:420px;
+  background:var(--g-surface,#111A14);color:var(--g-text,#ECF3E9);
+  border:1px solid rgba(255,255,255,.10);border-radius:18px;padding:16px 18px;
+  box-shadow:0 18px 44px rgba(0,0,0,.5);display:flex;flex-direction:column;gap:12px;
+  animation:g-install-in .28s cubic-bezier(.2,.8,.3,1) both}
+@keyframes g-install-in{from{transform:translateY(14px);opacity:0}to{transform:none;opacity:1}}
+@media (prefers-reduced-motion:reduce){.g-install__panel{animation:none}}
+.g-install__head{display:flex;gap:12px;align-items:center}
+.g-install__icon{border-radius:12px;flex:none}
+.g-install__title{margin:0;font-weight:650;font-size:.98rem;line-height:1.3}
+.g-install__sub{margin:2px 0 0;font-size:.84rem;opacity:.72;line-height:1.35}
+.g-install__steps{margin:0;padding-left:1.15rem;display:flex;flex-direction:column;gap:6px;
+  font-size:.9rem;opacity:.9}
+.g-install__steps b{font-weight:650}
+.g-install__actions{display:flex;gap:8px;justify-content:flex-end}
+.g-install__actions .g-btn{min-height:44px;display:inline-flex;align-items:center;justify-content:center}
+
+/* ── Home: let the last card clear the floating tab bar ──
+   Needs body.gaia-v2 to outrank `body.gaia-v2 .gaia-main`, which otherwise wins
+   on specificity and leaves the final card tucked under the bar. */
+body.gaia-v2 main.gaia-main.gaia-main--today{
+  padding-bottom:calc(88px + env(safe-area-inset-bottom,0px))}
+/* A short scrim so content scrolling under the floating bar fades out instead
+   of being sliced mid-word. */
+.gaia-tabbar::before{content:"";position:absolute;left:0;right:0;bottom:100%;height:28px;
+  background:linear-gradient(to top,var(--g-bg,#0B120E),transparent);pointer-events:none}

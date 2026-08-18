@@ -16,6 +16,7 @@ import path from 'node:path';
 import crypto from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { Body, Ecliptic, GeoVector } from 'astronomy-engine';
+import { todaySky } from './membership/sky.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const COOKIE = process.env.GAIA_WELLNESS_COOKIE || 'gaia_wellness';
@@ -430,6 +431,56 @@ async function handle(req, res, url, deps) {
     const token = deps.signTokenPayload({ wpid: profile.id, iat: Date.now(), exp: Date.now() + TTL_MS });
     const today = await dailyFor(profile, deps);
     return sendJson(res, 200, { ok: true, signedUp: true, profile: publicProfile(profile), today, challenge: challengeState(profile), existingMember, existingContact, memberName }, origin, { 'Set-Cookie': buildSetCookie(token) });
+  }
+
+  // Today's sky — the only wellness route that asks for nothing.
+  //
+  // Public and uncached-by-identity: the moon is the same for everyone, so this
+  // needs no cookie, no birth date and no email. A visitor gets the real reading
+  // first; the personal layer below is what signing up adds, not what it unlocks.
+  if (p === '/api/wellness/sky' && method === 'GET') {
+    let sky;
+    try {
+      sky = todaySky();
+    } catch (err) {
+      // An ephemeris failure is a real failure — better to say so than to
+      // invent a moon.
+      console.log('[Gaia Wellness] sky', JSON.stringify({ outcome: 'compute_failed', message: String(err && err.message) }));
+      return sendJson(res, 200, { ok: false, reason: 'sky_unavailable' }, origin);
+    }
+
+    // The symbolic layer is attached here, in the file that owns Gaia's chakra
+    // vocabulary — everyone gets it, signed up or not.
+    const moonChakra = CHAKRAS.find((c) => c.id === SIGN_CHAKRA[sky.moon.sign]) || null;
+    if (moonChakra) {
+      sky.moon.chakra = { id: moonChakra.id, name: moonChakra.name, colour: moonChakra.color, focus: moonChakra.focus };
+    }
+
+    // If they already have a profile, say how today's sky meets their chart.
+    // This is the honest version of the signup promise: the same sky, read
+    // against something only they have given us.
+    const profile = profileFromReq(req, deps);
+    if (profile) {
+      const dob = parseDob(profile.dob);
+      if (dob) {
+        const birth = CHAKRAS[birthChakraIndex(dob.y, dob.m, dob.d)];
+        const resonant = !!(moonChakra && birth && moonChakra.id === birth.id);
+        sky.personal = {
+          firstName: firstName(profile.name),
+          birthChakra: { id: birth.id, name: birth.name, colour: birth.color },
+          sunSign: sunSign(dob.m, dob.d),
+          resonant,
+          note: resonant
+            ? `The moon is in ${sky.moon.sign} today, which meets your ${birth.name.toLowerCase()} centre directly. Your own ground is lit — a good day to work with it rather than around it.`
+            : `The moon is in ${sky.moon.sign} today, asking for your ${(moonChakra ? moonChakra.name : 'whole system').toLowerCase()} while your own centre is the ${birth.name.toLowerCase()}. Different ground than usual — notice what that stretches.`,
+        };
+      }
+    }
+    return sendJson(res, 200, sky, origin, {
+      // Recomputed on request but safe to hold briefly at the edge: the numbers
+      // move continuously, the reading does not change within an hour.
+      'Cache-Control': 'public, max-age=900',
+    });
   }
 
   if (p === '/api/wellness/logout' && method === 'POST') {

@@ -533,6 +533,9 @@
       + '<h1>' + greeting + '</h1><p>' + (authed ? 'Your healing journey is waiting.' : 'What does your energy need today?') + '</p>'
       + (authed ? journeyRail() + primaryMemberAction() : '<div class="g-super-discover"><a class="g-btn g-btn--primary" href="home.html?view=wellness&tab=check">' + icon('sparkle') + ' Check my energy</a><button type="button" class="g-btn g-btn--secondary" data-gaia-open-assist>' + icon('microphone') + ' Ask Gaia</button></div>') + '</div><div class="g-super-hero__art" aria-hidden="true"></div></section>'
       + eventFeature()
+      // Today's sky sits high on the page precisely because it needs nothing
+      // from the visitor: it is the first thing a stranger can actually read.
+      + '<div data-sky-host></div>'
       + freeTools()
       + (authed ? '<section class="g-super-services"><div class="g-super-section-head"><div><p class="g-super-kicker">Your access</p><h2>Everything Gaia</h2></div><a href="home.html?view=journey">View journey</a></div><div class="g-super-services__grid">' + services + '</div></section>' : '')
       + discoverGaia()
@@ -540,6 +543,9 @@
       + (authed ? '<section class="g-super-sync">' + icon('check-circle') + '<div><strong>Your access is synced</strong><span>Courses, communities, plans and purchases reflect your GHL member record.</span></div></section>' : '')
       + '</div>';
     bind(root);
+    // Panels that live inside the home screen but are owned by their own files
+    // follow this rather than the superapp having to know they exist.
+    document.dispatchEvent(new CustomEvent('gaia:superapp-rendered', { detail: { authed } }));
   }
 
   function renderJourney() {
@@ -724,11 +730,15 @@
 
     root.innerHTML = '<div class="g-super-page-head"><p class="g-super-kicker">Gather in person and online</p><h1>Events</h1>'
       + '<p>Every Gaia gathering, its programme and who you will meet there.</p></div>'
+      // Your own tickets first. Someone opening this screen at a venue is
+      // looking for their QR code, not for the programme they already read.
+      + '<div data-myevents-host></div>'
       + (liveCards ? '<section class="g-super-list g-super-list--live"><div class="g-super-section-head"><div><p class="g-super-kicker">On now</p><h2>Live</h2></div></div><div class="g-event-grid">' + liveCards + '</div></section>' : '')
       + section('Coming up', 'Upcoming events', upcoming.map((item) => eventCard(item)).join(''))
       + section('Archive', 'Past events', past.map((item) => eventCard(item, { countdown: false })).join(''))
       + empty;
     bind(root);
+    document.dispatchEvent(new CustomEvent('gaia:superapp-rendered', { detail: { view: 'events' } }));
   }
 
   function eventTabPanel(tab, detail, live) {

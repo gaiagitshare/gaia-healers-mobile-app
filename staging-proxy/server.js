@@ -5,6 +5,7 @@ import path from 'node:path';
 import { URL } from 'node:url';
 import * as adminRouter from './admin-router.js';
 import * as wellnessRouter from './wellness-router.js';
+import * as eventIdentity from './membership/event-identity.js';
 import { migrateStore, migrateContactRecord } from './membership/ledger.js';
 import { resolveMemberAccess } from './membership/resolver.js';
 import { UNRESOLVED_BILLING_IDS } from './membership/config.js';
@@ -1431,13 +1432,19 @@ function normalizeMemberIdentity(input = {}) {
   };
 }
 
-function createMemberSession(identity = {}, source = 'auth') {
+function createMemberSession(identity = {}, source = 'auth', options = {}) {
   const member = normalizeMemberIdentity({ ...identity, source });
   const exp = Date.now() + (AUTH_SESSION_TTL_SECONDS * 1000);
   return {
     sub: member.memberId || member.contactId || member.email || member.displayName,
     member,
     source,
+    // Whether this session PROVED the email address, as opposed to being told
+    // it. Carried as an explicit flag because `source` alone cannot answer it:
+    // the embedded-claim path uses one source string for both a GHL-verified
+    // member and an unverified fallback, and this value decides whether the
+    // address is allowed to unlock an event ticket.
+    emailVerified: options.emailVerified === true,
     iat: Date.now(),
     exp,
   };
@@ -3760,7 +3767,9 @@ async function authMagicLinkConsume(req, res, origin, url) {
     return;
   }
   CONSUMED_MAGIC_LINKS.set(tokenHash, Number(payload.exp) || (now + AUTH_MAGIC_LINK_TTL_SECONDS * 1000));
-  const session = createMemberSession(payload.member, 'magic-link');
+  // They opened a link delivered to that mailbox, which is exactly what
+  // verifying an email means.
+  const session = createMemberSession(payload.member, 'magic-link', { emailVerified: true });
   const token = signTokenPayload(session);
   const sessionCookie = { 'Set-Cookie': buildSetCookie(req, token, session.exp) };
   if (jsonMode) {
@@ -3842,7 +3851,12 @@ async function authEmbeddedClaim(req, res, origin) {
     return;
   }
 
-  const session = createMemberSession(member, 'ghl-embedded-claim');
+  // Verified only when GHL itself resolved the contact. The fallback branch
+  // above accepts an email nobody checked, and that must not be treated as
+  // proof — the contact id remains the usable evidence in that case.
+  const session = createMemberSession(member, 'ghl-embedded-claim', {
+    emailVerified: Boolean(verified.memberResolved && verified.member),
+  });
   const token = signTokenPayload(session);
   sendJson(res, 200, {
     ok: true,
@@ -4583,6 +4597,22 @@ const server = http.createServer(async (req, res) => {
     }
     if (req.method === 'GET' && /^\/api\/events\/\d+$/.test(url.pathname)) {
       await eventDetail(req, res, origin, url.pathname.split('/').pop());
+      return;
+    }
+    // My Events / My Ticket. Identity comes from the session cookie only —
+    // there is deliberately no way to ask for someone else's by id.
+    if (req.method === 'GET' && url.pathname === '/api/events/mine') {
+      const session = cookieForRequest(req);
+      sendJson(res, 200, await eventIdentity.myEvents(session), origin);
+      return;
+    }
+    if (req.method === 'GET' && /^\/api\/events\/\d+\/ticket$/.test(url.pathname)) {
+      const session = cookieForRequest(req);
+      const result = await eventIdentity.myTicket(session, url.pathname.split('/')[3]);
+      // A ticket is personal: never cached, by any hop.
+      sendJson(res, result.authenticated === false ? 401 : 200, result, origin, {
+        'Cache-Control': 'private, no-store',
+      });
       return;
     }
     if (req.method === 'GET' && /^\/api\/events\/\d+\/live$/.test(url.pathname)) {

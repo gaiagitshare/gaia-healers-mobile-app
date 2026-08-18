@@ -13,9 +13,10 @@ import fs from 'node:fs';
 import vm from 'node:vm';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { appTest, readApp } from './_app-present.js';
 
 const appRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
-const SOURCE = fs.readFileSync(path.join(appRoot, 'gaia-practice.js'), 'utf8');
+const SOURCE = readApp('gaia-practice.js');
 
 /** Boot the module against a minimal DOM and an in-memory localStorage. */
 function boot({ now = new Date('2026-08-18T12:00:00') } = {}) {
@@ -59,7 +60,7 @@ function boot({ now = new Date('2026-08-18T12:00:00') } = {}) {
 
 const KEY = 'gaia:practice:v1';
 
-test('the journal never sends anything anywhere', () => {
+appTest('the journal never sends anything anywhere', () => {
   // No endpoint, no beacon, no image ping. A private reflection has nowhere to
   // go by construction, not by policy.
   for (const forbidden of ['fetch(', 'XMLHttpRequest', 'sendBeacon', 'new Image', 'axios', 'WebSocket']) {
@@ -68,7 +69,7 @@ test('the journal never sends anything anywhere', () => {
   assert.ok(!/https?:\/\//.test(SOURCE.replace(/^\s*\*.*$/gm, '')), 'no URL in the code');
 });
 
-test('visiting records the day — no button to press', () => {
+appTest('visiting records the day — no button to press', () => {
   const { api, store } = boot();
   api.observe('Throat', '#3E9FF0');
   const data = JSON.parse(store.get(KEY));
@@ -79,7 +80,7 @@ test('visiting records the day — no button to press', () => {
   assert.equal(data[today].done, undefined, 'recording a day is not claiming the practice was kept');
 });
 
-test('every centre name maps to a known key, and nonsense maps to none', () => {
+appTest('every centre name maps to a known key, and nonsense maps to none', () => {
   const { api, store } = boot();
   const cases = [['Root', 'root'], ['Sacral', 'sacral'], ['Solar plexus', 'solar'],
     ['Heart', 'heart'], ['Throat', 'throat'], ['Third eye', 'third-eye'], ['Crown', 'crown']];
@@ -93,7 +94,7 @@ test('every centre name maps to a known key, and nonsense maps to none', () => {
   assert.equal(store.get(KEY), undefined, 'an unrecognised centre records nothing rather than guessing');
 });
 
-test('a streak counts consecutive kept days, and today not yet marked does not break it', () => {
+appTest('a streak counts consecutive kept days, and today not yet marked does not break it', () => {
   const { api, store } = boot();
   // yesterday and the day before were kept; today has not been marked yet
   store.set(KEY, JSON.stringify({
@@ -111,13 +112,13 @@ test('a streak counts consecutive kept days, and today not yet marked does not b
   assert.equal(api.streak(), 3 - 1, 'the run stops at the missing day');
 });
 
-test('an empty journal has a streak of zero rather than throwing', () => {
+appTest('an empty journal has a streak of zero rather than throwing', () => {
   const { api } = boot();
   assert.equal(api.streak(), 0);
   assert.equal(api.recurring(), null);
 });
 
-test('the recurring centre is the one that has come up most', () => {
+appTest('the recurring centre is the one that has come up most', () => {
   const { api, store } = boot();
   store.set(KEY, JSON.stringify({
     a: { chakra: 'heart' }, b: { chakra: 'heart' }, c: { chakra: 'heart' },
@@ -129,13 +130,13 @@ test('the recurring centre is the one that has come up most', () => {
   assert.equal(often.label, 'Heart');
 });
 
-test('third-eye reads as a phrase a person would say', () => {
+appTest('third-eye reads as a phrase a person would say', () => {
   const { api, store } = boot();
   store.set(KEY, JSON.stringify({ a: { chakra: 'third-eye' } }));
   assert.equal(api.recurring().label, 'Third eye');
 });
 
-test('a day is recorded against the local date, not UTC', () => {
+appTest('a day is recorded against the local date, not UTC', () => {
   // Late evening in a timezone ahead of UTC would otherwise file the entry
   // under tomorrow, and a journal that disagrees with the calendar on the wall
   // is worse than no journal.
@@ -144,7 +145,7 @@ test('a day is recorded against the local date, not UTC', () => {
   assert.ok(Object.keys(JSON.parse(store.get(KEY))).includes('2026-08-18'));
 });
 
-test('a full or unavailable localStorage degrades quietly', () => {
+appTest('a full or unavailable localStorage degrades quietly', () => {
   const { sandbox } = boot();
   sandbox.localStorage.setItem = () => { throw new Error('QuotaExceededError'); };
   // Private browsing must not take the whole panel down with it.
@@ -152,7 +153,7 @@ test('a full or unavailable localStorage degrades quietly', () => {
   assert.doesNotThrow(() => sandbox.window.GaiaPractice.streak());
 });
 
-test('corrupt stored data is treated as empty rather than crashing the panel', () => {
+appTest('corrupt stored data is treated as empty rather than crashing the panel', () => {
   const { api, store } = boot();
   store.set(KEY, 'not json at all {{{');
   // Compared by keys rather than deepEqual: the object comes back from inside
@@ -163,13 +164,13 @@ test('corrupt stored data is treated as empty rather than crashing the panel', (
   assert.equal(api.recurring(), null);
 });
 
-test('the journal listens for the wellness panel rather than owning it', () => {
+appTest('the journal listens for the wellness panel rather than owning it', () => {
   const { listeners } = boot();
   assert.ok(listeners.has('gaia:wellness-rendered'),
     'it follows the panel it lives in, so the wellness file need not know it exists');
 });
 
-test('the wellness panel emits what the journal needs', () => {
+appTest('the wellness panel emits what the journal needs', () => {
   const wellness = fs.readFileSync(path.join(appRoot, 'gaia-wellness.js'), 'utf8');
   assert.ok(wellness.includes("'gaia:wellness-rendered'"), 'the event is dispatched');
   assert.ok(/data-practice-host/.test(wellness), 'and a host element exists to draw into');

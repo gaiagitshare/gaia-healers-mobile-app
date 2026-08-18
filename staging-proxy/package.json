@@ -6,7 +6,7 @@
   "scripts": {
     "start": "node server.js",
     "check": "node --check server.js",
-    "test": "node --test --test-force-exit \"test/**/*.test.js\""
+    "test": "node --test --test-force-exit test/*.test.js"
   },
   "engines": {
     "node": ">=18"

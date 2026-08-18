@@ -11,10 +11,11 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { appTest, readApp } from './_app-present.js';
 
 const appRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
 const APP_FILES = ['gaia-member.js', 'gaia-membership-ui.js', 'gaia-ui.js', 'gaia-superapp.js'];
-const read = (file) => fs.readFileSync(path.join(appRoot, file), 'utf8');
+const read = (file) => readApp(file);
 
 /* Comments are stripped before scanning: a guard that trips over its own
    explanatory prose teaches people to delete the explanation. */
@@ -31,7 +32,7 @@ const allowedLines = (source) => new Set(
     .flatMap((i) => [i, i + 1, i + 2, i + 3, i + 4]),
 );
 
-test('no tier-name regex survives anywhere in the app JS', () => {
+appTest('no tier-name regex survives anywhere in the app JS', () => {
   for (const file of APP_FILES) {
     const source = read(file);
     const allowed = allowedLines(source);
@@ -48,7 +49,7 @@ test('no tier-name regex survives anywhere in the app JS', () => {
   }
 });
 
-test('no tier name is ever tested against membership or access data', () => {
+appTest('no tier name is ever tested against membership or access data', () => {
   for (const file of APP_FILES) {
     const code = stripComments(read(file));
     assert.ok(
@@ -59,13 +60,13 @@ test('no tier name is ever tested against membership or access data', () => {
   }
 });
 
-test('the membership UI contains no hardcoded plan prices', () => {
+appTest('the membership UI contains no hardcoded plan prices', () => {
   const source = read('gaia-membership-ui.js');
   const prices = source.match(/\$\s?[0-9][0-9,]*/g) || [];
   assert.deepEqual(prices, [], `prices must come from the plan catalogue, found: ${prices.join(', ')}`);
 });
 
-test('the membership UI never hardcodes a lead count, directory level or discount', () => {
+appTest('the membership UI never hardcodes a lead count, directory level or discount', () => {
   const source = stripComments(read('gaia-membership-ui.js'));
   // The renderer may only read these from entitlement values.
   for (const forbidden of [/\b5\s*leads?\b/i, /\bleads?\s*:\s*\d/i, /\bLevel\s*[123]\b(?!\s*\$\{)/,
@@ -77,14 +78,14 @@ test('the membership UI never hardcodes a lead count, directory level or discoun
   assert.ok(/value\?\.delivered/.test(source), 'lead allocation must be read from value.delivered');
 });
 
-test('gaia-member.js no longer carries the hardcoded tier catalogue', () => {
+appTest('gaia-member.js no longer carries the hardcoded tier catalogue', () => {
   const source = read('gaia-member.js');
   assert.ok(!/abilities:\s*\[\s*'Everything in/.test(source), 'hardcoded benefit bullets must be gone');
   assert.ok(!/\$97\/mo|\$497\/mo|\$997\/mo/.test(source), 'hardcoded prices must be gone');
   assert.ok(/api\/membership\/plans/.test(source), 'plans must come from the catalogue endpoint');
 });
 
-test('membership.key is used for presentation only, never to select benefits', () => {
+appTest('membership.key is used for presentation only, never to select benefits', () => {
   const source = read('gaia-membership-ui.js');
   // The only permitted uses are a CSS modifier and an upgrade lookup.
   const uses = source.match(/membership\.key/g) || [];
@@ -94,14 +95,14 @@ test('membership.key is used for presentation only, never to select benefits', (
     'a tier key must not select what a member gets');
 });
 
-test('the UI reads its rows from sections, not from a hardcoded list', () => {
+appTest('the UI reads its rows from sections, not from a hardcoded list', () => {
   const source = read('gaia-membership-ui.js');
   assert.ok(/access\?\.sections/.test(source), 'rows come from sections');
   // there must be no literal array of row titles
   assert.ok(!/\[\s*'Courses'\s*,\s*'Community'/.test(source), 'no hardcoded row list');
 });
 
-test('unknown entitlement types have a safe generic renderer', () => {
+appTest('unknown entitlement types have a safe generic renderer', () => {
   const source = read('gaia-membership-ui.js');
   assert.ok(/genericRenderer/.test(source), 'a generic renderer exists');
   assert.ok(/RENDERERS\[section\.type\]\s*\|\|\s*genericRenderer/.test(source),

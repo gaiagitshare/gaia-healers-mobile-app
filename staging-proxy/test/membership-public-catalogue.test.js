@@ -18,9 +18,14 @@ import fs from 'node:fs';
 import path from 'node:path';
 import vm from 'node:vm';
 import { fileURLToPath } from 'node:url';
+import { appTest as rawAppTest, readApp } from './_app-present.js';
+// Every test here reads gaia-member.js, so the guard checks that file.
+const appTest = (name, fn) => rawAppTest(name, fn, 'gaia-member.js');
 
 const appRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
-const SOURCE = fs.readFileSync(path.join(appRoot, 'gaia-member.js'), 'utf8');
+// Read through the guard: a module-level readFileSync would throw at import
+// time on the proxy host, taking the whole file down before any skip applies.
+const SOURCE = readApp('gaia-member.js');
 
 const MEMBER_ENDPOINTS = [
   '/api/member/profile', '/api/member/access', '/api/member/appointments',
@@ -122,7 +127,7 @@ async function bootSignedOut({ plansResponse = PLANS, plansStatus = 200 } = {}) 
   return { html, requested, listeners, nodes };
 }
 
-test('a signed-out visitor sees the plan catalogue even though all 11 member endpoints 401', async () => {
+appTest('a signed-out visitor sees the plan catalogue even though all 11 member endpoints 401', async () => {
   const { html, requested } = await bootSignedOut();
 
   assert.ok(requested.includes('/api/membership/plans'),
@@ -136,7 +141,7 @@ test('a signed-out visitor sees the plan catalogue even though all 11 member end
   assert.ok(html.includes('$97/mo'), 'prices come from the server catalogue, not from literals here');
 });
 
-test('gaia:auth never fires, and the catalogue still loaded', async () => {
+appTest('gaia:auth never fires, and the catalogue still loaded', async () => {
   const { requested, listeners } = await bootSignedOut();
   // loadMember is wired to gaia:auth; we deliberately never dispatch it.
   assert.ok(listeners.has('gaia:auth'), 'the authenticated path still exists');
@@ -145,13 +150,13 @@ test('gaia:auth never fires, and the catalogue still loaded', async () => {
     'a signed-out boot must not depend on member endpoints at all');
 });
 
-test('a failing catalogue degrades to the message, it does not crash', async () => {
+appTest('a failing catalogue degrades to the message, it does not crash', async () => {
   const { html } = await bootSignedOut({ plansStatus: 500, plansResponse: {} });
   assert.ok(html.includes('Membership plans are unavailable right now'),
     'when the public endpoint genuinely fails, saying so is correct');
 });
 
-test('the catalogue is presentation only and cannot grant anything', async () => {
+appTest('the catalogue is presentation only and cannot grant anything', async () => {
   const { html } = await bootSignedOut();
   // A plan card may advertise. It must never tell a visitor what they hold —
   // that sentence belongs to My Access, which reads the ledger.
@@ -160,7 +165,7 @@ test('the catalogue is presentation only and cannot grant anything', async () =>
   }
 });
 
-test('the plans fetch is not nested inside the authenticated loader', () => {
+appTest('the plans fetch is not nested inside the authenticated loader', () => {
   // Structural backstop for the control-flow mistake itself: loadMember() is
   // only ever called from the gaia:auth handler, so anything fetched inside it
   // is invisible to a signed-out visitor.

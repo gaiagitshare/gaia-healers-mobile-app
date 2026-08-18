@@ -8,6 +8,8 @@
 
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { appTest as rawAppTest, readApp } from './_app-present.js';
+const appTest = (name, fn) => rawAppTest(name, fn, 'gaia-store.js');
 
 import {
   emptyCatalog, normalizeShopifyProduct, syncCatalog, storeView, diffMessages, toCents, money,
@@ -328,9 +330,9 @@ test('a device family keeps its own products even when a generic word matches', 
 });
 
 // ── the boundary that must never blur ───────────────────────────────────────
-test('the store speaks about products; only the ledger speaks about access', async () => {
+appTest('the store speaks about products; only the ledger speaks about access', async () => {
   const fs = await import('node:fs');
-  const source = fs.readFileSync(new URL('../../gaia-store.js', import.meta.url), 'utf8');
+  const source = readApp('gaia-store.js');
 
   // A card may say what a product is and what it costs. It may never tell a
   // signed-in member what they hold — that sentence belongs to My Access,

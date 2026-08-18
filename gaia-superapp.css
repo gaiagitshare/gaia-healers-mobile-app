@@ -569,3 +569,69 @@ body.gaia-v2 .gaia-chakra-map__list-item, body.gaia-v2 .gaia-chakra-map--screen 
   .g-ma-row__button{flex-wrap:wrap}
   .g-ma-row__value{width:100%;text-align:left;order:3}
 }
+
+/* ── Home on a wide screen ────────────────────────────────────────────────
+   Until now the desktop home was the phone layout stretched: one column of
+   full-width sections running to about 2000px, so the only thing a large
+   screen bought you was longer lines and more scrolling.
+
+   This gives it a composition. The greeting and today's sky share the fold —
+   both are "right now" content and they read as a pair. The next gathering
+   stays full width, where its artwork has room to be a banner rather than a
+   thumbnail. The two exploratory sections then sit side by side, since they
+   are alternatives to each other rather than a sequence.
+
+   1060px is the threshold because that is where the layout has room for two
+   real columns once the 112px rail is accounted for — below it the single
+   column is still the better read. */
+@media (min-width: 1060px) {
+  .g-super-home {
+    grid-template-columns: minmax(0, 1.32fr) minmax(0, 1fr);
+    gap: 20px 22px;
+    align-items: stretch;
+  }
+
+  /* Row one is "right now": the greeting and today's sky, side by side. Both
+     are pinned explicitly rather than left to auto-placement, because the
+     sections between them in the DOM vary — a published event renders one
+     card, an empty schedule another — and auto-flow put whichever appeared
+     into this slot, stranding the sky a row down behind 300px of dead space. */
+  .g-super-home > .g-super-hero { grid-column: 1; grid-row: 1; }
+  .g-super-home > [data-sky-host] { grid-column: 2; grid-row: 1; }
+  .g-super-home > [data-sky-host] > .g-sky { height: 100%; }
+
+  /* Sections that want the full measure. Both event states are named: the
+     published card and the "nothing scheduled" placeholder are different
+     classes, and listing only one is how the gap above happened. */
+  .g-super-home > .g-feature-event,
+  .g-super-home > .g-super-event,
+  .g-super-home > .g-super-services,
+  .g-super-home > .g-super-auth,
+  .g-super-home > .g-super-sync { grid-column: 1 / -1; }
+
+  /* The two exploratory sections are alternatives to each other, not a
+     sequence, so they sit side by side instead of adding their heights. */
+  .g-super-home > .g-free-tools { grid-column: 1; }
+  .g-super-home > .g-super-discover-gaia { grid-column: 2; }
+
+  /* Beside the hero rather than under it, the sky card has less width and more
+     height, so the moon leads and the copy stacks beneath it. */
+  .g-super-home > [data-sky-host] .g-sky__head { flex-direction: column; align-items: flex-start; gap: 12px; }
+
+  .g-super-hero { min-height: 0; }
+}
+
+/* The next gathering, given the full width of a desktop.
+   Its artwork is often a wordmark rather than a photograph — the Elevate image
+   carries its own large lettering — and a purely vertical scrim only darkens
+   the bottom, so at wide sizes that lettering came through beside the title.
+   Adding a horizontal pass anchors the text side without flattening the image. */
+@media (min-width: 1060px) {
+  .g-feature-event { min-height: 300px; }
+  .g-feature-event__art::after {
+    background:
+      linear-gradient(180deg, rgba(7,16,11,.35) 0%, rgba(7,16,11,.72) 60%, rgba(7,16,11,.94) 100%),
+      linear-gradient(90deg, rgba(7,16,11,.88) 0%, rgba(7,16,11,.55) 45%, rgba(7,16,11,.18) 100%);
+  }
+  .g-feature-event__body { max-width: 62ch; }
+}

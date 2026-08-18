@@ -375,9 +375,11 @@ body.gaia-v2 .gaia-chakra-map__list-item, body.gaia-v2 .gaia-chakra-map--screen 
   .g-super-actions { width: 100%; }
   .g-super-actions .g-btn { flex: 1; }
   .g-super-services, .g-super-list { padding: 20px 16px; border-radius: 20px; }
-  .g-free-tools { padding: 20px 14px; border-radius: 20px; }
-  .g-free-tools__grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
-  .g-free-tool { min-height: 116px; padding: 14px 8px; border-radius: 15px; }
+  .g-free-tools { padding: 18px 14px; border-radius: 20px; }
+  /* Four doors in one row on phones — the template's call; gaia-system.css
+     owns the tile shape. */
+  .g-free-tools__grid { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; }
+  .g-free-tool { min-height: 96px; padding: 12px 4px; border-radius: 16px; }
   .g-super-discover-gaia { padding: 20px 14px; border-radius: 20px; }
   .g-super-discover-gaia__grid { grid-template-columns: 1fr; }
   .g-super-resource { min-height: 92px; }

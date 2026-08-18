@@ -96,6 +96,24 @@ body.gaia-booking-open{overflow:hidden;}
     return String((window.GAIA && (window.GAIA.clientPortal && window.GAIA.clientPortal.url || window.GAIA.portalUrl)) || 'https://education.gaiahealers.com').replace(/\/+$/, '');
   }
 
+  /**
+   * The public plan catalogue.
+   *
+   * Loaded on its own, from the public endpoint, with no dependency on any
+   * /api/member/* call. This used to live inside loadMember(), which only runs
+   * once a visitor is authenticated — so a signed-out visitor was told
+   * "Membership plans are unavailable" while the endpoint sat there returning
+   * all four plans quite happily.
+   *
+   * Presentation only. It never decides what anyone has access to; that answer
+   * comes from the ledger via /api/member/access.
+   */
+  async function loadPlans() {
+    const plans = await getJson('/api/membership/plans');
+    state.plans = (plans && Array.isArray(plans.plans)) ? plans.plans : [];
+    render();
+  }
+
   async function loadMember() {
     const [profile, access, appts, notif, devices, purchases, forms, courses, products, activity, events] = await Promise.all([
       getJson('/api/member/profile'), getJson('/api/member/access'),
@@ -105,11 +123,6 @@ body.gaia-booking-open{overflow:hidden;}
       getJson('/api/member/products'), getJson('/api/member/activity'),
       getJson('/api/member/events'),
     ]);
-    // Presentation-only plan catalogue. Never consulted for access decisions —
-    // it exists so prices and plan copy live in one server-side source instead
-    // of as literals in this file.
-    const plans = await getJson('/api/membership/plans').catch(() => null);
-    state.plans = (plans && Array.isArray(plans.plans)) ? plans.plans : [];
     state.authed = !!(profile && profile.ok && profile.authenticated);
     state.data = { profile, access, appts, notif, devices, purchases, forms, courses, products, activity, events };
     document.dispatchEvent(new CustomEvent('gaia:member', { detail: state.data }));
@@ -959,6 +972,7 @@ body.gaia-booking-open{overflow:hidden;}
       if (document.visibilityState === 'visible') loadEvent();
     });
     loadCatalog(); // live course catalog from the GHL webhook sync (public)
+    loadPlans(); // public plan catalogue — must not wait on a signed-in member
   });
   document.addEventListener('gaia:auth', (e) => {
     if (e && e.detail && e.detail.authenticated) loadMember();

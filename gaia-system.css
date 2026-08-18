@@ -699,10 +699,14 @@ body.gaia-v2 main.gaia-main.gaia-main--today{
   border:1px solid rgba(255,255,255,.10);background:var(--g-surface,#111A14);
   display:flex;flex-direction:column;min-height:210px}
 .g-feature-event__art{position:absolute;inset:0;z-index:0}
-.g-feature-event__art img{width:100%;height:100%;object-fit:cover;display:block}
-/* A scrim, so the title stays readable whatever photograph is published. */
+.g-feature-event__art img{width:100%;height:100%;object-fit:cover;display:block;
+  /* The published artwork is often a wordmark rather than a photograph — the
+     Elevate image carries its own large "ELEVATE" lettering. Held back to
+     texture so it sets a mood behind the card instead of arguing with the
+     title sitting on top of it. */
+  opacity:.34;transform:scale(1.04);filter:saturate(.9)}
 .g-feature-event__art::after{content:"";position:absolute;inset:0;
-  background:linear-gradient(180deg,rgba(7,16,11,.30) 0%,rgba(7,16,11,.72) 52%,rgba(7,16,11,.94) 100%)}
+  background:linear-gradient(180deg,rgba(7,16,11,.55) 0%,rgba(7,16,11,.82) 55%,rgba(7,16,11,.96) 100%)}
 .g-feature-event__body{position:relative;z-index:1;margin-top:auto;
   padding:18px;display:flex;flex-direction:column;gap:8px}
 .g-feature-event__kicker{margin:0;display:flex;align-items:center;gap:8px;flex-wrap:wrap;

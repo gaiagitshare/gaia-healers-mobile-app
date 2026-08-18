@@ -81,6 +81,52 @@ function auditEntry(store, entry) {
 }
 
 let _registryCache = null;
+let _modelCache = null;
+
+const MODEL_FILE = process.env.COMMERCE_MODEL_FILE
+  || path.join(__dirname, '..', 'data', 'commerce-model.json');
+
+function loadModel() {
+  if (_modelCache) return _modelCache;
+  try {
+    _modelCache = normalizeModel(JSON.parse(fs.readFileSync(MODEL_FILE, 'utf8')));
+  } catch (_) {
+    _modelCache = normalizeModel(defaultCatalogue());
+  }
+  return _modelCache;
+}
+
+function saveModel(model) {
+  const next = { ...model, updatedAt: new Date().toISOString() };
+  fs.mkdirSync(path.dirname(MODEL_FILE), { recursive: true });
+  const temp = `${MODEL_FILE}.${process.pid}.tmp`;
+  fs.writeFileSync(temp, JSON.stringify(next, null, 2), { mode: 0o600 });
+  fs.renameSync(temp, MODEL_FILE);
+  _modelCache = next;
+  return next;
+}
+
+/** Every effect still awaiting a business decision, biggest question first. */
+function decisionQueue(model) {
+  const out = [];
+  for (const product of Object.values(model.products)) {
+    for (const effect of product.effects) {
+      if (effect.policy !== 'pending') continue;
+      out.push({
+        product: product.key,
+        label: product.label,
+        type: product.type,
+        entitlementType: effect.entitlementType,
+        key: effect.key,
+        duration: effect.duration,
+        note: effect.note,
+        destination: product.presentation.destination || null,
+      });
+    }
+  }
+  return out;
+}
+
 
 function loadRegistry() {
   if (_registryCache) return _registryCache;
@@ -445,6 +491,67 @@ async function handle(req, res, url, deps) {
     return ok({ observed: list.length, added, health: registryHealth(registry) });
   }
 
+  // ---- canonical commerce model ----
+  if (p === '/api/admin/commerce/model' && method === 'GET') {
+    const model = loadModel();
+    const products = Object.values(model.products).map((product) => ({
+      ...product,
+      effectSummary: effectsForPurchase(model, product.key).reason,
+    }));
+    return ok({
+      products,
+      productTypes: PRODUCT_TYPES,
+      effectlessTypes: EFFECTLESS_TYPES,
+      policyStates: EFFECT_POLICY_STATES,
+      decisions: decisionQueue(model),
+      updatedAt: model.updatedAt,
+    });
+  }
+
+  // The POLICY approval — deliberately a different route, and a different
+  // decision, from mapping an external product to a canonical one.
+  if (p === '/api/admin/commerce/policy' && method === 'POST') {
+    const body = await readJsonBody(req).catch(() => ({}));
+    const model = loadModel();
+    const result = setEffectPolicy(model, text(body.product, 60), text(body.entitlementType, 40),
+      text(body.policy, 20), { note: text(body.note, 300) });
+    if (!result.ok) return bad(result.reason);
+    saveModel(model);
+    const store = loadLedger();
+    auditEntry(store, {
+      action: 'commerce.policy',
+      note: `${body.product} ${body.entitlementType}: ${result.from} to ${result.to}`,
+    });
+    saveLedger(store);
+    return ok({ effect: result.effect, decisions: decisionQueue(model) });
+  }
+
+  if (p === '/api/admin/commerce/candidates' && method === 'GET') {
+    const registry = loadRegistry();
+    const catalog = loadStoreCatalog ? loadStoreCatalog() : null;
+    const list = generateCandidates(registry, { catalog });
+    return ok({ candidates: list.slice(0, 200), coverage: candidateCoverage(list) });
+  }
+
+  // Dry run. Reads the ledger to resolve identity and writes nothing.
+  if (p === '/api/admin/commerce/simulate' && method === 'POST') {
+    const body = await readJsonBody(req).catch(() => ({}));
+    const store = loadLedger();
+    const registry = loadRegistry();
+    const model = loadModel();
+    if (body.standard) {
+      return ok({ scenarios: standardScenarios(store, registry, model), outcomes: OUTCOMES });
+    }
+    return ok({
+      result: simulatePurchase(store, registry, model, {
+        system: text(body.system, 20),
+        externalId: text(body.externalId, 80),
+        identity: body.identity && typeof body.identity === 'object' ? body.identity : {},
+        refunded: Boolean(body.refunded),
+      }),
+    });
+  }
+
   // ---- the Gaia store shelf ----
   if (p === '/api/admin/store/catalog' && method === 'GET') {
     if (!loadStoreCatalog) return bad('store_sync_unavailable');
@@ -521,4 +628,4 @@ async function handle(req, res, url, deps) {
   return sendJson(res, 404, { ok: false, reason: 'unknown_admin_route' }, origin);
 }
 
-export { handle, loadPolicy, savePolicy, loadRegistry, saveRegistry, POLICY_FILE, REGISTRY_FILE };
+export { handle, loadPolicy, savePolicy, loadRegistry, saveRegistry, loadModel, saveModel, POLICY_FILE, REGISTRY_FILE, MODEL_FILE };

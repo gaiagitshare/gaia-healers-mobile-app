@@ -60,10 +60,10 @@
   // ── shell ───────────────────────────────────────────────────
   function render() {
     panel.innerHTML =
-      '<div class="g-tabs g-tabs--5" role="tablist" aria-label="Membership sections">'
-      + ['members', 'plans', 'products', 'sources', 'audit'].map((key) => '<button type="button" class="g-tab'
+      '<div class="g-tabs g-tabs--6" role="tablist" aria-label="Membership sections">'
+      + ['members', 'plans', 'products', 'commerce', 'sources', 'audit'].map((key) => '<button type="button" class="g-tab'
         + (view === key ? ' is-active' : '') + '" data-ms-view="' + key + '" role="tab" aria-selected="'
-        + (view === key) + '">' + ({ plans: 'Plans &amp; Benefits', sources: 'Integrations', products: 'Products' }[key]
+        + (view === key) + '">' + ({ plans: 'Plans &amp; Benefits', sources: 'Integrations', products: 'Products', commerce: 'Commerce' }[key]
         || key[0].toUpperCase() + key.slice(1)) + '</button>').join('')
       + '</div><div id="ms-body"></div>';
     panel.querySelectorAll('[data-ms-view]').forEach((tab) => tab.addEventListener('click', () => {
@@ -72,6 +72,7 @@
     if (view === 'members') renderMembers();
     else if (view === 'plans') renderPlans();
     else if (view === 'products') renderProducts();
+    else if (view === 'commerce') renderCommerce();
     else if (view === 'sources') renderSources();
     else renderAudit();
   }
@@ -425,6 +426,123 @@
   }
 
 
+
+
+  // ── canonical commerce model ─────────────────────────────────
+  async function renderCommerce() {
+    const body = el('ms-body');
+    body.innerHTML = '<p class="g-empty">Loading the commerce model…</p>';
+    const [model, cands, sim] = await Promise.all([
+      api('GET', '/api/admin/commerce/model'),
+      api('GET', '/api/admin/commerce/candidates'),
+      api('POST', '/api/admin/commerce/simulate', { standard: true }),
+    ]);
+    if (!model || !model.ok) { body.innerHTML = '<p class="g-empty">Could not load the commerce model.</p>'; return; }
+
+    body.innerHTML =
+      '<article class="g-card"><p class="g-card__label">What Gaia sells</p>'
+      + '<p class="g-text-muted">Two decisions live here and they are deliberately separate. '
+      + '<b>Mapping</b> says which external product this is — that happens in the Products tab. '
+      + '<b>Policy</b> says what buying it grants. A product can be perfectly identified while what it '
+      + 'grants is still an open question, and in that state it grants nothing at all.</p></article>'
+      + decisionsCard(model.decisions || [])
+      + coverageCard(cands)
+      + simulatorCard((sim && sim.scenarios) || [])
+      + productsCard(model.products || []);
+
+    (model.decisions || []).forEach((d, i) => {
+      ['approved', 'none'].forEach((state) => {
+        on('ms-dec-' + i + '-' + state, 'click', async () => {
+          status('ms-dec-status', 'Saving…');
+          const r = await api('POST', '/api/admin/commerce/policy',
+            { product: d.product, entitlementType: d.entitlementType, policy: state });
+          if (!r.ok) { status('ms-dec-status', 'Refused: ' + esc(r.reason || 'unknown'), 'err'); return; }
+          renderCommerce();
+        });
+      });
+    });
+  }
+
+  function decisionsCard(decisions) {
+    return '<article class="g-card"><p class="g-card__label">Waiting on a business decision</p>'
+      + (decisions.length
+        ? '<p class="g-text-muted">Each of these is a product we have identified precisely and whose '
+          + 'access rule nobody has decided yet. Until you decide, it grants nothing.</p>'
+          + decisions.map((d, i) => '<div class="g-admin-item" style="display:block">'
+            + '<div><b>' + esc(d.label) + '</b> <span class="g-tag">' + esc(d.type) + '</span><br>'
+            + '<span class="g-text-muted">would propose <b>' + esc(d.entitlementType) + ':' + esc(d.key) + '</b>'
+            + ' · ' + esc(durationText(d.duration)) + '</span>'
+            + (d.note ? '<br><span class="g-text-muted">' + esc(d.note) + '</span>' : '')
+            + (d.destination ? '<br><span class="g-text-muted">meanwhile sends the member to ' + esc(d.destination) + '</span>' : '')
+            + '</div>'
+            + '<div class="g-card__actions">'
+            + '<button class="g-btn g-btn--primary g-btn--sm" id="ms-dec-' + i + '-approved">Approve this effect</button>'
+            + '<button class="g-btn g-btn--ghost g-btn--sm" id="ms-dec-' + i + '-none">Grants nothing</button>'
+            + '</div></div>').join('')
+        : '<p class="g-empty">Nothing pending. Every identified product has a decided policy.</p>')
+      + '<p class="g-admin-status" id="ms-dec-status"></p></article>';
+  }
+
+  function durationText(d) {
+    if (!d) return 'no duration';
+    if (d.kind === 'term') return d.months + ' months from ' + d.from;
+    if (d.kind === 'event') return 'lasts for the event';
+    if (d.kind === 'billing') return 'while the billing period lasts';
+    if (d.kind === 'period') return 'per ' + d.period;
+    if (d.kind === 'explicit') return 'explicit dates';
+    return 'perpetual';
+  }
+
+  function coverageCard(cands) {
+    if (!cands || !cands.ok) return '';
+    const c = cands.coverage || {};
+    const pct = c.totalOrders ? Math.round(100 * c.ordersWithCandidate / c.totalOrders) : 0;
+    return '<article class="g-card"><p class="g-card__label">Suggested mappings</p>'
+      + '<p class="g-text-muted">Generated from evidence — a SKU first, then an exact price, and a title '
+      + 'last and lowest. Nothing here is applied; every suggestion waits for a person.</p>'
+      + '<p>' + (c.withCandidate || 0) + ' of ' + (c.products || 0) + ' products have a suggestion, '
+      + 'covering ' + pct + '% of everything ever sold.</p>'
+      + '<div class="g-tagrow">'
+      + ['high', 'medium', 'low'].map((k) => '<span class="g-tag">' + k + ': '
+        + ((c.byConfidence && c.byConfidence[k] && c.byConfidence[k].products) || 0) + '</span>').join('')
+      + '</div></article>';
+  }
+
+  function simulatorCard(scenarios) {
+    if (!scenarios.length) return '';
+    const badge = { proposal: 'good', no_entitlement: '', policy_decision_required: 'warn',
+      unresolved_product: 'warn', unresolved_identity: 'crit', non_product: '' };
+    return '<article class="g-card"><p class="g-card__label">If these purchases arrived right now</p>'
+      + '<p class="g-text-muted">A dry run. It reads the ledger to work out who someone is and has no way '
+      + 'to write to it.</p>'
+      + scenarios.map((s) => '<div class="g-admin-item"><div><b>' + esc(s.label) + '</b> '
+        + '<span class="g-tag">' + esc(String(s.outcome).replace(/_/g, ' ')) + '</span><br>'
+        + '<span class="g-text-muted">'
+        + (s.proposals.length
+          ? 'would propose ' + esc(s.proposals.map((p) => p.type + ':' + p.key).join(', '))
+          : 'proposes nothing')
+        + (s.pending.length ? ' · ' + s.pending.length + ' awaiting a decision' : '')
+        + (s.destination ? ' · sends to ' + esc(String(s.destination).replace(/^https?:\/\//, '')) : '')
+        + '</span></div></div>').join('')
+      + '</article>';
+  }
+
+  function productsCard(products) {
+    const byType = {};
+    for (const p of products) (byType[p.type] = byType[p.type] || []).push(p);
+    return '<article class="g-card"><p class="g-card__label">Canonical products</p>'
+      + Object.keys(byType).sort().map((type) => '<p class="g-label">' + esc(type)
+        + ' (' + byType[type].length + ')</p>'
+        + byType[type].map((p) => '<div class="g-admin-item"><div><b>' + esc(p.label) + '</b> '
+          + '<span class="g-text-muted">' + esc(p.key) + '</span><br><span class="g-text-muted">'
+          + (p.components && p.components.length
+            ? 'contains ' + esc(p.components.map((c) => c.productKey).join(', '))
+            : (p.effects || []).length
+              ? (p.effects || []).map((e) => e.entitlementType + ':' + e.key + ' [' + e.policy + ']').join(', ')
+              : 'grants nothing')
+          + '</span></div></div>').join('')).join('')
+      + '</article>';
+  }
 
   // ── canonical product registry ───────────────────────────────
   let registry = { canonical: [], implications: {} };

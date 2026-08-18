@@ -1078,3 +1078,36 @@ body{overscroll-behavior-y:none;-webkit-tap-highlight-color:transparent}
   color:#FFC53D;padding:8px 12px;border-radius:10px;
   background:rgba(255,197,61,.09);border:1px solid rgba(255,197,61,.3)}
 .g-ticket__offline{margin-top:12px;max-width:34ch;text-align:center}
+
+/* ── People ───────────────────────────────────────────────────────────────
+   The join panel leads because the directory is opt-in: the first thing on
+   the tab is the choice, not other people's names. */
+.g-people{display:flex;flex-direction:column;gap:18px}
+.g-people__join{border:1px dashed rgba(255,255,255,.2);border-radius:16px;padding:16px;
+  display:flex;flex-direction:column;gap:10px;align-items:flex-start}
+.g-people__join.is-on{border-style:solid;border-color:rgba(168,224,99,.35);
+  background:rgba(168,224,99,.06)}
+.g-people__join p{margin:0;font-size:.92rem;line-height:1.55;color:rgba(255,255,255,.75);max-width:52ch}
+.g-people__join strong{color:#fff}
+.g-people__biolabel{width:100%;display:flex;flex-direction:column;gap:4px}
+.g-people__biolabel span{font-size:.72rem;letter-spacing:.1em;text-transform:uppercase;
+  font-weight:700;color:rgba(255,255,255,.5)}
+.g-people__biolabel input{width:100%;min-height:44px;padding:10px 14px;border-radius:12px;
+  border:1px solid rgba(255,255,255,.15);background:rgba(255,255,255,.05);color:#fff;font-size:.92rem}
+.g-people__group{display:flex;flex-direction:column;gap:8px}
+.g-people__group h3{margin:0;font-size:.72rem;letter-spacing:.13em;text-transform:uppercase;
+  font-weight:700;color:rgba(255,255,255,.5)}
+.g-people__card{display:flex;align-items:center;justify-content:space-between;gap:12px;
+  padding:12px 14px;border-radius:14px;border:1px solid rgba(255,255,255,.09);
+  background:rgba(255,255,255,.04)}
+.g-people__who{min-width:0}
+.g-people__who h4{margin:0;font-size:.98rem;font-weight:650;color:#fff}
+.g-people__who p{margin:2px 0 0;font-size:.82rem;color:rgba(255,255,255,.62)}
+.g-people__bio{font-style:italic}
+.g-people__email a{color:var(--g-accent,#A8E063);text-decoration:none;font-size:.86rem}
+.g-people__email a:hover{text-decoration:underline}
+.g-people__state{flex:0 0 auto;font-size:.78rem;font-weight:650;color:rgba(255,255,255,.55)}
+.g-people__state.is-good{color:#7DD956}
+.g-people__respond{display:flex;gap:6px;flex:0 0 auto}
+.g-people__respond .g-btn{min-height:44px}
+.g-people__empty{margin:0;font-size:.88rem;color:rgba(255,255,255,.55)}

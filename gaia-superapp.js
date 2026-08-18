@@ -702,7 +702,8 @@
   const eventUI = { tab: 'overview', past: null, pastLoading: false, live: {} };
   const EVENT_TABS = [
     ['overview', 'Overview'], ['agenda', 'Agenda'], ['speakers', 'Speakers'],
-    ['exhibitors', 'Exhibitors'], ['map', 'Map'], ['sponsors', 'Sponsors'], ['updates', 'Updates'],
+    ['exhibitors', 'Exhibitors'], ['map', 'Map'], ['people', 'People'],
+    ['sponsors', 'Sponsors'], ['updates', 'Updates'],
   ];
 
   // The server states the time; the device only measures elapsed time since.
@@ -865,6 +866,7 @@
   function eventTabPanel(tab, detail, live) {
     if (tab === 'agenda') return agendaSection(detail);
     if (tab === 'map') return mapSection(detail);
+    if (tab === 'people') return window.GaiaPeople ? window.GaiaPeople.panelHtml() : '';
     if (tab === 'speakers') return speakersSection(detail);
     if (tab === 'exhibitors') return directorySection(detail);
     if (tab === 'sponsors') return sponsorsSection(detail);
@@ -878,6 +880,7 @@
     if (tab === 'speakers') return Boolean(detail?.speakers?.length);
     if (tab === 'exhibitors') return Boolean(detail?.exhibitors?.length);
     if (tab === 'map') return Boolean(detail?.map);
+    if (tab === 'people') return Boolean(window.GaiaPeople && window.GaiaPeople.available());
     if (tab === 'sponsors') return Boolean(detail?.sponsors?.length);
     if (tab === 'updates') return Boolean(detail?.announcements?.length);
     return false;
@@ -896,6 +899,9 @@
     if (window.GaiaMySchedule && scheduleLoadedFor !== eventId) {
       scheduleLoadedFor = eventId;
       window.GaiaMySchedule.load(eventId).then(() => render()).catch(() => {});
+      // People rides the same cycle: it decides for itself whether this event
+      // and this visitor get a directory at all.
+      if (window.GaiaPeople) window.GaiaPeople.load(eventId).then(() => render()).catch(() => {});
     }
     const detail = eventDetail.data && eventDetail.id === eventId ? eventDetail.data : null;
     const live = eventLive.id === eventId ? eventLive.data : null;
@@ -960,6 +966,7 @@
     // finger that tapped it. The My Schedule panel is refreshed on the next
     // visit to the tab rather than mid-tap.
     if (window.GaiaMySchedule) window.GaiaMySchedule.bind(root, eventId);
+    if (window.GaiaPeople && eventUI.tab === 'people') window.GaiaPeople.bind(root, eventId, render);
     // Tapping a legend row (or a pin) highlights that pin and scrolls it into
     // view — the closest a flat plan gets to "take me there".
     root.querySelectorAll('[data-map-place]').forEach((el) => {

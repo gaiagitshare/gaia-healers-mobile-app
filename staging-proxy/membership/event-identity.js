@@ -224,4 +224,30 @@ async function changeWorkshop(session, eventId, sessionId, action) {
   return { authenticated: true, ...(result || { ok: false, reason: 'identity_failed' }) };
 }
 
-export { myEvents, myTicket, mySchedule, changeSchedule, changeWorkshop, identityFromSession, phaseOf, toAppRow };
+/**
+ * Networking calls. One generic bridge: every route re-proves ownership on the
+ * Event Manager side, and the browser can only ever act as the person the
+ * session cookie says they are.
+ */
+async function networking(session, eventId, action, extra = {}) {
+  const identity = identityFromSession(session);
+  if (!identity) return { ok: false, authenticated: false, reason: 'auth_required' };
+  const numericEvent = Number(eventId);
+  if (!Number.isInteger(numericEvent) || numericEvent <= 0) {
+    return { ok: false, authenticated: true, reason: 'bad_event_id' };
+  }
+  const paths = {
+    profile: '/identity/networking/profile',
+    directory: '/identity/networking/directory',
+    connect: '/identity/networking/connect',
+    respond: '/identity/networking/respond',
+    connections: '/identity/networking/connections',
+  };
+  if (!paths[action]) return { ok: false, authenticated: true, reason: 'bad_action' };
+  const result = await callEventIdentity(paths[action], {
+    ...identity, event_id: numericEvent, ...extra,
+  });
+  return { authenticated: true, ...(result || { ok: false, reason: 'identity_failed' }) };
+}
+
+export { myEvents, myTicket, mySchedule, changeSchedule, changeWorkshop, networking, identityFromSession, phaseOf, toAppRow };

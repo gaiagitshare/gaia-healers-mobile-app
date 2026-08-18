@@ -4652,6 +4652,21 @@ const server = http.createServer(async (req, res) => {
       });
       return;
     }
+    if (req.method === 'POST' && /^\/api\/events\/\d+\/networking$/.test(url.pathname)) {
+      const session = cookieForRequest(req);
+      const body = await readJsonBody(req).catch(() => ({}));
+      const extra = {};
+      if (body.action === 'profile') { extra.visible = body.visible === true; extra.bio = String(body.bio || ''); }
+      if (body.action === 'connect') extra.target_attendee_id = Number(body.targetAttendeeId) || 0;
+      if (body.action === 'respond') { extra.connection_id = Number(body.connectionId) || 0; extra.accept = body.accept === true; }
+      const result = await eventIdentity.networking(
+        session, url.pathname.split('/')[3], String(body.action || ''), extra,
+      );
+      sendJson(res, result.authenticated === false ? 401 : 200, result, origin, {
+        'Cache-Control': 'private, no-store',
+      });
+      return;
+    }
     if (req.method === 'GET' && /^\/api\/events\/\d+\/live$/.test(url.pathname)) {
       await eventLive(req, res, origin, url.pathname.split('/')[3]);
       return;

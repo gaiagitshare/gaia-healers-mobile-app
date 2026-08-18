@@ -69,13 +69,19 @@
   // answers, and the session is gone.
   window.addEventListener('gaia:signed-out', clearOfflineCopies);
 
-  async function api(path) {
+  async function api(path, body) {
+    const options = {
+      headers: { Accept: 'application/json' },
+      credentials: 'include',
+      cache: 'no-store',
+    };
+    if (body !== undefined) {
+      options.method = 'POST';
+      options.headers['Content-Type'] = 'application/json';
+      options.body = JSON.stringify(body);
+    }
     try {
-      const response = await fetch(proxyBase() + path, {
-        headers: { Accept: 'application/json' },
-        credentials: 'include',
-        cache: 'no-store',
-      });
+      const response = await fetch(proxyBase() + path, options);
       return await response.json();
     } catch (_) {
       return { ok: false, reason: 'network' };
@@ -161,6 +167,17 @@
       + '<a class="g-btn g-btn--ghost g-btn--sm" href="home.html?view=events&event=' + esc(item.id) + '">'
       + 'Programme</a>'
       + '</div>'
+      // Rating appears once there is something to rate — during and after,
+      // never before. Pre-filled with their own stars; a change updates the
+      // same opinion rather than stacking a new one.
+      + (item.phase !== 'upcoming'
+        ? '<div class="g-mye__rate" data-rate-event="' + esc(item.id) + '">'
+          + '<span class="g-mye__ratelabel">' + (item.phase === 'past' ? 'How was it?' : 'How is it so far?') + '</span>'
+          + '<span class="g-mye__stars" role="radiogroup" aria-label="Rate this event">'
+          + [1, 2, 3, 4, 5].map((n) => '<button type="button" class="g-mye__star" data-rate-star="'
+            + n + '" aria-label="' + n + ' of 5">☆</button>').join('')
+          + '</span><span class="g-mye__ratedone" hidden>Thank you</span></div>'
+        : '')
       + '</article>';
   }
 
@@ -314,6 +331,42 @@
 
   // ── Wiring ────────────────────────────────────────────────────────────────
 
+  const myRatings = {};   // eventId -> rating for the event overall
+
+  function paintStars(block, rating) {
+    block.querySelectorAll('[data-rate-star]').forEach((star) => {
+      star.textContent = Number(star.dataset.rateStar) <= rating ? '★' : '☆';
+      star.classList.toggle('is-on', Number(star.dataset.rateStar) <= rating);
+    });
+  }
+
+  async function bindRating(host) {
+    host.querySelectorAll('[data-rate-event]').forEach(async (block) => {
+      const eventId = block.dataset.rateEvent;
+      if (!(eventId in myRatings)) {
+        const mine = await api('/api/events/' + encodeURIComponent(eventId) + '/feedback', { mine: true });
+        const overall = mine && mine.ok && (mine.ratings || []).find((r) => r.session_id == null);
+        myRatings[eventId] = overall ? overall.rating : 0;
+      }
+      paintStars(block, myRatings[eventId]);
+      block.querySelectorAll('[data-rate-star]').forEach((star) => {
+        star.addEventListener('click', async () => {
+          const rating = Number(star.dataset.rateStar);
+          paintStars(block, rating);   // instant; the network confirms after
+          const result = await api('/api/events/' + encodeURIComponent(eventId) + '/feedback',
+            { rating });
+          if (result && result.ok === true) {
+            myRatings[eventId] = rating;
+            const done = block.querySelector('.g-mye__ratedone');
+            if (done) { done.hidden = false; setTimeout(() => { done.hidden = true; }, 2500); }
+          } else {
+            paintStars(block, myRatings[eventId] || 0);   // truthfully revert
+          }
+        });
+      });
+    });
+  }
+
   async function render() {
     const hosts = document.querySelectorAll('[data-myevents-host]');
     if (!hosts.length) return;
@@ -327,6 +380,7 @@
         await loadMine(true);
         render();
       });
+      bindRating(host);
     });
   }
 

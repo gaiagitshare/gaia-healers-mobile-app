@@ -4667,6 +4667,15 @@ const server = http.createServer(async (req, res) => {
       });
       return;
     }
+    if (req.method === 'POST' && /^\/api\/events\/\d+\/feedback$/.test(url.pathname)) {
+      const session = cookieForRequest(req);
+      const body = await readJsonBody(req).catch(() => ({}));
+      const result = await eventIdentity.feedback(session, url.pathname.split('/')[3], body);
+      sendJson(res, result.authenticated === false ? 401 : 200, result, origin, {
+        'Cache-Control': 'private, no-store',
+      });
+      return;
+    }
     if (req.method === 'GET' && /^\/api\/events\/\d+\/live$/.test(url.pathname)) {
       await eventLive(req, res, origin, url.pathname.split('/')[3]);
       return;

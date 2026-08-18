@@ -250,4 +250,28 @@ async function networking(session, eventId, action, extra = {}) {
   return { authenticated: true, ...(result || { ok: false, reason: 'identity_failed' }) };
 }
 
-export { myEvents, myTicket, mySchedule, changeSchedule, changeWorkshop, networking, identityFromSession, phaseOf, toAppRow };
+/** Submit or read this person's own ratings. */
+async function feedback(session, eventId, body) {
+  const identity = identityFromSession(session);
+  if (!identity) return { ok: false, authenticated: false, reason: 'auth_required' };
+  const numericEvent = Number(eventId);
+  if (!Number.isInteger(numericEvent) || numericEvent <= 0) {
+    return { ok: false, authenticated: true, reason: 'bad_event_id' };
+  }
+  if (body && body.mine) {
+    const result = await callEventIdentity('/identity/feedback/mine',
+      { ...identity, event_id: numericEvent });
+    return { authenticated: true, ...(result || { ok: false, reason: 'identity_failed' }) };
+  }
+  const rating = Number(body && body.rating);
+  const result = await callEventIdentity('/identity/feedback', {
+    ...identity,
+    event_id: numericEvent,
+    session_id: body && body.sessionId != null ? Number(body.sessionId) : null,
+    rating,
+    comment: String((body && body.comment) || '').slice(0, 1000),
+  });
+  return { authenticated: true, ...(result || { ok: false, reason: 'identity_failed' }) };
+}
+
+export { myEvents, myTicket, mySchedule, changeSchedule, changeWorkshop, networking, feedback, identityFromSession, phaseOf, toAppRow };

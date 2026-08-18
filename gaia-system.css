@@ -1121,3 +1121,24 @@ body{overscroll-behavior-y:none;-webkit-tap-highlight-color:transparent}
   font-size:1.4rem;line-height:1;color:rgba(255,255,255,.45);padding:0}
 .g-mye__star.is-on{color:#FFC53D}
 .g-mye__ratedone{font-size:.8rem;font-weight:650;color:#7DD956}
+
+
+/* ── Mobile: the sky card, condensed ──────────────────────────────────────
+   Same reading, half the height: a smaller moon, tighter copy, and the
+   signup invite as one row instead of a boxed paragraph. */
+@media (max-width: 480px) {
+  .g-sky { gap: 9px; }
+  .g-sky__art { width: 62px; height: 62px; }
+  .g-sky__phase { font-size: 1.16rem; }
+  .g-sky__facts { margin-top: 4px; }
+  .g-sky__facts span { font-size: .72rem; padding: 2px 8px; }
+  .g-sky__theme { display: none; }          /* the invitation carries it */
+  .g-sky__invitation { font-size: .9rem; line-height: 1.45; }
+  .g-sky__practice { font-size: .84rem; line-height: 1.45; padding: 9px 11px; }
+  .g-sky__invite { padding: 11px 12px; gap: 4px; }
+  .g-sky__invite p { font-size: .82rem; line-height: 1.4; }
+  .g-sky__invite-head { display: none; }    /* the ask itself is the line that matters */
+  .g-sky__invite .g-btn { margin-top: 2px; }
+  .g-sky__foot { padding-top: 8px; font-size: .72rem; }
+  .g-sky__source { display: none; }         /* charming, not essential */
+}

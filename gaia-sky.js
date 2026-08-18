@@ -138,8 +138,7 @@
         // vague "unlock more".
         : '<div class="g-sky__invite">'
           + '<p class="g-sky__invite-head">This is the sky for everyone today.</p>'
-          + '<p>Add your birth date and Gaia will read it against your own chart '
-          + '— which of your centres this moon meets, and what that asks of you.</p>'
+          + '<p>Add your birth date to see which of your centres this moon meets.</p>'
           + '<a class="g-btn g-btn--primary g-btn--sm" href="home.html?view=wellness&amp;tab=check">'
           + 'Read my chart</a>'
           + '</div>')

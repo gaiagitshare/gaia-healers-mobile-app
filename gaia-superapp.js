@@ -114,6 +114,36 @@
 
   // Organiser updates, shown whether or not live mode is on. The useful ones —
   // travel, hotel block, "the schedule is up" — go out weeks beforehand.
+  // Which announcements this device has already seen, per event. Kept locally:
+  // "seen" is a fact about this screen, not about the person's account, and it
+  // must keep working for visitors who never sign in.
+  const seenKey = (eventId) => 'gaia:updates-seen:' + eventId;
+  function highestSeen(eventId) {
+    try { return Number(localStorage.getItem(seenKey(eventId)) || 0); } catch (_) { return 0; }
+  }
+  function markUpdatesSeen(eventId, items) {
+    const top = Math.max(0, ...(items || []).map((a) => Number(a.id) || 0));
+    if (!top) return;
+    try {
+      if (top > highestSeen(eventId)) localStorage.setItem(seenKey(eventId), String(top));
+    } catch (_) { /* private browsing */ }
+  }
+  function unseenCount(eventId, items) {
+    const seen = highestSeen(eventId);
+    return (items || []).filter((a) => Number(a.id) > seen).length;
+  }
+
+  /** A brief, self-dismissing notice for something that just changed. */
+  function updateToast(title) {
+    if (document.querySelector('.g-update-toast')) return;   // one at a time
+    const el = document.createElement('div');
+    el.className = 'g-update-toast';
+    el.setAttribute('role', 'status');
+    el.innerHTML = '<strong>Event update</strong><span>' + esc(title) + '</span>';
+    document.body.appendChild(el);
+    setTimeout(() => { el.classList.add('is-leaving'); setTimeout(() => el.remove(), 400); }, 6000);
+  }
+
   function updatesSection(detail, live) {
     const items = Array.isArray(detail?.announcements) ? detail.announcements : [];
     if (!items.length) return '';
@@ -193,6 +223,7 @@
           eventLive.id = id;
           eventLive.data = payload.live;
           eventLive.fetchedAt = Date.now();
+          maybeToastNew(id, payload.live);
           render();
         }
       })
@@ -211,6 +242,19 @@
 
   // Only rendered once an operator switches the live page on, so a half-built
   // agenda never shows up as "happening now".
+  // Announcements arriving mid-refresh get a toast — the person is looking at
+  // some other tab, and a room change they do not see is a room they walk to
+  // wrongly. Only genuinely new ids toast, and only while on this event.
+  let toastedUpTo = 0;
+  function maybeToastNew(eventId, live) {
+    const items = (live && live.announcements) || [];
+    const seen = highestSeen(eventId);
+    const fresh = items.filter((a) => Number(a.id) > Math.max(seen, toastedUpTo));
+    if (!fresh.length) return;
+    toastedUpTo = Math.max(...fresh.map((a) => Number(a.id)));
+    updateToast(fresh[0].title || 'Something changed');
+  }
+
   function liveSection(live) {
     if (!live || !live.live_enabled) return '';
     const counters = live.counters || {};
@@ -860,10 +904,19 @@
       + (item.timezone ? '<div><dt>Local time</dt><dd>' + esc(String(item.timezone).replace(/_/g, ' ')) + '</dd></div>' : '')
       + '</dl>' + registrationCta(item) + '</section>';
 
+    // Marked seen BEFORE the tab bar is built: the dot is computed from the
+    // same stored value, and marking afterwards leaves a stale dot standing
+    // until some unrelated re-render.
+    if (eventUI.tab === 'updates') markUpdatesSeen(eventId, detail?.announcements);
     const tabBar = tabs.length > 1
       ? '<nav class="g-event-tabs" role="tablist">' + tabs.map(([key, label]) =>
         '<button type="button" role="tab" class="g-event-tab' + (eventUI.tab === key ? ' is-active' : '')
-        + '" data-event-tab="' + key + '" aria-selected="' + (eventUI.tab === key) + '">' + esc(label) + '</button>').join('') + '</nav>'
+        + '" data-event-tab="' + key + '" aria-selected="' + (eventUI.tab === key) + '">' + esc(label)
+        // The dot says "something you have not read", quietly. Opening the tab
+        // clears it; nothing nags.
+        + (key === 'updates' && unseenCount(eventId, detail?.announcements)
+          ? '<span class="g-tab-dot" aria-label="new updates"></span>' : '')
+        + '</button>').join('') + '</nav>'
       : '';
 
     root.innerHTML = '<div class="g-super-page-head"><a class="g-event-back" href="home.html?view=events">' + icon('arrow-left') + ' All events</a>'

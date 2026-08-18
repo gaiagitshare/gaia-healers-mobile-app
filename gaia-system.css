@@ -1054,3 +1054,21 @@ body{overscroll-behavior-y:none;-webkit-tap-highlight-color:transparent}
 .g-map__row .g-map__glyph{font-size:1rem}
 .g-map__row strong{display:block;font-size:.9rem;color:#fff}
 .g-map__row em{display:block;font-style:normal;font-size:.78rem;color:rgba(255,255,255,.6)}
+
+/* ── Update notifications ─────────────────────────────────────────────────
+   A dot, and a toast. The dot marks unread updates on the tab and clears the
+   moment the tab is opened; the toast surfaces a change that lands while the
+   person is looking somewhere else. Neither nags. */
+.g-tab-dot{display:inline-block;width:8px;height:8px;border-radius:50%;
+  background:var(--g-accent,#A8E063);margin-left:6px;vertical-align:2px}
+.g-update-toast{position:fixed;left:50%;bottom:calc(96px + env(safe-area-inset-bottom));
+  transform:translateX(-50%);z-index:2147482000;max-width:min(420px,92vw);
+  display:flex;flex-direction:column;gap:2px;padding:12px 18px;border-radius:16px;
+  background:#0E1712;border:1px solid rgba(168,224,99,.4);
+  box-shadow:0 12px 40px rgba(0,0,0,.5);animation:g-toast-in .3s ease}
+.g-update-toast strong{font-size:.72rem;letter-spacing:.12em;text-transform:uppercase;
+  color:var(--g-accent,#A8E063)}
+.g-update-toast span{font-size:.92rem;color:#fff;line-height:1.4}
+.g-update-toast.is-leaving{opacity:0;transition:opacity .4s ease}
+@keyframes g-toast-in{from{opacity:0;transform:translate(-50%,10px)}to{opacity:1;transform:translate(-50%,0)}}
+@media (prefers-reduced-motion: reduce){.g-update-toast{animation:none}}

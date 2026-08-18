@@ -9,7 +9,9 @@ import { migrateStore, migrateContactRecord } from './membership/ledger.js';
 import { resolveMemberAccess } from './membership/resolver.js';
 import { UNRESOLVED_BILLING_IDS } from './membership/config.js';
 import { membershipPlans } from './membership/plans.js';
-import { loadPolicy as loadMembershipPolicy } from './membership/admin-api.js';
+import { syncCatalog, storeView, diffMessages, emptyCatalog } from './membership/store-catalog.js';
+import { audit as recordAudit } from './membership/audit-log.js';
+import { loadPolicy as loadMembershipPolicy, loadRegistry as loadMembershipRegistry } from './membership/admin-api.js';
 import {
   resourceKey, eventTimestamp, eventSequence, decideOrder, watermark,
   noteRejection, domainWatermarkMs,
@@ -414,6 +416,79 @@ function writeJsonAtomic(file, payload) {
   const temp = `${file}.${process.pid}.${Date.now()}.tmp`;
   fs.writeFileSync(temp, JSON.stringify(payload, null, 2), { mode: 0o600 });
   fs.renameSync(temp, file);
+}
+
+const STORE_CATALOG_FILE = process.env.STORE_CATALOG_FILE
+  || path.join(path.dirname(MEMBER_ENTITLEMENTS_FILE), 'store-catalog.json');
+const SHOPIFY_STOREFRONT = process.env.SHOPIFY_STOREFRONT_URL || 'https://gaiahealers.com';
+const STORE_SYNC_INTERVAL_MS = Number(process.env.STORE_SYNC_INTERVAL_MS) || 24 * 60 * 60 * 1000;
+let _storeCatalogCache = null;
+
+function loadStoreCatalog() {
+  if (_storeCatalogCache) return _storeCatalogCache;
+  try { _storeCatalogCache = JSON.parse(fs.readFileSync(STORE_CATALOG_FILE, 'utf8')); }
+  catch (_) { _storeCatalogCache = emptyCatalog(); }
+  return _storeCatalogCache;
+}
+
+function saveStoreCatalog(catalog) {
+  writeJsonAtomic(STORE_CATALOG_FILE, catalog);
+  _storeCatalogCache = catalog;
+}
+
+/**
+ * Read the public Shopify catalogue.
+ *
+ * Public storefront JSON only — no credentials, no admin scopes, nothing that
+ * could mutate the shop. Shopify remains the authority for price and checkout;
+ * this is Gaia keeping a copy of the shelf so the app can browse it.
+ */
+async function fetchShopifyCatalogue({ maxPages = 6, pageSize = 250 } = {}) {
+  const products = [];
+  for (let page = 1; page <= maxPages; page += 1) {
+    const url = `${SHOPIFY_STOREFRONT}/products.json?limit=${pageSize}&page=${page}`;
+    const response = await fetch(url, { headers: { Accept: 'application/json' } });
+    if (!response.ok) throw new Error(`shopify ${response.status}`);
+    const batch = await response.json();
+    const list = Array.isArray(batch?.products) ? batch.products : [];
+    products.push(...list);
+    if (list.length < pageSize) break;
+  }
+  return products;
+}
+
+/**
+ * One sync pass. Never throws into the caller: a Shopify outage must leave the
+ * existing catalogue standing rather than take the store down with it.
+ */
+async function runStoreSync({ reason = 'scheduled' } = {}) {
+  try {
+    const fetched = await fetchShopifyCatalogue();
+    if (!fetched.length) {
+      console.log('[Gaia Store] sync returned no products; keeping the existing catalogue');
+      return { ok: false, reason: 'empty_response' };
+    }
+    const { catalog, diff } = syncCatalog(loadStoreCatalog(), fetched, { now: new Date() });
+    saveStoreCatalog(catalog);
+    const messages = diffMessages(diff);
+    if (messages.length) {
+      console.log(`[Gaia Store] sync (${reason}):`, messages.slice(0, 12).join(' | '));
+    }
+    try {
+      const ledger = loadMemberEntitlements();
+      for (const message of messages.slice(0, 40)) {
+        recordAudit(ledger, { actor: 'store-sync', source: 'shopify', action: 'store.sync', note: message });
+      }
+      if (messages.length) saveMemberEntitlements(ledger);
+    } catch (_) { /* the audit is a courtesy, never a reason to fail a sync */ }
+    return { ok: true, diff, counts: {
+      products: Object.keys(catalog.products).length,
+      added: diff.added.length, priceChanged: diff.priceChanged.length, unobserved: diff.unobserved.length,
+    } };
+  } catch (error) {
+    console.error('[Gaia Store] sync failed:', error.message.split('\n')[0]);
+    return { ok: false, reason: 'fetch_failed' };
+  }
 }
 
 function emptyEntitlementStore() {
@@ -4501,6 +4576,7 @@ const server = http.createServer(async (req, res) => {
         origin, sendJson, readJsonBody, signTokenPayload, readSignedToken,
         parseCookies, ghlGet, ghlConfig, ghlHeaders,
         loadLedger: loadMemberEntitlements, saveLedger: saveMemberEntitlements,
+        loadStoreCatalog, runStoreSync,
       });
       return;
     }
@@ -4536,6 +4612,16 @@ const server = http.createServer(async (req, res) => {
     }
     // Public plan catalogue. Presentation data only — this endpoint has no
     // access to the ledger and nothing it returns can grant anything.
+    // The Gaia shelf. Served from Gaia's own synced copy so the app does not
+    // depend on Shopify being reachable, and so the catalogue can be organised
+    // by Gaia's categories rather than Shopify's. Buying still leaves for
+    // Shopify — Gaia never sees a payment.
+    if (req.method === 'GET' && url.pathname === '/api/store/catalog') {
+      let registry = { mappings: {}, canonical: {} };
+      try { registry = loadMembershipRegistry(); } catch (_) { /* unmapped is fine */ }
+      sendJson(res, 200, { ok: true, ...storeView(loadStoreCatalog(), registry) }, origin);
+      return;
+    }
     if (req.method === 'GET' && url.pathname === '/api/membership/plans') {
       // Served from the policy an operator edits, so the Store and the Control
       // Center can never disagree about what a plan costs or promises.
@@ -4655,4 +4741,12 @@ const server = http.createServer(async (req, res) => {
 
 server.listen(PORT, HOST, () => {
   console.log(`Gaia staging proxy listening on ${HOST}:${PORT}`);
+
+  // Daily store sync. Disabled under test so the suite never reaches out to a
+  // real storefront, and staggered a minute after boot so a restart loop
+  // cannot turn into a request loop.
+  if (process.env.STORE_SYNC_ENABLED !== 'false' && !process.env.MEMBER_ENTITLEMENTS_FILE?.includes('tmp')) {
+    setTimeout(() => { runStoreSync({ reason: 'startup' }); }, 60_000).unref();
+    setInterval(() => { runStoreSync({ reason: 'daily' }); }, STORE_SYNC_INTERVAL_MS).unref();
+  }
 });

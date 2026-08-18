@@ -152,7 +152,7 @@ function summarize(store, id) {
  * server.js so this module owns no transport or persistence policy of its own.
  */
 async function handle(req, res, url, deps) {
-  const { origin, sendJson, readJsonBody, loadLedger, saveLedger } = deps;
+  const { origin, sendJson, readJsonBody, loadLedger, saveLedger, loadStoreCatalog, runStoreSync } = deps;
   const p = url.pathname.replace(/\/+$/, '') || url.pathname;
   const method = req.method;
   const policy = loadPolicy();
@@ -445,6 +445,55 @@ async function handle(req, res, url, deps) {
     return ok({ observed: list.length, added, health: registryHealth(registry) });
   }
 
+  // ---- the Gaia store shelf ----
+  if (p === '/api/admin/store/catalog' && method === 'GET') {
+    if (!loadStoreCatalog) return bad('store_sync_unavailable');
+    const catalog = loadStoreCatalog();
+    const registry = loadRegistry();
+    const rows = Object.values(catalog.products || {}).map((item) => {
+      const mapping = registry.mappings[`shopify:${item.externalId}`];
+      return {
+        externalId: item.externalId,
+        title: item.title,
+        price: money(item.priceCents),
+        previousPrice: money(item.previousPriceCents),
+        available: item.available,
+        observed: item.observed !== false,
+        hidden: Boolean(item.hidden),
+        url: item.url,
+        image: item.images?.[0] || null,
+        lastObservedAt: item.lastObservedAt || null,
+        canonical: mapping?.canonical || null,
+        mappingStatus: mapping?.canonical
+          ? (mapping.confidence === 'confirmed' ? 'confirmed' : 'needs_review')
+          : 'unmapped',
+        // Always Shopify. Gaia is the shelf, never the till.
+        checkout: 'shopify',
+      };
+    }).sort((a, b) => Number(a.canonical ? 1 : 0) - Number(b.canonical ? 1 : 0)
+      || a.title.localeCompare(b.title));
+
+    return ok({
+      products: rows,
+      syncedAt: catalog.syncedAt || null,
+      origin: catalog.origin || null,
+      lastDiff: catalog.lastDiff || null,
+      counts: {
+        total: rows.length,
+        unmapped: rows.filter((r) => r.mappingStatus === 'unmapped').length,
+        unobserved: rows.filter((r) => !r.observed).length,
+      },
+      view: storeView(catalog, registry),
+    });
+  }
+
+  if (p === '/api/admin/store/sync' && method === 'POST') {
+    if (!runStoreSync) return bad('store_sync_unavailable');
+    const result = await runStoreSync({ reason: 'manual' });
+    if (!result.ok) return bad(result.reason);
+    return ok({ counts: result.counts, diff: result.diff });
+  }
+
   // ---- audit ----
   if (p === '/api/admin/membership/audit' && method === 'GET') {
     const store = loadLedger();
@@ -455,4 +504,4 @@ async function handle(req, res, url, deps) {
   return sendJson(res, 404, { ok: false, reason: 'unknown_admin_route' }, origin);
 }
 
-export { handle, loadPolicy, savePolicy, POLICY_FILE };
+export { handle, loadPolicy, savePolicy, loadRegistry, saveRegistry, POLICY_FILE, REGISTRY_FILE };

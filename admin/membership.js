@@ -432,12 +432,15 @@
   async function renderProducts() {
     const body = el('ms-body');
     body.innerHTML = '<p class="g-empty">Loading products…</p>';
-    const res = await api('GET', '/api/admin/membership/products');
+    const [res, store] = await Promise.all([
+      api('GET', '/api/admin/membership/products'),
+      api('GET', '/api/admin/store/catalog'),
+    ]);
     if (!res || !res.ok) { body.innerHTML = '<p class="g-empty">Could not load the product registry.</p>'; return; }
     registry = res;
     const h = res.health || {};
 
-    body.innerHTML =
+    body.innerHTML = storeCard(store) +
       '<article class="g-card"><p class="g-card__label">What each product means</p>'
       + '<p class="g-text-muted">One device can be sold under many product ids across Shopify and GHL. '
       + 'Mapping them to a single Gaia product is what lets a purchase become access. '
@@ -461,6 +464,18 @@
         : '<p class="g-empty">Nothing mapped yet.</p>')
       + '</article>';
 
+    on('ms-store-sync', 'click', async () => {
+      status('ms-store-status', 'Reading the Shopify storefront…');
+      const r = await api('POST', '/api/admin/store/sync');
+      if (!r.ok) {
+        status('ms-store-status', r.reason === 'empty_response'
+          ? 'Shopify returned nothing. The store is unchanged — nothing was removed.'
+          : 'Could not reach Shopify. The store is unchanged.', 'err');
+        return;
+      }
+      renderProducts();
+    });
+
     (res.products || []).slice(0, 100).forEach((p) => {
       on('ms-map-' + rowId(p), 'click', async () => {
         const select = el('ms-canon-' + rowId(p));
@@ -474,6 +489,38 @@
         renderProducts();
       });
     });
+  }
+
+  /** What the daily sync last saw, and what it changed. */
+  function storeCard(store) {
+    if (!store || !store.ok) {
+      return '<article class="g-card"><p class="g-card__label">Gaia store</p>'
+        + '<p class="g-empty">The store catalogue is not available.</p></article>';
+    }
+    const d = store.lastDiff || {};
+    const c = store.counts || {};
+    const changes = []
+      .concat((d.added || []).map((x) => 'New: ' + x.title))
+      .concat((d.priceChanged || []).map((x) => 'Price changed: ' + x.title))
+      .concat((d.returned || []).map((x) => 'Listed again: ' + x.title))
+      .concat((d.unobserved || []).map((x) => 'No longer on Shopify: ' + x.title));
+
+    return '<article class="g-card"><p class="g-card__label">Gaia store</p>'
+      + '<p class="g-text-muted">Gaia keeps its own copy of the Shopify shelf so the store works even when '
+      + 'Shopify is slow, and can be grouped Gaia\'s way. <b>Shopify still takes every payment</b> — '
+      + 'buying always opens the real product page.</p>'
+      + '<p>' + (c.total || 0) + ' products · ' + (c.unmapped || 0) + ' not yet classified'
+      + ((c.unobserved || 0) ? ' · ' + c.unobserved + ' no longer listed on Shopify' : '') + '</p>'
+      + '<p class="g-text-muted">Last synced ' + esc(store.syncedAt ? store.syncedAt.replace('T', ' ').slice(0, 16) : 'never')
+      + '. Syncs itself once a day.</p>'
+      + (changes.length
+        ? '<p class="g-label">Last sync changed</p>'
+          + changes.slice(0, 10).map((line) => '<div class="g-admin-item"><div><span class="g-text-muted">'
+            + esc(line) + '</span></div></div>').join('')
+        : '<p class="g-text-muted">Nothing changed on the last sync.</p>')
+      + '<p class="g-admin-status" id="ms-store-status"></p>'
+      + '<div class="g-card__actions"><button class="g-btn g-btn--secondary g-btn--sm" id="ms-store-sync">Sync now</button></div>'
+      + '</article>';
   }
 
   const rowId = (p) => (p.system + '-' + p.externalId).replace(/[^a-zA-Z0-9-]/g, '');

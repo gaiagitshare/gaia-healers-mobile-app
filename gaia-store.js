@@ -1,15 +1,26 @@
-/** Gaia — live Shopify shop (public, no login).
- * Reads the gaiahealers.com Shopify catalog DIRECTLY from the browser (its
- * products.json is CORS-open, access-control-allow-origin: *), categorises it,
- * and renders scrollable product rows into #store-shop. Product details stay in
- * the Gaia app; only the final secure Shopify purchase step leaves the app.
- * No backend, no API keys. Lazy-loads the first time the Store view opens.
+/** Gaia — the Gaia store (public, no login).
+ *
+ * Renders Gaia's OWN catalogue, synced daily from the public Shopify storefront
+ * by the proxy and organised into Gaia's categories — so sixteen Shopify
+ * Bio-Well listings become one Bio-Well shelf, and the store still works when
+ * Shopify is slow or briefly unreachable.
+ *
+ * Shopify remains the authority for price, stock and checkout: "Buy" opens the
+ * real product page and the purchase completes there. No cart, no payment
+ * detail and no card ever touches Gaia.
+ *
+ * If the Gaia catalogue is unavailable, it falls back to reading Shopify's
+ * CORS-open products.json directly, exactly as this file used to.
  */
 (function () {
   'use strict';
   if (!document.getElementById('store-products') && !document.getElementById('home-store')) return;
 
   const SHOP = 'https://gaiahealers.com';
+  const GAIA_API = (function () {
+    try { if (window.location.hostname === 'api.gaiahealers.app') return ''; } catch (_) { /* ignore */ }
+    return 'https://api.gaiahealers.app';
+  }());
   // Curated categories → real Shopify collection handles (verified live).
   const COLLECTIONS = [
     { title: 'Featured', handle: 'avada-best-sellers', limit: 12 },
@@ -33,11 +44,12 @@
     const img = (p.images || [])[0];
     return img && img.src ? img.src : '';
   }
-  // NOTE: we intentionally do NOT show the products.json price. That endpoint
-  // returns a different Shopify Market's price than the retail page (observed a
-  // consistent ~3.7x inflation, e.g. json $8,573 vs page $2,299). Correct
-  // in-app pricing needs the Shopify Storefront API @inContext(country). Until
-  // then we link out and the accurate price shows on the Shopify page.
+  // Prices are shown again. The old note here recorded a ~3.7x inflation
+  // between products.json and the retail page (json $8,573 vs page $2,299),
+  // so prices were suppressed. Re-verified 18 Aug 2026 from two origins: the
+  // feed now returns $2,299 and the retail page reports 229900 cents — they
+  // agree. The daily sync reports any price change, so a future divergence
+  // shows up as a diff rather than as a wrong number on a card.
   // Canonical product tile (g-* system). Product details open in a native app
   // sheet because Shopify blocks iframe embedding.
   function gTile(p) {
@@ -101,12 +113,49 @@
     } catch (_) { return []; }
   }
 
+  /**
+   * Gaia's own shelf. One request, already grouped and already deduplicated,
+   * so the app is not doing seven Shopify round-trips on every store open.
+   */
+  async function fetchGaiaCatalog() {
+    try {
+      const r = await fetch(GAIA_API + '/api/store/catalog', { headers: { Accept: 'application/json' } });
+      if (!r.ok) return null;
+      const d = await r.json();
+      return d && d.ok && Array.isArray(d.sections) && d.sections.length ? d : null;
+    } catch (_) { return null; }
+  }
+
+  function gaiaTile(card) {
+    return '<article class="g-tile g-store-tile">'
+      + (card.image ? '<div class="g-tile__media"><img src="' + esc(card.image) + '" alt="" loading="lazy" /></div>' : '')
+      + '<div class="g-tile__body"><p class="g-tile__title">' + esc(card.title) + '</p>'
+      + (card.price ? '<p class="g-tile__meta">' + esc(card.price)
+          + (card.compareAt ? ' <s>' + esc(card.compareAt) + '</s>' : '') + '</p>' : '')
+      + (card.available === false ? '<p class="g-tile__meta">Currently unavailable</p>' : '')
+      + '<div class="g-card__actions">'
+      + '<a class="g-btn g-btn--primary g-btn--sm" href="' + esc(card.url) + '" target="_blank" rel="noopener noreferrer">Buy on Shopify</a>'
+      + '</div></div></article>';
+  }
+
   // STORE — "Shop" tab: full catalogue by category, g-* rails (galleries on desktop).
   async function loadStoreProducts() {
     const box = document.getElementById('store-products');
     if (!box || loaded) return;
     loaded = true;
     box.innerHTML = '<div class="g-store-cat"><div class="g-sk"><div class="g-sk-b big"></div><div class="g-sk-b w8"></div></div></div>';
+
+    const gaia = await fetchGaiaCatalog();
+    if (gaia) {
+      box.innerHTML = gaia.sections.map((section) => '<section class="g-store-cat">'
+        + '<div class="g-section"><div class="g-section__lead">'
+        + '<h2 class="g-section__title">' + esc(section.label) + '</h2></div></div>'
+        + '<div class="g-rail g-store-rail">' + section.products.map(gaiaTile).join('') + '</div></section>').join('');
+      window.dispatchEvent(new CustomEvent('gaia:shop-loaded', { detail: { categories: gaia.sections.length } }));
+      return;
+    }
+
+    // Fallback: Shopify direct, the original path.
     const results = await Promise.all(COLLECTIONS.map((c) => fetchCollection(c.handle, c.limit)));
     const seen = new Set();
     const html = [];

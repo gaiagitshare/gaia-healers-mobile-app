@@ -13,6 +13,8 @@ import {
   resourceKey, eventTimestamp, eventSequence, decideOrder, watermark,
   noteRejection, domainWatermarkMs,
 } from './membership/ordering.js';
+import { classifyMembershipEvent, membershipFromEvent } from './membership/events.js';
+import { normalizeMembership } from './membership/ledger.js';
 import {
   fixturesAvailable, fixtureKeyMatches, fixtureAccessGranted,
   requestedFixtureId, fixtureProfile, fixtureIds,
@@ -799,7 +801,13 @@ function classifyEntitlementEvent(body) {
   if (/(community|group).*(grant|granted|add|added|access)/.test(raw)) return { kind: 'community', grant: true, raw };
   if (/(course|offer).*(remove|removed|revoke|revoked|delete|deleted)/.test(raw)) return { kind: 'course', grant: false, raw };
   if (/(course|offer).*(grant|granted|add|added|access|enroll|enrolled)/.test(raw)) return { kind: 'course', grant: true, raw };
-  if (/tier|membership/.test(raw)) return { kind: 'tier', grant: !/(remove|cancel|expire|revoke)/.test(raw), raw };
+  // Membership is mapped exactly, never by substring: "membership_ended"
+  // matches no revoke keyword and used to be read as a grant. An unrecognised
+  // membership event returns action null so the caller rejects it.
+  if (/tier|membership/.test(raw)) {
+    const action = classifyMembershipEvent(raw);
+    return { kind: 'tier', grant: action === 'activate', raw, membershipAction: action };
+  }
   const resourceType = firstNonEmptyString(body.resourceType, body.data?.resourceType).toLowerCase();
   const action = firstNonEmptyString(body.action, body.data?.action).toLowerCase();
   if (['course', 'offer'].includes(resourceType)) return { kind: 'course', grant: !/(remove|revoke|delete|cancel)/.test(action), raw };
@@ -826,6 +834,16 @@ async function memberAccessWebhook(req, res, origin) {
   const event = classifyEntitlementEvent(body);
   if (!event.kind) { sendJson(res, 422, { ok: false, error: 'Unsupported entitlement event type.' }, origin); return; }
 
+  // An unrecognised membership event must not fall through to a grant.
+  if (event.kind === 'tier' && !event.membershipAction) {
+    sendJson(res, 422, {
+      ok: false, applied: false,
+      error: 'Unrecognised membership event type.',
+      received: event.raw,
+    }, origin);
+    return;
+  }
+
   const webhookId = firstNonEmptyString(req.headers['x-ghl-webhook-id'], body.webhookId, body.idempotencyKey, body.eventId);
   const store = loadMemberEntitlements();
   if (webhookId && store.processedWebhookIds.includes(webhookId)) {
@@ -834,6 +852,7 @@ async function memberAccessWebhook(req, res, origin) {
   }
   const arrivalMs = Date.now();
   const now = new Date(arrivalMs).toISOString();
+  let membershipNotes = [];
   const record = store.contacts[contactId] || { contactId, tags: [], tier: null, courses: [], communities: [], subscriptions: [], domainUpdatedAt: {}, updatedAt: now };
   record.tags = uniqueStrings(record.tags || []);
   record.courses = Array.isArray(record.courses) ? record.courses : [];
@@ -882,8 +901,21 @@ async function memberAccessWebhook(req, res, origin) {
     const tags = body.tags || body.contact?.tags || body.data?.tags || body.data?.contact?.tags;
     if (Array.isArray(tags)) record.tags = uniqueStrings(tags);
   } else if (event.kind === 'tier') {
-    const tier = normalizeTierName(nestedValue(body, 'tier', 'membershipTier', 'membership'));
-    record.tier = event.grant && tier ? { name: tier, matchedBy: `webhook:${event.raw || 'tier'}`, updatedAt: now } : null;
+    const built = membershipFromEvent(body, { action: event.membershipAction, rawType: event.raw, now: new Date(arrivalMs) });
+    if (built.error) {
+      sendJson(res, 422, { ok: false, applied: false, error: built.error }, origin);
+      return;
+    }
+    // Canonical state the Phase 1 resolver actually reads. Validated through
+    // the frozen ledger schema rather than assembled ad hoc here.
+    record.membership = normalizeMembership(built.membership, { now: new Date(arrivalMs) });
+    membershipNotes = built.notes || [];
+    // Legacy mirror, kept for diagnostics and any older consumer. It is not
+    // read by the resolver and must never be treated as authority.
+    const legacyTier = normalizeTierName(built.membership.key);
+    record.tier = event.membershipAction === 'activate' && legacyTier
+      ? { name: legacyTier, matchedBy: `webhook:${event.raw || 'tier'}`, updatedAt: now }
+      : null;
   } else {
     const resource = normalizeEntitlementResource(body, event.kind);
     if (!resource.id && !resource.name) { sendJson(res, 422, { ok: false, error: `${event.kind} id or name is required.` }, origin); return; }
@@ -926,6 +958,10 @@ async function memberAccessWebhook(req, res, origin) {
     ok: true, applied: true, contactId, kind: event.kind, grant: event.grant,
     resource: key, orderBasis: stamp.basis, orderReason: decision.reason,
     ...(decision.lowConfidence ? { lowConfidence: true } : {}),
+    ...(event.kind === 'tier' ? {
+      membership: record.membership,
+      ...(membershipNotes.length ? { notes: membershipNotes } : {}),
+    } : {}),
     updatedAt: now,
   }, origin);
 }

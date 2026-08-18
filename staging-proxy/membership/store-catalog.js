@@ -94,6 +94,26 @@ function sizedImage(src, width = 600) {
   return url + (url.includes('?') ? '&' : '?') + `width=${width}`;
 }
 
+/**
+ * Decode the handful of entities Shopify descriptions actually contain.
+ *
+ * Not a general HTML parser — just enough that "FAST &amp; FREE Shipping" reads
+ * as a person wrote it rather than as markup.
+ */
+const ENTITIES = {
+  '&amp;': '&', '&lt;': '<', '&gt;': '>', '&quot;': '"', '&#39;': "'", '&apos;': "'",
+  '&nbsp;': ' ', '&ndash;': '–', '&mdash;': '—', '&hellip;': '…', '&rsquo;': '’', '&lsquo;': '‘',
+};
+
+function decodeEntities(text) {
+  return String(text)
+    .replace(/&(amp|lt|gt|quot|#39|apos|nbsp|ndash|mdash|hellip|rsquo|lsquo);/g, (m) => ENTITIES[m] || m)
+    .replace(/&#(\d{2,5});/g, (_, code) => {
+      const n = Number(code);
+      return n > 31 && n < 0x10ffff ? String.fromCodePoint(n) : '';
+    });
+}
+
 /** A price string from Shopify, normalised to a number of cents. */
 function toCents(value) {
   const raw = String(value ?? '');
@@ -139,9 +159,9 @@ function normalizeShopifyProduct(product, { now = new Date() } = {}) {
     externalId: id,
     handle: clean(product.handle, 160),
     title: clean(product.title, 200),
-    // Tags become spaces so words never run together, then runs of whitespace
-    // collapse — otherwise every bit of inline markup leaves a visible gap.
-    description: clean(String(product.body_html || '').replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' '), 1200),
+    // Tags become spaces so words never run together, entities are decoded so a
+    // member never reads "&amp;", then runs of whitespace collapse.
+    description: clean(decodeEntities(String(product.body_html || '').replace(/<[^>]*>/g, ' ')).replace(/\s+/g, ' '), 1200),
     vendor: clean(product.vendor, 120),
     productType: clean(product.product_type, 120),
     tags: Array.isArray(product.tags) ? product.tags.slice(0, 20).map((t) => clean(t, 60)) : [],
@@ -349,8 +369,100 @@ function diffMessages(diff) {
   return out;
 }
 
+/**
+ * The action a member can take on a product.
+ *
+ * Navigation, never authorization. Which action appears is decided by what the
+ * product IS and where Gaia can honestly send someone — never by what anybody
+ * holds. A pending access policy changes the destination, never the entitlement.
+ */
+const MEMBER_ACTIONS = ['buy', 'learn_more', 'open_event', 'open_software', 'contact_gaia'];
+
+function actionFor(product, canonical) {
+  const type = canonical?.type || null;
+  const destination = canonical?.presentation?.destination || null;
+
+  if (type === 'ticket') {
+    return { action: 'open_event', label: 'See the event', href: destination || null, external: false };
+  }
+  if (type === 'software') {
+    return { action: 'open_software', label: 'Manage on Shopify', href: destination || product.url, external: true };
+  }
+  if (type === 'non_product' || type === 'session') {
+    // Nothing to sell here. Say so rather than inventing a button.
+    return { action: 'contact_gaia', label: 'Ask Gaia about this', href: null, external: false };
+  }
+  if (!product.url) {
+    return { action: 'contact_gaia', label: 'Ask Gaia about this', href: null, external: false };
+  }
+  return product.available === false
+    ? { action: 'learn_more', label: 'View on Shopify', href: product.url, external: true }
+    : { action: 'buy', label: 'Buy on Shopify', href: product.url, external: true };
+}
+
+/**
+ * One product, as a member should see it.
+ *
+ * Deliberately a hand-written projection rather than a spread of the stored
+ * record: nothing internal can leak by being added upstream later. Mapping
+ * status, confidence, canonical keys, policy states and evidence are all absent
+ * by construction, and a test asserts it.
+ */
+function productDetail(catalog, registry, model, externalId, { currency = 'USD', showPrices = true } = {}) {
+  const product = catalog.products?.[clean(externalId, 40)];
+  if (!product || product.hidden) return null;
+
+  const mapping = registry?.mappings?.[`shopify:${product.externalId}`];
+  const canonical = mapping?.canonical ? model?.products?.[mapping.canonical] : null;
+
+  // Bundle contents, named for a customer. What each part GRANTS is never
+  // mentioned — composition is commerce, effects are the ledger's business.
+  const contents = (canonical?.components || [])
+    .map((component) => model?.products?.[component.productKey])
+    .filter(Boolean)
+    .map((component) => ({ title: component.label, quantity: 1 }));
+
+  // Things from the same brand a member might reasonably want next. A family
+  // relationship is presentational: it implies nothing about ownership.
+  const related = canonical?.brand
+    ? Object.values(model.products)
+      .filter((other) => other.brand === canonical.brand && other.key !== canonical.key
+        && ['device', 'accessory'].includes(other.type))
+      .slice(0, 6)
+      .map((other) => ({ title: other.label, kind: other.type }))
+    : [];
+
+  return {
+    externalId: product.externalId,
+    title: product.title,
+    description: product.description || null,
+    images: product.images || [],
+    price: showPrices ? money(product.priceCents, currency) : null,
+    compareAt: showPrices && product.compareAtCents > (product.priceCents || 0)
+      ? money(product.compareAtCents, currency).replace(` ${currency}`, '') : null,
+    priceVaries: Boolean(product.priceVaries),
+    available: product.available,
+    variants: (product.variants || []).slice(0, 12).map((v) => ({
+      title: v.title,
+      price: showPrices ? money(v.priceCents, currency) : null,
+      available: v.available,
+    })),
+    // Customer-facing words only. "device" and "accessory" are things a person
+    // recognises; canonical keys and policy states are not.
+    kind: canonical ? canonical.type : null,
+    brand: canonical?.brand || null,
+    contents,
+    related,
+    ...actionFor(product, canonical),
+  };
+}
+
 export {
   STORE_CATEGORIES,
+  MEMBER_ACTIONS,
+  decodeEntities,
+  actionFor,
+  productDetail,
   displayFamily,
   sizedImage,
   emptyCatalog,

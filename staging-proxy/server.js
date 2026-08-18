@@ -9,9 +9,9 @@ import { migrateStore, migrateContactRecord } from './membership/ledger.js';
 import { resolveMemberAccess } from './membership/resolver.js';
 import { UNRESOLVED_BILLING_IDS } from './membership/config.js';
 import { membershipPlans } from './membership/plans.js';
-import { syncCatalog, storeView, diffMessages, emptyCatalog } from './membership/store-catalog.js';
+import { syncCatalog, storeView, diffMessages, emptyCatalog, productDetail } from './membership/store-catalog.js';
 import { audit as recordAudit } from './membership/audit-log.js';
-import { loadPolicy as loadMembershipPolicy, loadRegistry as loadMembershipRegistry } from './membership/admin-api.js';
+import { loadPolicy as loadMembershipPolicy, loadRegistry as loadMembershipRegistry, loadModel as loadCommerceModel } from './membership/admin-api.js';
 import {
   resourceKey, eventTimestamp, eventSequence, decideOrder, watermark,
   noteRejection, domainWatermarkMs,
@@ -4669,6 +4669,22 @@ const server = http.createServer(async (req, res) => {
       let registry = { mappings: {}, canonical: {} };
       try { registry = loadMembershipRegistry(); } catch (_) { /* unmapped is fine */ }
       sendJson(res, 200, { ok: true, ...storeView(loadStoreCatalog(), registry) }, origin);
+      return;
+    }
+    // One product, as a member sees it. Public: the Store is browsable signed
+    // out, and nothing here depends on who is asking.
+    if (req.method === 'GET' && url.pathname === '/api/store/product') {
+      let registry = { mappings: {}, canonical: {} };
+      let model = { products: {} };
+      try { registry = loadMembershipRegistry(); } catch (_) { /* unmapped is fine */ }
+      try { model = loadCommerceModel(); } catch (_) { /* unmodelled is fine */ }
+      const catalog = loadStoreCatalog();
+      const detail = productDetail(catalog, registry, model, url.searchParams.get('id'), {
+        currency: catalog.currency || 'USD',
+        showPrices: catalog.priceVerified === true && Boolean(catalog.currency),
+      });
+      if (!detail) { sendJson(res, 404, { ok: false, error: 'Not found.' }, origin); return; }
+      sendJson(res, 200, { ok: true, product: detail }, origin);
       return;
     }
     if (req.method === 'GET' && url.pathname === '/api/membership/plans') {

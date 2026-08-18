@@ -395,3 +395,141 @@ test('identical variant prices are quoted plainly, with no "From"', () => {
   const { catalog } = syncCatalog(emptyCatalog(), [same], { now: NOW, currency: 'USD', priceVerified: true });
   assert.equal(storeView(catalog, emptyRegistry()).sections[0].products[0].price, '$99 USD');
 });
+
+// ── the member-facing detail projection ─────────────────────────────────────
+import { productDetail, actionFor, MEMBER_ACTIONS } from '../membership/store-catalog.js';
+import { normalizeModel } from '../membership/commerce-model.js';
+import { defaultCatalogue } from '../membership/commerce-catalogue.js';
+
+const commerce = normalizeModel(defaultCatalogue());
+
+function detailFixture(canonicalKey, over = {}) {
+  const { catalog } = syncCatalog(emptyCatalog(), [shopifyProduct(over)],
+    { now: NOW, currency: 'USD', priceVerified: true });
+  const registry = emptyRegistry();
+  for (const key of Object.keys(commerce.products)) registry.canonical[key] = { key };
+  observeProduct(registry, { system: 'shopify', externalId: String(over.id || 8337764876575), title: 'x' });
+  if (canonicalKey) mapProduct(registry, { system: 'shopify', externalId: String(over.id || 8337764876575), canonical: canonicalKey });
+  return productDetail(catalog, registry, commerce, String(over.id || 8337764876575));
+}
+
+test('a product detail carries nothing internal — no ids, status, policy or evidence', () => {
+  const detail = detailFixture('biowell-3');
+  const serialized = JSON.stringify(detail);
+
+  // Field names first. A substring scan would false-positive here: the public
+  // Shopify handle is "biowell-3-0", which contains the canonical key by pure
+  // coincidence, and the URL is exactly what a customer is meant to see.
+  for (const field of ['canonical', 'mappingStatus', 'confidence', 'evidence', 'policy',
+    'shelvedBy', 'effects', 'entitlementType', 'components']) {
+    assert.ok(!Object.prototype.hasOwnProperty.call(detail, field), `a customer must never receive a "${field}" field`);
+  }
+  // Then values: no canonical key may appear as a value anywhere.
+  const values = JSON.stringify(Object.entries(detail)
+    .filter(([k]) => !['href', 'images'].includes(k))
+    .map(([, v]) => v));
+  for (const key of Object.keys(commerce.products)) {
+    assert.ok(!values.includes(`"${key}"`), `canonical key ${key} leaked as a value`);
+  }
+  assert.ok(!/\bapproved\b|\bpending\b/.test(serialized), 'policy words must not reach a customer');
+  // and it does carry what a person actually wants
+  assert.equal(detail.title, 'Bio-Well 3.0 Energy Monitoring Device');
+  assert.equal(detail.price, '$2299 USD');
+  assert.equal(detail.kind, 'device', 'a word a person recognises, not a canonical key');
+});
+
+test('catalogue data can never make an ownership or access claim', () => {
+  // The words that may only ever come from the ledger.
+  const forbidden = /\b(you own|owned|you have access|unlocked|your device|your software|your ticket|included in your|active on your)\b/i;
+  for (const key of Object.keys(commerce.products)) {
+    const detail = detailFixture(key);
+    if (!detail) continue;
+    const text = [detail.title, detail.description, detail.label, detail.kind,
+      ...(detail.contents || []).map((c) => c.title),
+      ...(detail.related || []).map((r) => r.title)].filter(Boolean).join(' ');
+    assert.ok(!forbidden.test(text), `${key} produced an ownership claim from catalogue data`);
+  }
+});
+
+test('a bundle shows what is in the box, and never what it grants', () => {
+  const detail = detailFixture('biowell-accessory-pack');
+  assert.equal(detail.kind, 'bundle');
+  assert.deepEqual(detail.contents.map((c) => c.title).sort(), [
+    'Bio-Well Bio-Cor', 'Bio-Well Glove', 'Bio-Well Water Sensor', 'Sputnik Environment Sensor',
+  ]);
+  const serialized = JSON.stringify(detail.contents);
+  assert.ok(!/device_owner|entitle|grant|access/i.test(serialized),
+    'composition is commerce; effects are the ledger\'s business');
+});
+
+test('related products are a family, not a claim about anything', () => {
+  const detail = detailFixture('biowell-3');
+  assert.ok(detail.related.length > 0, 'a device suggests its accessories');
+  assert.ok(detail.related.every((r) => ['device', 'accessory'].includes(r.kind)));
+  assert.ok(!JSON.stringify(detail.related).includes('own'));
+});
+
+test('the action model routes by what a product is, never by what a member holds', () => {
+  const cases = [
+    ['biowell-3', 'buy'],
+    ['biowell-software-1y', 'open_software'],
+    ['elevate-2026-exhibit', 'open_event'],
+    ['session-consultation', 'contact_gaia'],
+    ['non-product-custom-item', 'contact_gaia'],
+  ];
+  for (const [key, expected] of cases) {
+    const detail = detailFixture(key);
+    assert.equal(detail.action, expected, `${key} should offer ${expected}`);
+    assert.ok(MEMBER_ACTIONS.includes(detail.action));
+  }
+});
+
+test('a pending access policy changes the destination, never the entitlement', () => {
+  const software = detailFixture('biowell-software-1y');
+  assert.equal(software.action, 'open_software');
+  assert.ok(software.href, 'the member is sent somewhere useful');
+  assert.equal(software.kind, 'software');
+  // nothing in the payload resembles a grant
+  assert.ok(!/device_software|entitle|licence granted/i.test(JSON.stringify(software)));
+
+  const ticket = detailFixture('elevate-2026-exhibit');
+  assert.equal(ticket.action, 'open_event');
+  assert.match(ticket.href, /view=events/, 'handed to the existing Events experience');
+});
+
+test('an unavailable product offers viewing, not buying', () => {
+  const detail = detailFixture('biowell-3', { available: false });
+  assert.equal(detail.action, 'learn_more');
+  assert.equal(detail.label, 'View on Shopify');
+});
+
+test('an unmapped product still gets a safe, honest action', () => {
+  const detail = detailFixture(null);
+  assert.equal(detail.kind, null, 'we do not pretend to know what it is');
+  assert.equal(detail.action, 'buy', 'but it is still a real thing Shopify sells');
+  assert.deepEqual(detail.contents, []);
+});
+
+test('a hidden product has no detail at all', () => {
+  const { catalog } = syncCatalog(emptyCatalog(), [shopifyProduct()], { now: NOW, currency: 'USD', priceVerified: true });
+  catalog.products['8337764876575'].hidden = true;
+  assert.equal(productDetail(catalog, emptyRegistry(), commerce, '8337764876575'), null);
+});
+
+test('an unverified currency withholds price from the detail too', () => {
+  const { catalog } = syncCatalog(emptyCatalog(), [shopifyProduct()], { now: NOW, priceVerified: false });
+  const detail = productDetail(catalog, emptyRegistry(), commerce, '8337764876575', { showPrices: false });
+  assert.equal(detail.price, null);
+  assert.ok(detail.variants.every((v) => v.price === null));
+});
+
+test('a description reads as a person wrote it, not as markup', () => {
+  // Live data: "FAST &amp; FREE National Shipping" reached the member endpoint
+  // with the entity intact.
+  const p = normalizeShopifyProduct({
+    id: 1, handle: 'h', title: 't', variants: [{ id: 2, price: '1.00' }], images: [],
+    body_html: '<p>FAST &amp; FREE Shipping &ndash; <b>Bio&#45;Well</b> &nbsp; kit&hellip;</p>',
+  });
+  assert.ok(!/&(amp|ndash|nbsp|hellip|#\d+);/.test(p.description), 'no raw entity survives');
+  assert.match(p.description, /FAST & FREE Shipping – Bio-Well kit…/);
+});

@@ -127,6 +127,105 @@
     } catch (_) { return null; }
   }
 
+  /**
+   * The in-app product sheet.
+   *
+   * Gaia owns discovery and the whole of the learning experience; only the
+   * final transactional step leaves. Everything rendered here comes from
+   * /api/store/product, which is a hand-written customer projection — no
+   * mapping status, no policy state, no canonical identifiers.
+   */
+  let sheet = null;
+  let sheetKeyHandler = null;
+  let sheetOpener = null;
+
+  function closeSheet() {
+    if (sheetKeyHandler) document.removeEventListener('keydown', sheetKeyHandler);
+    sheetKeyHandler = null;
+    if (sheet) sheet.remove();
+    sheet = null;
+    // Send focus back where it came from, or a keyboard user is stranded.
+    if (sheetOpener && document.contains(sheetOpener)) sheetOpener.focus();
+    sheetOpener = null;
+  }
+
+  async function openSheet(externalId, opener) {
+    closeSheet();
+    sheetOpener = opener || null;
+    sheet = document.createElement('div');
+    sheet.className = 'gaia-booking-modal gaia-product-modal';
+    sheet.setAttribute('role', 'dialog');
+    sheet.setAttribute('aria-modal', 'true');
+    sheet.innerHTML = '<div class="gaia-booking-modal__backdrop" data-sheet-close></div>'
+      + '<div class="gaia-booking-modal__panel g-store-sheet"><p class="g-empty">Loading…</p></div>';
+    document.body.appendChild(sheet);
+
+    sheetKeyHandler = (event) => {
+      if (event.key === 'Escape') { closeSheet(); return; }
+      if (event.key !== 'Tab' || !sheet) return;
+      // Keep Tab inside the dialog rather than letting it wander the page behind.
+      const focusable = sheet.querySelectorAll('a[href],button:not([disabled])');
+      if (!focusable.length) return;
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus(); }
+      else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
+    };
+    document.addEventListener('keydown', sheetKeyHandler);
+
+    let product = null;
+    try {
+      const r = await fetch(GAIA_API + '/api/store/product?id=' + encodeURIComponent(externalId),
+        { headers: { Accept: 'application/json' } });
+      if (r.ok) { const d = await r.json(); product = d && d.ok ? d.product : null; }
+    } catch (_) { /* handled below */ }
+
+    const panel = sheet.querySelector('.gaia-booking-modal__panel');
+    panel.innerHTML = product ? sheetBody(product)
+      : '<p class="g-empty">We could not load this product just now.</p>'
+        + '<div class="g-card__actions"><button class="g-btn g-btn--ghost g-btn--sm" data-sheet-close>Close</button></div>';
+    sheet.querySelectorAll('[data-sheet-close]').forEach((b) => b.addEventListener('click', closeSheet));
+    (panel.querySelector('a,button') || panel).focus?.();
+  }
+
+  function sheetBody(p) {
+    const kindLabel = { device: 'Device', accessory: 'Accessory', bundle: 'Package',
+      software: 'Software', course: 'Course', ticket: 'Event ticket' }[p.kind] || '';
+    return '<button type="button" class="gaia-booking-modal__close" data-sheet-close aria-label="Close">&times;</button>'
+      + (p.images && p.images[0]
+        ? '<div class="g-store-sheet__media"><img src="' + esc(p.images[0]) + '" alt="' + esc(p.title) + '" /></div>' : '')
+      + '<h2 class="g-store-sheet__title">' + esc(p.title) + '</h2>'
+      + '<p class="g-store-sheet__meta">'
+      + (kindLabel ? '<span class="g-tag">' + esc(kindLabel) + '</span> ' : '')
+      + (p.brand ? '<span class="g-tag">' + esc(p.brand) + '</span>' : '') + '</p>'
+      + (p.price
+        ? '<p class="g-store-sheet__price">' + (p.priceVaries ? '' : '') + esc(p.price)
+          + (p.compareAt ? ' <s>' + esc(p.compareAt) + '</s>' : '') + '</p>'
+        : '<p class="g-store-sheet__price g-tile__price--muted">Price shown on Shopify</p>')
+      + (p.available === false ? '<p class="g-store-sheet__meta">Currently unavailable</p>' : '')
+      + (p.description ? '<p class="g-store-sheet__body">' + esc(p.description) + '</p>' : '')
+      + (p.contents && p.contents.length
+        ? '<p class="g-label">What is included</p><ul class="g-store-sheet__list">'
+          + p.contents.map((c) => '<li>' + esc(c.title) + '</li>').join('') + '</ul>'
+        : '')
+      + (p.variants && p.variants.length > 1
+        ? '<p class="g-label">Options</p><ul class="g-store-sheet__list">'
+          + p.variants.map((v) => '<li>' + esc(v.title) + (v.price ? ' — ' + esc(v.price) : '')
+            + (v.available === false ? ' (unavailable)' : '') + '</li>').join('')
+          + '</ul><p class="g-store-sheet__meta">Choose your option on Shopify.</p>'
+        : '')
+      + (p.related && p.related.length
+        ? '<p class="g-label">Also in this range</p><ul class="g-store-sheet__list">'
+          + p.related.map((r) => '<li>' + esc(r.title) + '</li>').join('') + '</ul>'
+        : '')
+      + '<div class="g-card__actions">'
+      + (p.href
+        ? '<a class="g-btn g-btn--primary g-btn--sm" href="' + esc(p.href) + '"'
+          + (p.external ? ' target="_blank" rel="noopener noreferrer"' : '') + '>' + esc(p.label) + '</a>'
+        : '<button class="g-btn g-btn--secondary g-btn--sm" data-sheet-close>' + esc(p.label) + '</button>')
+      + '<button class="g-btn g-btn--ghost g-btn--sm" data-sheet-close>Close</button></div>';
+  }
+
   function gaiaTile(card) {
     // Long Shopify titles are common here — 31 of 102 exceed 60 characters,
     // one runs to 200. The card clamps the visible title and keeps the full
@@ -137,7 +236,9 @@
         ? '<div class="g-tile__media"><img src="' + esc(card.image) + '" alt="' + title + '" loading="lazy" /></div>'
         : '<div class="g-tile__media g-tile__media--empty" aria-hidden="true"></div>')
       + '<div class="g-tile__body">'
-      + '<h3 class="g-tile__title g-clamp-2" title="' + title + '">' + title + '</h3>'
+      + '<h3 class="g-tile__title g-clamp-2" title="' + title + '">'
+      + '<button type="button" class="g-tile__open" data-store-detail="' + esc(card.externalId) + '">'
+      + title + '</button></h3>'
       + (card.price
         ? '<p class="g-tile__price">' + esc(card.price)
           + (card.compareAt ? ' <s class="g-tile__was">' + esc(card.compareAt) + '</s>' : '') + '</p>'
@@ -169,6 +270,8 @@
         + (gaia.priceNote
           ? '<p class="g-store-note">' + esc(gaia.priceNote) + '</p>'
           : '<p class="g-store-note">Prices and availability are confirmed on Shopify at checkout.</p>');
+      box.querySelectorAll('[data-store-detail]').forEach((button) => button.addEventListener('click',
+        () => openSheet(button.dataset.storeDetail, button)));
       window.dispatchEvent(new CustomEvent('gaia:shop-loaded', { detail: { categories: gaia.sections.length } }));
       return;
     }
@@ -280,5 +383,5 @@
   }
 
   // expose for the chakra→Colour-Energy cross-sell and future callers
-  window.GaiaStore = { load: loadStoreProducts, shopBase: SHOP, chakraShopUrl: chakraShopUrl, colourFor: (id) => CHAKRA_COLOUR[String(id || '').toLowerCase()] || '', openProduct, closeProduct };
+  window.GaiaStore = { load: loadStoreProducts, openSheet, closeSheet, shopBase: SHOP, chakraShopUrl: chakraShopUrl, colourFor: (id) => CHAKRA_COLOUR[String(id || '').toLowerCase()] || '', openProduct, closeProduct };
 })();

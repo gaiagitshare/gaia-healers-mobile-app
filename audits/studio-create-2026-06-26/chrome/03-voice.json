@@ -1,0 +1,43 @@
+{
+  "name": "03-voice",
+  "url": "https://snapbos.com/portal/studio?create=1&projectId=b6380912-2c46-449f-98c5-3b52ce764fa3&tab=voice",
+  "title": "Studio · SnapBOS",
+  "summary": {
+    "alerts": [],
+    "buttons": [
+      "HOME",
+      "Create",
+      "AI Team",
+      "More",
+      "Sign out",
+      "Guide",
+      "1",
+      "GR Goldvest Real estate",
+      "Male voice Preset AI voices",
+      "Female voice Preset AI voices",
+      "My voice Clone your own",
+      "Fine-tune sound",
+      "Show me where",
+      "← Back to Looks",
+      "Expert controls",
+      "Continue to Story →",
+      "Ask BOS"
+    ],
+    "h1": [
+      "Who's talking?"
+    ],
+    "h2": [
+      "BOS prepared a tasteful starting mix."
+    ],
+    "inputs": [
+      {
+        "disabled": false,
+        "placeholder": "Search conversations, leads...",
+        "tag": "INPUT",
+        "type": null,
+        "value": ""
+      }
+    ]
+  },
+  "snapshotExcerpt": "- complementary:\n  - button \"Home\":\n    - generic: Home\n  - navigation:\n    - link \"Home\":\n      - /url: /portal\n      - generic: Home\n    - link \"Inbox\":\n      - /url: /portal/inbox\n      - generic: Inbox\n    - link \"Customers\":\n      - /url: /portal/leads\n      - generic: Customers\n    - link \"Channels\":\n      - /url: /portal/connections\n      - generic: Channels\n    - link \"CRM\":\n      - /url: /portal/ghl\n      - generic: CRM\n    - button \"Create\":\n      - generic: Create\n    - button \"AI Team\":\n      - generic: AI Team\n    - link \"Insights\":\n      - /url: /portal/insights\n      - generic: Insights\n    - link \"Outreach\":\n      - /url: /portal/outreach\n      - generic: Outreach\n    - button \"More\":\n      - generic: More\n  - link \"Settings\":\n    - /url: /portal/settings\n    - generic: Settings\n  - link \"Billing\":\n    - /url: /portal/billing\n    - generic: Billing\n  - button \"Sign out\":\n    - text: Sign out\n- banner:\n  - link \"SnapBOS Business Operating System\":\n    - /url: /portal\n    - generic: SnapBOS\n    - paragraph: Business Operating System\n  - generic: New ad\n  - generic: Goal → format — reel, funnel, or DM campaign.\n  - textbox \"Search conversations, leads...\"\n  - link \"Free today 445/446\":\n    - /url: /portal/billing\n    - generic: Free today\n    - text: \"445\"\n    - generic: /446\n  - link \"∞ Unlimited\":\n    - /url: /portal/billing\n    - generic: ∞\n    - generic: Unlimited\n  - generic \"Page manual — press ⌘K (Ctrl+K) for BOS Assist\":\n    - button \"What does AI Ads do?\":\n      - generic: Guide\n  - button \"Toggle theme\":\n  - button \"Open notifications\":\n    - generic: \"1\"\n  - button \"GR Goldvest Real estate\":\n    - generic: GR\n    - generic: Goldvest Real estate\n- main:\n  - navigation \"Breadcrumb\":\n    - link \"Overview\":\n      - /url: /portal\n    - link \"Create Ads\":\n      - /url: /portal/studio?create=1\n    - link \"Studio\":\n      - /url: /portal/studio\n    - generic: Voice\n  - text: Studio\n  - list \"Studio progress\":\n    - generic \"Identity\":\n      - generic: Identity\n    - generic \"Looks\":\n      - generic: Looks\n    - generic \"Voice\":\n      - generic: \"3\"\n      - generic: Voice\n    - generic \"Pick one of your Professional Look Pack assets first — click \\\"Use this look\\\" on the Looks tab.\":\n      - generic: \"4\"\n      - generic: Story\n    - generic \"Frames\":\n      - generic: \"5\"\n      - generic: Frames\n    - generic \"Video\":\n      - generic: \"6\"\n      - generic: Video\n    - generic \"Export\":\n      - generic: \"7\"\n      - generic: Export\n  - generic: My ad\n  - generic: BOS Creative Wizard\n  - generic: ·\n  - generic: \"My ad · Step 3 of 7: Voice\"\n  - text: Cast the voice\n  - heading \"Who's talking?\" [level=1]\n  - paragraph: Pick a preset AI voice that matches your avatar, or clone your own voice for full authenticity.\n  - button \"Male voice Preset AI voices\":\n    - paragraph: Male voice\n    - paragraph: Preset AI voices\n  - button \"Female voice Preset AI voices\":\n    - paragraph: Female voice\n    - paragraph: Preset AI voices\n  - button \"My voice Clone your own\":\n    - paragraph: My voice\n    - paragraph: Clone your own\n  - paragraph: Sound magic\n  - heading \"BOS prepared a tasteful starting mix.\" [level=2]\n  - paragraph: My Voice · ✓ Trained · 20 sec sample · Last updated 1 day ago · Free stock · captions on\n  - button \"Fine-tune sound\":\n    - text: Fine-tune sound\n  - generic: \"One little thing before the next scene: Pick one of your Professional Look Pack assets first — click \\\"Use this look\\\" on the Looks tab.\"\n  - button \"Show me where\"\n  - button \"← Back to Looks\"\n  - generic: Step 3 of 7 · changes are saved automatically\n  - button \"Expert controls\"\n  - button \"Continue to Story →\" [disabled]\n- button \"Show BOS command bar\":\n  - generic: Ask BOS"
+}

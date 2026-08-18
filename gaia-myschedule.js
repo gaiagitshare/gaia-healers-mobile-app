@@ -28,8 +28,8 @@
   const esc = (s) => String(s == null ? '' : s)
     .replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 
-  // Per event: the saved ids, and the full schedule once asked for.
-  const state = { eventId: null, savedIds: null, schedule: null, busy: new Set() };
+  // Per event: the saved ids, registration states, and the schedule itself.
+  const state = { eventId: null, savedIds: null, registrations: {}, schedule: null, busy: new Set() };
 
   async function api(path, body) {
     const options = {
@@ -61,6 +61,7 @@
     }
     state.eventId = eventId;
     state.savedIds = new Set(data.saved_ids || []);
+    state.registrations = data.registrations || {};
     state.schedule = data;
     return data;
   }
@@ -86,6 +87,52 @@
     } finally {
       state.busy.delete(id);
     }
+  }
+
+  const myRegistration = (sessionId) => state.registrations[String(sessionId)]
+    || state.registrations[Number(sessionId)] || null;
+
+  async function toggleRegistration(eventId, sessionId) {
+    const id = Number(sessionId);
+    if (state.busy.has(id)) return null;
+    state.busy.add(id);
+    try {
+      const action = myRegistration(id) ? 'unregister' : 'register';
+      const result = await api('/api/events/' + encodeURIComponent(eventId) + '/workshops',
+        { sessionId: id, action });
+      if (result && result.registrations) {
+        state.registrations = result.registrations;
+        state.schedule = null;   // registering also saved it; refresh next open
+        if (result.status && state.savedIds) state.savedIds.add(id);
+      }
+      return result;
+    } finally {
+      state.busy.delete(id);
+    }
+  }
+
+  /**
+   * The register control for a session that takes registrations.
+   *
+   * Says what will actually happen before the tap: "Join waitlist" on a full
+   * room, never "Register" — a button that promises a chair and delivers a
+   * queue position has lied.
+   */
+  function registerButtonHtml(session) {
+    const avail = session && session.availability;
+    if (!avail || !avail.requires_registration || !canSave()) return '';
+    const mine = myRegistration(session.id);
+    let label, cls;
+    if (mine === 'registered') { label = '✓ Registered · cancel'; cls = ' is-registered'; }
+    else if (mine === 'waitlisted') { label = 'Waitlisted · leave'; cls = ' is-waitlisted'; }
+    else if (avail.full) { label = 'Join waitlist'; cls = ' is-full'; }
+    else {
+      label = 'Register' + (avail.remaining != null
+        ? ' · ' + avail.remaining + (avail.remaining === 1 ? ' place left' : ' places left') : '');
+      cls = '';
+    }
+    return '<button type="button" class="g-reg' + cls + '"'
+      + ' data-reg-session="' + esc(session.id) + '">' + esc(label) + '</button>';
   }
 
   /** The save control for one agenda row. Absent entirely for non-ticket-holders. */
@@ -180,6 +227,32 @@
    * does not jump under the finger that just tapped it.
    */
   function bind(root, eventId, onChange) {
+    root.querySelectorAll('[data-reg-session]').forEach((button) => {
+      button.addEventListener('click', async (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        button.disabled = true;
+        const result = await toggleRegistration(eventId, button.dataset.regSession);
+        button.disabled = false;
+        if (!result) return;
+        if (result.ok !== true) {
+          // The refusal, in words: pass required, or the room is gone.
+          button.textContent = result.reason === 'workshop_pass_required'
+            ? 'Needs a workshop pass' : 'Unavailable';
+          button.classList.add('is-refused');
+          return;
+        }
+        const mine = myRegistration(button.dataset.regSession);
+        button.className = 'g-reg' + (mine === 'registered' ? ' is-registered'
+          : mine === 'waitlisted' ? ' is-waitlisted' : (result.full ? ' is-full' : ''));
+        button.textContent = mine === 'registered' ? '✓ Registered · cancel'
+          : mine === 'waitlisted' ? 'Waitlisted · leave'
+            : (result.full ? 'Join waitlist'
+              : 'Register' + (result.remaining != null ? ' · ' + result.remaining
+                + (result.remaining === 1 ? ' place left' : ' places left') : ''));
+        if (typeof onChange === 'function') onChange(mine, button.dataset.regSession);
+      });
+    });
     root.querySelectorAll('[data-save-session]').forEach((button) => {
       button.addEventListener('click', async (event) => {
         event.preventDefault();
@@ -201,7 +274,8 @@
   }
 
   window.GaiaMySchedule = {
-    load, toggle, isSaved, canSave, saveButtonHtml, panelHtml, bind,
+    load, toggle, isSaved, canSave, saveButtonHtml, registerButtonHtml,
+    toggleRegistration, myRegistration, panelHtml, bind,
     get state() { return state; },
   };
 }());

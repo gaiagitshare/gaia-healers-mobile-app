@@ -320,10 +320,14 @@
           // empty string for anyone without a ticket — so the agenda stays a
           // plain programme for the public and gains a verb for attendees.
           const save = window.GaiaMySchedule ? window.GaiaMySchedule.saveButtonHtml(session.id) : '';
+          // Register appears only on sessions that take registrations, and only
+          // for ticket holders — the same rule as the save star.
+          const reg = window.GaiaMySchedule ? window.GaiaMySchedule.registerButtonHtml(session) : '';
           return '<div class="g-event-timeline__item"><time>' + esc(when) + '</time><div><strong>' + esc(session.title) + '</strong>'
             + (who ? '<span>' + esc(who) + '</span>' : '')
             + (meta ? '<span>' + esc(meta) + '</span>' : '')
             + (session.description ? '<span>' + esc(session.description) + '</span>' : '')
+            + (reg ? '<span class="g-event-timeline__reg">' + reg + '</span>' : '')
             + '</div>' + save + '</div>';
         }).join('')
         + '</div>').join('')

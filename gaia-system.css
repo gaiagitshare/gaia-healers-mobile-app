@@ -1006,3 +1006,21 @@ body{overscroll-behavior-y:none;-webkit-tap-highlight-color:transparent}
   .g-save{padding:8px 10px;min-width:44px;justify-content:center}
   .g-mysch__time{width:4.4rem;font-size:.76rem}
 }
+
+/* ── Workshop registration ────────────────────────────────────────────────
+   The label always says what the tap will actually do: "Join waitlist" on a
+   full room, never a "Register" that quietly delivers a queue position. */
+.g-event-timeline__reg{display:block;margin-top:8px}
+.g-reg{display:inline-flex;align-items:center;gap:6px;min-height:44px;padding:9px 16px;
+  border-radius:999px;cursor:pointer;font-size:.84rem;font-weight:650;
+  border:1px solid rgba(168,224,99,.45);background:rgba(168,224,99,.12);
+  color:var(--g-accent,#A8E063);
+  transition:background .15s ease,border-color .15s ease,color .15s ease}
+.g-reg:hover{background:rgba(168,224,99,.2)}
+.g-reg:disabled{opacity:.55;cursor:progress}
+.g-reg.is-registered{color:#07100b;background:var(--g-accent,#A8E063);border-color:transparent}
+.g-reg.is-waitlisted{color:#FFC53D;background:rgba(255,197,61,.12);border-color:rgba(255,197,61,.4)}
+.g-reg.is-full{color:rgba(255,255,255,.75);background:rgba(255,255,255,.06);
+  border-color:rgba(255,255,255,.18)}
+.g-reg.is-refused{color:#FF8A80;background:rgba(255,138,128,.1);
+  border-color:rgba(255,138,128,.35);cursor:default}

@@ -207,4 +207,21 @@ async function changeSchedule(session, eventId, sessionId, action) {
   return { authenticated: true, ...(result || { ok: false, reason: 'identity_failed' }) };
 }
 
-export { myEvents, myTicket, mySchedule, changeSchedule, identityFromSession, phaseOf, toAppRow };
+/** Register for, or withdraw from, a workshop place. */
+async function changeWorkshop(session, eventId, sessionId, action) {
+  const identity = identityFromSession(session);
+  if (!identity) return { ok: false, authenticated: false, reason: 'auth_required' };
+  const numericEvent = Number(eventId);
+  const numericSession = Number(sessionId);
+  if (!Number.isInteger(numericEvent) || numericEvent <= 0
+    || !Number.isInteger(numericSession) || numericSession <= 0) {
+    return { ok: false, authenticated: true, reason: 'bad_id' };
+  }
+  const path = action === 'unregister' ? '/identity/workshops/unregister' : '/identity/workshops/register';
+  const result = await callEventIdentity(path, {
+    ...identity, event_id: numericEvent, session_id: numericSession,
+  });
+  return { authenticated: true, ...(result || { ok: false, reason: 'identity_failed' }) };
+}
+
+export { myEvents, myTicket, mySchedule, changeSchedule, changeWorkshop, identityFromSession, phaseOf, toAppRow };

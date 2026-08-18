@@ -1163,8 +1163,9 @@ body.gaia-v2 .g-super-home .g-super-hero{border:0;background:transparent;overflo
   .g-super-home .g-super-hero__art{inset:0 0 auto 30%;height:300px;opacity:.5}
 }
 
-/* Featured event: content left, poster right — a panel, not a dim wash. */
-.g-feature-event{flex-direction:row;align-items:stretch}
+/* Featured event: content left, poster right — a panel, not a dim wash.
+   row-reverse because the art div comes first in the markup. */
+.g-feature-event{flex-direction:row-reverse;align-items:stretch}
 .g-feature-event__body{flex:1 1 60%;margin-top:0;z-index:1}
 .g-feature-event__art{position:relative;inset:auto;flex:1 1 40%;min-height:100%;
   border-radius:0 20px 20px 0;overflow:hidden}
@@ -1173,8 +1174,13 @@ body.gaia-v2 .g-super-home .g-super-hero{border:0;background:transparent;overflo
 .g-feature-event__where{display:flex;align-items:center;gap:5px}
 .g-feature-event__where svg{width:14px;height:14px;color:var(--g-accent,#A8E063)}
 @media (max-width:480px){
-  .g-feature-event__body{padding:14px;flex-basis:62%}
-  .g-feature-event__art{flex-basis:38%}
+  .g-feature-event__body{padding:14px;flex-basis:64%}
+  .g-feature-event__art{flex-basis:36%}
+  /* the earlier compaction pass dimmed the art to .22 when it was a backdrop;
+     as a panel it shows at full strength */
+  .g-feature-event .g-feature-event__art img{opacity:1}
+  .g-feature-event__title{font-size:1.05rem}
+  .g-feature-event__actions .g-btn{min-height:40px;padding:8px 14px;font-size:.82rem}
 }
 
 /* Sky strip: kicker row, then moon · phase+motto · ring. */

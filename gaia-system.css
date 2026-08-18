@@ -690,3 +690,78 @@ body.gaia-v2 main.gaia-main.gaia-main--today{
    of being sliced mid-word. */
 .gaia-tabbar::before{content:"";position:absolute;left:0;right:0;bottom:100%;height:28px;
   background:linear-gradient(to top,var(--g-bg,#0B120E),transparent);pointer-events:none}
+
+/* ── Featured event ──
+   The next gathering leads the home screen. It carries the event's own artwork
+   and its registration link, so it is useful in itself rather than only a way
+   through to another page. */
+.g-feature-event{position:relative;overflow:hidden;border-radius:20px;isolation:isolate;
+  border:1px solid rgba(255,255,255,.10);background:var(--g-surface,#111A14);
+  display:flex;flex-direction:column;min-height:210px}
+.g-feature-event__art{position:absolute;inset:0;z-index:0}
+.g-feature-event__art img{width:100%;height:100%;object-fit:cover;display:block}
+/* A scrim, so the title stays readable whatever photograph is published. */
+.g-feature-event__art::after{content:"";position:absolute;inset:0;
+  background:linear-gradient(180deg,rgba(7,16,11,.30) 0%,rgba(7,16,11,.72) 52%,rgba(7,16,11,.94) 100%)}
+.g-feature-event__body{position:relative;z-index:1;margin-top:auto;
+  padding:18px;display:flex;flex-direction:column;gap:8px}
+.g-feature-event__kicker{margin:0;display:flex;align-items:center;gap:8px;flex-wrap:wrap;
+  font-size:.72rem;letter-spacing:.13em;text-transform:uppercase;font-weight:700;
+  color:var(--g-accent,#A8E063)}
+.g-feature-event__kicker svg{width:15px;height:15px}
+.g-feature-event__badge{letter-spacing:.02em;text-transform:none;font-weight:650;font-size:.74rem;
+  color:#07100b;background:var(--g-accent,#A8E063);border-radius:999px;padding:3px 9px}
+.g-feature-event__title{margin:0;font-size:1.28rem;line-height:1.2;font-weight:650;
+  color:#fff;text-wrap:balance}
+.g-feature-event__meta{margin:0;font-size:.86rem;line-height:1.45;color:rgba(255,255,255,.80)}
+.g-feature-event__actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:4px}
+.g-feature-event__actions .g-btn{min-height:44px;display:inline-flex;align-items:center;justify-content:center}
+@media (min-width:760px){
+  .g-feature-event{min-height:260px}
+  .g-feature-event__title{font-size:1.6rem}
+  .g-feature-event__body{padding:24px}
+}
+
+/* ── App feel ──
+   The three things that separate a web page from an app: something happens the
+   instant you touch a control, screens arrive rather than blink into place, and
+   spacing is the same everywhere. All of it yields to prefers-reduced-motion. */
+
+/* Press feedback. A native control acknowledges a finger before the work
+   starts; without this the app feels dead on tap even when it is fast. */
+.g-tile,.g-card,.g-super-row,.g-store-tile,.g-super-services__grid > *,
+.g-free-tools a,.g-free-tools button,.g-feature-event .g-btn,.g-btn{
+  transition:transform .12s ease,opacity .12s ease,background-color .16s ease}
+.g-super-row:active,.g-store-tile:active,.g-free-tools a:active,
+.g-free-tools button:active,.g-btn:active{transform:scale(.975)}
+/* Cards are large, so they compress less — scaling a full-width card the same
+   amount as a button reads as a glitch rather than a press. */
+.g-tile:active,.g-card:active{transform:scale(.99)}
+
+/* Screens arrive. Only the incoming screen animates, and only once. */
+.gaia-screen.is-active{animation:g-screen-in .26s cubic-bezier(.22,.61,.36,1) both}
+@keyframes g-screen-in{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+
+/* One rhythm for every page, so sections do not drift apart view by view. */
+.g-super-home > section + section,
+.g-super-page > section + section{margin-top:18px}
+@media (min-width:760px){
+  .g-super-home > section + section,
+  .g-super-page > section + section{margin-top:24px}
+}
+
+/* Momentum scrolling and no rubber-banding of the whole page behind a sheet —
+   both are things people read as "this is a website". */
+html{-webkit-text-size-adjust:100%}
+body{overscroll-behavior-y:none;-webkit-tap-highlight-color:transparent}
+.g-store-rail,.g-rail{-webkit-overflow-scrolling:touch;scroll-snap-type:x proximity}
+.g-store-rail > *,.g-rail > *{scroll-snap-align:start}
+
+@media (prefers-reduced-motion:reduce){
+  .gaia-screen.is-active{animation:none}
+  .g-tile,.g-card,.g-super-row,.g-store-tile,.g-btn,
+  .g-free-tools a,.g-free-tools button{transition:none}
+  .g-super-row:active,.g-store-tile:active,.g-btn:active,
+  .g-tile:active,.g-card:active,
+  .g-free-tools a:active,.g-free-tools button:active{transform:none}
+}

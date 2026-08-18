@@ -458,18 +458,60 @@
       + icon('path') + ' Open your journey ' + icon('arrow-right') + '</a></section>';
   }
 
-  function eventRow() {
+  /** "in 12 days", "Tomorrow", "Happening now" — whichever is true. */
+  function eventCountdown(event) {
+    const start = event.startAt || event.startDate;
+    const end = event.endAt || event.endDate;
+    const startMs = start ? Date.parse(start) : NaN;
+    const endMs = end ? Date.parse(end) : NaN;
+    if (!Number.isFinite(startMs)) return '';
+    const now = Date.now();
+    if (Number.isFinite(endMs) && now >= startMs && now <= endMs) return 'Happening now';
+    if (now > startMs) return '';
+    const days = Math.ceil((startMs - now) / 86400000);
+    if (days <= 0) return 'Today';
+    if (days === 1) return 'Tomorrow';
+    if (days < 31) return 'In ' + days + ' days';
+    const months = Math.round(days / 30);
+    return 'In ' + months + ' month' + (months === 1 ? '' : 's');
+  }
+
+  /**
+   * The next gathering, given the top of the home screen.
+   *
+   * It uses the event's own hero image rather than a stock asset, and offers
+   * the registration link the Event Manager publishes — so the card is useful
+   * on its own rather than only a way through to another page.
+   */
+  function eventFeature() {
     const event = eventData();
     if (!event?.name) {
       return '<section class="g-super-event g-super-event--empty"><div><p class="g-super-kicker">Events</p><h2>Next gathering</h2>'
         + '<p>The next confirmed Gaia event will appear here when it is published.</p></div><a href="home.html?view=events" class="g-btn g-btn--secondary">View events</a></section>';
     }
     const location = event.location || event.venue || '';
-    return '<a class="g-super-event" href="home.html?view=events">'
-      + '<img src="assets/gaia-event-hero.webp" alt="" width="180" height="180" loading="lazy" />'
-      + '<span class="g-super-event__copy"><small>Upcoming gathering</small><strong>' + esc(event.name) + '</strong>'
-      + '<span>' + [eventDate(event), location].filter(Boolean).map(esc).join(' · ') + '</span></span>'
-      + icon('caret-right') + '</a>';
+    const when = eventDate(event);
+    const countdown = eventCountdown(event);
+    const art = event.heroImageUrl || 'assets/gaia-event-hero.webp';
+    const register = event.registrationUrl
+      ? '<a class="g-btn g-btn--primary g-btn--sm" href="' + esc(event.registrationUrl) + '" target="_blank" rel="noopener noreferrer">'
+        + esc(event.registrationLabel || 'Get tickets') + '</a>'
+      : '';
+
+    return '<section class="g-feature-event">'
+      + '<div class="g-feature-event__art" aria-hidden="true">'
+      + '<img src="' + esc(art) + '" alt="" loading="eager" /></div>'
+      + '<div class="g-feature-event__body">'
+      + '<p class="g-feature-event__kicker">' + icon('calendar-dots') + ' Next gathering'
+      + (countdown ? '<span class="g-feature-event__badge">' + esc(countdown) + '</span>' : '') + '</p>'
+      + '<h2 class="g-feature-event__title">' + esc(event.name) + '</h2>'
+      + (when || location
+        ? '<p class="g-feature-event__meta">' + [when, location].filter(Boolean).map(esc).join(' · ') + '</p>'
+        : '')
+      + '<div class="g-feature-event__actions">'
+      + '<a class="g-btn g-btn--secondary g-btn--sm" href="home.html?view=events">Event details</a>'
+      + register
+      + '</div></div></section>';
   }
 
   function renderHome() {
@@ -490,10 +532,10 @@
       + '<section class="g-super-hero"><div class="g-super-hero__intro"><p class="g-super-date">' + esc(dateLabel()) + '</p>'
       + '<h1>' + greeting + '</h1><p>' + (authed ? 'Your healing journey is waiting.' : 'What does your energy need today?') + '</p>'
       + (authed ? journeyRail() + primaryMemberAction() : '<div class="g-super-discover"><a class="g-btn g-btn--primary" href="home.html?view=wellness&tab=check">' + icon('sparkle') + ' Check my energy</a><button type="button" class="g-btn g-btn--secondary" data-gaia-open-assist>' + icon('microphone') + ' Ask Gaia</button></div>') + '</div><div class="g-super-hero__art" aria-hidden="true"></div></section>'
+      + eventFeature()
       + freeTools()
       + (authed ? '<section class="g-super-services"><div class="g-super-section-head"><div><p class="g-super-kicker">Your access</p><h2>Everything Gaia</h2></div><a href="home.html?view=journey">View journey</a></div><div class="g-super-services__grid">' + services + '</div></section>' : '')
       + discoverGaia()
-      + eventRow()
       + (!authed ? authPrompt(true) : '')
       + (authed ? '<section class="g-super-sync">' + icon('check-circle') + '<div><strong>Your access is synced</strong><span>Courses, communities, plans and purchases reflect your GHL member record.</span></div></section>' : '')
       + '</div>';

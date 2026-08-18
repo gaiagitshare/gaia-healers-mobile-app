@@ -1,82 +1,39 @@
 /**
- * Public plan catalogue — presentation data only.
+ * Public plan catalogue — presentation only.
  *
- * This is what the marketing/Store page renders. It is deliberately a separate
- * module from config.js and is NEVER imported by the resolver: prices and
- * benefit copy must not be able to reach an authorization decision, even by
- * accident. A contract test asserts that resolver.js does not import this file.
+ * This module holds no plan data of its own any more: it renders whatever the
+ * membership policy says into the shape the Store page expects. One place now
+ * decides what a plan is called, costs and promises, and editing it in the
+ * Membership Control Center changes the public catalogue too.
  *
- * Prices here are display strings. The authorization system keys off the
- * canonical billing ids in config.js and never reads an amount.
+ * It is still never imported by the resolver, and a contract test still asserts
+ * that. Prices and marketing copy must not be able to reach an authorization
+ * decision, even by accident.
  */
 
-import { MEMBERSHIP_ORDER, MEMBERSHIP_PRESENTATION } from './config.js';
-
-const CHECKOUT_BASE = 'https://join.gaiahealers.com';
+import { MEMBERSHIP_ORDER } from './config.js';
+import { defaultPolicy } from './policy.js';
 
 /**
- * Display copy per plan. Bullets are marketing claims about what a tier
- * promises — they are NOT entitlements and must never be rendered inside the
- * member's own access view. "Included in your access" comes from the ledger.
+ * The catalogue as the public endpoint serves it.
+ *
+ * `displayBenefits` are marketing claims about a plan. They are NOT
+ * entitlements and must never be rendered inside a member's own access view —
+ * "Included in your access" comes from the ledger.
  */
-const PLAN_DISPLAY = {
-  free: {
-    prices: { monthly: '$0', annual: '$0' },
-    displayBenefits: [
-      'Community access',
-      'State of the Union calls',
-      'Lightworker Creed resources',
-      'Newsletter and community updates',
-    ],
-    checkoutPath: '/onboarding',
-  },
-  silver: {
-    prices: { monthly: '$97/mo', annual: '$997/yr' },
-    displayBenefits: [
-      'Everything in Free',
-      'Certifications and courses',
-      'Directory listing',
-      'DIY practice platform and CRM',
-      'Monthly marketing coaching',
-    ],
-    checkoutPath: '/silver',
-  },
-  gold: {
-    prices: { monthly: '$497/mo', annual: '$4,997/yr' },
-    displayBenefits: [
-      'Everything in Silver',
-      'Custom landing page',
-      'Managed CRM and support',
-      'Monthly AI leads',
-      'Certification discount',
-    ],
-    checkoutPath: '/gold',
-  },
-  diamond: {
-    prices: { monthly: '$997/mo', annual: '$9,997/yr' },
-    displayBenefits: [
-      'Everything in Gold',
-      'Higher monthly AI lead allocation',
-      'Top directory placement',
-      'Business accelerator and retreats',
-      'Conference and speaking opportunities',
-    ],
-    checkoutPath: '/diamond',
-  },
-};
-
-/** The catalogue as the public endpoint serves it. */
-export function membershipPlans() {
+export function membershipPlans(policy = defaultPolicy()) {
   return MEMBERSHIP_ORDER.map((key) => {
-    const presentation = MEMBERSHIP_PRESENTATION[key] || {};
-    const display = PLAN_DISPLAY[key] || {};
+    const plan = policy?.plans?.[key] || {};
     return {
       key,
-      label: presentation.label || key,
-      subtitle: presentation.subtitle || null,
-      prices: display.prices || { monthly: null, annual: null },
-      displayBenefits: display.displayBenefits || [],
-      checkoutUrl: display.checkoutPath ? `${CHECKOUT_BASE}${display.checkoutPath}` : null,
+      label: plan.label || key,
+      subtitle: plan.subtitle || null,
+      prices: {
+        monthly: plan.prices?.monthly || null,
+        annual: plan.prices?.annual || null,
+      },
+      displayBenefits: Array.isArray(plan.displayBenefits) ? plan.displayBenefits : [],
+      checkoutUrl: plan.checkoutUrl || null,
     };
   });
 }

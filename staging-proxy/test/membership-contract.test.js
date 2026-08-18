@@ -90,7 +90,10 @@ test('5. canonical subscription ids produce the correct membership key and cycle
     });
     assert.equal(monthly.membership.key, key);
     assert.equal(monthly.membership.billing_cycle, 'monthly');
-    assert.equal(monthly.meta.membership_resolved_by, 'billing_id');
+    // With no ledger record, billing is still allowed to answer — but the read
+    // is labelled as the compatibility fallback it is, not as the ledger.
+    assert.equal(monthly.meta.membership_resolved_by, 'live_fallback');
+    assert.equal(monthly.meta.membership_provisional, true);
 
     const annual = resolveMemberAccess({
       subscriptions: [subscriptionWith({ priceId: map.annualPriceId })], now,
@@ -102,7 +105,36 @@ test('5. canonical subscription ids produce the correct membership key and cycle
       subscriptions: [subscriptionWith({ nested: { deep: { id: map.stripeMonthlyPriceId } } })], now,
     });
     assert.equal(stripe.membership.key, key, 'stripe ids must resolve too');
+
+    // The ledger outranks live billing: a member reconciled into the ledger no
+    // longer depends on an external system being reachable or correct.
+    const ledgerWins = resolveMemberAccess({
+      record: { membership: { key: 'silver', status: 'active', billing_cycle: 'annual', source: 'manual' } },
+      subscriptions: [subscriptionWith({ priceId: map.monthlyPriceId })], now,
+    });
+    assert.equal(ledgerWins.membership.key, 'silver');
+    assert.equal(ledgerWins.meta.membership_provisional, false);
+    assert.match(ledgerWins.meta.membership_resolved_by, /^ledger:/);
   }
+});
+
+test('5b. ledger_only refuses to resolve membership from live billing at all', () => {
+  const map = MEMBERSHIP_BILLING.silver;
+  const resolved = resolveMemberAccess({
+    subscriptions: [subscriptionWith({ priceId: map.monthlyPriceId })], now, authority: 'ledger_only',
+  });
+  assert.equal(resolved.membership.key, null, 'the end state: no ledger record means no membership');
+  assert.equal(resolved.meta.membership_provisional, false);
+});
+
+test('5c. a ledger record and live billing that disagree are surfaced, not hidden', () => {
+  const resolved = resolveMemberAccess({
+    record: { membership: { key: 'diamond', status: 'active', source: 'manual' } },
+    subscriptions: [subscriptionWith({ priceId: MEMBERSHIP_BILLING.silver.monthlyPriceId })], now,
+  });
+  assert.equal(resolved.membership.key, 'diamond', 'the operator decision stands');
+  assert.equal(resolved.meta.membership_conflict, true);
+  assert.ok(resolved.meta.notes.some((n) => n.includes('live billing says silver')));
 });
 
 // ── 6/7. Free requires explicit evidence ────────────────────────────────────

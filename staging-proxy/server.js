@@ -9,6 +9,7 @@ import { migrateStore, migrateContactRecord } from './membership/ledger.js';
 import { resolveMemberAccess } from './membership/resolver.js';
 import { UNRESOLVED_BILLING_IDS } from './membership/config.js';
 import { membershipPlans } from './membership/plans.js';
+import { loadPolicy as loadMembershipPolicy } from './membership/admin-api.js';
 import {
   resourceKey, eventTimestamp, eventSequence, decideOrder, watermark,
   noteRejection, domainWatermarkMs,
@@ -4536,7 +4537,9 @@ const server = http.createServer(async (req, res) => {
     // Public plan catalogue. Presentation data only — this endpoint has no
     // access to the ledger and nothing it returns can grant anything.
     if (req.method === 'GET' && url.pathname === '/api/membership/plans') {
-      sendJson(res, 200, { ok: true, plans: membershipPlans() }, origin);
+      // Served from the policy an operator edits, so the Store and the Control
+      // Center can never disagree about what a plan costs or promises.
+      sendJson(res, 200, { ok: true, plans: membershipPlans(loadMembershipPolicy()) }, origin);
       return;
     }
     // Dev-only: mint a session carrying fixture authority. Inert unless the

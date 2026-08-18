@@ -1,51 +1,66 @@
 /**
  * Membership administration — the operator's write path into the ledger.
  *
- * Every mutation here is explicit, carries a source and evidence, and writes an
- * audit entry. That is what makes the system answerable: a member asks "why can
- * I open this course?" and the answer is a record with a source, a timestamp and
- * the name of whoever granted it — not an inference.
+ * These functions are a thin, human-shaped façade over the ingestion pipeline.
+ * An operator action becomes a proposal from source `admin` and travels the
+ * same road a GHL or Shopify event will: validation, identity, precedence,
+ * ordering, audit. Admin holds no privileged shortcut into the ledger.
  *
- * The rule the whole design turns on: assigning a plan does NOT grant its
- * benefits. `assignMembership` sets the membership and nothing else.
- * `applyPolicy` is a separate, deliberate action that writes real entitlement
- * records. An operator has to mean it.
+ * That is the point. Because every operator action exercises the pipeline, the
+ * architecture is under test from ordinary daily use long before an external
+ * system is connected — and shadow mode is not a simulation that can drift from
+ * the real path, it IS the real path with the last step withheld.
  *
- * Pure functions over a store object — persistence belongs to the caller.
+ * The rule the whole design turns on is unchanged: assigning a plan does NOT
+ * grant its benefits. `applyPolicy` is a separate, deliberate action.
  */
 
-import { MEMBERSHIP_ORDER, ENTITLEMENT_TYPES, isFixtureContactId } from './config.js';
-import { normalizeMembership, normalizeEntitlement, emptyContactRecord, entitlementIdentity } from './ledger.js';
-import { benefitsToEntitlements } from './policy.js';
+import crypto from 'node:crypto';
 
-const MAX_AUDIT = 2000;
+import { MEMBERSHIP_ORDER, ENTITLEMENT_TYPES, isFixtureContactId } from './config.js';
+import { entitlementIdentity } from './ledger.js';
+import { benefitsToEntitlements } from './policy.js';
+import { ingest, overrideActive } from './proposals.js';
+import { audit, auditFor } from './audit-log.js';
 
 const clean = (value, max = 200) => String(value ?? '')
   .replace(/[\x00-\x1F\x7F]/g, '').trim().slice(0, max);
 
-/**
- * Append an audit entry. Append-only and capped; the cap is generous because
- * "why does this member have access" is a question asked months later.
- */
-export function audit(store, entry) {
-  const list = Array.isArray(store.auditLog) ? store.auditLog : [];
-  list.push({
-    at: entry.at || new Date().toISOString(),
-    actor: clean(entry.actor, 80) || 'admin',
-    action: clean(entry.action, 60),
-    contactId: clean(entry.contactId, 120),
-    detail: entry.detail && typeof entry.detail === 'object' ? entry.detail : {},
-    note: clean(entry.note, 300),
-  });
-  store.auditLog = list.slice(-MAX_AUDIT);
-  return store.auditLog[store.auditLog.length - 1];
+/** Monotonic, persisted with the store so it survives a restart. */
+function nextSequence(store) {
+  store.adminSequence = (Number(store.adminSequence) || 0) + 1;
+  return store.adminSequence;
 }
 
-function recordFor(store, contactId, now) {
+/**
+ * Push one operator action through the pipeline.
+ *
+ * An admin proposal always carries an occurredAt of now and a source event id,
+ * so it orders and deduplicates by exactly the same rules an adapter does.
+ */
+function propose(store, contactId, intentType, intent, { actor = 'admin', now = new Date(), note = '', evidence = null } = {}) {
   const id = clean(contactId, 120);
-  if (!id) throw new Error('contactId is required');
-  if (!store.contacts[id]) store.contacts[id] = emptyContactRecord(id, now.toISOString());
-  return store.contacts[id];
+  if (!id) return { ok: false, error: 'contact_id_required' };
+  const result = ingest(store, {
+    source: 'admin',
+    intentType,
+    contactId: id,
+    intent,
+    occurredAt: now.toISOString(),
+    // An operator action is a genuinely new event every time, never a redelivery
+    // of an earlier one, so it gets a fresh id. Deriving one from the timestamp
+    // made two actions in the same millisecond look like a duplicate.
+    sourceEventId: `admin-${crypto.randomUUID()}`,
+    // Operator actions are strictly ordered by when they were taken, and two of
+    // them can land in the same millisecond. A monotonic sequence makes the
+    // later one win deterministically instead of by an id comparison.
+    sequence: nextSequence(store),
+    evidence: evidence || {},
+    actor,
+    note,
+    confidence: 'authoritative',
+  }, { now });
+  return result;
 }
 
 /**
@@ -54,62 +69,58 @@ function recordFor(store, contactId, now) {
  * separate rights with their own evidence and expiry.
  */
 export function assignMembership(store, contactId, input, { actor = 'admin', now = new Date(), note = '' } = {}) {
-  if (!MEMBERSHIP_ORDER.includes(input?.key)) {
-    return { ok: false, error: 'unknown_plan_key' };
-  }
-  const record = recordFor(store, contactId, now);
-  const before = record.membership ? { ...record.membership } : null;
+  if (!MEMBERSHIP_ORDER.includes(input?.key)) return { ok: false, error: 'unknown_plan_key' };
 
-  record.membership = normalizeMembership({
+  const result = propose(store, contactId, 'membership', {
     key: input.key,
     status: input.status || 'active',
     billing_cycle: input.billing_cycle || 'none',
     started_at: input.started_at || now.toISOString(),
     renews_at: input.renews_at || null,
     ends_at: input.ends_at || null,
-    source: input.source || 'manual',
+    source: 'manual',
     evidence_id: input.evidence_id || null,
-  }, { now });
-  record.updatedAt = now.toISOString();
+    override_until: input.override_until || null,
+  }, { actor, now, note, evidence: { id: input.evidence_id || null } });
 
-  audit(store, {
-    at: now.toISOString(), actor, action: 'membership.assign', contactId, note,
-    detail: { from: before, to: record.membership },
-  });
-  return { ok: true, membership: record.membership };
+  if (!result.ok) return { ok: false, error: result.reason };
+  return { ok: true, membership: store.contacts[clean(contactId, 120)].membership };
 }
 
 /** End a membership without touching anything the member owns outright. */
 export function endMembership(store, contactId, { status = 'cancelled', endsAt = null, actor = 'admin', now = new Date(), note = '' } = {}) {
-  const record = recordFor(store, contactId, now);
-  if (!record.membership) return { ok: false, error: 'no_membership' };
-  const before = { ...record.membership };
-  record.membership = normalizeMembership({
+  const id = clean(contactId, 120);
+  const record = store.contacts?.[id];
+  if (!record?.membership) return { ok: false, error: 'no_membership' };
+
+  const result = propose(store, id, 'membership', {
     ...record.membership,
     status,
     ends_at: endsAt || now.toISOString(),
-  }, { now });
-  record.updatedAt = now.toISOString();
-  audit(store, {
-    at: now.toISOString(), actor, action: 'membership.end', contactId, note,
-    detail: { from: before, to: record.membership },
-  });
-  return { ok: true, membership: record.membership };
+  }, { actor, now, note });
+
+  if (!result.ok) return { ok: false, error: result.reason };
+  return { ok: true, membership: store.contacts[id].membership };
 }
 
 /**
  * Grant or update one entitlement.
  *
- * `source` defaults to manual and is recorded honestly — an operator grant is
- * never dressed up as a Shopify order or a GHL offer. When the adapters arrive
- * they write the same records with their own sources, and nothing else changes.
+ * `source` is recorded honestly — an operator grant is never dressed up as a
+ * Shopify order or a GHL sync. When the adapters arrive they write the same
+ * records under their own sources and nothing else changes.
  */
 export function grantEntitlement(store, contactId, input, { actor = 'admin', now = new Date(), note = '' } = {}) {
   const type = clean(input?.type, 40);
   if (!Object.prototype.hasOwnProperty.call(ENTITLEMENT_TYPES, type)) {
     return { ok: false, error: 'unknown_entitlement_type' };
   }
-  const entitlement = normalizeEntitlement({
+  const id = clean(contactId, 120);
+  const identity = `${type}::${clean(input.key, 120)}`;
+  const before = (store.contacts?.[id]?.entitlements || [])
+    .find((item) => entitlementIdentity(item) === identity) || null;
+
+  const result = propose(store, id, 'entitlement', {
     type,
     key: input.key,
     value: input.value,
@@ -118,23 +129,13 @@ export function grantEntitlement(store, contactId, input, { actor = 'admin', now
     evidence_id: input.evidence_id || null,
     starts_at: input.starts_at || now.toISOString(),
     expires_at: input.expires_at || null,
-    observed_at: now.toISOString(),
-  }, { now });
+    override_until: input.override_until || null,
+  }, { actor, now, note, evidence: { id: input.evidence_id || null } });
+
+  if (!result.ok) return { ok: false, error: result.reason };
+  const entitlement = (store.contacts[id].entitlements || [])
+    .find((item) => entitlementIdentity(item) === identity);
   if (!entitlement) return { ok: false, error: 'invalid_entitlement' };
-
-  const record = recordFor(store, contactId, now);
-  const list = Array.isArray(record.entitlements) ? record.entitlements : [];
-  const identity = entitlementIdentity(entitlement);
-  const index = list.findIndex((item) => entitlementIdentity(item) === identity);
-  const before = index >= 0 ? { ...list[index] } : null;
-  if (index >= 0) list[index] = entitlement; else list.push(entitlement);
-  record.entitlements = list;
-  record.updatedAt = now.toISOString();
-
-  audit(store, {
-    at: now.toISOString(), actor, action: before ? 'entitlement.update' : 'entitlement.grant',
-    contactId, note, detail: { identity, from: before, to: entitlement },
-  });
   return { ok: true, entitlement, replaced: Boolean(before) };
 }
 
@@ -142,33 +143,70 @@ export function grantEntitlement(store, contactId, input, { actor = 'admin', now
  * Revoke an entitlement.
  *
  * The record is kept and marked revoked rather than deleted: "this was removed
- * on the 3rd by Sara" is an answer, and a missing row is not.
+ * on the 3rd by an operator" is an answer, and a missing row is not.
  */
 export function revokeEntitlement(store, contactId, { type, key }, { actor = 'admin', now = new Date(), note = '' } = {}) {
-  const record = store.contacts[clean(contactId, 120)];
+  const id = clean(contactId, 120);
+  const record = store.contacts?.[id];
   if (!record) return { ok: false, error: 'unknown_contact' };
   const identity = `${clean(type, 40)}::${clean(key, 120)}`;
-  const list = Array.isArray(record.entitlements) ? record.entitlements : [];
-  const index = list.findIndex((item) => entitlementIdentity(item) === identity);
-  if (index < 0) return { ok: false, error: 'entitlement_not_found' };
+  const existing = (record.entitlements || []).find((item) => entitlementIdentity(item) === identity);
+  if (!existing) return { ok: false, error: 'entitlement_not_found' };
 
-  const before = { ...list[index] };
-  list[index] = { ...list[index], status: 'revoked', observed_at: now.toISOString() };
-  record.entitlements = list;
+  const result = propose(store, id, 'entitlement_absent', { type: clean(type, 40), key: clean(key, 120) },
+    { actor, now, note });
+  if (!result.ok) return { ok: false, error: result.reason };
+  return {
+    ok: true,
+    entitlement: (record.entitlements || []).find((item) => entitlementIdentity(item) === identity),
+  };
+}
+
+/**
+ * Place or lift a manual override.
+ *
+ * This is what stops a future reconciliation sweep from quietly undoing a comp,
+ * a correction or a temporary grant. It is time-boxed on purpose: an override
+ * with no end date is how a ledger drifts permanently out of step with billing.
+ */
+export function setOverride(store, contactId, { resource = 'membership', type, key, until, reason = '' },
+  { actor = 'admin', now = new Date() } = {}) {
+  const id = clean(contactId, 120);
+  const record = store.contacts?.[id];
+  if (!record) return { ok: false, error: 'unknown_contact' };
+  const untilIso = until ? new Date(Date.parse(until)).toISOString() : null;
+  if (until && !Number.isFinite(Date.parse(until))) return { ok: false, error: 'invalid_until' };
+
+  let target = null;
+  let label = 'membership';
+  if (resource === 'membership') {
+    if (!record.membership) return { ok: false, error: 'no_membership' };
+    target = record.membership;
+  } else {
+    const identity = `${clean(type, 40)}::${clean(key, 120)}`;
+    target = (record.entitlements || []).find((item) => entitlementIdentity(item) === identity);
+    if (!target) return { ok: false, error: 'entitlement_not_found' };
+    label = identity;
+  }
+
+  const from = target.override_until || null;
+  target.override_until = untilIso;
+  target.override_reason = clean(reason, 200) || null;
   record.updatedAt = now.toISOString();
 
   audit(store, {
-    at: now.toISOString(), actor, action: 'entitlement.revoke', contactId, note,
-    detail: { identity, from: before, to: list[index] },
+    at: now.toISOString(), actor, source: 'admin',
+    action: untilIso ? 'override.set' : 'override.clear',
+    contactId: id, note: clean(reason, 300),
+    detail: { resource: label, from, to: untilIso },
   });
-  return { ok: true, entitlement: list[index] };
+  return { ok: true, override_until: untilIso, resource: label };
 }
 
 /**
  * Write a plan's promised benefits as real entitlements for one member.
  *
  * This is the ONLY bridge from policy to access, and it is explicit on purpose.
- * Returns what it wrote so the operator sees exactly which rights now exist.
  */
 export function applyPolicy(store, contactId, policy, planKey, { actor = 'admin', now = new Date(), period = null, note = '' } = {}) {
   if (!policy?.plans?.[planKey]) return { ok: false, error: 'unknown_plan_key' };
@@ -179,7 +217,7 @@ export function applyPolicy(store, contactId, policy, planKey, { actor = 'admin'
     if (result.ok) written.push(result.entitlement);
   }
   audit(store, {
-    at: now.toISOString(), actor, action: 'policy.apply', contactId, note,
+    at: now.toISOString(), actor, source: 'admin', action: 'policy.apply', contactId, note,
     detail: { plan: planKey, created: written.map((item) => `${item.type}:${item.key}`) },
   });
   return { ok: true, created: written };
@@ -197,7 +235,6 @@ export function policyDrift(record, policy, now = new Date()) {
   if (!planKey || !policy?.plans?.[planKey]) return { plan: null, missing: [], extra: [] };
   const expected = benefitsToEntitlements(policy, planKey, { now });
   const held = (record.entitlements || []).filter((item) => item.status === 'active');
-  const heldTypes = new Set(held.map((item) => item.type));
 
   const missing = expected
     .filter((item) => !held.some((h) => h.type === item.type))
@@ -206,20 +243,10 @@ export function policyDrift(record, policy, now = new Date()) {
   // Rights the member holds from policy that their current plan no longer
   // promises — typically left behind by a downgrade.
   const extra = held
-    .filter((item) => item.source === 'membership_policy'
-      && !expected.some((e) => e.type === item.type))
+    .filter((item) => item.source === 'membership_policy' && !expected.some((e) => e.type === item.type))
     .map((item) => ({ type: item.type, key: item.key }));
 
-  return { plan: planKey, missing, extra, heldTypes: [...heldTypes] };
+  return { plan: planKey, missing, extra, heldTypes: [...new Set(held.map((i) => i.type))] };
 }
 
-/** Audit entries for one contact, newest first. */
-export function auditFor(store, contactId, limit = 100) {
-  const id = clean(contactId, 120);
-  return (store.auditLog || [])
-    .filter((entry) => !id || entry.contactId === id)
-    .slice(-limit)
-    .reverse();
-}
-
-export { isFixtureContactId };
+export { isFixtureContactId, audit, auditFor, overrideActive };

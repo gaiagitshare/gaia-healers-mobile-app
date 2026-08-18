@@ -286,3 +286,84 @@ test('the member list counts plans and finds a member by id', async () => {
 });
 
 // The proxy holds a listener open; the runner uses --test-force-exit.
+
+// ── integrations, overrides and the unresolved queue ────────────────────────
+test('the integrations view ships every external source disconnected', async () => {
+  const res = await admin('/api/admin/membership/sources');
+  assert.equal(res.json.ok, true);
+  const byKey = Object.fromEntries(res.json.sources.map((s) => [s.key, s]));
+  assert.equal(byKey.admin.state, 'active');
+  assert.equal(byKey.admin.locked, true);
+  for (const key of ['ghl_membership', 'ghl_course', 'shopify', 'vendor']) {
+    assert.equal(byKey[key].state, 'disabled');
+  }
+  assert.equal(byKey.ghl_membership.mode, 'snapshot', 'memberships reconcile');
+  assert.equal(byKey.ghl_course.mode, 'event', 'courses can only be pushed');
+});
+
+test('the billing map is visible but has no write route at all', async () => {
+  const res = await admin('/api/admin/membership/sources');
+  assert.equal(res.json.billingMapEditable, false);
+  const silver = res.json.billingMap.find((m) => m.key === 'silver');
+  assert.equal(silver.monthlyPriceId, '69177f9c54010d2bad6a8ac6');
+
+  // there is no endpoint to change it — not a disabled one, none
+  const attempt = await admin('/api/admin/membership/sources', {
+    method: 'POST', body: { billingMap: [{ key: 'diamond', monthlyPriceId: '67bb407aee6d11a5f3d8f45c' }] },
+  });
+  assert.equal(attempt.status, 404, 'the price-to-tier map cannot be edited over HTTP');
+  const after = await admin('/api/admin/membership/sources');
+  assert.equal(after.json.billingMap.find((m) => m.key === 'diamond').monthlyPriceId, '691cbd1d396387281fe141f7');
+});
+
+test('a source can be set to watching, but going live needs a server flag', async () => {
+  const watch = await admin('/api/admin/membership/sources/state', {
+    method: 'POST', body: { key: 'ghl_membership', state: 'shadow' },
+  });
+  assert.equal(watch.json.ok, true);
+  assert.equal(watch.json.sources.find((s) => s.key === 'ghl_membership').state, 'shadow');
+
+  const live = await admin('/api/admin/membership/sources/state', {
+    method: 'POST', body: { key: 'ghl_membership', state: 'active' },
+  });
+  assert.equal(live.json.ok, false);
+  assert.equal(live.json.reason, 'activation_requires_server_flag');
+
+  const locked = await admin('/api/admin/membership/sources/state', {
+    method: 'POST', body: { key: 'admin', state: 'disabled' },
+  });
+  assert.equal(locked.json.reason, 'source_is_locked');
+
+  // put it back
+  await admin('/api/admin/membership/sources/state', { method: 'POST', body: { key: 'ghl_membership', state: 'disabled' } });
+});
+
+test('an override protects a membership and shows on the member', async () => {
+  const until = new Date(Date.now() + 7 * 86400000).toISOString();
+  const res = await admin('/api/admin/membership/override', {
+    method: 'POST', body: { contactId: CONTACT_ID, resource: 'membership', until, reason: 'comped for the retreat' },
+  });
+  assert.equal(res.json.ok, true);
+  assert.equal(res.json.member.membership.override_until, until);
+  assert.equal(res.json.member.membership.override_reason, 'comped for the retreat');
+
+  const cleared = await admin('/api/admin/membership/override', {
+    method: 'POST', body: { contactId: CONTACT_ID, resource: 'membership', until: null },
+  });
+  assert.equal(cleared.json.member.membership.override_until, null);
+});
+
+test('admin writes are recorded as proposals from source admin', async () => {
+  const res = await admin(`/api/admin/membership/proposals?id=${CONTACT_ID}`);
+  assert.equal(res.json.ok, true);
+  assert.ok(res.json.proposals.length > 0);
+  assert.ok(res.json.proposals.every((p) => p.source === 'admin'));
+  assert.ok(res.json.proposals.every((p) => p.state === 'applied' || p.state === 'rejected'));
+});
+
+test('the public catalogue serves the policy an operator edited', async () => {
+  const res = await call('/api/membership/plans');
+  const silver = res.json.plans.find((p) => p.key === 'silver');
+  assert.equal(silver.prices.monthly, '$127/mo', 'the Store and the Control Center cannot disagree');
+  assert.ok(silver.displayBenefits.length, 'marketing copy still ships with the catalogue');
+});

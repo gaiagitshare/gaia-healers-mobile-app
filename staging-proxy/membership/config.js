@@ -145,13 +145,6 @@ const MEMBERSHIP_SOURCES = ['ghl_subscription', 'ghl_onboarding', 'manual', 'fix
  * it to describe an upgrade, never to manufacture an active entitlement. See
  * the ledger for what a member actually has.
  */
-const MEMBERSHIP_POLICY = {
-  free:    { crm_access: null,     directory_level: null, lead_allocation: 0,  discount: null },
-  silver:  { crm_access: 'diy',     directory_level: '3',  lead_allocation: 0,  discount: null },
-  gold:    { crm_access: 'managed', directory_level: '2',  lead_allocation: 5,  discount: 'certification:20' },
-  diamond: { crm_access: 'leader',  directory_level: '1',  lead_allocation: 25, discount: 'certification:20' },
-};
-
 // How long a ledger observation stays trustworthy before the response is
 // flagged stale. Conservative: a member should be told the data is old rather
 // than have access silently withdrawn.
@@ -229,7 +222,6 @@ export {
   BILLING_CYCLES,
   MEMBERSHIP_PRESENTATION,
   MEMBERSHIP_BILLING,
-  MEMBERSHIP_POLICY,
   UNRESOLVED_BILLING_IDS,
   LEGACY_MEMBERSHIP_TAGS,
   ENTITLEMENT_TYPES,

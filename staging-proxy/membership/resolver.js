@@ -11,11 +11,14 @@
  */
 
 import {
-  MEMBERSHIP_PRESENTATION, MEMBERSHIP_POLICY, ENTITLEMENT_TYPES,
+  MEMBERSHIP_PRESENTATION, ENTITLEMENT_TYPES,
   LEDGER_STALE_AFTER_MS,
   normalizeMembershipKey, tierFromBillingIds, isLegacyMembershipTag, nextMembershipKey,
 } from './config.js';
 import { normalizeMembership, normalizeEntitlement } from './ledger.js';
+// Only the prices-free matrix. benefitsMatrix() strips every amount and every
+// line of marketing copy, so no price can reach an access decision from here.
+import { benefitsMatrix } from './policy.js';
 
 const ID_LIKE = /^(prod_[A-Za-z0-9]+|price_[A-Za-z0-9]+|[0-9a-f]{24})$/;
 
@@ -135,7 +138,26 @@ function decorate(membership) {
  * `subscriptions` — live subscription evidence the caller already fetched
  * `tags`          — GHL tags, used ONLY for diagnostics and legacy reporting
  * `sourceError`   — true when an upstream read failed for this request
+ * `authority`     — where membership may be resolved FROM. See MEMBERSHIP_AUTHORITY.
  */
+/**
+ * Where a member's tier is allowed to come from.
+ *
+ *   ledger_first — the ledger answers; live billing fills in only for members
+ *                  who have never been reconciled, and that answer is marked
+ *                  provisional. This is the default and the transition state.
+ *   ledger_only  — the ledger answers or nobody does. The end state, safe to
+ *                  switch on once no read reports a provisional membership.
+ *   live_first   — the pre-B2 behaviour, retained so the change is reversible.
+ *
+ * Entitlements have always come from the ledger alone; this concerns membership,
+ * which was the last thing a member read still needed an external system for.
+ */
+const MEMBERSHIP_AUTHORITY = ['ledger_first', 'ledger_only', 'live_first']
+  .includes(process.env.GAIA_MEMBERSHIP_AUTHORITY)
+  ? process.env.GAIA_MEMBERSHIP_AUTHORITY
+  : 'ledger_first';
+
 function resolveMemberAccess({
   record = null,
   subscriptions = [],
@@ -143,6 +165,8 @@ function resolveMemberAccess({
   sourceError = false,
   now = new Date(),
   staleAfterMs = LEDGER_STALE_AFTER_MS,
+  authority = MEMBERSHIP_AUTHORITY,
+  benefits = benefitsMatrix(),
 } = {}) {
   const notes = [];
 
@@ -154,14 +178,34 @@ function resolveMemberAccess({
 
   const fromSubs = membershipFromSubscriptions(subscriptions, { now });
   unmappedSubscriptions = fromSubs.unmapped;
-  if (fromSubs.membership && fromSubs.membership.key) {
+  const stored = record?.membership ? normalizeMembership(record.membership, { now }) : null;
+  let provisional = false;
+
+  if (authority === 'live_first' && fromSubs.membership?.key) {
+    // The pre-B2 behaviour, kept only so the transition is reversible.
     membership = fromSubs.membership;
     resolvedBy = 'billing_id';
     conflict = fromSubs.conflict;
-  } else if (record?.membership) {
-    // An explicit ledger membership (onboarding, manual grant, fixture).
-    const stored = normalizeMembership(record.membership, { now });
-    if (stored?.key) { membership = stored; resolvedBy = `ledger:${stored.source}`; }
+  } else if (stored?.key) {
+    // The ledger is the answer. Everything else is evidence about the ledger.
+    membership = stored;
+    resolvedBy = `ledger:${stored.source}`;
+    if (fromSubs.membership?.key && fromSubs.membership.key !== stored.key) {
+      // Not an error: a comp, a correction or a pending reconciliation all look
+      // like this. It is surfaced so it can be reconciled rather than hidden.
+      conflict = true;
+      notes.push(`ledger says ${stored.key}, live billing says ${fromSubs.membership.key}`);
+    }
+  } else if (authority !== 'ledger_only' && fromSubs.membership?.key) {
+    // Compatibility fallback. A member whose subscription has never been
+    // reconciled into the ledger still sees the right tier, and we mark the
+    // answer provisional so the remaining dependency is countable rather than
+    // invisible. When this reaches zero the fallback can be switched off.
+    membership = fromSubs.membership;
+    resolvedBy = 'live_fallback';
+    conflict = fromSubs.conflict;
+    provisional = true;
+    notes.push('membership resolved from live billing because the ledger holds no record for this member');
   }
 
   if (unmappedSubscriptions.length) {
@@ -210,8 +254,8 @@ function resolveMemberAccess({
   const nextKey = nextMembershipKey(membership.key || 'free');
   const gains = [];
   if (nextKey) {
-    const current = MEMBERSHIP_POLICY[membership.key || 'free'] || {};
-    const next = MEMBERSHIP_POLICY[nextKey] || {};
+    const current = benefits[membership.key || 'free'] || {};
+    const next = benefits[nextKey] || {};
     for (const field of Object.keys(next)) {
       if (JSON.stringify(next[field]) !== JSON.stringify(current[field]) && next[field] != null) {
         gains.push({ type: field, from: current[field] ?? null, to: next[field] });
@@ -239,6 +283,10 @@ function resolveMemberAccess({
       stale,
       resolved_from: 'ledger',
       membership_resolved_by: resolvedBy,
+      // True while this member's tier still depends on an external system.
+      // The count of provisional reads is the migration's progress bar.
+      membership_provisional: provisional,
+      membership_authority: authority,
       ledger_observed_at: ledgerObservedAt,
       membership_conflict: conflict,
       legacy_membership_tags: legacyTierTags,
@@ -250,6 +298,7 @@ function resolveMemberAccess({
 }
 
 export {
+  MEMBERSHIP_AUTHORITY,
   resolveMemberAccess,
   membershipFromSubscriptions,
   billingIdsFromSubscription,

@@ -35,6 +35,12 @@ export function defaultPolicy() {
         description: 'Community access and the public wellness tools.',
         prices: { monthly: '$0', annual: '$0' },
         checkoutUrl: 'https://join.gaiahealers.com/onboarding',
+        displayBenefits: [
+          'Community access',
+          'State of the Union calls',
+          'Lightworker Creed resources',
+          'Newsletter and community updates',
+        ],
         active: true, displayOrder: 1, upgradeTo: 'silver',
         benefits: [],
       },
@@ -44,6 +50,13 @@ export function defaultPolicy() {
         description: 'Certifications, directory listing and the DIY practice platform.',
         prices: { monthly: '$97/mo', annual: '$997/yr' },
         checkoutUrl: 'https://join.gaiahealers.com/silver',
+        displayBenefits: [
+          'Everything in Free',
+          'Certifications and courses',
+          'Directory listing',
+          'DIY practice platform and CRM',
+          'Monthly marketing coaching',
+        ],
         active: true, displayOrder: 2, upgradeTo: 'gold',
         benefits: [
           { type: 'crm_access', key: 'diy', value: { level: 'diy' } },
@@ -56,6 +69,13 @@ export function defaultPolicy() {
         description: 'Managed CRM, monthly leads and a certification discount.',
         prices: { monthly: '$497/mo', annual: '$4,997/yr' },
         checkoutUrl: 'https://join.gaiahealers.com/gold',
+        displayBenefits: [
+          'Everything in Silver',
+          'Custom landing page',
+          'Managed CRM and support',
+          'Monthly AI leads',
+          'Certification discount',
+        ],
         active: true, displayOrder: 3, upgradeTo: 'diamond',
         benefits: [
           { type: 'crm_access', key: 'managed', value: { level: 'managed' } },
@@ -70,6 +90,13 @@ export function defaultPolicy() {
         description: 'Leader CRM, top directory placement and leadership benefits.',
         prices: { monthly: '$997/mo', annual: '$9,997/yr' },
         checkoutUrl: 'https://join.gaiahealers.com/diamond',
+        displayBenefits: [
+          'Everything in Gold',
+          'Higher monthly AI lead allocation',
+          'Top directory placement',
+          'Business accelerator and retreats',
+          'Conference and speaking opportunities',
+        ],
         active: true, displayOrder: 4, upgradeTo: null,
         benefits: [
           { type: 'crm_access', key: 'leader', value: { level: 'leader' } },
@@ -105,6 +132,11 @@ export function normalizePlan(key, input, existing = {}) {
   const benefits = Array.isArray(input?.benefits)
     ? input.benefits.map(normalizeBenefit).filter(Boolean)
     : (existing.benefits || []);
+  // Marketing bullets for the public catalogue. Deliberately free text and
+  // deliberately NOT entitlements: they describe a plan, they never grant it.
+  const displayBenefits = Array.isArray(input?.displayBenefits)
+    ? input.displayBenefits.map((line) => str(line, 120)).filter(Boolean).slice(0, 12)
+    : (existing.displayBenefits || []);
   return {
     key,
     label: str(input?.label, 60) || existing.label || presentation.label || key,
@@ -120,6 +152,7 @@ export function normalizePlan(key, input, existing = {}) {
       ? Number(input.displayOrder) : (existing.displayOrder ?? 99),
     upgradeTo: MEMBERSHIP_ORDER.includes(input?.upgradeTo) ? input.upgradeTo : (existing.upgradeTo ?? null),
     benefits,
+    displayBenefits,
   };
 }
 
@@ -171,4 +204,28 @@ export function benefitsToEntitlements(policy, planKey, { now = new Date(), peri
       observed_at: stamp,
     };
   });
+}
+
+/**
+ * The benefits matrix with every trace of money and marketing copy removed:
+ * `{ planKey: { entitlementType: value } }`.
+ *
+ * This exists so the resolver can compare one plan against the next without
+ * ever holding a price. An amount that can reach an authorization decision is
+ * an amount that can eventually decide one, and the Next Level comparison is
+ * the only place the two worlds nearly touch.
+ */
+export function benefitsMatrix(policy = defaultPolicy()) {
+  const matrix = {};
+  for (const key of MEMBERSHIP_ORDER) {
+    const plan = policy?.plans?.[key];
+    matrix[key] = {};
+    for (const benefit of (plan?.benefits || [])) {
+      const value = benefit.value || {};
+      // Collapse to the single meaningful scalar so "5 leads vs 25 leads"
+      // compares cleanly instead of comparing object shapes.
+      matrix[key][benefit.type] = value.level ?? value.monthly ?? value.percent ?? benefit.key;
+    }
+  }
+  return matrix;
 }

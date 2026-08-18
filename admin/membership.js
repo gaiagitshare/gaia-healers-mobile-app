@@ -60,16 +60,18 @@
   // ── shell ───────────────────────────────────────────────────
   function render() {
     panel.innerHTML =
-      '<div class="g-tabs g-tabs--3" role="tablist" aria-label="Membership sections">'
-      + ['members', 'plans', 'audit'].map((key) => '<button type="button" class="g-tab'
+      '<div class="g-tabs g-tabs--4" role="tablist" aria-label="Membership sections">'
+      + ['members', 'plans', 'sources', 'audit'].map((key) => '<button type="button" class="g-tab'
         + (view === key ? ' is-active' : '') + '" data-ms-view="' + key + '" role="tab" aria-selected="'
-        + (view === key) + '">' + (key === 'plans' ? 'Plans &amp; Benefits' : key[0].toUpperCase() + key.slice(1)) + '</button>').join('')
+        + (view === key) + '">' + ({ plans: 'Plans &amp; Benefits', sources: 'Integrations' }[key]
+        || key[0].toUpperCase() + key.slice(1)) + '</button>').join('')
       + '</div><div id="ms-body"></div>';
     panel.querySelectorAll('[data-ms-view]').forEach((tab) => tab.addEventListener('click', () => {
       view = tab.dataset.msView; render();
     }));
     if (view === 'members') renderMembers();
     else if (view === 'plans') renderPlans();
+    else if (view === 'sources') renderSources();
     else renderAudit();
   }
 
@@ -157,10 +159,50 @@
       + (membership ? '<button class="g-btn g-btn--ghost g-btn--sm" id="ms-end">End membership</button>' : '')
       + '</div>'
       + '<p class="g-text-muted">Setting a plan records the plan only. It grants nothing — '
-      + 'use <b>Apply plan benefits</b> below to write the actual entitlements.</p>';
+      + 'use <b>Apply plan benefits</b> below to write the actual entitlements.</p>'
+      + (membership ? overrideBlock(membership) : '');
+  }
+
+  /**
+   * A protected decision. Without this, the first reconciliation sweep would
+   * quietly undo a comp or a correction and nobody would know why.
+   */
+  function overrideBlock(membership) {
+    const until = membership.override_until;
+    const standing = until && new Date(until) > new Date();
+    return '<hr style="border:none;border-top:1px solid rgba(255,255,255,.08);margin:14px 0" />'
+      + '<p class="g-label">Protect from automatic changes</p>'
+      + (standing
+        ? '<p><b>Protected until ' + esc(dateOnly(until)) + '</b>'
+          + (membership.override_reason ? ' — ' + esc(membership.override_reason) : '')
+          + '<br><span class="g-text-muted">No external system can change this membership until then.</span></p>'
+        : '<p class="g-text-muted">Not protected. A future billing sync could change this membership.</p>')
+      + '<div class="g-field"><label class="g-label" for="ms-ov-until">Protect until</label>'
+      + '<input class="g-input" id="ms-ov-until" type="date" /></div>'
+      + '<div class="g-field"><label class="g-label" for="ms-ov-reason">Reason</label>'
+      + '<input class="g-input" id="ms-ov-reason" placeholder="Comped for the retreat" /></div>'
+      + '<p class="g-admin-status" id="ms-ov-status"></p>'
+      + '<div class="g-card__actions"><button class="g-btn g-btn--secondary g-btn--sm" id="ms-ov-set">Protect</button>'
+      + (standing ? '<button class="g-btn g-btn--ghost g-btn--sm" id="ms-ov-clear">Remove protection</button>' : '')
+      + '</div>';
   }
 
   function bindAssign(contactId) {
+    const saveOverride = async (until) => {
+      status('ms-ov-status', 'Saving…');
+      const res = await api('POST', '/api/admin/membership/override', {
+        contactId, resource: 'membership', until, reason: val('ms-ov-reason'),
+      });
+      if (!res.ok) { status('ms-ov-status', 'Refused: ' + esc(res.reason || 'unknown'), 'err'); return; }
+      current = res.member;
+      drawMember(current);
+    };
+    on('ms-ov-set', 'click', () => {
+      const date = val('ms-ov-until');
+      if (!date) { status('ms-ov-status', 'Choose the date the protection should end.', 'err'); return; }
+      saveOverride(new Date(date + 'T23:59:59Z').toISOString());
+    });
+    on('ms-ov-clear', 'click', () => saveOverride(null));
     on('ms-assign', 'click', async () => {
       status('ms-assign-status', 'Saving…');
       const res = await api('POST', '/api/admin/membership/assign', {
@@ -379,6 +421,125 @@
       + esc(JSON.stringify(plan.benefits || [], null, 1)) + '</textarea></div>'
       + '<div class="g-card__actions"><button class="g-btn g-btn--secondary g-btn--sm" id="ms-save-' + plan.key + '">'
       + 'Save ' + esc(plan.label) + '</button></div></article>';
+  }
+
+
+  // ── integrations ────────────────────────────────────────────
+  const STATE_COPY = {
+    disabled: 'Not connected. Nothing from this system reaches Gaia.',
+    shadow: 'Watching only. Gaia records what it would change and changes nothing.',
+    active: 'Live. Changes from this system are applied to member access.',
+  };
+
+  async function renderSources() {
+    const body = el('ms-body');
+    body.innerHTML = '<p class="g-empty">Loading integrations…</p>';
+    const [res, unresolved, proposals] = await Promise.all([
+      api('GET', '/api/admin/membership/sources'),
+      api('GET', '/api/admin/membership/unresolved'),
+      api('GET', '/api/admin/membership/proposals?state=shadow'),
+    ]);
+    if (!res || !res.ok) { body.innerHTML = '<p class="g-empty">Could not load integrations.</p>'; return; }
+
+    body.innerHTML =
+      '<article class="g-card"><p class="g-card__label">Where member access can come from</p>'
+      + '<p class="g-text-muted">Every source — including this admin panel — writes through the same pipeline. '
+      + 'A source in <b>watching</b> runs the whole thing and stops before the ledger, so you can see exactly what it '
+      + 'would do before letting it do anything.</p></article>'
+      + res.sources.map(sourceCard).join('')
+      + shadowCard(proposals && proposals.proposals || [])
+      + unresolvedCard(unresolved && unresolved.unresolved || [])
+      + billingCard(res)
+      + '<p class="g-admin-status" id="ms-source-status"></p>';
+
+    res.sources.forEach((source) => {
+      ['disabled', 'shadow', 'active'].forEach((state) => {
+        on('ms-src-' + source.key + '-' + state, 'click', async () => {
+          status('ms-source-status', 'Updating ' + source.label + '…');
+          const r = await api('POST', '/api/admin/membership/sources/state', { key: source.key, state });
+          if (!r.ok) {
+            status('ms-source-status', r.reason === 'activation_requires_server_flag'
+              ? 'Going live is not a web-form decision. It is enabled on the server once the adapter is reviewed.'
+              : 'Refused: ' + esc(r.reason || 'unknown'), 'err');
+            return;
+          }
+          renderSources();
+        });
+      });
+    });
+  }
+
+  function sourceCard(source) {
+    const c = source.counters || {};
+    const dot = { disabled: '', shadow: 'watching', active: 'live' }[source.state];
+    return '<article class="g-card"><p class="g-card__label">' + esc(source.label)
+      + ' <span class="g-tag">' + esc(source.mode === 'snapshot' ? 'reconciles' : 'receives events') + '</span>'
+      + (dot ? ' <span class="g-tag">' + dot + '</span>' : '') + '</p>'
+      + '<p class="g-text-muted">' + esc(source.description || '') + '</p>'
+      + '<p><b>' + esc(STATE_COPY[source.state] || source.state) + '</b></p>'
+      + '<p class="g-text-muted">'
+      + (source.lastObservedAt ? 'Last event ' + esc(source.lastObservedAt.replace('T', ' ').slice(0, 16)) : 'No events yet')
+      + ' · applied ' + (c.applied || 0) + ' · watched ' + (c.shadow || 0)
+      + ' · rejected ' + (c.rejected || 0) + ' · unresolved ' + (c.unresolved || 0)
+      + ' · low confidence ' + (c.lowConfidence || 0) + '</p>'
+      + (source.locked
+        ? '<p class="g-text-muted">Always on — this is how the system is operated.</p>'
+        : '<div class="g-card__actions">'
+          + ['disabled', 'shadow', 'active'].map((state) => '<button class="g-btn g-btn--'
+            + (source.state === state ? 'secondary' : 'ghost') + ' g-btn--sm" id="ms-src-'
+            + source.key + '-' + state + '"' + (source.state === state ? ' disabled' : '') + '>'
+            + ({ disabled: 'Disconnect', shadow: 'Watch only', active: 'Go live' }[state]) + '</button>').join('')
+          + '</div>')
+      + '</article>';
+  }
+
+  function shadowCard(proposals) {
+    return '<article class="g-card"><p class="g-card__label">What watching sources would change</p>'
+      + (proposals.length
+        ? '<p class="g-text-muted">Nothing below has been applied.</p>'
+          + proposals.slice(0, 40).map((p) => '<div class="g-admin-item"><div><b>' + esc(p.contactId || '—')
+            + '</b> <span class="g-text-muted">' + esc(p.source) + ' · ' + esc(p.resource) + '</span><br>'
+            + '<span class="g-text-muted">' + esc(describeDiff(p.diff)) + '</span></div></div>').join('')
+        : '<p class="g-empty">Nothing pending. No source is watching yet.</p>')
+      + '</article>';
+  }
+
+  function describeDiff(diff) {
+    if (!diff) return 'no change computed';
+    if (!diff.changed) return 'no change — Gaia already agrees';
+    if (diff.kind === 'membership') {
+      return 'would set membership ' + (diff.to ? (diff.to.key + ' / ' + diff.to.status) : 'none')
+        + (diff.from ? ' (currently ' + diff.from.key + ' / ' + diff.from.status + ')' : ' (currently none)');
+    }
+    return 'would ' + (diff.to && diff.to.status === 'revoked' ? 'revoke ' : 'grant ') + esc(diff.identity || '');
+  }
+
+  function unresolvedCard(list) {
+    return '<article class="g-card"><p class="g-card__label">Waiting to be identified</p>'
+      + (list.length
+        ? '<p class="g-text-muted">These arrived for someone Gaia could not identify with certainty. '
+          + 'They are kept whole, so linking the person replays them.</p>'
+          + list.slice(0, 25).map((u) => '<div class="g-admin-item"><div><b>' + esc(u.reason)
+            + '</b> <span class="g-text-muted">' + esc(u.source) + '</span><br><span class="g-text-muted">'
+            + esc(JSON.stringify(u.claim)) + (u.candidates && u.candidates.length
+              ? ' · candidates: ' + esc(u.candidates.join(', ')) : '') + '</span></div></div>').join('')
+        : '<p class="g-empty">Nothing waiting.</p>')
+      + '</article>';
+  }
+
+  function billingCard(res) {
+    return '<article class="g-card"><p class="g-card__label">Billing identity map</p>'
+      + '<p class="g-text-muted">Which product and price ids mean which plan. <b>Read-only here on purpose:</b> '
+      + 'whoever can edit this decides who gets Diamond, so it lives in reviewed, version-controlled code and is '
+      + 'shown here for confidence. Gaia never maps by price amount or product name — Next Level bills the same '
+      + '$97/month as Silver.</p>'
+      + (res.billingMap || []).map((m) => '<div class="g-admin-item"><div><b>' + esc(m.key) + '</b><br>'
+        + '<span class="g-text-muted">product ' + esc(m.ghlProductId) + '<br>monthly ' + esc(m.monthlyPriceId)
+        + '<br>annual ' + esc(m.annualPriceId) + '</span></div></div>').join('')
+      + ((res.quarantinedBillingIds || []).length
+        ? '<p class="g-text-muted">Quarantined, never granted: ' + esc(res.quarantinedBillingIds.join(', ')) + '</p>'
+        : '')
+      + '</article>';
   }
 
   // ── audit ───────────────────────────────────────────────────

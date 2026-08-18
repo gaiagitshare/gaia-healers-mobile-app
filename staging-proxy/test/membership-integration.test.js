@@ -231,7 +231,11 @@ test('5 (integration). a canonical Gold subscription does grant Gold', async () 
   assert.equal(body.membership.billing_cycle, 'monthly');
   assert.equal(body.membership.label, 'Gold');
   assert.equal(body.membership.subtitle, 'Gaia Practice Pro');
-  assert.equal(body.meta.membership_resolved_by, 'billing_id');
+  // This member has no ledger membership, so billing answers — and the read
+  // says so, which is how the remaining live dependency stays countable.
+  assert.equal(body.meta.membership_resolved_by, 'live_fallback');
+  assert.equal(body.meta.membership_provisional, true);
+  assert.equal(body.meta.membership_authority, 'ledger_first');
 });
 
 test('an unmapped subscription is reported, never guessed into a tier', async () => {

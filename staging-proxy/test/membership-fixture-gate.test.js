@@ -116,6 +116,19 @@ test('the resolver does not import the plan catalogue', () => {
   assert.ok(!/plans\.js/.test(gateSource));
 });
 
+test('no price or marketing copy survives into a resolved access payload', async () => {
+  // The resolver reads the benefits matrix, which is derived from the same
+  // policy that holds prices — so the structural guard above is no longer
+  // sufficient on its own. This asserts the property the guard exists for.
+  const res = await call('/api/member/access', {
+    headers: { cookie: cookie({ member: { contactId: 'real-contact-3', email: 'r3@example.test' } }) },
+  });
+  const serialized = JSON.stringify(res.json);
+  assert.ok(!/\$\d/.test(serialized), 'no amount reaches an access decision or its output');
+  assert.ok(!/\/mo|\/yr/.test(serialized), 'no billing copy either');
+  assert.ok(!serialized.includes('Everything in'), 'no marketing bullet leaks into member access');
+});
+
 test('the plan catalogue is not consulted by /api/member/access', async () => {
   const plain = cookie({ member: { contactId: 'real-contact-2', email: 'r2@example.test' } });
   const res = await call('/api/member/access', { headers: { cookie: plain } });

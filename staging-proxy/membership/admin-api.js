@@ -24,8 +24,13 @@ import {
 import { defaultPolicy, normalizePolicy, normalizePlan, plansInOrder, benefitsToEntitlements, POLICY_VERSION } from './policy.js';
 import {
   assignMembership, endMembership, grantEntitlement, revokeEntitlement,
-  applyPolicy, policyDrift, auditFor,
+  applyPolicy, policyDrift, setOverride,
 } from './admin-ops.js';
+import { audit, auditFor } from './audit-log.js';
+import { sourceSummary, setSourceState, getSource } from './sources.js';
+import { proposalsFor } from './proposals.js';
+import { linkIdentity, takeUnresolved, unresolvedCount } from './identity.js';
+import { MEMBERSHIP_BILLING, UNRESOLVED_BILLING_IDS } from './config.js';
 import { resolveMemberAccess } from './resolver.js';
 import { migrateContactRecord } from './ledger.js';
 
@@ -63,6 +68,10 @@ function savePolicy(policy) {
   fs.renameSync(temp, POLICY_FILE);
   _policyCache = next;
   return next;
+}
+
+function auditEntry(store, entry) {
+  return audit(store, { actor: ACTOR, source: 'admin', ...entry });
 }
 
 const text = (value, max = 200) => String(value ?? '').replace(/[\x00-\x1F\x7F]/g, '').trim().slice(0, max);
@@ -183,7 +192,17 @@ async function handle(req, res, url, deps) {
   }
 
   // ---- writes ----
-  if (method === 'POST' && p.startsWith('/api/admin/membership/')) {
+  // The member-write routes share identity resolution and a save, so they are
+  // handled together. Listed explicitly rather than by prefix: a prefix match
+  // silently swallows every POST route added below it.
+  const MEMBER_WRITES = [
+    '/api/admin/membership/assign',
+    '/api/admin/membership/end',
+    '/api/admin/membership/grant',
+    '/api/admin/membership/revoke',
+    '/api/admin/membership/apply-policy',
+  ];
+  if (method === 'POST' && MEMBER_WRITES.includes(p)) {
     const body = await readJsonBody(req).catch(() => ({}));
     const guard = contactGuard(body.contactId);
     if (!guard.ok) return bad(guard.reason);
@@ -221,10 +240,107 @@ async function handle(req, res, url, deps) {
     } else if (p === '/api/admin/membership/apply-policy') {
       const key = text(body.key, 20) || store.contacts[guard.id]?.membership?.key;
       result = applyPolicy(store, guard.id, policy, key, { ...opts, period: text(body.period, 10) || null });
-    } else {
-      return sendJson(res, 404, { ok: false, reason: 'unknown_admin_route' }, origin);
     }
 
+    if (!result.ok) return bad(result.error);
+    saveLedger(store);
+    return ok({ result, member: memberView(store, guard.id, policy) });
+  }
+
+  // ---- sources / integrations ----
+  if (p === '/api/admin/membership/sources' && method === 'GET') {
+    const store = loadLedger();
+    const summary = sourceSummary(store);
+    saveLedger(store);   // the registry seeds itself on first read
+    return ok({
+      sources: summary,
+      unresolved: unresolvedCount(store),
+      // Read-only by design: whoever can edit this decides who gets Diamond,
+      // so it lives in reviewed code and is shown here for confidence only.
+      billingMap: Object.entries(MEMBERSHIP_BILLING).map(([key, map]) => ({
+        key,
+        ghlProductId: map.ghlProductId,
+        monthlyPriceId: map.monthlyPriceId,
+        annualPriceId: map.annualPriceId,
+        stripeProductId: map.stripeProductId,
+        deprecatedIds: map.deprecatedIds || [],
+      })),
+      quarantinedBillingIds: [...UNRESOLVED_BILLING_IDS],
+      billingMapEditable: false,
+    });
+  }
+
+  if (p === '/api/admin/membership/sources/state' && method === 'POST') {
+    const body = await readJsonBody(req).catch(() => ({}));
+    const key = text(body.key, 40);
+    const state = text(body.state, 20);
+    // Promotion to active is not a web-form decision while the adapters do not
+    // exist yet. Disabled and shadow are freely switchable; going live is
+    // deliberately held behind a server-side flag.
+    if (state === 'active' && process.env.GAIA_ALLOW_SOURCE_ACTIVATION !== 'true') {
+      return bad('activation_requires_server_flag');
+    }
+    const store = loadLedger();
+    const result = setSourceState(store, key, state);
+    if (!result.ok) return bad(result.reason);
+    auditEntry(store, { action: 'source.state', note: `${key}: ${result.from} to ${result.to}` });
+    saveLedger(store);
+    return ok({ sources: sourceSummary(store) });
+  }
+
+  // ---- proposals: the shadow-mode review surface ----
+  if (p === '/api/admin/membership/proposals' && method === 'GET') {
+    const store = loadLedger();
+    return ok({
+      proposals: proposalsFor(store, {
+        source: text(url.searchParams.get('source'), 40),
+        state: text(url.searchParams.get('state'), 20),
+        contactId: text(url.searchParams.get('id'), 120),
+      }),
+    });
+  }
+
+  // ---- unresolved identities ----
+  if (p === '/api/admin/membership/unresolved' && method === 'GET') {
+    const store = loadLedger();
+    return ok({ unresolved: (store.unresolved || []).slice(-100).reverse() });
+  }
+  if (p === '/api/admin/membership/unresolved/link' && method === 'POST') {
+    const body = await readJsonBody(req).catch(() => ({}));
+    const guard = contactGuard(body.contactId);
+    if (!guard.ok) return bad(guard.reason);
+    const store = loadLedger();
+    const entry = takeUnresolved(store, text(body.id, 120));
+    if (!entry) return bad('unresolved_entry_not_found');
+    const linked = linkIdentity(store, guard.id, {
+      field: text(body.field, 40) || undefined,
+      value: body.value,
+      email: body.email,
+      verified: true,
+      source: 'manual',
+    });
+    if (!linked.ok) return bad(linked.reason);
+    auditEntry(store, {
+      contactId: guard.id, action: 'identity.link',
+      note: `resolved ${entry.source} event ${entry.id}`,
+    });
+    saveLedger(store);
+    return ok({ linked: linked.identity, entry });
+  }
+
+  // ---- manual override ----
+  if (p === '/api/admin/membership/override' && method === 'POST') {
+    const body = await readJsonBody(req).catch(() => ({}));
+    const guard = contactGuard(body.contactId);
+    if (!guard.ok) return bad(guard.reason);
+    const store = loadLedger();
+    const result = setOverride(store, guard.id, {
+      resource: text(body.resource, 20) || 'membership',
+      type: text(body.type, 40),
+      key: text(body.key, 120),
+      until: body.until || null,
+      reason: text(body.reason, 200),
+    }, { now: new Date() });
     if (!result.ok) return bad(result.error);
     saveLedger(store);
     return ok({ result, member: memberView(store, guard.id, policy) });

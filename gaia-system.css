@@ -1161,8 +1161,8 @@ body.gaia-v2 .g-super-home .g-super-hero{border:1px solid var(--g-line);
   background:linear-gradient(180deg,rgba(4,7,10,.18) 0%,rgba(4,7,10,.55) 55%,rgba(4,7,10,.9) 100%)}
 @media (max-width:480px){
   .g-super-home .g-super-hero__art{inset:0;height:auto;opacity:.8}
-  body.gaia-v2 .g-super-hero__intro{min-height:330px;display:grid;align-content:end;
-    padding:18px 16px 18px}
+  body.gaia-v2 .g-super-home .g-super-hero .g-super-hero__intro{min-height:300px;
+    display:grid;align-content:end;padding:18px 16px 18px}
   body.gaia-v2 .g-super-hero__intro::before{background:transparent}
 }
 

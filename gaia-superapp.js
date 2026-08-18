@@ -529,8 +529,16 @@
       ['events', 'calendar-dots', 'Events', 'Gatherings and live sessions'],
       ['store', 'bag', 'Gaia Store', 'Sprays, tools and memberships'],
     ];
-    return '<section class="g-free-tools"><div class="g-super-section-head"><div><p class="g-super-kicker">Explore free</p><h2>Try Gaia today</h2></div></div><div class="g-free-tools__grid">'
-      + tools.map((item) => '<a class="g-free-tool" href="home.html?view=' + item[0] + '"><span>' + icon(item[1]) + '</span><strong>' + esc(item[2]) + '</strong><small>' + esc(item[3]) + '</small></a>').join('')
+    // Each tool wears its own colour — the icons are the wayfinding, so they
+    // should not all be the same green.
+    const tint = (name) => ({ 'Energy check': '#7DD956', Horoscope: '#4ED6E0',
+      'Chakra match': '#9E8CFC', 'Colour test': '#FFC53D', Events: '#A8E063', 'Gaia Store': '#F76B15' }[name] || '#A8E063');
+    const [primary, secondary] = [tools.slice(0, 4), tools.slice(4)];
+    return '<section class="g-free-tools"><div class="g-super-section-head"><div><p class="g-super-kicker">Explore free</p><h2>Try Gaia today</h2></div></div>'
+      + '<div class="g-free-tools__grid">'
+      + primary.map((item) => '<a class="g-free-tool" style="--tool:' + tint(item[2]) + '" href="home.html?view=' + item[0] + '"><span>' + icon(item[1]) + '</span><strong>' + esc(item[2]) + '</strong><small>' + esc(item[3]) + '</small></a>').join('')
+      + '</div><div class="g-free-tools__wide">'
+      + secondary.map((item) => '<a class="g-free-tool g-free-tool--wide" style="--tool:' + tint(item[2]) + '" href="home.html?view=' + item[0] + '"><span>' + icon(item[1]) + '</span><strong>' + esc(item[2]) + '</strong><small>' + esc(item[3]) + '</small></a>').join('')
       + '</div></section>';
   }
 
@@ -626,9 +634,8 @@
       + '<p class="g-feature-event__kicker">' + icon('calendar-dots') + ' Next gathering'
       + (countdown ? '<span class="g-feature-event__badge">' + esc(countdown) + '</span>' : '') + '</p>'
       + '<h2 class="g-feature-event__title">' + esc(event.name) + '</h2>'
-      + (when || location
-        ? '<p class="g-feature-event__meta">' + [when, location].filter(Boolean).map(esc).join(' · ') + '</p>'
-        : '')
+      + (when ? '<p class="g-feature-event__meta">' + esc(when) + '</p>' : '')
+      + (location ? '<p class="g-feature-event__meta g-feature-event__where">' + icon('map-pin') + ' ' + esc(location) + '</p>' : '')
       + '<div class="g-feature-event__actions">'
       + '<a class="g-btn g-btn--secondary g-btn--sm" href="home.html?view=events">Event details</a>'
       + register
@@ -643,7 +650,9 @@
     const firstName = String(p.name || '').trim().split(/\s+/)[0];
     const hour = new Date().getHours();
     const dayGreeting = hour < 12 ? 'Good morning' : hour < 18 ? 'Good afternoon' : 'Good evening';
-    const greeting = authed ? ('Welcome back' + (firstName ? ', ' + esc(firstName) : '')) : dayGreeting;
+    // "Good evening, Sarah" — the day's greeting, made personal when we know
+    // who is here, rather than a different sentence for members.
+    const greeting = dayGreeting + (authed && firstName ? ', ' + esc(firstName) : '');
     const services = serviceLink('academy', 'graduation-cap', 'Academy', stateMeta('Courses and certifications', courseGrants().length, 'course', 'courses'))
       + serviceLink('community', 'users-three', 'Community', stateMeta('Boards and circles', communities().length, 'community', 'communities'))
       + serviceLink('events', 'calendar-dots', 'Events', eventData()?.name ? 'Upcoming gathering available' : 'Gatherings and live sessions')

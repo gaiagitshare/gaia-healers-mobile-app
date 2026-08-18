@@ -1142,3 +1142,81 @@ body{overscroll-behavior-y:none;-webkit-tap-highlight-color:transparent}
   .g-sky__foot { padding-top: 8px; font-size: .72rem; }
   .g-sky__source { display: none; }         /* charming, not essential */
 }
+
+/* ── Home redesign: the mockup, made real ─────────────────────────────────
+   Full-bleed hero, the event artwork as a panel instead of a wash, the sky
+   as one strip with its illumination ring, and tools that wear their own
+   colours. Scoped to the home screen; the rest of the app is untouched. */
+
+/* Primary CTAs on home get the gradient from the mockup. */
+.g-super-home .g-btn--primary{
+  background:linear-gradient(100deg,var(--g-accent,#A8E063) 0%,#D9F36B 100%);
+  border:0;color:#0B1408}
+
+/* Hero: borderless, the artwork breathing behind the words. */
+body.gaia-v2 .g-super-home .g-super-hero{border:0;background:transparent;overflow:visible}
+.g-super-home .g-super-hero__art{opacity:.55;
+  -webkit-mask-image:linear-gradient(200deg,#000 30%,transparent 78%);
+  mask-image:linear-gradient(200deg,#000 30%,transparent 78%)}
+@media (max-width:480px){
+  body.gaia-v2 .g-super-hero__intro::before{background:transparent}
+  .g-super-home .g-super-hero__art{inset:0 0 auto 30%;height:300px;opacity:.5}
+}
+
+/* Featured event: content left, poster right — a panel, not a dim wash. */
+.g-feature-event{flex-direction:row;align-items:stretch}
+.g-feature-event__body{flex:1 1 60%;margin-top:0;z-index:1}
+.g-feature-event__art{position:relative;inset:auto;flex:1 1 40%;min-height:100%;
+  border-radius:0 20px 20px 0;overflow:hidden}
+.g-feature-event__art img{opacity:1;transform:none;filter:none}
+.g-feature-event__art::after{background:linear-gradient(90deg,var(--g-surface,#111A14) 0%,transparent 45%)}
+.g-feature-event__where{display:flex;align-items:center;gap:5px}
+.g-feature-event__where svg{width:14px;height:14px;color:var(--g-accent,#A8E063)}
+@media (max-width:480px){
+  .g-feature-event__body{padding:14px;flex-basis:62%}
+  .g-feature-event__art{flex-basis:38%}
+}
+
+/* Sky strip: kicker row, then moon · phase+motto · ring. */
+.g-sky{gap:10px;padding:16px}
+.g-sky__open{display:flex;justify-content:space-between;align-items:center;
+  text-decoration:none;color:inherit;margin:-4px -4px 0;padding:4px}
+.g-sky__open .g-sky__kicker{margin:0}
+.g-sky__chev{font-size:1.4rem;line-height:1;color:rgba(255,255,255,.45)}
+.g-sky__open:hover .g-sky__chev{color:var(--g-accent,#A8E063)}
+.g-sky__row{display:flex;align-items:center;gap:14px}
+.g-sky__row .g-sky__art{flex:0 0 auto;width:72px;height:72px}
+.g-sky__lede{flex:1;min-width:0}
+.g-sky__motto{margin:3px 0 0;font-size:.86rem;line-height:1.45;color:rgba(255,255,255,.72)}
+.g-sky__ring{flex:0 0 auto;width:64px;height:64px}
+.g-sky__ring-track{fill:none;stroke:rgba(255,255,255,.1);stroke-width:5}
+.g-sky__ring-fill{fill:none;stroke-width:5;stroke-linecap:round}
+.g-sky__ring-num{fill:#fff;font-size:13px;font-weight:700;text-anchor:middle;
+  font-variant-numeric:tabular-nums}
+.g-sky__ring-label{fill:rgba(255,255,255,.5);font-size:8px;text-anchor:middle;
+  letter-spacing:.08em;text-transform:uppercase}
+.g-sky__invite{display:block;border:0;background:none;padding:8px 0 0;margin:0;
+  border-top:1px solid rgba(255,255,255,.08);font-size:.82rem;line-height:1.4;
+  color:color-mix(in srgb,var(--sky-tint,#8E4EC6) 70%,#fff);text-decoration:none}
+.g-sky__invite:hover{text-decoration:underline}
+.g-sky__personal-line{margin:0;padding:8px 0 0;border-top:1px solid rgba(255,255,255,.08);
+  font-size:.84rem;line-height:1.45;color:color-mix(in srgb,var(--own,#7DD956) 75%,#fff)}
+
+/* Tools: four square tiles wearing their own colours, then two wide doors. */
+.g-free-tools__grid{grid-template-columns:repeat(4,minmax(0,1fr));gap:8px}
+.g-free-tool{--tool:#A8E063}
+.g-free-tool > span{color:var(--tool);background:color-mix(in srgb,var(--tool) 13%,transparent)}
+.g-free-tool:hover,.g-free-tool:focus-visible{outline-color:color-mix(in srgb,var(--tool) 45%,transparent)}
+.g-free-tools__wide{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin-top:8px}
+.g-free-tool--wide{min-height:56px;grid-template-columns:34px minmax(0,1fr);grid-auto-flow:column;
+  align-content:center;align-items:center;justify-items:start;gap:0 10px;padding:10px 12px;text-align:left}
+.g-free-tool--wide > span{width:34px;height:34px;font-size:17px}
+.g-free-tool--wide small{display:none}
+@media (max-width:480px){
+  .g-free-tools__grid{grid-template-columns:repeat(4,minmax(0,1fr));gap:6px}
+  .g-free-tool{min-height:88px;grid-template-columns:none;grid-auto-flow:row;
+    align-content:center;justify-items:center;gap:6px;padding:10px 4px;text-align:center}
+  .g-free-tool > span{width:36px;height:36px;font-size:18px}
+  .g-free-tool strong{font-size:11.5px;line-height:1.15}
+  .g-free-tool small{display:none}
+}

@@ -1161,22 +1161,25 @@ body.gaia-v2 .g-super-home .g-super-hero{border:1px solid var(--g-line);
   background:linear-gradient(180deg,rgba(4,7,10,.18) 0%,rgba(4,7,10,.55) 55%,rgba(4,7,10,.9) 100%)}
 @media (max-width:480px){
   .g-super-home .g-super-hero__art{inset:0;height:auto;opacity:.8}
-  body.gaia-v2 .g-super-home .g-super-hero .g-super-hero__intro{min-height:300px;
+  body.gaia-v2 .g-super-home .g-super-hero .g-super-hero__intro{min-height:340px;
     display:grid;align-content:end;padding:18px 16px 18px}
+  .g-super-hero__intro h1{font-size:36px}
   body.gaia-v2 .g-super-hero__intro::before{background:transparent}
 }
 
 /* Elevate: the artwork gets a real banner on top; the details sit under it. */
 .g-feature-event{flex-direction:column;min-height:0}
-.g-feature-event__art{position:relative;inset:auto;height:150px;border-radius:0}
-.g-feature-event__art img{opacity:1;transform:none;filter:none;object-position:center 32%}
+.g-feature-event__art{position:relative;inset:auto;height:190px;border-radius:0}
+.g-feature-event__art img{opacity:1;transform:none;filter:none;object-position:center 30%}
 .g-feature-event__art::after{background:linear-gradient(180deg,transparent 40%,rgba(4,7,10,.75) 100%)}
 .g-feature-event__body{margin-top:0;padding:14px 16px 16px}
 .g-feature-event__where{display:flex;align-items:center;gap:5px}
 .g-feature-event__where svg{width:14px;height:14px;color:var(--g-accent)}
 @media (max-width:480px){
+  .g-feature-event .g-feature-event__art{height:170px}
   .g-feature-event .g-feature-event__art img{opacity:1}
-  .g-feature-event__title{font-size:1.2rem}
+  .g-feature-event__title{font-size:1.12rem}
+  .g-feature-event__meta{font-size:.82rem}
 }
 
 /* Sky: indigo, one screen. Head row · moon+phase+ring · chips · reading. */

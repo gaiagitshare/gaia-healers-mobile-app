@@ -29,7 +29,8 @@ body.gaia-v2 .g-home { width: 100%; max-width: none; display: block; }
 .g-super-hero__intro { position: relative; z-index: 2; padding: clamp(28px, 5vw, 64px); align-self: center; }
 .g-super-hero__art {
   min-height: 100%;
-  background: #08120b url("assets/gaia-event-hero.webp") center/cover no-repeat;
+  /* The template's moon-and-meditator artwork; the greeting sits on it. */
+  background: #060a12 url("assets/gaia-hero-moon.jpg") center 22%/cover no-repeat;
   border-left: 1px solid var(--super-line);
 }
 .g-super-date, .g-super-kicker {

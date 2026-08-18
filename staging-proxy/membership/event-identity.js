@@ -173,4 +173,38 @@ async function myTicket(session, eventId) {
   };
 }
 
-export { myEvents, myTicket, identityFromSession, phaseOf, toAppRow };
+/**
+ * My Schedule: read, save, remove.
+ *
+ * Same shape as the ticket routes — the session names the person, the client
+ * names only a session id, and the Event Manager re-proves ownership of the
+ * event before touching anything.
+ */
+async function mySchedule(session, eventId) {
+  const identity = identityFromSession(session);
+  if (!identity) return { ok: false, authenticated: false, reason: 'auth_required' };
+  const numericId = Number(eventId);
+  if (!Number.isInteger(numericId) || numericId <= 0) {
+    return { ok: false, authenticated: true, reason: 'bad_event_id' };
+  }
+  const result = await callEventIdentity('/identity/schedule', { ...identity, event_id: numericId });
+  return { authenticated: true, ...(result || { ok: false, reason: 'identity_failed' }) };
+}
+
+async function changeSchedule(session, eventId, sessionId, action) {
+  const identity = identityFromSession(session);
+  if (!identity) return { ok: false, authenticated: false, reason: 'auth_required' };
+  const numericEvent = Number(eventId);
+  const numericSession = Number(sessionId);
+  if (!Number.isInteger(numericEvent) || numericEvent <= 0
+    || !Number.isInteger(numericSession) || numericSession <= 0) {
+    return { ok: false, authenticated: true, reason: 'bad_id' };
+  }
+  const path = action === 'save' ? '/identity/schedule/save' : '/identity/schedule/unsave';
+  const result = await callEventIdentity(path, {
+    ...identity, event_id: numericEvent, session_id: numericSession,
+  });
+  return { authenticated: true, ...(result || { ok: false, reason: 'identity_failed' }) };
+}
+
+export { myEvents, myTicket, mySchedule, changeSchedule, identityFromSession, phaseOf, toAppRow };

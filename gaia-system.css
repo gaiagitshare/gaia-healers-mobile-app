@@ -961,3 +961,48 @@ body{overscroll-behavior-y:none;-webkit-tap-highlight-color:transparent}
   .g-mye__name{font-size:1.28rem}
   .g-ticket__qr{width:320px}
 }
+
+/* ── Favourites and My Schedule ───────────────────────────────────────────
+   The save control sits on every agenda row for ticket holders and is absent
+   entirely for everyone else, so the public programme stays a programme. */
+.g-save{flex:0 0 auto;display:inline-flex;align-items:center;gap:6px;
+  min-height:44px;padding:8px 12px;border-radius:999px;cursor:pointer;
+  border:1px solid rgba(255,255,255,.14);background:rgba(255,255,255,.05);
+  color:rgba(255,255,255,.72);font-size:.8rem;font-weight:650;
+  transition:background .15s ease,border-color .15s ease,color .15s ease}
+.g-save:hover{border-color:rgba(168,224,99,.4);color:#fff}
+.g-save:disabled{opacity:.55;cursor:progress}
+.g-save.is-on{color:#07100b;background:var(--g-accent,#A8E063);border-color:transparent}
+.g-save__icon{font-size:1rem;line-height:1}
+.g-event-timeline__item{display:flex;gap:12px;align-items:flex-start}
+.g-event-timeline__item > div{flex:1;min-width:0}
+
+.g-mysch{border:1px solid rgba(168,224,99,.26);border-radius:20px;padding:18px;
+  background:color-mix(in srgb,var(--g-accent,#A8E063) 7%,var(--g-surface,#111A14));
+  margin-bottom:22px;display:flex;flex-direction:column;gap:14px}
+.g-mysch__head{display:flex;justify-content:space-between;align-items:baseline;gap:12px}
+.g-mysch__head h3{margin:0;font-size:1.1rem;font-weight:650;color:#fff}
+.g-mysch__count{font-size:.8rem;color:rgba(255,255,255,.6);font-variant-numeric:tabular-nums}
+.g-mysch__warn{margin:0;font-size:.84rem;line-height:1.5;color:#FFC53D}
+.g-mysch__day{display:flex;flex-direction:column;gap:8px}
+.g-mysch__dayhead{margin:0;font-size:.72rem;letter-spacing:.13em;text-transform:uppercase;
+  font-weight:700;color:rgba(255,255,255,.5)}
+.g-mysch__item{display:flex;gap:12px;align-items:flex-start;padding:12px;
+  border-radius:14px;background:rgba(255,255,255,.04);
+  border:1px solid rgba(255,255,255,.07)}
+.g-mysch__item.has-clash{border-color:rgba(255,197,61,.4)}
+.g-mysch__time{flex:0 0 auto;width:5.4rem;font-size:.8rem;font-weight:650;
+  color:var(--g-accent,#A8E063);font-variant-numeric:tabular-nums;padding-top:2px}
+.g-mysch__body{flex:1;min-width:0;display:flex;flex-direction:column;gap:3px}
+.g-mysch__title{margin:0;font-size:.98rem;font-weight:650;color:#fff;line-height:1.3}
+.g-mysch__who,.g-mysch__where{margin:0;font-size:.83rem;color:rgba(255,255,255,.62)}
+.g-mysch__clash{margin:2px 0 0;font-size:.8rem;color:#FFC53D}
+.g-mysch--empty{align-items:flex-start}
+.g-mysch--empty h3{margin:0;font-size:1.05rem;color:#fff}
+.g-mysch--empty p{margin:0;font-size:.9rem;line-height:1.55;color:rgba(255,255,255,.68);max-width:50ch}
+
+@media (max-width:480px){
+  .g-save__label{display:none}          /* the star alone is legible on a phone */
+  .g-save{padding:8px 10px;min-width:44px;justify-content:center}
+  .g-mysch__time{width:4.4rem;font-size:.76rem}
+}

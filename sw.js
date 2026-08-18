@@ -1,4 +1,4 @@
-const CACHE_NAME = 'gaia-healers-20260818f';
+const CACHE_NAME = 'gaia-healers-20260818g';
 const APP_SHELL = [
   '/',
   '/home.html',
@@ -28,6 +28,7 @@ const APP_SHELL = [
   '/gaia-practice.js',
   '/gaia-sky.js',
   '/gaia-myevents.js',
+  '/gaia-myschedule.js',
   '/assets/gaia-mark.svg',
   '/assets/gaia-event-hero.webp',
   '/assets/gaia-chakra-meditation.webp',

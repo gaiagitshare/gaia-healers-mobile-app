@@ -4615,6 +4615,26 @@ const server = http.createServer(async (req, res) => {
       });
       return;
     }
+    if (req.method === 'GET' && /^\/api\/events\/\d+\/schedule$/.test(url.pathname)) {
+      const session = cookieForRequest(req);
+      const result = await eventIdentity.mySchedule(session, url.pathname.split('/')[3]);
+      sendJson(res, result.authenticated === false ? 401 : 200, result, origin, {
+        'Cache-Control': 'private, no-store',
+      });
+      return;
+    }
+    if (req.method === 'POST' && /^\/api\/events\/\d+\/schedule$/.test(url.pathname)) {
+      const session = cookieForRequest(req);
+      const body = await readJsonBody(req).catch(() => ({}));
+      const action = body.action === 'unsave' ? 'unsave' : 'save';
+      const result = await eventIdentity.changeSchedule(
+        session, url.pathname.split('/')[3], body.sessionId, action,
+      );
+      sendJson(res, result.authenticated === false ? 401 : 200, result, origin, {
+        'Cache-Control': 'private, no-store',
+      });
+      return;
+    }
     if (req.method === 'GET' && /^\/api\/events\/\d+\/live$/.test(url.pathname)) {
       await eventLive(req, res, origin, url.pathname.split('/')[3]);
       return;

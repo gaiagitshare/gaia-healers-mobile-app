@@ -307,17 +307,24 @@
     const days = Array.isArray(detail?.agenda?.days) ? detail.agenda.days : [];
     if (!days.length) return '';
     const zone = detail?.event?.timezone ? ' · times shown in ' + esc(detail.event.timezone.replace(/_/g, ' ')) : '';
-    return '<section class="g-event-timeline"><p class="g-super-kicker">Published schedule' + zone + '</p><h2>Agenda</h2>'
+    // A ticket holder's own picks come before the full programme: by the second
+    // morning that shorter list is the only one anybody opens.
+    const mine = window.GaiaMySchedule ? window.GaiaMySchedule.panelHtml(detail?.event?.timezone) : '';
+    return mine + '<section class="g-event-timeline"><p class="g-super-kicker">Published schedule' + zone + '</p><h2>Agenda</h2>'
       + days.map((day) => '<div class="g-event-day"><h3>' + esc(day.label || day.date) + '</h3>'
         + (day.sessions || []).map((session) => {
           const when = [sessionTime(session.start_time), sessionTime(session.end_time)].filter(Boolean).join(' – ');
           const meta = [session.room, session.track].filter(Boolean).join(' · ');
           const who = (session.speakers || []).map((speaker) => speaker.name).filter(Boolean).join(', ');
+          // The save control is rendered by gaia-myschedule.js, which returns an
+          // empty string for anyone without a ticket — so the agenda stays a
+          // plain programme for the public and gains a verb for attendees.
+          const save = window.GaiaMySchedule ? window.GaiaMySchedule.saveButtonHtml(session.id) : '';
           return '<div class="g-event-timeline__item"><time>' + esc(when) + '</time><div><strong>' + esc(session.title) + '</strong>'
             + (who ? '<span>' + esc(who) + '</span>' : '')
             + (meta ? '<span>' + esc(meta) + '</span>' : '')
             + (session.description ? '<span>' + esc(session.description) + '</span>' : '')
-            + '</div></div>';
+            + '</div>' + save + '</div>';
         }).join('')
         + '</div>').join('')
       + '</section>';
@@ -760,10 +767,20 @@
     return false;
   }
 
+  // Which event's schedule we have already asked for, so the request fires once
+  // per event rather than on every re-render.
+  let scheduleLoadedFor = null;
+
   function renderEventDetail(root, eventId) {
     loadEventDetail(eventId);
     loadEventLive(eventId);
     scheduleEventRefresh(root, eventId);
+    // A ticket holder's saved sessions. Non-holders get a null result and the
+    // agenda simply renders without save controls.
+    if (window.GaiaMySchedule && scheduleLoadedFor !== eventId) {
+      scheduleLoadedFor = eventId;
+      window.GaiaMySchedule.load(eventId).then(() => render()).catch(() => {});
+    }
     const detail = eventDetail.data && eventDetail.id === eventId ? eventDetail.data : null;
     const live = eventLive.id === eventId ? eventLive.data : null;
     const item = detail?.event;
@@ -811,6 +828,10 @@
     root.querySelectorAll('[data-event-tab]').forEach((button) => {
       button.addEventListener('click', () => { eventUI.tab = button.getAttribute('data-event-tab'); render(); });
     });
+    // Saving redraws only its own button, so the agenda does not jump under the
+    // finger that tapped it. The My Schedule panel is refreshed on the next
+    // visit to the tab rather than mid-tap.
+    if (window.GaiaMySchedule) window.GaiaMySchedule.bind(root, eventId);
     bind(root);
   }
 

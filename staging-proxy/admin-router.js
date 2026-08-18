@@ -16,6 +16,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import { fileURLToPath } from 'node:url';
+import * as membershipAdmin from './membership/admin-api.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -232,6 +233,12 @@ async function handle(req, res, url, deps) {
 
   // --- everything below requires admin auth ---
   if (!authed()) return need();
+
+  // Membership Admin — plans, members, entitlements, policy and audit.
+  // Delegated whole so the membership rules live with the membership modules.
+  if (p.startsWith('/api/admin/membership/')) {
+    return membershipAdmin.handle(req, res, url, deps);
+  }
 
   // Events
   if (p === '/api/admin/events' && method === 'GET') {

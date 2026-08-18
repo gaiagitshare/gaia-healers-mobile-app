@@ -9,7 +9,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="gaia-system.css?v=20260815b" />
+  <link rel="stylesheet" href="gaia-system.css?v=20260818a" />
   <style>
     *{box-sizing:border-box}
     html,body{margin:0}
@@ -38,16 +38,19 @@
     <div id="admin-login" class="g-page-sec" hidden></div>
     <!-- authed console -->
     <div id="admin-console" class="g-page-sec" hidden>
-      <div class="g-tabs g-tabs--3" role="tablist" aria-label="Admin sections">
+      <div class="g-tabs g-tabs--4" role="tablist" aria-label="Admin sections">
         <button type="button" class="g-tab is-active" data-admin-tab="events" role="tab" aria-selected="true">Events</button>
         <button type="button" class="g-tab" data-admin-tab="content" role="tab" aria-selected="false">Content</button>
         <button type="button" class="g-tab" data-admin-tab="members" role="tab" aria-selected="false">Members</button>
+        <button type="button" class="g-tab" data-admin-tab="membership" role="tab" aria-selected="false">Membership</button>
       </div>
       <div id="admin-panel-events" class="g-admin-panel" role="tabpanel"></div>
       <div id="admin-panel-content" class="g-admin-panel" role="tabpanel" hidden></div>
       <div id="admin-panel-members" class="g-admin-panel" role="tabpanel" hidden></div>
+      <div id="admin-panel-membership" class="g-admin-panel" role="tabpanel" hidden></div>
     </div>
   </main>
   <script src="admin.js"></script>
+  <script src="membership.js"></script>
 </body>
 </html>

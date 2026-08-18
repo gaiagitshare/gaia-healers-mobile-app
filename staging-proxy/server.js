@@ -4499,6 +4499,7 @@ const server = http.createServer(async (req, res) => {
       await adminRouter.handle(req, res, url, {
         origin, sendJson, readJsonBody, signTokenPayload, readSignedToken,
         parseCookies, ghlGet, ghlConfig, ghlHeaders,
+        loadLedger: loadMemberEntitlements, saveLedger: saveMemberEntitlements,
       });
       return;
     }

@@ -84,7 +84,9 @@
   tabs.forEach((t) => t.addEventListener('click', () => {
     const key = t.dataset.adminTab;
     tabs.forEach((x) => { const on = x === t; x.classList.toggle('is-active', on); x.setAttribute('aria-selected', String(on)); });
-    ['events', 'content', 'members'].forEach((k) => { const pane = el('admin-panel-' + k); if (pane) pane.hidden = k !== key; });
+    ['events', 'content', 'members', 'membership'].forEach((k) => { const pane = el('admin-panel-' + k); if (pane) pane.hidden = k !== key; });
+    // Membership loads its schema and plans on first open, not at boot.
+    if (key === 'membership' && window.GaiaMembershipAdmin) window.GaiaMembershipAdmin.load();
   }));
 
   // ── EVENTS ──────────────────────────────────────────────────

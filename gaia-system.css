@@ -326,6 +326,7 @@ a.g-access:hover{border-color:rgba(125,217,86,.4)}
 
 /* Admin console -------------------------------------------- */
 .g-tabs--3{grid-template-columns:1fr 1fr 1fr;max-width:420px}
+.g-tabs--4{grid-template-columns:repeat(4,1fr);max-width:520px}
 .g-admin{gap:var(--g-s4)}
 .g-admin-panel{display:flex;flex-direction:column;gap:var(--g-s4)}
 .g-admin-panel[hidden]{display:none}

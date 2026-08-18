@@ -1245,3 +1245,61 @@ body.gaia-v2 .g-super-home .g-super-hero{border:1px solid var(--g-line);
 .g-continue__body{flex:1;min-width:0}
 .g-continue__body h3{margin:0;font-family:var(--g-font-serif);font-size:1.08rem;font-weight:600;color:#fff}
 .g-continue__body p{margin:2px 0 0;font-size:.82rem;color:rgba(255,255,255,.6)}
+
+
+/* ── Retouch: air, hierarchy, and quiet edges ─────────────────────────────
+   From real-device review: same layout, more room to breathe. Text over the
+   hero art gets a soft shadow, every block inside the sky card gets clear
+   separation, and nothing sits closer than it needs to. */
+@media (max-width: 480px){
+  .g-super-home{gap:16px}
+
+  /* Hero: words seated with intention, not stacked in a corner. */
+  body.gaia-v2 .g-super-home .g-super-hero .g-super-hero__intro{
+    min-height:330px;padding:20px 18px 22px;row-gap:0}
+  .g-super-hero__intro .g-super-date{margin:0 0 8px;text-shadow:0 1px 8px rgba(0,0,0,.6)}
+  .g-super-hero__intro h1{font-size:34px;line-height:1.05;margin:0 0 8px;
+    text-shadow:0 2px 14px rgba(0,0,0,.65)}
+  .g-super-hero__intro > p:not(.g-super-date){margin:0 0 18px;font-size:15px;
+    color:rgba(255,255,255,.82);text-shadow:0 1px 10px rgba(0,0,0,.6)}
+  .g-super-discover{display:flex;gap:10px;flex-wrap:wrap}
+
+  /* Elevate: the banner shows the poster, the body gets real padding. */
+  .g-feature-event .g-feature-event__art{height:172px}
+  .g-feature-event__body{padding:16px;gap:8px}
+  .g-feature-event__meta{font-size:.84rem;color:rgba(255,255,255,.72)}
+  .g-feature-event__actions{margin-top:10px;gap:10px}
+
+  /* Sky: one screen, but with visible seams between its four moments. */
+  .g-sky{gap:0;padding:16px}
+  .g-sky__head{margin-bottom:14px}
+  .g-sky__tofull{font-size:.68rem;padding:3px 9px}
+  .g-sky__row{gap:12px;margin-bottom:12px}
+  .g-sky__row .g-sky__art{width:64px;height:64px}
+  .g-sky__phase{font-size:1.24rem}
+  .g-sky__day{font-size:.78rem}
+  .g-sky__ring{width:56px;height:56px}
+  .g-sky__facts{margin-bottom:14px}
+  .g-sky__facts span{font-size:.72rem;padding:3px 9px}
+  .g-sky__theme{font-size:.64rem;margin-bottom:6px}
+  .g-sky__invitation{font-size:.88rem;line-height:1.5;margin-bottom:12px}
+  .g-sky__practice{font-size:.84rem;padding:10px 12px;margin-bottom:12px}
+  .g-sky__invite{padding:12px 14px;gap:5px}
+  .g-sky__invite p{font-size:.84rem;margin:0}
+  .g-sky__invite-head{font-size:.86rem}
+  .g-sky__invite .g-btn{margin-top:6px;min-height:42px}
+
+  /* Four doors: square, roomy, labels that never wrap awkwardly. */
+  .g-free-tools{padding:18px 14px}
+  .g-free-tools__grid{grid-template-columns:repeat(4,minmax(0,1fr));gap:8px}
+  .g-free-tool{min-height:96px;grid-template-columns:none;grid-auto-flow:row;
+    align-content:center;justify-items:center;gap:7px;padding:12px 4px;
+    text-align:center;border-radius:16px}
+  .g-free-tool > span{width:40px;height:40px;font-size:20px}
+  .g-free-tool strong{font-size:11.5px;line-height:1.2;letter-spacing:.01em}
+  .g-free-tool small{display:none}
+
+  /* Section heads: kicker small, serif calm, consistent rhythm. */
+  .g-super-section-head{margin-bottom:14px}
+  .g-super-section-head h2{font-size:26px}
+}

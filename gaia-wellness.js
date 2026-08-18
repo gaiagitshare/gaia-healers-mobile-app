@@ -87,7 +87,15 @@
     if (r && r.signedUp) { state.signedUp = true; state.profile = r.profile; state.today = r.today; state.challenge = r.challenge || { joined: false }; }
     renderAll();
   }
-  function renderAll() { boxes.forEach(renderInto); updateHeaderName(); }
+  function renderAll() {
+    boxes.forEach(renderInto);
+    updateHeaderName();
+    // The practice journal draws itself into [data-practice-host]; it listens
+    // rather than being called, so this file does not depend on it existing.
+    document.dispatchEvent(new CustomEvent('gaia:wellness-rendered', {
+      detail: { today: state.today || null, signedUp: state.signedUp },
+    }));
+  }
 
   // ── visuals ──────────────────────────────────────────────
   function orb(color) {
@@ -250,7 +258,9 @@
       + '<p class="g-daily-card__title">' + esc(bp.chakra || '') + (bp.sanskrit ? ' · <span>' + esc(bp.sanskrit) + '</span>' : '') + '</p>'
       + '<p class="g-daily-card__area">' + esc(bp.area || '') + '</p>'
       + (bp.focus ? '<p class="g-daily-card__meta">Give attention to ' + esc(bp.focus) + '.</p>' : '')
-      + '</article>' + challengeHtml()
+      + '</article>'
+      + '<div data-practice-host></div>'
+      + challengeHtml()
       + '<button type="button" class="g-btn g-btn--ghost g-btn--sm g-well__signout" data-wsignout>Not you? Sign out</button></section>';
   }
 

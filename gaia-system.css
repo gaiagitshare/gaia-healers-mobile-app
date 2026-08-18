@@ -769,3 +769,43 @@ body{overscroll-behavior-y:none;-webkit-tap-highlight-color:transparent}
   .g-tile:active,.g-card:active,
   .g-free-tools a:active,.g-free-tools button:active{transform:none}
 }
+
+/* ── Practice journal ──
+   Twelve weeks of days, coloured by the centre each one asked for. A filled
+   ring means the practice was kept; a hollow one means the day was simply
+   lived. Nothing here leaves the device. */
+.g-practice{display:flex;flex-direction:column;gap:14px}
+.g-practice__lead{margin:0;font-size:.93rem;line-height:1.55;opacity:.85}
+.g-practice__stats{display:flex;gap:16px 22px;flex-wrap:wrap;align-items:flex-start}
+.g-practice__stats div{display:flex;flex-direction:column;gap:1px}
+.g-practice__stats strong{font-size:1.35rem;font-weight:700;line-height:1.05;font-variant-numeric:tabular-nums}
+/* The recurring centre is a name, not a number — sized so it sits beside the
+   counts rather than shouting over them. */
+.g-practice__stats div:last-child strong{font-size:1.05rem;font-weight:650}
+.g-practice__stats span{font-size:.74rem;letter-spacing:.05em;text-transform:uppercase;opacity:.6}
+
+.g-practice__grid{display:grid;grid-auto-flow:column;grid-template-rows:repeat(7,1fr);
+  gap:4px;overflow-x:auto;padding-bottom:4px}
+.g-practice__day{width:13px;height:13px;border-radius:4px;padding:0;cursor:pointer;
+  border:1px solid rgba(255,255,255,.09);background:rgba(255,255,255,.04);
+  transition:transform .12s ease}
+/* A day that was recorded carries its centre's colour, softly. */
+.g-practice__day.is-on{background:color-mix(in srgb,var(--c) 42%,transparent);border-color:transparent}
+/* A day the practice was kept is solid — the difference should be visible at a
+   glance across twelve weeks, not require reading. */
+.g-practice__day.is-done{background:var(--c)}
+.g-practice__day.is-today{outline:2px solid var(--g-accent,#A8E063);outline-offset:1px}
+.g-practice__day:hover{transform:scale(1.25)}
+.g-practice__day:focus-visible{outline:2px solid var(--g-accent,#A8E063);outline-offset:2px}
+
+.g-practice__detail{margin:0;font-size:.86rem;line-height:1.5;opacity:.9;
+  padding:10px 12px;border-radius:10px;background:rgba(255,255,255,.045)}
+.g-practice__detail em{opacity:.8}
+.g-practice__today{display:flex;gap:8px;flex-wrap:wrap}
+.g-practice__today .g-btn{min-height:44px;display:inline-flex;align-items:center;justify-content:center}
+.g-practice__note textarea{width:100%;resize:vertical;min-height:52px;font:inherit;font-size:.92rem;
+  color:inherit;background:rgba(255,255,255,.045);border:1px solid rgba(255,255,255,.10);
+  border-radius:12px;padding:10px 12px}
+.g-practice__note textarea:focus-visible{outline:2px solid var(--g-accent,#A8E063);outline-offset:1px}
+.g-practice__private{margin:0;font-size:.76rem;opacity:.55}
+@media (prefers-reduced-motion:reduce){.g-practice__day{transition:none}.g-practice__day:hover{transform:none}}

@@ -1399,7 +1399,7 @@ body.gaia-v2 .g-super-home .g-feature-event__body {
 body.gaia-v2 .g-super-home .g-super-hero{position:relative;display:flex !important;
   flex-direction:column !important;width:100%;
   aspect-ratio:720/749;height:auto !important;
-  max-height:calc(46vh);max-height:calc(46dvh);
+  max-height:calc(40vh);max-height:calc(40dvh);
   min-height:0 !important;border-radius:24px;overflow:hidden;isolation:isolate}
 
 body.gaia-v2 .g-super-home .g-super-hero__art{position:absolute !important;
@@ -1436,10 +1436,12 @@ body.gaia-v2 .g-super-home .g-super-discover{display:flex !important;
   flex-direction:row !important;justify-content:flex-start !important;
   align-items:center;gap:8px;flex-wrap:nowrap;
   width:100% !important;max-width:100%;min-width:0;margin:0 !important}
+/* Equal halves — two buttons of different widths read as an accident. */
 body.gaia-v2 .g-super-home .g-super-discover .g-btn{white-space:nowrap !important;
-  width:auto !important;flex:0 1 auto !important;min-width:0;
+  flex:1 1 0 !important;width:auto !important;min-width:0;max-width:220px;
+  justify-content:center !important;
   font-size:clamp(11.5px,3.1vw,13.5px) !important;
-  padding:10px 14px !important;min-height:44px}
+  padding:10px 12px !important;min-height:44px}
 
 /* Elevate: complete card — banner, kicker, title, dates, both buttons. */
 body.gaia-v2 .g-super-home .g-feature-event .g-feature-event__art{
@@ -1459,7 +1461,7 @@ body.gaia-v2 .g-super-home .g-feature-event__actions .g-btn{
 /* Short screens (iPhone SE and friends): the same two complete cards, tighter.
    Measured — at 667px tall the default tier overshot the tab bar by 23px. */
 @media (max-height:740px){
-  body.gaia-v2 .g-super-home .g-super-hero{max-height:calc(40vh);max-height:calc(40dvh)}
+  body.gaia-v2 .g-super-home .g-super-hero{max-height:calc(30vh);max-height:calc(30dvh)}
   body.gaia-v2 .g-super-home .g-super-hero .g-super-hero__intro{padding:12px 16px 12px !important}
   body.gaia-v2 .g-super-hero h1,
   body.gaia-v2 .g-super-hero__intro h1{font-size:clamp(23px,6vw,30px) !important;
@@ -1467,7 +1469,7 @@ body.gaia-v2 .g-super-home .g-feature-event__actions .g-btn{
   body.gaia-v2 .g-super-hero__intro > p:not(.g-super-date){margin:0 0 9px !important;
     font-size:12.5px}
   body.gaia-v2 .g-super-home .g-feature-event .g-feature-event__art{
-    height:clamp(84px,13vh,120px) !important;height:clamp(84px,13dvh,120px) !important}
+    height:clamp(140px,22vh,170px) !important;height:clamp(140px,22dvh,170px) !important}
   body.gaia-v2 .g-super-home .g-feature-event__body{padding:10px 14px 12px !important}
   body.gaia-v2 .g-feature-event__meta{font-size:11.5px !important}
   body.gaia-v2 .g-super-home .g-super-home{gap:10px}
@@ -1491,11 +1493,14 @@ body.gaia-v2 .g-super-home .g-feature-event .g-feature-event__art{position:relat
   width:100%;
   /* Sized so the whole Elevate card — banner, title, dates, both buttons —
      finishes above the tab bar on a phone. Wider screens get more. */
-  height:clamp(96px,15vh,150px) !important;
-  height:clamp(96px,15dvh,150px) !important;
+  /* Brightness profile of the poster: logo at 12%, ELEVATE at 36%, tagline
+     at ~50%. Showing the top ~58% keeps all three; anchored top so the logo
+     is never the thing that gets cut. */
+  height:clamp(150px,21vh,200px) !important;
+  height:clamp(150px,21dvh,200px) !important;
   border-radius:0;overflow:hidden;opacity:1}
 body.gaia-v2 .g-super-home .g-feature-event .g-feature-event__art img{width:100%;
-  height:100%;object-fit:cover;object-position:center 28%;opacity:1;
+  height:100%;object-fit:cover;object-position:center top;opacity:1;
   transform:none;filter:none}
 body.gaia-v2 .g-super-home .g-feature-event .g-feature-event__art::after{content:"";
   position:absolute;inset:0;

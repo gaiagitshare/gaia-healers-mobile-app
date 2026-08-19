@@ -124,7 +124,7 @@
       + '<div><span><i class="ph ph-note-pencil" aria-hidden="true"></i> Journal</span><p>' + esc(c.journalPrompt || zodiac.journal || 'What would bring me toward balance today?') + '</p></div>'
       + '</div><div class="g-birth-map__actions">'
       + '<button type="button" class="g-btn g-btn--secondary g-btn--sm" data-gaia-ask-birth>Ask Gaia about my map</button>'
-      + '<a class="g-btn g-btn--ghost g-btn--sm" href="' + esc(shop) + '" target="_blank" rel="noopener noreferrer">Matching Gaia support</a>'
+      + '<a class="g-btn g-btn--ghost g-btn--sm" href="' + esc(shop) + '" target="_blank" rel="noopener noreferrer">Matching Gaia Healers support</a>'
       + '</div></article>';
   }
 
@@ -210,7 +210,7 @@
       + '<div class="g-field"><label class="g-label">Full name</label><input class="g-input" data-wname autocomplete="name" placeholder="Your name" /></div>'
       + locationInputHtml()
       + '<div class="g-field g-birth-time"><label class="g-label">Birth time <span>Optional</span></label><input class="g-input" type="time" data-wtime aria-label="Birth time" autocomplete="bday" value="' + esc(state.birthTime) + '" />'
-      + '<p class="g-hint">If you do not know it, Gaia uses local noon and clearly labels the map as an estimate.</p></div>'
+      + '<p class="g-hint">If you do not know it, Gaia Healers uses local noon and clearly labels the map as an estimate.</p></div>'
       + '<div data-cosmic-chart>' + cosmicMapHtml(state.cosmicMap, false) + '</div>'
       + '<div class="g-field"><label class="g-label">Email</label><input class="g-input" type="email" data-wemail autocomplete="email" placeholder="you@email.com" /></div>'
       + '<p class="g-admin-status" data-wstatus></p>'
@@ -327,7 +327,7 @@
       // Real member with access → offer the sign-in that syncs their profile.
       return '<article class="g-card" style="--ck:var(--g-accent);border-color:color-mix(in srgb,var(--g-accent) 45%,transparent)">'
         + '<p class="g-daily-card__kicker" style="--ck:var(--g-accent)">✨ Welcome back, ' + nm + '</p>'
-        + '<p class="g-chal__title">You’re already a Gaia member</p>'
+        + '<p class="g-chal__title">You’re already a Gaia Healers member</p>'
         + '<p class="g-card__meta">Sign in to sync your courses, communities, and membership into your profile.</p>'
         + '<div class="g-card__actions"><button type="button" class="g-btn g-btn--primary g-btn--sm" data-well-signin>Sign in to sync →</button></div></article>';
     }
@@ -335,7 +335,7 @@
     // membership claim), with a soft sign-in in case they do have an account.
     return '<article class="g-card" style="--ck:var(--g-accent);border-color:color-mix(in srgb,var(--g-accent) 30%,transparent)">'
       + '<p class="g-daily-card__kicker" style="--ck:var(--g-accent)">✨ Welcome back, ' + nm + '</p>'
-      + '<p class="g-card__meta">Lovely to see you at Gaia again — your daily wellness is ready below.</p>'
+      + '<p class="g-card__meta">Lovely to see you at Gaia Healers again — your daily wellness is ready below.</p>'
       + '<div class="g-card__actions"><button type="button" class="g-btn g-btn--ghost g-btn--sm" data-well-signin>Already a member? Sign in</button></div></article>';
   }
 

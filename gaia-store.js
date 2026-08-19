@@ -87,7 +87,7 @@
     productModal.className = 'gaia-booking-modal gaia-product-modal';
     productModal.innerHTML = '<div class="gaia-booking-modal__backdrop" data-product-close></div>'
       + '<section class="gaia-booking-modal__sheet" role="dialog" aria-modal="true" aria-labelledby="gaia-product-title">'
-      + '<div class="gaia-booking-modal__head"><p class="gaia-booking-modal__title">Gaia Store</p>'
+      + '<div class="gaia-booking-modal__head"><p class="gaia-booking-modal__title">Gaia Healers Store</p>'
       + '<button type="button" class="gaia-booking-modal__close" data-product-close aria-label="Close product">&times;</button></div>'
       + '<div class="gaia-product-modal__body">'
       + (image ? '<img class="gaia-product-modal__image" src="' + esc(image) + '" alt="" />' : '')

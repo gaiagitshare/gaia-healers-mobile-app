@@ -183,13 +183,13 @@
     root.className = 'gaia-portal-workspace hidden';
     root.innerHTML = `
       <button type="button" class="gaia-portal-workspace__backdrop" aria-label="Close member workspace"></button>
-      <section class="gaia-portal-workspace__sheet" role="dialog" aria-label="Gaia member workspace">
+      <section class="gaia-portal-workspace__sheet" role="dialog" aria-label="Gaia Healers member workspace">
         <div class="gaia-portal-workspace__handle" aria-hidden="true"></div>
         <div class="gaia-portal-workspace__top">
           <div>
             <p class="gaia-mini-label">Member workspace</p>
-            <h3 class="gaia-portal-workspace__title">Gaia Client Portal</h3>
-            <p class="gaia-portal-workspace__note">Use your Gaia member login to continue secure courses, communities, purchases, and certificates without leaving the app shell.</p>
+            <h3 class="gaia-portal-workspace__title">Gaia Healers Client Portal</h3>
+            <p class="gaia-portal-workspace__note">Use your Gaia Healers member login to continue secure courses, communities, purchases, and certificates without leaving the app shell.</p>
           </div>
           <button type="button" class="gaia-portal-workspace__close" aria-label="Close member workspace">×</button>
         </div>
@@ -200,7 +200,7 @@
           <a class="gaia-portal-workspace__external" href="https://education.gaiahealers.com/login" target="_blank" rel="noreferrer">Open outside</a>
         </div>
         <div class="gaia-portal-workspace__frame-wrap">
-          <iframe class="gaia-portal-workspace__frame" title="Gaia client portal" loading="eager" referrerpolicy="strict-origin-when-cross-origin" allow="clipboard-read; clipboard-write; fullscreen"></iframe>
+          <iframe class="gaia-portal-workspace__frame" title="Gaia Healers client portal" loading="eager" referrerpolicy="strict-origin-when-cross-origin" allow="clipboard-read; clipboard-write; fullscreen"></iframe>
         </div>
       </section>`;
     document.body.appendChild(root);
@@ -718,7 +718,7 @@
           <div class="flex h-11 w-11 items-center justify-center rounded-xl bg-gaia text-white font-semibold">✓</div>
           <div class="flex-1 min-w-0">
             <p class="text-headline text-ink">${escapeHtml(credential.title || credential.name || 'Credential')}</p>
-            <p class="gaia-caption">${escapeHtml(credential.issuer || 'Gaia Credentials')}${credential.issuedAt ? ` · ${escapeHtml(credential.issuedAt)}` : ''}</p>
+            <p class="gaia-caption">${escapeHtml(credential.issuer || 'Gaia Healers Credentials')}${credential.issuedAt ? ` · ${escapeHtml(credential.issuedAt)}` : ''}</p>
           </div>
         </article>
       `).join('');
@@ -766,7 +766,7 @@
         activeTitle.textContent = memberReady ? 'Open your secure Academy workspace' : 'Log in to view your courses';
         activeDetail.textContent = memberReady
           ? 'Live lessons, locked modules, and certificates stay inside the in-app GHL portal.'
-          : 'Use your Gaia member login once, then continue lessons and gated modules inside the in-app GHL portal.';
+          : 'Use your Gaia Healers member login once, then continue lessons and gated modules inside the in-app GHL portal.';
         if (activeProgress) activeProgress.style.width = '0%';
         if (activePercent) activePercent.textContent = memberReady ? 'Portal ready' : 'Log in';
         if (activeLessons) activeLessons.textContent = memberReady ? 'GHL member workspace' : 'Secure Member Access';
@@ -1036,11 +1036,11 @@
           <div class="gaia-auth-modal__top">
             <div>
               <p class="gaia-auth-modal__kicker">Member Access</p>
-              <h2 class="gaia-auth-modal__title" id="gaia-auth-title">Sign in to Gaia</h2>
+              <h2 class="gaia-auth-modal__title" id="gaia-auth-title">Sign in to Gaia Healers</h2>
             </div>
             <button type="button" class="gaia-sheet-close" data-auth-close aria-label="Close sign in">&times;</button>
           </div>
-          <p class="gaia-auth-modal__body">Enter your Gaia member email. We’ll send a secure one-tap link that returns directly to this app and keeps you signed in for one week.</p>
+          <p class="gaia-auth-modal__body">Enter your Gaia Healers member email. We’ll send a secure one-tap link that returns directly to this app and keeps you signed in for one week.</p>
           <form class="gaia-auth-modal__form" data-auth-form>
             <input type="email" data-auth-email class="gaia-auth-modal__input" placeholder="you@example.com" autocomplete="email" inputmode="email" aria-label="Email address" aria-describedby="gaia-auth-status" required />
             <button type="submit" class="g-btn g-btn--primary gaia-auth-modal__submit" data-auth-submit>Email me a sign-in link</button>
@@ -1064,7 +1064,7 @@
         emailInput.setAttribute('aria-invalid', 'true');
         statusEl.textContent = emailInput.value.trim()
           ? 'Enter a valid email address.'
-          : 'Enter your Gaia member email.';
+          : 'Enter your Gaia Healers member email.';
         emailInput.focus();
       });
       emailInput.addEventListener('input', () => {
@@ -1580,7 +1580,7 @@
       sheet.innerHTML = `
         <section class="gaia-menu-sheet__panel" role="dialog" aria-modal="true" aria-labelledby="gaia-menu-title">
           <div class="gaia-menu-sheet__top">
-            <div><p class="gaia-menu-sheet__kicker">Explore Gaia</p><h2 class="gaia-menu-sheet__title" id="gaia-menu-title">Menu</h2></div>
+            <div><p class="gaia-menu-sheet__kicker">Explore Gaia Healers</p><h2 class="gaia-menu-sheet__title" id="gaia-menu-title">Menu</h2></div>
             <button type="button" class="gaia-sheet-close" data-menu-close aria-label="Close menu">&times;</button>
           </div>
           <p class="gaia-auth-modal__body">Learning, community, membership, and personal guidance from the Gaia Healers network.</p>

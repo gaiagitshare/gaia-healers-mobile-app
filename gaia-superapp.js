@@ -512,7 +512,7 @@
 
   function authPrompt(compact) {
     return '<section class="g-super-auth' + (compact ? ' g-super-auth--compact' : '') + '">'
-      + '<div><p class="g-super-kicker">Member Pass</p><h2>Already part of Gaia?</h2>'
+      + '<div><p class="g-super-kicker">Member Pass</p><h2>Already part of Gaia Healers?</h2>'
       + '<p>Sign in once to sync the courses, communities and plan access attached to your GHL record.</p></div>'
       + '<div class="g-super-actions"><button type="button" class="g-btn g-btn--primary" data-super-signin>Sign in</button>'
       + '<button type="button" class="g-btn g-btn--secondary" data-open-in-app="https://join.gaiahealers.com/onboarding" data-in-app-title="Join Gaia Healers">Join free</button>'
@@ -527,13 +527,13 @@
       ['wellness&tab=chakras', 'circles-three-plus', 'Chakra match', 'Explore centres and products'],
       ['profile&tool=colour', 'palette', 'Colour test', 'Five free questions'],
       ['events', 'calendar-dots', 'Events', 'Gatherings and live sessions'],
-      ['store', 'bag', 'Gaia Store', 'Sprays, tools and memberships'],
+      ['store', 'bag', 'Gaia Healers Store', 'Sprays, tools and memberships'],
     ];
     // The template's four doors, colour-coded: the icons are the wayfinding.
     const TINT = { 'Energy check': 'var(--g-accent)', Horoscope: 'var(--g-teal)',
       'Chakra match': 'var(--g-purple)', 'Colour test': 'var(--g-gold)' };
     const four = tools.filter((t) => TINT[t[2]]);
-    return '<section class="g-free-tools"><div class="g-super-section-head"><div><p class="g-super-kicker">Explore free</p><h2>Try Gaia today</h2></div></div><div class="g-free-tools__grid">'
+    return '<section class="g-free-tools"><div class="g-super-section-head"><div><p class="g-super-kicker">Explore free</p><h2>Try Gaia Healers today</h2></div></div><div class="g-free-tools__grid">'
       + four.map((item) => '<a class="g-free-tool" style="--tool:' + TINT[item[2]] + '" href="home.html?view=' + item[0] + '"><span>' + icon(item[1]) + '</span><strong>' + esc(item[2]) + '</strong><small>' + esc(item[3]) + '</small></a>').join('')
       + '</div></section>';
   }
@@ -577,7 +577,7 @@
         + '<p>' + esc(appointmentWhen(nextAppointment)) + '</p><a class="g-btn g-btn--primary g-super-primary__button" href="home.html?view=bookings">'
         + icon('calendar-check') + ' View booking ' + icon('arrow-right') + '</a></section>';
     }
-    return '<section class="g-super-primary"><p class="g-super-kicker">Your journey</p><h2>Your Gaia access is ready</h2>'
+    return '<section class="g-super-primary"><p class="g-super-kicker">Your journey</p><h2>Your Gaia Healers access is ready</h2>'
       + '<p>No course or appointment is currently attached to this GHL contact. Explore your verified access or choose your next step.</p>'
       + '<a class="g-btn g-btn--primary g-super-primary__button" href="home.html?view=journey">'
       + icon('path') + ' Open your journey ' + icon('arrow-right') + '</a></section>';
@@ -611,7 +611,7 @@
     const event = eventData();
     if (!event?.name) {
       return '<section class="g-super-event g-super-event--empty"><div><p class="g-super-kicker">Events</p><h2>Next gathering</h2>'
-        + '<p>The next confirmed Gaia event will appear here when it is published.</p></div><a href="home.html?view=events" class="g-btn g-btn--secondary">View events</a></section>';
+        + '<p>The next confirmed Gaia Healers event will appear here when it is published.</p></div><a href="home.html?view=events" class="g-btn g-btn--secondary">View events</a></section>';
     }
     const location = event.location || event.venue || '';
     const when = eventDate(event);
@@ -1033,7 +1033,7 @@
       const meeting = item.meetingLocation || '';
       const join = item.isVideo && meeting ? '<a class="g-btn g-btn--primary g-btn--sm" href="' + esc(meeting) + '" target="_blank" rel="noopener noreferrer">Join meeting</a>' : '';
       return '<article class="g-booking-item"><div><p class="g-super-kicker">' + esc(item.status || 'Scheduled') + '</p><h2>' + esc(item.title || 'Appointment') + '</h2><p>' + esc(appointmentWhen(item)) + (item.address ? ' · ' + esc(item.address) : '') + '</p></div>' + join + '</article>';
-    }).join('') : '<section class="g-super-empty-panel"><h2>No upcoming appointments</h2><p>Choose a verified Gaia booking option below when you are ready.</p></section>';
+    }).join('') : '<section class="g-super-empty-panel"><h2>No upcoming appointments</h2><p>Choose a verified Gaia Healers booking option below when you are ready.</p></section>';
     root.innerHTML = '<div class="g-super-page-head"><p class="g-super-kicker">Your schedule</p><h1>Bookings</h1><p>Appointments are read directly from the GHL contact signed into this app.</p></div>' + rows + bookingCatalog();
     bind(root);
   }

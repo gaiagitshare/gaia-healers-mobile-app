@@ -283,12 +283,12 @@ body.gaia-booking-open{overflow:hidden;}
       const accessSummary = [];
       if (courses.length) accessSummary.push(courses.length + (courses.length === 1 ? ' course' : ' courses'));
       if (unlocked.length) accessSummary.push(unlocked.length + (unlocked.length === 1 ? ' community' : ' communities'));
-      return '<div class="g-member-access__body"><p class="g-member-access__kicker">Your Gaia</p>'
+      return '<div class="g-member-access__body"><p class="g-member-access__kicker">Your Gaia Healers</p>'
         + '<p class="g-member-access__title">' + esc(profile.membershipTier ? profile.membershipTier + ' Member' : 'Member Access') + '</p>'
         + '<p class="g-member-access__meta">' + esc(accessSummary.join(' · ') || 'No course or community grants are attached to this GHL contact yet.') + '</p></div>'
         + '<a class="g-btn g-btn--secondary g-btn--sm" href="home.html?view=community">View access →</a>';
     }
-    return '<div class="g-member-access__body"><p class="g-member-access__kicker">Unlock your Gaia</p>'
+    return '<div class="g-member-access__body"><p class="g-member-access__kicker">Unlock your Gaia Healers</p>'
       + '<p class="g-member-access__title">Member Access</p>'
       + '<p class="g-member-access__meta">New here? Join free or explore membership. Already a member? Sign in to see the courses and communities attached to your GHL account.</p></div>'
       + '<div class="g-member-access__actions">'
@@ -712,12 +712,12 @@ body.gaia-booking-open{overflow:hidden;}
     const kicker = el('profile-kicker');
 
     if (!(state.authed && d.profile)) {
-      if (kicker) kicker.textContent = 'Gaia member pass';
+      if (kicker) kicker.textContent = 'Gaia Healers member pass';
       if (title) title.textContent = 'Member Pass';
       if (sub) sub.textContent = 'One secure sign-in for the access attached to your GHL member record.';
       box.innerHTML =
         '<article class="g-card g-card--feature"><p class="g-card__label">Existing members</p>'
-        + '<p class="g-card__value g-card__value--lg">Sync your Gaia access</p>'
+        + '<p class="g-card__value g-card__value--lg">Sync your Gaia Healers access</p>'
         + '<p class="g-card__meta">Courses, communities, devices, purchases, bookings and messages appear according to your real GHL plan.</p>'
         + '<div class="g-card__actions"><button type="button" class="g-btn g-btn--primary g-btn--sm" data-native-signin>Sign in securely →</button>'
         + '<button type="button" class="g-btn g-btn--secondary g-btn--sm" data-open-in-app="https://join.gaiahealers.com/onboarding" data-in-app-title="Join Gaia Healers">Join free</button>'
@@ -861,7 +861,7 @@ body.gaia-booking-open{overflow:hidden;}
         + '<div class="g-card__actions"><button type="button" class="g-btn g-btn--primary g-btn--sm" data-course-open="' + esc(academyEntry) + '" data-course-title="Gaia Academy">Open Academy →</button></div></article>'
       : '<article class="g-card g-card--feature"><p class="g-card__label">Academy</p>'
         + '<p class="g-card__value g-card__value--lg">Learn & get certified</p>'
-        + '<p class="g-card__meta">Sign in to see exactly what your GHL account can open. Gaia reflects your existing access; it does not assign a tier or course.</p>'
+        + '<p class="g-card__meta">Sign in to see exactly what your GHL account can open. Gaia Healers reflects your existing access; it does not assign a tier or course.</p>'
         + '<div class="g-card__actions"><button type="button" class="g-btn g-btn--primary g-btn--sm" ' + (state.authed ? 'data-track-cta' : 'data-academy-signin') + '>' + (state.authed ? 'View memberships →' : 'Sign in →') + '</button></div></article>';
     const parts = [
       academyHead,
@@ -870,7 +870,7 @@ body.gaia-booking-open{overflow:hidden;}
     ];
     if (!state.authed) {
       parts.push('<article class="g-card"><p class="g-card__label">Already a member?</p>'
-        + '<p class="g-card__meta">Sign in with your Gaia email to open your courses and see what your membership unlocks.</p>'
+        + '<p class="g-card__meta">Sign in with your Gaia Healers email to open your courses and see what your membership unlocks.</p>'
         + '<div class="g-card__actions"><button type="button" class="g-btn g-btn--secondary g-btn--sm" data-academy-signin>Sign in</button></div></article>');
     } else if (!hasAccess) {
       parts.push('<article class="g-card"><p class="g-card__label">No course grant found</p>'
@@ -904,7 +904,7 @@ body.gaia-booking-open{overflow:hidden;}
     let meta;
     let act;
     if (kind === 'unlocked') {
-      meta = c.openUrlIsFallback ? 'Opens in the Gaia portal' : 'Your community';
+      meta = c.openUrlIsFallback ? 'Opens in the Gaia Healers portal' : 'Your community';
       act = '<button type="button" class="g-btn g-btn--secondary g-btn--sm g-access__act" data-open-in-app="' + esc(c.openUrl || portalBase()) + '" data-in-app-title="' + esc(c.name) + '">Open →</button>';
     } else if (kind === 'soon') {
       meta = c.reason || 'Coming soon to Gaia Healers';

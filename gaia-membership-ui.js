@@ -215,7 +215,7 @@
       return '<article class="g-pass g-pass--none">'
         + '<p class="g-pass__kicker">Member Pass</p>'
         + '<p class="g-pass__title">No membership detected</p>'
-        + '<p class="g-pass__meta">We could not find an active Gaia membership on your account.</p>'
+        + '<p class="g-pass__meta">We could not find an active Gaia Healers membership on your account.</p>'
         + '<div class="g-pass__actions"><a class="g-btn g-btn--primary g-btn--sm" href="home.html?view=store&tab=membership">View plans</a></div>'
         + '</article>';
     }

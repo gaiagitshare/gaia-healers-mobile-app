@@ -1642,3 +1642,16 @@ body.gaia-v2 .g-super-home .g-feature-event__actions .g-btn{white-space:nowrap}
    every width. --fit-pad is that gutter, already tracking each breakpoint. */
 body.gaia-v2 .g-topbar{padding-left:var(--fit-pad) !important;
   padding-right:var(--fit-pad) !important}
+
+
+/* Status-bar safe area, definitively. In a standalone PWA with the translucent
+   status bar the app draws under the iPhone clock, so the header MUST reserve
+   env(safe-area-inset-top). Multiple .g-topbar owners meant the winning rule
+   sometimes lacked it and the logo/menu overlapped the clock. This one wins. */
+body.gaia-v2 .g-topbar,
+body.gaia-app .g-topbar {
+  padding-top: max(12px, env(safe-area-inset-top, 12px)) !important;
+}
+@media (display-mode: standalone) {
+  .gaia-booking-modal__head { padding-top: max(0px, env(safe-area-inset-top, 0px)); }
+}

@@ -515,12 +515,6 @@ body.gaia-booking-open{overflow:hidden;}
     }
   }
 
-  /* Shopify's article template opens with its own furniture — a breadcrumb, a
-   * share row, prev/next nav — which is navigation for a website, not part of
-   * the piece. In the app's sheet it is the first thing you read, so it goes.
-   * Bounded to the opening blocks: further down, a line reading "Share" is far
-   * more likely to be the author's own word. */
-  const CHROME = /^(share|prev|previous|next|back|home|menu|search)$/i;
   /* Shopify's page and article templates open with their own furniture — the
    * page title repeated, a share row, prev/next nav. In the app's sheet the
    * header already carries the title and there is nothing to navigate, so it

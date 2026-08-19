@@ -1383,63 +1383,84 @@ body.gaia-v2 .g-super-home .g-feature-event__body {
    This file loads last, so this section is the page's actual last word.
    ════════════════════════════════════════════════════════════════════════ */
 
-/* ── Hero ─────────────────────────────────────────────────────────────────
-   Measured, not guessed. The artwork is 720×1209 (ratio 0.5955), so on phones
-   and small tablets the CARD IS GIVEN THAT EXACT RATIO — cover then crops
-   nothing at any width. Wider screens take a deliberate crop, which the
-   regenerated sky and water margins absorb.
+/* ── The landing: two complete cards, any device ──────────────────────────
+   Sized so the hero AND the Elevate card both finish above the tab bar on
+   every screen, using dvh (the viewport height that survives mobile toolbars).
 
-   The text was a flex/grid bug, not a padding one: the intro's grid column was
-   being centred, so `justify-items:start` aligned each line inside an already
-   off-centre column — every line sat 107px adrift while the CSS read as
-   left-aligned. A flex column pinned to flex-start removes the indirection. */
+   The artwork is the ORIGINAL 720×749 — complete moon, sky, mountains, figure
+   and reflection. The earlier "tall" asset extended it with a blurred smear
+   that filled a third of the card; that was the real ugliness, not the crop.
+   The card carries the image's own ratio, so nothing is cut until a short
+   screen forces a cap — and then it trims water from the bottom, which the
+   text already covers. */
+
+:root{ --gaia-landing-chrome:186px; }   /* top bar + tab bar + gaps */
+
 body.gaia-v2 .g-super-home .g-super-hero{position:relative;display:flex !important;
   flex-direction:column !important;width:100%;
-  aspect-ratio:720/1209;height:auto !important;
-  max-height:calc(100vh - 168px);
+  aspect-ratio:720/749;height:auto !important;
+  max-height:calc(46vh);max-height:calc(46dvh);
   min-height:0 !important;border-radius:24px;overflow:hidden;isolation:isolate}
-@supports (height:100svh){
-  body.gaia-v2 .g-super-home .g-super-hero{max-height:calc(100svh - 168px)}
-}
 
 body.gaia-v2 .g-super-home .g-super-hero__art{position:absolute !important;
   inset:0 !important;z-index:0;height:auto !important;width:auto;max-height:none;
   border:0;opacity:1 !important;transform:none;background-color:#0a1310;
-  background-image:url("assets/gaia-hero-moon-tall.jpg") !important;
-  background-repeat:no-repeat;background-size:cover;background-position:center 42%}
+  background-image:url("assets/gaia-hero-moon.jpg") !important;
+  background-repeat:no-repeat;background-size:cover;background-position:center top}
 body.gaia-v2 .g-super-home .g-super-hero__art::before{content:none}
-/* One bottom-weighted scrim: the words sit on water, the moon stays clean. */
 body.gaia-v2 .g-super-home .g-super-hero__art::after{content:"";position:absolute;
-  inset:0;background:linear-gradient(180deg,transparent 46%,rgba(4,7,10,.62) 74%,rgba(4,7,10,.94) 100%)}
+  inset:0;background:linear-gradient(180deg,transparent 40%,rgba(4,7,10,.55) 66%,rgba(4,7,10,.93) 100%)}
 
 body.gaia-v2 .g-super-home .g-super-hero .g-super-hero__intro{position:relative;
   z-index:1;width:100% !important;max-width:none !important;height:100% !important;
   min-height:0 !important;margin:0 !important;
   display:flex !important;flex-direction:column !important;
   align-items:flex-start !important;justify-content:flex-end !important;
-  gap:0;text-align:left !important;
-  padding:22px 20px calc(96px + env(safe-area-inset-bottom,0px)) !important}
+  gap:0;text-align:left !important;padding:16px 18px 16px !important}
 body.gaia-v2 .g-super-home .g-super-hero .g-super-hero__intro::before{content:none}
 body.gaia-v2 .g-super-home .g-super-hero .g-super-hero__intro > *{
   align-self:flex-start !important;margin-left:0 !important;margin-right:0 !important;
   max-width:100%}
-body.gaia-v2 .g-super-hero__intro .g-super-date{margin:0 0 8px !important;
-  text-shadow:0 1px 8px rgba(0,0,0,.7)}
+body.gaia-v2 .g-super-hero__intro .g-super-date{margin:0 0 5px !important;
+  font-size:10.5px !important;text-shadow:0 1px 8px rgba(0,0,0,.75)}
 body.gaia-v2 .g-super-hero h1,
-body.gaia-v2 .g-super-hero__intro h1{font-size:clamp(30px,7.6vw,44px) !important;
-  line-height:1.05;margin:0 0 8px !important;max-width:none !important;
-  text-align:left !important;text-shadow:0 2px 16px rgba(0,0,0,.75)}
-body.gaia-v2 .g-super-hero__intro > p:not(.g-super-date){margin:0 0 16px !important;
-  max-width:34ch;font-size:clamp(14px,3.7vw,16px);color:rgba(255,255,255,.88);
-  text-align:left !important;text-shadow:0 1px 10px rgba(0,0,0,.7)}
+body.gaia-v2 .g-super-hero__intro h1{font-size:clamp(25px,6.4vw,38px) !important;
+  line-height:1.04;margin:0 0 5px !important;max-width:none !important;
+  text-align:left !important;text-shadow:0 2px 16px rgba(0,0,0,.8)}
+body.gaia-v2 .g-super-hero__intro > p:not(.g-super-date){margin:0 0 11px !important;
+  max-width:32ch;font-size:clamp(12.5px,3.4vw,15px);line-height:1.3;
+  color:rgba(255,255,255,.9);text-align:left !important;
+  text-shadow:0 1px 10px rgba(0,0,0,.75)}
 body.gaia-v2 .g-super-home .g-super-hero .g-super-discover,
 body.gaia-v2 .g-super-home .g-super-discover{display:flex !important;
   flex-direction:row !important;justify-content:flex-start !important;
-  align-items:center;gap:10px;flex-wrap:wrap;
+  align-items:center;gap:8px;flex-wrap:nowrap;
   width:100% !important;max-width:100%;min-width:0;margin:0 !important}
 body.gaia-v2 .g-super-home .g-super-discover .g-btn{white-space:nowrap !important;
-  width:auto !important;flex:0 0 auto !important;font-size:13.5px !important;
-  padding:11px 18px !important;min-height:44px}
+  width:auto !important;flex:0 1 auto !important;min-width:0;
+  font-size:clamp(11.5px,3.1vw,13.5px) !important;
+  padding:10px 14px !important;min-height:44px}
+
+/* Elevate: complete card — banner, kicker, title, dates, both buttons. */
+body.gaia-v2 .g-super-home .g-feature-event .g-feature-event__art{
+  height:clamp(96px,15vh,150px) !important;height:clamp(96px,15dvh,150px) !important}
+body.gaia-v2 .g-super-home .g-feature-event__body{padding:12px 16px 14px !important;
+  gap:5px !important}
+body.gaia-v2 .g-feature-event__kicker{font-size:10.5px !important}
+body.gaia-v2 .g-feature-event__title{font-size:clamp(15px,4.1vw,19px) !important;
+  line-height:1.18 !important}
+body.gaia-v2 .g-feature-event__meta{font-size:clamp(11.5px,3.1vw,13px) !important;
+  line-height:1.3 !important}
+body.gaia-v2 .g-super-home .g-feature-event__actions{margin-top:7px !important;gap:8px}
+body.gaia-v2 .g-super-home .g-feature-event__actions .g-btn{
+  font-size:clamp(11.5px,3.1vw,13.5px) !important;padding:10px 14px !important;
+  min-height:44px;white-space:nowrap}
+
+/* Roomier once there is room: tablets and up. */
+@media (min-height:820px) and (max-width:1059px){
+  body.gaia-v2 .g-super-home .g-super-hero{max-height:calc(52dvh)}
+  body.gaia-v2 .g-super-home .g-super-hero .g-super-hero__intro{padding:20px 20px 20px !important}
+}
 
 /* Event: banner, then details. Nothing overlays the poster's lettering. */
 body.gaia-v2 .g-super-home .g-feature-event{display:flex !important;flex-direction:column !important;
@@ -1467,8 +1488,8 @@ body.gaia-v2 .g-super-home .g-feature-event__actions .g-btn{white-space:nowrap}
 /* Desktop: taller hero; the poster earns its side seat. */
 @media (min-width:1060px){
   body.gaia-v2 .g-super-home .g-super-hero{aspect-ratio:auto !important;
-    height:calc(100vh - 190px) !important;min-height:440px !important;max-height:760px}
-  body.gaia-v2 .g-super-home .g-super-hero__art{background-position:center 38%}
+    height:calc(100dvh - 210px) !important;min-height:420px !important;max-height:680px}
+  body.gaia-v2 .g-super-home .g-super-hero__art{background-position:center 30%}
   body.gaia-v2 .g-super-home .g-feature-event .g-feature-event__art{height:auto !important;
     max-height:none}
   body.gaia-v2 .g-super-home .g-super-hero .g-super-hero__intro{padding:44px 48px 52px !important}
@@ -1483,11 +1504,3 @@ body.gaia-v2 .g-super-home .g-feature-event__actions .g-btn{white-space:nowrap}
 }
 
 
-/* Tablets: the portrait card would run past the fold, so a measured band. */
-@media (min-width:700px) and (max-width:1059px){
-  body.gaia-v2 .g-super-home .g-super-hero{aspect-ratio:auto !important;
-    height:clamp(420px,62vh,620px) !important}
-  body.gaia-v2 .g-super-home .g-super-hero__art{background-position:center 40%}
-  body.gaia-v2 .g-super-home .g-super-hero .g-super-hero__intro{
-    padding:28px 30px 34px !important}
-}

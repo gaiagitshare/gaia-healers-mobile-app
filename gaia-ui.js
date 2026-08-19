@@ -1046,6 +1046,7 @@
             <button type="submit" class="g-btn g-btn--primary gaia-auth-modal__submit" data-auth-submit>Email me a sign-in link</button>
           </form>
           <p class="gaia-auth-modal__status" id="gaia-auth-status" data-auth-status role="status" aria-live="polite">Your link goes straight to your inbox.</p>
+          <p class="gaia-auth-modal__join">New to Gaia? <button type="button" class="gaia-auth-modal__joinlink" data-open-in-app="https://join.gaiahealers.com/onboarding" data-in-app-title="Join Gaia — free">Join free</button> — it takes a minute and your account is created instantly.</p>
         </section>`;
       document.body.appendChild(modal);
       statusEl = modal.querySelector('[data-auth-status]');
@@ -1086,7 +1087,7 @@
             body: JSON.stringify({ email, returnTo: window.location.href }),
           });
           const payload = await response.json().catch(() => ({}));
-          if (response.ok && payload.ok) statusEl.textContent = 'Check your email — your Gaia sign-in link is on its way.';
+          if (response.ok && payload.ok) statusEl.textContent = 'If that email is a Gaia member, your sign-in link is on its way. New to Gaia? Use Join free below.';
           else if (payload.error) statusEl.textContent = payload.error;
           else statusEl.textContent = 'Could not send your link right now. Please try again in a moment.';
         } catch {

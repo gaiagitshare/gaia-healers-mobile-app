@@ -456,6 +456,9 @@ body.gaia-v2 .gaia-shell {
 .gaia-auth-modal__input:focus { outline: none; border-color: var(--g-accent); box-shadow: var(--g-focus); }
 .gaia-auth-modal__submit { width: 100%; border-radius: 15px; }
 .gaia-auth-modal__status { min-height: 20px; margin: 12px 0 0; color: var(--g-text-muted); font-size: 13px; line-height: 1.45; }
+.gaia-auth-modal__join { margin: 14px 0 0; padding-top: 12px; border-top: 1px solid var(--g-line); color: var(--g-text-muted); font-size: 13px; line-height: 1.5; }
+.gaia-auth-modal__joinlink { background: none; border: 0; padding: 0; font: inherit; font-weight: 700; color: var(--g-accent); cursor: pointer; text-decoration: underline; text-underline-offset: 2px; }
+.gaia-auth-modal__joinlink:focus-visible { outline: 2px solid var(--g-accent); outline-offset: 2px; border-radius: 3px; }
 
 .gaia-menu-sheet__nav { display: grid; gap: 8px; margin-top: 22px; }
 .gaia-menu-sheet__link {

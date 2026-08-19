@@ -6,6 +6,7 @@ import { URL } from 'node:url';
 import * as adminRouter from './admin-router.js';
 import * as wellnessRouter from './wellness-router.js';
 import * as eventIdentity from './membership/event-identity.js';
+import * as reader from './membership/reader.js';
 import { migrateStore, migrateContactRecord } from './membership/ledger.js';
 import { resolveMemberAccess } from './membership/resolver.js';
 import { UNRESOLVED_BILLING_IDS } from './membership/config.js';
@@ -4606,6 +4607,17 @@ const server = http.createServer(async (req, res) => {
     }
     // My Events / My Ticket. Identity comes from the session cookie only —
     // there is deliberately no way to ask for someone else's by id.
+    // In-app reader for Gaia pages that refuse to be framed (Shopify sends
+    // X-Frame-Options: DENY). Same principle as the Store: render Shopify
+    // content natively rather than trying to embed the storefront.
+    if (req.method === 'GET' && url.pathname === '/api/reader') {
+      const target = url.searchParams.get('url') || '';
+      const result = await reader.read(target);
+      sendJson(res, result.ok ? 200 : 400, result, origin, {
+        'Cache-Control': 'public, max-age=600',
+      });
+      return;
+    }
     if (req.method === 'GET' && url.pathname === '/api/events/mine') {
       const session = cookieForRequest(req);
       sendJson(res, 200, await eventIdentity.myEvents(session), origin);

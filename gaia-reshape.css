@@ -487,6 +487,25 @@ body.gaia-v2 .gaia-shell {
 .gaia-booking-modal__auth-hint { color: var(--g-text-muted) !important; }
 .gaia-booking-modal__fallback { background: #111e15 !important; border-color: var(--g-line) !important; color: var(--g-accent) !important; }
 
+/* In-app reader (Shopify pages we render instead of framing). This file owns
+   the dark theming for the booking sheet, so it owns the reader's too — the
+   reader's own stylesheet stays light-neutral and is themed only here. */
+.gaia-reader__body { background: #0d1710 !important; color: var(--g-text) !important; }
+.gaia-reader__loading,
+.gaia-reader__fallback { color: var(--g-text-muted) !important; }
+.gaia-reader__cta { background: var(--g-accent) !important; color: #0d1710 !important; }
+.gaia-reader__item { border-bottom-color: var(--g-line) !important; }
+.gaia-reader__item strong { color: var(--g-text) !important; font-family: var(--g-font-serif); }
+.gaia-reader__item span { color: var(--g-text-muted) !important; }
+.gaia-reader__item:active { background: var(--g-surface-hi) !important; }
+.gaia-reader__article { color: var(--g-text) !important; }
+.gaia-reader__article h1,
+.gaia-reader__article h2,
+.gaia-reader__article h3 { color: var(--g-text) !important; font-family: var(--g-font-serif); }
+.gaia-reader__article a { color: var(--g-accent) !important; }
+.gaia-reader__article td,
+.gaia-reader__article th { border-color: var(--g-line) !important; }
+
 /* Bottom navigation ----------------------------------------------------- */
 body.gaia-v2.gaia-has-tabbar { padding-bottom: calc(5.5rem + env(safe-area-inset-bottom)); }
 body.gaia-v2 .gaia-tabbar { padding-inline: max(12px, env(safe-area-inset-left)) !important; }

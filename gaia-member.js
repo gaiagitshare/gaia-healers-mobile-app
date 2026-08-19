@@ -27,6 +27,30 @@
 .gaia-booking-modal__close:active{background:#EFEFF0;}
 .gaia-booking-modal__body{flex:1;position:relative;overflow:auto;-webkit-overflow-scrolling:touch;}
 .gaia-booking-modal__body iframe{position:absolute;inset:0;width:100%;height:100%;border:none;}
+.gaia-reader__body{padding:0;}
+.gaia-reader__loading,.gaia-reader__fallback{padding:36px 22px;text-align:center;color:#636366;}
+.gaia-reader__cta{display:inline-block;margin-top:14px;padding:11px 20px;border-radius:999px;
+  background:#1C1C1E;color:#fff;text-decoration:none;font-weight:600;font-size:.92rem;}
+.gaia-reader__list{display:flex;flex-direction:column;padding:8px 0;}
+.gaia-reader__item{display:flex;flex-direction:column;gap:5px;padding:16px 20px;text-decoration:none;
+  color:inherit;border-bottom:1px solid rgba(0,0,0,.06);}
+.gaia-reader__item:last-child{border-bottom:none;}
+.gaia-reader__item strong{font-size:1rem;line-height:1.35;font-weight:600;}
+.gaia-reader__item span{font-size:.86rem;line-height:1.45;color:#636366;
+  display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;}
+.gaia-reader__article{padding:20px 22px 40px;font-size:1rem;line-height:1.62;}
+.gaia-reader__article h1,.gaia-reader__article h2,.gaia-reader__article h3{
+  line-height:1.25;margin:26px 0 10px;font-weight:600;}
+.gaia-reader__article h1{font-size:1.5rem;} .gaia-reader__article h2{font-size:1.24rem;}
+.gaia-reader__article h3{font-size:1.06rem;}
+.gaia-reader__article > *:first-child{margin-top:0;}
+.gaia-reader__article p,.gaia-reader__article ul,.gaia-reader__article ol{margin:0 0 15px;}
+.gaia-reader__article ul,.gaia-reader__article ol{padding-left:22px;}
+.gaia-reader__article li{margin-bottom:6px;}
+.gaia-reader__article img{max-width:100%;height:auto;border-radius:12px;display:block;margin:18px 0;}
+.gaia-reader__article a{color:#2A7F62;text-decoration:underline;text-underline-offset:2px;}
+.gaia-reader__article table{width:100%;border-collapse:collapse;font-size:.9rem;}
+.gaia-reader__article td,.gaia-reader__article th{border:1px solid rgba(0,0,0,.1);padding:7px 9px;text-align:left;}
 .gaia-booking-modal__loading{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;gap:10px;
   color:#AEAEB2;font-size:.9rem;background:#fff;}
 .gaia-booking-modal__spinner{width:18px;height:18px;border:2px solid #E5E5EA;border-top-color:#5CB82E;border-radius:50%;animation:gaia-spin .8s linear infinite;}
@@ -347,7 +371,18 @@ body.gaia-booking-open{overflow:hidden;}
     'elevate.gaiahealers.com',
     'api.leadconnectorhq.com',
     'calendly.com',
+    // Verified frameable and not login-gated: both are marketing funnels.
+    'join.gaiahealers.com',
+    'nextlevel.gaiahealers.com',
   ];
+  /* Shopify refuses framing outright, so these are READ rather than embedded —
+   * fetched through the proxy and rendered in Gaia's own shell, the same way
+   * the Store renders the Shopify catalogue natively. */
+  const READABLE_HOSTS = ['gaiahealers.com'];
+  const canRead = (u) => {
+    const h = hostOf(u);
+    return READABLE_HOSTS.some((allowed) => h === allowed || h.endsWith('.' + allowed));
+  };
   const canEmbed = (u) => {
     const h = hostOf(u);
     return EMBEDDABLE_HOSTS.some((allowed) => h === allowed || h.endsWith('.' + allowed));
@@ -375,9 +410,13 @@ body.gaia-booking-open{overflow:hidden;}
       return;
     }
 
-    // The same escape hatch for anything that refuses to be framed. Without
-    // this, a data-open-in-app button forced Shopify pages into an iframe they
-    // reject, and the panel opened blank.
+    // Shopify content: read it in-app instead of framing it.
+    if (!canEmbed(url) && canRead(url)) {
+      openReader(url, title);
+      return;
+    }
+
+    // Anything else that refuses framing opens as a real tab.
     if (!canEmbed(url)) {
       const opened = window.open(url, '_blank', 'noopener,noreferrer');
       if (!opened) window.location.assign(url);
@@ -390,6 +429,89 @@ body.gaia-booking-open{overflow:hidden;}
       : url;
 
     actuallyOpenInApp(url, embedUrl, title);
+  }
+
+  function readerProxyBase() {
+    return String((window.GAIA_SYNC && window.GAIA_SYNC.proxyBase)
+      || 'https://api.gaiahealers.app').replace(/\/+$/, '');
+  }
+
+  /** Open Gaia's own content inside the app, rendered rather than framed.
+   * Shopify sends X-Frame-Options: DENY, so the storefront cannot be embedded.
+   * The proxy fetches and sanitises the page and we render it in Gaia's own
+   * sheet — the same principle the Store already uses for the catalogue. */
+  async function openReader(url, title) {
+    closeInApp();
+    const lastTrigger = document.activeElement;
+    inAppModal = document.createElement('div');
+    inAppModal.className = 'gaia-booking-modal gaia-reader';
+    inAppModal.setAttribute('role', 'dialog');
+    inAppModal.setAttribute('aria-modal', 'true');
+    inAppModal.innerHTML = '<div class="gaia-booking-modal__backdrop" data-reader-close></div>'
+      + '<div class="gaia-booking-modal__sheet">'
+      + '<div class="gaia-booking-modal__head">'
+      + '<p class="gaia-booking-modal__title">' + escapeHtml(title || 'Gaia') + '</p>'
+      + '<button type="button" class="gaia-booking-modal__close" data-reader-close aria-label="Close">&times;</button>'
+      + '</div>'
+      + '<div class="gaia-booking-modal__body gaia-reader__body">'
+      + '<p class="gaia-reader__loading">Loading\u2026</p></div></div>';
+    document.body.appendChild(inAppModal);
+    document.body.classList.add('gaia-booking-open');
+
+    const close = () => {
+      if (inAppModal) inAppModal.remove();
+      inAppModal = null;
+      document.body.classList.remove('gaia-booking-open');
+      document.removeEventListener('keydown', onKey);
+      if (lastTrigger && lastTrigger.focus) lastTrigger.focus();
+    };
+    const onKey = (e) => { if (e.key === 'Escape') close(); };
+    document.addEventListener('keydown', onKey);
+    inAppModal.addEventListener('click', (e) => {
+      if (e.target.closest('[data-reader-close]')) close();
+    });
+    const sheet = inAppModal.querySelector('.gaia-booking-modal__sheet');
+    const body = inAppModal.querySelector('.gaia-reader__body');
+
+    let data = null;
+    try {
+      const response = await fetch(readerProxyBase() + '/api/reader?url=' + encodeURIComponent(url),
+        { headers: { Accept: 'application/json' } });
+      data = await response.json();
+    } catch (_) { data = null; }
+    if (!inAppModal || !document.body.contains(inAppModal)) return;
+
+    if (data && data.ok && data.title) {
+      const heading = sheet.querySelector('.gaia-booking-modal__title');
+      if (heading) heading.textContent = data.title;
+    }
+
+    if (data && data.ok && data.kind === 'list' && data.articles.length) {
+      body.innerHTML = '<div class="gaia-reader__list">'
+        + data.articles.map((a) => '<a class="gaia-reader__item" href="' + escapeHtml(a.url)
+          + '" target="_blank" rel="noopener noreferrer"><strong>' + escapeHtml(a.title) + '</strong>'
+          + (a.summary ? '<span>' + escapeHtml(a.summary) + '</span>' : '') + '</a>').join('')
+        + '</div>';
+    } else if (data && data.ok && data.html) {
+      // Sanitised on the server; rendered inside Gaia's own typography.
+      body.innerHTML = '<article class="gaia-reader__article">' + data.html + '</article>';
+    } else {
+      // Never a dead end: the page still exists, so offer the real thing.
+      body.innerHTML = '<div class="gaia-reader__fallback">'
+        + '<p>This page could not be loaded inside the app.</p>'
+        + '<a class="gaia-reader__cta" href="' + escapeHtml(url)
+        + '" target="_blank" rel="noopener noreferrer">Open in a new tab</a></div>';
+    }
+  }
+
+  function readerProxyBase() {
+    return String((window.GAIA_SYNC && window.GAIA_SYNC.proxyBase)
+      || 'https://api.gaiahealers.app').replace(/\/+$/, '');
+  }
+
+  function escapeHtml(value) {
+    return String(value == null ? '' : value)
+      .replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
   }
 
   function actuallyOpenInApp(url, embedUrl, title) {

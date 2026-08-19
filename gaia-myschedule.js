@@ -151,17 +151,32 @@
   function timeLabel(iso, timezone) {
     if (!iso) return '';
     try {
+      const s = String(iso);
+      // Session times are stored naive = venue-local wall clock (see the backend
+      // datetime convention). A value with an explicit offset is absolute and is
+      // shown in the event timezone; a naive value is rendered exactly as stored,
+      // because parsing it through the viewer's browser zone and then re-applying
+      // the event zone double-shifts the time.
+      if (/[zZ]|[+-]\d{2}:?\d{2}$/.test(s)) {
+        return new Intl.DateTimeFormat(undefined, {
+          timeZone: timezone || 'UTC', hour: 'numeric', minute: '2-digit',
+        }).format(new Date(s));
+      }
+      const m = /^(\d{4})-(\d{2})-(\d{2})[T ](\d{2}):(\d{2})/.exec(s);
+      if (!m) return '';
       return new Intl.DateTimeFormat(undefined, {
-        timeZone: timezone || 'UTC', hour: 'numeric', minute: '2-digit',
-      }).format(new Date(iso));
+        timeZone: 'UTC', hour: 'numeric', minute: '2-digit',
+      }).format(new Date(Date.UTC(+m[1], +m[2] - 1, +m[3], +m[4], +m[5])));
     } catch (_) { return ''; }
   }
 
   function dayLabel(key, timezone) {
     if (key === 'unscheduled') return 'Not yet scheduled';
     try {
+      // The day key is already a venue-local date (YYYY-MM-DD). Render it as-is
+      // in UTC so an extreme venue offset can't roll it to the previous/next day.
       return new Intl.DateTimeFormat(undefined, {
-        timeZone: timezone || 'UTC', weekday: 'long', day: 'numeric', month: 'long',
+        timeZone: 'UTC', weekday: 'long', day: 'numeric', month: 'long',
       }).format(new Date(key + 'T12:00:00Z'));
     } catch (_) { return key; }
   }

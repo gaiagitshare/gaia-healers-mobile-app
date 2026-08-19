@@ -129,9 +129,14 @@
   function checkedInAtLabel(item, iso) {
     if (!iso) return '';
     try {
+      const s = String(iso);
+      // checked_in_at is stored naive UTC (datetime.utcnow). Mark it UTC before
+      // parsing, then present it in the event's local timezone — without the 'Z'
+      // the browser reads it as local time and the label is doubly off.
+      const abs = /[zZ]|[+-]\d{2}:?\d{2}$/.test(s) ? s : s + 'Z';
       return new Intl.DateTimeFormat(undefined, {
         timeZone: item.timezone || 'UTC', hour: 'numeric', minute: '2-digit',
-      }).format(new Date(iso));
+      }).format(new Date(abs));
     } catch (_) { return ''; }
   }
 

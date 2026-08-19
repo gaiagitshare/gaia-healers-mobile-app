@@ -665,12 +665,19 @@ button.g-access.g-access--link {
 .g-store-sheet .g-btn{min-height:44px;display:inline-flex;align-items:center;justify-content:center}
 /* The title doubles as the control that opens the sheet — and on a phone it is
    the only way into the product, since the tile itself is an <article>. At its
-   natural height that control was 20px for a one-line title and 40px for two,
-   both under the 44px touch minimum and uneven between neighbouring tiles. A
-   floor fixes the target and squares the titles up across a row. */
+   natural height it was 20px for a one-line title, under the 44px touch
+   minimum, so it gets a floor. */
 .g-tile__open{background:none;border:0;padding:0;margin:0;font:inherit;color:inherit;
-  text-align:left;cursor:pointer;width:100%;
-  min-height:44px;display:flex;align-items:flex-start}
+  text-align:left;cursor:pointer;width:100%;min-height:44px}
+
+/* The two-line clamp could not live on .g-tile__title, even though that is
+   where .g-clamp-2 sits: the title is a flex item of .g-tile__body, so its
+   display:-webkit-box is blockified to flow-root and -webkit-line-clamp never
+   applied. A 200-character product title therefore ran to eight lines and
+   pushed its Buy button far out of line with the rest of the row. The button
+   inside the title is not a flex item, so the clamp holds there. */
+.g-store-tile .g-tile__open{display:-webkit-box;-webkit-line-clamp:2;
+  -webkit-box-orient:vertical;overflow:hidden}
 .g-tile__open:focus-visible{outline:2px solid var(--g-accent,#A8E063);outline-offset:3px;border-radius:6px}
 @media (max-width:640px){.g-store-sheet{max-width:100%;border-radius:16px 16px 0 0;max-height:90vh}}
 

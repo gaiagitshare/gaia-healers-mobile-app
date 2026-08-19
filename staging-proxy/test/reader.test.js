@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { allowed, sanitize, parseFeed, decodeEntities, ALLOWED_HOSTS } from '../membership/reader.js';
+import { allowed, sanitize, parseFeed, decodeEntities, extractContent, elementEnd, ALLOWED_HOSTS } from '../membership/reader.js';
 
 /* The reader fetches a remote URL on the server's behalf, so the allowlist is
  * the whole security boundary: it is what stops it becoming an open proxy into
@@ -66,4 +66,35 @@ test('sanitize drops head-only tags that leak into Shopify page bodies', () => {
     assert.ok(!clean.toLowerCase().includes(leak), 'leaked: ' + leak);
   }
   assert.ok(clean.includes('Real text'));
+});
+
+test('elementEnd counts depth instead of stopping at the first close', () => {
+  const html = '<div id=a><div id=b></div>TAIL</div>AFTER';
+  const end = elementEnd(html, 'div', 0);
+  assert.equal(html.slice(0, end).endsWith('TAIL'), true,
+    'must close the outer div, not the inner one');
+});
+
+test('elementEnd reports an unclosed element rather than guessing', () => {
+  assert.equal(elementEnd('<article>never closed', 'article', 0), -1);
+});
+
+test('extractContent prefers the prose body over the whole page', () => {
+  const page = '<main><nav>Home Shop About</nav>'
+    + '<div class="prose"><p>' + 'The piece itself. '.repeat(20) + '</p></div>'
+    + '<footer>Free delivery worldwide. ' + 'x '.repeat(200) + '</footer></main>';
+  const out = extractContent(page);
+  assert.ok(out.includes('The piece itself.'));
+  assert.ok(!/Free delivery worldwide/.test(out), 'footer must not be included');
+  assert.ok(!/Home Shop About/.test(out), 'nav must not be included');
+});
+
+test('extractContent survives an article tag the theme never closes', () => {
+  // Shopify's article template really does this; a non-greedy regex swallowed
+  // the entire page footer as a result.
+  const page = '<article><div class="prose"><p>' + 'Body text. '.repeat(30) + '</p></div>'
+    + '<footer>Free delivery worldwide</footer>';
+  const out = extractContent(page);
+  assert.ok(out.includes('Body text.'));
+  assert.ok(!/Free delivery worldwide/.test(out));
 });

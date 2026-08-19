@@ -73,20 +73,63 @@ function sanitize(html, baseUrl) {
 }
 
 /** The readable body of a Shopify page, in preference order. */
+/* Find where an element that starts at `from` actually ends, by counting
+ * opens and closes of the same tag. A non-greedy regex cannot do this: it stops
+ * at the first close, which for nested markup is the wrong one — and when the
+ * theme never emits a close at all (Shopify's article template does not close
+ * its <article>) it fails silently and swallows the whole page footer. */
+function elementEnd(html, tag, from) {
+  const scan = new RegExp(`<(/)?${tag}\\b`, 'gi');
+  scan.lastIndex = from + 1;
+  let depth = 1;
+  let match;
+  while ((match = scan.exec(html))) {
+    depth += match[1] ? -1 : 1;
+    if (depth === 0) return match.index;
+  }
+  return -1; // unclosed: the caller falls through to the next candidate
+}
+
+function elementsWithClass(html, tag, className) {
+  const open = new RegExp(`<${tag}\\b[^>]*\\bclass="[^"]*\\b${className}\\b[^"]*"[^>]*>`, 'gi');
+  const out = [];
+  let match;
+  while ((match = open.exec(html))) {
+    const from = match.index;
+    const to = elementEnd(html, tag, from);
+    if (to > from) out.push(html.slice(from + match[0].length, to));
+  }
+  return out;
+}
+
+const TEXT_FLOOR = 200;
+function textLength(fragment) {
+  return fragment.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim().length;
+}
+
+/** The readable body of a page, without the theme's navigation and footer. */
 function extractContent(html) {
-  const patterns = [
-    /<article\b[^>]*>([\s\S]*?)<\/article>/i,
-    /<div\b[^>]*class="[^"]*\brte\b[^"]*"[^>]*>([\s\S]*?)<\/div>\s*<\/div>/i,
-    /<main\b[^>]*>([\s\S]*?)<\/main>/i,
-  ];
-  for (const pattern of patterns) {
-    const found = html.match(pattern);
-    if (found && found[1] && found[1].replace(/<[^>]+>/g, '').trim().length > 200) {
-      return found[1];
-    }
+  // Prose containers first: these hold the piece itself, so trailing sections
+  // like related posts and the shipping footer never enter the fragment.
+  for (const className of ['prose', 'rte', 'article__content', 'article-template__content']) {
+    const candidates = elementsWithClass(html, 'div', className)
+      .filter((fragment) => textLength(fragment) > TEXT_FLOOR)
+      .sort((a, b) => textLength(b) - textLength(a));
+    if (candidates.length) return candidates[0];
+  }
+  // Then whole-document containers, which are correct but coarser.
+  for (const tag of ['article', 'main']) {
+    const open = new RegExp(`<${tag}\\b[^>]*>`, 'i');
+    const found = html.match(open);
+    if (!found) continue;
+    const to = elementEnd(html, tag, found.index);
+    if (to < 0) continue;
+    const fragment = html.slice(found.index + found[0].length, to);
+    if (textLength(fragment) > TEXT_FLOOR) return fragment;
   }
   return '';
 }
+
 
 function extractTitle(html) {
   const h1 = html.match(/<h1\b[^>]*>([\s\S]*?)<\/h1>/i);
@@ -177,4 +220,4 @@ async function read(rawUrl) {
   return value;
 }
 
-export { read, allowed, sanitize, parseFeed, decodeEntities, extractContent, ALLOWED_HOSTS };
+export { read, allowed, sanitize, parseFeed, decodeEntities, extractContent, elementEnd, ALLOWED_HOSTS };

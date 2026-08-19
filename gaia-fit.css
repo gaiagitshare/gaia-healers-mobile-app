@@ -1383,59 +1383,63 @@ body.gaia-v2 .g-super-home .g-feature-event__body {
    This file loads last, so this section is the page's actual last word.
    ════════════════════════════════════════════════════════════════════════ */
 
-/* Hero: seated, left-aligned, buttons on one line. */
-body.gaia-v2 .g-super-home .g-super-hero{position:relative;display:block;
-  /* The artwork is nearly square (720×749). The card takes the image's own
-     shape so the moon, mountains and figure all stay in frame — capped so a
-     wide window does not become a wall of art. */
-  /* Height follows the viewport at the image's own proportion, capped —
-     width stays 100%. (aspect-ratio + max-height coupled and narrowed the
-     whole card; explicit height keeps the two independent.) */
-  /* The landing opener: fills the viewport minus the top bar on every
-     device. svh so iOS toolbars do not lie about the height. */
-  width:100%;
-  /* vh first as the universal fallback; svh refines where supported. A hard
-     min floor so no failed calc can ever collapse the opener again. */
-  height:calc(100vh - 150px);
-  height:clamp(460px,calc(100svh - 150px),900px);
-  max-height:900px;
-  min-height:460px !important;border-radius:24px;overflow:hidden}
-body.gaia-v2 .g-super-home .g-super-hero__art{position:absolute !important;inset:0 !important;
-  height:auto !important;width:auto;max-height:none;border:0;opacity:.9 !important;
-  /* One standard layer: the artwork regenerated taller (extended with its
-     own sky and water), so plain cover shows the complete moon, mountains
-     and figure at every aspect — and leaves calm water for the words. */
+/* ── Hero ─────────────────────────────────────────────────────────────────
+   Measured, not guessed. The artwork is 720×1209 (ratio 0.5955), so on phones
+   and small tablets the CARD IS GIVEN THAT EXACT RATIO — cover then crops
+   nothing at any width. Wider screens take a deliberate crop, which the
+   regenerated sky and water margins absorb.
+
+   The text was a flex/grid bug, not a padding one: the intro's grid column was
+   being centred, so `justify-items:start` aligned each line inside an already
+   off-centre column — every line sat 107px adrift while the CSS read as
+   left-aligned. A flex column pinned to flex-start removes the indirection. */
+body.gaia-v2 .g-super-home .g-super-hero{position:relative;display:flex !important;
+  flex-direction:column !important;width:100%;
+  aspect-ratio:720/1209;height:auto !important;
+  max-height:calc(100vh - 168px);
+  min-height:0 !important;border-radius:24px;overflow:hidden;isolation:isolate}
+@supports (height:100svh){
+  body.gaia-v2 .g-super-home .g-super-hero{max-height:calc(100svh - 168px)}
+}
+
+body.gaia-v2 .g-super-home .g-super-hero__art{position:absolute !important;
+  inset:0 !important;z-index:0;height:auto !important;width:auto;max-height:none;
+  border:0;opacity:1 !important;transform:none;background-color:#0a1310;
   background-image:url("assets/gaia-hero-moon-tall.jpg") !important;
-  background-position:center top;background-size:cover;transform:none;
-  background-color:#0a1310}
-body.gaia-v2 .g-super-home .g-super-hero__art img{width:100%;height:100%;
-  object-fit:cover;object-position:center 25%}
+  background-repeat:no-repeat;background-size:cover;background-position:center 42%}
+body.gaia-v2 .g-super-home .g-super-hero__art::before{content:none}
+/* One bottom-weighted scrim: the words sit on water, the moon stays clean. */
 body.gaia-v2 .g-super-home .g-super-hero__art::after{content:"";position:absolute;
-  inset:0;background:linear-gradient(180deg,rgba(4,7,10,.12) 0%,transparent 30%),
-  linear-gradient(180deg,transparent 42%,rgba(4,7,10,.9) 100%)}
+  inset:0;background:linear-gradient(180deg,transparent 46%,rgba(4,7,10,.62) 74%,rgba(4,7,10,.94) 100%)}
+
 body.gaia-v2 .g-super-home .g-super-hero .g-super-hero__intro{position:relative;
-  z-index:1;width:100% !important;max-width:640px;min-height:100% !important;
-  display:grid;align-content:end !important;justify-items:start !important;row-gap:0;
-  /* Seated above the floating tab bar, whatever the phone's safe area. */
-  padding:24px 22px calc(108px + env(safe-area-inset-bottom,0px)) !important;
-  margin:0 !important;text-align:left !important;height:auto !important}
+  z-index:1;width:100% !important;max-width:none !important;height:100% !important;
+  min-height:0 !important;margin:0 !important;
+  display:flex !important;flex-direction:column !important;
+  align-items:flex-start !important;justify-content:flex-end !important;
+  gap:0;text-align:left !important;
+  padding:22px 20px calc(96px + env(safe-area-inset-bottom,0px)) !important}
 body.gaia-v2 .g-super-home .g-super-hero .g-super-hero__intro::before{content:none}
-body.gaia-v2 .g-super-hero__intro .g-super-date{margin:0 0 10px;
-  text-shadow:0 1px 8px rgba(0,0,0,.6)}
+body.gaia-v2 .g-super-home .g-super-hero .g-super-hero__intro > *{
+  align-self:flex-start !important;margin-left:0 !important;margin-right:0 !important;
+  max-width:100%}
+body.gaia-v2 .g-super-hero__intro .g-super-date{margin:0 0 8px !important;
+  text-shadow:0 1px 8px rgba(0,0,0,.7)}
 body.gaia-v2 .g-super-hero h1,
-body.gaia-v2 .g-super-hero__intro h1{font-size:clamp(32px,4.6vw,52px) !important;
-  line-height:1.04;margin:0 0 10px;text-align:left !important;max-width:none !important;
-  text-shadow:0 2px 16px rgba(0,0,0,.65)}
-body.gaia-v2 .g-super-hero__intro > p:not(.g-super-date){margin:0 0 18px;
-  font-size:clamp(15px,1.8vw,17px);color:rgba(255,255,255,.85);
-  text-align:left;text-shadow:0 1px 10px rgba(0,0,0,.6)}
+body.gaia-v2 .g-super-hero__intro h1{font-size:clamp(30px,7.6vw,44px) !important;
+  line-height:1.05;margin:0 0 8px !important;max-width:none !important;
+  text-align:left !important;text-shadow:0 2px 16px rgba(0,0,0,.75)}
+body.gaia-v2 .g-super-hero__intro > p:not(.g-super-date){margin:0 0 16px !important;
+  max-width:34ch;font-size:clamp(14px,3.7vw,16px);color:rgba(255,255,255,.88);
+  text-align:left !important;text-shadow:0 1px 10px rgba(0,0,0,.7)}
 body.gaia-v2 .g-super-home .g-super-hero .g-super-discover,
 body.gaia-v2 .g-super-home .g-super-discover{display:flex !important;
   flex-direction:row !important;justify-content:flex-start !important;
-  gap:10px;flex-wrap:wrap;align-items:center;
-  width:100% !important;max-width:100%;min-width:0}
+  align-items:center;gap:10px;flex-wrap:wrap;
+  width:100% !important;max-width:100%;min-width:0;margin:0 !important}
 body.gaia-v2 .g-super-home .g-super-discover .g-btn{white-space:nowrap !important;
-  width:auto;flex:none !important;font-size:13px !important;padding:10px 18px}
+  width:auto !important;flex:0 0 auto !important;font-size:13.5px !important;
+  padding:11px 18px !important;min-height:44px}
 
 /* Event: banner, then details. Nothing overlays the poster's lettering. */
 body.gaia-v2 .g-super-home .g-feature-event{display:flex !important;flex-direction:column !important;
@@ -1462,10 +1466,12 @@ body.gaia-v2 .g-super-home .g-feature-event__actions .g-btn{white-space:nowrap}
 
 /* Desktop: taller hero; the poster earns its side seat. */
 @media (min-width:1060px){
-  /* Desktop shares the full-viewport hero; only the padding refines. */
+  body.gaia-v2 .g-super-home .g-super-hero{aspect-ratio:auto !important;
+    height:calc(100vh - 190px) !important;min-height:440px !important;max-height:760px}
+  body.gaia-v2 .g-super-home .g-super-hero__art{background-position:center 38%}
   body.gaia-v2 .g-super-home .g-feature-event .g-feature-event__art{height:auto !important;
     max-height:none}
-  body.gaia-v2 .g-super-home .g-super-hero .g-super-hero__intro{padding:40px 44px 64px !important}
+  body.gaia-v2 .g-super-home .g-super-hero .g-super-hero__intro{padding:44px 48px 52px !important}
   body.gaia-v2 .g-super-home .g-feature-event{flex-direction:row !important;align-items:stretch;
     min-height:270px}
   body.gaia-v2 .g-super-home .g-feature-event .g-feature-event__art{flex:0 0 440px !important;
@@ -1474,4 +1480,14 @@ body.gaia-v2 .g-super-home .g-feature-event__actions .g-btn{white-space:nowrap}
     background:linear-gradient(90deg,transparent 55%,var(--g-surface,#0C1117) 100%)}
   body.gaia-v2 .g-super-home .g-feature-event__body{flex:1;justify-content:center;
     padding:28px 34px}
+}
+
+
+/* Tablets: the portrait card would run past the fold, so a measured band. */
+@media (min-width:700px) and (max-width:1059px){
+  body.gaia-v2 .g-super-home .g-super-hero{aspect-ratio:auto !important;
+    height:clamp(420px,62vh,620px) !important}
+  body.gaia-v2 .g-super-home .g-super-hero__art{background-position:center 40%}
+  body.gaia-v2 .g-super-home .g-super-hero .g-super-hero__intro{
+    padding:28px 30px 34px !important}
 }

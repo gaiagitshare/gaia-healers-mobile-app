@@ -18,6 +18,10 @@ import {
   resourceKey, eventTimestamp, eventSequence, decideOrder, watermark,
   noteRejection, domainWatermarkMs,
 } from './membership/ordering.js';
+import {
+  verifyIdToken, claimEmailVerified, isAppleRelayEmail, appleClientSecret,
+  googleAuthUrl, appleAuthUrl, providerConfig as oauthProviderConfig, OAUTH_ENDPOINTS,
+} from './membership/oauth-core.js';
 import { classifyMembershipEvent, membershipFromEvent } from './membership/events.js';
 import { normalizeMembership } from './membership/ledger.js';
 import {
@@ -3909,6 +3913,157 @@ async function authMagicLinkConsume(req, res, origin, url) {
   }
 }
 
+// ── OAuth / OIDC: Sign in with Google and Sign in with Apple ─────────────────
+// Each provider proves an email address; identity here is GHL-contact based, so
+// a verified non-member (or an Apple hidden-relay address that cannot match a
+// contact) is routed to the join funnel rather than signed in. Providers are
+// credential-gated: a button/flow exists only when its env config is complete.
+const OAUTH_STATE_TTL_MS = 10 * 60 * 1000;
+const OAUTH_JWKS_CACHE = new Map(); // url -> { jwks, fetchedAt }
+const JOIN_ONBOARDING_URL = (process.env.JOIN_ONBOARDING_URL
+  || 'https://join.gaiahealers.com/onboarding').trim();
+
+function logOAuth(provider, outcome, extra = '') {
+  try { console.log('[Gaia OAuth]', JSON.stringify({ provider, outcome, extra })); } catch (_) {}
+}
+
+function oauthRedirectUri(provider) {
+  return `${PROXY_PUBLIC_URL}/api/auth/oauth/${provider}/callback`;
+}
+
+function appAuthReturn(status) {
+  try {
+    const u = new URL(APP_PUBLIC_URL);
+    u.searchParams.set('auth', status);
+    return u.toString();
+  } catch (_) { return APP_PUBLIC_URL; }
+}
+
+// State is a signed, self-expiring token — no server-side store. It also carries
+// the nonce the id_token must echo, tying the callback to this exact start.
+function makeOAuthState(provider, returnTo, nonce) {
+  return signTokenPayload({
+    type: 'oauth-state', provider, returnTo, nonce,
+    iat: Date.now(), exp: Date.now() + OAUTH_STATE_TTL_MS,
+  });
+}
+function readOAuthState(state, provider) {
+  const payload = readSignedToken(state);
+  if (!payload || payload.type !== 'oauth-state' || payload.provider !== provider) return null;
+  if (!payload.exp || Date.now() > Number(payload.exp)) return null;
+  return payload;
+}
+
+async function fetchJwks(url) {
+  const cached = OAUTH_JWKS_CACHE.get(url);
+  if (cached && (Date.now() - cached.fetchedAt) < 60 * 60 * 1000) return cached.jwks;
+  const r = await fetch(url, { headers: { Accept: 'application/json' } });
+  if (!r.ok) throw new Error(`jwks_fetch_${r.status}`);
+  const jwks = await r.json();
+  OAUTH_JWKS_CACHE.set(url, { jwks, fetchedAt: Date.now() });
+  return jwks;
+}
+
+function authProviders(req, res, origin) {
+  const cfg = oauthProviderConfig();
+  sendJson(res, 200, { google: cfg.google.enabled, apple: cfg.apple.enabled }, origin);
+}
+
+function authOAuthStart(req, res, origin, url, provider) {
+  const cfg = oauthProviderConfig();
+  if (!cfg[provider] || !cfg[provider].enabled) {
+    sendRedirect(res, appAuthReturn('unavailable'), origin);
+    return;
+  }
+  const returnTo = safeReturnUrl(url.searchParams.get('returnTo'));
+  const nonce = crypto.randomBytes(16).toString('base64url');
+  const state = makeOAuthState(provider, returnTo, nonce);
+  const redirectUri = oauthRedirectUri(provider);
+  const authUrl = provider === 'google'
+    ? googleAuthUrl({ clientId: cfg.google.clientId, redirectUri, state, nonce })
+    : appleAuthUrl({ servicesId: cfg.apple.servicesId, redirectUri, state, nonce });
+  sendRedirect(res, authUrl, origin);
+}
+
+async function completeOAuth(req, res, origin, provider, code, statePayload) {
+  const cfg = oauthProviderConfig();
+  if (!cfg[provider] || !cfg[provider].enabled) { sendRedirect(res, appAuthReturn('unavailable'), origin); return; }
+  const redirectUri = oauthRedirectUri(provider);
+
+  // ── token exchange ──
+  const params = new URLSearchParams({ grant_type: 'authorization_code', code, redirect_uri: redirectUri });
+  if (provider === 'google') {
+    params.set('client_id', cfg.google.clientId);
+    params.set('client_secret', cfg.google.clientSecret);
+  } else {
+    params.set('client_id', cfg.apple.servicesId);
+    try {
+      params.set('client_secret', appleClientSecret(cfg.apple));
+    } catch (e) { logOAuth(provider, 'client_secret_error', e.message); sendRedirect(res, appAuthReturn('error'), origin); return; }
+  }
+  let tokenJson;
+  try {
+    const r = await fetch(OAUTH_ENDPOINTS[provider].token, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded', Accept: 'application/json' },
+      body: params.toString(),
+    });
+    tokenJson = await r.json().catch(() => ({}));
+    if (!r.ok || !tokenJson.id_token) throw new Error(tokenJson.error || `token_${r.status}`);
+  } catch (e) { logOAuth(provider, 'token_exchange_error', e.message); sendRedirect(res, appAuthReturn('error'), origin); return; }
+
+  // ── id_token verification ──
+  let claims;
+  try {
+    const jwks = await fetchJwks(OAUTH_ENDPOINTS[provider].jwks);
+    const aud = provider === 'google' ? cfg.google.clientId : cfg.apple.servicesId;
+    claims = verifyIdToken(tokenJson.id_token, jwks, {
+      aud, iss: OAUTH_ENDPOINTS[provider].issuers, now: Date.now(),
+      nonce: statePayload.nonce || null,
+    });
+  } catch (e) { logOAuth(provider, 'verify_error', e.message); sendRedirect(res, appAuthReturn('error'), origin); return; }
+
+  const email = String(claims.email || '').trim().toLowerCase();
+  if (!email || !claimEmailVerified(claims)) { logOAuth(provider, 'email_unverified', email); sendRedirect(res, appAuthReturn('unverified'), origin); return; }
+  if (provider === 'apple' && isAppleRelayEmail(email)) {
+    // A hidden-relay address cannot match a GHL contact — send them to onboarding.
+    logOAuth(provider, 'apple_relay_email');
+    sendRedirect(res, JOIN_ONBOARDING_URL, origin);
+    return;
+  }
+
+  const member = await resolveMemberRecord({ email });
+  if (!member) { logOAuth(provider, 'no_member'); sendRedirect(res, JOIN_ONBOARDING_URL, origin); return; }
+
+  const session = createMemberSession(member, `oauth-${provider}`, { emailVerified: true });
+  const token = signTokenPayload(session);
+  const cookie = { 'Set-Cookie': buildSetCookie(req, token, session.exp) };
+  logOAuth(provider, 'signed_in');
+  sendRedirect(res, safeReturnUrl(statePayload.returnTo), origin, cookie);
+}
+
+async function authOAuthGoogleCallback(req, res, origin, url) {
+  const err = url.searchParams.get('error');
+  if (err) { logOAuth('google', 'provider_error', err); sendRedirect(res, appAuthReturn('cancelled'), origin); return; }
+  const code = url.searchParams.get('code') || '';
+  const state = readOAuthState(url.searchParams.get('state') || '', 'google');
+  if (!code || !state) { logOAuth('google', 'bad_state'); sendRedirect(res, appAuthReturn('error'), origin); return; }
+  await completeOAuth(req, res, origin, 'google', code, state);
+}
+
+async function authOAuthAppleCallback(req, res, origin) {
+  // Apple POSTs the result as an x-www-form-urlencoded body (response_mode=form_post).
+  let form;
+  try { form = new URLSearchParams(await readRawBody(req, 256 * 1024)); }
+  catch (_) { sendRedirect(res, appAuthReturn('error'), origin); return; }
+  const err = form.get('error');
+  if (err) { logOAuth('apple', 'provider_error', err); sendRedirect(res, appAuthReturn('cancelled'), origin); return; }
+  const code = form.get('code') || '';
+  const state = readOAuthState(form.get('state') || '', 'apple');
+  if (!code || !state) { logOAuth('apple', 'bad_state'); sendRedirect(res, appAuthReturn('error'), origin); return; }
+  await completeOAuth(req, res, origin, 'apple', code, state);
+}
+
 async function authEmbeddedClaim(req, res, origin) {
   const body = await readJsonBody(req);
   const email = String(body.email || '').trim().toLowerCase();
@@ -4852,6 +5007,26 @@ const server = http.createServer(async (req, res) => {
     }
     if (req.method === 'POST' && url.pathname === '/api/auth/embedded/claim') {
       await authEmbeddedClaim(req, res, origin);
+      return;
+    }
+    if (req.method === 'GET' && url.pathname === '/api/auth/providers') {
+      authProviders(req, res, origin);
+      return;
+    }
+    if (req.method === 'GET' && url.pathname === '/api/auth/oauth/google/start') {
+      authOAuthStart(req, res, origin, url, 'google');
+      return;
+    }
+    if (req.method === 'GET' && url.pathname === '/api/auth/oauth/google/callback') {
+      await authOAuthGoogleCallback(req, res, origin, url);
+      return;
+    }
+    if (req.method === 'GET' && url.pathname === '/api/auth/oauth/apple/start') {
+      authOAuthStart(req, res, origin, url, 'apple');
+      return;
+    }
+    if (req.method === 'POST' && url.pathname === '/api/auth/oauth/apple/callback') {
+      await authOAuthAppleCallback(req, res, origin);
       return;
     }
     if (req.method === 'GET' && url.pathname === '/api/app/bootstrap') {

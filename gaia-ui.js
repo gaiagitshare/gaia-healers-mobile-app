@@ -1041,6 +1041,7 @@
             <button type="button" class="gaia-sheet-close" data-auth-close aria-label="Close sign in">&times;</button>
           </div>
           <p class="gaia-auth-modal__body">Enter your Gaia Healers member email. We’ll send a secure one-tap link that returns directly to this app and keeps you signed in for one week.</p>
+          <div class="gaia-auth-modal__social" data-auth-social hidden></div>
           <form class="gaia-auth-modal__form" data-auth-form>
             <input type="email" data-auth-email class="gaia-auth-modal__input" placeholder="you@example.com" autocomplete="email" inputmode="email" aria-label="Email address" aria-describedby="gaia-auth-status" required />
             <button type="submit" class="g-btn g-btn--primary gaia-auth-modal__submit" data-auth-submit>Email me a sign-in link</button>
@@ -1052,6 +1053,30 @@
       statusEl = modal.querySelector('[data-auth-status]');
       emailInput = modal.querySelector('[data-auth-email]');
       const submitBtn = modal.querySelector('[data-auth-submit]');
+      // Social sign-in (Google / Apple). Rendered only for providers the proxy
+      // has credentials for — /api/auth/providers reports each one — so a button
+      // never appears without a working flow behind it. Each opens the proxy's
+      // OAuth start as a full-page navigation and returns to this app signed in.
+      const socialEl = modal.querySelector('[data-auth-social]');
+      (async () => {
+        try {
+          const resp = await fetch(`${syncProxyBase()}/api/auth/providers`, { headers: { Accept: 'application/json' } });
+          const providers = await resp.json();
+          const ret = encodeURIComponent(location.href);
+          const startUrl = (name) => `${syncProxyBase()}/api/auth/oauth/${name}/start?returnTo=${ret}`;
+          const buttons = [];
+          if (providers && providers.apple) {
+            buttons.push(`<a class="gaia-auth-modal__social-btn" data-oauth="apple" href="${startUrl('apple')}">Continue with Apple</a>`);
+          }
+          if (providers && providers.google) {
+            buttons.push(`<a class="gaia-auth-modal__social-btn" data-oauth="google" href="${startUrl('google')}">Continue with Google</a>`);
+          }
+          if (buttons.length) {
+            socialEl.innerHTML = buttons.join('') + '<div class="gaia-auth-modal__or"><span>or use your email</span></div>';
+            socialEl.hidden = false;
+          }
+        } catch (_) { /* email sign-in is always available */ }
+      })();
       const closeModal = () => {
         modal.hidden = true;
       };

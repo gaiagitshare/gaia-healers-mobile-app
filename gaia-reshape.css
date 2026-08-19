@@ -411,6 +411,27 @@ body.gaia-v2 .gaia-shell {
 }
 .gaia-auth-modal[hidden],
 .gaia-menu-sheet[hidden] { display: none; }
+
+/* Social sign-in buttons (Google / Apple) in the member sign-in sheet. Shown
+   only when the proxy reports the provider is configured. */
+.gaia-auth-modal__social { display: grid; gap: 10px; margin: 2px 0 6px; }
+.gaia-auth-modal__social-btn {
+  display: flex; align-items: center; justify-content: center;
+  width: 100%; padding: 13px 16px; border-radius: 14px;
+  border: 1px solid var(--g-line-strong); background: #ffffff; color: #111111;
+  font: 600 15px/1 inherit; text-decoration: none; cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+.gaia-auth-modal__social-btn:active { opacity: 0.9; }
+.gaia-auth-modal__social-btn[data-oauth="apple"] { background: #000000; color: #ffffff; border-color: #000000; }
+.gaia-auth-modal__or {
+  display: flex; align-items: center; gap: 12px;
+  color: var(--g-text-dim, #9aa3a0); font-size: 13px; margin: 4px 0 6px;
+}
+.gaia-auth-modal__or span { flex: 0 0 auto; }
+.gaia-auth-modal__or::before, .gaia-auth-modal__or::after {
+  content: ""; flex: 1 1 auto; height: 1px; background: rgba(255, 255, 255, 0.14);
+}
 .gaia-auth-modal__panel,
 .gaia-menu-sheet__panel {
   width: min(100%, 480px);

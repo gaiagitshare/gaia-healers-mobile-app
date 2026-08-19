@@ -913,7 +913,58 @@ function normalizeEntitlementResource(body, resourceType) {
   const id = firstNonEmptyString(source !== body ? source?.id : '', ...idKeys.map((key) => source?.[key]), ...idKeys.map((key) => body?.data?.[key]));
   const name = firstNonEmptyString(...nameKeys.map((key) => source?.[key]), ...nameKeys.map((key) => body?.data?.[key]), id);
   const openUrl = firstNonEmptyString(source?.openUrl, source?.portalUrl, source?.url, body?.data?.openUrl, body?.data?.portalUrl, body?.data?.url);
-  return { id: id || courseGroupKey(name), name, openUrl };
+  // Preserve whether GHL actually gave us a stable id vs. one we derived from
+  // the name. A revoke that carries only a real product id must still match a
+  // backfill row that is keyed by the name — see resolveEntitlementMatch.
+  const rawId = firstNonEmptyString(source !== body ? source?.id : '', ...idKeys.map((key) => source?.[key]), ...idKeys.map((key) => body?.data?.[key]));
+  return { id: id || courseGroupKey(name), name, openUrl, rawId: rawId || '' };
+}
+
+/* A course event can arrive keyed by a real GHL product id, by a human name, or
+ * (historically) by neither cleanly. The backfill wrote rows keyed by
+ * courseGroupKey(name); live webhooks may carry a product id with no name. To
+ * make grant AND revoke land on the same row regardless, we match on any of:
+ *   - exact stored id            (id-keyed rows, and re-fired webhooks)
+ *   - exact stored name          (name-keyed backfill rows, when a name is sent)
+ *   - courseGroupKey(name)       (bridges name spelling ↔ the backfill key)
+ *   - a learned id↔key alias     (bridges a real product id ↔ the backfill key)
+ * The alias registry is populated only from webhooks that present BOTH a real
+ * product id and a name, so nothing is ever guessed. */
+function aliasKeyForId(store, realId) {
+  const id = String(realId || '').trim();
+  if (!id) return '';
+  return (store.courseAliases && store.courseAliases.byId && store.courseAliases.byId[id]) || '';
+}
+function learnCourseAlias(store, realId, name) {
+  const id = String(realId || '').trim();
+  const key = courseGroupKey(name || '');
+  if (!id || !key || id === key) return;                 // only real product ids
+  store.courseAliases = store.courseAliases || { byId: {}, byKey: {} };
+  store.courseAliases.byId = store.courseAliases.byId || {};
+  store.courseAliases.byKey = store.courseAliases.byKey || {};
+  store.courseAliases.byId[id] = key;
+  store.courseAliases.byKey[key] = id;
+}
+function resolveEntitlementMatch(list, resource, store) {
+  const rid = String(resource.rawId || '').trim();
+  const nameKey = courseGroupKey(resource.name || '');
+  const aliasKey = aliasKeyForId(store, rid);            // real id -> backfill key
+  const candidates = new Set([
+    String(resource.id || '').toLowerCase(),
+    nameKey,
+    aliasKey,
+  ].filter(Boolean));
+  const nameLc = String(resource.name || '').toLowerCase();
+  return list.findIndex((item) => {
+    const iid = String(item.id || '').toLowerCase();
+    const iname = String(item.name || '').toLowerCase();
+    const ikey = courseGroupKey(item.name || item.id || '');
+    if (rid && iid === rid.toLowerCase()) return true;   // real id == stored id
+    if (nameLc && iname === nameLc) return true;          // exact name
+    if (candidates.has(iid)) return true;                 // derived-key / alias match
+    if (candidates.has(ikey)) return true;               // stored name -> same key
+    return false;
+  });
 }
 
 function normalizeTierName(value) {
@@ -1048,15 +1099,42 @@ async function memberAccessWebhook(req, res, origin) {
     if (!resource.id && !resource.name) { sendJson(res, 422, { ok: false, error: `${event.kind} id or name is required.` }, origin); return; }
     const listName = event.kind === 'course' ? 'courses' : 'communities';
     const list = record[listName];
-    const match = (item) => (resource.id && String(item.id) === String(resource.id))
-      || (resource.name && String(item.name || '').toLowerCase() === resource.name.toLowerCase());
-    const index = list.findIndex(match);
+    // Learn a real-id ↔ name-key alias whenever the payload carries both, so a
+    // later id-only event can find a name-keyed backfill row.
+    if (event.kind === 'course' && resource.rawId && resource.name) {
+      learnCourseAlias(store, resource.rawId, resource.name);
+    }
+    const index = event.kind === 'course'
+      ? resolveEntitlementMatch(list, resource, store)
+      : list.findIndex((item) => (resource.id && String(item.id) === String(resource.id))
+          || (resource.name && String(item.name || '').toLowerCase() === resource.name.toLowerCase()));
     if (event.grant) {
-      const item = { id: resource.id, name: resource.name, state: 'unlocked', openUrl: resource.openUrl, matchedBy: `webhook:${event.raw}`, updatedAt: now };
+      // On a match, keep the human name if the incoming event lacks one (an
+      // id-only grant must not blank out a backfill row's display title), and
+      // adopt a real product id onto the row so it becomes fully keyed.
+      const prev = index >= 0 ? list[index] : null;
+      // A real human name is one that isn't just the id echoed back by the
+      // normalizer's fallback. Prefer it; otherwise keep the row's existing name.
+      const realName = resource.name && resource.name !== resource.rawId ? resource.name : (prev && prev.name) || resource.name;
+      const item = {
+        id: resource.rawId || (prev && prev.id) || resource.id,
+        name: realName,
+        state: 'unlocked',
+        openUrl: firstNonEmptyString(resource.openUrl, prev && prev.openUrl),
+        matchedBy: `webhook:${event.raw}`,
+        updatedAt: now,
+      };
       if (index >= 0) list[index] = { ...list[index], ...item };
       else list.push(item);
     } else if (index >= 0) {
       list.splice(index, 1);
+    } else if (event.kind === 'course') {
+      // A revoke we could not map (e.g. an id-only event for a course no grant
+      // webhook has yet taught us). Never guess which course to remove — log it
+      // for review rather than silently dropping the wrong access.
+      record.unmatchedRevokes = Array.isArray(record.unmatchedRevokes) ? record.unmatchedRevokes : [];
+      record.unmatchedRevokes.push({ at: now, id: resource.rawId || resource.id || null, name: resource.name || null, event: event.raw || null });
+      console.log('[Gaia Entitlements] revoke did not match any stored course', { contactId, id: resource.rawId || resource.id, name: resource.name });
     }
   }
 

@@ -333,6 +333,26 @@ body.gaia-booking-open{overflow:hidden;}
     'education.gaiahealers.com',
   ];
 
+  /* Hosts that actually permit being framed.
+   *
+   * Anything not on this list opens as a real tab. Verified by response
+   * headers, not by assumption: gaiahealers.com (Shopify) sends
+   * `X-Frame-Options: DENY` and `frame-ancestors 'none'`, so framing it
+   * produced a blank panel — the app looked broken while the site was fine.
+   * Sites that own a login (the GHL CRM, funnels) also belong in a tab, so
+   * their cookie is first-party. */
+  const EMBEDDABLE_HOSTS = [
+    'education.gaiahealers.com',
+    'gaiapractitioners.com',
+    'elevate.gaiahealers.com',
+    'api.leadconnectorhq.com',
+    'calendly.com',
+  ];
+  const canEmbed = (u) => {
+    const h = hostOf(u);
+    return EMBEDDABLE_HOSTS.some((allowed) => h === allowed || h.endsWith('.' + allowed));
+  };
+
   function hostOf(u) {
     try { return new URL(u, window.location.href).hostname.replace(/^www\./, ''); } catch (_) { return ''; }
   }
@@ -350,6 +370,15 @@ body.gaia-booking-open{overflow:hidden;}
     // opened as a top-level page so GHL can establish the member session and
     // enforce the offer/course access attached to that contact.
     if (isAuthPortal) {
+      const opened = window.open(url, '_blank', 'noopener,noreferrer');
+      if (!opened) window.location.assign(url);
+      return;
+    }
+
+    // The same escape hatch for anything that refuses to be framed. Without
+    // this, a data-open-in-app button forced Shopify pages into an iframe they
+    // reject, and the panel opened blank.
+    if (!canEmbed(url)) {
       const opened = window.open(url, '_blank', 'noopener,noreferrer');
       if (!opened) window.location.assign(url);
       return;
@@ -444,13 +473,7 @@ body.gaia-booking-open{overflow:hidden;}
   // Public tools can use the in-app modal; authentication-dependent GHL links
   // are promoted to a top-level tab by openInApp so their login cookie works.
   // Shopify and the GHL CRM are not intercepted.
-  const IN_APP_HOSTS = [
-    'education.gaiahealers.com',
-    'gaiapractitioners.com',
-    'elevate.gaiahealers.com',
-    'api.leadconnectorhq.com',
-    'calendly.com',
-  ];
+  const IN_APP_HOSTS = EMBEDDABLE_HOSTS;   // one list, one behaviour
   document.addEventListener('click', (event) => {
     const link = event.target.closest('a[href]');
     if (!link) return;

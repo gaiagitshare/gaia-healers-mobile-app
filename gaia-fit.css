@@ -1629,3 +1629,10 @@ body.gaia-v2 .g-super-home .g-feature-event__actions .g-btn{white-space:nowrap}
 @media (min-width:1060px){
   body.gaia-v2 .g-super-home{--pair-h:clamp(420px,calc(100dvh - 210px),680px)}
 }
+
+/* The header heads the content, so it shares the content's gutter. Left to
+   itself it ran 22px wider at 920px and 4px narrower at 1440px — the brand and
+   the Menu button drifting out of line with the column beneath them at almost
+   every width. --fit-pad is that gutter, already tracking each breakpoint. */
+body.gaia-v2 .g-topbar{padding-left:var(--fit-pad) !important;
+  padding-right:var(--fit-pad) !important}

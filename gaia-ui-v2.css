@@ -1985,12 +1985,17 @@ body.gaia-v2 .gaia-portal-workspace__frame {
     text-overflow: ellipsis;
   }
 
-  body.gaia-v2 #community-tabs,
+  /* This used to pull the tab strips edge-to-edge by a hard-coded 1rem. Two
+     things were wrong with it. #community-tabs no longer exists, so the only
+     live target is #wellness-tabs — a rounded, bordered pill card, which is
+     not something that should bleed off the screen edges. And the 1rem never
+     matched the page gutter (12px on phones this narrow), while max-width:100%
+     stopped the element widening to absorb the pull: the bar ended up shifted
+     3px off the left edge and stopping 29px short of the right. The switcher
+     lines up with the rest of the page instead. */
   body.gaia-v2 #wellness-tabs {
-    margin-left: calc(-1 * max(1rem, env(safe-area-inset-left)));
-    margin-right: calc(-1 * max(1rem, env(safe-area-inset-right)));
-    padding-left: max(1rem, env(safe-area-inset-left));
-    padding-right: max(1rem, env(safe-area-inset-right));
+    margin-inline: 0;
+    padding-inline: 6px;
   }
 }
 

@@ -692,3 +692,64 @@ body.gaia-v2 .gaia-chakra-map__list-item, body.gaia-v2 .gaia-chakra-map--screen 
   .g-super-auth h2 { font-size: 24px; }
   .g-super-auth p:not(.g-super-kicker) { margin: 6px 0 0; font-size: 14px; }
 }
+
+/* ════════════════════════════════════════════════════════════════════════
+   TEMPLATE, UNIFIED — the single owner of hero + event + CTA layout.
+   Lives at the end of the last-loaded stylesheet on purpose: three separate
+   bugs came from older rules in this file outliving their replacements in
+   gaia-system.css. Everything below works at EVERY width — the ~500–1050px
+   band previously fell between the phone and desktop rule sets and wore
+   leftovers: washed art behind text, wrapping buttons, a kicker overlapping
+   the poster.
+   ════════════════════════════════════════════════════════════════════════ */
+
+/* ── Hero: one cinematic card at any size ── */
+body.gaia-v2 .g-super-home .g-super-hero{position:relative;display:block;
+  min-height:360px;border-radius:24px;overflow:hidden;border:1px solid var(--g-line);
+  background:var(--g-surface)}
+.g-super-home .g-super-hero__art{position:absolute;inset:0;height:auto;width:auto;
+  border:0;opacity:.9;background-position:center 25%;background-size:cover}
+.g-super-home .g-super-hero__art::after{content:"";position:absolute;inset:0;
+  background:linear-gradient(100deg,rgba(4,7,10,.78) 0%,rgba(4,7,10,.3) 50%,rgba(4,7,10,.05) 78%),
+    linear-gradient(180deg,transparent 40%,rgba(4,7,10,.85) 100%)}
+body.gaia-v2 .g-super-home .g-super-hero .g-super-hero__intro{position:relative;
+  z-index:1;min-height:360px;max-width:640px;display:grid;align-content:end;
+  justify-items:start;row-gap:0;padding:26px 24px}
+.g-super-home .g-super-hero__intro::before{content:none}
+.g-super-home .g-super-hero__intro .g-super-date{margin:0 0 10px;
+  text-shadow:0 1px 8px rgba(0,0,0,.6)}
+.g-super-home .g-super-hero__intro h1{font-size:clamp(34px,5vw,54px);line-height:1.04;
+  margin:0 0 10px;text-shadow:0 2px 16px rgba(0,0,0,.65)}
+.g-super-home .g-super-hero__intro > p:not(.g-super-date){margin:0 0 20px;
+  font-size:clamp(15px,1.8vw,17px);color:rgba(255,255,255,.85);
+  text-shadow:0 1px 10px rgba(0,0,0,.6)}
+/* The CTA pair: one row, labels never wrap. */
+.g-super-home .g-super-discover{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+.g-super-home .g-super-discover .g-btn{white-space:nowrap}
+
+/* ── Featured event: poster banner above, details below — no overlap ── */
+.g-super-home .g-feature-event{display:flex;flex-direction:column;min-height:0}
+.g-super-home .g-feature-event__art{position:relative;inset:auto;flex:none;
+  height:clamp(170px,26vw,230px);width:auto;border-radius:0;overflow:hidden;opacity:1}
+.g-super-home .g-feature-event__art img{width:100%;height:100%;object-fit:cover;
+  object-position:center 32%;opacity:1;transform:none;filter:none}
+.g-super-home .g-feature-event__art::after{content:"";position:absolute;inset:0;
+  background:linear-gradient(180deg,transparent 55%,rgba(4,7,10,.6) 100%)}
+.g-super-home .g-feature-event__body{position:relative;margin-top:0;flex:none;
+  display:flex;flex-direction:column;gap:8px;padding:16px 18px 18px}
+.g-super-home .g-feature-event__actions{margin-top:10px;gap:10px}
+.g-super-home .g-feature-event__actions .g-btn{white-space:nowrap}
+
+/* ── Desktop refinements only — structure stays identical ── */
+@media (min-width:1060px){
+  body.gaia-v2 .g-super-home .g-super-hero,
+  body.gaia-v2 .g-super-home .g-super-hero .g-super-hero__intro{min-height:460px}
+  body.gaia-v2 .g-super-home .g-super-hero .g-super-hero__intro{padding:40px 44px}
+  /* Poster earns a side seat where the card is wide enough for both. */
+  .g-super-home .g-feature-event{flex-direction:row;align-items:stretch;min-height:270px}
+  .g-super-home .g-feature-event__art{flex:0 0 440px;height:auto}
+  .g-super-home .g-feature-event__art::after{
+    background:linear-gradient(90deg,transparent 55%,var(--g-surface) 100%)}
+  .g-super-home .g-feature-event__body{flex:1;justify-content:center;padding:28px 34px}
+  .g-feature-event__title{font-size:1.7rem}
+}

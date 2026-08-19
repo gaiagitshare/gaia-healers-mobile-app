@@ -1553,8 +1553,26 @@ body.gaia-v2 .g-super-home .g-feature-event__actions .g-btn{white-space:nowrap}
   body.gaia-v2 .g-super-home .g-feature-event .g-feature-event__art img{object-fit:contain}
   body.gaia-v2 .g-super-home .g-feature-event .g-feature-event__art::after{
     background:linear-gradient(180deg,transparent 60%,rgba(4,7,10,.5) 100%)}
+  /* The card grew to the hero's height but its type stayed phone-sized — a
+     19px title against the hero's 38px, and two buttons hugging their own text
+     at 112px and 97px. Everything below scales the body to the panel it now
+     sits in; the sizes are the hero's, so the two columns read as a pair. */
   body.gaia-v2 .g-super-home .g-feature-event__body{flex:none;justify-content:flex-start;
-    padding:20px 26px 24px !important}
+    gap:6px !important;padding:24px 28px 26px !important}
+  body.gaia-v2 .g-super-home .g-feature-event__kicker{font-size:11.5px !important;
+    letter-spacing:.09em}
+  body.gaia-v2 .g-super-home .g-feature-event__title{
+    font-size:clamp(21px,1.7vw,26px) !important;line-height:1.2 !important}
+  body.gaia-v2 .g-super-home .g-feature-event__meta{font-size:14.5px !important;
+    line-height:1.45 !important}
+  /* Equal halves, exactly as the hero's pair — two buttons of different widths
+     read as an accident rather than a choice. */
+  body.gaia-v2 .g-super-home .g-feature-event__actions{margin-top:16px !important;
+    gap:12px !important;flex-wrap:nowrap !important}
+  body.gaia-v2 .g-super-home .g-feature-event__actions .g-btn{
+    flex:1 1 0 !important;width:auto !important;min-width:0;max-width:220px;
+    justify-content:center !important;
+    font-size:14.5px !important;padding:12px 16px !important;min-height:48px}
 
   /* Try Gaia today sat beside a three-row ecosystem column, so its single row
      of four tiles left 247px of dead space underneath. Two by two, stretched

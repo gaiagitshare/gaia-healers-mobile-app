@@ -1540,20 +1540,33 @@ body.gaia-v2 .g-super-home .g-feature-event__actions .g-btn{white-space:nowrap}
   body.gaia-v2 .g-super-home .g-feature-event .g-feature-event__art{height:auto !important;
     max-height:none;min-height:0}
   body.gaia-v2 .g-super-home .g-super-hero .g-super-hero__intro{padding:44px 48px 52px !important}
-  /* The event card keeps the banner-then-details shape on desktop too, and
-     does NOT stretch to the hero's height — a 440px side panel cropped the
-     poster's lettering to "alers / ATE / TRANSFOR". Self-start lets the card
-     be its own height and the poster show properly. */
+  /* The event card now matches the hero's height. It deliberately did not
+     before: while the poster was cropped, a tall side panel cut its lettering
+     down to "alers / ATE / TRANSFOR", so the card was pinned to its own
+     height instead. Contained, a taller band simply shows the poster larger —
+     so the two columns can finally square off at the same height. */
   body.gaia-v2 .g-super-home .g-feature-event{flex-direction:column !important;
-    align-items:stretch;align-self:start !important;min-height:0}
-  body.gaia-v2 .g-super-home .g-feature-event .g-feature-event__art{flex:none !important;
-    width:100%;height:clamp(200px,26vh,300px) !important}
-  /* Contained, so a taller band simply shows the poster larger. */
+    align-items:stretch;align-self:stretch !important;height:100% !important;min-height:0}
+  /* The banner absorbs the extra height; the details keep their own. */
+  body.gaia-v2 .g-super-home .g-feature-event .g-feature-event__art{flex:1 1 auto !important;
+    width:100%;height:auto !important;min-height:200px}
   body.gaia-v2 .g-super-home .g-feature-event .g-feature-event__art img{object-fit:contain}
   body.gaia-v2 .g-super-home .g-feature-event .g-feature-event__art::after{
     background:linear-gradient(180deg,transparent 60%,rgba(4,7,10,.5) 100%)}
   body.gaia-v2 .g-super-home .g-feature-event__body{flex:none;justify-content:flex-start;
     padding:20px 26px 24px !important}
+
+  /* Try Gaia today sat beside a three-row ecosystem column, so its single row
+     of four tiles left 247px of dead space underneath. Two by two, stretched
+     to the row's height — the four tiles get roomier rather than the card
+     getting emptier, and the pair reads as one block. */
+  body.gaia-v2 .g-super-home .g-free-tools{display:flex !important;
+    flex-direction:column;min-height:0}
+  body.gaia-v2 .g-super-home .g-free-tools__grid{
+    grid-template-columns:repeat(2,minmax(0,1fr)) !important;
+    flex:1 1 auto;align-content:stretch;gap:14px !important}
+  body.gaia-v2 .g-super-home .g-free-tool{min-height:0 !important;height:100%;
+    justify-content:center}
 }
 
 

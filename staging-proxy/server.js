@@ -264,7 +264,7 @@ const GAIA_KNOWLEDGE = {
     'BioPulsar Basic Technical & Business',
     'BioTekna trainings',
     'HealeeX getting started',
-    '(Course videos are watched in the education.gaiahealers.com portal; the app does not track lesson-by-lesson progress.)',
+    'Members now see the courses they are entitled to inside the app (Academy and Journey). Course access comes from their GHL offers, bundles, purchases, and enrolments, not from a tier, price, or interest tag. Opening a course takes them to their course library in the education.gaiahealers.com portal, where the lessons play; the app itself does not track lesson-by-lesson progress.',
   ],
   // No event is described here. Event facts come from the Event Manager at
   // request time via gaiaKnowledgePrompt(event) — this app runs many events.
@@ -277,7 +277,7 @@ const GAIA_KNOWLEDGE = {
       'Bookings (view=bookings): real GHL appointments plus verified Gaia booking forms.',
       'Inbox (view=inbox): read-only GHL conversation summaries for the authenticated contact.',
       'Energy Studio (view=wellness): three distinct public tools. Energy Check (tab=check) uses an easy Month / Day / typed 4-digit Year form—never a long calendar scroll—to reveal a birth-date-number chakra and sun-sign reflection before sign-up. Worldwide birth-city autocomplete resolves the city and time zone; an optional birth time then powers a seven-planet sky-to-chakra map calculated with Astronomy Engine. It shows actual astronomical sign placements, a symbolic Gaia chakra spotlight, the most represented element, and an element to gently invite. The result now becomes a Gaia Energy Path: a two-minute practice, a balancing element invitation, a journal question, matching Colour Energy support, and verified routes to Bio-Well sessions, Dr. Nima, community, and Elevate. Planet details remain available in a disclosure. If birth time is unknown it uses local noon and labels the result as an estimate. Wellness Horoscope (tab=horoscope) adds a reflective daily practice and journal question. Chakra Match (tab=chakras) is an interactive seven-centre guide with traditional themes, practices, prompts, and relevant Colour Energy support. These are symbolic wellness reflection tools, not medical advice, predictions, device scans, or measured chakra scores.',
-      'Academy (view=academy, opened from the top Menu): courses and certification. It opens the education.gaiahealers.com portal for the actual lessons and never shows fake progress.',
+      'Academy (view=academy, opened from the top Menu): courses and certification. For a signed-in member it lists the courses they are actually entitled to; opening one takes them into their course library on education.gaiahealers.com for the lessons. It never shows fake progress.',
       'Community (view=community, opened from the top Menu): "My Access" — which communities you have unlocked versus still locked — plus Find a Practitioner. Communities: All Gaia Healers, Bio-Well, BioPulsar, BioTekna, ASEA, BrainTap, LifeWave, Golden Practitioner.',
       'Store (view=store): two tabs — Shop (the live Shopify catalogue by category: Featured, Colour Energy, Courses, Bio-Well, BioPulsar, BioTekna, Crystals; tapping a product opens its image, description, and purchase action in a native in-app sheet; Shopify opens only for the final current-price and secure-payment step) and Membership (the official Free / Silver / Gold / Diamond Gaia 2.0 tiers).',
       'Profile (view=profile, bottom-right): your account — devices, purchases, bookings, messages, membership status, booking tools, and the Colour Personality Test.',
@@ -2878,13 +2878,19 @@ async function buildMemberVoiceContext(req) {
     if (unlocked.length) lines.push(`Community access (unlocked): ${unlocked.join(', ')}.`);
     if (lockedNames.length) lines.push(`Not included yet: ${lockedNames.join(', ')} — if asked, offer to help them get access; never claim they already have it.`);
     if (owned.length) lines.push(`Owns/uses: ${owned.join(', ')}.`);
+    const courseNames = Array.isArray(b.entitlements && b.entitlements.courses)
+      ? b.entitlements.courses.map((c) => String((c && (c.name || c.id)) || '').trim()).filter(Boolean)
+      : [];
+    if (courseNames.length) {
+      lines.push('Course access (unlocked, ' + courseNames.length + '): ' + courseNames.slice(0, 24).join(', ') + (courseNames.length > 24 ? ', and more' : '') + '. If they ask which courses they have, list these by name. Opening a course takes them to their course library in the education portal, where the lessons play.');
+    }
     if (paid.length || subs.length) lines.push(`Account: ${paid.length} completed purchase(s), ${subs.length} subscription(s) on file. Do NOT say amounts, prices, or card details out loud.`);
     if (upcoming.length) lines.push(`Has ${upcoming.length} upcoming appointment(s) booked.`);
     if (formSubs.length || surveySubs.length) lines.push(`Has submitted ${formSubs.length} form(s) and ${surveySubs.length} survey(s).`);
     if (unread) lines.push(`Has ${unread} unread message(s) in their Gaia Healers conversations.`);
 
-    lines.push('WHAT YOU CAN SEE: their profile, memberships/communities, products/devices, purchases & subscriptions (counts only), appointments, forms/surveys submitted, and conversation notifications.');
-    lines.push('WHAT YOU CANNOT SEE: individual course lesson progress or community post/discussion content — the backend does not expose these. If asked about a specific lesson, grade, community post, or a detailed scan reading, say plainly that you can OPEN the course or community in the portal but cannot read the lesson/post details from here, and offer to take them there. NEVER invent progress, grades, posts, scan numbers, or history.');
+    lines.push('WHAT YOU CAN SEE: their profile, memberships/communities, which courses they are entitled to (by name), products/devices, purchases & subscriptions (counts only), appointments, forms/surveys submitted, and conversation notifications.');
+    lines.push('WHAT YOU CANNOT SEE: how far along a lesson they are, grades, or community post/discussion content — the backend does not expose these. You CAN tell them which courses they have access to and open the course for them; you cannot report lesson-by-lesson progress or a scan reading. If asked for those, say plainly you can open the course or community in the portal but cannot read the detail from here. NEVER invent progress, grades, posts, scan numbers, or history.');
     lines.push('Privacy: discuss only THIS member’s own data, and only when they ask about it. Do not proactively recite sensitive details.');
 
     const text = lines.join('\n');

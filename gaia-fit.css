@@ -398,6 +398,7 @@ body.gaia-v2 .g-super-home > section + section {
     right: 10px !important;
     width: auto !important;
     max-width: none !important;
+    bottom: max(8px, env(safe-area-inset-bottom, 0px)) !important;
     padding: 0 0 max(6px, env(safe-area-inset-bottom)) !important;
     transform: none !important;
   }
@@ -423,9 +424,9 @@ body.gaia-v2 .g-super-home > section + section {
   }
 
   body.gaia-v2 .gaia-tabbar__assist {
-    width: 50px;
-    height: 50px;
-    margin: -0.4rem 2px 0;
+    width: 48px;
+    height: 48px;
+    margin: -0.35rem 2px 0;
   }
 
   .g-install {
@@ -993,15 +994,28 @@ body.gaia-v2 .g-super-home .g-feature-event__art img {
    visible — the moment someone lands on the site. Art is a backdrop; copy
    overlays it so the event card is one short poster, not a banner + body. */
 body.gaia-v2 .gaia-screen[data-screen="today"] {
-  --gaia-topbar-h: 48px;
+  --gaia-topbar-h: 52px;
   --gaia-main-pad-top: 8px;
+  --gaia-g-home-pad-top: 8px;
   --gaia-fold-gap: 8px;
-  --gaia-tab-h: calc(100px + env(safe-area-inset-bottom, 0px));
-  --gaia-fold: calc(100vh - var(--gaia-topbar-h) - var(--gaia-main-pad-top) - var(--gaia-tab-h));
+  /* Tab bar + Safari bottom URL bar on real iPhones (not standalone PWA). */
+  --gaia-tab-h: calc(118px + env(safe-area-inset-bottom, 0px));
+  --gaia-fold: calc(
+    100vh - var(--gaia-topbar-h) - var(--gaia-main-pad-top) - var(--gaia-g-home-pad-top) - var(--gaia-tab-h)
+  );
 }
 @supports (height: 100svh) {
   body.gaia-v2 .gaia-screen[data-screen="today"] {
-    --gaia-fold: calc(100svh - var(--gaia-topbar-h) - var(--gaia-main-pad-top) - var(--gaia-tab-h));
+    --gaia-fold: calc(
+      100svh - var(--gaia-topbar-h) - var(--gaia-main-pad-top) - var(--gaia-g-home-pad-top) - var(--gaia-tab-h)
+    );
+  }
+}
+@supports (height: 100dvh) {
+  body.gaia-v2 .gaia-screen[data-screen="today"] {
+    --gaia-fold: calc(
+      100dvh - var(--gaia-topbar-h) - var(--gaia-main-pad-top) - var(--gaia-g-home-pad-top) - var(--gaia-tab-h)
+    );
   }
 }
 
@@ -1023,17 +1037,27 @@ body.gaia-v2 .g-super-home .g-feature-event__art {
   flex: none !important;
 }
 
-body.gaia-v2 .g-super-home .g-super-hero__intro,
-body.gaia-v2 .g-super-home .g-feature-event__body {
+body.gaia-v2 .g-super-home .g-super-hero__intro {
   position: relative;
   z-index: 1;
   min-height: 0 !important;
 }
 
+body.gaia-v2 .g-super-home .g-feature-event__body {
+  position: absolute !important;
+  inset: auto 0 0 0 !important;
+  z-index: 2 !important;
+  min-height: 0 !important;
+  margin-top: 0 !important;
+}
+
 @media (max-width: 899px) {
   body.gaia-v2 .gaia-screen[data-screen="today"] {
-    --gaia-hero-h: clamp(8rem, calc(var(--gaia-fold) * 0.33), 10.25rem);
-    --gaia-event-h: calc(var(--gaia-fold) - var(--gaia-hero-h) - var(--gaia-fold-gap));
+    --gaia-hero-h: clamp(7rem, calc(var(--gaia-fold) * 0.28), 8.75rem);
+    --gaia-event-h: min(
+      calc(var(--gaia-fold) - var(--gaia-hero-h) - var(--gaia-fold-gap)),
+      12.75rem
+    );
   }
 
   body.gaia-v2 .gaia-screen[data-screen="today"] .g-topbar {
@@ -1062,8 +1086,28 @@ body.gaia-v2 .g-super-home .g-feature-event__body {
     display: flex !important;
     flex-direction: column !important;
     justify-content: flex-end;
-    min-height: 12rem !important;
+    min-height: 0 !important;
+    max-height: var(--gaia-event-h) !important;
     height: var(--gaia-event-h) !important;
+  }
+
+  body.gaia-v2 .g-super-home .g-super-event--empty {
+    display: grid !important;
+    align-content: center;
+    gap: 8px;
+    padding: 14px 16px !important;
+    min-height: 0 !important;
+    height: auto !important;
+    max-height: var(--gaia-event-h) !important;
+  }
+
+  body.gaia-v2 .g-super-home .g-super-event--empty h2 {
+    font-size: 1.35rem !important;
+  }
+
+  body.gaia-v2 .g-super-home .g-feature-event__art img {
+    opacity: 1 !important;
+    object-position: center 52% !important;
   }
 
   body.gaia-v2 .g-super-home .g-super-hero__intro {
@@ -1131,9 +1175,8 @@ body.gaia-v2 .g-super-home .g-feature-event__body {
     flex-direction: column;
     justify-content: flex-end;
     gap: 5px;
-    margin-top: auto;
     padding: 10px 12px 12px !important;
-    background: linear-gradient(180deg, transparent 0%, rgba(4, 7, 10, .55) 28%, rgba(4, 7, 10, .88) 100%);
+    background: linear-gradient(180deg, transparent 0%, rgba(4, 7, 10, .62) 22%, rgba(4, 7, 10, .94) 100%);
   }
 
   body.gaia-v2 .g-feature-event__kicker {
@@ -1189,7 +1232,11 @@ body.gaia-v2 .g-super-home .g-feature-event__body {
 
 @media (max-width: 899px) and (max-height: 700px) {
   body.gaia-v2 .gaia-screen[data-screen="today"] {
-    --gaia-hero-h: clamp(7.25rem, calc(var(--gaia-fold) * 0.3), 8.75rem);
+    --gaia-hero-h: clamp(6.5rem, calc(var(--gaia-fold) * 0.26), 7.75rem);
+    --gaia-event-h: min(
+      calc(var(--gaia-fold) - var(--gaia-hero-h) - var(--gaia-fold-gap)),
+      11.25rem
+    );
   }
 
   body.gaia-v2 .g-super-home .g-super-hero h1 {

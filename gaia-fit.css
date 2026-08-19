@@ -1388,7 +1388,10 @@ body.gaia-v2 .g-super-home .g-super-hero{position:relative;display:block;
   /* The artwork is nearly square (720×749). The card takes the image's own
      shape so the moon, mountains and figure all stay in frame — capped so a
      wide window does not become a wall of art. */
-  aspect-ratio:720/780;max-height:560px;
+  /* Height follows the viewport at the image's own proportion, capped —
+     width stays 100%. (aspect-ratio + max-height coupled and narrowed the
+     whole card; explicit height keeps the two independent.) */
+  width:100%;height:min(102vw,560px);
   min-height:clamp(300px,42vw,420px) !important;border-radius:24px;overflow:hidden}
 body.gaia-v2 .g-super-home .g-super-hero__art{position:absolute !important;inset:0 !important;
   height:auto !important;width:auto;max-height:none;border:0;opacity:.9 !important;
@@ -1412,8 +1415,10 @@ body.gaia-v2 .g-super-hero__intro h1{font-size:clamp(32px,4.6vw,52px) !important
 body.gaia-v2 .g-super-hero__intro > p:not(.g-super-date){margin:0 0 18px;
   font-size:clamp(15px,1.8vw,17px);color:rgba(255,255,255,.85);
   text-align:left;text-shadow:0 1px 10px rgba(0,0,0,.6)}
-body.gaia-v2 .g-super-home .g-super-discover{display:flex;justify-content:flex-start;
-  gap:10px;flex-wrap:wrap;align-items:center;width:auto}
+body.gaia-v2 .g-super-home .g-super-hero .g-super-discover,
+body.gaia-v2 .g-super-home .g-super-discover{display:flex !important;
+  flex-direction:row !important;justify-content:flex-start;
+  gap:10px;flex-wrap:wrap;align-items:center;width:auto !important}
 body.gaia-v2 .g-super-home .g-super-discover .g-btn{white-space:nowrap !important;
   width:auto;flex:none !important;font-size:13px !important;padding:10px 18px}
 
@@ -1424,7 +1429,7 @@ body.gaia-v2 .g-super-home .g-feature-event .g-feature-event__art{position:relat
   inset:auto !important;flex:none;width:auto;
   /* The poster is 760×639; give it its own proportions instead of a letterbox
      sliver of crowd. Capped, then centred on the lettering when cropped. */
-  height:auto !important;aspect-ratio:760/560;max-height:420px;
+  width:100%;height:min(72vw,420px) !important;
   border-radius:0;overflow:hidden;opacity:1}
 body.gaia-v2 .g-super-home .g-feature-event .g-feature-event__art img{width:100%;
   height:100%;object-fit:cover;object-position:center 28%;opacity:1;
@@ -1440,11 +1445,11 @@ body.gaia-v2 .g-super-home .g-feature-event__actions .g-btn{white-space:nowrap}
 
 /* Desktop: taller hero; the poster earns its side seat. */
 @media (min-width:1060px){
-  body.gaia-v2 .g-super-home .g-super-hero{aspect-ratio:auto;max-height:none}
+  body.gaia-v2 .g-super-home .g-super-hero{height:auto;max-height:none}
   body.gaia-v2 .g-super-home .g-super-hero,
   body.gaia-v2 .g-super-home .g-super-hero .g-super-hero__intro{min-height:460px}
   body.gaia-v2 .g-super-home .g-super-hero__art{background-position:center 30%}
-  body.gaia-v2 .g-super-home .g-feature-event .g-feature-event__art{aspect-ratio:auto;
+  body.gaia-v2 .g-super-home .g-feature-event .g-feature-event__art{height:auto !important;
     max-height:none}
   body.gaia-v2 .g-super-home .g-super-hero .g-super-hero__intro{padding:40px 44px}
   body.gaia-v2 .g-super-home .g-feature-event{flex-direction:row !important;align-items:stretch;

@@ -1372,3 +1372,76 @@ body.gaia-v2 .g-super-home .g-feature-event__body {
     font-size: 12px;
   }
 }
+
+/* ════════════════════════════════════════════════════════════════════════
+   FINAL WORD — layout corrections on top of the fold rules above.
+   The fold pass squeezed the hero into a centred block (wrapping its own
+   CTA) and floated the event kicker back over the poster art. These keep
+   the fold's intent — everything important above the tab bar — while
+   restoring the template's composition: words seated bottom-left on the
+   hero, and the poster as a banner ABOVE the details, never behind them.
+   This file loads last, so this section is the page's actual last word.
+   ════════════════════════════════════════════════════════════════════════ */
+
+/* Hero: seated, left-aligned, buttons on one line. */
+body.gaia-v2 .g-super-home .g-super-hero{position:relative;display:block;
+  min-height:clamp(300px,42vw,420px);border-radius:24px;overflow:hidden}
+body.gaia-v2 .g-super-home .g-super-hero__art{position:absolute;inset:0;
+  height:auto;width:auto;max-height:none;border:0;opacity:.9;
+  background-position:center 25%;background-size:cover;transform:none}
+body.gaia-v2 .g-super-home .g-super-hero__art img{width:100%;height:100%;
+  object-fit:cover;object-position:center 25%}
+body.gaia-v2 .g-super-home .g-super-hero__art::after{content:"";position:absolute;
+  inset:0;background:linear-gradient(100deg,rgba(4,7,10,.75) 0%,rgba(4,7,10,.28) 50%,rgba(4,7,10,.05) 78%),
+  linear-gradient(180deg,transparent 38%,rgba(4,7,10,.86) 100%)}
+body.gaia-v2 .g-super-home .g-super-hero .g-super-hero__intro{position:relative;
+  z-index:1;width:100%;max-width:640px;min-height:clamp(300px,42vw,420px);
+  display:grid;align-content:end;justify-items:start;row-gap:0;
+  padding:24px 22px;margin:0;text-align:left}
+body.gaia-v2 .g-super-home .g-super-hero .g-super-hero__intro::before{content:none}
+body.gaia-v2 .g-super-hero__intro .g-super-date{margin:0 0 10px;
+  text-shadow:0 1px 8px rgba(0,0,0,.6)}
+body.gaia-v2 .g-super-hero h1,
+body.gaia-v2 .g-super-hero__intro h1{font-size:clamp(32px,4.6vw,52px);
+  line-height:1.04;margin:0 0 10px;text-align:left;
+  text-shadow:0 2px 16px rgba(0,0,0,.65)}
+body.gaia-v2 .g-super-hero__intro > p:not(.g-super-date){margin:0 0 18px;
+  font-size:clamp(15px,1.8vw,17px);color:rgba(255,255,255,.85);
+  text-align:left;text-shadow:0 1px 10px rgba(0,0,0,.6)}
+body.gaia-v2 .g-super-home .g-super-discover{display:flex;justify-content:flex-start;
+  gap:10px;flex-wrap:wrap;align-items:center;width:auto}
+body.gaia-v2 .g-super-home .g-super-discover .g-btn{white-space:nowrap;
+  width:auto;flex:none}
+
+/* Event: banner, then details. Nothing overlays the poster's lettering. */
+body.gaia-v2 .g-super-home .g-feature-event{display:flex;flex-direction:column;
+  min-height:0;height:auto}
+body.gaia-v2 .g-super-home .g-feature-event .g-feature-event__art{position:relative;
+  inset:auto;flex:none;height:clamp(170px,24vw,230px);width:auto;max-height:none;
+  border-radius:0;overflow:hidden;opacity:1}
+body.gaia-v2 .g-super-home .g-feature-event .g-feature-event__art img{width:100%;
+  height:100%;object-fit:cover;object-position:center 32%;opacity:1;
+  transform:none;filter:none}
+body.gaia-v2 .g-super-home .g-feature-event .g-feature-event__art::after{content:"";
+  position:absolute;inset:0;
+  background:linear-gradient(180deg,transparent 58%,rgba(4,7,10,.55) 100%)}
+body.gaia-v2 .g-super-home .g-feature-event__body{position:relative;inset:auto;
+  margin:0;flex:none;display:flex;flex-direction:column;gap:8px;
+  padding:16px 18px 18px;background:none}
+body.gaia-v2 .g-super-home .g-feature-event__actions{margin-top:10px;gap:10px}
+body.gaia-v2 .g-super-home .g-feature-event__actions .g-btn{white-space:nowrap}
+
+/* Desktop: taller hero; the poster earns its side seat. */
+@media (min-width:1060px){
+  body.gaia-v2 .g-super-home .g-super-hero,
+  body.gaia-v2 .g-super-home .g-super-hero .g-super-hero__intro{min-height:460px}
+  body.gaia-v2 .g-super-home .g-super-hero .g-super-hero__intro{padding:40px 44px}
+  body.gaia-v2 .g-super-home .g-feature-event{flex-direction:row;align-items:stretch;
+    min-height:270px}
+  body.gaia-v2 .g-super-home .g-feature-event .g-feature-event__art{flex:0 0 440px;
+    height:auto}
+  body.gaia-v2 .g-super-home .g-feature-event .g-feature-event__art::after{
+    background:linear-gradient(90deg,transparent 55%,var(--g-surface,#0C1117) 100%)}
+  body.gaia-v2 .g-super-home .g-feature-event__body{flex:1;justify-content:center;
+    padding:28px 34px}
+}

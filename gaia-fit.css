@@ -1477,8 +1477,10 @@ body.gaia-v2 .g-super-home .g-feature-event__actions .g-btn{
 
 /* Roomier once there is room: tablets and up. */
 @media (min-height:820px) and (max-width:1059px){
-  body.gaia-v2 .g-super-home .g-super-hero{max-height:calc(52dvh)}
-  body.gaia-v2 .g-super-home .g-super-hero .g-super-hero__intro{padding:20px 20px 20px !important}
+  /* Only the padding gets roomier. An earlier 52dvh bump here was written
+     when the poster banner was half its current height and pushed the cards
+     8px past the tab bar. */
+  body.gaia-v2 .g-super-home .g-super-hero .g-super-hero__intro{padding:18px 20px 18px !important}
 }
 
 /* Event: banner, then details. Nothing overlays the poster's lettering. */

@@ -87,7 +87,7 @@
   function upcomingEventsSection(currentId) {
     const items = Array.isArray(eventsList.data) ? eventsList.data : [];
     if (items.length < 2) return '';
-    return '<section class="g-super-list"><div class="g-super-section-head"><div><p class="g-super-kicker">Gaia gatherings</p><h2>Upcoming events</h2></div></div>'
+    return '<section class="g-super-list"><div class="g-super-section-head"><div><p class="g-super-kicker">Gaia Healers gatherings</p><h2>Upcoming events</h2></div></div>'
       + items.map((item) => {
         const active = String(item.id) === String(currentId);
         const meta = [eventDateRange(item), item.venue].filter(Boolean).join(' · ');
@@ -541,9 +541,9 @@
   function discoverGaia() {
     const items = [
       ['heartbeat', 'Bio-Well demo', 'See energy technology in action', 'https://api.leadconnectorhq.com/widget/bookings/bio-welldemo'],
-      ['map-pin', 'Find a practitioner', 'Browse the verified Gaia directory', 'https://gaiapractitioners.com'],
-      ['flask', 'Bio-Well research', 'Explore Gaia’s public research library', 'https://gaiahealers.com/pages/bio-well-research'],
-      ['newspaper', 'Gaia articles', 'Read current wellness and technology insights', 'https://gaiahealers.com/blogs/news'],
+      ['map-pin', 'Find a practitioner', 'Browse the verified Gaia Healers directory', 'https://gaiapractitioners.com'],
+      ['flask', 'Bio-Well research', 'Explore Gaia Healers’ public research library', 'https://gaiahealers.com/pages/bio-well-research'],
+      ['newspaper', 'Gaia Healers articles', 'Read current wellness and technology insights', 'https://gaiahealers.com/blogs/news'],
       ['book-open', 'Education & community', 'Start free or enter the learning portal', 'https://join.gaiahealers.com/'],
       ['briefcase', 'Practitioner tools', 'Open CRM, software and practice support', 'https://nextlevel.gaiahealers.com/'],
     ];
@@ -667,7 +667,7 @@
       + '<div data-sky-host></div>'
       + continueJourney(authed)
       + freeTools()
-      + (authed ? '<section class="g-super-services"><div class="g-super-section-head"><div><p class="g-super-kicker">Your access</p><h2>Everything Gaia</h2></div><a href="home.html?view=journey">View journey</a></div><div class="g-super-services__grid">' + services + '</div></section>' : '')
+      + (authed ? '<section class="g-super-services"><div class="g-super-section-head"><div><p class="g-super-kicker">Your access</p><h2>Everything Gaia Healers</h2></div><a href="home.html?view=journey">View journey</a></div><div class="g-super-services__grid">' + services + '</div></section>' : '')
       + discoverGaia()
       + (!authed ? authPrompt(true) : '')
       + (authed ? '<section class="g-super-sync">' + icon('check-circle') + '<div><strong>Your access is synced</strong><span>Courses, communities, plans and purchases reflect your GHL member record.</span></div></section>' : '')
@@ -700,7 +700,7 @@
     const root = $('journey-body');
     if (!root) return;
     if (!memberState().authed) {
-      root.innerHTML = '<div class="g-super-page-head"><p class="g-super-kicker">Learn · practice · connect</p><h1>Choose your path</h1><p>Explore Gaia freely. Your Member Pass adds the courses and communities included with your plan.</p></div>'
+      root.innerHTML = '<div class="g-super-page-head"><p class="g-super-kicker">Learn · practice · connect</p><h1>Choose your path</h1><p>Explore Gaia Healers freely. Your Member Pass adds the courses and communities included with your plan.</p></div>'
         + '<section class="g-super-services"><div class="g-super-services__grid">'
         + serviceLink('academy', 'book-open', 'Learn', 'Preview Academy and certifications')
         + serviceLink('wellness', 'sparkle', 'Practice', 'Energy, chakra and wellness tools')
@@ -712,9 +712,9 @@
     const courses = courseGrants();
     const appts = upcomingAppointments();
     const circles = communities();
-    const courseRows = courses.length ? courses.map((course) => '<button type="button" class="g-super-row" data-super-course="' + esc(course.openUrl || memberState().data?.courses?.portalUrl || '') + '" data-super-course-title="' + esc(course.title || course.name || 'Gaia Academy') + '"><span class="g-super-row__icon">' + icon('book-open') + '</span><span><small>Course access</small><strong>' + esc(course.title || course.name || 'Course') + '</strong><em>Open your verified GHL workspace</em></span>' + icon('caret-right') + '</button>').join('') : '<p class="g-super-empty">No course grants are attached to this GHL contact.</p>';
+    const courseRows = courses.length ? courses.map((course) => '<button type="button" class="g-super-row" data-super-course="' + esc(course.openUrl || memberState().data?.courses?.portalUrl || '') + '" data-super-course-title="' + esc(course.title || course.name || 'Gaia Healers Academy') + '"><span class="g-super-row__icon">' + icon('book-open') + '</span><span><small>Course access</small><strong>' + esc(course.title || course.name || 'Course') + '</strong><em>Open your verified GHL workspace</em></span>' + icon('caret-right') + '</button>').join('') : '<p class="g-super-empty">No course grants are attached to this GHL contact.</p>';
     const apptRows = appts.length ? appts.slice(0, 3).map((item) => '<a class="g-super-row" href="home.html?view=bookings"><span class="g-super-row__icon">' + icon('calendar-check') + '</span><span><small>Practice</small><strong>' + esc(item.title || 'Appointment') + '</strong><em>' + esc(appointmentWhen(item)) + '</em></span>' + icon('caret-right') + '</a>').join('') : '<p class="g-super-empty">No upcoming appointments.</p>';
-    const circleRows = circles.length ? circles.map((item) => '<button type="button" class="g-super-row" data-open-in-app="' + esc(item.openUrl || 'https://education.gaiahealers.com') + '" data-in-app-title="' + esc(item.name || 'Gaia Community') + '"><span class="g-super-row__icon">' + icon('users-three') + '</span><span><small>Community access</small><strong>' + esc(item.name || 'Community') + '</strong><em>Open your authorized circle</em></span>' + icon('caret-right') + '</button>').join('') : '<p class="g-super-empty">No community grants are attached to this GHL contact.</p>';
+    const circleRows = circles.length ? circles.map((item) => '<button type="button" class="g-super-row" data-open-in-app="' + esc(item.openUrl || 'https://education.gaiahealers.com') + '" data-in-app-title="' + esc(item.name || 'Gaia Healers Community') + '"><span class="g-super-row__icon">' + icon('users-three') + '</span><span><small>Community access</small><strong>' + esc(item.name || 'Community') + '</strong><em>Open your authorized circle</em></span>' + icon('caret-right') + '</button>').join('') : '<p class="g-super-empty">No community grants are attached to this GHL contact.</p>';
     root.innerHTML = '<div class="g-super-page-head"><p class="g-super-kicker">Learn · practice · connect</p><h1>Your journey</h1><p>Only actions and access verified from your Gaia Healers member record appear here.</p></div>'
       + journeyRail()
       + '<section class="g-super-list"><div class="g-super-section-head"><div><p class="g-super-kicker">Learn</p><h2>Your courses</h2></div><a href="home.html?view=academy">Academy</a></div>' + courseRows + '</section>'
@@ -878,7 +878,7 @@
       : '';
 
     root.innerHTML = '<div class="g-super-page-head"><p class="g-super-kicker">Gather in person and online</p><h1>Events</h1>'
-      + '<p>Every Gaia gathering, its programme and who you will meet there.</p></div>'
+      + '<p>Every Gaia Healers gathering, its programme and who you will meet there.</p></div>'
       // Your own tickets first. Someone opening this screen at a venue is
       // looking for their QR code, not for the programme they already read.
       + '<div data-myevents-host></div>'
@@ -1026,7 +1026,7 @@
     const root = $('bookings-body');
     if (!root) return;
     if (!memberState().authed) {
-      root.innerHTML = '<div class="g-super-page-head"><p class="g-super-kicker">Sessions and consultations</p><h1>Book your next step</h1><p>Explore real Gaia sessions now. Member appointments appear after you connect your Member Pass.</p></div>' + bookingCatalog() + authPrompt(true);
+      root.innerHTML = '<div class="g-super-page-head"><p class="g-super-kicker">Sessions and consultations</p><h1>Book your next step</h1><p>Explore real Gaia Healers sessions now. Member appointments appear after you connect your Member Pass.</p></div>' + bookingCatalog() + authPrompt(true);
       bind(root); return;
     }
     const rows = upcomingAppointments().length ? upcomingAppointments().map((item) => {
@@ -1058,7 +1058,7 @@
       bind(root); updateInboxBadge(); return;
     }
     const items = notifications();
-    const rows = items.length ? items.map((item) => '<article class="g-super-row g-super-row--static' + (item.unread ? ' is-unread' : '') + '"><span class="g-super-row__icon">' + icon(item.unread ? 'chat-circle-dots' : 'chat-circle') + '</span><span><small>' + (item.unread ? esc(item.unread + ' unread') : 'Conversation') + '</small><strong>' + esc(item.lastMessage || 'Open your Gaia portal to continue this conversation.') + '</strong><em>' + esc(item.updatedAt ? new Date(item.updatedAt).toLocaleString() : '') + '</em></span></article>').join('')
+    const rows = items.length ? items.map((item) => '<article class="g-super-row g-super-row--static' + (item.unread ? ' is-unread' : '') + '"><span class="g-super-row__icon">' + icon(item.unread ? 'chat-circle-dots' : 'chat-circle') + '</span><span><small>' + (item.unread ? esc(item.unread + ' unread') : 'Conversation') + '</small><strong>' + esc(item.lastMessage || 'Open your Gaia Healers portal to continue this conversation.') + '</strong><em>' + esc(item.updatedAt ? new Date(item.updatedAt).toLocaleString() : '') + '</em></span></article>').join('')
       : '<section class="g-super-empty-panel"><h2>You’re all caught up</h2><p>No conversations were returned for this GHL contact.</p></section>';
     root.innerHTML = '<div class="g-super-page-head"><p class="g-super-kicker">Member messages</p><h1>Inbox</h1><p>Read-only conversation summaries from GHL. Continue securely in the member portal.</p></div>'
       + '<section class="g-super-list">' + rows + '<div class="g-super-list__footer"><button type="button" class="g-btn g-btn--secondary" data-open-in-app="' + esc('https://education.gaiahealers.com') + '" data-in-app-title="Gaia Healers member portal">Open member portal</button></div></section>';
@@ -1087,7 +1087,7 @@
     root.querySelectorAll('[data-super-course]').forEach((button) => button.addEventListener('click', () => {
       const url = button.dataset.superCourse;
       if (!url) return;
-      window.GaiaInApp?.open?.(url, button.dataset.superCourseTitle || 'Gaia Academy');
+      window.GaiaInApp?.open?.(url, button.dataset.superCourseTitle || 'Gaia Healers Academy');
     }));
   }
 

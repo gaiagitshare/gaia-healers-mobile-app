@@ -1655,3 +1655,17 @@ body.gaia-app .g-topbar {
 @media (display-mode: standalone) {
   .gaia-booking-modal__head { padding-top: max(0px, env(safe-area-inset-top, 0px)); }
 }
+
+
+/* Featured event art: subtract the safe-area insets.
+   The art height is vh/dvh based, but vh cannot see the status-bar and
+   home-indicator safe areas a standalone install adds. On a notched iPhone that
+   stole vertical space and pushed the event's Buy Ticket / Event details buttons
+   under the floating tab bar on the landing screen. Subtracting the insets keeps
+   the card compact enough for the buttons to stay visible; in a normal browser
+   the insets are 0 so the art is unchanged. Appended last so it wins the several
+   older art-height rules above. */
+body.gaia-v2 .g-super-home .g-feature-event .g-feature-event__art {
+  height: clamp(120px, calc(22vh - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px)), 180px) !important;
+  height: clamp(120px, calc(22dvh - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px)), 180px) !important;
+}

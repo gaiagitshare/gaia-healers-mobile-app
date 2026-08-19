@@ -117,7 +117,7 @@ const FALLBACK_ACADEMY = {
   source: 'unavailable-without-member-session',
   generatedAt: '',
   member: {
-    name: 'Gaia member',
+    name: 'Gaia Healers member',
     email: '',
     portalUrl: 'https://education.gaiahealers.com',
   },
@@ -152,7 +152,7 @@ const FALLBACK_MEMBER_HUB = {
   source: 'unavailable-without-member-session',
   generatedAt: '',
   member: {
-    displayName: 'Gaia member',
+    displayName: 'Gaia Healers member',
     role: 'Member',
     cohort: '',
     portalUrl: 'https://education.gaiahealers.com',
@@ -242,7 +242,7 @@ const GAIA_KNOWLEDGE = {
     'Bio-Well demo booking: https://api.leadconnectorhq.com/widget/bookings/bio-welldemo.',
     'Find a Practitioner directory: https://gaiapractitioners.com.',
     'Bio-Well research: https://gaiahealers.com/pages/bio-well-research.',
-    'Gaia articles and wellness insights: https://gaiahealers.com/blogs/news.',
+    'Gaia Healers articles and wellness insights: https://gaiahealers.com/blogs/news.',
     'Free community and ecosystem orientation: https://join.gaiahealers.com/.',
     'Practitioner education and community portal: https://education.gaiahealers.com.',
     'Bio-Well Level 1 certificate request: https://form.jotform.com/250512881268055.',
@@ -1519,7 +1519,7 @@ function normalizeMemberIdentity(input = {}) {
     || input.name
     || input.fullName
     || [input.firstName, input.lastName].filter(Boolean).join(' ')
-    || 'Gaia member',
+    || 'Gaia Healers member',
   ).trim();
   return {
     memberId: String(input.memberId || input.member_id || input.contactId || input.contact_id || '').trim(),
@@ -1639,7 +1639,7 @@ async function resolveMemberRecord({ email = '', memberId = '', contactId = '' }
         memberId: ghlMember.member?.memberId || normalizedMemberId,
         contactId: ghlMember.member?.contactId || normalizedMemberId,
         email: ghlMember.member?.email || normalizedEmail,
-        displayName: ghlMember.member?.displayName || 'Gaia member',
+        displayName: ghlMember.member?.displayName || 'Gaia Healers member',
         role: ghlMember.member?.role || 'Member',
         cohort: ghlMember.member?.cohort || '',
         source: 'ghl-contact',
@@ -1661,7 +1661,7 @@ async function resolveMemberRecord({ email = '', memberId = '', contactId = '' }
         memberId: normalizedMemberId,
         contactId: normalizedMemberId,
         email: academy.member?.email || normalizedEmail,
-        name: academy.member?.name || 'Gaia member',
+        name: academy.member?.name || 'Gaia Healers member',
         source: academy.source || 'academy-progress',
       });
     }
@@ -1674,7 +1674,7 @@ async function resolveMemberRecord({ email = '', memberId = '', contactId = '' }
         memberId: normalizedMemberId,
         contactId: normalizedMemberId,
         email: normalizedEmail,
-        displayName: hub.member?.displayName || 'Gaia member',
+        displayName: hub.member?.displayName || 'Gaia Healers member',
         role: hub.member?.role || 'Member',
         cohort: hub.member?.cohort || '',
         source: hub.source || 'member-hub',
@@ -1865,7 +1865,7 @@ function authMagicLinkStart(_req, res) {
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Signing in · Gaia Healers</title>
 <style>body{margin:0;min-height:100vh;display:grid;place-items:center;background:#f7faf5;color:#173323;font:16px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}.card{width:min(88vw,420px);padding:32px;border-radius:22px;background:#fff;box-shadow:0 18px 55px rgba(22,61,36,.12);text-align:center}h1{font-size:24px;margin:0 0 10px}p{color:#65756b;margin:0}.dot{display:inline-block;width:10px;height:10px;margin:0 3px;border-radius:50%;background:#5cb82e;animation:p 1s infinite alternate}.dot:nth-child(2){animation-delay:.2s}.dot:nth-child(3){animation-delay:.4s}@keyframes p{to{opacity:.25;transform:translateY(-4px)}}a{color:#2f7d32}</style>
-</head><body><main class="card"><h1 id="title">Signing you in</h1><p id="status">Verifying your Gaia membership…</p><p id="loader" aria-hidden="true" style="margin-top:20px"><span class="dot"></span><span class="dot"></span><span class="dot"></span></p></main>
+</head><body><main class="card"><h1 id="title">Signing you in</h1><p id="status">Verifying your Gaia Healers membership…</p><p id="loader" aria-hidden="true" style="margin-top:20px"><span class="dot"></span><span class="dot"></span><span class="dot"></span></p></main>
 <script nonce="${nonce}">(async()=>{const fallback=${fallback};const status=document.getElementById('status');const title=document.getElementById('title');const loader=document.getElementById('loader');const fragment=new URLSearchParams(location.hash.slice(1));const token=fragment.get('gaia_magic')||'';history.replaceState({},'',location.pathname);if(!token){title.textContent='Sign-in link unavailable';status.innerHTML='Return to <a href="'+fallback+'">Gaia Healers</a> and request a new link.';loader.hidden=true;return}try{const response=await fetch('/api/auth/magic-link/consume',{method:'POST',headers:{'Content-Type':'application/json','Accept':'application/json'},credentials:'include',body:JSON.stringify({token})});const data=await response.json();if(!response.ok||!data.authenticated)throw new Error(data.error||'This link could not be verified.');status.textContent='Verified. Opening your Gaia…';location.replace(data.returnTo||fallback)}catch(error){title.textContent='Please request a new link';status.textContent=error.message||'This sign-in link is invalid or expired.';loader.hidden=true;}})();</script></body></html>`;
   res.writeHead(200, {
     'Content-Type': 'text/html; charset=utf-8',
@@ -1911,7 +1911,7 @@ function normalizeGhlContact(raw = {}, fallback = {}) {
 }
 
 // Privacy-safe check for the wellness sign-up: is this email ALREADY a real
-// Gaia member (existing GHL contact with membership / community / product
+// Gaia Healers member (existing GHL contact with membership / community / product
 // access)? Returns only { existing, member, name } — NEVER private access
 // details, because an unverified email is not proof of ownership. The real
 // profile sync only happens after the person signs in (magic link) and proves
@@ -2355,7 +2355,7 @@ function buildMemberAccess(rawTags = [], customFields = [], member = {}, entitle
 
   return {
     member: {
-      name: member.displayName || member.name || 'Gaia member',
+      name: member.displayName || member.name || 'Gaia Healers member',
       email: member.email || '',
       practitioner,
       practitionerCertified: certified,
@@ -2540,7 +2540,7 @@ async function memberProfile(req, res, origin) {
   const access = buildMemberAccess(b.tags, b.customFields, b.member, b.entitlements, b.subscriptions);
   sendJson(res, 200, memberEnvelope(b, {
     profile: {
-      name: b.member.displayName || b.member.name || 'Gaia member',
+      name: b.member.displayName || b.member.name || 'Gaia Healers member',
       email: b.member.email || '',
       role: b.member.role || 'Member',
       cohort: b.member.cohort || '',
@@ -3275,7 +3275,7 @@ function normalizeAcademyProgress(payload = {}) {
     source: String(payload.source || 'academy-connector'),
     generatedAt: String(payload.generatedAt || payload.generated_at || new Date().toISOString()),
     member: {
-      name: String(payload.member?.name || payload.contact?.name || 'Gaia member'),
+      name: String(payload.member?.name || payload.contact?.name || 'Gaia Healers member'),
       email: String(payload.member?.email || payload.contact?.email || ''),
       portalUrl: String(payload.member?.portalUrl || payload.portalUrl || FALLBACK_ACADEMY.member.portalUrl),
     },
@@ -3324,7 +3324,7 @@ function normalizeMemberHub(payload = {}, academy = FALLBACK_ACADEMY) {
     source: String(payload.source || 'member-hub'),
     generatedAt: String(payload.generatedAt || payload.generated_at || new Date().toISOString()),
     member: {
-      displayName: String(payload.member?.displayName || payload.member?.name || 'Gaia member'),
+      displayName: String(payload.member?.displayName || payload.member?.name || 'Gaia Healers member'),
       role: String(payload.member?.role || 'Practitioner'),
       cohort: String(payload.member?.cohort || 'Bio-Well Practitioners'),
       portalUrl: String(payload.member?.portalUrl || payload.portal?.url || FALLBACK_MEMBER_HUB.portal.url),
@@ -3538,7 +3538,7 @@ async function getAcademyProgress(url = new URL('http://localhost')) {
       source: 'ghl-portal-only',
       generatedAt: new Date().toISOString(),
       member: {
-        name: member.member.displayName || 'Gaia member',
+        name: member.member.displayName || 'Gaia Healers member',
         email: member.member.email || email,
         portalUrl: GHL_CLIENT_PORTAL_BASE_URL || FALLBACK_ACADEMY.member.portalUrl,
       },
@@ -3579,7 +3579,7 @@ function applyMemberContextToAcademy(payload, memberContext) {
     ...payload,
     member: {
       ...(payload.member || {}),
-      name: !currentName || currentName === 'Gaia member' ? (memberContext.displayName || 'Gaia member') : currentName,
+      name: !currentName || currentName === 'Gaia Healers member' ? (memberContext.displayName || 'Gaia Healers member') : currentName,
       email: payload.member?.email || memberContext.email || '',
     },
   };
@@ -3592,7 +3592,7 @@ function applyMemberContextToMemberHub(payload, memberContext) {
     ...payload,
     member: {
       ...(payload.member || {}),
-      displayName: !currentName || currentName === 'Gaia member' ? (memberContext.displayName || 'Gaia member') : currentName,
+      displayName: !currentName || currentName === 'Gaia Healers member' ? (memberContext.displayName || 'Gaia Healers member') : currentName,
       role: payload.member?.role || memberContext.role || 'Member',
       cohort: payload.member?.cohort || memberContext.cohort || '',
       portalUrl: payload.member?.portalUrl || FALLBACK_MEMBER_HUB.member.portalUrl,
@@ -3623,7 +3623,7 @@ async function bootstrap(req, url) {
       memberResolved: false,
       source: 'anonymous-portal-login',
       member: {
-        name: 'Gaia member',
+        name: 'Gaia Healers member',
         email: '',
         portalUrl: GHL_CLIENT_PORTAL_BASE_URL || FALLBACK_ACADEMY.member.portalUrl,
       },
@@ -3642,7 +3642,7 @@ async function bootstrap(req, url) {
       credentials: [],
       requirements: {
         title: 'Member login required',
-        description: 'Sign in with your Gaia portal account to unlock your own course progress, certificates, and gated lessons.',
+        description: 'Sign in with your Gaia Healers portal account to unlock your own course progress, certificates, and gated lessons.',
         scansCompleted: 0,
         scansRequired: 0,
         courseRequiredPercent: 0,
@@ -3659,7 +3659,7 @@ async function bootstrap(req, url) {
       memberResolved: false,
       source: 'anonymous-portal-login',
       member: {
-        displayName: 'Gaia member',
+        displayName: 'Gaia Healers member',
         role: 'Member',
         cohort: 'Client portal',
         portalUrl: GHL_CLIENT_PORTAL_BASE_URL || FALLBACK_MEMBER_HUB.portal.url,
@@ -3679,7 +3679,7 @@ async function bootstrap(req, url) {
       access: {
         notes: [
           'Public app shell is ready.',
-          'Member-specific courses, purchases, communities, and certificates unlock after Gaia portal login.',
+          'Member-specific courses, purchases, communities, and certificates unlock after Gaia Healers portal login.',
         ],
       },
       portalOnlyFields: uniqueStrings([
@@ -3789,7 +3789,7 @@ async function authMagicLinkRequest(req, res, origin) {
   const genericResponse = {
     ok: true,
     delivery: 'email-if-member',
-    message: 'If this email belongs to a Gaia member, a secure sign-in link will arrive shortly.',
+    message: 'If this email belongs to a Gaia Healers member, a secure sign-in link will arrive shortly.',
     expiresInSeconds: AUTH_MAGIC_LINK_TTL_SECONDS,
   };
 
@@ -4180,7 +4180,7 @@ function fallbackAssistReply(prompt, intent = '') {
     return 'Bio-Well is Gaia Healers’ electrophotonic biofield-imaging system. Gaia maintains a public Bio-Well research library at gaiahealers.com/pages/bio-well-research; use research as background information, not personal medical diagnosis.';
   }
   if (normalized.includes('join free') || normalized.includes('free member') || normalized.includes('free membership')) {
-    return 'Open the Store’s Membership tab and choose Free, or use Join free on Today. Enrol with the same email you will use for your Gaia Member Pass so GHL can connect your access.';
+    return 'Open the Store’s Membership tab and choose Free, or use Join free on Today. Enrol with the same email you will use for your Gaia Healers Member Pass so GHL can connect your access.';
   }
   if (normalized.includes('crm') || normalized.includes('software') || normalized.includes('marketplace') || normalized.includes('affiliate') || normalized.includes('contact support') || normalized.includes('certification request')) {
     return 'Gaia’s verified public tools include practitioner CRM at nextlevel.gaiahealers.com, software and marketplace through GaiaPractitioners, affiliate registration, certification requests, and the contact page. Tell me which one and I’ll point you to the exact source.';
@@ -5145,7 +5145,7 @@ const server = http.createServer(async (req, res) => {
     if (req.method === 'GET' && url.pathname === '/api/member/forms') { await memberForms(req, res, origin); return; }
     if (req.method === 'GET' && url.pathname === '/api/member/notifications') { await memberNotifications(req, res, origin); return; }
     // Gaia Assist routes are member-only: they proxy paid LLM/voice/tts calls,
-    // so every request must carry a valid Gaia member session cookie.
+    // so every request must carry a valid Gaia Healers member session cookie.
     if (url.pathname.startsWith('/api/assist/')) {
       /* Gaia Assist is open to all visitors (member or not); nginx rate-limits /api/assist/ for quota protection. Sign-in gate disabled per product decision. */
     }

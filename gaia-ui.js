@@ -226,15 +226,15 @@
     const external = root.querySelector('.gaia-portal-workspace__external');
     const targetUrl = portalWorkspaceUrl(section, explicitUrl);
     const labels = {
-      academy: 'Gaia Academy',
-      community: 'Gaia Community',
-      profile: 'Gaia Member Access',
-      home: 'Gaia Client Portal',
+      academy: 'Gaia Healers Academy',
+      community: 'Gaia Healers Community',
+      profile: 'Gaia Healers Member Access',
+      home: 'Gaia Healers Client Portal',
     };
     if (title) title.textContent = labels[section] || labels.home;
     if (note) {
       note.textContent = authState().authenticated
-        ? 'Your Gaia proxy session is active. Use the secure portal below for member-only lessons, community access, purchases, and certificates.'
+        ? 'Your Gaia Healers proxy session is active. Use the secure portal below for member-only lessons, community access, purchases, and certificates.'
         : 'Log in with your existing Gaia Healers member account below. Once authenticated, your courses and gated portal content stay inside this app experience.';
     }
     if (external) external.href = targetUrl;
@@ -780,14 +780,14 @@
         if (sourceNote) {
           sourceNote.textContent = memberReady
             ? 'Member verified · open the secure Academy workspace below for live lessons, locked modules, and certificates.'
-            : 'Gaia courses stay protected by member login. Open the secure Academy workspace below to continue.';
+            : 'Gaia Healers courses stay protected by member login. Open the secure Academy workspace below to continue.';
         }
         renderRoadmap([], '');
         renderRequirements({
           title: memberReady ? 'Member workspace' : 'Member login required',
           description: memberReady
             ? 'Course progress and gated lessons stay inside the secure GHL member workspace.'
-            : 'Sign in with your existing Gaia portal account to unlock your course progress, purchases, and credentials.',
+            : 'Sign in with your existing Gaia Healers portal account to unlock your course progress, purchases, and credentials.',
           scansCompleted: 0,
           scansRequired: 0,
           currentCoursePercent: 0,
@@ -1112,7 +1112,7 @@
             body: JSON.stringify({ email, returnTo: window.location.href }),
           });
           const payload = await response.json().catch(() => ({}));
-          if (response.ok && payload.ok) statusEl.textContent = 'If that email is a Gaia member, your sign-in link is on its way. New to Gaia? Use Join free below.';
+          if (response.ok && payload.ok) statusEl.textContent = 'If that email is a Gaia Healers member, your sign-in link is on its way. New to Gaia Healers? Use Join free below.';
           else if (payload.error) statusEl.textContent = payload.error;
           else statusEl.textContent = 'Could not send your link right now. Please try again in a moment.';
         } catch {
@@ -1208,7 +1208,7 @@
       });
       // Profile hero is owned by gaia-member.js (Phase 5c). No demo text here.
       if (accessNote && session.authenticated) {
-        accessNote.textContent = `Signed in as ${session.member?.displayName || 'Gaia member'}${session.member?.email ? ` (${session.member.email})` : ''}. Member-specific lessons, purchases, certificates, and gated access now resolve through the Gaia proxy session.`;
+        accessNote.textContent = `Signed in as ${session.member?.displayName || 'Gaia Healers member'}${session.member?.email ? ` (${session.member.email})` : ''}. Member-specific lessons, purchases, certificates, and gated access now resolve through the Gaia Healers proxy session.`;
       }
       if (signOutBtn) signOutBtn.hidden = !session.authenticated;
     }
@@ -1765,7 +1765,7 @@
         return;
       }
 
-      const passcode = window.prompt('Enter Gaia admin passcode');
+      const passcode = window.prompt('Enter Gaia Healers admin passcode');
       if (passcode === null) return;
       if (passcode.trim() === ADMIN_DEV_PASSCODE) {
         setAdminMode(true);
@@ -2148,7 +2148,7 @@
         }
         window.dispatchEvent(new CustomEvent('gaia:open-assist', {
           detail: {
-            prompt: 'Explain how BioTekna ANS mapping fits into my Gaia practitioner workflow.',
+            prompt: 'Explain how BioTekna ANS mapping fits into my Gaia Healers practitioner workflow.',
           },
         }));
       });
@@ -2491,12 +2491,12 @@
           { label: 'My access', reply: assistant.responses?.academy, intent: 'access' },
           { label: 'Today’s guidance', reply: assistant.responses?.scan, intent: 'energy' },
           { label: 'Book a session', reply: assistant.responses?.event, intent: 'booking' },
-          { label: 'Explore all Gaia', reply: assistant.responses?.scan, intent: 'ecosystem' },
+          { label: 'Explore all Gaia Healers', reply: assistant.responses?.scan, intent: 'ecosystem' },
         ];
       }
       return [
         { label: 'Energy check', reply: assistant.responses?.scan, intent: 'energy' },
-        { label: 'Explore all Gaia', reply: assistant.responses?.scan, intent: 'ecosystem' },
+        { label: 'Explore all Gaia Healers', reply: assistant.responses?.scan, intent: 'ecosystem' },
         { label: 'Join free', reply: assistant.responses?.ghl, intent: 'join-free' },
         { label: 'Memberships', reply: assistant.responses?.ghl, intent: 'membership' },
       ];
@@ -2527,23 +2527,23 @@
         academy: responses.academy,
         access: responses.academy,
         booking: responses.event,
-        'join-free': 'You can join Gaia for free from the Home member card. Tap Join free, complete the secure enrollment, then return here and sign in with the same email.',
+        'join-free': 'You can join Gaia Healers for free from the Home member card. Tap Join free, complete the secure enrollment, then return here and sign in with the same email.',
         membership: 'Open Store and choose Memberships to compare the official Free, Silver, Gold, and Diamond paths. Your app access will always mirror what GHL grants to your account.',
         'sign-in': 'Tap Sign in and enter the email on your GHL contact. I will send a secure one-time link so you can open your own courses and communities.',
         ghl: responses.ghl,
         services: responses.event,
         voice: responses.scan,
-        ecosystem: 'Gaia includes Energy Studio, Academy, practitioner communities, events, bookings, memberships and the live store — plus Bio-Well research, articles, demos, the practitioner directory, certification, affiliate access and practitioner software. Tell me what you want and I’ll open the verified source.',
+        ecosystem: 'Gaia Healers includes Energy Studio, Academy, practitioner communities, events, bookings, memberships and the live store — plus Bio-Well research, articles, demos, the practitioner directory, certification, affiliate access and practitioner software. Tell me what you want and I’ll open the verified source.',
         general: null,
       };
       if (intentReplies[intent]) return intentReplies[intent];
 
       const normalized = `${intent} ${prompt}`.toLowerCase();
       if (/research|study|studies|article|blog|scientific/.test(normalized)) {
-        return 'Gaia Healers has a public Bio-Well research library plus current wellness and technology articles. I can open the verified research page or the Gaia articles for you.';
+        return 'Gaia Healers has a public Bio-Well research library plus current wellness and technology articles. I can open the verified research page or the Gaia Healers articles for you.';
       }
       if (/affiliate|marketplace|software|contact|support|practitioner tools?/.test(normalized)) {
-        return 'I can open the verified Gaia destination for affiliate access, practitioner CRM/software/marketplace, certification requests, or contact support. Which one do you need?';
+        return 'I can open the verified Gaia Healers destination for affiliate access, practitioner CRM/software/marketplace, certification requests, or contact support. Which one do you need?';
       }
       if (/service|what do you do|device|bio-well|biowell|scan|chakra|energy/.test(normalized)) {
         return responses.scan || responses.event || 'Gaia Healers connects Bio-Well, certification, communities, and Elevate event operations.';
@@ -4252,7 +4252,7 @@
       if (/(energy check|daily chart|energy chart|body point|birth chakra|daily wellness|aura)/.test(t)) return { label: 'Open Energy check', view: 'wellness', tab: 'check' };
       // Verified public Gaia ecosystem resources.
       if (/\bresearch\b|scientific studies|study library/.test(t)) return { label: 'Open Bio-Well research', url: 'https://gaiahealers.com/pages/bio-well-research' };
-      if (/\b(blog|blogs|articles|wellness insights|read more)\b/.test(t)) return { label: 'Open Gaia articles', url: 'https://gaiahealers.com/blogs/news' };
+      if (/\b(blog|blogs|articles|wellness insights|read more)\b/.test(t)) return { label: 'Open Gaia Healers articles', url: 'https://gaiahealers.com/blogs/news' };
       if (/\b(affiliate|referral partner|become an affiliate)\b/.test(t)) return { label: 'Become an affiliate', url: 'https://af.uppromote.com/gaia/register' };
       if (/request certification|certification request|submit certification/.test(t)) return { label: 'Request certification', url: 'https://form.jotform.com/250512881268055' };
       if (/\b(crm|practice software|practitioner software|marketplace)\b/.test(t)) return { label: 'Open practitioner tools', url: 'https://gaiapractitioners.com' };

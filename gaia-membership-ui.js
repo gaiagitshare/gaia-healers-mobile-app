@@ -1,4 +1,4 @@
-/* Gaia membership UI — renders the /api/member/access v2 read model.
+/* Gaia Healers membership UI — renders the /api/member/access v2 read model.
  *
  * The one rule this file exists to enforce: the app RENDERS access, it never
  * decides it. There is no tier regex here, no benefit list, no lead count, no

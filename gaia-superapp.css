@@ -430,17 +430,33 @@ body.gaia-v2 .gaia-chakra-map__list-item, body.gaia-v2 .gaia-chakra-map--screen 
 
 @media (min-width: 1000px) {
   body.gaia-v2.gaia-has-tabbar { padding-left: 112px; }
-  body.gaia-v2 .gaia-tabbar { inset: 0 auto 0 0 !important; width: 112px; padding: 92px 12px 20px !important; transform: none !important; }
-  body.gaia-v2 .gaia-tabbar__inner { height: 100%; min-height: 0; display: flex; flex-direction: column; justify-content: flex-start; gap: 8px; padding: 10px 8px !important; border-radius: 24px !important; }
+  /* The rail is a pill sized to its five items and centred down the side, not
+     a full-height tube. Stretched to 100% it drew 329px of empty pill below
+     Profile, while the markup's own `gap-1` utility beat the 8px here and
+     squeezed the items to 1.9px apart — hence !important on the gap. */
+  body.gaia-v2 .gaia-tabbar { inset: 0 auto 0 0 !important; width: 112px; padding: 92px 12px 20px !important; transform: none !important; display: flex; align-items: center; justify-content: center; }
+  body.gaia-v2 .gaia-tabbar__inner { width: 100%; height: auto !important; min-height: 0; display: flex; flex-direction: column; justify-content: center; gap: 10px !important; padding: 14px 8px !important; border-radius: 28px !important; }
   body.gaia-v2 .gaia-tabbar__group { width: 100%; display: contents; }
   body.gaia-v2 .gaia-tabbar__link { width: 100%; min-height: 68px; flex: 0 0 auto; display: flex; flex-direction: column; gap: 6px; padding: 10px 4px; }
   body.gaia-v2 .gaia-tabbar__label { display: block !important; font-size: 10px !important; }
   body.gaia-v2 .gaia-tabbar__group--left .gaia-tabbar__link:nth-child(1) { order: 1; }
   body.gaia-v2 .gaia-tabbar__group--left .gaia-tabbar__link:nth-child(2) { order: 2; }
-  body.gaia-v2 .gaia-tabbar__assist { order: 3; width: 60px; height: 60px; margin: 8px auto; flex: none; }
+  /* Assist is the odd one out in the run of five, so it gets its own breathing
+     room rather than sitting at the same rhythm as the four labels. */
+  body.gaia-v2 .gaia-tabbar__assist { order: 3; width: 60px; height: 60px; margin: 6px auto; flex: none; }
   body.gaia-v2 .gaia-tabbar__group--right .gaia-tabbar__link:nth-child(1) { order: 4; }
   body.gaia-v2 .gaia-tabbar__group--right .gaia-tabbar__link:nth-child(2) { order: 5; }
-  body.gaia-v2 .g-topbar { padding-left: max(30px, calc((100vw - 112px - 1240px) / 2)); padding-right: max(30px, calc((100vw - 112px - 1240px) / 2)); }
+  /* The header's padding used to be derived from 100vw, which counts the
+     scrollbar the layout viewport does not — so it came out 4px wider than
+     <main>'s and the brand sat 4px inside the hero's left edge, the Menu
+     button 4px inside the content's right edge. Matching <main>'s own 40px
+     puts both flush with the column they head. */
+  body.gaia-v2 .g-topbar { padding-left: 40px !important; padding-right: 40px !important; }
+  /* Sized for the desktop bar rather than the phone one: a 26px mark under a
+     17px wordmark read as small against a 68px header. */
+  body.gaia-v2 .g-topbar__brand { font-size: 19px; gap: 10px; }
+  body.gaia-v2 .g-topbar__brand img { width: 36px; height: 36px; }
+  body.gaia-v2 .gaia-menu-button { height: 44px; min-width: 84px; padding: 0 22px; font-size: 14px; }
   .gaia-tabbar__badge { top: 5px; right: 18px; }
   .gaia-assist-nudge { left: 132px; bottom: 28px; transform: none; }
 }

@@ -1574,6 +1574,14 @@ body.gaia-v2 .g-super-home .g-feature-event__actions .g-btn{white-space:nowrap}
     justify-content:center !important;
     font-size:14.5px !important;padding:12px 16px !important;min-height:48px}
 
+  /* The hero's pair and the event's pair are the same control, side by side at
+     the same height — any difference in size between them reads as a mistake.
+     Kept immediately below the event's rule so the two stay in step. */
+  body.gaia-v2 .g-super-home .g-super-discover{gap:12px !important}
+  body.gaia-v2 .g-super-home .g-super-discover .g-btn{
+    flex:1 1 0 !important;max-width:220px;
+    font-size:14.5px !important;padding:12px 16px !important;min-height:48px}
+
   /* Try Gaia today sat beside a three-row ecosystem column, so its single row
      of four tiles left 247px of dead space underneath. Two by two, stretched
      to the row's height — the four tiles get roomier rather than the card

@@ -1492,24 +1492,35 @@ body.gaia-v2 .g-super-home .g-feature-event{display:flex !important;flex-directi
   /* The fold bands cap the card's height, which crops the poster to a sliver
      of crowd. The card is as tall as its banner plus its details — always. */
   min-height:0;height:auto !important;max-height:none !important;overflow:hidden}
+/* The Elevate artwork is a whole poster — logo, wordmark, tagline, crowd — at
+   426×358, and this slot is a wide band. `cover` therefore had to throw most of
+   it away, and how much it threw away depended on the width: the band is a
+   fixed pixel height, so at 360px wide it showed about half the poster and at
+   690px wide only 28% of it, magnified 1.6×. That widening zoom is what made it
+   look wrong on anything larger than a phone.
+
+   So the poster is no longer cropped at all. It is contained — shown whole at
+   every width — over a blurred, scaled copy of itself that fills the rest of
+   the band. The poster's own edges are #061510, so the bed reads as the
+   artwork continuing outward rather than as letterboxing. The band's height
+   stays governed by the fold, which is the one thing that genuinely cannot
+   move: the card must finish above the tab bar. */
 body.gaia-v2 .g-super-home .g-feature-event .g-feature-event__art{position:relative !important;
-  inset:auto !important;flex:none;width:auto;
-  /* The poster is 760×639; give it its own proportions instead of a letterbox
-     sliver of crowd. Capped, then centred on the lettering when cropped. */
-  width:100%;
-  /* Sized so the whole Elevate card — banner, title, dates, both buttons —
-     finishes above the tab bar on a phone. Wider screens get more. */
-  /* Brightness profile of the poster: logo at 12%, ELEVATE at 36%, tagline
-     at ~50%. Showing the top ~58% keeps all three; anchored top so the logo
-     is never the thing that gets cut. */
+  inset:auto !important;flex:none;width:100%;
   height:clamp(150px,21vh,200px) !important;
   height:clamp(150px,21dvh,200px) !important;
-  border-radius:0;overflow:hidden;opacity:1}
-body.gaia-v2 .g-super-home .g-feature-event .g-feature-event__art img{width:100%;
-  height:100%;object-fit:cover;object-position:center top;opacity:1;
-  transform:none;filter:none}
+  border-radius:0;overflow:hidden;opacity:1;background:#061510;isolation:isolate}
+/* The bed: the same artwork, blurred. Inset negatively so the blur's soft edge
+   is pushed outside the band instead of showing as a pale rim. */
+body.gaia-v2 .g-super-home .g-feature-event .g-feature-event__art::before{content:"";
+  position:absolute;inset:-12%;z-index:0;
+  background:url("assets/gaia-elevate-hero.png") center/cover no-repeat;
+  filter:blur(24px) saturate(.8) brightness(.5);transform:scale(1.08)}
+body.gaia-v2 .g-super-home .g-feature-event .g-feature-event__art img{position:relative;
+  z-index:1;width:100%;height:100%;object-fit:contain;object-position:center;
+  opacity:1;transform:none;filter:none}
 body.gaia-v2 .g-super-home .g-feature-event .g-feature-event__art::after{content:"";
-  position:absolute;inset:0;
+  position:absolute;inset:0;z-index:2;
   background:linear-gradient(180deg,transparent 58%,rgba(4,7,10,.55) 100%)}
 body.gaia-v2 .g-super-home .g-feature-event__body{position:relative !important;inset:auto !important;
   margin:0 !important;flex:none;display:flex;flex-direction:column;gap:8px;
@@ -1533,6 +1544,8 @@ body.gaia-v2 .g-super-home .g-feature-event__actions .g-btn{white-space:nowrap}
     align-items:stretch;align-self:start !important;min-height:0}
   body.gaia-v2 .g-super-home .g-feature-event .g-feature-event__art{flex:none !important;
     width:100%;height:clamp(200px,26vh,300px) !important}
+  /* Contained, so a taller band simply shows the poster larger. */
+  body.gaia-v2 .g-super-home .g-feature-event .g-feature-event__art img{object-fit:contain}
   body.gaia-v2 .g-super-home .g-feature-event .g-feature-event__art::after{
     background:linear-gradient(180deg,transparent 60%,rgba(4,7,10,.5) 100%)}
   body.gaia-v2 .g-super-home .g-feature-event__body{flex:none;justify-content:flex-start;

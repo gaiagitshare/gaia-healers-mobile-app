@@ -367,7 +367,7 @@ body.gaia-v2 .gaia-chakra-map__list-item, body.gaia-v2 .gaia-chakra-map--screen 
   body.gaia-v2 .gaia-main--today { padding-top: 12px; }
   .g-super-home { gap: 14px; }
   .g-super-hero { min-height: 0; display: block; border-radius: 22px; }
-  .g-super-hero__art { position: absolute; z-index: 0; inset: 0 0 auto 48%; height: 260px; border: 0; opacity: .4; }
+  .g-super-hero__art { position: absolute; z-index: 0; inset: 0; height: auto; border: 0; opacity: 1; }
   .g-super-hero__intro { min-height: 0; padding: 24px 18px 20px; display: grid; align-content: end; }
   .g-super-hero__intro::before { content: ""; position: absolute; z-index: -1; inset: 0; background: rgba(7, 16, 10, .72); }
   .g-super-hero h1 { max-width: 285px; font-size: clamp(36px, 10vw, 44px); line-height: 1; }

@@ -1513,9 +1513,13 @@ body.gaia-v2 .g-super-home .g-feature-event .g-feature-event__art{position:relat
 /* The bed: the same artwork, blurred. Inset negatively so the blur's soft edge
    is pushed outside the band instead of showing as a pale rim. */
 body.gaia-v2 .g-super-home .g-feature-event .g-feature-event__art::before{content:"";
-  position:absolute;inset:-12%;z-index:0;
+  position:absolute;inset:-14%;z-index:0;
   background:url("assets/gaia-elevate-hero.png") center/cover no-repeat;
-  filter:blur(24px) saturate(.8) brightness(.5);transform:scale(1.08)}
+  /* Kept lit and saturated on purpose. Darkened to near-black it stopped
+     reading as the artwork continuing and the poster looked like a rectangle
+     pasted onto a panel; the poster's own green glow is what ties the two
+     together. */
+  filter:blur(30px) saturate(1.25) brightness(.72);transform:scale(1.12)}
 body.gaia-v2 .g-super-home .g-feature-event .g-feature-event__art img{position:relative;
   z-index:1;width:100%;height:100%;object-fit:contain;object-position:center;
   opacity:1;transform:none;filter:none}

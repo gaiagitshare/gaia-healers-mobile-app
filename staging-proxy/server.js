@@ -1099,9 +1099,10 @@ async function memberAccessWebhook(req, res, origin) {
     if (!resource.id && !resource.name) { sendJson(res, 422, { ok: false, error: `${event.kind} id or name is required.` }, origin); return; }
     const listName = event.kind === 'course' ? 'courses' : 'communities';
     const list = record[listName];
-    // Learn a real-id ↔ name-key alias whenever the payload carries both, so a
-    // later id-only event can find a name-keyed backfill row.
-    if (event.kind === 'course' && resource.rawId && resource.name) {
+    // Learn a real-id ↔ name-key alias only when the payload carries a real id
+    // AND a real human name — not the id echoed back by the normalizer's
+    // fallback — so an id-only event never pollutes the registry with junk.
+    if (event.kind === 'course' && resource.rawId && resource.name && resource.name !== resource.rawId) {
       learnCourseAlias(store, resource.rawId, resource.name);
     }
     const index = event.kind === 'course'

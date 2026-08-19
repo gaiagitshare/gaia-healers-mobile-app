@@ -1048,7 +1048,25 @@ async function memberAccessWebhook(req, res, origin) {
   const orderResource = event.kind === 'course' || event.kind === 'community'
     ? normalizeEntitlementResource(body, event.kind)
     : null;
-  const key = resourceKey(event.kind, orderResource);
+  // Canonical ordering key. The delete path matches a revoke to a stored row by
+  // id, name, group-key OR learned alias, but resourceKey() keys only on the raw
+  // id-or-name the event happened to carry. Keyed naively, a name-only revoke
+  // ('course:<name>') and the grant it targets ('course:<id>') land on different
+  // watermarks, so decideOrder sees no prior marker for the revoke and accepts it
+  // as the first event — deleting a strictly newer grant. Resolve the event to
+  // its existing row first and key the watermark by THAT row's identity, so both
+  // the grant and any later revoke for the same course share one watermark.
+  let orderMatchIndex = -1;
+  let keyResource = orderResource;
+  if (event.kind === 'course' || event.kind === 'community') {
+    const olist = event.kind === 'course' ? record.courses : record.communities;
+    orderMatchIndex = event.kind === 'course'
+      ? resolveEntitlementMatch(olist, orderResource, store)
+      : olist.findIndex((item) => (orderResource.id && String(item.id) === String(orderResource.id))
+          || (orderResource.name && String(item.name || '').toLowerCase() === orderResource.name.toLowerCase()));
+    if (orderMatchIndex >= 0) keyResource = olist[orderMatchIndex];
+  }
+  const key = resourceKey(event.kind, keyResource);
   const decision = decideOrder(
     { ms: stamp.ms, basis: stamp.basis, eventId: webhookId, seq },
     record.order[key],
@@ -1105,10 +1123,9 @@ async function memberAccessWebhook(req, res, origin) {
     if (event.kind === 'course' && resource.rawId && resource.name && resource.name !== resource.rawId) {
       learnCourseAlias(store, resource.rawId, resource.name);
     }
-    const index = event.kind === 'course'
-      ? resolveEntitlementMatch(list, resource, store)
-      : list.findIndex((item) => (resource.id && String(item.id) === String(resource.id))
-          || (resource.name && String(item.name || '').toLowerCase() === resource.name.toLowerCase()));
+    // Resolved once already, when the ordering key was derived above. Reusing it
+    // keeps the watermark's identity and the row we mutate perfectly in step.
+    const index = orderMatchIndex;
     if (event.grant) {
       // On a match, keep the human name if the incoming event lacks one (an
       // id-only grant must not blank out a backfill row's display title), and

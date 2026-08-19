@@ -215,6 +215,30 @@ test('12. an event with no usable timestamp is applied but flagged, never treate
   assert.equal(mixed.json.lowConfidence, true, 'applied, but honestly marked unprovable');
 });
 
+// 13
+test('13. an id-keyed grant is not deleted by a delayed OLDER name-only revoke', async () => {
+  const c = 'synthetic-order-13';
+  // A live GHL course-access grant carries a real product id AND a human name,
+  // so the row is keyed by id and the id<->name alias is learned.
+  await hook({
+    type: 'course_access_granted', contactId: c,
+    courseId: 'cid-chakra-9001', courseName: 'Chakra Awakening',
+    timestamp: T.late, webhookId: 'ev13-grant',
+  });
+  assert.equal(hasCourse(c, 'cid-chakra-9001'), true);
+  // A late-delivered, strictly OLDER revoke carrying ONLY the course name — the
+  // case that used to sidestep the per-resource watermark by landing on a
+  // different key than the grant's. It must be refused, not applied.
+  const stale = await hook({
+    type: 'course_access_removed', contactId: c,
+    courseName: 'Chakra Awakening',
+    timestamp: T.early, webhookId: 'ev13-revoke',
+  });
+  assert.equal(stale.json.applied, false, 'the older name-only revoke is refused');
+  assert.equal(stale.json.stale, true);
+  assert.equal(hasCourse(c, 'cid-chakra-9001'), true, 'paid access survives the aliased stale revoke');
+});
+
 test('rejections are stored with an explanation', async () => {
   const c = 'synthetic-order-explain';
   await grant(c, 'course-1', T.late);

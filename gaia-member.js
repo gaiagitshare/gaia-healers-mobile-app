@@ -521,11 +521,24 @@ body.gaia-booking-open{overflow:hidden;}
    * Bounded to the opening blocks: further down, a line reading "Share" is far
    * more likely to be the author's own word. */
   const CHROME = /^(share|prev|previous|next|back|home|menu|search)$/i;
+  /* Themes wrap content in layers of single-child containers. The furniture we
+   * want to drop sits inside them, so walk down to the level where siblings
+   * actually begin before looking at anything. */
+  function contentRoot(node) {
+    let current = node;
+    while (current.children.length === 1
+      && current.textContent.trim() === current.children[0].textContent.trim()) {
+      current = current.children[0];
+    }
+    return current;
+  }
+
   function stripTemplateChrome(article, title) {
     const heading = String(title || '').trim().toLowerCase();
+    const root = contentRoot(article);
     let examined = 0;
-    while (article.firstElementChild && examined < 8) {
-      const first = article.firstElementChild;
+    while (root.firstElementChild && examined < 8) {
+      const first = root.firstElementChild;
       const text = first.textContent.replace(/\s+/g, ' ').trim();
       const lower = text.toLowerCase();
       const isChrome = !text

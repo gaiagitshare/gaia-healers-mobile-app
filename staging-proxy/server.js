@@ -2295,6 +2295,19 @@ function buildMemberAccess(rawTags = [], customFields = [], member = {}, entitle
       || tagTierCandidates.some((item) => item.tier !== subscriptionTier.tier);
   }
 
+  // A tier that rests ONLY on a legacy contact tag — no live subscription and no
+  // canonical workflow mirror — is not proof of a paid membership. This location
+  // carries ~200 stale ahc-gold/ahc-gold-trial tags with zero matching Gold
+  // subscriptions; showing them "Gold Member" (and telling the assistant so)
+  // overstates access and contradicts the canonical resolver. An unbacked tag
+  // tier is surfaced as a hint only, never as the confident tier.
+  let membershipTierUnverified = null;
+  if (membershipTier && String(tierMatchedBy || '').startsWith('tag:')) {
+    membershipTierUnverified = membershipTier;
+    membershipTier = null;
+    tierMatchedBy = 'tag-unverified';
+  }
+
   // Merge exact GHL Group/Community grants delivered by access workflows.
   // These grants are authoritative and may exist even when a matching contact
   // tag has not been configured.
@@ -2326,6 +2339,7 @@ function buildMemberAccess(rawTags = [], customFields = [], member = {}, entitle
       practitioner,
       practitionerCertified: certified,
       membershipTier,
+      membershipTierUnverified,
       tierMatchedBy,
       tierConflict,
       tierCandidates,

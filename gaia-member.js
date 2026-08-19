@@ -521,35 +521,36 @@ body.gaia-booking-open{overflow:hidden;}
    * Bounded to the opening blocks: further down, a line reading "Share" is far
    * more likely to be the author's own word. */
   const CHROME = /^(share|prev|previous|next|back|home|menu|search)$/i;
-  /* Themes wrap content in layers of single-child containers. The furniture we
-   * want to drop sits inside them, so walk down to the level where siblings
-   * actually begin before looking at anything. */
-  function contentRoot(node) {
-    let current = node;
-    while (current.children.length === 1
-      && current.textContent.trim() === current.children[0].textContent.trim()) {
-      current = current.children[0];
-    }
-    return current;
-  }
-
+  /* Shopify's page and article templates open with their own furniture — the
+   * page title repeated, a share row, prev/next nav. In the app's sheet the
+   * header already carries the title and there is nothing to navigate, so it
+   * reads as a bug. Matching on the elements themselves rather than on where
+   * they sit: the wrapper depth differs between templates, and an earlier
+   * version that walked down from the root matched on neither. */
+  const CHROME = /^(share|prev|previous|next|back|home|menu|search)$/i;
   function stripTemplateChrome(article, title) {
     const heading = String(title || '').trim().toLowerCase();
-    const root = contentRoot(article);
-    let examined = 0;
-    while (root.firstElementChild && examined < 8) {
-      const first = root.firstElementChild;
-      const text = first.textContent.replace(/\s+/g, ' ').trim();
-      const lower = text.toLowerCase();
-      const isChrome = !text
-        || CHROME.test(text)
-        || /^article:\s*/i.test(text)
-        // The sheet header already shows the title; the page repeating it reads as a bug.
-        || (heading && (lower === heading || lower === 'article: ' + heading));
-      // An element holding an image is content even when it carries no text.
-      if (!isChrome || first.querySelector('img')) break;
-      first.remove();
-      examined += 1;
+    const norm = (el) => el.textContent.replace(/\s+/g, ' ').trim();
+
+    // The title, wherever the theme put it.
+    if (heading) {
+      const lead = article.querySelector('h1, h2');
+      if (lead && norm(lead).toLowerCase() === heading) lead.remove();
+    }
+
+    // Navigation furniture, but only near the top: further down, a line reading
+    // "Share" is far more likely to be the author's own word.
+    const blocks = [...article.querySelectorAll('p, div, span, a, nav')].slice(0, 25);
+    for (const block of blocks) {
+      if (!block.isConnected || block.querySelector('img, h1, h2, h3, p')) continue;
+      const text = norm(block);
+      if (CHROME.test(text) || (heading && /^article:\s*/i.test(text)
+        && text.toLowerCase().replace(/^article:\s*/i, '') === heading)) block.remove();
+    }
+
+    // Whatever that leaves behind: empty wrappers holding nothing but space.
+    for (const block of [...article.querySelectorAll('div, p, section')]) {
+      if (block.isConnected && !block.textContent.trim() && !block.querySelector('img')) block.remove();
     }
   }
 

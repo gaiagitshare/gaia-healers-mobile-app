@@ -431,11 +431,6 @@ body.gaia-booking-open{overflow:hidden;}
     actuallyOpenInApp(url, embedUrl, title);
   }
 
-  function readerProxyBase() {
-    return String((window.GAIA_SYNC && window.GAIA_SYNC.proxyBase)
-      || 'https://api.gaiahealers.app').replace(/\/+$/, '');
-  }
-
   /** Open Gaia's own content inside the app, rendered rather than framed.
    * Shopify sends X-Frame-Options: DENY, so the storefront cannot be embedded.
    * The proxy fetches and sanitises the page and we render it in Gaia's own
@@ -503,10 +498,7 @@ body.gaia-booking-open{overflow:hidden;}
       // Sanitised on the server; rendered inside Gaia's own typography.
       body.innerHTML = '<article class="gaia-reader__article">' + data.html + '</article>';
       const article = body.firstElementChild;
-      // The sheet header already shows the title; the page repeating it reads as a bug.
-      const lead = article.querySelector('h1, h2');
-      if (lead && data.title
-        && lead.textContent.trim().toLowerCase() === data.title.trim().toLowerCase()) lead.remove();
+      stripTemplateChrome(article, data.title);
       // Source pages hotlink third-party logos that no longer resolve. A broken-image
       // icon looks like our failure, so drop images that do not load.
       article.querySelectorAll('img').forEach((img) => {
@@ -520,6 +512,31 @@ body.gaia-booking-open{overflow:hidden;}
         + '<p>This page could not be loaded inside the app.</p>'
         + '<a class="gaia-reader__cta" href="' + escapeHtml(url)
         + '" target="_blank" rel="noopener noreferrer">Open in a new tab</a></div>';
+    }
+  }
+
+  /* Shopify's article template opens with its own furniture — a breadcrumb, a
+   * share row, prev/next nav — which is navigation for a website, not part of
+   * the piece. In the app's sheet it is the first thing you read, so it goes.
+   * Bounded to the opening blocks: further down, a line reading "Share" is far
+   * more likely to be the author's own word. */
+  const CHROME = /^(share|prev|previous|next|back|home|menu|search)$/i;
+  function stripTemplateChrome(article, title) {
+    const heading = String(title || '').trim().toLowerCase();
+    let examined = 0;
+    while (article.firstElementChild && examined < 8) {
+      const first = article.firstElementChild;
+      const text = first.textContent.replace(/\s+/g, ' ').trim();
+      const lower = text.toLowerCase();
+      const isChrome = !text
+        || CHROME.test(text)
+        || /^article:\s*/i.test(text)
+        // The sheet header already shows the title; the page repeating it reads as a bug.
+        || (heading && (lower === heading || lower === 'article: ' + heading));
+      // An element holding an image is content even when it carries no text.
+      if (!isChrome || first.querySelector('img')) break;
+      first.remove();
+      examined += 1;
     }
   }
 

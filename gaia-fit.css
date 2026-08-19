@@ -1402,11 +1402,12 @@ body.gaia-v2 .g-super-home .g-super-hero{position:relative;display:block;
   min-height:460px !important;border-radius:24px;overflow:hidden}
 body.gaia-v2 .g-super-home .g-super-hero__art{position:absolute !important;inset:0 !important;
   height:auto !important;width:auto;max-height:none;border:0;opacity:.9 !important;
-  background-position:center 30%;background-size:cover;transform:none}
-/* The full artwork — moon, mountains, figure — never cropped: a sharp contain
-   layer seated at the top; the cover backdrop fills what the shape leaves. */
-body.gaia-v2 .g-super-home .g-super-hero__art::before{content:"";position:absolute;
-  inset:0;background:url("assets/gaia-hero-moon.jpg") center top/contain no-repeat}
+  /* One standard layer: the artwork regenerated taller (extended with its
+     own sky and water), so plain cover shows the complete moon, mountains
+     and figure at every aspect — and leaves calm water for the words. */
+  background-image:url("assets/gaia-hero-moon-tall.jpg") !important;
+  background-position:center top;background-size:cover;transform:none;
+  background-color:#0a1310}
 body.gaia-v2 .g-super-home .g-super-hero__art img{width:100%;height:100%;
   object-fit:cover;object-position:center 25%}
 body.gaia-v2 .g-super-home .g-super-hero__art::after{content:"";position:absolute;
@@ -1415,7 +1416,9 @@ body.gaia-v2 .g-super-home .g-super-hero__art::after{content:"";position:absolut
 body.gaia-v2 .g-super-home .g-super-hero .g-super-hero__intro{position:relative;
   z-index:1;width:100% !important;max-width:640px;min-height:100% !important;
   display:grid;align-content:end !important;justify-items:start !important;row-gap:0;
-  padding:24px 22px 104px !important;margin:0;text-align:left !important;height:auto !important}
+  /* Seated above the floating tab bar, whatever the phone's safe area. */
+  padding:24px 22px calc(108px + env(safe-area-inset-bottom,0px)) !important;
+  margin:0 !important;text-align:left !important;height:auto !important}
 body.gaia-v2 .g-super-home .g-super-hero .g-super-hero__intro::before{content:none}
 body.gaia-v2 .g-super-hero__intro .g-super-date{margin:0 0 10px;
   text-shadow:0 1px 8px rgba(0,0,0,.6)}
@@ -1428,8 +1431,9 @@ body.gaia-v2 .g-super-hero__intro > p:not(.g-super-date){margin:0 0 18px;
   text-align:left;text-shadow:0 1px 10px rgba(0,0,0,.6)}
 body.gaia-v2 .g-super-home .g-super-hero .g-super-discover,
 body.gaia-v2 .g-super-home .g-super-discover{display:flex !important;
-  flex-direction:row !important;justify-content:flex-start;
-  gap:10px;flex-wrap:wrap;align-items:center;width:auto !important}
+  flex-direction:row !important;justify-content:flex-start !important;
+  gap:10px;flex-wrap:wrap;align-items:center;
+  width:100% !important;max-width:100%;min-width:0}
 body.gaia-v2 .g-super-home .g-super-discover .g-btn{white-space:nowrap !important;
   width:auto;flex:none !important;font-size:13px !important;padding:10px 18px}
 

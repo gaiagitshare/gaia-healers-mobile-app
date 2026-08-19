@@ -470,7 +470,11 @@ body.gaia-v2 .gaia-chakra-map__list-item, body.gaia-v2 .gaia-chakra-map--screen 
 .g-event-card { display: grid; grid-template-columns: 108px minmax(0, 1fr); gap: 14px; padding: 12px; border: 1px solid var(--super-line); border-radius: 20px; background: #0b160f; }
 .g-event-card--live { border-color: var(--super-accent); }
 .g-event-card__art { display: block; }
-.g-event-card__art img { width: 108px; height: 108px; border-radius: 14px; object-fit: cover; border: 1px solid var(--super-line); }
+/* The art sits in a fixed-width grid track that stretches to the row's height,
+   but the image was pinned to a 108px square — so a card with four lines of
+   text beside it left 150px of empty column under the thumbnail. The image
+   fills its track, with the square as the floor for short cards. */
+.g-event-card__art img { width: 108px; height: 100%; min-height: 108px; border-radius: 14px; object-fit: cover; border: 1px solid var(--super-line); }
 .g-event-card__body { min-width: 0; display: grid; align-content: start; gap: 6px; }
 .g-event-card__body h3 { margin: 0; color: var(--g-text); font-family: var(--g-font-serif); font-size: 21px; line-height: 1.1; font-weight: 600; }
 .g-event-card__meta { margin: 0; color: var(--super-muted); font-size: 12.5px; line-height: 1.45; }
@@ -503,7 +507,7 @@ body.gaia-v2 .gaia-chakra-map__list-item, body.gaia-v2 .gaia-chakra-map--screen 
 @media (min-width: 720px) {
   .g-event-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .g-event-card { grid-template-columns: 132px minmax(0, 1fr); }
-  .g-event-card__art img { width: 132px; height: 132px; }
+  .g-event-card__art img { width: 132px; min-height: 132px; }
   .g-event-overview dl { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 }
 

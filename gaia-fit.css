@@ -1534,8 +1534,7 @@ body.gaia-v2 .g-super-home .g-feature-event__actions .g-btn{white-space:nowrap}
 
 /* Desktop: taller hero; the poster earns its side seat. */
 @media (min-width:1060px){
-  body.gaia-v2 .g-super-home .g-super-hero{aspect-ratio:auto !important;
-    height:calc(100dvh - 210px) !important;min-height:420px !important;max-height:680px}
+  /* The hero's height is set with the event's, from --pair-h below. */
   body.gaia-v2 .g-super-home .g-super-hero__art{background-position:center 30%}
   body.gaia-v2 .g-super-home .g-feature-event .g-feature-event__art{height:auto !important;
     max-height:none;min-height:0}
@@ -1590,10 +1589,13 @@ body.gaia-v2 .g-super-home .g-feature-event__actions .g-btn{white-space:nowrap}
   body.gaia-v2 .g-super-home .g-feature-event__actions{margin-top:14px !important;
     gap:12px !important;flex-wrap:nowrap !important}
   body.gaia-v2 .g-super-home .g-super-discover{gap:12px !important}
+  /* One width for all four buttons. Left to flex:1 they filled their own card,
+     and the two cards are different widths (1.12fr against 1fr) — so the
+     hero's pair came out 189px and the event's 161px, side by side. */
   body.gaia-v2 .g-super-home .g-feature-event__actions .g-btn,
   body.gaia-v2 .g-super-home .g-super-discover .g-btn{
-    flex:1 1 0 !important;width:auto !important;min-width:0;max-width:220px;
-    justify-content:center !important;
+    flex:0 0 auto !important;width:clamp(150px,13.5vw,190px) !important;
+    min-width:0;max-width:none;justify-content:center !important;
     font-size:clamp(13px,1.05vw,14.5px) !important;
     padding:12px 16px !important;min-height:48px}
 
@@ -1609,12 +1611,21 @@ body.gaia-v2 .g-super-home .g-feature-event__actions .g-btn{white-space:nowrap}
     justify-content:center}
 }
 
-/* Between 900 and 1059 the hero still carries its single-column cap (40dvh,
-   sized so two stacked cards clear the tab bar). Side by side that cap is the
-   wrong constraint — the pair costs one card's height, not two — and it left
-   the hero 320px tall beside a 554px event. Past 1060 the hero has its own
-   height and this band does not apply. */
-@media (min-width:900px) and (max-width:1059px){
-  body.gaia-v2 .g-super-home > .g-super-hero{aspect-ratio:auto !important;
-    max-height:none !important;height:clamp(400px,52dvh,560px) !important}
+/* One height for the paired row, shared by both cards.
+
+   Neither card owned it before. The hero kept the single-column 40dvh cap —
+   sized so two *stacked* cards clear the tab bar, which is the wrong
+   constraint once they sit side by side — and the event had no definite
+   height at all, so its <img> at natural aspect defined the row: 554px of
+   event beside 416px of hero at 1024. Giving both the same explicit height
+   settles it, and the event's banner flexes into whatever the body leaves. */
+@media (min-width:900px){
+  body.gaia-v2 .g-super-home{--pair-h:clamp(400px,52dvh,560px)}
+  body.gaia-v2 .g-super-home > .g-super-hero,
+  body.gaia-v2 .g-super-home > .g-feature-event{
+    aspect-ratio:auto !important;height:var(--pair-h) !important;
+    min-height:0 !important;max-height:none !important}
+}
+@media (min-width:1060px){
+  body.gaia-v2 .g-super-home{--pair-h:clamp(420px,calc(100dvh - 210px),680px)}
 }

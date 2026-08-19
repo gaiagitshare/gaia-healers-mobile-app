@@ -1424,7 +1424,9 @@ body.gaia-v2 .g-super-home .g-super-discover .g-btn{white-space:nowrap !importan
 
 /* Event: banner, then details. Nothing overlays the poster's lettering. */
 body.gaia-v2 .g-super-home .g-feature-event{display:flex !important;flex-direction:column !important;
-  min-height:0;height:auto}
+  /* The fold bands cap the card's height, which crops the poster to a sliver
+     of crowd. The card is as tall as its banner plus its details — always. */
+  min-height:0;height:auto !important;max-height:none !important;overflow:hidden}
 body.gaia-v2 .g-super-home .g-feature-event .g-feature-event__art{position:relative !important;
   inset:auto !important;flex:none;width:auto;
   /* The poster is 760×639; give it its own proportions instead of a letterbox

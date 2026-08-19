@@ -1393,8 +1393,13 @@ body.gaia-v2 .g-super-home .g-super-hero{position:relative;display:block;
      whole card; explicit height keeps the two independent.) */
   /* The landing opener: fills the viewport minus the top bar on every
      device. svh so iOS toolbars do not lie about the height. */
-  width:100%;height:clamp(460px,calc(100svh - 150px),900px);
-  min-height:0 !important;border-radius:24px;overflow:hidden}
+  width:100%;
+  /* vh first as the universal fallback; svh refines where supported. A hard
+     min floor so no failed calc can ever collapse the opener again. */
+  height:calc(100vh - 150px);
+  height:clamp(460px,calc(100svh - 150px),900px);
+  max-height:900px;
+  min-height:460px !important;border-radius:24px;overflow:hidden}
 body.gaia-v2 .g-super-home .g-super-hero__art{position:absolute !important;inset:0 !important;
   height:auto !important;width:auto;max-height:none;border:0;opacity:.9 !important;
   background-position:center 30%;background-size:cover;transform:none}

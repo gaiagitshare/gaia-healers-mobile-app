@@ -293,7 +293,7 @@ body.gaia-booking-open{overflow:hidden;}
       + '<p class="g-member-access__meta">New here? Join free or explore membership. Already a member? Sign in to see the courses and communities attached to your GHL account.</p></div>'
       + '<div class="g-member-access__actions">'
       + '<button type="button" class="g-btn g-btn--primary g-btn--sm" data-native-signin>Sign in</button>'
-      + '<button type="button" class="g-btn g-btn--secondary g-btn--sm" data-open-in-app="https://join.gaiahealers.com/onboarding" data-in-app-title="Free Gaia Membership">Join free</button>'
+      + '<button type="button" class="g-btn g-btn--secondary g-btn--sm" data-open-in-app="https://join.gaiahealers.com/onboarding" data-in-app-title="Free Gaia Healers Membership">Join free</button>'
       + '<a class="g-btn g-btn--ghost g-btn--sm" href="home.html?view=store&tab=membership">Memberships</a></div>';
   }
 
@@ -832,7 +832,7 @@ body.gaia-booking-open{overflow:hidden;}
     }));
     grants.forEach((grant) => {
       if (!tracks.some((track) => track.grant === grant)) {
-        tracks.unshift({ id: grant.id, name: grant.title || grant.name, desc: plainDescription(grant.description) || 'Available in your Gaia Academy.', image: grant.image, grant });
+        tracks.unshift({ id: grant.id, name: grant.title || grant.name, desc: plainDescription(grant.description) || 'Available in your Gaia Healers Academy.', image: grant.image, grant });
       }
     });
     const trackCard = (t) => {
@@ -858,7 +858,7 @@ body.gaia-booking-open{overflow:hidden;}
       ? '<article class="g-card g-card--feature"><p class="g-card__label">Academy</p>'
         + '<p class="g-card__value g-card__value--lg">Continue learning</p>'
         + '<p class="g-card__meta">These courses come directly from the access attached to your GHL contact. Lessons and certificates open securely in the Gaia Healers Academy.</p>'
-        + '<div class="g-card__actions"><button type="button" class="g-btn g-btn--primary g-btn--sm" data-course-open="' + esc(academyEntry) + '" data-course-title="Gaia Academy">Open Academy →</button></div></article>'
+        + '<div class="g-card__actions"><button type="button" class="g-btn g-btn--primary g-btn--sm" data-course-open="' + esc(academyEntry) + '" data-course-title="Gaia Healers Academy">Open Academy →</button></div></article>'
       : '<article class="g-card g-card--feature"><p class="g-card__label">Academy</p>'
         + '<p class="g-card__value g-card__value--lg">Learn & get certified</p>'
         + '<p class="g-card__meta">Sign in to see exactly what your GHL account can open. Gaia Healers reflects your existing access; it does not assign a tier or course.</p>'
@@ -888,7 +888,7 @@ body.gaia-booking-open{overflow:hidden;}
           window.GaiaAuth?.open?.();
           return;
         }
-        window.GaiaInApp?.open?.(button.dataset.courseOpen, button.dataset.courseTitle || 'Gaia Academy');
+        window.GaiaInApp?.open?.(button.dataset.courseOpen, button.dataset.courseTitle || 'Gaia Healers Academy');
       });
     });
   }

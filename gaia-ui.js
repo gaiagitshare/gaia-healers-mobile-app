@@ -235,7 +235,7 @@
     if (note) {
       note.textContent = authState().authenticated
         ? 'Your Gaia proxy session is active. Use the secure portal below for member-only lessons, community access, purchases, and certificates.'
-        : 'Log in with your existing Gaia member account below. Once authenticated, your courses and gated portal content stay inside this app experience.';
+        : 'Log in with your existing Gaia Healers member account below. Once authenticated, your courses and gated portal content stay inside this app experience.';
     }
     if (external) external.href = targetUrl;
     if (frame && frame.src !== targetUrl) frame.src = targetUrl;
@@ -1046,7 +1046,7 @@
             <button type="submit" class="g-btn g-btn--primary gaia-auth-modal__submit" data-auth-submit>Email me a sign-in link</button>
           </form>
           <p class="gaia-auth-modal__status" id="gaia-auth-status" data-auth-status role="status" aria-live="polite">Your link goes straight to your inbox.</p>
-          <p class="gaia-auth-modal__join">New to Gaia? <button type="button" class="gaia-auth-modal__joinlink" data-open-in-app="https://join.gaiahealers.com/onboarding" data-in-app-title="Join Gaia — free">Join free</button> — it takes a minute and your account is created instantly.</p>
+          <p class="gaia-auth-modal__join">New to Gaia Healers? <button type="button" class="gaia-auth-modal__joinlink" data-open-in-app="https://join.gaiahealers.com/onboarding" data-in-app-title="Join Gaia Healers — free">Join free</button> — it takes a minute and your account is created instantly.</p>
         </section>`;
       document.body.appendChild(modal);
       statusEl = modal.querySelector('[data-auth-status]');
@@ -1584,7 +1584,7 @@
             <button type="button" class="gaia-sheet-close" data-menu-close aria-label="Close menu">&times;</button>
           </div>
           <p class="gaia-auth-modal__body">Learning, community, membership, and personal guidance from the Gaia Healers network.</p>
-          <nav class="gaia-menu-sheet__nav" aria-label="Gaia menu">
+          <nav class="gaia-menu-sheet__nav" aria-label="Gaia Healers menu">
             <a class="gaia-menu-sheet__link" href="home.html?view=journey" data-app-nav="journey">Journey <span>Continue →</span></a>
             <a class="gaia-menu-sheet__link" href="home.html?view=academy" data-app-nav="academy">Academy <span>Learn →</span></a>
             <a class="gaia-menu-sheet__link" href="home.html?view=community" data-app-nav="community">Community <span>Connect →</span></a>
@@ -1622,7 +1622,7 @@
       button.type = 'button';
       button.className = 'gaia-menu-button';
       button.dataset.gaiaMenuButton = '';
-      button.setAttribute('aria-label', 'Open Gaia menu');
+      button.setAttribute('aria-label', 'Open Gaia Healers menu');
       button.textContent = 'Menu';
       button.addEventListener('click', open);
       slot.appendChild(button);

@@ -238,7 +238,8 @@ body.gaia-v2 .gaia-shell {
 .g-member-access__actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; }
 
 .g-chakra-hero { border-radius: var(--g-r-xl); background: #050906; }
-.g-chakra-hero__stage { height: min(44vh, 370px); height: min(44dvh, 370px); }
+.g-chakra-hero { --stage-h: min(44vh, 370px); }
+@supports (height: 100dvh) { .g-chakra-hero { --stage-h: min(44dvh, 370px); } }
 .g-chakra-hero__fig img { content: url("assets/gaia-chakra-meditation.webp"); }
 .g-chakra-hero__overlay { padding: 26px 22px 22px; }
 .g-chakra-hero__title { font-family: var(--g-font-serif); font-size: clamp(36px, 10vw, 52px); }
@@ -1102,7 +1103,7 @@ body.gaia-v2 .g-store > * {
     min-width: 0;
   }
 
-  .g-energy .g-chakra-hero__stage {
-    height: 440px;
+  .g-energy .g-chakra-hero {
+    --stage-h: 440px;
   }
 }

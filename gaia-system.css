@@ -131,16 +131,25 @@
 /* g-chakra-hero — the signature. Cinematic full-bleed meditation image (already
    carries the 7 glowing centres); greeting overlaid; the centres are tappable to
    reveal their essence. No scores, no list, no fake data. -------------------- */
-.g-chakra-hero{position:relative;border-radius:var(--g-r-xl);overflow:hidden;
+/* The scrim and the overlay are siblings of the stage, not children of it, so
+   they resolve against .g-chakra-hero — which is the stage *plus* the guide
+   panel beneath it. Anchoring them with inset:0 / bottom:0 therefore stretched
+   both across the guide as well, and the overlay's centred text drifted a
+   third of the way down the page. --stage-h is the one height all three read,
+   so they cannot come apart again; each breakpoint sets the token, not the
+   individual heights. */
+.g-chakra-hero{--stage-h:min(52vh,460px);
+  position:relative;border-radius:var(--g-r-xl);overflow:hidden;
   background:#05070a;border:1px solid var(--g-line);
   box-shadow:0 34px 90px -52px rgba(0,0,0,.95),0 0 70px -38px rgba(125,217,86,.2)}
+@supports (height:100dvh){ .g-chakra-hero{--stage-h:min(52dvh,460px)} }
 
 /* editorial section headers on Home ------------------------- */
 .g-sec-head{display:flex;flex-direction:column;gap:3px;margin-bottom:calc(var(--g-s2) * -1)}
 .g-sec-head__kicker{font:600 11px/1 var(--g-font-mono);letter-spacing:.16em;text-transform:uppercase;color:var(--g-accent);margin:0}
 .g-sec-head__title{font-family:var(--g-font-serif);font-weight:600;font-size:clamp(24px,6vw,30px);
   line-height:1;letter-spacing:-.02em;color:var(--g-text);margin:0;text-wrap:balance}
-.g-chakra-hero__stage{height:min(52vh,460px);height:min(52dvh,460px);display:flex;justify-content:center;align-items:center}
+.g-chakra-hero__stage{height:var(--stage-h);display:flex;justify-content:center;align-items:center}
 .g-chakra-hero__fig{position:relative;height:100%}
 .g-chakra-hero__fig img{height:100%;width:auto;display:block;
   animation:g-breathe 8s var(--g-ease) infinite}
@@ -155,9 +164,9 @@
 .g-chakra-hero__hit:focus-visible{outline:none}
 .g-chakra-hero__hit:focus-visible::after{border-color:var(--g-accent);box-shadow:0 0 0 2px var(--g-accent)}
 @keyframes g-ck-hint{0%,100%{transform:scale(1);opacity:.5}50%{transform:scale(1.4);opacity:1}}
-.g-chakra-hero__scrim{position:absolute;inset:0;pointer-events:none;
+.g-chakra-hero__scrim{position:absolute;top:0;left:0;right:0;height:var(--stage-h);pointer-events:none;
   background:linear-gradient(0deg,rgba(5,7,10,.94) 6%,rgba(5,7,10,.5) 26%,transparent 52%)}
-.g-chakra-hero__overlay{position:absolute;left:0;right:0;bottom:0;
+.g-chakra-hero__overlay{position:absolute;left:0;right:0;top:auto;bottom:calc(100% - var(--stage-h));
   padding:var(--g-s6) var(--g-s5) var(--g-s5);display:flex;flex-direction:column;gap:var(--g-s2);pointer-events:none}
 .g-chakra-hero__kicker{font:600 11px/1 var(--g-font-mono);letter-spacing:.14em;
   text-transform:uppercase;color:var(--g-accent);margin:0}
@@ -520,9 +529,10 @@ a.g-card:active,.g-tile:active,.g-quiz-opt:active{transform:scale(.99)}
   .g-tile{flex-basis:11rem}
 
   /* chakra hero → two-column: greeting left, cosmic figure right */
-  .g-chakra-hero__stage{height:440px;justify-content:flex-end;padding-right:6%}
-  .g-chakra-hero__overlay{top:0;bottom:0;right:auto;width:54%;justify-content:center;
-    padding:var(--g-s7) var(--g-s7)}
+  .g-chakra-hero{--stage-h:440px}
+  .g-chakra-hero__stage{justify-content:flex-end;padding-right:6%}
+  .g-chakra-hero__overlay{top:0;bottom:auto;height:var(--stage-h);right:auto;width:54%;
+    justify-content:center;padding:var(--g-s7) var(--g-s7)}
   .g-chakra-hero__scrim{background:
     linear-gradient(90deg,rgba(5,7,10,.94) 18%,rgba(5,7,10,.45) 48%,transparent 72%)}
   .g-chakra-hero__title{font-size:clamp(42px,4.4vw,62px)}

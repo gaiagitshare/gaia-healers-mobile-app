@@ -1080,42 +1080,26 @@ body.gaia-v2 .g-store > * {
     font-size: clamp(50px, 5vw, 68px);
   }
 
-  /* Energy becomes a balanced two-column workspace on desktop while the
-     source order remains linear and accessible on phones and tablets. */
+  /* Energy is a tabbed page: a switcher and exactly one visible panel.
+
+     It used to be a two-column workspace, and the rules here placed
+     #me-wellness in column one against #home-chakra-hero in column two. Both
+     of those now live *inside* the panels rather than being children of
+     .g-energy, so none of those placements matched any more: the switcher
+     auto-placed into column one, the open panel into column two, and the row
+     took the panel's height — leaving 772px of empty column beneath three
+     pills. One column, switcher across the top. */
   body.gaia-v2 .g-page.g-energy {
     display: grid;
-    grid-template-columns: minmax(320px, 0.82fr) minmax(0, 1.45fr);
-    grid-template-rows: auto auto auto auto;
+    grid-template-columns: minmax(0, 1fr);
     align-items: start;
-    gap: 22px 28px;
+    gap: 22px;
   }
 
-  .g-energy > .g-page__head,
-  .g-energy > .g-energy-note {
+  body.gaia-v2 .g-page.g-energy > * {
     grid-column: 1 / -1;
     width: 100%;
-  }
-
-  .g-energy > .g-sec-head:first-of-type {
-    grid-column: 1;
-    grid-row: 3;
-  }
-
-  .g-energy > #me-wellness {
-    grid-column: 1;
-    grid-row: 4;
-    width: 100%;
-  }
-
-  .g-energy > .g-sec-head:last-of-type {
-    grid-column: 2;
-    grid-row: 3;
-  }
-
-  .g-energy > #home-chakra-hero {
-    grid-column: 2;
-    grid-row: 4;
-    width: 100%;
+    min-width: 0;
   }
 
   .g-energy .g-chakra-hero__stage {

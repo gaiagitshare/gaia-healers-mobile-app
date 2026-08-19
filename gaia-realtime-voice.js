@@ -603,7 +603,7 @@
         }
         window.open(url, '_blank', 'noopener,noreferrer');
         return { ok: true, message: isFallback
-          ? `Opening the ${name} community in the Gaia portal.`
+          ? `Opening the ${name} community in the Gaia Healers portal.`
           : `Opening the ${name} community now.` };
       } catch (e) {
         return { ok: false, message: `I could not open the ${name} community. The member can reach it from the Community screen.` };
@@ -620,11 +620,11 @@
       const url = urls[section] || urls.home;
       try {
         if (window.GaiaInApp && typeof window.GaiaInApp.open === 'function') {
-          window.GaiaInApp.open(url, 'Gaia Member Portal');
-          return { ok: true, message: `Opening the Gaia member portal${section === 'courses' ? ' courses' : section === 'login' ? ' login' : ''} right here in the app.` };
+          window.GaiaInApp.open(url, 'Gaia Healers Member Portal');
+          return { ok: true, message: `Opening the Gaia Healers member portal${section === 'courses' ? ' courses' : section === 'login' ? ' login' : ''} right here in the app.` };
         }
         window.open(url, '_blank', 'noopener,noreferrer');
-        return { ok: true, message: `Opening the Gaia member portal${section === 'courses' ? ' courses' : section === 'login' ? ' login' : ''} now.` };
+        return { ok: true, message: `Opening the Gaia Healers member portal${section === 'courses' ? ' courses' : section === 'login' ? ' login' : ''} now.` };
       } catch (e) {
         return { ok: false, message: 'I could not open the portal. The member can visit education.gaiahealers.com directly.' };
       }

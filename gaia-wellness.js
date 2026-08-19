@@ -173,7 +173,7 @@
       + '<li><span>3</span><div><strong>Carry one question</strong><p>' + esc(path.journal || 'What would bring me toward balance today?') + '</p></div></li>'
       + '</ol>'
       + '<div class="g-energy-path__support">'
-      + '<a href="' + esc(shop) + '" target="_blank" rel="noopener noreferrer"><i class="ph ph-drop" aria-hidden="true"></i><span><strong>Explore ' + esc(colour) + ' Colour Energy</strong><small>Matching Gaia store support</small></span><i class="ph ph-arrow-up-right" aria-hidden="true"></i></a>'
+      + '<a href="' + esc(shop) + '" target="_blank" rel="noopener noreferrer"><i class="ph ph-drop" aria-hidden="true"></i><span><strong>Explore ' + esc(colour) + ' Colour Energy</strong><small>Matching Gaia Healers store support</small></span><i class="ph ph-arrow-up-right" aria-hidden="true"></i></a>'
       + '<a href="home.html?view=bookings"><i class="ph ph-wave-sine" aria-hidden="true"></i><span><strong>Choose a measured next step</strong><small>Book a Bio-Well scan, demo, or time with Dr. Nima</small></span><i class="ph ph-caret-right" aria-hidden="true"></i></a>'
       + '<a href="home.html?view=events"><i class="ph ph-calendar-dots" aria-hidden="true"></i><span><strong>Experience the work live</strong><small>Gaia Healers Elevate · Nov 20–22, 2026</small></span><i class="ph ph-caret-right" aria-hidden="true"></i></a>'
       + '</div>'

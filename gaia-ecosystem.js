@@ -68,7 +68,7 @@ window.GAIA = {
     mode: 'Live voice when the configured provider is available',
     promise: 'Gaia Assist asks before it changes member data and never invents personal results.',
     suggestions: [
-      'Show my Gaia access',
+      'Show my Gaia Healers access',
       'Open my Academy',
       'Find my next booking',
       'Show the Elevate event',

@@ -212,7 +212,7 @@
       return '<section class="g-mysch g-mysch--empty">'
         + '<h3>Your schedule is empty</h3>'
         + '<p>Save any session from the agenda and it will appear here — '
-        + 'on whichever device you open Gaia with.</p></section>';
+        + 'on whichever device you open Gaia Healers with.</p></section>';
     }
 
     const byId = {};

@@ -1329,7 +1329,7 @@
       sheet.innerHTML = `
         <section class="gaia-menu-sheet__panel" role="dialog" aria-modal="true" aria-labelledby="gaia-membership-title">
           <div class="gaia-menu-sheet__top">
-            <div><p class="gaia-menu-sheet__kicker">Membership</p><h2 class="gaia-menu-sheet__title" id="gaia-membership-title">Unlock your Gaia</h2></div>
+            <div><p class="gaia-menu-sheet__kicker">Membership</p><h2 class="gaia-menu-sheet__title" id="gaia-membership-title">Unlock your Gaia Healers</h2></div>
             <button type="button" class="gaia-sheet-close" data-membership-close aria-label="Close membership">&times;</button>
           </div>
           <p class="gaia-auth-modal__body">Gaia 2.0 offers Free, Silver, Gold, and Diamond paths for practitioners at every stage.</p>
@@ -2299,7 +2299,7 @@
             <button type="button" class="gaia-assist__orb-visual" data-gaia-orb-tap aria-label="Start voice conversation with Gaia">
               <span class="gaia-assist__orb-ring gaia-assist__orb-ring--1" aria-hidden="true"></span>
               <span class="gaia-assist__orb-ring gaia-assist__orb-ring--2" aria-hidden="true"></span>
-              <img class="gaia-assist__orb-icon" src="assets/gaia-mark.svg" alt="Gaia" />
+              <img class="gaia-assist__orb-icon" src="assets/gaia-mark.svg" alt="Gaia Healers" />
             </button>
             <div class="gaia-assist__wave" aria-hidden="true">
               <span></span><span></span><span></span><span></span><span></span>
@@ -2572,7 +2572,7 @@
         const firstName = fullName.split(/\s+/)[0] || 'there';
         return `Welcome back, ${firstName}. I’m Gaia Assist. I can help open your GHL-linked courses and communities, check your membership access, book a session, or guide you anywhere in the app. What would you like to do?`;
       }
-      return 'Welcome to Gaia Healers. I’m Gaia Assist. I can guide you through every app feature and verified Gaia resource — energy tools, products, learning, events, research, practitioners, membership, bookings, and support. What brings you here today?';
+      return 'Welcome to Gaia Healers. I’m Gaia Assist. I can guide you through every app feature and verified Gaia Healers resource — energy tools, products, learning, events, research, practitioners, membership, bookings, and support. What brings you here today?';
     }
 
     function liveWelcomePrompt() {
@@ -2589,7 +2589,7 @@
         const firstName = fullName.split(/\s+/)[0] || 'there';
         return `Welcome back, ${firstName}. I'm Gaia Assist. I can help with your access, courses, communities, membership, bookings, and anything on the ${currentAssistView()} screen. What would you like to do?`;
       }
-      return `Welcome to Gaia Healers. I'm Gaia Assist. I can guide you through every app feature and verified Gaia resource — energy tools, products, learning, events, research, practitioners, membership, bookings, and support. What brings you here today?`;
+      return `Welcome to Gaia Healers. I'm Gaia Assist. I can guide you through every app feature and verified Gaia Healers resource — energy tools, products, learning, events, research, practitioners, membership, bookings, and support. What brings you here today?`;
     }
 
     function ensureBrowserVoices() {

@@ -200,7 +200,7 @@
       // presenting an empty list that reads as "you have no tickets".
       return '<section class="g-mye g-mye--prompt">'
         + '<h2>Your tickets live here</h2>'
-        + '<p>Sign in and Gaia will show every event you hold a ticket for — '
+        + '<p>Sign in and Gaia Healers will show every event you hold a ticket for — '
         + 'your pass, your QR code for the door, and your check-in status.</p>'
         + '<a class="g-btn g-btn--primary" href="home.html?view=profile">Sign in</a>'
         + '</section>';
@@ -211,7 +211,7 @@
       // shown as one to somebody standing at a door.
       return '<section class="g-mye g-mye--problem">'
         + '<h2>Tickets are temporarily unavailable</h2>'
-        + '<p>Gaia could not reach the event system just now. Your ticket is safe — '
+        + '<p>Gaia Healers could not reach the event system just now. Your ticket is safe — '
         + 'try again in a moment, and staff can always find you by name at the desk.</p>'
         + '<button type="button" class="g-btn g-btn--secondary g-btn--sm" data-mye-retry>Try again</button>'
         + '</section>';
@@ -223,7 +223,7 @@
     if (!events.length) {
       return '<section class="g-mye g-mye--empty">'
         + '<h2>No tickets yet</h2>'
-        + '<p>When you register for a Gaia gathering, your ticket appears here automatically.</p>'
+        + '<p>When you register for a Gaia Healers gathering, your ticket appears here automatically.</p>'
         + '<a class="g-btn g-btn--secondary g-btn--sm" href="home.html?view=events">Browse events</a>'
         + '</section>';
     }
@@ -314,7 +314,7 @@
         + '<p class="g-ticket__hint">'
         + (data && data.reason === 'no_ticket_for_event'
           ? 'This account does not hold a ticket for that event.'
-          : 'Gaia could not load your ticket just now. Staff can find you by name at the desk.')
+          : 'Gaia Healers could not load your ticket just now. Staff can find you by name at the desk.')
         + '</p></div>';
     } else {
       state.ticket = data;

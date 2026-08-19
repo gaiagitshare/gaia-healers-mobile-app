@@ -558,7 +558,7 @@
     const connect = communities().length > 0;
     const item = (label, iconName, active) => '<div class="g-journey-step' + (active ? ' is-ready' : '') + '">'
       + '<span>' + icon(iconName) + '</span><strong>' + esc(label) + '</strong><small>' + (active ? 'Ready' : 'Explore') + '</small></div>';
-    return '<div class="g-journey-rail" aria-label="Your Gaia journey">'
+    return '<div class="g-journey-rail" aria-label="Your Gaia Healers journey">'
       + item('Learn', 'book-open', learn) + item('Practice', 'sparkle', practice) + item('Connect', 'users-three', connect) + '</div>';
   }
 

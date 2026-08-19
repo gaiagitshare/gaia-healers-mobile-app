@@ -201,7 +201,7 @@ async function read(rawUrl) {
         const feed = await fetch(feedUrl).then((r) => (r.ok ? r.text() : '')).catch(() => '');
         const articles = parseFeed(feed);
         value = articles.length
-          ? { ok: true, kind: 'list', title: extractTitle(body) || 'Gaia articles',
+          ? { ok: true, kind: 'list', title: extractTitle(body) || 'Gaia Healers articles',
               articles, source: rawUrl }
           : { ok: false, reason: 'no_articles' };
       } else {

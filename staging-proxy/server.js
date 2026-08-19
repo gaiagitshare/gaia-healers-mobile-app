@@ -165,7 +165,7 @@ const FALLBACK_MEMBER_HUB = {
     actions: ['Generate magic link', 'Invite to client portal', 'Send login email'],
   },
   dashboard: {
-    welcomeTitle: 'Your Gaia dashboard is ready',
+    welcomeTitle: 'Your Gaia Healers dashboard is ready',
     welcomeDetail: 'Courses, communities, live sessions, credentials, and products from GHL Memberships.',
     nextLessonTitle: 'Open your secure Academy workspace',
     nextLessonUrl: '',
@@ -209,7 +209,7 @@ const FALLBACK_MEMBER_HUB = {
 
 const GAIA_KNOWLEDGE = {
   brand: 'Gaia Healers — a holistic wellness network combining biofield / energy-science devices, practitioner certification, a member community, live events, and a wellness store. Founded by Dr. Nima Farshid.',
-  founder: 'Official Gaia sources describe Dr. Nima Farshid as Gaia Healers’ founder, a doctor of natural medicine, software engineer, and Bio-Well educator whose work connects biofield technology, practitioner education, community, and live events. His research interests include people, places, and water. Never use his story or titles to turn a symbolic horoscope into a medical claim; offer verified education, booking, device-measurement, community, and event routes as optional next steps.',
+  founder: 'Official Gaia Healers sources describe Dr. Nima Farshid as Gaia Healers’ founder, a doctor of natural medicine, software engineer, and Bio-Well educator whose work connects biofield technology, practitioner education, community, and live events. His research interests include people, places, and water. Never use his story or titles to turn a symbolic horoscope into a medical claim; offer verified education, booking, device-measurement, community, and event routes as optional next steps.',
   publicWebsite: 'https://gaiahealers.com',
   clientPortal: 'https://education.gaiahealers.com',
   practitionerDirectory: 'https://gaiapractitioners.com',
@@ -225,7 +225,7 @@ const GAIA_KNOWLEDGE = {
     observedLocationId: 'WkKl1K5RuZNQ60xR48k6',
     configuredLocationId: process.env.GHL_LOCATION_ID || '',
     embeddedAppUrl: 'https://gaiahealers.app/home.html?embedded=ghl',
-    embeddedRule: 'When the app is embedded in GHL, keep people inside the Gaia app: Today for the service hub, Journey for verified learning/practice/community access, Inbox for GHL conversation summaries, Profile for account tools, and the centre Gaia Assist button for guidance. Use the Menu for Academy, Community, Events, Bookings, Energy, Store, and Membership. Only send them to education.gaiahealers.com for actual course videos, community discussions, or portal login.',
+    embeddedRule: 'When the app is embedded in GHL, keep people inside the Gaia Healers app: Today for the service hub, Journey for verified learning/practice/community access, Inbox for GHL conversation summaries, Profile for account tools, and the centre Gaia Assist button for guidance. Use the Menu for Academy, Community, Events, Bookings, Energy, Store, and Membership. Only send them to education.gaiahealers.com for actual course videos, community discussions, or portal login.',
   },
   services: [
     'Certification and training on biofield devices: Bio-Well, BioPulsar, BioTekna, HealeeX.',
@@ -250,7 +250,7 @@ const GAIA_KNOWLEDGE = {
     'Practitioner CRM, software and marketplace: https://gaiapractitioners.com and https://nextlevel.gaiahealers.com.',
     'Contact Gaia Healers: https://gaiahealers.com/pages/contact-us.',
     'Elevate Conference: https://elevate.gaiahealers.com.',
-    'Dr. Nima Farshid and Gaia’s biofield education story: https://gaiahealers.com and https://workshop.gaiahealers.com/.',
+    'Dr. Nima Farshid and Gaia Healers’ biofield education story: https://gaiahealers.com and https://workshop.gaiahealers.com/.',
   ],
   devices: [
     'Bio-Well 3.0 — biofield / GDV imaging for stress and energy assessment (plus Sputnik, Glove, Water Sensor, and Bio Cor accessories).',
@@ -277,8 +277,8 @@ const GAIA_KNOWLEDGE = {
     screens: [
       'Today (view=today): the calm service hub with the confirmed next event, member access / sign-in, and direct routes to Academy, Community, Events, and Bookings.',
       'Journey (view=journey): a member-specific Learn, Practice, Connect path assembled only from verified GHL course grants, upcoming appointments, and community entitlements.',
-      'Events (view=events): the confirmed public Gaia event plus authenticated member appointments; unavailable community live-session feeds are never invented.',
-      'Bookings (view=bookings): real GHL appointments plus verified Gaia booking forms.',
+      'Events (view=events): the confirmed public Gaia Healers event plus authenticated member appointments; unavailable community live-session feeds are never invented.',
+      'Bookings (view=bookings): real GHL appointments plus verified Gaia Healers booking forms.',
       'Inbox (view=inbox): read-only GHL conversation summaries for the authenticated contact.',
       'Energy Studio (view=wellness): three distinct public tools. Energy Check (tab=check) uses an easy Month / Day / typed 4-digit Year form—never a long calendar scroll—to reveal a birth-date-number chakra and sun-sign reflection before sign-up. Worldwide birth-city autocomplete resolves the city and time zone; an optional birth time then powers a seven-planet sky-to-chakra map calculated with Astronomy Engine. It shows actual astronomical sign placements, a symbolic Gaia chakra spotlight, the most represented element, and an element to gently invite. The result now becomes a Gaia Energy Path: a two-minute practice, a balancing element invitation, a journal question, matching Colour Energy support, and verified routes to Bio-Well sessions, Dr. Nima, community, and Elevate. Planet details remain available in a disclosure. If birth time is unknown it uses local noon and labels the result as an estimate. Wellness Horoscope (tab=horoscope) adds a reflective daily practice and journal question. Chakra Match (tab=chakras) is an interactive seven-centre guide with traditional themes, practices, prompts, and relevant Colour Energy support. These are symbolic wellness reflection tools, not medical advice, predictions, device scans, or measured chakra scores.',
       'Academy (view=academy, opened from the top Menu): courses and certification. For a signed-in member it lists the courses they are actually entitled to; opening one takes them into their course library on education.gaiahealers.com for the lessons. It never shows fake progress.',
@@ -287,7 +287,7 @@ const GAIA_KNOWLEDGE = {
       'Profile (view=profile, bottom-right): your account — devices, purchases, bookings, messages, membership status, booking tools, and the Colour Personality Test.',
     ],
     features: [
-      'Energy Check — free at view=wellness&tab=check; choose a month and type the day and 4-digit year to see a birth-date-number chakra, sun-sign reflection, gentle practice, journal prompt, and relevant Gaia support. Saving the profile unlocks today’s body point and challenge practice.',
+      'Energy Check — free at view=wellness&tab=check; choose a month and type the day and 4-digit year to see a birth-date-number chakra, sun-sign reflection, gentle practice, journal prompt, and relevant Gaia Healers support. Saving the profile unlocks today’s body point and challenge practice.',
       'Wellness Horoscope — free at view=wellness&tab=horoscope; type and select a worldwide birth city, optionally add birth time, and receive a seven-planet sky-to-chakra map plus a personal Gaia Energy Path. Gaia Assist can turn it into a gentle 7-day plan and explain optional verified routes to Colour Energy, a Bio-Well scan or demo, Dr. Nima, community, and Elevate. The astronomy placements are calculated; the chakra interpretation is symbolic and not a prediction or measurement.',
       'Chakra Match — free at view=wellness&tab=chakras; an interactive seven-centre guide with traditional themes, two-minute practices, journal prompts, and matching Colour Energy support. It deliberately shows no fake percentages or scan scores.',
       'Wellness sign-up (name, birth date, location, email) — unlocks your daily body-point and a daily wellness horoscope tip.',
@@ -1866,7 +1866,7 @@ function authMagicLinkStart(_req, res) {
 <title>Signing in · Gaia Healers</title>
 <style>body{margin:0;min-height:100vh;display:grid;place-items:center;background:#f7faf5;color:#173323;font:16px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}.card{width:min(88vw,420px);padding:32px;border-radius:22px;background:#fff;box-shadow:0 18px 55px rgba(22,61,36,.12);text-align:center}h1{font-size:24px;margin:0 0 10px}p{color:#65756b;margin:0}.dot{display:inline-block;width:10px;height:10px;margin:0 3px;border-radius:50%;background:#5cb82e;animation:p 1s infinite alternate}.dot:nth-child(2){animation-delay:.2s}.dot:nth-child(3){animation-delay:.4s}@keyframes p{to{opacity:.25;transform:translateY(-4px)}}a{color:#2f7d32}</style>
 </head><body><main class="card"><h1 id="title">Signing you in</h1><p id="status">Verifying your Gaia Healers membership…</p><p id="loader" aria-hidden="true" style="margin-top:20px"><span class="dot"></span><span class="dot"></span><span class="dot"></span></p></main>
-<script nonce="${nonce}">(async()=>{const fallback=${fallback};const status=document.getElementById('status');const title=document.getElementById('title');const loader=document.getElementById('loader');const fragment=new URLSearchParams(location.hash.slice(1));const token=fragment.get('gaia_magic')||'';history.replaceState({},'',location.pathname);if(!token){title.textContent='Sign-in link unavailable';status.innerHTML='Return to <a href="'+fallback+'">Gaia Healers</a> and request a new link.';loader.hidden=true;return}try{const response=await fetch('/api/auth/magic-link/consume',{method:'POST',headers:{'Content-Type':'application/json','Accept':'application/json'},credentials:'include',body:JSON.stringify({token})});const data=await response.json();if(!response.ok||!data.authenticated)throw new Error(data.error||'This link could not be verified.');status.textContent='Verified. Opening your Gaia…';location.replace(data.returnTo||fallback)}catch(error){title.textContent='Please request a new link';status.textContent=error.message||'This sign-in link is invalid or expired.';loader.hidden=true;}})();</script></body></html>`;
+<script nonce="${nonce}">(async()=>{const fallback=${fallback};const status=document.getElementById('status');const title=document.getElementById('title');const loader=document.getElementById('loader');const fragment=new URLSearchParams(location.hash.slice(1));const token=fragment.get('gaia_magic')||'';history.replaceState({},'',location.pathname);if(!token){title.textContent='Sign-in link unavailable';status.innerHTML='Return to <a href="'+fallback+'">Gaia Healers</a> and request a new link.';loader.hidden=true;return}try{const response=await fetch('/api/auth/magic-link/consume',{method:'POST',headers:{'Content-Type':'application/json','Accept':'application/json'},credentials:'include',body:JSON.stringify({token})});const data=await response.json();if(!response.ok||!data.authenticated)throw new Error(data.error||'This link could not be verified.');status.textContent='Verified. Opening your Gaia Healers…';location.replace(data.returnTo||fallback)}catch(error){title.textContent='Please request a new link';status.textContent=error.message||'This sign-in link is invalid or expired.';loader.hidden=true;}})();</script></body></html>`;
   res.writeHead(200, {
     'Content-Type': 'text/html; charset=utf-8',
     'Cache-Control': 'no-store',
@@ -2855,7 +2855,7 @@ function buildGaiaLiveInstructions(context = {}) {
     'Handle corrections naturally. If the member says "no", "I meant", or changes direction, briefly acknowledge the correction and continue from the updated intent without repeating the whole introduction.',
     'Be proactive and specific: ask one short intent question when needed, tell them exactly where to go (for example "Open the Store and tap Membership" or "Go to Community to find a healer"), and after each answer or tool action offer the natural next step.',
     'MEMBERSHIP GUIDANCE \u2014 help people join and activate. Gaia Healers 2.0 has four practitioner paths: Free ($0), Silver ($97/mo or $997/yr), Gold ($497/mo or $4,997/yr), and Diamond ($997/mo or $9,997/yr), with benefits growing from community and education through directory exposure, CRM/software, implementation support, and lead generation. When someone wants to grow, go deeper, get certified, be listed as a practitioner, or asks what to join, warmly explain the paths, ask one short question about their stage and goal, recommend the single best-fit tier, and hand them its exact activation link so they can activate right away: Free join.gaiahealers.com/onboarding, Silver join.gaiahealers.com/silver, Gold join.gaiahealers.com/gold, Diamond join.gaiahealers.com/diamond (or say "Open the Store and tap Membership"). Guide, never pressure; frame it as the step that matches their goal. Their in-app access mirrors what GHL grants once they activate.',
-    'You can help with anything in the app and verified Gaia ecosystem: Today, Journey, the three Energy Studio tools, Academy, Community, Events, Bookings, Inbox, Store, Membership and Profile, plus Bio-Well research, articles, demos, the practitioner directory, certification requests, affiliate access, CRM/software/marketplace, contact and the Elevate conference. If a live number, price, inventory count or member fact is not in the supplied context, say so plainly and open the correct live source instead of inventing one.',
+    'You can help with anything in the app and verified Gaia Healers ecosystem: Today, Journey, the three Energy Studio tools, Academy, Community, Events, Bookings, Inbox, Store, Membership and Profile, plus Bio-Well research, articles, demos, the practitioner directory, certification requests, affiliate access, CRM/software/marketplace, contact and the Elevate conference. If a live number, price, inventory count or member fact is not in the supplied context, say so plainly and open the correct live source instead of inventing one.',
     'Keep members in-app first. Course videos and community discussions open the separate education.gaiahealers.com portal, which has its own login — mention it only when they want the actual lessons or discussions, or need to sign in.',
     'Never narrate your reasoning, planning, hidden analysis, or drafting process. Do not say phrases like "I have crafted", "I am refining", or "finalizing".',
     'When asked to say exact words, say only those words and no extra explanation.',
@@ -3666,7 +3666,7 @@ async function bootstrap(req, url) {
       },
       dashboard: {
         ...(memberHubScoped.dashboard || {}),
-        welcomeTitle: 'Your Gaia dashboard is ready',
+        welcomeTitle: 'Your Gaia Healers dashboard is ready',
         welcomeDetail: 'Sign in once to load your own courses, communities, products, and certificates inside the app.',
         topCourse: 'Secure Academy workspace',
         topCourseMeta: 'Member login unlocks your course progress',
@@ -3964,14 +3964,24 @@ async function fetchJwks(url) {
   return jwks;
 }
 
+// Master switch for OAuth sign-in. The Apple/Google implementation stays fully
+// built and tested but invisible until this is explicitly turned on: with it
+// off, /providers reports nothing (so the sign-in sheet shows Magic Link only)
+// and the start/callback routes refuse. Set AUTH_OAUTH_ENABLED=true (with the
+// provider credentials in place) to re-enable social sign-in later.
+function oauthMasterEnabled() {
+  return String(process.env.AUTH_OAUTH_ENABLED || '').trim().toLowerCase() === 'true';
+}
+
 function authProviders(req, res, origin) {
   const cfg = oauthProviderConfig();
-  sendJson(res, 200, { google: cfg.google.enabled, apple: cfg.apple.enabled }, origin);
+  const on = oauthMasterEnabled();
+  sendJson(res, 200, { google: on && cfg.google.enabled, apple: on && cfg.apple.enabled }, origin);
 }
 
 function authOAuthStart(req, res, origin, url, provider) {
   const cfg = oauthProviderConfig();
-  if (!cfg[provider] || !cfg[provider].enabled) {
+  if (!oauthMasterEnabled() || !cfg[provider] || !cfg[provider].enabled) {
     sendRedirect(res, appAuthReturn('unavailable'), origin);
     return;
   }
@@ -3987,7 +3997,7 @@ function authOAuthStart(req, res, origin, url, provider) {
 
 async function completeOAuth(req, res, origin, provider, code, statePayload) {
   const cfg = oauthProviderConfig();
-  if (!cfg[provider] || !cfg[provider].enabled) { sendRedirect(res, appAuthReturn('unavailable'), origin); return; }
+  if (!oauthMasterEnabled() || !cfg[provider] || !cfg[provider].enabled) { sendRedirect(res, appAuthReturn('unavailable'), origin); return; }
   const redirectUri = oauthRedirectUri(provider);
 
   // ── token exchange ──
@@ -4177,13 +4187,13 @@ function fallbackAssistReply(prompt, intent = '') {
     return 'Bio-Well uses electrophotonic imaging for biofield and stress-oriented assessment; BioPulsar shows live aura, chakra and organ-zone biofeedback; BioTekna focuses on nervous-system, stress, recovery and physiology-related measurements. Open the Store for current device details or ask which goal you have.';
   }
   if ((normalized.includes('bio-well') || normalized.includes('biowell')) && normalized.includes('research')) {
-    return 'Bio-Well is Gaia Healers’ electrophotonic biofield-imaging system. Gaia maintains a public Bio-Well research library at gaiahealers.com/pages/bio-well-research; use research as background information, not personal medical diagnosis.';
+    return 'Bio-Well is Gaia Healers’ electrophotonic biofield-imaging system. Gaia Healers maintains a public Bio-Well research library at gaiahealers.com/pages/bio-well-research; use research as background information, not personal medical diagnosis.';
   }
   if (normalized.includes('join free') || normalized.includes('free member') || normalized.includes('free membership')) {
     return 'Open the Store’s Membership tab and choose Free, or use Join free on Today. Enrol with the same email you will use for your Gaia Healers Member Pass so GHL can connect your access.';
   }
   if (normalized.includes('crm') || normalized.includes('software') || normalized.includes('marketplace') || normalized.includes('affiliate') || normalized.includes('contact support') || normalized.includes('certification request')) {
-    return 'Gaia’s verified public tools include practitioner CRM at nextlevel.gaiahealers.com, software and marketplace through GaiaPractitioners, affiliate registration, certification requests, and the contact page. Tell me which one and I’ll point you to the exact source.';
+    return 'Gaia Healers’ verified public tools include practitioner CRM at nextlevel.gaiahealers.com, software and marketplace through GaiaPractitioners, affiliate registration, certification requests, and the contact page. Tell me which one and I’ll point you to the exact source.';
   }
   if (normalized.includes('book') || normalized.includes('scan') || normalized.includes('appointment') || normalized.includes('session') || normalized.includes('demo')) {
     return 'You can book a session from the Home screen — there are options for a Bio-Well energy scan, a Bio-Well demo, a free discovery call, and wellness coaching. Want me to point you to the right one?';
@@ -4192,7 +4202,7 @@ function fallbackAssistReply(prompt, intent = '') {
     return 'Open Energy Studio and choose Horoscope. Type at least three letters of your birth city and select it from the worldwide suggestions so Gaia can resolve the correct time zone. Add birth time if you know it; otherwise Gaia uses local noon and labels the map as an estimate. The seven planet placements are astronomical calculations, while the chakra spotlight, element reflection, practice, and journal question are symbolic wellness guidance—not prediction or medical advice.';
   }
   if (normalized.includes('birth map') || normalized.includes('birth date') || normalized.includes('birthday') || normalized.includes('year')) {
-    return 'In Energy Check, choose your birth month and type the day and 4-digit year—there is no calendar to scroll through. Your Gaia birth map combines a birth-date-number chakra with a sun-sign reflection, then offers a gentle practice, journal prompt, and matching Gaia support. It is reflective guidance, not a scan or prediction.';
+    return 'In Energy Check, choose your birth month and type the day and 4-digit year—there is no calendar to scroll through. Your Gaia birth map combines a birth-date-number chakra with a sun-sign reflection, then offers a gentle practice, journal prompt, and matching Gaia Healers support. It is reflective guidance, not a scan or prediction.';
   }
   if (normalized.includes('chakra match') || normalized.includes('seven centre') || normalized.includes('seven center')) {
     return 'Open Energy Studio and choose Chakra match to explore all seven centres and the matching Colour Energy support. You can tap any centre without signing in.';
@@ -4201,7 +4211,7 @@ function fallbackAssistReply(prompt, intent = '') {
     return 'Energy Studio has three separate tools: Energy check for today’s body point and practice, Horoscope for reflective daily guidance, and Chakra match for the seven-centre guide. The five-question Colour Test is in Profile.';
   }
   if (normalized.includes('community') || normalized.includes('membership') || normalized.includes('healer') || normalized.includes('practitioner')) {
-    return 'Community shows which Gaia circles you have unlocked and links to the practitioner directory. The Store’s Membership tab shows the official Free, Silver, Gold, and Diamond Gaia 2.0 paths and opens enrolment inside the app. Want me to guide you there?';
+    return 'Community shows which Gaia Healers circles you have unlocked and links to the practitioner directory. The Store’s Membership tab shows the official Free, Silver, Gold, and Diamond Gaia 2.0 paths and opens enrolment inside the app. Want me to guide you there?';
   }
   if (normalized.includes('course') || normalized.includes('academy') || normalized.includes('certification') || normalized.includes('login') || normalized.includes('sign in') || normalized.includes('portal')) {
     return 'Academy has your courses — the lessons open in the education.gaiahealers.com portal, which has its own login. To sign in to the app, tap Sign in and use the one-tap link we email to your member address.';
@@ -4220,9 +4230,9 @@ function fallbackAssistReply(prompt, intent = '') {
     return 'No event is published right now. When one is, it appears on the Events screen with its agenda, speakers and exhibitors.';
   }
   if (normalized.includes('research') || normalized.includes('blog') || normalized.includes('article') || normalized.includes('contact')) {
-    return 'I can open the verified Gaia source for Bio-Well research, articles, affiliate access, practitioner CRM/software/marketplace, certification requests, or contact support. Tell me which one you need.';
+    return 'I can open the verified Gaia Healers source for Bio-Well research, articles, affiliate access, practitioner CRM/software/marketplace, certification requests, or contact support. Tell me which one you need.';
   }
-  return 'I can help across the full Gaia ecosystem: Energy Studio, Academy, Community, events, bookings, membership, live products, practitioners, research, articles, demos, certification, practitioner tools, contact, or Dr. Nima. What would you like to explore?';
+  return 'I can help across the full Gaia Healers ecosystem: Energy Studio, Academy, Community, events, bookings, membership, live products, practitioners, research, articles, demos, certification, practitioner tools, contact, or Dr. Nima. What would you like to explore?';
 }
 
 function assistSystemPrompt(memberContext = '') {

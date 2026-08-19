@@ -301,7 +301,7 @@ function storeView(catalog, registry, { includeUnobserved = false } = {}) {
   const familyOf = (canonicalKey) => registry?.canonical?.[canonicalKey]?.family || null;
 
   const sections = new Map(STORE_CATEGORIES.map((c) => [c.key, { ...c, products: [] }]));
-  const other = { key: 'other', label: 'More from Gaia', order: 99, products: [] };
+  const other = { key: 'other', label: 'More from Gaia Healers', order: 99, products: [] };
 
   for (const product of Object.values(catalog.products || {})) {
     if (product.hidden) continue;

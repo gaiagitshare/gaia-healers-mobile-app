@@ -256,7 +256,7 @@ body.gaia-booking-open{overflow:hidden;}
     if (!ev || !ev.name) {
       return '<div class="g-event-hero__content">'
         + '<p class="g-event-hero__kicker">Upcoming gathering</p>'
-        + '<h1 class="g-event-hero__title">Gaia <em>gatherings</em></h1>'
+        + '<h1 class="g-event-hero__title">Gaia Healers <em>gatherings</em></h1>'
         + '<p class="g-event-hero__summary">Connect with healers, practitioners, and conscious leaders. The next confirmed gathering will appear here.</p>'
         + '<span class="g-event-hero__status">Event details coming soon</span></div>';
     }
@@ -445,7 +445,7 @@ body.gaia-booking-open{overflow:hidden;}
     inAppModal.innerHTML = '<div class="gaia-booking-modal__backdrop" data-reader-close></div>'
       + '<div class="gaia-booking-modal__sheet">'
       + '<div class="gaia-booking-modal__head">'
-      + '<p class="gaia-booking-modal__title">' + escapeHtml(title || 'Gaia') + '</p>'
+      + '<p class="gaia-booking-modal__title">' + escapeHtml(title || 'Gaia Healers') + '</p>'
       + '<button type="button" class="gaia-booking-modal__close" data-reader-close aria-label="Close">&times;</button>'
       + '</div>'
       + '<div class="gaia-booking-modal__body gaia-reader__body">'

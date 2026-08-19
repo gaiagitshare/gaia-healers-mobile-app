@@ -524,10 +524,16 @@ body.gaia-v2 .g-super-home > section + section {
 }
 
 @media (max-width: 379px) {
+  /* Narrowest phones get a tighter gutter. Set on the token, not just on the
+     content: the header reads --fit-pad too, and overriding only the content
+     left the brand 4px inside the cards it sits above. */
+  body.gaia-v2,
+  body.gaia-app { --fit-pad: 12px; }
+
   body.gaia-v2 .g-home,
   body.gaia-v2 .g-page,
   body.gaia-v2 .g-store {
-    padding-inline: 12px;
+    padding-inline: var(--fit-pad);
   }
 
   body.gaia-v2 .g-super-hero h1,

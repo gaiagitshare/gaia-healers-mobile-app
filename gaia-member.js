@@ -489,12 +489,31 @@ body.gaia-booking-open{overflow:hidden;}
     if (data && data.ok && data.kind === 'list' && data.articles.length) {
       body.innerHTML = '<div class="gaia-reader__list">'
         + data.articles.map((a) => '<a class="gaia-reader__item" href="' + escapeHtml(a.url)
-          + '" target="_blank" rel="noopener noreferrer"><strong>' + escapeHtml(a.title) + '</strong>'
+          + '"><strong>' + escapeHtml(a.title) + '</strong>'
           + (a.summary ? '<span>' + escapeHtml(a.summary) + '</span>' : '') + '</a>').join('')
         + '</div>';
+      // Reading an article should stay in the app, not hand off to a browser tab.
+      body.addEventListener('click', (e) => {
+        const link = e.target.closest('.gaia-reader__item');
+        if (!link) return;
+        e.preventDefault();
+        openReader(link.getAttribute('href'), link.querySelector('strong').textContent);
+      });
     } else if (data && data.ok && data.html) {
       // Sanitised on the server; rendered inside Gaia's own typography.
       body.innerHTML = '<article class="gaia-reader__article">' + data.html + '</article>';
+      const article = body.firstElementChild;
+      // The sheet header already shows the title; the page repeating it reads as a bug.
+      const lead = article.querySelector('h1, h2');
+      if (lead && data.title
+        && lead.textContent.trim().toLowerCase() === data.title.trim().toLowerCase()) lead.remove();
+      // Source pages hotlink third-party logos that no longer resolve. A broken-image
+      // icon looks like our failure, so drop images that do not load.
+      article.querySelectorAll('img').forEach((img) => {
+        const drop = () => img.remove();
+        img.addEventListener('error', drop, { once: true });
+        if (img.complete && img.naturalWidth === 0) drop();
+      });
     } else {
       // Never a dead end: the page still exists, so offer the real thing.
       body.innerHTML = '<div class="gaia-reader__fallback">'

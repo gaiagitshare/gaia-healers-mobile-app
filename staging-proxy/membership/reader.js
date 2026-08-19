@@ -48,6 +48,10 @@ function sanitize(html, baseUrl) {
     out = out.replace(new RegExp(`<${tag}\\b[\\s\\S]*?</${tag}>`, 'gi'), '');
     out = out.replace(new RegExp(`<${tag}\\b[^>]*/?>`, 'gi'), '');
   }
+  // Head-only tags leak into Shopify page bodies; they render as stray text.
+  for (const tag of ['meta', 'link', 'title', 'base', 'input', 'button', 'select', 'textarea']) {
+    out = out.replace(new RegExp(`<${tag}\\b[^>]*>`, 'gi'), '');
+  }
   // Inline handlers and javascript: targets.
   out = out.replace(/\son[a-z]+\s*=\s*("[^"]*"|'[^']*'|[^\s>]+)/gi, '');
   out = out.replace(/\s(?:href|src)\s*=\s*("|')\s*javascript:[^"']*\1/gi, ' href="#"');

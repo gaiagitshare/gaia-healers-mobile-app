@@ -58,3 +58,12 @@ test('decodeEntities handles named, decimal and hex forms', () => {
   assert.equal(decodeEntities('&notareal; stays'), '&notareal; stays');
   assert.equal(decodeEntities('&#999999999999;'), '&#999999999999;', 'out of range is left alone');
 });
+
+test('sanitize drops head-only tags that leak into Shopify page bodies', () => {
+  const clean = sanitize('<meta charset="UTF-8"><link rel="x"><title>t</title><p>Real text</p>',
+    'https://gaiahealers.com/pages/x');
+  for (const leak of ['<meta', '<link', '<title']) {
+    assert.ok(!clean.toLowerCase().includes(leak), 'leaked: ' + leak);
+  }
+  assert.ok(clean.includes('Real text'));
+});

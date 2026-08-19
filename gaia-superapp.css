@@ -449,9 +449,10 @@ body.gaia-v2 .gaia-chakra-map__list-item, body.gaia-v2 .gaia-chakra-map--screen 
   /* The header's padding used to be derived from 100vw, which counts the
      scrollbar the layout viewport does not — so it came out 4px wider than
      <main>'s and the brand sat 4px inside the hero's left edge, the Menu
-     button 4px inside the content's right edge. Matching <main>'s own 40px
-     puts both flush with the column they head. */
-  body.gaia-v2 .g-topbar { padding-left: 40px !important; padding-right: 40px !important; }
+     button 4px inside the content's right edge. --fit-pad is the gutter the
+     content itself already uses (36px here, 40px past 1100px), so reading it
+     keeps the header flush at every width rather than at one of them. */
+  body.gaia-v2 .g-topbar { padding-left: var(--fit-pad, 40px) !important; padding-right: var(--fit-pad, 40px) !important; }
   /* Sized for the desktop bar rather than the phone one: a 26px mark under a
      17px wordmark read as small against a 68px header. */
   body.gaia-v2 .g-topbar__brand { font-size: 19px; gap: 10px; }

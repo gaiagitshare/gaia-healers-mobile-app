@@ -1564,10 +1564,12 @@ body.gaia-v2 .g-super-home .g-feature-event__actions .g-btn{white-space:nowrap}
      was cropped — a tall panel cut the lettering to "alers / ATE / TRANSFOR" —
      but contained, a taller band simply shows the poster larger. */
   body.gaia-v2 .g-super-home > .g-feature-event{align-self:stretch !important;
-    height:100% !important}
-  /* The banner absorbs the extra height; the details keep their own. */
+    height:100% !important;min-height:0}
+  /* The banner absorbs the extra height; the details keep their own. The floor
+     is low enough that the event's own content can never define the row —
+     when it did, the hero sat short beside it at 320px against 554px. */
   body.gaia-v2 .g-super-home .g-feature-event .g-feature-event__art{flex:1 1 auto !important;
-    width:100%;height:auto !important;min-height:180px}
+    width:100%;height:auto !important;min-height:140px}
   body.gaia-v2 .g-super-home .g-feature-event .g-feature-event__art img{object-fit:contain}
 
   /* Matching the hero's height left the card's contents behind: a 19px title
@@ -1605,4 +1607,14 @@ body.gaia-v2 .g-super-home .g-feature-event__actions .g-btn{white-space:nowrap}
     flex:1 1 auto;align-content:stretch;gap:14px !important}
   body.gaia-v2 .g-super-home .g-free-tool{min-height:0 !important;height:100%;
     justify-content:center}
+}
+
+/* Between 900 and 1059 the hero still carries its single-column cap (40dvh,
+   sized so two stacked cards clear the tab bar). Side by side that cap is the
+   wrong constraint — the pair costs one card's height, not two — and it left
+   the hero 320px tall beside a 554px event. Past 1060 the hero has its own
+   height and this band does not apply. */
+@media (min-width:900px) and (max-width:1059px){
+  body.gaia-v2 .g-super-home > .g-super-hero{aspect-ratio:auto !important;
+    max-height:none !important;height:clamp(400px,52dvh,560px) !important}
 }

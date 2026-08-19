@@ -1161,22 +1161,23 @@ body.gaia-v2 .g-super-home .g-super-hero{border:1px solid var(--g-line);
   background:linear-gradient(180deg,rgba(4,7,10,.18) 0%,rgba(4,7,10,.55) 55%,rgba(4,7,10,.9) 100%)}
 @media (max-width:480px){
   .g-super-home .g-super-hero__art{inset:0;height:auto;opacity:.8}
-  body.gaia-v2 .g-super-home .g-super-hero .g-super-hero__intro{min-height:340px;
-    display:grid;align-content:end;padding:18px 16px 18px}
-  .g-super-hero__intro h1{font-size:36px}
+  body.gaia-v2 .g-super-home .g-super-hero .g-super-hero__intro{min-height:0;
+    display:grid;align-content:end;padding:12px 14px 12px}
+  .g-super-hero__intro h1{font-size:28px}
   body.gaia-v2 .g-super-hero__intro::before{background:transparent}
 }
 
-/* Elevate: the artwork gets a real banner on top; the details sit under it. */
-.g-feature-event{flex-direction:column;min-height:0}
-.g-feature-event__art{position:relative;inset:auto;height:190px;border-radius:0}
+/* Elevate: the poster is the card; copy sits on it so the first fold can
+   hold greeting + event without stacking a 190px banner under the photo. */
+.g-feature-event{position:relative;flex-direction:column;min-height:0}
+.g-feature-event__art{position:absolute;inset:0;height:auto;border-radius:0}
 .g-feature-event__art img{opacity:1;transform:none;filter:none;object-position:center 30%}
-.g-feature-event__art::after{background:linear-gradient(180deg,transparent 40%,rgba(4,7,10,.75) 100%)}
-.g-feature-event__body{margin-top:0;padding:14px 16px 16px}
+.g-feature-event__art::after{background:linear-gradient(180deg,transparent 28%,rgba(4,7,10,.55) 62%,rgba(4,7,10,.94) 100%)}
+.g-feature-event__body{margin-top:auto;padding:14px 16px 16px}
 .g-feature-event__where{display:flex;align-items:center;gap:5px}
 .g-feature-event__where svg{width:14px;height:14px;color:var(--g-accent)}
 @media (max-width:480px){
-  .g-feature-event .g-feature-event__art{height:170px}
+  .g-feature-event .g-feature-event__art{height:auto}
   .g-feature-event .g-feature-event__art img{opacity:1}
   .g-feature-event__title{font-size:1.12rem}
   .g-feature-event__meta{font-size:.82rem}
@@ -1252,20 +1253,20 @@ body.gaia-v2 .g-super-home .g-super-hero{border:1px solid var(--g-line);
    hero art gets a soft shadow, every block inside the sky card gets clear
    separation, and nothing sits closer than it needs to. */
 @media (max-width: 480px){
-  .g-super-home{gap:16px}
+  .g-super-home{gap:8px}
 
   /* Hero: words seated with intention, not stacked in a corner. */
   body.gaia-v2 .g-super-home .g-super-hero .g-super-hero__intro{
-    min-height:330px;padding:20px 18px 22px;row-gap:0}
-  .g-super-hero__intro .g-super-date{margin:0 0 8px;text-shadow:0 1px 8px rgba(0,0,0,.6)}
-  .g-super-hero__intro h1{font-size:34px;line-height:1.05;margin:0 0 8px;
+    min-height:0;padding:12px 14px 12px;row-gap:0}
+  .g-super-hero__intro .g-super-date{margin:0 0 4px;text-shadow:0 1px 8px rgba(0,0,0,.6)}
+  .g-super-hero__intro h1{font-size:26px;line-height:1.05;margin:0 0 4px;
     text-shadow:0 2px 14px rgba(0,0,0,.65)}
-  .g-super-hero__intro > p:not(.g-super-date){margin:0 0 18px;font-size:15px;
+  .g-super-hero__intro > p:not(.g-super-date){margin:0 0 10px;font-size:13px;
     color:rgba(255,255,255,.82);text-shadow:0 1px 10px rgba(0,0,0,.6)}
 
-  /* Elevate: the banner shows the poster, the body gets real padding. */
-  .g-feature-event .g-feature-event__art{height:172px}
-  .g-feature-event__body{padding:16px;gap:8px}
+  /* Elevate: poster is the card; copy sits on it so the fold can hold both. */
+  .g-feature-event .g-feature-event__art{position:absolute;inset:0;height:auto}
+  .g-feature-event__body{padding:12px;gap:6px}
   .g-feature-event__meta{font-size:.84rem;color:rgba(255,255,255,.72)}
   .g-feature-event__actions{margin-top:10px;gap:10px}
 
@@ -1315,14 +1316,14 @@ body.gaia-v2 .g-super-home .g-super-hero{border:1px solid var(--g-line);
 @media (min-width: 1060px){
   /* Hero: full-bleed art, words bottom-left, air everywhere. */
   body.gaia-v2 .g-super-home .g-super-hero{position:relative;display:block;
-    min-height:460px;border-radius:26px}
+    min-height:0;border-radius:26px}
   .g-super-home .g-super-hero__art{position:absolute;inset:0;border-left:0;
     background-position:center 26%;opacity:.9}
   .g-super-home .g-super-hero__art::after{
     background:linear-gradient(100deg,rgba(4,7,10,.82) 0%,rgba(4,7,10,.35) 45%,rgba(4,7,10,.05) 75%),
       linear-gradient(180deg,transparent 45%,rgba(4,7,10,.8) 100%)}
   body.gaia-v2 .g-super-home .g-super-hero .g-super-hero__intro{position:relative;
-    z-index:1;min-height:460px;max-width:620px;display:grid;align-content:end;
+    z-index:1;min-height:0;max-width:620px;display:grid;align-content:end;
     padding:40px 44px;row-gap:0}
   .g-super-home .g-super-hero__intro h1{font-size:56px;line-height:1.02;margin:0 0 10px;
     text-shadow:0 2px 18px rgba(0,0,0,.6)}
@@ -1330,13 +1331,13 @@ body.gaia-v2 .g-super-home .g-super-hero{border:1px solid var(--g-line);
   .g-super-home .g-super-hero__intro > p:not(.g-super-date){margin:0 0 22px;
     font-size:17px;color:rgba(255,255,255,.85);text-shadow:0 1px 12px rgba(0,0,0,.55)}
 
-  /* Elevate: poster left at a width it stays sharp; details centred right. */
-  .g-feature-event{flex-direction:row;align-items:stretch;min-height:270px}
-  .g-feature-event__art{flex:0 0 440px;height:auto;border-radius:0}
+  /* Elevate: same overlay card as mobile, stretched beside the greeting. */
+  .g-feature-event{flex-direction:column;align-items:stretch;min-height:0}
+  .g-feature-event__art{position:absolute;inset:0;flex:none;height:auto;border-radius:0}
   .g-feature-event__art img{object-position:center 35%}
   .g-feature-event__art::after{
-    background:linear-gradient(90deg,transparent 55%,var(--g-surface) 100%)}
-  .g-feature-event__body{flex:1;justify-content:center;padding:28px 34px;gap:10px}
+    background:linear-gradient(180deg,transparent 32%,rgba(4,7,10,.55) 68%,rgba(4,7,10,.94) 100%)}
+  .g-feature-event__body{flex:none;margin-top:auto;justify-content:flex-end;padding:22px 26px;gap:10px}
   .g-feature-event__title{font-size:1.7rem}
   .g-feature-event__meta{font-size:.95rem}
   .g-feature-event__actions{margin-top:12px;gap:12px}

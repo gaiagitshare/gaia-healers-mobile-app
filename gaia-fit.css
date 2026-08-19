@@ -1,0 +1,1219 @@
+/* Gaia fit — last cascade layer.
+   Type, frames, and overflow so every public screen sizes to the viewport
+   instead of clipping, stretching, or colliding. Phone first, then desktop,
+   then tablet. */
+
+html,
+body.gaia-app,
+body.gaia-v2 {
+  max-width: 100%;
+  overflow-x: clip;
+}
+
+body.gaia-v2,
+body.gaia-app {
+  --fit-pad: 16px;
+  --fit-gap: 14px;
+  --fit-title: clamp(1.7rem, 7.2vw, 2.15rem);
+  --fit-display: clamp(1.85rem, 8vw, 2.35rem);
+  --fit-section: clamp(1.28rem, 4.6vw, 1.7rem);
+  --fit-body: 0.9375rem;
+  --fit-muted: 0.8125rem;
+  --fit-radius: 20px;
+}
+
+body.gaia-v2 .gaia-shell,
+body.gaia-v2 .gaia-main,
+body.gaia-v2 .g-home,
+body.gaia-v2 .g-page,
+body.gaia-v2 .g-store,
+body.gaia-v2 .g-super-home,
+.gaia-splash-shell,
+.gaia-splash-content {
+  min-width: 0;
+  max-width: 100%;
+}
+
+body.gaia-v2 .gaia-main {
+  overflow-x: visible;
+}
+
+body.gaia-v2 .gaia-main > *,
+body.gaia-v2 .g-super-home > *,
+body.gaia-v2 .g-page > *,
+body.gaia-v2 .g-store > *,
+body.gaia-v2 .g-card,
+body.gaia-v2 .g-super-list,
+body.gaia-v2 .g-super-empty-panel,
+body.gaia-v2 .g-super-services,
+body.gaia-v2 .g-feature-event,
+body.gaia-v2 .g-free-tools,
+body.gaia-v2 .g-pass,
+body.gaia-v2 .g-next {
+  min-width: 0;
+  max-width: 100%;
+}
+
+body.gaia-v2 h1,
+body.gaia-v2 h2,
+body.gaia-v2 h3,
+body.gaia-v2 p,
+body.gaia-v2 small,
+body.gaia-v2 strong,
+body.gaia-v2 .g-card__meta,
+body.gaia-v2 .g-super-page-head > p,
+.gaia-splash-title,
+.gaia-splash-body {
+  max-width: 100%;
+  overflow-wrap: break-word;
+  word-wrap: break-word;
+  white-space: normal;
+}
+
+body.gaia-v2 .g-super-empty-panel {
+  display: grid;
+  justify-content: start;
+  align-items: start;
+  gap: 8px;
+}
+
+body.gaia-v2 .g-super-empty-panel h2,
+body.gaia-v2 .g-super-empty-panel p {
+  max-width: 48ch;
+}
+
+body.gaia-v2 .g-super-empty-panel p {
+  margin-top: 0;
+}
+
+body.gaia-v2 .g-super-home > section + section {
+  margin-top: 0;
+}
+
+/* —— Phone ——————————————————————————————————————————————————————————— */
+@media (max-width: 699px) {
+  body.gaia-v2 .g-home,
+  body.gaia-v2 .g-page,
+  body.gaia-v2 .g-store {
+    gap: var(--fit-gap);
+    padding: 8px var(--fit-pad) calc(118px + env(safe-area-inset-bottom, 0px));
+  }
+
+  body.gaia-v2 .g-topbar {
+    min-height: 56px;
+    padding: 8px var(--fit-pad);
+  }
+
+  body.gaia-v2 .g-topbar__brand {
+    min-width: 0;
+    font-size: 16px;
+  }
+
+  body.gaia-v2 .g-super-page-head,
+  body.gaia-v2 .g-page__head,
+  body.gaia-v2 .g-store__head {
+    min-height: 0;
+    margin-bottom: 16px;
+    padding: 18px 16px;
+    border-radius: var(--fit-radius);
+  }
+
+  body.gaia-v2 .g-super-page-head {
+    padding: 8px 2px 12px;
+    background: none;
+    border: 0;
+  }
+
+  body.gaia-v2 .g-super-page-head h1,
+  body.gaia-v2 .g-page__title,
+  body.gaia-v2 .g-store__title {
+    font-size: var(--fit-title) !important;
+    line-height: 1.12;
+    letter-spacing: -0.03em;
+  }
+
+  body.gaia-v2 .g-super-page-head > p:last-child,
+  body.gaia-v2 .g-page__sub {
+    margin-top: 8px;
+    max-width: 46ch;
+    font-size: var(--fit-body);
+    line-height: 1.5;
+  }
+
+  body.gaia-v2 .g-super-section-head h2,
+  body.gaia-v2 .g-section__title,
+  body.gaia-v2 .g-sec-head__title {
+    font-size: var(--fit-section);
+    line-height: 1.15;
+  }
+
+  /* First fold: greeting + Elevate card must both fit on a phone
+     without scrolling. Heights are set in the fold budget at the
+     end of this file so they win over older min-height rules. */
+  body.gaia-v2 .g-super-home {
+    gap: 8px;
+  }
+  body.gaia-v2 .g-super-home > section + section {
+    margin-top: 0;
+  }
+
+  body.gaia-v2 .g-super-hero h1 {
+    max-width: 16ch;
+    font-size: 1.35rem !important;
+    line-height: 1.08;
+  }
+
+  body.gaia-v2 .g-super-home .g-super-hero {
+    position: relative;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    min-height: 0;
+  }
+
+  body.gaia-v2 .g-super-home .g-super-hero__art {
+    position: absolute;
+    z-index: 0;
+    inset: 0;
+    height: auto;
+    min-height: 0;
+    opacity: 0.94;
+    border: 0;
+  }
+
+  body.gaia-v2 .g-super-home .g-super-hero__art img {
+    object-position: center 50%;
+  }
+
+  body.gaia-v2 .g-super-home .g-super-hero .g-super-hero__intro {
+    position: relative;
+    z-index: 2;
+    min-height: 0 !important;
+    height: 100%;
+    align-content: start;
+    background: transparent;
+    padding: clamp(10px, 2.6vw, 14px) clamp(12px, 3.4vw, 16px) clamp(12px, 2vw, 16px);
+  }
+
+  body.gaia-v2 .g-super-home .g-super-hero .g-super-hero__intro::before {
+    content: "";
+    position: absolute;
+    z-index: -1;
+    inset: 0;
+    background: linear-gradient(180deg, rgba(7, 16, 10, .32) 0%, rgba(7, 16, 10, .1) 40%, rgba(7, 16, 10, .5) 100%);
+  }
+
+  body.gaia-v2 .g-super-hero__intro .g-super-date {
+    margin: 0 0 4px;
+  }
+
+  body.gaia-v2 .g-super-hero__intro > p:not(.g-super-date) {
+    max-width: 28ch;
+    margin: 0 0 10px;
+    font-size: 0.875rem;
+    line-height: 1.35;
+  }
+
+  /* Side-by-side on the fold so labels stay whole and the stack stays short. */
+  body.gaia-v2 .g-super-home .g-super-discover {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    width: 100%;
+    max-width: 100%;
+    margin-top: 0;
+  }
+
+  body.gaia-v2 .g-super-home .g-super-discover .g-btn {
+    flex: 1 1 auto;
+    width: auto;
+    min-width: 0;
+    min-height: 40px;
+    padding: 8px 12px;
+    justify-content: center;
+    white-space: nowrap;
+    font-size: 13px;
+  }
+
+  body.gaia-v2 .g-super-actions .g-btn,
+  body.gaia-v2 .g-pass__actions .g-btn,
+  body.gaia-v2 .g-member-access .g-btn {
+    width: 100%;
+    min-width: 0;
+    justify-content: center;
+    white-space: nowrap;
+  }
+
+  body.gaia-v2 .g-super-home .g-feature-event {
+    min-height: 0;
+  }
+
+  body.gaia-v2 .g-super-home .g-feature-event .g-feature-event__art {
+    height: 100%;
+  }
+
+  body.gaia-v2 .g-super-home .g-feature-event .g-feature-event__art img {
+    opacity: 1;
+    object-fit: cover;
+    object-position: center 40%;
+  }
+
+  body.gaia-v2 .g-super-home .g-feature-event__body {
+    padding: 10px 12px 12px;
+    gap: 5px;
+  }
+
+  body.gaia-v2 .g-feature-event__title {
+    font-size: 1.05rem;
+    line-height: 1.22;
+    overflow: visible;
+    display: block;
+    -webkit-line-clamp: unset;
+  }
+
+  body.gaia-v2 .g-feature-event__meta {
+    font-size: var(--fit-muted);
+    line-height: 1.35;
+  }
+
+  body.gaia-v2 .g-super-home .g-feature-event__actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    width: 100%;
+    margin-top: 4px;
+  }
+
+  body.gaia-v2 .g-super-home .g-feature-event__actions .g-btn {
+    flex: 1 1 0;
+    width: auto;
+    min-width: 0;
+    min-height: 40px;
+    padding: 8px 10px;
+    justify-content: center;
+    white-space: nowrap;
+    font-size: 13px;
+  }
+
+  body.gaia-v2 .g-super-actions,
+  body.gaia-v2 .g-pass__actions {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 8px;
+    width: 100%;
+  }
+
+  /* Two readable doors per row on phones; four across is too tight. */
+  body.gaia-v2 .g-free-tools {
+    padding: 16px 14px;
+  }
+
+  body.gaia-v2 .g-free-tools__grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
+  }
+
+  body.gaia-v2 .g-free-tool {
+    min-height: 96px;
+    gap: 8px;
+    padding: 14px 10px;
+  }
+
+  body.gaia-v2 .g-free-tool strong {
+    font-size: 13px;
+    line-height: 1.25;
+  }
+
+  body.gaia-v2 .g-tabs {
+    width: 100%;
+    max-width: 100%;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  body.gaia-v2 .g-tab {
+    min-width: 0;
+    padding: 10px 8px;
+    font-size: 13px;
+  }
+
+  body.gaia-v2 .g-energy-switcher {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  body.gaia-v2 .g-energy-switcher button {
+    min-height: 58px;
+    padding: 8px 4px;
+    font-size: 10px;
+  }
+
+  body.gaia-v2 .g-energy-intro h2 {
+    font-size: var(--fit-title);
+  }
+
+  body.gaia-v2 .g-super-service__copy strong,
+  body.gaia-v2 .g-super-event__copy strong {
+    font-size: 1.2rem;
+  }
+
+  body.gaia-v2 .g-super-empty-panel,
+  body.gaia-v2 .g-degraded,
+  body.gaia-v2 .g-super-list {
+    padding: 16px;
+    border-radius: var(--fit-radius);
+  }
+
+  body.gaia-v2 .g-super-empty-panel h2,
+  body.gaia-v2 .g-pass__title {
+    font-size: var(--fit-section);
+    line-height: 1.15;
+  }
+
+  body.gaia-v2 .g-tile__title {
+    white-space: normal;
+    -webkit-line-clamp: 2;
+  }
+
+  body.gaia-v2 .gaia-tabbar {
+    left: 10px !important;
+    right: 10px !important;
+    width: auto !important;
+    max-width: none !important;
+    padding: 0 0 max(6px, env(safe-area-inset-bottom)) !important;
+    transform: none !important;
+  }
+
+  body.gaia-v2 .gaia-tabbar__inner {
+    width: 100%;
+    max-width: none !important;
+    min-width: 0;
+  }
+
+  body.gaia-v2 .gaia-tabbar__link {
+    min-width: 0;
+    flex: 1 1 0;
+    overflow: visible;
+  }
+
+  body.gaia-v2 .gaia-tabbar__label {
+    display: block !important;
+    max-width: 100%;
+    overflow: visible;
+    font-size: 10px !important;
+    text-overflow: clip;
+  }
+
+  body.gaia-v2 .gaia-tabbar__assist {
+    width: 50px;
+    height: 50px;
+    margin: -0.4rem 2px 0;
+  }
+
+  .g-install {
+    z-index: 80;
+    bottom: calc(86px + env(safe-area-inset-bottom, 0px));
+    padding: 0 12px;
+  }
+
+  .g-install__panel {
+    max-width: 100%;
+    min-width: 0;
+    padding: 14px;
+    gap: 10px;
+  }
+
+  .g-install__head,
+  .g-install__head > div {
+    min-width: 0;
+  }
+
+  .g-install__title {
+    font-size: 0.95rem;
+  }
+
+  .g-install__sub {
+    overflow: visible;
+    white-space: normal;
+  }
+
+  .g-install__actions {
+    flex-wrap: wrap;
+  }
+
+  .g-install__actions .g-btn {
+    min-width: 0;
+  }
+
+  body:has(.gaia-assist-nudge) .g-install {
+    bottom: calc(168px + env(safe-area-inset-bottom, 0px));
+  }
+
+  .gaia-assist-nudge {
+    width: min(100% - 24px, 360px);
+    min-width: 0;
+    bottom: max(96px, calc(env(safe-area-inset-bottom, 0px) + 84px));
+  }
+
+  body:has(.gaia-assist-nudge) .g-home,
+  body:has(.gaia-assist-nudge) .g-page,
+  body:has(.gaia-assist-nudge) .g-store {
+    padding-bottom: calc(186px + env(safe-area-inset-bottom, 0px));
+  }
+
+  body:has(.g-install) .g-home,
+  body:has(.g-install) .g-page,
+  body:has(.g-install) .g-store {
+    padding-bottom: calc(168px + env(safe-area-inset-bottom, 0px));
+  }
+
+  body:has(.g-install):has(.gaia-assist-nudge) .g-home,
+  body:has(.g-install):has(.gaia-assist-nudge) .g-page,
+  body:has(.g-install):has(.gaia-assist-nudge) .g-store {
+    padding-bottom: calc(248px + env(safe-area-inset-bottom, 0px));
+  }
+
+  .gaia-splash-shell {
+    padding: max(0.85rem, env(safe-area-inset-top)) 1.15rem max(1.1rem, env(safe-area-inset-bottom));
+  }
+
+  .gaia-splash-content,
+  .gaia-splash-footer {
+    max-width: min(100%, 22.5rem);
+  }
+
+  .gaia-splash-title {
+    font-size: clamp(1.65rem, 7vw, 2.15rem);
+  }
+
+  .gaia-splash-body {
+    max-width: 34ch;
+    font-size: 0.9375rem;
+    line-height: 1.5;
+  }
+
+  .gaia-splash-btn {
+    width: 100%;
+    min-height: 48px;
+  }
+}
+
+@media (max-width: 699px) and (max-height: 700px) {
+  body.gaia-v2 .g-super-home .g-super-hero {
+    min-height: 0;
+  }
+}
+
+@media (max-width: 379px) {
+  body.gaia-v2 .g-home,
+  body.gaia-v2 .g-page,
+  body.gaia-v2 .g-store {
+    padding-inline: 12px;
+  }
+
+  body.gaia-v2 .g-super-hero h1,
+  body.gaia-v2 .g-super-page-head h1 {
+    font-size: 1.55rem !important;
+  }
+
+  body.gaia-v2 .gaia-tabbar__label {
+    font-size: 9px !important;
+  }
+}
+
+/* —— Desktop ———————————————————————————————————————————————————————— */
+@media (min-width: 1100px) {
+  body.gaia-v2 {
+    --fit-title: clamp(2.35rem, 3vw, 2.85rem);
+    --fit-display: clamp(2.6rem, 3.4vw, 3.5rem);
+    --fit-section: 1.85rem;
+    --fit-body: 1.02rem;
+    --fit-pad: 40px;
+  }
+
+  body.gaia-v2 .g-home,
+  body.gaia-v2 .g-page,
+  body.gaia-v2 .g-store {
+    padding: 28px var(--fit-pad) 56px;
+  }
+
+  body.gaia-v2 .g-super-page-head h1,
+  body.gaia-v2 .g-page__title,
+  body.gaia-v2 .g-store__title {
+    font-size: var(--fit-title) !important;
+    line-height: 1.08;
+  }
+
+  body.gaia-v2 .g-super-page-head > p:last-child,
+  body.gaia-v2 .g-page__sub,
+  body.gaia-v2 .g-energy-intro > p:last-child {
+    max-width: 62ch;
+    font-size: var(--fit-body);
+    line-height: 1.6;
+  }
+
+  body.gaia-v2 .g-super-hero h1 {
+    font-size: var(--fit-display) !important;
+    max-width: 14ch;
+  }
+
+  body.gaia-v2 .g-super-discover {
+    display: flex;
+    flex-wrap: wrap;
+    width: auto;
+  }
+
+  body.gaia-v2 .g-super-discover .g-btn,
+  body.gaia-v2 .g-feature-event__actions .g-btn {
+    width: auto;
+  }
+
+  body.gaia-v2 .g-feature-event__actions,
+  body.gaia-v2 .g-super-actions,
+  body.gaia-v2 .g-pass__actions {
+    display: flex;
+    flex-wrap: wrap;
+    width: auto;
+  }
+
+  body.gaia-v2 .g-free-tools__grid {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 12px;
+  }
+
+  body.gaia-v2 .g-free-tool {
+    min-height: 128px;
+    padding: 18px 14px;
+  }
+
+  body.gaia-v2 .g-free-tool strong {
+    font-size: 14px;
+  }
+
+  body.gaia-v2 .g-feature-event__title {
+    font-size: clamp(1.2rem, 1.6vw, 1.7rem);
+    overflow: visible;
+    display: block;
+    -webkit-line-clamp: unset;
+    line-clamp: unset;
+  }
+
+  body.gaia-v2 .g-tabs {
+    max-width: 380px;
+  }
+
+  body.gaia-v2 .g-store-rail,
+  body.gaia-v2 .g-store-rail.g-rail {
+    grid-template-columns: repeat(auto-fill, minmax(210px, 1fr));
+  }
+
+  body.gaia-v2 .g-super-home:not(:has(.g-feature-event)):not(:has(.g-super-event)):not(:has([data-sky-host] > .g-sky)) > .g-super-hero {
+    grid-column: 1 / -1;
+  }
+
+  body.gaia-v2 .g-super-home > [data-sky-host]:empty {
+    display: none;
+  }
+
+  body.gaia-v2 .g-energy-intro,
+  body.gaia-v2 .g-energy-panel {
+    max-width: 72ch;
+  }
+
+  .gaia-splash-shell {
+    padding: 2.25rem 2.5rem 2.75rem;
+  }
+
+  .gaia-splash-content,
+  .gaia-splash-footer {
+    max-width: 26rem;
+  }
+
+  .gaia-splash-title {
+    font-size: clamp(2.15rem, 3vw, 2.7rem);
+  }
+}
+
+/* —— Tablet ————————————————————————————————————————————————————————— */
+@media (min-width: 700px) and (max-width: 1099px) {
+  body.gaia-v2 {
+    --fit-title: clamp(2rem, 4.2vw, 2.45rem);
+    --fit-display: clamp(2.15rem, 4.6vw, 2.7rem);
+    --fit-section: 1.65rem;
+    --fit-body: 0.98rem;
+    --fit-pad: clamp(24px, 4vw, 36px);
+  }
+
+  body.gaia-v2 .g-home,
+  body.gaia-v2 .g-page,
+  body.gaia-v2 .g-store {
+    gap: 18px;
+    padding-top: 18px;
+    padding-inline: var(--fit-pad);
+  }
+}
+
+@media (min-width: 700px) and (max-width: 999px) {
+  body.gaia-v2 .g-home,
+  body.gaia-v2 .g-page,
+  body.gaia-v2 .g-store {
+    padding-bottom: calc(108px + env(safe-area-inset-bottom, 0px));
+  }
+}
+
+@media (min-width: 1000px) and (max-width: 1099px) {
+  body.gaia-v2 .g-home,
+  body.gaia-v2 .g-page,
+  body.gaia-v2 .g-store {
+    padding-bottom: 40px;
+  }
+}
+
+@media (min-width: 700px) and (max-width: 1099px) {
+
+  body.gaia-v2 .g-super-page-head h1,
+  body.gaia-v2 .g-page__title,
+  body.gaia-v2 .g-store__title {
+    font-size: var(--fit-title) !important;
+    line-height: 1.1;
+  }
+
+  body.gaia-v2 .g-super-page-head > p:last-child {
+    max-width: 52ch;
+    font-size: var(--fit-body);
+  }
+
+  body.gaia-v2 .g-super-hero h1 {
+    font-size: var(--fit-display) !important;
+  }
+
+  body.gaia-v2 .g-super-discover {
+    display: flex;
+    flex-wrap: wrap;
+    max-width: 420px;
+  }
+
+  body.gaia-v2 .g-super-discover .g-btn {
+    width: auto;
+    flex: 1 1 auto;
+  }
+
+  body.gaia-v2 .g-feature-event__actions {
+    display: flex;
+    flex-wrap: wrap;
+  }
+
+  body.gaia-v2 .g-feature-event__actions .g-btn {
+    width: auto;
+  }
+
+  body.gaia-v2 .g-free-tools__grid {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 12px;
+  }
+
+  body.gaia-v2 .g-free-tool {
+    min-height: 118px;
+    padding: 16px 12px;
+  }
+
+  body.gaia-v2 .g-free-tool strong {
+    font-size: 13.5px;
+  }
+
+  body.gaia-v2 .g-tabs {
+    max-width: 420px;
+  }
+
+  .gaia-splash-shell {
+    padding: 1.75rem 2rem 2.25rem;
+  }
+
+  .gaia-splash-content,
+  .gaia-splash-footer {
+    max-width: 24rem;
+  }
+
+  .gaia-splash-title {
+    font-size: clamp(1.9rem, 4vw, 2.4rem);
+  }
+}
+
+/* —— Home fold photos: fluid while the window is dragged ——————————————
+   Photo B (moon meditator) lives in .g-super-hero__art.
+   Photo A (Elevate wordmark) lives in .g-feature-event__art.
+   Heights use svh/clamp so a live resize does not jump between three
+   fixed layouts, and object-position keeps ELEVATE and the figure in frame. */
+body.gaia-v2 .g-super-home .g-super-hero,
+body.gaia-v2 .g-super-home .g-feature-event {
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+}
+
+body.gaia-v2 .g-super-home .g-super-hero__art {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  min-width: 0;
+  min-height: 0;
+}
+
+body.gaia-v2 .g-super-home .g-super-hero__art img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: center 46%;
+}
+
+body.gaia-v2 .g-super-home .g-super-hero__art::after {
+  background: linear-gradient(180deg, rgba(4, 7, 10, .2) 0%, rgba(4, 7, 10, .08) 45%, rgba(4, 7, 10, .55) 100%);
+}
+
+body.gaia-v2 .g-super-home .g-feature-event__art {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  min-width: 0;
+  overflow: hidden;
+}
+
+body.gaia-v2 .g-super-home .g-feature-event__art img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: center 40%;
+  opacity: 1;
+  transform: none;
+  filter: none;
+}
+
+/* Tablet / small laptop: keep a compact stack so both photos stay on the
+   first screen. The 510px two-column hero from superapp.css is too tall. */
+@media (min-width: 700px) and (max-width: 899px) {
+  body.gaia-v2 .g-super-home {
+    gap: clamp(10px, 1.6vw, 16px);
+  }
+
+  body.gaia-v2 .g-super-home .g-super-hero {
+    position: relative;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    min-height: 0;
+  }
+
+  body.gaia-v2 .g-super-home .g-super-hero__art {
+    position: absolute;
+    z-index: 0;
+    inset: 0;
+    height: auto;
+    opacity: 0.9;
+    border: 0;
+  }
+
+  body.gaia-v2 .g-super-home .g-super-hero__art img {
+    object-position: center 38%;
+  }
+
+  body.gaia-v2 .g-super-home .g-super-hero .g-super-hero__intro {
+    position: relative;
+    z-index: 2;
+    min-height: 0 !important;
+    height: 100%;
+    align-content: start;
+    background: transparent;
+    padding: clamp(16px, 2.4vw, 28px);
+  }
+
+  body.gaia-v2 .g-super-home .g-super-hero .g-super-hero__intro::before {
+    content: "";
+    position: absolute;
+    z-index: -1;
+    inset: 0;
+    background: linear-gradient(180deg, rgba(7, 16, 10, .38) 0%, rgba(7, 16, 10, .12) 48%, rgba(7, 16, 10, .7) 100%);
+  }
+
+  body.gaia-v2 .g-super-home .g-super-hero h1 {
+    font-size: clamp(1.85rem, 4.2vw, 2.45rem) !important;
+  }
+
+  body.gaia-v2 .g-super-home .g-feature-event {
+    position: relative;
+    flex-direction: column;
+    min-height: 0;
+  }
+
+  body.gaia-v2 .g-super-home .g-feature-event .g-feature-event__art {
+    position: absolute;
+    inset: 0;
+    flex: none;
+    width: auto;
+    height: auto;
+  }
+
+  body.gaia-v2 .g-super-home .g-feature-event .g-feature-event__art img {
+    object-position: center 42%;
+  }
+}
+
+/* Wide enough for two photos side by side: greeting | Elevate, both on fold.
+   Sky moves under that pair so it cannot steal the event's column. */
+@media (min-width: 900px) {
+  body.gaia-v2 .g-super-home {
+    grid-template-columns: minmax(0, 1.12fr) minmax(0, 1fr);
+    gap: clamp(14px, 1.6vw, 22px);
+    align-items: stretch;
+  }
+
+  body.gaia-v2 .g-super-home > .g-super-hero {
+    grid-column: 1;
+    grid-row: 1;
+    position: relative;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    min-height: 0;
+    height: auto;
+  }
+
+  body.gaia-v2 .g-super-home > .g-super-hero__art,
+  body.gaia-v2 .g-super-home .g-super-hero__art {
+    position: absolute;
+    z-index: 0;
+    inset: 0;
+    height: auto;
+    opacity: 0.92;
+    border: 0;
+  }
+
+  body.gaia-v2 .g-super-home .g-super-hero__art img {
+    object-position: center 46%;
+  }
+
+  body.gaia-v2 .g-super-home .g-super-hero .g-super-hero__intro {
+    position: relative;
+    z-index: 2;
+    min-height: 0 !important;
+    max-width: 38rem;
+    height: 100%;
+    display: grid;
+    align-content: end;
+    background: transparent;
+    padding: clamp(20px, 2.8vw, 40px);
+  }
+
+  body.gaia-v2 .g-super-home .g-super-hero .g-super-hero__intro::before {
+    content: "";
+    position: absolute;
+    z-index: -1;
+    inset: 0;
+    background: linear-gradient(100deg, rgba(4, 7, 10, .78) 0%, rgba(4, 7, 10, .28) 52%, rgba(4, 7, 10, .04) 78%);
+  }
+
+  body.gaia-v2 .g-super-home > .g-feature-event,
+  body.gaia-v2 .g-super-home > .g-super-event {
+    grid-column: 2;
+    grid-row: 1;
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+    height: auto;
+  }
+
+  body.gaia-v2 .g-super-home > .g-feature-event .g-feature-event__art {
+    position: absolute;
+    inset: 0;
+    flex: none;
+    width: auto;
+    max-width: none;
+    min-height: 0;
+    height: auto;
+  }
+
+  body.gaia-v2 .g-super-home > .g-feature-event .g-feature-event__art img {
+    object-position: center 40%;
+  }
+
+  body.gaia-v2 .g-super-home > .g-feature-event .g-feature-event__body {
+    position: relative;
+    z-index: 1;
+    flex: 0 0 auto;
+    margin-top: auto;
+    max-width: none;
+    padding: clamp(12px, 1.6vw, 22px);
+  }
+
+  body.gaia-v2 .g-super-home > [data-sky-host] {
+    grid-column: 1 / -1;
+    grid-row: auto;
+  }
+
+  body.gaia-v2 .g-super-home > .g-super-services,
+  body.gaia-v2 .g-super-home > .g-super-auth,
+  body.gaia-v2 .g-super-home > .g-super-sync {
+    grid-column: 1 / -1;
+  }
+}
+
+/* —— First-fold budget (must win last) ——————————————————————————————
+   On open, greeting + Elevate (including Event details / Buy Tickets) have
+   to sit fully above the tab bar. 100svh is the Safari viewport with chrome
+   visible — the moment someone lands on the site. Art is a backdrop; copy
+   overlays it so the event card is one short poster, not a banner + body. */
+body.gaia-v2 .gaia-screen[data-screen="today"] {
+  --gaia-topbar-h: 48px;
+  --gaia-main-pad-top: 8px;
+  --gaia-fold-gap: 8px;
+  --gaia-tab-h: calc(100px + env(safe-area-inset-bottom, 0px));
+  --gaia-fold: calc(100vh - var(--gaia-topbar-h) - var(--gaia-main-pad-top) - var(--gaia-tab-h));
+}
+@supports (height: 100svh) {
+  body.gaia-v2 .gaia-screen[data-screen="today"] {
+    --gaia-fold: calc(100svh - var(--gaia-topbar-h) - var(--gaia-main-pad-top) - var(--gaia-tab-h));
+  }
+}
+
+body.gaia-v2 .g-super-home .g-super-hero,
+body.gaia-v2 .g-super-home .g-feature-event,
+body.gaia-v2 .g-super-home .g-super-event {
+  position: relative;
+  overflow: hidden;
+}
+
+body.gaia-v2 .g-super-home .g-super-hero__art,
+body.gaia-v2 .g-super-home .g-feature-event__art {
+  position: absolute !important;
+  inset: 0 !important;
+  z-index: 0 !important;
+  width: auto !important;
+  height: auto !important;
+  min-height: 0 !important;
+  flex: none !important;
+}
+
+body.gaia-v2 .g-super-home .g-super-hero__intro,
+body.gaia-v2 .g-super-home .g-feature-event__body {
+  position: relative;
+  z-index: 1;
+  min-height: 0 !important;
+}
+
+@media (max-width: 899px) {
+  body.gaia-v2 .gaia-screen[data-screen="today"] {
+    --gaia-hero-h: clamp(7.25rem, calc(var(--gaia-fold) * 0.30), 9.25rem);
+    --gaia-event-h: calc(var(--gaia-fold) - var(--gaia-hero-h) - var(--gaia-fold-gap));
+  }
+
+  body.gaia-v2 .gaia-screen[data-screen="today"] .g-topbar {
+    min-height: var(--gaia-topbar-h);
+    padding-block: 6px;
+  }
+
+  body.gaia-v2 .gaia-screen[data-screen="today"] .gaia-main--today {
+    padding-top: var(--gaia-main-pad-top) !important;
+  }
+
+  body.gaia-v2 .g-super-home {
+    gap: var(--gaia-fold-gap) !important;
+  }
+
+  body.gaia-v2 .g-super-home .g-super-hero {
+    display: flex !important;
+    flex-direction: column !important;
+    justify-content: flex-end;
+    min-height: 0 !important;
+    height: var(--gaia-hero-h) !important;
+  }
+
+  body.gaia-v2 .g-super-home .g-feature-event,
+  body.gaia-v2 .g-super-home .g-super-event {
+    display: flex !important;
+    flex-direction: column !important;
+    justify-content: flex-end;
+    min-height: 12rem !important;
+    height: var(--gaia-event-h) !important;
+  }
+
+  body.gaia-v2 .g-super-home .g-super-hero__intro {
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-end;
+    gap: 2px;
+    height: auto !important;
+    padding: 10px 12px 12px !important;
+    background: transparent;
+  }
+
+  body.gaia-v2 .g-super-hero__intro .g-super-date {
+    margin: 0 0 2px;
+    font-size: 10px;
+  }
+
+  body.gaia-v2 .g-super-home .g-super-hero h1 {
+    font-size: clamp(1.2rem, 5.4vw, 1.45rem) !important;
+    line-height: 1.08;
+    margin: 0;
+  }
+
+  body.gaia-v2 .g-super-hero__intro > p:not(.g-super-date) {
+    margin: 2px 0 8px !important;
+    font-size: 12.5px !important;
+    line-height: 1.3;
+  }
+
+  body.gaia-v2 .g-super-home .g-super-discover {
+    display: flex !important;
+    flex-wrap: nowrap;
+    gap: 8px;
+    width: 100%;
+    margin-top: 0 !important;
+  }
+
+  body.gaia-v2 .g-super-home .g-super-discover .g-btn {
+    flex: 1 1 0;
+    min-height: 40px;
+    padding: 8px 10px;
+    font-size: 13px;
+    white-space: nowrap;
+  }
+
+  body.gaia-v2 .g-super-home .g-feature-event__body {
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-end;
+    gap: 5px;
+    margin-top: auto;
+    padding: 10px 12px 12px !important;
+    background: linear-gradient(180deg, transparent 0%, rgba(4, 7, 10, .55) 28%, rgba(4, 7, 10, .88) 100%);
+  }
+
+  body.gaia-v2 .g-feature-event__kicker {
+    font-size: 0.64rem;
+  }
+
+  body.gaia-v2 .g-feature-event__title {
+    font-size: clamp(0.98rem, 4.2vw, 1.12rem);
+    line-height: 1.2;
+  }
+
+  body.gaia-v2 .g-feature-event__meta {
+    font-size: 0.75rem;
+    line-height: 1.3;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+
+  body.gaia-v2 .g-super-home .g-feature-event__actions {
+    display: flex;
+    flex-wrap: nowrap;
+    gap: 8px;
+    margin-top: 4px;
+  }
+
+  body.gaia-v2 .g-super-home .g-feature-event__actions .g-btn {
+    flex: 1 1 0;
+    min-height: 40px;
+    padding: 8px 10px;
+    font-size: 13px;
+    white-space: nowrap;
+  }
+
+  /* Assist / install chips sit on top of Buy Tickets on iPhone. */
+  body.gaia-v2:has(.gaia-screen[data-screen="today"].is-active) .gaia-assist-nudge,
+  body.gaia-v2:has(.gaia-screen[data-screen="today"].is-active) .g-install {
+    display: none !important;
+  }
+}
+
+@media (max-width: 899px) and (max-height: 700px) {
+  body.gaia-v2 .gaia-screen[data-screen="today"] {
+    --gaia-hero-h: clamp(7.25rem, calc(var(--gaia-fold) * 0.3), 8.75rem);
+  }
+
+  body.gaia-v2 .g-super-home .g-super-hero h1 {
+    font-size: 1.15rem !important;
+  }
+
+  body.gaia-v2 .g-super-home .g-super-discover .g-btn,
+  body.gaia-v2 .g-super-home .g-feature-event__actions .g-btn {
+    min-height: 36px;
+    font-size: 12px;
+  }
+}
+
+@media (min-width: 700px) and (max-width: 899px) {
+  body.gaia-v2 .gaia-screen[data-screen="today"] {
+    --gaia-topbar-h: 56px;
+    --gaia-main-pad-top: 14px;
+    --gaia-fold-gap: 12px;
+    --gaia-tab-h: calc(88px + env(safe-area-inset-bottom, 0px));
+    --gaia-hero-h: clamp(9.5rem, calc(var(--gaia-fold) * 0.34), 12.5rem);
+  }
+
+  body.gaia-v2 .g-super-home .g-super-hero__intro,
+  body.gaia-v2 .g-super-home .g-feature-event__body {
+    padding: 16px 18px 18px !important;
+  }
+
+  body.gaia-v2 .g-super-home .g-super-hero h1 {
+    font-size: clamp(1.7rem, 4vw, 2.2rem) !important;
+  }
+}
+
+@media (min-width: 900px) {
+  body.gaia-v2 .gaia-screen[data-screen="today"] {
+    --gaia-topbar-h: 64px;
+    --gaia-main-pad-top: 20px;
+    --gaia-tab-h: 0px;
+    --gaia-fold: calc(100vh - var(--gaia-topbar-h) - var(--gaia-main-pad-top) - var(--gaia-tab-h) - 24px);
+  }
+}
+
+@supports (height: 100svh) {
+  @media (min-width: 900px) {
+    body.gaia-v2 .gaia-screen[data-screen="today"] {
+      --gaia-fold: calc(100svh - var(--gaia-topbar-h) - var(--gaia-main-pad-top) - var(--gaia-tab-h) - 24px);
+    }
+  }
+}
+
+@media (min-width: 900px) {
+  body.gaia-v2 .g-super-home > .g-super-hero {
+    grid-column: 1 / 2 !important;
+    grid-row: 1 !important;
+  }
+
+  body.gaia-v2 .g-super-home > .g-feature-event,
+  body.gaia-v2 .g-super-home > .g-super-event {
+    grid-column: 2 / 3 !important;
+    grid-row: 1 !important;
+  }
+
+  body.gaia-v2 .g-super-home > .g-super-hero,
+  body.gaia-v2 .g-super-home > .g-feature-event,
+  body.gaia-v2 .g-super-home > .g-super-event {
+    display: flex !important;
+    flex-direction: column !important;
+    justify-content: flex-end;
+    min-height: 0 !important;
+    height: clamp(18rem, calc(var(--gaia-fold) * 0.72), 28rem) !important;
+  }
+
+  body.gaia-v2 .g-super-home .g-super-hero__intro,
+  body.gaia-v2 .g-super-home .g-feature-event__body {
+    margin-top: auto;
+    height: auto !important;
+  }
+
+  body.gaia-v2 .g-super-home .g-feature-event__body {
+    background: linear-gradient(180deg, transparent 0%, rgba(4, 7, 10, .5) 36%, rgba(4, 7, 10, .9) 100%);
+  }
+}
+
+@media (min-width: 900px) and (max-width: 999px) {
+  body.gaia-v2 .gaia-screen[data-screen="today"] {
+    --gaia-tab-h: calc(88px + env(safe-area-inset-bottom, 0px));
+  }
+}

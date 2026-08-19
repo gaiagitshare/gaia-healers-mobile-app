@@ -604,9 +604,8 @@
   /**
    * The next gathering, given the top of the home screen.
    *
-   * It uses the event's own hero image rather than a stock asset, and offers
-   * the registration link the Event Manager publishes — so the card is useful
-   * on its own rather than only a way through to another page.
+   * Home uses the designated Elevate conference artwork. Copy, dates, and the
+   * registration link still come from the published event — never invented.
    */
   function eventFeature() {
     const event = eventData();
@@ -617,15 +616,15 @@
     const location = event.location || event.venue || '';
     const when = eventDate(event);
     const countdown = eventCountdown(event);
-    const art = event.heroImageUrl || 'assets/gaia-event-hero.webp';
+    const art = 'assets/gaia-elevate-hero.png';
     const register = event.registrationUrl
       ? '<a class="g-btn g-btn--primary g-btn--sm" href="' + esc(event.registrationUrl) + '" target="_blank" rel="noopener noreferrer">'
         + esc(event.registrationLabel || 'Get tickets') + '</a>'
       : '';
 
     return '<section class="g-feature-event">'
-      + '<div class="g-feature-event__art" aria-hidden="true">'
-      + '<img src="' + esc(art) + '" alt="" loading="eager" /></div>'
+      + '<div class="g-feature-event__art">'
+      + '<img src="' + esc(art) + '" alt="Gaia Healers Elevate Conference — crowd gathered under a green Earth light" width="426" height="358" loading="eager" /></div>'
       + '<div class="g-feature-event__body">'
       + '<p class="g-feature-event__kicker">' + icon('calendar-dots') + ' Next gathering'
       + (countdown ? '<span class="g-feature-event__badge">' + esc(countdown) + '</span>' : '') + '</p>'
@@ -656,7 +655,7 @@
     root.innerHTML = '<div class="g-super-home">'
       + '<section class="g-super-hero"><div class="g-super-hero__intro"><p class="g-super-date">' + esc(dateLabel()) + '</p>'
       + '<h1>' + greeting + '</h1><p>' + (authed ? 'Your healing journey is waiting.' : 'What does your energy need today?') + '</p>'
-      + (authed ? journeyRail() + primaryMemberAction() : '<div class="g-super-discover"><a class="g-btn g-btn--primary" href="home.html?view=wellness&tab=check">' + icon('sparkle') + ' Check my energy</a><button type="button" class="g-btn g-btn--secondary" data-gaia-open-assist>' + icon('microphone') + ' Ask Gaia</button></div>') + '</div><div class="g-super-hero__art" aria-hidden="true"></div></section>'
+      + (authed ? journeyRail() + primaryMemberAction() : '<div class="g-super-discover"><a class="g-btn g-btn--primary" href="home.html?view=wellness&tab=check">' + icon('sparkle') + ' Check my energy</a><button type="button" class="g-btn g-btn--secondary" data-gaia-open-assist>' + icon('microphone') + ' Ask Gaia</button></div>') + '</div><div class="g-super-hero__art"><img src="assets/gaia-hero-moon.png" alt="Person meditating in lotus pose under a full moon" width="1024" height="1024" /></div></section>'
       + eventFeature()
       // Today's sky sits high on the page precisely because it needs nothing
       // from the visitor: it is the first thing a stranger can actually read.

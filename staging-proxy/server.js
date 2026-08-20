@@ -5131,7 +5131,7 @@ const server = http.createServer(async (req, res) => {
     }
     if (url.pathname.startsWith('/api/wellness/')) {
       await wellnessRouter.handle(req, res, url, {
-        origin, sendJson, readJsonBody, signTokenPayload, readSignedToken, parseCookies, aiComplete, ghlUpsertContact, memberLookup: wellnessMemberLookup,
+        origin, sendJson, readJsonBody, signTokenPayload, readSignedToken, parseCookies, aiComplete, ghlUpsertContact, memberLookup: wellnessMemberLookup, memberSession: cookieForRequest(req),
       });
       return;
     }

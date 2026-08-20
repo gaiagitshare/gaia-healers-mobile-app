@@ -111,7 +111,7 @@
       + '<div class="g-de__personalise">'
       + '<p>Add your birth date to get a <strong>daily energy made for you</strong> — your focus centre, a personal note, and a streak that saves.</p>'
       + '<div class="g-de__actions">'
-      + '<a class="g-btn g-btn--primary" href="home.html?view=wellness&tab=check"><i class="ph ph-sparkle"></i> Personalise my energy</a>'
+      + '<button type="button" class="g-btn g-btn--primary" data-de-personalise><i class="ph ph-sparkle"></i> Personalise my energy</button>'
       + '<button type="button" class="g-btn g-btn--secondary g-de__share" data-de-share><i class="ph ph-share-network"></i> Share</button>'
       + '</div></div>'
       + '</section>';
@@ -138,6 +138,13 @@
           paint(host, lastDaily);
           host.querySelector('.g-de')?.classList.add('g-de--celebrate');
         }
+      });
+    }
+    var pers = host.querySelector('[data-de-personalise]');
+    if (pers) {
+      pers.addEventListener('click', function () {
+        if (window.GaiaOnboard) window.GaiaOnboard.openQuickStart();
+        else location.href = 'home.html?view=wellness&tab=check';
       });
     }
     var share = host.querySelector('[data-de-share]');

@@ -1882,3 +1882,24 @@ body.gaia-v2 .g-topbar__actions.gaia-header-actions { display: flex; align-items
 }
 
 .g-de__source { margin: 14px 0 0; font-size: 10.5px; line-height: 1.4; color: var(--g-text-dim, #93A597); opacity: 0.72; }
+
+/* Quick personalisation sheet (onboarding "aha") */
+.gaia-onboard-modal { position: fixed; inset: 0; z-index: 1200; display: flex; align-items: center; justify-content: center; padding: 20px; background: rgba(4, 8, 5, 0.72); backdrop-filter: blur(6px); }
+.gaia-onboard-modal__panel { position: relative; width: 100%; max-width: 380px; max-height: 92vh; overflow-y: auto; border-radius: 22px; padding: 22px 20px calc(20px + env(safe-area-inset-bottom, 0px)); background: var(--g-card-bg, #101A12); border: 1px solid var(--g-line, rgba(190,240,170,0.16)); box-shadow: 0 26px 60px rgba(0,0,0,0.5); }
+.g-onb__kicker { font-size: 10.5px; font-weight: 700; letter-spacing: 0.16em; text-transform: uppercase; color: var(--g-accent, #A6E84B); margin: 0; }
+.g-onb__title { font-family: var(--g-font-serif, "Cormorant Garamond", serif); font-weight: 600; font-size: 28px; line-height: 1.05; margin: 6px 0 0; }
+.g-onb__lead { font-size: 13.5px; line-height: 1.5; color: var(--g-text-dim, #93A597); margin: 8px 0 16px; }
+.g-onb__row { display: flex; flex-direction: column; gap: 5px; margin-bottom: 12px; font-size: 12.5px; color: var(--g-text-dim, #93A597); }
+.g-onb__row input, .gaia-onboard-modal select, .gaia-onboard-modal input[type=number] {
+  width: 100%; padding: 12px 14px; border-radius: 12px; font-size: 15px;
+  background: rgba(255,255,255,0.05); border: 1px solid var(--g-line, rgba(190,240,170,0.16)); color: var(--g-text, #E7EFE6);
+}
+.g-onb__dob { margin-bottom: 14px; }
+.g-onb__dob-label { display: block; font-size: 12.5px; color: var(--g-text-dim, #93A597); margin-bottom: 5px; }
+.g-onb__dob-fields { display: grid; grid-template-columns: 1.4fr 1fr 1fr; gap: 8px; }
+.g-onb__dob-fields select, .g-onb__dob-fields input { min-width: 0; }
+.gaia-onboard-modal select:focus, .gaia-onboard-modal input:focus { outline: 2px solid color-mix(in srgb, var(--g-accent, #A6E84B) 60%, transparent); outline-offset: 1px; }
+.g-onb__submit { width: 100%; display: inline-flex; align-items: center; justify-content: center; gap: 7px; margin-top: 4px; }
+.g-onb__status { margin: 10px 0 0; font-size: 12.5px; text-align: center; color: var(--g-accent, #A6E84B); min-height: 1em; }
+.g-onb__status.is-error { color: #ff8a8a; }
+.g-onb__note { margin: 10px 0 0; font-size: 11px; line-height: 1.45; color: var(--g-text-dim, #93A597); opacity: 0.85; text-align: center; }

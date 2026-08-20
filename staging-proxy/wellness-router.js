@@ -465,6 +465,29 @@ async function handle(req, res, url, deps) {
     return sendJson(res, 200, { ok: true, ritual: ritualState(profile) }, origin);
   }
 
+  if (p === '/api/wellness/quickstart' && method === 'POST') {
+    // The frictionless personalisation step after Join: birth date only (the
+    // city / sky-map is a later optional step). A logged-in member's real,
+    // verified email and name are used when present; otherwise name + email
+    // must be supplied. Never creates a profile without a real email.
+    const body = await deps.readJsonBody(req).catch(function () { return {}; });
+    const dob = parseDob(body.dob);
+    if (!dob) return sendJson(res, 200, { ok: false, reason: 'dob_invalid' }, origin);
+    const ms = (deps.memberSession && deps.memberSession.member) ? deps.memberSession.member : null;
+    let email = ms && ms.email ? String(ms.email).toLowerCase().trim() : str(body.email, 160).toLowerCase();
+    let name = (ms && (ms.displayName || ms.name)) ? String(ms.displayName || ms.name) : str(body.name, 100);
+    if (!validEmail(email)) return sendJson(res, 200, { ok: false, reason: 'email_required' }, origin);
+    if (!name) name = firstName(email);
+    let profile = readStore().find(function (x) { return x.email === email; });
+    const now = new Date().toISOString();
+    if (!profile) profile = { id: newId(), name: name, email: email, location: '', dob: body.dob, createdAt: now, updatedAt: now };
+    else { profile.dob = body.dob; if (!profile.name) profile.name = name; profile.updatedAt = now; }
+    saveProfile(profile);
+    maybeSyncGhl(profile, deps).catch(function () {});
+    const token = deps.signTokenPayload({ wpid: profile.id, iat: Date.now(), exp: Date.now() + TTL_MS });
+    const daily = await dailyEnergyFor(profile, deps);
+    return sendJson(res, 200, { ok: true, daily: daily }, origin, { 'Set-Cookie': buildSetCookie(token) });
+  }
   if (p === '/api/wellness/signup' && method === 'POST') {
     const body = await deps.readJsonBody(req).catch(() => ({}));
     const name = str(body.name, 100);

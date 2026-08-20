@@ -230,7 +230,7 @@ test('5 (integration). a canonical Gold subscription does grant Gold', async () 
   assert.equal(body.membership.status, 'active');
   assert.equal(body.membership.billing_cycle, 'monthly');
   assert.equal(body.membership.label, 'Gold');
-  assert.equal(body.membership.subtitle, 'Gaia Practice Pro');
+  assert.equal(body.membership.subtitle, 'Gaia Healers Practice Pro');
   // This member has no ledger membership, so billing answers — and the read
   // says so, which is how the remaining live dependency stays countable.
   assert.equal(body.meta.membership_resolved_by, 'live_fallback');

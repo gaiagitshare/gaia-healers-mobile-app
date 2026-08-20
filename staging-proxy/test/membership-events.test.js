@@ -309,7 +309,7 @@ test('END TO END: a membership event changes /api/member/access', async () => {
   assert.equal(after.membership.status, 'active');
   assert.equal(after.membership.billing_cycle, 'monthly');
   assert.equal(after.membership.label, 'Gold');
-  assert.equal(after.membership.subtitle, 'Gaia Practice Pro');
+  assert.equal(after.membership.subtitle, 'Gaia Healers Practice Pro');
   assert.match(after.meta.membership_resolved_by, /^ledger:/, 'resolved from the ledger, not a live GHL call');
 });
 

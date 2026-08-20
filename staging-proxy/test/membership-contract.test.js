@@ -448,5 +448,5 @@ test('presentation labels are attached but are not the authorization key', () =>
   const resolved = resolveFixture('fixture-gold-annual');
   assert.equal(resolved.membership.key, 'gold');
   assert.equal(resolved.membership.label, 'Gold');
-  assert.equal(resolved.membership.subtitle, 'Gaia Practice Pro');
+  assert.equal(resolved.membership.subtitle, 'Gaia Healers Practice Pro');
 });

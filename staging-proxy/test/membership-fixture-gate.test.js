@@ -91,7 +91,7 @@ test('GET /api/membership/plans returns presentation data for all four tiers', a
   }
   const gold = res.json.plans.find((p) => p.key === 'gold');
   assert.equal(gold.label, 'Gold');
-  assert.equal(gold.subtitle, 'Gaia Practice Pro');
+  assert.equal(gold.subtitle, 'Gaia Healers Practice Pro');
   assert.equal(gold.prices.monthly, '$497/mo');
 });
 

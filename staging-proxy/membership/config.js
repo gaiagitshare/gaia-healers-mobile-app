@@ -23,10 +23,10 @@ const BILLING_CYCLES = ['monthly', 'annual', 'none'];
 
 // Presentation only. These strings must never be used to decide access.
 const MEMBERSHIP_PRESENTATION = {
-  free: { label: 'Free', subtitle: 'Gaia Network' },
-  silver: { label: 'Silver', subtitle: 'Gaia Practitioner' },
-  gold: { label: 'Gold', subtitle: 'Gaia Practice Pro' },
-  diamond: { label: 'Diamond', subtitle: 'Gaia Leader' },
+  free: { label: 'Free', subtitle: 'Gaia Healers Network' },
+  silver: { label: 'Silver', subtitle: 'Gaia Healers Practitioner' },
+  gold: { label: 'Gold', subtitle: 'Gaia Healers Practice Pro' },
+  diamond: { label: 'Diamond', subtitle: 'Gaia Healers Leader' },
 };
 
 /**

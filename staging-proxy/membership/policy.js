@@ -31,7 +31,7 @@ export function defaultPolicy() {
     plans: {
       free: {
         key: 'free',
-        label: 'Free', subtitle: 'Gaia Network',
+        label: 'Free', subtitle: 'Gaia Healers Network',
         description: 'Community access and the public wellness tools.',
         prices: { monthly: '$0', annual: '$0' },
         checkoutUrl: 'https://join.gaiahealers.com/onboarding',
@@ -46,7 +46,7 @@ export function defaultPolicy() {
       },
       silver: {
         key: 'silver',
-        label: 'Silver', subtitle: 'Gaia Practitioner',
+        label: 'Silver', subtitle: 'Gaia Healers Practitioner',
         description: 'Certifications, directory listing and the DIY practice platform.',
         prices: { monthly: '$97/mo', annual: '$997/yr' },
         checkoutUrl: 'https://join.gaiahealers.com/silver',
@@ -65,7 +65,7 @@ export function defaultPolicy() {
       },
       gold: {
         key: 'gold',
-        label: 'Gold', subtitle: 'Gaia Practice Pro',
+        label: 'Gold', subtitle: 'Gaia Healers Practice Pro',
         description: 'Managed CRM, monthly leads and a certification discount.',
         prices: { monthly: '$497/mo', annual: '$4,997/yr' },
         checkoutUrl: 'https://join.gaiahealers.com/gold',
@@ -86,7 +86,7 @@ export function defaultPolicy() {
       },
       diamond: {
         key: 'diamond',
-        label: 'Diamond', subtitle: 'Gaia Leader',
+        label: 'Diamond', subtitle: 'Gaia Healers Leader',
         description: 'Leader CRM, top directory placement and leadership benefits.',
         prices: { monthly: '$997/mo', annual: '$9,997/yr' },
         checkoutUrl: 'https://join.gaiahealers.com/diamond',

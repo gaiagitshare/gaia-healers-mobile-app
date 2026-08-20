@@ -37,10 +37,10 @@ const MEMBER_ENDPOINTS = [
 const PLANS = {
   ok: true,
   plans: [
-    { key: 'free', label: 'Free', subtitle: 'Gaia Network', prices: { monthly: '$0', annual: '$0' }, displayBenefits: ['Community access'], checkoutUrl: 'https://join.gaiahealers.com/onboarding' },
-    { key: 'silver', label: 'Silver', subtitle: 'Gaia Practitioner', prices: { monthly: '$97/mo', annual: '$997/yr' }, displayBenefits: ['Certifications'], checkoutUrl: 'https://join.gaiahealers.com/silver' },
-    { key: 'gold', label: 'Gold', subtitle: 'Gaia Practice Pro', prices: { monthly: '$497/mo', annual: '$4,997/yr' }, displayBenefits: ['Managed CRM'], checkoutUrl: 'https://join.gaiahealers.com/gold' },
-    { key: 'diamond', label: 'Diamond', subtitle: 'Gaia Leader', prices: { monthly: '$997/mo', annual: '$9,997/yr' }, displayBenefits: ['Leader CRM'], checkoutUrl: 'https://join.gaiahealers.com/diamond' },
+    { key: 'free', label: 'Free', subtitle: 'Gaia Healers Network', prices: { monthly: '$0', annual: '$0' }, displayBenefits: ['Community access'], checkoutUrl: 'https://join.gaiahealers.com/onboarding' },
+    { key: 'silver', label: 'Silver', subtitle: 'Gaia Healers Practitioner', prices: { monthly: '$97/mo', annual: '$997/yr' }, displayBenefits: ['Certifications'], checkoutUrl: 'https://join.gaiahealers.com/silver' },
+    { key: 'gold', label: 'Gold', subtitle: 'Gaia Healers Practice Pro', prices: { monthly: '$497/mo', annual: '$4,997/yr' }, displayBenefits: ['Managed CRM'], checkoutUrl: 'https://join.gaiahealers.com/gold' },
+    { key: 'diamond', label: 'Diamond', subtitle: 'Gaia Healers Leader', prices: { monthly: '$997/mo', annual: '$9,997/yr' }, displayBenefits: ['Leader CRM'], checkoutUrl: 'https://join.gaiahealers.com/diamond' },
   ],
 };
 

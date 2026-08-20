@@ -59,7 +59,7 @@
     const el = card(
       '<div class="g-install__head">'
       + '<img class="g-install__icon" src="assets/apple-touch-icon.png" alt="" width="52" height="52" />'
-      + '<div><p class="g-install__title">Keep Gaia on your home screen</p>'
+      + '<div><p class="g-install__title">Keep Gaia Healers on your home screen</p>'
       + '<p class="g-install__sub">Opens full screen, like an app.</p></div></div>'
       + '<ol class="g-install__steps">'
       + '<li>Tap <b>Share</b> in the Safari toolbar</li>'

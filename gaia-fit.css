@@ -1768,3 +1768,29 @@ body.gaia-v2 .g-topbar__actions.gaia-header-actions { display: flex; align-items
 .g-upgrade__tier.is-current { border-color: rgba(166,232,75,.42); color: var(--g-accent, #A6E84B); background: rgba(166,232,75,.08); }
 .g-upgrade__cta { margin-top: 18px; width: 100%; }
 @media (min-width: 720px) { .g-upgrade__cta { width: auto; min-width: 260px; } }
+
+
+/* ── Desktop home grid (authoritative) ──────────────────────────────────────
+   Placed here (last-loaded, body.gaia-v2, !important) so it beats the older
+   grid rules. Only hero + next-gathering are pinned as the feature row; every
+   other section runs the full width, tools become one row of four, the home is
+   capped and centred. Robust to guest/member order + section-set differences. */
+@media (min-width: 1060px) {
+  body.gaia-v2 .g-super-home {
+    grid-template-columns: minmax(0, 1.32fr) minmax(0, 1fr) !important;
+    max-width: 1180px !important; margin-inline: auto !important; align-items: start !important;
+  }
+  body.gaia-v2 .g-super-home > .g-super-hero { grid-column: 1 !important; grid-row: 1 !important; }
+  body.gaia-v2 .g-super-home > .g-feature-event,
+  body.gaia-v2 .g-super-home > .g-super-event { grid-column: 2 !important; grid-row: 1 !important; height: 100%; margin: 0; }
+  body.gaia-v2 .g-super-home > [data-sky-host],
+  body.gaia-v2 .g-super-home > .g-super-primary,
+  body.gaia-v2 .g-super-home > .g-upgrade,
+  body.gaia-v2 .g-super-home > .g-free-tools,
+  body.gaia-v2 .g-super-home > .g-super-services,
+  body.gaia-v2 .g-super-home > .g-super-auth,
+  body.gaia-v2 .g-super-home > .g-super-discover-gaia,
+  body.gaia-v2 .g-super-home > .g-super-sync { grid-column: 1 / -1 !important; }
+  body.gaia-v2 .g-super-home > .g-free-tools .g-free-tools__grid { grid-template-columns: repeat(4, 1fr) !important; }
+  body.gaia-v2 .g-super-home > [data-sky-host] .g-sky { max-width: 900px; }
+}

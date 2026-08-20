@@ -683,6 +683,7 @@
       + '<p class="g-super-date">' + esc(dateLabel()) + '</p>'
       + '<p>' + (authed ? 'Your healing journey is waiting.' : 'What does your energy need today?') + '</p>'
       + (authed ? '' : '<div class="g-super-discover g-super-discover--solo"><a class="g-btn g-btn--primary" href="home.html?view=wellness&tab=check">' + icon('sparkle') + ' Check my energy</a></div>') + '</div><div class="g-super-hero__art"><picture><source media="(min-width: 900px)" srcset="assets/gaia-hero-moon.png" /><img src="assets/gaia-hero-moon-wide.png" alt="Person meditating in lotus pose under a full moon over mountains" width="1024" height="576" loading="eager" /></picture></div></section>'
+      + '<div data-daily-host></div>'
       + (authed
         // Member flow: lead with the next step and their real access, then the
         // daily sky, the event, the free wellness tools, and the sync note.

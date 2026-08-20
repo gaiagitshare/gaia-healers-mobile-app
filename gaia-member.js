@@ -815,7 +815,7 @@ body.gaia-booking-open{overflow:hidden;}
     const hasAccess = grants.length > 0;
     if (cap) cap.textContent = hasAccess
       ? grants.length + ' course' + (grants.length === 1 ? '' : 's') + ' available from your GHL access.'
-      : (state.authed ? 'No courses yet.' : 'Sign in to see your GHL course access.');
+      : (state.authed ? 'No courses yet.' : 'Sign in to see your courses.');
     const hub = courses.portalUrl || (portalBase() + '/courses/library-v2');
     const academyEntry = grants.find((grant) => grant && grant.openUrl)?.openUrl || hub;
     const cat = (state.catalog && Array.isArray(state.catalog.courses) && state.catalog.courses.length)

@@ -513,7 +513,7 @@
   function authPrompt(compact) {
     return '<section class="g-super-auth' + (compact ? ' g-super-auth--compact' : '') + '">'
       + '<div><p class="g-super-kicker">Member Pass</p><h2>Already part of Gaia Healers?</h2>'
-      + '<p>Sign in once to sync the courses, communities and plan access attached to your GHL record.</p></div>'
+      + '<p>Sign in once to sync the courses, communities and plan access in your account.</p></div>'
       + '<div class="g-super-actions"><button type="button" class="g-btn g-btn--primary" data-super-signin>Sign in</button>'
       + '<button type="button" class="g-btn g-btn--secondary" data-open-in-app="https://join.gaiahealers.com/onboarding" data-in-app-title="Join Gaia Healers">Join free</button>'
       + '<a class="g-btn g-btn--ghost" href="home.html?view=store&tab=membership">Compare plans</a></div>'
@@ -568,7 +568,7 @@
     if (firstCourse?.openUrl) {
       return '<section class="g-super-primary"><p class="g-super-kicker">Continue learning</p>'
         + '<h2>' + esc(firstCourse.title || firstCourse.name || 'Your course') + '</h2>'
-        + '<p>Your GHL access is active. Lessons and verified progress open in your secure Academy workspace.</p>'
+        + '<p>Your access is active. Lessons and verified progress open in your secure Academy workspace.</p>'
         + '<button type="button" class="g-btn g-btn--primary g-super-primary__button" data-super-course="' + esc(firstCourse.openUrl) + '" data-super-course-title="' + esc(firstCourse.title || firstCourse.name || 'Gaia Healers Academy') + '">'
         + icon('book-open') + ' Open course ' + icon('arrow-right') + '</button></section>';
     }
@@ -578,7 +578,7 @@
         + icon('calendar-check') + ' View booking ' + icon('arrow-right') + '</a></section>';
     }
     return '<section class="g-super-primary"><p class="g-super-kicker">Your journey</p><h2>Your Gaia Healers access is ready</h2>'
-      + '<p>No course or appointment is currently attached to this GHL contact. Explore your verified access or choose your next step.</p>'
+      + '<p>No course or appointment yet. Explore your verified access or choose your next step.</p>'
       + '<a class="g-btn g-btn--primary g-super-primary__button" href="home.html?view=journey">'
       + icon('path') + ' Open your journey ' + icon('arrow-right') + '</a></section>';
   }
@@ -669,7 +669,7 @@
           + '<div data-sky-host></div>'
           + eventFeature()
           + freeTools()
-          + '<section class="g-super-sync">' + icon('check-circle') + '<div><strong>Your access is synced</strong><span>Courses, communities, plans and purchases reflect your GHL member record.</span></div></section>'
+          + '<section class="g-super-sync">' + icon('check-circle') + '<div><strong>Your access is synced</strong><span>Courses, communities, plans and purchases reflect your Gaia Healers account.</span></div></section>'
         // Logged-out flow: the free tools first — the one thing a stranger can
         // use right now — then today's sky, the event, one clear way in, and the
         // wider ecosystem last so the top of the page stays short and focused.
@@ -719,9 +719,9 @@
     const courses = courseGrants();
     const appts = upcomingAppointments();
     const circles = communities();
-    const courseRows = courses.length ? courses.map((course) => '<button type="button" class="g-super-row" data-super-course="' + esc(course.openUrl || memberState().data?.courses?.portalUrl || '') + '" data-super-course-title="' + esc(course.title || course.name || 'Gaia Healers Academy') + '"><span class="g-super-row__icon">' + icon('book-open') + '</span><span><small>Course access</small><strong>' + esc(course.title || course.name || 'Course') + '</strong><em>Open your verified GHL workspace</em></span>' + icon('caret-right') + '</button>').join('') : '<p class="g-super-empty">No course grants are attached to this GHL contact.</p>';
+    const courseRows = courses.length ? courses.map((course) => '<button type="button" class="g-super-row" data-super-course="' + esc(course.openUrl || memberState().data?.courses?.portalUrl || '') + '" data-super-course-title="' + esc(course.title || course.name || 'Gaia Healers Academy') + '"><span class="g-super-row__icon">' + icon('book-open') + '</span><span><small>Course access</small><strong>' + esc(course.title || course.name || 'Course') + '</strong><em>Open your member workspace</em></span>' + icon('caret-right') + '</button>').join('') : '<p class="g-super-empty">No courses yet.</p>';
     const apptRows = appts.length ? appts.slice(0, 3).map((item) => '<a class="g-super-row" href="home.html?view=bookings"><span class="g-super-row__icon">' + icon('calendar-check') + '</span><span><small>Practice</small><strong>' + esc(item.title || 'Appointment') + '</strong><em>' + esc(appointmentWhen(item)) + '</em></span>' + icon('caret-right') + '</a>').join('') : '<p class="g-super-empty">No upcoming appointments.</p>';
-    const circleRows = circles.length ? circles.map((item) => '<button type="button" class="g-super-row" data-open-in-app="' + esc(item.openUrl || 'https://education.gaiahealers.com') + '" data-in-app-title="' + esc(item.name || 'Gaia Healers Community') + '"><span class="g-super-row__icon">' + icon('users-three') + '</span><span><small>Community access</small><strong>' + esc(item.name || 'Community') + '</strong><em>Open your authorized circle</em></span>' + icon('caret-right') + '</button>').join('') : '<p class="g-super-empty">No community grants are attached to this GHL contact.</p>';
+    const circleRows = circles.length ? circles.map((item) => '<button type="button" class="g-super-row" data-open-in-app="' + esc(item.openUrl || 'https://education.gaiahealers.com') + '" data-in-app-title="' + esc(item.name || 'Gaia Healers Community') + '"><span class="g-super-row__icon">' + icon('users-three') + '</span><span><small>Community access</small><strong>' + esc(item.name || 'Community') + '</strong><em>Open your authorized circle</em></span>' + icon('caret-right') + '</button>').join('') : '<p class="g-super-empty">No circles joined yet.</p>';
     root.innerHTML = '<div class="g-super-page-head"><p class="g-super-kicker">Learn · practice · connect</p><h1>Your journey</h1><p>Only actions and access verified from your Gaia Healers member record appear here.</p></div>'
       + journeyRail()
       + '<section class="g-super-list"><div class="g-super-section-head"><div><p class="g-super-kicker">Learn</p><h2>Your courses</h2></div><a href="home.html?view=academy">Academy</a></div>' + courseRows + '</section>'
@@ -1041,7 +1041,7 @@
       const join = item.isVideo && meeting ? '<a class="g-btn g-btn--primary g-btn--sm" href="' + esc(meeting) + '" target="_blank" rel="noopener noreferrer">Join meeting</a>' : '';
       return '<article class="g-booking-item"><div><p class="g-super-kicker">' + esc(item.status || 'Scheduled') + '</p><h2>' + esc(item.title || 'Appointment') + '</h2><p>' + esc(appointmentWhen(item)) + (item.address ? ' · ' + esc(item.address) : '') + '</p></div>' + join + '</article>';
     }).join('') : '<section class="g-super-empty-panel"><h2>No upcoming appointments</h2><p>Choose a verified Gaia Healers booking option below when you are ready.</p></section>';
-    root.innerHTML = '<div class="g-super-page-head"><p class="g-super-kicker">Your schedule</p><h1>Bookings</h1><p>Appointments are read directly from the GHL contact signed into this app.</p></div>' + rows + bookingCatalog();
+    root.innerHTML = '<div class="g-super-page-head"><p class="g-super-kicker">Your schedule</p><h1>Bookings</h1><p>Your appointments appear here automatically.</p></div>' + rows + bookingCatalog();
     bind(root);
   }
 
@@ -1061,13 +1061,13 @@
     const root = $('inbox-body');
     if (!root) return;
     if (!memberState().authed) {
-      root.innerHTML = '<div class="g-super-page-head"><p class="g-super-kicker">Member messages</p><h1>Inbox</h1><p>Sign in to see conversation summaries associated with your GHL contact.</p></div>' + authPrompt(false);
+      root.innerHTML = '<div class="g-super-page-head"><p class="g-super-kicker">Member messages</p><h1>Inbox</h1><p>Sign in to see your message summaries.</p></div>' + authPrompt(false);
       bind(root); updateInboxBadge(); return;
     }
     const items = notifications();
     const rows = items.length ? items.map((item) => '<article class="g-super-row g-super-row--static' + (item.unread ? ' is-unread' : '') + '"><span class="g-super-row__icon">' + icon(item.unread ? 'chat-circle-dots' : 'chat-circle') + '</span><span><small>' + (item.unread ? esc(item.unread + ' unread') : 'Conversation') + '</small><strong>' + esc(item.lastMessage || 'Open your Gaia Healers portal to continue this conversation.') + '</strong><em>' + esc(item.updatedAt ? new Date(item.updatedAt).toLocaleString() : '') + '</em></span></article>').join('')
-      : '<section class="g-super-empty-panel"><h2>You’re all caught up</h2><p>No conversations were returned for this GHL contact.</p></section>';
-    root.innerHTML = '<div class="g-super-page-head"><p class="g-super-kicker">Member messages</p><h1>Inbox</h1><p>Read-only conversation summaries from GHL. Continue securely in the member portal.</p></div>'
+      : '<section class="g-super-empty-panel"><h2>You’re all caught up</h2><p>No messages yet.</p></section>';
+    root.innerHTML = '<div class="g-super-page-head"><p class="g-super-kicker">Member messages</p><h1>Inbox</h1><p>Read-only summaries of your messages. Continue securely in the member portal.</p></div>'
       + '<section class="g-super-list">' + rows + '<div class="g-super-list__footer"><button type="button" class="g-btn g-btn--secondary" data-open-in-app="' + esc('https://education.gaiahealers.com') + '" data-in-app-title="Gaia Healers member portal">Open member portal</button></div></section>';
     bind(root); updateInboxBadge();
   }

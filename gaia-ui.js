@@ -515,7 +515,7 @@
         <a href="${escapeHtml(portalUrl)}" class="gaia-row gaia-row--link gaia-row--cta">
           <div class="min-w-0 flex-1">
             <p class="text-headline text-ink">Search full directory</p>
-            <p class="gaia-caption mt-0.5">Member list syncs after GHL login</p>
+            <p class="gaia-caption mt-0.5">Members appear after you sign in</p>
           </div>
           <span class="gaia-link shrink-0">Log in</span>
         </a>
@@ -576,7 +576,7 @@
         <a href="${escapeHtml(portalUrl)}" class="gaia-row gaia-row--link gaia-row--cta">
           <div class="min-w-0 flex-1">
             <p class="text-headline text-ink">Manage in client portal</p>
-            <p class="gaia-caption mt-0.5">Preferences map to GHL Marketing segments</p>
+            <p class="gaia-caption mt-0.5">Your preferences are saved to your account</p>
           </div>
           <span class="gaia-link shrink-0">Open</span>
         </a>
@@ -615,7 +615,7 @@
           <div class="gaia-tile-icon strip-healeex">GK</div>
           <div class="min-w-0 flex-1">
             <p class="text-headline text-ink">${escapeHtml(marketplace.provider || 'Marketplace')}</p>
-            <p class="gaia-caption mt-0.5">${escapeHtml(marketplace.note || 'Member products and digital offers sync from GHL Memberships.')}</p>
+            <p class="gaia-caption mt-0.5">${escapeHtml(marketplace.note || 'Member products and digital offers sync from your membership.')}</p>
           </div>
           <span class="gaia-badge gaia-badge--subtle">${escapeHtml(marketplace.status || 'Live')}</span>
         </article>
@@ -732,7 +732,7 @@
           <article class="gaia-row">
             <div class="flex-1 min-w-0">
               <p class="text-headline text-ink">${academy.memberResolved || academy.authenticated ? 'Secure Academy workspace ready' : 'Member login needed'}</p>
-              <p class="gaia-caption">${academy.memberResolved || academy.authenticated ? 'Open the in-app GHL workspace for live lessons, locked modules, purchases, and certificates.' : 'Sign in once to open your secure course workspace inside the app.'}</p>
+              <p class="gaia-caption">${academy.memberResolved || academy.authenticated ? 'Open your in-app workspace for live lessons, locked modules, purchases, and certificates.' : 'Sign in once to open your secure course workspace inside the app.'}</p>
             </div>
             <a href="${escapeHtml(portalWorkspaceUrl('academy'))}" class="gaia-link shrink-0" data-gaia-portal-launch="1" data-gaia-portal-section="academy">${academy.memberResolved || academy.authenticated ? 'Open' : 'Log in'}</a>
           </article>`;
@@ -761,7 +761,7 @@
       const memberReady = Boolean(academy.memberResolved || academy.authenticated);
       if (portalWorkspaceOnly) {
         summaryCaption.textContent = memberReady
-          ? 'Secure courses · GHL member workspace'
+          ? 'Secure courses · Member workspace'
           : 'Sign in required · secure Academy workspace';
         activeTitle.textContent = memberReady ? 'Open your secure Academy workspace' : 'Log in to view your courses';
         activeDetail.textContent = memberReady
@@ -769,7 +769,7 @@
           : 'Use your Gaia Healers member login once, then continue lessons and gated modules inside the in-app GHL portal.';
         if (activeProgress) activeProgress.style.width = '0%';
         if (activePercent) activePercent.textContent = memberReady ? 'Portal ready' : 'Log in';
-        if (activeLessons) activeLessons.textContent = memberReady ? 'GHL member workspace' : 'Secure Member Access';
+        if (activeLessons) activeLessons.textContent = memberReady ? 'Member workspace' : 'Secure Member Access';
         if (continueLink) {
           continueLink.href = portalWorkspaceUrl('academy');
           continueLink.dataset.gaiaPortalLaunch = '1';
@@ -786,7 +786,7 @@
         renderRequirements({
           title: memberReady ? 'Member workspace' : 'Member login required',
           description: memberReady
-            ? 'Course progress and gated lessons stay inside the secure GHL member workspace.'
+            ? 'Course progress and gated lessons stay inside the secure Member workspace.'
             : 'Sign in with your existing Gaia Healers portal account to unlock your course progress, purchases, and credentials.',
           scansCompleted: 0,
           scansRequired: 0,
@@ -937,7 +937,7 @@
       }
       if (todayJourneyBadge) todayJourneyBadge.textContent = percentLabel(activeCourse.progressPercent || academy.summary?.averageProgress || 0);
       if (todayHubTitle) todayHubTitle.textContent = `${portal.adminSections?.length || 5} synced membership areas`;
-      if (todayHubBadge) todayHubBadge.textContent = (portal.users || data.members) ? `${Number(portal.users || data.members).toLocaleString()} users` : 'GHL';
+      if (todayHubBadge) todayHubBadge.textContent = (portal.users || data.members) ? `${Number(portal.users || data.members).toLocaleString()} users` : 'Members';
       if (todayNextLesson) todayNextLesson.textContent = dashboard.nextLessonTitle || academy.summary?.nextLessonTitle || 'Continue your active course';
       if (todayNextMeeting) {
         const meeting = meetings[0];
@@ -1004,7 +1004,7 @@
             <div class="gaia-tile-icon strip-healeex">GH</div>
             <div class="min-w-0 flex-1">
               <p class="text-headline text-ink">Community access</p>
-              <p class="gaia-caption mt-0.5">${communities.length} active groups inside GHL Memberships</p>
+              <p class="gaia-caption mt-0.5">${communities.length} active circles in Gaia Healers</p>
             </div>
             <span class="gaia-badge">${communities.length}</span>
           </article>

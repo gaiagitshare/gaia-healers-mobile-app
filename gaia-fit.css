@@ -1987,3 +1987,15 @@ body.gaia-v2 .g-topbar__actions.gaia-header-actions { display: flex; align-items
 @media (min-width: 1060px) {
   .g-dir__list { grid-template-columns: 1fr 1fr 1fr; }
 }
+
+/* My Gaia Healers Journey — real credentials (derived from tags/membership) */
+.g-jcreds { margin: 4px 0 10px; }
+.g-jcreds__grid { display: grid; gap: 10px; grid-template-columns: 1fr; margin-top: 10px; }
+@media (min-width: 560px) { .g-jcreds__grid { grid-template-columns: 1fr 1fr; } }
+.g-jcred { display: flex; align-items: center; gap: 13px; padding: 14px 15px; border-radius: 16px;
+  background: radial-gradient(120% 140% at 0% 0%, color-mix(in srgb, var(--g-accent, #A6E84B) 16%, transparent), transparent 60%), var(--g-card-bg, rgba(20,30,22,0.6));
+  border: 1px solid color-mix(in srgb, var(--g-accent, #A6E84B) 30%, var(--g-line, rgba(190,240,170,0.14))); }
+.g-jcred__ic { flex: 0 0 auto; width: 42px; height: 42px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 22px; color: #0a0f0a; background: linear-gradient(135deg, var(--g-accent, #A6E84B), #6fb03a); }
+.g-jcred__body { display: flex; flex-direction: column; min-width: 0; }
+.g-jcred__body strong { font-size: 14.5px; color: var(--g-text, #E7EFE6); line-height: 1.2; }
+.g-jcred__body small { font-size: 11.5px; color: var(--g-text-dim, #93A597); margin-top: 2px; }

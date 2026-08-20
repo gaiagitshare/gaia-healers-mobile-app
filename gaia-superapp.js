@@ -733,6 +733,72 @@
       + '</div></section>';
   }
 
+  // Real credentials only — derived from the member's actual GHL tags and
+  // resolved membership. Never inferred from owning a course. Hidden if none.
+  function credentialsSection() {
+    const acc = memberState().data && memberState().data.access;
+    const m = (acc && acc.member) || {};
+    const mem = acc && acc.membership;
+    const badges = [];
+    if (m.practitionerCertified) badges.push(['seal-check', 'Certified Bio-Well Practitioner', 'Verified certification']);
+    else if (m.practitioner) badges.push(['user-focus', 'Gaia Healers Practitioner', 'Practitioner status']);
+    if (mem && mem.key && ['active', 'trialing', 'past_due'].includes(mem.status)) {
+      let sub = mem.subtitle || 'Active membership';
+      if (mem.started_at) { const d = new Date(mem.started_at); if (!isNaN(d.getTime())) sub = 'Member since ' + d.toLocaleDateString(undefined, { month: 'short', year: 'numeric' }); }
+      const label = mem.label || (mem.key.charAt(0).toUpperCase() + mem.key.slice(1));
+      badges.push(['crown-simple', label + ' Member', sub]);
+    }
+    if (!badges.length) return '';
+    return '<section class="g-jcreds"><p class="g-super-kicker">Your credentials</p><div class="g-jcreds__grid">'
+      + badges.map((b) => '<div class="g-jcred"><span class="g-jcred__ic">' + icon(b[0]) + '</span><div class="g-jcred__body"><strong>' + esc(b[1]) + '</strong><small>' + esc(b[2]) + '</small></div></div>').join('')
+      + '</div></section>';
+  }
+
+  // Academy SUMMARY (count + link) — the full library lives in the Academy
+  // screen, so Journey never duplicates the course list.
+  function academySummary() {
+    const n = courseGrants().length;
+    const inner = n
+      ? '<a class="g-super-row" href="home.html?view=academy"><span class="g-super-row__icon">' + icon('graduation-cap') + '</span><span><small>Course access</small><strong>' + n + ' course' + (n === 1 ? '' : 's') + ' in your Academy</strong><em>Open the Academy for lessons &amp; certificates</em></span>' + icon('caret-right') + '</a>'
+      : '<a class="g-super-row" href="home.html?view=academy"><span class="g-super-row__icon">' + icon('graduation-cap') + '</span><span><small>Academy</small><strong>Browse courses &amp; certifications</strong><em>See what your membership unlocks</em></span>' + icon('caret-right') + '</a>';
+    return '<section class="g-super-list"><div class="g-super-section-head"><div><p class="g-super-kicker">Academy</p><h2>Your courses</h2></div><a href="home.html?view=academy">Open Academy</a></div>' + inner + '</section>';
+  }
+
+  async function fillJourneyStreak() {
+    const host = document.querySelector('[data-journey-streak]'); if (!host) return;
+    try {
+      const r = await fetch(proxyBase() + '/api/wellness/daily', { credentials: 'include' });
+      const d = await r.json();
+      if (d && !d.guest && d.ritual) {
+        const cur = d.ritual.current || 0;
+        host.innerHTML = '<div class="g-super-row"><span class="g-super-row__icon">' + icon('flame') + '</span><span><small>Daily Energy</small><strong>' + (cur > 0 ? cur + ' day streak' : 'Begin your streak today') + '</strong><em>' + (d.ritual.total || 0) + ' ritual' + ((d.ritual.total || 0) === 1 ? '' : 's') + ' completed</em></span></div>';
+      } else {
+        host.innerHTML = '<a class="g-super-row" href="home.html?view=today"><span class="g-super-row__icon">' + icon('sparkle') + '</span><span><small>Daily Energy</small><strong>Start your daily practice</strong><em>Personalise your energy on Today</em></span>' + icon('caret-right') + '</a>';
+      }
+    } catch (e) { host.innerHTML = ''; }
+  }
+
+  async function fillJourneyEvents() {
+    const sec = document.querySelector('[data-journey-events-sec]');
+    const host = document.querySelector('[data-journey-events]');
+    if (!host) return;
+    try {
+      const r = await fetch(proxyBase() + '/api/events/mine', { credentials: 'include' });
+      if (!r.ok) return;
+      const d = await r.json();
+      const rows = (d && (d.events || d.tickets || d.registrations)) || [];
+      if (!Array.isArray(rows) || !rows.length) return; // hide when there is no real ticket
+      const html = rows.map((ev) => {
+        const t = ev.ticket || ev;
+        const attended = !!t.checkedIn;
+        const when = attended && t.checkedInAt ? ' · ' + new Date(t.checkedInAt).toLocaleDateString() : '';
+        return '<div class="g-super-row"><span class="g-super-row__icon">' + icon(attended ? 'seal-check' : 'ticket') + '</span><span><small>' + (attended ? 'Attended' : 'Registered') + '</small><strong>' + esc(ev.name || ev.eventName || ev.title || 'Gaia Healers event') + '</strong><em>' + (attended ? 'Checked in' + when : 'You have a ticket') + '</em></span></div>';
+      }).join('');
+      host.innerHTML = html;
+      if (sec) sec.hidden = false;
+    } catch (e) { /* leave hidden */ }
+  }
+
   function renderJourney() {
     const root = $('journey-body');
     if (!root) return;
@@ -752,12 +818,16 @@
     const courseRows = courses.length ? courses.map((course) => '<button type="button" class="g-super-row" data-super-course="' + esc(course.openUrl || memberState().data?.courses?.portalUrl || '') + '" data-super-course-title="' + esc(course.title || course.name || 'Gaia Healers Academy') + '"><span class="g-super-row__icon">' + icon('book-open') + '</span><span><small>Course access</small><strong>' + esc(course.title || course.name || 'Course') + '</strong><em>Open your member workspace</em></span>' + icon('caret-right') + '</button>').join('') : '<p class="g-super-empty">No courses yet.</p>';
     const apptRows = appts.length ? appts.slice(0, 3).map((item) => '<a class="g-super-row" href="home.html?view=bookings"><span class="g-super-row__icon">' + icon('calendar-check') + '</span><span><small>Practice</small><strong>' + esc(item.title || 'Appointment') + '</strong><em>' + esc(appointmentWhen(item)) + '</em></span>' + icon('caret-right') + '</a>').join('') : '<p class="g-super-empty">No upcoming appointments.</p>';
     const circleRows = circles.length ? circles.map((item) => '<button type="button" class="g-super-row" data-open-in-app="' + esc(item.openUrl || 'https://education.gaiahealers.com') + '" data-in-app-title="' + esc(item.name || 'Gaia Healers Community') + '"><span class="g-super-row__icon">' + icon('users-three') + '</span><span><small>Community access</small><strong>' + esc(item.name || 'Community') + '</strong><em>Open your authorized circle</em></span>' + icon('caret-right') + '</button>').join('') : '<p class="g-super-empty">No circles joined yet.</p>';
-    root.innerHTML = '<div class="g-super-page-head"><p class="g-super-kicker">Learn · practice · connect</p><h1>Your journey</h1><p>Only actions and access verified from your Gaia Healers member record appear here.</p></div>'
+    root.innerHTML = '<div class="g-super-page-head"><p class="g-super-kicker">Your Gaia Healers journey</p><h1>Your journey</h1><p>Everything here is verified from your real Gaia Healers record.</p></div>'
+      + credentialsSection()
       + journeyRail()
-      + '<section class="g-super-list"><div class="g-super-section-head"><div><p class="g-super-kicker">Learn</p><h2>Your courses</h2></div><a href="home.html?view=academy">Academy</a></div>' + courseRows + '</section>'
-      + '<section class="g-super-list"><div class="g-super-section-head"><div><p class="g-super-kicker">Practice</p><h2>Upcoming sessions</h2></div><a href="home.html?view=bookings">Bookings</a></div>' + apptRows + '</section>'
-      + '<section class="g-super-list"><div class="g-super-section-head"><div><p class="g-super-kicker">Connect</p><h2>Your communities</h2></div><a href="home.html?view=community">Community</a></div>' + circleRows + '</section>';
+      + '<section class="g-super-list"><div class="g-super-section-head"><div><p class="g-super-kicker">Practice</p><h2>Daily practice</h2></div><a href="home.html?view=today">Today</a></div><div data-journey-streak><p class="g-super-empty">…</p></div>' + apptRows + '</section>'
+      + academySummary()
+      + '<section class="g-super-list" data-journey-events-sec hidden><div class="g-super-section-head"><div><p class="g-super-kicker">Events</p><h2>Your events</h2></div><a href="home.html?view=events">Events</a></div><div data-journey-events></div></section>'
+      + '<section class="g-super-list"><div class="g-super-section-head"><div><p class="g-super-kicker">Community</p><h2>Your communities</h2></div><a href="home.html?view=community">Community</a></div>' + circleRows + '</section>'
     bind(root);
+    fillJourneyStreak();
+    fillJourneyEvents();
   }
 
   // ---- Events: hub and per-event page -------------------------------------

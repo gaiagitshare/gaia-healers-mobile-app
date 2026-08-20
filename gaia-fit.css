@@ -1700,3 +1700,46 @@ body.gaia-v2 .g-super-home .g-feature-event .g-feature-event__art {
   .g-install { justify-content: flex-end; padding-right: 20px; padding-left: 20px; }
   .g-install__panel { max-width: 380px; }
 }
+
+
+/* ── Logged-out home rework (2026-08-20) ───────────────────────────────────── */
+/* Hero: a single full-width primary action for guests. */
+body.gaia-v2 .g-super-home .g-super-hero .g-super-discover--solo { display: block !important; }
+body.gaia-v2 .g-super-home .g-super-hero .g-super-discover--solo > .g-btn { width: 100%; }
+
+/* Header: Sign in pill for guests, sitting beside the Menu button. */
+body.gaia-v2 .g-topbar__actions.gaia-header-actions { display: flex; align-items: center; gap: 8px; }
+.gaia-header-signin {
+  font-family: inherit; font-weight: 700; font-size: 13px; line-height: 1;
+  color: var(--g-accent, #A6E84B); border: 1px solid var(--g-line-strong, rgba(190,240,170,.18));
+  background: rgba(166,232,75,.06); padding: 9px 15px; border-radius: 999px;
+  cursor: pointer; min-height: 38px; -webkit-tap-highlight-color: transparent;
+}
+.gaia-header-signin:active { background: rgba(166,232,75,.12); }
+
+
+/* ── First-run tour (spotlight) ─────────────────────────────────────────────── */
+.gaia-tour { position: fixed; inset: 0; z-index: 1000; }
+.gaia-tour__spot {
+  position: fixed; border-radius: 18px; border: 2px solid var(--g-accent, #A6E84B);
+  box-shadow: 0 0 0 9999px rgba(4,8,6,.80), 0 0 34px rgba(166,232,75,.35);
+  transition: left .32s cubic-bezier(.2,.8,.3,1), top .32s cubic-bezier(.2,.8,.3,1),
+    width .32s cubic-bezier(.2,.8,.3,1), height .32s cubic-bezier(.2,.8,.3,1);
+  pointer-events: none;
+}
+.gaia-tour__card {
+  position: fixed; left: 16px; right: 16px; max-width: 420px; margin: 0 auto;
+  background: #0e1a11; border: 1px solid var(--g-line-strong, rgba(190,240,170,.18));
+  border-radius: 20px; padding: 18px; box-shadow: 0 20px 50px rgba(0,0,0,.6);
+}
+.gaia-tour__eyebrow { font-size: 10.5px; font-weight: 700; letter-spacing: .16em; text-transform: uppercase; color: var(--g-accent, #A6E84B); }
+.gaia-tour__title { font-family: var(--g-font-serif, "Cormorant Garamond", serif); font-weight: 600; font-size: 22px; margin-top: 6px; line-height: 1.1; }
+.gaia-tour__body { font-size: 13.5px; color: var(--g-text-dim, #93A597); margin-top: 6px; line-height: 1.45; }
+.gaia-tour__row { display: flex; align-items: center; justify-content: space-between; margin-top: 16px; gap: 12px; }
+.gaia-tour__dots { display: flex; gap: 6px; }
+.gaia-tour__dots i { width: 7px; height: 7px; border-radius: 50%; background: var(--g-line-strong, rgba(190,240,170,.18)); display: block; transition: width .2s, background .2s; }
+.gaia-tour__dots i.on { width: 20px; border-radius: 99px; background: var(--g-accent, #A6E84B); }
+.gaia-tour__btns { display: flex; gap: 8px; align-items: center; }
+.gaia-tour__skip { background: none; border: none; color: var(--g-text-dim, #93A597); font-size: 12.5px; font-weight: 600; cursor: pointer; }
+.gaia-tour__next { background: var(--g-accent, #A6E84B); color: #0a1705; border: none; border-radius: 999px; padding: 9px 18px; font-weight: 700; font-size: 13px; cursor: pointer; }
+@media (prefers-reduced-motion: reduce) { .gaia-tour__spot { transition: none; } }

@@ -660,17 +660,23 @@
       + '<h1>' + greeting + '</h1>'
       + '<p class="g-super-date">' + esc(dateLabel()) + '</p>'
       + '<p>' + (authed ? 'Your healing journey is waiting.' : 'What does your energy need today?') + '</p>'
-      + (authed ? journeyRail() + primaryMemberAction() : '<div class="g-super-discover"><a class="g-btn g-btn--primary" href="home.html?view=wellness&tab=check">' + icon('sparkle') + ' Check my energy</a><button type="button" class="g-btn g-btn--secondary" data-gaia-open-assist>' + icon('microphone') + ' Ask Gaia</button></div>') + '</div><div class="g-super-hero__art"><picture><source media="(min-width: 900px)" srcset="assets/gaia-hero-moon.png" /><img src="assets/gaia-hero-moon-wide.png" alt="Person meditating in lotus pose under a full moon over mountains" width="1024" height="576" loading="eager" /></picture></div></section>'
-      + eventFeature()
-      // Today's sky sits high on the page precisely because it needs nothing
-      // from the visitor: it is the first thing a stranger can actually read.
-      + '<div data-sky-host></div>'
-      + continueJourney(authed)
-      + freeTools()
-      + (authed ? '<section class="g-super-services"><div class="g-super-section-head"><div><p class="g-super-kicker">Your access</p><h2>Everything Gaia Healers</h2></div><a href="home.html?view=journey">View journey</a></div><div class="g-super-services__grid">' + services + '</div></section>' : '')
-      + discoverGaia()
-      + (!authed ? authPrompt(true) : '')
-      + (authed ? '<section class="g-super-sync">' + icon('check-circle') + '<div><strong>Your access is synced</strong><span>Courses, communities, plans and purchases reflect your GHL member record.</span></div></section>' : '')
+      + (authed ? journeyRail() + primaryMemberAction() : '<div class="g-super-discover g-super-discover--solo"><a class="g-btn g-btn--primary" href="home.html?view=wellness&tab=check">' + icon('sparkle') + ' Check my energy</a></div>') + '</div><div class="g-super-hero__art"><picture><source media="(min-width: 900px)" srcset="assets/gaia-hero-moon.png" /><img src="assets/gaia-hero-moon-wide.png" alt="Person meditating in lotus pose under a full moon over mountains" width="1024" height="576" loading="eager" /></picture></div></section>'
+      + (authed
+        ? eventFeature()
+          + '<div data-sky-host></div>'
+          + continueJourney(authed)
+          + freeTools()
+          + '<section class="g-super-services"><div class="g-super-section-head"><div><p class="g-super-kicker">Your access</p><h2>Everything Gaia Healers</h2></div><a href="home.html?view=journey">View journey</a></div><div class="g-super-services__grid">' + services + '</div></section>'
+          + discoverGaia()
+          + '<section class="g-super-sync">' + icon('check-circle') + '<div><strong>Your access is synced</strong><span>Courses, communities, plans and purchases reflect your GHL member record.</span></div></section>'
+        // Logged-out flow: the free tools first — the one thing a stranger can
+        // use right now — then today's sky, the event, one clear way in, and the
+        // wider ecosystem last so the top of the page stays short and focused.
+        : freeTools()
+          + '<div data-sky-host></div>'
+          + eventFeature()
+          + authPrompt(true)
+          + discoverGaia())
       + '</div>';
     bind(root);
     // Panels that live inside the home screen but are owned by their own files

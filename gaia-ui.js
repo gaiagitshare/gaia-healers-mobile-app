@@ -1631,24 +1631,83 @@
     refreshChakraMaps();
   }
 
+  // First-run tour: a once-ever, guest-only spotlight walk that shows a new
+  // visitor the free tools, Ask Gaia, the Menu, and how to save their readings.
+  const TOUR_KEY = 'gaia-tour-v1';
+  function tourSeen() { try { return localStorage.getItem(TOUR_KEY) === '1'; } catch (_) { return true; } }
+  function markTourSeen() { try { localStorage.setItem(TOUR_KEY, '1'); } catch (_) {} }
+
+  function runTour() {
+    const steps = [
+      { sel: '.g-free-tools', eyebrow: 'Free · no sign-up', title: 'Try your energy — free',
+        body: 'Energy, Horoscope, Chakra &amp; Moon readings, right now. Your results save when you join.' },
+      { sel: '.gaia-tabbar__assist', eyebrow: 'Your guide', title: 'Ask Gaia, anytime',
+        body: 'Tap the centre orb to talk or type — your AI wellness guide for anything in the app.' },
+      { sel: '[data-gaia-menu-button]', eyebrow: 'More', title: "Everything else is in the Menu",
+        body: 'Academy, Community, Store, Events and Bookings all live here.' },
+      { sel: '.gaia-header-signin', eyebrow: 'Save it', title: 'Keep your readings',
+        body: 'Create a free account to save your progress and unlock member courses &amp; communities.' },
+    ].filter((st) => document.querySelector(st.sel));
+    if (!steps.length) { markTourSeen(); return; }
+
+    let i = 0;
+    const overlay = document.createElement('div');
+    overlay.className = 'gaia-tour';
+    overlay.innerHTML = '<div class="gaia-tour__spot" aria-hidden="true"></div><div class="gaia-tour__card" role="dialog" aria-modal="true"></div>';
+    const spot = overlay.querySelector('.gaia-tour__spot');
+    const card = overlay.querySelector('.gaia-tour__card');
+    document.body.appendChild(overlay);
+
+    const finish = () => { markTourSeen(); overlay.remove(); window.removeEventListener('resize', place); };
+    function place() {
+      const el = document.querySelector(steps[i].sel);
+      if (!el) return;
+      const r = el.getBoundingClientRect();
+      const pad = 8;
+      spot.style.left = Math.max(6, r.left - pad) + 'px';
+      spot.style.top = Math.max(6, r.top - pad) + 'px';
+      spot.style.width = Math.min(window.innerWidth - 12, r.width + pad * 2) + 'px';
+      spot.style.height = (r.height + pad * 2) + 'px';
+      const room = window.innerHeight - r.bottom;
+      if (room > 210) { card.style.top = (r.bottom + 14) + 'px'; card.style.bottom = 'auto'; }
+      else { card.style.top = 'auto'; card.style.bottom = Math.max(14, window.innerHeight - r.top + 14) + 'px'; }
+    }
+    function render() {
+      const el = document.querySelector(steps[i].sel);
+      if (el && el.scrollIntoView) el.scrollIntoView({ block: 'center', behavior: 'smooth' });
+      window.requestAnimationFrame(() => window.setTimeout(place, 260));
+      const dots = steps.map((_, n) => '<i class="' + (n === i ? 'on' : '') + '"></i>').join('');
+      card.innerHTML = '<p class="gaia-tour__eyebrow">' + steps[i].eyebrow + '</p>'
+        + '<h4 class="gaia-tour__title">' + steps[i].title + '</h4>'
+        + '<p class="gaia-tour__body">' + steps[i].body + '</p>'
+        + '<div class="gaia-tour__row"><div class="gaia-tour__dots">' + dots + '</div>'
+        + '<div class="gaia-tour__btns"><button type="button" class="gaia-tour__skip">Skip</button>'
+        + '<button type="button" class="gaia-tour__next">' + (i === steps.length - 1 ? 'Got it' : 'Next →') + '</button></div></div>';
+      card.querySelector('.gaia-tour__skip').addEventListener('click', finish);
+      card.querySelector('.gaia-tour__next').addEventListener('click', () => {
+        if (i >= steps.length - 1) finish(); else { i += 1; render(); }
+      });
+    }
+    window.addEventListener('resize', place);
+    render();
+  }
+
   function initCoachMark() {
     if (window.location.pathname.split('/').pop() !== 'home.html') return;
-    if (sessionStorage.getItem(COACH_KEY)) return;
-    const anchor = document.getElementById('gaia-coach-anchor');
-    if (!anchor) return;
-
-    const tip = document.createElement('div');
-    tip.className = 'gaia-coach';
-    tip.innerHTML = `
-      <p class="gaia-coach__eyebrow">Quick guide</p>
-      <p class="gaia-coach__body"><strong>Tap Gaia</strong> once for live voice — just speak naturally, like a phone call. Tap again to close.</p>
-      <p class="gaia-coach__sub">Explore <strong>Home</strong>, <strong>Academy</strong>, <strong>Community</strong>, and <strong>Me</strong> in the bottom bar. Sign in to unlock your data.</p>
-      <button type="button" class="gaia-coach__btn">Got it</button>`;
-    tip.querySelector('button').addEventListener('click', () => {
-      sessionStorage.setItem(COACH_KEY, '1');
-      tip.remove();
-    });
-    anchor.before(tip);
+    if (tourSeen()) return;
+    let started = false;
+    const start = () => {
+      if (started || tourSeen()) return;
+      // Guests only — a signed-in member does not need the intro.
+      if (authState().authenticated) { markTourSeen(); return; }
+      // Wait until the home has actually rendered its free tools.
+      if (!document.querySelector('.g-free-tools')) return;
+      started = true;
+      document.removeEventListener('gaia:superapp-rendered', start);
+      window.setTimeout(runTour, 500);
+    };
+    document.addEventListener('gaia:superapp-rendered', start);
+    start();
   }
 
   function initHeaderProfile() {
@@ -1697,17 +1756,34 @@
     });
     sheet.querySelector('[data-menu-signin]')?.addEventListener('click', () => { close(); window.GaiaAuth?.open?.(); });
     sheet.querySelector('[data-book-inline]')?.addEventListener('click', close);
-    document.querySelectorAll('[data-gaia-header-actions]').forEach((slot) => {
-      slot.replaceChildren();
-      const button = document.createElement('button');
-      button.type = 'button';
-      button.className = 'gaia-menu-button';
-      button.dataset.gaiaMenuButton = '';
-      button.setAttribute('aria-label', 'Open Gaia Healers menu');
-      button.textContent = 'Menu';
-      button.addEventListener('click', open);
-      slot.appendChild(button);
-    });
+    // Header actions: a Sign in pill (guests only) beside the Menu button, so a
+    // returning member never has to scroll to the foot of the page to sign in.
+    // Repainted on every auth change so it appears/disappears with the session.
+    const paintHeaderActions = () => {
+      const authed = authState().authenticated;
+      document.querySelectorAll('[data-gaia-header-actions]').forEach((slot) => {
+        slot.replaceChildren();
+        if (!authed) {
+          const signin = document.createElement('button');
+          signin.type = 'button';
+          signin.className = 'gaia-header-signin';
+          signin.textContent = 'Sign in';
+          signin.setAttribute('aria-label', 'Sign in to Gaia Healers');
+          signin.addEventListener('click', () => window.GaiaAuth?.open?.());
+          slot.appendChild(signin);
+        }
+        const button = document.createElement('button');
+        button.type = 'button';
+        button.className = 'gaia-menu-button';
+        button.dataset.gaiaMenuButton = '';
+        button.setAttribute('aria-label', 'Open Gaia Healers menu');
+        button.textContent = 'Menu';
+        button.addEventListener('click', open);
+        slot.appendChild(button);
+      });
+    };
+    paintHeaderActions();
+    document.addEventListener('gaia:auth', paintHeaderActions);
   }
 
   function initSplashSteps() {

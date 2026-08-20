@@ -277,6 +277,68 @@ async function dailyFor(profile, deps) {
   };
 }
 
+// ---- Daily Energy: a composed daily ritual + real server-side streak ----
+// Built entirely on the existing real daily (focus chakra, sun sign, AI tip)
+// plus the per-chakra CHAKRA_PATHS. No mock data, no random.
+function dayNumberUTC(dateKey) { return Math.floor(Date.parse(dateKey + 'T00:00:00Z') / 86400000); }
+function keyFromDayNumber(n) { return new Date(n * 86400000).toISOString().slice(0, 10); }
+
+// Streak state derived from profile.ritual.checkins (an array of YYYY-MM-DD).
+function ritualState(profile) {
+  const log = (profile.ritual && Array.isArray(profile.ritual.checkins)) ? profile.ritual.checkins : [];
+  const set = new Set(log);
+  const todayKeyStr = todayKey();
+  const todayN = dayNumberUTC(todayKeyStr);
+  // Current streak: consecutive days ending today, or ending yesterday if today
+  // is not done yet (so the streak is not shown as broken before you check in).
+  let current = 0;
+  const anchor = set.has(todayKeyStr) ? todayN : todayN - 1;
+  for (let n = anchor; ; n -= 1) { if (set.has(keyFromDayNumber(n))) current += 1; else break; }
+  // Longest run anywhere in the log.
+  const nums = [...set].map(dayNumberUTC).sort((a, b) => a - b);
+  let longest = 0, run = 0, prev = null;
+  for (const n of nums) { run = (prev !== null && n === prev + 1) ? run + 1 : 1; if (run > longest) longest = run; prev = n; }
+  // Last 7 days for a calendar strip.
+  const last7 = [];
+  for (let i = 6; i >= 0; i -= 1) { const key = keyFromDayNumber(todayN - i); last7.push({ date: key, done: set.has(key) }); }
+  return { doneToday: set.has(todayKeyStr), current, longest, total: set.size, last7 };
+}
+
+async function dailyEnergyFor(profile, deps) {
+  const d = await dailyFor(profile, deps);
+  const dob = parseDob(profile.dob);
+  const focus = todayChakra(birthChakraIndex(dob.y, dob.m, dob.d), todayKey());
+  const path = CHAKRA_PATHS[focus.id] || CHAKRA_PATHS.heart;
+  return Object.assign({}, d, {
+    name: firstName(profile.name),
+    chakraId: focus.id,
+    intention: path.intention,
+    practice: path.practice,
+    journal: path.journal,
+    colour: path.colour,
+    ritual: ritualState(profile),
+  });
+}
+
+// Guest preview: a COLLECTIVE focus chakra derived from the date only (never
+// personal), so signed-out visitors see a real, changing preview and a reason
+// to add their birth date. Clearly flagged guest:true so the UI never implies
+// it is personalised.
+function guestDaily() {
+  const dateKey = todayKey();
+  const focus = CHAKRAS[((dayNumberUTC(dateKey) % 7) + 7) % 7];
+  const path = CHAKRA_PATHS[focus.id] || CHAKRA_PATHS.heart;
+  return {
+    guest: true,
+    date: dateKey,
+    bodyPoint: { chakra: focus.name, sanskrit: focus.sanskrit, area: focus.area, focus: focus.focus, element: focus.element, color: focus.color },
+    chakraId: focus.id,
+    intention: path.intention,
+    practice: path.practice,
+    colour: path.colour,
+  };
+}
+
 function publicProfile(p) { return { name: p.name, firstName: firstName(p.name), location: p.location, birthTime: p.birthTime || '', email: p.email }; }
 
 // ---- GHL sync (best-effort; needs contacts.write on the PIT) ----
@@ -385,6 +447,22 @@ async function handle(req, res, url, deps) {
     if (!profile.challenge.checkins.includes(dateKey)) profile.challenge.checkins.push(dateKey);
     saveProfile(profile);
     return sendJson(res, 200, { ok: true, challenge: challengeState(profile) }, origin);
+  }
+
+  if (p === '/api/wellness/daily' && method === 'GET') {
+    const profile = profileFromReq(req, deps);
+    if (!profile) return sendJson(res, 200, Object.assign({ ok: true }, guestDaily()), origin);
+    const daily = await dailyEnergyFor(profile, deps);
+    return sendJson(res, 200, Object.assign({ ok: true }, daily), origin);
+  }
+  if (p === '/api/wellness/daily/complete' && method === 'POST') {
+    const profile = profileFromReq(req, deps);
+    if (!profile) return sendJson(res, 401, { ok: false, reason: 'not_signed_up' }, origin);
+    const dateKey = todayKey();
+    if (!profile.ritual || !Array.isArray(profile.ritual.checkins)) profile.ritual = { checkins: [] };
+    if (!profile.ritual.checkins.includes(dateKey)) profile.ritual.checkins.push(dateKey);
+    saveProfile(profile);
+    return sendJson(res, 200, { ok: true, ritual: ritualState(profile) }, origin);
   }
 
   if (p === '/api/wellness/signup' && method === 'POST') {

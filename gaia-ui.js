@@ -1047,7 +1047,14 @@
             <button type="submit" class="g-btn g-btn--primary gaia-auth-modal__submit" data-auth-submit>Email me a sign-in link</button>
           </form>
           <p class="gaia-auth-modal__status" id="gaia-auth-status" data-auth-status role="status" aria-live="polite">Your link goes straight to your inbox.</p>
-          <p class="gaia-auth-modal__join">New to Gaia Healers? <button type="button" class="gaia-auth-modal__joinlink" data-open-in-app="https://join.gaiahealers.com/onboarding" data-in-app-title="Join Gaia Healers — free">Join free</button> — it takes a minute and your account is created instantly.</p>
+          <p class="gaia-auth-modal__join">New to Gaia Healers? <button type="button" class="gaia-auth-modal__joinlink" data-join-toggle>Join free</button> — we’ll create your account and email your one-tap sign-in link.</p>
+          <div class="gaia-auth-modal__joinform" data-join-form hidden>
+            <input type="text" data-join-name class="gaia-auth-modal__input" placeholder="Your name" autocomplete="name" aria-label="Your name" />
+            <input type="email" data-join-email class="gaia-auth-modal__input" placeholder="you@example.com" autocomplete="email" inputmode="email" aria-label="Email for your new account" />
+            <button type="button" class="g-btn g-btn--primary gaia-auth-modal__submit" data-join-submit>Create my account &amp; email my link</button>
+            <p class="gaia-auth-modal__status" data-join-status role="status" aria-live="polite"></p>
+            <button type="button" class="gaia-auth-modal__joinalt" data-open-in-app="https://join.gaiahealers.com/onboarding" data-in-app-title="Join Gaia Healers">Prefer the full onboarding survey? →</button>
+          </div>
         </section>`;
       document.body.appendChild(modal);
       statusEl = modal.querySelector('[data-auth-status]');
@@ -1077,6 +1084,55 @@
           }
         } catch (_) { /* email sign-in is always available */ }
       })();
+      // In-app Join: create the GHL contact and email the sign-in link in one
+      // step (no 14-step survey, no search-index wait). Falls back to the full
+      // onboarding funnel if the backend cannot write to GHL.
+      const joinToggle = modal.querySelector('[data-join-toggle]');
+      const joinForm = modal.querySelector('[data-join-form]');
+      const joinName = modal.querySelector('[data-join-name]');
+      const joinEmail = modal.querySelector('[data-join-email]');
+      const joinSubmit = modal.querySelector('[data-join-submit]');
+      const joinStatus = modal.querySelector('[data-join-status]');
+      joinToggle?.addEventListener('click', () => {
+        joinForm.hidden = !joinForm.hidden;
+        if (!joinForm.hidden) { if (emailInput.value) joinEmail.value = emailInput.value; joinName.focus(); }
+      });
+      async function submitJoin() {
+        const name = (joinName.value || '').trim();
+        const email = (joinEmail.value || '').trim();
+        if (!name) { joinStatus.textContent = 'Please enter your name.'; joinName.focus(); return; }
+        if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) { joinStatus.textContent = 'Please enter a valid email.'; joinEmail.focus(); return; }
+        joinSubmit.disabled = true;
+        joinStatus.textContent = 'Creating your account…';
+        try {
+          const resp = await fetch(`${syncProxyBase()}/api/auth/join`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+            credentials: 'include',
+            body: JSON.stringify({ name, email, returnTo: location.href }),
+          });
+          const data = await resp.json().catch(() => ({}));
+          if (data.delivery === 'funnel' && data.joinUrl) {
+            joinStatus.textContent = 'Opening the full sign-up…';
+            const alt = joinForm.querySelector('[data-open-in-app]');
+            if (alt) alt.click(); else window.open(data.joinUrl, '_blank', 'noopener');
+            joinSubmit.disabled = false;
+            return;
+          }
+          if (data.ok && data.joined) {
+            joinForm.querySelectorAll('input,button').forEach((el) => { el.disabled = true; });
+            joinStatus.textContent = data.message || 'You are in — check your email for your sign-in link.';
+            return;
+          }
+          joinStatus.textContent = data.error || 'Could not create your account right now. Please try again.';
+          joinSubmit.disabled = false;
+        } catch (_) {
+          joinStatus.textContent = 'Network error. Please try again.';
+          joinSubmit.disabled = false;
+        }
+      }
+      joinSubmit?.addEventListener('click', submitJoin);
+      joinEmail?.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); submitJoin(); } });
       const closeModal = () => {
         modal.hidden = true;
       };

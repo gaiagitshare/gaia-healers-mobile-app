@@ -3870,6 +3870,72 @@ async function authMagicLinkRequest(req, res, origin) {
   sendJson(res, 200, genericResponse, origin);
 }
 
+// In-app Join. Records a brand-new person in GHL (contacts.upsert — dedupes by
+// email, never a second contact) and emails their sign-in link immediately,
+// using the contact id the upsert returns so it never waits on GHL's search
+// index. This is the fast path behind the app's own Join form; the full
+// onboarding survey at join.gaiahealers.com stays available for anyone who
+// wants it.
+async function authJoin(req, res, origin) {
+  const body = await readJsonBody(req).catch(() => ({}));
+  const name = String(body.name || '').trim().slice(0, 120);
+  const email = String(body.email || '').trim().toLowerCase();
+  const phone = String(body.phone || '').trim().slice(0, 40);
+  const returnTo = safeReturnUrl(body.returnTo || APP_PUBLIC_URL);
+  if (!name) { sendJson(res, 400, { ok: false, reason: 'name_required', error: 'Please enter your name.' }, origin); return; }
+  if (!email || !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) { sendJson(res, 400, { ok: false, reason: 'email_invalid', error: 'Please enter a valid email.' }, origin); return; }
+
+  // Joining writes to GHL and sends an email, so bound it per ip+email exactly
+  // like the sign-in request (shares the same store, distinct key prefix).
+  const requestIp = firstNonEmptyString(req.headers['cf-connecting-ip'], String(req.headers['x-forwarded-for'] || '').split(',')[0], req.socket?.remoteAddress, 'unknown');
+  const rateKey = crypto.createHash('sha256').update(`join|${requestIp}|${email}`).digest('hex');
+  const cutoff = Date.now() - (15 * 60 * 1000);
+  const attempts = (MAGIC_LINK_REQUESTS.get(rateKey) || []).filter((t) => t > cutoff);
+  if (attempts.length >= 5) { sendJson(res, 429, { ok: false, code: 'rate_limited', error: 'Too many attempts. Please wait a few minutes and try again.' }, origin, { 'Retry-After': '900' }); return; }
+  attempts.push(Date.now());
+  MAGIC_LINK_REQUESTS.set(rateKey, attempts);
+
+  const trace = crypto.createHash('sha256').update(email).digest('hex').slice(0, 10);
+  const parts = name.split(/\s+/);
+  const firstName = parts[0] || '';
+  const lastName = parts.slice(1).join(' ');
+
+  // 1) Record in GHL.
+  const up = await ghlUpsertContact({
+    firstName, lastName, email,
+    ...(phone ? { phone } : {}),
+    tags: ['gaia-app', 'gaia-join-free'],
+    source: 'Gaia Healers app - Join free',
+  });
+  if (!up.ok || !up.contactId) {
+    // GHL not writable (scope/network). Never strand the person — hand back the
+    // onboarding funnel and say so honestly.
+    console.log('[Gaia Auth] join', JSON.stringify({ trace, outcome: 'ghl_upsert_failed', reason: up.reason || 'unknown' }));
+    sendJson(res, 200, { ok: false, reason: up.reason || 'ghl_error', delivery: 'funnel', joinUrl: 'https://join.gaiahealers.com/onboarding', message: 'We could not finish sign-up here just now — opening the full onboarding.' }, origin);
+    return;
+  }
+
+  // 2) Email the sign-in link now, straight to the contact we just created.
+  const member = normalizeMemberIdentity({ contactId: up.contactId, memberId: up.contactId, email, displayName: name, role: 'Member', source: 'ghl-join' });
+  const token = signTokenPayload({ type: 'magic-link', member, returnTo, iat: Date.now(), exp: Date.now() + (AUTH_MAGIC_LINK_TTL_SECONDS * 1000) });
+  const consumeUrl = magicLinkAppUrl(token, returnTo);
+  const sent = await ghlSendEmail({ contactId: up.contactId, subject: 'Your Gaia Healers sign-in link', html: magicLinkEmailHtml(member, consumeUrl) });
+
+  if (sent.ok) {
+    console.log('[Gaia Auth] join', JSON.stringify({ trace, outcome: 'joined_and_emailed', contactId: up.contactId }));
+    sendJson(res, 200, { ok: true, joined: true, delivery: 'email', email, message: 'You are in — we have emailed your sign-in link. Tap it to open Gaia Healers.', expiresInSeconds: AUTH_MAGIC_LINK_TTL_SECONDS }, origin);
+    return;
+  }
+  if (AUTH_ALLOW_DEBUG_LINKS) {
+    sendJson(res, 200, { ok: true, joined: true, delivery: 'debug-link', authUrl: consumeUrl, email }, origin);
+    return;
+  }
+  // Contact exists but the email did not send — point them at Sign in rather
+  // than claiming a link went out.
+  console.log('[Gaia Auth] join', JSON.stringify({ trace, outcome: 'joined_email_failed', contactId: up.contactId, reason: sent.reason || 'send_failed' }));
+  sendJson(res, 200, { ok: true, joined: true, delivery: 'created_no_email', email, message: 'Your account is ready. Tap Sign in and request your one-tap link with this email.' }, origin);
+}
+
 async function authMagicLinkConsume(req, res, origin, url) {
   const jsonMode = req.method === 'POST';
   let rawToken = url.searchParams.get('token') || '';
@@ -5005,6 +5071,10 @@ const server = http.createServer(async (req, res) => {
     }
     if (req.method === 'POST' && url.pathname === '/api/auth/magic-link/request') {
       await authMagicLinkRequest(req, res, origin);
+      return;
+    }
+    if (req.method === 'POST' && url.pathname === '/api/auth/join') {
+      await authJoin(req, res, origin);
       return;
     }
     if (req.method === 'GET' && url.pathname === '/api/auth/magic-link/start') {

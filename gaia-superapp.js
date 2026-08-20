@@ -672,11 +672,11 @@
         // Logged-out flow: the free tools first — the one thing a stranger can
         // use right now — then today's sky, the event, one clear way in, and the
         // wider ecosystem last so the top of the page stays short and focused.
+        // Ecosystem links moved into the Menu — the guest home stays short.
         : freeTools()
           + '<div data-sky-host></div>'
           + eventFeature()
-          + authPrompt(true)
-          + discoverGaia())
+          + authPrompt(true))
       + '</div>';
     bind(root);
     // Panels that live inside the home screen but are owned by their own files

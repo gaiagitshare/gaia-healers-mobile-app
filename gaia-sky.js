@@ -136,7 +136,8 @@
       + '<h2 class="g-sky__phase">' + esc(sky.moon.phaseLabel) + '</h2>'
       + '<p class="g-sky__day">Day ' + lunarDay + ' of the lunar cycle</p>'
       + '</div>'
-      + ringSvg(pct)
+      + '<div class="g-sky__illum" aria-label="' + Math.round(pct) + '% illuminated">'
+        + '<strong>' + Math.round(pct) + '<i>%</i></strong><span>lit</span></div>'
       + '</div>'
       + '<p class="g-sky__facts">'
       + '<span>Moon in ' + esc(sky.moon.sign) + '</span>'

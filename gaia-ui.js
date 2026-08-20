@@ -3,7 +3,7 @@
   if (new URLSearchParams(window.location.search).has('store')) {
     sessionStorage.setItem('gaia-coach-v5', '1');
     sessionStorage.setItem('gaia-entered', '1');
-    sessionStorage.setItem('gaia-onboarded', '1');
+    localStorage.setItem('gaia-onboarded', '1');
   }
 
   const COACH_KEY = 'gaia-coach-v5';
@@ -1736,6 +1736,10 @@
             <button type="button" class="gaia-menu-sheet__link" data-menu-membership>Membership <span>Explore →</span></button>
             <button type="button" class="gaia-menu-sheet__link" data-book-inline="https://calendly.com/nimafarshid/gaia-healers-meeting" data-book-title="Meet Dr. Nima Farshid">Meet the founder <span>Book →</span></button>
             <a class="gaia-menu-sheet__link" href="https://gaiapractitioners.com" target="_blank" rel="noopener">Find a practitioner <span>Browse →</span></a>
+            <button type="button" class="gaia-menu-sheet__link" data-open-in-app="https://api.leadconnectorhq.com/widget/bookings/bio-welldemo" data-in-app-title="Bio-Well demo">Bio-Well demo <span>Watch →</span></button>
+            <button type="button" class="gaia-menu-sheet__link" data-open-in-app="https://gaiahealers.com/pages/bio-well-research" data-in-app-title="Bio-Well research">Bio-Well research <span>Read →</span></button>
+            <button type="button" class="gaia-menu-sheet__link" data-open-in-app="https://gaiahealers.com/blogs/news" data-in-app-title="Gaia Healers articles">Articles <span>Read →</span></button>
+            <button type="button" class="gaia-menu-sheet__link" data-open-in-app="https://nextlevel.gaiahealers.com/" data-in-app-title="Practitioner tools">Practitioner tools <span>Open →</span></button>
             <button type="button" class="gaia-menu-sheet__link" data-menu-signin>Member sign in <span>Open →</span></button>
           </nav>
         </section>`;
@@ -1756,6 +1760,7 @@
     });
     sheet.querySelector('[data-menu-signin]')?.addEventListener('click', () => { close(); window.GaiaAuth?.open?.(); });
     sheet.querySelector('[data-book-inline]')?.addEventListener('click', close);
+    sheet.querySelectorAll('[data-open-in-app]').forEach((b) => b.addEventListener('click', close));
     // Header actions: a Sign in pill (guests only) beside the Menu button, so a
     // returning member never has to scroll to the foot of the page to sign in.
     // Repainted on every auth change so it appears/disappears with the session.
@@ -1815,7 +1820,7 @@
     });
     enterLink?.addEventListener('click', () => {
       sessionStorage.setItem('gaia-entered', '1');
-      sessionStorage.setItem('gaia-onboarded', '1');
+      localStorage.setItem('gaia-onboarded', '1');
     });
 
     // Swipe navigation for mobile splash intro.

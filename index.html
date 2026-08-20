@@ -19,7 +19,7 @@
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="gaia-shared.css?v=20260703j" />
   <link rel="stylesheet" href="gaia-splash.css?v=20260819ag" />
-  <link rel="stylesheet" href="gaia-fit.css?v=20260820d" />
+  <link rel="stylesheet" href="gaia-fit.css?v=20260820e" />
 </head>
 <body class="gaia-app min-h-screen">
   <div id="splash-flow" class="gaia-splash-shell">
@@ -203,13 +203,13 @@
         <span data-splash-dot class="bg-neutral-200 w-1.5"></span>
       </div>
       <button type="button" data-splash-next class="gaia-splash-btn">Continue</button>
-      <a href="home.html" data-splash-enter class="gaia-splash-btn hidden" onclick="sessionStorage.setItem('gaia-entered','1');sessionStorage.setItem('gaia-onboarded','1')">Enter portal</a>
-      <a href="home.html" class="gaia-splash-skip" onclick="sessionStorage.setItem('gaia-entered','1');sessionStorage.setItem('gaia-onboarded','1')">Skip intro</a>
+      <a href="home.html" data-splash-enter class="gaia-splash-btn hidden" onclick="localStorage.setItem('gaia-onboarded','1')">Enter portal</a>
+      <a href="home.html" class="gaia-splash-skip" onclick="localStorage.setItem('gaia-onboarded','1')">Skip intro</a>
     </footer>
   </div>
-  <script src="gaia-ui.js?v=20260820d"></script>
+  <script src="gaia-ui.js?v=20260820e"></script>
   <script>
-    if (sessionStorage.getItem('gaia-entered') && sessionStorage.getItem('gaia-onboarded')) location.replace('home.html');
+    if (localStorage.getItem('gaia-onboarded')) location.replace('home.html');
   </script>
 </body>
 </html>

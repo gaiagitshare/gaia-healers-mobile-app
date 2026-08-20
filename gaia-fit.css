@@ -1880,3 +1880,5 @@ body.gaia-v2 .g-topbar__actions.gaia-header-actions { display: flex; align-items
 @media (min-width: 1060px) {
   .g-super-home > [data-daily-host] { grid-column: 1 / -1; }
 }
+
+.g-de__source { margin: 14px 0 0; font-size: 10.5px; line-height: 1.4; color: var(--g-text-dim, #93A597); opacity: 0.72; }

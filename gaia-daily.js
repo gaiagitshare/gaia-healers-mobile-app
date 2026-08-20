@@ -91,6 +91,7 @@
       + '<button type="button" class="g-btn g-btn--secondary g-de__share" data-de-share><i class="ph ph-share-network"></i> Share</button>'
       + '</div>'
       + (d.journal ? '<details class="g-de__journal"><summary>Reflection prompt</summary><p>' + esc(d.journal) + '</p></details>' : '')
+      + '<p class="g-de__source">Reflective guidance from your birth date &amp; today’s date — a wellness practice, not a measurement.</p>'
       + '</section>';
   }
 

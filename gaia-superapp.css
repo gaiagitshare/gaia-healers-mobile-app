@@ -619,35 +619,34 @@ body.gaia-v2 .gaia-chakra-map__list-item, body.gaia-v2 .gaia-chakra-map--screen 
   .g-super-home {
     grid-template-columns: minmax(0, 1.32fr) minmax(0, 1fr);
     gap: 20px 22px;
-    align-items: stretch;
+    align-items: start;
+    max-width: 1180px;
+    margin-inline: auto;
   }
 
-  /* Row one is "right now": the greeting and today's sky, side by side. Both
-     are pinned explicitly rather than left to auto-placement, because the
-     sections between them in the DOM vary — a published event renders one
-     card, an empty schedule another — and auto-flow put whichever appeared
-     into this slot, stranding the sky a row down behind 300px of dead space. */
+  /* Feature row: the greeting and the next gathering, side by side — the two
+     things a visitor reacts to first. ONLY these two are pinned; every other
+     section runs the full measure below, so the grid stays gap-free whatever
+     sections a guest or a member actually has (order and set both vary). */
   .g-super-home > .g-super-hero { grid-column: 1; grid-row: 1; }
-  .g-super-home > [data-sky-host] { grid-column: 2; grid-row: 1; }
-  .g-super-home > [data-sky-host] > .g-sky { height: 100%; }
-
-  /* Sections that want the full measure. Both event states are named: the
-     published card and the "nothing scheduled" placeholder are different
-     classes, and listing only one is how the gap above happened. */
   .g-super-home > .g-feature-event,
-  .g-super-home > .g-super-event,
+  .g-super-home > .g-super-event { grid-column: 2; grid-row: 1; height: 100%; margin: 0; }
+
+  .g-super-home > [data-sky-host],
+  .g-super-home > .g-super-primary,
+  .g-super-home > .g-upgrade,
+  .g-super-home > .g-free-tools,
   .g-super-home > .g-super-services,
   .g-super-home > .g-super-auth,
+  .g-super-home > .g-super-discover-gaia,
   .g-super-home > .g-super-sync { grid-column: 1 / -1; }
 
-  /* The two exploratory sections are alternatives to each other, not a
-     sequence, so they sit side by side instead of adding their heights. */
-  .g-super-home > .g-free-tools { grid-column: 1; }
-  .g-super-home > .g-super-discover-gaia { grid-column: 2; }
+  /* Free tools use the full width as one row of four. */
+  .g-super-home > .g-free-tools .g-free-tools__grid { grid-template-columns: repeat(4, 1fr) !important; }
 
-  /* Beside the hero rather than under it, the sky card has less width and more
-     height, so the moon leads and the copy stacks beneath it. */
-  .g-super-home > [data-sky-host] .g-sky__head { flex-direction: column; align-items: flex-start; gap: 12px; }
+  /* Today's sky, full width: keep the reading comfortable rather than letting
+     the moon and the illumination drift to opposite edges of a wide card. */
+  .g-super-home > [data-sky-host] .g-sky { max-width: 900px; }
 
   .g-super-hero { min-height: 0; }
 }

@@ -1669,3 +1669,34 @@ body.gaia-v2 .g-super-home .g-feature-event .g-feature-event__art {
   height: clamp(120px, calc(22vh - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px)), 180px) !important;
   height: clamp(120px, calc(22dvh - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px)), 180px) !important;
 }
+
+
+/* ── Two visual fixes (2026-08-20) ─────────────────────────────────────────
+   Reported clipping/overlap; verified in a real browser and fixed at source.
+   (The splash title and the wellness tool cards were also reported but use
+   white-space:normal and do NOT clip even at 320px — left untouched.) */
+
+/* Hero CTAs stack on very narrow screens. "Check my energy" / "Ask Gaia" are two
+   50%-width, white-space:nowrap buttons; below ~360px the label clips (e.g. at
+   320px). Stack them full-width there so the text always fits — iPhone-SE width
+   (375) and up keep the side-by-side row. The base layout forces
+   flex-direction:row !important, so this override matches its specificity, adds
+   !important, and is appended last to win the cascade. */
+@media (max-width: 360px) {
+  body.gaia-v2 .g-super-home .g-super-hero .g-super-discover,
+  body.gaia-v2 .g-super-home .g-super-discover {
+    flex-direction: column !important;
+  }
+  body.gaia-v2 .g-super-home .g-super-discover > .g-btn {
+    width: 100% !important;
+  }
+}
+
+/* PWA install prompt on desktop. The bottom card is centered (max-width 420),
+   which floated over the middle of the page on wide screens. Dock it to the
+   bottom-right as a toast on desktop so it never covers content; on mobile it
+   stays centered and full-width as before. */
+@media (min-width: 768px) {
+  .g-install { justify-content: flex-end; padding-right: 20px; padding-left: 20px; }
+  .g-install__panel { max-width: 380px; }
+}

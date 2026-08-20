@@ -1903,3 +1903,14 @@ body.gaia-v2 .g-topbar__actions.gaia-header-actions { display: flex; align-items
 .g-onb__status { margin: 10px 0 0; font-size: 12.5px; text-align: center; color: var(--g-accent, #A6E84B); min-height: 1em; }
 .g-onb__status.is-error { color: #ff8a8a; }
 .g-onb__note { margin: 10px 0 0; font-size: 11px; line-height: 1.45; color: var(--g-text-dim, #93A597); opacity: 0.85; text-align: center; }
+
+/* Guest 'Make Gaia Healers yours' join section (truthful benefits, in-app Join) */
+.g-why-join { display: block; }
+.g-why-join__intro h2 { font-family: var(--g-font-serif, 'Cormorant Garamond', serif); font-weight: 600; font-size: 26px; line-height: 1.05; margin: 4px 0 6px; }
+.g-why-join__intro p { font-size: 14px; line-height: 1.5; color: var(--g-text-dim, #93A597); margin: 0; }
+.g-why-join__list { list-style: none; margin: 16px 0 0; padding: 0; display: grid; gap: 10px; }
+.g-why-join__list li { display: flex; align-items: flex-start; gap: 10px; font-size: 14px; line-height: 1.4; color: var(--g-text, #E7EFE6); }
+.g-why-join__list li i, .g-why-join__list li svg { color: var(--g-accent, #A6E84B); flex: 0 0 auto; margin-top: 1px; font-size: 18px; width: 18px; height: 18px; }
+.g-why-join .g-super-actions { margin-top: 18px; display: flex; flex-wrap: wrap; gap: 10px; }
+.g-why-join .g-super-actions .g-btn { display: inline-flex; align-items: center; gap: 6px; }
+.g-why-join__note { margin: 14px 0 0; font-size: 11.5px; line-height: 1.45; color: var(--g-text-dim, #93A597); opacity: 0.85; }

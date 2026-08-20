@@ -511,12 +511,18 @@
   }
 
   function authPrompt(compact) {
-    return '<section class="g-super-auth' + (compact ? ' g-super-auth--compact' : '') + '">'
-      + '<div><p class="g-super-kicker">Member Pass</p><h2>Already part of Gaia Healers?</h2>'
-      + '<p>Sign in once to sync the courses, communities and plan access in your account.</p></div>'
-      + '<div class="g-super-actions"><button type="button" class="g-btn g-btn--primary" data-super-signin>Sign in</button>'
-      + '<button type="button" class="g-btn g-btn--secondary" data-open-in-app="https://join.gaiahealers.com/onboarding" data-in-app-title="Join Gaia Healers">Join free</button>'
+    return '<section class="g-super-auth g-why-join' + (compact ? ' g-super-auth--compact' : '') + '">'
+      + '<div class="g-why-join__intro"><p class="g-super-kicker">Join free</p><h2>Make Gaia Healers yours</h2>'
+      + '<p>A free account saves your Daily Energy and streak, and brings your real courses, community and plan access into one place.</p></div>'
+      + '<ul class="g-why-join__list">'
+      + '<li>' + icon('check-circle') + '<span>Save your Daily Energy, streak &amp; readings</span></li>'
+      + '<li>' + icon('check-circle') + '<span>Your real courses, certifications &amp; plan — synced automatically</span></li>'
+      + '<li>' + icon('check-circle') + '<span>Events, bookings, community &amp; Store, all in one home</span></li>'
+      + '</ul>'
+      + '<div class="g-super-actions"><button type="button" class="g-btn g-btn--primary" data-super-join>' + icon('sparkle') + ' Join free</button>'
+      + '<button type="button" class="g-btn g-btn--secondary" data-super-signin>Sign in</button>'
       + '<a class="g-btn g-btn--ghost" href="home.html?view=store&tab=membership">Compare plans</a></div>'
+      + '<p class="g-why-join__note">Name and email only — we send a one-tap sign-in link, then you can add your birth date for a personal Daily Energy. No long forms.</p>'
       + '</section>';
   }
 
@@ -698,9 +704,9 @@
         // use right now — then today's sky, the event, one clear way in, and the
         // wider ecosystem last so the top of the page stays short and focused.
         // Ecosystem links moved into the Menu — the guest home stays short.
-        : freeTools()
+        : eventFeature()
+          + freeTools()
           + '<div data-sky-host></div>'
-          + eventFeature()
           + authPrompt(true))
       + '</div>';
     bind(root);
@@ -1112,6 +1118,7 @@
 
   function bind(root) {
     root.querySelectorAll('[data-super-signin]').forEach((button) => button.addEventListener('click', () => window.GaiaAuth?.open?.()));
+    root.querySelectorAll('[data-super-join]').forEach((button) => button.addEventListener('click', () => { window.GaiaAuth?.open?.(); setTimeout(() => document.querySelector('[data-join-toggle]')?.click(), 120); }));
     root.querySelectorAll('[data-gaia-open-assist]').forEach((button) => button.addEventListener('click', () => {
       document.querySelector('[data-gaia-tab-assist]')?.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, cancelable: true }));
     }));

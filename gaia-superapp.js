@@ -638,6 +638,28 @@
       + '</div></div></section>';
   }
 
+  // An active paid/trial membership, or null for a free member.
+  function activeMembership() {
+    const m = memberState().data && memberState().data.access && memberState().data.access.membership;
+    return (m && ['active', 'trialing', 'past_due'].includes(m.status)) ? m : null;
+  }
+
+  // Membership encouragement — shown to signed-in members who are not yet on a
+  // paid plan. Premium card that leads to the membership tiers in the Store.
+  function upgradeCard() {
+    const tiers = ['Free', 'Silver', 'Gold', 'Diamond'];
+    return '<section class="g-upgrade">'
+      + '<div class="g-upgrade__aura" aria-hidden="true"></div>'
+      + '<p class="g-upgrade__kicker">Gaia 2.0 Membership</p>'
+      + '<h2 class="g-upgrade__title">Unlock your full practice</h2>'
+      + '<p class="g-upgrade__lede">Certifications, practitioner communities, a directory listing, and the CRM tools that grow your practice — start free, upgrade any time.</p>'
+      + '<div class="g-upgrade__tiers">'
+      + tiers.map((t, i) => '<span class="g-upgrade__tier' + (i === 0 ? ' is-current' : '') + '">' + t + '</span>').join('')
+      + '</div>'
+      + '<a class="g-btn g-btn--primary g-upgrade__cta" href="home.html?view=store&tab=membership">' + icon('sparkle') + ' See membership plans ' + icon('arrow-right') + '</a>'
+      + '</section>';
+  }
+
   function renderHome() {
     const root = $('home-superapp');
     if (!root) return;
@@ -665,6 +687,7 @@
         // Member flow: lead with the next step and their real access, then the
         // daily sky, the event, the free wellness tools, and the sync note.
         ? primaryMemberAction()
+          + (activeMembership() ? '' : upgradeCard())
           + '<section class="g-super-services"><div class="g-super-section-head"><div><p class="g-super-kicker">Your access</p><h2>Everything Gaia Healers</h2></div><a href="home.html?view=journey">View journey</a></div><div class="g-super-services__grid">' + services + '</div></section>'
           + '<div data-sky-host></div>'
           + eventFeature()

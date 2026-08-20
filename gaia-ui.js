@@ -765,8 +765,8 @@
           : 'Sign in required · secure Academy workspace';
         activeTitle.textContent = memberReady ? 'Open your secure Academy workspace' : 'Log in to view your courses';
         activeDetail.textContent = memberReady
-          ? 'Live lessons, locked modules, and certificates stay inside the in-app GHL portal.'
-          : 'Use your Gaia Healers member login once, then continue lessons and gated modules inside the in-app GHL portal.';
+          ? 'Live lessons, locked modules, and certificates stay inside the in-app member portal.'
+          : 'Use your Gaia Healers member login once, then continue lessons and gated modules inside the in-app member portal.';
         if (activeProgress) activeProgress.style.width = '0%';
         if (activePercent) activePercent.textContent = memberReady ? 'Portal ready' : 'Log in';
         if (activeLessons) activeLessons.textContent = memberReady ? 'Member workspace' : 'Secure Member Access';
@@ -955,7 +955,7 @@
       if (profileAccessNote) {
         const notes = hub.access?.notes || [];
         profileAccessNote.textContent = notes[0]
-          || 'Member login should use GHL Client Portal or a backend-generated magic link through the staging proxy.';
+          || 'Member login uses the secure member portal or a one-time sign-in link.';
       }
       if (profileCeCredits) profileCeCredits.textContent = String(ceEarned || 0);
       if (profileCeDetail) profileCeDetail.textContent = `of ${ceRequired} required · live Academy sync when member identity is verified`;
@@ -986,7 +986,7 @@
         profileMarketplace.innerHTML = (products.length ? products : [{
           title: 'Client portal storefront',
           category: 'Store',
-          detail: marketplace.note || 'Products and member checkout routes live inside GHL Memberships.',
+          detail: marketplace.note || 'Member products and checkout open securely in your account.',
           href: portal.url || appHref('community', { tab: 'products' }),
           cta: 'Open',
         }]).map((item) => `
@@ -2243,7 +2243,7 @@
           sourceNote.textContent = 'Bio-Well scan readings synced from your device account.';
         } else {
           sourceNote.textContent = authenticated
-            ? 'Your GHL member record is connected, but Bio-Well readings require a separate verified device integration.'
+            ? 'Your member record is connected, but Bio-Well readings require a separate verified device integration.'
             : 'Sign in for member access. Bio-Well charts remain empty until a verified device source is connected.';
         }
       }
@@ -2665,8 +2665,8 @@
         access: responses.academy,
         booking: responses.event,
         'join-free': 'You can join Gaia Healers for free from the Home member card. Tap Join free, complete the secure enrollment, then return here and sign in with the same email.',
-        membership: 'Open Store and choose Memberships to compare the official Free, Silver, Gold, and Diamond paths. Your app access will always mirror what GHL grants to your account.',
-        'sign-in': 'Tap Sign in and enter the email on your GHL contact. I will send a secure one-time link so you can open your own courses and communities.',
+        membership: 'Open Store and choose Memberships to compare the official Free, Silver, Gold, and Diamond paths. Your app access always mirrors what your account has been granted.',
+        'sign-in': 'Tap Sign in and enter the email on your account. I will send a secure one-time link so you can open your own courses and communities.',
         ghl: responses.ghl,
         services: responses.event,
         voice: responses.scan,
@@ -2689,10 +2689,10 @@
         return responses.event || 'I can help prepare your Elevate badge flow and check QR status in review mode.';
       }
       if (/course|academy|certification|module|exam/.test(normalized)) {
-        return responses.academy || 'Open Academy to see the courses attached to your signed-in GHL contact. I can guide you there, but I will not guess a course or progress level.';
+        return responses.academy || 'Open Academy to see the courses in your account. I can guide you there, but I will not guess a course or progress level.';
       }
       if (/ghl|follow-up|crm|registration/.test(normalized)) {
-        return responses.ghl || 'GHL handles registration and tickets. I can draft follow-up copy for your review before anything is sent.';
+        return responses.ghl || 'Registration and tickets are handled on our events platform. I can draft follow-up copy for your review before anything is sent.';
       }
       return responses.scan || 'Gaia Assist is ready. Ask about today’s energy, Academy, community, events, membership, products, your profile, or meeting the founder.';
     }
@@ -2707,7 +2707,7 @@
       if (AUTH_STATE.authenticated) {
         const fullName = String(AUTH_STATE.member?.displayName || AUTH_STATE.member?.name || '').trim();
         const firstName = fullName.split(/\s+/)[0] || 'there';
-        return `Welcome back, ${firstName}. I’m Gaia Assist. I can help open your GHL-linked courses and communities, check your membership access, book a session, or guide you anywhere in the app. What would you like to do?`;
+        return `Welcome back, ${firstName}. I’m Gaia Assist. I can help open your courses and communities, check your membership access, book a session, or guide you anywhere in the app. What would you like to do?`;
       }
       return 'Welcome to Gaia Healers. I’m Gaia Assist. I can guide you through every app feature and verified Gaia Healers resource — energy tools, products, learning, events, research, practitioners, membership, bookings, and support. What brings you here today?';
     }
@@ -2715,7 +2715,7 @@
     function liveWelcomePrompt() {
       const view = currentAssistView();
       const embedded = isGhlEmbeddedMode()
-        ? 'You are inside the Gaia Healers GHL custom menu.'
+        ? 'You are inside the Gaia Healers member menu.'
         : 'The app is running from GitHub Pages with the staging proxy.';
       return `Start the live app session now. Speak directly to the member only, without mentioning instructions, planning, or drafting. Say this welcome in your own natural voice: ${welcomeTranscriptText()}. ${embedded}`;
     }

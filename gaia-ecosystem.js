@@ -51,7 +51,7 @@ window.GAIA = {
     },
     requirements: {
       title: 'Member login required',
-      description: 'Course progress is available only inside the authorized GHL workspace.',
+      description: 'Course progress opens securely inside your member Academy.',
       scansCompleted: 0,
       scansRequired: 0,
       courseRequiredPercent: 0,

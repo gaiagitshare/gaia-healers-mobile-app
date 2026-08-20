@@ -926,7 +926,7 @@ body.gaia-booking-open{overflow:hidden;}
     return '<article class="g-card"><div class="g-tier__head"><p class="g-card__label">Find a Healer</p></div>'
       + '<p class="g-card__value">Connect with a practitioner</p>'
       + '<p class="g-card__meta">Browse the Gaia Healers practitioner directory to find a certified healer.</p>'
-      + '<div class="g-card__actions"><a class="g-btn g-btn--secondary g-btn--sm" href="https://gaiapractitioners.com" target="_blank" rel="noopener noreferrer">Open the directory →</a></div></article>';
+      + '<div class="g-card__actions"><a class="g-btn g-btn--secondary g-btn--sm" href="home.html?view=directory">Find a healer →</a></div></article>';
   }
 
   function renderCommunity() {

@@ -1,4 +1,4 @@
-const CACHE_NAME = 'gaia-healers-20260820q';
+const CACHE_NAME = 'gaia-healers-20260820r';
 const APP_SHELL = [
   '/',
   '/home.html',
@@ -25,6 +25,12 @@ const APP_SHELL = [
   '/gaia-store.js',
   '/gaia-ui.js',
   '/gaia-superapp.js',
+  '/gaia-directory.js',
+  '/vendor/leaflet/leaflet.js',
+  '/vendor/leaflet/leaflet.css',
+  '/vendor/leaflet/markercluster.js',
+  '/vendor/leaflet/MarkerCluster.css',
+  '/vendor/leaflet/MarkerCluster.Default.css',
   '/gaia-daily.js',
   '/gaia-onboard.js',
   '/gaia-share.js',

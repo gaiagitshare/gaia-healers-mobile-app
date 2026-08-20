@@ -17,7 +17,7 @@
   const ADMIN_DEV_PASSCODE = 'gaia2026';
   const ASSIST_WELCOME_KEY = 'gaia-assist-welcome-v3';
   const GHL_CUSTOM_MENU_URL = 'https://crm.gaiahealers.com/v2/location/WkKl1K5RuZNQ60xR48k6/custom-menu-link/328efaea-4e94-42ec-9ce2-4358a64657db';
-  const APP_VIEWS = new Set(['today', 'journey', 'wellness', 'academy', 'community', 'events', 'bookings', 'inbox', 'profile', 'store']);
+  const APP_VIEWS = new Set(['today', 'journey', 'wellness', 'academy', 'community', 'events', 'bookings', 'inbox', 'profile', 'store', 'directory']);
   const AUTH_HINT_KEYS = ['memberId', 'contactId', 'email', 'name', 'displayName', 'role', 'cohort', 'locationId', 'bridge', 'sharedSecret'];
   const AUTH_STATE = {
     authenticated: false,
@@ -227,6 +227,7 @@
     const targetUrl = portalWorkspaceUrl(section, explicitUrl);
     const labels = {
       academy: 'Gaia Healers Academy',
+      directory: 'Find a Gaia Healer',
       community: 'Gaia Healers Community',
       profile: 'Gaia Healers Member Access',
       home: 'Gaia Healers Client Portal',
@@ -1728,6 +1729,7 @@
             <a class="gaia-menu-sheet__link" href="home.html?view=journey" data-app-nav="journey">Journey <span>Continue →</span></a>
             <a class="gaia-menu-sheet__link" href="home.html?view=academy" data-app-nav="academy">Academy <span>Learn →</span></a>
             <a class="gaia-menu-sheet__link" href="home.html?view=community" data-app-nav="community">Community <span>Connect →</span></a>
+            <a class="gaia-menu-sheet__link" href="home.html?view=directory" data-app-nav="directory">Find a Healer <span>Discover →</span></a>
             <a class="gaia-menu-sheet__link" href="home.html?view=events" data-app-nav="events">Events <span>Gather →</span></a>
             <a class="gaia-menu-sheet__link" href="home.html?view=bookings" data-app-nav="bookings">Bookings <span>Schedule →</span></a>
             <a class="gaia-menu-sheet__link" href="home.html?view=inbox" data-app-nav="inbox">Inbox <span>Messages →</span></a>
@@ -1972,6 +1974,7 @@
         biowell: 'Energy',
         chakras: 'Energy',
         academy: 'Academy',
+        directory: 'Directory',
         community: 'Community',
         events: 'Events',
         bookings: 'Bookings',

@@ -1914,3 +1914,76 @@ body.gaia-v2 .g-topbar__actions.gaia-header-actions { display: flex; align-items
 .g-why-join .g-super-actions { margin-top: 18px; display: flex; flex-wrap: wrap; gap: 10px; }
 .g-why-join .g-super-actions .g-btn { display: inline-flex; align-items: center; gap: 6px; }
 .g-why-join__note { margin: 14px 0 0; font-size: 11.5px; line-height: 1.45; color: var(--g-text-dim, #93A597); opacity: 0.85; }
+
+/* ============================================================= */
+/* Find a Gaia Healer — practitioner directory (real data)       */
+/* ============================================================= */
+.g-directory .g-page__head { margin-bottom: 4px; }
+.g-dir__loading, .g-dir__empty { color: var(--g-text-dim, #93A597); font-size: 14px; padding: 24px 4px; text-align: center; }
+.g-dir__unavailable { text-align: center; padding: 40px 16px; color: var(--g-text-dim, #93A597); }
+.g-dir__unavailable i { font-size: 34px; color: var(--g-accent, #A6E84B); opacity: 0.7; display: block; margin-bottom: 10px; }
+.g-dir__unavailable p { font-size: 14px; margin: 0 0 14px; }
+
+.g-dir__controls { display: flex; flex-direction: column; gap: 10px; margin: 8px 0 12px; }
+.g-dir__search { position: relative; display: flex; align-items: center; }
+.g-dir__search i { position: absolute; left: 13px; color: var(--g-text-dim, #93A597); font-size: 18px; pointer-events: none; }
+.g-dir__search input { width: 100%; padding: 12px 14px 12px 40px; border-radius: 14px; font-size: 15px; background: rgba(255,255,255,0.05); border: 1px solid var(--g-line, rgba(190,240,170,0.16)); color: var(--g-text, #E7EFE6); }
+.g-dir__search input:focus { outline: 2px solid color-mix(in srgb, var(--g-accent, #A6E84B) 55%, transparent); outline-offset: 1px; }
+.g-dir__fchips, .g-dir__schips { display: flex; gap: 8px; overflow-x: auto; -webkit-overflow-scrolling: touch; padding-bottom: 2px; scrollbar-width: none; }
+.g-dir__fchips::-webkit-scrollbar, .g-dir__schips::-webkit-scrollbar { display: none; }
+.g-dir-fchip, .g-dir-schip { flex: 0 0 auto; padding: 7px 13px; border-radius: 999px; font-size: 12.5px; font-weight: 600; white-space: nowrap; cursor: pointer;
+  background: rgba(255,255,255,0.04); border: 1px solid var(--g-line, rgba(190,240,170,0.14)); color: var(--g-text-dim, #93A597); }
+.g-dir-fchip.is-on, .g-dir-schip.is-on { background: color-mix(in srgb, var(--g-accent, #A6E84B) 22%, transparent); color: #F4F7F1; border-color: color-mix(in srgb, var(--g-accent, #A6E84B) 45%, transparent); }
+.g-dir__count { font-size: 12px; color: var(--g-text-dim, #93A597); margin: 2px 2px 10px; font-weight: 600; letter-spacing: 0.02em; }
+
+.g-dir__map { height: 260px; border-radius: 16px; overflow: hidden; margin-bottom: 14px; border: 1px solid var(--g-line, rgba(190,240,170,0.14)); background: #0c130d; }
+.leaflet-container { background: #0c130d; font: inherit; }
+.leaflet-tile { filter: saturate(0.85) brightness(0.9); }
+.leaflet-popup-content-wrapper, .leaflet-popup-tip { background: #16211a; color: var(--g-text, #E7EFE6); box-shadow: 0 10px 30px rgba(0,0,0,0.4); }
+.leaflet-popup-content { margin: 12px 14px; }
+.g-dir-pop { display: flex; flex-direction: column; gap: 3px; min-width: 150px; }
+.g-dir-pop strong { font-size: 14px; }
+.g-dir-pop span { font-size: 12px; color: var(--g-text-dim, #93A597); }
+.g-dir-pop em { font-size: 11.5px; color: var(--g-accent, #A6E84B); font-style: normal; }
+.g-dir-pop button { margin-top: 6px; padding: 6px 10px; border-radius: 8px; font-size: 12px; font-weight: 700; cursor: pointer; background: var(--g-accent, #A6E84B); color: #0a0f0a; border: none; }
+.leaflet-control-attribution { background: rgba(0,0,0,0.5) !important; color: #93A597 !important; }
+.leaflet-control-attribution a { color: #A6E84B !important; }
+
+.g-dir__list { display: grid; gap: 10px; grid-template-columns: 1fr; }
+.g-dir-card { display: flex; gap: 12px; text-align: left; width: 100%; padding: 12px; border-radius: 16px; cursor: pointer;
+  background: var(--g-card-bg, rgba(20,30,22,0.6)); border: 1px solid var(--g-line, rgba(190,240,170,0.12)); transition: border-color 0.15s, transform 0.1s; }
+.g-dir-card:hover { border-color: color-mix(in srgb, var(--g-accent, #A6E84B) 40%, transparent); }
+.g-dir-card:active { transform: scale(0.995); }
+.g-dir-card__photo { flex: 0 0 auto; }
+.g-dir-card__img { width: 60px; height: 60px; border-radius: 12px; object-fit: cover; display: block; }
+.g-dir-avatar { width: 60px; height: 60px; border-radius: 12px; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 20px; text-transform: uppercase;
+  color: #0a0f0a; background: linear-gradient(135deg, var(--g-accent, #A6E84B), #6fb03a); }
+.g-dir-card__body { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
+.g-dir-card__top { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.g-dir-card__top strong { font-size: 15px; color: var(--g-text, #E7EFE6); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.g-dir-card__rating { flex: 0 0 auto; font-size: 12px; font-weight: 700; color: #FFC24B; display: inline-flex; align-items: center; gap: 3px; }
+.g-dir-card__rating small { color: var(--g-text-dim, #93A597); font-weight: 500; }
+.g-dir-card__loc { font-size: 12px; color: var(--g-text-dim, #93A597); display: inline-flex; align-items: center; gap: 4px; }
+.g-dir-card__specs { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 1px; }
+.g-dir-chip { font-size: 10.5px; padding: 3px 8px; border-radius: 999px; background: rgba(255,255,255,0.06); color: var(--g-text-dim, #cfe0c8); white-space: nowrap; }
+.g-dir-card__avail { align-self: flex-start; margin-top: 2px; font-size: 11px; font-weight: 600; color: var(--g-accent, #A6E84B); display: inline-flex; align-items: center; gap: 4px; }
+
+/* Profile modal */
+.gaia-dirprofile-modal { position: fixed; inset: 0; z-index: 1200; display: flex; align-items: center; justify-content: center; padding: 18px; background: rgba(4,8,5,0.74); backdrop-filter: blur(6px); }
+.gaia-dirprofile__panel { position: relative; width: 100%; max-width: 400px; max-height: 90vh; overflow-y: auto; border-radius: 22px; padding: 22px 20px calc(20px + env(safe-area-inset-bottom, 0px)); background: var(--g-card-bg, #101A12); border: 1px solid var(--g-line, rgba(190,240,170,0.16)); box-shadow: 0 26px 60px rgba(0,0,0,0.5); }
+.gaia-dirprofile__hero { display: flex; gap: 14px; align-items: center; margin-bottom: 14px; }
+.gaia-dirprofile__img { width: 76px; height: 76px; border-radius: 16px; object-fit: cover; }
+.gaia-dirprofile__hero h2 { font-family: var(--g-font-serif, "Cormorant Garamond", serif); font-weight: 600; font-size: 24px; line-height: 1.05; margin: 0 0 4px; }
+.gaia-dirprofile__loc { font-size: 13px; color: var(--g-text-dim, #93A597); margin: 0 0 6px; display: inline-flex; align-items: center; gap: 4px; }
+.gaia-dirprofile__specs { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 16px; }
+.gaia-dirprofile__actions { display: flex; flex-direction: column; gap: 8px; }
+.gaia-dirprofile__actions .g-btn { width: 100%; display: inline-flex; align-items: center; justify-content: center; gap: 7px; }
+.gaia-dirprofile__src { margin: 14px 0 0; font-size: 11px; color: var(--g-text-dim, #93A597); opacity: 0.8; text-align: center; }
+
+@media (min-width: 720px) {
+  .g-dir__list { grid-template-columns: 1fr 1fr; }
+  .g-dir__map { height: 340px; }
+}
+@media (min-width: 1060px) {
+  .g-dir__list { grid-template-columns: 1fr 1fr 1fr; }
+}

@@ -49,7 +49,10 @@
   <link rel="stylesheet" href="gaia-system.css?v=20260819ag" />
   <link rel="stylesheet" href="gaia-reshape.css?v=20260820b" />
   <link rel="stylesheet" href="gaia-superapp.css?v=20260820k" />
-  <link rel="stylesheet" href="gaia-fit.css?v=20260820q" />
+  <link rel="stylesheet" href="gaia-fit.css?v=20260820r" />
+  <link rel="stylesheet" href="vendor/leaflet/leaflet.css?v=1.9.4" />
+  <link rel="stylesheet" href="vendor/leaflet/MarkerCluster.css?v=1.5.3" />
+  <link rel="stylesheet" href="vendor/leaflet/MarkerCluster.Default.css?v=1.5.3" />
 </head>
 <body class="gaia-app gaia-page gaia-single-app gaia-v2">
   <a class="gaia-skip-link" href="#gaia-app-shell">Skip to app content</a>
@@ -188,6 +191,21 @@
       </main>
     </section>
 
+    <section class="gaia-screen" data-screen="directory" aria-label="Find a Gaia Healer">
+      <header class="g-topbar">
+        <a href="home.html?view=today" class="g-topbar__brand"><img src="assets/gaia-mark.svg" alt="" /> Gaia Healers</a>
+        <div class="g-topbar__actions gaia-header-actions" data-gaia-header-actions></div>
+      </header>
+      <main class="gaia-main g-page g-directory">
+        <div class="g-page__head">
+          <p class="g-page__kicker">Verified network</p>
+          <h1 class="g-page__title">Find a Gaia Healer</h1>
+          <p class="g-page__sub">Real certified practitioners, live from the Gaia Healers directory.</p>
+        </div>
+        <div id="directory-body" class="g-page-sec" aria-live="polite"></div>
+      </main>
+    </section>
+
     <!-- PROFILE — rebuilt on the g-* system: live account (devices, purchases,
          bookings, forms, messages) from /api/member/*, plus birth-date chakra. -->
     <section class="gaia-screen" data-screen="profile" aria-label="Profile">
@@ -243,12 +261,15 @@
   <script defer src="shared-nav.js?v=20260815b"></script>
   <script defer src="gaia-realtime-voice.js?v=20260819an"></script>
   <script defer src="gaia-membership-ui.js?v=20260820i"></script>
-  <script defer src="gaia-member.js?v=20260820m"></script>
+  <script defer src="gaia-member.js?v=20260820r"></script>
   <script defer src="gaia-wellness.js?v=20260819an"></script>
   <script defer src="gaia-quiz.js?v=20260815b"></script>
   <script defer src="gaia-store.js?v=20260819am"></script>
-  <script defer src="gaia-ui.js?v=20260820m"></script>
+  <script defer src="gaia-ui.js?v=20260820r"></script>
   <script defer src="gaia-superapp.js?v=20260820q"></script>
+  <script defer src="vendor/leaflet/leaflet.js?v=1.9.4"></script>
+  <script defer src="vendor/leaflet/markercluster.js?v=1.5.3"></script>
+  <script defer src="gaia-directory.js?v=20260820r"></script>
   <script defer src="gaia-share.js?v=20260820n"></script>
   <script defer src="gaia-daily.js?v=20260820p"></script>
   <script defer src="gaia-onboard.js?v=20260820p"></script>

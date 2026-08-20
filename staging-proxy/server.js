@@ -5,6 +5,7 @@ import path from 'node:path';
 import { URL } from 'node:url';
 import * as adminRouter from './admin-router.js';
 import * as wellnessRouter from './wellness-router.js';
+import * as directoryRouter from './directory-router.js';
 import * as eventIdentity from './membership/event-identity.js';
 import * as reader from './membership/reader.js';
 import { migrateStore, migrateContactRecord } from './membership/ledger.js';
@@ -5133,6 +5134,10 @@ const server = http.createServer(async (req, res) => {
       await wellnessRouter.handle(req, res, url, {
         origin, sendJson, readJsonBody, signTokenPayload, readSignedToken, parseCookies, aiComplete, ghlUpsertContact, memberLookup: wellnessMemberLookup, memberSession: cookieForRequest(req),
       });
+      return;
+    }
+    if (url.pathname === '/api/directory' || url.pathname.startsWith('/api/directory/')) {
+      await directoryRouter.handle(req, res, url, { origin, sendJson });
       return;
     }
     if (req.method === 'GET' && url.pathname === '/api/academy/progress') {

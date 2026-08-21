@@ -10,6 +10,7 @@
     { id: 'wellness', href: 'home.html?view=wellness', label: 'Energy', icon: 'ph-sparkle' },
     { id: 'academy', href: 'home.html?view=academy', label: 'Academy', icon: 'ph-graduation-cap' },
     { id: 'community', href: 'home.html?view=community', label: 'Community', icon: 'ph-users-three' },
+    { id: 'store', href: 'home.html?view=store', label: 'Shop', icon: 'ph-shopping-bag' },
     { id: 'profile', href: 'home.html?view=profile', label: 'You', icon: 'ph-user' },
   ];
 
@@ -23,7 +24,8 @@
     wellness: 'wellness', biowell: 'wellness', chakras: 'wellness',
     academy: 'academy',
     community: 'community', events: 'community', directory: 'community', inbox: 'community',
-    profile: 'profile', bookings: 'profile', store: 'profile', journey: 'profile',
+    profile: 'profile', bookings: 'profile', journey: 'profile',
+    store: 'store',
   };
 
   function currentView() {
@@ -52,8 +54,8 @@
   }
 
   function buildTabbar(inner, active) {
-    const left = tabs.slice(0, 2);
-    const right = tabs.slice(2);
+    const left = tabs.slice(0, 3);
+    const right = tabs.slice(3);
     inner.innerHTML = `
       <div class="gaia-tabbar__group gaia-tabbar__group--left">${left.map((t) => tabLink(t, active === t.id)).join('')}</div>
       <button type="button" class="gaia-tabbar__assist" data-gaia-tab-assist data-state="idle" aria-label="Open Gaia Assist — live voice" aria-expanded="false">

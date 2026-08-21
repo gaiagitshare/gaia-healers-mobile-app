@@ -1169,7 +1169,10 @@
             body: JSON.stringify({ email, returnTo: window.location.href }),
           });
           const payload = await response.json().catch(() => ({}));
-          if (response.ok && payload.ok) statusEl.textContent = 'If that email is a Gaia Healers member, your sign-in link is on its way. New to Gaia Healers? Use Join free below.';
+          if (response.ok && payload.ok) {
+            statusEl.textContent = 'Check your email and tap your sign-in link — this screen signs you in automatically. New to Gaia Healers? Use Join free below.';
+            if (payload.pollId) startMagicPolling(payload.pollId, statusEl, modal);
+          }
           else if (payload.error) statusEl.textContent = payload.error;
           else statusEl.textContent = 'Could not send your link right now. Please try again in a moment.';
         } catch {
@@ -1268,6 +1271,32 @@
         accessNote.textContent = `Signed in as ${session.member?.displayName || 'Gaia Healers member'}${session.member?.email ? ` (${session.member.email})` : ''}. Member-specific lessons, purchases, certificates, and gated access now resolve through the Gaia Healers proxy session.`;
       }
       if (signOutBtn) signOutBtn.hidden = !session.authenticated;
+    }
+
+    let magicPollTimer = null;
+    function stopMagicPolling() { if (magicPollTimer) { clearInterval(magicPollTimer); magicPollTimer = null; } }
+    // Installed-PWA sign-in bridge: after requesting a magic link, poll the
+    // server. When the user taps the link (in any browser context), the poll
+    // itself receives the session cookie IN THIS app's context, so the PWA — not
+    // just the tab the link opened — becomes authenticated. Then refresh in place.
+    function startMagicPolling(pollId, statusEl, modalEl) {
+      stopMagicPolling();
+      const started = Date.now();
+      magicPollTimer = setInterval(async () => {
+        if (Date.now() - started > 5 * 60 * 1000) { stopMagicPolling(); return; }
+        try {
+          const r = await fetch(syncProxyBase() + '/api/auth/magic-link/poll?pollId=' + encodeURIComponent(pollId), { credentials: 'include' });
+          const d = await r.json().catch(function () { return {}; });
+          if (d && d.authenticated) {
+            stopMagicPolling();
+            if (statusEl) statusEl.textContent = 'Signed in! Loading your account…';
+            await refreshSession();
+            try { if (modalEl) modalEl.hidden = true; } catch (e) {}
+          } else if (d && d.status === 'unknown') {
+            stopMagicPolling();
+          }
+        } catch (e) { /* transient — keep polling */ }
+      }, 2500);
     }
 
     async function refreshSession() {

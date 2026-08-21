@@ -66,6 +66,16 @@ const AUTH_SESSION_TTL_SECONDS = Math.min(
 const AUTH_MAGIC_LINK_TTL_SECONDS = Math.min(Math.max(Number(process.env.AUTH_MAGIC_LINK_TTL_SECONDS || 900) || 900, 300), 3600);
 const CONSUMED_MAGIC_LINKS = new Map();
 const MAGIC_LINK_REQUESTS = new Map();
+// Pending magic-link polls. Lets an installed PWA establish its OWN session even
+// when the emailed link opened in a separate browser context (iOS PWA cookie
+// isolation): the app polls this, and the session cookie is minted on the poll
+// request itself, landing in the PWA's context. pollId -> { verified, member, exp }.
+const MAGIC_LINK_POLLS = new Map();
+const MAGIC_LINK_POLL_TTL_MS = 10 * 60 * 1000;
+function cleanupMagicPolls(now) {
+  for (const [id, entry] of MAGIC_LINK_POLLS) { if (entry.exp <= now) MAGIC_LINK_POLLS.delete(id); }
+  if (MAGIC_LINK_POLLS.size > 20000) MAGIC_LINK_POLLS.clear();
+}
 const AUTH_ALLOW_DEBUG_LINKS = process.env.AUTH_ALLOW_DEBUG_LINKS === 'true';
 const AUTH_ALLOW_UNVERIFIED_EMAIL_MAGIC_LINK = process.env.AUTH_ALLOW_UNVERIFIED_EMAIL_MAGIC_LINK === 'true';
 const AUTH_EMBED_SHARED_SECRET = process.env.AUTH_EMBED_SHARED_SECRET || process.env.APP_PROXY_SHARED_SECRET || '';
@@ -3787,11 +3797,17 @@ async function authMagicLinkRequest(req, res, origin) {
     }
   }
 
+  // Always mint a pollId (member or not) so the response cannot be used to
+  // enumerate members: a non-member's poll simply never verifies.
+  const pollId = crypto.randomBytes(24).toString('base64url');
+  cleanupMagicPolls(Date.now());
+  MAGIC_LINK_POLLS.set(pollId, { verified: false, member: null, exp: Date.now() + MAGIC_LINK_POLL_TTL_MS });
   const genericResponse = {
     ok: true,
     delivery: 'email-if-member',
     message: 'If this email belongs to a Gaia Healers member, a secure sign-in link will arrive shortly.',
     expiresInSeconds: AUTH_MAGIC_LINK_TTL_SECONDS,
+    pollId,
   };
 
   // Every sign-in attempt is recorded. The response is deliberately identical
@@ -3822,6 +3838,7 @@ async function authMagicLinkRequest(req, res, origin) {
     type: 'magic-link',
     member,
     returnTo,
+    pollId,
     iat: Date.now(),
     exp: Date.now() + (AUTH_MAGIC_LINK_TTL_SECONDS * 1000),
   });
@@ -3937,6 +3954,24 @@ async function authJoin(req, res, origin) {
   sendJson(res, 200, { ok: true, joined: true, delivery: 'created_no_email', email, message: 'Your account is ready. Tap Sign in and request your one-tap link with this email.' }, origin);
 }
 
+async function authMagicLinkPoll(req, res, origin, url) {
+  const pollId = String(url.searchParams.get('pollId') || '').trim();
+  cleanupMagicPolls(Date.now());
+  const pending = pollId ? MAGIC_LINK_POLLS.get(pollId) : null;
+  if (!pending) { sendJson(res, 200, { ok: true, authenticated: false, status: 'unknown' }, origin); return; }
+  if (!pending.verified || !pending.member) { sendJson(res, 200, { ok: true, authenticated: false, status: 'pending' }, origin); return; }
+  // The link was opened (email proven). Mint the session on THIS request so the
+  // HttpOnly cookie lands in the caller's context (the installed PWA), not the
+  // browser tab the email link happened to open. Single-use.
+  MAGIC_LINK_POLLS.delete(pollId);
+  const session = createMemberSession(pending.member, 'magic-link', { emailVerified: true });
+  const token = signTokenPayload(session);
+  sendJson(res, 200, {
+    ok: true, authenticated: true, memberResolved: true,
+    member: session.member, expiresAt: session.exp,
+  }, origin, { 'Set-Cookie': buildSetCookie(req, token, session.exp) });
+}
+
 async function authMagicLinkConsume(req, res, origin, url) {
   const jsonMode = req.method === 'POST';
   let rawToken = url.searchParams.get('token') || '';
@@ -3961,6 +3996,14 @@ async function authMagicLinkConsume(req, res, origin, url) {
     return;
   }
   CONSUMED_MAGIC_LINKS.set(tokenHash, Number(payload.exp) || (now + AUTH_MAGIC_LINK_TTL_SECONDS * 1000));
+  // Bridge to the polling PWA: this proves the email was opened, so any app
+  // polling on this pollId may now mint its own session (in its own context).
+  if (payload.pollId && MAGIC_LINK_POLLS.has(payload.pollId)) {
+    const pending = MAGIC_LINK_POLLS.get(payload.pollId);
+    pending.verified = true;
+    pending.member = payload.member;
+    pending.exp = Date.now() + MAGIC_LINK_POLL_TTL_MS;
+  }
   // They opened a link delivered to that mailbox, which is exactly what
   // verifying an email means.
   const session = createMemberSession(payload.member, 'magic-link', { emailVerified: true });
@@ -5076,6 +5119,10 @@ const server = http.createServer(async (req, res) => {
     }
     if (req.method === 'POST' && url.pathname === '/api/auth/join') {
       await authJoin(req, res, origin);
+      return;
+    }
+    if (req.method === 'GET' && url.pathname === '/api/auth/magic-link/poll') {
+      await authMagicLinkPoll(req, res, origin, url);
       return;
     }
     if (req.method === 'GET' && url.pathname === '/api/auth/magic-link/start') {

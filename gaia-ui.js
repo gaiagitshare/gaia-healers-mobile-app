@@ -1768,26 +1768,10 @@
             <div><p class="gaia-menu-sheet__kicker">Explore Gaia Healers</p><h2 class="gaia-menu-sheet__title" id="gaia-menu-title">Menu</h2></div>
             <button type="button" class="gaia-sheet-close" data-menu-close aria-label="Close menu">&times;</button>
           </div>
-          <p class="gaia-auth-modal__body">Learning, community, membership, and personal guidance from the Gaia Healers network.</p>
+          <p class="gaia-auth-modal__body">Membership, founder access, and member sign-in. Everything else lives in the tabs below.</p>
           <nav class="gaia-menu-sheet__nav" aria-label="Gaia Healers menu">
-            <a class="gaia-menu-sheet__link" href="home.html?view=journey" data-app-nav="journey">Journey <span>Continue →</span></a>
-            <a class="gaia-menu-sheet__link" href="home.html?view=academy" data-app-nav="academy">Academy <span>Learn →</span></a>
-            <a class="gaia-menu-sheet__link" href="home.html?view=community" data-app-nav="community">Community <span>Connect →</span></a>
-            <a class="gaia-menu-sheet__link" href="home.html?view=directory" data-app-nav="directory">Find a Healer <span>Discover →</span></a>
-            <a class="gaia-menu-sheet__link" href="home.html?view=events" data-app-nav="events">Events <span>Gather →</span></a>
-            <a class="gaia-menu-sheet__link" href="home.html?view=bookings" data-app-nav="bookings">Bookings <span>Schedule →</span></a>
-            <a class="gaia-menu-sheet__link" href="home.html?view=inbox" data-app-nav="inbox">Inbox <span>Messages →</span></a>
-            <button type="button" class="gaia-menu-sheet__link" data-open-in-app="https://numerology.lightworkers.club" data-in-app-title="Numerology Calculator">Numerology <span>Calculate →</span></button>
-            <button type="button" class="gaia-menu-sheet__link" data-open-in-app="https://music.gaiahealers.com" data-in-app-title="Gaia Healers Radio">Gaia Radio <span>Listen →</span></button>
-            <a class="gaia-menu-sheet__link" href="home.html?view=wellness" data-app-nav="wellness">Energy <span>Explore →</span></a>
-            <a class="gaia-menu-sheet__link" href="home.html?view=store" data-app-nav="store">Store <span>Shop →</span></a>
             <button type="button" class="gaia-menu-sheet__link" data-menu-membership>Membership <span>Explore →</span></button>
             <button type="button" class="gaia-menu-sheet__link" data-book-inline="https://calendly.com/nimafarshid/gaia-healers-meeting" data-book-title="Meet Dr. Nima Farshid">Meet the founder <span>Book →</span></button>
-            <a class="gaia-menu-sheet__link" href="https://gaiapractitioners.com" target="_blank" rel="noopener">Find a practitioner <span>Browse →</span></a>
-            <button type="button" class="gaia-menu-sheet__link" data-open-in-app="https://api.leadconnectorhq.com/widget/bookings/bio-welldemo" data-in-app-title="Bio-Well demo">Bio-Well demo <span>Watch →</span></button>
-            <button type="button" class="gaia-menu-sheet__link" data-open-in-app="https://gaiahealers.com/pages/bio-well-research" data-in-app-title="Bio-Well research">Bio-Well research <span>Read →</span></button>
-            <button type="button" class="gaia-menu-sheet__link" data-open-in-app="https://gaiahealers.com/blogs/news" data-in-app-title="Gaia Healers articles">Articles <span>Read →</span></button>
-            <button type="button" class="gaia-menu-sheet__link" data-open-in-app="https://nextlevel.gaiahealers.com/" data-in-app-title="Practitioner tools">Practitioner tools <span>Open →</span></button>
             <button type="button" class="gaia-menu-sheet__link" data-menu-signin>Member sign in <span>Open →</span></button>
           </nav>
         </section>`;
@@ -1965,6 +1949,7 @@
     function normalizeView(value) {
       const view = String(value || 'today').toLowerCase();
       if (view === 'home') return 'today';
+      if (view === 'journey') return 'profile'; // Journey retired; its rollup lives in You
       return APP_VIEWS.has(view) ? view : 'today';
     }
 

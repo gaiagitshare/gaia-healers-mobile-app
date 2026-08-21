@@ -695,9 +695,10 @@
         // daily sky, the event, the free wellness tools, and the sync note.
         ? primaryMemberAction()
           + (activeMembership() ? '' : upgradeCard())
-          + '<section class="g-super-services"><div class="g-super-section-head"><div><p class="g-super-kicker">Your access</p><h2>Everything Gaia Healers</h2></div><a href="home.html?view=journey">View journey</a></div><div class="g-super-services__grid">' + services + '</div></section>'
+          + '<section class="g-super-services"><div class="g-super-section-head"><div><p class="g-super-kicker">Your access</p><h2>Everything Gaia Healers</h2></div><a href="home.html?view=profile">Your account</a></div><div class="g-super-services__grid">' + services + '</div></section>'
           + '<div data-sky-host></div>'
           + eventFeature()
+          + nextBookingCard()
           + freeTools()
           + '<section class="g-super-sync">' + icon('check-circle') + '<div><strong>Your access is synced</strong><span>Courses, communities, plans and purchases reflect your Gaia Healers account.</span></div></section>'
         // Logged-out flow: the free tools first — the one thing a stranger can
@@ -731,6 +732,16 @@
       + '<p>Pick up where you left off</p></div>'
       + (url ? '<button type="button" class="g-btn g-btn--secondary g-btn--sm" data-super-course="' + esc(url) + '" data-super-course-title="' + esc(title) + '">Continue</button>' : '')
       + '</div></section>';
+  }
+
+  // Next booking — the member's soonest real appointment (from the ledger).
+  // Shown only when one exists; links to the Bookings screen (canonical home).
+  function nextBookingCard() {
+    const appts = upcomingAppointments();
+    if (!appts.length) return '';
+    const a = appts[0];
+    return '<section class="g-super-list"><div class="g-super-section-head"><div><p class="g-super-kicker">Next booking</p><h2>Upcoming session</h2></div><a href="home.html?view=bookings">Bookings</a></div>'
+      + '<a class="g-super-row" href="home.html?view=bookings"><span class="g-super-row__icon">' + icon('calendar-check') + '</span><span><small>Scheduled</small><strong>' + esc(a.title || 'Appointment') + '</strong><em>' + esc(appointmentWhen(a)) + '</em></span>' + icon('caret-right') + '</a></section>';
   }
 
   // Real credentials only — derived from the member's actual GHL tags and

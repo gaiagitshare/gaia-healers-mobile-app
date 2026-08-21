@@ -755,7 +755,8 @@ body.gaia-booking-open{overflow:hidden;}
         + '<p class="g-card__meta">Courses, communities, devices, purchases, bookings and messages reflect your Gaia Healers plan.</p>'
         + '<div class="g-card__actions"><button type="button" class="g-btn g-btn--primary g-btn--sm" data-native-signin>Sign in securely →</button>'
         + '<button type="button" class="g-btn g-btn--secondary g-btn--sm" data-open-in-app="https://join.gaiahealers.com/onboarding" data-in-app-title="Join Gaia Healers">Join free</button>'
-        + '<a class="g-btn g-btn--ghost g-btn--sm" href="home.html?view=store&tab=membership">Compare plans</a></div></article>';
+        + '<a class="g-btn g-btn--ghost g-btn--sm" href="home.html?view=store&tab=membership">Compare plans</a></div></article>'
+        + '<article class="g-card"><p class="g-card__label">Become a practitioner</p><p class="g-card__meta">List your practice on Gaia Healers and get discovered by seekers.</p><div class="g-card__actions"><a class="g-btn g-btn--secondary g-btn--sm" href="https://gaiapractitioners.com/register" target="_blank" rel="noopener noreferrer">List your practice \u2192</a></div></article>';
       box.querySelector('[data-native-signin]')?.addEventListener('click', () => window.GaiaAuth?.open?.());
       return;
     }
@@ -825,6 +826,22 @@ body.gaia-booking-open{overflow:hidden;}
 
     const ncnt = (d.notif && d.notif.counts) || {};
     cards.push(gMeCard('Messages', gRows([gRow(ncnt.unread ? ncnt.unread + ' unread' : 'All caught up', (ncnt.conversations || 0) + ' conversation' + ((ncnt.conversations === 1) ? '' : 's'))])));
+
+    // My communities + events — canonical homes are the Community / Events hubs.
+    const myCircles = ((d.access && d.access.communities && d.access.communities.unlocked) || []);
+    cards.push(gMeCard('My communities', gRows([
+      gRowLink(myCircles.length ? myCircles.length + ' circle' + (myCircles.length === 1 ? '' : 's') + ' unlocked' : 'Browse your circles', 'View \u2192', 'home.html?view=community', false),
+      gRowLink('Your events', 'View \u2192', 'home.html?view=events', false),
+    ])));
+
+    // For Practitioners \u2014 adaptive: acquisition for seekers, tools for practitioners.
+    cards.push(p.practitioner
+      ? gMeCard('For practitioners', gRows([
+          gRowLink('Practitioner tools', 'Open \u2192', 'https://nextlevel.gaiahealers.com', true),
+          gRowLink('Your public listing', 'gaiapractitioners.com', 'https://gaiapractitioners.com', true),
+        ]))
+      : gMeCard('Become a practitioner', '<p class="g-empty">List your practice on Gaia Healers and get discovered by seekers looking for your work.</p>'
+        + '<div class="g-card__actions"><a class="g-btn g-btn--secondary g-btn--sm" href="https://gaiapractitioners.com/register" target="_blank" rel="noopener noreferrer">List your practice \u2192</a></div>'));
 
     cards.push(gMeCard('Account', gRows([
       gRowLink('Store & memberships', 'Shop →', 'home.html?view=store', false),

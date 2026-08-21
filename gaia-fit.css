@@ -2033,8 +2033,12 @@ body.gaia-v2 .g-topbar__actions.gaia-header-actions { display: flex; align-items
    (Community); space-around keeps them evenly spread. Scoped to the phone bar
    only (the >=1000px side-rail keeps its own vertical sizing). */
 @media (max-width: 999px) {
-  .gaia-tabbar__inner .gaia-tabbar__group { gap: 0; justify-content: space-around; }
-  .gaia-tabbar__inner .gaia-tabbar__link { flex: 0 1 auto; padding-left: 0.14rem; padding-right: 0.14rem; }
-  .gaia-tabbar__inner .gaia-tabbar__label { font-size: 0.5rem !important; letter-spacing: -0.02em; }
-  .gaia-tabbar__inner .gaia-tabbar__icon { width: 1.15rem; height: 1.15rem; }
+  .gaia-tabbar__inner .gaia-tabbar__group,
+  body.gaia-v2 .gaia-tabbar__inner .gaia-tabbar__group { gap: 0; justify-content: space-around; }
+  .gaia-tabbar__inner .gaia-tabbar__link,
+  body.gaia-v2 .gaia-tabbar__inner .gaia-tabbar__link { flex: 0 1 auto !important; min-width: 0; padding-left: 0.14rem; padding-right: 0.14rem; }
+  .gaia-tabbar__inner .gaia-tabbar__label,
+  body.gaia-v2 .gaia-tabbar__inner .gaia-tabbar__label { font-size: 0.5rem !important; letter-spacing: -0.02em; }
+  .gaia-tabbar__inner .gaia-tabbar__icon,
+  body.gaia-v2 .gaia-tabbar__inner .gaia-tabbar__icon { width: 1.15rem; height: 1.15rem; }
 }

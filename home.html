@@ -49,7 +49,7 @@
   <link rel="stylesheet" href="gaia-system.css?v=20260819ag" />
   <link rel="stylesheet" href="gaia-reshape.css?v=20260820b" />
   <link rel="stylesheet" href="gaia-superapp.css?v=20260821b" />
-  <link rel="stylesheet" href="gaia-fit.css?v=20260821d" />
+  <link rel="stylesheet" href="gaia-fit.css?v=20260821e" />
   <link rel="stylesheet" href="vendor/leaflet/leaflet.css?v=1.9.4" />
   <link rel="stylesheet" href="vendor/leaflet/MarkerCluster.css?v=1.5.3" />
   <link rel="stylesheet" href="vendor/leaflet/MarkerCluster.Default.css?v=1.5.3" />
@@ -150,6 +150,31 @@
           <section id="home-chakra-hero" class="g-chakra-hero" aria-label="Interactive chakra match"></section>
         </section>
 
+        <section class="g-energy-more" aria-label="More energy tools">
+          <div class="g-energy-intro">
+            <p class="g-sec-head__kicker">More in Energy</p>
+            <h2>Your self-discovery toolkit</h2>
+            <p>Reflective tools that read from your birth date and today &mdash; a wellness practice, not a measurement.</p>
+          </div>
+
+          <div data-sky-host></div>
+
+          <section id="home-colourtest" class="g-page-sec g-energy-tool" aria-label="Colour personality test"></section>
+
+          <div class="g-energy-launch">
+            <button type="button" class="g-energy-launch__card" data-open-in-app="https://numerology.lightworkers.club" data-in-app-title="Numerology Calculator">
+              <span class="g-energy-launch__icon"><i class="ph ph-hash" aria-hidden="true"></i></span>
+              <span class="g-energy-launch__body"><strong>Numerology</strong><small>Your numbers, calculated live</small></span>
+              <i class="ph ph-arrow-right g-energy-launch__go" aria-hidden="true"></i>
+            </button>
+            <button type="button" class="g-energy-launch__card" data-open-in-app="https://gaiahealers.com/pages/bio-well-research" data-in-app-title="Bio-Well research">
+              <span class="g-energy-launch__icon"><i class="ph ph-scan" aria-hidden="true"></i></span>
+              <span class="g-energy-launch__body"><strong>Bio-Well</strong><small>The science &amp; research behind the scan</small></span>
+              <i class="ph ph-arrow-right g-energy-launch__go" aria-hidden="true"></i>
+            </button>
+          </div>
+        </section>
+
         <aside class="g-energy-note" aria-label="Wellness guidance notice">
           <strong>Guidance, not diagnosis.</strong>
           <span>These tools support reflection and do not replace professional medical care.</span>
@@ -171,6 +196,16 @@
           <p class="g-page__sub" id="academy-summary-caption">Your courses live in the Gaia Healers portal.</p>
         </div>
         <div id="member-academy" class="g-page-sec" aria-live="polite"></div>
+        <section class="g-super-list g-academy-library" aria-label="Library and articles">
+          <div class="g-super-section-head"><div><p class="g-super-kicker">Library</p><h2>Articles &amp; research</h2></div></div>
+          <div class="g-energy-launch">
+            <button type="button" class="g-energy-launch__card" data-open-in-app="https://gaiahealers.com/blogs/news" data-in-app-title="Gaia Healers articles">
+              <span class="g-energy-launch__icon"><i class="ph ph-article" aria-hidden="true"></i></span>
+              <span class="g-energy-launch__body"><strong>Articles</strong><small>Guides &amp; stories from Gaia Healers</small></span>
+              <i class="ph ph-arrow-right g-energy-launch__go" aria-hidden="true"></i>
+            </button>
+          </div>
+        </section>
       </main>
     </section>
 
@@ -225,7 +260,6 @@
         <header class="g-sec-head"><p class="g-sec-head__kicker">Guidance &amp; tools</p><h2 class="g-sec-head__title">Continue your journey</h2></header>
         <div class="g-home-pair">
           <section id="home-book" class="g-page-sec" aria-label="Book a session"></section>
-          <section id="home-colourtest" class="g-page-sec" aria-label="Colour personality test"></section>
         </div>
 
         <button type="button" class="g-btn g-btn--ghost g-btn--sm g-profile-signout" data-sign-out hidden>Sign out</button>

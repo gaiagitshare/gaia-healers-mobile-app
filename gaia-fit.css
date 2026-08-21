@@ -2042,3 +2042,26 @@ body.gaia-v2 .g-topbar__actions.gaia-header-actions { display: flex; align-items
   .gaia-tabbar__inner .gaia-tabbar__icon,
   body.gaia-v2 .gaia-tabbar__inner .gaia-tabbar__icon { width: 1.15rem; height: 1.15rem; }
 }
+
+
+/* ==== IA Stage 2: Energy "More" toolkit + Academy Library launch cards ==== */
+.g-energy-more { margin-top: 22px; display: grid; gap: 16px; }
+.g-energy-tool { margin: 0; }
+.g-energy-launch { display: grid; gap: 12px; }
+.g-energy-launch__card {
+  display: flex; align-items: center; gap: 14px; width: 100%;
+  text-align: left; padding: 14px 16px; font: inherit; color: inherit; cursor: pointer;
+  border: 1px solid var(--super-line); border-radius: 20px; background: #0b160f;
+  transition: border-color .15s ease, transform .15s ease;
+}
+.g-energy-launch__card:hover { border-color: var(--super-accent); }
+.g-energy-launch__card:active { transform: scale(.99); }
+.g-energy-launch__icon {
+  display: grid; place-items: center; width: 44px; height: 44px; flex: none;
+  border-radius: 14px; background: rgba(92, 184, 46, .14); color: var(--super-accent); font-size: 22px;
+}
+.g-energy-launch__body { display: flex; flex-direction: column; gap: 2px; flex: 1; min-width: 0; }
+.g-energy-launch__body strong { font-size: 15px; font-weight: 700; }
+.g-energy-launch__body small { color: var(--super-muted); font-size: 12px; }
+.g-energy-launch__go { margin-left: auto; flex: none; color: var(--super-muted); font-size: 18px; }
+.g-academy-library { margin-top: 18px; }

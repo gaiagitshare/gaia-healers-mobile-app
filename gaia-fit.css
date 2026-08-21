@@ -2028,12 +2028,13 @@ body.gaia-v2 .g-topbar__actions.gaia-header-actions { display: flex; align-items
 
 
 /* ==== IA redesign: 6-tab bottom bar (Today·Energy·Academy · Assist · Community·Shop·You) ====
-   Three labels per side must fit at 320-375px without truncation. Tighten the
-   run: no inter-tab gap, minimal inline padding, slightly smaller label + icon.
-   Scoped to the phone bar only (the >=1000px side-rail keeps its own sizing). */
+   Three labels per side, no truncation from 320px up. Tabs are content-sized
+   (flex:0 1 auto) so short labels (Shop, You) hand their slack to the long one
+   (Community); space-around keeps them evenly spread. Scoped to the phone bar
+   only (the >=1000px side-rail keeps its own vertical sizing). */
 @media (max-width: 999px) {
-  .gaia-tabbar__inner .gaia-tabbar__group { gap: 0; }
-  .gaia-tabbar__inner .gaia-tabbar__link { padding-left: 0.06rem; padding-right: 0.06rem; }
-  .gaia-tabbar__inner .gaia-tabbar__label { font-size: 0.52rem !important; letter-spacing: -0.02em; }
+  .gaia-tabbar__inner .gaia-tabbar__group { gap: 0; justify-content: space-around; }
+  .gaia-tabbar__inner .gaia-tabbar__link { flex: 0 1 auto; padding-left: 0.14rem; padding-right: 0.14rem; }
+  .gaia-tabbar__inner .gaia-tabbar__label { font-size: 0.5rem !important; letter-spacing: -0.02em; }
   .gaia-tabbar__inner .gaia-tabbar__icon { width: 1.15rem; height: 1.15rem; }
 }

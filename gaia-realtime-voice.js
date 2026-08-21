@@ -445,8 +445,8 @@
                   properties: {
                     screen: {
                       type: 'string',
-                      description: 'The destination screen. today=Home, journey=member path, academy=Courses, community=Communities & Find a Healer, events=gatherings, bookings=sessions, inbox=messages, store=Shop & Membership, profile=Account, wellness=Energy Studio.',
-                      enum: ['today', 'journey', 'academy', 'community', 'events', 'bookings', 'inbox', 'store', 'profile', 'wellness'],
+                      description: 'The destination screen. today=Home, academy=Courses & Library, community=Community/Find a Healer/Events/Gaia Radio/Book a session, events=gatherings, bookings=your sessions, inbox=messages, directory=Find a Healer, store=Shop & Membership, profile=You (account & access), wellness=Energy (energy check, horoscope, chakras, numerology, colour test, Bio-Well).',
+                      enum: ['today', 'academy', 'community', 'events', 'bookings', 'inbox', 'directory', 'store', 'profile', 'wellness'],
                     },
                     tab: {
                       type: 'string',
@@ -518,7 +518,7 @@
     // calls it as a functionCall; handleGeminiMessage routes it to
     // window.GaiaAppShell.go(), then sends a toolResponse back so the model
     // can confirm the move aloud.
-    const NAVIGATE_SCREENS = ['today', 'journey', 'academy', 'community', 'events', 'bookings', 'inbox', 'store', 'profile', 'wellness'];
+    const NAVIGATE_SCREENS = ['today', 'academy', 'community', 'events', 'bookings', 'inbox', 'directory', 'store', 'profile', 'wellness'];
 
     function handleNavigateToolCall(args = {}) {
       const screen = String(args.screen || '').trim().toLowerCase();

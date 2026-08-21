@@ -2091,3 +2091,14 @@ body.gaia-v2 .g-topbar__actions.gaia-header-actions { display: flex; align-items
 .g-topbar__brand--stack img { width: 34px; height: 34px; margin: 0; }
 .g-topbar__brand--stack span { font-size: 12px; font-weight: 700; letter-spacing: .04em; }
 .g-topbar__actions.gaia-header-actions { justify-self: end; }
+
+
+/* ==== IA: Today topbar — horizontal brand lockup, no redundant Home button ==== */
+.gaia-screen[data-screen="today"] .g-topbar { grid-template-columns: auto 1fr; }
+.gaia-screen[data-screen="today"] .g-topbar__nav { display: none; }
+.gaia-screen[data-screen="today"] .g-topbar__brand--stack {
+  justify-self: start; flex-direction: row; align-items: center; gap: 9px;
+}
+.gaia-screen[data-screen="today"] .g-topbar__brand--stack img { width: 32px; height: 32px; }
+.gaia-screen[data-screen="today"] .g-topbar__brand--stack span { font-size: 17px; letter-spacing: .01em; }
+.gaia-screen[data-screen="today"] .g-topbar__actions.gaia-header-actions { justify-self: end; }

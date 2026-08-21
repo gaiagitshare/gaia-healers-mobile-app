@@ -4453,7 +4453,7 @@
       if (/\b(product|products|device|buy|shop|store|purchase|bio-?well|biopulsar|biotekna|price|cost|spray|crystal)\b/.test(t)) return { label: 'Open the Store', view: 'store' };
       if (/\b(profile|account|my devices|my purchases|my bookings|my account|settings)\b/.test(t)) return { label: 'Open your Profile', view: 'profile' };
       if (/\b(inbox|message|messages|conversation|notifications?)\b/.test(t)) return { label: 'Open Inbox', view: 'inbox' };
-      if (/\b(journey|continue|next step|what next)\b/.test(t)) return { label: 'Open your Journey', view: 'journey' };
+      if (/\b(journey|continue|next step|what next)\b/.test(t)) return { label: 'Open your account', view: 'profile' };
       if (/\b(home|dashboard|main screen|start screen|the start)\b/.test(t)) return { label: 'Go Home', view: 'today' };
       return null;
     }

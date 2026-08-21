@@ -531,7 +531,7 @@
       ['wellness&tab=check', 'sparkle', 'Energy check', 'Today’s body point and practice'],
       ['wellness&tab=horoscope', 'moon-stars', 'Horoscope', 'Your reflective daily guidance'],
       ['wellness&tab=chakras', 'circles-three-plus', 'Chakra match', 'Explore centres and products'],
-      ['profile&tool=colour', 'palette', 'Colour test', 'Five free questions'],
+      ['wellness&tool=colour', 'palette', 'Colour test', 'Five free questions'],
       ['events', 'calendar-dots', 'Events', 'Gatherings and live sessions'],
       ['store', 'bag', 'Gaia Healers Store', 'Sprays, tools and memberships'],
     ];
@@ -583,10 +583,10 @@
         + '<p>' + esc(appointmentWhen(nextAppointment)) + '</p><a class="g-btn g-btn--primary g-super-primary__button" href="home.html?view=bookings">'
         + icon('calendar-check') + ' View booking ' + icon('arrow-right') + '</a></section>';
     }
-    return '<section class="g-super-primary"><p class="g-super-kicker">Your journey</p><h2>Your Gaia Healers access is ready</h2>'
+    return '<section class="g-super-primary"><p class="g-super-kicker">Your access</p><h2>Your Gaia Healers access is ready</h2>'
       + '<p>No course or appointment yet. Explore your verified access or choose your next step.</p>'
-      + '<a class="g-btn g-btn--primary g-super-primary__button" href="home.html?view=journey">'
-      + icon('path') + ' Open your journey ' + icon('arrow-right') + '</a></section>';
+      + '<a class="g-btn g-btn--primary g-super-primary__button" href="home.html?view=profile">'
+      + icon('user') + ' View your account ' + icon('arrow-right') + '</a></section>';
   }
 
   /** "in 12 days", "Tomorrow", "Happening now" — whichever is true. */

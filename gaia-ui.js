@@ -1686,10 +1686,10 @@
     const steps = [
       { sel: '.g-free-tools', eyebrow: 'Free · no sign-up', title: 'Try your energy — free',
         body: 'Energy, Horoscope, Chakra &amp; Moon readings, right now. Your results save when you join.' },
+      { sel: '.gaia-tabbar', eyebrow: 'Your navigation', title: 'Six places, one tap',
+        body: 'Today, Energy, Academy, Community, Shop and You — everything lives in the bar below.' },
       { sel: '.gaia-tabbar__assist', eyebrow: 'Your guide', title: 'Ask Gaia, anytime',
         body: 'Tap the centre orb to talk or type — your AI wellness guide for anything in the app.' },
-      { sel: '[data-gaia-menu-button]', eyebrow: 'More', title: "Everything else is in the Menu",
-        body: 'Academy, Community, Store, Events and Bookings all live here.' },
       { sel: '.gaia-header-signin', eyebrow: 'Save it', title: 'Keep your readings',
         body: 'Create a free account to save your progress and unlock member courses &amp; communities.' },
     ].filter((st) => document.querySelector(st.sel));
@@ -2099,6 +2099,27 @@
     }
 
     document.addEventListener('click', routeClick);
+    // Top-left topbar button: a Home icon on Today, a Back arrow everywhere else.
+    // Back returns to the previous in-app view (or Today if this was the entry).
+    function syncNavButtons() {
+      const isHome = routeFromUrl().view === 'today';
+      document.querySelectorAll('[data-app-nav-btn]').forEach((btn) => {
+        btn.innerHTML = isHome
+          ? '<i class="ph ph-house" aria-hidden="true"></i>'
+          : '<i class="ph ph-caret-left" aria-hidden="true"></i>';
+        btn.setAttribute('aria-label', isHome ? 'Home' : 'Go back');
+      });
+    }
+    document.addEventListener('click', (event) => {
+      const btn = event.target.closest('[data-app-nav-btn]');
+      if (!btn) return;
+      event.preventDefault();
+      if (routeFromUrl().view === 'today') { navigate('today', { replace: true }); return; }
+      if (window.history.length > 1 && window.history.state) window.history.back();
+      else navigate('today', { replace: true });
+    });
+    window.addEventListener('gaia:route', syncNavButtons);
+    syncNavButtons();
     adminUnlockButtons.forEach((button) => {
       button.addEventListener('click', handleAdminUnlock);
     });
@@ -2704,7 +2725,7 @@
         ghl: responses.ghl,
         services: responses.event,
         voice: responses.scan,
-        ecosystem: 'Gaia Healers includes Energy Studio, Academy, practitioner communities, events, bookings, memberships and the live store — plus Bio-Well research, articles, demos, the practitioner directory, certification, affiliate access and practitioner software. Tell me what you want and I’ll open the verified source.',
+        ecosystem: 'Gaia Healers has six places: Today for your daily energy; Energy for energy check, horoscope, chakras, numerology, colour test, today sky and Bio-Well; Academy for courses, certifications and the library; Community for your circles, Find a Healer, events, Gaia Radio, booking a session and messages; Shop for the live store; and You for your membership, access, bookings and practitioner tools. Tell me what you want and I will open the verified source.',
         general: null,
       };
       if (intentReplies[intent]) return intentReplies[intent];
@@ -4399,11 +4420,11 @@
         return { label: 'Shop Colour Energy', url };
       }
       // Find a Healer — external directory
-      if (/(find|search|browse|looking for|need)[^.]{0,24}(healer|practitioner)|practitioner directory/.test(t)) return { label: 'Find a Healer', url: 'https://gaiapractitioners.com' };
+      if (/(find|search|browse|looking for|need)[^.]{0,24}(healer|practitioner)|practitioner directory/.test(t)) return { label: 'Find a Healer', view: 'directory' };
       // Home features / actions (all on the Home screen). Routes with a `run`
       // are ACTIONS — they surface a one-tap chip and never fire from a raw
       // voice transcript. `run` executes after navigating Home.
-      if (/(colou?r|personality)[^.]{0,12}(test|quiz)|personality test/.test(t)) return { label: 'Start the Colour Test', view: 'profile', run: () => window.GaiaQuiz?.start?.() };
+      if (/(colou?r|personality)[^.]{0,12}(test|quiz)|personality test/.test(t)) return { label: 'Start the Colour Test', view: 'wellness', run: () => window.GaiaQuiz?.start?.() };
       if (/check[ -]?in/.test(t) && /(challenge|chakra|today)/.test(t)) return { label: 'Check in for today', view: 'wellness', run: () => window.GaiaWellness?.checkIn?.() };
       if (/(join|start|begin|enroll|do)[^.]{0,20}(8[- ]?week|chakra challenge|challenge)/.test(t)) return { label: 'Join the 8-week challenge', view: 'wellness', run: () => window.GaiaWellness?.joinChallenge?.() };
       if (/(8[- ]?week|chakra challenge|\bchallenge\b)/.test(t)) return { label: 'Open the Chakra Challenge', view: 'wellness' };

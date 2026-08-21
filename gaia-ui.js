@@ -1402,6 +1402,21 @@
       if (magicLinked || claimed || AUTH_STATE.authenticated) window.GAIA_SYNC?.refresh?.();
       renderMyAccess();
     })();
+
+    // Auto-refresh the member session when the user returns to the app — e.g.
+    // after tapping a magic link in Mail, or after signing in in another tab or
+    // browser context. The server session is the source of truth; the app
+    // re-reads it on return so the user never has to manually reload to appear
+    // signed in. Debounced so a quick tab-switch does not spam the endpoint.
+    let lastReturnRefresh = 0;
+    function refreshSessionOnReturn() {
+      const now = Date.now();
+      if (now - lastReturnRefresh < 4000) return;
+      lastReturnRefresh = now;
+      refreshSession();
+    }
+    document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') refreshSessionOnReturn(); });
+    window.addEventListener('pageshow', (event) => { if (event.persisted) refreshSessionOnReturn(); });
   }
 
   function initMembershipAccess() {

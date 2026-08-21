@@ -100,8 +100,8 @@ body.gaia-v2 .g-super-home > section + section {
   }
 
   body.gaia-v2 .g-topbar {
-    min-height: 56px;
-    padding: 8px var(--fit-pad);
+    min-height: 46px;
+    padding: 6px var(--fit-pad);
   }
 
   body.gaia-v2 .g-topbar__brand {
@@ -1000,7 +1000,7 @@ body.gaia-v2 .g-super-home .g-feature-event__art img {
    visible — the moment someone lands on the site. Art is a backdrop; copy
    overlays it so the event card is one short poster, not a banner + body. */
 body.gaia-v2 .gaia-screen[data-screen="today"] {
-  --gaia-topbar-h: 52px;
+  --gaia-topbar-h: 46px;
   --gaia-main-pad-top: 8px;
   --gaia-g-home-pad-top: 8px;
   --gaia-fold-gap: 8px;
@@ -1712,8 +1712,8 @@ body.gaia-v2 .g-topbar__actions.gaia-header-actions { display: flex; align-items
 .gaia-header-signin {
   font-family: inherit; font-weight: 700; font-size: 13px; line-height: 1;
   color: var(--g-accent, #A6E84B); border: 1px solid var(--g-line-strong, rgba(190,240,170,.18));
-  background: rgba(166,232,75,.06); padding: 9px 15px; border-radius: 999px;
-  cursor: pointer; min-height: 38px; -webkit-tap-highlight-color: transparent;
+  background: rgba(166,232,75,.06); padding: 7px 13px; border-radius: 999px;
+  cursor: pointer; min-height: 32px; -webkit-tap-highlight-color: transparent;
 }
 .gaia-header-signin:active { background: rgba(166,232,75,.12); }
 
@@ -2067,13 +2067,13 @@ body.gaia-v2 .g-topbar__actions.gaia-header-actions { display: flex; align-items
 .g-academy-library { margin-top: 18px; }
 
 
-/* ==== IA: 3-column topbar — nav button (Home/Back) | centered stacked brand | actions ==== */
-.g-topbar { display: grid !important; grid-template-columns: 1fr auto 1fr; align-items: center; }
+/* ==== Header: one compact row — [menu/back] | centered wordmark | [sign in/avatar] ==== */
+.g-topbar { display: grid !important; grid-template-columns: minmax(44px, 1fr) auto minmax(44px, 1fr); align-items: center; column-gap: 6px; }
 .g-topbar__nav,
 .gaia-menu-button {
   display: inline-flex; align-items: center; justify-content: center; flex: none;
-  width: 38px; height: 38px; min-width: 0; padding: 0; border: 0; border-radius: 12px;
-  background: transparent; color: inherit; font-size: 21px; line-height: 1; letter-spacing: normal;
+  width: 36px; height: 36px; min-width: 0; padding: 0; border: 0; border-radius: 11px;
+  background: transparent; color: inherit; font-size: 20px; line-height: 1; letter-spacing: normal;
   cursor: pointer; -webkit-tap-highlight-color: transparent; transition: background-color .15s ease, transform .12s ease;
 }
 .g-topbar__nav { justify-self: start; }
@@ -2081,24 +2081,20 @@ body.gaia-v2 .g-topbar__actions.gaia-header-actions { display: flex; align-items
 .gaia-menu-button:hover { background: rgba(125, 217, 86, .12); }
 .g-topbar__nav:active,
 .gaia-menu-button:active { transform: scale(.92); }
-@media (min-width: 1000px) {
-  body.gaia-v2 .gaia-menu-button { width: 38px; height: 38px; min-width: 0; padding: 0; font-size: 21px; }
-}
+/* Brand: small mark + wordmark, one line, optically centered on screen */
 .g-topbar__brand--stack {
-  justify-self: center; display: inline-flex; flex-direction: column; align-items: center; gap: 1px;
-  text-decoration: none; line-height: 1;
+  justify-self: center; display: inline-flex; flex-direction: row; align-items: center; gap: 7px;
+  text-decoration: none; line-height: 1; white-space: nowrap;
 }
-.g-topbar__brand--stack img { width: 34px; height: 34px; margin: 0; }
-.g-topbar__brand--stack span { font-size: 12px; font-weight: 700; letter-spacing: .04em; }
-.g-topbar__actions.gaia-header-actions { justify-self: end; }
-
-
-/* ==== IA: Today topbar — horizontal brand lockup, no redundant Home button ==== */
-.gaia-screen[data-screen="today"] .g-topbar { grid-template-columns: auto 1fr; }
-.gaia-screen[data-screen="today"] .g-topbar__nav { display: none; }
-.gaia-screen[data-screen="today"] .g-topbar__brand--stack {
-  justify-self: start; flex-direction: row; align-items: center; gap: 9px;
+.g-topbar__brand--stack img { width: 22px; height: 22px; margin: 0; }
+.g-topbar__brand--stack span { font-size: 15px; font-weight: 700; letter-spacing: .01em; }
+/* Right zone: a single compact account action (Sign in guest / avatar member) */
+.g-topbar__actions.gaia-header-actions { justify-self: end; display: inline-flex; align-items: center; flex-wrap: nowrap; }
+.gaia-header-avatar {
+  display: inline-flex; align-items: center; justify-content: center; flex: none;
+  width: 32px; height: 32px; padding: 0; border-radius: 999px; cursor: pointer;
+  border: 1px solid var(--g-line-strong, rgba(190,240,170,.22)); background: rgba(166,232,75,.12);
+  color: var(--g-accent, #A6E84B); font-family: inherit; font-weight: 800; font-size: 14px; line-height: 1;
+  -webkit-tap-highlight-color: transparent; transition: transform .12s ease;
 }
-.gaia-screen[data-screen="today"] .g-topbar__brand--stack img { width: 32px; height: 32px; }
-.gaia-screen[data-screen="today"] .g-topbar__brand--stack span { font-size: 17px; letter-spacing: .01em; }
-.gaia-screen[data-screen="today"] .g-topbar__actions.gaia-header-actions { justify-self: end; }
+.gaia-header-avatar:active { transform: scale(.94); }

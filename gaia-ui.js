@@ -1783,6 +1783,7 @@
       document.body.classList.add('gaia-menu-open');
       sheet.querySelector('[data-menu-close]')?.focus();
     };
+    window.GaiaMenu = { open, close };
     sheet.querySelector('[data-menu-close]')?.addEventListener('click', close);
     sheet.addEventListener('click', (event) => { if (event.target === sheet) close(); });
     sheet.querySelectorAll('a[href]').forEach((link) => link.addEventListener('click', close));
@@ -1797,10 +1798,23 @@
     // returning member never has to scroll to the foot of the page to sign in.
     // Repainted on every auth change so it appears/disappears with the session.
     const paintHeaderActions = () => {
-      const authed = authState().authenticated;
+      const st = authState();
+      const authed = st.authenticated;
+      const member = st.member || (typeof AUTH_STATE !== 'undefined' ? AUTH_STATE.member : null) || {};
       document.querySelectorAll('[data-gaia-header-actions]').forEach((slot) => {
         slot.replaceChildren();
-        if (!authed) {
+        if (authed) {
+          const nm = String(member.displayName || member.name || member.email || 'G').trim();
+          const initial = ((nm.match(/[A-Za-z0-9]/) || ['G'])[0]).toUpperCase();
+          const avatar = document.createElement('button');
+          avatar.type = 'button';
+          avatar.className = 'gaia-header-avatar';
+          avatar.setAttribute('aria-label', 'Your account');
+          avatar.setAttribute('title', 'Account');
+          avatar.textContent = initial;
+          avatar.addEventListener('click', () => window.GaiaAppShell?.go?.('profile'));
+          slot.appendChild(avatar);
+        } else {
           const signin = document.createElement('button');
           signin.type = 'button';
           signin.className = 'gaia-header-signin';
@@ -1809,15 +1823,6 @@
           signin.addEventListener('click', () => window.GaiaAuth?.open?.());
           slot.appendChild(signin);
         }
-        const button = document.createElement('button');
-        button.type = 'button';
-        button.className = 'gaia-menu-button';
-        button.dataset.gaiaMenuButton = '';
-        button.setAttribute('aria-label', 'Open Gaia Healers menu');
-        button.setAttribute('title', 'Menu');
-        button.innerHTML = '<i class="ph ph-list" aria-hidden="true"></i>';
-        button.addEventListener('click', open);
-        slot.appendChild(button);
       });
     };
     paintHeaderActions();
@@ -2106,16 +2111,16 @@
       const isHome = routeFromUrl().view === 'today';
       document.querySelectorAll('[data-app-nav-btn]').forEach((btn) => {
         btn.innerHTML = isHome
-          ? '<i class="ph ph-house" aria-hidden="true"></i>'
+          ? '<i class="ph ph-list" aria-hidden="true"></i>'
           : '<i class="ph ph-caret-left" aria-hidden="true"></i>';
-        btn.setAttribute('aria-label', isHome ? 'Home' : 'Go back');
+        btn.setAttribute('aria-label', isHome ? 'Menu' : 'Go back');
       });
     }
     document.addEventListener('click', (event) => {
       const btn = event.target.closest('[data-app-nav-btn]');
       if (!btn) return;
       event.preventDefault();
-      if (routeFromUrl().view === 'today') { navigate('today', { replace: true }); return; }
+      if (routeFromUrl().view === 'today') { window.GaiaMenu?.open?.(); return; }
       if (window.history.length > 1 && window.history.state) window.history.back();
       else navigate('today', { replace: true });
     });

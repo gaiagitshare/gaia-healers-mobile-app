@@ -1814,7 +1814,8 @@
         button.className = 'gaia-menu-button';
         button.dataset.gaiaMenuButton = '';
         button.setAttribute('aria-label', 'Open Gaia Healers menu');
-        button.textContent = 'Menu';
+        button.setAttribute('title', 'Menu');
+        button.innerHTML = '<i class="ph ph-list" aria-hidden="true"></i>';
         button.addEventListener('click', open);
         slot.appendChild(button);
       });

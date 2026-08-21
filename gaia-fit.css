@@ -159,8 +159,8 @@ body.gaia-v2 .g-super-home > section + section {
 
   body.gaia-v2 .g-super-hero h1 {
     max-width: 16ch;
-    font-size: 1.35rem !important;
-    line-height: 1.08;
+    font-size: 1.2rem !important;
+    line-height: 1.06;
   }
 
   body.gaia-v2 .g-super-home .g-super-hero {
@@ -191,7 +191,7 @@ body.gaia-v2 .g-super-home > section + section {
     height: 100%;
     align-content: start;
     background: transparent;
-    padding: clamp(10px, 2.6vw, 14px) clamp(12px, 3.4vw, 16px) clamp(12px, 2vw, 16px);
+    padding: clamp(8px, 2vw, 11px) clamp(12px, 3.4vw, 16px) clamp(9px, 1.6vw, 12px);
   }
 
   body.gaia-v2 .g-super-home .g-super-hero .g-super-hero__intro::before {
@@ -208,9 +208,9 @@ body.gaia-v2 .g-super-home > section + section {
 
   body.gaia-v2 .g-super-hero__intro > p:not(.g-super-date) {
     max-width: 28ch;
-    margin: 0 0 10px;
-    font-size: 0.875rem;
-    line-height: 1.35;
+    margin: 0 0 7px;
+    font-size: 0.82rem;
+    line-height: 1.3;
   }
 
   /* Side-by-side on the fold so labels stay whole and the stack stays short. */
@@ -1802,7 +1802,7 @@ body.gaia-v2 .g-topbar__actions.gaia-header-actions { display: flex; align-items
 .g-de {
   position: relative; overflow: hidden;
   border-radius: 22px;
-  padding: 20px 18px 18px;
+  padding: 15px 16px 15px;
   margin: 0 0 4px;
   background:
     radial-gradient(120% 90% at 50% -10%, color-mix(in srgb, var(--de-c, #A6E84B) 20%, transparent), transparent 60%),
@@ -1821,7 +1821,7 @@ body.gaia-v2 .g-topbar__actions.gaia-header-actions { display: flex; align-items
   font-size: 10.5px; font-weight: 700; letter-spacing: 0.16em; text-transform: uppercase;
   color: color-mix(in srgb, var(--de-c, #A6E84B) 78%, #ffffff);
 }
-.g-de__focus { display: flex; align-items: center; gap: 14px; margin-top: 10px; }
+.g-de__focus { display: flex; align-items: center; gap: 14px; margin-top: 8px; }
 .g-de__orb {
   position: relative; flex: 0 0 auto; width: 56px; height: 56px; border-radius: 50%;
   background: radial-gradient(circle at 35% 30%, #ffffff, var(--de-c, #A6E84B) 55%, color-mix(in srgb, var(--de-c, #A6E84B) 40%, #000) 100%);
@@ -1831,8 +1831,8 @@ body.gaia-v2 .g-topbar__actions.gaia-header-actions { display: flex; align-items
 @keyframes g-de-pulse { 0%,100% { transform: scale(1); opacity: 0.85; } 50% { transform: scale(1.06); opacity: 1; } }
 .g-de__title { font-family: var(--g-font-serif, "Cormorant Garamond", serif); font-weight: 600; font-size: 26px; line-height: 1.08; margin: 0; text-wrap: balance; }
 .g-de__chakra { font-size: 12.5px; color: var(--g-text-dim, #93A597); margin-top: 3px; }
-.g-de__tip { font-size: 14.5px; line-height: 1.5; color: var(--g-text, #E7EFE6); margin: 14px 0 0; }
-.g-de__practice { margin-top: 14px; padding: 12px 14px; border-radius: 14px; background: rgba(255,255,255,0.04); border: 1px solid var(--g-line, rgba(190,240,170,0.12)); }
+.g-de__tip { font-size: 14.5px; line-height: 1.45; color: var(--g-text, #E7EFE6); margin: 10px 0 0; }
+.g-de__practice { margin-top: 10px; padding: 10px 12px; border-radius: 14px; background: rgba(255,255,255,0.04); border: 1px solid var(--g-line, rgba(190,240,170,0.12)); }
 .g-de__label { font-size: 10.5px; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; color: var(--g-text-dim, #93A597); margin: 0 0 4px; }
 .g-de__practice p { margin: 0; font-size: 14px; line-height: 1.5; }
 .g-de__track { display: flex; align-items: center; gap: 14px; margin-top: 16px; }
@@ -1846,7 +1846,7 @@ body.gaia-v2 .g-topbar__actions.gaia-header-actions { display: flex; align-items
 .g-de__day.is-done i { background: var(--de-c, #A6E84B); box-shadow: 0 0 10px color-mix(in srgb, var(--de-c, #A6E84B) 60%, transparent); }
 .g-de__day em { font-size: 9px; font-style: normal; color: var(--g-text-dim, #93A597); }
 .g-de__milestone { margin: 12px 0 0; font-size: 13px; color: color-mix(in srgb, var(--de-c, #A6E84B) 80%, #fff); font-weight: 600; }
-.g-de__actions { display: flex; gap: 10px; margin-top: 16px; }
+.g-de__actions { display: flex; gap: 10px; margin-top: 12px; }
 .g-de__actions .g-btn { flex: 1; display: inline-flex; align-items: center; justify-content: center; gap: 7px; }
 .g-de__done.is-done { background: color-mix(in srgb, var(--de-c, #A6E84B) 22%, transparent); color: #F4F7F1; border: 1px solid color-mix(in srgb, var(--de-c, #A6E84B) 45%, transparent); }
 .g-de__journal { margin-top: 14px; }
@@ -1855,8 +1855,8 @@ body.gaia-v2 .g-topbar__actions.gaia-header-actions { display: flex; align-items
 .g-de__journal summary::before { content: "＋ "; color: var(--de-c, #A6E84B); }
 .g-de__journal[open] summary::before { content: "－ "; }
 .g-de__journal p { margin: 8px 0 0; font-size: 14px; line-height: 1.5; font-style: italic; color: var(--g-text, #E7EFE6); }
-.g-de__personalise { margin-top: 16px; padding-top: 14px; border-top: 1px solid var(--g-line, rgba(190,240,170,0.12)); }
-.g-de__personalise p { margin: 0 0 12px; font-size: 13.5px; line-height: 1.5; color: var(--g-text-dim, #93A597); }
+.g-de__personalise { margin-top: 11px; padding-top: 11px; border-top: 1px solid var(--g-line, rgba(190,240,170,0.12)); }
+.g-de__personalise p { margin: 0 0 9px; font-size: 13.5px; line-height: 1.5; color: var(--g-text-dim, #93A597); }
 .g-de--preview .g-de__title { font-size: 24px; }
 .g-de--celebrate { animation: g-de-cel 0.6s ease; }
 @keyframes g-de-cel { 0% { transform: scale(1); } 30% { transform: scale(1.012); } 100% { transform: scale(1); } }

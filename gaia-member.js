@@ -919,11 +919,7 @@ body.gaia-booking-open{overflow:hidden;}
       gSec(hasAccess ? ('Your courses · ' + grants.length) : (cat.length ? ('Course catalog · ' + tracks.length) : 'Course catalog'),
         tracks.length ? '<div class="g-access-grid">' + tracks.map(trackCard).join('') + '</div>' : '<article class="g-card"><p class="g-card__meta">The catalogue is syncing.</p></article>'),
     ];
-    if (!state.authed) {
-      parts.push('<article class="g-card"><p class="g-card__label">Already a member?</p>'
-        + '<p class="g-card__meta">Sign in with your Gaia Healers email to open your courses and see what your membership unlocks.</p>'
-        + '<div class="g-card__actions"><button type="button" class="g-btn g-btn--secondary g-btn--sm" data-academy-signin>Sign in</button></div></article>');
-    } else if (!hasAccess) {
+    if (state.authed && !hasAccess) {
       parts.push('<article class="g-card"><p class="g-card__label">No course grant found</p>'
         + '<p class="g-card__meta">You are signed in, but no course or offer has been added to your account yet. If you just joined, it can take a few minutes to appear.</p>'
         + '<div class="g-card__actions"><button type="button" class="g-btn g-btn--primary g-btn--sm" data-track-cta>View memberships →</button></div></article>');

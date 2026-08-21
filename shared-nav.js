@@ -8,7 +8,7 @@
   const tabs = [
     { id: 'today', href: 'home.html?view=today', label: 'Today', icon: 'ph-sun' },
     { id: 'journey', href: 'home.html?view=journey', label: 'Journey', icon: 'ph-target' },
-    { id: 'inbox', href: 'home.html?view=inbox', label: 'Inbox', icon: 'ph-chat-circle-dots' },
+    { id: 'academy', href: 'home.html?view=academy', label: 'Academy', icon: 'ph-graduation-cap' },
     { id: 'profile', href: 'home.html?view=profile', label: 'Profile', icon: 'ph-user' },
   ];
 

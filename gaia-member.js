@@ -374,6 +374,8 @@ body.gaia-booking-open{overflow:hidden;}
     // Verified frameable and not login-gated: both are marketing funnels.
     'join.gaiahealers.com',
     'nextlevel.gaiahealers.com',
+    'numerology.lightworkers.club',
+    'music.gaiahealers.com',
   ];
   /* Shopify refuses framing outright, so these are READ rather than embedded —
    * fetched through the proxy and rendered in Gaia's own shell, the same way

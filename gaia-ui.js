@@ -1733,6 +1733,8 @@
             <a class="gaia-menu-sheet__link" href="home.html?view=events" data-app-nav="events">Events <span>Gather →</span></a>
             <a class="gaia-menu-sheet__link" href="home.html?view=bookings" data-app-nav="bookings">Bookings <span>Schedule →</span></a>
             <a class="gaia-menu-sheet__link" href="home.html?view=inbox" data-app-nav="inbox">Inbox <span>Messages →</span></a>
+            <button type="button" class="gaia-menu-sheet__link" data-open-in-app="https://numerology.lightworkers.club" data-in-app-title="Numerology Calculator">Numerology <span>Calculate →</span></button>
+            <button type="button" class="gaia-menu-sheet__link" data-open-in-app="https://music.gaiahealers.com" data-in-app-title="Gaia Healers Radio">Gaia Radio <span>Listen →</span></button>
             <a class="gaia-menu-sheet__link" href="home.html?view=wellness" data-app-nav="wellness">Energy <span>Explore →</span></a>
             <a class="gaia-menu-sheet__link" href="home.html?view=store" data-app-nav="store">Store <span>Shop →</span></a>
             <button type="button" class="gaia-menu-sheet__link" data-menu-membership>Membership <span>Explore →</span></button>

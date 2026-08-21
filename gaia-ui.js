@@ -2025,7 +2025,7 @@
         events: 'Events',
         bookings: 'Bookings',
         inbox: 'Inbox',
-        profile: 'Profile',
+        profile: 'You',
         store: 'Store',
         admin: 'Admin',
       };

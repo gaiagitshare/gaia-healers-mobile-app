@@ -7,10 +7,24 @@
 
   const tabs = [
     { id: 'today', href: 'home.html?view=today', label: 'Today', icon: 'ph-sun' },
-    { id: 'journey', href: 'home.html?view=journey', label: 'Journey', icon: 'ph-target' },
+    { id: 'wellness', href: 'home.html?view=wellness', label: 'Energy', icon: 'ph-sparkle' },
     { id: 'academy', href: 'home.html?view=academy', label: 'Academy', icon: 'ph-graduation-cap' },
-    { id: 'profile', href: 'home.html?view=profile', label: 'Profile', icon: 'ph-user' },
+    { id: 'community', href: 'home.html?view=community', label: 'Community', icon: 'ph-users-three' },
+    { id: 'profile', href: 'home.html?view=profile', label: 'You', icon: 'ph-user' },
   ];
+
+  // Compatibility map: which bottom-tab lights up for every current view.
+  // Relocated/child screens (events, directory, inbox -> Community; bookings,
+  // store, journey -> You) highlight their new parent hub, so old routes and
+  // bookmarks resolve to a screen with the correct tab active. Canonical homes
+  // are built stage by stage; until then the child screens still render in place.
+  const VIEW_TO_TAB = {
+    today: 'today',
+    wellness: 'wellness', biowell: 'wellness', chakras: 'wellness',
+    academy: 'academy',
+    community: 'community', events: 'community', directory: 'community', inbox: 'community',
+    profile: 'profile', bookings: 'profile', store: 'profile', journey: 'profile',
+  };
 
   function currentView() {
     return window.GaiaAppShell?.currentView?.() || new URLSearchParams(window.location.search).get('view') || 'today';
@@ -18,6 +32,7 @@
 
   function activeTabId() {
     const view = currentView();
+    if (VIEW_TO_TAB[view]) return VIEW_TO_TAB[view];
     if (tabs.some((tab) => tab.id === view)) return view;
     return null;
   }

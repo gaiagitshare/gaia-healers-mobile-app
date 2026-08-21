@@ -1999,3 +1999,20 @@ body.gaia-v2 .g-topbar__actions.gaia-header-actions { display: flex; align-items
 .g-jcred__body { display: flex; flex-direction: column; min-width: 0; }
 .g-jcred__body strong { font-size: 14.5px; color: var(--g-text, #E7EFE6); line-height: 1.2; }
 .g-jcred__body small { font-size: 11.5px; color: var(--g-text-dim, #93A597); margin-top: 2px; }
+
+/* ================= UI polish pass ================= */
+/* Action button rows wrap gracefully — a button never spills past its frame. */
+.g-de__actions, .g-super-actions, .g-card__actions, .gaia-share-modal__actions,
+.gaia-onboard-modal .g-super-actions, .g-feature-event__actions, .g-continue__row,
+.gaia-dirprofile__actions, .g-pass__actions, .g-upgrade__tiers { flex-wrap: wrap; }
+
+/* Close (×) buttons: centre the glyph (was baseline-offset) + a real hover state. */
+.gaia-sheet-close, .gaia-booking-modal__close, .gaia-assist__close, .gaia-portal-workspace__close {
+  display: inline-flex; align-items: center; justify-content: center; padding: 0; line-height: 1;
+}
+.gaia-sheet-close { transition: background .15s ease, color .15s ease, border-color .15s ease; }
+.gaia-sheet-close:hover, .gaia-sheet-close:focus-visible {
+  background: color-mix(in srgb, var(--g-accent, #A6E84B) 18%, transparent);
+  color: var(--g-text, #E7EFE6);
+  border-color: color-mix(in srgb, var(--g-accent, #A6E84B) 45%, transparent);
+}

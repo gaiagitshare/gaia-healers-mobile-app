@@ -218,11 +218,63 @@
       </header>
       <main class="gaia-main g-page g-community">
         <div class="g-page__head g-page__head--community">
-          <p class="g-page__kicker">Living network</p>
-          <h1 class="g-page__title">Your circles</h1>
-          <p class="g-page__sub" id="community-sub">The Gaia Healers communities you can open — and what unlocks next.</p>
+          <p class="g-page__kicker">Connect &amp; communicate</p>
+          <h1 class="g-page__title">Community</h1>
+          <p class="g-page__sub" id="community-sub">Your circles, people and live updates — all in one place.</p>
         </div>
-        <div id="community-body" class="g-page-sec" aria-live="polite"></div>
+
+        <section class="g-super-list" aria-label="Connect">
+          <div class="g-super-section-head"><div><p class="g-super-kicker">Connect</p><h2>Find your people</h2></div></div>
+          <div class="g-energy-launch">
+            <a class="g-energy-launch__card" href="home.html?view=directory" data-app-nav="directory">
+              <span class="g-energy-launch__icon"><i class="ph ph-map-pin-line" aria-hidden="true"></i></span>
+              <span class="g-energy-launch__body"><strong>Find a Healer</strong><small>Browse verified Gaia practitioners</small></span>
+              <i class="ph ph-arrow-right g-energy-launch__go" aria-hidden="true"></i>
+            </a>
+            <button type="button" class="g-energy-launch__card" data-open-in-app="https://calendly.com/nimafarshid/gaia-healers-meeting" data-in-app-title="Meet Dr. Nima Farshid">
+              <span class="g-energy-launch__icon"><i class="ph ph-calendar-heart" aria-hidden="true"></i></span>
+              <span class="g-energy-launch__body"><strong>Schedule with Dr. Nima</strong><small>Book a call with the founder</small></span>
+              <i class="ph ph-arrow-right g-energy-launch__go" aria-hidden="true"></i>
+            </button>
+            <a class="g-energy-launch__card" href="home.html?view=bookings" data-app-nav="bookings">
+              <span class="g-energy-launch__icon"><i class="ph ph-calendar-check" aria-hidden="true"></i></span>
+              <span class="g-energy-launch__body"><strong>Book a Session</strong><small>Sessions &amp; consultations</small></span>
+              <i class="ph ph-arrow-right g-energy-launch__go" aria-hidden="true"></i>
+            </a>
+          </div>
+        </section>
+
+        <section class="g-super-list" aria-label="Your circles">
+          <div class="g-super-section-head"><div><p class="g-super-kicker">Discussions</p><h2>Your circles</h2></div></div>
+          <div id="community-body" class="g-page-sec" aria-live="polite"></div>
+        </section>
+
+        <section class="g-super-list" aria-label="Live and updates">
+          <div class="g-super-section-head"><div><p class="g-super-kicker">Live &amp; updates</p><h2>What&rsquo;s happening</h2></div></div>
+          <div class="g-energy-launch">
+            <a class="g-energy-launch__card" href="home.html?view=events" data-app-nav="events">
+              <span class="g-energy-launch__icon"><i class="ph ph-calendar-dots" aria-hidden="true"></i></span>
+              <span class="g-energy-launch__body"><strong>Events</strong><small>Gatherings &amp; live sessions</small></span>
+              <i class="ph ph-arrow-right g-energy-launch__go" aria-hidden="true"></i>
+            </a>
+            <button type="button" class="g-energy-launch__card" data-open-in-app="https://music.gaiahealers.com" data-in-app-title="Gaia Healers Radio">
+              <span class="g-energy-launch__icon"><i class="ph ph-radio" aria-hidden="true"></i></span>
+              <span class="g-energy-launch__body"><strong>Gaia Radio</strong><small>The Gaia Healers broadcast</small></span>
+              <i class="ph ph-arrow-right g-energy-launch__go" aria-hidden="true"></i>
+            </button>
+          </div>
+        </section>
+
+        <section class="g-super-list" aria-label="People">
+          <div class="g-super-section-head"><div><p class="g-super-kicker">People</p><h2>Messages</h2></div></div>
+          <div class="g-energy-launch">
+            <a class="g-energy-launch__card" href="home.html?view=inbox" data-app-nav="inbox">
+              <span class="g-energy-launch__icon"><i class="ph ph-chat-circle-dots" aria-hidden="true"></i></span>
+              <span class="g-energy-launch__body"><strong>Inbox</strong><small>Your message summaries</small></span>
+              <i class="ph ph-arrow-right g-energy-launch__go" aria-hidden="true"></i>
+            </a>
+          </div>
+        </section>
       </main>
     </section>
 
@@ -295,7 +347,7 @@
   <script defer src="shared-nav.js?v=20260821b"></script>
   <script defer src="gaia-realtime-voice.js?v=20260819an"></script>
   <script defer src="gaia-membership-ui.js?v=20260820i"></script>
-  <script defer src="gaia-member.js?v=20260820y"></script>
+  <script defer src="gaia-member.js?v=20260821f"></script>
   <script defer src="gaia-wellness.js?v=20260819an"></script>
   <script defer src="gaia-quiz.js?v=20260815b"></script>
   <script defer src="gaia-store.js?v=20260819am"></script>

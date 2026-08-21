@@ -975,7 +975,6 @@ body.gaia-booking-open{overflow:hidden;}
         .map((name) => accessItem({ name: name, reason: 'Sign in to check your access' }, 'locked')).join('');
       box.innerHTML =
         announcementsHtml(state.announcements)
-        + findHealerCard()
         + '<article class="g-card g-card--feature"><p class="g-card__label">Community</p>'
         + '<p class="g-card__value g-card__value--lg">Open your circles</p>'
         + '<p class="g-card__meta">Sign in to see which Gaia Healers communities your membership unlocks — and open them in one tap.</p>'
@@ -997,7 +996,7 @@ body.gaia-booking-open{overflow:hidden;}
       sub.textContent = bits.join(' · ');
     }
 
-    const parts = [announcementsHtml(state.announcements), findHealerCard(), '<div class="g-stats">'
+    const parts = [announcementsHtml(state.announcements), '<div class="g-stats">'
       + '<div class="g-stat"><span class="g-stat__n g-stat__n--accent">' + unlocked.length + '</span><span class="g-stat__l">Unlocked</span></div>'
       + '<div class="g-stat"><span class="g-stat__n">' + locked.length + '</span><span class="g-stat__l">To unlock</span></div>'
       + '<div class="g-stat"><span class="g-stat__n">' + soon.length + '</span><span class="g-stat__l">Coming soon</span></div></div>'];

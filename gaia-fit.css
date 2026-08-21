@@ -2093,9 +2093,9 @@ body.gaia-v2 .g-topbar__actions.gaia-header-actions { display: flex; align-items
 .g-topbar__actions.gaia-header-actions { justify-self: end; display: inline-flex; align-items: center; flex-wrap: nowrap; }
 .gaia-header-avatar {
   display: inline-flex; align-items: center; justify-content: center; flex: none;
-  width: 32px; height: 32px; padding: 0; border-radius: 999px; cursor: pointer;
+  width: 36px; height: 36px; padding: 0; border-radius: 999px; cursor: pointer;
   border: 1px solid var(--g-line-strong, rgba(190,240,170,.22)); background: rgba(166,232,75,.12);
-  color: var(--g-accent, #A6E84B); font-family: inherit; font-weight: 800; font-size: 14px; line-height: 1;
+  color: var(--g-accent, #A6E84B); font-family: inherit; font-weight: 800; font-size: 15px; line-height: 1;
   -webkit-tap-highlight-color: transparent; transition: transform .12s ease;
 }
 .gaia-header-avatar:active { transform: scale(.94); }

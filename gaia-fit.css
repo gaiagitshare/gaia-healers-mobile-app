@@ -1471,7 +1471,7 @@ body.gaia-v2 .g-super-home .g-feature-event__actions .g-btn{
 /* Short screens (iPhone SE and friends): the same two complete cards, tighter.
    Measured — at 667px tall the default tier overshot the tab bar by 23px. */
 @media (max-height:740px){
-  body.gaia-v2 .g-super-home .g-super-hero{max-height:calc(24vh);max-height:calc(24dvh)}
+  body.gaia-v2 .g-super-home .g-super-hero{max-height:calc(22vh);max-height:calc(22dvh)}
   body.gaia-v2 .g-super-home .g-super-hero .g-super-hero__intro{padding:9px 16px 9px !important}
   body.gaia-v2 .g-super-hero h1,
   body.gaia-v2 .g-super-hero__intro h1{font-size:clamp(21px,5.4vw,26px) !important;

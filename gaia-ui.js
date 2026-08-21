@@ -383,7 +383,7 @@
     const strip = document.querySelector('.gaia-community-strip');
     if (strip) {
       const stats = strip.querySelectorAll('.gaia-community-strip__stat strong');
-      if (stats[0]) stats[0].textContent = Number(data.members || 1252).toLocaleString();
+      if (stats[0]) stats[0].textContent = Number(data.members || 0).toLocaleString();
       if (stats[1]) stats[1].textContent = String(communities.length);
       if (stats[2]) stats[2].textContent = `${(data.communityCourses || []).length}+`;
     }
@@ -391,7 +391,7 @@
     const postsBadge = document.querySelector('#panel-discussion .gaia-badge--live');
     if (postsBadge) {
       const totalPosts = communities.reduce((sum, c) => sum + (c.posts || 0), 0);
-      postsBadge.textContent = `${totalPosts || 39}+ posts`;
+      postsBadge.textContent = `${totalPosts || 0}+ posts`;
     }
 
     function renderGroups() {
@@ -1818,8 +1818,9 @@
           const signin = document.createElement('button');
           signin.type = 'button';
           signin.className = 'gaia-header-signin';
-          signin.textContent = 'Sign in';
+          signin.innerHTML = '<i class="ph ph-sign-in" aria-hidden="true"></i>';
           signin.setAttribute('aria-label', 'Sign in to Gaia Healers');
+          signin.setAttribute('title', 'Sign in');
           signin.addEventListener('click', () => window.GaiaAuth?.open?.());
           slot.appendChild(signin);
         }

@@ -544,20 +544,6 @@
       + '</div></section>';
   }
 
-  function discoverGaia() {
-    const items = [
-      ['heartbeat', 'Bio-Well demo', 'See energy technology in action', 'https://api.leadconnectorhq.com/widget/bookings/bio-welldemo'],
-      ['map-pin', 'Find a practitioner', 'Browse the verified Gaia Healers directory', 'https://gaiapractitioners.com'],
-      ['flask', 'Bio-Well research', 'Explore Gaia Healers’ public research library', 'https://gaiahealers.com/pages/bio-well-research'],
-      ['newspaper', 'Gaia Healers articles', 'Read current wellness and technology insights', 'https://gaiahealers.com/blogs/news'],
-      ['book-open', 'Education & community', 'Start free or enter the learning portal', 'https://join.gaiahealers.com/'],
-      ['briefcase', 'Practitioner tools', 'Open CRM, software and practice support', 'https://nextlevel.gaiahealers.com/'],
-    ];
-    return '<section class="g-super-discover-gaia"><div class="g-super-section-head"><div><p class="g-super-kicker">Across Gaia Healers</p><h2>Discover the ecosystem</h2></div></div><div class="g-super-discover-gaia__grid">'
-      + items.map((item) => '<button type="button" class="g-super-resource" data-open-in-app="' + esc(item[3]) + '" data-in-app-title="' + esc(item[1]) + '"><span>' + icon(item[0]) + '</span><strong>' + esc(item[1]) + '</strong><small>' + esc(item[2]) + '</small>' + icon('arrow-up-right') + '</button>').join('')
-      + '</div></section>';
-  }
-
   function journeyRail() {
     const learn = courseGrants().length > 0;
     const practice = upcomingAppointments().length > 0;
@@ -1212,7 +1198,6 @@
 
   function render() {
     renderHome();
-    renderJourney();
     renderEvents();
     renderBookings();
     renderInbox();
@@ -1226,6 +1211,6 @@
   document.addEventListener('gaia:sync', render);
   document.addEventListener('gaia:auth', () => window.setTimeout(render, 0));
   window.addEventListener('gaia:route', (event) => {
-    if (['today', 'journey', 'events', 'bookings', 'inbox'].includes(event.detail?.view)) render();
+    if (['today', 'events', 'bookings', 'inbox'].includes(event.detail?.view)) render();
   });
 })();

@@ -1710,12 +1710,13 @@ body.gaia-v2 .g-super-home .g-super-hero .g-super-discover--solo > .g-btn { widt
 /* Header: Sign in pill for guests, sitting beside the Menu button. */
 body.gaia-v2 .g-topbar__actions.gaia-header-actions { display: flex; align-items: center; gap: 8px; }
 .gaia-header-signin {
-  font-family: inherit; font-weight: 700; font-size: 13px; line-height: 1;
-  color: var(--g-accent, #A6E84B); border: 1px solid var(--g-line-strong, rgba(190,240,170,.18));
-  background: rgba(166,232,75,.06); padding: 7px 13px; border-radius: 999px;
-  cursor: pointer; min-height: 32px; -webkit-tap-highlight-color: transparent;
+  display: inline-flex; align-items: center; justify-content: center; flex: none;
+  width: 36px; height: 36px; min-width: 0; padding: 0; border: 0; border-radius: 11px;
+  background: transparent; color: inherit; font-size: 20px; line-height: 1;
+  cursor: pointer; -webkit-tap-highlight-color: transparent; transition: background-color .15s ease, transform .12s ease;
 }
-.gaia-header-signin:active { background: rgba(166,232,75,.12); }
+.gaia-header-signin:hover { background: rgba(125, 217, 86, .12); }
+.gaia-header-signin:active { transform: scale(.92); }
 
 
 /* ── First-run tour (spotlight) ─────────────────────────────────────────────── */

@@ -2016,3 +2016,12 @@ body.gaia-v2 .g-topbar__actions.gaia-header-actions { display: flex; align-items
   color: var(--g-text, #E7EFE6);
   border-color: color-mix(in srgb, var(--g-accent, #A6E84B) 45%, transparent);
 }
+
+/* Community transition sheet (Mighty-hosted communities) */
+.gaia-transition-modal { position: fixed; inset: 0; z-index: 1250; display: flex; align-items: center; justify-content: center; padding: 22px; background: rgba(4,8,5,0.74); backdrop-filter: blur(6px); }
+.gaia-transition__panel { width: 100%; max-width: 360px; border-radius: 22px; padding: 24px 22px calc(22px + env(safe-area-inset-bottom,0px)); background: var(--g-card-bg, #101A12); border: 1px solid var(--g-line, rgba(190,240,170,0.16)); box-shadow: 0 26px 60px rgba(0,0,0,0.5); text-align: center; }
+.gaia-transition__kicker { font-size: 10.5px; font-weight: 700; letter-spacing: 0.16em; text-transform: uppercase; color: var(--g-accent, #A6E84B); margin: 0; }
+.gaia-transition__title { font-family: var(--g-font-serif, 'Cormorant Garamond', serif); font-weight: 600; font-size: 26px; line-height: 1.1; margin: 6px 0 12px; }
+.gaia-transition__body { font-size: 14px; line-height: 1.55; color: var(--g-text-dim, #93A597); margin: 0 0 20px; }
+.gaia-transition__actions { display: flex; flex-direction: column; gap: 10px; }
+.gaia-transition__actions .g-btn { width: 100%; }

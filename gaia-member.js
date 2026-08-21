@@ -394,9 +394,41 @@ body.gaia-booking-open{overflow:hidden;}
     try { return new URL(u, window.location.href).hostname.replace(/^www\./, ''); } catch (_) { return ''; }
   }
 
+  // Mighty Networks hosts a Gaia community. It cannot be embedded (SAMEORIGIN)
+  // and keeps its own login, so we open it as a top-level page — but first show
+  // an honest transition sheet so the member knows where they are going and that
+  // Mighty may ask them to sign in. We never claim Gaia login = Mighty login.
+  const MIGHTY_HOSTS = ['lightworkersapp.com'];
+  function isMightyUrl(u) { const h = hostOf(u); return MIGHTY_HOSTS.some((a) => h === a || h.endsWith('.' + a)); }
+  function communityTransition(url, title) {
+    const name = String(title || 'Community').trim();
+    const overlay = document.createElement('div');
+    overlay.className = 'gaia-transition-modal';
+    overlay.innerHTML = '<div class="gaia-transition__panel" role="dialog" aria-modal="true" aria-label="Opening community">'
+      + '<p class="gaia-transition__kicker">Opening</p>'
+      + '<h2 class="gaia-transition__title">' + esc(name) + '</h2>'
+      + '<p class="gaia-transition__body">Your community is hosted on <strong>Mighty Networks</strong>. You may be asked to sign in to Mighty Networks the first time.</p>'
+      + '<div class="gaia-transition__actions">'
+      + '<button type="button" class="g-btn g-btn--primary" data-transition-open>Open Community</button>'
+      + '<button type="button" class="g-btn g-btn--secondary" data-transition-cancel>Cancel</button>'
+      + '</div></div>';
+    document.body.appendChild(overlay);
+    document.documentElement.style.overflow = 'hidden';
+    const close = () => { overlay.remove(); document.documentElement.style.overflow = ''; };
+    overlay.querySelector('[data-transition-cancel]').addEventListener('click', close);
+    overlay.addEventListener('click', (e) => { if (e.target === overlay) close(); });
+    overlay.querySelector('[data-transition-open]').addEventListener('click', () => {
+      close();
+      const opened = window.open(url, '_blank', 'noopener,noreferrer');
+      if (!opened) window.location.assign(url);
+    });
+    setTimeout(() => { try { overlay.querySelector('[data-transition-open]').focus(); } catch (e) {} }, 40);
+  }
+
   function openInApp(rawUrl, title) {
     const url = String(rawUrl || '').trim();
     if (!url) return;
+    if (isMightyUrl(url)) { communityTransition(url, title); return; }
     const host = hostOf(url);
     const isAuthPortal = AUTH_DEPENDENT_HOSTS.includes(host);
 

@@ -2142,7 +2142,7 @@ const DEEPLINK = {
   portalFallback: (process.env.GHL_CLIENT_PORTAL_BASE_URL || 'https://education.gaiahealers.com').replace(/\/+$/, ''),
   // Confirmed high-confidence URLs wired; empty string => portal fallback.
   communityUrls: {
-    'all-gaia': 'https://education.gaiahealers.com/gaia-healers-community', // confirmed
+    'all-gaia': 'https://www.lightworkersapp.com/spaces/13553216', // VERIFIED Mighty 'Gaiahealers Community' (active host of community + weekly events)
     biowell: '',                                                           // pending → portal
     biopulsar: 'https://education.gaiahealers.com/biopulsar-community',    // confirmed
     biotekna: '',                                                         // pending → portal

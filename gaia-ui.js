@@ -2738,12 +2738,7 @@
     }
 
     function passiveWelcomeText() {
-      if (AUTH_STATE.authenticated) {
-        const fullName = String(AUTH_STATE.member?.displayName || AUTH_STATE.member?.name || '').trim();
-        const firstName = fullName.split(/\s+/)[0] || 'there';
-        return `Welcome back, ${firstName}. I’m Gaia Assist. I can help open your courses and communities, check your membership access, book a session, or guide you anywhere in the app. What would you like to do?`;
-      }
-      return 'Welcome to Gaia Healers. I’m Gaia Assist. I can guide you through every app feature and verified Gaia Healers resource — energy tools, products, learning, events, research, practitioners, membership, bookings, and support. What brings you here today?';
+      return "Hi, I'm Gaia Assist — your personal guide for your Gaia Healers journey. Ask me any question to learn more about Gaia Healers.";
     }
 
     function liveWelcomePrompt() {
@@ -2755,12 +2750,7 @@
     }
 
     function welcomeTranscriptText() {
-      if (AUTH_STATE.authenticated) {
-        const fullName = String(AUTH_STATE.member?.displayName || AUTH_STATE.member?.name || '').trim();
-        const firstName = fullName.split(/\s+/)[0] || 'there';
-        return `Welcome back, ${firstName}. I'm Gaia Assist. I can help with your access, courses, communities, membership, bookings, and anything on the ${currentAssistView()} screen. What would you like to do?`;
-      }
-      return `Welcome to Gaia Healers. I'm Gaia Assist. I can guide you through every app feature and verified Gaia Healers resource — energy tools, products, learning, events, research, practitioners, membership, bookings, and support. What brings you here today?`;
+      return "Hi, I'm Gaia Assist — your personal guide for your Gaia Healers journey. Ask me any question to learn more about Gaia Healers.";
     }
 
     function ensureBrowserVoices() {

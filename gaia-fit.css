@@ -2137,3 +2137,15 @@ body.gaia-v2 .g-topbar__actions.gaia-header-actions { display: flex; align-items
 .g-info-item > summary::after { content: "+"; color: var(--g-accent, #A6E84B); font-size: 20px; line-height: 1; flex: 0 0 auto; }
 .g-info-item[open] > summary::after { content: "\2013"; }
 .g-info-item__body { padding: 0 16px 14px; color: var(--g-text-dim, #93A597); line-height: 1.55; }
+
+
+/* Event resources — downloadable links under the Info tab. */
+.g-resource { display: flex; align-items: center; gap: 12px; text-decoration: none;
+  border: 1px solid var(--g-line, rgba(190,240,170,.12)); border-radius: 14px; padding: 13px 16px;
+  background: var(--g-card, rgba(255,255,255,.02)); color: inherit; }
+.g-resource:hover { border-color: rgba(166,232,75,.4); }
+.g-resource__body { display: flex; flex-direction: column; gap: 2px; flex: 1; min-width: 0; }
+.g-resource__body strong { font-weight: 600; }
+.g-resource__body em { font-style: normal; color: var(--g-text-dim, #93A597); font-size: 13px; }
+.g-resource__go { color: var(--g-accent, #A6E84B); flex: 0 0 auto; display: flex; }
+.g-resource__go i { font-size: 20px; }

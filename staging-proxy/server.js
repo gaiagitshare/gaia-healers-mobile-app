@@ -3212,7 +3212,7 @@ async function eventsList(req, res, origin, url) {
 }
 
 async function eventDetail(req, res, origin, eventId) {
-  const [event, agenda, speakers, exhibitors, sponsors, announcements, venueMap, info] = await Promise.all([
+  const [event, agenda, speakers, exhibitors, sponsors, announcements, venueMap, info, resources] = await Promise.all([
     eventManagerGet(`/public/events/${eventId}`),
     eventManagerGet(`/public/events/${eventId}/agenda`),
     eventManagerGet(`/public/events/${eventId}/speakers`),
@@ -3221,6 +3221,7 @@ async function eventDetail(req, res, origin, eventId) {
     eventManagerGet(`/public/events/${eventId}/announcements`),
     eventManagerGet(`/public/events/${eventId}/map`),
     eventManagerGet(`/public/events/${eventId}/info`),
+    eventManagerGet(`/public/events/${eventId}/resources`),
   ]);
   if (!event) {
     sendJson(res, 404, { ok: false, error: 'event_not_found' }, origin);
@@ -3237,6 +3238,8 @@ async function eventDetail(req, res, origin, eventId) {
     announcements: Array.isArray(announcements) ? announcements : [],
     // FAQ / help / event-info cards, grouped by section.
     info: (info && Array.isArray(info.items)) ? info.items : [],
+    // Downloadable files / links the organiser published.
+    resources: Array.isArray(resources) ? resources : [],
     // Absent (not empty) when the organiser has not built a map, so the app
     // can skip the tab entirely rather than show a blank floor plan.
     map: venueMap && (venueMap.map_image_url || (venueMap.places || []).length)

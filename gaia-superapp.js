@@ -1049,7 +1049,13 @@
   // screen stays short until a question is opened. Native <details> = no JS.
   function infoSection(detail) {
     const items = Array.isArray(detail && detail.info) ? detail.info : [];
-    if (!items.length) return '';
+    const resources = Array.isArray(detail && detail.resources) ? detail.resources : [];
+    if (!items.length && !resources.length) return '';
+    const resBlock = resources.length
+      ? '<section class="g-super-list"><div class="g-super-section-head"><div><p class="g-super-kicker">Downloads</p><h2>Resources</h2></div></div><div class="g-info-list">'
+        + resources.map((r) => '<a class="g-resource" href="' + esc(r.url || '#') + '" target="_blank" rel="noopener noreferrer"><span class="g-resource__body"><strong>' + esc(r.title || '') + '</strong>' + (r.description ? '<em>' + esc(r.description) + '</em>' : '') + '</span><span class="g-resource__go" aria-hidden="true">' + icon('arrow-up-right') + '</span></a>').join('')
+        + '</div></section>'
+      : '';
     const groups = { info: [], faq: [], help: [] };
     items.forEach((it) => { (groups[it.section] || groups.faq).push(it); });
     const heading = { info: 'Good to know', faq: 'Event FAQ', help: 'Need help?' };
@@ -1064,7 +1070,7 @@
           + '</summary><div class="g-info-item__body">' + esc(it.body || '') + '</div></details>').join('')
         + '</div></section>';
     };
-    return ['info', 'faq', 'help'].map(block).join('');
+    return resBlock + ['info', 'faq', 'help'].map(block).join('');
   }
 
   function eventTabPanel(tab, detail, live) {
@@ -1088,7 +1094,7 @@
     if (tab === 'people') return Boolean(window.GaiaPeople && window.GaiaPeople.available());
     if (tab === 'sponsors') return Boolean(detail?.sponsors?.length);
     if (tab === 'updates') return Boolean((detail?.announcements?.length) || (eventUpdates.data && eventUpdates.data.length));
-    if (tab === 'info') return Boolean(detail?.info?.length);
+    if (tab === 'info') return Boolean((detail?.info?.length) || (detail?.resources?.length));
     return false;
   }
 

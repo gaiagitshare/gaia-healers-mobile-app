@@ -352,7 +352,8 @@
   function degradedNotice(access) {
     const meta = access?.meta || {};
     if (!meta.degraded && !meta.stale) return '';
-    const observed = meta.ledger_observed_at ? formatDate(meta.ledger_observed_at) : null;
+    const confirmedSrc = meta.confirmed_at || meta.ledger_observed_at;
+    const observed = confirmedSrc ? formatDate(confirmedSrc) : null;
     return '<div class="g-degraded" role="status">'
       + '<p class="g-degraded__title">This may not be up to date</p>'
       + '<p class="g-degraded__meta">'

@@ -435,6 +435,45 @@ function writeJsonAtomic(file, payload) {
   fs.renameSync(temp, file);
 }
 
+// ── Access confirmations ──────────────────────────────────────────────────
+// observed_at = when an entitlement last CHANGED (ingest). confirmed_at = when
+// we last SUCCESSFULLY read the member live from GHL (state still current).
+// The stale/degraded banner is driven by confirmed_at, so a stable entitlement
+// that simply hasn't changed does not read as stale while GHL is healthy. Kept
+// in a small side store (not the entitlement ledger) to avoid ledger churn and
+// read-modify-write races; persisted on a debounced timer.
+const MEMBER_CONFIRMATIONS_FILE = String(process.env.MEMBER_CONFIRMATIONS_FILE
+  || path.join(path.dirname(MEMBER_ENTITLEMENTS_FILE), 'member-confirmations.json')).trim();
+const CONFIRM_DEBOUNCE_MS = 10 * 60 * 1000; // stamp a contact at most every 10 min
+const _confirmations = new Map();
+let _confirmationsDirty = false;
+try {
+  const obj = JSON.parse(fs.readFileSync(MEMBER_CONFIRMATIONS_FILE, 'utf8')) || {};
+  for (const [cid, iso] of Object.entries(obj)) {
+    const ms = Date.parse(iso);
+    if (cid && Number.isFinite(ms)) _confirmations.set(cid, ms);
+  }
+} catch (_) { /* first run: no confirmations file yet */ }
+function recordConfirmation(contactId) {
+  if (!contactId) return;
+  const prev = _confirmations.get(contactId) || 0;
+  if (Date.now() - prev < CONFIRM_DEBOUNCE_MS) return; // debounced: no write on every request
+  _confirmations.set(contactId, Date.now());
+  _confirmationsDirty = true;
+}
+function confirmationIso(contactId) {
+  const ms = contactId ? _confirmations.get(contactId) : 0;
+  return ms ? new Date(ms).toISOString() : null;
+}
+setInterval(() => {
+  if (!_confirmationsDirty) return;
+  _confirmationsDirty = false;
+  try {
+    writeJsonAtomic(MEMBER_CONFIRMATIONS_FILE,
+      Object.fromEntries([..._confirmations].map(([k, v]) => [k, new Date(v).toISOString()])));
+  } catch (err) { console.error('[Gaia Confirmations] persist failed', err.message); }
+}, 60 * 1000).unref();
+
 const STORE_CATALOG_FILE = process.env.STORE_CATALOG_FILE
   || path.join(path.dirname(MEMBER_ENTITLEMENTS_FILE), 'store-catalog.json');
 const SHOPIFY_STOREFRONT = process.env.SHOPIFY_STOREFRONT_URL || 'https://gaiahealers.com';
@@ -2464,11 +2503,22 @@ async function memberAccess(req, res, origin, url) {
   // canonical membership/entitlement view is added next to it so the UI can be
   // migrated screen by screen instead of in one breaking release.
   const contactId = liveMember.contactId || liveMember.memberId || sessionMember.contactId || '';
+  // A successful live GHL read IS a confirmation of current state. Stamp it
+  // (debounced) and drive freshness off it; on a failed read, fall back to the
+  // last stored confirmation so the honesty banner still fires when it should.
+  let confirmedAt = null;
+  if (live && !sourceError) {
+    confirmedAt = new Date().toISOString();
+    recordConfirmation(contactId);
+  } else {
+    confirmedAt = confirmationIso(contactId);
+  }
   const resolved = resolveMemberAccess({
     record: entitlements,
     subscriptions,
     tags,
     sourceError,
+    confirmedAt,
   });
 
   sendJson(res, 200, {

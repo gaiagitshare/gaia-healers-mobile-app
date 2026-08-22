@@ -163,6 +163,7 @@ function resolveMemberAccess({
   subscriptions = [],
   tags = [],
   sourceError = false,
+  confirmedAt = null,
   now = new Date(),
   staleAfterMs = LEDGER_STALE_AFTER_MS,
   authority = MEMBERSHIP_AUTHORITY,
@@ -268,8 +269,13 @@ function resolveMemberAccess({
     .map((item) => Date.parse(item.observed_at || '') || 0)
     .filter(Boolean);
   const ledgerObservedAt = observedTimes.length ? new Date(Math.max(...observedTimes)).toISOString() : null;
-  const ageMs = ledgerObservedAt ? now.getTime() - Date.parse(ledgerObservedAt) : null;
-  const stale = Boolean(ledgerObservedAt && ageMs > staleAfterMs);
+  // Freshness = last SUCCESSFUL live confirmation (confirmed_at), NOT last
+  // entitlement change (observed_at). A stable entitlement that hasn't changed
+  // in weeks is not stale as long as the source was confirmed recently. Fall
+  // back to observed_at only for a contact never confirmed yet.
+  const freshnessAt = confirmedAt || ledgerObservedAt;
+  const ageMs = freshnessAt ? now.getTime() - Date.parse(freshnessAt) : null;
+  const stale = Boolean(freshnessAt && ageMs > staleAfterMs);
   if (stale) notes.push('ledger observation is older than the freshness window');
   if (sourceError) notes.push('an upstream source was unavailable for this request; access shown is the last known state, not a revocation');
 
@@ -288,6 +294,7 @@ function resolveMemberAccess({
       membership_provisional: provisional,
       membership_authority: authority,
       ledger_observed_at: ledgerObservedAt,
+      confirmed_at: confirmedAt || null,
       membership_conflict: conflict,
       legacy_membership_tags: legacyTierTags,
       unmapped_subscriptions: unmappedSubscriptions,

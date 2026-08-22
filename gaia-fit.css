@@ -2099,3 +2099,29 @@ body.gaia-v2 .g-topbar__actions.gaia-header-actions { display: flex; align-items
   -webkit-tap-highlight-color: transparent; transition: transform .12s ease;
 }
 .gaia-header-avatar:active { transform: scale(.94); }
+
+/* ============================================================= */
+/* Event carousel — the home "Next gathering" becomes a swipeable */
+/* set of upcoming events, each with its own hero. Native         */
+/* scroll-snap does the swipe; the dots reflect and drive it.     */
+.g-event-carousel { position: relative; }
+.g-event-carousel__track {
+  display: flex; gap: 12px; overflow-x: auto; scroll-snap-type: x mandatory;
+  -webkit-overflow-scrolling: touch; scrollbar-width: none; overscroll-behavior-x: contain;
+}
+.g-event-carousel__track::-webkit-scrollbar { display: none; }
+.g-event-carousel__slide { flex: 0 0 100%; min-width: 0; scroll-snap-align: start; }
+.g-event-carousel__slide > .g-feature-event { height: 100%; margin: 0; }
+.g-event-carousel__dots { display: flex; justify-content: center; gap: 7px; margin-top: 12px; }
+.g-event-carousel__dot {
+  width: 7px; height: 7px; padding: 0; border: 0; border-radius: 999px; cursor: pointer;
+  background: rgba(190,240,170,.28); transition: width .2s ease, background .2s ease;
+}
+.g-event-carousel__dot.is-active { width: 22px; background: var(--g-accent, #A6E84B); }
+@media (min-width: 1060px) {
+  body.gaia-v2 .g-super-home > .g-event-carousel {
+    grid-column: 2 !important; grid-row: 1 !important; align-self: stretch !important; height: 100%; margin: 0;
+  }
+  body.gaia-v2 .g-super-home > .g-event-carousel .g-event-carousel__track,
+  body.gaia-v2 .g-super-home > .g-event-carousel .g-event-carousel__slide { height: 100%; }
+}

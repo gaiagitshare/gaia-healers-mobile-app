@@ -599,8 +599,34 @@
    * Home uses the designated Elevate conference artwork. Copy, dates, and the
    * registration link still come from the published event — never invented.
    */
-  function eventFeature() {
-    const event = eventData();
+  // Upcoming events (not yet ended), earliest first — the slides of the home carousel.
+  function upcomingFeatureEvents() {
+    const list = Array.isArray(eventsList.data) ? eventsList.data.slice() : [];
+    const now = Date.now();
+    return list.filter((e) => {
+      const end = Date.parse(e.endAt || e.endDate || e.startAt || e.startDate || '');
+      return !Number.isFinite(end) || end >= now;
+    }).sort((a, b) => (Date.parse(a.startDate || a.startAt || '') || 0) - (Date.parse(b.startDate || b.startAt || '') || 0));
+  }
+
+  // The home 'Next gathering' as a swipeable carousel when more than one event
+  // is upcoming; a single event just renders its own card, no carousel chrome.
+  function eventFeatureCarousel() {
+    loadEventsList();
+    const events = upcomingFeatureEvents();
+    if (events.length === 0) return eventFeature();
+    if (events.length === 1) return eventFeature(events[0]);
+    const slides = events.map((e) => '<div class="g-event-carousel__slide">' + eventFeature(e) + '</div>').join('');
+    const dots = events.map((_, i) => '<button type="button" class="g-event-carousel__dot' + (i === 0 ? ' is-active' : '')
+      + '" data-carousel-dot="' + i + '" aria-label="Show event ' + (i + 1) + '"></button>').join('');
+    return '<section class="g-event-carousel" data-event-carousel>'
+      + '<div class="g-event-carousel__track" data-carousel-track>' + slides + '</div>'
+      + '<div class="g-event-carousel__dots">' + dots + '</div>'
+      + '</section>';
+  }
+
+  function eventFeature(event) {
+    event = event || eventData();
     if (!event?.name) {
       return '<section class="g-super-event g-super-event--empty"><div><p class="g-super-kicker">Events</p><h2>Next gathering</h2>'
         + '<p>The next confirmed Gaia Healers event will appear here when it is published.</p></div><a href="home.html?view=events" class="g-btn g-btn--secondary">View events</a></section>';
@@ -683,7 +709,7 @@
           + (activeMembership() ? '' : upgradeCard())
           + '<section class="g-super-services"><div class="g-super-section-head"><div><p class="g-super-kicker">Your access</p><h2>Everything Gaia Healers</h2></div><a href="home.html?view=profile">Your account</a></div><div class="g-super-services__grid">' + services + '</div></section>'
           + '<div data-sky-host></div>'
-          + eventFeature()
+          + eventFeatureCarousel()
           + nextBookingCard()
           + freeTools()
           + '<section class="g-super-sync">' + icon('check-circle') + '<div><strong>Your access is synced</strong><span>Courses, communities, plans and purchases reflect your Gaia Healers account.</span></div></section>'
@@ -691,7 +717,7 @@
         // use right now — then today's sky, the event, one clear way in, and the
         // wider ecosystem last so the top of the page stays short and focused.
         // Ecosystem links moved into the Menu — the guest home stays short.
-        : eventFeature()
+        : eventFeatureCarousel()
           + freeTools()
           + '<div data-sky-host></div>'
           + authPrompt(true))
@@ -1184,6 +1210,20 @@
   }
 
   function bind(root) {
+    // Event carousel: dots reflect the swiped position and jump to a slide.
+    root.querySelectorAll('[data-event-carousel]').forEach((car) => {
+      const track = car.querySelector('[data-carousel-track]');
+      const dots = Array.from(car.querySelectorAll('[data-carousel-dot]'));
+      if (!track || !dots.length) return;
+      const sync = () => {
+        const i = Math.round(track.scrollLeft / Math.max(1, track.clientWidth));
+        dots.forEach((d, n) => d.classList.toggle('is-active', n === i));
+      };
+      track.addEventListener('scroll', () => window.requestAnimationFrame(sync), { passive: true });
+      dots.forEach((dot, n) => dot.addEventListener('click', () => {
+        track.scrollTo({ left: n * track.clientWidth, behavior: 'smooth' });
+      }));
+    });
     root.querySelectorAll('[data-super-signin]').forEach((button) => button.addEventListener('click', () => window.GaiaAuth?.open?.()));
     root.querySelectorAll('[data-super-join]').forEach((button) => button.addEventListener('click', () => { window.GaiaAuth?.open?.(); setTimeout(() => document.querySelector('[data-join-toggle]')?.click(), 120); }));
     root.querySelectorAll('[data-gaia-open-assist]').forEach((button) => button.addEventListener('click', () => {

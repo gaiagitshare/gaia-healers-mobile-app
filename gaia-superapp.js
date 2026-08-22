@@ -701,23 +701,23 @@
       + '<p class="g-super-date">' + esc(dateLabel()) + '</p>'
       + '<p>' + (authed ? 'Your healing journey is waiting.' : 'What does your energy need today?') + '</p>'
       + (authed ? '' : '<div class="g-super-discover g-super-discover--solo"><a class="g-btn g-btn--primary" href="home.html?view=wellness&tab=check">' + icon('sparkle') + ' Check my energy</a></div>') + '</div><div class="g-super-hero__art"><picture><source media="(min-width: 900px)" srcset="assets/gaia-hero-moon.png" /><img src="assets/gaia-hero-moon-wide.png" alt="Person meditating in lotus pose under a full moon over mountains" width="1024" height="576" loading="eager" /></picture></div></section>'
-      + '<div data-daily-host></div>'
       + (authed
-        // Member flow: lead with the next step and their real access, then the
-        // daily sky, the event, the free wellness tools, and the sync note.
-        ? primaryMemberAction()
+        // Member flow (reordered): greeting, then the upcoming-events carousel
+        // and the quick free tools up top, then daily energy, real access,
+        // today's sky, the next booking and the sync note.
+        ? eventFeatureCarousel()
+          + freeTools()
+          + '<div data-daily-host></div>'
+          + primaryMemberAction()
           + (activeMembership() ? '' : upgradeCard())
           + '<section class="g-super-services"><div class="g-super-section-head"><div><p class="g-super-kicker">Your access</p><h2>Everything Gaia Healers</h2></div><a href="home.html?view=profile">Your account</a></div><div class="g-super-services__grid">' + services + '</div></section>'
           + '<div data-sky-host></div>'
-          + eventFeatureCarousel()
           + nextBookingCard()
-          + freeTools()
           + '<section class="g-super-sync">' + icon('check-circle') + '<div><strong>Your access is synced</strong><span>Courses, communities, plans and purchases reflect your Gaia Healers account.</span></div></section>'
-        // Logged-out flow: the free tools first — the one thing a stranger can
-        // use right now — then today's sky, the event, one clear way in, and the
-        // wider ecosystem last so the top of the page stays short and focused.
-        // Ecosystem links moved into the Menu — the guest home stays short.
-        : eventFeatureCarousel()
+        // Logged-out flow: daily energy, then the free tools a stranger can use
+        // right now, the event, and one clear way in.
+        : '<div data-daily-host></div>'
+          + eventFeatureCarousel()
           + freeTools()
           + '<div data-sky-host></div>'
           + authPrompt(true))

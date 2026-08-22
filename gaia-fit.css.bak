@@ -1759,7 +1759,7 @@ body.gaia-v2 .g-topbar__actions.gaia-header-actions { display: flex; align-items
   border: 1px solid rgba(166,232,75,.18); box-shadow: 0 22px 54px -26px rgba(166,232,75,.28); }
 .g-upgrade__aura { position: absolute; top: -46%; right: -22%; width: 300px; height: 300px; border-radius: 50%;
   background: radial-gradient(circle, rgba(166,232,75,.22), transparent 68%); pointer-events: none; }
-.g-upgrade > *:not(.g-upgrade__aura) { position: relative; }
+.g-upgrade > * { position: relative; }
 .g-upgrade__kicker { font-size: 11px; font-weight: 700; letter-spacing: .18em; text-transform: uppercase; color: var(--g-accent, #A6E84B); }
 .g-upgrade__title { font-family: var(--g-font-serif, "Cormorant Garamond", serif); font-weight: 600; font-size: 28px; margin-top: 8px; line-height: 1.05; }
 .g-upgrade__lede { color: var(--g-text-dim, #93A597); font-size: 14px; line-height: 1.5; margin-top: 10px; max-width: 42ch; }

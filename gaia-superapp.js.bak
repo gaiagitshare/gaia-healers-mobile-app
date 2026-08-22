@@ -608,7 +608,7 @@
     const location = event.location || event.venue || '';
     const when = eventDate(event);
     const countdown = eventCountdown(event);
-    const art = event.heroImageUrl || 'assets/gaia-elevate-hero.png';
+    const art = 'assets/gaia-elevate-hero.png';
     const register = event.registrationUrl
       ? '<a class="g-btn g-btn--primary g-btn--sm" href="' + esc(event.registrationUrl) + '" target="_blank" rel="noopener noreferrer">'
         + esc(event.registrationLabel || 'Get tickets') + '</a>'
@@ -616,7 +616,7 @@
 
     return '<section class="g-feature-event">'
       + '<div class="g-feature-event__art">'
-      + '<img src="' + esc(art) + '" alt="' + esc(event.name) + '" width="426" height="358" loading="eager" /></div>'
+      + '<img src="' + esc(art) + '" alt="Gaia Healers Elevate Conference — crowd gathered under a green Earth light" width="426" height="358" loading="eager" /></div>'
       + '<div class="g-feature-event__body">'
       + '<p class="g-feature-event__kicker">' + icon('calendar-dots') + ' Next gathering'
       + (countdown ? '<span class="g-feature-event__badge">' + esc(countdown) + '</span>' : '') + '</p>'

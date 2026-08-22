@@ -860,7 +860,7 @@
   const EVENT_TABS = [
     ['overview', 'Overview'], ['agenda', 'Agenda'], ['speakers', 'Speakers'],
     ['exhibitors', 'Exhibitors'], ['map', 'Map'], ['people', 'People'],
-    ['sponsors', 'Sponsors'], ['updates', 'Updates'], ['info', 'Info'],
+    ['sponsors', 'Sponsors'], ['updates', 'Updates'],
   ];
 
   // The server states the time; the device only measures elapsed time since.
@@ -1020,28 +1020,6 @@
     document.dispatchEvent(new CustomEvent('gaia:superapp-rendered', { detail: { view: 'events' } }));
   }
 
-  // FAQ / help / event-info cards, grouped and shown as an accordion so the
-  // screen stays short until a question is opened. Native <details> = no JS.
-  function infoSection(detail) {
-    const items = Array.isArray(detail && detail.info) ? detail.info : [];
-    if (!items.length) return '';
-    const groups = { info: [], faq: [], help: [] };
-    items.forEach((it) => { (groups[it.section] || groups.faq).push(it); });
-    const heading = { info: 'Good to know', faq: 'Event FAQ', help: 'Need help?' };
-    const kicker = { info: 'Information', faq: 'Questions', help: 'Support' };
-    const block = (key) => {
-      const list = groups[key];
-      if (!list || !list.length) return '';
-      return '<section class="g-super-list"><div class="g-super-section-head"><div>'
-        + '<p class="g-super-kicker">' + esc(kicker[key]) + '</p><h2>' + esc(heading[key]) + '</h2></div></div>'
-        + '<div class="g-info-list">'
-        + list.map((it) => '<details class="g-info-item"><summary>' + esc(it.title || '')
-          + '</summary><div class="g-info-item__body">' + esc(it.body || '') + '</div></details>').join('')
-        + '</div></section>';
-    };
-    return ['info', 'faq', 'help'].map(block).join('');
-  }
-
   function eventTabPanel(tab, detail, live) {
     if (tab === 'agenda') return agendaSection(detail);
     if (tab === 'map') return mapSection(detail);
@@ -1050,7 +1028,6 @@
     if (tab === 'exhibitors') return directorySection(detail);
     if (tab === 'sponsors') return sponsorsSection(detail);
     if (tab === 'updates') return updatesSection(detail, live);
-    if (tab === 'info') return infoSection(detail);
     return '';
   }
 
@@ -1063,7 +1040,6 @@
     if (tab === 'people') return Boolean(window.GaiaPeople && window.GaiaPeople.available());
     if (tab === 'sponsors') return Boolean(detail?.sponsors?.length);
     if (tab === 'updates') return Boolean(detail?.announcements?.length);
-    if (tab === 'info') return Boolean(detail?.info?.length);
     return false;
   }
 

@@ -2125,3 +2125,15 @@ body.gaia-v2 .g-topbar__actions.gaia-header-actions { display: flex; align-items
   body.gaia-v2 .g-super-home > .g-event-carousel .g-event-carousel__track,
   body.gaia-v2 .g-super-home > .g-event-carousel .g-event-carousel__slide { height: 100%; }
 }
+
+
+/* Event Info / FAQ / Help — an accordion of cards. */
+.g-info-list { display: flex; flex-direction: column; gap: 8px; }
+.g-info-item { border: 1px solid var(--g-line, rgba(190,240,170,.12)); border-radius: 14px;
+  background: var(--g-card, rgba(255,255,255,.02)); overflow: hidden; }
+.g-info-item > summary { list-style: none; cursor: pointer; padding: 14px 16px; font-weight: 600;
+  display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.g-info-item > summary::-webkit-details-marker { display: none; }
+.g-info-item > summary::after { content: "+"; color: var(--g-accent, #A6E84B); font-size: 20px; line-height: 1; flex: 0 0 auto; }
+.g-info-item[open] > summary::after { content: "\2013"; }
+.g-info-item__body { padding: 0 16px 14px; color: var(--g-text-dim, #93A597); line-height: 1.55; }

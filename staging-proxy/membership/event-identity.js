@@ -274,4 +274,36 @@ async function feedback(session, eventId, body) {
   return { authenticated: true, ...(result || { ok: false, reason: 'identity_failed' }) };
 }
 
-export { myEvents, myTicket, mySchedule, changeSchedule, changeWorkshop, networking, feedback, identityFromSession, phaseOf, toAppRow };
+async function pushVapidKey() {
+  const base = (process.env.EVENT_MANAGER_BASE_URL || '').replace(/\/+$/, '');
+  if (!base) return { ok: false, reason: 'identity_not_configured' };
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), IDENTITY_TIMEOUT_MS);
+  try {
+    const response = await fetch(`${base}/public/push/vapid-key`, { headers: { Accept: 'application/json' }, signal: controller.signal });
+    if (!response.ok) return { ok: false, reason: `event_manager_${response.status}` };
+    const data = await response.json();
+    return { ok: true, key: data.key || '', configured: !!data.configured };
+  } catch (err) {
+    return { ok: false, reason: 'event_manager_unreachable' };
+  } finally { clearTimeout(timer); }
+}
+
+async function pushSubscribe(session, eventId, subscription) {
+  const identity = identityFromSession(session);
+  if (!identity) return { ok: false, authenticated: false, reason: 'auth_required' };
+  const numericId = Number(eventId);
+  if (!Number.isInteger(numericId) || numericId <= 0) return { ok: false, authenticated: true, reason: 'bad_event_id' };
+  if (!subscription || !subscription.endpoint) return { ok: false, authenticated: true, reason: 'bad_subscription' };
+  const result = await callEventIdentity('/identity/push/subscribe', { ...identity, event_id: numericId, subscription });
+  return result || { ok: false, reason: 'event_manager_unreachable' };
+}
+
+async function pushUnsubscribe(session, endpoint) {
+  const identity = identityFromSession(session);
+  if (!identity) return { ok: false, authenticated: false, reason: 'auth_required' };
+  const result = await callEventIdentity('/identity/push/unsubscribe', { ...identity, endpoint: String(endpoint || '') });
+  return result || { ok: false, reason: 'event_manager_unreachable' };
+}
+
+export { myEvents, myTicket, mySchedule, changeSchedule, changeWorkshop, networking, feedback, pushVapidKey, pushSubscribe, pushUnsubscribe, identityFromSession, phaseOf, toAppRow };

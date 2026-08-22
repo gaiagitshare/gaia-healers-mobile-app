@@ -251,6 +251,10 @@
     const event = data.event;
     const ticket = data.ticket;
     const status = ticketStatus(ticket);
+    const notifyBlock = (window.GaiaPush && window.GaiaPush.supported())
+      ? '<div class="g-ticket__notify"><button type="button" class="g-btn g-btn--secondary g-btn--sm" data-push-toggle data-event-id="' + esc(String(event.id || '')) + '"><i class="ph ph-bell" aria-hidden="true"></i> Get event alerts</button>'
+        + '<p class="g-ticket__notify-hint">Schedule changes, reminders and important updates. On iPhone, add the app to your Home Screen first.</p></div>'
+      : '';
 
     return '<div class="g-ticket__panel" role="dialog" aria-label="My ticket" aria-modal="true">'
       + '<button type="button" class="g-ticket__close" data-ticket-close aria-label="Close">&times;</button>'
@@ -275,6 +279,7 @@
       + (ticket.checkedIn && ticket.checkedInAt
         ? ' · ' + esc(checkedInAtLabel(event, ticket.checkedInAt)) : '')
       + '</p>'
+      + notifyBlock
       + '<p class="g-ticket__hint">Show this at the door. Your screen brightness may need turning up.</p>'
       + '</div>';
   }
@@ -391,6 +396,44 @@
 
   document.addEventListener('gaia:superapp-rendered', render);
   document.addEventListener('DOMContentLoaded', render);
+
+  // Push-notification opt-in for one event, from the ticket sheet. Idempotent;
+  // subscribing is browser-wide but the server records it per attendee/event.
+  let pushBusy = false;
+  document.addEventListener('click', async (ev) => {
+    const btn = ev.target.closest('[data-push-toggle]');
+    if (!btn || pushBusy || !window.GaiaPush) return;
+    ev.preventDefault();
+    const eventId = btn.getAttribute('data-event-id');
+    const hint = btn.parentElement && btn.parentElement.querySelector('.g-ticket__notify-hint');
+    pushBusy = true; btn.disabled = true;
+    try {
+      if (btn.getAttribute('data-on') === '1') {
+        await window.GaiaPush.disable(eventId);
+        btn.removeAttribute('data-on');
+        btn.innerHTML = '<i class="ph ph-bell" aria-hidden="true"></i> Get event alerts';
+      } else {
+        btn.innerHTML = 'Enabling…';
+        const r = await window.GaiaPush.enable(eventId);
+        if (r && r.ok) {
+          btn.setAttribute('data-on', '1');
+          btn.innerHTML = '<i class="ph ph-bell-ringing" aria-hidden="true"></i> Alerts on';
+          if (hint) hint.textContent = 'You will get schedule changes, reminders and important updates for this event.';
+        } else {
+          btn.innerHTML = '<i class="ph ph-bell" aria-hidden="true"></i> Get event alerts';
+          const reason = (r && r.reason) || '';
+          if (hint) hint.textContent = reason === 'denied' ? 'Notifications are blocked — enable them in your browser settings.'
+            : reason === 'no_attendee_for_event' ? 'Alerts are available once you are a registered attendee for this event.'
+            : reason === 'unsupported' ? 'Add the app to your Home Screen first, then turn on alerts.'
+            : reason === 'not_configured' ? 'Alerts are not available for this event yet.'
+            : 'Could not enable alerts — please try again.';
+        }
+      }
+    } catch (e) {
+      btn.innerHTML = '<i class="ph ph-bell" aria-hidden="true"></i> Get event alerts';
+    }
+    btn.disabled = false; pushBusy = false;
+  });
 
   window.GaiaMyEvents = { render, openTicket, closeTicket, panelHtml, ticketStatus, dateRange };
 }());

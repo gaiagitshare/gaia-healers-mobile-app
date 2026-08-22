@@ -1,4 +1,4 @@
-const CACHE_NAME = 'gaia-healers-20260822a';
+const CACHE_NAME = 'gaia-healers-20260821t';
 const APP_SHELL = [
   '/',
   '/home.html',
@@ -87,36 +87,5 @@ self.addEventListener('fetch', (event) => {
       if (response.ok) caches.open(CACHE_NAME).then((cache) => cache.put(event.request, response.clone()));
       return response;
     }))
-  );
-});
-
-// ---- Web push: show event notifications; focus/open the app on click --------
-self.addEventListener("push", (event) => {
-  let data = {};
-  try { data = event.data ? event.data.json() : {}; }
-  catch (e) { try { data = { body: event.data.text() }; } catch (_) { data = {}; } }
-  const title = data.title || "Gaia Healers";
-  const options = {
-    body: data.body || "",
-    icon: "/assets/gaia-logo.png",
-    tag: data.tag || ("gaia-event-" + (data.eventId || "")),
-    data: { url: data.url || "/home.html?view=events" },
-  };
-  event.waitUntil(self.registration.showNotification(title, options));
-});
-
-self.addEventListener("notificationclick", (event) => {
-  event.notification.close();
-  const target = (event.notification.data && event.notification.data.url) || "/home.html?view=events";
-  event.waitUntil(
-    self.clients.matchAll({ type: "window", includeUncontrolled: true }).then((clientList) => {
-      for (const client of clientList) {
-        if (client.url.indexOf(self.location.origin) === 0 && "focus" in client) {
-          if ("navigate" in client) { client.navigate(target); }
-          return client.focus();
-        }
-      }
-      if (self.clients.openWindow) return self.clients.openWindow(target);
-    })
   );
 });

@@ -5066,6 +5066,24 @@ const server = http.createServer(async (req, res) => {
       sendJson(res, 200, await eventIdentity.myEvents(session), origin);
       return;
     }
+    if (req.method === 'GET' && url.pathname === '/api/events/push/vapid-key') {
+      sendJson(res, 200, await eventIdentity.pushVapidKey(), origin, { 'Cache-Control': 'public, max-age=3600' });
+      return;
+    }
+    if (req.method === 'POST' && /^\/api\/events\/\d+\/push\/subscribe$/.test(url.pathname)) {
+      const session = cookieForRequest(req);
+      const body = await readJsonBody(req).catch(() => ({}));
+      const result = await eventIdentity.pushSubscribe(session, url.pathname.split('/')[3], body.subscription);
+      sendJson(res, result.authenticated === false ? 401 : 200, result, origin, { 'Cache-Control': 'private, no-store' });
+      return;
+    }
+    if (req.method === 'POST' && /^\/api\/events\/\d+\/push\/unsubscribe$/.test(url.pathname)) {
+      const session = cookieForRequest(req);
+      const body = await readJsonBody(req).catch(() => ({}));
+      const result = await eventIdentity.pushUnsubscribe(session, body.endpoint);
+      sendJson(res, result.authenticated === false ? 401 : 200, result, origin, { 'Cache-Control': 'private, no-store' });
+      return;
+    }
     if (req.method === 'GET' && /^\/api\/events\/\d+\/ticket$/.test(url.pathname)) {
       const session = cookieForRequest(req);
       const result = await eventIdentity.myTicket(session, url.pathname.split('/')[3]);

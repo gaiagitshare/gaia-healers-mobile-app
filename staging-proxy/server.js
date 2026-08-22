@@ -5087,6 +5087,12 @@ const server = http.createServer(async (req, res) => {
       sendJson(res, result.authenticated === false ? 401 : 200, result, origin, { 'Cache-Control': 'private, no-store' });
       return;
     }
+    if (req.method === 'GET' && /^\/api\/events\/\d+\/updates$/.test(url.pathname)) {
+      const session = cookieForRequest(req);
+      const result = await eventIdentity.announcements(session, url.pathname.split('/')[3]);
+      sendJson(res, 200, result, origin, { 'Cache-Control': 'private, no-store' });
+      return;
+    }
     if (req.method === 'GET' && /^\/api\/events\/\d+\/ticket$/.test(url.pathname)) {
       const session = cookieForRequest(req);
       const result = await eventIdentity.myTicket(session, url.pathname.split('/')[3]);

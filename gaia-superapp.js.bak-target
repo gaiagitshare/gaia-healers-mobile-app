@@ -28,9 +28,6 @@
   // The live panel carries countdowns and check-in numbers, so it refreshes far
   // more often than the agenda it sits above.
   const eventLive = { id: null, data: null, loading: false, fetchedAt: 0 };
-  // Audience-filtered announcements for the signed-in viewer (VIP-only notes
-  // never reach a General attendee — the server decides, not the app).
-  const eventUpdates = { id: null, data: null, loading: false, fetchedAt: 0 };
   const EVENT_LIVE_TTL_MS = 30 * 1000;
 
   function proxyBase() {
@@ -148,10 +145,7 @@
   }
 
   function updatesSection(detail, live) {
-    const eid = detail && detail.event && detail.event.id;
-    const items = (String(eventUpdates.id) === String(eid) && Array.isArray(eventUpdates.data))
-      ? eventUpdates.data
-      : (Array.isArray(detail?.announcements) ? detail.announcements : []);
+    const items = Array.isArray(detail?.announcements) ? detail.announcements : [];
     if (!items.length) return '';
     // While the live panel is up it already carries the latest few; repeating
     // them immediately below would just be noise.
@@ -235,24 +229,6 @@
     if (!Number.isFinite(hour)) return '';
     const suffix = hour >= 12 ? 'PM' : 'AM';
     return (hour % 12 === 0 ? 12 : hour % 12) + ':' + minute + ' ' + suffix;
-  }
-
-  function loadEventUpdates(id) {
-    const fresh = eventUpdates.id === id && (Date.now() - eventUpdates.fetchedAt) < EVENT_LIVE_TTL_MS;
-    if (eventUpdates.loading || fresh) return;
-    eventUpdates.loading = true;
-    fetch(proxyBase() + '/api/events/' + encodeURIComponent(id) + '/updates', { headers: { Accept: 'application/json' }, credentials: 'include', cache: 'no-store' })
-      .then((r) => (r.ok ? r.json() : null))
-      .then((payload) => {
-        if (payload && payload.ok) {
-          eventUpdates.id = id;
-          eventUpdates.data = Array.isArray(payload.announcements) ? payload.announcements : [];
-          eventUpdates.fetchedAt = Date.now();
-          render();
-        }
-      })
-      .catch(() => {})
-      .finally(() => { eventUpdates.loading = false; });
   }
 
   function loadEventLive(id) {
@@ -379,7 +355,6 @@
       if (root.offsetParent !== null && document.visibilityState === 'visible') {
         loadEventDetail(id);
         loadEventLive(id);
-        loadEventUpdates(id);
       }
       scheduleEventRefresh(root, id);
     }, EVENT_LIVE_TTL_MS);
@@ -1087,7 +1062,7 @@
     if (tab === 'map') return Boolean(detail?.map);
     if (tab === 'people') return Boolean(window.GaiaPeople && window.GaiaPeople.available());
     if (tab === 'sponsors') return Boolean(detail?.sponsors?.length);
-    if (tab === 'updates') return Boolean((detail?.announcements?.length) || (eventUpdates.data && eventUpdates.data.length));
+    if (tab === 'updates') return Boolean(detail?.announcements?.length);
     if (tab === 'info') return Boolean(detail?.info?.length);
     return false;
   }
@@ -1099,7 +1074,6 @@
   function renderEventDetail(root, eventId) {
     loadEventDetail(eventId);
     loadEventLive(eventId);
-    loadEventUpdates(eventId);
     scheduleEventRefresh(root, eventId);
     // A ticket holder's saved sessions. Non-holders get a null result and the
     // agenda simply renders without save controls.

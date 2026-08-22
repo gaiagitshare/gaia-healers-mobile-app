@@ -112,6 +112,16 @@ function toAppRow(row, now) {
  * screen has no use for a door credential. It is fetched only when the person
  * opens the one ticket they are looking at.
  */
+async function announcements(session, eventId) {
+  const numericId = Number(eventId);
+  if (!Number.isInteger(numericId) || numericId <= 0) return { ok: false, announcements: [] };
+  // A logged-out viewer resolves to no attendee, so the server returns only
+  // untargeted announcements — the safe public set.
+  const identity = identityFromSession(session) || { contact_id: null, email: null, email_verified: false };
+  const result = await callEventIdentity('/identity/events/' + numericId + '/announcements', { ...identity, event_id: numericId });
+  return (result && result.ok) ? result : { ok: false, announcements: [] };
+}
+
 async function myEvents(session) {
   const identity = identityFromSession(session);
   if (!identity) return { ok: true, authenticated: false, events: [] };
@@ -306,4 +316,4 @@ async function pushUnsubscribe(session, endpoint) {
   return result || { ok: false, reason: 'event_manager_unreachable' };
 }
 
-export { myEvents, myTicket, mySchedule, changeSchedule, changeWorkshop, networking, feedback, pushVapidKey, pushSubscribe, pushUnsubscribe, identityFromSession, phaseOf, toAppRow };
+export { announcements, myEvents, myTicket, mySchedule, changeSchedule, changeWorkshop, networking, feedback, pushVapidKey, pushSubscribe, pushUnsubscribe, identityFromSession, phaseOf, toAppRow };

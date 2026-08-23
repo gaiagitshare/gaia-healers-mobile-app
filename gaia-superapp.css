@@ -770,3 +770,9 @@ body.gaia-v2 .g-super-home .g-super-hero .g-super-hero__intro{position:relative;
   .g-super-home .g-feature-event__body{flex:1;justify-content:center;padding:28px 34px}
   .g-feature-event__title{font-size:1.7rem}
 }
+
+/* Speaker rows: real headshot avatars + clamped bio */
+.g-super-row__avatar { width: 50px; height: 50px; border-radius: 50%; overflow: hidden; border: 1px solid rgba(166, 237, 104, .35); background: #0e1a10; }
+.g-super-row__avatar img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.g-super-row__bio { color: var(--super-muted); font-size: 12px; line-height: 1.45; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; margin-top: 2px; }
+@media (max-width: 760px) { .g-super-row__avatar { width: 44px; height: 44px; } }

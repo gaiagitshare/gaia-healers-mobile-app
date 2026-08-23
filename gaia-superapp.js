@@ -473,8 +473,15 @@
     const speakers = Array.isArray(detail?.speakers) ? detail.speakers : [];
     if (!speakers.length) return '';
     return '<section class="g-super-list"><div class="g-super-section-head"><div><p class="g-super-kicker">Who is speaking</p><h2>Speakers</h2></div></div>'
-      + speakers.map((speaker) => '<div class="g-super-row"><span class="g-super-row__icon">' + icon('microphone-stage') + '</span>'
-        + '<span><strong>' + esc(speaker.name) + '</strong><em>' + esc([speaker.role, speaker.company].filter(Boolean).join(' · ')) + '</em></span></div>').join('')
+      + speakers.map((speaker) => {
+          const lead = speaker.photo_url
+            ? '<span class="g-super-row__avatar"><img src="' + esc(speaker.photo_url) + '" alt="" loading="lazy" decoding="async"></span>'
+            : '<span class="g-super-row__icon">' + icon('microphone-stage') + '</span>';
+          const meta = esc([speaker.role, speaker.company].filter(Boolean).join(' · '));
+          const bio = speaker.bio ? '<em class="g-super-row__bio">' + esc(speaker.bio) + '</em>' : '';
+          return '<div class="g-super-row g-super-row--speaker">' + lead
+            + '<span><strong>' + esc(speaker.name) + '</strong>' + (meta ? '<em>' + meta + '</em>' : '') + bio + '</span></div>';
+        }).join('')
       + '</section>';
   }
 

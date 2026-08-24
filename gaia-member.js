@@ -888,6 +888,7 @@ body.gaia-booking-open{overflow:hidden;}
     });
     const trackCard = (t) => {
       const openable = Boolean(state.authed && t.grant);
+      const descClean = (function (d, n) { d = String(d || '').replace(/\s+/g, ' ').trim(); n = String(n || '').trim(); if (n && d.toLowerCase().indexOf(n.toLowerCase()) === 0) d = d.slice(n.length).replace(/^[\s:\u2022\-\u2013\u2014]+/, '').trim(); return d; })(t.desc, t.name);
       const url = t.grant?.openUrl || t.portalUrl || hub;
       const badge = openable
         ? '<span class="g-chip g-chip--on" style="margin-left:.5rem">Your access</span>'
@@ -898,11 +899,11 @@ body.gaia-booking-open{overflow:hidden;}
       return openable
         ? '<button type="button" class="g-access g-access--unlocked g-access--link" data-course-open="' + esc(url) + '" data-course-title="' + esc(t.name) + '">'
           + img
-          + '<div class="g-access__body"><span class="g-access__name">' + esc(t.name) + badge + countChip + '</span><span class="g-access__meta">' + esc(t.desc) + '</span></div>'
+          + '<div class="g-access__body"><span class="g-access__name">' + esc(t.name) + badge + countChip + '</span><span class="g-access__meta">' + esc(descClean) + '</span></div>'
           + '<span class="g-chip g-chip--on g-access__act">Open →</span></button>'
         : '<button type="button" class="g-access g-access--locked g-access--link" ' + (state.authed ? 'data-track-cta' : 'data-academy-signin') + '>'
           + img
-          + '<div class="g-access__body"><span class="g-access__name">' + esc(t.name) + badge + countChip + '</span><span class="g-access__meta">' + esc(t.desc) + '</span></div>'
+          + '<div class="g-access__body"><span class="g-access__name">' + esc(t.name) + badge + countChip + '</span><span class="g-access__meta">' + esc(descClean) + '</span></div>'
           + '<span class="g-chip g-access__act">' + (state.authed ? 'Get access →' : 'Sign in →') + '</span></button>';
     };
     const academyHead = hasAccess

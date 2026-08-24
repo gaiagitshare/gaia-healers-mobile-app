@@ -378,7 +378,7 @@ body.gaia-v2 .gaia-shell {
 }
 .g-access::before { width: 2px; }
 .g-access__name { white-space: normal; overflow: visible; font-size: 14px; line-height: 1.35; }
-.g-access__meta { font-size: 12px; }
+.g-access__meta { font-size: 12px; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
 .g-access__act { max-width: 42%; white-space: normal; text-align: right; }
 
 .g-section__title { font-family: var(--g-font-serif); font-size: 26px; }

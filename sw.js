@@ -1,4 +1,4 @@
-const CACHE_NAME = 'gaia-healers-20260823e';
+const CACHE_NAME = 'gaia-healers-20260823f';
 const APP_SHELL = [
   '/',
   '/home.html',

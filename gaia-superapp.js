@@ -1189,7 +1189,7 @@
   }
 
   function loadEventFeed(eventId) {
-    return fetch('/api/events/' + eventId + '/posts', { credentials: 'include' })
+    return fetch(proxyBase() + '/api/events/' + eventId + '/posts', { credentials: 'include' })
       .then((r) => r.json())
       .then((data) => {
         if (!data || !data.ok) return false;
@@ -1235,7 +1235,7 @@
     if (!text) return;
     const btn = document.querySelector('[data-feed-post]');
     if (btn) { btn.disabled = true; btn.textContent = 'Posting…'; }
-    fetch('/api/events/' + eventId + '/posts', {
+    fetch(proxyBase() + '/api/events/' + eventId + '/posts', {
       method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ body: text, displayName: (eventFeed.displayName || '').trim() }),
     }).then((r) => r.json().then((d) => ({ status: r.status, d })))
@@ -1254,7 +1254,7 @@
   }
 
   function toggleFeedLike(eventId, postId) {
-    fetch('/api/events/' + eventId + '/posts/' + postId + '/like', {
+    fetch(proxyBase() + '/api/events/' + eventId + '/posts/' + postId + '/like', {
       method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: '{}',
     }).then((r) => r.json().then((d) => ({ status: r.status, d })))
       .then(({ status, d }) => {
@@ -1269,7 +1269,7 @@
 
   function reportFeedPost(eventId, postId) {
     if (!window.confirm('Report this post to the organizers?')) return;
-    fetch('/api/events/' + eventId + '/posts/' + postId + '/report', {
+    fetch(proxyBase() + '/api/events/' + eventId + '/posts/' + postId + '/report', {
       method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ reason: 'reported' }),
     }).then((r) => r.json().then((d) => ({ status: r.status, d })))

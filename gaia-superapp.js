@@ -1118,7 +1118,7 @@
   // proxy from the session — the browser only ever chooses a display name.
   const eventFeed = { id: null, loadedFor: null, posts: [], me: null,
     authenticated: false, canPost: false, suspended: false,
-    draft: '', displayName: null, timer: null };
+    draft: '', displayName: null, pendingImage: '', timer: null };
 
   function feedTime(iso) {
     if (!iso) return '';
@@ -1174,7 +1174,9 @@
       composer = '<div class="g-feed-composer">'
         + '<div class="g-feed-composer__id">Posting as <input class="g-feed-name" data-feed-name maxlength="40" value="' + nm + '" placeholder="Your name" /></div>'
         + '<textarea class="g-feed-input" data-feed-input rows="2" maxlength="1200" placeholder="Share something with everyone here…">' + esc(eventFeed.draft || '') + '</textarea>'
-        + '<div class="g-feed-composer__foot"><span class="g-feed-hint">Be kind — posts are public and moderated.</span>'
+        + (eventFeed.pendingImage ? '<div class="g-feed-preview"><img src="' + esc(eventFeed.pendingImage) + '" alt="" /><button type="button" class="g-feed-preview__x" data-feed-rmimg aria-label="Remove photo">&times;</button></div>' : '')
+        + '<div class="g-feed-hint">Be kind — posts are public and moderated.</div>'
+        + '<div class="g-feed-composer__foot"><label class="g-feed-photo-btn">' + icon('image') + '<span>Photo</span><input type="file" accept="image/jpeg,image/png,image/webp,image/gif" data-feed-file hidden /></label>'
         + '<button type="button" class="g-btn g-btn--primary g-btn--sm" data-feed-post>Post</button></div></div>';
     }
     return '<section class="g-super-list g-feed-sec"><div class="g-super-section-head"><div>'
@@ -1232,16 +1234,17 @@
 
   function submitFeedPost(eventId) {
     const text = (eventFeed.draft || '').trim();
-    if (!text) return;
+    if (!text && !eventFeed.pendingImage) return;
     const btn = document.querySelector('[data-feed-post]');
     if (btn) { btn.disabled = true; btn.textContent = 'Posting…'; }
     fetch(proxyBase() + '/api/events/' + eventId + '/posts', {
       method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ body: text, displayName: (eventFeed.displayName || '').trim() }),
+      body: JSON.stringify({ body: text, displayName: (eventFeed.displayName || '').trim(), imageUrl: eventFeed.pendingImage || '' }),
     }).then((r) => r.json().then((d) => ({ status: r.status, d })))
       .then(({ status, d }) => {
         if (d && d.ok) {
           eventFeed.draft = '';
+          eventFeed.pendingImage = '';
           const inp = document.querySelector('[data-feed-input]'); if (inp) inp.value = '';
           loadEventFeed(eventId);
         } else if (status === 401 || (d && d.authenticated === false)) {
@@ -1282,6 +1285,25 @@
       }).catch(() => {});
   }
 
+  function uploadFeedImage(eventId, fileInput) {
+    const f = fileInput && fileInput.files && fileInput.files[0];
+    if (!f) return;
+    if (f.size > 5 * 1024 * 1024) { alert('That image is too large (max 5MB).'); fileInput.value = ''; return; }
+    const label = fileInput.closest('.g-feed-photo-btn');
+    if (label) label.classList.add('is-loading');
+    const fd = new FormData();
+    fd.append('file', f);
+    fetch(proxyBase() + '/api/events/' + eventId + '/posts/image', { method: 'POST', credentials: 'include', body: fd })
+      .then((r) => r.json().then((d) => ({ status: r.status, d })))
+      .then(({ status, d }) => {
+        if (d && d.ok && d.url) { eventFeed.pendingImage = d.url; render(); }
+        else if (status === 401 || (d && d.authenticated === false)) { if (window.GaiaAuth && window.GaiaAuth.open) window.GaiaAuth.open(); }
+        else { alert((d && d.detail) || 'Could not upload that image.'); }
+      })
+      .catch(() => { alert('Could not upload that image.'); })
+      .finally(() => { if (label) label.classList.remove('is-loading'); });
+  }
+
   function bindCommunity(root, eventId) {
     const sec = root.querySelector('.g-feed-sec');
     if (!sec) return;
@@ -1289,12 +1311,15 @@
     const inputEl = sec.querySelector('[data-feed-input]');
     if (nameEl) nameEl.addEventListener('input', () => { eventFeed.displayName = nameEl.value; });
     if (inputEl) inputEl.addEventListener('input', () => { eventFeed.draft = inputEl.value; });
+    const fileEl = sec.querySelector('[data-feed-file]');
+    if (fileEl) fileEl.addEventListener('change', () => uploadFeedImage(eventId, fileEl));
     sec.addEventListener('click', (e) => {
       const si = e.target.closest('[data-feed-signin]');
       const post = e.target.closest('[data-feed-post]');
       const like = e.target.closest('[data-feed-like]');
       const rep = e.target.closest('[data-feed-report]');
       if (si) { if (window.GaiaAuth && window.GaiaAuth.open) window.GaiaAuth.open(); return; }
+      const rmimg = e.target.closest('[data-feed-rmimg]'); if (rmimg) { eventFeed.pendingImage = ''; render(); return; }
       if (post) { submitFeedPost(eventId); return; }
       if (like) { toggleFeedLike(eventId, like.getAttribute('data-feed-like')); return; }
       if (rep) { reportFeedPost(eventId, rep.getAttribute('data-feed-report')); return; }

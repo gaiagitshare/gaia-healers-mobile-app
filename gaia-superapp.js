@@ -1365,6 +1365,10 @@
     loadEventLive(eventId);
     loadEventUpdates(eventId);
     scheduleEventRefresh(root, eventId);
+    if (eventUI._tabUrlFor !== eventId) {
+      eventUI._tabUrlFor = eventId;
+      try { const _t = new URLSearchParams(window.location.search).get('tab'); if (_t) eventUI.tab = _t; } catch (e) {}
+    }
     // A ticket holder's saved sessions. Non-holders get a null result and the
     // agenda simply renders without save controls.
     if (window.GaiaMySchedule && scheduleLoadedFor !== eventId) {

@@ -814,3 +814,11 @@ body.gaia-v2 .g-super-home .g-super-hero .g-super-hero__intro{position:relative;
 .g-feed-preview { position: relative; width: fit-content; margin-bottom: 6px; }
 .g-feed-preview img { max-height: 150px; max-width: 100%; border-radius: 12px; border: 1px solid var(--super-line); display: block; }
 .g-feed-preview__x { position: absolute; top: 6px; right: 6px; width: 26px; height: 26px; border-radius: 50%; border: 0; background: rgba(0, 0, 0, .65); color: #fff; font-size: 18px; line-height: 1; cursor: pointer; }
+.g-feed-replies { margin-top: 10px; margin-left: 6px; padding-left: 14px; border-left: 2px solid var(--super-line); }
+.g-feed-item.is-reply { grid-template-columns: 30px minmax(0, 1fr); gap: 9px; padding: 10px 0; }
+.g-feed-replies .g-feed-item.is-reply:first-child { border-top: 0; }
+.g-feed-item.is-reply .g-feed-avatar { width: 30px; height: 30px; font-size: 12px; }
+.g-feed-item.is-reply .g-feed-meta strong { font-size: 13px; }
+.g-feed-reply-box { display: flex; gap: 8px; align-items: flex-end; margin-top: 10px; }
+.g-feed-reply-input { flex: 1; resize: none; min-height: 38px; background: #0e1a10; border: 1px solid var(--super-line); border-radius: 10px; color: var(--g-text); font: inherit; font-size: 13px; padding: 8px 10px; }
+.g-feed-reply-input:focus { outline: none; border-color: rgba(166, 237, 104, .5); }

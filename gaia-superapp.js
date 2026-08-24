@@ -1118,7 +1118,7 @@
   // proxy from the session — the browser only ever chooses a display name.
   const eventFeed = { id: null, loadedFor: null, posts: [], me: null,
     authenticated: false, canPost: false, suspended: false,
-    draft: '', displayName: null, pendingImage: '', timer: null };
+    draft: '', displayName: null, pendingImage: '', replyingTo: null, replyDraft: '', timer: null };
 
   function feedTime(iso) {
     if (!iso) return '';
@@ -1132,7 +1132,7 @@
     return new Date(t).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
   }
 
-  function feedItemHtml(p) {
+  function feedItemHtml(p, isReply) {
     const name = p.author_name || 'Member';
     const initials = name.trim().slice(0, 1).toUpperCase() || 'M';
     const avatar = p.author_photo
@@ -1141,25 +1141,39 @@
     const badge = p.is_announcement
       ? '<span class="g-feed-badge">' + icon('megaphone') + ' Announcement</span>'
       : (p.is_pinned ? '<span class="g-feed-badge">' + icon('push-pin') + ' Pinned</span>' : '');
-    const body = esc(p.body || '').replace(/\n/g, '<br>');
+    const body = esc(p.body || '').split(String.fromCharCode(10)).join('<br>');
     const img = p.image_url ? '<div class="g-feed-img"><img src="' + esc(p.image_url) + '" alt="" loading="lazy"></div>' : '';
-    const actions = p.is_announcement ? ''
-      : '<div class="g-feed-actions">'
-        + '<button type="button" class="g-feed-act' + (p.liked ? ' is-on' : '') + '" data-feed-like="' + p.id + '" aria-label="Like">'
+    let actions = '<div class="g-feed-actions">';
+    if (!p.is_announcement) {
+      actions += '<button type="button" class="g-feed-act' + (p.liked ? ' is-on' : '') + '" data-feed-like="' + p.id + '" aria-label="Like">'
         + icon('heart') + '<span>' + (p.like_count || 0) + '</span></button>'
-        + (p.is_own ? '' : '<button type="button" class="g-feed-act" data-feed-report="' + p.id + '" aria-label="Report">' + icon('flag') + '</button>')
-        + '</div>';
-    return '<article class="g-feed-item' + (p.is_announcement ? ' is-announce' : '') + '">'
+        + (p.is_own ? '' : '<button type="button" class="g-feed-act" data-feed-report="' + p.id + '" aria-label="Report">' + icon('flag') + '</button>');
+    }
+    if (!isReply) {
+      actions += '<button type="button" class="g-feed-act" data-feed-reply="' + p.id + '">' + icon('chat-circle')
+        + '<span>' + (p.reply_count ? p.reply_count : 'Reply') + '</span></button>';
+    }
+    actions += '</div>';
+    let sub = '';
+    if (!isReply) {
+      const replies = (p.replies || []).map((r) => feedItemHtml(r, true)).join('');
+      const box = (eventFeed.replyingTo === p.id && eventFeed.authenticated && !eventFeed.suspended)
+        ? '<div class="g-feed-reply-box"><textarea class="g-feed-reply-input" data-reply-input rows="1" maxlength="1200" placeholder="Write a reply…">' + esc(eventFeed.replyDraft || '') + '</textarea>'
+          + '<button type="button" class="g-btn g-btn--primary g-btn--sm" data-reply-send="' + p.id + '">Reply</button></div>'
+        : '';
+      if (replies || box) sub = '<div class="g-feed-replies">' + replies + box + '</div>';
+    }
+    return '<article class="g-feed-item' + (p.is_announcement ? ' is-announce' : '') + (isReply ? ' is-reply' : '') + '">'
       + avatar
       + '<div class="g-feed-body"><div class="g-feed-meta"><strong>' + esc(name) + '</strong>' + badge
       + '<em>' + esc(feedTime(p.created_at)) + '</em></div>'
-      + '<div class="g-feed-text">' + body + '</div>' + img + actions + '</div></article>';
+      + '<div class="g-feed-text">' + body + '</div>' + img + actions + sub + '</div></article>';
   }
 
   function feedListHtml() {
     const posts = eventFeed.posts || [];
     if (!posts.length) return '<div class="g-feed-empty">' + icon('chat-circle-dots') + '<p>No posts yet. Be the first to say hello.</p></div>';
-    return posts.map(feedItemHtml).join('');
+    return posts.map((p) => feedItemHtml(p, false)).join('');
   }
 
   function communitySection() {
@@ -1203,7 +1217,7 @@
         eventFeed.suspended = !!data.suspended;
         eventFeed.posts = data.posts || [];
         if (eventFeed.displayName == null && eventFeed.me) eventFeed.displayName = eventFeed.me.name || '';
-        refreshFeedList();
+        if (!eventFeed.replyingTo) refreshFeedList();
         return (wasAuthed !== eventFeed.authenticated) || (wasCanPost !== eventFeed.canPost);
       })
       .catch(() => false);
@@ -1254,6 +1268,20 @@
         }
       }).catch(() => {})
       .finally(() => { const b = document.querySelector('[data-feed-post]'); if (b) { b.disabled = false; b.textContent = 'Post'; } });
+  }
+
+  function submitReply(eventId, parentId) {
+    const text = (eventFeed.replyDraft || '').trim();
+    if (!text) return;
+    fetch(proxyBase() + '/api/events/' + eventId + '/posts', {
+      method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ body: text, displayName: (eventFeed.displayName || '').trim(), parentId: parentId }),
+    }).then((r) => r.json().then((d) => ({ status: r.status, d })))
+      .then(({ status, d }) => {
+        if (d && d.ok) { eventFeed.replyDraft = ''; eventFeed.replyingTo = null; loadEventFeed(eventId); }
+        else if (status === 401 || (d && d.authenticated === false)) { if (window.GaiaAuth && window.GaiaAuth.open) window.GaiaAuth.open(); }
+        else { alert((d && d.detail) || 'Could not reply.'); }
+      }).catch(() => {});
   }
 
   function toggleFeedLike(eventId, postId) {
@@ -1313,6 +1341,7 @@
     if (inputEl) inputEl.addEventListener('input', () => { eventFeed.draft = inputEl.value; });
     const fileEl = sec.querySelector('[data-feed-file]');
     if (fileEl) fileEl.addEventListener('change', () => uploadFeedImage(eventId, fileEl));
+    sec.addEventListener('input', (e) => { const ri = e.target.closest('[data-reply-input]'); if (ri) eventFeed.replyDraft = ri.value; });
     sec.addEventListener('click', (e) => {
       const si = e.target.closest('[data-feed-signin]');
       const post = e.target.closest('[data-feed-post]');
@@ -1323,6 +1352,10 @@
       if (post) { submitFeedPost(eventId); return; }
       if (like) { toggleFeedLike(eventId, like.getAttribute('data-feed-like')); return; }
       if (rep) { reportFeedPost(eventId, rep.getAttribute('data-feed-report')); return; }
+      const reply = e.target.closest('[data-feed-reply]');
+      if (reply) { const pid = Number(reply.getAttribute('data-feed-reply')); eventFeed.replyingTo = (eventFeed.replyingTo === pid ? null : pid); eventFeed.replyDraft = ''; render(); return; }
+      const rsend = e.target.closest('[data-reply-send]');
+      if (rsend) { submitReply(eventId, Number(rsend.getAttribute('data-reply-send'))); return; }
     });
   }
 

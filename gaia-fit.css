@@ -133,6 +133,7 @@ body.gaia-v2 .g-super-home > section + section {
   }
 
   body.gaia-v2 .g-super-page-head > p:last-child,
+  body.gaia-v2 .g-store__sub,
   body.gaia-v2 .g-page__sub {
     margin-top: 8px;
     max-width: 46ch;

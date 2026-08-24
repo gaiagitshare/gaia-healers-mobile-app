@@ -892,7 +892,7 @@
   const EVENT_TABS = [
     ['overview', 'Overview'], ['agenda', 'Agenda'], ['speakers', 'Speakers'],
     ['exhibitors', 'Exhibitors'], ['map', 'Map'], ['people', 'People'],
-    ['sponsors', 'Sponsors'], ['updates', 'Updates'], ['info', 'Info'],
+    ['sponsors', 'Sponsors'], ['community', 'Community'], ['updates', 'Updates'], ['info', 'Info'],
   ];
 
   // The server states the time; the device only measures elapsed time since.
@@ -1087,6 +1087,7 @@
     if (tab === 'speakers') return speakersSection(detail);
     if (tab === 'exhibitors') return directorySection(detail);
     if (tab === 'sponsors') return sponsorsSection(detail);
+    if (tab === 'community') return communitySection();
     if (tab === 'updates') return updatesSection(detail, live);
     if (tab === 'info') return infoSection(detail);
     return '';
@@ -1100,6 +1101,7 @@
     if (tab === 'map') return Boolean(detail?.map);
     if (tab === 'people') return Boolean(window.GaiaPeople && window.GaiaPeople.available());
     if (tab === 'sponsors') return Boolean(detail?.sponsors?.length);
+    if (tab === 'community') return true;
     if (tab === 'updates') return Boolean((detail?.announcements?.length) || (eventUpdates.data && eventUpdates.data.length));
     if (tab === 'info') return Boolean((detail?.info?.length) || (detail?.resources?.length));
     return false;
@@ -1108,6 +1110,197 @@
   // Which event's schedule we have already asked for, so the request fires once
   // per event rather than on every re-render.
   let scheduleLoadedFor = null;
+
+  // ── Event community feed ─────────────────────────────────────────────
+  // A moderated public board per event. Signed-in members post under a display
+  // name; everyone reads; organisers pin announcements and moderate. The feed
+  // polls every few seconds while its tab is open. Identity is attached by the
+  // proxy from the session — the browser only ever chooses a display name.
+  const eventFeed = { id: null, loadedFor: null, posts: [], me: null,
+    authenticated: false, canPost: false, suspended: false,
+    draft: '', displayName: null, timer: null };
+
+  function feedTime(iso) {
+    if (!iso) return '';
+    const t = new Date(iso).getTime();
+    if (!Number.isFinite(t)) return '';
+    const s = Math.max(0, Math.floor((Date.now() - t) / 1000));
+    if (s < 45) return 'just now';
+    if (s < 3600) return Math.floor(s / 60) + 'm';
+    if (s < 86400) return Math.floor(s / 3600) + 'h';
+    if (s < 604800) return Math.floor(s / 86400) + 'd';
+    return new Date(t).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+  }
+
+  function feedItemHtml(p) {
+    const name = p.author_name || 'Member';
+    const initials = name.trim().slice(0, 1).toUpperCase() || 'M';
+    const avatar = p.author_photo
+      ? '<span class="g-feed-avatar"><img src="' + esc(p.author_photo) + '" alt=""></span>'
+      : '<span class="g-feed-avatar g-feed-avatar--i">' + esc(initials) + '</span>';
+    const badge = p.is_announcement
+      ? '<span class="g-feed-badge">' + icon('megaphone') + ' Announcement</span>'
+      : (p.is_pinned ? '<span class="g-feed-badge">' + icon('push-pin') + ' Pinned</span>' : '');
+    const body = esc(p.body || '').replace(/\n/g, '<br>');
+    const img = p.image_url ? '<div class="g-feed-img"><img src="' + esc(p.image_url) + '" alt="" loading="lazy"></div>' : '';
+    const actions = p.is_announcement ? ''
+      : '<div class="g-feed-actions">'
+        + '<button type="button" class="g-feed-act' + (p.liked ? ' is-on' : '') + '" data-feed-like="' + p.id + '" aria-label="Like">'
+        + icon('heart') + '<span>' + (p.like_count || 0) + '</span></button>'
+        + (p.is_own ? '' : '<button type="button" class="g-feed-act" data-feed-report="' + p.id + '" aria-label="Report">' + icon('flag') + '</button>')
+        + '</div>';
+    return '<article class="g-feed-item' + (p.is_announcement ? ' is-announce' : '') + '">'
+      + avatar
+      + '<div class="g-feed-body"><div class="g-feed-meta"><strong>' + esc(name) + '</strong>' + badge
+      + '<em>' + esc(feedTime(p.created_at)) + '</em></div>'
+      + '<div class="g-feed-text">' + body + '</div>' + img + actions + '</div></article>';
+  }
+
+  function feedListHtml() {
+    const posts = eventFeed.posts || [];
+    if (!posts.length) return '<div class="g-feed-empty">' + icon('chat-circle-dots') + '<p>No posts yet. Be the first to say hello.</p></div>';
+    return posts.map(feedItemHtml).join('');
+  }
+
+  function communitySection() {
+    let composer;
+    if (!eventFeed.authenticated) {
+      composer = '<div class="g-feed-signin"><p>Sign in to join the conversation — everyone here will see your post.</p>'
+        + '<button type="button" class="g-btn g-btn--primary g-btn--sm" data-feed-signin>Sign in</button></div>';
+    } else if (eventFeed.suspended) {
+      composer = '<div class="g-feed-note">You’ve been suspended from posting in this event. You can still read the feed.</div>';
+    } else {
+      const nm = esc(eventFeed.displayName != null ? eventFeed.displayName : (eventFeed.me && eventFeed.me.name) || '');
+      composer = '<div class="g-feed-composer">'
+        + '<div class="g-feed-composer__id">Posting as <input class="g-feed-name" data-feed-name maxlength="40" value="' + nm + '" placeholder="Your name" /></div>'
+        + '<textarea class="g-feed-input" data-feed-input rows="2" maxlength="1200" placeholder="Share something with everyone here…">' + esc(eventFeed.draft || '') + '</textarea>'
+        + '<div class="g-feed-composer__foot"><span class="g-feed-hint">Be kind — posts are public and moderated.</span>'
+        + '<button type="button" class="g-btn g-btn--primary g-btn--sm" data-feed-post>Post</button></div></div>';
+    }
+    return '<section class="g-super-list g-feed-sec"><div class="g-super-section-head"><div>'
+      + '<p class="g-super-kicker">Community</p><h2>Event feed</h2></div></div>'
+      + composer
+      + '<div class="g-feed" data-feed-list>' + feedListHtml() + '</div></section>';
+  }
+
+  function refreshFeedList() {
+    const host = document.querySelector('[data-feed-list]');
+    if (host) host.innerHTML = feedListHtml();
+  }
+
+  function loadEventFeed(eventId) {
+    return fetch('/api/events/' + eventId + '/posts', { credentials: 'include' })
+      .then((r) => r.json())
+      .then((data) => {
+        if (!data || !data.ok) return false;
+        const wasAuthed = eventFeed.authenticated, wasCanPost = eventFeed.canPost;
+        eventFeed.id = eventId;
+        eventFeed.me = data.me || null;
+        eventFeed.authenticated = !!data.authenticated;
+        eventFeed.canPost = !!data.canPost;
+        eventFeed.suspended = !!data.suspended;
+        eventFeed.posts = data.posts || [];
+        if (eventFeed.displayName == null && eventFeed.me) eventFeed.displayName = eventFeed.me.name || '';
+        refreshFeedList();
+        return (wasAuthed !== eventFeed.authenticated) || (wasCanPost !== eventFeed.canPost);
+      })
+      .catch(() => false);
+  }
+
+  function ensureFeed(eventId) {
+    if (eventFeed.loadedFor !== eventId) {
+      eventFeed.loadedFor = eventId;
+      eventFeed.id = eventId;
+      eventFeed.posts = [];
+      loadEventFeed(eventId).then(() => render());
+    }
+    startFeedPolling(eventId);
+  }
+
+  function startFeedPolling(eventId) {
+    stopFeedPolling();
+    eventFeed.timer = setInterval(() => {
+      if (document.hidden) return;
+      if (eventUI.tab !== 'community' || !document.querySelector('[data-feed-list]')) { stopFeedPolling(); return; }
+      loadEventFeed(eventId);
+    }, 6000);
+  }
+
+  function stopFeedPolling() {
+    if (eventFeed.timer) { clearInterval(eventFeed.timer); eventFeed.timer = null; }
+  }
+
+  function submitFeedPost(eventId) {
+    const text = (eventFeed.draft || '').trim();
+    if (!text) return;
+    const btn = document.querySelector('[data-feed-post]');
+    if (btn) { btn.disabled = true; btn.textContent = 'Posting…'; }
+    fetch('/api/events/' + eventId + '/posts', {
+      method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ body: text, displayName: (eventFeed.displayName || '').trim() }),
+    }).then((r) => r.json().then((d) => ({ status: r.status, d })))
+      .then(({ status, d }) => {
+        if (d && d.ok) {
+          eventFeed.draft = '';
+          const inp = document.querySelector('[data-feed-input]'); if (inp) inp.value = '';
+          loadEventFeed(eventId);
+        } else if (status === 401 || (d && d.authenticated === false)) {
+          if (window.GaiaAuth && window.GaiaAuth.open) window.GaiaAuth.open();
+        } else {
+          alert((d && d.detail) || 'Could not post. Please try again.');
+        }
+      }).catch(() => {})
+      .finally(() => { const b = document.querySelector('[data-feed-post]'); if (b) { b.disabled = false; b.textContent = 'Post'; } });
+  }
+
+  function toggleFeedLike(eventId, postId) {
+    fetch('/api/events/' + eventId + '/posts/' + postId + '/like', {
+      method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: '{}',
+    }).then((r) => r.json().then((d) => ({ status: r.status, d })))
+      .then(({ status, d }) => {
+        if (d && d.ok) {
+          const p = (eventFeed.posts || []).find((x) => String(x.id) === String(postId));
+          if (p) { p.liked = d.liked; p.like_count = d.like_count; refreshFeedList(); }
+        } else if (status === 401 || (d && d.authenticated === false)) {
+          if (window.GaiaAuth && window.GaiaAuth.open) window.GaiaAuth.open();
+        }
+      }).catch(() => {});
+  }
+
+  function reportFeedPost(eventId, postId) {
+    if (!window.confirm('Report this post to the organizers?')) return;
+    fetch('/api/events/' + eventId + '/posts/' + postId + '/report', {
+      method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ reason: 'reported' }),
+    }).then((r) => r.json().then((d) => ({ status: r.status, d })))
+      .then(({ status, d }) => {
+        if (status === 401 || (d && d.authenticated === false)) {
+          if (window.GaiaAuth && window.GaiaAuth.open) window.GaiaAuth.open();
+          return;
+        }
+        alert('Thanks — the organizers will review this post.');
+      }).catch(() => {});
+  }
+
+  function bindCommunity(root, eventId) {
+    const sec = root.querySelector('.g-feed-sec');
+    if (!sec) return;
+    const nameEl = sec.querySelector('[data-feed-name]');
+    const inputEl = sec.querySelector('[data-feed-input]');
+    if (nameEl) nameEl.addEventListener('input', () => { eventFeed.displayName = nameEl.value; });
+    if (inputEl) inputEl.addEventListener('input', () => { eventFeed.draft = inputEl.value; });
+    sec.addEventListener('click', (e) => {
+      const si = e.target.closest('[data-feed-signin]');
+      const post = e.target.closest('[data-feed-post]');
+      const like = e.target.closest('[data-feed-like]');
+      const rep = e.target.closest('[data-feed-report]');
+      if (si) { if (window.GaiaAuth && window.GaiaAuth.open) window.GaiaAuth.open(); return; }
+      if (post) { submitFeedPost(eventId); return; }
+      if (like) { toggleFeedLike(eventId, like.getAttribute('data-feed-like')); return; }
+      if (rep) { reportFeedPost(eventId, rep.getAttribute('data-feed-report')); return; }
+    });
+  }
+
 
   function renderEventDetail(root, eventId) {
     loadEventDetail(eventId);
@@ -1199,6 +1392,7 @@
         if (pin) pin.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'center' });
       });
     });
+    if (eventUI.tab === 'community') { bindCommunity(root, eventId); ensureFeed(eventId); } else { stopFeedPolling(); }
     bind(root);
   }
 

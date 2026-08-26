@@ -284,12 +284,62 @@
       + '</div>';
   }
 
+  function priceLabel(u) {
+    if (u && u.price && typeof u.price.amount === 'number') {
+      const cur = u.price.currency || 'USD';
+      return cur === 'USD' ? '$' + u.price.amount : u.price.amount + ' ' + cur;
+    }
+    return 'See price';
+  }
+
+  function upgradesHtml(up) {
+    const cur = (up.current && up.current.tier_name) ? esc(up.current.tier_name) : 'your pass';
+    const items = (up.upgrades || []).map((u) => {
+      const url = u.checkout_url || '';
+      const name = esc(u.tier_name || u.label || 'Upgrade');
+      const price = esc(priceLabel(u));
+      const cta = url
+        ? '<a class="g-btn g-btn--primary g-btn--sm g-upg__cta" href="' + esc(url) + '" target="_blank" rel="noopener noreferrer">Upgrade &middot; ' + price + '</a>'
+        : '<span class="g-upg__soon">Ask at the desk</span>';
+      return '<li class="g-upg__item"><span class="g-upg__name">' + name + '</span>' + cta + '</li>';
+    }).join('');
+    return '<div class="g-upg">'
+      + '<h3 class="g-upg__title">Upgrade your pass</h3>'
+      + '<p class="g-upg__cur">Current: ' + cur + '</p>'
+      + '<ul class="g-upg__list">' + items + '</ul>'
+      + '<p class="g-upg__note">You keep the same QR. Your new access applies automatically after payment.</p>'
+      + '</div>';
+  }
+
+  async function injectUpgrades(eventId, shell) {
+    try {
+      const up = await api('/api/events/' + encodeURIComponent(eventId) + '/upgrades');
+      const panel = shell.querySelector('.g-ticket__panel');
+      if (up && up.ok && Array.isArray(up.upgrades) && up.upgrades.length && panel
+          && !panel.querySelector('.g-upg')) {
+        panel.insertAdjacentHTML('beforeend', upgradesHtml(up));
+      }
+    } catch (_) { /* upgrades are additive; never block the ticket */ }
+  }
+
+  async function refreshTicketPanel(eventId, shell) {
+    if (!document.body.contains(shell)) return;
+    const data = await api('/api/events/' + encodeURIComponent(eventId) + '/ticket');
+    if (data && data.ok === true) {
+      keepCopy(TICKET_KEY(eventId), data);
+      state.ticket = data;
+      shell.innerHTML = ticketHtml(data);
+      injectUpgrades(eventId, shell);
+    }
+  }
+
   function closeTicket() {
     const open = document.querySelector('.g-ticket');
     if (open) open.remove();
     // Held only for the life of the sheet: a door credential has no business
     // outliving the screen showing it.
     state.ticket = null;
+    if (state._onVis) { document.removeEventListener('visibilitychange', state._onVis); state._onVis = null; }
     document.removeEventListener('keydown', onKey);
   }
 
@@ -324,6 +374,10 @@
     } else {
       state.ticket = data;
       shell.innerHTML = ticketHtml(data);
+      injectUpgrades(eventId, shell);
+      // Returning from the external checkout: re-fetch so a newly paid tier shows.
+      state._onVis = () => { if (document.visibilityState === 'visible') refreshTicketPanel(eventId, shell); };
+      document.addEventListener('visibilitychange', state._onVis);
       if (data.offline) {
         const note = document.createElement('p');
         note.className = 'g-ticket__offline';

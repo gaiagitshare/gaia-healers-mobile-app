@@ -822,3 +822,15 @@ body.gaia-v2 .g-super-home .g-super-hero .g-super-hero__intro{position:relative;
 .g-feed-reply-box { display: flex; gap: 8px; align-items: flex-end; margin-top: 10px; }
 .g-feed-reply-input { flex: 1; resize: none; min-height: 38px; background: #0e1a10; border: 1px solid var(--super-line); border-radius: 10px; color: var(--g-text); font: inherit; font-size: 13px; padding: 8px 10px; }
 .g-feed-reply-input:focus { outline: none; border-color: rgba(166, 237, 104, .5); }
+
+
+/* Customer pass upgrades on the ticket sheet */
+.g-upg { margin-top: 18px; padding-top: 16px; border-top: 1px solid rgba(255,255,255,.14); text-align: left; }
+.g-upg__title { margin: 0 0 2px; font-size: 1rem; font-weight: 700; }
+.g-upg__cur { margin: 0 0 10px; font-size: .82rem; opacity: .7; }
+.g-upg__list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.g-upg__item { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.g-upg__name { font-weight: 600; font-size: .92rem; }
+.g-upg__cta { white-space: nowrap; }
+.g-upg__soon { font-size: .8rem; opacity: .6; }
+.g-upg__note { margin: 10px 0 0; font-size: .76rem; opacity: .62; line-height: 1.4; }

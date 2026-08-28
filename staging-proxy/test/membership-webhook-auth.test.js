@@ -14,6 +14,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import crypto from 'node:crypto';
+import { installCourseAuthority } from './course-authority-fixture.js';
 
 const SECRET = 'auth-secret-'.padEnd(48, 'a');
 
@@ -25,6 +26,10 @@ const workdir = fs.mkdtempSync(path.join(os.tmpdir(), 'gaia-auth-'));
 fs.mkdirSync(path.join(workdir, 'data'), { recursive: true });
 const storeFile = path.join(workdir, 'data', 'member-entitlements.json');
 process.chdir(workdir);
+installCourseAuthority(workdir, [
+  'auth-course-1', 'auth-course-2', 'auth-course-3',
+  'auth-course-4', 'auth-course-5', 'auth-course-6',
+]);
 
 const PORT = 8904;
 Object.assign(process.env, {

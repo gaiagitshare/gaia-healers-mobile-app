@@ -138,7 +138,7 @@ const ENTITLEMENT_SOURCES = [
   'membership_policy', 'manual', 'fixture', 'legacy_tag', 'ghl_onboarding',
 ];
 
-const MEMBERSHIP_SOURCES = ['ghl_subscription', 'ghl_onboarding', 'manual', 'fixture'];
+const MEMBERSHIP_SOURCES = ['ghl_subscription', 'ghl_onboarding', 'ghl_payment', 'manual', 'fixture'];
 
 /**
  * What each tier is *promised*. This is policy, not grant: the resolver may use

@@ -10,7 +10,7 @@ import * as eventIdentity from './membership/event-identity.js';
 import * as reader from './membership/reader.js';
 import { migrateStore, migrateContactRecord } from './membership/ledger.js';
 import { resolveMemberAccess } from './membership/resolver.js';
-import { UNRESOLVED_BILLING_IDS } from './membership/config.js';
+import { UNRESOLVED_BILLING_IDS, tierFromBillingIds } from './membership/config.js';
 import { membershipPlans } from './membership/plans.js';
 import { syncCatalog, storeView, diffMessages, emptyCatalog, productDetail } from './membership/store-catalog.js';
 import { audit as recordAudit } from './membership/audit-log.js';
@@ -79,6 +79,10 @@ function cleanupMagicPolls(now) {
 const AUTH_ALLOW_DEBUG_LINKS = process.env.AUTH_ALLOW_DEBUG_LINKS === 'true';
 const AUTH_ALLOW_UNVERIFIED_EMAIL_MAGIC_LINK = process.env.AUTH_ALLOW_UNVERIFIED_EMAIL_MAGIC_LINK === 'true';
 const AUTH_EMBED_SHARED_SECRET = process.env.AUTH_EMBED_SHARED_SECRET || process.env.APP_PROXY_SHARED_SECRET || '';
+// Legacy embedded auto-claim accepts a static bearer plus a caller-selected
+// contact id. It remains off unless an operator explicitly re-enables it while
+// migrating to a signed, per-user SSO assertion. Magic-link/OAuth auth remains.
+const AUTH_ALLOW_LEGACY_EMBEDDED_CLAIM = String(process.env.AUTH_ALLOW_LEGACY_EMBEDDED_CLAIM || '').trim() === '1';
 const AUTH_TRUSTED_REFERRERS = (process.env.AUTH_TRUSTED_REFERRERS || 'https://crm.gaiahealers.com,https://education.gaiahealers.com')
   .split(',')
   .map((item) => item.trim())
@@ -393,6 +397,30 @@ function sendBuffer(res, status, buffer, contentType, origin, extraHeaders = {})
 const COURSES_FILE = path.join(process.cwd(), 'data', 'courses.json');
 const COURSES_SYNC_SECRET = String(process.env.COURSES_SYNC_SECRET || '').trim();
 const MEMBER_ENTITLEMENTS_FILE = String(process.env.MEMBER_ENTITLEMENTS_FILE || path.join(process.cwd(), 'data', 'member-entitlements.json')).trim();
+// Explicit product -> membership/course mapping (the Event-style discipline for
+// entitlements): a paid product decides the entitlement, never the webhook body.
+const ENTITLEMENT_MAP_FILE = String(process.env.ENTITLEMENT_MAP_FILE || path.join(process.cwd(), 'data', 'entitlement-product-mappings.json')).trim();
+function loadEntitlementProductMappings() {
+  try { return JSON.parse(fs.readFileSync(ENTITLEMENT_MAP_FILE, 'utf8')); } catch (_) { return { version: 1, products: {} }; }
+}
+// Product classification registry + a review store so a paid product that is
+// not explicitly classified is never silently lost — it surfaces for an admin.
+const PRODUCT_REGISTRY_FILE = path.join(process.cwd(), 'data', 'product-registry.json');
+const PAYMENT_REVIEW_FILE = path.join(process.cwd(), 'data', 'payment-review.json');
+const INTENTIONAL_CLASSES = new Set(['EVENT_TICKET','EVENT_UPGRADE','EVENT_ADDON','MEMBERSHIP_SUBSCRIPTION','PHYSICAL_PRODUCT','SPONSOR','SERVICE','COURSE','NON_ENTITLEMENT']);
+function loadProductRegistry() { try { return JSON.parse(fs.readFileSync(PRODUCT_REGISTRY_FILE,'utf8')); } catch(_){ return {version:1,products:{}}; } }
+function recordEntitlementReview(productIds, orderId) {
+  const reg = (loadProductRegistry().products)||{};
+  let store; try { store = JSON.parse(fs.readFileSync(PAYMENT_REVIEW_FILE,'utf8')); } catch(_){ store = { version:1, items:{} }; }
+  const now = new Date().toISOString(); let changed=false;
+  for (const pid of (productIds||[])) {
+    const entry = reg[pid];
+    if (entry && INTENTIONAL_CLASSES.has(entry.classification)) continue; // intentional non-event: not a gap
+    const it = store.items[pid] || { product_id: pid, name: (entry&&entry.name)||null, classification: (entry&&entry.classification)||'UNKNOWN', count:0, first_seen: now };
+    it.count += 1; it.last_seen = now; it.last_order = orderId||null; store.items[pid]=it; changed=true;
+  }
+  if (changed) { try { writeJsonAtomic(PAYMENT_REVIEW_FILE, store); } catch(_){} }
+}
 const GHL_WORKFLOW_WEBHOOK_SECRET = String(process.env.GHL_WORKFLOW_WEBHOOK_SECRET || COURSES_SYNC_SECRET).trim();
 const GHL_BACKFILL_SECRET = String(process.env.GHL_BACKFILL_SECRET || GHL_WORKFLOW_WEBHOOK_SECRET).trim();
 const GHL_WEBHOOK_ED25519_PUBLIC_KEY = normalizeEd25519PublicKey(process.env.GHL_WEBHOOK_ED25519_PUBLIC_KEY);
@@ -415,6 +443,7 @@ if (GHL_BACKFILL_SECRET.length < 32) {
 }
 let _coursesCache = null;
 let _memberEntitlementsCache = null;
+let _memberEntitlementsMtimeMs = 0;
 
 function safeSecretEqual(left, right) {
   const a = Buffer.from(String(left || ''), 'utf8');
@@ -601,8 +630,9 @@ function emptyEntitlementStore() {
 }
 
 function loadMemberEntitlements() {
-  if (_memberEntitlementsCache) return _memberEntitlementsCache;
   try {
+    const mtimeMs = fs.statSync(MEMBER_ENTITLEMENTS_FILE).mtimeMs;
+    if (_memberEntitlementsCache && mtimeMs === _memberEntitlementsMtimeMs) return _memberEntitlementsCache;
     const parsed = JSON.parse(fs.readFileSync(MEMBER_ENTITLEMENTS_FILE, 'utf8'));
     const base = {
       ...emptyEntitlementStore(), ...parsed,
@@ -620,8 +650,10 @@ function loadMemberEntitlements() {
       });
     }
     _memberEntitlementsCache = store;
+    _memberEntitlementsMtimeMs = mtimeMs;
   } catch (_) {
     _memberEntitlementsCache = emptyEntitlementStore();
+    _memberEntitlementsMtimeMs = 0;
   }
   return _memberEntitlementsCache;
 }
@@ -631,6 +663,7 @@ function saveMemberEntitlements(store) {
   store.processedWebhookIds = uniqueStrings(store.processedWebhookIds || []).slice(-5000);
   writeJsonAtomic(MEMBER_ENTITLEMENTS_FILE, store);
   _memberEntitlementsCache = store;
+  try { _memberEntitlementsMtimeMs = fs.statSync(MEMBER_ENTITLEMENTS_FILE).mtimeMs; } catch (_) { _memberEntitlementsMtimeMs = 0; }
 }
 
 function entitlementForContact(contactId) {
@@ -741,6 +774,7 @@ function plainCourseDescription(value, maxLength = 220) {
 
 function catalogCourseIsPublic(course = {}) {
   if (course.deletedAt) return false;
+  if (/\b(demo|e2e)\b/i.test(String(course.title || ''))) return false; // never surface test/DEMO courses
   if (course.processing && !/^(false|complete|completed|ready)$/i.test(String(course.processing))) return false;
   if (course.status && !/^(active|published|live)$/i.test(course.status)) return false;
   return course.portalPublished || course.availableInStore;
@@ -888,6 +922,28 @@ async function coursesSync(req, res, origin) {
     source: 'ghl-workflow',
   };
   saveCourses(payload);
+  // Self-heal the authoritative grant registry from the FULL raw GHL universe
+  // (including hidden/unpublished courses), so authority always tracks GHL.
+  // Ambiguous group-keys are recorded so a name mapping to >1 course is
+  // rejected, never guessed. This is what makes GHL — not our ledger — the
+  // authority for whether a NEW course entitlement may be created.
+  try {
+    const authCourses = [];
+    const keyIds = new Map();
+    for (const c of normalized) {
+      const id = String(c.id || '').trim();
+      const title = String(c.title || '').trim();
+      if (!id && !title) continue;
+      if (/\b(demo|e2e)\b/i.test(title)) continue; // keep DEMO/test courses out of grant authority
+      const key = courseGroupKey(title || id);
+      authCourses.push({ id: id || key, title, groupKey: key, productType: c.productType || '', visible: catalogCourseIsPublic(c), status: c.status || '', source: 'ghl_courses_sync' });
+      if (key) { if (!keyIds.has(key)) keyIds.set(key, new Set()); keyIds.get(key).add(id || key); }
+    }
+    const ambiguous = {};
+    for (const [k, ids] of keyIds) if (ids.size > 1) ambiguous[k] = [...ids];
+    writeJsonAtomic(COURSE_AUTHORITY_FILE, { version: 1, source: 'ghl_courses_sync (full raw universe, incl hidden)', seeded_pending_full_sync: false, generatedAt: payload.syncedAt, count: authCourses.length, courses: authCourses, ambiguous_keys: ambiguous });
+    console.log('[Gaia Courses] authority refreshed', { count: authCourses.length, ambiguous: Object.keys(ambiguous).length });
+  } catch (err) { console.warn('[Gaia Courses] authority refresh failed', { error: err.message.split('\n')[0] }); }
   console.log('[Gaia Courses] sync received', { raw: normalized.length, deduped: courses.length, hidden: hiddenCount, syncedAt: payload.syncedAt });
   sendJson(res, 200, { ok: true, count: courses.length, rawCount: normalized.length, hidden: hiddenCount, syncedAt: payload.syncedAt }, origin);
 }
@@ -989,6 +1045,11 @@ function aliasKeyForId(store, realId) {
   if (!id) return '';
   return (store.courseAliases && store.courseAliases.byId && store.courseAliases.byId[id]) || '';
 }
+function aliasIdForKey(store, nameKey) {
+  const key = String(nameKey || '').trim();
+  if (!key) return '';
+  return (store.courseAliases && store.courseAliases.byKey && store.courseAliases.byKey[key]) || '';
+}
 function learnCourseAlias(store, realId, name) {
   const id = String(realId || '').trim();
   const key = courseGroupKey(name || '');
@@ -1003,10 +1064,12 @@ function resolveEntitlementMatch(list, resource, store) {
   const rid = String(resource.rawId || '').trim();
   const nameKey = courseGroupKey(resource.name || '');
   const aliasKey = aliasKeyForId(store, rid);            // real id -> backfill key
+  const aliasId = aliasIdForKey(store, nameKey);         // name-only revoke -> real id
   const candidates = new Set([
     String(resource.id || '').toLowerCase(),
     nameKey,
     aliasKey,
+    String(aliasId || '').toLowerCase(),
   ].filter(Boolean));
   const nameLc = String(resource.name || '').toLowerCase();
   return list.findIndex((item) => {
@@ -1019,6 +1082,87 @@ function resolveEntitlementMatch(list, resource, store) {
     if (candidates.has(ikey)) return true;               // stored name -> same key
     return false;
   });
+}
+
+// ── Authoritative course grant registry ──────────────────────────────
+// Authority for CREATING a course entitlement comes ONLY from GHL, never from
+// our own ledger. data/course-authority.json is the real GHL course universe
+// (seeded from the catalog sync + GHL Products API, and self-healed from the
+// full raw set on every POST /api/courses/sync). course-authority-aliases.json
+// holds explicit, evidence-documented approvals for LMS-only courses GHL's own
+// access-granted workflow uses but that expose no product id. The ledger is
+// audited against this authority but is NEVER itself a source of authority — a
+// bad historical row can never become grantable.
+const COURSE_REJECTIONS_FILE = path.join(process.cwd(), 'data', 'course-grant-rejections.json');
+const COURSE_AUTHORITY_FILE = String(process.env.COURSE_AUTHORITY_FILE || path.join(process.cwd(), 'data', 'course-authority.json')).trim();
+const COURSE_ALIAS_FILE = String(process.env.COURSE_ALIAS_FILE || path.join(process.cwd(), 'data', 'course-authority-aliases.json')).trim();
+function loadCourseAuthority() { try { return JSON.parse(fs.readFileSync(COURSE_AUTHORITY_FILE, 'utf8')); } catch (_) { return { courses: [], ambiguous_keys: {} }; } }
+function loadCourseAliases() { try { return JSON.parse(fs.readFileSync(COURSE_ALIAS_FILE, 'utf8')); } catch (_) { return { aliases: [] }; } }
+// Build the resolution index from authority + approved aliases (NOT the ledger).
+function buildCourseAuthorityIndex() {
+  const auth = loadCourseAuthority();
+  const byId = new Map();      // lc id -> { id, title }
+  const byKey = new Map();     // unique group key -> { id, title }
+  const ambiguousKeys = new Set(Object.keys(auth.ambiguous_keys || {}));
+  for (const c of (auth.courses || [])) {
+    const id = String(c.id || '').trim();
+    const title = String(c.title || '').trim();
+    const key = String(c.groupKey || courseGroupKey(title || id));
+    if (id) byId.set(id.toLowerCase(), { id, title });
+    if (key && !ambiguousKeys.has(key) && !byKey.has(key)) byKey.set(key, { id, title });
+  }
+  const aliasByKey = new Map();
+  const aliasById = new Map();
+  for (const a of (loadCourseAliases().aliases || [])) {
+    if (a.approved === false) continue;
+    const entry = { id: String(a.canonical_id || a.alias_key || ''), title: String(a.canonical_title || a.alias_name || ''), method: a.resolution_method || 'explicit_alias' };
+    if (a.alias_key) aliasByKey.set(String(a.alias_key), entry);
+    if (a.canonical_id) aliasById.set(String(a.canonical_id).toLowerCase(), entry);
+  }
+  return { byId, byKey, ambiguousKeys, aliasByKey, aliasById };
+}
+// Group-keys present in the ledger but resolving to NO authority/alias: legacy,
+// unverified courses. Used only to classify a rejection reason and to let an
+// existing owner keep access; never to authorize a NEW grant.
+function courseLegacyKeySet(store, idx) {
+  const legacy = new Set();
+  for (const rec of Object.values((store && store.contacts) || {})) {
+    for (const c of (rec.courses || [])) {
+      const key = courseGroupKey(c.name || c.id || '');
+      if (!key) continue;
+      const known = idx.byKey.has(key) || idx.aliasByKey.has(key) || (c.id && idx.byId.has(String(c.id).toLowerCase()));
+      if (!known) legacy.add(key);
+    }
+  }
+  return legacy;
+}
+// Resolve an incoming course to an authoritative course, or a reject reason.
+// Order: exact GHL id -> explicit alias -> exact authoritative name/group-key.
+// Ambiguous key -> reject. No fuzzy matching. Records the resolution method.
+function resolveCourseGrant(idx, resource) {
+  const rid = String(resource.rawId || '').trim().toLowerCase();
+  if (rid && idx.byId.has(rid)) return { course: idx.byId.get(rid), method: 'exact_resource_id' };
+  if (rid && idx.aliasById.has(rid)) { const a = idx.aliasById.get(rid); return { course: { id: a.id, title: a.title }, method: a.method }; }
+  const key = courseGroupKey(resource.name || '');
+  if (key) {
+    if (idx.ambiguousKeys.has(key)) return { reject: 'AMBIGUOUS_RESOURCE' };
+    if (idx.aliasByKey.has(key)) { const a = idx.aliasByKey.get(key); return { course: { id: a.id, title: a.title }, method: a.method }; }
+    if (idx.byKey.has(key)) return { course: idx.byKey.get(key), method: 'exact_authoritative_name' };
+  }
+  return { reject: 'UNKNOWN_RESOURCE' };
+}
+function recordCourseGrantRejection(store, contactId, entry) {
+  const rec = store && store.contacts && store.contacts[contactId];
+  if (rec) {
+    rec.courseGrantRejections = Array.isArray(rec.courseGrantRejections) ? rec.courseGrantRejections : [];
+    rec.courseGrantRejections.push(entry);
+    if (rec.courseGrantRejections.length > 50) rec.courseGrantRejections = rec.courseGrantRejections.slice(-50);
+  }
+  let log; try { log = JSON.parse(fs.readFileSync(COURSE_REJECTIONS_FILE, 'utf8')); } catch (_) { log = { version: 1, items: [] }; }
+  log.items = Array.isArray(log.items) ? log.items : [];
+  log.items.push({ ...entry, contactId });
+  if (log.items.length > 500) log.items = log.items.slice(-500);
+  try { writeJsonAtomic(COURSE_REJECTIONS_FILE, log); } catch (_) {}
 }
 
 function normalizeTierName(value) {
@@ -1063,6 +1207,76 @@ async function memberAccessWebhook(req, res, origin) {
 
   const contactId = firstNonEmptyString(nestedValue(body, 'contactId', 'contact_id'), body.contact?.id, body.data?.contact?.id);
   if (!contactId) { sendJson(res, 422, { ok: false, error: 'contactId is required.' }, origin); return; }
+
+  // \u2500\u2500 EVIDENCE MODE (product determines the entitlement) \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
+  // Same discipline as the Event webhook. When a workflow supplies PAYMENT
+  // EVIDENCE (a transaction/order id), we resolve the REAL GHL order -> product
+  // id -> an explicit MEMBERSHIP/COURSE product mapping and grant ONLY what the
+  // mapping says. Any body-supplied tier/courseId is ignored; no mapping = no-op;
+  // idempotent per order. This is what makes membership/course product-driven.
+  {
+    const _txId = String(body.transaction_id || body.transactionId || body.payment_transaction_id || '').trim();
+    let _orderId = String(body.orderId || body.order_id || '').trim();
+    if (_txId || _orderId) {
+      const _LOC = (process.env.GHL_LOCATION_ID || '').trim();
+      const _isRefund = body.refunded === true || /(refund|refunded|charge_?back|cancel|revoke)/i.test(String(body.type || body.event || body.action || ''));
+      if (_txId && !_orderId) {
+        try { const _tx = await _swFindTransaction(_txId, contactId); if (_tx && _tx.entityId) _orderId = _tx.entityId; } catch (_) {}
+      }
+      let _productIds = [];
+      if (_orderId) {
+        try {
+          const _order = await _swGhlGetRetry('/payments/orders/' + encodeURIComponent(_orderId), { altId: _LOC, altType: 'location' });
+          const _items = (_order && _order.items) || [];
+          _productIds = [...new Set(_items.map((it) => (it.product && it.product._id) || it.productId).filter(Boolean))];
+        } catch (_) {}
+      }
+      const _emap = loadEntitlementProductMappings();
+      const _matched = _productIds.map((pid) => ({ pid, m: (_emap.products || {})[pid] })).filter((x) => x.m);
+      const _store = loadMemberEntitlements();
+      const _idem = (_isRefund ? 'evidence:refund:' : 'evidence:grant:') + (_orderId || _txId);
+      if ((_orderId || _txId) && _store.processedWebhookIds.includes(_idem)) {
+        sendJson(res, 200, { ok: true, duplicate: true, contactId, orderId: _orderId }, origin); return;
+      }
+      if (!_matched.length) {
+        console.log('[Gaia Entitlements] member-access evidence no-op: no compatible product mapping', { contactId, orderId: _orderId, productIds: _productIds });
+        sendJson(res, 202, { ok: true, applied: false, reason: 'no_mapped_product', productIds: _productIds }, origin); return;
+      }
+      const _now = new Date().toISOString();
+      const _rec = _store.contacts[contactId] || { contactId, tags: [], tier: null, courses: [], communities: [], subscriptions: [], domainUpdatedAt: {}, updatedAt: _now };
+      _rec.courses = Array.isArray(_rec.courses) ? _rec.courses : [];
+      const _granted = [];
+      for (const { pid, m } of _matched) {
+        const _et = String(m.entitlement_type || '').toUpperCase();
+        if (_et === 'MEMBERSHIP') {
+          const _tier = String(m.membership_tier || '').toLowerCase();
+          const _act = _isRefund ? 'end' : 'activate';
+          const _b = membershipFromEvent({ tier: _tier, source: 'ghl_payment', evidenceId: _orderId || _txId }, { action: _act, rawType: _isRefund ? 'evidence_refund' : 'evidence_payment', now: new Date() });
+          if (!_b.error) { _rec.membership = normalizeMembership(_b.membership, { now: new Date() }); }
+          _granted.push({ type: 'MEMBERSHIP', action: _isRefund ? 'revoked' : 'granted', tier: _tier, product: pid });
+        } else if (_et === 'COURSE') {
+          const _cid = String(m.course_id || m.course_name || pid);
+          const _cname = String(m.course_name || m.course_id || 'Course');
+          const _idx = _rec.courses.findIndex((c) => String(c.id).toLowerCase() === _cid.toLowerCase() || String(c.name || '').toLowerCase() === _cname.toLowerCase());
+          if (_isRefund) {
+            if (_idx >= 0) _rec.courses.splice(_idx, 1);
+            _granted.push({ type: 'COURSE', action: 'revoked', course: _cname, product: pid });
+          } else {
+            const _item = { id: _cid, name: _cname, state: 'unlocked', openUrl: '', matchedBy: 'payment:' + (_orderId || _txId), updatedAt: _now };
+            if (_idx >= 0) _rec.courses[_idx] = { ..._rec.courses[_idx], ..._item }; else _rec.courses.push(_item);
+            _granted.push({ type: 'COURSE', action: 'granted', course: _cname, product: pid });
+          }
+          _rec.domainUpdatedAt = _rec.domainUpdatedAt || {}; _rec.domainUpdatedAt.courses = _now;
+        }
+      }
+      _rec.updatedAt = _now;
+      _store.contacts[contactId] = _rec;
+      if (_orderId || _txId) _store.processedWebhookIds.push(_idem);
+      try { saveMemberEntitlements(_store); } catch (_) {}
+      console.log('[Gaia Entitlements] member-access evidence grant', { contactId, orderId: _orderId, granted: _granted });
+      sendJson(res, 200, { ok: true, applied: true, contactId, orderId: _orderId, granted: _granted }, origin); return;
+    }
+  }
   const event = classifyEntitlementEvent(body);
   if (!event.kind) { sendJson(res, 422, { ok: false, error: 'Unsupported entitlement event type.' }, origin); return; }
 
@@ -1151,7 +1365,27 @@ async function memberAccessWebhook(req, res, origin) {
     const tags = body.tags || body.contact?.tags || body.data?.tags || body.data?.contact?.tags;
     if (Array.isArray(tags)) record.tags = uniqueStrings(tags);
   } else if (event.kind === 'tier') {
-    const built = membershipFromEvent(body, { action: event.membershipAction, rawType: event.raw, now: new Date(arrivalMs) });
+    const nestedMembership = (body.membership && typeof body.membership === 'object') ? body.membership : {};
+    const billingIds = [
+      body.priceId, body.price_id, body.productId, body.product_id,
+      nestedMembership.priceId, nestedMembership.productId,
+    ].filter(Boolean).map(String);
+    const billingMatch = tierFromBillingIds(billingIds);
+    if (!billingMatch) {
+      console.warn('[Gaia Entitlements] membership event rejected: no canonical billing id', {
+        contactId, event: event.raw, billingIdCount: billingIds.length,
+      });
+      sendJson(res, 202, {
+        ok: true, applied: false, rejected: true,
+        reason: billingIds.length ? 'UNMAPPED_BILLING_ID' : 'BILLING_ID_REQUIRED',
+        contactId,
+      }, origin);
+      return;
+    }
+    // The canonical billing id decides the tier. A body-supplied tier is only
+    // diagnostic input and cannot grant or change a membership.
+    const authoritativeBody = { ...body, tier: billingMatch.key };
+    const built = membershipFromEvent(authoritativeBody, { action: event.membershipAction, rawType: event.raw, now: new Date(arrivalMs) });
     if (built.error) {
       sendJson(res, 422, { ok: false, applied: false, error: built.error }, origin);
       return;
@@ -1185,15 +1419,44 @@ async function memberAccessWebhook(req, res, origin) {
       // id-only grant must not blank out a backfill row's display title), and
       // adopt a real product id onto the row so it becomes fully keyed.
       const prev = index >= 0 ? list[index] : null;
-      // A real human name is one that isn't just the id echoed back by the
-      // normalizer's fallback. Prefer it; otherwise keep the row's existing name.
-      const realName = resource.name && resource.name !== resource.rawId ? resource.name : (prev && prev.name) || resource.name;
+      // ── Authority gate (courses only) ─────────────────────────────
+      // Creating OR re-affirming a course entitlement requires the incoming
+      // course to resolve against GHL AUTHORITY or an approved alias — the
+      // ledger is never authority. This runs even when the contact already
+      // holds the row (index>=0), so a stale/forged webhook can never turn an
+      // existing legacy row into an authorization. On rejection the existing
+      // row is left exactly as-is (the owner keeps access) and only a
+      // reviewable rejection is logged. On success the SERVER id/title win.
+      let resolved = null;
+      if (event.kind === 'course') {
+        const aidx = buildCourseAuthorityIndex();
+        const r = resolveCourseGrant(aidx, resource);
+        if (r.course) {
+          resolved = r;
+        } else {
+          const rkey = courseGroupKey(resource.name || '');
+          let reason = r.reject || 'UNKNOWN_RESOURCE';
+          if (reason === 'UNKNOWN_RESOURCE' && rkey && courseLegacyKeySet(store, aidx).has(rkey)) reason = 'LEGACY_UNVERIFIED';
+          recordCourseGrantRejection(store, contactId, {
+            at: now, action: 'grant', event: event.raw || null,
+            id: resource.rawId || resource.id || null, name: resource.name || null,
+            reason, already_held: index >= 0,
+          });
+          try { saveMemberEntitlements(store); } catch (_) {}
+          console.warn('[Gaia Entitlements] course grant rejected', { contactId, reason, id: resource.rawId || resource.id, name: resource.name, alreadyHeld: index >= 0 });
+          sendJson(res, 202, { ok: true, applied: false, rejected: true, reason, contactId, requested: { id: resource.rawId || resource.id || null, name: resource.name || null } }, origin);
+          return;
+        }
+      }
+      const realName = resolved ? resolved.course.title
+        : (resource.name && resource.name !== resource.rawId ? resource.name : (prev && prev.name) || resource.name);
       const item = {
-        id: resource.rawId || (prev && prev.id) || resource.id,
+        id: resolved ? resolved.course.id : (resource.rawId || (prev && prev.id) || resource.id),
         name: realName,
         state: 'unlocked',
         openUrl: firstNonEmptyString(resource.openUrl, prev && prev.openUrl),
-        matchedBy: `webhook:${event.raw}`,
+        matchedBy: resolved ? `webhook:${event.raw}:${resolved.method}` : `webhook:${event.raw}`,
+        ...(resolved ? { resolutionMethod: resolved.method } : {}),
         updatedAt: now,
       };
       if (index >= 0) list[index] = { ...list[index], ...item };
@@ -1206,6 +1469,7 @@ async function memberAccessWebhook(req, res, origin) {
       // for review rather than silently dropping the wrong access.
       record.unmatchedRevokes = Array.isArray(record.unmatchedRevokes) ? record.unmatchedRevokes : [];
       record.unmatchedRevokes.push({ at: now, id: resource.rawId || resource.id || null, name: resource.name || null, event: event.raw || null });
+      recordCourseGrantRejection(store, contactId, { at: now, action: 'revoke', event: event.raw || null, id: resource.rawId || resource.id || null, name: resource.name || null, reason: 'INVALID_REVOKE' });
       console.log('[Gaia Entitlements] revoke did not match any stored course', { contactId, id: resource.rawId || resource.id, name: resource.name });
     }
   }
@@ -1793,6 +2057,141 @@ function ghlHeaders(token, version) {
     Authorization: `Bearer ${token}`,
     Version: version,
   };
+}
+
+// ── Smart Webhook: one generic GHL Payment webhook for ALL events ───────────
+// GHL can't hand us the purchased product in the body (only payment.transaction_id
+// is available as a merge field), so a single generic webhook posts the
+// transaction id + contact context here; we look the order up through the same
+// authorized GHL API the reconciler uses, resolve the product against the ONE
+// mapping source of truth (Event Manager ticket_mappings), and upsert the
+// attendee through the SAME idempotent endpoint the reconciler calls. That makes
+// the instant path race-safe with the 60s reconciler by construction: both funnel
+// through reconcile-attendee, keyed on (event,email), so double-processing updates
+// rather than duplicates. Nothing here hard-codes an event, product or tier.
+function _swSleep(ms) { return new Promise((r) => setTimeout(r, ms)); }
+async function _swGhlGetRetry(path, params, tries) {
+  tries = tries || 3;
+  for (let i = 0; i < tries; i++) {
+    try { const r = await ghlGet(path, params); if (r !== null && r !== undefined) return r; } catch (e) { /* transient */ }
+    await _swSleep(350 * (i + 1));
+  }
+  return null;
+}
+// Resolve the EXACT transaction by id — never assume the newest belongs to this
+// webhook. Paginate so an old/delayed/out-of-order payment still resolves; a
+// contactId keeps the scan bounded even for a prolific buyer.
+async function _swFindTransaction(txId, contactId) {
+  const limit = 100; const maxPages = 6;
+  for (let page = 0; page < maxPages; page++) {
+    const params = { altId: process.env.GHL_LOCATION_ID, altType: 'location', limit, offset: page * limit };
+    if (contactId) params.contactId = contactId;
+    const list = await _swGhlGetRetry('/payments/transactions', params);
+    const arr = (list && (list.data || list.transactions)) || [];
+    const hit = arr.find((t) => String(t._id) === String(txId));
+    if (hit) return hit;
+    if (arr.length < limit) break;
+  }
+  return null;
+}
+
+async function handleGhlPaymentWebhook(req, res, origin) {
+  const EMBASE = (process.env.EVENT_MANAGER_BASE_URL || '').replace(/\/+$/, '');
+  const SVC = (process.env.IDENTITY_SERVICE_TOKEN || '').trim();
+  const LOC = (process.env.GHL_LOCATION_ID || '').trim();
+  const expected = (process.env.REGISTRATION_WEBHOOK_SECRET || '').trim();
+
+  // 1) Auth — shared secret, header or ?secret=, timing-safe. Never logged.
+  let qSecret = '';
+  try { qSecret = new URL(req.url, 'http://localhost').searchParams.get('secret') || ''; } catch (e) { /* noop */ }
+  const supplied = String(req.headers['x-gaia-secret'] || qSecret || '');
+  if (!expected || !SVC) { sendJson(res, 503, { ok: false, error: 'webhook_not_configured' }, origin); return; }
+  const a = Buffer.from(supplied); const b = Buffer.from(expected);
+  if (a.length !== b.length || !crypto.timingSafeEqual(a, b)) {
+    console.warn(JSON.stringify({ evt: 'smart_webhook', outcome: 'forbidden_bad_secret' }));
+    sendJson(res, 403, { ok: false, error: 'invalid_secret' }, origin); return;
+  }
+
+  // 2) Body — need a transaction id; contact fields are a best-effort fallback.
+  let body = {};
+  try { body = await readJsonBody(req); } catch (e) { sendJson(res, 400, { ok: false, error: 'bad_json' }, origin); return; }
+  const txId = String(body.transaction_id || body.transactionId || body.payment_transaction_id || '').trim();
+  const log = (o) => { try { console.log(JSON.stringify({ evt: 'smart_webhook', transaction_id: txId || null, ...o })); } catch (e) { /* noop */ } };
+  if (!txId) { log({ outcome: 'missing_transaction_id' }); sendJson(res, 400, { ok: false, error: 'missing_transaction_id' }, origin); return; }
+
+  try {
+    // 3) transaction -> order id (entityId) + buyer identity
+    // Resolve by the EXACT transaction id (hardened: paginated + retried).
+    const _cid = body.contact_id || body.contactId;
+    const tx = await _swFindTransaction(txId, _cid);
+    if (!tx) { log({ outcome: 'transaction_not_found' }); sendJson(res, 202, { ok: false, matched: 0, reason: 'transaction_not_found' }, origin); return; }
+    if (!tx.entityId) { log({ outcome: 'no_order_on_transaction' }); sendJson(res, 202, { ok: false, matched: 0, reason: 'no_order_on_transaction' }, origin); return; }
+
+    const orderId = tx.entityId || '';
+    // 4) order -> product ids (+ buyer fallback from the order snapshot)
+    let productIds = [];
+    let snap = {};
+    if (orderId) {
+      const order = await _swGhlGetRetry(`/payments/orders/${encodeURIComponent(orderId)}`, { altId: LOC, altType: 'location' });
+      const items = (order && order.items) || [];
+      productIds = [...new Set(items.map((it) => (it.product && it.product._id) || it.productId).filter(Boolean))];
+      snap = (order && order.contactSnapshot) || {};
+    }
+    const email = String(tx.contactEmail || snap.email || body.email || '').trim().toLowerCase();
+    const first = snap.firstName || body.first_name || '';
+    const last = snap.lastName || body.last_name || '';
+    const phone = snap.phone || body.phone || '';
+    const contactId = tx.contactId || body.contact_id || body.contactId || '';
+    if (!email) { log({ outcome: 'no_buyer_email', order_id: orderId }); sendJson(res, 202, { ok: false, matched: 0, reason: 'no_buyer_email' }, origin); return; }
+
+    // 5) Resolve against the single mapping source of truth (Event Manager)
+    let maps = [];
+    for (let i = 0; i < 3 && maps.length === 0; i++) {
+      try {
+        const mr = await fetch(`${EMBASE}/identity/ticket-mappings`, { headers: { Authorization: `Bearer ${SVC}` } });
+        maps = mr.ok ? await mr.json() : [];
+      } catch (e) { maps = []; }
+      if (!maps.length) await _swSleep(300 * (i + 1));
+    }
+    const byPid = new Map();
+    const EVENT_TYPES = new Set(['EVENT_TICKET', 'EVENT_UPGRADE']);
+    for (const m of maps) if (m.provider === 'ghl' && EVENT_TYPES.has(m.entitlement_type || 'EVENT_TICKET')) byPid.set(m.external_product_id, m);
+    let targets = productIds.map((pid) => ({ pid, m: byPid.get(pid) })).filter((x) => x.m);
+    // Preserve appropriate pass: apply base mappings first, upgrades last (upgrade wins).
+    targets.sort((x, y) => (x.m.is_upgrade ? 1 : 0) - (y.m.is_upgrade ? 1 : 0));
+
+    if (!targets.length) {
+      log({ outcome: 'no_mapped_product', order_id: orderId, product_ids: productIds });
+      try { recordEntitlementReview(productIds, orderId); } catch (e) { /* review is best-effort */ }
+      // 202: accepted but nothing to do — fails safe, visible in logs, touches nothing.
+      sendJson(res, 202, { ok: true, matched: 0, reason: 'no_mapped_product', product_ids: productIds }, origin); return;
+    }
+
+    // 6) Idempotent upsert per mapped product (same endpoint as the reconciler)
+    const results = [];
+    for (const t of targets) {
+      let j = null;
+      try {
+        const er = await fetch(`${EMBASE}/identity/reconcile-attendee`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${SVC}` },
+          body: JSON.stringify({
+            event_id: t.m.event_id, email, ticket_type_id: t.m.ticket_type_id,
+            first_name: first, last_name: last, phone,
+            contact_id: contactId, order_id: orderId || txId, is_upgrade: !!t.m.is_upgrade,
+          }),
+        });
+        j = er.ok ? await er.json() : null;
+      } catch (e) { j = null; }
+      results.push({ product_id: t.pid, event_id: t.m.event_id, ticket_type_id: t.m.ticket_type_id, ok: !!(j && j.ok), created: !!(j && j.created) });
+      log({ outcome: 'reconciled', order_id: orderId, product_id: t.pid, event_id: t.m.event_id, ticket_type_id: t.m.ticket_type_id, created: !!(j && j.created) });
+    }
+    sendJson(res, 200, { ok: true, transaction_id: txId, order_id: orderId, matched: results.length, results }, origin);
+  } catch (e) {
+    log({ outcome: 'error', error: String((e && e.message) || e) });
+    // 502 so GHL retries; the 60s reconciler is the backstop regardless.
+    sendJson(res, 502, { ok: false, error: 'lookup_failed' }, origin);
+  }
 }
 
 async function ghlGet(path, params = {}) {
@@ -4241,6 +4640,13 @@ async function authOAuthAppleCallback(req, res, origin) {
 }
 
 async function authEmbeddedClaim(req, res, origin) {
+  if (!AUTH_ALLOW_LEGACY_EMBEDDED_CLAIM) {
+    sendJson(res, 410, {
+      ok: false,
+      error: 'Embedded auto-claim is disabled. Use magic-link or OAuth sign-in.',
+    }, origin);
+    return;
+  }
   const body = await readJsonBody(req);
   const email = String(body.email || '').trim().toLowerCase();
   const contactId = String(body.contactId || body.memberId || '').trim();
@@ -5042,6 +5448,14 @@ const server = http.createServer(async (req, res) => {
       sendJson(res, 200, { ok: true }, origin);
       return;
     }
+    if (req.method === 'GET' && url.pathname === '/api/entitlement-review') {
+      const sec = String(req.headers['x-webhook-secret'] || url.searchParams.get('secret') || '').trim();
+      if (!(GHL_WORKFLOW_WEBHOOK_SECRET.length>=32 && safeSecretEqual(sec, GHL_WORKFLOW_WEBHOOK_SECRET))) { sendJson(res,403,{ok:false,error:'forbidden'},origin); return; }
+      const reg = loadProductRegistry(); let rev={items:{}}; try { rev=JSON.parse(fs.readFileSync(PAYMENT_REVIEW_FILE,'utf8')); } catch(_){}
+      const counts={}; for (const p of Object.values(reg.products||{})) counts[p.classification]=(counts[p.classification]||0)+1;
+      const reviewRequired = Object.entries(reg.products||{}).filter(([,p])=>p.classification==='REVIEW_REQUIRED').map(([id,p])=>({product_id:id,name:p.name,orders:p.orders,note:p.note}));
+      sendJson(res,200,{ok:true,summary:counts,review_required:reviewRequired,recent_unclassified_payments:Object.values(rev.items||{})},origin); return;
+    }
     if (req.method === 'GET' && url.pathname === '/api/courses') {
       await coursesList(req, res, origin);
       return;
@@ -5067,6 +5481,10 @@ const server = http.createServer(async (req, res) => {
       });
       return;
     }
+    if (req.method === 'POST' && url.pathname === '/api/webhooks/ghl-payment') {
+      await handleGhlPaymentWebhook(req, res, origin);
+      return;
+    }
     if (req.method === 'GET' && url.pathname === '/api/events/mine') {
       const session = cookieForRequest(req);
       sendJson(res, 200, await eventIdentity.myEvents(session), origin);
@@ -5090,10 +5508,74 @@ const server = http.createServer(async (req, res) => {
       sendJson(res, result.authenticated === false ? 401 : 200, result, origin, { 'Cache-Control': 'private, no-store' });
       return;
     }
+    if (req.method === 'GET' && /^\/api\/events\/\d+\/upgrades$/.test(url.pathname)) {
+      const session = cookieForRequest(req);
+      const result = await eventIdentity.myUpgrades(session, url.pathname.split('/')[3]);
+      // Fill each option's price from GHL (authoritative), never hard-coded.
+      if (result && result.ok && Array.isArray(result.upgrades) && result.upgrades.length) {
+        const LOC = (process.env.GHL_LOCATION_ID || '').trim();
+        await Promise.all(result.upgrades.map(async (u) => {
+          u.price = null;
+          if (!u.external_product_id) return;
+          try {
+            const pr = await ghlGet(`/products/${u.external_product_id}/price`, { locationId: LOC, limit: 100 });
+            const list = (pr && (pr.prices || pr.data)) || [];
+            const match = u.external_price_id ? list.find((p) => String(p._id) === String(u.external_price_id)) : list[0];
+            if (match) u.price = { amount: match.amount, currency: String(match.currency || 'USD').toUpperCase() };
+          } catch (e) { /* price stays null; the app shows "see price at checkout" */ }
+        }));
+      }
+      sendJson(res, result && result.authenticated === false ? 401 : 200, result, origin, { 'Cache-Control': 'private, no-store' });
+      return;
+    }
     if (req.method === 'GET' && /^\/api\/events\/\d+\/updates$/.test(url.pathname)) {
       const session = cookieForRequest(req);
       const result = await eventIdentity.announcements(session, url.pathname.split('/')[3]);
       sendJson(res, 200, result, origin, { 'Cache-Control': 'private, no-store' });
+      return;
+    }
+    if (req.method === 'GET' && /^\/api\/events\/\d+\/posts$/.test(url.pathname)) {
+      const session = cookieForRequest(req);
+      const since = Number(url.searchParams.get('since') || 0) || 0;
+      const result = await eventIdentity.communityFeed(session, url.pathname.split('/')[3], since);
+      sendJson(res, 200, result, origin, { 'Cache-Control': 'private, no-store' });
+      return;
+    }
+    if (req.method === 'POST' && /^\/api\/events\/\d+\/posts$/.test(url.pathname)) {
+      const session = cookieForRequest(req);
+      const body = await readJsonBody(req).catch(() => ({}));
+      const result = await eventIdentity.createPost(session, url.pathname.split('/')[3], body);
+      sendJson(res, result.authenticated === false ? 401 : (result.ok ? 200 : 400), result, origin, { 'Cache-Control': 'private, no-store' });
+      return;
+    }
+    if (req.method === 'POST' && /^\/api\/events\/\d+\/posts\/\d+\/like$/.test(url.pathname)) {
+      const session = cookieForRequest(req);
+      const parts = url.pathname.split('/');
+      const result = await eventIdentity.postAction(session, parts[3], parts[5], 'like');
+      sendJson(res, result.authenticated === false ? 401 : 200, result, origin, { 'Cache-Control': 'private, no-store' });
+      return;
+    }
+    if (req.method === 'POST' && /^\/api\/events\/\d+\/posts\/\d+\/report$/.test(url.pathname)) {
+      const session = cookieForRequest(req);
+      const parts = url.pathname.split('/');
+      const body = await readJsonBody(req).catch(() => ({}));
+      const result = await eventIdentity.postAction(session, parts[3], parts[5], 'report', body.reason);
+      sendJson(res, result.authenticated === false ? 401 : 200, result, origin, { 'Cache-Control': 'private, no-store' });
+      return;
+    }
+    if (req.method === 'POST' && /^\/api\/events\/\d+\/posts\/image$/.test(url.pathname)) {
+      const session = cookieForRequest(req);
+      const ct = req.headers['content-type'] || '';
+      const chunks = [];
+      let total = 0; let tooBig = false;
+      for await (const chunk of req) {
+        total += chunk.length;
+        if (total > 6 * 1024 * 1024) { tooBig = true; break; }
+        chunks.push(chunk);
+      }
+      if (tooBig) { sendJson(res, 413, { ok: false, reason: 'too_large', detail: 'Image is too large (max 5MB)' }, origin); return; }
+      const result = await eventIdentity.uploadPostImage(session, url.pathname.split('/')[3], ct, Buffer.concat(chunks));
+      sendJson(res, result.authenticated === false ? 401 : (result.ok ? 200 : 400), result, origin, { 'Cache-Control': 'private, no-store' });
       return;
     }
     if (req.method === 'GET' && /^\/api\/events\/\d+\/ticket$/.test(url.pathname)) {

@@ -1,0 +1,17 @@
+[Unit]
+Description=Gaia Healers staging data proxy
+After=network.target
+
+[Service]
+Type=simple
+WorkingDirectory=/root/gaia-staging-proxy
+EnvironmentFile=/root/gaia-staging-proxy/.env
+ExecStart=/usr/bin/node /root/gaia-staging-proxy/server.js
+Restart=always
+RestartSec=3
+User=root
+NoNewPrivileges=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

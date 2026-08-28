@@ -1,0 +1,14 @@
+[Unit]
+Description=Gaia membership reconciliation from GHL billing
+After=network-online.target gaia-staging-proxy.service
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+WorkingDirectory=/root/gaia-staging-proxy
+ExecStart=/usr/bin/flock -n /run/gaia-membership-reconcile.lock /usr/bin/node /root/gaia-staging-proxy/membership-reconcile.mjs
+User=root
+UMask=0077
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=gaia-membership-reconcile

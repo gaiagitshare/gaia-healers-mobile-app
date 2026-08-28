@@ -101,6 +101,13 @@ function toAppRow(row, now) {
       registrationStatus: attendee.registration_status || 'registered',
       checkedIn: Boolean(attendee.is_checked_in),
       checkedInAt: attendee.checked_in_at || null,
+      // Straight from the Event Manager's ONE effective-access resolver.
+      // The app renders this; it never recomputes access. Same source as Admin + Scanner.
+      effectiveLabel: (attendee.effective_access && attendee.effective_access.effective_label) || attendee.pass_label || '',
+      baseTicket: (attendee.effective_access && attendee.effective_access.base_ticket) || null,
+      addons: (attendee.effective_access && attendee.effective_access.addons) || [],
+      valid: attendee.effective_access ? attendee.effective_access.active !== false
+        : !['refunded','revoked','cancelled'].includes((attendee.registration_status || 'registered')),
     },
   };
 }
@@ -181,6 +188,24 @@ async function myTicket(session, eventId) {
       qrImage: result.qr_image || '',
     },
   };
+}
+
+/** Eligible upgrades from this person's current pass for one event. Resolution
+ * and rank rules live in the Event Manager; price is filled in by the caller
+ * from GHL so it is always the real configured amount. */
+async function myUpgrades(session, eventId) {
+  const identity = identityFromSession(session);
+  if (!identity) return { ok: false, authenticated: false, reason: 'auth_required' };
+  const numericId = Number(eventId);
+  if (!Number.isInteger(numericId) || numericId <= 0) {
+    return { ok: false, authenticated: true, reason: 'bad_event_id' };
+  }
+  const result = await callEventIdentity('/identity/upgrades', { ...identity, event_id: numericId });
+  if (!result || result.ok !== true) {
+    return { ok: false, authenticated: true, reason: (result && result.reason) || 'no_ticket_for_event' };
+  }
+  return { ok: true, authenticated: true, status: result.status || 'active',
+           current: result.current || null, upgrades: Array.isArray(result.upgrades) ? result.upgrades : [] };
 }
 
 /**
@@ -316,4 +341,93 @@ async function pushUnsubscribe(session, endpoint) {
   return result || { ok: false, reason: 'event_manager_unreachable' };
 }
 
-export { announcements, myEvents, myTicket, mySchedule, changeSchedule, changeWorkshop, networking, feedback, pushVapidKey, pushSubscribe, pushUnsubscribe, identityFromSession, phaseOf, toAppRow };
+
+/**
+ * Community feed — a moderated public board per event. The browser never sends
+ * an identity: the proxy attaches the session's contact id (the real person)
+ * to every post/like/report, so nobody can post as someone else. The client
+ * may only choose a *display name*, which is bounded here and stored alongside
+ * the real contact id so an organiser always sees who actually posted.
+ */
+function boundedDisplayName(value, fallback) {
+  const v = String(value || '').replace(/\s+/g, ' ').trim().slice(0, 40);
+  return v || fallback || 'Member';
+}
+
+async function communityFeed(session, eventId, since = 0) {
+  const numericId = Number(eventId);
+  if (!Number.isInteger(numericId) || numericId <= 0) return { ok: false, posts: [] };
+  const identity = identityFromSession(session) || { contact_id: null, email: null, email_verified: false };
+  const member = (session && session.member) ? session.member : null;
+  const authed = !!(identity && identity.contact_id);
+  const result = await callEventIdentity('/identity/events/' + numericId + '/posts/feed',
+    { ...identity, since: Number(since) || 0, limit: 60 });
+  if (!result || result.ok !== true) return { ok: false, authenticated: authed, posts: [] };
+  return {
+    ok: true,
+    authenticated: authed,
+    suspended: !!result.suspended,
+    canPost: authed && !result.suspended,
+    me: authed ? { name: member ? member.displayName : 'Member', contactId: identity.contact_id } : null,
+    posts: result.posts || [],
+  };
+}
+
+async function createPost(session, eventId, body) {
+  const identity = identityFromSession(session);
+  if (!identity || !identity.contact_id) return { ok: false, authenticated: false, reason: 'auth_required' };
+  const numericId = Number(eventId);
+  if (!Number.isInteger(numericId) || numericId <= 0) return { ok: false, authenticated: true, reason: 'bad_event_id' };
+  const member = session.member || {};
+  const authorName = boundedDisplayName(body && body.displayName, member.displayName);
+  const text = String((body && body.body) || '').slice(0, 1200);
+  const imageUrl = String((body && body.imageUrl) || '').slice(0, 600);
+  const parentId = Number(body && body.parentId) || null;
+  const result = await callEventIdentity('/identity/events/' + numericId + '/posts',
+    { ...identity, author_name: authorName, author_photo: '', body: text, image_url: imageUrl, parent_id: parentId });
+  return { authenticated: true, ...(result || { ok: false, reason: 'identity_failed' }) };
+}
+
+async function postAction(session, eventId, postId, action, reason) {
+  const identity = identityFromSession(session);
+  if (!identity || !identity.contact_id) return { ok: false, authenticated: false, reason: 'auth_required' };
+  const numericId = Number(eventId);
+  const pid = Number(postId);
+  if (!Number.isInteger(numericId) || numericId <= 0 || !Number.isInteger(pid) || pid <= 0) {
+    return { ok: false, authenticated: true, reason: 'bad_id' };
+  }
+  const path = action === 'report' ? '/report' : '/like';
+  const result = await callEventIdentity('/identity/events/' + numericId + '/posts/' + pid + path,
+    { ...identity, reason: String(reason || '').slice(0, 200) });
+  return { authenticated: true, ...(result || { ok: false, reason: 'identity_failed' }) };
+}
+
+
+async function uploadPostImage(session, eventId, contentType, buffer) {
+  const identity = identityFromSession(session);
+  if (!identity || !identity.contact_id) return { ok: false, authenticated: false, reason: 'auth_required' };
+  const numericId = Number(eventId);
+  if (!Number.isInteger(numericId) || numericId <= 0) return { ok: false, authenticated: true, reason: 'bad_event_id' };
+  const base = (process.env.EVENT_MANAGER_BASE_URL || '').replace(/\/+$/, '');
+  const token = (process.env.IDENTITY_SERVICE_TOKEN || '').trim();
+  if (!base || !token) return { ok: false, authenticated: true, reason: 'identity_not_configured' };
+  const url = base + '/identity/events/' + numericId + '/posts/image?contact_id=' + encodeURIComponent(identity.contact_id);
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 15000);
+  try {
+    const r = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': contentType || 'application/octet-stream', Authorization: 'Bearer ' + token },
+      body: buffer,
+      signal: controller.signal,
+    });
+    const data = await r.json().catch(() => ({ ok: false, reason: 'bad_response' }));
+    return { authenticated: true, ...data };
+  } catch (e) {
+    return { ok: false, authenticated: true, reason: 'event_manager_unreachable' };
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+export { announcements, myEvents, myTicket, myUpgrades, mySchedule, changeSchedule, changeWorkshop, networking, feedback, pushVapidKey, pushSubscribe, pushUnsubscribe, identityFromSession, phaseOf, toAppRow , communityFeed, createPost, postAction , uploadPostImage };

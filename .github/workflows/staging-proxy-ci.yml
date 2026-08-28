@@ -1,0 +1,31 @@
+name: Staging proxy CI
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "staging-proxy/**"
+      - ".github/workflows/staging-proxy-ci.yml"
+  pull_request:
+    paths:
+      - "staging-proxy/**"
+      - ".github/workflows/staging-proxy-ci.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: staging-proxy
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: staging-proxy/package-lock.json
+      - run: npm ci
+      - run: npm test

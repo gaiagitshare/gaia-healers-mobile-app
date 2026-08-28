@@ -1,0 +1,12 @@
+[Unit]
+Description=Refresh Gaia membership state from GHL every five minutes
+
+[Timer]
+OnBootSec=2min
+OnUnitActiveSec=5min
+RandomizedDelaySec=20s
+Persistent=true
+Unit=gaia-membership-reconcile.service
+
+[Install]
+WantedBy=timers.target

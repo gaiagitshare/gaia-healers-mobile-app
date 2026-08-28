@@ -142,9 +142,8 @@
 
   /** The one-line status of a ticket, in the words a person would use. */
   function ticketStatus(ticket) {
-    var rs = (ticket.registrationStatus || 'registered').toLowerCase();
-    if (ticket.valid === false || rs === 'refunded' || rs === 'revoked' || rs === 'cancelled') {
-      return { text: (rs === 'refunded' ? 'Refunded' : rs === 'revoked' ? 'Revoked' : rs === 'cancelled' ? 'Cancelled' : 'Not valid') + ' \u2014 not valid for entry', tone: 'bad' };
+    if (ticket.registrationStatus === 'cancelled') {
+      return { text: 'Cancelled', tone: 'bad' };
     }
     if (ticket.checkedIn) return { text: 'Checked in', tone: 'good' };
     return { text: 'Not yet checked in', tone: 'idle' };
@@ -163,9 +162,8 @@
       + (item.location ? '<p class="g-mye__where">' + esc(item.location) + '</p>' : '')
       + '</div>' + phaseChip + '</div>'
       + '<div class="g-mye__pass">'
-      + '<span class="g-mye__passname">' + esc((item.ticket.baseTicket && item.ticket.baseTicket.name) || item.ticket.passLabel || 'Ticket') + '</span>'
+      + '<span class="g-mye__passname">' + esc(item.ticket.passLabel || 'Ticket') + '</span>'
       + (item.ticket.isVip ? '<span class="g-mye__vip">VIP</span>' : '')
-      + (item.ticket.addons || []).map(function(a){return '<span class="g3-addon" style="display:inline-block;background:#e6f4ec;color:#1f6f52;border:1px solid #bfe0cd;border-radius:100px;padding:1px 8px;font-size:.78em;margin-left:6px;white-space:nowrap;">+ ' + esc(a.label) + (a.day ? ' \u00b7 ' + esc(a.day) : ' \u00b7 day TBD') + '</span>';}).join('')
       + '<span class="g-mye__status is-' + status.tone + '">' + esc(status.text) + '</span>'
       + '</div>'
       + '<div class="g-mye__actions">'
@@ -274,13 +272,9 @@
 
       + '<p class="g-ticket__name">' + esc(ticket.name || '') + '</p>'
       + '<div class="g-ticket__meta">'
-      + '<span class="g-ticket__pass">' + esc((ticket.baseTicket && ticket.baseTicket.name) || ticket.passLabel || 'Ticket') + '</span>'
+      + '<span class="g-ticket__pass">' + esc(ticket.passLabel || 'Ticket') + '</span>'
       + (ticket.isVip ? '<span class="g-ticket__vip">VIP</span>' : '')
-      + (ticket.addons || []).map(function(a){return '<span class="g3-addon" style="display:inline-block;background:#e6f4ec;color:#1f6f52;border:1px solid #bfe0cd;border-radius:100px;padding:1px 8px;font-size:.78em;margin-left:6px;white-space:nowrap;">+ ' + esc(a.label) + (a.day ? ' \u00b7 ' + esc(a.day) : ' \u00b7 day not selected') + '</span>';}).join('')
       + '</div>'
-      + '<p class="g3-access" style="margin:8px 0 0;font-size:.95em;"><span style="opacity:.6;text-transform:uppercase;font-size:.8em;letter-spacing:.04em;">Access</span> <strong>' + esc(ticket.effectiveLabel || ticket.passLabel || '\u2014') + '</strong></p>'
-      + ((!ticket.baseTicket && (ticket.addons || []).length) ? '<p class="g3-warn" style="margin:6px 0 0;color:#b3341f;font-size:.9em;">Base admission not found \u2014 please see the registration desk.</p>' : '')
-      + (ticket.valid === false ? '<p class="g3-void" style="margin:6px 0 0;color:#b3341f;font-weight:600;">This ticket is not valid for entry.</p>' : '')
       + '<p class="g-ticket__status is-' + status.tone + '">' + esc(status.text)
       + (ticket.checkedIn && ticket.checkedInAt
         ? ' · ' + esc(checkedInAtLabel(event, ticket.checkedInAt)) : '')

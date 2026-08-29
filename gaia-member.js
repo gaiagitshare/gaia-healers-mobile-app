@@ -906,7 +906,9 @@ body.gaia-booking-open{overflow:hidden;}
     } catch (_) { return; }
     if (!data || !data.ok || !Array.isArray(data.courses) || !data.courses.length) return;
     const prog = data.progress || {};
-    const courseHtml = data.courses.map((c) => {
+    const shown = data.courses.filter((c) => (c.sections || []).some((sec) => (sec.lessons || []).length));
+    if (!shown.length) return;
+    const courseHtml = shown.map((c) => {
       const lessons = (c.sections || []).reduce((arr, sec) => arr.concat(sec.lessons || []), []);
       const cp = prog[c.id] || {}; const doneSet = new Set(cp.completed || []);
       const pct = lessons.length ? Math.round((lessons.filter((l) => doneSet.has(l.id)).length / lessons.length) * 100) : (Number(cp.pct) || 0);

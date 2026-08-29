@@ -179,6 +179,13 @@
           + '" allow="autoplay; encrypted-media; fullscreen; picture-in-picture" allowfullscreen></iframe>';
         return;
       }
+      if (prov === 'vimeo') {
+        var vid = String(l.src).replace(/\D+/g, '');
+        stage.innerHTML = '<iframe class="gaia-acad__yt" src="https://player.vimeo.com/video/' + esc(vid)
+          + '?autoplay=1&title=0&byline=0&portrait=0" title="' + esc(l.title)
+          + '" allow="autoplay; fullscreen; picture-in-picture" allowfullscreen></iframe>';
+        return;
+      }
       // native video (mp4 / hls)
       stage.innerHTML = '<video class="gaia-acad__video" playsinline controls preload="metadata"></video>';
       var video = stage.querySelector('video');

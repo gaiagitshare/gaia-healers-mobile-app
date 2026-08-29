@@ -29,7 +29,7 @@
 
   const TOOL_HOST = { chakra: 'home-chakraquiz', cosmic: 'home-cosmic', match: 'home-match', moon: 'home-moon', journey: 'home-challenge', colour: 'home-colourtest', sky: 'data-sky-host' };
   const tool = new URLSearchParams(window.location.search).get('tool');
-  let openItem = items[0];
+  let openItem = null;
   if (tool && TOOL_HOST[tool]) {
     const host = TOOL_HOST[tool] === 'data-sky-host' ? container.querySelector('[data-sky-host]') : container.querySelector('#' + TOOL_HOST[tool]);
     const it = host && host.closest('[data-tk]');

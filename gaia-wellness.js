@@ -249,15 +249,15 @@
     if (!state.signedUp) return publicHtml();
     const t = state.today || {}; const pr = state.profile || {};
     const bc = t.birthChakra || {}; const bp = t.bodyPoint || {};
+    const eh = new Date().getHours();
+    const greet = eh < 12 ? 'Good morning' : eh < 18 ? 'Good afternoon' : 'Good evening';
     return '<section class="g-well">'
-      + '<div class="g-well__welcome"><p class="g-card__label">Today’s energy check</p><p class="g-well__name">' + esc(pr.firstName || pr.name || 'Your day') + '</p></div>'
+      + '<div class="g-well__welcome"><p class="g-card__label">' + esc(greet) + '</p><p class="g-well__name">' + esc(pr.firstName || pr.name || 'friend') + '</p></div>'
       + memberBridgeHtml()
-      + energyCard(bc, 'Your birth chakra')
-      + '<article class="g-card g-daily-card" style="--ck:' + esc(bp.color || '#7DD956') + '">'
-      + '<p class="g-daily-card__kicker">Today’s body point</p>'
-      + '<p class="g-daily-card__title">' + esc(bp.chakra || '') + (bp.sanskrit ? ' · <span>' + esc(bp.sanskrit) + '</span>' : '') + '</p>'
-      + '<p class="g-daily-card__area">' + esc(bp.area || '') + '</p>'
-      + (bp.focus ? '<p class="g-daily-card__meta">Give attention to ' + esc(bp.focus) + '.</p>' : '')
+      + '<article class="g-card g-et" style="--ck:' + esc(bp.color || '#7DD956') + '">'
+      + ((bc && bc.name) ? '<div class="g-et__row">' + orb(bc.color) + '<div class="g-et__body"><p class="g-et__k">Your birth chakra</p><p class="g-et__n">' + esc(bc.name) + (bc.sanskrit ? ' · <span>' + esc(bc.sanskrit) + '</span>' : '') + '</p><p class="g-et__m">' + esc(bc.focus || '') + (bc.element ? ' · ' + esc(bc.element) : '') + '</p></div></div>' : '')
+      + '<div class="g-et__row">' + orb(bp.color) + '<div class="g-et__body"><p class="g-et__k">Today’s focus</p><p class="g-et__n">' + esc(bp.chakra || '') + (bp.sanskrit ? ' · <span>' + esc(bp.sanskrit) + '</span>' : '') + '</p><p class="g-et__m">' + esc(bp.area || '') + '</p></div></div>'
+      + (bp.focus ? '<p class="g-et__note">Give attention to ' + esc(bp.focus) + '.</p>' : '')
       + '</article>'
       + '<div data-practice-host></div>'
       + challengeHtml()

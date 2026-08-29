@@ -391,11 +391,7 @@ body.gaia-v2 .g-super-home > section + section {
 
   body.gaia-v2 .g-tile__title {
     white-space: normal;
-    display: -webkit-box;
-    -webkit-box-orient: vertical;
     -webkit-line-clamp: 2;
-    line-clamp: 2;
-    overflow: hidden;
   }
 
   body.gaia-v2 .gaia-tabbar {

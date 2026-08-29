@@ -1482,3 +1482,16 @@ body.gaia-v2 .g-super-home .g-super-hero{border:1px solid var(--g-line);
 .g-drop__body{padding:0 16px 16px}
 .g-drop__body .g-card{border:none;background:transparent;box-shadow:none;margin:0;padding:0}
 [data-wellness-signout]{display:flex;justify-content:center;margin-top:6px}
+
+/* Horoscope — element-tinted graphic hero (redesign) */
+.g-horo{position:relative;overflow:hidden;padding:20px;border-radius:20px;border:1px solid color-mix(in srgb,var(--el,#4fc3dc) 30%,var(--g-line));background:linear-gradient(150deg,color-mix(in srgb,var(--el,#4fc3dc) 15%,var(--g-surface)),var(--g-surface) 68%)}
+.g-horo__glow{position:absolute;top:-46px;right:-34px;width:190px;height:190px;border-radius:50%;background:radial-gradient(circle,color-mix(in srgb,var(--el,#4fc3dc) 42%,transparent),transparent 70%);pointer-events:none}
+.g-horo__hero{position:relative;display:flex;align-items:center;gap:16px}
+.g-horo__badge{flex:none;width:64px;height:64px;border-radius:50%;display:grid;place-items:center;font-size:32px;color:var(--el,#4fc3dc);border:1px solid color-mix(in srgb,var(--el,#4fc3dc) 45%,transparent);background:color-mix(in srgb,var(--el,#4fc3dc) 12%,transparent);box-shadow:0 0 34px color-mix(in srgb,var(--el,#4fc3dc) 32%,transparent)}
+.g-horo__id{min-width:0}
+.g-horo__eyebrow{margin:0;font:700 10px/1 var(--g-font-mono);letter-spacing:.12em;text-transform:uppercase;color:var(--el,#4fc3dc)}
+.g-horo__sign{margin:5px 0 9px;font-family:var(--g-font-serif);font-size:30px;font-weight:600;line-height:1;color:var(--g-text)}
+.g-horo__chips{display:flex;flex-wrap:wrap;gap:7px}
+.g-horo__chips span{padding:5px 11px;border-radius:999px;font:700 10.5px/1 var(--g-font-sans);color:var(--g-text);border:1px solid color-mix(in srgb,var(--el,#4fc3dc) 38%,transparent);background:color-mix(in srgb,var(--el,#4fc3dc) 12%,transparent)}
+.g-horo__reading{position:relative;margin:16px 0 10px;font-family:var(--g-font-serif);font-size:clamp(19px,4.8vw,24px);line-height:1.35;color:var(--g-text)}
+.g-horo .g-hint{position:relative;margin:0}

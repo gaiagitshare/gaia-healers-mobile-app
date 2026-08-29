@@ -280,12 +280,17 @@
         + '<p class="g-hint">No scan or paid membership is required.</p></article>';
     }
     const t = state.today || {}; const guide = ZODIAC[t.sunSign] || {};
+    const horoEl = guide.element || 'Water';
+    const horoColor = { Fire: '#ff7a4d', Earth: '#7bc86c', Air: '#a99bf0', Water: '#4fc3dc' }[horoEl] || '#4fc3dc';
     return '<section class="g-well">' + memberBridgeHtml()
-      + '<article class="g-card g-daily-card g-daily-card--horo g-horoscope-card">'
-      + '<div class="g-horoscope-card__mark" aria-hidden="true"><i class="ph ph-moon-stars"></i></div>'
-      + '<p class="g-daily-card__kicker">Today’s wellness horoscope' + (t.sunSign ? ' · ' + esc(t.sunSign) : '') + '</p>'
-      + (guide.element ? '<div class="g-horoscope-card__chips"><span>' + esc(guide.element) + '</span><span>' + esc(guide.theme) + '</span></div>' : '')
-      + '<p class="g-daily-card__tip">' + esc(t.tip || 'Your daily guidance is preparing.') + '</p>'
+      + '<article class="g-horo" style="--el:' + horoColor + '">'
+      + '<div class="g-horo__glow" aria-hidden="true"></div>'
+      + '<div class="g-horo__hero"><div class="g-horo__badge" aria-hidden="true"><i class="ph ph-moon-stars"></i></div>'
+      + '<div class="g-horo__id"><p class="g-horo__eyebrow">Today’s wellness horoscope</p>'
+      + '<h3 class="g-horo__sign">' + esc(t.sunSign || 'Your sign') + '</h3>'
+      + (guide.element ? '<div class="g-horo__chips"><span>' + esc(guide.element) + '</span><span>' + esc(guide.theme) + '</span></div>' : '')
+      + '</div></div>'
+      + '<p class="g-horo__reading">' + esc(t.tip || 'Your daily guidance is preparing.') + '</p>'
       + '<p class="g-hint">A sun-sign reflection for journaling—not a birth chart, prediction, or medical reading.</p></article>'
       + (t.cosmicMap ? cosmicMapHtml(t.cosmicMap, false) : '')
       + '<div class="g-cosmic-checkin">'

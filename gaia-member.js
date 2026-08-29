@@ -955,7 +955,7 @@ body.gaia-booking-open{overflow:hidden;}
     const parts = [
       '<button type="button" class="g-card g-card--feature gaia-acad-cta" data-acad-demo>'
         + '<span class="g-chip g-chip--on" style="margin-bottom:.5rem">New \u00b7 Beta</span>'
-        + '<p class="g-card__value g-card__value--lg">Watch inside Gaia</p>'
+        + '<p class="g-card__value g-card__value--lg">Gaia Healers Player</p>'
         + '<p class="g-card__meta">Preview the new in-app course player \u2014 lessons stream right here, with a back button. No portal, no leaving the app.</p>'
         + '<div class="g-card__actions"><span class="g-btn g-btn--primary g-btn--sm"><i class="ph ph-play" aria-hidden="true"></i> Open the player</span></div></button>',
       academyHead,

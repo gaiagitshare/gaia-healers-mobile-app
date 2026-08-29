@@ -34,6 +34,7 @@
     const element = (cm && cm.representedElement) || bc.element || 'Earth';
     const elementStone = ELEMENT_STONE[element] || 'your chakra crystal set';
     const dominant = cm ? cm.dominantSign : null;
+    const rising = cm && cm.rising ? cm.rising.sign : null;
     const spotlight = cm && cm.spotlight ? cm.spotlight.name : bc.name;
     const precise = cm && cm.timeBasis === 'exact-local-time';
     const hasPlace = !!cm;
@@ -44,6 +45,7 @@
       + '<div><p class="g-quiz__kicker">Your cosmic map</p><p class="g-quiz__result-name">' + esc(spotlight || 'Your centre') + '</p></div></div>'
       + '<p class="g-card__meta"><strong>Birth chakra:</strong> ' + esc(bc.name || '—') + (bc.sanskrit ? ' (' + esc(bc.sanskrit) + ')' : '')
       + ' · <strong>Sun sign:</strong> ' + esc(sign || '—')
+      + (rising ? ' · <strong>Rising:</strong> ' + esc(rising) : '')
       + (dominant ? ' · <strong>Dominant:</strong> ' + esc(dominant) : '')
       + ' · <strong>Element:</strong> ' + esc(element) + '. A reflection, not a prediction.</p>';
 

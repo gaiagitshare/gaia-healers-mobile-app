@@ -1396,3 +1396,15 @@ body.gaia-v2 .g-super-home .g-super-hero{border:1px solid var(--g-line);
 .g-cq-lead__input{flex:1 1 160px;min-width:0}
 .g-cq-lead__status{margin:7px 0 0;font-size:12px;color:var(--g-text-muted);min-height:14px}
 .g-cq-lead__done{margin:0;font-size:13px;font-weight:600;color:var(--ck,var(--g-accent))}
+
+/* Moon Rituals (Phase 2) */
+.g-moon__top{display:flex;align-items:center;gap:14px}
+.g-moon__orb{flex:none;width:50px;height:50px;border-radius:50%;background:radial-gradient(circle at 38% 34%,#f6f3ff,#d9d0ff 55%,#b9a9f0);box-shadow:0 0 18px rgba(190,170,255,.45);border:1px solid rgba(200,185,255,.4)}
+.g-moon__phase{margin:0;font-family:var(--g-font-serif);font-size:19px;color:var(--g-text)}
+.g-moon__sign{margin:1px 0 0;font-size:12px;color:var(--g-text-muted)}
+.g-moon__ritual-title{margin:12px 0 4px;font-family:var(--g-font-serif);font-size:17px;color:var(--g-text)}
+.g-moon__crystal{margin-top:12px;padding:12px 14px;border:1px solid var(--g-line);border-radius:14px;display:flex;flex-direction:column;gap:9px}
+.g-moon.is-full .g-moon__crystal{border-color:rgba(200,185,255,.55);background:rgba(190,170,255,.10)}
+.g-moon__crystal p{margin:0;font-size:13px;line-height:1.5;color:var(--g-text)}
+.g-moon__crystal .g-btn{align-self:flex-start}
+.g-moon__next{margin:12px 0 0;font:600 11px/1.4 var(--g-font-mono);letter-spacing:.04em;text-transform:uppercase;color:var(--g-text-muted)}

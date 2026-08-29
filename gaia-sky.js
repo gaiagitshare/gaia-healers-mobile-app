@@ -35,7 +35,7 @@
   function fetchSky() {
     if (pending) return pending;
     pending = fetch(proxyBase() + '/api/wellness/sky', {
-      method: 'GET', headers: { Accept: 'application/json' }, credentials: 'include',
+      method: 'GET', headers: { Accept: 'application/json' }, credentials: 'include', cache: 'no-store',
     }).then((r) => r.json()).catch(() => ({ ok: false, reason: 'network' }));
     return pending;
   }
@@ -173,6 +173,9 @@
 
   document.addEventListener('gaia:superapp-rendered', render);
   document.addEventListener('DOMContentLoaded', render);
+  // A just-added birth date must re-personalise the sky at once: drop the
+  // cached response and re-render whenever any tool updates the wellness profile.
+  window.addEventListener('gaia:wellness-updated', () => { pending = null; render(); });
 
   window.GaiaSky = { render, moonSvg, countdownLine };
 }());

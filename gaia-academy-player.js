@@ -121,7 +121,7 @@
     return out;
   }
 
-  function render(course) {
+  function render(course, startLessonId) {
     close();
     modal = document.createElement('div');
     modal.className = 'gaia-acad';
@@ -140,7 +140,7 @@
       '<div class="gaia-acad__bar">'
       + '<button type="button" class="gaia-acad__back" data-acad-close aria-label="Back to Academy"><i class="ph ph-arrow-left" aria-hidden="true"></i></button>'
       + '<p class="gaia-acad__title">' + esc(course.title) + '</p>'
-      + '<span class="gaia-acad__spacer"></span></div>'
+      + '<button type="button" class="gaia-acad__fs" data-acad-fs aria-label="Fullscreen"><i class="ph ph-corners-out" aria-hidden="true"></i></button></div>'
       + '<div class="gaia-acad__stage" data-stage></div>'
       + '<p class="gaia-acad__nowplaying" data-now></p>'
       + '<div class="gaia-acad__list">' + listHtml + '</div>';
@@ -148,6 +148,12 @@
     document.body.classList.add('gaia-booking-open');
     document.addEventListener('keydown', onKey);
     modal.addEventListener('click', function (e) { if (e.target.closest('[data-acad-close]')) close(); });
+    modal.querySelector('[data-acad-fs]').addEventListener('click', function () {
+      var el = modal.querySelector('.gaia-acad__video') || modal.querySelector('.gaia-acad__yt') || modal.querySelector('[data-stage]');
+      if (!el) return;
+      var fn = el.requestFullscreen || el.webkitRequestFullscreen || el.webkitEnterFullscreen;
+      if (fn) { try { fn.call(el); } catch (e) {} }
+    });
 
     var stage = modal.querySelector('[data-stage]');
     var now = modal.querySelector('[data-now]');
@@ -197,17 +203,19 @@
       });
     });
     markChecks();
-    playLesson(lessons[0]);
+    var startLesson = (startLessonId && lessons.find(function (x) { return x.id === startLessonId; })) || lessons[0];
+    playLesson(startLesson);
   }
 
-  function open(idOrObj) {
+  function open(idOrObj, startLessonId) {
     return loadManifest().then(function () {
       var course = (idOrObj && typeof idOrObj === 'object') ? idOrObj : findCourse(idOrObj);
-      if (course) render(course);
+      if (course) render(course, startLessonId);
       return !!course;
     });
   }
+  function openLesson(idOrObj, lessonId) { return open(idOrObj, lessonId); }
 
-  window.GaiaAcademyPlayer = { open: open, has: has, ready: loadManifest };
+  window.GaiaAcademyPlayer = { open: open, openLesson: openLesson, has: has, ready: loadManifest };
   loadManifest();
 })();

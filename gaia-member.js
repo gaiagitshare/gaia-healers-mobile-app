@@ -906,23 +906,38 @@ body.gaia-booking-open{overflow:hidden;}
     } catch (_) { return; }
     if (!data || !data.ok || !Array.isArray(data.courses) || !data.courses.length) return;
     const prog = data.progress || {};
-    const cards = data.courses.map((c) => {
-      const pr = prog[c.id] || {}; const pct = Math.max(0, Math.min(100, Number(pr.pct) || 0));
-      const lessons = (c.sections || []).reduce((n, s) => n + ((s.lessons || []).length), 0);
-      return '<button type="button" class="g-access g-access--unlocked g-access--link" data-synced-course="' + esc(c.id) + '">'
-        + (c.poster ? '<img src="' + esc(c.poster) + '" alt="" class="g-access__img" style="width:48px;height:48px;border-radius:8px;object-fit:cover;flex-shrink:0"/>' : '')
-        + '<div class="g-access__body"><span class="g-access__name">' + esc(c.title) + '</span>'
-        + '<span class="g-access__meta">' + lessons + ' lesson' + (lessons === 1 ? '' : 's') + (pct ? ' \u00b7 ' + pct + '% complete' : '') + '</span>'
-        + (pct ? '<span class="g-acadprog"><span style="width:' + pct + '%"></span></span>' : '')
-        + '</div><span class="g-chip g-chip--on g-access__act">\u25b6 Play</span></button>';
+    const courseHtml = data.courses.map((c) => {
+      const lessons = (c.sections || []).reduce((arr, sec) => arr.concat(sec.lessons || []), []);
+      const cp = prog[c.id] || {}; const doneSet = new Set(cp.completed || []);
+      const pct = lessons.length ? Math.round((lessons.filter((l) => doneSet.has(l.id)).length / lessons.length) * 100) : (Number(cp.pct) || 0);
+      const rows = lessons.length ? lessons.map((l) => {
+        const isDone = doneSet.has(l.id);
+        return '<button type="button" class="g-sync__lesson" data-lid="' + esc(l.id) + '">'
+          + '<span class="g-sync__lplay"><i class="ph ' + (isDone ? 'ph-check-circle' : 'ph-play-circle') + '" aria-hidden="true"></i></span>'
+          + '<span class="g-sync__ltext"><strong>' + esc(l.title) + '</strong></span>'
+          + (isDone ? '<span class="g-sync__ldone">Done</span>' : '<i class="ph ph-caret-right g-sync__lgo" aria-hidden="true"></i>')
+          + '</button>';
+      }).join('') : '<p class="g-sync__empty">Your videos for this course are syncing — check back shortly.</p>';
+      return '<details class="g-sync" data-course="' + esc(c.id) + '">'
+        + '<summary class="g-sync__head">'
+        + (c.poster ? '<img class="g-sync__poster" src="' + esc(c.poster) + '" alt="" loading="lazy"/>' : '<span class="g-sync__poster g-sync__poster--ph"><i class="ph ph-graduation-cap" aria-hidden="true"></i></span>')
+        + '<span class="g-sync__meta"><strong>' + esc(c.title) + '</strong>'
+        + '<small>' + lessons.length + ' video' + (lessons.length === 1 ? '' : 's') + (pct ? ' · ' + pct + '% complete' : '') + '</small>'
+        + '<span class="g-acadprog"><span style="width:' + pct + '%"></span></span></span>'
+        + '<i class="ph ph-caret-down g-sync__chev" aria-hidden="true"></i></summary>'
+        + '<div class="g-sync__lessons">' + rows + '</div></details>';
     }).join('');
-    const header = '<article class="g-card g-card--feature"><p class="g-card__label">Your Academy \u00b7 live from your membership</p>'
+    const header = '<article class="g-card g-card--feature"><p class="g-card__label">Your Academy · live from your membership</p>'
       + '<p class="g-card__value g-card__value--lg">Your courses</p>'
-      + '<p class="g-card__meta">Everything your membership unlocks \u2014 play it right here.</p></article>';
+      + '<p class="g-card__meta">' + data.courses.length + ' courses unlocked — tap one to see its videos.</p></article>';
     const host = document.createElement('div'); host.className = 'g-page-sec';
-    host.innerHTML = header + '<div class="g-access-grid">' + cards + '</div>';
+    host.innerHTML = header + '<div class="g-sync-list">' + courseHtml + '</div>';
     box.insertBefore(host, box.firstChild);
-    host.querySelectorAll('[data-synced-course]').forEach((b) => b.addEventListener('click', () => window.GaiaAcademyPlayer?.open?.(b.dataset.syncedCourse)));
+    host.querySelectorAll('.g-sync__lesson').forEach((b) => b.addEventListener('click', () => {
+      const det = b.closest('.g-sync'); const cid = det && det.dataset.course;
+      const course = data.courses.find((c) => c.id === cid);
+      if (course) window.GaiaAcademyPlayer?.openLesson?.(course, b.dataset.lid);
+    }));
   }
 
   function renderAcademy() {

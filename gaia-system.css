@@ -1550,3 +1550,28 @@ body.gaia-v2 .g-super-home .g-super-hero{border:1px solid var(--g-line);
 
 .g-acadprog{display:block;height:5px;border-radius:999px;background:var(--g-line);margin-top:7px;overflow:hidden}
 .g-acadprog > span{display:block;height:100%;border-radius:999px;background:var(--g-accent)}
+
+/* Your courses — collapsible course cards with video drop-down + progress */
+.g-sync-list{display:grid;gap:10px;margin-top:12px}
+.g-sync{border:1px solid var(--g-line);border-radius:16px;background:var(--g-surface);overflow:hidden}
+.g-sync[open]{border-color:color-mix(in srgb,var(--g-accent) 40%,var(--g-line))}
+.g-sync__head{list-style:none;display:flex;align-items:center;gap:13px;padding:12px 14px;cursor:pointer}
+.g-sync__head::-webkit-details-marker{display:none}
+.g-sync__poster{flex:none;width:52px;height:52px;border-radius:11px;object-fit:cover;background:var(--g-surface-hi)}
+.g-sync__poster--ph{display:grid;place-items:center;font-size:22px;color:var(--g-accent);background:color-mix(in srgb,var(--g-accent) 12%,transparent)}
+.g-sync__meta{flex:1;min-width:0;display:grid;gap:4px}
+.g-sync__meta strong{font-size:14.5px;font-weight:600;line-height:1.2}
+.g-sync__meta small{font-size:12px;color:var(--g-text-muted);font-variant-numeric:tabular-nums}
+.g-sync__chev{flex:none;font-size:18px;color:var(--g-text-muted);transition:transform .2s ease}
+.g-sync[open] .g-sync__chev{transform:rotate(180deg);color:var(--g-accent)}
+.g-sync__lessons{padding:2px 10px 10px}
+.g-sync__lesson{width:100%;display:flex;align-items:center;gap:11px;padding:10px 11px;margin-top:6px;border:1px solid var(--g-line);border-radius:12px;background:var(--g-bg,#0b0f0c);color:var(--g-text);cursor:pointer;text-align:left}
+.g-sync__lesson:hover{border-color:var(--g-accent)}
+.g-sync__lplay{flex:none;width:32px;height:32px;border-radius:9px;display:grid;place-items:center;font-size:18px;color:var(--g-accent);background:color-mix(in srgb,var(--g-accent) 13%,transparent)}
+.g-sync__ltext{flex:1;min-width:0}
+.g-sync__ltext strong{font-size:13.5px;font-weight:600}
+.g-sync__lgo{flex:none;font-size:15px;color:var(--g-text-muted)}
+.g-sync__ldone{flex:none;font:700 10px/1 var(--g-font-mono);letter-spacing:.08em;text-transform:uppercase;color:var(--g-accent)}
+.g-sync__empty{margin:8px 4px 2px;font-size:12.5px;color:var(--g-text-muted)}
+.gaia-acad__fs{flex:none;width:38px;height:38px;border-radius:11px;display:grid;place-items:center;font-size:19px;color:var(--g-text);background:var(--g-surface-hi);border:1px solid var(--g-line);cursor:pointer}
+.gaia-acad__fs:hover{border-color:var(--g-accent);color:var(--g-accent)}

@@ -1,0 +1,194 @@
+/* Gaia Academy Player (Path A, Phase 1)
+ * A native in-app course player. Fetches the content manifest from the proxy,
+ * renders a full-screen player (video + lesson list) with a real back button,
+ * and remembers where you left off. iOS/Safari plays HLS natively; other
+ * browsers lazy-load the vendored hls.js. GHL stays the source of truth for
+ * entitlements — this module only plays what the manifest exposes.
+ * Public API: window.GaiaAcademyPlayer.open(idOrObj) / .has(idOrTitle) / .ready()
+ */
+(function () {
+  'use strict';
+
+  var manifest = null, manifestPromise = null;
+
+  function proxyBase() {
+    return String((window.GAIA_SYNC && window.GAIA_SYNC.proxyBase) || 'https://api.gaiahealers.app').replace(/\/+$/, '');
+  }
+  function esc(s) {
+    return String(s == null ? '' : s).replace(/[&<>"]/g, function (c) {
+      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c];
+    });
+  }
+  function fmtDur(sec) {
+    sec = Number(sec) || 0;
+    var m = Math.floor(sec / 60), s = Math.round(sec % 60);
+    return m + ':' + (s < 10 ? '0' : '') + s;
+  }
+
+  function loadManifest() {
+    if (manifest) return Promise.resolve(manifest);
+    if (manifestPromise) return manifestPromise;
+    manifestPromise = fetch(proxyBase() + '/api/academy/manifest', { headers: { Accept: 'application/json' } })
+      .then(function (r) { return r.json(); })
+      .then(function (d) { manifest = (d && d.ok) ? d : { courses: [] }; return manifest; })
+      .catch(function () { manifest = { courses: [] }; return manifest; });
+    return manifestPromise;
+  }
+
+  function findCourse(idOrTitle) {
+    if (!manifest) return null;
+    var k = String(idOrTitle || '').toLowerCase().trim();
+    if (!k) return null;
+    return (manifest.courses || []).find(function (c) {
+      return String(c.id).toLowerCase() === k
+        || String(c.title || '').toLowerCase() === k
+        || (Array.isArray(c.grantMatch) && c.grantMatch.some(function (g) { return String(g).toLowerCase() === k; }));
+    }) || null;
+  }
+  function has(idOrTitle) { return !!findCourse(idOrTitle); }
+
+  /* hls.js only when the browser can't play HLS natively (iOS/Safari can). */
+  var hlsLoading = null;
+  function ensureHls() {
+    if (window.Hls) return Promise.resolve(window.Hls);
+    if (hlsLoading) return hlsLoading;
+    hlsLoading = new Promise(function (resolve) {
+      var el = document.createElement('script');
+      el.src = 'vendor/hls.min.js?v=1';
+      el.onload = function () { resolve(window.Hls || null); };
+      el.onerror = function () { resolve(null); };
+      document.head.appendChild(el);
+    });
+    return hlsLoading;
+  }
+
+  function attach(video, src) {
+    if (video._hls) { try { video._hls.destroy(); } catch (e) {} video._hls = null; }
+    var canNative = !!video.canPlayType('application/vnd.apple.mpegurl');
+    var isHls = /\.m3u8($|\?)/i.test(src);
+    if (isHls && !canNative) {
+      ensureHls().then(function (Hls) {
+        if (Hls && Hls.isSupported()) {
+          var hls = new Hls({ enableWorker: true, lowLatencyMode: false });
+          hls.loadSource(src);
+          hls.attachMedia(video);
+          video._hls = hls;
+        } else {
+          video.src = src;
+        }
+      });
+    } else {
+      video.src = src;
+    }
+  }
+
+  /* local resume/progress (Phase 3 syncs this to the server) */
+  function pKey(cid, lid) { return 'gaia-acad-pos-' + cid + '-' + lid; }
+  function dKey(cid, lid) { return 'gaia-acad-done-' + cid + '-' + lid; }
+  function savePos(cid, lid, t) { try { localStorage.setItem(pKey(cid, lid), String(Math.floor(t))); } catch (e) {} }
+  function getPos(cid, lid) { try { return Number(localStorage.getItem(pKey(cid, lid))) || 0; } catch (e) { return 0; } }
+  function markDone(cid, lid) { try { localStorage.setItem(dKey(cid, lid), '1'); } catch (e) {} }
+  function isDone(cid, lid) { try { return localStorage.getItem(dKey(cid, lid)) === '1'; } catch (e) { return false; } }
+
+  var modal = null;
+  function onKey(e) { if (e.key === 'Escape') close(); }
+  function close() {
+    if (modal) {
+      var v = modal.querySelector('.gaia-acad__video');
+      if (v && v._hls) { try { v._hls.destroy(); } catch (e) {} }
+      modal.remove();
+      modal = null;
+      document.body.classList.remove('gaia-booking-open');
+    }
+    document.removeEventListener('keydown', onKey);
+  }
+
+  function flatLessons(course) {
+    var out = [];
+    (course.sections || []).forEach(function (sec) {
+      (sec.lessons || []).forEach(function (l) { out.push(l); });
+    });
+    return out;
+  }
+
+  function render(course) {
+    close();
+    modal = document.createElement('div');
+    modal.className = 'gaia-acad';
+    var lessons = flatLessons(course);
+    var listHtml = (course.sections || []).map(function (sec) {
+      return '<div class="gaia-acad__sec"><p class="gaia-acad__seclabel">' + esc(sec.title || 'Lessons') + '</p>'
+        + (sec.lessons || []).map(function (l) {
+          return '<button type="button" class="gaia-acad__lesson" data-lesson="' + esc(l.id) + '">'
+            + '<span class="gaia-acad__play"><i class="ph ph-play" aria-hidden="true"></i></span>'
+            + '<span class="gaia-acad__ltext"><strong>' + esc(l.title) + '</strong><small>' + fmtDur(l.durationSec) + '</small></span>'
+            + '<span class="gaia-acad__lcheck" data-check="' + esc(l.id) + '"></span></button>';
+        }).join('')
+        + '</div>';
+    }).join('');
+    modal.innerHTML =
+      '<div class="gaia-acad__bar">'
+      + '<button type="button" class="gaia-acad__back" data-acad-close aria-label="Back to Academy"><i class="ph ph-arrow-left" aria-hidden="true"></i></button>'
+      + '<p class="gaia-acad__title">' + esc(course.title) + '</p>'
+      + '<span class="gaia-acad__spacer"></span></div>'
+      + '<div class="gaia-acad__stage"><video class="gaia-acad__video" playsinline controls preload="metadata"></video></div>'
+      + '<p class="gaia-acad__nowplaying" data-now></p>'
+      + '<div class="gaia-acad__list">' + listHtml + '</div>';
+    document.body.appendChild(modal);
+    document.body.classList.add('gaia-booking-open');
+    document.addEventListener('keydown', onKey);
+    modal.addEventListener('click', function (e) { if (e.target.closest('[data-acad-close]')) close(); });
+
+    var video = modal.querySelector('.gaia-acad__video');
+    var now = modal.querySelector('[data-now]');
+    var current = null;
+
+    function markChecks() {
+      modal.querySelectorAll('[data-check]').forEach(function (c) {
+        c.classList.toggle('is-done', isDone(course.id, c.dataset.check));
+      });
+    }
+    function playLesson(l) {
+      if (!l) return;
+      current = l;
+      modal.querySelectorAll('.gaia-acad__lesson').forEach(function (b) {
+        b.classList.toggle('is-active', b.dataset.lesson === l.id);
+      });
+      if (now) now.textContent = l.title;
+      attach(video, l.src);
+      var resume = getPos(course.id, l.id);
+      var onMeta = function () {
+        if (resume > 2 && resume < (video.duration || 1e9) - 5) { try { video.currentTime = resume; } catch (e) {} }
+        video.play().catch(function () {});
+        video.removeEventListener('loadedmetadata', onMeta);
+      };
+      video.addEventListener('loadedmetadata', onMeta);
+    }
+    video.addEventListener('timeupdate', function () { if (current) savePos(course.id, current.id, video.currentTime); });
+    video.addEventListener('ended', function () {
+      if (!current) return;
+      markDone(course.id, current.id);
+      markChecks();
+      var idx = lessons.findIndex(function (x) { return x.id === current.id; });
+      if (idx >= 0 && idx + 1 < lessons.length) playLesson(lessons[idx + 1]);
+    });
+    modal.querySelectorAll('.gaia-acad__lesson').forEach(function (b) {
+      b.addEventListener('click', function () {
+        playLesson(lessons.find(function (x) { return x.id === b.dataset.lesson; }));
+      });
+    });
+    markChecks();
+    playLesson(lessons[0]);
+  }
+
+  function open(idOrObj) {
+    return loadManifest().then(function () {
+      var course = (idOrObj && typeof idOrObj === 'object') ? idOrObj : findCourse(idOrObj);
+      if (course) render(course);
+      return !!course;
+    });
+  }
+
+  window.GaiaAcademyPlayer = { open: open, has: has, ready: loadManifest };
+  loadManifest();
+})();

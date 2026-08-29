@@ -953,6 +953,11 @@ body.gaia-booking-open{overflow:hidden;}
         + '<p class="g-card__meta">Your courses and certifications appear here automatically. Browse the catalogue below, or explore a membership to unlock more.</p>'
         + '<div class="g-card__actions"><button type="button" class="g-btn g-btn--primary g-btn--sm" ' + (state.authed ? 'data-track-cta' : 'data-academy-signin') + '>' + (state.authed ? 'View memberships →' : 'Sign in →') + '</button></div></article>';
     const parts = [
+      '<button type="button" class="g-card g-card--feature gaia-acad-cta" data-acad-demo>'
+        + '<span class="g-chip g-chip--on" style="margin-bottom:.5rem">New \u00b7 Beta</span>'
+        + '<p class="g-card__value g-card__value--lg">Watch inside Gaia</p>'
+        + '<p class="g-card__meta">Preview the new in-app course player \u2014 lessons stream right here, with a back button. No portal, no leaving the app.</p>'
+        + '<div class="g-card__actions"><span class="g-btn g-btn--primary g-btn--sm"><i class="ph ph-play" aria-hidden="true"></i> Open the player</span></div></button>',
       academyHead,
       gSec(hasAccess ? ('Your courses · ' + grants.length) : (cat.length ? ('Course catalog · ' + tracks.length) : 'Course catalog'),
         tracks.length ? '<div class="g-access-grid">' + tracks.map(trackCard).join('') + '</div>' : '<article class="g-card"><p class="g-card__meta">The catalogue is syncing.</p></article>'),
@@ -967,13 +972,19 @@ body.gaia-booking-open{overflow:hidden;}
       b.addEventListener('click', () => window.GaiaAppShell?.go?.('store', { tab: 'membership' }));
     });
     box.querySelectorAll('[data-academy-signin]').forEach((button) => button.addEventListener('click', () => window.GaiaAuth?.open?.()));
+    box.querySelectorAll('[data-acad-demo]').forEach((b) => b.addEventListener('click', () => window.GaiaAcademyPlayer?.open?.('demo-gaia-player')));
     box.querySelectorAll('[data-course-open]').forEach((button) => {
       button.addEventListener('click', () => {
         if (!state.authed) {
           window.GaiaAuth?.open?.();
           return;
         }
-        window.GaiaInApp?.open?.(button.dataset.courseOpen, button.dataset.courseTitle || 'Gaia Healers Academy');
+        const courseTitle = button.dataset.courseTitle || 'Gaia Healers Academy';
+        if (window.GaiaAcademyPlayer && window.GaiaAcademyPlayer.has(courseTitle)) {
+          window.GaiaAcademyPlayer.open(courseTitle);
+        } else {
+          window.GaiaInApp?.open?.(button.dataset.courseOpen, courseTitle);
+        }
       });
     });
   }

@@ -434,6 +434,35 @@ body.gaia-booking-open{overflow:hidden;}
     setTimeout(() => { try { overlay.querySelector('[data-transition-open]').focus(); } catch (e) {} }, 40);
   }
 
+  // The Academy portal (Biofield University on GHL/ClientClub) frame-busts and
+  // relies on a first-party login cookie, so it cannot live inside the app. We
+  // hand off honestly: say what it is, that a one-time sign-in is expected, and
+  // how to get back. Opens in a NEW tab so the Gaia PWA stays alive underneath.
+  function portalTransition(url, title) {
+    const name = String(title || 'Gaia Healers Academy').trim();
+    const overlay = document.createElement('div');
+    overlay.className = 'gaia-transition-modal';
+    overlay.innerHTML = '<div class="gaia-transition__panel" role="dialog" aria-modal="true" aria-label="Opening your Academy">'
+      + '<p class="gaia-transition__kicker">Opening your Academy</p>'
+      + '<h2 class="gaia-transition__title">' + esc(name) + '</h2>'
+      + '<p class="gaia-transition__body">Your courses are hosted in the <strong>Gaia Healers Academy</strong>. The first time, you\u2019ll sign in or set a password. To come back, use your browser\u2019s back button or reopen the Gaia app.</p>'
+      + '<div class="gaia-transition__actions">'
+      + '<button type="button" class="g-btn g-btn--primary" data-transition-open>Continue to Academy \u2192</button>'
+      + '<button type="button" class="g-btn g-btn--secondary" data-transition-cancel>Cancel</button>'
+      + '</div></div>';
+    document.body.appendChild(overlay);
+    document.documentElement.style.overflow = 'hidden';
+    const close = () => { overlay.remove(); document.documentElement.style.overflow = ''; };
+    overlay.querySelector('[data-transition-cancel]').addEventListener('click', close);
+    overlay.addEventListener('click', (e) => { if (e.target === overlay) close(); });
+    overlay.querySelector('[data-transition-open]').addEventListener('click', () => {
+      close();
+      const opened = window.open(url, '_blank', 'noopener,noreferrer');
+      if (!opened) window.location.assign(url);
+    });
+    setTimeout(() => { try { overlay.querySelector('[data-transition-open]').focus(); } catch (e) {} }, 40);
+  }
+
   function openInApp(rawUrl, title) {
     const url = String(rawUrl || '').trim();
     if (!url) return;
@@ -448,8 +477,7 @@ body.gaia-booking-open{overflow:hidden;}
     // opened as a top-level page so GHL can establish the member session and
     // enforce the offer/course access attached to that contact.
     if (isAuthPortal) {
-      const opened = window.open(url, '_blank', 'noopener,noreferrer');
-      if (!opened) window.location.assign(url);
+      portalTransition(url, title);
       return;
     }
 

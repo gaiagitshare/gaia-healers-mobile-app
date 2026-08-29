@@ -1375,3 +1375,16 @@ body.gaia-v2 .g-super-home .g-super-hero{border:1px solid var(--g-line);
   .g-free-tool strong{font-size:13px}
   .g-free-tool > span{width:46px;height:46px;font-size:22px}
 }
+
+/* Chakra Balance Quiz — result recommendations (Phase 1) */
+.g-cq-result .g-quiz__result-name span{font-size:15px;color:var(--g-text-muted);font-style:italic;font-weight:400}
+.g-cq-try{margin-top:var(--g-s3);padding:12px 14px;border:1px solid var(--g-line);border-radius:14px;background:color-mix(in srgb,var(--ck,var(--g-accent)) 8%,transparent)}
+.g-cq-try__label{display:block;font:700 10.5px/1 var(--g-font-mono);letter-spacing:.12em;text-transform:uppercase;color:var(--ck,var(--g-accent));margin-bottom:5px}
+.g-cq-try p{margin:0;font-size:13.5px;line-height:1.5;color:var(--g-text)}
+.g-cq-recs__head{margin:var(--g-s4) 0 8px;font:700 11px/1 var(--g-font-mono);letter-spacing:.1em;text-transform:uppercase;color:var(--g-text-muted)}
+.g-cq-recs{display:flex;flex-direction:column;gap:8px}
+.g-cq-rec{display:flex;flex-direction:column;gap:2px;padding:12px 14px;border:1px solid var(--g-line);border-radius:14px;text-decoration:none;background:var(--g-surface);transition:border-color .15s ease}
+.g-cq-rec:hover{border-color:var(--ck,var(--g-accent))}
+.g-cq-rec strong{color:var(--g-text);font-size:14px;font-weight:600}
+.g-cq-rec small{color:var(--g-text-muted);font-size:12px}
+.g-cq-rec--primary{border-color:var(--ck,var(--g-accent));background:color-mix(in srgb,var(--ck,var(--g-accent)) 12%,var(--g-surface))}

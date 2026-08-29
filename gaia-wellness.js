@@ -90,6 +90,12 @@
   function renderAll() {
     boxes.forEach(renderInto);
     updateHeaderName();
+    const soHost = document.querySelector('[data-wellness-signout]');
+    if (soHost) {
+      soHost.innerHTML = state.signedUp ? '<button type="button" class="g-btn g-btn--ghost g-btn--sm g-well__signout" data-wsignout>Not you? Sign out</button>' : '';
+      const so = soHost.querySelector('[data-wsignout]');
+      if (so) so.addEventListener('click', signout);
+    }
     // The practice journal draws itself into [data-practice-host]; it listens
     // rather than being called, so this file does not depend on it existing.
     document.dispatchEvent(new CustomEvent('gaia:wellness-rendered', {
@@ -259,9 +265,9 @@
       + '<div class="g-et__row">' + orb(bp.color) + '<div class="g-et__body"><p class="g-et__k">Today’s focus</p><p class="g-et__n">' + esc(bp.chakra || '') + (bp.sanskrit ? ' · <span>' + esc(bp.sanskrit) + '</span>' : '') + '</p><p class="g-et__m">' + esc(bp.area || '') + '</p></div></div>'
       + (bp.focus ? '<p class="g-et__note">Give attention to ' + esc(bp.focus) + '.</p>' : '')
       + '</article>'
-      + '<div data-practice-host></div>'
-      + challengeHtml()
-      + '<button type="button" class="g-btn g-btn--ghost g-btn--sm g-well__signout" data-wsignout>Not you? Sign out</button></section>';
+      + '<details class="g-drop"><summary class="g-drop__head"><span class="g-drop__icon" style="--tint:#7DD956"><i class="ph ph-note-pencil" aria-hidden="true"></i></span><span class="g-drop__text"><strong>Your practice</strong><small>Reflection &amp; streak</small></span><i class="ph ph-caret-down g-drop__chev" aria-hidden="true"></i></summary><div class="g-drop__body"><div data-practice-host></div></div></details>'
+      + '<details class="g-drop"><summary class="g-drop__head"><span class="g-drop__icon" style="--tint:#5C9EAD"><i class="ph ph-medal" aria-hidden="true"></i></span><span class="g-drop__text"><strong>Chakra Challenge</strong><small>Your 8-week journey</small></span><i class="ph ph-caret-down g-drop__chev" aria-hidden="true"></i></summary><div class="g-drop__body">' + challengeHtml() + '</div></details>'
+      + '</section>';
   }
 
   function horoscopeHtml() {
@@ -286,7 +292,7 @@
       + '<article><i class="ph ph-wind" aria-hidden="true"></i><span>Energy reset</span><p>' + esc(guide.practice || 'Take three slow breaths and choose one gentle next step.') + '</p></article>'
       + '<article><i class="ph ph-note-pencil" aria-hidden="true"></i><span>Journal prompt</span><p>' + esc(guide.journal || 'What deserves my clearest attention today?') + '</p></article>'
       + '</div><div class="g-card__actions"><button type="button" class="g-btn g-btn--secondary g-btn--sm" data-gaia-ask-horoscope>Turn this into a 2-minute ritual with Gaia</button></div>'
-      + '<button type="button" class="g-btn g-btn--ghost g-btn--sm g-well__signout" data-wsignout>Not you? Sign out</button></section>';
+      + '</section>';
   }
 
   // ── 8-week chakra challenge ──────────────────────────────

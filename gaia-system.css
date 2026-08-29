@@ -1408,3 +1408,17 @@ body.gaia-v2 .g-super-home .g-super-hero{border:1px solid var(--g-line);
 .g-moon__crystal p{margin:0;font-size:13px;line-height:1.5;color:var(--g-text)}
 .g-moon__crystal .g-btn{align-self:flex-start}
 .g-moon__next{margin:12px 0 0;font:600 11px/1.4 var(--g-font-mono);letter-spacing:.04em;text-transform:uppercase;color:var(--g-text-muted)}
+
+/* Energy Match (Phase 4) */
+.g-match-person{margin-top:12px}
+.g-match-person .g-label{display:block;margin-bottom:6px}
+.g-match-dob{display:flex;gap:8px}
+.g-match-dob .g-input{min-width:0}
+.g-match-dob select{flex:1.4}
+.g-match-dob input{flex:1}
+.g-match-err{margin:8px 0 0;font-size:12px;color:#e0745a;min-height:14px}
+.g-match-orbs{display:flex;align-items:center;justify-content:center;gap:18px;margin:4px 0 14px}
+.g-match-score{text-align:center}
+.g-match-score strong{display:block;font-family:var(--g-font-serif);font-size:34px;line-height:1;color:var(--g-text)}
+.g-match-score strong i{font-size:16px;font-style:normal;color:var(--g-text-muted)}
+.g-match-score span{font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--g-accent)}

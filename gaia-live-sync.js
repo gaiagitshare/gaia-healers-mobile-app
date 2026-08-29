@@ -25,7 +25,6 @@
   async function probeProxy(base) {
     const response = await fetch(`${base}/health`, {
       headers: { Accept: 'application/json' },
-      credentials: 'include',
     });
     if (!response.ok) throw new Error(`Proxy health returned ${response.status}`);
     return base;

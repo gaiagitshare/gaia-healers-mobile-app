@@ -225,8 +225,17 @@ body.gaia-booking-open{overflow:hidden;}
       if (guideJournal) guideJournal.textContent = c.journalPrompt || 'What would bring me toward balance today?';
       const shop = (window.GaiaStore && window.GaiaStore.chakraShopUrl && window.GaiaStore.chakraShopUrl(c.id)) || '';
       if (guideShop) {
-        guideShop.href = shop || 'home.html?view=store';
-        guideShop.textContent = shop ? 'Support this centre →' : 'Explore the store →';
+        if (shop) {
+          guideShop.href = shop;
+          guideShop.target = '_blank';
+          guideShop.rel = 'noopener';
+          guideShop.textContent = 'Support this centre →';
+        } else {
+          guideShop.href = 'home.html?view=store';
+          guideShop.removeAttribute('target');
+          guideShop.removeAttribute('rel');
+          guideShop.textContent = 'Explore the store →';
+        }
       }
     };
 

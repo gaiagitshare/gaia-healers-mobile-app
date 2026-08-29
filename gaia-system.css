@@ -1422,3 +1422,16 @@ body.gaia-v2 .g-super-home .g-super-hero{border:1px solid var(--g-line);
 .g-match-score strong{display:block;font-family:var(--g-font-serif);font-size:34px;line-height:1;color:var(--g-text)}
 .g-match-score strong i{font-size:16px;font-style:normal;color:var(--g-text-muted)}
 .g-match-score span{font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--g-accent)}
+
+/* Cosmic Map (Phase 5) */
+.g-cosmic__note{margin:10px 0 0;font-size:12.5px;line-height:1.5;color:var(--g-text-muted);font-style:italic}
+.g-cosmic__unlock{margin-top:var(--g-s4);padding:13px 15px;border:1px dashed var(--g-line);border-radius:14px}
+.g-cosmic__unlock-head{margin:0 0 5px;font-size:13px;font-weight:700;color:var(--g-text)}
+.g-cosmic__unlock p{margin:0 0 9px;font-size:12.5px;line-height:1.5;color:var(--g-text-muted)}
+/* Chakra Journey (Phase 3) */
+.g-chal__bar{height:6px;border-radius:4px;background:rgba(255,255,255,.07);overflow:hidden;margin:2px 0 12px}
+.g-chal__bar>i{display:block;height:100%;border-radius:4px;background:var(--ck,var(--g-accent))}
+.g-chal__affirm{margin:0 0 10px;font-family:var(--g-font-serif);font-size:16px;font-style:italic;color:var(--g-text)}
+.g-chal__foot{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-top:12px;flex-wrap:wrap}
+.g-chal__done{font-size:13px;font-weight:700;color:var(--ck,var(--g-accent))}
+.g-chal__streak{font:600 11px/1 var(--g-font-mono);letter-spacing:.06em;text-transform:uppercase;color:var(--g-text-muted)}

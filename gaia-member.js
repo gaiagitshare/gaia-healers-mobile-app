@@ -191,9 +191,9 @@ body.gaia-booking-open{overflow:hidden;}
       + '<strong class="g-chakra-guide__name"></strong><span class="g-chakra-guide__meta"></span></div>'
       + '<a class="g-btn g-btn--secondary g-btn--sm g-chakra-guide__shop" href="#" data-external>Support this centre →</a>'
       + '<div class="g-chakra-guide__rituals">'
-      + '<div><span><i class="ph ph-sparkle" aria-hidden="true"></i> Try now</span><p data-guide-practice></p></div>'
-      + '<div><span><i class="ph ph-note-pencil" aria-hidden="true"></i> Journal</span><p data-guide-journal></p></div>'
-      + '</div><button type="button" class="g-btn g-btn--ghost g-btn--sm g-chakra-guide__ask" data-guide-ask>Ask Gaia about this centre</button>'
+      + '<article class="g-guide-row"><span class="g-guide-row__ic"><i class="ph ph-sparkle" aria-hidden="true"></i></span><div class="g-guide-row__b"><span class="g-guide-row__k">Try now</span><p data-guide-practice></p></div></article>'
+      + '<article class="g-guide-row"><span class="g-guide-row__ic"><i class="ph ph-pen-nib" aria-hidden="true"></i></span><div class="g-guide-row__b"><span class="g-guide-row__k">Journal</span><p data-guide-journal></p></div></article>'
+      + '</div><button type="button" class="g-ritual-cta g-chakra-guide__ask" data-guide-ask><span class="g-ritual-cta__ic"><i class="ph ph-sparkle" aria-hidden="true"></i></span><span class="g-ritual-cta__t"><strong>Ask Gaia about this centre</strong><small>A 2-minute guided practice</small></span><i class="ph ph-arrow-right g-ritual-cta__go" aria-hidden="true"></i></button>'
       + '<div class="g-chakra-guide__steps" role="group" aria-label="Choose chakra">'
       + chs.map((c) => '<button type="button" data-guide-ck="' + esc(c.id) + '" aria-label="Show ' + esc(c.name) + '"></button>').join('')
       + '</div></div>';

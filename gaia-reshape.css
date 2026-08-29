@@ -485,6 +485,10 @@ body.gaia-v2 .gaia-shell {
 .gaia-auth-modal__input:focus { outline: none; border-color: var(--g-accent); box-shadow: var(--g-focus); }
 .gaia-auth-modal__submit { width: 100%; border-radius: 15px; }
 .gaia-auth-modal__status { min-height: 20px; margin: 12px 0 0; color: var(--g-text-muted); font-size: 13px; line-height: 1.45; }
+.gaia-auth-modal__status.is-sent { display: grid; gap: 6px; text-align: left; margin-top: 14px; padding: 14px 16px; color: var(--g-text); background: rgba(166,237,104,.10); border: 1px solid rgba(166,237,104,.34); border-radius: 14px; }
+.gaia-auth-modal__sent-title { color: var(--g-accent, #A8E063); font-size: 15px; font-weight: 700; }
+.gaia-auth-modal__sent-body { font-size: 13px; line-height: 1.5; }
+.gaia-auth-modal__sent-hint { font-size: 12px; color: var(--g-text-muted); line-height: 1.45; }
 .gaia-auth-modal__join { margin: 14px 0 0; padding-top: 12px; border-top: 1px solid var(--g-line); color: var(--g-text-muted); font-size: 13px; line-height: 1.5; }
 .gaia-auth-modal__joinlink { background: none; border: 0; padding: 0; font: inherit; font-weight: 700; color: var(--g-accent); cursor: pointer; text-decoration: underline; text-underline-offset: 2px; }
 .gaia-auth-modal__joinlink:focus-visible { outline: 2px solid var(--g-accent); outline-offset: 2px; border-radius: 3px; }

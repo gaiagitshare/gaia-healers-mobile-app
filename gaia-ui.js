@@ -1160,6 +1160,8 @@
         if (!email) return;
         emailInput.removeAttribute('aria-invalid');
         submitBtn.disabled = true;
+        statusEl.classList.remove('is-sent');
+        submitBtn.textContent = 'Email me a sign-in link';
         statusEl.textContent = 'Sending your sign-in link…';
         try {
           const response = await fetch(`${syncProxyBase()}/api/auth/magic-link/request`, {
@@ -1170,7 +1172,12 @@
           });
           const payload = await response.json().catch(() => ({}));
           if (response.ok && payload.ok) {
-            statusEl.textContent = 'Check your email and tap your sign-in link — this screen signs you in automatically. New to Gaia Healers? Use Join free below.';
+            const safeEmail = email.replace(/[&<>"']/g, (ch) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch]));
+            statusEl.classList.add('is-sent');
+            statusEl.innerHTML = '<strong class="gaia-auth-modal__sent-title">\u2713 Sign-in link sent</strong>'
+              + '<span class="gaia-auth-modal__sent-body">We just emailed a one-tap sign-in link to <strong>' + safeEmail + '</strong>. Open it on this device to sign in automatically.</span>'
+              + '<span class="gaia-auth-modal__sent-hint">No email within a minute? Check your <strong>spam</strong> or <strong>promotions</strong> folder.</span>';
+            submitBtn.textContent = 'Resend link';
             if (payload.pollId) startMagicPolling(payload.pollId, statusEl, modal);
           }
           else if (payload.error) statusEl.textContent = payload.error;

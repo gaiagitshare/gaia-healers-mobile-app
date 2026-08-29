@@ -293,9 +293,9 @@
       + '<p class="g-horo__reading">' + esc(t.tip || 'Your daily guidance is preparing.') + '</p>'
       + '<p class="g-hint">A sun-sign reflection for journaling—not a birth chart, prediction, or medical reading.</p></article>'
       + (t.cosmicMap ? cosmicMapHtml(t.cosmicMap, false) : '')
-      + '<div class="g-cosmic-checkin">'
-      + '<article><i class="ph ph-wind" aria-hidden="true"></i><span>Energy reset</span><p>' + esc(guide.practice || 'Take three slow breaths and choose one gentle next step.') + '</p></article>'
-      + '<article><i class="ph ph-note-pencil" aria-hidden="true"></i><span>Journal prompt</span><p>' + esc(guide.journal || 'What deserves my clearest attention today?') + '</p></article>'
+      + '<div class="g-cc" style="--el:' + horoColor + '">'
+      + '<article class="g-cc__item"><span class="g-cc__ic"><i class="ph ph-wind" aria-hidden="true"></i></span><div class="g-cc__b"><span class="g-cc__k">Try this today</span><p>' + esc(guide.practice || 'Take three slow breaths and choose one gentle next step.') + '</p></div></article>'
+      + '<article class="g-cc__item"><span class="g-cc__ic"><i class="ph ph-pen-nib" aria-hidden="true"></i></span><div class="g-cc__b"><span class="g-cc__k">Journal on this</span><p>' + esc(guide.journal || 'What deserves my clearest attention today?') + '</p></div></article>'
       + '</div><div class="g-card__actions"><button type="button" class="g-btn g-btn--secondary g-btn--sm" data-gaia-ask-horoscope>Turn this into a 2-minute ritual with Gaia</button></div>'
       + '</section>';
   }

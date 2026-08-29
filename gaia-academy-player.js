@@ -92,13 +92,34 @@
     }
   }
 
-  /* local resume/progress (Phase 3 syncs this to the server) */
+  /* local resume/progress mirror (also synced to the server per member) */
   function pKey(cid, lid) { return 'gaia-acad-pos-' + cid + '-' + lid; }
   function dKey(cid, lid) { return 'gaia-acad-done-' + cid + '-' + lid; }
   function savePos(cid, lid, t) { try { localStorage.setItem(pKey(cid, lid), String(Math.floor(t))); } catch (e) {} }
   function getPos(cid, lid) { try { return Number(localStorage.getItem(pKey(cid, lid))) || 0; } catch (e) { return 0; } }
   function markDone(cid, lid) { try { localStorage.setItem(dKey(cid, lid), '1'); } catch (e) {} }
-  function isDone(cid, lid) { try { return localStorage.getItem(dKey(cid, lid)) === '1'; } catch (e) { return false; } }
+  function isDone(cid, lid) { try { if (serverDone(cid, lid)) return true; return localStorage.getItem(dKey(cid, lid)) === '1'; } catch (e) { return serverDone(cid, lid); } }
+
+  /* member identity + server-synced progress (the app calls setMember before opening).
+   * Playback happens in-app, so the server is the source of truth for progress;
+   * localStorage stays as an instant/offline mirror. */
+  var member = { email: '', contactId: '', progress: {} };
+  function setMember(m) { member = { email: (m && m.email) || '', contactId: (m && m.contactId) || '', progress: (m && m.progress) || {} }; }
+  function serverProg(cid) { return (member.progress && member.progress[cid]) || null; }
+  function serverPos(cid, lid) { var p = serverProg(cid); return (p && p.pos && Number(p.pos[lid])) || 0; }
+  function serverDone(cid, lid) { var p = serverProg(cid); return !!(p && Array.isArray(p.completed) && p.completed.indexOf(lid) >= 0); }
+  var _lastPost = 0;
+  function postProgress(cid, lid, pos, dur, done) {
+    if (!member.email && !member.contactId) return;
+    try {
+      fetch(proxyBase() + '/api/academy/progress', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, keepalive: true,
+        body: JSON.stringify({ email: member.email, contactId: member.contactId, courseId: cid, lessonId: lid, positionSec: Math.floor(pos || 0), durationSec: Math.floor(dur || 0), done: !!done }),
+      }).then(function (r) { return r.json(); }).then(function (d) {
+        if (d && d.ok) { var p = member.progress[cid] = member.progress[cid] || { pct: 0, completed: [], pos: {} }; p.pct = d.pct; p.completed = d.completed || p.completed; }
+      }).catch(function () {});
+    } catch (e) {}
+  }
 
   var modal = null;
   function onKey(e) { if (e.key === 'Escape') close(); }
@@ -190,16 +211,23 @@
       stage.innerHTML = '<video class="gaia-acad__video" playsinline controls preload="metadata"></video>';
       var video = stage.querySelector('video');
       attachHlsOrSrc(video, l.src);
-      var resume = getPos(course.id, l.id);
+      var resume = serverPos(course.id, l.id) || getPos(course.id, l.id);
       var onMeta = function () {
         if (resume > 2 && resume < (video.duration || 1e9) - 5) { try { video.currentTime = resume; } catch (e) {} }
         video.play().catch(function () {});
         video.removeEventListener('loadedmetadata', onMeta);
       };
       video.addEventListener('loadedmetadata', onMeta);
-      video.addEventListener('timeupdate', function () { savePos(course.id, l.id, video.currentTime); });
+      video.addEventListener('timeupdate', function () {
+        savePos(course.id, l.id, video.currentTime);
+        var now = Date.now();
+        if (now - _lastPost > 10000 && video.currentTime > 2) { _lastPost = now; postProgress(course.id, l.id, video.currentTime, video.duration, false); }
+      });
+      video.addEventListener('pause', function () { if (video.currentTime > 2) postProgress(course.id, l.id, video.currentTime, video.duration, false); });
       video.addEventListener('ended', function () {
-        markDone(course.id, l.id); markChecks();
+        markDone(course.id, l.id);
+        postProgress(course.id, l.id, video.duration, video.duration, true);
+        markChecks();
         var idx = lessons.findIndex(function (x) { return x.id === l.id; });
         if (idx >= 0 && idx + 1 < lessons.length) playLesson(lessons[idx + 1]);
       });
@@ -223,6 +251,6 @@
   }
   function openLesson(idOrObj, lessonId) { return open(idOrObj, lessonId); }
 
-  window.GaiaAcademyPlayer = { open: open, openLesson: openLesson, has: has, ready: loadManifest };
+  window.GaiaAcademyPlayer = { open: open, openLesson: openLesson, has: has, ready: loadManifest, setMember: setMember };
   loadManifest();
 })();

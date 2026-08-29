@@ -906,6 +906,7 @@ body.gaia-booking-open{overflow:hidden;}
     } catch (_) { return; }
     if (!data || !data.ok || !Array.isArray(data.courses) || !data.courses.length) return;
     const prog = data.progress || {};
+    try { window.GaiaAcademyPlayer && window.GaiaAcademyPlayer.setMember && window.GaiaAcademyPlayer.setMember({ email: email, contactId: contactId, progress: prog }); } catch (e) {}
     const shown = data.courses.filter((c) => (c.sections || []).some((sec) => (sec.lessons || []).length));
     if (!shown.length) return;
     const courseHtml = shown.map((c) => {

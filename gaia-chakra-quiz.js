@@ -85,8 +85,13 @@
       +   '<a class="g-cq-rec" href="' + esc(colourShop) + '" target="_blank" rel="noopener noreferrer"><strong>' + esc(c.colour) + ' Colour Energy</strong><small>Support your ' + esc(c.name) + ' centre</small></a>'
       +   '<a class="g-cq-rec" href="' + esc(scanUrl) + '" target="_blank" rel="noopener noreferrer"><strong>See it for real — Bio-Well scan</strong><small>Measure your energy field</small></a>'
       + '</div>'
+      + '<div class="g-cq-lead" data-cq-lead>'
+      +   '<p class="g-cq-lead__head">Email me my full 7-chakra guide</p>'
+      +   '<div class="g-cq-lead__row"><input type="email" class="g-input g-cq-lead__input" data-cq-email placeholder="you@example.com" autocomplete="email" inputmode="email" aria-label="Email address" />'
+      +   '<button type="button" class="g-btn g-btn--primary g-btn--sm" data-cq-send>Send it →</button></div>'
+      +   '<p class="g-cq-lead__status" data-cq-status role="status"></p>'
+      + '</div>'
       + '<div class="g-card__actions">'
-      +   '<button type="button" class="g-btn g-btn--primary g-btn--sm" data-cq-save>Save my result — Join free</button>'
       +   '<button type="button" class="g-btn g-btn--secondary g-btn--sm" data-cq-share>Share</button>'
       +   '<button type="button" class="g-btn g-btn--ghost g-btn--sm" data-cq-retake>Retake</button>'
       + '</div></article>';
@@ -100,15 +105,28 @@
     try { navigator.clipboard.writeText(text + ' ' + url); } catch (_) { /* ignore */ }
   }
 
+  function submitLead(ck) {
+    const input = box.querySelector('[data-cq-email]');
+    const status = box.querySelector('[data-cq-status]');
+    const email = ((input && input.value) || '').trim();
+    if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) { if (status) status.textContent = 'Please enter a valid email address.'; return; }
+    if (status) status.textContent = 'Sending…';
+    const base = (window.GAIA_SYNC && window.GAIA_SYNC.proxyBase) || 'https://api.gaiahealers.app';
+    fetch(base + '/api/quiz/lead', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email: email, chakra: ck, tool: 'chakra-balance' }) })
+      .then((r) => r.json()).then(() => {
+        const lead = box.querySelector('[data-cq-lead]');
+        if (lead) lead.innerHTML = '<p class="g-cq-lead__done">✓ On its way — check your inbox, and your spam or promotions folder.</p>';
+      }).catch(() => { if (status) status.textContent = 'Could not send right now. Please try again.'; });
+  }
+
   function bind() {
     const s = box.querySelector('[data-cq-start]'); if (s) s.addEventListener('click', start);
     const r = box.querySelector('[data-cq-retake]'); if (r) r.addEventListener('click', reset);
     const share = box.querySelector('[data-cq-share]'); if (share) share.addEventListener('click', () => shareResult(winner()));
-    const save = box.querySelector('[data-cq-save]');
-    if (save) save.addEventListener('click', () => {
-      if (window.GaiaAuth && window.GaiaAuth.open) window.GaiaAuth.open();
-      else window.location.href = 'home.html?view=profile';
-    });
+    const send = box.querySelector('[data-cq-send]');
+    if (send) send.addEventListener('click', () => submitLead(winner()));
+    const email = box.querySelector('[data-cq-email]');
+    if (email) email.addEventListener('keydown', (e) => { if (e.key === 'Enter') submitLead(winner()); });
     box.querySelectorAll('.g-quiz-opt').forEach((b) => b.addEventListener('click', () => answer(b.dataset.ck)));
   }
 

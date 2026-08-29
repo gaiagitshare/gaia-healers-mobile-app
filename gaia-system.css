@@ -1388,3 +1388,11 @@ body.gaia-v2 .g-super-home .g-super-hero{border:1px solid var(--g-line);
 .g-cq-rec strong{color:var(--g-text);font-size:14px;font-weight:600}
 .g-cq-rec small{color:var(--g-text-muted);font-size:12px}
 .g-cq-rec--primary{border-color:var(--ck,var(--g-accent));background:color-mix(in srgb,var(--ck,var(--g-accent)) 12%,var(--g-surface))}
+
+/* Chakra Balance Quiz — email lead capture (Phase 1b) */
+.g-cq-lead{margin-top:var(--g-s4);padding:14px 15px;border:1px solid var(--ck,var(--g-accent));border-radius:14px;background:color-mix(in srgb,var(--ck,var(--g-accent)) 8%,transparent)}
+.g-cq-lead__head{margin:0 0 9px;font-size:13.5px;font-weight:600;color:var(--g-text)}
+.g-cq-lead__row{display:flex;gap:8px;flex-wrap:wrap}
+.g-cq-lead__input{flex:1 1 160px;min-width:0}
+.g-cq-lead__status{margin:7px 0 0;font-size:12px;color:var(--g-text-muted);min-height:14px}
+.g-cq-lead__done{margin:0;font-size:13px;font-weight:600;color:var(--ck,var(--g-accent))}

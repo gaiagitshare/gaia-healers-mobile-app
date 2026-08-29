@@ -564,12 +564,15 @@
       ['wellness&tab=horoscope', 'moon-stars', 'Horoscope', 'Your reflective daily guidance'],
       ['wellness&tab=chakras', 'circles-three-plus', 'Chakra match', 'Explore centres and products'],
       ['wellness&tool=colour', 'palette', 'Colour test', 'Five free questions'],
+      ['wellness&tool=chakra', 'circles-three-plus', 'Chakra Quiz', 'Find your focus centre'],
+      ['wellness&tool=match', 'heart', 'Energy Match', 'Your compatibility'],
       ['events', 'calendar-dots', 'Events', 'Gatherings and live sessions'],
       ['store', 'bag', 'Gaia Healers Store', 'Sprays, tools and memberships'],
     ];
     // The template's four doors, colour-coded: the icons are the wayfinding.
     const TINT = { 'Energy check': 'var(--g-accent)', Horoscope: 'var(--g-teal)',
-      'Chakra match': 'var(--g-purple)', 'Colour test': 'var(--g-gold)' };
+      'Chakra match': 'var(--g-purple)', 'Colour test': 'var(--g-gold)',
+      'Chakra Quiz': 'var(--g-gold)', 'Energy Match': 'var(--g-accent)' };
     const four = tools.filter((t) => TINT[t[2]]);
     return '<section class="g-free-tools"><div class="g-super-section-head"><div><p class="g-super-kicker">Explore free</p><h2>Try Gaia Healers today</h2></div></div><div class="g-free-tools__grid">'
       + four.map((item) => '<a class="g-free-tool" style="--tool:' + TINT[item[2]] + '" href="home.html?view=' + item[0] + '"><span>' + icon(item[1]) + '</span><strong>' + esc(item[2]) + '</strong><small>' + esc(item[3]) + '</small></a>').join('')

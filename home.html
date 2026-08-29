@@ -47,7 +47,7 @@
   <link rel="stylesheet" href="gaia-shared.css?v=20260721a" />
   <link rel="stylesheet" href="gaia-ui-v2.css?v=20260819ag" />
   <link rel="stylesheet" href="vendor/phosphor/phosphor.css?v=2.1.2" />
-  <link rel="stylesheet" href="gaia-system.css?v=20260829e" />
+  <link rel="stylesheet" href="gaia-system.css?v=20260829f" />
   <link rel="stylesheet" href="gaia-reshape.css?v=20260829b" />
   <link rel="stylesheet" href="gaia-superapp.css?v=20260826u" />
   <link rel="stylesheet" href="gaia-fit.css?v=20260829ae" />
@@ -155,19 +155,70 @@
             <p>Reflective tools that read from your birth date and today &mdash; a wellness practice, not a measurement.</p>
           </div>
 
-          <div data-sky-host></div>
+          <div class="g-toolkit" data-toolkit>
+            <div class="g-tk" data-tk>
+              <button class="g-tk__head" type="button" aria-expanded="false" style="--tint:#FDD835">
+                <span class="g-tk__icon"><i class="ph ph-circles-three-plus" aria-hidden="true"></i></span>
+                <span class="g-tk__text"><strong>Chakra Balance</strong><small>Find the centre asking for your attention</small></span>
+                <i class="ph ph-caret-down g-tk__chev" aria-hidden="true"></i>
+              </button>
+              <div class="g-tk__panel"><div class="g-tk__inner"><section id="home-chakraquiz" class="g-page-sec g-energy-tool" aria-label="Chakra balance quiz"></section></div></div>
+            </div>
 
-          <section id="home-colourtest" class="g-page-sec g-energy-tool" aria-label="Colour personality test"></section>
+            <div class="g-tk" data-tk>
+              <button class="g-tk__head" type="button" aria-expanded="false" style="--tint:#B57EDC">
+                <span class="g-tk__icon"><i class="ph ph-sparkle" aria-hidden="true"></i></span>
+                <span class="g-tk__text"><strong>Cosmic Map</strong><small>Your birth chart &amp; cosmic stones</small></span>
+                <i class="ph ph-caret-down g-tk__chev" aria-hidden="true"></i>
+              </button>
+              <div class="g-tk__panel"><div class="g-tk__inner"><section id="home-cosmic" class="g-page-sec g-energy-tool" aria-label="Cosmic map"></section></div></div>
+            </div>
 
-          <section id="home-chakraquiz" class="g-page-sec g-energy-tool" aria-label="Chakra balance quiz"></section>
+            <div class="g-tk" data-tk>
+              <button class="g-tk__head" type="button" aria-expanded="false" style="--tint:#4CAF50">
+                <span class="g-tk__icon"><i class="ph ph-heart" aria-hidden="true"></i></span>
+                <span class="g-tk__text"><strong>Energy Match</strong><small>Your compatibility with anyone</small></span>
+                <i class="ph ph-caret-down g-tk__chev" aria-hidden="true"></i>
+              </button>
+              <div class="g-tk__panel"><div class="g-tk__inner"><section id="home-match" class="g-page-sec g-energy-tool" aria-label="Energy match"></section></div></div>
+            </div>
 
-          <section id="home-moon" class="g-page-sec g-energy-tool" aria-label="Moon rituals"></section>
+            <div class="g-tk" data-tk>
+              <button class="g-tk__head" type="button" aria-expanded="false" style="--tint:#B9A9F0">
+                <span class="g-tk__icon"><i class="ph ph-moon-stars" aria-hidden="true"></i></span>
+                <span class="g-tk__text"><strong>Moon Rituals</strong><small>Tonight&rsquo;s phase &amp; ritual</small></span>
+                <i class="ph ph-caret-down g-tk__chev" aria-hidden="true"></i>
+              </button>
+              <div class="g-tk__panel"><div class="g-tk__inner"><section id="home-moon" class="g-page-sec g-energy-tool" aria-label="Moon rituals"></section></div></div>
+            </div>
 
-          <section id="home-match" class="g-page-sec g-energy-tool" aria-label="Energy match"></section>
+            <div class="g-tk" data-tk>
+              <button class="g-tk__head" type="button" aria-expanded="false" style="--tint:#5C9EAD">
+                <span class="g-tk__icon"><i class="ph ph-medal" aria-hidden="true"></i></span>
+                <span class="g-tk__text"><strong>Chakra Journey</strong><small>An 8-week guided practice</small></span>
+                <i class="ph ph-caret-down g-tk__chev" aria-hidden="true"></i>
+              </button>
+              <div class="g-tk__panel"><div class="g-tk__inner"><section id="home-challenge" class="g-page-sec g-energy-tool" aria-label="Chakra journey"></section></div></div>
+            </div>
 
-          <section id="home-cosmic" class="g-page-sec g-energy-tool" aria-label="Cosmic map"></section>
+            <div class="g-tk" data-tk>
+              <button class="g-tk__head" type="button" aria-expanded="false" style="--tint:#1E88E5">
+                <span class="g-tk__icon"><i class="ph ph-palette" aria-hidden="true"></i></span>
+                <span class="g-tk__text"><strong>Colour Test</strong><small>Which colour are you?</small></span>
+                <i class="ph ph-caret-down g-tk__chev" aria-hidden="true"></i>
+              </button>
+              <div class="g-tk__panel"><div class="g-tk__inner"><section id="home-colourtest" class="g-page-sec g-energy-tool" aria-label="Colour personality test"></section></div></div>
+            </div>
 
-          <section id="home-challenge" class="g-page-sec g-energy-tool" aria-label="Chakra journey"></section>
+            <div class="g-tk" data-tk>
+              <button class="g-tk__head" type="button" aria-expanded="false" style="--tint:#3949AB">
+                <span class="g-tk__icon"><i class="ph ph-star-four" aria-hidden="true"></i></span>
+                <span class="g-tk__text"><strong>Today&rsquo;s Sky</strong><small>The moon &amp; sky right now</small></span>
+                <i class="ph ph-caret-down g-tk__chev" aria-hidden="true"></i>
+              </button>
+              <div class="g-tk__panel"><div class="g-tk__inner"><div data-sky-host></div></div></div>
+            </div>
+          </div>
 
           <div class="g-energy-launch">
             <button type="button" class="g-energy-launch__card" data-open-in-app="https://numerology.lightworkers.club" data-in-app-title="Numerology Calculator">
@@ -365,9 +416,10 @@
   <script defer src="gaia-match.js?v=20260829a"></script>
   <script defer src="gaia-cosmic.js?v=20260829a"></script>
   <script defer src="gaia-challenge.js?v=20260829a"></script>
+  <script defer src="gaia-toolkit.js?v=20260829a"></script>
   <script defer src="gaia-store.js?v=20260819am"></script>
   <script defer src="gaia-ui.js?v=20260829b"></script>
-  <script defer src="gaia-superapp.js?v=20260823k"></script>
+  <script defer src="gaia-superapp.js?v=20260829a"></script>
   <script defer src="vendor/leaflet/leaflet.js?v=1.9.4"></script>
   <script defer src="vendor/leaflet/markercluster.js?v=1.5.3"></script>
   <script defer src="gaia-directory.js?v=20260820r"></script>

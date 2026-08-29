@@ -1,10 +1,12 @@
-/* Gaia Academy Player (Path A, Phase 1)
+/* Gaia Healers Player (Path A)
  * A native in-app course player. Fetches the content manifest from the proxy,
  * renders a full-screen player (video + lesson list) with a real back button,
- * and remembers where you left off. iOS/Safari plays HLS natively; other
- * browsers lazy-load the vendored hls.js. GHL stays the source of truth for
- * entitlements — this module only plays what the manifest exposes.
- * Public API: window.GaiaAcademyPlayer.open(idOrObj) / .has(idOrTitle) / .ready()
+ * and remembers where you left off. Plays the SAME sources the website uses —
+ * YouTube embeds and GHL-native public MP4/HLS — with no re-hosting. iOS/Safari
+ * plays HLS natively; other browsers lazy-load the vendored hls.js. GHL stays
+ * the source of truth for entitlements; this module only plays what the
+ * manifest exposes for courses the member owns.
+ * API: window.GaiaAcademyPlayer.open(idOrObj) / .has(idOrTitle) / .ready()
  */
 (function () {
   'use strict';
@@ -21,8 +23,21 @@
   }
   function fmtDur(sec) {
     sec = Number(sec) || 0;
+    if (!sec) return '';
     var m = Math.floor(sec / 60), s = Math.round(sec % 60);
     return m + ':' + (s < 10 ? '0' : '') + s;
+  }
+  function ytId(src) {
+    var s = String(src || '');
+    var m = s.match(/(?:youtube\.com\/embed\/|youtu\.be\/|[?&]v=)([\w-]{11})/);
+    if (m) return m[1];
+    if (/^[\w-]{11}$/.test(s)) return s;
+    return null;
+  }
+  function providerOf(l) {
+    if (l.provider) return l.provider;
+    if (ytId(l.src)) return 'youtube';
+    return /\.m3u8(\?|$)/i.test(l.src) ? 'hls' : 'mp4';
   }
 
   function loadManifest() {
@@ -61,21 +76,16 @@
     });
     return hlsLoading;
   }
-
-  function attach(video, src) {
+  function attachHlsOrSrc(video, src) {
     if (video._hls) { try { video._hls.destroy(); } catch (e) {} video._hls = null; }
     var canNative = !!video.canPlayType('application/vnd.apple.mpegurl');
-    var isHls = /\.m3u8($|\?)/i.test(src);
+    var isHls = /\.m3u8(\?|$)/i.test(src);
     if (isHls && !canNative) {
       ensureHls().then(function (Hls) {
         if (Hls && Hls.isSupported()) {
           var hls = new Hls({ enableWorker: true, lowLatencyMode: false });
-          hls.loadSource(src);
-          hls.attachMedia(video);
-          video._hls = hls;
-        } else {
-          video.src = src;
-        }
+          hls.loadSource(src); hls.attachMedia(video); video._hls = hls;
+        } else { video.src = src; }
       });
     } else {
       video.src = src;
@@ -94,7 +104,7 @@
   function onKey(e) { if (e.key === 'Escape') close(); }
   function close() {
     if (modal) {
-      var v = modal.querySelector('.gaia-acad__video');
+      var v = modal.querySelector('video');
       if (v && v._hls) { try { v._hls.destroy(); } catch (e) {} }
       modal.remove();
       modal = null;
@@ -121,7 +131,7 @@
         + (sec.lessons || []).map(function (l) {
           return '<button type="button" class="gaia-acad__lesson" data-lesson="' + esc(l.id) + '">'
             + '<span class="gaia-acad__play"><i class="ph ph-play" aria-hidden="true"></i></span>'
-            + '<span class="gaia-acad__ltext"><strong>' + esc(l.title) + '</strong><small>' + fmtDur(l.durationSec) + '</small></span>'
+            + '<span class="gaia-acad__ltext"><strong>' + esc(l.title) + '</strong><small>' + esc(fmtDur(l.durationSec)) + '</small></span>'
             + '<span class="gaia-acad__lcheck" data-check="' + esc(l.id) + '"></span></button>';
         }).join('')
         + '</div>';
@@ -131,7 +141,7 @@
       + '<button type="button" class="gaia-acad__back" data-acad-close aria-label="Back to Academy"><i class="ph ph-arrow-left" aria-hidden="true"></i></button>'
       + '<p class="gaia-acad__title">' + esc(course.title) + '</p>'
       + '<span class="gaia-acad__spacer"></span></div>'
-      + '<div class="gaia-acad__stage"><video class="gaia-acad__video" playsinline controls preload="metadata"></video></div>'
+      + '<div class="gaia-acad__stage" data-stage></div>'
       + '<p class="gaia-acad__nowplaying" data-now></p>'
       + '<div class="gaia-acad__list">' + listHtml + '</div>';
     document.body.appendChild(modal);
@@ -139,7 +149,7 @@
     document.addEventListener('keydown', onKey);
     modal.addEventListener('click', function (e) { if (e.target.closest('[data-acad-close]')) close(); });
 
-    var video = modal.querySelector('.gaia-acad__video');
+    var stage = modal.querySelector('[data-stage]');
     var now = modal.querySelector('[data-now]');
     var current = null;
 
@@ -155,7 +165,18 @@
         b.classList.toggle('is-active', b.dataset.lesson === l.id);
       });
       if (now) now.textContent = l.title;
-      attach(video, l.src);
+      var prov = providerOf(l);
+      if (prov === 'youtube') {
+        var id = ytId(l.src);
+        stage.innerHTML = '<iframe class="gaia-acad__yt" src="https://www.youtube.com/embed/' + esc(id)
+          + '?autoplay=1&rel=0&playsinline=1&modestbranding=1" title="' + esc(l.title)
+          + '" allow="autoplay; encrypted-media; fullscreen; picture-in-picture" allowfullscreen></iframe>';
+        return;
+      }
+      // native video (mp4 / hls)
+      stage.innerHTML = '<video class="gaia-acad__video" playsinline controls preload="metadata"></video>';
+      var video = stage.querySelector('video');
+      attachHlsOrSrc(video, l.src);
       var resume = getPos(course.id, l.id);
       var onMeta = function () {
         if (resume > 2 && resume < (video.duration || 1e9) - 5) { try { video.currentTime = resume; } catch (e) {} }
@@ -163,15 +184,13 @@
         video.removeEventListener('loadedmetadata', onMeta);
       };
       video.addEventListener('loadedmetadata', onMeta);
+      video.addEventListener('timeupdate', function () { savePos(course.id, l.id, video.currentTime); });
+      video.addEventListener('ended', function () {
+        markDone(course.id, l.id); markChecks();
+        var idx = lessons.findIndex(function (x) { return x.id === l.id; });
+        if (idx >= 0 && idx + 1 < lessons.length) playLesson(lessons[idx + 1]);
+      });
     }
-    video.addEventListener('timeupdate', function () { if (current) savePos(course.id, current.id, video.currentTime); });
-    video.addEventListener('ended', function () {
-      if (!current) return;
-      markDone(course.id, current.id);
-      markChecks();
-      var idx = lessons.findIndex(function (x) { return x.id === current.id; });
-      if (idx >= 0 && idx + 1 < lessons.length) playLesson(lessons[idx + 1]);
-    });
     modal.querySelectorAll('.gaia-acad__lesson').forEach(function (b) {
       b.addEventListener('click', function () {
         playLesson(lessons.find(function (x) { return x.id === b.dataset.lesson; }));

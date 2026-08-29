@@ -972,7 +972,7 @@ body.gaia-booking-open{overflow:hidden;}
       b.addEventListener('click', () => window.GaiaAppShell?.go?.('store', { tab: 'membership' }));
     });
     box.querySelectorAll('[data-academy-signin]').forEach((button) => button.addEventListener('click', () => window.GaiaAuth?.open?.()));
-    box.querySelectorAll('[data-acad-demo]').forEach((b) => b.addEventListener('click', () => window.GaiaAcademyPlayer?.open?.('demo-gaia-player')));
+    box.querySelectorAll('[data-acad-demo]').forEach((b) => b.addEventListener('click', () => window.GaiaAcademyPlayer?.open?.('healeex-getting-started')));
     box.querySelectorAll('[data-course-open]').forEach((button) => {
       button.addEventListener('click', () => {
         if (!state.authed) {

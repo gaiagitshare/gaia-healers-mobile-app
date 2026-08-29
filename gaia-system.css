@@ -1547,3 +1547,6 @@ body.gaia-v2 .g-super-home .g-super-hero{border:1px solid var(--g-line);
 .gaia-acad-cta{width:100%;text-align:left;cursor:pointer;border:1px solid color-mix(in srgb,var(--g-accent) 45%,var(--g-line))}
 
 .gaia-acad__yt{width:100%;aspect-ratio:16/9;max-height:56vh;display:block;border:0;background:#000}
+
+.g-acadprog{display:block;height:5px;border-radius:999px;background:var(--g-line);margin-top:7px;overflow:hidden}
+.g-acadprog > span{display:block;height:100%;border-radius:999px;background:var(--g-accent)}

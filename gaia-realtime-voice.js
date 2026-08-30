@@ -485,6 +485,26 @@
                 },
               },
               {
+                name: 'play_course',
+                description: 'Play one of the member\'s courses in the native in-app video player. Call this when they ask to watch, play, open, or continue a specific course or its videos — e.g. "play my Bio-Well Advanced course", "watch the chakra challenge". Pass the course name.',
+                parameters: { type: 'object', properties: { courseTitle: { type: 'string', description: 'The course name to play, as the member said it.' } }, required: ['courseTitle'] },
+              },
+              {
+                name: 'express_interest',
+                description: 'Record that the member is interested in a device, topic, membership, or getting certified, and open the best place for it. Call this when they express interest — e.g. "I\'m interested in BioPulsar", "tell me about getting certified", "I want structured water", "I\'m curious about Gold". Pass the topic in their words.',
+                parameters: { type: 'object', properties: { topic: { type: 'string', description: 'What they are interested in, in their own words (device, topic, membership tier, certification, etc.).' } }, required: ['topic'] },
+              },
+              {
+                name: 'register_event',
+                description: 'Take the member to register for the current Gaia Healers event. Call this when they want to sign up for, register for, or attend the event — e.g. "sign me up for the event", "I want to attend the conference".',
+                parameters: { type: 'object', properties: {} },
+              },
+              {
+                name: 'find_practitioner',
+                description: 'Open the in-app Find a Healer practitioner directory. Call this when they want to find, browse, or connect with a practitioner or healer — e.g. "find me a healer", "show me practitioners near me".',
+                parameters: { type: 'object', properties: { specialty: { type: 'string', description: 'Optional specialty or location they mentioned.' } } },
+              },
+              {
                 name: 'book_session',
                 description: 'Open a booking or session widget so the member can book an appointment, scan, demo, call, or a 1:1 with the founder. Call this when the member asks to book, schedule, or reserve a session — for example "book a Bio-Well scan", "I want a demo", "book a discovery call", "schedule wellness coaching", or "book a call with Dr. Nima". Opens the real booking form in a new tab; the member completes the booking there.',
                 parameters: {
@@ -671,6 +691,43 @@
       }
     }
 
+    async function handlePlayCourseToolCall(args = {}) {
+      const title = String(args.courseTitle || args.course || args.title || '').trim();
+      if (!title) return { ok: false, message: 'Ask which course they would like to watch.' };
+      try {
+        const P = window.GaiaAcademyPlayer;
+        if (P && typeof P.has === 'function' && P.has(title)) {
+          if (typeof P.ready === 'function') { try { await P.ready(); } catch (e) {} }
+          P.open(title);
+          return { ok: true, message: 'Playing ' + title + ' in the app now. Tell them they can tap any lesson to jump to it.' };
+        }
+        window.GaiaAppShell && window.GaiaAppShell.go && window.GaiaAppShell.go('academy');
+        return { ok: true, message: 'I opened Academy — their owned courses are under Your courses. That title may not be mirrored in-app yet; if so it opens in the portal.' };
+      } catch (e) { return { ok: false, message: 'I could not start that course; open Academy and tap it under Your courses.' }; }
+    }
+    async function handleExpressInterestToolCall(args = {}) {
+      const topic = String(args.topic || args.interest || '').trim();
+      if (!topic) return { ok: false, message: 'Ask what they are interested in.' };
+      try {
+        const res = await fetch(proxyBase() + '/api/assist/interest', { method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'include', body: JSON.stringify({ topic }) });
+        const d = await res.json().catch(() => ({}));
+        const route = d && d.route;
+        if (route) {
+          if (route.kind === 'community') { handleOpenCommunityToolCall({ community: route.community }); }
+          else if (route.kind === 'navigate' && window.GaiaAppShell && window.GaiaAppShell.go) { window.GaiaAppShell.go(route.screen, route.tab ? { tab: route.tab } : {}); }
+          else if (route.kind === 'url' && window.GaiaInApp && window.GaiaInApp.open) { window.GaiaInApp.open(route.url, topic); }
+        }
+        return { ok: true, message: (d && d.saved ? 'Noted your interest in ' + topic + '. ' : '') + 'I am opening the best place for it — tell them what they are seeing and offer the next step.' };
+      } catch (e) { return { ok: true, message: 'Noted. Let me point you to the right place for that.' }; }
+    }
+    function handleRegisterEventToolCall() {
+      try { if (window.GaiaAppShell && window.GaiaAppShell.go) window.GaiaAppShell.go('events'); return { ok: true, message: 'Opening the Events screen — tell them to tap Register on the event to sign up.' }; }
+      catch (e) { return { ok: false, message: 'Tell them to open the Events tab and tap Register.' }; }
+    }
+    function handleFindPractitionerToolCall() {
+      try { if (window.GaiaAppShell && window.GaiaAppShell.go) window.GaiaAppShell.go('directory'); return { ok: true, message: 'Opening Find a Healer — they can browse and filter practitioners there.' }; }
+      catch (e) { return { ok: false, message: 'Tell them to go to Community and tap Find a Healer.' }; }
+    }
     async function handleSaveOnboardingToolCall(args = {}) {
       try {
         const stepKey = String(args.stepKey || args.step || '').trim();
@@ -706,6 +763,10 @@
         case 'open_portal': return handleOpenPortalToolCall(args);
         case 'sign_in': return handleSignInToolCall();
         case 'save_onboarding_step': return handleSaveOnboardingToolCall(args);
+        case 'play_course': return handlePlayCourseToolCall(args);
+        case 'express_interest': return handleExpressInterestToolCall(args);
+        case 'register_event': return handleRegisterEventToolCall();
+        case 'find_practitioner': return handleFindPractitionerToolCall();
         default: return { ok: false, message: 'That action is not available yet.' };
       }
     }

@@ -275,7 +275,36 @@ function suggestOffers(tags, hasPaidSub) {
   return offers;
 }
 
+// express_interest: map a free-text topic the member voices ("I'm interested in
+// BioPulsar", "structured water", "getting certified") to GHL interest tag(s)
+// (so the existing routing workflows fire) + where in the app to take them.
+const INTEREST_MAP = [
+  { re: /biopulsar|bio[- ]?pulsar/, tags: ['product_biopulsar_interest'], route: { kind: 'community', community: 'biopulsar' } },
+  { re: /bio[- ]?well|biowell/, tags: ['product_biowell_interest'], route: { kind: 'community', community: 'biowell' } },
+  { re: /biotekna|bio[- ]?tekna/, tags: ['product_biotekna_interest'], route: { kind: 'community', community: 'biotekna' } },
+  { re: /braintap|brain[- ]?tap|neurofeedback|entrainment/, tags: ['product_braintap_interest'], route: { kind: 'community', community: 'braintap' } },
+  { re: /asea/, tags: ['product_asea_interest'], route: { kind: 'community', community: 'asea' } },
+  { re: /lifewave|life[- ]?wave|phototherapy|light[- ]?based/, tags: ['product_lifewave_interest'], route: { kind: 'community', community: 'lifewave' } },
+  { re: /healy/, tags: ['product_healy_interest'], route: { kind: 'navigate', screen: 'store', tab: 'shop' } },
+  { re: /tachyon/, tags: ['product_tachyon_interest'], route: { kind: 'navigate', screen: 'store', tab: 'shop' } },
+  { re: /colou?r|chakra spray|colour energy/, tags: ['product_colourenergy_interest'], route: { kind: 'navigate', screen: 'store', tab: 'shop' } },
+  { re: /water|kangen|alkaline|hydration/, tags: ['product_general_water_interest'], route: { kind: 'navigate', screen: 'store', tab: 'shop' } },
+  { re: /certif|become a practitioner|get listed|directory listing|practitioner path/, tags: ['interest_professional_healing', 'practitioner_interest_biofield'], route: { kind: 'navigate', screen: 'store', tab: 'membership' } },
+  { re: /member|subscrib|silver|gold|diamond|upgrade|plan/, tags: [], route: { kind: 'navigate', screen: 'store', tab: 'membership' } },
+  { re: /event|conference|elevate|gathering/, tags: [], route: { kind: 'navigate', screen: 'events' } },
+  { re: /course|academy|learn|training|class/, tags: [], route: { kind: 'navigate', screen: 'academy' } },
+  { re: /practitioner|healer|directory|find (a|someone)/, tags: [], route: { kind: 'navigate', screen: 'directory' } },
+];
+function interestFromTopic(topic) {
+  const t = String(topic || '').toLowerCase();
+  for (let i = 0; i < INTEREST_MAP.length; i++) {
+    if (INTEREST_MAP[i].re.test(t)) return { matched: true, tags: INTEREST_MAP[i].tags.slice(), route: INTEREST_MAP[i].route };
+  }
+  return { matched: false, tags: [], route: null };
+}
+
 export {
   COMPLETE_TAG, STEPS, STEP_BY_KEY,
   mapStep, mapOnboardingAnswers, onboardingState, onboardingPromptBlock, suggestOffers,
+  interestFromTopic,
 };

@@ -457,6 +457,33 @@
                 },
               },
               {
+                name: 'save_onboarding_step',
+                description: 'Record ONE step of the Gaia Healers getting-to-know-you (onboarding) survey for the signed-in member, which creates their interest tags. Call this right after the member answers each step, passing the EXACT option label(s) they chose. Use complete=true only on the final step. Only for signed-in members.',
+                parameters: {
+                  type: 'object',
+                  properties: {
+                    stepKey: {
+                      type: 'string',
+                      description: 'The step key: primary_interests, why_join, living_beings_who, living_beings_support, environment_areas, environment_spaces, water, business_length, invest_timing, growth_needs, devices_owned, client_needs, can_offer, want_receive, or final_notes.',
+                    },
+                    selections: {
+                      type: 'array',
+                      items: { type: 'string' },
+                      description: 'The exact option label(s) the member chose for this step (one or several). Empty for a skipped or free-text-only step.',
+                    },
+                    freeText: {
+                      type: 'string',
+                      description: 'Optional free-text answer (e.g. Other devices, or the final comments).',
+                    },
+                    complete: {
+                      type: 'boolean',
+                      description: 'True only on the final step, to mark the whole survey complete.',
+                    },
+                  },
+                  required: ['stepKey'],
+                },
+              },
+              {
                 name: 'book_session',
                 description: 'Open a booking or session widget so the member can book an appointment, scan, demo, call, or a 1:1 with the founder. Call this when the member asks to book, schedule, or reserve a session — for example "book a Bio-Well scan", "I want a demo", "book a discovery call", "schedule wellness coaching", or "book a call with Dr. Nima". Opens the real booking form in a new tab; the member completes the booking there.',
                 parameters: {
@@ -643,6 +670,32 @@
       }
     }
 
+    async function handleSaveOnboardingToolCall(args = {}) {
+      try {
+        const stepKey = String(args.stepKey || args.step || '').trim();
+        let selections = args.selections;
+        if (typeof selections === 'string') selections = selections.split(/\s*[;,|]\s*/);
+        if (!Array.isArray(selections)) selections = selections ? [String(selections)] : [];
+        selections = selections.map((x) => String(x || '').trim()).filter(Boolean);
+        const body = { stepKey, selections, freeText: String(args.freeText || ''), complete: Boolean(args.complete) };
+        const res = await fetch(proxyBase() + '/api/assist/onboarding', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
+          body: JSON.stringify(body),
+        });
+        const d = await res.json().catch(() => ({}));
+        if (!d || !d.ok) {
+          return { ok: false, message: (d && d.reason === 'not_signed_in')
+            ? 'They need to sign in before I can save their answers.'
+            : 'I could not save that step; keep going and I will try again.' };
+        }
+        return { ok: true, message: 'Saved.' + (d.complete ? ' Their onboarding profile is now complete.' : ' Continue to the next question.') };
+      } catch (e) {
+        return { ok: false, message: 'I could not save that step right now.' };
+      }
+    }
+
     // Central tool dispatcher: routes a toolCall to the right handler.
     function runToolCall(name, args = {}) {
       switch (name) {
@@ -651,6 +704,7 @@
         case 'open_community': return handleOpenCommunityToolCall(args);
         case 'open_portal': return handleOpenPortalToolCall(args);
         case 'sign_in': return handleSignInToolCall();
+        case 'save_onboarding_step': return handleSaveOnboardingToolCall(args);
         default: return { ok: false, message: 'That action is not available yet.' };
       }
     }
@@ -847,16 +901,17 @@
           case 'toolCall': {
             // Run the requested tool locally, then send the result back so the
             // model can confirm the action aloud and finish its turn.
-            const result = runToolCall(event.name, event.args || {});
-            // toolResponse lets the Live session continue after a function call.
-            sendWs({
-              toolResponse: {
-                functionResponses: [{
-                  id: event.id || '',
-                  name: event.name || '',
-                  response: { result: result.message || (result.ok ? 'Done.' : 'Unavailable.') },
-                }],
-              },
+            Promise.resolve(runToolCall(event.name, event.args || {})).then((result) => {
+              // toolResponse lets the Live session continue after a function call.
+              sendWs({
+                toolResponse: {
+                  functionResponses: [{
+                    id: event.id || '',
+                    name: event.name || '',
+                    response: { result: (result && result.message) || (result && result.ok ? 'Done.' : 'Unavailable.') },
+                  }],
+                },
+              });
             });
             break;
           }

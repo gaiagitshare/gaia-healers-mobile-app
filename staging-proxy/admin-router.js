@@ -382,17 +382,35 @@ async function exportContacts(body, deps) {
 }
 var _sysMapCache = { at: 0, data: null };
 async function systemMap(deps) {
-  if (_sysMapCache.data && (Date.now() - _sysMapCache.at) < 5 * 60 * 1000) return _sysMapCache.data;
+  if (_sysMapCache.data && (Date.now() - _sysMapCache.at) < 10 * 60 * 1000) return _sysMapCache.data;
   const cfg = deps.ghlConfig();
   const out = { ok: true, generatedAt: new Date().toISOString() };
   async function tagTotal(tag) { try { const d = await ghlSearchContacts(cfg, deps, { locationId: cfg.locationId, pageLimit: 1, filters: [{ field: 'tags', operator: 'contains', value: tag }] }); return (d && d.total != null) ? d.total : null; } catch (e) { return null; } }
+  async function tagMemberIds(tag, cap) { const ids = []; let after = null, g = 0; while (ids.length < (cap || 400) && g < 8) { g++; const body = { locationId: cfg.locationId, pageLimit: 100, filters: [{ field: 'tags', operator: 'contains', value: tag }] }; if (after) body.searchAfter = after; const d = await ghlSearchContacts(cfg, deps, body); const list = (d && (d.contacts || d.data)) || []; if (!list.length) break; list.forEach((c) => ids.push(c.id)); const last = list[list.length - 1]; after = last && last.searchAfter; if (!after) break; } return ids; }
   try { const d = await ghlSearchContacts(cfg, deps, { locationId: cfg.locationId, pageLimit: 1 }); out.members = (d && d.total != null) ? d.total : null; } catch (e) { out.members = null; }
   out.tiers = { diamond: await tagTotal('ahc-diamond-active'), gold: await tagTotal('ahc-gold-active'), silver: await tagTotal('ahc-silver-active') };
-  try { const subs = await loadSubscriptions(deps); out.subscriptions = subs.summary; } catch (e) { out.subscriptions = null; }
+  try {
+    const subs = await loadSubscriptions(deps); out.subscriptions = subs.summary;
+    const list = subs.list || []; const active = list.filter((x) => x.status === 'active');
+    let mrr = 0; const bd = {};
+    active.forEach((x) => { const amt = Number(x.amount) || 0; const yr = String(x.interval).indexOf('year') >= 0; mrr += yr ? amt / 12 : amt; const k = '$' + amt + (yr ? '/yr' : '/mo'); bd[k] = (bd[k] || 0) + 1; });
+    out.revenue = { mrr: Math.round(mrr), activeCount: active.length, breakdown: Object.keys(bd).map((k) => ({ label: k, count: bd[k] })).sort((a, b) => b.count - a.count) };
+    const activeSet = new Set(active.map((x) => x.contactId).filter(Boolean));
+    async function payingFor(tag) { const ids = await tagMemberIds(tag, 300); return ids.filter((id) => activeSet.has(id)).length; }
+    out.tierPaying = { gold: await payingFor('ahc-gold-active'), silver: await payingFor('ahc-silver-active'), diamond: await payingFor('ahc-diamond-active') };
+  } catch (e) { out.subscriptions = null; }
   try { const sc = deps.loadStoreCatalog && deps.loadStoreCatalog(); out.products = (sc && sc.products) ? Object.keys(sc.products).length : null; } catch (e) { out.products = null; }
   try { const m = await fetch('http://127.0.0.1:8787/api/academy/manifest').then((r) => r.json()); out.courses = (m && m.courses ? m.courses.length : null); } catch (e) { out.courses = null; }
   try { const dr = await fetch('http://127.0.0.1:8787/api/directory').then((r) => r.json()); out.practitioners = (dr && (dr.count != null ? dr.count : (dr.practitioners || []).length)); } catch (e) { out.practitioners = null; }
-  try { const oc = tagTotal; out.onboardingComplete = await tagTotal('gaia_app_onboarding_complete'); out.surveyComplete = await tagTotal('gaia_practitioner_form_complete'); } catch (e) {}
+  out.surveyComplete = await tagTotal('gaia_practitioner_form_complete');
+  out.onboardingComplete = await tagTotal('gaia_app_onboarding_complete');
+  const INT = [['biowell', 'Bio-Well'], ['biopulsar', 'BioPulsar'], ['biotekna', 'BioTekna'], ['braintap', 'BrainTap'], ['colourenergy', 'Colour Energy'], ['tachyon', 'Tachyon'], ['healy', 'Healy'], ['lifewave', 'LifeWave']];
+  out.interests = []; for (const iv of INT) { const cnt = await tagTotal('product_' + iv[0] + '_interest'); if (cnt) out.interests.push({ label: iv[1], count: cnt }); }
+  out.interests.sort((a, b) => b.count - a.count);
+  const ST = [['prelaunch', 'Pre-launch'], ['early', 'Early'], ['growth', 'Growth'], ['established', 'Established'], ['scaling', 'Scaling'], ['mature', 'Mature']];
+  out.stages = []; for (const sv of ST) { const cnt = await tagTotal('practice_stage_' + sv[0]); out.stages.push({ label: sv[1], count: cnt || 0 }); }
+  const COM = [['biowell', 'Bio-Well'], ['biopulsar', 'BioPulsar'], ['biotekna', 'BioTekna'], ['braintap', 'BrainTap'], ['asea', 'ASEA'], ['lifewave', 'LifeWave']];
+  out.communitiesList = []; for (const cv of COM) { const cnt = await tagTotal('community-' + cv[0] + '-member'); if (cnt) out.communitiesList.push({ label: cv[1], count: cnt }); }
   out.communities = 8;
   _sysMapCache = { at: Date.now(), data: out };
   return out;

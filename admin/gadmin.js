@@ -606,37 +606,67 @@
   function branch(cls, icon, title, inner) {
     return '<div class="smbranch smbranch--' + cls + '"><div class="smbranch__hd">' + svg(icon) + '<b>' + title + '</b></div>' + inner + '</div>';
   }
+  function smBar(label, count, max, acc) {
+    var pct = max ? Math.round(count / max * 100) : 0;
+    return '<div class="smbar"><span class="smbar__l">' + esc(label) + '</span><span class="smbar__t"><span class="smbar__f" style="width:' + pct + '%;background:' + (acc || 'var(--green2)') + '"></span></span><b class="smbar__v">' + n(count) + '</b></div>';
+  }
   function paintSystem(d) {
-    var sub = d.subscriptions || {};
+    var sub = d.subscriptions || {}, rev = d.revenue || {}, pay = d.tierPaying || {};
+    // KPI strip
+    var kpi = function (v, l, acc) { return '<div class="smkpi"><b' + (acc ? ' style="color:' + acc + '"' : '') + '>' + v + '</b><span>' + l + '</span></div>'; };
+    var kpis = '<div class="smkpis">'
+      + kpi(n(d.members), 'Members')
+      + kpi(n(rev.activeCount != null ? rev.activeCount : sub.active), 'Active subscribers', '#8fd36a')
+      + kpi('$' + n(rev.mrr), 'MRR (monthly)', 'var(--green)')
+      + kpi(n(d.practitioners), 'Practitioners', 'var(--blue)')
+      + kpi(n(d.surveyComplete), 'Survey completed', 'var(--violet)')
+      + '</div>';
+    // tiers with tagged + paying
     var tierCard = function (t) {
-      var live = (t.key === 'gold' || t.key === 'silver' || t.key === 'diamond') ? d.tiers[t.key] : null;
+      var tagged = (t.key === 'gold' || t.key === 'silver' || t.key === 'diamond') ? d.tiers[t.key] : null;
+      var paying = pay[t.key];
+      var badge = (tagged != null)
+        ? '<span class="smtier__n">' + n(tagged) + ' tagged' + (paying != null ? ' · <em>' + n(paying) + ' paying</em>' : '') + '</span>'
+        : '<span class="smtier__n smtier__n--free">default</span>';
       return '<div class="smtier" style="--acc:' + t.acc + '">'
-        + '<div class="smtier__hd"><b>' + t.name + '</b>' + (live != null ? '<span class="smtier__n">' + n(live) + ' tagged</span>' : '<span class="smtier__n smtier__n--free">default</span>') + '</div>'
+        + '<div class="smtier__hd"><b>' + t.name + '</b>' + badge + '</div>'
         + '<div class="smtier__price">' + t.price + '</div>'
         + '<ul class="smtier__b">' + t.benefits.map(function (b) { return '<li>' + esc(b) + '</li>'; }).join('') + '</ul></div>';
     };
     var tiers = branch('tiers', 'member', 'Membership Tiers', '<div class="smtiers">' + TIER_INFO.map(tierCard).join('') + '</div>');
-    var pay = branch('pay', 'lock', 'Payments &amp; Billing',
-      '<div class="smnode smnode--live"><b>Live subscriptions · Stripe</b><div class="smstats"><span class="smstat smstat--good"><b>' + n(sub.active) + '</b>active</span><span class="smstat smstat--bad"><b>' + n(sub.canceled) + '</b>canceled</span><span class="smstat"><b>' + n(sub.expired) + '</b>expired</span></div></div>'
+    // payments: MRR + breakdown + reconciliation
+    var totTagged = (d.tiers.gold || 0) + (d.tiers.silver || 0) + (d.tiers.diamond || 0);
+    var totPaying = (pay.gold || 0) + (pay.silver || 0) + (pay.diamond || 0);
+    var bd = (rev.breakdown || []).map(function (b) { return '<span class="smchip smchip--num">' + esc(b.label) + ' ×' + b.count + '</span>'; }).join('');
+    var payB = branch('pay', 'lock', 'Payments &amp; Revenue',
+      '<div class="smnode smnode--live"><b>$' + n(rev.mrr) + ' MRR</b><span>from ' + n(rev.activeCount) + ' active Stripe subscriptions</span>' + (bd ? '<div class="smflow" style="margin-top:6px">' + bd + '</div>' : '') + '</div>'
+      + '<div class="smnode"><b>Subscription health</b><div class="smstats"><span class="smstat smstat--good"><b>' + n(sub.active) + '</b>active</span><span class="smstat smstat--bad"><b>' + n(sub.canceled) + '</b>canceled</span><span class="smstat"><b>' + n(sub.expired) + '</b>expired</span></div></div>'
       + '<div class="smnode"><b>Shopify store</b><span>' + n(d.products) + ' products · checkout on Shopify</span></div>'
-      + '<div class="smnode smnode--warn"><b>⚠ Tier tags ≠ billing</b><span>' + n(d.tiers.gold) + ' carry the Gold tag, but only ' + n(sub.active) + ' pay a live subscription. Tags come from tiers/grants, not Stripe.</span></div>');
+      + '<div class="smnode smnode--warn"><b>⚠ ' + n(totTagged) + ' tier-tagged, ' + n(totPaying) + ' actually paying</b><span>Gold ' + n(pay.gold) + '/' + n(d.tiers.gold) + ' · Silver ' + n(pay.silver) + '/' + n(d.tiers.silver) + ' · Diamond ' + n(pay.diamond) + '/' + n(d.tiers.diamond) + ' pay. Tier tags come from grants, not Stripe.</span></div>');
+    // access: funnel + demand + audience
+    var maxInt = Math.max.apply(null, (d.interests || [{ count: 1 }]).map(function (x) { return x.count; }));
+    var maxStg = Math.max.apply(null, (d.stages || [{ count: 1 }]).map(function (x) { return x.count; }));
     var access = branch('access', 'survey', 'How Access Is Granted',
       '<div class="smnode"><b>Onboarding survey</b><span>14 steps → interest / goal / device tags · ' + n(d.surveyComplete) + ' completed</span></div>'
       + '<div class="smflow">' + ['Survey', 'Tags', 'Communities + Membership'].map(function (s, i) { return (i ? '<span class="smarrow">→</span>' : '') + '<span class="smchip">' + s + '</span>'; }).join('') + '</div>'
-      + '<div class="smnode"><b>Course grants</b><span>GHL offers/purchases → Academy access (in-app player)</span></div>'
-      + '<div class="smnode"><b>' + n(d.communities) + ' communities</b><span>Tag-routed circles + private channels</span></div>');
+      + '<div class="smsub">Top demand (device interest)</div><div class="smbars">' + (d.interests || []).slice(0, 6).map(function (x) { return smBar(x.label, x.count, maxInt, 'var(--amber)'); }).join('') + '</div>'
+      + '<div class="smsub">Audience by practice stage</div><div class="smbars">' + (d.stages || []).map(function (x) { return smBar(x.label, x.count, maxStg, 'var(--blue)'); }).join('') + '</div>');
+    // app: counts + community sizes
+    var maxCom = Math.max.apply(null, (d.communitiesList || [{ count: 1 }]).map(function (x) { return x.count; }));
     var app = branch('app', 'contacts', 'The App &amp; Ecosystem',
       '<div class="smgrid">'
       + '<div class="smmini"><b>' + n(d.courses) + '</b><span>Courses (Academy)</span></div>'
-      + '<div class="smmini"><b>' + n(d.practitioners) + '</b><span>Practitioners (Directory)</span></div>'
+      + '<div class="smmini"><b>' + n(d.practitioners) + '</b><span>Practitioners</span></div>'
       + '<div class="smmini"><b>' + n(d.products) + '</b><span>Store products</span></div>'
       + '<div class="smmini"><b>' + n(d.communities) + '</b><span>Communities</span></div>'
       + '</div>'
+      + '<div class="smsub">Community membership</div><div class="smbars">' + (d.communitiesList || []).map(function (x) { return smBar(x.label, x.count, maxCom, 'var(--violet)'); }).join('') + '</div>'
       + '<div class="smnode"><b>Gaia Assist</b><span>AI concierge — knows this whole system, guides &amp; sells</span></div>');
     document.getElementById('sysmap').innerHTML =
-      '<svg class="sysmap__edges"></svg>'
+      kpis
+      + '<svg class="sysmap__edges"></svg>'
       + '<div class="smhub" id="smhub"><span class="smhub__k">Gaia Healers 2.0</span><b>' + n(d.members) + '</b><span class="smhub__l">total members</span></div>'
-      + '<div class="smrow">' + tiers + pay + access + app + '</div>'
+      + '<div class="smrow">' + tiers + payB + access + app + '</div>'
       + '<div class="smfoot">Live from GHL · Stripe · Shopify · updated ' + fmtDate(d.generatedAt) + '</div>';
     requestAnimationFrame(drawEdges);
     if (!window.__smResize) { window.__smResize = true; window.addEventListener('resize', function () { if (document.getElementById('sysmap')) drawEdges(); }); }

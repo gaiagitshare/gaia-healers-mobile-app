@@ -3702,6 +3702,7 @@ function buildGaiaLiveInstructions(context = {}) {
     'You have a navigate tool. When a member asks to open a screen or feature, call it. Energy routes are distinct: energy/body point → navigate(screen=wellness, tab=check); horoscope/daily guidance → navigate(screen=wellness, tab=horoscope); chakra match/seven centres → navigate(screen=wellness, tab=chakras). Other examples: event → events; session → bookings; messages → inbox; course → academy; community/practitioner access → community; shop → store; membership → store/membership; profile/account/your stuff → profile; colour test or numerology → navigate(screen=wellness); find a healer or practitioner directory → navigate(screen=directory). The app has six bottom-bar sections: Today (daily dashboard), Energy (energy check, horoscope, chakras, numerology, colour test, today sky, Bio-Well), Academy (courses, certifications, library), Community (circles/discussions, find a healer, schedule with Dr. Nima, book a session, events, Gaia Radio, messages/inbox), Shop (the live store), and You (membership, access, bookings, your communities, become-a-practitioner). The centre orb is Gaia Assist. Navigation is the start of helping, not the finish: explain what is available there and keep listening.',
     'You also have action tools. Use them to actually do things for the member, not just describe how. book_session: when the member asks to book, schedule, or reserve something — "book a call with Dr. Nima" or "I want to meet the founder" → book_session(session=nima); "book a Bio-Well scan" → book_session(session=scan); "I want a demo" → book_session(session=demo); "book a discovery call" → book_session(session=discovery); "schedule coaching" → book_session(session=coaching). It opens the real booking form (Nima uses Calendly, the others use GHL widgets); tell them to complete it there. open_community: when the member asks to open or visit a community — "open the Bio-Well community" → open_community(community=biowell); "take me to BioPulsar" → open_community(community=biopulsar); "all gaia healers group" → open_community(community=all-gaia). Some open directly, others open in the portal. open_portal: when the member wants the portal itself — "open the portal" → open_portal(section=home); "open my courses in the portal" → open_portal(section=courses); "portal login" → open_portal(section=login). sign_in: when the member says they want to sign in, log in, or access their account and they are not signed in — "sign me in" → sign_in(). Never call sign_in if the member is already signed in. After ANY action tool, STAY ENGAGED: confirm what you opened, then guide them through the next step and keep listening. Do not go silent after opening something — the conversation continues until the member says goodbye. You ALSO have: play_course (play a specific course in the in-app player — "play my Bio-Well Advanced course" -> play_course(courseTitle)); express_interest (when they say they are interested in a device, topic, membership, or getting certified -> express_interest(topic) records their interest and opens the best place for it); register_event ("sign me up for the event" -> register_event()); find_practitioner ("find me a healer" -> find_practitioner()). Prefer DOING with these tools over only describing.',
     'This is an ongoing conversation, not a single request-response. After every action — navigating, opening a booking form, opening a community, signing in — you are STILL their assistant on that screen. Keep helping: point out what they can do, answer follow-ups, navigate elsewhere if asked, and only go quiet when the member clearly ends the conversation. Never end your turn with just a confirmation and silence; end with either a useful observation about what is now on screen, or a concrete next step they can take, or a question.',
+    'ANSWER ANYTHING — you can answer questions about the whole Gaia Healers world: this app, the store at gaiahealers.com (products and prices), the practitioner directory at gaiapractitioners.com, courses, events, the devices, membership, and Dr. Nima. For any LIVE or specific fact — a price, whether something is in stock, a specific product or practitioner, the current event, or which courses exist — CALL gaia_lookup(query) and answer only from what it returns; never invent a price, count, product, or name. For general questions use your knowledge. If you truly do not know, say so and offer to open the exact page (the store, the directory, or the right screen).',
     'MEMORY — you remember members across visits. If the member context includes WHAT YOU REMEMBER, use it to greet and continue naturally (reference it lightly, never recite it), do not re-ask what you already know, and never repeat a declined offer. When you learn something durable this conversation — a real interest, a goal, a decision, an objection, or a follow-up for next time — call remember_member({ facts: [short strings], summary? }) to save it. Never save trivia, one-off logistics, or sensitive personal/financial details.',
     'GUIDE FULLY — you are their hands-on in-app guide and you know every screen and flow. When they ask how to do ANYTHING, give the exact steps from the app task guide AND offer to take them there right now by calling navigate or the right action tool. For multi-step tasks, walk them one step at a time and confirm as they go; after you move them, say what they will see and what to tap next. Never leave them to figure it out alone.',
     'RAPPORT FIRST — answer the member\'s actual question before you suggest or offer anything; never pitch in your opening sentence unless they asked. Ask one thing at a time and confirm you understood before moving on.',
@@ -5259,6 +5260,7 @@ function assistSystemPrompt(memberContext = '') {
     'When asked how to do something, name the exact screen and step. Never invent course progress, scan numbers, community posts, prices, or personal history.',
     'MEMBERSHIP GUIDANCE \u2014 help people join and activate. Gaia Healers 2.0 has four practitioner paths: Free ($0), Silver ($97/mo or $997/yr), Gold ($497/mo or $4,997/yr), and Diamond ($997/mo or $9,997/yr), with benefits growing from community and education through directory exposure, CRM/software, implementation support, and lead generation. When someone wants to grow, go deeper, get certified, be listed as a practitioner, or asks what to join, warmly explain the paths, ask one short question about their stage and goal, recommend the single best-fit tier, and hand them its exact activation link so they can activate right away: Free join.gaiahealers.com/onboarding, Silver join.gaiahealers.com/silver, Gold join.gaiahealers.com/gold, Diamond join.gaiahealers.com/diamond (or say "Open the Store and tap Membership"). Guide, never pressure; frame it as the step that matches their goal. Their in-app access mirrors what GHL grants once they activate.',
     'Never claim that you saved, imported, checked in, emailed, booked, purchased, or changed data. Explain how the member can do it.',
+    'ANSWER ANYTHING — you can answer about the whole Gaia Healers world (app, the gaiahealers.com store + prices, the practitioner directory, courses, events, devices, membership, Dr. Nima). When LIVE GAIA HEALERS DATA is provided for the question, answer using ONLY those real facts and never invent a price, count, product, or name. For general questions use your knowledge; if you do not know, say so and point them to the exact page.',
     'MEMORY — you remember members across visits. Use WHAT YOU REMEMBER (if present) to continue naturally; do not re-ask or repeat declined offers. When you learn something durable (interest, goal, decision, objection, follow-up), append a line <<REMEMBER: fact one ;; fact two>> which the app saves and hides. Never save trivia or sensitive details.',
     'GUIDE FULLY — you are their in-app guide and know every screen and flow. For any "how do I…" give the exact steps from the app task guide and offer to open the right screen for them; walk multi-step tasks one step at a time and say what to tap next.',
     'RAPPORT FIRST — answer the actual question before offering anything; do not pitch in the first sentence unless asked. One question at a time; confirm understanding.',
@@ -5343,7 +5345,28 @@ async function aiComplete(system, user, { maxTokens = 160, temperature = 0.6 } =
   return '';
 }
 
+async function callGeminiChat(prompt, context = {}) {
+  const key = geminiApiKey();
+  if (!key) return { skipped: true, reason: 'missing-api-key' };
+  const model = process.env.GEMINI_TEXT_MODEL || 'gemini-2.5-flash';
+  const isVoice = String(context.source || '').includes('voice');
+  const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${encodeURIComponent(key)}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      systemInstruction: { parts: [{ text: assistSystemPrompt(context.memberContext) }] },
+      contents: [{ role: 'user', parts: [{ text: assistUserPrompt(prompt, context) }] }],
+      generationConfig: { temperature: 0.35, maxOutputTokens: isVoice ? 220 : 640 },
+    }),
+  });
+  if (!res.ok) { const d = await res.text(); throw new Error(`gemini chat request failed with ${res.status}: ${d.slice(0, 280)}`); }
+  const j = await res.json();
+  const parts = (j.candidates && j.candidates[0] && j.candidates[0].content && j.candidates[0].content.parts) || [];
+  const text = parts.map((p) => p.text || '').join('').trim();
+  return { provider: 'gemini', model, reply: text || fallbackAssistReply(prompt, context.intent) };
+}
 async function callChatProvider(provider, prompt, context = {}) {
+  if (provider === 'gemini') return callGeminiChat(prompt, context);
   const config = providerConfig(provider);
   if (!config) {
     return { skipped: true, reason: 'unknown-provider' };
@@ -5527,6 +5550,46 @@ async function applyOnboardingStep(contactId, stepKey, selections, freeText, com
   if (tags.length) await ghlPost(`/contacts/${encodeURIComponent(contactId)}/tags`, { tags }).catch(() => null);
   if (freeText) { try { await ghlPost(`/contacts/${encodeURIComponent(contactId)}/notes`, { body: 'Gaia Assist onboarding (' + stepKey + '): ' + String(freeText).slice(0, 800) }); } catch (e) {} }
   return { tagsAdded: tags, matched: r.matched, unmatched: r.unmatched, complete: !!complete };
+}
+function priceFromCents(c) { if (c == null || isNaN(c)) return ''; const n = Number(c) / 100; return '$' + (Number.isInteger(n) ? n : n.toFixed(2)); }
+async function gaiaLookup(query) {
+  const q = String(query || '').toLowerCase();
+  const terms = q.split(/[^a-z0-9]+/).filter((t) => t.length > 2);
+  const score = (text) => { const t = String(text || '').toLowerCase(); let sc = 0; terms.forEach((w) => { if (t.indexOf(w) >= 0) sc++; }); return sc; };
+  const out = { ok: true, query: String(query || '') };
+  try {
+    const cat = loadStoreCatalog(); const prods = (cat && cat.products) ? Object.values(cat.products) : [];
+    out.storeTotal = prods.length;
+    out.store = prods.filter((p) => p && !p.hidden && p.title)
+      .map((p) => ({ p, s: score(p.title + ' ' + (p.productType || '') + ' ' + ((p.tags || []).join(' ')) + ' ' + String(p.description || '').slice(0, 200)) }))
+      .filter((x) => x.s > 0).sort((a, b) => b.s - a.s).slice(0, 6)
+      .map((x) => ({ title: x.p.title, price: (x.p.priceVaries ? 'from ' : '') + priceFromCents(x.p.priceCents), available: x.p.available !== false, type: x.p.productType || '', url: x.p.url || '' }));
+  } catch (e) { out.store = []; }
+  try {
+    const dir = await fetch('http://127.0.0.1:8787/api/directory').then((r) => r.json()).catch(() => null);
+    const list = (dir && dir.practitioners) || [];
+    out.practitionerTotal = list.length;
+    out.practitioners = list.map((p) => ({ p, s: score(p.name + ' ' + (p.city || '') + ' ' + (p.state || '') + ' ' + (p.specialty || '') + ' ' + ((p.tags || []).join(' '))) }))
+      .filter((x) => x.s > 0).sort((a, b) => b.s - a.s).slice(0, 6)
+      .map((x) => ({ name: x.p.name, location: [x.p.city, x.p.state].filter(Boolean).join(', '), specialty: x.p.specialty || '', link: x.p.profileLink || '' }));
+  } catch (e) { out.practitioners = []; }
+  try { const cs = (loadAcademyManifest().courses || []).map((c) => c.title); out.courseTotal = cs.length; out.courses = cs.filter((t) => score(t) > 0).slice(0, 8); } catch (e) { out.courses = []; }
+  try { if (_lastPublishedEvent && _lastPublishedEvent.name) out.event = { name: _lastPublishedEvent.name, date: _lastPublishedEvent.date || '', venue: _lastPublishedEvent.venue || '' }; } catch (e) {}
+  return out;
+}
+function formatLookup(r, query) {
+  const parts = [];
+  if (r.store && r.store.length) parts.push('Store products: ' + r.store.map((p) => p.title + (p.price ? ' — ' + p.price : '') + (p.available ? '' : ' (sold out)')).join(' | '));
+  if (r.practitioners && r.practitioners.length) parts.push('Practitioners (' + r.practitionerTotal + ' total): ' + r.practitioners.map((p) => p.name + (p.location ? ' (' + p.location + ')' : '') + (p.specialty ? ' — ' + p.specialty : '')).join(' | '));
+  else if (/practitioner|healer|how many|directory/i.test(String(query || '')) && r.practitionerTotal) parts.push('The directory has ' + r.practitionerTotal + ' practitioners.');
+  if (r.courses && r.courses.length) parts.push('Courses: ' + r.courses.join(', '));
+  if (r.event) parts.push('Current event: ' + r.event.name + (r.event.date ? ' — ' + r.event.date : ''));
+  return parts.join('\n');
+}
+const LIVE_Q_RE = /\b(price|prices|cost|costs|how much|buy|purchase|order|shop|store|in stock|available|product|products|device|devices|bio-?well|biopulsar|biotekna|braintap|healy|asea|lifewave|spray|sprays|crystal|crystals|mala|malas|practitioner|practitioners|healer|healers|near me|how many|course|courses|class|classes|event|events|conference|elevate)\b/i;
+async function assistLiveDataBlock(query) {
+  if (!LIVE_Q_RE.test(String(query || ''))) return '';
+  try { const r = await gaiaLookup(query); const body = formatLookup(r, query); return body ? ('LIVE GAIA HEALERS DATA for this question (use ONLY these real facts for prices/products/practitioners/courses/events; never invent others):\n' + body) : ''; } catch (e) { return ''; }
 }
 async function assistChat(body) {
   const prompt = String(body.prompt || body.transcript || '').trim();
@@ -6349,6 +6412,12 @@ const server = http.createServer(async (req, res) => {
     if (url.pathname.startsWith('/api/assist/')) {
       /* Gaia Assist is open to all visitors (member or not); nginx rate-limits /api/assist/ for quota protection. Sign-in gate disabled per product decision. */
     }
+    if (req.method === 'POST' && url.pathname === '/api/assist/lookup') {
+      const body = await readJsonBody(req).catch(() => ({}));
+      const r = await gaiaLookup(String(body.query || body.q || '')).catch(() => ({ ok: false }));
+      sendJson(res, 200, { ok: true, summary: formatLookup(r, body.query || ''), data: r }, origin);
+      return;
+    }
     if (req.method === 'POST' && url.pathname === '/api/assist/memory') {
       const sm = sessionMemberContext(req);
       if (!sm) { sendJson(res, 200, { ok: false, reason: 'not_signed_in' }, origin); return; }
@@ -6378,7 +6447,9 @@ const server = http.createServer(async (req, res) => {
     }
     if (req.method === 'POST' && url.pathname === '/api/assist/chat') {
       const body = await readJsonBody(req);
-      const memberContext = await buildMemberVoiceContext(req);
+      const memberContext0 = await buildMemberVoiceContext(req);
+      const liveData = await assistLiveDataBlock(String(body.prompt || body.transcript || '')).catch(() => '');
+      const memberContext = [memberContext0, liveData].filter(Boolean).join('\n\n');
       const payload = await assistChat({ ...body, source: body.source || 'chat', memberContext });
       try { if (payload && payload.reply) { const ex = await executeOnboardingMarkers(req, payload.reply); payload.reply = ex.clean; if (ex.ran) payload.onboardingSaved = ex.ran; } } catch (e) {}
       sendJson(res, payload.ok === false ? 400 : 200, payload, origin);
@@ -6386,7 +6457,9 @@ const server = http.createServer(async (req, res) => {
     }
     if (req.method === 'POST' && url.pathname === '/api/assist/chat/stream') {
       const body = await readJsonBody(req);
-      const memberContext = await buildMemberVoiceContext(req);
+      const memberContext0 = await buildMemberVoiceContext(req);
+      const liveData = await assistLiveDataBlock(String(body.prompt || body.transcript || '')).catch(() => '');
+      const memberContext = [memberContext0, liveData].filter(Boolean).join('\n\n');
       await assistChatStream({ ...body, source: body.source || 'chat-stream', memberContext }, res, origin);
       return;
     }

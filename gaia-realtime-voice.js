@@ -485,6 +485,11 @@
                 },
               },
               {
+                name: 'gaia_lookup',
+                description: 'Look up LIVE Gaia Healers facts to answer a question accurately: store products and prices (gaiahealers.com), the practitioner directory (count and who/where), which courses exist, and the current event. Call this whenever they ask about a price, whether something is sold, a specific product or device, a practitioner or where to find one, how many practitioners, what courses/events exist. Answer only from what it returns; never invent a price, count, or name.',
+                parameters: { type: 'object', properties: { query: { type: 'string', description: 'What to look up, in the member\'s words (e.g. "Bio-Well price", "practitioner in California", "chakra sprays", "what courses").' } }, required: ['query'] },
+              },
+              {
                 name: 'remember_member',
                 description: 'Save durable facts about the signed-in member so you can continue naturally next visit. Call this when you learn something worth remembering — a real interest, a goal, a decision they made, an objection they raised, or a follow-up for next time. Do NOT save trivia, one-off logistics, or sensitive personal/financial details.',
                 parameters: { type: 'object', properties: { facts: { type: 'array', items: { type: 'string' }, description: 'Short durable facts to remember, e.g. "Wants to get Bio-Well certified", "Declined Gold - too expensive right now".' }, summary: { type: 'string', description: 'Optional one-line summary of who they are / where they are in their journey.' } }, required: ['facts'] },
@@ -696,6 +701,17 @@
       }
     }
 
+    async function handleGaiaLookupToolCall(args = {}) {
+      const query = String(args.query || args.q || '').trim();
+      if (!query) return { ok: false, message: 'Ask what they want to look up.' };
+      try {
+        const res = await fetch(proxyBase() + '/api/assist/lookup', { method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'include', body: JSON.stringify({ query }) });
+        const d = await res.json().catch(() => ({}));
+        const summary = (d && d.summary) ? d.summary : '';
+        if (!summary) return { ok: true, message: 'I did not find a live match for that. Answer from what you know, or offer to open the store or directory.' };
+        return { ok: true, message: 'LIVE DATA (answer only from this, do not invent): ' + summary };
+      } catch (e) { return { ok: false, message: 'I could not look that up right now.' }; }
+    }
     async function handleRememberMemberToolCall(args = {}) {
       let facts = args.facts;
       if (typeof facts === 'string') facts = facts.split(/\s*;;\s*/);
@@ -781,6 +797,7 @@
         case 'open_portal': return handleOpenPortalToolCall(args);
         case 'sign_in': return handleSignInToolCall();
         case 'save_onboarding_step': return handleSaveOnboardingToolCall(args);
+        case 'gaia_lookup': return handleGaiaLookupToolCall(args);
         case 'remember_member': return handleRememberMemberToolCall(args);
         case 'play_course': return handlePlayCourseToolCall(args);
         case 'express_interest': return handleExpressInterestToolCall(args);

@@ -506,10 +506,35 @@
     // Live billing truth — decoupled from the program tags above.
     api('/subscriptions/summary').then(function (d) {
       var s = (d && d.summary) || {};
-      var note = document.getElementById('billnote'); if (note) note.textContent = (s.total || 0) + ' subscriptions ever created';
+      var note = document.getElementById('billnote'); if (note) note.textContent = (s.total || 0) + ' subscriptions ever created · click to list';
       var box = document.getElementById('billstats'); if (!box) return;
-      var stat = function (n, l, cls) { return '<div class="bstat bstat--' + cls + '"><b>' + (n || 0) + '</b><span>' + l + '</span></div>'; };
-      box.innerHTML = stat(s.active, 'Active', 'active') + stat(s.canceled, 'Canceled', 'canceled') + stat(s.expired, 'Expired', 'other') + (s.other ? stat(s.other, 'Other', 'other') : '');
+      var stat = function (n, l, cls, st) { return '<button class="bstat bstat--' + cls + '" data-status="' + st + '"><b>' + (n || 0) + '</b><span>' + l + '</span></button>'; };
+      box.innerHTML = stat(s.active, 'Active', 'active', 'active') + stat(s.canceled, 'Canceled', 'canceled', 'canceled') + stat(s.expired, 'Expired', 'other', 'expired') + (s.other ? stat(s.other, 'Other', 'other', 'other') : '');
+      box.querySelectorAll('.bstat').forEach(function (b) {
+        b.onclick = function () {
+          document.querySelectorAll('.tiercard').forEach(function (x) { x.classList.remove('is-on'); });
+          box.querySelectorAll('.bstat').forEach(function (x) { x.classList.remove('is-on'); });
+          b.classList.add('is-on');
+          listSubscribers(b.dataset.status, b.querySelector('span').textContent);
+        };
+      });
+    });
+  }
+  function listSubscribers(status, label) {
+    var title = document.getElementById('mtitle'); title.style.display = ''; title.textContent = label + ' subscriptions';
+    var box = document.getElementById('mrows'); box.innerHTML = '<div class="skel"></div><div class="skel" style="margin-top:8px"></div>';
+    api('/subscriptions?status=' + encodeURIComponent(status)).then(function (d) {
+      if (!d || !d.ok) { box.innerHTML = '<div class="empty">Could not load subscriptions.</div>'; return; }
+      var list = d.subscriptions || [];
+      if (!list.length) { box.innerHTML = '<div class="empty">' + svg('member') + '<div>No ' + esc(label.toLowerCase()) + ' subscriptions.</div></div>'; return; }
+      box.innerHTML = list.map(function (x) {
+        var amt = x.amount != null ? ('$' + x.amount + (x.interval ? '/' + x.interval : '')) : '';
+        return '<div class="row" data-id="' + esc(x.contactId) + '">'
+          + '<div class="ava">' + esc(initials(x.name)).toUpperCase() + '</div>'
+          + '<div style="min-width:0"><div class="row__name">' + esc(x.name || '—') + '</div><div class="row__mail">' + esc(x.email || x.phone || '—') + '</div></div>'
+          + '<div class="row__tags"><span class="mstatus mstatus--' + statusCls(x.status) + '">' + esc(cap(x.status)) + '</span>' + (amt ? '<span class="tag t-member">' + esc(amt) + '</span>' : '') + '</div></div>';
+      }).join('');
+      box.querySelectorAll('.row').forEach(function (el) { el.onclick = function () { openContact(el.dataset.id); }; });
     });
   }
   function selectTier(key, btn) {

@@ -277,7 +277,7 @@ async function loadSubscriptions(deps) {
   var now = Date.now();
   if (_subCache.byContact && (now - _subCache.at) < 5 * 60 * 1000) return _subCache;
   var cfg = deps.ghlConfig();
-  var empty = { at: now, byContact: {}, summary: { total: 0, active: 0, canceled: 0, expired: 0, other: 0 } };
+  var empty = { at: now, byContact: {}, summary: { total: 0, active: 0, canceled: 0, expired: 0, other: 0 }, list: [] };
   if (!cfg.enabled) return empty;
   var all = [], off = 0, guard = 0;
   while (guard < 20) {
@@ -301,7 +301,8 @@ async function loadSubscriptions(deps) {
   });
   var byContact = {};
   Object.keys(best).forEach(function (id) { byContact[id] = normSub(best[id]); });
-  _subCache = { at: now, byContact: byContact, summary: summary };
+  var list = all.map(function (s) { var n = normSub(s); n.contactId = s.contactId || ''; n.name = s.contactName || ''; n.email = s.contactEmail || ''; n.phone = s.contactPhone || ''; return n; });
+  _subCache = { at: now, byContact: byContact, summary: summary, list: list };
   return _subCache;
 }
 async function contactDetail(cid, deps) {
@@ -525,6 +526,14 @@ async function handle(req, res, url, deps) {
   if (p === '/api/admin/subscriptions/summary' && method === 'GET') {
     const subs = await loadSubscriptions(deps);
     return sendJson(res, 200, { ok: true, summary: subs.summary }, origin);
+  }
+  if (p === '/api/admin/subscriptions' && method === 'GET') {
+    const subs = await loadSubscriptions(deps);
+    var st = (url.searchParams.get('status') || '').toLowerCase();
+    var list = subs.list || [];
+    if (st) list = list.filter(function (x) { return st === 'expired' ? (x.status === 'incomplete_expired' || x.status === 'expired') : x.status === st; });
+    list = list.slice().sort(function (a, b) { return String(b.startedAt).localeCompare(String(a.startedAt)); });
+    return sendJson(res, 200, { ok: true, count: list.length, subscriptions: list }, origin);
   }
   if (p === '/api/admin/contact' && method === 'GET') {
     const cid = url.searchParams.get('id') || '';

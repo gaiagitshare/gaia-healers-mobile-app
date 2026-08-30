@@ -305,6 +305,31 @@ async function loadSubscriptions(deps) {
   _subCache = { at: now, byContact: byContact, summary: summary, list: list };
   return _subCache;
 }
+async function contactBilling(cid, deps) {
+  var cfg = deps.ghlConfig();
+  if (!cfg.enabled) return { subscriptions: [], orders: [], transactions: [], totalPaid: 0, totalRefunded: 0, orderCount: 0, txCount: 0 };
+  var L = cfg.locationId;
+  var subsR = await deps.ghlGet('/payments/subscriptions', { altId: L, altType: 'location', contactId: cid, limit: 50 }).catch(function () { return null; });
+  var ordR = await deps.ghlGet('/payments/orders', { altId: L, altType: 'location', contactId: cid, limit: 50 }).catch(function () { return null; });
+  var txR = await deps.ghlGet('/payments/transactions', { altId: L, altType: 'location', contactId: cid, limit: 50 }).catch(function () { return null; });
+  var subs = (((subsR && subsR.data) || [])).map(normSub);
+  var orders = (((ordR && ordR.data) || [])).map(function (o) {
+    var prods = Array.isArray(o.onetimeProducts) ? o.onetimeProducts.map(function (p) { return p && (p.name || p.productName || p.title); }).filter(Boolean) : [];
+    return { amount: (o.amount != null ? o.amount : null), currency: (o.currency || '').toUpperCase(), status: o.status || o.paymentStatus || '', product: prods.join(', ') || o.sourceName || o.sourceType || '', source: o.sourceType || '', createdAt: o.createdAt || '' };
+  });
+  orders.sort(function (a, b) { return String(b.createdAt).localeCompare(String(a.createdAt)); });
+  var totalPaid = 0, totalRefunded = 0;
+  var transactions = (((txR && txR.data) || [])).map(function (t) {
+    var amt = (typeof t.amount === 'number') ? t.amount : 0;
+    var ref = (typeof t.amountRefunded === 'number') ? t.amountRefunded : 0;
+    var st = (t.status || t.paymentStatus || '').toLowerCase();
+    if (st === 'succeeded' || st === 'completed' || st === 'success' || st === 'paid') { totalPaid += amt; totalRefunded += ref; }
+    return { amount: (t.amount != null ? t.amount : null), currency: (t.currency || '').toUpperCase(), status: t.status || '', refunded: ref || 0, product: t.entitySourceName || t.entityType || '', createdAt: t.createdAt || '' };
+  });
+  transactions.sort(function (a, b) { return String(b.createdAt).localeCompare(String(a.createdAt)); });
+  return { subscriptions: subs, orders: orders, transactions: transactions, totalPaid: totalPaid, totalRefunded: totalRefunded, orderCount: orders.length, txCount: transactions.length };
+}
+
 async function contactDetail(cid, deps) {
   const data = await deps.ghlGet(`/contacts/${encodeURIComponent(cid)}`).catch(() => null);
   const c = (data && (data.contact || data)) || {};
@@ -321,9 +346,11 @@ async function contactDetail(cid, deps) {
   try { var led = deps.loadLedger && deps.loadLedger(); var rec = led && led.contacts && led.contacts[c.id || cid]; if (rec && rec.membership) membership = rec.membership; } catch (e) {}
   var subscription = null;
   try { var subs = await loadSubscriptions(deps); subscription = subs.byContact[c.id || cid] || null; } catch (e) {}
+  var billing = null;
+  try { billing = await contactBilling(c.id || cid, deps); } catch (e) {}
   return { ok: true, contact: {
     id: c.id || cid, name: contactName(c), email: c.email || '', phone: c.phone || '',
-    tags: Array.isArray(c.tags) ? c.tags : [], fields, membership: membership, subscription: subscription,
+    tags: Array.isArray(c.tags) ? c.tags : [], fields, membership: membership, subscription: subscription, billing: billing,
     source: c.source || '', dateAdded: c.dateAdded || '', country: c.country || '', city: c.city || '', state: c.state || '',
   } };
 }

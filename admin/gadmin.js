@@ -42,9 +42,11 @@
     logout: '<path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9"/>',
     tag: '<path d="M20.6 13.4 12 22l-9-9V3h10l7.6 7.6a2 2 0 0 1 0 2.8Z"/><circle cx="7.5" cy="7.5" r="1.5"/>',
     lock: '<rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/>',
-    download: '<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/>'
+    download: '<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/>',
+    receipt: '<path d="M4 2v20l2-1 2 1 2-1 2 1 2-1 2 1 2-1V2l-2 1-2-1-2 1-2-1-2 1-2-1Z"/><path d="M8 7h8M8 11h8M8 15h5"/>'
   };
   function fmtDate(iso) { if (!iso) return '—'; try { var d = new Date(iso); if (isNaN(d)) return '—'; return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }); } catch (e) { return '—'; } }
+  function money(a) { if (a == null || isNaN(a)) return '—'; return '$' + (Number.isInteger(a) ? a : Number(a).toFixed(2)); }
   function svg(name, cls) { return '<svg class="' + (cls || '') + '" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">' + ICON[name] + '</svg>'; }
 
   function tagClass(t) {
@@ -320,6 +322,7 @@
       + '<div class="drawer__body">'
       + '  <div class="sec-label">' + svg('member') + 'Membership</div>'
       + '  ' + membershipCard(m)
+      + billingHistory(m)
       + '  <div class="sec-label">' + svg('tag') + 'Tags <span class="faint">(' + (m.tags || []).length + ')</span></div>'
       + '  <div class="tag-edit" id="tagedit"></div>'
       + (choiceFields.length ? '<div class="sec-label">Survey answers</div><div class="qa">' + choiceFields.map(qa).join('') + '</div>' : '')
@@ -440,7 +443,30 @@
     return null;
   }
   function tierAccent(key) { key = String(key || '').toLowerCase(); for (var i = 0; i < TIERS.length; i++) { if (TIERS[i].key === key) return TIERS[i].accent; } return 'var(--green)'; }
-  function statusCls(st) { st = String(st || '').toLowerCase(); if (/trial/.test(st)) return 'trial'; if (/^active$/.test(st)) return 'active'; if (/cancel/.test(st)) return 'canceled'; if (/past_due|unpaid|expired|incomplete/.test(st)) return 'canceled'; return 'other'; }
+  function statusCls(st) { st = String(st || '').toLowerCase(); if (/trial/.test(st)) return 'trial'; if (/^active$|succeed|success|^completed$|^paid$/.test(st)) return 'active'; if (/cancel|refund/.test(st)) return 'canceled'; if (/past_due|unpaid|expired|incomplete|fail|declin/.test(st)) return 'canceled'; return 'other'; }
+  function billingHistory(m) {
+    var b = m.billing; if (!b) return '';
+    var subs = b.subscriptions || [], tx = b.transactions || [];
+    if (!subs.length && !tx.length) {
+      return '<div class="sec-label">' + svg('receipt') + 'Billing history</div><p class="faint" style="margin:2px 2px 14px">No purchases or payments on record.</p>';
+    }
+    var out = '<div class="sec-label">' + svg('receipt') + 'Billing history</div><div class="bh">';
+    out += '<div class="bh-sum"><span class="bh-total">Lifetime paid <b>' + money(b.totalPaid) + '</b></span>'
+      + (b.totalRefunded > 0 ? '<span class="bh-ref">Refunded ' + money(b.totalRefunded) + '</span>' : '')
+      + '<span class="faint">' + (b.txCount || 0) + ' payment' + (b.txCount === 1 ? '' : 's') + '</span></div>';
+    if (subs.length) {
+      out += '<div class="bh-lbl">Subscriptions</div>' + subs.map(function (s) {
+        var amt = s.amount != null ? (money(s.amount) + (s.interval ? '/' + s.interval : '')) : '';
+        return '<div class="bh-row"><span class="mstatus mstatus--' + statusCls(s.status) + '">' + esc(cap(s.status)) + '</span>' + (amt ? '<b>' + esc(amt) + '</b>' : '') + '<span class="bh-prod">' + esc(s.product || '') + '</span><span class="faint bh-when">' + fmtDate(s.startedAt) + '</span></div>';
+      }).join('');
+    }
+    if (tx.length) {
+      out += '<div class="bh-lbl">Payments</div>' + tx.map(function (t) {
+        return '<div class="bh-row"><b>' + esc(money(t.amount)) + '</b><span class="mstatus mstatus--' + statusCls(t.status) + '">' + esc(cap(t.status)) + '</span>' + (t.refunded > 0 ? '<span class="bh-refchip">−' + esc(money(t.refunded)) + '</span>' : '') + '<span class="bh-prod">' + esc(t.product || '') + '</span><span class="faint bh-when">' + fmtDate(t.createdAt) + '</span></div>';
+      }).join('');
+    }
+    return out + '</div>';
+  }
   function billingBlock(sub) {
     if (!sub || !sub.status) {
       return '<div class="bill"><small>Live billing · Stripe</small><div class="bill__none">No recurring subscription on file</div></div>';

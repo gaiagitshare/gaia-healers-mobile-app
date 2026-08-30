@@ -50,15 +50,42 @@
     return manifestPromise;
   }
 
+  // Normalize a course title to its distinctive tokens so catalogue titles
+  // (e.g. "... Certification Course (12 hour)") match manifest titles
+  // (e.g. "... Certification Training") without an exact string.
+  function acadKey(str) {
+    return String(str || '').toLowerCase()
+      .replace(/\([^)]*\)/g, ' ')
+      .replace(/[^a-z0-9]+/g, ' ')
+      .replace(/\b(course|training|certification|certificate|program|the|a|an|in|person|virtual|online|with|and|for|your|new|model)\b/g, ' ')
+      .replace(/\s+/g, ' ').trim();
+  }
   function findCourse(idOrTitle) {
     if (!manifest) return null;
-    var k = String(idOrTitle || '').toLowerCase().trim();
+    var raw = String(idOrTitle || '').toLowerCase().trim();
+    if (!raw) return null;
+    var courses = manifest.courses || [];
+    var exact = courses.find(function (c) {
+      return String(c.id).toLowerCase() === raw
+        || String(c.title || '').toLowerCase() === raw
+        || (Array.isArray(c.grantMatch) && c.grantMatch.some(function (g) { return String(g).toLowerCase() === raw; }));
+    });
+    if (exact) return exact;
+    // fuzzy fallback: strongest distinctive-token overlap wins (>=60%).
+    var k = acadKey(idOrTitle);
     if (!k) return null;
-    return (manifest.courses || []).find(function (c) {
-      return String(c.id).toLowerCase() === k
-        || String(c.title || '').toLowerCase() === k
-        || (Array.isArray(c.grantMatch) && c.grantMatch.some(function (g) { return String(g).toLowerCase() === k; }));
-    }) || null;
+    var kt = k.split(' ').filter(Boolean);
+    if (!kt.length) return null;
+    var best = null, bestScore = 0;
+    courses.forEach(function (c) {
+      var ct = acadKey(c.title).split(' ').filter(Boolean);
+      if (!ct.length) return;
+      if (ct.join(' ') === k) { best = c; bestScore = 1; return; }
+      var overlap = kt.filter(function (w) { return ct.indexOf(w) >= 0; }).length;
+      var score = overlap / Math.max(kt.length, ct.length);
+      if (score > bestScore) { bestScore = score; best = c; }
+    });
+    return bestScore >= 0.6 ? best : null;
   }
   function has(idOrTitle) { return !!findCourse(idOrTitle); }
 

@@ -81,7 +81,7 @@ body.gaia-booking-open{overflow:hidden;}
     document.head.appendChild(st);
   }
 
-  const state = { authed: false, data: {}, event: null, announcements: [], adminEvents: [], catalog: null };
+  const state = { authed: false, data: {}, event: null, announcements: [], adminEvents: [], catalog: null, academyOwned: null, academyProgress: {} };
   window.GaiaMember = state;
 
   function proxyBase() {
@@ -899,13 +899,10 @@ body.gaia-booking-open{overflow:hidden;}
     const p = (state.data && state.data.profile && state.data.profile.profile) || {};
     const email = p.email || ''; const contactId = p.contactId || p.id || '';
     if (!state.authed || (!email && !contactId)) return;
-    let data = null;
-    try {
-      const r = await fetch(proxyBase() + '/api/academy/me?email=' + encodeURIComponent(email) + '&contactId=' + encodeURIComponent(contactId), { headers: { Accept: 'application/json' } });
-      data = await r.json();
-    } catch (_) { return; }
-    if (!data || !data.ok || !Array.isArray(data.courses) || !data.courses.length) return;
-    const prog = data.progress || {};
+    const owned = await ensureAcademyOwned();
+    if (!owned || !owned.length) return;
+    const data = { courses: owned };
+    const prog = state.academyProgress || {};
     try { window.GaiaAcademyPlayer && window.GaiaAcademyPlayer.setMember && window.GaiaAcademyPlayer.setMember({ email: email, contactId: contactId, progress: prog }); } catch (e) {}
     const shown = data.courses.filter((c) => (c.sections || []).some((sec) => (sec.lessons || []).length));
     if (!shown.length) return;
@@ -943,9 +940,49 @@ body.gaia-booking-open{overflow:hidden;}
     }));
   }
 
+  // Distinctive-token normalizer, matches the Academy player's acadKey so the
+  // catalogue and the in-app "Your courses" agree on which course is which.
+  function acadKey(str) {
+    return String(str || '').toLowerCase()
+      .replace(/\([^)]*\)/g, ' ')
+      .replace(/[^a-z0-9]+/g, ' ')
+      .replace(/\b(course|training|certification|certificate|program|the|a|an|in|person|virtual|online|with|and|for|your|new|model)\b/g, ' ')
+      .replace(/\s+/g, ' ').trim();
+  }
+  // Does this catalogue title map to a course the member already owns in-app?
+  function ownedInApp(name) {
+    const owned = state.academyOwned;
+    if (!Array.isArray(owned) || !owned.length) return null;
+    const k = acadKey(name); if (!k) return null;
+    const kt = k.split(' ').filter(Boolean); if (!kt.length) return null;
+    let best = null, bs = 0;
+    owned.forEach((c) => {
+      const ct = acadKey(c.title).split(' ').filter(Boolean); if (!ct.length) return;
+      const ov = kt.filter((w) => ct.indexOf(w) >= 0).length;
+      const sc = ov / Math.max(kt.length, ct.length);
+      if (sc > bs) { bs = sc; best = c; }
+    });
+    return bs >= 0.6 ? best : null;
+  }
+  // Fetch the member's owned academy courses once (from the ledger/access mirror
+  // of GHL) and cache them on state; both the catalogue and "Your courses" use it.
+  async function ensureAcademyOwned() {
+    if (state.academyOwned) return state.academyOwned;
+    const p = (state.data && state.data.profile && state.data.profile.profile) || {};
+    const email = p.email || ''; const contactId = p.contactId || p.id || '';
+    if (!state.authed || (!email && !contactId)) { state.academyOwned = []; return state.academyOwned; }
+    try {
+      const r = await fetch(proxyBase() + '/api/academy/me?email=' + encodeURIComponent(email) + '&contactId=' + encodeURIComponent(contactId), { headers: { Accept: 'application/json' } });
+      const data = await r.json();
+      state.academyOwned = (data && data.ok && Array.isArray(data.courses)) ? data.courses : [];
+      state.academyProgress = (data && data.progress) || {};
+    } catch (_) { state.academyOwned = []; }
+    return state.academyOwned;
+  }
   function renderAcademy() {
     const box = el('member-academy');
     if (!box) return;
+    if (state.authed && state.academyOwned == null) { ensureAcademyOwned().then(() => { if (el('member-academy')) renderAcademy(); }); }
     const cap = el('academy-summary-caption');
     const courses = state.data.courses || {};
     const grants = state.authed && Array.isArray(courses.courses) ? courses.courses : [];
@@ -1006,7 +1043,7 @@ body.gaia-booking-open{overflow:hidden;}
     // Owned courses now live in the native "Your courses" section (renderSyncedAcademy,
     // inserted at the top of this box). This legacy view keeps only the courses the
     // member does NOT own yet, as a clearly-separate "Explore more courses" block.
-    const exploreTracks = tracks.filter((t) => !(state.authed && t.grant));
+    const exploreTracks = tracks.filter((t) => !(state.authed && (t.grant || ownedInApp(t.name))));
     const parts = [];
     if (!state.authed || !hasAccess) parts.push(academyHead);
     if (exploreTracks.length) {

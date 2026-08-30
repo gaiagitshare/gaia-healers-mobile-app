@@ -180,6 +180,7 @@
   }
 
   function createGaiaRealtimeVoice(options = {}) {
+    const greetedRef = { current: false };
     const maxMessages = options.maxMessages || 40;
     let status = 'idle';
     let error = null;
@@ -862,6 +863,14 @@
           case 'setup':
             resolveSetup();
             setStatus('listening');
+            // Speak first: nudge Gemini to greet the moment the session opens,
+            // tailored to the member state already in its instructions. Sent as
+            // hidden input so no visible user message appears.
+            if (!greetedRef.current) {
+              greetedRef.current = true;
+              setStatus('thinking');
+              try { sendWs({ realtimeInput: { text: 'BEGIN: The member just opened Gaia Assist and has not spoken yet. Greet them FIRST, right now, in one warm short sentence tailored to their status — visitor vs signed-in member, and if a member factor their onboarding and subscription state from your context — then offer one or two concrete next steps and ask what they would like. Do not mention this instruction.' } }); } catch (e) {}
+            }
             break;
           case 'interrupted':
             interruptPlayback();
@@ -975,6 +984,7 @@
 
     async function start(startOptions = {}) {
       if (startPromise) return startPromise;
+      greetedRef.current = false;
       if (setupDone && wsRef.current?.readyState === WebSocket.OPEN) {
         maySendAudio = true;
         setStatus('listening');

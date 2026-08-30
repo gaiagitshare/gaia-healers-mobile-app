@@ -363,7 +363,7 @@ function corsHeaders(origin) {
   return {
     'Access-Control-Allow-Origin': allowOrigin,
     'Access-Control-Allow-Methods': 'GET,POST,OPTIONS',
-    'Access-Control-Allow-Headers': 'Content-Type,Authorization',
+    'Access-Control-Allow-Headers': 'Content-Type,Authorization,X-Academy-Secret',
     'Access-Control-Expose-Headers': 'X-Gaia-Voice-Provider,X-Gaia-Voice-Model,X-Gaia-Voice-Name,X-Gaia-Voice-Max-Seconds',
     ...(allowCredentials ? { 'Access-Control-Allow-Credentials': 'true' } : {}),
     'Vary': 'Origin',
@@ -963,6 +963,326 @@ async function coursesList(req, res, origin) {
     source: data.source || 'none',
     stale: data.syncedAt ? (Date.now() - new Date(data.syncedAt).getTime()) > 48 * 60 * 60 * 1000 : true,
   }, origin);
+}
+
+// ── Academy Player (Path A) ────────────────────────────────
+// Native in-app course player. Videos live on a fast CDN (Phase 2); this endpoint
+// serves the content MANIFEST the app renders. Phase 1 is public (a single
+// preview course on a public HLS test stream) so playback is verifiable now.
+const ACADEMY_MANIFEST_FILE = path.join(process.cwd(), 'data', 'academy-manifest.json');
+const DEFAULT_ACADEMY_MANIFEST = {
+  courses: [
+    {
+      id: 'demo-gaia-player',
+      title: 'Gaia Academy \u2014 Player Preview',
+      poster: '',
+      preview: true,          // visible to everyone (beta demo); no grant needed
+      grantMatch: [],         // GHL course ids/names this maps to (Phase 2)
+      sections: [
+        { title: 'Welcome', lessons: [
+          { id: 'demo-1', title: 'Watching your courses inside Gaia', durationSec: 60, type: 'hls', free: true, src: 'https://test-streams.mux.dev/x36xhzz/x36xhzz.m3u8' },
+          { id: 'demo-2', title: 'Adaptive streaming \u2014 no portal, no leaving', durationSec: 120, type: 'hls', free: true, src: 'https://test-streams.mux.dev/x36xhzz/x36xhzz.m3u8' },
+        ] },
+      ],
+    },
+  ],
+};
+function loadAcademyManifest() {
+  try {
+    if (fs.existsSync(ACADEMY_MANIFEST_FILE)) {
+      const parsed = JSON.parse(fs.readFileSync(ACADEMY_MANIFEST_FILE, 'utf8'));
+      if (parsed && Array.isArray(parsed.courses)) return parsed;
+    }
+  } catch (_) { /* fall through to the built-in default */ }
+  return DEFAULT_ACADEMY_MANIFEST;
+}
+// GET /api/academy/manifest — public course structure for the in-app player.
+async function academyManifest(req, res, origin) {
+  const data = loadAcademyManifest();
+  sendJson(res, 200, {
+    ok: true,
+    courses: data.courses || [],
+    updatedAt: data.updatedAt || null,
+    count: (data.courses || []).length,
+  }, origin);
+}
+
+const ACADEMY_ACCESS_FILE = path.join(process.cwd(), 'data', 'academy-access.json');
+const ACADEMY_PROGRESS_FILE = path.join(process.cwd(), 'data', 'academy-progress.json');
+function loadAcademyAccess() { try { return JSON.parse(fs.readFileSync(ACADEMY_ACCESS_FILE, 'utf8')); } catch (_) { return { byContact: {}, byEmail: {}, updatedAt: null }; } }
+function loadAcademyProgress() { try { return JSON.parse(fs.readFileSync(ACADEMY_PROGRESS_FILE, 'utf8')); } catch (_) { return { byContact: {}, updatedAt: null }; } }
+
+// Detect a lesson's video provider + playable source from GHL's fields.
+function academyLessonSource(lesson) {
+  if (lesson.provider === 'youtube' && lesson.src) return { provider: 'youtube', src: String(lesson.src) };
+  if (lesson.provider === 'vimeo' && lesson.src) return { provider: 'vimeo', src: String(lesson.src) };
+  const raw = String(lesson.videoUrl || lesson.embedUrl || lesson.url || lesson.src || '').trim();
+  const vm = raw.match(/vimeo\.com\/(?:video\/)?(\d+)/);
+  if (vm) return { provider: 'vimeo', src: vm[1] };
+  const yt = raw.match(/(?:youtube\.com\/embed\/|youtu\.be\/|[?&]v=)([\w-]{11})/);
+  if (yt) return { provider: 'youtube', src: yt[1] };
+  if (/^[\w-]{11}$/.test(raw) && lesson.provider === 'youtube') return { provider: 'youtube', src: raw };
+  // GHL-native: build the PUBLIC mp4 URL from the video id (CORS-open CDN).
+  const vid = String(lesson.videoId || lesson.mediaId || lesson.embedMediaId || '').trim();
+  const loc = String(process.env.GHL_LOCATION_ID || '').trim();
+  if (vid && loc) {
+    const bitrate = String(lesson.bitrate || '5300k');
+    return { provider: 'mp4', src: 'https://cdn.courses.apisystem.tech/memberships/' + loc + '/videos/' + vid + '_' + bitrate + '.mp4' };
+  }
+  if (raw) return { provider: /\.m3u8(\?|$)/i.test(raw) ? 'hls' : 'mp4', src: raw };
+  return { provider: 'none', src: '' };
+}
+
+// POST /api/academy/sync — ingest the mirror from the GHL extractor.
+async function academySync(req, res, origin) {
+  const expected = String(process.env.ACADEMY_SYNC_SECRET || '').trim();
+  let qSecret = ''; try { qSecret = new URL(req.url, 'http://x').searchParams.get('secret') || ''; } catch (e) {}
+  const supplied = String(req.headers['x-academy-secret'] || qSecret || '').trim();
+  if (!expected || expected.length < 16) { sendJson(res, 503, { ok: false, error: 'sync_not_configured' }, origin); return; }
+  if (supplied.length !== expected.length || !crypto.timingSafeEqual(Buffer.from(supplied), Buffer.from(expected))) {
+    sendJson(res, 401, { ok: false, error: 'unauthorized' }, origin); return;
+  }
+  let body;
+  try { body = await readJsonBody(req, 16 * 1024 * 1024); } catch (e) { sendJson(res, 400, { ok: false, error: 'bad_json' }, origin); return; }
+  const now = new Date().toISOString();
+  const catalog = Array.isArray(body.catalog) ? body.catalog : [];
+  const members = Array.isArray(body.members) ? body.members : [];
+
+  // --- manifest (catalog -> player shape) ---
+  const courses = catalog.map((c) => {
+    const modules = Array.isArray(c.modules) ? c.modules : [{ title: 'Lessons', lessons: c.lessons || [] }];
+    const sections = modules.map((m) => ({
+      title: String(m.title || 'Lessons'),
+      lessons: (m.lessons || []).map((l) => {
+        const vs = academyLessonSource(l);
+        return { id: String(l.postId || l.id || ''), title: String(l.title || 'Lesson'), provider: vs.provider, src: vs.src, durationSec: Number(l.durationSec || l.duration || 0) || 0 };
+      }).filter((l) => l.id),
+    }));
+    return { id: String(c.productId || c.id || ''), title: String(c.title || 'Course'), poster: String(c.poster || c.image || ''), grantMatch: [String(c.productId || ''), String(c.title || '')].filter(Boolean), sections };
+  }).filter((c) => c.id);
+  if (courses.length) {
+    const existing = loadAcademyManifest();
+    const map = {}; (existing.courses || []).forEach((c) => { map[c.id] = c; });
+    courses.forEach((c) => {
+      const incomingHasLessons = (c.sections || []).some((s) => (s.lessons || []).length);
+      const prev = map[c.id];
+      if (!prev) { map[c.id] = c; }
+      else { map[c.id] = Object.assign({}, prev, c, { sections: incomingHasLessons ? c.sections : (prev.sections || c.sections) }); }
+    });
+    writeJsonAtomic(ACADEMY_MANIFEST_FILE, { updatedAt: now, source: 'ghl-sync', courses: Object.values(map) });
+  }
+
+  // --- access + progress (per member) ---
+  const access = { byContact: {}, byEmail: {}, updatedAt: now };
+  const progress = { byContact: {}, updatedAt: now };
+  for (const m of members) {
+    const cid = String(m.contactId || '').trim();
+    const email = String(m.email || '').trim().toLowerCase();
+    const cs = Array.isArray(m.courses) ? m.courses : [];
+    const ids = cs.map((x) => String(x.productId || x.id || '')).filter(Boolean);
+    if (cid) access.byContact[cid] = ids;
+    if (email) access.byEmail[email] = ids;
+    if (cid) {
+      progress.byContact[cid] = {};
+      for (const x of cs) {
+        const pid = String(x.productId || x.id || ''); if (!pid) continue;
+        progress.byContact[cid][pid] = { pct: Number(x.progressPct || x.percentage || 0) || 0, completed: Array.isArray(x.completedPostIds) ? x.completedPostIds : [] };
+      }
+    }
+  }
+  if (members.length) {
+    const ea = loadAcademyAccess(); const ep = loadAcademyProgress();
+    ea.byContact = Object.assign(ea.byContact || {}, access.byContact); ea.byEmail = Object.assign(ea.byEmail || {}, access.byEmail); ea.updatedAt = now;
+    ep.byContact = Object.assign(ep.byContact || {}, progress.byContact); ep.updatedAt = now;
+    writeJsonAtomic(ACADEMY_ACCESS_FILE, ea); writeJsonAtomic(ACADEMY_PROGRESS_FILE, ep);
+  }
+
+  sendJson(res, 200, { ok: true, courses: courses.length, members: members.length, updatedAt: now }, origin);
+}
+
+// POST /api/academy/webhook — GHL Workflow fires this on course grant/revoke.
+// Body (any of): { email, contactId, productId, offerTitle|offerName, action: "grant"|"revoke" }.
+// The GHL "Membership Offer Access Granted/Removed" trigger cannot pass a course
+// UUID, only the granted offer's TITLE ({{membership_contact.offer_title}}), so we
+// resolve that title -> course product id(s) here: an explicit map wins
+// (data/academy-offer-map.json), else a single unambiguous manifest-title match;
+// anything unresolved is recorded in data/academy-offer-unmapped.json for review.
+// Secret via ?secret= or x-academy-secret. Updates data/academy-access.json live.
+const ACADEMY_OFFER_MAP_FILE = path.join(process.cwd(), 'data', 'academy-offer-map.json');
+const ACADEMY_OFFER_UNMAPPED_FILE = path.join(process.cwd(), 'data', 'academy-offer-unmapped.json');
+function acadNorm(s) { return String(s == null ? '' : s).toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim(); }
+function loadAcademyOfferMap() { try { return JSON.parse(fs.readFileSync(ACADEMY_OFFER_MAP_FILE, 'utf8')) || {}; } catch (_) { return {}; } }
+// Resolve a granted offer title to the course product id(s) it should unlock.
+// Returns { ids: [...], via: 'map'|'title'|'unresolved', candidates: n }.
+function resolveOfferToProducts(offerTitle) {
+  const norm = acadNorm(offerTitle);
+  if (!norm) return { ids: [], via: 'unresolved', candidates: 0 };
+  const map = loadAcademyOfferMap();
+  for (const k of Object.keys(map)) {
+    if (acadNorm(k) === norm) {
+      const v = map[k]; const ids = (Array.isArray(v) ? v : [v]).map((x) => String(x).trim()).filter(Boolean);
+      if (ids.length) return { ids, via: 'map', candidates: ids.length };
+    }
+  }
+  // Fall back to the synced manifest, but accept ONLY an unambiguous single match,
+  // so a vague offer title never silently unlocks the wrong (or several) courses.
+  const courses = (loadAcademyManifest().courses || []);
+  const hits = courses.filter((c) => {
+    const t = acadNorm(c.title);
+    if (!t) return false;
+    if (t === norm) return true;
+    if (Array.isArray(c.grantMatch) && c.grantMatch.some((g) => acadNorm(g) === norm)) return true;
+    return t.indexOf(norm) === 0 || norm.indexOf(t) === 0;
+  });
+  const ids = [...new Set(hits.map((c) => c.id).filter(Boolean))];
+  if (ids.length === 1) return { ids, via: 'title', candidates: 1 };
+  return { ids: [], via: 'unresolved', candidates: ids.length };
+}
+function recordUnmappedOffer(offerTitle, contactRef) {
+  try {
+    let log = {}; try { log = JSON.parse(fs.readFileSync(ACADEMY_OFFER_UNMAPPED_FILE, 'utf8')) || {}; } catch (_) {}
+    const key = String(offerTitle || '').trim() || '(empty)';
+    const e = log[key] || { count: 0, firstSeen: new Date().toISOString(), lastContact: null };
+    e.count += 1; e.lastSeen = new Date().toISOString(); e.lastContact = contactRef || e.lastContact;
+    log[key] = e; writeJsonAtomic(ACADEMY_OFFER_UNMAPPED_FILE, log);
+  } catch (_) {}
+}
+async function academyWebhook(req, res, origin) {
+  const expected = String(process.env.ACADEMY_SYNC_SECRET || '').trim();
+  let qSecret = ''; try { qSecret = new URL(req.url, 'http://x').searchParams.get('secret') || ''; } catch (e) {}
+  const supplied = String(req.headers['x-academy-secret'] || qSecret || '').trim();
+  if (!expected || supplied.length !== expected.length || !crypto.timingSafeEqual(Buffer.from(supplied), Buffer.from(expected))) {
+    sendJson(res, 401, { ok: false, error: 'unauthorized' }, origin); return;
+  }
+  let body; try { body = await readJsonBody(req, 256 * 1024); } catch (e) { sendJson(res, 400, { ok: false, error: 'bad_json' }, origin); return; }
+  const email = String(body.email || body.contact_email || (body.contact && body.contact.email) || '').trim().toLowerCase();
+  const contactId = String(body.contactId || body.contact_id || (body.contact && body.contact.id) || '').trim();
+  const directId = String(body.productId || body.product_id || body.courseId || body.course_id || '').trim();
+  const offerTitle = String(body.offerTitle || body.offer_title || body.offerName || body.offer_name || '').trim();
+  const raw = String(body.action || body.event || body.type || 'grant').toLowerCase();
+  const action = /revok|remov|cancel|refund|expir|delete/.test(raw) ? 'revoke' : 'grant';
+  if (!email && !contactId) { sendJson(res, 422, { ok: false, error: 'need contact (email or contactId)' }, origin); return; }
+  let ids = []; let via = 'direct';
+  if (directId) { ids = [directId]; via = 'direct'; }
+  else if (offerTitle && !/\{\{/.test(offerTitle)) { const r = resolveOfferToProducts(offerTitle); ids = r.ids; via = r.via; }
+  if (!ids.length) {
+    // Nothing to change — not a fault the sender can fix, so 200 + record the
+    // offer title we could not map, ready for a one-line academy-offer-map.json entry.
+    if (offerTitle) recordUnmappedOffer(offerTitle, email || contactId);
+    sendJson(res, 200, { ok: true, action, resolved: [], via: 'unresolved', offerTitle: offerTitle || null, contactId: contactId || null, email: email || null }, origin);
+    return;
+  }
+  const access = loadAcademyAccess(); access.byContact = access.byContact || {}; access.byEmail = access.byEmail || {};
+  const upd = (store, key) => { if (!key) return; const set = new Set(store[key] || []); for (const id of ids) { if (action === 'grant') set.add(id); else set.delete(id); } store[key] = [...set]; };
+  upd(access.byContact, contactId); upd(access.byEmail, email);
+  access.updatedAt = new Date().toISOString();
+  writeJsonAtomic(ACADEMY_ACCESS_FILE, access);
+  sendJson(res, 200, { ok: true, action, resolved: ids, via, offerTitle: offerTitle || null, contactId: contactId || null, email: email || null }, origin);
+}
+
+const ACADEMY_EMAIL_TO_CONTACT_FILE = path.join(path.dirname(MEMBER_ENTITLEMENTS_FILE), 'email-to-contact.json');
+// email -> contactId crosswalk (from the backfill), cached by mtime.
+let _acadEmailToContact = null;
+function loadAcademyEmailToContact() {
+  try {
+    const mtime = fs.statSync(ACADEMY_EMAIL_TO_CONTACT_FILE).mtimeMs;
+    if (_acadEmailToContact && _acadEmailToContact.mtime === mtime) return _acadEmailToContact.map;
+    const j = JSON.parse(fs.readFileSync(ACADEMY_EMAIL_TO_CONTACT_FILE, 'utf8'));
+    const raw = (j && j.map) || j || {};
+    const map = {};
+    for (const e of Object.keys(raw)) { const k = String(e).trim().toLowerCase(); if (k) map[k] = String(raw[e] || '').trim(); }
+    _acadEmailToContact = { mtime, map };
+    return map;
+  } catch (e) { return (_acadEmailToContact && _acadEmailToContact.map) || {}; }
+}
+
+// contactId -> [manifest course ids], derived from the ledger by matching each
+// unlocked course's NAME to a manifest course title/grantMatch. Cached until the
+// ledger or the manifest file changes.
+let _ledgerAcademyIndex = null;
+function loadLedgerAcademyIndex() {
+  let lm = 0, mm = 0;
+  try { lm = fs.statSync(MEMBER_ENTITLEMENTS_FILE).mtimeMs; } catch (e) {}
+  try { mm = fs.statSync(ACADEMY_MANIFEST_FILE).mtimeMs; } catch (e) {}
+  const key = lm + ':' + mm;
+  if (_ledgerAcademyIndex && _ledgerAcademyIndex.key === key) return _ledgerAcademyIndex.byContact;
+  const byContact = {};
+  try {
+    const manifest = loadAcademyManifest();
+    const titleToId = {};
+    (manifest.courses || []).forEach((c) => {
+      const t = acadNorm(c.title); if (t) titleToId[t] = c.id;
+      (Array.isArray(c.grantMatch) ? c.grantMatch : []).forEach((g) => { const k = acadNorm(g); if (k) titleToId[k] = c.id; });
+    });
+    const ledger = loadMemberEntitlements();
+    const contacts = (ledger && ledger.contacts) || {};
+    for (const cid of Object.keys(contacts)) {
+      const courses = (contacts[cid] && contacts[cid].courses) || [];
+      const set = new Set();
+      for (const co of courses) {
+        if (co && co.state && co.state !== 'unlocked') continue;
+        const id = titleToId[acadNorm(co && co.name)] || titleToId[acadNorm(co && co.id)];
+        if (id) set.add(id);
+      }
+      if (set.size) byContact[cid] = [...set];
+    }
+  } catch (e) { /* fall through with whatever we built */ }
+  _ledgerAcademyIndex = { key, byContact };
+  return byContact;
+}
+
+// GET /api/academy/me?email= — the signed-in member's OWN courses + progress.
+// Access = live webhook grants (academy-access.json) UNION the authoritative GHL
+// entitlement ledger (member-entitlements.json), so a member plays exactly what
+// GHL grants them, for every course whose videos are in the synced manifest.
+async function academyMe(req, res, origin, url) {
+  const email = String(url.searchParams.get('email') || '').trim().toLowerCase();
+  let contactId = String(url.searchParams.get('contactId') || '').trim();
+  if (!contactId && email) { const map = loadAcademyEmailToContact(); contactId = map[email] || ''; }
+  const access = loadAcademyAccess();
+  const progress = loadAcademyProgress();
+  const ids = new Set();
+  if (contactId && Array.isArray(access.byContact[contactId])) access.byContact[contactId].forEach((x) => ids.add(x));
+  if (email && Array.isArray(access.byEmail[email])) access.byEmail[email].forEach((x) => ids.add(x));
+  const ledgerIdx = loadLedgerAcademyIndex();
+  if (contactId && Array.isArray(ledgerIdx[contactId])) ledgerIdx[contactId].forEach((x) => ids.add(x));
+  const manifest = loadAcademyManifest();
+  const owned = (manifest.courses || []).filter((c) => ids.has(c.id) || (Array.isArray(c.grantMatch) && c.grantMatch.some((g) => ids.has(g))));
+  const prog = (contactId && progress.byContact && progress.byContact[contactId]) || {};
+  sendJson(res, 200, { ok: true, courses: owned, progress: prog, count: owned.length, updatedAt: access.updatedAt }, origin);
+}
+
+// POST /api/academy/progress — the in-app player reports a lesson's position +
+// completion; we persist it per member so "% complete" and resume survive across
+// devices (academyMe returns this back). Body: { email|contactId, courseId,
+// lessonId, positionSec, durationSec, done }. Playback lives in-app now, so THIS
+// is the source of truth for in-app progress (GHL's portal progress is separate).
+async function academyProgress(req, res, origin) {
+  let body; try { body = await readJsonBody(req, 64 * 1024); } catch (e) { sendJson(res, 400, { ok: false, error: 'bad_json' }, origin); return; }
+  const email = String(body.email || '').trim().toLowerCase();
+  let contactId = String(body.contactId || '').trim();
+  if (!contactId && email) { const map = loadAcademyEmailToContact(); contactId = map[email] || ''; }
+  const courseId = String(body.courseId || '').trim();
+  const lessonId = String(body.lessonId || '').trim();
+  if (!contactId || !courseId || !lessonId) { sendJson(res, 422, { ok: false, error: 'need contactId (or known email) + courseId + lessonId' }, origin); return; }
+  const pos = Math.max(0, Math.floor(Number(body.positionSec) || 0));
+  const dur = Math.max(0, Math.floor(Number(body.durationSec) || 0));
+  const done = !!body.done || (dur > 0 && pos >= dur - 15);
+  const store = loadAcademyProgress(); store.byContact = store.byContact || {};
+  const byCourse = store.byContact[contactId] = store.byContact[contactId] || {};
+  const c = byCourse[courseId] = byCourse[courseId] || { pct: 0, completed: [], pos: {} };
+  c.completed = Array.isArray(c.completed) ? c.completed : [];
+  c.pos = c.pos && typeof c.pos === 'object' ? c.pos : {};
+  c.pos[lessonId] = pos;
+  if (done && !c.completed.includes(lessonId)) c.completed.push(lessonId);
+  // recompute % against the manifest's lesson count for this course
+  const manifest = loadAcademyManifest();
+  const mc = (manifest.courses || []).find((x) => String(x.id) === courseId || (Array.isArray(x.grantMatch) && x.grantMatch.some((g) => String(g) === courseId)));
+  const total = mc ? (mc.sections || []).reduce((a, sec) => a + ((sec.lessons || []).length), 0) : 0;
+  c.pct = total ? Math.round(Math.min(c.completed.length, total) / total * 100) : (c.completed.length ? 100 : 0);
+  store.updatedAt = new Date().toISOString();
+  writeJsonAtomic(ACADEMY_PROGRESS_FILE, store);
+  sendJson(res, 200, { ok: true, courseId, pct: c.pct, completed: c.completed }, origin);
 }
 
 function memberWebhookAuthorized(req, rawBody) {
@@ -2243,6 +2563,44 @@ async function ghlUpsertContact(fields = {}) {
     const d = await r.json().catch(() => ({}));
     return { ok: true, contactId: (d && (d.contact?.id || d.id)) || '' };
   } catch (e) { return { ok: false, reason: 'network', error: String((e && e.message) || e) }; }
+}
+
+// Capture an app quiz result as a GHL lead (email + focus-chakra tag). Public,
+// rate-limited, never leaks GHL internals, and falls back to a local store so a
+// missing GHL write scope can never lose a lead.
+const QUIZ_LEAD_REQUESTS = new Map();
+async function quizLead(req, res, origin) {
+  const body = await readJsonBody(req).catch(() => ({}));
+  const email = String(body.email || '').trim().toLowerCase();
+  if (!email || !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) {
+    sendJson(res, 400, { ok: false, error: 'Valid email required.' }, origin); return;
+  }
+  const chakra = String(body.chakra || '').trim().toLowerCase().replace(/[^a-z-]/g, '').slice(0, 20);
+  const tool = String(body.tool || 'chakra-balance').trim().toLowerCase().replace(/[^a-z0-9-]/g, '').slice(0, 40);
+  const name = String(body.name || '').trim().slice(0, 80);
+  const ip = firstNonEmptyString(req.headers['cf-connecting-ip'], String(req.headers['x-forwarded-for'] || '').split(',')[0], req.socket && req.socket.remoteAddress, 'unknown');
+  const rlKey = crypto.createHash('sha256').update(ip + '|' + email).digest('hex');
+  const cutoff = Date.now() - 15 * 60 * 1000;
+  const hits = (QUIZ_LEAD_REQUESTS.get(rlKey) || []).filter((t) => t > cutoff);
+  if (hits.length >= 6) { sendJson(res, 429, { ok: false, error: 'Too many requests. Please wait a few minutes.' }, origin, { 'Retry-After': '900' }); return; }
+  hits.push(Date.now()); QUIZ_LEAD_REQUESTS.set(rlKey, hits);
+  if (QUIZ_LEAD_REQUESTS.size > 10000) { for (const [k, t] of QUIZ_LEAD_REQUESTS) if (!t.some((x) => x > cutoff)) QUIZ_LEAD_REQUESTS.delete(k); }
+  const tags = ['gaia-app-lead', 'quiz:' + tool];
+  if (chakra) tags.push('focus-chakra:' + chakra);
+  let up = { ok: false, reason: 'ghl_unconfigured' };
+  try { up = await ghlUpsertContact({ email, ...(name ? { firstName: name.split(/\s+/)[0], name } : {}), tags, source: 'Gaia App - ' + tool }); } catch (_) {}
+  if (!up.ok) {
+    try {
+      const f = path.join(process.cwd(), 'data', 'quiz-leads.json');
+      let store; try { store = JSON.parse(fs.readFileSync(f, 'utf8')); } catch (_) { store = { version: 1, items: [] }; }
+      store.items = Array.isArray(store.items) ? store.items : [];
+      store.items.push({ at: new Date().toISOString(), email, chakra, tool, name, ghl_reason: up.reason || null });
+      if (store.items.length > 5000) store.items = store.items.slice(-5000);
+      writeJsonAtomic(f, store);
+    } catch (_) {}
+  }
+  console.log('[Gaia Quiz Lead]', JSON.stringify({ ghl: up.ok === true, reason: up.ok ? null : (up.reason || 'error'), tool, chakra }));
+  sendJson(res, 200, { ok: true }, origin);
 }
 
 // Send a transactional email to a GHL contact via the conversations API.
@@ -5460,6 +5818,26 @@ const server = http.createServer(async (req, res) => {
       await coursesList(req, res, origin);
       return;
     }
+    if (req.method === 'GET' && url.pathname === '/api/academy/manifest') {
+      await academyManifest(req, res, origin);
+      return;
+    }
+    if (req.method === 'POST' && url.pathname === '/api/academy/sync') {
+      await academySync(req, res, origin);
+      return;
+    }
+    if (req.method === 'GET' && url.pathname === '/api/academy/me') {
+      await academyMe(req, res, origin, url);
+      return;
+    }
+    if (req.method === 'POST' && url.pathname === '/api/academy/progress') {
+      await academyProgress(req, res, origin);
+      return;
+    }
+    if (req.method === 'POST' && url.pathname === '/api/academy/webhook') {
+      await academyWebhook(req, res, origin);
+      return;
+    }
     if (req.method === 'GET' && url.pathname === '/api/events') {
       await eventsList(req, res, origin, url);
       return;
@@ -5677,6 +6055,10 @@ const server = http.createServer(async (req, res) => {
     }
     if (req.method === 'POST' && url.pathname === '/api/auth/magic-link/request') {
       await authMagicLinkRequest(req, res, origin);
+      return;
+    }
+    if (req.method === 'POST' && url.pathname === '/api/quiz/lead') {
+      await quizLead(req, res, origin);
       return;
     }
     if (req.method === 'POST' && url.pathname === '/api/auth/join') {

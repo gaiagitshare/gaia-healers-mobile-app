@@ -10,7 +10,7 @@ import path from 'node:path';
  * the guarantee that grant AND revoke still land on the backfilled row, and
  * that an unmappable revoke NEVER removes the wrong course. */
 
-// Load the pure matching functions straight out of server.js without booting it.
+// Load the four pure functions straight out of server.js without booting it.
 const here = path.dirname(fileURLToPath(import.meta.url));
 const src = fs.readFileSync(path.join(here, '..', 'server.js'), 'utf8');
 const grab = (name) => {
@@ -19,8 +19,7 @@ const grab = (name) => {
   return m[0];
 };
 const mod = await import('data:text/javascript;base64,' + Buffer.from(
-  grab('courseGroupKey') + grab('aliasKeyForId') + grab('aliasIdForKey') +
-  grab('learnCourseAlias') + grab('resolveEntitlementMatch') +
+  grab('courseGroupKey') + grab('aliasKeyForId') + grab('learnCourseAlias') + grab('resolveEntitlementMatch') +
   '\nexport { courseGroupKey, learnCourseAlias, resolveEntitlementMatch };'
 ).toString('base64'));
 const { courseGroupKey, learnCourseAlias, resolveEntitlementMatch } = mod;

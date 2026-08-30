@@ -14,7 +14,6 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import crypto from 'node:crypto';
-import { installCourseAuthority } from './course-authority-fixture.js';
 
 const SECRET = 'test-secret-'.padEnd(48, 'x');
 const CONTACT_ID = 'contact-integration-1';
@@ -24,9 +23,6 @@ const workdir = fs.mkdtempSync(path.join(os.tmpdir(), 'gaia-membership-'));
 fs.mkdirSync(path.join(workdir, 'data'), { recursive: true });
 const storeFile = path.join(workdir, 'data', 'member-entitlements.json');
 process.chdir(workdir);
-installCourseAuthority(workdir, [
-  'offer-idem-1', 'offer-pipeline-1', 'offer-order-1', 'offer-v2-1',
-]);
 
 // ── stub GHL ────────────────────────────────────────────────────────────────
 let subscriptionsResponse = { data: [] };

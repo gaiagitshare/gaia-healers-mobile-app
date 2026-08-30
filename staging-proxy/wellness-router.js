@@ -15,7 +15,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import { fileURLToPath } from 'node:url';
-import { Body, Ecliptic, GeoVector } from 'astronomy-engine';
+import { Body, Ecliptic, GeoVector, SiderealTime } from 'astronomy-engine';
 import { todaySky } from './membership/sky.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -161,6 +161,21 @@ function zodiacPlacement(longitude) {
   return { sign: ZODIAC_SIGNS[index], element: ZODIAC_ELEMENTS[index % 4], degree: Math.floor(normalized % 30) };
 }
 
+const ASC_D2R = Math.PI / 180;
+function ascJulianDay(date) { return date.getTime() / 86400000 + 2440587.5; }
+function ascMeanObliquity(date) { const T = (ascJulianDay(date) - 2451545.0) / 36525; return (23.439291 - 0.0130042 * T - 1.64e-7 * T * T + 5.04e-7 * T * T * T) * ASC_D2R; }
+// Ascendant (rising sign) ecliptic longitude in degrees. Needs an exact birth
+// time + place; validated at sunrise against the Sun (matches to ~1 deg).
+function ascendantLongitude(instant, latitude, longitude) {
+  const gast = SiderealTime(instant);
+  const lst = (((gast + longitude / 15) % 24) + 24) % 24;
+  const ramc = (lst * 15) * ASC_D2R;
+  const eps = ascMeanObliquity(instant);
+  const phi = latitude * ASC_D2R;
+  const asc = Math.atan2(Math.cos(ramc), -(Math.sin(ramc) * Math.cos(eps) + Math.tan(phi) * Math.sin(eps)));
+  return ((asc / ASC_D2R) % 360 + 360) % 360;
+}
+
 function buildCosmicMap(dob, birthTime, place) {
   const timeKnown = /^(?:[01]\d|2[0-3]):[0-5]\d$/.test(String(birthTime || ''));
   const instant = localBirthInstant(dob, timeKnown ? birthTime : '12:00', place.timezone);
@@ -176,6 +191,7 @@ function buildCosmicMap(dob, birthTime, place) {
   const dominantSign = Object.entries(signCounts).sort((a, b) => b[1] - a[1] || (a[0] === sun.sign ? -1 : 1))[0][0];
   const rankedElements = Object.entries(elementCounts).sort((a, b) => b[1] - a[1]);
   const spotlight = CHAKRAS.find((chakra) => chakra.id === SIGN_CHAKRA[dominantSign]) || CHAKRAS[0];
+  const rising = (timeKnown && Number.isFinite(place.latitude) && Number.isFinite(place.longitude)) ? zodiacPlacement(ascendantLongitude(instant, place.latitude, place.longitude)) : null;
   const representedElement = rankedElements[0][0];
   const elementToInvite = rankedElements[rankedElements.length - 1][0];
   return {
@@ -185,6 +201,7 @@ function buildCosmicMap(dob, birthTime, place) {
     place: place.label,
     timezone: place.timezone,
     placements,
+    rising,
     dominantSign,
     representedElement,
     elementToInvite,
@@ -578,9 +595,11 @@ async function handle(req, res, url, deps) {
       }
     }
     return sendJson(res, 200, sky, origin, {
-      // Recomputed on request but safe to hold briefly at the edge: the numbers
-      // move continuously, the reading does not change within an hour.
-      'Cache-Control': 'public, max-age=900',
+      // This carries a personal layer (first name, birth chakra) keyed to the
+      // gaia_wellness cookie: it must never be shared-cached, and must reflect a
+      // just-added birth date at once rather than be held generic for 15 minutes.
+      'Cache-Control': 'private, no-cache',
+      Vary: 'Cookie',
     });
   }
 

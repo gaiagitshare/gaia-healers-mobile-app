@@ -132,10 +132,7 @@ test('the service token is never sent to the browser', () => {
   const source = fs.readFileSync(path.join(proxyRoot, 'membership', 'event-identity.js'), 'utf8');
   // It may be read from the environment and put in an Authorization header,
   // but must not appear in anything returned to a caller.
-  const returned = source.slice(
-    source.indexOf('async function myEvents'),
-    source.indexOf('async function myUpgrades'),
-  );
+  const returned = source.slice(source.indexOf('function myEvents'));
   assert.ok(!/IDENTITY_SERVICE_TOKEN/.test(returned),
     'the token is used only in the server-to-server call, never in a response');
 });

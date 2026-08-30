@@ -198,11 +198,219 @@ async function writeTag(cid, tag, add, deps) {
 }
 
 // ---------- main handler ----------
+// ---------- Gaia Admin: Contacts + Surveys (GHL PIT) ----------
+let _cfMapCache = null, _cfMapAt = 0;
+async function loadCustomFieldMap(deps) {
+  const cfg = deps.ghlConfig();
+  if (!cfg.enabled) return {};
+  if (_cfMapCache && Date.now() - _cfMapAt < 10 * 60 * 1000) return _cfMapCache;
+  const data = await deps.ghlGet(`/locations/${cfg.locationId}/customFields`).catch(() => null);
+  const fields = (data && (data.customFields || data.customField || data.fields)) || [];
+  const map = {};
+  for (const f of fields) if (f && f.id) map[f.id] = { name: f.name || f.fieldKey || f.id, key: f.fieldKey || '', type: f.dataType || f.type || '' };
+  _cfMapCache = map; _cfMapAt = Date.now();
+  return map;
+}
+function contactName(c) { return (c.contactName || `${c.firstName || ''} ${c.lastName || ''}`).trim() || c.email || 'Contact'; }
+async function ghlSearchContacts(cfg, deps, body) {
+  try {
+    const r = await fetch(`${cfg.base}/contacts/search`, { method: 'POST', headers: { ...deps.ghlHeaders(cfg.token, cfg.version), 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+    if (!r.ok) return null;
+    return await r.json();
+  } catch (_) { return null; }
+}
+async function listContacts(params, deps) {
+  const cfg = deps.ghlConfig();
+  if (!cfg.enabled) return { ok: false, reason: 'ghl_unconfigured', contacts: [] };
+  const limit = Math.min(50, Math.max(1, parseInt(params.limit, 10) || 25));
+  const body = { locationId: cfg.locationId, pageLimit: limit };
+  if (params.tag) body.filters = [{ field: 'tags', operator: 'contains', value: String(params.tag) }];
+  if (params.query) body.query = String(params.query);
+  if (params.after) { try { body.searchAfter = JSON.parse(params.after); } catch (_) {} }
+  const data = await ghlSearchContacts(cfg, deps, body);
+  if (!data) return { ok: false, reason: 'ghl_error', contacts: [] };
+  const list = data.contacts || data.data || [];
+  const contacts = list.map((c) => ({ id: c.id, name: contactName(c), email: c.email || '', phone: c.phone || '', tagCount: (c.tags || []).length, tags: c.tags || [] }));
+  const last = list[list.length - 1];
+  return { ok: true, total: data.total != null ? data.total : null, count: contacts.length, contacts, next: (last && last.searchAfter) ? JSON.stringify(last.searchAfter) : null };
+}
+async function listContactsAdvanced(body, deps) {
+  const cfg = deps.ghlConfig();
+  if (!cfg.enabled) return { ok: false, reason: 'ghl_unconfigured', contacts: [] };
+  const limit = Math.min(50, Math.max(1, parseInt(body.limit, 10) || 30));
+  const q = { locationId: cfg.locationId, pageLimit: limit };
+  const filters = [];
+  // groups: array of tag-arrays. Within a group => OR (GHL contains + array value).
+  // Across groups => AND (separate filter entries).
+  (Array.isArray(body.groups) ? body.groups : []).forEach(function (g) {
+    var arr = (Array.isArray(g) ? g : [g]).map(function (x) { return String(x || '').trim(); }).filter(Boolean);
+    if (arr.length) filters.push({ field: 'tags', operator: 'contains', value: arr.length === 1 ? arr[0] : arr });
+  });
+  if (body.source) filters.push({ field: 'source', operator: 'eq', value: String(body.source) });
+  if (filters.length) q.filters = filters;
+  if (body.query) q.query = String(body.query);
+  if (body.after) { try { q.searchAfter = typeof body.after === 'string' ? JSON.parse(body.after) : body.after; } catch (_) {} }
+  const data = await ghlSearchContacts(cfg, deps, q);
+  if (!data) return { ok: false, reason: 'ghl_error', contacts: [] };
+  const list = data.contacts || data.data || [];
+  const contacts = list.map(function (c) { return { id: c.id, name: contactName(c), email: c.email || '', phone: c.phone || '', tagCount: (c.tags || []).length, tags: c.tags || [] }; });
+  const last = list[list.length - 1];
+  return { ok: true, total: data.total != null ? data.total : null, count: contacts.length, contacts: contacts, next: (last && last.searchAfter) ? JSON.stringify(last.searchAfter) : null };
+}
+function normSub(s) {
+  if (!s) return null;
+  var rp = s.recurringProduct || {};
+  var interval = (rp.price && rp.price.recurring && rp.price.recurring.interval) || '';
+  return {
+    status: s.status || '',
+    amount: (s.amount != null ? s.amount : null),
+    currency: (s.currency || '').toUpperCase(),
+    interval: interval,
+    product: (s.lineItemDetails && s.lineItemDetails.name) || (rp.product && rp.product.name) || '',
+    startedAt: s.subscriptionStartDate || s.createdAt || '',
+    trialEndAt: s.trialEndDate || '',
+    updatedAt: s.updatedAt || '',
+  };
+}
+var _subCache = { at: 0, byContact: null, summary: null };
+async function loadSubscriptions(deps) {
+  var now = Date.now();
+  if (_subCache.byContact && (now - _subCache.at) < 5 * 60 * 1000) return _subCache;
+  var cfg = deps.ghlConfig();
+  var empty = { at: now, byContact: {}, summary: { total: 0, active: 0, canceled: 0, expired: 0, other: 0 } };
+  if (!cfg.enabled) return empty;
+  var all = [], off = 0, guard = 0;
+  while (guard < 20) {
+    guard++;
+    var r = await deps.ghlGet('/payments/subscriptions', { altId: cfg.locationId, altType: 'location', limit: 100, offset: off }).catch(function () { return null; });
+    var arr = (r && (r.data || r.subscriptions)) || [];
+    if (!arr.length) break;
+    all = all.concat(arr);
+    off += 100;
+    if (arr.length < 100) break;
+  }
+  var rank = { active: 4, trialing: 3, past_due: 2, unpaid: 1, canceled: 0, incomplete_expired: 0, incomplete: 0 };
+  var best = {}, summary = { total: all.length, active: 0, canceled: 0, expired: 0, other: 0 };
+  all.forEach(function (s) {
+    var id = s.contactId;
+    if (id) { if (!best[id] || (rank[s.status] || 0) > (rank[best[id].status] || 0)) best[id] = s; }
+    if (s.status === 'active') summary.active++;
+    else if (s.status === 'canceled') summary.canceled++;
+    else if (s.status === 'incomplete_expired' || s.status === 'expired') summary.expired++;
+    else summary.other++;
+  });
+  var byContact = {};
+  Object.keys(best).forEach(function (id) { byContact[id] = normSub(best[id]); });
+  _subCache = { at: now, byContact: byContact, summary: summary };
+  return _subCache;
+}
+async function contactDetail(cid, deps) {
+  const data = await deps.ghlGet(`/contacts/${encodeURIComponent(cid)}`).catch(() => null);
+  const c = (data && (data.contact || data)) || {};
+  if (!c.id && !c.email) return { ok: false, reason: 'not_found' };
+  const cfMap = await loadCustomFieldMap(deps);
+  const rawCf = c.customFields || c.customField || [];
+  const fields = rawCf.map((f) => {
+    const def = cfMap[f.id] || {};
+    let value = f.value;
+    if (value && typeof value === 'object' && !Array.isArray(value)) { const picked = Object.values(value).filter((x) => x !== '' && x != null); value = picked.length ? picked : ''; }
+    return { id: f.id, name: def.name || f.id, value };
+  }).filter((f) => f.value !== '' && f.value != null && !(Array.isArray(f.value) && !f.value.length));
+  var membership = null;
+  try { var led = deps.loadLedger && deps.loadLedger(); var rec = led && led.contacts && led.contacts[c.id || cid]; if (rec && rec.membership) membership = rec.membership; } catch (e) {}
+  var subscription = null;
+  try { var subs = await loadSubscriptions(deps); subscription = subs.byContact[c.id || cid] || null; } catch (e) {}
+  return { ok: true, contact: {
+    id: c.id || cid, name: contactName(c), email: c.email || '', phone: c.phone || '',
+    tags: Array.isArray(c.tags) ? c.tags : [], fields, membership: membership, subscription: subscription,
+    source: c.source || '', dateAdded: c.dateAdded || '', country: c.country || '', city: c.city || '', state: c.state || '',
+  } };
+}
+async function exportContacts(body, deps) {
+  const cfg = deps.ghlConfig();
+  if (!cfg.enabled) return { ok: false, reason: 'ghl_unconfigured' };
+  const CAP = 5000;
+  const base = { locationId: cfg.locationId, pageLimit: 100 };
+  const filters = [];
+  (Array.isArray(body.groups) ? body.groups : []).forEach(function (g) { var arr = (Array.isArray(g) ? g : [g]).map(function (x) { return String(x || '').trim(); }).filter(Boolean); if (arr.length) filters.push({ field: 'tags', operator: 'contains', value: arr.length === 1 ? arr[0] : arr }); });
+  if (body.source) filters.push({ field: 'source', operator: 'eq', value: String(body.source) });
+  if (filters.length) base.filters = filters;
+  if (body.query) base.query = String(body.query);
+  const rows = []; let after = null, guard = 0;
+  while (rows.length < CAP && guard < 60) {
+    guard++;
+    const q = Object.assign({}, base); if (after) q.searchAfter = after;
+    const data = await ghlSearchContacts(cfg, deps, q);
+    if (!data) break;
+    const list = data.contacts || data.data || [];
+    if (!list.length) break;
+    for (const c of list) rows.push([contactName(c), c.email || '', c.phone || '', c.country || '', c.dateAdded || '', (c.tags || []).join('; ')]);
+    const last = list[list.length - 1]; after = last && last.searchAfter; if (!after) break;
+  }
+  const q = function (v) { return '"' + String(v == null ? '' : v).replace(/"/g, '""') + '"'; };
+  const head = ['Name', 'Email', 'Phone', 'Country', 'Date added', 'Tags'].map(q).join(',');
+  const csv = [head].concat(rows.map(function (r) { return r.map(q).join(','); })).join('\r\n');
+  return { ok: true, csv: csv, count: rows.length, capped: rows.length >= CAP };
+}
+async function listSurveys(deps) {
+  const cfg = deps.ghlConfig();
+  if (!cfg.enabled) return { ok: false, surveys: [] };
+  const data = await deps.ghlGet(`/surveys/`, { locationId: cfg.locationId, limit: 50 }).catch(() => null);
+  const surveys = ((data && (data.surveys || data.data)) || []).map((s) => ({ id: s.id, name: s.name || '' }));
+  return { ok: true, surveys };
+}
+// Parse the live survey widget schema -> questions + conditional branch rules.
+async function surveyMap(surveyId) {
+  const id = String(surveyId || '').replace(/[^A-Za-z0-9]/g, '');
+  if (!id) return { ok: false, reason: 'id_required' };
+  let html = '';
+  try { const r = await fetch(`https://api.leadconnectorhq.com/widget/survey/${id}`); html = await r.text(); } catch (_) { return { ok: false, reason: 'fetch_failed' }; }
+  const m = html.match(/<script type="application\/json"[^>]*id="__NUXT_DATA__">([\s\S]*?)<\/script>/);
+  if (!m) return { ok: false, reason: 'no_schema' };
+  let arr; try { arr = JSON.parse(m[1]); } catch (_) { return { ok: false, reason: 'parse_failed' }; }
+  const R = (i, d) => { if (d > 8 || typeof i !== 'number') return i; const v = arr[i]; if (v == null || typeof v !== 'object') return v; if (Array.isArray(v)) return v.map((x) => R(x, d + 1)); const o = {}; for (const k in v) o[k] = R(v[k], d + 1); return o; };
+  // human question labels: contain a "?", an uppercase letter, and a space
+  const questions = [];
+  arr.forEach((v) => { if (typeof v === 'string' && v.length < 240 && /\?/.test(v) && /[A-Z]/.test(v) && /\s/.test(v)) questions.push(v); });
+  let clIdx = null;
+  for (const v of arr) { if (v && typeof v === 'object' && !Array.isArray(v) && Object.prototype.hasOwnProperty.call(v, 'conditionalLogic')) { clIdx = v.conditionalLogic; break; } }
+  const rules = [];
+  if (typeof clIdx === 'number' && Array.isArray(arr[clIdx])) {
+    for (const ri of arr[clIdx]) {
+      const rule = R(ri, 0);
+      const conds = (rule.conditions || []).map((c) => ({ field: c.selectedField, op: c.selectedOperation, value: String(c.inputValue || '').slice(0, 140) }));
+      rules.push({ operation: rule.conditionalOperation, conditions: conds, outcomeType: rule.outcome && rule.outcome.type, shows: (rule.outcome && rule.outcome.value) || [] });
+    }
+  }
+  let name = ''; const nm = html.match(/parentName":"([^"]+)"/); if (nm) name = nm[1];
+  return { ok: true, survey: { id, name }, questions: [...new Set(questions)], rules };
+}
+
+// Accept an Event-admin bearer JWT (same accounts as /event) for single sign-on.
+function verifyEventBearer(req) {
+  var secret = String(process.env.EVENT_JWT_SECRET || '').trim();
+  if (!secret) return null;
+  var auth = String((req.headers && req.headers['authorization']) || '');
+  var m = auth.match(/^Bearer\s+(.+)$/i);
+  if (!m) return null;
+  var parts = m[1].split('.');
+  if (parts.length !== 3) return null;
+  try {
+    var expected = crypto.createHmac('sha256', secret).update(parts[0] + '.' + parts[1]).digest('base64url');
+    var a = Buffer.from(parts[2], 'utf8'), b = Buffer.from(expected, 'utf8');
+    if (a.length !== b.length || !crypto.timingSafeEqual(a, b)) return null;
+    var payload = JSON.parse(Buffer.from(parts[1], 'base64url').toString('utf8'));
+    if (payload.exp && Math.floor(Date.now() / 1000) > Number(payload.exp)) return null;
+    if (!payload.sub) return null;
+    return payload;
+  } catch (e) { return null; }
+}
+
 async function handle(req, res, url, deps) {
   const { origin, sendJson } = deps;
   const p = url.pathname.replace(/\/+$/, '') || url.pathname;
   const method = req.method;
-  const authed = () => Boolean(adminCookieFromReq(req, deps));
+  const authed = () => Boolean(adminCookieFromReq(req, deps) || verifyEventBearer(req));
   const need = () => { sendJson(res, 401, { ok: false, reason: 'admin_auth_required' }, origin); };
 
   // --- session / login / logout (public) ---
@@ -300,6 +508,34 @@ async function handle(req, res, url, deps) {
     if (!cid || !tag) return sendJson(res, 200, { ok: false, reason: 'params_required' }, origin);
     const result = await writeTag(cid, tag, body.add !== false, deps);
     return sendJson(res, 200, result, origin);
+  }
+
+  // --- Gaia Admin: Contacts + Surveys ---
+  if (p === '/api/admin/contacts' && method === 'GET') {
+    return sendJson(res, 200, await listContacts({ tag: url.searchParams.get('tag'), query: url.searchParams.get('query'), after: url.searchParams.get('after'), limit: url.searchParams.get('limit') }, deps), origin);
+  }
+  if (p === '/api/admin/contacts' && method === 'POST') {
+    const body = await deps.readJsonBody(req).catch(function () { return {}; });
+    return sendJson(res, 200, await listContactsAdvanced(body || {}, deps), origin);
+  }
+  if (p === '/api/admin/contacts/export' && method === 'POST') {
+    const body = await deps.readJsonBody(req).catch(function () { return {}; });
+    return sendJson(res, 200, await exportContacts(body || {}, deps), origin);
+  }
+  if (p === '/api/admin/subscriptions/summary' && method === 'GET') {
+    const subs = await loadSubscriptions(deps);
+    return sendJson(res, 200, { ok: true, summary: subs.summary }, origin);
+  }
+  if (p === '/api/admin/contact' && method === 'GET') {
+    const cid = url.searchParams.get('id') || '';
+    if (!cid) return sendJson(res, 200, { ok: false, reason: 'id_required' }, origin);
+    return sendJson(res, 200, await contactDetail(cid, deps), origin);
+  }
+  if (p === '/api/admin/surveys' && method === 'GET') {
+    return sendJson(res, 200, await listSurveys(deps), origin);
+  }
+  if (p === '/api/admin/survey-map' && method === 'GET') {
+    return sendJson(res, 200, await surveyMap(url.searchParams.get('id')), origin);
   }
 
   return sendJson(res, 404, { ok: false, reason: 'unknown_admin_route' }, origin);

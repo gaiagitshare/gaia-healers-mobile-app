@@ -12,17 +12,12 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { installCourseAuthority } from './course-authority-fixture.js';
 
 const SECRET = 'ordering-secret-'.padEnd(48, 'o');
-const GOLD_MONTHLY = '691cbb52396387d816e0f670';
 const workdir = fs.mkdtempSync(path.join(os.tmpdir(), 'gaia-order-'));
 fs.mkdirSync(path.join(workdir, 'data'), { recursive: true });
 const storeFile = path.join(workdir, 'data', 'member-entitlements.json');
 process.chdir(workdir);
-installCourseAuthority(workdir, [
-  'course-1', 'course-A', 'course-B', 'course-live', 'course-old', 'cid-chakra-9001',
-]);
 
 const PORT = 8903;
 Object.assign(process.env, {
@@ -167,13 +162,13 @@ test('8. events about community A do not affect community B', async () => {
 // 9 ─────────────────────────────────────────────────────────────────────────
 test('9. membership ordering is independent of course and community ordering', async () => {
   const c = 'synthetic-order-9';
-  await hook({ type: 'membership_tier_granted', contactId: c, priceId: GOLD_MONTHLY, tier: 'gold', timestamp: T.late, webhookId: 'm1' });
+  await hook({ type: 'membership_tier_granted', contactId: c, tier: 'gold', timestamp: T.late, webhookId: 'm1' });
   assert.equal(rec(c).tier?.name, 'Gold');
   // an older course event still applies — different resource
   const course = await grant(c, 'course-1', T.mid);
   assert.equal(course.json.applied, true);
   // an older membership event does not
-  const staleTier = await hook({ type: 'membership_tier_removed', contactId: c, priceId: GOLD_MONTHLY, tier: 'gold', timestamp: T.early, webhookId: 'm2' });
+  const staleTier = await hook({ type: 'membership_tier_removed', contactId: c, tier: 'gold', timestamp: T.early, webhookId: 'm2' });
   assert.equal(staleTier.json.applied, false);
   assert.equal(rec(c).tier?.name, 'Gold', 'membership survives its own stale event');
   assert.equal(hasCourse(c, 'course-1'), true);

@@ -13,14 +13,12 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { installCourseAuthority } from './course-authority-fixture.js';
 
 const SECRET = 'events-secret-'.padEnd(48, 'e');
 const workdir = fs.mkdtempSync(path.join(os.tmpdir(), 'gaia-events-'));
 fs.mkdirSync(path.join(workdir, 'data'), { recursive: true });
 const storeFile = path.join(workdir, 'data', 'member-entitlements.json');
 process.chdir(workdir);
-installCourseAuthority(workdir, ['course-x', 'lifetime-1']);
 
 const PORT = 8905;
 Object.assign(process.env, {
@@ -147,16 +145,16 @@ test('the canonical flat payload from the build sheet is accepted', async () => 
   assert.equal(m.ends_at, null);
 });
 
-test('a nested membership claim without billing identity is safely deferred', async () => {
+test('a nested membership object is normalized, never coerced to [object Object]', async () => {
   const c = 'synthetic-ev-nested';
   const res = await hook({
     eventId: `ev-${++n}`, eventType: 'membership_activated', contactId: c, timestamp: T.mid,
     membership: { key: 'diamond', status: 'active', billing_cycle: 'monthly' },
   });
-  assert.equal(res.status, 202);
-  assert.equal(res.json.applied, false);
-  assert.equal(res.json.reason, 'BILLING_ID_REQUIRED');
-  assert.equal(membershipOf(c), null);
+  assert.equal(res.json.applied, true);
+  const m = membershipOf(c);
+  assert.equal(m.key, 'diamond', 'the nested key was read, not stringified');
+  assert.equal(m.billing_cycle, 'monthly');
 });
 
 test('a canonical billing id overrules a contradictory tier claim', async () => {
@@ -167,7 +165,7 @@ test('a canonical billing id overrules a contradictory tier claim', async () => 
   });
   assert.equal(res.json.applied, true);
   assert.equal(membershipOf(c).key, 'silver', 'billing identity wins over the claim');
-  assert.notEqual(membershipOf(c).key, 'gold', 'the contradictory body claim never wins');
+  assert.ok(res.json.notes?.some((note) => /id wins/.test(note)), 'and the disagreement is reported');
 });
 
 test('a membership event with no recognisable tier is rejected', async () => {
@@ -175,8 +173,7 @@ test('a membership event with no recognisable tier is rejected', async () => {
   const res = await hook({
     eventId: `ev-${++n}`, eventType: 'membership_activated', contactId: c, timestamp: T.mid,
   });
-  assert.equal(res.status, 202);
-  assert.equal(res.json.reason, 'BILLING_ID_REQUIRED');
+  assert.equal(res.status, 422);
   assert.equal(membershipOf(c), null);
 });
 
@@ -186,8 +183,7 @@ test('legacy tags in a membership payload still cannot grant a tier', async () =
     eventId: `ev-${++n}`, eventType: 'membership_activated', contactId: c, timestamp: T.mid,
     tags: ['ahc-gold-active', 'ahc-gold-trial'],   // no tier, no billing id
   });
-  assert.equal(res.status, 202, 'tags are not tier evidence');
-  assert.equal(res.json.reason, 'BILLING_ID_REQUIRED');
+  assert.equal(res.status, 422, 'tags are not tier evidence');
   assert.equal(membershipOf(c), null);
 });
 

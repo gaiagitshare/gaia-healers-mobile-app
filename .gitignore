@@ -19,3 +19,4 @@ staging-proxy/data/
 # Swept in once by a careless `git add -A`; ignored so it cannot recur.
 NEW/
 audits/
+*.bak-*

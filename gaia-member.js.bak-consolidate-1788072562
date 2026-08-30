@@ -1001,16 +1001,16 @@ body.gaia-booking-open{overflow:hidden;}
         + '<p class="g-card__value g-card__value--lg">Learn & get certified</p>'
         + '<p class="g-card__meta">Your courses and certifications appear here automatically. Browse the catalogue below, or explore a membership to unlock more.</p>'
         + '<div class="g-card__actions"><button type="button" class="g-btn g-btn--primary g-btn--sm" ' + (state.authed ? 'data-track-cta' : 'data-academy-signin') + '>' + (state.authed ? 'View memberships →' : 'Sign in →') + '</button></div></article>';
-    // Owned courses now live in the native "Your courses" section (renderSyncedAcademy,
-    // inserted at the top of this box). This legacy view keeps only the courses the
-    // member does NOT own yet, as a clearly-separate "Explore more courses" block.
-    const exploreTracks = tracks.filter((t) => !(state.authed && t.grant));
-    const parts = [];
-    if (!state.authed || !hasAccess) parts.push(academyHead);
-    if (exploreTracks.length) {
-      parts.push(gSec('Explore more courses',
-        '<div class="g-access-grid">' + exploreTracks.map(trackCard).join('') + '</div>'));
-    }
+    const parts = [
+      '<button type="button" class="g-card g-card--feature gaia-acad-cta" data-acad-demo>'
+        + '<span class="g-chip g-chip--on" style="margin-bottom:.5rem">New \u00b7 Beta</span>'
+        + '<p class="g-card__value g-card__value--lg">Gaia Healers Player</p>'
+        + '<p class="g-card__meta">Preview the new in-app course player \u2014 lessons stream right here, with a back button. No portal, no leaving the app.</p>'
+        + '<div class="g-card__actions"><span class="g-btn g-btn--primary g-btn--sm"><i class="ph ph-play" aria-hidden="true"></i> Open the player</span></div></button>',
+      academyHead,
+      gSec(hasAccess ? ('Your courses · ' + grants.length) : (cat.length ? ('Course catalog · ' + tracks.length) : 'Course catalog'),
+        tracks.length ? '<div class="g-access-grid">' + tracks.map(trackCard).join('') + '</div>' : '<article class="g-card"><p class="g-card__meta">The catalogue is syncing.</p></article>'),
+    ];
     if (state.authed && !hasAccess) {
       parts.push('<article class="g-card"><p class="g-card__label">No course grant found</p>'
         + '<p class="g-card__meta">You are signed in, but no course or offer has been added to your account yet. If you just joined, it can take a few minutes to appear.</p>'

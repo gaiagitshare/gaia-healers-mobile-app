@@ -303,8 +303,85 @@ function interestFromTopic(topic) {
   return { matched: false, tags: [], route: null };
 }
 
+// ── Targeting engine ────────────────────────────────────────────────
+// Turn a member's tags + the LIVE catalog into SPECIFIC, ranked, deduped
+// recommendations (priced products, named courses, the right tier + community),
+// cross-checked against what they already own. Pure function — the server feeds
+// it live store products, course titles, owned courses, and subscription state.
+const DEVICE_SIGNALS = [
+  { key: 'biowell', label: 'Bio-Well', ownRe: /biowell.*owner|bio-?well owner|biocor owner|sputnik owner|water sensor owner/, intRe: /biowell.*interest|biocor.*interest|sputnik.*interest|biowell_water.*interest/, prodRe: /bio-?well|biocor|sputnik/i, courseRe: /bio-?well/i, community: 'biowell' },
+  { key: 'biopulsar', label: 'BioPulsar', ownRe: /biopulsar.*owner|biopulsar-owner/, intRe: /biopulsar.*interest/, prodRe: /biopulsar/i, courseRe: /biopulsar/i, community: 'biopulsar' },
+  { key: 'biotekna', label: 'BioTekna', ownRe: /biotekna.*owner|_bia_owner|_heg_owner|_ppg_owner|_tomeex_owner|_regmatex_owner|bia owner|heg owner|ppg.*owner/, intRe: /biotekna.*interest|_bia_interest|_heg_interest|_ppg_interest|_tomeex_interest|_regmatex_interest/, prodRe: /biotekna/i, courseRe: /biotekna/i, community: 'biotekna' },
+  { key: 'braintap', label: 'BrainTap', ownRe: /braintap.*owner/, intRe: /braintap.*interest|neurofeedback|meditation/, prodRe: /braintap/i, courseRe: /braintap/i, community: 'braintap' },
+  { key: 'colour', label: 'Colour Energy', ownRe: /x^/, intRe: /colourenergy.*interest|colour_therapy/, prodRe: /colou?r|chakra/i, courseRe: /chakra/i, community: null },
+  { key: 'tachyon', label: 'Tachyon', ownRe: /x^/, intRe: /tachyon.*interest|env_objects/, prodRe: /tachyon/i, courseRe: /x^/, community: null },
+  { key: 'water', label: 'water', ownRe: /x^/, intRe: /general_water.*interest|alkaline|kangen/, prodRe: /water|kangen|hydrogen/i, courseRe: /x^/, community: null },
+  { key: 'healy', label: 'Healy', ownRe: /healy.*owner/, intRe: /healy.*interest/, prodRe: /healy/i, courseRe: /x^/, community: null },
+  { key: 'lifewave', label: 'LifeWave', ownRe: /lifewave.*owner/, intRe: /lifewave.*interest|phototherapy/, prodRe: /lifewave/i, courseRe: /x^/, community: 'lifewave' },
+];
+function buildTargeting(tags, opts) {
+  opts = opts || {};
+  const set = new Set((tags || []).map((t) => String(t).toLowerCase()));
+  const tagList = Array.from(set);
+  // Match WITHIN a single tag (never across tags) so e.g. biopulsar.*owner does
+  // not match a biopulsar-interest tag + an unrelated sputnik-owner tag.
+  const has = (re) => tagList.some((t) => re.test(t));
+  const products = (opts.storeProducts || []).filter((p) => p && p.title && p.available !== false);
+  const courseTitles = opts.courseTitles || [];
+  const ownedCourses = (opts.ownedCourseTitles || []).map((x) => String(x || '').toLowerCase());
+  const hasPaidSub = !!opts.hasPaidSub;
+  const ownsCourse = (re) => ownedCourses.some((c) => re.test(c));
+  const rec = { hotLead: false, membership: null, courses: [], products: [], communities: [], headline: '' };
+
+  if (set.has('invest_ready_now')) rec.hotLead = true;
+  // membership tier from practice stage / aspiration (only if not already paying)
+  if (set.has('interest_gaia_healer_center')) rec.membership = 'diamond';
+  else if (has(/practice_stage_(growth|established|scaling|mature)/)) rec.membership = 'gold';
+  else if (has(/practice_stage_(prelaunch|early)/)) rec.membership = 'silver';
+  if (hasPaidSub) rec.membership = null; // do not re-pitch a plan they pay for
+
+  const seenCourse = {}, seenProd = {}, seenComm = {};
+  DEVICE_SIGNALS.forEach((d) => {
+    const owner = d.ownRe && d.ownRe.source !== 'x^' && has(d.ownRe);
+    const interested = d.intRe && has(d.intRe);
+    if (!owner && !interested) return;
+    if (d.courseRe && d.courseRe.source !== 'x^' && !ownsCourse(d.courseRe)) {
+      const c = courseTitles.find((t) => d.courseRe.test(t));
+      if (c && !seenCourse[c]) { seenCourse[c] = 1; rec.courses.push({ title: c, reason: owner ? ('owns ' + d.label + ', not yet trained — certify') : ('interested in ' + d.label), priority: owner ? 3 : 1 }); }
+    }
+    if (!owner && d.prodRe) {
+      products.filter((p) => d.prodRe.test(p.title)).slice(0, 2).forEach((p) => { if (!seenProd[p.title]) { seenProd[p.title] = 1; rec.products.push({ title: p.title, price: p.price || '', url: p.url || '', reason: 'interested in ' + d.label, priority: 1 }); } });
+    }
+    if (d.community && !seenComm[d.community] && !has(new RegExp('community-' + d.community + '-member'))) { seenComm[d.community] = 1; rec.communities.push(d.community); }
+  });
+  rec.courses.sort((a, b) => b.priority - a.priority);
+  rec.products.sort((a, b) => b.priority - a.priority);
+  rec.courses = rec.courses.slice(0, 4);
+  rec.products = rec.products.slice(0, 4);
+
+  // headline = the single best next step
+  const ownerCourse = rec.courses.find((c) => c.priority >= 3);
+  if (ownerCourse) rec.headline = 'They own the device but are not certified — nudge the "' + ownerCourse.title + '" course' + (rec.hotLead ? ' (they are ready to invest now)' : '') + '.';
+  else if (rec.hotLead && rec.membership) rec.headline = 'Ready to invest now → recommend the ' + rec.membership.toUpperCase() + ' membership with its activation link.';
+  else if (rec.membership && !hasPaidSub) rec.headline = 'Best-fit membership for their stage is ' + rec.membership.toUpperCase() + '.';
+  else if (rec.courses.length) rec.headline = 'Suggest the "' + rec.courses[0].title + '" course.';
+  else if (rec.products.length) rec.headline = 'Suggest ' + rec.products[0].title + (rec.products[0].price ? ' (' + rec.products[0].price + ')' : '') + '.';
+  return rec;
+}
+function formatTargeting(rec) {
+  if (!rec) return '';
+  const parts = [];
+  if (rec.headline) parts.push('Best next step: ' + rec.headline);
+  if (rec.courses.length) parts.push('Courses to suggest: ' + rec.courses.map((c) => '"' + c.title + '" (' + c.reason + ')').join('; '));
+  if (rec.products.length) parts.push('Products to suggest: ' + rec.products.map((p) => p.title + (p.price ? ' — ' + p.price : '') + ' (' + p.reason + ')').join('; '));
+  if (rec.membership) parts.push('Membership to offer: ' + rec.membership.toUpperCase());
+  if (rec.communities.length) parts.push('Communities they could join: ' + rec.communities.join(', '));
+  if (!parts.length) return '';
+  return 'TARGETED RECOMMENDATIONS (specific, from the live catalog, deduped against what they own — bring up the Best next step first, naturally and one at a time, never pushy):\n' + parts.map((p) => '- ' + p).join('\n');
+}
+
 export {
   COMPLETE_TAG, STEPS, STEP_BY_KEY,
   mapStep, mapOnboardingAnswers, onboardingState, onboardingPromptBlock, suggestOffers,
-  interestFromTopic,
+  interestFromTopic, buildTargeting, formatTargeting,
 };

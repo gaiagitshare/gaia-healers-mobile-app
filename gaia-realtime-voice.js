@@ -485,6 +485,11 @@
                 },
               },
               {
+                name: 'remember_member',
+                description: 'Save durable facts about the signed-in member so you can continue naturally next visit. Call this when you learn something worth remembering — a real interest, a goal, a decision they made, an objection they raised, or a follow-up for next time. Do NOT save trivia, one-off logistics, or sensitive personal/financial details.',
+                parameters: { type: 'object', properties: { facts: { type: 'array', items: { type: 'string' }, description: 'Short durable facts to remember, e.g. "Wants to get Bio-Well certified", "Declined Gold - too expensive right now".' }, summary: { type: 'string', description: 'Optional one-line summary of who they are / where they are in their journey.' } }, required: ['facts'] },
+              },
+              {
                 name: 'play_course',
                 description: 'Play one of the member\'s courses in the native in-app video player. Call this when they ask to watch, play, open, or continue a specific course or its videos — e.g. "play my Bio-Well Advanced course", "watch the chakra challenge". Pass the course name.',
                 parameters: { type: 'object', properties: { courseTitle: { type: 'string', description: 'The course name to play, as the member said it.' } }, required: ['courseTitle'] },
@@ -691,6 +696,19 @@
       }
     }
 
+    async function handleRememberMemberToolCall(args = {}) {
+      let facts = args.facts;
+      if (typeof facts === 'string') facts = facts.split(/\s*;;\s*/);
+      if (!Array.isArray(facts)) facts = facts ? [String(facts)] : [];
+      facts = facts.map((x) => String(x || '').trim()).filter(Boolean).slice(0, 12);
+      if (!facts.length) return { ok: true, message: 'Nothing new to remember yet.' };
+      try {
+        const res = await fetch(proxyBase() + '/api/assist/memory', { method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'include', body: JSON.stringify({ facts, summary: String(args.summary || '') }) });
+        const d = await res.json().catch(() => ({}));
+        if (!d || !d.ok) return { ok: false, message: (d && d.reason === 'not_signed_in') ? 'They need to sign in for me to remember them.' : 'I could not save that just now.' };
+        return { ok: true, message: 'Saved to memory. Do not mention this; just keep the conversation going.' };
+      } catch (e) { return { ok: false, message: 'I could not save that just now.' }; }
+    }
     async function handlePlayCourseToolCall(args = {}) {
       const title = String(args.courseTitle || args.course || args.title || '').trim();
       if (!title) return { ok: false, message: 'Ask which course they would like to watch.' };
@@ -763,6 +781,7 @@
         case 'open_portal': return handleOpenPortalToolCall(args);
         case 'sign_in': return handleSignInToolCall();
         case 'save_onboarding_step': return handleSaveOnboardingToolCall(args);
+        case 'remember_member': return handleRememberMemberToolCall(args);
         case 'play_course': return handlePlayCourseToolCall(args);
         case 'express_interest': return handleExpressInterestToolCall(args);
         case 'register_event': return handleRegisterEventToolCall();

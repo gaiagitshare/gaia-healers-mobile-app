@@ -3702,6 +3702,7 @@ function buildGaiaLiveInstructions(context = {}) {
     'You have a navigate tool. When a member asks to open a screen or feature, call it. Energy routes are distinct: energy/body point → navigate(screen=wellness, tab=check); horoscope/daily guidance → navigate(screen=wellness, tab=horoscope); chakra match/seven centres → navigate(screen=wellness, tab=chakras). Other examples: event → events; session → bookings; messages → inbox; course → academy; community/practitioner access → community; shop → store; membership → store/membership; profile/account/your stuff → profile; colour test or numerology → navigate(screen=wellness); find a healer or practitioner directory → navigate(screen=directory). The app has six bottom-bar sections: Today (daily dashboard), Energy (energy check, horoscope, chakras, numerology, colour test, today sky, Bio-Well), Academy (courses, certifications, library), Community (circles/discussions, find a healer, schedule with Dr. Nima, book a session, events, Gaia Radio, messages/inbox), Shop (the live store), and You (membership, access, bookings, your communities, become-a-practitioner). The centre orb is Gaia Assist. Navigation is the start of helping, not the finish: explain what is available there and keep listening.',
     'You also have action tools. Use them to actually do things for the member, not just describe how. book_session: when the member asks to book, schedule, or reserve something — "book a call with Dr. Nima" or "I want to meet the founder" → book_session(session=nima); "book a Bio-Well scan" → book_session(session=scan); "I want a demo" → book_session(session=demo); "book a discovery call" → book_session(session=discovery); "schedule coaching" → book_session(session=coaching). It opens the real booking form (Nima uses Calendly, the others use GHL widgets); tell them to complete it there. open_community: when the member asks to open or visit a community — "open the Bio-Well community" → open_community(community=biowell); "take me to BioPulsar" → open_community(community=biopulsar); "all gaia healers group" → open_community(community=all-gaia). Some open directly, others open in the portal. open_portal: when the member wants the portal itself — "open the portal" → open_portal(section=home); "open my courses in the portal" → open_portal(section=courses); "portal login" → open_portal(section=login). sign_in: when the member says they want to sign in, log in, or access their account and they are not signed in — "sign me in" → sign_in(). Never call sign_in if the member is already signed in. After ANY action tool, STAY ENGAGED: confirm what you opened, then guide them through the next step and keep listening. Do not go silent after opening something — the conversation continues until the member says goodbye. You ALSO have: play_course (play a specific course in the in-app player — "play my Bio-Well Advanced course" -> play_course(courseTitle)); express_interest (when they say they are interested in a device, topic, membership, or getting certified -> express_interest(topic) records their interest and opens the best place for it); register_event ("sign me up for the event" -> register_event()); find_practitioner ("find me a healer" -> find_practitioner()). Prefer DOING with these tools over only describing.',
     'This is an ongoing conversation, not a single request-response. After every action — navigating, opening a booking form, opening a community, signing in — you are STILL their assistant on that screen. Keep helping: point out what they can do, answer follow-ups, navigate elsewhere if asked, and only go quiet when the member clearly ends the conversation. Never end your turn with just a confirmation and silence; end with either a useful observation about what is now on screen, or a concrete next step they can take, or a question.',
+    'MEMORY — you remember members across visits. If the member context includes WHAT YOU REMEMBER, use it to greet and continue naturally (reference it lightly, never recite it), do not re-ask what you already know, and never repeat a declined offer. When you learn something durable this conversation — a real interest, a goal, a decision, an objection, or a follow-up for next time — call remember_member({ facts: [short strings], summary? }) to save it. Never save trivia, one-off logistics, or sensitive personal/financial details.',
     'GUIDE FULLY — you are their hands-on in-app guide and you know every screen and flow. When they ask how to do ANYTHING, give the exact steps from the app task guide AND offer to take them there right now by calling navigate or the right action tool. For multi-step tasks, walk them one step at a time and confirm as they go; after you move them, say what they will see and what to tap next. Never leave them to figure it out alone.',
     'RAPPORT FIRST — answer the member\'s actual question before you suggest or offer anything; never pitch in your opening sentence unless they asked. Ask one thing at a time and confirm you understood before moving on.',
     'HANDLE HESITATION — if they hesitate about a membership, address their specific concern: price -> Free starts at $0 and annual billing saves; value -> tie the benefits to the goals they told you; timing -> they can start free and upgrade anytime. Guide, never pressure, and never repeat an offer they already declined in this conversation.',
@@ -3725,6 +3726,37 @@ function buildGaiaLiveInstructions(context = {}) {
 // Returns '' for anonymous visitors (Gaia stays generic/public). Cached ~60s
 // per contact so prewarm+start don't double-hit GHL.
 const _memberAiCtxCache = new Map();
+const ASSIST_MEMORY_FILE = path.join(process.cwd(), 'data', 'assist-memory.json');
+function loadAssistMemory() { try { return JSON.parse(fs.readFileSync(ASSIST_MEMORY_FILE, 'utf8')) || { byContact: {} }; } catch (_) { return { byContact: {}, updatedAt: null }; } }
+function saveAssistMemory(m) { try { writeJsonAtomic(ASSIST_MEMORY_FILE, m); } catch (e) {} }
+function fmtSince(iso) { try { const d = Date.now() - Date.parse(iso); const day = 86400000; if (d < 3600000) return 'earlier today'; if (d < day) return 'today'; const days = Math.floor(d / day); if (days === 1) return 'yesterday'; if (days < 30) return days + ' days ago'; const mo = Math.floor(days / 30); return mo + ' month' + (mo > 1 ? 's' : '') + ' ago'; } catch (e) { return ''; } }
+function rememberForContact(cid, facts, summary) {
+  if (!cid) return { ok: false, reason: 'no_contact' };
+  const store = loadAssistMemory();
+  const now = new Date().toISOString();
+  const rec = store.byContact[cid] || { facts: [], firstSeen: now, sessions: 0 };
+  const gap = rec.lastSeen ? (Date.parse(now) - Date.parse(rec.lastSeen)) : Infinity;
+  if (gap > 30 * 60 * 1000) rec.sessions = (rec.sessions || 0) + 1;
+  rec.lastSeen = now;
+  (Array.isArray(facts) ? facts : []).forEach((f) => {
+    const t = String(f || '').trim().slice(0, 240);
+    if (t && !rec.facts.some((x) => x.text.toLowerCase() === t.toLowerCase())) rec.facts.push({ text: t, at: now });
+  });
+  if (rec.facts.length > 40) rec.facts = rec.facts.slice(-40);
+  if (summary) rec.summary = String(summary).slice(0, 600);
+  store.byContact[cid] = rec; store.updatedAt = now; saveAssistMemory(store);
+  return { ok: true, count: rec.facts.length };
+}
+function memoryContextLine(cid) {
+  if (!cid) return '';
+  const rec = loadAssistMemory().byContact[cid];
+  if (!rec || !Array.isArray(rec.facts) || !rec.facts.length) return '';
+  const when = rec.lastSeen ? fmtSince(rec.lastSeen) : '';
+  const lines = ['WHAT YOU REMEMBER ABOUT THIS MEMBER (from past visits' + (when ? ', last seen ' + when : '') + ') — reference it lightly to continue naturally; never re-ask what you already know here, and never repeat an offer they declined:'];
+  rec.facts.slice(-16).forEach((f) => lines.push('- ' + f.text));
+  if (rec.summary) lines.push('Summary of them: ' + rec.summary);
+  return lines.join('\n');
+}
 async function buildMemberVoiceContext(req) {
   try {
     const member = sessionMemberContext(req);
@@ -3777,6 +3809,7 @@ async function buildMemberVoiceContext(req) {
     lines.push('Privacy: discuss only THIS member’s own data, and only when they ask about it. Do not proactively recite sensitive details.');
 
     try {
+      const mem = memoryContextLine(cid); if (mem) lines.push(mem);
       const obState = onboarding.onboardingState(b.tags);
       lines.push('ONBOARDING PROFILE: ' + (obState === 'complete'
         ? 'DONE — do NOT run the onboarding survey again; use their interests below to tailor suggestions.'
@@ -5226,6 +5259,7 @@ function assistSystemPrompt(memberContext = '') {
     'When asked how to do something, name the exact screen and step. Never invent course progress, scan numbers, community posts, prices, or personal history.',
     'MEMBERSHIP GUIDANCE \u2014 help people join and activate. Gaia Healers 2.0 has four practitioner paths: Free ($0), Silver ($97/mo or $997/yr), Gold ($497/mo or $4,997/yr), and Diamond ($997/mo or $9,997/yr), with benefits growing from community and education through directory exposure, CRM/software, implementation support, and lead generation. When someone wants to grow, go deeper, get certified, be listed as a practitioner, or asks what to join, warmly explain the paths, ask one short question about their stage and goal, recommend the single best-fit tier, and hand them its exact activation link so they can activate right away: Free join.gaiahealers.com/onboarding, Silver join.gaiahealers.com/silver, Gold join.gaiahealers.com/gold, Diamond join.gaiahealers.com/diamond (or say "Open the Store and tap Membership"). Guide, never pressure; frame it as the step that matches their goal. Their in-app access mirrors what GHL grants once they activate.',
     'Never claim that you saved, imported, checked in, emailed, booked, purchased, or changed data. Explain how the member can do it.',
+    'MEMORY — you remember members across visits. Use WHAT YOU REMEMBER (if present) to continue naturally; do not re-ask or repeat declined offers. When you learn something durable (interest, goal, decision, objection, follow-up), append a line <<REMEMBER: fact one ;; fact two>> which the app saves and hides. Never save trivia or sensitive details.',
     'GUIDE FULLY — you are their in-app guide and know every screen and flow. For any "how do I…" give the exact steps from the app task guide and offer to open the right screen for them; walk multi-step tasks one step at a time and say what to tap next.',
     'RAPPORT FIRST — answer the actual question before offering anything; do not pitch in the first sentence unless asked. One question at a time; confirm understanding.',
     'HANDLE HESITATION — address the specific concern (price -> Free is $0 and annual saves; value -> tie to their goals; timing -> start free, upgrade anytime); never pressure or repeat a declined offer. PERSONALIZE from what you know; after the survey give a short recap + best next step; if a TOP NUDGE is present, lead with it.',
@@ -5472,7 +5506,12 @@ async function executeOnboardingMarkers(req, text) {
     markers.push({ step: String(step).trim(), selections: String(sel).split(';;').map((x) => x.trim()).filter(Boolean), complete: /true/i.test(complete) });
     return '';
   }).replace(/\n{3,}/g, '\n\n').trim();
-  if (!markers.length || !sm) return out;
+  var remFacts = [];
+  out.clean = out.clean.replace(/<<\s*REMEMBER\s*:\s*([^>]*)>>/gi, function (_m, body) { String(body).split(';;').map(function (x) { return x.trim(); }).filter(Boolean).forEach(function (f) { remFacts.push(f); }); return ''; }).replace(/\n{3,}/g, '\n\n').trim();
+  if (!markers.length && !remFacts.length) return out;
+  if (!sm) return out;
+  if (remFacts.length) { try { var bb = await fetchMemberBundle(sm); if (bb && bb.contactId) { rememberForContact(bb.contactId, remFacts, ''); out.ran += remFacts.length; } } catch (e) {} }
+  if (!markers.length) return out;
   try {
     const b = await fetchMemberBundle(sm);
     if (b && b.contactId) {
@@ -6309,6 +6348,14 @@ const server = http.createServer(async (req, res) => {
     // so every request must carry a valid Gaia Healers member session cookie.
     if (url.pathname.startsWith('/api/assist/')) {
       /* Gaia Assist is open to all visitors (member or not); nginx rate-limits /api/assist/ for quota protection. Sign-in gate disabled per product decision. */
+    }
+    if (req.method === 'POST' && url.pathname === '/api/assist/memory') {
+      const sm = sessionMemberContext(req);
+      if (!sm) { sendJson(res, 200, { ok: false, reason: 'not_signed_in' }, origin); return; }
+      const body = await readJsonBody(req).catch(() => ({}));
+      let facts = body.facts; if (typeof facts === 'string') facts = [facts]; if (!Array.isArray(facts)) facts = [];
+      try { const b = await fetchMemberBundle(sm); const r = rememberForContact(b && b.contactId, facts, body.summary || ''); sendJson(res, 200, r, origin); } catch (e) { sendJson(res, 200, { ok: false }, origin); }
+      return;
     }
     if (req.method === 'POST' && url.pathname === '/api/assist/interest') {
       const sm = sessionMemberContext(req);

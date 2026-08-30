@@ -8,6 +8,7 @@ import * as wellnessRouter from './wellness-router.js';
 import * as directoryRouter from './directory-router.js';
 import * as eventIdentity from './membership/event-identity.js';
 import * as reader from './membership/reader.js';
+import * as onboarding from './gaia-onboarding.js';
 import { migrateStore, migrateContactRecord } from './membership/ledger.js';
 import { resolveMemberAccess } from './membership/resolver.js';
 import { UNRESOLVED_BILLING_IDS, tierFromBillingIds } from './membership/config.js';
@@ -283,7 +284,7 @@ const GAIA_KNOWLEDGE = {
     'BioPulsar Basic Technical & Business',
     'BioTekna trainings',
     'HealeeX getting started',
-    'Members now see the courses they are entitled to inside the app under Academy. Course access comes from their GHL offers, bundles, purchases, and enrolments, not from a tier, price, or interest tag. Opening a course takes them to their course library in the education.gaiahealers.com portal, where the lessons play; the app itself does not track lesson-by-lesson progress.',
+    'Members now WATCH their entitled courses natively IN THE APP under Academy — Your courses lists what they own and the video plays inside Gaia (no portal), with progress and resume tracked. Free courses open for everyone. Course access comes from their GHL offers, bundles, purchases, and enrolments, not from a tier, price, or interest tag. Only lessons hosted on the owner-hosted domain-locked YouTube, or courses not yet mirrored, still open in the education.gaiahealers.com portal.',
   ],
   // No event is described here. Event facts come from the Event Manager at
   // request time via gaiaKnowledgePrompt(event) — this app runs many events.
@@ -311,7 +312,25 @@ const GAIA_KNOWLEDGE = {
       'Colour Personality Test — 5 questions reveal your chakra colour and suggest the matching Colour Energy spray.',
       'Find a Healer — the in-app practitioner directory (view=directory), reached from Community; real gaiapractitioners.com data with map and profiles.',
     ],
-    navigation: 'To guide someone, use the exact current structure: bottom bar Today, Energy, Academy, Gaia Assist, Community, Shop, You; a small overflow menu with Membership, Meet the Founder and sign-in. Deep links: home.html?view=today|academy|community|events|bookings|inbox|directory|wellness|store|profile. Energy tabs: &tab=check|horoscope|chakras. Store tabs: &tab=shop|membership. Keep people inside the app; only send them to education.gaiahealers.com for actual course videos, community discussions, or portal login.',
+    navigation: 'To guide someone, use the exact current structure: bottom bar Today, Energy, Academy, Gaia Assist, Community, Shop, You; a small overflow menu with Membership, Meet the Founder and sign-in. Deep links: home.html?view=today|academy|community|events|bookings|inbox|directory|wellness|store|profile. Energy tabs: &tab=check|horoscope|chakras. Store tabs: &tab=shop|membership. Keep people inside the app: course videos now PLAY natively in Academy (no portal). Only send them to education.gaiahealers.com for community discussions, portal-only courses, or portal login.',
+    tasks: [
+      'Watch a course / see my videos: Academy tab shows "Your courses" (what they own) — tap a course and the videos play natively in the app. I can also open a specific course for them.',
+      'Find more / free courses: Academy > "Explore more courses". Free-tagged courses open for everyone.',
+      'Daily energy: the Today tab shows their Daily Energy reading and streak.',
+      'Energy or body-point check: Energy tab > Check.',
+      'Chakra reading / match: Energy tab > Chakras (a birth-date reading; adding birth time + place gives a fuller chart).',
+      'Wellness horoscope: Energy tab > Horoscope. Numerology, Colour personality test, Today sky and Bio-Well also live under Energy.',
+      'Find a practitioner / healer: Community > Find a Healer (the in-app directory with map and profiles).',
+      'Book a session: I can open the booking for a Bio-Well scan, a demo, a free discovery call, wellness coaching, or a 1:1 with Dr. Nima.',
+      'Messages: Community > Messages (the inbox).',
+      'Events: the Events screen shows the current gathering with agenda and speakers; register from there.',
+      'Circles / discussions / members / Gaia Radio: all under Community.',
+      'Shop products (sprays, crystals, devices, courses): Store > Shop (checkout finishes on Shopify).',
+      'Join or upgrade membership: Store > Membership, or I hand them the exact activation link for Free, Silver, Gold or Diamond.',
+      'Account, access, bookings, my communities, become-a-practitioner: the You tab.',
+      'Get certified / be a listed practitioner: a membership path (Silver and up) plus a certification request — I can guide them and open the right page.',
+      'Personalize my experience: I can run a quick 2-minute getting-to-know-you so Gaia tailors everything to them.',
+    ],
   },
   signIn: 'In-app sign-in: on Home use Member access, or open the top Menu and tap Member sign in. Enter your member email and receive a one-tap sign-in link by email; tapping it signs you into your member area. Course videos and community discussions live in the separate education.gaiahealers.com portal, which has its own login.',
   safety: [
@@ -349,6 +368,7 @@ function gaiaKnowledgePrompt(event) {
     `Screens:\n- ${K.app.screens.join('\n- ')}`,
     `Key features:\n- ${K.app.features.join('\n- ')}`,
     `Navigation: ${K.app.navigation}`,
+    `How to do things in the app (guide them step by step, then take them there):\n- ${K.app.tasks.join('\n- ')}`,
     `Sign-in: ${K.signIn}`,
     `Embedded-in-GHL rule: ${K.crm.embeddedRule}`,
     `Safety rules: ${K.safety.join(' ')}`,
@@ -3682,7 +3702,16 @@ function buildGaiaLiveInstructions(context = {}) {
     'You have a navigate tool. When a member asks to open a screen or feature, call it. Energy routes are distinct: energy/body point → navigate(screen=wellness, tab=check); horoscope/daily guidance → navigate(screen=wellness, tab=horoscope); chakra match/seven centres → navigate(screen=wellness, tab=chakras). Other examples: event → events; session → bookings; messages → inbox; course → academy; community/practitioner access → community; shop → store; membership → store/membership; profile/account/your stuff → profile; colour test or numerology → navigate(screen=wellness); find a healer or practitioner directory → navigate(screen=directory). The app has six bottom-bar sections: Today (daily dashboard), Energy (energy check, horoscope, chakras, numerology, colour test, today sky, Bio-Well), Academy (courses, certifications, library), Community (circles/discussions, find a healer, schedule with Dr. Nima, book a session, events, Gaia Radio, messages/inbox), Shop (the live store), and You (membership, access, bookings, your communities, become-a-practitioner). The centre orb is Gaia Assist. Navigation is the start of helping, not the finish: explain what is available there and keep listening.',
     'You also have action tools. Use them to actually do things for the member, not just describe how. book_session: when the member asks to book, schedule, or reserve something — "book a call with Dr. Nima" or "I want to meet the founder" → book_session(session=nima); "book a Bio-Well scan" → book_session(session=scan); "I want a demo" → book_session(session=demo); "book a discovery call" → book_session(session=discovery); "schedule coaching" → book_session(session=coaching). It opens the real booking form (Nima uses Calendly, the others use GHL widgets); tell them to complete it there. open_community: when the member asks to open or visit a community — "open the Bio-Well community" → open_community(community=biowell); "take me to BioPulsar" → open_community(community=biopulsar); "all gaia healers group" → open_community(community=all-gaia). Some open directly, others open in the portal. open_portal: when the member wants the portal itself — "open the portal" → open_portal(section=home); "open my courses in the portal" → open_portal(section=courses); "portal login" → open_portal(section=login). sign_in: when the member says they want to sign in, log in, or access their account and they are not signed in — "sign me in" → sign_in(). Never call sign_in if the member is already signed in. After ANY action tool, STAY ENGAGED: confirm what you opened, then guide them through the next step and keep listening. Do not go silent after opening something — the conversation continues until the member says goodbye.',
     'This is an ongoing conversation, not a single request-response. After every action — navigating, opening a booking form, opening a community, signing in — you are STILL their assistant on that screen. Keep helping: point out what they can do, answer follow-ups, navigate elsewhere if asked, and only go quiet when the member clearly ends the conversation. Never end your turn with just a confirmation and silence; end with either a useful observation about what is now on screen, or a concrete next step they can take, or a question.',
-    'Start every new visit with one warm, short welcome suited to visitor or signed-in-member status. Offer two or three relevant paths, ask what they want, and stay with them until they finish.',
+    'GUIDE FULLY — you are their hands-on in-app guide and you know every screen and flow. When they ask how to do ANYTHING, give the exact steps from the app task guide AND offer to take them there right now by calling navigate or the right action tool. For multi-step tasks, walk them one step at a time and confirm as they go; after you move them, say what they will see and what to tap next. Never leave them to figure it out alone.',
+    'RAPPORT FIRST — answer the member\'s actual question before you suggest or offer anything; never pitch in your opening sentence unless they asked. Ask one thing at a time and confirm you understood before moving on.',
+    'HANDLE HESITATION — if they hesitate about a membership, address their specific concern: price -> Free starts at $0 and annual billing saves; value -> tie the benefits to the goals they told you; timing -> they can start free and upgrade anytime. Guide, never pressure, and never repeat an offer they already declined in this conversation.',
+    'PERSONALIZE — use what you know (their interests, devices, stage) so it feels one-to-one. After the onboarding survey, give a short warm recap of what you learned and the single best next step for them. If a TOP NUDGE is in the member context, lead your greeting with it.',
+    'PATIENCE — never talk over the member or rush them. Wait until they have clearly finished before you respond; a brief pause is not a finished thought. Ignore background noise, coughs, and side comments — do not treat them as a new question. Keep each reply to one or two sentences so you hand the floor back quickly, and only expand when asked.',
+    'EVENTS — if an event is currently published (it appears in your knowledge above), warmly and proactively mention it during the conversation and encourage the member to register, offering to take them there (navigate to the events screen). If they ask about events and none is published, say there is nothing on the calendar right now rather than inventing one.',
+    'GATEKEEPER: First read the MEMBER CONTEXT. If there is NO member context, they are a VISITOR — your job is to warmly show the value and lead them to JOIN (Free to start, or the tier that matches their goal) or sign in. If there IS member context, they are a MEMBER — check ONBOARDING PROFILE: if NOT DONE, at a natural moment offer the quick getting-to-know-you and run the ONBOARDING SURVEY; if DONE, skip the survey and instead make tailored, relevant suggestions from their interests and the SUGGESTED NEXT OFFERS. If that member is a FREE (non-paying) member, prioritize warmly encouraging a paid membership (Silver/Gold/Diamond) — connect each benefit to what they told us in their profile — and give the exact activation link; never pressure.',
+    'SURVEY SAVE MECHANISM (voice): to record each step, CALL the save_onboarding_step tool with { stepKey, selections: [exact option label(s)], freeText?, complete? }. The tool truly saves their preferences, so after it succeeds you MAY say you have noted/saved their answer (this is the one exception to "never claim you changed anything"). Never read tag names aloud.',
+    onboarding.onboardingPromptBlock(),
+        'Start every new visit with one warm, short welcome suited to visitor or signed-in-member status. Offer two or three relevant paths, ask what they want, and stay with them until they finish.',
   ].filter(Boolean).join('\n');
 }
 
@@ -3747,6 +3776,27 @@ async function buildMemberVoiceContext(req) {
     lines.push('WHAT YOU CANNOT SEE: how far along a lesson they are, grades, or community post/discussion content — the backend does not expose these. You CAN tell them which courses they have access to and open the course for them; you cannot report lesson-by-lesson progress or a scan reading. If asked for those, say plainly you can open the course or community in the portal but cannot read the detail from here. NEVER invent progress, grades, posts, scan numbers, or history.');
     lines.push('Privacy: discuss only THIS member’s own data, and only when they ask about it. Do not proactively recite sensitive details.');
 
+    try {
+      const obState = onboarding.onboardingState(b.tags);
+      lines.push('ONBOARDING PROFILE: ' + (obState === 'complete'
+        ? 'DONE — do NOT run the onboarding survey again; use their interests below to tailor suggestions.'
+        : 'NOT DONE — when the moment fits, warmly offer the quick 2-minute getting-to-know-you and run the ONBOARDING SURVEY, saving each step.'));
+      const interestTags = (b.tags || []).filter((t) => /^(interest_|product_.*_(interest|owner)|practice_stage_|invest_|community_feature_|need_)/.test(String(t).toLowerCase()));
+      if (interestTags.length) lines.push('What we already know (profile tags): ' + interestTags.slice(0, 40).join(', ') + '.');
+      const hasPaidSub = Array.isArray(b.subscriptions) && b.subscriptions.some((x) => /active|trialing/i.test(String(x.status || '')));
+      lines.push('SUBSCRIPTION: ' + (hasPaidSub
+        ? 'This member is a PAID subscriber — do NOT pitch a plan they already pay for; focus on helping them get more value from it.'
+        : 'This member is a FREE member (no active paid subscription). If their onboarding is DONE, your priority is to warmly encourage upgrading to a paid membership (Silver/Gold/Diamond), tying each benefit to their own goals/tags, and hand them the exact activation link. Guide, never pressure.'));
+      var nudge = '';
+      if (obState !== 'complete') nudge = 'they have not finished the quick getting-to-know-you survey — warmly offer to do it now (about 2 minutes) so you can tailor everything to them.';
+      else if (unread) nudge = 'they have ' + unread + ' unread message(s) in Gaia — mention it and offer to open their inbox.';
+      else if (Array.isArray(upcoming) && upcoming.length) nudge = 'they have an upcoming session booked — acknowledge it warmly and ask if they want the details.';
+      else if (_lastPublishedEvent && _lastPublishedEvent.name) nudge = 'the event "' + _lastPublishedEvent.name + '" is on the calendar — invite them to register.';
+      else if (!hasPaidSub) nudge = 'they are on the free plan — when it fits, warmly show why a paid membership matches the goals they shared.';
+      if (nudge) lines.push('TOP NUDGE (open your first greeting with this, in your own warm words, then ask what they want): ' + nudge);
+      const offers = onboarding.suggestOffers(b.tags, hasPaidSub);
+      if (offers.length) lines.push('SUGGESTED NEXT OFFERS (present naturally, never pushy, one at a time, only when relevant): ' + offers.map((o, i) => (i + 1) + ') ' + o).join('  '));
+    } catch (e) {}
     const text = lines.join('\n');
     if (cid) _memberAiCtxCache.set(cid, { at: Date.now(), text });
     return text;
@@ -5176,7 +5226,14 @@ function assistSystemPrompt(memberContext = '') {
     'When asked how to do something, name the exact screen and step. Never invent course progress, scan numbers, community posts, prices, or personal history.',
     'MEMBERSHIP GUIDANCE \u2014 help people join and activate. Gaia Healers 2.0 has four practitioner paths: Free ($0), Silver ($97/mo or $997/yr), Gold ($497/mo or $4,997/yr), and Diamond ($997/mo or $9,997/yr), with benefits growing from community and education through directory exposure, CRM/software, implementation support, and lead generation. When someone wants to grow, go deeper, get certified, be listed as a practitioner, or asks what to join, warmly explain the paths, ask one short question about their stage and goal, recommend the single best-fit tier, and hand them its exact activation link so they can activate right away: Free join.gaiahealers.com/onboarding, Silver join.gaiahealers.com/silver, Gold join.gaiahealers.com/gold, Diamond join.gaiahealers.com/diamond (or say "Open the Store and tap Membership"). Guide, never pressure; frame it as the step that matches their goal. Their in-app access mirrors what GHL grants once they activate.',
     'Never claim that you saved, imported, checked in, emailed, booked, purchased, or changed data. Explain how the member can do it.',
-    'Keep responses concise, practical, warm, proactive, and wellness-safe. End with one useful next step or a short question, and continue helping until they are finished. Do not provide medical diagnosis.',
+    'GUIDE FULLY — you are their in-app guide and know every screen and flow. For any "how do I…" give the exact steps from the app task guide and offer to open the right screen for them; walk multi-step tasks one step at a time and say what to tap next.',
+    'RAPPORT FIRST — answer the actual question before offering anything; do not pitch in the first sentence unless asked. One question at a time; confirm understanding.',
+    'HANDLE HESITATION — address the specific concern (price -> Free is $0 and annual saves; value -> tie to their goals; timing -> start free, upgrade anytime); never pressure or repeat a declined offer. PERSONALIZE from what you know; after the survey give a short recap + best next step; if a TOP NUDGE is present, lead with it.',
+    'EVENTS — if an event is currently published (in your knowledge above), proactively mention it and encourage the member to register; offer to open the events screen. If none is published, say the calendar is clear rather than inventing one.',
+    'GATEKEEPER: read the member context. No context = VISITOR: show value and lead them to JOIN or sign in. Has context = MEMBER: if ONBOARDING PROFILE is NOT DONE, at a natural moment offer the quick getting-to-know-you and run the ONBOARDING SURVEY; if DONE, skip it and give tailored suggestions from their interests and SUGGESTED NEXT OFFERS. If that member is a FREE (non-paying) member, prioritize warmly encouraging a paid membership (Silver/Gold/Diamond), tying benefits to their profile, with the activation link; never pressure.',
+    'SURVEY SAVE MECHANISM (text): after a member answers a step, append on its OWN LINE at the very end of your message exactly: <<ONBOARD step=STEPKEY | SELECTIONS: label one ;; label two | complete=false>> (use complete=true on the final step). The app records it and REMOVES that line, so the member never sees it. Put nothing after the marker.',
+    onboarding.onboardingPromptBlock(),
+        'Keep responses concise, practical, warm, proactive, and wellness-safe. End with one useful next step or a short question, and continue helping until they are finished. Do not provide medical diagnosis.',
     gaiaKnowledgePrompt(),
     String(memberContext || '').trim(),
   ].filter(Boolean).join(' ');
@@ -5404,6 +5461,34 @@ async function callAssistProviders(prompt, context = {}) {
   };
 }
 
+const ONBOARD_MARKER_RE = /<<\s*ONBOARD\s+step\s*=\s*([a-z_]+)\s*\|\s*SELECTIONS\s*:\s*([^|]*)\|\s*complete\s*=\s*(true|false)\s*>>/gi;
+async function executeOnboardingMarkers(req, text) {
+  const out = { clean: String(text || ''), ran: 0 };
+  if (!out.clean || out.clean.indexOf('ONBOARD') < 0) return out;
+  let sm = null;
+  try { sm = sessionMemberContext(req); } catch (e) {}
+  const markers = [];
+  out.clean = out.clean.replace(ONBOARD_MARKER_RE, function (_m, step, sel, complete) {
+    markers.push({ step: String(step).trim(), selections: String(sel).split(';;').map((x) => x.trim()).filter(Boolean), complete: /true/i.test(complete) });
+    return '';
+  }).replace(/\n{3,}/g, '\n\n').trim();
+  if (!markers.length || !sm) return out;
+  try {
+    const b = await fetchMemberBundle(sm);
+    if (b && b.contactId) {
+      for (const mk of markers) { await applyOnboardingStep(b.contactId, mk.step, mk.selections, '', mk.complete); out.ran++; }
+    }
+  } catch (e) {}
+  return out;
+}
+async function applyOnboardingStep(contactId, stepKey, selections, freeText, complete) {
+  const r = onboarding.mapStep(stepKey, selections);
+  const tags = r.tags.slice();
+  if (complete) tags.push(onboarding.COMPLETE_TAG);
+  if (tags.length) await ghlPost(`/contacts/${encodeURIComponent(contactId)}/tags`, { tags }).catch(() => null);
+  if (freeText) { try { await ghlPost(`/contacts/${encodeURIComponent(contactId)}/notes`, { body: 'Gaia Assist onboarding (' + stepKey + '): ' + String(freeText).slice(0, 800) }); } catch (e) {} }
+  return { tagsAdded: tags, matched: r.matched, unmatched: r.unmatched, complete: !!complete };
+}
 async function assistChat(body) {
   const prompt = String(body.prompt || body.transcript || '').trim();
   if (!prompt) {
@@ -6225,10 +6310,21 @@ const server = http.createServer(async (req, res) => {
     if (url.pathname.startsWith('/api/assist/')) {
       /* Gaia Assist is open to all visitors (member or not); nginx rate-limits /api/assist/ for quota protection. Sign-in gate disabled per product decision. */
     }
+    if (req.method === 'POST' && url.pathname === '/api/assist/onboarding') {
+      const sm = sessionMemberContext(req);
+      if (!sm) { sendJson(res, 200, { ok: false, reason: 'not_signed_in' }, origin); return; }
+      const body = await readJsonBody(req).catch(() => ({}));
+      const b = await fetchMemberBundle(sm);
+      if (!b || !b.contactId) { sendJson(res, 200, { ok: false, reason: 'no_contact' }, origin); return; }
+      const result = await applyOnboardingStep(b.contactId, String(body.stepKey || ''), Array.isArray(body.selections) ? body.selections : [], String(body.freeText || ''), Boolean(body.complete));
+      sendJson(res, 200, { ok: true, stepKey: body.stepKey || '', ...result }, origin);
+      return;
+    }
     if (req.method === 'POST' && url.pathname === '/api/assist/chat') {
       const body = await readJsonBody(req);
       const memberContext = await buildMemberVoiceContext(req);
       const payload = await assistChat({ ...body, source: body.source || 'chat', memberContext });
+      try { if (payload && payload.reply) { const ex = await executeOnboardingMarkers(req, payload.reply); payload.reply = ex.clean; if (ex.ran) payload.onboardingSaved = ex.ran; } } catch (e) {}
       sendJson(res, payload.ok === false ? 400 : 200, payload, origin);
       return;
     }

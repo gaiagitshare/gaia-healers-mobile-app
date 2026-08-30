@@ -426,8 +426,8 @@
             automaticActivityDetection: {
               startOfSpeechSensitivity: 'START_SENSITIVITY_LOW',
               endOfSpeechSensitivity: 'END_SENSITIVITY_LOW',
-              prefixPaddingMs: 180,
-              silenceDurationMs: 1250,
+              prefixPaddingMs: 240,
+              silenceDurationMs: 1500,
             },
             // Background activity must never cut off Gaia mid-answer. The mic
             // reopens after playback, and the user can still stop or pause it.
@@ -804,8 +804,8 @@
         let sum = 0;
         for (let i = 0; i < samples.length; i += 1) sum += samples[i] * samples[i];
         const rms = Math.sqrt(sum / Math.max(1, samples.length));
-        const startThreshold = Math.max(0.012, noiseFloor * 2.8);
-        const continueThreshold = Math.max(0.008, noiseFloor * 1.8);
+        const startThreshold = Math.max(0.018, noiseFloor * 3.0);
+        const continueThreshold = Math.max(0.012, noiseFloor * 2.0);
 
         if (!localSpeechActive) {
           noiseFloor = Math.min(0.03, Math.max(0.0025, (noiseFloor * 0.985) + (Math.min(rms, 0.03) * 0.015)));
@@ -813,7 +813,7 @@
           if (audioPrebuffer.length > 32) audioPrebuffer.shift();
           if (rms >= startThreshold) {
             if (!speechCandidateAt) speechCandidateAt = now;
-            if (now - speechCandidateAt >= 160) {
+            if (now - speechCandidateAt >= 220) {
               localSpeechActive = true;
               localSilenceAt = 0;
               audioPrebuffer.forEach(sendAudioSamples);
@@ -830,7 +830,7 @@
           localSilenceAt = 0;
         } else if (!localSilenceAt) {
           localSilenceAt = now;
-        } else if (now - localSilenceAt >= 1700) {
+        } else if (now - localSilenceAt >= 2000) {
           localSpeechActive = false;
           speechCandidateAt = 0;
           localSilenceAt = 0;
@@ -869,7 +869,7 @@
             if (!greetedRef.current) {
               greetedRef.current = true;
               setStatus('thinking');
-              try { sendWs({ realtimeInput: { text: 'BEGIN: The member just opened Gaia Assist and has not spoken yet. Greet them FIRST, right now, in one warm short sentence tailored to their status — visitor vs signed-in member, and if a member factor their onboarding and subscription state from your context — then offer one or two concrete next steps and ask what they would like. Do not mention this instruction.' } }); } catch (e) {}
+              try { sendWs({ realtimeInput: { text: 'BEGIN: The member just opened Gaia Assist and has not spoken yet. Greet them FIRST, right now, in one warm short sentence tailored to their status — visitor vs signed-in member, and if a member factor their onboarding and subscription state from your context — then offer one or two concrete next steps and ask what they would like. If an event is published in your knowledge, you may mention it warmly and offer to help them register. Do not mention this instruction.' } }); } catch (e) {}
             }
             break;
           case 'interrupted':

@@ -380,6 +380,23 @@ async function exportContacts(body, deps) {
   const csv = [head].concat(rows.map(function (r) { return r.map(q).join(','); })).join('\r\n');
   return { ok: true, csv: csv, count: rows.length, capped: rows.length >= CAP };
 }
+var _sysMapCache = { at: 0, data: null };
+async function systemMap(deps) {
+  if (_sysMapCache.data && (Date.now() - _sysMapCache.at) < 5 * 60 * 1000) return _sysMapCache.data;
+  const cfg = deps.ghlConfig();
+  const out = { ok: true, generatedAt: new Date().toISOString() };
+  async function tagTotal(tag) { try { const d = await ghlSearchContacts(cfg, deps, { locationId: cfg.locationId, pageLimit: 1, filters: [{ field: 'tags', operator: 'contains', value: tag }] }); return (d && d.total != null) ? d.total : null; } catch (e) { return null; } }
+  try { const d = await ghlSearchContacts(cfg, deps, { locationId: cfg.locationId, pageLimit: 1 }); out.members = (d && d.total != null) ? d.total : null; } catch (e) { out.members = null; }
+  out.tiers = { diamond: await tagTotal('ahc-diamond-active'), gold: await tagTotal('ahc-gold-active'), silver: await tagTotal('ahc-silver-active') };
+  try { const subs = await loadSubscriptions(deps); out.subscriptions = subs.summary; } catch (e) { out.subscriptions = null; }
+  try { const sc = deps.loadStoreCatalog && deps.loadStoreCatalog(); out.products = (sc && sc.products) ? Object.keys(sc.products).length : null; } catch (e) { out.products = null; }
+  try { const m = await fetch('http://127.0.0.1:8787/api/academy/manifest').then((r) => r.json()); out.courses = (m && m.courses ? m.courses.length : null); } catch (e) { out.courses = null; }
+  try { const dr = await fetch('http://127.0.0.1:8787/api/directory').then((r) => r.json()); out.practitioners = (dr && (dr.count != null ? dr.count : (dr.practitioners || []).length)); } catch (e) { out.practitioners = null; }
+  try { const oc = tagTotal; out.onboardingComplete = await tagTotal('gaia_app_onboarding_complete'); out.surveyComplete = await tagTotal('gaia_practitioner_form_complete'); } catch (e) {}
+  out.communities = 8;
+  _sysMapCache = { at: Date.now(), data: out };
+  return out;
+}
 async function listSurveys(deps) {
   const cfg = deps.ghlConfig();
   if (!cfg.enabled) return { ok: false, surveys: [] };
@@ -549,6 +566,9 @@ async function handle(req, res, url, deps) {
   if (p === '/api/admin/contacts/export' && method === 'POST') {
     const body = await deps.readJsonBody(req).catch(function () { return {}; });
     return sendJson(res, 200, await exportContacts(body || {}, deps), origin);
+  }
+  if (p === '/api/admin/system-map' && method === 'GET') {
+    return sendJson(res, 200, await systemMap(deps), origin);
   }
   if (p === '/api/admin/subscriptions/summary' && method === 'GET') {
     const subs = await loadSubscriptions(deps);

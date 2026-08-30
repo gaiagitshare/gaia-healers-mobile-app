@@ -43,7 +43,8 @@
     tag: '<path d="M20.6 13.4 12 22l-9-9V3h10l7.6 7.6a2 2 0 0 1 0 2.8Z"/><circle cx="7.5" cy="7.5" r="1.5"/>',
     lock: '<rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/>',
     download: '<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/>',
-    receipt: '<path d="M4 2v20l2-1 2 1 2-1 2 1 2-1 2 1 2-1V2l-2 1-2-1-2 1-2-1-2 1-2-1Z"/><path d="M8 7h8M8 11h8M8 15h5"/>'
+    receipt: '<path d="M4 2v20l2-1 2 1 2-1 2 1 2-1 2 1 2-1V2l-2 1-2-1-2 1-2-1-2 1-2-1Z"/><path d="M8 7h8M8 11h8M8 15h5"/>',
+    system: '<circle cx="12" cy="5" r="2.4"/><circle cx="5" cy="19" r="2.4"/><circle cx="19" cy="19" r="2.4"/><path d="M12 7.4v4M12 11.4 5.8 16.8M12 11.4l6.2 5.4"/>'
   };
   function fmtDate(iso) { if (!iso) return '—'; try { var d = new Date(iso); if (isNaN(d)) return '—'; return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }); } catch (e) { return '—'; } }
   function money(a) { if (a == null || isNaN(a)) return '—'; return '$' + (Number.isInteger(a) ? a : Number(a).toFixed(2)); }
@@ -70,6 +71,7 @@
     else if (view === 'surveys') mountSurveys();
     else if (view === 'membership') mountMembership();
     else if (view === 'events') mountEvents();
+    else if (view === 'system') mountSystem();
   }
 
   function shell() {
@@ -81,7 +83,8 @@
       contacts: ['Contacts', 'Search, filter by tag, and edit any contact’s tags & survey answers'],
       surveys: ['Surveys', 'The onboarding questions and how the answers branch'],
       membership: ['Membership', 'Members by tier and status — Diamond, Gold, Silver'],
-      events: ['Events', 'Your Event Manager — right inside the admin']
+      events: ['Events', 'Your Event Manager — right inside the admin'],
+      system: ['System Map', 'How the whole Gaia Healers system fits together — live']
     };
     var t = titles[view] || ['', ''];
     return ''
@@ -92,6 +95,7 @@
       + item('surveys', 'Surveys', 'survey')
       + item('membership', 'Membership', 'member')
       + item('events', 'Events', 'event')
+      + item('system', 'System Map', 'system')
       + '    <div class="nav__sp"></div>'
       + '    <div class="nav__item" id="changepw">' + svg('lock', 'nav__ico') + 'Change password</div>'
       + '    <div class="nav__item" id="logout">' + svg('logout', 'nav__ico') + 'Sign out</div>'
@@ -583,6 +587,79 @@
     });
   }
 
+  // ================= SYSTEM MAP =================
+  var TIER_INFO = [
+    { key: 'free', name: 'Free', price: '$0 forever', acc: 'var(--muted)', benefits: ['Community circles', 'Free wellness tools', 'Full app access'], link: 'join.gaiahealers.com/onboarding' },
+    { key: 'silver', name: 'Silver', price: '$97/mo · $997/yr', acc: 'var(--teal)', benefits: ['Everything in Free', 'Full community + education', 'Directory listing', 'Start certification'], link: 'join.gaiahealers.com/silver' },
+    { key: 'gold', name: 'Gold', price: '$497/mo · $4,997/yr', acc: 'var(--amber)', benefits: ['Everything in Silver', 'Practitioner CRM / software', 'Implementation support', 'Lead generation'], link: 'join.gaiahealers.com/gold' },
+    { key: 'diamond', name: 'Diamond', price: '$997/mo · $9,997/yr', acc: 'var(--violet)', benefits: ['Everything in Gold', 'Accelerator benefits', 'Early-access opportunities', 'Priority support'], link: 'join.gaiahealers.com/diamond' }
+  ];
+  function n(v) { return (v == null) ? '—' : Number(v).toLocaleString(); }
+  function mountSystem() {
+    var c = document.getElementById('content');
+    c.innerHTML = '<div class="sysmap" id="sysmap"><div class="smload">' + svg('system') + '<div>Mapping the system…</div></div></div>';
+    api('/system-map').then(function (d) {
+      if (!d || !d.ok) { document.getElementById('sysmap').innerHTML = '<div class="empty">Could not load the system map.</div>'; return; }
+      paintSystem(d);
+    });
+  }
+  function branch(cls, icon, title, inner) {
+    return '<div class="smbranch smbranch--' + cls + '"><div class="smbranch__hd">' + svg(icon) + '<b>' + title + '</b></div>' + inner + '</div>';
+  }
+  function paintSystem(d) {
+    var sub = d.subscriptions || {};
+    var tierCard = function (t) {
+      var live = (t.key === 'gold' || t.key === 'silver' || t.key === 'diamond') ? d.tiers[t.key] : null;
+      return '<div class="smtier" style="--acc:' + t.acc + '">'
+        + '<div class="smtier__hd"><b>' + t.name + '</b>' + (live != null ? '<span class="smtier__n">' + n(live) + ' tagged</span>' : '<span class="smtier__n smtier__n--free">default</span>') + '</div>'
+        + '<div class="smtier__price">' + t.price + '</div>'
+        + '<ul class="smtier__b">' + t.benefits.map(function (b) { return '<li>' + esc(b) + '</li>'; }).join('') + '</ul></div>';
+    };
+    var tiers = branch('tiers', 'member', 'Membership Tiers', '<div class="smtiers">' + TIER_INFO.map(tierCard).join('') + '</div>');
+    var pay = branch('pay', 'lock', 'Payments &amp; Billing',
+      '<div class="smnode smnode--live"><b>Live subscriptions · Stripe</b><div class="smstats"><span class="smstat smstat--good"><b>' + n(sub.active) + '</b>active</span><span class="smstat smstat--bad"><b>' + n(sub.canceled) + '</b>canceled</span><span class="smstat"><b>' + n(sub.expired) + '</b>expired</span></div></div>'
+      + '<div class="smnode"><b>Shopify store</b><span>' + n(d.products) + ' products · checkout on Shopify</span></div>'
+      + '<div class="smnode smnode--warn"><b>⚠ Tier tags ≠ billing</b><span>' + n(d.tiers.gold) + ' carry the Gold tag, but only ' + n(sub.active) + ' pay a live subscription. Tags come from tiers/grants, not Stripe.</span></div>');
+    var access = branch('access', 'survey', 'How Access Is Granted',
+      '<div class="smnode"><b>Onboarding survey</b><span>14 steps → interest / goal / device tags · ' + n(d.surveyComplete) + ' completed</span></div>'
+      + '<div class="smflow">' + ['Survey', 'Tags', 'Communities + Membership'].map(function (s, i) { return (i ? '<span class="smarrow">→</span>' : '') + '<span class="smchip">' + s + '</span>'; }).join('') + '</div>'
+      + '<div class="smnode"><b>Course grants</b><span>GHL offers/purchases → Academy access (in-app player)</span></div>'
+      + '<div class="smnode"><b>' + n(d.communities) + ' communities</b><span>Tag-routed circles + private channels</span></div>');
+    var app = branch('app', 'contacts', 'The App &amp; Ecosystem',
+      '<div class="smgrid">'
+      + '<div class="smmini"><b>' + n(d.courses) + '</b><span>Courses (Academy)</span></div>'
+      + '<div class="smmini"><b>' + n(d.practitioners) + '</b><span>Practitioners (Directory)</span></div>'
+      + '<div class="smmini"><b>' + n(d.products) + '</b><span>Store products</span></div>'
+      + '<div class="smmini"><b>' + n(d.communities) + '</b><span>Communities</span></div>'
+      + '</div>'
+      + '<div class="smnode"><b>Gaia Assist</b><span>AI concierge — knows this whole system, guides &amp; sells</span></div>');
+    document.getElementById('sysmap').innerHTML =
+      '<svg class="sysmap__edges"></svg>'
+      + '<div class="smhub" id="smhub"><span class="smhub__k">Gaia Healers 2.0</span><b>' + n(d.members) + '</b><span class="smhub__l">total members</span></div>'
+      + '<div class="smrow">' + tiers + pay + access + app + '</div>'
+      + '<div class="smfoot">Live from GHL · Stripe · Shopify · updated ' + fmtDate(d.generatedAt) + '</div>';
+    requestAnimationFrame(drawEdges);
+    if (!window.__smResize) { window.__smResize = true; window.addEventListener('resize', function () { if (document.getElementById('sysmap')) drawEdges(); }); }
+  }
+  function drawEdges() {
+    var wrap = document.getElementById('sysmap'); if (!wrap) return;
+    var svgEl = wrap.querySelector('.sysmap__edges'); var hub = document.getElementById('smhub'); if (!svgEl || !hub) return;
+    var wr = wrap.getBoundingClientRect();
+    svgEl.setAttribute('viewBox', '0 0 ' + wr.width + ' ' + wr.height);
+    svgEl.style.width = wr.width + 'px'; svgEl.style.height = wr.height + 'px';
+    var hb = hub.getBoundingClientRect();
+    var hx = hb.left - wr.left + hb.width / 2, hy = hb.bottom - wr.top;
+    var p = '';
+    wrap.querySelectorAll('.smbranch').forEach(function (b) {
+      var bb = b.getBoundingClientRect();
+      var bx = bb.left - wr.left + bb.width / 2, by = bb.top - wr.top;
+      var my = hy + (by - hy) * 0.5;
+      p += '<path d="M' + hx + ' ' + hy + ' C ' + hx + ' ' + my + ' ' + bx + ' ' + my + ' ' + bx + ' ' + by + '" fill="none" stroke="var(--line2)" stroke-width="2"/>';
+      p += '<circle cx="' + bx + '" cy="' + by + '" r="3.5" fill="var(--green2)"/>';
+    });
+    svgEl.innerHTML = p;
+  }
+
   // ================= AUTH =================
   function doLogout() { setToken(''); location.hash = ''; loginScreen(''); }
 
@@ -664,7 +741,7 @@
     api('/session').then(function (d) {
       if (d && d.__401) return;
       if (d && d.authed) {
-        var initial = (location.hash || '').replace('#', ''); if (['contacts', 'surveys', 'membership', 'events'].indexOf(initial) >= 0) view = initial;
+        var initial = (location.hash || '').replace('#', ''); if (['contacts', 'surveys', 'membership', 'events', 'system'].indexOf(initial) >= 0) view = initial;
         render();
       } else { setToken(''); loginScreen(''); }
     }).catch(function () { loginScreen('Cannot reach the server.'); });

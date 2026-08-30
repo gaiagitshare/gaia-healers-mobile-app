@@ -973,17 +973,19 @@ body.gaia-booking-open{overflow:hidden;}
       }
     });
     const trackCard = (t) => {
-      const openable = Boolean(state.authed && t.grant);
+      const owned = Boolean(state.authed && t.grant);
+      const isFree = key(t.accessLevel) === 'free';
+      const openable = owned || isFree;
       const descClean = (function (d, n) { d = String(d || '').replace(/\s+/g, ' ').trim(); n = String(n || '').trim(); if (n && d.toLowerCase().indexOf(n.toLowerCase()) === 0) d = d.slice(n.length).replace(/^[\s:\u2022\-\u2013\u2014]+/, '').trim(); return d; })(t.desc, t.name);
       const url = t.grant?.openUrl || t.portalUrl || hub;
-      const badge = openable
+      const badge = owned
         ? '<span class="g-chip g-chip--on" style="margin-left:.5rem">Your access</span>'
         : (t.accessLevel ? '<span class="g-chip" style="margin-left:.5rem">' + esc(t.accessLevel.charAt(0).toUpperCase() + t.accessLevel.slice(1)) + '</span>' : '');
       const count = Number(t.memberCount) || 0;
       const countChip = count > 0 ? '<span class="g-chip" style="margin-left:.35rem;opacity:.85">' + count + ' learners</span>' : '';
       const img = t.image ? '<img src="' + esc(t.image) + '" alt="" class="g-access__img" style="width:48px;height:48px;border-radius:8px;object-fit:cover;flex-shrink:0" />' : '';
       return openable
-        ? '<button type="button" class="g-access g-access--unlocked g-access--link" data-course-open="' + esc(url) + '" data-course-title="' + esc(t.name) + '">'
+        ? '<button type="button" class="g-access g-access--unlocked g-access--link" data-course-open="' + esc(url) + '"' + (isFree && !owned ? ' data-course-free="1"' : '') + ' data-course-title="' + esc(t.name) + '">'
           + img
           + '<div class="g-access__body"><span class="g-access__name">' + esc(t.name) + badge + countChip + '</span><span class="g-access__meta">' + esc(descClean) + '</span></div>'
           + '<span class="g-chip g-chip--on g-access__act">Open →</span></button>'
@@ -1025,7 +1027,7 @@ body.gaia-booking-open{overflow:hidden;}
     renderSyncedAcademy();
     box.querySelectorAll('[data-course-open]').forEach((button) => {
       button.addEventListener('click', () => {
-        if (!state.authed) {
+        if (!state.authed && button.dataset.courseFree !== '1') {
           window.GaiaAuth?.open?.();
           return;
         }

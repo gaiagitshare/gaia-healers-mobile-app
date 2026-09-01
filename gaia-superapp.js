@@ -561,6 +561,8 @@
   function freeTools() {
     const tools = [
       ['wellness&tab=check', 'sparkle', 'Energy check', 'Today’s body point and practice'],
+      ['wellness&tool=pulse', 'heartbeat', 'Energy Pulse', '60-second body read'],
+      ['wellness&tool=breath', 'wind', 'Coherence Breath', 'Reset your energy'],
       ['wellness&tab=horoscope', 'moon-stars', 'Horoscope', 'Your reflective daily guidance'],
       ['wellness&tab=chakras', 'circles-three-plus', 'Chakra match', 'Explore centres and products'],
       ['wellness&tool=colour', 'palette', 'Colour test', 'Five free questions'],
@@ -570,7 +572,8 @@
       ['store', 'bag', 'Gaia Healers Store', 'Sprays, tools and memberships'],
     ];
     // The template's four doors, colour-coded: the icons are the wayfinding.
-    const TINT = { 'Energy check': 'var(--g-accent)', Horoscope: 'var(--g-teal)',
+    const TINT = { 'Energy check': 'var(--g-accent)', 'Energy Pulse': 'var(--g-teal)',
+      'Coherence Breath': 'var(--g-accent)', Horoscope: 'var(--g-teal)',
       'Chakra match': 'var(--g-purple)', 'Colour test': 'var(--g-gold)',
       'Chakra Quiz': 'var(--g-gold)', 'Energy Match': 'var(--g-accent)' };
     const four = tools.filter((t) => TINT[t[2]]);

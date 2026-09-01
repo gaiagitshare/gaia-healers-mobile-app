@@ -1,7 +1,7 @@
 /** Gaia — Energy Pulse.
- * A real 60-second body read. Primary method: camera photoplethysmography
+ * A real camera pulse estimate. Primary method: camera photoplethysmography
  * (PPG) — the fingertip over the rear camera modulates the red channel with
- * each heartbeat; we recover BPM by autocorrelation and show the live wave so
+ * each heartbeat; spectral and autocorrelation estimates must agree before we
  * you can see it working. Fallback (any device, no camera): tap along with
  * your heartbeat. No data leaves the phone; the camera frames are analysed in
  * memory and never uploaded. Honest by design: this estimates heart rate from
@@ -62,84 +62,10 @@
     document.head.appendChild(st);
   }
 
-  /* ---- signal processing (real) --------------------------------------- */
-  // Autocorrelation BPM over a detrended, roughly-uniformly-sampled signal.
-  // Returns { bpm, quality } where quality is the normalised autocorr peak.
-  function estimateBpm(values, fps) {
-    const n = values.length;
-    if (n < fps * 4) return null;
-    // Band-pass the raw ROI signal to the heart-rate band before correlating,
-    // using two biquad filters (RBJ cookbook): a high-pass at ~0.6 Hz then a
-    // low-pass at ~3.6 Hz. Unlike moving-average filters these have a real
-    // stopband, so slow drift (auto-exposure, hand motion) is genuinely crushed
-    // and cannot fake a low pulse, while a faint 0.7–3 Hz pulse is preserved.
-    function biquad(x, type, fc, q) {
-      const w0 = 2 * Math.PI * fc / fps, c = Math.cos(w0), sn = Math.sin(w0), al = sn / (2 * q);
-      let b0, b1, b2; const a0 = 1 + al, a1 = -2 * c, a2 = 1 - al;
-      if (type === 'hp') { b0 = (1 + c) / 2; b1 = -(1 + c); b2 = (1 + c) / 2; }
-      else { b0 = (1 - c) / 2; b1 = 1 - c; b2 = (1 - c) / 2; }
-      b0 /= a0; b1 /= a0; b2 /= a0; const na1 = a1 / a0, na2 = a2 / a0;
-      // Prime the state with the first sample so a constant DC start produces no
-      // step transient (a HP fed a constant settles to 0 immediately this way).
-      const y = new Array(x.length); let x1 = x[0], x2 = x[0], y1 = 0, y2 = 0;
-      for (let i = 0; i < x.length; i++) { const xi = x[i]; const yi = b0 * xi + b1 * x1 + b2 * x2 - na1 * y1 - na2 * y2; x2 = x1; x1 = xi; y2 = y1; y1 = yi; y[i] = yi; }
-      return y;
-    }
-    if (fps < 12) return null; // too few frames/s to resolve the band
-    let s = biquad(values, 'hp', 0.6, 0.707);
-    s = biquad(s, 'lp', 3.6, 0.707);
-    // drop a short residual warm-up before analysing
-    const warm = Math.min(n - 4, Math.round(fps * 0.3));
-    s = s.slice(warm);
-    const nn = s.length;
-    // zero-mean + std normalise
-    let m = 0; for (let i = 0; i < nn; i++) m += s[i]; m /= nn;
-    let sd = 0; for (let i = 0; i < nn; i++) { s[i] -= m; sd += s[i] * s[i]; }
-    sd = Math.sqrt(sd / nn) || 1e-6;
-    for (let i = 0; i < nn; i++) s[i] /= sd;
-    const d2 = s; // correlate the band-passed, normalised signal
-    // autocorrelation over lags for 40..160 BPM (a slow drift otherwise aliases
-    // to an implausibly high rate; capping the search removes that failure mode)
-    const minLag = Math.max(2, Math.floor(fps * 60 / 160));
-    const maxLag = Math.min(nn - 2, Math.ceil(fps * 60 / 40));
-    if (maxLag <= minLag + 1) return null;
-    const acf = new Array(maxLag + 2).fill(0);
-    let gmax = -Infinity;
-    for (let lag = minLag; lag <= maxLag; lag++) {
-      let ss = 0;
-      for (let i = 0; i + lag < nn; i++) ss += d2[i] * d2[i + lag];
-      ss /= (nn - lag);
-      acf[lag] = ss;
-      if (ss > gmax) gmax = ss;
-    }
-    if (gmax <= 0) return null;
-    // Pick the SMALLEST lag that is a local peak near the global max. This locks
-    // onto the fundamental and avoids the classic octave error where a strong
-    // 2×/3× period (a lower BPM) outscores the true rate.
-    let bestLag = -1; let bestVal = -Infinity;
-    for (let lag = minLag + 1; lag < maxLag; lag++) {
-      if (acf[lag] >= 0.72 * gmax && acf[lag] >= acf[lag - 1] && acf[lag] >= acf[lag + 1]) { bestLag = lag; bestVal = acf[lag]; break; }
-    }
-    if (bestLag < 0) { for (let lag = minLag; lag <= maxLag; lag++) if (acf[lag] > bestVal) { bestVal = acf[lag]; bestLag = lag; } }
-    if (bestLag < 0) return null;
-    // Reject slow drift / trends masquerading as a low pulse: a genuine periodic
-    // signal's autocorrelation dips well below its peak (toward/below zero at the
-    // half-period) before rising again, whereas a monotone trend decays smoothly
-    // with no such trough. Require a real dip before the chosen peak.
-    if (bestLag > minLag + 3) {
-      let trough = Infinity;
-      for (let lag = minLag; lag < bestLag; lag++) if (acf[lag] < trough) trough = acf[lag];
-      if (!(trough < 0.5 * bestVal)) return null;
-    }
-    // parabolic interpolation around the peak for sub-sample accuracy
-    let lag = bestLag;
-    if (bestLag > minLag && bestLag < maxLag) {
-      const y0 = acf[bestLag - 1], y1 = bestVal, y2 = acf[bestLag + 1];
-      const denom = (y0 - 2 * y1 + y2);
-      if (denom !== 0) lag = bestLag + 0.5 * (y0 - y2) / denom;
-    }
-    const bpm = 60 * fps / lag;
-    return { bpm, quality: Math.max(0, Math.min(1, gmax)) };
+  /* ---- signal processing ---------------------------------------------- */
+  function pulseDsp() {
+    if (!window.GaiaPulseDSP) throw new Error('Pulse signal processing did not load. Refresh and try again.');
+    return window.GaiaPulseDSP;
   }
 
   /* ---- the tool ------------------------------------------------------- */
@@ -199,8 +125,8 @@
       + '<ellipse cx="100" cy="52" rx="17" ry="12" fill="url(#gpContact)"/></g>'
       + '</svg>'
       + '<span class="gp-pill">Cover one lens — slide to another if it’s not reading</span>'
-      + '<h2 class="gp-title">A 60-second pulse read</h2>'
-      + '<p class="gp-lead">Phones have 2–3 lenses. Rest the pad of a finger over <strong>one lens</strong> — the main camera (usually the largest, or the one by the flash). If it doesn’t read after a few seconds, <strong>slide to the next lens</strong>. Hold still in good light — the meter fills when you’ve found it.</p>'
+      + '<h2 class="gp-title">A careful pulse read</h2>'
+      + '<p class="gp-lead">Rest the pad of a finger gently over <strong>one rear lens</strong>. If the flash turns on, cover the lens beside the light. Otherwise try each rear lens until the contact meter responds. Hold completely still; the app returns a number only when the optical signal passes every quality check.</p>'
       + '<div class="gp-actions">'
       + '<button type="button" class="gp-btn" data-gp-start><i class="ph ph-camera" aria-hidden="true"></i> Start reading</button>'
       + '<button type="button" class="gp-btn--link" data-gp-tap>No camera? Tap with your heartbeat →</button>'
@@ -212,7 +138,11 @@
 
   /* ---- camera measurement --------------------------------------------- */
   let stream = null, video = null, sampleCanvas = null, sctx = null;
+  let videoFrameCallbackId = null, captureActive = false;
   function stopCamera() {
+    captureActive = false;
+    try { if (video && videoFrameCallbackId != null && video.cancelVideoFrameCallback) video.cancelVideoFrameCallback(videoFrameCallbackId); } catch (e) {}
+    videoFrameCallbackId = null;
     try { if (stream) stream.getTracks().forEach((t) => t.stop()); } catch (e) {}
     try { if (video) { video.pause(); video.srcObject = null; if (video.parentNode) video.parentNode.removeChild(video); } } catch (e) {}
     stream = null; video = null; sampleCanvas = null; sctx = null;
@@ -220,138 +150,139 @@
 
   async function measure(card) {
     if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) { tapMode(card, 'Camera isn’t available on this device.'); return; }
+    try { pulseDsp(); } catch (error) { tapMode(card, error.message); return; }
     card.innerHTML = closeBtn()
       + '<p class="gp-eyebrow">Reading your pulse</p>'
       + '<div class="gp-bpm"><span data-gp-bpm>– –</span><small>BPM</small></div>'
       + '<canvas class="gp-wave" data-gp-wave width="300" height="64" aria-hidden="true"></canvas>'
       + '<div class="gp-quality" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i></div>'
       + '<p class="gp-status" data-gp-status>Requesting camera…</p>'
+      + '<p class="gp-note" data-gp-camera style="margin-top:5px"></p>'
       + '<div class="gp-actions"><button type="button" class="gp-btn--link" data-gp-tap>Trouble? Tap with your heartbeat →</button></div>';
     card.querySelector('[data-gp-tap]').addEventListener('click', () => { stopCamera(); tapMode(card); });
     const statusEl = card.querySelector('[data-gp-status]');
     const bpmEl = card.querySelector('[data-gp-bpm]');
     const qEls = [...card.querySelectorAll('.gp-quality i')];
+    const cameraEl = card.querySelector('[data-gp-camera]');
     const wave = card.querySelector('[data-gp-wave]');
     const wctx = wave.getContext('2d');
 
-    // Ask for a fixed 640x480 @60fps feed: the explicit resolution + high frame
-    // rate biases iOS toward the main WIDE lens and reduces its habit of auto-
-    // switching lenses mid-capture (a documented iOS Safari issue that otherwise
-    // drops the signal), and 60fps gives more samples to lock onto.
-    const baseVideo = { facingMode: { ideal: 'environment' }, width: { ideal: 640 }, height: { ideal: 480 }, frameRate: { ideal: 60 } };
+    // Ask for the standard environment camera at a stable, modest size/rate.
+    // These are preferences only: the actual delivered settings are read back
+    // and displayed. We do not claim that WebKit exposes or pins a physical lens.
+    const baseVideo = { facingMode: { ideal: 'environment' }, width: { ideal: 640 }, height: { ideal: 480 }, frameRate: { ideal: 30 } };
     try {
       stream = await navigator.mediaDevices.getUserMedia({ video: baseVideo, audio: false });
     } catch (e1) {
       try { stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false }); }
       catch (e2) { tapMode(card, 'Camera permission was blocked. You can still tap your pulse.'); return; }
     }
-    // With permission granted, device labels are now readable. Prefer the main
-    // rear WIDE camera — the one that lights up under a fingertip and (on Android)
-    // carries a torch — over ultra-wide / telephoto / depth cameras.
-    try {
-      const cur = stream.getVideoTracks()[0];
-      const curId = cur && cur.getSettings ? (cur.getSettings().deviceId || null) : null;
-      const vids = (await navigator.mediaDevices.enumerateDevices()).filter((d) => d.kind === 'videoinput');
-      const scoreOf = (l) => { l = (l || '').toLowerCase(); let s = 0; if (/back|rear|environment/.test(l)) s += 3; if (/front|face|truedepth/.test(l)) s -= 8; if (/ultra|0\.5|tele|depth/.test(l)) s -= 4; if (/^back camera$/.test(l) || /\bwide\b/.test(l)) s += 1; return s; };
-      vids.sort((a, b) => scoreOf(b.label) - scoreOf(a.label));
-      const bestId = vids.length && vids[0].label ? vids[0].deviceId : null;
-      if (bestId && bestId !== curId) {
-        let alt = null;
-        try { alt = await navigator.mediaDevices.getUserMedia({ video: Object.assign({ deviceId: { exact: bestId } }, baseVideo), audio: false }); } catch (e) { alt = null; }
-        if (alt) { stream.getTracks().forEach((t) => t.stop()); stream = alt; }
-      }
-    } catch (e) { /* keep the stream we have */ }
-    // Torch: on many Androids this turns the flash on for a much stronger, cleaner
-    // pulse. iOS Safari doesn't expose torch, so it stays a silent no-op there.
+    const track = stream.getVideoTracks()[0];
+    // Modern WebKit and Chromium can expose torch. applyConstraints resolving is
+    // the useful signal; some iOS 18 builds reported stale torch in getSettings().
     let torchOn = false;
     try {
-      const tr = stream.getVideoTracks()[0];
-      const caps = tr && tr.getCapabilities ? tr.getCapabilities() : {};
-      if (caps && caps.torch && tr.applyConstraints) { await tr.applyConstraints({ advanced: [{ torch: true }] }); torchOn = true; }
+      const caps = track && track.getCapabilities ? track.getCapabilities() : {};
+      if (caps && caps.torch === true && track.applyConstraints) {
+        await track.applyConstraints({ advanced: [{ torch: true }] });
+        torchOn = true;
+      }
     } catch (e) {}
+    const settings = track && track.getSettings ? track.getSettings() : {};
+    const deliveredFps = Number(settings.frameRate) || 0;
+    const deliveredSize = settings.width && settings.height ? `${settings.width}×${settings.height}` : 'size unknown';
+    const cameraName = String(track && track.label || 'rear camera').replace(/[<>]/g, '');
+    cameraEl.textContent = `${cameraName} · ${deliveredSize}${deliveredFps ? ` · ${deliveredFps.toFixed(0)} fps` : ''} · ${torchOn ? 'flash on' : 'flash unavailable'}`;
 
     video = document.createElement('video');
     video.className = 'gp-video'; video.playsInline = true; video.muted = true; video.setAttribute('playsinline', ''); video.srcObject = stream;
     document.body.appendChild(video);
     try { await video.play(); } catch (e) {}
-    sampleCanvas = document.createElement('canvas'); sampleCanvas.width = 40; sampleCanvas.height = 40; sctx = sampleCanvas.getContext('2d', { willReadFrequently: true });
+    sampleCanvas = document.createElement('canvas'); sampleCanvas.width = 48; sampleCanvas.height = 48; sctx = sampleCanvas.getContext('2d', { willReadFrequently: true });
 
-    // Sample BOTH the red and green channels: on a torch-lit finger red carries
-    // the pulse, but on an iPhone with no flash the red channel often clips and
-    // green holds the stronger pulsatile signal — so we estimate on each and
-    // keep whichever locks on better. `bright` guides finger placement.
-    const sampR = []; const sampG = []; const times = [];
-    const recent = []; // { t, bpm } — a short history to confirm a *stable* lock
+    const frames = [];
     const startedAt = performance.now();
-    let lastGood = startedAt; // last time we had a usable pulse-ish signal
-    const GIVEUP_MS = 40000;
-    statusEl.textContent = torchOn ? 'Flash on — press a fingertip over the lit lens…' : 'Cover a lens with your fingertip…';
+    const GIVEUP_MS = 35000;
+    let previousGrid = null;
+    let lastMediaTime = -1;
+    let lastAnalysisAt = 0;
+    captureActive = true;
+    statusEl.textContent = torchOn ? 'Flash on — cover the rear lens beside the light.' : 'Cover one rear lens; use bright, steady light.';
 
-    function best(a, b) { if (a && b) return a.quality >= b.quality ? a : b; return a || b || null; }
+    const reasonCopy = {
+      no_frames: 'Waiting for camera frames…',
+      too_dark: 'Too dark — move near a bright, steady light.',
+      overexposed: 'Too bright — cover the active lens fully.',
+      no_finger_contact: 'No fingertip contact yet — try the next rear lens.',
+      scene_texture: 'Cover the lens completely with the pad of your finger.',
+      motion: 'Too much movement — rest your hand and hold still.',
+      unstable_contact: 'Keep gentle, even contact over one lens.',
+      need_more: 'Contact found — collecting a clean pulse signal…',
+      need_more_stability: 'Pulse found — hold still a few seconds longer…',
+      weak_or_irregular_signal: 'Contact is good, but the pulse signal is weak. Hold still.',
+      channel_disagreement: 'Light or movement is interfering — hold still and keep the lens covered.',
+      common_mode_artifact: 'Movement detected instead of a pulse — rest your hand and retry.',
+      unstable_rate: 'The rate is not stable yet — keep still and breathe normally.',
+    };
 
-    function frame() {
-      if (!video || !sctx) return;
+    function scheduleFrame() {
+      if (!captureActive || !video) return;
+      if (video.requestVideoFrameCallback) videoFrameCallbackId = video.requestVideoFrameCallback(processFrame);
+      else window.__gpRAF = requestAnimationFrame((now) => processFrame(now, null));
+    }
+
+    function processFrame(now, metadata) {
+      if (!captureActive || !video || !sctx) return;
       try {
-        sctx.drawImage(video, 0, 0, 40, 40);
-        const px = sctx.getImageData(8, 8, 24, 24).data; // larger centre ROI → better averaging
-        let r = 0, g = 0, b = 0; const cnt = px.length / 4;
-        for (let i = 0; i < px.length; i += 4) { r += px[i]; g += px[i + 1]; b += px[i + 2]; }
+        const mediaTime = metadata && Number.isFinite(metadata.mediaTime) ? metadata.mediaTime : video.currentTime;
+        // rAF fallback may fire repeatedly for one camera frame. Never count a
+        // duplicate as a fresh optical sample.
+        if (Number.isFinite(mediaTime) && mediaTime === lastMediaTime) { scheduleFrame(); return; }
+        if (Number.isFinite(mediaTime)) lastMediaTime = mediaTime;
+        sctx.drawImage(video, 0, 0, 48, 48);
+        const px = sctx.getImageData(8, 8, 32, 32).data;
+        let r = 0; let g = 0; let b = 0; let luminance = 0; let luminanceSquared = 0;
+        const grid = [];
+        const cnt = px.length / 4;
+        for (let i = 0; i < px.length; i += 4) {
+          const rr = px[i]; const gg = px[i + 1]; const bb = px[i + 2];
+          const lum = 0.2126 * rr + 0.7152 * gg + 0.0722 * bb;
+          r += rr; g += gg; b += bb; luminance += lum; luminanceSquared += lum * lum;
+          if ((i / 4) % 4 === 0 && Math.floor((i / 4) / 32) % 4 === 0) grid.push(lum);
+        }
         r /= cnt; g /= cnt; b /= cnt;
-        const bright = (r + g + b) / 3;
-        const t = performance.now();
-        sampR.push(r); sampG.push(g); times.push(t);
-        while (times.length && t - times[0] > 12000) { times.shift(); sampR.shift(); sampG.shift(); } // keep ~12s
-        drawWave(wctx, wave, sampR.slice(-Math.min(sampR.length, 300)));
+        const meanLum = luminance / cnt;
+        const spatialSd = Math.sqrt(Math.max(0, luminanceSquared / cnt - meanLum * meanLum));
+        const motion = previousGrid && previousGrid.length === grid.length
+          ? grid.reduce((sum, value, index) => sum + Math.abs(value - previousGrid[index]), 0) / grid.length / 255 : 0;
+        previousGrid = grid;
+        const t = metadata && Number.isFinite(metadata.mediaTime) ? metadata.mediaTime * 1000 : now;
+        frames.push({ t, r, g, b, spatialCv: spatialSd / Math.max(1, meanLum), motion });
+        while (frames.length && t - frames[0].t > 14000) frames.shift();
+        drawWave(wctx, wave, frames.slice(-300).map((frame) => frame.r));
 
-        // Physical coaching from brightness: lens uncovered (too bright) or too dark.
-        let coach = null;
-        if (bright > 236) coach = 'Cover the lens fully with your fingertip.';
-        else if (bright < 18) coach = 'A little more light helps — try near a lamp or window.';
-        // If nothing pulse-like has shown up for a while, the finger is probably on
-        // a lens the camera isn't using (common on 2–3 lens phones) — nudge them on.
-        const stale = !coach && (t - lastGood > 7000) && (t - startedAt > 6000);
-        const searchMsg = coach || (stale ? 'No reading yet — slide your finger to the next lens.' : 'Searching — press gently and hold still.');
+        if (now - lastAnalysisAt >= 700) {
+          lastAnalysisAt = now;
+          const analysis = pulseDsp().analyzePulse(frames);
+          const visibleQuality = analysis.ok ? analysis.quality : (analysis.contact && analysis.contact.score) || 0;
+          qEls.forEach((el, index) => el.classList.toggle('on', index < Math.round(visibleQuality * 5)));
+          statusEl.textContent = analysis.ok ? 'Clean optical pulse confirmed.' : (reasonCopy[analysis.reason] || 'Checking signal quality…');
+          if (analysis.ok && analysis.quality >= 0.5) { finish(analysis.bpm); return; }
+        }
 
-        if (sampR.length > 96) {
-          const dur = (times[times.length - 1] - times[0]) / 1000;
-          const fps = sampR.length / Math.max(dur, 0.001);
-          const est = best(estimateBpm(sampR, fps), estimateBpm(sampG, fps));
-          if (est && est.bpm >= 40 && est.bpm <= 160) {
-            qEls.forEach((el, i) => el.classList.toggle('on', i < Math.round(est.quality * 5)));
-            if (!coach && est.quality > 0.4) {
-              lastGood = t;
-              bpmEl.textContent = Math.round(est.bpm);
-              recent.push({ t, bpm: est.bpm });
-              while (recent.length && t - recent[0].t > 5500) recent.shift();
-              statusEl.textContent = 'Hold still — locking on to your pulse…';
-              // Lock only when the estimate has held steady for ≥4s of real time
-              // — a tight cluster spanning several seconds. A real pulse does this;
-              // noise/drift never holds one rate that long. Validated over synthetic
-              // noise, drift and panning-room signals at 0% false-lock, ~98% true.
-              const span = recent.length ? (recent[recent.length - 1].t - recent[0].t) : 0;
-              if ((t - startedAt) > 10000 && recent.length >= 6 && span >= 4000) {
-                const bpms = recent.map((x) => x.bpm).sort((a2, b2) => a2 - b2);
-                if (bpms[bpms.length - 1] - bpms[0] <= 5) { finish(bpms[Math.floor(bpms.length / 2)]); return; }
-              }
-            } else {
-              recent.length = 0;
-              statusEl.textContent = searchMsg;
-            }
-          } else { statusEl.textContent = searchMsg; }
-        } else if (coach) { statusEl.textContent = coach; }
-
-        if (t - startedAt > GIVEUP_MS) {
-          const dur = (times[times.length - 1] - times[0]) / 1000;
-          const fps = sampR.length / Math.max(dur, 0.001);
-          const est = best(estimateBpm(sampR, fps), estimateBpm(sampG, fps));
-          if (est && est.quality > 0.5 && est.bpm >= 40 && est.bpm <= 160) { finish(est.bpm); return; }
+        if (performance.now() - startedAt > GIVEUP_MS) {
           tapMode(card, 'Couldn’t get a clean pulse from the camera. Try tapping instead.');
           return;
         }
-      } catch (e) {}
-      window.__gpRAF = requestAnimationFrame(frame);
+      } catch (error) {
+        captureActive = false;
+        stopCamera();
+        tapMode(card, 'The camera signal could not be analysed. Try tapping instead.');
+        return;
+      }
+      scheduleFrame();
     }
-    window.__gpRAF = requestAnimationFrame(frame);
+    scheduleFrame();
 
     function finish(bpm) {
       stopCamera();

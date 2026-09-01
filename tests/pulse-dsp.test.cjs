@@ -1,0 +1,114 @@
+const test = require('node:test');
+const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const path = require('node:path');
+const dsp = require('../gaia-pulse-dsp.js');
+
+function seededNoise(seed) {
+  let state = seed >>> 0;
+  return () => {
+    state = (1664525 * state + 1013904223) >>> 0;
+    return state / 0x100000000 - 0.5;
+  };
+}
+
+function makeFrames({
+  bpm = 72,
+  fps = 30,
+  duration = 12,
+  mode = 'ppg',
+  jitter = true,
+  seed = 7,
+} = {}) {
+  const random = seededNoise(seed);
+  const frames = [];
+  let t = 0;
+  for (let index = 0; t < duration * 1000; index += 1) {
+    const cadence = 1000 / fps;
+    t += cadence + (jitter ? ((index % 7) - 3) * 0.22 : 0);
+    if (index % 53 === 0 && index > 0) t += cadence; // a dropped camera frame
+    const phase = 2 * Math.PI * (bpm / 60) * t / 1000;
+    const wave = Math.sin(phase) + 0.22 * Math.sin(2 * phase + 0.4);
+    let amplitudes = [0.009, 0.004, 0.00025];
+    if (mode === 'common') amplitudes = [0.009, 0.009, 0.009];
+    if (mode === 'noise') amplitudes = [0, 0, 0];
+    const noise = mode === 'noise' ? random() * 9 : random() * 0.08;
+    frames.push({
+      t,
+      r: 185 * (1 + amplitudes[0] * wave) + noise,
+      g: 82 * (1 + amplitudes[1] * wave) + noise,
+      b: 42 * (1 + amplitudes[2] * wave) + noise,
+      spatialCv: 0.06,
+      motion: 0.004,
+    });
+  }
+  return frames;
+}
+
+for (const expected of [50, 72, 110, 150]) {
+  test(`recovers ${expected} BPM from irregular camera timestamps`, () => {
+    const result = dsp.analyzePulse(makeFrames({ bpm: expected, seed: expected }));
+    assert.equal(result.ok, true, result.reason);
+    assert.ok(Math.abs(result.bpm - expected) < 2, `${result.bpm} vs ${expected}`);
+    assert.ok(Math.abs(result.spectralBpm - result.autocorrelationBpm) <= 5);
+    assert.ok(result.segmentBpms.length >= 2);
+  });
+}
+
+test('rejects periodic whole-scene RGB artifacts across the pulse band', () => {
+  for (const cadence of [48, 60, 72, 90, 120, 150]) {
+    const result = dsp.analyzePulse(makeFrames({ bpm: cadence, mode: 'common', seed: cadence }));
+    assert.equal(result.ok, false, `false lock at ${cadence} CPM`);
+    assert.equal(result.reason, 'common_mode_artifact');
+  }
+});
+
+test('rejects structured cadence without fingertip color contact', () => {
+  const frames = makeFrames({ bpm: 90, mode: 'common' }).map((frame) => ({
+    ...frame,
+    r: 104 + (frame.r - 185),
+    g: 104 + (frame.g - 82),
+    b: 104 + (frame.b - 42),
+    spatialCv: 0.4,
+  }));
+  const result = dsp.analyzePulse(frames);
+  assert.equal(result.ok, false);
+  assert.ok(['no_finger_contact', 'scene_texture', 'unstable_contact'].includes(result.reason));
+});
+
+test('rejects random camera noise without false locks', () => {
+  for (let seed = 1; seed <= 100; seed += 1) {
+    const result = dsp.analyzePulse(makeFrames({ mode: 'noise', seed }));
+    assert.equal(result.ok, false, `false lock for noise seed ${seed}`);
+  }
+});
+
+test('requires enough independent time coverage', () => {
+  const result = dsp.analyzePulse(makeFrames({ duration: 6 }));
+  assert.equal(result.ok, false);
+  assert.ok(['need_more', 'need_more_stability'].includes(result.reason));
+});
+
+test('contact gate rejects darkness, scene texture, and motion', () => {
+  const base = makeFrames({ duration: 2 });
+  assert.equal(dsp.contactMetrics(base.map((f) => ({ ...f, r: 5, g: 4, b: 3 }))).reason, 'too_dark');
+  assert.equal(dsp.contactMetrics(base.map((f) => ({ ...f, spatialCv: 0.5 }))).reason, 'scene_texture');
+  assert.equal(dsp.contactMetrics(base.map((f) => ({ ...f, motion: 0.3 }))).reason, 'motion');
+});
+
+test('production capture is frame-clocked and has no timed BPM acceptance', () => {
+  const source = fs.readFileSync(path.join(__dirname, '..', 'gaia-pulse.js'), 'utf8');
+  assert.match(source, /requestVideoFrameCallback/);
+  assert.match(source, /analyzePulse\(frames\)/);
+  assert.doesNotMatch(source, /function estimateBpm/);
+  assert.doesNotMatch(source, /elapsed\s*>\s*40000/);
+  assert.match(source, /tapMode\(card, 'Couldn’t get a clean pulse/);
+});
+
+test('production shell loads the tested DSP before capture and caches both', () => {
+  const home = fs.readFileSync(path.join(__dirname, '..', 'home.html'), 'utf8');
+  const sw = fs.readFileSync(path.join(__dirname, '..', 'sw.js'), 'utf8');
+  assert.ok(home.indexOf('gaia-pulse-dsp.js') < home.indexOf('gaia-pulse.js'));
+  assert.match(sw, /gaia-pulse-dsp\.js/);
+  assert.match(sw, /gaia-pulse\.js/);
+});

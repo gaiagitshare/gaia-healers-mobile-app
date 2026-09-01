@@ -561,7 +561,7 @@
   function freeTools() {
     const tools = [
       ['wellness&tab=check', 'sparkle', 'Energy check', 'Today’s body point and practice'],
-      ['wellness&tool=pulse', 'heartbeat', 'Energy Pulse', '60-second pulse read'],
+      ['wellness&tool=pulse', 'heartbeat', 'Energy Pulse', 'Camera or tap pulse read'],
       ['wellness&tool=breath', 'wind', 'Coherence Breath', 'Paced resonance breathing'],
       ['wellness&tab=horoscope', 'moon-stars', 'Horoscope', 'Your reflective daily guidance'],
       ['wellness&tab=chakras', 'circles-three-plus', 'Chakra match', 'Explore centres and products'],

@@ -1,4 +1,4 @@
-const CACHE_NAME = 'gaia-healers-20260830p32';
+const CACHE_NAME = 'gaia-healers-20260902-pulse-dsp';
 const APP_SHELL = [
   '/',
   '/home.html',
@@ -22,6 +22,9 @@ const APP_SHELL = [
   '/gaia-academy-player.js',
   '/gaia-membership-ui.js',
   '/gaia-wellness.js',
+  '/gaia-pulse-dsp.js',
+  '/gaia-pulse.js',
+  '/gaia-breath.js',
   '/gaia-quiz.js',
   '/gaia-store.js',
   '/gaia-ui.js',

@@ -193,7 +193,7 @@ test('production capture is frame-clocked and has no timed BPM acceptance', () =
   assert.match(source, /requestCamera\(\{ video: baseVideo, audio: false \}, 25000\)/);
   assert.equal((source.match(/mediaDevices\.getUserMedia\(/g) || []).length, 1, 'one camera request path only');
   assert.match(source, /cameraPolicyBlocked\(\)/);
-  assert.match(source, /analyzePulse\(frames\)/);
+  assert.match(source, /analyzePulse\(frames/); // may pass a site option (e.g. wrist)
   assert.match(source, /dsp\.analyzeFace\(frames\)/);
   assert.match(source, /gp-video--face/);
   assert.match(source, /if \(analysis\.ok\) \{ finish\(analysis\.bpm\)/);

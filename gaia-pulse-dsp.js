@@ -187,7 +187,12 @@
     return result;
   }
 
-  function contactMetrics(frames) {
+  function contactMetrics(frames, options = {}) {
+    // Reflectance off the volar wrist (over the radial artery) is dimmer and much
+    // less red-saturated than a torch-lit fingertip, so the wrist relaxes the
+    // colour/saturation part of the contact gate. Spatial uniformity, motion and
+    // the downstream cross-channel/agreement/stability checks still hold.
+    const wrist = options.site === 'wrist';
     const recent = frames.slice(-Math.min(frames.length, 180));
     if (!recent.length) return { valid: false, reason: 'no_frames', score: 0 };
     let contactFrames = 0;
@@ -205,8 +210,8 @@
       // rather than strongly red. Keep the gate tolerant to that variation;
       // spatial uniformity, motion and the later cross-channel DSP still reject
       // ordinary scenes and rhythmic whole-frame movement.
-      if (bright >= 10 && bright <= 253 && frame.r >= frame.g * 0.96 && frame.r >= frame.b * 1.08
-        && saturation >= 0.06 && texture <= 0.42 && motion <= 0.16) contactFrames += 1;
+      if (bright >= 10 && bright <= 253 && frame.r >= frame.g * (wrist ? 0.85 : 0.96) && frame.r >= frame.b * (wrist ? 1.0 : 1.08)
+        && saturation >= (wrist ? 0.03 : 0.06) && texture <= 0.42 && motion <= 0.16) contactFrames += 1;
     });
     const fraction = contactFrames / recent.length;
     const metrics = {
@@ -219,7 +224,7 @@
     let reason = '';
     if (metrics.brightness < 10) reason = 'too_dark';
     else if (metrics.brightness > 253) reason = 'overexposed';
-    else if (metrics.redRatio < 0.46) reason = 'no_finger_contact';
+    else if (metrics.redRatio < (wrist ? 0.40 : 0.46)) reason = 'no_finger_contact';
     else if (metrics.spatialCv > 0.42) reason = 'scene_texture';
     else if (metrics.motion > 0.16) reason = 'motion';
     else if (fraction < 0.6) reason = 'unstable_contact';
@@ -227,7 +232,7 @@
     // active lens. Passing BPM remains fail-closed on every binary gate above.
     const exposureScore = clamp((metrics.brightness - 6) / 28, 0, 1)
       * clamp((255 - metrics.brightness) / 20, 0, 1);
-    const colorScore = clamp((metrics.redRatio - 0.36) / 0.28, 0, 1);
+    const colorScore = clamp((metrics.redRatio - (wrist ? 0.30 : 0.36)) / 0.28, 0, 1);
     const textureScore = clamp((0.56 - metrics.spatialCv) / 0.4, 0, 1);
     const motionScore = clamp((0.23 - metrics.motion) / 0.2, 0, 1);
     const fractionScore = clamp((fraction - 0.2) / 0.65, 0, 1);
@@ -299,12 +304,17 @@
     return starts.map((start) => estimateChannel(values.slice(start, start + segmentLength), fps, thresholds)).filter(Boolean);
   }
 
-  function analyzePulse(frames) {
-    const contact = contactMetrics(frames);
+  function analyzePulse(frames, options = {}) {
+    // options.site === 'wrist' relaxes the contact colour gate and the channel
+    // SNR/autocorrelation thresholds for the dimmer volar-wrist reflectance
+    // signal. With no options the behaviour is identical to before (fingertip).
+    const thresholds = options.thresholds
+      || (options.site === 'wrist' ? { minSnr: 2.8, minAutocorrelation: 0.34 } : undefined);
+    const contact = contactMetrics(frames, options);
     if (!contact.valid) return { ok: false, reason: contact.reason, contact };
     const uniform = resampleUniform(frames);
     if (!uniform || uniform.duration < 8) return { ok: false, reason: 'need_more', contact, duration: uniform ? uniform.duration : 0 };
-    const channels = channelCandidates(uniform);
+    const channels = channelCandidates(uniform, thresholds);
     const { red, green } = channels;
     const candidates = channels.ranked;
     if (!candidates.length) return { ok: false, reason: 'weak_or_irregular_signal', contact, fps: uniform.measuredFps };
@@ -313,7 +323,7 @@
       return { ok: false, reason: 'channel_disagreement', contact, fps: uniform.measuredFps };
     }
     const [channel, chosen] = candidates[0];
-    const blue = estimateChannel(uniform.b, uniform.fps);
+    const blue = estimateChannel(uniform.b, uniform.fps, thresholds);
     // Whole-scene movement changes R/G/B together. Contact PPG should
     // be materially stronger in red/green than in blue.
     if ((channel === 'red' || channel === 'green') && blue
@@ -321,7 +331,7 @@
       return { ok: false, reason: 'common_mode_artifact', contact, fps: uniform.measuredFps };
     }
     const channelValues = channels.values[channel];
-    const segments = segmentEstimates(channelValues, uniform.fps);
+    const segments = segmentEstimates(channelValues, uniform.fps, thresholds);
     if (segments.length < 2) return { ok: false, reason: 'need_more_stability', contact, fps: uniform.measuredFps };
     const segmentBpms = segments.map((item) => item.bpm);
     if (Math.max(...segmentBpms) - Math.min(...segmentBpms) > 7) {
@@ -345,8 +355,8 @@
     };
   }
 
-  function previewPulse(frames) {
-    const contact = contactMetrics(frames);
+  function previewPulse(frames, options = {}) {
+    const contact = contactMetrics(frames, options);
     if (!contact.valid) return { ok: false, reason: contact.reason, contact };
     const uniform = resampleUniform(frames, 8);
     if (!uniform || uniform.duration < 4.8) return { ok: false, reason: 'need_more', contact };

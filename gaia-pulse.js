@@ -234,14 +234,41 @@
     const wave = card.querySelector('[data-gp-wave]');
     const wctx = wave.getContext('2d');
 
+    // Ask for a fixed 640x480 @60fps feed: the explicit resolution + high frame
+    // rate biases iOS toward the main WIDE lens and reduces its habit of auto-
+    // switching lenses mid-capture (a documented iOS Safari issue that otherwise
+    // drops the signal), and 60fps gives more samples to lock onto.
+    const baseVideo = { facingMode: { ideal: 'environment' }, width: { ideal: 640 }, height: { ideal: 480 }, frameRate: { ideal: 60 } };
     try {
-      stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: 'environment' }, width: { ideal: 320 }, height: { ideal: 240 } }, audio: false });
+      stream = await navigator.mediaDevices.getUserMedia({ video: baseVideo, audio: false });
     } catch (e1) {
       try { stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false }); }
       catch (e2) { tapMode(card, 'Camera permission was blocked. You can still tap your pulse.'); return; }
     }
-    // best-effort torch (works on some Android; silently ignored on iOS)
-    try { const tr = stream.getVideoTracks()[0]; if (tr && tr.applyConstraints) await tr.applyConstraints({ advanced: [{ torch: true }] }); } catch (e) {}
+    // With permission granted, device labels are now readable. Prefer the main
+    // rear WIDE camera — the one that lights up under a fingertip and (on Android)
+    // carries a torch — over ultra-wide / telephoto / depth cameras.
+    try {
+      const cur = stream.getVideoTracks()[0];
+      const curId = cur && cur.getSettings ? (cur.getSettings().deviceId || null) : null;
+      const vids = (await navigator.mediaDevices.enumerateDevices()).filter((d) => d.kind === 'videoinput');
+      const scoreOf = (l) => { l = (l || '').toLowerCase(); let s = 0; if (/back|rear|environment/.test(l)) s += 3; if (/front|face|truedepth/.test(l)) s -= 8; if (/ultra|0\.5|tele|depth/.test(l)) s -= 4; if (/^back camera$/.test(l) || /\bwide\b/.test(l)) s += 1; return s; };
+      vids.sort((a, b) => scoreOf(b.label) - scoreOf(a.label));
+      const bestId = vids.length && vids[0].label ? vids[0].deviceId : null;
+      if (bestId && bestId !== curId) {
+        let alt = null;
+        try { alt = await navigator.mediaDevices.getUserMedia({ video: Object.assign({ deviceId: { exact: bestId } }, baseVideo), audio: false }); } catch (e) { alt = null; }
+        if (alt) { stream.getTracks().forEach((t) => t.stop()); stream = alt; }
+      }
+    } catch (e) { /* keep the stream we have */ }
+    // Torch: on many Androids this turns the flash on for a much stronger, cleaner
+    // pulse. iOS Safari doesn't expose torch, so it stays a silent no-op there.
+    let torchOn = false;
+    try {
+      const tr = stream.getVideoTracks()[0];
+      const caps = tr && tr.getCapabilities ? tr.getCapabilities() : {};
+      if (caps && caps.torch && tr.applyConstraints) { await tr.applyConstraints({ advanced: [{ torch: true }] }); torchOn = true; }
+    } catch (e) {}
 
     video = document.createElement('video');
     video.className = 'gp-video'; video.playsInline = true; video.muted = true; video.setAttribute('playsinline', ''); video.srcObject = stream;
@@ -258,7 +285,7 @@
     const startedAt = performance.now();
     let lastGood = startedAt; // last time we had a usable pulse-ish signal
     const GIVEUP_MS = 40000;
-    statusEl.textContent = 'Cover a lens with your fingertip…';
+    statusEl.textContent = torchOn ? 'Flash on — press a fingertip over the lit lens…' : 'Cover a lens with your fingertip…';
 
     function best(a, b) { if (a && b) return a.quality >= b.quality ? a : b; return a || b || null; }
 

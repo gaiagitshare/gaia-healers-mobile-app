@@ -2213,3 +2213,34 @@ body.gaia-v2 .g-topbar__actions.gaia-header-actions { display: flex; align-items
   .gaia-splash-btn { min-height: 44px; }
   .gaia-splash-skip { min-height: 40px; }
 }
+
+/* ============================================================================
+   Universal viewport-fit hardening — every page, every size (phone / tablet /
+   desktop / landscape). Belt-and-suspenders on top of the app's existing
+   responsive system, targeting the whole class of "cut off / half there":
+     · iOS Safari address bar overshoot (bare 100vh),
+     · content hidden behind the fixed bottom tab bar,
+     · media / long content forcing sideways scroll.
+   ========================================================================== */
+
+/* 1) No sideways scroll, ever — on any page (splash, app, redirect shells). */
+html, body { max-width: 100%; overflow-x: clip; }
+
+/* 2) Media + embeds can never be wider than their column. */
+img, svg, video, canvas, iframe { max-width: 100%; }
+
+/* 3) Full-height helpers use the dynamic/small viewport instead of bare 100vh,
+   so the address bar can't push content out of frame. Progressive: the last
+   unit the browser understands wins; ancient browsers keep 100vh. */
+.min-h-screen { min-height: 100svh; min-height: 100dvh; }
+body.gaia-app, body.gaia-v2 { min-height: 100svh; min-height: 100dvh; }
+
+/* 4) App content must ALWAYS clear the fixed bottom tab bar. Its raised centre
+   button makes it ~90px tall; some short-height tiers reserved less than that,
+   hiding the primary CTAs (Join free / Sign in) behind the bar in landscape and
+   on short screens. Enforce a floor (max() never reduces the tuned values). */
+@media (max-width: 899px) {
+  body.gaia-v2.gaia-has-tabbar {
+    padding-bottom: max(6rem, calc(92px + env(safe-area-inset-bottom, 0px)));
+  }
+}

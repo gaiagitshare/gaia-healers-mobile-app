@@ -1,6 +1,6 @@
 /** Gaia — Energy Pulse.
  * A real camera pulse estimate. Primary method: camera photoplethysmography
- * (PPG) — the volar wrist over the radial artery, pressed on the rear camera, modulates color
+ * (PPG) — a fingertip on the flash-lit rear camera reflects each heartbeat as a tiny colour change
  * each heartbeat; spectral and autocorrelation estimates must agree before we
  * you can see it working. Fallback (any device, no camera): tap along with
  * your heartbeat. No data leaves the phone; the camera frames are analysed in
@@ -79,7 +79,7 @@
 .gp-actions{display:flex;flex-direction:column;gap:10px;margin-top:16px;}
 .gp-howto{width:190px;max-width:62vw;margin:2px auto 0;display:block;}
 .gp-howto .gp-lensG circle{fill:#10241699;stroke:rgba(180,220,180,.4);stroke-width:1.5;}
-.gp-ringpulse{transform-origin:108px 106px;animation:gp-ring 2.6s ease-out infinite;}
+.gp-ringpulse{transform-origin:100px 44px;animation:gp-ring 2.6s ease-out infinite;}
 @keyframes gp-ring{0%{transform:scale(.55);opacity:.9}70%{opacity:0}100%{transform:scale(1.5);opacity:0}}
 .gp-finger{transform-origin:100px 120px;animation:gp-press 2.6s ease-in-out infinite;}
 @keyframes gp-press{0%,100%{transform:translateY(9px)}42%,66%{transform:translateY(0)}}
@@ -155,38 +155,28 @@
   function intro(card) {
     card.innerHTML = closeBtn()
       + '<p class="gp-eyebrow">Energy Pulse</p>'
-      + '<svg class="gp-howto" viewBox="0 0 210 168" role="img" aria-label="Hold the phone in one hand and rest its rear camera on the radial pulse — the thumb-side of your other inner wrist, just below the crease">'
+      + '<svg class="gp-howto" viewBox="0 0 200 176" role="img" aria-label="Rest a fingertip flat over the phone rear camera and flash, covering the whole camera bump">'
       + '<defs>'
-      + '<linearGradient id="gpSkin" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#eac29b"/><stop offset="1" stop-color="#c99a72"/></linearGradient>'
-      + '<radialGradient id="gpContact" cx="50%" cy="50%" r="50%"><stop offset="0" stop-color="#9bf078" stop-opacity=".9"/><stop offset="1" stop-color="#9bf078" stop-opacity="0"/></radialGradient>'
+      + '<linearGradient id="gpSkin" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#e7bf97"/><stop offset=".5" stop-color="#dcae82"/><stop offset="1" stop-color="#c39970"/></linearGradient>'
+      + '<radialGradient id="gpFlash" cx="50%" cy="45%" r="55%"><stop offset="0" stop-color="#ff7a5c" stop-opacity=".85"/><stop offset="1" stop-color="#ff7a5c" stop-opacity="0"/></radialGradient>'
       + '</defs>'
-      // open palm-up inner forearm (left), fingers curling up, wrist toward the phone
-      + '<path d="M2 132 L2 96 Q2 82 24 82 L104 84 Q120 85 120 100 L120 118 Q120 132 104 132 Z" fill="url(#gpSkin)" stroke="rgba(70,40,15,.28)" stroke-width="1.5"/>'
-      + '<g fill="url(#gpSkin)" stroke="rgba(70,40,15,.26)" stroke-width="1.3">'
-      + '<path d="M14 84 Q8 58 22 55 Q34 54 34 82 Z"/>'
-      + '<path d="M32 82 Q28 52 42 50 Q55 51 52 80 Z"/>'
-      + '<path d="M50 82 Q49 54 63 53 Q75 55 70 82 Z"/>'
-      + '<path d="M68 84 Q70 62 82 64 Q92 68 86 86 Z"/>'
-      + '</g>'
-      // thumb on the radial side + the radial pulse point on the inner wrist
-      + '<path d="M104 108 Q120 110 121 96 Q120 84 106 88 Q98 94 98 102 Z" fill="url(#gpSkin)" stroke="rgba(70,40,15,.26)" stroke-width="1.3"/>'
-      + '<ellipse cx="108" cy="106" rx="22" ry="17" fill="url(#gpContact)"/>'
-      + '<circle class="gp-ringpulse" cx="108" cy="106" r="12" fill="none" stroke="#7dd956" stroke-width="2"/>'
-      // phone (right), held screen-up, rear camera on its near edge over the wrist pulse
-      + '<rect x="128" y="20" width="74" height="128" rx="15" fill="#0c1811" stroke="rgba(125,217,86,.3)" stroke-width="2"/>'
-      + '<rect x="135" y="30" width="60" height="108" rx="9" fill="#07120c"/>'
-      + '<path d="M141 78 h10 l4 -13 l6 24 l4 -11 h30" fill="none" stroke="#7dd956" stroke-width="2"/>'
-      + '<text x="165" y="108" text-anchor="middle" font-family="system-ui,-apple-system,sans-serif" font-weight="800" font-size="17" fill="#eaf4ea">72</text>'
-      + '<text x="165" y="121" text-anchor="middle" font-family="system-ui,-apple-system,sans-serif" font-size="7" fill="#9bbf9b" letter-spacing="1.5">BPM</text>'
-      + '<rect x="118" y="92" width="22" height="26" rx="7" fill="#050f09" stroke="rgba(255,255,255,.38)" stroke-width="1.1"/>'
-      + '<circle cx="124" cy="99" r="2.8" fill="#22452e"/><circle cx="134" cy="99" r="2.8" fill="#22452e"/><circle cx="124" cy="109" r="2.8" fill="#22452e"/>'
-      + '<circle class="gp-flash" cx="134" cy="109" r="1.5" fill="#ffd98a"/>'
+      // phone back + rear camera cluster and flash
+      + '<rect x="58" y="6" width="84" height="164" rx="18" fill="#0c1811" stroke="rgba(125,217,86,.28)" stroke-width="2"/>'
+      + '<rect x="74" y="16" width="52" height="52" rx="15" fill="#050f09" stroke="rgba(255,255,255,.13)" stroke-width="1.5"/>'
+      + '<g class="gp-lensG"><circle cx="90" cy="32" r="9"/><circle cx="110" cy="32" r="9"/><circle cx="90" cy="52" r="9"/></g>'
+      + '<circle cx="90" cy="32" r="3.4" fill="#173521"/><circle cx="110" cy="32" r="3.4" fill="#173521"/><circle cx="90" cy="52" r="3.4" fill="#173521"/>'
+      + '<circle class="gp-flash" cx="110" cy="52" r="4" fill="#ffe08a"/>'
+      // fingertip pressing flat over the whole camera bump (lens + flash), flash-lit
+      + '<g class="gp-finger"><path d="M60 176 L60 64 Q60 30 100 30 Q140 30 140 64 L140 176 Z" fill="url(#gpSkin)" fill-opacity="0.94" stroke="rgba(60,30,10,.28)" stroke-width="1"/>'
+      + '<ellipse cx="100" cy="72" rx="20" ry="26" fill="rgba(255,255,255,.1)"/>'
+      + '<ellipse cx="100" cy="46" rx="30" ry="22" fill="url(#gpFlash)"/>'
+      + '<circle class="gp-ringpulse" cx="100" cy="44" r="16" fill="none" stroke="#7dd956" stroke-width="2"/></g>'
       + '</svg>'
-      + '<span class="gp-pill">Press your wrist pulse on the camera</span>'
+      + '<span class="gp-pill">Cover the camera + flash with a fingertip</span>'
       + '<h2 class="gp-title">A careful pulse read</h2>'
-      + '<p class="gp-lead">Rest the <strong>thumb-side of your wrist — over the radial pulse, just below the crease</strong> — onto the rear camera cluster and flash. Light, even contact; keep your arm completely still. The wrist gives a fainter signal than a fingertip, so hold steady — the app returns a number only when it passes every quality check.</p>'
+      + '<p class="gp-lead">Rest a fingertip flat over the <strong>rear camera and flash</strong> — cover the whole camera bump, right on the skin. Keep the flash on (or sit in bright light), use <strong>light pressure</strong> — pressing hard hides the pulse — and hold still for ~15 seconds. The app returns a number only when the signal passes every quality check.</p>'
       + '<div class="gp-actions">'
-      + '<button type="button" class="gp-btn" data-gp-start><i class="ph ph-camera" aria-hidden="true"></i> Read at my wrist</button>'
+      + '<button type="button" class="gp-btn" data-gp-start><i class="ph ph-camera" aria-hidden="true"></i> Read with fingertip</button>'
       + '<button type="button" class="gp-btn--ghost" data-gp-face><i class="ph ph-user-focus" aria-hidden="true"></i> Read with my face · beta</button>'
       + '<button type="button" class="gp-btn--link" data-gp-tap>Or tap along with your heartbeat →</button>'
       + '</div>'
@@ -245,7 +235,7 @@
       + '<p class="gp-status" data-gp-status>Requesting camera…</p>'
       + '<p class="gp-note" data-gp-camera style="margin-top:5px"></p>'
       + '<div class="gp-actions">'
-      + '<button type="button" class="gp-btn--link" data-gp-switch>' + (face ? 'Use wrist + rear camera instead' : 'No luck? Use my face (front camera) instead') + '</button>'
+      + '<button type="button" class="gp-btn--link" data-gp-switch>' + (face ? 'Use fingertip + rear camera instead' : 'No luck? Use my face (front camera) instead') + '</button>'
       + '<button type="button" class="gp-btn--link" data-gp-tap>Or tap with your heartbeat →</button>'
       + '</div>';
     card.querySelector('[data-gp-tap]').addEventListener('click', () => { stopCamera(); tapMode(card); });
@@ -263,7 +253,7 @@
     // Use one request only. Retrying while the iOS permission sheet is open can
     // leave two competing captures and prevent either from becoming readable.
     try {
-      statusEl.textContent = face ? 'Allow camera access, then center your face in the guide.' : 'Allow camera access, then press the thumb-side of your wrist onto the camera cluster.';
+      statusEl.textContent = face ? 'Allow camera access, then center your face in the guide.' : 'Allow camera access, then cover the rear camera and flash with a fingertip.';
       stream = await requestCamera({ video: baseVideo, audio: false }, 25000);
     } catch (error) { cameraUnavailable(card, isFramed()); return; }
     const track = stream.getVideoTracks()[0];
@@ -307,17 +297,17 @@
     let useRafFallback = !video.requestVideoFrameCallback;
     captureActive = true;
     statusEl.textContent = face ? 'Center your face in the oval; hold still in bright, even light.'
-      : (torchOn ? 'Flash on — press the thumb-side of your wrist across the camera cluster.' : 'Press your wrist pulse on the camera cluster; use bright, steady light.');
+      : (torchOn ? 'Flash on — cover the camera and flash with your fingertip, light pressure.' : 'Cover the rear camera with your fingertip; use bright, steady light.');
 
     const reasonCopy = {
       no_frames: 'Waiting for camera frames…',
       too_dark: 'Too dark — move near a bright, steady light.',
       overexposed: 'Too bright — cover the active lens fully.',
-      no_finger_contact: 'No wrist contact yet — reposition the thumb-side of your wrist over the camera and flash.',
+      no_finger_contact: 'No fingertip yet — cover the rear camera and flash with the pad of your finger.',
       no_face: 'Center your face in the frame, in even light.',
-      scene_texture: 'Cover the active camera fully with the thumb-side of your wrist.',
+      scene_texture: 'Cover the camera fully with the pad of your finger.',
       motion: 'Too much movement — rest your hand and hold still.',
-      unstable_contact: 'Keep gentle, even contact with your wrist.',
+      unstable_contact: 'Keep gentle, even fingertip contact — light pressure.',
       need_more: 'Contact found — collecting a clean pulse signal…',
       need_more_stability: 'Pulse found — hold still a few seconds longer…',
       weak_or_irregular_signal: 'Signal weak — press very gently (hard pressure hides the pulse) and hold still.',
@@ -383,7 +373,7 @@
 
         if (now - lastAnalysisAt >= 700) {
           lastAnalysisAt = now;
-          const analysis = face ? dsp.analyzeFace(frames) : dsp.analyzePulse(frames, { site: 'wrist' });
+          const analysis = face ? dsp.analyzeFace(frames) : dsp.analyzePulse(frames);
           const visibleQuality = analysis.ok ? analysis.quality : (analysis.contact && analysis.contact.score) || 0;
           qEls.forEach((el, index) => el.classList.toggle('on', index < Math.round(visibleQuality * 5)));
           const elapsedSignal = frames.length > 1 ? (frames[frames.length - 1].t - frames[0].t) / 1000 : 0;
@@ -391,7 +381,7 @@
             : analysis.reason === 'need_more' ? `${face ? 'Face detected — measuring' : 'Contact found — collecting'} ${Math.min(8, Math.floor(elapsedSignal))}/8 seconds…`
               : (reasonCopy[analysis.reason] || 'Checking signal quality…');
           if (!analysis.ok && elapsedSignal >= 4.8) {
-            const liveEstimate = face ? dsp.previewFace(frames) : dsp.previewPulse(frames, { site: 'wrist' });
+            const liveEstimate = face ? dsp.previewFace(frames) : dsp.previewPulse(frames);
             if (liveEstimate.ok) {
               bpmEl.textContent = Math.round(liveEstimate.bpm);
               const label = bpmEl.parentNode && bpmEl.parentNode.querySelector('small');
@@ -413,7 +403,7 @@
         }
 
         if (performance.now() - startedAt > GIVEUP_MS) {
-          if (face) { tapMode(card, 'Couldn’t verify a face pulse — try the wrist camera, or tap below.'); return; }
+          if (face) { tapMode(card, 'Couldn’t verify a face pulse — try the fingertip camera, or tap below.'); return; }
           tapMode(card, 'Couldn’t get a clean pulse from the camera. Try tapping instead.');
           return;
         }
@@ -474,7 +464,7 @@
       + '<div class="gp-tap" data-gp-taparea>Tap</div>'
       + '<p class="gp-status" data-gp-status>0 taps</p>'
       + '<div class="gp-actions">'
-      + '<button type="button" class="gp-btn--ghost" data-gp-camera>Use wrist camera</button>'
+      + '<button type="button" class="gp-btn--ghost" data-gp-camera>Use fingertip camera</button>'
       + '<button type="button" class="gp-btn--link" data-gp-faceb>Or read with my face (beta) →</button>'
       + '</div>';
     const area = card.querySelector('[data-gp-taparea]');

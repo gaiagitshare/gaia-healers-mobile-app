@@ -292,7 +292,7 @@
       unstable_contact: 'Keep gentle, even contact over one lens.',
       need_more: 'Contact found — collecting a clean pulse signal…',
       need_more_stability: 'Pulse found — hold still a few seconds longer…',
-      weak_or_irregular_signal: 'Contact is good, but the pulse signal is weak. Hold still.',
+      weak_or_irregular_signal: 'Signal weak — press very gently (hard pressure hides the pulse) and hold still.',
       channel_disagreement: 'Light or movement is interfering — hold still and keep the lens covered.',
       common_mode_artifact: 'Movement detected instead of a pulse — rest your hand and retry.',
       unstable_rate: 'The rate is not stable yet — keep still and breathe normally.',

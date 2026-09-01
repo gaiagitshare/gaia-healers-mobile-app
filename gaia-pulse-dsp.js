@@ -278,20 +278,50 @@
     return primary.map((value, index) => 1 + value / primaryMean - reference[index] / referenceMean);
   }
 
+  // HSV hue of an (r,g,b) mean, 0..1. Hue barely moves with overall brightness,
+  // so on iOS Safari — where we cannot lock exposure the way a native app does —
+  // the hue of the torch-lit fingertip carries the pulse even while auto-exposure
+  // swings the raw intensity. (Technique from isahutch/bpm_from_camera.)
+  function rgbToHue(r, g, b) {
+    const mx = Math.max(r, g, b); const mn = Math.min(r, g, b); const d = mx - mn;
+    if (d < 1e-6) return 0;
+    let h;
+    if (mx === r) h = ((g - b) / d) % 6;
+    else if (mx === g) h = (b - r) / d + 2;
+    else h = (r - g) / d + 4;
+    h /= 6; if (h < 0) h += 1;
+    return h;
+  }
+  // Continuous (phase-unwrapped) hue series, so a hue that sits near the red 0/1
+  // boundary doesn't produce fake jumps.
+  function hueSeries(rArr, gArr, bArr) {
+    const n = rArr.length; if (n < 2) return [];
+    const out = new Array(n); let prev = rgbToHue(rArr[0], gArr[0], bArr[0]); out[0] = prev;
+    for (let i = 1; i < n; i++) {
+      const raw = rgbToHue(rArr[i], gArr[i], bArr[i]);
+      let dd = raw - prev; if (dd > 0.5) dd -= 1; else if (dd < -0.5) dd += 1;
+      out[i] = out[i - 1] + dd; prev = raw;
+    }
+    return out;
+  }
+
   function channelCandidates(uniform, thresholds) {
     const red = estimateChannel(uniform.r, uniform.fps, thresholds);
     const green = estimateChannel(uniform.g, uniform.fps, thresholds);
     const redBlueValues = differentialChannel(uniform.r, uniform.b);
     const greenBlueValues = differentialChannel(uniform.g, uniform.b);
+    const hueValues = hueSeries(uniform.r, uniform.g, uniform.b);
     const redBlue = redBlueValues.length ? estimateChannel(redBlueValues, uniform.fps, thresholds) : null;
     const greenBlue = greenBlueValues.length ? estimateChannel(greenBlueValues, uniform.fps, thresholds) : null;
+    const hue = hueValues.length ? estimateChannel(hueValues, uniform.fps, thresholds) : null;
     return {
       red,
       green,
       redBlue,
       greenBlue,
-      values: { red: uniform.r, green: uniform.g, redBlue: redBlueValues, greenBlue: greenBlueValues },
-      ranked: [['red', red], ['green', green], ['redBlue', redBlue], ['greenBlue', greenBlue]]
+      hue,
+      values: { red: uniform.r, green: uniform.g, redBlue: redBlueValues, greenBlue: greenBlueValues, hue: hueValues },
+      ranked: [['red', red], ['green', green], ['redBlue', redBlue], ['greenBlue', greenBlue], ['hue', hue]]
         .filter((entry) => entry[1]).sort((a, b) => b[1].score - a[1].score),
     };
   }

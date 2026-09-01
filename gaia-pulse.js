@@ -36,8 +36,8 @@
 .gp-actions{display:flex;flex-direction:column;gap:10px;margin-top:16px;}
 .gp-howto{width:190px;max-width:62vw;margin:2px auto 0;display:block;}
 .gp-howto .gp-lensG circle{fill:#10241699;stroke:rgba(180,220,180,.4);stroke-width:1.5;}
-.gp-ringpulse{transform-origin:100px 40px;animation:gp-ring 2.6s ease-out infinite;}
-@keyframes gp-ring{0%{transform:scale(.62);opacity:.85}70%{opacity:0}100%{transform:scale(1.3);opacity:0}}
+.gp-ringpulse{transform-origin:100px 52px;animation:gp-ring 2.6s ease-out infinite;}
+@keyframes gp-ring{0%{transform:scale(.55);opacity:.9}70%{opacity:0}100%{transform:scale(1.5);opacity:0}}
 .gp-finger{transform-origin:100px 120px;animation:gp-press 2.6s ease-in-out infinite;}
 @keyframes gp-press{0%,100%{transform:translateY(9px)}42%,66%{transform:translateY(0)}}
 .gp-flash{animation:gp-flash 2.6s ease-in-out infinite;}
@@ -183,24 +183,24 @@
   function intro(card) {
     card.innerHTML = closeBtn()
       + '<p class="gp-eyebrow">Energy Pulse</p>'
-      + '<svg class="gp-howto" viewBox="0 0 200 176" role="img" aria-label="Rest a fingertip over your phone’s rear camera, covering all of the lenses">'
+      + '<svg class="gp-howto" viewBox="0 0 200 176" role="img" aria-label="Cover one lens of your phone’s rear camera with a fingertip; slide to another lens if it is not reading">'
       + '<defs>'
       + '<linearGradient id="gpSkin" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#e7bf97"/><stop offset=".5" stop-color="#dcae82"/><stop offset="1" stop-color="#c39970"/></linearGradient>'
-      + '<radialGradient id="gpContact" cx="50%" cy="50%" r="50%"><stop offset="0" stop-color="#9bf078" stop-opacity=".6"/><stop offset="1" stop-color="#9bf078" stop-opacity="0"/></radialGradient>'
+      + '<radialGradient id="gpContact" cx="50%" cy="50%" r="50%"><stop offset="0" stop-color="#9bf078" stop-opacity=".7"/><stop offset="1" stop-color="#9bf078" stop-opacity="0"/></radialGradient>'
       + '</defs>'
-      + '<rect x="64" y="6" width="72" height="164" rx="17" fill="#0c1811" stroke="rgba(125,217,86,.28)" stroke-width="2"/>'
-      + '<rect x="76" y="16" width="48" height="48" rx="14" fill="#050f09" stroke="rgba(255,255,255,.13)" stroke-width="1.5"/>'
-      + '<g class="gp-lensG"><circle cx="90" cy="30" r="8.5"/><circle cx="110" cy="30" r="8.5"/><circle cx="90" cy="50" r="8.5"/></g>'
-      + '<circle cx="90" cy="30" r="3.1" fill="#173521"/><circle cx="110" cy="30" r="3.1" fill="#173521"/><circle cx="90" cy="50" r="3.1" fill="#173521"/>'
-      + '<circle class="gp-flash" cx="110" cy="50" r="3.6" fill="#ffd98a"/>'
-      + '<circle class="gp-ringpulse" cx="100" cy="40" r="30" fill="none" stroke="#7dd956" stroke-width="2"/>'
-      + '<g class="gp-finger"><path d="M78 176 L78 64 Q78 28 100 28 Q122 28 122 64 L122 176 Z" fill="url(#gpSkin)" fill-opacity="0.8" stroke="rgba(60,30,10,.28)" stroke-width="1"/>'
-      + '<ellipse cx="100" cy="48" rx="15" ry="19" fill="rgba(255,255,255,.12)"/>'
-      + '<ellipse cx="100" cy="42" rx="25" ry="16" fill="url(#gpContact)"/></g>'
+      + '<rect x="62" y="6" width="76" height="164" rx="17" fill="#0c1811" stroke="rgba(125,217,86,.28)" stroke-width="2"/>'
+      + '<rect x="70" y="12" width="58" height="58" rx="17" fill="#050f09" stroke="rgba(255,255,255,.13)" stroke-width="1.5"/>'
+      + '<g class="gp-lensG"><circle cx="89" cy="30" r="10"/><circle cx="111" cy="30" r="10"/><circle cx="100" cy="52" r="10"/></g>'
+      + '<circle cx="89" cy="30" r="4" fill="#173521"/><circle cx="111" cy="30" r="4" fill="#173521"/><circle cx="100" cy="52" r="4" fill="#173521"/>'
+      + '<circle class="gp-flash" cx="117" cy="52" r="2.6" fill="#ffd98a"/>'
+      + '<circle class="gp-ringpulse" cx="100" cy="52" r="14" fill="none" stroke="#7dd956" stroke-width="2"/>'
+      + '<g class="gp-finger"><path d="M84 176 L84 60 Q84 40 100 40 Q116 40 116 60 L116 176 Z" fill="url(#gpSkin)" fill-opacity="0.92" stroke="rgba(60,30,10,.28)" stroke-width="1"/>'
+      + '<ellipse cx="100" cy="56" rx="12" ry="16" fill="rgba(255,255,255,.12)"/>'
+      + '<ellipse cx="100" cy="52" rx="17" ry="12" fill="url(#gpContact)"/></g>'
       + '</svg>'
-      + '<span class="gp-pill">Cover the whole camera — any lens is fine</span>'
+      + '<span class="gp-pill">Cover one lens — slide to another if it’s not reading</span>'
       + '<h2 class="gp-title">A 60-second pulse read</h2>'
-      + '<p class="gp-lead">Rest the pad of a finger gently over your phone’s <strong>rear camera</strong> — cover the <strong>whole camera area</strong>, you don’t need to find the exact lens. Hold still in good light; we read your heart rate from the tiny colour changes under your skin.</p>'
+      + '<p class="gp-lead">Phones have 2–3 lenses. Rest the pad of a finger over <strong>one lens</strong> — the main camera (usually the largest, or the one by the flash). If it doesn’t read after a few seconds, <strong>slide to the next lens</strong>. Hold still in good light — the meter fills when you’ve found it.</p>'
       + '<div class="gp-actions">'
       + '<button type="button" class="gp-btn" data-gp-start><i class="ph ph-camera" aria-hidden="true"></i> Start reading</button>'
       + '<button type="button" class="gp-btn--link" data-gp-tap>No camera? Tap with your heartbeat →</button>'
@@ -256,8 +256,9 @@
     const sampR = []; const sampG = []; const times = [];
     const recent = []; // { t, bpm } — a short history to confirm a *stable* lock
     const startedAt = performance.now();
+    let lastGood = startedAt; // last time we had a usable pulse-ish signal
     const GIVEUP_MS = 40000;
-    statusEl.textContent = 'Cover the camera fully with your fingertip…';
+    statusEl.textContent = 'Cover a lens with your fingertip…';
 
     function best(a, b) { if (a && b) return a.quality >= b.quality ? a : b; return a || b || null; }
 
@@ -279,6 +280,10 @@
         let coach = null;
         if (bright > 236) coach = 'Cover the lens fully with your fingertip.';
         else if (bright < 18) coach = 'A little more light helps — try near a lamp or window.';
+        // If nothing pulse-like has shown up for a while, the finger is probably on
+        // a lens the camera isn't using (common on 2–3 lens phones) — nudge them on.
+        const stale = !coach && (t - lastGood > 7000) && (t - startedAt > 6000);
+        const searchMsg = coach || (stale ? 'No reading yet — slide your finger to the next lens.' : 'Searching — press gently and hold still.');
 
         if (sampR.length > 96) {
           const dur = (times[times.length - 1] - times[0]) / 1000;
@@ -287,6 +292,7 @@
           if (est && est.bpm >= 40 && est.bpm <= 160) {
             qEls.forEach((el, i) => el.classList.toggle('on', i < Math.round(est.quality * 5)));
             if (!coach && est.quality > 0.4) {
+              lastGood = t;
               bpmEl.textContent = Math.round(est.bpm);
               recent.push({ t, bpm: est.bpm });
               while (recent.length && t - recent[0].t > 5500) recent.shift();
@@ -302,9 +308,9 @@
               }
             } else {
               recent.length = 0;
-              statusEl.textContent = coach || 'Searching — press gently and hold still.';
+              statusEl.textContent = searchMsg;
             }
-          } else if (coach) { statusEl.textContent = coach; }
+          } else { statusEl.textContent = searchMsg; }
         } else if (coach) { statusEl.textContent = coach; }
 
         if (t - startedAt > GIVEUP_MS) {

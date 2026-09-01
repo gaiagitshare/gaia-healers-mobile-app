@@ -46,9 +46,27 @@ function makeFrames({
 }
 
 test('accepts a yellow/pink iPhone-white-balanced fingertip signal', () => {
-  const result = dsp.analyzePulse(makeFrames({ bpm: 78, mode: 'iphone-yellow', seed: 78 }));
+  const frames = makeFrames({ bpm: 78, mode: 'iphone-yellow', seed: 78 });
+  const result = dsp.analyzePulse(frames);
   assert.equal(result.ok, true, result.reason);
   assert.ok(Math.abs(result.bpm - 78) < 2);
+  const preview = dsp.previewPulse(frames);
+  assert.equal(preview.ok, true, preview.reason);
+  assert.ok(Math.abs(preview.bpm - 78) < 2);
+});
+
+test('local texture ignores a smooth flash hotspot but catches a detailed scene', () => {
+  const smoothHotspot = [];
+  const checkerboard = [];
+  for (let y = 0; y < 8; y += 1) {
+    for (let x = 0; x < 8; x += 1) {
+      const distance = Math.hypot(x - 3.5, y - 3.5);
+      smoothHotspot.push(210 - distance * 18);
+      checkerboard.push((x + y) % 2 ? 180 : 45);
+    }
+  }
+  assert.ok(dsp.spatialTexture(smoothHotspot, 8, 8) < 0.2);
+  assert.ok(dsp.spatialTexture(checkerboard, 8, 8) > 0.8);
 });
 
 for (const expected of [50, 72, 110, 150]) {

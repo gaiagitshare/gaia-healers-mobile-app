@@ -26,6 +26,23 @@
     return Math.sqrt(values.reduce((sum, value) => sum + (value - average) ** 2, 0) / values.length);
   }
 
+  // Measures local high-frequency variation, not the overall light gradient.
+  // A fingertip lit by a nearby flash often has a bright hotspot and dark edge;
+  // global variance mistakes that smooth gradient for scene detail. Adjacent
+  // block differences preserve the useful "is this a textured scene?" signal.
+  function spatialTexture(grid, width = 8, height = 8) {
+    if (!Array.isArray(grid) || grid.length < width * height) return 1;
+    const diffs = [];
+    for (let y = 0; y < height; y += 1) {
+      for (let x = 0; x < width; x += 1) {
+        const value = Number(grid[y * width + x]) || 0;
+        if (x) diffs.push(Math.abs(value - (Number(grid[y * width + x - 1]) || 0)));
+        if (y) diffs.push(Math.abs(value - (Number(grid[(y - 1) * width + x]) || 0)));
+      }
+    }
+    return mean(diffs) / Math.max(1, mean(grid));
+  }
+
   function biquad(values, type, cutoff, fps, q = 0.707) {
     const w0 = 2 * Math.PI * cutoff / fps;
     const cosine = Math.cos(w0);
@@ -299,13 +316,34 @@
     };
   }
 
+  function previewPulse(frames) {
+    const contact = contactMetrics(frames);
+    if (!contact.valid) return { ok: false, reason: contact.reason, contact };
+    const uniform = resampleUniform(frames, 8);
+    if (!uniform || uniform.duration < 4.8) return { ok: false, reason: 'need_more', contact };
+    const red = estimateChannel(uniform.r, uniform.fps);
+    const green = estimateChannel(uniform.g, uniform.fps);
+    const candidates = [['red', red], ['green', green]].filter((entry) => entry[1]);
+    if (!candidates.length) return { ok: false, reason: 'weak_or_irregular_signal', contact };
+    if (red && green && Math.abs(red.bpm - green.bpm) > 7) return { ok: false, reason: 'channel_disagreement', contact };
+    candidates.sort((a, b) => b[1].score - a[1].score);
+    const [channel, chosen] = candidates[0];
+    const blue = estimateChannel(uniform.b, uniform.fps);
+    if (blue && blue.pulsatility >= chosen.pulsatility * 0.65 && Math.abs(blue.bpm - chosen.bpm) <= 6) {
+      return { ok: false, reason: 'common_mode_artifact', contact };
+    }
+    return { ok: true, bpm: chosen.bpm, channel, contact, duration: uniform.duration };
+  }
+
   return {
     analyzePulse,
+    previewPulse,
     contactMetrics,
     resampleUniform,
     estimateChannel,
     spectralEstimate,
     autocorrelationEstimate,
+    spatialTexture,
     _internal: { bandpass, powerAtBpm, median },
   };
 }));

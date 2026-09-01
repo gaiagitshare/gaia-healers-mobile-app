@@ -215,7 +215,8 @@
 
   async function measure(card) {
     if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) { tapMode(card, 'Camera isn’t available on this device.'); return; }
-    try { pulseDsp(); } catch (error) { tapMode(card, error.message); return; }
+    let dsp;
+    try { dsp = pulseDsp(); } catch (error) { tapMode(card, error.message); return; }
     if (cameraPolicyBlocked()) { cameraUnavailable(card, true); return; }
     card.innerHTML = closeBtn()
       + '<p class="gp-eyebrow">Reading your pulse</p>'
@@ -316,32 +317,53 @@
         if (frameWatchdog) { clearTimeout(frameWatchdog); frameWatchdog = null; }
         sctx.drawImage(video, 0, 0, 48, 48);
         const px = sctx.getImageData(8, 8, 32, 32).data;
-        let r = 0; let g = 0; let b = 0; let luminance = 0; let luminanceSquared = 0;
-        const grid = [];
+        let r = 0; let g = 0; let b = 0;
+        const gridSums = new Array(64).fill(0);
+        const gridCounts = new Array(64).fill(0);
         const cnt = px.length / 4;
         for (let i = 0; i < px.length; i += 4) {
           const rr = px[i]; const gg = px[i + 1]; const bb = px[i + 2];
           const lum = 0.2126 * rr + 0.7152 * gg + 0.0722 * bb;
-          r += rr; g += gg; b += bb; luminance += lum; luminanceSquared += lum * lum;
-          if ((i / 4) % 4 === 0 && Math.floor((i / 4) / 32) % 4 === 0) grid.push(lum);
+          const pixelIndex = i / 4;
+          const x = pixelIndex % 32;
+          const y = Math.floor(pixelIndex / 32);
+          const block = Math.floor(y / 4) * 8 + Math.floor(x / 4);
+          r += rr; g += gg; b += bb;
+          gridSums[block] += lum; gridCounts[block] += 1;
         }
         r /= cnt; g /= cnt; b /= cnt;
-        const meanLum = luminance / cnt;
-        const spatialSd = Math.sqrt(Math.max(0, luminanceSquared / cnt - meanLum * meanLum));
+        const grid = gridSums.map((sum, index) => sum / Math.max(1, gridCounts[index]));
+        const texture = dsp.spatialTexture(grid, 8, 8);
         const motion = previousGrid && previousGrid.length === grid.length
           ? grid.reduce((sum, value, index) => sum + Math.abs(value - previousGrid[index]), 0) / grid.length / 255 : 0;
         previousGrid = grid;
         const t = metadata && Number.isFinite(metadata.mediaTime) ? metadata.mediaTime * 1000 : now;
-        frames.push({ t, r, g, b, spatialCv: spatialSd / Math.max(1, meanLum), motion });
+        frames.push({ t, r, g, b, spatialCv: texture, motion });
         while (frames.length && t - frames[0].t > 14000) frames.shift();
         drawWave(wctx, wave, frames.slice(-300).map((frame) => frame.r));
 
         if (now - lastAnalysisAt >= 700) {
           lastAnalysisAt = now;
-          const analysis = pulseDsp().analyzePulse(frames);
+          const analysis = dsp.analyzePulse(frames);
           const visibleQuality = analysis.ok ? analysis.quality : (analysis.contact && analysis.contact.score) || 0;
           qEls.forEach((el, index) => el.classList.toggle('on', index < Math.round(visibleQuality * 5)));
-          statusEl.textContent = analysis.ok ? 'Clean optical pulse confirmed.' : (reasonCopy[analysis.reason] || 'Checking signal quality…');
+          const elapsedSignal = frames.length > 1 ? (frames[frames.length - 1].t - frames[0].t) / 1000 : 0;
+          statusEl.textContent = analysis.ok ? 'Clean optical pulse confirmed.'
+            : analysis.reason === 'need_more' ? `Contact found — collecting ${Math.min(8, Math.floor(elapsedSignal))}/8 seconds…`
+              : (reasonCopy[analysis.reason] || 'Checking signal quality…');
+          if (!analysis.ok && elapsedSignal >= 4.8) {
+            const preview = dsp.previewPulse(frames);
+            if (preview.ok) {
+              bpmEl.textContent = Math.round(preview.bpm);
+              const label = bpmEl.parentNode && bpmEl.parentNode.querySelector('small');
+              if (label) label.textContent = 'BPM · checking';
+              statusEl.textContent = 'Pulse found — confirming that it stays stable…';
+            } else if (bpmEl.textContent !== '– –') {
+              bpmEl.textContent = '– –';
+              const label = bpmEl.parentNode && bpmEl.parentNode.querySelector('small');
+              if (label) label.textContent = 'BPM';
+            }
+          }
           if (analysis.contact) {
             const c = analysis.contact;
             cameraEl.textContent = `${cameraName} · ${deliveredSize}${deliveredFps ? ` · ${deliveredFps.toFixed(0)} fps` : ''} · ${torchOn ? 'flash on' : 'flash unavailable'} · signal ${Math.round(visibleQuality * 100)}%`;

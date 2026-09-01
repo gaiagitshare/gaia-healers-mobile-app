@@ -308,10 +308,11 @@
       if (!captureActive || !video || !sctx) return;
       try {
         if (video.readyState < 2) { scheduleFrame(); return; }
-        const mediaTime = metadata && Number.isFinite(metadata.mediaTime) ? metadata.mediaTime : video.currentTime;
-        // rAF fallback may fire repeatedly for one camera frame. Never count a
-        // duplicate as a fresh optical sample.
-        if (Number.isFinite(mediaTime) && mediaTime === lastMediaTime) { scheduleFrame(); return; }
+        const mediaTime = metadata && Number.isFinite(metadata.mediaTime) ? metadata.mediaTime : (Number.isFinite(video.currentTime) ? video.currentTime : NaN);
+        // Only the rAF fallback can fire several times for one camera frame — skip
+        // those duplicates. rVFC delivers exactly one callback per real frame, and
+        // iOS mediaTime can repeat there, so we must NOT dedup the rVFC path.
+        if (!metadata && Number.isFinite(mediaTime) && mediaTime === lastMediaTime) { scheduleFrame(); return; }
         if (Number.isFinite(mediaTime)) lastMediaTime = mediaTime;
         receivedFrames += 1;
         if (frameWatchdog) { clearTimeout(frameWatchdog); frameWatchdog = null; }
@@ -337,7 +338,10 @@
         const motion = previousGrid && previousGrid.length === grid.length
           ? grid.reduce((sum, value, index) => sum + Math.abs(value - previousGrid[index]), 0) / grid.length / 255 : 0;
         previousGrid = grid;
-        const t = metadata && Number.isFinite(metadata.mediaTime) ? metadata.mediaTime * 1000 : now;
+        // Timestamp every frame with the wall clock (ms). iOS Safari's mediaTime
+        // for the tiny live <video> stalls/repeats, which froze the collection
+        // timer at "0/8 seconds" and starved the resampler — `now` is monotonic.
+        const t = now;
         frames.push({ t, r, g, b, spatialCv: texture, motion });
         while (frames.length && t - frames[0].t > 14000) frames.shift();
         drawWave(wctx, wave, frames.slice(-300).map((frame) => frame.r));

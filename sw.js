@@ -1,4 +1,4 @@
-const CACHE_NAME = 'gaia-healers-20260902e-pulse-texture-fix';
+const CACHE_NAME = 'gaia-healers-20260902f-walltime';
 const APP_SHELL = [
   '/',
   '/home.html',

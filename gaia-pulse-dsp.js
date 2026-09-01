@@ -236,7 +236,7 @@
     return { valid: !reason, reason, score, ...metrics };
   }
 
-  function estimateChannel(values, fps) {
+  function estimateChannel(values, fps, thresholds = {}) {
     const average = mean(values);
     if (!average) return null;
     const relative = values.map((value) => value / average - 1);
@@ -245,9 +245,11 @@
     const pulsatility = standardDeviation(filtered);
     if (pulsatility < 0.00015 || pulsatility > 0.12) return null;
     const spectral = spectralEstimate(filtered, fps);
-    if (!spectral || spectral.snr < 3.2) return null;
+    const minSnr = Number.isFinite(thresholds.minSnr) ? thresholds.minSnr : 3.2;
+    const minAutocorrelation = Number.isFinite(thresholds.minAutocorrelation) ? thresholds.minAutocorrelation : 0.38;
+    if (!spectral || spectral.snr < minSnr) return null;
     const autocorrelation = autocorrelationEstimate(filtered, fps, spectral.bpm);
-    if (!autocorrelation || autocorrelation.quality < 0.38) return null;
+    if (!autocorrelation || autocorrelation.quality < minAutocorrelation) return null;
     const agreement = Math.abs(spectral.bpm - autocorrelation.bpm);
     if (agreement > 5) return null;
     return {
@@ -260,6 +262,32 @@
       filtered,
       power: spectral.power,
       score: Math.min(20, spectral.snr) * autocorrelation.quality,
+    };
+  }
+
+  function differentialChannel(primary, reference) {
+    const primaryMean = mean(primary);
+    const referenceMean = mean(reference);
+    if (!primaryMean || !referenceMean || primary.length !== reference.length) return [];
+    // Keep a positive baseline because estimateChannel works in relative units.
+    return primary.map((value, index) => 1 + value / primaryMean - reference[index] / referenceMean);
+  }
+
+  function channelCandidates(uniform, thresholds) {
+    const red = estimateChannel(uniform.r, uniform.fps, thresholds);
+    const green = estimateChannel(uniform.g, uniform.fps, thresholds);
+    const redBlueValues = differentialChannel(uniform.r, uniform.b);
+    const greenBlueValues = differentialChannel(uniform.g, uniform.b);
+    const redBlue = redBlueValues.length ? estimateChannel(redBlueValues, uniform.fps, thresholds) : null;
+    const greenBlue = greenBlueValues.length ? estimateChannel(greenBlueValues, uniform.fps, thresholds) : null;
+    return {
+      red,
+      green,
+      redBlue,
+      greenBlue,
+      values: { red: uniform.r, green: uniform.g, redBlue: redBlueValues, greenBlue: greenBlueValues },
+      ranked: [['red', red], ['green', green], ['redBlue', redBlue], ['greenBlue', greenBlue]]
+        .filter((entry) => entry[1]).sort((a, b) => b[1].score - a[1].score),
     };
   }
 
@@ -276,22 +304,23 @@
     if (!contact.valid) return { ok: false, reason: contact.reason, contact };
     const uniform = resampleUniform(frames);
     if (!uniform || uniform.duration < 8) return { ok: false, reason: 'need_more', contact, duration: uniform ? uniform.duration : 0 };
-    const red = estimateChannel(uniform.r, uniform.fps);
-    const green = estimateChannel(uniform.g, uniform.fps);
-    const candidates = [['red', red], ['green', green]].filter((entry) => entry[1]);
+    const channels = channelCandidates(uniform);
+    const { red, green } = channels;
+    const candidates = channels.ranked;
     if (!candidates.length) return { ok: false, reason: 'weak_or_irregular_signal', contact, fps: uniform.measuredFps };
-    if (red && green && Math.abs(red.bpm - green.bpm) > 7) {
+    if (red && green && red.score >= candidates[0][1].score * 0.65
+      && green.score >= candidates[0][1].score * 0.65 && Math.abs(red.bpm - green.bpm) > 7) {
       return { ok: false, reason: 'channel_disagreement', contact, fps: uniform.measuredFps };
     }
-    candidates.sort((a, b) => b[1].score - a[1].score);
     const [channel, chosen] = candidates[0];
     const blue = estimateChannel(uniform.b, uniform.fps);
     // Whole-scene movement changes R/G/B together. A fingertip PPG signal should
     // be materially stronger in red/green than in blue.
-    if (blue && blue.pulsatility >= chosen.pulsatility * 0.65 && Math.abs(blue.bpm - chosen.bpm) <= 6) {
+    if ((channel === 'red' || channel === 'green') && blue
+      && blue.pulsatility >= chosen.pulsatility * 0.65 && Math.abs(blue.bpm - chosen.bpm) <= 6) {
       return { ok: false, reason: 'common_mode_artifact', contact, fps: uniform.measuredFps };
     }
-    const channelValues = channel === 'red' ? uniform.r : uniform.g;
+    const channelValues = channels.values[channel];
     const segments = segmentEstimates(channelValues, uniform.fps);
     if (segments.length < 2) return { ok: false, reason: 'need_more_stability', contact, fps: uniform.measuredFps };
     const segmentBpms = segments.map((item) => item.bpm);
@@ -321,15 +350,19 @@
     if (!contact.valid) return { ok: false, reason: contact.reason, contact };
     const uniform = resampleUniform(frames, 8);
     if (!uniform || uniform.duration < 4.8) return { ok: false, reason: 'need_more', contact };
-    const red = estimateChannel(uniform.r, uniform.fps);
-    const green = estimateChannel(uniform.g, uniform.fps);
-    const candidates = [['red', red], ['green', green]].filter((entry) => entry[1]);
+    const thresholds = { minSnr: 2.2, minAutocorrelation: 0.25 };
+    const channels = channelCandidates(uniform, thresholds);
+    const { red, green } = channels;
+    const candidates = channels.ranked;
     if (!candidates.length) return { ok: false, reason: 'weak_or_irregular_signal', contact };
-    if (red && green && Math.abs(red.bpm - green.bpm) > 7) return { ok: false, reason: 'channel_disagreement', contact };
-    candidates.sort((a, b) => b[1].score - a[1].score);
+    if (red && green && red.score >= candidates[0][1].score * 0.65
+      && green.score >= candidates[0][1].score * 0.65 && Math.abs(red.bpm - green.bpm) > 8) {
+      return { ok: false, reason: 'channel_disagreement', contact };
+    }
     const [channel, chosen] = candidates[0];
     const blue = estimateChannel(uniform.b, uniform.fps);
-    if (blue && blue.pulsatility >= chosen.pulsatility * 0.65 && Math.abs(blue.bpm - chosen.bpm) <= 6) {
+    if ((channel === 'red' || channel === 'green') && blue
+      && blue.pulsatility >= chosen.pulsatility * 0.65 && Math.abs(blue.bpm - chosen.bpm) <= 6) {
       return { ok: false, reason: 'common_mode_artifact', contact };
     }
     return { ok: true, bpm: chosen.bpm, channel, contact, duration: uniform.duration };
@@ -341,6 +374,7 @@
     contactMetrics,
     resampleUniform,
     estimateChannel,
+    differentialChannel,
     spectralEstimate,
     autocorrelationEstimate,
     spatialTexture,

@@ -1,4 +1,4 @@
-const CACHE_NAME = 'gaia-healers-20260902h-three-modes';
+const CACHE_NAME = 'gaia-healers-20260902i-pulse-differential';
 const APP_SHELL = [
   '/',
   '/home.html',

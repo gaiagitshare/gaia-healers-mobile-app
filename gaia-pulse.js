@@ -427,7 +427,9 @@
             const c = analysis.contact;
             cameraEl.textContent = `${cameraName} · ${deliveredSize}${deliveredFps ? ` · ${deliveredFps.toFixed(0)} fps` : ''} · ${modeTag} · signal ${Math.round(visibleQuality * 100)}%`;
           }
-          if (analysis.ok && analysis.quality >= 0.5) { finish(analysis.bpm); return; }
+          // analyzePulse already passed contact, artifact, dual-estimator and
+          // multi-window stability gates. Do not silently add a second cutoff.
+          if (analysis.ok) { finish(analysis.bpm); return; }
         }
 
         if (performance.now() - startedAt > GIVEUP_MS) {

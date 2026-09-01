@@ -69,6 +69,27 @@ test('local texture ignores a smooth flash hotspot but catches a detailed scene'
   assert.ok(dsp.spatialTexture(checkerboard, 8, 8) > 0.8);
 });
 
+test('differential color cancels rhythmic exposure and recovers a weak pulse', () => {
+  const frames = [];
+  for (let index = 0; index < 360; index += 1) {
+    const t = index * (1000 / 30);
+    const exposure = 0.006 * Math.sin(2 * Math.PI * 1.5 * t / 1000);
+    const pulse = Math.sin(2 * Math.PI * 1.2 * t / 1000);
+    frames.push({
+      t,
+      r: 190 * (1 + exposure + 0.0018 * pulse),
+      g: 94 * (1 + exposure + 0.0008 * pulse),
+      b: 48 * (1 + exposure),
+      spatialCv: 0.05,
+      motion: 0.004,
+    });
+  }
+  const result = dsp.analyzePulse(frames);
+  assert.equal(result.ok, true, result.reason);
+  assert.ok(['redBlue', 'greenBlue'].includes(result.channel));
+  assert.ok(Math.abs(result.bpm - 72) < 3, `${result.bpm} vs 72`);
+});
+
 for (const expected of [50, 72, 110, 150]) {
   test(`recovers ${expected} BPM from irregular camera timestamps`, () => {
     const result = dsp.analyzePulse(makeFrames({ bpm: expected, seed: expected }));
@@ -130,6 +151,7 @@ test('production capture is frame-clocked and has no timed BPM acceptance', () =
   assert.equal((source.match(/mediaDevices\.getUserMedia\(/g) || []).length, 1, 'one camera request path only');
   assert.match(source, /cameraPolicyBlocked\(\)/);
   assert.match(source, /analyzePulse\(frames\)/);
+  assert.match(source, /if \(analysis\.ok\) \{ finish\(analysis\.bpm\)/);
   assert.doesNotMatch(source, /function estimateBpm/);
   assert.doesNotMatch(source, /elapsed\s*>\s*40000/);
   assert.match(source, /tapMode\(card, 'Couldn’t get a clean pulse/);

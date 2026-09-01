@@ -127,7 +127,9 @@
     document.body.appendChild(modal);
     document.body.style.overflow = 'hidden';
     const card = modal.querySelector('[data-gp-card]');
-    modal.querySelectorAll('[data-gp-close]').forEach((e) => e.addEventListener('click', close));
+    // Delegate close so the × button works on every re-rendered screen (intro,
+    // measure, tap, result) as well as the backdrop — not just the first render.
+    modal.addEventListener('click', (e) => { if (e.target.closest && e.target.closest('[data-gp-close]')) close(); });
     document.addEventListener('keydown', onKey);
     window.__gpModal = modal;
     intro(card);
@@ -342,6 +344,15 @@
 
   /* ---- expose + auto-open --------------------------------------------- */
   window.GaiaPulse = { open, close };
+  // The in-app router (gaia-ui.js) intercepts links, strips the ?tool= param and
+  // switches views without a reload — so the auto-open below only fires on a
+  // fresh page load / deep link. Catch clicks on any link to this tool (the home
+  // free-tools grid) in the capture phase, ahead of the router, and open here.
+  document.addEventListener('click', function (e) {
+    const a = e.target && e.target.closest ? e.target.closest('a[href]') : null;
+    if (!a) return;
+    if (/[?&]tool=pulse(?:&|$)/.test(a.getAttribute('href') || '')) { e.preventDefault(); e.stopImmediatePropagation(); open(); }
+  }, true);
   if (new URLSearchParams(window.location.search).get('tool') === 'pulse') {
     if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', open); else open();
   }

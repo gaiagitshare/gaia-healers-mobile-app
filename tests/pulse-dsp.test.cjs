@@ -35,15 +35,21 @@ function makeFrames({
     const noise = mode === 'noise' ? random() * 9 : random() * 0.08;
     frames.push({
       t,
-      r: 185 * (1 + amplitudes[0] * wave) + noise,
-      g: 82 * (1 + amplitudes[1] * wave) + noise,
-      b: 42 * (1 + amplitudes[2] * wave) + noise,
+      r: (mode === 'iphone-yellow' ? 218 : 185) * (1 + amplitudes[0] * wave) + noise,
+      g: (mode === 'iphone-yellow' ? 224 : 82) * (1 + amplitudes[1] * wave) + noise,
+      b: (mode === 'iphone-yellow' ? 142 : 42) * (1 + amplitudes[2] * wave) + noise,
       spatialCv: 0.06,
       motion: 0.004,
     });
   }
   return frames;
 }
+
+test('accepts a yellow/pink iPhone-white-balanced fingertip signal', () => {
+  const result = dsp.analyzePulse(makeFrames({ bpm: 78, mode: 'iphone-yellow', seed: 78 }));
+  assert.equal(result.ok, true, result.reason);
+  assert.ok(Math.abs(result.bpm - 78) < 2);
+});
 
 for (const expected of [50, 72, 110, 150]) {
   test(`recovers ${expected} BPM from irregular camera timestamps`, () => {
@@ -99,6 +105,12 @@ test('contact gate rejects darkness, scene texture, and motion', () => {
 test('production capture is frame-clocked and has no timed BPM acceptance', () => {
   const source = fs.readFileSync(path.join(__dirname, '..', 'gaia-pulse.js'), 'utf8');
   assert.match(source, /requestVideoFrameCallback/);
+  assert.match(source, /useRafFallback/);
+  assert.match(source, /receivedFrames/);
+  assert.match(source, /frameWatchdog/);
+  assert.match(source, /requestCamera\(\{ video: baseVideo, audio: false \}, 25000\)/);
+  assert.equal((source.match(/mediaDevices\.getUserMedia\(/g) || []).length, 1, 'one camera request path only');
+  assert.match(source, /cameraPolicyBlocked\(\)/);
   assert.match(source, /analyzePulse\(frames\)/);
   assert.doesNotMatch(source, /function estimateBpm/);
   assert.doesNotMatch(source, /elapsed\s*>\s*40000/);

@@ -22,8 +22,39 @@
       Promise.resolve(p).then((v) => { clearTimeout(to); resolve(v); }, (e) => { clearTimeout(to); reject(e); });
     });
   }
+  function requestCamera(constraints, ms) {
+    let expired = false;
+    return new Promise((resolve, reject) => {
+      const timer = setTimeout(() => {
+        expired = true;
+        const error = new Error('camera_timeout');
+        error.name = 'TimeoutError';
+        reject(error);
+      }, ms);
+      navigator.mediaDevices.getUserMedia(constraints).then((cameraStream) => {
+        if (expired) {
+          // getUserMedia cannot be aborted. If WebKit resolves after our UI has
+          // moved on, stop that orphaned camera immediately.
+          cameraStream.getTracks().forEach((track) => track.stop());
+          return;
+        }
+        clearTimeout(timer);
+        resolve(cameraStream);
+      }, (error) => {
+        if (expired) return;
+        clearTimeout(timer);
+        reject(error);
+      });
+    });
+  }
   // Best-effort: are we running inside a (cross-origin) iframe?
   function isFramed() { try { return window.self !== window.top; } catch (e) { return true; } }
+  function cameraPolicyBlocked() {
+    try {
+      const policy = document.permissionsPolicy || document.featurePolicy;
+      return Boolean(isFramed() && policy && policy.allowsFeature && !policy.allowsFeature('camera'));
+    } catch (e) { return false; }
+  }
 
   /* ---- one-time styles ------------------------------------------------- */
   function injectStyles() {
@@ -59,7 +90,7 @@
 .gp-bpm{font-size:3.4rem;font-weight:800;line-height:1;color:#fff;letter-spacing:-.03em;font-variant-numeric:tabular-nums;}
 .gp-bpm small{display:block;font-size:.8rem;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:rgba(234,244,234,.55);margin-top:4px;}
 .gp-wave{width:100%;height:64px;margin:6px 0 2px;display:block;}
-.gp-video{position:absolute;width:2px;height:2px;opacity:0;pointer-events:none;left:-9999px;top:-9999px;}
+.gp-video{position:fixed;width:2px;height:2px;opacity:.01;pointer-events:none;right:0;bottom:0;}
 .gp-status{font-size:.86rem;color:rgba(234,244,234,.75);min-height:1.3em;margin:8px 0 0;}
 .gp-quality{display:flex;gap:4px;justify-content:center;margin:10px 0 2px;}
 .gp-quality i{width:26px;height:5px;border-radius:99px;background:rgba(255,255,255,.14);transition:background .3s;}
@@ -150,9 +181,10 @@
 
   /* ---- camera measurement --------------------------------------------- */
   let stream = null, video = null, sampleCanvas = null, sctx = null;
-  let videoFrameCallbackId = null, captureActive = false;
+  let videoFrameCallbackId = null, captureActive = false, frameWatchdog = null;
   function stopCamera() {
     captureActive = false;
+    if (frameWatchdog) { clearTimeout(frameWatchdog); frameWatchdog = null; }
     try { if (video && videoFrameCallbackId != null && video.cancelVideoFrameCallback) video.cancelVideoFrameCallback(videoFrameCallbackId); } catch (e) {}
     videoFrameCallbackId = null;
     try { if (stream) stream.getTracks().forEach((t) => t.stop()); } catch (e) {}
@@ -184,6 +216,7 @@
   async function measure(card) {
     if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) { tapMode(card, 'Camera isn’t available on this device.'); return; }
     try { pulseDsp(); } catch (error) { tapMode(card, error.message); return; }
+    if (cameraPolicyBlocked()) { cameraUnavailable(card, true); return; }
     card.innerHTML = closeBtn()
       + '<p class="gp-eyebrow">Reading your pulse</p>'
       + '<div class="gp-bpm"><span data-gp-bpm>– –</span><small>BPM</small></div>'
@@ -204,19 +237,20 @@
     // These are preferences only: the actual delivered settings are read back
     // and displayed. We do not claim that WebKit exposes or pins a physical lens.
     const baseVideo = { facingMode: { ideal: 'environment' }, width: { ideal: 640 }, height: { ideal: 480 }, frameRate: { ideal: 30 } };
-    // Never wait forever: getUserMedia can hang pending in a camera-blocked iframe.
+    // Use one request only. Retrying while the iOS permission sheet is open can
+    // leave two competing captures and prevent either from becoming readable.
     try {
-      stream = await withTimeout(navigator.mediaDevices.getUserMedia({ video: baseVideo, audio: false }), 8000);
-    } catch (e1) {
-      try { stream = await withTimeout(navigator.mediaDevices.getUserMedia({ video: true, audio: false }), 7000); }
-      catch (e2) { cameraUnavailable(card, isFramed()); return; }
-    }
+      statusEl.textContent = 'Allow camera access, then cover one rear lens.';
+      stream = await requestCamera({ video: baseVideo, audio: false }, 25000);
+    } catch (error) { cameraUnavailable(card, isFramed()); return; }
     const track = stream.getVideoTracks()[0];
 
     video = document.createElement('video');
-    video.className = 'gp-video'; video.playsInline = true; video.muted = true; video.setAttribute('playsinline', ''); video.srcObject = stream;
+    video.className = 'gp-video'; video.playsInline = true; video.muted = true;
+    video.setAttribute('playsinline', ''); video.setAttribute('autoplay', ''); video.srcObject = stream;
     document.body.appendChild(video);
-    try { await withTimeout(video.play(), 4000); } catch (e) {}
+    try { await withTimeout(video.play(), 5000); }
+    catch (e) { cameraUnavailable(card, isFramed()); return; }
 
     // Torch AFTER the track is live and playing (some builds need that). Modern
     // WebKit and Chromium can expose it; applyConstraints resolving is the signal.
@@ -242,6 +276,8 @@
     let previousGrid = null;
     let lastMediaTime = -1;
     let lastAnalysisAt = 0;
+    let receivedFrames = 0;
+    let useRafFallback = !video.requestVideoFrameCallback;
     captureActive = true;
     statusEl.textContent = torchOn ? 'Flash on — cover the rear lens beside the light.' : 'Cover one rear lens; use bright, steady light.';
 
@@ -263,18 +299,21 @@
 
     function scheduleFrame() {
       if (!captureActive || !video) return;
-      if (video.requestVideoFrameCallback) videoFrameCallbackId = video.requestVideoFrameCallback(processFrame);
+      if (!useRafFallback && video.requestVideoFrameCallback) videoFrameCallbackId = video.requestVideoFrameCallback(processFrame);
       else window.__gpRAF = requestAnimationFrame((now) => processFrame(now, null));
     }
 
     function processFrame(now, metadata) {
       if (!captureActive || !video || !sctx) return;
       try {
+        if (video.readyState < 2) { scheduleFrame(); return; }
         const mediaTime = metadata && Number.isFinite(metadata.mediaTime) ? metadata.mediaTime : video.currentTime;
         // rAF fallback may fire repeatedly for one camera frame. Never count a
         // duplicate as a fresh optical sample.
         if (Number.isFinite(mediaTime) && mediaTime === lastMediaTime) { scheduleFrame(); return; }
         if (Number.isFinite(mediaTime)) lastMediaTime = mediaTime;
+        receivedFrames += 1;
+        if (frameWatchdog) { clearTimeout(frameWatchdog); frameWatchdog = null; }
         sctx.drawImage(video, 0, 0, 48, 48);
         const px = sctx.getImageData(8, 8, 32, 32).data;
         let r = 0; let g = 0; let b = 0; let luminance = 0; let luminanceSquared = 0;
@@ -303,6 +342,10 @@
           const visibleQuality = analysis.ok ? analysis.quality : (analysis.contact && analysis.contact.score) || 0;
           qEls.forEach((el, index) => el.classList.toggle('on', index < Math.round(visibleQuality * 5)));
           statusEl.textContent = analysis.ok ? 'Clean optical pulse confirmed.' : (reasonCopy[analysis.reason] || 'Checking signal quality…');
+          if (analysis.contact) {
+            const c = analysis.contact;
+            cameraEl.textContent = `${cameraName} · ${deliveredSize}${deliveredFps ? ` · ${deliveredFps.toFixed(0)} fps` : ''} · ${torchOn ? 'flash on' : 'flash unavailable'} · signal ${Math.round(visibleQuality * 100)}%`;
+          }
           if (analysis.ok && analysis.quality >= 0.5) { finish(analysis.bpm); return; }
         }
 
@@ -319,6 +362,19 @@
       scheduleFrame();
     }
     scheduleFrame();
+    // WebKit can grant the stream yet never invoke rVFC for a tiny/off-screen
+    // video. Fall back to rAF with currentTime de-duplication (still one sample
+    // per actual camera frame), then fail clearly if no frame arrives at all.
+    frameWatchdog = setTimeout(() => {
+      if (!captureActive || receivedFrames) return;
+      try { if (videoFrameCallbackId != null && video.cancelVideoFrameCallback) video.cancelVideoFrameCallback(videoFrameCallbackId); } catch (e) {}
+      videoFrameCallbackId = null;
+      useRafFallback = true;
+      scheduleFrame();
+      frameWatchdog = setTimeout(() => {
+        if (captureActive && !receivedFrames) cameraUnavailable(card, isFramed());
+      }, 5000);
+    }, 1800);
 
     function finish(bpm) {
       stopCamera();

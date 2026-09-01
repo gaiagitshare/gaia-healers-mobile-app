@@ -184,8 +184,12 @@
       const texture = Number.isFinite(frame.spatialCv) ? frame.spatialCv : 1;
       const motion = Number.isFinite(frame.motion) ? frame.motion : 1;
       brightness.push(bright); redRatios.push(redRatio); textures.push(texture); motions.push(motion);
-      if (bright >= 14 && bright <= 250 && frame.r >= frame.g * 1.04 && frame.r >= frame.b * 1.15
-        && saturation >= 0.1 && texture <= 0.32 && motion <= 0.12) contactFrames += 1;
+      // iPhone auto-white-balance can make a torch-lit fingertip yellow/pink
+      // rather than strongly red. Keep the gate tolerant to that variation;
+      // spatial uniformity, motion and the later cross-channel DSP still reject
+      // ordinary scenes and rhythmic whole-frame movement.
+      if (bright >= 10 && bright <= 253 && frame.r >= frame.g * 0.96 && frame.r >= frame.b * 1.08
+        && saturation >= 0.06 && texture <= 0.42 && motion <= 0.16) contactFrames += 1;
     });
     const fraction = contactFrames / recent.length;
     const metrics = {
@@ -196,13 +200,23 @@
       motion: median(motions),
     };
     let reason = '';
-    if (metrics.brightness < 14) reason = 'too_dark';
-    else if (metrics.brightness > 250) reason = 'overexposed';
-    else if (metrics.redRatio < 0.5) reason = 'no_finger_contact';
-    else if (metrics.spatialCv > 0.32) reason = 'scene_texture';
-    else if (metrics.motion > 0.12) reason = 'motion';
-    else if (fraction < 0.72) reason = 'unstable_contact';
-    return { valid: !reason, reason, score: clamp((fraction - 0.55) / 0.4, 0, 1), ...metrics };
+    if (metrics.brightness < 10) reason = 'too_dark';
+    else if (metrics.brightness > 253) reason = 'overexposed';
+    else if (metrics.redRatio < 0.46) reason = 'no_finger_contact';
+    else if (metrics.spatialCv > 0.42) reason = 'scene_texture';
+    else if (metrics.motion > 0.16) reason = 'motion';
+    else if (fraction < 0.6) reason = 'unstable_contact';
+    // A graded score makes the live meter react while the user is finding the
+    // active lens. Passing BPM remains fail-closed on every binary gate above.
+    const exposureScore = clamp((metrics.brightness - 6) / 28, 0, 1)
+      * clamp((255 - metrics.brightness) / 20, 0, 1);
+    const colorScore = clamp((metrics.redRatio - 0.36) / 0.28, 0, 1);
+    const textureScore = clamp((0.56 - metrics.spatialCv) / 0.4, 0, 1);
+    const motionScore = clamp((0.23 - metrics.motion) / 0.2, 0, 1);
+    const fractionScore = clamp((fraction - 0.2) / 0.65, 0, 1);
+    const score = clamp(0.2 * exposureScore + 0.3 * colorScore + 0.2 * textureScore
+      + 0.15 * motionScore + 0.15 * fractionScore, 0, 1);
+    return { valid: !reason, reason, score, ...metrics };
   }
 
   function estimateChannel(values, fps) {

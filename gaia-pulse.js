@@ -13,6 +13,18 @@
 
   function esc(s) { return String(s == null ? '' : s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c])); }
 
+  // Reject after `ms` if a promise never settles. Cross-origin iframes without
+  // allow="camera" (e.g. the GHL embed) can leave getUserMedia PENDING forever
+  // on iOS WebKit rather than rejecting — this keeps the UI from hanging.
+  function withTimeout(p, ms) {
+    return new Promise((resolve, reject) => {
+      const to = setTimeout(() => reject(new Error('timeout')), ms);
+      Promise.resolve(p).then((v) => { clearTimeout(to); resolve(v); }, (e) => { clearTimeout(to); reject(e); });
+    });
+  }
+  // Best-effort: are we running inside a (cross-origin) iframe?
+  function isFramed() { try { return window.self !== window.top; } catch (e) { return true; } }
+
   /* ---- one-time styles ------------------------------------------------- */
   function injectStyles() {
     if (document.getElementById('gaia-pulse-styles')) return;
@@ -148,6 +160,27 @@
     stream = null; video = null; sampleCanvas = null; sctx = null;
   }
 
+  // Shown when the camera can't be reached — most often because this is the GHL
+  // in-app view, whose iframe must delegate camera access (allow="camera"). We
+  // can't grant that from inside, so we offer the browser (where it works) and
+  // the tap reading (which is just as real).
+  function cameraUnavailable(card, framed) {
+    stopCamera();
+    const topUrl = 'https://gaiahealers.app/home.html?tool=pulse';
+    card.innerHTML = closeBtn()
+      + '<p class="gp-eyebrow">Camera unavailable</p>'
+      + '<h2 class="gp-title">Can’t reach the camera here</h2>'
+      + '<p class="gp-lead">' + (framed
+        ? 'This in-app view isn’t permitted to use the camera. Open Gaia in your browser for the camera reading — or tap your pulse below, it’s just as real.'
+        : 'The camera didn’t respond or was blocked. Tap your pulse below — it’s just as real a measurement.') + '</p>'
+      + '<div class="gp-actions">'
+      + (framed ? '<a class="gp-btn" href="' + esc(topUrl) + '" target="_blank" rel="noopener"><i class="ph ph-arrow-square-out" aria-hidden="true"></i> Open in browser</a>' : '')
+      + '<button type="button" class="gp-btn' + (framed ? '--ghost' : '') + '" data-gp-tapnow>Tap your pulse instead</button>'
+      + '</div>';
+    const tp = card.querySelector('[data-gp-tapnow]');
+    if (tp) tp.addEventListener('click', () => tapMode(card));
+  }
+
   async function measure(card) {
     if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) { tapMode(card, 'Camera isn’t available on this device.'); return; }
     try { pulseDsp(); } catch (error) { tapMode(card, error.message); return; }
@@ -171,20 +204,27 @@
     // These are preferences only: the actual delivered settings are read back
     // and displayed. We do not claim that WebKit exposes or pins a physical lens.
     const baseVideo = { facingMode: { ideal: 'environment' }, width: { ideal: 640 }, height: { ideal: 480 }, frameRate: { ideal: 30 } };
+    // Never wait forever: getUserMedia can hang pending in a camera-blocked iframe.
     try {
-      stream = await navigator.mediaDevices.getUserMedia({ video: baseVideo, audio: false });
+      stream = await withTimeout(navigator.mediaDevices.getUserMedia({ video: baseVideo, audio: false }), 8000);
     } catch (e1) {
-      try { stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false }); }
-      catch (e2) { tapMode(card, 'Camera permission was blocked. You can still tap your pulse.'); return; }
+      try { stream = await withTimeout(navigator.mediaDevices.getUserMedia({ video: true, audio: false }), 7000); }
+      catch (e2) { cameraUnavailable(card, isFramed()); return; }
     }
     const track = stream.getVideoTracks()[0];
-    // Modern WebKit and Chromium can expose torch. applyConstraints resolving is
-    // the useful signal; some iOS 18 builds reported stale torch in getSettings().
+
+    video = document.createElement('video');
+    video.className = 'gp-video'; video.playsInline = true; video.muted = true; video.setAttribute('playsinline', ''); video.srcObject = stream;
+    document.body.appendChild(video);
+    try { await withTimeout(video.play(), 4000); } catch (e) {}
+
+    // Torch AFTER the track is live and playing (some builds need that). Modern
+    // WebKit and Chromium can expose it; applyConstraints resolving is the signal.
     let torchOn = false;
     try {
       const caps = track && track.getCapabilities ? track.getCapabilities() : {};
       if (caps && caps.torch === true && track.applyConstraints) {
-        await track.applyConstraints({ advanced: [{ torch: true }] });
+        await withTimeout(track.applyConstraints({ advanced: [{ torch: true }] }), 2500);
         torchOn = true;
       }
     } catch (e) {}
@@ -194,10 +234,6 @@
     const cameraName = String(track && track.label || 'rear camera').replace(/[<>]/g, '');
     cameraEl.textContent = `${cameraName} · ${deliveredSize}${deliveredFps ? ` · ${deliveredFps.toFixed(0)} fps` : ''} · ${torchOn ? 'flash on' : 'flash unavailable'}`;
 
-    video = document.createElement('video');
-    video.className = 'gp-video'; video.playsInline = true; video.muted = true; video.setAttribute('playsinline', ''); video.srcObject = stream;
-    document.body.appendChild(video);
-    try { await video.play(); } catch (e) {}
     sampleCanvas = document.createElement('canvas'); sampleCanvas.width = 48; sampleCanvas.height = 48; sctx = sampleCanvas.getContext('2d', { willReadFrequently: true });
 
     const frames = [];

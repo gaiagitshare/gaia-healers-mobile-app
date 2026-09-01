@@ -180,6 +180,15 @@
   }
 
   window.GaiaBreath = { open, close };
+  // The in-app router (gaia-ui.js) intercepts links, strips the ?tool= param and
+  // switches views without a reload — so the auto-open below only fires on a
+  // fresh page load / deep link. Catch clicks on any link to this tool (the home
+  // free-tools grid) in the capture phase, ahead of the router, and open here.
+  document.addEventListener('click', function (e) {
+    const a = e.target && e.target.closest ? e.target.closest('a[href]') : null;
+    if (!a) return;
+    if (/[?&]tool=breath(?:&|$)/.test(a.getAttribute('href') || '')) { e.preventDefault(); e.stopImmediatePropagation(); open(); }
+  }, true);
   if (new URLSearchParams(window.location.search).get('tool') === 'breath') {
     if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', open); else open();
   }

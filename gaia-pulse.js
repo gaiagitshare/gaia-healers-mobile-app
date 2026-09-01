@@ -34,11 +34,16 @@
 .gp-btn--ghost{background:transparent;border:1px solid rgba(167,233,126,.3);color:#cfe6c7;box-shadow:none;min-height:46px;font-weight:600;}
 .gp-btn--link{background:none;border:none;color:#a7e97e;box-shadow:none;min-height:40px;font-size:.9rem;font-weight:600;width:auto;}
 .gp-actions{display:flex;flex-direction:column;gap:10px;margin-top:16px;}
-.gp-stage{position:relative;width:170px;height:170px;margin:8px auto 6px;display:grid;place-items:center;}
-.gp-ring{position:absolute;inset:0;border-radius:50%;border:2px solid rgba(167,233,126,.16);}
-.gp-heart{font-size:64px;color:#7dd956;line-height:1;filter:drop-shadow(0 0 18px rgba(92,184,46,.5));animation:gp-beat 1s ease-in-out infinite;}
-@keyframes gp-beat{0%,100%{transform:scale(1)}18%{transform:scale(1.16)}32%{transform:scale(1)}}
-@media (prefers-reduced-motion:reduce){.gp-heart{animation:none}}
+.gp-howto{width:190px;max-width:62vw;margin:2px auto 0;display:block;}
+.gp-howto .gp-lensG circle{fill:#10241699;stroke:rgba(180,220,180,.4);stroke-width:1.5;}
+.gp-ringpulse{transform-origin:100px 40px;animation:gp-ring 2.6s ease-out infinite;}
+@keyframes gp-ring{0%{transform:scale(.62);opacity:.85}70%{opacity:0}100%{transform:scale(1.3);opacity:0}}
+.gp-finger{transform-origin:100px 120px;animation:gp-press 2.6s ease-in-out infinite;}
+@keyframes gp-press{0%,100%{transform:translateY(9px)}42%,66%{transform:translateY(0)}}
+.gp-flash{animation:gp-flash 2.6s ease-in-out infinite;}
+@keyframes gp-flash{0%,38%,100%{opacity:.45}52%{opacity:1}}
+.gp-pill{display:inline-block;margin:8px auto 0;padding:5px 12px;border-radius:999px;background:rgba(92,184,46,.14);border:1px solid rgba(167,233,126,.3);color:#cfe6c7;font-size:.78rem;font-weight:700;}
+@media (prefers-reduced-motion:reduce){.gp-ringpulse,.gp-finger,.gp-flash{animation:none}.gp-finger{transform:translateY(0)}}
 .gp-bpm{font-size:3.4rem;font-weight:800;line-height:1;color:#fff;letter-spacing:-.03em;font-variant-numeric:tabular-nums;}
 .gp-bpm small{display:block;font-size:.8rem;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:rgba(234,244,234,.55);margin-top:4px;}
 .gp-wave{width:100%;height:64px;margin:6px 0 2px;display:block;}
@@ -178,9 +183,24 @@
   function intro(card) {
     card.innerHTML = closeBtn()
       + '<p class="gp-eyebrow">Energy Pulse</p>'
-      + '<div class="gp-stage"><span class="gp-ring"></span><i class="ph ph-heartbeat gp-heart" aria-hidden="true"></i></div>'
+      + '<svg class="gp-howto" viewBox="0 0 200 176" role="img" aria-label="Rest a fingertip over your phone’s rear camera, covering all of the lenses">'
+      + '<defs>'
+      + '<linearGradient id="gpSkin" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#e7bf97"/><stop offset=".5" stop-color="#dcae82"/><stop offset="1" stop-color="#c39970"/></linearGradient>'
+      + '<radialGradient id="gpContact" cx="50%" cy="50%" r="50%"><stop offset="0" stop-color="#9bf078" stop-opacity=".6"/><stop offset="1" stop-color="#9bf078" stop-opacity="0"/></radialGradient>'
+      + '</defs>'
+      + '<rect x="64" y="6" width="72" height="164" rx="17" fill="#0c1811" stroke="rgba(125,217,86,.28)" stroke-width="2"/>'
+      + '<rect x="76" y="16" width="48" height="48" rx="14" fill="#050f09" stroke="rgba(255,255,255,.13)" stroke-width="1.5"/>'
+      + '<g class="gp-lensG"><circle cx="90" cy="30" r="8.5"/><circle cx="110" cy="30" r="8.5"/><circle cx="90" cy="50" r="8.5"/></g>'
+      + '<circle cx="90" cy="30" r="3.1" fill="#173521"/><circle cx="110" cy="30" r="3.1" fill="#173521"/><circle cx="90" cy="50" r="3.1" fill="#173521"/>'
+      + '<circle class="gp-flash" cx="110" cy="50" r="3.6" fill="#ffd98a"/>'
+      + '<circle class="gp-ringpulse" cx="100" cy="40" r="30" fill="none" stroke="#7dd956" stroke-width="2"/>'
+      + '<g class="gp-finger"><path d="M78 176 L78 64 Q78 28 100 28 Q122 28 122 64 L122 176 Z" fill="url(#gpSkin)" fill-opacity="0.8" stroke="rgba(60,30,10,.28)" stroke-width="1"/>'
+      + '<ellipse cx="100" cy="48" rx="15" ry="19" fill="rgba(255,255,255,.12)"/>'
+      + '<ellipse cx="100" cy="42" rx="25" ry="16" fill="url(#gpContact)"/></g>'
+      + '</svg>'
+      + '<span class="gp-pill">Cover the whole camera — any lens is fine</span>'
       + '<h2 class="gp-title">A 60-second pulse read</h2>'
-      + '<p class="gp-lead">Rest a fingertip gently over your phone’s <strong>rear camera</strong> in good light and hold still. We estimate your heart rate from the tiny colour changes under your skin — you’ll see the live wave.</p>'
+      + '<p class="gp-lead">Rest the pad of a finger gently over your phone’s <strong>rear camera</strong> — cover the <strong>whole camera area</strong>, you don’t need to find the exact lens. Hold still in good light; we read your heart rate from the tiny colour changes under your skin.</p>'
       + '<div class="gp-actions">'
       + '<button type="button" class="gp-btn" data-gp-start><i class="ph ph-camera" aria-hidden="true"></i> Start reading</button>'
       + '<button type="button" class="gp-btn--link" data-gp-tap>No camera? Tap with your heartbeat →</button>'

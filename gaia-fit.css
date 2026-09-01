@@ -2150,3 +2150,97 @@ body.gaia-v2 .g-topbar__actions.gaia-header-actions { display: flex; align-items
 .g-resource__body em { font-style: normal; color: var(--g-text-dim, #93A597); font-size: 13px; }
 .g-resource__go { color: var(--g-accent, #A6E84B); flex: 0 0 auto; display: flex; }
 .g-resource__go i { font-size: 20px; }
+
+/* ============================================================================
+   iOS Safari opener fit — the full splash must sit inside the frame with the
+   Continue / Skip controls always fully visible, on every iPhone height and
+   with Safari's address bar + bottom toolbar showing. Previously the artwork
+   (13rem) and the steps block (min-height 12rem) were fixed, so on short
+   viewports the footer was pushed past the fold and clipped by overflow:hidden.
+   Fix: strict flex column (header/footer fixed, middle flexes), artwork + copy
+   sized to the SMALL viewport (svh), and the footer never allowed to shrink.
+   This block is at the end of the last cascade layer so it wins.
+   ========================================================================== */
+.gaia-splash-shell {
+  /* fill the live viewport (dvh) but never rely on it being large: the content
+     below is sized to the small-viewport state so nothing is ever clipped */
+  min-height: 100vh;
+  min-height: 100dvh;
+  /* keep the footer clear of the home indicator in Safari too (not only PWA) */
+  padding-bottom: max(1.1rem, calc(env(safe-area-inset-bottom) + 0.5rem));
+}
+
+.gaia-splash-header { flex: 0 0 auto; }
+.gaia-splash-content {
+  flex: 1 1 auto;
+  min-height: 0;          /* allow the middle to shrink instead of overflowing */
+  justify-content: center;
+}
+.gaia-splash-footer {
+  flex: 0 0 auto;         /* footer is always its natural size, pinned, in-frame */
+  padding-top: 0.35rem;   /* keep the progress dots off the body copy */
+}
+
+/* Artwork + its gap scale with the small-viewport height, so on a short Safari
+   frame the illustration shrinks rather than shoving the copy/footer off. */
+.gaia-splash-stage {
+  width: clamp(7rem, 26svh, 13rem);
+  height: clamp(7rem, 26svh, 13rem);
+  margin-bottom: clamp(0.85rem, 3svh, 2.25rem);
+}
+.gaia-splash-steps { min-height: 0; }   /* was 12rem/10rem — let copy set height */
+
+/* Short viewports (iPhone SE, or any iPhone with the Safari bars visible):
+   tighten type + spacing so header + artwork + copy + footer all fit. */
+@media (max-height: 700px) {
+  .gaia-splash-header { margin-bottom: 0.75rem; }
+  .gaia-splash-eyebrow { margin-bottom: 0.6rem; }
+  .gaia-splash-title { font-size: clamp(1.5rem, 6.2vw, 2rem); }
+  .gaia-splash-body { font-size: 0.9rem; line-height: 1.45; margin-top: 0.6rem; }
+  .gaia-splash-footer { gap: 0.85rem; }
+  .gaia-splash-btn { padding: 0.85rem 1.25rem; min-height: 46px; }
+}
+@media (max-height: 600px) {
+  .gaia-splash-stage {
+    width: clamp(5.25rem, 19svh, 7.5rem);
+    height: clamp(5.25rem, 19svh, 7.5rem);
+    margin-bottom: 0.6rem;
+  }
+  .gaia-splash-header { margin-bottom: 0.5rem; }
+  .gaia-splash-title { font-size: clamp(1.35rem, 5.6vw, 1.75rem); }
+  .gaia-splash-body { font-size: 0.85rem; line-height: 1.4; margin-top: 0.5rem; }
+  .gaia-splash-footer { gap: 0.7rem; }
+  .gaia-splash-btn { min-height: 44px; }
+  .gaia-splash-skip { min-height: 40px; }
+}
+
+/* ============================================================================
+   Universal viewport-fit hardening — every page, every size (phone / tablet /
+   desktop / landscape). Belt-and-suspenders on top of the app's existing
+   responsive system, targeting the whole class of "cut off / half there":
+     · iOS Safari address bar overshoot (bare 100vh),
+     · content hidden behind the fixed bottom tab bar,
+     · media / long content forcing sideways scroll.
+   ========================================================================== */
+
+/* 1) No sideways scroll, ever — on any page (splash, app, redirect shells). */
+html, body { max-width: 100%; overflow-x: clip; }
+
+/* 2) Media + embeds can never be wider than their column. */
+img, svg, video, canvas, iframe { max-width: 100%; }
+
+/* 3) Full-height helpers use the dynamic/small viewport instead of bare 100vh,
+   so the address bar can't push content out of frame. Progressive: the last
+   unit the browser understands wins; ancient browsers keep 100vh. */
+.min-h-screen { min-height: 100svh; min-height: 100dvh; }
+body.gaia-app, body.gaia-v2 { min-height: 100svh; min-height: 100dvh; }
+
+/* 4) App content must ALWAYS clear the fixed bottom tab bar. Its raised centre
+   button makes it ~90px tall; some short-height tiers reserved less than that,
+   hiding the primary CTAs (Join free / Sign in) behind the bar in landscape and
+   on short screens. Enforce a floor (max() never reduces the tuned values). */
+@media (max-width: 899px) {
+  body.gaia-v2.gaia-has-tabbar {
+    padding-bottom: max(6rem, calc(92px + env(safe-area-inset-bottom, 0px)));
+  }
+}

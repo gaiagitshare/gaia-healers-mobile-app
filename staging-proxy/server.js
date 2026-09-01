@@ -1400,7 +1400,7 @@ function learnCourseAlias(store, realId, name) {
   store.courseAliases.byId[id] = key;
   store.courseAliases.byKey[key] = id;
 }
-function resolveEntitlementMatch(list, resource, store) {
+function resolveEntitlementMatch(list, resource, store, authAliasIndex) {
   const rid = String(resource.rawId || '').trim();
   const nameKey = courseGroupKey(resource.name || '');
   const aliasKey = aliasKeyForId(store, rid);            // real id -> backfill key
@@ -1411,6 +1411,13 @@ function resolveEntitlementMatch(list, resource, store) {
     aliasKey,
     String(aliasId || '').toLowerCase(),
   ].filter(Boolean));
+  // Approved AUTHORITY aliases — the SAME registry grant resolution
+  // (resolveCourseGrant) uses — so a variant revoke/existing-row match lands on
+  // the canonical row a variant grant created. Deterministic: explicit approved
+  // aliases only; the ambiguity guard still lives in the grant authority gate.
+  const aidx = authAliasIndex || buildCourseAuthorityIndex();
+  const authHit = (nameKey && aidx.aliasByKey.get(nameKey)) || (rid && aidx.aliasById.get(rid.toLowerCase()));
+  if (authHit) { candidates.add(String(authHit.id).toLowerCase()); candidates.add(courseGroupKey(authHit.title)); }
   const nameLc = String(resource.name || '').toLowerCase();
   return list.findIndex((item) => {
     const iid = String(item.id || '').toLowerCase();

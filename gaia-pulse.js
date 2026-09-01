@@ -171,11 +171,13 @@
       + '<h2 class="gp-title">A careful pulse read</h2>'
       + '<p class="gp-lead">Rest the pad of a finger gently over <strong>one rear lens</strong>. If the flash turns on, cover the lens beside the light. Otherwise try each rear lens until the contact meter responds. Hold completely still; the app returns a number only when the optical signal passes every quality check.</p>'
       + '<div class="gp-actions">'
-      + '<button type="button" class="gp-btn" data-gp-start><i class="ph ph-camera" aria-hidden="true"></i> Start reading</button>'
-      + '<button type="button" class="gp-btn--link" data-gp-tap>No camera? Tap with your heartbeat →</button>'
+      + '<button type="button" class="gp-btn" data-gp-start><i class="ph ph-camera" aria-hidden="true"></i> Read with fingertip</button>'
+      + '<button type="button" class="gp-btn--ghost" data-gp-face><i class="ph ph-user-focus" aria-hidden="true"></i> Read with my face · beta</button>'
+      + '<button type="button" class="gp-btn--link" data-gp-tap>Or tap along with your heartbeat →</button>'
       + '</div>'
-      + '<p class="gp-note">This estimates your heart rate for reflection — not a medical device, and not a Bio-Well scan. Nothing is recorded or uploaded; it all happens on your phone.</p>';
-    card.querySelector('[data-gp-start]').addEventListener('click', () => measure(card));
+      + '<p class="gp-note">Three ways to read — if one won’t catch, try another. All estimate your heart rate for reflection — not a medical device, not a Bio-Well scan. Nothing is recorded or uploaded; it all happens on your phone.</p>';
+    card.querySelector('[data-gp-start]').addEventListener('click', () => measure(card, { mode: 'finger' }));
+    card.querySelector('[data-gp-face]').addEventListener('click', () => measure(card, { mode: 'face' }));
     card.querySelector('[data-gp-tap]').addEventListener('click', () => tapMode(card));
   }
 
@@ -213,20 +215,62 @@
     if (tp) tp.addEventListener('click', () => tapMode(card));
   }
 
-  async function measure(card) {
+  // ---- Face (front-camera) rPPG ---------------------------------------
+  // The pulse shows up as a faint green-channel oscillation in facial skin.
+  // Far weaker than contact PPG, so we relax amplitude but keep the spectral +
+  // autocorrelation agreement AND a two-half stability check, plus a light/skin/
+  // motion gate — so it stays honest (no locking onto motion or lighting).
+  function faceContact(frames) {
+    if (frames.length < 8) return { valid: false, reason: 'no_frames', score: 0 };
+    const recent = frames.slice(-30);
+    let r = 0, g = 0, b = 0, mot = 0;
+    for (const f of recent) { r += f.r; g += f.g; b += f.b; mot += f.motion || 0; }
+    const n = recent.length; r /= n; g /= n; b /= n; mot /= n;
+    const bright = (r + g + b) / 3;
+    if (bright < 40) return { valid: false, reason: 'too_dark', score: 0 };
+    if (bright > 245) return { valid: false, reason: 'overexposed', score: 0 };
+    if (!(r >= g * 0.95 && g >= b * 0.9)) return { valid: false, reason: 'no_face', score: 0.1 };
+    if (mot > 0.12) return { valid: false, reason: 'motion', score: 0.2 };
+    return { valid: true, reason: 'need_more', score: Math.max(0.3, Math.min(1, 1 - mot * 4)) };
+  }
+  function analyzeFace(frames, dsp) {
+    const contact = faceContact(frames);
+    if (!contact.valid) return { ok: false, reason: contact.reason, contact };
+    const uniform = dsp.resampleUniform(frames);
+    if (!uniform || uniform.duration < 8) return { ok: false, reason: 'need_more', contact, duration: uniform ? uniform.duration : 0 };
+    const bp = dsp._internal.bandpass(uniform.g, uniform.fps);
+    const spectral = dsp.spectralEstimate(bp, uniform.fps);
+    if (!spectral || spectral.snr < 2.6) return { ok: false, reason: 'weak_or_irregular_signal', contact, fps: uniform.measuredFps };
+    const acorr = dsp.autocorrelationEstimate(bp, uniform.fps, spectral.bpm);
+    if (!acorr || acorr.quality < 0.3) return { ok: false, reason: 'weak_or_irregular_signal', contact, fps: uniform.measuredFps };
+    if (Math.abs(spectral.bpm - acorr.bpm) > 7) return { ok: false, reason: 'channel_disagreement', contact, fps: uniform.measuredFps };
+    const half = Math.floor(bp.length / 2);
+    const s1 = dsp.spectralEstimate(bp.slice(0, half), uniform.fps);
+    const s2 = dsp.spectralEstimate(bp.slice(half), uniform.fps);
+    if (!s1 || !s2 || Math.abs(s1.bpm - s2.bpm) > 8) return { ok: false, reason: 'need_more_stability', contact, fps: uniform.measuredFps };
+    const quality = Math.min(1, 0.55 + (Math.min(spectral.snr, 10) - 2.6) * 0.05);
+    return { ok: true, bpm: (spectral.bpm + acorr.bpm) / 2, quality, contact, fps: uniform.measuredFps };
+  }
+
+  async function measure(card, opts) {
+    const face = !!(opts && opts.mode === 'face');
     if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) { tapMode(card, 'Camera isn’t available on this device.'); return; }
     let dsp;
     try { dsp = pulseDsp(); } catch (error) { tapMode(card, error.message); return; }
     if (cameraPolicyBlocked()) { cameraUnavailable(card, true); return; }
     card.innerHTML = closeBtn()
-      + '<p class="gp-eyebrow">Reading your pulse</p>'
+      + '<p class="gp-eyebrow">' + (face ? 'Face pulse · beta' : 'Reading your pulse') + '</p>'
       + '<div class="gp-bpm"><span data-gp-bpm>– –</span><small>BPM</small></div>'
       + '<canvas class="gp-wave" data-gp-wave width="300" height="64" aria-hidden="true"></canvas>'
       + '<div class="gp-quality" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i></div>'
       + '<p class="gp-status" data-gp-status>Requesting camera…</p>'
       + '<p class="gp-note" data-gp-camera style="margin-top:5px"></p>'
-      + '<div class="gp-actions"><button type="button" class="gp-btn--link" data-gp-tap>Trouble? Tap with your heartbeat →</button></div>';
+      + '<div class="gp-actions">'
+      + '<button type="button" class="gp-btn--link" data-gp-switch>' + (face ? 'Use fingertip + rear camera instead' : 'No luck? Use my face (front camera) instead') + '</button>'
+      + '<button type="button" class="gp-btn--link" data-gp-tap>Or tap with your heartbeat →</button>'
+      + '</div>';
     card.querySelector('[data-gp-tap]').addEventListener('click', () => { stopCamera(); tapMode(card); });
+    card.querySelector('[data-gp-switch]').addEventListener('click', () => { stopCamera(); measure(card, { mode: face ? 'finger' : 'face' }); });
     const statusEl = card.querySelector('[data-gp-status]');
     const bpmEl = card.querySelector('[data-gp-bpm]');
     const qEls = [...card.querySelectorAll('.gp-quality i')];
@@ -234,14 +278,13 @@
     const wave = card.querySelector('[data-gp-wave]');
     const wctx = wave.getContext('2d');
 
-    // Ask for the standard environment camera at a stable, modest size/rate.
-    // These are preferences only: the actual delivered settings are read back
-    // and displayed. We do not claim that WebKit exposes or pins a physical lens.
-    const baseVideo = { facingMode: { ideal: 'environment' }, width: { ideal: 640 }, height: { ideal: 480 }, frameRate: { ideal: 30 } };
+    // Finger mode uses the rear (environment) camera; face mode the front (user)
+    // camera. Delivered settings are read back and shown; no physical-lens claim.
+    const baseVideo = { facingMode: { ideal: face ? 'user' : 'environment' }, width: { ideal: 640 }, height: { ideal: 480 }, frameRate: { ideal: 30 } };
     // Use one request only. Retrying while the iOS permission sheet is open can
     // leave two competing captures and prevent either from becoming readable.
     try {
-      statusEl.textContent = 'Allow camera access, then cover one rear lens.';
+      statusEl.textContent = face ? 'Allow camera access, then fill the frame with your face.' : 'Allow camera access, then cover one rear lens.';
       stream = await requestCamera({ video: baseVideo, audio: false }, 25000);
     } catch (error) { cameraUnavailable(card, isFramed()); return; }
     const track = stream.getVideoTracks()[0];
@@ -256,18 +299,21 @@
     // Torch AFTER the track is live and playing (some builds need that). Modern
     // WebKit and Chromium can expose it; applyConstraints resolving is the signal.
     let torchOn = false;
-    try {
-      const caps = track && track.getCapabilities ? track.getCapabilities() : {};
-      if (caps && caps.torch === true && track.applyConstraints) {
-        await withTimeout(track.applyConstraints({ advanced: [{ torch: true }] }), 2500);
-        torchOn = true;
-      }
-    } catch (e) {}
+    if (!face) {
+      try {
+        const caps = track && track.getCapabilities ? track.getCapabilities() : {};
+        if (caps && caps.torch === true && track.applyConstraints) {
+          await withTimeout(track.applyConstraints({ advanced: [{ torch: true }] }), 2500);
+          torchOn = true;
+        }
+      } catch (e) {}
+    }
     const settings = track && track.getSettings ? track.getSettings() : {};
     const deliveredFps = Number(settings.frameRate) || 0;
     const deliveredSize = settings.width && settings.height ? `${settings.width}×${settings.height}` : 'size unknown';
-    const cameraName = String(track && track.label || 'rear camera').replace(/[<>]/g, '');
-    cameraEl.textContent = `${cameraName} · ${deliveredSize}${deliveredFps ? ` · ${deliveredFps.toFixed(0)} fps` : ''} · ${torchOn ? 'flash on' : 'flash unavailable'}`;
+    const cameraName = String(track && track.label || (face ? 'front camera' : 'rear camera')).replace(/[<>]/g, '');
+    const modeTag = face ? 'face mode' : (torchOn ? 'flash on' : 'flash unavailable');
+    cameraEl.textContent = `${cameraName} · ${deliveredSize}${deliveredFps ? ` · ${deliveredFps.toFixed(0)} fps` : ''} · ${modeTag}`;
 
     sampleCanvas = document.createElement('canvas'); sampleCanvas.width = 48; sampleCanvas.height = 48; sctx = sampleCanvas.getContext('2d', { willReadFrequently: true });
 
@@ -280,13 +326,15 @@
     let receivedFrames = 0;
     let useRafFallback = !video.requestVideoFrameCallback;
     captureActive = true;
-    statusEl.textContent = torchOn ? 'Flash on — cover the rear lens beside the light.' : 'Cover one rear lens; use bright, steady light.';
+    statusEl.textContent = face ? 'Fill the frame with your face; hold still in even light.'
+      : (torchOn ? 'Flash on — cover the rear lens beside the light.' : 'Cover one rear lens; use bright, steady light.');
 
     const reasonCopy = {
       no_frames: 'Waiting for camera frames…',
       too_dark: 'Too dark — move near a bright, steady light.',
       overexposed: 'Too bright — cover the active lens fully.',
       no_finger_contact: 'No fingertip contact yet — try the next rear lens.',
+      no_face: 'Center your face in the frame, in even light.',
       scene_texture: 'Cover the lens completely with the pad of your finger.',
       motion: 'Too much movement — rest your hand and hold still.',
       unstable_contact: 'Keep gentle, even contact over one lens.',
@@ -297,6 +345,13 @@
       common_mode_artifact: 'Movement detected instead of a pulse — rest your hand and retry.',
       unstable_rate: 'The rate is not stable yet — keep still and breathe normally.',
     };
+    if (face) Object.assign(reasonCopy, {
+      need_more: 'Face detected — measuring, hold still…',
+      need_more_stability: 'Almost there — hold still a few seconds longer…',
+      weak_or_irregular_signal: 'Signal weak — face brighter, even light, and hold very still.',
+      channel_disagreement: 'Movement or light change — hold still.',
+      motion: 'Hold your head still.',
+    });
 
     function scheduleFrame() {
       if (!captureActive || !video) return;
@@ -348,14 +403,14 @@
 
         if (now - lastAnalysisAt >= 700) {
           lastAnalysisAt = now;
-          const analysis = dsp.analyzePulse(frames);
+          const analysis = face ? analyzeFace(frames, dsp) : dsp.analyzePulse(frames);
           const visibleQuality = analysis.ok ? analysis.quality : (analysis.contact && analysis.contact.score) || 0;
           qEls.forEach((el, index) => el.classList.toggle('on', index < Math.round(visibleQuality * 5)));
           const elapsedSignal = frames.length > 1 ? (frames[frames.length - 1].t - frames[0].t) / 1000 : 0;
           statusEl.textContent = analysis.ok ? 'Clean optical pulse confirmed.'
-            : analysis.reason === 'need_more' ? `Contact found — collecting ${Math.min(8, Math.floor(elapsedSignal))}/8 seconds…`
+            : analysis.reason === 'need_more' ? `${face ? 'Face detected — measuring' : 'Contact found — collecting'} ${Math.min(8, Math.floor(elapsedSignal))}/8 seconds…`
               : (reasonCopy[analysis.reason] || 'Checking signal quality…');
-          if (!analysis.ok && elapsedSignal >= 4.8) {
+          if (!face && !analysis.ok && elapsedSignal >= 4.8) {
             const preview = dsp.previewPulse(frames);
             if (preview.ok) {
               bpmEl.textContent = Math.round(preview.bpm);
@@ -370,12 +425,13 @@
           }
           if (analysis.contact) {
             const c = analysis.contact;
-            cameraEl.textContent = `${cameraName} · ${deliveredSize}${deliveredFps ? ` · ${deliveredFps.toFixed(0)} fps` : ''} · ${torchOn ? 'flash on' : 'flash unavailable'} · signal ${Math.round(visibleQuality * 100)}%`;
+            cameraEl.textContent = `${cameraName} · ${deliveredSize}${deliveredFps ? ` · ${deliveredFps.toFixed(0)} fps` : ''} · ${modeTag} · signal ${Math.round(visibleQuality * 100)}%`;
           }
           if (analysis.ok && analysis.quality >= 0.5) { finish(analysis.bpm); return; }
         }
 
         if (performance.now() - startedAt > GIVEUP_MS) {
+          if (face) { tapMode(card, 'Couldn’t read a face pulse — try the fingertip camera, or tap below.'); return; }
           tapMode(card, 'Couldn’t get a clean pulse from the camera. Try tapping instead.');
           return;
         }
@@ -435,10 +491,14 @@
       + '<p class="gp-lead">' + (reason ? esc(reason) + ' ' : '') + 'Find your pulse (wrist or neck), then tap the circle in time with each heartbeat. Keep going for ~15 seconds.</p>'
       + '<div class="gp-tap" data-gp-taparea>Tap</div>'
       + '<p class="gp-status" data-gp-status>0 taps</p>'
-      + '<div class="gp-actions"><button type="button" class="gp-btn--ghost" data-gp-camera>Use the camera instead</button></div>';
+      + '<div class="gp-actions">'
+      + '<button type="button" class="gp-btn--ghost" data-gp-camera>Use fingertip camera</button>'
+      + '<button type="button" class="gp-btn--link" data-gp-faceb>Or read with my face (beta) →</button>'
+      + '</div>';
     const area = card.querySelector('[data-gp-taparea]');
     const status = card.querySelector('[data-gp-status]');
-    card.querySelector('[data-gp-camera]').addEventListener('click', () => measure(card));
+    card.querySelector('[data-gp-camera]').addEventListener('click', () => measure(card, { mode: 'finger' }));
+    card.querySelector('[data-gp-faceb]').addEventListener('click', () => measure(card, { mode: 'face' }));
     function onTap() {
       if (done) return;
       const t = performance.now(); taps.push(t);

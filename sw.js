@@ -1,4 +1,4 @@
-const CACHE_NAME = 'gaia-healers-20260902f-walltime';
+const CACHE_NAME = 'gaia-healers-20260902g-pressure';
 const APP_SHELL = [
   '/',
   '/home.html',

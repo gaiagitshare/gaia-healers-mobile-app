@@ -2214,6 +2214,33 @@ body.gaia-v2 .g-topbar__actions.gaia-header-actions { display: flex; align-items
   .gaia-splash-skip { min-height: 40px; }
 }
 
+/* Ultra-short — landscape phones (~740x360) and any viewport under ~430px tall.
+   The opener must still show every control in-frame, so the artwork, brand and
+   type collapse hard and the gaps tighten; the footer stays fixed and visible. */
+@media (max-height: 430px) {
+  .gaia-splash-shell {
+    padding-top: max(0.4rem, env(safe-area-inset-top));
+    padding-bottom: max(0.5rem, calc(env(safe-area-inset-bottom) + 0.35rem));
+  }
+  .gaia-splash-header { margin-bottom: 0.3rem; }
+  .gaia-splash-logo-mark { width: 1.75rem; height: 1.75rem; }
+  .gaia-splash-brand { font-size: 1rem; }
+  .gaia-splash-stage {
+    width: clamp(3rem, 14svh, 4.25rem);
+    height: clamp(3rem, 14svh, 4.25rem);
+    margin-bottom: 0.35rem;
+  }
+  .gaia-splash-eyebrow { margin-bottom: 0.35rem; padding: 0.2rem 0.65rem; font-size: 0.68rem; }
+  .gaia-splash-title { font-size: clamp(1.05rem, 4vw, 1.4rem); line-height: 1.08; }
+  .gaia-splash-body { font-size: 0.78rem; line-height: 1.3; margin-top: 0.3rem; max-width: 54ch; }
+  .gaia-splash-steps { min-height: 0; }
+  .gaia-splash-footer { gap: 0.45rem; padding-top: 0.15rem; }
+  .gaia-splash-progress { gap: 0.35rem; }
+  .gaia-splash-progress [data-splash-dot] { height: 0.4rem; }
+  .gaia-splash-btn { min-height: 40px; padding: 0.55rem 1rem; font-size: 0.95rem; }
+  .gaia-splash-skip { min-height: 32px; font-size: 0.82rem; }
+}
+
 /* ============================================================================
    Universal viewport-fit hardening — every page, every size (phone / tablet /
    desktop / landscape). Belt-and-suspenders on top of the app's existing

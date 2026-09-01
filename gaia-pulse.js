@@ -79,7 +79,7 @@
 .gp-actions{display:flex;flex-direction:column;gap:10px;margin-top:16px;}
 .gp-howto{width:190px;max-width:62vw;margin:2px auto 0;display:block;}
 .gp-howto .gp-lensG circle{fill:#10241699;stroke:rgba(180,220,180,.4);stroke-width:1.5;}
-.gp-ringpulse{transform-origin:100px 52px;animation:gp-ring 2.6s ease-out infinite;}
+.gp-ringpulse{transform-origin:108px 106px;animation:gp-ring 2.6s ease-out infinite;}
 @keyframes gp-ring{0%{transform:scale(.55);opacity:.9}70%{opacity:0}100%{transform:scale(1.5);opacity:0}}
 .gp-finger{transform-origin:100px 120px;animation:gp-press 2.6s ease-in-out infinite;}
 @keyframes gp-press{0%,100%{transform:translateY(9px)}42%,66%{transform:translateY(0)}}
@@ -155,21 +155,32 @@
   function intro(card) {
     card.innerHTML = closeBtn()
       + '<p class="gp-eyebrow">Energy Pulse</p>'
-      + '<svg class="gp-howto" viewBox="0 0 200 176" role="img" aria-label="Press the thumb-side of your wrist, over the radial pulse just below the crease, onto the rear camera and flash">'
+      + '<svg class="gp-howto" viewBox="0 0 210 168" role="img" aria-label="Hold the phone in one hand and rest its rear camera on the radial pulse — the thumb-side of your other inner wrist, just below the crease">'
       + '<defs>'
-      + '<linearGradient id="gpSkin" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#e7bf97"/><stop offset=".5" stop-color="#dcae82"/><stop offset="1" stop-color="#c39970"/></linearGradient>'
-      + '<radialGradient id="gpContact" cx="50%" cy="50%" r="50%"><stop offset="0" stop-color="#9bf078" stop-opacity=".7"/><stop offset="1" stop-color="#9bf078" stop-opacity="0"/></radialGradient>'
+      + '<linearGradient id="gpSkin" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#eac29b"/><stop offset="1" stop-color="#c99a72"/></linearGradient>'
+      + '<radialGradient id="gpContact" cx="50%" cy="50%" r="50%"><stop offset="0" stop-color="#9bf078" stop-opacity=".9"/><stop offset="1" stop-color="#9bf078" stop-opacity="0"/></radialGradient>'
       + '</defs>'
-      + '<rect x="62" y="6" width="76" height="164" rx="17" fill="#0c1811" stroke="rgba(125,217,86,.28)" stroke-width="2"/>'
-      + '<rect x="70" y="12" width="58" height="58" rx="17" fill="#050f09" stroke="rgba(255,255,255,.13)" stroke-width="1.5"/>'
-      + '<g class="gp-lensG"><circle cx="89" cy="30" r="10"/><circle cx="111" cy="30" r="10"/><circle cx="100" cy="52" r="10"/></g>'
-      + '<circle cx="89" cy="30" r="4" fill="#173521"/><circle cx="111" cy="30" r="4" fill="#173521"/><circle cx="100" cy="52" r="4" fill="#173521"/>'
-      + '<circle class="gp-flash" cx="117" cy="52" r="2.6" fill="#ffd98a"/>'
-      + '<circle class="gp-ringpulse" cx="100" cy="52" r="14" fill="none" stroke="#7dd956" stroke-width="2"/>'
-      + '<g class="gp-finger"><path d="M26 176 L26 100 Q26 72 58 68 Q100 60 150 58 Q176 57 176 82 L176 176 Z" fill="url(#gpSkin)" fill-opacity="0.9" stroke="rgba(60,30,10,.28)" stroke-width="1"/>'
-      + '<path d="M44 90 Q108 74 168 84 M42 110 Q108 92 170 102" fill="none" stroke="rgba(255,255,255,.12)" stroke-width="2"/>'
-      + '<ellipse cx="100" cy="52" rx="26" ry="18" fill="url(#gpContact)"/>'
-      + '<circle cx="100" cy="52" r="5" fill="#9bf078"/></g>'
+      // open palm-up inner forearm (left), fingers curling up, wrist toward the phone
+      + '<path d="M2 132 L2 96 Q2 82 24 82 L104 84 Q120 85 120 100 L120 118 Q120 132 104 132 Z" fill="url(#gpSkin)" stroke="rgba(70,40,15,.28)" stroke-width="1.5"/>'
+      + '<g fill="url(#gpSkin)" stroke="rgba(70,40,15,.26)" stroke-width="1.3">'
+      + '<path d="M14 84 Q8 58 22 55 Q34 54 34 82 Z"/>'
+      + '<path d="M32 82 Q28 52 42 50 Q55 51 52 80 Z"/>'
+      + '<path d="M50 82 Q49 54 63 53 Q75 55 70 82 Z"/>'
+      + '<path d="M68 84 Q70 62 82 64 Q92 68 86 86 Z"/>'
+      + '</g>'
+      // thumb on the radial side + the radial pulse point on the inner wrist
+      + '<path d="M104 108 Q120 110 121 96 Q120 84 106 88 Q98 94 98 102 Z" fill="url(#gpSkin)" stroke="rgba(70,40,15,.26)" stroke-width="1.3"/>'
+      + '<ellipse cx="108" cy="106" rx="22" ry="17" fill="url(#gpContact)"/>'
+      + '<circle class="gp-ringpulse" cx="108" cy="106" r="12" fill="none" stroke="#7dd956" stroke-width="2"/>'
+      // phone (right), held screen-up, rear camera on its near edge over the wrist pulse
+      + '<rect x="128" y="20" width="74" height="128" rx="15" fill="#0c1811" stroke="rgba(125,217,86,.3)" stroke-width="2"/>'
+      + '<rect x="135" y="30" width="60" height="108" rx="9" fill="#07120c"/>'
+      + '<path d="M141 78 h10 l4 -13 l6 24 l4 -11 h30" fill="none" stroke="#7dd956" stroke-width="2"/>'
+      + '<text x="165" y="108" text-anchor="middle" font-family="system-ui,-apple-system,sans-serif" font-weight="800" font-size="17" fill="#eaf4ea">72</text>'
+      + '<text x="165" y="121" text-anchor="middle" font-family="system-ui,-apple-system,sans-serif" font-size="7" fill="#9bbf9b" letter-spacing="1.5">BPM</text>'
+      + '<rect x="118" y="92" width="22" height="26" rx="7" fill="#050f09" stroke="rgba(255,255,255,.38)" stroke-width="1.1"/>'
+      + '<circle cx="124" cy="99" r="2.8" fill="#22452e"/><circle cx="134" cy="99" r="2.8" fill="#22452e"/><circle cx="124" cy="109" r="2.8" fill="#22452e"/>'
+      + '<circle class="gp-flash" cx="134" cy="109" r="1.5" fill="#ffd98a"/>'
       + '</svg>'
       + '<span class="gp-pill">Press your wrist pulse on the camera</span>'
       + '<h2 class="gp-title">A careful pulse read</h2>'

@@ -27,7 +27,7 @@
   }
 
   // Measures local high-frequency variation, not the overall light gradient.
-  // A fingertip lit by a nearby flash often has a bright hotspot and dark edge;
+  // Palm skin lit by a nearby flash often has a bright hotspot and dark edge;
   // global variance mistakes that smooth gradient for scene detail. Adjacent
   // block differences preserve the useful "is this a textured scene?" signal.
   function spatialTexture(grid, width = 8, height = 8) {
@@ -201,7 +201,7 @@
       const texture = Number.isFinite(frame.spatialCv) ? frame.spatialCv : 1;
       const motion = Number.isFinite(frame.motion) ? frame.motion : 1;
       brightness.push(bright); redRatios.push(redRatio); textures.push(texture); motions.push(motion);
-      // iPhone auto-white-balance can make a torch-lit fingertip yellow/pink
+      // iPhone auto-white-balance can make torch-lit skin yellow/pink
       // rather than strongly red. Keep the gate tolerant to that variation;
       // spatial uniformity, motion and the later cross-channel DSP still reject
       // ordinary scenes and rhythmic whole-frame movement.
@@ -291,12 +291,12 @@
     };
   }
 
-  function segmentEstimates(values, fps) {
+  function segmentEstimates(values, fps, thresholds) {
     const segmentLength = Math.round(fps * 6);
     if (values.length < segmentLength + Math.round(fps * 2)) return [];
     const lastStart = values.length - segmentLength;
     const starts = [0, Math.round(lastStart / 2), lastStart];
-    return starts.map((start) => estimateChannel(values.slice(start, start + segmentLength), fps)).filter(Boolean);
+    return starts.map((start) => estimateChannel(values.slice(start, start + segmentLength), fps, thresholds)).filter(Boolean);
   }
 
   function analyzePulse(frames) {
@@ -314,7 +314,7 @@
     }
     const [channel, chosen] = candidates[0];
     const blue = estimateChannel(uniform.b, uniform.fps);
-    // Whole-scene movement changes R/G/B together. A fingertip PPG signal should
+    // Whole-scene movement changes R/G/B together. Contact PPG should
     // be materially stronger in red/green than in blue.
     if ((channel === 'red' || channel === 'green') && blue
       && blue.pulsatility >= chosen.pulsatility * 0.65 && Math.abs(blue.bpm - chosen.bpm) <= 6) {
@@ -368,10 +368,86 @@
     return { ok: true, bpm: chosen.bpm, channel, contact, duration: uniform.duration };
   }
 
+  // Contactless facial rPPG is much weaker than palm contact PPG. Keep it in
+  // this DOM-free module so the exact production path is testable. This gate
+  // only checks that a well-lit, still, skin-toned region is centered; the
+  // spectral/autocorrelation and stability gates below decide whether a pulse
+  // is present. It intentionally fails closed when they do not agree.
+  function faceContactMetrics(frames) {
+    const recent = frames.slice(-Math.min(frames.length, 90));
+    if (recent.length < 8) return { valid: false, reason: 'no_frames', score: 0 };
+    const reds = recent.map((frame) => frame.r);
+    const greens = recent.map((frame) => frame.g);
+    const blues = recent.map((frame) => frame.b);
+    const motions = recent.map((frame) => Number.isFinite(frame.motion) ? frame.motion : 1);
+    const r = median(reds); const g = median(greens); const b = median(blues);
+    const brightness = (r + g + b) / 3;
+    const motion = median(motions);
+    let reason = '';
+    if (brightness < 35) reason = 'too_dark';
+    else if (brightness > 245) reason = 'overexposed';
+    // Broad enough for varied skin tones and camera white balance, but rejects
+    // strongly blue/green backgrounds in the center sampling region.
+    else if (!(r >= g * 0.85 && g >= b * 0.72 && r >= b * 0.92)) reason = 'no_face';
+    else if (motion > 0.12) reason = 'motion';
+    const exposureScore = clamp((brightness - 25) / 55, 0, 1) * clamp((252 - brightness) / 35, 0, 1);
+    const motionScore = clamp((0.15 - motion) / 0.13, 0, 1);
+    const colorScore = clamp((r / Math.max(1, b) - 0.85) / 0.55, 0, 1);
+    return { valid: !reason, reason, score: clamp(0.4 * exposureScore + 0.4 * motionScore + 0.2 * colorScore, 0, 1), brightness, motion, r, g, b };
+  }
+
+  function faceCandidate(frames, maxSeconds, minDuration, thresholds) {
+    const contact = faceContactMetrics(frames);
+    if (!contact.valid) return { ok: false, reason: contact.reason, contact };
+    const uniform = resampleUniform(frames, maxSeconds);
+    if (!uniform || uniform.duration < minDuration) {
+      return { ok: false, reason: 'need_more', contact, duration: uniform ? uniform.duration : 0 };
+    }
+    const channels = channelCandidates(uniform, thresholds);
+    if (!channels.ranked.length) return { ok: false, reason: 'weak_or_irregular_signal', contact, fps: uniform.measuredFps };
+    const [channel, chosen] = channels.ranked[0];
+    const blue = estimateChannel(uniform.b, uniform.fps, thresholds);
+    if ((channel === 'red' || channel === 'green') && blue
+      && blue.pulsatility >= chosen.pulsatility * 0.65 && Math.abs(blue.bpm - chosen.bpm) <= 6) {
+      return { ok: false, reason: 'common_mode_artifact', contact, fps: uniform.measuredFps };
+    }
+    return { ok: true, contact, uniform, channels, channel, chosen };
+  }
+
+  function previewFace(frames) {
+    const candidate = faceCandidate(frames, 8, 5, { minSnr: 2.2, minAutocorrelation: 0.25 });
+    if (!candidate.ok) return candidate;
+    return { ok: true, bpm: candidate.chosen.bpm, channel: candidate.channel, contact: candidate.contact, duration: candidate.uniform.duration };
+  }
+
+  function analyzeFace(frames) {
+    const thresholds = { minSnr: 2.6, minAutocorrelation: 0.3 };
+    const candidate = faceCandidate(frames, 12, 9, thresholds);
+    if (!candidate.ok) return candidate;
+    const { contact, uniform, channels, channel, chosen } = candidate;
+    const values = channels.values[channel];
+    const segmentLength = Math.round(uniform.fps * 5);
+    const starts = [0, Math.max(0, values.length - segmentLength)];
+    const segments = starts.map((start) => estimateChannel(values.slice(start, start + segmentLength), uniform.fps, thresholds)).filter(Boolean);
+    if (segments.length < 2) return { ok: false, reason: 'need_more_stability', contact, fps: uniform.measuredFps };
+    const segmentBpms = segments.map((item) => item.bpm);
+    if (Math.max(...segmentBpms) - Math.min(...segmentBpms) > 8) {
+      return { ok: false, reason: 'unstable_rate', contact, fps: uniform.measuredFps };
+    }
+    const bpm = median([chosen.bpm, ...segmentBpms]);
+    const quality = clamp(0.3 * contact.score
+      + 0.35 * clamp((chosen.autocorrelationQuality - 0.25) / 0.55, 0, 1)
+      + 0.35 * clamp((chosen.spectralSnr - 2.2) / 8, 0, 1), 0, 1);
+    return { ok: true, bpm, quality, channel, contact, fps: uniform.measuredFps, duration: uniform.duration, segmentBpms };
+  }
+
   return {
     analyzePulse,
     previewPulse,
+    analyzeFace,
+    previewFace,
     contactMetrics,
+    faceContactMetrics,
     resampleUniform,
     estimateChannel,
     differentialChannel,

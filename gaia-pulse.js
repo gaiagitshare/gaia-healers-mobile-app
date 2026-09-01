@@ -1,6 +1,6 @@
 /** Gaia — Energy Pulse.
  * A real camera pulse estimate. Primary method: camera photoplethysmography
- * (PPG) — the fingertip over the rear camera modulates the red channel with
+ * (PPG) — the fleshy base of the thumb over the rear camera modulates color
  * each heartbeat; spectral and autocorrelation estimates must agree before we
  * you can see it working. Fallback (any device, no camera): tap along with
  * your heartbeat. No data leaves the phone; the camera frames are analysed in
@@ -91,6 +91,9 @@
 .gp-bpm small{display:block;font-size:.8rem;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:rgba(234,244,234,.55);margin-top:4px;}
 .gp-wave{width:100%;height:64px;margin:6px 0 2px;display:block;}
 .gp-video{position:fixed;width:2px;height:2px;opacity:.01;pointer-events:none;right:0;bottom:0;}
+.gp-face-preview{width:150px;height:150px;margin:4px auto 10px;border-radius:50%;overflow:hidden;position:relative;background:#050a07;border:2px solid rgba(167,233,126,.38);box-shadow:0 0 0 5px rgba(92,184,46,.07);}
+.gp-face-preview::after{content:'';position:absolute;inset:17px 24px;border:1px dashed rgba(255,255,255,.5);border-radius:48% 48% 44% 44%;pointer-events:none;}
+.gp-video.gp-video--face{position:absolute;inset:0;width:100%;height:100%;opacity:1;right:auto;bottom:auto;object-fit:cover;transform:scaleX(-1);pointer-events:none;}
 .gp-status{font-size:.86rem;color:rgba(234,244,234,.75);min-height:1.3em;margin:8px 0 0;}
 .gp-quality{display:flex;gap:4px;justify-content:center;margin:10px 0 2px;}
 .gp-quality i{width:26px;height:5px;border-radius:99px;background:rgba(255,255,255,.14);transition:background .3s;}
@@ -152,7 +155,7 @@
   function intro(card) {
     card.innerHTML = closeBtn()
       + '<p class="gp-eyebrow">Energy Pulse</p>'
-      + '<svg class="gp-howto" viewBox="0 0 200 176" role="img" aria-label="Cover one lens of your phone’s rear camera with a fingertip; slide to another lens if it is not reading">'
+      + '<svg class="gp-howto" viewBox="0 0 200 176" role="img" aria-label="Rest the fleshy base of your thumb over the rear camera and flash">'
       + '<defs>'
       + '<linearGradient id="gpSkin" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#e7bf97"/><stop offset=".5" stop-color="#dcae82"/><stop offset="1" stop-color="#c39970"/></linearGradient>'
       + '<radialGradient id="gpContact" cx="50%" cy="50%" r="50%"><stop offset="0" stop-color="#9bf078" stop-opacity=".7"/><stop offset="1" stop-color="#9bf078" stop-opacity="0"/></radialGradient>'
@@ -163,15 +166,15 @@
       + '<circle cx="89" cy="30" r="4" fill="#173521"/><circle cx="111" cy="30" r="4" fill="#173521"/><circle cx="100" cy="52" r="4" fill="#173521"/>'
       + '<circle class="gp-flash" cx="117" cy="52" r="2.6" fill="#ffd98a"/>'
       + '<circle class="gp-ringpulse" cx="100" cy="52" r="14" fill="none" stroke="#7dd956" stroke-width="2"/>'
-      + '<g class="gp-finger"><path d="M84 176 L84 60 Q84 40 100 40 Q116 40 116 60 L116 176 Z" fill="url(#gpSkin)" fill-opacity="0.92" stroke="rgba(60,30,10,.28)" stroke-width="1"/>'
-      + '<ellipse cx="100" cy="56" rx="12" ry="16" fill="rgba(255,255,255,.12)"/>'
-      + '<ellipse cx="100" cy="52" rx="17" ry="12" fill="url(#gpContact)"/></g>'
+      + '<g class="gp-finger"><path d="M42 176 L42 92 Q42 65 63 54 Q67 30 88 25 Q113 19 127 45 Q158 52 158 86 L158 176 Z" fill="url(#gpSkin)" fill-opacity="0.92" stroke="rgba(60,30,10,.28)" stroke-width="1"/>'
+      + '<path d="M58 71 Q98 44 143 68 M55 89 Q99 64 145 88" fill="none" stroke="rgba(255,255,255,.14)" stroke-width="2"/>'
+      + '<ellipse cx="102" cy="51" rx="48" ry="29" fill="url(#gpContact)"/></g>'
       + '</svg>'
-      + '<span class="gp-pill">Cover one lens — slide to another if it’s not reading</span>'
+      + '<span class="gp-pill">Use the fleshy base of your thumb</span>'
       + '<h2 class="gp-title">A careful pulse read</h2>'
-      + '<p class="gp-lead">Rest the pad of a finger gently over <strong>one rear lens</strong>. If the flash turns on, cover the lens beside the light. Otherwise try each rear lens until the contact meter responds. Hold completely still; the app returns a number only when the optical signal passes every quality check.</p>'
+      + '<p class="gp-lead">Gently rest the <strong>fleshy area at the base of your thumb, near the wrist crease</strong>, across the rear camera cluster and flash. Use light, even contact and keep your hand completely still. The app returns a number only when the optical signal passes every quality check.</p>'
       + '<div class="gp-actions">'
-      + '<button type="button" class="gp-btn" data-gp-start><i class="ph ph-camera" aria-hidden="true"></i> Read with fingertip</button>'
+      + '<button type="button" class="gp-btn" data-gp-start><i class="ph ph-camera" aria-hidden="true"></i> Read with base of thumb</button>'
       + '<button type="button" class="gp-btn--ghost" data-gp-face><i class="ph ph-user-focus" aria-hidden="true"></i> Read with my face · beta</button>'
       + '<button type="button" class="gp-btn--link" data-gp-tap>Or tap along with your heartbeat →</button>'
       + '</div>'
@@ -215,43 +218,6 @@
     if (tp) tp.addEventListener('click', () => tapMode(card));
   }
 
-  // ---- Face (front-camera) rPPG ---------------------------------------
-  // The pulse shows up as a faint green-channel oscillation in facial skin.
-  // Far weaker than contact PPG, so we relax amplitude but keep the spectral +
-  // autocorrelation agreement AND a two-half stability check, plus a light/skin/
-  // motion gate — so it stays honest (no locking onto motion or lighting).
-  function faceContact(frames) {
-    if (frames.length < 8) return { valid: false, reason: 'no_frames', score: 0 };
-    const recent = frames.slice(-30);
-    let r = 0, g = 0, b = 0, mot = 0;
-    for (const f of recent) { r += f.r; g += f.g; b += f.b; mot += f.motion || 0; }
-    const n = recent.length; r /= n; g /= n; b /= n; mot /= n;
-    const bright = (r + g + b) / 3;
-    if (bright < 40) return { valid: false, reason: 'too_dark', score: 0 };
-    if (bright > 245) return { valid: false, reason: 'overexposed', score: 0 };
-    if (!(r >= g * 0.95 && g >= b * 0.9)) return { valid: false, reason: 'no_face', score: 0.1 };
-    if (mot > 0.12) return { valid: false, reason: 'motion', score: 0.2 };
-    return { valid: true, reason: 'need_more', score: Math.max(0.3, Math.min(1, 1 - mot * 4)) };
-  }
-  function analyzeFace(frames, dsp) {
-    const contact = faceContact(frames);
-    if (!contact.valid) return { ok: false, reason: contact.reason, contact };
-    const uniform = dsp.resampleUniform(frames);
-    if (!uniform || uniform.duration < 8) return { ok: false, reason: 'need_more', contact, duration: uniform ? uniform.duration : 0 };
-    const bp = dsp._internal.bandpass(uniform.g, uniform.fps);
-    const spectral = dsp.spectralEstimate(bp, uniform.fps);
-    if (!spectral || spectral.snr < 2.6) return { ok: false, reason: 'weak_or_irregular_signal', contact, fps: uniform.measuredFps };
-    const acorr = dsp.autocorrelationEstimate(bp, uniform.fps, spectral.bpm);
-    if (!acorr || acorr.quality < 0.3) return { ok: false, reason: 'weak_or_irregular_signal', contact, fps: uniform.measuredFps };
-    if (Math.abs(spectral.bpm - acorr.bpm) > 7) return { ok: false, reason: 'channel_disagreement', contact, fps: uniform.measuredFps };
-    const half = Math.floor(bp.length / 2);
-    const s1 = dsp.spectralEstimate(bp.slice(0, half), uniform.fps);
-    const s2 = dsp.spectralEstimate(bp.slice(half), uniform.fps);
-    if (!s1 || !s2 || Math.abs(s1.bpm - s2.bpm) > 8) return { ok: false, reason: 'need_more_stability', contact, fps: uniform.measuredFps };
-    const quality = Math.min(1, 0.55 + (Math.min(spectral.snr, 10) - 2.6) * 0.05);
-    return { ok: true, bpm: (spectral.bpm + acorr.bpm) / 2, quality, contact, fps: uniform.measuredFps };
-  }
-
   async function measure(card, opts) {
     const face = !!(opts && opts.mode === 'face');
     if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) { tapMode(card, 'Camera isn’t available on this device.'); return; }
@@ -260,13 +226,14 @@
     if (cameraPolicyBlocked()) { cameraUnavailable(card, true); return; }
     card.innerHTML = closeBtn()
       + '<p class="gp-eyebrow">' + (face ? 'Face pulse · beta' : 'Reading your pulse') + '</p>'
+      + (face ? '<div class="gp-face-preview" data-gp-preview aria-label="Live front camera preview"></div>' : '')
       + '<div class="gp-bpm"><span data-gp-bpm>– –</span><small>BPM</small></div>'
       + '<canvas class="gp-wave" data-gp-wave width="300" height="64" aria-hidden="true"></canvas>'
       + '<div class="gp-quality" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i></div>'
       + '<p class="gp-status" data-gp-status>Requesting camera…</p>'
       + '<p class="gp-note" data-gp-camera style="margin-top:5px"></p>'
       + '<div class="gp-actions">'
-      + '<button type="button" class="gp-btn--link" data-gp-switch>' + (face ? 'Use fingertip + rear camera instead' : 'No luck? Use my face (front camera) instead') + '</button>'
+      + '<button type="button" class="gp-btn--link" data-gp-switch>' + (face ? 'Use base of thumb + rear camera instead' : 'No luck? Use my face (front camera) instead') + '</button>'
       + '<button type="button" class="gp-btn--link" data-gp-tap>Or tap with your heartbeat →</button>'
       + '</div>';
     card.querySelector('[data-gp-tap]').addEventListener('click', () => { stopCamera(); tapMode(card); });
@@ -278,21 +245,22 @@
     const wave = card.querySelector('[data-gp-wave]');
     const wctx = wave.getContext('2d');
 
-    // Finger mode uses the rear (environment) camera; face mode the front (user)
+    // Palm mode uses the rear (environment) camera; face mode the front (user)
     // camera. Delivered settings are read back and shown; no physical-lens claim.
     const baseVideo = { facingMode: { ideal: face ? 'user' : 'environment' }, width: { ideal: 640 }, height: { ideal: 480 }, frameRate: { ideal: 30 } };
     // Use one request only. Retrying while the iOS permission sheet is open can
     // leave two competing captures and prevent either from becoming readable.
     try {
-      statusEl.textContent = face ? 'Allow camera access, then fill the frame with your face.' : 'Allow camera access, then cover one rear lens.';
+      statusEl.textContent = face ? 'Allow camera access, then center your face in the guide.' : 'Allow camera access, then cover the camera cluster with the base of your thumb.';
       stream = await requestCamera({ video: baseVideo, audio: false }, 25000);
     } catch (error) { cameraUnavailable(card, isFramed()); return; }
     const track = stream.getVideoTracks()[0];
 
     video = document.createElement('video');
-    video.className = 'gp-video'; video.playsInline = true; video.muted = true;
+    video.className = face ? 'gp-video gp-video--face' : 'gp-video'; video.playsInline = true; video.muted = true;
     video.setAttribute('playsinline', ''); video.setAttribute('autoplay', ''); video.srcObject = stream;
-    document.body.appendChild(video);
+    const preview = face && card.querySelector('[data-gp-preview]');
+    (preview || document.body).appendChild(video);
     try { await withTimeout(video.play(), 5000); }
     catch (e) { cameraUnavailable(card, isFramed()); return; }
 
@@ -326,18 +294,18 @@
     let receivedFrames = 0;
     let useRafFallback = !video.requestVideoFrameCallback;
     captureActive = true;
-    statusEl.textContent = face ? 'Fill the frame with your face; hold still in even light.'
-      : (torchOn ? 'Flash on — cover the rear lens beside the light.' : 'Cover one rear lens; use bright, steady light.');
+    statusEl.textContent = face ? 'Center your face in the oval; hold still in bright, even light.'
+      : (torchOn ? 'Flash on — rest the base of your thumb across the camera cluster.' : 'Cover the camera cluster with the base of your thumb; use bright, steady light.');
 
     const reasonCopy = {
       no_frames: 'Waiting for camera frames…',
       too_dark: 'Too dark — move near a bright, steady light.',
       overexposed: 'Too bright — cover the active lens fully.',
-      no_finger_contact: 'No fingertip contact yet — try the next rear lens.',
+      no_finger_contact: 'No palm contact yet — reposition the fleshy base of your thumb over the camera and flash.',
       no_face: 'Center your face in the frame, in even light.',
-      scene_texture: 'Cover the lens completely with the pad of your finger.',
+      scene_texture: 'Cover the active camera fully with the fleshy base of your thumb.',
       motion: 'Too much movement — rest your hand and hold still.',
-      unstable_contact: 'Keep gentle, even contact over one lens.',
+      unstable_contact: 'Keep gentle, even contact with the base of your thumb.',
       need_more: 'Contact found — collecting a clean pulse signal…',
       need_more_stability: 'Pulse found — hold still a few seconds longer…',
       weak_or_irregular_signal: 'Signal weak — press very gently (hard pressure hides the pulse) and hold still.',
@@ -403,17 +371,17 @@
 
         if (now - lastAnalysisAt >= 700) {
           lastAnalysisAt = now;
-          const analysis = face ? analyzeFace(frames, dsp) : dsp.analyzePulse(frames);
+          const analysis = face ? dsp.analyzeFace(frames) : dsp.analyzePulse(frames);
           const visibleQuality = analysis.ok ? analysis.quality : (analysis.contact && analysis.contact.score) || 0;
           qEls.forEach((el, index) => el.classList.toggle('on', index < Math.round(visibleQuality * 5)));
           const elapsedSignal = frames.length > 1 ? (frames[frames.length - 1].t - frames[0].t) / 1000 : 0;
           statusEl.textContent = analysis.ok ? 'Clean optical pulse confirmed.'
             : analysis.reason === 'need_more' ? `${face ? 'Face detected — measuring' : 'Contact found — collecting'} ${Math.min(8, Math.floor(elapsedSignal))}/8 seconds…`
               : (reasonCopy[analysis.reason] || 'Checking signal quality…');
-          if (!face && !analysis.ok && elapsedSignal >= 4.8) {
-            const preview = dsp.previewPulse(frames);
-            if (preview.ok) {
-              bpmEl.textContent = Math.round(preview.bpm);
+          if (!analysis.ok && elapsedSignal >= 4.8) {
+            const liveEstimate = face ? dsp.previewFace(frames) : dsp.previewPulse(frames);
+            if (liveEstimate.ok) {
+              bpmEl.textContent = Math.round(liveEstimate.bpm);
               const label = bpmEl.parentNode && bpmEl.parentNode.querySelector('small');
               if (label) label.textContent = 'BPM · checking';
               statusEl.textContent = 'Pulse found — confirming that it stays stable…';
@@ -433,7 +401,7 @@
         }
 
         if (performance.now() - startedAt > GIVEUP_MS) {
-          if (face) { tapMode(card, 'Couldn’t read a face pulse — try the fingertip camera, or tap below.'); return; }
+          if (face) { tapMode(card, 'Couldn’t verify a face pulse — try the base-of-thumb camera, or tap below.'); return; }
           tapMode(card, 'Couldn’t get a clean pulse from the camera. Try tapping instead.');
           return;
         }
@@ -494,7 +462,7 @@
       + '<div class="gp-tap" data-gp-taparea>Tap</div>'
       + '<p class="gp-status" data-gp-status>0 taps</p>'
       + '<div class="gp-actions">'
-      + '<button type="button" class="gp-btn--ghost" data-gp-camera>Use fingertip camera</button>'
+      + '<button type="button" class="gp-btn--ghost" data-gp-camera>Use base-of-thumb camera</button>'
       + '<button type="button" class="gp-btn--link" data-gp-faceb>Or read with my face (beta) →</button>'
       + '</div>';
     const area = card.querySelector('[data-gp-taparea]');

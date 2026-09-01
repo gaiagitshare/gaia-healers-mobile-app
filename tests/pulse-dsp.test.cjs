@@ -45,6 +45,30 @@ function makeFrames({
   return frames;
 }
 
+function makeFaceFrames({ bpm = 72, fps = 30, duration = 12, mode = 'face', seed = 19 } = {}) {
+  const random = seededNoise(seed);
+  const frames = [];
+  for (let index = 0; index < fps * duration; index += 1) {
+    const t = index * (1000 / fps);
+    const phase = 2 * Math.PI * (bpm / 60) * t / 1000;
+    const pulse = Math.sin(phase) + 0.16 * Math.sin(2 * phase + 0.3);
+    const exposure = 0.0015 * Math.sin(2 * Math.PI * 0.22 * t / 1000);
+    const common = mode === 'common' ? 0.008 * pulse : exposure;
+    const greenPulse = mode === 'face' ? 0.0022 * pulse : 0;
+    const redPulse = mode === 'face' ? 0.0007 * pulse : 0;
+    const noise = random() * 0.035;
+    frames.push({
+      t,
+      r: 154 * (1 + common + redPulse) + noise,
+      g: 121 * (1 + common + greenPulse) + noise,
+      b: 91 * (1 + common) + noise,
+      spatialCv: 0.12,
+      motion: mode === 'moving' ? 0.22 : 0.004,
+    });
+  }
+  return frames;
+}
+
 test('accepts a yellow/pink iPhone-white-balanced fingertip signal', () => {
   const frames = makeFrames({ bpm: 78, mode: 'iphone-yellow', seed: 78 });
   const result = dsp.analyzePulse(frames);
@@ -53,6 +77,25 @@ test('accepts a yellow/pink iPhone-white-balanced fingertip signal', () => {
   const preview = dsp.previewPulse(frames);
   assert.equal(preview.ok, true, preview.reason);
   assert.ok(Math.abs(preview.bpm - 78) < 2);
+});
+
+test('face beta recovers a weak green-channel facial pulse', () => {
+  const frames = makeFaceFrames({ bpm: 76 });
+  const preview = dsp.previewFace(frames);
+  assert.equal(preview.ok, true, preview.reason);
+  assert.ok(Math.abs(preview.bpm - 76) < 3, `${preview.bpm} vs 76`);
+  const result = dsp.analyzeFace(frames);
+  assert.equal(result.ok, true, result.reason);
+  assert.ok(Math.abs(result.bpm - 76) < 3, `${result.bpm} vs 76`);
+});
+
+test('face beta rejects common-mode light cadence and excessive motion', () => {
+  const cadence = dsp.analyzeFace(makeFaceFrames({ bpm: 90, mode: 'common' }));
+  assert.equal(cadence.ok, false, 'locked onto whole-frame light cadence');
+  assert.equal(cadence.reason, 'common_mode_artifact');
+  const moving = dsp.analyzeFace(makeFaceFrames({ mode: 'moving' }));
+  assert.equal(moving.ok, false);
+  assert.equal(moving.reason, 'motion');
 });
 
 test('local texture ignores a smooth flash hotspot but catches a detailed scene', () => {
@@ -151,6 +194,8 @@ test('production capture is frame-clocked and has no timed BPM acceptance', () =
   assert.equal((source.match(/mediaDevices\.getUserMedia\(/g) || []).length, 1, 'one camera request path only');
   assert.match(source, /cameraPolicyBlocked\(\)/);
   assert.match(source, /analyzePulse\(frames\)/);
+  assert.match(source, /dsp\.analyzeFace\(frames\)/);
+  assert.match(source, /gp-video--face/);
   assert.match(source, /if \(analysis\.ok\) \{ finish\(analysis\.bpm\)/);
   assert.doesNotMatch(source, /function estimateBpm/);
   assert.doesNotMatch(source, /elapsed\s*>\s*40000/);

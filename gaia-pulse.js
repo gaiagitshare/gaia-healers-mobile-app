@@ -249,7 +249,10 @@
 
     // Palm mode uses the rear (environment) camera; face mode the front (user)
     // camera. Delivered settings are read back and shown; no physical-lens claim.
-    const baseVideo = { facingMode: { ideal: face ? 'user' : 'environment' }, width: { ideal: 640 }, height: { ideal: 480 }, frameRate: { ideal: 30 } };
+    // Low resolution on purpose: reading frames from a big stream provokes iOS
+    // thermal throttling that drops the frame rate mid-measurement. 320x240 is
+    // plenty for a mean-colour PPG signal and keeps the rate steady.
+    const baseVideo = { facingMode: { ideal: face ? 'user' : 'environment' }, width: { ideal: 320 }, height: { ideal: 240 }, frameRate: { ideal: 30 } };
     // Use one request only. Retrying while the iOS permission sheet is open can
     // leave two competing captures and prevent either from becoming readable.
     try {
@@ -301,8 +304,8 @@
 
     const reasonCopy = {
       no_frames: 'Waiting for camera frames…',
-      too_dark: 'Too dark — move near a bright, steady light.',
-      overexposed: 'Too bright — cover the active lens fully.',
+      too_dark: 'Too dark — cover the main lens next to the flash, or add light.',
+      overexposed: 'Pressing too hard, or too bright — ease off to a very light touch.',
       no_finger_contact: 'No fingertip yet — cover the rear camera and flash with the pad of your finger.',
       no_face: 'Center your face in the frame, in even light.',
       scene_texture: 'Cover the camera fully with the pad of your finger.',

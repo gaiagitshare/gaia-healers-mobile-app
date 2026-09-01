@@ -311,17 +311,22 @@
     const redBlueValues = differentialChannel(uniform.r, uniform.b);
     const greenBlueValues = differentialChannel(uniform.g, uniform.b);
     const hueValues = hueSeries(uniform.r, uniform.g, uniform.b);
+    // Normalised green = G/(R+G+B): a global exposure/gain change scales R,G,B
+    // together and cancels in the ratio, so this survives Safari's auto-exposure.
+    const gNormValues = uniform.g.map((g, i) => g / Math.max(1, uniform.r[i] + g + uniform.b[i]));
     const redBlue = redBlueValues.length ? estimateChannel(redBlueValues, uniform.fps, thresholds) : null;
     const greenBlue = greenBlueValues.length ? estimateChannel(greenBlueValues, uniform.fps, thresholds) : null;
     const hue = hueValues.length ? estimateChannel(hueValues, uniform.fps, thresholds) : null;
+    const gNorm = gNormValues.length ? estimateChannel(gNormValues, uniform.fps, thresholds) : null;
     return {
       red,
       green,
       redBlue,
       greenBlue,
       hue,
-      values: { red: uniform.r, green: uniform.g, redBlue: redBlueValues, greenBlue: greenBlueValues, hue: hueValues },
-      ranked: [['red', red], ['green', green], ['redBlue', redBlue], ['greenBlue', greenBlue], ['hue', hue]]
+      gNorm,
+      values: { red: uniform.r, green: uniform.g, redBlue: redBlueValues, greenBlue: greenBlueValues, hue: hueValues, gNorm: gNormValues },
+      ranked: [['red', red], ['green', green], ['redBlue', redBlue], ['greenBlue', greenBlue], ['hue', hue], ['gNorm', gNorm]]
         .filter((entry) => entry[1]).sort((a, b) => b[1].score - a[1].score),
     };
   }

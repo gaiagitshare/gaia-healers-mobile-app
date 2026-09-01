@@ -1,10 +1,10 @@
-/** Gaia — Coherence Breath.
- * A guided heart-coherence breathing session at ~6 breaths per minute (5s in /
- * 5s out), the resonance pace shown to steady heart-rate variability and calm
- * the nervous system (HeartMath science). Pure client-side — a real, beautiful
- * paced-breathing guide, no data collected. Pairs with Energy Pulse for an
- * optional before/after read, mirroring what Bio-Well reports recommend:
- * breathwork to rebalance your energy.
+/** Gaia — Coherence Breathing.
+ * A guided paced-breathing session at ~6 breaths per minute (5s in / 5s out),
+ * the "resonance" pace widely used to steady the heart rhythm and calm the
+ * nervous system. This is a breathing *practice* — it does not measure your
+ * heart-rate variability or a coherence score. Real timer, real durations,
+ * pause/resume and tab-visibility handling; pure client-side, no data
+ * collected. Pairs with Energy Pulse for an optional before/after pulse read.
  */
 (function () {
   'use strict';
@@ -47,7 +47,7 @@
   const BIOWELL_URL = 'home.html?view=wellness&tab=biowell';
   const IN = 5000, OUT = 5000, CYCLE = IN + OUT; // 6 breaths/min
 
-  let raf = null, timer = null, modal = null;
+  let raf = null, timer = null, modal = null, sessionCtl = null;
 
   function open() {
     injectStyles();
@@ -63,6 +63,7 @@
   }
   function onKey(e) { if (e.key === 'Escape') close(); }
   function close() {
+    if (sessionCtl) { try { sessionCtl.teardown(); } catch (e) {} }
     if (raf) { cancelAnimationFrame(raf); raf = null; }
     if (timer) { clearInterval(timer); timer = null; }
     document.removeEventListener('keydown', onKey);
@@ -75,77 +76,103 @@
   let minutes = 3;
   function intro(card) {
     card.innerHTML = closeBtn()
-      + '<p class="gb-eyebrow">Coherence Breath</p>'
-      + '<h2 class="gb-title">Reset your energy</h2>'
-      + '<p class="gb-lead">Follow the orb: breathe <strong>in as it grows</strong>, <strong>out as it shrinks</strong> — about six calm breaths a minute. This resonance pace steadies your heart rhythm and settles the nervous system.</p>'
+      + '<p class="gb-eyebrow">Coherence Breathing</p>'
+      + '<h2 class="gb-title">Find your resonant breath</h2>'
+      + '<p class="gb-lead">Follow the orb: breathe <strong>in as it grows</strong>, <strong>out as it shrinks</strong> — about six slow breaths a minute. This resonance pace is widely used to steady the heart rhythm and settle the nervous system.</p>'
       + '<div class="gb-choices">'
       + [[1, 'quick'], [3, 'classic'], [5, 'deep']].map(([m, lbl]) => '<button type="button" class="gb-choice' + (m === minutes ? ' on' : '') + '" data-gb-min="' + m + '">' + m + ' min<small>' + lbl + '</small></button>').join('')
       + '</div>'
       + '<div class="gb-actions"><button type="button" class="gb-btn" data-gb-begin><i class="ph ph-wind" aria-hidden="true"></i> Begin</button></div>'
-      + '<p class="gb-note">A guided practice for calm — the same breathwork Bio-Well reports recommend to rebalance your energy. Find a comfortable seat and relax your shoulders.</p>';
+      + '<p class="gb-note">A guided breathing practice for calm — not a measurement and not medical treatment. Find a comfortable seat and relax your shoulders.</p>';
     card.querySelector('[data-gb-close]').addEventListener('click', close);
-    card.querySelectorAll('[data-gb-min]').forEach((b) => b.addEventListener('click', () => { minutes = Number(b.dataset.min); intro(card); }));
+    card.querySelectorAll('[data-gb-min]').forEach((b) => b.addEventListener('click', () => { minutes = Number(b.getAttribute('data-gb-min')) || minutes; intro(card); }));
     card.querySelector('[data-gb-begin]').addEventListener('click', () => session(card));
   }
+
+  function fmt(ms) { const s = Math.max(0, Math.ceil(ms / 1000)); return Math.floor(s / 60) + ':' + String(s % 60).padStart(2, '0'); }
 
   function session(card) {
     const total = minutes * 60 * 1000;
     card.innerHTML = closeBtn()
       + '<p class="gb-eyebrow" data-gb-phaselabel>Get ready…</p>'
       + '<div class="gb-stage"><span class="gb-ripple"></span><div class="gb-orb" data-gb-orb></div><div class="gb-phase"><span data-gb-word>Breathe</span></div></div>'
-      + '<div class="gb-meta"><span>Breaths <b data-gb-count>0</b></span><span>Left <b data-gb-left>' + minutes + ':00</b></span></div>'
-      + '<div class="gb-actions"><button type="button" class="gb-btn--link" data-gb-end>End session</button></div>';
+      + '<div class="gb-meta"><span>Breaths <b data-gb-count>0</b></span><span>Left <b data-gb-left>' + fmt(total) + '</b></span></div>'
+      + '<div class="gb-actions">'
+      + '<button type="button" class="gb-btn--ghost" data-gb-pause><i class="ph ph-pause" aria-hidden="true"></i> Pause</button>'
+      + '<button type="button" class="gb-btn--link" data-gb-end>End session</button>'
+      + '</div>';
     card.querySelector('[data-gb-close]').addEventListener('click', close);
-    card.querySelector('[data-gb-end]').addEventListener('click', () => complete(card));
     const orb = card.querySelector('[data-gb-orb]');
     const word = card.querySelector('[data-gb-word]');
     const eye = card.querySelector('[data-gb-phaselabel]');
     const countEl = card.querySelector('[data-gb-count]');
     const leftEl = card.querySelector('[data-gb-left]');
+    const pauseBtn = card.querySelector('[data-gb-pause]');
     const reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-    const start = performance.now();
-    let lastPhase = '';
     const ease = (p) => 0.5 - 0.5 * Math.cos(Math.PI * p); // smooth in/out
+    // Timing is anchored to the real clock (performance.now), never to a frame
+    // count — so the session lasts real wall-clock time even if frames drop.
+    let start = performance.now();
+    let pausedTotal = 0, pauseAt = 0, paused = false, lastPhase = '';
+    if (reduce) orb.style.transition = 'transform ' + (IN / 1000) + 's ease-in-out';
 
-    function tick(now) {
-      const elapsed = now - start;
-      if (elapsed >= total) { complete(card); return; }
+    function draw(now) {
+      const elapsed = now - start - pausedTotal;
+      if (elapsed >= total) { teardown(); complete(card); return true; }
       const inCycle = elapsed % CYCLE;
       const inhaling = inCycle < IN;
       const p = inhaling ? inCycle / IN : (inCycle - IN) / OUT;
-      const scale = inhaling ? 0.5 + 0.5 * ease(p) : 1 - 0.5 * ease(p);
-      orb.style.transform = 'scale(' + scale.toFixed(3) + ')';
+      if (!reduce) { const scale = inhaling ? 0.5 + 0.5 * ease(p) : 1 - 0.5 * ease(p); orb.style.transform = 'scale(' + scale.toFixed(3) + ')'; }
       const phase = inhaling ? 'in' : 'out';
       if (phase !== lastPhase) {
         lastPhase = phase;
         word.textContent = inhaling ? 'Breathe in' : 'Breathe out';
         eye.textContent = inhaling ? 'Fill up slowly' : 'Let it all go';
+        if (reduce) orb.style.transform = 'scale(' + (inhaling ? 1 : 0.5) + ')'; // one gentle move per phase
         try { if (navigator.vibrate) navigator.vibrate(12); } catch (e) {}
       }
-      const breaths = Math.floor(elapsed / CYCLE);
-      countEl.textContent = breaths;
-      const remain = Math.max(0, total - elapsed);
-      const mm = Math.floor(remain / 60000); const ss = Math.floor((remain % 60000) / 1000);
-      leftEl.textContent = mm + ':' + String(ss).padStart(2, '0');
+      countEl.textContent = Math.floor(elapsed / CYCLE);
+      leftEl.textContent = fmt(total - elapsed);
+      return false;
+    }
+    function tick(now) { if (paused) return; if (draw(now)) return; raf = requestAnimationFrame(tick); }
+    function doPause() {
+      if (paused) return; paused = true; pauseAt = performance.now();
+      if (raf) { cancelAnimationFrame(raf); raf = null; }
+      pauseBtn.innerHTML = '<i class="ph ph-play" aria-hidden="true"></i> Resume';
+      word.textContent = 'Paused'; eye.textContent = 'Paused — tap resume';
+    }
+    function doResume() {
+      if (!paused) return; pausedTotal += performance.now() - pauseAt; paused = false; lastPhase = '';
+      pauseBtn.innerHTML = '<i class="ph ph-pause" aria-hidden="true"></i> Pause';
       raf = requestAnimationFrame(tick);
     }
-    if (reduce) { orb.style.transition = 'transform ' + (IN / 1000) + 's ease-in-out'; }
+    // Leaving the tab/app auto-pauses, so away-time is never counted and the
+    // orb never jumps on return; the user taps Resume to continue.
+    function onVis() { if (document.hidden) doPause(); }
+    function teardown() { if (raf) { cancelAnimationFrame(raf); raf = null; } document.removeEventListener('visibilitychange', onVis); sessionCtl = null; }
+
+    pauseBtn.addEventListener('click', () => { paused ? doResume() : doPause(); });
+    card.querySelector('[data-gb-end]').addEventListener('click', () => { teardown(); intro(card); });
+    document.addEventListener('visibilitychange', onVis);
+    sessionCtl = { teardown };
     raf = requestAnimationFrame(tick);
   }
 
   function complete(card) {
+    if (sessionCtl) { try { sessionCtl.teardown(); } catch (e) {} }
     if (raf) { cancelAnimationFrame(raf); raf = null; }
     card.innerHTML = closeBtn()
       + '<p class="gb-eyebrow">Session complete</p>'
       + '<div class="gb-stage" style="width:min(52vw,12rem);height:min(52vw,12rem)"><span class="gb-ripple"></span><div class="gb-orb" style="transform:scale(.9)"></div><div class="gb-phase"><i class="ph ph-check" style="font-size:2.6rem;color:#062b0c" aria-hidden="true"></i></div></div>'
       + '<h2 class="gb-title">Nicely done</h2>'
-      + '<p class="gb-lead">A few minutes of resonant breathing nudges your heart rhythm toward coherence. Notice how your body feels now versus a moment ago.</p>'
+      + '<p class="gb-lead">Resonant breathing like this is widely used to steady the heart rhythm. Notice how you feel now versus a few minutes ago.</p>'
       + '<div class="gb-actions">'
       + '<button type="button" class="gb-btn" data-gb-measure><i class="ph ph-heartbeat" aria-hidden="true"></i> See the difference — read my pulse</button>'
       + '<a class="gb-btn--ghost" href="' + esc(BIOWELL_URL) + '">Go deeper with a Bio-Well scan →</a>'
       + '<button type="button" class="gb-btn--link" data-gb-again>Breathe again</button>'
       + '</div>'
-      + '<p class="gb-note">A calming practice for reflection, not medical treatment.</p>';
+      + '<p class="gb-note">A calming breathing practice for reflection — not a measurement or medical treatment.</p>';
     card.querySelector('[data-gb-close]').addEventListener('click', close);
     card.querySelector('[data-gb-again]').addEventListener('click', () => intro(card));
     const m = card.querySelector('[data-gb-measure]');

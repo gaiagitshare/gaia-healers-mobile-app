@@ -4,8 +4,9 @@
  * each heartbeat; we recover BPM by autocorrelation and show the live wave so
  * you can see it working. Fallback (any device, no camera): tap along with
  * your heartbeat. No data leaves the phone; the camera frames are analysed in
- * memory and never uploaded. Honest by design: it is a quick snapshot, not a
- * medical device — a full Bio-Well scan maps the biofield in depth.
+ * memory and never uploaded. Honest by design: this estimates heart rate from
+ * a real optical signal — it is not a medical device, not HRV/coherence, and
+ * not a Bio-Well measurement.
  */
 (function () {
   'use strict';
@@ -151,13 +152,13 @@
     card.innerHTML = closeBtn()
       + '<p class="gp-eyebrow">Energy Pulse</p>'
       + '<div class="gp-stage"><span class="gp-ring"></span><i class="ph ph-heartbeat gp-heart" aria-hidden="true"></i></div>'
-      + '<h2 class="gp-title">A 60-second body read</h2>'
-      + '<p class="gp-lead">Rest a fingertip gently over your phone’s <strong>rear camera</strong> in good light and hold still. We read your pulse from the tiny colour changes under your skin — you’ll see the live wave.</p>'
+      + '<h2 class="gp-title">A 60-second pulse read</h2>'
+      + '<p class="gp-lead">Rest a fingertip gently over your phone’s <strong>rear camera</strong> in good light and hold still. We estimate your heart rate from the tiny colour changes under your skin — you’ll see the live wave.</p>'
       + '<div class="gp-actions">'
       + '<button type="button" class="gp-btn" data-gp-start><i class="ph ph-camera" aria-hidden="true"></i> Start reading</button>'
       + '<button type="button" class="gp-btn--link" data-gp-tap>No camera? Tap with your heartbeat →</button>'
       + '</div>'
-      + '<p class="gp-note">A quick snapshot for reflection — not a medical device. Nothing is recorded or uploaded; the reading happens on your phone. A full <strong>Bio-Well</strong> scan maps your biofield in depth.</p>';
+      + '<p class="gp-note">This estimates your heart rate for reflection — not a medical device, and not a Bio-Well scan. Nothing is recorded or uploaded; it all happens on your phone.</p>';
     card.querySelector('[data-gp-start]').addEventListener('click', () => measure(card));
     card.querySelector('[data-gp-tap]').addEventListener('click', () => tapMode(card));
   }
@@ -166,6 +167,7 @@
   let stream = null, video = null, sampleCanvas = null, sctx = null;
   function stopCamera() {
     try { if (stream) stream.getTracks().forEach((t) => t.stop()); } catch (e) {}
+    try { if (video) { video.pause(); video.srcObject = null; if (video.parentNode) video.parentNode.removeChild(video); } } catch (e) {}
     stream = null; video = null; sampleCanvas = null; sctx = null;
   }
 
@@ -231,7 +233,7 @@
               statusEl.textContent = 'Hold still — reading your rhythm…';
               goodRun += 1;
               // finalise after enough steady good frames + minimum time
-              if (goodRun > 45 && (t - startedAt) > 12000) { finish(est.bpm, samples, times); return; }
+              if (goodRun > 45 && (t - startedAt) > 12000) { finish(est.bpm); return; }
             } else { goodRun = Math.max(0, goodRun - 2); statusEl.textContent = 'Searching for your pulse — press gently and stay still.'; }
           }
         }
@@ -240,7 +242,7 @@
           const dur = (times[times.length - 1] - times[0]) / 1000;
           const fps = samples.length / Math.max(dur, 0.001);
           const est = estimateBpm(samples, fps);
-          if (est && est.quality > 0.28 && est.bpm >= 40 && est.bpm <= 180) { finish(est.bpm, samples, times); return; }
+          if (est && est.quality > 0.28 && est.bpm >= 40 && est.bpm <= 180) { finish(est.bpm); return; }
           tapMode(card, 'Couldn’t get a clean pulse from the camera. Try tapping instead.');
           return;
         }
@@ -249,11 +251,10 @@
     }
     window.__gpRAF = requestAnimationFrame(frame);
 
-    function finish(bpm, vals, ts) {
+    function finish(bpm) {
       stopCamera();
       if (window.__gpRAF) { cancelAnimationFrame(window.__gpRAF); window.__gpRAF = null; }
-      const vr = beatVariability(vals, ts);
-      result(card, Math.round(bpm), vr, 'camera');
+      result(card, Math.round(bpm), 'camera');
     }
   }
 
@@ -272,21 +273,6 @@
       if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
     }
     ctx.stroke();
-  }
-
-  // Rough beat-interval variability from peak times → a calm/activated hint.
-  function beatVariability(vals, ts) {
-    if (!vals || vals.length < 60) return null;
-    // detrend quickly
-    const n = vals.length; const win = 12; const d = new Array(n);
-    let acc = 0; for (let i = 0; i < n; i++) { acc += vals[i]; if (i >= win) acc -= vals[i - win]; d[i] = vals[i] - acc / Math.min(i + 1, win); }
-    const peaks = [];
-    for (let i = 2; i < n - 2; i++) { if (d[i] > d[i - 1] && d[i] > d[i - 2] && d[i] >= d[i + 1] && d[i] > d[i + 2] && d[i] > 0) { if (!peaks.length || (ts[i] - ts[peaks[peaks.length - 1]]) > 330) peaks.push(i); } }
-    if (peaks.length < 5) return null;
-    const ibis = []; for (let i = 1; i < peaks.length; i++) ibis.push(ts[peaks[i]] - ts[peaks[i - 1]]);
-    const m = ibis.reduce((a, b) => a + b, 0) / ibis.length;
-    let sd = 0; for (const x of ibis) sd += (x - m) * (x - m); sd = Math.sqrt(sd / ibis.length);
-    return { rmssdish: Math.round(sd), meanIbi: Math.round(m) };
   }
 
   /* ---- tap fallback (real, no camera) --------------------------------- */
@@ -317,8 +303,7 @@
         const kept = ibis.filter((x) => x > med * 0.5 && x < med * 1.8);
         const meanIbi = kept.reduce((a, b) => a + b, 0) / kept.length;
         const bpm = Math.round(60000 / meanIbi);
-        let sd = 0; for (const x of kept) sd += (x - meanIbi) * (x - meanIbi); sd = Math.sqrt(sd / kept.length);
-        result(card, bpm, { rmssdish: Math.round(sd), meanIbi: Math.round(meanIbi) }, 'tap');
+        result(card, bpm, 'tap');
       }
     }
     area.addEventListener('click', onTap);
@@ -326,28 +311,28 @@
   }
 
   /* ---- result --------------------------------------------------------- */
-  function result(card, bpm, vr, method) {
-    // Calm↔Activated: resting HR is the main signal (lower = calmer). Nudge by
-    // beat variability when we have it (more variability = more recovered/calm).
-    let pos = clamp((bpm - 55) / (95 - 55), 0, 1); // 55bpm→calm end, 95bpm→activated end
-    if (vr && vr.rmssdish != null) { const hrvAdj = clamp((60 - vr.rmssdish) / 60, -0.15, 0.15); pos = clamp(pos + hrvAdj, 0, 1); }
-    const band = pos < 0.34 ? 'Calm & settled' : pos < 0.67 ? 'Balanced' : 'Activated';
-    const bandNote = pos < 0.34 ? 'Your body reads relaxed and recovered right now.'
-      : pos < 0.67 ? 'A steady, even state — neither wired nor sluggish.'
-      : 'Your system reads switched-on — a few slow breaths can settle it.';
+  function result(card, bpm, method) {
+    // Calm↔Activated is a plain-language reading of the *measured pulse rate*
+    // only (lower rate → calmer end). It is not HRV, coherence, or a biofield.
+    const pos = clamp((bpm - 55) / (95 - 55), 0, 1); // 55bpm→calm end, 95bpm→activated end
+    const band = pos < 0.34 ? 'Calm' : pos < 0.67 ? 'Balanced' : 'Activated';
+    const bandNote = pos < 0.34 ? 'A relatively low pulse right now — often how the body reads at rest.'
+      : pos < 0.67 ? 'A middle-of-the-range pulse — steady and even.'
+      : 'A higher pulse right now — a few slow breaths can help it settle.';
     card.innerHTML = closeBtn()
-      + '<p class="gp-eyebrow">Your reading</p>'
-      + '<div class="gp-bpm"><span>' + bpm + '</span><small>BPM' + (method === 'tap' ? ' · tapped' : '') + '</small></div>'
+      + '<p class="gp-eyebrow">Your pulse</p>'
+      + '<div class="gp-bpm"><span>' + bpm + '</span><small>BPM · ' + (method === 'tap' ? 'tapped' : 'camera') + '</small></div>'
       + '<div class="gp-gauge"><span class="gp-gauge__pin" style="left:' + (pos * 100) + '%"></span></div>'
       + '<div class="gp-gauge__labels"><span>Calm</span><span>Balanced</span><span>Activated</span></div>'
       + '<p class="gp-read">' + esc(band) + '</p>'
       + '<p class="gp-lead">' + esc(bandNote) + '</p>'
+      + '<p class="gp-note" style="margin-top:0">Calm ↔ Activated is a simple reading of your <strong>pulse rate</strong> only — not HRV, coherence, stress, or a biofield measurement.</p>'
       + '<div class="gp-actions">'
-      + '<button type="button" class="gp-btn" data-gp-breath><i class="ph ph-wind" aria-hidden="true"></i> Reset with Coherence Breath</button>'
-      + '<a class="gp-btn--ghost" href="' + esc(BIOWELL_URL) + '">Go deeper with a Bio-Well scan →</a>'
-      + '<button type="button" class="gp-btn--link" data-gp-again>Read again</button>'
+      + '<button type="button" class="gp-btn" data-gp-breath><i class="ph ph-wind" aria-hidden="true"></i> Slow it down with breathing</button>'
+      + '<a class="gp-btn--ghost" href="' + esc(BIOWELL_URL) + '">Explore a Bio-Well scan →</a>'
+      + '<button type="button" class="gp-btn--link" data-gp-again>Measure again</button>'
       + '</div>'
-      + '<p class="gp-note">A reflective snapshot, not a diagnosis. Bio-Well’s Gas Discharge Visualization maps your stress, energy reserve and chakra balance in depth.</p>';
+      + '<p class="gp-note">A quick pulse estimate for reflection, not a diagnosis. A Bio-Well scan is a separate, in-depth session.</p>';
     card.querySelector('[data-gp-again]').addEventListener('click', () => intro(card));
     const b = card.querySelector('[data-gp-breath]');
     if (b) b.addEventListener('click', () => { close(); if (window.GaiaBreath && window.GaiaBreath.open) window.GaiaBreath.open(); else location.href = 'home.html?view=wellness&tool=breath'; });

@@ -264,19 +264,42 @@
     const minAutocorrelation = Number.isFinite(thresholds.minAutocorrelation) ? thresholds.minAutocorrelation : 0.38;
     if (!spectral || spectral.snr < minSnr) return null;
     const autocorrelation = autocorrelationEstimate(filtered, fps, spectral.bpm);
-    if (!autocorrelation || autocorrelation.quality < minAutocorrelation) return null;
-    const agreement = Math.abs(spectral.bpm - autocorrelation.bpm);
-    if (agreement > 5) return null;
+    if (autocorrelation && autocorrelation.quality >= minAutocorrelation) {
+      const agreement = Math.abs(spectral.bpm - autocorrelation.bpm);
+      if (agreement > 5) return null;
+      return {
+        bpm: (spectral.bpm + autocorrelation.bpm) / 2,
+        spectralBpm: spectral.bpm,
+        autocorrelationBpm: autocorrelation.bpm,
+        spectralSnr: spectral.snr,
+        autocorrelationQuality: autocorrelation.quality,
+        pulsatility,
+        filtered,
+        power: spectral.power,
+        score: Math.min(20, spectral.snr) * autocorrelation.quality,
+      };
+    }
+    // iOS Safari's temporal noise reduction and tone mapping preserve the pulse
+    // FREQUENCY while erasing cycle-to-cycle shape: on a real iPhone (18.7,
+    // Back Triple Camera) every channel measured autocorrelation quality
+    // 0.002-0.14 — an order of magnitude below any usable bar — with the only
+    // remaining peak at the 40 BPM band edge. Discarding the channel there made
+    // the verifier fail closed 100% of the time on iOS. Instead expose the
+    // spectral estimate as a frequency-only candidate (spectralOnly); callers
+    // must then corroborate it with raw-tissue confirmation, beat-count
+    // agreement and independent half-window estimates before it can finalise
+    // or preview. Shape-verified candidates keep every original gate.
     return {
-      bpm: (spectral.bpm + autocorrelation.bpm) / 2,
+      bpm: spectral.bpm,
       spectralBpm: spectral.bpm,
-      autocorrelationBpm: autocorrelation.bpm,
+      autocorrelationBpm: autocorrelation ? autocorrelation.bpm : null,
+      autocorrelationQuality: autocorrelation ? autocorrelation.quality : null,
       spectralSnr: spectral.snr,
-      autocorrelationQuality: autocorrelation.quality,
       pulsatility,
       filtered,
       power: spectral.power,
-      score: Math.min(20, spectral.snr) * autocorrelation.quality,
+      score: Math.min(20, spectral.snr) * 0.45,
+      spectralOnly: true,
     };
   }
 
@@ -443,6 +466,22 @@
     return { confirmed: best.snr > 0, snr: best.snr, amp: best.amp };
   }
 
+  // A frequency-only candidate may not stand alone: at least two OTHER usable
+  // channels' spectral peaks must land within `tolerance` BPM of it. The
+  // max-energy bin of pure noise does not coincide across differently-constructed
+  // channels, while every real-device diagnostic with unusable autocorrelation
+  // still showed 2-4 channels agreeing on the true rate (e.g. green 73.5,
+  // blue 73.5, hue 72). Corroborators may themselves carry an artifact flag —
+  // a flag means "cannot be the WINNER", not "wrong about the rate" — because
+  // the candidate itself has already passed the classifier at this rate.
+  function spectralConsensus(channels, name, bpm, tolerance = 6) {
+    let agreeing = 0;
+    for (const [other, est] of channels.ranked) {
+      if (other !== name && est && Math.abs(est.bpm - bpm) <= tolerance) agreeing += 1;
+    }
+    return agreeing >= 2;
+  }
+
   // Third, time-domain estimator independent of the FFT/autocorrelation pair:
   // adaptive-threshold peak picking with a 0.3 s refractory, then inter-beat
   // regularity and agreement with the candidate rate.
@@ -469,14 +508,33 @@
     return { ok: cv < 0.35 && Math.abs(bpm - candidateBpm) <= 8, bpm, beats: peaks.length, cv };
   }
 
+  // Time-domain corroboration for frequency-only candidates. Autocorrelation
+  // compares waveform SHAPE cycle-to-cycle, which iOS smoothing destroys, but
+  // simply COUNTING peaks survives it. The number of beats observed in the
+  // window must plausibly match the claimed rate: 18 beats in 15 s cannot
+  // belong to a 58 BPM claim, so an in-band wander peak riding a real 72 BPM
+  // waveform is rejected by the evidence of its own channel.
+  function beatCountCorroborates(filtered, fps, bpm) {
+    const timing = peakTimingEstimate(filtered, fps, bpm);
+    if (!timing) return false;
+    const durationS = filtered.length / fps;
+    const expected = durationS * bpm / 60;
+    if (timing.beats < Math.max(4, Math.floor(expected * 0.6))) return false;
+    const countBpm = (timing.beats / durationS) * 60;
+    return Math.abs(countBpm - bpm) <= 10;
+  }
+
   // Two NON-overlapping ~5 s segments over a 10 s capture must independently
   // support the same rate. This keeps the safety check independent while making
   // a handheld capture achievable; the artifact, dual-estimator and beat-timing
-  // gates above remain unchanged.
-  function segmentEstimates(values, fps, thresholds) {
+  // gates above remain unchanged. A shape-verified winner requires
+  // shape-verified segments; a frequency-only winner accepts either, because
+  // the halves of an iOS-smoothed window are smoothed too.
+  function segmentEstimates(values, fps, thresholds, requireStrict) {
     const segmentLength = Math.floor(values.length / 2);
     if (segmentLength < fps * 4) return [];
-    return [0, 1].map((k) => estimateChannel(values.slice(k * segmentLength, (k + 1) * segmentLength), fps, thresholds)).filter(Boolean);
+    return [0, 1].map((k) => estimateChannel(values.slice(k * segmentLength, (k + 1) * segmentLength), fps, thresholds))
+      .filter(Boolean).filter((estimate) => (requireStrict ? !estimate.spectralOnly : true));
   }
 
   function analyzePulse(frames, options = {}) {
@@ -498,7 +556,13 @@
     // A red channel pinned at 255 has no real AC; anything derived from it is unusable.
     const candidates = channels.ranked.filter(([name]) => !(redClipped && (name === 'red' || name === 'redBlue' || name === 'hue')));
     if (!candidates.length) return { ok: false, reason: 'weak_or_irregular_signal', contact, fps: uniform.measuredFps };
-    if (!redClipped && red && green && red.score >= candidates[0][1].score * 0.65
+    // Tone-mapped iOS video can leave raw red's SPECTRAL peak off the true rate
+    // while its beats stay on it (diagnostic: red FFT 58.5 vs 18 beats/15 s =
+    // 72 BPM). With frequency-only candidates the per-candidate walk below
+    // corroborates each rate individually, so the blunt red-vs-green guard
+    // applies only when both raw channels are shape-verified.
+    if (!redClipped && red && green && !red.spectralOnly && !green.spectralOnly
+      && red.score >= candidates[0][1].score * 0.65
       && green.score >= candidates[0][1].score * 0.65 && Math.abs(red.bpm - green.bpm) > 7) {
       return { ok: false, reason: 'channel_disagreement', contact, fps: uniform.measuredFps };
     }
@@ -506,7 +570,13 @@
     // exposure artifact that tops the ranking (e.g. green@90) is skipped and a
     // genuine pulse carried by an exposure-cancelling channel (e.g. red-blue@72)
     // can still be chosen — while every candidate individually must pass the
-    // classifier, ratio-confirmation, timing and stability gates below.
+    // classifier, ratio-confirmation, timing and stability gates below. A
+    // frequency-only candidate must ALSO be raw-confirmed in tissue, backed by
+    // at least two other channels' spectral peaks, and carry a beat count
+    // matching its claimed rate, since its autocorrelation corroboration does
+    // not exist on smoothed iOS video. A shape-verified candidate that fails
+    // its own beat-timing check is skipped, not fatal — one channel's
+    // irregularity does not veto a corroborated sibling.
     let chosenEntry = null; let firstRejection = null;
     for (const entry of candidates) {
       const [name, est] = entry;
@@ -515,35 +585,65 @@
       if (RATIO_CHANNELS.includes(name) && !rawConfirms(uniform, est.bpm, redClipped).confirmed) {
         if (!firstRejection) firstRejection = 'ratio_unconfirmed'; continue;
       }
+      if (est.spectralOnly && !rawConfirms(uniform, est.bpm, redClipped).confirmed) {
+        if (!firstRejection) firstRejection = 'unconfirmed'; continue;
+      }
+      if (est.spectralOnly && !spectralConsensus(channels, name, est.bpm)) {
+        if (!firstRejection) firstRejection = 'no_spectral_consensus'; continue;
+      }
+      if (est.spectralOnly && !beatCountCorroborates(est.filtered, uniform.fps, est.bpm)) {
+        if (!firstRejection) firstRejection = 'beat_count_mismatch'; continue;
+      }
+      if (!est.spectralOnly && !peakTimingEstimate(est.filtered, uniform.fps, est.bpm).ok) {
+        if (!firstRejection) firstRejection = 'irregular_beats'; continue;
+      }
       chosenEntry = entry; break;
     }
     if (!chosenEntry) return { ok: false, reason: firstRejection || 'weak_or_irregular_signal', contact, fps: uniform.measuredFps };
     const [channel, chosen] = chosenEntry;
-    // Independent time-domain check: regular, plausible beats at that rate.
-    const timing = peakTimingEstimate(chosen.filtered, uniform.fps, chosen.bpm);
-    if (!timing || !timing.ok) return { ok: false, reason: 'irregular_beats', contact, fps: uniform.measuredFps };
+    // Independent time-domain check for shape-verified candidates (re-checked
+    // here for the peak-rate readout; the walk above already enforced it). A
+    // frequency-only winner cannot rely on beat-to-beat regularity (iOS
+    // smoothing destroys cycle shape); its time-domain evidence is the beat
+    // COUNT from the walk plus the two independent half-window rates below.
+    let peakBpm = null;
+    if (!chosen.spectralOnly) {
+      const timing = peakTimingEstimate(chosen.filtered, uniform.fps, chosen.bpm);
+      if (!timing || !timing.ok) return { ok: false, reason: 'irregular_beats', contact, fps: uniform.measuredFps };
+      peakBpm = timing.bpm;
+    }
     const channelValues = channels.values[channel];
-    const segments = segmentEstimates(channelValues, uniform.fps, thresholds);
+    const segments = segmentEstimates(channelValues, uniform.fps, thresholds, !chosen.spectralOnly);
     if (segments.length < 2) return { ok: false, reason: 'need_more_stability', contact, fps: uniform.measuredFps };
     const segmentBpms = segments.map((item) => item.bpm);
-    if (Math.max(...segmentBpms) - Math.min(...segmentBpms) > 7) {
+    // A frequency-only winner's half-window FFTs are noisier than a
+    // shape-verified waveform's (that is exactly why autocorrelation failed),
+    // so the inter-half spread bar matches that estimator's variance.
+    if (Math.max(...segmentBpms) - Math.min(...segmentBpms) > (chosen.spectralOnly ? 10 : 7)
+      || (chosen.spectralOnly && segmentBpms.some((value) => Math.abs(value - chosen.bpm) > 10))) {
       return { ok: false, reason: 'unstable_rate', contact, fps: uniform.measuredFps };
     }
     const bpm = median([chosen.bpm, ...segmentBpms]);
-    const quality = clamp(0.35 * contact.score
-      + 0.35 * clamp((chosen.autocorrelationQuality - 0.35) / 0.55, 0, 1)
-      + 0.3 * clamp((chosen.spectralSnr - 3) / 9, 0, 1), 0, 1);
+    // Frequency-only confirmation is honest but weaker evidence than a
+    // shape-verified waveform: the quality score reflects that, and the result
+    // names the estimator used.
+    const quality = chosen.spectralOnly
+      ? clamp(0.4 * contact.score + 0.6 * clamp((chosen.spectralSnr - 3) / 9, 0, 1), 0, 0.7)
+      : clamp(0.35 * contact.score
+        + 0.35 * clamp((chosen.autocorrelationQuality - 0.35) / 0.55, 0, 1)
+        + 0.3 * clamp((chosen.spectralSnr - 3) / 9, 0, 1), 0, 1);
     return {
       ok: true,
       bpm,
       quality,
       channel,
+      estimator: chosen.spectralOnly ? 'spectral-consensus' : 'shape-verified',
       fps: uniform.measuredFps,
       duration: uniform.duration,
       contact,
       spectralBpm: chosen.spectralBpm,
       autocorrelationBpm: chosen.autocorrelationBpm,
-      peakBpm: timing.bpm,
+      peakBpm,
       segmentBpms,
     };
   }
@@ -559,13 +659,17 @@
     const { red, green } = channels;
     const candidates = channels.ranked.filter(([name]) => !(redClipped && (name === 'red' || name === 'redBlue' || name === 'hue')));
     if (!candidates.length) return { ok: false, reason: 'weak_or_irregular_signal', contact };
-    if (!redClipped && red && green && red.score >= candidates[0][1].score * 0.65
+    if (!redClipped && red && green && !red.spectralOnly && !green.spectralOnly
+      && red.score >= candidates[0][1].score * 0.65
       && green.score >= candidates[0][1].score * 0.65 && Math.abs(red.bpm - green.bpm) > 8) {
       return { ok: false, reason: 'channel_disagreement', contact };
     }
     // The provisional number goes through the same per-candidate artifact
     // classifier and ratio-confirmation as the final result, so it can't show a
-    // fake either; an artifact-classified leader is skipped, not fatal.
+    // fake either; an artifact-classified leader is skipped, not fatal. A
+    // frequency-only candidate needs the same raw-tissue and beat-count
+    // corroboration as in the final path; sustained agreement across previews
+    // (previewConsensus) then guards the provisional number over real time.
     let chosenEntry = null; let firstRejection = null;
     for (const entry of candidates) {
       const [name, est] = entry;
@@ -574,11 +678,20 @@
       if (RATIO_CHANNELS.includes(name) && !rawConfirms(uniform, est.bpm, redClipped).confirmed) {
         if (!firstRejection) firstRejection = 'ratio_unconfirmed'; continue;
       }
+      if (est.spectralOnly && !rawConfirms(uniform, est.bpm, redClipped).confirmed) {
+        if (!firstRejection) firstRejection = 'unconfirmed'; continue;
+      }
+      if (est.spectralOnly && !spectralConsensus(channels, name, est.bpm)) {
+        if (!firstRejection) firstRejection = 'no_spectral_consensus'; continue;
+      }
+      if (est.spectralOnly && !beatCountCorroborates(est.filtered, uniform.fps, est.bpm)) {
+        if (!firstRejection) firstRejection = 'beat_count_mismatch'; continue;
+      }
       chosenEntry = entry; break;
     }
     if (!chosenEntry) return { ok: false, reason: firstRejection || 'weak_or_irregular_signal', contact };
     const [channel, chosen] = chosenEntry;
-    return { ok: true, bpm: chosen.bpm, channel, contact, duration: uniform.duration };
+    return { ok: true, bpm: chosen.bpm, channel, contact, duration: uniform.duration, estimator: chosen.spectralOnly ? 'spectral-consensus' : 'shape-verified' };
   }
 
   // A provisional estimate is deliberately easier to obtain than a final
@@ -646,6 +759,8 @@
     // Same per-candidate safety walk as the fingertip paths: every candidate is
     // classified at its own rate, and a ratio channel needs raw confirmation —
     // so the face path can't finalise or preview on a colour/light artifact.
+    // Frequency-only candidates need raw confirmation and beat-count agreement
+    // exactly like the fingertip path (iOS smoothing affects faces too).
     let chosenEntry = null; let firstRejection = null;
     for (const entry of channels.ranked) {
       const [name, est] = entry;
@@ -653,6 +768,15 @@
       if (artifact) { if (!firstRejection) firstRejection = artifact; continue; }
       if (RATIO_CHANNELS.includes(name) && !rawConfirms(uniform, est.bpm, false).confirmed) {
         if (!firstRejection) firstRejection = 'ratio_unconfirmed'; continue;
+      }
+      if (est.spectralOnly && !rawConfirms(uniform, est.bpm, false).confirmed) {
+        if (!firstRejection) firstRejection = 'unconfirmed'; continue;
+      }
+      if (est.spectralOnly && !spectralConsensus(channels, name, est.bpm)) {
+        if (!firstRejection) firstRejection = 'no_spectral_consensus'; continue;
+      }
+      if (est.spectralOnly && !beatCountCorroborates(est.filtered, uniform.fps, est.bpm)) {
+        if (!firstRejection) firstRejection = 'beat_count_mismatch'; continue;
       }
       chosenEntry = entry; break;
     }
@@ -664,7 +788,7 @@
   function previewFace(frames) {
     const candidate = faceCandidate(frames, 8, 5, { minSnr: 2.2, minAutocorrelation: 0.25 });
     if (!candidate.ok) return candidate;
-    return { ok: true, bpm: candidate.chosen.bpm, channel: candidate.channel, contact: candidate.contact, duration: candidate.uniform.duration };
+    return { ok: true, bpm: candidate.chosen.bpm, channel: candidate.channel, contact: candidate.contact, duration: candidate.uniform.duration, estimator: candidate.chosen.spectralOnly ? 'spectral-consensus' : 'shape-verified' };
   }
 
   function analyzeFace(frames) {
@@ -674,17 +798,22 @@
     const { contact, uniform, channels, channel, chosen } = candidate;
     const values = channels.values[channel];
     const segmentLength = Math.floor(values.length / 2);
-    const segments = [0, 1].map((part) => estimateChannel(values.slice(part * segmentLength, (part + 1) * segmentLength), uniform.fps, thresholds)).filter(Boolean);
+    const segments = [0, 1]
+      .map((part) => estimateChannel(values.slice(part * segmentLength, (part + 1) * segmentLength), uniform.fps, thresholds))
+      .filter(Boolean).filter((estimate) => (chosen.spectralOnly ? true : !estimate.spectralOnly));
     if (segments.length < 2) return { ok: false, reason: 'need_more_stability', contact, fps: uniform.measuredFps };
     const segmentBpms = segments.map((item) => item.bpm);
-    if (Math.max(...segmentBpms) - Math.min(...segmentBpms) > 8) {
+    if (Math.max(...segmentBpms) - Math.min(...segmentBpms) > 8
+      || (chosen.spectralOnly && segmentBpms.some((value) => Math.abs(value - chosen.bpm) > 10))) {
       return { ok: false, reason: 'unstable_rate', contact, fps: uniform.measuredFps };
     }
     const bpm = median([chosen.bpm, ...segmentBpms]);
-    const quality = clamp(0.3 * contact.score
-      + 0.35 * clamp((chosen.autocorrelationQuality - 0.25) / 0.55, 0, 1)
-      + 0.35 * clamp((chosen.spectralSnr - 2.2) / 8, 0, 1), 0, 1);
-    return { ok: true, bpm, quality, channel, contact, fps: uniform.measuredFps, duration: uniform.duration, segmentBpms };
+    const quality = chosen.spectralOnly
+      ? clamp(0.4 * contact.score + 0.6 * clamp((chosen.spectralSnr - 2.2) / 8, 0, 1), 0, 0.7)
+      : clamp(0.3 * contact.score
+        + 0.35 * clamp((chosen.autocorrelationQuality - 0.25) / 0.55, 0, 1)
+        + 0.35 * clamp((chosen.spectralSnr - 2.2) / 8, 0, 1), 0, 1);
+    return { ok: true, bpm, quality, channel, estimator: chosen.spectralOnly ? 'spectral-consensus' : 'shape-verified', contact, fps: uniform.measuredFps, duration: uniform.duration, segmentBpms };
   }
 
   /* ---- Read-only diagnostic -------------------------------------------------
@@ -765,6 +894,8 @@
     classifyArtifact,
     rawConfirms,
     peakTimingEstimate,
+    beatCountCorroborates,
+    spectralConsensus,
     bandPowerAt,
     channelCandidates,
     _internal: { bandpass, powerAtBpm, median },

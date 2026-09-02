@@ -441,3 +441,122 @@ test('safety: consensus fallback is limited to the full-window weak-signal path'
   assert.match(src, /analysis\.contact && analysis\.contact\.valid && previewAgreement\.ok/);
   assert.match(src, /consensusSamples = \[\];/);
 });
+
+/* ---- iOS spectral-consensus suite -----------------------------------------
+ * Real-device diagnostic (iPhone 18.7, Safari, Back Triple Camera, torch on):
+ * contact perfect, 30.3 fps, FFTs agreeing at 72-73.5 BPM across green/blue/
+ * hue, raw confirmation true on every channel — yet autocorrelation quality
+ * 0.002-0.14 on all seven channels, locking at the 40 BPM band edge, so every
+ * candidate was discarded and the reading timed out with no number. iOS
+ * temporal noise reduction preserves the pulse FREQUENCY and erases
+ * cycle-to-cycle shape. These tests pin the frequency-consensus path that
+ * finalises such readings while every artifact/false-lock rejection above
+ * stays in force.
+ * ------------------------------------------------------------------------ */
+
+test('consensus: autocorrelation-hostile signal yields a frequency-only candidate', () => {
+  // A 41 BPM in-band interference at 0.9x the pulse amplitude drags the
+  // autocorrelation at the pulse lag below the trust bar while the pulse bin
+  // stays the top FFT peak — the exact signature the device diagnostic showed
+  // (autocorrelation quality 0.03-0.14 locked at the 40 BPM band edge).
+  const values = [];
+  for (let i = 0; i < 30 * 15; i += 1) {
+    const t = i / 30;
+    values.push(1 + 0.01 * Math.sin(2 * Math.PI * 1.2 * t) + 0.009 * Math.sin(2 * Math.PI * (41 / 60) * t));
+  }
+  const est = dsp.estimateChannel(values, 30);
+  assert.ok(est, 'channel discarded entirely');
+  assert.equal(est.spectralOnly, true, 'should not be shape-verified');
+  assert.ok(Math.abs(est.bpm - 72) <= 3, `${est.bpm} vs 72`);
+});
+
+test('consensus: beat-count corroboration accepts the true rate and rejects wrong ones', () => {
+  const values = [];
+  for (let i = 0; i < 30 * 15; i += 1) {
+    const t = i / 30;
+    values.push(1 + 0.01 * Math.sin(2 * Math.PI * 1.2 * t));
+  }
+  const est = dsp.estimateChannel(values, 30);
+  assert.ok(est && est.filtered);
+  assert.equal(dsp.beatCountCorroborates(est.filtered, 30, 72), true, '72 BPM beats must corroborate 72');
+  assert.equal(dsp.beatCountCorroborates(est.filtered, 30, 58), false, '18 beats/15 s cannot be a 58 BPM claim');
+  assert.equal(dsp.beatCountCorroborates(est.filtered, 30, 41), false, 'nor a 41 BPM claim');
+});
+
+test('consensus: two other channel peaks are required, one is not enough', () => {
+  const lone = { ranked: [['red', { bpm: 73 }], ['green', { bpm: 58 }], ['hue', { bpm: 41 }]] };
+  assert.equal(dsp.spectralConsensus(lone, 'red', 72), false, 'accepted a single agreeing channel');
+  const backed = { ranked: [['red', { bpm: 73 }], ['blue', { bpm: 73.5 }], ['green', { bpm: 58 }], ['gNorm', { bpm: 72.5 }]] };
+  assert.equal(dsp.spectralConsensus(backed, 'red', 72), true);
+  assert.equal(dsp.spectralConsensus(backed, 'green', 58), false, 'accepted an unbacked outlier');
+});
+
+// Device-condition synthesis: coherent pulse with per-beat amplitude and
+// period chaos, temporally-correlated ISP noise (consecutive frames share
+// noise, exactly like temporal noise reduction), and the diagnostic's 41 BPM
+// band-edge interference scaled to 0.7x each channel's pulse amplitude.
+function makeIOSFrames({ bpm = 72, fps = 30, duration = 16, seed = 41 } = {}) {
+  const random = seededNoise(seed);
+  const frames = [];
+  let phase = 0; let beatAmp = 1; let lastBeatPhase = 0;
+  const wanderPhase = random() * 6.28;
+  const lpAlpha = 1 - Math.exp(-2 * Math.PI * 0.8 / fps);
+  const lpGain = 1 / Math.sqrt(lpAlpha / (2 - lpAlpha));
+  let lpCommon = 0;
+  const lpStep = () => { lpCommon += lpAlpha * ((random() - 0.5) * 0.016 * lpGain - lpCommon); };
+  const amps = [0.004, 0.003, 0.0025]; // tissue: red > green > blue
+  for (let i = 0; i < fps * duration; i += 1) {
+    const t = i / fps;
+    const instFreq = (bpm / 60) * (1 + 0.12 * (random()));
+    phase += 2 * Math.PI * instFreq / fps;
+    if (phase - lastBeatPhase > 2 * Math.PI) { lastBeatPhase = phase; beatAmp = 0.6 + Math.abs(random()) * 0.8; }
+    const envelope = 1 + 0.3 * Math.sin(2 * Math.PI * 0.09 * t);
+    const wave = beatAmp * envelope * (Math.sin(phase) + 0.2 * Math.sin(2 * phase + 0.5));
+    const interfer = 0.7 * Math.sin(2 * Math.PI * (41 / 60) * t + wanderPhase);
+    const awb = 1 + (-0.045) * (t / duration);
+    lpStep();
+    const n = (m) => lpCommon * m + random() * 0.0015 * m;
+    frames.push({
+      t: t * 1000,
+      r: 185 * (1 + amps[0] * (wave + interfer)) * awb + n(185),
+      g: 82 * (1 + amps[1] * (wave + interfer)) + n(82),
+      b: 42 * (1 + amps[2] * (wave + interfer)) + n(42),
+      spatialCv: 0.06,
+      motion: 0.004,
+    });
+  }
+  return frames;
+}
+
+test('consensus: iPhone-noise regime finalises the true rate through frequency consensus', () => {
+  for (const seed of [23, 37, 41, 89]) {
+    const final = dsp.analyzePulse(makeIOSFrames({ seed }));
+    assert.equal(final.ok, true, `seed ${seed}: ${final.reason}`);
+    assert.equal(final.estimator, 'spectral-consensus', `seed ${seed}: went through ${final.estimator}`);
+    assert.ok(Math.abs(final.bpm - 72) <= 2.5, `seed ${seed}: ${final.bpm} vs 72`);
+    const preview = dsp.previewPulse(makeIOSFrames({ seed }));
+    assert.equal(preview.ok, true, `seed ${seed} preview: ${preview.reason}`);
+    assert.ok(Math.abs(preview.bpm - 72) <= 2.5, `seed ${seed} preview: ${preview.bpm} vs 72`);
+  }
+});
+
+test('consensus: clean signals keep the shape-verified path, iOS paths never fake numbers', () => {
+  const clean = dsp.analyzePulse(makeFrames({ bpm: 72, seed: 72 }));
+  assert.equal(clean.ok, true, clean.reason);
+  assert.equal(clean.estimator, 'shape-verified');
+  // Noise-only input through the consensus machinery must still refuse.
+  const noise = dsp.analyzePulse(makeFrames({ mode: 'noise', seed: 5 }));
+  assert.equal(noise.ok, false, 'consensus path faked a number on noise');
+});
+
+test('consensus: production corroborates frequency-only candidates instead of discarding them', () => {
+  const dspSource = fs.readFileSync(path.join(__dirname, '..', 'gaia-pulse-dsp.js'), 'utf8');
+  const pulse = fs.readFileSync(path.join(__dirname, '..', 'gaia-pulse.js'), 'utf8');
+  assert.match(dspSource, /spectralOnly: true/);
+  assert.match(dspSource, /beatCountCorroborates\(est\.filtered, uniform\.fps, est\.bpm\)/);
+  assert.match(dspSource, /spectralConsensus\(channels, name, est\.bpm\)/);
+  assert.match(dspSource, /no_spectral_consensus/);
+  assert.match(dspSource, /estimator: chosen\.spectralOnly \? 'spectral-consensus' : 'shape-verified'/);
+  assert.match(pulse, /diagSession\.finalVia = analysis\.estimator/);
+  assert.match(pulse, /unconfirmed: '/);
+});

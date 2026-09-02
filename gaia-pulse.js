@@ -176,6 +176,13 @@
 .gp-diag__bar input{flex:1;min-width:9rem;font:12px ui-monospace,Menlo,monospace;padding:6px 8px;border-radius:8px;border:1px solid rgba(167,233,126,.3);background:#050f09;color:#eaf4ea;}
 .gp-diag__bar .gp-btn--ghost{min-height:34px;padding:4px 12px;font-size:.8rem;width:auto;}
 .gp-diag__ta{width:100%;height:8rem;margin-top:6px;font:11px ui-monospace,monospace;background:#050f09;color:#eaf4ea;border:1px solid rgba(167,233,126,.3);border-radius:8px;}
+.gp-stage{display:flex;flex-wrap:wrap;justify-content:center;align-items:center;gap:2px 5px;font-size:.66rem;letter-spacing:.03em;color:rgba(234,244,234,.38);margin:0 0 6px;min-height:1em;}
+.gp-stage span.is-done{color:#7dd956;}
+.gp-stage span.is-now{color:#fff;font-weight:700;}
+.gp-stage i{font-style:normal;opacity:.35;}
+.gp-other{font-size:.66rem;letter-spacing:.12em;text-transform:uppercase;color:rgba(234,244,234,.38);margin:6px 0 -4px;}
+.gp-howto--tap{width:210px;max-width:70vw;margin:2px auto 4px;}
+.gp-ringpulse--tap{transform-origin:126px 60px;}
 .gp-status{font-size:.86rem;color:rgba(234,244,234,.75);min-height:1.3em;margin:8px 0 0;}
 .gp-quality{display:flex;gap:4px;justify-content:center;margin:10px 0 2px;}
 .gp-quality i{width:26px;height:5px;border-radius:99px;background:rgba(255,255,255,.14);transition:background .3s;}
@@ -237,7 +244,7 @@
   function intro(card) {
     card.innerHTML = closeBtn()
       + '<p class="gp-eyebrow">Energy Pulse</p>'
-      + '<svg class="gp-howto" viewBox="0 0 200 176" role="img" aria-label="Rest a fingertip flat over the phone rear camera and flash, covering the whole camera bump">'
+      + '<svg class="gp-howto" viewBox="0 0 200 176" role="img" aria-label="Rest the pad of your thumb or a fingertip lightly over the flash-lit rear lens">'
       + '<defs>'
       + '<linearGradient id="gpSkin" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#e7bf97"/><stop offset=".5" stop-color="#dcae82"/><stop offset="1" stop-color="#c39970"/></linearGradient>'
       + '<radialGradient id="gpFlash" cx="50%" cy="45%" r="55%"><stop offset="0" stop-color="#ff7a5c" stop-opacity=".85"/><stop offset="1" stop-color="#ff7a5c" stop-opacity="0"/></radialGradient>'
@@ -254,13 +261,14 @@
       + '<ellipse cx="100" cy="46" rx="30" ry="22" fill="url(#gpFlash)"/>'
       + '<circle class="gp-ringpulse" cx="100" cy="44" r="16" fill="none" stroke="#7dd956" stroke-width="2"/></g>'
       + '</svg>'
-      + '<span class="gp-pill">Cover the camera + flash with a fingertip</span>'
+      + '<span class="gp-pill">Thumb or fingertip pad over the flash-lit lens</span>'
       + '<h2 class="gp-title">A careful pulse read</h2>'
-      + '<p class="gp-lead">Rest a fingertip flat over the <strong>rear camera and flash</strong> — cover the whole camera bump, right on the skin. Keep the flash on (or sit in bright light), use <strong>light pressure</strong> — pressing hard hides the pulse — and hold still for ~15 seconds. The app returns a number only when the signal passes every quality check.</p>'
+      + '<p class="gp-lead">Place the pad of your <strong>thumb or a fingertip</strong> lightly over the <strong>flash-lit lens</strong>. If nothing reacts, slide across the rear camera cluster until it reads <strong>Lens covered</strong>. Light pressure — pressing hard hides the pulse — and hold still for ~15 seconds. A number appears only once the signal passes every check.</p>'
       + '<div class="gp-actions">'
-      + '<button type="button" class="gp-btn" data-gp-start><i class="ph ph-camera" aria-hidden="true"></i> Read with fingertip</button>'
-      + '<button type="button" class="gp-btn--ghost" data-gp-face><i class="ph ph-user-focus" aria-hidden="true"></i> Read with my face · beta</button>'
-      + '<button type="button" class="gp-btn--link" data-gp-tap>Or tap along with your heartbeat →</button>'
+      + '<button type="button" class="gp-btn" data-gp-start><i class="ph ph-camera" aria-hidden="true"></i> Read with thumb or fingertip</button>'
+      + '<button type="button" class="gp-btn--ghost" data-gp-tap><i class="ph ph-hand-tap" aria-hidden="true"></i> Tap at your wrist</button>'
+      + '<p class="gp-other">Other ways to measure</p>'
+      + '<button type="button" class="gp-btn--link" data-gp-face><i class="ph ph-user-focus" aria-hidden="true"></i> Face camera · beta</button>'
       + '</div>'
       + '<p class="gp-note">Three ways to read — if one won’t catch, try another. All estimate your heart rate for reflection — not a medical device, not a Bio-Well scan. Nothing is recorded or uploaded; it all happens on your phone.</p>';
     card.querySelector('[data-gp-start]').addEventListener('click', () => measure(card, { mode: 'finger' }));
@@ -310,6 +318,7 @@
     if (cameraPolicyBlocked()) { cameraUnavailable(card, true); return; }
     card.innerHTML = closeBtn()
       + '<p class="gp-eyebrow">' + (face ? 'Face pulse · beta' : 'Reading your pulse') + '</p>'
+      + '<p class="gp-stage" data-gp-stage aria-live="polite"></p>'
       + (face ? '<div class="gp-face-preview" data-gp-preview aria-label="Live front camera preview"></div>' : '')
       + '<div class="gp-bpm"><span data-gp-bpm>– –</span><small>BPM</small></div>'
       + '<canvas class="gp-wave" data-gp-wave width="300" height="64" aria-hidden="true"></canvas>'
@@ -318,12 +327,21 @@
       + '<p class="gp-note" data-gp-camera style="margin-top:5px"></p>'
       + (diagEnabled ? DIAG_MARKUP : '')
       + '<div class="gp-actions">'
-      + '<button type="button" class="gp-btn--link" data-gp-switch>' + (face ? 'Use fingertip + rear camera instead' : 'No luck? Use my face (front camera) instead') + '</button>'
-      + '<button type="button" class="gp-btn--link" data-gp-tap>Or tap with your heartbeat →</button>'
+      + '<button type="button" class="gp-btn--link" data-gp-tap>Or tap at your wrist →</button>'
+      + '<button type="button" class="gp-btn--link" data-gp-switch>' + (face ? 'Use thumb/fingertip + rear camera instead' : 'Other ways: face camera (beta)') + '</button>'
       + '</div>';
     card.querySelector('[data-gp-tap]').addEventListener('click', () => { stopCamera(); tapMode(card); });
     card.querySelector('[data-gp-switch]').addEventListener('click', () => { stopCamera(); measure(card, { mode: face ? 'finger' : 'face' }); });
     const statusEl = card.querySelector('[data-gp-status]');
+    // Staged progress: only ever advances, so a brief contact wobble doesn't
+    // bounce the user backwards (the status line still shows the live issue).
+    const stageEl = card.querySelector('[data-gp-stage]');
+    const STAGES = ['Camera', face ? 'Face centred' : 'Lens covered', 'Pulse detected', 'Confirming', 'Stable estimate'];
+    let stageNow = 0;
+    function setStage(n) {
+      if (!stageEl || n <= stageNow) return; stageNow = n;
+      stageEl.innerHTML = STAGES.map((s, i) => '<span class="' + (i + 1 < n ? 'is-done' : (i + 1 === n ? 'is-now' : '')) + '">' + esc(s) + '</span>').join('<i>›</i>');
+    }
     const bpmEl = card.querySelector('[data-gp-bpm]');
     const qEls = [...card.querySelectorAll('.gp-quality i')];
     const cameraEl = card.querySelector('[data-gp-camera]');
@@ -393,6 +411,7 @@
     let receivedFrames = 0;
     let useRafFallback = !video.requestVideoFrameCallback;
     captureActive = true;
+    setStage(1);
     statusEl.textContent = face ? 'Center your face in the oval; hold still in bright, even light.'
       : (torchOn ? 'Flash on — cover the camera and flash with your fingertip, light pressure.' : 'Cover the rear camera with your fingertip; use bright, steady light.');
 
@@ -491,6 +510,7 @@
           const visibleQuality = analysis.ok ? analysis.quality : (analysis.contact && analysis.contact.score) || 0;
           qEls.forEach((el, index) => el.classList.toggle('on', index < Math.round(visibleQuality * 5)));
           const elapsedSignal = frames.length > 1 ? (frames[frames.length - 1].t - frames[0].t) / 1000 : 0;
+          if (analysis.contact && analysis.contact.valid) setStage(2);
           statusEl.textContent = analysis.ok ? 'Clean optical pulse confirmed.'
             : analysis.reason === 'need_more' ? `${face ? 'Face detected — measuring' : 'Contact found — collecting'} ${Math.min(15, Math.floor(elapsedSignal))}/15 seconds…`
               : (reasonCopy[analysis.reason] || 'Checking signal quality…');
@@ -498,10 +518,22 @@
             const liveEstimate = face ? dsp.previewFace(frames) : dsp.previewPulse(frames);
             if (liveEstimate.ok) {
               if (diagSession && diagSession.provisionalAt == null) diagSession.provisionalAt = (now - diagSession.started) / 1000;
-              bpmEl.textContent = Math.round(liveEstimate.bpm);
               const label = bpmEl.parentNode && bpmEl.parentNode.querySelector('small');
-              if (label) label.textContent = 'BPM · checking';
-              statusEl.textContent = 'Pulse found — confirming that it stays stable…';
+              if (elapsedSignal >= 8) {
+                // ~8 s+: an approximate number, clearly marked as still measuring.
+                // It is never saved — only the 15 s stable estimate is the result.
+                setStage(4);
+                bpmEl.textContent = Math.round(liveEstimate.bpm);
+                if (label) label.textContent = 'BPM · still measuring';
+                statusEl.textContent = 'Pulse found — confirming that it stays stable…';
+              } else {
+                // ~5-8 s: a pulse pattern is present, but too few beats to show a
+                // number with any authority (at 40 BPM that's ~3 beats).
+                setStage(3);
+                bpmEl.textContent = '– –';
+                if (label) label.textContent = 'BPM';
+                statusEl.textContent = 'Pulse detected — hold still…';
+              }
             } else if (bpmEl.textContent !== '– –') {
               bpmEl.textContent = '– –';
               const label = bpmEl.parentNode && bpmEl.parentNode.querySelector('small');
@@ -575,14 +607,30 @@
   function tapMode(card, reason) {
     let taps = []; let done = false;
     card.innerHTML = closeBtn()
-      + '<p class="gp-eyebrow">Tap your pulse</p>'
+      + '<p class="gp-eyebrow">Tap at your wrist</p>'
+      + '<svg class="gp-howto gp-howto--tap" viewBox="0 0 200 130" role="img" aria-label="Feel the radial pulse on the thumb-side of your inner wrist, just below the crease, with two fingertips, then tap with each beat">'
+      + '<defs><linearGradient id="gpSkinT" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#eac29b"/><stop offset="1" stop-color="#c99a72"/></linearGradient>'
+      + '<radialGradient id="gpPulseT" cx="50%" cy="50%" r="50%"><stop offset="0" stop-color="#9bf078" stop-opacity=".9"/><stop offset="1" stop-color="#9bf078" stop-opacity="0"/></radialGradient></defs>'
+      // palm-up hand (fingers left, thumb at the top edge) and forearm to the right
+      + '<path d="M198 96 L198 62 Q198 50 184 50 L96 52 Q80 53 80 66 L80 84 Q80 96 96 96 Z" fill="url(#gpSkinT)" stroke="rgba(70,40,15,.28)" stroke-width="1.5"/>'
+      + '<g fill="url(#gpSkinT)" stroke="rgba(70,40,15,.26)" stroke-width="1.3"><path d="M84 54 Q60 44 46 52 Q40 60 60 66 Z"/><path d="M82 66 Q52 62 40 72 Q38 80 62 80 Z"/><path d="M84 80 Q56 82 46 92 Q48 100 66 94 Z"/><path d="M92 92 Q74 100 74 108 Q82 114 96 102 Z"/></g>'
+      + '<path d="M94 52 Q88 36 98 30 Q108 28 108 44 Z" fill="url(#gpSkinT)" stroke="rgba(70,40,15,.26)" stroke-width="1.3"/>'
+      + '<path d="M112 54 Q114 74 112 94" fill="none" stroke="rgba(70,40,15,.18)" stroke-width="1.5"/>'
+      // radial pulse point: thumb-side edge of the wrist, just below the crease
+      + '<ellipse cx="126" cy="60" rx="20" ry="14" fill="url(#gpPulseT)"/>'
+      + '<circle class="gp-ringpulse gp-ringpulse--tap" cx="126" cy="60" r="10" fill="none" stroke="#7dd956" stroke-width="2"/>'
+      + '<circle cx="126" cy="60" r="4" fill="#9bf078"/>'
+      // two fingertips of the other hand resting on that point
+      + '<ellipse cx="130" cy="34" rx="9" ry="16" transform="rotate(-25 130 34)" fill="url(#gpSkinT)" stroke="rgba(70,40,15,.3)" stroke-width="1.2"/>'
+      + '<ellipse cx="146" cy="40" rx="9" ry="16" transform="rotate(-25 146 40)" fill="url(#gpSkinT)" stroke="rgba(70,40,15,.3)" stroke-width="1.2"/>'
+      + '</svg>'
       + '<h2 class="gp-title">Tap with each beat</h2>'
-      + '<p class="gp-lead">' + (reason ? esc(reason) + ' ' : '') + 'Find your pulse (wrist or neck), then tap the circle in time with each heartbeat. Keep going for ~15 seconds.</p>'
+      + '<p class="gp-lead">' + (reason ? esc(reason) + ' ' : '') + 'Rest two fingertips on the <strong>thumb-side of your inner wrist, just below the crease</strong> — that’s the radial pulse (the side of your neck works too). Tap the circle each time you feel a beat, for ~15 seconds.</p>'
       + '<div class="gp-tap" data-gp-taparea>Tap</div>'
       + '<p class="gp-status" data-gp-status>0 taps</p>'
       + '<div class="gp-actions">'
-      + '<button type="button" class="gp-btn--ghost" data-gp-camera>Use fingertip camera</button>'
-      + '<button type="button" class="gp-btn--link" data-gp-faceb>Or read with my face (beta) →</button>'
+      + '<button type="button" class="gp-btn--ghost" data-gp-camera>Use the camera instead (thumb / fingertip)</button>'
+      + '<button type="button" class="gp-btn--link" data-gp-faceb>Other ways: face camera (beta) →</button>'
       + '</div>';
     if (diagEnabled && diagSession) { card.insertAdjacentHTML('beforeend', DIAG_MARKUP); wireDiag(card); }
     const area = card.querySelector('[data-gp-taparea]');
@@ -621,8 +669,8 @@
       : pos < 0.67 ? 'A middle-of-the-range pulse — steady and even.'
       : 'A higher pulse right now — a few slow breaths can help it settle.';
     card.innerHTML = closeBtn()
-      + '<p class="gp-eyebrow">Your pulse</p>'
-      + '<div class="gp-bpm"><span>' + bpm + '</span><small>BPM · ' + (method === 'tap' ? 'tapped' : 'camera') + '</small></div>'
+      + '<p class="gp-eyebrow">Pulse estimate</p>'
+      + '<div class="gp-bpm"><span>' + bpm + '</span><small>BPM · ' + (method === 'tap' ? 'counted from your taps' : 'signal stayed stable during this reading') + '</small></div>'
       + '<div class="gp-gauge"><span class="gp-gauge__pin" style="left:' + (pos * 100) + '%"></span></div>'
       + '<div class="gp-gauge__labels"><span>Calm</span><span>Balanced</span><span>Activated</span></div>'
       + '<p class="gp-read">' + esc(band) + '</p>'

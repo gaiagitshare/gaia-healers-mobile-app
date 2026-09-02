@@ -1,4 +1,4 @@
-const CACHE_NAME = 'gaia-healers-20260902z3-pulse-spectral-consensus';
+const CACHE_NAME = 'gaia-healers-20260902z4-match-sun-signs';
 const APP_SHELL = [
   '/',
   '/home.html',

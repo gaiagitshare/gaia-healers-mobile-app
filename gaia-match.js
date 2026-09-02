@@ -17,12 +17,10 @@
     { id: 'throat', name: 'Throat', hex: '#1E88E5' }, { id: 'third-eye', name: 'Third Eye', hex: '#3949AB' },
     { id: 'crown', name: 'Crown', hex: '#8E24AA' },
   ];
-  const SIGNS = [['Capricorn', 1, 20], ['Aquarius', 2, 19], ['Pisces', 3, 20], ['Aries', 4, 20], ['Taurus', 5, 21], ['Gemini', 6, 21], ['Cancer', 7, 23], ['Leo', 8, 23], ['Virgo', 9, 23], ['Libra', 10, 23], ['Scorpio', 11, 22], ['Sagittarius', 12, 22]];
   const ELEMENT = { Aries: 'Fire', Leo: 'Fire', Sagittarius: 'Fire', Taurus: 'Earth', Virgo: 'Earth', Capricorn: 'Earth', Gemini: 'Air', Libra: 'Air', Aquarius: 'Air', Cancer: 'Water', Scorpio: 'Water', Pisces: 'Water' };
 
   function digitRoot(n) { n = Math.abs(n); while (n > 9) { n = String(n).split('').reduce((a, c) => a + (+c), 0); } return n; }
   function birthChakra(y, m, d) { return CHAKRAS[((digitRoot(y + m + d) - 1) % 7 + 7) % 7]; }
-  function sunSign(m, d) { for (let i = SIGNS.length - 1; i >= 0; i--) { const [name, mo, day] = SIGNS[i]; if (m > mo || (m === mo && d >= day)) return name; } return 'Capricorn'; }
 
   // Playful element harmony (0..1). Same element = warm; Fire/Air & Earth/Water
   // = flowing; the crossed pairs = growthful friction (still positive).
@@ -41,8 +39,14 @@
     const mo = +box.querySelector('[data-' + prefix + '-m]').value;
     const day = +box.querySelector('[data-' + prefix + '-d]').value;
     const yr = +box.querySelector('[data-' + prefix + '-y]').value;
-    if (!mo || !(day >= 1 && day <= 31) || !(yr >= 1900 && yr <= 2025)) return null;
-    return { ck: birthChakra(yr, mo, day), sign: sunSign(mo, day), y: yr, m: mo, d: day };
+    // Sun signs come from the ONE shared table (GaiaWellness.sunSignFromDob),
+    // so Energy Match and the member's horoscope can never disagree. Its
+    // parser also rejects impossible calendar dates (Feb 31, non-leap Feb 29),
+    // pre-1900 years and future dates — replacing the old fixed 2025 year cap.
+    const shared = window.GaiaWellness && window.GaiaWellness.sunSignFromDob;
+    const sign = shared && shared(String(yr).padStart(4, '0') + '-' + String(mo).padStart(2, '0') + '-' + String(day).padStart(2, '0'));
+    if (!mo || !(day >= 1 && day <= 31) || !sign) return null;
+    return { ck: birthChakra(yr, mo, day), sign, y: yr, m: mo, d: day };
   }
   function person(p) { p.element = ELEMENT[p.sign]; p.ci = CHAKRAS.indexOf(p.ck); return p; }
 

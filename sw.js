@@ -1,4 +1,4 @@
-const CACHE_NAME = 'gaia-healers-20260902u-pulse-stability';
+const CACHE_NAME = 'gaia-healers-20260902v-contact-calibration';
 const APP_SHELL = [
   '/',
   '/home.html',

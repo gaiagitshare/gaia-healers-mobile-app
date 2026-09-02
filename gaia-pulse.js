@@ -124,7 +124,7 @@
       lines.push(`contact ${c.valid ? 'OK' : c.reason} score ${(c.score || 0).toFixed(2)} bright ${(c.brightness || 0).toFixed(0)} redRatio ${(c.redRatio || 0).toFixed(2)} texture ${(c.spatialCv || 0).toFixed(2)} motion ${(c.motion || 0).toFixed(3)} redClip ${(c.redClip || 0).toFixed(2)}`);
       const dr = L.diag.drift || { rgOverWindow: 0, gbOverWindow: 0 };
       lines.push(`GUARD: ${L.ok ? 'OK ' + Math.round(L.bpm) : (L.reason || '-')} | window ${L.diag.duration.toFixed(1)}s fps ${L.diag.fps.toFixed(1)} | drift R/G ${(dr.rgOverWindow * 100).toFixed(1)}% G/B ${(dr.gbOverWindow * 100).toFixed(1)}%`);
-      lines.push('chan      fft   snr   ac    q    Δ   puls%  PSAGT  artifact / raw');
+      lines.push('chan      fft   p/n   ac    q    Δ   puls%  PSAGT  artifact / raw');
       for (const [name, ch] of Object.entries(L.diag.channels || {})) {
         if (!ch.usable) { lines.push(`${name.padEnd(9)} n/a`); continue; }
         const p = ch.pass;
@@ -424,6 +424,11 @@
     let provisionalSamples = [];
     let provisionalShown = false;
     let lastProvisionalAt = 0;
+    // Do not let uncovered frames or the ISP's first exposure/gain swing enter
+    // the 15 s PPG window. Contact must remain valid for two seconds first.
+    let contactStableSince = 0;
+    let contactLostSince = 0;
+    let signalWindowStarted = face;
     let receivedFrames = 0;
     let useRafFallback = !video.requestVideoFrameCallback;
     captureActive = true;
@@ -530,7 +535,44 @@
           statusEl.textContent = analysis.ok ? 'Clean optical pulse confirmed.'
             : analysis.reason === 'need_more' ? `${face ? 'Face detected — measuring' : 'Contact found — collecting'} ${Math.min(15, Math.floor(elapsedSignal))}/15 seconds…`
               : (reasonCopy[analysis.reason] || 'Checking signal quality…');
-          if (!analysis.ok && elapsedSignal >= 4.8) {
+          let canAnalyzeSignal = face || signalWindowStarted;
+          if (!face && !signalWindowStarted) {
+            if (analysis.contact && analysis.contact.valid) {
+              if (!contactStableSince) contactStableSince = now;
+              const calibratingFor = now - contactStableSince;
+              if (calibratingFor < 2000) {
+                statusEl.textContent = `Lens covered — calibrating exposure ${Math.min(2, Math.floor(calibratingFor / 1000))}/2 seconds…`;
+              } else {
+                signalWindowStarted = true;
+                contactLostSince = 0;
+                // Keep the current frame as the first clean sample and discard
+                // everything captured before exposure/contact settled.
+                frames.splice(0, Math.max(0, frames.length - 1));
+                provisionalSamples = [];
+                statusEl.textContent = 'Calibrated — collecting a clean pulse signal 0/15 seconds…';
+              }
+            } else {
+              contactStableSince = 0;
+            }
+            canAnalyzeSignal = false; // the next analysis tick starts the clean window
+          } else if (!face && signalWindowStarted) {
+            if (analysis.contact && analysis.contact.valid) {
+              contactLostSince = 0;
+            } else {
+              if (!contactLostSince) contactLostSince = now;
+              if (now - contactLostSince >= 1200) {
+                signalWindowStarted = false;
+                contactStableSince = 0;
+                contactLostSince = 0;
+                frames.splice(0, Math.max(0, frames.length - 1));
+                provisionalSamples = [];
+                canAnalyzeSignal = false;
+                const label = bpmEl.parentNode && bpmEl.parentNode.querySelector('small');
+                if (provisionalShown && label) label.textContent = 'BPM · last estimate, repositioning';
+              }
+            }
+          }
+          if (canAnalyzeSignal && !analysis.ok && elapsedSignal >= 4.8) {
             const liveEstimate = face ? dsp.previewFace(frames) : dsp.previewPulse(frames);
             if (liveEstimate.ok) {
               if (diagSession && diagSession.provisionalAt == null) diagSession.provisionalAt = (now - diagSession.started) / 1000;
@@ -570,7 +612,7 @@
           }
           // analyzePulse already passed contact, artifact, dual-estimator and
           // multi-window stability gates. Do not silently add a second cutoff.
-          if (analysis.ok) { finish(analysis.bpm); return; }
+          if (canAnalyzeSignal && analysis.ok) { finish(analysis.bpm); return; }
         }
 
         if (performance.now() - startedAt > GIVEUP_MS) {

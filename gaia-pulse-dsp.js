@@ -113,6 +113,9 @@
     }
     const floor = median(bins.filter((item) => Math.abs(item.bpm - peak.bpm) > 8
       && Math.abs(item.bpm - peak.bpm * 2) > 8).map((item) => item.power)) || 1e-12;
+    // `snr` is deliberately a LINEAR peak-to-floor power ratio, not dB.
+    // Thresholds such as 3.2 must therefore never be described or tuned as
+    // "3.2 dB" (which would be a different value and acceptance boundary).
     return { bpm: peak.bpm, power: peak.power, snr: peak.power / floor, signal };
   }
 

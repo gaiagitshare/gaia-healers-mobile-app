@@ -200,7 +200,7 @@ test('production capture is frame-clocked and has no timed BPM acceptance', () =
   assert.match(source, /analyzePulse\(frames/); // may pass a site option (e.g. wrist)
   assert.match(source, /dsp\.analyzeFace\(frames\)/);
   assert.match(source, /gp-video--face/);
-  assert.match(source, /if \(analysis\.ok\) \{ finish\(analysis\.bpm\)/);
+  assert.match(source, /if \(canAnalyzeSignal && analysis\.ok\) \{ finish\(analysis\.bpm\)/);
   assert.doesNotMatch(source, /function estimateBpm/);
   assert.doesNotMatch(source, /elapsed\s*>\s*40000/);
   assert.match(source, /tapMode\(card, 'Couldn’t get a clean pulse/);
@@ -224,6 +224,19 @@ test('production UX keeps provisional estimates stable and saves only completed 
   assert.doesNotMatch(source, /else if \(bpmEl\.textContent !== '– –'\)/);
   assert.match(source, /only completed readings are saved on this device/);
   assert.match(source, /you do not need to cover the whole cluster/);
+});
+
+test('production capture calibrates stable contact before starting the clean signal window', () => {
+  const source = fs.readFileSync(path.join(__dirname, '..', 'gaia-pulse.js'), 'utf8');
+  const dspSource = fs.readFileSync(path.join(__dirname, '..', 'gaia-pulse-dsp.js'), 'utf8');
+  assert.match(source, /let contactStableSince = 0/);
+  assert.match(source, /calibratingFor < 2000/);
+  assert.match(source, /frames\.splice\(0, Math\.max\(0, frames\.length - 1\)\)/);
+  assert.match(source, /now - contactLostSince >= 1200/);
+  assert.match(source, /if \(canAnalyzeSignal && analysis\.ok\)/);
+  assert.match(source, /p\/n\s+ac/);
+  assert.match(dspSource, /LINEAR peak-to-floor power ratio, not dB/);
+  assert.doesNotMatch(source, /sendBeacon|WebSocket|fetch\s*\(/);
 });
 
 /* ---- Six-channel safety suite (Phase 1A) ---------------------------------

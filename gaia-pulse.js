@@ -97,7 +97,7 @@
       device: { ua: navigator.userAgent, platform: navigator.platform, language: navigator.language, framed: isFramed() },
       ...info,
       frames: { deltas: [], repeated: 0, gaps: 0, count: 0 },
-      lastFrameAt: null, ticks: [], provisionalAt: null, finalAt: null, finalReason: null, finalBpm: null, referenceBpm: null,
+      lastFrameAt: null, ticks: [], previews: [], provisionalAt: null, finalAt: null, finalReason: null, finalBpm: null, finalVia: null, referenceBpm: null,
     };
     return diagSession;
   }
@@ -426,6 +426,7 @@
     let lastMediaTime = -1;
     let lastAnalysisAt = 0;
     let provisionalSamples = [];
+    let consensusSamples = [];
     let provisionalShown = false;
     let lastProvisionalAt = 0;
     // Do not let uncovered frames or the ISP's first exposure/gain swing enter
@@ -558,6 +559,7 @@
                 // everything captured before exposure/contact settled.
                 frames.splice(0, Math.max(0, frames.length - 1));
                 provisionalSamples = [];
+                consensusSamples = [];
                 statusEl.textContent = 'Calibrated — collecting a clean pulse signal 0/15 seconds…';
               }
             } else {
@@ -578,6 +580,7 @@
                 giveupAt = hardStopAt;
                 frames.splice(0, Math.max(0, frames.length - 1));
                 provisionalSamples = [];
+                consensusSamples = [];
                 canAnalyzeSignal = false;
                 const label = bpmEl.parentNode && bpmEl.parentNode.querySelector('small');
                 if (provisionalShown && label) label.textContent = 'BPM · last estimate, repositioning';
@@ -586,6 +589,14 @@
           }
           if (canAnalyzeSignal && !analysis.ok && elapsedSignal >= 4.8) {
             const liveEstimate = face ? dsp.previewFace(frames) : dsp.previewPulse(frames);
+            if (diagSession) {
+              diagSession.previews.push([
+                Math.round((now - diagSession.started) / 100) / 10,
+                liveEstimate.ok ? Math.round(liveEstimate.bpm) : null,
+                liveEstimate.ok ? liveEstimate.channel : liveEstimate.reason,
+              ]);
+              if (diagSession.previews.length > 60) diagSession.previews.shift();
+            }
             if (liveEstimate.ok) {
               if (diagSession && diagSession.provisionalAt == null) diagSession.provisionalAt = (now - diagSession.started) / 1000;
               const label = bpmEl.parentNode && bpmEl.parentNode.querySelector('small');
@@ -595,6 +606,10 @@
                 // back to dashes; only a completed 15 s result is persisted.
                 provisionalSamples.push({ bpm: Math.round(liveEstimate.bpm), at: now });
                 provisionalSamples = provisionalSamples.filter((sample) => now - sample.at <= 5000).slice(-5);
+                if (!face) {
+                  consensusSamples.push({ bpm: liveEstimate.bpm, at: now, channel: liveEstimate.channel });
+                  consensusSamples = consensusSamples.filter((sample) => now - sample.at <= 10000).slice(-12);
+                }
                 const recent = provisionalSamples.slice(-3).map((sample) => sample.bpm).sort((a, b) => a - b);
                 const spread = recent.length > 1 ? recent[recent.length - 1] - recent[0] : Infinity;
                 if (recent.length >= 2 && spread <= 8) {
@@ -613,14 +628,32 @@
                 if (label) label.textContent = 'BPM';
                 statusEl.textContent = 'Pulse detected — hold still…';
               }
-            } else if (provisionalShown) {
-              const label = bpmEl.parentNode && bpmEl.parentNode.querySelector('small');
-              if (label) label.textContent = now - lastProvisionalAt > 3000 ? 'BPM · last estimate, reacquiring' : 'BPM · estimate, confirming';
+            } else {
+              // Consensus must be consecutive. A failed guarded preview breaks
+              // the run, while the last estimate can remain visible as coaching.
+              consensusSamples = [];
+              if (provisionalShown) {
+                const label = bpmEl.parentNode && bpmEl.parentNode.querySelector('small');
+                if (label) label.textContent = now - lastProvisionalAt > 3000 ? 'BPM · last estimate, reacquiring' : 'BPM · estimate, confirming';
+              }
             }
           }
           if (analysis.contact) {
             const c = analysis.contact;
             cameraEl.textContent = `${cameraName} · ${deliveredSize}${deliveredFps ? ` · ${deliveredFps.toFixed(0)} fps` : ''} · ${modeTag} · signal ${Math.round(visibleQuality * 100)}%`;
+          }
+          // On some real iPhones, every guarded preview agrees for several
+          // seconds while the stricter beat-timing verifier still cannot locate
+          // clean individual peaks. Promote only that narrow failure mode, only
+          // after the full 15 s window, and never bypass contact/artifact guards.
+          const previewAgreement = !face && dsp.previewConsensus
+            ? dsp.previewConsensus(consensusSamples) : { ok: false };
+          if (canAnalyzeSignal && !analysis.ok && elapsedSignal >= 14.5
+            && analysis.reason === 'weak_or_irregular_signal'
+            && analysis.contact && analysis.contact.valid && previewAgreement.ok) {
+            if (diagSession) diagSession.finalVia = 'sustained_preview_consensus';
+            finish(previewAgreement.bpm);
+            return;
           }
           // analyzePulse already passed contact, artifact, dual-estimator and
           // multi-window stability gates. Do not silently add a second cutoff.

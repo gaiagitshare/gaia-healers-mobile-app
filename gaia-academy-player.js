@@ -199,8 +199,15 @@
     modal.querySelector('[data-acad-fs]').addEventListener('click', function () {
       var el = modal.querySelector('.gaia-acad__video') || modal.querySelector('.gaia-acad__yt') || modal.querySelector('[data-stage]');
       if (!el) return;
-      var fn = el.requestFullscreen || el.webkitRequestFullscreen || el.webkitEnterFullscreen;
-      if (fn) { try { fn.call(el); } catch (e) {} }
+      // 1) Native fullscreen where the platform allows it (desktop, Android).
+      var fn = el.requestFullscreen || el.webkitRequestFullscreen;
+      if (fn) { try { fn.call(el); } catch (e) {} return; }
+      // 2) iOS Safari only fullscreens real <video> elements.
+      if (typeof el.webkitEnterFullscreen === 'function') { try { el.webkitEnterFullscreen(); } catch (e) {} return; }
+      // 3) iOS Safari can fullscreen neither iframes nor divs (YouTube/Vimeo
+      // lessons): fill the viewport with the SAME player instead — a class
+      // toggle on the modal, no reload, playback never restarts.
+      modal.classList.toggle('gaia-acad--fill');
     });
 
     var stage = modal.querySelector('[data-stage]');

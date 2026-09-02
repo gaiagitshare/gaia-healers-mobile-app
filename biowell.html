@@ -4,11 +4,15 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Redirecting · Gaia Healers</title>
-  <meta http-equiv="refresh" content="0; url=home.html?view=wellness&tab=biowell" />
+  <!-- Bio-Well in the app means the scan bookings (Bio-Well energy scan, demo,
+       discovery call). The legacy in-app biofield panel no longer exists and
+       the old tab=biowell deep link silently fell back to the generic Energy
+       check tab — Bookings is the honest destination for this link. -->
+  <meta http-equiv="refresh" content="0; url=home.html?view=bookings" />
   <script>
     const params = new URLSearchParams(window.location.search);
-    params.set('view', 'wellness');
-    if (!params.get('tab')) params.set('tab', 'biowell');
+    params.set('view', 'bookings');
+    params.delete('tab');
     window.location.replace(`home.html?${params.toString()}`);
   </script>
 </head>

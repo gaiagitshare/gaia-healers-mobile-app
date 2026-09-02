@@ -513,3 +513,14 @@
     min-height: 10rem;
   }
 }
+
+/* Reduced motion: the same premium scene, held still. Orbs, rings and sparks
+   stop floating/pulsing and scene cross-fades become instant swaps; gradients,
+   layout and the drawn SVGs are unchanged. Scoped to the splash shell only. */
+@media (prefers-reduced-motion: reduce) {
+  .gaia-splash-shell,
+  .gaia-splash-shell * {
+    animation: none !important;
+    transition: none !important;
+  }
+}

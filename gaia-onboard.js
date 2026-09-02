@@ -32,7 +32,7 @@
       + '<div class="g-onb__dob-fields">'
       + '<select data-onb-month aria-label="Birth month"><option value="" disabled selected>Month</option>' + monthOpts + '</select>'
       + '<input type="number" data-onb-day min="1" max="31" inputmode="numeric" aria-label="Birth day" placeholder="Day" />'
-      + '<input type="number" data-onb-year min="1900" max="2025" inputmode="numeric" aria-label="Birth year" placeholder="Year" />'
+      + '<input type="number" data-onb-year min="1900" max="' + new Date().getFullYear() + '" inputmode="numeric" aria-label="Birth year" placeholder="Year" />'
       + '</div></div>';
   }
 
@@ -68,7 +68,7 @@
       var mo = overlay.querySelector('[data-onb-month]').value;
       var day = parseInt(overlay.querySelector('[data-onb-day]').value, 10);
       var year = parseInt(overlay.querySelector('[data-onb-year]').value, 10);
-      if (!mo || !(day >= 1 && day <= 31) || !(year >= 1900 && year <= 2025)) { setStatus('Please enter a full birth date.', true); return; }
+      if (!mo || !(day >= 1 && day <= 31) || !(year >= 1900 && year <= new Date().getFullYear())) { setStatus('Please enter a full birth date.', true); return; }
       var dob = year + '-' + pad(parseInt(mo, 10)) + '-' + pad(day);
       var payload = { dob: dob };
       if (!member) {

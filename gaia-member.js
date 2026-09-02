@@ -260,52 +260,6 @@ body.gaia-booking-open{overflow:hidden;}
     selectChakra(chs[activeIndex] || chs[0]);
   }
 
-  function homeEventCard() {
-    const ev = state.event;
-    if (!ev || !ev.name) {
-      return '<div class="g-event-hero__content">'
-        + '<p class="g-event-hero__kicker">Upcoming gathering</p>'
-        + '<h1 class="g-event-hero__title">Gaia Healers <em>gatherings</em></h1>'
-        + '<p class="g-event-hero__summary">Connect with healers, practitioners, and conscious leaders. The next confirmed gathering will appear here.</p>'
-        + '<span class="g-event-hero__status">Event details coming soon</span></div>';
-    }
-    const when = fmtEventDate(ev);
-    const url = String(ev.sourceUrl || '').trim();
-    const words = String(ev.name || '').trim().split(/\s+/);
-    const last = words.length > 1 ? words.pop() : '';
-    const title = esc(words.join(' ')) + (last ? ' <em>' + esc(last) + '</em>' : '');
-    const titleClass = String(ev.name || '').length > 28 ? ' g-event-hero__title--long' : '';
-    return '<div class="g-event-hero__content">'
-      + '<p class="g-event-hero__kicker">Upcoming gathering</p>'
-      + '<h1 class="g-event-hero__title' + titleClass + '">' + title + '</h1>'
-      + (ev.summary ? '<p class="g-event-hero__summary">' + esc(ev.summary) + '</p>' : '')
-      + '<p class="g-event-hero__meta">' + [when && esc(when), ev.venue && esc(ev.venue)].filter(Boolean).join(' · ') + '</p>'
-      + (url ? '<div class="g-event-hero__actions"><button type="button" class="g-btn g-btn--primary" data-open-in-app="' + esc(url) + '" data-in-app-title="' + esc(ev.name) + '">View event →</button></div>' : '')
-      + '</div>';
-  }
-
-  function membersCard() {
-    if (state.authed && state.data.profile) {
-      const profile = (state.data.profile && state.data.profile.profile) || {};
-      const unlocked = (state.data.access && state.data.access.communities && state.data.access.communities.unlocked) || [];
-      const courses = (state.data.courses && state.data.courses.courses) || [];
-      const accessSummary = [];
-      if (courses.length) accessSummary.push(courses.length + (courses.length === 1 ? ' course' : ' courses'));
-      if (unlocked.length) accessSummary.push(unlocked.length + (unlocked.length === 1 ? ' community' : ' communities'));
-      return '<div class="g-member-access__body"><p class="g-member-access__kicker">Your Gaia Healers</p>'
-        + '<p class="g-member-access__title">' + esc(profile.membershipTier ? profile.membershipTier + ' Member' : 'Member Access') + '</p>'
-        + '<p class="g-member-access__meta">' + esc(accessSummary.join(' · ') || 'No courses or communities yet.') + '</p></div>'
-        + '<a class="g-btn g-btn--secondary g-btn--sm" href="home.html?view=community">View access →</a>';
-    }
-    return '<div class="g-member-access__body"><p class="g-member-access__kicker">Unlock your Gaia Healers</p>'
-      + '<p class="g-member-access__title">Member Access</p>'
-      + '<p class="g-member-access__meta">New here? Join free or explore membership. Already a member? Sign in to see the courses and communities in your account.</p></div>'
-      + '<div class="g-member-access__actions">'
-      + '<button type="button" class="g-btn g-btn--primary g-btn--sm" data-native-signin>Sign in</button>'
-      + '<button type="button" class="g-btn g-btn--secondary g-btn--sm" data-open-in-app="https://join.gaiahealers.com/onboarding" data-in-app-title="Free Gaia Healers Membership">Join free</button>'
-      + '<a class="g-btn g-btn--ghost g-btn--sm" href="home.html?view=store&tab=membership">Memberships</a></div>';
-  }
-
   // Admin-published announcements (from /api/app/bootstrap → gaia.announcements).
   function announcementsHtml(list) {
     if (!list || !list.length) return '';
@@ -318,18 +272,6 @@ body.gaia-booking-open{overflow:hidden;}
         : '<div class="' + cls + '">' + inner + '</div>';
     };
     return '<div class="g-anns">' + list.map(item).join('') + '</div>';
-  }
-
-  // Book a session / work with us — real GHL booking + form widgets (public).
-  // Book a 1:1 with Dr. Nima Farshid (founder) via Calendly. Sits at the top of
-  // the "Book a session" section on Home so it is the first booking members see.
-  // Links verified live on gaiahealers.com/pages/bio-well-demo.
-  function nimaBookingCard(home) {
-    const nima = 'https://calendly.com/nimafarshid/gaia-healers-meeting';
-    return '<article class="g-founder-row' + (home ? ' g-founder-row--home' : '') + '"><div><p class="g-founder-row__kicker">Meet the founder</p>'
-      + '<p class="g-founder-row__title">Dr. Nima Farshid</p>'
-      + '<p class="g-founder-row__meta">Personal guidance from Gaia Healers’ founder and Bio-Well educator.</p></div>'
-      + '<button type="button" class="g-btn g-btn--secondary g-btn--sm" data-book-inline="' + esc(nima) + '" data-book-title="Book with Dr. Nima">Book →</button></article>';
   }
 
   function bookCard() {
@@ -735,19 +677,14 @@ body.gaia-booking-open{overflow:hidden;}
   function renderHome() {
     window.GaiaSuperApp?.render?.();
     renderChakraHero();
-    const eventHero = el('home-event-hero');
-    if (eventHero) eventHero.innerHTML = homeEventCard();
+    // Home hosts that actually exist in the superapp's home markup. The old
+    // writes to home-event-hero / home-member-access / home-founder targeted
+    // ids that were removed from Home long ago (events live in the carousel,
+    // member access in the services grid) — the data was fetched and dropped.
     const anns = el('home-announcements');
     if (anns) anns.innerHTML = announcementsHtml(state.announcements);
-    const access = el('home-member-access');
-    if (access) {
-      access.innerHTML = membersCard();
-      access.querySelector('[data-native-signin]')?.addEventListener('click', () => window.GaiaAuth?.open?.());
-    }
-    const founder = el('home-founder');
-    if (founder) founder.innerHTML = nimaBookingCard(true);
     const book = el('home-book');
-    if (book) book.innerHTML = nimaBookingCard() + bookCard();
+    if (book) book.innerHTML = bookCard();
     // #home-wellness is owned by gaia-wellness.js
   }
 

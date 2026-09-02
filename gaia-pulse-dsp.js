@@ -346,8 +346,8 @@
    * red pinned by the flash could win via green-blue/hue/gNorm and skip the
    * artifact check that only covered raw red/green. Every winner now passes a
    * physiological classifier, ratio winners need raw-tissue confirmation, a
-   * third (time-domain) estimator must agree, and stability uses three
-   * NON-overlapping windows over 15 s. A strong blue channel is NOT by itself
+   * third (time-domain) estimator must agree, and stability uses two
+   * NON-overlapping windows over 10 s. A strong blue channel is NOT by itself
    * treated as an artifact — blue can carry a genuine pulse on some phones.
    * ----------------------------------------------------------------------- */
   const RATIO_CHANNELS = ['redBlue', 'greenBlue', 'hue', 'gNorm'];
@@ -469,12 +469,14 @@
     return { ok: cv < 0.35 && Math.abs(bpm - candidateBpm) <= 8, bpm, beats: peaks.length, cv };
   }
 
-  // Three NON-overlapping segments (~5 s each over the 15 s window) must each
-  // independently support the same rate.
+  // Two NON-overlapping ~5 s segments over a 10 s capture must independently
+  // support the same rate. This keeps the safety check independent while making
+  // a handheld capture achievable; the artifact, dual-estimator and beat-timing
+  // gates above remain unchanged.
   function segmentEstimates(values, fps, thresholds) {
-    const segmentLength = Math.floor(values.length / 3);
+    const segmentLength = Math.floor(values.length / 2);
     if (segmentLength < fps * 4) return [];
-    return [0, 1, 2].map((k) => estimateChannel(values.slice(k * segmentLength, (k + 1) * segmentLength), fps, thresholds)).filter(Boolean);
+    return [0, 1].map((k) => estimateChannel(values.slice(k * segmentLength, (k + 1) * segmentLength), fps, thresholds)).filter(Boolean);
   }
 
   function analyzePulse(frames, options = {}) {
@@ -485,12 +487,11 @@
       || (options.site === 'wrist' ? { minSnr: 2.8, minAutocorrelation: 0.34 } : undefined);
     const contact = contactMetrics(frames, options);
     if (!contact.valid) return { ok: false, reason: contact.reason, contact };
-    const uniform = resampleUniform(frames);
-    // Validated smartphone-PPG studies use 15-20 s recordings; the three
-    // non-overlapping stability windows below need the full 15 s.
-    // The resampler keeps frames with t >= end-15000, so a full window measures
-    // ~14.97 s; 14.5 is the "15 s window is complete" boundary.
-    if (!uniform || uniform.duration < 14.5) return { ok: false, reason: 'need_more', contact, duration: uniform ? uniform.duration : 0 };
+    const uniform = resampleUniform(frames, 10);
+    // ECG-referenced smartphone PPG datasets include 10 s recordings. Require
+    // the full practical window (~9.97 s at 30 fps), then verify two separate
+    // halves rather than asking a handheld user to remain perfect for 15 s.
+    if (!uniform || uniform.duration < 9.5) return { ok: false, reason: 'need_more', contact, duration: uniform ? uniform.duration : 0 };
     const redClipped = contact.redClip > 0.5;
     const channels = channelCandidates(uniform, thresholds);
     const { red, green } = channels;
@@ -523,7 +524,7 @@
     if (!timing || !timing.ok) return { ok: false, reason: 'irregular_beats', contact, fps: uniform.measuredFps };
     const channelValues = channels.values[channel];
     const segments = segmentEstimates(channelValues, uniform.fps, thresholds);
-    if (segments.length < 3) return { ok: false, reason: 'need_more_stability', contact, fps: uniform.measuredFps };
+    if (segments.length < 2) return { ok: false, reason: 'need_more_stability', contact, fps: uniform.measuredFps };
     const segmentBpms = segments.map((item) => item.bpm);
     if (Math.max(...segmentBpms) - Math.min(...segmentBpms) > 7) {
       return { ok: false, reason: 'unstable_rate', contact, fps: uniform.measuredFps };
@@ -668,13 +669,12 @@
 
   function analyzeFace(frames) {
     const thresholds = { minSnr: 2.6, minAutocorrelation: 0.3 };
-    const candidate = faceCandidate(frames, 12, 9, thresholds);
+    const candidate = faceCandidate(frames, 10, 9.5, thresholds);
     if (!candidate.ok) return candidate;
     const { contact, uniform, channels, channel, chosen } = candidate;
     const values = channels.values[channel];
-    const segmentLength = Math.round(uniform.fps * 5);
-    const starts = [0, Math.max(0, values.length - segmentLength)];
-    const segments = starts.map((start) => estimateChannel(values.slice(start, start + segmentLength), uniform.fps, thresholds)).filter(Boolean);
+    const segmentLength = Math.floor(values.length / 2);
+    const segments = [0, 1].map((part) => estimateChannel(values.slice(part * segmentLength, (part + 1) * segmentLength), uniform.fps, thresholds)).filter(Boolean);
     if (segments.length < 2) return { ok: false, reason: 'need_more_stability', contact, fps: uniform.measuredFps };
     const segmentBpms = segments.map((item) => item.bpm);
     if (Math.max(...segmentBpms) - Math.min(...segmentBpms) > 8) {

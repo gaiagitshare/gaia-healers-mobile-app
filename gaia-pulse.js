@@ -314,7 +314,7 @@
       + '<img class="gp-howto" src="assets/pulse-finger.webp" width="720" height="513" decoding="async" alt="A fingertip resting on the flash-lit rear camera cluster of a phone, with a green pulse glow">'
       + '<span class="gp-pill"><i class="ph ph-sun" aria-hidden="true"></i><span>Bridge one lens + its nearby flash<em>with the broad pad of your thumb or fingertip</em></span></span>'
       + '<h2 class="gp-title">A careful pulse read</h2>'
-      + '<p class="gp-lead">Lay the <strong>broad pad</strong> of your thumb or fingertip across <strong>one rear lens and its nearby flash at the same time</strong>. On a multi-lens phone, start with the lens nearest or just below the flash — you do not need to cover the whole cluster. If <strong>Lens covered</strong> does not appear, slide or rotate the pad to the next lens; do not press harder. Hold still with very light pressure for the full clean 15-second window, and stop if the phone feels hot.</p>'
+      + '<p class="gp-lead">Lay the <strong>broad pad</strong> of your thumb or fingertip across <strong>one rear lens and its nearby flash at the same time</strong>. On a multi-lens phone, start with the lens nearest or just below the flash — you do not need to cover the whole cluster. If <strong>Lens covered</strong> does not appear, slide or rotate the pad to the next lens; do not press harder. Hold still with very light pressure for the clean 10-second window, and stop if the phone feels hot.</p>'
       + latestReadingMarkup()
       + '<div class="gp-actions">'
       + '<button type="button" class="gp-btn" data-gp-start><i class="ph ph-camera" aria-hidden="true"></i> Read with thumb or fingertip</button>'
@@ -395,7 +395,7 @@
       + '<div class="gp-live"><div class="gp-live__head"><span><i aria-hidden="true"></i>Live optical camera signal</span><small>On-device</small></div>'
       + '<canvas class="gp-wave" data-gp-wave width="300" height="58" aria-label="Live raw optical signal from the camera"></canvas>'
       + '<div class="gp-live__stats"><span><small>Contact</small><b data-gp-live-contact>0%</b></span>'
-      + '<span><small>Clean window</small><b data-gp-live-window>0.0 / 15s</b></span>'
+      + '<span><small>Clean window</small><b data-gp-live-window>0.0 / 10s</b></span>'
       + '<span><small>Pulse pattern</small><b data-gp-live-pattern>Waiting</b></span></div>'
       + '<p class="gp-live__privacy">Real camera colour samples · no photos or video saved</p></div>'
       + '<p class="gp-status" data-gp-status>Requesting camera…</p>'
@@ -482,7 +482,7 @@
     const frames = [];
     const startedAt = performance.now();
     const SEARCH_TIMEOUT_MS = 35000;
-    const CLEAN_ATTEMPT_MS = 25000; // enough for calibration + the full 15 s verifier
+    const CLEAN_ATTEMPT_MS = 20000; // enough for calibration + the full 10 s verifier
     const HARD_STOP_MS = 60000; // never leave the camera/torch running indefinitely
     const hardStopAt = startedAt + HARD_STOP_MS;
     let giveupAt = startedAt + SEARCH_TIMEOUT_MS;
@@ -494,7 +494,7 @@
     let provisionalShown = false;
     let lastProvisionalAt = 0;
     // Do not let uncovered frames or the ISP's first exposure/gain swing enter
-    // the 15 s PPG window. Contact must remain valid for two seconds first.
+    // the 10 s PPG window. Contact must remain valid for two seconds first.
     let contactStableSince = 0;
     let contactLostSince = 0;
     let signalWindowStarted = face;
@@ -514,7 +514,7 @@
       scene_texture: 'Ambient light is leaking in — bridge the nearby flash and one lens with the broad pad of your finger.',
       motion: 'Too much movement — rest your hand and hold still.',
       unstable_contact: 'Keep gentle, even fingertip contact — light pressure.',
-      need_more: 'Contact found — collecting a clean pulse signal…',
+      need_more: 'Contact found — collecting a clean 10-second pulse signal…',
       need_more_stability: 'Pulse found — hold still a few seconds longer…',
       weak_or_irregular_signal: 'Contact is good, but no clean pulse pattern yet — use very light pressure and hold completely still.',
       channel_disagreement: 'Light or movement is interfering — hold still and keep the lens covered.',
@@ -600,7 +600,7 @@
           const elapsedSignal = frames.length > 1 ? (frames[frames.length - 1].t - frames[0].t) / 1000 : 0;
           if (analysis.contact && analysis.contact.valid) setStage(2);
           statusEl.textContent = analysis.ok ? 'Clean optical pulse confirmed.'
-            : analysis.reason === 'need_more' ? `${face ? 'Face detected — measuring' : 'Contact found — collecting'} ${Math.min(15, Math.floor(elapsedSignal))}/15 seconds…`
+            : analysis.reason === 'need_more' ? `${face ? 'Face detected — measuring' : 'Contact found — collecting'} ${Math.min(10, Math.floor(elapsedSignal))}/10 seconds…`
               : (reasonCopy[analysis.reason] || 'Checking signal quality…');
           let canAnalyzeSignal = face || signalWindowStarted;
           if (!face && !signalWindowStarted) {
@@ -622,7 +622,7 @@
                 frames.splice(0, Math.max(0, frames.length - 1));
                 provisionalSamples = [];
                 consensusSamples = [];
-                statusEl.textContent = 'Calibrated — collecting a clean pulse signal 0/15 seconds…';
+                statusEl.textContent = 'Calibrated — collecting a clean pulse signal 0/10 seconds…';
               }
             } else {
               contactStableSince = 0;
@@ -666,7 +666,7 @@
               if (elapsedSignal >= 8) {
                 // Require two mutually consistent previews, then smooth the live
                 // value. A single failed 700 ms tick must not flash the number
-                // back to dashes; only a completed 15 s result is persisted.
+                // back to dashes; only a completed 10 s result is persisted.
                 provisionalSamples.push({ bpm: Math.round(liveEstimate.bpm), at: now });
                 provisionalSamples = provisionalSamples.filter((sample) => now - sample.at <= 5000).slice(-5);
                 if (!face) {
@@ -707,7 +707,7 @@
           // quality is not pulse quality (the old UI called both “signal”, so a
           // uniform palm could misleadingly show 99% even with no detected beat).
           const contactPercent = Math.round(clamp((analysis.contact && analysis.contact.score) || 0, 0, 1) * 100);
-          const cleanSeconds = canAnalyzeSignal ? Math.min(15, elapsedSignal) : 0;
+          const cleanSeconds = canAnalyzeSignal ? Math.min(10, elapsedSignal) : 0;
           const patternLabel = analysis.ok ? 'Confirmed'
             : !(analysis.contact && analysis.contact.valid) ? 'Waiting'
               : provisionalShown && canAnalyzeSignal ? 'Confirming'
@@ -715,16 +715,16 @@
                 : canAnalyzeSignal && elapsedSignal >= 4.8 ? 'Searching'
                   : 'Building';
           liveContactEl.textContent = contactPercent + '%';
-          liveWindowEl.textContent = cleanSeconds.toFixed(1) + ' / 15s';
+          liveWindowEl.textContent = cleanSeconds.toFixed(1) + ' / 10s';
           livePatternEl.textContent = patternLabel;
           cameraEl.textContent = `${cameraName} · ${deliveredSize}${deliveredFps ? ` · ${deliveredFps.toFixed(0)} fps` : ''} · ${modeTag}`;
           // On some real iPhones, every guarded preview agrees for several
           // seconds while the stricter beat-timing verifier still cannot locate
           // clean individual peaks. Promote only that narrow failure mode, only
-          // after the full 15 s window, and never bypass contact/artifact guards.
+          // after the full 10 s window, and never bypass contact/artifact guards.
           const previewAgreement = !face && dsp.previewConsensus
             ? dsp.previewConsensus(consensusSamples) : { ok: false };
-          if (canAnalyzeSignal && !analysis.ok && elapsedSignal >= 14.5
+          if (canAnalyzeSignal && !analysis.ok && elapsedSignal >= 9.5
             && analysis.reason === 'weak_or_irregular_signal'
             && analysis.contact && analysis.contact.valid && previewAgreement.ok) {
             if (diagSession) diagSession.finalVia = 'sustained_preview_consensus';

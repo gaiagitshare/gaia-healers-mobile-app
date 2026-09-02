@@ -15,7 +15,7 @@ function seededNoise(seed) {
 function makeFrames({
   bpm = 72,
   fps = 30,
-  duration = 16, // final result needs the 15 s window (validated-study standard)
+  duration = 16, // longer than the production 10 s proof window
   mode = 'ppg',
   jitter = true,
   seed = 7,
@@ -276,12 +276,24 @@ test('production capture calibrates stable contact before starting the clean sig
 
 test('production timeout starts a full bounded verification attempt after calibration', () => {
   const source = fs.readFileSync(path.join(__dirname, '..', 'gaia-pulse.js'), 'utf8');
-  assert.match(source, /const CLEAN_ATTEMPT_MS = 25000/);
+  assert.match(source, /const CLEAN_ATTEMPT_MS = 20000/);
   assert.match(source, /const HARD_STOP_MS = 60000/);
   assert.match(source, /giveupAt = Math\.min\(hardStopAt, now \+ CLEAN_ATTEMPT_MS\)/);
   assert.match(source, /giveupAt = hardStopAt/);
   assert.match(source, /timeoutNow > giveupAt \|\| timeoutNow > hardStopAt/);
   assert.doesNotMatch(source, /performance\.now\(\) - startedAt > GIVEUP_MS/);
+});
+
+test('production uses an achievable ten-second proof window without lowering signal thresholds', () => {
+  const source = fs.readFileSync(path.join(__dirname, '..', 'gaia-pulse.js'), 'utf8');
+  const dspSource = fs.readFileSync(path.join(__dirname, '..', 'gaia-pulse-dsp.js'), 'utf8');
+  assert.match(source, /clean 10-second window/);
+  assert.match(source, /cleanSeconds = canAnalyzeSignal \? Math\.min\(10, elapsedSignal\)/);
+  assert.match(dspSource, /resampleUniform\(frames, 10\)/);
+  assert.match(dspSource, /uniform\.duration < 9\.5/);
+  assert.match(dspSource, /const segmentLength = Math\.floor\(values\.length \/ 2\)/);
+  assert.match(dspSource, /minSnr\) \? thresholds\.minSnr : 3\.2/);
+  assert.match(dspSource, /minAutocorrelation\) \? thresholds\.minAutocorrelation : 0\.38/);
 });
 
 /* ---- Six-channel safety suite (Phase 1A) ---------------------------------
@@ -385,7 +397,7 @@ test('safety: fingertip paths classify every candidate, and ratio winners need r
   assert.match(src, /classifyArtifact\(uniform, uniform\.fps, est\.bpm\)/);
   assert.match(src, /RATIO_CHANNELS\.includes\(name\) && !rawConfirms/);
   assert.match(src, /peakTimingEstimate\(chosen\.filtered/);
-  assert.match(src, /uniform\.duration < 14\.5/);
+  assert.match(src, /uniform\.duration < 9\.5/);
 });
 
 test('safety: face path cannot finalise or preview on a white-balance colour swing', () => {
@@ -424,7 +436,7 @@ test('safety: preview consensus rejects short, scattered, or interrupted runs', 
 
 test('safety: consensus fallback is limited to the full-window weak-signal path', () => {
   const src = fs.readFileSync(path.join(__dirname, '..', 'gaia-pulse.js'), 'utf8');
-  assert.match(src, /elapsedSignal >= 14\.5/);
+  assert.match(src, /elapsedSignal >= 9\.5/);
   assert.match(src, /analysis\.reason === 'weak_or_irregular_signal'/);
   assert.match(src, /analysis\.contact && analysis\.contact\.valid && previewAgreement\.ok/);
   assert.match(src, /consensusSamples = \[\];/);

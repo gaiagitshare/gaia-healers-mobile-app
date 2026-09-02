@@ -735,19 +735,14 @@ body.gaia-booking-open{overflow:hidden;}
   function renderHome() {
     window.GaiaSuperApp?.render?.();
     renderChakraHero();
-    const eventHero = el('home-event-hero');
-    if (eventHero) eventHero.innerHTML = homeEventCard();
+    // Home hosts that actually exist in the superapp's home markup. The old
+    // writes to home-event-hero / home-member-access / home-founder targeted
+    // ids that were removed from Home long ago (events live in the carousel,
+    // member access in the services grid) — the data was fetched and dropped.
     const anns = el('home-announcements');
     if (anns) anns.innerHTML = announcementsHtml(state.announcements);
-    const access = el('home-member-access');
-    if (access) {
-      access.innerHTML = membersCard();
-      access.querySelector('[data-native-signin]')?.addEventListener('click', () => window.GaiaAuth?.open?.());
-    }
-    const founder = el('home-founder');
-    if (founder) founder.innerHTML = nimaBookingCard(true);
     const book = el('home-book');
-    if (book) book.innerHTML = nimaBookingCard() + bookCard();
+    if (book) book.innerHTML = bookCard();
     // #home-wellness is owned by gaia-wellness.js
   }
 

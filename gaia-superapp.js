@@ -731,6 +731,9 @@
       + serviceLink('bookings', 'calendar-check', 'Bookings', stateMeta('Sessions and consultations', upcomingAppointments().length, 'upcoming booking', 'upcoming bookings'));
 
     root.innerHTML = '<div class="g-super-home">'
+      // Admin-published announcements (rendered by gaia-member.js from
+      // /api/app/bootstrap) sit above everything, for members and guests alike.
+      + '<div id="home-announcements"></div>'
       // The greeting opens the card on its own; the date and the question sit
       // with the actions at the foot. Reordered here rather than with CSS
       // `order` so what a screen reader hears matches what the eye sees.
@@ -751,6 +754,7 @@
           + '<section class="g-super-services"><div class="g-super-section-head"><div><p class="g-super-kicker">Your access</p><h2>Everything Gaia Healers</h2></div><a href="home.html?view=profile">Your account</a></div><div class="g-super-services__grid">' + services + '</div></section>'
           + '<div data-sky-host></div>'
           + nextBookingCard()
+          + '<div id="home-book"></div>'
           + '<section class="g-super-sync">' + icon('check-circle') + '<div><strong>Your access is synced</strong><span>Courses, communities, plans and purchases reflect your Gaia Healers account.</span></div></section>'
         // Logged-out flow: daily energy, then the free tools a stranger can use
         // right now, the event, and one clear way in.
@@ -758,7 +762,8 @@
           + eventFeatureCarousel()
           + freeTools()
           + '<div data-sky-host></div>'
-          + authPrompt(true))
+          + authPrompt(true)
+          + '<div id="home-book"></div>')
       + '</div>';
     bind(root);
     // Panels that live inside the home screen but are owned by their own files
@@ -1521,7 +1526,9 @@
   }
 
   function updateInboxBadge() {
-    const link = document.querySelector('.gaia-tabbar__link[data-app-nav="inbox"]');
+    // The tab bar has no Inbox tab: shared-nav.js maps the inbox view onto the
+    // Community tab (VIEW_TO_TAB), so the unread badge lives there.
+    const link = document.querySelector('.gaia-tabbar__link[data-app-nav="community"]');
     if (!link) return;
     link.querySelector('.gaia-tabbar__badge')?.remove();
     const unread = Number(memberState().data?.notif?.counts?.unread || 0);

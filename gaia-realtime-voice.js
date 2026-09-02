@@ -62,6 +62,10 @@
           }
         }
         while (outputIndex < channel.length) channel[outputIndex++] = 0;
+        // Mono PCM must be mirrored to EVERY output channel: on stereo hardware
+        // (including the iPhone speaker route) the browser only zeros unwritten
+        // channels, which made Gaia speak in one ear.
+        for (let c = 1; c < output.length; c += 1) output[c].set(channel);
         return true;
       }
     }

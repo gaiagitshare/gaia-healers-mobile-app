@@ -1,9 +1,13 @@
 /* Gaia Healers — production app shell, routing, authentication, and Gaia Assist. */
 (function () {
   if (new URLSearchParams(window.location.search).has('store')) {
-    sessionStorage.setItem('gaia-coach-v5', '1');
-    sessionStorage.setItem('gaia-entered', '1');
-    localStorage.setItem('gaia-onboarded', '1');
+    // A store deep link is a deliberate entry: mark the tour seen (the actual
+    // key the first-run tour reads — the old 'gaia-coach-v5' write was dead)
+    // and skip the splash on any later visit.
+    try {
+      localStorage.setItem('gaia-tour-v1', '1');
+      localStorage.setItem('gaia-onboarded', '1');
+    } catch (_) {}
   }
 
   const COACH_KEY = 'gaia-coach-v5';
@@ -12,9 +16,6 @@
   const VOICE_PROVIDER_KEY = 'gaia-assist-voice-provider';
   const VOICE_NAME_KEY = 'gaia-assist-voice-name';
   const VOICE_SPEED_KEY = 'gaia-assist-voice-speed';
-  const ADMIN_MODE_KEY = 'gaia-admin-mode';
-  const ADMIN_UNLOCK_PARAM = 'admin';
-  const ADMIN_DEV_PASSCODE = 'gaia2026';
   const ASSIST_WELCOME_KEY = 'gaia-assist-welcome-v3';
   const GHL_CUSTOM_MENU_URL = 'https://crm.gaiahealers.com/v2/location/WkKl1K5RuZNQ60xR48k6/custom-menu-link/328efaea-4e94-42ec-9ce2-4358a64657db';
   const APP_VIEWS = new Set(['today', 'journey', 'wellness', 'academy', 'community', 'events', 'bookings', 'inbox', 'profile', 'store', 'directory']);
@@ -1026,6 +1027,7 @@
     let modal;
     let statusEl;
     let emailInput;
+    let authA11yRelease = null;
 
     function ensureModal() {
       if (modal) return modal;
@@ -1136,6 +1138,8 @@
       joinEmail?.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); submitJoin(); } });
       const closeModal = () => {
         modal.hidden = true;
+        authA11yRelease?.();
+        authA11yRelease = null;
       };
       modal.querySelector('[data-auth-close]').addEventListener('click', closeModal);
       modal.addEventListener('click', (event) => {
@@ -1195,8 +1199,11 @@
       ensureModal();
       if (prefill && emailInput && !emailInput.value) emailInput.value = prefill;
       modal.hidden = false;
+      authA11yRelease?.();
+      authA11yRelease = bindDialogA11y(modal.querySelector('.gaia-auth-modal__panel'), closeModalSafe);
       setTimeout(() => { try { emailInput?.focus(); } catch (_) {} }, 50);
     }
+    function closeModalSafe() { modal.hidden = true; authA11yRelease?.(); authA11yRelease = null; }
 
     function cleanAuthHintsFromUrl() {
       const url = new URL(window.location.href);
@@ -1428,7 +1435,12 @@
 
   function initMembershipAccess() {
     let sheet;
-    const close = () => { if (sheet) sheet.hidden = true; };
+    let sheetA11yRelease = null;
+    const close = () => {
+      if (sheet) sheet.hidden = true;
+      sheetA11yRelease?.();
+      sheetA11yRelease = null;
+    };
     const ensure = () => {
       if (sheet) return sheet;
       sheet = document.createElement('div');
@@ -1458,7 +1470,16 @@
       sheet.querySelector('[data-book-inline]')?.addEventListener('click', close);
       return sheet;
     };
-    window.GaiaMembership = { open() { ensure().hidden = false; }, close };
+    window.GaiaMembership = {
+      open() {
+        const s = ensure();
+        s.hidden = false;
+        sheetA11yRelease?.();
+        sheetA11yRelease = bindDialogA11y(s.querySelector('.gaia-menu-sheet__panel'), close);
+        try { s.querySelector('.gaia-menu-sheet__link')?.focus(); } catch (_) {}
+      },
+      close,
+    };
   }
 
   function initTheme() {
@@ -1683,6 +1704,37 @@
     refreshChakraMaps();
   }
 
+  // Escape + focus trap for the app's role="dialog" aria-modal panels (auth
+  // modal, membership sheet). Binds a keydown handler to the panel: Escape
+  // closes, Tab cycles inside the panel only. Returns a release() that
+  // unbinds and restores focus to what was focused before the dialog opened.
+  function bindDialogA11y(panel, onClose) {
+    if (!panel) return function release() {};
+    const FOCUSABLE = 'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
+    const previouslyFocused = document.activeElement;
+    const onKeydown = (event) => {
+      if (event.key === 'Escape') { event.preventDefault(); onClose(); return; }
+      if (event.key !== 'Tab') return;
+      const focusables = Array.from(panel.querySelectorAll(FOCUSABLE)).filter((el) => el.getClientRects().length > 0);
+      if (!focusables.length) return;
+      const first = focusables[0];
+      const last = focusables[focusables.length - 1];
+      if (event.shiftKey && (document.activeElement === first || !panel.contains(document.activeElement))) {
+        event.preventDefault(); last.focus();
+      } else if (!event.shiftKey && (document.activeElement === last || !panel.contains(document.activeElement))) {
+        event.preventDefault(); first.focus();
+      }
+    };
+    panel.addEventListener('keydown', onKeydown);
+    return function release() {
+      panel.removeEventListener('keydown', onKeydown);
+      if (previouslyFocused && previouslyFocused.focus && document.contains(previouslyFocused)) {
+        try { previouslyFocused.focus(); } catch (_) {}
+      }
+    };
+  }
+
+
   // First-run tour: a once-ever, guest-only spotlight walk that shows a new
   // visitor the free tools, Ask Gaia, the Menu, and how to save their readings.
   const TOUR_KEY = 'gaia-tour-v1';
@@ -1861,12 +1913,22 @@
       if (nextBtn) nextBtn.classList.toggle('hidden', n === steps.length - 1);
     }
 
+    // Shared/deep links must survive the splash: Enter and Skip both carry the
+    // incoming query string and hash through to home.html, so a link like
+    // gaiahealers.app/?view=events&event=… lands where it was meant to.
+    const dest = 'home.html' + window.location.search + window.location.hash;
+    const skipLink = root.querySelector('[data-splash-skip]');
+    enterLink?.setAttribute('href', dest);
+    if (skipLink) skipLink.setAttribute('href', dest);
+
     nextBtn?.addEventListener('click', () => {
       if (i < steps.length - 1) { i += 1; show(i); }
     });
     enterLink?.addEventListener('click', () => {
-      sessionStorage.setItem('gaia-entered', '1');
-      localStorage.setItem('gaia-onboarded', '1');
+      try { localStorage.setItem('gaia-onboarded', '1'); } catch (_) {}
+    });
+    skipLink?.addEventListener('click', () => {
+      try { localStorage.setItem('gaia-onboarded', '1'); } catch (_) {}
     });
 
     // Swipe navigation for mobile splash intro.
@@ -1903,62 +1965,19 @@
 
     const screens = Array.from(shell.querySelectorAll('[data-screen]'));
     const screenMap = new Map(screens.map((screen) => [screen.dataset.screen, screen]));
-    const adminEntries = Array.from(document.querySelectorAll('[data-admin-entry]'));
-    const adminUnlockButtons = Array.from(document.querySelectorAll('[data-admin-unlock]'));
-    const adminLockedPanels = Array.from(document.querySelectorAll('[data-admin-locked]'));
     const signOut = document.querySelector('[data-sign-out]');
     let activeView = 'today';
-    let adminBlocked = false;
 
-    function adminMode() {
-      return sessionStorage.getItem(ADMIN_MODE_KEY) === '1';
-    }
-
-    function adminUnlockAvailable() {
-      const params = new URLSearchParams(window.location.search);
-      return params.get(ADMIN_UNLOCK_PARAM) === '1' || adminMode();
-    }
-
-    function setAdminMode(enabled) {
-      if (enabled) sessionStorage.setItem(ADMIN_MODE_KEY, '1');
-      else sessionStorage.removeItem(ADMIN_MODE_KEY);
-      adminBlocked = false;
-      syncAdminUi();
-    }
-
-    function syncAdminUi() {
-      const enabled = adminMode();
-      const unlockAvailable = adminUnlockAvailable();
-      adminEntries.forEach((entry) => { entry.hidden = !enabled; });
-      adminUnlockButtons.forEach((button) => {
-        button.hidden = !unlockAvailable;
-        button.textContent = enabled ? 'Lock admin' : 'Unlock admin';
-        button.setAttribute('aria-pressed', String(enabled));
-      });
-      adminLockedPanels.forEach((panel) => {
-        panel.hidden = enabled || (!unlockAvailable && !adminBlocked);
-      });
-      document.body.classList.toggle('gaia-admin-mode', enabled);
-    }
-
-    function handleAdminUnlock() {
-      if (adminMode()) {
-        setAdminMode(false);
-        if (activeView === 'admin') navigate('profile', { replace: true });
-        return;
-      }
-
-      const passcode = window.prompt('Enter Gaia Healers admin passcode');
-      if (passcode === null) return;
-      if (passcode.trim() === ADMIN_DEV_PASSCODE) {
-        setAdminMode(true);
-        navigate('admin');
-        return;
-      }
-      adminBlocked = true;
-      syncAdminUi();
-      window.alert('Admin is not available.');
-    }
+    // Community deep links (?view=community&tab=…): the Community screen has
+    // no tab bar — it is three stacked sections — so a tab scrolls to its
+    // section. showView() calls this on every community navigation.
+    window.GaiaCommunityTabs = {
+      activate(tab = 'discussion') {
+        const labels = { discussion: 'Your circles', members: 'Connect', events: 'Live and updates' };
+        const target = shell.querySelector('[data-screen="community"] section[aria-label="' + (labels[tab] || labels.discussion) + '"]');
+        if (target) target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      },
+    };
 
     function normalizeView(value) {
       const view = String(value || 'today').toLowerCase();
@@ -2036,9 +2055,8 @@
         return showView('wellness', { ...options, tab: options.tab || (view === 'biowell' ? 'check' : view) });
       }
       let nextView = normalizeView(view);
-      // Admin is protected by a server-side password (gaia-admin.js) — it's
-      // reachable directly (not in the nav), and the login form gates it.
-      adminBlocked = Boolean(options.adminBlocked);
+      // Admin is the standalone, server-side-password-protected screen at
+      // /admin — nothing in the public app shell unlocks it.
 
       screens.forEach((screen) => {
         const on = screen.dataset.screen === nextView;
@@ -2054,15 +2072,11 @@
       if (nextView === 'wellness') {
         window.GaiaWellnessTabs?.activate(options.tab || 'check');
       }
-      if (options.adminBlocked) {
-        const lockedPanel = document.querySelector('[data-admin-locked]');
-        lockedPanel?.scrollIntoView?.({ block: 'center' });
-      } else {
+      {
         const useInstantScroll = isCoarsePointer()
           || window.matchMedia('(prefers-reduced-motion: reduce)').matches;
         window.scrollTo({ top: 0, behavior: options.replace || useInstantScroll ? 'auto' : 'smooth' });
       }
-      syncAdminUi();
       const routeTab = options.tab || tabForView(nextView, options.tab);
       window.dispatchEvent(new CustomEvent('gaia:route', { detail: { view: nextView, tab: routeTab } }));
       if (nextView === 'wellness' && (options.tab || 'check') === 'chakras') {
@@ -2134,9 +2148,6 @@
     });
     window.addEventListener('gaia:route', syncNavButtons);
     syncNavButtons();
-    adminUnlockButtons.forEach((button) => {
-      button.addEventListener('click', handleAdminUnlock);
-    });
     signOut?.addEventListener('click', () => {
       sessionStorage.clear();
       setAdminMode(false);
@@ -4440,7 +4451,12 @@
       // voice transcript. `run` executes after navigating Home.
       if (/(colou?r|personality)[^.]{0,12}(test|quiz)|personality test/.test(t)) return { label: 'Start the Colour Test', view: 'wellness', run: () => window.GaiaQuiz?.start?.() };
       if (/check[ -]?in/.test(t) && /(challenge|chakra|today)/.test(t)) return { label: 'Check in for today', view: 'wellness', run: () => window.GaiaWellness?.checkIn?.() };
-      if (/(join|start|begin|enroll|do)[^.]{0,20}(8[- ]?week|chakra challenge|challenge)/.test(t)) return { label: 'Join the 8-week challenge', view: 'wellness', run: () => window.GaiaWellness?.joinChallenge?.() };
+      if (/(join|start|begin|enroll|do)[^.]{0,20}(8[- ]?week|chakra challenge|challenge)/.test(t)) return { label: 'Join the 8-week challenge', view: 'wellness', run: () => {
+        // The join button renders with the wellness check tab (for signed-up
+        // profiles); give the view a beat to render before clicking it. If it
+        // is not there, GaiaWellness falls back to focusing the sign-up form.
+        window.setTimeout(() => window.GaiaWellness?.joinChallenge?.(), 250);
+      } };
       if (/(8[- ]?week|chakra challenge|\bchallenge\b)/.test(t)) return { label: 'Open the Chakra Challenge', view: 'wellness' };
       if (/(sign\s*(?:me\s*)?up|register|unlock)[^.]{0,24}(wellness|daily|horoscope|chakra|body point)|(wellness|daily|horoscope)[^.]{0,16}(sign\s*(?:me\s*)?up|register)/.test(t)) return { label: 'Start your wellness sign-up', view: 'wellness', run: () => window.GaiaWellness?.focusSignup?.() };
       if (/horoscope|sun sign|daily guidance/.test(t)) return { label: 'Open your horoscope', view: 'wellness', tab: 'horoscope' };
@@ -4555,13 +4571,10 @@
         return true;
       }
       if (intent === 'booking') {
+        // The Bookings view is the session catalogue — the old path hunted for
+        // a "Book a session" card on Today that no longer exists there.
         setOpen(false);
-        window.GaiaAppShell?.go?.('today');
-        window.setTimeout(() => {
-          const label = [...document.querySelectorAll('.g-card__label')]
-            .find((node) => /book a session/i.test(node.textContent || ''));
-          label?.closest('.g-card')?.scrollIntoView?.({ behavior: 'smooth', block: 'center' });
-        }, 80);
+        window.GaiaAppShell?.go?.('bookings');
         return true;
       }
       return false;

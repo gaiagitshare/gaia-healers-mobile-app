@@ -1,4 +1,4 @@
-const CACHE_NAME = 'gaia-healers-20260902z5-offline-tool-scripts';
+const CACHE_NAME = 'gaia-healers-20260902z6-first-visit-fixes';
 const APP_SHELL = [
   '/',
   '/home.html',

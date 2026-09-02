@@ -2150,7 +2150,6 @@
     syncNavButtons();
     signOut?.addEventListener('click', () => {
       sessionStorage.clear();
-      setAdminMode(false);
       navigate('today');
     });
     window.addEventListener('popstate', () => {
@@ -2158,14 +2157,12 @@
       showView(route.view, { tab: route.tab, replace: true });
     });
 
-    syncAdminUi();
     const route = routeFromUrl();
     navigate(route.view, { tab: route.tab, event: route.event, replace: true });
 
     window.GaiaAppShell = {
       go: navigate,
       currentView: () => activeView,
-      adminMode,
     };
   }
 

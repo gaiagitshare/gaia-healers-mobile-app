@@ -198,3 +198,79 @@ test('assist booking chip navigates to the bookings view', () => {
   assert.match(ui, /intent === 'booking'\)[\s\S]{0,500}go\?\.\('bookings'\)/);
   assert.doesNotMatch(ui, /book a session\/i\.test/);
 });
+
+/* ---- boot smoke: execute gaia-ui.js's real boot chain in a DOM stub --------
+ * A runtime ReferenceError in initAppShellNavigation (e.g. a call to a deleted
+ * helper) passes node --check and every source grep — this test is the only
+ * guard that actually runs the boot. Found in external audit: PR #61 shipped
+ * three dangling admin call sites that killed home.html on every load while
+ * all 63 tests stayed green.
+ * ------------------------------------------------------------------------ */
+test('boot smoke: gaia-ui.js boots on a home-like DOM without throwing', () => {
+  const handlers = {};
+  const listeners = {};
+  function fakeEl(tag) {
+    const el = {
+      tagName: (tag || 'div').toUpperCase(), children: [], style: {}, dataset: {},
+      classList: { add() {}, remove() {}, toggle() {}, contains() { return false; } },
+      addEventListener(t, f) { (listeners[t] = listeners[t] || []).push(f); },
+      removeEventListener() {},
+      appendChild(c) { return c; }, removeChild() {}, remove() {},
+      setAttribute() {}, getAttribute() { return null; }, hasAttribute() { return false; },
+      querySelector() { return null; }, querySelectorAll() { return []; },
+      innerHTML: '', textContent: '', value: '', hidden: false,
+      focus() {}, blur() {}, click() {},
+      getClientRects() { return { length: 0 }; },
+    };
+    return el;
+  }
+  const shell = fakeEl('div');
+  global.document = {
+    readyState: 'loading',
+    title: 'Gaia Healers App',
+    body: fakeEl('body'),
+    documentElement: fakeEl('html'),
+    head: fakeEl('head'),
+    getElementById(id) { return id === 'gaia-app-shell' ? shell : null; },
+    querySelector() { return null; },
+    querySelectorAll() { return []; },
+    createElement: (t) => fakeEl(t),
+    createTextNode: () => ({ data: '' }),
+    addEventListener(t, f) { (handlers[t] = handlers[t] || []).push(f); },
+    removeEventListener() {},
+    dispatchEvent() { return true; },
+    contains() { return false; },
+    activeElement: null,
+  };
+  const store = (() => { const m = new Map(); return {
+    getItem: (k) => (m.has(k) ? m.get(k) : null),
+    setItem: (k, v) => m.set(k, String(v)),
+    removeItem: (k) => m.delete(k), clear: () => m.clear(),
+  }; })();
+  global.window = global;
+  global.window.addEventListener = () => {};
+  global.window.removeEventListener = () => {};
+  global.window.dispatchEvent = () => true;
+  global.window.location = { search: '', hash: '', href: 'https://gaiahealers.app/home.html', pathname: '/home.html', origin: 'https://gaiahealers.app', replace() {} };
+  global.window.matchMedia = () => ({ matches: false, addEventListener() {}, addListener() {} });
+  global.window.scrollTo = () => {};
+  global.window.requestAnimationFrame = () => 0;
+  global.window.setTimeout = () => 0;   // deterministic: no deferred callbacks
+  global.window.clearTimeout = () => {};
+  global.localStorage = store;
+  global.sessionStorage = { ...store };
+  global.CustomEvent = class CustomEvent { constructor(type, options) { this.type = type; this.detail = options && options.detail; } };
+  global.navigator = { userAgent: 'node-test', clipboard: { writeText() { return Promise.resolve(); } } };
+  global.fetch = () => new Promise(() => {}); // pending forever: no async paths run
+  global.history = { replaceState() {}, pushState() {}, state: null, length: 1, scrollRestoration: 'manual' };
+
+  const ui = read('gaia-ui.js');
+  assert.doesNotThrow(() => {
+    new Function('window', 'document', 'navigator', 'localStorage', 'sessionStorage', 'CustomEvent', 'fetch', 'setTimeout', 'clearTimeout', 'requestAnimationFrame', 'matchMedia', ui)(
+      global.window, global.document, global.navigator, global.localStorage, global.sessionStorage, global.CustomEvent, global.fetch, global.window.setTimeout, global.window.clearTimeout, global.window.requestAnimationFrame, global.window.matchMedia);
+  }, 'gaia-ui.js top-level evaluation');
+  assert.ok(handlers.DOMContentLoaded && handlers.DOMContentLoaded.length, 'boot handler registered');
+  assert.doesNotThrow(() => handlers.DOMContentLoaded.forEach((f) => f()), 'the full boot chain (all init* calls)');
+  assert.equal(typeof global.window.GaiaAppShell, 'object', 'GaiaAppShell exported — the route never ran if this is undefined');
+  assert.equal(typeof global.window.GaiaAppShell.go, 'function');
+});

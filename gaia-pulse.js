@@ -350,8 +350,10 @@
         const gridSums = new Array(64).fill(0);
         const gridCounts = new Array(64).fill(0);
         const cnt = px.length / 4;
+        let satCount = 0; // pixels with red pinned by the flash (no usable AC there)
         for (let i = 0; i < px.length; i += 4) {
           const rr = px[i]; const gg = px[i + 1]; const bb = px[i + 2];
+          if (rr >= 250) satCount += 1;
           const lum = 0.2126 * rr + 0.7152 * gg + 0.0722 * bb;
           const pixelIndex = i / 4;
           const x = pixelIndex % 32;
@@ -370,8 +372,8 @@
         // for the tiny live <video> stalls/repeats, which froze the collection
         // timer at "0/8 seconds" and starved the resampler — `now` is monotonic.
         const t = now;
-        frames.push({ t, r, g, b, spatialCv: texture, motion });
-        while (frames.length && t - frames[0].t > 14000) frames.shift();
+        frames.push({ t, r, g, b, spatialCv: texture, motion, satR: satCount / cnt });
+        while (frames.length && t - frames[0].t > 17000) frames.shift(); // ~15 s analysed + margin
         drawWave(wctx, wave, frames.slice(-300).map((frame) => frame.r));
 
         if (now - lastAnalysisAt >= 700) {
@@ -381,7 +383,7 @@
           qEls.forEach((el, index) => el.classList.toggle('on', index < Math.round(visibleQuality * 5)));
           const elapsedSignal = frames.length > 1 ? (frames[frames.length - 1].t - frames[0].t) / 1000 : 0;
           statusEl.textContent = analysis.ok ? 'Clean optical pulse confirmed.'
-            : analysis.reason === 'need_more' ? `${face ? 'Face detected — measuring' : 'Contact found — collecting'} ${Math.min(8, Math.floor(elapsedSignal))}/8 seconds…`
+            : analysis.reason === 'need_more' ? `${face ? 'Face detected — measuring' : 'Contact found — collecting'} ${Math.min(15, Math.floor(elapsedSignal))}/15 seconds…`
               : (reasonCopy[analysis.reason] || 'Checking signal quality…');
           if (!analysis.ok && elapsedSignal >= 4.8) {
             const liveEstimate = face ? dsp.previewFace(frames) : dsp.previewPulse(frames);

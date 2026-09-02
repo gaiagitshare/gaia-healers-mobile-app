@@ -49,6 +49,82 @@
   }
   // Best-effort: are we running inside a (cross-origin) iframe?
   function isFramed() { try { return window.self !== window.top; } catch (e) { return true; } }
+
+  /* ---- Read-only diagnostic session (?tool=pulse&debug=1) ---------------
+   * Numeric only — never stores or exports camera images. Observes the exact
+   * production pipeline without changing ranking, thresholds or results. The
+   * report stays local until the user presses "Copy report".
+   * --------------------------------------------------------------------- */
+  let diagEnabled = false;
+  try { diagEnabled = new URLSearchParams(window.location.search).get('debug') === '1'; } catch (e) {}
+  let diagSession = null;
+  const DIAG_MARKUP = '<div class="gp-diag" data-gp-diag><pre data-gp-diag-text>diagnostic…</pre>'
+    + '<div class="gp-diag__bar"><input data-gp-diag-ref type="number" inputmode="numeric" placeholder="reference BPM (oximeter / watch)">'
+    + '<button type="button" class="gp-btn--ghost" data-gp-diag-copy>Copy report</button></div></div>';
+  function diagStart(info) {
+    diagSession = {
+      started: performance.now(),
+      device: { ua: navigator.userAgent, platform: navigator.platform, language: navigator.language, framed: isFramed() },
+      ...info,
+      frames: { deltas: [], repeated: 0, gaps: 0, count: 0 },
+      lastFrameAt: null, ticks: [], provisionalAt: null, finalAt: null, finalReason: null, finalBpm: null, referenceBpm: null,
+    };
+    return diagSession;
+  }
+  function diagPct(arr, p) { if (!arr.length) return 0; const s = [...arr].sort((a, b) => a - b); return s[Math.min(s.length - 1, Math.floor(p * (s.length - 1)))]; }
+  function diagSummary() {
+    const d = diagSession; if (!d) return null;
+    const { ticks, frames, lastFrameAt, ...rest } = d;
+    return {
+      ...rest,
+      elapsedS: (performance.now() - d.started) / 1000,
+      frames: { count: frames.count, repeated: frames.repeated, gapsOver100ms: frames.gaps, medianMs: diagPct(frames.deltas, 0.5), p95Ms: diagPct(frames.deltas, 0.95), maxMs: frames.deltas.length ? Math.max(...frames.deltas) : 0 },
+      reasonTimeline: ticks.map((k) => [Math.round((k.t - d.started) / 100) / 10, k.ok ? 'OK ' + Math.round(k.bpm) : (k.reason || '-')]),
+      last: ticks.length ? ticks[ticks.length - 1] : null,
+    };
+  }
+  function diagRender(el) {
+    if (!el || !diagSession) return;
+    const s = diagSummary(); const L = s.last; const lines = [];
+    const T = s.torch || {};
+    lines.push(`cam ${s.cameraName || '?'} | req ${s.requested || '?'} got ${s.delivered || '?'} | torch cap:${T.capable} req:${T.requested} applied:${T.applied} settings:${T.settings}`);
+    lines.push(`frames ${s.frames.count} med ${s.frames.medianMs.toFixed(1)}ms p95 ${s.frames.p95Ms.toFixed(1)} max ${s.frames.maxMs.toFixed(0)} repeated ${s.frames.repeated} gaps>100ms ${s.frames.gapsOver100ms} | t ${s.elapsedS.toFixed(1)}s`);
+    if (L && L.diag) {
+      const c = L.diag.contact || {};
+      lines.push(`contact ${c.valid ? 'OK' : c.reason} score ${(c.score || 0).toFixed(2)} bright ${(c.brightness || 0).toFixed(0)} redRatio ${(c.redRatio || 0).toFixed(2)} texture ${(c.spatialCv || 0).toFixed(2)} motion ${(c.motion || 0).toFixed(3)} redClip ${(c.redClip || 0).toFixed(2)}`);
+      const dr = L.diag.drift || { rgOverWindow: 0, gbOverWindow: 0 };
+      lines.push(`GUARD: ${L.ok ? 'OK ' + Math.round(L.bpm) : (L.reason || '-')} | window ${L.diag.duration.toFixed(1)}s fps ${L.diag.fps.toFixed(1)} | drift R/G ${(dr.rgOverWindow * 100).toFixed(1)}% G/B ${(dr.gbOverWindow * 100).toFixed(1)}%`);
+      lines.push('chan      fft   snr   ac    q    Δ   puls%  PSAGT  artifact / raw');
+      for (const [name, ch] of Object.entries(L.diag.channels || {})) {
+        if (!ch.usable) { lines.push(`${name.padEnd(9)} n/a`); continue; }
+        const p = ch.pass;
+        const flags = (p.pulsatility ? 'P' : 'p') + (p.snr ? 'S' : 's') + (p.autocorr ? 'A' : 'a') + (p.agreement ? 'G' : 'g') + (p.timing ? 'T' : 't');
+        const f = (v, d = 0) => (v == null ? '-' : Number(v).toFixed(d));
+        lines.push(`${name.padEnd(9)} ${f(ch.spectralBpm).padStart(4)} ${f(ch.snr, 1).padStart(5)} ${f(ch.autocorrBpm).padStart(4)} ${f(ch.autocorrQuality, 2).padStart(4)} ${f(ch.agreement, 1).padStart(4)} ${f(ch.pulsatility * 100, 2).padStart(6)} ${flags} ${ch.excludedByClipping ? 'CLIP' : ''}${ch.artifact ? ' ' + ch.artifact : ''}${ch.rawConfirm ? (ch.rawConfirm.confirmed ? ' raw✓' : ' raw✗') : ''}`);
+      }
+      lines.push('flags: P pulsatility S snr A autocorr G fft/ac agreement T peak timing (upper=pass)');
+    }
+    lines.push(`provisional ${s.provisionalAt != null ? s.provisionalAt.toFixed(1) + 's' : '-'} | final ${s.finalAt != null ? s.finalAt.toFixed(1) + 's → ' + s.finalBpm + ' BPM' : '-'}${s.finalReason ? ' (' + s.finalReason + ')' : ''}${s.referenceBpm ? ' | ref ' + s.referenceBpm : ''}`);
+    const pre = el.querySelector('[data-gp-diag-text]'); if (pre) pre.textContent = lines.join('\n');
+  }
+  function diagReportText() {
+    const s = diagSummary(); if (!s) return '';
+    return 'GAIA PULSE DIAGNOSTIC SESSION — numeric only, no images\n'
+      + JSON.stringify(s, (k, v) => (typeof v === 'number' ? Math.round(v * 1000) / 1000 : v), 1);
+  }
+  function wireDiag(card) {
+    const el = card.querySelector('[data-gp-diag]'); if (!el) return null;
+    const copy = el.querySelector('[data-gp-diag-copy]');
+    if (copy) copy.addEventListener('click', async () => {
+      const text = diagReportText();
+      try { await navigator.clipboard.writeText(text); copy.textContent = 'Copied ✓'; }
+      catch (e) { const ta = document.createElement('textarea'); ta.value = text; ta.className = 'gp-diag__ta'; el.appendChild(ta); ta.select(); }
+    });
+    const ref = el.querySelector('[data-gp-diag-ref]');
+    if (ref) { if (diagSession && diagSession.referenceBpm) ref.value = diagSession.referenceBpm; ref.addEventListener('change', (e) => { if (diagSession) diagSession.referenceBpm = Number(e.target.value) || null; }); }
+    diagRender(el);
+    return el;
+  }
   function cameraPolicyBlocked() {
     try {
       const policy = document.permissionsPolicy || document.featurePolicy;
@@ -94,6 +170,12 @@
 .gp-face-preview{width:150px;height:150px;margin:4px auto 10px;border-radius:50%;overflow:hidden;position:relative;background:#050a07;border:2px solid rgba(167,233,126,.38);box-shadow:0 0 0 5px rgba(92,184,46,.07);}
 .gp-face-preview::after{content:'';position:absolute;inset:17px 24px;border:1px dashed rgba(255,255,255,.5);border-radius:48% 48% 44% 44%;pointer-events:none;}
 .gp-video.gp-video--face{position:absolute;inset:0;width:100%;height:100%;opacity:1;right:auto;bottom:auto;object-fit:cover;transform:scaleX(-1);pointer-events:none;}
+.gp-diag{text-align:left;margin-top:10px;padding:8px;border-radius:10px;background:rgba(0,0,0,.38);border:1px solid rgba(167,233,126,.25);color:#cfe6c7;}
+.gp-diag pre{margin:0;font:10.5px/1.35 ui-monospace,Menlo,Consolas,monospace;white-space:pre;overflow:auto;max-height:34vh;}
+.gp-diag__bar{display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin-top:6px;}
+.gp-diag__bar input{flex:1;min-width:9rem;font:12px ui-monospace,Menlo,monospace;padding:6px 8px;border-radius:8px;border:1px solid rgba(167,233,126,.3);background:#050f09;color:#eaf4ea;}
+.gp-diag__bar .gp-btn--ghost{min-height:34px;padding:4px 12px;font-size:.8rem;width:auto;}
+.gp-diag__ta{width:100%;height:8rem;margin-top:6px;font:11px ui-monospace,monospace;background:#050f09;color:#eaf4ea;border:1px solid rgba(167,233,126,.3);border-radius:8px;}
 .gp-status{font-size:.86rem;color:rgba(234,244,234,.75);min-height:1.3em;margin:8px 0 0;}
 .gp-quality{display:flex;gap:4px;justify-content:center;margin:10px 0 2px;}
 .gp-quality i{width:26px;height:5px;border-radius:99px;background:rgba(255,255,255,.14);transition:background .3s;}
@@ -234,6 +316,7 @@
       + '<div class="gp-quality" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i></div>'
       + '<p class="gp-status" data-gp-status>Requesting camera…</p>'
       + '<p class="gp-note" data-gp-camera style="margin-top:5px"></p>'
+      + (diagEnabled ? DIAG_MARKUP : '')
       + '<div class="gp-actions">'
       + '<button type="button" class="gp-btn--link" data-gp-switch>' + (face ? 'Use fingertip + rear camera instead' : 'No luck? Use my face (front camera) instead') + '</button>'
       + '<button type="button" class="gp-btn--link" data-gp-tap>Or tap with your heartbeat →</button>'
@@ -288,6 +371,17 @@
     const modeTag = face ? 'face mode' : (torchOn ? 'flash on' : 'flash unavailable');
     cameraEl.textContent = `${cameraName} · ${deliveredSize}${deliveredFps ? ` · ${deliveredFps.toFixed(0)} fps` : ''} · ${modeTag}`;
 
+    if (diagEnabled) {
+      const caps = track && track.getCapabilities ? track.getCapabilities() : {};
+      diagStart({
+        mode: face ? 'face' : 'fingertip',
+        cameraName,
+        requested: `${baseVideo.width.ideal}x${baseVideo.height.ideal}@${baseVideo.frameRate.ideal}`,
+        delivered: `${deliveredSize}@${deliveredFps ? deliveredFps.toFixed(0) : '?'}`,
+        torch: { capable: !!(caps && caps.torch), requested: !face, applied: torchOn, settings: settings && ('torch' in settings) ? String(settings.torch) : 'unknown' },
+      });
+      wireDiag(card);
+    }
     sampleCanvas = document.createElement('canvas'); sampleCanvas.width = 48; sampleCanvas.height = 48; sctx = sampleCanvas.getContext('2d', { willReadFrequently: true });
 
     const frames = [];
@@ -343,6 +437,14 @@
         if (!metadata && Number.isFinite(mediaTime) && mediaTime === lastMediaTime) { scheduleFrame(); return; }
         if (Number.isFinite(mediaTime)) lastMediaTime = mediaTime;
         receivedFrames += 1;
+        if (diagSession) {
+          const dt = diagSession.lastFrameAt != null ? now - diagSession.lastFrameAt : null; diagSession.lastFrameAt = now;
+          if (dt != null) {
+            diagSession.frames.deltas.push(dt); if (diagSession.frames.deltas.length > 900) diagSession.frames.deltas.shift();
+            if (dt < 8) diagSession.frames.repeated += 1; if (dt > 100) diagSession.frames.gaps += 1;
+          }
+          diagSession.frames.count += 1;
+        }
         if (frameWatchdog) { clearTimeout(frameWatchdog); frameWatchdog = null; }
         sctx.drawImage(video, 0, 0, 48, 48);
         const px = sctx.getImageData(8, 8, 32, 32).data;
@@ -379,6 +481,13 @@
         if (now - lastAnalysisAt >= 700) {
           lastAnalysisAt = now;
           const analysis = face ? dsp.analyzeFace(frames) : dsp.analyzePulse(frames);
+          if (diagSession) {
+            try {
+              diagSession.ticks.push({ t: now, ok: analysis.ok, reason: analysis.reason, bpm: analysis.bpm, diag: dsp.diagnoseChannels ? dsp.diagnoseChannels(frames) : null });
+              if (diagSession.ticks.length > 60) diagSession.ticks.shift();
+              diagRender(card.querySelector('[data-gp-diag]'));
+            } catch (e) { /* diagnostics must never break the reading */ }
+          }
           const visibleQuality = analysis.ok ? analysis.quality : (analysis.contact && analysis.contact.score) || 0;
           qEls.forEach((el, index) => el.classList.toggle('on', index < Math.round(visibleQuality * 5)));
           const elapsedSignal = frames.length > 1 ? (frames[frames.length - 1].t - frames[0].t) / 1000 : 0;
@@ -388,6 +497,7 @@
           if (!analysis.ok && elapsedSignal >= 4.8) {
             const liveEstimate = face ? dsp.previewFace(frames) : dsp.previewPulse(frames);
             if (liveEstimate.ok) {
+              if (diagSession && diagSession.provisionalAt == null) diagSession.provisionalAt = (now - diagSession.started) / 1000;
               bpmEl.textContent = Math.round(liveEstimate.bpm);
               const label = bpmEl.parentNode && bpmEl.parentNode.querySelector('small');
               if (label) label.textContent = 'BPM · checking';
@@ -408,6 +518,7 @@
         }
 
         if (performance.now() - startedAt > GIVEUP_MS) {
+          if (diagSession) { diagSession.finalAt = (performance.now() - diagSession.started) / 1000; diagSession.finalReason = 'timeout_no_clean_signal'; }
           if (face) { tapMode(card, 'Couldn’t verify a face pulse — try the fingertip camera, or tap below.'); return; }
           tapMode(card, 'Couldn’t get a clean pulse from the camera. Try tapping instead.');
           return;
@@ -436,6 +547,7 @@
     }, 1800);
 
     function finish(bpm) {
+      if (diagSession) { diagSession.finalAt = (performance.now() - diagSession.started) / 1000; diagSession.finalBpm = Math.round(bpm); diagSession.finalReason = null; }
       stopCamera();
       if (window.__gpRAF) { cancelAnimationFrame(window.__gpRAF); window.__gpRAF = null; }
       result(card, Math.round(bpm), 'camera');
@@ -472,6 +584,7 @@
       + '<button type="button" class="gp-btn--ghost" data-gp-camera>Use fingertip camera</button>'
       + '<button type="button" class="gp-btn--link" data-gp-faceb>Or read with my face (beta) →</button>'
       + '</div>';
+    if (diagEnabled && diagSession) { card.insertAdjacentHTML('beforeend', DIAG_MARKUP); wireDiag(card); }
     const area = card.querySelector('[data-gp-taparea]');
     const status = card.querySelector('[data-gp-status]');
     card.querySelector('[data-gp-camera]').addEventListener('click', () => measure(card, { mode: 'finger' }));
@@ -521,6 +634,7 @@
       + '<button type="button" class="gp-btn--link" data-gp-again>Measure again</button>'
       + '</div>'
       + '<p class="gp-note">A quick pulse estimate for reflection, not a diagnosis. A Bio-Well scan is a separate, in-depth session.</p>';
+    if (diagEnabled && diagSession) { card.insertAdjacentHTML('beforeend', DIAG_MARKUP); wireDiag(card); }
     card.querySelector('[data-gp-again]').addEventListener('click', () => intro(card));
     const b = card.querySelector('[data-gp-breath]');
     if (b) b.addEventListener('click', () => { close(); if (window.GaiaBreath && window.GaiaBreath.open) window.GaiaBreath.open(); else location.href = 'home.html?view=wellness&tool=breath'; });
@@ -529,7 +643,7 @@
   function clamp(v, a, b) { return Math.max(a, Math.min(b, v)); }
 
   /* ---- expose + auto-open --------------------------------------------- */
-  window.GaiaPulse = { open, close };
+  window.GaiaPulse = { open, close, debug: (on) => { diagEnabled = !!on; }, diagnostic: () => diagSummary() };
   // The in-app router (gaia-ui.js) intercepts links, strips the ?tool= param and
   // switches views without a reload — so the auto-open below only fires on a
   // fresh page load / deep link. Catch clicks on any link to this tool (the home

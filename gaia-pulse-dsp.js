@@ -659,9 +659,70 @@
     return { ok: true, bpm, quality, channel, contact, fps: uniform.measuredFps, duration: uniform.duration, segmentBpms };
   }
 
+  /* ---- Read-only diagnostic -------------------------------------------------
+   * Per-channel measurements BEFORE any threshold rejection, so a real-device
+   * session can show exactly which guard is over-rejecting. This is a pure
+   * observer: it never changes candidate ranking, thresholds or results.
+   * ----------------------------------------------------------------------- */
+  function diagnoseChannels(frames, options = {}) {
+    const contact = contactMetrics(frames, options);
+    const uniform = resampleUniform(frames);
+    const out = { contact, duration: uniform ? uniform.duration : 0, fps: uniform ? uniform.measuredFps : 0, channels: {}, drift: null };
+    if (!uniform) return out;
+    const fps = uniform.fps;
+    const series = {
+      red: uniform.r, green: uniform.g, blue: uniform.b,
+      redBlue: differentialChannel(uniform.r, uniform.b),
+      greenBlue: differentialChannel(uniform.g, uniform.b),
+      hue: hueSeries(uniform.r, uniform.g, uniform.b),
+      gNorm: uniform.g.map((g, i) => g / Math.max(1, uniform.r[i] + g + uniform.b[i])),
+    };
+    const thr = options.thresholds || { minSnr: 3.2, minAutocorrelation: 0.38 };
+    const redClipped = contact.redClip > 0.5;
+    for (const [name, values] of Object.entries(series)) {
+      const average = mean(values);
+      if (!average || values.length < fps * 4) { out.channels[name] = { usable: false }; continue; }
+      const filtered = bandpass(values.map((v) => v / average - 1), fps);
+      if (filtered.length < fps * 4) { out.channels[name] = { usable: false }; continue; }
+      const pulsatility = standardDeviation(filtered);
+      const spectral = spectralEstimate(filtered, fps);
+      const autocorrelation = spectral ? autocorrelationEstimate(filtered, fps, spectral.bpm) : null;
+      const agreement = spectral && autocorrelation ? Math.abs(spectral.bpm - autocorrelation.bpm) : null;
+      const timing = spectral ? peakTimingEstimate(filtered, fps, spectral.bpm) : null;
+      out.channels[name] = {
+        usable: true,
+        spectralBpm: spectral ? spectral.bpm : null,
+        snr: spectral ? spectral.snr : null,
+        autocorrBpm: autocorrelation ? autocorrelation.bpm : null,
+        autocorrQuality: autocorrelation ? autocorrelation.quality : null,
+        agreement,
+        pulsatility,
+        peakBpm: timing && timing.ok ? timing.bpm : null,
+        beats: timing ? timing.beats : null,
+        pass: {
+          pulsatility: pulsatility >= 0.00015 && pulsatility <= 0.12,
+          snr: !!spectral && spectral.snr >= thr.minSnr,
+          autocorr: !!autocorrelation && autocorrelation.quality >= thr.minAutocorrelation,
+          agreement: agreement != null && agreement <= 5,
+          timing: !!(timing && timing.ok),
+        },
+        artifact: spectral ? classifyArtifact(uniform, fps, spectral.bpm) : null,
+        rawConfirm: spectral ? rawConfirms(uniform, spectral.bpm, redClipped) : null,
+        excludedByClipping: redClipped && (name === 'red' || name === 'redBlue' || name === 'hue'),
+      };
+    }
+    // Low-frequency colour drift over the window (white-balance movement).
+    const rg = uniform.r.map((r, i) => r / Math.max(1, uniform.g[i]));
+    const gb = uniform.g.map((g, i) => g / Math.max(1, uniform.b[i]));
+    const drift = (arr) => { const k = Math.max(1, Math.floor(arr.length / 4)); return (mean(arr.slice(-k)) - mean(arr.slice(0, k))) / (mean(arr) || 1); };
+    out.drift = { rgOverWindow: drift(rg), gbOverWindow: drift(gb) };
+    return out;
+  }
+
   return {
     analyzePulse,
     previewPulse,
+    diagnoseChannels,
     analyzeFace,
     previewFace,
     contactMetrics,

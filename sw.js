@@ -1,4 +1,4 @@
-const CACHE_NAME = 'gaia-healers-20260902z6-first-visit-fixes';
+const CACHE_NAME = 'gaia-healers-20260903a-splash-share-a11y';
 const APP_SHELL = [
   '/',
   '/home.html',

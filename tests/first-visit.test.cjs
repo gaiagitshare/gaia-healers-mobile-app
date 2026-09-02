@@ -274,3 +274,41 @@ test('boot smoke: gaia-ui.js boots on a home-like DOM without throwing', () => {
   assert.equal(typeof global.window.GaiaAppShell, 'object', 'GaiaAppShell exported — the route never ran if this is undefined');
   assert.equal(typeof global.window.GaiaAppShell.go, 'function');
 });
+
+/* ---- splash: share preview, non-blocking scripts, slide a11y --------------
+ * index.html IS https://gaiahealers.app/ — the URL people actually share —
+ * yet it shipped with none of the share/PWA meta home.html has. The five
+ * slides were also stacked at opacity:0, so a screen reader read all of them
+ * at once, and every script in the head blocked the first paint.
+ * ------------------------------------------------------------------------ */
+test('splash root page carries share, PWA and a11y essentials', () => {
+  const html = read('index.html');
+  for (const tag of [
+    'name="description"', 'name="theme-color"',
+    'name="apple-mobile-web-app-status-bar-style"',
+    'property="og:title"', 'property="og:image"', 'property="og:url"',
+    'name="twitter:card"',
+  ]) {
+    assert.ok(html.includes(tag), `root page must declare ${tag} (it is the shared URL)`);
+  }
+  assert.ok(/og:url" content="https:\/\/gaiahealers\.app\/"/.test(html), 'og:url points at the root, not home.html');
+
+  // Every external script deferred: none may block the first screen's paint.
+  const externals = html.match(/<script src="[^"]+"[^>]*>/g) || [];
+  assert.ok(externals.length >= 4, 'external scripts present');
+  externals.forEach((tag) => assert.ok(/\sdefer\b/.test(tag), `must be deferred: ${tag}`));
+
+  assert.ok(/class="gaia-splash-steps" aria-live="polite"/.test(html), 'slide changes are announced');
+  assert.ok(/class="gaia-splash-progress" aria-hidden="true"/.test(html), 'decorative dots hidden from AT');
+  assert.ok(html.includes("serviceWorker.register"), 'the shell precaches from the first screen');
+});
+
+test('inactive splash slides are removed from the accessibility tree', () => {
+  const css = read('gaia-splash.css');
+  const base = css.slice(css.indexOf('.splash-step {'));
+  const rule = base.slice(0, base.indexOf('}'));
+  assert.ok(/visibility:\s*hidden/.test(rule), 'opacity:0 alone leaves all five slides readable by a screen reader');
+  const activeIdx = css.indexOf('.splash-step.active');
+  const activeRule = css.slice(activeIdx, css.indexOf('}', activeIdx));
+  assert.ok(/visibility:\s*visible/.test(activeRule), 'the active slide must be re-exposed');
+});

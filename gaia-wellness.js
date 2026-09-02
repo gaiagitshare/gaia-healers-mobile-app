@@ -576,6 +576,10 @@
   window.GaiaWellness = {
     isSignedUp: () => !!state.signedUp,
     focusSignup,
+    // The one zodiac table in the app. Energy Match (gaia-match.js) shares this
+    // exact function so a match result can never disagree with the member's
+    // own horoscope for the same birth date.
+    sunSignFromDob,
     joinChallenge: () => {
       const b = document.querySelector('[data-chal-join]');
       if (b) { b.click(); return true; }

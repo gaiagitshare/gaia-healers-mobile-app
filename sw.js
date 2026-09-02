@@ -1,4 +1,4 @@
-const CACHE_NAME = 'gaia-healers-20260902s-art';
+const CACHE_NAME = 'gaia-healers-20260902t-photo';
 const APP_SHELL = [
   '/',
   '/home.html',
@@ -24,6 +24,8 @@ const APP_SHELL = [
   '/gaia-wellness.js',
   '/gaia-pulse-dsp.js',
   '/gaia-pulse.js',
+  '/assets/pulse-finger.webp',
+  '/assets/pulse-tap.webp',
   '/gaia-breath.js',
   '/gaia-quiz.js',
   '/gaia-store.js',

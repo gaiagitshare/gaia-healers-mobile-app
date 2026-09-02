@@ -155,7 +155,7 @@
 .gp-actions{display:flex;flex-direction:column;gap:10px;margin-top:16px;}
 .gp-howto{width:190px;max-width:62vw;margin:2px auto 0;display:block;}
 .gp-howto .gp-lensG circle{fill:#10241699;stroke:rgba(180,220,180,.4);stroke-width:1.5;}
-.gp-ringpulse{transform-origin:100px 44px;animation:gp-ring 2.6s ease-out infinite;}
+.gp-ringpulse{transform-origin:100px 48px;animation:gp-ring 2.6s ease-out infinite;}
 @keyframes gp-ring{0%{transform:scale(.55);opacity:.9}70%{opacity:0}100%{transform:scale(1.5);opacity:0}}
 .gp-finger{transform-origin:100px 120px;animation:gp-press 2.6s ease-in-out infinite;}
 @keyframes gp-press{0%,100%{transform:translateY(9px)}42%,66%{transform:translateY(0)}}
@@ -182,7 +182,7 @@
 .gp-stage i{font-style:normal;opacity:.35;}
 .gp-other{font-size:.66rem;letter-spacing:.12em;text-transform:uppercase;color:rgba(234,244,234,.38);margin:6px 0 -4px;}
 .gp-howto--tap{width:210px;max-width:70vw;margin:2px auto 4px;}
-.gp-ringpulse--tap{transform-origin:126px 60px;}
+.gp-ringpulse--tap{transform-origin:118px 52px;}
 .gp-status{font-size:.86rem;color:rgba(234,244,234,.75);min-height:1.3em;margin:8px 0 0;}
 .gp-quality{display:flex;gap:4px;justify-content:center;margin:10px 0 2px;}
 .gp-quality i{width:26px;height:5px;border-radius:99px;background:rgba(255,255,255,.14);transition:background .3s;}
@@ -245,21 +245,20 @@
     card.innerHTML = closeBtn()
       + '<p class="gp-eyebrow">Energy Pulse</p>'
       + '<svg class="gp-howto" viewBox="0 0 200 176" role="img" aria-label="Rest the pad of your thumb or a fingertip lightly over the flash-lit rear lens">'
-      + '<defs>'
-      + '<linearGradient id="gpSkin" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#e7bf97"/><stop offset=".5" stop-color="#dcae82"/><stop offset="1" stop-color="#c39970"/></linearGradient>'
-      + '<radialGradient id="gpFlash" cx="50%" cy="45%" r="55%"><stop offset="0" stop-color="#ff7a5c" stop-opacity=".85"/><stop offset="1" stop-color="#ff7a5c" stop-opacity="0"/></radialGradient>'
-      + '</defs>'
-      // phone back + rear camera cluster and flash
-      + '<rect x="58" y="6" width="84" height="164" rx="18" fill="#0c1811" stroke="rgba(125,217,86,.28)" stroke-width="2"/>'
-      + '<rect x="74" y="16" width="52" height="52" rx="15" fill="#050f09" stroke="rgba(255,255,255,.13)" stroke-width="1.5"/>'
-      + '<g class="gp-lensG"><circle cx="90" cy="32" r="9"/><circle cx="110" cy="32" r="9"/><circle cx="90" cy="52" r="9"/></g>'
-      + '<circle cx="90" cy="32" r="3.4" fill="#173521"/><circle cx="110" cy="32" r="3.4" fill="#173521"/><circle cx="90" cy="52" r="3.4" fill="#173521"/>'
-      + '<circle class="gp-flash" cx="110" cy="52" r="4" fill="#ffe08a"/>'
-      // fingertip pressing flat over the whole camera bump (lens + flash), flash-lit
-      + '<g class="gp-finger"><path d="M60 176 L60 64 Q60 30 100 30 Q140 30 140 64 L140 176 Z" fill="url(#gpSkin)" fill-opacity="0.94" stroke="rgba(60,30,10,.28)" stroke-width="1"/>'
-      + '<ellipse cx="100" cy="72" rx="20" ry="26" fill="rgba(255,255,255,.1)"/>'
-      + '<ellipse cx="100" cy="46" rx="30" ry="22" fill="url(#gpFlash)"/>'
-      + '<circle class="gp-ringpulse" cx="100" cy="44" r="16" fill="none" stroke="#7dd956" stroke-width="2"/></g>'
+      + '<defs><radialGradient id="gpGlow" cx="50%" cy="50%" r="50%"><stop offset="0" stop-color="#7dd956" stop-opacity=".5"/><stop offset="1" stop-color="#7dd956" stop-opacity="0"/></radialGradient></defs>'
+      // line-art phone back with the rear camera cluster and flash
+      + '<rect x="62" y="8" width="76" height="160" rx="18" fill="rgba(125,217,86,.04)" stroke="#7dd956" stroke-opacity=".55" stroke-width="2"/>'
+      + '<rect x="77" y="20" width="46" height="46" rx="13" fill="rgba(255,255,255,.04)" stroke="#fff" stroke-opacity=".28" stroke-width="1.5"/>'
+      + '<g fill="none" stroke="#fff" stroke-opacity=".5" stroke-width="1.5"><circle cx="90" cy="33" r="6.5"/><circle cx="110" cy="33" r="6.5"/><circle cx="90" cy="53" r="6.5"/></g>'
+      + '<g fill="#fff" fill-opacity=".35"><circle cx="90" cy="33" r="2"/><circle cx="110" cy="33" r="2"/><circle cx="90" cy="53" r="2"/></g>'
+      + '<circle class="gp-flash" cx="110" cy="53" r="3.2" fill="#ffe08a"/>'
+      + '<circle cx="100" cy="46" r="26" fill="url(#gpGlow)"/>'
+      // fingertip: translucent rounded outline over the cluster, fingerprint arcs on the pad
+      + '<g class="gp-finger">'
+      + '<rect x="72" y="30" width="56" height="150" rx="28" fill="rgba(125,217,86,.10)" stroke="#7dd956" stroke-opacity=".9" stroke-width="2"/>'
+      + '<g fill="none" stroke="#7dd956" stroke-opacity=".5" stroke-width="1.5" stroke-linecap="round"><path d="M88 62 a12 12 0 0 1 24 0"/><path d="M83 64 a17 17 0 0 1 34 0"/><path d="M78 66 a22 22 0 0 1 44 0"/></g>'
+      + '<circle class="gp-ringpulse" cx="100" cy="48" r="17" fill="none" stroke="#7dd956" stroke-width="2"/>'
+      + '</g>'
       + '</svg>'
       + '<span class="gp-pill">Thumb or fingertip pad over the flash-lit lens</span>'
       + '<h2 class="gp-title">A careful pulse read</h2>'
@@ -608,21 +607,22 @@
     let taps = []; let done = false;
     card.innerHTML = closeBtn()
       + '<p class="gp-eyebrow">Tap at your wrist</p>'
-      + '<svg class="gp-howto gp-howto--tap" viewBox="0 0 200 130" role="img" aria-label="Feel the radial pulse on the thumb-side of your inner wrist, just below the crease, with two fingertips, then tap with each beat">'
-      + '<defs><linearGradient id="gpSkinT" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#eac29b"/><stop offset="1" stop-color="#c99a72"/></linearGradient>'
-      + '<radialGradient id="gpPulseT" cx="50%" cy="50%" r="50%"><stop offset="0" stop-color="#9bf078" stop-opacity=".9"/><stop offset="1" stop-color="#9bf078" stop-opacity="0"/></radialGradient></defs>'
-      // palm-up hand (fingers left, thumb at the top edge) and forearm to the right
-      + '<path d="M198 96 L198 62 Q198 50 184 50 L96 52 Q80 53 80 66 L80 84 Q80 96 96 96 Z" fill="url(#gpSkinT)" stroke="rgba(70,40,15,.28)" stroke-width="1.5"/>'
-      + '<g fill="url(#gpSkinT)" stroke="rgba(70,40,15,.26)" stroke-width="1.3"><path d="M84 54 Q60 44 46 52 Q40 60 60 66 Z"/><path d="M82 66 Q52 62 40 72 Q38 80 62 80 Z"/><path d="M84 80 Q56 82 46 92 Q48 100 66 94 Z"/><path d="M92 92 Q74 100 74 108 Q82 114 96 102 Z"/></g>'
-      + '<path d="M94 52 Q88 36 98 30 Q108 28 108 44 Z" fill="url(#gpSkinT)" stroke="rgba(70,40,15,.26)" stroke-width="1.3"/>'
-      + '<path d="M112 54 Q114 74 112 94" fill="none" stroke="rgba(70,40,15,.18)" stroke-width="1.5"/>'
-      // radial pulse point: thumb-side edge of the wrist, just below the crease
-      + '<ellipse cx="126" cy="60" rx="20" ry="14" fill="url(#gpPulseT)"/>'
-      + '<circle class="gp-ringpulse gp-ringpulse--tap" cx="126" cy="60" r="10" fill="none" stroke="#7dd956" stroke-width="2"/>'
-      + '<circle cx="126" cy="60" r="4" fill="#9bf078"/>'
+      + '<svg class="gp-howto gp-howto--tap" viewBox="0 0 220 130" role="img" aria-label="Feel the radial pulse on the thumb-side of your inner wrist, just below the crease, with two fingertips, then tap with each beat">'
+      + '<defs><radialGradient id="gpGlowT" cx="50%" cy="50%" r="50%"><stop offset="0" stop-color="#7dd956" stop-opacity=".55"/><stop offset="1" stop-color="#7dd956" stop-opacity="0"/></radialGradient></defs>'
+      // line-art palm-up hand (fingers left, thumb up = radial side) and forearm to the right
+      + '<g fill="rgba(125,217,86,.08)" stroke="#7dd956" stroke-opacity=".85" stroke-width="2" stroke-linejoin="round">'
+      + '<rect x="96" y="44" width="130" height="46" rx="20"/>'
+      + '<rect x="52" y="40" width="50" height="54" rx="16"/>'
+      + '<rect x="6" y="38" width="50" height="11" rx="5.5"/><rect x="2" y="52" width="54" height="11" rx="5.5"/><rect x="4" y="66" width="52" height="11" rx="5.5"/><rect x="10" y="80" width="46" height="11" rx="5.5"/>'
+      + '<rect x="64" y="8" width="12" height="36" rx="6" transform="rotate(-18 70 26)"/>'
+      + '</g>'
+      + '<path d="M100 48 v38" fill="none" stroke="#7dd956" stroke-opacity=".35" stroke-width="1.5" stroke-dasharray="3 3"/>'
+      // radial pulse point: thumb-side (top) edge of the wrist, just below the crease
+      + '<circle cx="118" cy="52" r="20" fill="url(#gpGlowT)"/>'
+      + '<circle class="gp-ringpulse gp-ringpulse--tap" cx="118" cy="52" r="9" fill="none" stroke="#7dd956" stroke-width="2"/>'
+      + '<circle cx="118" cy="52" r="3.5" fill="#9bf078"/>'
       // two fingertips of the other hand resting on that point
-      + '<ellipse cx="130" cy="34" rx="9" ry="16" transform="rotate(-25 130 34)" fill="url(#gpSkinT)" stroke="rgba(70,40,15,.3)" stroke-width="1.2"/>'
-      + '<ellipse cx="146" cy="40" rx="9" ry="16" transform="rotate(-25 146 40)" fill="url(#gpSkinT)" stroke="rgba(70,40,15,.3)" stroke-width="1.2"/>'
+      + '<g fill="rgba(125,217,86,.10)" stroke="#7dd956" stroke-opacity=".9" stroke-width="2"><rect x="106" y="4" width="13" height="46" rx="6.5" transform="rotate(-14 112 27)"/><rect x="122" y="0" width="13" height="46" rx="6.5" transform="rotate(-14 128 23)"/></g>'
       + '</svg>'
       + '<h2 class="gp-title">Tap with each beat</h2>'
       + '<p class="gp-lead">' + (reason ? esc(reason) + ' ' : '') + 'Rest two fingertips on the <strong>thumb-side of your inner wrist, just below the crease</strong> — that’s the radial pulse (the side of your neck works too). Tap the circle each time you feel a beat, for ~15 seconds.</p>'

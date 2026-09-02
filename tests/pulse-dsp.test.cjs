@@ -369,3 +369,28 @@ test('safety: face path cannot finalise or preview on a white-balance colour swi
     assert.equal(final.ok, false, `face FINAL false lock at ${rate}: ${final.bpm} via ${final.channel}`);
   }
 });
+
+test('safety: sustained guarded previews can form a narrow consensus', () => {
+  const samples = [107, 108, 109, 108, 107, 109, 108, 108]
+    .map((bpm, index) => ({ bpm, at: index * 750, channel: 'gNorm' }));
+  const result = dsp.previewConsensus(samples);
+  assert.equal(result.ok, true, result.reason);
+  assert.equal(result.bpm, 108);
+  assert.equal(result.samples, 8);
+});
+
+test('safety: preview consensus rejects short, scattered, or interrupted runs', () => {
+  const stable = [107, 108, 109, 108, 107, 109, 108, 108]
+    .map((bpm, index) => ({ bpm, at: index * 750 }));
+  assert.equal(dsp.previewConsensus(stable.slice(1)).ok, false, 'accepted only seven previews');
+  assert.equal(dsp.previewConsensus(stable.map((sample, index) => ({ ...sample, bpm: index === 4 ? 116 : sample.bpm }))).ok, false, 'accepted wide BPM spread');
+  assert.equal(dsp.previewConsensus(stable.map((sample, index) => ({ ...sample, at: index < 4 ? sample.at : sample.at + 1500 }))).ok, false, 'accepted interrupted previews');
+});
+
+test('safety: consensus fallback is limited to the full-window weak-signal path', () => {
+  const src = fs.readFileSync(path.join(__dirname, '..', 'gaia-pulse.js'), 'utf8');
+  assert.match(src, /elapsedSignal >= 14\.5/);
+  assert.match(src, /analysis\.reason === 'weak_or_irregular_signal'/);
+  assert.match(src, /analysis\.contact && analysis\.contact\.valid && previewAgreement\.ok/);
+  assert.match(src, /consensusSamples = \[\];/);
+});

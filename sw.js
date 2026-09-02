@@ -1,4 +1,4 @@
-const CACHE_NAME = 'gaia-healers-20260902w-clean-window-timeout';
+const CACHE_NAME = 'gaia-healers-20260902x-preview-consensus';
 const APP_SHELL = [
   '/',
   '/home.html',

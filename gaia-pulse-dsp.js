@@ -580,6 +580,31 @@
     return { ok: true, bpm: chosen.bpm, channel, contact, duration: uniform.duration };
   }
 
+  // A provisional estimate is deliberately easier to obtain than a final
+  // beat-by-beat verification.  It may become a result only when many
+  // consecutive, independently recomputed previews agree over real time.
+  // Keeping this rule pure makes the safety boundary directly testable.
+  function previewConsensus(samples, options = {}) {
+    const minSamples = options.minSamples || 8;
+    const minSpanMs = options.minSpanMs || 5000;
+    const maxSpreadBpm = options.maxSpreadBpm || 5;
+    const maxGapMs = options.maxGapMs || 1200;
+    const valid = (Array.isArray(samples) ? samples : [])
+      .filter((sample) => sample && Number.isFinite(sample.bpm) && Number.isFinite(sample.at))
+      .sort((a, b) => a.at - b.at)
+      .slice(-minSamples);
+    if (valid.length < minSamples) return { ok: false, reason: 'too_few_previews' };
+    const spanMs = valid[valid.length - 1].at - valid[0].at;
+    if (spanMs < minSpanMs) return { ok: false, reason: 'preview_span_too_short', spanMs };
+    for (let i = 1; i < valid.length; i += 1) {
+      if (valid[i].at - valid[i - 1].at > maxGapMs) return { ok: false, reason: 'preview_gap', spanMs };
+    }
+    const bpms = valid.map((sample) => sample.bpm).sort((a, b) => a - b);
+    const spread = bpms[bpms.length - 1] - bpms[0];
+    if (spread > maxSpreadBpm) return { ok: false, reason: 'preview_spread', spanMs, spread };
+    return { ok: true, bpm: median(bpms), samples: valid.length, spanMs, spread };
+  }
+
   // Contactless facial rPPG is much weaker than palm contact PPG. Keep it in
   // this DOM-free module so the exact production path is testable. This gate
   // only checks that a well-lit, still, skin-toned region is centered; the
@@ -725,6 +750,7 @@
   return {
     analyzePulse,
     previewPulse,
+    previewConsensus,
     diagnoseChannels,
     analyzeFace,
     previewFace,

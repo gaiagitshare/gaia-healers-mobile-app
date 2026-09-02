@@ -517,6 +517,9 @@
       need_more: 'Contact found — collecting a clean 10-second pulse signal…',
       need_more_stability: 'Pulse found — hold still a few seconds longer…',
       weak_or_irregular_signal: 'Contact is good, but no clean pulse pattern yet — use very light pressure and hold completely still.',
+      unconfirmed: 'A rhythm is showing, but it is not yet clear enough in tissue — keep very light pressure and hold still.',
+      no_spectral_consensus: 'No agreement between colour channels yet — hold still with light, even pressure.',
+      beat_count_mismatch: 'Found movement or light patterns instead of a pulse — hold still with light pressure.',
       channel_disagreement: 'Light or movement is interfering — hold still and keep the lens covered.',
       common_mode_artifact: 'Movement detected instead of a pulse — rest your hand and retry.',
       unstable_rate: 'The rate is not stable yet — keep still and breathe normally.',
@@ -733,6 +736,7 @@
           }
           // analyzePulse already passed contact, artifact, dual-estimator and
           // multi-window stability gates. Do not silently add a second cutoff.
+          if (diagSession && analysis.estimator) diagSession.finalVia = analysis.estimator;
           if (canAnalyzeSignal && analysis.ok) { finish(analysis.bpm); return; }
         }
 

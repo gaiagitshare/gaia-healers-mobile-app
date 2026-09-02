@@ -12,6 +12,19 @@
   <link rel="icon" href="assets/icon-192.png" type="image/png" />
   <link rel="apple-touch-icon" href="assets/apple-touch-icon.png" />
   <title>Gaia Healers</title>
+  <meta name="description" content="Gaia Healers is the mobile home for your wellness journey — free energy tools, practitioner events, Academy courses, community, and bookings in one place." />
+  <meta name="theme-color" content="#07100b" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta property="og:type" content="website" />
+  <meta property="og:site_name" content="Gaia Healers" />
+  <meta property="og:title" content="Gaia Healers" />
+  <meta property="og:description" content="Free energy tools, practitioner events, Academy courses, community and bookings — in one mobile-first app." />
+  <meta property="og:url" content="https://gaiahealers.app/" />
+  <meta property="og:image" content="https://gaiahealers.app/assets/gaia-event-hero.webp" />
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="twitter:title" content="Gaia Healers" />
+  <meta name="twitter:description" content="Free energy tools, practitioner events, Academy courses, community and bookings — in one mobile-first app." />
+  <meta name="twitter:image" content="https://gaiahealers.app/assets/gaia-event-hero.webp" />
   <script>
     // Returning visitors skip the splash instantly — before the splash CSS or
     // any app script loads — and keep the destination they came for (query
@@ -25,14 +38,14 @@
     })();
   </script>
   <link rel="stylesheet" href="gaia-utilities.css?v=20260815a" />
-  <script src="gaia-app-urls.js"></script>
-  <script src="gaia-ecosystem.js"></script>
-  <script src="gaia-live-sync.js"></script>
+  <script src="gaia-app-urls.js" defer></script>
+  <script src="gaia-ecosystem.js" defer></script>
+  <script src="gaia-live-sync.js" defer></script>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="gaia-shared.css?v=20260703j" />
-  <link rel="stylesheet" href="gaia-splash.css?v=20260902b" />
+  <link rel="stylesheet" href="gaia-splash.css?v=20260902c" />
   <link rel="stylesheet" href="gaia-fit.css?v=20260901b" />
 </head>
 <body class="gaia-app min-h-screen">
@@ -179,7 +192,7 @@
         </div>
       </div>
 
-      <div class="gaia-splash-steps">
+      <div class="gaia-splash-steps" aria-live="polite">
         <div class="splash-step active" data-step="0">
           <p class="gaia-splash-eyebrow">Welcome</p>
           <h1 class="gaia-splash-title">Your wellness<br />journey starts here</h1>
@@ -209,7 +222,7 @@
     </main>
 
     <footer class="gaia-splash-footer">
-      <div class="gaia-splash-progress">
+      <div class="gaia-splash-progress" aria-hidden="true">
         <span data-splash-dot class="bg-gaia w-6"></span>
         <span data-splash-dot class="bg-neutral-200 w-1.5"></span>
         <span data-splash-dot class="bg-neutral-200 w-1.5"></span>
@@ -221,6 +234,13 @@
       <a href="home.html" class="gaia-splash-skip" data-splash-skip>Skip intro</a>
     </footer>
   </div>
-  <script src="gaia-ui.js?v=20260902b"></script>
+  <script src="gaia-ui.js?v=20260902b" defer></script>
+  <script>
+    // Precache the app shell from the very first screen — previously the
+    // worker only registered once the user reached home.html.
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', function () { navigator.serviceWorker.register('/sw.js').catch(function () {}); });
+    }
+  </script>
 </body>
 </html>

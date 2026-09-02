@@ -23,7 +23,6 @@ const APP_SHELL = [
   '/gaia-membership-ui.js',
   '/gaia-wellness.js',
   '/gaia-chakra-quiz.js',
-  '/gaia-challenge.js',
   '/gaia-cosmic.js',
   '/gaia-match.js',
   '/gaia-moon.js',

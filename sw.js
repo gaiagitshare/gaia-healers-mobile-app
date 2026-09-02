@@ -1,4 +1,4 @@
-const CACHE_NAME = 'gaia-healers-20260902x-preview-consensus';
+const CACHE_NAME = 'gaia-healers-20260902y-energy-result';
 const APP_SHELL = [
   '/',
   '/home.html',

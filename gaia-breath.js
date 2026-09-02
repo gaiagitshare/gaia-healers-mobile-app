@@ -45,11 +45,22 @@
   }
 
   const BIOWELL_URL = 'home.html?view=wellness&tab=biowell';
+  const PULSE_RESET_KEY = 'gaia:pulse:reset:v1';
   const IN = 5000, OUT = 5000, CYCLE = IN + OUT; // 6 breaths/min
+
+  function markPulseResetComplete() {
+    try {
+      const pending = JSON.parse(sessionStorage.getItem(PULSE_RESET_KEY) || 'null');
+      if (!pending || !Number.isFinite(pending.bpm) || !Number.isFinite(pending.at)) return;
+      pending.completedAt = Date.now();
+      sessionStorage.setItem(PULSE_RESET_KEY, JSON.stringify(pending));
+    } catch (e) {}
+  }
 
   let raf = null, timer = null, modal = null, sessionCtl = null;
 
-  function open() {
+  function open(opts) {
+    if (opts && [1, 3, 5].includes(Number(opts.minutes))) minutes = Number(opts.minutes);
     injectStyles();
     close();
     modal = document.createElement('div');
@@ -162,6 +173,7 @@
   function complete(card) {
     if (sessionCtl) { try { sessionCtl.teardown(); } catch (e) {} }
     if (raf) { cancelAnimationFrame(raf); raf = null; }
+    markPulseResetComplete();
     card.innerHTML = closeBtn()
       + '<p class="gb-eyebrow">Session complete</p>'
       + '<div class="gb-stage" style="width:min(52vw,12rem);height:min(52vw,12rem)"><span class="gb-ripple"></span><div class="gb-orb" style="transform:scale(.9)"></div><div class="gb-phase"><i class="ph ph-check" style="font-size:2.6rem;color:#062b0c" aria-hidden="true"></i></div></div>'

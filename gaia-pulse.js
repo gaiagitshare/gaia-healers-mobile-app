@@ -15,6 +15,7 @@
   function esc(s) { return String(s == null ? '' : s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c])); }
 
   const PULSE_HISTORY_KEY = 'gaia:pulse:readings:v1';
+  const RESET_COMPARE_KEY = 'gaia:pulse:reset:v1';
   const MAX_SAVED_READINGS = 20;
   function savedReadings() {
     try {
@@ -41,6 +42,25 @@
     if (!latest) return '';
     return '<div class="gp-last"><span>Latest completed reading</span><strong>' + latest.bpm + ' BPM</strong><small>'
       + esc(readingTime(latest.at)) + ' · ' + (latest.method === 'tap' ? 'tapped' : 'camera') + ' · saved on this device</small></div>';
+  }
+  function recentBaseline(readings) {
+    const values = (readings || []).slice(0, 7).map((reading) => reading.bpm)
+      .filter(Number.isFinite).sort((a, b) => a - b);
+    if (values.length < 3) return null;
+    const middle = Math.floor(values.length / 2);
+    return Math.round(values.length % 2 ? values[middle] : (values[middle - 1] + values[middle]) / 2);
+  }
+  function rememberResetStart(bpm, minutes) {
+    try { sessionStorage.setItem(RESET_COMPARE_KEY, JSON.stringify({ bpm: Math.round(bpm), at: Date.now(), minutes, completedAt: null })); } catch (e) {}
+  }
+  function consumeResetComparison(bpm) {
+    try {
+      const raw = sessionStorage.getItem(RESET_COMPARE_KEY); if (!raw) return null;
+      const before = JSON.parse(raw); sessionStorage.removeItem(RESET_COMPARE_KEY);
+      if (!before || !Number.isFinite(before.bpm) || !Number.isFinite(before.at)
+        || !Number.isFinite(before.completedAt) || Date.now() - before.completedAt > 30 * 60 * 1000) return null;
+      return { before: before.bpm, after: Math.round(bpm), change: Math.round(bpm - before.bpm), minutes: before.minutes || 3 };
+    } catch (e) { return null; }
   }
 
   // Reject after `ms` if a promise never settles. Cross-origin iframes without
@@ -218,6 +238,19 @@
 .gp-gauge__pin{position:absolute;top:50%;width:16px;height:16px;border-radius:50%;background:#fff;border:2px solid #0a140d;transform:translate(-50%,-50%);box-shadow:0 2px 8px rgba(0,0,0,.4);transition:left .6s cubic-bezier(.22,1,.36,1);}
 .gp-gauge__labels{display:flex;justify-content:space-between;font-size:.7rem;color:rgba(234,244,234,.5);margin:0 4px;}
 .gp-read{font-size:1.05rem;font-weight:700;color:#fff;margin:12px 0 2px;}
+.gp-result-hero{margin:8px 0 12px;padding:15px;border-radius:18px;background:linear-gradient(145deg,rgba(92,184,46,.14),rgba(11,31,18,.35));border:1px solid rgba(167,233,126,.2);}
+.gp-result-state{display:flex;align-items:center;justify-content:center;gap:8px;margin:10px 0 2px;font-size:1.08rem;font-weight:800;color:#fff;}
+.gp-result-state i{color:#9bf078;font-size:1.25rem;}
+.gp-insight{display:grid;gap:8px;margin:12px 0;text-align:left;}
+.gp-insight__row{display:flex;gap:10px;align-items:flex-start;padding:11px 12px;border-radius:14px;background:rgba(255,255,255,.045);border:1px solid rgba(255,255,255,.06);}
+.gp-insight__row i{font-size:1.25rem;color:#9bf078;margin-top:1px;}
+.gp-insight__row strong{display:block;color:#fff;font-size:.86rem;margin-bottom:2px;}
+.gp-insight__row small{display:block;color:rgba(234,244,234,.62);font-size:.75rem;line-height:1.42;}
+.gp-reset-result{padding:12px 14px;margin:12px 0;border-radius:16px;background:rgba(92,184,46,.12);border:1px solid rgba(167,233,126,.28);}
+.gp-reset-result strong{display:block;color:#fff;font-size:1rem;}
+.gp-reset-result span{display:block;color:#9bf078;font-size:1.5rem;font-weight:800;margin:2px 0;}
+.gp-reset-result small{color:rgba(234,244,234,.62);font-size:.74rem;line-height:1.4;}
+.gp-section-label{font-size:.66rem;letter-spacing:.12em;text-transform:uppercase;color:#a7e97e;margin:16px 0 5px;font-weight:700;}
 .gp-tap{width:150px;height:150px;border-radius:50%;border:2px solid rgba(167,233,126,.35);background:radial-gradient(circle,rgba(92,184,46,.22),rgba(92,184,46,.05));color:#eaf4ea;font-weight:700;font-size:1rem;margin:6px auto 4px;display:grid;place-items:center;cursor:pointer;user-select:none;-webkit-user-select:none;transition:transform .08s;}
 .gp-tap:active{transform:scale(.94);}
 `;
@@ -321,6 +354,25 @@
       + '</div>';
     const tp = card.querySelector('[data-gp-tapnow]');
     if (tp) tp.addEventListener('click', () => tapMode(card));
+  }
+
+  function measurementIncomplete(card, opts) {
+    stopCamera();
+    const face = !!(opts && opts.face); const sawPulse = !!(opts && opts.sawPulse);
+    card.innerHTML = closeBtn()
+      + '<p class="gp-eyebrow">No result saved</p>'
+      + '<h2 class="gp-title">' + (sawPulse ? 'We found your pulse — but it did not stay stable' : 'We could not confirm a stable pulse') + '</h2>'
+      + '<p class="gp-lead">' + (sawPulse
+        ? 'The reader saw a real pulse pattern, but it changed or dropped before the safety check finished. We will never turn a brief number into an Energy result.'
+        : 'No number passed the full safety check, so nothing was saved. You stay in control of what to try next.') + '</p>'
+      + '<div class="gp-actions">'
+      + '<button type="button" class="gp-btn" data-gp-retry><i class="ph ph-arrow-counter-clockwise" aria-hidden="true"></i> Retry ' + (face ? 'face camera' : 'thumb / fingertip') + '</button>'
+      + '<button type="button" class="gp-btn--ghost" data-gp-tapnow>Use wrist tap instead</button>'
+      + '<button type="button" class="gp-btn--link" data-gp-back>Back to all options</button>'
+      + '</div><p class="gp-note">The app no longer switches measurement methods automatically.</p>';
+    card.querySelector('[data-gp-retry]').addEventListener('click', () => measure(card, { mode: face ? 'face' : 'finger' }));
+    card.querySelector('[data-gp-tapnow]').addEventListener('click', () => tapMode(card));
+    card.querySelector('[data-gp-back]').addEventListener('click', () => intro(card));
   }
 
   async function measure(card, opts) {
@@ -614,10 +666,12 @@
                 const spread = recent.length > 1 ? recent[recent.length - 1] - recent[0] : Infinity;
                 if (recent.length >= 2 && spread <= 8) {
                   setStage(4);
-                  bpmEl.textContent = recent[Math.floor(recent.length / 2)];
+                  // Do not present a provisional BPM as though it were a saved
+                  // result. The actual number appears only on the result card.
+                  bpmEl.textContent = '♥';
                   provisionalShown = true;
                   lastProvisionalAt = now;
-                  if (label) label.textContent = 'BPM · estimate, confirming';
+                  if (label) label.textContent = 'Pulse found · confirming';
                   statusEl.textContent = 'Pulse found — confirming that it stays stable…';
                 }
               } else {
@@ -634,7 +688,7 @@
               consensusSamples = [];
               if (provisionalShown) {
                 const label = bpmEl.parentNode && bpmEl.parentNode.querySelector('small');
-                if (label) label.textContent = now - lastProvisionalAt > 3000 ? 'BPM · last estimate, reacquiring' : 'BPM · estimate, confirming';
+                if (label) label.textContent = now - lastProvisionalAt > 3000 ? 'Signal reacquiring' : 'Pulse found · confirming';
               }
             }
           }
@@ -663,14 +717,13 @@
         const timeoutNow = performance.now();
         if (timeoutNow > giveupAt || timeoutNow > hardStopAt) {
           if (diagSession) { diagSession.finalAt = (performance.now() - diagSession.started) / 1000; diagSession.finalReason = 'timeout_no_clean_signal'; }
-          if (face) { tapMode(card, 'Couldn’t verify a face pulse — try the fingertip camera, or tap below.'); return; }
-          tapMode(card, 'Couldn’t get a clean pulse from the camera. Try tapping instead.');
+          measurementIncomplete(card, { face, sawPulse: provisionalShown });
           return;
         }
       } catch (error) {
         captureActive = false;
         stopCamera();
-        tapMode(card, 'The camera signal could not be analysed. Try tapping instead.');
+        measurementIncomplete(card, { face, sawPulse: provisionalShown });
         return;
       }
       scheduleFrame();
@@ -750,7 +803,12 @@
         const kept = ibis.filter((x) => x > med * 0.5 && x < med * 1.8);
         const meanIbi = kept.reduce((a, b) => a + b, 0) / kept.length;
         const bpm = Math.round(60000 / meanIbi);
-        result(card, bpm, 'tap');
+        if (Number.isFinite(bpm) && bpm >= 35 && bpm <= 220) result(card, bpm, 'tap');
+        else {
+          done = false; taps = [];
+          area.textContent = 'Tap';
+          status.textContent = 'That rhythm was outside the supported range — tap steadily and try again.';
+        }
       }
     }
     area.addEventListener('click', onTap);
@@ -759,7 +817,10 @@
 
   /* ---- result --------------------------------------------------------- */
   function result(card, bpm, method) {
+    const priorReadings = savedReadings();
+    const baseline = recentBaseline(priorReadings);
     saveCompletedReading(bpm, method);
+    const resetComparison = consumeResetComparison(bpm);
     // Calm↔Activated is a plain-language reading of the *measured pulse rate*
     // only (lower rate → calmer end). It is not HRV, coherence, or a biofield.
     const pos = clamp((bpm - 55) / (95 - 55), 0, 1); // 55bpm→calm end, 95bpm→activated end
@@ -767,24 +828,50 @@
     const bandNote = pos < 0.34 ? 'A relatively low pulse right now — often how the body reads at rest.'
       : pos < 0.67 ? 'A middle-of-the-range pulse — steady and even.'
       : 'A higher pulse right now — a few slow breaths can help it settle.';
+    const baselineDelta = baseline == null ? null : Math.round(bpm - baseline);
+    const baselineText = baseline == null
+      ? 'Complete three readings on this device and Gaia will begin showing your personal pulse reference.'
+      : (Math.abs(baselineDelta) <= 3 ? 'Close to your recent device reference of ' + baseline + ' BPM.'
+        : Math.abs(baselineDelta) + ' BPM ' + (baselineDelta > 0 ? 'above' : 'below') + ' your recent device reference of ' + baseline + ' BPM.');
+    const suggestedMinutes = band === 'Calm' ? 1 : 3;
+    const actionTitle = band === 'Activated' ? 'Reset, then see the difference'
+      : band === 'Balanced' ? 'Keep the rhythm steady' : 'Protect this quiet moment';
+    const actionCopy = band === 'Activated'
+      ? 'Take a 3-minute guided coherence-breathing break, then remeasure. Gaia will compare before and after on this device.'
+      : band === 'Balanced' ? 'A short coherence-breathing break can help you carry this steadiness into what comes next.'
+        : 'One quiet minute of paced breathing can help you stay connected to this calmer moment.';
+    const resetMarkup = resetComparison ? '<div class="gp-reset-result"><strong>Your Gaia Reset</strong><span>'
+      + (resetComparison.change === 0 ? 'No BPM change' : (resetComparison.change > 0 ? '+' : '') + resetComparison.change + ' BPM')
+      + '</span><small>Before ' + resetComparison.before + ' → after ' + resetComparison.after
+      + '. This is a pulse comparison, not a stress or treatment score.</small></div>' : '';
     card.innerHTML = closeBtn()
-      + '<p class="gp-eyebrow">Pulse estimate</p>'
-      + '<div class="gp-bpm"><span>' + bpm + '</span><small>BPM · ' + (method === 'tap' ? 'counted from your taps' : 'signal stayed stable during this reading') + '</small></div>'
+      + '<p class="gp-eyebrow">Your Energy Pulse</p>'
+      + '<h2 class="gp-title">Your result is ready</h2>'
+      + '<div class="gp-result-hero"><div class="gp-bpm"><span>' + bpm + '</span><small>BPM · ' + (method === 'tap' ? 'counted from your taps' : 'stable optical estimate') + '</small></div>'
       + '<div class="gp-gauge"><span class="gp-gauge__pin" style="left:' + (pos * 100) + '%"></span></div>'
       + '<div class="gp-gauge__labels"><span>Calm</span><span>Balanced</span><span>Activated</span></div>'
-      + '<p class="gp-read">' + esc(band) + '</p>'
-      + '<p class="gp-lead">' + esc(bandNote) + '</p>'
-      + '<p class="gp-note" style="margin-top:0">Calm ↔ Activated is a simple reading of your <strong>pulse rate</strong> only — not HRV, coherence, stress, or a biofield measurement.</p>'
+      + '<p class="gp-result-state"><i class="ph ph-wave-sine" aria-hidden="true"></i> Pulse activation: ' + esc(band) + '</p></div>'
+      + resetMarkup
+      + '<div class="gp-insight"><div class="gp-insight__row"><i class="ph ph-heartbeat" aria-hidden="true"></i><div><strong>What it suggests right now</strong><small>' + esc(bandNote) + '</small></div></div>'
+      + '<div class="gp-insight__row"><i class="ph ph-chart-line" aria-hidden="true"></i><div><strong>Your personal context</strong><small>' + esc(baselineText) + '</small></div></div></div>'
+      + '<p class="gp-note" style="margin-top:2px">This is a pulse-based activation snapshot. Heart rate alone cannot measure stress, HRV, coherence, or a biofield.</p>'
+      + '<p class="gp-section-label">Your next best step</p><p class="gp-read">' + esc(actionTitle) + '</p><p class="gp-lead">' + esc(actionCopy) + '</p>'
       + '<div class="gp-actions">'
-      + '<button type="button" class="gp-btn" data-gp-breath><i class="ph ph-wind" aria-hidden="true"></i> Slow it down with breathing</button>'
-      + '<a class="gp-btn--ghost" href="' + esc(BIOWELL_URL) + '">Explore a Bio-Well scan →</a>'
+      + '<button type="button" class="gp-btn" data-gp-breath><i class="ph ph-wind" aria-hidden="true"></i> Start my ' + suggestedMinutes + '-minute Gaia Reset</button>'
+      + '<a class="gp-btn--ghost" href="home.html?view=wellness&amp;tool=chakra"><i class="ph ph-sparkle" aria-hidden="true"></i> Match this moment to a chakra practice</a>'
+      + '<a class="gp-btn--link" href="' + esc(BIOWELL_URL) + '">Explore a separate Bio-Well scan →</a>'
       + '<button type="button" class="gp-btn--link" data-gp-again>Measure again</button>'
       + '</div>'
-      + '<p class="gp-note">A quick pulse estimate for reflection, not a diagnosis. A Bio-Well scan is a separate, in-depth session.</p>';
+      + '<p class="gp-note">The chakra practice and any product match are based on your answers in the Energy Check — never inferred from BPM. For reflection, not diagnosis.</p>';
     if (diagEnabled && diagSession) { card.insertAdjacentHTML('beforeend', DIAG_MARKUP); wireDiag(card); }
     card.querySelector('[data-gp-again]').addEventListener('click', () => intro(card));
     const b = card.querySelector('[data-gp-breath]');
-    if (b) b.addEventListener('click', () => { close(); if (window.GaiaBreath && window.GaiaBreath.open) window.GaiaBreath.open(); else location.href = 'home.html?view=wellness&tool=breath'; });
+    if (b) b.addEventListener('click', () => {
+      rememberResetStart(bpm, suggestedMinutes);
+      close();
+      if (window.GaiaBreath && window.GaiaBreath.open) window.GaiaBreath.open({ minutes: suggestedMinutes });
+      else location.href = 'home.html?view=wellness&tool=breath';
+    });
   }
 
   function clamp(v, a, b) { return Math.max(a, Math.min(b, v)); }

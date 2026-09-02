@@ -203,7 +203,8 @@ test('production capture is frame-clocked and has no timed BPM acceptance', () =
   assert.match(source, /if \(canAnalyzeSignal && analysis\.ok\) \{ finish\(analysis\.bpm\)/);
   assert.doesNotMatch(source, /function estimateBpm/);
   assert.doesNotMatch(source, /elapsed\s*>\s*40000/);
-  assert.match(source, /tapMode\(card, 'Couldn’t get a clean pulse/);
+  assert.match(source, /measurementIncomplete\(card, \{ face, sawPulse: provisionalShown \}\)/);
+  assert.doesNotMatch(source, /if \(face\) \{ tapMode\(card/);
 });
 
 test('production shell loads the tested DSP before capture and caches both', () => {
@@ -218,12 +219,33 @@ test('production UX keeps provisional estimates stable and saves only completed 
   const source = fs.readFileSync(path.join(__dirname, '..', 'gaia-pulse.js'), 'utf8');
   assert.match(source, /const PULSE_HISTORY_KEY = 'gaia:pulse:readings:v1'/);
   assert.match(source, /function saveCompletedReading\(bpm, method\)/);
-  assert.match(source, /function result\(card, bpm, method\) \{\s*saveCompletedReading\(bpm, method\);/);
+  assert.match(source, /function result\(card, bpm, method\)[\s\S]*?saveCompletedReading\(bpm, method\);/);
   assert.match(source, /recent\.length >= 2 && spread <= 8/);
-  assert.match(source, /last estimate, reacquiring/);
+  assert.match(source, /bpmEl\.textContent = '♥'/);
+  assert.match(source, /Signal reacquiring/);
+  assert.doesNotMatch(source, /bpmEl\.textContent = recent\[/);
   assert.doesNotMatch(source, /else if \(bpmEl\.textContent !== '– –'\)/);
   assert.match(source, /only completed readings are saved on this device/);
   assert.match(source, /you do not need to cover the whole cluster/);
+});
+
+test('production result becomes an actionable Gaia journey and never auto-switches methods', () => {
+  const pulse = fs.readFileSync(path.join(__dirname, '..', 'gaia-pulse.js'), 'utf8');
+  const breath = fs.readFileSync(path.join(__dirname, '..', 'gaia-breath.js'), 'utf8');
+  assert.match(pulse, /Your result is ready/);
+  assert.match(pulse, /Pulse activation:/);
+  assert.match(pulse, /function recentBaseline\(readings\)/);
+  assert.match(pulse, /const RESET_COMPARE_KEY = 'gaia:pulse:reset:v1'/);
+  assert.match(pulse, /Start my ' \+ suggestedMinutes \+ '-minute Gaia Reset/);
+  assert.match(pulse, /Your Gaia Reset/);
+  assert.match(pulse, /Match this moment to a chakra practice/);
+  assert.match(pulse, /product match are based on your answers/);
+  assert.match(pulse, /The app no longer switches measurement methods automatically/);
+  assert.match(pulse, /bpm >= 35 && bpm <= 220/);
+  assert.match(breath, /function open\(opts\)/);
+  assert.match(breath, /\[1, 3, 5\]\.includes\(Number\(opts\.minutes\)\)/);
+  assert.match(breath, /function markPulseResetComplete\(\)/);
+  assert.match(pulse, /!Number\.isFinite\(before\.completedAt\)/);
 });
 
 test('production capture calibrates stable contact before starting the clean signal window', () => {

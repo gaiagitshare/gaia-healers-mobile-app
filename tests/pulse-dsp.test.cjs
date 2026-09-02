@@ -214,6 +214,18 @@ test('production shell loads the tested DSP before capture and caches both', () 
   assert.match(sw, /gaia-pulse\.js/);
 });
 
+test('production UX keeps provisional estimates stable and saves only completed readings locally', () => {
+  const source = fs.readFileSync(path.join(__dirname, '..', 'gaia-pulse.js'), 'utf8');
+  assert.match(source, /const PULSE_HISTORY_KEY = 'gaia:pulse:readings:v1'/);
+  assert.match(source, /function saveCompletedReading\(bpm, method\)/);
+  assert.match(source, /function result\(card, bpm, method\) \{\s*saveCompletedReading\(bpm, method\);/);
+  assert.match(source, /recent\.length >= 2 && spread <= 8/);
+  assert.match(source, /last estimate, reacquiring/);
+  assert.doesNotMatch(source, /else if \(bpmEl\.textContent !== '– –'\)/);
+  assert.match(source, /only completed readings are saved on this device/);
+  assert.match(source, /you do not need to cover the whole cluster/);
+});
+
 /* ---- Six-channel safety suite (Phase 1A) ---------------------------------
  * The ratio channels (red-blue, green-blue, hue, gNorm) must recover genuine
  * pulses but must NOT finalise or preview on colour / white-balance / exposure

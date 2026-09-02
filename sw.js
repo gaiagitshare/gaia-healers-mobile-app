@@ -1,4 +1,4 @@
-const CACHE_NAME = 'gaia-healers-20260903a-splash-share-a11y';
+const CACHE_NAME = 'gaia-healers-20260903b-pulse-trend-assist';
 const APP_SHELL = [
   '/',
   '/home.html',

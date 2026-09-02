@@ -43,6 +43,36 @@
     return '<div class="gp-last"><span>Latest completed reading</span><strong>' + latest.bpm + ' BPM</strong><small>'
       + esc(readingTime(latest.at)) + ' · ' + (latest.method === 'tap' ? 'tapped' : 'camera') + ' · saved on this device</small></div>';
   }
+  // The readings have always been saved — they were just never shown back.
+  // A compact sparkline + list turns the stored history into something the
+  // person can actually read: where today's number sits against their own
+  // recent ones, on this device only.
+  function trendMarkup(readings) {
+    const points = (readings || []).slice(0, 7).filter((r) => r && Number.isFinite(r.bpm));
+    if (points.length < 2) {
+      return '<div class="gp-trend"><div class="gp-trend__head"><strong>Your recent readings</strong></div>'
+        + '<p class="gp-trend__empty">This is your first saved reading on this device. Measure again another time and Gaia will chart how your pulse moves.</p></div>';
+    }
+    const series = points.slice().reverse(); // oldest → newest
+    const values = series.map((r) => r.bpm);
+    const lo = Math.min(...values), hi = Math.max(...values);
+    const span = (hi - lo) || 1;
+    const W = 280, H = 44, pad = 4;
+    const x = (i) => pad + (i * (W - pad * 2)) / Math.max(1, series.length - 1);
+    const y = (v) => H - pad - ((v - lo) / span) * (H - pad * 2);
+    const line = series.map((r, i) => (i ? 'L' : 'M') + x(i).toFixed(1) + ' ' + y(r.bpm).toFixed(1)).join(' ');
+    const dots = series.map((r, i) => '<circle cx="' + x(i).toFixed(1) + '" cy="' + y(r.bpm).toFixed(1) + '" r="'
+      + (i === series.length - 1 ? 3.6 : 2.2) + '" fill="' + (i === series.length - 1 ? '#9bf078' : 'rgba(167,233,126,.55)') + '"/>').join('');
+    const items = points.map((r, i) => '<li' + (i === 0 ? ' class="is-now"' : '') + '><span>' + esc(readingTime(r.at))
+      + ' · ' + (r.method === 'tap' ? 'tapped' : 'camera') + '</span><b>' + r.bpm + ' BPM</b></li>').join('');
+    return '<div class="gp-trend"><div class="gp-trend__head"><strong>Your recent readings</strong><span>'
+      + points.length + ' on this device · ' + lo + '–' + hi + ' BPM</span></div>'
+      + '<svg class="gp-trend__spark" viewBox="0 0 ' + W + ' ' + H + '" preserveAspectRatio="none" role="img" aria-label="Your last '
+      + points.length + ' pulse readings, oldest to newest, ranging ' + lo + ' to ' + hi + ' BPM">'
+      + '<path d="' + line + '" fill="none" stroke="#7dd956" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>'
+      + dots + '</svg><ul class="gp-trend__list">' + items + '</ul></div>';
+  }
+
   function recentBaseline(readings) {
     const values = (readings || []).slice(0, 7).map((reading) => reading.bpm)
       .filter(Number.isFinite).sort((a, b) => a - b);
@@ -211,6 +241,16 @@
 .gp-last span{font-size:.66rem;letter-spacing:.1em;text-transform:uppercase;color:rgba(234,244,234,.5);}
 .gp-last strong{font-size:1.15rem;color:#fff;}
 .gp-last small{font-size:.72rem;color:rgba(234,244,234,.56);}
+.gp-trend{margin:14px auto 2px;padding:12px 13px;max-width:23rem;border:1px solid rgba(167,233,126,.2);border-radius:14px;background:rgba(92,184,46,.06);text-align:left;}
+.gp-trend__head{display:flex;align-items:baseline;justify-content:space-between;gap:8px;margin-bottom:8px;}
+.gp-trend__head strong{font-size:.86rem;color:#fff;}
+.gp-trend__head span{font-size:.68rem;color:rgba(234,244,234,.5);}
+.gp-trend__spark{display:block;width:100%;height:44px;overflow:visible;}
+.gp-trend__list{list-style:none;margin:8px 0 0;padding:0;display:grid;gap:4px;}
+.gp-trend__list li{display:flex;align-items:baseline;justify-content:space-between;gap:10px;font-size:.74rem;color:rgba(234,244,234,.6);}
+.gp-trend__list li b{color:#fff;font-weight:700;font-variant-numeric:tabular-nums;}
+.gp-trend__list li.is-now b{color:#9bf078;}
+.gp-trend__empty{font-size:.74rem;color:rgba(234,244,234,.55);margin:0;}
 .gp-bpm{font-size:3.4rem;font-weight:800;line-height:1;color:#fff;letter-spacing:-.03em;font-variant-numeric:tabular-nums;}
 .gp-bpm small{display:block;font-size:.8rem;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:rgba(234,244,234,.55);margin-top:4px;}
 .gp-live{margin:9px 0 4px;padding:10px 11px 9px;border-radius:15px;background:rgba(2,10,5,.5);border:1px solid rgba(167,233,126,.16);text-align:left;}
@@ -849,8 +889,12 @@
     const resetComparison = consumeResetComparison(bpm);
     // Calm↔Activated is a plain-language reading of the *measured pulse rate*
     // only (lower rate → calmer end). It is not HRV, coherence, or a biofield.
-    const pos = clamp((bpm - 55) / (95 - 55), 0, 1); // 55bpm→calm end, 95bpm→activated end
-    const band = pos < 0.34 ? 'Calm' : pos < 0.67 ? 'Balanced' : 'Activated';
+    // The gauge used to map 55–95 BPM, so anything at or above 95 pinned to the
+    // far end — 96 and 140 looked identical. The band cut-offs are unchanged in
+    // BPM terms (Calm <68.6, Balanced <81.8); only the drawn range is wider so
+    // an elevated reading still shows how elevated it is.
+    const pos = clamp((bpm - 50) / (115 - 50), 0, 1);
+    const band = bpm < 68.6 ? 'Calm' : bpm < 81.8 ? 'Balanced' : 'Activated';
     const bandNote = pos < 0.34 ? 'A relatively low pulse right now — often how the body reads at rest.'
       : pos < 0.67 ? 'A middle-of-the-range pulse — steady and even.'
       : 'A higher pulse right now — a few slow breaths can help it settle.';
@@ -859,6 +903,13 @@
       ? 'Complete three readings on this device and Gaia will begin showing your personal pulse reference.'
       : (Math.abs(baselineDelta) <= 3 ? 'Close to your recent device reference of ' + baseline + ' BPM.'
         : Math.abs(baselineDelta) + ' BPM ' + (baselineDelta > 0 ? 'above' : 'below') + ' your recent device reference of ' + baseline + ' BPM.');
+    // A camera reading can read high from movement or hard pressure. Saying so
+    // is measurement hygiene, not health advice — and it is the difference
+    // between a number someone trusts and one they quietly discount.
+    const confirmMarkup = (method === 'camera' && bpm >= 100)
+      ? '<div class="gp-insight__row"><i class="ph ph-arrows-clockwise" aria-hidden="true"></i><div><strong>Worth confirming</strong>'
+        + '<small>Moving, talking or pressing hard can push a camera reading high. If you were resting, measure once more to see whether it settles.</small></div></div>'
+      : '';
     const suggestedMinutes = band === 'Calm' ? 1 : 3;
     const actionTitle = band === 'Activated' ? 'Reset, then see the difference'
       : band === 'Balanced' ? 'Keep the rhythm steady' : 'Protect this quiet moment';
@@ -879,7 +930,8 @@
       + '<p class="gp-result-state"><i class="ph ph-wave-sine" aria-hidden="true"></i> Pulse activation: ' + esc(band) + '</p></div>'
       + resetMarkup
       + '<div class="gp-insight"><div class="gp-insight__row"><i class="ph ph-heartbeat" aria-hidden="true"></i><div><strong>What it suggests right now</strong><small>' + esc(bandNote) + '</small></div></div>'
-      + '<div class="gp-insight__row"><i class="ph ph-chart-line" aria-hidden="true"></i><div><strong>Your personal context</strong><small>' + esc(baselineText) + '</small></div></div></div>'
+      + '<div class="gp-insight__row"><i class="ph ph-chart-line" aria-hidden="true"></i><div><strong>Your personal context</strong><small>' + esc(baselineText) + '</small></div></div>' + confirmMarkup + '</div>'
+      + trendMarkup([{ bpm: Math.round(bpm), method, at: Date.now() }].concat(priorReadings))
       + '<p class="gp-note" style="margin-top:2px">This is a pulse-based activation snapshot. Heart rate alone cannot measure stress, HRV, coherence, or a biofield.</p>'
       + '<p class="gp-section-label">Your next best step</p><p class="gp-read">' + esc(actionTitle) + '</p><p class="gp-lead">' + esc(actionCopy) + '</p>'
       + '<div class="gp-actions">'

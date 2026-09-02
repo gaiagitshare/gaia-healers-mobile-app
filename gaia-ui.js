@@ -2730,7 +2730,44 @@
       console.error(`[Gaia Assist] ${event}`, err);
     }
 
+    // Energy Pulse stores completed readings in localStorage (device-only, never
+    // uploaded). Assist reads them so "what was my last reading" is answered
+    // with the person's own data instead of a generic description.
+    function savedPulseReadings() {
+      try {
+        const parsed = JSON.parse(localStorage.getItem('gaia:pulse:readings:v1') || '[]');
+        if (!Array.isArray(parsed)) return [];
+        return parsed.filter((r) => r && Number.isFinite(r.bpm) && Number.isFinite(r.at));
+      } catch (_) { return []; }
+    }
+
+    function pulseReply(prompt) {
+      const t = String(prompt || '').toLowerCase();
+      if (!/pulse|heart ?rate|bpm|heartbeat|heart beat/.test(t)) return null;
+      const readings = savedPulseReadings();
+      const wantsHistory = /last|latest|recent|previous|history|trend|average|usual|before|my /.test(t);
+      if (wantsHistory && readings.length) {
+        const latest = readings[0];
+        const when = (() => {
+          try { return new Intl.DateTimeFormat(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }).format(new Date(latest.at)); }
+          catch (_) { return new Date(latest.at).toLocaleString(); }
+        })();
+        const recent = readings.slice(0, 7).map((r) => r.bpm);
+        const average = Math.round(recent.reduce((a, b) => a + b, 0) / recent.length);
+        const spread = recent.length > 1 ? ' Your last ' + recent.length + ' readings average ' + average + ' BPM.' : '';
+        return 'Your most recent Energy Pulse reading was ' + latest.bpm + ' BPM on ' + when
+          + ' (' + (latest.method === 'tap' ? 'tapped at the wrist' : 'camera') + ').' + spread
+          + ' Readings are saved only on this device, never uploaded. I can open Energy Pulse if you want to measure again.';
+      }
+      if (wantsHistory) {
+        return 'I do not have a saved Energy Pulse reading on this device yet. Open Energy Pulse from Home, hold a fingertip over the flash-lit camera for about fifteen seconds, and I will keep the result here for you.';
+      }
+      return 'Energy Pulse measures your heart rate with the phone camera — a fingertip over the flash-lit lens for about fifteen seconds, or you can tap along with your wrist pulse instead. It shows a number only once the signal passes every quality check, and it is a pulse estimate for reflection, not a medical device. Want me to open it?';
+    }
+
     function resolveLocalReply(prompt, intent = 'general') {
+      const pulse = pulseReply(prompt);
+      if (pulse) return pulse;
       const responses = assistant.responses || {};
       const intentReplies = {
         event: responses.event,
@@ -2747,7 +2784,7 @@
         ghl: responses.ghl,
         services: responses.event,
         voice: responses.scan,
-        ecosystem: 'Gaia Healers has six places: Today for your daily energy; Energy for energy check, horoscope, chakras, numerology, colour test, today sky and Bio-Well; Academy for courses, certifications and the library; Community for your circles, Find a Healer, events, Gaia Radio, booking a session and messages; Shop for the live store; and You for your membership, access, bookings and practitioner tools. Tell me what you want and I will open the verified source.',
+        ecosystem: 'Gaia Healers has six places: Today for your daily energy; Energy for energy check, horoscope, chakras, numerology, colour test, today sky, Bio-Well and the free tools (Energy Pulse heart-rate reading and coherence breathing); Academy for courses, certifications and the library; Community for your circles, Find a Healer, events, Gaia Radio, booking a session and messages; Shop for the live store; and You for your membership, access, bookings and practitioner tools. Tell me what you want and I will open the verified source.',
         general: null,
       };
       if (intentReplies[intent]) return intentReplies[intent];
@@ -4447,6 +4484,11 @@
       // are ACTIONS — they surface a one-tap chip and never fire from a raw
       // voice transcript. `run` executes after navigating Home.
       if (/(colou?r|personality)[^.]{0,12}(test|quiz)|personality test/.test(t)) return { label: 'Start the Colour Test', view: 'wellness', run: () => window.GaiaQuiz?.start?.() };
+      // Energy Pulse + Coherence Breathing: the two free tools on Home. Assist
+      // had no route to either, so "check my heart rate" fell through to a
+      // generic reply about services.
+      if (/(pulse|heart ?rate|bpm|heartbeat|heart beat)/.test(t)) return { label: 'Check my Energy Pulse', view: 'wellness', run: () => window.GaiaPulse?.open?.() };
+      if (/(breath|breathe|breathing|coherence|calm me|slow down|wind down)/.test(t)) return { label: 'Start coherence breathing', view: 'wellness', run: () => window.GaiaBreath?.open?.() };
       if (/check[ -]?in/.test(t) && /(challenge|chakra|today)/.test(t)) return { label: 'Check in for today', view: 'wellness', run: () => window.GaiaWellness?.checkIn?.() };
       if (/(join|start|begin|enroll|do)[^.]{0,20}(8[- ]?week|chakra challenge|challenge)/.test(t)) return { label: 'Join the 8-week challenge', view: 'wellness', run: () => {
         // The join button renders with the wellness check tab (for signed-up

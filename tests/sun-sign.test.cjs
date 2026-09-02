@@ -142,3 +142,13 @@ test('source: one zodiac table, shared — no local table, no stale year cap', (
   assert.match(match, /window\.GaiaWellness && window\.GaiaWellness\.sunSignFromDob/);
   assert.match(wellness, /sunSignFromDob,/, 'wellness exports the shared function');
 });
+
+test('offline: every versioned home.html script is in the service worker shell', () => {
+  const html = fs.readFileSync(path.join(__dirname, '..', 'home.html'), 'utf8');
+  const sw = fs.readFileSync(path.join(__dirname, '..', 'sw.js'), 'utf8');
+  const referenced = new Set([...html.matchAll(/src="([a-z0-9-]+\.js)\?v=/g)].map((m) => m[1]));
+  const shell = new Set([...sw.matchAll(/'\/([a-z0-9.-]+\.js)'/g)].map((m) => m[1]));
+  assert.ok(referenced.size >= 20, 'sanity: found the script set');
+  const missing = [...referenced].filter((name) => !shell.has(name));
+  assert.deepEqual(missing, [], `scripts referenced by home.html but not precached (offline gap): ${missing.join(', ')}`);
+});

@@ -152,7 +152,7 @@
     return (Number(left[key]) || 0) + ((Number(right[key]) || 0) - (Number(left[key]) || 0)) * ratio;
   }
 
-  function resampleUniform(inputFrames, maxSeconds = 12) {
+  function resampleUniform(inputFrames, maxSeconds = 15) {
     const frames = inputFrames.filter((frame) => frame && Number.isFinite(frame.t)
       && Number.isFinite(frame.r) && Number.isFinite(frame.g) && Number.isFinite(frame.b))
       .sort((a, b) => a.t - b.t)
@@ -197,8 +197,10 @@
     if (!recent.length) return { valid: false, reason: 'no_frames', score: 0 };
     let contactFrames = 0;
     const brightness = []; const redRatios = []; const textures = []; const motions = [];
+    const greens = []; const clips = []; // per-pixel red-saturation fraction (0..1), if the capture reports it
     recent.forEach((frame) => {
       const bright = (frame.r + frame.g + frame.b) / 3;
+      greens.push(frame.g); clips.push(Number.isFinite(frame.satR) ? frame.satR : 0);
       const maxChannel = Math.max(frame.r, frame.g, frame.b, 1);
       const minChannel = Math.min(frame.r, frame.g, frame.b);
       const redRatio = frame.r / Math.max(1, frame.g + frame.b);
@@ -220,10 +222,15 @@
       redRatio: median(redRatios),
       spatialCv: median(textures),
       motion: median(motions),
+      greenMedian: median(greens),
+      redClip: median(clips),
     };
     let reason = '';
     if (metrics.brightness < 10) reason = 'too_dark';
     else if (metrics.brightness > 253) reason = 'overexposed';
+    // Flash can pin the red channel at 255 (no usable AC) while the mean brightness
+    // still looks fine. If green is blown too, nothing is recoverable.
+    else if (metrics.redClip > 0.5 && metrics.greenMedian > 248) reason = 'clipped';
     else if (metrics.redRatio < (wrist ? 0.40 : 0.46)) reason = 'no_finger_contact';
     else if (metrics.spatialCv > 0.42) reason = 'scene_texture';
     else if (metrics.motion > 0.16) reason = 'motion';
@@ -331,12 +338,140 @@
     };
   }
 
+  /* ---- Safety layer -------------------------------------------------------
+   * Closes the ratio-channel false-lock path: a colour/white-balance swing with
+   * red pinned by the flash could win via green-blue/hue/gNorm and skip the
+   * artifact check that only covered raw red/green. Every winner now passes a
+   * physiological classifier, ratio winners need raw-tissue confirmation, a
+   * third (time-domain) estimator must agree, and stability uses three
+   * NON-overlapping windows over 15 s. A strong blue channel is NOT by itself
+   * treated as an artifact — blue can carry a genuine pulse on some phones.
+   * ----------------------------------------------------------------------- */
+  const RATIO_CHANNELS = ['redBlue', 'greenBlue', 'hue', 'gNorm'];
+
+  // Spectral power of `values` at `bpm` versus the median power across the
+  // heart-rate band ("local SNR"). Lets a raw channel confirm a candidate rate
+  // even when a larger exposure component dominates that channel's own peak.
+  function bandPowerAt(values, fps, bpm) {
+    const average = mean(values);
+    if (!average) return { snr: 0 };
+    const filtered = bandpass(values.map((value) => value / average - 1), fps);
+    if (filtered.length < fps * 4) return { snr: 0 };
+    const signal = normalized(filtered);
+    const bins = [];
+    for (let candidate = MIN_BPM; candidate <= MAX_BPM; candidate += 1) bins.push(powerAtBpm(signal, fps, candidate));
+    const floor = median(bins) || 1e-12;
+    return { snr: powerAtBpm(signal, fps, bpm) / floor, filtered };
+  }
+
+  // Classify raw R,G,B behaviour in the pulse band. Tissue pulse: the channels
+  // move IN PHASE with DIFFERENT relative amplitudes (haemoglobin absorbs each
+  // wavelength differently). Global exposure/gain or light flicker: in phase
+  // with near-EQUAL amplitudes. Auto-white-balance gain redistribution: channels
+  // move in OPPOSITE directions. Only the last two are rejected.
+  function classifyArtifact(uniform, fps, bpm) {
+    // Narrow-band projection AT the candidate rate, so an unrelated exposure
+    // component at another frequency cannot dominate the verdict. A channel only
+    // "counts" when its component at the rate stands clear of its OWN noise
+    // floor (local SNR) — otherwise the noise phase of a dim channel (blue) can
+    // masquerade as an anti-phase partner and mislabel a real pulse.
+    const ch = ['r', 'g', 'b'].map((key) => {
+      const p = projectAt(uniform[key], fps, bpm);
+      const { snr } = bandPowerAt(uniform[key], fps, bpm);
+      // Live bar sits BELOW the most lenient candidate threshold (preview 2.2),
+      // so no candidate can exist in a window the classifier cannot see.
+      return { amp: p.amp, phase: p.phase, live: p.amp > 0.0006 && snr >= 2.0 };
+    });
+    const dphase = (a, b) => { const d = Math.abs(a.phase - b.phase) % (2 * Math.PI); return d > Math.PI ? 2 * Math.PI - d : d; };
+    const pairs = [[0, 1], [1, 2], [0, 2]];
+    for (const [i, j] of pairs) {
+      if (ch[i].live && ch[j].live && dphase(ch[i], ch[j]) > 2.4) return 'awb_artifact';
+    }
+    const amps = ch.map((c) => c.amp);
+    // Two common-mode signatures, both in phase across R,G,B:
+    //  - multiplicative gain / exposure / flicker: equal RELATIVE amplitudes;
+    //  - additive light leak / sensor offset: equal ABSOLUTE amplitudes (which
+    //    look UNequal in relative terms — largest on the dimmest channel).
+    // A tissue pulse has wildly unequal absolute amplitudes (r >> g >> b).
+    const absAmps = ch.map((c, k) => c.amp * mean(uniform[['r', 'g', 'b'][k]]));
+    // Judge whichever channels are live (>= 2) — a dim channel dropping below
+    // the SNR bar must not switch the common-mode check off.
+    const live = ch.map((c, k) => (c.live ? k : -1)).filter((k) => k >= 0);
+    if (live.length >= 2) {
+      const livePairs = pairs.filter(([i, j]) => ch[i].live && ch[j].live);
+      const inPhase = livePairs.every(([i, j]) => dphase(ch[i], ch[j]) < 0.9);
+      const rel = live.map((k) => amps[k]); const abs = live.map((k) => absAmps[k]);
+      if (inPhase && (Math.max(...rel) / Math.min(...rel) < 1.3
+        || Math.max(...abs) / Math.min(...abs) < 1.3)) return 'common_mode_artifact';
+    }
+    return null;
+  }
+
+  // A ratio-derived channel may propose a rate but may not finalise alone: at
+  // least one unclipped RAW channel must carry energy at that rate.
+  // Narrow-band amplitude (relative units) and phase of `values` at `bpm`.
+  function projectAt(values, fps, bpm) {
+    const average = mean(values); if (!average) return { amp: 0, phase: 0 };
+    const f = bpm / 60; const n = values.length; let inPhase = 0; let quadrature = 0;
+    for (let i = 0; i < n; i += 1) {
+      const x = values[i] / average - 1; const w = 2 * Math.PI * f * i / fps;
+      inPhase += x * Math.cos(w); quadrature += x * Math.sin(w);
+    }
+    inPhase *= 2 / n; quadrature *= 2 / n;
+    return { amp: Math.hypot(inPhase, quadrature), phase: Math.atan2(quadrature, inPhase) };
+  }
+
+  function rawConfirms(uniform, bpm, redClipped) {
+    // A raw channel confirms only if it carries a MEANINGFUL amplitude at the
+    // rate (a real tissue pulse is >= ~0.06 % relative) AND that component
+    // stands clear of the band's noise floor. Noise alone can clear a bare
+    // local-SNR bar, which is how a noise-only ratio channel previewed a fake.
+    const keys = redClipped ? ['g', 'b'] : ['r', 'g', 'b'];
+    let best = { snr: 0, amp: 0 };
+    for (const key of keys) {
+      const { snr, filtered } = bandPowerAt(uniform[key], uniform.fps, bpm);
+      const { amp } = projectAt(uniform[key], uniform.fps, bpm);
+      // Spectral concentration: a genuine periodic component projects to many
+      // times the projection that pure noise of the same power would give
+      // (std * sqrt(2/n)). Noise sits at ~1x, so chance alignment can't confirm.
+      const noiseProjection = filtered && filtered.length ? standardDeviation(filtered) * Math.sqrt(2 / filtered.length) : Infinity;
+      if (amp >= 0.0006 && amp >= 3 * noiseProjection && snr >= 2.5 && snr > best.snr) best = { snr, amp };
+    }
+    return { confirmed: best.snr > 0, snr: best.snr, amp: best.amp };
+  }
+
+  // Third, time-domain estimator independent of the FFT/autocorrelation pair:
+  // adaptive-threshold peak picking with a 0.3 s refractory, then inter-beat
+  // regularity and agreement with the candidate rate.
+  function peakTimingEstimate(filtered, fps, candidateBpm) {
+    if (!filtered || filtered.length < fps * 4) return null;
+    // Light smoothing (~0.13 s, like the 5-sample window in isahutch/bpm_from_
+    // camera) so per-sample noise doesn't spawn false peaks; a pulse's >= 0.3 s
+    // period is untouched.
+    const win = Math.max(2, Math.round(fps * 0.13));
+    const smooth = new Array(filtered.length); let acc = 0;
+    for (let i = 0; i < filtered.length; i += 1) { acc += filtered[i]; if (i >= win) acc -= filtered[i - win]; smooth[i] = acc / Math.min(i + 1, win); }
+    const rms = Math.sqrt(mean(smooth.map((value) => value * value))) || 1e-9;
+    const threshold = 0.25 * rms; const refractory = Math.round(fps * 0.3);
+    const peaks = [];
+    for (let i = 1; i < smooth.length - 1; i += 1) {
+      if (smooth[i] > threshold && smooth[i] >= smooth[i - 1] && smooth[i] > smooth[i + 1]
+        && (!peaks.length || i - peaks[peaks.length - 1] >= refractory)) peaks.push(i);
+    }
+    const expected = (smooth.length / fps) * candidateBpm / 60;
+    if (peaks.length < Math.max(4, Math.floor(expected * 0.6))) return { ok: false, beats: peaks.length };
+    const ibis = []; for (let i = 1; i < peaks.length; i += 1) ibis.push(peaks[i] - peaks[i - 1]);
+    const cv = standardDeviation(ibis) / (mean(ibis) || 1);
+    const bpm = 60 * fps / (median(ibis) || 1);
+    return { ok: cv < 0.35 && Math.abs(bpm - candidateBpm) <= 8, bpm, beats: peaks.length, cv };
+  }
+
+  // Three NON-overlapping segments (~5 s each over the 15 s window) must each
+  // independently support the same rate.
   function segmentEstimates(values, fps, thresholds) {
-    const segmentLength = Math.round(fps * 6);
-    if (values.length < segmentLength + Math.round(fps * 2)) return [];
-    const lastStart = values.length - segmentLength;
-    const starts = [0, Math.round(lastStart / 2), lastStart];
-    return starts.map((start) => estimateChannel(values.slice(start, start + segmentLength), fps, thresholds)).filter(Boolean);
+    const segmentLength = Math.floor(values.length / 3);
+    if (segmentLength < fps * 4) return [];
+    return [0, 1, 2].map((k) => estimateChannel(values.slice(k * segmentLength, (k + 1) * segmentLength), fps, thresholds)).filter(Boolean);
   }
 
   function analyzePulse(frames, options = {}) {
@@ -348,26 +483,44 @@
     const contact = contactMetrics(frames, options);
     if (!contact.valid) return { ok: false, reason: contact.reason, contact };
     const uniform = resampleUniform(frames);
-    if (!uniform || uniform.duration < 8) return { ok: false, reason: 'need_more', contact, duration: uniform ? uniform.duration : 0 };
+    // Validated smartphone-PPG studies use 15-20 s recordings; the three
+    // non-overlapping stability windows below need the full 15 s.
+    // The resampler keeps frames with t >= end-15000, so a full window measures
+    // ~14.97 s; 14.5 is the "15 s window is complete" boundary.
+    if (!uniform || uniform.duration < 14.5) return { ok: false, reason: 'need_more', contact, duration: uniform ? uniform.duration : 0 };
+    const redClipped = contact.redClip > 0.5;
     const channels = channelCandidates(uniform, thresholds);
     const { red, green } = channels;
-    const candidates = channels.ranked;
+    // A red channel pinned at 255 has no real AC; anything derived from it is unusable.
+    const candidates = channels.ranked.filter(([name]) => !(redClipped && (name === 'red' || name === 'redBlue' || name === 'hue')));
     if (!candidates.length) return { ok: false, reason: 'weak_or_irregular_signal', contact, fps: uniform.measuredFps };
-    if (red && green && red.score >= candidates[0][1].score * 0.65
+    if (!redClipped && red && green && red.score >= candidates[0][1].score * 0.65
       && green.score >= candidates[0][1].score * 0.65 && Math.abs(red.bpm - green.bpm) > 7) {
       return { ok: false, reason: 'channel_disagreement', contact, fps: uniform.measuredFps };
     }
-    const [channel, chosen] = candidates[0];
-    const blue = estimateChannel(uniform.b, uniform.fps, thresholds);
-    // Whole-scene movement changes R/G/B together. Contact PPG should
-    // be materially stronger in red/green than in blue.
-    if ((channel === 'red' || channel === 'green') && blue
-      && blue.pulsatility >= chosen.pulsatility * 0.65 && Math.abs(blue.bpm - chosen.bpm) <= 6) {
-      return { ok: false, reason: 'common_mode_artifact', contact, fps: uniform.measuredFps };
+    // Walk candidates in rank order. Each is classified AT ITS OWN rate, so an
+    // exposure artifact that tops the ranking (e.g. green@90) is skipped and a
+    // genuine pulse carried by an exposure-cancelling channel (e.g. red-blue@72)
+    // can still be chosen — while every candidate individually must pass the
+    // classifier, ratio-confirmation, timing and stability gates below.
+    let chosenEntry = null; let firstRejection = null;
+    for (const entry of candidates) {
+      const [name, est] = entry;
+      const artifact = classifyArtifact(uniform, uniform.fps, est.bpm);
+      if (artifact) { if (!firstRejection) firstRejection = artifact; continue; }
+      if (RATIO_CHANNELS.includes(name) && !rawConfirms(uniform, est.bpm, redClipped).confirmed) {
+        if (!firstRejection) firstRejection = 'ratio_unconfirmed'; continue;
+      }
+      chosenEntry = entry; break;
     }
+    if (!chosenEntry) return { ok: false, reason: firstRejection || 'weak_or_irregular_signal', contact, fps: uniform.measuredFps };
+    const [channel, chosen] = chosenEntry;
+    // Independent time-domain check: regular, plausible beats at that rate.
+    const timing = peakTimingEstimate(chosen.filtered, uniform.fps, chosen.bpm);
+    if (!timing || !timing.ok) return { ok: false, reason: 'irregular_beats', contact, fps: uniform.measuredFps };
     const channelValues = channels.values[channel];
     const segments = segmentEstimates(channelValues, uniform.fps, thresholds);
-    if (segments.length < 2) return { ok: false, reason: 'need_more_stability', contact, fps: uniform.measuredFps };
+    if (segments.length < 3) return { ok: false, reason: 'need_more_stability', contact, fps: uniform.measuredFps };
     const segmentBpms = segments.map((item) => item.bpm);
     if (Math.max(...segmentBpms) - Math.min(...segmentBpms) > 7) {
       return { ok: false, reason: 'unstable_rate', contact, fps: uniform.measuredFps };
@@ -386,6 +539,7 @@
       contact,
       spectralBpm: chosen.spectralBpm,
       autocorrelationBpm: chosen.autocorrelationBpm,
+      peakBpm: timing.bpm,
       segmentBpms,
     };
   }
@@ -396,20 +550,30 @@
     const uniform = resampleUniform(frames, 8);
     if (!uniform || uniform.duration < 4.8) return { ok: false, reason: 'need_more', contact };
     const thresholds = { minSnr: 2.2, minAutocorrelation: 0.25 };
+    const redClipped = contact.redClip > 0.5;
     const channels = channelCandidates(uniform, thresholds);
     const { red, green } = channels;
-    const candidates = channels.ranked;
+    const candidates = channels.ranked.filter(([name]) => !(redClipped && (name === 'red' || name === 'redBlue' || name === 'hue')));
     if (!candidates.length) return { ok: false, reason: 'weak_or_irregular_signal', contact };
-    if (red && green && red.score >= candidates[0][1].score * 0.65
+    if (!redClipped && red && green && red.score >= candidates[0][1].score * 0.65
       && green.score >= candidates[0][1].score * 0.65 && Math.abs(red.bpm - green.bpm) > 8) {
       return { ok: false, reason: 'channel_disagreement', contact };
     }
-    const [channel, chosen] = candidates[0];
-    const blue = estimateChannel(uniform.b, uniform.fps);
-    if ((channel === 'red' || channel === 'green') && blue
-      && blue.pulsatility >= chosen.pulsatility * 0.65 && Math.abs(blue.bpm - chosen.bpm) <= 6) {
-      return { ok: false, reason: 'common_mode_artifact', contact };
+    // The provisional number goes through the same per-candidate artifact
+    // classifier and ratio-confirmation as the final result, so it can't show a
+    // fake either; an artifact-classified leader is skipped, not fatal.
+    let chosenEntry = null; let firstRejection = null;
+    for (const entry of candidates) {
+      const [name, est] = entry;
+      const artifact = classifyArtifact(uniform, uniform.fps, est.bpm);
+      if (artifact) { if (!firstRejection) firstRejection = artifact; continue; }
+      if (RATIO_CHANNELS.includes(name) && !rawConfirms(uniform, est.bpm, redClipped).confirmed) {
+        if (!firstRejection) firstRejection = 'ratio_unconfirmed'; continue;
+      }
+      chosenEntry = entry; break;
     }
+    if (!chosenEntry) return { ok: false, reason: firstRejection || 'weak_or_irregular_signal', contact };
+    const [channel, chosen] = chosenEntry;
     return { ok: true, bpm: chosen.bpm, channel, contact, duration: uniform.duration };
   }
 
@@ -450,12 +614,21 @@
     }
     const channels = channelCandidates(uniform, thresholds);
     if (!channels.ranked.length) return { ok: false, reason: 'weak_or_irregular_signal', contact, fps: uniform.measuredFps };
-    const [channel, chosen] = channels.ranked[0];
-    const blue = estimateChannel(uniform.b, uniform.fps, thresholds);
-    if ((channel === 'red' || channel === 'green') && blue
-      && blue.pulsatility >= chosen.pulsatility * 0.65 && Math.abs(blue.bpm - chosen.bpm) <= 6) {
-      return { ok: false, reason: 'common_mode_artifact', contact, fps: uniform.measuredFps };
+    // Same per-candidate safety walk as the fingertip paths: every candidate is
+    // classified at its own rate, and a ratio channel needs raw confirmation —
+    // so the face path can't finalise or preview on a colour/light artifact.
+    let chosenEntry = null; let firstRejection = null;
+    for (const entry of channels.ranked) {
+      const [name, est] = entry;
+      const artifact = classifyArtifact(uniform, uniform.fps, est.bpm);
+      if (artifact) { if (!firstRejection) firstRejection = artifact; continue; }
+      if (RATIO_CHANNELS.includes(name) && !rawConfirms(uniform, est.bpm, false).confirmed) {
+        if (!firstRejection) firstRejection = 'ratio_unconfirmed'; continue;
+      }
+      chosenEntry = entry; break;
     }
+    if (!chosenEntry) return { ok: false, reason: firstRejection || 'weak_or_irregular_signal', contact, fps: uniform.measuredFps };
+    const [channel, chosen] = chosenEntry;
     return { ok: true, contact, uniform, channels, channel, chosen };
   }
 
@@ -499,6 +672,11 @@
     spectralEstimate,
     autocorrelationEstimate,
     spatialTexture,
+    classifyArtifact,
+    rawConfirms,
+    peakTimingEstimate,
+    bandPowerAt,
+    channelCandidates,
     _internal: { bandpass, powerAtBpm, median },
   };
 }));

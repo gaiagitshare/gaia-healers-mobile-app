@@ -15,7 +15,7 @@ function seededNoise(seed) {
 function makeFrames({
   bpm = 72,
   fps = 30,
-  duration = 12,
+  duration = 16, // final result needs the 15 s window (validated-study standard)
   mode = 'ppg',
   jitter = true,
   seed = 7,
@@ -114,7 +114,7 @@ test('local texture ignores a smooth flash hotspot but catches a detailed scene'
 
 test('differential color cancels rhythmic exposure and recovers a weak pulse', () => {
   const frames = [];
-  for (let index = 0; index < 360; index += 1) {
+  for (let index = 0; index < 480; index += 1) {
     const t = index * (1000 / 30);
     const exposure = 0.006 * Math.sin(2 * Math.PI * 1.5 * t / 1000);
     const pulse = Math.sin(2 * Math.PI * 1.2 * t / 1000);
@@ -129,7 +129,8 @@ test('differential color cancels rhythmic exposure and recovers a weak pulse', (
   }
   const result = dsp.analyzePulse(frames);
   assert.equal(result.ok, true, result.reason);
-  assert.ok(['redBlue', 'greenBlue'].includes(result.channel));
+  // any exposure-cancelling (ratio) channel is a legitimate winner here
+  assert.ok(['redBlue', 'greenBlue', 'hue', 'gNorm'].includes(result.channel), result.channel);
   assert.ok(Math.abs(result.bpm - 72) < 3, `${result.bpm} vs 72`);
 });
 
@@ -164,10 +165,13 @@ test('rejects structured cadence without fingertip color contact', () => {
   assert.ok(['no_finger_contact', 'scene_texture', 'unstable_contact'].includes(result.reason));
 });
 
-test('rejects random camera noise without false locks', () => {
+test('rejects random camera noise without false locks (final AND provisional)', () => {
   for (let seed = 1; seed <= 100; seed += 1) {
-    const result = dsp.analyzePulse(makeFrames({ mode: 'noise', seed }));
+    const frames = makeFrames({ mode: 'noise', seed });
+    const result = dsp.analyzePulse(frames);
     assert.equal(result.ok, false, `false lock for noise seed ${seed}`);
+    const preview = dsp.previewPulse(frames);
+    assert.equal(preview.ok, false, `PREVIEW false lock for noise seed ${seed} (${preview.bpm} via ${preview.channel})`);
   }
 });
 
@@ -208,4 +212,125 @@ test('production shell loads the tested DSP before capture and caches both', () 
   assert.ok(home.indexOf('gaia-pulse-dsp.js') < home.indexOf('gaia-pulse.js'));
   assert.match(sw, /gaia-pulse-dsp\.js/);
   assert.match(sw, /gaia-pulse\.js/);
+});
+
+/* ---- Six-channel safety suite (Phase 1A) ---------------------------------
+ * The ratio channels (red-blue, green-blue, hue, gNorm) must recover genuine
+ * pulses but must NOT finalise or preview on colour / white-balance / exposure
+ * artifacts. Real tissue moves all channels IN PHASE with different amplitudes.
+ * ------------------------------------------------------------------------ */
+function synth({ bpm = 72, seconds = 16, fps = 30, seed = 3, make }) {
+  const random = seededNoise(seed);
+  const frames = [];
+  for (let i = 0; i < fps * seconds; i += 1) {
+    const t = i / fps;
+    const s = Math.sin(2 * Math.PI * (bpm / 60) * t);
+    const c = make(s, t);
+    const n = () => random() * 1.2;
+    frames.push({ t: t * 1000, r: c.r + n(), g: c.g + n(), b: c.b + n(), spatialCv: 0.05, motion: 0.004, satR: c.satR || 0 });
+  }
+  return frames;
+}
+const tissue = (s) => ({ r: 200 * (1 + 0.009 * s), g: 62 * (1 + 0.004 * s), b: 50 * (1 + 0.00025 * s) });
+const ARTIFACT_RATES = [48, 72, 120, 150];
+
+function assertRejectedBothPaths(label, frames) {
+  const final = dsp.analyzePulse(frames);
+  assert.equal(final.ok, false, `${label}: FINAL false lock ${final.bpm} via ${final.channel}`);
+  const preview = dsp.previewPulse(frames);
+  assert.equal(preview.ok, false, `${label}: PREVIEW false lock ${preview.bpm} via ${preview.channel}`);
+}
+
+test('safety: genuine pulse survives slow exposure drift and slow white-balance drift', () => {
+  const drifts = [
+    ['exposure', (t) => ({ k: 1 + 0.18 * Math.sin(2 * Math.PI * 0.05 * t), rb: 1 })],
+    ['awb', (t) => ({ k: 1, rb: 1 + 0.06 * Math.sin(2 * Math.PI * 0.04 * t) })],
+  ];
+  for (const [label, drift] of drifts) {
+    const frames = synth({ bpm: 75, seed: 11, make: (s, t) => { const d = drift(t); const c = tissue(s); return { r: c.r * d.k * d.rb, g: c.g * d.k, b: c.b * d.k / d.rb }; } });
+    const res = dsp.analyzePulse(frames);
+    assert.equal(res.ok, true, `${label}: ${res.reason}`);
+    assert.ok(Math.abs(res.bpm - 75) < 3, `${label}: ${res.bpm} vs 75`);
+  }
+});
+
+test('safety: red pinned at 255 by the flash still recovers via a non-red channel', () => {
+  const frames = synth({ bpm: 68, seed: 5, make: (s) => ({ r: 255, g: 62 * (1 + 0.006 * s), b: 50 * (1 + 0.0005 * s), satR: 1 }) });
+  const res = dsp.analyzePulse(frames);
+  assert.equal(res.ok, true, res.reason);
+  assert.ok(Math.abs(res.bpm - 68) < 3, `${res.bpm} vs 68`);
+  assert.ok(!['red', 'redBlue', 'hue'].includes(res.channel), `used clipped-red channel ${res.channel}`);
+});
+
+test('safety: darker baseline and dropped/repeated camera frames still recover', () => {
+  const dark = synth({ bpm: 82, seed: 9, make: (s) => ({ r: 120 * (1 + 0.009 * s), g: 40 * (1 + 0.004 * s), b: 30 * (1 + 0.0003 * s) }) });
+  const a = dsp.analyzePulse(dark);
+  assert.equal(a.ok, true, a.reason);
+  assert.ok(Math.abs(a.bpm - 82) < 3, `${a.bpm} vs 82`);
+  const rough = synth({ bpm: 70, seed: 13, make: (s) => tissue(s) })
+    .map((f, i) => (i % 9 === 0 ? { ...f, t: f.t - 1000 / 30 } : f)) // repeated timestamp
+    .filter((f, i) => i % 41 !== 0); // dropped frame
+  const b = dsp.analyzePulse(rough);
+  assert.equal(b.ok, true, b.reason);
+  assert.ok(Math.abs(b.bpm - 70) < 3, `${b.bpm} vs 70`);
+});
+
+test('safety: recovers the fundamental despite a strong second harmonic', () => {
+  const frames = synth({ bpm: 64, seed: 17, make: (s, t) => {
+    const w = s + 0.6 * Math.sin(2 * Math.PI * (64 / 60) * 2 * t);
+    return { r: 200 * (1 + 0.009 * w), g: 62 * (1 + 0.004 * w), b: 50 * (1 + 0.0003 * w) };
+  } });
+  const res = dsp.analyzePulse(frames);
+  assert.equal(res.ok, true, res.reason);
+  assert.ok(Math.abs(res.bpm - 64) < 3, `${res.bpm} vs 64 (harmonic confusion)`);
+});
+
+test('safety: white-balance gain redistribution cannot finalise or preview', () => {
+  for (const rate of ARTIFACT_RATES) {
+    assertRejectedBothPaths(`awb ${rate}`, synth({ bpm: rate, seed: rate, make: (s) => ({ r: 200 * (1 + 0.02 * s), g: 62 * (1 - 0.02 * s), b: 50 * (1 - 0.03 * s) }) }));
+  }
+});
+
+test('safety: red clipped with oscillating green/blue cannot finalise or preview', () => {
+  for (const rate of ARTIFACT_RATES) {
+    assertRejectedBothPaths(`clipped ${rate}`, synth({ bpm: rate, seed: rate + 1, make: (s) => ({ r: 255, g: 60 * (1 + 0.04 * s), b: 55 * (1 - 0.04 * s), satR: 1 }) }));
+  }
+});
+
+test('safety: hue rotation and alternating colour temperature cannot finalise or preview', () => {
+  for (const rate of [60, 90, 150]) {
+    assertRejectedBothPaths(`hue ${rate}`, synth({ bpm: rate, seed: rate + 2, make: (s) => ({ r: 200 - 3 * s, g: 60 + 2 * s, b: 55 + s }) }));
+    assertRejectedBothPaths(`colourtemp ${rate}`, synth({ bpm: rate, seed: rate + 3, make: (s) => { const sq = s >= 0 ? 1 : -1; return { r: 200 * (1 + 0.015 * sq), g: 62, b: 50 * (1 - 0.02 * sq) }; } }));
+  }
+});
+
+test('safety: rhythmic pressure (all channels scaled together) cannot finalise or preview', () => {
+  for (const rate of ARTIFACT_RATES) {
+    assertRejectedBothPaths(`pressure ${rate}`, synth({ bpm: rate, seed: rate + 4, make: (s) => ({ r: 200 * (1 + 0.012 * s), g: 62 * (1 + 0.012 * s), b: 50 * (1 + 0.012 * s) }) }));
+  }
+});
+
+test('safety: fingertip paths classify every candidate, and ratio winners need raw confirmation', () => {
+  const src = fs.readFileSync(path.join(__dirname, '..', 'gaia-pulse-dsp.js'), 'utf8');
+  assert.match(src, /classifyArtifact\(uniform, uniform\.fps, est\.bpm\)/);
+  assert.match(src, /RATIO_CHANNELS\.includes\(name\) && !rawConfirms/);
+  assert.match(src, /peakTimingEstimate\(chosen\.filtered/);
+  assert.match(src, /uniform\.duration < 14\.5/);
+});
+
+test('safety: face path cannot finalise or preview on a white-balance colour swing', () => {
+  for (const rate of [60, 80, 120]) {
+    const random = seededNoise(rate);
+    const frames = [];
+    for (let i = 0; i < 30 * 13; i += 1) {
+      const t = i / 30; const s = Math.sin(2 * Math.PI * (rate / 60) * t);
+      const n = () => random() * 0.4;
+      // face-like skin, NO pulse: red up while blue down (AWB gain redistribution)
+      frames.push({ t: t * 1000, r: 154 * (1 + 0.012 * s) + n(), g: 121 + n(), b: 91 * (1 - 0.014 * s) + n(), spatialCv: 0.12, motion: 0.004 });
+    }
+    const preview = dsp.previewFace(frames);
+    assert.equal(preview.ok, false, `face PREVIEW false lock at ${rate}: ${preview.bpm} via ${preview.channel}`);
+    const final = dsp.analyzeFace(frames);
+    assert.equal(final.ok, false, `face FINAL false lock at ${rate}: ${final.bpm} via ${final.channel}`);
+  }
 });

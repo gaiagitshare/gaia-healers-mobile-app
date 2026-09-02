@@ -3,8 +3,9 @@
  * (PPG) — a fingertip on the flash-lit rear camera reflects each heartbeat as a tiny colour change
  * each heartbeat; spectral and autocorrelation estimates must agree before we
  * you can see it working. Fallback (any device, no camera): tap along with
- * your heartbeat. No data leaves the phone; the camera frames are analysed in
- * memory and never uploaded. Honest by design: this estimates heart rate from
+ * your heartbeat. No data leaves the phone; camera frames are analysed in
+ * memory and never uploaded. Completed readings are kept only in localStorage
+ * on this device. Honest by design: this estimates heart rate from
  * a real optical signal — it is not a medical device, not HRV/coherence, and
  * not a Bio-Well measurement.
  */
@@ -12,6 +13,35 @@
   'use strict';
 
   function esc(s) { return String(s == null ? '' : s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c])); }
+
+  const PULSE_HISTORY_KEY = 'gaia:pulse:readings:v1';
+  const MAX_SAVED_READINGS = 20;
+  function savedReadings() {
+    try {
+      const parsed = JSON.parse(localStorage.getItem(PULSE_HISTORY_KEY) || '[]');
+      if (!Array.isArray(parsed)) return [];
+      return parsed.filter((reading) => reading && Number.isFinite(reading.bpm)
+        && reading.bpm >= 30 && reading.bpm <= 220 && Number.isFinite(reading.at))
+        .slice(0, MAX_SAVED_READINGS);
+    } catch (e) { return []; }
+  }
+  function saveCompletedReading(bpm, method) {
+    const reading = { bpm: Math.round(bpm), method: method === 'tap' ? 'tap' : 'camera', at: Date.now() };
+    try {
+      localStorage.setItem(PULSE_HISTORY_KEY, JSON.stringify([reading, ...savedReadings()].slice(0, MAX_SAVED_READINGS)));
+    } catch (e) { /* private mode / full storage: the result still works */ }
+    return reading;
+  }
+  function readingTime(at) {
+    try { return new Intl.DateTimeFormat(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }).format(new Date(at)); }
+    catch (e) { return new Date(at).toLocaleString(); }
+  }
+  function latestReadingMarkup() {
+    const latest = savedReadings()[0];
+    if (!latest) return '';
+    return '<div class="gp-last"><span>Latest completed reading</span><strong>' + latest.bpm + ' BPM</strong><small>'
+      + esc(readingTime(latest.at)) + ' · ' + (latest.method === 'tap' ? 'tapped' : 'camera') + ' · saved on this device</small></div>';
+  }
 
   // Reject after `ms` if a promise never settles. Cross-origin iframes without
   // allow="camera" (e.g. the GHL embed) can leave getUserMedia PENDING forever
@@ -157,6 +187,10 @@
 .gp-pill{display:inline-flex;align-items:center;gap:8px;margin:0 auto;padding:7px 14px;border-radius:999px;background:rgba(92,184,46,.12);border:1px solid rgba(167,233,126,.35);color:#fff;font-size:.8rem;font-weight:700;text-align:left;line-height:1.25;}
 .gp-pill i{font-size:1.2rem;color:#9bf078;}
 .gp-pill em{display:block;font-style:normal;color:#9bf078;}
+.gp-last{margin:12px auto 14px;padding:10px 12px;max-width:22rem;border:1px solid rgba(167,233,126,.2);border-radius:13px;background:rgba(92,184,46,.07);display:grid;gap:2px;}
+.gp-last span{font-size:.66rem;letter-spacing:.1em;text-transform:uppercase;color:rgba(234,244,234,.5);}
+.gp-last strong{font-size:1.15rem;color:#fff;}
+.gp-last small{font-size:.72rem;color:rgba(234,244,234,.56);}
 .gp-bpm{font-size:3.4rem;font-weight:800;line-height:1;color:#fff;letter-spacing:-.03em;font-variant-numeric:tabular-nums;}
 .gp-bpm small{display:block;font-size:.8rem;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:rgba(234,244,234,.55);margin-top:4px;}
 .gp-wave{width:100%;height:64px;margin:6px 0 2px;display:block;}
@@ -239,16 +273,17 @@
       + '<p class="gp-eyebrow">Energy Pulse</p>'
       // illustration: fingertip resting on the flash-lit rear camera cluster (assets/pulse-finger.webp)
       + '<img class="gp-howto" src="assets/pulse-finger.webp" width="720" height="513" decoding="async" alt="A fingertip resting on the flash-lit rear camera cluster of a phone, with a green pulse glow">'
-      + '<span class="gp-pill"><i class="ph ph-sun" aria-hidden="true"></i><span>Cover the camera &amp; flash<em>with your thumb or fingertip</em></span></span>'
+      + '<span class="gp-pill"><i class="ph ph-sun" aria-hidden="true"></i><span>Cover one rear lens<em>let the nearby flash light your fingertip</em></span></span>'
       + '<h2 class="gp-title">A careful pulse read</h2>'
-      + '<p class="gp-lead">Place the pad of your <strong>thumb or a fingertip</strong> lightly over the <strong>flash-lit lens</strong>. If nothing reacts, slide across the rear camera cluster until it reads <strong>Lens covered</strong>. Light pressure — pressing hard hides the pulse — and hold still for ~15 seconds. A number appears only once the signal passes every check.</p>'
+      + '<p class="gp-lead">Cover <strong>one rear lens</strong> with the pad of your thumb or fingertip, letting the nearby flash shine through it. On a multi-lens phone, start with the lens <strong>nearest or just below the flash</strong> — you do not need to cover the whole cluster. If <strong>Lens covered</strong> does not appear, slide to the next lens. Use very light pressure, hold still for ~15 seconds, and stop if the phone feels hot.</p>'
+      + latestReadingMarkup()
       + '<div class="gp-actions">'
       + '<button type="button" class="gp-btn" data-gp-start><i class="ph ph-camera" aria-hidden="true"></i> Read with thumb or fingertip</button>'
       + '<button type="button" class="gp-btn--ghost" data-gp-tap><i class="ph ph-hand-tap" aria-hidden="true"></i> Tap at your wrist</button>'
       + '<p class="gp-other">Other ways to measure</p>'
       + '<button type="button" class="gp-btn--link" data-gp-face><i class="ph ph-user-focus" aria-hidden="true"></i> Face camera · beta</button>'
       + '</div>'
-      + '<p class="gp-note">Three ways to read — if one won’t catch, try another. All estimate your heart rate for reflection — not a medical device, not a Bio-Well scan. Nothing is recorded or uploaded; it all happens on your phone.</p>';
+      + '<p class="gp-note">Three ways to read — if one won’t catch, try another. All estimate your heart rate for reflection — not a medical device, not a Bio-Well scan. Camera images are never stored or uploaded; only completed readings are saved on this device.</p>';
     card.querySelector('[data-gp-start]').addEventListener('click', () => measure(card, { mode: 'finger' }));
     card.querySelector('[data-gp-face]').addEventListener('click', () => measure(card, { mode: 'face' }));
     card.querySelector('[data-gp-tap]').addEventListener('click', () => tapMode(card));
@@ -335,7 +370,7 @@
     // Use one request only. Retrying while the iOS permission sheet is open can
     // leave two competing captures and prevent either from becoming readable.
     try {
-      statusEl.textContent = face ? 'Allow camera access, then center your face in the guide.' : 'Allow camera access, then cover the rear camera and flash with a fingertip.';
+      statusEl.textContent = face ? 'Allow camera access, then center your face in the guide.' : 'Allow camera access, then cover one rear lens with a fingertip.';
       stream = await requestCamera({ video: baseVideo, audio: false }, 25000);
     } catch (error) { cameraUnavailable(card, isFramed()); return; }
     const track = stream.getVideoTracks()[0];
@@ -386,18 +421,21 @@
     let previousGrid = null;
     let lastMediaTime = -1;
     let lastAnalysisAt = 0;
+    let provisionalSamples = [];
+    let provisionalShown = false;
+    let lastProvisionalAt = 0;
     let receivedFrames = 0;
     let useRafFallback = !video.requestVideoFrameCallback;
     captureActive = true;
     setStage(1);
     statusEl.textContent = face ? 'Center your face in the oval; hold still in bright, even light.'
-      : (torchOn ? 'Flash on — cover the camera and flash with your fingertip, light pressure.' : 'Cover the rear camera with your fingertip; use bright, steady light.');
+      : (torchOn ? 'Flash on — cover one lens and let the nearby flash light your fingertip.' : 'Cover one rear lens with your fingertip; use bright, steady light.');
 
     const reasonCopy = {
       no_frames: 'Waiting for camera frames…',
       too_dark: 'Too dark — cover the main lens next to the flash, or add light.',
       overexposed: 'Pressing too hard, or too bright — ease off to a very light touch.',
-      no_finger_contact: 'No fingertip yet — cover the rear camera and flash with the pad of your finger.',
+      no_finger_contact: 'No fingertip yet — start with the lens nearest or just below the flash, then slide to another lens.',
       no_face: 'Center your face in the frame, in even light.',
       scene_texture: 'Cover the camera fully with the pad of your finger.',
       motion: 'Too much movement — rest your hand and hold still.',
@@ -498,12 +536,21 @@
               if (diagSession && diagSession.provisionalAt == null) diagSession.provisionalAt = (now - diagSession.started) / 1000;
               const label = bpmEl.parentNode && bpmEl.parentNode.querySelector('small');
               if (elapsedSignal >= 8) {
-                // ~8 s+: an approximate number, clearly marked as still measuring.
-                // It is never saved — only the 15 s stable estimate is the result.
-                setStage(4);
-                bpmEl.textContent = Math.round(liveEstimate.bpm);
-                if (label) label.textContent = 'BPM · still measuring';
-                statusEl.textContent = 'Pulse found — confirming that it stays stable…';
+                // Require two mutually consistent previews, then smooth the live
+                // value. A single failed 700 ms tick must not flash the number
+                // back to dashes; only a completed 15 s result is persisted.
+                provisionalSamples.push({ bpm: Math.round(liveEstimate.bpm), at: now });
+                provisionalSamples = provisionalSamples.filter((sample) => now - sample.at <= 5000).slice(-5);
+                const recent = provisionalSamples.slice(-3).map((sample) => sample.bpm).sort((a, b) => a - b);
+                const spread = recent.length > 1 ? recent[recent.length - 1] - recent[0] : Infinity;
+                if (recent.length >= 2 && spread <= 8) {
+                  setStage(4);
+                  bpmEl.textContent = recent[Math.floor(recent.length / 2)];
+                  provisionalShown = true;
+                  lastProvisionalAt = now;
+                  if (label) label.textContent = 'BPM · estimate, confirming';
+                  statusEl.textContent = 'Pulse found — confirming that it stays stable…';
+                }
               } else {
                 // ~5-8 s: a pulse pattern is present, but too few beats to show a
                 // number with any authority (at 40 BPM that's ~3 beats).
@@ -512,10 +559,9 @@
                 if (label) label.textContent = 'BPM';
                 statusEl.textContent = 'Pulse detected — hold still…';
               }
-            } else if (bpmEl.textContent !== '– –') {
-              bpmEl.textContent = '– –';
+            } else if (provisionalShown) {
               const label = bpmEl.parentNode && bpmEl.parentNode.querySelector('small');
-              if (label) label.textContent = 'BPM';
+              if (label) label.textContent = now - lastProvisionalAt > 3000 ? 'BPM · last estimate, reacquiring' : 'BPM · estimate, confirming';
             }
           }
           if (analysis.contact) {
@@ -625,6 +671,7 @@
 
   /* ---- result --------------------------------------------------------- */
   function result(card, bpm, method) {
+    saveCompletedReading(bpm, method);
     // Calm↔Activated is a plain-language reading of the *measured pulse rate*
     // only (lower rate → calmer end). It is not HRV, coherence, or a biofield.
     const pos = clamp((bpm - 55) / (95 - 55), 0, 1); // 55bpm→calm end, 95bpm→activated end

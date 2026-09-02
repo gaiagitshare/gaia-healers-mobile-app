@@ -1,4 +1,4 @@
-const CACHE_NAME = 'gaia-healers-20260902v-contact-calibration';
+const CACHE_NAME = 'gaia-healers-20260902w-clean-window-timeout';
 const APP_SHELL = [
   '/',
   '/home.html',

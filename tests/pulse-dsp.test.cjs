@@ -239,6 +239,16 @@ test('production capture calibrates stable contact before starting the clean sig
   assert.doesNotMatch(source, /sendBeacon|WebSocket|fetch\s*\(/);
 });
 
+test('production timeout starts a full bounded verification attempt after calibration', () => {
+  const source = fs.readFileSync(path.join(__dirname, '..', 'gaia-pulse.js'), 'utf8');
+  assert.match(source, /const CLEAN_ATTEMPT_MS = 25000/);
+  assert.match(source, /const HARD_STOP_MS = 60000/);
+  assert.match(source, /giveupAt = Math\.min\(hardStopAt, now \+ CLEAN_ATTEMPT_MS\)/);
+  assert.match(source, /giveupAt = hardStopAt/);
+  assert.match(source, /timeoutNow > giveupAt \|\| timeoutNow > hardStopAt/);
+  assert.doesNotMatch(source, /performance\.now\(\) - startedAt > GIVEUP_MS/);
+});
+
 /* ---- Six-channel safety suite (Phase 1A) ---------------------------------
  * The ratio channels (red-blue, green-blue, hue, gNorm) must recover genuine
  * pulses but must NOT finalise or preview on colour / white-balance / exposure

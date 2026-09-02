@@ -417,7 +417,11 @@
 
     const frames = [];
     const startedAt = performance.now();
-    const GIVEUP_MS = 35000;
+    const SEARCH_TIMEOUT_MS = 35000;
+    const CLEAN_ATTEMPT_MS = 25000; // enough for calibration + the full 15 s verifier
+    const HARD_STOP_MS = 60000; // never leave the camera/torch running indefinitely
+    const hardStopAt = startedAt + HARD_STOP_MS;
+    let giveupAt = startedAt + SEARCH_TIMEOUT_MS;
     let previousGrid = null;
     let lastMediaTime = -1;
     let lastAnalysisAt = 0;
@@ -545,6 +549,11 @@
               } else {
                 signalWindowStarted = true;
                 contactLostSince = 0;
+                // The old timeout started when the camera opened. Lens searching
+                // and calibration could therefore consume the time needed for a
+                // final result even after a provisional BPM appeared. Give every
+                // clean post-calibration attempt its own bounded verification time.
+                giveupAt = Math.min(hardStopAt, now + CLEAN_ATTEMPT_MS);
                 // Keep the current frame as the first clean sample and discard
                 // everything captured before exposure/contact settled.
                 frames.splice(0, Math.max(0, frames.length - 1));
@@ -564,6 +573,9 @@
                 signalWindowStarted = false;
                 contactStableSince = 0;
                 contactLostSince = 0;
+                // Allow repositioning until the hard safety cap. Recalibration
+                // below will arm a fresh bounded clean-attempt deadline.
+                giveupAt = hardStopAt;
                 frames.splice(0, Math.max(0, frames.length - 1));
                 provisionalSamples = [];
                 canAnalyzeSignal = false;
@@ -615,7 +627,8 @@
           if (canAnalyzeSignal && analysis.ok) { finish(analysis.bpm); return; }
         }
 
-        if (performance.now() - startedAt > GIVEUP_MS) {
+        const timeoutNow = performance.now();
+        if (timeoutNow > giveupAt || timeoutNow > hardStopAt) {
           if (diagSession) { diagSession.finalAt = (performance.now() - diagSession.started) / 1000; diagSession.finalReason = 'timeout_no_clean_signal'; }
           if (face) { tapMode(card, 'Couldn’t verify a face pulse — try the fingertip camera, or tap below.'); return; }
           tapMode(card, 'Couldn’t get a clean pulse from the camera. Try tapping instead.');

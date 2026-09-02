@@ -229,6 +229,19 @@ test('production UX keeps provisional estimates stable and saves only completed 
   assert.match(source, /you do not need to cover the whole cluster/);
 });
 
+test('production normal mode exposes truthful live optical evidence without calling contact pulse signal', () => {
+  const pulse = fs.readFileSync(path.join(__dirname, '..', 'gaia-pulse.js'), 'utf8');
+  assert.match(pulse, /Live optical camera signal/);
+  assert.match(pulse, /data-gp-live-contact/);
+  assert.match(pulse, /data-gp-live-window/);
+  assert.match(pulse, /data-gp-live-pattern/);
+  assert.match(pulse, /Real camera colour samples · no photos or video saved/);
+  assert.match(pulse, /contactPercent/);
+  assert.match(pulse, /cleanSeconds\.toFixed\(1\)/);
+  assert.doesNotMatch(pulse, /· signal \$\{Math\.round/);
+  assert.match(pulse, /one rear lens and its nearby flash at the same time/);
+});
+
 test('production result becomes an actionable Gaia journey and never auto-switches methods', () => {
   const pulse = fs.readFileSync(path.join(__dirname, '..', 'gaia-pulse.js'), 'utf8');
   const breath = fs.readFileSync(path.join(__dirname, '..', 'gaia-breath.js'), 'utf8');

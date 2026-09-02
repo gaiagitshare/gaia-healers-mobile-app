@@ -213,7 +213,16 @@
 .gp-last small{font-size:.72rem;color:rgba(234,244,234,.56);}
 .gp-bpm{font-size:3.4rem;font-weight:800;line-height:1;color:#fff;letter-spacing:-.03em;font-variant-numeric:tabular-nums;}
 .gp-bpm small{display:block;font-size:.8rem;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:rgba(234,244,234,.55);margin-top:4px;}
-.gp-wave{width:100%;height:64px;margin:6px 0 2px;display:block;}
+.gp-live{margin:9px 0 4px;padding:10px 11px 9px;border-radius:15px;background:rgba(2,10,5,.5);border:1px solid rgba(167,233,126,.16);text-align:left;}
+.gp-live__head{display:flex;align-items:center;justify-content:space-between;gap:8px;font-size:.64rem;letter-spacing:.09em;text-transform:uppercase;color:#cfe6c7;font-weight:700;}
+.gp-live__head span{display:flex;align-items:center;gap:6px;}.gp-live__head i{width:7px;height:7px;border-radius:50%;background:#68e13a;box-shadow:0 0 8px rgba(104,225,58,.8);}
+.gp-live__head small{font-size:.58rem;color:rgba(234,244,234,.42);letter-spacing:.05em;}
+.gp-wave{width:100%;height:58px;margin:5px 0 4px;display:block;}
+.gp-live__stats{display:grid;grid-template-columns:repeat(3,1fr);gap:5px;}
+.gp-live__stats span{min-width:0;padding:6px 5px;border-radius:9px;background:rgba(255,255,255,.035);text-align:center;}
+.gp-live__stats small,.gp-live__stats b{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.gp-live__stats small{font-size:.57rem;color:rgba(234,244,234,.48);margin-bottom:2px;}.gp-live__stats b{font-size:.72rem;color:#fff;font-variant-numeric:tabular-nums;}
+.gp-live__privacy{margin:6px 0 0;text-align:center;font-size:.59rem;color:rgba(234,244,234,.4);}
 .gp-video{position:fixed;width:2px;height:2px;opacity:.01;pointer-events:none;right:0;bottom:0;}
 .gp-face-preview{width:150px;height:150px;margin:4px auto 10px;border-radius:50%;overflow:hidden;position:relative;background:#050a07;border:2px solid rgba(167,233,126,.38);box-shadow:0 0 0 5px rgba(92,184,46,.07);}
 .gp-face-preview::after{content:'';position:absolute;inset:17px 24px;border:1px dashed rgba(255,255,255,.5);border-radius:48% 48% 44% 44%;pointer-events:none;}
@@ -231,9 +240,6 @@
 .gp-other{font-size:.66rem;letter-spacing:.12em;text-transform:uppercase;color:rgba(234,244,234,.38);margin:6px 0 -4px;}
 .gp-howto--tap{width:min(320px,84vw);margin:-4px auto 2px;}
 .gp-status{font-size:.86rem;color:rgba(234,244,234,.75);min-height:1.3em;margin:8px 0 0;}
-.gp-quality{display:flex;gap:4px;justify-content:center;margin:10px 0 2px;}
-.gp-quality i{width:26px;height:5px;border-radius:99px;background:rgba(255,255,255,.14);transition:background .3s;}
-.gp-quality i.on{background:#5cb82e;}
 .gp-gauge{position:relative;height:8px;border-radius:99px;margin:14px 4px 6px;background:linear-gradient(90deg,#2e77c9,#5cb82e 50%,#e0912c);}
 .gp-gauge__pin{position:absolute;top:50%;width:16px;height:16px;border-radius:50%;background:#fff;border:2px solid #0a140d;transform:translate(-50%,-50%);box-shadow:0 2px 8px rgba(0,0,0,.4);transition:left .6s cubic-bezier(.22,1,.36,1);}
 .gp-gauge__labels{display:flex;justify-content:space-between;font-size:.7rem;color:rgba(234,244,234,.5);margin:0 4px;}
@@ -306,9 +312,9 @@
       + '<p class="gp-eyebrow">Energy Pulse</p>'
       // illustration: fingertip resting on the flash-lit rear camera cluster (assets/pulse-finger.webp)
       + '<img class="gp-howto" src="assets/pulse-finger.webp" width="720" height="513" decoding="async" alt="A fingertip resting on the flash-lit rear camera cluster of a phone, with a green pulse glow">'
-      + '<span class="gp-pill"><i class="ph ph-sun" aria-hidden="true"></i><span>Cover one rear lens<em>let the nearby flash light your fingertip</em></span></span>'
+      + '<span class="gp-pill"><i class="ph ph-sun" aria-hidden="true"></i><span>Bridge one lens + its nearby flash<em>with the broad pad of your thumb or fingertip</em></span></span>'
       + '<h2 class="gp-title">A careful pulse read</h2>'
-      + '<p class="gp-lead">Cover <strong>one rear lens</strong> with the pad of your thumb or fingertip, letting the nearby flash shine through it. On a multi-lens phone, start with the lens <strong>nearest or just below the flash</strong> — you do not need to cover the whole cluster. If <strong>Lens covered</strong> does not appear, slide to the next lens. Use very light pressure, hold still for ~15 seconds, and stop if the phone feels hot.</p>'
+      + '<p class="gp-lead">Lay the <strong>broad pad</strong> of your thumb or fingertip across <strong>one rear lens and its nearby flash at the same time</strong>. On a multi-lens phone, start with the lens nearest or just below the flash — you do not need to cover the whole cluster. If <strong>Lens covered</strong> does not appear, slide or rotate the pad to the next lens; do not press harder. Hold still with very light pressure for the full clean 15-second window, and stop if the phone feels hot.</p>'
       + latestReadingMarkup()
       + '<div class="gp-actions">'
       + '<button type="button" class="gp-btn" data-gp-start><i class="ph ph-camera" aria-hidden="true"></i> Read with thumb or fingertip</button>'
@@ -386,8 +392,12 @@
       + '<p class="gp-stage" data-gp-stage aria-live="polite"></p>'
       + (face ? '<div class="gp-face-preview" data-gp-preview aria-label="Live front camera preview"></div>' : '')
       + '<div class="gp-bpm"><span data-gp-bpm>– –</span><small>BPM</small></div>'
-      + '<canvas class="gp-wave" data-gp-wave width="300" height="64" aria-hidden="true"></canvas>'
-      + '<div class="gp-quality" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i></div>'
+      + '<div class="gp-live"><div class="gp-live__head"><span><i aria-hidden="true"></i>Live optical camera signal</span><small>On-device</small></div>'
+      + '<canvas class="gp-wave" data-gp-wave width="300" height="58" aria-label="Live raw optical signal from the camera"></canvas>'
+      + '<div class="gp-live__stats"><span><small>Contact</small><b data-gp-live-contact>0%</b></span>'
+      + '<span><small>Clean window</small><b data-gp-live-window>0.0 / 15s</b></span>'
+      + '<span><small>Pulse pattern</small><b data-gp-live-pattern>Waiting</b></span></div>'
+      + '<p class="gp-live__privacy">Real camera colour samples · no photos or video saved</p></div>'
       + '<p class="gp-status" data-gp-status>Requesting camera…</p>'
       + '<p class="gp-note" data-gp-camera style="margin-top:5px"></p>'
       + (diagEnabled ? DIAG_MARKUP : '')
@@ -408,10 +418,12 @@
       stageEl.innerHTML = STAGES.map((s, i) => '<span class="' + (i + 1 < n ? 'is-done' : (i + 1 === n ? 'is-now' : '')) + '">' + esc(s) + '</span>').join('<i>›</i>');
     }
     const bpmEl = card.querySelector('[data-gp-bpm]');
-    const qEls = [...card.querySelectorAll('.gp-quality i')];
     const cameraEl = card.querySelector('[data-gp-camera]');
     const wave = card.querySelector('[data-gp-wave]');
     const wctx = wave.getContext('2d');
+    const liveContactEl = card.querySelector('[data-gp-live-contact]');
+    const liveWindowEl = card.querySelector('[data-gp-live-window]');
+    const livePatternEl = card.querySelector('[data-gp-live-pattern]');
 
     // Palm mode uses the rear (environment) camera; face mode the front (user)
     // camera. Delivered settings are read back and shown; no physical-lens claim.
@@ -422,7 +434,7 @@
     // Use one request only. Retrying while the iOS permission sheet is open can
     // leave two competing captures and prevent either from becoming readable.
     try {
-      statusEl.textContent = face ? 'Allow camera access, then center your face in the guide.' : 'Allow camera access, then cover one rear lens with a fingertip.';
+      statusEl.textContent = face ? 'Allow camera access, then center your face in the guide.' : 'Allow camera access, then bridge one rear lens and its nearby flash with the broad pad of your thumb or fingertip.';
       stream = await requestCamera({ video: baseVideo, audio: false }, 25000);
     } catch (error) { cameraUnavailable(card, isFramed()); return; }
     const track = stream.getVideoTracks()[0];
@@ -497,14 +509,14 @@
       no_frames: 'Waiting for camera frames…',
       too_dark: 'Too dark — cover the main lens next to the flash, or add light.',
       overexposed: 'Pressing too hard, or too bright — ease off to a very light touch.',
-      no_finger_contact: 'No fingertip yet — start with the lens nearest or just below the flash, then slide to another lens.',
+      no_finger_contact: 'No stable contact yet — bridge the nearby flash and one lens with the broad finger pad; slide or rotate, don’t press harder.',
       no_face: 'Center your face in the frame, in even light.',
-      scene_texture: 'Cover the camera fully with the pad of your finger.',
+      scene_texture: 'Ambient light is leaking in — bridge the nearby flash and one lens with the broad pad of your finger.',
       motion: 'Too much movement — rest your hand and hold still.',
       unstable_contact: 'Keep gentle, even fingertip contact — light pressure.',
       need_more: 'Contact found — collecting a clean pulse signal…',
       need_more_stability: 'Pulse found — hold still a few seconds longer…',
-      weak_or_irregular_signal: 'Signal weak — press very gently (hard pressure hides the pulse) and hold still.',
+      weak_or_irregular_signal: 'Contact is good, but no clean pulse pattern yet — use very light pressure and hold completely still.',
       channel_disagreement: 'Light or movement is interfering — hold still and keep the lens covered.',
       common_mode_artifact: 'Movement detected instead of a pulse — rest your hand and retry.',
       unstable_rate: 'The rate is not stable yet — keep still and breathe normally.',
@@ -585,8 +597,6 @@
               diagRender(card.querySelector('[data-gp-diag]'));
             } catch (e) { /* diagnostics must never break the reading */ }
           }
-          const visibleQuality = analysis.ok ? analysis.quality : (analysis.contact && analysis.contact.score) || 0;
-          qEls.forEach((el, index) => el.classList.toggle('on', index < Math.round(visibleQuality * 5)));
           const elapsedSignal = frames.length > 1 ? (frames[frames.length - 1].t - frames[0].t) / 1000 : 0;
           if (analysis.contact && analysis.contact.valid) setStage(2);
           statusEl.textContent = analysis.ok ? 'Clean optical pulse confirmed.'
@@ -639,8 +649,9 @@
               }
             }
           }
+          let liveEstimate = null;
           if (canAnalyzeSignal && !analysis.ok && elapsedSignal >= 4.8) {
-            const liveEstimate = face ? dsp.previewFace(frames) : dsp.previewPulse(frames);
+            liveEstimate = face ? dsp.previewFace(frames) : dsp.previewPulse(frames);
             if (diagSession) {
               diagSession.previews.push([
                 Math.round((now - diagSession.started) / 100) / 10,
@@ -692,10 +703,21 @@
               }
             }
           }
-          if (analysis.contact) {
-            const c = analysis.contact;
-            cameraEl.textContent = `${cameraName} · ${deliveredSize}${deliveredFps ? ` · ${deliveredFps.toFixed(0)} fps` : ''} · ${modeTag} · signal ${Math.round(visibleQuality * 100)}%`;
-          }
+          // These three values deliberately describe different evidence. Contact
+          // quality is not pulse quality (the old UI called both “signal”, so a
+          // uniform palm could misleadingly show 99% even with no detected beat).
+          const contactPercent = Math.round(clamp((analysis.contact && analysis.contact.score) || 0, 0, 1) * 100);
+          const cleanSeconds = canAnalyzeSignal ? Math.min(15, elapsedSignal) : 0;
+          const patternLabel = analysis.ok ? 'Confirmed'
+            : !(analysis.contact && analysis.contact.valid) ? 'Waiting'
+              : provisionalShown && canAnalyzeSignal ? 'Confirming'
+              : liveEstimate && liveEstimate.ok ? 'Detected'
+                : canAnalyzeSignal && elapsedSignal >= 4.8 ? 'Searching'
+                  : 'Building';
+          liveContactEl.textContent = contactPercent + '%';
+          liveWindowEl.textContent = cleanSeconds.toFixed(1) + ' / 15s';
+          livePatternEl.textContent = patternLabel;
+          cameraEl.textContent = `${cameraName} · ${deliveredSize}${deliveredFps ? ` · ${deliveredFps.toFixed(0)} fps` : ''} · ${modeTag}`;
           // On some real iPhones, every guarded preview agrees for several
           // seconds while the stricter beat-timing verifier still cannot locate
           // clean individual peaks. Promote only that narrow failure mode, only

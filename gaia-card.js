@@ -224,6 +224,24 @@
     setTimeout(() => { el.classList.remove('is-in'); setTimeout(() => el.remove(), 400); }, 5200);
   }
 
+  // Sign-in is the app's own magic-link flow (window.GaiaAuth). The email goes
+  // to the address on the ticket; opening it proves the person. We wait for
+  // the session to appear, then finish what the scan started.
+  async function waitForSession(maxMs) {
+    const until = Date.now() + (maxMs || 10 * 60 * 1000);
+    while (Date.now() < until) {
+      await new Promise((r) => setTimeout(r, 3000));
+      const s = await api('/api/auth/session');
+      if (s && s.authenticated) return true;
+    }
+    return false;
+  }
+  function requireSignIn(reason) {
+    toast(reason, 'warn');
+    if (window.GaiaAuth && typeof window.GaiaAuth.open === 'function') window.GaiaAuth.open('');
+    return waitForSession();
+  }
+
   let handled = false;
   async function handleScannedLink() {
     if (handled) return;
@@ -232,18 +250,34 @@
     if (!/^[A-Z2-9]{8}$/.test(token)) return;
     handled = true;
     const claim = params.get('claim') === '1';
-    const mine = await api('/api/events/mine');
-    if (!mine || mine.authenticated === false) {
-      toast(claim ? 'Sign in to claim your badge card.' : 'Sign in to connect — then scan the badge again.', 'warn');
-      return;
+
+    let session = await api('/api/auth/session');
+    if (!session || !session.authenticated) {
+      const ok = await requireSignIn(claim
+        ? 'Sign in with the email on your ticket to set up your badge card.'
+        : 'Sign in to connect — the request is sent from your own badge.');
+      if (!ok) return;
     }
-    const events = (mine.events || []).filter((e) => e.phase !== 'past');
-    const target = events[0] || (mine.events || [])[0];
-    if (!target) { toast('No ticket found on this account.', 'warn'); return; }
+
     if (claim) {
-      openEditor(target.id);
+      // The URL never grants editing. The proxy re-proves ownership from the
+      // session against the badge behind this token.
+      const own = await api('/api/card/claim', { token });
+      if (own && own.ok && own.owner && own.event_id) {
+        openEditor(own.event_id);
+        toast(own.claimed ? 'This is your badge — edit your card below.' : 'This is your badge — set up your card below.', 'good');
+      } else if (own && own.ok && !own.owner) {
+        toast('This badge belongs to someone else. You can connect with them from your own account.', 'warn');
+      } else {
+        toast('Could not check this badge right now. Please try again.', 'warn');
+      }
       return;
     }
+
+    const mine = await api('/api/events/mine');
+    const events = ((mine && mine.events) || []).filter((e) => e.phase !== 'past');
+    const target = events[0] || ((mine && mine.events) || [])[0];
+    if (!target) { toast('No ticket found on this account.', 'warn'); return; }
     const result = await api('/api/events/' + encodeURIComponent(target.id) + '/networking', { action: 'connectByToken', token });
     if (result && result.ok === true) {
       toast(result.already
@@ -252,7 +286,7 @@
     } else if (result && result.reason === 'networking_disabled') {
       toast('Networking opens once the organiser turns it on for this event.', 'warn');
     } else if (result && result.reason === 'cannot_connect_to_self') {
-      toast('That’s your own badge — open your ticket to edit your card.', 'warn');
+      toast('That’s your own badge — add &claim=1 or open your ticket to edit your card.', 'warn');
     } else {
       toast('This person is not reachable for connections yet.', 'warn');
     }

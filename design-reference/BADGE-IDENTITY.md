@@ -82,6 +82,8 @@ be sourced, the closest compatible **portrait** roll is **40 × 60 mm**
 extra 10 mm becomes air around the QR. The layout is never switched to
 landscape because stock is easier to find.
 
-Printed host: `card.gaiahealers.app` (DNS pending). The token does not change
-when the host does; **do not print production badges until the host is live**
-and `CARD_PUBLIC_BASE` in the Event Manager `.env` points at it.
+Printed host: **`card.gaiahealers.app` — live since 2026-09-03** (Let's Encrypt,
+auto-renewed). `CARD_PUBLIC_BASE=https://card.gaiahealers.app` is set in the
+Event Manager `.env`; both `card.gaiahealers.app/<token>` and `/c/<token>`
+resolve, and `api.gaiahealers.app/c/<token>` remains as a fallback. The token
+never changes when a host does.

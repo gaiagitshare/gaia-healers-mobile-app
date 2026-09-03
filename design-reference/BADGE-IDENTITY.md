@@ -64,12 +64,23 @@ Never on the card, in its HTML, its vCard or its URL: ticket tier or
 entitlement, order or payment data, GHL contact id, attendee id, `ATT-` code,
 email or phone unless switched on.
 
-## The sticker
+## The sticker (approved 2026-09-03)
 
 40 × 50 mm portrait: full name on top (one line, wrapping to two and shrinking
 for long names; the surname is never cut before the given names are), one
 large QR beneath (≈ 32.7 mm, 9 printer dots per module at 203 dpi), nothing
 else. The coloured card already says ATTENDEE / VIP / EXHIBITOR / SPEAKER.
+
+**Placement on the 70 × 100 mm card:** top edge **12 mm** down from the card's
+top (clear of the lanyard clip), horizontally centred in the 56 mm area to the
+left of the vertical tier word (i.e. left edge at 8 mm). Same position on all
+four card designs; it never touches the tier word or the ELEVATE lockup.
+
+**Stock:** the design target is a genuine 40 × 50 NIIMBOT roll. If that cannot
+be sourced, the closest compatible **portrait** roll is **40 × 60 mm**
+(NIIMBOT, 125/roll, B1/B21/B3S) — the layout is not changed for it; the
+extra 10 mm becomes air around the QR. The layout is never switched to
+landscape because stock is easier to find.
 
 Printed host: `card.gaiahealers.app` (DNS pending). The token does not change
 when the host does; **do not print production badges until the host is live**

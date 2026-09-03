@@ -56,6 +56,15 @@ test('a scanned link handles every state without breaking the page', () => {
   assert.equal(typeof sandbox.window.GaiaCard.openEditor, 'function');
 });
 
+test('a scanned claim link never edits without a proven owner', () => {
+  const card = read('gaia-card.js');
+  assert.match(card, /api\('\/api\/card\/claim', \{ token \}\)/, 'ownership is asked of the proxy (session), not assumed from the URL');
+  assert.match(card, /own\.owner && own\.event_id\)\s*\{\s*openEditor/, 'the editor opens only when the proxy says owner');
+  assert.match(card, /belongs to someone else/, 'a stranger scanning the badge is told so and gets nothing');
+  assert.match(card, /window\.GaiaAuth\.open/, 'signed-out users are sent through the real magic-link sign-in');
+  assert.match(card, /\/api\/auth\/session/, 'the flow waits for a real session before continuing');
+});
+
 test('the token in a scanned link is validated before any request is made', () => {
   const card = read('gaia-card.js');
   assert.match(card, /\/\^\[A-Z2-9\]\{8\}\$\/\.test\(token\)/, 'only the badge alphabet, exactly 8 symbols');

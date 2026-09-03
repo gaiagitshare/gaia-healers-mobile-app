@@ -102,15 +102,25 @@
       + '<small data-card-photo-hint>Square works best. Stored at 512px, without location data.</small>'
       + '</div>'
       + '<p class="g-card__name">' + esc(card.name) + '</p>'
+      + field('Name on the card', 'display_name', f.display_name, 'Leave empty to use the name on your ticket: ' + (card.name || ''))
+      + field('Headline', 'headline', f.headline, 'One line under your name — what you do, for whom.', 'maxlength="90"')
       + field('Company / practice', 'company', f.company, '')
       + field('Title / role', 'title', f.title, '')
       + field('City', 'city', f.city, '')
       + '<label class="g-card__field"><span>A line about you</span><textarea name="bio" maxlength="400" rows="2">' + esc(card.bio || '') + '</textarea></label>'
       + field('Interests', 'tags', (f.tags || []).join(', '), 'Up to four, comma-separated — e.g. Reiki, Sound healing')
+      + '<label class="g-card__field"><span>Offerings / services</span><textarea name="services" rows="3" placeholder="One per line — e.g. 1:1 Reiki session">' + esc((f.services || []).join('\n')) + '</textarea><small>Up to six. Shown as a list on your card.</small></label>'
+      + field('Booking link', 'booking_url', f.booking_url, 'Becomes a "Book with you" button at the top of your card.', 'inputmode="url" placeholder="calendly.com/you or your booking page"')
+      + '<div class="g-card__field"><span>Card colour</span><div class="g-card__themes">'
+      + (card.themes || ['gaia']).map((t) => '<label class="g-card__theme g-card__theme--' + esc(t) + '"><input type="radio" name="theme" value="' + esc(t) + '"' + ((f.theme || 'gaia') === t ? ' checked' : '') + ' /><i aria-hidden="true"></i><span>' + esc(t) + '</span></label>').join('')
+      + '</div></div>'
       + '<h4 class="g-card__sub">Links</h4>'
       + field('Website', 'website', f.website, '', 'inputmode="url" placeholder="yourwebsite.com"')
       + field('Instagram', 'instagram', f.instagram, '', 'placeholder="@handle"')
       + field('LinkedIn', 'linkedin', f.linkedin, '', 'placeholder="profile name or URL"')
+      + field('Facebook', 'facebook', f.facebook, '', 'placeholder="page name or URL"')
+      + field('TikTok', 'tiktok', f.tiktok, '', 'placeholder="@handle"')
+      + field('YouTube', 'youtube', f.youtube, '', 'placeholder="@channel or URL"')
       + field('WhatsApp', 'whatsapp', f.whatsapp, 'Number with country code. Shown as a tap-to-chat link.', 'inputmode="tel" placeholder="+1 407 555 0100"')
       + '<h4 class="g-card__sub">Contact details</h4>'
       + '<p class="g-card__note">These come from your ticket and stay private unless you switch them on.</p>'
@@ -166,8 +176,10 @@
       state.saving = true; say('Saving…');
       const data = new FormData(form);
       const body = {};
-      ['company', 'title', 'city', 'bio', 'website', 'instagram', 'linkedin', 'whatsapp'].forEach((k) => { body[k] = String(data.get(k) || ''); });
+      ['display_name', 'headline', 'company', 'title', 'city', 'bio', 'website', 'booking_url', 'instagram', 'linkedin', 'facebook', 'tiktok', 'youtube', 'whatsapp'].forEach((k) => { body[k] = String(data.get(k) || ''); });
       body.tags = String(data.get('tags') || '').split(',').map((t) => t.trim()).filter(Boolean).slice(0, 4);
+      body.services = String(data.get('services') || '').split(/\n|,/).map((t) => t.trim()).filter(Boolean).slice(0, 6);
+      body.theme = String(data.get('theme') || 'gaia');
       body.show_email = data.get('show_email') === 'on';
       body.show_phone = data.get('show_phone') === 'on';
       body.public = data.get('public') === 'on';
@@ -177,6 +189,7 @@
         state.card = result;
         say(result.public ? 'Saved. Your card is live.' : 'Saved. Your card stays private until you make it public.', 'good');
         refreshBlock();
+        renderProfileHosts();
       } else {
         say(result && result.authenticated === false ? 'Please sign in again.' : 'Could not save. Please try again.', 'bad');
       }
@@ -295,5 +308,52 @@
   document.addEventListener('gaia:superapp-rendered', handleScannedLink);
   document.addEventListener('DOMContentLoaded', () => setTimeout(handleScannedLink, 800));
 
-  window.GaiaCard = { inject, openEditor, closeEditor };
+  // ── "My badge card" in the person's profile ──────────────────────────────
+  // Anywhere a [data-badgecard-host] exists (the You / profile view), list the
+  // person's badge cards with the exact QR that is on their badge, so a new
+  // member sees the card they just created, can share it, and can edit it
+  // without going through the ticket sheet.
+  async function renderProfileHosts() {
+    const hosts = document.querySelectorAll('[data-badgecard-host]');
+    if (!hosts.length) return;
+    const mine = await api('/api/events/mine');
+    if (!mine || mine.authenticated === false) { hosts.forEach((h) => { h.innerHTML = ''; }); return; }
+    const events = ((mine && mine.events) || []).filter((e) => e.phase !== 'past');
+    const cards = [];
+    for (const ev of events) {
+      const c = await api('/api/events/' + encodeURIComponent(ev.id) + '/card');
+      if (c && c.ok === true) cards.push({ ev, c });
+    }
+    hosts.forEach((host) => {
+      if (!cards.length) { host.innerHTML = ''; return; }
+      host.innerHTML = '<section class="g-cardtile__wrap"><p class="g-super-kicker">Your badge</p><h2 class="g-cardtile__h2">My badge card</h2>'
+        + cards.map(({ ev, c }) => '<article class="g-cardtile" data-cardtile="' + esc(ev.id) + '">'
+          + '<div class="g-cardtile__qr">' + (c.qr_image ? '<img src="' + esc(c.qr_image) + '" alt="Your badge QR" />' : '') + '</div>'
+          + '<div class="g-cardtile__body"><p class="g-cardtile__ev">' + esc(c.event_name || ev.name) + '</p>'
+          + '<p class="g-cardtile__name">' + esc((c.fields && c.fields.display_name) || c.name) + '</p>'
+          + '<a class="g-card__url" href="' + esc(c.card_url) + '" target="_blank" rel="noopener">' + esc(prettyUrl(c.card_url)) + '</a>'
+          + '<p class="g-cardtile__state">' + (c.public ? '<span class="g-card__pill is-on">Public</span>' + (c.views ? ' <span class="g-card__views">Opened ' + esc(c.views) + 'x</span>' : '') : '<span class="g-card__pill">' + (c.claimed_at ? 'Private' : 'Not set up') + '</span>') + '</p>'
+          + '<div class="g-card__actions"><button type="button" class="g-btn g-btn--primary g-btn--sm" data-cardtile-edit>' + (c.public || c.claimed_at ? 'Edit my card' : 'Set up my card') + '</button>'
+          + '<button type="button" class="g-btn g-btn--secondary g-btn--sm" data-cardtile-share>Share</button></div>'
+          + '</div></article>').join('')
+        + '<p class="g-cardtile__hint">This is the same QR that is printed on your badge. Scan it with any phone camera to open your card.</p></section>';
+      host.querySelectorAll('[data-cardtile]').forEach((tile) => {
+        const eventId = tile.getAttribute('data-cardtile');
+        const entry = cards.find((x) => String(x.ev.id) === String(eventId));
+        tile.querySelector('[data-cardtile-edit]').addEventListener('click', () => { state.card = entry.c; state.eventId = eventId; openEditor(eventId); });
+        tile.querySelector('[data-cardtile-share]').addEventListener('click', async () => {
+          const url = entry.c.card_url;
+          try {
+            if (navigator.share) await navigator.share({ title: entry.c.name + ' — Gaia Healers badge card', url });
+            else { await navigator.clipboard.writeText(url); toast('Link copied.', 'good'); }
+          } catch (_) { /* dismissed */ }
+        });
+      });
+    });
+  }
+  document.addEventListener('gaia:superapp-rendered', renderProfileHosts);
+  document.addEventListener('gaia:profile-rendered', renderProfileHosts);
+  document.addEventListener('DOMContentLoaded', () => setTimeout(renderProfileHosts, 600));
+
+  window.GaiaCard = { inject, openEditor, closeEditor, renderProfileHosts };
 })();

@@ -1647,3 +1647,22 @@ body.gaia-v2 .g-super-home .g-super-hero{border:1px solid var(--g-line);
 .g-card__toast.is-in{opacity:1;transform:translate(-50%,0)}
 .g-card__toast.is-good{border-color:rgba(182,242,92,.45)}.g-card__toast.is-warn{border-color:rgba(232,176,75,.5)}
 @media (prefers-reduced-motion:reduce){.g-card__toast,.g-card__toggle i,.g-card__toggle i::after{transition:none}}
+
+/* theme picker + profile tile (gaia-card.js) */
+.g-card__themes{display:flex;gap:8px;flex-wrap:wrap}
+.g-card__theme{position:relative;display:flex;flex-direction:column;align-items:center;gap:4px;cursor:pointer;font-size:11px;color:rgba(255,255,255,.6);text-transform:capitalize}
+.g-card__theme input{position:absolute;opacity:0;width:1px;height:1px}
+.g-card__theme i{width:36px;height:36px;border-radius:50%;border:2px solid transparent;background:conic-gradient(from 210deg,var(--t1),var(--t2),var(--t3),var(--t1))}
+.g-card__theme input:checked+i{border-color:#fff;box-shadow:0 0 0 3px rgba(255,255,255,.18)}
+.g-card__theme input:focus-visible+i{box-shadow:var(--g-focus)}
+.g-card__theme--gaia{--t1:#B6F25C;--t2:#5CE1E6;--t3:#A78BFA}.g-card__theme--sunrise{--t1:#F5C451;--t2:#F08A5D;--t3:#E5715A}
+.g-card__theme--ocean{--t1:#5CE1E6;--t2:#4F9DF2;--t3:#A78BFA}.g-card__theme--rose{--t1:#F7A1C4;--t2:#E06C9F;--t3:#A78BFA}
+.g-card__theme--forest{--t1:#6FCE3A;--t2:#3F8C1F;--t3:#5CE1E6}.g-card__theme--gold{--t1:#F5C451;--t2:#E8B04B;--t3:#FFFFFF}
+.g-cardtile__wrap{margin:8px 0 18px}.g-cardtile__h2{margin:2px 0 12px;font-size:1.25rem}
+.g-cardtile{display:grid;grid-template-columns:104px 1fr;gap:14px;align-items:center;padding:14px;border-radius:18px;background:var(--g-surface);border:1px solid var(--g-line)}
+.g-cardtile__qr{background:#fff;border-radius:12px;padding:6px}.g-cardtile__qr img{display:block;width:100%;height:auto;image-rendering:pixelated}
+.g-cardtile__ev{margin:0;font-size:.74rem;letter-spacing:.08em;text-transform:uppercase;color:var(--g-accent);font-weight:700}
+.g-cardtile__name{margin:2px 0 4px;font-weight:700;font-size:1.05rem;color:#fff}
+.g-cardtile__state{margin:8px 0 0;display:flex;align-items:center;gap:8px}
+.g-cardtile__hint{margin:10px 0 0;font-size:.8rem;color:rgba(255,255,255,.5);line-height:1.5}
+@media (max-width:420px){.g-cardtile{grid-template-columns:84px 1fr}}

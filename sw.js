@@ -1,4 +1,4 @@
-const CACHE_NAME = 'gaia-healers-20260903d-badge-claim';
+const CACHE_NAME = 'gaia-healers-20260903e-badge-business';
 const APP_SHELL = [
   '/',
   '/home.html',

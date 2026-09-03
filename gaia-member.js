@@ -823,7 +823,11 @@ body.gaia-booking-open{overflow:hidden;}
     ])));
 
     box.innerHTML = cards.join('');
+    // The person's badge card sits at the top of their account: the thing they
+    // just created by scanning their badge is the first thing they see here.
+    box.insertAdjacentHTML('afterbegin', '<div data-badgecard-host></div>');
     window.GaiaMembershipUI?.bind?.(box);
+    document.dispatchEvent(new CustomEvent('gaia:profile-rendered'));
   }
 
   // Academy = honest course portal. Lesson progress isn't exposed by GHL, so we

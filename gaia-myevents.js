@@ -336,6 +336,7 @@
       state.ticket = data;
       shell.innerHTML = ticketHtml(data);
       injectUpgrades(eventId, shell);
+      if (window.GaiaCard) window.GaiaCard.inject(eventId, shell);
     }
   }
 
@@ -381,6 +382,7 @@
       state.ticket = data;
       shell.innerHTML = ticketHtml(data);
       injectUpgrades(eventId, shell);
+      if (window.GaiaCard) window.GaiaCard.inject(eventId, shell);
       // Returning from the external checkout: re-fetch so a newly paid tier shows.
       state._onVis = () => { if (document.visibilityState === 'visible') refreshTicketPanel(eventId, shell); };
       document.addEventListener('visibilitychange', state._onVis);

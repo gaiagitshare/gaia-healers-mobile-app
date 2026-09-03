@@ -1,4 +1,4 @@
-const CACHE_NAME = 'gaia-healers-20260903b-pulse-trend-assist';
+const CACHE_NAME = 'gaia-healers-20260903c-badge-card';
 const APP_SHELL = [
   '/',
   '/home.html',
@@ -52,6 +52,7 @@ const APP_SHELL = [
   '/gaia-myevents.js',
   '/gaia-myschedule.js',
   '/gaia-people.js',
+  '/gaia-card.js',
   '/assets/gaia-mark.svg',
   '/assets/gaia-elevate-hero.png',
   '/assets/gaia-hero-moon.png',

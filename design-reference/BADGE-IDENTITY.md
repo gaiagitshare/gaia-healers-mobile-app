@@ -87,3 +87,39 @@ auto-renewed). `CARD_PUBLIC_BASE=https://card.gaiahealers.app` is set in the
 Event Manager `.env`; both `card.gaiahealers.app/<token>` and `/c/<token>`
 resolve, and `api.gaiahealers.app/c/<token>` remains as a fallback. The token
 never changes when a host does.
+
+
+---
+
+## Permanence (2026-09-04)
+
+The card is a **`member_cards`** row keyed on the person — GHL contact id **plus
+the name on the ticket**, or the verified email. It is not owned by an event, and
+nothing it needs lives on an attendee row:
+
+- **Archive** an event → card unaffected.
+- **Delete** an event → attendee rows go, card and token stay, and the event
+  stays in the card's history, because attending it still happened.
+- **Delete every event the person ever attended** → the card still resolves,
+  still renders, still edits. Proved by `test_card_permanence.py`.
+
+`attendees.public_token` remains as a denormalised copy so the door resolves a
+scan exactly as before. `member_cards` carries its own `name`, `email` and
+`phone` snapshot so the contact switches keep working with no ticket left.
+
+**A CRM contact id alone never merges two people.** Households and couples share
+one GHL contact; before this was fixed, two different people behind one contact
+were issued the *same* badge token and therefore the same card. The identity key
+is now `contact_id + normalised name`, or the email on its own.
+
+`member_card_events` is the participation history: event label and role only,
+written from genuine attendee records and never deleted.
+
+Deleting an event now also removes `networking_profiles`, `saved_sessions`,
+`connections`, `feedback` and `push_subscriptions` for its attendees — no
+orphaned personal rows. The member card is deliberately NOT in that cascade.
+
+**Label roll:** the default is **40 × 60 mm**, a roll NIIMBOT actually sells
+(the printer needs its own RFID stock; unbranded rolls print blank). The
+40 × 50 design target is unchanged and still selectable — the layout is
+identical, name over the same 32.7 mm QR.

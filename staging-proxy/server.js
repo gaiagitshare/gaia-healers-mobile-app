@@ -2477,11 +2477,17 @@ async function handleGhlPaymentWebhook(req, res, origin) {
     const orderId = tx.entityId || '';
     // 4) order -> product ids (+ buyer fallback from the order snapshot)
     let productIds = [];
+    let productNames = [];
+    let orderAmount = null;
     let snap = {};
     if (orderId) {
       const order = await _swGhlGetRetry(`/payments/orders/${encodeURIComponent(orderId)}`, { altId: LOC, altType: 'location' });
       const items = (order && order.items) || [];
       productIds = [...new Set(items.map((it) => (it.product && it.product._id) || it.productId).filter(Boolean))];
+      // Kept so an unmapped sale can be shown to staff as something they can
+      // recognise, not just an opaque id.
+      productNames = items.map((it) => (it.product && it.product.name) || it.name).filter(Boolean);
+      orderAmount = (order && order.amount) || null;
       snap = (order && order.contactSnapshot) || {};
     }
     const email = String(tx.contactEmail || snap.email || body.email || '').trim().toLowerCase();
@@ -2510,6 +2516,23 @@ async function handleGhlPaymentWebhook(req, res, origin) {
     if (!targets.length) {
       log({ outcome: 'no_mapped_product', order_id: orderId, product_ids: productIds });
       try { recordEntitlementReview(productIds, orderId); } catch (e) { /* review is best-effort */ }
+      // Somebody paid for something we do not recognise. A log line is not
+      // enough — that is exactly how four people bought a day pass created that
+      // morning and nobody noticed for a day. Put it in front of staff, without
+      // ever turning a product name into event access.
+      try {
+        await fetch(`${EMBASE}/identity/report-unmapped-sale`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${SVC}` },
+          body: JSON.stringify({
+            reference: orderId || txId, source: 'ghl_order',
+            product_id: productIds[0] || null, product_name: productNames[0] || null,
+            buyer_email: email, buyer_name: [first, last].filter(Boolean).join(' '),
+            contact_id: contactId, amount: orderAmount, quantity: 1,
+            paid_at: new Date().toISOString().slice(0, 10),
+          }),
+        });
+      } catch (e) { /* the sale is already logged; surfacing it must never break the webhook */ }
       // 202: accepted but nothing to do — fails safe, visible in logs, touches nothing.
       sendJson(res, 202, { ok: true, matched: 0, reason: 'no_mapped_product', product_ids: productIds }, origin); return;
     }

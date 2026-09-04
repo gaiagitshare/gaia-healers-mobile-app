@@ -19,8 +19,16 @@ const grab = (name) => {
   return m[0];
 };
 const mod = await import('data:text/javascript;base64,' + Buffer.from(
-  grab('courseGroupKey') + grab('aliasKeyForId') + grab('learnCourseAlias') + grab('resolveEntitlementMatch') +
-  '\nexport { courseGroupKey, learnCourseAlias, resolveEntitlementMatch };'
+  // These cases predate the course-authority registry: they assert that a
+  // revoke lands on the backfilled row using aliases and names ALONE. So the
+  // index is stubbed EMPTY rather than thrown from (which is what the variant
+  // tests do, because those exist to test the registry). Empty also keeps the
+  // stub from reaching real file I/O.
+  'function buildCourseAuthorityIndex(){return {byId:new Map(),byKey:new Map(),'
+  + 'ambiguousKeys:new Set(),aliasByKey:new Map(),aliasById:new Map()};}\n'
+  + grab('courseGroupKey') + grab('aliasKeyForId') + grab('aliasIdForKey')
+  + grab('learnCourseAlias') + grab('resolveEntitlementMatch')
+  + '\nexport { courseGroupKey, learnCourseAlias, resolveEntitlementMatch };'
 ).toString('base64'));
 const { courseGroupKey, learnCourseAlias, resolveEntitlementMatch } = mod;
 

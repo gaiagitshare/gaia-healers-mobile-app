@@ -3344,6 +3344,9 @@ def get_public_exhibitors(
             "description": r.description, "logo_url": r.logo_url, "website": r.website,
             "category": r.category, "tagline": getattr(r, "tagline", None),
             "address": getattr(r, "address", None),
+            # Several of these logos are white artwork and vanish on a white
+            # tile, so the directory has to know which way round to draw it.
+            "logo_on_dark": bool(getattr(r, "logo_on_dark", False)),
             "contact_email": (getattr(r, "public_email", None)
                               or ((r.contact_email or None) if show else None)),
             "contact_phone": (getattr(r, "public_phone", None)

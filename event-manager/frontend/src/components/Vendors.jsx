@@ -60,6 +60,7 @@ export default function Vendors() {
     const [leads, setLeads] = useState(null);
     const [invite, setInvite] = useState(null);
     const [openStages, setOpenStages] = useState({ confirmed: true });
+    const [granting, setGranting] = useState(false);
 
     useEffect(() => {
         getEvents()
@@ -153,6 +154,46 @@ export default function Vendors() {
                     </Stack>
                 </Paper>
             )}
+
+            {/* Scanning is sold, and paying for a booth is not the same purchase —
+                but in practice these should agree, and when they drift it is
+                worth saying so rather than discovering it at the door. */}
+            {(() => {
+                const paid = confirmed.filter((r) => r.payment_status === 'paid' || r.payment_status === 'comp');
+                const paidNoScan = paid.filter((r) => !r.can_scan_leads);
+                const scanUnpaid = confirmed.filter((r) => r.can_scan_leads
+                    && r.payment_status !== 'paid' && r.payment_status !== 'comp');
+                if (!paidNoScan.length && !scanUnpaid.length) return null;
+                return (
+                    <Alert severity={scanUnpaid.length ? 'warning' : 'info'} sx={{ mb: 2 }}
+                        action={paidNoScan.length ? (
+                            <Button size="small" color="inherit" disabled={granting}
+                                onClick={async () => {
+                                    setGranting(true);
+                                    try {
+                                        for (const r of paidNoScan) {
+                                            await updateExhibitor(r.id, { can_scan_leads: true });
+                                        }
+                                        await load();
+                                    } catch (e) {
+                                        setError('Could not grant scanning to every stand.');
+                                    } finally { setGranting(false); }
+                                }}>
+                                {granting ? 'Granting…' : `Let all ${paidNoScan.length} scan`}
+                            </Button>
+                        ) : null}>
+                        {paidNoScan.length > 0 && (
+                            <>{paidNoScan.length} settled {paidNoScan.length === 1 ? 'stand' : 'stands'} cannot
+                            scan badges yet. </>
+                        )}
+                        {scanUnpaid.length > 0 && (
+                            <><strong>{scanUnpaid.length} {scanUnpaid.length === 1 ? 'stand' : 'stands'} can scan
+                            but {scanUnpaid.length === 1 ? 'has' : 'have'} not settled:</strong>{' '}
+                            {scanUnpaid.map((r) => r.company_name).join(', ')}.</>
+                        )}
+                    </Alert>
+                );
+            })()}
 
             {loading && rows.length === 0 ? <CircularProgress size={26} /> : STAGES.map((stage) => {
                 const group = rows.filter((r) => (r.stage || 'confirmed') === stage.key);

@@ -370,6 +370,7 @@ class ExhibitorPublic(BaseModel):
     category: Optional[str] = None
     tagline: Optional[str] = None
     address: Optional[str] = None
+    logo_on_dark: Optional[bool] = False
     contact_email: Optional[str] = None
     contact_phone: Optional[str] = None
 

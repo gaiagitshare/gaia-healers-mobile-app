@@ -488,16 +488,38 @@
   function directorySection(detail) {
     const exhibitors = Array.isArray(detail?.exhibitors) ? detail.exhibitors : [];
     if (!exhibitors.length) return '';
-    return '<section class="g-super-list"><div class="g-super-section-head"><div><p class="g-super-kicker">Exhibit hall</p><h2>Vendor directory</h2></div></div>'
+    // Each row opens the stand's OWN page rather than firing the attendee
+    // straight out to a company website. Their page carries the booth number,
+    // what they do and how to reach them; a link out loses all of that, and
+    // loses the person too.
+    const base = (window.GAIA_APP_URLS && window.GAIA_APP_URLS.production
+      && window.GAIA_APP_URLS.production.proxy) || '';
+    const withBooth = exhibitors.filter((v) => v.booth_number).length;
+    return '<section class="g-super-list"><div class="g-super-section-head"><div>'
+      + '<p class="g-super-kicker">Exhibit hall</p><h2>Vendor directory</h2>'
+      + '<p class="g-super-sub">' + exhibitors.length + ' exhibiting'
+      + (withBooth ? ' \u00b7 ' + withBooth + ' with a booth number' : '') + '</p>'
+      + '</div></div>'
+      + '<div class="g-vendors">'
       + exhibitors.map((vendor) => {
-        const meta = [vendor.booth_number ? 'Booth ' + vendor.booth_number : '', vendor.category].filter(Boolean).join(' · ');
-        const row = '<span class="g-super-row__icon">' + icon('storefront') + '</span>'
-          + '<span><strong>' + esc(vendor.company_name) + '</strong><em>' + esc(meta || vendor.description || '') + '</em></span>';
-        return vendor.website
-          ? '<a class="g-super-row" href="' + esc(vendor.website) + '" target="_blank" rel="noopener noreferrer">' + row + icon('arrow-up-right') + '</a>'
-          : '<div class="g-super-row">' + row + '</div>';
+        const meta = [vendor.booth_number ? 'Booth ' + vendor.booth_number : '', vendor.category]
+          .filter(Boolean).join(' \u00b7 ');
+        const blurb = vendor.tagline || vendor.description || '';
+        const logo = vendor.logo_url
+          ? '<img src="' + esc(vendor.logo_url) + '" alt="" loading="lazy">'
+          : '<b>' + esc((vendor.company_name || 'G').trim().charAt(0).toUpperCase()) + '</b>';
+        const inner = '<span class="g-vendor__logo' + (vendor.logo_on_dark ? ' is-dark' : '') + '">'
+          + logo + '</span>'
+          + '<span class="g-vendor__text"><strong>' + esc(vendor.company_name) + '</strong>'
+          + (meta ? '<em>' + esc(meta) + '</em>' : '')
+          + (blurb ? '<span class="g-vendor__blurb">' + esc(blurb) + '</span>' : '')
+          + '</span>';
+        return base
+          ? '<a class="g-vendor" href="' + esc(base + '/v/' + vendor.id) + '" target="_blank" rel="noopener noreferrer">'
+            + inner + icon('arrow-up-right') + '</a>'
+          : '<div class="g-vendor">' + inner + '</div>';
       }).join('')
-      + '</section>';
+      + '</div></section>';
   }
 
   function dateLabel() {

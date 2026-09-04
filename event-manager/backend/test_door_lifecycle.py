@@ -124,6 +124,11 @@ check(st == 200 and dec.get("attendee_id") == AID, "their badge checks them in")
 st, png = call("GET", "/events/%d/attendees/%d/badge-label.png" % (EV1, AID), token=ADMIN, raw=True)
 check(st == 200 and png[:4] == bytes([0x89, 0x50, 0x4E, 0x47]), "their sticker prints")
 ident = {"email": E["payer"], "email_verified": True, "event_id": 0}
+# Publishing needs all three identity fields; this test is about the door, so
+# the phone is filled in directly rather than through the verification flow.
+_c = sqlite3.connect(DB)
+_c.execute("UPDATE member_cards SET phone=? WHERE public_token=?", ("+1 555 700 2000", TOKEN))
+_c.commit(); _c.close()
 st, card = call("POST", "/identity/card/update", dict(ident, public=True, company="Doortest Studio"), SVC)
 check(st == 200 and card.get("token") == TOKEN and card.get("public") is True, "they claim and publish their card")
 st, body = call("GET", "/c/" + TOKEN, raw=True)

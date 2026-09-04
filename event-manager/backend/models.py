@@ -922,3 +922,53 @@ class MapReconcileRun(Base):
     failed = Column(Integer, default=0)
     actor_id = Column(Integer, ForeignKey("users.id"))
     created_at = Column(DateTime, default=datetime.utcnow)
+
+
+class CardVerification(Base):
+    """A one-time code proving somebody is who they say they are before they
+    change the identity on their card.
+
+    The code is never stored. Only a salted SHA-256 of it is kept, so a copy of
+    this table does not let anyone complete a verification, and nothing here is
+    ever returned through the public card API.
+
+    Two purposes, and the difference is the whole point of the feature:
+
+      identity   -- prove you are the CURRENT owner, using a contact method
+                    already on file. The code goes to the OLD address.
+      new_email  -- prove the NEW address really belongs to you, after the
+      new_phone    identity step has already passed. Until this succeeds the
+                    trusted contact value is not replaced.
+
+    That ordering is what stops somebody who finds an unlocked session from
+    quietly swapping the recovery email for their own.
+    """
+    __tablename__ = "card_verifications"
+
+    id = Column(Integer, primary_key=True, index=True)
+    card_id = Column(Integer, ForeignKey("member_cards.id"), index=True)
+    purpose = Column(String, index=True)          # identity | new_email | new_phone
+    dest_kind = Column(String)                    # email | phone
+    dest_masked = Column(String)                  # what the user was shown
+    code_hash = Column(String)                    # sha256(salt + code); never the code
+    salt = Column(String)
+    pending_value = Column(String)                # the new address, for new_* only
+    attempts = Column(Integer, default=0)
+    max_attempts = Column(Integer, default=5)
+    created_at = Column(DateTime, default=datetime.utcnow, index=True)
+    expires_at = Column(DateTime, index=True)
+    consumed_at = Column(DateTime, nullable=True)
+
+
+class CardVerificationSession(Base):
+    """A short-lived permit to edit the protected fields, minted only by a
+    successful identity verification. The token itself is hashed, so the row
+    cannot be replayed by anyone reading the database."""
+    __tablename__ = "card_verification_sessions"
+
+    id = Column(Integer, primary_key=True, index=True)
+    card_id = Column(Integer, ForeignKey("member_cards.id"), index=True)
+    token_hash = Column(String, index=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    expires_at = Column(DateTime, index=True)
+    revoked_at = Column(DateTime, nullable=True)

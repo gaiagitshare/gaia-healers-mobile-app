@@ -460,6 +460,13 @@ async function myCard(session, eventId) {
 
 const CARD_FIELDS = ['public', 'bio', 'company', 'title', 'city', 'website', 'instagram', 'linkedin', 'whatsapp', 'photo_url', 'show_email', 'show_phone', 'tags'];
 
+// Name, email and phone are the account's recovery information, so they are
+// NOT ordinary card fields. Only full_name may be written through the update
+// call, and only with a permit from a completed identity verification; email
+// and phone are replaced solely by their own second verification, once the new
+// address has answered a code of its own.
+const PROTECTED_CARD_FIELDS = ['full_name', 'new_email', 'new_phone'];
+
 async function updateCard(session, eventId, body) {
   const identity = identityFromSession(session);
   if (!identity) return { ok: false, authenticated: false, reason: 'auth_required' };
@@ -476,8 +483,130 @@ async function updateCard(session, eventId, body) {
     else if (key === 'tags') fields[key] = Array.isArray(v) ? v.map((t) => String(t)).slice(0, 4) : String(v || '');
     else fields[key] = String(v == null ? '' : v).slice(0, 400);
   }
-  const result = await callEventIdentity('/identity/card/update', { ...identity, event_id: numericId, ...fields });
+  for (const key of PROTECTED_CARD_FIELDS) {
+    if (key in (body || {})) fields[key] = String(body[key] == null ? '' : body[key]).slice(0, 120);
+  }
+  const token = String((body && body.verification_token) || '');
+  const result = await callEventIdentity('/identity/card/update', {
+    ...identity, event_id: numericId, ...fields,
+    ...(token ? { verification_token: token } : {}),
+  });
   return { authenticated: true, ...(result || { ok: false, reason: 'identity_failed' }) };
+}
+
+/**
+ * Identity verification for the protected card fields.
+ *
+ * The security shape, in order:
+ *
+ *   destinations -> masked contact methods ALREADY on file
+ *   start        -> a code to one of those, never to a newly typed address
+ *   confirm      -> a short-lived permit to edit
+ *   new/start    -> a second code, this time to the NEW address
+ *   new/confirm  -> only now is the trusted value replaced
+ *
+ * Every call needs a real Gaia session. A public badge token is a way to VIEW a
+ * card and is never a way to change one, so none of these accept a token.
+ */
+const OTP_REQUESTS = new Map();          // sessionKey -> timestamps
+
+function otpRateLimited(key, limit = 5, windowMs = 60 * 60 * 1000) {
+  const now = Date.now();
+  const hits = (OTP_REQUESTS.get(key) || []).filter((t) => t > now - windowMs);
+  if (hits.length >= limit) { OTP_REQUESTS.set(key, hits); return true; }
+  hits.push(now);
+  OTP_REQUESTS.set(key, hits);
+  if (OTP_REQUESTS.size > 5000) {
+    for (const [k, v] of OTP_REQUESTS) if (!v.some((t) => t > now - windowMs)) OTP_REQUESTS.delete(k);
+  }
+  return false;
+}
+
+async function cardVerifyDestinations(session) {
+  const identity = identityFromSession(session);
+  if (!identity) return { ok: false, authenticated: false, reason: 'auth_required' };
+  const r = await callEventIdentity('/identity/card/verify/destinations', { ...identity, event_id: 0 });
+  return { authenticated: true, ...(r || { ok: false, reason: 'identity_failed' }) };
+}
+
+// The code never comes back to the browser and is never logged. It travels
+// from the Event Manager to here over the service channel, goes straight into
+// the message, and is dropped.
+async function deliverCode(identity, kind, to, code, what) {
+  if (kind === 'email') {
+    const contactId = identity.contact_id || '';
+    if (!contactId) return { ok: false, reason: 'no_contact_for_delivery' };
+    const mins = 10;
+    const html = [
+      '<div style="font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;max-width:480px;margin:0 auto;padding:24px;color:#1a2b20">',
+      '<h2 style="margin:0 0 10px;font-size:20px;color:#12281c">Your Gaia Healers verification code</h2>',
+      '<p style="margin:0 0 18px;font-size:15px;line-height:1.55">Use this code to ' + what + '. It expires in ' + mins + ' minutes and can be used once.</p>',
+      '<p style="margin:0 0 22px;font-size:30px;letter-spacing:6px;font-weight:700;color:#2e7d32">' + code + '</p>',
+      '<p style="margin:22px 0 0;font-size:12px;color:#8a978f">If you did not ask to change your card details, ignore this email and nothing will change.</p>',
+      '</div>',
+    ].join('');
+    return ghlSendEmailRef({ contactId, subject: 'Your Gaia Healers verification code', html });
+  }
+  // No SMS channel is configured. Saying so beats pretending a code was sent.
+  return { ok: false, reason: 'sms_delivery_unavailable' };
+}
+
+let ghlSendEmailRef = async () => ({ ok: false, reason: 'mailer_not_wired' });
+function setCardMailer(fn) { if (typeof fn === 'function') ghlSendEmailRef = fn; }
+
+async function cardVerifyStart(session, body) {
+  const identity = identityFromSession(session);
+  if (!identity) return { ok: false, authenticated: false, reason: 'auth_required' };
+  const key = 'id:' + (identity.contact_id || identity.email || 'anon');
+  if (otpRateLimited(key)) return { ok: false, authenticated: true, reason: 'rate_limited', retry_after_seconds: 3600 };
+  const r = await callEventIdentity('/identity/card/verify/start', {
+    ...identity, event_id: 0, destination_id: String((body && body.destination_id) || ''),
+  });
+  if (!r || r.ok !== true) return { authenticated: true, ...(r || { ok: false, reason: 'identity_failed' }) };
+  const sent = await deliverCode(identity, r.kind, r._deliver_to, r._code,
+                                 'confirm a change to your Gaia Healers card');
+  // Strip the code and the real address before anything is returned.
+  delete r._code; delete r._deliver_to;
+  if (!sent.ok) return { ok: false, authenticated: true, reason: sent.reason || 'delivery_failed', sent_to: r.sent_to, kind: r.kind };
+  return { authenticated: true, ...r };
+}
+
+async function cardVerifyConfirm(session, body) {
+  const identity = identityFromSession(session);
+  if (!identity) return { ok: false, authenticated: false, reason: 'auth_required' };
+  const r = await callEventIdentity('/identity/card/verify/confirm', {
+    ...identity, event_id: 0, code: String((body && body.code) || ''),
+  });
+  return { authenticated: true, ...(r || { ok: false, reason: 'identity_failed' }) };
+}
+
+async function cardVerifyNewStart(session, body) {
+  const identity = identityFromSession(session);
+  if (!identity) return { ok: false, authenticated: false, reason: 'auth_required' };
+  const key = 'new:' + (identity.contact_id || identity.email || 'anon');
+  if (otpRateLimited(key)) return { ok: false, authenticated: true, reason: 'rate_limited', retry_after_seconds: 3600 };
+  const r = await callEventIdentity('/identity/card/verify/new/start', {
+    ...identity, event_id: 0,
+    verification_token: String((body && body.verification_token) || ''),
+    kind: String((body && body.kind) || ''), value: String((body && body.value) || ''),
+  });
+  if (!r || r.ok !== true) return { authenticated: true, ...(r || { ok: false, reason: 'identity_failed' }) };
+  const sent = await deliverCode(identity, r.kind, r._deliver_to, r._code,
+                                 'confirm this is your address');
+  delete r._code; delete r._deliver_to;
+  if (!sent.ok) return { ok: false, authenticated: true, reason: sent.reason || 'delivery_failed', sent_to: r.sent_to, kind: r.kind };
+  return { authenticated: true, ...r };
+}
+
+async function cardVerifyNewConfirm(session, body) {
+  const identity = identityFromSession(session);
+  if (!identity) return { ok: false, authenticated: false, reason: 'auth_required' };
+  const r = await callEventIdentity('/identity/card/verify/new/confirm', {
+    ...identity, event_id: 0,
+    verification_token: String((body && body.verification_token) || ''),
+    kind: String((body && body.kind) || ''), code: String((body && body.code) || ''),
+  });
+  return { authenticated: true, ...(r || { ok: false, reason: 'identity_failed' }) };
 }
 
 async function uploadCardPhoto(session, eventId, contentType, buffer) {
@@ -531,4 +660,4 @@ async function cardOwner(session, token) {
            claimed: Boolean(result.claimed), public: Boolean(result.public) };
 }
 
-export { announcements, myEvents, myTicket, myUpgrades, mySchedule, changeSchedule, changeWorkshop, networking, feedback, pushVapidKey, pushSubscribe, pushUnsubscribe, identityFromSession, phaseOf, toAppRow , communityFeed, createPost, postAction , uploadPostImage, myCard, updateCard, uploadCardPhoto, cardOwner };
+export { announcements, myEvents, myTicket, myUpgrades, mySchedule, changeSchedule, changeWorkshop, networking, feedback, pushVapidKey, pushSubscribe, pushUnsubscribe, identityFromSession, phaseOf, toAppRow , communityFeed, createPost, postAction , uploadPostImage, myCard, updateCard, uploadCardPhoto, cardOwner, cardVerifyDestinations, cardVerifyStart, cardVerifyConfirm, cardVerifyNewStart, cardVerifyNewConfirm, setCardMailer };

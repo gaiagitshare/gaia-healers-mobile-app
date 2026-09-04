@@ -22,6 +22,7 @@ import re
 import json
 import uuid
 import secrets
+import hashlib
 from dotenv import load_dotenv
 
 from database import engine, SessionLocal, get_db, Base
@@ -7023,6 +7024,324 @@ def identity_card(payload: schemas.IdentityTicketLookup, db: Session = Depends(g
     return _card_owner_view(db, mcard, attendee, event)
 
 
+# ---------------------------------------------------------------------------
+# Digital card identity: mandatory fields, and verified changes to them
+#
+# Full name, email and phone are what make a card a business card rather than a
+# nickname, so a card cannot be published without all three. They are also the
+# account's recovery information, which is why changing them is not an ordinary
+# edit: somebody who finds a signed-in phone on a conference floor must not be
+# able to swap the recovery email for their own.
+#
+# So a change to any of them takes two proofs, in this order:
+#
+#   1. prove you are the CURRENT owner -- a code sent to a contact method
+#      ALREADY on file, never to the new one being entered;
+#   2. for a new email or phone, prove the NEW value is yours as well.
+#
+# The trusted value is not replaced until step 2 succeeds. Step 1 alone buys a
+# short-lived permit, not a permanent right to edit.
+
+PROTECTED_CARD_FIELDS = ("full_name", "email", "phone")
+REQUIRED_CARD_FIELDS = ("full_name", "email", "phone")
+
+OTP_TTL_SECONDS = 10 * 60          # short: a code left in an inbox goes stale
+OTP_MAX_ATTEMPTS = 5
+OTP_REQUESTS_PER_HOUR = 5          # per card, per purpose
+VERIFICATION_SESSION_TTL_SECONDS = 15 * 60
+
+
+def _otp_hash(salt, code):
+    return hashlib.sha256(("%s:%s" % (salt, code)).encode("utf-8")).hexdigest()
+
+
+def _mask_email(value):
+    v = str(value or "").strip()
+    if "@" not in v:
+        return ""
+    user, _, domain = v.partition("@")
+    if len(user) <= 1:
+        head = user[:1]
+    else:
+        head = user[:1]
+    return "%s***@%s" % (head, domain)
+
+
+def _mask_phone(value):
+    digits = "".join(ch for ch in str(value or "") if ch.isdigit())
+    if len(digits) < 4:
+        return ""
+    return "\u2022\u2022\u2022 \u2022\u2022\u2022 %s" % digits[-4:]
+
+
+def _card_full_name(mcard):
+    card = dict(mcard.card or {})
+    return str(card.get("full_name") or mcard.name or "").strip()
+
+
+def _card_email(mcard):
+    card = dict(mcard.card or {})
+    return str(card.get("email") or mcard.email or "").strip().lower()
+
+
+def _card_phone(mcard):
+    card = dict(mcard.card or {})
+    return str(card.get("phone") or mcard.phone or "").strip()
+
+
+def _card_missing_required(mcard):
+    """Which of the three mandatory fields this card does not yet have."""
+    missing = []
+    if not _card_full_name(mcard):
+        missing.append("full_name")
+    if not _card_email(mcard):
+        missing.append("email")
+    if not _card_phone(mcard):
+        missing.append("phone")
+    return missing
+
+
+def _trusted_destinations(db, mcard):
+    """Contact methods already on file that a code may be sent to.
+
+    Deliberately drawn from what the person ALREADY has -- the card, and the
+    attendee records their identity resolves to. A value being typed into the
+    form right now is never in here, which is the entire security property.
+    """
+    emails, phones = [], []
+
+    def add_email(v):
+        v = str(v or "").strip().lower()
+        if v and "@" in v and v not in emails:
+            emails.append(v)
+
+    def add_phone(v):
+        v = str(v or "").strip()
+        if len("".join(c for c in v if c.isdigit())) >= 7 and v not in phones:
+            phones.append(v)
+
+    add_email(mcard.email)
+    add_phone(mcard.phone)
+    card = dict(mcard.card or {})
+    add_email(card.get("email"))
+    add_phone(card.get("phone"))
+    for a in _person_candidates(mcard.contact_id, mcard.email, mcard.name) if False else []:
+        pass
+    q = db.query(models.Attendee)
+    if mcard.contact_id:
+        rows = [a for a in q.all() if (a.custom_data or {}).get("contact_id") == mcard.contact_id]
+    else:
+        rows = []
+    if not rows and mcard.email:
+        rows = q.filter(func.lower(models.Attendee.email) == mcard.email.strip().lower()).all()
+    for a in rows:
+        add_email(a.email)
+        add_phone(a.phone)
+
+    out = []
+    for i, v in enumerate(emails):
+        out.append({"id": "e%d" % i, "kind": "email", "masked": _mask_email(v), "_value": v})
+    for i, v in enumerate(phones):
+        out.append({"id": "p%d" % i, "kind": "phone", "masked": _mask_phone(v), "_value": v})
+    return [d for d in out if d["masked"]]
+
+
+def _recent_otp_count(db, card_id, purpose):
+    since = datetime.utcnow() - timedelta(hours=1)
+    return db.query(models.CardVerification).filter(
+        models.CardVerification.card_id == card_id,
+        models.CardVerification.purpose == purpose,
+        models.CardVerification.created_at >= since).count()
+
+
+def _issue_otp(db, card, purpose, dest_kind, dest_masked, pending_value=None):
+    """Mint a code. The plaintext is returned to the CALLER (the proxy, over the
+    service channel) so it can be delivered, and is never written down here."""
+    code = "%06d" % secrets.randbelow(1000000)
+    salt = secrets.token_hex(8)
+    # Any earlier live code for this purpose stops working the moment a new one
+    # is issued, so a stack of valid codes cannot build up in an inbox.
+    for old in db.query(models.CardVerification).filter(
+            models.CardVerification.card_id == card.id,
+            models.CardVerification.purpose == purpose,
+            models.CardVerification.consumed_at.is_(None)).all():
+        old.consumed_at = datetime.utcnow()
+    row = models.CardVerification(
+        card_id=card.id, purpose=purpose, dest_kind=dest_kind, dest_masked=dest_masked,
+        code_hash=_otp_hash(salt, code), salt=salt, pending_value=pending_value,
+        attempts=0, max_attempts=OTP_MAX_ATTEMPTS,
+        expires_at=datetime.utcnow() + timedelta(seconds=OTP_TTL_SECONDS))
+    db.add(row)
+    db.flush()
+    return row, code
+
+
+def _check_otp(db, card, purpose, code):
+    """Returns (ok, reason, row). Wrong, expired and reused all fail, and every
+    attempt is counted so a code cannot be brute-forced within its short life."""
+    row = db.query(models.CardVerification).filter(
+        models.CardVerification.card_id == card.id,
+        models.CardVerification.purpose == purpose,
+        models.CardVerification.consumed_at.is_(None)).order_by(
+        models.CardVerification.created_at.desc()).first()
+    if not row:
+        return False, "no_code_outstanding", None
+    if row.expires_at and datetime.utcnow() > row.expires_at:
+        return False, "code_expired", row
+    if row.attempts >= (row.max_attempts or OTP_MAX_ATTEMPTS):
+        return False, "too_many_attempts", row
+    row.attempts = (row.attempts or 0) + 1
+    supplied = "".join(ch for ch in str(code or "") if ch.isdigit())
+    if not supplied or not secrets.compare_digest(_otp_hash(row.salt, supplied), row.code_hash):
+        db.commit()
+        return False, "code_incorrect", row
+    row.consumed_at = datetime.utcnow()
+    return True, "", row
+
+
+def _mint_verification_session(db, card):
+    token = secrets.token_urlsafe(24)
+    db.add(models.CardVerificationSession(
+        card_id=card.id, token_hash=hashlib.sha256(token.encode()).hexdigest(),
+        expires_at=datetime.utcnow() + timedelta(seconds=VERIFICATION_SESSION_TTL_SECONDS)))
+    db.flush()
+    return token
+
+
+def _verification_session_valid(db, card, token):
+    if not token:
+        return False
+    h = hashlib.sha256(str(token).encode()).hexdigest()
+    row = db.query(models.CardVerificationSession).filter(
+        models.CardVerificationSession.card_id == card.id,
+        models.CardVerificationSession.token_hash == h,
+        models.CardVerificationSession.revoked_at.is_(None)).first()
+    return bool(row and row.expires_at and datetime.utcnow() <= row.expires_at)
+
+
+@app.post("/identity/card/verify/destinations")
+def card_verify_destinations(payload: schemas.IdentityTicketLookup, db: Session = Depends(get_db),
+                             _: bool = Depends(require_service_token)):
+    """Where a code could be sent, MASKED. Never the full address: a shoulder
+    surfer with the phone should not learn the recovery email from this screen."""
+    mcard, _attendee, report = _own_card(db, payload, create=False)
+    if not mcard:
+        return {"ok": False, "reason": "no_card_for_member", "resolution": report}
+    dests = _trusted_destinations(db, mcard)
+    return {"ok": True,
+            "destinations": [{"id": d["id"], "kind": d["kind"], "masked": d["masked"]} for d in dests],
+            "missing_required": _card_missing_required(mcard)}
+
+
+@app.post("/identity/card/verify/start")
+def card_verify_start(payload: schemas.CardVerifyStart, db: Session = Depends(get_db),
+                      _: bool = Depends(require_service_token)):
+    """Send a code to a contact method ALREADY on file. The response carries the
+    code so the proxy can deliver it, and nothing else ever sees it."""
+    mcard, _attendee, report = _own_card(db, payload, create=False)
+    if not mcard:
+        return {"ok": False, "reason": "no_card_for_member", "resolution": report}
+    if _recent_otp_count(db, mcard.id, "identity") >= OTP_REQUESTS_PER_HOUR:
+        return {"ok": False, "reason": "rate_limited",
+                "retry_after_seconds": 3600}
+    dests = _trusted_destinations(db, mcard)
+    chosen = next((d for d in dests if d["id"] == (payload.destination_id or "")), None)
+    if chosen is None:
+        chosen = dests[0] if dests else None
+    if chosen is None:
+        # Nothing on file to send to. Better to say so than to invent a channel.
+        return {"ok": False, "reason": "no_trusted_destination"}
+    row, code = _issue_otp(db, mcard, "identity", chosen["kind"], chosen["masked"])
+    db.commit()
+    return {"ok": True, "verification_id": row.id, "sent_to": chosen["masked"],
+            "kind": chosen["kind"], "expires_in_seconds": OTP_TTL_SECONDS,
+            "_deliver_to": chosen["_value"], "_code": code}
+
+
+@app.post("/identity/card/verify/confirm")
+def card_verify_confirm(payload: schemas.CardVerifyConfirm, db: Session = Depends(get_db),
+                        _: bool = Depends(require_service_token)):
+    """Check the code and, on success, mint a short-lived permit to edit the
+    protected fields. The permit is what the update call must present."""
+    mcard, _attendee, report = _own_card(db, payload, create=False)
+    if not mcard:
+        return {"ok": False, "reason": "no_card_for_member", "resolution": report}
+    ok, reason, row = _check_otp(db, mcard, "identity", payload.code)
+    if not ok:
+        db.commit()
+        return {"ok": False, "reason": reason,
+                "attempts_remaining": max(0, (row.max_attempts or OTP_MAX_ATTEMPTS) - (row.attempts or 0)) if row else 0}
+    token = _mint_verification_session(db, mcard)
+    db.commit()
+    return {"ok": True, "verification_token": token,
+            "expires_in_seconds": VERIFICATION_SESSION_TTL_SECONDS}
+
+
+@app.post("/identity/card/verify/new/start")
+def card_verify_new_start(payload: schemas.CardVerifyNewStart, db: Session = Depends(get_db),
+                          _: bool = Depends(require_service_token)):
+    """Second step: prove the NEW address is yours. Requires the permit from the
+    first step, so the order can never be reversed."""
+    mcard, _attendee, report = _own_card(db, payload, create=False)
+    if not mcard:
+        return {"ok": False, "reason": "no_card_for_member", "resolution": report}
+    if not _verification_session_valid(db, mcard, payload.verification_token):
+        return {"ok": False, "reason": "identity_verification_required"}
+    kind = (payload.kind or "").strip().lower()
+    if kind not in ("email", "phone"):
+        return {"ok": False, "reason": "bad_kind"}
+    purpose = "new_email" if kind == "email" else "new_phone"
+    value = str(payload.value or "").strip()
+    if kind == "email":
+        value = value.lower()
+        if "@" not in value or len(value) < 5:
+            return {"ok": False, "reason": "bad_email"}
+        masked = _mask_email(value)
+    else:
+        if len("".join(c for c in value if c.isdigit())) < 7:
+            return {"ok": False, "reason": "bad_phone"}
+        masked = _mask_phone(value)
+    if _recent_otp_count(db, mcard.id, purpose) >= OTP_REQUESTS_PER_HOUR:
+        return {"ok": False, "reason": "rate_limited", "retry_after_seconds": 3600}
+    row, code = _issue_otp(db, mcard, purpose, kind, masked, pending_value=value)
+    db.commit()
+    return {"ok": True, "verification_id": row.id, "sent_to": masked, "kind": kind,
+            "expires_in_seconds": OTP_TTL_SECONDS,
+            "_deliver_to": value, "_code": code}
+
+
+@app.post("/identity/card/verify/new/confirm")
+def card_verify_new_confirm(payload: schemas.CardVerifyNewConfirm, db: Session = Depends(get_db),
+                            _: bool = Depends(require_service_token)):
+    """Promote the new address ONLY now that it has answered its own code. Until
+    this point the old trusted value is still the one on file."""
+    mcard, _attendee, report = _own_card(db, payload, create=False)
+    if not mcard:
+        return {"ok": False, "reason": "no_card_for_member", "resolution": report}
+    if not _verification_session_valid(db, mcard, payload.verification_token):
+        return {"ok": False, "reason": "identity_verification_required"}
+    kind = (payload.kind or "").strip().lower()
+    purpose = "new_email" if kind == "email" else "new_phone"
+    ok, reason, row = _check_otp(db, mcard, purpose, payload.code)
+    if not ok:
+        db.commit()
+        return {"ok": False, "reason": reason,
+                "attempts_remaining": max(0, (row.max_attempts or OTP_MAX_ATTEMPTS) - (row.attempts or 0)) if row else 0}
+    value = row.pending_value or ""
+    card = dict(mcard.card or {})
+    if kind == "email":
+        card["email"] = value
+        mcard.email = value
+    else:
+        card["phone"] = value
+        mcard.phone = value
+    mcard.card = badge_card.clean_card(card)
+    mcard.updated_at = datetime.utcnow()
+    db.commit()
+    return {"ok": True, "field": kind, "masked": row.dest_masked,
+            "missing_required": _card_missing_required(mcard)}
+
+
 @app.post("/identity/card/update")
 def identity_card_update(payload: schemas.CardUpdate, db: Session = Depends(get_db),
                          _: bool = Depends(require_service_token)):
@@ -7036,19 +7355,64 @@ def identity_card_update(payload: schemas.CardUpdate, db: Session = Depends(get_
     prof = mcard
     current = dict(prof.card or {})
     incoming = payload.dict(exclude_unset=True)
+
+    # A change to name, email or phone is a change to the account's recovery
+    # information, so it needs the permit an identity verification mints. An
+    # ordinary edit -- headline, bio, links -- never asks for one.
+    # Email and phone are replaced ONLY by /verify/new/confirm, once the new
+    # address has answered a code of its own. Accepting them here would skip
+    # that second proof, which is the whole point of the feature.
+    for f, field in (("email", "new_email"), ("phone", "new_phone")):
+        if incoming.get(field):
+            return {"ok": False, "reason": "new_value_verification_required",
+                    "field": f,
+                    "detail": "Verify the new %s with the code sent to it before it replaces the old one." % f}
+
+    touching_protected = [
+        f for f in ("full_name",)
+        if f in incoming and incoming[f] is not None
+        and str(incoming[f]).strip() != _card_full_name(prof)
+    ]
+    if touching_protected and not _verification_session_valid(db, prof, payload.verification_token):
+        return {"ok": False, "reason": "identity_verification_required",
+                "protected_fields": touching_protected}
+
     for k in badge_card.CARD_FIELDS:
         if k in incoming and incoming[k] is not None:
             current[k] = incoming[k]
+    if "full_name" in touching_protected:
+        current["full_name"] = str(incoming["full_name"] or "").strip()[:120]
+        # The card's display name is the person's to choose. Their ticket and
+        # check-in records are history and are deliberately NOT rewritten here.
+        prof.name = current["full_name"] or prof.name
     prof.card = badge_card.clean_card(current)
     if incoming.get("bio") is not None:
         prof.bio = str(incoming["bio"] or "").strip()[:400]
     if incoming.get("public") is not None:
-        prof.card_public = bool(incoming["public"])
+        wants_public = bool(incoming["public"])
+        if wants_public:
+            # A card without a name, an email and a phone is not a business
+            # card. Publishing is where that is enforced -- saving a draft is
+            # not blocked, so nobody is trapped half-way through filling it in.
+            missing = _card_missing_required(prof)
+            if missing:
+                db.rollback()
+                return {"ok": False, "reason": "missing_required_fields",
+                        "missing": missing,
+                        "detail": "A card needs a full name, an email address and a phone number before it can be published."}
+        prof.card_public = wants_public
         if prof.card_public and not prof.card_claimed_at:
             prof.card_claimed_at = datetime.utcnow()
     prof.updated_at = datetime.utcnow()
     db.commit()
-    return _card_owner_view(db, mcard, attendee, event)
+    out = _card_owner_view(db, mcard, attendee, event)
+    if isinstance(out, dict):
+        # A card made before these fields existed keeps working in public. The
+        # gap is reported so the editor can ask for it on the next visit rather
+        # than the card silently going dark.
+        out["missing_required"] = _card_missing_required(prof)
+        out["protected_fields"] = list(PROTECTED_CARD_FIELDS)
+    return out
 
 
 _CARD_IMAGE_EXT = {"image/jpeg": ".jpg", "image/pjpeg": ".jpg", "image/png": ".png", "image/webp": ".webp"}

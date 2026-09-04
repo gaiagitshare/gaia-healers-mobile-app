@@ -6147,6 +6147,11 @@ async function ghlSalesForProducts(wanted) {
   return { orders, invoices, reversed, cache_misses: fetched };
 }
 
+// The card verifier sends its codes through the same transactional channel the
+// sign-in magic link already uses. Injected rather than imported so the
+// identity module stays testable without a mail server.
+eventIdentity.setCardMailer(ghlSendEmail);
+
 const server = http.createServer(async (req, res) => {
   const origin = req.headers.origin || '';
   if (req.method === 'OPTIONS') {
@@ -6343,6 +6348,24 @@ const server = http.createServer(async (req, res) => {
       } catch (e) {
         sendJson(res, 502, { ok: false, error: String((e && e.message) || e) }, origin);
       }
+      return;
+    }
+    // Identity verification for the card's protected fields. Every one of these
+    // needs a real Gaia session -- a public badge token can view a card and can
+    // never change one, so none of them accept a token.
+    if (req.method === 'POST' && url.pathname.startsWith('/api/card/verify')) {
+      const session = cookieForRequest(req);
+      const body = await readJsonBody(req).catch(() => ({}));
+      let result;
+      if (url.pathname === '/api/card/verify/destinations') result = await eventIdentity.cardVerifyDestinations(session);
+      else if (url.pathname === '/api/card/verify/start') result = await eventIdentity.cardVerifyStart(session, body || {});
+      else if (url.pathname === '/api/card/verify/confirm') result = await eventIdentity.cardVerifyConfirm(session, body || {});
+      else if (url.pathname === '/api/card/verify/new/start') result = await eventIdentity.cardVerifyNewStart(session, body || {});
+      else if (url.pathname === '/api/card/verify/new/confirm') result = await eventIdentity.cardVerifyNewConfirm(session, body || {});
+      else { sendJson(res, 404, { ok: false, error: 'not_found' }, origin); return; }
+      const code = result.authenticated === false ? 401
+        : result.reason === 'rate_limited' ? 429 : 200;
+      sendJson(res, code, result, origin, { 'Cache-Control': 'private, no-store' });
       return;
     }
     if ((req.method === 'GET' || req.method === 'POST') && (url.pathname === '/api/card/owner' || url.pathname === '/api/card/claim')) {

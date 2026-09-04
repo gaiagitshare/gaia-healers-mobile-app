@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200" class="splash-svg" fill="none">
+            <rect x="40" y="46" width="120" height="80" rx="14" fill="rgba(255,255,255,0.06)" stroke="rgba(167,233,126,0.35)" stroke-width="1.5"/>
+            <line x1="40" y1="70" x2="160" y2="70" stroke="rgba(167,233,126,0.28)" stroke-width="1.5"/>
+            <circle cx="58" cy="58" r="3.5" fill="#a7e97e"/><circle cx="72" cy="58" r="3.5" fill="rgba(167,233,126,0.5)"/>
+            <g class="s-wave" fill="url(#gGrad4)">
+              <rect style="--i:0" x="67" y="86" width="6" height="24" rx="3"/>
+              <rect style="--i:1" x="82" y="86" width="6" height="24" rx="3"/>
+              <rect style="--i:2" x="97" y="86" width="6" height="24" rx="3"/>
+              <rect style="--i:3" x="112" y="86" width="6" height="24" rx="3"/>
+              <rect style="--i:4" x="127" y="86" width="6" height="24" rx="3"/>
+            </g>
+            <circle class="s-mic" cx="100" cy="150" r="20" fill="url(#gGrad4)"/>
+            <g stroke="#052b0a" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" fill="none">
+              <rect x="96" y="141" width="8" height="11" rx="4" fill="#052b0a" stroke="none"/>
+              <path d="M92 149a8 8 0 0 0 16 0"/>
+              <path d="M100 157v4"/>
+              <path d="M95 161h10"/>
+            </g>
+            <defs>
+              <linearGradient id="gGrad4" x1="0" y1="0" x2="1" y2="1">
+                <stop offset="0" stop-color="#7dd956"/><stop offset="1" stop-color="#5cb82e"/>
+              </linearGradient>
+            </defs>
+          </svg>

@@ -123,3 +123,60 @@ orphaned personal rows. The member card is deliberately NOT in that cascade.
 (the printer needs its own RFID stock; unbranded rolls print blank). The
 40 × 50 design target is unchanged and still selectable — the layout is
 identical, name over the same 32.7 mm QR.
+
+
+## Card identity fields, and changing them
+
+**Full name, email and phone are mandatory to publish.** A card without all
+three is not a business card. Saving a draft is never blocked — only publishing
+is — so nobody is trapped half-way through the form.
+
+**Legacy cards keep working.** 585 of 661 cards predate the phone field. A card
+already public stays public and stays resolvable at its printed URL; the gap is
+reported to the editor as `missing_required` and must be filled before that card
+is published again. A refusal never takes a live card down.
+
+### Changing name, email or phone takes two proofs
+
+These three are also the account's recovery information. Someone who picks up a
+signed-in phone at a conference must not be able to swap the recovery email for
+their own and lock the owner out. So:
+
+1. **Prove you are the current owner.** A code goes to a contact method
+   *already on file* — never to the address being typed in. Destinations are
+   shown masked (`b***@gmail.com`, `••• ••• 4821`); the full value is never
+   returned. Success mints a **15-minute permit**, not a standing right.
+2. **Prove the new address is yours.** A second code goes to the *new* email or
+   phone. **The trusted value is not replaced until this succeeds.**
+
+`full_name` is written through `/identity/card/update` with the permit. Email
+and phone are not writable there at all — they are named `new_email`/`new_phone`
+on that payload purely so a client trying the shortcut gets pointed at the
+two-step flow. (The payload's own `email` is the *caller's identity*; one field
+meaning both "who I am" and "who I want to become" would let a card update
+silently change which account it was editing.)
+
+### What the codes guarantee
+
+Six digits, 10-minute expiry, single-use, 5 attempts, 5 requests per hour per
+person per purpose, and issuing a new code kills the previous one. Only a
+salted SHA-256 is stored — a copy of the table completes no verification. Codes
+never reach a log and never cross the public card API.
+
+**A public badge token is never enough.** Every verification route requires a
+real Gaia session and returns 401 to an anonymous caller or a bare token. A
+permit belongs to one card: it cannot edit or start a change on anybody else's.
+
+### What a name change does not do
+
+The card's display name is the person's to choose. Editing it **does not rewrite
+the attendee or ticket record**, and the permanent badge token and QR do not
+change — the sticker in someone's drawer keeps working.
+
+### Delivery
+
+Codes go out over the same transactional channel the sign-in magic link already
+uses (a GHL conversations email to the contact). **No SMS channel is
+configured**, so a phone destination for step 1 returns
+`sms_delivery_unavailable` rather than pretending a code was sent. Step 2 for a
+phone number needs that channel before it can be used in production.

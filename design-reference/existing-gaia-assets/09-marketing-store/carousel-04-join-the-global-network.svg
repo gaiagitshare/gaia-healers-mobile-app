@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="392" height="440" viewBox="0 0 392 440" fill="none">
+  <defs>
+    <linearGradient id="bg4" x1="196" y1="0" x2="196" y2="440" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#fafafa"/>
+      <stop offset="1" stop-color="#f4fbef"/>
+    </linearGradient>
+  </defs>
+  <rect width="392" height="440" fill="url(#bg4)"/>
+  <circle cx="44" cy="52" r="20" fill="#66CC33"/>
+  <circle cx="44" cy="52" r="14" fill="#fff" fill-opacity="0.95"/>
+  <path d="M44 42c-5.5 0-10 4.5-10 10s4.5 10 10 10" stroke="#66CC33" stroke-width="3" fill="none" stroke-linecap="round"/>
+  <text x="24" y="88" font-family="Inter, system-ui, sans-serif" font-size="10" font-weight="600" fill="#4DA626" letter-spacing="0.1em">GLOBAL NETWORK</text>
+  <text x="24" y="118" font-family="Inter, system-ui, sans-serif" font-size="20" font-weight="700" fill="#1C1C1E">Join the global</text>
+  <text x="24" y="142" font-family="Inter, system-ui, sans-serif" font-size="20" font-weight="700" fill="#1C1C1E">network</text>
+  <text x="24" y="168" font-family="Inter, system-ui, sans-serif" font-size="12" fill="#636366">Communities, directory &amp; live trainings.</text>
+  <rect x="24" y="300" width="344" height="100" rx="14" fill="#fff" stroke="#000" stroke-opacity="0.06"/>
+  <text x="196" y="348" text-anchor="middle" font-family="Inter, system-ui, sans-serif" font-size="28" font-weight="700" fill="#4DA626">1,233+</text>
+  <text x="196" y="372" text-anchor="middle" font-family="Inter, system-ui, sans-serif" font-size="11" fill="#636366">Practitioners in the Gaia ecosystem</text>
+  <circle cx="156" cy="388" r="4" fill="#66CC33" fill-opacity="0.35"/>
+  <circle cx="176" cy="388" r="4" fill="#66CC33" fill-opacity="0.55"/>
+  <circle cx="196" cy="388" r="4" fill="#66CC33" fill-opacity="0.75"/>
+  <circle cx="216" cy="388" r="4" fill="#66CC33"/>
+  <circle cx="236" cy="388" r="4" fill="#66CC33" fill-opacity="0.75"/>
+</svg>

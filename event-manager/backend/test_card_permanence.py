@@ -90,6 +90,12 @@ st, card = call("POST", "/identity/card", ident, SVC)
 check(st == 200 and card.get("ok") and card.get("token"), "the ticket holder gets a card and a token", (st, card))
 TOKEN = card["token"]
 
+# A card needs a name, an email and a phone before it can be published. The
+# attendee fixture carries the first two; the phone is set here so this test
+# stays about permanence rather than about the publishing rule.
+_c = sqlite3.connect(DB)
+_c.execute("UPDATE member_cards SET phone=? WHERE public_token=?", ("+1 555 700 1000", TOKEN))
+_c.commit(); _c.close()
 st, card = call("POST", "/identity/card/update", dict(
     ident, public=True, company="Permanence Test Co", title="Practitioner",
     bio="Set up before anything was archived or deleted."), SVC)

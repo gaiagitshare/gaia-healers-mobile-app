@@ -1,0 +1,32 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="392" height="440" viewBox="0 0 392 440" fill="none">
+  <defs>
+    <linearGradient id="bg1" x1="196" y1="0" x2="196" y2="440" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#fff"/>
+      <stop offset="1" stop-color="#f4fbef"/>
+    </linearGradient>
+    <radialGradient id="glow1" cx="0.5" cy="0" r="0.65">
+      <stop stop-color="#66CC33" stop-opacity="0.22"/>
+      <stop offset="1" stop-color="#66CC33" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="cardDark" x1="0" y1="0" x2="1" y2="1">
+      <stop stop-color="#2a2a2c"/>
+      <stop offset="1" stop-color="#1c1c1e"/>
+    </linearGradient>
+  </defs>
+  <rect width="392" height="440" fill="url(#bg1)"/>
+  <rect width="392" height="220" fill="url(#glow1)"/>
+  <circle cx="44" cy="52" r="20" fill="#66CC33"/>
+  <circle cx="44" cy="52" r="14" fill="#fff" fill-opacity="0.95"/>
+  <path d="M44 42c-5.5 0-10 4.5-10 10s4.5 10 10 10" stroke="#66CC33" stroke-width="3" fill="none" stroke-linecap="round"/>
+  <text x="24" y="88" font-family="Inter, system-ui, sans-serif" font-size="10" font-weight="600" fill="#4DA626" letter-spacing="0.1em">PREVENTION</text>
+  <text x="24" y="118" font-family="Inter, system-ui, sans-serif" font-size="20" font-weight="700" fill="#1C1C1E">See energy before</text>
+  <text x="24" y="142" font-family="Inter, system-ui, sans-serif" font-size="20" font-weight="700" fill="#1C1C1E">symptoms show</text>
+  <text x="24" y="168" font-family="Inter, system-ui, sans-serif" font-size="12" fill="#636366">Track biofield readiness with </text>
+  <text x="24" y="184" font-family="Inter, system-ui, sans-serif" font-size="12" font-weight="600" fill="#4DA626">Bio-Well"</text>
+  <rect x="24" y="320" width="344" height="72" rx="14" fill="url(#cardDark)"/>
+  <circle cx="68" cy="356" r="26" fill="none" stroke="#66CC33" stroke-width="4" stroke-opacity="0.35"/>
+  <path d="M68 330a26 26 0 0 1 0 52" stroke="#66CC33" stroke-width="4" fill="none" stroke-linecap="round"/>
+  <text x="68" y="362" text-anchor="middle" font-family="Inter, system-ui, sans-serif" font-size="18" font-weight="700" fill="#fff">87</text>
+  <text x="108" y="350" font-family="Inter, system-ui, sans-serif" font-size="13" font-weight="600" fill="#fff">Energy index</text>
+  <text x="108" y="368" font-family="Inter, system-ui, sans-serif" font-size="10" fill="#fff" fill-opacity="0.55">7-day trends · Early signals</text>
+</svg>

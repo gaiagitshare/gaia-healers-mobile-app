@@ -972,6 +972,31 @@ class UndoCheckIn(BaseModel):
     reason: str
 
 
+class CardVerifyStart(IdentityTicketLookup):
+    """Ask for a code at a contact method already on file. The destination is
+    chosen by opaque id, never by typing an address: the caller cannot name a
+    destination the person does not already have."""
+    destination_id: Optional[str] = None
+
+
+class CardVerifyConfirm(IdentityTicketLookup):
+    code: Optional[str] = None
+
+
+class CardVerifyNewStart(IdentityTicketLookup):
+    """Second step. The permit from step one is required, so a new address can
+    never be verified before the current owner has proved themselves."""
+    verification_token: Optional[str] = None
+    kind: Optional[str] = None            # email | phone
+    value: Optional[str] = None
+
+
+class CardVerifyNewConfirm(IdentityTicketLookup):
+    verification_token: Optional[str] = None
+    kind: Optional[str] = None
+    code: Optional[str] = None
+
+
 class CardUpdate(IdentityTicketLookup):
     """The owner editing their own digital card. Every field optional; the
     Event Manager sanitises and stores only what it recognises."""
@@ -991,6 +1016,19 @@ class CardUpdate(IdentityTicketLookup):
     tags: Optional[Any] = None
     display_name: Optional[str] = None
     headline: Optional[str] = None
+    # Protected: the fields that make the card an identity.
+    #
+    # full_name is written here, with a permit from a completed identity
+    # verification. Email and phone are NOT: they are deliberately named
+    # new_email / new_phone rather than email / phone, because this payload
+    # already carries `email` as the identity of the CALLER -- one field
+    # meaning both "who I am" and "who I want to become" is how a card update
+    # would quietly change which account it was editing. They exist here only
+    # so a client that tries the shortcut gets pointed at the two-step flow.
+    full_name: Optional[str] = None
+    new_email: Optional[str] = None
+    new_phone: Optional[str] = None
+    verification_token: Optional[str] = None
     booking_url: Optional[str] = None
     facebook: Optional[str] = None
     tiktok: Optional[str] = None

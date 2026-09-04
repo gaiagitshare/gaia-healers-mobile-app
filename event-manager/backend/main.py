@@ -3230,7 +3230,7 @@ def _walk_in_matches(db, event_id, email, phone, first, last):
 
 
 @app.post("/events/{event_id}/walk-in/check")
-def walk_in_check(event_id: int, payload: schemas.WalkInCreate,
+def walk_in_check(event_id: int, payload: schemas.WalkInCheck,
                   db: Session = Depends(get_db),
                   current_user: models.User = Depends(get_current_user)):
     """Who is this, before anything is written? Staff see the candidates."""

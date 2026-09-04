@@ -864,7 +864,8 @@ function CheckIn({ timezone: timezoneProp }) {
                             <TextField label="Email" required fullWidth size="small" type="email"
                                 helperText="Their sign-in link goes here, and it is how we tell them apart from an existing member."
                                 value={visitor?.email || ''} onChange={(e) => setVisitor({ ...visitor, email: e.target.value })} />
-                            <TextField label="Phone" fullWidth size="small"
+                            <TextField label="Phone" required fullWidth size="small" type="tel"
+                                helperText="Every badge card carries a name, an email and a phone. Without it their card can never be published."
                                 value={visitor?.phone || ''} onChange={(e) => setVisitor({ ...visitor, phone: e.target.value })} />
                             <TextField select label="Ticket" fullWidth size="small" value={visitor?.ticket_type_id || ''}
                                 onChange={(e) => setVisitor({ ...visitor, ticket_type_id: e.target.value })}>
@@ -889,7 +890,7 @@ function CheckIn({ timezone: timezoneProp }) {
                         </Button>
                     ) : (
                         <Button variant="contained" onClick={() => submitVisitor()}
-                            disabled={visitorBusy || !visitor?.reason || !visitor?.first_name?.trim() || !visitor?.email?.trim()
+                            disabled={visitorBusy || !visitor?.reason || !visitor?.first_name?.trim() || !visitor?.email?.trim() || !visitor?.phone?.trim()
                                 || (visitor?.reason === 'pay_at_door' && !(Number(visitor?.door_payment_amount) > 0))
                                 || (visitor?.reason === 'complimentary' && !visitor?.note?.trim())}>
                             {visitorBusy ? 'Checking…' : 'Register'}

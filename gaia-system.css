@@ -1626,6 +1626,15 @@ body.gaia-v2 .g-super-home .g-super-hero{border:1px solid var(--g-line);
 .g-card__field textarea{resize:vertical;line-height:1.45}
 .g-card__field input:focus,.g-card__field textarea:focus{outline:none;border-color:var(--g-accent);box-shadow:0 0 0 3px rgba(182,242,92,.18)}
 .g-card__note{margin:0;font-size:.85rem;line-height:1.5;color:rgba(255,255,255,.6)}
+/* What is held on file but never published. Shown read-only so the owner can
+   check it is right, without implying they can switch it on for the world. */
+.g-card__oncard{display:grid;gap:1px;background:rgba(255,255,255,.08);
+  border:1px solid rgba(255,255,255,.12);border-radius:12px;overflow:hidden;margin-top:10px}
+.g-card__oncard-row{display:flex;justify-content:space-between;align-items:baseline;gap:12px;
+  padding:11px 14px;background:var(--g-surface,#0f1a12)}
+.g-card__oncard-row span{font-size:.8rem;letter-spacing:.04em;text-transform:uppercase;
+  color:rgba(255,255,255,.55)}
+.g-card__oncard-row b{font-weight:600;font-size:.95rem;overflow-wrap:anywhere;text-align:right}
 .g-card__toggle{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:10px 12px;border-radius:12px;
   background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.1);cursor:pointer;min-height:48px}
 .g-card__toggle>span{display:flex;flex-direction:column;gap:2px;min-width:0}

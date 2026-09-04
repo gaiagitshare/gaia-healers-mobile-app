@@ -80,7 +80,8 @@ E = {k: "door-%s-test@example.invalid" % k for k in ("payer", "unfound", "comp",
 
 def walk_in(ev, email, first, extra):
     st, d = call("POST", "/events/%d/walk-in" % ev,
-                 dict({"first_name": first, "last_name": "Doortest", "email": email}, **extra), ADMIN)
+                 dict({"first_name": first, "last_name": "Doortest", "email": email,
+                       "phone": "+1407555%04d" % (abs(hash(email)) % 10000)}, **extra), ADMIN)
     return st, d
 
 # ── 1. four kinds of person, four records ─────────────────────────────────
@@ -183,6 +184,7 @@ check(rep2["verified_ghl_revenue"]["amount"] + rep2["door_payments"]["collected_
 # ── 6. the same person at a second event ──────────────────────────────────
 st, second = call("POST", "/events/%d/walk-in" % EV2,
                   {"first_name": "Pia", "last_name": "Doortest", "email": E["payer"],
+                   "phone": "+14075550777",
                    "attendance_type": "paid", "door_payment_status": "none", "link_token": TOKEN}, ADMIN)
 A2 = (second.get("attendee") or {})
 check(A2.get("public_token") == TOKEN, "SAME permanent card token at the second event")

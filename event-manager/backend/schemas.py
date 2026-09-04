@@ -1043,13 +1043,30 @@ class CardUpdate(IdentityTicketLookup):
     theme: Optional[str] = None
 
 
+class WalkInCheck(BaseModel):
+    """Only enough to ask "do we already know this person?" -- nothing is
+    written, so nothing beyond a name and an address is demanded."""
+    first_name: Optional[str] = ""
+    last_name: Optional[str] = ""
+    email: Optional[str] = ""
+    phone: Optional[str] = None
+
+
 class WalkInCreate(BaseModel):
     """Someone registering at the door. Email is required: it is how we tell
     them apart from an existing member and how their claim link reaches them."""
     first_name: str
     last_name: str = ""
     email: str
-    phone: Optional[str] = None
+    # Required on CREATE, and only there. Every attendee's card carries a name,
+    # an email and a phone; a walk-in registered without one produces a card
+    # that can never be published -- found out later, at the worst moment.
+    #
+    # The duplicate CHECK deliberately does not require it: staff type a name
+    # and an address, and the system answers "we already know this person"
+    # before they have finished filling anything else in. Demanding a phone to
+    # ask that question is how a queue forms. See WalkInCheck below.
+    phone: str
     ticket_type_id: Optional[int] = None
     note: Optional[str] = None
     # WHY they need a badge. Being a walk-in says nothing about payment, so

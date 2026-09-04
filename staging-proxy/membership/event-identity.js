@@ -458,7 +458,11 @@ async function myCard(session, eventId) {
   return { authenticated: true, ...(result || { ok: false, reason: 'identity_failed' }) };
 }
 
-const CARD_FIELDS = ['public', 'bio', 'company', 'title', 'city', 'website', 'instagram', 'linkedin', 'whatsapp', 'photo_url', 'show_email', 'show_phone', 'tags'];
+// The visitor card is deliberately small: a name, and optionally a company and
+// a city. The older fields are still accepted so a card that already carries
+// one keeps it, but show_email / show_phone are gone -- contact details are
+// never public, so those switches decided nothing.
+const CARD_FIELDS = ['public', 'bio', 'company', 'title', 'city', 'website', 'instagram', 'linkedin', 'whatsapp', 'photo_url', 'tags'];
 
 // Name, email and phone are the account's recovery information, so they are
 // NOT ordinary card fields. Only full_name may be written through the update

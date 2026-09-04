@@ -123,9 +123,20 @@ st, body, _ = call("GET", "/c/" + tok.lower(), raw=True)
 check(st == 200 and b"Test Co" in body and b"Save contact" in body and email.encode() not in body, "public card shows opted-in fields and NOT the email (switch off)", st)
 st, body, _ = call("GET", "/c/" + tok + ".vcf", raw=True)
 check(st == 200 and isinstance(body, bytes) and b"ORG:Test Co" in body and b"EMAIL" not in body and b"14075550100" in body, "vCard carries company/whatsapp and no email", (st, body if not isinstance(body, bytes) else body[:200]))
+# There is no switch any more, and that is the point: a badge is on someone's
+# chest all day and its URL can be photographed from across a room. Contact
+# details reach an exhibitor who SCANS the badge -- the moment the attendee
+# hands it over -- and never a stranger with a camera. Offering a switch
+# implied a control that could be turned the wrong way.
 st, d, _ = call("POST", "/identity/card/update", dict(ident, show_email=True), SVC)
 st, body, _ = call("GET", "/c/" + tok + ".vcf", raw=True)
-check(st == 200 and ("EMAIL;TYPE=INTERNET:" + email).encode() in body, "email appears ONLY after the owner switches it on")
+check(st == 200 and ("EMAIL;TYPE=INTERNET:" + email).encode() not in body,
+      "the email stays off the public card even when an old client asks for it")
+st, page, _ = call("GET", "/c/" + tok, raw=True)
+check(st == 200 and email.encode() not in page,
+      "and it is never sent to the page, so the source reveals nothing")
+check(st == 200 and b"locked__blur" in page,
+      "the page shows a locked row instead of pretending there is no contact detail")
 # restore: unpublish and clear what the test wrote
 call("POST", "/identity/card/update", dict(ident, public=False, show_email=False, company="", title="", city="", website="", instagram="", whatsapp="", bio="", tags=[]), SVC)
 st, body, _ = call("GET", "/c/" + tok + ".vcf", raw=True)

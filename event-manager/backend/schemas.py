@@ -272,6 +272,7 @@ class ExhibitorCreate(ExhibitorBase):
     public_phone: Optional[str] = None
     address: Optional[str] = None
     tagline: Optional[str] = None
+    tables: Optional[int] = None
     logo_on_dark: Optional[bool] = None
     package: Optional[str] = None
     payment_status: Optional[str] = None          # paid | partial | unpaid | comp
@@ -298,6 +299,7 @@ class ExhibitorUpdate(BaseModel):
     public_phone: Optional[str] = None
     address: Optional[str] = None
     tagline: Optional[str] = None
+    tables: Optional[int] = None
     logo_on_dark: Optional[bool] = None
     package: Optional[str] = None
     payment_status: Optional[str] = None          # paid | partial | unpaid | comp
@@ -326,6 +328,7 @@ class Exhibitor(ExhibitorBase):
     public_phone: Optional[str] = None
     address: Optional[str] = None
     tagline: Optional[str] = None
+    tables: Optional[int] = None
     logo_on_dark: Optional[bool] = None
     package: Optional[str] = None
     payment_status: Optional[str] = "unpaid"
@@ -370,6 +373,9 @@ class ExhibitorPublic(BaseModel):
     category: Optional[str] = None
     tagline: Optional[str] = None
     address: Optional[str] = None
+    # How big their stand is. An attendee scanning the directory for the large
+    # exhibits is asking exactly this.
+    tables: Optional[int] = None
     logo_on_dark: Optional[bool] = False
     contact_email: Optional[str] = None
     contact_phone: Optional[str] = None

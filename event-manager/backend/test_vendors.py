@@ -41,7 +41,7 @@ def check(ok, label, detail=""):
     if not ok:
         fails.append(label)
 
-def call(method, path, body=None, token=None):
+def call(method, path, body=None, token=None, raw=False):
     data = json.dumps(body).encode() if body is not None else None
     req = urllib.request.Request(BASE + path, data=data, method=method)
     req.add_header("Content-Type", "application/json")
@@ -49,7 +49,8 @@ def call(method, path, body=None, token=None):
         req.add_header("Authorization", "Bearer " + token)
     try:
         with urllib.request.urlopen(req, timeout=60) as r:
-            return r.status, json.loads(r.read() or b"null")
+            p = r.read()
+            return r.status, (p if raw else json.loads(p or b"null"))
     except urllib.error.HTTPError as e:
         p = e.read()
         try:
@@ -409,13 +410,54 @@ call("DELETE", "/exhibitors/%d" % V4, token=ADMIN)
 write("DELETE FROM attendees WHERE email LIKE 'zz-roster-%'")
 write("DELETE FROM member_cards WHERE email LIKE 'zz-roster-%'")
 
+# ── 20. booth and tables are editable, and every surface follows ──────────
+# Floor plans move. If changing a booth number meant re-typing it in three
+# places, one of them would be wrong on the day.
+st, v6 = call("POST", "/exhibitors", {
+    "event_id": EV, "company_name": "ZZ Movable Stand",
+    "contact_email": "movable@example.invalid",
+    "booth_number": "9", "tables": 1, "stage": "confirmed"}, ADMIN)
+V6 = v6["id"]
+call("PUT", "/exhibitors/%d" % V6, {"is_published": True}, ADMIN)
+
+def directory_row():
+    st, d = call("GET", "/public/events/%d/exhibitors" % EV)
+    return [x for x in d if x["company_name"] == "ZZ Movable Stand"][0]
+
+row = directory_row()
+check(row["booth_number"] == "9" and row.get("tables") == 1,
+      "the directory carries the booth and the table count", row)
+
+st, up = call("PUT", "/exhibitors/%d" % V6, {"booth_number": "14B", "tables": 3}, ADMIN)
+check(up.get("booth_number") == "14B" and up.get("tables") == 3,
+      "an organiser can edit both", up)
+row = directory_row()
+check(row["booth_number"] == "14B" and row.get("tables") == 3,
+      "and the attendee directory follows immediately — no re-publish, no sync step", row)
+st, page = call("GET", "/v/%d" % V6, raw=True)
+check(b"14B" in page and b"9" not in page.split(b"<em>Booth</em>")[1][:40],
+      "as does the stand's own page", st)
+
+# A booth is a label, not a quantity.
+call("PUT", "/exhibitors/%d" % V6, {"booth_number": "#7 & #8"}, ADMIN)
+check(directory_row()["booth_number"] == "#7 & #8",
+      "a booth that is not a number survives intact")
+call("DELETE", "/exhibitors/%d" % V6, token=ADMIN)
+
+# ── 21. the real board is clean ───────────────────────────────────────────
+check(sql("SELECT COUNT(*) FROM exhibitors WHERE booth_number LIKE '%.0'")[0][0] == 0,
+      "no booth label was left as a float from the numeric sheet cell")
+check(sql("SELECT COUNT(*) FROM exhibitors WHERE event_id=1 AND tables IS NOT NULL")[0][0] >= 20,
+      "table counts came across from the sheet",
+      sql("SELECT COUNT(*) FROM exhibitors WHERE event_id=1 AND tables IS NOT NULL")[0][0])
+
 # ── cleanup ───────────────────────────────────────────────────────────────
 call("DELETE", "/exhibitors/%d" % VID, token=ADMIN)
 call("DELETE", "/events/%d" % EV, token=ADMIN)
 check(sql("SELECT COUNT(*) FROM exhibitors WHERE company_name='ZZ Sound Co'")[0][0] == 0,
       "the throwaway vendor is gone afterwards")
 
-print("\n%d checks, %d failed" % (69, len(fails)))
+print("\n%d checks, %d failed" % (76, len(fails)))
 if fails:
     print("FAILED: " + "; ".join(fails))
 sys.exit(1 if fails else 0)

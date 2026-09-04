@@ -242,7 +242,9 @@ export default function Vendors() {
                                                 <Box sx={{ minWidth: 0 }}>
                                                     <Typography variant="body2" fontWeight={600}>{r.company_name}</Typography>
                                                     <Typography variant="caption" color="text.secondary" noWrap display="block">
-                                                        {r.booth_number ? `Booth ${r.booth_number} · ` : ''}{r.category || 'Exhibitor'}
+                                                        {r.booth_number ? `Booth ${r.booth_number} · ` : ''}
+                                                        {r.tables ? `${r.tables} table${r.tables > 1 ? 's' : ''} · ` : ''}
+                                                        {r.category || 'Exhibitor'}
                                                     </Typography>
                                                     {/* What the attendee directory would actually show. A stand
                                                         missing a description is a blank card, and the fix is to
@@ -411,7 +413,10 @@ function VendorDialog({ vendor, saving, onClose, onSave }) {
                         {STAGES.map((st) => <MenuItem key={st.key} value={st.key}>{st.label}</MenuItem>)}
                     </TextField>
                     <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2}>
-                        {field('Booth number', 'booth_number')}
+                        {field('Booth number', 'booth_number', {
+                            helperText: 'Shown to attendees. A label, not a number — "#7 & #8" is fine.',
+                        })}
+                        {field('Tables', 'tables', { type: 'number', inputProps: { min: 0, max: 20 } })}
                         {field('Category', 'category')}
                     </Stack>
                     {field('Website', 'website', { placeholder: 'https://…' })}
@@ -481,7 +486,7 @@ function VendorDialog({ vendor, saving, onClose, onSave }) {
                         });
                         body.payment_status = f.payment_status || 'unpaid';
                         body.show_contact_publicly = !!f.show_contact_publicly;
-                        ['amount_due', 'amount_paid'].forEach((k) => {
+                        ['amount_due', 'amount_paid', 'tables'].forEach((k) => {
                             body[k] = f[k] === '' || f[k] == null ? null : Number(f[k]);
                         });
                         onSave(body);

@@ -38,8 +38,12 @@ for v in rows:
     ex.contact_email = v["email"] or ""
     ex.contact_phone = v["phone"] or None
     ex.website = v["website"] or None
-    ex.booth_number = v["booth"] or None
+    b = (v["booth"] or "").strip()
+    # A booth is a label, not a quantity — the sheet stores some numerically.
+    ex.booth_number = (b[:-2] if b.endswith(".0") else b) or None
     ex.stage = v["stage"]
+    if v.get("tables") is not None:
+        ex.tables = int(v["tables"])
     ex.package = v["package"] or None
     ex.payment_status = v["payment_status"]
     ex.amount_due = v["amount_due"]

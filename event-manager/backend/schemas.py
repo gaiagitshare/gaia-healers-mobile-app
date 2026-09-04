@@ -267,6 +267,12 @@ class ExhibitorCreate(ExhibitorBase):
     # An operator adding a vendor wants attendees to find it, so it goes into the
     # directory unless they say otherwise.
     is_published: Optional[bool] = True
+    package: Optional[str] = None
+    payment_status: Optional[str] = None          # paid | partial | unpaid | comp
+    amount_due: Optional[float] = None
+    amount_paid: Optional[float] = None
+    payment_note: Optional[str] = None
+    show_contact_publicly: Optional[bool] = None
 
 class ExhibitorUpdate(BaseModel):
     company_name: Optional[str] = None
@@ -281,6 +287,12 @@ class ExhibitorUpdate(BaseModel):
     is_published: Optional[bool] = None
     # Scanning is sold and granted, not implied by existing.
     can_scan_leads: Optional[bool] = None
+    package: Optional[str] = None
+    payment_status: Optional[str] = None          # paid | partial | unpaid | comp
+    amount_due: Optional[float] = None
+    amount_paid: Optional[float] = None
+    payment_note: Optional[str] = None
+    show_contact_publicly: Optional[bool] = None
 
 class Exhibitor(ExhibitorBase):
     id: int
@@ -297,13 +309,40 @@ class Exhibitor(ExhibitorBase):
     # Admin-facing only (ExhibitorPublic below never carries it): whether this
     # stand's scanner link actually works.
     can_scan_leads: bool = False
+    package: Optional[str] = None
+    payment_status: Optional[str] = "unpaid"
+    amount_due: Optional[float] = None
+    amount_paid: Optional[float] = None
+    payment_note: Optional[str] = None
+    show_contact_publicly: bool = False
 
     class Config:
         from_attributes = True
 
+class VendorSetup(BaseModel):
+    """What a stand may write about itself through a setup link.
+
+    Note what is absent: package, amount_due, amount_paid, payment_status,
+    booth_number and can_scan_leads. Those are the organiser's, and leaving them
+    out of the payload is a stronger guarantee than checking for them.
+    """
+    company_name: Optional[str] = None
+    description: Optional[str] = None
+    website: Optional[str] = None
+    logo_url: Optional[str] = None
+    contact_email: Optional[str] = None
+    contact_phone: Optional[str] = None
+    show_contact_publicly: Optional[bool] = None
+    publish: bool = False
+
+
 class ExhibitorPublic(BaseModel):
-    """Directory entry. Deliberately omits contact_email/contact_phone and the
-    scanning access_token — those are internal to the organisers."""
+    """Directory entry. Never carries the scanning access_token, the package,
+    what they paid, or anything else the organiser holds.
+
+    Contact details appear only where the stand asked for them to -- some of
+    these addresses are a personal mailbox, so the organiser switches it on per
+    vendor rather than the directory assuming a business is happy to publish."""
     id: int
     company_name: str
     booth_number: Optional[str] = None
@@ -311,6 +350,8 @@ class ExhibitorPublic(BaseModel):
     logo_url: Optional[str] = None
     website: Optional[str] = None
     category: Optional[str] = None
+    contact_email: Optional[str] = None
+    contact_phone: Optional[str] = None
 
     class Config:
         from_attributes = True

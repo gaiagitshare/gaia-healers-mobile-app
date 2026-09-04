@@ -1,0 +1,222 @@
+# -*- coding: utf-8 -*-
+"""VENDORS — what a stand bought, and what a stand may do.
+
+This lived in a spreadsheet: a free-text payment column and a green highlight.
+Fine for planning; it cannot be the thing that decides who may scan attendees on
+the day. So the money moved here, and two things that were tangled got pulled
+apart:
+
+  in the directory  -- attendees can find them
+  can scan badges   -- their lead-retrieval link works
+
+A booth and lead retrieval are separate purchases. Neither switch implies the
+other, and paying for one has never meant getting the other.
+
+The directory carries no commercial detail at all -- not the package, not what
+they paid, not their scanner token -- and carries contact details only for a
+stand that asked for it, because several of these addresses are somebody's
+personal mailbox.
+
+Throwaway event only.
+Run:  python3 /root/event/backend/test_vendors.py
+"""
+import json, sqlite3, sys, urllib.error, urllib.request
+from datetime import datetime, timedelta
+
+env = {}
+for line in open("/root/event/backend/.env"):
+    s = line.strip()
+    if "=" in s and not s.startswith("#"):
+        k, v = s.split("=", 1)
+        env[k] = v.strip().strip('"').strip("'")
+from jose import jwt
+ADMIN = jwt.encode({"sub": "1"}, env["SECRET_KEY"], algorithm="HS256")
+BASE = "http://127.0.0.1:8002"
+DB = "/root/event/backend/event.db"
+
+fails = []
+def check(ok, label, detail=""):
+    print("  %s  %s%s" % ("PASS" if ok else "FAIL", label, "" if ok else "   %s" % (detail,)))
+    if not ok:
+        fails.append(label)
+
+def call(method, path, body=None, token=None):
+    data = json.dumps(body).encode() if body is not None else None
+    req = urllib.request.Request(BASE + path, data=data, method=method)
+    req.add_header("Content-Type", "application/json")
+    if token:
+        req.add_header("Authorization", "Bearer " + token)
+    try:
+        with urllib.request.urlopen(req, timeout=60) as r:
+            return r.status, json.loads(r.read() or b"null")
+    except urllib.error.HTTPError as e:
+        p = e.read()
+        try:
+            return e.code, json.loads(p or b"null")
+        except Exception:
+            return e.code, p
+
+def sql(q, a=()):
+    c = sqlite3.connect(DB)
+    try:
+        return c.execute(q, a).fetchall()
+    finally:
+        c.close()
+
+print("VENDORS")
+
+for (eid,) in sql("SELECT id FROM events WHERE name LIKE 'ZZ vend%'"):
+    call("DELETE", "/events/%d" % eid, token=ADMIN)
+
+start = datetime.utcnow()
+st, ev = call("POST", "/events", {"name": "ZZ vend", "start_date": start.isoformat(),
+                                  "end_date": (start + timedelta(days=1)).isoformat(),
+                                  "location": "Test", "timezone": "UTC",
+                                  "is_published": True}, ADMIN)
+EV = ev["id"]
+call("PUT", "/events/%d" % EV, {"is_published": True}, ADMIN)
+
+st, v = call("POST", "/exhibitors", {
+    "event_id": EV, "company_name": "ZZ Sound Co", "contact_email": "stand@example.invalid",
+    "contact_phone": "+14075550300", "website": "https://example.invalid",
+    "booth_number": "12", "package": "The Connector $5000",
+    "payment_status": "partial", "amount_due": 5000, "amount_paid": 2500,
+    "payment_note": "$2500 Paid - $2500 remaining balance"}, ADMIN)
+check(st in (200, 201) and v.get("id"), "a vendor can be created with what they bought", (st, v))
+VID = v["id"]
+
+# ── 1. the commercial detail is admin-only ────────────────────────────────
+st, rows = call("GET", "/events/%d/exhibitors" % EV, token=ADMIN)
+mine = [r for r in rows if r["id"] == VID][0]
+check(mine["amount_due"] == 5000 and mine["amount_paid"] == 2500 and mine["payment_status"] == "partial",
+      "admin sees booked, paid and status", mine)
+check(mine["payment_note"] == "$2500 Paid - $2500 remaining balance",
+      "and the original wording is kept verbatim, not just the parsed number")
+
+# ── 2. added by hand vs imported in bulk — two different intentions ───────
+# Somebody typing a vendor into this screen wants attendees to find them, so a
+# manual add goes into the directory. A bulk import of a planning sheet is not
+# that: it is 23 rows nobody has looked at yet, and publishing them would put a
+# spreadsheet in front of attendees. The import leaves every one switched off.
+check(mine["is_published"] is True,
+      "a vendor added BY HAND goes into the directory", mine["is_published"])
+check(mine["can_scan_leads"] is False,
+      "but never gets a scanner by being created — that is sold separately",
+      mine["can_scan_leads"])
+call("PUT", "/exhibitors/%d" % VID, {"is_published": False}, ADMIN)
+st, pub = call("GET", "/public/events/%d/exhibitors" % EV)
+check(st == 200 and not any(p["company_name"] == "ZZ Sound Co" for p in pub),
+      "and taking them out removes them from the public directory", pub)
+
+# ── 3. the two switches are independent ───────────────────────────────────
+call("PUT", "/exhibitors/%d" % VID, {"is_published": True}, ADMIN)
+st, rows = call("GET", "/events/%d/exhibitors" % EV, token=ADMIN)
+mine = [r for r in rows if r["id"] == VID][0]
+check(mine["is_published"] is True and mine["can_scan_leads"] is False,
+      "putting them in the directory does NOT hand them a working scanner", mine)
+call("PUT", "/exhibitors/%d" % VID, {"can_scan_leads": True}, ADMIN)
+st, rows = call("GET", "/events/%d/exhibitors" % EV, token=ADMIN)
+mine = [r for r in rows if r["id"] == VID][0]
+check(mine["can_scan_leads"] is True, "scanning is granted separately", mine)
+
+# ── 4. the directory carries no commercial detail ─────────────────────────
+st, pub = call("GET", "/public/events/%d/exhibitors" % EV)
+entry = [p for p in pub if p["company_name"] == "ZZ Sound Co"][0]
+check(entry.get("website") == "https://example.invalid" and entry.get("booth_number") == "12",
+      "the directory shows what an attendee needs", entry)
+leaked = [k for k in ("package", "amount_due", "amount_paid", "payment_status",
+                      "payment_note", "access_token", "can_scan_leads") if k in entry]
+check(not leaked, "and never what they paid, or their scanner token", leaked)
+raw = json.dumps(pub)
+check("5000" not in raw and "2500" not in raw, "no amount appears anywhere in the response")
+
+# ── 5. contact details are the stand's own call ───────────────────────────
+check(entry.get("contact_email") is None and entry.get("contact_phone") is None,
+      "contact details are withheld by default", entry)
+call("PUT", "/exhibitors/%d" % VID, {"show_contact_publicly": True}, ADMIN)
+st, pub = call("GET", "/public/events/%d/exhibitors" % EV)
+entry = [p for p in pub if p["company_name"] == "ZZ Sound Co"][0]
+check(entry.get("contact_email") == "stand@example.invalid" and entry.get("contact_phone") == "+14075550300",
+      "and appear once the stand asks for them to", entry)
+call("PUT", "/exhibitors/%d" % VID, {"show_contact_publicly": False}, ADMIN)
+st, pub = call("GET", "/public/events/%d/exhibitors" % EV)
+entry = [p for p in pub if p["company_name"] == "ZZ Sound Co"][0]
+check(entry.get("contact_email") is None, "switching it back off withholds them again")
+
+# ── 6. taking them out of the directory is immediate ──────────────────────
+call("PUT", "/exhibitors/%d" % VID, {"is_published": False}, ADMIN)
+st, pub = call("GET", "/public/events/%d/exhibitors" % EV)
+check(not any(p["company_name"] == "ZZ Sound Co" for p in pub),
+      "unpublishing removes them from the directory at once")
+
+# ── 7. the real import landed ─────────────────────────────────────────────
+real = sql("SELECT COUNT(*), SUM(amount_due), SUM(amount_paid) FROM exhibitors WHERE event_id=1")[0]
+check(real[0] == 23, "the 23 confirmed exhibitors are in the system", real[0])
+check(int(real[1] or 0) == 111000 and int(real[2] or 0) == 94500,
+      "with the booked and collected totals from the sheet", real)
+live = sql("SELECT COUNT(*) FROM exhibitors WHERE event_id=1 AND (is_published=1 OR can_scan_leads=1)")[0][0]
+check(live == 0, "and none of them is published or scanning until somebody decides", live)
+
+# ── 8. the setup link lets a stand write its own listing ──────────────────
+st, link = call("POST", "/exhibitors/%d/activation-link" % VID, None, ADMIN)
+check(st == 200 and link.get("url", "").startswith("http"), "an organiser can mint a setup link", link)
+T = link["url"].rsplit("/", 1)[-1]
+check(len(T) > 20, "the token is long enough not to be guessed", len(T))
+
+st, page = call("GET", "/vendor-setup/%s" % T)
+check(st == 200 and page.get("company_name") == "ZZ Sound Co",
+      "the stand can open it with no login — the link IS the credential", page)
+
+st, saved = call("POST", "/vendor-setup/%s" % T,
+                 {"description": "Sound beds and tuning forks.",
+                  "website": "zzsound.example", "publish": True})
+check(st == 200 and saved.get("is_published") is True and saved.get("activated") is True,
+      "finishing the form publishes them", saved)
+st, rows = call("GET", "/events/%d/exhibitors" % EV, token=ADMIN)
+mine = [r for r in rows if r["id"] == VID][0]
+check(mine["website"] == "https://zzsound.example",
+      "a bare domain is stored as a real URL", mine["website"])
+
+# ── 9. what the stand may NOT touch ───────────────────────────────────────
+st, _ = call("POST", "/vendor-setup/%s" % T,
+             {"description": "still theirs",
+              "can_scan_leads": True, "is_published": True,
+              "amount_paid": 999999, "payment_status": "paid",
+              "package": "Title Sponsor", "booth_number": "1"})
+st, rows = call("GET", "/events/%d/exhibitors" % EV, token=ADMIN)
+mine = [r for r in rows if r["id"] == VID][0]
+check(mine["can_scan_leads"] is True,
+      "the scanner grant is whatever the ORGANISER set, untouched", mine["can_scan_leads"])
+check(mine["amount_paid"] == 2500 and mine["payment_status"] == "partial",
+      "they cannot mark themselves paid", (mine["amount_paid"], mine["payment_status"]))
+check(mine["package"] == "The Connector $5000" and mine["booth_number"] == "12",
+      "nor change their package or booth", (mine["package"], mine["booth_number"]))
+check(mine["description"] == "still theirs", "but their own words did save")
+
+# ── 10. a new link retires the old one ────────────────────────────────────
+st, link2 = call("POST", "/exhibitors/%d/activation-link" % VID, None, ADMIN)
+T2 = link2["url"].rsplit("/", 1)[-1]
+check(T2 != T, "a fresh link is a different token")
+st, _ = call("GET", "/vendor-setup/%s" % T)
+check(st == 404, "and the previous one stops working")
+st, _ = call("GET", "/vendor-setup/%s" % T2)
+check(st == 200, "while the new one works")
+
+# ── 11. the setup link is NOT the scanner token ───────────────────────────
+scan_token = mine["access_token"]
+check(T2 != scan_token and T != scan_token,
+      "a setup link and a lead-scanner token are different secrets", )
+st, _ = call("GET", "/vendor-setup/%s" % scan_token)
+check(st == 404,
+      "so a forwarded setup email cannot be swapped for a lead list, or the reverse")
+
+# ── cleanup ───────────────────────────────────────────────────────────────
+call("DELETE", "/exhibitors/%d" % VID, token=ADMIN)
+call("DELETE", "/events/%d" % EV, token=ADMIN)
+check(sql("SELECT COUNT(*) FROM exhibitors WHERE company_name='ZZ Sound Co'")[0][0] == 0,
+      "the throwaway vendor is gone afterwards")
+
+print("\n%d checks, %d failed" % (32, len(fails)))
+if fails:
+    print("FAILED: " + "; ".join(fails))
+sys.exit(1 if fails else 0)

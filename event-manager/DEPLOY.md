@@ -265,6 +265,47 @@ panel shows `event_like` and counts the rest. **Nothing is deleted** —
 `?include_unrelated=true` returns everything. Triage decides what is *shown* and
 never what is *granted*: a product still becomes access only when a human maps it.
 
+## Vendors
+
+The 23 confirmed exhibitors live in **Admin → Vendors**, imported from the
+planning sheet ($111,000 booked, $94,500 collected, $16,500 outstanding). The
+importer is `event-manager/import/import_vendors.py`, idempotent on
+(event, company name), and it leaves every stand **unpublished with scanning
+off** — a spreadsheet is planning, not a decision.
+
+Two switches per stand, deliberately separate, because a booth and lead
+retrieval are separate purchases:
+
+| | |
+|---|---|
+| **In the directory** | attendees can find them in the app |
+| **Can scan badges** | their lead-retrieval link actually works |
+
+Neither implies the other. Adding a vendor by hand publishes them (someone
+typing a stand in wants it found); the bulk import does not.
+
+The public directory carries **no commercial detail at all** — not the package,
+not what they paid, not their scanner token — and carries contact details only
+for a stand that asked for it, because several of these addresses are somebody's
+personal mailbox.
+
+### Vendor self-setup
+
+**Setup link** mints a URL the organiser sends however they actually reach that
+vendor. The stand opens `/vendor/<token>`, writes its own description, website
+and logo, and publishing itself puts it in the directory.
+
+It is **not** their scanner token, and that is the point: one writes a paragraph,
+the other reads the people who walked up to their booth. A forwarded setup email
+must not become a lead list. Only a hash is stored, links last 21 days, and
+issuing a new one retires the previous.
+
+The payload has no `package`, `amount_paid`, `booth_number` or `can_scan_leads`
+field at all — leaving them out is a stronger guarantee than checking for them.
+
+`test_vendors.py` covers the lot, including that a stand cannot mark itself paid
+or grant itself a scanner.
+
 ## Rehearsing the door before opening day
 
 A ticket is not valid outside its event's calendar window, and that gate is not

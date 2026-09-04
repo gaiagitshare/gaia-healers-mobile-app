@@ -166,7 +166,11 @@ import vm from 'node:vm';
 function loadClient() {
   const source = fs.readFileSync(path.resolve(proxyRoot, '..', 'gaia-sky.js'), 'utf8');
   const sandbox = {
-    window: {}, document: { querySelectorAll: () => [], addEventListener() {} },
+    // The client subscribes to a wellness-updated event on load. The stub only
+    // has to accept the listener -- these tests read the SVG geometry it emits,
+    // and never fire browser events at it.
+    window: { addEventListener() {}, removeEventListener() {} },
+    document: { querySelectorAll: () => [], addEventListener() {} },
     fetch: () => Promise.resolve({ json: () => ({}) }),
     URLSearchParams, location: { hostname: 'gaiahealers.app', search: '' },
     console, String, Number, Math, Object, Array, JSON,

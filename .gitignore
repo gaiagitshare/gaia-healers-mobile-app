@@ -10,6 +10,7 @@ build/
 .playwright-cli/
 .tmp-gaia.cookies
 *.log
+*.pid
 *.pem
 *.key
 secrets/

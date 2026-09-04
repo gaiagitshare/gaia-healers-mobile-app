@@ -77,6 +77,17 @@ def _ensure_event_columns():
         stmts.append("ALTER TABLE member_cards ADD COLUMN activated_at DATETIME")
     if _mc and "visibility_set_at" not in _mc:
         stmts.append("ALTER TABLE member_cards ADD COLUMN visibility_set_at DATETIME")
+    try:
+        _ex = {c["name"] for c in inspector.get_columns("exhibitors")}
+    except Exception:
+        _ex = set()
+    for _col, _ddl in (("package", "VARCHAR"), ("payment_status", "VARCHAR DEFAULT 'unpaid'"),
+                       ("amount_due", "FLOAT"), ("amount_paid", "FLOAT"),
+                       ("payment_note", "TEXT"), ("show_contact_publicly", "BOOLEAN DEFAULT 0"),
+                       ("setup_token_hash", "VARCHAR"), ("setup_sent_at", "DATETIME"),
+                       ("setup_expires_at", "DATETIME"), ("activated_at", "DATETIME")):
+        if _ex and _col not in _ex:
+            stmts.append("ALTER TABLE exhibitors ADD COLUMN %s %s" % (_col, _ddl))
     if "door_test_mode" not in cols:
         stmts.append("ALTER TABLE events ADD COLUMN door_test_mode BOOLEAN DEFAULT 0")
     if "source_url" not in cols:
@@ -3107,17 +3118,172 @@ def get_public_speakers(
     ).order_by(models.Speaker.sort_order.asc(), models.Speaker.name.asc()).all()
 
 
+# ---------------------------------------------------------------------------
+# Vendor self-setup
+#
+# An organiser has 23 stands and no appetite for typing 23 descriptions. So the
+# organiser holds the commercial facts -- what was bought, what was paid, and
+# whether this stand may scan attendees -- and the stand writes its own listing.
+#
+# The link that lets them do it is NOT their scanner token. One is for writing a
+# paragraph about themselves; the other reads the people who walked up to their
+# booth. Sharing a secret between those two would mean a forwarded setup email
+# handed somebody a lead list.
+
+VENDOR_SETUP_TTL_DAYS = 21
+
+
+def _vendor_token_hash(tok):
+    return hashlib.sha256(("vendor:%s" % tok).encode("utf-8")).hexdigest()
+
+
+def _vendor_for_setup_token(db, token):
+    tok = (token or "").strip()
+    if len(tok) < 20:
+        return None
+    ex = db.query(models.Exhibitor).filter(
+        models.Exhibitor.setup_token_hash == _vendor_token_hash(tok)).first()
+    if ex is None:
+        return None
+    if ex.setup_expires_at and datetime.utcnow() > ex.setup_expires_at:
+        return None
+    return ex
+
+
+@app.post("/exhibitors/{exhibitor_id}/activation-link")
+def vendor_activation_link(exhibitor_id: int, db: Session = Depends(get_db),
+                           current_user: models.User = Depends(get_current_user)):
+    """Mint a fresh setup link for one stand.
+
+    Returns the URL so an organiser can send it however they actually reach this
+    vendor -- most of these relationships live in email threads and WhatsApp, not
+    in our contact list. Issuing a new link retires the previous one.
+    """
+    ex = db.query(models.Exhibitor).filter(models.Exhibitor.id == exhibitor_id).first()
+    if not ex:
+        raise HTTPException(status_code=404, detail="Vendor not found")
+    authz.require_cap(db, current_user, ex.event_id, "exhibitor.write")
+    token = secrets.token_urlsafe(24)
+    ex.setup_token_hash = _vendor_token_hash(token)
+    ex.setup_sent_at = datetime.utcnow()
+    ex.setup_expires_at = datetime.utcnow() + timedelta(days=VENDOR_SETUP_TTL_DAYS)
+    db.commit()
+    base = (os.environ.get("CARD_PUBLIC_BASE") or "").rstrip("/")
+    app_base = base.replace("//card.", "//api.") if base else ""
+    return {"ok": True, "exhibitor_id": ex.id, "company_name": ex.company_name,
+            "email": ex.contact_email or None,
+            "url": "%s/vendor/%s" % (app_base or "", token),
+            "expires_at": ex.setup_expires_at.isoformat(),
+            "expires_in_days": VENDOR_SETUP_TTL_DAYS}
+
+
+@app.get("/vendor/{token}", response_class=HTMLResponse)
+def vendor_setup_page(token: str, db: Session = Depends(get_db)):
+    """The page a stand lands on from its setup link.
+
+    Plain server-rendered HTML on purpose: this is opened once, on a phone, by
+    somebody who is not our user and has no account. Anything that needs a
+    bundle to download before it shows a text box is the wrong shape for that.
+    """
+    ex = _vendor_for_setup_token(db, token)
+    esc = badge_card._h
+    if not ex:
+        body = ("<h1>This link has expired</h1>"
+                "<p>Setup links last %d days. Ask the Gaia Healers team for a fresh one "
+                "and it will work straight away.</p>" % VENDOR_SETUP_TTL_DAYS)
+        return HTMLResponse(badge_card.vendor_page_html("Link expired", body), status_code=404)
+    event = db.query(models.Event).filter(models.Event.id == ex.event_id).first()
+    return HTMLResponse(badge_card.vendor_setup_html(ex, event.name if event else "", token))
+
+
+@app.get("/vendor-setup/{token}")
+def vendor_setup_read(token: str, db: Session = Depends(get_db)):
+    """What this stand may edit. No login: the link is the credential, which is
+    why it expires and why it is not the scanner token."""
+    ex = _vendor_for_setup_token(db, token)
+    if not ex:
+        raise HTTPException(status_code=404, detail="This setup link is not valid, or has expired.")
+    event = db.query(models.Event).filter(models.Event.id == ex.event_id).first()
+    return {"ok": True, "company_name": ex.company_name,
+            "event_name": event.name if event else "",
+            "booth_number": ex.booth_number,
+            "description": ex.description or "", "website": ex.website or "",
+            "logo_url": ex.logo_url or "",
+            "contact_email": ex.contact_email or "", "contact_phone": ex.contact_phone or "",
+            "show_contact_publicly": bool(ex.show_contact_publicly),
+            "is_published": bool(ex.is_published),
+            "activated": ex.activated_at is not None}
+
+
+@app.post("/vendor-setup/{token}")
+def vendor_setup_save(token: str, payload: schemas.VendorSetup,
+                      db: Session = Depends(get_db)):
+    """The stand writes its own listing, and publishes itself by finishing.
+
+    What it may touch is exactly its own words. The package, what was paid,
+    the booth number and -- above all -- whether it may scan attendees are the
+    organiser's, and are not in this payload at all.
+    """
+    ex = _vendor_for_setup_token(db, token)
+    if not ex:
+        raise HTTPException(status_code=404, detail="This setup link is not valid, or has expired.")
+    if payload.company_name is not None and payload.company_name.strip():
+        ex.company_name = payload.company_name.strip()[:120]
+    if payload.description is not None:
+        ex.description = payload.description.strip()[:1200]
+    if payload.website is not None:
+        w = payload.website.strip()[:300]
+        if w and not w.startswith(("http://", "https://")):
+            w = "https://" + w
+        ex.website = w or None
+    if payload.logo_url is not None:
+        ex.logo_url = payload.logo_url.strip()[:400] or None
+    if payload.contact_email is not None:
+        ex.contact_email = payload.contact_email.strip()[:160]
+    if payload.contact_phone is not None:
+        ex.contact_phone = payload.contact_phone.strip()[:40] or None
+    if payload.show_contact_publicly is not None:
+        ex.show_contact_publicly = bool(payload.show_contact_publicly)
+    if payload.publish:
+        # Finishing the form is what puts them in the directory. An organiser can
+        # still take them out; they cannot grant themselves a scanner.
+        ex.is_published = True
+        if not ex.activated_at:
+            ex.activated_at = datetime.utcnow()
+    db.commit()
+    return {"ok": True, "company_name": ex.company_name,
+            "is_published": bool(ex.is_published),
+            "activated": ex.activated_at is not None}
+
+
 @app.get("/public/events/{event_id}/exhibitors", response_model=List[schemas.ExhibitorPublic])
 def get_public_exhibitors(
     event_id: int,
     db: Session = Depends(get_db)
 ):
-    """The vendor directory. Organiser-only contact details are never included."""
+    """The vendor directory.
+
+    The package, what they paid and their scanner token are organiser business
+    and never appear. Contact details appear only for a stand that asked for
+    them to: several of these addresses are somebody's personal mailbox, so
+    publishing is per vendor and off until switched on.
+    """
     _published_event_or_404(event_id, db)
-    return db.query(models.Exhibitor).filter(
+    rows = db.query(models.Exhibitor).filter(
         models.Exhibitor.event_id == event_id,
-        models.Exhibitor.is_published == True,
+        models.Exhibitor.is_published == True,       # noqa: E712
     ).order_by(models.Exhibitor.sort_order.asc(), models.Exhibitor.company_name.asc()).all()
+    out = []
+    for r in rows:
+        show = bool(getattr(r, "show_contact_publicly", False))
+        out.append({
+            "id": r.id, "company_name": r.company_name, "booth_number": r.booth_number,
+            "description": r.description, "logo_url": r.logo_url, "website": r.website,
+            "category": r.category,
+            "contact_email": (r.contact_email or None) if show else None,
+            "contact_phone": (r.contact_phone or None) if show else None,
+        })
+    return out
 
 
 # ---------------------------------------------------------------------------

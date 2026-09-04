@@ -31,6 +31,7 @@ import {
     Event as EventIcon,
     Menu as MenuIcon,
     QrCodeScanner as CheckInIcon,
+    Storefront as StorefrontIcon,
     Password as PasswordIcon,
     Logout as LogoutIcon,
     FactCheck as ReviewIcon,
@@ -71,6 +72,7 @@ function Layout({ children, user, onLogout }) {
         { text: 'Dashboard', icon: <DashboardIcon />, path: '/dashboard' },
         { text: 'Events', icon: <EventIcon />, path: '/events' },
         { text: 'Check-In', icon: <CheckInIcon />, path: '/checkin' },
+        { text: 'Vendors', icon: <StorefrontIcon />, path: '/vendors' },
         { text: 'Payments Review', icon: <ReviewIcon />, path: '/entitlement-review' },
     ];
 

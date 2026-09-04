@@ -5,6 +5,7 @@ import CssBaseline from '@mui/material/CssBaseline';
 import Login from './components/Login';
 import Dashboard from './components/Dashboard';
 import EntitlementReview from './components/EntitlementReview';
+import Vendors from './components/Vendors';
 import Events from './components/Events';
 import EventDetail from './components/EventDetail';
 import Attendees from './components/Attendees';
@@ -127,6 +128,7 @@ function App() {
                                     
                                     
                                     <Route path="/checkin" element={<CheckIn />} />
+                                    <Route path="/vendors" element={<Vendors />} />
                                     <Route path="/entitlement-review" element={<EntitlementReview />} />
                                     <Route path="/" element={<Navigate to="/dashboard" />} />
                                 </Routes>

@@ -132,6 +132,9 @@ export const createExhibitor = (data) => api.post('/exhibitors', data);
 export const updateExhibitor = (id, data) => api.put(`/exhibitors/${id}`, data);
 export const deleteExhibitor = (id) => api.delete(`/exhibitors/${id}`);
 export const getExhibitorLeads = (exhibitorId) => api.get(`/exhibitors/${exhibitorId}/leads`);
+// A fresh setup link for one stand. Issuing a new one retires the previous.
+export const vendorActivationLink = (id) => api.post(`/exhibitors/${id}/activation-link`);
+
 
 // Agenda — sessions
 export const getSessions = (eventId) => api.get(`/events/${eventId}/sessions`);

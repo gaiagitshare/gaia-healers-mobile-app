@@ -814,3 +814,128 @@ def render_label(first_name, last_name, token, width_mm=40, height_mm=50, qr_mm=
     img.convert("1").save(out, format="PNG")
     meta.update({"width_px": W, "height_px": H, "dpi": DPI, "payload": printed_payload(token, base)})
     return out.getvalue(), meta
+
+
+# ---------------------------------------------------------------------------
+# Vendor self-setup page
+#
+# Opened once, on a phone, by somebody who is not our user and has no account.
+# So: server-rendered, one form, no bundle to download before a text box shows.
+
+_VENDOR_CSS = """
+:root{color-scheme:light}
+*{box-sizing:border-box}
+body{margin:0;background:#f4f6f3;color:#16231a;
+  font:400 16px/1.55 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif}
+.wrap{max-width:560px;margin:0 auto;padding:28px 18px 64px}
+.top{display:flex;align-items:center;gap:9px;margin-bottom:22px;font-size:13px;color:#5c6f61}
+.top b{color:#16231a}
+.sheet{background:#fff;border:1px solid #e2e8e3;border-radius:16px;padding:22px 20px;
+  box-shadow:0 1px 2px rgba(0,0,0,.04)}
+.event{font-size:12px;letter-spacing:.09em;text-transform:uppercase;color:#6f8175;margin:0 0 4px}
+h1{margin:0 0 4px;font-size:26px;line-height:1.15;letter-spacing:-.02em}
+.sub{margin:0 0 22px;color:#5c6f61;font-size:14.5px}
+label{display:block;margin:0 0 15px}
+label>span{display:block;font-size:12.5px;font-weight:600;letter-spacing:.02em;
+  text-transform:uppercase;color:#5c6f61;margin-bottom:6px}
+input[type=text],input[type=url],input[type=email],input[type=tel],textarea{
+  width:100%;padding:11px 13px;font:inherit;font-size:16px;color:#16231a;background:#fbfcfb;
+  border:1px solid #d7e0d9;border-radius:10px;-webkit-appearance:none}
+input:focus,textarea:focus{outline:2px solid #2e7d32;outline-offset:1px;border-color:#2e7d32}
+textarea{min-height:96px;resize:vertical}
+small{display:block;margin-top:5px;font-size:12.5px;color:#7b8c81}
+.row{display:flex;gap:12px;flex-wrap:wrap}
+.row>label{flex:1 1 200px}
+.check{display:flex;gap:11px;align-items:flex-start;padding:13px;border:1px solid #d7e0d9;
+  border-radius:10px;background:#fbfcfb;margin:0 0 18px}
+.check input{margin:2px 0 0;width:19px;height:19px;flex:0 0 auto;accent-color:#2e7d32}
+.check b{display:block;font-size:14.5px}
+.check small{margin-top:2px}
+.locked{margin:20px 0 0;padding:13px 15px;border:1px dashed #cfd9d1;border-radius:10px;
+  font-size:13px;color:#6f8175}
+.locked b{color:#16231a}
+button{width:100%;padding:14px;font:inherit;font-size:16px;font-weight:600;color:#fff;
+  background:#2e7d32;border:0;border-radius:999px;cursor:pointer;margin-top:6px}
+button[disabled]{opacity:.55;cursor:default}
+.msg{margin:14px 0 0;font-size:14.5px;min-height:20px}
+.msg.ok{color:#2e7d32;font-weight:600}
+.msg.bad{color:#b3261e}
+.foot{margin:24px 0 0;font-size:12.5px;color:#8a998f;text-align:center}
+@media (prefers-color-scheme:dark){
+  body{background:#0e1510;color:#e8efe9}
+  .sheet{background:#141d17;border-color:#243026;box-shadow:none}
+  input[type=text],input[type=url],input[type=email],input[type=tel],textarea,.check{
+    background:#101811;border-color:#2b382e;color:#e8efe9}
+  h1,.check b,.locked b{color:#e8efe9}
+  .sub,label>span,small,.top,.locked{color:#9db0a3}
+}
+"""
+
+
+def vendor_page_html(title, body_html):
+    return ("<!doctype html><html lang=\"en\"><head><meta charset=\"utf-8\">"
+            "<meta name=\"viewport\" content=\"width=device-width,initial-scale=1\">"
+            "<meta name=\"robots\" content=\"noindex,nofollow\">"
+            "<title>%s · Gaia Healers</title><style>%s</style></head>"
+            "<body><div class=\"wrap\"><div class=\"top\">%s<span><b>Gaia Healers</b> · exhibitors</span></div>"
+            "<div class=\"sheet\">%s</div>"
+            "<p class=\"foot\">This link is just for your stand. It expires, and it does not sign you in to anything else.</p>"
+            "</div></body></html>" % (_h(title), _VENDOR_CSS, _MARK, body_html))
+
+
+def vendor_setup_html(ex, event_name, token):
+    """The stand's own listing, as a form it can finish in one sitting."""
+    v = lambda x: _h(x or "")
+    done = ex.activated_at is not None
+    body = (
+        "<p class=\"event\">%s</p>"
+        "<h1>%s</h1>"
+        "<p class=\"sub\">%s</p>"
+        "<form id=\"f\">"
+        "<label><span>Company name</span>"
+        "<input type=\"text\" name=\"company_name\" value=\"%s\" maxlength=\"120\" required></label>"
+        "<label><span>About your stand</span>"
+        "<textarea name=\"description\" maxlength=\"1200\" "
+        "placeholder=\"What you do, and what people will find at your booth.\">%s</textarea>"
+        "<small>Shown to attendees in the Gaia Healers app.</small></label>"
+        "<label><span>Website</span>"
+        "<input type=\"url\" name=\"website\" value=\"%s\" placeholder=\"yourcompany.com\"></label>"
+        "<div class=\"row\">"
+        "<label><span>Email</span><input type=\"email\" name=\"contact_email\" value=\"%s\"></label>"
+        "<label><span>Phone</span><input type=\"tel\" name=\"contact_phone\" value=\"%s\"></label>"
+        "</div>"
+        "<div class=\"check\"><input type=\"checkbox\" name=\"show_contact_publicly\" id=\"sc\"%s>"
+        "<label for=\"sc\" style=\"margin:0\"><b>Show my email and phone to attendees</b>"
+        "<small>Off by default. Leave it off and attendees see your stand and website, "
+        "but reach you through us.</small></label></div>"
+        "<button type=\"submit\">%s</button>"
+        "<p class=\"msg\" id=\"m\" role=\"status\"></p>"
+        "</form>"
+        "<div class=\"locked\">Your <b>booth number</b>, package and payments are managed by the "
+        "Gaia Healers team — message them if anything there looks wrong. This page only changes "
+        "how your stand is described.</div>"
+        % (v(event_name), v(ex.company_name),
+           "Update how your stand appears to attendees." if done
+           else "Fill this in and your stand goes live in the attendee directory.",
+           v(ex.company_name), v(ex.description), v(ex.website),
+           v(ex.contact_email), v(ex.contact_phone),
+           " checked" if ex.show_contact_publicly else "",
+           "Save changes" if done else "Publish my stand")
+    )
+    script = (
+        "<script>(function(){var f=document.getElementById('f'),m=document.getElementById('m');"
+        "f.addEventListener('submit',async function(e){e.preventDefault();"
+        "var b=f.querySelector('button');b.disabled=true;m.className='msg';m.textContent='Saving\\u2026';"
+        "var d=new FormData(f),p={publish:true};"
+        "['company_name','description','website','contact_email','contact_phone']"
+        ".forEach(function(k){p[k]=String(d.get(k)||'');});"
+        "p.show_contact_publicly=d.get('show_contact_publicly')==='on';"
+        "try{var r=await fetch(%s,{method:'POST',headers:{'Content-Type':'application/json'},"
+        "body:JSON.stringify(p)});var j=await r.json();"
+        "if(r.ok&&j.ok){m.className='msg ok';m.textContent='Saved. Your stand is live in the attendee directory.';}"
+        "else{m.className='msg bad';m.textContent=(j&&j.detail)||'That did not save. Please try again.';}}"
+        "catch(err){m.className='msg bad';m.textContent='No connection. Please try again.';}"
+        "b.disabled=false;});})();</script>"
+        % ("'/event-api/vendor-setup/" + _h(token) + "'")
+    )
+    return vendor_page_html(ex.company_name or "Your stand", body + script)

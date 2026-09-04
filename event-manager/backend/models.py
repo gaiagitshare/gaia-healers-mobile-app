@@ -269,6 +269,32 @@ class Exhibitor(Base):
     # was issued a working token on creation, so scanning was a side effect of
     # existing rather than something an organiser sold and granted.
     can_scan_leads = Column(Boolean, default=False)
+    # What they bought, and whether they have paid for it.
+    #
+    # This lived in a spreadsheet column of free text and a green highlight,
+    # which is fine for planning and cannot be what gates lead retrieval on the
+    # day. `package` is the seller's own wording; `payment_status` is the thing
+    # anything may branch on.
+    package = Column(String)                        # "The Connector $5000", "Partners", ...
+    payment_status = Column(String, default="unpaid", index=True)  # paid|partial|unpaid|comp
+    amount_due = Column(Float)
+    amount_paid = Column(Float)
+    payment_note = Column(Text)                     # "$2500 Paid - $2500 remaining balance"
+    # A stand's own contact details are business details, and plenty of vendors
+    # want them in the directory -- but that is their call, not a default, and
+    # some of these addresses are a personal mailbox. Off unless switched on.
+    show_contact_publicly = Column(Boolean, default=False)
+    # Vendor self-setup. An organiser sends a link; the stand fills in its own
+    # description, logo and links, and publishes itself.
+    #
+    # Deliberately NOT access_token: that one makes a scanner work, and is sold.
+    # A link for writing a directory entry must never be a link for reading
+    # attendees, so they are different secrets with different lifetimes. Only a
+    # hash is stored, so a copy of this table opens nobody's page.
+    setup_token_hash = Column(String, index=True)
+    setup_sent_at = Column(DateTime, nullable=True)
+    setup_expires_at = Column(DateTime, nullable=True)
+    activated_at = Column(DateTime, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
 
     event = relationship("Event", back_populates="exhibitors")

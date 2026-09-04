@@ -110,6 +110,13 @@ badge and no QR.
 | **paid invoice** | `POST /identity/reconcile-invoice` | `invoice_id` |
 | unmapped paid product | `POST /identity/report-unmapped-sale` | surfaced for review only |
 
+The **webhook branches on `transaction.entityType`**. It previously fetched every
+`entityId` as an order, so an invoice-backed payment 404'd, produced no products
+and was filed as an unmapped sale — which is how five paying customers ended up
+with no attendee, no badge and no QR. Both branches now also carry the product
+id, line quantity, amount and GHL's own timestamp, so the ledger can be counted
+later without guessing.
+
 No order id is ever invented for an invoice sale. A transaction is the *payment
 representation* of an order or invoice, never a third purchase — count orders
 and invoices, never the transaction total.

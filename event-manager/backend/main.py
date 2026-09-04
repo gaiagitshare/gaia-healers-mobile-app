@@ -5627,7 +5627,13 @@ def refund_ticket(payload: schemas.RefundTicket, db: Session = Depends(get_db),
     # this with nothing else: most refunds in the account are sponsorships and
     # equipment rather than tickets, and those must resolve to nobody.
     if _ref_lookup:
-        for a in db.query(models.Attendee).all():
+        _q = db.query(models.Attendee)
+        if payload.event_id:
+            # A caller that names the event means that event. Without this the
+            # scan returned the first holder of the reference anywhere, which is
+            # the wrong row the moment two events share a reference.
+            _q = _q.filter(models.Attendee.event_id == payload.event_id)
+        for a in _q.all():
             _cd = a.custom_data or {}
             if _cd.get("order_id") == _ref_lookup or _cd.get("invoice_id") == _ref_lookup:
                 attendee = a; break

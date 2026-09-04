@@ -2474,19 +2474,39 @@ async function handleGhlPaymentWebhook(req, res, origin) {
     if (!tx) { log({ outcome: 'transaction_not_found' }); sendJson(res, 202, { ok: false, matched: 0, reason: 'transaction_not_found' }, origin); return; }
     if (!tx.entityId) { log({ outcome: 'no_order_on_transaction' }); sendJson(res, 202, { ok: false, matched: 0, reason: 'no_order_on_transaction' }, origin); return; }
 
-    const orderId = tx.entityId || '';
-    // 4) order -> product ids (+ buyer fallback from the order snapshot)
+    const entityId = tx.entityId || '';
+    // A transaction is the payment representation of an ORDER *or* an INVOICE.
+    // This branch used to be absent: every entityId was fetched as an order, so
+    // an invoice-backed payment 404'd, produced no products, and was filed as an
+    // unmapped sale. Five people paid for Elevate 2026 tickets on invoices and
+    // got no attendee, no badge and no QR until an audit found them.
+    const isInvoice = String(tx.entityType || '').toLowerCase().includes('invoice');
+    const orderId = isInvoice ? '' : entityId;
+    const invoiceId = isInvoice ? entityId : '';
     let productIds = [];
     let productNames = [];
+    let lineQty = new Map();
     let orderAmount = null;
     let snap = {};
-    if (orderId) {
+    if (isInvoice && invoiceId) {
+      const inv = await _swGhlGetRetry(`/invoices/${encodeURIComponent(invoiceId)}`, { altId: LOC, altType: 'location' });
+      const body_ = (inv && (inv.invoice || inv)) || {};
+      const items = body_.invoiceItems || [];
+      productIds = [...new Set(items.map((it) => it.productId).filter(Boolean))];
+      productNames = items.map((it) => it.name).filter(Boolean);
+      for (const it of items) lineQty.set(String(it.productId || ''), Math.max(1, Number(it.qty != null ? it.qty : (it.quantity != null ? it.quantity : 1))));
+      orderAmount = body_.amountPaid != null ? body_.amountPaid : (body_.total != null ? body_.total : null);
+      const cd = body_.contactDetails || {};
+      snap = { email: cd.email, firstName: String(cd.name || '').split(' ')[0],
+               lastName: String(cd.name || '').split(' ').slice(1).join(' '), phone: cd.phoneNo };
+    } else if (orderId) {
       const order = await _swGhlGetRetry(`/payments/orders/${encodeURIComponent(orderId)}`, { altId: LOC, altType: 'location' });
       const items = (order && order.items) || [];
       productIds = [...new Set(items.map((it) => (it.product && it.product._id) || it.productId).filter(Boolean))];
       // Kept so an unmapped sale can be shown to staff as something they can
       // recognise, not just an opaque id.
       productNames = items.map((it) => (it.product && it.product.name) || it.name).filter(Boolean);
+      for (const it of items) lineQty.set(String((it.product && it.product._id) || it.productId || ''), Math.max(1, Number(it.qty != null ? it.qty : (it.quantity != null ? it.quantity : 1))));
       orderAmount = (order && order.amount) || null;
       snap = (order && order.contactSnapshot) || {};
     }
@@ -2525,7 +2545,10 @@ async function handleGhlPaymentWebhook(req, res, origin) {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${SVC}` },
           body: JSON.stringify({
-            reference: orderId || txId, source: 'ghl_order',
+            // Record it under the reference it actually has, so a later refund
+            // or a Map & Reconcile replay can find the same payment again.
+            reference: invoiceId || orderId || txId,
+            source: invoiceId ? 'ghl_invoice' : 'ghl_order',
             product_id: productIds[0] || null, product_name: productNames[0] || null,
             buyer_email: email, buyer_name: [first, last].filter(Boolean).join(' '),
             contact_id: contactId, amount: orderAmount, quantity: 1,
@@ -2542,21 +2565,36 @@ async function handleGhlPaymentWebhook(req, res, origin) {
     for (const t of targets) {
       let j = null;
       try {
-        const er = await fetch(`${EMBASE}/identity/reconcile-attendee`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${SVC}` },
-          body: JSON.stringify({
+        const qty = lineQty.get(String(t.pid)) || 1;
+        // An invoice sale is ledgered under its own id. No order id is ever
+        // invented for it, because a made-up reference cannot be refunded later.
+        const endpoint = invoiceId ? '/identity/reconcile-invoice' : '/identity/reconcile-attendee';
+        const payload = invoiceId
+          ? {
+            event_id: t.m.event_id, email, invoice_id: invoiceId, transaction_id: txId,
+            contact_id: contactId, product_id: t.pid, amount: orderAmount, quantity: qty,
+            status: 'paid', first_name: first, last_name: last, phone,
+            issued_at: String(tx.createdAt || '').slice(0, 19) || null,
+          }
+          : {
             event_id: t.m.event_id, email, ticket_type_id: t.m.ticket_type_id,
             first_name: first, last_name: last, phone,
             contact_id: contactId, order_id: orderId || txId, is_upgrade: !!t.m.is_upgrade,
-          }),
+            product_id: t.pid, quantity: qty, amount: orderAmount,
+            purchased_at: String(tx.createdAt || '').slice(0, 19) || null,
+          };
+        const er = await fetch(`${EMBASE}${endpoint}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${SVC}` },
+          body: JSON.stringify(payload),
         });
         j = er.ok ? await er.json() : null;
       } catch (e) { j = null; }
       results.push({ product_id: t.pid, event_id: t.m.event_id, ticket_type_id: t.m.ticket_type_id, ok: !!(j && j.ok), created: !!(j && j.created) });
       log({ outcome: 'reconciled', order_id: orderId, product_id: t.pid, event_id: t.m.event_id, ticket_type_id: t.m.ticket_type_id, created: !!(j && j.created) });
     }
-    sendJson(res, 200, { ok: true, transaction_id: txId, order_id: orderId, matched: results.length, results }, origin);
+    sendJson(res, 200, { ok: true, transaction_id: txId, order_id: orderId || null,
+                         invoice_id: invoiceId || null, matched: results.length, results }, origin);
   } catch (e) {
     log({ outcome: 'error', error: String((e && e.message) || e) });
     // 502 so GHL retries; the 60s reconciler is the backstop regardless.

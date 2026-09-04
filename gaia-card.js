@@ -150,8 +150,8 @@
     document.body.appendChild(sheet);
     document.addEventListener('keydown', onKey);
     sheet.addEventListener('click', (ev) => { if (ev.target === sheet) closeEditor(); });
-    let card = state.card && state.eventId === eventId ? state.card : null;
-    if (!card) card = await api('/api/events/' + encodeURIComponent(eventId) + '/card');
+    let card = state.card && String(state.eventId) === String(eventId) ? state.card : null;
+    if (!card) card = eventId ? await api('/api/events/' + encodeURIComponent(eventId) + '/card') : await api('/api/card');
     if (!card || card.ok !== true) {
       sheet.innerHTML = '<div class="g-ticket__panel"><button type="button" class="g-ticket__close" data-card-close aria-label="Close">&times;</button>'
         + '<h2>Card unavailable</h2><p class="g-card__note">' + (card && card.authenticated === false
@@ -183,7 +183,7 @@
       body.show_email = data.get('show_email') === 'on';
       body.show_phone = data.get('show_phone') === 'on';
       body.public = data.get('public') === 'on';
-      const result = await api('/api/events/' + encodeURIComponent(eventId) + '/card', body);
+      const result = eventId ? await api('/api/events/' + encodeURIComponent(eventId) + '/card', body) : await api('/api/card', body);
       state.saving = false;
       if (result && result.ok === true) {
         state.card = result;
@@ -202,7 +202,8 @@
       if (file.size > 5 * 1024 * 1024) { say('That photo is over 5MB.', 'bad'); return; }
       say('Uploading photo…');
       try {
-        const response = await fetch(proxyBase() + '/api/events/' + encodeURIComponent(eventId) + '/card/photo', {
+        const photoPath = eventId ? '/api/events/' + encodeURIComponent(eventId) + '/card/photo' : '/api/card/photo';
+        const response = await fetch(proxyBase() + photoPath, {
           method: 'POST', credentials: 'include', headers: { 'Content-Type': file.type || 'application/octet-stream' }, body: file,
         });
         const result = await response.json();
@@ -316,41 +317,38 @@
   async function renderProfileHosts() {
     const hosts = document.querySelectorAll('[data-badgecard-host]');
     if (!hosts.length) return;
-    const mine = await api('/api/events/mine');
-    if (!mine || mine.authenticated === false) { hosts.forEach((h) => { h.innerHTML = ''; }); return; }
-    const events = ((mine && mine.events) || []).filter((e) => e.phase !== 'past');
-    const cards = [];
-    for (const ev of events) {
-      const c = await api('/api/events/' + encodeURIComponent(ev.id) + '/card');
-      if (c && c.ok === true) cards.push({ ev, c });
-    }
+    // The card is the person's, not a ticket's: no event id, and it keeps
+    // answering after every event they attended has ended or been removed.
+    const c = await api('/api/card');
     hosts.forEach((host) => {
-      if (!cards.length) { host.innerHTML = ''; return; }
+      if (!c || c.ok !== true) { host.innerHTML = ''; return; }
+      const evs = (c.events || []).map((e) => '<li><span class="g-cardtile__dot"></span>'
+        + esc(e.label) + '<span class="g-cardtile__role">' + esc(e.role || 'Participant') + '</span></li>').join('');
       host.innerHTML = '<section class="g-cardtile__wrap"><p class="g-super-kicker">Your badge</p><h2 class="g-cardtile__h2">My badge card</h2>'
-        + cards.map(({ ev, c }) => '<article class="g-cardtile" data-cardtile="' + esc(ev.id) + '">'
-          + '<div class="g-cardtile__qr">' + (c.qr_image ? '<img src="' + esc(c.qr_image) + '" alt="Your badge QR" />' : '') + '</div>'
-          + '<div class="g-cardtile__body"><p class="g-cardtile__ev">' + esc(c.event_name || ev.name) + '</p>'
-          + '<p class="g-cardtile__name">' + esc((c.fields && c.fields.display_name) || c.name) + '</p>'
-          + '<a class="g-card__url" href="' + esc(c.card_url) + '" target="_blank" rel="noopener">' + esc(prettyUrl(c.card_url)) + '</a>'
-          + '<p class="g-cardtile__state">' + (c.public ? '<span class="g-card__pill is-on">Public</span>' + (c.views ? ' <span class="g-card__views">Opened ' + esc(c.views) + 'x</span>' : '') : '<span class="g-card__pill">' + (c.claimed_at ? 'Private' : 'Not set up') + '</span>') + '</p>'
-          + '<div class="g-card__actions"><button type="button" class="g-btn g-btn--primary g-btn--sm" data-cardtile-edit>' + (c.public || c.claimed_at ? 'Edit my card' : 'Set up my card') + '</button>'
-          + '<button type="button" class="g-btn g-btn--secondary g-btn--sm" data-cardtile-share>Share</button></div>'
-          + '</div></article>').join('')
-        + '<p class="g-cardtile__hint">This is the same QR that is printed on your badge. Scan it with any phone camera to open your card.</p></section>';
-      host.querySelectorAll('[data-cardtile]').forEach((tile) => {
-        const eventId = tile.getAttribute('data-cardtile');
-        const entry = cards.find((x) => String(x.ev.id) === String(eventId));
-        tile.querySelector('[data-cardtile-edit]').addEventListener('click', () => { state.card = entry.c; state.eventId = eventId; openEditor(eventId); });
-        tile.querySelector('[data-cardtile-share]').addEventListener('click', async () => {
-          const url = entry.c.card_url;
-          try {
-            if (navigator.share) await navigator.share({ title: entry.c.name + ' — Gaia Healers badge card', url });
-            else { await navigator.clipboard.writeText(url); toast('Link copied.', 'good'); }
-          } catch (_) { /* dismissed */ }
-        });
+        + '<article class="g-cardtile">'
+        + '<div class="g-cardtile__qr">' + (c.qr_image ? '<img src="' + esc(c.qr_image) + '" alt="Your badge QR" />' : '') + '</div>'
+        + '<div class="g-cardtile__body">'
+        + '<p class="g-cardtile__name">' + esc((c.fields && c.fields.display_name) || c.name) + '</p>'
+        + '<a class="g-card__url" href="' + esc(c.card_url) + '" target="_blank" rel="noopener">' + esc(prettyUrl(c.card_url)) + '</a>'
+        + '<p class="g-cardtile__state">' + (c.public
+            ? '<span class="g-card__pill is-on">Public</span>' + (c.views ? ' <span class="g-card__views">Opened ' + esc(c.views) + 'x</span>' : '')
+            : '<span class="g-card__pill">' + (c.claimed_at ? 'Private' : 'Not set up') + '</span>') + '</p>'
+        + '<div class="g-card__actions"><button type="button" class="g-btn g-btn--primary g-btn--sm" data-cardtile-edit>'
+        + (c.public || c.claimed_at ? 'Edit my card' : 'Set up my card') + '</button>'
+        + '<button type="button" class="g-btn g-btn--secondary g-btn--sm" data-cardtile-share>Share</button></div>'
+        + '</div></article>'
+        + (evs ? '<ul class="g-cardtile__events">' + evs + '</ul>' : '')
+        + '<p class="g-cardtile__hint">This is the same QR printed on your badge. It keeps working after the event ends \u2014 edit your card any time and nothing is reprinted.</p></section>';
+      host.querySelector('[data-cardtile-edit]').addEventListener('click', () => { state.card = c; state.eventId = 0; openEditor(0); });
+      host.querySelector('[data-cardtile-share]').addEventListener('click', async () => {
+        try {
+          if (navigator.share) await navigator.share({ title: c.name + ' \u2014 Gaia Healers badge card', url: c.card_url });
+          else { await navigator.clipboard.writeText(c.card_url); toast('Link copied.', 'good'); }
+        } catch (_) { /* dismissed */ }
       });
     });
   }
+
   document.addEventListener('gaia:superapp-rendered', renderProfileHosts);
   document.addEventListener('gaia:profile-rendered', renderProfileHosts);
   document.addEventListener('DOMContentLoaded', () => setTimeout(renderProfileHosts, 600));

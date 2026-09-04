@@ -56,6 +56,14 @@ test('a scanned link handles every state without breaking the page', () => {
   assert.equal(typeof sandbox.window.GaiaCard.openEditor, 'function');
 });
 
+test('the badge card in the profile is permanent, not tied to a live event', () => {
+  const card = read('gaia-card.js');
+  assert.match(card, /api\('\/api\/card'\)/, 'the profile tile asks for the PERSON\'s card, with no event in the path');
+  assert.ok(!/events\.filter\(\(e\) => e\.phase !== 'past'\)[\s\S]{0,400}badgecard/.test(card),
+    'the tile is no longer filtered to events that have not finished');
+  assert.match(card, /keeps working after the event ends/, 'and it says so to the person');
+});
+
 test('a scanned claim link never edits without a proven owner', () => {
   const card = read('gaia-card.js');
   assert.match(card, /api\('\/api\/card\/claim', \{ token \}\)/, 'ownership is asked of the proxy (session), not assumed from the URL');

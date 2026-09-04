@@ -1666,3 +1666,9 @@ body.gaia-v2 .g-super-home .g-super-hero{border:1px solid var(--g-line);
 .g-cardtile__state{margin:8px 0 0;display:flex;align-items:center;gap:8px}
 .g-cardtile__hint{margin:10px 0 0;font-size:.8rem;color:rgba(255,255,255,.5);line-height:1.5}
 @media (max-width:420px){.g-cardtile{grid-template-columns:84px 1fr}}
+
+/* permanent badge-card tile: the events it has been carried at */
+.g-cardtile__events{list-style:none;margin:10px 0 0;padding:12px 14px;display:grid;gap:8px;border-radius:14px;background:rgba(255,255,255,.03);border:1px solid var(--g-line)}
+.g-cardtile__events li{display:flex;align-items:center;gap:9px;font-size:.92rem;font-weight:600;color:#fff}
+.g-cardtile__dot{width:6px;height:6px;border-radius:50%;background:var(--g-accent);flex:none}
+.g-cardtile__role{margin-left:auto;font-size:.78rem;font-weight:500;color:rgba(255,255,255,.45)}

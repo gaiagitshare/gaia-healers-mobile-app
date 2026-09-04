@@ -174,7 +174,12 @@ def ensure_public_token(db, models, attendee, commit=True) -> str:
 # ---------------------------------------------------------------------------
 CARD_FIELDS = ("display_name", "headline", "company", "title", "city", "website", "booking_url",
                "instagram", "linkedin", "facebook", "tiktok", "youtube", "whatsapp",
-               "photo_url", "show_email", "show_phone", "tags", "services", "theme")
+               "photo_url", "tags", "services", "theme")
+# show_email / show_phone are RETIRED. They used to decide whether contact
+# details appeared on the public card; contact details are no longer public at
+# all, so the switches decided nothing and offering them implied a control the
+# owner did not have. Sharing with an exhibitor is governed separately, by the
+# consent recorded on the attendee and snapshotted onto each lead.
 # The identity fields. NOT in CARD_FIELDS on purpose: an ordinary card update
 # must not be able to write them, because changing them needs a verified
 # identity. clean_card still has to carry them through, or a headline edit
@@ -241,8 +246,6 @@ def clean_card(data: dict) -> dict:
     out["whatsapp"] = re.sub(r"\D", "", str(src.get("whatsapp") or ""))[:MAX["whatsapp"]]
     p = str(src.get("photo_url") or "").strip()[:MAX["photo_url"]]
     out["photo_url"] = p if re.match(r"^https://", p) else ""
-    out["show_email"] = bool(src.get("show_email") is True)
-    out["show_phone"] = bool(src.get("show_phone") is True)
     tags = src.get("tags") or []
     if isinstance(tags, str):
         tags = [t for t in re.split(r"[,\n]", tags)]
@@ -302,11 +305,20 @@ def public_view(mcard, event=None, participation=None) -> dict:
         "whatsapp": card.get("whatsapp") or "",
         "photo_url": card.get("photo_url") or "",
         "tags": list(card.get("tags") or []),
-        # Contact details cross over ONLY when the owner switched them on. They
-        # come from the card's own snapshot, not from a ticket, so the switches
-        # still mean something once the event is gone.
-        "email": (mcard.email or "") if card.get("show_email") else "",
-        "phone": (getattr(mcard, "phone", "") or "") if card.get("show_phone") else "",
+        # Email and phone are NEVER public, and are not sent to this page at
+        # all -- a blur drawn in CSS is not privacy, because the value is still
+        # in the HTML for anyone who opens the page source.
+        #
+        # A badge is visible on someone's chest all day and its URL can be
+        # photographed from across a room by people the attendee never spoke
+        # to. Contact details reach an EXHIBITOR who scans the badge, because
+        # the attendee handed it over -- that is the moment consent is given,
+        # and it is recorded on the lead. It does not reach a stranger with a
+        # camera.
+        "email": "",
+        "phone": "",
+        # So the page can show a locked row rather than pretend nothing exists.
+        "contact_on_file": bool((mcard.email or "").strip() or (getattr(mcard, "phone", "") or "").strip()),
     })
     return view
 
@@ -419,6 +431,14 @@ h1{margin:18px 0 0;font-size:28px;line-height:1.1;text-align:center;font-weight:
 .btn--secondary{background:rgba(167,139,250,.14);color:#EDE8FF;border-color:rgba(167,139,250,.4)}.btn--ghost{background:transparent;color:var(--muted);border-color:var(--line)}
 .btn svg{width:18px;height:18px}
 .links{display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:8px;margin:14px 0 0}
+/* Contact details that exist but are not on this page. The blur is decoration
+   over block characters -- the real values were never sent, so there is nothing
+   to find in the page source. */
+.locked{margin:14px 0 0;padding:12px 14px;border:1px dashed rgba(0,0,0,.18);border-radius:12px}
+.locked__row{display:flex;align-items:center;gap:10px;padding:4px 0}
+.locked__row svg{flex:0 0 auto;opacity:.45}
+.locked__blur{filter:blur(4px);letter-spacing:.06em;opacity:.5;user-select:none}
+.locked__note{margin:8px 0 0;font-size:.78rem;line-height:1.5;opacity:.62}
 .links a{display:flex;align-items:center;gap:8px;padding:12px;border-radius:12px;background:rgba(255,255,255,.04);border:1px solid var(--line);color:var(--text);text-decoration:none;font-size:14px;min-height:46px}
 .links a svg{width:18px;height:18px;color:var(--teal);flex:none}.links a span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .claim{margin:22px 0 0;padding:16px;border-radius:14px;background:rgba(255,255,255,.03);border:1px dashed var(--line);text-align:center;color:var(--muted);font-size:14px;line-height:1.5}
@@ -512,6 +532,18 @@ def render_card_html(view: dict, token: str, app_base: str = None) -> str:
         if view.get("phone"):
             links.append("<a href=\"tel:%s\">%s<span>%s</span></a>" % (_h(view["phone"]), _ICON["phone"], _h(view["phone"])))
         links_html = ("<div class=\"links\">%s</div>" % "".join(links)) if links else ""
+        # Contact details exist but are not on this page. Shown as a locked row
+        # rather than omitted, so it is honest about what is being withheld and
+        # from whom -- and the blur is nothing but decoration over text that was
+        # never sent, so viewing the source reveals nothing.
+        locked_html = ""
+        if view.get("contact_on_file"):
+            locked_html = (
+                "<div class=\"locked\">"
+                "<div class=\"locked__row\">%s<span class=\"locked__blur\">&#9608;&#9608;&#9608;&#9608;&#9608;&#9608;&#9608;&#64;&#9608;&#9608;&#9608;&#9608;&#9608;</span></div>"
+                "<div class=\"locked__row\">%s<span class=\"locked__blur\">&#9608;&#9608;&#9608; &#9608;&#9608;&#9608; &#9608;&#9608;&#9608;&#9608;</span></div>"
+                "<p class=\"locked__note\">Email and phone are shared with an exhibitor when this badge is scanned at their stand \u2014 not on this page.</p>"
+                "</div>" % (_ICON["mail"], _ICON["phone"]))
         # Where they have been with us. Built from attendance records only —
         # no ticket, order or payment ever appears here.
         events_html = ""
@@ -524,11 +556,11 @@ def render_card_html(view: dict, token: str, app_base: str = None) -> str:
                 "<div class=\"avatar\">%s</div><h1>%s</h1>%s%s%s%s%s%s"
                 "<div class=\"actions\">%s<a class=\"btn %s\" href=\"%s.vcf\" download>%s Save contact</a>"
                 "<a class=\"btn btn--secondary\" href=\"%s\">Connect in the Gaia app</a>"
-                "<a class=\"btn btn--ghost\" href=\"%s\" data-owner-edit hidden>Edit my card</a></div>%s%s</div>"
+                "<a class=\"btn btn--ghost\" href=\"%s\" data-owner-edit hidden>Edit my card</a></div>%s%s%s</div>"
                 % (event, avatar, name, headline, role, city, tags, bio, services, booking,
                    "btn--secondary" if booking else "btn--primary", _h(token),
                    _ICON["mail"].replace("currentColor", "#0B1408" if not booking else "currentColor"),
-                   _h(connect_url), _h(claim_url), links_html, events_html))
+                   _h(connect_url), _h(claim_url), links_html, locked_html, events_html))
 
     foot = ("<p class=\"foot\">This card is shared by its owner and shows only what they chose to share.<br>"
             "<a href=\"%s\">gaiahealers.app</a></p></div>" % _h(app_base))

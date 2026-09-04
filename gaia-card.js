@@ -103,29 +103,17 @@
       + '</div>'
       + '<p class="g-card__name">' + esc(card.name) + '</p>'
       + field('Name on the card', 'display_name', f.display_name, 'Leave empty to use the name on your ticket: ' + (card.name || ''))
-      + field('Headline', 'headline', f.headline, 'One line under your name — what you do, for whom.', 'maxlength="90"')
-      + field('Company / practice', 'company', f.company, '')
-      + field('Title / role', 'title', f.title, '')
-      + field('City', 'city', f.city, '')
-      + '<label class="g-card__field"><span>A line about you</span><textarea name="bio" maxlength="400" rows="2">' + esc(card.bio || '') + '</textarea></label>'
-      + field('Interests', 'tags', (f.tags || []).join(', '), 'Up to four, comma-separated — e.g. Reiki, Sound healing')
-      + '<label class="g-card__field"><span>Offerings / services</span><textarea name="services" rows="3" placeholder="One per line — e.g. 1:1 Reiki session">' + esc((f.services || []).join('\n')) + '</textarea><small>Up to six. Shown as a list on your card.</small></label>'
-      + field('Booking link', 'booking_url', f.booking_url, 'Becomes a "Book with you" button at the top of your card.', 'inputmode="url" placeholder="calendly.com/you or your booking page"')
-      + '<div class="g-card__field"><span>Card colour</span><div class="g-card__themes">'
-      + (card.themes || ['gaia']).map((t) => '<label class="g-card__theme g-card__theme--' + esc(t) + '"><input type="radio" name="theme" value="' + esc(t) + '"' + ((f.theme || 'gaia') === t ? ' checked' : '') + ' /><i aria-hidden="true"></i><span>' + esc(t) + '</span></label>').join('')
-      + '</div></div>'
-      + '<h4 class="g-card__sub">Links</h4>'
-      + field('Website', 'website', f.website, '', 'inputmode="url" placeholder="yourwebsite.com"')
-      + field('Instagram', 'instagram', f.instagram, '', 'placeholder="@handle"')
-      + field('LinkedIn', 'linkedin', f.linkedin, '', 'placeholder="profile name or URL"')
-      + field('Facebook', 'facebook', f.facebook, '', 'placeholder="page name or URL"')
-      + field('TikTok', 'tiktok', f.tiktok, '', 'placeholder="@handle"')
-      + field('YouTube', 'youtube', f.youtube, '', 'placeholder="@channel or URL"')
-      + field('WhatsApp', 'whatsapp', f.whatsapp, 'Number with country code. Shown as a tap-to-chat link.', 'inputmode="tel" placeholder="+1 407 555 0100"')
+      + field('Company / practice', 'company', f.company, 'Optional. Shown on your card if you fill it in.')
+      + field('City', 'city', f.city, 'Optional. Shown on your card if you fill it in.')
       + '<h4 class="g-card__sub">Contact details</h4>'
-      + '<p class="g-card__note">These come from your ticket and stay private unless you switch them on.</p>'
-      + toggle('Show my email', 'show_email', f.show_email, card.email_on_file || '')
-      + (card.phone_on_file ? toggle('Show my phone', 'show_phone', f.show_phone, card.phone_on_file) : '')
+      + '<p class="g-card__note">'
+      + 'Your name, email and phone come from your ticket. They are <strong>not</strong> shown on your public card &mdash; '
+      + 'an exhibitor receives them only when you hand them your badge to scan at their stand.'
+      + '</p>'
+      + '<div class="g-card__oncard">'
+      + '<div class="g-card__oncard-row"><span>Email</span><b>' + esc(card.email_on_file || '\u2014') + '</b></div>'
+      + '<div class="g-card__oncard-row"><span>Phone</span><b>' + esc(card.phone_on_file || '\u2014') + '</b></div>'
+      + '</div>'
       + '<div class="g-card__publish">'
       + toggle('Card is public', 'public', card.public, 'Anyone who scans your badge can open it. Off = the link shows only your name.')
       + '</div>'
@@ -176,12 +164,12 @@
       state.saving = true; say('Saving…');
       const data = new FormData(form);
       const body = {};
-      ['display_name', 'headline', 'company', 'title', 'city', 'bio', 'website', 'booking_url', 'instagram', 'linkedin', 'facebook', 'tiktok', 'youtube', 'whatsapp'].forEach((k) => { body[k] = String(data.get(k) || ''); });
-      body.tags = String(data.get('tags') || '').split(',').map((t) => t.trim()).filter(Boolean).slice(0, 4);
-      body.services = String(data.get('services') || '').split(/\n|,/).map((t) => t.trim()).filter(Boolean).slice(0, 6);
-      body.theme = String(data.get('theme') || 'gaia');
-      body.show_email = data.get('show_email') === 'on';
-      body.show_phone = data.get('show_phone') === 'on';
+      // The visitor card is deliberately small: a name, and optionally a company
+      // and a city. Most people at this event are not going to fill in six social
+      // handles on a phone, and a form that asks anyway is a form they abandon.
+      // Only what the form actually offers is sent; the older fields still exist
+      // server-side, so any card that already carries one keeps it.
+      ['display_name', 'company', 'city'].forEach((k) => { body[k] = String(data.get(k) || ''); });
       body.public = data.get('public') === 'on';
       const result = eventId ? await api('/api/events/' + encodeURIComponent(eventId) + '/card', body) : await api('/api/card', body);
       state.saving = false;

@@ -31,12 +31,19 @@ test('the ticket QR is untouched: the app still renders the server QR image and 
   assert.doesNotMatch(card, /qrCode|qr_code|ATT-/, 'the card module never handles the ticket identity');
 });
 
-test('contact details default to private and only known fields are sent', () => {
+test('contact details are never public, and only known fields are sent', () => {
   const card = read('gaia-card.js');
-  assert.match(card, /body\.show_email = data\.get\('show_email'\) === 'on'/, 'email is a checkbox that must be ticked');
-  assert.match(card, /body\.show_phone = data\.get\('show_phone'\) === 'on'/, 'phone likewise');
+  // There is no switch, and that is deliberate. A badge hangs on someone's chest
+  // all day and its URL can be photographed from across a room; email and phone
+  // reach an exhibitor who SCANS the badge, which is the moment the attendee
+  // hands it over. A switch implied a control that could be turned the wrong way.
+  assert.doesNotMatch(card, /show_email|show_phone/, 'the retired switches are gone from the editor');
   assert.match(card, /body\.public = data\.get\('public'\) === 'on'/, 'public is an explicit switch');
-  assert.match(card, /toggle\('Show my email', 'show_email', f\.show_email/, 'the switch reflects the saved state, never assumed on');
+  // The visitor form is deliberately short: most of this event's attendees are
+  // not going to fill in six social handles on a phone.
+  assert.match(card, /\['display_name', 'company', 'city'\]/, 'only the basic fields are submitted');
+  assert.doesNotMatch(card, /field\('Instagram'|field\('LinkedIn'|field\('TikTok'/, 'no social handles are asked for');
+  assert.doesNotMatch(card, /field\('Title \/ role'/, 'no role field');
 });
 
 test('a scanned link handles every state without breaking the page', () => {

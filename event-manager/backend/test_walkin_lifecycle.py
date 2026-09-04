@@ -91,7 +91,8 @@ check(st == 200 and b"Nadia" in body, "their card is live the moment the order l
 
 # ── 2. a WALK-IN, nobody has heard of them ────────────────────────────────
 st, chk = call("POST", "/events/%d/walk-in/check" % EV1,
-               {"first_name": "Ola", "last_name": "Doorstep", "email": WALKIN}, ADMIN)
+               {"first_name": "Ola", "last_name": "Doorstep", "email": WALKIN,
+                "phone": "+14075550123"}, ADMIN)
 check(st == 200 and chk.get("matches") == [], "a genuinely new person shows no duplicate matches", chk)
 
 st, w = call("POST", "/events/%d/walk-in" % EV1,
@@ -133,7 +134,8 @@ check(st == 200 and prof.get("card_url", "").endswith(TOKEN) and prof.get("qr_im
 
 # ── 5. the SAME person at a second event ──────────────────────────────────
 st, dup = call("POST", "/events/%d/walk-in" % EV2,
-               {"first_name": "Ola", "last_name": "Doorstep", "email": WALKIN}, ADMIN)
+               {"first_name": "Ola", "last_name": "Doorstep", "email": WALKIN,
+                "phone": "+14075550123"}, ADMIN)
 check(st == 200 and dup.get("ok") is False and dup.get("reason") == "possible_duplicate",
       "registering them again stops and offers the match instead of minting a second card", dup.get("reason"))
 match = (dup.get("matches") or [{}])[0]
@@ -144,7 +146,7 @@ check("@" in match.get("email_masked", "") and WALKIN not in json.dumps(dup),
 
 st, linked = call("POST", "/events/%d/walk-in" % EV2,
                   {"first_name": "Ola", "last_name": "Doorstep", "email": WALKIN,
-                   "link_token": TOKEN}, ADMIN)
+                   "phone": "+14075550123", "link_token": TOKEN}, ADMIN)
 check(st == 200 and linked.get("created") is True and linked.get("reused_existing_card") is True,
       "staff link them to the card they already have", (st, linked.get("reused_existing_card")))
 att2 = linked.get("attendee") or {}

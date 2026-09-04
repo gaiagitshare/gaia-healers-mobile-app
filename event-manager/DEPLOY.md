@@ -163,6 +163,57 @@ revokes. A ticket bought on an invoice is ledgered under `invoice_id`, so
 to a legacy path that was neither idempotent nor tier-aware, and an invoice
 *upgrade* refund threw the person out of the event entirely.
 
+## Map & Reconcile
+
+Mapping a product used to do nothing for the sales that had already happened.
+Four people bought a day pass created that morning, and even once somebody
+mapped it their payments stayed unrepresented.
+
+Now: Attendees → *Unmapped event sales* → **Map & Reconcile**. Staff pick the
+Gaia ticket type, see the impact, and only then approve. The preview shows the
+product name, its immutable id, the ticket type, successful historical payments,
+seats represented, how many Gaia already holds, how many would be created, and
+what is excluded as pending or refunded.
+
+The replay calls the same `reconcile_attendee` / `reconcile_invoice` functions
+the webhook and the mirror call — not a parallel implementation — so a replayed
+sale and a live one cannot end up in different states. It is idempotent (keyed on
+the payment reference), audited in `map_reconcile_runs` with the preview staff
+were shown, and matched on the product id alone. The Event Manager holds no GHL
+credentials, so it reads sales through the proxy's `/api/event/ghl-sales`, which
+is GET-only and caches line items in `data/ghl-line-items.json`.
+
+## Counting: never one number called "purchases"
+
+`GET /events/{id}/ticket-metrics`. The identity that holds it together:
+
+    original ticket purchases + repeat base payments + upgrade payments
+      = total economic events
+
+An **upgrade** adds revenue and a tier. It is never a head and never a seat. A
+**second payment for the same base product is not an upgrade** — it is another
+seat or a duplicate charge, decided from the purchase timestamp GHL recorded:
+minutes apart with the same amount reads as a suspected duplicate, days apart as
+an additional paid seat, anything between is left for a person. Where GHL does
+not name the second guest the seat is counted as **unassigned**, never filled
+with an invented attendee. Same for `quantity > 1`.
+
+Whether a mapped product is an upgrade is a **Gaia** mapping attribute, not GHL
+data. Two products were mapped as base tickets when the evidence said otherwise
+(Full Speaker Access was never a first purchase for any of its 33 buyers, One Day
+Speaker Upgrade for 1 of 26), which made 59 tier changes look like 59 extra
+tickets sold.
+
+## Unmapped sales: triage, not deletion
+
+Gaia Healers sells Bio-Well devices, Healeex systems, CRM subscriptions,
+sponsorships and calendar bookings through the same GHL location. Those are real
+sales that are simply not this event's, and 80 of them sitting in an event alert
+trains staff to ignore the alert. `unmapped_sales.relevance` sorts them; the
+panel shows `event_like` and counts the rest. **Nothing is deleted** —
+`?include_unrelated=true` returns everything. Triage decides what is *shown* and
+never what is *granted*: a product still becomes access only when a human maps it.
+
 ### Single-day passes
 
 `ticket_types.valid_day` (nullable, `YYYY-MM-DD`, venue-local) limits a base

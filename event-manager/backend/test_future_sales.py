@@ -93,7 +93,9 @@ st, d = call("POST", "/identity/report-unmapped-sale", {"event_id": EV, "referen
     "source": "ghl_order", "product_id": P_NEW, "product_name": "ZZ Saturday Pass",
     "buyer_email": E("new"), "buyer_name": "Nia New", "amount": 197, "paid_at": "2026-10-01"}, SVC)
 st2, lst = call("GET", "/events/%d/unmapped-sales" % EV, tok=ADMIN)
-check(d.get("recorded") and lst.get("pending") == 1,
+# Present, not sole occupant: the reconciler files real unmapped sales too.
+_mine = [i for i in (lst.get("items") or []) if i.get("reference") == "fut-ord-new-1"]
+check(d.get("recorded") and len(_mine) == 1,
       "a brand-new UNMAPPED product surfaces for review instead of disappearing")
 check(sql("SELECT COUNT(*) FROM attendees WHERE event_id=? AND lower(email)=?", (EV, E("new")))[0][0] == 0,
       "and creates no attendee on its own")

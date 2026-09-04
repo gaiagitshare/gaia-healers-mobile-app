@@ -18,7 +18,9 @@ import {
     getAttendees, getAttendee, getTicketCounts, createAttendee, updateAttendee, deleteAttendee,
     generateBadge, importAttendees, searchAttendees, getTicketTypes, exportAttendees,
     revokeAttendee, reinstateAttendee, changePass, setAddonDay,
-    getAcquisitionReport, badgeLabelBlob , getDoorReport, getUnmappedSales, dismissUnmappedSale} from '../utils/api';
+    getAcquisitionReport, badgeLabelBlob , getDoorReport, getUnmappedSales, dismissUnmappedSale,
+    getTicketMetrics} from '../utils/api';
+import MapReconcile from './MapReconcile';
 import { formatVenueTime, STATUS_LABELS, statusLabel } from '../utils/datetime';
 
 // The organiser's GHL location, for the authoritative refund/payment record.
@@ -58,6 +60,9 @@ function Attendees({ timezone }) {
     const [showReport, setShowReport] = useState(true);
     const [door, setDoor] = useState(null);
     const [unmapped, setUnmapped] = useState(null);
+    const [mapTarget, setMapTarget] = useState(null);   // the product being mapped
+    const [metrics, setMetrics] = useState(null);
+    const [showMetrics, setShowMetrics] = useState(false);
     const [showDoor, setShowDoor] = useState(false);
     const [showUnmapped, setShowUnmapped] = useState(true);
     const [sortBy, setSortBy] = useState('');
@@ -354,6 +359,9 @@ function Attendees({ timezone }) {
         getAcquisitionReport(eventId)
             .then((r) => { if (alive) setReport(r.data); })
             .catch(() => { /* the table still works without the summary */ });
+        getTicketMetrics(eventId)
+            .then((r) => setMetrics(r.data))
+            .catch(() => setMetrics(null));
         getUnmappedSales(eventId)
             .then((r) => { if (alive) setUnmapped(r.data); })
             .catch(() => { /* additive */ });
@@ -598,7 +606,11 @@ function Attendees({ timezone }) {
                                         <TableCell align="right">{u.quantity}</TableCell>
                                         <TableCell align="right">${Math.round(u.amount || 0)}</TableCell>
                                         <TableCell>{u.source === 'ghl_invoice' ? 'Invoice' : 'Order'}</TableCell>
-                                        <TableCell align="right">
+                                        <TableCell align="right" sx={{ whiteSpace: 'nowrap' }}>
+                                            <Button size="small" variant="outlined"
+                                                onClick={() => setMapTarget({ id: u.product_id, name: u.product_name })}>
+                                                Map &amp; Reconcile
+                                            </Button>
                                             <Button size="small" onClick={async () => {
                                                 await dismissUnmappedSale(eventId, u.id);
                                                 const r = await getUnmappedSales(eventId); setUnmapped(r.data);
@@ -610,9 +622,125 @@ function Attendees({ timezone }) {
                         </Table>
                     )}
                     <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 1 }}>
-                        Map the product in Ticket Mappings to turn these into attendees. Nothing is created from a product name alone.
+                        Map &amp; Reconcile shows you what it would create before it creates anything. Nothing
+                        is created from a product name alone.
+                        {unmapped.unrelated_hidden > 0 && (
+                            <> {unmapped.unrelated_hidden} other unmapped {unmapped.unrelated_hidden === 1 ? 'sale is' : 'sales are'}{' '}
+                            not event products (Bio-Well, Healeex, CRM, sponsorships) and are kept out of this
+                            panel. They are still recorded.</>
+                        )}
                     </Typography>
                 </Alert>
+            )}
+
+            <MapReconcile
+                eventId={eventId}
+                open={!!mapTarget}
+                productId={mapTarget?.id}
+                productName={mapTarget?.name}
+                onClose={() => setMapTarget(null)}
+                onDone={async () => {
+                    const [u, m] = await Promise.all([getUnmappedSales(eventId), getTicketMetrics(eventId)]);
+                    setUnmapped(u.data); setMetrics(m.data);
+                    if (typeof loadAttendees === 'function') loadAttendees();
+                }}
+            />
+
+            {/* Deliberately not one number called "purchases". An upgrade is
+                revenue and a tier change; counting it as a ticket is what made
+                the old figure overstate the room. */}
+            {metrics && (
+                <Paper variant="outlined" sx={{ p: 1.5, mb: 2 }}>
+                    <Box display="flex" alignItems="baseline" justifyContent="space-between" gap={2} flexWrap="wrap">
+                        <Box display="flex" gap={3} flexWrap="wrap" alignItems="baseline">
+                            <Box>
+                                <Typography variant="h6">{metrics.people.unique_attendees}</Typography>
+                                <Typography variant="caption" color="text.secondary">People attending</Typography>
+                            </Box>
+                            <Box>
+                                <Typography variant="h6">{metrics.seats.assigned_paid_seats}</Typography>
+                                <Typography variant="caption" color="text.secondary">Assigned paid seats</Typography>
+                            </Box>
+                            <Box>
+                                <Typography variant="h6">{metrics.seats.unassigned_paid_seats}</Typography>
+                                <Typography variant="caption" color="text.secondary">Unassigned paid seats</Typography>
+                            </Box>
+                            <Box>
+                                <Typography variant="h6">{metrics.payments.upgrade_payments}</Typography>
+                                <Typography variant="caption" color="text.secondary">Upgrade payments</Typography>
+                            </Box>
+                            <Box>
+                                <Typography variant="h6">
+                                    ${Math.round(metrics.money.net_event_revenue).toLocaleString()}
+                                </Typography>
+                                <Typography variant="caption" color="text.secondary">Net event revenue</Typography>
+                            </Box>
+                        </Box>
+                        <Button size="small" onClick={() => setShowMetrics(!showMetrics)}>
+                            {showMetrics ? 'Hide breakdown' : 'Breakdown'}
+                        </Button>
+                    </Box>
+
+                    {showMetrics && (
+                        <Box sx={{ mt: 2 }}>
+                            <Table size="small">
+                                <TableBody>
+                                    <TableRow><TableCell>Original ticket purchases</TableCell>
+                                        <TableCell align="right">{metrics.payments.original_ticket_purchases}</TableCell></TableRow>
+                                    <TableRow><TableCell>Upgrade payments <em>(no extra seat)</em></TableCell>
+                                        <TableCell align="right">{metrics.payments.upgrade_payments}</TableCell></TableRow>
+                                    <TableRow><TableCell>Repeat payments on the same base ticket</TableCell>
+                                        <TableCell align="right">{metrics.payments.repeat_base_payments}</TableCell></TableRow>
+                                    <TableRow><TableCell sx={{ pl: 4 }}>— suspected duplicate charges</TableCell>
+                                        <TableCell align="right">{metrics.payments.repeat_breakdown.duplicate_suspected || 0}</TableCell></TableRow>
+                                    <TableRow><TableCell sx={{ pl: 4 }}>— additional paid seats</TableCell>
+                                        <TableCell align="right">{metrics.payments.repeat_breakdown.additional_paid_seat || 0}</TableCell></TableRow>
+                                    <TableRow><TableCell sx={{ pl: 4 }}>— needs a human</TableCell>
+                                        <TableCell align="right">{metrics.payments.repeat_breakdown.needs_review || 0}</TableCell></TableRow>
+                                    <TableRow><TableCell><strong>Total economic events</strong></TableCell>
+                                        <TableCell align="right"><strong>{metrics.payments.total_economic_events}</strong></TableCell></TableRow>
+                                    <TableRow><TableCell>Gross event revenue</TableCell>
+                                        <TableCell align="right">${metrics.money.gross_event_revenue.toLocaleString()}</TableCell></TableRow>
+                                    <TableRow><TableCell>Refunds</TableCell>
+                                        <TableCell align="right">${metrics.money.refunds.toLocaleString()}</TableCell></TableRow>
+                                    <TableRow><TableCell>Complimentary / staff / speaker (no payment)</TableCell>
+                                        <TableCell align="right">{metrics.people.complimentary_or_unpaid}</TableCell></TableRow>
+                                </TableBody>
+                            </Table>
+
+                            {metrics.needs_review.length > 0 && (
+                                <Alert severity="info" sx={{ mt: 2 }}>
+                                    <strong>{metrics.needs_review.length} repeat {metrics.needs_review.length === 1 ? 'payment' : 'payments'} to look at.</strong>{' '}
+                                    Someone paid twice for the same ticket. Minutes apart is usually a retry or a
+                                    double charge; a refund is a decision for a person, not for this screen.
+                                    <Table size="small" sx={{ mt: 1 }}>
+                                        <TableHead><TableRow>
+                                            <TableCell>Buyer</TableCell><TableCell>Gap</TableCell>
+                                            <TableCell align="right">Amount</TableCell><TableCell>Reading</TableCell>
+                                        </TableRow></TableHead>
+                                        <TableBody>
+                                            {metrics.needs_review.map((r) => (
+                                                <TableRow key={r.reference}>
+                                                    <TableCell>{r.email}</TableCell>
+                                                    <TableCell sx={{ whiteSpace: 'nowrap' }}>
+                                                        {r.gap_minutes == null ? '—'
+                                                            : r.gap_minutes < 60 ? `${r.gap_minutes} min`
+                                                                : `${Math.round(r.gap_minutes / 60)} h`}
+                                                    </TableCell>
+                                                    <TableCell align="right">${Math.round(r.amount || 0)}</TableCell>
+                                                    <TableCell>
+                                                        <Chip size="small"
+                                                            label={r.kind === 'duplicate_suspected' ? 'likely duplicate' : 'unclear'} />
+                                                    </TableCell>
+                                                </TableRow>
+                                            ))}
+                                        </TableBody>
+                                    </Table>
+                                </Alert>
+                            )}
+                        </Box>
+                    )}
+                </Paper>
             )}
 
             {door && (door.walk_ins?.total > 0 || showDoor) && (

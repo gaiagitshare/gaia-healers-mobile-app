@@ -100,9 +100,21 @@ for (const o of orders) {
   for (const m of hits.sort((a, b) => (a.is_upgrade ? 1 : 0) - (b.is_upgrade ? 1 : 0))) {
     if (DRY) { stats.reconciled++; continue; }
     const nm = String(o.contactName || '').split(' ');
+    // The line for THIS product carries the quantity, which is the only field
+    // that distinguishes one person paying for three seats from three people.
+    const line = items.find((i) => String((i.product && i.product._id) || i.productId) === m.external_product_id);
+    const qty = Math.max(1, Number((line && (line.qty != null ? line.qty : line.quantity)) || 1));
     const { j } = await em('/identity/reconcile-attendee', {
       event_id: m.event_id, email, ticket_type_id: m.ticket_type_id, is_upgrade: !!m.is_upgrade,
-      contact_id: o.contactId, order_id: o._id, first_name: nm[0] || '', last_name: nm.slice(1).join(' ') });
+      contact_id: o.contactId, order_id: o._id,
+      // Recorded so the ledger can be classified later without guessing: the
+      // immutable product id, the seat count, the money, and WHEN GHL took it
+      // (not when Gaia happened to reconcile it).
+      product_id: m.external_product_id, quantity: qty, amount: o.amount,
+      // Full timestamp, not a date: minutes are what separate a duplicate
+      // charge from a second seat bought the same afternoon.
+      purchased_at: String(o.createdAt || '').slice(0, 19) || null,
+      first_name: nm[0] || '', last_name: nm.slice(1).join(' ') });
     if (j && j.ok) { if (j.created) stats.reconciled++; else stats.already++; } else stats.errors++;
   }
 }

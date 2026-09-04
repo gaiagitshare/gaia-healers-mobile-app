@@ -59,7 +59,15 @@ def _ensure_event_columns():
         exhibitor_cols = {c["name"] for c in inspector.get_columns("exhibitors")}
     except Exception:
         return
+    try:
+        _us = {c["name"] for c in inspector.get_columns("unmapped_sales")}
+    except Exception:
+        _us = set()
     stmts = []
+    if _us and "relevance" not in _us:
+        stmts.append("ALTER TABLE unmapped_sales ADD COLUMN relevance VARCHAR DEFAULT 'event_like'")
+    if _us and "relevance_reason" not in _us:
+        stmts.append("ALTER TABLE unmapped_sales ADD COLUMN relevance_reason VARCHAR")
     if "source_url" not in cols:
         stmts.append("ALTER TABLE events ADD COLUMN source_url VARCHAR")
     if "locked_fields" not in cols:
@@ -1775,7 +1783,8 @@ def _lifecycle_append(attendee, action, actor="system", **extra):
 # not grant access on their own. Refunded entries are sticky (a re-seen completed
 # order never resurrects them). Legacy attendees (no ledger) keep old behavior.
 def _ent_record(cd, order_id, tx, tt_id, is_upgrade, addon_code=None, day=None, day_date=None,
-                event_id=None, invoice_id=None, amount=None, source=None):
+                event_id=None, invoice_id=None, amount=None, source=None,
+                product_id=None, quantity=None, purchased_at=None):
     """Ledger one paid purchase.
 
     Most arrive as a completed GHL order. Some arrive as a PAID GHL INVOICE,
@@ -1805,6 +1814,17 @@ def _ent_record(cd, order_id, tx, tt_id, is_upgrade, addon_code=None, day=None, 
                 e["day_date"] = day_date
             if tx:
                 e["transaction_id"] = tx
+            # Backfill on replay: rows written before these were captured are the
+            # reason the 2026 numbers could not be classified without guessing.
+            if product_id and not e.get("product_id"):
+                e["product_id"] = product_id
+            if quantity is not None and e.get("quantity") is None:
+                e["quantity"] = int(quantity)
+            # A date alone cannot separate a double charge minutes apart from a
+            # second seat bought the same afternoon, so a more precise timestamp
+            # replaces a date-only one.
+            if purchased_at and len(str(purchased_at)) > len(str(e.get("purchased_at") or "")):
+                e["purchased_at"] = purchased_at
             cd["entitlements"] = ents
             return
     # Ownership is intrinsic to the entitlement, never inferred later from which
@@ -1823,6 +1843,15 @@ def _ent_record(cd, order_id, tx, tt_id, is_upgrade, addon_code=None, day=None, 
         entry["amount"] = amount
     if addon_code:
         entry["addon_code"] = addon_code
+    if product_id:
+        # The immutable product id, so a later rename cannot orphan this record.
+        entry["product_id"] = product_id
+    if quantity is not None:
+        entry["quantity"] = int(quantity)
+    if purchased_at:
+        # When GHL took the money -- NOT when Gaia reconciled it. Using the
+        # reconcile time made every historical import look like one instant.
+        entry["purchased_at"] = purchased_at
     if day is not None:
         entry["day"] = day
     if day_date is not None:
@@ -4809,18 +4838,78 @@ def report_unmapped_sale(payload: schemas.UnmappedSaleIn, db: Session = Depends(
     row = db.query(models.UnmappedSale).filter(models.UnmappedSale.reference == ref).first()
     if row:
         return {"ok": True, "recorded": False, "already": True, "id": row.id, "status": row.status}
+    email = (payload.buyer_email or "").lower() or None
+    # Triage on the way in, so the panel stays about this event. Nothing is
+    # discarded: an "unrelated" row is stored in full and still searchable.
+    relevance, reason = _classify_unmapped(payload.product_name, payload.amount,
+                                           email, payload.funnel, db, payload.event_id)
     row = models.UnmappedSale(
         event_id=payload.event_id, reference=ref, source=payload.source,
         product_id=payload.product_id, product_name=payload.product_name,
-        buyer_name=payload.buyer_name, buyer_email=(payload.buyer_email or "").lower() or None,
+        buyer_name=payload.buyer_name, buyer_email=email,
         contact_id=payload.contact_id, amount=payload.amount, currency=payload.currency,
-        quantity=payload.quantity or 1, paid_at=payload.paid_at, funnel=payload.funnel)
+        quantity=payload.quantity or 1, paid_at=payload.paid_at, funnel=payload.funnel,
+        relevance=relevance, relevance_reason=reason)
     db.add(row); db.commit(); db.refresh(row)
-    return {"ok": True, "recorded": True, "id": row.id}
+    return {"ok": True, "recorded": True, "id": row.id,
+            "relevance": relevance, "relevance_reason": reason}
+
+
+# Triage for the review panel. This decides only what staff are SHOWN, never
+# what is granted -- a product becomes event access when a human maps it and at
+# no other moment. That separation is what makes a name-based hint acceptable
+# here when it would be unacceptable anywhere near an entitlement.
+#
+# Gaia Healers sells Bio-Well devices, Healeex systems, CRM subscriptions,
+# sponsorship tiers and calendar bookings through the same GHL location as event
+# tickets. Those are real sales; they are simply not this event's, and leaving
+# 80 of them permanently in an event alert trains staff to ignore the alert.
+
+_EVENT_WORDS = ("ticket", "admission", "pass", "conference", "expo", "exhibit",
+                "attendee", "seat", "vip", "workshop", "summit", "elevate",
+                "day pass", "speaker")
+_NOT_EVENT_WORDS = ("bio-well", "biowell", "bio well", "healeex", "crm",
+                    "subscription", "sponsor", "ambassador", "legacy partner",
+                    "connector", "device", "sensor", "bundle", "wholesale",
+                    "via calendars", "biopulsar", "plasma", "scan", "custom item",
+                    "colour energy", "color energy")
+
+
+def _classify_unmapped(product_name, amount, buyer_email, funnel, db, event_id):
+    """event_like -> stays in the review panel. unrelated -> kept, not shown."""
+    name = (product_name or "").strip().lower()
+    fun = (funnel or "").strip().lower()
+
+    # Strongest signal available, and it is not a name at all: this buyer already
+    # holds a ticket to this event, so the purchase is very likely event-related.
+    if buyer_email and event_id:
+        holder = db.query(models.Attendee).filter(
+            models.Attendee.event_id == event_id,
+            func.lower(models.Attendee.email) == buyer_email.strip().lower()).first()
+        if holder:
+            return "event_like", "buyer already holds a ticket to this event"
+
+    if fun and any(w in fun for w in ("elevate", "conference", "exhibit", "event")):
+        return "event_like", "purchased through an event funnel"
+
+    if any(w in name for w in _EVENT_WORDS):
+        return "event_like", "product name reads like event admission"
+
+    if any(w in name for w in _NOT_EVENT_WORDS):
+        return "unrelated", "matches the non-event catalogue"
+
+    # A device costs thousands; a ticket does not. Used only to break ties.
+    try:
+        if amount is not None and float(amount) > 1000:
+            return "unrelated", "amount is far outside any ticket price"
+    except (TypeError, ValueError):
+        pass
+    return "event_like", "could not be ruled out"
 
 
 @app.get("/events/{event_id}/unmapped-sales")
 def unmapped_sales(event_id: int, include_resolved: bool = False,
+                   include_unrelated: bool = False,
                    db: Session = Depends(get_db),
                    current_user: models.User = Depends(get_current_user)):
     """Paid products nobody has mapped to a ticket. Review required."""
@@ -4830,7 +4919,13 @@ def unmapped_sales(event_id: int, include_resolved: bool = False,
         (models.UnmappedSale.event_id == event_id) | (models.UnmappedSale.event_id.is_(None)))
     if not include_resolved:
         q = q.filter(models.UnmappedSale.status == "pending")
-    rows = q.order_by(models.UnmappedSale.paid_at.desc()).limit(200).all()
+    all_rows = q.order_by(models.UnmappedSale.paid_at.desc()).limit(500).all()
+    # Bio-Well kits and sponsorships are real sales that simply are not this
+    # event's. They stay recorded and reachable, but an event alert that is 90%
+    # other people's business is an alert nobody reads.
+    unrelated_n = sum(1 for r in all_rows if (r.relevance or "event_like") == "unrelated")
+    rows = ([r for r in all_rows if (r.relevance or "event_like") != "unrelated"]
+            if not include_unrelated else all_rows)[:200]
     out = []
     for r in rows:
         att = db.query(models.Attendee).filter(
@@ -4841,8 +4936,13 @@ def unmapped_sales(event_id: int, include_resolved: bool = False,
                     "buyer_name": r.buyer_name, "buyer_email": r.buyer_email,
                     "amount": r.amount, "currency": r.currency, "quantity": r.quantity,
                     "paid_at": r.paid_at, "funnel": r.funnel, "status": r.status,
+                    "relevance": r.relevance or "event_like",
+                    "relevance_reason": r.relevance_reason,
                     "already_an_attendee": bool(att)})
-    return {"event_id": event_id, "pending": sum(1 for r in rows if r.status == "pending"), "items": out}
+    return {"event_id": event_id,
+            "pending": sum(1 for r in rows if r.status == "pending"),
+            "unrelated_hidden": 0 if include_unrelated else unrelated_n,
+            "items": out}
 
 
 @app.post("/events/{event_id}/unmapped-sales/{sale_id}/dismiss")
@@ -4857,6 +4957,435 @@ def dismiss_unmapped_sale(event_id: int, sale_id: int, db: Session = Depends(get
     r.status = "dismissed"; r.resolved_by = current_user.id; r.resolved_at = datetime.utcnow()
     db.commit()
     return {"ok": True}
+
+
+# ---------------------------------------------------------------------------
+# Map & Reconcile
+#
+# A product only becomes event access when a human maps it. That rule is right,
+# but until now mapping a product did nothing for the sales that already
+# happened: four people bought a day pass created that morning, and even after
+# somebody mapped it their payments sat there unrepresented.
+#
+# This closes that. Staff pick an immutable GHL product id, choose the Gaia
+# ticket type, see exactly what the replay would do, and only then approve it.
+# The replay calls the SAME reconcile functions the webhook and the hourly
+# mirror call -- not a parallel implementation -- so a replayed sale and a live
+# one cannot end up in different states.
+#
+# Nothing here writes to GHL. The GHL read goes through the proxy, which is
+# where the credentials live.
+
+GAIA_PROXY_BASE = (os.environ.get("GAIA_PROXY_BASE_URL") or "http://127.0.0.1:8787").rstrip("/")
+
+
+def _ghl_sales_for_product(product_id: str):
+    """Every GHL order and invoice containing this exact product id.
+
+    Read-only, and matched on the immutable id alone. Product names are carried
+    for display but never matched on -- a renamed product is the same product,
+    and treating the new name as a new thing is how history splits in two.
+    """
+    import urllib.request, urllib.error, urllib.parse
+    token = os.environ.get("IDENTITY_SERVICE_TOKEN") or ""
+    url = "%s/api/event/ghl-sales?product_id=%s" % (GAIA_PROXY_BASE, urllib.parse.quote(product_id))
+    req = urllib.request.Request(url)
+    req.add_header("Authorization", "Bearer " + token)
+    try:
+        with urllib.request.urlopen(req, timeout=600) as r:
+            return json.loads(r.read() or b"{}")
+    except urllib.error.HTTPError as e:
+        raise HTTPException(status_code=502,
+                            detail="Could not read sales from GHL (%s)" % e.code)
+    except Exception as e:
+        raise HTTPException(status_code=502,
+                            detail="Could not read sales from GHL: %s" % e)
+
+
+def _mr_eligible(sales):
+    """Split GHL sales into what may be replayed and what must not be.
+
+    Only settled money creates access. Pending, failed and refunded records are
+    excluded and counted, so the preview can say why a number is smaller than
+    the raw sale count instead of quietly dropping rows.
+    """
+    reversed_ids = set((sales.get("reversed") or {}).keys())
+    eligible, excluded = [], {"not_paid": 0, "refunded": 0}
+    for o in sales.get("orders") or []:
+        if o.get("id") in reversed_ids:
+            excluded["refunded"] += 1; continue
+        if str(o.get("status") or "").lower() != "completed":
+            excluded["not_paid"] += 1; continue
+        if not (o.get("email") or "").strip():
+            excluded["not_paid"] += 1; continue
+        eligible.append({"kind": "order", **o})
+    for iv in sales.get("invoices") or []:
+        if iv.get("id") in reversed_ids:
+            excluded["refunded"] += 1; continue
+        if str(iv.get("status") or "").lower() not in ("paid", "partially_paid"):
+            excluded["not_paid"] += 1; continue
+        if not (iv.get("email") or "").strip():
+            excluded["not_paid"] += 1; continue
+        eligible.append({"kind": "invoice", **iv})
+    return eligible, excluded
+
+
+def _mr_preview(db, event, product_id, ticket_type_id, is_upgrade):
+    sales = _ghl_sales_for_product(product_id)
+    eligible, excluded = _mr_eligible(sales)
+
+    # What Gaia already holds, keyed on the payment reference -- the only key
+    # that is stable. Email would merge two people who share an address.
+    held = set()
+    for a in db.query(models.Attendee).filter(models.Attendee.event_id == event.id).all():
+        cd = a.custom_data or {}
+        if cd.get("order_id"):
+            held.add(cd["order_id"])
+        for e in (cd.get("entitlements") or []):
+            ref = e.get("order_id") or e.get("invoice_id")
+            if ref:
+                held.add(ref)
+
+    seats = 0
+    already = 0
+    people = set()
+    product_name = None
+    for row in eligible:
+        for it in row.get("items") or []:
+            if str(it.get("product_id")) != str(product_id):
+                continue
+            seats += max(1, int(it.get("qty") or 1))
+            product_name = product_name or it.get("name")
+        if row.get("id") in held:
+            already += 1
+        if row.get("email"):
+            people.add(row["email"])
+
+    tt = db.query(models.TicketType).filter(
+        models.TicketType.id == ticket_type_id).first() if ticket_type_id else None
+    return {
+        "product_id": product_id,
+        "product_name": product_name,
+        "ticket_type_id": ticket_type_id,
+        "ticket_type_name": tt.name if tt else None,
+        "is_upgrade": bool(is_upgrade),
+        "successful_payments": len(eligible),
+        "total_seats": seats,
+        "unique_buyers": len(people),
+        "already_in_gaia": already,
+        "expected_to_create_or_update": len(eligible) - already,
+        "excluded": {"not_paid_or_pending": excluded["not_paid"],
+                     "refunded_or_reversed": excluded["refunded"]},
+        # An upgrade adds revenue and a tier, never a head or a seat. Saying so
+        # on the confirmation screen is the whole point of showing it first.
+        "counts_as_seats": (not is_upgrade),
+        "note": ("This product is mapped as an UPGRADE: replaying it changes tiers "
+                 "and revenue, and adds no attendees or paid seats."
+                 if is_upgrade else
+                 "This product is mapped as a BASE ticket: replaying it may add "
+                 "attendees and paid seats."),
+    }
+
+
+# --- Ticket metrics ---------------------------------------------------------
+# One number called "purchases" is what let an upgrade look like another ticket.
+# These figures are deliberately separate, and the identity that ties them
+# together is printed with them:
+#
+#   original ticket purchases + repeat base payments + upgrade payments
+#     = total economic events
+#
+# An upgrade adds revenue and a tier. It does not add a head or a seat.
+
+REPEAT_DUPLICATE_WINDOW_MIN = 15
+
+
+def _tm_classify(entitlements, upgrade_tt_ids, upgrade_pids):
+    """Split one attendee's paid ledger into the categories that mean different
+    things. Classification is driven by the mapping (is this product an upgrade?)
+    and by the purchase timing GHL recorded -- never by ordering alone, because
+    "the second payment is an upgrade" is simply not true."""
+    paid = [e for e in (entitlements or []) if e.get("status") != "refunded"]
+    out = {"base": [], "upgrade": [], "repeat": []}
+    seen_base_products = {}
+    for e in sorted(paid, key=lambda x: (x.get("purchased_at") or x.get("ts") or "")):
+        pid = e.get("product_id")
+        is_up = bool(e.get("is_upgrade")) or (pid and pid in upgrade_pids) \
+            or (e.get("ticket_type_id") in upgrade_tt_ids and pid is None and False)
+        if is_up:
+            out["upgrade"].append(e)
+            continue
+        key = pid or e.get("ticket_type_id")
+        if key in seen_base_products:
+            first = seen_base_products[key]
+            gap = None
+            try:
+                a = (first.get("purchased_at") or first.get("ts") or "")[:19]
+                b = (e.get("purchased_at") or e.get("ts") or "")[:19]
+                if a and b:
+                    gap = abs((datetime.fromisoformat(b) - datetime.fromisoformat(a)).total_seconds()) / 60.0
+            except Exception:                       # noqa: BLE001
+                gap = None
+            same_amount = (e.get("amount") is not None and first.get("amount") is not None
+                           and abs(float(e["amount"]) - float(first["amount"])) < 0.01)
+            if gap is not None and gap <= REPEAT_DUPLICATE_WINDOW_MIN and same_amount:
+                kind = "duplicate_suspected"
+            elif gap is not None and gap > 1440:
+                kind = "additional_paid_seat"
+            else:
+                kind = "needs_review"
+            out["repeat"].append({**e, "repeat_kind": kind, "gap_minutes": gap})
+        else:
+            seen_base_products[key] = e
+            out["base"].append(e)
+    return out
+
+
+@app.get("/events/{event_id}/ticket-metrics")
+def ticket_metrics(event_id: int, db: Session = Depends(get_db),
+                   current_user: models.User = Depends(get_current_user)):
+    """Unambiguous figures. Never one blended "purchases" count."""
+    event = _get_event_or_404(event_id, db)
+    authz.require_cap(db, current_user, event_id, "attendee.read")
+
+    maps = db.query(models.TicketMapping).filter(
+        models.TicketMapping.event_id == event_id,
+        models.TicketMapping.is_active == True).all()   # noqa: E712
+    upgrade_pids = {m.external_product_id for m in maps if m.is_upgrade}
+    upgrade_tt_ids = {m.ticket_type_id for m in maps if m.is_upgrade}
+
+    attendees = db.query(models.Attendee).filter(models.Attendee.event_id == event_id).all()
+
+    people = 0
+    comp = 0
+    base_n = upgrade_n = 0
+    repeats = {"duplicate_suspected": 0, "additional_paid_seat": 0, "needs_review": 0}
+    repeat_rows = []
+    gross = 0.0
+    refunded_amount = 0.0
+    refunded_n = 0
+    unassigned_seats = 0
+    blocked = 0
+
+    for a in attendees:
+        cd = a.custom_data or {}
+        ents = cd.get("entitlements") or []
+        status = _ticket_status(a)
+        if status in TICKET_BLOCKED_STATUSES:
+            blocked += 1
+        else:
+            people += 1
+        if not ents:
+            # No paid ledger at all: comp, staff, speaker, exhibitor or a door
+            # registration. Real attendees, but they are not ticket sales.
+            comp += 1
+        c = _tm_classify(ents, upgrade_tt_ids, upgrade_pids)
+        base_n += len(c["base"])
+        upgrade_n += len(c["upgrade"])
+        for r in c["repeat"]:
+            repeats[r["repeat_kind"]] = repeats.get(r["repeat_kind"], 0) + 1
+            repeat_rows.append({
+                "email": a.email, "name": ("%s %s" % (a.first_name or "", a.last_name or "")).strip(),
+                "kind": r["repeat_kind"], "gap_minutes": round(r["gap_minutes"], 1) if r.get("gap_minutes") is not None else None,
+                "amount": r.get("amount"), "reference": r.get("order_id") or r.get("invoice_id"),
+                "purchased_at": r.get("purchased_at")})
+            if r["repeat_kind"] == "additional_paid_seat":
+                unassigned_seats += max(1, int(r.get("quantity") or 1))
+        for e in ents:
+            q = max(1, int(e.get("quantity") or 1))
+            if q > 1:
+                # Paid for more people than themselves. GHL holds no name for the
+                # others, so the seats are counted and left unassigned rather
+                # than filled with invented attendees.
+                unassigned_seats += q - 1
+            if e.get("status") == "refunded":
+                refunded_n += 1
+                refunded_amount += float(e.get("amount") or 0)
+            elif e.get("amount") is not None:
+                gross += float(e["amount"])
+
+    return {
+        "event_id": event_id,
+        "people": {
+            "unique_attendees": people,
+            "revoked_or_refunded_attendees": blocked,
+            "complimentary_or_unpaid": comp,
+        },
+        "seats": {
+            "assigned_paid_seats": people - comp,
+            "unassigned_paid_seats": unassigned_seats,
+        },
+        "payments": {
+            "original_ticket_purchases": base_n,
+            "upgrade_payments": upgrade_n,
+            "repeat_base_payments": sum(repeats.values()),
+            "repeat_breakdown": repeats,
+            "total_economic_events": base_n + upgrade_n + sum(repeats.values()),
+        },
+        "money": {
+            "gross_event_revenue": round(gross, 2),
+            "refunds": round(refunded_amount, 2),
+            "refunded_payments": refunded_n,
+            "net_event_revenue": round(gross - refunded_amount, 2),
+        },
+        "needs_review": [r for r in repeat_rows if r["kind"] != "additional_paid_seat"],
+        "additional_paid_seats": [r for r in repeat_rows if r["kind"] == "additional_paid_seat"],
+        "definitions": {
+            "upgrade_payment": "Adds revenue and a tier. Never an attendee or a seat.",
+            "original_ticket_purchase": "The first base ticket a person paid for.",
+            "repeat_base_payment": "The same person paid for the same base product again. "
+                                   "Minutes apart with the same amount is treated as a suspected "
+                                   "duplicate charge; days apart as an additional paid seat; "
+                                   "anything between is left for a human.",
+            "unassigned_paid_seat": "A seat that was paid for but whose occupant GHL does not name.",
+        },
+    }
+
+
+@app.post("/events/{event_id}/map-reconcile/preview")
+def map_reconcile_preview(event_id: int, payload: schemas.MapReconcileRequest,
+                          db: Session = Depends(get_db),
+                          current_user: models.User = Depends(get_current_user)):
+    """What WOULD happen. Reads GHL, writes nothing, creates no mapping."""
+    event = _get_event_or_404(event_id, db)
+    authz.require_cap(db, current_user, event_id, "attendee.write")
+    if not (payload.product_id or "").strip():
+        raise HTTPException(status_code=400, detail="A GHL product id is required")
+    return {"ok": True, "preview": _mr_preview(db, event, payload.product_id.strip(),
+                                               payload.ticket_type_id, payload.is_upgrade)}
+
+
+@app.post("/events/{event_id}/map-reconcile/apply")
+def map_reconcile_apply(event_id: int, payload: schemas.MapReconcileRequest,
+                        db: Session = Depends(get_db),
+                        current_user: models.User = Depends(get_current_user)):
+    """Create the mapping, then replay this product's eligible history through
+    the ordinary reconcile path. Idempotent: a second run finds everything
+    already present and creates nothing."""
+    event = _get_event_or_404(event_id, db)
+    authz.require_cap(db, current_user, event_id, "attendee.write")
+    _assert_event_writable(db, event, "reconcile sales into it")
+    if not payload.confirm:
+        raise HTTPException(status_code=400,
+                            detail="Confirmation is required. Review the preview first.")
+    product_id = (payload.product_id or "").strip()
+    if not product_id:
+        raise HTTPException(status_code=400, detail="A GHL product id is required")
+    if not payload.ticket_type_id:
+        raise HTTPException(status_code=400, detail="Choose the Gaia ticket type this product grants")
+    tt = db.query(models.TicketType).filter(
+        models.TicketType.id == payload.ticket_type_id,
+        models.TicketType.event_id == event.id).first()
+    if not tt:
+        raise HTTPException(status_code=404, detail="That ticket type is not part of this event")
+
+    preview = _mr_preview(db, event, product_id, payload.ticket_type_id, payload.is_upgrade)
+
+    # The mapping itself, keyed on the immutable product id. Re-mapping the same
+    # product updates it rather than creating a rival row.
+    mapping = db.query(models.TicketMapping).filter(
+        models.TicketMapping.external_product_id == product_id,
+        models.TicketMapping.event_id == event.id).first()
+    if mapping is None:
+        mapping = models.TicketMapping(event_id=event.id, provider="ghl",
+                                       external_product_id=product_id)
+        db.add(mapping)
+    mapping.ticket_type_id = payload.ticket_type_id
+    mapping.is_upgrade = bool(payload.is_upgrade)
+    mapping.entitlement_type = payload.entitlement_type or "EVENT_TICKET"
+    mapping.addon_code = payload.addon_code
+    mapping.label = payload.label or preview.get("product_name") or tt.name
+    mapping.is_active = True
+    db.flush()
+
+    sales = _ghl_sales_for_product(product_id)
+    eligible, _excluded = _mr_eligible(sales)
+    created = updated = skipped = failed = 0
+    details = []
+    for row in eligible:
+        qty = 1
+        for it in row.get("items") or []:
+            if str(it.get("product_id")) == str(product_id):
+                qty = max(qty, int(it.get("qty") or 1))
+        nm = str(row.get("name") or "").split(" ")
+        first, last = (nm[0] if nm else ""), " ".join(nm[1:])
+        try:
+            if row["kind"] == "invoice":
+                # Invoices resolve their ticket type from the mapping we just
+                # wrote, which is why this runs after the flush.
+                res = reconcile_invoice(schemas.ReconcileInvoice(
+                    event_id=event.id, email=row["email"], invoice_id=row["id"],
+                    contact_id=row.get("contact_id"), product_id=product_id,
+                    amount=row.get("amount_paid"), quantity=qty, status="paid",
+                    first_name=first, last_name=last,
+                    issued_at=str(row.get("created_at") or "")[:10] or None,
+                ), db=db, _=True)
+            else:
+                res = reconcile_attendee(schemas.ReconcileAttendee(
+                    event_id=event.id, email=row["email"],
+                    ticket_type_id=payload.ticket_type_id,
+                    is_upgrade=bool(payload.is_upgrade), addon_code=payload.addon_code,
+                    contact_id=row.get("contact_id"), order_id=row["id"],
+                    product_id=product_id, quantity=qty, amount=row.get("amount"),
+                    purchased_at=str(row.get("created_at") or "")[:10] or None,
+                    first_name=first, last_name=last,
+                ), db=db, _=True)
+            if isinstance(res, dict) and res.get("blocked"):
+                skipped += 1
+            elif isinstance(res, dict) and res.get("created"):
+                created += 1
+            else:
+                updated += 1
+        except HTTPException as e:
+            failed += 1
+            details.append({"reference": row["id"], "error": str(e.detail)})
+        except Exception as e:                       # noqa: BLE001
+            failed += 1
+            details.append({"reference": row["id"], "error": str(e)})
+
+    run = models.MapReconcileRun(
+        event_id=event.id, product_id=product_id,
+        product_name=preview.get("product_name"),
+        ticket_type_id=payload.ticket_type_id, is_upgrade=bool(payload.is_upgrade),
+        entitlement_type=payload.entitlement_type or "EVENT_TICKET",
+        preview=preview, result={"failures": details[:50]},
+        created=created, updated=updated, skipped=skipped, failed=failed,
+        actor_id=current_user.id)
+    db.add(run)
+
+    # Anything filed for review under this product is now answered.
+    for r in db.query(models.UnmappedSale).filter(
+            models.UnmappedSale.product_id == product_id,
+            models.UnmappedSale.status == "pending").all():
+        r.status = "mapped"
+        r.resolved_by = current_user.id
+        r.resolved_at = datetime.utcnow()
+        r.note = "Mapped to %s and reconciled" % tt.name
+    db.commit()
+
+    return {"ok": True, "run_id": run.id, "preview": preview,
+            "created": created, "updated": updated,
+            "skipped_refunded_or_blocked": skipped, "failed": failed,
+            "failures": details[:50]}
+
+
+@app.get("/events/{event_id}/map-reconcile/runs")
+def map_reconcile_runs(event_id: int, db: Session = Depends(get_db),
+                       current_user: models.User = Depends(get_current_user)):
+    """The audit trail: who mapped what, what they were shown, what it did."""
+    _get_event_or_404(event_id, db)
+    authz.require_cap(db, current_user, event_id, "attendee.read")
+    rows = db.query(models.MapReconcileRun).filter(
+        models.MapReconcileRun.event_id == event_id).order_by(
+        models.MapReconcileRun.created_at.desc()).limit(50).all()
+    return {"items": [{
+        "id": r.id, "product_id": r.product_id, "product_name": r.product_name,
+        "ticket_type_id": r.ticket_type_id, "is_upgrade": bool(r.is_upgrade),
+        "created": r.created, "updated": r.updated,
+        "skipped": r.skipped, "failed": r.failed,
+        "preview": r.preview,
+        "at": r.created_at.isoformat() if r.created_at else None,
+    } for r in rows]}
 
 
 @app.post("/identity/reconcile-invoice")
@@ -4915,7 +5444,9 @@ def reconcile_invoice(payload: schemas.ReconcileInvoice, db: Session = Depends(g
     already = any((e.get("invoice_id") == payload.invoice_id) for e in (custom.get("entitlements") or []))
     _ent_record(custom, None, payload.transaction_id, tt_id, bool(mapping.is_upgrade),
                 event_id=event.id, invoice_id=payload.invoice_id,
-                amount=payload.amount, source="ghl_invoice")
+                amount=payload.amount, source="ghl_invoice",
+                product_id=payload.product_id, quantity=payload.quantity,
+                purchased_at=payload.issued_at)
     if not already:
         _ll = list(custom.get("lifecycle") or [])
         _ll.append({"ts": datetime.utcnow().isoformat(), "action": "reconciled_with_ghl_invoice",
@@ -5022,7 +5553,10 @@ def reconcile_attendee(payload: schemas.ReconcileAttendee, db: Session = Depends
             custom["lifecycle"] = _ll
         old_tt = existing.ticket_type_id
         # Ledger this paid order for refund-aware recalculation.
-        _ent_record(custom, payload.order_id, None, payload.ticket_type_id, payload.is_upgrade, event_id=event.id)
+        _ent_record(custom, payload.order_id, None, payload.ticket_type_id, payload.is_upgrade,
+                    event_id=event.id, product_id=payload.product_id,
+                    quantity=payload.quantity, amount=payload.amount,
+                    purchased_at=getattr(payload, "purchased_at", None))
         _order_refunded = bool(payload.order_id and payload.order_id in set(custom.get("refunded_order_ids") or []))
         # Purchase-side tier behavior is unchanged (base sets if unset; upgrades
         # never downgrade) EXCEPT: an admin override wins, and a refunded order
@@ -5057,7 +5591,10 @@ def reconcile_attendee(payload: schemas.ReconcileAttendee, db: Session = Depends
         return {"ok": True, "created": False, "upgraded": upgraded,
                 "attendee_id": existing.id, "qr_code": existing.qr_code}
     _cd_new = {"contact_id": payload.contact_id, "order_id": payload.order_id, "source": "ghl_reconcile"}
-    _ent_record(_cd_new, payload.order_id, None, payload.ticket_type_id, payload.is_upgrade, event_id=event.id)
+    _ent_record(_cd_new, payload.order_id, None, payload.ticket_type_id, payload.is_upgrade,
+                event_id=event.id, product_id=payload.product_id,
+                quantity=payload.quantity, amount=payload.amount,
+                purchased_at=getattr(payload, "purchased_at", None))
     attendee = models.Attendee(
         event_id=event.id, email=email,
         first_name=payload.first_name or "", last_name=payload.last_name or "",
@@ -5082,16 +5619,14 @@ def refund_ticket(payload: schemas.RefundTicket, db: Session = Depends(get_db),
     refund is recorded but does NOT revoke (business rule). The QR value is kept
     so history/audit survive; the scanner refuses it via status."""
     email = (payload.email or "").strip().lower()
-    q = db.query(models.Attendee)
-    if payload.event_id:
-        q = q.filter(models.Attendee.event_id == payload.event_id)
-    if email:
-        q = q.filter(func.lower(models.Attendee.email) == email)
-    attendee = q.first()
     _ref_lookup = payload.order_id or payload.invoice_id
-    if not attendee and _ref_lookup:
-        # Fall back to the purchase reference recorded on the attendee. Invoice
-        # buyers have no order_id at all, so search the ledger as well.
+    attendee = None
+
+    # The payment reference is tried FIRST and on its own, because it is the only
+    # identifier that means "this exact money". The reconciler legitimately calls
+    # this with nothing else: most refunds in the account are sponsorships and
+    # equipment rather than tickets, and those must resolve to nobody.
+    if _ref_lookup:
         for a in db.query(models.Attendee).all():
             _cd = a.custom_data or {}
             if _cd.get("order_id") == _ref_lookup or _cd.get("invoice_id") == _ref_lookup:
@@ -5099,7 +5634,18 @@ def refund_ticket(payload: schemas.RefundTicket, db: Session = Depends(get_db),
             if any((e.get("order_id") or e.get("invoice_id")) == _ref_lookup
                    for e in (_cd.get("entitlements") or [])):
                 attendee = a; break
-    if not attendee:
+
+    # Falling back to the PERSON requires actually being given a person. This
+    # query used to run with no filter at all when neither email nor event was
+    # supplied, so it returned whichever attendee happened to be first in the
+    # table -- and a refunded $3,500 sponsorship revoked a stranger's ticket.
+    if attendee is None and email:
+        q = db.query(models.Attendee).filter(func.lower(models.Attendee.email) == email)
+        if payload.event_id:
+            q = q.filter(models.Attendee.event_id == payload.event_id)
+        attendee = q.first()
+
+    if attendee is None:
         return {"ok": True, "matched": False, "reason": "no_attendee"}
 
     cd = dict(attendee.custom_data or {})

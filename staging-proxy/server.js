@@ -6014,6 +6014,101 @@ async function listHostedVoices() {
   }
 }
 
+
+// Every GHL order and invoice containing one of these exact product ids.
+// GETs only. Returns line-item quantity, which is what separates a second seat
+// from an upgrade, and the payment status, which is what excludes the rest.
+// Order and invoice LINE ITEMS need a detail call each, and there are >1200 of
+// them -- far too slow to do inside a click. They are also immutable once paid,
+// so they are cached on disk and only new ids are fetched. The hourly mirror
+// keeps the cache warm.
+const GHL_ITEM_CACHE = '/root/gaia-staging-proxy/data/ghl-line-items.json';
+function loadItemCache() {
+  try { return JSON.parse(fs.readFileSync(GHL_ITEM_CACHE, 'utf8')); }
+  catch (e) { return { orders: {}, invoices: {} }; }
+}
+function saveItemCache(c) {
+  try {
+    fs.mkdirSync('/root/gaia-staging-proxy/data', { recursive: true });
+    fs.writeFileSync(GHL_ITEM_CACHE, JSON.stringify(c));
+  } catch (e) { /* cache is an optimisation, never a correctness requirement */ }
+}
+
+async function ghlSalesForProducts(wanted) {
+  const LOC = process.env.GHL_LOCATION_ID;
+  const G = (process.env.GHL_API_BASE_URL || 'https://services.leadconnectorhq.com').replace(/\/+$/, '');
+  const H = { Authorization: `Bearer ${process.env.GHL_API_TOKEN}`,
+              Version: process.env.GHL_API_VERSION || '2021-07-28', Accept: 'application/json' };
+  const get = async (path) => {
+    for (let i = 0; i < 5; i++) {
+      const r = await fetch(G + path, { headers: H });
+      if (r.status === 429 || r.status >= 500) { await new Promise((s) => setTimeout(s, 700 + i * 500)); continue; }
+      try { return await r.json(); } catch (e) { return {}; }
+    }
+    return {};
+  };
+  const page = async (u, k) => { const o = []; let off = 0;
+    for (;;) { const j = await get(`${u}&limit=100&offset=${off}`); const rows = j[k] || j.data || [];
+      o.push(...rows); if (rows.length < 100 || off > 4000) break; off += 100; } return o; };
+
+  const cache = loadItemCache();
+  let fetched = 0;
+
+  const orders = [];
+  for (const o of await page(`/payments/orders?altId=${LOC}&altType=location`, 'data')) {
+    let all = cache.orders[o._id];
+    if (!all) {
+      const f = await get(`/payments/orders/${o._id}?altId=${LOC}&altType=location`);
+      const body = (f && (f.order || f)) || {};
+      all = (body.items || []).map((it) => ({
+        product_id: String((it.product && it.product._id) || it.productId || ''),
+        price_id: (it.price && it.price._id) || it.priceId || null,
+        name: (it.product && it.product.name) || it.name || null,
+        qty: Number(it.qty != null ? it.qty : (it.quantity != null ? it.quantity : 1)) }));
+      cache.orders[o._id] = all;
+      if (++fetched % 100 === 0) saveItemCache(cache);
+    }
+    const items = all.filter((it) => wanted.has(String(it.product_id || '')));
+    if (!items.length) continue;
+    orders.push({ id: o._id, status: String(o.status || '').toLowerCase(), amount: o.amount,
+      created_at: o.createdAt, contact_id: o.contactId,
+      email: String(o.contactEmail || '').toLowerCase(), name: o.contactName,
+      items });
+  }
+
+  const invoices = [];
+  for (const iv of await page(`/invoices/?altId=${LOC}&altType=location`, 'invoices')) {
+    let all = cache.invoices[iv._id];
+    if (!all) {
+      const f = await get(`/invoices/${iv._id}?altId=${LOC}&altType=location`);
+      const body = (f && (f.invoice || f)) || {};
+      all = (body.invoiceItems || iv.invoiceItems || []).map((it) => ({
+        product_id: String(it.productId || ''), price_id: it.priceId || null,
+        name: it.name || null,
+        qty: Number(it.qty != null ? it.qty : (it.quantity != null ? it.quantity : 1)) }));
+      cache.invoices[iv._id] = all;
+      if (++fetched % 100 === 0) saveItemCache(cache);
+    }
+    const items = all.filter((it) => wanted.has(String(it.product_id || '')));
+    if (!items.length) continue;
+    const cd = iv.contactDetails || {};
+    invoices.push({ id: iv._id, status: String(iv.status || '').toLowerCase(),
+      amount_paid: iv.amountPaid, total: iv.total,
+      created_at: iv.issueDate || iv.createdAt, contact_id: cd.id,
+      email: String(cd.email || '').toLowerCase(), name: cd.name,
+      items });
+  }
+
+  // A refunded payment must not be replayed into a seat.
+  const reversed = {};
+  for (const t of await page(`/payments/transactions?altId=${LOC}&altType=location`, 'data')) {
+    const st = String(t.status || '').toLowerCase();
+    if (st === 'refunded' || st === 'partially_refunded') reversed[String(t.entityId || '')] = st;
+  }
+  saveItemCache(cache);
+  return { orders, invoices, reversed, cache_misses: fetched };
+}
+
 const server = http.createServer(async (req, res) => {
   const origin = req.headers.origin || '';
   if (req.method === 'OPTIONS') {
@@ -6192,6 +6287,26 @@ const server = http.createServer(async (req, res) => {
     }
     // Ownership of a printed badge token, from the session only. The card page
     // on card.gaiahealers.app asks this to decide whether to show "Edit my card".
+    // Read-only: every GHL sale of ONE exact product id, for Map & Reconcile.
+    // The Event Manager holds no GHL credentials by design, so it asks here.
+    // Matching is on the immutable product id only -- never on a product name,
+    // which is exactly how a renamed product would silently split in two.
+    if (req.method === 'GET' && url.pathname === '/api/event/ghl-sales') {
+      const svc = (process.env.IDENTITY_SERVICE_TOKEN || '').trim();
+      const auth = String(req.headers.authorization || '').replace(/^Bearer\s+/i, '').trim();
+      if (!svc || auth !== svc) { sendJson(res, 401, { ok: false, error: 'unauthorized' }, origin); return; }
+      const wantedRaw = String(url.searchParams.get('product_id') || '').trim();
+      if (!wantedRaw) { sendJson(res, 400, { ok: false, error: 'product_id required' }, origin); return; }
+      const wanted = new Set(wantedRaw.split(',').map((x) => x.trim()).filter(Boolean));
+      try {
+        const sales = await ghlSalesForProducts(wanted);
+        sendJson(res, 200, { ok: true, product_ids: [...wanted], ...sales }, origin,
+                 { 'Cache-Control': 'private, no-store' });
+      } catch (e) {
+        sendJson(res, 502, { ok: false, error: String((e && e.message) || e) }, origin);
+      }
+      return;
+    }
     if ((req.method === 'GET' || req.method === 'POST') && (url.pathname === '/api/card/owner' || url.pathname === '/api/card/claim')) {
       const session = cookieForRequest(req);
       const body = req.method === 'POST' ? await readJsonBody(req).catch(() => ({})) : {};

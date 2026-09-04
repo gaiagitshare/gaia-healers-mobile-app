@@ -127,6 +127,50 @@ required*; nothing is created from a product's name, however event-like it
 sounds. This exists because four people bought a day pass created that morning
 and it went unnoticed until an audit.
 
+## Source of truth, in one place
+
+**GHL is authoritative.** Gaia mirrors it and never writes payment, ticket,
+entitlement or attribution changes back. Every reconciliation path issues GET
+requests to GHL only; the sole write target is the Event Manager.
+
+| | |
+|---|---|
+| **Webhook** | the fast path — a sale is reconciled seconds after GHL takes the money |
+| **Hourly mirror** | the recovery path — re-reads GHL and converges Gaia on it, so an undelivered webhook leaves no silent gap |
+| **Map & Reconcile** | a human maps a product, reviews the impact, and replays that product's history through the same reconcile functions |
+
+A product becomes event access only when a person maps it. Nothing is created
+from a product's name, however event-like it sounds.
+
+## Installing the hourly mirror
+
+The unit files are tracked in `event-manager/systemd/`, so the timer is part of
+the repository rather than something configured by hand on one server:
+
+```bash
+cp event-manager/systemd/gaia-event-mirror.service event-manager/systemd/gaia-event-mirror.timer /etc/systemd/system/
+systemctl daemon-reload && systemctl enable --now gaia-event-mirror.timer
+systemctl list-timers gaia-event-mirror.timer --no-pager
+```
+
+The script it runs is `staging-proxy/event-mirror.mjs`, deployed with the rest
+of the proxy. To check it, or to see what it would do without writing anything:
+
+```bash
+journalctl -u gaia-event-mirror.service -n 20 --no-pager -o cat
+```
+
+```bash
+node /root/gaia-staging-proxy/event-mirror.mjs --since-days=30 --dry-run
+```
+
+## Known unrelated debt
+
+15 membership tests in `staging-proxy/test/` fail against a membership-event
+pipeline `memberAccessWebhook` does not implement. Pre-existing, unrelated to
+the event work, and deliberately not "fixed" — see issue #75. Do not implement
+membership semantics merely to turn them green.
+
 ## Two ways a payment reaches Gaia
 
 **The webhook is the fast path.** `POST /api/webhooks/ghl-payment` on the proxy

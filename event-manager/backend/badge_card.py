@@ -175,7 +175,13 @@ def ensure_public_token(db, models, attendee, commit=True) -> str:
 CARD_FIELDS = ("display_name", "headline", "company", "title", "city", "website", "booking_url",
                "instagram", "linkedin", "facebook", "tiktok", "youtube", "whatsapp",
                "photo_url", "show_email", "show_phone", "tags", "services", "theme")
-MAX = {"display_name": 60, "headline": 90, "company": 80, "title": 80, "city": 60, "website": 200,
+# The identity fields. NOT in CARD_FIELDS on purpose: an ordinary card update
+# must not be able to write them, because changing them needs a verified
+# identity. clean_card still has to carry them through, or a headline edit
+# would quietly wipe the card's own name, email and phone.
+IDENTITY_FIELDS = ("full_name", "email", "phone")
+MAX = {"full_name": 120, "email": 160, "phone": 32,
+       "display_name": 60, "headline": 90, "company": 80, "title": 80, "city": 60, "website": 200,
        "booking_url": 300, "instagram": 60, "linkedin": 120, "facebook": 120, "tiktok": 60,
        "youtube": 160, "whatsapp": 24, "photo_url": 400}
 # Accent presets the owner may pick. Names, not hex, cross the API.
@@ -214,6 +220,11 @@ def clean_card(data: dict) -> dict:
     out = {}
     for k in ("display_name", "headline", "company", "title", "city"):
         out[k] = str(src.get(k) or "").strip()[:MAX[k]]
+    # Preserved, never re-derived: these arrive only through the verified paths.
+    for k in IDENTITY_FIELDS:
+        v = str(src.get(k) or "").strip()[:MAX[k]]
+        if v:
+            out[k] = v.lower() if k == "email" else v
     out["website"] = _url(src.get("website"), MAX["website"])
     out["booking_url"] = _url(src.get("booking_url"), MAX["booking_url"])
     out["instagram"] = _handle(src.get("instagram"), ["instagram.com"])

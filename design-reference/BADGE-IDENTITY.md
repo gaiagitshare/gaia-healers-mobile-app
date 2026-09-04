@@ -207,6 +207,19 @@ Activation publishes **once**, guarded by `activated_at` rather than
 and walking past a scanner again must not quietly undo it. The page then says
 *"Card is private"* — a different state from dormant, and it says which.
 
+**It publishes only a card nobody has claimed.** An owner who has opened the
+editor has already decided whether their card is public, and a scanner at the
+door must not overrule them. That decision is recorded in `visibility_set_at`,
+which exists because `card_claimed_at` could not answer the question: it records
+the first time a card went *public*, so someone who deliberately chose private
+looked identical to someone who had never opened the editor. A real attendee was
+published that way before this was fixed.
+
+**Undoing a check-in puts the card back to sleep** — scanning the wrong badge is
+exactly what Undo is for, and a card left switched on would publish a stranger
+because staff mis-scanned. It reverses only what the check-in did: a card its
+owner has filled in, or whose visibility they have set, keeps everything.
+
 `test_card_activation.py` pins all of it.
 
 ### Getting the QR to people before the day

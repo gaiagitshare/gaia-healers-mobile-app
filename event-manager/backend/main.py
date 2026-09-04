@@ -75,6 +75,8 @@ def _ensure_event_columns():
         _mc = set()
     if _mc and "activated_at" not in _mc:
         stmts.append("ALTER TABLE member_cards ADD COLUMN activated_at DATETIME")
+    if _mc and "visibility_set_at" not in _mc:
+        stmts.append("ALTER TABLE member_cards ADD COLUMN visibility_set_at DATETIME")
     if "door_test_mode" not in cols:
         stmts.append("ALTER TABLE events ADD COLUMN door_test_mode BOOLEAN DEFAULT 0")
     if "source_url" not in cols:
@@ -7048,9 +7050,42 @@ def _activate_member_card(db, attendee):
     if card is None or card.activated_at is not None:
         return card
     card.activated_at = datetime.utcnow()
-    card.card_public = True
-    if not card.card_claimed_at:
+    # Publishing is for cards nobody has claimed yet -- the great majority, who
+    # will never open the editor and whose card would otherwise stay dark all
+    # weekend. Someone who HAS claimed theirs has already decided whether it is
+    # public, and a scanner at the door must not overrule them. Getting this
+    # wrong published a real attendee who had deliberately kept hers private.
+    if card.visibility_set_at is None and not card.card_claimed_at:
+        card.card_public = True
         card.card_claimed_at = card.activated_at
+    return card
+
+
+def _deactivate_member_card(db, attendee):
+    """Put a card back to sleep when the check-in that woke it is undone.
+
+    Deliberately narrow. A card whose owner signed in and set it up themselves
+    is theirs, and an undone door scan has no business unpublishing it -- so a
+    card is only put back if the person has never edited it.
+    """
+    token = getattr(attendee, "public_token", None)
+    if not token:
+        return None
+    card = db.query(models.MemberCard).filter(
+        models.MemberCard.public_token == token).first()
+    if card is None or card.activated_at is None:
+        return card
+    # Reverse only what the check-in itself did. Activation publishes a card
+    # only when nobody had claimed it, and it stamps the claim at the same
+    # moment -- so an undo unpublishes exactly those, and leaves a card its
+    # owner set up (claimed before activation, or edited since) untouched.
+    owner_made_it_theirs = (card.card or {}) or (card.bio or "").strip() \
+        or card.visibility_set_at is not None \
+        or (card.card_claimed_at is not None and card.card_claimed_at != card.activated_at)
+    card.activated_at = None
+    if not owner_made_it_theirs:
+        card.card_public = False
+        card.card_claimed_at = None
     return card
 
 
@@ -7505,6 +7540,9 @@ def identity_card_update(payload: schemas.CardUpdate, db: Session = Depends(get_
                         "missing": missing,
                         "detail": "A card needs a full name, an email address and a phone number before it can be published."}
         prof.card_public = wants_public
+        # The owner has expressed a preference, in either direction. Recorded so
+        # a door scan can tell "chose private" apart from "never opened this".
+        prof.visibility_set_at = datetime.utcnow()
         if prof.card_public and not prof.card_claimed_at:
             prof.card_claimed_at = datetime.utcnow()
     prof.updated_at = datetime.utcnow()
@@ -7709,6 +7747,12 @@ def undo_checkin(event_id: int, attendee_id: int, body: schemas.UndoCheckIn,
     was = a.checked_in_at.isoformat() if a.checked_in_at else "?"
     a.is_checked_in = False
     a.checked_in_at = None
+    # Undo the activation the check-in performed. Scanning the wrong badge is
+    # exactly the case this endpoint exists for, and a card that stayed switched
+    # on afterwards would leave a stranger published because staff mis-scanned.
+    # Only reverse an activation this check-in caused: a card its owner set up
+    # themselves keeps its claim, and is left alone.
+    _deactivate_member_card(db, a)
     db.add(models.ScanLog(event_id=event_id, attendee_id=a.id, qr_code=a.qr_code, access_type="EVENT_ENTRY",
                           result="UNDO", reason=("Check-in undone (was %s): %s" % (was, reason))[:300],
                           staff_user_id=current_user.id))

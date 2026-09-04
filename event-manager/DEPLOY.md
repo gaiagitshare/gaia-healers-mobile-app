@@ -96,3 +96,33 @@ One Event Manager. `/admin/ → Events` embeds `/event/` in an iframe. Never bui
 event features in the Admin shell — see
 [`design-reference/EVENT-ADMIN-ARCHITECTURE.md`](../design-reference/EVENT-ADMIN-ARCHITECTURE.md),
 enforced by `tests/event-admin-boundary.test.cjs`.
+
+## Payment channels the reconciler reads
+
+Tickets do not only arrive as GHL **orders**. A ticket sold on a GHL **invoice**
+is a different object with its own id, and until 2026-09-04 the reconciler read
+orders only — which is how five paying customers ended up with no attendee, no
+badge and no QR.
+
+| Channel | Endpoint | Ledger key |
+|---|---|---|
+| completed order | `POST /identity/reconcile-attendee` | `order_id` |
+| **paid invoice** | `POST /identity/reconcile-invoice` | `invoice_id` |
+| unmapped paid product | `POST /identity/report-unmapped-sale` | surfaced for review only |
+
+No order id is ever invented for an invoice sale. A transaction is the *payment
+representation* of an order or invoice, never a third purchase — count orders
+and invoices, never the transaction total.
+
+**A product becomes event access only when a human maps it.** An unmapped paid
+product is recorded and shown in Admin as *Unmapped event sales — review
+required*; nothing is created from a product's name, however event-like it
+sounds. This exists because four people bought a day pass created that morning
+and it went unnoticed until an audit.
+
+### Single-day passes
+
+`ticket_types.valid_day` (nullable, `YYYY-MM-DD`, venue-local) limits a base
+pass to one calendar day; the door refuses it on any other. NULL means valid for
+the whole event, which is every tier that existed before this — so adding it
+changed nothing for them.

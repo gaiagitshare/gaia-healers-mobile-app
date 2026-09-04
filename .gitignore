@@ -20,3 +20,23 @@ staging-proxy/data/
 NEW/
 audits/
 *.bak-*
+
+# ── Event Manager (event-manager/) ────────────────────────────────────────
+# Its SOURCE is tracked. Its runtime is not, and must never be:
+# the attendee database and its backups are personal data, and the .env
+# carries the JWT signing key, the identity service token and VAPID keys.
+event-manager/**/.env
+event-manager/**/*.db
+event-manager/**/*.db.*
+event-manager/**/*.sqlite*
+event-manager/_backups/
+event-manager/backend/uploads/
+event-manager/backend/vapid_private.pem
+event-manager/**/__pycache__/
+event-manager/**/*.pyc
+event-manager/**/*.pid
+event-manager/frontend/build/
+event-manager/frontend/node_modules/
+# Editor copies left beside production files; the history is in Git now.
+event-manager/**/*.bak
+event-manager/**/*.bak-*

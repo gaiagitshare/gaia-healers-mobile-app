@@ -1,0 +1,279 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<meta name="robots" content="noindex, nofollow" />
+<title>Live Display · Gaia Healers Events</title>
+<!--
+  Lobby / venue display. Point a screen at:
+      /event/display.html?event=1
+
+  Self-contained on purpose: no bundle, no login, no dependencies. A venue TV or
+  a spare laptop opens this URL and never needs attention again. It reads the
+  same public live endpoint as the app, so the foyer screen and an attendee's
+  phone can never disagree.
+
+  Options:  &rotate=12   seconds per sponsor  (default 10)
+            &poll=20     seconds between refreshes (default 20)
+-->
+<style>
+  :root {
+    --bg: #08130d; --panel: #0e1d14; --line: #1d3527;
+    --text: #ecf3e9; --muted: #8fae99; --accent: #7bd88f; --warn: #f0c674;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { height: 100%; }
+  body {
+    background: var(--bg); color: var(--text); overflow: hidden;
+    font-family: "Plus Jakarta Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+    display: flex; flex-direction: column; padding: 2.2vw; gap: 1.6vw;
+  }
+  header { display: flex; justify-content: space-between; align-items: baseline; gap: 2vw; }
+  .event { font-size: 2.2vw; font-weight: 700; letter-spacing: -0.01em; }
+  .clock { font-size: 2.6vw; font-weight: 800; color: var(--accent); font-variant-numeric: tabular-nums; }
+  .zone { font-size: 0.95vw; color: var(--muted); text-transform: uppercase; letter-spacing: .14em; }
+  .banner {
+    background: var(--warn); color: #23200c; font-weight: 700; font-size: 1.35vw;
+    padding: .9vw 1.4vw; border-radius: .8vw;
+  }
+  main { flex: 1; display: grid; grid-template-columns: 1.65fr 1fr; gap: 1.6vw; min-height: 0; }
+  .panel { background: var(--panel); border: 1px solid var(--line); border-radius: 1.2vw; padding: 1.6vw; min-height: 0; }
+  .kicker { font-size: .95vw; letter-spacing: .18em; text-transform: uppercase; color: var(--accent); font-weight: 800; }
+  .now-title { font-size: 3.4vw; font-weight: 700; line-height: 1.08; margin-top: .6vw; }
+  .now-meta { font-size: 1.5vw; color: var(--muted); margin-top: .7vw; }
+  .remaining { font-size: 1.5vw; color: var(--accent); font-weight: 700; margin-top: 1vw; }
+  .next-item { display: flex; gap: 1.2vw; padding: 1vw 0; border-top: 1px solid var(--line); }
+  .next-item:first-of-type { border-top: 0; }
+  .next-time { color: var(--accent); font-weight: 800; font-size: 1.15vw; white-space: nowrap; font-variant-numeric: tabular-nums; }
+  .next-title { font-size: 1.25vw; font-weight: 600; }
+  .next-meta { font-size: 1vw; color: var(--muted); margin-top: .2vw; }
+  .counters { display: grid; grid-template-columns: repeat(4, 1fr); gap: 1.2vw; }
+  .counter { background: var(--panel); border: 1px solid var(--line); border-radius: 1.2vw; padding: 1.2vw; text-align: center; }
+  .counter b { display: block; font-size: 3vw; font-weight: 800; color: var(--accent); font-variant-numeric: tabular-nums; }
+  .counter span { font-size: .95vw; color: var(--muted); text-transform: uppercase; letter-spacing: .12em; }
+  footer { display: flex; align-items: center; gap: 2vw; min-height: 7vw; }
+  .sponsor { flex: 1; display: flex; align-items: center; gap: 1.6vw; opacity: 0; transition: opacity .6s ease; }
+  .sponsor.show { opacity: 1; }
+  .sponsor img { max-height: 5.5vw; max-width: 22vw; object-fit: contain; }
+  .sponsor-name { font-size: 2.2vw; font-weight: 700; }
+  .sponsor-tier { font-size: .95vw; color: var(--accent); text-transform: uppercase; letter-spacing: .16em; font-weight: 800; }
+  .sponsor-blurb { font-size: 1.1vw; color: var(--muted); margin-top: .3vw; max-width: 46vw; }
+  .announce { margin-top: 1.2vw; padding-top: 1.2vw; border-top: 1px solid var(--line); }
+  .announce h3 { font-size: 1.25vw; font-weight: 700; }
+  .announce p { font-size: 1.05vw; color: var(--muted); margin-top: .3vw; }
+  .status { position: fixed; right: 1.2vw; bottom: 1vw; font-size: .85vw; color: var(--muted); }
+  .status.stale { color: var(--warn); }
+  .empty { color: var(--muted); font-size: 1.4vw; margin-top: 1vw; }
+</style>
+</head>
+<body>
+  <header>
+    <div>
+      <div class="event" id="event-name">Loading…</div>
+      <div class="zone" id="zone"></div>
+    </div>
+    <div class="clock" id="clock">--:--</div>
+  </header>
+
+  <div class="banner" id="banner" hidden></div>
+
+  <main>
+    <section class="panel" id="now-panel">
+      <div class="kicker">Happening now</div>
+      <div id="now-body"><div class="empty">Waiting for the next session…</div></div>
+      <div class="announce" id="announce" hidden></div>
+    </section>
+
+    <section style="display:flex; flex-direction:column; gap:1.6vw; min-height:0;">
+      <div class="panel" style="flex:1; overflow:hidden;">
+        <div class="kicker">Up next</div>
+        <div id="next-body"><div class="empty">Nothing scheduled after this.</div></div>
+      </div>
+      <div class="counters" id="counters"></div>
+    </section>
+  </main>
+
+  <footer class="panel" id="sponsor-footer" hidden>
+    <div class="sponsor" id="sponsor"></div>
+  </footer>
+
+  <div class="status" id="status"></div>
+
+<script>
+(function () {
+  'use strict';
+  var params = new URLSearchParams(location.search);
+  var eventId = params.get('event') || params.get('id') || '1';
+  var pollMs = Math.max(5, Number(params.get('poll') || 20)) * 1000;
+  var rotateMs = Math.max(4, Number(params.get('rotate') || 10)) * 1000;
+  var api = params.get('api') || '/event-api';
+
+  var state = { live: null, sponsorIndex: 0, lastOk: 0, clockBase: null, clockSetAt: 0 };
+  var $ = function (id) { return document.getElementById(id); };
+  var esc = function (v) {
+    return String(v == null ? '' : v).replace(/[&<>"]/g, function (c) {
+      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c];
+    });
+  };
+
+  function timeLabel(value) {
+    var time = String(value || '').split('T')[1];
+    if (!time) return '';
+    var parts = time.split(':');
+    var hour = Number(parts[0]);
+    if (!isFinite(hour)) return '';
+    var suffix = hour >= 12 ? 'PM' : 'AM';
+    return (hour % 12 === 0 ? 12 : hour % 12) + ':' + parts[1] + ' ' + suffix;
+  }
+
+  // The clock follows the venue's timezone as reported by the server, so a
+  // screen with a wrong system clock still shows the right local time.
+  function tickClock() {
+    if (!state.clockBase) return;
+    var drift = Date.now() - state.clockSetAt;
+    var now = new Date(state.clockBase.getTime() + drift);
+    var hours = now.getHours();
+    var suffix = hours >= 12 ? 'PM' : 'AM';
+    var display = hours % 12 === 0 ? 12 : hours % 12;
+    $('clock').textContent = display + ':' + String(now.getMinutes()).padStart(2, '0') + ' ' + suffix;
+  }
+
+  function renderNow(live) {
+    var body = $('now-body');
+    if (!live.now || !live.now.length) {
+      var msg = live.status === 'ended' ? 'That is a wrap. Thank you for joining us.'
+        : live.status === 'before' ? 'Doors are not open yet.'
+        : 'Between sessions — the exhibit hall is open.';
+      body.innerHTML = '<div class="empty">' + esc(msg) + '</div>';
+      return;
+    }
+    body.innerHTML = live.now.map(function (session) {
+      var who = (session.speakers || []).map(function (s) { return s.name; }).join(', ');
+      var meta = [session.room, session.track].filter(Boolean).join(' · ');
+      var left = session.minutes_remaining;
+      var remaining = left == null ? '' :
+        (left >= 60 ? Math.floor(left / 60) + 'h ' + (left % 60) + 'm' : left + ' min') + ' remaining';
+      return '<div class="now-title">' + esc(session.title) + '</div>'
+        + (who ? '<div class="now-meta">' + esc(who) + '</div>' : '')
+        + (meta ? '<div class="now-meta">' + esc(meta) + '</div>' : '')
+        + (remaining ? '<div class="remaining">' + esc(remaining) + '</div>' : '');
+    }).join('<hr style="border:0;border-top:1px solid var(--line);margin:1.2vw 0" />');
+  }
+
+  function renderNext(live) {
+    var body = $('next-body');
+    if (!live.next || !live.next.length) {
+      body.innerHTML = '<div class="empty">Nothing scheduled after this.</div>';
+      return;
+    }
+    body.innerHTML = live.next.map(function (session) {
+      var meta = [session.room, (session.speakers || []).map(function (s) { return s.name; }).join(', ')]
+        .filter(Boolean).join(' · ');
+      var until = session.minutes_until;
+      var when = until != null && until < 90
+        ? 'in ' + (until < 1 ? 'moments' : until + ' min')
+        : timeLabel(session.start_time);
+      return '<div class="next-item"><div class="next-time">' + esc(when) + '</div>'
+        + '<div><div class="next-title">' + esc(session.title) + '</div>'
+        + (meta ? '<div class="next-meta">' + esc(meta) + '</div>' : '') + '</div></div>';
+    }).join('');
+  }
+
+  function renderCounters(live) {
+    var c = live.counters || {};
+    var tiles = [
+      { value: c.checked_in, label: 'Checked in' },
+      { value: c.attendees, label: 'Registered' },
+      { value: c.exhibitors, label: 'Exhibitors' },
+      { value: c.sessions_today, label: 'Sessions today' }
+    ];
+    $('counters').innerHTML = tiles.map(function (t) {
+      return '<div class="counter"><b>' + esc(t.value == null ? 0 : t.value) + '</b><span>' + esc(t.label) + '</span></div>';
+    }).join('');
+  }
+
+  function renderAnnouncement(live) {
+    var box = $('announce');
+    var items = live.announcements || [];
+    if (!items.length) { box.hidden = true; return; }
+    var item = items[0];
+    box.hidden = false;
+    box.innerHTML = '<h3>' + esc(item.title) + '</h3>' + (item.body ? '<p>' + esc(item.body) + '</p>' : '');
+  }
+
+  // Sponsors rotate one at a time so every tier gets the full screen rather than
+  // competing in a crowded logo strip. Higher tiers come first in the list.
+  function rotateSponsor() {
+    var live = state.live;
+    var box = $('sponsor');
+    var footer = $('sponsor-footer');
+    if (!live || !live.sponsors || !live.sponsors.length) { footer.hidden = true; return; }
+    footer.hidden = false;
+    if (state.sponsorIndex >= live.sponsors.length) state.sponsorIndex = 0;
+    var sponsor = live.sponsors[state.sponsorIndex];
+    state.sponsorIndex += 1;
+    box.classList.remove('show');
+    setTimeout(function () {
+      box.innerHTML = (sponsor.logo_url ? '<img src="' + esc(sponsor.logo_url) + '" alt="" />' : '')
+        + '<div><div class="sponsor-tier">' + esc(sponsor.tier || 'partner') + ' sponsor</div>'
+        + '<div class="sponsor-name">' + esc(sponsor.name) + '</div>'
+        + (sponsor.blurb ? '<div class="sponsor-blurb">' + esc(sponsor.blurb) + '</div>' : '') + '</div>';
+      box.classList.add('show');
+    }, 250);
+  }
+
+  function render(live) {
+    $('event-name').textContent = live.event_name || 'Event';
+    $('zone').textContent = (live.timezone || '').replace(/_/g, ' ') + (live.today ? ' · ' + live.today : '');
+    var banner = $('banner');
+    if (live.live_message) { banner.hidden = false; banner.textContent = live.live_message; }
+    else banner.hidden = true;
+    renderNow(live);
+    renderNext(live);
+    renderCounters(live);
+    renderAnnouncement(live);
+  }
+
+  function markStatus() {
+    var el = $('status');
+    if (!state.lastOk) { el.textContent = 'connecting…'; return; }
+    var age = Math.round((Date.now() - state.lastOk) / 1000);
+    if (age > pollMs / 1000 * 3) {
+      el.textContent = 'last update ' + age + 's ago — reconnecting';
+      el.className = 'status stale';
+    } else {
+      el.textContent = 'live · updated ' + age + 's ago';
+      el.className = 'status';
+    }
+  }
+
+  function poll() {
+    fetch(api + '/public/events/' + encodeURIComponent(eventId) + '/live', { cache: 'no-store' })
+      .then(function (r) { return r.ok ? r.json() : null; })
+      .then(function (live) {
+        if (!live) return;
+        state.live = live;
+        state.lastOk = Date.now();
+        if (live.server_time) {
+          state.clockBase = new Date(live.server_time);
+          state.clockSetAt = Date.now();
+        }
+        render(live);
+        // Keep showing the last good frame if the network drops — a blank screen
+        // in a venue looks broken; slightly stale numbers do not.
+      })
+      .catch(function () { /* keep last frame */ })
+      .finally(markStatus);
+  }
+
+  poll();
+  setInterval(poll, pollMs);
+  setInterval(rotateSponsor, rotateMs);
+  setInterval(tickClock, 1000);
+  setInterval(markStatus, 1000);
+  rotateSponsor();
+})();
+</script>
+</body>
+</html>

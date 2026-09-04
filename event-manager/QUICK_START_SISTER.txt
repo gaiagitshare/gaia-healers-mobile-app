@@ -1,0 +1,216 @@
+═══════════════════════════════════════════════════════════════════
+   GAIA HEALERS EVENT SYSTEM - QUICK START FOR YOUR SISTER
+═══════════════════════════════════════════════════════════════════
+
+🌐 STEP 1: LOGIN
+────────────────
+URL:  https://ba2ki.com/event/
+
+First Time:
+  → Click "Create Account"
+  → Enter: Name, Email, Password
+  → Click "Create Account"
+  → Done! You're admin
+
+Returning:
+  → Enter Email + Password
+  → Click "Sign In"
+
+
+═══════════════════════════════════════════════════════════════════
+📅 STEP 2: CREATE EVENT
+═══════════════════════════════════════════════════════════════════
+
+1. Click "Events" in left menu
+2. Click "Create Event" button
+3. Fill in:
+   Name:  Gaia Healers Elevate 2026
+   Dates: Nov 20-22, 2026
+   Place: Rosen Shingle Creek, Orlando, FL
+4. Click "Create"
+5. Event appears with ID number (remember this!)
+
+
+═══════════════════════════════════════════════════════════════════
+📥 STEP 3: IMPORT ATTENDEES (Ask Your Brother)
+═══════════════════════════════════════════════════════════════════
+
+What You Need:
+  → CSV file from GoHighLevel (GHL)
+  → Event ID from Step 2
+
+Brother Runs This Command:
+  cd ~/event/backend
+  python3 import_ghl.py [EVENT_ID] [CSV_FILE]
+
+Example:
+  python3 import_ghl.py 1 ghl_attendees.csv
+
+Result:
+  ✅ All attendees imported
+  ✅ Each gets unique QR code
+  ✅ Ready for badge printing
+
+
+═══════════════════════════════════════════════════════════════════
+🎫 STEP 4: PRINT BADGES
+═══════════════════════════════════════════════════════════════════
+
+1. Go to Events → Click your event
+2. Click "Manage Attendees"
+3. For each person:
+   → Click badge icon (📛)
+   → Download PDF
+   → Print on badge paper
+
+Badge Contains:
+  ✓ Name, Company, Title
+  ✓ QR Code (for check-in)
+  ✓ Event branding
+
+
+═══════════════════════════════════════════════════════════════════
+🏢 STEP 5: SET UP EXHIBITORS
+═══════════════════════════════════════════════════════════════════
+
+1. Go to Event page
+2. Scroll to "Exhibitors" section
+3. Click "Add Exhibitor"
+4. Fill: Company, Booth, Email
+5. Click "Add"
+6. System creates UNIQUE LINK:
+   
+   https://ba2ki.com/event/scan/EXH-ABC123XYZ
+
+7. COPY this link
+8. EMAIL/SMS to exhibitor
+
+Repeat for each exhibitor (wellness vendors)
+
+
+═══════════════════════════════════════════════════════════════════
+📱 STEP 6: EVENT DAY CHECK-IN
+═══════════════════════════════════════════════════════════════════
+
+At Venue Entrance:
+
+1. Open: https://ba2ki.com/event/checkin
+   (Must be logged in as admin)
+
+2. Click "Start QR Scanner"
+
+3. When attendee arrives:
+   → Point webcam at their badge QR
+   → System beeps
+   → Shows: "✅ John Smith - Checked In!"
+
+4. If scan fails:
+   → Type QR code manually
+   → Click "Check In"
+
+5. Monitor Dashboard:
+   https://ba2ki.com/event/dashboard
+   
+   Shows live stats:
+   "450 of 700 checked in (64%)"
+
+
+═══════════════════════════════════════════════════════════════════
+📊 WHAT EXHIBITORS DO (Lead Retrieval)
+═══════════════════════════════════════════════════════════════════
+
+Exhibitor receives unique link → Opens on phone
+
+At Event:
+1. Exhibitor points phone at attendee badge
+2. Scans QR code
+3. System captures lead
+4. They add notes:
+   "Interested in package deal"
+   Rating: ⭐⭐⭐⭐⭐
+
+You See:
+  → Event page → Exhibitor → "View Leads"
+  → All captured leads
+  → Can export to Excel
+
+
+═══════════════════════════════════════════════════════════════════
+📈 IMPORTANT URLS (Bookmark These!)
+═══════════════════════════════════════════════════════════════════
+
+🔐 Login/Register
+   https://ba2ki.com/event/
+
+📊 Admin Dashboard (Stats)
+   https://ba2ki.com/event/dashboard
+
+📅 Manage Events
+   https://ba2ki.com/event/events
+
+📱 Check-In Station
+   https://ba2ki.com/event/checkin
+
+📋 API Docs (For Brother)
+   https://ba2ki.com/event-api/docs
+
+
+═══════════════════════════════════════════════════════════════════
+⚠️  TROUBLESHOOTING
+═══════════════════════════════════════════════════════════════════
+
+White Screen?
+   → Press Ctrl+Shift+R (hard refresh)
+   → Wait 10 seconds
+
+Can't Login?
+   → Check email/password
+   → Clear browser cache
+   → Try different browser (Chrome/Firefox)
+
+QR Scanner Not Working?
+   → Allow camera permissions
+   → Use manual entry as backup
+   → Make sure room is well-lit
+
+Need Help?
+   → Ask your brother!
+   → Check SISTER_MANUAL.md
+
+
+═══════════════════════════════════════════════════════════════════
+✅ EVENT DAY CHECKLIST
+═══════════════════════════════════════════════════════════════════
+
+BEFORE EVENT:
+[ ] Login to system
+[ ] Create "Gaia Healers Elevate 2026" event
+[ ] Brother imports GHL attendees
+[ ] Print all badges
+[ ] Add all exhibitors, send their links
+[ ] Test check-in scanner
+
+DURING EVENT:
+[ ] Open check-in page at entrance
+[ ] Staff scans each attendee
+[ ] Watch dashboard for stats
+[ ] Exhibitors scanning on their own
+
+AFTER EVENT:
+[ ] View final dashboard stats
+[ ] Export attendee list (who came)
+[ ] Send exhibitors their leads
+[ ] Celebrate! 🎉
+
+
+═══════════════════════════════════════════════════════════════════
+📞 CONTACT
+═══════════════════════════════════════════════════════════════════
+
+Your Brother: [His Contact Info]
+System Location: ~/event/
+Domain: ba2ki.com/event/
+
+═══════════════════════════════════════════════════════════════════
+        🌿 GAIA HEALERS ELEVATE 2026 - LET'S GO! 🌿
+═══════════════════════════════════════════════════════════════════

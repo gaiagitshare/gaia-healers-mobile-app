@@ -1,0 +1,31 @@
+version: '3.8'
+
+services:
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    ports:
+      - "8002:8000"
+    volumes:
+      - ./backend:/app
+      - event-data:/app/data
+    environment:
+      - DATABASE_URL=sqlite:///./data/event.db
+      - SECRET_KEY=your-secret-key-change-in-production
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    ports:
+      - "3002:3000"
+    environment:
+      - REACT_APP_API_URL=http://localhost:8002
+    depends_on:
+      - backend
+    restart: unless-stopped
+
+volumes:
+  event-data:

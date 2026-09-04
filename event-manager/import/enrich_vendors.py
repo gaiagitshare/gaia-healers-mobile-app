@@ -41,6 +41,12 @@ for company, r in data.items():
         ex.public_phone = r["public_phone"][:40]
     if r.get("address") and not (ex.address or "").strip():
         ex.address = r["address"][:200]
+    if r.get("logo_on_dark") is not None and ex.logo_url == r.get("logo_url"):
+        ex.logo_on_dark = bool(r["logo_on_dark"])
+    # Some booth numbers came out of a numeric cell as "27.0". A booth is a
+    # label, not a quantity.
+    if ex.booth_number and str(ex.booth_number).strip().endswith(".0"):
+        ex.booth_number = str(ex.booth_number).strip()[:-2]
     # The website column held an email address for a few of these. A directory
     # link that opens a mail client is a broken link.
     w = (ex.website or "").strip()

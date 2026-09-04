@@ -31,6 +31,7 @@ for line in open("/root/event/backend/.env"):
         env[k] = v.strip().strip('"').strip("'")
 from jose import jwt
 ADMIN = jwt.encode({"sub": "1"}, env["SECRET_KEY"], algorithm="HS256")
+SVC = env["IDENTITY_SERVICE_TOKEN"]
 BASE = "http://127.0.0.1:8002"
 DB = "/root/event/backend/event.db"
 
@@ -60,6 +61,13 @@ def sql(q, a=()):
     c = sqlite3.connect(DB)
     try:
         return c.execute(q, a).fetchall()
+    finally:
+        c.close()
+
+def write(q, a=()):
+    c = sqlite3.connect(DB)
+    try:
+        c.execute(q, a); c.commit()
     finally:
         c.close()
 
@@ -313,13 +321,101 @@ mismatch = sql("SELECT COUNT(*) FROM exhibitors WHERE event_id=1 "
                "AND public_phone IS NOT NULL AND public_phone = contact_phone")[0][0]
 check(mismatch == 0, "and no sheet phone number was copied into the public field", mismatch)
 
+# ── 16. the roster a stand may see is a NUMBER, not a list ────────────────
+# This is the whole security model. Blurring a real list in CSS would be
+# theatre: the browser would hold every name and devtools would show them.
+# Encrypting it would be the same theatre with extra steps, because a client
+# that can decrypt is a client that holds the key. So the list is never sent.
+st, v4 = call("POST", "/exhibitors", {
+    "event_id": EV, "company_name": "ZZ Roster Co",
+    "contact_email": "roster@example.invalid", "stage": "confirmed"}, ADMIN)
+V4 = v4["id"]
+TOK4 = v4["access_token"]
+
+# Two attendees at this event, so there IS something to leak.
+for i, em in enumerate(("zz-roster-a@example.invalid", "zz-roster-b@example.invalid")):
+    call("POST", "/identity/reconcile-attendee", {
+        "event_id": EV, "email": em, "ticket_type_id": None,
+        "order_id": "zz-roster-o%d" % i,
+        "first_name": "Rosterly", "last_name": "Person%d" % i,
+        "phone": "+1407555110%d" % i}, SVC)
+
+st, r = call("GET", "/scan/roster/%s" % TOK4)
+check(st == 404, "a stand with no scanning grant cannot read the roster at all", st)
+
+call("PUT", "/exhibitors/%d" % V4, {"can_scan_leads": True}, ADMIN)
+st, r = call("GET", "/scan/roster/%s" % TOK4)
+check(st == 200 and r.get("attendees_total", 0) >= 2,
+      "once granted, it learns HOW MANY people are at the event", r.get("attendees_total"))
+raw = json.dumps(r)
+check("Rosterly" not in raw, "but not a single name")
+check("zz-roster-a@example.invalid" not in raw and "zz-roster-b@example.invalid" not in raw,
+      "not an email address")
+check("4075551100" not in raw and "+1407555110" not in raw, "not a phone number")
+check(r.get("leads") == [], "and no leads until they have scanned somebody")
+
+# ── 17. a scan is what releases one person, and only one ──────────────────
+tok = sql("SELECT public_token FROM attendees WHERE event_id=? AND lower(email)=?",
+          (EV, "zz-roster-a@example.invalid"))[0][0]
+st, sc = call("POST", "/scan", {"qr_code": tok, "access_token": TOK4})
+check(st == 200 and sc.get("success") is True, "scanning a badge captures that person", sc.get("message"))
+
+st, r = call("GET", "/scan/roster/%s" % TOK4)
+raw = json.dumps(r)
+check(len(r.get("leads") or []) == 1, "one lead appears", len(r.get("leads") or []))
+check("Person0" in raw, "the scanned person is named")
+check("Person1" not in raw, "the one they did NOT scan is still not named")
+
+# ── 18. even a scanned person shares only what they agreed to ─────────────
+lead = r["leads"][0]["attendee"]
+check(lead.get("email") is None and lead.get("phone") is None,
+      "with consent off, a scan yields a name and no contact details", lead)
+# Consent is snapshotted at the MOMENT of the scan, so granting it afterwards
+# does not retroactively hand over an exchange that already happened.
+write("UPDATE attendees SET share_email_with_exhibitors=1 WHERE event_id=? AND lower(email)=?",
+      (EV, "zz-roster-a@example.invalid"))
+st, r = call("GET", "/scan/roster/%s" % TOK4)
+lead = r["leads"][0]["attendee"]
+check(lead.get("email") is None,
+      "agreeing AFTER the scan does not retroactively share that exchange", lead)
+
+# Agreeing BEFORE the scan does share — and only the field they agreed to.
+write("UPDATE attendees SET share_email_with_exhibitors=1, share_phone_with_exhibitors=0 "
+      "WHERE event_id=? AND lower(email)=?", (EV, "zz-roster-b@example.invalid"))
+tok_b = sql("SELECT public_token FROM attendees WHERE event_id=? AND lower(email)=?",
+            (EV, "zz-roster-b@example.invalid"))[0][0]
+call("POST", "/scan", {"qr_code": tok_b, "access_token": TOK4})
+st, r = call("GET", "/scan/roster/%s" % TOK4)
+b = [l["attendee"] for l in r["leads"] if l["attendee"]["last_name"] == "Person1"][0]
+check(b.get("email") == "zz-roster-b@example.invalid",
+      "consent given before the scan does share the email", b)
+check(b.get("phone") is None,
+      "and the phone stays private — consent is per field, not all-or-nothing", b)
+
+# ── 19. another stand's token reads its own roster, never this one's ──────
+st, v5 = call("POST", "/exhibitors", {
+    "event_id": EV, "company_name": "ZZ Other Stand",
+    "contact_email": "other@example.invalid"}, ADMIN)
+call("PUT", "/exhibitors/%d" % v5["id"], {"can_scan_leads": True}, ADMIN)
+st, r5 = call("GET", "/scan/roster/%s" % v5["access_token"])
+check(st == 200 and r5.get("leads") == [],
+      "a different stand sees none of the first stand's leads", r5.get("leads"))
+check("Person0" not in json.dumps(r5), "not even the name it already captured")
+st, bad = call("GET", "/scan/roster/not-a-real-token-at-all")
+check(bad if isinstance(bad, dict) else True, "an invented token gets nothing")
+
+call("DELETE", "/exhibitors/%d" % v5["id"], token=ADMIN)
+call("DELETE", "/exhibitors/%d" % V4, token=ADMIN)
+write("DELETE FROM attendees WHERE email LIKE 'zz-roster-%'")
+write("DELETE FROM member_cards WHERE email LIKE 'zz-roster-%'")
+
 # ── cleanup ───────────────────────────────────────────────────────────────
 call("DELETE", "/exhibitors/%d" % VID, token=ADMIN)
 call("DELETE", "/events/%d" % EV, token=ADMIN)
 check(sql("SELECT COUNT(*) FROM exhibitors WHERE company_name='ZZ Sound Co'")[0][0] == 0,
       "the throwaway vendor is gone afterwards")
 
-print("\n%d checks, %d failed" % (52, len(fails)))
+print("\n%d checks, %d failed" % (69, len(fails)))
 if fails:
     print("FAILED: " + "; ".join(fails))
 sys.exit(1 if fails else 0)

@@ -272,6 +272,7 @@ class ExhibitorCreate(ExhibitorBase):
     public_phone: Optional[str] = None
     address: Optional[str] = None
     tagline: Optional[str] = None
+    logo_on_dark: Optional[bool] = None
     package: Optional[str] = None
     payment_status: Optional[str] = None          # paid | partial | unpaid | comp
     amount_due: Optional[float] = None
@@ -297,6 +298,7 @@ class ExhibitorUpdate(BaseModel):
     public_phone: Optional[str] = None
     address: Optional[str] = None
     tagline: Optional[str] = None
+    logo_on_dark: Optional[bool] = None
     package: Optional[str] = None
     payment_status: Optional[str] = None          # paid | partial | unpaid | comp
     amount_due: Optional[float] = None
@@ -324,6 +326,7 @@ class Exhibitor(ExhibitorBase):
     public_phone: Optional[str] = None
     address: Optional[str] = None
     tagline: Optional[str] = None
+    logo_on_dark: Optional[bool] = None
     package: Optional[str] = None
     payment_status: Optional[str] = "unpaid"
     amount_due: Optional[float] = None

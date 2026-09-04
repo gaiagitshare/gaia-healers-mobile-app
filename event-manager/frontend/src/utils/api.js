@@ -185,6 +185,10 @@ export const getPublicExhibitors = (eventId) => api.get(`/public/events/${eventI
 export const publicRegister = (data) => api.post('/register', data);
 export const scanQR = (qrCode, accessToken) => api.post('/scan', { qr_code: qrCode, access_token: accessToken });
 export const getPublicExhibitorLeads = (accessToken) => api.get(`/scan/leads/${accessToken}`);
+// The stand's own roster. Carries a COUNT and their earned leads — never the
+// attendee list, because a list sent to the browser is a list the browser has.
+export const getExhibitorRoster = (accessToken) => api.get(`/scan/roster/${accessToken}`);
+
 export const updatePublicLead = (leadId, accessToken, data) => api.put(`/scan/leads/${leadId}`, {
     access_token: accessToken,
     ...data,

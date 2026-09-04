@@ -305,6 +305,38 @@ not what they paid, not their scanner token — and carries contact details only
 for a stand that asked for it, because several of these addresses are somebody's
 personal mailbox.
 
+### The stand's own screen — and why the blur is real
+
+`/event/scan/<access_token>` is what a booth runs on a phone. It shows the
+people they have met, and below that the rest of the event as **blurred
+placeholder rows**.
+
+The blur is over nothing, and that is the security model rather than a styling
+choice. `GET /scan/roster/<token>` returns a **count** — no names, no emails, no
+ids. For the 292-person event the whole payload is **169 bytes**.
+
+> Blurring a real list in CSS would be theatre: the browser would be holding
+> every name, and devtools would show them. Encrypting it would be the same
+> theatre with extra steps, because a client that can decrypt is a client that
+> holds the key. The only thing that actually withholds data is not sending it.
+
+A person becomes visible exactly once — when they hand over their badge and the
+server, having checked this stand is granted `can_scan_leads` at all, records the
+exchange. Even then the response is consent-filtered per field, and consent is
+snapshotted **at the moment of the scan**, so agreeing later does not
+retroactively hand over an exchange that already happened.
+
+A stand with no grant gets a 404 from the roster — the same answer an invented
+token gets, so a probe learns nothing either way.
+
+### The public stand page
+
+`/v/<exhibitor_id>`, published stands only. Logo, tagline, description, booth,
+and whatever public contact the company itself publishes. Eight of the logos are
+white artwork taken from the event site, which is dark, so `logo_on_dark` is
+measured once at import and the tile follows — otherwise those eight are
+invisible on a white background.
+
 ### Two kinds of vendor contact
 
 | | |

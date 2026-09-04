@@ -41,3 +41,9 @@ event-manager/frontend/node_modules/
 # Editor copies left beside production files; the history is in Git now.
 event-manager/**/*.bak
 event-manager/**/*.bak-*
+# Import SCRIPTS are tracked; the data they read is not. Those files carry
+# vendor and attendee contact details, and the source of truth for them is the
+# planning sheet, not this repository.
+event-manager/import/*.json
+event-manager/import/*.xlsx
+event-manager/import/*.csv

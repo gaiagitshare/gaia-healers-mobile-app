@@ -283,6 +283,14 @@ vendor on conversion. Promoting one is a single field.
 Money is the **confirmed** stands only. A prospect has booked nothing, and
 rolling them in would make "booked" a number nobody could act on.
 
+> **The scripts are tracked; the data they read is not.** `import_vendors.py`
+> and `enrich_vendors.py` expect `vendors_all.json` / `enrich.json` beside them,
+> and those carry vendor contact details — the source of truth for that is the
+> planning sheet, not this repository. `scrape_vendor_sites.py` regenerates the
+> enrichment from the companies' own websites, and the sheet export regenerates
+> the rest. `event-manager/import/*.json` is gitignored so a careless
+> `git add -A` cannot sweep them in.
+
 The importer is `event-manager/import/import_vendors.py`, idempotent on
 (event, company name), and it leaves every stand **unpublished with scanning
 off** — a spreadsheet is planning, not a decision. Only `confirmed` should ever

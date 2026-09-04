@@ -84,6 +84,7 @@ def _ensure_event_columns():
     for _col, _ddl in (("package", "VARCHAR"), ("payment_status", "VARCHAR DEFAULT 'unpaid'"),
                        ("amount_due", "FLOAT"), ("amount_paid", "FLOAT"),
                        ("payment_note", "TEXT"), ("show_contact_publicly", "BOOLEAN DEFAULT 0"),
+                       ("stage", "VARCHAR DEFAULT 'confirmed'"),
                        ("setup_token_hash", "VARCHAR"), ("setup_sent_at", "DATETIME"),
                        ("setup_expires_at", "DATETIME"), ("activated_at", "DATETIME")):
         if _ex and _col not in _ex:

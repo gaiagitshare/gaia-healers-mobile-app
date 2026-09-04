@@ -669,6 +669,13 @@ class MemberCard(Base):
     # activates it -- one scan opens the door and switches the card on, because
     # it is the same QR either way.
     activated_at = Column(DateTime, nullable=True)
+    # When the OWNER last said, themselves, whether this card is public.
+    #
+    # card_claimed_at cannot answer that: it records the first time a card went
+    # public, so someone who deliberately chose PRIVATE looks identical to
+    # someone who has never opened the editor. Activation used that, and
+    # published an attendee who had chosen to stay private.
+    visibility_set_at = Column(DateTime, nullable=True)
     card_claimed_at = Column(DateTime, nullable=True)
     card_views = Column(Integer, default=0)
     card_last_viewed_at = Column(DateTime, nullable=True)

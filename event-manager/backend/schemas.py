@@ -826,6 +826,7 @@ class RefundTicket(BaseModel):
     event_id: Optional[int] = None
     email: Optional[str] = None
     order_id: Optional[str] = None
+    invoice_id: Optional[str] = None
     transaction_id: Optional[str] = None
     amount: Optional[float] = None
     amount_refunded: Optional[float] = None

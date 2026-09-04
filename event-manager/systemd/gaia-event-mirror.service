@@ -1,0 +1,11 @@
+[Unit]
+Description=Mirror GHL payments into the Gaia Event Manager (read-only against GHL)
+After=network-online.target gaia-event-manager.service
+
+[Service]
+Type=oneshot
+WorkingDirectory=/root/gaia-staging-proxy
+ExecStart=/usr/bin/node /root/gaia-staging-proxy/event-mirror.mjs --since-days=14
+# The webhook is the fast path; this only ever catches what it missed.
+TimeoutStartSec=900
+Nice=10

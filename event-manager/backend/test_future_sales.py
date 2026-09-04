@@ -154,7 +154,8 @@ check(len(json.loads(sql("SELECT custom_data FROM attendees WHERE id=?", (A1,))[
 
 # 10 walk-ins keep working alongside all of this
 st, w = call("POST", "/events/%d/walk-in" % EV, {"first_name": "Wanda", "last_name": "Walkin",
-    "email": E("walkin"), "attendance_type": "paid", "door_payment_status": "collected",
+    "email": E("walkin"), "phone": "+14075550188",
+    "attendance_type": "paid", "door_payment_status": "collected",
     "door_payment_method": "cash", "door_payment_amount": 97, "confirm_new": True}, ADMIN)
 check(st == 200 and (w.get("attendee") or {}).get("public_token"), "walk-ins still work independently", st)
 

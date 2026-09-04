@@ -69,6 +69,12 @@ def _ensure_event_columns():
         stmts.append("ALTER TABLE unmapped_sales ADD COLUMN relevance VARCHAR DEFAULT 'event_like'")
     if _us and "relevance_reason" not in _us:
         stmts.append("ALTER TABLE unmapped_sales ADD COLUMN relevance_reason VARCHAR")
+    try:
+        _mc = {c["name"] for c in inspector.get_columns("member_cards")}
+    except Exception:
+        _mc = set()
+    if _mc and "activated_at" not in _mc:
+        stmts.append("ALTER TABLE member_cards ADD COLUMN activated_at DATETIME")
     if "door_test_mode" not in cols:
         stmts.append("ALTER TABLE events ADD COLUMN door_test_mode BOOLEAN DEFAULT 0")
     if "source_url" not in cols:
@@ -1389,6 +1395,10 @@ def authorize_scan(event_id: int, payload: schemas.AuthorizeRequest,
             att.is_checked_in = True
             att.checked_in_at = datetime.utcnow()
             checked_in_now = True
+            # The same scan that opens the door switches their card on. It is
+            # the same QR, so this costs the person nothing and needs no second
+            # step at a busy desk.
+            _activate_member_card(db, att)
     # A rehearsal scan says so in its own reason line, so the history cannot be
     # read later as though the door had really opened that day.
     _reason = dec.get("reason")
@@ -7021,6 +7031,27 @@ def _own_profile(db, attendee, create=False):
         db.add(prof)
         db.flush()
     return prof
+
+
+def _activate_member_card(db, attendee):
+    """Bring a dormant card to life at check-in.
+
+    Publishing is set here ONCE, on first activation. A person who later turns
+    their card off has decided something, and walking past a scanner again must
+    not quietly undo it -- so activated_at is the guard, not card_public.
+    """
+    token = getattr(attendee, "public_token", None)
+    if not token:
+        return None
+    card = db.query(models.MemberCard).filter(
+        models.MemberCard.public_token == token).first()
+    if card is None or card.activated_at is not None:
+        return card
+    card.activated_at = datetime.utcnow()
+    card.card_public = True
+    if not card.card_claimed_at:
+        card.card_claimed_at = card.activated_at
+    return card
 
 
 def _own_card(db, payload, create=False):

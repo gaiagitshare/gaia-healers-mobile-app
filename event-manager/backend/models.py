@@ -660,6 +660,15 @@ class MemberCard(Base):
     card = Column(JSON, default=dict)
     bio = Column(Text)
     card_public = Column(Boolean, default=False)
+    # When this card came to life, stamped by the person's FIRST check-in.
+    #
+    # Every attendee has a card and a permanent token from the moment their
+    # ticket lands, months before the event. Until they walk through the door
+    # that card is real but dormant: the page says so rather than presenting an
+    # empty profile as though the person had nothing to say. Checking in is what
+    # activates it -- one scan opens the door and switches the card on, because
+    # it is the same QR either way.
+    activated_at = Column(DateTime, nullable=True)
     card_claimed_at = Column(DateTime, nullable=True)
     card_views = Column(Integer, default=0)
     card_last_viewed_at = Column(DateTime, nullable=True)

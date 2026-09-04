@@ -521,7 +521,7 @@ def render_card_html(view: dict, token: str, app_base: str = None) -> str:
                       "</div>" % (_ICON["mail"], _ICON["phone"]))
         body = ("<div class=\"card\"><span class=\"event\">%s</span>"
                 "<div class=\"avatar\">%s</div><h1>%s</h1>%s%s"
-                "<div class=\"actions\"><a class=\"btn btn--secondary\" href=\"%s\">Connect in the Gaia app</a></div>"
+                "<div class=\"actions\"><a class=\"btn btn--secondary\" href=\"%s\">Connect in the Gaia Healers app</a></div>"
                 "<div class=\"claim\" data-claim>Is this you, %s? <a href=\"%s\" data-claim-link>Sign in to set up your card</a> \u2014 "
                 "add your photo, company and city. The QR on your badge already points here; nothing gets reprinted.</div>"
                 "</div>" % (event, _h(_initials(view)), name, state, locked, _h(connect_url), first, _h(claim_url)))
@@ -587,15 +587,17 @@ def render_card_html(view: dict, token: str, app_base: str = None) -> str:
         body = ("<div class=\"card\"><span class=\"event\">%s</span>"
                 "<div class=\"avatar\">%s</div><h1>%s</h1>%s%s%s%s%s%s"
                 "<div class=\"actions\">%s<a class=\"btn %s\" href=\"%s.vcf\" download>%s Save contact</a>"
-                "<a class=\"btn btn--secondary\" href=\"%s\">Connect in the Gaia app</a>"
+                "<a class=\"btn btn--secondary\" href=\"%s\">Connect in the Gaia Healers app</a>"
                 "<a class=\"btn btn--ghost\" href=\"%s\" data-owner-edit hidden>Edit my card</a></div>%s%s%s</div>"
                 % (event, avatar, name, headline, role, city, tags, bio, services, booking,
                    "btn--secondary" if booking else "btn--primary", _h(token),
                    _ICON["mail"].replace("currentColor", "#0B1408" if not booking else "currentColor"),
                    _h(connect_url), _h(claim_url), links_html, locked_html, events_html))
 
-    foot = ("<p class=\"foot\">This card is shared by its owner and shows only what they chose to share.<br>"
-            "<a href=\"%s\">gaiahealers.app</a></p></div>" % _h(app_base))
+    # Just the wordmark. The sentence that used to sit here explained the card to
+    # someone who is already looking at it, and every line of that kind pushes
+    # what they actually came for further off a phone screen.
+    foot = ("<p class=\"foot\"><a href=\"%s\">gaiahealers.app</a></p></div>" % _h(app_base))
     # Ownership is asked of the Gaia proxy with the viewer's own session cookie.
     # The answer is one boolean; the page never sees who the viewer is. Owner ->
     # the edit/set-up control; a signed-in stranger -> the claim box goes away;

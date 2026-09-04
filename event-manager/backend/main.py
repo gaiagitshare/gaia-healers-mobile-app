@@ -35,6 +35,7 @@ import workshops as workshops_lib
 import networking as networking_lib
 import push as push_lib
 import badge_card
+import vendor_page
 from fastapi import Response
 from fastapi.responses import HTMLResponse, PlainTextResponse
 
@@ -87,6 +88,7 @@ def _ensure_event_columns():
                        ("stage", "VARCHAR DEFAULT 'confirmed'"),
                        ("public_email", "VARCHAR"), ("public_phone", "VARCHAR"),
                        ("address", "VARCHAR"), ("tagline", "VARCHAR"),
+                       ("logo_on_dark", "BOOLEAN DEFAULT 0"),
                        ("setup_token_hash", "VARCHAR"), ("setup_sent_at", "DATETIME"),
                        ("setup_expires_at", "DATETIME"), ("activated_at", "DATETIME")):
         if _ex and _col not in _ex:
@@ -3178,6 +3180,60 @@ def vendor_activation_link(exhibitor_id: int, db: Session = Depends(get_db),
             "url": "%s/vendor/%s" % (app_base or "", token),
             "expires_at": ex.setup_expires_at.isoformat(),
             "expires_in_days": VENDOR_SETUP_TTL_DAYS}
+
+
+@app.get("/v/{exhibitor_id}", response_class=HTMLResponse)
+def public_vendor_page(exhibitor_id: int, db: Session = Depends(get_db)):
+    """One stand's public page. Published stands only — an unpublished vendor is
+    a planning row, and a planning row has no public page."""
+    ex = db.query(models.Exhibitor).filter(models.Exhibitor.id == exhibitor_id).first()
+    if not ex or not ex.is_published:
+        raise HTTPException(status_code=404, detail="Not found")
+    event = db.query(models.Event).filter(models.Event.id == ex.event_id).first()
+    base = (os.environ.get("CARD_PUBLIC_BASE") or "").rstrip("/")
+    return HTMLResponse(vendor_page.public_vendor_html(
+        ex, event.name if event else "", base.replace("//card.", "//api.") if base else ""))
+
+
+@app.get("/scan/roster/{access_token}")
+def exhibitor_roster(access_token: str, db: Session = Depends(get_db)):
+    """How many people are at this event, and which of them this stand has met.
+
+    Read the shape of this response carefully, because it is the whole security
+    model: it contains NO attendee names, emails, phones or ids. Just a total,
+    and the leads this stand has already earned by scanning.
+
+    The vendor's screen shows the total as blurred placeholder rows. That blur is
+    over nothing — there is nothing behind it to reveal. Sending the roster and
+    blurring it in CSS would be theatre: the browser would hold every name, and
+    devtools would show them. Encrypting it would be the same theatre with extra
+    steps, because a client that can decrypt is a client that holds the key.
+
+    A name reaches this stand exactly once: when somebody hands them a badge.
+    """
+    exhibitor = authz.exhibitor_for_token(db, access_token)
+    if not exhibitor:
+        # Same answer for an unknown token and a stand without permission, so a
+        # probe cannot tell which it hit.
+        raise HTTPException(status_code=404, detail="Not found")
+    total = db.query(models.Attendee).filter(
+        models.Attendee.event_id == exhibitor.event_id).count()
+    leads = db.query(models.Lead).filter(
+        models.Lead.exhibitor_id == exhibitor.id).order_by(
+        models.Lead.scanned_at.desc()).limit(200).all()
+    event = db.query(models.Event).filter(models.Event.id == exhibitor.event_id).first()
+    return {
+        "ok": True,
+        "company_name": exhibitor.company_name,
+        "event_name": event.name if event else "",
+        "booth_number": exhibitor.booth_number,
+        "attendees_total": total,
+        "captured": len(leads),
+        "leads": [{
+            "id": l.id, "scanned_at": l.scanned_at, "rating": l.rating,
+            "notes": l.notes, "attendee": authz.lead_public_view(l),
+        } for l in leads],
+    }
 
 
 @app.get("/vendor/{token}", response_class=HTMLResponse)

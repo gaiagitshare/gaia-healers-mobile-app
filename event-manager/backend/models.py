@@ -304,6 +304,11 @@ class Exhibitor(Base):
     public_phone = Column(String)
     address = Column(String)
     tagline = Column(String)          # the one line the company leads with
+    # Whether this logo needs a DARK tile behind it. Most of these came off the
+    # event site, which is dark, so eight of them are white artwork that
+    # disappears on a white background — measured once at import rather than
+    # guessed per render.
+    logo_on_dark = Column(Boolean, default=False)
     # Vendor self-setup. An organiser sends a link; the stand fills in its own
     # description, logo and links, and publishes itself.
     #

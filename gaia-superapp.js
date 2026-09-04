@@ -502,8 +502,11 @@
       + '</div></div>'
       + '<div class="g-vendors">'
       + exhibitors.map((vendor) => {
-        const meta = [vendor.booth_number ? 'Booth ' + vendor.booth_number : '', vendor.category]
-          .filter(Boolean).join(' \u00b7 ');
+        const meta = [
+          vendor.booth_number ? 'Booth ' + vendor.booth_number : '',
+          vendor.tables ? vendor.tables + (vendor.tables > 1 ? ' tables' : ' table') : '',
+          vendor.category,
+        ].filter(Boolean).join(' \u00b7 ');
         const blurb = vendor.tagline || vendor.description || '';
         const logo = vendor.logo_url
           ? '<img src="' + esc(vendor.logo_url) + '" alt="" loading="lazy">'

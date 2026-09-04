@@ -738,9 +738,16 @@ def _render_portrait(first_name, last_name, token, W, H, base=None):
     # so it stays in the file -- but it is white, and counting it as content
     # pushes everything visibly high on the sticker. Balance the INK.
     quiet = 2 * box
-    content_h = (block_h - ink_top) + gap + (qimg.height - quiet)
+    # The typed-code line, if the roll is tall enough to carry it.
+    code_f = _font(_FONT_REG, _mm(2.6))
+    code_gap = _mm(0.6)
+    code_h = code_f.getbbox("HXg")[3]
+    if H - top - bottom < block_h + gap + qimg.height + code_gap + code_h:
+        code_h = 0                                   # no room; the QR wins
+    tail = (code_gap + code_h) if code_h else -quiet
+    content_h = (block_h - ink_top) + gap + qimg.height + tail
     y = (H - content_h) // 2 - ink_top
-    y = max(top - ink_top, min(y, H - bottom - block_h - gap - qimg.height + quiet))
+    y = max(top - ink_top, min(y, H - bottom - block_h - gap - qimg.height - (tail if code_h else -quiet)))
     if y + content_h > H - bottom:                            # never crowd the foot
         y = max(top, H - bottom - content_h)
     for t in texts:
@@ -749,9 +756,27 @@ def _render_portrait(first_name, last_name, token, W, H, base=None):
         y += line_h + lead
     y -= lead
 
-    img.paste(qimg, ((W - qimg.width) // 2, int(y + gap)))
+    qr_y = int(y + gap)
+    img.paste(qimg, ((W - qimg.width) // 2, qr_y))
+
+    # The code, in human-readable form, BELOW the QR.
+    #
+    # A camera that will not focus is the likeliest failure at a busy door -- a
+    # scratched sticker, a cracked lens, bad light. Check-In accepts this code
+    # typed by hand, so printing it turns a dead end into four seconds of
+    # typing.
+    #
+    # It sits clear of the QR's quiet zone rather than tucked inside it. The
+    # quiet zone is not decoration: scanners need that clear margin to find the
+    # code at all, and saving two millimetres of label by writing in it would
+    # trade the thing that works for the thing that helps when it does not.
+    if code_h:
+        code_txt = (token or "").upper()
+        cw = draw.textlength(code_txt, font=code_f)
+        draw.text(((W - cw) / 2, qr_y + qimg.height + code_gap), code_txt, font=code_f, fill=0)
+
     meta = {"layout": "portrait", "name_lines": len(texts), "name_pt_mm": round(f.size * 25.4 / DPI, 1),
-            "content_mm": round(content_h * 25.4 / DPI, 1),
+            "content_mm": round(content_h * 25.4 / DPI, 1), "code_printed": bool(code_h),
             "qr_mm": round(qimg.width * 25.4 / DPI, 1), "qr_modules": q.modules_count, "qr_box_px": box}
     return img, meta
 

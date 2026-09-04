@@ -88,7 +88,7 @@ def _ensure_event_columns():
                        ("stage", "VARCHAR DEFAULT 'confirmed'"),
                        ("public_email", "VARCHAR"), ("public_phone", "VARCHAR"),
                        ("address", "VARCHAR"), ("tagline", "VARCHAR"),
-                       ("logo_on_dark", "BOOLEAN DEFAULT 0"),
+                       ("logo_on_dark", "BOOLEAN DEFAULT 0"), ("tables", "INTEGER"),
                        ("setup_token_hash", "VARCHAR"), ("setup_sent_at", "DATETIME"),
                        ("setup_expires_at", "DATETIME"), ("activated_at", "DATETIME")):
         if _ex and _col not in _ex:
@@ -3347,6 +3347,7 @@ def get_public_exhibitors(
             # Several of these logos are white artwork and vanish on a white
             # tile, so the directory has to know which way round to draw it.
             "logo_on_dark": bool(getattr(r, "logo_on_dark", False)),
+            "tables": getattr(r, "tables", None),
             "contact_email": (getattr(r, "public_email", None)
                               or ((r.contact_email or None) if show else None)),
             "contact_phone": (getattr(r, "public_phone", None)

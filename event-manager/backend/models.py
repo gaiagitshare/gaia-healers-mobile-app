@@ -304,6 +304,7 @@ class Exhibitor(Base):
     public_phone = Column(String)
     address = Column(String)
     tagline = Column(String)          # the one line the company leads with
+    tables = Column(Integer)          # how many tables their booth gets
     # Whether this logo needs a DARK tile behind it. Most of these came off the
     # event site, which is dark, so eight of them are white artwork that
     # disappears on a white background — measured once at import rather than

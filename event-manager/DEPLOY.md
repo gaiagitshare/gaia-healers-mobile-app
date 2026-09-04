@@ -313,6 +313,19 @@ not what they paid, not their scanner token — and carries contact details only
 for a stand that asked for it, because several of these addresses are somebody's
 personal mailbox.
 
+### Booth and tables are live
+
+Both are editable per stand in **Admin → Vendors**, and every surface reads the
+same row: the attendee directory, the stand's own page, and the admin list all
+change the moment you save. There is no publish step and no sync — floor plans
+move, and re-typing a booth number in three places means one of them is wrong on
+the day.
+
+A booth is a **label, not a quantity**: `#7 & #8` and `Foyar 6&7` are real
+values here. The sheet stored some of them in a numeric cell, which is how
+`27.0` reached the page; the importer strips that now, and a test fails if any
+booth label is left as a float.
+
 ### What attendees see
 
 The app's **Exhibit hall → Vendor directory** lists every published stand with
@@ -435,6 +448,20 @@ attendance. Turn it off before the event; **Clear** empties the practice scans.
 > stored it, so a single-day pass created through the UI silently became valid
 > for the whole event. The live Friday Pass was set directly in the database and
 > was never affected.
+
+### The typed code on the label
+
+The badge prints the 8-character code under the QR. Check-In accepts it typed by
+hand, and a camera that will not focus — scratched sticker, cracked lens, bad
+light — is the likeliest failure at a busy door. Printing it turns a dead end
+into four seconds of typing.
+
+It sits **clear of the QR's quiet zone**, not tucked inside it. That margin is
+what lets a scanner find the code at all; saving two millimetres by writing in
+it would trade the thing that works for the thing that helps when it does not.
+On a roll too short to carry both, the code is dropped and the QR keeps its
+size. Verified decoding on two independent engines, clean and blurred, at every
+roll size.
 
 ### Single-day passes
 

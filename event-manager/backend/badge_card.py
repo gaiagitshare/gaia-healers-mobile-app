@@ -655,17 +655,41 @@ def _render_portrait(first_name, last_name, token, W, H, base=None):
         else:
             lines = (f2, [t2])
 
+    # 3. Compose name and QR as ONE block and centre that on the label.
+    #
+    # Previously the name was centred inside its own reserved band and the QR
+    # pinned below it. On a 40x60 roll the QR is limited by the label's WIDTH,
+    # so the leftover height all collected in the name band: the name floated
+    # in mid-air, the gap under it was wide, and the whole composition sat high
+    # with a thin margin at the foot. Measuring the real content and centring it
+    # gives even air top and bottom and keeps the name sitting on its QR.
     f, texts = lines
-    line_h = f.getbbox("HXg")[3]
-    block_h = line_h * len(texts) + _mm(0.9) * (len(texts) - 1)
-    y = top + max(0, (band_h - block_h) // 2)                # centred in the band
+    bb = f.getbbox("HXg")
+    ink_top = bb[1]          # the blank the font leaves above a capital
+    line_h = bb[3]
+    lead = _mm(0.9)
+    block_h = line_h * len(texts) + lead * (len(texts) - 1)
+    # Centre the INK, not the text box. A capital sits below its box top by the
+    # font's ascender bearing, so centring the box leaves the label looking
+    # top-heavy by exactly that much.
+    # The QR image carries its own 2-module white quiet zone. Scanners need it,
+    # so it stays in the file -- but it is white, and counting it as content
+    # pushes everything visibly high on the sticker. Balance the INK.
+    quiet = 2 * box
+    content_h = (block_h - ink_top) + gap + (qimg.height - quiet)
+    y = (H - content_h) // 2 - ink_top
+    y = max(top - ink_top, min(y, H - bottom - block_h - gap - qimg.height + quiet))
+    if y + content_h > H - bottom:                            # never crowd the foot
+        y = max(top, H - bottom - content_h)
     for t in texts:
         w = draw.textlength(t, font=f)
         draw.text(((W - w) / 2, y), t, font=f, fill=0)
-        y += line_h + _mm(0.9)
+        y += line_h + lead
+    y -= lead
 
-    img.paste(qimg, ((W - qimg.width) // 2, top + band_h + gap))
+    img.paste(qimg, ((W - qimg.width) // 2, int(y + gap)))
     meta = {"layout": "portrait", "name_lines": len(texts), "name_pt_mm": round(f.size * 25.4 / DPI, 1),
+            "content_mm": round(content_h * 25.4 / DPI, 1),
             "qr_mm": round(qimg.width * 25.4 / DPI, 1), "qr_modules": q.modules_count, "qr_box_px": box}
     return img, meta
 

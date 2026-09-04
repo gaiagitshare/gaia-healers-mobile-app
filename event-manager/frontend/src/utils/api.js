@@ -71,6 +71,10 @@ export const getAttendees = (eventId) => api.get(`/events/${eventId}/attendees`)
 // transaction amounts, because one attendee can hold several purchases.
 export const getUnmappedSales = (eventId) => api.get(`/events/${eventId}/unmapped-sales`);
 export const dismissUnmappedSale = (eventId, id) => api.post(`/events/${eventId}/unmapped-sales/${id}/dismiss`);
+// Destructive, admin-only: wipes this event's record of who was scanned where.
+export const clearScanLogs = (eventId) => api.delete(`/events/${eventId}/scan-logs`);
+// Door rehearsal: waives ONLY the calendar window, for one event, deliberately.
+export const setDoorTestMode = (eventId, enabled) => api.post(`/events/${eventId}/door-test-mode`, { enabled });
 export const getTicketMetrics = (eventId) => api.get(`/events/${eventId}/ticket-metrics`);
 // Map & Reconcile: preview reads GHL and changes nothing; apply needs confirm:true.
 export const mapReconcilePreview = (eventId, body) => api.post(`/events/${eventId}/map-reconcile/preview`, body);

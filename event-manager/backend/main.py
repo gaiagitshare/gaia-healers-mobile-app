@@ -69,6 +69,8 @@ def _ensure_event_columns():
         stmts.append("ALTER TABLE unmapped_sales ADD COLUMN relevance VARCHAR DEFAULT 'event_like'")
     if _us and "relevance_reason" not in _us:
         stmts.append("ALTER TABLE unmapped_sales ADD COLUMN relevance_reason VARCHAR")
+    if "door_test_mode" not in cols:
+        stmts.append("ALTER TABLE events ADD COLUMN door_test_mode BOOLEAN DEFAULT 0")
     if "source_url" not in cols:
         stmts.append("ALTER TABLE events ADD COLUMN source_url VARCHAR")
     if "locked_fields" not in cols:
@@ -1387,14 +1389,56 @@ def authorize_scan(event_id: int, payload: schemas.AuthorizeRequest,
             att.is_checked_in = True
             att.checked_in_at = datetime.utcnow()
             checked_in_now = True
+    # A rehearsal scan says so in its own reason line, so the history cannot be
+    # read later as though the door had really opened that day.
+    _reason = dec.get("reason")
+    if dec.get("rehearsal"):
+        _reason = "REHEARSAL \u2014 %s" % (_reason or "practice scan before opening day")
     db.add(models.ScanLog(event_id=event_id, attendee_id=att.id, qr_code=att.qr_code,
                           access_type=dec.get("access_type"), result=dec.get("result"),
-                          reason=dec.get("reason"), staff_user_id=current_user.id,
+                          reason=_reason, staff_user_id=current_user.id,
                           session_id=payload.session_id))
     db.commit()
     dec["checked_in"] = bool(att.is_checked_in)
     dec["checked_in_now"] = checked_in_now
     return dec
+
+
+@app.post("/events/{event_id}/door-test-mode")
+def set_door_test_mode(event_id: int, payload: schemas.DoorTestMode,
+                       db: Session = Depends(get_db),
+                       current_user: models.User = Depends(get_current_user)):
+    """Switch door rehearsal on or off for one event.
+
+    The calendar gate is what stops last year's badge opening this year's door,
+    so it is never removed -- it is waived, deliberately, for one event, while a
+    banner says so on every screen. Staff need to practise the flow and test the
+    printer before opening day rather than in front of a queue.
+    """
+    event = _get_event_or_404(event_id, db)
+    authz.require_cap(db, current_user, event_id, "event.write")
+    _assert_event_writable(db, event, "change its door settings")
+    event.door_test_mode = bool(payload.enabled)
+    db.commit()
+    return {"ok": True, "event_id": event_id, "door_test_mode": bool(event.door_test_mode)}
+
+
+@app.delete("/events/{event_id}/scan-logs")
+def clear_scan_logs(event_id: int, db: Session = Depends(get_db),
+                    current_user: models.User = Depends(get_current_user)):
+    """Clear this event's scan history.
+
+    Destructive and deliberately admin-only: the history is the record of who
+    was let through which door and when. It exists so a rehearsal's worth of
+    practice scans can be cleared before the real event, rather than staff
+    reading past 160 test rows to find the one that matters on the day.
+    """
+    _get_event_or_404(event_id, db)
+    if not current_user.is_admin:
+        raise HTTPException(status_code=403, detail="Only an administrator can clear the scan history")
+    n = db.query(models.ScanLog).filter(models.ScanLog.event_id == event_id).delete()
+    db.commit()
+    return {"ok": True, "cleared": n}
 
 
 @app.get("/events/{event_id}/scan-logs")
@@ -1993,17 +2037,41 @@ def _authorize_decision(db, attendee, event, access_type, at=None):
     # cannot override it with its own clock or payload.
     start_day = event.start_date.date().isoformat() if event.start_date else None
     end_day = event.end_date.date().isoformat() if event.end_date else start_day
-    if start_day and today < start_day:
+    rehearsing = bool(getattr(event, "door_test_mode", False))
+    if rehearsing:
+        # Deliberately switched on by an organiser so staff can practise before
+        # opening day. Everything else still applies -- a refunded ticket, a
+        # wrong event or a single-day pass is refused exactly as it would be on
+        # the day. Only the calendar window is waived, and it is stamped on the
+        # decision so nothing downstream can mistake this for real attendance.
+        out["rehearsal"] = True
+    elif start_day and today < start_day:
         out.update({"result": "DENIED", "granted": False,
                     "reason": "Event access is not open yet"})
         return out
-    if end_day and today > end_day:
+    elif end_day and today > end_day:
         out.update({"result": "DENIED", "granted": False,
                     "reason": "Event access has ended"})
         return out
     # Secure default anti-passback. Organisers can explicitly allow re-entry in
     # event.custom_fields; otherwise the same badge cannot admit a second body.
-    allow_reentry_raw = (event.custom_fields or {}).get("allow_reentry")
+    #
+    # custom_fields is a LIST of registration-form field definitions on every
+    # real event -- it defaults to list in the model -- so calling .get() on it
+    # raised AttributeError. Nothing had reached this line before: the calendar
+    # gate above returns first on every day that is not an event day, so the
+    # first scan to get this far would have been the first scan of the event
+    # itself. Read the setting from whichever shape the column holds.
+    _cf = event.custom_fields
+    if isinstance(_cf, dict):
+        allow_reentry_raw = _cf.get("allow_reentry")
+    elif isinstance(_cf, list):
+        allow_reentry_raw = next(
+            (f.get("value") if isinstance(f, dict) and "value" in f else f.get("default")
+             for f in _cf
+             if isinstance(f, dict) and f.get("name") == "allow_reentry"), None)
+    else:
+        allow_reentry_raw = None
     allow_reentry = allow_reentry_raw is True or str(allow_reentry_raw).lower() in {"1", "true", "yes"}
     if az == "EVENT_ENTRY" and attendee.is_checked_in and not allow_reentry:
         out.update({"result": "LIMITED", "granted": False,
@@ -4402,6 +4470,11 @@ def create_ticket_type(event_id: int, payload: schemas.TicketTypeCreate,
                            description=payload.description or "",
                            is_vip=bool(payload.is_vip),
                            grants_workshops=bool(payload.grants_workshops),
+                           # A single-day pass is only a single-day pass if this
+                           # is stored. The field was accepted and then dropped,
+                           # so a day pass created here silently became valid for
+                           # the whole event -- the exact opposite of its point.
+                           valid_day=(payload.valid_day or None),
                            sort_order=payload.sort_order or 0)
     db.add(tt)
     db.commit()

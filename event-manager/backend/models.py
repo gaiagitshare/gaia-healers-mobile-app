@@ -94,6 +94,17 @@ class Event(Base):
     # Off by default: a directory of ticket buyers is something an organiser
     # turns on for a networking event, not something that happens to people.
     networking_enabled = Column(Boolean, default=False)
+    # Rehearsal at the door, before opening day.
+    #
+    # A ticket is not valid outside its event's calendar window, and that gate
+    # is not negotiable -- it is what stops last year's badge opening this
+    # year's door. But staff have to be able to practise the whole flow, and
+    # printers have to be tested, BEFORE the event rather than in front of a
+    # queue. This lets an organiser switch the date gate off deliberately, for
+    # one event, with a banner on screen the whole time it is on. Every scan
+    # taken this way is recorded as a rehearsal so it can never be mistaken for
+    # real attendance.
+    door_test_mode = Column(Boolean, default=False)
     created_at = Column(DateTime, default=datetime.utcnow)
 
     attendees = relationship("Attendee", back_populates="event")

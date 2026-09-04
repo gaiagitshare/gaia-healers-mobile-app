@@ -1,3 +1,11 @@
+> **Note on this directory.** The binary assets it originally catalogued were
+> byte-identical copies of files already tracked in `assets/`, `admin/` and the
+> repository root — 5.46 MB of duplication gathered for a design audit. They
+> were removed; the originals are untouched and remain the ones the app loads.
+> What stays here is the material that exists nowhere else: this inventory, the
+> extracted inline SVGs, and the moon SVG generator. Paths below refer to the
+> originals in their real locations.
+
 # Gaia Healers — Existing Production Visual Assets
 
 **Inventory date:** 2026-09-02

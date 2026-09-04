@@ -129,8 +129,15 @@
    carries the 7 glowing centres); greeting overlaid; the centres are tappable to
    reveal their essence. No scores, no list, no fake data. -------------------- */
 .g-chakra-hero{position:relative;border-radius:var(--g-r-xl);overflow:hidden;
-  background:#05070a;border:1px solid var(--g-line)}
-.g-chakra-hero__stage{height:min(52vh,460px);display:flex;justify-content:center;align-items:center}
+  background:#05070a;border:1px solid var(--g-line);
+  box-shadow:0 34px 90px -52px rgba(0,0,0,.95),0 0 70px -38px rgba(125,217,86,.2)}
+
+/* editorial section headers on Home ------------------------- */
+.g-sec-head{display:flex;flex-direction:column;gap:3px;margin-bottom:calc(var(--g-s2) * -1)}
+.g-sec-head__kicker{font:600 11px/1 var(--g-font-mono);letter-spacing:.16em;text-transform:uppercase;color:var(--g-accent);margin:0}
+.g-sec-head__title{font-family:var(--g-font-serif);font-weight:600;font-size:clamp(24px,6vw,30px);
+  line-height:1;letter-spacing:-.02em;color:var(--g-text);margin:0;text-wrap:balance}
+.g-chakra-hero__stage{height:min(52vh,460px);height:min(52dvh,460px);display:flex;justify-content:center;align-items:center}
 .g-chakra-hero__fig{position:relative;height:100%}
 .g-chakra-hero__fig img{height:100%;width:auto;display:block;
   animation:g-breathe 8s var(--g-ease) infinite}
@@ -311,7 +318,7 @@ a.g-access:hover{border-color:rgba(125,217,86,.4)}
 /* Birth-date chakra reading (Profile) ----------------------- */
 .g-dob{margin-top:var(--g-s3);appearance:none;width:100%;background:var(--g-surface-hi);
   border:1px solid var(--g-line);border-radius:var(--g-r-md);color:var(--g-text);
-  padding:11px 14px;font:500 15px var(--g-font)}
+  padding:11px 14px;font:500 16px var(--g-font)}
 .g-dob::-webkit-calendar-picker-indicator{filter:invert(1) opacity(.55);cursor:pointer}
 .g-chakra-read{display:flex;align-items:center;gap:var(--g-s3);margin-top:var(--g-s3);min-height:44px}
 .g-chakra-dot{flex:none;width:34px;height:34px;border-radius:var(--g-r-pill);box-shadow:0 0 16px currentColor}
@@ -319,6 +326,9 @@ a.g-access:hover{border-color:rgba(125,217,86,.4)}
 
 /* Admin console -------------------------------------------- */
 .g-tabs--3{grid-template-columns:1fr 1fr 1fr;max-width:420px}
+.g-tabs--4{grid-template-columns:repeat(4,1fr);max-width:520px}
+.g-tabs--5{grid-template-columns:repeat(5,1fr);max-width:620px}
+.g-tabs--6{grid-template-columns:repeat(6,1fr);max-width:720px}
 .g-admin{gap:var(--g-s4)}
 .g-admin-panel{display:flex;flex-direction:column;gap:var(--g-s4)}
 .g-admin-panel[hidden]{display:none}
@@ -326,7 +336,7 @@ a.g-access:hover{border-color:rgba(125,217,86,.4)}
 .g-field:first-child{margin-top:0}
 .g-label{font:600 12px/1 var(--g-font-mono);letter-spacing:.05em;text-transform:uppercase;color:var(--g-text-muted)}
 .g-input,.g-textarea{appearance:none;width:100%;background:var(--g-surface-hi);border:1px solid var(--g-line);
-  border-radius:var(--g-r-md);color:var(--g-text);padding:11px 13px;font:500 15px var(--g-font)}
+  border-radius:var(--g-r-md);color:var(--g-text);padding:11px 13px;font:500 16px var(--g-font)}
 .g-input:focus,.g-textarea:focus{outline:none;border-color:var(--g-accent);box-shadow:var(--g-focus)}
 .g-textarea{min-height:84px;resize:vertical;line-height:1.45}
 .g-input::placeholder,.g-textarea::placeholder{color:var(--g-text-muted)}
@@ -369,9 +379,110 @@ a.g-access:hover{border-color:rgba(125,217,86,.4)}
 .g-ann__body{display:block;font-size:13px;color:var(--g-text-muted);margin-top:3px;line-height:1.45}
 a.g-ann:hover{border-color:rgba(125,217,86,.4)}
 
-/* ---------- Desktop: use the width, don't stretch a phone ---------- */
-@media (min-width:900px){
-  /* widen the shell ONLY while a redesigned (g-*) screen is active */
+/* Dark-first: the g-* app is designed dark. Keep the canvas dark on every
+   theme and retire the half-broken light toggle. */
+html{background:#0B120E}
+/* faint brand aura at the top of the canvas gives the dark app depth */
+body.gaia-v2,body.gaia-v2[data-theme="light"]{
+  background:radial-gradient(900px 460px at 50% -90px,rgba(125,217,86,.055),transparent 72%),var(--g-bg) !important;
+  background-attachment:fixed;color:var(--g-text)}
+.gaia-theme-toggle{display:none !important}
+
+/* ===== Polish: depth, aura, hover/tap feedback ===== */
+/* feature cards get a soft aura so wide desktop cards feel intentional */
+.g-card--feature{position:relative;overflow:hidden}
+.g-card--feature::after{content:"";position:absolute;top:-45%;right:-6%;width:min(320px,58%);aspect-ratio:1;
+  background:radial-gradient(circle at 58% 42%,rgba(125,217,86,.15),transparent 66%);pointer-events:none;z-index:0}
+.g-card--feature>*{position:relative;z-index:1}
+.g-card--feature .g-card__meta{max-width:56ch}
+/* motion for interactive surfaces */
+.g-card,.g-tile,.g-access,.g-quiz-opt,.g-btn,.g-row--link{
+  transition:transform .18s ease,border-color .18s ease,box-shadow .2s ease,filter .15s ease,background .18s ease}
+@media (hover:hover){
+  a.g-card:hover,.g-tile:hover,a.g-access:hover{transform:translateY(-2px);border-color:rgba(125,217,86,.38);
+    box-shadow:0 16px 36px -18px rgba(0,0,0,.75)}
+  .g-btn--primary:hover{filter:brightness(1.06);box-shadow:0 10px 26px -12px rgba(125,217,86,.5)}
+  .g-btn--secondary:hover,.g-btn--ghost:hover{border-color:var(--g-accent)}
+  .g-quiz-opt:hover{transform:translateY(-1px)}
+}
+.g-btn:active{transform:translateY(1px)}
+a.g-card:active,.g-tile:active,.g-quiz-opt:active{transform:scale(.99)}
+/* Home: book + colour-test pair (stacks on mobile, 2-up on desktop) */
+.g-home-pair{display:flex;flex-direction:column;gap:var(--g-s5)}
+
+/* Birth-date chakra + daily wellness ------------------------ */
+.g-well{display:flex;flex-direction:column;gap:var(--g-s3)}
+.g-well__lead{color:var(--g-text-muted);font-size:13.5px;margin:2px 0 var(--g-s2);line-height:1.5}
+.g-well__lead strong{color:var(--g-text);font-weight:600}
+.g-well__welcome{display:flex;flex-direction:column;gap:2px}
+.g-well__name{font-family:var(--g-font-serif);font-weight:600;font-size:clamp(26px,7vw,34px);line-height:1;color:var(--g-text)}
+.g-well__signout{align-self:flex-start;margin-top:var(--g-s1)}
+.g-well-reveal{min-height:20px}
+
+/* chakra energy card + orb */
+.g-energy{display:flex;align-items:center;gap:var(--g-s4);background:var(--g-surface-hi);
+  border:1px solid var(--g-line);border-radius:var(--g-r-lg);padding:var(--g-s4)}
+.g-energy--empty{background:var(--g-surface)}
+.g-well-orb{position:relative;flex:none;width:60px;height:60px;border-radius:50%;
+  background:var(--ck,#7DD956);box-shadow:0 0 26px -3px var(--ck,#7DD956),0 0 0 1px rgba(255,255,255,.14) inset;
+  animation:g-well-pulse 4.2s ease-in-out infinite}
+.g-well-orb span{position:absolute;inset:0;border-radius:50%;
+  background:radial-gradient(circle at 34% 28%,rgba(255,255,255,.6),transparent 46%)}
+.g-well-orb--empty{background:var(--g-surface);box-shadow:0 0 0 1px var(--g-line) inset;animation:none}
+@keyframes g-well-pulse{0%,100%{transform:scale(1)}50%{transform:scale(1.06)}}
+.g-energy__body{min-width:0}
+.g-energy__kicker{font:600 10.5px/1 var(--g-font-mono);letter-spacing:.12em;text-transform:uppercase;color:var(--ck,var(--g-accent));margin:0}
+.g-energy__name{font-family:var(--g-font-serif);font-weight:600;font-size:20px;color:var(--g-text);margin:5px 0 0}
+.g-energy__name span{color:var(--g-text-muted);font-size:15px;font-style:italic}
+.g-energy__meta{font-size:12.5px;color:var(--g-text-muted);margin:3px 0 0}
+
+/* daily body-point + horoscope cards */
+.g-daily{display:flex;flex-direction:column;gap:var(--g-s3)}
+.g-daily-card{position:relative;overflow:hidden;padding-left:calc(var(--g-s5) + 3px)}
+.g-daily-card::before{content:"";position:absolute;left:0;top:0;bottom:0;width:3px;background:var(--ck,var(--g-accent))}
+.g-daily-card__kicker{font:600 10.5px/1 var(--g-font-mono);letter-spacing:.1em;text-transform:uppercase;color:var(--ck,var(--g-accent));margin:0}
+.g-daily-card--horo{--ck:var(--g-accent)}
+.g-daily-card__title{font-family:var(--g-font-serif);font-weight:600;font-size:22px;color:var(--g-text);margin:6px 0 0}
+.g-daily-card__title span{color:var(--g-text-muted);font-size:15px;font-style:italic}
+.g-daily-card__area{font-size:14px;color:var(--g-text);margin:5px 0 0}
+.g-daily-card__meta{font-size:12.5px;color:var(--g-text-muted);margin:4px 0 0}
+.g-daily-card__tip{font-size:14.5px;color:var(--g-text);line-height:1.55;margin:8px 0 0}
+
+/* 8-week chakra challenge ----------------------------------- */
+.g-chal{position:relative;overflow:hidden;padding-left:calc(var(--g-s5) + 3px)}
+.g-chal::before{content:"";position:absolute;left:0;top:0;bottom:0;width:3px;background:var(--ck,var(--g-accent))}
+.g-chal__title{font-family:var(--g-font-serif);font-weight:600;font-size:20px;color:var(--g-text);margin:6px 0 0}
+.g-chal__title span{color:var(--g-text-muted);font-size:14px;font-style:italic}
+.g-chal-dots{display:flex;gap:6px;margin:var(--g-s3) 0 0}
+.g-chal-dot{flex:1;height:6px;border-radius:99px;background:var(--g-line);max-width:34px}
+.g-chal-dot.is-on{background:var(--ck,var(--g-accent))}
+.g-chal-dot[data-now]{box-shadow:0 0 8px var(--ck,var(--g-accent))}
+.g-chal__practice{font-size:14px;color:var(--g-text);line-height:1.5;margin:var(--g-s3) 0 0}
+.g-chal__practice strong{color:var(--ck,var(--g-accent))}
+.g-chal__aff{font-family:var(--g-font-serif);font-style:italic;font-size:15px;color:var(--g-text-muted);margin:8px 0 0}
+.g-chal__count{font-size:12px;color:var(--g-text-muted);align-self:center;margin-left:auto}
+
+/* Colour Personality Test ----------------------------------- */
+.g-quiz__title,.g-quiz__q{font-family:var(--g-font-serif);font-weight:600;font-size:20px;color:var(--g-text);margin:6px 0 0}
+.g-quiz__q{margin:8px 0 0}
+.g-quiz-opts{display:flex;flex-direction:column;gap:8px;margin-top:var(--g-s3)}
+.g-quiz-opt{display:flex;align-items:center;gap:10px;width:100%;text-align:left;
+  background:var(--g-surface-hi);border:1px solid var(--g-line);border-radius:var(--g-r-md);
+  color:var(--g-text);font:500 15px var(--g-font);padding:12px 14px;cursor:pointer;
+  transition:border-color .15s ease,background .15s ease}
+.g-quiz-opt:hover{border-color:var(--g-accent);background:var(--g-surface)}
+.g-quiz-opt:focus-visible{outline:none;box-shadow:var(--g-focus)}
+.g-quiz-dot{flex:none;width:16px;height:16px;border-radius:50%;box-shadow:0 0 8px -1px currentColor}
+.g-quiz-result{display:flex;align-items:center;gap:var(--g-s4);margin-top:var(--g-s2)}
+.g-quiz__kicker{font:600 10.5px/1 var(--g-font-mono);letter-spacing:.12em;text-transform:uppercase;color:var(--ck,var(--g-accent));margin:0}
+.g-quiz__result-name{font-family:var(--g-font-serif);font-weight:600;font-size:26px;color:var(--g-text);margin:4px 0 0}
+
+/* ---------- Tablet (≥768px): fill the screen, don't float a tiny phone column ---------- */
+@media (min-width:768px){
+  /* widen the shell when a redesigned (g-*) screen is active. The non-:has()
+     line is a fallback for Safari <15.4 / older browsers that don't support
+     :has() — without it the desktop layout silently stays at phone width. */
+  body.gaia-v2 .gaia-shell{max-width:1000px !important;}
   body.gaia-v2 .gaia-shell:has(.gaia-screen[data-screen="today"].is-active),
   body.gaia-v2 .gaia-shell:has(.gaia-screen[data-screen="store"].is-active),
   body.gaia-v2 .gaia-shell:has(.gaia-screen[data-screen="community"].is-active),
@@ -379,14 +490,23 @@ a.g-ann:hover{border-color:rgba(125,217,86,.4)}
   body.gaia-v2 .gaia-shell:has(.gaia-screen[data-screen="profile"].is-active){
     max-width:1000px !important;
   }
+  /* Keep the floating tabbar pill centered under the widened shell. */
+  body.gaia-v2 .gaia-tabbar,
+  body.gaia-v2 .gaia-tabbar__inner{max-width:1000px !important;margin-left:auto !important;margin-right:auto !important;}
+  /* 2-up grids breathe on tablet & desktop. */
+  .g-access-grid{display:grid;grid-template-columns:1fr 1fr;gap:var(--g-s3)}
+  .g-daily{display:grid;grid-template-columns:1fr 1fr;gap:var(--g-s3);align-items:start}
+  .g-home-pair{display:grid;grid-template-columns:1fr 1fr;gap:var(--g-s4);align-items:start}
+  .g-store-rail{display:grid;grid-template-columns:repeat(auto-fill,minmax(11rem,1fr));overflow:visible;gap:var(--g-s4)}
+  .g-store-rail .g-tile{flex:auto}
+}
+
+/* ---------- Desktop (≥900px): chakra hero, side-by-side CTAs, wider gaps ---------- */
+@media (min-width:900px){
   /* Store: horizontal rails become full galleries on desktop */
   .g-store{padding-left:var(--g-s7);padding-right:var(--g-s7)}
-  /* generic g-* pages breathe on desktop; access lists go 2-up */
+  /* generic g-* pages breathe on desktop */
   .g-page{padding-left:var(--g-s7);padding-right:var(--g-s7)}
-  .g-access-grid{display:grid;grid-template-columns:1fr 1fr;gap:var(--g-s3)}
-  .g-store-rail{display:grid;grid-template-columns:repeat(auto-fill,minmax(11rem,1fr));
-    overflow:visible;gap:var(--g-s4)}
-  .g-store-rail .g-tile{flex:auto}
   .g-home{padding-left:var(--g-s7);padding-right:var(--g-s7);gap:var(--g-s7)}
   .g-topbar{padding-left:var(--g-s7);padding-right:var(--g-s7)}
   .g-hero{min-height:280px;padding:var(--g-s8) var(--g-s7)}
@@ -405,3 +525,133 @@ a.g-ann:hover{border-color:rgba(125,217,86,.4)}
   .g-chakra-hero__title{font-size:clamp(42px,4.4vw,62px)}
   .g-chakra-hero__caption{font-size:15px}
 }
+
+/* ============================================================
+   iOS / mobile polish (2026-07-21)
+   - Global tap-highlight removal (no more gray flash on buttons)
+   - :hover rules gated to real hover-capable pointers (no sticky hover on touch)
+   - 44px minimum tap targets for tabs, buttons, chakra hits
+   - position:sticky vendor prefix
+   - color-scheme: dark on form controls so native widgets match the dark UI
+   ============================================================ */
+html { -webkit-tap-highlight-color: transparent; }
+a, button, [role="button"], input[type="submit"], input[type="button"], input[type="reset"],
+.g-btn, .g-tab, .g-card--interactive, .g-tile, .g-quiz-opt, .g-access, .g-ann,
+.g-chakra-hero__hit, [data-open-in-app], [data-book-inline], [data-track-cta] {
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* Global dark color-scheme so native form controls render dark to match the UI. */
+html { color-scheme: dark; }
+
+/* Sticky vendor prefix (older iOS Safari ≤13). */
+.gaia-header { position: -webkit-sticky; position: sticky; }
+
+/* 44px minimum tap targets (Apple HIG). */
+.g-tab { min-height: 44px; }
+.g-btn--sm { min-height: 40px; }
+
+/* Larger, easier-to-tap chakra hotspots on the body map. */
+.g-chakra-hero__hit { width: 44px; height: 44px; }
+.g-chakra-hero__hit::after { inset: 11px; }
+
+/* data-track-cta is now a <button>; reset native button chrome so it still
+   looks like the g-access card it replaced. */
+button.g-access.g-access--link {
+  text-align: left; width: 100%;
+  font: inherit; color: inherit; background: none; border: 1px solid var(--g-line);
+  cursor: pointer;
+}
+
+/* Real-pointer-only hover effects. On iOS, bare :hover gets "stuck" after a
+   tap, so buttons/links look permanently lifted/highlighted. Re-declare the
+   hover styling here inside @media (hover:hover) so touch devices never apply it. */
+@media (hover: hover) {
+  .g-btn--primary:hover { filter: brightness(1.06); }
+  .g-btn--secondary:hover { border-color: var(--g-line-strong); }
+  .g-btn--ghost:hover { filter: brightness(1.12); }
+  .g-btn--pill:hover { background: var(--g-surface-hi); }
+  .g-card--interactive:hover { border-color: var(--g-line-strong); transform: translateY(-2px); }
+  .g-tile:hover .g-tile__media { transform: scale(1.02); border-color: var(--g-line-strong); }
+  .g-chakra-hero__hit:hover::after { border-color: rgba(255,255,255,.5); }
+  a.g-row--link:hover, a.g-row--link:hover .g-row__meta { color: var(--g-accent); }
+  a.g-access:hover { border-color: rgba(125,217,86,.4); }
+  .g-tag button:hover { color: #F5C518; }
+  a.g-ann:hover { border-color: rgba(125,217,86,.4); }
+  .g-quiz-opt:hover { border-color: var(--g-accent); background: var(--g-surface); }
+}
+
+/* Suppress the inherited "stuck" hover on touch devices by overriding the
+   transform/filter changes back to neutral when the pointer can't hover. */
+@media (hover: none) {
+  .g-card--interactive:hover,
+  .g-tile:hover .g-tile__media,
+  .g-access:hover,
+  .gaia-chakra-teaser:hover,
+  .gaia-bento__tile:hover,
+  .gaia-assist__chips button:hover { transform: none !important; filter: none !important; }
+}
+
+/* ── Gaia store: cards built for a Shopify catalogue with very long titles ── */
+.g-clamp-2{display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.g-sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;
+  clip:rect(0 0 0 0);white-space:nowrap;border:0}
+.g-store-tile{display:flex;flex-direction:column;min-width:0}
+.g-store-tile .g-tile__body{display:flex;flex-direction:column;gap:6px;flex:1;min-width:0}
+.g-store-tile .g-tile__title{font-size:.95rem;line-height:1.3;margin:0;font-weight:600;
+  /* a 200-character title must never stretch the card */
+  overflow-wrap:anywhere}
+.g-store-tile .g-tile__price{margin:0;font-size:.95rem;font-weight:650;font-variant-numeric:tabular-nums;
+  /* never split "$2500 USD" across lines */
+  text-wrap:pretty}
+.g-store-tile .g-tile__price>*{white-space:nowrap}
+.g-store-tile .g-tile__price--muted{font-weight:500;opacity:.72;font-size:.86rem}
+.g-store-tile .g-tile__was{opacity:.6;font-weight:400;margin-left:6px}
+.g-store-tile .g-tile__meta{margin:0;font-size:.82rem;opacity:.75}
+.g-store-tile .g-tile__media{aspect-ratio:1;overflow:hidden;border-radius:10px;background:rgba(255,255,255,.04)}
+.g-store-tile .g-tile__media img{width:100%;height:100%;object-fit:cover;display:block}
+.g-store-tile .g-card__actions{margin-top:auto;padding-top:4px}
+/* a comfortable tap target on phones */
+.g-store-tile .g-btn{min-height:44px;display:inline-flex;align-items:center;justify-content:center}
+.g-store-note{font-size:.82rem;opacity:.7;margin:8px 0 0;padding:0 4px}
+/* Keyboard users must be able to see where they are. The shared button style
+   sets outline:none, so the store restores a visible ring on its own links. */
+.g-store-tile a:focus-visible,.g-store-tile .g-btn:focus-visible{
+  outline:2px solid var(--g-accent,#A8E063);outline-offset:3px;border-radius:999px}
+.g-section__meta{font-size:.8rem;opacity:.65;margin:2px 0 0}
+
+/* ── Gaia store: the in-app product sheet ──
+   Self-contained on purpose. An earlier version reused .gaia-booking-modal__panel
+   and inherited nothing, because that rule is not loaded on this page — the
+   sheet rendered transparent over the shelf and was unreadable. */
+.gaia-product-modal{position:fixed;inset:0;z-index:100;display:flex;align-items:center;
+  justify-content:center;padding:20px}
+.gaia-product-modal .gaia-booking-modal__backdrop{position:absolute;inset:0;
+  background:rgba(0,0,0,.62);backdrop-filter:blur(2px)}
+.g-store-sheet{position:relative;z-index:1;max-width:560px;width:100%;max-height:86vh;
+  overflow-y:auto;padding:22px;display:flex;flex-direction:column;gap:12px;
+  background:var(--g-surface,#111A14);color:var(--g-text,#ECF3E9);
+  border:1px solid rgba(255,255,255,.10);border-radius:18px;
+  box-shadow:0 24px 60px rgba(0,0,0,.55)}
+.gaia-product-modal .gaia-booking-modal__close{position:absolute;top:12px;right:12px;
+  width:44px;height:44px;border-radius:999px;border:1px solid rgba(255,255,255,.14);
+  background:rgba(0,0,0,.35);color:inherit;font-size:20px;line-height:1;cursor:pointer;z-index:2}
+.gaia-product-modal .gaia-booking-modal__close:focus-visible{outline:2px solid var(--g-accent,#A8E063);outline-offset:2px}
+.g-store-sheet__media{aspect-ratio:16/10;overflow:hidden;border-radius:12px;background:rgba(255,255,255,.04)}
+.g-store-sheet__media img{width:100%;height:100%;object-fit:cover;display:block}
+.g-store-sheet__title{font-size:1.3rem;line-height:1.25;margin:0;font-weight:650;overflow-wrap:anywhere}
+.g-store-sheet__meta{margin:0;font-size:.85rem;opacity:.8;display:flex;gap:6px;flex-wrap:wrap;align-items:center}
+.g-store-sheet__price{margin:0;font-size:1.1rem;font-weight:700;font-variant-numeric:tabular-nums}
+.g-store-sheet__price s{opacity:.55;font-weight:400;margin-left:6px}
+.g-store-sheet__body{margin:0;font-size:.92rem;line-height:1.6;opacity:.88;
+  /* Shopify descriptions run to hundreds of words; show a readable lead and let
+     the rest live on the product page. */
+  display:-webkit-box;-webkit-line-clamp:8;-webkit-box-orient:vertical;overflow:hidden}
+.g-store-sheet__list{margin:0;padding-left:1.1rem;display:flex;flex-direction:column;gap:4px;font-size:.9rem;opacity:.9}
+.g-store-sheet .g-card__actions{margin-top:6px;display:flex;gap:8px;flex-wrap:wrap}
+.g-store-sheet .g-btn{min-height:44px;display:inline-flex;align-items:center;justify-content:center}
+/* the title doubles as the control that opens the sheet */
+.g-tile__open{background:none;border:0;padding:0;margin:0;font:inherit;color:inherit;
+  text-align:left;cursor:pointer;width:100%}
+.g-tile__open:focus-visible{outline:2px solid var(--g-accent,#A8E063);outline-offset:3px;border-radius:6px}
+@media (max-width:640px){.g-store-sheet{max-width:100%;border-radius:16px 16px 0 0;max-height:90vh}}

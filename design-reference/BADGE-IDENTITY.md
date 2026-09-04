@@ -127,6 +127,11 @@ identical, name over the same 32.7 mm QR.
 
 ## Card identity fields, and changing them
 
+**Digital card, in one line:** full name, email and phone are required to
+publish; changing any of them takes two proofs — first that you are the current
+owner, then that the new address is yours — and neither the badge token, the QR,
+nor the ticket record changes when the card's name does.
+
 **Full name, email and phone are mandatory to publish.** A card without all
 three is not a business card. Saving a draft is never blocked — only publishing
 is — so nobody is trapped half-way through the form.

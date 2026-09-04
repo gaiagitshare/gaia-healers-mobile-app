@@ -191,10 +191,35 @@ export default function Vendors() {
                                 return (
                                     <TableRow key={r.id} hover>
                                         <TableCell>
-                                            <Typography variant="body2" fontWeight={600}>{r.company_name}</Typography>
-                                            <Typography variant="caption" color="text.secondary">
-                                                {r.booth_number ? `Booth ${r.booth_number} · ` : ''}{r.category || 'Exhibitor'}
-                                            </Typography>
+                                            <Stack direction="row" spacing={1.25} alignItems="center">
+                                                {r.logo_url
+                                                    ? <Box component="img" src={r.logo_url} alt=""
+                                                        sx={{ width: 34, height: 34, objectFit: 'contain',
+                                                              borderRadius: 1, bgcolor: '#fff', p: 0.25, flex: '0 0 auto' }} />
+                                                    : <Box sx={{ width: 34, height: 34, borderRadius: 1,
+                                                                 border: '1px dashed', borderColor: 'divider', flex: '0 0 auto' }} />}
+                                                <Box sx={{ minWidth: 0 }}>
+                                                    <Typography variant="body2" fontWeight={600}>{r.company_name}</Typography>
+                                                    <Typography variant="caption" color="text.secondary" noWrap display="block">
+                                                        {r.booth_number ? `Booth ${r.booth_number} · ` : ''}{r.category || 'Exhibitor'}
+                                                    </Typography>
+                                                    {/* What the attendee directory would actually show. A stand
+                                                        missing a description is a blank card, and the fix is to
+                                                        send them their setup link. */}
+                                                    <Stack direction="row" spacing={0.5} sx={{ mt: 0.4 }}>
+                                                        {[['Logo', r.logo_url], ['About', r.description],
+                                                          ['Link', r.website], ['Contact', r.public_email || r.public_phone]]
+                                                            .map(([lbl, ok]) => (
+                                                                <Chip key={lbl} size="small" label={lbl}
+                                                                    variant={ok ? 'filled' : 'outlined'}
+                                                                    color={ok ? 'success' : 'default'}
+                                                                    sx={{ height: 17, fontSize: 10,
+                                                                          opacity: ok ? 1 : 0.45,
+                                                                          '& .MuiChip-label': { px: 0.6 } }} />
+                                                            ))}
+                                                    </Stack>
+                                                </Box>
+                                            </Stack>
                                         </TableCell>
                                         <TableCell>
                                             <Typography variant="caption">{r.package || '—'}</Typography>
@@ -354,7 +379,20 @@ function VendorDialog({ vendor, saving, onClose, onSave }) {
                         helperText: 'Shown in the attendee directory.',
                     })}
 
-                    <Divider textAlign="left"><Typography variant="caption">Contact</Typography></Divider>
+                    {field('Tagline', 'tagline', { helperText: 'The one line they lead with on their own site.' })}
+                    {field('Logo URL', 'logo_url')}
+
+                    <Divider textAlign="left"><Typography variant="caption">Public contact — from their website</Typography></Divider>
+                    <Typography variant="caption" color="text.secondary" sx={{ mt: -1 }}>
+                        Already published by the company, so it appears in the directory without asking.
+                    </Typography>
+                    <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2}>
+                        {field('Public email', 'public_email')}
+                        {field('Public phone', 'public_phone')}
+                    </Stack>
+                    {field('Address', 'address')}
+
+                    <Divider textAlign="left"><Typography variant="caption">Our contact — internal</Typography></Divider>
                     <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2}>
                         {field('Email', 'contact_email')}
                         {field('Phone', 'contact_phone')}
@@ -363,9 +401,10 @@ function VendorDialog({ vendor, saving, onClose, onSave }) {
                         <Switch size="small" checked={!!f.show_contact_publicly}
                             onChange={(e) => setF({ ...f, show_contact_publicly: e.target.checked })} />
                         <Box>
-                            <Typography variant="body2">Show contact details in the directory</Typography>
+                            <Typography variant="body2">Also show our contact in the directory</Typography>
                             <Typography variant="caption" color="text.secondary">
-                                Off by default — some of these are a personal mailbox, so it is the vendor&rsquo;s call.
+                                Off by default. This is whoever booked the booth and is often a personal
+                                mobile — the directory already uses the public details above.
                             </Typography>
                         </Box>
                     </Stack>
@@ -395,6 +434,7 @@ function VendorDialog({ vendor, saving, onClose, onSave }) {
                     onClick={() => {
                         const body = {};
                         ['company_name', 'stage', 'booth_number', 'category', 'website', 'description',
+                         'tagline', 'logo_url', 'public_email', 'public_phone', 'address',
                          'contact_email', 'contact_phone', 'package', 'payment_note'].forEach((k) => {
                             if (f[k] !== undefined) body[k] = f[k] === '' ? null : f[k];
                         });

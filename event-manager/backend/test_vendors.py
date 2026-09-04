@@ -249,13 +249,77 @@ check(up.get("is_published") is True and up.get("can_scan_leads") is False,
       "paying does not by itself hand them a scanner", up)
 call("DELETE", "/exhibitors/%d" % PID, token=ADMIN)
 
+# ── 14. two kinds of contact, and only one is anybody's to publish ────────
+# The website details a company already publishes need no permission. The sheet
+# contact is whoever booked the booth -- frequently a personal mobile -- and
+# publishing that would be handing out somebody's private number.
+st, v3 = call("POST", "/exhibitors", {
+    "event_id": EV, "company_name": "ZZ Two Contacts",
+    "contact_email": "booker-private@example.invalid", "contact_phone": "+14075550999",
+    "public_email": "hello@zztwo.example", "public_phone": "+18005550100",
+    "address": "1 Test Way, Orlando, FL 32801",
+    "tagline": "A tagline from their own site",
+    "description": "What they do.", "stage": "confirmed"}, ADMIN)
+V3 = v3["id"]
+call("PUT", "/exhibitors/%d" % V3, {"is_published": True}, ADMIN)
+st, pub = call("GET", "/public/events/%d/exhibitors" % EV)
+e3 = [p for p in pub if p["company_name"] == "ZZ Two Contacts"][0]
+check(e3.get("contact_email") == "hello@zztwo.example",
+      "the directory shows the PUBLIC email from their website", e3)
+check(e3.get("contact_phone") == "+18005550100",
+      "and the public switchboard, not the booker's mobile", e3)
+raw = json.dumps(pub)
+check("booker-private@example.invalid" not in raw and "4075550999" not in raw,
+      "the booking contact never reaches the directory, even switched off")
+check(e3.get("tagline") == "A tagline from their own site" and e3.get("address"),
+      "tagline and address carry across", e3)
+
+# Even when the organiser opts the booking contact in, the public one wins:
+# it is the number the company actually answers.
+call("PUT", "/exhibitors/%d" % V3, {"show_contact_publicly": True}, ADMIN)
+st, pub = call("GET", "/public/events/%d/exhibitors" % EV)
+e3 = [p for p in pub if p["company_name"] == "ZZ Two Contacts"][0]
+check(e3.get("contact_email") == "hello@zztwo.example",
+      "opting in does not replace the public email with the private one", e3)
+
+# With no public detail on file, the opt-in is what the sheet contact needs.
+call("PUT", "/exhibitors/%d" % V3, {"public_email": None, "public_phone": None}, ADMIN)
+st, pub = call("GET", "/public/events/%d/exhibitors" % EV)
+e3 = [p for p in pub if p["company_name"] == "ZZ Two Contacts"][0]
+check(e3.get("contact_email") == "booker-private@example.invalid",
+      "with nothing public on file, an explicit opt-in still works", e3)
+call("PUT", "/exhibitors/%d" % V3, {"show_contact_publicly": False}, ADMIN)
+st, pub = call("GET", "/public/events/%d/exhibitors" % EV)
+e3 = [p for p in pub if p["company_name"] == "ZZ Two Contacts"][0]
+check(e3.get("contact_email") is None, "and switching it off withholds it again")
+call("DELETE", "/exhibitors/%d" % V3, token=ADMIN)
+
+# ── 15. the real listings were filled from public sources ─────────────────
+enriched = sql("SELECT COUNT(*) FROM exhibitors WHERE event_id=1 "
+               "AND logo_url IS NOT NULL AND description IS NOT NULL AND description != ''")[0][0]
+check(enriched >= 14, "most confirmed stands have a logo and a description", enriched)
+# A public address that happens to equal the sheet contact is not a leak: for a
+# one-person business the address on its website IS the address that booked the
+# booth. What would be a leak is copying the sheet across without checking, so
+# the two known matches are named here — both were read off the company's own
+# site independently, and any NEW match means somebody took a shortcut.
+SAME_ON_PURPOSE = {"Hair By Mermaid", "Medi Air Purifier"}
+same = {r[0] for r in sql("SELECT company_name FROM exhibitors WHERE event_id=1 "
+                          "AND public_email IS NOT NULL AND public_email = contact_email")}
+check(same == SAME_ON_PURPOSE,
+      "the only public addresses matching a sheet contact are the two that genuinely publish it",
+      same - SAME_ON_PURPOSE)
+mismatch = sql("SELECT COUNT(*) FROM exhibitors WHERE event_id=1 "
+               "AND public_phone IS NOT NULL AND public_phone = contact_phone")[0][0]
+check(mismatch == 0, "and no sheet phone number was copied into the public field", mismatch)
+
 # ── cleanup ───────────────────────────────────────────────────────────────
 call("DELETE", "/exhibitors/%d" % VID, token=ADMIN)
 call("DELETE", "/events/%d" % EV, token=ADMIN)
 check(sql("SELECT COUNT(*) FROM exhibitors WHERE company_name='ZZ Sound Co'")[0][0] == 0,
       "the throwaway vendor is gone afterwards")
 
-print("\n%d checks, %d failed" % (42, len(fails)))
+print("\n%d checks, %d failed" % (52, len(fails)))
 if fails:
     print("FAILED: " + "; ".join(fails))
 sys.exit(1 if fails else 0)

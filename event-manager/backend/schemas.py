@@ -268,6 +268,10 @@ class ExhibitorCreate(ExhibitorBase):
     # directory unless they say otherwise.
     is_published: Optional[bool] = True
     stage: Optional[str] = None                   # confirmed | waiting | unsure | ...
+    public_email: Optional[str] = None            # from their own website
+    public_phone: Optional[str] = None
+    address: Optional[str] = None
+    tagline: Optional[str] = None
     package: Optional[str] = None
     payment_status: Optional[str] = None          # paid | partial | unpaid | comp
     amount_due: Optional[float] = None
@@ -289,6 +293,10 @@ class ExhibitorUpdate(BaseModel):
     # Scanning is sold and granted, not implied by existing.
     can_scan_leads: Optional[bool] = None
     stage: Optional[str] = None                   # confirmed | waiting | unsure | ...
+    public_email: Optional[str] = None            # from their own website
+    public_phone: Optional[str] = None
+    address: Optional[str] = None
+    tagline: Optional[str] = None
     package: Optional[str] = None
     payment_status: Optional[str] = None          # paid | partial | unpaid | comp
     amount_due: Optional[float] = None
@@ -312,6 +320,10 @@ class Exhibitor(ExhibitorBase):
     # stand's scanner link actually works.
     can_scan_leads: bool = False
     stage: Optional[str] = "confirmed"
+    public_email: Optional[str] = None
+    public_phone: Optional[str] = None
+    address: Optional[str] = None
+    tagline: Optional[str] = None
     package: Optional[str] = None
     payment_status: Optional[str] = "unpaid"
     amount_due: Optional[float] = None
@@ -353,6 +365,8 @@ class ExhibitorPublic(BaseModel):
     logo_url: Optional[str] = None
     website: Optional[str] = None
     category: Optional[str] = None
+    tagline: Optional[str] = None
+    address: Optional[str] = None
     contact_email: Optional[str] = None
     contact_phone: Optional[str] = None
 

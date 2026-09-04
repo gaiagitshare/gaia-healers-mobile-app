@@ -295,6 +295,15 @@ class Exhibitor(Base):
     # want them in the directory -- but that is their call, not a default, and
     # some of these addresses are a personal mailbox. Off unless switched on.
     show_contact_publicly = Column(Boolean, default=False)
+    # PUBLIC contact, taken from the company's own website — separate from
+    # contact_email/contact_phone above, which is the person who booked the
+    # booth and is frequently their personal mobile. A directory that published
+    # the booking contact would be handing out someone's private number; these
+    # are the details the company itself already publishes.
+    public_email = Column(String)
+    public_phone = Column(String)
+    address = Column(String)
+    tagline = Column(String)          # the one line the company leads with
     # Vendor self-setup. An organiser sends a link; the stand fills in its own
     # description, logo and links, and publishes itself.
     #

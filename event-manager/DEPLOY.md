@@ -305,6 +305,32 @@ not what they paid, not their scanner token — and carries contact details only
 for a stand that asked for it, because several of these addresses are somebody's
 personal mailbox.
 
+### Two kinds of vendor contact
+
+| | |
+|---|---|
+| `public_email` / `public_phone` / `address` | read off the company's **own website** — already published by them, so the directory shows it without asking |
+| `contact_email` / `contact_phone` | whoever **booked the booth**, frequently a personal mobile — internal, and shown only if that person opts in |
+
+The directory prefers the public one wherever it exists. Publishing the booking
+contact by default would mean handing out somebody's private number to anyone
+who opens the app.
+
+`import/scrape_vendor_sites.py` reads only what a site actually shows —
+`mailto:`, `tel:`, a postal address, the meta description — and writes nothing
+it had to guess, because a directory entry with a wrong phone number is worse
+than one with none. `import/enrich_vendors.py` applies it and **never overwrites
+something a human already wrote**. Logos come from the event site's own
+exhibitor wall.
+
+Two vendors publish the same address they booked with (Hair By Mermaid, Medi Air
+Purifier) — that is a one-person business, not a copied field, and
+`test_vendors.py` names them so a *new* match fails the suite.
+
+Coverage after the first pass: 15 of 33 have a logo and a description; four
+sites block automated reading entirely (ASEA, Quantum Sound Therapy, Pulse PEMF,
+Approvd). That is what the setup link is for.
+
 ### Vendor self-setup
 
 **Setup link** mints a URL the organiser sends however they actually reach that

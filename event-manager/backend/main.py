@@ -85,6 +85,8 @@ def _ensure_event_columns():
                        ("amount_due", "FLOAT"), ("amount_paid", "FLOAT"),
                        ("payment_note", "TEXT"), ("show_contact_publicly", "BOOLEAN DEFAULT 0"),
                        ("stage", "VARCHAR DEFAULT 'confirmed'"),
+                       ("public_email", "VARCHAR"), ("public_phone", "VARCHAR"),
+                       ("address", "VARCHAR"), ("tagline", "VARCHAR"),
                        ("setup_token_hash", "VARCHAR"), ("setup_sent_at", "DATETIME"),
                        ("setup_expires_at", "DATETIME"), ("activated_at", "DATETIME")):
         if _ex and _col not in _ex:
@@ -3277,12 +3279,19 @@ def get_public_exhibitors(
     out = []
     for r in rows:
         show = bool(getattr(r, "show_contact_publicly", False))
+        # Two different things, deliberately not merged. The public_* fields came
+        # off the company's own website and are already published by them, so
+        # they need no permission. contact_* is whoever booked the booth --
+        # often a personal mobile -- and appears only if that person asked.
         out.append({
             "id": r.id, "company_name": r.company_name, "booth_number": r.booth_number,
             "description": r.description, "logo_url": r.logo_url, "website": r.website,
-            "category": r.category,
-            "contact_email": (r.contact_email or None) if show else None,
-            "contact_phone": (r.contact_phone or None) if show else None,
+            "category": r.category, "tagline": getattr(r, "tagline", None),
+            "address": getattr(r, "address", None),
+            "contact_email": (getattr(r, "public_email", None)
+                              or ((r.contact_email or None) if show else None)),
+            "contact_phone": (getattr(r, "public_phone", None)
+                              or ((r.contact_phone or None) if show else None)),
         })
     return out
 

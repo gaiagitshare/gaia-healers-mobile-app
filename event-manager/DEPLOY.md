@@ -305,6 +305,25 @@ not what they paid, not their scanner token — and carries contact details only
 for a stand that asked for it, because several of these addresses are somebody's
 personal mailbox.
 
+### What attendees see
+
+The app's **Exhibit hall → Vendor directory** lists every published stand with
+its logo, booth number and what it does. A row opens that stand's own page
+(`/v/<id>`) rather than firing the attendee straight out to a company website —
+the stand page carries the booth number and how to reach them, and a link out
+loses both, along with the person.
+
+Nothing commercial crosses: no package, no amounts, no scanner token. Verified
+by `test_vendors.py`.
+
+### Paid, and allowed to scan
+
+They are separate switches because they are separate purchases, but they should
+normally agree. The Vendors screen reconciles them: it offers to grant scanning
+to every settled stand in one action, and **warns in the other direction** —
+a stand that can scan but has not paid is named, because that is the one you
+want to find before the doors open, not after.
+
 ### The stand's own screen — and why the blur is real
 
 `/event/scan/<access_token>` is what a booth runs on a phone. It shows the

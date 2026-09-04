@@ -719,6 +719,8 @@ class TicketTypeCreate(BaseModel):
 
 
 class TicketTypeUpdate(BaseModel):
+    # Editable, so a day pass can be corrected without a database write.
+    valid_day: Optional[str] = None
     code: Optional[str] = None
     name: Optional[str] = None
     description: Optional[str] = None
@@ -970,6 +972,10 @@ class BadgePrintRecord(BaseModel):
 
 class UndoCheckIn(BaseModel):
     reason: str
+
+
+class DoorTestMode(BaseModel):
+    enabled: bool = False
 
 
 class CardVerifyStart(IdentityTicketLookup):

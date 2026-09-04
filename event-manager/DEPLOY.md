@@ -265,6 +265,35 @@ panel shows `event_like` and counts the rest. **Nothing is deleted** —
 `?include_unrelated=true` returns everything. Triage decides what is *shown* and
 never what is *granted*: a product still becomes access only when a human maps it.
 
+## Rehearsing the door before opening day
+
+A ticket is not valid outside its event's calendar window, and that gate is not
+negotiable — it is what stops last year's badge opening this year's door. But
+staff have to practise check-in and test the printer *before* the event, not in
+front of a queue, and there was no way to do that at all.
+
+Check-In shows a banner whenever the event has not started. **Start rehearsal**
+waives the calendar window for that one event, and nothing else: another event's
+badge, a refunded ticket, a single-day pass on the wrong day and a second scan of
+the same badge are all refused exactly as they would be on the day. Every scan
+is written to the history prefixed `REHEARSAL —`, so it can never be read as real
+attendance. Turn it off before the event; **Clear** empties the practice scans.
+
+`test_door_rehearsal.py` pins the whole boundary.
+
+> **The bug this uncovered.** The anti-passback check read
+> `event.custom_fields.get("allow_reentry")`, but that column is a *list* of
+> registration-form fields on every real event. Nothing had ever reached the
+> line, because the calendar gate returns first on every day that is not an
+> event day — so the first scan to get that far would have been **the first scan
+> of the real event**, and it would have been a 500 at the door. Rehearsal is
+> what found it.
+>
+> A second one: `POST /events/{id}/ticket-types` accepted `valid_day` and never
+> stored it, so a single-day pass created through the UI silently became valid
+> for the whole event. The live Friday Pass was set directly in the database and
+> was never affected.
+
 ### Single-day passes
 
 `ticket_types.valid_day` (nullable, `YYYY-MM-DD`, venue-local) limits a base

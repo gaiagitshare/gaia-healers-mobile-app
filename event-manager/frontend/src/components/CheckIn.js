@@ -13,7 +13,7 @@ import UndoIcon from '@mui/icons-material/Undo';
 import VisibilityIcon from '@mui/icons-material/Visibility';
 import PersonAddIcon from '@mui/icons-material/PersonAdd';
 import { Html5QrcodeScanner } from 'html5-qrcode';
-import { authorizeScan, getScanLogs, searchAttendees, getEvents, walkInCreate, getTicketTypes, badgeLabelBlob, recordBadgePrint, undoCheckIn } from '../utils/api';
+import { authorizeScan, getScanLogs, searchAttendees, getEvents, walkInCreate, getTicketTypes, badgeLabelBlob, recordBadgePrint, undoCheckIn, clearScanLogs, setDoorTestMode, getEvent } from '../utils/api';
 import { formatVenueTime, statusLabel, isFlaggedStatus } from '../utils/datetime';
 
 // The access zones a scanner can be checking. The BACKEND decides the outcome;
@@ -97,6 +97,10 @@ function CheckIn({ timezone: timezoneProp }) {
     const [feedback, setFeedback] = useState(null);
     const [scanLogs, setScanLogs] = useState([]);
     const [logsLoading, setLogsLoading] = useState(false);
+    const [clearLogsOpen, setClearLogsOpen] = useState(false);
+    const [clearing, setClearing] = useState(false);
+    const [rehearsal, setRehearsal] = useState(false);
+    const [rehearsalBusy, setRehearsalBusy] = useState(false);
     const [truncated, setTruncated] = useState(false);
     const [revealId, setRevealId] = useState(null);
     const [station, setStation] = useState(() => { try { return localStorage.getItem(STATION_KEY) || ''; } catch (e) { return ''; } });
@@ -105,6 +109,22 @@ function CheckIn({ timezone: timezoneProp }) {
     const [label, setLabel] = useState(null);   // { attendee, url, attemptId, checkedInNow, error }
     const [undoTarget, setUndoTarget] = useState(null);
     const [undoReason, setUndoReason] = useState('');
+
+    // The door's own state: has this event started, and is a rehearsal running.
+    const [doorEvent, setDoorEvent] = useState(null);
+    useEffect(() => {
+        if (!eventId) { setDoorEvent(null); return; }
+        getEvent(eventId)
+            .then((r) => { setDoorEvent(r.data); setRehearsal(Boolean(r.data?.door_test_mode)); })
+            .catch(() => setDoorEvent(null));
+    }, [eventId]);
+    const doorNotOpenYet = (() => {
+        const start = doorEvent?.start_date;
+        const end = doorEvent?.end_date || start;
+        if (!start) return false;
+        const today = new Date().toISOString().slice(0, 10);
+        return today < String(start).slice(0, 10) || today > String(end).slice(0, 10);
+    })();
 
     useEffect(() => {
         if (eventIdFromRoute) return;
@@ -493,13 +513,18 @@ function CheckIn({ timezone: timezoneProp }) {
             ) : (
                 <>
                     <Paper variant="outlined" sx={{ p: 2, mb: 3 }}>
-                        <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1.5} alignItems={{ sm: 'flex-end' }}>
-                            <TextField select size="small" label="This scanner checks" value={accessType} onChange={(e) => setAccessType(e.target.value)} sx={{ minWidth: 230 }}>
+                        {/* flex-start, not flex-end: only one of these fields has helper
+                            text, and bottom-aligning a row of mixed heights lifted that
+                            field's input box out of line with the other two. */}
+                        <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1.5} alignItems={{ sm: 'flex-start' }}>
+                            <TextField select size="small" label="This scanner checks" value={accessType} onChange={(e) => setAccessType(e.target.value)} sx={{ minWidth: 230 }}
+                                helperText="Zone this scanner guards">
                                 {ZONES.map((z) => <MenuItem key={z.value} value={z.value}>{z.label}</MenuItem>)}
                             </TextField>
                             <TextField size="small" label="Station name" placeholder="e.g. Desk A" value={station} onChange={(e) => rememberStation(e.target.value)} sx={{ minWidth: 160 }}
                                 helperText="Recorded on every print" />
-                            <TextField select size="small" label="Label roll" value={labelSize} onChange={(e) => rememberLabelSize(e.target.value)} sx={{ minWidth: 140 }}>
+                            <TextField select size="small" label="Label roll" value={labelSize} onChange={(e) => rememberLabelSize(e.target.value)} sx={{ minWidth: 140 }}
+                                helperText="Saved on this device">
                                 <MenuItem value="40x60">40 × 60 mm · portrait — in stock</MenuItem>
                                 <MenuItem value="40x50">40 × 50 mm · portrait — design target, roll not sold by NIIMBOT</MenuItem>
                                 <MenuItem value="40x40">40 × 40 mm — in stock</MenuItem>
@@ -509,6 +534,45 @@ function CheckIn({ timezone: timezoneProp }) {
                         </Stack>
                         <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 1 }}>{zoneNote}</Typography>
                     </Paper>
+
+                    {/* Rehearsal. The calendar window is what stops last year's badge
+                        opening this year's door, so it is never removed — it is waived,
+                        deliberately, for this one event, and said out loud the whole
+                        time it is on. */}
+                    {doorNotOpenYet && (
+                        <Alert
+                            severity={rehearsal ? 'warning' : 'info'}
+                            sx={{ mb: 3 }}
+                            action={
+                                <Button size="small" color="inherit" disabled={rehearsalBusy}
+                                    onClick={async () => {
+                                        setRehearsalBusy(true);
+                                        try {
+                                            const r = await setDoorTestMode(eventId, !rehearsal);
+                                            setRehearsal(Boolean(r.data?.door_test_mode));
+                                        } catch (e) {
+                                            setError(e?.response?.data?.detail || 'Could not change the door mode.');
+                                        } finally { setRehearsalBusy(false); }
+                                    }}>
+                                    {rehearsalBusy ? 'Working…' : (rehearsal ? 'Turn off' : 'Start rehearsal')}
+                                </Button>
+                            }>
+                            {rehearsal ? (
+                                <>
+                                    <strong>Rehearsal mode is on.</strong> The door is accepting badges even though the
+                                    event has not started. Every other rule still applies — a refunded ticket, another
+                                    event&rsquo;s badge or a single-day pass is refused exactly as it would be on the day.
+                                    Scans are marked <em>REHEARSAL</em> in the history. Turn this off before the event.
+                                </>
+                            ) : (
+                                <>
+                                    <strong>This event has not started, so the door refuses every badge.</strong>{' '}
+                                    Start a rehearsal to practise check-in and test the printer now, rather than in
+                                    front of a queue.
+                                </>
+                            )}
+                        </Alert>
+                    )}
 
                     <Box mb={3}>
                         <Button variant={scanning ? 'outlined' : 'contained'} onClick={() => { setScanning(!scanning); setResult(null); setError(''); }}>
@@ -564,37 +628,56 @@ function CheckIn({ timezone: timezoneProp }) {
                     )}
 
                     <Divider sx={{ my: 3 }} />
-                    <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 1.5 }}>
+                    <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 1.5 }} gap={1} flexWrap="wrap">
                         <Box>
                             <Typography variant="subtitle1">Recent scan history</Typography>
-                            <Typography variant="caption" color="text.secondary">Latest 100 access decisions for this event.</Typography>
+                            <Typography variant="caption" color="text.secondary">
+                                Latest 100 access decisions for this event
+                                {scanLogs.length ? ` · showing ${scanLogs.length}` : ''}
+                            </Typography>
                         </Box>
-                        <Button size="small" onClick={refreshScanLogs} disabled={logsLoading}>
-                            {logsLoading ? 'Loading…' : 'Refresh'}
-                        </Button>
+                        <Stack direction="row" spacing={0.5}>
+                            <Button size="small" onClick={refreshScanLogs} disabled={logsLoading}>
+                                {logsLoading ? 'Loading…' : 'Refresh'}
+                            </Button>
+                            {scanLogs.length > 0 && (
+                                <Button size="small" color="error" onClick={() => setClearLogsOpen(true)}>Clear</Button>
+                            )}
+                        </Stack>
                     </Stack>
                     {scanLogs.length === 0 ? (
                         <Alert severity="info">No access decisions have been recorded for this event yet.</Alert>
                     ) : (
-                        <Stack spacing={1}>
-                            {scanLogs.map((log) => (
-                                <Paper key={log.id} variant="outlined" sx={{ p: 1.5 }}>
-                                    <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1} justifyContent="space-between">
-                                        <Box sx={{ minWidth: 0 }}>
-                                            <Stack direction="row" spacing={0.75} flexWrap="wrap" useFlexGap>
-                                                <Chip size="small" color={RESULT_COLOR[log.result] || 'default'} label={log.result || 'UNKNOWN'} />
-                                                <Chip size="small" variant="outlined" label={ZONES.find((z) => z.value === log.access_type)?.label || log.access_type} />
-                                            </Stack>
-                                            <Typography variant="body2" sx={{ mt: 0.75 }}>{log.reason || 'No reason recorded'}</Typography>
-                                            <Typography variant="caption" color="text.secondary" sx={{ fontFamily: 'monospace', wordBreak: 'break-all' }}>{log.qr_code}</Typography>
-                                        </Box>
-                                        <Typography variant="caption" color="text.secondary" sx={{ whiteSpace: 'nowrap' }}>
-                                            {log.created_at ? formatVenueTime(log.created_at, timezone) : ''}
-                                        </Typography>
-                                    </Stack>
-                                </Paper>
+                        /* One dense line per scan. The old card-per-row layout meant a
+                           morning's scans scrolled for pages, and the line that matters
+                           on the day is the most recent one — it should be readable
+                           without scrolling past the rest. */
+                        <Paper variant="outlined" sx={{ overflow: 'hidden' }}>
+                            {scanLogs.map((log, i) => (
+                                <Stack key={log.id} direction="row" spacing={1} alignItems="center"
+                                    sx={{
+                                        px: 1.25, py: 0.6, minWidth: 0,
+                                        borderTop: i === 0 ? 'none' : '1px solid',
+                                        borderColor: 'divider',
+                                        bgcolor: log.result === 'GRANTED' ? 'transparent' : 'action.hover',
+                                    }}>
+                                    <Chip size="small" color={RESULT_COLOR[log.result] || 'default'}
+                                        label={log.result || '—'}
+                                        sx={{ height: 20, fontSize: 11, minWidth: 68, '& .MuiChip-label': { px: 0.75 } }} />
+                                    <Typography variant="caption" color="text.secondary"
+                                        sx={{ minWidth: 92, display: { xs: 'none', sm: 'block' } }}>
+                                        {ZONES.find((z) => z.value === log.access_type)?.label || log.access_type}
+                                    </Typography>
+                                    <Typography variant="body2" noWrap sx={{ flex: 1, minWidth: 0 }} title={`${log.reason || ''} · ${log.qr_code || ''}`}>
+                                        {log.reason || 'No reason recorded'}
+                                    </Typography>
+                                    <Typography variant="caption" color="text.secondary"
+                                        sx={{ whiteSpace: 'nowrap', fontVariantNumeric: 'tabular-nums' }}>
+                                        {log.created_at ? formatVenueTime(log.created_at, timezone) : ''}
+                                    </Typography>
+                                </Stack>
                             ))}
-                        </Stack>
+                        </Paper>
                     )}
                 </>
             )}
@@ -628,6 +711,33 @@ function CheckIn({ timezone: timezoneProp }) {
                     <Button variant="outlined" startIcon={<PrintIcon />} disabled={!label?.url} onClick={sendToPrinter}>Print</Button>
                     <Button color="warning" onClick={() => finishPrint('failed', 'Operator reported a failed print')}>Mark failed</Button>
                     <Button variant="contained" color="success" onClick={() => finishPrint('printed')}>Printed ✓</Button>
+                </DialogActions>
+            </Dialog>
+
+            <Dialog open={clearLogsOpen} onClose={() => setClearLogsOpen(false)}>
+                <DialogTitle>Clear the scan history?</DialogTitle>
+                <DialogContent>
+                    <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
+                        This deletes all {scanLogs.length} recorded access decisions for this event and cannot be undone.
+                    </Typography>
+                    <Typography variant="body2" color="text.secondary">
+                        It does not change anyone&rsquo;s check-in state, their badge, or their ticket — only the log of
+                        who was scanned at which door. Clear it after a rehearsal so the real event starts on a
+                        clean sheet.
+                    </Typography>
+                </DialogContent>
+                <DialogActions>
+                    <Button onClick={() => setClearLogsOpen(false)}>Cancel</Button>
+                    <Button color="error" variant="contained" disabled={clearing} onClick={async () => {
+                        setClearing(true);
+                        try {
+                            await clearScanLogs(eventId);
+                            await refreshScanLogs();
+                            setClearLogsOpen(false);
+                        } catch (e) {
+                            setError(e?.response?.data?.detail || 'Could not clear the scan history.');
+                        } finally { setClearing(false); }
+                    }}>{clearing ? 'Clearing…' : 'Clear history'}</Button>
                 </DialogActions>
             </Dialog>
 

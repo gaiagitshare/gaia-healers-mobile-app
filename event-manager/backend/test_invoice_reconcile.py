@@ -110,7 +110,11 @@ st8, d8 = call("POST", "/identity/report-unmapped-sale", {"event_id": EV, "refer
     "buyer_email": E("f"), "buyer_name": "Fay Friday", "amount": 97, "paid_at": "2026-09-04"}, SVC)
 check(st8 == 200 and d8.get("recorded") is True, "an unmapped paid product is recorded for review", d8)
 st9, d9 = call("GET", "/events/%d/unmapped-sales" % EV, tok=ADMIN)
-check(st9 == 200 and d9.get("pending") == 1 and d9["items"][0]["product_name"] == "ZZ Friday Pass",
+# Assert THIS row is present, not that it is the only one: the reconciler now
+# files genuine unmapped sales of its own, so the panel is shared.
+_mine = [i for i in (d9.get("items") or []) if i.get("reference") == "ord-zz-1"]
+check(st9 == 200 and len(_mine) == 1 and _mine[0]["product_name"] == "ZZ Friday Pass"
+      and _mine[0]["amount"] == 97,
       "and it appears in the review list with enough detail to act on", d9.get("pending"))
 check(sql("SELECT COUNT(*) FROM attendees WHERE event_id=? AND lower(email)=?", (EV, E("f")))[0][0] == 0,
       "and NO attendee was created from it")

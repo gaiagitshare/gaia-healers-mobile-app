@@ -907,6 +907,21 @@ class ReconcileInvoice(BaseModel):
     issued_at: Optional[str] = None
 
 
+class MapReconcileRequest(BaseModel):
+    """Map ONE immutable GHL product id to ONE Gaia ticket type, and optionally
+    replay its history. product_id is the whole key: names are display only,
+    because a renamed product must not become a second, separate thing."""
+    product_id: str
+    ticket_type_id: Optional[int] = None
+    is_upgrade: bool = False
+    entitlement_type: str = "EVENT_TICKET"
+    addon_code: Optional[str] = None
+    label: Optional[str] = None
+    valid_day: Optional[str] = None
+    confirm: bool = False          # apply requires an explicit yes
+    preview_token: Optional[str] = None   # ties an apply to the preview shown
+
+
 class ReconcileAttendee(BaseModel):
     event_id: int
     email: str
@@ -916,6 +931,11 @@ class ReconcileAttendee(BaseModel):
     phone: Optional[str] = None
     contact_id: Optional[str] = None
     order_id: Optional[str] = None
+    product_id: Optional[str] = None
+    price_id: Optional[str] = None
+    quantity: Optional[int] = 1
+    purchased_at: Optional[str] = None   # when GHL took the money
+    amount: Optional[float] = None
     is_upgrade: Optional[bool] = False
     addon_code: Optional[str] = None
     day: Optional[str] = None

@@ -609,6 +609,11 @@ class UnmappedSale(Base):
     resolved_by = Column(Integer, nullable=True)
     resolved_at = Column(DateTime, nullable=True)
     note = Column(String)
+    # Triage only: does this belong in the Event review panel at all. It NEVER
+    # decides access -- a product still becomes a ticket only when a human maps
+    # it. Bio-Well devices and sponsorships are real sales, just not this event's.
+    relevance = Column(String, default="event_like", index=True)   # event_like | unrelated
+    relevance_reason = Column(String)
     first_seen = Column(DateTime, default=datetime.utcnow)
 
 
@@ -893,4 +898,27 @@ class BadgePrintLog(Base):
     error = Column(String, nullable=True)
     # A retry re-sends the same id; the log keeps one row per attempt, not per click.
     client_attempt_id = Column(String, nullable=True, unique=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+
+class MapReconcileRun(Base):
+    """One Map & Reconcile action, kept so the question "who let this product in,
+    and what did it create?" always has an answer. The preview that staff
+    approved is stored alongside the result, so a surprising outcome can be
+    compared against what they were shown."""
+    __tablename__ = "map_reconcile_runs"
+    id = Column(Integer, primary_key=True, index=True)
+    event_id = Column(Integer, ForeignKey("events.id"), index=True)
+    product_id = Column(String, index=True)        # immutable GHL product id
+    product_name = Column(String)                  # display only, never matched on
+    ticket_type_id = Column(Integer, ForeignKey("ticket_types.id"))
+    is_upgrade = Column(Boolean, default=False)
+    entitlement_type = Column(String, default="EVENT_TICKET")
+    preview = Column(JSON)                         # exactly what was shown before approval
+    result = Column(JSON)                          # what the replay actually did
+    created = Column(Integer, default=0)
+    updated = Column(Integer, default=0)
+    skipped = Column(Integer, default=0)
+    failed = Column(Integer, default=0)
+    actor_id = Column(Integer, ForeignKey("users.id"))
     created_at = Column(DateTime, default=datetime.utcnow)

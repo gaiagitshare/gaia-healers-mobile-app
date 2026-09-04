@@ -231,14 +231,26 @@ O_TICKET = "ord-zz-ticket-5"
 call("POST", "/identity/reconcile-attendee", {
     "event_id": EV, "email": E_SPON, "ticket_type_id": BASE_TT, "order_id": O_TICKET,
     "first_name": "Sam", "last_name": "Sponsor"}, SVC)
+blocked_before = sql("SELECT COUNT(*) FROM attendees WHERE registration_status IN "
+                     "('refunded','cancelled','revoked')")[0][0]
 st, ref = call("POST", "/identity/refund-ticket", {
     "order_id": "ord-zz-sponsorship-not-a-ticket",
     "amount": 3500.0, "amount_refunded": 3500.0, "actor": "mirror"}, SVC)
+check(ref.get("matched") is False,
+      "a refund for a reference Gaia never ledgered matches NOBODY", ref)
 check(status_of(E_SPON) not in BLOCKED,
       "refunding a non-ticket purchase leaves that buyer's event seat alone",
       (ref, status_of(E_SPON)))
 check(tier_of(E_SPON) == BASE_TT,
       "and does not disturb their tier", tier_of(E_SPON))
+# The narrow version of this check passed while a real attendee was being
+# revoked: the reconciler passes no email, the lookup ran unfiltered, and the
+# refund landed on whoever was first in the table. Count the whole table.
+blocked_after = sql("SELECT COUNT(*) FROM attendees WHERE registration_status IN "
+                    "('refunded','cancelled','revoked')")[0][0]
+check(blocked_after == blocked_before,
+      "and revokes nobody ELSE anywhere in the event either",
+      (blocked_before, blocked_after))
 
 # ── 5. a reference nobody recognises must never guess ─────────────────────
 st, ref = call("POST", "/identity/refund-ticket", {
@@ -259,7 +271,7 @@ check(maps_left[0][0] == 0, "the throwaway mappings are gone too", maps_left)
 left = sql("SELECT COUNT(*) FROM attendees WHERE email LIKE 'zz-refund-%'")
 check(left[0][0] == 0, "the throwaway event and its people are gone afterwards", left)
 
-print("\n%d checks, %d failed" % (22, len(fails)))
+print("\n%d checks, %d failed" % (24, len(fails)))
 if fails:
     print("FAILED: " + "; ".join(fails))
 sys.exit(1 if fails else 0)

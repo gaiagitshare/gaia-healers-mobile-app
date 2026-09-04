@@ -5088,10 +5088,16 @@ def refund_ticket(payload: schemas.RefundTicket, db: Session = Depends(get_db),
     if email:
         q = q.filter(func.lower(models.Attendee.email) == email)
     attendee = q.first()
-    if not attendee and payload.order_id:
-        # fall back to order id embedded in custom_data
+    _ref_lookup = payload.order_id or payload.invoice_id
+    if not attendee and _ref_lookup:
+        # Fall back to the purchase reference recorded on the attendee. Invoice
+        # buyers have no order_id at all, so search the ledger as well.
         for a in db.query(models.Attendee).all():
-            if (a.custom_data or {}).get("order_id") == payload.order_id:
+            _cd = a.custom_data or {}
+            if _cd.get("order_id") == _ref_lookup or _cd.get("invoice_id") == _ref_lookup:
+                attendee = a; break
+            if any((e.get("order_id") or e.get("invoice_id")) == _ref_lookup
+                   for e in (_cd.get("entitlements") or [])):
                 attendee = a; break
     if not attendee:
         return {"ok": True, "matched": False, "reason": "no_attendee"}
@@ -5100,8 +5106,12 @@ def refund_ticket(payload: schemas.RefundTicket, db: Session = Depends(get_db),
     seen = set(cd.get("refunded_order_ids") or [])
     # Idempotent per order: once this order has been refunded (whether it dropped
     # the ticket to a lower tier or invalidated it), a repeat delivery is a no-op.
-    _already = payload.order_id and (payload.order_id in seen or any(
-        e.get("order_id") == payload.order_id and e.get("status") == "refunded"
+    # A ticket bought on an INVOICE is ledgered under invoice_id, not order_id.
+    # Matching on order_id alone made an invoice refund a silent no-op: the
+    # person kept full access after their money was returned.
+    _ref = payload.order_id or payload.invoice_id
+    _already = _ref and (_ref in seen or any(
+        (e.get("order_id") or e.get("invoice_id")) == _ref and e.get("status") == "refunded"
         for e in (cd.get("entitlements") or [])))
     if _already:
         return {"ok": True, "matched": True, "changed": False,
@@ -5120,13 +5130,13 @@ def refund_ticket(payload: schemas.RefundTicket, db: Session = Depends(get_db),
         return {"ok": True, "matched": True, "changed": True, "partial": True,
                 "status": _ticket_status(attendee), "attendee_id": attendee.id}
 
-    if payload.order_id:
-        seen.add(payload.order_id)
+    if _ref:
+        seen.add(_ref)
     cd["refunded_order_ids"] = sorted(seen)
     ents = list(cd.get("entitlements") or [])
     ledger_hit = None
     for e in ents:
-        if e.get("order_id") == payload.order_id:
+        if (e.get("order_id") or e.get("invoice_id")) == _ref:
             e["status"] = "refunded"; ledger_hit = e; break
     cd["entitlements"] = ents
     prev_tt = attendee.ticket_type_id

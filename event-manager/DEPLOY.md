@@ -120,6 +120,49 @@ required*; nothing is created from a product's name, however event-like it
 sounds. This exists because four people bought a day pass created that morning
 and it went unnoticed until an audit.
 
+## Two ways a payment reaches Gaia
+
+**The webhook is the fast path.** `POST /api/webhooks/ghl-payment` on the proxy
+reconciles a sale within seconds of GHL taking the money.
+
+**The mirror is the recovery path.** `gaia-event-mirror.timer` runs
+`staging-proxy/event-mirror.mjs` hourly, re-reads the last 14 days from GHL and
+makes Gaia converge on it — completed orders, paid invoices, refunds, and
+products nobody has mapped. It is **read-only against GHL**: it issues GET
+requests only and writes exclusively to the Event Manager.
+
+It exists because an undelivered webhook leaves no trace at all. On its first
+real run it saw 83 orders, found all 83 already reconciled, and created nothing
+— which is the result to expect. A run that starts creating attendees means
+webhooks are being missed, and the log line says so:
+
+```bash
+journalctl -u gaia-event-mirror.service -n 20 --no-pager -o cat
+```
+
+```bash
+node /root/gaia-staging-proxy/event-mirror.mjs --since-days=30 --dry-run
+```
+
+Two rules it must keep:
+
+- It scopes mappings to `EVENT_TICKET` / `EVENT_UPGRADE`, exactly as the webhook
+  does, so a membership or course product can never mint a seat.
+- **Refunds are keyed on the money reference, never on the buyer's email.**
+  Sponsorships and Bio-Well kits get refunded too and share an address; matching
+  by person would revoke an event seat nobody refunded. A refund Gaia never
+  ledgered is a clean no-op. `test_refund_mirror.py` pins this.
+
+### Refunds follow the payment that is still valid
+
+Access is derived from the entitlement ledger, not switched off wholesale:
+refunding an upgrade drops the tier and keeps the person; refunding everything
+revokes. A ticket bought on an invoice is ledgered under `invoice_id`, so
+`/identity/refund-ticket` accepts `invoice_id` alongside `order_id` — before
+2026-09-04 it matched `order_id` only, which made an invoice refund fall through
+to a legacy path that was neither idempotent nor tier-aware, and an invoice
+*upgrade* refund threw the person out of the event entirely.
+
 ### Single-day passes
 
 `ticket_types.valid_day` (nullable, `YYYY-MM-DD`, venue-local) limits a base

@@ -426,6 +426,19 @@
   }
 
   // ================= EVENTS (embedded, single sign-on) =================
+  // ── Events ───────────────────────────────────────────────────────────────
+  // This embeds the REAL Event Manager (/event/). It is not a copy and there is
+  // no second implementation: same build, same /event-api backend, same
+  // database. Everything about attendees, check-in, walk-ins, badges, badge
+  // cards, door payments and event reporting is built there and appears here
+  // automatically.
+  //
+  // Do NOT add event logic to this shell. Its whole job for Events is the nav
+  // item, this iframe, and keeping the token in sync for single sign-on. The
+  // only /event-api calls allowed from here are under /auth/.
+  //
+  // See design-reference/EVENT-ADMIN-ARCHITECTURE.md.
+  // Enforced by tests/event-admin-boundary.test.cjs.
   function mountEvents() {
     try { var tk = TOKEN || localStorage.getItem('gha_token'); if (tk) localStorage.setItem('token', tk); } catch (e) {}
     var c = document.getElementById('content');

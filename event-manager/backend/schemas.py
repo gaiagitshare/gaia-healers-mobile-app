@@ -709,6 +709,7 @@ class FeedbackSubmit(IdentityTicketLookup):
 
 
 class TicketTypeCreate(BaseModel):
+    valid_day: Optional[str] = None
     code: str                    # canonical (a price id), never display copy
     name: str
     description: Optional[str] = None
@@ -868,6 +869,42 @@ class TicketMapping(TicketMappingBase):
     event_id: int
     class Config:
         from_attributes = True
+
+class UnmappedSaleIn(BaseModel):
+    """Reported by the sync when a paid product has no ticket mapping."""
+    event_id: Optional[int] = None
+    reference: str
+    source: str = "ghl_order"
+    product_id: Optional[str] = None
+    product_name: Optional[str] = None
+    buyer_name: Optional[str] = None
+    buyer_email: Optional[str] = None
+    contact_id: Optional[str] = None
+    amount: Optional[float] = None
+    currency: Optional[str] = "USD"
+    quantity: Optional[int] = 1
+    paid_at: Optional[str] = None
+    funnel: Optional[str] = None
+
+
+class ReconcileInvoice(BaseModel):
+    """A PAID GHL invoice for an event ticket. Distinct from an order: it has
+    its own id, and no order id is ever invented for it."""
+    event_id: int
+    email: str
+    invoice_id: str
+    transaction_id: Optional[str] = None
+    contact_id: Optional[str] = None
+    product_id: Optional[str] = None
+    price_id: Optional[str] = None
+    amount: Optional[float] = None
+    quantity: Optional[int] = 1
+    status: Optional[str] = "paid"
+    first_name: Optional[str] = ""
+    last_name: Optional[str] = ""
+    phone: Optional[str] = None
+    issued_at: Optional[str] = None
+
 
 class ReconcileAttendee(BaseModel):
     event_id: int

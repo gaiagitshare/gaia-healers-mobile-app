@@ -18,7 +18,7 @@ import {
     getAttendees, getAttendee, getTicketCounts, createAttendee, updateAttendee, deleteAttendee,
     generateBadge, importAttendees, searchAttendees, getTicketTypes, exportAttendees,
     revokeAttendee, reinstateAttendee, changePass, setAddonDay,
-    getAcquisitionReport, badgeLabelBlob , getDoorReport} from '../utils/api';
+    getAcquisitionReport, badgeLabelBlob , getDoorReport, getUnmappedSales, dismissUnmappedSale} from '../utils/api';
 import { formatVenueTime, STATUS_LABELS, statusLabel } from '../utils/datetime';
 
 // The organiser's GHL location, for the authoritative refund/payment record.
@@ -57,7 +57,9 @@ function Attendees({ timezone }) {
     const [reportLevel, setReportLevel] = useState('by_source');
     const [showReport, setShowReport] = useState(true);
     const [door, setDoor] = useState(null);
+    const [unmapped, setUnmapped] = useState(null);
     const [showDoor, setShowDoor] = useState(false);
+    const [showUnmapped, setShowUnmapped] = useState(true);
     const [sortBy, setSortBy] = useState('');
     const [sortDir, setSortDir] = useState('asc');
     const [fFunnel, setFFunnel] = useState('');
@@ -352,6 +354,9 @@ function Attendees({ timezone }) {
         getAcquisitionReport(eventId)
             .then((r) => { if (alive) setReport(r.data); })
             .catch(() => { /* the table still works without the summary */ });
+        getUnmappedSales(eventId)
+            .then((r) => { if (alive) setUnmapped(r.data); })
+            .catch(() => { /* additive */ });
         getDoorReport(eventId)
             .then((r) => { if (alive) setDoor(r.data); })
             .catch(() => { /* the table still works without it */ });
@@ -553,6 +558,61 @@ function Attendees({ timezone }) {
                         </Box>
                     )}
                 </Paper>
+            )}
+
+            {/* Somebody paid for something we do not recognise as a ticket. It is
+                never converted automatically — a product becomes access only when
+                a human maps it. */}
+            {unmapped && unmapped.pending > 0 && (
+                <Alert severity="warning" sx={{ mb: 2 }}
+                    action={<Button size="small" onClick={() => setShowUnmapped(!showUnmapped)}>
+                        {showUnmapped ? 'Hide' : 'Review'}</Button>}>
+                    <strong>Unmapped event sales — review required.</strong>{' '}
+                    {unmapped.pending} paid {unmapped.pending === 1 ? 'purchase has' : 'purchases have'} a product
+                    that is not mapped to any ticket, so no attendee or badge was created.
+                    {showUnmapped && (
+                        <Table size="small" sx={{ mt: 1.5 }}>
+                            <TableHead>
+                                <TableRow>
+                                    <TableCell>Paid</TableCell><TableCell>Buyer</TableCell>
+                                    <TableCell>Product (immutable id)</TableCell>
+                                    <TableCell align="right">Qty</TableCell><TableCell align="right">Amount</TableCell>
+                                    <TableCell>Source</TableCell><TableCell></TableCell>
+                                </TableRow>
+                            </TableHead>
+                            <TableBody>
+                                {unmapped.items.map((u) => (
+                                    <TableRow key={u.id}>
+                                        <TableCell sx={{ whiteSpace: 'nowrap' }}>{String(u.paid_at || '').slice(0, 10)}</TableCell>
+                                        <TableCell>
+                                            {u.buyer_name || '—'}
+                                            <Typography variant="caption" color="text.secondary" display="block">{u.buyer_email}</Typography>
+                                            {u.already_an_attendee && <Chip size="small" label="already an attendee" sx={{ mt: 0.5 }} />}
+                                        </TableCell>
+                                        <TableCell>
+                                            {u.product_name || '—'}
+                                            <Typography variant="caption" color="text.secondary" display="block" sx={{ fontFamily: 'monospace' }}>
+                                                {u.product_id}
+                                            </Typography>
+                                        </TableCell>
+                                        <TableCell align="right">{u.quantity}</TableCell>
+                                        <TableCell align="right">${Math.round(u.amount || 0)}</TableCell>
+                                        <TableCell>{u.source === 'ghl_invoice' ? 'Invoice' : 'Order'}</TableCell>
+                                        <TableCell align="right">
+                                            <Button size="small" onClick={async () => {
+                                                await dismissUnmappedSale(eventId, u.id);
+                                                const r = await getUnmappedSales(eventId); setUnmapped(r.data);
+                                            }}>Not a ticket</Button>
+                                        </TableCell>
+                                    </TableRow>
+                                ))}
+                            </TableBody>
+                        </Table>
+                    )}
+                    <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 1 }}>
+                        Map the product in Ticket Mappings to turn these into attendees. Nothing is created from a product name alone.
+                    </Typography>
+                </Alert>
             )}
 
             {door && (door.walk_ins?.total > 0 || showDoor) && (

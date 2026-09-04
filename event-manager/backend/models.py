@@ -412,7 +412,11 @@ class TicketType(Base):
     # from the name, so "VIP Gold Plus" and "vip" cannot disagree.
     is_vip = Column(Boolean, default=False)
     grants_workshops = Column(Boolean, default=False)
-    grants_conference = Column(Boolean, default=False)  # conference/speaker sessions
+    grants_conference = Column(Boolean, default=False)
+    # A pass that is valid on ONE calendar day only (venue-local, YYYY-MM-DD).
+    # NULL means the pass is valid for the whole event, which is what every
+    # existing tier is — so adding this changes nothing for them.
+    valid_day = Column(String, nullable=True)  # conference/speaker sessions
     sort_order = Column(Integer, default=0)
     upgrade_rank = Column(Integer, default=0)  # higher = more premium; upgrade precedence
     created_at = Column(DateTime, default=datetime.utcnow)
@@ -573,6 +577,39 @@ class NetworkingProfile(Base):
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
     attendee = relationship("Attendee")
+
+
+class UnmappedSale(Base):
+    """A successful GHL payment whose product is NOT mapped to a ticket.
+
+    Recorded, never acted on. Somebody paid, so this must be visible — but a
+    product is not turned into event access because its name sounds like one.
+    Staff map the product deliberately, and only then does the sale become an
+    attendee. This exists because four people bought a day pass that had been
+    created that morning and nobody found out until an audit.
+    """
+    __tablename__ = "unmapped_sales"
+    __table_args__ = (UniqueConstraint("reference", name="uq_unmapped_reference"),)
+
+    id = Column(Integer, primary_key=True, index=True)
+    event_id = Column(Integer, ForeignKey("events.id"), nullable=True, index=True)
+    reference = Column(String, index=True)      # the order or invoice id
+    source = Column(String)                     # ghl_order | ghl_invoice
+    product_id = Column(String, index=True)
+    product_name = Column(String)
+    buyer_name = Column(String)
+    buyer_email = Column(String, index=True)
+    contact_id = Column(String)
+    amount = Column(Float)
+    currency = Column(String)
+    quantity = Column(Integer, default=1)
+    paid_at = Column(String)
+    funnel = Column(String)
+    status = Column(String, default="pending", index=True)   # pending | mapped | dismissed
+    resolved_by = Column(Integer, nullable=True)
+    resolved_at = Column(DateTime, nullable=True)
+    note = Column(String)
+    first_seen = Column(DateTime, default=datetime.utcnow)
 
 
 class MemberCard(Base):

@@ -69,6 +69,8 @@ export const autoSyncEvents = () => api.post('/events/auto-sync');
 export const getAttendees = (eventId) => api.get(`/events/${eventId}/attendees`);
 // Sales/acquisition summary: revenue is summed server-side from recorded
 // transaction amounts, because one attendee can hold several purchases.
+export const getUnmappedSales = (eventId) => api.get(`/events/${eventId}/unmapped-sales`);
+export const dismissUnmappedSale = (eventId, id) => api.post(`/events/${eventId}/unmapped-sales/${id}/dismiss`);
 export const getDoorReport = (eventId) => api.get(`/events/${eventId}/door-report`);
 export const getAcquisitionReport = (eventId) => api.get(`/events/${eventId}/acquisition-report`);
 export const getAttendee = (id) => api.get(`/attendees/${id}`);

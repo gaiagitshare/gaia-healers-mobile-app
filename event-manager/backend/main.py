@@ -221,6 +221,11 @@ def _ensure_badge_columns():
     ):
         if col not in prof:
             stmts.append(ddl)
+    try:
+        if "valid_day" not in {c["name"] for c in inspector.get_columns("ticket_types")}:
+            stmts.append("ALTER TABLE ticket_types ADD COLUMN valid_day VARCHAR")
+    except Exception:
+        pass
     stmts.append("CREATE INDEX IF NOT EXISTS ix_attendees_public_token ON attendees (public_token)")
     stmts.append("CREATE INDEX IF NOT EXISTS ix_attendees_registration_source ON attendees (registration_source)")
     stmts.append("CREATE INDEX IF NOT EXISTS ix_attendees_attendance_type ON attendees (attendance_type)")
@@ -1483,7 +1488,7 @@ def door_report(event_id: int, db: Session = Depends(get_db),
         by_source[src] = by_source.get(src, 0) + 1
         # Verified GHL revenue: from the ledger only, never from door fields.
         for e in ((a.custom_data or {}).get("entitlements") or []):
-            if not e.get("order_id"):
+            if not (e.get("order_id") or e.get("invoice_id")):
                 continue
             if str(e.get("order_status") or e.get("status") or "").lower() in ("refunded", "partially_refunded"):
                 continue
@@ -1581,7 +1586,7 @@ def acquisition_report(event_id: int, db: Session = Depends(get_db),
 
     for a in atts:
         cd = a.custom_data or {}
-        ents = [e for e in (cd.get("entitlements") or []) if e.get("order_id")]
+        ents = [e for e in (cd.get("entitlements") or []) if e.get("order_id") or e.get("invoice_id")]
         basis = a.acq_source_basis or "unknown"
         bucket = ("purchase_session" if basis.startswith("purchase_session")
                   else "none" if (basis.startswith("direct") or basis == "unknown") else "weaker")
@@ -1769,17 +1774,23 @@ def _lifecycle_append(attendee, action, actor="system", **extra):
 # A base (is_upgrade=False) is a standalone ticket; upgrades are add-ons that do
 # not grant access on their own. Refunded entries are sticky (a re-seen completed
 # order never resurrects them). Legacy attendees (no ledger) keep old behavior.
-def _ent_record(cd, order_id, tx, tt_id, is_upgrade, addon_code=None, day=None, day_date=None, event_id=None):
-    """Ledger one paid order. A base/upgrade carries a ticket_type_id; an ADD-ON
-    carries an addon_code (and optional day) and never a tier. Keyed on
-    (order_id, addon_code) so a base and an add-on from one order don't collide."""
-    if not order_id:
+def _ent_record(cd, order_id, tx, tt_id, is_upgrade, addon_code=None, day=None, day_date=None,
+                event_id=None, invoice_id=None, amount=None, source=None):
+    """Ledger one paid purchase.
+
+    Most arrive as a completed GHL order. Some arrive as a PAID GHL INVOICE,
+    which is a different object with its own id — so the invoice id is recorded
+    as itself and never disguised as an order id. Either way the reference is
+    what makes the ledger idempotent, so a replay updates rather than duplicates.
+    """
+    ref = order_id or invoice_id
+    if not ref:
         return
     if not tt_id and not addon_code:
         return
     ents = list(cd.get("entitlements") or [])
     for e in ents:
-        if e.get("order_id") == order_id and e.get("addon_code") == addon_code:
+        if (e.get("order_id") or e.get("invoice_id")) == ref and e.get("addon_code") == addon_code:
             if e.get("status") == "refunded":
                 cd["entitlements"] = ents
                 return  # sticky: a re-seen completed order does not un-refund it
@@ -1804,6 +1815,12 @@ def _ent_record(cd, order_id, tx, tt_id, is_upgrade, addon_code=None, day=None, 
              "event_id": event_id,
              "is_upgrade": bool(is_upgrade), "status": "paid",
              "ts": datetime.utcnow().isoformat()}
+    if invoice_id:
+        entry["invoice_id"] = invoice_id
+    if source:
+        entry["source"] = source
+    if amount is not None:
+        entry["amount"] = amount
     if addon_code:
         entry["addon_code"] = addon_code
     if day is not None:
@@ -1971,9 +1988,17 @@ def _authorize_decision(db, attendee, event, access_type, at=None):
         "vip": bool(tt and getattr(tt, "is_vip", False)),
     }
     out["zones"] = zones
+    # A single-day pass admits on its own day and no other. Every existing tier
+    # has valid_day NULL and is unaffected.
+    day_only = getattr(tt, "valid_day", None) if tt is not None else None
+    if az in ("EVENT_ENTRY", "EXHIBIT") and day_only and str(day_only)[:10] != today:
+        out.update({"result": "DENIED", "granted": False,
+                    "reason": "%s is valid on %s only" % (base["name"] if base else "This pass", str(day_only)[:10])})
+        return out
     if az in ("EVENT_ENTRY", "EXHIBIT"):
         if has_base:
-            out.update({"result": "GRANTED", "granted": True, "reason": (base["name"] + " \u2014 admitted")})
+            out.update({"result": "GRANTED", "granted": True,
+                        "reason": (base["name"] + (" \u2014 admitted" if not day_only else " \u2014 admitted for %s" % str(day_only)[:10]))})
         else:
             out.update({"result": "DENIED", "granted": False, "reason": "Add-on found, but no valid base event admission"})
     elif az in ("CONFERENCE", "SPEAKER"):
@@ -4760,6 +4785,167 @@ def identity_upgrades(payload: schemas.IdentityTicketLookup,
             "upgrades": opts}
 
 
+@app.post("/identity/report-unmapped-sale")
+def report_unmapped_sale(payload: schemas.UnmappedSaleIn, db: Session = Depends(get_db),
+                         _: bool = Depends(require_service_token)):
+    """Someone paid for something we do not recognise as a ticket.
+
+    Recorded for a human, never converted into access. Idempotent on the
+    order/invoice reference. If the product has since been mapped, the row
+    closes itself rather than nagging.
+    """
+    ref = (payload.reference or "").strip()
+    if not ref:
+        raise HTTPException(status_code=400, detail="A payment reference is required")
+    if payload.product_id:
+        mapped = db.query(models.TicketMapping).filter(
+            models.TicketMapping.external_product_id == payload.product_id,
+            models.TicketMapping.is_active == True).first()
+        if mapped:
+            row = db.query(models.UnmappedSale).filter(models.UnmappedSale.reference == ref).first()
+            if row and row.status == "pending":
+                row.status = "mapped"; row.resolved_at = datetime.utcnow(); db.commit()
+            return {"ok": True, "recorded": False, "reason": "product_is_now_mapped"}
+    row = db.query(models.UnmappedSale).filter(models.UnmappedSale.reference == ref).first()
+    if row:
+        return {"ok": True, "recorded": False, "already": True, "id": row.id, "status": row.status}
+    row = models.UnmappedSale(
+        event_id=payload.event_id, reference=ref, source=payload.source,
+        product_id=payload.product_id, product_name=payload.product_name,
+        buyer_name=payload.buyer_name, buyer_email=(payload.buyer_email or "").lower() or None,
+        contact_id=payload.contact_id, amount=payload.amount, currency=payload.currency,
+        quantity=payload.quantity or 1, paid_at=payload.paid_at, funnel=payload.funnel)
+    db.add(row); db.commit(); db.refresh(row)
+    return {"ok": True, "recorded": True, "id": row.id}
+
+
+@app.get("/events/{event_id}/unmapped-sales")
+def unmapped_sales(event_id: int, include_resolved: bool = False,
+                   db: Session = Depends(get_db),
+                   current_user: models.User = Depends(get_current_user)):
+    """Paid products nobody has mapped to a ticket. Review required."""
+    _get_event_or_404(event_id, db)
+    authz.require_cap(db, current_user, event_id, "attendee.read")
+    q = db.query(models.UnmappedSale).filter(
+        (models.UnmappedSale.event_id == event_id) | (models.UnmappedSale.event_id.is_(None)))
+    if not include_resolved:
+        q = q.filter(models.UnmappedSale.status == "pending")
+    rows = q.order_by(models.UnmappedSale.paid_at.desc()).limit(200).all()
+    out = []
+    for r in rows:
+        att = db.query(models.Attendee).filter(
+            models.Attendee.event_id == event_id,
+            func.lower(models.Attendee.email) == (r.buyer_email or "")).first() if r.buyer_email else None
+        out.append({"id": r.id, "reference": r.reference, "source": r.source,
+                    "product_id": r.product_id, "product_name": r.product_name,
+                    "buyer_name": r.buyer_name, "buyer_email": r.buyer_email,
+                    "amount": r.amount, "currency": r.currency, "quantity": r.quantity,
+                    "paid_at": r.paid_at, "funnel": r.funnel, "status": r.status,
+                    "already_an_attendee": bool(att)})
+    return {"event_id": event_id, "pending": sum(1 for r in rows if r.status == "pending"), "items": out}
+
+
+@app.post("/events/{event_id}/unmapped-sales/{sale_id}/dismiss")
+def dismiss_unmapped_sale(event_id: int, sale_id: int, db: Session = Depends(get_db),
+                          current_user: models.User = Depends(get_current_user)):
+    """Not a ticket. Recorded as reviewed so it stops asking."""
+    _get_event_or_404(event_id, db)
+    authz.require_cap(db, current_user, event_id, "attendee.write")
+    r = db.query(models.UnmappedSale).filter(models.UnmappedSale.id == sale_id).first()
+    if not r:
+        raise HTTPException(status_code=404, detail="Not found")
+    r.status = "dismissed"; r.resolved_by = current_user.id; r.resolved_at = datetime.utcnow()
+    db.commit()
+    return {"ok": True}
+
+
+@app.post("/identity/reconcile-invoice")
+def reconcile_invoice(payload: schemas.ReconcileInvoice, db: Session = Depends(get_db),
+                      _: bool = Depends(require_service_token)):
+    """Turn a PAID GHL invoice for a mapped ticket product into an attendee.
+
+    The same guarantees as the order path, and the same refusals:
+
+      * only paid / partially_paid invoices; anything else is ignored
+      * only products positively mapped to a ticket type FOR THIS EVENT — a
+        sponsorship, a CRM subscription or a piece of hardware never becomes an
+        attendee, however event-sounding its name
+      * idempotent on the invoice id, so a replay updates rather than duplicates
+      * an existing person keeps their attendee row, their ticket QR and their
+        permanent card; an upgrade lifts the tier instead of creating a second
+        record
+      * no GHL order id is invented — the invoice is recorded as an invoice
+    """
+    event = db.query(models.Event).filter(models.Event.id == payload.event_id).first()
+    if not event:
+        raise HTTPException(status_code=404, detail="Event not found")
+    _assert_event_writable(db, event, "reconcile an invoice into it")
+    if str(payload.status or "").lower() not in ("paid", "partially_paid"):
+        return {"ok": False, "reason": "invoice_not_paid", "status": payload.status}
+    email = (payload.email or "").strip().lower()
+    if not email or "@" not in email:
+        raise HTTPException(status_code=400, detail="A contact email is required")
+    mapping = db.query(models.TicketMapping).filter(
+        models.TicketMapping.event_id == event.id,
+        models.TicketMapping.external_product_id == (payload.product_id or ""),
+        models.TicketMapping.is_active == True).first()
+    if not mapping:
+        # Deliberate: an unmapped product is surfaced for review, never guessed
+        # into a ticket from its name.
+        return {"ok": False, "reason": "product_not_mapped_to_this_event",
+                "product_id": payload.product_id}
+    tt_id = mapping.ticket_type_id
+    existing = db.query(models.Attendee).filter(
+        models.Attendee.event_id == event.id,
+        func.lower(models.Attendee.email) == email).first()
+    created = False
+    if existing is None:
+        existing = models.Attendee(
+            event_id=event.id, email=email,
+            first_name=payload.first_name or "", last_name=payload.last_name or "",
+            phone=payload.phone, ticket_type_id=tt_id,
+            custom_data={"contact_id": payload.contact_id, "source": "ghl_invoice"},
+            qr_code="ATT-%s" % uuid.uuid4().hex[:12].upper())
+        db.add(existing); db.flush()
+        stamp_registration(existing, "ghl_invoice", "paid")
+        created = True
+    custom = dict(existing.custom_data or {})
+    if payload.contact_id:
+        custom["contact_id"] = payload.contact_id
+    already = any((e.get("invoice_id") == payload.invoice_id) for e in (custom.get("entitlements") or []))
+    _ent_record(custom, None, payload.transaction_id, tt_id, bool(mapping.is_upgrade),
+                event_id=event.id, invoice_id=payload.invoice_id,
+                amount=payload.amount, source="ghl_invoice")
+    if not already:
+        _ll = list(custom.get("lifecycle") or [])
+        _ll.append({"ts": datetime.utcnow().isoformat(), "action": "reconciled_with_ghl_invoice",
+                    "actor": "reconcile", "invoice_id": payload.invoice_id,
+                    "transaction_id": payload.transaction_id})
+        custom["lifecycle"] = _ll
+    old_tt = existing.ticket_type_id
+    # Tier behaviour matches the order path: a base sets it when unset, an
+    # upgrade only ever lifts.
+    if custom.get("admin_tier") is None:
+        if tt_id and not mapping.is_upgrade and not existing.ticket_type_id:
+            existing.ticket_type_id = tt_id
+        if tt_id and mapping.is_upgrade and _tt_rank(db, tt_id) >= _tt_rank(db, existing.ticket_type_id):
+            existing.ticket_type_id = tt_id
+    for f in ("first_name", "last_name", "phone"):
+        v = getattr(payload, f)
+        if v and not getattr(existing, f):
+            setattr(existing, f, v)
+    existing.custom_data = custom
+    if not existing.ghl_linked_at:
+        existing.ghl_linked_at = datetime.utcnow()
+    attach_member_identity(db, existing)
+    db.commit(); db.refresh(existing)
+    return {"ok": True, "created": created, "already": already,
+            "attendee_id": existing.id, "qr_code": existing.qr_code,
+            "public_token": existing.public_token,
+            "ticket_type_id": existing.ticket_type_id,
+            "upgraded": bool(existing.ticket_type_id != old_tt and not created)}
+
+
 @app.post("/identity/reconcile-attendee")
 def reconcile_attendee(payload: schemas.ReconcileAttendee, db: Session = Depends(get_db),
                        _: bool = Depends(require_service_token)):
@@ -5875,6 +6061,11 @@ def _inferred_source(attendee):
     src = str(((attendee.custom_data or {}).get("source") or "")).lower()
     if src == "walk_in":
         return "walk_in"
+    if src == "ghl_invoice":
+        return "ghl_invoice"
+    if any(e.get("invoice_id") for e in ((attendee.custom_data or {}).get("entitlements") or [])) \
+            and not (attendee.custom_data or {}).get("order_id"):
+        return "ghl_invoice"
     if src in ("ghl_reconcile", "ghl_order"):
         return "ghl_order"
     if "webhook" in src:
@@ -5978,7 +6169,7 @@ def _member_card_for_attendee(db, attendee, create=True):
     return card
 
 
-REGISTRATION_SOURCES = ("ghl_order", "ghl_webhook", "walk_in", "admin", "import")
+REGISTRATION_SOURCES = ("ghl_order", "ghl_invoice", "ghl_webhook", "walk_in", "admin", "import")
 ATTENDANCE_TYPES = ("paid", "complimentary", "staff", "speaker", "exhibitor")
 DOOR_PAYMENT_STATUS = ("none", "pending", "collected", "waived", "needs_review")
 DOOR_PAYMENT_METHODS = ("cash", "card_terminal", "payment_link", "other")

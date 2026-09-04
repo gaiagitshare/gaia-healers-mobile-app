@@ -132,6 +132,18 @@ st, d, _ = call("POST", "/identity/card/update", dict(ident, show_email=True), S
 st, body, _ = call("GET", "/c/" + tok + ".vcf", raw=True)
 check(st == 200 and ("EMAIL;TYPE=INTERNET:" + email).encode() not in body,
       "the email stays off the public card even when an old client asks for it")
+# Every icon on this page is an inline SVG with no width or height of its own,
+# so each one depends on a CSS rule sizing it. One rule was missing and the
+# envelope rendered the full width of the card. Assert the rules exist rather
+# than trusting that the next icon added remembers.
+st, css_page, _ = call("GET", "/c/" + tok, raw=True)
+import re as _re
+_css = css_page.decode("utf-8", "ignore")
+_unsized = [cls for cls in ("locked__row", "links a", "city", "btn", "top")
+            if not _re.search(r"\.%s svg\{[^}]*width:" % _re.escape(cls), _css)]
+check(not _unsized, "every icon container sizes its SVG, so none can render full-width", _unsized)
+check("<svg" in _css and 'viewBox="0 0 24 24"' in _css, "the icons are inline SVG as expected")
+
 st, page, _ = call("GET", "/c/" + tok, raw=True)
 check(st == 200 and email.encode() not in page,
       "and it is never sent to the page, so the source reveals nothing")

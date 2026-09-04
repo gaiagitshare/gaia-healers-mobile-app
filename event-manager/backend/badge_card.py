@@ -445,7 +445,9 @@ h1{margin:18px 0 0;font-size:28px;line-height:1.1;text-align:center;font-weight:
 .dormant__k{margin:0;font-size:.72rem;letter-spacing:.09em;text-transform:uppercase;opacity:.55;font-weight:700}
 .dormant__t{margin:5px 0 0;font-size:.85rem;line-height:1.55;opacity:.75}
 .locked__row{display:flex;align-items:center;gap:10px;padding:4px 0}
-.locked__row svg{flex:0 0 auto;opacity:.45}
+/* These SVGs carry no width/height of their own -- every other rule on this
+   page sizes them, and this one did not, so the envelope filled the card. */
+.locked__row svg{width:18px;height:18px;flex:none;opacity:.45}
 .locked__blur{filter:blur(4px);letter-spacing:.06em;opacity:.5;user-select:none}
 .locked__note{margin:8px 0 0;font-size:.78rem;line-height:1.5;opacity:.62}
 .links a{display:flex;align-items:center;gap:8px;padding:12px;border-radius:12px;background:rgba(255,255,255,.04);border:1px solid var(--line);color:var(--text);text-decoration:none;font-size:14px;min-height:46px}

@@ -33,6 +33,15 @@ function identityFromSession(session) {
   };
 }
 
+/** The one place the service token is read. Everything that talks to the
+ * Event Manager goes through here or through callEventIdentity below. */
+function serviceCall() {
+  const base = (process.env.EVENT_MANAGER_BASE_URL || '').replace(/\/+$/, '');
+  const token = (process.env.IDENTITY_SERVICE_TOKEN || '').trim();
+  if (!base || !token) return null;
+  return { base, headers: { Authorization: 'Bearer ' + token } };
+}
+
 async function callEventIdentity(path, body) {
   const base = (process.env.EVENT_MANAGER_BASE_URL || '').replace(/\/+$/, '');
   const token = (process.env.IDENTITY_SERVICE_TOKEN || '').trim();
@@ -277,6 +286,7 @@ async function networking(session, eventId, action, extra = {}) {
     connect: '/identity/networking/connect',
     respond: '/identity/networking/respond',
     connections: '/identity/networking/connections',
+    connectByToken: '/identity/networking/connect-by-token',
   };
   if (!paths[action]) return { ok: false, authenticated: true, reason: 'bad_action' };
   const result = await callEventIdentity(paths[action], {
@@ -408,16 +418,16 @@ async function uploadPostImage(session, eventId, contentType, buffer) {
   if (!identity || !identity.contact_id) return { ok: false, authenticated: false, reason: 'auth_required' };
   const numericId = Number(eventId);
   if (!Number.isInteger(numericId) || numericId <= 0) return { ok: false, authenticated: true, reason: 'bad_event_id' };
-  const base = (process.env.EVENT_MANAGER_BASE_URL || '').replace(/\/+$/, '');
-  const token = (process.env.IDENTITY_SERVICE_TOKEN || '').trim();
-  if (!base || !token) return { ok: false, authenticated: true, reason: 'identity_not_configured' };
+  const svc = serviceCall();
+  const base = svc ? svc.base : '';
+  if (!svc) return { ok: false, authenticated: true, reason: 'identity_not_configured' };
   const url = base + '/identity/events/' + numericId + '/posts/image?contact_id=' + encodeURIComponent(identity.contact_id);
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), 15000);
   try {
     const r = await fetch(url, {
       method: 'POST',
-      headers: { 'Content-Type': contentType || 'application/octet-stream', Authorization: 'Bearer ' + token },
+      headers: { 'Content-Type': contentType || 'application/octet-stream', ...svc.headers },
       body: buffer,
       signal: controller.signal,
     });
@@ -430,4 +440,95 @@ async function uploadPostImage(session, eventId, contentType, buffer) {
   }
 }
 
-export { announcements, myEvents, myTicket, myUpgrades, mySchedule, changeSchedule, changeWorkshop, networking, feedback, pushVapidKey, pushSubscribe, pushUnsubscribe, identityFromSession, phaseOf, toAppRow , communityFeed, createPost, postAction , uploadPostImage };
+/**
+ * The digital badge card behind the printed QR: read, edit, photo.
+ *
+ * Same contract as the ticket: the session names the person, the Event
+ * Manager re-proves ownership of the attendee row on every call, and nothing
+ * the browser sends can make it act as anyone else.
+ */
+async function myCard(session, eventId) {
+  const identity = identityFromSession(session);
+  if (!identity) return { ok: false, authenticated: false, reason: 'auth_required' };
+  // 0 means "my permanent card": the card belongs to the person, so it must
+  // resolve with no event named — including when they hold no live ticket.
+  const numericId = Number(eventId) || 0;
+  if (!Number.isInteger(numericId) || numericId < 0) return { ok: false, authenticated: true, reason: 'bad_event_id' };
+  const result = await callEventIdentity('/identity/card', { ...identity, event_id: numericId });
+  return { authenticated: true, ...(result || { ok: false, reason: 'identity_failed' }) };
+}
+
+const CARD_FIELDS = ['public', 'bio', 'company', 'title', 'city', 'website', 'instagram', 'linkedin', 'whatsapp', 'photo_url', 'show_email', 'show_phone', 'tags'];
+
+async function updateCard(session, eventId, body) {
+  const identity = identityFromSession(session);
+  if (!identity) return { ok: false, authenticated: false, reason: 'auth_required' };
+  // 0 means "my permanent card": the card belongs to the person, so it must
+  // resolve with no event named — including when they hold no live ticket.
+  const numericId = Number(eventId) || 0;
+  if (!Number.isInteger(numericId) || numericId < 0) return { ok: false, authenticated: true, reason: 'bad_event_id' };
+  // Only known fields cross; booleans are booleans, everything else a string.
+  const fields = {};
+  for (const key of CARD_FIELDS) {
+    if (!(key in (body || {}))) continue;
+    const v = body[key];
+    if (key === 'public' || key === 'show_email' || key === 'show_phone') fields[key] = v === true;
+    else if (key === 'tags') fields[key] = Array.isArray(v) ? v.map((t) => String(t)).slice(0, 4) : String(v || '');
+    else fields[key] = String(v == null ? '' : v).slice(0, 400);
+  }
+  const result = await callEventIdentity('/identity/card/update', { ...identity, event_id: numericId, ...fields });
+  return { authenticated: true, ...(result || { ok: false, reason: 'identity_failed' }) };
+}
+
+async function uploadCardPhoto(session, eventId, contentType, buffer) {
+  const identity = identityFromSession(session);
+  if (!identity) return { ok: false, authenticated: false, reason: 'auth_required' };
+  // 0 = the person's permanent card, with no event named.
+  const numericId = Number(eventId) || 0;
+  if (!Number.isInteger(numericId) || numericId < 0) return { ok: false, authenticated: true, reason: 'bad_event_id' };
+  const svc = serviceCall();
+  const base = svc ? svc.base : '';
+  if (!svc) return { ok: false, authenticated: true, reason: 'identity_not_configured' };
+  const qs = new URLSearchParams({
+    event_id: String(numericId),
+    contact_id: identity.contact_id || '',
+    email: identity.email || '',
+    email_verified: identity.email_verified ? '1' : '0',
+  });
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 15000);
+  try {
+    const r = await fetch(base + '/identity/card/photo?' + qs.toString(), {
+      method: 'POST',
+      headers: { 'Content-Type': contentType || 'application/octet-stream', ...svc.headers },
+      body: buffer,
+      signal: controller.signal,
+    });
+    const data = await r.json().catch(() => ({ ok: false, reason: 'bad_response' }));
+    if (!r.ok && !data.reason) data.reason = data.detail || ('event_manager_' + r.status);
+    return { authenticated: true, ...data, ok: r.ok && data.ok !== false };
+  } catch (e) {
+    return { ok: false, authenticated: true, reason: 'event_manager_unreachable' };
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+/**
+ * Who owns the badge behind a printed token? Answered from the SESSION, never
+ * from the URL: the Event Manager re-proves the person (contact id, or an
+ * email this session verified by magic link) against the rows carrying the
+ * token. Signed out -> not authenticated, and nothing is looked up.
+ */
+async function cardOwner(session, token) {
+  const identity = identityFromSession(session);
+  const clean = String(token || '').trim().toUpperCase();
+  if (!/^[A-Z2-9]{8}$/.test(clean)) return { ok: true, authenticated: Boolean(identity), owner: false };
+  if (!identity) return { ok: true, authenticated: false, owner: false };
+  const result = await callEventIdentity('/identity/card/owner', { ...identity, event_id: 0, token: clean });
+  if (!result || result.ok !== true) return { ok: false, authenticated: true, owner: false, reason: (result && result.reason) || 'identity_failed' };
+  return { ok: true, authenticated: true, owner: Boolean(result.owner), event_id: result.event_id || null,
+           claimed: Boolean(result.claimed), public: Boolean(result.public) };
+}
+
+export { announcements, myEvents, myTicket, myUpgrades, mySchedule, changeSchedule, changeWorkshop, networking, feedback, pushVapidKey, pushSubscribe, pushUnsubscribe, identityFromSession, phaseOf, toAppRow , communityFeed, createPost, postAction , uploadPostImage, myCard, updateCard, uploadCardPhoto, cardOwner };

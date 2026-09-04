@@ -1,0 +1,46 @@
+GAIA HEALERS EVENT MANAGEMENT SYSTEM - SETUP SUMMARY
+======================================================
+
+PROJECT LOCATION: ~/event/
+
+WHAT'S READY:
+✅ Backend (FastAPI) - Port 8002
+✅ Frontend (React) - Port 3002  
+✅ Database (SQLite) - Auto-created
+✅ QR Code Check-in
+✅ PDF Badge Generation
+✅ Exhibitor Lead Retrieval
+✅ GHL CSV Import Script
+
+BRANDING:
+- Gaia Healers theme (nature green/teal)
+- Configured for Elevate Conference
+- GHL integration ready
+
+PORTS IN USE:
+- Dr. Bahar: 80, 443, 8080, 8001
+- Event System: 3002, 8002 (NEW)
+
+QUICK START:
+------------
+1. cd ~/event
+2. ./start.sh
+3. Open http://your-vps-ip:3002
+4. Register admin account
+5. Create "Gaia Healers Elevate 2026" event
+6. Import attendees: python backend/import_ghl.py 1 /path/to/ghl.csv
+
+WORKFLOW:
+---------
+GHL (Registration) → This System (Check-in/Badges/Leads)
+
+EVENT DAY CHECKLIST:
+-------------------
+□ Print badges with QR codes
+□ Set up check-in station at venue entrance
+□ Give exhibitors their unique scan links
+□ Monitor check-in rate on dashboard
+
+SUPPORT:
+- API Docs: http://localhost:8002/docs
+- Test page: http://localhost:3002

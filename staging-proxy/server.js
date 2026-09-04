@@ -6155,6 +6155,57 @@ const server = http.createServer(async (req, res) => {
       sendJson(res, result.authenticated === false ? 401 : (result.ok ? 200 : 400), result, origin, { 'Cache-Control': 'private, no-store' });
       return;
     }
+    // ── The digital badge card (behind the printed QR) ───────────────────
+    // The member's permanent badge card, with no event in the path: it belongs
+    // to the person and outlives every event it was ever issued at.
+    if ((req.method === 'GET' || req.method === 'POST') && url.pathname === '/api/card') {
+      const session = cookieForRequest(req);
+      const result = req.method === 'POST'
+        ? await eventIdentity.updateCard(session, 0, await readJsonBody(req).catch(() => ({})))
+        : await eventIdentity.myCard(session, 0);
+      sendJson(res, result.authenticated === false ? 401 : 200, result, origin,
+               { 'Cache-Control': 'private, no-store' });
+      return;
+    }
+    // Ownership of a printed badge token, from the session only. The card page
+    // on card.gaiahealers.app asks this to decide whether to show "Edit my card".
+    if ((req.method === 'GET' || req.method === 'POST') && (url.pathname === '/api/card/owner' || url.pathname === '/api/card/claim')) {
+      const session = cookieForRequest(req);
+      const body = req.method === 'POST' ? await readJsonBody(req).catch(() => ({})) : {};
+      const token = String((body && body.token) || url.searchParams.get('token') || '');
+      const result = await eventIdentity.cardOwner(session, token);
+      sendJson(res, 200, result, origin, { 'Cache-Control': 'private, no-store' });
+      return;
+    }
+    if (req.method === 'GET' && /^\/api\/events\/\d+\/card$/.test(url.pathname)) {
+      const session = cookieForRequest(req);
+      const result = await eventIdentity.myCard(session, url.pathname.split('/')[3]);
+      sendJson(res, result.authenticated === false ? 401 : 200, result, origin, { 'Cache-Control': 'private, no-store' });
+      return;
+    }
+    if (req.method === 'POST' && /^\/api\/events\/\d+\/card$/.test(url.pathname)) {
+      const session = cookieForRequest(req);
+      const body = await readJsonBody(req).catch(() => ({}));
+      const result = await eventIdentity.updateCard(session, url.pathname.split('/')[3], body || {});
+      sendJson(res, result.authenticated === false ? 401 : 200, result, origin, { 'Cache-Control': 'private, no-store' });
+      return;
+    }
+    if (req.method === 'POST' && (/^\/api\/events\/\d+\/card\/photo$/.test(url.pathname) || url.pathname === '/api/card/photo')) {
+      const session = cookieForRequest(req);
+      const ct = req.headers['content-type'] || '';
+      const chunks = [];
+      let total = 0; let tooBig = false;
+      for await (const chunk of req) {
+        total += chunk.length;
+        if (total > 6 * 1024 * 1024) { tooBig = true; break; }
+        chunks.push(chunk);
+      }
+      if (tooBig) { sendJson(res, 413, { ok: false, reason: 'too_large', detail: 'Image is too large (max 5MB)' }, origin); return; }
+      const photoEvent = url.pathname === '/api/card/photo' ? 0 : url.pathname.split('/')[3];
+      const result = await eventIdentity.uploadCardPhoto(session, photoEvent, ct, Buffer.concat(chunks));
+      sendJson(res, result.authenticated === false ? 401 : (result.ok ? 200 : 400), result, origin, { 'Cache-Control': 'private, no-store' });
+      return;
+    }
     if (req.method === 'GET' && /^\/api\/events\/\d+\/ticket$/.test(url.pathname)) {
       const session = cookieForRequest(req);
       const result = await eventIdentity.myTicket(session, url.pathname.split('/')[3]);
@@ -6204,6 +6255,7 @@ const server = http.createServer(async (req, res) => {
       if (body.action === 'profile') { extra.visible = body.visible === true; extra.bio = String(body.bio || ''); }
       if (body.action === 'connect') extra.target_attendee_id = Number(body.targetAttendeeId) || 0;
       if (body.action === 'respond') { extra.connection_id = Number(body.connectionId) || 0; extra.accept = body.accept === true; }
+      if (body.action === 'connectByToken') extra.token = String(body.token || '').trim().toUpperCase().slice(0, 16);
       const result = await eventIdentity.networking(
         session, url.pathname.split('/')[3], String(body.action || ''), extra,
       );

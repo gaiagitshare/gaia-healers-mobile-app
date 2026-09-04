@@ -185,3 +185,38 @@ uses (a GHL conversations email to the contact). **No SMS channel is
 configured**, so a phone destination for step 1 returns
 `sms_delivery_unavailable` rather than pretending a code was sent. Step 2 for a
 phone number needs that channel before it can be used in production.
+
+
+## One QR, two jobs — and a card that wakes up
+
+Every attendee has a permanent token and a card **from the moment their ticket
+lands**, months before the event. All 292 for Elevate 2026 already do. The QR
+resolves the whole time; there is nothing to generate later and nothing to
+reissue.
+
+Until they check in the card is **dormant**, and the page says so — *"Card not
+active yet. It switches on when Jane checks in at the event."* An empty profile
+reads as broken; "not yet" reads as correct.
+
+**Checking in activates it.** The same scan opens the door and switches the card
+on, because it is the same QR either way — no second step at a busy desk, no
+second code to print.
+
+Activation publishes **once**, guarded by `activated_at` rather than
+`card_public`. Somebody who later switches their card off has decided something,
+and walking past a scanner again must not quietly undo it. The page then says
+*"Card is private"* — a different state from dormant, and it says which.
+
+`test_card_activation.py` pins all of it.
+
+### Getting the QR to people before the day
+
+It is the same token either way, so this is a delivery choice, not an
+architecture one:
+
+- **The printed badge at the door** — the guaranteed path, works with no email,
+  no phone and no signal. This is the one to rely on.
+- **Signing in to the app** — *You → My badge card* shows it, already.
+- **Emailing it ahead** — possible over the same transactional channel the
+  sign-in link uses. Worth doing for the queue it saves, but it is 290 outbound
+  emails and should be sent deliberately, not as a side effect of a deploy.

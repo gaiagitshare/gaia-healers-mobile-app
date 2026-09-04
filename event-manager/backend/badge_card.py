@@ -284,6 +284,12 @@ def public_view(mcard, event=None, participation=None) -> dict:
         "event_name": event.name if event else "",
         "event_id": event.id if event else None,
         "public": bool(mcard and mcard.card_public),
+        # A card exists from the moment a ticket does, months before the event.
+        # Until its owner checks in it is real but dormant, and the page says so
+        # rather than showing an empty profile as though they had nothing to say.
+        "activated": bool(mcard and getattr(mcard, "activated_at", None)),
+        "contact_on_file": bool(mcard and ((mcard.email or "").strip()
+                                           or (getattr(mcard, "phone", "") or "").strip())),
     }
     if not view["public"]:
         return view
@@ -435,6 +441,9 @@ h1{margin:18px 0 0;font-size:28px;line-height:1.1;text-align:center;font-weight:
    over block characters -- the real values were never sent, so there is nothing
    to find in the page source. */
 .locked{margin:14px 0 0;padding:12px 14px;border:1px dashed rgba(0,0,0,.18);border-radius:12px}
+.dormant{margin:12px 0 0;padding:12px 14px;border-radius:12px;background:rgba(0,0,0,.045)}
+.dormant__k{margin:0;font-size:.72rem;letter-spacing:.09em;text-transform:uppercase;opacity:.55;font-weight:700}
+.dormant__t{margin:5px 0 0;font-size:.85rem;line-height:1.55;opacity:.75}
 .locked__row{display:flex;align-items:center;gap:10px;padding:4px 0}
 .locked__row svg{flex:0 0 auto;opacity:.45}
 .locked__blur{filter:blur(4px);letter-spacing:.06em;opacity:.5;user-select:none}
@@ -486,13 +495,34 @@ def render_card_html(view: dict, token: str, app_base: str = None) -> str:
 
     if not view.get("public"):
         first = _h(view.get("first_name") or "the owner")
+        # Dormant, not empty. Before its owner has checked in the card is real
+        # and its QR already resolves -- it simply has not been switched on yet.
+        # Saying that is better than an unexplained blank profile, and it tells
+        # a scanner at the door exactly what will happen next.
+        if not view.get("activated"):
+            state = ("<p class=\"role\">Attending <b>%s</b></p>"
+                     "<div class=\"dormant\"><p class=\"dormant__k\">Card not active yet</p>"
+                     "<p class=\"dormant__t\">It switches on when %s checks in at the event. "
+                     "The same QR does both, so nothing here changes and nothing gets reprinted.</p></div>"
+                     % (event, first))
+        else:
+            state = ("<p class=\"role\">Attending <b>%s</b></p>"
+                     "<div class=\"dormant\"><p class=\"dormant__k\">Card is private</p>"
+                     "<p class=\"dormant__t\">%s has this card switched off, so only their name is shown.</p></div>"
+                     % (event, first))
+        locked = ""
+        if view.get("contact_on_file"):
+            locked = ("<div class=\"locked\">"
+                      "<div class=\"locked__row\">%s<span class=\"locked__blur\">&#9608;&#9608;&#9608;&#9608;&#9608;&#9608;&#9608;&#64;&#9608;&#9608;&#9608;&#9608;&#9608;</span></div>"
+                      "<div class=\"locked__row\">%s<span class=\"locked__blur\">&#9608;&#9608;&#9608; &#9608;&#9608;&#9608; &#9608;&#9608;&#9608;&#9608;</span></div>"
+                      "<p class=\"locked__note\">Email and phone are shared with an exhibitor when this badge is scanned at their stand \u2014 never on this page.</p>"
+                      "</div>" % (_ICON["mail"], _ICON["phone"]))
         body = ("<div class=\"card\"><span class=\"event\">%s</span>"
-                "<div class=\"avatar\">%s</div><h1>%s</h1>"
-                "<p class=\"role\">Attending <b>%s</b></p>"
+                "<div class=\"avatar\">%s</div><h1>%s</h1>%s%s"
                 "<div class=\"actions\"><a class=\"btn btn--secondary\" href=\"%s\">Connect in the Gaia app</a></div>"
                 "<div class=\"claim\" data-claim>Is this you, %s? <a href=\"%s\" data-claim-link>Sign in to set up your card</a> \u2014 "
-                "add your photo, company and links. The QR on your badge already points here; nothing gets reprinted.</div>"
-                "</div>" % (event, _h(_initials(view)), name, event, _h(connect_url), first, _h(claim_url)))
+                "add your photo, company and city. The QR on your badge already points here; nothing gets reprinted.</div>"
+                "</div>" % (event, _h(_initials(view)), name, state, locked, _h(connect_url), first, _h(claim_url)))
     else:
         avatar = ("<img src=\"%s\" alt=\"\">" % _h(view["photo_url"])) if view.get("photo_url") else _h(_initials(view))
         role = ""

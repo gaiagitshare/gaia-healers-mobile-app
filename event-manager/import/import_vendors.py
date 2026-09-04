@@ -1,5 +1,11 @@
 # -*- coding: utf-8 -*-
-"""Import the 2026 confirmed exhibitors from the planning sheet.
+"""Import the vendor board from the planning sheet -- every section, not just
+the confirmed ones.
+
+Prospects, maybes and refusals share the list with the confirmed stands,
+separated only by a heading. That is the right shape: a maybe becomes confirmed
+the day they pay. Carrying it across means the whole board is in one place and
+nobody re-types a vendor on conversion.
 
 Idempotent on (event, company name): re-running updates rather than duplicating.
 Everything arrives UNPUBLISHED with scanning OFF -- the sheet is a planning
@@ -16,7 +22,7 @@ from database import SessionLocal
 import models, secrets
 
 EVENT_ID = 1
-rows = json.load(open("/root/vendors.json"))
+rows = json.load(open("/root/vendors_all.json"))
 db = SessionLocal()
 created = updated = 0
 for v in rows:
@@ -33,6 +39,7 @@ for v in rows:
     ex.contact_phone = v["phone"] or None
     ex.website = v["website"] or None
     ex.booth_number = v["booth"] or None
+    ex.stage = v["stage"]
     ex.package = v["package"] or None
     ex.payment_status = v["payment_status"]
     ex.amount_due = v["amount_due"]
@@ -40,6 +47,8 @@ for v in rows:
     ex.payment_note = v["payment_note"] or None
     ex.category = "Gaia Healers" if (v["package"] or "").startswith("Gaia") else (
         "Partner" if (v["package"] or "") == "Partners" else "Exhibitor")
+    if not (v.get("contact") or "").strip():
+        pass
     if ex.description is None:
         ex.description = ""
     # Deliberately NOT set here: is_published, can_scan_leads, show_contact_publicly.
@@ -51,14 +60,21 @@ print("created %d, updated %d" % (created, updated))
 print()
 rows = db.query(models.Exhibitor).filter(models.Exhibitor.event_id == EVENT_ID).order_by(
     models.Exhibitor.company_name).all()
-print("%-28s %-9s %8s %8s %-10s %s" % ("company", "status", "due", "paid", "published", "scan"))
-print("-" * 80)
-for r in rows:
-    print("%-28s %-9s %8s %8s %-10s %s" % (
-        (r.company_name or "")[:28], r.payment_status,
-        int(r.amount_due) if r.amount_due else "-",
-        int(r.amount_paid) if r.amount_paid else "-",
-        "yes" if r.is_published else "no", "yes" if r.can_scan_leads else "no"))
-print("-" * 80)
-print("%d exhibitors on event %d" % (len(rows), EVENT_ID))
+from collections import Counter
+by = Counter(r.stage or "confirmed" for r in rows)
+print("%-18s %6s %10s %10s" % ("stage", "count", "booked", "collected"))
+print("-" * 48)
+for st in ("confirmed", "waiting", "unsure", "other", "product_sponsor",
+           "next_year", "not_attending", "not_aligned"):
+    grp = [r for r in rows if (r.stage or "confirmed") == st]
+    if not grp:
+        continue
+    print("%-18s %6d %10s %10s" % (st, len(grp),
+          int(sum(r.amount_due or 0 for r in grp)) or "-",
+          int(sum(r.amount_paid or 0 for r in grp)) or "-"))
+print("-" * 48)
+print("%-18s %6d %10d %10d" % ("TOTAL", len(rows),
+      sum(r.amount_due or 0 for r in rows), sum(r.amount_paid or 0 for r in rows)))
+live = [r for r in rows if r.is_published or r.can_scan_leads]
+print("\npublished or scanning: %d" % len(live))
 db.close()

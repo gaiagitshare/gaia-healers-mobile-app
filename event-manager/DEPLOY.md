@@ -267,11 +267,27 @@ never what is *granted*: a product still becomes access only when a human maps i
 
 ## Vendors
 
-The 23 confirmed exhibitors live in **Admin → Vendors**, imported from the
-planning sheet ($111,000 booked, $94,500 collected, $16,500 outstanding). The
-importer is `event-manager/import/import_vendors.py`, idempotent on
+**Admin → Vendors** holds the whole board — 52 stands across eight stages, not
+just the ones who paid. The sheet keeps prospects, maybes and refusals in the
+same list separated by a heading, and that is the right shape: a maybe becomes
+confirmed the day they pay, and carrying it across means nobody re-types a
+vendor on conversion. Promoting one is a single field.
+
+| stage | |
+|---|---|
+| `confirmed` | 23 — $111,000 booked, $94,500 collected, $16,500 outstanding |
+| `waiting` / `unsure` | 8 in conversation |
+| `other` / `product_sponsor` | 10 — our own tables, and product-only sponsors |
+| `next_year` / `not_attending` / `not_aligned` | 11 kept for the record |
+
+Money is the **confirmed** stands only. A prospect has booked nothing, and
+rolling them in would make "booked" a number nobody could act on.
+
+The importer is `event-manager/import/import_vendors.py`, idempotent on
 (event, company name), and it leaves every stand **unpublished with scanning
-off** — a spreadsheet is planning, not a decision.
+off** — a spreadsheet is planning, not a decision. Only `confirmed` should ever
+be published; the UI groups by stage so a "not aligned" stand is never one stray
+click from the attendee directory.
 
 Two switches per stand, deliberately separate, because a booth and lead
 retrieval are separate purchases:

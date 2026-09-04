@@ -275,6 +275,17 @@ class Exhibitor(Base):
     # which is fine for planning and cannot be what gates lead retrieval on the
     # day. `package` is the seller's own wording; `payment_status` is the thing
     # anything may branch on.
+    # Where this stand is in the conversation, not what it has paid.
+    #
+    # The sheet keeps prospects, maybes and refusals in the same list as the
+    # confirmed stands, separated only by a heading -- which is right, because a
+    # maybe becomes confirmed the day they pay. Carrying that across means the
+    # whole board lives in one place and nobody re-types a vendor on conversion.
+    #
+    # Only `confirmed` should ever be published or given a scanner; the rest are
+    # imported switched off, and the UI groups by this so a "not aligned" stand
+    # is not one stray click from the attendee directory.
+    stage = Column(String, default="confirmed", index=True)
     package = Column(String)                        # "The Connector $5000", "Partners", ...
     payment_status = Column(String, default="unpaid", index=True)  # paid|partial|unpaid|comp
     amount_due = Column(Float)

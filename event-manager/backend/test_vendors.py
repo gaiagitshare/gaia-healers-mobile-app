@@ -150,7 +150,8 @@ check(not any(p["company_name"] == "ZZ Sound Co" for p in pub),
       "unpublishing removes them from the directory at once")
 
 # ── 7. the real import landed ─────────────────────────────────────────────
-real = sql("SELECT COUNT(*), SUM(amount_due), SUM(amount_paid) FROM exhibitors WHERE event_id=1")[0]
+real = sql("SELECT COUNT(*), SUM(amount_due), SUM(amount_paid) FROM exhibitors "
+           "WHERE event_id=1 AND stage='confirmed'")[0]
 check(real[0] == 23, "the 23 confirmed exhibitors are in the system", real[0])
 check(int(real[1] or 0) == 111000 and int(real[2] or 0) == 94500,
       "with the booked and collected totals from the sheet", real)
@@ -210,13 +211,51 @@ st, _ = call("GET", "/vendor-setup/%s" % scan_token)
 check(st == 404,
       "so a forwarded setup email cannot be swapped for a lead list, or the reverse")
 
+# ── 12. the pipeline: prospects live beside the confirmed stands ──────────
+# The sheet keeps maybes and refusals in the same list, separated by a heading.
+# That is the right shape, because a maybe becomes confirmed the day they pay --
+# but only a confirmed stand should ever reach the attendee directory.
+counts = dict(sql("SELECT stage, COUNT(*) FROM exhibitors WHERE event_id=1 GROUP BY stage"))
+check(sum(counts.values()) == 52, "the whole vendor board is in the system", counts)
+check(counts.get("confirmed") == 23, "23 of them are confirmed", counts.get("confirmed"))
+check(counts.get("not_aligned", 0) > 0 and counts.get("next_year", 0) > 0,
+      "including the ones deliberately not invited, and next year's", counts)
+
+money = sql("SELECT SUM(amount_due), SUM(amount_paid) FROM exhibitors "
+            "WHERE event_id=1 AND stage='confirmed'")[0]
+check(int(money[0]) == 111000 and int(money[1]) == 94500,
+      "the money belongs to the confirmed stands", money)
+pipeline_money = sql("SELECT COALESCE(SUM(amount_due),0) FROM exhibitors "
+                     "WHERE event_id=1 AND stage!='confirmed'")[0][0]
+check(int(pipeline_money) == 0,
+      "a prospect has booked nothing, so it adds nothing to the total", pipeline_money)
+
+live = sql("SELECT COUNT(*) FROM exhibitors WHERE event_id=1 "
+           "AND stage!='confirmed' AND (is_published=1 OR can_scan_leads=1)")[0][0]
+check(live == 0, "and no prospect is published or scanning", live)
+
+# ── 13. promoting a prospect is one field ─────────────────────────────────
+st, p2 = call("POST", "/exhibitors", {
+    "event_id": EV, "company_name": "ZZ Maybe Co", "contact_email": "maybe@example.invalid",
+    "stage": "unsure"}, ADMIN)
+PID = p2["id"]
+check(p2.get("stage") == "unsure", "a prospect can be created at its stage", p2.get("stage"))
+st, up = call("PUT", "/exhibitors/%d" % PID,
+              {"stage": "confirmed", "payment_status": "paid",
+               "amount_due": 3500, "amount_paid": 3500}, ADMIN)
+check(up.get("stage") == "confirmed" and up.get("payment_status") == "paid",
+      "and moves to confirmed when they pay, without being re-typed", up)
+check(up.get("is_published") is True and up.get("can_scan_leads") is False,
+      "paying does not by itself hand them a scanner", up)
+call("DELETE", "/exhibitors/%d" % PID, token=ADMIN)
+
 # ── cleanup ───────────────────────────────────────────────────────────────
 call("DELETE", "/exhibitors/%d" % VID, token=ADMIN)
 call("DELETE", "/events/%d" % EV, token=ADMIN)
 check(sql("SELECT COUNT(*) FROM exhibitors WHERE company_name='ZZ Sound Co'")[0][0] == 0,
       "the throwaway vendor is gone afterwards")
 
-print("\n%d checks, %d failed" % (32, len(fails)))
+print("\n%d checks, %d failed" % (42, len(fails)))
 if fails:
     print("FAILED: " + "; ".join(fails))
 sys.exit(1 if fails else 0)

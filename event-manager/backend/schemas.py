@@ -267,6 +267,7 @@ class ExhibitorCreate(ExhibitorBase):
     # An operator adding a vendor wants attendees to find it, so it goes into the
     # directory unless they say otherwise.
     is_published: Optional[bool] = True
+    stage: Optional[str] = None                   # confirmed | waiting | unsure | ...
     package: Optional[str] = None
     payment_status: Optional[str] = None          # paid | partial | unpaid | comp
     amount_due: Optional[float] = None
@@ -287,6 +288,7 @@ class ExhibitorUpdate(BaseModel):
     is_published: Optional[bool] = None
     # Scanning is sold and granted, not implied by existing.
     can_scan_leads: Optional[bool] = None
+    stage: Optional[str] = None                   # confirmed | waiting | unsure | ...
     package: Optional[str] = None
     payment_status: Optional[str] = None          # paid | partial | unpaid | comp
     amount_due: Optional[float] = None
@@ -309,6 +311,7 @@ class Exhibitor(ExhibitorBase):
     # Admin-facing only (ExhibitorPublic below never carries it): whether this
     # stand's scanner link actually works.
     can_scan_leads: bool = False
+    stage: Optional[str] = "confirmed"
     package: Optional[str] = None
     payment_status: Optional[str] = "unpaid"
     amount_due: Optional[float] = None

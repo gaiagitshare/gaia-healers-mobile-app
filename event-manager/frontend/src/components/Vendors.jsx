@@ -24,6 +24,22 @@ import {
  * one being on has never meant the other should be.
  */
 
+// Where a stand is in the conversation, and how much attention it deserves.
+// The sheet keeps prospects, maybes and refusals in the same list as confirmed
+// stands, separated by a heading — which is right, because a maybe becomes
+// confirmed the day they pay. Grouping keeps that without letting a "not
+// aligned" stand sit one stray click from the attendee directory.
+const STAGES = [
+    { key: 'confirmed', label: 'Confirmed', note: 'Paid or ours. These are the stands at the event.' },
+    { key: 'waiting', label: 'Waiting to confirm', note: 'In conversation. Promote them when they pay.' },
+    { key: 'unsure', label: 'Not sure yet', note: 'Contacted, no answer either way.' },
+    { key: 'other', label: 'Others', note: 'Our own tables and anything that does not fit a package.' },
+    { key: 'product_sponsor', label: 'Product-only sponsors', note: 'Sending product, not taking a booth.' },
+    { key: 'next_year', label: 'Interested next year', note: 'Not for 2026. Kept so nobody re-types them in 2027.' },
+    { key: 'not_attending', label: 'Not attending', note: 'Declined for this year.' },
+    { key: 'not_aligned', label: 'Not aligned', note: 'Deliberately not invited. Read the note before changing anything here.' },
+];
+
 const STATUS = {
     paid: { label: 'Paid', color: 'success' },
     partial: { label: 'Part paid', color: 'warning' },
@@ -43,6 +59,7 @@ export default function Vendors() {
     const [saving, setSaving] = useState(false);
     const [leads, setLeads] = useState(null);
     const [invite, setInvite] = useState(null);
+    const [openStages, setOpenStages] = useState({ confirmed: true });
 
     useEffect(() => {
         getEvents()
@@ -79,7 +96,10 @@ export default function Vendors() {
         }
     };
 
-    const totals = rows.reduce((a, r) => ({
+    // Money means the CONFIRMED stands. A prospect has not booked anything, and
+    // rolling them in would make "booked" a number nobody could act on.
+    const confirmed = rows.filter((r) => (r.stage || 'confirmed') === 'confirmed');
+    const totals = confirmed.reduce((a, r) => ({
         due: a.due + (r.amount_due || 0),
         paid: a.paid + (r.amount_paid || 0),
         published: a.published + (r.is_published ? 1 : 0),
@@ -112,8 +132,10 @@ export default function Vendors() {
             {rows.length > 0 && (
                 <Paper variant="outlined" sx={{ p: 1.5, mb: 3 }}>
                     <Stack direction="row" gap={3} flexWrap="wrap" alignItems="baseline">
-                        <Box><Typography variant="h6">{rows.length}</Typography>
-                            <Typography variant="caption" color="text.secondary">Vendors</Typography></Box>
+                        <Box><Typography variant="h6">{confirmed.length}</Typography>
+                            <Typography variant="caption" color="text.secondary">Confirmed</Typography></Box>
+                        <Box><Typography variant="h6">{rows.length - confirmed.length}</Typography>
+                            <Typography variant="caption" color="text.secondary">In the pipeline</Typography></Box>
                         <Box><Typography variant="h6">{money(totals.due)}</Typography>
                             <Typography variant="caption" color="text.secondary">Booked</Typography></Box>
                         <Box><Typography variant="h6">{money(totals.paid)}</Typography>
@@ -132,7 +154,22 @@ export default function Vendors() {
                 </Paper>
             )}
 
-            {loading && rows.length === 0 ? <CircularProgress size={26} /> : (
+            {loading && rows.length === 0 ? <CircularProgress size={26} /> : STAGES.map((stage) => {
+                const group = rows.filter((r) => (r.stage || 'confirmed') === stage.key);
+                if (!group.length) return null;
+                const open = openStages[stage.key] !== false && (openStages[stage.key] || stage.key === 'confirmed');
+                return (
+                <Box key={stage.key} sx={{ mb: 2 }}>
+                    <Stack direction="row" alignItems="baseline" gap={1.5} flexWrap="wrap"
+                        sx={{ cursor: 'pointer', py: 1 }}
+                        onClick={() => setOpenStages((o) => ({ ...o, [stage.key]: !open }))}>
+                        <Typography variant="subtitle1" fontWeight={700}>{stage.label}</Typography>
+                        <Chip size="small" label={group.length} sx={{ height: 20 }} />
+                        <Typography variant="caption" color="text.secondary">{stage.note}</Typography>
+                        <Box flexGrow={1} />
+                        <Button size="small">{open ? 'Hide' : 'Show'}</Button>
+                    </Stack>
+                    {open && (
                 <Paper variant="outlined" sx={{ overflowX: 'auto' }}>
                     <Table size="small">
                         <TableHead>
@@ -148,7 +185,7 @@ export default function Vendors() {
                             </TableRow>
                         </TableHead>
                         <TableBody>
-                            {rows.map((r) => {
+                            {group.map((r) => {
                                 const st = STATUS[r.payment_status] || STATUS.unpaid;
                                 const owes = (r.amount_due || 0) - (r.amount_paid || 0);
                                 return (
@@ -207,7 +244,10 @@ export default function Vendors() {
                         </TableBody>
                     </Table>
                 </Paper>
-            )}
+                    )}
+                </Box>
+                );
+            })}
 
             <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 1.5 }}>
                 <strong>In the directory</strong> puts them in front of attendees in the app.
@@ -299,6 +339,11 @@ function VendorDialog({ vendor, saving, onClose, onSave }) {
             <DialogContent dividers>
                 <Stack spacing={2} sx={{ mt: 0.5 }}>
                     {field('Company name', 'company_name', { required: true })}
+                    <TextField select label="Stage" size="small" fullWidth
+                        value={f.stage || 'confirmed'} onChange={set('stage')}
+                        helperText="Move a stand to Confirmed when they pay.">
+                        {STAGES.map((st) => <MenuItem key={st.key} value={st.key}>{st.label}</MenuItem>)}
+                    </TextField>
                     <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2}>
                         {field('Booth number', 'booth_number')}
                         {field('Category', 'category')}
@@ -349,7 +394,7 @@ function VendorDialog({ vendor, saving, onClose, onSave }) {
                 <Button variant="contained" disabled={saving || !f.company_name}
                     onClick={() => {
                         const body = {};
-                        ['company_name', 'booth_number', 'category', 'website', 'description',
+                        ['company_name', 'stage', 'booth_number', 'category', 'website', 'description',
                          'contact_email', 'contact_phone', 'package', 'payment_note'].forEach((k) => {
                             if (f[k] !== undefined) body[k] = f[k] === '' ? null : f[k];
                         });

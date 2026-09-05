@@ -67,6 +67,13 @@
     document.querySelectorAll('[data-nav]').forEach(function (el) { el.onclick = function () { nav(el.dataset.nav); }; });
     var lo = document.getElementById('logout'); if (lo) lo.onclick = doLogout;
     var cp = document.getElementById('changepw'); if (cp) cp.onclick = changePasswordModal;
+    var ab = document.getElementById('alertbtn');
+    if (ab) {
+      ab.onclick = openAlerts;
+      refreshAlertBadge();
+      // The badge has to be right without anybody navigating anywhere.
+      if (!window.__alertPoll) window.__alertPoll = setInterval(refreshAlertBadge, 120000);
+    }
     if (view === 'contacts') mountContacts();
     else if (view === 'surveys') mountSurveys();
     else if (view === 'membership') mountMembership();
@@ -97,6 +104,8 @@
       + item('events', 'Events', 'event')
       + item('system', 'System Map', 'system')
       + '    <div class="nav__sp"></div>'
+      + '    <button class="nav__item alertbtn" id="alertbtn">' + svg('lock', 'nav__ico')
+      + '<span>System Alerts</span><span class="alertbtn__n" id="alertn"></span></button>'
       + '    <div class="nav__item" id="changepw">' + svg('lock', 'nav__ico') + 'Change password</div>'
       + '    <div class="nav__item" id="logout">' + svg('logout', 'nav__ico') + 'Sign out</div>'
       + '    <div class="side__foot">Gaia Healers &middot; live from GHL</div>'
@@ -751,9 +760,100 @@
     { key: 'diamond', name: 'Diamond', price: '$997/mo · $9,997/yr', acc: 'var(--violet)', benefits: ['Everything in Gold', 'Accelerator benefits', 'Early-access opportunities', 'Priority support'], link: 'join.gaiahealers.com/diamond' }
   ];
   function n(v) { return (v == null) ? '—' : Number(v).toLocaleString(); }
+  /* System Alerts.
+   *
+   * Deliberately a badge and a drawer, not another page: an alert is a prompt
+   * to go and look at something, and burying it behind a navigation choice
+   * would recreate the problem it exists to solve. Only OPEN incidents count
+   * toward the badge — an acknowledged one is somebody's current business, and
+   * a resolved one is history. */
+  var ALERT_SEV = {
+    critical: { label: 'Critical', cls: 'crit' },
+    warning:  { label: 'Warning',  cls: 'warn' },
+    info:     { label: 'Info',     cls: 'info' },
+  };
+  var aState = { data: null, filter: 'open', subsystem: '' };
+
+  function refreshAlertBadge() {
+    api('/alerts').then(function (d) {
+      if (!d || !d.ok) return;
+      aState.data = d;
+      var el = document.getElementById('alertn'); if (!el) return;
+      var crit = d.counts.critical, open = d.counts.open;
+      if (!open) { el.textContent = ''; el.className = 'alertbtn__n'; return; }
+      el.textContent = String(open);
+      el.className = 'alertbtn__n is-on' + (crit ? ' is-crit' : '');
+    }).catch(function () {});
+  }
+
+  function openAlerts() {
+    var d = aState.data;
+    if (!d) { drawerEl.innerHTML = '<div class="spinner"></div>'; openDrawer(); refreshAlertBadge(); setTimeout(openAlerts, 900); return; }
+    var list = (d.incidents || []).filter(function (i) {
+      if (aState.filter === 'open') return i.state === 'open' || i.state === 'acknowledged';
+      if (aState.filter === 'resolved') return i.state === 'resolved';
+      return true;
+    }).filter(function (i) { return !aState.subsystem || i.subsystem === aState.subsystem; });
+
+    var chip = function (v, label, on) {
+      return '<button class="afilter' + (on ? ' is-on' : '') + '" data-f="' + esc(v) + '">' + esc(label) + '</button>';
+    };
+    var subs = (d.subsystems || []);
+    drawerEl.innerHTML = ''
+      + '<div class="drawer__head"><div style="min-width:0">'
+      + '<div class="drawer__name">System Alerts</div>'
+      + '<div class="drawer__mail">' + n(d.counts.critical) + ' critical &middot; ' + n(d.counts.open) + ' open &middot; checked ' + fmtDate(d.generatedAt) + '</div>'
+      + '</div><button class="drawer__x" id="ax">' + svg('close') + '</button></div>'
+      + '<div class="drawer__body">'
+      + '<div class="afilters">' + chip('open', 'Open', aState.filter === 'open')
+      + chip('resolved', 'Resolved', aState.filter === 'resolved')
+      + chip('all', 'All', aState.filter === 'all')
+      + (subs.length > 1 ? '<span class="afilters__sp"></span>'
+          + '<button class="afilter' + (aState.subsystem ? '' : ' is-on') + '" data-s="">All areas</button>'
+          + subs.map(function (x) { return '<button class="afilter' + (aState.subsystem === x ? ' is-on' : '') + '" data-s="' + esc(x) + '">' + esc(x) + '</button>'; }).join('')
+          : '')
+      + '</div>'
+      + (list.length ? list.map(function (i) {
+          var sv = ALERT_SEV[i.severity] || ALERT_SEV.info;
+          return '<div class="acard acard--' + sv.cls + (i.state === 'resolved' ? ' is-done' : '') + '">'
+            + '<div class="acard__hd">'
+            + '<span class="asev asev--' + sv.cls + '">' + sv.label + '</span>'
+            + '<span class="asub">' + esc(i.subsystem) + '</span>'
+            + '<span class="astate">' + esc(i.state) + '</span></div>'
+            + '<div class="acard__t">' + esc(i.title) + '</div>'
+            + '<p class="acard__w">' + esc(i.why) + '</p>'
+            + (i.affected && i.affected.label ? '<div class="acard__a">Affected: <b>' + esc(i.affected.label) + '</b></div>' : '')
+            + '<div class="acard__m">'
+            + '<span>first ' + fmtDate(i.firstDetectedAt) + '</span>'
+            + '<span>last ' + fmtDate(i.lastDetectedAt) + '</span>'
+            + '<span>' + n(i.occurrences) + '&times;</span>'
+            + (i.resolvedAt ? '<span>resolved ' + fmtDate(i.resolvedAt) + '</span>' : '')
+            + '</div>'
+            + '<div class="acard__e">' + esc(i.evidence || '') + '</div>'
+            + (i.notified && i.notified.lastError ? '<div class="acard__n">Notification failed: ' + esc(i.notified.lastError) + '</div>'
+               : (i.notified && i.notified.sentAt ? '<div class="acard__n acard__n--ok">Notified ' + fmtDate(i.notified.sentAt) + '</div>' : ''))
+            + (i.state === 'open' ? '<button class="btn btn--ghost acard__ack" data-ack="' + esc(i.id) + '">Acknowledge</button>' : '')
+            + '</div>';
+        }).join('')
+        : '<div class="empty">' + svg('system') + '<div>Nothing here. Every monitored condition is healthy.</div></div>')
+      + '</div>';
+    document.getElementById('ax').onclick = closeDrawer;
+    drawerEl.querySelectorAll('[data-f]').forEach(function (b) { b.onclick = function () { aState.filter = b.dataset.f; openAlerts(); }; });
+    drawerEl.querySelectorAll('[data-s]').forEach(function (b) { b.onclick = function () { aState.subsystem = b.dataset.s; openAlerts(); }; });
+    drawerEl.querySelectorAll('[data-ack]').forEach(function (b) {
+      b.onclick = function () {
+        api('/alerts/ack', { method: 'POST', body: JSON.stringify({ id: b.dataset.ack }) })
+          .then(function () { refreshAlertBadge(); setTimeout(openAlerts, 400); });
+      };
+    });
+    openDrawer();
+  }
+
   function mountSystem() {
     var c = document.getElementById('content');
     c.innerHTML = '<div class="sysmap" id="sysmap"><div class="smload">' + svg('system') + '<div>Mapping the system…</div></div></div>';
+    // Fetch incidents first so a component carrying one can say so as it paints.
+    if (!aState.data) refreshAlertBadge();
     api('/system-map').then(function (d) {
       if (!d || !d.ok) { document.getElementById('sysmap').innerHTML = '<div class="empty">Could not load the system map.</div>'; return; }
       paintSystem(d);
@@ -859,10 +959,36 @@
           + row('Implemented', c.plannedAdapter.implemented ? 'yes' : 'no')
           + '</div><p class="faint" style="margin:6px 0 0;font-size:12px">' + esc(c.plannedAdapter.note || '') + '</p>' : '')
       + '</div>';
+    var inc = incidentsFor(c.key);
+    if (inc.length) {
+      var box = document.createElement('div');
+      box.innerHTML = '<div class="sec-label" style="margin-top:14px">Active alerts</div>'
+        + inc.map(function (i) {
+            return '<div class="hdinc hdinc--' + (i.severity === 'critical' ? 'crit' : 'warn') + '">'
+              + '<b>' + esc(i.title) + '</b>'
+              + '<span>' + n(i.occurrences) + ' occurrence' + (i.occurrences > 1 ? 's' : '') + ' \u00b7 since ' + fmtDate(i.firstDetectedAt) + '</span></div>';
+          }).join('')
+        + '<button class="btn btn--ghost" id="toalerts" style="margin-top:8px">Open System Alerts</button>';
+      drawerEl.querySelector('.drawer__body').appendChild(box);
+      var go = document.getElementById('toalerts');
+      if (go) go.onclick = function () { aState.subsystem = ''; aState.filter = 'open'; openAlerts(); };
+    }
     document.getElementById('hx').onclick = closeDrawer;
     openDrawer();
   }
 
+  var HEALTH_INCIDENTS = {
+    course_webhook:       /^course-webhook:/,
+    membership_reconcile: /^membership-reconcile:/,
+    event_mirror:         /^event-mirror:/,
+    event_backup:         /^event-backup:/,
+  };
+  function incidentsFor(key) {
+    var all = (aState.data && aState.data.incidents) || [];
+    var re = HEALTH_INCIDENTS[key];
+    if (!re) return [];
+    return all.filter(function (i) { return re.test(i.key) && i.state !== 'resolved'; });
+  }
   function healthStrip(h) {
     if (!h || !h.components) return '';
     // Sort the things that need a person to the front. A wall of green with one
@@ -882,9 +1008,13 @@
       if (c.lastRunResult && c.lastRunResult !== 'success') lines.push('result ' + c.lastRunResult
         + (c.lastRunExitCode != null ? ' (exit ' + c.lastRunExitCode + ')' : ''));
       var tip = (c.evidence || '') + (lines.length ? ' — ' + lines.join(' · ') : '');
-      return '<button class="smh smh--' + st.cls + '" data-hk="' + esc(c.key) + '" title="' + esc(tip) + '">'
+      var inc = incidentsFor(c.key);
+      var crit = inc.filter(function (x) { return x.severity === 'critical'; }).length;
+      return '<button class="smh smh--' + st.cls + (inc.length ? ' has-inc' : '') + '" data-hk="' + esc(c.key) + '" title="' + esc(tip) + '">'
         + '<span class="smh__s">' + st.label + '</span>'
-        + '<span class="smh__l">' + esc(c.label) + '</span>'
+        + '<span class="smh__l">' + esc(c.label)
+        + (inc.length ? ' <span class="smh__inc' + (crit ? ' smh__inc--crit' : '') + '">' + inc.length + ' alert' + (inc.length > 1 ? 's' : '') + '</span>' : '')
+        + '</span>'
         + '<span class="smh__d">' + esc(detail) + (lines.length ? '<span class="smh__x">' + esc(lines[0]) + '</span>' : '') + '</span></button>';
     }).join('') + '</div>';
   }

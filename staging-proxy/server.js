@@ -2795,6 +2795,28 @@ async function quizLead(req, res, origin) {
   sendJson(res, 200, { ok: true }, origin);
 }
 
+/**
+ * Operational alerts to whoever runs Gaia.
+ *
+ * Reuses the GHL conversations email that already delivers magic links in
+ * production — no new dependency, no third party, and one place where outbound
+ * mail is configured. The recipient is a GHL contact id in ALERT_CONTACT_ID; if
+ * that is unset the alert still exists, is still recorded and is still shown in
+ * Admin, and this reports `not_configured` rather than pretending to deliver.
+ */
+async function sendAlertEmail({ subject, html, text }) {
+  const contactId = String(process.env.ALERT_CONTACT_ID || '').trim();
+  if (!contactId) return { ok: false, reason: 'not_configured' };
+  const body = html || String(text || '').split('\n').map((l) => (l ? `<p>${l}</p>` : '')).join('');
+  const out = await ghlSendEmail({ contactId, subject, html: body });
+  console.log('[Gaia Alerts] notification', JSON.stringify({
+    outcome: out.ok ? 'sent' : 'failed', reason: out.reason || null,
+    // The subject line only. Never the incident body, never a contact address.
+    subject: String(subject || '').slice(0, 80),
+  }));
+  return out;
+}
+
 // Send a transactional email to a GHL contact via the conversations API.
 // The PIT carries conversations/messages scope; returns { ok, reason } so
 // callers can branch precisely (keeps all email inside GHL).
@@ -6672,6 +6694,7 @@ const server = http.createServer(async (req, res) => {
         parseCookies, ghlGet, ghlConfig, ghlHeaders,
         loadLedger: loadMemberEntitlements, saveLedger: saveMemberEntitlements,
         loadStoreCatalog, runStoreSync,
+        sendAlertEmail,
       });
       return;
     }
@@ -6894,6 +6917,39 @@ const server = http.createServer(async (req, res) => {
 
 server.listen(PORT, HOST, () => {
   console.log(`Gaia staging proxy listening on ${HOST}:${PORT}`);
+
+  // Evaluate alerts on a timer, not on page load.
+  //
+  // This is the whole point of the exercise: a stopped pipeline at 2am has to
+  // be noticed without anybody opening Admin. The incident model makes running
+  // this often free — ten failures of one problem stay one incident and one
+  // notification — so the cadence is chosen for how fast we want to know, not
+  // for how much noise it makes.
+  //
+  // Skipped entirely under test, where suites boot the server themselves and a
+  // background timer would fire against their fixtures.
+  if (!process.env.GAIA_DISABLE_ALERT_TIMER) {
+    const ALERT_INTERVAL_MS = Number(process.env.ALERT_INTERVAL_MS || 5 * 60 * 1000);
+    const runAlertSweep = async () => {
+      try {
+        const out = await adminRouter.evaluateAlerts({
+          ghlGet, ghlConfig, ghlHeaders,
+          loadLedger: loadMemberEntitlements, saveLedger: saveMemberEntitlements,
+          loadStoreCatalog, sendAlertEmail,
+        });
+        if (out.opened || out.resolved || out.notificationsFailed) {
+          console.log('[Gaia Alerts] sweep', JSON.stringify({
+            opened: out.opened, resolved: out.resolved,
+            delivered: out.notificationsDelivered, failed: out.notificationsFailed,
+          }));
+        }
+      } catch (e) {
+        console.warn('[Gaia Alerts] sweep failed', String((e && e.message) || e).slice(0, 160));
+      }
+    };
+    setTimeout(runAlertSweep, 20 * 1000).unref?.();
+    setInterval(runAlertSweep, ALERT_INTERVAL_MS).unref?.();
+  }
 
   // Daily store sync. Disabled under test so the suite never reaches out to a
   // real storefront, and staggered a minute after boot so a restart loop

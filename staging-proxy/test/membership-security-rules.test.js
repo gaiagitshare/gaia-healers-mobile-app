@@ -32,7 +32,7 @@ Object.assign(process.env, {
   MEMBER_ENTITLEMENTS_FILE: storeFile,
   WEBHOOK_TELEMETRY_FILE: path.join(workdir, 'data', 'webhook-telemetry.json'),
   GHL_API_BASE_URL: 'http://127.0.0.1:9', GHL_API_TOKEN: 'x', GHL_LOCATION_ID: 'x',
-  MEMBERSHIP_FIXTURES: '', MEMBERSHIP_FIXTURE_KEY: '',
+  GAIA_DISABLE_ALERT_TIMER: '1', MEMBERSHIP_FIXTURES: '', MEMBERSHIP_FIXTURE_KEY: '',
 });
 await import(new URL('../server.js', import.meta.url).href);
 await new Promise((r) => setTimeout(r, 400));

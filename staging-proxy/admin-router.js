@@ -18,6 +18,7 @@ import crypto from 'node:crypto';
 import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import * as membershipAdmin from './membership/admin-api.js';
+import * as alerts from './alerts.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -815,6 +816,114 @@ async function pipelineHealth(deps) {
   return { ok: true, ...out };
 }
 
+/**
+ * The evidence detection needs that health does not already carry.
+ *
+ * Two questions health cannot answer on its own: is anybody PAYING for a
+ * membership they do not hold, and has money arrived for a ticket that does not
+ * exist. Both compare two stores, so both live here rather than inside a health
+ * component about a single service.
+ */
+async function alertExtras(deps) {
+  const extra = { membershipExceptions: [], payments: null };
+
+  // Paid, but no membership. The sweep can exit cleanly and still skip one
+  // person; this is what would catch that. Evidence only — never a grant.
+  try {
+    const subs = await loadSubscriptions(deps);
+    const led = deps.loadLedger && deps.loadLedger();
+    const contacts = (led && led.contacts) || {};
+    for (const sub of (subs.list || [])) {
+      if (sub.status !== 'active') continue;
+      const cid = sub.contactId;
+      if (!cid) continue;
+      const rec = contacts[cid];
+      if (rec && rec.membership && rec.membership.status === 'active') continue;
+      extra.membershipExceptions.push({
+        contactId: cid,
+        // GHL names this field differently across payloads; take whichever is
+        // present so the alert can be traced back to a real subscription.
+        subscriptionId: sub._id || sub.id || sub.subscriptionId || null,
+        status: sub.status,
+        amount: sub.amount != null ? sub.amount : null,
+        email: sub.contactEmail || sub.email || '',
+      });
+    }
+    // A cap, so one bad sweep cannot produce hundreds of incidents.
+    extra.membershipExceptions = extra.membershipExceptions.slice(0, 25);
+  } catch (_) { /* absence of evidence is not an alert */ }
+
+  // Money in, nobody to admit — past a grace period, because a webhook and its
+  // reconciliation are not simultaneous and a fresh purchase is not a fault.
+  try {
+    const GRACE_HOURS = 6;
+    const evTok = String(process.env.IDENTITY_SERVICE_TOKEN || '').trim();
+    if (evTok) {
+      const r = await fetch('http://127.0.0.1:8002/identity/payment-exceptions?grace_hours=' + GRACE_HOURS,
+        { headers: { Authorization: 'Bearer ' + evTok } });
+      if (r.ok) {
+        const d = await r.json();
+        extra.payments = {
+          graceHours: GRACE_HOURS,
+          paidWithoutTicket: d.paid_without_ticket || 0,
+          refundedStillActive: d.refunded_still_active || 0,
+          unmatched: d.unmatched || 0,
+          providers: d.providers || [],
+          oldest: d.oldest || null,
+          sample: d.sample || null,
+        };
+      }
+    }
+  } catch (_) { /* leave payments unevaluated rather than guess */ }
+
+  return extra;
+}
+
+const ALERTS_FILE = () => path.join(process.cwd(), 'data', 'system-alerts.json');
+function loadAlertStore() {
+  try { return JSON.parse(fs.readFileSync(ALERTS_FILE(), 'utf8')) || { incidents: [] }; }
+  catch (_) { return { incidents: [] }; }
+}
+function saveAlertStore(store) {
+  try {
+    fs.mkdirSync(path.dirname(ALERTS_FILE()), { recursive: true });
+    fs.writeFileSync(ALERTS_FILE(), JSON.stringify(store, null, 1));
+  } catch (_) { /* the incident is still in memory for this response */ }
+}
+
+/**
+ * One pass: read health, detect, fold into incidents, send what is due.
+ *
+ * Safe to call as often as you like — that is the point of the incident model.
+ * Ten failures of one problem produce one incident and one notification.
+ */
+export async function evaluateAlerts(deps, { notify = true } = {}) {
+  const health = await pipelineHealth(deps);
+  const extra = await alertExtras(deps);
+  const detections = alerts.detect(health, extra);
+  const store = loadAlertStore();
+  const result = alerts.reconcile(store, detections);
+
+  let delivered = 0, failed = 0;
+  if (notify && typeof deps.sendAlertEmail === 'function') {
+    for (const { incident, kind } of alerts.notificationsDue(store)) {
+      const msg = alerts.renderNotification(incident, kind);
+      let outcome;
+      try { outcome = await deps.sendAlertEmail(msg); }
+      catch (e) { outcome = { ok: false, reason: String((e && e.message) || e) }; }
+      alerts.recordNotification(incident, kind, outcome);
+      if (outcome && outcome.ok) delivered++; else failed++;
+    }
+  }
+  saveAlertStore(store);
+  return {
+    ok: true, generatedAt: new Date().toISOString(),
+    opened: result.opened.length, updated: result.updated.length, resolved: result.resolved.length,
+    notificationsDelivered: delivered, notificationsFailed: failed,
+    incidents: store.incidents,
+  };
+}
+
 async function systemMap(deps) {
   if (_sysMapCache.data && (Date.now() - _sysMapCache.at) < 10 * 60 * 1000) return _sysMapCache.data;
   const cfg = deps.ghlConfig();
@@ -1060,6 +1169,39 @@ async function handle(req, res, url, deps) {
         timer: unit.replace(/\.service$/, '.timer'), okWithin: 36 * 60 * 60 * 1000, cadence: 'probe',
       }),
     }, origin);
+  }
+  if (p === '/api/admin/alerts' && method === 'GET') {
+    const evaluated = await evaluateAlerts(deps, { notify: url.searchParams.get('notify') !== '0' });
+    const state = (url.searchParams.get('state') || '').toLowerCase();
+    const sub = (url.searchParams.get('subsystem') || '').toLowerCase();
+    let list = evaluated.incidents;
+    if (state) list = list.filter((i) => i.state === state);
+    if (sub) list = list.filter((i) => String(i.subsystem).toLowerCase() === sub);
+    const open = evaluated.incidents.filter((i) => i.state === 'open');
+    return sendJson(res, 200, {
+      ok: true, generatedAt: evaluated.generatedAt,
+      counts: {
+        open: open.length,
+        critical: open.filter((i) => i.severity === 'critical').length,
+        warning: open.filter((i) => i.severity === 'warning').length,
+        acknowledged: evaluated.incidents.filter((i) => i.state === 'acknowledged').length,
+        resolved: evaluated.incidents.filter((i) => i.state === 'resolved').length,
+      },
+      subsystems: [...new Set(evaluated.incidents.map((i) => i.subsystem))],
+      incidents: list,
+    }, origin);
+  }
+  if (p === '/api/admin/alerts/ack' && method === 'POST') {
+    const body = await deps.readJsonBody(req).catch(() => ({}));
+    const store = loadAlertStore();
+    const inc = (store.incidents || []).find((i) => i.id === (body && body.id));
+    if (!inc) return sendJson(res, 404, { ok: false, reason: 'not_found' }, origin);
+    // Acknowledging says a human has seen it. It does not say it is fixed, so
+    // the condition keeps being evaluated and can still resolve on its own.
+    inc.state = inc.state === 'resolved' ? 'resolved' : 'acknowledged';
+    inc.acknowledgedAt = new Date().toISOString();
+    saveAlertStore(store);
+    return sendJson(res, 200, { ok: true, incident: inc }, origin);
   }
   if (p === '/api/admin/health' && method === 'GET') {
     return sendJson(res, 200, await pipelineHealth(deps), origin);

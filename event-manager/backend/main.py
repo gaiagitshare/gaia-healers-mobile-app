@@ -5851,6 +5851,64 @@ def event_payments_recovery(event_id: int, db: Session = Depends(get_db),
             "items": out}
 
 
+@app.get("/identity/payment-exceptions")
+def payment_exceptions(grace_hours: int = 6, db: Session = Depends(get_db),
+                       _: bool = Depends(require_service_token)):
+    """Payments whose state and ticket state disagree, past a grace period.
+
+    A webhook and its reconciliation are not simultaneous, and a purchase made a
+    minute ago with no attendee yet is a normal race, not a fault. The grace
+    period is what separates the two — without it every checkout would raise an
+    alarm and the real ones would be lost in them.
+
+    Read-only. Provider-agnostic: whatever GHL reports is counted, so PayPal,
+    Stripe and anything switched on later are all included without a code change.
+    """
+    cutoff = datetime.utcnow() - timedelta(hours=max(0, grace_hours))
+    rows = db.query(models.PaymentEvent).filter(
+        models.PaymentEvent.event_id != None).all()                      # noqa: E711
+
+    paid_no_ticket, refunded_active, unmatched = [], [], 0
+    for r in rows:
+        if r.status in payments.PAID and not r.attendee_id:
+            if r.occurred_at and r.occurred_at <= cutoff:
+                paid_no_ticket.append(r)
+        if r.status in payments.REVERSED and r.attendee_id:
+            a = db.query(models.Attendee).filter(models.Attendee.id == r.attendee_id).first()
+            if a and _ticket_active(a):
+                refunded_active.append(r)
+
+    # A provider event Gaia could not tie to a mapped product at all.
+    unmatched = db.query(models.PaymentEvent).filter(
+        models.PaymentEvent.event_id.is_(None),
+        models.PaymentEvent.status.in_(list(payments.PAID)),
+        models.PaymentEvent.occurred_at <= cutoff,
+        models.PaymentEvent.recon_state == "not_event",
+    ).count()
+
+    oldest = min((r.occurred_at for r in paid_no_ticket if r.occurred_at), default=None)
+    sample = None
+    if paid_no_ticket:
+        s = sorted(paid_no_ticket, key=lambda r: r.occurred_at or datetime.max)[0]
+        sample = {"id": s.contact_id or s.ghl_transaction_id, "email": s.buyer_email}
+
+    return {
+        "ok": True,
+        "grace_hours": grace_hours,
+        "paid_without_ticket": len(paid_no_ticket),
+        "refunded_still_active": len(refunded_active),
+        # Payments for things that are not event products — memberships, devices,
+        # the store — are the overwhelming majority here and are not a fault.
+        # The count is reported so it is visible; it is deliberately NOT an
+        # alertable figure, because 730 normal sales would drown the real ones.
+        "unmatched": 0,
+        "unmatched_observed": unmatched,
+        "providers": sorted({payments.display_provider(r.provider) for r in paid_no_ticket if r.provider}),
+        "oldest": oldest.isoformat() if oldest else None,
+        "sample": sample,
+    }
+
+
 @app.get("/identity/system-summary")
 def system_summary(db: Session = Depends(get_db), _: bool = Depends(require_service_token)):
     """Counts for the System Map. Every figure is a live COUNT(*), not a cache."""

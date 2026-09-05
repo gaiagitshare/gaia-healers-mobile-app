@@ -619,38 +619,96 @@ async function pipelineHealth(deps) {
   });
 
   // ── Course entitlement webhook ────────────────────────────────────────────
-  // Idle and broken look identical from the outside, so both the last grant AND
-  // whether anything applicable has been SOLD are reported. Silence with no
-  // sales is idle; silence with sales is a fault.
+  // One green/red light cannot tell an operator what to DO. These are the
+  // failure classes that need different responses: a signature problem is a
+  // credentials job, an unmapped course is a catalogue job, an unresolved
+  // contact is an identity job, a failed write is an infrastructure job — and
+  // silence with nothing sold is not a problem at all.
   const courseSrc = sources.ghl_course || {};
+  let tele = {};
+  try {
+    const tf = process.env.WEBHOOK_TELEMETRY_FILE
+      || path.join(path.dirname(process.env.MEMBER_ENTITLEMENTS_FILE
+        || path.join(process.cwd(), 'data', 'member-entitlements.json')), 'webhook-telemetry.json');
+    tele = (JSON.parse(fs.readFileSync(tf, 'utf8')) || {}).member_access || {};
+  } catch (_) { tele = {}; }
+  const c = tele.counters || {};
+
+  // Newest evidence of each kind.
+  const lastAccepted = tele.lastAcceptedAt || lastWebhookGrantAt || null;
+  const lastRejected = tele.lastRejectedAt || null;
+  const RECENT = 7 * DAY;
+  const acceptedAge = ageMs(lastAccepted);
+  const rejectedAge = ageMs(lastRejected);
+  const rejectionIsCurrent = rejectedAge != null
+    && rejectedAge <= RECENT
+    && (acceptedAge == null || rejectedAge < acceptedAge);
+
+  let webhookState, detail;
+  if (rejectionIsCurrent) {
+    // The most recent thing that happened was a refusal. Which kind decides
+    // both the state and who needs to look at it.
+    const kind = tele.lastRejectionKind;
+    if (kind === 'rejected_auth') {
+      webhookState = 'auth_failure';
+      detail = 'A delivery arrived but its signature or shared secret did not verify. Check the webhook credentials in GHL.';
+    } else if (kind === 'unknown_resource') {
+      webhookState = 'mapping_failure';
+      detail = 'An authenticated delivery arrived for a course or product Gaia could not resolve. Check the course authority and offer mapping.';
+    } else if (kind === 'unknown_contact') {
+      webhookState = 'identity_failure';
+      detail = 'A valid course event arrived without a contact Gaia could resolve safely. Nothing was granted.';
+    } else if (tele.lastRejectionReason === 'persistence_failed') {
+      webhookState = 'processing_failure';
+      detail = 'The event was valid and the ledger write failed. This is the one class that loses a grant.';
+    } else if (kind === 'stale') {
+      webhookState = 'ok';
+      detail = 'The last delivery was an out-of-order replay and was correctly ignored.';
+    } else {
+      webhookState = 'stale';
+      detail = 'The last delivery was refused: ' + (tele.lastRejectionReason || 'reason not recorded') + '.';
+    }
+  } else if (acceptedAge != null && acceptedAge <= RECENT) {
+    webhookState = 'ok';
+    detail = 'A course entitlement was granted from a live delivery within the last week.';
+  } else if (!tele.lastReceivedAt && !lastAccepted) {
+    webhookState = 'unknown';
+    detail = 'No delivery has ever been observed by this monitor. It began recording on this deployment.';
+  } else {
+    webhookState = 'idle';
+    detail = 'No applicable event recently, and no evidence of failure. Course grants only arrive when a course is actually sold.';
+  }
+
   add({
     key: 'course_webhook', label: 'Course entitlement webhook', kind: 'webhook',
-    ...grade(lastWebhookGrantAt, { okWithin: 3 * DAY, staleAfter: 30 * DAY, idleReason: true }),
-    lastWriteAt: iso(lastWebhookGrantAt),
+    state: webhookState, detail,
+    ageMs: acceptedAge,
+    lastWriteAt: iso(lastAccepted),
+    lastReceivedAt: iso(tele.lastReceivedAt),
+    lastAuthenticatedAt: iso(tele.lastAuthenticatedAt),
+    lastAcceptedAt: iso(tele.lastAcceptedAt),
+    lastGrantAt: iso(tele.lastGrantAt),
+    lastRevokeAt: iso(tele.lastRevokeAt),
+    lastRejectedAt: iso(tele.lastRejectedAt),
+    lastRejectionReason: tele.lastRejectionReason || null,
+    lastRejectionKind: tele.lastRejectionKind || null,
+    counters: {
+      received: c.received || 0, authenticated: c.authenticated || 0,
+      rejected_auth: c.rejected_auth || 0, unknown_resource: c.unknown_resource || 0,
+      unknown_contact: c.unknown_contact || 0, rejected_other: c.rejected_other || 0,
+      accepted: c.accepted || 0, duplicate: c.duplicate || 0,
+      grant: c.grant || 0, revoke: c.revoke || 0, stale: c.stale || 0,
+    },
+    telemetrySince: iso(tele.firstSeenAt),
     endpoint: '/api/webhooks/ghl/member-access',
-    counts: { grantsFromWebhook: Object.keys(contacts).reduce((a, id) =>
-      a + (contacts[id].courses || []).filter((c) => /webhook/i.test(String(c.matchedBy || ''))).length, 0) },
-    note: 'Authenticated by Ed25519 signature or shared secret, validated against the course authority, '
-        + 'ordered per resource and idempotent on webhook id. Grants arrive only when a course or community is actually sold.',
-    // There are two course routes on paper and one in practice.
-    //
-    // This receiver is the canonical one: it authenticates, checks the course
-    // authority, applies per-resource ordering and de-duplicates on webhook id,
-    // and it produced every live grant in the ledger.
-    //
-    // `ghl_course` in the source registry is a declared adapter slot that was
-    // never built — nothing anywhere calls propose() with that source, which is
-    // why its counters are zero and it has never observed anything. Its zeros
-    // are not evidence that this pipeline is down, so they are reported as what
-    // they are rather than beside a health state that invites the comparison.
     canonicalRoute: 'POST /api/webhooks/ghl/member-access',
     plannedAdapter: {
-      source: 'ghl_course',
-      state: courseSrc.state || 'unknown',
-      implemented: false,
+      source: 'ghl_course', state: courseSrc.state || 'unknown', implemented: false,
       note: 'Registry slot for a future adapter. No producer exists, so its counters stay at zero and mean nothing about the live route.',
     },
-    evidence: 'newest webhook-sourced grant in the ledger',
+    historicGrantsFromWebhook: Object.keys(contacts).reduce((a, id) =>
+      a + (contacts[id].courses || []).filter((x) => /webhook/i.test(String(x.matchedBy || ''))).length, 0),
+    evidence: 'receiver telemetry (counters + per-decision timestamps) and the newest webhook-sourced grant in the ledger',
   });
 
   // ── Membership reconciliation ─────────────────────────────────────────────
@@ -686,11 +744,49 @@ async function pipelineHealth(deps) {
     service: 'gaia-academy-sync.service', timer: 'gaia-academy-sync.timer',
     okWithin: 36 * HOUR, cadence: 'daily',
   }));
-  add(jobHealth({
+  // A backup job that exits 0 is not a backup. The artifact is checked too:
+  // newest file, its age and its size. A truncated or missing archive turns the
+  // component amber even when systemd is perfectly happy with the run.
+  const backup = jobHealth({
     key: 'event_backup', label: 'Event database backup',
     service: 'gaia-event-backup.service', timer: 'gaia-event-backup.timer',
     okWithin: 36 * HOUR, cadence: 'daily',
-  }));
+  });
+  try {
+    const dir = process.env.EVENT_BACKUP_DIR || '/root/event/_backups';
+    const files = fs.readdirSync(dir)
+      .filter((f) => /^event-.*\.db\.gz$/.test(f))
+      .map((f) => ({ f, st: fs.statSync(path.join(dir, f)) }))
+      .sort((a, b) => b.st.mtimeMs - a.st.mtimeMs);
+    backup.artifactCount = files.length;
+    if (files.length) {
+      const newest = files[0];
+      backup.latestArtifact = newest.f;
+      backup.latestArtifactAt = new Date(newest.st.mtimeMs).toISOString();
+      backup.latestArtifactBytes = newest.st.size;
+      const artifactAge = ageMs(backup.latestArtifactAt);
+      // An archive this small is not a database. Better to say so than to
+      // inherit a green state from a job that technically exited cleanly.
+      if (newest.st.size < 1024) {
+        backup.state = 'failed';
+        backup.detail = 'The newest backup archive is smaller than 1 KB — it is not a usable database.';
+      } else if (artifactAge != null && artifactAge > 36 * HOUR) {
+        backup.state = 'stale';
+        backup.detail = 'The job may have run, but no fresh archive has appeared for over 36 hours.';
+      } else {
+        backup.detail = 'Newest archive is ' + Math.round(newest.st.size / 1024) + ' KB, written '
+          + backup.latestArtifactAt.slice(0, 16).replace('T', ' ') + '. Contents verified separately; restore untested.';
+      }
+    } else {
+      backup.state = 'failed';
+      backup.detail = 'No backup archive found on disk, whatever the job reported.';
+    }
+    backup.evidence += ' + newest archive on disk (name, size, mtime)';
+  } catch (_) {
+    backup.detail = 'Could not read the backup directory, so the archive itself is unverified.';
+    if (backup.state === 'ok') backup.state = 'unknown';
+  }
+  add(backup);
 
   // ── GHL reachability ──────────────────────────────────────────────────────
   const cfg = deps.ghlConfig();

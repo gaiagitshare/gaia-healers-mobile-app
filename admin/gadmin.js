@@ -784,6 +784,85 @@
     var h = Math.round(m / 60); if (h < 48) return h + 'h ago';
     return Math.round(h / 24) + 'd ago';
   }
+  // What each component IS, in an operator's terms. The runtime facts come from
+  // the health payload; this is the part a timestamp cannot tell you.
+  var HMETA = {
+    entitlement_ledger:   { what: 'Gaia\u2019s own record of what each person holds \u2014 memberships and course access.',
+                            truth: 'Gaia (this is the source of truth)', how: 'Written by the webhook receiver and the reconcile sweep', rw: 'read/write' },
+    course_webhook:       { what: 'Receives course and community grants pushed by GHL workflows when something is sold.',
+                            truth: 'GHL (Gaia records the grant)', how: 'Pushed, live', rw: 'write into the ledger' },
+    membership_reconcile: { what: 'Walks GHL subscriptions and reconciles them against the canonical billing map.',
+                            truth: 'GHL billing', how: 'Scheduled sweep', rw: 'write into the ledger' },
+    event_mirror:         { what: 'Catches GHL orders the event webhook missed and mirrors payments.',
+                            truth: 'GHL orders and transactions', how: 'Scheduled, hourly', rw: 'write into the Event Manager' },
+    academy_sync:         { what: 'Refreshes the course catalogue Gaia validates grants against.',
+                            truth: 'GHL courses', how: 'Scheduled, daily', rw: 'write into Gaia\u2019s catalogue' },
+    event_backup:         { what: 'Snapshots the Event Manager database and keeps 30 days.',
+                            truth: 'The Event Manager database', how: 'Scheduled, daily', rw: 'read-only snapshot' },
+    ghl_api:              { what: 'The upstream CRM: contacts, tags, subscriptions, orders.',
+                            truth: 'GHL', how: 'Queried live on demand', rw: 'read-only from Gaia' },
+    event_manager:        { what: 'Attendees, exhibitors, check-in, badges and event payments.',
+                            truth: 'The Event Manager (this is the source of truth)', how: 'Live API', rw: 'read/write \u2014 owned by Event Admin' },
+  };
+  function openHealth(c) {
+    var m = HMETA[c.key] || {};
+    var st = HSTATE[c.state] || HSTATE.unknown;
+    var row = function (k, v) { return v == null || v === '' ? '' : '<div class="hdrow"><span>' + esc(k) + '</span><b>' + esc(String(v)) + '</b></div>'; };
+    var counters = '';
+    if (c.counters && Object.keys(c.counters).length) {
+      counters = '<div class="sec-label" style="margin-top:14px">Counters</div><div class="hdgrid">'
+        + Object.keys(c.counters).map(function (k) {
+            return '<div class="hdmini"><b>' + n(c.counters[k]) + '</b><span>' + esc(k.replace(/_/g, ' ')) + '</span></div>';
+          }).join('') + '</div>';
+    }
+    drawerEl.innerHTML = ''
+      + '<div class="drawer__head"><div style="min-width:0">'
+      + '<div class="drawer__name">' + esc(c.label) + '</div>'
+      + '<div class="drawer__mail"><span class="smh__s smh__s--in smh--' + st.cls + '">' + st.label + '</span></div>'
+      + '</div><button class="drawer__x" id="hx">' + svg('close') + '</button></div>'
+      + '<div class="drawer__body">'
+      + (m.what ? '<p class="hdwhat">' + esc(m.what) + '</p>' : '')
+      + (c.detail ? '<div class="hddetail">' + esc(c.detail) + '</div>' : '')
+      + '<div class="sec-label" style="margin-top:14px">Where the truth lives</div>'
+      + '<div class="hdrows">'
+      + row('Source of truth', m.truth)
+      + row('Update method', m.how || c.cadence)
+      + row('Read / write', m.rw)
+      + row('Cadence', c.cadence)
+      + '</div>'
+      + '<div class="sec-label" style="margin-top:14px">Evidence</div>'
+      + '<div class="hdrows">'
+      + row('Last success', c.lastSuccessAt ? fmtDate(c.lastSuccessAt) : (c.lastWriteAt ? fmtDate(c.lastWriteAt) : 'not observed'))
+      + row('Last failure', c.lastFailureAt ? fmtDate(c.lastFailureAt) : 'none observed')
+      + row('Last run started', c.lastStartAt ? fmtDate(c.lastStartAt) : null)
+      + row('Last result', c.lastRunResult ? (c.lastRunResult + (c.lastRunExitCode != null ? ' (exit ' + c.lastRunExitCode + ')' : '')) : null)
+      + row('Next run', c.nextRunAt ? fmtDate(c.nextRunAt) : null)
+      + row('Last received', c.lastReceivedAt ? fmtDate(c.lastReceivedAt) : null)
+      + row('Last authenticated', c.lastAuthenticatedAt ? fmtDate(c.lastAuthenticatedAt) : null)
+      + row('Last rejection', c.lastRejectedAt ? fmtDate(c.lastRejectedAt) : null)
+      + row('Rejection reason', c.lastRejectionReason)
+      + row('Endpoint', c.endpoint)
+      + row('Response time', c.ms != null ? c.ms + ' ms' : null)
+      + row('Latest archive', c.latestArtifact)
+      + row('Archive size', c.latestArtifactBytes != null ? Math.round(c.latestArtifactBytes / 1024) + ' KB' : null)
+      + row('Archives kept', c.artifactCount)
+      + row('How this is known', c.evidence)
+      + '</div>'
+      + (c.counts ? '<div class="sec-label" style="margin-top:14px">Records</div><div class="hdgrid">'
+          + Object.keys(c.counts).map(function (k) {
+              return '<div class="hdmini"><b>' + n(c.counts[k]) + '</b><span>' + esc(k.replace(/([A-Z])/g, ' $1').toLowerCase()) + '</span></div>';
+            }).join('') + '</div>'
+          + (c.countsNote ? '<p class="faint" style="margin:6px 0 0;font-size:12px">' + esc(c.countsNote) + '</p>' : '') : '')
+      + counters
+      + (c.plannedAdapter ? '<div class="sec-label" style="margin-top:14px">Planned adapter</div>'
+          + '<div class="hdrows">' + row('Registry source', c.plannedAdapter.source)
+          + row('Implemented', c.plannedAdapter.implemented ? 'yes' : 'no')
+          + '</div><p class="faint" style="margin:6px 0 0;font-size:12px">' + esc(c.plannedAdapter.note || '') + '</p>' : '')
+      + '</div>';
+    document.getElementById('hx').onclick = closeDrawer;
+    openDrawer();
+  }
+
   function healthStrip(h) {
     if (!h || !h.components) return '';
     // Sort the things that need a person to the front. A wall of green with one
@@ -803,10 +882,10 @@
       if (c.lastRunResult && c.lastRunResult !== 'success') lines.push('result ' + c.lastRunResult
         + (c.lastRunExitCode != null ? ' (exit ' + c.lastRunExitCode + ')' : ''));
       var tip = (c.evidence || '') + (lines.length ? ' — ' + lines.join(' · ') : '');
-      return '<div class="smh smh--' + st.cls + '" title="' + esc(tip) + '">'
+      return '<button class="smh smh--' + st.cls + '" data-hk="' + esc(c.key) + '" title="' + esc(tip) + '">'
         + '<span class="smh__s">' + st.label + '</span>'
         + '<span class="smh__l">' + esc(c.label) + '</span>'
-        + '<span class="smh__d">' + esc(detail) + (lines.length ? '<span class="smh__x">' + esc(lines[0]) + '</span>' : '') + '</span></div>';
+        + '<span class="smh__d">' + esc(detail) + (lines.length ? '<span class="smh__x">' + esc(lines[0]) + '</span>' : '') + '</span></button>';
     }).join('') + '</div>';
   }
 
@@ -894,6 +973,12 @@
       + '<div class="smhub" id="smhub"><span class="smhub__k">Gaia Healers 2.0</span><b>' + n(d.members) + '</b><span class="smhub__l">total members</span></div>'
       + '<div class="smrow">' + tiers + payB + access + app + eventsB + entB + '</div>'
       + '<div class="smfoot">GHL contacts &amp; tags · GHL/Stripe subscriptions · Gaia\u2019s Shopify and Academy catalogues · built ' + fmtDate(d.generatedAt) + ' \u00b7 cached 10 min</div>';
+    document.querySelectorAll('.smh[data-hk]').forEach(function (b) {
+      b.onclick = function () {
+        var c = (d.health && d.health.components || []).filter(function (x) { return x.key === b.dataset.hk; })[0];
+        if (c) openHealth(c);
+      };
+    });
     requestAnimationFrame(drawEdges);
     if (!window.__smResize) { window.__smResize = true; window.addEventListener('resize', function () { if (document.getElementById('sysmap')) drawEdges(); }); }
   }

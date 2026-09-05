@@ -220,3 +220,14 @@ try {
 } catch (e) { /* monitoring must never break a reconciliation */ }
 
 log({ phase: 'done', ...stats });
+
+// Exit non-zero when anything failed.
+//
+// The run counted its errors and then exited 0 regardless, so a pass in which
+// EVERY reconcile failed still recorded Result=success against the unit — and
+// the health check, which reads exactly that, would have called it healthy. A
+// job that cannot fail is a job nobody can monitor.
+if (stats.errors > 0) {
+  log({ phase: 'failed', reason: 'reconcile_errors', errors: stats.errors });
+  process.exit(1);
+}

@@ -1538,22 +1538,93 @@ function classifyEntitlementEvent(body) {
   return { kind: '', grant: null, raw };
 }
 
+/* ─────────────────────────────────────────────────────────────────────────────
+ * Entitlement webhook telemetry.
+ *
+ * The pipeline is correct and, today, idle: no course has been sold since 27
+ * August, so nothing arrives. Idle and broken are indistinguishable from the
+ * outside, and the next real purchase is the moment that matters — so every
+ * decision the receiver makes is counted, and the last time each KIND of
+ * decision happened is kept.
+ *
+ * What is deliberately NOT kept: request bodies, contact identifiers, secrets,
+ * signatures, emails. A monitoring file that leaks the thing it monitors is a
+ * worse problem than the blindness it fixes. Counters and timestamps only.
+ * ────────────────────────────────────────────────────────────────────────── */
+const WEBHOOK_TELEMETRY_FILE = String(process.env.WEBHOOK_TELEMETRY_FILE
+  || path.join(path.dirname(MEMBER_ENTITLEMENTS_FILE), 'webhook-telemetry.json')).trim();
+
+const TELEMETRY_COUNTERS = ['received', 'authenticated', 'rejected_auth', 'unknown_resource',
+  'unknown_contact', 'rejected_other', 'accepted', 'duplicate', 'grant', 'revoke', 'stale'];
+
+function readWebhookTelemetry() {
+  try {
+    const parsed = JSON.parse(fs.readFileSync(WEBHOOK_TELEMETRY_FILE, 'utf8'));
+    return (parsed && typeof parsed === 'object') ? parsed : {};
+  } catch (_) { return {}; }
+}
+
+/**
+ * Record one decision. `event` is a counter name; `at` fields are set from the
+ * counter so a reader can ask "when did authentication last succeed" without
+ * the writer having to enumerate every combination.
+ */
+function noteWebhookEvent(hook, event, { reason = null } = {}) {
+  try {
+    const all = readWebhookTelemetry();
+    const h = all[hook] || { counters: {}, firstSeenAt: new Date().toISOString() };
+    h.counters = h.counters || {};
+    if (TELEMETRY_COUNTERS.includes(event)) h.counters[event] = (h.counters[event] || 0) + 1;
+    const now = new Date().toISOString();
+    const set = (k) => { h[k] = now; };
+    if (event === 'received') set('lastReceivedAt');
+    if (event === 'authenticated') set('lastAuthenticatedAt');
+    if (event === 'accepted') set('lastAcceptedAt');
+    if (event === 'grant') set('lastGrantAt');
+    if (event === 'revoke') set('lastRevokeAt');
+    if (event === 'duplicate') set('lastDuplicateAt');
+    if (event === 'rejected_auth' || event === 'unknown_resource'
+        || event === 'unknown_contact' || event === 'rejected_other' || event === 'stale') {
+      set('lastRejectedAt');
+      // A short, non-identifying label. Never the payload.
+      h.lastRejectionReason = String(reason || event).slice(0, 80);
+      h.lastRejectionKind = event;
+    }
+    all[hook] = h;
+    fs.mkdirSync(path.dirname(WEBHOOK_TELEMETRY_FILE), { recursive: true });
+    writeJsonAtomic(WEBHOOK_TELEMETRY_FILE, all);
+  } catch (_) { /* telemetry must never break the pipeline it watches */ }
+}
+
 async function memberAccessWebhook(req, res, origin) {
+  noteWebhookEvent('member_access', 'received');
   let rawBody = '';
   try { rawBody = await readRawBody(req, 512 * 1024); }
-  catch (_) { sendJson(res, 413, { ok: false, error: 'Request body is too large.' }, origin); return; }
+  catch (_) {
+    noteWebhookEvent('member_access', 'rejected_other', { reason: 'body_too_large' });
+    sendJson(res, 413, { ok: false, error: 'Request body is too large.' }, origin); return;
+  }
   const authMethod = memberWebhookAuthorized(req, rawBody);
   if (!authMethod) {
+    noteWebhookEvent('member_access', 'rejected_auth', { reason: 'invalid_authentication' });
     console.warn('[Gaia Entitlements] webhook rejected: invalid authentication');
     sendJson(res, 403, { ok: false, error: 'Invalid webhook authentication.' }, origin);
     return;
   }
+  noteWebhookEvent('member_access', 'authenticated');
   let body;
   try { body = rawBody ? JSON.parse(rawBody) : {}; }
-  catch (_) { sendJson(res, 400, { ok: false, error: 'Invalid JSON body.' }, origin); return; }
+  catch (_) {
+    noteWebhookEvent('member_access', 'rejected_other', { reason: 'invalid_json' });
+    sendJson(res, 400, { ok: false, error: 'Invalid JSON body.' }, origin); return;
+  }
 
   const contactId = firstNonEmptyString(nestedValue(body, 'contactId', 'contact_id'), body.contact?.id, body.data?.contact?.id);
-  if (!contactId) { sendJson(res, 422, { ok: false, error: 'contactId is required.' }, origin); return; }
+  if (!contactId) {
+    // The course was fine; we could not say safely WHO it was for.
+    noteWebhookEvent('member_access', 'unknown_contact', { reason: 'contact_id_missing' });
+    sendJson(res, 422, { ok: false, error: 'contactId is required.' }, origin); return;
+  }
 
   // \u2500\u2500 EVIDENCE MODE (product determines the entitlement) \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
   // Same discipline as the Event webhook. When a workflow supplies PAYMENT
@@ -1583,9 +1654,11 @@ async function memberAccessWebhook(req, res, origin) {
       const _store = loadMemberEntitlements();
       const _idem = (_isRefund ? 'evidence:refund:' : 'evidence:grant:') + (_orderId || _txId);
       if ((_orderId || _txId) && _store.processedWebhookIds.includes(_idem)) {
+        noteWebhookEvent('member_access', 'duplicate', { reason: 'evidence_replay' });
         sendJson(res, 200, { ok: true, duplicate: true, contactId, orderId: _orderId }, origin); return;
       }
       if (!_matched.length) {
+        noteWebhookEvent('member_access', 'unknown_resource', { reason: 'no_mapped_product' });
         console.log('[Gaia Entitlements] member-access evidence no-op: no compatible product mapping', { contactId, orderId: _orderId, productIds: _productIds });
         sendJson(res, 202, { ok: true, applied: false, reason: 'no_mapped_product', productIds: _productIds }, origin); return;
       }
@@ -1640,6 +1713,7 @@ async function memberAccessWebhook(req, res, origin) {
   const webhookId = firstNonEmptyString(req.headers['x-ghl-webhook-id'], body.webhookId, body.idempotencyKey, body.eventId);
   const store = loadMemberEntitlements();
   if (webhookId && store.processedWebhookIds.includes(webhookId)) {
+    noteWebhookEvent('member_access', 'duplicate', { reason: 'webhook_id_replay' });
     sendJson(res, 200, { ok: true, duplicate: true, contactId }, origin);
     return;
   }
@@ -1698,6 +1772,7 @@ async function memberAccessWebhook(req, res, origin) {
     store.contacts[contactId] = record;
     if (webhookId) store.processedWebhookIds.push(webhookId);
     try { saveMemberEntitlements(store); } catch (_) { /* reported below */ }
+    noteWebhookEvent('member_access', 'stale', { reason: 'out_of_order' });
     console.log('[Gaia Entitlements] event ignored as out of order', {
       contactId, resource: key, reason: decision.reason, eventId: webhookId,
     });
@@ -1796,6 +1871,7 @@ async function memberAccessWebhook(req, res, origin) {
             reason, already_held: index >= 0,
           });
           try { saveMemberEntitlements(store); } catch (_) {}
+          noteWebhookEvent('member_access', 'unknown_resource', { reason: String(reason || 'unknown_resource') });
           console.warn('[Gaia Entitlements] course grant rejected', { contactId, reason, id: resource.rawId || resource.id, name: resource.name, alreadyHeld: index >= 0 });
           sendJson(res, 202, { ok: true, applied: false, rejected: true, reason, contactId, requested: { id: resource.rawId || resource.id || null, name: resource.name || null } }, origin);
           return;
@@ -1843,10 +1919,15 @@ async function memberAccessWebhook(req, res, origin) {
   if (webhookId) store.processedWebhookIds.push(webhookId);
   try { saveMemberEntitlements(store); }
   catch (err) {
+    // Everything about the event was valid and the write failed. That is its
+    // own failure class: not auth, not mapping, not identity.
+    noteWebhookEvent('member_access', 'rejected_other', { reason: 'persistence_failed' });
     console.error('[Gaia Entitlements] save failed', { error: err.message.split('\n')[0] });
     sendJson(res, 500, { ok: false, error: 'Unable to persist entitlement update.' }, origin);
     return;
   }
+  noteWebhookEvent('member_access', 'accepted');
+  noteWebhookEvent('member_access', event.grant ? 'grant' : 'revoke');
   console.log('[Gaia Entitlements] access updated', { contactId, event: event.raw, kind: event.kind, grant: event.grant, authMethod });
   sendJson(res, 200, {
     ok: true, applied: true, contactId, kind: event.kind, grant: event.grant,

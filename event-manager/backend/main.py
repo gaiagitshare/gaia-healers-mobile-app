@@ -1498,12 +1498,23 @@ def get_scan_logs(
     if access_type:
         query = query.filter(models.ScanLog.access_type == access_type.strip().upper())
     rows = query.order_by(models.ScanLog.created_at.desc()).limit(max(1, min(limit, 1000))).all()
+    # Who the scan was about, resolved once for the whole page. The log itself
+    # deliberately stores only the attendee id and the code that was presented —
+    # a name copied into an audit row would go stale the moment somebody
+    # corrects a spelling. This is a read-time lookup for display; nothing about
+    # what was written changes.
+    names = {}
+    ids = {r.attendee_id for r in rows if r.attendee_id}
+    if ids:
+        for a in db.query(models.Attendee).filter(models.Attendee.id.in_(ids)).all():
+            names[a.id] = ("%s %s" % (a.first_name or "", a.last_name or "")).strip() or a.email
     return {
         "event_id": event_id,
         "count": len(rows),
         "items": [{
             "id": row.id,
             "attendee_id": row.attendee_id,
+            "attendee_name": names.get(row.attendee_id),
             "qr_code": row.qr_code,
             "access_type": row.access_type,
             "result": row.result,

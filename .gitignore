@@ -47,3 +47,10 @@ event-manager/**/*.bak-*
 event-manager/import/*.json
 event-manager/import/*.xlsx
 event-manager/import/*.csv
+
+# ── Local to this machine, never part of the app ──────────────────────────
+# Claude Code's per-project session state, a one-off visual-asset export, and
+# the HTML mockups ASSET-INVENTORY.md already records as local reference only.
+.claude/
+gaia-healers-visual-assets.zip
+prototype/

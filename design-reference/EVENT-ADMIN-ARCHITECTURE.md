@@ -88,3 +88,23 @@ the embedded scanner, adding that attribute in `mountEvents()` is the fix.
 repo under `admin/`, but the Event Manager — backend and frontend — exists only
 on the VPS. Backups are taken (`event.db.pre-*`), but the code has no history
 and no remote. Worth fixing before the codebase grows further.
+
+## Amendment — read-only event context in the Admin shell
+
+The rule above forbids a second Event Manager. It does not forbid *showing* a
+person's event history where an operator is already looking at that person.
+
+Contacts → a contact → **Events** lists the attendee records belonging to that
+GHL contact. Three properties keep it on the right side of the line:
+
+* the join happens **server-side**, in the proxy, against the Event Manager's
+  own `/identity/attendees-by-contact` — the shell never calls the event backend
+  (still asserted: only `/auth/*` is reachable from here);
+* it is **read-only**. Nothing in the shell authorises, checks in, undoes,
+  prints or writes an attendee. A test asserts the absence of those verbs;
+* it **computes nothing**. It renders what the Event Manager returned, so the
+  two panels cannot arrive at different answers — there is only one answer.
+
+The tripwire's forbidden list therefore names event *actions*, not the word
+"attendee". A list of attendee names in the shell is a label; a check-in button
+in the shell is a second implementation.

@@ -5851,6 +5851,100 @@ def event_payments_recovery(event_id: int, db: Session = Depends(get_db),
             "items": out}
 
 
+@app.get("/identity/system-summary")
+def system_summary(db: Session = Depends(get_db), _: bool = Depends(require_service_token)):
+    """Counts for the System Map. Every figure is a live COUNT(*), not a cache."""
+    ev = db.query(models.Event).all()
+    live = [e for e in ev if not getattr(e, "is_archived", 0)]
+    return {
+        "ok": True,
+        "events": len(ev),
+        "eventsLive": len(live),
+        "attendees": db.query(models.Attendee).count(),
+        "checkedIn": db.query(models.Attendee).filter(models.Attendee.is_checked_in == True).count(),  # noqa: E712
+        "exhibitors": db.query(models.Exhibitor).count(),
+        "exhibitorsPublished": db.query(models.Exhibitor).filter(
+            models.Exhibitor.is_published == True).count(),                                            # noqa: E712
+        "leads": db.query(models.Lead).count(),
+        "scanLogs": db.query(models.ScanLog).count(),
+        "memberCards": db.query(models.MemberCard).count(),
+        "paymentEvents": db.query(models.PaymentEvent).count(),
+        "paymentsNeedingAttention": db.query(models.PaymentEvent).filter(
+            models.PaymentEvent.severity > 0).count(),
+        "ticketMappings": db.query(models.TicketMapping).filter(
+            models.TicketMapping.is_active == True).count(),                                           # noqa: E712
+        "byEvent": [
+            {"id": e.id, "name": e.name,
+             "attendees": db.query(models.Attendee).filter(models.Attendee.event_id == e.id).count(),
+             "archived": bool(getattr(e, "is_archived", 0))}
+            for e in ev
+        ],
+    }
+
+
+@app.get("/identity/attendees-by-contact")
+def attendees_by_contact(contact_id: str = "", email: str = "",
+                         db: Session = Depends(get_db),
+                         _: bool = Depends(require_service_token)):
+    """Every attendee record belonging to one GHL contact, across all events.
+
+    Read-only, and deliberately plural. One GHL contact can legitimately carry
+    several attendee rows — a couple buying two seats on one order, or somebody
+    buying a second seat for a guest GHL never names — and it can also carry two
+    rows because the same human checked out twice under two addresses. Those two
+    situations are indistinguishable from the data, so this reports the fact and
+    refuses to interpret it: `shares_contact` is raised whenever a contact holds
+    more than one attendee in the same event, and the caller shows a human the
+    ambiguity rather than resolving it.
+    """
+    cid = (contact_id or "").strip()
+    em = (email or "").strip().lower()
+    if not cid and not em:
+        raise HTTPException(status_code=400, detail="contact_id or email is required")
+
+    rows = db.query(models.Attendee).all()
+    mine = []
+    for a in rows:
+        cd = a.custom_data or {}
+        a_cid = str(cd.get("contact_id") or getattr(a, "acq_contact_id", "") or "").strip()
+        if (cid and a_cid == cid) or (em and (a.email or "").strip().lower() == em):
+            mine.append((a, a_cid))
+
+    by_event = {}
+    for a, a_cid in mine:
+        by_event.setdefault((a.event_id, a_cid), []).append(a)
+
+    events = {e.id: e for e in db.query(models.Event).all()}
+    out = []
+    for a, a_cid in mine:
+        ev = events.get(a.event_id)
+        siblings = by_event.get((a.event_id, a_cid), [])
+        out.append({
+            "attendee_id": a.id,
+            "event_id": a.event_id,
+            "event_name": ev.name if ev else None,
+            "email": a.email,
+            "name": ("%s %s" % (a.first_name or "", a.last_name or "")).strip() or a.email,
+            "contact_id": a_cid or None,
+            "status": a.registration_status,
+            "is_checked_in": bool(a.is_checked_in),
+            "checked_in_at": a.checked_in_at.isoformat() if a.checked_in_at else None,
+            "registration_source": a.registration_source,
+            "qr_code": a.qr_code,
+            # More than one attendee in ONE event under ONE contact. Reported,
+            # never resolved: see the docstring.
+            "shares_contact": len(siblings) > 1,
+            "shares_contact_with": [
+                {"attendee_id": s.id, "email": s.email,
+                 "name": ("%s %s" % (s.first_name or "", s.last_name or "")).strip() or s.email}
+                for s in siblings if s.id != a.id
+            ],
+        })
+    out.sort(key=lambda r: (r["event_id"] or 0, r["attendee_id"]))
+    return {"ok": True, "count": len(out), "attendees": out,
+            "has_ambiguity": any(r["shares_contact"] for r in out)}
+
+
 @app.get("/events/{event_id}/ticket-metrics")
 def ticket_metrics(event_id: int, db: Session = Depends(get_db),
                    current_user: models.User = Depends(get_current_user)):

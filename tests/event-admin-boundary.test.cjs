@@ -33,8 +33,18 @@ test('the Admin shell embeds the real Event Manager rather than reimplementing i
 test('no event-domain logic has crept into the Admin shell', () => {
   // Each of these belongs to the Event Manager. Finding one here means a second
   // implementation has been started.
+  // What this list is for: a SECOND implementation. The failure it prevents is
+  // two panels computing check-in independently and disagreeing on the day.
+  //
+  // Amended deliberately: the Contacts drawer shows a person's event attendance,
+  // joined server-side by the proxy from the Event Manager's own API and
+  // rendered read-only. That cannot drift, because it computes nothing and
+  // writes nothing — the noun "attendee" now appears in the shell as a label.
+  // The verbs below are what would signal a real second implementation, and
+  // they stay forbidden, as does calling the event backend from here at all
+  // (asserted in the next test).
   const forbidden = [
-    'attendee', 'checkin', 'check-in', 'walk-in', 'walkin',
+    'checkin', 'check-in', 'walk-in', 'walkin',
     'badge-label', 'badge_print', 'door-report', 'acquisition-report',
     'ticket_type', 'ticket-mappings', 'public_token', 'qr_code',
   ];
@@ -50,6 +60,18 @@ test('the Admin shell only reaches the event backend for sign-in', () => {
   const notAuth = calls.filter((p) => !p.startsWith('/auth/'));
   assert.deepEqual(notAuth, [],
     `only /auth/* may be called from the Admin shell — found: ${notAuth.join(', ')}`);
+});
+
+test('event data in the shell is displayed, never computed or written', () => {
+  // The drawer may render what the proxy already joined. It may not decide
+  // anything about an attendee, and it may not write one.
+  const writeShapes = [
+    /authorize\s*\(/i, /undo-?checkin/i, /scan\s*\(/i,
+    /is_checked_in\s*=/, /registration_status\s*=/,
+  ];
+  const offenders = writeShapes.filter((re) => re.test(shell));
+  assert.deepEqual(offenders.map(String), [],
+    'the Admin shell must not perform event actions — those belong to /event/');
 });
 
 test('the architecture is written down where a developer will find it', () => {

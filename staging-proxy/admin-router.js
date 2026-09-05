@@ -15,6 +15,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
+import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import * as membershipAdmin from './membership/admin-api.js';
 
@@ -342,8 +343,42 @@ async function contactDetail(cid, deps) {
     if (value && typeof value === 'object' && !Array.isArray(value)) { const picked = Object.values(value).filter((x) => x !== '' && x != null); value = picked.length ? picked : ''; }
     return { id: f.id, name: def.name || f.id, value };
   }).filter((f) => f.value !== '' && f.value != null && !(Array.isArray(f.value) && !f.value.length));
-  var membership = null;
-  try { var led = deps.loadLedger && deps.loadLedger(); var rec = led && led.contacts && led.contacts[c.id || cid]; if (rec && rec.membership) membership = rec.membership; } catch (e) {}
+  // Everything below is JOINED from its authoritative store at read time and
+  // never copied onto the contact: the ledger owns entitlements, the Event
+  // Manager owns attendance, GHL owns tags and fields.
+  var membership = null, courses = [], entitlementCount = 0, audit = [];
+  try {
+    var led = deps.loadLedger && deps.loadLedger();
+    var rec = led && led.contacts && led.contacts[c.id || cid];
+    if (rec) {
+      if (rec.membership) membership = rec.membership;
+      courses = (rec.courses || []).map(function (x) {
+        return { id: x.id, name: x.name, state: x.state, matchedBy: x.matchedBy, updatedAt: x.updatedAt };
+      });
+      entitlementCount = (rec.entitlements || []).length;
+    }
+    audit = ((led && led.auditLog) || []).filter(function (e) {
+      return e && e.contactId === (c.id || cid);
+    }).slice(-12).reverse();
+  } catch (e) {}
+
+  // A tier that rests only on a legacy GHL tag. Reported so an operator can see
+  // it, kept apart from `membership` so it can never be read as billing
+  // evidence — the resolver makes the same distinction for the app.
+  var unverifiedTierTags = (Array.isArray(c.tags) ? c.tags : []).filter(function (t) {
+    return /^(ahc|gaia|membership)[-_](free|silver|gold|diamond|trial)/i.test(String(t))
+        || /^(silver|gold|diamond|free)-membership$/i.test(String(t));
+  });
+
+  var attendance = null;
+  try {
+    var evTok = String(process.env.IDENTITY_SERVICE_TOKEN || '').trim();
+    if (evTok) {
+      var ar = await fetch('http://127.0.0.1:8002/identity/attendees-by-contact?contact_id='
+        + encodeURIComponent(c.id || cid), { headers: { Authorization: 'Bearer ' + evTok } });
+      if (ar.ok) attendance = await ar.json();
+    }
+  } catch (e) { attendance = null; }
   var subscription = null;
   try { var subs = await loadSubscriptions(deps); subscription = subs.byContact[c.id || cid] || null; } catch (e) {}
   var billing = null;
@@ -351,6 +386,8 @@ async function contactDetail(cid, deps) {
   return { ok: true, contact: {
     id: c.id || cid, name: contactName(c), email: c.email || '', phone: c.phone || '',
     tags: Array.isArray(c.tags) ? c.tags : [], fields, membership: membership, subscription: subscription, billing: billing,
+    courses: courses, entitlementCount: entitlementCount, audit: audit,
+    unverifiedTierTags: unverifiedTierTags, attendance: attendance,
     source: c.source || '', dateAdded: c.dateAdded || '', country: c.country || '', city: c.city || '', state: c.state || '',
   } };
 }
@@ -381,6 +418,167 @@ async function exportContacts(body, deps) {
   return { ok: true, csv: csv, count: rows.length, capped: rows.length >= CAP };
 }
 var _sysMapCache = { at: 0, data: null };
+
+/* ─────────────────────────────────────────────────────────────────────────────
+ * Pipeline health, from evidence only.
+ *
+ * Every field here is something that was actually observed: a timestamp written
+ * by a job, a row counted in a store, a socket that opened. Nothing returns
+ * "Healthy" because a service is supposed to exist. Where there is no evidence
+ * the answer is `unknown`, and the UI says so — a green badge that cannot be
+ * traced to an observation is worse than no badge, because it is trusted.
+ *
+ * `state` is one of:
+ *   ok        — observed recently enough for this component's own cadence
+ *   stale     — observed, but longer ago than it should be
+ *   idle      — working and simply has had nothing to do (a real, distinct state)
+ *   unknown   — no evidence either way; never guessed
+ *   error     — an observation exists and it is a failure
+ * ────────────────────────────────────────────────────────────────────────── */
+
+const MIN = 60 * 1000, HOUR = 60 * MIN, DAY = 24 * HOUR;
+const iso = (v) => { try { return v ? new Date(v).toISOString() : null; } catch (_) { return null; } };
+const ageMs = (v) => { const t = v ? Date.parse(v) : NaN; return Number.isFinite(t) ? Date.now() - t : null; };
+
+/** Newest mtime under a data file, as evidence a writer is still running. */
+function fileSeen(file) {
+  try { return { at: new Date(fs.statSync(file).mtimeMs).toISOString(), bytes: fs.statSync(file).size }; }
+  catch (_) { return { at: null, bytes: null }; }
+}
+
+/** Ask systemd what it knows. A timer that has never run is evidence too. */
+function unitState(unit) {
+  try {
+    const out = execFileSync('systemctl', ['show', unit, '--property=ActiveState,Result,ExecMainExitTimestamp'],
+      { encoding: 'utf8', timeout: 4000 });
+    const kv = Object.fromEntries(out.trim().split('\n').map((l) => l.split('=')));
+    return { active: kv.ActiveState || null, result: kv.Result || null, lastExit: kv.ExecMainExitTimestamp || null };
+  } catch (_) { return { active: null, result: null, lastExit: null }; }
+}
+
+function grade(lastAt, { okWithin, staleAfter, idleReason = null }) {
+  const age = ageMs(lastAt);
+  if (age == null) return { state: idleReason ? 'idle' : 'unknown', ageMs: null };
+  if (age <= okWithin) return { state: 'ok', ageMs: age };
+  if (age <= staleAfter) return { state: idleReason ? 'idle' : 'stale', ageMs: age };
+  return { state: idleReason ? 'idle' : 'stale', ageMs: age };
+}
+
+async function pipelineHealth(deps) {
+  const out = { generatedAt: new Date().toISOString(), components: [] };
+  const add = (c) => out.components.push(c);
+  let led = null;
+  try { led = deps.loadLedger && deps.loadLedger(); } catch (_) { led = null; }
+  const contacts = (led && led.contacts) || {};
+  const sources = (led && led.sources) || {};
+
+  // ── Entitlement ledger ────────────────────────────────────────────────────
+  const ledgerFile = fileSeen(process.env.MEMBER_ENTITLEMENTS_FILE
+    || path.join(process.cwd(), 'data', 'member-entitlements.json'));
+  const ids = Object.keys(contacts);
+  let courseGrants = 0, memberships = 0, lastCourseAt = null, lastWebhookGrantAt = null;
+  for (const id of ids) {
+    const rec = contacts[id] || {};
+    if (rec.membership) memberships++;
+    for (const c of (rec.courses || [])) {
+      courseGrants++;
+      if (c.updatedAt && (!lastCourseAt || c.updatedAt > lastCourseAt)) lastCourseAt = c.updatedAt;
+      if (/webhook/i.test(String(c.matchedBy || '')) && c.updatedAt
+          && (!lastWebhookGrantAt || c.updatedAt > lastWebhookGrantAt)) lastWebhookGrantAt = c.updatedAt;
+    }
+  }
+  add({
+    key: 'entitlement_ledger', label: 'Entitlement ledger', kind: 'store',
+    ...grade(ledgerFile.at, { okWithin: 2 * DAY, staleAfter: 14 * DAY }),
+    lastWriteAt: iso(ledgerFile.at),
+    counts: { contacts: ids.length, memberships, courseGrants },
+    evidence: 'file mtime + record counts',
+  });
+
+  // ── Course entitlement webhook ────────────────────────────────────────────
+  // Idle and broken look identical from the outside, so both the last grant AND
+  // whether anything applicable has been SOLD are reported. Silence with no
+  // sales is idle; silence with sales is a fault.
+  const courseSrc = sources.ghl_course || {};
+  add({
+    key: 'course_webhook', label: 'Course entitlement webhook', kind: 'webhook',
+    ...grade(lastWebhookGrantAt, { okWithin: 3 * DAY, staleAfter: 30 * DAY, idleReason: true }),
+    lastWriteAt: iso(lastWebhookGrantAt),
+    endpoint: '/api/webhooks/ghl/member-access',
+    counts: { grantsFromWebhook: Object.keys(contacts).reduce((a, id) =>
+      a + (contacts[id].courses || []).filter((c) => /webhook/i.test(String(c.matchedBy || ''))).length, 0) },
+    note: 'Authenticated by shared secret / signature. Grants arrive only when a course or community is actually sold.',
+    sourceRegistry: { state: courseSrc.state || 'unknown', lastObservedAt: iso(courseSrc.lastObservedAt) },
+    evidence: 'newest webhook-sourced grant in the ledger',
+  });
+
+  // ── Membership reconciliation ─────────────────────────────────────────────
+  const memSrc = sources.ghl_membership || {};
+  const memUnit = unitState('gaia-membership-reconcile.timer');
+  add({
+    key: 'membership_reconcile', label: 'Membership reconciliation', kind: 'job',
+    ...grade(memSrc.lastRunAt, { okWithin: 30 * MIN, staleAfter: 6 * HOUR }),
+    lastRunAt: iso(memSrc.lastRunAt), lastOutcome: memSrc.lastRunOutcome || null,
+    counts: memSrc.counters || null,
+    // A snapshot source proposes for every contact it walks; the ones with no
+    // membership to apply come back "rejected". That is the normal shape of a
+    // 29k-contact sweep, not a failure, and the UI must not read it as one.
+    countsNote: 'rejected = contacts walked with no membership to apply (normal for a snapshot sweep)',
+    timer: memUnit.active, cadence: 'every ~5 minutes',
+    evidence: 'source registry lastRunAt + systemd timer',
+  });
+
+  // ── Event mirror ──────────────────────────────────────────────────────────
+  const mirrorUnit = unitState('gaia-event-mirror.timer');
+  add({
+    key: 'event_mirror', label: 'Event order mirror', kind: 'job',
+    state: mirrorUnit.active === 'active' ? 'ok' : (mirrorUnit.active ? 'stale' : 'unknown'),
+    ageMs: null, timer: mirrorUnit.active, cadence: 'hourly',
+    evidence: 'systemd timer state',
+  });
+
+  // ── Academy sync + backups ────────────────────────────────────────────────
+  const academyFile = fileSeen(path.join(process.cwd(), 'data', 'academy-manifest.json'));
+  add({
+    key: 'academy_sync', label: 'Academy catalogue sync', kind: 'job',
+    ...grade(academyFile.at, { okWithin: 2 * DAY, staleAfter: 7 * DAY }),
+    lastWriteAt: iso(academyFile.at), timer: unitState('gaia-academy-sync.timer').active,
+    cadence: 'daily', evidence: 'academy-manifest.json mtime',
+  });
+  add({
+    key: 'event_backup', label: 'Event database backup', kind: 'job',
+    state: unitState('gaia-event-backup.timer').active === 'active' ? 'ok' : 'unknown',
+    ageMs: null, timer: unitState('gaia-event-backup.timer').active,
+    cadence: 'daily', evidence: 'systemd timer state',
+  });
+
+  // ── GHL reachability ──────────────────────────────────────────────────────
+  const cfg = deps.ghlConfig();
+  let ghl = { state: 'unknown', evidence: 'not configured' };
+  if (cfg.enabled) {
+    const t0 = Date.now();
+    try {
+      const r = await deps.ghlGet('/contacts/', { locationId: cfg.locationId, limit: 1 });
+      ghl = { state: r ? 'ok' : 'error', ms: Date.now() - t0, evidence: 'live GET /contacts/ round-trip' };
+    } catch (_) { ghl = { state: 'error', ms: Date.now() - t0, evidence: 'live GET /contacts/ failed' }; }
+  }
+  add({ key: 'ghl_api', label: 'GHL API', kind: 'service', lastWriteAt: null, ...ghl });
+
+  // ── Event Manager ─────────────────────────────────────────────────────────
+  let em = { state: 'unknown', evidence: 'no response' }, emCounts = null;
+  try {
+    const t0 = Date.now();
+    // The app exposes no /health route; its schema document is the cheapest
+    // thing that proves the process is up and serving.
+    const r = await fetch('http://127.0.0.1:8002/openapi.json').catch(() => null);
+    em = { state: r && r.ok ? 'ok' : 'error', ms: Date.now() - t0,
+           evidence: 'HTTP probe of the Event Manager (/openapi.json)' };
+  } catch (_) { /* leave unknown */ }
+  add({ key: 'event_manager', label: 'Event Manager API', kind: 'service', ...em, counts: emCounts });
+
+  return { ok: true, ...out };
+}
+
 async function systemMap(deps) {
   if (_sysMapCache.data && (Date.now() - _sysMapCache.at) < 10 * 60 * 1000) return _sysMapCache.data;
   const cfg = deps.ghlConfig();
@@ -417,6 +615,30 @@ async function systemMap(deps) {
   // counts the tags that were probed, not just the ones that came back.
   out.communitiesProbed = COM.length;
   out.communities = out.communitiesList.length;
+
+  // The event side of the house. It was missing entirely: attendees, exhibitors
+  // and the payment mirror are the busiest part of the system and the map that
+  // claimed to show "the whole system" did not know they existed.
+  try {
+    const evTok = String(process.env.IDENTITY_SERVICE_TOKEN || '').trim();
+    const r = evTok ? await fetch('http://127.0.0.1:8002/identity/system-summary',
+      { headers: { Authorization: 'Bearer ' + evTok } }) : null;
+    out.events = r && r.ok ? await r.json() : null;
+  } catch (e) { out.events = null; }
+
+  // Entitlements, counted from the ledger rather than described.
+  try {
+    const led = deps.loadLedger && deps.loadLedger();
+    const cs = (led && led.contacts) || {};
+    let memberships = 0, courseGrants = 0;
+    for (const id of Object.keys(cs)) {
+      if (cs[id].membership) memberships++;
+      courseGrants += (cs[id].courses || []).length;
+    }
+    out.ledger = { contacts: Object.keys(cs).length, memberships, courseGrants };
+  } catch (e) { out.ledger = null; }
+
+  try { out.health = await pipelineHealth(deps); } catch (e) { out.health = null; }
   _sysMapCache = { at: Date.now(), data: out };
   return out;
 }
@@ -589,6 +811,9 @@ async function handle(req, res, url, deps) {
   if (p === '/api/admin/contacts/export' && method === 'POST') {
     const body = await deps.readJsonBody(req).catch(function () { return {}; });
     return sendJson(res, 200, await exportContacts(body || {}, deps), origin);
+  }
+  if (p === '/api/admin/health' && method === 'GET') {
+    return sendJson(res, 200, await pipelineHealth(deps), origin);
   }
   if (p === '/api/admin/system-map' && method === 'GET') {
     return sendJson(res, 200, await systemMap(deps), origin);

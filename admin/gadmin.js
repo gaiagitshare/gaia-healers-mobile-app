@@ -327,6 +327,12 @@
       + '  <div class="sec-label">' + svg('member') + 'Membership</div>'
       + '  ' + membershipCard(m)
       + billingHistory(m)
+      + '  <div class="sec-label">' + svg('survey') + 'Course access <span class="faint">(' + ((m.courses || []).length) + ' \u2014 granted by purchase, never by tier)</span></div>'
+      + '  ' + coursesCard(m)
+      + '  <div class="sec-label">' + svg('member') + 'Events</div>'
+      + '  ' + attendanceCard(m)
+      + '  <div class="sec-label">' + svg('lock') + 'Membership history</div>'
+      + '  ' + auditCard(m)
       + '  <div class="sec-label">' + svg('tag') + 'Tags <span class="faint">(' + (m.tags || []).length + ')</span></div>'
       + '  <div class="tag-edit" id="tagedit"></div>'
       + (choiceFields.length ? '<div class="sec-label">Survey answers</div><div class="qa">' + choiceFields.map(qa).join('') + '</div>' : '')
@@ -366,7 +372,8 @@
   var sState = { surveys: [], id: '', map: null, loading: false };
   function mountSurveys() {
     var c = document.getElementById('content');
-    c.innerHTML = '<div class="survey-bar"><select class="select" id="ssel"></select><a class="btn btn--ghost" id="editghl" href="https://crm.gaiahealers.com/v2/location/WkKl1K5RuZNQ60xR48k6/survey-builder/main" target="_blank" rel="noopener">' + svg('ext') + ' Edit in GHL</a></div><div id="smap"></div>';
+    c.innerHTML = '<div class="survey-bar"><select class="select" id="ssel"></select><a class="btn btn--ghost" id="editghl" href="https://crm.gaiahealers.com/v2/location/WkKl1K5RuZNQ60xR48k6/survey-builder/main" target="_blank" rel="noopener">' + svg('ext') + ' Edit in GHL</a></div>'
+      + '<div class="scopebox" id="sscope"></div><div id="smap"></div>';
     if (!sState.surveys.length) {
       api('/surveys').then(function (d) {
         sState.surveys = d.surveys || [];
@@ -376,10 +383,32 @@
     } else { fillSel(); if (sState.map) paintMap(); else loadMap(); }
     function fillSel() {
       var sel = document.getElementById('ssel');
-      sel.innerHTML = sState.surveys.map(function (s) { return '<option value="' + esc(s.id) + '"' + (s.id === sState.id ? ' selected' : '') + '>' + esc(s.name || s.id) + '</option>'; }).join('');
-      sel.onchange = function () { sState.id = sel.value; sState.map = null; loadMap(); };
+      var live = sState.surveys.filter(function (s) { return !isArchived(s); });
+      var arch = sState.surveys.filter(isArchived);
+      var opt = function (s) {
+        return '<option value="' + esc(s.id) + '"' + (s.id === sState.id ? ' selected' : '') + '>'
+          + esc(s.name || s.id) + '</option>';
+      };
+      sel.innerHTML = (live.length ? '<optgroup label="Active">' + live.map(opt).join('') + '</optgroup>' : '')
+        + (arch.length ? '<optgroup label="Archived — kept for reference">' + arch.map(opt).join('') + '</optgroup>' : '');
+      sel.onchange = function () { sState.id = sel.value; sState.map = null; paintScope(); loadMap(); };
+      paintScope();
     }
   }
+  function isArchived(s) { return /^\s*archive\b|\barchived\b/i.test(String(s && s.name || '')); }
+  function paintScope() {
+    var box = document.getElementById('sscope'); if (!box) return;
+    var cur = sState.surveys.filter(function (s) { return s.id === sState.id; })[0];
+    var archived = cur && isArchived(cur);
+    box.innerHTML =
+      (archived ? '<div class="scopebox__arch">Archived survey \u2014 shown for reference. It is not collecting responses.</div>' : '')
+      + '<p class="scopebox__p"><b>This page shows the questions, not the answers.</b> '
+      + 'Gaia reads survey definitions from GHL and draws how they branch. Responses stay in GHL: '
+      + 'an individual\u2019s answers appear on their contact record under Contacts, and completion is '
+      + 'visible only where GHL sets a tag. Gaia holds no submission log, no timestamps and no '
+      + 'per-question reporting, so this page cannot say how many people answered a given question.</p>';
+  }
+
   function loadMap() {
     var box = document.getElementById('smap'); box.innerHTML = '<div class="spinner"></div>';
     api('/survey-map?id=' + encodeURIComponent(sState.id)).then(function (d) { sState.map = d; paintMap(); });
@@ -498,33 +527,108 @@
       + (bits.length ? '<span class="faint">' + esc(bits.join(' · ')) + '</span>' : '') + '</div>'
       + (sub.product ? '<div class="bill__prod">' + esc(sub.product) + '</div>' : '') + '</div>';
   }
+  /* Membership, as evidence.
+   *
+   * A verified membership is one the ledger holds with a source and an evidence
+   * id — a subscription, or an operator's own recorded grant. A GHL tier tag is
+   * neither: this location carries 105 ahc-gold-active tags against one paying
+   * Gold subscription, so a tag proves that somebody was once labelled, not that
+   * anybody is being billed. The app's resolver already refuses to promote a
+   * tag-only tier, and this panel refuses in the same way — the tags are shown,
+   * plainly, under their own heading, and never as the tier.
+   */
+  var VERIFIED_SOURCES = { ghl_subscription: 'Live subscription', manual: 'Operator grant', admin: 'Operator grant' };
   function membershipCard(m) {
     var mem = m.membership;
-    var derived = deriveTier(m.tags || []);
-    var tierLabel = mem ? cap(mem.key) : (derived ? derived.label : null);
-    var accKey = mem ? mem.key : (derived ? derived.key : '');
-    var head, cells = [];
-    if (tierLabel) {
-      var status = mem ? cap(mem.status) : derived.status;
-      head = '<span class="mtier">' + esc(tierLabel) + '</span>'
-        + '<span class="mstatus mstatus--' + statusCls(status) + '">' + esc(status) + '</span>'
-        + '<span class="mtag-note">' + (mem ? 'ledger record' : 'by tag') + '</span>';
-      cells.push('<div class="memcell"><small>Program joined</small><b>' + fmtDate((mem && mem.started_at) || m.dateAdded) + '</b></div>');
-      if (mem && (mem.renews_at || mem.ends_at)) {
-        var endLabel = (mem.ends_at && !mem.renews_at) ? 'Ends' : 'Renews';
-        cells.push('<div class="memcell"><small>' + endLabel + '</small><b>' + fmtDate(mem.renews_at || mem.ends_at) + '</b></div>');
-      } else {
-        cells.push('<div class="memcell"><small>Member since</small><b>' + fmtDate(m.dateAdded) + '</b></div>');
-      }
+    var unv = m.unverifiedTierTags || [];
+    var out = '';
+
+    if (mem) {
+      var srcLabel = VERIFIED_SOURCES[mem.source] || esc(mem.source || 'unknown source');
+      var cells = [];
+      cells.push('<div class="memcell"><small>Evidence</small><b>' + esc(srcLabel) + '</b></div>');
+      cells.push('<div class="memcell"><small>Started</small><b>' + fmtDate(mem.started_at) + '</b></div>');
+      if (mem.renews_at) cells.push('<div class="memcell"><small>Renews</small><b>' + fmtDate(mem.renews_at) + '</b></div>');
+      else if (mem.ends_at) cells.push('<div class="memcell"><small>Ends</small><b>' + fmtDate(mem.ends_at) + '</b></div>');
+      else cells.push('<div class="memcell"><small>Expiry</small><b>None recorded</b></div>');
+      if (mem.billing_cycle && mem.billing_cycle !== 'none') cells.push('<div class="memcell"><small>Billing</small><b>' + esc(cap(mem.billing_cycle)) + '</b></div>');
+      if (mem.override_until) cells.push('<div class="memcell"><small>Override until</small><b>' + fmtDate(mem.override_until) + '</b></div>');
+      out += '<div class="memcard" style="--acc:' + tierAccent(mem.key) + '">'
+        + '<div class="memcard__hd">'
+        + '<span class="mtier">' + esc(cap(mem.key)) + '</span>'
+        + '<span class="mstatus mstatus--' + statusCls(mem.status) + '">' + esc(cap(mem.status)) + '</span>'
+        + '<span class="mtag-note">verified</span>'
+        + '</div>'
+        + '<div class="memgrid">' + cells.join('') + '</div>'
+        + (mem.evidence_id ? '<div class="faint" style="padding:0 12px 10px;font-family:ui-monospace,monospace;font-size:11px">evidence ' + esc(mem.evidence_id) + '</div>' : '')
+        + billingBlock(m.subscription) + '</div>';
     } else {
-      head = '<span class="mtier mtier--none">No program tier</span>';
-      cells.push('<div class="memcell"><small>Member since</small><b>' + fmtDate(m.dateAdded) + '</b></div>');
+      out += '<div class="memcard memcard--plain">'
+        + '<div class="memcard__hd"><span class="mtier mtier--none">No verified membership</span></div>'
+        + '<div class="memgrid"><div class="memcell"><small>Contact since</small><b>' + fmtDate(m.dateAdded) + '</b></div></div>'
+        + billingBlock(m.subscription) + '</div>';
     }
-    return '<div class="memcard' + (tierLabel ? '' : ' memcard--plain') + '" style="--acc:' + tierAccent(accKey) + '">'
-      + '<div class="memcard__hd">' + head + '</div>'
-      + '<div class="memgrid">' + cells.join('') + '</div>'
-      + billingBlock(m.subscription) + '</div>';
+
+    if (unv.length) {
+      out += '<div class="unvbox">'
+        + '<div class="unvbox__hd">Unverified tier tags <span class="faint">(' + unv.length + ')</span></div>'
+        + '<div class="unvbox__tags">' + unv.map(function (t) { return '<span class="pill pill--warn">' + esc(t) + '</span>'; }).join('') + '</div>'
+        + '<p class="unvbox__note">Legacy GHL labels. They are not billing evidence and do not grant anything — '
+        + 'the app shows this person their verified tier only.</p></div>';
+    }
+    return out;
   }
+
+  /* Course access, kept apart from the tier on purpose. Nothing here is implied
+   * by a membership plan: every grant carries the offer or backfill it came
+   * from, and a plan changing has never moved one. */
+  function coursesCard(m) {
+    var cs = m.courses || [];
+    if (!cs.length) return '<p class="faint" style="margin:6px 0 14px">No course entitlements on record.</p>';
+    var shown = cs.slice(0, 12);
+    return '<div class="crslist">' + shown.map(function (c) {
+      var via = String(c.matchedBy || '');
+      var how = /webhook/i.test(via) ? 'live grant' : (/backfill/i.test(via) ? 'backfill' : (via || 'unknown'));
+      return '<div class="crsrow">'
+        + '<span class="crsrow__n">' + esc(c.name || c.id) + '</span>'
+        + '<span class="crsrow__m">' + esc(how) + '</span>'
+        + '<span class="crsrow__d">' + fmtDate(c.updatedAt) + '</span></div>';
+    }).join('') + '</div>'
+      + (cs.length > shown.length ? '<p class="faint" style="margin:6px 0 0">and ' + (cs.length - shown.length) + ' more</p>' : '');
+  }
+
+  /* Attendance, joined live from the Event Manager. Where one GHL contact holds
+   * more than one attendee in the same event the ambiguity is stated and left
+   * alone — two people on one order and one person who checked out twice look
+   * identical from here, and guessing wrong merges two humans. */
+  function attendanceCard(m) {
+    var a = m.attendance;
+    if (!a || !a.count) return '<p class="faint" style="margin:6px 0 14px">Not registered for any event.</p>';
+    var warn = a.has_ambiguity
+      ? '<div class="idwarn"><b>One contact, more than one attendee</b>'
+        + '<p>This GHL contact carries several attendee records in the same event. That is correct for a '
+        + 'couple or a bought guest seat, and a duplicate if the same person checked out twice. Gaia does not '
+        + 'guess which — decide it here before the door does.</p></div>'
+      : '';
+    return warn + '<div class="crslist">' + a.attendees.map(function (x) {
+      return '<div class="crsrow">'
+        + '<span class="crsrow__n">' + esc(x.name || x.email) + (x.shares_contact ? ' <span class="pill pill--warn">shared contact</span>' : '') + '</span>'
+        + '<span class="crsrow__m">' + esc(x.event_name || ('event ' + x.event_id)) + '</span>'
+        + '<span class="crsrow__d">' + (x.is_checked_in ? 'checked in' : esc(x.status || '')) + '</span></div>';
+    }).join('') + '</div>';
+  }
+
+  function auditCard(m) {
+    var rows = m.audit || [];
+    if (!rows.length) return '<p class="faint" style="margin:6px 0 14px">No recorded changes.</p>';
+    return '<div class="crslist">' + rows.map(function (e) {
+      return '<div class="crsrow">'
+        + '<span class="crsrow__n">' + esc(e.action || 'change') + '</span>'
+        + '<span class="crsrow__m">' + esc(e.actor || '') + '</span>'
+        + '<span class="crsrow__d">' + fmtDate(e.at) + '</span></div>';
+    }).join('') + '</div>';
+  }
+
   function mountMembership() {
     var c = document.getElementById('content');
     var tiles = TIERS.filter(function (t) { return !t.hideTile; });
@@ -623,6 +727,35 @@
     var pct = max ? Math.round(count / max * 100) : 0;
     return '<div class="smbar"><span class="smbar__l">' + esc(label) + '</span><span class="smbar__t"><span class="smbar__f" style="width:' + pct + '%;background:' + (acc || 'var(--green2)') + '"></span></span><b class="smbar__v">' + n(count) + '</b></div>';
   }
+  /* Pipeline health. Every chip is an observation with a timestamp behind it;
+   * anything without evidence says "unknown" rather than borrowing a green. */
+  var HSTATE = {
+    ok:      { label: 'OK',        cls: 'good' },
+    idle:    { label: 'Idle',      cls: 'idle' },
+    stale:   { label: 'Stale',     cls: 'warn' },
+    error:   { label: 'Error',     cls: 'bad'  },
+    unknown: { label: 'Unknown',   cls: 'idle' },
+  };
+  function since(ms) {
+    if (ms == null) return '';
+    var m = Math.round(ms / 60000);
+    if (m < 60) return m + 'm ago';
+    var h = Math.round(m / 60); if (h < 48) return h + 'h ago';
+    return Math.round(h / 24) + 'd ago';
+  }
+  function healthStrip(h) {
+    if (!h || !h.components) return '';
+    return '<div class="smhealth">' + h.components.map(function (c) {
+      var st = HSTATE[c.state] || HSTATE.unknown;
+      var when = c.lastWriteAt || c.lastRunAt;
+      var detail = when ? since(c.ageMs) : (c.ms != null ? c.ms + 'ms' : 'no timestamp');
+      return '<div class="smh smh--' + st.cls + '" title="' + esc(c.evidence || '') + '">'
+        + '<span class="smh__s">' + st.label + '</span>'
+        + '<span class="smh__l">' + esc(c.label) + '</span>'
+        + '<span class="smh__d">' + esc(detail) + '</span></div>';
+    }).join('') + '</div>';
+  }
+
   function paintSystem(d) {
     var sub = d.subscriptions || {}, rev = d.revenue || {}, pay = d.tierPaying || {};
     // KPI strip
@@ -675,11 +808,37 @@
       + '</div>'
       + '<div class="smsub">Community membership</div><div class="smbars">' + (d.communitiesList || []).map(function (x) { return smBar(x.label, x.count, maxCom, 'var(--violet)'); }).join('') + '</div>'
       + '<div class="smnode"><b>Gaia Assist</b><span>AI concierge — knows this whole system, guides &amp; sells</span></div>');
+    // ── Events, entitlements and the jobs that move data ──────────────────
+    var ev = d.events || {}, lg = d.ledger || {};
+    var eventsB = branch('events', 'member', 'Events &amp; the Door',
+      '<div class="smgrid">'
+      + '<div class="smmini"><b>' + n(ev.attendees) + '</b><span>Attendees</span></div>'
+      + '<div class="smmini"><b>' + n(ev.exhibitors) + '</b><span>Exhibitors</span></div>'
+      + '<div class="smmini"><b>' + n(ev.memberCards) + '</b><span>Badge cards</span></div>'
+      + '<div class="smmini"><b>' + n(ev.scanLogs) + '</b><span>Scans logged</span></div>'
+      + '</div>'
+      + '<div class="smflow">' + ['GHL order', 'Webhook', 'Attendee + QR', 'Door'].map(function (x, i) { return (i ? '<span class="smarrow">\u2192</span>' : '') + '<span class="smchip">' + x + '</span>'; }).join('') + '</div>'
+      + '<div class="smnode"><b>' + n(ev.paymentEvents) + ' payment attempts mirrored</b><span>'
+        + n(ev.paymentsNeedingAttention) + ' need attention \u00b7 ' + n(ev.ticketMappings) + ' active ticket mappings</span></div>'
+      + (ev.byEvent || []).map(function (e) {
+          return '<div class="smnode"><b>' + esc(e.name) + '</b><span>' + n(e.attendees) + ' attendees' + (e.archived ? ' \u00b7 archived' : '') + '</span></div>';
+        }).join(''));
+
+    var entB = branch('ent', 'lock', 'Entitlements Ledger',
+      '<div class="smgrid">'
+      + '<div class="smmini"><b>' + n(lg.contacts) + '</b><span>Contacts held</span></div>'
+      + '<div class="smmini"><b>' + n(lg.memberships) + '</b><span>Verified memberships</span></div>'
+      + '<div class="smmini"><b>' + n(lg.courseGrants) + '</b><span>Course grants</span></div>'
+      + '</div>'
+      + '<div class="smflow">' + ['GHL subscription', 'Proposal', 'Evidence check', 'Ledger'].map(function (x, i) { return (i ? '<span class="smarrow">\u2192</span>' : '') + '<span class="smchip">' + x + '</span>'; }).join('') + '</div>'
+      + '<div class="smnode"><b>Course access is never inferred from a tier</b><span>Every grant carries the offer or backfill it came from.</span></div>');
+
     document.getElementById('sysmap').innerHTML =
       kpis
+      + healthStrip(d.health)
       + '<svg class="sysmap__edges"></svg>'
       + '<div class="smhub" id="smhub"><span class="smhub__k">Gaia Healers 2.0</span><b>' + n(d.members) + '</b><span class="smhub__l">total members</span></div>'
-      + '<div class="smrow">' + tiers + payB + access + app + '</div>'
+      + '<div class="smrow">' + tiers + payB + access + app + eventsB + entB + '</div>'
       + '<div class="smfoot">GHL contacts &amp; tags · GHL/Stripe subscriptions · Gaia\u2019s Shopify and Academy catalogues · built ' + fmtDate(d.generatedAt) + ' \u00b7 cached 10 min</div>';
     requestAnimationFrame(drawEdges);
     if (!window.__smResize) { window.__smResize = true; window.addEventListener('resize', function () { if (document.getElementById('sysmap')) drawEdges(); }); }

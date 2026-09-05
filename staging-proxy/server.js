@@ -1729,10 +1729,16 @@ async function memberAccessWebhook(req, res, origin) {
       }, origin);
       return;
     }
-    // The canonical billing id decides the tier. A body-supplied tier is only
-    // diagnostic input and cannot grant or change a membership.
-    const authoritativeBody = { ...body, tier: billingMatch.key };
-    const built = membershipFromEvent(authoritativeBody, { action: event.membershipAction, rawType: event.raw, now: new Date(arrivalMs) });
+    // The canonical billing id decides the tier — membershipFromEvent resolves
+    // it from the id itself and prefers it over any claim in the body.
+    //
+    // The body is passed through UNCHANGED on purpose. Overwriting `tier` with
+    // the billing-derived key first made the claim and the id agree by
+    // construction, so the "payload claimed X but billing id says Y" note could
+    // never fire: a workflow misconfigured to send Gold against a Silver price
+    // was silently corrected and nothing recorded that it had lied. The
+    // correction is right; losing the evidence of it is not.
+    const built = membershipFromEvent(body, { action: event.membershipAction, rawType: event.raw, now: new Date(arrivalMs) });
     if (built.error) {
       sendJson(res, 422, { ok: false, applied: false, error: built.error }, origin);
       return;

@@ -456,6 +456,129 @@ function unitState(unit) {
   } catch (_) { return { active: null, result: null, lastExit: null }; }
 }
 
+function showUnit(unit, props) {
+  try {
+    // `--timestamp=unix` renders every timestamp as @<epoch-seconds>. Without
+    // it systemd prints "Sat 2026-09-05 14:33:41 CEST", which Date.parse
+    // rejects outright — every timestamp came back null and every job read
+    // "unknown" while systemd knew perfectly well when it had run.
+    const out = execFileSync('systemctl',
+      ['show', unit, '--timestamp=unix', '--property=' + props.join(',')],
+      { encoding: 'utf8', timeout: 4000 });
+    const kv = {};
+    for (const line of out.trim().split('\n')) {
+      const i = line.indexOf('=');
+      if (i > 0) kv[line.slice(0, i)] = line.slice(i + 1);
+    }
+    return kv;
+  } catch (_) { return {}; }
+}
+const stamp = (v) => {
+  if (!v || v === 'n/a' || v === '0') return null;
+  const s = String(v).trim();
+  if (s.startsWith('@')) {                       // @epoch-seconds, from --timestamp=unix
+    const n = Number(s.slice(1));
+    return Number.isFinite(n) && n > 0 ? new Date(n * 1000).toISOString() : null;
+  }
+  if (/^\d+$/.test(s)) {                         // *USec properties: microseconds
+    const n = Number(s);
+    return n > 0 ? new Date(Math.round(n / 1000)).toISOString() : null;
+  }
+  const t = Date.parse(s);
+  return Number.isFinite(t) ? new Date(t).toISOString() : null;
+};
+
+/**
+ * Where the observed run history lives.
+ *
+ * systemd keeps only the MOST RECENT run of a oneshot: its start, its exit and
+ * whether it succeeded. That is real evidence and it is what the state below is
+ * built from — but it cannot answer "when did this last SUCCEED" once a later
+ * run has failed and overwritten it. So each observation is also appended here,
+ * and the two are reported separately: `lastRun*` is systemd's own record,
+ * `lastSuccessAt` / `lastFailureAt` are what Gaia has watched happen. Sampled,
+ * and labelled as sampled, rather than presented as a complete log.
+ */
+function jobObservationsFile() {
+  return path.join(process.cwd(), 'data', 'job-observations.json');
+}
+function readJobObservations() {
+  try { return JSON.parse(fs.readFileSync(jobObservationsFile(), 'utf8')) || {}; } catch (_) { return {}; }
+}
+function recordJobObservation(unit, { exitAt, ok }) {
+  if (!exitAt) return readJobObservations()[unit] || {};
+  const all = readJobObservations();
+  const cur = all[unit] || {};
+  // Only a run we have not already filed. Re-reading the same exit timestamp
+  // must not look like a fresh run.
+  if (cur.lastSeenExitAt === exitAt) return cur;
+  cur.lastSeenExitAt = exitAt;
+  if (ok) cur.lastSuccessAt = exitAt; else cur.lastFailureAt = exitAt;
+  all[unit] = cur;
+  try {
+    fs.mkdirSync(path.dirname(jobObservationsFile()), { recursive: true });
+    fs.writeFileSync(jobObservationsFile(), JSON.stringify(all, null, 1));
+  } catch (_) { /* observation is best-effort; never break the health read */ }
+  return cur;
+}
+
+/**
+ * A scheduled job's health, from systemd's own record of it.
+ *
+ * `Result=success` on a run that finished an hour ago is evidence. A timer that
+ * merely EXISTS is not, and never produces `ok` here.
+ */
+function jobHealth({ key, label, service, timer, okWithin, cadence }) {
+  const svc = showUnit(service, ['ActiveState', 'SubState', 'Result', 'ExecMainStartTimestamp',
+    'ExecMainExitTimestamp', 'ExecMainStatus']);
+  const tmr = showUnit(timer, ['ActiveState', 'NextElapseUSecRealtime', 'LastTriggerUSec']);
+  // A calendar timer reports NextElapseUSecRealtime; a monotonic one (OnUnitActiveSec)
+  // reports only a duration since boot, which is useless as a wall clock. list-timers
+  // resolves both to an absolute microsecond stamp, so it is the fallback.
+  let nextFromList = null;
+  if (!stamp(tmr.NextElapseUSecRealtime)) {
+    try {
+      const raw = execFileSync('systemctl',
+        ['list-timers', timer, '--output=json', '--no-pager'], { encoding: 'utf8', timeout: 4000 });
+      const rows = JSON.parse(raw);
+      if (Array.isArray(rows) && rows[0] && rows[0].next) nextFromList = String(rows[0].next);
+    } catch (_) { /* leave unknown rather than invent one */ }
+  }
+  const startedAt = stamp(svc.ExecMainStartTimestamp);
+  const exitedAt = stamp(svc.ExecMainExitTimestamp);
+  const result = svc.Result || null;
+  const exitCode = (svc.ExecMainStatus === '' || svc.ExecMainStatus == null) ? null : Number(svc.ExecMainStatus);
+  const succeeded = result === 'success' && (exitCode === 0 || exitCode === null);
+  const running = svc.ActiveState === 'activating'
+    || (svc.ActiveState === 'active' && svc.SubState !== 'exited');
+
+  const obs = recordJobObservation(service, { exitAt: exitedAt, ok: succeeded });
+
+  let state;
+  if (running) state = 'running';
+  else if (!exitedAt && !startedAt) state = 'unknown';       // never observed running
+  else if (!succeeded) state = 'failed';
+  else {
+    const age = ageMs(exitedAt);
+    state = (age != null && age <= okWithin) ? 'ok' : 'stale';
+  }
+
+  return {
+    key, label, kind: 'job', state,
+    ageMs: ageMs(exitedAt),
+    lastStartAt: startedAt,
+    lastRunAt: exitedAt,
+    lastRunResult: result,
+    lastRunExitCode: exitCode,
+    lastSuccessAt: obs.lastSuccessAt || (succeeded ? exitedAt : null),
+    lastFailureAt: obs.lastFailureAt || (!succeeded && exitedAt ? exitedAt : null),
+    nextRunAt: stamp(tmr.NextElapseUSecRealtime) || stamp(nextFromList),
+    timer: tmr.ActiveState || null,
+    cadence,
+    evidence: 'systemd unit record (Result, ExecMainStart/ExitTimestamp, exit code) + observed run history',
+  };
+}
+
 function grade(lastAt, { okWithin, staleAfter, idleReason = null }) {
   const age = ageMs(lastAt);
   if (age == null) return { state: idleReason ? 'idle' : 'unknown', ageMs: null };
@@ -507,50 +630,67 @@ async function pipelineHealth(deps) {
     endpoint: '/api/webhooks/ghl/member-access',
     counts: { grantsFromWebhook: Object.keys(contacts).reduce((a, id) =>
       a + (contacts[id].courses || []).filter((c) => /webhook/i.test(String(c.matchedBy || ''))).length, 0) },
-    note: 'Authenticated by shared secret / signature. Grants arrive only when a course or community is actually sold.',
-    sourceRegistry: { state: courseSrc.state || 'unknown', lastObservedAt: iso(courseSrc.lastObservedAt) },
+    note: 'Authenticated by Ed25519 signature or shared secret, validated against the course authority, '
+        + 'ordered per resource and idempotent on webhook id. Grants arrive only when a course or community is actually sold.',
+    // There are two course routes on paper and one in practice.
+    //
+    // This receiver is the canonical one: it authenticates, checks the course
+    // authority, applies per-resource ordering and de-duplicates on webhook id,
+    // and it produced every live grant in the ledger.
+    //
+    // `ghl_course` in the source registry is a declared adapter slot that was
+    // never built — nothing anywhere calls propose() with that source, which is
+    // why its counters are zero and it has never observed anything. Its zeros
+    // are not evidence that this pipeline is down, so they are reported as what
+    // they are rather than beside a health state that invites the comparison.
+    canonicalRoute: 'POST /api/webhooks/ghl/member-access',
+    plannedAdapter: {
+      source: 'ghl_course',
+      state: courseSrc.state || 'unknown',
+      implemented: false,
+      note: 'Registry slot for a future adapter. No producer exists, so its counters stay at zero and mean nothing about the live route.',
+    },
     evidence: 'newest webhook-sourced grant in the ledger',
   });
 
   // ── Membership reconciliation ─────────────────────────────────────────────
   const memSrc = sources.ghl_membership || {};
-  const memUnit = unitState('gaia-membership-reconcile.timer');
+  const memJob = jobHealth({
+    key: 'membership_reconcile', label: 'Membership reconciliation',
+    service: 'gaia-membership-reconcile.service', timer: 'gaia-membership-reconcile.timer',
+    okWithin: 30 * MIN, cadence: 'every ~5 minutes',
+  });
   add({
-    key: 'membership_reconcile', label: 'Membership reconciliation', kind: 'job',
-    ...grade(memSrc.lastRunAt, { okWithin: 30 * MIN, staleAfter: 6 * HOUR }),
-    lastRunAt: iso(memSrc.lastRunAt), lastOutcome: memSrc.lastRunOutcome || null,
+    ...memJob,
+    // The sweep also files its own outcome in the source registry, which says
+    // more than an exit code: it is kept alongside, not instead.
+    registryLastRunAt: iso(memSrc.lastRunAt), lastOutcome: memSrc.lastRunOutcome || null,
     counts: memSrc.counters || null,
     // A snapshot source proposes for every contact it walks; the ones with no
     // membership to apply come back "rejected". That is the normal shape of a
     // 29k-contact sweep, not a failure, and the UI must not read it as one.
     countsNote: 'rejected = contacts walked with no membership to apply (normal for a snapshot sweep)',
-    timer: memUnit.active, cadence: 'every ~5 minutes',
-    evidence: 'source registry lastRunAt + systemd timer',
+    evidence: 'systemd unit record + source registry outcome',
   });
 
   // ── Event mirror ──────────────────────────────────────────────────────────
-  const mirrorUnit = unitState('gaia-event-mirror.timer');
-  add({
-    key: 'event_mirror', label: 'Event order mirror', kind: 'job',
-    state: mirrorUnit.active === 'active' ? 'ok' : (mirrorUnit.active ? 'stale' : 'unknown'),
-    ageMs: null, timer: mirrorUnit.active, cadence: 'hourly',
-    evidence: 'systemd timer state',
-  });
+  add(jobHealth({
+    key: 'event_mirror', label: 'Event order mirror',
+    service: 'gaia-event-mirror.service', timer: 'gaia-event-mirror.timer',
+    okWithin: 3 * HOUR, cadence: 'hourly',
+  }));
 
   // ── Academy sync + backups ────────────────────────────────────────────────
-  const academyFile = fileSeen(path.join(process.cwd(), 'data', 'academy-manifest.json'));
-  add({
-    key: 'academy_sync', label: 'Academy catalogue sync', kind: 'job',
-    ...grade(academyFile.at, { okWithin: 2 * DAY, staleAfter: 7 * DAY }),
-    lastWriteAt: iso(academyFile.at), timer: unitState('gaia-academy-sync.timer').active,
-    cadence: 'daily', evidence: 'academy-manifest.json mtime',
-  });
-  add({
-    key: 'event_backup', label: 'Event database backup', kind: 'job',
-    state: unitState('gaia-event-backup.timer').active === 'active' ? 'ok' : 'unknown',
-    ageMs: null, timer: unitState('gaia-event-backup.timer').active,
-    cadence: 'daily', evidence: 'systemd timer state',
-  });
+  add(jobHealth({
+    key: 'academy_sync', label: 'Academy catalogue sync',
+    service: 'gaia-academy-sync.service', timer: 'gaia-academy-sync.timer',
+    okWithin: 36 * HOUR, cadence: 'daily',
+  }));
+  add(jobHealth({
+    key: 'event_backup', label: 'Event database backup',
+    service: 'gaia-event-backup.service', timer: 'gaia-event-backup.timer',
+    okWithin: 36 * HOUR, cadence: 'daily',
+  }));
 
   // ── GHL reachability ──────────────────────────────────────────────────────
   const cfg = deps.ghlConfig();
@@ -811,6 +951,19 @@ async function handle(req, res, url, deps) {
   if (p === '/api/admin/contacts/export' && method === 'POST') {
     const body = await deps.readJsonBody(req).catch(function () { return {}; });
     return sendJson(res, 200, await exportContacts(body || {}, deps), origin);
+  }
+  // Lets the failure path be proven against a throwaway unit rather than by
+  // breaking a real job. Admin-only, read-only, and it names the unit it read.
+  if (p === '/api/admin/health/job' && method === 'GET') {
+    const unit = String(url.searchParams.get('service') || '').replace(/[^A-Za-z0-9._-]/g, '');
+    if (!unit) return sendJson(res, 400, { ok: false, reason: 'service_required' }, origin);
+    return sendJson(res, 200, {
+      ok: true,
+      job: jobHealth({
+        key: 'probe', label: unit, service: unit,
+        timer: unit.replace(/\.service$/, '.timer'), okWithin: 36 * 60 * 60 * 1000, cadence: 'probe',
+      }),
+    }, origin);
   }
   if (p === '/api/admin/health' && method === 'GET') {
     return sendJson(res, 200, await pipelineHealth(deps), origin);

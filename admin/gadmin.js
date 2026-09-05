@@ -637,6 +637,45 @@
       + '<div class="billbar" id="billbar"><div class="billbar__hd"><span class="sec-label" style="margin:0">' + svg('lock') + 'Live subscriptions · Stripe</span><span class="faint" id="billnote">loading…</span></div><div class="billbar__stats" id="billstats"></div></div>'
       + '<div class="sec-label" id="mtitle" style="display:none"></div>'
       + '<div class="rows" id="mrows"><div class="empty">' + svg('member') + '<div>Choose a tier above to see its members.</div></div></div>';
+    // Oversight, migrated from the legacy Membership console: every change to
+    // anyone's access, and everything that arrived but could not be resolved to
+    // a person or a product. Both read-only — the write actions from that
+    // console are deliberately not here (see the audit report).
+    var mv = document.createElement('div');
+    mv.innerHTML = '<div class="sec-label" style="margin-top:22px">' + svg('lock')
+      + 'Membership changes <span class="faint">(every grant, end and override, newest first)</span></div>'
+      + '<div id="mAudit" class="crslist"><div class="faint" style="padding:10px 12px">Loading…</div></div>'
+      + '<div class="sec-label" style="margin-top:22px">' + svg('member')
+      + 'Unresolved <span class="faint">(arrived, but could not be matched to a person or product)</span></div>'
+      + '<div id="mUnres" class="crslist"><div class="faint" style="padding:10px 12px">Loading…</div></div>';
+    c.appendChild(mv);
+    api('/membership/audit').then(function (d) {
+      var box = document.getElementById('mAudit'); if (!box) return;
+      var rows = (d && d.entries) || [];
+      if (!rows.length) { box.innerHTML = '<div class="faint" style="padding:10px 12px">No membership changes recorded.</div>'; return; }
+      box.innerHTML = rows.slice().reverse().slice(0, 25).map(function (e) {
+        return '<div class="crsrow">'
+          + '<span class="crsrow__n">' + esc(e.action || 'change')
+          + (e.contactId ? ' <span class="faint">' + esc(String(e.contactId).slice(0, 10)) + '</span>' : '') + '</span>'
+          + '<span class="crsrow__m">' + esc(e.actor || '') + '</span>'
+          + '<span class="crsrow__d">' + fmtDate(e.at) + '</span></div>';
+      }).join('');
+    }).catch(function () {});
+    api('/membership/unresolved').then(function (d) {
+      var box = document.getElementById('mUnres'); if (!box) return;
+      var rows = (d && d.unresolved) || [];
+      if (!rows.length) {
+        box.innerHTML = '<div class="faint" style="padding:10px 12px">Nothing unresolved \u2014 every incoming grant matched a person and a product.</div>';
+        return;
+      }
+      box.innerHTML = rows.slice(0, 25).map(function (u) {
+        return '<div class="crsrow">'
+          + '<span class="crsrow__n">' + esc(u.reason || u.kind || 'unresolved') + '</span>'
+          + '<span class="crsrow__m">' + esc(u.source || '') + '</span>'
+          + '<span class="crsrow__d">' + fmtDate(u.at || u.receivedAt) + '</span></div>';
+      }).join('');
+    }).catch(function () {});
+
     var grid = document.getElementById('tiercards');
     grid.innerHTML = tiles.map(function (t) {
       return '<button class="tiercard" data-tier="' + t.key + '" style="--acc:' + t.accent + '">'
@@ -730,11 +769,13 @@
   /* Pipeline health. Every chip is an observation with a timestamp behind it;
    * anything without evidence says "unknown" rather than borrowing a green. */
   var HSTATE = {
-    ok:      { label: 'OK',        cls: 'good' },
-    idle:    { label: 'Idle',      cls: 'idle' },
-    stale:   { label: 'Stale',     cls: 'warn' },
-    error:   { label: 'Error',     cls: 'bad'  },
-    unknown: { label: 'Unknown',   cls: 'idle' },
+    ok:      { label: 'OK',      cls: 'good' },
+    running: { label: 'Running', cls: 'good' },
+    idle:    { label: 'Idle',    cls: 'idle' },
+    stale:   { label: 'Stale',   cls: 'warn' },
+    failed:  { label: 'Failed',  cls: 'bad'  },
+    error:   { label: 'Error',   cls: 'bad'  },
+    unknown: { label: 'Unknown', cls: 'idle' },
   };
   function since(ms) {
     if (ms == null) return '';
@@ -745,14 +786,27 @@
   }
   function healthStrip(h) {
     if (!h || !h.components) return '';
-    return '<div class="smhealth">' + h.components.map(function (c) {
+    // Sort the things that need a person to the front. A wall of green with one
+    // amber chip buried in the middle is how a stopped pipeline goes unnoticed.
+    var order = { failed: 0, error: 0, stale: 1, unknown: 2, idle: 3, running: 4, ok: 5 };
+    var comps = h.components.slice().sort(function (a, b) {
+      return (order[a.state] == null ? 9 : order[a.state]) - (order[b.state] == null ? 9 : order[b.state]);
+    });
+    return '<div class="smhealth">' + comps.map(function (c) {
       var st = HSTATE[c.state] || HSTATE.unknown;
       var when = c.lastWriteAt || c.lastRunAt;
       var detail = when ? since(c.ageMs) : (c.ms != null ? c.ms + 'ms' : 'no timestamp');
-      return '<div class="smh smh--' + st.cls + '" title="' + esc(c.evidence || '') + '">'
+      var lines = [];
+      if (c.lastSuccessAt) lines.push('last success ' + fmtDate(c.lastSuccessAt));
+      if (c.lastFailureAt) lines.push('last failure ' + fmtDate(c.lastFailureAt));
+      if (c.nextRunAt) lines.push('next ' + fmtDate(c.nextRunAt));
+      if (c.lastRunResult && c.lastRunResult !== 'success') lines.push('result ' + c.lastRunResult
+        + (c.lastRunExitCode != null ? ' (exit ' + c.lastRunExitCode + ')' : ''));
+      var tip = (c.evidence || '') + (lines.length ? ' — ' + lines.join(' · ') : '');
+      return '<div class="smh smh--' + st.cls + '" title="' + esc(tip) + '">'
         + '<span class="smh__s">' + st.label + '</span>'
         + '<span class="smh__l">' + esc(c.label) + '</span>'
-        + '<span class="smh__d">' + esc(detail) + '</span></div>';
+        + '<span class="smh__d">' + esc(detail) + (lines.length ? '<span class="smh__x">' + esc(lines[0]) + '</span>' : '') + '</span></div>';
     }).join('') + '</div>';
   }
 

@@ -12,11 +12,16 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { installCourseAuthority } from './course-authority-fixture.js';
 
 const SECRET = 'ordering-secret-'.padEnd(48, 'o');
 const workdir = fs.mkdtempSync(path.join(os.tmpdir(), 'gaia-order-'));
 fs.mkdirSync(path.join(workdir, 'data'), { recursive: true });
 const storeFile = path.join(workdir, 'data', 'member-entitlements.json');
+// The receiver validates every grant against the course authority. These
+// synthetic ids are not in the live catalogue, so the suite installs its own.
+installCourseAuthority(workdir, ['course-1', 'course-2', 'course-live', 'course-old',
+  'course-A', 'course-B', { id: 'cid-chakra-9001', title: 'Chakra Awakening' }]);
 process.chdir(workdir);
 
 const PORT = 8903;
@@ -160,15 +165,32 @@ test('8. events about community A do not affect community B', async () => {
 });
 
 // 9 ─────────────────────────────────────────────────────────────────────────
+// The canonical Gold monthly price id. A membership event must carry a billing
+// identifier the config recognises: the id decides the tier, and a body-supplied
+// `tier` is diagnostic input that cannot grant anything on its own.
+const GOLD_MONTHLY_PRICE = '691cbb52396387d816e0f670';
+
+test('a membership event with no billing identifier grants nothing', async () => {
+  // The rule this suite must not quietly lose: a tier claim on its own is not
+  // evidence of billing, whether it arrives as a tag or as a webhook body.
+  const c = 'synthetic-order-9-bare';
+  const bare = await hook({ type: 'membership_tier_granted', contactId: c, tier: 'gold', timestamp: T.late, webhookId: 'm0' });
+  assert.equal(bare.json.applied, false);
+  assert.equal(bare.json.reason, 'BILLING_ID_REQUIRED');
+  assert.equal(rec(c), null, 'no record is created by an unbacked tier claim');
+});
+
 test('9. membership ordering is independent of course and community ordering', async () => {
   const c = 'synthetic-order-9';
-  await hook({ type: 'membership_tier_granted', contactId: c, tier: 'gold', timestamp: T.late, webhookId: 'm1' });
+  await hook({ type: 'membership_tier_granted', contactId: c, tier: 'gold',
+    priceId: GOLD_MONTHLY_PRICE, timestamp: T.late, webhookId: 'm1' });
   assert.equal(rec(c).tier?.name, 'Gold');
   // an older course event still applies — different resource
   const course = await grant(c, 'course-1', T.mid);
   assert.equal(course.json.applied, true);
   // an older membership event does not
-  const staleTier = await hook({ type: 'membership_tier_removed', contactId: c, tier: 'gold', timestamp: T.early, webhookId: 'm2' });
+  const staleTier = await hook({ type: 'membership_tier_removed', contactId: c, tier: 'gold',
+    priceId: GOLD_MONTHLY_PRICE, timestamp: T.early, webhookId: 'm2' });
   assert.equal(staleTier.json.applied, false);
   assert.equal(rec(c).tier?.name, 'Gold', 'membership survives its own stale event');
   assert.equal(hasCourse(c, 'course-1'), true);

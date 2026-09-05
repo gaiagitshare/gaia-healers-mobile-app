@@ -30,27 +30,51 @@ test('the Admin shell embeds the real Event Manager rather than reimplementing i
   assert.match(shell, /localStorage\.setItem\('token'/, 'and it hands the iframe the same session (SSO)');
 });
 
-test('no event-domain logic has crept into the Admin shell', () => {
-  // Each of these belongs to the Event Manager. Finding one here means a second
-  // implementation has been started.
-  // What this list is for: a SECOND implementation. The failure it prevents is
-  // two panels computing check-in independently and disagreeing on the day.
-  //
-  // Amended deliberately: the Contacts drawer shows a person's event attendance,
-  // joined server-side by the proxy from the Event Manager's own API and
-  // rendered read-only. That cannot drift, because it computes nothing and
-  // writes nothing — the noun "attendee" now appears in the shell as a label.
-  // The verbs below are what would signal a real second implementation, and
-  // they stay forbidden, as does calling the event backend from here at all
-  // (asserted in the next test).
-  const forbidden = [
-    'checkin', 'check-in', 'walk-in', 'walkin',
-    'badge-label', 'badge_print', 'door-report', 'acquisition-report',
-    'ticket_type', 'ticket-mappings', 'public_token', 'qr_code',
+test('no Event Admin capability is reimplemented in the general Admin shell', () => {
+  // The boundary is about OWNERSHIP, not vocabulary. General Admin may show a
+  // person's event summary; Event Admin remains the only place that performs
+  // event actions. So this looks for the shapes of those actions rather than
+  // for nouns — a screen can say "attendee" and be innocent, and can avoid the
+  // word entirely while shipping a check-in button.
+  const capabilities = [
+    ['check-in',              /\bcheck(ing)?[\s_-]?in\s*\(|\bcheckIn[A-Z(]|authorize(Scan)?\s*\(/],
+    ['undo check-in',         /undo[\s_-]?check|\bunCheckIn\b/i],
+    ['badge scanning',        /Html5Qrcode|qr-?reader|startScanner|\bscanBadge\b/i],
+    ['attendee mutation',     /\b(create|update|delete|revoke|reinstate)Attendee\s*\(|attendees?\/\$\{|\/attendees['"`]/],
+    ['pass changes',          /changePass\s*\(|ticket_type_id\s*[:=]|setAddonDay/],
+    ['badge printing',        /badgeLabel|recordBadgePrint|sendToPrinter/i],
+    ['event payment recon',   /reconcile[A-Za-z]*\s*\(|payments\/(sync|reconcile)|mapReconcile/i],
+    ['exhibitor management',  /\/exhibitors?['"`]|createExhibitor|updateExhibitor|vendorActivationLink/],
+    // The API path or a mutator — not the phrase. The System Map prints
+    // "16 active ticket mappings" as a count, which is exactly the read-only
+    // summary this boundary permits.
+    ['ticket mappings',       /['"`]\/[a-z-]*ticket-mappings|createTicketMapping|updateTicketMapping/i],
+    ['event permissions',     /require_cap|authz\.|grantEventRole/i],
+    ['walk-in registration',  /walkInCreate|\bwalk[\s_-]?in\b/i],
   ];
-  const found = forbidden.filter((word) => shell.toLowerCase().includes(word));
+  const found = capabilities.filter(([, re]) => re.test(shell)).map(([name]) => name);
   assert.deepEqual(found, [],
-    `event logic must live in /event/, not the Admin shell — found: ${found.join(', ')}`);
+    `Event Admin owns these; the general Admin shell must not implement them — found: ${found.join(', ')}`);
+});
+
+test('the Admin shell writes nothing to the event domain', () => {
+  // Reading a summary is allowed. Changing an event record from here is not,
+  // however it is spelled — so any mutating HTTP verb aimed at the event API is
+  // a failure regardless of the path.
+  const mutating = [...shell.matchAll(/method:\s*['"](POST|PUT|PATCH|DELETE)['"][\s\S]{0,200}?['"`]([^'"`]*event[^'"`]*)['"`]/gi)]
+    .map((m) => `${m[1]} ${m[2]}`);
+  assert.deepEqual(mutating, [],
+    `the Admin shell must not write to the event domain — found: ${mutating.join(', ')}`);
+});
+
+test('event data reaching the shell is server-joined, not fetched from the event API', () => {
+  // The one safe shape: the proxy joins it under /api/admin and the shell
+  // renders the result. A direct call to the event backend would make the shell
+  // a second client with its own idea of the truth.
+  const eventApiCalls = [...shell.matchAll(/['"`](\/event-api\/[^'"`]*)['"`]/g)].map((m) => m[1]);
+  const notAuth = eventApiCalls.filter((p) => !p.startsWith('/event-api/auth/'));
+  assert.deepEqual(notAuth, [],
+    `event data must arrive via the proxy's own /api/admin join, not /event-api — found: ${notAuth.join(', ')}`);
 });
 
 test('the Admin shell only reaches the event backend for sign-in', () => {

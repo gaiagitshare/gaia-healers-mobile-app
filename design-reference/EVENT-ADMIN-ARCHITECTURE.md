@@ -89,22 +89,50 @@ repo under `admin/`, but the Event Manager — backend and frontend — exists o
 on the VPS. Backups are taken (`event.db.pre-*`), but the code has no history
 and no remote. Worth fixing before the codebase grows further.
 
-## Amendment — read-only event context in the Admin shell
+## The boundary, stated as ownership
 
-The rule above forbids a second Event Manager. It does not forbid *showing* a
-person's event history where an operator is already looking at that person.
+**Event Admin owns event behaviour. General Admin may read event summaries.**
 
-Contacts → a contact → **Events** lists the attendee records belonging to that
-GHL contact. Three properties keep it on the right side of the line:
+That is the whole rule. It is about who *performs* an action, not which words
+appear on a screen.
 
-* the join happens **server-side**, in the proxy, against the Event Manager's
-  own `/identity/attendees-by-contact` — the shell never calls the event backend
-  (still asserted: only `/auth/*` is reachable from here);
-* it is **read-only**. Nothing in the shell authorises, checks in, undoes,
-  prints or writes an attendee. A test asserts the absence of those verbs;
-* it **computes nothing**. It renders what the Event Manager returned, so the
-  two panels cannot arrive at different answers — there is only one answer.
+### General Admin may
 
-The tripwire's forbidden list therefore names event *actions*, not the word
-"attendee". A list of attendee names in the shell is a label; a check-in button
-in the shell is a second implementation.
+* show which events a contact attended, and their status
+* show pass/ticket and current check-in state as a summary
+* show a payment or attendance count
+* link across to Event Admin
+
+…provided the data is **joined server-side by the proxy** and rendered read-only.
+
+### General Admin may not
+
+check in · undo check-in · scan badges · create, update, delete, revoke or
+reinstate an attendee · change a pass or add-on · print or record a badge ·
+reconcile event payments · manage exhibitors · manage ticket mappings · grant
+event permissions · register a walk-in.
+
+### How it is enforced
+
+`tests/event-admin-boundary.test.cjs` checks the shapes of those capabilities
+rather than a list of nouns — a screen can say "attendee" and be innocent, and
+can avoid the word entirely while shipping a check-in button. It also asserts:
+
+* the shell issues **no mutating request** (POST/PUT/PATCH/DELETE) at the event
+  domain, however the path is spelled;
+* the shell calls **no `/event-api/*` route except `/auth/*`** — event data
+  arrives through the proxy's own `/api/admin` join, so the shell never becomes
+  a second client with its own idea of the truth;
+* Events remains an iframe onto the real `/event/`, sharing one session.
+
+The tripwire was verified by planting five realistic violations — a check-in
+function, an exhibitor POST, a PUT to `/event-api/attendees/5`, a QR scanner and
+an `undoCheckIn` — and confirming each one fails the suite.
+
+### Why the earlier word-list was replaced
+
+It banned the literal string `attendee` anywhere in the shell. That blocked a
+read-only attendance summary on a contact — which cannot drift, because it
+computes nothing and writes nothing — while doing nothing to stop somebody
+implementing check-in under a different name. Ownership is the property worth
+enforcing; vocabulary was a proxy for it, and a poor one.

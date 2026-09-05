@@ -5637,6 +5637,69 @@ def payments_sync(payload: schemas.PaymentSyncIn, db: Session = Depends(get_db),
     return {"ok": True, "recorded": seen}
 
 
+@app.post("/identity/payments/reclassify")
+def payments_reclassify(db: Session = Depends(get_db),
+                        _: bool = Depends(require_service_token)):
+    """Re-judge payments already on file, without going back to GHL.
+
+    Stored payments carry a verdict, and a verdict can go stale without the
+    payment changing at all: a mapping gets added in Map & Reconcile, a ticket
+    is finally issued, a refund lands. Re-fetching a year of transactions to
+    notice that is slow and pointless -- the evidence is already here. This
+    re-runs the same attribution and the same classifier over what we hold, so
+    a row's verdict never depends on how long ago it happened to be fetched.
+    """
+    maps = {}
+    for m in db.query(models.TicketMapping).filter(
+            models.TicketMapping.is_active == True).all():        # noqa: E712
+        if (m.entitlement_type or "EVENT_TICKET") in ("EVENT_TICKET", "EVENT_UPGRADE"):
+            maps.setdefault(m.external_product_id, []).append(m)
+
+    changed = 0
+    rows = db.query(models.PaymentEvent).all()
+    # One lookup of who has paid, rather than one per row.
+    paid_by_event = {}
+    for r in rows:
+        if r.event_id and r.buyer_email and r.status in payments.PAID:
+            paid_by_event.setdefault(r.event_id, set()).add(r.buyer_email)
+
+    for pe in rows:
+        before = (pe.event_id, pe.recon_state, pe.severity, pe.attendee_id)
+        hit = None
+        for p in (pe.product_ids or []):
+            for m in maps.get(p, []):
+                if _mapping_covers(m, pe.occurred_at):
+                    hit = m
+                    break
+            if hit:
+                break
+        pe.event_id = hit.event_id if hit else None
+        attendee = None
+        if pe.event_id and pe.buyer_email:
+            attendee = db.query(models.Attendee).filter(
+                models.Attendee.event_id == pe.event_id,
+                func.lower(models.Attendee.email) == pe.buyer_email).first()
+        pe.attendee_id = attendee.id if attendee else None
+        active = bool(attendee and _ticket_active(attendee))
+        person_paid = (pe.status not in payments.PAID and pe.buyer_email
+                       and pe.buyer_email in paid_by_event.get(pe.event_id, ()))
+        state, sev, reason = payments.classify(pe, attendee, active,
+                                               person_paid=bool(person_paid))
+        was_bad = (pe.severity or 0) > 0
+        pe.recon_state, pe.severity, pe.recon_reason = state, sev, reason
+        pe.last_checked_at = datetime.utcnow()
+        if was_bad and sev == 0 and not pe.resolved_at:
+            pe.resolved_at = datetime.utcnow()
+            pe.resolution = reason
+        elif sev > 0:
+            pe.resolved_at = None
+            pe.resolution = None
+        if before != (pe.event_id, pe.recon_state, pe.severity, pe.attendee_id):
+            changed += 1
+    db.commit()
+    return {"ok": True, "examined": len(rows), "changed": changed}
+
+
 def _pe_rows(db, event_id, include_non_event=False):
     q = db.query(models.PaymentEvent)
     if include_non_event:

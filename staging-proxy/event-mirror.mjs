@@ -209,4 +209,14 @@ for (const t of reversed) {
     reason: 'ghl_reconcile', actor: 'mirror' });
 }
 
+// Re-judge what is already on file before finishing. A ticket issued at the
+// door, a mapping added in Map & Reconcile, a refund landing -- any of those
+// changes whether a stored payment still needs attention, without the payment
+// itself changing. Cheap, local, and it keeps a row's verdict from depending on
+// how long ago it happened to be fetched.
+try {
+  const { j } = await em('/identity/payments/reclassify', {});
+  if (j && j.ok) stats.reclassified = j.changed;
+} catch (e) { /* monitoring must never break a reconciliation */ }
+
 log({ phase: 'done', ...stats });

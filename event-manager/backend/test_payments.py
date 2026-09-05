@@ -268,6 +268,25 @@ res = sql("SELECT resolved_at, resolution FROM payment_events WHERE ghl_transact
 check(res and res[0][0] is not None,
       "and how it ended is recorded -- a fixed problem, not one that quietly moved")
 
+print("\nA verdict is re-judged, not frozen at fetch time")
+# Money in, ticket missing, and then somebody fixes it by hand rather than
+# through a payment. Nothing about the payment changed, so no re-fetch from GHL
+# would notice -- but the row must stop shouting.
+call("POST", "/identity/payments/sync", {"source": "mirror", "transactions": [
+    tx("zz-pay-8", "succeeded", "latecomer@example.invalid")]}, SVC)
+st, a = call("GET", "/events/%d/payments/attention" % EV, token=ADMIN)
+check(a["critical"] == 1, "critical while the ticket is missing", a["critical"])
+st, _ = call("POST", "/identity/reconcile-attendee", {
+    "event_id": EV, "email": "latecomer@example.invalid", "ticket_type_id": TT,
+    "product_id": PROD, "order_id": "ord-zz-pay-8",
+    "first_name": "Zed", "last_name": "Late"}, SVC)
+st, rc = call("POST", "/identity/payments/reclassify", None, SVC)
+check(st == 200 and rc["changed"] >= 1, "reclassify re-judges without re-fetching", (st, rc))
+st, a = call("GET", "/events/%d/payments/attention" % EV, token=ADMIN)
+check(a["critical"] == 0, "and the row goes quiet once the ticket exists", a)
+st, _ = call("POST", "/identity/payments/reclassify", None, ADMIN)
+check(st in (401, 403), "reclassify needs the service token, like every other write", st)
+
 print("\nRecovery view, live")
 st, rv = call("GET", "/events/%d/payments/recovery" % EV, token=ADMIN)
 emails = {r["email"] for r in rv["items"]}
@@ -311,7 +330,7 @@ check(f2["total"] == 0, "another event sees none of these payments", f2)
 
 print("\nFilters")
 st, f = call("GET", "/events/%d/payments?status=paid" % EV, token=ADMIN)
-check(f["total"] == 1, "status filter", f["total"])
+check(f["total"] == 2, "status filter", f["total"])
 st, f = call("GET", "/events/%d/payments?provider=paypal" % EV, token=ADMIN)
 check(f["total"] == 1, "provider filter", f["total"])
 st, f = call("GET", "/events/%d/payments?q=waiting" % EV, token=ADMIN)

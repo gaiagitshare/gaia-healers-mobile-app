@@ -680,7 +680,7 @@
       + '<svg class="sysmap__edges"></svg>'
       + '<div class="smhub" id="smhub"><span class="smhub__k">Gaia Healers 2.0</span><b>' + n(d.members) + '</b><span class="smhub__l">total members</span></div>'
       + '<div class="smrow">' + tiers + payB + access + app + '</div>'
-      + '<div class="smfoot">Live from GHL · Stripe · Shopify · updated ' + fmtDate(d.generatedAt) + '</div>';
+      + '<div class="smfoot">GHL contacts &amp; tags · GHL/Stripe subscriptions · Gaia\u2019s Shopify and Academy catalogues · built ' + fmtDate(d.generatedAt) + ' \u00b7 cached 10 min</div>';
     requestAnimationFrame(drawEdges);
     if (!window.__smResize) { window.__smResize = true; window.addEventListener('resize', function () { if (document.getElementById('sysmap')) drawEdges(); }); }
   }

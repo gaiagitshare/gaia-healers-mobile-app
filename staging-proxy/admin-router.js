@@ -411,7 +411,12 @@ async function systemMap(deps) {
   out.stages = []; for (const sv of ST) { const cnt = await tagTotal('practice_stage_' + sv[0]); out.stages.push({ label: sv[1], count: cnt || 0 }); }
   const COM = [['biowell', 'Bio-Well'], ['biopulsar', 'BioPulsar'], ['biotekna', 'BioTekna'], ['braintap', 'BrainTap'], ['asea', 'ASEA'], ['lifewave', 'LifeWave']];
   out.communitiesList = []; for (const cv of COM) { const cnt = await tagTotal('community-' + cv[0] + '-member'); if (cnt) out.communitiesList.push({ label: cv[1], count: cnt }); }
-  out.communities = 8;
+  // The count is the list. This was hardcoded to 8 while the list beneath it
+  // on the same card showed 3 — the only two numbers a reader can compare,
+  // disagreeing. A community with no members is still a community, so this
+  // counts the tags that were probed, not just the ones that came back.
+  out.communitiesProbed = COM.length;
+  out.communities = out.communitiesList.length;
   _sysMapCache = { at: Date.now(), data: out };
   return out;
 }

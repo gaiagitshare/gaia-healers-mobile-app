@@ -2593,6 +2593,23 @@ async function handleGhlPaymentWebhook(req, res, origin) {
       results.push({ product_id: t.pid, event_id: t.m.event_id, ticket_type_id: t.m.ticket_type_id, ok: !!(j && j.ok), created: !!(j && j.created) });
       log({ outcome: 'reconciled', order_id: orderId, product_id: t.pid, event_id: t.m.event_id, ticket_type_id: t.m.ticket_type_id, created: !!(j && j.created) });
     }
+    // Record the payment itself, whatever it did. The reconciler above only
+    // acts on money that arrived; the Payments screen has to show the declined
+    // card and the PayPal checkout still sitting in pending, because those are
+    // the ones somebody needs to chase.
+    try {
+      await fetch(`${EMBASE}/identity/payments/sync`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${SVC}` },
+        body: JSON.stringify({ source: 'webhook', transactions: [{
+          transaction: tx,
+          order: invoiceId
+            ? { status: 'paid', items: productIds.map((p, i) => ({ productId: p, name: productNames[i] })) }
+            : { status: 'completed', items: productIds.map((p, i) => ({ productId: p, name: productNames[i] })), amount: orderAmount },
+        }] }),
+      });
+    } catch (e) { /* monitoring must never break a reconciliation */ }
+
     sendJson(res, 200, { ok: true, transaction_id: txId, order_id: orderId || null,
                          invoice_id: invoiceId || null, matched: results.length, results }, origin);
   } catch (e) {

@@ -75,6 +75,11 @@ export const dismissUnmappedSale = (eventId, id) => api.post(`/events/${eventId}
 export const clearScanLogs = (eventId) => api.delete(`/events/${eventId}/scan-logs`);
 // Door rehearsal: waives ONLY the calendar window, for one event, deliberately.
 export const setDoorTestMode = (eventId, enabled) => api.post(`/events/${eventId}/door-test-mode`, { enabled });
+// Payment monitoring. Reads Gaia's mirror of GHL, never GHL directly.
+export const getPayments = (eventId, p = {}) => api.get(`/events/${eventId}/payments`, { params: p });
+export const getPaymentsSummary = (eventId) => api.get(`/events/${eventId}/payments/summary`);
+export const getPaymentsAttention = (eventId) => api.get(`/events/${eventId}/payments/attention`);
+export const getPaymentsRecovery = (eventId) => api.get(`/events/${eventId}/payments/recovery`);
 export const getTicketMetrics = (eventId) => api.get(`/events/${eventId}/ticket-metrics`);
 // Map & Reconcile: preview reads GHL and changes nothing; apply needs confirm:true.
 export const mapReconcilePreview = (eventId, body) => api.post(`/events/${eventId}/map-reconcile/preview`, body);

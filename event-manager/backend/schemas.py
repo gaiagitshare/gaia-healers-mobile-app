@@ -1042,6 +1042,13 @@ class UndoCheckIn(BaseModel):
     reason: str
 
 
+class PaymentSyncIn(BaseModel):
+    """What the proxy read from GHL. Gaia stores and classifies; it never
+    writes any of it back."""
+    transactions: List[Dict[str, Any]] = []
+    source: Optional[str] = "mirror"          # webhook | mirror
+
+
 class DoorTestMode(BaseModel):
     enabled: bool = False
 

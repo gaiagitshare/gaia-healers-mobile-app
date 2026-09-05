@@ -74,7 +74,11 @@ for (const m of (maps.mappings || maps || [])) {
 }
 log({ phase: 'start', since, dry_run: DRY, mapped_products: byPid.size });
 
-const stats = { orders_seen: 0, invoices_seen: 0, reconciled: 0, already: 0, unmapped: 0, refunds: 0, errors: 0 };
+// `out_of_window` is a normal outcome, not a failure: a backfill reaching back
+// far enough will meet last year's sales of a product that is still on sale
+// this year, and Gaia correctly declines them. Counting those as errors would
+// make a healthy recovery run look broken.
+const stats = { orders_seen: 0, invoices_seen: 0, reconciled: 0, already: 0, unmapped: 0, out_of_window: 0, refunds: 0, payments: 0, errors: 0 };
 
 // ── 1. completed orders ───────────────────────────────────────────────────
 const orders = await pageAll(`/payments/orders?altId=${LOC}&altType=location`, 'data');
@@ -104,7 +108,7 @@ for (const o of orders) {
     // that distinguishes one person paying for three seats from three people.
     const line = items.find((i) => String((i.product && i.product._id) || i.productId) === m.external_product_id);
     const qty = Math.max(1, Number((line && (line.qty != null ? line.qty : line.quantity)) || 1));
-    const { j } = await em('/identity/reconcile-attendee', {
+    const { status, j } = await em('/identity/reconcile-attendee', {
       event_id: m.event_id, email, ticket_type_id: m.ticket_type_id, is_upgrade: !!m.is_upgrade,
       contact_id: o.contactId, order_id: o._id,
       // Recorded so the ledger can be classified later without guessing: the
@@ -115,7 +119,9 @@ for (const o of orders) {
       // charge from a second seat bought the same afternoon.
       purchased_at: String(o.createdAt || '').slice(0, 19) || null,
       first_name: nm[0] || '', last_name: nm.slice(1).join(' ') });
-    if (j && j.ok) { if (j.created) stats.reconciled++; else stats.already++; } else stats.errors++;
+    if (status === 409) stats.out_of_window++;
+    else if (j && j.ok) { if (j.created) stats.reconciled++; else stats.already++; }
+    else stats.errors++;
   }
 }
 
@@ -136,18 +142,50 @@ for (const iv of invoices) {
     if (!m) continue;                       // not a ticket; invoices sell many things
     if (DRY) { stats.reconciled++; continue; }
     const nm = String(cd.name || '').split(' ');
-    const { j } = await em('/identity/reconcile-invoice', {
+    const { status, j } = await em('/identity/reconcile-invoice', {
       event_id: m.event_id, email, invoice_id: iv._id, contact_id: cd.id,
       product_id: it.productId, price_id: it.priceId, amount: iv.amountPaid,
       quantity: Number(it.qty || it.quantity || 1), status: iv.status,
       first_name: nm[0] || '', last_name: nm.slice(1).join(' '), phone: cd.phoneNo,
       issued_at: when });
-    if (j && j.ok) { if (j.created) stats.reconciled++; else stats.already++; } else stats.errors++;
+    if (status === 409) stats.out_of_window++;
+    else if (j && j.ok) { if (j.created) stats.reconciled++; else stats.already++; }
+    else stats.errors++;
   }
 }
 
-// ── 3. refunds and reversals ─────────────────────────────────────────────
+// ── 3. every payment attempt, for monitoring and for refunds ─────────────
+// Fetched once and used twice: the Payments screen needs every attempt, and
+// the refund pass below needs the reversed ones.
 const txns = await pageAll(`/payments/transactions?altId=${LOC}&altType=location`, 'data');
+
+// Every payment ATTEMPT, not just the ones that worked. A declined card and a
+// PayPal checkout still sitting in pending are exactly what the Payments screen
+// exists to show, and neither of them appears in the orders list above.
+{
+  const window = txns.filter((t) => String(t.createdAt || '') >= since);
+  const rows = [];
+  for (const t of window) {
+    let order = {};
+    if (t.entityType === 'order' && t.entityId) {
+      const f = await ghl(`/payments/orders/${t.entityId}?altId=${LOC}&altType=location`);
+      order = (f && (f.order || f)) || {};
+    } else if (t.entityType === 'invoice' && t.entityId) {
+      const f = await ghl(`/invoices/${t.entityId}?altId=${LOC}&altType=location`);
+      const b = (f && (f.invoice || f)) || {};
+      order = { status: b.status,
+                items: (b.invoiceItems || []).map((i) => ({ productId: i.productId, name: i.name })) };
+    }
+    rows.push({ transaction: t, order });
+  }
+  if (!DRY && rows.length) {
+    const r = await em('/identity/payments/sync', { transactions: rows, source: 'mirror' });
+    stats.payments = (r.j && r.j.recorded) || 0;
+  } else {
+    stats.payments = rows.length;
+  }
+}
+
 const reversed = txns.filter((t) => String(t.createdAt || '') >= since
   && ['refunded', 'partially_refunded'].includes(String(t.status || '').toLowerCase()));
 for (const t of reversed) {

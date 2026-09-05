@@ -44,7 +44,9 @@ export default function Payments() {
     const [summary, setSummary] = useState(null);
     const [attention, setAttention] = useState(null);
     const [recovery, setRecovery] = useState(null);
-    const [loading, setLoading] = useState(false);
+    // Starts true: before the first fetch lands there is nothing to say, and an
+    // empty-state message would be read as a fact rather than as a wait.
+    const [loading, setLoading] = useState(true);
     const [error, setError] = useState('');
     const [status, setStatus] = useState('');
     const [provider, setProvider] = useState('');
@@ -193,7 +195,9 @@ export default function Payments() {
 }
 
 function FeedTable({ rows, onOpen, loading }) {
-    if (loading && !rows.length) return <CircularProgress size={26} />;
+    if (loading && !rows.length) {
+        return <Paper variant="outlined" sx={{ p: 3, textAlign: 'center' }}><CircularProgress size={26} /></Paper>;
+    }
     if (!rows.length) {
         return <Paper variant="outlined" sx={{ p: 3, textAlign: 'center', color: 'text.secondary' }}>
             <Typography variant="body2">Nothing here.</Typography>

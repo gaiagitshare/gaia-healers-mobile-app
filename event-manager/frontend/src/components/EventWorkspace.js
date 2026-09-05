@@ -3,6 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { Box, Typography, Tabs, Tab, Chip, Stack } from '@mui/material';
 import { getEvent } from '../utils/api';
 import EventDetail from './EventDetail';
+import LiveAdmin from './LiveAdmin';
 import Agenda from './Agenda';
 import Attendees from './Attendees';
 import CheckIn from './CheckIn';
@@ -56,7 +57,7 @@ function EventWorkspace() {
             case 'speakers': return <Agenda section="speakers" />;
             case 'sponsors': return <Agenda section="sponsors" />;
             case 'updates': return <Agenda section="updates" />;
-            case 'live': return <Agenda section="live" />;
+            case 'live': return <LiveAdmin />;
             case 'exhibitors': return <EventDetail section="exhibitors" />;
             case 'attendees': return <Attendees timezone={event?.timezone} />;
             case 'notify': return <Notifications />;

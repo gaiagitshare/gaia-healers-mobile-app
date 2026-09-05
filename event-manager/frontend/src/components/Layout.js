@@ -31,7 +31,6 @@ import {
     Event as EventIcon,
     Menu as MenuIcon,
     QrCodeScanner as CheckInIcon,
-    Storefront as StorefrontIcon,
     Payments as PaymentsIcon,
     Password as PasswordIcon,
     Logout as LogoutIcon,
@@ -73,7 +72,6 @@ function Layout({ children, user, onLogout }) {
         { text: 'Dashboard', icon: <DashboardIcon />, path: '/dashboard' },
         { text: 'Events', icon: <EventIcon />, path: '/events' },
         { text: 'Check-In', icon: <CheckInIcon />, path: '/checkin' },
-        { text: 'Vendors', icon: <StorefrontIcon />, path: '/vendors' },
         { text: 'Payments', icon: <PaymentsIcon />, path: '/payments' },
         { text: 'Entitlement Review', icon: <ReviewIcon />, path: '/entitlement-review' },
     ];

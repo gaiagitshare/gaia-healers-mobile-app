@@ -15,13 +15,13 @@ import { getEvent, updateEvent, getAnnouncements } from '../utils/api';
  * view of the announcements riding along with them.
  *
  * These controls used to live inside <Agenda>, which meant they rendered on
- * Schedule, Speakers, Sponsors and Updates as well — the same on-air switch on
+ * Schedule, Speakers, Sponsors and Announcements as well — the same on-air switch on
  * five screens, none of which were about being on air. Worse, `live` had no tab
  * of its own in that component, so it fell through to index 0 and the Live tab
  * showed the schedule editor: "Add session", "Import CSV", "No sessions yet".
  *
  * Nothing here writes an announcement. The list below is a mirror of what the
- * live payload carries, and editing it belongs under Updates — one editor, not
+ * live payload carries, and editing it belongs under Announcements — one editor, not
  * two.
  */
 export default function LiveAdmin() {
@@ -144,7 +144,7 @@ export default function LiveAdmin() {
                     No published announcements. The live panel and the venue display carry up to five
                     of them — room changes, delays, “lunch is served”.{' '}
                     <Button size="small" onClick={() => navigate(`/events/${id}/updates`)}>
-                        Write one under Updates
+                        Write one under Announcements
                     </Button>
                 </Alert>
             ) : (
@@ -169,7 +169,7 @@ export default function LiveAdmin() {
                         Read-only — this is the same five the live payload carries, pinned first.
                         Write and edit them under{' '}
                         <Button size="small" sx={{ p: 0, minWidth: 0, verticalAlign: 'baseline' }}
-                            onClick={() => navigate(`/events/${id}/updates`)}>Updates</Button>.
+                            onClick={() => navigate(`/events/${id}/updates`)}>Announcements</Button>.
                     </Typography>
                 </>
             )}

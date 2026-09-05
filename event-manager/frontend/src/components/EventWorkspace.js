@@ -23,8 +23,10 @@ const SECTIONS = [
     ['speakers', 'Speakers'],
     ['exhibitors', 'Exhibitors'],
     ['sponsors', 'Sponsors'],
-    ['updates', 'Updates'],
-    ['notify', 'Notify'],
+    // Labels, not keys. 'Updates' and 'Notify' read as near-synonyms to
+    // anyone who has not used both; the paths stay put so existing links do.
+    ['updates', 'Announcements'],
+    ['notify', 'Push Notifications'],
     ['info', 'FAQ & Info'],
     ['resources', 'Resources'],
     ['community', 'Community'],

@@ -19,6 +19,8 @@ import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import * as membershipAdmin from './membership/admin-api.js';
 import * as alerts from './alerts.js';
+import * as ghlAdapter from './membership/adapters/ghl-membership.js';
+import * as membershipConfig from './membership/config.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -303,7 +305,15 @@ async function loadSubscriptions(deps) {
   });
   var byContact = {};
   Object.keys(best).forEach(function (id) { byContact[id] = normSub(best[id]); });
-  var list = all.map(function (s) { var n = normSub(s); n.contactId = s.contactId || ''; n.name = s.contactName || ''; n.email = s.contactEmail || ''; n.phone = s.contactPhone || ''; return n; });
+  var list = all.map(function (s) {
+    var n = normSub(s); n.contactId = s.contactId || ''; n.name = s.contactName || ''; n.email = s.contactEmail || ''; n.phone = s.contactPhone || '';
+    // The billing identity lives on the raw record, nested under
+    // recurringProduct. normSub drops it, and without it every subscription
+    // looks like a product Gaia does not sell — so the alert could not tell a
+    // genuine mapping gap from a stuck membership. Carried, not re-derived.
+    n.recurringProduct = s.recurringProduct || null;
+    return n;
+  });
   _subCache = { at: now, byContact: byContact, summary: summary, list: list };
   return _subCache;
 }
@@ -839,7 +849,20 @@ async function alertExtras(deps) {
       if (!cid) continue;
       const rec = contacts[cid];
       if (rec && rec.membership && rec.membership.status === 'active') continue;
+      // Two very different situations look identical from a distance, and an
+      // operator told the same thing five times learns nothing. Either the
+      // product is not one Gaia sells as a tier — a mapping question — or it is,
+      // and the membership is missing, which is a reconciliation question.
+      let kind = 'missing_membership';
+      try {
+        const ids = ghlAdapter.billingIds(sub);
+        if (!membershipConfig.tierFromBillingIds(ids)) kind = 'unmapped_product';
+      } catch (_) { /* fall back to the safer of the two */ }
       extra.membershipExceptions.push({
+        kind,
+        productName: (sub.recurringProduct && sub.recurringProduct.product
+          && sub.recurringProduct.product.name) || null,
+        heldStatus: (rec && rec.membership && rec.membership.status) || null,
         contactId: cid,
         // GHL names this field differently across payloads; take whichever is
         // present so the alert can be traced back to a real subscription.

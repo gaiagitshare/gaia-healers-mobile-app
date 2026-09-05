@@ -117,12 +117,21 @@ export function detect(health, extra = {}) {
   // subscriptions against the ledger and names anyone paying without a
   // membership record — evidence of a gap, never an instruction to grant one.
   for (const m of (extra.membershipExceptions || [])) {
-    add({ key: `membership:missing:${m.contactId}`, severity: 'warning', subsystem: 'Membership',
-      title: 'Paid subscription with no membership record',
-      why: 'An active subscription exists in GHL billing and the ledger holds no membership for that person. They may be paying without access. Gaia does not grant it automatically — the evidence needs a human.',
+    const unmapped = m.kind === 'unmapped_product';
+    add({
+      key: `membership:${unmapped ? 'unmapped' : 'missing'}:${m.contactId}`,
+      severity: 'warning', subsystem: 'Membership',
+      title: unmapped
+        ? 'Active subscription for a product that is not a membership tier'
+        : 'Paid subscription with no membership record',
+      why: unmapped
+        ? `They are paying for "${m.productName || 'a product'}", which is not one of the four canonical tiers, so no membership is created. That is correct unless this product is supposed to grant one — which is a mapping decision, not a reconciliation fault.`
+        : `An active subscription exists in GHL billing and the ledger holds ${m.heldStatus ? `a ${m.heldStatus} membership` : 'no membership'} for that person. They may be paying without access. Gaia does not grant it automatically — the evidence needs a human.`,
       evidence: `subscription ${m.subscriptionId || 'unknown'} · status ${m.status || '?'}`
-        + (m.amount != null ? ` · ${m.amount}` : ''),
-      affected: { kind: 'contact', id: m.contactId, label: maskEmail(m.email || '') || m.contactId } });
+        + (m.amount != null ? ` · ${m.amount}` : '')
+        + (m.productName ? ` · ${m.productName}` : ''),
+      affected: { kind: 'contact', id: m.contactId, label: maskEmail(m.email || '') || m.contactId },
+    });
   }
 
   // ── Event mirror ─────────────────────────────────────────────────────────

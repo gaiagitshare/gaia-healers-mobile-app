@@ -181,11 +181,34 @@ function validateProposal(store, proposal, { now = new Date() } = {}) {
   if (source.state === 'disabled') return fail('rejected', 'source_disabled');
 
   // ── idempotency ───────────────────────────────────────────────────────────
+  //
+  // For an EVENT source this is essential: a webhook redelivered twice must not
+  // apply twice. For a SNAPSHOT source it is actively harmful. A snapshot does
+  // not report events; it restates current truth on every run, with a stable id
+  // for the same underlying subscription. Rejecting those restatements as
+  // duplicates means the store can never converge on the truth again once it
+  // has diverged from it — which is precisely what happened here: a membership
+  // wrongly ended by a truncated snapshot could not be repaired by the next
+  // fifty correct ones, because each was dismissed as something already seen.
+  //
+  // Snapshots have their own protections (ordering, and the absence guard
+  // above). Re-applying an unchanged state is a no-op; re-applying a changed
+  // one is the correction the mechanism exists to make.
   if (proposal.sourceEventId) {
     const seen = Array.isArray(store.processedWebhookIds) ? store.processedWebhookIds : [];
     const key = `${proposal.source}:${proposal.sourceEventId}`;
     if (seen.includes(key) || seen.includes(proposal.sourceEventId)) {
-      return fail('rejected', 'duplicate_source_event');
+      if (source.mode !== 'snapshot') return fail('rejected', 'duplicate_source_event');
+      // A snapshot restating what the store already holds is genuinely nothing
+      // to do. A snapshot restating something DIFFERENT is the correction, and
+      // must not be dismissed as a repeat.
+      const held = store.contacts?.[proposal.contactId]?.membership || null;
+      if (proposal.intentType === 'membership' && sameMembership(held, proposal.intent)) {
+        return fail('rejected', 'duplicate_source_event');
+      }
+      if (proposal.intentType !== 'membership') {
+        return fail('rejected', 'duplicate_source_event');
+      }
     }
   }
 
@@ -440,7 +463,38 @@ function ingest(store, input, { now = new Date() } = {}) {
  * this function refuses to infer absence at all, because a webhook that never
  * arrived looks exactly like one that was never sent.
  */
-function reconcile(store, { source, observed = [], scope = 'membership', now = new Date(), actor = 'reconciler' } = {}) {
+/**
+ * `applyAbsence` exists because absence is the dangerous half of a snapshot.
+ *
+ * A snapshot says two things: these exist, and — by omission — the rest do not.
+ * The first is safe under any circumstances. The second is only true if the
+ * snapshot is COMPLETE, and a paginated fetch that returns a short page for a
+ * transient reason produces a snapshot that looks complete and is not.
+ *
+ * That is not hypothetical: a live member's Diamond membership was assigned at
+ * 20:56 from a snapshot that saw all three of her subscriptions, and cancelled
+ * at 21:12 as "absent" while the subscription was, and still is, active in GHL.
+ * A truncated read cancelled a paying member.
+ *
+ * So the caller may withhold the absence pass when it cannot vouch for the
+ * snapshot. Presences still apply — being told somebody exists is never unsafe.
+ */
+/**
+ * Do these describe the same membership?
+ *
+ * Compared on the fields that decide access — tier, status, cycle, end date —
+ * and not on timestamps a re-run naturally regenerates. Two records that differ
+ * only in when they were written are the same fact.
+ */
+function sameMembership(a, b) {
+  if (!a || !b) return false;
+  return a.key === b.key
+    && a.status === b.status
+    && (a.billing_cycle || null) === (b.billing_cycle || null)
+    && (a.ends_at || null) === (b.ends_at || null);
+}
+
+function reconcile(store, { source, observed = [], scope = 'membership', now = new Date(), actor = 'reconciler', applyAbsence = true } = {}) {
   const registered = getSource(store, source);
   if (!registered) return { ok: false, reason: 'unknown_source' };
   if (registered.state === 'disabled') return { ok: false, reason: 'source_disabled' };
@@ -456,9 +510,11 @@ function reconcile(store, { source, observed = [], scope = 'membership', now = n
     results.push(outcome);
   }
 
-  // absence — only within the scope this sweep actually covered
+  // absence — only within the scope this sweep actually covered, and only when
+  // the caller can vouch for the snapshot being complete.
   const absences = [];
   for (const [contactId, record] of Object.entries(store.contacts || {})) {
+    if (!applyAbsence) break;
     if (present.has(contactId)) continue;
     if (scope !== 'membership') continue;
     const membership = record.membership;

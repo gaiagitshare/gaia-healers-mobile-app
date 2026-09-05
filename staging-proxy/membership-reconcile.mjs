@@ -96,9 +96,35 @@ const sourceState = DRY_RUN ? 'shadow' : 'active';
 const promoted = setSourceState(store, 'ghl_membership', sourceState);
 if (!promoted.ok) throw new Error(`Cannot set GHL membership source: ${promoted.reason}`);
 
-const run = sweep(store, subscriptions, { now: new Date(), source: 'ghl_membership' });
+// Can this snapshot be trusted to say who is ABSENT?
+//
+// Presence is always safe. Absence is only true if the fetch was complete, and
+// a paginated read that returns a short page for a transient reason produces a
+// snapshot that looks complete and is not. That has already cost a paying
+// member her Diamond membership: assigned at 20:56 from a full snapshot,
+// cancelled at 21:12 as "absent", subscription active in GHL throughout.
+//
+// So the previous good size is remembered, and a snapshot that has lost a
+// meaningful share of it applies its presences and withholds its absences. The
+// run is marked so the shortfall raises an alert rather than passing silently.
+const SNAPSHOT_FLOOR = 0.8;
+const prevCount = Number(store.sources?.ghl_membership?.lastSnapshotSize || 0);
+const applyAbsence = !prevCount || subscriptions.length >= Math.floor(prevCount * SNAPSHOT_FLOOR);
+if (!applyAbsence) {
+  console.warn('[Gaia Membership] snapshot short — absences withheld', JSON.stringify({
+    fetched: subscriptions.length, previous: prevCount, floor: SNAPSHOT_FLOOR,
+  }));
+}
+
+const run = sweep(store, subscriptions, { now: new Date(), source: 'ghl_membership', applyAbsence });
 if (!run.ok) throw new Error(`Membership sweep failed: ${run.reason}`);
-noteRun(store, 'ghl_membership', DRY_RUN ? 'shadow_ok' : 'active_ok');
+// Only a snapshot we were willing to act on in full updates the benchmark.
+if (applyAbsence) {
+  store.sources = store.sources || {};
+  store.sources.ghl_membership = store.sources.ghl_membership || {};
+  store.sources.ghl_membership.lastSnapshotSize = subscriptions.length;
+}
+noteRun(store, 'ghl_membership', DRY_RUN ? 'shadow_ok' : (applyAbsence ? 'active_ok' : 'active_partial'));
 
 const terminal = [...run.results, ...run.absenceResults];
 const summary = {

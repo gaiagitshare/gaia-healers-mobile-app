@@ -5,6 +5,7 @@ import {
     TableHead, TableRow, TableSortLabel, Paper, Dialog, DialogTitle, DialogContent, DialogActions,
     TextField, IconButton, Chip, Alert, Checkbox, FormControlLabel, InputAdornment,
     MenuItem, Snackbar, Stack, CircularProgress, Divider, useMediaQuery, useTheme,
+    Menu, ListItemIcon, ListItemText, Popover, Collapse,
 } from '@mui/material';
 import {
     Print as PrintIcon,
@@ -12,6 +13,8 @@ import {
     UploadFile as UploadFileIcon, Edit as EditIcon, Search as SearchIcon, Clear as ClearIcon,
     ManageAccounts as ManageIcon, OpenInNew as OpenInNewIcon,
     InfoOutlined as InfoOutlinedIcon,
+    MoreVert as MoreVertIcon, FilterList as FilterListIcon,
+    ExpandMore as ExpandMoreIcon, ExpandLess as ExpandLessIcon,
 } from '@mui/icons-material';
 import { QRCodeSVG } from 'qrcode.react';
 import {
@@ -64,7 +67,12 @@ function Attendees({ timezone }) {
     const [metrics, setMetrics] = useState(null);
     const [showMetrics, setShowMetrics] = useState(false);
     const [showDoor, setShowDoor] = useState(false);
-    const [showUnmapped, setShowUnmapped] = useState(true);
+    // Analytics and the unmapped-sales review are closed by default: the working
+    // page is the list of people, not the reporting.
+    const [showUnmapped, setShowUnmapped] = useState(false);
+    const [showAnalytics, setShowAnalytics] = useState(false);
+    const [moreAnchor, setMoreAnchor] = useState(null);      // "More filters" popover
+    const [rowMenu, setRowMenu] = useState(null);            // { el, attendee } row overflow
     const [sortBy, setSortBy] = useState('');
     const [sortDir, setSortDir] = useState('asc');
     const [fFunnel, setFFunnel] = useState('');
@@ -269,15 +277,27 @@ function Attendees({ timezone }) {
         } catch (error) { console.error('Failed to render label:', error); }
     };
 
+    // One visible action. Everything the six icons used to do is still here,
+    // named, behind the overflow — same handlers, same confirmation on delete.
     const rowActions = (attendee) => (
-        <>
-            <IconButton size="small" onClick={() => openManage(attendee)} aria-label="Manage / view"><ManageIcon /></IconButton>
-            <IconButton size="small" onClick={() => showQR(attendee)} aria-label="Show QR code"><QrCodeIcon /></IconButton>
-            <IconButton size="small" onClick={() => openEdit(attendee)} aria-label="Edit attendee"><EditIcon /></IconButton>
-            <IconButton size="small" onClick={() => downloadBadge(attendee)} aria-label="Download badge"><BadgeIcon /></IconButton>
-            <IconButton size="small" onClick={() => openLabel(attendee)} aria-label="Badge sticker (name + QR)" title="Badge sticker (name + QR)"><PrintIcon /></IconButton>
-            <IconButton size="small" color="error" onClick={() => setConfirmDelete(attendee)} aria-label="Delete attendee"><DeleteIcon /></IconButton>
-        </>
+        <Box display="flex" alignItems="center" gap={0.5} sx={{ justifyContent: 'flex-end' }}>
+            <Button size="small" variant="outlined" startIcon={<ManageIcon fontSize="small" />}
+                onClick={() => openManage(attendee)} sx={{ textTransform: 'none', py: 0.1 }}>
+                Manage
+            </Button>
+            <IconButton size="small" aria-label={`More actions for ${displayName(attendee)}`}
+                onClick={(e) => setRowMenu({ el: e.currentTarget, attendee })}>
+                <MoreVertIcon fontSize="small" />
+            </IconButton>
+        </Box>
+    );
+
+    // The overflow itself, rendered once rather than per row.
+    const rowMenuItem = (icon, label, run, extra = {}) => (
+        <MenuItem onClick={() => { const a = rowMenu?.attendee; setRowMenu(null); if (a) run(a); }} {...extra}>
+            <ListItemIcon>{icon}</ListItemIcon>
+            <ListItemText>{label}</ListItemText>
+        </MenuItem>
     );
 
     const applyFilters = (list) => list.filter((a) => {
@@ -327,11 +347,13 @@ function Attendees({ timezone }) {
             return <Chip size="small" variant="outlined" label={sourceOf(a) || 'Not captured'} />;
         }
         return (
-            <Box sx={{ minWidth: 170 }}>
-                <Typography variant="body2" sx={{ fontWeight: 600, lineHeight: 1.25 }}>
+            <Box sx={{ minWidth: 170, maxWidth: 230 }}>
+                <Typography variant="body2" noWrap sx={{ fontWeight: 600, lineHeight: 1.25 }}
+                    title={a.acq_funnel_name || 'Not captured'}>
                     {a.acq_funnel_name || 'Not captured'}
                 </Typography>
-                <Typography variant="caption" color="text.secondary" display="block">
+                <Typography variant="caption" color="text.secondary" display="block" noWrap
+                    title={`${a.acq_domain || 'Not captured'}${a.acq_page_name ? ` · ${a.acq_page_name}` : ''}`}>
                     {a.acq_domain || 'Not captured'}{a.acq_page_name ? ` · ${a.acq_page_name}` : ''}
                 </Typography>
 
@@ -390,86 +412,293 @@ function Attendees({ timezone }) {
         else { setSortBy(key); setSortDir(key === 'purchased' || key === 'last' ? 'desc' : 'asc'); }
     };
     const uniq = (key) => Array.from(new Set((attendees || []).map((a) => a[key]).filter(Boolean))).sort();
-    const anyFilter = fCheck || fStatus || fBase || fAddon;
+    const anyFilter = Boolean(fCheck || fStatus || fBase || fAddon || fFunnel || fDomain
+        || fUtm || fPage || fSource || fProduct || fFrom || fTo);
     const addonCodes = counts ? Object.keys(counts.by_addon || {}) : [];
 
-    const countChip = (label, value, color) => (
-        <Chip size="small" color={color} variant={color ? 'filled' : 'outlined'}
-            label={<span><strong>{value}</strong> {label}</span>} sx={{ mr: 0.5, mb: 0.5 }} />
-    );
+    // The header line. Base tickets and add-ons stay separate figures, because
+    // an add-on is not a seat and never has been.
+    const ticketSummary = counts
+        ? Object.entries(counts.by_base_ticket || {}).map(([k, v]) => `${k} ${v}`).join(' \u00b7 ') : '';
+    const addonSummary = counts
+        ? Object.entries(counts.by_addon || {}).map(([k, v]) => `${k.replace(/_/g, ' ').toLowerCase()} ${v}`).join(' \u00b7 ') : '';
+    const lifecycleSummary = counts
+        ? Object.entries(counts.by_status || {})
+            .filter(([k]) => ['refunded', 'revoked', 'cancelled'].includes(k))
+            .map(([k, v]) => `${v} ${k}`).join(' \u00b7 ') : '';
+
+    // Three filters stay on the toolbar; the rest sit behind "More filters".
+    // Each active one gets a chip you can take off, so a filtered list can
+    // never look like the whole room.
+    const ticketName = (code) => (ticketTypes.find((t) => t.code === code) || {}).name || code;
+    const moreFilterDefs = [
+        ['Add-on', fAddon ? fAddon.replace(/_/g, ' ').toLowerCase() : '', () => setFAddon('')],
+        ['Funnel', fFunnel, () => setFFunnel('')],
+        ['Website', fDomain, () => setFDomain('')],
+        ['Product', fProduct, () => setFProduct('')],
+        ['Page', fPage, () => setFPage('')],
+        ['Source', fSource, () => setFSource('')],
+        ['UTM', fUtm, () => setFUtm('')],
+        ['Bought from', fFrom, () => setFFrom('')],
+        ['Bought to', fTo, () => setFTo('')],
+    ];
+    const moreCount = moreFilterDefs.filter((f) => f[1]).length;
+    const activeFilters = [
+        ['Checked in', fCheck ? (fCheck === 'in' ? 'yes' : 'no') : '', () => setFCheck('')],
+        ['Status', fStatus ? (STATUS_LABELS[fStatus] || fStatus) : '', () => setFStatus('')],
+        ['Ticket', fBase ? ticketName(fBase) : '', () => setFBase('')],
+        ...moreFilterDefs,
+    ].filter((f) => f[1]);
+    const clearMoreFilters = () => {
+        setFAddon(''); setFFunnel(''); setFDomain(''); setFProduct('');
+        setFPage(''); setFSource(''); setFUtm(''); setFFrom(''); setFTo('');
+    };
+    const clearAllFilters = () => { setFCheck(''); setFStatus(''); setFBase(''); clearMoreFilters(); };
+
+    // One summary line for the whole reporting section, so the numbers are
+    // visible without opening it. Each figure still comes from its own source.
+    const salesSummary = [
+        report ? `${report.attendees} attendees` : null,
+        report ? `${report.purchases} purchases` : null,
+        report ? `$${Math.round(report.gross_revenue).toLocaleString()} gross` : null,
+        metrics ? `${metrics.seats.unassigned_paid_seats} unassigned paid seats` : null,
+        door && door.walk_ins && door.walk_ins.total ? `${door.walk_ins.total} walk-ins` : null,
+    ].filter(Boolean).join(' \u00b7 ');
+
 
     return (
         <Box>
-            <Box display="flex" justifyContent="space-between" alignItems={{ xs: 'stretch', sm: 'center' }} flexDirection={{ xs: 'column', sm: 'row' }} gap={1} mb={2}>
-                <Typography variant="h4">Attendees</Typography>
-                <Box display="flex" gap={1} flexDirection={{ xs: 'column', sm: 'row' }}>
-                    <Button variant="outlined" startIcon={<UploadFileIcon />} onClick={() => setOpenImportDialog(true)}>Bulk Import CSV</Button>
-                    <Button variant="outlined" onClick={handleExport}>Export CSV</Button>
-                    <Button variant="contained" startIcon={<AddIcon />} onClick={() => setOpenDialog(true)}>Add Attendee</Button>
+            {/* Who is in the room, in one line. The detail behind each number
+                lives in Acquisition & Sales Insights, not up here. */}
+            <Box display="flex" justifyContent="space-between" alignItems={{ xs: 'stretch', sm: 'flex-start' }}
+                flexDirection={{ xs: 'column', sm: 'row' }} gap={1} mb={1.5}>
+                <Box sx={{ minWidth: 0 }}>
+                    <Typography variant="h5" sx={{ fontWeight: 600 }}>Attendees</Typography>
+                    {counts && (
+                        <>
+                            <Typography variant="body2" color="text.secondary" sx={{ mt: 0.25 }}>
+                                <Box component="span" sx={{ color: 'text.primary', fontWeight: 600 }}>{counts.total}</Box> attendees
+                                {' · '}
+                                <Box component="span" sx={{ color: 'success.main', fontWeight: 600 }}>{counts.checked_in}</Box> checked in
+                                {' · '}{counts.not_checked_in} not in
+                                {lifecycleSummary && (
+                                    <Box component="span" sx={{ color: 'error.main' }}>{' · '}{lifecycleSummary}</Box>
+                                )}
+                            </Typography>
+                            {(ticketSummary || addonSummary) && (
+                                <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>
+                                    {ticketSummary}
+                                    {addonSummary && <> &nbsp;|&nbsp; add-ons (counted separately): {addonSummary}</>}
+                                </Typography>
+                            )}
+                        </>
+                    )}
+                </Box>
+                <Box display="flex" gap={1} flexDirection={{ xs: 'column', sm: 'row' }} sx={{ flexShrink: 0 }}>
+                    <Button size="small" variant="outlined" startIcon={<UploadFileIcon />} onClick={() => setOpenImportDialog(true)}>Bulk Import CSV</Button>
+                    <Button size="small" variant="outlined" onClick={handleExport}>Export CSV</Button>
+                    <Button size="small" variant="contained" startIcon={<AddIcon />} onClick={() => setOpenDialog(true)}>Add Attendee</Button>
                 </Box>
             </Box>
 
-            {/* Operational counts — base tickets and add-ons counted SEPARATELY. */}
-            {counts && (
-            <Paper variant="outlined" sx={{ p: 1.5, mb: 2 }}>
-                    <Box sx={{ mb: 0.5 }}>
-                        {countChip('total', counts.total)}
-                        {countChip('checked in', counts.checked_in, 'success')}
-                        {countChip('not in', counts.not_checked_in)}
-                    </Box>
-                    <Typography variant="caption" color="text.secondary">Base tickets</Typography>
-                    <Box sx={{ mb: 0.5 }}>
-                        {Object.entries(counts.by_base_ticket || {}).map(([k, v]) => <span key={k}>{countChip(k, v, 'primary')}</span>)}
-                    </Box>
-                    {addonCodes.length > 0 && (
-                        <>
-                            <Typography variant="caption" color="text.secondary">Add-ons (counted independently, not folded into a tier)</Typography>
-                            <Box sx={{ mb: 0.5 }}>
-                                {Object.entries(counts.by_addon || {}).map(([k, v]) => <span key={k}>{countChip(k.replace(/_/g, ' ').toLowerCase(), v, 'success')}</span>)}
-                            </Box>
-                        </>
-                    )}
-                    {Object.entries(counts.by_status || {}).some(([k]) => ['refunded', 'revoked', 'cancelled'].includes(k)) && (
-                        <Box>
-                            {Object.entries(counts.by_status || {}).filter(([k]) => ['refunded', 'revoked', 'cancelled'].includes(k)).map(([k, v]) => <span key={k}>{countChip(k, v, 'error')}</span>)}
-                        </Box>
-                    )}
-                </Paper>
-            )}
-
-            <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1} sx={{ mb: 1 }}>
-                <TextField fullWidth size="small" placeholder="Search this event by name, email, phone or QR" value={query} onChange={(e) => setQuery(e.target.value)}
-                    InputProps={{
-                        startAdornment: <InputAdornment position="start">{searching ? <CircularProgress size={18} /> : <SearchIcon fontSize="small" />}</InputAdornment>,
-                        endAdornment: query ? <InputAdornment position="end"><IconButton size="small" onClick={() => setQuery('')} aria-label="Clear search"><ClearIcon fontSize="small" /></IconButton></InputAdornment> : null,
-                    }} />
-            </Stack>
-            <Stack direction="row" spacing={1} sx={{ mb: 2 }} flexWrap="wrap" useFlexGap>
-                <TextField select size="small" label="Checked in" value={fCheck} onChange={(e) => setFCheck(e.target.value)} sx={{ minWidth: 130 }}>
-                    <MenuItem value="">Any</MenuItem><MenuItem value="in">Checked in</MenuItem><MenuItem value="out">Not checked in</MenuItem>
-                </TextField>
-                <TextField select size="small" label="Status" value={fStatus} onChange={(e) => setFStatus(e.target.value)} sx={{ minWidth: 130 }}>
-                    <MenuItem value="">Any</MenuItem><MenuItem value="active">Active</MenuItem><MenuItem value="refunded">Refunded</MenuItem><MenuItem value="revoked">Revoked</MenuItem><MenuItem value="cancelled">Cancelled</MenuItem>
-                </TextField>
-                <TextField select size="small" label="Base ticket" value={fBase} onChange={(e) => setFBase(e.target.value)} sx={{ minWidth: 150 }}>
-                    <MenuItem value="">Any</MenuItem>
-                    {ticketTypes.map((t) => <MenuItem key={t.id} value={t.code}>{t.name}</MenuItem>)}
-                </TextField>
-                {addonCodes.length > 0 && (
-                    <TextField select size="small" label="Add-on" value={fAddon} onChange={(e) => setFAddon(e.target.value)} sx={{ minWidth: 160 }}>
-                        <MenuItem value="">Any</MenuItem>
-                        {addonCodes.map((c) => <MenuItem key={c} value={c}>{c.replace(/_/g, ' ').toLowerCase()}</MenuItem>)}
-                    </TextField>
+            {/* The working toolbar. It stays put while the list scrolls, because
+                finding one person is what this page is for. */}
+            <Paper variant="outlined" sx={{ p: 1, mb: 1.5, position: { md: 'sticky' }, top: 0, zIndex: 3 }}>
+                <Stack direction={{ xs: 'column', md: 'row' }} spacing={1} alignItems={{ md: 'center' }}
+                    flexWrap="wrap" useFlexGap>
+                    <TextField fullWidth size="small" placeholder="Search by name, email, phone or QR" value={query}
+                        onChange={(e) => setQuery(e.target.value)} sx={{ flex: 1, minWidth: { md: 240 } }}
+                        InputProps={{
+                            startAdornment: <InputAdornment position="start">{searching ? <CircularProgress size={18} /> : <SearchIcon fontSize="small" />}</InputAdornment>,
+                            endAdornment: query ? <InputAdornment position="end"><IconButton size="small" onClick={() => setQuery('')} aria-label="Clear search"><ClearIcon fontSize="small" /></IconButton></InputAdornment> : null,
+                        }} />
+                    <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
+                        <TextField select size="small" label="Status" value={fStatus} onChange={(e) => setFStatus(e.target.value)} sx={{ minWidth: 120 }}>
+                            <MenuItem value="">Any</MenuItem><MenuItem value="active">Active</MenuItem><MenuItem value="refunded">Refunded</MenuItem><MenuItem value="revoked">Revoked</MenuItem><MenuItem value="cancelled">Cancelled</MenuItem>
+                        </TextField>
+                        <TextField select size="small" label="Ticket" value={fBase} onChange={(e) => setFBase(e.target.value)} sx={{ minWidth: 140 }}>
+                            <MenuItem value="">Any</MenuItem>
+                            {ticketTypes.map((t) => <MenuItem key={t.id} value={t.code}>{t.name}</MenuItem>)}
+                        </TextField>
+                        <TextField select size="small" label="Checked in" value={fCheck} onChange={(e) => setFCheck(e.target.value)} sx={{ minWidth: 130 }}>
+                            <MenuItem value="">Any</MenuItem><MenuItem value="in">Checked in</MenuItem><MenuItem value="out">Not checked in</MenuItem>
+                        </TextField>
+                        <Button size="small" variant={moreCount ? 'contained' : 'outlined'} color={moreCount ? 'primary' : 'inherit'}
+                            startIcon={<FilterListIcon />} endIcon={<ExpandMoreIcon />}
+                            onClick={(e) => setMoreAnchor(e.currentTarget)} sx={{ textTransform: 'none' }}>
+                            More filters{moreCount ? ` (${moreCount})` : ''}
+                        </Button>
+                    </Stack>
+                </Stack>
+                {(activeFilters.length > 0 || results !== null) && (
+                    <Stack direction="row" spacing={0.5} flexWrap="wrap" useFlexGap alignItems="center" sx={{ mt: 1 }}>
+                        {activeFilters.map((f) => (
+                            <Chip key={f[0]} size="small" label={`${f[0]}: ${f[1]}`} onDelete={f[2]} />
+                        ))}
+                        {activeFilters.length > 0 && <Button size="small" onClick={clearAllFilters}>Clear all</Button>}
+                        <Box sx={{ flexGrow: 1 }} />
+                        <Typography variant="caption" color="text.secondary">
+                            {visible.length === 0 ? 'No match' : `${visible.length} shown of ${attendees.length}`}
+                        </Typography>
+                    </Stack>
                 )}
-                {anyFilter && <Button size="small" onClick={() => { setFCheck(''); setFStatus(''); setFBase(''); setFAddon(''); }}>Clear filters</Button>}
-            </Stack>
+            </Paper>
 
-            {(results !== null || anyFilter) && (
-                <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
-                    {visible.length === 0 ? 'No match.' : `${visible.length} shown of ${attendees.length} attendee${attendees.length === 1 ? '' : 's'}`}
-                </Typography>
+            {/* Everything else you can filter on. Same fields, same predicates —
+                just not eight selects standing between you and the list. */}
+            <Popover open={Boolean(moreAnchor)} anchorEl={moreAnchor} onClose={() => setMoreAnchor(null)}
+                anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }} transformOrigin={{ vertical: 'top', horizontal: 'right' }}>
+                <Box sx={{ p: 2, maxWidth: 560 }}>
+                    <Typography variant="subtitle2" gutterBottom>More filters</Typography>
+                    <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
+                        {addonCodes.length > 0 && (
+                            <TextField select size="small" label="Add-on" value={fAddon} onChange={(e) => setFAddon(e.target.value)} sx={{ minWidth: 165 }}>
+                                <MenuItem value="">Any</MenuItem>
+                                {addonCodes.map((c) => <MenuItem key={c} value={c}>{c.replace(/_/g, ' ').toLowerCase()}</MenuItem>)}
+                            </TextField>
+                        )}
+                        <TextField select size="small" label="Funnel" value={fFunnel} onChange={(e) => setFFunnel(e.target.value)} sx={{ minWidth: 210 }}>
+                            <MenuItem value="">All funnels</MenuItem>
+                            {uniq('acq_funnel_name').map((v) => <MenuItem key={v} value={v}>{v}</MenuItem>)}
+                        </TextField>
+                        <TextField select size="small" label="Website / page" value={fDomain} onChange={(e) => setFDomain(e.target.value)} sx={{ minWidth: 200 }}>
+                            <MenuItem value="">All websites</MenuItem>
+                            {uniq('acq_domain').map((v) => <MenuItem key={v} value={v}>{v}</MenuItem>)}
+                        </TextField>
+                        <TextField select size="small" label="Product" value={fProduct} onChange={(e) => setFProduct(e.target.value)} sx={{ minWidth: 210 }}>
+                            <MenuItem value="">All products</MenuItem>
+                            {uniq('acq_product_name').map((v) => <MenuItem key={v} value={v}>{v}</MenuItem>)}
+                        </TextField>
+                        <TextField select size="small" label="Page bought on" value={fPage} onChange={(e) => setFPage(e.target.value)} sx={{ minWidth: 175 }}>
+                            <MenuItem value="">All pages</MenuItem>
+                            {uniq('acq_page_name').map((v) => <MenuItem key={v} value={v}>{v}</MenuItem>)}
+                        </TextField>
+                        <TextField select size="small" label="Acquisition source" value={fSource} onChange={(e) => setFSource(e.target.value)} sx={{ minWidth: 175 }}>
+                            <MenuItem value="">Anywhere</MenuItem>
+                            {uniq('acq_source_value').map((v) => <MenuItem key={v} value={v}>{v}</MenuItem>)}
+                        </TextField>
+                        <TextField select size="small" label="UTM source" value={fUtm} onChange={(e) => setFUtm(e.target.value)} sx={{ minWidth: 150 }}>
+                            <MenuItem value="">Any</MenuItem>
+                            {uniq('acq_utm_source').map((v) => <MenuItem key={v} value={v}>{v}</MenuItem>)}
+                        </TextField>
+                        <TextField size="small" type="date" label="Bought from" InputLabelProps={{ shrink: true }}
+                            value={fFrom} onChange={(e) => setFFrom(e.target.value)} sx={{ minWidth: 155 }} />
+                        <TextField size="small" type="date" label="Bought to" InputLabelProps={{ shrink: true }}
+                            value={fTo} onChange={(e) => setFTo(e.target.value)} sx={{ minWidth: 155 }} />
+                    </Stack>
+                    <Box display="flex" justifyContent="space-between" alignItems="center" sx={{ mt: 1.5 }}>
+                        <Typography variant="caption" color="text.secondary">
+                            Showing {visible.length} of {(results !== null ? results : attendees).length}
+                        </Typography>
+                        <Box>
+                            {moreCount > 0 && <Button size="small" onClick={clearMoreFilters}>Clear these</Button>}
+                            <Button size="small" onClick={() => setMoreAnchor(null)}>Done</Button>
+                        </Box>
+                    </Box>
+                </Box>
+            </Popover>
+
+            {/* Somebody paid for something we do not recognise as a ticket. It is
+                never converted automatically — a product becomes access only when
+                a human maps it. */}
+            {unmapped && unmapped.pending > 0 && (
+                <Alert severity="warning" sx={{ mb: 1.5, py: 0, alignItems: 'center' }}
+                    action={<Button size="small" onClick={() => setShowUnmapped(!showUnmapped)}>
+                        {showUnmapped ? 'Hide' : `Review ${unmapped.pending} \u2192`}</Button>}>
+                    <strong>{unmapped.pending} unmapped event {unmapped.pending === 1 ? 'sale' : 'sales'}</strong>
+                    {' \u2014 '}paid, but the product is not mapped to a ticket, so no attendee or badge was created.
+                    {showUnmapped && (
+                        <Table size="small" sx={{ mt: 1.5 }}>
+                            <TableHead>
+                                <TableRow>
+                                    <TableCell>Paid</TableCell><TableCell>Buyer</TableCell>
+                                    <TableCell>Product (immutable id)</TableCell>
+                                    <TableCell align="right">Qty</TableCell><TableCell align="right">Amount</TableCell>
+                                    <TableCell>Source</TableCell><TableCell></TableCell>
+                                </TableRow>
+                            </TableHead>
+                            <TableBody>
+                                {unmapped.items.map((u) => (
+                                    <TableRow key={u.id}>
+                                        <TableCell sx={{ whiteSpace: 'nowrap' }}>{String(u.paid_at || '').slice(0, 10)}</TableCell>
+                                        <TableCell>
+                                            {u.buyer_name || '—'}
+                                            <Typography variant="caption" color="text.secondary" display="block">{u.buyer_email}</Typography>
+                                            {u.already_an_attendee && <Chip size="small" label="already an attendee" sx={{ mt: 0.5 }} />}
+                                        </TableCell>
+                                        <TableCell>
+                                            {u.product_name || '—'}
+                                            <Typography variant="caption" color="text.secondary" display="block" sx={{ fontFamily: 'monospace' }}>
+                                                {u.product_id}
+                                            </Typography>
+                                        </TableCell>
+                                        <TableCell align="right">{u.quantity}</TableCell>
+                                        <TableCell align="right">${Math.round(u.amount || 0)}</TableCell>
+                                        <TableCell>{u.source === 'ghl_invoice' ? 'Invoice' : 'Order'}</TableCell>
+                                        <TableCell align="right" sx={{ whiteSpace: 'nowrap' }}>
+                                            <Button size="small" variant="outlined"
+                                                onClick={() => setMapTarget({ id: u.product_id, name: u.product_name })}>
+                                                Map &amp; Reconcile
+                                            </Button>
+                                            <Button size="small" onClick={async () => {
+                                                await dismissUnmappedSale(eventId, u.id);
+                                                const r = await getUnmappedSales(eventId); setUnmapped(r.data);
+                                            }}>Not a ticket</Button>
+                                        </TableCell>
+                                    </TableRow>
+                                ))}
+                            </TableBody>
+                        </Table>
+                    )}
+                    {showUnmapped && (
+                        <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 1 }}>
+                            Map &amp; Reconcile shows you what it would create before it creates anything. Nothing
+                            is created from a product name alone.
+                            {unmapped.unrelated_hidden > 0 && (
+                                <> {unmapped.unrelated_hidden} other unmapped {unmapped.unrelated_hidden === 1 ? 'sale is' : 'sales are'}{' '}
+                                not event products (Bio-Well, Healeex, CRM, sponsorships) and are kept out of this
+                                panel. They are still recorded.</>
+                            )}
+                        </Typography>
+                    )}
+                </Alert>
             )}
 
+            <MapReconcile
+                eventId={eventId}
+                open={!!mapTarget}
+                productId={mapTarget?.id}
+                productName={mapTarget?.name}
+                onClose={() => setMapTarget(null)}
+                onDone={async () => {
+                    const [u, m] = await Promise.all([getUnmappedSales(eventId), getTicketMetrics(eventId)]);
+                    setUnmapped(u.data); setMetrics(m.data);
+                    if (typeof loadAttendees === 'function') loadAttendees();
+                }}
+            />
+
+            {/* Analytics, in one place and closed by default. Every figure below
+                still comes from its own endpoint — they are grouped, not merged. */}
+            {(report || metrics || door) && (
+                <Paper variant="outlined" sx={{ p: 1.5, mb: 2 }}>
+                    <Box display="flex" alignItems="center" justifyContent="space-between" gap={1} flexWrap="wrap">
+                        <Box sx={{ minWidth: 0 }}>
+                            <Typography variant="subtitle2" sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                                {showAnalytics ? <ExpandLessIcon fontSize="small" /> : <ExpandMoreIcon fontSize="small" />}
+                                Acquisition &amp; Sales Insights
+                            </Typography>
+                            {salesSummary && (
+                                <Typography variant="caption" color="text.secondary" sx={{ display: 'block', pl: 3 }}>
+                                    {salesSummary}
+                                </Typography>
+                            )}
+                        </Box>
+                        <Button size="small" onClick={() => setShowAnalytics(!showAnalytics)}>
+                            {showAnalytics ? 'Hide sales details' : 'Sales details \u2192'}
+                        </Button>
+                    </Box>
+                    <Collapse in={showAnalytics} unmountOnExit>
+                        <Box sx={{ mt: 1.5 }}>
                 {report && (
                 <Paper variant="outlined" sx={{ p: 1.5, mb: 2 }}>
                     <Box display="flex" alignItems="center" justifyContent="space-between" gap={2} flexWrap="wrap">
@@ -485,7 +714,7 @@ function Attendees({ timezone }) {
                                 </Typography></Box>
                         </Box>
                         <Button size="small" onClick={() => setShowReport(!showReport)}>
-                            {showReport ? 'Hide breakdown' : 'Sales & acquisition'}
+                            {showReport ? 'Hide breakdown' : 'Breakdown'}
                         </Button>
                     </Box>
                     {showReport && (
@@ -567,84 +796,6 @@ function Attendees({ timezone }) {
                     )}
                 </Paper>
             )}
-
-            {/* Somebody paid for something we do not recognise as a ticket. It is
-                never converted automatically — a product becomes access only when
-                a human maps it. */}
-            {unmapped && unmapped.pending > 0 && (
-                <Alert severity="warning" sx={{ mb: 2 }}
-                    action={<Button size="small" onClick={() => setShowUnmapped(!showUnmapped)}>
-                        {showUnmapped ? 'Hide' : 'Review'}</Button>}>
-                    <strong>Unmapped event sales — review required.</strong>{' '}
-                    {unmapped.pending} paid {unmapped.pending === 1 ? 'purchase has' : 'purchases have'} a product
-                    that is not mapped to any ticket, so no attendee or badge was created.
-                    {showUnmapped && (
-                        <Table size="small" sx={{ mt: 1.5 }}>
-                            <TableHead>
-                                <TableRow>
-                                    <TableCell>Paid</TableCell><TableCell>Buyer</TableCell>
-                                    <TableCell>Product (immutable id)</TableCell>
-                                    <TableCell align="right">Qty</TableCell><TableCell align="right">Amount</TableCell>
-                                    <TableCell>Source</TableCell><TableCell></TableCell>
-                                </TableRow>
-                            </TableHead>
-                            <TableBody>
-                                {unmapped.items.map((u) => (
-                                    <TableRow key={u.id}>
-                                        <TableCell sx={{ whiteSpace: 'nowrap' }}>{String(u.paid_at || '').slice(0, 10)}</TableCell>
-                                        <TableCell>
-                                            {u.buyer_name || '—'}
-                                            <Typography variant="caption" color="text.secondary" display="block">{u.buyer_email}</Typography>
-                                            {u.already_an_attendee && <Chip size="small" label="already an attendee" sx={{ mt: 0.5 }} />}
-                                        </TableCell>
-                                        <TableCell>
-                                            {u.product_name || '—'}
-                                            <Typography variant="caption" color="text.secondary" display="block" sx={{ fontFamily: 'monospace' }}>
-                                                {u.product_id}
-                                            </Typography>
-                                        </TableCell>
-                                        <TableCell align="right">{u.quantity}</TableCell>
-                                        <TableCell align="right">${Math.round(u.amount || 0)}</TableCell>
-                                        <TableCell>{u.source === 'ghl_invoice' ? 'Invoice' : 'Order'}</TableCell>
-                                        <TableCell align="right" sx={{ whiteSpace: 'nowrap' }}>
-                                            <Button size="small" variant="outlined"
-                                                onClick={() => setMapTarget({ id: u.product_id, name: u.product_name })}>
-                                                Map &amp; Reconcile
-                                            </Button>
-                                            <Button size="small" onClick={async () => {
-                                                await dismissUnmappedSale(eventId, u.id);
-                                                const r = await getUnmappedSales(eventId); setUnmapped(r.data);
-                                            }}>Not a ticket</Button>
-                                        </TableCell>
-                                    </TableRow>
-                                ))}
-                            </TableBody>
-                        </Table>
-                    )}
-                    <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 1 }}>
-                        Map &amp; Reconcile shows you what it would create before it creates anything. Nothing
-                        is created from a product name alone.
-                        {unmapped.unrelated_hidden > 0 && (
-                            <> {unmapped.unrelated_hidden} other unmapped {unmapped.unrelated_hidden === 1 ? 'sale is' : 'sales are'}{' '}
-                            not event products (Bio-Well, Healeex, CRM, sponsorships) and are kept out of this
-                            panel. They are still recorded.</>
-                        )}
-                    </Typography>
-                </Alert>
-            )}
-
-            <MapReconcile
-                eventId={eventId}
-                open={!!mapTarget}
-                productId={mapTarget?.id}
-                productName={mapTarget?.name}
-                onClose={() => setMapTarget(null)}
-                onDone={async () => {
-                    const [u, m] = await Promise.all([getUnmappedSales(eventId), getTicketMetrics(eventId)]);
-                    setUnmapped(u.data); setMetrics(m.data);
-                    if (typeof loadAttendees === 'function') loadAttendees();
-                }}
-            />
 
             {/* Deliberately not one number called "purchases". An upgrade is
                 revenue and a tier change; counting it as a ticket is what made
@@ -795,49 +946,10 @@ function Attendees({ timezone }) {
                 </Paper>
             )}
 
-            <Paper variant="outlined" sx={{ p: 1.5, mb: 2 }}>
-                <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 1 }}>
-                    Filter by acquisition
-                </Typography>
-                <Stack direction={{ xs: 'column', md: 'row' }} spacing={1} flexWrap="wrap" useFlexGap>
-                    <TextField select size="small" label="Funnel" value={fFunnel} onChange={(e) => setFFunnel(e.target.value)} sx={{ minWidth: 210 }}>
-                        <MenuItem value="">All funnels</MenuItem>
-                        {uniq('acq_funnel_name').map((v) => <MenuItem key={v} value={v}>{v}</MenuItem>)}
-                    </TextField>
-                    <TextField select size="small" label="Website / page" value={fDomain} onChange={(e) => setFDomain(e.target.value)} sx={{ minWidth: 200 }}>
-                        <MenuItem value="">All websites</MenuItem>
-                        {uniq('acq_domain').map((v) => <MenuItem key={v} value={v}>{v}</MenuItem>)}
-                    </TextField>
-                    <TextField select size="small" label="Product" value={fProduct} onChange={(e) => setFProduct(e.target.value)} sx={{ minWidth: 210 }}>
-                        <MenuItem value="">All products</MenuItem>
-                        {uniq('acq_product_name').map((v) => <MenuItem key={v} value={v}>{v}</MenuItem>)}
-                    </TextField>
-                    <TextField select size="small" label="Page bought on" value={fPage} onChange={(e) => setFPage(e.target.value)} sx={{ minWidth: 175 }}>
-                        <MenuItem value="">All pages</MenuItem>
-                        {uniq('acq_page_name').map((v) => <MenuItem key={v} value={v}>{v}</MenuItem>)}
-                    </TextField>
-                    <TextField select size="small" label="Acquisition source" value={fSource} onChange={(e) => setFSource(e.target.value)} sx={{ minWidth: 175 }}>
-                        <MenuItem value="">Anywhere</MenuItem>
-                        {uniq('acq_source_value').map((v) => <MenuItem key={v} value={v}>{v}</MenuItem>)}
-                    </TextField>
-                    <TextField select size="small" label="UTM source" value={fUtm} onChange={(e) => setFUtm(e.target.value)} sx={{ minWidth: 150 }}>
-                        <MenuItem value="">Any</MenuItem>
-                        {uniq('acq_utm_source').map((v) => <MenuItem key={v} value={v}>{v}</MenuItem>)}
-                    </TextField>
-                    <TextField size="small" type="date" label="Bought from" InputLabelProps={{ shrink: true }}
-                        value={fFrom} onChange={(e) => setFFrom(e.target.value)} sx={{ minWidth: 155 }} />
-                    <TextField size="small" type="date" label="Bought to" InputLabelProps={{ shrink: true }}
-                        value={fTo} onChange={(e) => setFTo(e.target.value)} sx={{ minWidth: 155 }} />
-                    {(fFunnel || fDomain || fProduct || fUtm || fPage || fSource || fFrom || fTo) ? (
-                        <Button size="small" onClick={() => { setFFunnel(''); setFDomain(''); setFProduct(''); setFUtm(''); setFPage(''); setFSource(''); setFFrom(''); setFTo(''); }}>
-                            Clear
-                        </Button>
-                    ) : null}
-                </Stack>
-                <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 1 }}>
-                    Showing {visible.length} of {(results !== null ? results : attendees).length}
-                </Typography>
-            </Paper>
+                        </Box>
+                    </Collapse>
+                </Paper>
+            )}
 
             {visible.length === 0 ? (
                 <Paper variant="outlined" sx={{ p: 4, textAlign: 'center' }}>
@@ -846,7 +958,7 @@ function Attendees({ timezone }) {
                         {(results !== null || anyFilter) ? 'Try a shorter term or clear the filters.' : 'Add one by hand, or bring a list in from CSV.'}
                     </Typography>
                     {(results !== null || anyFilter) ? (
-                        <Button onClick={() => { setQuery(''); setFCheck(''); setFStatus(''); setFBase(''); setFAddon(''); }}>Clear</Button>
+                        <Button onClick={() => { setQuery(''); clearAllFilters(); }}>Clear</Button>
                     ) : (
                         <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1} justifyContent="center">
                             <Button variant="contained" startIcon={<AddIcon />} onClick={() => setOpenDialog(true)}>Add Attendee</Button>
@@ -874,12 +986,11 @@ function Attendees({ timezone }) {
                 </Stack>
             ) : (
                 <TableContainer component={Paper} sx={{ width: '100%', overflowX: 'auto' }}>
-                    <Table sx={{ minWidth: 900 }}>
+                    <Table size="small" sx={{ minWidth: 900, '& td, & th': { py: 0.75 } }}>
                         <TableHead>
                             <TableRow>
-                                <TableCell>Name / Phone</TableCell>
-                                <TableCell>Email</TableCell>
-                                <TableCell>Ticket / Access</TableCell>
+                                <TableCell>Attendee</TableCell>
+                                <TableCell>Ticket</TableCell>
                                 <TableCell>Status</TableCell>
                                 <TableCell sx={{ whiteSpace: 'nowrap' }}>
                                     <TableSortLabel active={sortBy === 'purchased'}
@@ -896,20 +1007,23 @@ function Attendees({ timezone }) {
                                 <TableCell>
                                     <TableSortLabel active={sortBy === 'source'}
                                         direction={sortBy === 'source' ? sortDir : 'asc'}
-                                        onClick={() => toggleSort('source')}>Acquisition source</TableSortLabel>
+                                        onClick={() => toggleSort('source')}>Source</TableSortLabel>
                                 </TableCell>
                                 <TableCell>QR</TableCell>
-                                <TableCell>Actions</TableCell>
+                                <TableCell align="right">Actions</TableCell>
                             </TableRow>
                         </TableHead>
                         <TableBody>
                             {visible.map((attendee) => (
                                 <TableRow key={attendee.id} hover>
-                                    <TableCell>
+                                    <TableCell sx={{ maxWidth: 260 }}>
                                         <Typography variant="body2" sx={{ fontWeight: 600 }}>{attendee.first_name} {attendee.last_name}</Typography>
-                                        {attendee.phone && <Typography variant="caption" color="text.secondary">{attendee.phone}</Typography>}
+                                        <Typography variant="caption" color="text.secondary" noWrap
+                                            sx={{ display: 'block' }}
+                                            title={`${attendee.email}${attendee.phone ? ` \u00b7 ${attendee.phone}` : ''}`}>
+                                            {attendee.email}{attendee.phone ? ` \u00b7 ${attendee.phone}` : ''}
+                                        </Typography>
                                     </TableCell>
-                                    <TableCell sx={{ wordBreak: 'break-all' }}>{attendee.email}</TableCell>
                                     <TableCell>{accessCell(attendee)}</TableCell>
                                     <TableCell>
                                         {statusChip(attendee)}
@@ -923,23 +1037,33 @@ function Attendees({ timezone }) {
                                             </Typography>
                                         )}
                                     </TableCell>
-                                    <TableCell>
-                                        <Box display="flex" alignItems="center" gap={0.5}>
-                                            {acquisitionCell(attendee)}
-                                            <IconButton size="small" title="Purchase & attribution"
-                                                onClick={() => openAcq(attendee)}>
-                                                <InfoOutlinedIcon fontSize="small" />
-                                            </IconButton>
-                                        </Box>
+                                    <TableCell sx={{ cursor: 'pointer' }} onClick={() => openAcq(attendee)}
+                                        title="Purchase & attribution">
+                                        {acquisitionCell(attendee)}
                                     </TableCell>
                                     <TableCell><Typography variant="caption" sx={{ fontFamily: 'monospace' }}>{attendee.qr_code}</Typography></TableCell>
-                                    <TableCell sx={{ whiteSpace: 'nowrap' }}>{rowActions(attendee)}</TableCell>
+                                    <TableCell align="right" sx={{ whiteSpace: 'nowrap' }}>{rowActions(attendee)}</TableCell>
                                 </TableRow>
                             ))}
                         </TableBody>
                     </Table>
                 </TableContainer>
             )}
+
+            {/* The row overflow. Same six actions the icon strip had, named this
+                time, with Delete kept apart and still behind its confirmation. */}
+            <Menu anchorEl={rowMenu?.el} open={Boolean(rowMenu)} onClose={() => setRowMenu(null)}
+                anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
+                transformOrigin={{ vertical: 'top', horizontal: 'right' }}>
+                {rowMenuItem(<QrCodeIcon fontSize="small" />, 'Show QR code', showQR)}
+                {rowMenuItem(<InfoOutlinedIcon fontSize="small" />, 'Purchase & attribution', openAcq)}
+                {rowMenuItem(<EditIcon fontSize="small" />, 'Edit attendee', openEdit)}
+                {rowMenuItem(<BadgeIcon fontSize="small" />, 'Download badge', downloadBadge)}
+                {rowMenuItem(<PrintIcon fontSize="small" />, 'Badge sticker (name + QR)', openLabel)}
+                <Divider />
+                {rowMenuItem(<DeleteIcon fontSize="small" color="error" />, 'Delete attendee',
+                    (a) => setConfirmDelete(a), { sx: { color: 'error.main' } })}
+            </Menu>
 
             {/* Attendee detail / Manage ticket — the operational source of truth. */}
             <Dialog open={Boolean(manage)} onClose={() => setManage(null)} maxWidth="md" fullWidth>

@@ -69,10 +69,10 @@ function Notifications() {
 
     return (
         <Box sx={{ maxWidth: 640 }}>
-            <Typography variant="h4" gutterBottom>Notifications</Typography>
+            <Typography variant="h4" gutterBottom>Push Notifications</Typography>
             <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
                 Send a push notification to attendees who turned on alerts for this event
-                from their ticket. It also appears under Updates unless you turn that off.
+                from their ticket. It also appears under Announcements unless you turn that off.
             </Typography>
 
             <Card>
@@ -164,7 +164,7 @@ function Notifications() {
                                     onChange={(e) => setAlsoAnnounce(e.target.checked)}
                                 />
                             )}
-                            label="Also post to Updates (visible in the app without a push)"
+                            label="Also post to Announcements (visible in the app without a push)"
                         />
 
                         {error && <Alert severity="error">{error}</Alert>}
@@ -181,7 +181,7 @@ function Notifications() {
                                 {result.targeted === 0 && (
                                     <Typography variant="caption" display="block" sx={{ mt: 0.5 }}>
                                         No one has alerts on for this audience yet. It was still
-                                        posted to Updates.
+                                        posted to Announcements.
                                     </Typography>
                                 )}
                             </Alert>

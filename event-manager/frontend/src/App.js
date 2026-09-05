@@ -5,7 +5,8 @@ import CssBaseline from '@mui/material/CssBaseline';
 import Login from './components/Login';
 import Dashboard from './components/Dashboard';
 import EntitlementReview from './components/EntitlementReview';
-import Vendors from './components/Vendors';
+import VendorsRedirect from './components/VendorsRedirect';
+import Payments from './components/Payments';
 import Events from './components/Events';
 import EventDetail from './components/EventDetail';
 import Attendees from './components/Attendees';
@@ -128,7 +129,9 @@ function App() {
                                     
                                     
                                     <Route path="/checkin" element={<CheckIn />} />
-                                    <Route path="/vendors" element={<Vendors />} />
+                                    {/* Retired: Vendors merged into each event's Exhibitors area. */}
+                                    <Route path="/vendors" element={<VendorsRedirect />} />
+                                    <Route path="/payments" element={<Payments />} />
                                     <Route path="/entitlement-review" element={<EntitlementReview />} />
                                     <Route path="/" element={<Navigate to="/dashboard" />} />
                                 </Routes>

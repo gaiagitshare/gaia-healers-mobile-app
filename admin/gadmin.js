@@ -67,6 +67,13 @@
     document.querySelectorAll('[data-nav]').forEach(function (el) { el.onclick = function () { nav(el.dataset.nav); }; });
     var lo = document.getElementById('logout'); if (lo) lo.onclick = doLogout;
     var cp = document.getElementById('changepw'); if (cp) cp.onclick = changePasswordModal;
+    var ab = document.getElementById('alertbtn');
+    if (ab) {
+      ab.onclick = openAlerts;
+      refreshAlertBadge();
+      // The badge has to be right without anybody navigating anywhere.
+      if (!window.__alertPoll) window.__alertPoll = setInterval(refreshAlertBadge, 120000);
+    }
     if (view === 'contacts') mountContacts();
     else if (view === 'surveys') mountSurveys();
     else if (view === 'membership') mountMembership();
@@ -97,6 +104,8 @@
       + item('events', 'Events', 'event')
       + item('system', 'System Map', 'system')
       + '    <div class="nav__sp"></div>'
+      + '    <button class="nav__item alertbtn" id="alertbtn">' + svg('lock', 'nav__ico')
+      + '<span>System Alerts</span><span class="alertbtn__n" id="alertn"></span></button>'
       + '    <div class="nav__item" id="changepw">' + svg('lock', 'nav__ico') + 'Change password</div>'
       + '    <div class="nav__item" id="logout">' + svg('logout', 'nav__ico') + 'Sign out</div>'
       + '    <div class="side__foot">Gaia Healers &middot; live from GHL</div>'
@@ -327,6 +336,12 @@
       + '  <div class="sec-label">' + svg('member') + 'Membership</div>'
       + '  ' + membershipCard(m)
       + billingHistory(m)
+      + '  <div class="sec-label">' + svg('survey') + 'Course access <span class="faint">(' + ((m.courses || []).length) + ' \u2014 granted by purchase, never by tier)</span></div>'
+      + '  ' + coursesCard(m)
+      + '  <div class="sec-label">' + svg('member') + 'Events</div>'
+      + '  ' + attendanceCard(m)
+      + '  <div class="sec-label">' + svg('lock') + 'Membership history</div>'
+      + '  ' + auditCard(m)
       + '  <div class="sec-label">' + svg('tag') + 'Tags <span class="faint">(' + (m.tags || []).length + ')</span></div>'
       + '  <div class="tag-edit" id="tagedit"></div>'
       + (choiceFields.length ? '<div class="sec-label">Survey answers</div><div class="qa">' + choiceFields.map(qa).join('') + '</div>' : '')
@@ -366,7 +381,8 @@
   var sState = { surveys: [], id: '', map: null, loading: false };
   function mountSurveys() {
     var c = document.getElementById('content');
-    c.innerHTML = '<div class="survey-bar"><select class="select" id="ssel"></select><a class="btn btn--ghost" id="editghl" href="https://crm.gaiahealers.com/v2/location/WkKl1K5RuZNQ60xR48k6/survey-builder/main" target="_blank" rel="noopener">' + svg('ext') + ' Edit in GHL</a></div><div id="smap"></div>';
+    c.innerHTML = '<div class="survey-bar"><select class="select" id="ssel"></select><a class="btn btn--ghost" id="editghl" href="https://crm.gaiahealers.com/v2/location/WkKl1K5RuZNQ60xR48k6/survey-builder/main" target="_blank" rel="noopener">' + svg('ext') + ' Edit in GHL</a></div>'
+      + '<div class="scopebox" id="sscope"></div><div id="smap"></div>';
     if (!sState.surveys.length) {
       api('/surveys').then(function (d) {
         sState.surveys = d.surveys || [];
@@ -376,10 +392,32 @@
     } else { fillSel(); if (sState.map) paintMap(); else loadMap(); }
     function fillSel() {
       var sel = document.getElementById('ssel');
-      sel.innerHTML = sState.surveys.map(function (s) { return '<option value="' + esc(s.id) + '"' + (s.id === sState.id ? ' selected' : '') + '>' + esc(s.name || s.id) + '</option>'; }).join('');
-      sel.onchange = function () { sState.id = sel.value; sState.map = null; loadMap(); };
+      var live = sState.surveys.filter(function (s) { return !isArchived(s); });
+      var arch = sState.surveys.filter(isArchived);
+      var opt = function (s) {
+        return '<option value="' + esc(s.id) + '"' + (s.id === sState.id ? ' selected' : '') + '>'
+          + esc(s.name || s.id) + '</option>';
+      };
+      sel.innerHTML = (live.length ? '<optgroup label="Active">' + live.map(opt).join('') + '</optgroup>' : '')
+        + (arch.length ? '<optgroup label="Archived — kept for reference">' + arch.map(opt).join('') + '</optgroup>' : '');
+      sel.onchange = function () { sState.id = sel.value; sState.map = null; paintScope(); loadMap(); };
+      paintScope();
     }
   }
+  function isArchived(s) { return /^\s*archive\b|\barchived\b/i.test(String(s && s.name || '')); }
+  function paintScope() {
+    var box = document.getElementById('sscope'); if (!box) return;
+    var cur = sState.surveys.filter(function (s) { return s.id === sState.id; })[0];
+    var archived = cur && isArchived(cur);
+    box.innerHTML =
+      (archived ? '<div class="scopebox__arch">Archived survey \u2014 shown for reference. It is not collecting responses.</div>' : '')
+      + '<p class="scopebox__p"><b>This page shows the questions, not the answers.</b> '
+      + 'Gaia reads survey definitions from GHL and draws how they branch. Responses stay in GHL: '
+      + 'an individual\u2019s answers appear on their contact record under Contacts, and completion is '
+      + 'visible only where GHL sets a tag. Gaia holds no submission log, no timestamps and no '
+      + 'per-question reporting, so this page cannot say how many people answered a given question.</p>';
+  }
+
   function loadMap() {
     var box = document.getElementById('smap'); box.innerHTML = '<div class="spinner"></div>';
     api('/survey-map?id=' + encodeURIComponent(sState.id)).then(function (d) { sState.map = d; paintMap(); });
@@ -498,33 +536,108 @@
       + (bits.length ? '<span class="faint">' + esc(bits.join(' · ')) + '</span>' : '') + '</div>'
       + (sub.product ? '<div class="bill__prod">' + esc(sub.product) + '</div>' : '') + '</div>';
   }
+  /* Membership, as evidence.
+   *
+   * A verified membership is one the ledger holds with a source and an evidence
+   * id — a subscription, or an operator's own recorded grant. A GHL tier tag is
+   * neither: this location carries 105 ahc-gold-active tags against one paying
+   * Gold subscription, so a tag proves that somebody was once labelled, not that
+   * anybody is being billed. The app's resolver already refuses to promote a
+   * tag-only tier, and this panel refuses in the same way — the tags are shown,
+   * plainly, under their own heading, and never as the tier.
+   */
+  var VERIFIED_SOURCES = { ghl_subscription: 'Live subscription', manual: 'Operator grant', admin: 'Operator grant' };
   function membershipCard(m) {
     var mem = m.membership;
-    var derived = deriveTier(m.tags || []);
-    var tierLabel = mem ? cap(mem.key) : (derived ? derived.label : null);
-    var accKey = mem ? mem.key : (derived ? derived.key : '');
-    var head, cells = [];
-    if (tierLabel) {
-      var status = mem ? cap(mem.status) : derived.status;
-      head = '<span class="mtier">' + esc(tierLabel) + '</span>'
-        + '<span class="mstatus mstatus--' + statusCls(status) + '">' + esc(status) + '</span>'
-        + '<span class="mtag-note">' + (mem ? 'ledger record' : 'by tag') + '</span>';
-      cells.push('<div class="memcell"><small>Program joined</small><b>' + fmtDate((mem && mem.started_at) || m.dateAdded) + '</b></div>');
-      if (mem && (mem.renews_at || mem.ends_at)) {
-        var endLabel = (mem.ends_at && !mem.renews_at) ? 'Ends' : 'Renews';
-        cells.push('<div class="memcell"><small>' + endLabel + '</small><b>' + fmtDate(mem.renews_at || mem.ends_at) + '</b></div>');
-      } else {
-        cells.push('<div class="memcell"><small>Member since</small><b>' + fmtDate(m.dateAdded) + '</b></div>');
-      }
+    var unv = m.unverifiedTierTags || [];
+    var out = '';
+
+    if (mem) {
+      var srcLabel = VERIFIED_SOURCES[mem.source] || esc(mem.source || 'unknown source');
+      var cells = [];
+      cells.push('<div class="memcell"><small>Evidence</small><b>' + esc(srcLabel) + '</b></div>');
+      cells.push('<div class="memcell"><small>Started</small><b>' + fmtDate(mem.started_at) + '</b></div>');
+      if (mem.renews_at) cells.push('<div class="memcell"><small>Renews</small><b>' + fmtDate(mem.renews_at) + '</b></div>');
+      else if (mem.ends_at) cells.push('<div class="memcell"><small>Ends</small><b>' + fmtDate(mem.ends_at) + '</b></div>');
+      else cells.push('<div class="memcell"><small>Expiry</small><b>None recorded</b></div>');
+      if (mem.billing_cycle && mem.billing_cycle !== 'none') cells.push('<div class="memcell"><small>Billing</small><b>' + esc(cap(mem.billing_cycle)) + '</b></div>');
+      if (mem.override_until) cells.push('<div class="memcell"><small>Override until</small><b>' + fmtDate(mem.override_until) + '</b></div>');
+      out += '<div class="memcard" style="--acc:' + tierAccent(mem.key) + '">'
+        + '<div class="memcard__hd">'
+        + '<span class="mtier">' + esc(cap(mem.key)) + '</span>'
+        + '<span class="mstatus mstatus--' + statusCls(mem.status) + '">' + esc(cap(mem.status)) + '</span>'
+        + '<span class="mtag-note">verified</span>'
+        + '</div>'
+        + '<div class="memgrid">' + cells.join('') + '</div>'
+        + (mem.evidence_id ? '<div class="faint" style="padding:0 12px 10px;font-family:ui-monospace,monospace;font-size:11px">evidence ' + esc(mem.evidence_id) + '</div>' : '')
+        + billingBlock(m.subscription) + '</div>';
     } else {
-      head = '<span class="mtier mtier--none">No program tier</span>';
-      cells.push('<div class="memcell"><small>Member since</small><b>' + fmtDate(m.dateAdded) + '</b></div>');
+      out += '<div class="memcard memcard--plain">'
+        + '<div class="memcard__hd"><span class="mtier mtier--none">No verified membership</span></div>'
+        + '<div class="memgrid"><div class="memcell"><small>Contact since</small><b>' + fmtDate(m.dateAdded) + '</b></div></div>'
+        + billingBlock(m.subscription) + '</div>';
     }
-    return '<div class="memcard' + (tierLabel ? '' : ' memcard--plain') + '" style="--acc:' + tierAccent(accKey) + '">'
-      + '<div class="memcard__hd">' + head + '</div>'
-      + '<div class="memgrid">' + cells.join('') + '</div>'
-      + billingBlock(m.subscription) + '</div>';
+
+    if (unv.length) {
+      out += '<div class="unvbox">'
+        + '<div class="unvbox__hd">Unverified tier tags <span class="faint">(' + unv.length + ')</span></div>'
+        + '<div class="unvbox__tags">' + unv.map(function (t) { return '<span class="pill pill--warn">' + esc(t) + '</span>'; }).join('') + '</div>'
+        + '<p class="unvbox__note">Legacy GHL labels. They are not billing evidence and do not grant anything — '
+        + 'the app shows this person their verified tier only.</p></div>';
+    }
+    return out;
   }
+
+  /* Course access, kept apart from the tier on purpose. Nothing here is implied
+   * by a membership plan: every grant carries the offer or backfill it came
+   * from, and a plan changing has never moved one. */
+  function coursesCard(m) {
+    var cs = m.courses || [];
+    if (!cs.length) return '<p class="faint" style="margin:6px 0 14px">No course entitlements on record.</p>';
+    var shown = cs.slice(0, 12);
+    return '<div class="crslist">' + shown.map(function (c) {
+      var via = String(c.matchedBy || '');
+      var how = /webhook/i.test(via) ? 'live grant' : (/backfill/i.test(via) ? 'backfill' : (via || 'unknown'));
+      return '<div class="crsrow">'
+        + '<span class="crsrow__n">' + esc(c.name || c.id) + '</span>'
+        + '<span class="crsrow__m">' + esc(how) + '</span>'
+        + '<span class="crsrow__d">' + fmtDate(c.updatedAt) + '</span></div>';
+    }).join('') + '</div>'
+      + (cs.length > shown.length ? '<p class="faint" style="margin:6px 0 0">and ' + (cs.length - shown.length) + ' more</p>' : '');
+  }
+
+  /* Attendance, joined live from the Event Manager. Where one GHL contact holds
+   * more than one attendee in the same event the ambiguity is stated and left
+   * alone — two people on one order and one person who checked out twice look
+   * identical from here, and guessing wrong merges two humans. */
+  function attendanceCard(m) {
+    var a = m.attendance;
+    if (!a || !a.count) return '<p class="faint" style="margin:6px 0 14px">Not registered for any event.</p>';
+    var warn = a.has_ambiguity
+      ? '<div class="idwarn"><b>One contact, more than one attendee</b>'
+        + '<p>This GHL contact carries several attendee records in the same event. That is correct for a '
+        + 'couple or a bought guest seat, and a duplicate if the same person checked out twice. Gaia does not '
+        + 'guess which — decide it here before the door does.</p></div>'
+      : '';
+    return warn + '<div class="crslist">' + a.attendees.map(function (x) {
+      return '<div class="crsrow">'
+        + '<span class="crsrow__n">' + esc(x.name || x.email) + (x.shares_contact ? ' <span class="pill pill--warn">shared contact</span>' : '') + '</span>'
+        + '<span class="crsrow__m">' + esc(x.event_name || ('event ' + x.event_id)) + '</span>'
+        + '<span class="crsrow__d">' + (x.is_checked_in ? 'checked in' : esc(x.status || '')) + '</span></div>';
+    }).join('') + '</div>';
+  }
+
+  function auditCard(m) {
+    var rows = m.audit || [];
+    if (!rows.length) return '<p class="faint" style="margin:6px 0 14px">No recorded changes.</p>';
+    return '<div class="crslist">' + rows.map(function (e) {
+      return '<div class="crsrow">'
+        + '<span class="crsrow__n">' + esc(e.action || 'change') + '</span>'
+        + '<span class="crsrow__m">' + esc(e.actor || '') + '</span>'
+        + '<span class="crsrow__d">' + fmtDate(e.at) + '</span></div>';
+    }).join('') + '</div>';
+  }
+
   function mountMembership() {
     var c = document.getElementById('content');
     var tiles = TIERS.filter(function (t) { return !t.hideTile; });
@@ -533,6 +646,45 @@
       + '<div class="billbar" id="billbar"><div class="billbar__hd"><span class="sec-label" style="margin:0">' + svg('lock') + 'Live subscriptions · Stripe</span><span class="faint" id="billnote">loading…</span></div><div class="billbar__stats" id="billstats"></div></div>'
       + '<div class="sec-label" id="mtitle" style="display:none"></div>'
       + '<div class="rows" id="mrows"><div class="empty">' + svg('member') + '<div>Choose a tier above to see its members.</div></div></div>';
+    // Oversight, migrated from the legacy Membership console: every change to
+    // anyone's access, and everything that arrived but could not be resolved to
+    // a person or a product. Both read-only — the write actions from that
+    // console are deliberately not here (see the audit report).
+    var mv = document.createElement('div');
+    mv.innerHTML = '<div class="sec-label" style="margin-top:22px">' + svg('lock')
+      + 'Membership changes <span class="faint">(every grant, end and override, newest first)</span></div>'
+      + '<div id="mAudit" class="crslist"><div class="faint" style="padding:10px 12px">Loading…</div></div>'
+      + '<div class="sec-label" style="margin-top:22px">' + svg('member')
+      + 'Unresolved <span class="faint">(arrived, but could not be matched to a person or product)</span></div>'
+      + '<div id="mUnres" class="crslist"><div class="faint" style="padding:10px 12px">Loading…</div></div>';
+    c.appendChild(mv);
+    api('/membership/audit').then(function (d) {
+      var box = document.getElementById('mAudit'); if (!box) return;
+      var rows = (d && d.entries) || [];
+      if (!rows.length) { box.innerHTML = '<div class="faint" style="padding:10px 12px">No membership changes recorded.</div>'; return; }
+      box.innerHTML = rows.slice().reverse().slice(0, 25).map(function (e) {
+        return '<div class="crsrow">'
+          + '<span class="crsrow__n">' + esc(e.action || 'change')
+          + (e.contactId ? ' <span class="faint">' + esc(String(e.contactId).slice(0, 10)) + '</span>' : '') + '</span>'
+          + '<span class="crsrow__m">' + esc(e.actor || '') + '</span>'
+          + '<span class="crsrow__d">' + fmtDate(e.at) + '</span></div>';
+      }).join('');
+    }).catch(function () {});
+    api('/membership/unresolved').then(function (d) {
+      var box = document.getElementById('mUnres'); if (!box) return;
+      var rows = (d && d.unresolved) || [];
+      if (!rows.length) {
+        box.innerHTML = '<div class="faint" style="padding:10px 12px">Nothing unresolved \u2014 every incoming grant matched a person and a product.</div>';
+        return;
+      }
+      box.innerHTML = rows.slice(0, 25).map(function (u) {
+        return '<div class="crsrow">'
+          + '<span class="crsrow__n">' + esc(u.reason || u.kind || 'unresolved') + '</span>'
+          + '<span class="crsrow__m">' + esc(u.source || '') + '</span>'
+          + '<span class="crsrow__d">' + fmtDate(u.at || u.receivedAt) + '</span></div>';
+      }).join('');
+    }).catch(function () {});
+
     var grid = document.getElementById('tiercards');
     grid.innerHTML = tiles.map(function (t) {
       return '<button class="tiercard" data-tier="' + t.key + '" style="--acc:' + t.accent + '">'
@@ -608,9 +760,100 @@
     { key: 'diamond', name: 'Diamond', price: '$997/mo · $9,997/yr', acc: 'var(--violet)', benefits: ['Everything in Gold', 'Accelerator benefits', 'Early-access opportunities', 'Priority support'], link: 'join.gaiahealers.com/diamond' }
   ];
   function n(v) { return (v == null) ? '—' : Number(v).toLocaleString(); }
+  /* System Alerts.
+   *
+   * Deliberately a badge and a drawer, not another page: an alert is a prompt
+   * to go and look at something, and burying it behind a navigation choice
+   * would recreate the problem it exists to solve. Only OPEN incidents count
+   * toward the badge — an acknowledged one is somebody's current business, and
+   * a resolved one is history. */
+  var ALERT_SEV = {
+    critical: { label: 'Critical', cls: 'crit' },
+    warning:  { label: 'Warning',  cls: 'warn' },
+    info:     { label: 'Info',     cls: 'info' },
+  };
+  var aState = { data: null, filter: 'open', subsystem: '' };
+
+  function refreshAlertBadge() {
+    api('/alerts').then(function (d) {
+      if (!d || !d.ok) return;
+      aState.data = d;
+      var el = document.getElementById('alertn'); if (!el) return;
+      var crit = d.counts.critical, open = d.counts.open;
+      if (!open) { el.textContent = ''; el.className = 'alertbtn__n'; return; }
+      el.textContent = String(open);
+      el.className = 'alertbtn__n is-on' + (crit ? ' is-crit' : '');
+    }).catch(function () {});
+  }
+
+  function openAlerts() {
+    var d = aState.data;
+    if (!d) { drawerEl.innerHTML = '<div class="spinner"></div>'; openDrawer(); refreshAlertBadge(); setTimeout(openAlerts, 900); return; }
+    var list = (d.incidents || []).filter(function (i) {
+      if (aState.filter === 'open') return i.state === 'open' || i.state === 'acknowledged';
+      if (aState.filter === 'resolved') return i.state === 'resolved';
+      return true;
+    }).filter(function (i) { return !aState.subsystem || i.subsystem === aState.subsystem; });
+
+    var chip = function (v, label, on) {
+      return '<button class="afilter' + (on ? ' is-on' : '') + '" data-f="' + esc(v) + '">' + esc(label) + '</button>';
+    };
+    var subs = (d.subsystems || []);
+    drawerEl.innerHTML = ''
+      + '<div class="drawer__head"><div style="min-width:0">'
+      + '<div class="drawer__name">System Alerts</div>'
+      + '<div class="drawer__mail">' + n(d.counts.critical) + ' critical &middot; ' + n(d.counts.open) + ' open &middot; checked ' + fmtDate(d.generatedAt) + '</div>'
+      + '</div><button class="drawer__x" id="ax">' + svg('close') + '</button></div>'
+      + '<div class="drawer__body">'
+      + '<div class="afilters">' + chip('open', 'Open', aState.filter === 'open')
+      + chip('resolved', 'Resolved', aState.filter === 'resolved')
+      + chip('all', 'All', aState.filter === 'all')
+      + (subs.length > 1 ? '<span class="afilters__sp"></span>'
+          + '<button class="afilter' + (aState.subsystem ? '' : ' is-on') + '" data-s="">All areas</button>'
+          + subs.map(function (x) { return '<button class="afilter' + (aState.subsystem === x ? ' is-on' : '') + '" data-s="' + esc(x) + '">' + esc(x) + '</button>'; }).join('')
+          : '')
+      + '</div>'
+      + (list.length ? list.map(function (i) {
+          var sv = ALERT_SEV[i.severity] || ALERT_SEV.info;
+          return '<div class="acard acard--' + sv.cls + (i.state === 'resolved' ? ' is-done' : '') + '">'
+            + '<div class="acard__hd">'
+            + '<span class="asev asev--' + sv.cls + '">' + sv.label + '</span>'
+            + '<span class="asub">' + esc(i.subsystem) + '</span>'
+            + '<span class="astate">' + esc(i.state) + '</span></div>'
+            + '<div class="acard__t">' + esc(i.title) + '</div>'
+            + '<p class="acard__w">' + esc(i.why) + '</p>'
+            + (i.affected && i.affected.label ? '<div class="acard__a">Affected: <b>' + esc(i.affected.label) + '</b></div>' : '')
+            + '<div class="acard__m">'
+            + '<span>first ' + fmtDate(i.firstDetectedAt) + '</span>'
+            + '<span>last ' + fmtDate(i.lastDetectedAt) + '</span>'
+            + '<span>' + n(i.occurrences) + '&times;</span>'
+            + (i.resolvedAt ? '<span>resolved ' + fmtDate(i.resolvedAt) + '</span>' : '')
+            + '</div>'
+            + '<div class="acard__e">' + esc(i.evidence || '') + '</div>'
+            + (i.notified && i.notified.lastError ? '<div class="acard__n">Notification failed: ' + esc(i.notified.lastError) + '</div>'
+               : (i.notified && i.notified.sentAt ? '<div class="acard__n acard__n--ok">Notified ' + fmtDate(i.notified.sentAt) + '</div>' : ''))
+            + (i.state === 'open' ? '<button class="btn btn--ghost acard__ack" data-ack="' + esc(i.id) + '">Acknowledge</button>' : '')
+            + '</div>';
+        }).join('')
+        : '<div class="empty">' + svg('system') + '<div>Nothing here. Every monitored condition is healthy.</div></div>')
+      + '</div>';
+    document.getElementById('ax').onclick = closeDrawer;
+    drawerEl.querySelectorAll('[data-f]').forEach(function (b) { b.onclick = function () { aState.filter = b.dataset.f; openAlerts(); }; });
+    drawerEl.querySelectorAll('[data-s]').forEach(function (b) { b.onclick = function () { aState.subsystem = b.dataset.s; openAlerts(); }; });
+    drawerEl.querySelectorAll('[data-ack]').forEach(function (b) {
+      b.onclick = function () {
+        api('/alerts/ack', { method: 'POST', body: JSON.stringify({ id: b.dataset.ack }) })
+          .then(function () { refreshAlertBadge(); setTimeout(openAlerts, 400); });
+      };
+    });
+    openDrawer();
+  }
+
   function mountSystem() {
     var c = document.getElementById('content');
     c.innerHTML = '<div class="sysmap" id="sysmap"><div class="smload">' + svg('system') + '<div>Mapping the system…</div></div></div>';
+    // Fetch incidents first so a component carrying one can say so as it paints.
+    if (!aState.data) refreshAlertBadge();
     api('/system-map').then(function (d) {
       if (!d || !d.ok) { document.getElementById('sysmap').innerHTML = '<div class="empty">Could not load the system map.</div>'; return; }
       paintSystem(d);
@@ -623,6 +866,159 @@
     var pct = max ? Math.round(count / max * 100) : 0;
     return '<div class="smbar"><span class="smbar__l">' + esc(label) + '</span><span class="smbar__t"><span class="smbar__f" style="width:' + pct + '%;background:' + (acc || 'var(--green2)') + '"></span></span><b class="smbar__v">' + n(count) + '</b></div>';
   }
+  /* Pipeline health. Every chip is an observation with a timestamp behind it;
+   * anything without evidence says "unknown" rather than borrowing a green. */
+  var HSTATE = {
+    ok:      { label: 'OK',      cls: 'good' },
+    running: { label: 'Running', cls: 'good' },
+    idle:    { label: 'Idle',    cls: 'idle' },
+    stale:   { label: 'Stale',   cls: 'warn' },
+    failed:  { label: 'Failed',  cls: 'bad'  },
+    error:   { label: 'Error',   cls: 'bad'  },
+    unknown: { label: 'Unknown', cls: 'idle' },
+  };
+  function since(ms) {
+    if (ms == null) return '';
+    var m = Math.round(ms / 60000);
+    if (m < 60) return m + 'm ago';
+    var h = Math.round(m / 60); if (h < 48) return h + 'h ago';
+    return Math.round(h / 24) + 'd ago';
+  }
+  // What each component IS, in an operator's terms. The runtime facts come from
+  // the health payload; this is the part a timestamp cannot tell you.
+  var HMETA = {
+    entitlement_ledger:   { what: 'Gaia\u2019s own record of what each person holds \u2014 memberships and course access.',
+                            truth: 'Gaia (this is the source of truth)', how: 'Written by the webhook receiver and the reconcile sweep', rw: 'read/write' },
+    course_webhook:       { what: 'Receives course and community grants pushed by GHL workflows when something is sold.',
+                            truth: 'GHL (Gaia records the grant)', how: 'Pushed, live', rw: 'write into the ledger' },
+    membership_reconcile: { what: 'Walks GHL subscriptions and reconciles them against the canonical billing map.',
+                            truth: 'GHL billing', how: 'Scheduled sweep', rw: 'write into the ledger' },
+    event_mirror:         { what: 'Catches GHL orders the event webhook missed and mirrors payments.',
+                            truth: 'GHL orders and transactions', how: 'Scheduled, hourly', rw: 'write into the Event Manager' },
+    academy_sync:         { what: 'Refreshes the course catalogue Gaia validates grants against.',
+                            truth: 'GHL courses', how: 'Scheduled, daily', rw: 'write into Gaia\u2019s catalogue' },
+    event_backup:         { what: 'Snapshots the Event Manager database and keeps 30 days.',
+                            truth: 'The Event Manager database', how: 'Scheduled, daily', rw: 'read-only snapshot' },
+    ghl_api:              { what: 'The upstream CRM: contacts, tags, subscriptions, orders.',
+                            truth: 'GHL', how: 'Queried live on demand', rw: 'read-only from Gaia' },
+    event_manager:        { what: 'Attendees, exhibitors, check-in, badges and event payments.',
+                            truth: 'The Event Manager (this is the source of truth)', how: 'Live API', rw: 'read/write \u2014 owned by Event Admin' },
+  };
+  function openHealth(c) {
+    var m = HMETA[c.key] || {};
+    var st = HSTATE[c.state] || HSTATE.unknown;
+    var row = function (k, v) { return v == null || v === '' ? '' : '<div class="hdrow"><span>' + esc(k) + '</span><b>' + esc(String(v)) + '</b></div>'; };
+    var counters = '';
+    if (c.counters && Object.keys(c.counters).length) {
+      counters = '<div class="sec-label" style="margin-top:14px">Counters</div><div class="hdgrid">'
+        + Object.keys(c.counters).map(function (k) {
+            return '<div class="hdmini"><b>' + n(c.counters[k]) + '</b><span>' + esc(k.replace(/_/g, ' ')) + '</span></div>';
+          }).join('') + '</div>';
+    }
+    drawerEl.innerHTML = ''
+      + '<div class="drawer__head"><div style="min-width:0">'
+      + '<div class="drawer__name">' + esc(c.label) + '</div>'
+      + '<div class="drawer__mail"><span class="smh__s smh__s--in smh--' + st.cls + '">' + st.label + '</span></div>'
+      + '</div><button class="drawer__x" id="hx">' + svg('close') + '</button></div>'
+      + '<div class="drawer__body">'
+      + (m.what ? '<p class="hdwhat">' + esc(m.what) + '</p>' : '')
+      + (c.detail ? '<div class="hddetail">' + esc(c.detail) + '</div>' : '')
+      + '<div class="sec-label" style="margin-top:14px">Where the truth lives</div>'
+      + '<div class="hdrows">'
+      + row('Source of truth', m.truth)
+      + row('Update method', m.how || c.cadence)
+      + row('Read / write', m.rw)
+      + row('Cadence', c.cadence)
+      + '</div>'
+      + '<div class="sec-label" style="margin-top:14px">Evidence</div>'
+      + '<div class="hdrows">'
+      + row('Last success', c.lastSuccessAt ? fmtDate(c.lastSuccessAt) : (c.lastWriteAt ? fmtDate(c.lastWriteAt) : 'not observed'))
+      + row('Last failure', c.lastFailureAt ? fmtDate(c.lastFailureAt) : 'none observed')
+      + row('Last run started', c.lastStartAt ? fmtDate(c.lastStartAt) : null)
+      + row('Last result', c.lastRunResult ? (c.lastRunResult + (c.lastRunExitCode != null ? ' (exit ' + c.lastRunExitCode + ')' : '')) : null)
+      + row('Next run', c.nextRunAt ? fmtDate(c.nextRunAt) : null)
+      + row('Last received', c.lastReceivedAt ? fmtDate(c.lastReceivedAt) : null)
+      + row('Last authenticated', c.lastAuthenticatedAt ? fmtDate(c.lastAuthenticatedAt) : null)
+      + row('Last rejection', c.lastRejectedAt ? fmtDate(c.lastRejectedAt) : null)
+      + row('Rejection reason', c.lastRejectionReason)
+      + row('Endpoint', c.endpoint)
+      + row('Response time', c.ms != null ? c.ms + ' ms' : null)
+      + row('Latest archive', c.latestArtifact)
+      + row('Archive size', c.latestArtifactBytes != null ? Math.round(c.latestArtifactBytes / 1024) + ' KB' : null)
+      + row('Archives kept', c.artifactCount)
+      + row('How this is known', c.evidence)
+      + '</div>'
+      + (c.counts ? '<div class="sec-label" style="margin-top:14px">Records</div><div class="hdgrid">'
+          + Object.keys(c.counts).map(function (k) {
+              return '<div class="hdmini"><b>' + n(c.counts[k]) + '</b><span>' + esc(k.replace(/([A-Z])/g, ' $1').toLowerCase()) + '</span></div>';
+            }).join('') + '</div>'
+          + (c.countsNote ? '<p class="faint" style="margin:6px 0 0;font-size:12px">' + esc(c.countsNote) + '</p>' : '') : '')
+      + counters
+      + (c.plannedAdapter ? '<div class="sec-label" style="margin-top:14px">Planned adapter</div>'
+          + '<div class="hdrows">' + row('Registry source', c.plannedAdapter.source)
+          + row('Implemented', c.plannedAdapter.implemented ? 'yes' : 'no')
+          + '</div><p class="faint" style="margin:6px 0 0;font-size:12px">' + esc(c.plannedAdapter.note || '') + '</p>' : '')
+      + '</div>';
+    var inc = incidentsFor(c.key);
+    if (inc.length) {
+      var box = document.createElement('div');
+      box.innerHTML = '<div class="sec-label" style="margin-top:14px">Active alerts</div>'
+        + inc.map(function (i) {
+            return '<div class="hdinc hdinc--' + (i.severity === 'critical' ? 'crit' : 'warn') + '">'
+              + '<b>' + esc(i.title) + '</b>'
+              + '<span>' + n(i.occurrences) + ' occurrence' + (i.occurrences > 1 ? 's' : '') + ' \u00b7 since ' + fmtDate(i.firstDetectedAt) + '</span></div>';
+          }).join('')
+        + '<button class="btn btn--ghost" id="toalerts" style="margin-top:8px">Open System Alerts</button>';
+      drawerEl.querySelector('.drawer__body').appendChild(box);
+      var go = document.getElementById('toalerts');
+      if (go) go.onclick = function () { aState.subsystem = ''; aState.filter = 'open'; openAlerts(); };
+    }
+    document.getElementById('hx').onclick = closeDrawer;
+    openDrawer();
+  }
+
+  var HEALTH_INCIDENTS = {
+    course_webhook:       /^course-webhook:/,
+    membership_reconcile: /^membership-reconcile:/,
+    event_mirror:         /^event-mirror:/,
+    event_backup:         /^event-backup:/,
+  };
+  function incidentsFor(key) {
+    var all = (aState.data && aState.data.incidents) || [];
+    var re = HEALTH_INCIDENTS[key];
+    if (!re) return [];
+    return all.filter(function (i) { return re.test(i.key) && i.state !== 'resolved'; });
+  }
+  function healthStrip(h) {
+    if (!h || !h.components) return '';
+    // Sort the things that need a person to the front. A wall of green with one
+    // amber chip buried in the middle is how a stopped pipeline goes unnoticed.
+    var order = { failed: 0, error: 0, stale: 1, unknown: 2, idle: 3, running: 4, ok: 5 };
+    var comps = h.components.slice().sort(function (a, b) {
+      return (order[a.state] == null ? 9 : order[a.state]) - (order[b.state] == null ? 9 : order[b.state]);
+    });
+    return '<div class="smhealth">' + comps.map(function (c) {
+      var st = HSTATE[c.state] || HSTATE.unknown;
+      var when = c.lastWriteAt || c.lastRunAt;
+      var detail = when ? since(c.ageMs) : (c.ms != null ? c.ms + 'ms' : 'no timestamp');
+      var lines = [];
+      if (c.lastSuccessAt) lines.push('last success ' + fmtDate(c.lastSuccessAt));
+      if (c.lastFailureAt) lines.push('last failure ' + fmtDate(c.lastFailureAt));
+      if (c.nextRunAt) lines.push('next ' + fmtDate(c.nextRunAt));
+      if (c.lastRunResult && c.lastRunResult !== 'success') lines.push('result ' + c.lastRunResult
+        + (c.lastRunExitCode != null ? ' (exit ' + c.lastRunExitCode + ')' : ''));
+      var tip = (c.evidence || '') + (lines.length ? ' — ' + lines.join(' · ') : '');
+      var inc = incidentsFor(c.key);
+      var crit = inc.filter(function (x) { return x.severity === 'critical'; }).length;
+      return '<button class="smh smh--' + st.cls + (inc.length ? ' has-inc' : '') + '" data-hk="' + esc(c.key) + '" title="' + esc(tip) + '">'
+        + '<span class="smh__s">' + st.label + '</span>'
+        + '<span class="smh__l">' + esc(c.label)
+        + (inc.length ? ' <span class="smh__inc' + (crit ? ' smh__inc--crit' : '') + '">' + inc.length + ' alert' + (inc.length > 1 ? 's' : '') + '</span>' : '')
+        + '</span>'
+        + '<span class="smh__d">' + esc(detail) + (lines.length ? '<span class="smh__x">' + esc(lines[0]) + '</span>' : '') + '</span></button>';
+    }).join('') + '</div>';
+  }
+
   function paintSystem(d) {
     var sub = d.subscriptions || {}, rev = d.revenue || {}, pay = d.tierPaying || {};
     // KPI strip
@@ -675,12 +1071,44 @@
       + '</div>'
       + '<div class="smsub">Community membership</div><div class="smbars">' + (d.communitiesList || []).map(function (x) { return smBar(x.label, x.count, maxCom, 'var(--violet)'); }).join('') + '</div>'
       + '<div class="smnode"><b>Gaia Assist</b><span>AI concierge — knows this whole system, guides &amp; sells</span></div>');
+    // ── Events, entitlements and the jobs that move data ──────────────────
+    var ev = d.events || {}, lg = d.ledger || {};
+    var eventsB = branch('events', 'member', 'Events &amp; the Door',
+      '<div class="smgrid">'
+      + '<div class="smmini"><b>' + n(ev.attendees) + '</b><span>Attendees</span></div>'
+      + '<div class="smmini"><b>' + n(ev.exhibitors) + '</b><span>Exhibitors</span></div>'
+      + '<div class="smmini"><b>' + n(ev.memberCards) + '</b><span>Badge cards</span></div>'
+      + '<div class="smmini"><b>' + n(ev.scanLogs) + '</b><span>Scans logged</span></div>'
+      + '</div>'
+      + '<div class="smflow">' + ['GHL order', 'Webhook', 'Attendee + QR', 'Door'].map(function (x, i) { return (i ? '<span class="smarrow">\u2192</span>' : '') + '<span class="smchip">' + x + '</span>'; }).join('') + '</div>'
+      + '<div class="smnode"><b>' + n(ev.paymentEvents) + ' payment attempts mirrored</b><span>'
+        + n(ev.paymentsNeedingAttention) + ' need attention \u00b7 ' + n(ev.ticketMappings) + ' active ticket mappings</span></div>'
+      + (ev.byEvent || []).map(function (e) {
+          return '<div class="smnode"><b>' + esc(e.name) + '</b><span>' + n(e.attendees) + ' attendees' + (e.archived ? ' \u00b7 archived' : '') + '</span></div>';
+        }).join(''));
+
+    var entB = branch('ent', 'lock', 'Entitlements Ledger',
+      '<div class="smgrid">'
+      + '<div class="smmini"><b>' + n(lg.contacts) + '</b><span>Contacts held</span></div>'
+      + '<div class="smmini"><b>' + n(lg.memberships) + '</b><span>Verified memberships</span></div>'
+      + '<div class="smmini"><b>' + n(lg.courseGrants) + '</b><span>Course grants</span></div>'
+      + '</div>'
+      + '<div class="smflow">' + ['GHL subscription', 'Proposal', 'Evidence check', 'Ledger'].map(function (x, i) { return (i ? '<span class="smarrow">\u2192</span>' : '') + '<span class="smchip">' + x + '</span>'; }).join('') + '</div>'
+      + '<div class="smnode"><b>Course access is never inferred from a tier</b><span>Every grant carries the offer or backfill it came from.</span></div>');
+
     document.getElementById('sysmap').innerHTML =
       kpis
+      + healthStrip(d.health)
       + '<svg class="sysmap__edges"></svg>'
       + '<div class="smhub" id="smhub"><span class="smhub__k">Gaia Healers 2.0</span><b>' + n(d.members) + '</b><span class="smhub__l">total members</span></div>'
-      + '<div class="smrow">' + tiers + payB + access + app + '</div>'
-      + '<div class="smfoot">Live from GHL · Stripe · Shopify · updated ' + fmtDate(d.generatedAt) + '</div>';
+      + '<div class="smrow">' + tiers + payB + access + app + eventsB + entB + '</div>'
+      + '<div class="smfoot">GHL contacts &amp; tags · GHL/Stripe subscriptions · Gaia\u2019s Shopify and Academy catalogues · built ' + fmtDate(d.generatedAt) + ' \u00b7 cached 10 min</div>';
+    document.querySelectorAll('.smh[data-hk]').forEach(function (b) {
+      b.onclick = function () {
+        var c = (d.health && d.health.components || []).filter(function (x) { return x.key === b.dataset.hk; })[0];
+        if (c) openHealth(c);
+      };
+    });
     requestAnimationFrame(drawEdges);
     if (!window.__smResize) { window.__smResize = true; window.addEventListener('resize', function () { if (document.getElementById('sysmap')) drawEdges(); }); }
   }

@@ -88,3 +88,51 @@ the embedded scanner, adding that attribute in `mountEvents()` is the fix.
 repo under `admin/`, but the Event Manager — backend and frontend — exists only
 on the VPS. Backups are taken (`event.db.pre-*`), but the code has no history
 and no remote. Worth fixing before the codebase grows further.
+
+## The boundary, stated as ownership
+
+**Event Admin owns event behaviour. General Admin may read event summaries.**
+
+That is the whole rule. It is about who *performs* an action, not which words
+appear on a screen.
+
+### General Admin may
+
+* show which events a contact attended, and their status
+* show pass/ticket and current check-in state as a summary
+* show a payment or attendance count
+* link across to Event Admin
+
+…provided the data is **joined server-side by the proxy** and rendered read-only.
+
+### General Admin may not
+
+check in · undo check-in · scan badges · create, update, delete, revoke or
+reinstate an attendee · change a pass or add-on · print or record a badge ·
+reconcile event payments · manage exhibitors · manage ticket mappings · grant
+event permissions · register a walk-in.
+
+### How it is enforced
+
+`tests/event-admin-boundary.test.cjs` checks the shapes of those capabilities
+rather than a list of nouns — a screen can say "attendee" and be innocent, and
+can avoid the word entirely while shipping a check-in button. It also asserts:
+
+* the shell issues **no mutating request** (POST/PUT/PATCH/DELETE) at the event
+  domain, however the path is spelled;
+* the shell calls **no `/event-api/*` route except `/auth/*`** — event data
+  arrives through the proxy's own `/api/admin` join, so the shell never becomes
+  a second client with its own idea of the truth;
+* Events remains an iframe onto the real `/event/`, sharing one session.
+
+The tripwire was verified by planting five realistic violations — a check-in
+function, an exhibitor POST, a PUT to `/event-api/attendees/5`, a QR scanner and
+an `undoCheckIn` — and confirming each one fails the suite.
+
+### Why the earlier word-list was replaced
+
+It banned the literal string `attendee` anywhere in the shell. That blocked a
+read-only attendance summary on a contact — which cannot drift, because it
+computes nothing and writes nothing — while doing nothing to stop somebody
+implementing check-in under a different name. Ownership is the property worth
+enforcing; vocabulary was a proxy for it, and a poor one.

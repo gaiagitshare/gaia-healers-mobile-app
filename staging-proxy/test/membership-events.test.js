@@ -13,11 +13,15 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { installCourseAuthority } from './course-authority-fixture.js';
 
 const SECRET = 'events-secret-'.padEnd(48, 'e');
 const workdir = fs.mkdtempSync(path.join(os.tmpdir(), 'gaia-events-'));
 fs.mkdirSync(path.join(workdir, 'data'), { recursive: true });
 const storeFile = path.join(workdir, 'data', 'member-entitlements.json');
+// The receiver validates every grant against the course authority. These
+// synthetic ids are not in the live catalogue, so the suite installs its own.
+installCourseAuthority(workdir, ['course-x', 'course-1', 'lifetime-1']);
 process.chdir(workdir);
 
 const PORT = 8905;
@@ -34,6 +38,7 @@ await new Promise((r) => setTimeout(r, 300));
 const GOLD_MONTHLY = '691cbb52396387d816e0f670';
 const GOLD_PRODUCT = '691cbb523963872e3be0f660';
 const SILVER_ANNUAL = '69177f9c54010d7d6f6a8abe';
+const DIAMOND_MONTHLY = '691cbd1d396387281fe141f7';
 
 let n = 0;
 const hook = async (body, headers = {}) => {
@@ -149,6 +154,9 @@ test('a nested membership object is normalized, never coerced to [object Object]
   const c = 'synthetic-ev-nested';
   const res = await hook({
     eventId: `ev-${++n}`, eventType: 'membership_activated', contactId: c, timestamp: T.mid,
+    // The billing id is what grants; the nested object is still the thing under
+    // test — that its `key` is read rather than coerced to "[object Object]".
+    priceId: DIAMOND_MONTHLY,
     membership: { key: 'diamond', status: 'active', billing_cycle: 'monthly' },
   });
   assert.equal(res.json.applied, true);
@@ -173,7 +181,11 @@ test('a membership event with no recognisable tier is rejected', async () => {
   const res = await hook({
     eventId: `ev-${++n}`, eventType: 'membership_activated', contactId: c, timestamp: T.mid,
   });
-  assert.equal(res.status, 422);
+  // The billing gate fires first now, so the refusal arrives as an accepted-
+  // but-not-applied 202 rather than a 422. What the test is really protecting
+  // is unchanged and still asserted: nothing was granted.
+  assert.equal(res.json.applied, false);
+  assert.equal(res.json.reason, 'BILLING_ID_REQUIRED');
   assert.equal(membershipOf(c), null);
 });
 
@@ -183,7 +195,10 @@ test('legacy tags in a membership payload still cannot grant a tier', async () =
     eventId: `ev-${++n}`, eventType: 'membership_activated', contactId: c, timestamp: T.mid,
     tags: ['ahc-gold-active', 'ahc-gold-trial'],   // no tier, no billing id
   });
-  assert.equal(res.status, 422, 'tags are not tier evidence');
+  // Same refusal, reported the current way. The property under test — a tag is
+  // not tier evidence — is the assertion that matters and it still holds.
+  assert.equal(res.json.applied, false, 'tags are not tier evidence');
+  assert.equal(res.json.reason, 'BILLING_ID_REQUIRED');
   assert.equal(membershipOf(c), null);
 });
 

@@ -1,8 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { Box, Typography, Tabs, Tab, Chip, Stack } from '@mui/material';
+import { Box, Typography, Chip, Stack } from '@mui/material';
 import { getEvent } from '../utils/api';
+import EventNav from './EventNav';
 import EventDetail from './EventDetail';
+import LiveAdmin from './LiveAdmin';
 import Agenda from './Agenda';
 import Attendees from './Attendees';
 import CheckIn from './CheckIn';
@@ -21,8 +23,10 @@ const SECTIONS = [
     ['speakers', 'Speakers'],
     ['exhibitors', 'Exhibitors'],
     ['sponsors', 'Sponsors'],
-    ['updates', 'Updates'],
-    ['notify', 'Notify'],
+    // Labels, not keys. 'Updates' and 'Notify' read as near-synonyms to
+    // anyone who has not used both; the paths stay put so existing links do.
+    ['updates', 'Announcements'],
+    ['notify', 'Push Notifications'],
     ['info', 'FAQ & Info'],
     ['resources', 'Resources'],
     ['community', 'Community'],
@@ -56,7 +60,7 @@ function EventWorkspace() {
             case 'speakers': return <Agenda section="speakers" />;
             case 'sponsors': return <Agenda section="sponsors" />;
             case 'updates': return <Agenda section="updates" />;
-            case 'live': return <Agenda section="live" />;
+            case 'live': return <LiveAdmin />;
             case 'exhibitors': return <EventDetail section="exhibitors" />;
             case 'attendees': return <Attendees timezone={event?.timezone} />;
             case 'notify': return <Notifications />;
@@ -86,15 +90,11 @@ function EventWorkspace() {
                 )}
             </Stack>
 
-            <Tabs
-                value={active}
-                onChange={(_, value) => navigate(`/events/${id}/${value}`)}
-                variant="scrollable"
-                scrollButtons="auto"
-                sx={{ mb: 3, borderBottom: 1, borderColor: 'divider' }}
-            >
-                {SECTIONS.map(([key, label]) => <Tab key={key} value={key} label={label} />)}
-            </Tabs>
+            <EventNav
+                sections={SECTIONS}
+                active={active}
+                onSelect={(key) => navigate(`/events/${id}/${key}`)}
+            />
 
             {/* Keyed on the event id so switching events remounts the panel and
                 cannot leave the previous event's rows on screen. */}

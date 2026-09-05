@@ -91,6 +91,11 @@ class Event(EventBase):
     # any new writable field goes in BOTH schemas, always.
     public_counters: bool = False
     networking_enabled: bool = False
+    # Same class of bug, caught at the door: rehearsal was stored but never
+    # returned, so reloading the check-in page showed "Start rehearsal" while a
+    # rehearsal was already running — every scan practice, the screen implying
+    # real admission.
+    door_test_mode: bool = False
     map_image_url: Optional[str] = None
     # Unambiguous instants: the same moment however the reader's device is set.
     # start_date/end_date above stay venue-local for display.
@@ -1040,6 +1045,13 @@ class BadgePrintRecord(BaseModel):
 
 class UndoCheckIn(BaseModel):
     reason: str
+
+
+class PaymentSyncIn(BaseModel):
+    """What the proxy read from GHL. Gaia stores and classifies; it never
+    writes any of it back."""
+    transactions: List[Dict[str, Any]] = []
+    source: Optional[str] = "mirror"          # webhook | mirror
 
 
 class DoorTestMode(BaseModel):

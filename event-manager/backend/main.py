@@ -1082,7 +1082,13 @@ def get_event(
         models.Attendee.event_id == event.id,
         models.Attendee.is_checked_in == True
     ).count()
-    
+    # Declared on the schema since the stats card was written, but never filled
+    # in here, so the card only had a number while something else happened to be
+    # loading the whole exhibitor list.
+    event.exhibitor_count = db.query(models.Exhibitor).filter(
+        models.Exhibitor.event_id == event.id
+    ).count()
+
     return event
 
 @app.get("/public/events/next", response_model=schemas.Event)

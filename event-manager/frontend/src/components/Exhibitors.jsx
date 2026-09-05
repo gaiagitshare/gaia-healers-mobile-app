@@ -1,14 +1,16 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
     Box, Paper, Typography, Table, TableHead, TableBody, TableRow, TableCell,
-    Card, CardContent, Chip, Switch, Button, IconButton, Dialog, DialogTitle,
+    Chip, Switch, Button, IconButton, Dialog, DialogTitle,
     DialogContent, DialogActions, TextField, MenuItem, Stack, Alert, Divider,
     CircularProgress, Tooltip, Checkbox, ToggleButton, ToggleButtonGroup,
-    InputAdornment,
+    InputAdornment, Menu, Snackbar, Badge,
 } from '@mui/material';
 import {
     Add as AddIcon, UploadFile as UploadFileIcon, Delete as DeleteIcon,
-    Search as SearchIcon, ContentCopy as CopyIcon,
+    Search as SearchIcon, ContentCopy as CopyIcon, MoreVert as MoreIcon,
+    QrCodeScanner as ScanIcon, Send as SendIcon, Visibility as VisibleIcon,
+    VisibilityOff as HiddenIcon,
 } from '@mui/icons-material';
 import {
     getExhibitors, createExhibitor, updateExhibitor, deleteExhibitor,
@@ -109,6 +111,7 @@ export default function Exhibitors({ eventId, onCountChange }) {
     const [importOpen, setImportOpen] = useState(false);
     const [granting, setGranting] = useState(false);
     const [openStages, setOpenStages] = useState({ confirmed: true });
+    const [toast, setToast] = useState('');
 
     const sel = useBulkSelection(rows);
 
@@ -164,7 +167,12 @@ export default function Exhibitors({ eventId, onCountChange }) {
         }
     };
 
-    const copy = (text) => { navigator.clipboard?.writeText(text); };
+    // A copy that gives no sign it happened is indistinguishable from a
+    // dead button, and people click it twice to be sure.
+    const copy = (text, what = 'Link') => {
+        navigator.clipboard?.writeText(text);
+        setToast(`${what} copied`);
+    };
     const scanUrl = (row) => `${window.location.origin}/event/scan/${row.access_token}`;
 
     // Money means the CONFIRMED stands. A prospect has not booked anything, and
@@ -233,25 +241,25 @@ export default function Exhibitors({ eventId, onCountChange }) {
 
             {rows.length > 0 && (
                 <Paper variant="outlined" sx={{ p: 1.5, mb: 2 }}>
-                    <Stack direction="row" gap={3} flexWrap="wrap" alignItems="baseline">
-                        <Box><Typography variant="h6">{confirmed.length}</Typography>
-                            <Typography variant="caption" color="text.secondary">Confirmed</Typography></Box>
-                        <Box><Typography variant="h6">{rows.length - confirmed.length}</Typography>
-                            <Typography variant="caption" color="text.secondary">In the pipeline</Typography></Box>
-                        <Box><Typography variant="h6">{money(totals.due)}</Typography>
-                            <Typography variant="caption" color="text.secondary">Booked</Typography></Box>
-                        <Box><Typography variant="h6">{money(totals.paid)}</Typography>
-                            <Typography variant="caption" color="text.secondary">Collected</Typography></Box>
-                        <Box>
-                            <Typography variant="h6" color={outstanding > 0 ? 'warning.main' : 'text.primary'}>
-                                {money(outstanding)}
-                            </Typography>
-                            <Typography variant="caption" color="text.secondary">Outstanding</Typography>
-                        </Box>
-                        <Box><Typography variant="h6">{totals.published}</Typography>
-                            <Typography variant="caption" color="text.secondary">In the directory</Typography></Box>
-                        <Box><Typography variant="h6">{totals.scanning}</Typography>
-                            <Typography variant="caption" color="text.secondary">Can scan badges</Typography></Box>
+                    {/* Three kinds of fact, kept apart: how many stands, how much
+                        money, and how many are switched on. Run together they read
+                        as one undifferentiated row of numbers. */}
+                    <Stack direction="row" gap={2.5} flexWrap="wrap" alignItems="stretch"
+                           divider={<Divider orientation="vertical" flexItem />}>
+                        <Stack direction="row" gap={2.5}>
+                            <Figure value={confirmed.length} label="Confirmed" />
+                            <Figure value={rows.length - confirmed.length} label="In the pipeline" />
+                        </Stack>
+                        <Stack direction="row" gap={2.5}>
+                            <Figure value={money(totals.due)} label="Booked" />
+                            <Figure value={money(totals.paid)} label="Collected" />
+                            <Figure value={money(outstanding)} label="Outstanding"
+                                    color={outstanding > 0 ? 'warning.main' : 'text.primary'} />
+                        </Stack>
+                        <Stack direction="row" gap={2.5}>
+                            <Figure value={totals.published} label="In the directory" />
+                            <Figure value={totals.scanning} label="Can scan badges" />
+                        </Stack>
                     </Stack>
                 </Paper>
             )}
@@ -396,7 +404,7 @@ export default function Exhibitors({ eventId, onCountChange }) {
                     <TextField fullWidth size="small" value={invite?.url || ''} multiline
                         InputProps={{ readOnly: true, sx: { fontFamily: 'monospace', fontSize: 12.5 } }} />
                     <Stack direction="row" spacing={1} sx={{ mt: 1.5 }} flexWrap="wrap" useFlexGap>
-                        <Button size="small" variant="contained" onClick={() => copy(invite.url)}>
+                        <Button size="small" variant="contained" onClick={() => copy(invite.url, 'Setup link')}>
                             Copy link
                         </Button>
                         {invite?.email && (
@@ -434,61 +442,126 @@ export default function Exhibitors({ eventId, onCountChange }) {
                 </DialogContent>
                 <DialogActions><Button onClick={() => setLeads(null)}>Close</Button></DialogActions>
             </Dialog>
+
+            <Snackbar open={Boolean(toast)} autoHideDuration={2000}
+                onClose={() => setToast('')} message={toast}
+                anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }} />
         </Box>
     );
 }
 
-/** The floor: booth, tables, scanner link, leads, and what the directory shows. */
+function Figure({ value, label, color }) {
+    return (
+        <Box>
+            <Typography variant="h6" color={color} sx={{ fontVariantNumeric: 'tabular-nums', lineHeight: 1.2 }}>
+                {value}
+            </Typography>
+            <Typography variant="caption" color="text.secondary">{label}</Typography>
+        </Box>
+    );
+}
+
+/**
+ * The floor: booth, tables, who may scan, and what the directory would show.
+ *
+ * One line per stand, because there are fifty-two of them and the job is
+ * scanning down the list, not reading one card. The scanner URL used to sit in
+ * a full-width box on every row — nobody reads a token, they copy it, so it is
+ * a button now. Everything except Edit and Leads moved behind the overflow
+ * menu, which is also where Delete belongs: it should take a deliberate second
+ * click, not sit under the thumb next to "List".
+ */
 function RosterCards({ rows, sel, patch, onEdit, onLeads, onSetup, onDelete, copy, scanUrl }) {
-    return rows.map((ex) => (
-        <Card key={ex.id} sx={{ mb: 2 }}>
-            <CardContent>
-                <Box display="flex" justifyContent="space-between" alignItems="start" flexWrap="wrap" gap={1}>
-                    <Box display="flex" alignItems="flex-start" gap={1}>
-                        <Checkbox size="small" sx={{ mt: -0.5, ml: -1 }}
-                            checked={sel.isSelected(ex.id)}
-                            onChange={() => sel.toggle(ex.id)}
-                            inputProps={{ 'aria-label': `Select ${ex.company_name}` }} />
-                        <Logo row={ex} size={40} />
-                        <Box sx={{ minWidth: 0 }}>
-                            <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap">
-                                <Typography variant="h6">{ex.company_name}</Typography>
-                                <Chip size="small" color={ex.is_published ? 'primary' : 'default'}
-                                    label={ex.is_published ? 'In directory' : 'Not listed'} />
-                                <Chip size="small" color={ex.can_scan_leads ? 'success' : 'default'}
-                                    label={ex.can_scan_leads ? 'Lead scanning ON' : 'Lead scanning off'}
-                                    onClick={() => patch(ex, { can_scan_leads: !ex.can_scan_leads })} />
-                            </Stack>
-                            <Typography variant="body2" color="text.secondary">
-                                Booth: {ex.booth_number || 'N/A'}
-                                {ex.tables ? ` · ${ex.tables} table${ex.tables > 1 ? 's' : ''}` : ''}
-                                {ex.category ? ` · ${ex.category}` : ''}
-                            </Typography>
-                            <Typography variant="body2" color="text.secondary">{ex.contact_email}</Typography>
-                            <ReadyChips row={ex} />
-                        </Box>
+    const [menu, setMenu] = useState(null);
+    const row = menu?.row;
+    return (
+        <Paper variant="outlined">
+            {rows.map((ex, i) => (
+                <Box key={ex.id}
+                    sx={{ display: 'flex', alignItems: 'center', gap: 1.25, px: 1.5, py: 1.25,
+                          // Wraps rather than squeezing: on a narrow screen the
+                          // chips and actions drop to their own line instead of
+                          // crushing the company name to two letters.
+                          flexWrap: 'wrap',
+                          borderTop: i ? '1px solid' : 0, borderColor: 'divider',
+                          '&:hover': { bgcolor: 'action.hover' } }}>
+                    <Checkbox size="small" checked={sel.isSelected(ex.id)}
+                        onChange={() => sel.toggle(ex.id)}
+                        inputProps={{ 'aria-label': `Select ${ex.company_name}` }} />
+                    <Logo row={ex} size={38} />
+
+                    <Box sx={{ minWidth: 0, flex: '1 1 220px' }}>
+                        <Typography variant="body2" fontWeight={600} noWrap>{ex.company_name}</Typography>
+                        <Typography variant="caption" color="text.secondary" noWrap display="block">
+                            {ex.booth_number ? `Booth ${ex.booth_number}` : 'No booth'}
+                            {ex.tables ? ` · ${ex.tables} table${ex.tables > 1 ? 's' : ''}` : ''}
+                            {ex.category ? ` · ${ex.category}` : ''}
+                        </Typography>
+                        <ReadyChips row={ex} />
                     </Box>
-                    <Box display="flex" alignItems="center" gap={0.5} flexWrap="wrap">
-                        <TextField size="small" value={scanUrl(ex)} sx={{ width: 260 }}
-                            InputProps={{ readOnly: true, sx: { fontSize: 12 } }} />
-                        <Tooltip title="Copy scanner link">
-                            <IconButton size="small" onClick={() => copy(scanUrl(ex))}><CopyIcon fontSize="small" /></IconButton>
+
+                    {/* Both are one click, and both say what they are rather than
+                        what they would become — a chip that reads "List" leaves
+                        you guessing whether it is the state or the action. */}
+                    <Stack direction="row" spacing={0.75} flexWrap="wrap" useFlexGap
+                           sx={{ flex: '0 1 auto' }}>
+                        <Tooltip title={ex.is_published
+                            ? 'Attendees can find this stand. Click to unlist.'
+                            : 'Hidden from attendees. Click to list.'}>
+                            <Chip size="small" icon={ex.is_published ? <VisibleIcon /> : <HiddenIcon />}
+                                color={ex.is_published ? 'primary' : 'default'}
+                                variant={ex.is_published ? 'filled' : 'outlined'}
+                                label={ex.is_published ? 'Listed' : 'Not listed'}
+                                onClick={() => patch(ex, { is_published: !ex.is_published })}
+                                sx={{ height: 24 }} />
+                        </Tooltip>
+                        <Tooltip title={ex.can_scan_leads
+                            ? 'Their scanner link works. Click to revoke.'
+                            : 'Their scanner link is dead. Click to grant.'}>
+                            <Chip size="small" icon={<ScanIcon />}
+                                color={ex.can_scan_leads ? 'success' : 'default'}
+                                variant={ex.can_scan_leads ? 'filled' : 'outlined'}
+                                label={ex.can_scan_leads ? 'Can scan' : 'No scanning'}
+                                onClick={() => patch(ex, { can_scan_leads: !ex.can_scan_leads })}
+                                sx={{ height: 24 }} />
+                        </Tooltip>
+                    </Stack>
+
+                    <Stack direction="row" spacing={0.5} alignItems="center"
+                           sx={{ flex: '0 0 auto', ml: { xs: 0, sm: 'auto' } }}>
+                        <Tooltip title={ex.lead_count ? 'See their captured leads' : 'No badges scanned yet'}>
+                            <span>
+                                <Badge badgeContent={ex.lead_count || 0} color="primary" showZero={false}>
+                                    <Button size="small" onClick={() => onLeads(ex)}>Leads</Button>
+                                </Badge>
+                            </span>
                         </Tooltip>
                         <Button size="small" onClick={() => onEdit({ ...ex })}>Edit</Button>
-                        <Button size="small" onClick={() => onLeads(ex)}>{ex.lead_count || 0} Leads</Button>
-                        <Button size="small" onClick={() => onSetup(ex)}>Setup link</Button>
-                        <Button size="small" onClick={() => patch(ex, { is_published: !ex.is_published })}>
-                            {ex.is_published ? 'Unlist' : 'List'}
-                        </Button>
-                        <Tooltip title="Delete">
-                            <IconButton size="small" aria-label={`Delete ${ex.company_name}`}
-                                onClick={() => onDelete(ex)}><DeleteIcon fontSize="small" /></IconButton>
+                        <Tooltip title="More">
+                            <IconButton size="small" aria-label={`More for ${ex.company_name}`}
+                                onClick={(e) => setMenu({ el: e.currentTarget, row: ex })}>
+                                <MoreIcon fontSize="small" />
+                            </IconButton>
                         </Tooltip>
-                    </Box>
+                    </Stack>
                 </Box>
-            </CardContent>
-        </Card>
-    ));
+            ))}
+
+            <Menu open={Boolean(menu)} anchorEl={menu?.el} onClose={() => setMenu(null)}>
+                <MenuItem onClick={() => { copy(scanUrl(row), 'Scanner link'); setMenu(null); }}>
+                    <CopyIcon fontSize="small" style={{ marginRight: 8 }} /> Copy scanner link
+                </MenuItem>
+                <MenuItem onClick={() => { onSetup(row); setMenu(null); }}>
+                    <SendIcon fontSize="small" style={{ marginRight: 8 }} /> Send setup link
+                </MenuItem>
+                <Divider />
+                <MenuItem onClick={() => { onDelete(row); setMenu(null); }}
+                    sx={{ color: 'error.main' }}>
+                    <DeleteIcon fontSize="small" style={{ marginRight: 8 }} /> Delete stand
+                </MenuItem>
+            </Menu>
+        </Paper>
+    );
 }
 
 /** The board: stage, package, money, and the two permissions. */

@@ -23,19 +23,14 @@ import {
 import Exhibitors from './Exhibitors';
 import { getEvent, updateEvent, grabEvent } from '../utils/api';
 
-function EventDetail() {
+function EventDetail({ section }) {
     const { id } = useParams();
-    // NOTE: `section` is accepted so the workspace can route Overview and
-    // Exhibitors here, but this component renders the same content either way.
-    // Two flags used to be computed for it and never applied; they were dead
-    // before this change and removing them alters nothing on screen. Making the
-    // Exhibitors tab show only exhibitors would mean restructuring the grid, so
-    // it is left alone rather than smuggled into a merge.
     const navigate = useNavigate();
     const [event, setEvent] = useState(null);
-    // Only the count, for Event Stats. The exhibitor list itself lives in
-    // <Exhibitors>, which owns loading and refreshing it.
-    const [exhibitorCount, setExhibitorCount] = useState(0);
+    // Event Stats needs a number, not the list. The event carries the count, and
+    // <Exhibitors> overrides it with a live one while that tab is open — so
+    // adding or deleting a stand is reflected without a reload.
+    const [exhibitorCount, setExhibitorCount] = useState(null);
     const [editMode, setEditMode] = useState(false);
     // Prefilled from this event's own import source — never a fixed page.
     const [sourceUrl, setSourceUrl] = useState('');
@@ -116,6 +111,15 @@ function EventDetail() {
 
     if (!event) {
         return <Typography>Loading...</Typography>;
+    }
+
+    // The Exhibitors tab shows the exhibitor area and nothing else. It used to
+    // render this whole component — event title, publish switches, description,
+    // dates, stats — with the exhibitor list bolted underneath, which is what
+    // made it indistinguishable from Overview. The workspace already prints the
+    // event name and the tab bar above, so none of that needs repeating here.
+    if (section === 'exhibitors') {
+        return <Exhibitors eventId={id} onCountChange={setExhibitorCount} />;
     }
 
     return (
@@ -373,13 +377,6 @@ function EventDetail() {
                             )}
                         </CardContent>
                     </Card>
-
-                    {/* One place for exhibitors: the roster, the commercial board,
-                        the permissions and the setup links. This used to be split
-                        across here and a separate Vendors screen over the same rows. */}
-                    <Box mt={3}>
-                        <Exhibitors eventId={id} onCountChange={setExhibitorCount} />
-                    </Box>
                 </Grid>
 
                 <Grid item xs={12} md={4}>
@@ -395,7 +392,7 @@ function EventDetail() {
                                 <strong>{event.checked_in_count}</strong> Checked In
                             </Typography>
                             <Typography variant="body1">
-                                <strong>{exhibitorCount}</strong> Exhibitors
+                                <strong>{exhibitorCount ?? event.exhibitor_count ?? 0}</strong> Exhibitors
                             </Typography>
                         </CardContent>
                     </Card>

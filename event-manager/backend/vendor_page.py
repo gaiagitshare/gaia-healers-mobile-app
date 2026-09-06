@@ -101,7 +101,7 @@ def _initials(name):
     return ("".join(p[0] for p in parts[:2]) or "G").upper()
 
 
-def public_vendor_html(ex, event_name, app_base=""):
+def public_vendor_html(ex, event_name, directory_url=""):
     """One stand, as an attendee meets it."""
     tile = " logo--dark" if getattr(ex, "logo_on_dark", False) else ""
     logo_inner = ('<img src="%s" alt="">' % _h(ex.logo_url)) if ex.logo_url else \
@@ -172,9 +172,12 @@ def public_vendor_html(ex, event_name, app_base=""):
                      'Come and find them at the event.</div>'
                      % (_h(ex.company_name), _h(event_name)))
 
+    # Straight to the exhibitor directory in the Gaia app, not to the API root
+    # this used to point at. Somebody who scanned one stand's QR is asking who
+    # else is here, and that is a directory, not a JSON document.
     cta = ""
-    if app_base:
-        cta = ('<a class="cta ghost" href="%s">See everyone exhibiting</a>' % _h(app_base))
+    if directory_url:
+        cta = ('<a class="cta ghost" href="%s">See everyone exhibiting</a>' % _h(directory_url))
 
     body = ('<div class="card">'
             '<div class="hero"><div class="logo%s">%s</div><h1>%s</h1>%s%s</div>'

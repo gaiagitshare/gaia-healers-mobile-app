@@ -3204,6 +3204,16 @@ def vendor_activation_link(exhibitor_id: int, db: Session = Depends(get_db),
             "expires_in_days": VENDOR_SETUP_TTL_DAYS}
 
 
+# Where "See everyone exhibiting" goes: the exhibitor directory inside the Gaia
+# app, deep-linked to this event's tab. It used to point at the API root, which
+# answered a person's question about the hall with a JSON document.
+APP_PUBLIC_BASE = os.getenv("APP_PUBLIC_BASE", "https://gaiahealers.app").rstrip("/")
+
+
+def _directory_url(event_id):
+    return "%s/?event=%s&tab=exhibitors" % (APP_PUBLIC_BASE, event_id)
+
+
 @app.get("/v/{exhibitor_id}", response_class=HTMLResponse)
 def public_vendor_page(exhibitor_id: int, db: Session = Depends(get_db)):
     """One stand's public page. Published stands only — an unpublished vendor is
@@ -3212,9 +3222,8 @@ def public_vendor_page(exhibitor_id: int, db: Session = Depends(get_db)):
     if not ex or not ex.is_published:
         raise HTTPException(status_code=404, detail="Not found")
     event = db.query(models.Event).filter(models.Event.id == ex.event_id).first()
-    base = (os.environ.get("CARD_PUBLIC_BASE") or "").rstrip("/")
     return HTMLResponse(vendor_page.public_vendor_html(
-        ex, event.name if event else "", base.replace("//card.", "//api.") if base else ""))
+        ex, event.name if event else "", _directory_url(ex.event_id)))
 
 
 @app.get("/scan/roster/{access_token}")

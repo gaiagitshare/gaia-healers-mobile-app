@@ -3211,7 +3211,10 @@ APP_PUBLIC_BASE = os.getenv("APP_PUBLIC_BASE", "https://gaiahealers.app").rstrip
 
 
 def _directory_url(event_id):
-    return "%s/?event=%s&tab=exhibitors" % (APP_PUBLIC_BASE, event_id)
+    # `view` is what selects the screen; without it the link lands on Today and
+    # the rest of the query is ignored. The splash carries the whole query
+    # through to home.html, so this form survives a first-time visitor too.
+    return "%s/?view=events&event=%s&tab=exhibitors" % (APP_PUBLIC_BASE, event_id)
 
 
 @app.get("/v/{exhibitor_id}", response_class=HTMLResponse)

@@ -10,11 +10,14 @@ import {
     Add as AddIcon, UploadFile as UploadFileIcon, Delete as DeleteIcon,
     Search as SearchIcon, ContentCopy as CopyIcon, MoreVert as MoreIcon,
     QrCodeScanner as ScanIcon, Send as SendIcon, Visibility as VisibleIcon,
-    VisibilityOff as HiddenIcon,
+    VisibilityOff as HiddenIcon, AddPhotoAlternate as AddPhotoIcon,
+    Close as CloseIcon,
 } from '@mui/icons-material';
 import {
     getExhibitors, createExhibitor, updateExhibitor, deleteExhibitor,
     getExhibitorLeads, vendorActivationLink,
+    uploadExhibitorImage, addExhibitorPhoto, deleteExhibitorPhoto,
+    addExhibitorProduct, updateExhibitorProduct, deleteExhibitorProduct,
 } from '../utils/api';
 import ImportCsvDialog from './ImportCsvDialog';
 import BulkToolbar, { useBulkSelection, SelectAllCheckbox } from './BulkToolbar';
@@ -122,8 +125,10 @@ export default function Exhibitors({ eventId, onCountChange }) {
             const r = await getExhibitors(eventId);
             setRows(r.data || []);
             if (onCountChange) onCountChange((r.data || []).length);
+            return r.data || [];
         } catch (e) {
             setError(e?.response?.data?.detail || 'Could not load the exhibitors.');
+            return null;
         } finally { setLoading(false); }
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [eventId]);
@@ -360,6 +365,17 @@ export default function Exhibitors({ eventId, onCountChange }) {
                 row={editing}
                 saving={saving}
                 onClose={() => setEditing(null)}
+                onMediaChanged={async () => {
+                    // Photos and catalogue items save on their own, so the open
+                    // dialog is re-pointed at the freshly loaded row rather than
+                    // waiting for Save — otherwise it shows what was there before.
+                    const fresh = await load();
+                    setEditing((cur) => {
+                        if (!cur || cur.isNew) return cur;
+                        const found = (fresh || []).find((r) => r.id === cur.id);
+                        return found ? { ...cur, photos: found.photos, products: found.products } : cur;
+                    });
+                }}
                 onSave={async (body) => {
                     setSaving(true);
                     try {
@@ -644,7 +660,141 @@ function CommercialTable({ rows, patch, onEdit, onLeads, onSetup }) {
  * "where do I change the booth?" depended on which screen you happened to be
  * on. Sections, not tabs: it is one record and it is short enough to read.
  */
-function ExhibitorDialog({ row, saving, onClose, onSave }) {
+/**
+ * A stand's pictures and its catalogue, edited by us before they activate.
+ *
+ * The same rows the stand edits through its own setup link, against the same
+ * endpoints — so nothing built here is thrown away the day they take it over,
+ * and there is no second copy of a catalogue to drift.
+ *
+ * Every action saves immediately. There is no draft state to lose, which is why
+ * this cannot live behind the dialog's Save button.
+ */
+function MediaManager({ exhibitorId, photos, products, onChanged }) {
+    const [busy, setBusy] = useState('');
+    const [error, setError] = useState('');
+    const [adding, setAdding] = useState(false);
+    const [draft, setDraft] = useState({ name: '', description: '', file: null });
+
+    const run = async (label, fn) => {
+        setBusy(label); setError('');
+        try { await fn(); await onChanged(); } catch (e) {
+            setError(e?.response?.data?.detail || 'That did not save.');
+        } finally { setBusy(''); }
+    };
+
+    const addPhotos = (files) => run('photos', async () => {
+        for (const file of Array.from(files)) {
+            const { data } = await uploadExhibitorImage(exhibitorId, file);
+            await addExhibitorPhoto(exhibitorId, { url: data.url });
+        }
+    });
+
+    const saveProduct = () => run('product', async () => {
+        let imageUrl = null;
+        if (draft.file) imageUrl = (await uploadExhibitorImage(exhibitorId, draft.file)).data.url;
+        await addExhibitorProduct(exhibitorId, {
+            name: draft.name.trim(), description: draft.description.trim() || null, image_url: imageUrl,
+        });
+        setDraft({ name: '', description: '', file: null });
+        setAdding(false);
+    });
+
+    return (
+        <>
+            <Divider textAlign="left"><Typography variant="caption">Photos of the stand</Typography></Divider>
+            <Typography variant="caption" color="text.secondary" sx={{ mt: -1 }}>
+                Up to 12, shown as a strip on their public page. The stand can change these itself once it activates.
+            </Typography>
+            <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
+                {photos.map((p) => (
+                    <Box key={p.id} sx={{ position: 'relative', width: 84, height: 84 }}>
+                        <Box component="img" src={p.url} alt=""
+                            sx={{ width: 84, height: 84, objectFit: 'cover', borderRadius: 1.5, border: 1, borderColor: 'divider' }} />
+                        <IconButton size="small" aria-label="Remove photo"
+                            onClick={() => run('photos', () => deleteExhibitorPhoto(exhibitorId, p.id))}
+                            sx={{ position: 'absolute', top: 2, right: 2, bgcolor: 'rgba(0,0,0,.6)', color: '#fff',
+                                  '&:hover': { bgcolor: 'rgba(0,0,0,.8)' } }}>
+                            <CloseIcon fontSize="inherit" />
+                        </IconButton>
+                    </Box>
+                ))}
+                <Button component="label" variant="outlined" disabled={busy === 'photos'}
+                    sx={{ width: 84, height: 84, minWidth: 0, borderStyle: 'dashed', flexDirection: 'column', gap: 0.5 }}>
+                    {busy === 'photos' ? <CircularProgress size={18} /> : <AddPhotoIcon fontSize="small" />}
+                    <Typography variant="caption">Add</Typography>
+                    <input hidden type="file" accept="image/*" multiple
+                        onChange={(e) => { if (e.target.files?.length) addPhotos(e.target.files); e.target.value = ''; }} />
+                </Button>
+            </Stack>
+
+            <Divider textAlign="left"><Typography variant="caption">Catalogue</Typography></Divider>
+            <Typography variant="caption" color="text.secondary" sx={{ mt: -1 }}>
+                What they will have on the table. A catalogue, not a shop — no prices, nothing sold through Gaia.
+            </Typography>
+            <Stack spacing={1}>
+                {products.map((p) => (
+                    <Paper key={p.id} variant="outlined" sx={{ p: 1, display: 'flex', gap: 1.5, alignItems: 'flex-start' }}>
+                        {p.image_url
+                            ? <Box component="img" src={p.image_url} alt=""
+                                sx={{ width: 46, height: 46, objectFit: 'cover', borderRadius: 1, flexShrink: 0 }} />
+                            : <Box sx={{ width: 46, height: 46, borderRadius: 1, bgcolor: 'action.hover', flexShrink: 0 }} />}
+                        <Box sx={{ flex: 1, minWidth: 0 }}>
+                            <TextField variant="standard" fullWidth defaultValue={p.name}
+                                InputProps={{ disableUnderline: true, sx: { fontWeight: 600, fontSize: 14 } }}
+                                onBlur={(e) => e.target.value.trim() && e.target.value !== p.name
+                                    && run('product', () => updateExhibitorProduct(exhibitorId, p.id, { name: e.target.value.trim() }))} />
+                            <TextField variant="standard" fullWidth multiline defaultValue={p.description || ''}
+                                placeholder="A line about it"
+                                InputProps={{ disableUnderline: true, sx: { fontSize: 13, color: 'text.secondary' } }}
+                                onBlur={(e) => e.target.value !== (p.description || '')
+                                    && run('product', () => updateExhibitorProduct(exhibitorId, p.id, { description: e.target.value }))} />
+                        </Box>
+                        <IconButton size="small" color="error" aria-label="Remove item"
+                            onClick={() => run('product', () => deleteExhibitorProduct(exhibitorId, p.id))}>
+                            <DeleteIcon fontSize="small" />
+                        </IconButton>
+                    </Paper>
+                ))}
+                {!products.length && !adding && (
+                    <Typography variant="caption" color="text.secondary">Nothing listed yet.</Typography>
+                )}
+                {adding ? (
+                    <Paper variant="outlined" sx={{ p: 1.5 }}>
+                        <Stack spacing={1.5}>
+                            <TextField size="small" label="Name" autoFocus value={draft.name}
+                                onChange={(e) => setDraft({ ...draft, name: e.target.value })} />
+                            <TextField size="small" label="One or two lines about it" multiline rows={2}
+                                value={draft.description}
+                                onChange={(e) => setDraft({ ...draft, description: e.target.value })} />
+                            <Button component="label" size="small" variant="outlined" startIcon={<AddPhotoIcon />}>
+                                {draft.file ? draft.file.name : 'Photo (optional)'}
+                                <input hidden type="file" accept="image/*"
+                                    onChange={(e) => setDraft({ ...draft, file: e.target.files?.[0] || null })} />
+                            </Button>
+                            <Stack direction="row" spacing={1}>
+                                <Button size="small" variant="contained" disabled={!draft.name.trim() || busy === 'product'}
+                                    onClick={saveProduct}>
+                                    {busy === 'product' ? 'Adding…' : 'Add to catalogue'}
+                                </Button>
+                                <Button size="small" onClick={() => { setAdding(false); setDraft({ name: '', description: '', file: null }); }}>
+                                    Cancel
+                                </Button>
+                            </Stack>
+                        </Stack>
+                    </Paper>
+                ) : (
+                    <Button size="small" startIcon={<AddIcon />} onClick={() => setAdding(true)} sx={{ alignSelf: 'flex-start' }}>
+                        Add an item
+                    </Button>
+                )}
+            </Stack>
+            {error && <Alert severity="error" onClose={() => setError('')}>{error}</Alert>}
+        </>
+    );
+}
+
+function ExhibitorDialog({ row, saving, onClose, onSave, onMediaChanged }) {
     const [f, setF] = useState({});
     useEffect(() => { setF(row ? { ...row } : {}); }, [row]);
     if (!row) return null;
@@ -697,6 +847,19 @@ function ExhibitorDialog({ row, saving, onClose, onSave }) {
                             'For white artwork that would disappear on a white card.')}
                     {toggle('is_published', 'In the attendee directory',
                             'Attendees can find this stand in the app.')}
+
+                    {row.isNew ? (
+                        <Alert severity="info" variant="outlined">
+                            Save the stand first, then photos and a catalogue can be added to it.
+                        </Alert>
+                    ) : (
+                        <MediaManager
+                            exhibitorId={row.id}
+                            photos={row.photos || []}
+                            products={row.products || []}
+                            onChanged={onMediaChanged}
+                        />
+                    )}
 
                     <Divider textAlign="left"><Typography variant="caption">Public contact — from their website</Typography></Divider>
                     <Typography variant="caption" color="text.secondary" sx={{ mt: -1 }}>

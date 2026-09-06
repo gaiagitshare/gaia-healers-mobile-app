@@ -139,6 +139,21 @@ export const deleteExhibitor = (id) => api.delete(`/exhibitors/${id}`);
 export const getExhibitorLeads = (exhibitorId) => api.get(`/exhibitors/${exhibitorId}/leads`);
 // A fresh setup link for one stand. Issuing a new one retires the previous.
 export const vendorActivationLink = (id) => api.post(`/exhibitors/${id}/activation-link`);
+// A stand's pictures and its catalogue. The same rows the stand edits through
+// its own setup link, so whatever the team builds here is what the stand takes
+// over the day it activates.
+export const uploadExhibitorImage = (id, file) => {
+    const body = new FormData();
+    body.append('file', file);
+    return api.post(`/exhibitors/${id}/images`, body,
+        { headers: { 'Content-Type': 'multipart/form-data' } });
+};
+export const addExhibitorPhoto = (id, data) => api.post(`/exhibitors/${id}/photos`, data);
+export const updateExhibitorPhoto = (id, photoId, data) => api.patch(`/exhibitors/${id}/photos/${photoId}`, data);
+export const deleteExhibitorPhoto = (id, photoId) => api.delete(`/exhibitors/${id}/photos/${photoId}`);
+export const addExhibitorProduct = (id, data) => api.post(`/exhibitors/${id}/products`, data);
+export const updateExhibitorProduct = (id, productId, data) => api.patch(`/exhibitors/${id}/products/${productId}`, data);
+export const deleteExhibitorProduct = (id, productId) => api.delete(`/exhibitors/${id}/products/${productId}`);
 
 
 // Agenda — sessions

@@ -286,6 +286,42 @@ class ExhibitorCreate(ExhibitorBase):
     payment_note: Optional[str] = None
     show_contact_publicly: Optional[bool] = None
 
+class ExhibitorPhoto(BaseModel):
+    id: int
+    url: str
+    caption: Optional[str] = None
+    sort_order: int = 0
+
+    class Config:
+        from_attributes = True
+
+
+class ExhibitorProduct(BaseModel):
+    """A catalogue entry, not a listing. There is deliberately no price and no
+    purchase link: nothing on a stand is sold through Gaia."""
+    id: int
+    name: str
+    description: Optional[str] = None
+    image_url: Optional[str] = None
+    sort_order: int = 0
+
+    class Config:
+        from_attributes = True
+
+
+class ExhibitorPhotoWrite(BaseModel):
+    url: Optional[str] = None
+    caption: Optional[str] = None
+    sort_order: Optional[int] = None
+
+
+class ExhibitorProductWrite(BaseModel):
+    name: Optional[str] = None
+    description: Optional[str] = None
+    image_url: Optional[str] = None
+    sort_order: Optional[int] = None
+
+
 class ExhibitorUpdate(BaseModel):
     company_name: Optional[str] = None
     booth_number: Optional[str] = None
@@ -341,6 +377,8 @@ class Exhibitor(ExhibitorBase):
     amount_paid: Optional[float] = None
     payment_note: Optional[str] = None
     show_contact_publicly: bool = False
+    photos: List[ExhibitorPhoto] = []
+    products: List[ExhibitorProduct] = []
 
     class Config:
         from_attributes = True
@@ -384,6 +422,8 @@ class ExhibitorPublic(BaseModel):
     logo_on_dark: Optional[bool] = False
     contact_email: Optional[str] = None
     contact_phone: Optional[str] = None
+    photos: List[ExhibitorPhoto] = []
+    products: List[ExhibitorProduct] = []
 
     class Config:
         from_attributes = True

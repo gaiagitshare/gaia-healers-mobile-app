@@ -3337,6 +3337,268 @@ def vendor_setup_save(token: str, payload: schemas.VendorSetup,
             "activated": ex.activated_at is not None}
 
 
+# ---------------------------------------------------------------------------
+# A stand's pictures and its catalogue.
+#
+# Two people edit the same rows at different times: the Gaia team builds the
+# page for a stand that has paid but not yet activated, and the stand itself
+# takes it over the moment it opens its setup link. So every operation below
+# exists twice over one implementation -- once behind an operator login, once
+# behind the setup link -- and neither route can reach anything the other owns.
+# The stand still cannot touch its booth, its package, what it paid, or its
+# scanner, because none of those are in any payload here.
+# ---------------------------------------------------------------------------
+EXHIBITOR_IMAGE_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "uploads", "exhibitors")
+os.makedirs(EXHIBITOR_IMAGE_DIR, exist_ok=True)
+EXHIBITOR_MEDIA_PATH = "/public/exhibitors/media/"
+_EXHIBITOR_IMAGE_EXT = {"image/jpeg": ".jpg", "image/pjpeg": ".jpg", "image/png": ".png",
+                        "image/webp": ".webp", "image/gif": ".gif"}
+EXHIBITOR_IMAGE_MAX_BYTES = 8 * 1024 * 1024
+EXHIBITOR_MAX_PHOTOS = 12
+EXHIBITOR_MAX_PRODUCTS = 24
+
+
+async def _store_exhibitor_image(file: UploadFile) -> str:
+    """Write one uploaded image and return the URL it will be served from.
+
+    The content type decides the extension, never the filename the browser sent:
+    a stand uploading `logo.php` gets a `.png` on disk or a 400, and nothing in
+    between. The name is random, so one stand cannot guess or overwrite another's.
+    """
+    ext = _EXHIBITOR_IMAGE_EXT.get((file.content_type or "").lower())
+    if not ext:
+        raise HTTPException(status_code=400, detail="Only JPG, PNG, WEBP or GIF images are allowed")
+    data = await file.read()
+    if not data:
+        raise HTTPException(status_code=400, detail="That file was empty")
+    if len(data) > EXHIBITOR_IMAGE_MAX_BYTES:
+        raise HTTPException(status_code=413, detail="That image is too large (8MB maximum)")
+    name = uuid.uuid4().hex + ext
+    with open(os.path.join(EXHIBITOR_IMAGE_DIR, name), "wb") as fh:
+        fh.write(data)
+    return EVENT_API_PUBLIC_BASE + EXHIBITOR_MEDIA_PATH + name
+
+
+@app.get("/public/exhibitors/media/{filename}")
+def exhibitor_media(filename: str):
+    """Serve one uploaded exhibitor image. Published stands are public, so this
+    is public too -- but only ever a file this server itself named."""
+    if not re.fullmatch(r"[0-9a-f]{32}\.(jpg|png|webp|gif)", filename or ""):
+        raise HTTPException(status_code=404, detail="Not found")
+    path = os.path.join(EXHIBITOR_IMAGE_DIR, filename)
+    if not os.path.isfile(path):
+        raise HTTPException(status_code=404, detail="Not found")
+    from fastapi.responses import FileResponse
+    return FileResponse(path, headers={"Cache-Control": "public, max-age=31536000, immutable"})
+
+
+def _next_sort(db, model, exhibitor_id):
+    last = db.query(model).filter(model.exhibitor_id == exhibitor_id).order_by(
+        model.sort_order.desc()).first()
+    return ((last.sort_order or 0) + 1) if last else 0
+
+
+def _add_photo(db, ex, url, caption=None):
+    if len(ex.photos) >= EXHIBITOR_MAX_PHOTOS:
+        raise HTTPException(status_code=400,
+                            detail="A stand can show up to %d photos." % EXHIBITOR_MAX_PHOTOS)
+    photo = models.ExhibitorPhoto(exhibitor_id=ex.id, url=url,
+                                  caption=(caption or None),
+                                  sort_order=_next_sort(db, models.ExhibitorPhoto, ex.id))
+    db.add(photo)
+    db.commit()
+    db.refresh(photo)
+    return photo
+
+
+def _add_product(db, ex, name, description=None, image_url=None):
+    name = (name or "").strip()
+    if not name:
+        raise HTTPException(status_code=400, detail="A catalogue item needs a name")
+    if len(ex.products) >= EXHIBITOR_MAX_PRODUCTS:
+        raise HTTPException(status_code=400,
+                            detail="A stand can list up to %d items." % EXHIBITOR_MAX_PRODUCTS)
+    product = models.ExhibitorProduct(
+        exhibitor_id=ex.id, name=name[:120],
+        description=(description or "").strip()[:600] or None,
+        image_url=(image_url or "").strip()[:400] or None,
+        sort_order=_next_sort(db, models.ExhibitorProduct, ex.id))
+    db.add(product)
+    db.commit()
+    db.refresh(product)
+    return product
+
+
+def _edit_row(db, row, changes, fields):
+    for f in fields:
+        v = getattr(changes, f, None)
+        if v is not None:
+            if f == "sort_order":
+                row.sort_order = int(v)
+            else:
+                setattr(row, f, (str(v).strip() or None))
+    db.commit()
+    db.refresh(row)
+    return row
+
+
+def _owned_or_404(db, model, row_id, exhibitor_id):
+    """A row is only editable through the stand it belongs to. Checking the
+    parent here is what stops one setup link editing another stand's catalogue."""
+    row = db.query(model).filter(model.id == row_id,
+                                 model.exhibitor_id == exhibitor_id).first()
+    if not row:
+        raise HTTPException(status_code=404, detail="Not found")
+    return row
+
+
+def _admin_exhibitor(db, current_user, exhibitor_id):
+    ex = db.query(models.Exhibitor).filter(models.Exhibitor.id == exhibitor_id).first()
+    if not ex:
+        raise HTTPException(status_code=404, detail="Exhibitor not found")
+    authz.require_cap(db, current_user, ex.event_id, "exhibitor.write")
+    return ex
+
+
+def _setup_exhibitor(db, token):
+    ex = _vendor_for_setup_token(db, token)
+    if not ex:
+        raise HTTPException(status_code=404, detail="This setup link is not valid, or has expired.")
+    return ex
+
+
+# ── operator routes ─────────────────────────────────────────────────────────
+@app.post("/exhibitors/{exhibitor_id}/images", response_model=dict)
+async def upload_exhibitor_image(exhibitor_id: int, file: UploadFile = File(...),
+                                 db: Session = Depends(get_db),
+                                 current_user: models.User = Depends(get_current_user)):
+    _admin_exhibitor(db, current_user, exhibitor_id)
+    return {"ok": True, "url": await _store_exhibitor_image(file)}
+
+
+@app.post("/exhibitors/{exhibitor_id}/photos", response_model=schemas.ExhibitorPhoto)
+def admin_add_photo(exhibitor_id: int, body: schemas.ExhibitorPhotoWrite,
+                    db: Session = Depends(get_db),
+                    current_user: models.User = Depends(get_current_user)):
+    ex = _admin_exhibitor(db, current_user, exhibitor_id)
+    if not (body.url or "").strip():
+        raise HTTPException(status_code=400, detail="A photo needs an image")
+    return _add_photo(db, ex, body.url.strip()[:400], body.caption)
+
+
+@app.patch("/exhibitors/{exhibitor_id}/photos/{photo_id}", response_model=schemas.ExhibitorPhoto)
+def admin_edit_photo(exhibitor_id: int, photo_id: int, body: schemas.ExhibitorPhotoWrite,
+                     db: Session = Depends(get_db),
+                     current_user: models.User = Depends(get_current_user)):
+    _admin_exhibitor(db, current_user, exhibitor_id)
+    row = _owned_or_404(db, models.ExhibitorPhoto, photo_id, exhibitor_id)
+    return _edit_row(db, row, body, ("url", "caption", "sort_order"))
+
+
+@app.delete("/exhibitors/{exhibitor_id}/photos/{photo_id}")
+def admin_delete_photo(exhibitor_id: int, photo_id: int,
+                       db: Session = Depends(get_db),
+                       current_user: models.User = Depends(get_current_user)):
+    _admin_exhibitor(db, current_user, exhibitor_id)
+    db.delete(_owned_or_404(db, models.ExhibitorPhoto, photo_id, exhibitor_id))
+    db.commit()
+    return {"ok": True}
+
+
+@app.post("/exhibitors/{exhibitor_id}/products", response_model=schemas.ExhibitorProduct)
+def admin_add_product(exhibitor_id: int, body: schemas.ExhibitorProductWrite,
+                      db: Session = Depends(get_db),
+                      current_user: models.User = Depends(get_current_user)):
+    ex = _admin_exhibitor(db, current_user, exhibitor_id)
+    return _add_product(db, ex, body.name, body.description, body.image_url)
+
+
+@app.patch("/exhibitors/{exhibitor_id}/products/{product_id}", response_model=schemas.ExhibitorProduct)
+def admin_edit_product(exhibitor_id: int, product_id: int, body: schemas.ExhibitorProductWrite,
+                       db: Session = Depends(get_db),
+                       current_user: models.User = Depends(get_current_user)):
+    _admin_exhibitor(db, current_user, exhibitor_id)
+    row = _owned_or_404(db, models.ExhibitorProduct, product_id, exhibitor_id)
+    return _edit_row(db, row, body, ("name", "description", "image_url", "sort_order"))
+
+
+@app.delete("/exhibitors/{exhibitor_id}/products/{product_id}")
+def admin_delete_product(exhibitor_id: int, product_id: int,
+                         db: Session = Depends(get_db),
+                         current_user: models.User = Depends(get_current_user)):
+    _admin_exhibitor(db, current_user, exhibitor_id)
+    db.delete(_owned_or_404(db, models.ExhibitorProduct, product_id, exhibitor_id))
+    db.commit()
+    return {"ok": True}
+
+
+# ── the stand's own routes, behind its setup link ───────────────────────────
+@app.post("/vendor-setup/{token}/images", response_model=dict)
+async def vendor_upload_image(token: str, file: UploadFile = File(...),
+                              db: Session = Depends(get_db)):
+    _setup_exhibitor(db, token)
+    return {"ok": True, "url": await _store_exhibitor_image(file)}
+
+
+@app.get("/vendor-setup/{token}/media")
+def vendor_media(token: str, db: Session = Depends(get_db)):
+    ex = _setup_exhibitor(db, token)
+    return {"ok": True,
+            "photos": [{"id": p.id, "url": p.url, "caption": p.caption,
+                        "sort_order": p.sort_order} for p in ex.photos],
+            "products": [{"id": p.id, "name": p.name, "description": p.description,
+                          "image_url": p.image_url, "sort_order": p.sort_order}
+                         for p in ex.products]}
+
+
+@app.post("/vendor-setup/{token}/photos", response_model=schemas.ExhibitorPhoto)
+def vendor_add_photo(token: str, body: schemas.ExhibitorPhotoWrite,
+                     db: Session = Depends(get_db)):
+    ex = _setup_exhibitor(db, token)
+    if not (body.url or "").strip():
+        raise HTTPException(status_code=400, detail="A photo needs an image")
+    return _add_photo(db, ex, body.url.strip()[:400], body.caption)
+
+
+@app.patch("/vendor-setup/{token}/photos/{photo_id}", response_model=schemas.ExhibitorPhoto)
+def vendor_edit_photo(token: str, photo_id: int, body: schemas.ExhibitorPhotoWrite,
+                      db: Session = Depends(get_db)):
+    ex = _setup_exhibitor(db, token)
+    return _edit_row(db, _owned_or_404(db, models.ExhibitorPhoto, photo_id, ex.id),
+                     body, ("url", "caption", "sort_order"))
+
+
+@app.delete("/vendor-setup/{token}/photos/{photo_id}")
+def vendor_delete_photo(token: str, photo_id: int, db: Session = Depends(get_db)):
+    ex = _setup_exhibitor(db, token)
+    db.delete(_owned_or_404(db, models.ExhibitorPhoto, photo_id, ex.id))
+    db.commit()
+    return {"ok": True}
+
+
+@app.post("/vendor-setup/{token}/products", response_model=schemas.ExhibitorProduct)
+def vendor_add_product(token: str, body: schemas.ExhibitorProductWrite,
+                       db: Session = Depends(get_db)):
+    ex = _setup_exhibitor(db, token)
+    return _add_product(db, ex, body.name, body.description, body.image_url)
+
+
+@app.patch("/vendor-setup/{token}/products/{product_id}", response_model=schemas.ExhibitorProduct)
+def vendor_edit_product(token: str, product_id: int, body: schemas.ExhibitorProductWrite,
+                        db: Session = Depends(get_db)):
+    ex = _setup_exhibitor(db, token)
+    return _edit_row(db, _owned_or_404(db, models.ExhibitorProduct, product_id, ex.id),
+                     body, ("name", "description", "image_url", "sort_order"))
+
+
+@app.delete("/vendor-setup/{token}/products/{product_id}")
+def vendor_delete_product(token: str, product_id: int, db: Session = Depends(get_db)):
+    ex = _setup_exhibitor(db, token)
+    db.delete(_owned_or_404(db, models.ExhibitorProduct, product_id, ex.id))
+    db.commit()
+    return {"ok": True}
+
+
 @app.get("/public/events/{event_id}/exhibitors", response_model=List[schemas.ExhibitorPublic])
 def get_public_exhibitors(
     event_id: int,
@@ -3374,6 +3636,14 @@ def get_public_exhibitors(
                               or ((r.contact_email or None) if show else None)),
             "contact_phone": (getattr(r, "public_phone", None)
                               or ((r.contact_phone or None) if show else None)),
+            # Built by hand rather than serialised from the row, so anything
+            # added to the model has to be added here on purpose. These two are
+            # the stand's own published material and carry nothing private.
+            "photos": [{"id": ph.id, "url": ph.url, "caption": ph.caption,
+                        "sort_order": ph.sort_order or 0} for ph in r.photos],
+            "products": [{"id": pd.id, "name": pd.name, "description": pd.description,
+                          "image_url": pd.image_url, "sort_order": pd.sort_order or 0}
+                         for pd in r.products],
         })
     return out
 

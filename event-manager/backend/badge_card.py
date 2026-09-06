@@ -890,6 +890,32 @@ button[disabled]{opacity:.55;cursor:default}
 .msg.ok{color:#2e7d32;font-weight:600}
 .msg.bad{color:#b3261e}
 .foot{margin:24px 0 0;font-size:12.5px;color:#8a998f;text-align:center}
+.media{margin:26px 0 0;padding-top:22px;border-top:1px solid #e3eae4}
+.media h2{margin:0 0 3px;font-size:15px}
+.media .hint{margin:0 0 13px;font-size:13px;color:#8a998f;line-height:1.5}
+.thumbs{display:grid;grid-template-columns:repeat(auto-fill,minmax(96px,1fr));gap:9px}
+.thumb{position:relative;border-radius:11px;overflow:hidden;border:1px solid #e3eae4;background:#f2f5f2}
+.thumb img{display:block;width:100%;aspect-ratio:1/1;object-fit:cover}
+.thumb button{position:absolute;top:5px;right:5px;width:25px;height:25px;padding:0;border:0;
+  border-radius:999px;background:rgba(9,16,11,.72);color:#fff;font-size:15px;line-height:25px;
+  cursor:pointer}
+.items{display:grid;gap:9px;margin-bottom:11px}
+.item{display:flex;gap:11px;align-items:flex-start;padding:11px;border:1px solid #e3eae4;
+  border-radius:12px;background:#fbfdfb}
+.item img{width:54px;height:54px;border-radius:9px;object-fit:cover;flex:0 0 auto;background:#eef3ee}
+.item .no{width:54px;height:54px;border-radius:9px;flex:0 0 auto;background:#eef3ee;
+  display:flex;align-items:center;justify-content:center;color:#9db0a3;font-size:19px}
+.item .t{flex:1;min-width:0}
+.item .t b{display:block;font-size:14.5px}
+.item .t span{display:block;font-size:13px;color:#8a998f;line-height:1.45}
+.item .x{border:0;background:none;color:#b3261e;font-size:19px;cursor:pointer;padding:0 3px}
+.addbtn{display:inline-block;padding:11px 17px;border:1.5px solid #2e7d32;border-radius:999px;
+  background:none;color:#2e7d32;font:inherit;font-weight:650;font-size:14.5px;cursor:pointer}
+.addbtn[disabled]{opacity:.5;cursor:default}
+.newitem{display:none;gap:9px;margin-top:11px;padding:13px;border:1px dashed #cfdcd2;border-radius:12px}
+.newitem.on{display:grid}
+.empty2{padding:15px;border:1px dashed #cfdcd2;border-radius:12px;text-align:center;
+  color:#8a998f;font-size:13.5px}
 @media (prefers-color-scheme:dark){
   body{background:#0e1510;color:#e8efe9}
   .sheet{background:#141d17;border-color:#243026;box-shadow:none}
@@ -897,6 +923,11 @@ button[disabled]{opacity:.55;cursor:default}
     background:#101811;border-color:#2b382e;color:#e8efe9}
   h1,.check b,.locked b{color:#e8efe9}
   .sub,label>span,small,.top,.locked{color:#9db0a3}
+  .media{border-top-color:#243026}
+  .thumb,.item{border-color:#2b382e;background:#101811}
+  .item .no,.item img{background:#1b241d}
+  .newitem,.empty2{border-color:#2b382e}
+  .addbtn{border-color:#7dd956;color:#7dd956}
 }
 """
 
@@ -940,6 +971,35 @@ def vendor_setup_html(ex, event_name, token):
         "<button type=\"submit\">%s</button>"
         "<p class=\"msg\" id=\"m\" role=\"status\"></p>"
         "</form>"
+        # Photos and the catalogue sit OUTSIDE the form on purpose: each one
+        # saves the moment it is added or removed, so a stand that uploads six
+        # pictures and then closes the tab has still uploaded six pictures.
+        "<div class=\"media\">"
+        "<h2>Photos of your stand</h2>"
+        "<p class=\"hint\">Up to 12. The first one leads. JPG, PNG, WEBP or GIF, 8MB each.</p>"
+        "<div class=\"thumbs\" id=\"ph\"></div>"
+        "<p class=\"empty2\" id=\"ph0\">No photos yet.</p>"
+        "<p style=\"margin:12px 0 0\">"
+        "<input type=\"file\" id=\"phf\" accept=\"image/*\" multiple hidden>"
+        "<button type=\"button\" class=\"addbtn\" id=\"phb\">Add photos</button>"
+        "<span class=\"msg\" id=\"phm\" role=\"status\"></span></p>"
+        "</div>"
+        "<div class=\"media\">"
+        "<h2>What you bring</h2>"
+        "<p class=\"hint\">Your catalogue &mdash; what people will find on your table. "
+        "Nothing here is sold through Gaia, so there are no prices and no checkout.</p>"
+        "<div class=\"items\" id=\"pr\"></div>"
+        "<p class=\"empty2\" id=\"pr0\">Nothing listed yet.</p>"
+        "<button type=\"button\" class=\"addbtn\" id=\"prb\">Add an item</button>"
+        "<span class=\"msg\" id=\"prm\" role=\"status\"></span>"
+        "<div class=\"newitem\" id=\"prn\">"
+        "<label><span>Name</span><input type=\"text\" id=\"prname\" maxlength=\"120\"></label>"
+        "<label><span>One or two lines about it</span>"
+        "<textarea id=\"prdesc\" maxlength=\"600\" rows=\"2\"></textarea></label>"
+        "<label><span>Photo (optional)</span><input type=\"file\" id=\"prf\" accept=\"image/*\"></label>"
+        "<button type=\"button\" class=\"addbtn\" id=\"prsave\">Add to catalogue</button>"
+        "</div>"
+        "</div>"
         "<div class=\"locked\">Your <b>booth number</b>, package and payments are managed by the "
         "Gaia Healers team — message them if anything there looks wrong. This page only changes "
         "how your stand is described.</div>"
@@ -967,4 +1027,66 @@ def vendor_setup_html(ex, event_name, token):
         "b.disabled=false;});})();</script>"
         % ("'/event-api/vendor-setup/" + _h(token) + "'")
     )
-    return vendor_page_html(ex.company_name or "Your stand", body + script)
+    # The media manager. Every action is its own request against the same setup
+    # link, so nothing here depends on the form above being submitted -- and a
+    # half-finished catalogue is still a saved catalogue.
+    media_script = (
+        "<script>(function(){"
+        "var B=%s;"
+        "var ph=document.getElementById('ph'),ph0=document.getElementById('ph0'),"
+        "phf=document.getElementById('phf'),phb=document.getElementById('phb'),"
+        "phm=document.getElementById('phm'),pr=document.getElementById('pr'),"
+        "pr0=document.getElementById('pr0'),prb=document.getElementById('prb'),"
+        "prn=document.getElementById('prn'),prm=document.getElementById('prm'),"
+        "prf=document.getElementById('prf'),prsave=document.getElementById('prsave');"
+        "function esc(t){var d=document.createElement('div');d.textContent=t==null?'':t;return d.innerHTML;}"
+        "function say(el,t,bad){el.className='msg'+(bad?' bad':' ok');el.textContent=t;"
+        "if(!bad)setTimeout(function(){el.textContent='';},2500);}"
+        "async function api(path,opt){var r=await fetch(B+path,opt);var j=null;"
+        "try{j=await r.json();}catch(e){}"
+        "if(!r.ok)throw new Error((j&&j.detail)||'That did not save.');return j;}"
+        "function draw(d){"
+        "ph.innerHTML=(d.photos||[]).map(function(p){return '<div class=\"thumb\">"
+        "<img src=\"'+esc(p.url)+'\" alt=\"\">"
+        "<button type=\"button\" data-ph=\"'+p.id+'\" aria-label=\"Remove photo\">&times;</button></div>';}).join('');"
+        "ph0.style.display=(d.photos||[]).length?'none':'';"
+        "pr.innerHTML=(d.products||[]).map(function(p){return '<div class=\"item\">'"
+        "+(p.image_url?'<img src=\"'+esc(p.image_url)+'\" alt=\"\">':'<div class=\"no\">&#9634;</div>')"
+        "+'<div class=\"t\"><b>'+esc(p.name)+'</b><span>'+esc(p.description||'')+'</span></div>'"
+        "+'<button type=\"button\" class=\"x\" data-pr=\"'+p.id+'\" aria-label=\"Remove item\">&times;</button></div>';}).join('');"
+        "pr0.style.display=(d.products||[]).length?'none':'';}"
+        "async function load(){try{draw(await api('/media'));}catch(e){}}"
+        "async function upload(file){var fd=new FormData();fd.append('file',file);"
+        "return (await api('/images',{method:'POST',body:fd})).url;}"
+        "phb.addEventListener('click',function(){phf.click();});"
+        "phf.addEventListener('change',async function(){"
+        "var files=Array.prototype.slice.call(phf.files||[]);if(!files.length)return;"
+        "phb.disabled=true;say(phm,'Uploading\\u2026');"
+        "try{for(var i=0;i<files.length;i++){var url=await upload(files[i]);"
+        "await api('/photos',{method:'POST',headers:{'Content-Type':'application/json'},"
+        "body:JSON.stringify({url:url})});}"
+        "await load();say(phm,files.length===1?'Photo added.':files.length+' photos added.');}"
+        "catch(e){say(phm,e.message,1);}phf.value='';phb.disabled=false;});"
+        "ph.addEventListener('click',async function(e){var b=e.target.closest('[data-ph]');if(!b)return;"
+        "if(!confirm('Remove this photo?'))return;"
+        "try{await api('/photos/'+b.getAttribute('data-ph'),{method:'DELETE'});await load();}"
+        "catch(err){say(phm,err.message,1);}});"
+        "prb.addEventListener('click',function(){prn.classList.toggle('on');});"
+        "prsave.addEventListener('click',async function(){"
+        "var name=document.getElementById('prname').value.trim();"
+        "if(!name){say(prm,'Give it a name first.',1);return;}"
+        "prsave.disabled=true;say(prm,'Saving\\u2026');"
+        "try{var img=null;if(prf.files&&prf.files[0])img=await upload(prf.files[0]);"
+        "await api('/products',{method:'POST',headers:{'Content-Type':'application/json'},"
+        "body:JSON.stringify({name:name,description:document.getElementById('prdesc').value,image_url:img})});"
+        "document.getElementById('prname').value='';document.getElementById('prdesc').value='';"
+        "prf.value='';prn.classList.remove('on');await load();say(prm,'Added.');}"
+        "catch(e){say(prm,e.message,1);}prsave.disabled=false;});"
+        "pr.addEventListener('click',async function(e){var b=e.target.closest('[data-pr]');if(!b)return;"
+        "if(!confirm('Remove this item?'))return;"
+        "try{await api('/products/'+b.getAttribute('data-pr'),{method:'DELETE'});await load();}"
+        "catch(err){say(prm,err.message,1);}});"
+        "load();})();</script>"
+        % ("'/event-api/vendor-setup/" + _h(token) + "'")
+    )
+    return vendor_page_html(ex.company_name or "Your stand", body + script + media_script)

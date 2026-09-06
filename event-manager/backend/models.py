@@ -325,6 +325,53 @@ class Exhibitor(Base):
 
     event = relationship("Event", back_populates="exhibitors")
     leads = relationship("Lead", back_populates="exhibitor")
+    photos = relationship("ExhibitorPhoto", back_populates="exhibitor",
+                          cascade="all, delete-orphan",
+                          order_by="ExhibitorPhoto.sort_order")
+    products = relationship("ExhibitorProduct", back_populates="exhibitor",
+                            cascade="all, delete-orphan",
+                            order_by="ExhibitorProduct.sort_order")
+
+
+class ExhibitorPhoto(Base):
+    """One picture of a stand, in the order the stand wants them shown.
+
+    Rows rather than a JSON blob because they are reordered and deleted one at a
+    time by two different people -- the Gaia team building the page before the
+    event, and the exhibitor editing it afterwards -- and a list you have to
+    rewrite whole is a list two editors can silently overwrite for each other.
+    """
+    __tablename__ = "exhibitor_photos"
+
+    id = Column(Integer, primary_key=True, index=True)
+    exhibitor_id = Column(Integer, ForeignKey("exhibitors.id", ondelete="CASCADE"), index=True)
+    url = Column(String, nullable=False)
+    caption = Column(String)
+    sort_order = Column(Integer, default=0)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    exhibitor = relationship("Exhibitor", back_populates="photos")
+
+
+class ExhibitorProduct(Base):
+    """One item in a stand's catalogue.
+
+    A catalogue, deliberately, and not a shop: no price, no basket, no link that
+    takes money. Nothing here is sold through Gaia, so nothing here pretends to
+    be. It is what the stand will have on the table, so somebody walking the
+    floor knows whether to stop.
+    """
+    __tablename__ = "exhibitor_products"
+
+    id = Column(Integer, primary_key=True, index=True)
+    exhibitor_id = Column(Integer, ForeignKey("exhibitors.id", ondelete="CASCADE"), index=True)
+    name = Column(String, nullable=False)
+    description = Column(Text)
+    image_url = Column(String)
+    sort_order = Column(Integer, default=0)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    exhibitor = relationship("Exhibitor", back_populates="products")
 
 
 # Sessions may have several speakers, and a speaker may hold several slots.

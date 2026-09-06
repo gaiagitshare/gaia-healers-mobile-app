@@ -312,7 +312,11 @@ check(enriched >= 14, "most confirmed stands have a logo and a description", enr
 # booth. What would be a leak is copying the sheet across without checking, so
 # the two known matches are named here — both were read off the company's own
 # site independently, and any NEW match means somebody took a shortcut.
-SAME_ON_PURPOSE = {"Hair By Mermaid", "Medi Air Purifier"}
+# The Real Framework's info@ address is published in the contact section of
+# therealframework.org and is also what booked the booth -- a one-person
+# operation has one address. Read off their site before it was written here,
+# not copied from the sheet, which is the distinction this guard exists for.
+SAME_ON_PURPOSE = {"Hair By Mermaid", "Medi Air Purifier", "The Real Framework/BOOK"}
 same = {r[0] for r in sql("SELECT company_name FROM exhibitors WHERE event_id=1 "
                           "AND public_email IS NOT NULL AND public_email = contact_email")}
 check(same == SAME_ON_PURPOSE,

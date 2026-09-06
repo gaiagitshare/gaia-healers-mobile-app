@@ -147,9 +147,11 @@ check("ZZ Listed Stand" in str(body), "and it is their page")
 # The ampersand is escaped in the attribute, which is what correct HTML looks
 # like; the browser resolves it back. Assert the escaped form rather than
 # quietly weakening the check to a substring that would also match the old link.
-check(("?event=%d&amp;tab=exhibitors" % EV) in str(body),
+check(("?view=events&amp;event=%d&amp;tab=exhibitors" % EV) in str(body),
       "'See everyone exhibiting' points at the app directory, not the API root")
-check("gaiahealers.app/?event=" in str(body).replace("&amp;", "&"),
+check("view=events" in str(body),
+      "and it names the screen, without which the link lands on Today")
+check("gaiahealers.app/?view=events&event=" in str(body).replace("&amp;", "&"),
       "and it is the app host, not the API host")
 check('href="https://api.gaiahealers.app">See everyone' not in str(body),
       "the old raw-API target is gone")

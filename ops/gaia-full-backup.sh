@@ -419,7 +419,8 @@ GNUPGHOME="$GPG_HOME" gpg --batch --yes --trust-model always \
   || fail "gpg could not encrypt to the configured recipient"
 ENCRYPTED_BYTES="$(stat -c%s "$ENCRYPTED")"
 [ "$ENCRYPTED_BYTES" -gt 1024 ] || fail "the encrypted archive is implausibly small"
-GNUPGHOME="$GPG_HOME" gpg --batch --list-packets "$ENCRYPTED" >/dev/null 2>&1 \
+PACKET_INFO="$(GNUPGHOME="$GPG_HOME" gpg --batch --list-packets "$ENCRYPTED" 2>&1 || true)"
+printf '%s\n' "$PACKET_INFO" | grep -qE ':(pubkey enc packet|encrypted data packet|aead encrypted packet):' \
   || fail "the encrypted archive is not readable as an OpenPGP message"
 CHECK_ENCRYPT="ok"
 install -m 0600 "$ENCRYPTED" "$LOCAL_DIR/${NAME}.tar.gz.gpg"

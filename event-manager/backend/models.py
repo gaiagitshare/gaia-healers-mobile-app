@@ -325,6 +325,53 @@ class Exhibitor(Base):
 
     event = relationship("Event", back_populates="exhibitors")
     leads = relationship("Lead", back_populates="exhibitor")
+    photos = relationship("ExhibitorPhoto", back_populates="exhibitor",
+                          cascade="all, delete-orphan",
+                          order_by="ExhibitorPhoto.sort_order")
+    products = relationship("ExhibitorProduct", back_populates="exhibitor",
+                            cascade="all, delete-orphan",
+                            order_by="ExhibitorProduct.sort_order")
+
+
+class ExhibitorPhoto(Base):
+    """One picture of a stand, in the order the stand wants them shown.
+
+    Rows rather than a JSON blob because they are reordered and deleted one at a
+    time by two different people -- the Gaia team building the page before the
+    event, and the exhibitor editing it afterwards -- and a list you have to
+    rewrite whole is a list two editors can silently overwrite for each other.
+    """
+    __tablename__ = "exhibitor_photos"
+
+    id = Column(Integer, primary_key=True, index=True)
+    exhibitor_id = Column(Integer, ForeignKey("exhibitors.id", ondelete="CASCADE"), index=True)
+    url = Column(String, nullable=False)
+    caption = Column(String)
+    sort_order = Column(Integer, default=0)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    exhibitor = relationship("Exhibitor", back_populates="photos")
+
+
+class ExhibitorProduct(Base):
+    """One item in a stand's catalogue.
+
+    A catalogue, deliberately, and not a shop: no price, no basket, no link that
+    takes money. Nothing here is sold through Gaia, so nothing here pretends to
+    be. It is what the stand will have on the table, so somebody walking the
+    floor knows whether to stop.
+    """
+    __tablename__ = "exhibitor_products"
+
+    id = Column(Integer, primary_key=True, index=True)
+    exhibitor_id = Column(Integer, ForeignKey("exhibitors.id", ondelete="CASCADE"), index=True)
+    name = Column(String, nullable=False)
+    description = Column(Text)
+    image_url = Column(String)
+    sort_order = Column(Integer, default=0)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    exhibitor = relationship("Exhibitor", back_populates="products")
 
 
 # Sessions may have several speakers, and a speaker may hold several slots.
@@ -884,6 +931,13 @@ class TicketMapping(Base):
     # EVENT_TICKET | EVENT_UPGRADE (only event types are honored by the ticket path).
     entitlement_type = Column(String, default="EVENT_TICKET")
     addon_code = Column(String, nullable=True)  # for EVENT_ADDON: the additive grant code (e.g. ONE_DAY_CONFERENCE)
+    # The sales window this mapping claims. GHL reuses product ids across years,
+    # so the product alone cannot say WHICH conference a ticket is for -- the
+    # product plus the purchase date can. Both columns existed in the database
+    # from the 2025/2026 untangling but were never declared here, which made
+    # every reader of them silently see None and admit everything.
+    valid_from = Column(String, nullable=True)
+    valid_until = Column(String, nullable=True)
     is_active = Column(Boolean, default=True)
     created_at = Column(DateTime, default=datetime.utcnow)
 
@@ -1051,3 +1105,75 @@ class CardVerificationSession(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
     expires_at = Column(DateTime, index=True)
     revoked_at = Column(DateTime, nullable=True)
+
+
+class PaymentEvent(Base):
+    """One payment ATTEMPT in GHL, mirrored into Gaia for monitoring.
+
+    Gaia does not own this row -- GHL does. It is written by the webhook the
+    moment a payment happens and re-read by the hourly mirror, and nothing here
+    is ever pushed back. Two reasons it is a table rather than a live query:
+    reading 1,600 transactions to paint a screen is too slow to be useful at a
+    door, and a status that changed while nobody was looking has to leave a
+    trace.
+
+    The point of the shape is that PAYMENT and RECONCILIATION are separate
+    columns. "Money arrived" and "this person has a ticket" are different facts,
+    and the interesting cases are exactly where they disagree:
+
+        paid + ticket        healthy
+        failed + no ticket   healthy
+        paid + NO ticket     somebody paid and cannot get in
+        refunded + ticket    somebody was refunded and still can
+
+    Collapsing them into one status is what makes those invisible.
+    """
+    __tablename__ = "payment_events"
+    __table_args__ = (UniqueConstraint("ghl_transaction_id", name="uq_payment_tx"),)
+
+    id = Column(Integer, primary_key=True, index=True)
+
+    # --- what GHL says, kept as GHL said it -------------------------------
+    ghl_transaction_id = Column(String, index=True)
+    ghl_entity_type = Column(String)          # order | invoice | calendar
+    ghl_entity_id = Column(String, index=True)
+    provider = Column(String, index=True)     # stripe | paypal | manual | ...
+    provider_charge_id = Column(String)
+    status_raw = Column(String)               # GHL's own word, never rewritten
+    order_status_raw = Column(String)         # completed | pending | cancelled
+    amount = Column(Float)
+    amount_refunded = Column(Float)
+    currency = Column(String)
+    live_mode = Column(Boolean, default=True) # GHL has test-mode rows too
+    occurred_at = Column(DateTime, index=True)
+    ghl_updated_at = Column(DateTime)
+
+    # --- who and what -----------------------------------------------------
+    buyer_name = Column(String)
+    buyer_email = Column(String, index=True)
+    buyer_phone = Column(String)
+    contact_id = Column(String, index=True)
+    product_ids = Column(JSON, default=list)
+    product_names = Column(JSON, default=list)
+    funnel_name = Column(String)
+    funnel_id = Column(String)
+    page_domain = Column(String)
+    page_url = Column(String)
+    source_type = Column(String)              # funnel | invoice | payment_link | ...
+
+    # --- Gaia's reading of it --------------------------------------------
+    # NULL event_id means "this is not an event sale". A transaction existing in
+    # GHL does not make it an Elevate transaction; only a mapped product does.
+    event_id = Column(Integer, ForeignKey("events.id"), nullable=True, index=True)
+    status = Column(String, index=True)       # paid|pending|declined|failed|refunded|...
+    attendee_id = Column(Integer, ForeignKey("attendees.id"), nullable=True)
+    recon_state = Column(String, index=True)  # healthy|critical|warning|info|not_event
+    recon_reason = Column(String)
+    severity = Column(Integer, default=0)     # 2 critical, 1 warning, 0 fine
+
+    # --- the audit trail --------------------------------------------------
+    ingest_source = Column(String)            # webhook | mirror
+    first_seen_at = Column(DateTime, default=datetime.utcnow)
+    last_checked_at = Column(DateTime, default=datetime.utcnow)
+    resolved_at = Column(DateTime, nullable=True)
+    resolution = Column(String)

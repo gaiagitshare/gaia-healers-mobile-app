@@ -13,6 +13,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { installCourseAuthority } from './course-authority-fixture.js';
 import crypto from 'node:crypto';
 
 const SECRET = 'auth-secret-'.padEnd(48, 'a');
@@ -24,6 +25,10 @@ const publicDer = publicKey.export({ type: 'spki', format: 'der' }).toString('ba
 const workdir = fs.mkdtempSync(path.join(os.tmpdir(), 'gaia-auth-'));
 fs.mkdirSync(path.join(workdir, 'data'), { recursive: true });
 const storeFile = path.join(workdir, 'data', 'member-entitlements.json');
+// Grants are validated against the course authority. These ids are synthetic,
+// so the suite registers its own catalogue — this is about authentication,
+// not about which courses exist.
+installCourseAuthority(workdir, ['auth-course-1', 'auth-course-2', 'auth-course-3', 'auth-course-4', 'auth-course-5', 'auth-course-6', 'auth-course-7', 'auth-course-8', 'auth-course-9', 'auth-course-10', 'auth-course-11', 'auth-course-12', 'auth-course-13', 'auth-course-14', 'auth-course-15', 'auth-course-16', 'auth-course-17', 'auth-course-18', 'auth-course-19', 'auth-course-20', 'auth-course-21', 'auth-course-22', 'auth-course-23', 'auth-course-24', 'auth-course-25']);
 process.chdir(workdir);
 
 const PORT = 8904;

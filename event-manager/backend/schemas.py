@@ -91,6 +91,11 @@ class Event(EventBase):
     # any new writable field goes in BOTH schemas, always.
     public_counters: bool = False
     networking_enabled: bool = False
+    # Same class of bug, caught at the door: rehearsal was stored but never
+    # returned, so reloading the check-in page showed "Start rehearsal" while a
+    # rehearsal was already running — every scan practice, the screen implying
+    # real admission.
+    door_test_mode: bool = False
     map_image_url: Optional[str] = None
     # Unambiguous instants: the same moment however the reader's device is set.
     # start_date/end_date above stay venue-local for display.
@@ -281,6 +286,42 @@ class ExhibitorCreate(ExhibitorBase):
     payment_note: Optional[str] = None
     show_contact_publicly: Optional[bool] = None
 
+class ExhibitorPhoto(BaseModel):
+    id: int
+    url: str
+    caption: Optional[str] = None
+    sort_order: int = 0
+
+    class Config:
+        from_attributes = True
+
+
+class ExhibitorProduct(BaseModel):
+    """A catalogue entry, not a listing. There is deliberately no price and no
+    purchase link: nothing on a stand is sold through Gaia."""
+    id: int
+    name: str
+    description: Optional[str] = None
+    image_url: Optional[str] = None
+    sort_order: int = 0
+
+    class Config:
+        from_attributes = True
+
+
+class ExhibitorPhotoWrite(BaseModel):
+    url: Optional[str] = None
+    caption: Optional[str] = None
+    sort_order: Optional[int] = None
+
+
+class ExhibitorProductWrite(BaseModel):
+    name: Optional[str] = None
+    description: Optional[str] = None
+    image_url: Optional[str] = None
+    sort_order: Optional[int] = None
+
+
 class ExhibitorUpdate(BaseModel):
     company_name: Optional[str] = None
     booth_number: Optional[str] = None
@@ -336,6 +377,8 @@ class Exhibitor(ExhibitorBase):
     amount_paid: Optional[float] = None
     payment_note: Optional[str] = None
     show_contact_publicly: bool = False
+    photos: List[ExhibitorPhoto] = []
+    products: List[ExhibitorProduct] = []
 
     class Config:
         from_attributes = True
@@ -379,6 +422,8 @@ class ExhibitorPublic(BaseModel):
     logo_on_dark: Optional[bool] = False
     contact_email: Optional[str] = None
     contact_phone: Optional[str] = None
+    photos: List[ExhibitorPhoto] = []
+    products: List[ExhibitorProduct] = []
 
     class Config:
         from_attributes = True
@@ -1040,6 +1085,13 @@ class BadgePrintRecord(BaseModel):
 
 class UndoCheckIn(BaseModel):
     reason: str
+
+
+class PaymentSyncIn(BaseModel):
+    """What the proxy read from GHL. Gaia stores and classifies; it never
+    writes any of it back."""
+    transactions: List[Dict[str, Any]] = []
+    source: Optional[str] = "mirror"          # webhook | mirror
 
 
 class DoorTestMode(BaseModel):

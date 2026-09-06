@@ -1,0 +1,17 @@
+[Unit]
+Description=Gaia complete production backup (snapshot, verify, encrypt, off-site)
+Documentation=https://github.com/gaiagitshare/gaia-healers-mobile-app/blob/main/ops/gaia-full-backup.sh
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+# Credentials live here, never in the unit and never in the repository. The
+# dash means an unconfigured server still runs and reports local_only rather
+# than failing to start at all.
+EnvironmentFile=-/root/.config/gaia-backup.env
+ExecStart=/usr/local/bin/gaia-full-backup.sh
+TimeoutStartSec=1800
+Nice=10
+IOSchedulingClass=idle
+UMask=0077

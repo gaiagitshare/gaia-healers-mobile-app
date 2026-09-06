@@ -13,6 +13,7 @@ import http from 'node:http';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { installCourseAuthority } from './course-authority-fixture.js';
 import crypto from 'node:crypto';
 
 const SECRET = 'test-secret-'.padEnd(48, 'x');
@@ -22,6 +23,9 @@ const CONTACT_ID = 'contact-integration-1';
 const workdir = fs.mkdtempSync(path.join(os.tmpdir(), 'gaia-membership-'));
 fs.mkdirSync(path.join(workdir, 'data'), { recursive: true });
 const storeFile = path.join(workdir, 'data', 'member-entitlements.json');
+// The receiver validates every grant against the course authority. These
+// synthetic ids are not in the live catalogue, so the suite installs its own.
+installCourseAuthority(workdir, ['offer-idem-1', 'offer-order-1', 'offer-pipeline-1', 'offer-v2-1', 'x', 'course-1']);
 process.chdir(workdir);
 
 // ── stub GHL ────────────────────────────────────────────────────────────────

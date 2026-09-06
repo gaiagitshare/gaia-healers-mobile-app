@@ -11,7 +11,7 @@ import {
     Add as AddIcon, Delete as DeleteIcon, QrCode as QrCodeIcon, Badge as BadgeIcon,
     UploadFile as UploadFileIcon, Edit as EditIcon, Search as SearchIcon, Clear as ClearIcon,
     ManageAccounts as ManageIcon, OpenInNew as OpenInNewIcon,
-    InfoOutlined as InfoOutlinedIcon,
+    InfoOutlined as InfoOutlinedIcon, Undo as UndoIcon,
 } from '@mui/icons-material';
 import { QRCodeSVG } from 'qrcode.react';
 import {
@@ -19,7 +19,7 @@ import {
     generateBadge, importAttendees, searchAttendees, getTicketTypes, exportAttendees,
     revokeAttendee, reinstateAttendee, changePass, setAddonDay,
     getAcquisitionReport, badgeLabelBlob , getDoorReport, getUnmappedSales, dismissUnmappedSale,
-    getTicketMetrics} from '../utils/api';
+    getTicketMetrics, undoCheckIn} from '../utils/api';
 import MapReconcile from './MapReconcile';
 import { formatVenueTime, STATUS_LABELS, statusLabel } from '../utils/datetime';
 
@@ -92,6 +92,7 @@ function Attendees({ timezone }) {
     const [manageBusy, setManageBusy] = useState(false);
     const [manageTier, setManageTier] = useState('');
     const [manageReason, setManageReason] = useState('');
+    const [undoNote, setUndoNote] = useState('');
     const [dayValue, setDayValue] = useState('');
     const [dayBusy, setDayBusy] = useState(false);
     const dayLabelFromISO = (iso) => { try { return new Date(iso + 'T12:00:00').toLocaleDateString(undefined, { weekday: 'long', month: 'short', day: 'numeric' }); } catch (e) { return iso; } };
@@ -143,7 +144,7 @@ function Attendees({ timezone }) {
 
     const openManage = (attendee) => {
         setManage(attendee); setManageDetail(null);
-        setManageTier(attendee.ticket_type_id ?? ''); setManageReason('');
+        setManageTier(attendee.ticket_type_id ?? ''); setManageReason(''); setUndoNote('');
         getAttendee(attendee.id).then((r) => setManageDetail(r.data)).catch(() => setManageDetail(null));
     };
     const lifecycleOf = (a) => ((a && a.custom_data && a.custom_data.lifecycle) || []);
@@ -157,6 +158,23 @@ function Attendees({ timezone }) {
     const afterManage = async (updated) => {
         if (updated) { setManage(updated); getAttendee(updated.id).then((r) => setManageDetail(r.data)).catch(() => {}); }
         await refreshCurrentView(); loadCounts();
+    };
+    // Undoing a check-in is the same audited endpoint the door uses — it writes
+    // a ScanLog with result UNDO and puts a card the check-in woke back to
+    // sleep. Offered here too because the person who notices the mistake is
+    // usually looking at the attendee, not standing at the scanner.
+    const doUndoCheckIn = async () => {
+        const reason = manageReason.trim();
+        if (reason.length < 3) { setUndoNote('A reason is required — it goes in the log.'); return; }
+        setManageBusy(true);
+        setUndoNote('');
+        try {
+            const { data } = await undoCheckIn(eventId, manage.id, reason);
+            setUndoNote(`Check-in undone and logged${data?.already ? ' (they were already not checked in)' : ''}.`);
+            await afterManage(data?.attendee || null);
+        } catch (e) {
+            setUndoNote(e?.response?.data?.detail || 'Could not undo that check-in.');
+        } finally { setManageBusy(false); }
     };
     const doRevoke = async () => { setManageBusy(true); try { const { data } = await revokeAttendee(manage.id, manageReason); await afterManage(data); } finally { setManageBusy(false); } };
     const doReinstate = async () => { setManageBusy(true); try { const { data } = await reinstateAttendee(manage.id, manageReason); await afterManage(data); } finally { setManageBusy(false); } };
@@ -965,8 +983,9 @@ function Attendees({ timezone }) {
                                     <Typography variant="caption" color="text.secondary">Attendee #{manage.id}</Typography>
                                     <Stack direction="row" spacing={1} sx={{ mt: 1 }} alignItems="center" flexWrap="wrap">
                                         {statusChip(manage)}
-                                        {manage.is_checked_in && checkedInAt(manage) ? (
-                                            <Chip size="small" variant="outlined" label={`Checked in ${checkedInAt(manage)}`} />
+                                        {manage.is_checked_in ? (
+                                            <Chip size="small" color="success" variant="outlined"
+                                                  label={checkedInAt(manage) ? `Checked in ${checkedInAt(manage)}` : 'Checked in'} />
                                         ) : <Chip size="small" variant="outlined" label="Not checked in" />}
                                         <Chip size="small" label={sourceOf(manage) || 'Direct'} />
                                     </Stack>
@@ -1046,6 +1065,37 @@ function Attendees({ timezone }) {
                             <Typography variant="caption" color="text.secondary">
                                 Refunds are issued in GHL; this app syncs the refunded status back and the scanner then rejects the ticket. The QR never changes on upgrade, refund, add-on or day change.
                             </Typography>
+
+                            {/* Attendance, separate from entitlement. Being through the
+                                door and being allowed in are different facts, and the
+                                fix for a mis-scan is not to revoke someone's ticket. */}
+                            <Divider />
+                            <Box>
+                                <Typography variant="subtitle2" gutterBottom>Attendance</Typography>
+                                {manage.is_checked_in ? (
+                                    <>
+                                        <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap" useFlexGap>
+                                            <Typography variant="body2" color="text.secondary" sx={{ flex: 1, minWidth: 200 }}>
+                                                Checked in{checkedInAt(manage) ? ` ${checkedInAt(manage)}` : ''}. Undoing this
+                                                marks them not checked in and is recorded in the scan log with your reason.
+                                            </Typography>
+                                            <Button color="warning" variant="outlined" startIcon={<UndoIcon />}
+                                                    disabled={manageBusy} onClick={doUndoCheckIn}>
+                                                Undo check-in
+                                            </Button>
+                                        </Stack>
+                                        <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.5 }}>
+                                            Uses the Reason box below. Their ticket, pass and QR are untouched — they can
+                                            check in again straight away.
+                                        </Typography>
+                                    </>
+                                ) : (
+                                    <Typography variant="body2" color="text.secondary">
+                                        Not checked in. They are checked in by scanning their badge under Check-In.
+                                    </Typography>
+                                )}
+                                {undoNote && <Alert severity="info" sx={{ mt: 1 }} onClose={() => setUndoNote('')}>{undoNote}</Alert>}
+                            </Box>
 
                             <Divider />
                             <Box>

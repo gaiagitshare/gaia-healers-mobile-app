@@ -36,6 +36,7 @@ import networking as networking_lib
 import push as push_lib
 import badge_card
 import vendor_page
+import payments
 from fastapi import Response
 from fastapi.responses import HTMLResponse, PlainTextResponse
 
@@ -82,6 +83,10 @@ def _ensure_event_columns():
         _ex = {c["name"] for c in inspector.get_columns("exhibitors")}
     except Exception:
         _ex = set()
+    try:
+        _pe = {c["name"] for c in inspector.get_columns("payment_events")}
+    except Exception:
+        _pe = set()
     for _col, _ddl in (("package", "VARCHAR"), ("payment_status", "VARCHAR DEFAULT 'unpaid'"),
                        ("amount_due", "FLOAT"), ("amount_paid", "FLOAT"),
                        ("payment_note", "TEXT"), ("show_contact_publicly", "BOOLEAN DEFAULT 0"),
@@ -1077,7 +1082,13 @@ def get_event(
         models.Attendee.event_id == event.id,
         models.Attendee.is_checked_in == True
     ).count()
-    
+    # Declared on the schema since the stats card was written, but never filled
+    # in here, so the card only had a number while something else happened to be
+    # loading the whole exhibitor list.
+    event.exhibitor_count = db.query(models.Exhibitor).filter(
+        models.Exhibitor.event_id == event.id
+    ).count()
+
     return event
 
 @app.get("/public/events/next", response_model=schemas.Event)
@@ -1487,12 +1498,23 @@ def get_scan_logs(
     if access_type:
         query = query.filter(models.ScanLog.access_type == access_type.strip().upper())
     rows = query.order_by(models.ScanLog.created_at.desc()).limit(max(1, min(limit, 1000))).all()
+    # Who the scan was about, resolved once for the whole page. The log itself
+    # deliberately stores only the attendee id and the code that was presented —
+    # a name copied into an audit row would go stale the moment somebody
+    # corrects a spelling. This is a read-time lookup for display; nothing about
+    # what was written changes.
+    names = {}
+    ids = {r.attendee_id for r in rows if r.attendee_id}
+    if ids:
+        for a in db.query(models.Attendee).filter(models.Attendee.id.in_(ids)).all():
+            names[a.id] = ("%s %s" % (a.first_name or "", a.last_name or "")).strip() or a.email
     return {
         "event_id": event_id,
         "count": len(rows),
         "items": [{
             "id": row.id,
             "attendee_id": row.attendee_id,
+            "attendee_name": names.get(row.attendee_id),
             "qr_code": row.qr_code,
             "access_type": row.access_type,
             "result": row.result,
@@ -3182,6 +3204,16 @@ def vendor_activation_link(exhibitor_id: int, db: Session = Depends(get_db),
             "expires_in_days": VENDOR_SETUP_TTL_DAYS}
 
 
+# Where "See everyone exhibiting" goes: the exhibitor directory inside the Gaia
+# app, deep-linked to this event's tab. It used to point at the API root, which
+# answered a person's question about the hall with a JSON document.
+APP_PUBLIC_BASE = os.getenv("APP_PUBLIC_BASE", "https://gaiahealers.app").rstrip("/")
+
+
+def _directory_url(event_id):
+    return "%s/?event=%s&tab=exhibitors" % (APP_PUBLIC_BASE, event_id)
+
+
 @app.get("/v/{exhibitor_id}", response_class=HTMLResponse)
 def public_vendor_page(exhibitor_id: int, db: Session = Depends(get_db)):
     """One stand's public page. Published stands only — an unpublished vendor is
@@ -3190,9 +3222,8 @@ def public_vendor_page(exhibitor_id: int, db: Session = Depends(get_db)):
     if not ex or not ex.is_published:
         raise HTTPException(status_code=404, detail="Not found")
     event = db.query(models.Event).filter(models.Event.id == ex.event_id).first()
-    base = (os.environ.get("CARD_PUBLIC_BASE") or "").rstrip("/")
     return HTMLResponse(vendor_page.public_vendor_html(
-        ex, event.name if event else "", base.replace("//card.", "//api.") if base else ""))
+        ex, event.name if event else "", _directory_url(ex.event_id)))
 
 
 @app.get("/scan/roster/{access_token}")
@@ -3315,6 +3346,268 @@ def vendor_setup_save(token: str, payload: schemas.VendorSetup,
             "activated": ex.activated_at is not None}
 
 
+# ---------------------------------------------------------------------------
+# A stand's pictures and its catalogue.
+#
+# Two people edit the same rows at different times: the Gaia team builds the
+# page for a stand that has paid but not yet activated, and the stand itself
+# takes it over the moment it opens its setup link. So every operation below
+# exists twice over one implementation -- once behind an operator login, once
+# behind the setup link -- and neither route can reach anything the other owns.
+# The stand still cannot touch its booth, its package, what it paid, or its
+# scanner, because none of those are in any payload here.
+# ---------------------------------------------------------------------------
+EXHIBITOR_IMAGE_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "uploads", "exhibitors")
+os.makedirs(EXHIBITOR_IMAGE_DIR, exist_ok=True)
+EXHIBITOR_MEDIA_PATH = "/public/exhibitors/media/"
+_EXHIBITOR_IMAGE_EXT = {"image/jpeg": ".jpg", "image/pjpeg": ".jpg", "image/png": ".png",
+                        "image/webp": ".webp", "image/gif": ".gif"}
+EXHIBITOR_IMAGE_MAX_BYTES = 8 * 1024 * 1024
+EXHIBITOR_MAX_PHOTOS = 12
+EXHIBITOR_MAX_PRODUCTS = 24
+
+
+async def _store_exhibitor_image(file: UploadFile) -> str:
+    """Write one uploaded image and return the URL it will be served from.
+
+    The content type decides the extension, never the filename the browser sent:
+    a stand uploading `logo.php` gets a `.png` on disk or a 400, and nothing in
+    between. The name is random, so one stand cannot guess or overwrite another's.
+    """
+    ext = _EXHIBITOR_IMAGE_EXT.get((file.content_type or "").lower())
+    if not ext:
+        raise HTTPException(status_code=400, detail="Only JPG, PNG, WEBP or GIF images are allowed")
+    data = await file.read()
+    if not data:
+        raise HTTPException(status_code=400, detail="That file was empty")
+    if len(data) > EXHIBITOR_IMAGE_MAX_BYTES:
+        raise HTTPException(status_code=413, detail="That image is too large (8MB maximum)")
+    name = uuid.uuid4().hex + ext
+    with open(os.path.join(EXHIBITOR_IMAGE_DIR, name), "wb") as fh:
+        fh.write(data)
+    return EVENT_API_PUBLIC_BASE + EXHIBITOR_MEDIA_PATH + name
+
+
+@app.get("/public/exhibitors/media/{filename}")
+def exhibitor_media(filename: str):
+    """Serve one uploaded exhibitor image. Published stands are public, so this
+    is public too -- but only ever a file this server itself named."""
+    if not re.fullmatch(r"[0-9a-f]{32}\.(jpg|png|webp|gif)", filename or ""):
+        raise HTTPException(status_code=404, detail="Not found")
+    path = os.path.join(EXHIBITOR_IMAGE_DIR, filename)
+    if not os.path.isfile(path):
+        raise HTTPException(status_code=404, detail="Not found")
+    from fastapi.responses import FileResponse
+    return FileResponse(path, headers={"Cache-Control": "public, max-age=31536000, immutable"})
+
+
+def _next_sort(db, model, exhibitor_id):
+    last = db.query(model).filter(model.exhibitor_id == exhibitor_id).order_by(
+        model.sort_order.desc()).first()
+    return ((last.sort_order or 0) + 1) if last else 0
+
+
+def _add_photo(db, ex, url, caption=None):
+    if len(ex.photos) >= EXHIBITOR_MAX_PHOTOS:
+        raise HTTPException(status_code=400,
+                            detail="A stand can show up to %d photos." % EXHIBITOR_MAX_PHOTOS)
+    photo = models.ExhibitorPhoto(exhibitor_id=ex.id, url=url,
+                                  caption=(caption or None),
+                                  sort_order=_next_sort(db, models.ExhibitorPhoto, ex.id))
+    db.add(photo)
+    db.commit()
+    db.refresh(photo)
+    return photo
+
+
+def _add_product(db, ex, name, description=None, image_url=None):
+    name = (name or "").strip()
+    if not name:
+        raise HTTPException(status_code=400, detail="A catalogue item needs a name")
+    if len(ex.products) >= EXHIBITOR_MAX_PRODUCTS:
+        raise HTTPException(status_code=400,
+                            detail="A stand can list up to %d items." % EXHIBITOR_MAX_PRODUCTS)
+    product = models.ExhibitorProduct(
+        exhibitor_id=ex.id, name=name[:120],
+        description=(description or "").strip()[:600] or None,
+        image_url=(image_url or "").strip()[:400] or None,
+        sort_order=_next_sort(db, models.ExhibitorProduct, ex.id))
+    db.add(product)
+    db.commit()
+    db.refresh(product)
+    return product
+
+
+def _edit_row(db, row, changes, fields):
+    for f in fields:
+        v = getattr(changes, f, None)
+        if v is not None:
+            if f == "sort_order":
+                row.sort_order = int(v)
+            else:
+                setattr(row, f, (str(v).strip() or None))
+    db.commit()
+    db.refresh(row)
+    return row
+
+
+def _owned_or_404(db, model, row_id, exhibitor_id):
+    """A row is only editable through the stand it belongs to. Checking the
+    parent here is what stops one setup link editing another stand's catalogue."""
+    row = db.query(model).filter(model.id == row_id,
+                                 model.exhibitor_id == exhibitor_id).first()
+    if not row:
+        raise HTTPException(status_code=404, detail="Not found")
+    return row
+
+
+def _admin_exhibitor(db, current_user, exhibitor_id):
+    ex = db.query(models.Exhibitor).filter(models.Exhibitor.id == exhibitor_id).first()
+    if not ex:
+        raise HTTPException(status_code=404, detail="Exhibitor not found")
+    authz.require_cap(db, current_user, ex.event_id, "exhibitor.write")
+    return ex
+
+
+def _setup_exhibitor(db, token):
+    ex = _vendor_for_setup_token(db, token)
+    if not ex:
+        raise HTTPException(status_code=404, detail="This setup link is not valid, or has expired.")
+    return ex
+
+
+# ── operator routes ─────────────────────────────────────────────────────────
+@app.post("/exhibitors/{exhibitor_id}/images", response_model=dict)
+async def upload_exhibitor_image(exhibitor_id: int, file: UploadFile = File(...),
+                                 db: Session = Depends(get_db),
+                                 current_user: models.User = Depends(get_current_user)):
+    _admin_exhibitor(db, current_user, exhibitor_id)
+    return {"ok": True, "url": await _store_exhibitor_image(file)}
+
+
+@app.post("/exhibitors/{exhibitor_id}/photos", response_model=schemas.ExhibitorPhoto)
+def admin_add_photo(exhibitor_id: int, body: schemas.ExhibitorPhotoWrite,
+                    db: Session = Depends(get_db),
+                    current_user: models.User = Depends(get_current_user)):
+    ex = _admin_exhibitor(db, current_user, exhibitor_id)
+    if not (body.url or "").strip():
+        raise HTTPException(status_code=400, detail="A photo needs an image")
+    return _add_photo(db, ex, body.url.strip()[:400], body.caption)
+
+
+@app.patch("/exhibitors/{exhibitor_id}/photos/{photo_id}", response_model=schemas.ExhibitorPhoto)
+def admin_edit_photo(exhibitor_id: int, photo_id: int, body: schemas.ExhibitorPhotoWrite,
+                     db: Session = Depends(get_db),
+                     current_user: models.User = Depends(get_current_user)):
+    _admin_exhibitor(db, current_user, exhibitor_id)
+    row = _owned_or_404(db, models.ExhibitorPhoto, photo_id, exhibitor_id)
+    return _edit_row(db, row, body, ("url", "caption", "sort_order"))
+
+
+@app.delete("/exhibitors/{exhibitor_id}/photos/{photo_id}")
+def admin_delete_photo(exhibitor_id: int, photo_id: int,
+                       db: Session = Depends(get_db),
+                       current_user: models.User = Depends(get_current_user)):
+    _admin_exhibitor(db, current_user, exhibitor_id)
+    db.delete(_owned_or_404(db, models.ExhibitorPhoto, photo_id, exhibitor_id))
+    db.commit()
+    return {"ok": True}
+
+
+@app.post("/exhibitors/{exhibitor_id}/products", response_model=schemas.ExhibitorProduct)
+def admin_add_product(exhibitor_id: int, body: schemas.ExhibitorProductWrite,
+                      db: Session = Depends(get_db),
+                      current_user: models.User = Depends(get_current_user)):
+    ex = _admin_exhibitor(db, current_user, exhibitor_id)
+    return _add_product(db, ex, body.name, body.description, body.image_url)
+
+
+@app.patch("/exhibitors/{exhibitor_id}/products/{product_id}", response_model=schemas.ExhibitorProduct)
+def admin_edit_product(exhibitor_id: int, product_id: int, body: schemas.ExhibitorProductWrite,
+                       db: Session = Depends(get_db),
+                       current_user: models.User = Depends(get_current_user)):
+    _admin_exhibitor(db, current_user, exhibitor_id)
+    row = _owned_or_404(db, models.ExhibitorProduct, product_id, exhibitor_id)
+    return _edit_row(db, row, body, ("name", "description", "image_url", "sort_order"))
+
+
+@app.delete("/exhibitors/{exhibitor_id}/products/{product_id}")
+def admin_delete_product(exhibitor_id: int, product_id: int,
+                         db: Session = Depends(get_db),
+                         current_user: models.User = Depends(get_current_user)):
+    _admin_exhibitor(db, current_user, exhibitor_id)
+    db.delete(_owned_or_404(db, models.ExhibitorProduct, product_id, exhibitor_id))
+    db.commit()
+    return {"ok": True}
+
+
+# ── the stand's own routes, behind its setup link ───────────────────────────
+@app.post("/vendor-setup/{token}/images", response_model=dict)
+async def vendor_upload_image(token: str, file: UploadFile = File(...),
+                              db: Session = Depends(get_db)):
+    _setup_exhibitor(db, token)
+    return {"ok": True, "url": await _store_exhibitor_image(file)}
+
+
+@app.get("/vendor-setup/{token}/media")
+def vendor_media(token: str, db: Session = Depends(get_db)):
+    ex = _setup_exhibitor(db, token)
+    return {"ok": True,
+            "photos": [{"id": p.id, "url": p.url, "caption": p.caption,
+                        "sort_order": p.sort_order} for p in ex.photos],
+            "products": [{"id": p.id, "name": p.name, "description": p.description,
+                          "image_url": p.image_url, "sort_order": p.sort_order}
+                         for p in ex.products]}
+
+
+@app.post("/vendor-setup/{token}/photos", response_model=schemas.ExhibitorPhoto)
+def vendor_add_photo(token: str, body: schemas.ExhibitorPhotoWrite,
+                     db: Session = Depends(get_db)):
+    ex = _setup_exhibitor(db, token)
+    if not (body.url or "").strip():
+        raise HTTPException(status_code=400, detail="A photo needs an image")
+    return _add_photo(db, ex, body.url.strip()[:400], body.caption)
+
+
+@app.patch("/vendor-setup/{token}/photos/{photo_id}", response_model=schemas.ExhibitorPhoto)
+def vendor_edit_photo(token: str, photo_id: int, body: schemas.ExhibitorPhotoWrite,
+                      db: Session = Depends(get_db)):
+    ex = _setup_exhibitor(db, token)
+    return _edit_row(db, _owned_or_404(db, models.ExhibitorPhoto, photo_id, ex.id),
+                     body, ("url", "caption", "sort_order"))
+
+
+@app.delete("/vendor-setup/{token}/photos/{photo_id}")
+def vendor_delete_photo(token: str, photo_id: int, db: Session = Depends(get_db)):
+    ex = _setup_exhibitor(db, token)
+    db.delete(_owned_or_404(db, models.ExhibitorPhoto, photo_id, ex.id))
+    db.commit()
+    return {"ok": True}
+
+
+@app.post("/vendor-setup/{token}/products", response_model=schemas.ExhibitorProduct)
+def vendor_add_product(token: str, body: schemas.ExhibitorProductWrite,
+                       db: Session = Depends(get_db)):
+    ex = _setup_exhibitor(db, token)
+    return _add_product(db, ex, body.name, body.description, body.image_url)
+
+
+@app.patch("/vendor-setup/{token}/products/{product_id}", response_model=schemas.ExhibitorProduct)
+def vendor_edit_product(token: str, product_id: int, body: schemas.ExhibitorProductWrite,
+                        db: Session = Depends(get_db)):
+    ex = _setup_exhibitor(db, token)
+    return _edit_row(db, _owned_or_404(db, models.ExhibitorProduct, product_id, ex.id),
+                     body, ("name", "description", "image_url", "sort_order"))
+
+
+@app.delete("/vendor-setup/{token}/products/{product_id}")
+def vendor_delete_product(token: str, product_id: int, db: Session = Depends(get_db)):
+    ex = _setup_exhibitor(db, token)
+    db.delete(_owned_or_404(db, models.ExhibitorProduct, product_id, ex.id))
+    db.commit()
+    return {"ok": True}
+
+
 @app.get("/public/events/{event_id}/exhibitors", response_model=List[schemas.ExhibitorPublic])
 def get_public_exhibitors(
     event_id: int,
@@ -3352,6 +3645,14 @@ def get_public_exhibitors(
                               or ((r.contact_email or None) if show else None)),
             "contact_phone": (getattr(r, "public_phone", None)
                               or ((r.contact_phone or None) if show else None)),
+            # Built by hand rather than serialised from the row, so anything
+            # added to the model has to be added here on purpose. These two are
+            # the stand's own published material and carry nothing private.
+            "photos": [{"id": ph.id, "url": ph.url, "caption": ph.caption,
+                        "sort_order": ph.sort_order or 0} for ph in r.photos],
+            "products": [{"id": pd.id, "name": pd.name, "description": pd.description,
+                          "image_url": pd.image_url, "sort_order": pd.sort_order or 0}
+                         for pd in r.products],
         })
     return out
 
@@ -4010,6 +4311,35 @@ def _mapping_covers(mapping, when):
     if vu and w > str(vu)[:10]:
         return False
     return True
+
+
+def _assert_sale_in_window(db, event, product_id, purchased_at):
+    """A sale may only become an attendee of the event whose sales window it
+    falls in.
+
+    GHL reuses product and funnel ids across years, so the product alone cannot
+    say which conference a ticket is for -- only the product plus when it was
+    bought can. The mappings have carried `valid_from` since the 2025/2026 mixup
+    was untangled, but only the webhook checked it; the reconciler did not, so a
+    backfill reaching past 1 January 2026 pulled 2025 buyers into the 2026
+    event. The check belongs here, at the one door every caller comes through
+    -- webhook, hourly mirror and Map & Reconcile alike.
+    """
+    if not product_id or not purchased_at:
+        return
+    maps = db.query(models.TicketMapping).filter(
+        models.TicketMapping.external_product_id == str(product_id),
+        models.TicketMapping.is_active == True).all()          # noqa: E712
+    mine = [m for m in maps if m.event_id == event.id]
+    if not mine or any(_mapping_covers(m, purchased_at) for m in mine):
+        return
+    # The product is mapped to this event, but this sale predates the window.
+    # Say where it does belong, if anywhere, so the caller can route it.
+    elsewhere = [m for m in maps if m.event_id != event.id and _mapping_covers(m, purchased_at)]
+    raise HTTPException(status_code=409, detail=(
+        "Sale dated %s is outside the sales window for product %s on '%s'%s"
+        % (str(purchased_at)[:10], product_id, event.name,
+           "; it falls in event %d's window" % elsewhere[0].event_id if elsewhere else "")))
 
 
 @app.post("/webhooks/registration")
@@ -5463,6 +5793,495 @@ def _tm_classify(entitlements, upgrade_tt_ids, upgrade_pids):
     return out
 
 
+# ---------------------------------------------------------------------------
+# Payment monitoring
+#
+# Gaia mirrors GHL's payment attempts so it can say, per payment, whether the
+# two systems agree. Every read is a GET; nothing is written back.
+#
+# The rows arrive twice over, on purpose: the webhook writes one the moment a
+# payment happens, and the hourly mirror re-reads GHL so a status that changed
+# while nobody was looking, or a webhook that never arrived, cannot hide.
+
+def _pe_upsert(db, tx, order, mappings, source):
+    """Record one GHL transaction, and say whether Gaia agrees with it.
+
+    `mappings` is {product_id: mapping}; a transaction only becomes an EVENT
+    payment when it carries a mapped product. A transaction existing in GHL
+    does not make it this event's -- that is how a Sweetwater Club sale would
+    otherwise land in the Elevate numbers.
+    """
+    txid = str(tx.get("_id") or tx.get("id") or "").strip()
+    if not txid:
+        return None
+    pe = db.query(models.PaymentEvent).filter(
+        models.PaymentEvent.ghl_transaction_id == txid).first()
+    if pe is None:
+        pe = models.PaymentEvent(ghl_transaction_id=txid, ingest_source=source)
+        db.add(pe)
+
+    body = (order or {})
+    items = body.get("items") or []
+    pids = [str((i.get("product") or {}).get("_id") or i.get("productId") or "")
+            for i in items]
+    pids = [p for p in pids if p]
+    names = [((i.get("product") or {}).get("name") or i.get("name") or "") for i in items]
+    meta = tx.get("entitySourceMeta") or {}
+
+    pe.ghl_entity_type = tx.get("entityType")
+    pe.ghl_entity_id = tx.get("entityId")
+    pe.provider = tx.get("paymentProviderType")
+    pe.provider_charge_id = tx.get("chargeId")
+    pe.status_raw = tx.get("status")
+    pe.order_status_raw = body.get("status")
+    pe.amount = tx.get("amount")
+    pe.amount_refunded = tx.get("amountRefunded")
+    pe.currency = tx.get("currency")
+    pe.live_mode = tx.get("liveMode") is not False
+    pe.occurred_at = _parse_dt(tx.get("createdAt"))
+    pe.ghl_updated_at = _parse_dt(tx.get("updatedAt"))
+    pe.buyer_name = tx.get("contactName") or body.get("contactName")
+    pe.buyer_email = (tx.get("contactEmail") or body.get("contactEmail") or "").lower() or None
+    pe.buyer_phone = (body.get("contactSnapshot") or {}).get("phone")
+    pe.contact_id = tx.get("contactId") or body.get("contactId")
+    pe.product_ids = pids
+    pe.product_names = [n for n in names if n]
+    pe.funnel_name = tx.get("entitySourceName")
+    pe.funnel_id = tx.get("entitySourceId")
+    pe.source_type = tx.get("entitySourceType")
+    pe.page_domain = meta.get("domain")
+    pe.page_url = meta.get("pageUrl")
+    pe.status = payments.normalise_status(tx.get("status"))
+
+    # Which event this payment belongs to is decided by product AND date, for
+    # the same reason attendee reconciliation is: GHL reuses product ids across
+    # years, so a 2025 ticket bought through a product that is still on sale
+    # would otherwise be judged against the 2026 roster and reported as money
+    # received from somebody with no ticket.
+    hit = None
+    for p in pids:
+        for m in mappings.get(p, []):
+            if _mapping_covers(m, pe.occurred_at):
+                hit = m
+                break
+        if hit:
+            break
+    pe.event_id = hit.event_id if hit else None
+
+    attendee = None
+    if pe.event_id and pe.buyer_email:
+        attendee = db.query(models.Attendee).filter(
+            models.Attendee.event_id == pe.event_id,
+            func.lower(models.Attendee.email) == pe.buyer_email).first()
+    pe.attendee_id = attendee.id if attendee else None
+    active = bool(attendee and _ticket_active(attendee))
+    # Did this buyer get money through for this event by any route? A card that
+    # declined before a successful retry is not a problem to chase.
+    person_paid = False
+    if pe.event_id and pe.buyer_email and pe.status not in payments.PAID:
+        person_paid = db.query(models.PaymentEvent.id).filter(
+            models.PaymentEvent.event_id == pe.event_id,
+            func.lower(models.PaymentEvent.buyer_email) == pe.buyer_email,
+            models.PaymentEvent.status.in_(payments.PAID),
+        ).first() is not None
+    state, sev, reason = payments.classify(pe, attendee, active, person_paid=person_paid)
+    was_bad = (pe.severity or 0) > 0
+    pe.recon_state, pe.severity, pe.recon_reason = state, sev, reason
+    pe.last_checked_at = datetime.utcnow()
+    if was_bad and sev == 0 and not pe.resolved_at:
+        # It used to need attention and no longer does. Recording how it ended
+        # is the difference between a fixed problem and one that quietly moved.
+        pe.resolved_at = datetime.utcnow()
+        pe.resolution = reason
+    elif sev > 0:
+        pe.resolved_at = None
+        pe.resolution = None
+    return pe
+
+
+def _parse_dt(v):
+    if not v:
+        return None
+    try:
+        return datetime.fromisoformat(str(v).replace("Z", "+00:00")).replace(tzinfo=None)
+    except (TypeError, ValueError):
+        return None
+
+
+@app.post("/identity/payments/sync")
+def payments_sync(payload: schemas.PaymentSyncIn, db: Session = Depends(get_db),
+                  _: bool = Depends(require_service_token)):
+    """The proxy hands over what GHL said. Gaia stores and classifies it.
+
+    Called by the webhook for one transaction, and by the hourly mirror for a
+    window of them -- the same code either way, so a live row and a recovered
+    row cannot end up classified differently.
+    """
+    # A product id can carry several mappings -- one per event that sold it.
+    # They are all kept, and the purchase date picks between them.
+    maps = {}
+    for m in db.query(models.TicketMapping).filter(
+            models.TicketMapping.is_active == True).all():        # noqa: E712
+        if (m.entitlement_type or "EVENT_TICKET") in ("EVENT_TICKET", "EVENT_UPGRADE"):
+            maps.setdefault(m.external_product_id, []).append(m)
+    seen = 0
+    for row in (payload.transactions or []):
+        tx = row.get("transaction") or {}
+        if _pe_upsert(db, tx, row.get("order") or {}, maps, payload.source or "mirror") is not None:
+            seen += 1
+    db.commit()
+    return {"ok": True, "recorded": seen}
+
+
+@app.post("/identity/payments/reclassify")
+def payments_reclassify(db: Session = Depends(get_db),
+                        _: bool = Depends(require_service_token)):
+    """Re-judge payments already on file, without going back to GHL.
+
+    Stored payments carry a verdict, and a verdict can go stale without the
+    payment changing at all: a mapping gets added in Map & Reconcile, a ticket
+    is finally issued, a refund lands. Re-fetching a year of transactions to
+    notice that is slow and pointless -- the evidence is already here. This
+    re-runs the same attribution and the same classifier over what we hold, so
+    a row's verdict never depends on how long ago it happened to be fetched.
+    """
+    maps = {}
+    for m in db.query(models.TicketMapping).filter(
+            models.TicketMapping.is_active == True).all():        # noqa: E712
+        if (m.entitlement_type or "EVENT_TICKET") in ("EVENT_TICKET", "EVENT_UPGRADE"):
+            maps.setdefault(m.external_product_id, []).append(m)
+
+    changed = 0
+    rows = db.query(models.PaymentEvent).all()
+    # One lookup of who has paid, rather than one per row.
+    paid_by_event = {}
+    for r in rows:
+        if r.event_id and r.buyer_email and r.status in payments.PAID:
+            paid_by_event.setdefault(r.event_id, set()).add(r.buyer_email)
+
+    for pe in rows:
+        before = (pe.event_id, pe.recon_state, pe.severity, pe.attendee_id)
+        hit = None
+        for p in (pe.product_ids or []):
+            for m in maps.get(p, []):
+                if _mapping_covers(m, pe.occurred_at):
+                    hit = m
+                    break
+            if hit:
+                break
+        pe.event_id = hit.event_id if hit else None
+        attendee = None
+        if pe.event_id and pe.buyer_email:
+            attendee = db.query(models.Attendee).filter(
+                models.Attendee.event_id == pe.event_id,
+                func.lower(models.Attendee.email) == pe.buyer_email).first()
+        pe.attendee_id = attendee.id if attendee else None
+        active = bool(attendee and _ticket_active(attendee))
+        person_paid = (pe.status not in payments.PAID and pe.buyer_email
+                       and pe.buyer_email in paid_by_event.get(pe.event_id, ()))
+        state, sev, reason = payments.classify(pe, attendee, active,
+                                               person_paid=bool(person_paid))
+        was_bad = (pe.severity or 0) > 0
+        pe.recon_state, pe.severity, pe.recon_reason = state, sev, reason
+        pe.last_checked_at = datetime.utcnow()
+        if was_bad and sev == 0 and not pe.resolved_at:
+            pe.resolved_at = datetime.utcnow()
+            pe.resolution = reason
+        elif sev > 0:
+            pe.resolved_at = None
+            pe.resolution = None
+        if before != (pe.event_id, pe.recon_state, pe.severity, pe.attendee_id):
+            changed += 1
+    db.commit()
+    return {"ok": True, "examined": len(rows), "changed": changed}
+
+
+def _pe_rows(db, event_id, include_non_event=False):
+    q = db.query(models.PaymentEvent)
+    if include_non_event:
+        q = q.filter((models.PaymentEvent.event_id == event_id)
+                     | (models.PaymentEvent.event_id.is_(None)))
+    else:
+        q = q.filter(models.PaymentEvent.event_id == event_id)
+    return q.order_by(models.PaymentEvent.occurred_at.desc()).all()
+
+
+def _pe_json(pe, db=None):
+    return {
+        "id": pe.id,
+        "at": pe.occurred_at.isoformat() if pe.occurred_at else None,
+        "buyer": pe.buyer_name or (pe.buyer_email or "").split("@")[0],
+        "email": pe.buyer_email, "phone": pe.buyer_phone,
+        "products": pe.product_names or [],
+        "amount": pe.amount, "currency": pe.currency or "USD",
+        "amount_refunded": pe.amount_refunded,
+        "provider": payments.display_provider(pe.provider),
+        "status": pe.status,
+        "status_raw": pe.status_raw,               # GHL's own word, always kept
+        "order_status_raw": pe.order_status_raw,
+        "entity_type": pe.ghl_entity_type,
+        "order_id": pe.ghl_entity_id,
+        "transaction_id": pe.ghl_transaction_id,
+        "funnel": pe.funnel_name, "page": pe.page_domain, "page_url": pe.page_url,
+        "source_type": pe.source_type,
+        "live_mode": bool(pe.live_mode),
+        "event_id": pe.event_id,
+        "attendee_id": pe.attendee_id,
+        "ticket": ("created" if pe.attendee_id else None),
+        "recon_state": pe.recon_state, "severity": pe.severity or 0,
+        "reason": pe.recon_reason,
+        "ingest_source": pe.ingest_source,
+        "first_seen": pe.first_seen_at.isoformat() if pe.first_seen_at else None,
+        "last_checked": pe.last_checked_at.isoformat() if pe.last_checked_at else None,
+        "resolved_at": pe.resolved_at.isoformat() if pe.resolved_at else None,
+        "resolution": pe.resolution,
+    }
+
+
+@app.get("/events/{event_id}/payments")
+def event_payments(event_id: int,
+                   status: str = "", provider: str = "", q: str = "",
+                   needs_attention: bool = False, include_other: bool = False,
+                   since_days: int = 0, limit: int = 300,
+                   db: Session = Depends(get_db),
+                   current_user: models.User = Depends(get_current_user)):
+    """The live feed. Payment state and reconciliation state are separate
+    fields, deliberately, because the useful rows are where they disagree."""
+    _get_event_or_404(event_id, db)
+    authz.require_cap(db, current_user, event_id, "attendee.read")
+    rows = _pe_rows(db, event_id, include_non_event=include_other)
+    if since_days:
+        cutoff = datetime.utcnow() - timedelta(days=since_days)
+        rows = [r for r in rows if r.occurred_at and r.occurred_at >= cutoff]
+    if status:
+        want = {s.strip() for s in status.split(",") if s.strip()}
+        if "missing_ticket" in want:
+            rows = [r for r in rows
+                    if r.status in payments.PAID and not r.attendee_id] + \
+                   [r for r in rows if r.status in want and r.status != "missing_ticket"]
+        else:
+            rows = [r for r in rows if r.status in want]
+    if provider:
+        want = {p.strip().lower() for p in provider.split(",") if p.strip()}
+        rows = [r for r in rows if (r.provider or "").lower() in want]
+    if needs_attention:
+        rows = [r for r in rows if (r.severity or 0) > 0]
+    if q:
+        needle = q.strip().lower()
+        rows = [r for r in rows if needle in " ".join(filter(None, [
+            (r.buyer_name or ""), (r.buyer_email or ""), (r.buyer_phone or ""),
+            (r.ghl_transaction_id or ""), (r.ghl_entity_id or ""),
+            (r.funnel_name or ""), " ".join(r.product_names or []),
+        ])).lower()]
+    total = len(rows)
+    return {"event_id": event_id, "total": total,
+            "items": [_pe_json(r) for r in rows[:limit]]}
+
+
+@app.get("/events/{event_id}/payments/summary")
+def event_payments_summary(event_id: int, db: Session = Depends(get_db),
+                           current_user: models.User = Depends(get_current_user)):
+    _get_event_or_404(event_id, db)
+    authz.require_cap(db, current_user, event_id, "attendee.read")
+    rows = _pe_rows(db, event_id)
+    today = datetime.utcnow().replace(hour=0, minute=0, second=0, microsecond=0)
+    latest = max((r.last_checked_at for r in rows if r.last_checked_at), default=None)
+    return {
+        "event_id": event_id,
+        "today": payments.summarise(rows, since=today),
+        "all_time": payments.summarise(rows),
+        "last_checked": latest.isoformat() if latest else None,
+        "providers": sorted({payments.display_provider(r.provider) for r in rows if r.provider}),
+    }
+
+
+@app.get("/events/{event_id}/payments/attention")
+def event_payments_attention(event_id: int, db: Session = Depends(get_db),
+                             current_user: models.User = Depends(get_current_user)):
+    """What actually needs a person, worst first."""
+    _get_event_or_404(event_id, db)
+    authz.require_cap(db, current_user, event_id, "attendee.read")
+    rows = [r for r in _pe_rows(db, event_id) if (r.severity or 0) > 0]
+    rows.sort(key=lambda r: (-(r.severity or 0), -(r.amount or 0)))
+    unmapped = db.query(models.UnmappedSale).filter(
+        models.UnmappedSale.status == "pending",
+        models.UnmappedSale.relevance == "event_like").count()
+    return {"event_id": event_id,
+            "critical": sum(1 for r in rows if r.severity == 2),
+            "warning": sum(1 for r in rows if r.severity == 1),
+            "unmapped_event_sales": unmapped,
+            "items": [_pe_json(r) for r in rows[:100]]}
+
+
+@app.get("/events/{event_id}/payments/recovery")
+def event_payments_recovery(event_id: int, db: Session = Depends(get_db),
+                            current_user: models.User = Depends(get_current_user)):
+    """Money attempted and never received — with the people who later paid
+    another way marked as resolved, because chasing them would be an apology
+    sent to a paying customer."""
+    _get_event_or_404(event_id, db)
+    authz.require_cap(db, current_user, event_id, "attendee.read")
+    rows = _pe_rows(db, event_id)
+    out = payments.recovery_rows(rows)
+    return {"event_id": event_id,
+            "unrecovered": sum(1 for r in out if not r["recovered"]),
+            "unrecovered_value": round(sum(r["amount"] or 0 for r in out if not r["recovered"]), 2),
+            "recovered": sum(1 for r in out if r["recovered"]),
+            "items": out}
+
+
+@app.get("/identity/payment-exceptions")
+def payment_exceptions(grace_hours: int = 6, db: Session = Depends(get_db),
+                       _: bool = Depends(require_service_token)):
+    """Payments whose state and ticket state disagree, past a grace period.
+
+    A webhook and its reconciliation are not simultaneous, and a purchase made a
+    minute ago with no attendee yet is a normal race, not a fault. The grace
+    period is what separates the two — without it every checkout would raise an
+    alarm and the real ones would be lost in them.
+
+    Read-only. Provider-agnostic: whatever GHL reports is counted, so PayPal,
+    Stripe and anything switched on later are all included without a code change.
+    """
+    cutoff = datetime.utcnow() - timedelta(hours=max(0, grace_hours))
+    rows = db.query(models.PaymentEvent).filter(
+        models.PaymentEvent.event_id != None).all()                      # noqa: E711
+
+    paid_no_ticket, refunded_active, unmatched = [], [], 0
+    for r in rows:
+        if r.status in payments.PAID and not r.attendee_id:
+            if r.occurred_at and r.occurred_at <= cutoff:
+                paid_no_ticket.append(r)
+        if r.status in payments.REVERSED and r.attendee_id:
+            a = db.query(models.Attendee).filter(models.Attendee.id == r.attendee_id).first()
+            if a and _ticket_active(a):
+                refunded_active.append(r)
+
+    # A provider event Gaia could not tie to a mapped product at all.
+    unmatched = db.query(models.PaymentEvent).filter(
+        models.PaymentEvent.event_id.is_(None),
+        models.PaymentEvent.status.in_(list(payments.PAID)),
+        models.PaymentEvent.occurred_at <= cutoff,
+        models.PaymentEvent.recon_state == "not_event",
+    ).count()
+
+    oldest = min((r.occurred_at for r in paid_no_ticket if r.occurred_at), default=None)
+    sample = None
+    if paid_no_ticket:
+        s = sorted(paid_no_ticket, key=lambda r: r.occurred_at or datetime.max)[0]
+        sample = {"id": s.contact_id or s.ghl_transaction_id, "email": s.buyer_email}
+
+    return {
+        "ok": True,
+        "grace_hours": grace_hours,
+        "paid_without_ticket": len(paid_no_ticket),
+        "refunded_still_active": len(refunded_active),
+        # Payments for things that are not event products — memberships, devices,
+        # the store — are the overwhelming majority here and are not a fault.
+        # The count is reported so it is visible; it is deliberately NOT an
+        # alertable figure, because 730 normal sales would drown the real ones.
+        "unmatched": 0,
+        "unmatched_observed": unmatched,
+        "providers": sorted({payments.display_provider(r.provider) for r in paid_no_ticket if r.provider}),
+        "oldest": oldest.isoformat() if oldest else None,
+        "sample": sample,
+    }
+
+
+@app.get("/identity/system-summary")
+def system_summary(db: Session = Depends(get_db), _: bool = Depends(require_service_token)):
+    """Counts for the System Map. Every figure is a live COUNT(*), not a cache."""
+    ev = db.query(models.Event).all()
+    live = [e for e in ev if not getattr(e, "is_archived", 0)]
+    return {
+        "ok": True,
+        "events": len(ev),
+        "eventsLive": len(live),
+        "attendees": db.query(models.Attendee).count(),
+        "checkedIn": db.query(models.Attendee).filter(models.Attendee.is_checked_in == True).count(),  # noqa: E712
+        "exhibitors": db.query(models.Exhibitor).count(),
+        "exhibitorsPublished": db.query(models.Exhibitor).filter(
+            models.Exhibitor.is_published == True).count(),                                            # noqa: E712
+        "leads": db.query(models.Lead).count(),
+        "scanLogs": db.query(models.ScanLog).count(),
+        "memberCards": db.query(models.MemberCard).count(),
+        "paymentEvents": db.query(models.PaymentEvent).count(),
+        "paymentsNeedingAttention": db.query(models.PaymentEvent).filter(
+            models.PaymentEvent.severity > 0).count(),
+        "ticketMappings": db.query(models.TicketMapping).filter(
+            models.TicketMapping.is_active == True).count(),                                           # noqa: E712
+        "byEvent": [
+            {"id": e.id, "name": e.name,
+             "attendees": db.query(models.Attendee).filter(models.Attendee.event_id == e.id).count(),
+             "archived": bool(getattr(e, "is_archived", 0))}
+            for e in ev
+        ],
+    }
+
+
+@app.get("/identity/attendees-by-contact")
+def attendees_by_contact(contact_id: str = "", email: str = "",
+                         db: Session = Depends(get_db),
+                         _: bool = Depends(require_service_token)):
+    """Every attendee record belonging to one GHL contact, across all events.
+
+    Read-only, and deliberately plural. One GHL contact can legitimately carry
+    several attendee rows — a couple buying two seats on one order, or somebody
+    buying a second seat for a guest GHL never names — and it can also carry two
+    rows because the same human checked out twice under two addresses. Those two
+    situations are indistinguishable from the data, so this reports the fact and
+    refuses to interpret it: `shares_contact` is raised whenever a contact holds
+    more than one attendee in the same event, and the caller shows a human the
+    ambiguity rather than resolving it.
+    """
+    cid = (contact_id or "").strip()
+    em = (email or "").strip().lower()
+    if not cid and not em:
+        raise HTTPException(status_code=400, detail="contact_id or email is required")
+
+    rows = db.query(models.Attendee).all()
+    mine = []
+    for a in rows:
+        cd = a.custom_data or {}
+        a_cid = str(cd.get("contact_id") or getattr(a, "acq_contact_id", "") or "").strip()
+        if (cid and a_cid == cid) or (em and (a.email or "").strip().lower() == em):
+            mine.append((a, a_cid))
+
+    by_event = {}
+    for a, a_cid in mine:
+        by_event.setdefault((a.event_id, a_cid), []).append(a)
+
+    events = {e.id: e for e in db.query(models.Event).all()}
+    out = []
+    for a, a_cid in mine:
+        ev = events.get(a.event_id)
+        siblings = by_event.get((a.event_id, a_cid), [])
+        out.append({
+            "attendee_id": a.id,
+            "event_id": a.event_id,
+            "event_name": ev.name if ev else None,
+            "email": a.email,
+            "name": ("%s %s" % (a.first_name or "", a.last_name or "")).strip() or a.email,
+            "contact_id": a_cid or None,
+            "status": a.registration_status,
+            "is_checked_in": bool(a.is_checked_in),
+            "checked_in_at": a.checked_in_at.isoformat() if a.checked_in_at else None,
+            "registration_source": a.registration_source,
+            "qr_code": a.qr_code,
+            # More than one attendee in ONE event under ONE contact. Reported,
+            # never resolved: see the docstring.
+            "shares_contact": len(siblings) > 1,
+            "shares_contact_with": [
+                {"attendee_id": s.id, "email": s.email,
+                 "name": ("%s %s" % (s.first_name or "", s.last_name or "")).strip() or s.email}
+                for s in siblings if s.id != a.id
+            ],
+        })
+    out.sort(key=lambda r: (r["event_id"] or 0, r["attendee_id"]))
+    return {"ok": True, "count": len(out), "attendees": out,
+            "has_ambiguity": any(r["shares_contact"] for r in out)}
+
+
 @app.get("/events/{event_id}/ticket-metrics")
 def ticket_metrics(event_id: int, db: Session = Depends(get_db),
                    current_user: models.User = Depends(get_current_user)):
@@ -5731,6 +6550,7 @@ def reconcile_invoice(payload: schemas.ReconcileInvoice, db: Session = Depends(g
     if not event:
         raise HTTPException(status_code=404, detail="Event not found")
     _assert_event_writable(db, event, "reconcile an invoice into it")
+    _assert_sale_in_window(db, event, payload.product_id, payload.issued_at)
     if str(payload.status or "").lower() not in ("paid", "partially_paid"):
         return {"ok": False, "reason": "invoice_not_paid", "status": payload.status}
     email = (payload.email or "").strip().lower()
@@ -5809,6 +6629,7 @@ def reconcile_attendee(payload: schemas.ReconcileAttendee, db: Session = Depends
     if not event:
         raise HTTPException(status_code=404, detail="Event not found")
     _assert_event_writable(db, event, "reconcile an attendee into it")
+    _assert_sale_in_window(db, event, payload.product_id, payload.purchased_at)
     email = (payload.email or "").strip().lower()
     if not email or "@" not in email:
         raise HTTPException(status_code=400, detail="A contact email is required")

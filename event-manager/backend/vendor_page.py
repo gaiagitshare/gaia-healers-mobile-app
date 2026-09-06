@@ -61,6 +61,26 @@ h1{margin:0 0 6px;font-size:29px;line-height:1.15;letter-spacing:-.022em;text-wr
 .foot a{color:var(--brand)}
 .empty{margin:20px 0 0;padding:18px;border:1px dashed var(--line);border-radius:14px;
   text-align:center;color:var(--muted);font-size:14.5px;line-height:1.6}
+/* Photos scroll sideways rather than stacking: a stand with eight pictures
+   should not push its catalogue and its address off the bottom of the phone. */
+.shots{margin:22px -26px 0;padding:0 26px;display:flex;gap:10px;overflow-x:auto;
+  scroll-snap-type:x mandatory;-webkit-overflow-scrolling:touch;scrollbar-width:none}
+.shots::-webkit-scrollbar{display:none}
+.shot{flex:0 0 auto;width:75%;max-width:280px;scroll-snap-align:start}
+.shot img{display:block;width:100%;aspect-ratio:4/3;object-fit:cover;border-radius:14px;
+  border:1px solid var(--line);background:var(--brand-soft)}
+.shot figcaption{margin:7px 2px 0;font-size:12.5px;color:var(--muted);line-height:1.45}
+.sect{margin:26px 0 0;padding-top:22px;border-top:1px solid var(--line)}
+.sect h2{margin:0 0 3px;font-size:13px;letter-spacing:.08em;text-transform:uppercase;
+  color:var(--muted);font-weight:650}
+.sect .note{margin:0 0 14px;font-size:13px;color:var(--muted)}
+.cat{display:grid;grid-template-columns:repeat(2,1fr);gap:12px}
+@media (max-width:420px){.cat{grid-template-columns:1fr}}
+.item{border:1px solid var(--line);border-radius:14px;overflow:hidden;background:var(--card)}
+.item img{display:block;width:100%;aspect-ratio:1/1;object-fit:cover;background:var(--brand-soft)}
+.item .txt{padding:11px 13px 13px}
+.item h3{margin:0;font-size:15px;line-height:1.35;letter-spacing:-.01em}
+.item p{margin:4px 0 0;font-size:13.5px;line-height:1.5;color:var(--muted)}
 """
 
 _ICON = {
@@ -81,7 +101,7 @@ def _initials(name):
     return ("".join(p[0] for p in parts[:2]) or "G").upper()
 
 
-def public_vendor_html(ex, event_name, app_base=""):
+def public_vendor_html(ex, event_name, directory_url=""):
     """One stand, as an attendee meets it."""
     tile = " logo--dark" if getattr(ex, "logo_on_dark", False) else ""
     logo_inner = ('<img src="%s" alt="">' % _h(ex.logo_url)) if ex.logo_url else \
@@ -121,19 +141,49 @@ def public_vendor_html(ex, event_name, app_base=""):
         row("pin", "Address", addr)
     rows_html = ('<div class="rows">%s</div>' % "".join(rows)) if rows else ""
 
-    if not about and not rows_html:
+    # Pictures of the stand, then what will be on the table. Both are the
+    # company's own material, so both are simply absent when they have not
+    # given us any -- never a grey box promising something that isn't coming.
+    photos = [p for p in (getattr(ex, "photos", None) or []) if p.url]
+    shots = ""
+    if photos:
+        shots = ('<div class="shots">%s</div>' % "".join(
+            '<figure class="shot"><img src="%s" alt="%s" loading="lazy">%s</figure>'
+            % (_h(p.url), _h(p.caption or ex.company_name),
+               ('<figcaption>%s</figcaption>' % _h(p.caption)) if p.caption else "")
+            for p in photos))
+
+    products = [p for p in (getattr(ex, "products", None) or []) if (p.name or "").strip()]
+    catalogue = ""
+    if products:
+        catalogue = (
+            '<div class="sect"><h2>What they bring</h2>'
+            '<p class="note">A catalogue, not a shop &mdash; see it on the stand.</p>'
+            '<div class="cat">%s</div></div>' % "".join(
+                '<article class="item">%s<div class="txt"><h3>%s</h3>%s</div></article>'
+                % (('<img src="%s" alt="%s" loading="lazy">' % (_h(p.image_url), _h(p.name)))
+                   if p.image_url else "",
+                   _h(p.name),
+                   ('<p>%s</p>' % _h(p.description)) if (p.description or "").strip() else "")
+                for p in products))
+
+    if not about and not rows_html and not shots and not catalogue:
         rows_html = ('<div class="empty">%s is exhibiting at %s.<br>'
                      'Come and find them at the event.</div>'
                      % (_h(ex.company_name), _h(event_name)))
 
+    # Straight to the exhibitor directory in the Gaia app, not to the API root
+    # this used to point at. Somebody who scanned one stand's QR is asking who
+    # else is here, and that is a directory, not a JSON document.
     cta = ""
-    if app_base:
-        cta = ('<a class="cta ghost" href="%s">See everyone exhibiting</a>' % _h(app_base))
+    if directory_url:
+        cta = ('<a class="cta ghost" href="%s">See everyone exhibiting</a>' % _h(directory_url))
 
     body = ('<div class="card">'
             '<div class="hero"><div class="logo%s">%s</div><h1>%s</h1>%s%s</div>'
-            '<div class="body">%s%s%s</div></div>'
-            % (tile, logo_inner, _h(ex.company_name), tag, booth, about, rows_html, cta))
+            '<div class="body">%s%s%s%s%s</div></div>'
+            % (tile, logo_inner, _h(ex.company_name), tag, booth,
+               about, shots, catalogue, rows_html, cta))
 
     return ("<!doctype html><html lang=\"en\"><head><meta charset=\"utf-8\">"
             "<meta name=\"viewport\" content=\"width=device-width,initial-scale=1\">"

@@ -487,42 +487,105 @@
 
   function directorySection(detail) {
     const exhibitors = Array.isArray(detail?.exhibitors) ? detail.exhibitors : [];
-    if (!exhibitors.length) return '';
+    // The list arrives already filtered by the server: only stands an operator
+    // has put in the directory are ever in this payload. Nothing here decides
+    // who is visible, and nothing here can widen it.
+    const rows = exhibitors.slice().sort((a, b) => String(a.company_name || '')
+      .localeCompare(String(b.company_name || ''), undefined, { sensitivity: 'base' }));
+    const head = '<section class="g-super-list" data-directory><div class="g-super-section-head"><div>'
+      + '<p class="g-super-kicker">Exhibit hall</p><h2>Exhibitor directory</h2>'
+      + '<p class="g-super-sub" data-dir-count>' + rows.length
+      + (rows.length === 1 ? ' stand' : ' stands') + '</p>'
+      + '</div></div>';
+
+    if (!rows.length) {
+      return head + '<p class="g-empty">No stands are listed yet. They appear here as each one '
+        + 'is added to the directory.</p></section>';
+    }
+
     // Each row opens the stand's OWN page rather than firing the attendee
     // straight out to a company website. Their page carries the booth number,
     // what they do and how to reach them; a link out loses all of that, and
     // loses the person too.
     const base = (window.GAIA_APP_URLS && window.GAIA_APP_URLS.production
       && window.GAIA_APP_URLS.production.proxy) || '';
-    const withBooth = exhibitors.filter((v) => v.booth_number).length;
-    return '<section class="g-super-list"><div class="g-super-section-head"><div>'
-      + '<p class="g-super-kicker">Exhibit hall</p><h2>Vendor directory</h2>'
-      + '<p class="g-super-sub">' + exhibitors.length + ' exhibiting'
-      + (withBooth ? ' \u00b7 ' + withBooth + ' with a booth number' : '') + '</p>'
-      + '</div></div>'
-      + '<div class="g-vendors">'
-      + exhibitors.map((vendor) => {
-        const meta = [
-          vendor.booth_number ? 'Booth ' + vendor.booth_number : '',
-          vendor.tables ? vendor.tables + (vendor.tables > 1 ? ' tables' : ' table') : '',
-          vendor.category,
-        ].filter(Boolean).join(' \u00b7 ');
-        const blurb = vendor.tagline || vendor.description || '';
-        const logo = vendor.logo_url
-          ? '<img src="' + esc(vendor.logo_url) + '" alt="" loading="lazy">'
-          : '<b>' + esc((vendor.company_name || 'G').trim().charAt(0).toUpperCase()) + '</b>';
-        const inner = '<span class="g-vendor__logo' + (vendor.logo_on_dark ? ' is-dark' : '') + '">'
-          + logo + '</span>'
-          + '<span class="g-vendor__text"><strong>' + esc(vendor.company_name) + '</strong>'
-          + (meta ? '<em>' + esc(meta) + '</em>' : '')
-          + (blurb ? '<span class="g-vendor__blurb">' + esc(blurb) + '</span>' : '')
-          + '</span>';
-        return base
-          ? '<a class="g-vendor" href="' + esc(base + '/v/' + vendor.id) + '" target="_blank" rel="noopener noreferrer">'
-            + inner + icon('arrow-up-right') + '</a>'
-          : '<div class="g-vendor">' + inner + '</div>';
-      }).join('')
-      + '</div></section>';
+    const search = '<div class="g-dir-search">'
+      + '<label class="g-sr-only" for="g-dir-q">Search exhibitors by name or booth</label>'
+      + '<input class="g-input" type="search" id="g-dir-q" data-dir-q autocomplete="off"'
+      + ' placeholder="Search by name or booth" enterkeyhint="search">'
+      + '</div>';
+
+    const cards = rows.map((vendor) => {
+      const booth = vendor.booth_number ? String(vendor.booth_number).replace(/\.0$/, '') : '';
+      const meta = [
+        booth ? 'Booth ' + booth : '',
+        vendor.tables ? vendor.tables + (vendor.tables > 1 ? ' tables' : ' table') : '',
+      ].filter(Boolean).join(' \u00b7 ');
+      const blurb = vendor.tagline || vendor.description || '';
+      const name = vendor.company_name || '';
+      // A logo is decorative beside the name it sits next to, so its alt is
+      // empty on purpose. A photo of the stand is not decorative, so it is
+      // described — and it only stands in where there is no logo at all.
+      const photo = (Array.isArray(vendor.photos) && vendor.photos.length && vendor.photos[0].url)
+        ? vendor.photos[0] : null;
+      let tile;
+      if (vendor.logo_url) {
+        tile = '<img src="' + esc(vendor.logo_url) + '" alt="" loading="lazy">';
+      } else if (photo) {
+        tile = '<img class="is-photo" src="' + esc(photo.url) + '" loading="lazy" alt="'
+          + esc(photo.caption || (name + ' at their stand')) + '">';
+      } else {
+        tile = '<b>' + esc((name || 'G').trim().charAt(0).toUpperCase()) + '</b>';
+      }
+      const inner = '<span class="g-vendor__logo' + (vendor.logo_on_dark ? ' is-dark' : '') + '">'
+        + tile + '</span>'
+        + '<span class="g-vendor__text"><strong>' + esc(name) + '</strong>'
+        + (meta ? '<em>' + esc(meta) + '</em>' : '')
+        + (blurb ? '<span class="g-vendor__blurb">' + esc(blurb) + '</span>' : '')
+        + '</span>';
+      // The searchable text is put on the element rather than read back out of
+      // the DOM, so filtering never depends on how the row happens to be marked
+      // up and a rename cannot quietly break search.
+      const key = esc((name + ' ' + booth).toLowerCase());
+      return base
+        ? '<a class="g-vendor" data-dir-row data-dir-key="' + key + '" href="'
+          + esc(base + '/v/' + vendor.id) + '" target="_blank" rel="noopener noreferrer">'
+          + inner + icon('arrow-up-right') + '</a>'
+        : '<div class="g-vendor" data-dir-row data-dir-key="' + key + '">' + inner + '</div>';
+    }).join('');
+
+    return head + search + '<div class="g-vendors">' + cards + '</div>'
+      + '<p class="g-empty" data-dir-none hidden>Nothing matches that. Try part of a company name, '
+      + 'or a booth number.</p></section>';
+  }
+
+  // Filtering happens in the DOM rather than through a re-render, so the caret
+  // and the keyboard stay exactly where the person put them while they type.
+  function bindDirectory(root) {
+    const sec = root.querySelector('[data-directory]');
+    if (!sec) return;
+    const input = sec.querySelector('[data-dir-q]');
+    if (!input) return;
+    const rows = Array.prototype.slice.call(sec.querySelectorAll('[data-dir-row]'));
+    const count = sec.querySelector('[data-dir-count]');
+    const none = sec.querySelector('[data-dir-none]');
+    const apply = () => {
+      const q = input.value.trim().toLowerCase();
+      let shown = 0;
+      rows.forEach((row) => {
+        const hit = !q || (row.getAttribute('data-dir-key') || '').indexOf(q) !== -1;
+        row.hidden = !hit;
+        if (hit) shown += 1;
+      });
+      if (none) none.hidden = shown !== 0;
+      if (count) {
+        count.textContent = q
+          ? shown + ' of ' + rows.length + (rows.length === 1 ? ' stand' : ' stands')
+          : rows.length + (rows.length === 1 ? ' stand' : ' stands');
+      }
+    };
+    input.addEventListener('input', apply);
+    input.addEventListener('search', apply);
   }
 
   function dateLabel() {
@@ -1490,6 +1553,7 @@
         if (pin) pin.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'center' });
       });
     });
+    if (eventUI.tab === 'exhibitors') bindDirectory(root);
     if (eventUI.tab === 'community') { bindCommunity(root, eventId); ensureFeed(eventId); } else { stopFeedPolling(); }
     bind(root);
   }

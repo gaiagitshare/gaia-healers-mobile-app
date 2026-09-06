@@ -1704,4 +1704,15 @@ body.gaia-v2 .g-super-home .g-super-hero{border:1px solid var(--g-line);
   color:rgba(255,255,255,.55)}
 .g-vendor__blurb{font-size:13px;line-height:1.45;color:rgba(255,255,255,.68);
   display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+/* Where a stand has no logo but has photographed itself, the photo fills the
+   tile rather than leaving an initial next to a page that is full of pictures. */
+.g-vendor__logo img.is-photo{max-width:100%;max-height:100%;width:100%;height:100%;
+  object-fit:cover}
+.g-dir-search{margin:0 0 12px}
+.g-dir-search .g-input{font-size:15px}
+/* One column on a phone; two once there is room for two, because a directory
+   read standing in a hall is scanned, not read. */
+@media (min-width:760px){
+  .g-vendors{grid-template-columns:1fr 1fr;gap:1px}
+}
 .g-super-sub{margin:2px 0 0;font-size:12.5px;color:rgba(255,255,255,.55)}

@@ -15,7 +15,7 @@ import ImportCsvDialog from './ImportCsvDialog';
 import BulkToolbar, { useBulkSelection, SelectAllCheckbox } from './BulkToolbar';
 import Checkbox from '@mui/material/Checkbox';
 import {
-    getEvent, updateEvent, getSessions, createSession, updateSession, deleteSession,
+    getEvent, getSessions, createSession, updateSession, deleteSession,
     getSpeakers, createSpeaker, updateSpeaker, deleteSpeaker,
     getSponsors, createSponsor, updateSponsor, deleteSponsor,
     getAnnouncements, createAnnouncement, updateAnnouncement, deleteAnnouncement,
@@ -62,7 +62,10 @@ const dayLabel = (isoDate) => {
 function Agenda({ section }) {
     const { id } = useParams();
     // Section index when the workspace drives which panel shows.
-    const SECTION_INDEX = { schedule: 0, speakers: 1, sponsors: 2, updates: 3, live: -1 };
+    // Live is its own screen now (<LiveAdmin>), not a section of this one. It
+    // used to be mapped to -1 here, which fell through to index 0 and made the
+    // Live tab render the schedule editor.
+    const SECTION_INDEX = { schedule: 0, speakers: 1, sponsors: 2, updates: 3 };
     const navigate = useNavigate();
 
     const [event, setEvent] = useState(null);
@@ -274,25 +277,6 @@ function Agenda({ section }) {
         load();
     };
 
-    // ---- live switch -------------------------------------------------------
-    const setLive = async (enabled) => {
-        try {
-            const res = await updateEvent(id, { live_enabled: enabled });
-            setEvent(res.data);
-        } catch (err) {
-            setError('Could not change the live page.');
-        }
-    };
-
-    const saveLiveMessage = async (message) => {
-        try {
-            const res = await updateEvent(id, { live_message: message });
-            setEvent(res.data);
-        } catch (err) {
-            setError('Could not save the live message.');
-        }
-    };
-
     // ---- grouping ----------------------------------------------------------
     const scheduled = sessions.filter((s) => s.start_time);
     const unscheduled = sessions.filter((s) => !s.start_time);
@@ -327,46 +311,6 @@ function Agenda({ section }) {
             </Typography>
 
             {error && <Alert severity="error" sx={{ mb: 2 }} onClose={() => setError('')}>{error}</Alert>}
-
-            {/* Live page control — the switch an operator flips when doors open. */}
-            <Card sx={{ mb: 3, border: (t) => `1px solid ${event?.live_enabled ? t.palette.primary.main : 'transparent'}` }}>
-                <CardContent>
-                    <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2} justifyContent="space-between" alignItems={{ sm: 'center' }}>
-                        <Box>
-                            <Typography variant="h4">Live page</Typography>
-                            <Typography variant="body2" color="text.secondary">
-                                {event?.live_enabled
-                                    ? 'On — attendees see “happening now”, counts and sponsors in the app.'
-                                    : 'Off — the app shows the normal event page. Turn this on when doors open.'}
-                            </Typography>
-                        </Box>
-                        <Stack direction="row" spacing={1} alignItems="center">
-                            <FormControlLabel
-                                control={<Switch checked={Boolean(event?.live_enabled)} onChange={(e) => setLive(e.target.checked)} />}
-                                label={event?.live_enabled ? 'Live' : 'Off'}
-                            />
-                            <Button
-                                variant="outlined"
-                                href={`/event/display.html?event=${id}`}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                            >
-                                Open venue display
-                            </Button>
-                        </Stack>
-                    </Stack>
-                    <TextField
-                        fullWidth
-                        size="small"
-                        sx={{ mt: 2 }}
-                        label="Banner message (optional)"
-                        placeholder="e.g. Lunch is served in the Exhibit Hall"
-                        defaultValue={event?.live_message || ''}
-                        onBlur={(e) => saveLiveMessage(e.target.value)}
-                        helperText="Saved when you click away. Shows on the app live panel and the venue display."
-                    />
-                </CardContent>
-            </Card>
 
             {!section && (
             <Tabs value={tab} onChange={(_, v) => setTab(v)} variant="scrollable" scrollButtons="auto" sx={{ mb: 2 }}>

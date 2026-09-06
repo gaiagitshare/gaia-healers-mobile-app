@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useParams } from 'react-router-dom';
 import {
-    Alert, Avatar, Box, Button, Card, CardContent, Chip, CircularProgress,
+    Alert, Box, Button, Chip, CircularProgress,
     Dialog, DialogActions, DialogContent, DialogTitle, Divider, IconButton,
     InputAdornment, MenuItem, Paper, Snackbar, Stack, TextField, Typography,
 } from '@mui/material';
@@ -12,6 +12,8 @@ import PrintIcon from '@mui/icons-material/Print';
 import UndoIcon from '@mui/icons-material/Undo';
 import VisibilityIcon from '@mui/icons-material/Visibility';
 import PersonAddIcon from '@mui/icons-material/PersonAdd';
+import QrCodeScannerIcon from '@mui/icons-material/QrCodeScanner';
+import TuneIcon from '@mui/icons-material/Tune';
 import { Html5QrcodeScanner } from 'html5-qrcode';
 import { authorizeScan, getScanLogs, searchAttendees, getEvents, walkInCreate, getTicketTypes, badgeLabelBlob, recordBadgePrint, undoCheckIn, clearScanLogs, setDoorTestMode, getEvent } from '../utils/api';
 import { formatVenueTime, statusLabel, isFlaggedStatus } from '../utils/datetime';
@@ -25,8 +27,19 @@ const ZONES = [
     { value: 'WORKSHOP', label: 'Workshops' },
     { value: 'VIP', label: 'VIP area' },
 ];
-const RESULT_COLOR = { GRANTED: 'success', LIMITED: 'warning', DENIED: 'error', UNDO: 'info' };
-const RESULT_MARK = { GRANTED: '✓', LIMITED: '!', DENIED: '✗', UNDO: '↺' };
+// How each state reads at a glance. REHEARSAL is not a stored result — it is a
+// real decision taken while the door is in practice mode — so it gets its own
+// presentation without pretending the audit trail has a status it does not.
+const LOG_STATE = {
+    GRANTED:   { label: 'Granted',   mark: '✓', color: 'success', variant: 'outlined' },
+    LIMITED:   { label: 'Limited',   mark: '!', color: 'warning', variant: 'outlined' },
+    DENIED:    { label: 'Denied',    mark: '✕', color: 'error',   variant: 'filled' },
+    UNDO:      { label: 'Undo',      mark: '↶', color: 'info',    variant: 'outlined' },
+    REHEARSAL: { label: 'Rehearsal', mark: '◐', color: 'warning', variant: 'filled' },
+};
+const HEADLINE = {
+    GRANTED: 'ADMITTED', LIMITED: 'CHECK THIS ONE', DENIED: 'DENIED', UNDO: 'UNDONE',
+};
 const STATION_KEY = 'gha_station';
 const LABEL_SIZE_KEY = 'gha_label_size';
 
@@ -109,6 +122,10 @@ function CheckIn({ timezone: timezoneProp }) {
     const [label, setLabel] = useState(null);   // { attendee, url, attemptId, checkedInNow, error }
     const [undoTarget, setUndoTarget] = useState(null);
     const [undoReason, setUndoReason] = useState('');
+    const [stationOpen, setStationOpen] = useState(false);
+    const [logFilter, setLogFilter] = useState('');
+    const [expandedLog, setExpandedLog] = useState(null);
+    const [showDecisionDetail, setShowDecisionDetail] = useState(false);
 
     // The door's own state: has this event started, and is a rehearsal running.
     const [doorEvent, setDoorEvent] = useState(null);
@@ -441,64 +458,112 @@ function CheckIn({ timezone: timezoneProp }) {
 
     // The decision card — GRANTED / LIMITED / DENIED, with the same effective access
     // Admin and the member app show, plus the reason and the QR identity.
+    /**
+     * The scan result, as a person at a door needs it: the verdict first and
+     * large, then who it is, then what they hold. The zone grid, badge code and
+     * event day are audit facts — kept, one tap away, rather than competing with
+     * the three words staff actually read between one person and the next.
+     */
     const decisionCard = (d) => {
-        const color = RESULT_COLOR[d.result] || 'default';
+        // The response says so outright. The REHEARSAL prefix only exists on the
+        // logged reason — reading the live decision that way would miss it, and
+        // a practice scan that looks like a real admission is the one mistake
+        // this banner exists to prevent.
+        const rehearsing = Boolean(d.rehearsal);
+        const state = rehearsing ? 'REHEARSAL' : (d.result || 'DENIED');
+        const v = LOG_STATE[state] || LOG_STATE.DENIED;
+        const headline = rehearsing
+            ? (d.result === 'GRANTED' ? 'REHEARSAL — WOULD ADMIT' : 'REHEARSAL — WOULD REFUSE')
+            : (HEADLINE[d.result] || d.result);
+        const reason = String(d.reason || '').replace(/^REHEARSAL\s*—\s*/i, '');
         const addons = d.addons || [];
         return (
-            <Card sx={{ mb: 3, borderLeft: 6, borderColor: `${color}.main` }}>
-                <CardContent>
-                    <Stack direction="row" alignItems="center" spacing={2} sx={{ mb: 1.5 }}>
-                        <Avatar sx={{ width: 60, height: 60, bgcolor: `${color}.main`, fontSize: 30 }}>{RESULT_MARK[d.result] || '?'}</Avatar>
-                        <Box sx={{ minWidth: 0 }}>
-                            <Stack direction="row" spacing={1} alignItems="center">
-                                <Typography variant="h5" color={`${color}.main`} sx={{ fontWeight: 700 }}>{d.result}</Typography>
-                                <Chip size="small" variant="outlined" label={ZONES.find((z) => z.value === d.access_type)?.label || d.access_type} />
-                            </Stack>
-                            <Typography variant="body1" sx={{ mt: 0.25 }}>{d.reason}</Typography>
-                        </Box>
+            <Paper variant="outlined"
+                sx={{ borderColor: `${v.color}.main`, borderWidth: 2, overflow: 'hidden' }}>
+                <Box sx={{ px: 2, py: 1.25, bgcolor: `${v.color}.main`,
+                           backgroundImage: 'linear-gradient(rgba(0,0,0,.55),rgba(0,0,0,.55))' }}>
+                    <Stack direction="row" alignItems="center" spacing={1.5}>
+                        <Typography sx={{ fontSize: 30, lineHeight: 1, color: `${v.color}.main` }}>{v.mark}</Typography>
+                        <Typography variant="h5" sx={{ fontWeight: 800, letterSpacing: '.02em', color: `${v.color}.main` }}>
+                            {headline}
+                        </Typography>
                     </Stack>
-
-                    <Typography variant="h6" sx={{ fontWeight: 600 }}>{d.name}</Typography>
+                </Box>
+                <Box sx={{ p: 2 }}>
+                    {/* An unrecognised badge has no name to show. Saying so beats
+                        an empty line that looks like the card failed to load. */}
+                    <Typography variant="h5" sx={{ fontWeight: 700, color: d.name ? 'text.primary' : 'text.disabled' }}>
+                        {d.name || 'Unknown badge'}
+                    </Typography>
                     {d.effective_label && (
-                        <Typography variant="body2" sx={{ mt: 0.5 }}>
-                            <Typography component="span" variant="caption" sx={{ textTransform: 'uppercase', letterSpacing: '.04em', color: 'text.secondary', mr: 0.5 }}>Access</Typography>
-                            <strong>{d.effective_label}</strong>
+                        <Typography variant="body1" color="text.secondary" sx={{ mt: 0.25 }}>
+                            {d.effective_label}
                         </Typography>
                     )}
-                    <Stack direction="row" spacing={0.5} flexWrap="wrap" useFlexGap sx={{ mt: 1 }}>
-                        {d.base_ticket && <Chip size="small" color="primary" variant="outlined" label={d.base_ticket.name} />}
+                    <Typography variant="body2" sx={{ mt: 1 }}>{reason}</Typography>
+
+                    <Stack direction="row" spacing={0.5} flexWrap="wrap" useFlexGap sx={{ mt: 1.5 }}>
+                        {d.checked_in && (
+                            <Chip size="small" color="success"
+                                  label={d.checked_in_now ? 'Checked in just now' : 'Already checked in'} />
+                        )}
+                        {d.base_ticket && <Chip size="small" variant="outlined" label={d.base_ticket.name} />}
                         {addons.map((a) => (
-                            <Chip key={a.code} size="small" color="success" variant="outlined" label={`+ ${a.label}${a.day ? ` · ${a.day}` : ' · day not selected'}`} />
+                            <Chip key={a.code} size="small" color="success" variant="outlined"
+                                  label={`+ ${a.label}${a.day ? ` · ${a.day}` : ' · day not selected'}`} />
                         ))}
-                        {d.checked_in && <Chip size="small" color="success" label={d.checked_in_now ? 'Checked in just now' : 'Checked in'} />}
+                        <Chip size="small" variant="outlined"
+                              label={ZONES.find((z) => z.value === d.access_type)?.label || d.access_type} />
                     </Stack>
 
-                    {d.zones && (
-                        <Stack direction="row" spacing={0.5} flexWrap="wrap" useFlexGap sx={{ mt: 1.5 }}>
-                            <Chip size="small" variant={d.zones.exhibit ? 'filled' : 'outlined'} color={d.zones.exhibit ? 'success' : 'default'} label="Exhibit" />
-                            <Chip size="small" variant={d.zones.conference?.allowed ? 'filled' : 'outlined'} color={d.zones.conference?.allowed ? 'success' : 'default'} label="Conference" />
-                            <Chip size="small" variant={d.zones.workshop ? 'filled' : 'outlined'} color={d.zones.workshop ? 'success' : 'default'} label="Workshops" />
-                            <Chip size="small" variant={d.zones.vip ? 'filled' : 'outlined'} color={d.zones.vip ? 'success' : 'default'} label="VIP" />
-                        </Stack>
+                    <Button size="small" sx={{ mt: 1.5, px: 0, minWidth: 0 }}
+                            onClick={() => setShowDecisionDetail((x) => !x)}>
+                        {showDecisionDetail ? 'Hide details' : 'Details'}
+                    </Button>
+                    {showDecisionDetail && (
+                        <Box sx={{ mt: 1 }}>
+                            {d.zones && (
+                                <Stack direction="row" spacing={0.5} flexWrap="wrap" useFlexGap sx={{ mb: 1 }}>
+                                    <Chip size="small" variant={d.zones.exhibit ? 'filled' : 'outlined'} color={d.zones.exhibit ? 'success' : 'default'} label="Exhibit" />
+                                    <Chip size="small" variant={d.zones.conference?.allowed ? 'filled' : 'outlined'} color={d.zones.conference?.allowed ? 'success' : 'default'} label="Conference" />
+                                    <Chip size="small" variant={d.zones.workshop ? 'filled' : 'outlined'} color={d.zones.workshop ? 'success' : 'default'} label="Workshops" />
+                                    <Chip size="small" variant={d.zones.vip ? 'filled' : 'outlined'} color={d.zones.vip ? 'success' : 'default'} label="VIP" />
+                                </Stack>
+                            )}
+                            <Typography variant="caption" color="text.secondary" sx={{ fontFamily: 'monospace', display: 'block', overflowWrap: 'anywhere' }}>
+                                {d.qr_code}{d.event_local_date ? ` · event day ${d.event_local_date}` : ''}
+                                {d.result ? ` · result ${d.result}` : ''}
+                            </Typography>
+                        </Box>
                     )}
-                    <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 1.5, fontFamily: 'monospace' }}>
-                        {d.qr_code}{d.event_local_date ? ` · event day ${d.event_local_date}` : ''}
-                    </Typography>
-                </CardContent>
-            </Card>
+                </Box>
+            </Paper>
         );
     };
 
+    const zoneLabel = ZONES.find((z) => z.value === accessType)?.label || accessType;
     const zoneNote = accessType === 'EVENT_ENTRY'
         ? 'A granted Event-entry scan checks the attendee in.'
         : 'A zone scan authorizes access to this area only — it does not change check-in state.';
 
+    // A rehearsal scan is a real decision recorded with a REHEARSAL prefix on its
+    // reason — the backend writes it that way so the history cannot be misread
+    // later. Reading it back the same way keeps the filter honest without
+    // inventing a status the audit trail does not have.
+    const isRehearsalLog = (log) => /^REHEARSAL/i.test(log.reason || '');
+    const logState = (log) => (isRehearsalLog(log) ? 'REHEARSAL' : (log.result || 'DENIED'));
+    const cleanReason = (log) => String(log.reason || '').replace(/^REHEARSAL\s*—\s*/i, '');
+    const shownLogs = scanLogs.filter((l) => !logFilter || logState(l) === logFilter);
+    const logCounts = scanLogs.reduce((a, l) => { const k = logState(l); a[k] = (a[k] || 0) + 1; return a; }, {});
+
     return (
         <Box>
-            <Typography variant="h4" gutterBottom>Check-In &amp; Access</Typography>
+            {!eventIdFromRoute && (
+                <Typography variant="h5" sx={{ mb: 2 }}>Check-In &amp; Access</Typography>
+            )}
 
             {!eventIdFromRoute && (
-                <Paper variant="outlined" sx={{ p: 2, mb: 3 }}>
+                <Paper variant="outlined" sx={{ p: 2, mb: 2 }}>
                     <TextField select fullWidth size="small" label="Which event's door is this?"
                         value={pickedEvent ? pickedEvent.id : ''}
                         onChange={(e) => setPickedEvent(events.find((event) => event.id === Number(e.target.value)) || null)}
@@ -512,39 +577,83 @@ function CheckIn({ timezone: timezoneProp }) {
                 <Alert severity="info">Choose an event above to start.</Alert>
             ) : (
                 <>
-                    <Paper variant="outlined" sx={{ p: 2, mb: 3 }}>
-                        {/* flex-start, not flex-end: only one of these fields has helper
-                            text, and bottom-aligning a row of mixed heights lifted that
-                            field's input box out of line with the other two. */}
-                        <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1.5} alignItems={{ sm: 'flex-start' }}>
-                            <TextField select size="small" label="This scanner checks" value={accessType} onChange={(e) => setAccessType(e.target.value)} sx={{ minWidth: 230 }}
-                                helperText="Zone this scanner guards">
-                                {ZONES.map((z) => <MenuItem key={z.value} value={z.value}>{z.label}</MenuItem>)}
-                            </TextField>
-                            <TextField size="small" label="Station name" placeholder="e.g. Desk A" value={station} onChange={(e) => rememberStation(e.target.value)} sx={{ minWidth: 160 }}
-                                helperText="Recorded on every print" />
-                            <TextField select size="small" label="Label roll" value={labelSize} onChange={(e) => rememberLabelSize(e.target.value)} sx={{ minWidth: 140 }}
-                                helperText="Saved on this device">
-                                <MenuItem value="40x60">40 × 60 mm · portrait — in stock</MenuItem>
-                                <MenuItem value="40x50">40 × 50 mm · portrait — design target, roll not sold by NIIMBOT</MenuItem>
-                                <MenuItem value="40x40">40 × 40 mm — in stock</MenuItem>
-                                <MenuItem value="40x30">40 × 30 mm — in stock</MenuItem>
-                                <MenuItem value="50x30">50 × 30 mm · landscape — in stock</MenuItem>
-                            </TextField>
+                    {/* ── Station bar ───────────────────────────────────────────
+                        Set once at the start of a shift and then left alone, so it
+                        reads as a status line rather than a form. Three dropdowns
+                        across the top of the page made configuration look like the
+                        job; the job is the queue. */}
+                    <Paper variant="outlined" sx={{ mb: 2 }}>
+                        <Stack direction="row" alignItems="center" gap={1} flexWrap="wrap"
+                               sx={{ px: 1.5, py: 1 }}>
+                            <Chip size="small" color={accessType === 'EVENT_ENTRY' ? 'primary' : 'default'}
+                                  variant={accessType === 'EVENT_ENTRY' ? 'filled' : 'outlined'}
+                                  label={zoneLabel} sx={{ height: 24 }} />
+                            <Typography variant="body2" color="text.secondary">·</Typography>
+                            <Typography variant="body2" sx={{ fontWeight: 600 }}>
+                                {station || <Box component="span" sx={{ color: 'text.disabled', fontWeight: 400 }}>Unnamed station</Box>}
+                            </Typography>
+                            <Typography variant="body2" color="text.secondary">·</Typography>
+                            <Typography variant="body2" color="text.secondary">
+                                {labelSize.replace('x', ' × ')} mm label
+                            </Typography>
+                            <Box flexGrow={1} />
+                            <Button size="small" onClick={() => setStationOpen((v) => !v)}
+                                    endIcon={<TuneIcon fontSize="small" />}>
+                                {stationOpen ? 'Done' : 'Station setup'}
+                            </Button>
                         </Stack>
-                        <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 1 }}>{zoneNote}</Typography>
+                        {stationOpen && (
+                            <Box sx={{ px: 1.5, pb: 1.5, pt: 0.5, borderTop: 1, borderColor: 'divider' }}>
+                                <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1.5} sx={{ mt: 1.5 }}>
+                                    <TextField select size="small" label="This scanner checks" value={accessType}
+                                        onChange={(e) => setAccessType(e.target.value)} sx={{ minWidth: 230 }}>
+                                        {ZONES.map((z) => <MenuItem key={z.value} value={z.value}>{z.label}</MenuItem>)}
+                                    </TextField>
+                                    <TextField size="small" label="Station name" placeholder="e.g. Desk A" value={station}
+                                        onChange={(e) => rememberStation(e.target.value)} sx={{ minWidth: 170 }}
+                                        helperText="Recorded on every print" />
+                                    <TextField select size="small" label="Label roll" value={labelSize}
+                                        onChange={(e) => rememberLabelSize(e.target.value)} sx={{ minWidth: 150 }}
+                                        helperText="Saved on this device">
+                                        <MenuItem value="40x60">40 × 60 mm · portrait — in stock</MenuItem>
+                                        <MenuItem value="40x50">40 × 50 mm · portrait — design target, roll not sold by NIIMBOT</MenuItem>
+                                        <MenuItem value="40x40">40 × 40 mm — in stock</MenuItem>
+                                        <MenuItem value="40x30">40 × 30 mm — in stock</MenuItem>
+                                        <MenuItem value="50x30">50 × 30 mm · landscape — in stock</MenuItem>
+                                    </TextField>
+                                </Stack>
+                                <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 1 }}>{zoneNote}</Typography>
+                            </Box>
+                        )}
                     </Paper>
 
-                    {/* Rehearsal. The calendar window is what stops last year's badge
-                        opening this year's door, so it is never removed — it is waived,
-                        deliberately, for this one event, and said out loud the whole
-                        time it is on. */}
+                    {/* ── Door status ───────────────────────────────────────────
+                        The calendar window is what stops last year's badge opening
+                        this year's door, so it is never removed — it is waived,
+                        deliberately, for this one event, and said out loud for as
+                        long as it is on. */}
                     {doorNotOpenYet && (
-                        <Alert
-                            severity={rehearsal ? 'warning' : 'info'}
-                            sx={{ mb: 3 }}
-                            action={
-                                <Button size="small" color="inherit" disabled={rehearsalBusy}
+                        <Paper variant="outlined" sx={{ mb: 2, borderColor: rehearsal ? 'warning.main' : 'divider',
+                                                        bgcolor: rehearsal ? 'warning.dark' : 'transparent',
+                                                        ...(rehearsal ? { backgroundImage: 'linear-gradient(rgba(0,0,0,.72),rgba(0,0,0,.72))' } : {}) }}>
+                            <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1.5} alignItems={{ sm: 'center' }} sx={{ p: 1.5 }}>
+                                <Box sx={{ flex: 1, minWidth: 0 }}>
+                                    <Stack direction="row" spacing={1} alignItems="center">
+                                        <Box sx={{ width: 8, height: 8, borderRadius: '50%',
+                                                   bgcolor: rehearsal ? 'warning.main' : 'text.disabled' }} />
+                                        <Typography variant="subtitle2" sx={{ fontWeight: 700,
+                                                    color: rehearsal ? 'warning.main' : 'text.primary' }}>
+                                            {rehearsal ? 'Rehearsal mode — scans are practice, not admission' : 'Event hasn’t started'}
+                                        </Typography>
+                                    </Stack>
+                                    <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.25 }}>
+                                        {rehearsal
+                                            ? 'Every other rule still applies — a refunded ticket, another event’s badge or a single-day pass is refused exactly as on the day. Turn this off before the doors open.'
+                                            : 'Real check-in is locked. Practise now rather than in front of a queue.'}
+                                    </Typography>
+                                </Box>
+                                <Button size="small" variant={rehearsal ? 'contained' : 'outlined'}
+                                    color={rehearsal ? 'warning' : 'inherit'} disabled={rehearsalBusy}
                                     onClick={async () => {
                                         setRehearsalBusy(true);
                                         try {
@@ -554,133 +663,200 @@ function CheckIn({ timezone: timezoneProp }) {
                                             setError(e?.response?.data?.detail || 'Could not change the door mode.');
                                         } finally { setRehearsalBusy(false); }
                                     }}>
-                                    {rehearsalBusy ? 'Working…' : (rehearsal ? 'Turn off' : 'Start rehearsal')}
+                                    {rehearsalBusy ? 'Working…' : (rehearsal ? 'End rehearsal' : 'Start rehearsal')}
                                 </Button>
-                            }>
-                            {rehearsal ? (
-                                <>
-                                    <strong>Rehearsal mode is on.</strong> The door is accepting badges even though the
-                                    event has not started. Every other rule still applies — a refunded ticket, another
-                                    event&rsquo;s badge or a single-day pass is refused exactly as it would be on the day.
-                                    Scans are marked <em>REHEARSAL</em> in the history. Turn this off before the event.
-                                </>
-                            ) : (
-                                <>
-                                    <strong>This event has not started, so the door refuses every badge.</strong>{' '}
-                                    Start a rehearsal to practise check-in and test the printer now, rather than in
-                                    front of a queue.
-                                </>
-                            )}
-                        </Alert>
-                    )}
-
-                    <Box mb={3}>
-                        <Button variant={scanning ? 'outlined' : 'contained'} onClick={() => { setScanning(!scanning); setResult(null); setError(''); }}>
-                            {scanning ? 'Stop Scanner' : 'Start QR Scanner'}
-                        </Button>
-                    </Box>
-
-                    {scanning && <Paper sx={{ p: 2, mb: 3 }}><div id="qr-reader" style={{ width: '100%' }}></div></Paper>}
-
-                    <Box mb={3}>
-                        <Typography variant="subtitle1" gutterBottom>Or enter the badge code by hand:</Typography>
-                        <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1.5}>
-                            <TextField value={manualCode} onChange={(e) => setManualCode(e.target.value)} placeholder="Badge code, e.g. ATT-ABC123" size="small" sx={{ flexGrow: 1 }} />
-                            <Button variant="contained" onClick={handleManualCheckIn}>Authorize</Button>
-                        </Stack>
-                    </Box>
-
-                    {error && <Alert severity="error" sx={{ mb: 3 }}>{error}</Alert>}
-                    {result && result.result && decisionCard(result)}
-
-                    <Divider sx={{ mb: 3 }} />
-                    <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 1 }}>
-                        <Typography variant="subtitle1">Badge won’t scan? Find them by name</Typography>
-                        <Button size="small" startIcon={<PersonAddIcon />} onClick={openVisitor}>New visitor</Button>
-                    </Stack>
-                    <TextField fullWidth size="small" placeholder="Search this event by name, email, phone or QR" value={query} onChange={(e) => setQuery(e.target.value)} sx={{ mb: 2 }}
-                        InputProps={{
-                            startAdornment: <InputAdornment position="start">{searching ? <CircularProgress size={18} /> : <SearchIcon fontSize="small" />}</InputAdornment>,
-                            endAdornment: query ? <InputAdornment position="end"><IconButton size="small" onClick={() => setQuery('')} aria-label="Clear search"><ClearIcon fontSize="small" /></IconButton></InputAdornment> : null,
-                        }} />
-
-                    {results !== null && results.length > 0 && (
-                        <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>{results.length} {results.length === 1 ? 'match' : 'matches'} in this event</Typography>
-                    )}
-                    {results === null ? (
-                        <Typography variant="body2" color="text.secondary">Search covers name, email, phone and QR — for this event only.</Typography>
-                    ) : results.length === 0 ? (
-                        <Paper variant="outlined" sx={{ p: 3, textAlign: 'center' }}>
-                            <Typography variant="subtitle1" gutterBottom>Nobody here matches that</Typography>
-                            <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-                                If they are buying at the door, register them here — they get the same badge, card and QR as everyone else.
-                            </Typography>
-                            <Stack direction="row" spacing={1} justifyContent="center">
-                                <Button variant="contained" startIcon={<PersonAddIcon />} onClick={openVisitor}>New visitor / walk-in</Button>
-                                <Button onClick={() => setQuery('')}>Clear search</Button>
                             </Stack>
                         </Paper>
-                    ) : (
-                        <Stack spacing={1.5}>
-                            {truncated && <Alert severity="info">Showing the first 50 matches — add a surname, email or phone digits to narrow it down.</Alert>}
-                            {results.map(resultRow)}
-                        </Stack>
                     )}
 
-                    <Divider sx={{ my: 3 }} />
-                    <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 1.5 }} gap={1} flexWrap="wrap">
-                        <Box>
-                            <Typography variant="subtitle1">Recent scan history</Typography>
-                            <Typography variant="caption" color="text.secondary">
-                                Latest 100 access decisions for this event
-                                {scanLogs.length ? ` · showing ${scanLogs.length}` : ''}
-                            </Typography>
-                        </Box>
-                        <Stack direction="row" spacing={0.5}>
-                            <Button size="small" onClick={refreshScanLogs} disabled={logsLoading}>
-                                {logsLoading ? 'Loading…' : 'Refresh'}
-                            </Button>
-                            {scanLogs.length > 0 && (
-                                <Button size="small" color="error" onClick={() => setClearLogsOpen(true)}>Clear</Button>
-                            )}
-                        </Stack>
-                    </Stack>
-                    {scanLogs.length === 0 ? (
-                        <Alert severity="info">No access decisions have been recorded for this event yet.</Alert>
-                    ) : (
-                        /* One dense line per scan. The old card-per-row layout meant a
-                           morning's scans scrolled for pages, and the line that matters
-                           on the day is the most recent one — it should be readable
-                           without scrolling past the rest. */
-                        <Paper variant="outlined" sx={{ overflow: 'hidden' }}>
-                            {scanLogs.map((log, i) => (
-                                <Stack key={log.id} direction="row" spacing={1} alignItems="center"
-                                    sx={{
-                                        px: 1.25, py: 0.6, minWidth: 0,
-                                        borderTop: i === 0 ? 'none' : '1px solid',
-                                        borderColor: 'divider',
-                                        bgcolor: log.result === 'GRANTED' ? 'transparent' : 'action.hover',
-                                    }}>
-                                    <Chip size="small" color={RESULT_COLOR[log.result] || 'default'}
-                                        label={log.result || '—'}
-                                        sx={{ height: 20, fontSize: 11, minWidth: 68, '& .MuiChip-label': { px: 0.75 } }} />
-                                    <Typography variant="caption" color="text.secondary"
-                                        sx={{ minWidth: 92, display: { xs: 'none', sm: 'block' } }}>
-                                        {ZONES.find((z) => z.value === log.access_type)?.label || log.access_type}
-                                    </Typography>
-                                    <Typography variant="body2" noWrap sx={{ flex: 1, minWidth: 0 }} title={`${log.reason || ''} · ${log.qr_code || ''}`}>
-                                        {log.reason || 'No reason recorded'}
-                                    </Typography>
-                                    <Typography variant="caption" color="text.secondary"
-                                        sx={{ whiteSpace: 'nowrap', fontVariantNumeric: 'tabular-nums' }}>
-                                        {log.created_at ? formatVenueTime(log.created_at, timezone) : ''}
-                                    </Typography>
+                    {/* Two columns: the door on the left, what just happened on the
+                        right. One column meant the last scan scrolled away under the
+                        search results. */}
+                    <Box sx={{ display: 'grid', gap: 2,
+                               gridTemplateColumns: { xs: '1fr', lg: 'minmax(0, 1.35fr) minmax(320px, 1fr)' },
+                               alignItems: 'start' }}>
+                        <Stack spacing={2} sx={{ minWidth: 0 }}>
+                            {/* ── The primary action ───────────────────────────── */}
+                            <Paper variant="outlined" sx={{ p: 2 }}>
+                                <Button fullWidth size="large"
+                                    variant={scanning ? 'outlined' : 'contained'}
+                                    color={scanning ? 'inherit' : 'primary'}
+                                    startIcon={<QrCodeScannerIcon />}
+                                    onClick={() => { setScanning(!scanning); setResult(null); setError(''); }}
+                                    sx={{ py: 1.5, fontSize: 16, fontWeight: 700 }}>
+                                    {scanning ? 'Stop scanner' : 'Start QR scanner'}
+                                </Button>
+
+                                {scanning && (
+                                    <Box sx={{ mt: 2 }}><div id="qr-reader" style={{ width: '100%' }}></div></Box>
+                                )}
+
+                                <Stack direction="row" spacing={1} alignItems="center" sx={{ mt: 2 }}>
+                                    <Divider sx={{ flex: 1 }} />
+                                    <Typography variant="caption" color="text.disabled">or type the code</Typography>
+                                    <Divider sx={{ flex: 1 }} />
                                 </Stack>
-                            ))}
+
+                                <Stack direction="row" spacing={1} sx={{ mt: 1.5 }}>
+                                    <TextField value={manualCode} onChange={(e) => setManualCode(e.target.value)}
+                                        onKeyDown={(e) => { if (e.key === 'Enter') handleManualCheckIn(); }}
+                                        placeholder="Badge code, e.g. ATT-ABC123" size="small" sx={{ flexGrow: 1 }}
+                                        inputProps={{ style: { fontFamily: 'monospace' } }} />
+                                    <Button variant="outlined" onClick={handleManualCheckIn} disabled={!manualCode.trim()}>
+                                        Authorize
+                                    </Button>
+                                </Stack>
+                            </Paper>
+
+                            {error && <Alert severity="error" onClose={() => setError('')}>{error}</Alert>}
+                            {result && result.result && decisionCard(result)}
+
+                            {/* ── Find them by name ────────────────────────────── */}
+                            <Paper variant="outlined" sx={{ p: 2 }}>
+                                <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 1.5 }} gap={1} flexWrap="wrap">
+                                    <Typography variant="subtitle2" sx={{ fontWeight: 700 }}>Find attendee</Typography>
+                                    <Button size="small" startIcon={<PersonAddIcon />} onClick={openVisitor}>New visitor</Button>
+                                </Stack>
+                                <TextField fullWidth size="small" placeholder="Name · email · phone · QR"
+                                    value={query} onChange={(e) => setQuery(e.target.value)}
+                                    InputProps={{
+                                        startAdornment: <InputAdornment position="start">{searching ? <CircularProgress size={18} /> : <SearchIcon fontSize="small" />}</InputAdornment>,
+                                        endAdornment: query ? <InputAdornment position="end"><IconButton size="small" onClick={() => setQuery('')} aria-label="Clear search"><ClearIcon fontSize="small" /></IconButton></InputAdornment> : null,
+                                    }} />
+
+                                {results !== null && results.length > 0 && (
+                                    <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 1 }}>
+                                        {results.length} {results.length === 1 ? 'match' : 'matches'} in this event
+                                    </Typography>
+                                )}
+                                {results === null ? (
+                                    <Typography variant="caption" color="text.disabled" sx={{ display: 'block', mt: 1 }}>
+                                        This event only.
+                                    </Typography>
+                                ) : results.length === 0 ? (
+                                    <Box sx={{ textAlign: 'center', py: 2.5 }}>
+                                        <Typography variant="subtitle2" gutterBottom>Nobody here matches that</Typography>
+                                        <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 1.5 }}>
+                                            Buying at the door? Register them here — same badge, card and QR as everyone else.
+                                        </Typography>
+                                        <Stack direction="row" spacing={1} justifyContent="center">
+                                            <Button variant="contained" size="small" startIcon={<PersonAddIcon />} onClick={openVisitor}>New visitor / walk-in</Button>
+                                            <Button size="small" onClick={() => setQuery('')}>Clear</Button>
+                                        </Stack>
+                                    </Box>
+                                ) : (
+                                    <Stack spacing={1.5} sx={{ mt: 1.5 }}>
+                                        {truncated && <Alert severity="info">Showing the first 50 matches — add a surname, email or phone digits to narrow it down.</Alert>}
+                                        {results.map(resultRow)}
+                                    </Stack>
+                                )}
+                            </Paper>
+                        </Stack>
+
+                        {/* ── Activity ─────────────────────────────────────────── */}
+                        <Paper variant="outlined" sx={{ minWidth: 0 }}>
+                            <Stack direction="row" justifyContent="space-between" alignItems="center"
+                                   sx={{ px: 1.5, pt: 1.5, pb: 1 }} gap={1} flexWrap="wrap">
+                                <Typography variant="subtitle2" sx={{ fontWeight: 700 }}>Recent activity</Typography>
+                                <Stack direction="row" spacing={0.5}>
+                                    <Button size="small" onClick={refreshScanLogs} disabled={logsLoading}>
+                                        {logsLoading ? 'Loading…' : 'Refresh'}
+                                    </Button>
+                                    {scanLogs.length > 0 && (
+                                        <Button size="small" color="error" onClick={() => setClearLogsOpen(true)}>Clear</Button>
+                                    )}
+                                </Stack>
+                            </Stack>
+
+                            {scanLogs.length > 0 && (
+                                <Stack direction="row" spacing={0.5} flexWrap="wrap" useFlexGap sx={{ px: 1.5, pb: 1.25 }}>
+                                    {[['', 'All', scanLogs.length], ['GRANTED', 'Granted', logCounts.GRANTED || 0],
+                                      ['DENIED', 'Denied', logCounts.DENIED || 0], ['LIMITED', 'Limited', logCounts.LIMITED || 0],
+                                      ['UNDO', 'Undo', logCounts.UNDO || 0], ['REHEARSAL', 'Rehearsal', logCounts.REHEARSAL || 0]]
+                                        .filter(([k, , n]) => k === '' || n > 0)
+                                        .map(([k, label, n]) => (
+                                            <Chip key={k || 'all'} size="small" label={`${label} ${n}`}
+                                                onClick={() => setLogFilter(k)}
+                                                color={logFilter === k ? 'primary' : 'default'}
+                                                variant={logFilter === k ? 'filled' : 'outlined'}
+                                                sx={{ height: 22, fontSize: 11 }} />
+                                        ))}
+                                </Stack>
+                            )}
+
+                            {scanLogs.length === 0 ? (
+                                <Box sx={{ px: 1.5, pb: 2 }}>
+                                    <Typography variant="body2" color="text.secondary">
+                                        Nothing scanned yet. Decisions appear here the moment a badge is read.
+                                    </Typography>
+                                </Box>
+                            ) : (
+                                <Box sx={{ maxHeight: { lg: 620 }, overflowY: 'auto' }}>
+                                    {shownLogs.map((log, i) => {
+                                        const st = logState(log);
+                                        const v = LOG_STATE[st] || LOG_STATE.DENIED;
+                                        const open = expandedLog === log.id;
+                                        return (
+                                            <Box key={log.id}
+                                                onClick={() => setExpandedLog(open ? null : log.id)}
+                                                sx={{ px: 1.5, py: 1, cursor: 'pointer',
+                                                      borderTop: i === 0 ? 'none' : '1px solid', borderColor: 'divider',
+                                                      '&:hover': { bgcolor: 'action.hover' } }}>
+                                                <Stack direction="row" spacing={1.25} alignItems="flex-start">
+                                                    {/* A chip, not a whole row of colour: fifty green rows
+                                                        make the one red row harder to see, not easier. */}
+                                                    <Chip size="small" color={v.color} variant={v.variant}
+                                                          label={`${v.mark} ${v.label}`}
+                                                          sx={{ height: 22, fontSize: 11, minWidth: 92, flex: '0 0 auto',
+                                                                '& .MuiChip-label': { px: 0.75 } }} />
+                                                    <Box sx={{ flex: 1, minWidth: 0 }}>
+                                                        <Typography variant="body2" sx={{ fontWeight: 600 }} noWrap>
+                                                            {log.attendee_name || 'Unknown badge'}
+                                                        </Typography>
+                                                        <Typography variant="caption" color="text.secondary" noWrap display="block">
+                                                            {cleanReason(log) || 'No reason recorded'}
+                                                        </Typography>
+                                                    </Box>
+                                                    <Typography variant="caption" color="text.secondary"
+                                                        sx={{ whiteSpace: 'nowrap', fontVariantNumeric: 'tabular-nums', pt: 0.25 }}>
+                                                        {log.created_at ? formatVenueTime(log.created_at, timezone) : ''}
+                                                    </Typography>
+                                                </Stack>
+                                                {/* The audit detail is kept, one tap away — the door needs
+                                                    the name, the review needs the code. */}
+                                                {open && (
+                                                    <Box sx={{ mt: 1, pl: '104px', display: 'grid',
+                                                               gridTemplateColumns: 'auto 1fr', columnGap: 1.5, rowGap: 0.25 }}>
+                                                        {[['Zone', ZONES.find((z) => z.value === log.access_type)?.label || log.access_type],
+                                                          ['Result', log.result],
+                                                          ['Badge', log.qr_code],
+                                                          ['Attendee', log.attendee_id ? `#${log.attendee_id}` : 'not matched'],
+                                                          ['Recorded', log.created_at],
+                                                          ['Full reason', log.reason]].map(([k, val]) => (
+                                                            <React.Fragment key={k}>
+                                                                <Typography variant="caption" color="text.disabled">{k}</Typography>
+                                                                <Typography variant="caption" sx={{ fontFamily: 'monospace', overflowWrap: 'anywhere' }}>
+                                                                    {val || '—'}
+                                                                </Typography>
+                                                            </React.Fragment>
+                                                        ))}
+                                                    </Box>
+                                                )}
+                                            </Box>
+                                        );
+                                    })}
+                                    {shownLogs.length === 0 && (
+                                        <Box sx={{ px: 1.5, py: 2 }}>
+                                            <Typography variant="body2" color="text.secondary">Nothing with that status.</Typography>
+                                        </Box>
+                                    )}
+                                </Box>
+                            )}
                         </Paper>
-                    )}
+                    </Box>
                 </>
             )}
+
 
             {/* Label preview. Check-in (if any) has already committed; this only prints. */}
             <Dialog open={Boolean(label)} onClose={closeLabel} maxWidth="sm" fullWidth>

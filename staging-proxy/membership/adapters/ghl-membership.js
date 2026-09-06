@@ -211,7 +211,7 @@ export async function fetchSubscriptions(fetchPage, { pageSize = 100, maxPages =
  * subscriptions it could map, so `scope` is limited accordingly — an unmapped
  * Next Level subscription must never look like a Gaia membership that vanished.
  */
-export function sweep(store, subscriptions, { now = new Date(), source = 'ghl_membership' } = {}) {
+export function sweep(store, subscriptions, { now = new Date(), source = 'ghl_membership', applyAbsence = true } = {}) {
   const converted = subscriptions.map((s) => subscriptionToProposal(s, { source }));
   const usable = converted.filter((c) => c.proposal);
   const skipped = converted.filter((c) => c.skip);
@@ -222,6 +222,7 @@ export function sweep(store, subscriptions, { now = new Date(), source = 'ghl_me
     scope: 'membership',
     now,
     actor: 'ghl-membership-sweep',
+    applyAbsence,
   });
 
   return {
@@ -230,6 +231,7 @@ export function sweep(store, subscriptions, { now = new Date(), source = 'ghl_me
     mapped: usable.length,
     contacts: contactProposals(subscriptions, { source }).length,
     skipped: skipped.length,
+    absenceApplied: applyAbsence,
     skippedReasons: skipped.reduce((acc, s) => {
       const key = s.skip.split(':')[0];
       acc[key] = (acc[key] || 0) + 1;

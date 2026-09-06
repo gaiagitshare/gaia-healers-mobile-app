@@ -170,6 +170,57 @@ export function detect(health, extra = {}) {
     }
   }
 
+  // ── Complete off-site backup ─────────────────────────────────────────────
+  // The question this answers is only ever "if the server died tonight, what
+  // survives". A local archive is not an answer, so degraded is a real alert
+  // and not a green light with a note.
+  const fb = byKey.full_backup;
+  if (fb) {
+    if (fb.state === 'failed') {
+      const stage = fb.lastFailureStage || 'unknown';
+      const bySt = {
+        sqlite_snapshot: ['backup:snapshot-failed', 'The database snapshot could not be taken',
+          'The event database could not be copied consistently, so tonight there is no new backup of attendees, payments or check-ins.'],
+        sqlite_integrity: ['backup:database-corrupt', 'The database failed its integrity check',
+          'integrity_check did not return ok. Either the live database is damaged or the snapshot is — both need a human before anything is trusted.'],
+        collect_state: ['backup:state-unreadable', 'Live state could not be captured',
+          'A state file the backup depends on was missing or did not parse, so the entitlement ledger and alert history are not in tonight’s archive.'],
+        archive: ['backup:archive-failed', 'The backup archive could not be built',
+          'Packing failed, so no archive exists for today at all.'],
+        verify_gzip: ['backup:archive-unreadable', 'The backup archive does not read back',
+          'The archive was written and cannot be decompressed. An unreadable backup is not a backup.'],
+        verify_listing: ['backup:archive-incomplete', 'The backup archive is incomplete',
+          'The archive is missing files it must contain, so a restore from it would be partial.'],
+        verify_database_in_archive: ['backup:archive-database-bad', 'The database inside the archive is unusable',
+          'The archive unpacked but the database inside it does not pass integrity_check. This is the failure that looks fine until the day you need it.'],
+        encrypt: ['backup:encryption-failed', 'The backup could not be encrypted',
+          'Encryption failed, so nothing was uploaded — production data is never sent off-site in the clear.'],
+        upload: ['backup:upload-failed', 'The backup could not be sent off-site',
+          'A complete encrypted archive exists on the server and did not reach the off-site destination. The only copy is on the machine it protects.'],
+        verify_remote: ['backup:remote-verify-failed', 'The uploaded backup could not be verified',
+          'The upload reported success and the object could not be read back at the expected size. Treat it as absent.'],
+      };
+      const [key, title, why] = bySt[stage]
+        || ['backup:failure', 'The complete backup is failing',
+            fb.detail || 'The backup run did not complete, so there is no verified copy of production from today.'];
+      add({ key, severity: 'critical', subsystem: 'Backups', title, why,
+        evidence: `stage ${stage} · ${fb.lastFailureReason || 'no reason recorded'} · last verified off-site copy ${fb.lastSuccessAt || 'never'}`,
+        affected: null });
+    } else if (fb.state === 'degraded') {
+      add({ key: 'backup:no-offsite', severity: 'critical', subsystem: 'Backups',
+        title: 'No Gaia backup leaves this server',
+        why: 'A complete archive is built and verified daily, but it is stored only on the machine it protects. Losing the server loses the event database, the entitlement ledger and every secret with it.',
+        evidence: `encryption ${fb.encryptionConfigured ? 'configured' : 'NOT configured'} · off-site ${fb.offsiteConfigured ? 'configured' : 'NOT configured'} · newest local archive ${fb.localNewest || 'none'}`,
+        affected: null });
+    } else if (fb.state === 'stale') {
+      add({ key: 'backup:stale', severity: 'warning', subsystem: 'Backups',
+        title: 'No fresh off-site Gaia backup',
+        why: 'The daily backup has not produced a verified off-site copy within its cadence. Yesterday is still protected; today is not.',
+        evidence: `last verified off-site copy ${fb.lastSuccessAt || 'never'} · last attempt ${fb.lastAttemptAt || 'unknown'}`,
+        affected: null });
+    }
+  }
+
   // ── Payments ─────────────────────────────────────────────────────────────
   // Money arriving and a ticket existing are separate facts; the alert is for
   // where they disagree past a grace period, not for every pending checkout.

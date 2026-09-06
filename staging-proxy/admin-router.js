@@ -799,6 +799,88 @@ async function pipelineHealth(deps) {
   }
   add(backup);
 
+  // ── Complete production backup ────────────────────────────────────────────
+  // The unit exiting 0 is the weakest possible evidence, so it is not what this
+  // reads. The backup writes its own record of what it proved — database
+  // integrity, the archive it could read back, the encryption, and the object
+  // it saw at the far end — and a run that never reached the off-site copy is
+  // reported as exactly that, not as a success.
+  const full = jobHealth({
+    key: 'full_backup', label: 'Complete Gaia backup (off-site)',
+    service: 'gaia-full-backup.service', timer: 'gaia-full-backup.timer',
+    okWithin: 30 * HOUR, cadence: 'daily',
+  });
+  try {
+    const stateFile = process.env.GAIA_BACKUP_STATE_FILE
+      || path.join(process.cwd(), 'data', 'backup-state.json');
+    const bs = JSON.parse(fs.readFileSync(stateFile, 'utf8'));
+    const ck = bs.checks || {};
+    const rem = bs.remote || {};
+    const loc = bs.local || {};
+    const arc = bs.archive || {};
+
+    full.lastAttemptAt = bs.lastAttemptAt || null;
+    full.lastSuccessAt = bs.lastSuccessAt || null;       // off-site verified
+    full.lastFailureAt = bs.lastFailureAt || null;
+    full.lastFailureStage = bs.lastFailureStage || null;
+    full.lastFailureReason = bs.lastFailureReason || null;
+    full.lastLocalArchiveAt = bs.lastLocalArchiveAt || null;
+    full.outcome = bs.lastOutcome || null;
+    full.archiveName = arc.name || null;
+    full.archiveBytes = arc.plainBytes != null ? arc.plainBytes : null;
+    full.encryptedBytes = arc.encryptedBytes != null ? arc.encryptedBytes : null;
+    full.archiveSha256 = arc.sha256 ? String(arc.sha256).slice(0, 16) + '…' : null;
+    full.fileCount = arc.fileCount != null ? arc.fileCount : null;
+    full.sqliteIntegrity = ck.sqliteIntegrity || 'not_checked';
+    full.checksumVerified = ck.checksum === 'ok';
+    full.archiveVerified = ck.gzip === 'ok' && ck.tarListing === 'ok' && ck.databaseInsideArchive === 'ok';
+    full.encrypted = ck.encryption === 'ok';
+    full.encryptionConfigured = bs.encryptionConfigured === true;
+    full.offsiteConfigured = rem.configured === true;
+    full.offsiteUploadedAt = rem.uploadedAt || null;
+    full.offsiteVerifiedAt = rem.verifiedAt || null;
+    full.localCount = loc.count != null ? loc.count : null;
+    full.localNewest = loc.newest || null;
+    full.retentionKeep = (bs.retention && bs.retention.keep) || null;
+
+    const successAge = ageMs(bs.lastSuccessAt);
+    if (bs.lastOutcome === 'failed') {
+      full.state = 'failed';
+      full.detail = `Backup failed at the ${bs.lastFailureStage || 'unknown'} stage: `
+        + (bs.lastFailureReason || 'no reason recorded') + '.';
+    } else if (ck.sqliteIntegrity && ck.sqliteIntegrity !== 'ok' && ck.sqliteIntegrity !== 'not_checked') {
+      full.state = 'failed';
+      full.detail = 'The database snapshot did not pass integrity_check, so the archive is not trustworthy.';
+    } else if (!full.encryptionConfigured || !full.offsiteConfigured) {
+      // Awaiting configuration is a real gap, but it is a different fact from a
+      // backup that broke, and saying so is what makes the alert actionable.
+      full.state = 'degraded';
+      full.detail = 'A complete archive is built and verified on this server, but '
+        + (!full.encryptionConfigured ? 'no encryption key is configured' : 'no off-site destination is configured')
+        + ', so nothing leaves the machine it protects.';
+    } else if (!bs.lastSuccessAt) {
+      full.state = 'failed';
+      full.detail = 'No complete off-site backup has ever been verified.';
+    } else if (successAge != null && successAge > 30 * HOUR) {
+      full.state = 'stale';
+      full.detail = 'The last verified off-site backup is '
+        + Math.round(successAge / (60 * 60 * 1000)) + ' hours old.';
+    } else {
+      full.state = 'ok';
+      full.detail = `${arc.name || 'archive'} · ${Math.round((arc.encryptedBytes || arc.plainBytes || 0) / 1024)} KB encrypted · `
+        + `database ok (${ck.sqliteRowsAttendees != null ? ck.sqliteRowsAttendees + ' attendees' : 'verified'}) · `
+        + `off-site copy verified ${(rem.verifiedAt || '').slice(0, 16).replace('T', ' ')} · `
+        + `${loc.count || 0} local, keeping ${(bs.retention && bs.retention.keep) || 7}. Restore untested.`;
+    }
+    full.evidence = 'backup run record (integrity_check, archive read-back, encryption, remote object size) + systemd unit record';
+  } catch (_) {
+    full.state = 'failed';
+    full.detail = 'The backup has never recorded a run, so nothing proves a complete backup exists.';
+    full.encryptionConfigured = false;
+    full.offsiteConfigured = false;
+  }
+  add(full);
+
   // ── GHL reachability ──────────────────────────────────────────────────────
   const cfg = deps.ghlConfig();
   let ghl = { state: 'unknown', evidence: 'not configured' };

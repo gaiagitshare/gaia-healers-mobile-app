@@ -164,8 +164,17 @@ real = sql("SELECT COUNT(*), SUM(amount_due), SUM(amount_paid) FROM exhibitors "
 check(real[0] == 23, "the 23 confirmed exhibitors are in the system", real[0])
 check(int(real[1] or 0) == 111000 and int(real[2] or 0) == 94500,
       "with the booked and collected totals from the sheet", real)
-live = sql("SELECT COUNT(*) FROM exhibitors WHERE event_id=1 AND (is_published=1 OR can_scan_leads=1)")[0][0]
-check(live == 0, "and none of them is published or scanning until somebody decides", live)
+# Scanning is SOLD, and is still granted to nobody. This half of the rule does
+# not move: a stand appearing in the directory has never implied a scanner, and
+# the day it does is the day somebody bought one.
+scanning = sql("SELECT COUNT(*) FROM exhibitors WHERE event_id=1 AND can_scan_leads=1")[0][0]
+check(scanning == 0, "and not one of them can scan a badge until somebody buys it", scanning)
+# Publication, unlike scanning, HAS been decided: twenty stands were reviewed
+# and listed on 2026-09-06. Three were deliberately held back, and those three
+# are what this now guards -- an accidental publish of any of them is exactly
+# the mistake worth catching.
+held = sql("SELECT id, company_name FROM exhibitors WHERE id IN (1, 18, 20) AND is_published=1")
+check(not held, "and the three stands held back are still not in the directory", held)
 
 # ── 8. the setup link lets a stand write its own listing ──────────────────
 st, link = call("POST", "/exhibitors/%d/activation-link" % VID, None, ADMIN)

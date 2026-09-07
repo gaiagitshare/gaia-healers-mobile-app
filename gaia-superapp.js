@@ -837,12 +837,16 @@
       + '<p>' + (authed ? 'Your healing journey is waiting.' : 'What does your energy need today?') + '</p>'
       + (authed ? '' : '<div class="g-super-discover g-super-discover--solo"><a class="g-btn g-btn--primary" href="home.html?view=wellness&tab=check">' + icon('sparkle') + ' Check my energy</a></div>') + '</div><div class="g-super-hero__art"><picture><source media="(min-width: 900px)" type="image/webp" srcset="assets/gaia-hero-moon.webp" /><source media="(min-width: 900px)" srcset="assets/gaia-hero-moon.png" /><source type="image/webp" srcset="assets/gaia-hero-moon-wide.webp" /><img src="assets/gaia-hero-moon-wide.png" alt="Person meditating in lotus pose under a full moon over mountains" width="1024" height="576" loading="eager" /></picture></div></section>'
       + (authed
-        // Member flow (reordered): greeting, then the upcoming-events carousel
-        // and the quick free tools up top, then daily energy, real access,
-        // today's sky, the next booking and the sync note.
-        ? eventFeatureCarousel()
-          + freeTools()
-          + '<div data-daily-host></div>'
+        // Member flow: the daily energy leads, because it is the one thing on
+        // this page that changed since yesterday and the only reason to open
+        // the app before breakfast. The event and real access follow it.
+        //
+        // No free-tools grid here. It is the on-ramp a stranger needs, and a
+        // member already has the whole Energy tab -- for them it was a second
+        // door to a room they were standing in, pushing the daily reading to
+        // fourth on their own home page.
+        ? '<div data-daily-host></div>'
+          + eventFeatureCarousel()
           + primaryMemberAction()
           + (activeMembership() ? '' : upgradeCard())
           + '<section class="g-super-services"><div class="g-super-section-head"><div><p class="g-super-kicker">Your access</p><h2>Everything Gaia Healers</h2></div><a href="home.html?view=profile">Your account</a></div><div class="g-super-services__grid">' + services + '</div></section>'

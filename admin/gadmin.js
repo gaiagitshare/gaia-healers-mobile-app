@@ -37,6 +37,7 @@
     event: '<rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/>',
     member: '<path d="M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6M12 1v4M12 19v4M4.2 4.2l2.8 2.8M17 17l2.8 2.8M1 12h4M19 12h4M4.2 19.8 7 17M17 7l2.8-2.8"/>',
     search: '<circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/>',
+    menu: '<path d="M4 7h16M4 12h16M4 17h16"/>',
     close: '<path d="M18 6 6 18M6 6l12 12"/>',
     ext: '<path d="M15 3h6v6M10 14 21 3M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/>',
     logout: '<path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9"/>',
@@ -65,6 +66,22 @@
   function render() {
     root.innerHTML = shell();
     document.querySelectorAll('[data-nav]').forEach(function (el) { el.onclick = function () { nav(el.dataset.nav); }; });
+    var side = document.getElementById('side');
+    var sideBtn = document.getElementById('sidetoggle');
+    var sideScrim = document.getElementById('sidescrim');
+    function setSide(open) {
+      if (!side) return;
+      side.classList.toggle('is-open', open);
+      if (sideScrim) sideScrim.hidden = !open;
+      if (sideBtn) sideBtn.setAttribute('aria-expanded', open ? 'true' : 'false');
+    }
+    if (sideBtn) sideBtn.onclick = function () { setSide(!side.classList.contains('is-open')); };
+    if (sideScrim) sideScrim.onclick = function () { setSide(false); };
+    // Tapping a section on a phone should take you there AND get out of the way.
+    side && side.querySelectorAll('[data-nav],#alertbtn,#changepw,#logout').forEach(function (el) {
+      el.addEventListener('click', function () { setSide(false); });
+    });
+    document.addEventListener('keydown', function (e) { if (e.key === 'Escape') setSide(false); });
     var lo = document.getElementById('logout'); if (lo) lo.onclick = doLogout;
     var cp = document.getElementById('changepw'); if (cp) cp.onclick = changePasswordModal;
     var ab = document.getElementById('alertbtn');
@@ -96,7 +113,13 @@
     var t = titles[view] || ['', ''];
     return ''
       + '<div class="app">'
-      + '  <aside class="side">'
+      // The sidebar slides off-screen below 760px and there was nothing to
+      // bring it back, so a phone could reach Contacts and nothing else --
+      // not Membership, not System Alerts, not even Sign out.
+      + '  <button class="sidetoggle" id="sidetoggle" aria-label="Open menu" aria-expanded="false" aria-controls="side">'
+      + svg('menu') + '</button>'
+      + '  <div class="side__scrim" id="sidescrim" hidden></div>'
+      + '  <aside class="side" id="side">'
       + '    <div class="brand"><img src="gaia-mark.svg" alt=""><div><b>Gaia Healers</b><span>Admin</span></div></div>'
       + item('contacts', 'Contacts', 'contacts')
       + item('surveys', 'Surveys', 'survey')

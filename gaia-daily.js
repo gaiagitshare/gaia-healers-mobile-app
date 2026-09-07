@@ -134,6 +134,8 @@
         var r = await api('POST', '/api/wellness/daily/complete');
         complete.disabled = false;
         if (r && r.ok && r.ritual) {
+          // The streak just changed, so the cached copy is stale.
+          if (window.GaiaDaily && window.GaiaDaily.invalidate) window.GaiaDaily.invalidate();
           lastDaily.ritual = r.ritual;
           paint(host, lastDaily);
           host.querySelector('.g-de')?.classList.add('g-de--celebrate');
@@ -160,7 +162,11 @@
     if (!host) return;
     host.innerHTML = '<section class="g-de g-de--loading" aria-busy="true"><div class="g-de__aura" aria-hidden="true"></div><p class="g-de__kicker">Your daily energy</p><div class="g-de__skeleton"></div></section>';
     try {
-      var d = await api('GET', '/api/wellness/daily');
+      // Shared with gaia-superapp.js: one fetch per day between them, rather
+      // than one each on every render.
+      var d = (window.GaiaDaily && window.GaiaDaily.get)
+        ? await window.GaiaDaily.get()
+        : await api('GET', '/api/wellness/daily');
       if (!d || !d.ok) { host.innerHTML = ''; return; }
       paint(host, d);
     } catch (e) { host.innerHTML = ''; }

@@ -761,6 +761,11 @@
     const when = eventDate(event);
     const countdown = eventCountdown(event);
     const art = event.heroImageUrl || 'assets/gaia-elevate-hero.png';
+    // Only our own artwork gets a WebP source. A heroImageUrl supplied by the
+    // Event Manager is a URL we know nothing about, and guessing that a .webp
+    // sits beside it would show a broken hero.
+    const artSource = event.heroImageUrl
+      ? '' : '<source type="image/webp" srcset="assets/gaia-elevate-hero.webp" />';
     const register = event.registrationUrl
       ? '<a class="g-btn g-btn--primary g-btn--sm" href="' + esc(event.registrationUrl) + '" target="_blank" rel="noopener noreferrer">'
         + esc(event.registrationLabel || 'Get tickets') + '</a>'
@@ -768,7 +773,8 @@
 
     return '<section class="g-feature-event">'
       + '<div class="g-feature-event__art">'
-      + '<img src="' + esc(art) + '" alt="' + esc(event.name) + '" width="426" height="358" loading="eager" /></div>'
+      + '<picture>' + artSource
+      + '<img src="' + esc(art) + '" alt="' + esc(event.name) + '" width="426" height="358" loading="eager" /></picture></div>'
       + '<div class="g-feature-event__body">'
       + '<p class="g-feature-event__kicker">' + icon('calendar-dots') + ' Next gathering'
       + (countdown ? '<span class="g-feature-event__badge">' + esc(countdown) + '</span>' : '') + '</p>'
@@ -829,7 +835,7 @@
       + '<h1>' + greeting + '</h1>'
       + '<p class="g-super-date">' + esc(dateLabel()) + '</p>'
       + '<p>' + (authed ? 'Your healing journey is waiting.' : 'What does your energy need today?') + '</p>'
-      + (authed ? '' : '<div class="g-super-discover g-super-discover--solo"><a class="g-btn g-btn--primary" href="home.html?view=wellness&tab=check">' + icon('sparkle') + ' Check my energy</a></div>') + '</div><div class="g-super-hero__art"><picture><source media="(min-width: 900px)" srcset="assets/gaia-hero-moon.png" /><img src="assets/gaia-hero-moon-wide.png" alt="Person meditating in lotus pose under a full moon over mountains" width="1024" height="576" loading="eager" /></picture></div></section>'
+      + (authed ? '' : '<div class="g-super-discover g-super-discover--solo"><a class="g-btn g-btn--primary" href="home.html?view=wellness&tab=check">' + icon('sparkle') + ' Check my energy</a></div>') + '</div><div class="g-super-hero__art"><picture><source media="(min-width: 900px)" type="image/webp" srcset="assets/gaia-hero-moon.webp" /><source media="(min-width: 900px)" srcset="assets/gaia-hero-moon.png" /><source type="image/webp" srcset="assets/gaia-hero-moon-wide.webp" /><img src="assets/gaia-hero-moon-wide.png" alt="Person meditating in lotus pose under a full moon over mountains" width="1024" height="576" loading="eager" /></picture></div></section>'
       + (authed
         // Member flow (reordered): greeting, then the upcoming-events carousel
         // and the quick free tools up top, then daily energy, real access,
@@ -918,11 +924,47 @@
     return '<section class="g-super-list"><div class="g-super-section-head"><div><p class="g-super-kicker">Academy</p><h2>Your courses</h2></div><a href="home.html?view=academy">Open Academy</a></div>' + inner + '</section>';
   }
 
+  /**
+   * One fetch of the daily energy per day, shared by everything that wants it.
+   *
+   * This module and gaia-daily.js both asked for it on every render, and a
+   * render happens on every screen change -- one browsing session made 76
+   * identical requests, each costing 300-800ms of round trip for 442 bytes.
+   * The value is by definition constant for the day.
+   *
+   * The day is taken from the device's own calendar, so it turns over at the
+   * viewer's midnight rather than UTC's, matching how the rest of the app
+   * already renders "MONDAY, SEPTEMBER 7". A failed request clears the entry
+   * instead of becoming the answer until tomorrow.
+   */
+  const dailyCache = { day: null, promise: null, value: null };
+  function localDayKey() {
+    const d = new Date();
+    return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0')
+      + '-' + String(d.getDate()).padStart(2, '0');
+  }
+  function clearDaily() { dailyCache.day = null; dailyCache.promise = null; dailyCache.value = null; }
+  function getDaily(force) {
+    const day = localDayKey();
+    if (dailyCache.day !== day) clearDaily();            // the day turned over
+    if (force) clearDaily();
+    if (dailyCache.value) return Promise.resolve(dailyCache.value);
+    if (dailyCache.promise) return dailyCache.promise;   // share the one in flight
+    dailyCache.day = day;
+    dailyCache.promise = fetch(proxyBase() + '/api/wellness/daily', { credentials: 'include' })
+      .then((r) => r.json())
+      .then((d) => { dailyCache.value = d; dailyCache.promise = null; return d; })
+      .catch((e) => { clearDaily(); throw e; });
+    return dailyCache.promise;
+  }
+  // Completing today's ritual changes the streak, so the holder of that action
+  // invalidates rather than everyone polling in case it did.
+  window.GaiaDaily = { get: getDaily, invalidate: clearDaily };
+
   async function fillJourneyStreak() {
     const host = document.querySelector('[data-journey-streak]'); if (!host) return;
     try {
-      const r = await fetch(proxyBase() + '/api/wellness/daily', { credentials: 'include' });
-      const d = await r.json();
+      const d = await getDaily();
       if (d && !d.guest && d.ritual) {
         const cur = d.ritual.current || 0;
         host.innerHTML = '<div class="g-super-row"><span class="g-super-row__icon">' + icon('flame') + '</span><span><small>Daily Energy</small><strong>' + (cur > 0 ? cur + ' day streak' : 'Begin your streak today') + '</strong><em>' + (d.ritual.total || 0) + ' ritual' + ((d.ritual.total || 0) === 1 ? '' : 's') + ' completed</em></span></div>';
@@ -1090,7 +1132,7 @@
     const meta = [humanDates(item), item.venue].filter(Boolean).join(' · ');
     const countdown = opts.countdown === false ? '' : countdownLabel(item);
     return '<article class="g-event-card">'
-      + '<a class="g-event-card__art" href="home.html?view=events&event=' + esc(item.id) + '">' + eventHero(item) + '</a>'
+      + '<a class="g-event-card__art" href="home.html?view=events&event=' + esc(item.id) + '" aria-label="' + esc(item.name || 'Event') + '">' + eventHero(item) + '</a>'
       + '<div class="g-event-card__body">'
       + (opts.kicker ? '<p class="g-super-kicker">' + esc(opts.kicker) + '</p>' : '')
       + '<h3>' + esc(item.name) + '</h3>'
@@ -1119,7 +1161,7 @@
       if (!live || !live.live_enabled) return eventCard(item, { kicker: 'Happening now' });
       const nowTitles = (live.now || []).map((s) => s.title).filter(Boolean);
       return '<article class="g-event-card g-event-card--live">'
-        + '<a class="g-event-card__art" href="home.html?view=events&event=' + esc(item.id) + '">' + eventHero(item) + '</a>'
+        + '<a class="g-event-card__art" href="home.html?view=events&event=' + esc(item.id) + '" aria-label="' + esc(item.name || 'Event') + '">' + eventHero(item) + '</a>'
         + '<div class="g-event-card__body"><p class="g-super-kicker"><span class="g-live-dot" aria-hidden="true"></span> Live now</p>'
         + '<h3>' + esc(item.name) + '</h3>'
         + (nowTitles.length ? '<p class="g-event-card__meta">' + esc(nowTitles.join(' · ')) + '</p>'

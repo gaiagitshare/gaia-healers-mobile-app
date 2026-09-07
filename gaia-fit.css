@@ -1521,7 +1521,13 @@ body.gaia-v2 .g-super-home .g-feature-event .g-feature-event__art{position:relat
    is pushed outside the band instead of showing as a pale rim. */
 body.gaia-v2 .g-super-home .g-feature-event .g-feature-event__art::before{content:"";
   position:absolute;inset:-14%;z-index:0;
+  /* The plain url() stays as the fallback declaration; a browser that does not
+     understand image-set() simply keeps it. WebP is 19KB against the PNG's 203. */
   background:url("assets/gaia-elevate-hero.png") center/cover no-repeat;
+  background-image:-webkit-image-set(url("assets/gaia-elevate-hero.webp") type("image/webp"),
+                                     url("assets/gaia-elevate-hero.png") type("image/png"));
+  background-image:image-set(url("assets/gaia-elevate-hero.webp") type("image/webp"),
+                             url("assets/gaia-elevate-hero.png") type("image/png"));
   /* Kept lit and saturated on purpose. Darkened to near-black it stopped
      reading as the artwork continuing and the poster looked like a rectangle
      pasted onto a panel; the poster's own green glow is what ties the two
@@ -1933,7 +1939,11 @@ body.gaia-v2 .g-topbar__actions.gaia-header-actions { display: flex; align-items
 .g-dir__search input:focus { outline: 2px solid color-mix(in srgb, var(--g-accent, #A6E84B) 55%, transparent); outline-offset: 1px; }
 .g-dir__fchips, .g-dir__schips { display: flex; gap: 8px; overflow-x: auto; -webkit-overflow-scrolling: touch; padding-bottom: 2px; scrollbar-width: none; }
 .g-dir__fchips::-webkit-scrollbar, .g-dir__schips::-webkit-scrollbar { display: none; }
-.g-dir-fchip, .g-dir-schip { flex: 0 0 auto; padding: 7px 13px; border-radius: 999px; font-size: 12.5px; font-weight: 600; white-space: nowrap; cursor: pointer;
+/* These were 35px tall against a 44px minimum for a comfortable thumb. Height
+   is raised without touching the padding, type or radius, so the chips look
+   the same and only the tap area grows. */
+.g-dir-fchip, .g-dir-schip { flex: 0 0 auto; padding: 7px 13px; border-radius: 999px; font-size: 12.5px; font-weight: 600;
+  min-height: 44px; display: inline-flex; align-items: center; white-space: nowrap; cursor: pointer;
   background: rgba(255,255,255,0.04); border: 1px solid var(--g-line, rgba(190,240,170,0.14)); color: var(--g-text-dim, #93A597); }
 .g-dir-fchip.is-on, .g-dir-schip.is-on { background: color-mix(in srgb, var(--g-accent, #A6E84B) 22%, transparent); color: #F4F7F1; border-color: color-mix(in srgb, var(--g-accent, #A6E84B) 45%, transparent); }
 .g-dir__count { font-size: 12px; color: var(--g-text-dim, #93A597); margin: 2px 2px 10px; font-weight: 600; letter-spacing: 0.02em; }

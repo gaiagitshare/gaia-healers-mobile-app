@@ -68,7 +68,7 @@ Object.assign(process.env, {
 });
 
 const serverModuleUrl = new URL('../server.js', import.meta.url).href;
-await import(serverModuleUrl);
+const { closeServer } = await import(serverModuleUrl);
 await new Promise((resolve) => setTimeout(resolve, 400));
 
 // ── helpers ─────────────────────────────────────────────────────────────────
@@ -275,6 +275,9 @@ test('the store on disk keeps its original working shape after v2 reads', () => 
   assert.ok(Array.isArray(store.processedWebhookIds) && store.processedWebhookIds.length > 0);
 });
 
-// The proxy keeps a listener open; the runner is started with --test-force-exit
-// so the process ends once every test has actually finished.
 test.after(() => { stub.close(); });
+
+// Close what this suite booted. Without it the proxy's listening socket keeps
+// the process alive after the last assertion and the run has to be killed,
+// which would hide a real hang behind the same symptom.
+test.after(() => closeServer());

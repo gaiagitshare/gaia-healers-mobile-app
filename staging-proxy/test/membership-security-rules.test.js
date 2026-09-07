@@ -34,7 +34,7 @@ Object.assign(process.env, {
   GHL_API_BASE_URL: 'http://127.0.0.1:9', GHL_API_TOKEN: 'x', GHL_LOCATION_ID: 'x',
   GAIA_DISABLE_ALERT_TIMER: '1', MEMBERSHIP_FIXTURES: '', MEMBERSHIP_FIXTURE_KEY: '',
 });
-await import(new URL('../server.js', import.meta.url).href);
+const { closeServer } = await import(new URL('../server.js', import.meta.url).href);
 await new Promise((r) => setTimeout(r, 400));
 
 const url = `http://127.0.0.1:${PORT}/api/webhooks/ghl/member-access`;
@@ -128,3 +128,8 @@ test('RULE 5 holds in reverse — a course grant never creates a membership', as
   assert.equal(res.json.applied, true);
   assert.equal(membershipOf(c), null, 'holding a course is not being a member');
 });
+
+// Close what this suite booted. Without it the proxy's listening socket keeps
+// the process alive after the last assertion and the run has to be killed,
+// which would hide a real hang behind the same symptom.
+test.after(() => closeServer());

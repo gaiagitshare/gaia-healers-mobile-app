@@ -27,7 +27,7 @@ Object.assign(process.env, {
   AUTH_ALLOW_DEBUG_LINKS: 'false',
 });
 
-await import(new URL('../server.js', import.meta.url).href);
+const { closeServer } = await import(new URL('../server.js', import.meta.url).href);
 await new Promise((r) => setTimeout(r, 300));
 
 const post = async (body, headers = {}) => {
@@ -67,3 +67,8 @@ test('join is rate limited per ip+email (6th attempt is 429)', async () => {
   assert.equal(last.status, 429);
   assert.equal(last.json.code, 'rate_limited');
 });
+
+// Close what this suite booted. Without it the proxy's listening socket keeps
+// the process alive after the last assertion and the run has to be killed,
+// which would hide a real hang behind the same symptom.
+test.after(() => closeServer());

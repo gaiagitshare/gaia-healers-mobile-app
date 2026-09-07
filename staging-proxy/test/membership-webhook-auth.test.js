@@ -41,7 +41,7 @@ Object.assign(process.env, {
   GHL_WEBHOOK_ED25519_PUBLIC_KEY: publicDer,
 });
 
-await import(new URL('../server.js', import.meta.url).href);
+const { closeServer } = await import(new URL('../server.js', import.meta.url).href);
 await new Promise((r) => setTimeout(r, 300));
 
 const url = `http://127.0.0.1:${PORT}/api/webhooks/ghl/member-access`;
@@ -143,3 +143,8 @@ test('every magic-link outcome is logged, and no email address is written to the
     'the email must be hashed into a trace id, never logged in the clear');
   assert.ok(!/console\.log\([^)]*\bemail\b[^)]*\)/.test(body), 'no raw email in a log call');
 });
+
+// Close what this suite booted. Without it the proxy's listening socket keeps
+// the process alive after the last assertion and the run has to be killed,
+// which would hide a real hang behind the same symptom.
+test.after(() => closeServer());

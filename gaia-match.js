@@ -61,20 +61,43 @@
   }
 
   const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
-  function dobFields(prefix, label) {
-    const opts = MONTHS.map((n, i) => '<option value="' + (i + 1) + '">' + n + '</option>').join('');
+
+  /**
+   * The birth date the member already gave us, as {y, m, d}, or null.
+   *
+   * Every other tool on this screen reads it rather than asking again — the
+   * Cosmic Map says so in its own header — and this one was the exception,
+   * showing a signed-up member three empty boxes for a date Gaia already knew.
+   * Only the "You" side is filled: the other person is genuinely unknown.
+   */
+  function savedDobParts() {
+    try {
+      const w = window.GaiaWellness;
+      const raw = (w && typeof w.savedDob === 'function' && w.savedDob()) || '';
+      const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(raw).trim());
+      if (!m) return null;
+      const y = +m[1], mo = +m[2], d = +m[3];
+      if (mo < 1 || mo > 12 || d < 1 || d > 31 || y < 1900 || y > 2100) return null;
+      return { y, m: mo, d };
+    } catch (e) { return null; }
+  }
+
+  function dobFields(prefix, label, pre) {
+    const opts = MONTHS.map((n, i) => '<option value="' + (i + 1) + '"'
+      + (pre && pre.m === i + 1 ? ' selected' : '') + '>' + n + '</option>').join('');
+    const val = (v) => (v == null ? '' : ' value="' + esc(String(v)) + '"');
     return '<div class="g-match-person"><span class="g-label">' + esc(label) + '</span>'
       + '<div class="g-match-dob">'
       + '<select class="g-input" data-' + prefix + '-m aria-label="Month"><option value="">Month</option>' + opts + '</select>'
-      + '<input class="g-input" data-' + prefix + '-d type="text" inputmode="numeric" maxlength="2" placeholder="DD" aria-label="Day">'
-      + '<input class="g-input" data-' + prefix + '-y type="text" inputmode="numeric" maxlength="4" placeholder="YYYY" aria-label="Year">'
+      + '<input class="g-input" data-' + prefix + '-d type="text" inputmode="numeric" maxlength="2" placeholder="DD" aria-label="Day"' + val(pre && pre.d) + '>'
+      + '<input class="g-input" data-' + prefix + '-y type="text" inputmode="numeric" maxlength="4" placeholder="YYYY" aria-label="Year"' + val(pre && pre.y) + '>'
       + '</div></div>';
   }
   function formHtml() {
     return '<article class="g-card g-match"><p class="g-card__label">Energy Match</p>'
       + '<p class="g-quiz__title">How do your energies meet?</p>'
       + '<p class="g-card__meta">Two birth dates reveal your chakra and element match — for a partner, a friend, or someone new.</p>'
-      + dobFields('a', 'You') + dobFields('b', 'Them')
+      + dobFields('a', 'You', savedDobParts()) + dobFields('b', 'Them', null)
       + '<p class="g-match-err" data-match-err aria-live="polite"></p>'
       + '<div class="g-card__actions"><button type="button" class="g-btn g-btn--primary g-btn--sm" data-match-go>See our match →</button></div></article>';
   }
@@ -107,6 +130,10 @@
     const sh = box.querySelector('[data-match-share]'); if (sh) sh.addEventListener('click', shareResult);
   }
   render();
+  // The wellness profile arrives after this first render, and a member may also
+  // save a birth date while this panel is on screen. Re-render the empty form
+  // so the prefill appears, but never while they are reading a result.
+  window.addEventListener('gaia:wellness-updated', () => { if (state.step === 0) render(); });
   if (new URLSearchParams(window.location.search).get('tool') === 'match') {
     window.requestAnimationFrame(() => box.scrollIntoView({ behavior: 'smooth', block: 'center' }));
   }

@@ -143,12 +143,32 @@ test('source: one zodiac table, shared — no local table, no stale year cap', (
   assert.match(wellness, /sunSignFromDob,/, 'wellness exports the shared function');
 });
 
-test('offline: every versioned home.html script is in the service worker shell', () => {
+// This used to assert that every versioned script was named in APP_SHELL, on
+// the assumption that precaching it made it available offline. It did not:
+// home.html asks for '/gaia-ui.js?v=...' and caches.match() compares the whole
+// URL, so a bare '/gaia-ui.js' entry could never be served. The shell was
+// downloaded twice and answered from the network anyway.
+//
+// Offline rests on the runtime cache instead, so that is what is guarded here
+// -- and the guard is sharper than the old one, because it would have caught
+// the bug the old one sat next to for months: the clone has to be taken BEFORE
+// the response is handed back. Taken inside the caches.open() callback it runs
+// a microtask later, the page is already reading the body, clone() throws
+// inside a floating promise, and nothing is ever cached.
+test('offline: the worker takes its clone before returning, so assets really are cached', () => {
   const html = fs.readFileSync(path.join(__dirname, '..', 'home.html'), 'utf8');
   const sw = fs.readFileSync(path.join(__dirname, '..', 'sw.js'), 'utf8');
   const referenced = new Set([...html.matchAll(/src="([a-z0-9-]+\.js)\?v=/g)].map((m) => m[1]));
-  const shell = new Set([...sw.matchAll(/'\/([a-z0-9.-]+\.js)'/g)].map((m) => m[1]));
   assert.ok(referenced.size >= 20, 'sanity: found the script set');
-  const missing = [...referenced].filter((name) => !shell.has(name));
-  assert.deepEqual(missing, [], `scripts referenced by home.html but not precached (offline gap): ${missing.join(', ')}`);
+
+  assert.match(sw, /const copy = response\.clone\(\);/,
+    'the clone is taken before the response is returned');
+  assert.match(sw, /cache\.put\(event\.request, copy\)/,
+    'and it is that pre-taken clone which is stored');
+  assert.doesNotMatch(sw, /cache\.put\(event\.request, response\.clone\(\)\)/,
+    'cloning inside the caches.open() callback throws and silently caches nothing');
+  assert.match(sw, /'\/home\.html'/,
+    'the navigation fallback is precached: it is needed before any fetch can fill the cache');
+  assert.doesNotMatch(sw, /cache\.addAll\(APP_SHELL\)/,
+    'addAll is atomic, so one 404 would block the whole install');
 });

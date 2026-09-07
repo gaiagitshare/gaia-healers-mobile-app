@@ -17,7 +17,10 @@ test('the card module is shipped, cached, and hooked into the ticket sheet', () 
   assert.match(home, /gaia-card\.js\?v=\d+/, 'home.html loads the module');
   assert.ok(home.indexOf('gaia-myevents.js') < home.indexOf('gaia-card.js'), 'after the ticket sheet it injects into');
   const sw = read('sw.js');
-  assert.match(sw, /'\/gaia-card\.js'/, 'offline shell includes it');
+  // Not asserted via APP_SHELL any more: a bare '/gaia-card.js' entry could
+  // never answer the '?v=' request home.html makes. The runtime cache is what
+  // makes it available offline, and sun-sign.test.cjs guards that mechanism.
+  assert.match(sw, /caches\.match\(event\.request\)/, 'the worker serves same-origin GETs from cache');
   assert.doesNotMatch(sw, /20260903b-pulse-trend-assist/, 'the cache name moved on, so old shells are evicted');
   const mye = read('gaia-myevents.js');
   assert.equal((mye.match(/GaiaCard\.inject\(eventId, shell\)/g) || []).length, 2, 'both ticket render paths hand the sheet over');

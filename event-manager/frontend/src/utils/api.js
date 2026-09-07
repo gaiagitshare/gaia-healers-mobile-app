@@ -11,6 +11,48 @@ const api = axios.create({
     },
 });
 
+/**
+ * A short-lived read cache for the heavy per-event GETs.
+ *
+ * Switching to Attendees remounts the component, which re-ran every load from
+ * scratch: five visits to that tab pulled the full attendee list five times.
+ * Compression cut what that costs on the wire, but the right fix is not to ask
+ * again at all when the answer is seconds old.
+ *
+ * Two properties matter more than the caching itself:
+ *
+ *   in-flight sharing -- two components mounting at once share one request
+ *                        rather than racing two identical ones.
+ *   write invalidation -- ANY non-GET drops the whole cache. Over-invalidating
+ *                        is cheap; showing an operator a stale roster after
+ *                        they just changed it is not. There is no path where a
+ *                        mutation leaves a stale read behind.
+ */
+const CACHE_TTL_MS = 20 * 1000;
+const _cache = new Map();      // key -> { at, value }
+const _inflight = new Map();   // key -> Promise
+
+export function invalidateReadCache() {
+    _cache.clear();
+    _inflight.clear();
+}
+
+function cachedGet(path, ttl = CACHE_TTL_MS) {
+    const hit = _cache.get(path);
+    if (hit && Date.now() - hit.at < ttl) return Promise.resolve(hit.value);
+    const running = _inflight.get(path);
+    if (running) return running;
+    const p = api.get(path)
+        .then((response) => {
+            _cache.set(path, { at: Date.now(), value: response });
+            _inflight.delete(path);
+            return response;
+        })
+        .catch((error) => { _inflight.delete(path); throw error; });
+    _inflight.set(path, p);
+    return p;
+}
+
 api.interceptors.request.use((config) => {
     const token = localStorage.getItem('token');
     if (token) {
@@ -24,8 +66,16 @@ api.interceptors.request.use((config) => {
 // so the admin sees empty lists instead of being asked to sign in again. On any
 // 401 that is not the login call itself, drop the dead token and return to login.
 api.interceptors.response.use(
-    (response) => response,
+    (response) => {
+        if (response.config && String(response.config.method || 'get').toLowerCase() !== 'get') {
+            invalidateReadCache();
+        }
+        return response;
+    },
     (error) => {
+        if (error.config && String(error.config.method || 'get').toLowerCase() !== 'get') {
+            invalidateReadCache();
+        }
         const status = error.response && error.response.status;
         const url = (error.config && error.config.url) || '';
         const isLoginCall = url.indexOf('/auth/login') !== -1;
@@ -66,10 +116,10 @@ export const deleteEvent = (id) => api.delete(`/events/${id}`);
 export const autoSyncEvents = () => api.post('/events/auto-sync');
 
 // Attendees
-export const getAttendees = (eventId) => api.get(`/events/${eventId}/attendees`);
+export const getAttendees = (eventId) => cachedGet(`/events/${eventId}/attendees`);
 // Sales/acquisition summary: revenue is summed server-side from recorded
 // transaction amounts, because one attendee can hold several purchases.
-export const getUnmappedSales = (eventId) => api.get(`/events/${eventId}/unmapped-sales`);
+export const getUnmappedSales = (eventId) => cachedGet(`/events/${eventId}/unmapped-sales`);
 export const dismissUnmappedSale = (eventId, id) => api.post(`/events/${eventId}/unmapped-sales/${id}/dismiss`);
 // Destructive, admin-only: wipes this event's record of who was scanned where.
 export const clearScanLogs = (eventId) => api.delete(`/events/${eventId}/scan-logs`);
@@ -80,15 +130,15 @@ export const getPayments = (eventId, p = {}) => api.get(`/events/${eventId}/paym
 export const getPaymentsSummary = (eventId) => api.get(`/events/${eventId}/payments/summary`);
 export const getPaymentsAttention = (eventId) => api.get(`/events/${eventId}/payments/attention`);
 export const getPaymentsRecovery = (eventId) => api.get(`/events/${eventId}/payments/recovery`);
-export const getTicketMetrics = (eventId) => api.get(`/events/${eventId}/ticket-metrics`);
+export const getTicketMetrics = (eventId) => cachedGet(`/events/${eventId}/ticket-metrics`);
 // Map & Reconcile: preview reads GHL and changes nothing; apply needs confirm:true.
 export const mapReconcilePreview = (eventId, body) => api.post(`/events/${eventId}/map-reconcile/preview`, body);
 export const mapReconcileApply = (eventId, body) => api.post(`/events/${eventId}/map-reconcile/apply`, { ...body, confirm: true });
 export const getMapReconcileRuns = (eventId) => api.get(`/events/${eventId}/map-reconcile/runs`);
-export const getDoorReport = (eventId) => api.get(`/events/${eventId}/door-report`);
-export const getAcquisitionReport = (eventId) => api.get(`/events/${eventId}/acquisition-report`);
+export const getDoorReport = (eventId) => cachedGet(`/events/${eventId}/door-report`);
+export const getAcquisitionReport = (eventId) => cachedGet(`/events/${eventId}/acquisition-report`);
 export const getAttendee = (id) => api.get(`/attendees/${id}`);
-export const getTicketCounts = (eventId) => api.get(`/events/${eventId}/ticket-counts`);
+export const getTicketCounts = (eventId) => cachedGet(`/events/${eventId}/ticket-counts`);
 export const createAttendee = (data) => api.post('/attendees', data);
 export const importAttendees = (eventId, file, options = {}) => {
     const formData = new FormData();
@@ -220,7 +270,7 @@ export const getEntitlementReview = () => api.get('/entitlement-review');
 
 // Ticket types — the canonical pass identities. `code` is a product/price id,
 // never display copy; renaming a pass must not move anyone's access.
-export const getTicketTypes = (eventId) => api.get(`/events/${eventId}/ticket-types`);
+export const getTicketTypes = (eventId) => cachedGet(`/events/${eventId}/ticket-types`);
 export const createTicketType = (eventId, data) => api.post(`/events/${eventId}/ticket-types`, data);
 export const updateTicketType = (id, data) => api.put(`/ticket-types/${id}`, data);
 export const deleteTicketType = (id) => api.delete(`/ticket-types/${id}`);

@@ -1,0 +1,17 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "gaia-app-local",
+      "runtimeExecutable": "python3",
+      "runtimeArgs": [
+        "-m",
+        "http.server",
+        "8914",
+        "--directory",
+        "/Users/ba2ki-goldvest/Desktop/Gaia-Healers-App"
+      ],
+      "port": 8914
+    }
+  ]
+}

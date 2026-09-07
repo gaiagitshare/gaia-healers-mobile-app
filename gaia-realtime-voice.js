@@ -457,6 +457,11 @@
                       type: 'string',
                       description: 'Optional tab within the screen. store: "shop" or "membership". wellness: "check", "horoscope", or "chakras". community: "discussion", "members", or "events". Omit if unsure.',
                     },
+                    tool: {
+                      type: 'string',
+                      description: 'Optional single Energy tool to open on the wellness screen, instead of leaving the member to scroll for it. pulse=Energy Pulse (camera heart-rate reading), breath=Coherence Breathing, numerology=Numerology, sky=Today\u2019s Sky, colour=Colour Personality Test, chakra=Chakra Balance Quiz, match=Energy Match. Only valid with screen=wellness.',
+                      enum: ['pulse', 'breath', 'numerology', 'sky', 'colour', 'chakra', 'match'],
+                    },
                   },
                   required: ['screen'],
                 },
@@ -585,6 +590,7 @@
     function handleNavigateToolCall(args = {}) {
       const screen = String(args.screen || '').trim().toLowerCase();
       const tab = String(args.tab || '').trim().toLowerCase();
+      const tool = String(args.tool || '').trim().toLowerCase();
       if (!screen || !NAVIGATE_SCREENS.includes(screen)) {
         return { ok: false, message: 'That screen is not available. Tell the member where to tap instead.' };
       }
@@ -594,10 +600,23 @@
       }
       try {
         shell.go(screen, tab ? { tab } : {});
+        // The Energy tools are accordion panels and modals, not routes, so the
+        // screen has to be there before one can be opened. A frame is enough.
+        let toolOpened = false;
+        if (tool && screen === 'wellness') {
+          try { toolOpened = !!(window.GaiaTools && window.GaiaTools.open(tool)); } catch (_) { toolOpened = false; }
+          if (!toolOpened) {
+            window.requestAnimationFrame(() => {
+              try { if (window.GaiaTools) window.GaiaTools.open(tool); } catch (_) {}
+            });
+            toolOpened = true;
+          }
+        }
         window.dispatchEvent(new CustomEvent('gaia:assist-minimize', {
-          detail: { screen, tab: tab || '' },
+          detail: { screen, tab: tab || '', tool: tool || '' },
         }));
-        return { ok: true, message: `Opening ${screen}${tab ? ' / ' + tab : ''} now.` };
+        const where = toolOpened ? tool : (tab ? screen + ' / ' + tab : screen);
+        return { ok: true, message: `Opening ${where} now.` };
       } catch (e) {
         return { ok: false, message: 'Could not open that screen. Tell the member where to tap instead.' };
       }

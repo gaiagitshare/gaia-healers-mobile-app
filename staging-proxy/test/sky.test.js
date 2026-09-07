@@ -229,11 +229,31 @@ appTest('the countdown names the nearer of the two moons, and reads like a perso
   assert.equal(sky.countdownLine(null), '', 'no data means no sentence, not a broken one');
 });
 
-appTest('the card is rendered for a visitor with no account', () => {
+appTest('the card is rendered for a visitor with no account, and asks them for nothing', () => {
   // The entire point of this feature. A gate here would put it behind the same
   // wall as everything else and it would stop being a reason to come back.
   const source = fs.readFileSync(path.resolve(proxyRoot, '..', 'gaia-sky.js'), 'utf8');
   assert.ok(!/signedUp|authed|memberState|isMember/.test(source),
     'the sky card must not consult sign-in state before deciding to draw');
-  assert.ok(source.includes('g-sky__invite'), 'and it offers the personal version instead of withholding this one');
+
+  // This used to assert the opposite: that the guest card carried an invite
+  // block offering the personal version. It was removed on purpose. Today's Sky
+  // is the section whose whole claim is that this is the same sky for everyone,
+  // given away with nothing withheld, and an upsell inside it was the third
+  // time one page asked a stranger for their birth date. The guard now protects
+  // that promise instead of the upsell it replaced: draw for everyone, ask for
+  // nothing.
+  assert.ok(!source.includes('g-sky__invite'),
+    'the guest card must not carry an invite block');
+  // "Asks for nothing" as something a test can actually see: the card renders
+  // no link, no button and no call to action of any kind.
+  ['g-btn', 'href', '<button', "'<a "].forEach((cta) => {
+    assert.ok(!source.includes(cta), `the card must render no ${cta} call to action`);
+  });
+
+  // The reading itself still has to be there, or "asks for nothing" would be
+  // satisfied by a card that also gives nothing.
+  ['g-sky__phase', 'g-sky__facts', 'g-sky__invitation', 'g-sky__practice'].forEach((cls) => {
+    assert.ok(source.includes(cls), `the card keeps its ${cls} content`);
+  });
 });

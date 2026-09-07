@@ -37,6 +37,20 @@
   let productModal = null;
   let productKeyHandler = null;
 
+  /**
+   * Thousands separators, and nothing else.
+   *
+   * Prices arrive already formatted from the catalogue, which verifies the
+   * currency before it will publish any of them -- so this does not parse money
+   * or convert anything. It inserts separators into a plain run of digits after
+   * a $ and passes every other shape through byte-identical, including
+   * "$2500 USD", ranges and anything non-numeric.
+   */
+  function withThousands(text) {
+    return String(text == null ? '' : text)
+      .replace(/\$(\d{4,})(?![\d.,])/g, (m, digits) => '$' + Number(digits).toLocaleString('en-US'));
+  }
+
   function esc(s) {
     return String(s == null ? '' : s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
   }
@@ -199,7 +213,7 @@
       + (kindLabel ? '<span class="g-tag">' + esc(kindLabel) + '</span> ' : '')
       + (p.brand ? '<span class="g-tag">' + esc(p.brand) + '</span>' : '') + '</p>'
       + (p.price
-        ? '<p class="g-store-sheet__price">' + (p.priceVaries ? '' : '') + esc(p.price)
+        ? '<p class="g-store-sheet__price">' + (p.priceVaries ? '' : '') + esc(withThousands(p.price))
           + (p.compareAt ? ' <s>' + esc(p.compareAt) + '</s>' : '') + '</p>'
         : '<p class="g-store-sheet__price g-tile__price--muted">Price shown on Shopify</p>')
       + (p.available === false ? '<p class="g-store-sheet__meta">Currently unavailable</p>' : '')
@@ -210,7 +224,7 @@
         : '')
       + (p.variants && p.variants.length > 1
         ? '<p class="g-label">Options</p><ul class="g-store-sheet__list">'
-          + p.variants.map((v) => '<li>' + esc(v.title) + (v.price ? ' — ' + esc(v.price) : '')
+          + p.variants.map((v) => '<li>' + esc(v.title) + (v.price ? ' — ' + esc(withThousands(v.price)) : '')
             + (v.available === false ? ' (unavailable)' : '') + '</li>').join('')
           + '</ul><p class="g-store-sheet__meta">Choose your option on Shopify.</p>'
         : '')
@@ -240,8 +254,8 @@
       + '<button type="button" class="g-tile__open" data-store-detail="' + esc(card.externalId) + '">'
       + title + '</button></h3>'
       + (card.price
-        ? '<p class="g-tile__price">' + esc(card.price)
-          + (card.compareAt ? ' <s class="g-tile__was">' + esc(card.compareAt) + '</s>' : '') + '</p>'
+        ? '<p class="g-tile__price">' + esc(withThousands(card.price))
+          + (card.compareAt ? ' <s class="g-tile__was">' + esc(withThousands(card.compareAt)) + '</s>' : '') + '</p>'
         : '<p class="g-tile__price g-tile__price--muted">Price shown on Shopify</p>')
       + (card.available === false ? '<p class="g-tile__meta">Currently unavailable</p>' : '')
       + '<div class="g-card__actions">'

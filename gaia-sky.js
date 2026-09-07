@@ -17,6 +17,7 @@
  */
 (function () {
   'use strict';
+  let moonUid = 0;
 
   function proxyBase() {
     const localOverride = /^(127\.0\.0\.1|localhost)$/.test(window.location.hostname)
@@ -64,19 +65,23 @@
     // Past half the ellipse is painted light rather than dark, so it spills the
     // lit side over the terminator instead of biting into it.
     const gibbous = f > 0.5;
+    // The moon can be drawn more than once on a page, and two <defs> sharing an
+    // id means the second one silently references the first's gradient. A
+    // per-render suffix keeps each instance pointing at its own.
+    const uid = '-' + (moonUid += 1);
 
     return '<svg class="g-sky__moon" viewBox="0 0 100 100" role="img"'
       + ' aria-label="' + esc(Math.round(f * 100) + '% illuminated') + '">'
       + '<defs>'
-      + '<radialGradient id="gSkyGlow" cx="50%" cy="50%" r="50%">'
+      + '<radialGradient id="gSkyGlow' + uid + '" cx="50%" cy="50%" r="50%">'
       + '<stop offset="60%" stop-color="' + esc(tint) + '" stop-opacity="0.35"/>'
       + '<stop offset="100%" stop-color="' + esc(tint) + '" stop-opacity="0"/>'
       + '</radialGradient>'
-      + '<clipPath id="gSkyDisc"><circle cx="50" cy="50" r="' + R + '"/></clipPath>'
+      + '<clipPath id="gSkyDisc' + uid + '"><circle cx="50" cy="50" r="' + R + '"/></clipPath>'
       + '</defs>'
-      + '<circle cx="50" cy="50" r="49" fill="url(#gSkyGlow)"/>'
+      + '<circle cx="50" cy="50" r="49" fill="url(#gSkyGlow' + uid + ')"/>'
       + '<circle cx="50" cy="50" r="' + R + '" class="g-sky__moon-dark"/>'
-      + '<g clip-path="url(#gSkyDisc)">'
+      + '<g clip-path="url(#gSkyDisc' + uid + ')">'
       // The lit half, then the shadow ellipse carving the terminator across it.
       + '<path class="g-sky__moon-lit" d="M50 8 A ' + R + ' ' + R + ' 0 0 '
       + (waxing ? '1' : '0') + ' 50 92 Z"/>'

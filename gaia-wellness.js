@@ -580,6 +580,9 @@
     // exact function so a match result can never disagree with the member's
     // own horoscope for the same birth date.
     sunSignFromDob,
+    // The saved birth date, so a tool that needs one can offer it back rather
+    // than asking a member who has already told us. Numerology reads this.
+    savedDob: () => String((state.profile && state.profile.dob) || state.dob || ''),
     joinChallenge: () => {
       const b = document.querySelector('[data-chal-join]');
       if (b) { b.click(); return true; }

@@ -1759,6 +1759,41 @@ body.gaia-v2 .g-topbar__actions.gaia-header-actions { display: flex; align-items
 .g-sky__illum strong i { font-style: normal; font-weight: 600; font-size: 17px; color: var(--sky-tint, #A78BFA); vertical-align: super; margin-left: 1px; }
 .g-sky__illum span { font-size: 10px; font-weight: 700; letter-spacing: .16em; text-transform: uppercase; color: var(--g-text-dim, #93A597); }
 
+/* ── Numerology ───────────────────────────────────────────────────────────
+   Three cards from a birth date. The figure is the number itself, set large
+   in the serif the rest of the app uses for anything contemplative, so the
+   card reads as a reflection rather than a readout. */
+.g-num__intro { margin: 0 0 14px; font-size: 13.5px; line-height: 1.5; color: var(--g-text-dim, #93A597); }
+.g-num__row { display: flex; gap: 9px; flex-wrap: wrap; align-items: center; }
+.g-num__row .g-input { flex: 1 1 170px; min-width: 0; }
+.g-num__note, .g-num__foot { margin: 10px 0 0; font-size: 12.5px; line-height: 1.5; color: var(--g-text-muted, #7C8C80); }
+.g-num__err { margin: 9px 0 0; font-size: 13px; color: #F5A3A3; }
+.g-num__cards { display: grid; gap: 10px; }
+@media (min-width: 720px) { .g-num__cards { grid-template-columns: repeat(3, 1fr); } }
+.g-num__card { display: flex; gap: 13px; align-items: flex-start; padding: 14px 15px;
+  border: 1px solid var(--g-line, rgba(190,240,170,0.14)); border-radius: 16px;
+  background: rgba(255,255,255,0.03); }
+.g-num__figure { flex: 0 0 auto; min-width: 44px; text-align: center;
+  font-family: var(--g-font-serif, "Cormorant Garamond", serif); font-weight: 600;
+  font-size: 38px; line-height: 1; color: var(--g-accent, #A6E84B); }
+.g-num__body { min-width: 0; }
+.g-num__kind { margin: 0; font-size: 10.5px; font-weight: 700; letter-spacing: .16em;
+  text-transform: uppercase; color: var(--g-text-muted, #7C8C80); }
+.g-num__theme { margin: 3px 0 0; font-family: var(--g-font-serif, "Cormorant Garamond", serif);
+  font-weight: 600; font-size: 20px; line-height: 1.2; }
+.g-num__value { margin: 2px 0 0; font-size: 12.5px; color: var(--g-text-dim, #93A597); }
+.g-num__extra { opacity: .75; }
+.g-num__kindnote { margin: 7px 0 0; font-size: 12.5px; line-height: 1.45; color: var(--g-text-muted, #7C8C80); }
+.g-num__practice { margin: 8px 0 0; font-size: 14px; line-height: 1.5; }
+.g-num__echo { margin: 11px 0 0; padding: 10px 13px; border-radius: 12px; font-size: 13px; line-height: 1.5;
+  background: color-mix(in srgb, var(--g-accent, #A6E84B) 10%, transparent);
+  border: 1px solid color-mix(in srgb, var(--g-accent, #A6E84B) 22%, transparent); }
+.g-num__journal { margin: 6px 0 0; font-size: 13px; line-height: 1.5; font-style: italic;
+  color: var(--g-text-dim, #93A597); }
+.g-num__again { background: none; border: 0; padding: 0; font: inherit; cursor: pointer;
+  color: var(--g-accent, #A6E84B); text-decoration: underline; }
+.g-num__again:focus-visible { outline: 2px solid var(--g-accent, #A6E84B); outline-offset: 2px; }
+
 
 /* ── Membership upgrade card (free members) ─────────────────────────────────── */
 .g-upgrade { position: relative; overflow: hidden; border-radius: 24px; padding: 24px 20px;

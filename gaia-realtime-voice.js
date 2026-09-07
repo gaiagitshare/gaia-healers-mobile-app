@@ -459,8 +459,8 @@
                     },
                     tool: {
                       type: 'string',
-                      description: 'Optional single Energy tool to open on the wellness screen, instead of leaving the member to scroll for it. pulse=Energy Pulse (camera heart-rate reading), breath=Coherence Breathing, numerology=Numerology, sky=Today\u2019s Sky, colour=Colour Personality Test, chakra=Chakra Balance Quiz, match=Energy Match. Only valid with screen=wellness.',
-                      enum: ['pulse', 'breath', 'numerology', 'sky', 'colour', 'chakra', 'match'],
+                      description: 'Optional single Energy tool to open on the wellness screen, instead of leaving the member to scroll for it. Each value is the card the member will see: pulse=Energy Pulse (camera heart-rate reading), breath=Coherence Breathing, numerology=Numerology, sky=Today\u2019s Sky, colour=Colour Test, chakra=Chakra Balance, match=Energy Match, cosmic=Cosmic Map, moon=Moon Rituals. Only valid with screen=wellness.',
+                      enum: ['pulse', 'breath', 'numerology', 'sky', 'colour', 'chakra', 'match', 'cosmic', 'moon'],
                     },
                   },
                   required: ['screen'],

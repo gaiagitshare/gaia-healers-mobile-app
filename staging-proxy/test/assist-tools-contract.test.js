@@ -30,12 +30,19 @@ import { appPresent, appRoot, appTest } from './_app-present.js';
 const proxyRoot = path.resolve(path.dirname(new URL(import.meta.url).pathname), '..');
 const readApp = (file) => fs.readFileSync(path.join(appRoot, file), 'utf8');
 
-/** Parse a flat single-quoted string array literal assigned to `name`. */
-function arrayLiteral(source, name, label) {
+/**
+ * Parse a flat single-quoted string array literal assigned to `name`.
+ *
+ * `allowEmpty` distinguishes a list that is empty on purpose from one that has
+ * been renamed or deleted. NOT_ASSIST_TOOLS is empty now that every panel on
+ * the Energy screen is Assist-facing, but it still has to exist: it is where a
+ * future tool goes when it should not be routed to.
+ */
+function arrayLiteral(source, name, label, allowEmpty = false) {
   const m = new RegExp(`${name}\\s*=\\s*\\[([^\\]]*)\\]`).exec(source);
   assert.ok(m, `${label}: could not find ${name} — has it been renamed or restructured?`);
   const items = [...m[1].matchAll(/'([^']+)'/g)].map((x) => x[1]);
-  assert.ok(items.length, `${label}: ${name} parsed as empty`);
+  if (!allowEmpty) assert.ok(items.length, `${label}: ${name} parsed as empty`);
   return items;
 }
 
@@ -70,6 +77,16 @@ const sorted = (a) => [...a].sort();
 const proxySource = fs.readFileSync(path.join(proxyRoot, 'server.js'), 'utf8');
 const proxyIds = arrayLiteral(proxySource, 'ASSIST_TOOL_IDS', 'proxy');
 
+test('the knowledge does not disclaim an ability Assist now has', () => {
+  // It used to say, correctly, that Cosmic Map and Moon Rituals could not be
+  // opened by name. Now they can, and a leftover disclaimer would make Assist
+  // talk someone through scrolling to a card it could have opened for them.
+  [/cannot open it by name/i, /not openable by name/i].forEach((re) => {
+    assert.doesNotMatch(proxySource, re,
+      'GAIA_KNOWLEDGE still tells Assist it cannot open a tool it can now open');
+  });
+});
+
 test('the proxy declares its tool list once and builds the prose from it', () => {
   assert.ok(proxyIds.length >= 1);
   // A hardcoded &tool=a|b|c list would drift silently the moment the array
@@ -86,7 +103,7 @@ appTest('Assist advertises exactly the tools the app dispatcher supports', () =>
   const voice = readApp('gaia-realtime-voice.js');
 
   const assistTools = arrayLiteral(toolkit, 'ASSIST_TOOLS', 'app dispatcher');
-  const notAssist = arrayLiteral(toolkit, 'NOT_ASSIST_TOOLS', 'app dispatcher');
+  const notAssist = arrayLiteral(toolkit, 'NOT_ASSIST_TOOLS', 'app dispatcher', true);
   const panelKeys = objectKeys(toolkit, 'TOOL_HOST', 'app dispatcher');
   const voiceEnum = navigateToolEnum(voice);
 
@@ -125,6 +142,33 @@ appTest('Assist advertises exactly the tools the app dispatcher supports', () =>
   });
   assistTools.forEach((id) => {
     assert.ok(!notAssist.includes(id), `"${id}" is in both ASSIST_TOOLS and NOT_ASSIST_TOOLS`);
+  });
+
+  // 6. The nine tools Assist is expected to reach. Named rather than counted:
+  //    three lists agreeing with each other would still agree if a tool were
+  //    dropped from all three at once, and this is the list people care about.
+  ['pulse', 'breath', 'numerology', 'sky', 'colour', 'chakra', 'match', 'cosmic', 'moon']
+    .forEach((id) => {
+      assert.ok(assistTools.includes(id), `"${id}" is no longer an Assist-facing tool`);
+      assert.ok(voiceEnum.includes(id), `"${id}" is missing from the navigate tool enum`);
+      assert.ok(proxyIds.includes(id), `"${id}" is missing from the proxy's ASSIST_TOOL_IDS`);
+    });
+  assert.equal(assistTools.length, 9, 'expected nine Assist-facing tools');
+});
+
+appTest('the two newest Assist tools resolve to real panels', () => {
+  // Cosmic Map and Moon Rituals were promoted from NOT_ASSIST_TOOLS. They are
+  // ordinary accordion panels, so they need no new opener -- but they do need
+  // hosts that exist, which is the thing that was wrong with 'journey'.
+  const toolkit = readApp('gaia-toolkit.js');
+  const home = readApp('home.html');
+  const m = /TOOL_HOST\s*=\s*\{([^}]*)\}/.exec(toolkit);
+  assert.ok(m, 'TOOL_HOST not found');
+  const map = Object.fromEntries([...m[1].matchAll(/([A-Za-z_$][\w$]*)\s*:\s*'([^']+)'/g)]
+    .map(([, k, v]) => [k, v]));
+  [['cosmic', 'home-cosmic'], ['moon', 'home-moon']].forEach(([id, host]) => {
+    assert.equal(map[id], host, `"${id}" must map to #${host}`);
+    assert.ok(home.includes(`id="${host}"`), `#${host} is not in home.html`);
   });
 });
 

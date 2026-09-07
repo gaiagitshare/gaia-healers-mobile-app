@@ -42,11 +42,14 @@
   // the proxy's GAIA_KNOWLEDGE. They are separate files in separate deploy
   // units, so a contract test compares them rather than a shared import.
   //
-  // Cosmic Map and Moon Rituals are real, working panels that Assist does not
-  // route to. That is recorded here so the omission is a decision someone can
-  // find and change, instead of a gap nobody notices.
-  const ASSIST_TOOLS = ['pulse', 'breath', 'numerology', 'sky', 'colour', 'chakra', 'match'];
-  const NOT_ASSIST_TOOLS = ['cosmic', 'moon'];
+  // Cosmic Map and Moon Rituals were listed as deliberately-not-Assist while the
+  // omission was reviewed. It was, and they are in: both are ordinary panels on
+  // this screen with nothing special about them, so leaving Assist unable to say
+  // their names was the odd part. NOT_ASSIST_TOOLS stays, empty, because it is
+  // half of the contract -- the place a future tool goes when it should not be
+  // routed to, rather than a list that gets deleted and then reinvented.
+  const ASSIST_TOOLS = ['pulse', 'breath', 'numerology', 'sky', 'colour', 'chakra', 'match', 'cosmic', 'moon'];
+  const NOT_ASSIST_TOOLS = [];
   function itemFor(name) {
     // hasOwnProperty, not a truthy lookup. TOOL_HOST is a plain object, so
     // TOOL_HOST['constructor'] returns a function off Object.prototype rather

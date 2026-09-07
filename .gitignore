@@ -47,3 +47,11 @@ event-manager/**/*.bak-*
 event-manager/import/*.json
 event-manager/import/*.xlsx
 event-manager/import/*.csv
+
+# Local-only, never part of the deployed app. All three were swept in by a
+# careless `git add -A` in 2aabe5d and are removed again here: GitHub Pages
+# serves whatever is in this repo, so tracking them published the mockups and
+# an 8.7 MB asset archive at gaiahealers.app.
+.claude/
+prototype/
+gaia-healers-visual-assets.zip

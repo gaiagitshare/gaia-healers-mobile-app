@@ -61,7 +61,19 @@
 
   // ================= STATE / ROUTER =================
   var view = 'contacts';
+  var VIEWS = ['contacts', 'surveys', 'membership', 'events', 'system'];
   function nav(v) { view = v; render(); location.hash = v; }
+
+  // Back and Forward moved the hash and nothing else: the view only ever
+  // changed when something called nav(), so the browser's own buttons left the
+  // address bar saying one thing and the screen showing another. Listening for
+  // the change is what makes history mean anything here.
+  window.addEventListener('hashchange', function () {
+    var want = (location.hash || '').replace('#', '');
+    if (VIEWS.indexOf(want) < 0 || want === view) return;   // ignore noise and no-ops
+    view = want;
+    render();
+  });
 
   function render() {
     root.innerHTML = shell();
@@ -1235,7 +1247,7 @@
     api('/session').then(function (d) {
       if (d && d.__401) return;
       if (d && d.authed) {
-        var initial = (location.hash || '').replace('#', ''); if (['contacts', 'surveys', 'membership', 'events', 'system'].indexOf(initial) >= 0) view = initial;
+        var initial = (location.hash || '').replace('#', ''); if (VIEWS.indexOf(initial) >= 0) view = initial;
         render();
       } else { setToken(''); loginScreen(''); }
     }).catch(function () { loginScreen('Cannot reach the server.'); });

@@ -640,10 +640,13 @@
       + '<li>' + icon('check-circle') + '<span>Events, bookings, community &amp; Store, all in one home</span></li>'
       + '</ul>'
       + '<div class="g-super-actions"><button type="button" class="g-btn g-btn--primary" data-super-join>' + icon('sparkle') + ' Join free</button>'
-      + '<button type="button" class="g-btn g-btn--secondary" data-super-signin>Sign in</button></div>'
-      // No Compare plans here, and no footnote. Plan comparison is the
-      // membership screen's job, and the footnote only said the three lines
-      // above it again. What is left is one offer and one way to take it.
+      + '<button type="button" class="g-btn g-btn--secondary" data-super-signin>Sign in</button>'
+      // Third and quietest. Join free is the last section of the signed-out
+      // home, so this is the plan link at the foot of the page -- there for
+      // the reader who wants to know what is above free before they commit,
+      // and beneath the two actions that matter for everyone else.
+      + '<a class="g-btn g-btn--ghost" href="home.html?view=store&tab=membership">Compare plans</a></div>'
+      // Still no footnote: it only said the three lines above it again.
       + '</section>';
   }
 
@@ -849,11 +852,15 @@
         ? '<div data-daily-host></div>'
           + eventFeatureCarousel()
           + primaryMemberAction()
-          + (activeMembership() ? '' : upgradeCard())
           + '<section class="g-super-services"><div class="g-super-section-head"><div><p class="g-super-kicker">Your access</p><h2>Everything Gaia Healers</h2></div><a href="home.html?view=profile">Your account</a></div><div class="g-super-services__grid">' + services + '</div></section>'
           + '<div data-sky-host></div>'
           + nextBookingCard()
           + '<div id="home-book"></div>'
+          // The upsell goes last, after everything a member already pays for.
+          // It used to sit fourth, between two sections both called "Your
+          // access", so a member met "Unlock your full practice" before they
+          // reached their own sky. Sell after the page has finished giving.
+          + (activeMembership() ? '' : upgradeCard())
           + '<section class="g-super-sync">' + icon('check-circle') + '<div><strong>Your access is synced</strong><span>Courses, communities, plans and purchases reflect your Gaia Healers account.</span></div></section>'
         // Logged-out flow: daily energy, then the free tools a stranger can use
         // right now, the event, and one clear way in.

@@ -157,11 +157,11 @@
             ? 'The moon meets your ' + personal.birthChakra.name.toLowerCase() + ' centre directly today.'
             : 'Today asks for the ' + ((sky.moon.chakra && sky.moon.chakra.name) || 'whole system').toLowerCase()
               + ' — your own centre is the ' + personal.birthChakra.name.toLowerCase() + '.') + '</p>'
-        : '<div class="g-sky__invite">'
-          + '<p class="g-sky__invite-head">This is the sky for everyone today.</p>'
-          + '<p>Add your birth date to see which of your centres this moon meets.</p>'
-          + '<a class="g-btn g-btn--primary g-btn--sm" href="home.html?view=wellness&amp;tab=check">Read my chart</a>'
-          + '</div>')
+        // Nothing for a signed-out reader. The sky is the same sky for
+        // everyone today, and saying so was the third time this page asked a
+        // stranger for their birth date before it had given them anything.
+        // The section keeps its whole reading and asks for nothing.
+        : '')
       + '</article>';
   }
 

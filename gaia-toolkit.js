@@ -30,8 +30,31 @@
   // Keyed by the ?tool= value. 'sky' and 'numerology' are addressed by their
   // host attribute rather than an id, because their panels are filled in by
   // their own modules after this runs.
-  const TOOL_HOST = { chakra: 'home-chakraquiz', cosmic: 'home-cosmic', match: 'home-match', moon: 'home-moon', journey: 'home-challenge', colour: 'home-colourtest', sky: 'data-sky-host', numerology: 'data-numerology-host' };
+  //
+  // 'journey' used to be here pointing at #home-challenge, which is not on this
+  // screen -- open('journey') could only ever return false. Removed rather than
+  // left as a name that reads as supported.
+  const TOOL_HOST = { chakra: 'home-chakraquiz', cosmic: 'home-cosmic', match: 'home-match', moon: 'home-moon', colour: 'home-colourtest', sky: 'data-sky-host', numerology: 'data-numerology-host' };
+
+  // Which of these Gaia Assist is allowed to open by name, and which it is
+  // deliberately not. Three places have to agree on this: the dispatcher below,
+  // the navigate tool's enum in gaia-realtime-voice.js, and the &tool= line in
+  // the proxy's GAIA_KNOWLEDGE. They are separate files in separate deploy
+  // units, so a contract test compares them rather than a shared import.
+  //
+  // Cosmic Map and Moon Rituals are real, working panels that Assist does not
+  // route to. That is recorded here so the omission is a decision someone can
+  // find and change, instead of a gap nobody notices.
+  const ASSIST_TOOLS = ['pulse', 'breath', 'numerology', 'sky', 'colour', 'chakra', 'match'];
+  const NOT_ASSIST_TOOLS = ['cosmic', 'moon'];
   function itemFor(name) {
+    // hasOwnProperty, not a truthy lookup. TOOL_HOST is a plain object, so
+    // TOOL_HOST['constructor'] returns a function off Object.prototype rather
+    // than undefined -- and ?tool=constructor then built the selector
+    // '#function Object() { [native code] }', threw during module init, and
+    // took the whole accordion down with it. Every panel on the Energy screen
+    // stopped opening because of one word in a query string.
+    if (!Object.prototype.hasOwnProperty.call(TOOL_HOST, name)) return null;
     const key = TOOL_HOST[name];
     if (!key) return null;
     const host = key.indexOf('data-') === 0 ? container.querySelector('[' + key + ']') : container.querySelector('#' + key);
@@ -55,6 +78,10 @@
   // has a single call to make instead of knowing which module owns which. The
   // accordion panels open here; the two full-screen tools own their own modals.
   window.GaiaTools = {
+    // The Assist contract, readable at runtime so a test can check the shipped
+    // build rather than only the source.
+    assistTools: ASSIST_TOOLS.slice(),
+    notAssistTools: NOT_ASSIST_TOOLS.slice(),
     // Only what this page can actually open: a couple of TOOL_HOST keys
     // belong to panels that do not exist on every build of the screen.
     get names() {

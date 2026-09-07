@@ -44,7 +44,7 @@ Object.assign(process.env, {
   GAIA_DISABLE_ALERT_TIMER: '1', MEMBERSHIP_FIXTURES: '', MEMBERSHIP_FIXTURE_KEY: '',
 });
 
-await import(new URL('../server.js', import.meta.url).href);
+const { closeServer } = await import(new URL('../server.js', import.meta.url).href);
 await new Promise((r) => setTimeout(r, 400));
 
 const url = `http://127.0.0.1:${PORT}/api/webhooks/ghl/member-access`;
@@ -174,3 +174,8 @@ test('every decision is counted, and no payload is kept', async () => {
   const reason = tele().lastRejectionReason || '';
   assert.ok(reason.length <= 80, 'the rejection reason is a short label, not a body');
 });
+
+// Close what this suite booted. Without it the proxy's listening socket keeps
+// the process alive after the last assertion and the run has to be killed,
+// which would hide a real hang behind the same symptom.
+test.after(() => closeServer());

@@ -32,7 +32,7 @@ Object.assign(process.env, {
   GHL_API_BASE_URL: 'http://127.0.0.1:9', GHL_API_TOKEN: 'x', GHL_LOCATION_ID: 'x',
 });
 
-await import(new URL('../server.js', import.meta.url).href);
+const { closeServer } = await import(new URL('../server.js', import.meta.url).href);
 await new Promise((r) => setTimeout(r, 300));
 
 const GOLD_MONTHLY = '691cbb52396387d816e0f670';
@@ -353,3 +353,8 @@ test('END TO END: legacy ahc tags on the session still grant nothing', async () 
   assert.equal(access.membership.key, null);
   assert.equal(access.membership.status, 'none');
 });
+
+// Close what this suite booted. Without it the proxy's listening socket keeps
+// the process alive after the last assertion and the run has to be killed,
+// which would hide a real hang behind the same symptom.
+test.after(() => closeServer());

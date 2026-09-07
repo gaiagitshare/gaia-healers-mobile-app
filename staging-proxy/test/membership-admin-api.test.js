@@ -44,7 +44,7 @@ Object.assign(process.env, {
   GHL_API_TOKEN: 'test-token', GHL_LOCATION_ID: 'test-location',
 });
 
-await import(new URL('../server.js', import.meta.url).href);
+const { closeServer } = await import(new URL('../server.js', import.meta.url).href);
 await new Promise((r) => setTimeout(r, 400));
 
 // ── helpers ─────────────────────────────────────────────────────────────────
@@ -285,7 +285,6 @@ test('the member list counts plans and finds a member by id', async () => {
   assert.equal(res.json.counts.silver, 1);
 });
 
-// The proxy holds a listener open; the runner uses --test-force-exit.
 
 // ── integrations, overrides and the unresolved queue ────────────────────────
 test('the integrations view ships every external source disconnected', async () => {
@@ -366,4 +365,13 @@ test('the public catalogue serves the policy an operator edited', async () => {
   const silver = res.json.plans.find((p) => p.key === 'silver');
   assert.equal(silver.prices.monthly, '$127/mo', 'the Store and the Control Center cannot disagree');
   assert.ok(silver.displayBenefits.length, 'marketing copy still ships with the catalogue');
+});
+
+// Close what this suite booted. Without it the proxy's listening socket keeps
+// the process alive after the last assertion and the run has to be killed,
+// which would hide a real hang behind the same symptom. The stub GHL is a
+// second listener this file opens itself, so it has to be closed too.
+test.after(async () => {
+  await closeServer();
+  await new Promise((r) => stub.close(r));
 });

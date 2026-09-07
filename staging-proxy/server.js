@@ -223,6 +223,13 @@ const FALLBACK_MEMBER_HUB = {
   },
 };
 
+// The Energy tools Gaia Assist may open by name. This is the proxy's half of a
+// three-way contract: it must match ASSIST_TOOLS in the app's gaia-toolkit.js
+// and the navigate tool's enum in gaia-realtime-voice.js. The knowledge string
+// below is built from it so the prose cannot drift from the list, and
+// test/assist-tools-contract.test.js fails if the three stop agreeing.
+export const ASSIST_TOOL_IDS = ['pulse', 'breath', 'numerology', 'sky', 'colour', 'chakra', 'match'];
+
 const GAIA_KNOWLEDGE = {
   brand: 'Gaia Healers — a holistic wellness network combining biofield / energy-science devices, practitioner certification, a member community, live events, and a wellness store. Founded by Dr. Nima Farshid.',
   founder: 'Official Gaia Healers sources describe Dr. Nima Farshid as Gaia Healers’ founder, a doctor of natural medicine, software engineer, and Bio-Well educator whose work connects biofield technology, practitioner education, community, and live events. His research interests include people, places, and water. Never use his story or titles to turn a symbolic horoscope into a medical claim; offer verified education, booking, device-measurement, community, and event routes as optional next steps.',
@@ -248,6 +255,7 @@ const GAIA_KNOWLEDGE = {
     'A practitioner community and mentorship.',
     'Live events, including the annual Elevate conference.',
     'A wellness store (energy sprays, crystals, devices, courses).',
+    'One birth date, entered once. Energy Check saves it, and every other tool that needs it — Numerology, Cosmic Map, Today’s Sky, Energy Match — reads it back instead of asking again. Never tell a member to re-enter a birth date Gaia already has; if a tool looks empty for them, the fix is to check they are signed in, not to retype it.',
     'In-app wellness tools, all free and all native (nothing redirects to a third-party site): a birth-chakra reading, a daily body-point and wellness horoscope, an 8-week chakra challenge, a colour personality test, a chakra balance quiz, Energy Match compatibility, Numerology, Today’s Sky, Energy Pulse (a real camera pulse reading) and Coherence Breathing.',
     'Session booking: Bio-Well energy scans, Bio-Well demos, a free discovery call, and wellness coaching.',
     'A directory to find certified practitioners.',
@@ -309,16 +317,18 @@ const GAIA_KNOWLEDGE = {
       'Wellness sign-up (name, birth date, location, email) — unlocks your daily body-point and a daily wellness horoscope tip.',
       '8-Week Chakra Challenge — join, then check in daily; one chakra per week with a practice and an affirmation.',
       'Book a session — a Bio-Well energy scan, a Bio-Well demo, a free discovery call, or wellness coaching (real booking links).',
-      'Colour Personality Test — 5 questions reveal your chakra colour and suggest the matching Colour Energy spray.',
+      'Colour Test — free at view=wellness&tool=colour; the card is titled \'Colour Test\'. Five questions reveal your chakra colour and suggest the matching Colour Energy spray.',
       'Find a Healer — the in-app practitioner directory (view=directory), reached from Community; real gaiapractitioners.com data with map and profiles.',
       'Energy Pulse — free at view=wellness&tool=pulse; a real heart-rate estimate from the phone’s own camera (a fingertip on the flash-lit rear lens) with a tap-along fallback on any device. Frames are analysed on the phone and never uploaded, and readings stay on that device. Be honest about what it is: a heart-rate estimate from an optical signal — NOT a medical device, NOT HRV or a coherence score, and NOT a Bio-Well measurement. If someone wants a real biofield measurement, offer a Bio-Well scan.',
       'Coherence Breathing — free at view=wellness&tool=breath; a guided paced-breathing session at about six breaths a minute (five seconds in, five out), the resonance pace used to steady the heart rhythm. It is a breathing practice with a real timer, not a measurement: it does not score coherence or HRV. It pairs naturally with Energy Pulse for an optional before-and-after read.',
       'Numerology — free at view=wellness&tool=numerology; calculated natively in the app (it used to send people to an outside site and no longer does). It gives a Life Path from the whole birth date, a Birth Day number from the day they arrived, and a Personal Year for where they are in the nine-year cycle, keeping master numbers 11, 22 and 33 unreduced. It asks nothing new of a member who has already saved a birth date. Reflective, not predictive.',
       'Today’s Sky — free at view=wellness&tool=sky and also on the Today screen; the moon phase, the day of the lunar cycle, how lit the moon is, its sign and the chakra it echoes, a theme, and one short practice. It is the same sky for everyone and asks for nothing. A member who has saved a birth date also gets a line about which of their own centres the moon meets.',
-      'Chakra Balance Quiz — free at view=wellness&tool=chakra; eight questions reveal the centre asking for attention, then suggest the matching Colour Energy, the seven-chakra crystal set, or a Bio-Well scan to measure it properly. Saving a result is opt-in.',
+      'Chakra Balance — free at view=wellness&tool=chakra; the card is titled \'Chakra Balance\' (distinct from Chakra Match on tab=chakras); eight questions reveal the centre asking for attention, then suggest the matching Colour Energy, the seven-chakra crystal set, or a Bio-Well scan to measure it properly. Saving a result is opt-in.',
+      'Cosmic Map — a panel on the Energy screen that reads the birth date already saved and shows the birth chakra, sun sign, element and matching stones, with an optional birth time and city for a sharper chart. Real and free, but Gaia Assist cannot open it by name: send people to the Energy screen and tell them to look for the Cosmic Map card.',
+      'Moon Rituals — a panel on the Energy screen with practices tied to the lunar cycle. Also free, and also not openable by name: point to the Energy screen and name the card.',
       'Energy Match — free at view=wellness&tool=match; two birth dates give each person’s birth chakra, sun sign and element, then a playful compatibility read and a shareable card. Entertainment and reflection, never a prediction about a relationship.',
     ],
-    navigation: 'To guide someone, use the exact current structure: bottom bar Today, Energy, Academy, Gaia Assist, Community, Shop, You; a small overflow menu with Membership, Meet the Founder and sign-in. Deep links: home.html?view=today|academy|community|events|bookings|inbox|directory|wellness|store|profile. Energy tabs: &tab=check|horoscope|chakras. Individual Energy tools open straight to their own panel with &tool=pulse|breath|colour|chakra|match|sky|numerology (for example home.html?view=wellness&tool=numerology). Store tabs: &tab=shop|membership. An event’s exhibitor directory is home.html?view=events&event=<id>&tab=exhibitors. Keep people inside the app: course videos now PLAY natively in Academy (no portal). Only send them to education.gaiahealers.com for community discussions, portal-only courses, or portal login.',
+    navigation: 'To guide someone, use the exact current structure: bottom bar Today, Energy, Academy, Gaia Assist, Community, Shop, You; a small overflow menu with Membership, Meet the Founder and sign-in. Deep links: home.html?view=today|academy|community|events|bookings|inbox|directory|wellness|store|profile. Energy tabs: &tab=check|horoscope|chakras. Individual Energy tools open straight to their own panel with &tool=' + ASSIST_TOOL_IDS.join('|') + ' (for example home.html?view=wellness&tool=numerology). Store tabs: &tab=shop|membership. An event’s exhibitor directory is home.html?view=events&event=<id>&tab=exhibitors. Keep people inside the app: course videos now PLAY natively in Academy (no portal). Only send them to education.gaiahealers.com for community discussions, portal-only courses, or portal login.',
     tasks: [
       'Watch a course / see my videos: Academy tab shows "Your courses" (what they own) — tap a course and the videos play natively in the app. I can also open a specific course for them.',
       'Find more / free courses: Academy > "Explore more courses". Free-tagged courses open for everyone.',
@@ -330,7 +340,7 @@ const GAIA_KNOWLEDGE = {
       'Calm down / breathe / steady myself: Energy tab > Coherence Breathing, a guided five-in five-out session.',
       'My numbers / life path / numerology: Energy tab > Numerology, calculated in the app from their birth date.',
       'Moon phase / what the sky is doing today: Today’s Sky, on the Today screen and under Energy.',
-      'Which chakra needs attention: Energy tab > Chakra Balance Quiz (eight questions).',
+      'Which chakra needs attention: Energy tab > Chakra Balance (eight questions).',
       'Compatibility with someone: Energy tab > Energy Match (two birth dates).',
       'Colour personality test and Bio-Well research also live under Energy.',
       'Find a practitioner / healer: Community > Find a Healer (the in-app directory with map and profiles).',
@@ -6972,3 +6982,19 @@ server.listen(PORT, HOST, () => {
     setInterval(() => { runStoreSync({ reason: 'daily' }); }, STORE_SYNC_INTERVAL_MS).unref();
   }
 });
+
+// The listening socket is the one handle that outlives a test run. Suites boot
+// this module with `await import()`, and without a way to close the server the
+// process stays alive after the last assertion — which is why the runner used
+// to need --test-force-exit. Exporting it lets a suite shut down what it
+// started, so Node exits on its own and a genuine hang stays visible instead of
+// being hidden behind a forced exit.
+//
+// closeAllConnections() matters as much as close(): close() stops new
+// connections but waits on established keep-alive sockets, and undici (the
+// fetch tests use) holds those open, so close() alone never calls back.
+export { server };
+export async function closeServer() {
+  server.closeAllConnections?.();
+  await new Promise((resolve) => server.close(resolve));
+}

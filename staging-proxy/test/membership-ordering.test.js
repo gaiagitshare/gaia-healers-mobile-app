@@ -33,7 +33,7 @@ Object.assign(process.env, {
   GAIA_DISABLE_ALERT_TIMER: '1', MEMBERSHIP_FIXTURES: '', MEMBERSHIP_FIXTURE_KEY: '',
 });
 
-await import(new URL('../server.js', import.meta.url).href);
+const { closeServer } = await import(new URL('../server.js', import.meta.url).href);
 await new Promise((r) => setTimeout(r, 300));
 
 let seq = 0;
@@ -294,3 +294,8 @@ test('sequence numbers win over timestamps when both sides provide them', async 
 });
 
 // The proxy holds a listener open; the runner uses --test-force-exit.
+
+// Close what this suite booted. Without it the proxy's listening socket keeps
+// the process alive after the last assertion and the run has to be killed,
+// which would hide a real hang behind the same symptom.
+test.after(() => closeServer());

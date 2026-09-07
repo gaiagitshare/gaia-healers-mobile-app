@@ -313,7 +313,26 @@ button{font-family:inherit}
 .stat small{color:var(--muted);font-size:12px}
 .spinner{width:26px;height:26px;border:3px solid var(--line2);border-top-color:var(--green);border-radius:50%;animation:spin .8s linear infinite;margin:50px auto}
 @keyframes spin{to{transform:rotate(360deg)}}
-@media(max-width:760px){.app{grid-template-columns:1fr}.side{position:fixed;z-index:30;transform:translateX(-102%);transition:.2s}.side.is-open{transform:none}.branches{grid-template-columns:1fr}}
+/* The sidebar slides away below 760px. The button that brings it back lives
+   here too -- without it the whole console was one screen deep on a phone. */
+.sidetoggle{display:none}
+.side__scrim{display:none}
+@media(max-width:760px){
+  .app{grid-template-columns:1fr}
+  .side{position:fixed;z-index:30;transform:translateX(-102%);transition:.2s}
+  .side.is-open{transform:none;box-shadow:0 0 40px rgba(0,0,0,.55)}
+  .branches{grid-template-columns:1fr}
+  .sidetoggle{display:grid;place-items:center;position:fixed;z-index:31;top:10px;left:10px;
+    width:42px;height:42px;padding:0;border-radius:12px;cursor:pointer;
+    background:var(--surface,#141d17);border:1px solid var(--line,rgba(255,255,255,.14));
+    color:var(--text,#e9f0ea)}
+  .sidetoggle svg{width:22px;height:22px}
+  .sidetoggle:focus-visible{outline:2px solid var(--accent,#7dd956);outline-offset:2px}
+  .side__scrim{display:block;position:fixed;inset:0;z-index:29;background:rgba(0,0,0,.5)}
+  .side__scrim[hidden]{display:none}
+  /* Clear the floating button so it never sits on top of the page title. */
+  .main .top{padding-left:58px}
+}
 
 /* ── Contact drawer: evidence panels ──────────────────────────────────────
    A verified membership and a legacy tag must never look alike, so the tag

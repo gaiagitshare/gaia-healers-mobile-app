@@ -211,8 +211,11 @@ test('production shell loads the tested DSP before capture and caches both', () 
   const home = fs.readFileSync(path.join(__dirname, '..', 'home.html'), 'utf8');
   const sw = fs.readFileSync(path.join(__dirname, '..', 'sw.js'), 'utf8');
   assert.ok(home.indexOf('gaia-pulse-dsp.js') < home.indexOf('gaia-pulse.js'));
-  assert.match(sw, /gaia-pulse-dsp\.js/);
-  assert.match(sw, /gaia-pulse\.js/);
+  // Both are loaded with a ?v=, so naming them in APP_SHELL never made them
+  // servable; the runtime cache does. Load order is what this test is really
+  // about, and it is asserted above.
+  assert.match(home, /gaia-pulse-dsp\.js\?v=/, 'the DSP is versioned like the rest of the shell');
+  assert.match(sw, /caches\.match\(event\.request\)/, 'the worker serves same-origin GETs from cache');
 });
 
 test('production UX keeps provisional estimates stable and saves only completed readings locally', () => {

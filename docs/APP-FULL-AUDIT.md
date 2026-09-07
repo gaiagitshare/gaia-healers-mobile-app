@@ -1,5 +1,9 @@
 # Gaia Healers app — full audit
 
+> **Update — 2026-09-07: seven of the nine findings are fixed and live.**
+> See **Resolved** at the end. The two left open were left open deliberately,
+> and are named there.
+
 **Date:** 2026-09-07 · **Target:** https://gaiahealers.app (production) ·
 **Method:** driving the live app in a browser — cold and warm loads, every
 screen, five viewport widths — rather than reading source and inferring.
@@ -203,3 +207,90 @@ needs its source pointed to before it can be audited.
 and titles · no horizontal overflow and no unreachable controls at five widths ·
 installable PWA with a valid manifest · solid accessibility fundamentals · safe
 outbound links · a signed-out experience that sells rather than blocks.
+
+
+---
+
+# Resolved — 2026-09-07
+
+Shipped in `app-perf-fixes` (PR #103). No redesign, no navigation change, no
+content-structure change; the app renders identically.
+
+## Performance
+
+| | Before | After |
+|---|---|---|
+| Cold-load transfer (same asset list, gzip negotiated) | 1,700 KB | **786 KB** |
+| Images and fonts | 1,282 KB | **369 KB** |
+| Service-worker install | 3,246 KB | **507 KB** |
+| `wellness/daily` per session | 76 | **1** |
+| Shell downloaded twice | yes | **no** |
+
+**Heroes.** Photographic PNGs replaced with WebP at identical dimensions,
+through the existing `<picture>` and a CSS `image-set()`. Every PNG stays in
+place as the fallback; no artwork, crop or dimension changed.
+`gaia-hero-moon-wide` 806 KB → 59 KB, `gaia-elevate-hero` 208 KB → 19 KB,
+`gaia-hero-moon` 233 KB → 96 KB.
+
+**Service worker.** The precache is now the ten URLs the page requests by that
+exact string, verified by capturing every same-origin request — 47 of 53 carry
+`?v=`. `ignoreSearch` was rejected as the fix: it would answer a request for
+the *new* `gaia-ui.js` with the *old* one, defeating the point of the version
+query.
+
+**A bug this audit missed.** The runtime cache had never worked.
+`response.clone()` ran inside the `caches.open()` callback — a microtask after
+the body was handed to the page — so it threw inside a floating promise and
+every asset silently failed to cache. The navigate branch had always done it
+correctly. **Offline now genuinely works:** every same-origin request resolves
+from cache, and the navigation fallback is present.
+
+`install` no longer uses `addAll`, whose atomicity meant a single 404 could
+block an entire release. Verified by installing with a deliberately missing
+asset: ten of eleven cached, worker active, app fine.
+
+**Daily energy.** One shared day-keyed fetch replacing two modules each asking
+on every render. The day comes from the device's own calendar, so it turns over
+at the viewer's midnight; a failed request clears the entry rather than becoming
+the answer until tomorrow; completing the ritual invalidates it.
+
+## Accessibility
+
+- Event poster link now carries the event name as its accessible name.
+- Moon SVG gradient ids are per-render, so two instances no longer collide.
+- Directory filter chips raised to a 44px target — height only, so padding,
+  type and radius are unchanged and the chips look the same.
+
+## Store
+
+Four- and five-figure prices now carry thousands separators. The formatter only
+touches a bare `$` followed by digits and passes everything else through
+byte-identical — `"$2500 USD"`, ranges, and non-numeric text like *"Price shown
+on Shopify"*. Ten cases tested.
+
+## Verified after the change
+
+Zero console errors, warnings or unhandled rejections. Zero horizontal overflow
+and zero genuinely unreachable controls at 375, 430, 768, 1024 and 1440. Zero
+images without `alt`, zero buttons without a name, zero links without a name,
+zero duplicate ids. Service worker install, update-from-previous-worker,
+offline coverage and install-survives-a-404 all tested locally before deploy
+and re-verified in production.
+
+## Still open, deliberately
+
+**Two findings from this audit are unfixed**, as scoped:
+
+- the 5,359-node DOM and eager rendering of the directory and store
+- the four practitioner photos that 404 upstream at `gaiapractitioners.com`
+  (the app degrades to initials avatars correctly)
+
+**Two new observations**, neither worth a change:
+
+- `vendor/leaflet/images/marker-icon.png` and two siblings 404 in production —
+  they were never shipped. Invisible: the directory map draws its own `div`
+  cluster markers, so nothing is broken and the service worker correctly
+  declines to cache a 404.
+- Three touch targets remain under 44px — Leaflet's own zoom buttons (30px) and
+  its attribution link. Third-party control internals, left alone rather than
+  restyled.

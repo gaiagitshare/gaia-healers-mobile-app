@@ -99,24 +99,25 @@
 
   const state = { dob: '', touched: false };
 
-  // What each of the three is actually about. Without this the cards differ
-  // only by a heading, and two that land on the same number look like the page
-  // repeated itself.
+  // What each number is drawn from, kept as a short suffix on the label rather
+  // than its own paragraph. Three cards each carrying five stacked lines made
+  // the panel taller than the phone it opens on.
   const KIND_NOTE = {
-    'Life Path': 'The whole birth date. The long arc.',
-    'Birth Day': 'The day of the month you arrived. A gift you lean on.',
-    'Personal Year': 'Where this particular year sits in a nine-year cycle.',
+    'Life Path': 'the whole date',
+    'Birth Day': 'the day you arrived',
+    'Personal Year': 'this year in a nine-year cycle',
   };
 
   function numberCard(kind, value, extra) {
     const m = meaning(value);
+    const meta = [extra, KIND_NOTE[kind] || ''].filter(Boolean).join(' · ');
     return '<article class="g-num__card">'
-      + '<div class="g-num__figure" aria-hidden="true">' + esc(value) + '</div>'
+      + '<span class="g-num__figure" aria-hidden="true">' + esc(value) + '</span>'
       + '<div class="g-num__body">'
-      + '<p class="g-num__kind">' + esc(kind) + '</p>'
-      + '<h4 class="g-num__theme">' + esc(m.theme) + '</h4>'
-      + '<p class="g-num__value">' + esc(label(value)) + (extra ? ' <span class="g-num__extra">' + esc(extra) + '</span>' : '') + '</p>'
-      + '<p class="g-num__kindnote">' + esc(KIND_NOTE[kind] || '') + '</p>'
+      + '<p class="g-num__head"><span class="g-num__kind">' + esc(kind) + '</span>'
+      + (MASTER.has(value) ? '<span class="g-num__master">master</span>' : '')
+      + '<span class="g-num__theme">' + esc(m.theme) + '</span></p>'
+      + (meta ? '<p class="g-num__meta">' + esc(meta) + '</p>' : '')
       + '<p class="g-num__practice">' + esc(m.practice) + '</p>'
       + '<p class="g-num__journal">' + esc(m.journal) + '</p>'
       + '</div></article>';
@@ -148,8 +149,8 @@
       ? '<p class="g-num__echo">Worth noticing: ' + esc(echoes.join(', and ')) + '.</p>' : '';
     return '<div class="g-num__cards">'
       + numberCard('Life Path', lp, '')
-      + numberCard('Birth Day', bd, dob.d !== bd ? 'from day ' + dob.d : '')
-      + numberCard('Personal Year', py.value, 'in ' + py.year)
+      + numberCard('Birth Day', bd, dob.d !== bd ? 'day ' + dob.d : '')
+      + numberCard('Personal Year', py.value, String(py.year))
       + '</div>'
       + echo
       + '<p class="g-num__foot">Your personal year turns over on your birthday, not in January.'

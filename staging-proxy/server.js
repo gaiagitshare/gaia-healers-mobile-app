@@ -6262,6 +6262,11 @@ async function ghlSalesForProducts(wanted) {
     orders.push({ id: o._id, status: String(o.status || '').toLowerCase(), amount: o.amount,
       created_at: o.createdAt, contact_id: o.contactId,
       email: String(o.contactEmail || '').toLowerCase(), name: o.contactName,
+      // The buyer's phone, which only this snapshot carries on an order. Without
+      // it map-reconcile creates an attendee with a blank phone: the webhook
+      // path fills one in at checkout, so nobody noticed until a product was
+      // mapped late and its buyer was reconciled from history alone.
+      phone: (o.contactSnapshot && o.contactSnapshot.phone) || null,
       items });
   }
 
@@ -6285,6 +6290,9 @@ async function ghlSalesForProducts(wanted) {
       amount_paid: iv.amountPaid, total: iv.total,
       created_at: iv.issueDate || iv.createdAt, contact_id: cd.id,
       email: String(cd.email || '').toLowerCase(), name: cd.name,
+      // phoneNo on an invoice, phone on an order -- same fact, two spellings,
+      // and the mirror already reads this one for the invoice path.
+      phone: cd.phoneNo || cd.phone || null,
       items });
   }
 

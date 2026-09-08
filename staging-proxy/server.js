@@ -6245,8 +6245,12 @@ async function ghlSalesForProducts(wanted) {
 
   const orders = [];
   for (const o of await page(`/payments/orders?altId=${LOC}&altType=location`, 'data')) {
-    let all = cache.orders[o._id];
-    if (!all) {
+    // The cache used to hold the item array alone. It now holds { items, phone },
+    // and a legacy array is read as "items known, phone never looked for".
+    const entry = cache.orders[o._id];
+    let all = Array.isArray(entry) ? entry : (entry && entry.items);
+    let phone = (entry && !Array.isArray(entry)) ? (entry.phone || null) : undefined;
+    const readDetail = async () => {
       const f = await get(`/payments/orders/${o._id}?altId=${LOC}&altType=location`);
       const body = (f && (f.order || f)) || {};
       all = (body.items || []).map((it) => ({
@@ -6254,19 +6258,23 @@ async function ghlSalesForProducts(wanted) {
         price_id: (it.price && it.price._id) || it.priceId || null,
         name: (it.product && it.product.name) || it.name || null,
         qty: Number(it.qty != null ? it.qty : (it.quantity != null ? it.quantity : 1)) }));
-      cache.orders[o._id] = all;
+      // The buyer's phone lives ONLY on the detail body: the list row does not
+      // carry contactSnapshot at all. Reading it off the list row was the first
+      // version of this fix, and it silently produced null every time.
+      phone = (body.contactSnapshot && body.contactSnapshot.phone) || null;
+      cache.orders[o._id] = { items: all, phone };
       if (++fetched % 100 === 0) saveItemCache(cache);
-    }
-    const items = all.filter((it) => wanted.has(String(it.product_id || '')));
+    };
+    if (!all) await readDetail();
+    const items = (all || []).filter((it) => wanted.has(String(it.product_id || '')));
     if (!items.length) continue;
+    // Only orders of a product we are actually replaying are worth a second
+    // call, so a cache written before phones existed heals just for those.
+    if (phone === undefined) await readDetail();
     orders.push({ id: o._id, status: String(o.status || '').toLowerCase(), amount: o.amount,
       created_at: o.createdAt, contact_id: o.contactId,
       email: String(o.contactEmail || '').toLowerCase(), name: o.contactName,
-      // The buyer's phone, which only this snapshot carries on an order. Without
-      // it map-reconcile creates an attendee with a blank phone: the webhook
-      // path fills one in at checkout, so nobody noticed until a product was
-      // mapped late and its buyer was reconciled from history alone.
-      phone: (o.contactSnapshot && o.contactSnapshot.phone) || null,
+      phone: phone || null,
       items });
   }
 

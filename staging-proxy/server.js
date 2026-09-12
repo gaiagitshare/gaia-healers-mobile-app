@@ -1055,6 +1055,20 @@ function academyOwnedIdsForRequest(req) {
 function academyCourseOwned(course, ids) {
   return ids.has(String(course.id)) || (Array.isArray(course.grantMatch) && course.grantMatch.some((g) => ids.has(String(g))));
 }
+// canAccessCourse(req, courseId) — the single answer for every protected
+// course surface: manifest sources, /api/academy/me, progress writes. The
+// course is found by manifest id or grantMatch; the answer comes from the
+// session's entitlement set (the same list My Access renders).
+function canAccessCourse(req, courseId) {
+  const { member, ids } = academyOwnedIdsForRequest(req);
+  const course = (loadAcademyManifest().courses || []).find((x) => String(x.id) === String(courseId)
+    || (Array.isArray(x.grantMatch) && x.grantMatch.some((g) => String(g) === String(courseId))));
+  if (!course) return { allowed: false, member, course: null, reason: 'unknown_course' };
+  // A preview course is playable by everyone but owned by no one; that
+  // distinction is why /api/academy/me lists ownership, not playability.
+  const allowed = course.preview === true || academyCourseOwned(course, ids);
+  return { allowed, member, course, reason: allowed ? null : (member ? 'not_owned' : 'auth_required') };
+}
 
 // GET /api/academy/manifest — the course structure for the in-app player.
 // Titles, sections and lesson names are public: a visitor may see what a
@@ -1097,7 +1111,10 @@ const ACADEMY_PROGRESS_FILE = path.join(process.cwd(), 'data', 'academy-progress
 function loadAcademyAccess() { try { return JSON.parse(fs.readFileSync(ACADEMY_ACCESS_FILE, 'utf8')); } catch (_) { return { byContact: {}, byEmail: {}, updatedAt: null }; } }
 function loadAcademyProgress() { try { return JSON.parse(fs.readFileSync(ACADEMY_PROGRESS_FILE, 'utf8')); } catch (_) { return { byContact: {}, updatedAt: null }; } }
 
-// Detect a lesson's video provider + playable source from GHL's fields.
+// A lesson's video provider + playable source, as the extractor reported it.
+// The URL is the one GHL supplied for that upload; nothing is rebuilt here.
+// (This used to construct …/<videoId>_5300k.mp4 whenever a videoId was
+// present — 79 of 87 native lessons pointed at files that did not exist.)
 function academyLessonSource(lesson) {
   if (lesson.provider === 'youtube' && lesson.src) return { provider: 'youtube', src: String(lesson.src) };
   if (lesson.provider === 'vimeo' && lesson.src) return { provider: 'vimeo', src: String(lesson.src) };
@@ -1107,14 +1124,10 @@ function academyLessonSource(lesson) {
   const yt = raw.match(/(?:youtube\.com\/embed\/|youtu\.be\/|[?&]v=)([\w-]{11})/);
   if (yt) return { provider: 'youtube', src: yt[1] };
   if (/^[\w-]{11}$/.test(raw) && lesson.provider === 'youtube') return { provider: 'youtube', src: raw };
-  // GHL-native: build the PUBLIC mp4 URL from the video id (CORS-open CDN).
-  const vid = String(lesson.videoId || lesson.mediaId || lesson.embedMediaId || '').trim();
-  const loc = String(process.env.GHL_LOCATION_ID || '').trim();
-  if (vid && loc) {
-    const bitrate = String(lesson.bitrate || '5300k');
-    return { provider: 'mp4', src: 'https://cdn.courses.apisystem.tech/memberships/' + loc + '/videos/' + vid + '_' + bitrate + '.mp4' };
+  if (/^https?:\/\//i.test(raw)) return { provider: /\.m3u8(\?|$)/i.test(raw) ? 'hls' : 'mp4', src: raw };
+  if (lesson.videoId || lesson.mediaId || lesson.embedMediaId) {
+    console.error('[Gaia Academy] LESSON_SOURCE_MISSING', { lessonId: lesson.postId || lesson.id || null, lesson: String(lesson.title || '').slice(0, 80), reason: 'native video without a GHL-supplied url' });
   }
-  if (raw) return { provider: /\.m3u8(\?|$)/i.test(raw) ? 'hls' : 'mp4', src: raw };
   return { provider: 'none', src: '' };
 }
 
@@ -1150,9 +1163,17 @@ async function academySync(req, res, origin) {
     const modules = Array.isArray(c.modules) ? c.modules : [{ title: 'Lessons', lessons: c.lessons || [] }];
     const sections = modules.map((m) => ({
       title: String(m.title || 'Lessons'),
+      id: String(m.id || ''),
       lessons: (m.lessons || []).map((l) => {
         const vs = academyLessonSource(l);
-        return { id: String(l.postId || l.id || ''), title: String(l.title || 'Lesson'), provider: vs.provider, src: vs.src, durationSec: Number(l.durationSec || l.duration || 0) || 0 };
+        const out = { id: String(l.postId || l.id || ''), title: String(l.title || 'Lesson'), provider: vs.provider, src: vs.src, durationSec: Number(l.durationSec || l.duration || 0) || 0 };
+        // Where the file lives and whether the sync could reach it. The player
+        // turns a failed check into an "unavailable" notice, never a blank stage.
+        if (l.sourceKind) out.sourceKind = String(l.sourceKind);
+        if (typeof l.sourceValid === 'boolean') out.sourceValid = l.sourceValid;
+        if (l.sourceCheckedAt) out.sourceCheckedAt = String(l.sourceCheckedAt);
+        if (l.sourceMissing === true) out.sourceMissing = true;
+        return out;
       }).filter((l) => l.id),
     }));
     return { id: String(c.productId || c.id || ''), title: String(c.title || 'Course'), poster: String(c.poster || c.image || ''), grantMatch: [String(c.productId || ''), String(c.title || '')].filter(Boolean), sections };
@@ -1320,6 +1341,36 @@ function loadAcademyEmailToContact() {
 // unlocked course's NAME to a manifest course title/grantMatch. Cached until the
 // ledger or the manifest file changes.
 let _ledgerAcademyIndex = null;
+// After a webhook grant or revoke has changed record.courses[], bring the
+// persisted course_access entitlements — the list My Access, the resolver and
+// (now) the player all read — into step. Derived rows (source ghl_offer)
+// follow the course rows: a course that is gone marks its entitlement
+// revoked (kept, with the date, never deleted); a course that is back makes
+// it active again. Rows an admin created by hand (any other source) are
+// theirs and are not touched. Before this, a revoke removed the course row
+// and left the entitlement active: the player locked, My Access still said
+// "Active", and 1,194 production records were shaped exactly like that.
+function syncCourseEntitlementsFromCourses(record, now) {
+  if (!record || typeof record !== 'object') return false;
+  const courses = Array.isArray(record.courses) ? record.courses : [];
+  const ents = Array.isArray(record.entitlements) ? record.entitlements : [];
+  const liveKeys = new Set();
+  for (const c of courses) {
+    if (c && c.state && c.state !== 'unlocked') continue;
+    for (const v of [c && c.id, c && c.name]) { const k = acadNorm(v); if (k) liveKeys.add(k); }
+  }
+  let changed = false;
+  for (const e of ents) {
+    if (!e || e.type !== 'course_access') continue;
+    if (e.source && e.source !== 'ghl_offer') continue;
+    const keys = [acadNorm(e.key), acadNorm(e.value && e.value.name)].filter(Boolean);
+    const live = keys.some((k) => liveKeys.has(k));
+    if (!live && e.status === 'active') { e.status = 'revoked'; e.revoked_at = now; e.observed_at = now; changed = true; }
+    else if (live && e.status === 'revoked') { e.status = 'active'; delete e.revoked_at; e.observed_at = now; changed = true; }
+  }
+  return changed;
+}
+
 function loadLedgerAcademyIndex() {
   let lm = 0, mm = 0;
   try { lm = fs.statSync(MEMBER_ENTITLEMENTS_FILE).mtimeMs; } catch (e) {}
@@ -1336,12 +1387,19 @@ function loadLedgerAcademyIndex() {
     });
     const ledger = loadMemberEntitlements();
     const contacts = (ledger && ledger.contacts) || {};
+    // One authorization source. This used to read record.courses[] while My
+    // Access read record.entitlements[] — two lists, two answers (an admin grant
+    // showed in one and not the other). The player now reads the same migrated
+    // entitlement list, active rows only, that the resolver gives My Access.
     for (const cid of Object.keys(contacts)) {
-      const courses = (contacts[cid] && contacts[cid].courses) || [];
+      let record = contacts[cid];
+      try { record = migrateContactRecord(record).record; } catch (_) { /* use as stored */ }
+      const ents = Array.isArray(record && record.entitlements) ? record.entitlements : [];
       const set = new Set();
-      for (const co of courses) {
-        if (co && co.state && co.state !== 'unlocked') continue;
-        const id = titleToId[acadNorm(co && co.name)] || titleToId[acadNorm(co && co.id)];
+      for (const e of ents) {
+        if (!e || e.type !== 'course_access' || e.status !== 'active') continue;
+        if (e.expires_at && Date.parse(e.expires_at) < Date.now()) continue;
+        const id = titleToId[acadNorm(e.value && e.value.name)] || titleToId[acadNorm(e.key)];
         if (id) set.add(id);
       }
       if (set.size) byContact[cid] = [...set];
@@ -1378,14 +1436,16 @@ async function academyProgress(req, res, origin) {
   let body; try { body = await readJsonBody(req, 64 * 1024); } catch (e) { sendJson(res, 400, { ok: false, error: 'bad_json' }, origin); return; }
   // Whose progress this is comes from the session, not the body: a body
   // could name anyone. And progress is only kept for a course the member owns.
-  const { member, ids } = academyOwnedIdsForRequest(req);
-  if (!member) { sendJson(res, 401, { ok: false, error: 'Sign in required.', reason: 'auth_required' }, origin); return; }
-  const contactId = member.contactId;
   const courseId = String(body.courseId || '').trim();
   const lessonId = String(body.lessonId || '').trim();
+  const access = canAccessCourse(req, courseId);
+  if (!access.member) { sendJson(res, 401, { ok: false, error: 'Sign in required.', reason: 'auth_required' }, origin); return; }
+  const contactId = access.member.contactId;
   if (!contactId || !courseId || !lessonId) { sendJson(res, 422, { ok: false, error: 'need a resolved contact + courseId + lessonId' }, origin); return; }
-  const ownedCourse = (loadAcademyManifest().courses || []).find((x) => (String(x.id) === courseId || (Array.isArray(x.grantMatch) && x.grantMatch.some((g) => String(g) === courseId))) && (x.preview === true || academyCourseOwned(x, ids)));
-  if (!ownedCourse) { sendJson(res, 403, { ok: false, error: 'This course is not in your access.', reason: 'not_owned' }, origin); return; }
+  if (!access.allowed) {
+    console.warn('[Gaia Academy] ACCESS_DENIED', { surface: 'progress', contactId, courseId, reason: access.reason });
+    sendJson(res, 403, { ok: false, error: 'This course is not in your access.', reason: 'not_owned' }, origin); return;
+  }
   const pos = Math.max(0, Math.floor(Number(body.positionSec) || 0));
   const dur = Math.max(0, Math.floor(Number(body.durationSec) || 0));
   const done = !!body.done || (dur > 0 && pos >= dur - 15);
@@ -1412,7 +1472,9 @@ async function academyProgress(req, res, origin) {
 // Only a lesson that exists in the manifest is recorded, only its ids and the
 // error code are kept, and one client cannot flood it.
 const ACADEMY_VIDEO_REPORTS_FILE = path.join(process.cwd(), 'data', 'academy-video-reports.json');
-const ACADEMY_VIDEO_ERROR_CODES = new Set(['2', '5', '100', '101', '150']);
+// YouTube IFrame API codes, MediaError codes from a native <video>, the
+// player's own stall timeout, and the two sync-time verdicts.
+const ACADEMY_VIDEO_ERROR_CODES = new Set(['2', '5', '100', '101', '150', 'media_0', 'media_1', 'media_2', 'media_3', 'media_4', 'media_timeout', 'source_invalid', 'source_missing']);
 const ACADEMY_VIDEO_REPORT_WINDOW_MS = 60 * 1000;
 const ACADEMY_VIDEO_REPORT_MAX_PER_WINDOW = 20;
 const _academyVideoReportHits = new Map();
@@ -1460,7 +1522,10 @@ async function academyVideoUnavailable(req, res, origin) {
   };
   store.updatedAt = at;
   writeJsonAtomic(ACADEMY_VIDEO_REPORTS_FILE, store);
-  if (!prev) console.error('[Gaia Academy] lesson video unavailable', { course: course.title, lesson: lesson.title, provider: lesson.provider, src: lesson.src, code });
+  if (!prev) {
+    const taxonomy = /^source_/.test(code) ? 'VIDEO_SOURCE_INVALID' : 'VIDEO_LOAD_FAILED';
+    console.error('[Gaia Academy] ' + taxonomy, { course: course.title, lessonId: lesson.id, lesson: lesson.title, provider: lesson.provider, sourceKind: lesson.sourceKind || null, code, at });
+  }
   sendJson(res, 200, { ok: true }, origin);
 }
 
@@ -2046,7 +2111,7 @@ async function memberAccessWebhook(req, res, origin) {
           });
           try { saveMemberEntitlements(store); } catch (_) {}
           noteWebhookEvent('member_access', 'unknown_resource', { reason: String(reason || 'unknown_resource') });
-          console.warn('[Gaia Entitlements] course grant rejected', { contactId, reason, id: resource.rawId || resource.id, name: resource.name, alreadyHeld: index >= 0 });
+          console.warn('[Gaia Entitlements] COURSE_UNRESOLVED ACCESS_GRANT_FAILED course grant rejected', { contactId, reason, id: resource.rawId || resource.id, name: resource.name, alreadyHeld: index >= 0 });
           sendJson(res, 202, { ok: true, applied: false, rejected: true, reason, contactId, requested: { id: resource.rawId || resource.id || null, name: resource.name || null } }, origin);
           return;
         }
@@ -2062,6 +2127,16 @@ async function memberAccessWebhook(req, res, origin) {
         ...(resolved ? { resolutionMethod: resolved.method } : {}),
         updatedAt: now,
       };
+      // Whatever stable GHL identifiers rode along with the event are kept on
+      // the row as-is, so the next phase can match on ids instead of titles.
+      // Nothing here decides access; the resolved course above did that.
+      const sourceIds = {
+        offerId: String(nestedValue(body, 'offerId', 'offer_id') || '').trim() || null,
+        productId: String(nestedValue(body, 'productId', 'product_id') || '').trim() || null,
+        courseId: String(nestedValue(body, 'courseId', 'course_id') || '').trim() || null,
+        offerTitle: String(nestedValue(body, 'offerTitle', 'offer_title', 'offerName', 'offer_name') || '').trim() || null,
+      };
+      if (Object.values(sourceIds).some(Boolean)) item.sourceIds = { ...((prev && prev.sourceIds) || {}), ...Object.fromEntries(Object.entries(sourceIds).filter(([, v]) => v)) };
       if (index >= 0) list[index] = { ...list[index], ...item };
       else list.push(item);
     } else if (index >= 0) {
@@ -2073,7 +2148,7 @@ async function memberAccessWebhook(req, res, origin) {
       record.unmatchedRevokes = Array.isArray(record.unmatchedRevokes) ? record.unmatchedRevokes : [];
       record.unmatchedRevokes.push({ at: now, id: resource.rawId || resource.id || null, name: resource.name || null, event: event.raw || null });
       recordCourseGrantRejection(store, contactId, { at: now, action: 'revoke', event: event.raw || null, id: resource.rawId || resource.id || null, name: resource.name || null, reason: 'INVALID_REVOKE' });
-      console.log('[Gaia Entitlements] revoke did not match any stored course', { contactId, id: resource.rawId || resource.id, name: resource.name });
+      console.warn('[Gaia Entitlements] ACCESS_REVOCATION_FAILED revoke did not match any stored course', { contactId, id: resource.rawId || resource.id, name: resource.name });
     }
   }
 
@@ -2088,6 +2163,7 @@ async function memberAccessWebhook(req, res, origin) {
     appliedAt: now,
   });
   if (decision.lowConfidence) record.order[key].lowConfidence = true;
+  if (event.kind === 'course') syncCourseEntitlementsFromCourses(record, now);
   record.updatedAt = now;
   store.contacts[contactId] = record;
   if (webhookId) store.processedWebhookIds.push(webhookId);
@@ -2096,7 +2172,7 @@ async function memberAccessWebhook(req, res, origin) {
     // Everything about the event was valid and the write failed. That is its
     // own failure class: not auth, not mapping, not identity.
     noteWebhookEvent('member_access', 'rejected_other', { reason: 'persistence_failed' });
-    console.error('[Gaia Entitlements] save failed', { error: err.message.split('\n')[0] });
+    console.error('[Gaia Entitlements] ' + (event.grant ? 'ACCESS_GRANT_FAILED' : 'ACCESS_REVOCATION_FAILED') + ' save failed', { contactId, error: err.message.split('\n')[0] });
     sendJson(res, 500, { ok: false, error: 'Unable to persist entitlement update.' }, origin);
     return;
   }

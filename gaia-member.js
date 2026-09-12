@@ -922,7 +922,8 @@ body.gaia-booking-open{overflow:hidden;}
     const email = p.email || ''; const contactId = p.contactId || p.id || '';
     if (!state.authed || (!email && !contactId)) { state.academyOwned = []; return state.academyOwned; }
     try {
-      const r = await fetch(proxyBase() + '/api/academy/me?email=' + encodeURIComponent(email) + '&contactId=' + encodeURIComponent(contactId), { headers: { Accept: 'application/json' } });
+      // Identity comes from the session cookie; the server no longer reads it off the URL.
+      const r = await fetch(proxyBase() + '/api/academy/me', { headers: { Accept: 'application/json' }, credentials: 'include' });
       const data = await r.json();
       state.academyOwned = (data && data.ok && Array.isArray(data.courses)) ? data.courses : [];
       state.academyProgress = (data && data.progress) || {};

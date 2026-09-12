@@ -1594,6 +1594,9 @@ body.gaia-v2 .g-super-home .g-super-hero{border:1px solid var(--g-line);
 .gaia-acad__unavail .ph{font-size:40px;color:var(--g-text-muted)}
 .gaia-acad__unavail-title{margin:0;font-size:17px;font-weight:600}
 .gaia-acad__unavail-body{margin:0;max-width:34em;font-size:14px;line-height:1.45;color:var(--g-text-muted)}
+.gaia-acad__unavail-actions{margin:8px 0 0}
+.gaia-acad__lesson.is-locked{opacity:.72}
+.gaia-acad__lesson.is-locked .gaia-acad__play{color:var(--g-text-muted)}
 /* Viewport-fill fallback for the fullscreen button where iOS Safari can
    fullscreen neither an iframe nor a div (YouTube/Vimeo lessons): the same
    player stays mounted — no reload, no playback restart — and the lesson

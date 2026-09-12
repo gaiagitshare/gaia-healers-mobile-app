@@ -1035,9 +1035,54 @@ function loadAcademyManifest() {
   } catch (_) { /* fall through to the built-in default */ }
   return DEFAULT_ACADEMY_MANIFEST;
 }
-// GET /api/academy/manifest — public course structure for the in-app player.
-async function academyManifest(req, res, origin) {
+// Which manifest courses this request may play. The rule is the one My Access
+// already lives by: the entitlement ledger (GHL's access-granted / removed
+// workflows, mirrored) plus the academy access list, keyed by the SESSION —
+// never by an email or contact id the caller typed into the URL.
+function academyOwnedIdsForRequest(req) {
+  const sm = sessionMemberContext(req);
+  if (!sm) return { member: null, ids: new Set() };
+  const email = String(sm.email || '').trim().toLowerCase();
+  let contactId = String(sm.contactId || sm.memberId || '').trim();
+  if (!contactId && email) { const map = loadAcademyEmailToContact(); contactId = map[email] || ''; }
+  const ids = new Set();
+  const access = loadAcademyAccess();
+  if (contactId && Array.isArray(access.byContact?.[contactId])) access.byContact[contactId].forEach((x) => ids.add(x));
+  if (email && Array.isArray(access.byEmail?.[email])) access.byEmail[email].forEach((x) => ids.add(x));
+  const ledgerIdx = loadLedgerAcademyIndex();
+  if (contactId && Array.isArray(ledgerIdx[contactId])) ledgerIdx[contactId].forEach((x) => ids.add(x));
+  return { member: { email, contactId }, ids };
+}
+function academyCourseOwned(course, ids) {
+  return ids.has(String(course.id)) || (Array.isArray(course.grantMatch) && course.grantMatch.some((g) => ids.has(String(g))));
+}
+
+// GET /api/academy/manifest — the course structure for the in-app player.
+// Titles, sections and lesson names are public: a visitor may see what a
+// course contains. The video source is not. A lesson's `src` is served only
+// when the session owns the course (or the course is a preview / the lesson
+// is free); otherwise the lesson is `locked` with an empty src, and the
+// course is marked `locked`. Before this, the whole manifest — every CDN mp4
+// of every certification — went to anyone who asked.
+function manifestForRequest(req) {
   const data = loadAcademyManifest();
+  const { ids } = academyOwnedIdsForRequest(req);
+  const courses = (data.courses || []).map((course) => {
+    const owned = course.preview === true || academyCourseOwned(course, ids);
+    if (owned) return { ...course, locked: false };
+    return {
+      ...course,
+      locked: true,
+      sections: (course.sections || []).map((section) => ({
+        ...section,
+        lessons: (section.lessons || []).map((lesson) => (lesson.free ? lesson : { ...lesson, src: '', locked: true })),
+      })),
+    };
+  });
+  return { ...data, courses };
+}
+async function academyManifest(req, res, origin) {
+  const data = manifestForRequest(req);
   sendJson(res, 200, {
     ok: true,
     courses: data.courses || [],
@@ -1047,6 +1092,8 @@ async function academyManifest(req, res, origin) {
 }
 
 const ACADEMY_ACCESS_FILE = path.join(process.cwd(), 'data', 'academy-access.json');
+const ACADEMY_COURSE_STATS_FILE = path.join(process.cwd(), 'data', 'academy-course-stats.json');
+function loadAcademyCourseStats() { try { return JSON.parse(fs.readFileSync(ACADEMY_COURSE_STATS_FILE, 'utf8')); } catch (_) { return { updatedAt: null, courses: {} }; } }
 const ACADEMY_PROGRESS_FILE = path.join(process.cwd(), 'data', 'academy-progress.json');
 function loadAcademyAccess() { try { return JSON.parse(fs.readFileSync(ACADEMY_ACCESS_FILE, 'utf8')); } catch (_) { return { byContact: {}, byEmail: {}, updatedAt: null }; } }
 function loadAcademyProgress() { try { return JSON.parse(fs.readFileSync(ACADEMY_PROGRESS_FILE, 'utf8')); } catch (_) { return { byContact: {}, updatedAt: null }; } }
@@ -1086,6 +1133,18 @@ async function academySync(req, res, origin) {
   const now = new Date().toISOString();
   const catalog = Array.isArray(body.catalog) ? body.catalog : [];
   const members = Array.isArray(body.members) ? body.members : [];
+  const courseStats = Array.isArray(body.courseStats) ? body.courseStats : [];
+
+  // --- GHL's member count per course (drift signal for the access webhook) ---
+  if (courseStats.length) {
+    const stats = { updatedAt: now, courses: {} };
+    for (const c of courseStats) {
+      const id = String(c.productId || c.id || '').trim();
+      if (!id || !Number.isFinite(Number(c.membersCount))) continue;
+      stats.courses[id] = { title: String(c.title || ''), membersCount: Number(c.membersCount) };
+    }
+    writeJsonAtomic(ACADEMY_COURSE_STATS_FILE, stats);
+  }
 
   // --- manifest (catalog -> player shape) ---
   const courses = catalog.map((c) => {
@@ -1274,21 +1333,18 @@ function loadLedgerAcademyIndex() {
 // Access = live webhook grants (academy-access.json) UNION the authoritative GHL
 // entitlement ledger (member-entitlements.json), so a member plays exactly what
 // GHL grants them, for every course whose videos are in the synced manifest.
-async function academyMe(req, res, origin, url) {
-  const email = String(url.searchParams.get('email') || '').trim().toLowerCase();
-  let contactId = String(url.searchParams.get('contactId') || '').trim();
-  if (!contactId && email) { const map = loadAcademyEmailToContact(); contactId = map[email] || ''; }
+// GET /api/academy/me — the signed-in member's own courses and progress. The
+// identity is the session's; ?email= / ?contactId= used to be honoured here,
+// which let anyone read any member's course list and lesson progress.
+async function academyMe(req, res, origin) {
+  const { member, ids } = academyOwnedIdsForRequest(req);
+  if (!member) { sendJson(res, 200, { ok: true, authenticated: false, courses: [], progress: {}, count: 0, updatedAt: null }, origin); return; }
   const access = loadAcademyAccess();
   const progress = loadAcademyProgress();
-  const ids = new Set();
-  if (contactId && Array.isArray(access.byContact[contactId])) access.byContact[contactId].forEach((x) => ids.add(x));
-  if (email && Array.isArray(access.byEmail[email])) access.byEmail[email].forEach((x) => ids.add(x));
-  const ledgerIdx = loadLedgerAcademyIndex();
-  if (contactId && Array.isArray(ledgerIdx[contactId])) ledgerIdx[contactId].forEach((x) => ids.add(x));
   const manifest = loadAcademyManifest();
-  const owned = (manifest.courses || []).filter((c) => ids.has(c.id) || (Array.isArray(c.grantMatch) && c.grantMatch.some((g) => ids.has(g))));
-  const prog = (contactId && progress.byContact && progress.byContact[contactId]) || {};
-  sendJson(res, 200, { ok: true, courses: owned, progress: prog, count: owned.length, updatedAt: access.updatedAt }, origin);
+  const owned = (manifest.courses || []).filter((c) => academyCourseOwned(c, ids));
+  const prog = (member.contactId && progress.byContact && progress.byContact[member.contactId]) || {};
+  sendJson(res, 200, { ok: true, authenticated: true, courses: owned, progress: prog, count: owned.length, updatedAt: access.updatedAt }, origin);
 }
 
 // POST /api/academy/progress — the in-app player reports a lesson's position +
@@ -1298,12 +1354,16 @@ async function academyMe(req, res, origin, url) {
 // is the source of truth for in-app progress (GHL's portal progress is separate).
 async function academyProgress(req, res, origin) {
   let body; try { body = await readJsonBody(req, 64 * 1024); } catch (e) { sendJson(res, 400, { ok: false, error: 'bad_json' }, origin); return; }
-  const email = String(body.email || '').trim().toLowerCase();
-  let contactId = String(body.contactId || '').trim();
-  if (!contactId && email) { const map = loadAcademyEmailToContact(); contactId = map[email] || ''; }
+  // Whose progress this is comes from the session, not the body: a body
+  // could name anyone. And progress is only kept for a course the member owns.
+  const { member, ids } = academyOwnedIdsForRequest(req);
+  if (!member) { sendJson(res, 401, { ok: false, error: 'Sign in required.', reason: 'auth_required' }, origin); return; }
+  const contactId = member.contactId;
   const courseId = String(body.courseId || '').trim();
   const lessonId = String(body.lessonId || '').trim();
-  if (!contactId || !courseId || !lessonId) { sendJson(res, 422, { ok: false, error: 'need contactId (or known email) + courseId + lessonId' }, origin); return; }
+  if (!contactId || !courseId || !lessonId) { sendJson(res, 422, { ok: false, error: 'need a resolved contact + courseId + lessonId' }, origin); return; }
+  const ownedCourse = (loadAcademyManifest().courses || []).find((x) => (String(x.id) === courseId || (Array.isArray(x.grantMatch) && x.grantMatch.some((g) => String(g) === courseId))) && (x.preview === true || academyCourseOwned(x, ids)));
+  if (!ownedCourse) { sendJson(res, 403, { ok: false, error: 'This course is not in your access.', reason: 'not_owned' }, origin); return; }
   const pos = Math.max(0, Math.floor(Number(body.positionSec) || 0));
   const dur = Math.max(0, Math.floor(Number(body.durationSec) || 0));
   const done = !!body.done || (dur > 0 && pos >= dur - 15);
@@ -6720,7 +6780,7 @@ const server = http.createServer(async (req, res) => {
         loadLedger: loadMemberEntitlements, saveLedger: saveMemberEntitlements,
         loadStoreCatalog, runStoreSync,
         sendAlertEmail,
-        loadAcademyVideoReports, loadAcademyManifest,
+        loadAcademyVideoReports, loadAcademyManifest, loadAcademyCourseStats,
       });
       return;
     }

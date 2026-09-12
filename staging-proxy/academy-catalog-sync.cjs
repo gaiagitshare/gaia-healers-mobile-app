@@ -82,9 +82,13 @@ function lessonSource(l) {
 (async () => {
   const token = await login();
   const libR = await request('GET', `${CP}/courses/learners/locations/${LOC}/courses/library?page=1&limit=500`, H(token));
-  const courses = asArray(libR.json).map((c) => ({ id: c.id || c.productId || c._id, title: (c.title || c.name || '').trim() })).filter((c) => c.id);
+  const courses = asArray(libR.json).map((c) => ({ id: c.id || c.productId || c._id, title: (c.title || c.name || '').trim(), membersCount: Number(c.membersCount) })).filter((c) => c.id);
   if (!courses.length) fail('no courses (status ' + libR.status + '): ' + String(libR.raw).slice(0, 160));
   const catalog = [];
+  // GHL's own member count per course rides along. It is the only live number
+  // GHL exposes about WHO holds a course, so the proxy compares it with the
+  // grants it mirrors — the way to notice when the access webhook goes quiet.
+  const courseStats = [];
   for (const c of courses) {
     const mR = await request('GET', `${CP}/courses/learners/locations/${LOC}/courses/${c.id}/modules`, H(token, c.id));
     const modules = asArray(mR.json);
@@ -95,8 +99,9 @@ function lessonSource(l) {
     }
     lessons.sort((a, b) => a.seq - b.seq); lessons.forEach((o) => delete o.seq);
     if (lessons.length) catalog.push({ productId: c.id, title: c.title, modules: [{ title: 'Lessons', lessons }] });
+    if (Number.isFinite(c.membersCount)) courseStats.push({ productId: c.id, title: c.title, membersCount: c.membersCount });
     console.log('[academy-sync] ' + c.title + ' -> ' + lessons.length + ' videos');
   }
-  const post = await request('POST', `http://127.0.0.1:8787/api/academy/sync?secret=${encodeURIComponent(SECRET)}`, { 'content-type': 'application/json' }, JSON.stringify({ catalog, members: [] }));
+  const post = await request('POST', `http://127.0.0.1:8787/api/academy/sync?secret=${encodeURIComponent(SECRET)}`, { 'content-type': 'application/json' }, JSON.stringify({ catalog, courseStats, members: [] }));
   console.log('[academy-sync] pushed ' + catalog.length + ' courses ->', post.json || post.status);
 })();

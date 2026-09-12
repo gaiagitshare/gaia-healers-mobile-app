@@ -43,7 +43,9 @@
   function loadManifest() {
     if (manifest) return Promise.resolve(manifest);
     if (manifestPromise) return manifestPromise;
-    manifestPromise = fetch(proxyBase() + '/api/academy/manifest', { headers: { Accept: 'application/json' } })
+    // With the cookie: the server serves a lesson's video only to a session
+    // that owns the course, so this must be the member's request, not a bare one.
+    manifestPromise = fetch(proxyBase() + '/api/academy/manifest', { headers: { Accept: 'application/json' }, credentials: 'include' })
       .then(function (r) { return r.json(); })
       .then(function (d) { manifest = (d && d.ok) ? d : { courses: [] }; return manifest; })
       .catch(function () { manifest = { courses: [] }; return manifest; });
@@ -131,7 +133,13 @@
    * Playback happens in-app, so the server is the source of truth for progress;
    * localStorage stays as an instant/offline mirror. */
   var member = { email: '', contactId: '', progress: {} };
-  function setMember(m) { member = { email: (m && m.email) || '', contactId: (m && m.contactId) || '', progress: (m && m.progress) || {} }; }
+  function setMember(m) {
+    member = { email: (m && m.email) || '', contactId: (m && m.contactId) || '', progress: (m && m.progress) || {} };
+    // The manifest is per-session (locked lessons carry no video). It was
+    // fetched at script load, likely before the cookie was checked; fetch it
+    // again now that the app knows who this is.
+    manifest = null; manifestPromise = null; loadManifest();
+  }
   function serverProg(cid) { return (member.progress && member.progress[cid]) || null; }
   function serverPos(cid, lid) { var p = serverProg(cid); return (p && p.pos && Number(p.pos[lid])) || 0; }
   function serverDone(cid, lid) { var p = serverProg(cid); return !!(p && Array.isArray(p.completed) && p.completed.indexOf(lid) >= 0); }
@@ -140,7 +148,7 @@
     if (!member.email && !member.contactId) return;
     try {
       fetch(proxyBase() + '/api/academy/progress', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' }, keepalive: true,
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, keepalive: true, credentials: 'include',
         body: JSON.stringify({ email: member.email, contactId: member.contactId, courseId: cid, lessonId: lid, positionSec: Math.floor(pos || 0), durationSec: Math.floor(dur || 0), done: !!done }),
       }).then(function (r) { return r.json(); }).then(function (d) {
         if (d && d.ok) { var p = member.progress[cid] = member.progress[cid] || { pct: 0, completed: [], pos: {} }; p.pct = d.pct; p.completed = d.completed || p.completed; }
@@ -177,8 +185,9 @@
     var listHtml = (course.sections || []).map(function (sec) {
       return '<div class="gaia-acad__sec"><p class="gaia-acad__seclabel">' + esc(sec.title || 'Lessons') + '</p>'
         + (sec.lessons || []).map(function (l) {
-          return '<button type="button" class="gaia-acad__lesson" data-lesson="' + esc(l.id) + '">'
-            + '<span class="gaia-acad__play"><i class="ph ph-play" aria-hidden="true"></i></span>'
+          var locked = !!(l.locked || !l.src);
+          return '<button type="button" class="gaia-acad__lesson' + (locked ? ' is-locked' : '') + '" data-lesson="' + esc(l.id) + '"' + (locked ? ' aria-label="' + esc(l.title) + ' (locked)"' : '') + '>'
+            + '<span class="gaia-acad__play"><i class="ph ' + (locked ? 'ph-lock-simple' : 'ph-play') + '" aria-hidden="true"></i></span>'
             + '<span class="gaia-acad__ltext"><strong>' + esc(l.title) + '</strong><small>' + esc(fmtDur(l.durationSec)) + '</small></span>'
             + '<span class="gaia-acad__lcheck" data-check="' + esc(l.id) + '"></span></button>';
         }).join('')
@@ -226,6 +235,7 @@
         b.classList.toggle('is-active', b.dataset.lesson === l.id);
       });
       if (now) now.textContent = l.title;
+      if (l.locked || !l.src) { showLocked(stage, course); return; }
       var prov = providerOf(l);
       if (prov === 'youtube') {
         var id = ytId(l.src);
@@ -344,6 +354,17 @@
       + '<p class="gaia-acad__unavail-title">This video can’t play right now</p>'
       + '<p class="gaia-acad__unavail-body">' + esc(UNAVAILABLE_REASON[code] || 'The video host refused to play it.')
       + ' The organizers have been notified; the other lessons in this course still play.</p></div>';
+  }
+  // A lesson the server sent without a video: the session does not own the
+  // course. Say so, and point at the way in — never at the video.
+  function showLocked(stage, course) {
+    stage.innerHTML = '<div class="gaia-acad__unavail gaia-acad__locked" role="status">'
+      + '<i class="ph ph-lock-simple" aria-hidden="true"></i>'
+      + '<p class="gaia-acad__unavail-title">This course isn’t in your access yet</p>'
+      + '<p class="gaia-acad__unavail-body">' + esc(course.title || 'This course') + ' unlocks with the matching Gaia Healers course or membership. '
+      + 'Once it’s yours in GHL, the lessons play here.</p>'
+      + '<p class="gaia-acad__unavail-actions"><a class="g-btn g-btn--primary g-btn--sm" href="home.html?view=store&tab=membership">See membership plans &rarr;</a></p>'
+      + '</div>';
   }
   function reportUnavailable(course, lesson, code) {
     try {

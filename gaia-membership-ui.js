@@ -29,7 +29,9 @@
     .filter((item) => item.type === type && item.status === 'active');
   const allOf = (entitlements, type) => (entitlements || []).filter((item) => item.type === type);
 
-  const plural = (count, word) => `${count} ${word}${count === 1 ? '' : 's'}`;
+  // Nouns pluralise; adjectives ("available", "owned", "active") do not — the
+  // member's screen read "10 availables" before this told them apart.
+  const plural = (count, word, { adjective = false } = {}) => `${count} ${word}${adjective || count === 1 ? '' : 's'}`;
 
   /* ── status vocabulary ──────────────────────────────────────────────────
    * Status is always written out as words. Colour alone never carries it.   */
@@ -65,17 +67,31 @@
     lead_allocation: 6, discount: 7, device_owner: 8, device_software: 9,
     event_ticket: 10, promo_membership: 11,
   };
+  /* Where each access type lives in the app — the "Open … →" link at the foot
+   * of an expanded panel. Only types with a real section get one. */
+  const SECTION_LINKS = {
+    course_access: 'view=academy',
+    community_access: 'view=community',
+    event_ticket: 'view=events',
+    device_owner: 'view=profile',
+    device_software: 'view=profile',
+    directory_level: 'view=directory',
+    lead_allocation: 'view=directory',
+    discount: 'view=store',
+    promo_membership: 'view=store&tab=membership',
+  };
 
   const RENDERERS = {
     course_access: {
-      summary: (items) => plural(activeCount(items), 'available'),
+      summary: (items) => plural(activeCount(items), 'available', { adjective: true }),
       detail: (items) => list(items.map((item) => row(
         item.value?.name || item.key,
         ENTITLEMENT_STATUS_TEXT[item.status] || item.status,
         item.status,
-        item.expires_at ? `Until ${formatDate(item.expires_at)}` : 'Lifetime access',
+        [item.expires_at ? `Until ${formatDate(item.expires_at)}` : 'Lifetime access', destinationHint(item)].filter(Boolean).join(' · '),
         null,
         item.status === 'active' ? item.value?.openUrl : '',
+        item.status === 'active' ? item.value?.academyCourseId : '',
       ))),
     },
     community_access: {
@@ -143,7 +159,7 @@
       ))),
     },
     device_owner: {
-      summary: (items) => plural(activeCount(items), 'owned'),
+      summary: (items) => plural(activeCount(items), 'owned', { adjective: true }),
       detail: (items) => list(items.map((item) => {
         const name = item.value?.name || item.key;
         // Serial numbers are enrichment from the member record; the ledger
@@ -154,7 +170,7 @@
       })),
     },
     device_software: {
-      summary: (items) => plural(activeCount(items), 'active'),
+      summary: (items) => plural(activeCount(items), 'active', { adjective: true }),
       detail: (items) => list(items.map((item) => {
         const days = daysUntil(item.expires_at);
         const expiring = item.status === 'active' && days !== null && days <= 30;
@@ -200,14 +216,25 @@
     return text ? text.charAt(0).toUpperCase() + text.slice(1) : 'None';
   };
 
+  /* Tell the member where a course row will take them before they tap it. */
+  const destinationHint = (item) => {
+    if (item.status !== 'active' || !item.value?.openUrl) return '';
+    if (item.value.academyCourseId) return 'Watch in app';
+    return item.value.openUrlIsFallback ? 'Opens in the Gaia Healers portal' : 'Opens in the portal';
+  };
+
   /* A row's name becomes a link only when the server put an openUrl on the
    * entitlement — the UI still never invents a destination. The anchor carries
-   * a real href so it works even if the in-app reader is unavailable. */
-  const row = (label, statusText, status, meta, flag, href) =>
+   * a real href so it works even if the in-app reader is unavailable. A course
+   * the in-app Academy player carries also names its manifest id, and the
+   * click delegate in gaia-member.js opens the player first, portal second. */
+  const row = (label, statusText, status, meta, flag, href, academyCourseId) =>
     '<li class="g-ma-item g-ma-item--' + esc(statusTone(status)) + '">'
     + (href
       ? '<a class="g-ma-item__name g-ma-item__link" href="' + esc(href) + '" target="_blank" rel="noopener noreferrer"'
-        + ' data-open-in-app="' + esc(href) + '" data-in-app-title="' + esc(label) + '">' + esc(label) + '</a>'
+        + ' data-open-in-app="' + esc(href) + '" data-in-app-title="' + esc(label) + '"'
+        + (academyCourseId ? ' data-academy-course="' + esc(academyCourseId) + '"' : '')
+        + '>' + esc(label) + '</a>'
       : '<span class="g-ma-item__name">' + esc(label) + '</span>')
     + '<span class="g-ma-item__status">' + esc(statusText || '') + '</span>'
     + (meta ? '<span class="g-ma-item__meta">' + esc(meta) + '</span>' : '')
@@ -262,21 +289,7 @@
     // Rows come from `sections` (what is active) PLUS any type the member holds
     // only in an ended state. A benefit that stopped should say so rather than
     // vanish — silence reads as "we lost your data", not "this ended".
-    /* Where each access type lives in the app — the "Open … →" link at the foot
-   * of an expanded panel. Only types with a real section get one. */
-  const SECTION_LINKS = {
-    course_access: 'view=academy',
-    community_access: 'view=community',
-    event_ticket: 'view=events',
-    device_owner: 'view=profile',
-    device_software: 'view=profile',
-    directory_level: 'view=directory',
-    lead_allocation: 'view=directory',
-    discount: 'view=store',
-    promo_membership: 'view=store&tab=membership',
-  };
-
-  const rowTypes = new Map();
+    const rowTypes = new Map();
     for (const section of sections) {
       rowTypes.set(section.type, { type: section.type, title: section.title, order: section.order });
     }

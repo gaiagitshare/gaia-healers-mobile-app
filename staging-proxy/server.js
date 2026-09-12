@@ -2351,6 +2351,28 @@ function requireMemberSession(req, res, origin) {
   return session;
 }
 
+// A member who keeps using the app keeps their session. The profile read is
+// the app's first call on every launch; once a session is more than a day old
+// it is re-issued there with a fresh full TTL, so an active member is never
+// signed out mid-habit while an abandoned session still lapses on schedule.
+// Renewal never outlives AUTH_SESSION_ABSOLUTE_MAX_MS from the original
+// sign-in: a cookie that leaks cannot be kept alive forever by replaying it.
+const AUTH_SESSION_RENEW_AFTER_MS = 24 * 60 * 60 * 1000;
+const AUTH_SESSION_ABSOLUTE_MAX_MS = 90 * 24 * 60 * 60 * 1000;
+function renewedSessionCookie(req) {
+  const session = cookieForRequest(req);
+  if (!session?.member || !session.exp) return null;
+  if (session.source === 'fixture' || session.fixtureAccess) return null;
+  const now = Date.now();
+  const firstIssued = Number(session.iat || 0) || (Number(session.exp) - AUTH_SESSION_TTL_SECONDS * 1000);
+  const lastIssued = Number(session.renewedAt || 0) || firstIssued;
+  if (now - lastIssued < AUTH_SESSION_RENEW_AFTER_MS) return null;
+  if (now - firstIssued > AUTH_SESSION_ABSOLUTE_MAX_MS) return null;
+  const exp = now + AUTH_SESSION_TTL_SECONDS * 1000;
+  const token = signTokenPayload({ ...session, renewedAt: now, exp });
+  return { 'Set-Cookie': buildSetCookie(req, token, exp) };
+}
+
 function sessionMemberContext(req) {
   const session = cookieForRequest(req);
   if (!session?.member) return null;
@@ -3431,7 +3453,31 @@ function buildMemberAccess(rawTags = [], customFields = [], member = {}, entitle
 // link we actually have. `value` passes through the access payload untouched,
 // so this is what lets the UI turn a row into a link without inventing a
 // destination.
-function entitlementOpenUrl(item, record) {
+//
+// A course the in-app Academy player carries is also stamped with its manifest
+// id (`academyCourseId`), because for those the best destination is not the
+// portal at all — it is the lesson list inside the app. The portal URL stays
+// on the row as the fallback for a device without the player.
+function lessonCount(course) {
+  return (Array.isArray(course?.sections) ? course.sections : [])
+    .reduce((n, section) => n + (Array.isArray(section?.lessons) ? section.lessons.length : 0), 0);
+}
+
+function academyManifestCourse(manifest, name, ids = []) {
+  const courses = Array.isArray(manifest?.courses) ? manifest.courses : [];
+  const wanted = [name, ...ids].map((v) => String(v || '').toLowerCase().trim()).filter(Boolean);
+  if (!wanted.length) return null;
+  const key = courseGroupKey(name || '');
+  const exact = courses.find((c) => {
+    const hay = [c?.id, c?.title, ...(Array.isArray(c?.grantMatch) ? c.grantMatch : [])]
+      .map((v) => String(v || '').toLowerCase().trim());
+    return wanted.some((w) => hay.includes(w));
+  });
+  if (exact) return exact;
+  return key ? (courses.find((c) => courseGroupKey(c?.title || '') === key) || null) : null;
+}
+
+function entitlementOpenUrl(item, record, ctx = {}) {
   if (!item || typeof item !== 'object') return null;
   const name = String(item.value?.name || '').trim();
   if (item.type === 'course_access') {
@@ -3439,11 +3485,19 @@ function entitlementOpenUrl(item, record) {
     const key = courseGroupKey(name || item.key || '');
     const grant = grants.find((g) => String(g?.id || '') === String(item.key || '')
       || (key && courseGroupKey(g?.name || '') === key));
-    const catalog = loadCourses().courses || [];
+    const catalog = Array.isArray(ctx.catalog) ? ctx.catalog : (loadCourses().courses || []);
     const catalogCourse = catalog.find((c) => String(c.id || '') === String(grant?.id || item.key || ''))
       || catalog.find((c) => key && courseGroupKey(c.title || '') === key);
     const direct = firstNonEmptyString(grant?.openUrl, catalogCourse?.portalUrl, DEEPLINK.courseUrls[grant?.id || item.key]);
-    return { openUrl: direct || DEEPLINK.academyHubUrl || DEEPLINK.portalFallback, openUrlIsFallback: !direct };
+    const link = { openUrl: direct || DEEPLINK.academyHubUrl || DEEPLINK.portalFallback, openUrlIsFallback: !direct };
+    const inApp = academyManifestCourse(ctx.manifest || loadAcademyManifest(), name, [item.key, grant?.id, grant?.name]);
+    const lessons = lessonCount(inApp);
+    // An empty course in the player is a worse landing than the portal.
+    if (inApp && lessons > 0) {
+      link.academyCourseId = String(inApp.id);
+      link.academyLessons = lessons;
+    }
+    return link;
   }
   if (item.type === 'community_access') {
     const grants = Array.isArray(record?.communities) ? record.communities : [];
@@ -3456,8 +3510,10 @@ function entitlementOpenUrl(item, record) {
 }
 
 function withAccessLinks(entitlements, record) {
+  // Both stores are read once per request, not once per row.
+  const ctx = { catalog: loadCourses().courses || [], manifest: loadAcademyManifest() };
   return (Array.isArray(entitlements) ? entitlements : []).map((item) => {
-    const link = entitlementOpenUrl(item, record);
+    const link = entitlementOpenUrl(item, record, ctx);
     return link ? { ...item, value: { ...(item.value || {}), ...link } } : item;
   });
 }
@@ -3647,7 +3703,7 @@ async function memberProfile(req, res, origin) {
       tagCount: b.tags.length,
       customFieldCount: Array.isArray(b.customFields) ? b.customFields.length : 0,
     },
-  }), origin);
+  }), origin, renewedSessionCookie(req) || {});
 }
 
 async function memberCommunities(req, res, origin) {

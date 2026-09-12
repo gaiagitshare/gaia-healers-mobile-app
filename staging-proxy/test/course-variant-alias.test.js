@@ -119,3 +119,22 @@ test('unrelated course never matches the canonical row (no wrong-course removal)
     { name: 'Tachyon Stress Relief Certification', rawId: '' }, { courseAliases: { byId: {}, byKey: {} } }, fixtureIdx());
   assert.equal(i, -1);
 });
+
+// ── Offer-title prefix rule (no alias needed for a new audience suffix) ────
+test('GRANT: an offer "<Course>-<new audience>" with no alias resolves by its leading course segment', () => {
+  const r = resolveCourseGrant(fixtureIdx(), { name: 'Bio-Well Basic Certification Training-Reiki Practitioners', rawId: '' });
+  assert.ok(r.course, 'should resolve');
+  assert.equal(r.course.id, CANON.basic.id);
+  assert.equal(r.method, 'offer_title_prefix');
+});
+test('GRANT: " – " and ":" and "for" separators work the same way', () => {
+  assert.equal(resolveCourseGrant(fixtureIdx(), { name: '9-Week Chakra Challenge – Spring Cohort', rawId: '' }).course?.id, CANON.chakra.id);
+  assert.equal(resolveCourseGrant(fixtureIdx(), { name: '9-Week Chakra Challenge for Biopulsar owners', rawId: '' }).course?.id, CANON.chakra.id);
+});
+test('GRANT: a prefix that is not itself a full course name resolves nothing', () => {
+  assert.equal(resolveCourseGrant(fixtureIdx(), { name: 'Bio-Well Basic - Upgrade to Advanced', rawId: '' }).reject, 'UNKNOWN_RESOURCE');
+  assert.equal(resolveCourseGrant(fixtureIdx(), { name: 'Chakra Challenge - Free Preview', rawId: '' }).reject, 'UNKNOWN_RESOURCE');
+});
+test('GRANT: an ambiguous leading segment is still refused, not guessed', () => {
+  assert.equal(resolveCourseGrant(fixtureIdx(), { name: 'Level 1 Certification Training - Cohort B', rawId: '' }).reject, 'AMBIGUOUS_RESOURCE');
+});

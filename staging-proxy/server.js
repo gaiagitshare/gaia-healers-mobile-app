@@ -1655,6 +1655,21 @@ function resolveCourseGrant(idx, resource) {
     if (idx.aliasByKey.has(key)) { const a = idx.aliasByKey.get(key); return { course: { id: a.id, title: a.title }, method: a.method }; }
     if (idx.byKey.has(key)) return { course: idx.byKey.get(key), method: 'exact_authoritative_name' };
   }
+  // GHL's "Offer access granted" trigger sends the OFFER title, and offers
+  // are named "<Course>-<Audience>" ("Bio-Well Basic Certification
+  // Training-Bio-Well Practitioners"). One such grant was refused on 30 Aug
+  // as UNKNOWN_RESOURCE and that member never saw the course. Try the
+  // leading whole segments: the longest one whose key IS a course (exactly,
+  // unambiguously) wins. A prefix that is not itself a full course name
+  // ("Bio-Well Basic" from "Bio-Well Basic - Upgrade") matches nothing.
+  const segments = String(resource.name || '').split(/\s*(?:[-–—:|]|\bfor\b)\s*/i).map((v) => v.trim()).filter(Boolean);
+  for (let n = segments.length - 1; n >= 1; n--) {
+    const prefixKey = courseGroupKey(segments.slice(0, n).join(' '));
+    if (!prefixKey || prefixKey === key) continue;
+    if (idx.ambiguousKeys.has(prefixKey)) return { reject: 'AMBIGUOUS_RESOURCE' };
+    if (idx.aliasByKey.has(prefixKey)) { const a = idx.aliasByKey.get(prefixKey); return { course: { id: a.id, title: a.title }, method: 'offer_title_prefix:' + a.method }; }
+    if (idx.byKey.has(prefixKey)) return { course: idx.byKey.get(prefixKey), method: 'offer_title_prefix' };
+  }
   return { reject: 'UNKNOWN_RESOURCE' };
 }
 function recordCourseGrantRejection(store, contactId, entry) {

@@ -1,0 +1,8 @@
+[Unit]
+Description=Gaia Academy daily catalog sync (courses -> videos)
+After=network-online.target gaia-staging-proxy.service
+[Service]
+Type=oneshot
+WorkingDirectory=/root/gaia-staging-proxy
+EnvironmentFile=/root/gaia-staging-proxy/.env
+ExecStart=/usr/bin/node /root/gaia-staging-proxy/academy-catalog-sync.cjs

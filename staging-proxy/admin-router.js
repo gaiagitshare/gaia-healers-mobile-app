@@ -763,8 +763,23 @@ async function pipelineHealth(deps) {
   // — the lesson is only re-reported when someone opens it again.
   try {
     const reports = deps.loadAcademyVideoReports ? deps.loadAcademyVideoReports() : null;
+    // A report is about one lesson with one video. Once the sync replaces that
+    // lesson or its video (the owner fixed it, or the lesson was rebuilt), the
+    // report is history, not a live fault — it stops counting immediately.
+    const manifest = deps.loadAcademyManifest ? deps.loadAcademyManifest() : null;
+    const stillCurrent = (r) => {
+      if (!manifest || !Array.isArray(manifest.courses)) return true;
+      const course = manifest.courses.find((c) => String(c.id) === String(r.courseId));
+      if (!course) return false;
+      for (const section of course.sections || []) {
+        const lesson = (section.lessons || []).find((l) => String(l.id) === String(r.lessonId));
+        if (lesson) return String(lesson.provider || '') === String(r.provider || '') && String(lesson.src || '') === String(r.src || '');
+      }
+      return false;
+    };
     const recent = Object.values((reports && reports.lessons) || {})
       .filter((r) => r && Date.parse(r.lastAt || '') > Date.now() - 7 * 24 * HOUR)
+      .filter(stillCurrent)
       .sort((a, b) => Date.parse(b.lastAt) - Date.parse(a.lastAt));
     add({
       key: 'academy_videos', label: 'Academy lesson videos', kind: 'content',

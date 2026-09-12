@@ -280,6 +280,13 @@
         return;
       }
       // native video (mp4 / hls)
+      // The sync checks every native file before publishing it; one it could not
+      // reach is listed (the lesson exists) but is not sent to a blank player.
+      if (l.sourceValid === false || l.sourceMissing) {
+        showVideoUnavailable(stage, course, l, function () { playLesson(l); });
+        reportUnavailable(course, l, l.sourceMissing ? 'source_missing' : 'source_invalid');
+        return;
+      }
       stage.innerHTML = '<video class="gaia-acad__video" playsinline controls preload="metadata"></video>';
       var video = stage.querySelector('video');
       attachHlsOrSrc(video, l.src);
@@ -290,6 +297,21 @@
         video.removeEventListener('loadedmetadata', onMeta);
       };
       video.addEventListener('loadedmetadata', onMeta);
+      // MediaError codes: 1 aborted, 2 network, 3 decode, 4 source not
+      // supported / not found. Any of them replaces the stage with the notice
+      // and reports the lesson — the failure that used to be a silent black box.
+      var failed = false;
+      var onFail = function (kind) {
+        if (failed || current !== l) return; failed = true;
+        var code = kind || ('media_' + ((video.error && video.error.code) || 0));
+        showVideoUnavailable(stage, course, l, function () { playLesson(l); });
+        reportUnavailable(course, l, code);
+      };
+      video.addEventListener('error', function () { onFail(); });
+      // A file that never even reaches metadata (DNS/CDN silence rather than
+      // an HTTP error) would otherwise spin forever.
+      var stall = setTimeout(function () { if (current === l && video.readyState === 0) onFail('media_timeout'); }, 30000);
+      video.addEventListener('loadedmetadata', function () { clearTimeout(stall); });
       video.addEventListener('timeupdate', function () {
         savePos(course.id, l.id, video.currentTime);
         var now = Date.now();
@@ -365,6 +387,17 @@
       + 'Once it’s yours in GHL, the lessons play here.</p>'
       + '<p class="gaia-acad__unavail-actions"><a class="g-btn g-btn--primary g-btn--sm" href="home.html?view=store&tab=membership">See membership plans &rarr;</a></p>'
       + '</div>';
+  }
+  // A native video that will not load. The member gets one calm sentence and
+  // a retry; the diagnostics (course, lesson, source kind, error class) go to
+  // the proxy. No URL, no provider detail, no browser error text is shown.
+  function showVideoUnavailable(stage, course, lesson, onRetry) {
+    stage.innerHTML = '<div class="gaia-acad__unavail" role="status">'
+      + '<i class="ph ph-video-camera-slash" aria-hidden="true"></i>'
+      + '<p class="gaia-acad__unavail-title">This video is temporarily unavailable</p>'
+      + '<p class="gaia-acad__unavail-body">Please try again in a moment. The organizers have been notified.</p>'
+      + '<p class="gaia-acad__unavail-actions"><button type="button" class="g-btn g-btn--secondary g-btn--sm" data-acad-retry>Try again</button></p></div>';
+    var b = stage.querySelector('[data-acad-retry]'); if (b && onRetry) b.addEventListener('click', onRetry);
   }
   function reportUnavailable(course, lesson, code) {
     try {

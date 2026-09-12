@@ -302,7 +302,9 @@
       // and reports the lesson — the failure that used to be a silent black box.
       var failed = false;
       var onFail = function (kind) {
-        if (failed || current !== l) return; failed = true;
+        // A lesson the member has already left (the element is gone from the
+        // page) is not a failure — its timer must not report it.
+        if (failed || current !== l || !document.contains(video)) return; failed = true;
         var code = kind || ('media_' + ((video.error && video.error.code) || 0));
         showVideoUnavailable(stage, course, l, function () { playLesson(l); });
         reportUnavailable(course, l, code);
@@ -310,7 +312,7 @@
       video.addEventListener('error', function () { onFail(); });
       // A file that never even reaches metadata (DNS/CDN silence rather than
       // an HTTP error) would otherwise spin forever.
-      var stall = setTimeout(function () { if (current === l && video.readyState === 0) onFail('media_timeout'); }, 30000);
+      var stall = setTimeout(function () { if (document.contains(video) && current === l && video.readyState === 0 && !video.error) onFail('media_timeout'); }, 45000);
       video.addEventListener('loadedmetadata', function () { clearTimeout(stall); });
       video.addEventListener('timeupdate', function () {
         savePos(course.id, l.id, video.currentTime);

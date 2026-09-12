@@ -6720,7 +6720,7 @@ const server = http.createServer(async (req, res) => {
         loadLedger: loadMemberEntitlements, saveLedger: saveMemberEntitlements,
         loadStoreCatalog, runStoreSync,
         sendAlertEmail,
-        loadAcademyVideoReports,
+        loadAcademyVideoReports, loadAcademyManifest,
       });
       return;
     }

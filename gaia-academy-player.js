@@ -332,8 +332,9 @@
   }
   var UNAVAILABLE_REASON = {
     100: 'YouTube reports this video as removed or private.',
-    101: 'YouTube does not allow this video to play outside youtube.com.',
-    150: 'YouTube does not allow this video to play outside youtube.com.',
+    // YouTube answers 150 for removed videos as well as embed-blocked ones.
+    101: 'YouTube will not play this video here — it may have been removed, made private, or blocked from embedding.',
+    150: 'YouTube will not play this video here — it may have been removed, made private, or blocked from embedding.',
     2: 'The video link for this lesson is not valid.',
     5: 'The video player could not start.',
   };

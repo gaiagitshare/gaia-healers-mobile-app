@@ -56,7 +56,7 @@ export function detect(health, extra = {}) {
   const av = byKey.academy_videos;
   if (av && av.state === 'degraded' && Array.isArray(av.unavailable) && av.unavailable.length) {
     const n = av.unavailable.length;
-    const codeText = (c) => ({ 100: 'removed or private', 101: 'embedding disabled', 150: 'embedding disabled', 2: 'bad video id', 5: 'player error' })[c] || `code ${c}`;
+    const codeText = (c) => ({ 100: 'removed or private', 101: 'removed, private or embed-blocked', 150: 'removed, private or embed-blocked', 2: 'bad video id', 5: 'player error' })[c] || `code ${c}`;
     add({ key: 'academy-videos:unavailable', severity: 'warning', subsystem: 'Academy',
       title: `${n} lesson video${n === 1 ? '' : 's'} cannot play`,
       why: 'A member opened a lesson and the video host refused it. The lesson list still works; the video itself has to be restored (made public/unlisted) or replaced in the GHL course.',

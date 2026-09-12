@@ -1,4 +1,4 @@
-const CACHE_NAME = 'gaia-healers-20260912f-video-unavailable';
+const CACHE_NAME = 'gaia-healers-20260912g-video-copy';
 /**
  * Precache ONLY what the page requests by exactly this URL.
  *

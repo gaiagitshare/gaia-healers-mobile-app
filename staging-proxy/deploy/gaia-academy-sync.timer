@@ -1,7 +1,10 @@
 [Unit]
-Description=Run Gaia Academy catalog sync daily
+Description=Run Gaia Academy catalog sync hourly
 [Timer]
-OnCalendar=*-*-* 04:30:00
+# Hourly, not nightly: the app mirrors GHL's course videos and member counts,
+# and a lesson added or a course sold in the morning should not wait for 04:30.
+# Nine courses, ~30 portal requests a run.
+OnCalendar=*-*-* *:30:00
 Persistent=true
 [Install]
 WantedBy=timers.target

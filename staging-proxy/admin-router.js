@@ -756,6 +756,45 @@ async function pipelineHealth(deps) {
     okWithin: 36 * HOUR, cadence: 'daily',
   }));
 
+  // ── Academy access drift ──────────────────────────────────────────────────
+  // GHL exposes one live number about who holds a course: its member count.
+  // The app's grants come from GHL's access-granted/removed workflow webhook.
+  // When those two drift apart, the webhook is not delivering (or is
+  // rejecting) and members who bought a course in GHL are not seeing it here.
+  // GHL's count includes bundle-offer holders and staff, so small gaps are
+  // noise; a gap of five or more on a course is not.
+  try {
+    const stats = deps.loadAcademyCourseStats ? deps.loadAcademyCourseStats() : null;
+    const ghlCourses = (stats && stats.courses) || {};
+    const norm = (v) => String(v || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+    const ledgerCounts = {};
+    for (const rec of Object.values(contacts)) {
+      const seen = new Set();
+      for (const co of (rec && rec.courses) || []) {
+        if (!co || (co.state && co.state !== 'unlocked')) continue;
+        const k = norm(co.name); if (k && !seen.has(k)) { seen.add(k); ledgerCounts[k] = (ledgerCounts[k] || 0) + 1; }
+      }
+    }
+    const rows = Object.entries(ghlCourses).map(([id, c]) => {
+      const ledger = ledgerCounts[norm(c.title)] || 0;
+      return { id, title: c.title, ghl: c.membersCount, ledger, gap: c.membersCount - ledger };
+    });
+    const drifted = rows.filter((r) => Math.abs(r.gap) >= 5);
+    const known = Object.keys(ghlCourses).length > 0;
+    add({
+      key: 'academy_access_drift', label: 'Course access vs GHL', kind: 'reconcile',
+      state: !known ? 'idle' : (drifted.length ? 'degraded' : 'ok'),
+      detail: !known
+        ? 'No GHL member counts yet — the academy sync has not run with stats.'
+        : (drifted.length
+          ? `${drifted.length} course${drifted.length === 1 ? '' : 's'} where GHL's member count and the app's grants differ by 5 or more.`
+          : `GHL member counts and the app's grants agree (within 4) on all ${rows.length} courses.`),
+      lastWriteAt: (stats && stats.updatedAt) || null,
+      courses: rows,
+      drifted,
+    });
+  } catch (_) { /* stats optional */ }
+
   // ── Academy lesson videos ─────────────────────────────────────────────────
   // The in-app player reports a lesson YouTube refused to play (removed,
   // private, embedding disabled). A member saw a dead video: that is a fault

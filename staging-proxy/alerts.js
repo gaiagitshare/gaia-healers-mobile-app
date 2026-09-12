@@ -49,6 +49,21 @@ export function detect(health, extra = {}) {
   for (const c of (health && health.components) || []) byKey[c.key] = c;
   const add = (d) => out.push(d);
 
+  // ── Academy access drift ─────────────────────────────────────────────────
+  const ad = byKey.academy_access_drift;
+  if (ad && ad.state === 'degraded' && Array.isArray(ad.drifted) && ad.drifted.length) {
+    const missing = ad.drifted.filter((r) => r.gap > 0);
+    const extra = ad.drifted.filter((r) => r.gap < 0);
+    add({ key: 'academy-access:drift', severity: 'warning', subsystem: 'Course access',
+      title: 'The app\'s course access has drifted from GHL',
+      why: missing.length
+        ? 'GHL counts more members on a course than the app has grants for: people who were given the course in GHL are not seeing it here. The access-granted workflow webhook is not reaching Gaia, or is being rejected — check the workflow in GHL and the rejections below.'
+        : 'The app holds more course grants than GHL counts members: access removed in GHL is still open here. The access-removed workflow webhook is not reaching Gaia.',
+      evidence: ad.drifted.map((r) => `${r.title}: GHL ${r.ghl} · app ${r.ledger} (${r.gap > 0 ? '+' : ''}${r.gap})`).join(' · ')
+        + (byKey.course_webhook ? ` · webhook last accepted ${byKey.course_webhook.lastAcceptedAt || 'never'}` : ''),
+      affected: null });
+  }
+
   // ── Academy lesson videos ────────────────────────────────────────────────
   // Reported by the player itself when the host refused to play a lesson. The
   // lesson list still works; the video has to be restored or replaced in the

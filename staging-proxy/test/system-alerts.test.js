@@ -336,3 +336,21 @@ test('a healthy academy_videos component raises nothing', () => {
   h.components.push({ key: 'academy_videos', kind: 'content', state: 'ok', unavailable: [] });
   assert.deepEqual(detect(h), []);
 });
+
+test('course access drifting from GHL raises a warning naming the courses', () => {
+  const h = health();
+  h.components.push({ key: 'academy_access_drift', kind: 'reconcile', state: 'degraded', courses: [], drifted: [
+    { title: 'Bio-Well Orientation', ghl: 600, ledger: 590, gap: 10 },
+  ] });
+  const d = detect(h);
+  assert.deepEqual(keys(d), ['academy-access:drift']);
+  assert.equal(d[0].severity, 'warning');
+  assert.match(d[0].evidence, /Bio-Well Orientation: GHL 600 · app 590 \(\+10\)/);
+  assert.match(d[0].why, /not seeing it here/);
+});
+
+test('course access within tolerance of GHL raises nothing', () => {
+  const h = health();
+  h.components.push({ key: 'academy_access_drift', kind: 'reconcile', state: 'ok', courses: [{ title: 'x', ghl: 520, ledger: 517, gap: 3 }], drifted: [] });
+  assert.deepEqual(detect(h), []);
+});

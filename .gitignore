@@ -21,6 +21,10 @@ staging-proxy/data/
 NEW/
 audits/
 *.bak-*
+# Editor/agent snapshots next to the live file. Nineteen of these were tracked
+# and served from gaiahealers.app (792 KB of stale code) until 2026-09-12.
+*.bak
+*.*.bak
 
 # ── Event Manager (event-manager/) ────────────────────────────────────────
 # Its SOURCE is tracked. Its runtime is not, and must never be:

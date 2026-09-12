@@ -13,7 +13,10 @@ function fakeEl() {
   return {
     value: '', textContent: '', innerHTML: '',
     listeners: {},
-    addEventListener(type, fn) { (this.listeners[type] = this.listeners[type] || []).push(fn); },
+    // A real EventTarget ignores a second addEventListener with the same
+    // (type, fn) pair. Without that rule every render() stacked one more
+    // `compute` on this shared fake button and 24 clicks became 2^24 calls.
+    addEventListener(type, fn) { const list = (this.listeners[type] = this.listeners[type] || []); if (!list.includes(fn)) list.push(fn); },
     click() { (this.listeners.click || []).forEach((fn) => fn()); },
     querySelector() { return null; },
     querySelectorAll() { return []; },

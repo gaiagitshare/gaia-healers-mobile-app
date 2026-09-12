@@ -39,7 +39,7 @@ authorized GHL workspace; the app does not fabricate them.
 ## App routes
 
 - `?view=today` — service hub and confirmed next event
-- `?view=journey` — verified Learn / Practice / Connect access
+- `?view=profile` — the You screen: Member Pass, My Access, verified Learn / Practice / Connect rollup (`?view=journey` redirects here)
 - `?view=academy` — real course grants and authorized Academy workspace
 - `?view=community` — real community entitlements
 - `?view=events` — confirmed event and member appointments

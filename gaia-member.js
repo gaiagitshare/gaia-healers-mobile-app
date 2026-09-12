@@ -646,6 +646,15 @@ body.gaia-booking-open{overflow:hidden;}
     event.preventDefault();
     const url = trigger.getAttribute('data-open-in-app') || trigger.getAttribute('data-book-inline') || '';
     const title = trigger.getAttribute('data-book-title') || trigger.getAttribute('data-in-app-title') || 'Open';
+    // A course the in-app Academy player carries opens there — same rule the
+    // Academy screen applies. The portal URL is only for a course it lacks.
+    const courseId = trigger.getAttribute('data-academy-course');
+    if (courseId && window.GaiaAcademyPlayer?.open) {
+      Promise.resolve(window.GaiaAcademyPlayer.open(courseId))
+        .then((opened) => { if (!opened) openInApp(url, title); })
+        .catch(() => openInApp(url, title));
+      return;
+    }
     openInApp(url, title);
   });
   // Global interceptor: route supported external links through one safe opener.
@@ -1226,12 +1235,17 @@ body.gaia-booking-open{overflow:hidden;}
   // `membership.key` is used only to mark which card is the member's current
   // plan — it never decides what any plan contains.
   function membershipCards() {
-    // Only a live membership marks a plan as "current". A cancelled or expired
-    // Gold should show Gold's price again, because buying it back is exactly
-    // what that member may want to do.
-    const membership = (state.data.access && state.data.access.membership) || null;
-    const currentKey = membership && ['active', 'trialing', 'past_due'].includes(membership.status)
-      ? membership.key : null;
+    // Only a live membership marks its own plan as "current". A cancelled or
+    // expired Gold shows Gold's price again, because buying it back is exactly
+    // what that member may want to do — but that member is on Free now, so Free
+    // is the card that carries the marker. A member with no membership record
+    // is on Free too. Signed-out visitors hold nothing, so nothing is marked.
+    // Free is only asserted from a loaded access payload: if /api/member/access
+    // failed, nothing is marked rather than telling a Gold member they are Free.
+    const access = state.authed ? state.data.access : null;
+    const membership = (access && access.membership) || null;
+    const currentKey = !access ? null
+      : (membership && ['active', 'trialing', 'past_due'].includes(membership.status) ? membership.key : 'free');
     const plans = Array.isArray(state.plans) ? state.plans : [];
     if (!plans.length) {
       return '<article class="g-card"><p class="g-card__meta">Membership plans are unavailable right now.</p></article>';

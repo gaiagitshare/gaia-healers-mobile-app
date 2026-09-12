@@ -569,6 +569,15 @@ body.gaia-v2 .gaia-chakra-map__list-item, body.gaia-v2 .gaia-chakra-map--screen 
 .g-ma-item--off .g-ma-item__name{text-decoration:line-through;color:var(--g-text-muted)}
 .g-ma-item__meta{flex:1 1 100%;font-size:.8rem;color:var(--g-text-faint)}
 .g-ma-item__flag{flex:1 1 100%;font-size:.8rem;color:var(--g-warn)}
+.g-ma-item__link{color:var(--g-accent);text-decoration:none}
+.g-ma-item__link::after{content:" ›";color:var(--g-text-faint)}
+.g-ma-item__link:hover{text-decoration:underline}
+.g-ma-item__link:focus-visible{outline:none;box-shadow:var(--g-focus)}
+.g-ma-open{margin:var(--g-s3) 0 0}
+.g-ma-open__link{display:inline-flex;align-items:center;min-height:44px;
+  font-size:.9rem;font-weight:600;color:var(--g-accent);text-decoration:none}
+.g-ma-open__link:hover{text-decoration:underline}
+.g-ma-open__link:focus-visible{outline:none;box-shadow:var(--g-focus)}
 
 .g-ma-meter{padding:var(--g-s3) 0}
 .g-ma-meter__period{font-size:.78rem;color:var(--g-text-faint);margin:0 0 var(--g-s2)}

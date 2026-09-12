@@ -19,11 +19,21 @@ const UA = 'GaiaHealers-App/1.0 (+https://gaiahealers.app)';
 let _listCache = { at: 0, list: null };
 const _detailCache = new Map(); // id -> { at, data }
 
+// Uploaded photos arrive as bare filenames ("image-<ts>-<rand>.jpeg"). As of
+// 2026-09-12 gaiapractitioners.com serves those from nowhere public — its own
+// profile pages are behind login and /api/uploads/ answers 401 — so 140 of the
+// 142 resolved to 404 and the app fell back to initials after a failed fetch
+// each. A dead URL is not a photo: bare filenames now resolve only when the
+// upstream has published a base for them (DIRECTORY_UPLOAD_BASE_URL); until
+// then the row is honest from the first paint. Absolute URLs (the ten hosted
+// elsewhere) still pass through.
+const UPLOAD_BASE = String(process.env.DIRECTORY_UPLOAD_BASE_URL || '').trim().replace(/\/+$/, '');
 function directoryImage(url) {
   const u = String(url == null ? '' : url).trim();
   if (!u || u.toLowerCase() === 'null' || /\/null$/i.test(u)) return '';
   if (/^https?:\/\//i.test(u)) return u;
-  return SOURCE + (u.startsWith('/') ? '' : '/') + u;
+  if (!UPLOAD_BASE) return '';
+  return UPLOAD_BASE + (u.startsWith('/') ? '' : '/') + u;
 }
 function safeHttpUrl(url) {
   const u = String(url == null ? '' : url).trim();
@@ -128,6 +138,9 @@ async function handleDetail(res, sendJson, origin, id) {
     return sendJson(res, 503, { ok: false, unavailable: true }, origin);
   }
 }
+
+// Exported for the test; the router itself is the only runtime caller.
+export { directoryImage };
 
 export async function handle(req, res, url, deps) {
   const { origin, sendJson } = deps;

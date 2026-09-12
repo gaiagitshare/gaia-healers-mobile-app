@@ -973,6 +973,72 @@
   // invalidates rather than everyone polling in case it did.
   window.GaiaDaily = { get: getDaily, invalidate: clearDaily };
 
+  // ── Notices: toast + confirm ─────────────────────────────────────────
+  // The community board used to reach for window.alert / window.confirm on
+  // its error and confirmation paths. Those are the browser's dialogs, not the
+  // app's — a white system box over a dark screen, unstyled, and in the
+  // installed PWA on iOS they carry the origin in the title. This is the
+  // in-app equivalent: a toast that announces itself to screen readers and a
+  // confirm sheet that returns a promise, both drawn from the same g-* tokens
+  // as the rest of the shell.
+  const notice = (() => {
+    let toastEl = null; let toastTimer = 0;
+    function toast(message, opts = {}) {
+      const text = String(message || '').trim(); if (!text) return;
+      const tone = opts.tone === 'ok' ? 'ok' : (opts.tone === 'error' ? 'error' : 'info');
+      if (!toastEl) {
+        toastEl = document.createElement('div');
+        toastEl.className = 'g-toast';
+        toastEl.setAttribute('role', 'status');
+        toastEl.setAttribute('aria-live', 'polite');
+        toastEl.hidden = true;
+        document.body.appendChild(toastEl);
+      }
+      window.clearTimeout(toastTimer);
+      toastEl.className = 'g-toast g-toast--' + tone;
+      toastEl.innerHTML = '<span class="g-toast__text"></span><button type="button" class="g-toast__close" aria-label="Dismiss">' + icon('x') + '</button>';
+      toastEl.querySelector('.g-toast__text').textContent = text;
+      toastEl.querySelector('.g-toast__close').addEventListener('click', hideToast);
+      toastEl.hidden = false;
+      toastTimer = window.setTimeout(hideToast, opts.duration || 4500);
+    }
+    function hideToast() { if (toastEl) toastEl.hidden = true; window.clearTimeout(toastTimer); }
+
+    function confirm(message, opts = {}) {
+      return new Promise((resolve) => {
+        const previous = document.activeElement;
+        const sheet = document.createElement('div');
+        sheet.className = 'g-confirm';
+        sheet.innerHTML = '<div class="g-confirm__panel" role="dialog" aria-modal="true" aria-labelledby="g-confirm-title">'
+          + '<p class="g-confirm__title" id="g-confirm-title"></p>'
+          + (opts.detail ? '<p class="g-confirm__detail"></p>' : '')
+          + '<div class="g-confirm__actions">'
+          + '<button type="button" class="g-btn g-btn--ghost g-btn--sm" data-confirm-no></button>'
+          + '<button type="button" class="g-btn g-btn--primary g-btn--sm" data-confirm-yes></button>'
+          + '</div></div>';
+        sheet.querySelector('.g-confirm__title').textContent = String(message || '');
+        if (opts.detail) sheet.querySelector('.g-confirm__detail').textContent = String(opts.detail);
+        const yes = sheet.querySelector('[data-confirm-yes]'); const no = sheet.querySelector('[data-confirm-no]');
+        yes.textContent = opts.confirmLabel || 'Confirm'; no.textContent = opts.cancelLabel || 'Cancel';
+        function close(result) {
+          document.removeEventListener('keydown', onKey);
+          sheet.remove();
+          try { if (previous && previous.focus) previous.focus(); } catch (_) { /* gone */ }
+          resolve(result);
+        }
+        function onKey(e) { if (e.key === 'Escape') { e.preventDefault(); close(false); } }
+        yes.addEventListener('click', () => close(true));
+        no.addEventListener('click', () => close(false));
+        sheet.addEventListener('click', (e) => { if (e.target === sheet) close(false); });
+        document.addEventListener('keydown', onKey);
+        document.body.appendChild(sheet);
+        window.requestAnimationFrame(() => yes.focus());
+      });
+    }
+    return { toast, confirm };
+  })();
+  window.GaiaNotice = notice;
+
   async function fillJourneyStreak() {
     const host = document.querySelector('[data-journey-streak]'); if (!host) return;
     try {
@@ -1417,7 +1483,7 @@
         } else if (status === 401 || (d && d.authenticated === false)) {
           if (window.GaiaAuth && window.GaiaAuth.open) window.GaiaAuth.open();
         } else {
-          alert((d && d.detail) || 'Could not post. Please try again.');
+          notice.toast((d && d.detail) || 'Could not post. Please try again.', { tone: 'error' });
         }
       }).catch(() => {})
       .finally(() => { const b = document.querySelector('[data-feed-post]'); if (b) { b.disabled = false; b.textContent = 'Post'; } });
@@ -1433,7 +1499,7 @@
       .then(({ status, d }) => {
         if (d && d.ok) { eventFeed.replyDraft = ''; eventFeed.replyingTo = null; loadEventFeed(eventId); }
         else if (status === 401 || (d && d.authenticated === false)) { if (window.GaiaAuth && window.GaiaAuth.open) window.GaiaAuth.open(); }
-        else { alert((d && d.detail) || 'Could not reply.'); }
+        else { notice.toast((d && d.detail) || 'Could not reply.', { tone: 'error' }); }
       }).catch(() => {});
   }
 
@@ -1451,8 +1517,9 @@
       }).catch(() => {});
   }
 
-  function reportFeedPost(eventId, postId) {
-    if (!window.confirm('Report this post to the organizers?')) return;
+  async function reportFeedPost(eventId, postId) {
+    const go = await notice.confirm('Report this post to the organizers?', { detail: 'They will review it and decide whether it stays.', confirmLabel: 'Report post' });
+    if (!go) return;
     fetch(proxyBase() + '/api/events/' + eventId + '/posts/' + postId + '/report', {
       method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ reason: 'reported' }),
@@ -1462,14 +1529,14 @@
           if (window.GaiaAuth && window.GaiaAuth.open) window.GaiaAuth.open();
           return;
         }
-        alert('Thanks — the organizers will review this post.');
+        notice.toast('Thanks — the organizers will review this post.', { tone: 'ok' });
       }).catch(() => {});
   }
 
   function uploadFeedImage(eventId, fileInput) {
     const f = fileInput && fileInput.files && fileInput.files[0];
     if (!f) return;
-    if (f.size > 5 * 1024 * 1024) { alert('That image is too large (max 5MB).'); fileInput.value = ''; return; }
+    if (f.size > 5 * 1024 * 1024) { notice.toast('That image is too large (max 5MB).', { tone: 'error' }); fileInput.value = ''; return; }
     const label = fileInput.closest('.g-feed-photo-btn');
     if (label) label.classList.add('is-loading');
     const fd = new FormData();
@@ -1479,9 +1546,9 @@
       .then(({ status, d }) => {
         if (d && d.ok && d.url) { eventFeed.pendingImage = d.url; render(); }
         else if (status === 401 || (d && d.authenticated === false)) { if (window.GaiaAuth && window.GaiaAuth.open) window.GaiaAuth.open(); }
-        else { alert((d && d.detail) || 'Could not upload that image.'); }
+        else { notice.toast((d && d.detail) || 'Could not upload that image.', { tone: 'error' }); }
       })
-      .catch(() => { alert('Could not upload that image.'); })
+      .catch(() => { notice.toast('Could not upload that image.', { tone: 'error' }); })
       .finally(() => { if (label) label.classList.remove('is-loading'); });
   }
 

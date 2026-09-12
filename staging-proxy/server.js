@@ -1149,7 +1149,7 @@ async function academySync(req, res, origin) {
 
   // --- GHL's member count per course (drift signal for the access webhook) ---
   if (courseStats.length) {
-    const stats = { updatedAt: now, courses: {} };
+    const stats = { updatedAt: now, syncIdentity: String(body.syncIdentity || '') || null, courses: {} };
     for (const c of courseStats) {
       const id = String(c.productId || c.id || '').trim();
       if (!id || !Number.isFinite(Number(c.membersCount))) continue;
@@ -1670,6 +1670,31 @@ const COURSE_ALIAS_FILE = String(process.env.COURSE_ALIAS_FILE || path.join(proc
 function loadCourseAuthority() { try { return JSON.parse(fs.readFileSync(COURSE_AUTHORITY_FILE, 'utf8')); } catch (_) { return { courses: [], ambiguous_keys: {} }; } }
 function loadCourseAliases() { try { return JSON.parse(fs.readFileSync(COURSE_ALIAS_FILE, 'utf8')); } catch (_) { return { aliases: [] }; } }
 // Build the resolution index from authority + approved aliases (NOT the ledger).
+// Stable GHL ids that a grant carried (offer / product / course id) mapped to
+// the course the strict resolver settled by name at the time. Learned only
+// from a resolution that succeeded under the existing rules — never from a
+// guess — and consulted BEFORE any name matching on the next event, so once
+// the workflow sends ids, identity by id is primary and names are the
+// fallback. An id is never re-pointed at a different course: a conflict is
+// logged and the first mapping stands.
+const COURSE_ID_MAP_FILE = path.join(process.cwd(), 'data', 'course-id-map.json');
+function loadCourseIdMap() { try { return JSON.parse(fs.readFileSync(COURSE_ID_MAP_FILE, 'utf8')) || { version: 1, learned: {} }; } catch (_) { return { version: 1, learned: {} }; }
+}
+function learnCourseId(rawId, course, method, source) {
+  const id = String(rawId || '').trim().toLowerCase();
+  if (!id || !course || !course.id) return;
+  if (id === String(course.id).toLowerCase() || courseGroupKey(rawId) === courseGroupKey(course.title || '')) return; // not an id, an echo of the name
+  const map = loadCourseIdMap(); map.learned = map.learned || {};
+  const prev = map.learned[id];
+  if (prev && String(prev.courseId) !== String(course.id)) {
+    console.warn('[Gaia Entitlements] COURSE_ID_CONFLICT', { id, kept: prev.courseId, rejected: course.id, method });
+    return;
+  }
+  if (prev) return;
+  map.learned[id] = { courseId: String(course.id), courseTitle: String(course.title || ''), learnedAt: new Date().toISOString(), method: String(method || ''), source: String(source || '') };
+  map.updatedAt = new Date().toISOString();
+  try { writeJsonAtomic(COURSE_ID_MAP_FILE, map); } catch (_) { /* best effort */ }
+}
 function buildCourseAuthorityIndex() {
   const auth = loadCourseAuthority();
   const byId = new Map();      // lc id -> { id, title }
@@ -1689,6 +1714,13 @@ function buildCourseAuthorityIndex() {
     const entry = { id: String(a.canonical_id || a.alias_key || ''), title: String(a.canonical_title || a.alias_name || ''), method: a.resolution_method || 'explicit_alias' };
     if (a.alias_key) aliasByKey.set(String(a.alias_key), entry);
     if (a.canonical_id) aliasById.set(String(a.canonical_id).toLowerCase(), entry);
+  }
+  // Learned stable ids resolve first (resolveCourseGrant checks byId/aliasById
+  // before any name). They only ever point at a course the strict rules
+  // already settled, so they cannot loosen resolution — only shortcut it.
+  for (const [id, m] of Object.entries(loadCourseIdMap().learned || {})) {
+    if (!m || !m.courseId) continue;
+    if (!aliasById.has(id)) aliasById.set(id, { id: String(m.courseId), title: String(m.courseTitle || ''), method: 'learned_id' });
   }
   return { byId, byKey, ambiguousKeys, aliasByKey, aliasById };
 }
@@ -2115,6 +2147,10 @@ async function memberAccessWebhook(req, res, origin) {
           sendJson(res, 202, { ok: true, applied: false, rejected: true, reason, contactId, requested: { id: resource.rawId || resource.id || null, name: resource.name || null } }, origin);
           return;
         }
+      }
+      // A grant that carried a stable id AND was settled by name teaches the id.
+      if (resolved && resource.rawId && !/^exact_resource_id$|^learned_id$/.test(String(resolved.method || ''))) {
+        learnCourseId(resource.rawId, resolved.course, resolved.method, event.raw);
       }
       const realName = resolved ? resolved.course.title
         : (resource.name && resource.name !== resource.rawId ? resource.name : (prev && prev.name) || resource.name);

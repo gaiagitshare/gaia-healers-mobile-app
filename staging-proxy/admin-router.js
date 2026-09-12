@@ -781,6 +781,7 @@ async function pipelineHealth(deps) {
     });
     const drifted = rows.filter((r) => Math.abs(r.gap) >= 5);
     const known = Object.keys(ghlCourses).length > 0;
+    if (drifted.length) console.warn('[Gaia Access] ENTITLEMENT_DRIFT', { courses: drifted.map((r) => ({ title: r.title, ghl: r.ghl, app: r.ledger, gap: r.gap })) });
     add({
       key: 'academy_access_drift', label: 'Course access vs GHL', kind: 'reconcile',
       state: !known ? 'idle' : (drifted.length ? 'degraded' : 'ok'),

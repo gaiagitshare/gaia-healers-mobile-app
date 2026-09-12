@@ -14,14 +14,24 @@ const http = require('http');
 const crypto = require('crypto');
 
 const LOC = (process.env.GHL_LOCATION_ID || '').trim();
-const EMAIL = (process.env.GHL_PORTAL_SYNC_EMAIL || '').trim();
-const PASS = (process.env.GHL_PORTAL_SYNC_PASSWORD || '').trim();
 const SECRET = (process.env.ACADEMY_SYNC_SECRET || '').trim();
+// Who reads the portal. A dedicated Gaia-owned "content sync" member is
+// preferred; the personal account that has done this job so far stays as the
+// fallback until the replacement has proven itself. Whichever identity is
+// used, it only READS course structure — it never decides who owns a course.
+const IDENTITIES = [
+  { label: 'content-sync', email: (process.env.GHL_CONTENT_SYNC_EMAIL || '').trim(), pass: (process.env.GHL_CONTENT_SYNC_PASSWORD || '').trim() },
+  { label: 'portal-sync-fallback', email: (process.env.GHL_PORTAL_SYNC_EMAIL || '').trim(), pass: (process.env.GHL_PORTAL_SYNC_PASSWORD || '').trim() },
+].filter((i) => i.email && i.pass);
+// A half-configured replacement must never shrink the catalog: an identity
+// that sees fewer courses than this floor is skipped for the run.
+const MIN_COURSES = Number(process.env.CONTENT_SYNC_MIN_COURSES || 9);
+const maskEmail = (e) => String(e).replace(/^(.{2}).*(@.*)$/, '$1…$2');
 const CP = 'https://services.leadconnectorhq.com/clientportal-middleware';
 const BASE = { channel: 'APP', source: 'PORTAL_USER', 'x-location-id': LOC, 'x-app-build': 'communities-nuxt-development', 'x-app-version': 'web', 'x-platform-details': 'server', origin: 'https://education.gaiahealers.com', referer: 'https://education.gaiahealers.com/', accept: 'application/json' };
 
 function fail(m) { console.error('[academy-sync] CONTENT_SYNC_FAILED ' + m); process.exit(1); }
-if (!LOC || !EMAIL || !PASS || !SECRET) fail('missing env');
+if (!LOC || !SECRET || !IDENTITIES.length) fail('missing env');
 
 function request(method, url, headers, body) {
   return new Promise((resolve) => {
@@ -38,12 +48,25 @@ function request(method, url, headers, body) {
 }
 const asArray = (b) => Array.isArray(b) ? b : ((b && (b.items || b.courses || b.data || b.lessons || b.modules)) || []);
 
-async function login() {
+async function login(identity) {
   const r = await request('POST', `${CP}/clientclub/v2/${LOC}/auth/login/email`, { ...BASE, version: '2021-04-15', 'content-type': 'application/json' },
-    JSON.stringify({ email: EMAIL, password: PASS, locationId: LOC, deviceId: crypto.randomUUID(), deviceName: 'gaia-academy-sync', deviceType: 'web', ipAddress: '127.0.0.1' }));
-  const t = r.json && r.json.token;
-  if (!t) fail('login failed (' + r.status + '): ' + String(r.raw).slice(0, 160));
-  return t;
+    JSON.stringify({ email: identity.email, password: identity.pass, locationId: LOC, deviceId: crypto.randomUUID(), deviceName: 'gaia-academy-sync', deviceType: 'web', ipAddress: '127.0.0.1' }));
+  return (r.json && r.json.token) || null;
+}
+// Try each identity in order; the first that logs in AND sees enough courses
+// wins. The email is logged masked; the password never is.
+async function openPortal() {
+  for (const identity of IDENTITIES) {
+    const token = await login(identity);
+    if (!token) { log('CONTENT_SYNC_IDENTITY_FALLBACK', { identity: identity.label, email: maskEmail(identity.email), reason: 'login failed' }); continue; }
+    const libR = await request('GET', `${CP}/courses/learners/locations/${LOC}/courses/library?page=1&limit=500`, H(token));
+    const courses = asArray(libR.json).map((c) => ({ id: c.id || c.productId || c._id, title: (c.title || c.name || '').trim(), membersCount: Number(c.membersCount) })).filter((c) => c.id);
+    if (courses.length < MIN_COURSES) { log('CONTENT_SYNC_IDENTITY_FALLBACK', { identity: identity.label, email: maskEmail(identity.email), reason: 'sees ' + courses.length + ' courses, floor is ' + MIN_COURSES }); continue; }
+    console.log('[academy-sync] identity ' + identity.label + ' (' + maskEmail(identity.email) + ') sees ' + courses.length + ' courses');
+    return { token, courses, identity };
+  }
+  fail('no identity could read the portal');
+  return null;
 }
 function H(token, productId) { const h = { ...BASE, version: '2021-07-28', authorization: 'Bearer ' + token }; if (productId) h['x-product-id'] = productId; return h; }
 
@@ -128,10 +151,7 @@ async function validateNative(lessons, courseTitle) {
 function log(code, details) { console.error('[academy-sync] ' + code + ' ' + JSON.stringify(details)); }
 
 (async () => {
-  const token = await login();
-  const libR = await request('GET', `${CP}/courses/learners/locations/${LOC}/courses/library?page=1&limit=500`, H(token));
-  const courses = asArray(libR.json).map((c) => ({ id: c.id || c.productId || c._id, title: (c.title || c.name || '').trim(), membersCount: Number(c.membersCount) })).filter((c) => c.id);
-  if (!courses.length) fail('no courses (status ' + libR.status + '): ' + String(libR.raw).slice(0, 160));
+  const { token, courses, identity } = await openPortal();
   const catalog = [];
   // GHL's own member count per course rides along. It is the only live number
   // GHL exposes about WHO holds a course, so the proxy compares it with the
@@ -158,7 +178,7 @@ function log(code, details) { console.error('[academy-sync] ' + code + ' ' + JSO
     if (Number.isFinite(c.membersCount)) courseStats.push({ productId: c.id, title: c.title, membersCount: c.membersCount });
     console.log('[academy-sync] ' + c.title + ' -> ' + total + ' videos in ' + out.length + ' modules' + (invalid ? ' (' + invalid + ' native sources FAILED validation)' : (valid ? ' (' + valid + ' native sources validated)' : '')));
   }
-  const post = await request('POST', `http://127.0.0.1:8787/api/academy/sync?secret=${encodeURIComponent(SECRET)}`, { 'content-type': 'application/json' }, JSON.stringify({ catalog, courseStats, members: [] }));
+  const post = await request('POST', `http://127.0.0.1:8787/api/academy/sync?secret=${encodeURIComponent(SECRET)}`, { 'content-type': 'application/json' }, JSON.stringify({ catalog, courseStats, members: [], syncIdentity: identity.label }));
   if (!post.json || post.json.ok !== true) { log('CONTENT_SYNC_FAILED', { status: post.status, body: String(post.raw || post.error || '').slice(0, 160) }); process.exit(1); }
   console.log('[academy-sync] pushed ' + catalog.length + ' courses ->', post.json);
 })();

@@ -1226,12 +1226,14 @@ body.gaia-booking-open{overflow:hidden;}
   // `membership.key` is used only to mark which card is the member's current
   // plan — it never decides what any plan contains.
   function membershipCards() {
-    // Only a live membership marks a plan as "current". A cancelled or expired
-    // Gold should show Gold's price again, because buying it back is exactly
-    // what that member may want to do.
+    // Only a live membership marks its own plan as "current". A cancelled or
+    // expired Gold shows Gold's price again, because buying it back is exactly
+    // what that member may want to do — but that member is on Free now, so Free
+    // is the card that carries the marker. A member with no membership record
+    // is on Free too. Signed-out visitors hold nothing, so nothing is marked.
     const membership = (state.data.access && state.data.access.membership) || null;
-    const currentKey = membership && ['active', 'trialing', 'past_due'].includes(membership.status)
-      ? membership.key : null;
+    const currentKey = !state.authed ? null
+      : (membership && ['active', 'trialing', 'past_due'].includes(membership.status) ? membership.key : 'free');
     const plans = Array.isArray(state.plans) ? state.plans : [];
     if (!plans.length) {
       return '<article class="g-card"><p class="g-card__meta">Membership plans are unavailable right now.</p></article>';

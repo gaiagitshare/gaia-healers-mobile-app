@@ -61,7 +61,7 @@ const PROXY_PUBLIC_URL = (process.env.PROXY_PUBLIC_URL || 'https://api.gaiaheale
 const GHL_CLIENT_PORTAL_BASE_URL = (process.env.GHL_CLIENT_PORTAL_BASE_URL || 'https://education.gaiahealers.com').trim().replace(/\/+$/, '');
 const AUTH_SESSION_COOKIE = process.env.AUTH_SESSION_COOKIE || 'gaia_member_session';
 const AUTH_SESSION_TTL_SECONDS = Math.min(
-  Math.max(Number(process.env.AUTH_SESSION_TTL_SECONDS || 60 * 60 * 24 * 7) || (60 * 60 * 24 * 7), 900),
+  Math.max(Number(process.env.AUTH_SESSION_TTL_SECONDS || 60 * 60 * 24 * 14) || (60 * 60 * 24 * 14), 900),
   60 * 60 * 24 * 30,
 );
 const AUTH_MAGIC_LINK_TTL_SECONDS = Math.min(Math.max(Number(process.env.AUTH_MAGIC_LINK_TTL_SECONDS || 900) || 900, 300), 3600);
@@ -3425,6 +3425,43 @@ function buildMemberAccess(rawTags = [], customFields = [], member = {}, entitle
   };
 }
 
+// Where a My Access entitlement row should open. Mirrors the resolution the
+// courses endpoint and the community grid already do: the mirrored grant's own
+// openUrl, then the synced course catalog / community map, then the deepest
+// link we actually have. `value` passes through the access payload untouched,
+// so this is what lets the UI turn a row into a link without inventing a
+// destination.
+function entitlementOpenUrl(item, record) {
+  if (!item || typeof item !== 'object') return null;
+  const name = String(item.value?.name || '').trim();
+  if (item.type === 'course_access') {
+    const grants = Array.isArray(record?.courses) ? record.courses : [];
+    const key = courseGroupKey(name || item.key || '');
+    const grant = grants.find((g) => String(g?.id || '') === String(item.key || '')
+      || (key && courseGroupKey(g?.name || '') === key));
+    const catalog = loadCourses().courses || [];
+    const catalogCourse = catalog.find((c) => String(c.id || '') === String(grant?.id || item.key || ''))
+      || catalog.find((c) => key && courseGroupKey(c.title || '') === key);
+    const direct = firstNonEmptyString(grant?.openUrl, catalogCourse?.portalUrl, DEEPLINK.courseUrls[grant?.id || item.key]);
+    return { openUrl: direct || DEEPLINK.academyHubUrl || DEEPLINK.portalFallback, openUrlIsFallback: !direct };
+  }
+  if (item.type === 'community_access') {
+    const grants = Array.isArray(record?.communities) ? record.communities : [];
+    const grant = grants.find((g) => String(g?.id || '') === String(item.key || '')
+      || String(g?.name || '').toLowerCase() === (name || String(item.key || '')).toLowerCase());
+    if (grant?.openUrl) return { openUrl: grant.openUrl, openUrlIsFallback: false };
+    return communityOpenUrl(String(grant?.id || item.key || courseGroupKey(name)));
+  }
+  return null;
+}
+
+function withAccessLinks(entitlements, record) {
+  return (Array.isArray(entitlements) ? entitlements : []).map((item) => {
+    const link = entitlementOpenUrl(item, record);
+    return link ? { ...item, value: { ...(item.value || {}), ...link } } : item;
+  });
+}
+
 async function memberAccess(req, res, origin, url) {
   const sessionMember = sessionMemberContext(req);
   if (!sessionMember) {
@@ -3458,7 +3495,7 @@ async function memberAccess(req, res, origin, url) {
       ...emptyAccess,
       member: { ...emptyAccess.member, contactId: profile.id },
       membership: resolvedFixture.membership,
-      entitlements: resolvedFixture.entitlements,
+      entitlements: withAccessLinks(resolvedFixture.entitlements, profile.record),
       sections: resolvedFixture.sections,
       upgrade: resolvedFixture.upgrade,
       meta: { ...resolvedFixture.meta, fixture: profile.id, live_source: 'fixture' },
@@ -3525,7 +3562,7 @@ async function memberAccess(req, res, origin, url) {
     ...access,
     member: { ...access.member, contactId },
     membership: resolved.membership,
-    entitlements: resolved.entitlements,
+    entitlements: withAccessLinks(resolved.entitlements, entitlements),
     sections: resolved.sections,
     upgrade: resolved.upgrade,
     meta: {

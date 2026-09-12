@@ -74,6 +74,8 @@
         ENTITLEMENT_STATUS_TEXT[item.status] || item.status,
         item.status,
         item.expires_at ? `Until ${formatDate(item.expires_at)}` : 'Lifetime access',
+        null,
+        item.status === 'active' ? item.value?.openUrl : '',
       ))),
     },
     community_access: {
@@ -82,6 +84,9 @@
         item.value?.name || item.key,
         ENTITLEMENT_STATUS_TEXT[item.status] || item.status,
         item.status,
+        '',
+        null,
+        item.status === 'active' ? item.value?.openUrl : '',
       ))),
     },
     crm_access: {
@@ -195,9 +200,15 @@
     return text ? text.charAt(0).toUpperCase() + text.slice(1) : 'None';
   };
 
-  const row = (label, statusText, status, meta, flag) =>
+  /* A row's name becomes a link only when the server put an openUrl on the
+   * entitlement — the UI still never invents a destination. The anchor carries
+   * a real href so it works even if the in-app reader is unavailable. */
+  const row = (label, statusText, status, meta, flag, href) =>
     '<li class="g-ma-item g-ma-item--' + esc(statusTone(status)) + '">'
-    + '<span class="g-ma-item__name">' + esc(label) + '</span>'
+    + (href
+      ? '<a class="g-ma-item__name g-ma-item__link" href="' + esc(href) + '" target="_blank" rel="noopener noreferrer"'
+        + ' data-open-in-app="' + esc(href) + '" data-in-app-title="' + esc(label) + '">' + esc(label) + '</a>'
+      : '<span class="g-ma-item__name">' + esc(label) + '</span>')
     + '<span class="g-ma-item__status">' + esc(statusText || '') + '</span>'
     + (meta ? '<span class="g-ma-item__meta">' + esc(meta) + '</span>' : '')
     + (flag ? '<span class="g-ma-item__flag">' + esc(flag) + '</span>' : '')
@@ -251,7 +262,21 @@
     // Rows come from `sections` (what is active) PLUS any type the member holds
     // only in an ended state. A benefit that stopped should say so rather than
     // vanish — silence reads as "we lost your data", not "this ended".
-    const rowTypes = new Map();
+    /* Where each access type lives in the app — the "Open … →" link at the foot
+   * of an expanded panel. Only types with a real section get one. */
+  const SECTION_LINKS = {
+    course_access: 'view=academy',
+    community_access: 'view=community',
+    event_ticket: 'view=events',
+    device_owner: 'view=profile',
+    device_software: 'view=profile',
+    directory_level: 'view=directory',
+    lead_allocation: 'view=directory',
+    discount: 'view=store',
+    promo_membership: 'view=store&tab=membership',
+  };
+
+  const rowTypes = new Map();
     for (const section of sections) {
       rowTypes.set(section.type, { type: section.type, title: section.title, order: section.order });
     }
@@ -281,7 +306,11 @@
         + '<span class="g-ma-row__value">' + esc(summary || section.summary || '') + '</span>'
         + '<span class="g-ma-row__chev" aria-hidden="true">›</span>'
         + '</button>'
-        + '<div class="g-ma-row__panel" id="' + panelId + '" hidden>' + safeDetail(renderer, items) + '</div>'
+        + '<div class="g-ma-row__panel" id="' + panelId + '" hidden>' + safeDetail(renderer, items)
+        + (SECTION_LINKS[section.type]
+          ? '<p class="g-ma-open"><a class="g-ma-open__link" href="home.html?' + esc(SECTION_LINKS[section.type]) + '">Open ' + esc(section.title || 'section') + ' &rarr;</a></p>'
+          : '')
+        + '</div>'
         + '</li>';
     }).join('');
 

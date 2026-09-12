@@ -120,12 +120,6 @@ const EMPTY_EVENT = {
   stats: { attendees: 0, paidMembers: 0, checkedIn: 0, exhibitors: 0, leads: 0, sessions: 0, speakers: 0, checkInRate: 0 },
 };
 
-const FALLBACK_GAIA = {
-  members: 0,
-  portalUrl: 'https://education.gaiahealers.com',
-  event: EMPTY_EVENT,
-};
-
 const FALLBACK_ACADEMY = {
   ok: true,
   configured: false,
@@ -4419,31 +4413,6 @@ async function eventLive(req, res, origin, eventId) {
   sendJson(res, 200, { ok: true, source: 'event-manager', live }, origin);
 }
 
-async function getGhlSummary() {
-  const cfg = ghlConfig();
-  if (!cfg.enabled) {
-    return { configured: false };
-  }
-
-  const lookup = await ghlGet('/contacts', { locationId: cfg.locationId, limit: 1 });
-  const contactsPreview = Array.isArray(lookup?.contacts)
-    ? lookup.contacts.length
-    : Array.isArray(lookup?.data?.contacts)
-      ? lookup.data.contacts.length
-      : 0;
-  return {
-    configured: true,
-    normalized: false,
-    liveData: Boolean(lookup),
-    locationId: cfg.locationId,
-    apiBaseUrl: cfg.base,
-    contactsPreview,
-    note: lookup
-      ? 'GHL contact endpoint is reachable. Using direct contact/member reads with portal-only fallback for unavailable resources.'
-      : 'GHL credentials are configured, but contact endpoint probe failed.',
-  };
-}
-
 function clampPercent(value) {
   return clampNumber(value, 0, 100, 0);
 }
@@ -4683,35 +4652,6 @@ async function getMemberHub(url = new URL('http://localhost'), academy = FALLBAC
   }, academy);
 }
 
-function buildGaiaAppData(event, academy, memberHub) {
-  return {
-    members: memberHub.portal?.users || FALLBACK_GAIA.members,
-    invited: memberHub.portal?.invited || 1,
-    portalUrl: memberHub.portal?.url || FALLBACK_MEMBER_HUB.portal.url,
-    clientPortal: {
-      url: memberHub.portal?.url || FALLBACK_MEMBER_HUB.portal.url,
-      users: memberHub.portal?.users || FALLBACK_MEMBER_HUB.portal.users,
-      invited: memberHub.portal?.invited || FALLBACK_MEMBER_HUB.portal.invited,
-      adminSections: memberHub.portal?.adminSections || FALLBACK_MEMBER_HUB.portal.adminSections,
-      actions: memberHub.portal?.actions || FALLBACK_MEMBER_HUB.portal.actions,
-    },
-    communities: memberHub.communities || FALLBACK_MEMBER_HUB.communities,
-    communityFeed: memberHub.discussions || FALLBACK_MEMBER_HUB.discussions,
-    communityCourses: memberHub.communityCourses || memberHub.courses?.map(academyCourseToCommunityCourse) || [],
-    communityEvents: memberHub.events || FALLBACK_MEMBER_HUB.events,
-    communityMembers: memberHub.members || FALLBACK_MEMBER_HUB.members,
-    communityNewsletter: memberHub.newsletters || FALLBACK_MEMBER_HUB.newsletters,
-    marketplace: memberHub.marketplace || FALLBACK_MEMBER_HUB.marketplace,
-    products: memberHub.products || FALLBACK_MEMBER_HUB.products,
-    meetings: memberHub.meetings || FALLBACK_MEMBER_HUB.meetings,
-    certifications: memberHub.credentials || academy.credentials || FALLBACK_ACADEMY.credentials,
-    topCourse: memberHub.dashboard?.topCourse || FALLBACK_MEMBER_HUB.dashboard.topCourse,
-    event,
-    academy,
-    memberHub,
-  };
-}
-
 async function getAcademyProgress(url = new URL('http://localhost')) {
   const configuredUrl = String(process.env.ACADEMY_PROGRESS_BASE_URL || process.env.GHL_COURSE_PROGRESS_URL || '').replace(/\/+$/, '');
   const token = process.env.ACADEMY_PROGRESS_TOKEN || process.env.GHL_COURSE_PROGRESS_TOKEN || '';
@@ -4825,140 +4765,29 @@ function applyMemberContextToMemberHub(payload, memberContext) {
   };
 }
 
-async function bootstrap(req, url) {
-  const memberContext = sessionMemberContext(req);
-  const academyUrl = withMemberContext(url, memberContext);
-  const [event, ghl, academy] = await Promise.all([
-    getEventSummary().catch((error) => ({ ...EMPTY_EVENT, source: 'event-manager-error', error: error.message })),
-    getGhlSummary().catch((error) => ({ configured: false, error: error.message })),
-    getAcademyProgress(academyUrl).catch((error) => ({ ...FALLBACK_ACADEMY, source: 'academy-error', error: error.message })),
-  ]);
+// GET /api/app/bootstrap — what the app shell reads on boot and on every
+// event refresh: the next event, the portal URL, and whether that read was
+// live. Nothing else. The academy and member-hub read models used to ride
+// along here for renderers that no longer exist; they still serve
+// /api/academy/* and the assist tools, just not this route. The GHL
+// reachability probe that ran on every call is gone too: a contact read per
+// page view whose only output was a status blob (with the location id in it)
+// that nothing rendered.
+async function bootstrap(req) {
+  const event = await getEventSummary().catch((error) => ({ ...EMPTY_EVENT, source: 'event-manager-error', error: error.message }));
   const session = cookieForRequest(req);
-  const authenticated = Boolean(session?.member);
-  const memberResolved = Boolean(memberContext?.email || memberContext?.memberId || memberContext?.contactId);
-  let academyScoped = applyMemberContextToAcademy(academy, memberContext);
-  let memberHub = await getMemberHub(academyUrl, academyScoped).catch((error) => ({ ...FALLBACK_MEMBER_HUB, source: 'member-hub-error', error: error.message }));
-  let memberHubScoped = applyMemberContextToMemberHub(memberHub, memberContext);
-
-  if (!authenticated && !memberResolved) {
-    academyScoped = normalizeAcademyProgress({
-      configured: true,
-      liveData: false,
-      authenticated: false,
-      memberResolved: false,
-      source: 'anonymous-portal-login',
-      member: {
-        name: 'Gaia Healers member',
-        email: '',
-        portalUrl: GHL_CLIENT_PORTAL_BASE_URL || FALLBACK_ACADEMY.member.portalUrl,
-      },
-      summary: {
-        enrolled: 0,
-        completed: 0,
-        inProgress: 0,
-        averageProgress: 0,
-        nextCourseTitle: 'Open your secure Academy workspace',
-        nextLessonTitle: 'Member login unlocks your live lessons and course progress in-app',
-        nextLessonUrl: GHL_CLIENT_PORTAL_BASE_URL || FALLBACK_ACADEMY.member.portalUrl,
-        ceCreditsEarned: 0,
-        ceCreditsRequired: FALLBACK_ACADEMY.summary.ceCreditsRequired,
-      },
-      courses: [],
-      credentials: [],
-      requirements: {
-        title: 'Member login required',
-        description: 'Sign in with your Gaia Healers portal account to unlock your own course progress, certificates, and gated lessons.',
-        scansCompleted: 0,
-        scansRequired: 0,
-        courseRequiredPercent: 0,
-        currentCoursePercent: 0,
-      },
-      portalOnlyFields: ['academyProgress', 'courseLessons', 'certificateIssuance'],
-    });
-
-    memberHubScoped = normalizeMemberHub({
-      ...memberHubScoped,
-      configured: true,
-      liveData: false,
-      authenticated: false,
-      memberResolved: false,
-      source: 'anonymous-portal-login',
-      member: {
-        displayName: 'Gaia Healers member',
-        role: 'Member',
-        cohort: 'Client portal',
-        portalUrl: GHL_CLIENT_PORTAL_BASE_URL || FALLBACK_MEMBER_HUB.portal.url,
-      },
-      dashboard: {
-        ...(memberHubScoped.dashboard || {}),
-        welcomeTitle: 'Your Gaia Healers dashboard is ready',
-        welcomeDetail: 'Sign in once to load your own courses, communities, products, and certificates inside the app.',
-        topCourse: 'Secure Academy workspace',
-        topCourseMeta: 'Member login unlocks your course progress',
-        nextLessonTitle: 'Log in to continue your live lessons',
-        eventPassTitle: event?.shortName || event?.name || '',
-        eventPassDetail: 'Badge ops ready',
-        ceCreditsEarned: 0,
-        ceCreditsRequired: FALLBACK_ACADEMY.summary.ceCreditsRequired,
-      },
-      access: {
-        notes: [
-          'Public app shell is ready.',
-          'Member-specific courses, purchases, communities, and certificates unlock after Gaia Healers portal login.',
-        ],
-      },
-      portalOnlyFields: uniqueStrings([
-        ...(memberHubScoped.portalOnlyFields || []),
-        'communitiesPrivateData',
-        'purchases',
-        'credentialsSourceOfTruth',
-        'courseProgress',
-      ]),
-    }, academyScoped);
-  }
-
-  const liveData = Boolean(event.liveData || ghl.liveData || ghl.normalized || academyScoped.liveData || memberHubScoped.liveData);
-  const gaiaData = buildGaiaAppData(event, academyScoped, memberHubScoped);
-  const portalOnlyFields = uniqueStrings([
-    ...(academyScoped.portalOnlyFields || []),
-    ...(memberHubScoped.portalOnlyFields || []),
-  ]);
-
+  const liveData = Boolean(event.liveData);
   return {
     ok: true,
     gaia: {
-      ...FALLBACK_GAIA,
-      ...gaiaData,
+      portalUrl: FALLBACK_MEMBER_HUB.portal.url,
+      clientPortal: { url: FALLBACK_MEMBER_HUB.portal.url },
+      event,
       sync: {
         generatedAt: new Date().toISOString(),
         liveData,
         mode: liveData ? 'live' : 'proxy-connected',
-        authenticated,
-        memberResolved,
-        academyConfigured: Boolean(academyScoped.configured),
-        academyLive: Boolean(academyScoped.liveData),
-        hubConfigured: Boolean(memberHubScoped.configured),
-        hubLive: Boolean(memberHubScoped.liveData),
-        portalOnlyFields,
-        ghl,
-        auth: sessionPublicShape(session),
-        voice: {
-          configured: Boolean(process.env.GROQ_API_KEY || process.env.OPENROUTER_API_KEY || process.env.OPENAI_API_KEY),
-          enabled: process.env.GAIA_ASSIST_VOICE_ENABLED === 'true',
-          providerOrder: ASSIST_PROVIDER_ORDER,
-          live: gaiaLiveVoiceConfig(),
-          realtime: gaiaLiveVoiceConfig(),
-          tts: {
-            configured: hasAnyBackendTtsProvider(),
-            providerOrder: publicTtsOrder(),
-            openaiModel: OPENAI_TTS_MODEL,
-            openaiVoice: OPENAI_TTS_VOICE,
-            elevenLabsConfigured: Boolean(process.env.ELEVENLABS_API_KEY && ELEVENLABS_VOICE_ID),
-            elevenLabsVoice: ELEVENLABS_VOICE_NAME,
-            elevenLabsVoiceId: ELEVENLABS_VOICE_ID || '',
-            elevenLabsModel: ELEVENLABS_MODEL,
-          },
-        },
+        authenticated: Boolean(session?.member),
       },
     },
   };
@@ -6812,7 +6641,7 @@ const server = http.createServer(async (req, res) => {
       return;
     }
     if (req.method === 'GET' && url.pathname === '/api/app/bootstrap') {
-      const boot = await bootstrap(req, url);
+      const boot = await bootstrap(req);
       try {
         if (boot && boot.gaia) {
           boot.gaia.announcements = adminRouter.publishedAnnouncements();

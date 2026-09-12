@@ -1324,6 +1324,64 @@ async function academyProgress(req, res, origin) {
   sendJson(res, 200, { ok: true, courseId, pct: c.pct, completed: c.completed }, origin);
 }
 
+// A lesson the player could not play. YouTube tells the page — not the
+// server — when it refuses a video (removed, private, embedding disabled), so
+// the player reports it here and the admin health map / alerts pick it up.
+// Only a lesson that exists in the manifest is recorded, only its ids and the
+// error code are kept, and one client cannot flood it.
+const ACADEMY_VIDEO_REPORTS_FILE = path.join(process.cwd(), 'data', 'academy-video-reports.json');
+const ACADEMY_VIDEO_ERROR_CODES = new Set(['2', '5', '100', '101', '150']);
+const ACADEMY_VIDEO_REPORT_WINDOW_MS = 60 * 1000;
+const ACADEMY_VIDEO_REPORT_MAX_PER_WINDOW = 20;
+const _academyVideoReportHits = new Map();
+function loadAcademyVideoReports() {
+  try { return JSON.parse(fs.readFileSync(ACADEMY_VIDEO_REPORTS_FILE, 'utf8')); } catch (_) { return { updatedAt: null, lessons: {} }; }
+}
+function academyLessonInManifest(manifest, courseId, lessonId) {
+  const course = (manifest.courses || []).find((x) => String(x.id) === courseId
+    || (Array.isArray(x.grantMatch) && x.grantMatch.some((g) => String(g) === courseId)));
+  if (!course) return null;
+  for (const section of course.sections || []) {
+    const lesson = (section.lessons || []).find((l) => String(l.id) === lessonId);
+    if (lesson) return { course, lesson };
+  }
+  return null;
+}
+async function academyVideoUnavailable(req, res, origin) {
+  const ip = firstNonEmptyString(req.headers['cf-connecting-ip'], String(req.headers['x-forwarded-for'] || '').split(',')[0], req.socket?.remoteAddress, 'unknown');
+  const now = Date.now();
+  const hits = (_academyVideoReportHits.get(ip) || []).filter((t) => now - t < ACADEMY_VIDEO_REPORT_WINDOW_MS);
+  if (hits.length >= ACADEMY_VIDEO_REPORT_MAX_PER_WINDOW) {
+    sendJson(res, 429, { ok: false, error: 'too_many_reports' }, origin, { 'Retry-After': '60' });
+    return;
+  }
+  hits.push(now); _academyVideoReportHits.set(ip, hits);
+  let body; try { body = await readJsonBody(req, 4 * 1024); } catch (e) { sendJson(res, 400, { ok: false, error: 'bad_json' }, origin); return; }
+  const courseId = String(body.courseId || '').trim().slice(0, 120);
+  const lessonId = String(body.lessonId || '').trim().slice(0, 120);
+  const code = String(body.code == null ? '' : body.code).trim();
+  if (!courseId || !lessonId || !ACADEMY_VIDEO_ERROR_CODES.has(code)) {
+    sendJson(res, 422, { ok: false, error: 'need courseId + lessonId + a known error code' }, origin); return;
+  }
+  const found = academyLessonInManifest(loadAcademyManifest(), courseId, lessonId);
+  if (!found) { sendJson(res, 404, { ok: false, error: 'unknown_lesson' }, origin); return; }
+  const { course, lesson } = found;
+  const store = loadAcademyVideoReports(); store.lessons = store.lessons && typeof store.lessons === 'object' ? store.lessons : {};
+  const key = String(course.id) + '/' + String(lesson.id);
+  const at = new Date(now).toISOString();
+  const prev = store.lessons[key] || null;
+  store.lessons[key] = {
+    courseId: String(course.id), courseTitle: String(course.title || ''),
+    lessonId: String(lesson.id), lessonTitle: String(lesson.title || ''),
+    provider: String(lesson.provider || ''), src: String(lesson.src || ''),
+    code, count: (prev && prev.count || 0) + 1, firstAt: (prev && prev.firstAt) || at, lastAt: at,
+  };
+  store.updatedAt = at;
+  writeJsonAtomic(ACADEMY_VIDEO_REPORTS_FILE, store);
+  if (!prev) console.error('[Gaia Academy] lesson video unavailable', { course: course.title, lesson: lesson.title, provider: lesson.provider, src: lesson.src, code });
+  sendJson(res, 200, { ok: true }, origin);
+}
+
 function memberWebhookAuthorized(req, rawBody) {
   const suppliedSignature = String(req.headers['x-ghl-signature'] || '').trim();
 
@@ -6283,6 +6341,10 @@ const server = http.createServer(async (req, res) => {
       await academyProgress(req, res, origin);
       return;
     }
+    if (req.method === 'POST' && url.pathname === '/api/academy/video-unavailable') {
+      await academyVideoUnavailable(req, res, origin);
+      return;
+    }
     if (req.method === 'POST' && url.pathname === '/api/academy/webhook') {
       await academyWebhook(req, res, origin);
       return;
@@ -6658,6 +6720,7 @@ const server = http.createServer(async (req, res) => {
         loadLedger: loadMemberEntitlements, saveLedger: saveMemberEntitlements,
         loadStoreCatalog, runStoreSync,
         sendAlertEmail,
+        loadAcademyVideoReports,
       });
       return;
     }

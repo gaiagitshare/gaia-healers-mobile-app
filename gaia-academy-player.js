@@ -229,9 +229,37 @@
       var prov = providerOf(l);
       if (prov === 'youtube') {
         var id = ytId(l.src);
-        stage.innerHTML = '<iframe class="gaia-acad__yt" src="https://www.youtube.com/embed/' + esc(id)
-          + '?autoplay=1&rel=0&playsinline=1&modestbranding=1" title="' + esc(l.title)
-          + '" allow="autoplay; encrypted-media; fullscreen; picture-in-picture" allowfullscreen></iframe>';
+        var plainIframe = function () {
+          stage.innerHTML = '<iframe class="gaia-acad__yt" src="https://www.youtube.com/embed/' + esc(id)
+            + '?autoplay=1&rel=0&playsinline=1&modestbranding=1" title="' + esc(l.title)
+            + '" allow="autoplay; encrypted-media; fullscreen; picture-in-picture" allowfullscreen></iframe>';
+        };
+        var host = document.createElement('div');
+        host.className = 'gaia-acad__yt';
+        stage.innerHTML = ''; stage.appendChild(host);
+        loadYouTubeApi().then(function (YT) {
+          if (current !== l) return; // member moved on while the API loaded
+          new YT.Player(host, {
+            videoId: id, width: '100%', height: '100%',
+            playerVars: { autoplay: 1, rel: 0, playsinline: 1, modestbranding: 1 },
+            events: {
+              // The API swaps the host div for an iframe of its own; give it
+              // the stage class so sizing and the fullscreen button find it.
+              onReady: function (e) { try { e.target.getIframe().className = 'gaia-acad__yt'; } catch (err) {} },
+              onError: function (e) {
+                if (current !== l) return;
+                var code = e && e.data != null ? e.data : 5;
+                showUnavailable(stage, l, code);
+                reportUnavailable(course, l, code);
+              },
+            },
+          });
+        }).catch(function () {
+          // The API script did not load (offline, blocked). That says nothing
+          // about the video, so no report — just the plain embed.
+          if (current !== l) return;
+          plainIframe();
+        });
         return;
       }
       if (prov === 'vimeo') {
@@ -274,6 +302,56 @@
     markChecks();
     var startLesson = (startLessonId && lessons.find(function (x) { return x.id === startLessonId; })) || lessons[0];
     playLesson(startLesson);
+  }
+
+  // ── When the host refuses a video ──────────────────────────────────────
+  // A plain <iframe> cannot tell us that YouTube refused a lesson; the member
+  // just gets YouTube's grey "Video unavailable" box. The IFrame Player API
+  // does tell us (100 removed/private, 101/150 embedding disabled), so
+  // YouTube lessons go through it: on error the stage says what is wrong in
+  // the app's words, and the proxy is told so the admin health map and alerts
+  // see it. If the API script cannot load, the plain iframe is the fallback.
+  var ytApi = null;
+  function loadYouTubeApi() {
+    if (window.YT && window.YT.Player) return Promise.resolve(window.YT);
+    if (ytApi) return ytApi;
+    ytApi = new Promise(function (resolve, reject) {
+      var prev = window.onYouTubeIframeAPIReady;
+      var timer = setTimeout(function () { ytApi = null; reject(new Error('youtube api timeout')); }, 8000);
+      window.onYouTubeIframeAPIReady = function () {
+        clearTimeout(timer);
+        if (typeof prev === 'function') { try { prev(); } catch (e) {} }
+        resolve(window.YT);
+      };
+      var s = document.createElement('script');
+      s.src = 'https://www.youtube.com/iframe_api'; s.async = true;
+      s.onerror = function () { clearTimeout(timer); ytApi = null; reject(new Error('youtube api failed')); };
+      document.head.appendChild(s);
+    });
+    return ytApi;
+  }
+  var UNAVAILABLE_REASON = {
+    100: 'YouTube reports this video as removed or private.',
+    101: 'YouTube does not allow this video to play outside youtube.com.',
+    150: 'YouTube does not allow this video to play outside youtube.com.',
+    2: 'The video link for this lesson is not valid.',
+    5: 'The video player could not start.',
+  };
+  function showUnavailable(stage, lesson, code) {
+    stage.innerHTML = '<div class="gaia-acad__unavail" role="status">'
+      + '<i class="ph ph-video-camera-slash" aria-hidden="true"></i>'
+      + '<p class="gaia-acad__unavail-title">This video can’t play right now</p>'
+      + '<p class="gaia-acad__unavail-body">' + esc(UNAVAILABLE_REASON[code] || 'The video host refused to play it.')
+      + ' The organizers have been notified; the other lessons in this course still play.</p></div>';
+  }
+  function reportUnavailable(course, lesson, code) {
+    try {
+      fetch(proxyBase() + '/api/academy/video-unavailable', {
+        method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ courseId: course.id, lessonId: lesson.id, code: String(code) }),
+        keepalive: true,
+      }).catch(function () {});
+    } catch (e) { /* reporting is best-effort */ }
   }
 
   function open(idOrObj, startLessonId) {

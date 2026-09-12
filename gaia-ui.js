@@ -1043,7 +1043,7 @@
             </div>
             <button type="button" class="gaia-sheet-close" data-auth-close aria-label="Close sign in">&times;</button>
           </div>
-          <p class="gaia-auth-modal__body">Enter your Gaia Healers member email. We’ll send a secure one-tap link that returns directly to this app and keeps you signed in for one week.</p>
+          <p class="gaia-auth-modal__body">Enter your Gaia Healers member email. We’ll send a secure one-tap link that returns directly to this app and keeps you signed in for two weeks — longer if you keep coming back.</p>
           <div class="gaia-auth-modal__social" data-auth-social hidden></div>
           <form class="gaia-auth-modal__form" data-auth-form>
             <input type="email" data-auth-email class="gaia-auth-modal__input" placeholder="you@example.com" autocomplete="email" inputmode="email" aria-label="Email address" aria-describedby="gaia-auth-status" required />
@@ -1180,7 +1180,7 @@
             statusEl.classList.add('is-sent');
             statusEl.innerHTML = '<strong class="gaia-auth-modal__sent-title">\u2713 Sign-in link sent</strong>'
               + '<span class="gaia-auth-modal__sent-body">We just emailed a one-tap sign-in link to <strong>' + safeEmail + '</strong>. Open it on this device to sign in automatically.</span>'
-              + '<span class="gaia-auth-modal__sent-hint">No email within a minute? Check your <strong>spam</strong> or <strong>promotions</strong> folder.</span>';
+              + '<span class="gaia-auth-modal__sent-hint">No email within a minute? Check your <strong>spam</strong> or <strong>promotions</strong> folder — the link is good for 15 minutes.</span>';
             submitBtn.textContent = 'Resend link';
             if (payload.pollId) startMagicPolling(payload.pollId, statusEl, modal);
           }

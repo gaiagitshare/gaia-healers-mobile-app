@@ -1045,10 +1045,9 @@ function academyOwnedIdsForRequest(req) {
   const email = String(sm.email || '').trim().toLowerCase();
   let contactId = String(sm.contactId || sm.memberId || '').trim();
   if (!contactId && email) { const map = loadAcademyEmailToContact(); contactId = map[email] || ''; }
+  // The ledger alone. academy-access.json used to be read here too; it held a
+  // hand-seeded "all courses" grant from August, not anything GHL said.
   const ids = new Set();
-  const access = loadAcademyAccess();
-  if (contactId && Array.isArray(access.byContact?.[contactId])) access.byContact[contactId].forEach((x) => ids.add(x));
-  if (email && Array.isArray(access.byEmail?.[email])) access.byEmail[email].forEach((x) => ids.add(x));
   const ledgerIdx = loadLedgerAcademyIndex();
   if (contactId && Array.isArray(ledgerIdx[contactId])) ledgerIdx[contactId].forEach((x) => ids.add(x));
   return { member: { email, contactId }, ids };
@@ -1270,12 +1269,35 @@ async function academyWebhook(req, res, origin) {
     sendJson(res, 200, { ok: true, action, resolved: [], via: 'unresolved', offerTitle: offerTitle || null, contactId: contactId || null, email: email || null }, origin);
     return;
   }
-  const access = loadAcademyAccess(); access.byContact = access.byContact || {}; access.byEmail = access.byEmail || {};
-  const upd = (store, key) => { if (!key) return; const set = new Set(store[key] || []); for (const id of ids) { if (action === 'grant') set.add(id); else set.delete(id); } store[key] = [...set]; };
-  upd(access.byContact, contactId); upd(access.byEmail, email);
-  access.updatedAt = new Date().toISOString();
-  writeJsonAtomic(ACADEMY_ACCESS_FILE, access);
-  sendJson(res, 200, { ok: true, action, resolved: ids, via, offerTitle: offerTitle || null, contactId: contactId || null, email: email || null }, origin);
+  // Hand each resolved course to the entitlement ledger's own webhook path —
+  // the one with identity resolution, ordering watermarks, rejections and
+  // health — over loopback with the workflow secret. This route used to write
+  // a side file the ledger never saw, so a grant that arrived here showed in
+  // the player but not in My Access. One channel, one truth.
+  const manifest = loadAcademyManifest();
+  const titleFor = (id) => { const c = (manifest.courses || []).find((x) => String(x.id) === String(id)); return c ? String(c.title || '') : ''; };
+  const forwarded = [];
+  for (const id of ids) {
+    const payload = {
+      eventId: 'academy-webhook:' + crypto.createHash('sha256').update([action, contactId, email, id, String(body.timestamp || body.eventId || Date.now())].join('|')).digest('hex').slice(0, 24),
+      type: action === 'grant' ? 'course_access_granted' : 'course_access_revoked',
+      contactId: contactId || undefined, email: email || undefined,
+      courseId: id, courseName: titleFor(id) || offerTitle || id,
+      timestamp: body.timestamp || new Date().toISOString(),
+      source: 'academy-webhook',
+    };
+    try {
+      const r = await fetch(`http://${HOST}:${PORT}/api/webhooks/ghl/member-access`, {
+        method: 'POST', headers: { 'content-type': 'application/json', 'x-webhook-secret': GHL_WORKFLOW_WEBHOOK_SECRET },
+        body: JSON.stringify(payload),
+      });
+      const j = await r.json().catch(() => ({}));
+      forwarded.push({ courseId: id, status: r.status, applied: j.applied === true, reason: j.reason || j.error || null });
+    } catch (err) {
+      forwarded.push({ courseId: id, status: 0, applied: false, reason: String(err && err.message || err).split('\n')[0] });
+    }
+  }
+  sendJson(res, 200, { ok: true, action, resolved: ids, via, forwarded, offerTitle: offerTitle || null, contactId: contactId || null, email: email || null }, origin);
 }
 
 const ACADEMY_EMAIL_TO_CONTACT_FILE = path.join(path.dirname(MEMBER_ENTITLEMENTS_FILE), 'email-to-contact.json');
@@ -1339,12 +1361,12 @@ function loadLedgerAcademyIndex() {
 async function academyMe(req, res, origin) {
   const { member, ids } = academyOwnedIdsForRequest(req);
   if (!member) { sendJson(res, 200, { ok: true, authenticated: false, courses: [], progress: {}, count: 0, updatedAt: null }, origin); return; }
-  const access = loadAcademyAccess();
   const progress = loadAcademyProgress();
   const manifest = loadAcademyManifest();
   const owned = (manifest.courses || []).filter((c) => academyCourseOwned(c, ids));
   const prog = (member.contactId && progress.byContact && progress.byContact[member.contactId]) || {};
-  sendJson(res, 200, { ok: true, authenticated: true, courses: owned, progress: prog, count: owned.length, updatedAt: access.updatedAt }, origin);
+  let updatedAt = null; try { updatedAt = new Date(fs.statSync(MEMBER_ENTITLEMENTS_FILE).mtimeMs).toISOString(); } catch (_) { /* no ledger yet */ }
+  sendJson(res, 200, { ok: true, authenticated: true, courses: owned, progress: prog, count: owned.length, updatedAt }, origin);
 }
 
 // POST /api/academy/progress — the in-app player reports a lesson's position +

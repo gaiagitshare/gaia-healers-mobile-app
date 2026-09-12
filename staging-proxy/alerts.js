@@ -49,6 +49,21 @@ export function detect(health, extra = {}) {
   for (const c of (health && health.components) || []) byKey[c.key] = c;
   const add = (d) => out.push(d);
 
+  // ── Academy lesson videos ────────────────────────────────────────────────
+  // Reported by the player itself when the host refused to play a lesson. The
+  // lesson list still works; the video has to be restored or replaced in the
+  // GHL course, so this is a warning to the content owner, not an outage.
+  const av = byKey.academy_videos;
+  if (av && av.state === 'degraded' && Array.isArray(av.unavailable) && av.unavailable.length) {
+    const n = av.unavailable.length;
+    const codeText = (c) => ({ 100: 'removed or private', 101: 'embedding disabled', 150: 'embedding disabled', 2: 'bad video id', 5: 'player error' })[c] || `code ${c}`;
+    add({ key: 'academy-videos:unavailable', severity: 'warning', subsystem: 'Academy',
+      title: `${n} lesson video${n === 1 ? '' : 's'} cannot play`,
+      why: 'A member opened a lesson and the video host refused it. The lesson list still works; the video itself has to be restored (made public/unlisted) or replaced in the GHL course.',
+      evidence: av.unavailable.map((r) => `${r.courseTitle} › ${r.lessonTitle} (${r.provider} ${r.src}: ${codeText(r.code)}, seen ${r.count}×, last ${r.lastAt})`).join(' · '),
+      affected: null });
+  }
+
   // ── Course access ────────────────────────────────────────────────────────
   // Idle is NOT a fault: no course has sold, so nothing arrives. Only an actual
   // refusal or a failed write is a problem.

@@ -317,3 +317,22 @@ test('a backup incident carries no credential, path secret or environment value'
   assert.ok(!/access[_-]?key|secret|token|password|R2_|rclone\.conf/i.test(msg.text),
     'a backup alert must never quote what it uses to authenticate');
 });
+
+test('a lesson video the host refused raises a warning naming the lesson', () => {
+  const h = health();
+  h.components.push({ key: 'academy_videos', kind: 'content', state: 'degraded', unavailable: [
+    { courseTitle: 'Healeex - Getting Started', lessonTitle: 'Lesson 1: User Guide', provider: 'youtube', src: 'KmRBzDeRqPI', code: '100', count: 3, lastAt: '2026-09-12T16:00:00.000Z' },
+  ] });
+  const d = detect(h);
+  assert.deepEqual(keys(d), ['academy-videos:unavailable']);
+  assert.equal(d[0].severity, 'warning');
+  assert.match(d[0].title, /1 lesson video cannot play/);
+  assert.match(d[0].evidence, /Healeex - Getting Started › Lesson 1: User Guide/);
+  assert.match(d[0].evidence, /removed or private/);
+});
+
+test('a healthy academy_videos component raises nothing', () => {
+  const h = health();
+  h.components.push({ key: 'academy_videos', kind: 'content', state: 'ok', unavailable: [] });
+  assert.deepEqual(detect(h), []);
+});

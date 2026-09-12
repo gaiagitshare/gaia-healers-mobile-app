@@ -755,6 +755,30 @@ async function pipelineHealth(deps) {
     service: 'gaia-academy-sync.service', timer: 'gaia-academy-sync.timer',
     okWithin: 36 * HOUR, cadence: 'daily',
   }));
+
+  // ── Academy lesson videos ─────────────────────────────────────────────────
+  // The in-app player reports a lesson YouTube refused to play (removed,
+  // private, embedding disabled). A member saw a dead video: that is a fault
+  // in the content, not idleness, and it stays amber until the report ages out
+  // — the lesson is only re-reported when someone opens it again.
+  try {
+    const reports = deps.loadAcademyVideoReports ? deps.loadAcademyVideoReports() : null;
+    const recent = Object.values((reports && reports.lessons) || {})
+      .filter((r) => r && Date.parse(r.lastAt || '') > Date.now() - 7 * 24 * HOUR)
+      .sort((a, b) => Date.parse(b.lastAt) - Date.parse(a.lastAt));
+    add({
+      key: 'academy_videos', label: 'Academy lesson videos', kind: 'content',
+      state: recent.length ? 'degraded' : 'ok',
+      detail: recent.length
+        ? `${recent.length} lesson video${recent.length === 1 ? '' : 's'} refused by the host in the last 7 days.`
+        : 'Every lesson a member opened in the last 7 days played.',
+      lastWriteAt: (reports && reports.updatedAt) || null,
+      unavailable: recent.map((r) => ({
+        courseTitle: r.courseTitle, lessonTitle: r.lessonTitle, provider: r.provider, src: r.src,
+        code: r.code, count: r.count, lastAt: r.lastAt,
+      })),
+    });
+  } catch (_) { /* reports store optional */ }
   // A backup job that exits 0 is not a backup. The artifact is checked too:
   // newest file, its age and its size. A truncated or missing archive turns the
   // component amber even when systemd is perfectly happy with the run.

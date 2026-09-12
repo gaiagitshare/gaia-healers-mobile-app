@@ -1225,6 +1225,7 @@ body.gaia-booking-open{overflow:hidden;}
       + '<div class="g-tier__head"><p class="g-card__label">' + esc(o.name) + '</p>'
       + (o.statusLabel ? '<span class="g-badge' + (o.active ? ' g-badge--on' : '') + '">' + esc(o.statusLabel) + '</span>' : '') + '</div>'
       + '<ul class="g-tier__list">' + o.abilities.map((a) => '<li>' + esc(a) + '</li>').join('') + '</ul>'
+      + (o.accessHtml || '')
       + (o.note ? '<p class="g-card__meta">' + esc(o.note) + '</p>' : '')
       + (o.ctaAction ? '<div class="g-card__actions"><button type="button" class="g-btn ' + (o.active ? 'g-btn--secondary' : 'g-btn--primary') + ' g-btn--sm" data-open-in-app="' + esc(o.ctaUrl) + '" data-in-app-title="' + esc(o.name + ' Membership') + '">' + esc(o.ctaLabel) + '</button></div>' : '')
       + (o.ctaHref ? '<div class="g-card__actions"><a class="g-btn ' + (o.active ? 'g-btn--secondary' : 'g-btn--primary') + ' g-btn--sm" href="' + esc(o.ctaHref) + '" target="_blank" rel="noopener noreferrer">' + esc(o.ctaLabel) + '</a></div>' : '')
@@ -1260,11 +1261,38 @@ body.gaia-booking-open{overflow:hidden;}
         statusLabel: isCurrent ? 'Current plan' : price,
         active: isCurrent,
         abilities: Array.isArray(plan.displayBenefits) ? plan.displayBenefits : [],
+        accessHtml: isCurrent ? yourAccessBlock(access) : '',
         ctaLabel: isCurrent ? '' : ('Choose ' + plan.label),
         ctaAction: isCurrent ? '' : 'membership',
         ctaUrl: plan.checkoutUrl || '',
       });
     }).join('');
+  }
+
+  // The member's own enrolments, on the card of the plan they hold. This is
+  // the ledger's `sections` (what is active right now), never the plan's
+  // marketing benefits above it — those say what a plan promises, this says
+  // what this member has. Each row is the way into that part of the app; the
+  // section → view map is the one My Access already uses.
+  function yourAccessBlock(access) {
+    const links = (window.GaiaMembershipUI && window.GaiaMembershipUI.SECTION_LINKS) || {};
+    const sections = Array.isArray(access && access.sections) ? access.sections : [];
+    // Every active section is listed; only those with a screen in the app are
+    // links. CRM access, for instance, lives in the GHL workspace, so its row
+    // is plain — but it is still the member's, so it is still shown.
+    const rows = sections.filter((s) => s && s.type).map((s) => {
+      const inner = '<span class="g-tier__access-name">' + esc(s.title || s.type) + '</span>'
+        + (s.summary ? '<span class="g-tier__access-meta">' + esc(s.summary) + '</span>' : '');
+      return links[s.type]
+        ? '<li><a class="g-tier__access-link" href="home.html?' + esc(links[s.type]) + '">' + inner
+          + '<span class="g-tier__access-chev" aria-hidden="true">›</span></a></li>'
+        : '<li><span class="g-tier__access-link g-tier__access-link--static">' + inner + '</span></li>';
+    });
+    return '<div class="g-tier__access"><p class="g-tier__access-head">Your access</p>'
+      + (rows.length
+        ? '<ul class="g-tier__access-list">' + rows.join('') + '</ul>'
+        : '<p class="g-card__meta">Nothing on record yet — courses and communities you are enrolled in will appear here.</p>')
+      + '<p class="g-tier__access-all"><a href="home.html?view=profile">Everything in My Access &rarr;</a></p></div>';
   }
 
   // Store "Membership" tab. Products live in the "Shop" tab (gaia-store.js);

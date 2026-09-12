@@ -438,5 +438,6 @@
     degradedNotice,
     bind,
     RENDERERS,
+    SECTION_LINKS,
   };
 })();

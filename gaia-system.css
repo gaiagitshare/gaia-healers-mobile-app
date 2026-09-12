@@ -252,6 +252,22 @@
 .g-tier__list{list-style:none;margin:var(--g-s2) 0 0;padding:0;display:flex;flex-direction:column;gap:6px}
 .g-tier__list li{position:relative;padding-left:22px;font-size:14px;color:var(--g-text);line-height:1.4}
 .g-tier__list li::before{content:"✓";position:absolute;left:0;top:0;color:var(--g-accent);font-weight:700}
+/* "Your access" on the current plan's card: the member's live enrolments, each a way in. */
+.g-tier__access{margin-top:var(--g-s3);padding-top:var(--g-s3);border-top:1px solid var(--g-line)}
+.g-tier__access-head{margin:0 0 var(--g-s2);font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--g-text-faint)}
+.g-tier__access-list{list-style:none;margin:0;padding:0;display:flex;flex-direction:column}
+.g-tier__access-link{display:flex;align-items:center;gap:var(--g-s2);min-height:44px;padding:6px 0;
+  color:var(--g-text);text-decoration:none;border-bottom:1px solid var(--g-line)}
+.g-tier__access-list li:last-child .g-tier__access-link{border-bottom:0}
+.g-tier__access-name{flex:1 1 auto;font-size:14px;font-weight:600}
+.g-tier__access-meta{font-size:13px;color:var(--g-text-muted)}
+.g-tier__access-chev{color:var(--g-accent);font-size:18px;line-height:1}
+.g-tier__access-link--static{color:var(--g-text-muted);cursor:default}
+.g-tier__access-link:hover .g-tier__access-name{text-decoration:underline}
+.g-tier__access-link:focus-visible{outline:none;box-shadow:var(--g-focus)}
+.g-tier__access-all{margin:var(--g-s2) 0 0;font-size:13px}
+.g-tier__access-all a{color:var(--g-accent);text-decoration:none;font-weight:600}
+.g-tier__access-all a:hover{text-decoration:underline}
 
 /* Store layout ---------------------------------------------- */
 .g-store{background:var(--g-bg);color:var(--g-text);font-family:var(--g-font);

@@ -1,4 +1,4 @@
-const CACHE_NAME = 'gaia-healers-20260912c-signin-copy';
+const CACHE_NAME = 'gaia-healers-20260912d-plan-card-access';
 /**
  * Precache ONLY what the page requests by exactly this URL.
  *

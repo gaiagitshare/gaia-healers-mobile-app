@@ -9,6 +9,7 @@ import SearchIcon from '@mui/icons-material/Search';
 import ClearIcon from '@mui/icons-material/Clear';
 import HowToRegIcon from '@mui/icons-material/HowToReg';
 import PrintIcon from '@mui/icons-material/Print';
+import IosShareIcon from '@mui/icons-material/IosShare';
 import UndoIcon from '@mui/icons-material/Undo';
 import VisibilityIcon from '@mui/icons-material/Visibility';
 import PersonAddIcon from '@mui/icons-material/PersonAdd';
@@ -312,7 +313,7 @@ function CheckIn({ timezone: timezoneProp }) {
         setLabel({ attendee, url: null, attemptId: attemptId(), checkedInNow, error: '' });
         try {
             const response = await badgeLabelBlob(eventId, attendee.id, labelSize);
-            setLabel((l) => (l && l.attendee.id === attendee.id ? { ...l, url: URL.createObjectURL(response.data) } : l));
+            setLabel((l) => (l && l.attendee.id === attendee.id ? { ...l, url: URL.createObjectURL(response.data), blob: response.data } : l));
         } catch (err) {
             setLabel((l) => (l ? { ...l, error: err.response?.data?.detail || 'Could not render the label.' } : l));
         }
@@ -330,6 +331,29 @@ function CheckIn({ timezone: timezoneProp }) {
         if (!win) { setFeedback({ severity: 'warning', message: 'Pop-up blocked — allow pop-ups for this site to print.' }); return; }
         win.document.write(`<!doctype html><title>Badge label</title><style>@page{size:${w}mm ${h}mm;margin:0}html,body{margin:0;padding:0}img{display:block;width:${w}mm;height:${h}mm;image-rendering:pixelated}</style><img src="${label.url}" onload="setTimeout(function(){window.print();},150)">`);
         win.document.close();
+    };
+    // iPhone: no NIIMBOT printer driver exists (the printers are Bluetooth-only,
+    // no AirPrint), and the NIIMBOT app has no link that takes an image. The one
+    // route iOS gives a web page is the share sheet: hand the PNG over as a
+    // file, the operator picks NIIMBOT (or Save Image, then NIIMBOT → Image
+    // label). Android Chrome shows the same sheet. Desktop keeps Print.
+    const canShareLabel = () => {
+        try {
+            if (!label?.blob || !navigator.canShare) return false;
+            return navigator.canShare({ files: [new File([label.blob], 'badge.png', { type: 'image/png' })] });
+        } catch (e) { return false; }
+    };
+    const shareToApp = async () => {
+        if (!label?.blob) return;
+        const a = label.attendee;
+        const file = new File([label.blob], `badge-${a.qr_code || a.id}.png`, { type: 'image/png' });
+        try {
+            await navigator.share({ files: [file], title: `${fullName(a)} — badge label` });
+            setFeedback({ severity: 'info', message: `Label sent. In NIIMBOT: Image label → this picture → Print. Then tap “Printed ✓” here.` });
+        } catch (err) {
+            if (err && err.name === 'AbortError') return;          // operator closed the sheet
+            setFeedback({ severity: 'warning', message: 'Could not open the share sheet — use Download PNG and open it in NIIMBOT.' });
+        }
     };
     const finishPrint = async (result, error = '') => {
         if (!label) return;
@@ -896,6 +920,7 @@ function CheckIn({ timezone: timezoneProp }) {
                 <DialogActions sx={{ flexWrap: 'wrap', gap: 0.5 }}>
                     <Button onClick={closeLabel}>Close</Button>
                     {label?.url && <Button component="a" href={label.url} download={`badge-${label.attendee.qr_code}.png`}>Download PNG</Button>}
+                    {canShareLabel() && <Button variant="outlined" startIcon={<IosShareIcon />} onClick={shareToApp}>Send to NIIMBOT app</Button>}
                     <Button variant="outlined" startIcon={<PrintIcon />} disabled={!label?.url} onClick={sendToPrinter}>Print</Button>
                     <Button color="warning" onClick={() => finishPrint('failed', 'Operator reported a failed print')}>Mark failed</Button>
                     <Button variant="contained" color="success" onClick={() => finishPrint('printed')}>Printed ✓</Button>

@@ -42,6 +42,19 @@ const HEADLINE = {
 };
 const STATION_KEY = 'gha_station';
 const LABEL_SIZE_KEY = 'gha_label_size';
+// Every roll the station can print on. Key = the server's size id (width x
+// length, mm); w/h are the exact page dimensions the print window is sized
+// to, so nothing is scaled. The 3 x 5 inch label is 76.2 x 127 mm on a
+// 3"-wide printer and gets the same name-over-QR design, scaled to the width.
+const LABEL_ROLLS = {
+    '40x60':  { w: 40,   h: 60,  text: '40 × 60 mm',      menu: '40 × 60 mm · portrait — in stock' },
+    '40x50':  { w: 40,   h: 50,  text: '40 × 50 mm',      menu: '40 × 50 mm · portrait — design target, roll not sold by NIIMBOT' },
+    '40x40':  { w: 40,   h: 40,  text: '40 × 40 mm',      menu: '40 × 40 mm — in stock' },
+    '40x30':  { w: 40,   h: 30,  text: '40 × 30 mm',      menu: '40 × 30 mm — in stock' },
+    '50x30':  { w: 50,   h: 30,  text: '50 × 30 mm',      menu: '50 × 30 mm · landscape — in stock' },
+    '76x127': { w: 76.2, h: 127, text: '3 × 5 in (76 × 127 mm)', menu: '3 × 5 in · portrait (76 × 127 mm) — 3" label printer' },
+};
+const rollText = (key) => (LABEL_ROLLS[key] ? LABEL_ROLLS[key].text : key.replace('x', ' × ') + ' mm');
 
 // The desk faces a queue. Contact details are masked until the operator asks.
 const maskEmail = (email) => {
@@ -311,7 +324,8 @@ function CheckIn({ timezone: timezoneProp }) {
     // page is sized to the roll so nothing is scaled.
     const sendToPrinter = () => {
         if (!label?.url) return;
-        const [w, h] = labelSize.split('x');   // roll width x length, mm
+        const roll = LABEL_ROLLS[labelSize] || { w: Number(labelSize.split('x')[0]), h: Number(labelSize.split('x')[1]) };
+        const w = roll.w, h = roll.h;             // page = the roll, in mm, exactly
         const win = window.open('', '_blank', 'width=520,height=360');
         if (!win) { setFeedback({ severity: 'warning', message: 'Pop-up blocked — allow pop-ups for this site to print.' }); return; }
         win.document.write(`<!doctype html><title>Badge label</title><style>@page{size:${w}mm ${h}mm;margin:0}html,body{margin:0;padding:0}img{display:block;width:${w}mm;height:${h}mm;image-rendering:pixelated}</style><img src="${label.url}" onload="setTimeout(function(){window.print();},150)">`);
@@ -594,7 +608,7 @@ function CheckIn({ timezone: timezoneProp }) {
                             </Typography>
                             <Typography variant="body2" color="text.secondary">·</Typography>
                             <Typography variant="body2" color="text.secondary">
-                                {labelSize.replace('x', ' × ')} mm label
+                                {rollText(labelSize)} label
                             </Typography>
                             <Box flexGrow={1} />
                             <Button size="small" onClick={() => setStationOpen((v) => !v)}
@@ -615,11 +629,9 @@ function CheckIn({ timezone: timezoneProp }) {
                                     <TextField select size="small" label="Label roll" value={labelSize}
                                         onChange={(e) => rememberLabelSize(e.target.value)} sx={{ minWidth: 150 }}
                                         helperText="Saved on this device">
-                                        <MenuItem value="40x60">40 × 60 mm · portrait — in stock</MenuItem>
-                                        <MenuItem value="40x50">40 × 50 mm · portrait — design target, roll not sold by NIIMBOT</MenuItem>
-                                        <MenuItem value="40x40">40 × 40 mm — in stock</MenuItem>
-                                        <MenuItem value="40x30">40 × 30 mm — in stock</MenuItem>
-                                        <MenuItem value="50x30">50 × 30 mm · landscape — in stock</MenuItem>
+                                        {Object.entries(LABEL_ROLLS).map(([key, roll]) => (
+                                            <MenuItem key={key} value={key}>{roll.menu}</MenuItem>
+                                        ))}
                                     </TextField>
                                 </Stack>
                                 <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 1 }}>{zoneNote}</Typography>
@@ -868,7 +880,7 @@ function CheckIn({ timezone: timezoneProp }) {
                     {label && (
                         <Stack spacing={1.5} alignItems="center">
                             <Typography variant="body2" color="text.secondary" alignSelf="flex-start">
-                                Hand over the <strong>{physicalCard(label.attendee)}</strong> card. Sticker: {labelSize.replace('x', ' × ')} mm — full name over the badge QR, nothing else.
+                                Hand over the <strong>{physicalCard(label.attendee)}</strong> card. Sticker: {rollText(labelSize)} — full name over the badge QR, nothing else.
                             </Typography>
                             <Box sx={{ p: 2, bgcolor: '#fff', borderRadius: 1, border: '1px solid', borderColor: 'divider', width: '100%', display: 'flex', justifyContent: 'center' }}>
                                 {label.url

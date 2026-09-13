@@ -1877,6 +1877,34 @@ def _lifecycle_append(attendee, action, actor="system", **extra):
 # A base (is_upgrade=False) is a standalone ticket; upgrades are add-ons that do
 # not grant access on their own. Refunded entries are sticky (a re-seen completed
 # order never resurrects them). Legacy attendees (no ledger) keep old behavior.
+def _ent_is_same(e, ref, addon_code, product_id, tt_id):
+    """Is this ledger row the same purchase as the one being recorded?
+
+    The reference alone used to be the whole identity, which was right while an
+    order meant one thing. Elevate now sells the exhibit hall by the day, so a
+    single order can carry Friday AND Saturday AND Sunday -- three separate
+    entitlements that arrive as three calls sharing one order id. Keyed on the
+    reference alone the second call found the first, overwrote its
+    ticket_type_id, and the buyer silently ended up holding one day.
+
+    So for base tickets the product is part of the identity. Add-ons keep their
+    old identity (reference + code), and a legacy row that recorded neither a
+    product nor a ticket type still matches on the reference alone, exactly as
+    it did before -- replaying an old order must not fork it into a duplicate.
+    """
+    if (e.get("order_id") or e.get("invoice_id")) != ref:
+        return False
+    if e.get("addon_code") != addon_code:
+        return False
+    if addon_code:
+        return True
+    if product_id and e.get("product_id"):
+        return str(e.get("product_id")) == str(product_id)
+    if tt_id and e.get("ticket_type_id"):
+        return int(e.get("ticket_type_id")) == int(tt_id)
+    return True
+
+
 def _ent_record(cd, order_id, tx, tt_id, is_upgrade, addon_code=None, day=None, day_date=None,
                 event_id=None, invoice_id=None, amount=None, source=None,
                 product_id=None, quantity=None, purchased_at=None):
@@ -1894,7 +1922,7 @@ def _ent_record(cd, order_id, tx, tt_id, is_upgrade, addon_code=None, day=None, 
         return
     ents = list(cd.get("entitlements") or [])
     for e in ents:
-        if (e.get("order_id") or e.get("invoice_id")) == ref and e.get("addon_code") == addon_code:
+        if _ent_is_same(e, ref, addon_code, product_id, tt_id):
             if e.get("status") == "refunded":
                 cd["entitlements"] = ents
                 return  # sticky: a re-seen completed order does not un-refund it
@@ -2023,11 +2051,46 @@ def _effective_access(db, attendee):
             lbl = (tt.name if tt else "Ticket"); kind = ("upgrade" if e.get("is_upgrade") else "base ticket")
         hist.append({"label": lbl, "kind": kind, "status": e.get("status") or "paid",
                      "order_id": e.get("order_id"), "day": e.get("day"), "ts": e.get("ts")})
+    # Which days this person actually paid for.
+    #
+    # base_ticket above is ONE ticket type, chosen by rank, and that is right for
+    # naming a tier and for zones. It is wrong for the door: day passes do not
+    # compete, they accumulate, and every one of them ranks the same, so
+    # resolving to a single base threw away every day but one. The door needs the
+    # whole set.
+    #
+    # A paid tier with no valid_day (GA, VIP, Three Day) is unrestricted and
+    # admits on any event day -- recorded separately so it can never be mistaken
+    # for "no days purchased".
+    day_dates, unrestricted = set(), False
+    for e in base_ents:
+        _tt = db.query(models.TicketType).filter(models.TicketType.id == e.get("ticket_type_id")).first()
+        if not _tt:
+            continue
+        if getattr(_tt, "valid_day", None):
+            day_dates.add(str(_tt.valid_day)[:10])
+        else:
+            unrestricted = True
+    day_list = sorted(day_dates)
+    # Name every day that was bought, so a two-day buyer does not read in Admin
+    # or on the badge as though they hold one.
+    if len(day_list) > 1 and not unrestricted:
+        _names = []
+        for e in base_ents:
+            _tt = db.query(models.TicketType).filter(models.TicketType.id == e.get("ticket_type_id")).first()
+            if _tt is not None and getattr(_tt, "valid_day", None) and (_tt.name or _tt.code) not in _names:
+                _names.append(_tt.name or _tt.code)
+        if _names:
+            eff = " + ".join(_names)
+            if not active:
+                eff = "%s \u2014 %s" % (eff, _ticket_status(attendee).upper())
     return {
         "base_ticket": ({"id": base.id, "code": base.code, "name": base.name} if base else None),
         "status": _ticket_status(attendee),
         "active": active,
         "addons": addons,
+        "valid_days": day_list,
+        "unrestricted_days": unrestricted,
         "effective_label": eff,
         "entitlement_history": hist,
     }
@@ -2136,17 +2199,31 @@ def _authorize_decision(db, attendee, event, access_type, at=None):
         "vip": bool(tt and getattr(tt, "is_vip", False)),
     }
     out["zones"] = zones
-    # A single-day pass admits on its own day and no other. Every existing tier
-    # has valid_day NULL and is unaffected.
-    day_only = getattr(tt, "valid_day", None) if tt is not None else None
-    if az in ("EVENT_ENTRY", "EXHIBIT") and day_only and str(day_only)[:10] != today:
+    # A day pass admits on its own day and no other -- but a person may hold
+    # several, and then every one of them counts. Reading valid_day off the single
+    # resolved base ticket refused the days it had not picked. Tiers with no
+    # valid_day (GA, VIP, Three Day) are unrestricted and unaffected.
+    paid_days = eff.get("valid_days") or []
+    unrestricted = bool(eff.get("unrestricted_days"))
+    if paid_days and not unrestricted:
+        out["valid_days"] = paid_days
+    if az in ("EVENT_ENTRY", "EXHIBIT") and paid_days and not unrestricted and today not in paid_days:
+        _held = (eff.get("effective_label") if len(paid_days) > 1
+                 else (base["name"] if base else "This pass"))
         out.update({"result": "DENIED", "granted": False,
-                    "reason": "%s is valid on %s only" % (base["name"] if base else "This pass", str(day_only)[:10])})
+                    "reason": "%s is valid on %s only" % (_held, " and ".join(paid_days))})
         return out
+    day_only = paid_days[0] if (len(paid_days) == 1 and not unrestricted) else None
     if az in ("EVENT_ENTRY", "EXHIBIT"):
         if has_base:
+            # Name what the person actually holds. A two-day buyer scanned on the
+            # second day used to read as "Saturday Exhibit Hall admitted" on a
+            # Sunday, which is the sort of thing that makes door staff stop
+            # trusting the screen.
+            _who = eff.get("effective_label") if len(paid_days) > 1 else base["name"]
+            _when = day_only or (today if len(paid_days) > 1 else None)
             out.update({"result": "GRANTED", "granted": True,
-                        "reason": (base["name"] + (" \u2014 admitted" if not day_only else " \u2014 admitted for %s" % str(day_only)[:10]))})
+                        "reason": (_who + (" \u2014 admitted" if not _when else " \u2014 admitted for %s" % str(_when)[:10]))})
         else:
             out.update({"result": "DENIED", "granted": False, "reason": "Add-on found, but no valid base event admission"})
     elif az in ("CONFERENCE", "SPEAKER"):
@@ -6461,7 +6538,7 @@ def map_reconcile_apply(event_id: int, payload: schemas.MapReconcileRequest,
                     event_id=event.id, email=row["email"], invoice_id=row["id"],
                     contact_id=row.get("contact_id"), product_id=product_id,
                     amount=row.get("amount_paid"), quantity=qty, status="paid",
-                    first_name=first, last_name=last,
+                    first_name=first, last_name=last, phone=row.get("phone") or None,
                     issued_at=str(row.get("created_at") or "")[:10] or None,
                 ), db=db, _=True)
             else:
@@ -6472,6 +6549,14 @@ def map_reconcile_apply(event_id: int, payload: schemas.MapReconcileRequest,
                     contact_id=row.get("contact_id"), order_id=row["id"],
                     product_id=product_id, quantity=qty, amount=row.get("amount"),
                     purchased_at=str(row.get("created_at") or "")[:10] or None,
+                    # The phone GHL recorded with the payment. A replay is often
+                    # the ONLY thing that ever creates this person: the checkout
+                    # webhook only fires for a product that was already mapped,
+                    # so a product mapped after the fact reconciles its buyers
+                    # from history alone -- and they arrived with no phone at all
+                    # until this was passed. reconcile_attendee fills a blank
+                    # field and never overwrites one that is already set.
+                    phone=row.get("phone") or None,
                     first_name=first, last_name=last,
                 ), db=db, _=True)
             if isinstance(res, dict) and res.get("blocked"):
@@ -6811,7 +6896,10 @@ def refund_ticket(payload: schemas.RefundTicket, db: Session = Depends(get_db),
     _already = _ref and (_ref in seen or any(
         (e.get("order_id") or e.get("invoice_id")) == _ref and e.get("status") == "refunded"
         for e in (cd.get("entitlements") or [])))
-    if _already:
+    if _already and all(
+            e.get("status") == "refunded"
+            for e in (cd.get("entitlements") or [])
+            if (e.get("order_id") or e.get("invoice_id")) == _ref):
         return {"ok": True, "matched": True, "changed": False,
                 "status": _ticket_status(attendee), "attendee_id": attendee.id}
 
@@ -6834,8 +6922,13 @@ def refund_ticket(payload: schemas.RefundTicket, db: Session = Depends(get_db),
     ents = list(cd.get("entitlements") or [])
     ledger_hit = None
     for e in ents:
+        # Every entitlement this order bought, not just the first. One order can
+        # now carry several day passes, and a full refund of it takes back all of
+        # them -- stopping at the first left the buyer holding the other days.
         if (e.get("order_id") or e.get("invoice_id")) == _ref:
-            e["status"] = "refunded"; ledger_hit = e; break
+            e["status"] = "refunded"
+            if ledger_hit is None:
+                ledger_hit = e
     cd["entitlements"] = ents
     prev_tt = attendee.ticket_type_id
     # Admin override keeps access at the admin-set tier regardless of payment.

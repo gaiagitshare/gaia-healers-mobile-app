@@ -676,10 +676,18 @@ def _render_portrait(first_name, last_name, token, W, H, base=None):
     surname is never cut before the given names are."""
     img = Image.new("L", (W, H), 255)
     draw = ImageDraw.Draw(img)
-    side = _mm(2.5)
-    top = _mm(3.0)
-    bottom = _mm(2.5)
-    gap = _mm(1.5)
+    # Every millimetre below was tuned on a 40 mm-wide roll. A wider label (the
+    # 3 x 5 inch, 76 mm) gets the same design at the same proportions -- type,
+    # margins and leading all grow with the width -- instead of a 40 mm-sized
+    # name floating over a QR that fills the sheet. Rolls up to 40 mm wide are
+    # untouched: the factor never drops below 1.
+    scale = max(1.0, W / float(_mm(40)))
+    def smm(v):
+        return _mm(v * scale)
+    side = smm(2.5)
+    top = smm(3.0)
+    bottom = smm(2.5)
+    gap = smm(1.5)
     max_w = W - 2 * side
 
     # 1. QR first, as large as the label allows while leaving a name band that
@@ -688,8 +696,8 @@ def _render_portrait(first_name, last_name, token, W, H, base=None):
     q.add_data(printed_payload(token, base))
     q.make(fit=True)
     n = q.modules_count + 4
-    min_line = _font(_FONT_BOLD, _mm(3.0)).getbbox("HXg")[3]
-    min_band = 2 * min_line + _mm(0.9)
+    min_line = _font(_FONT_BOLD, smm(3.0)).getbbox("HXg")[3]
+    min_band = 2 * min_line + smm(0.9)
     qr_px = min(max_w, H - top - bottom - gap - min_band)
     box = max(1, int(qr_px // n))
     qimg = q.make_image(fill_color="black", back_color="white").convert("L").resize((n * box, n * box), Image.NEAREST)
@@ -699,14 +707,14 @@ def _render_portrait(first_name, last_name, token, W, H, base=None):
     name = " ".join(p for p in ((first_name or "").strip(), (last_name or "").strip()) if p).upper()
     words = name.split()
     lines = None
-    for size in range(_mm(5.6), _mm(3.8) - 1, -1):          # one line
+    for size in range(smm(5.6), smm(3.8) - 1, -1):          # one line
         f = _font(_FONT_BOLD, size)
         if draw.textlength(name, font=f) <= max_w and f.getbbox("HXg")[3] <= band_h:
             lines = (f, [name]); break
     if lines is None and len(words) > 1:                     # two lines
-        for size in range(_mm(5.2), _mm(3.0) - 1, -1):
+        for size in range(smm(5.2), smm(3.0) - 1, -1):
             f = _font(_FONT_BOLD, size)
-            if 2 * f.getbbox("HXg")[3] + _mm(0.9) > band_h:
+            if 2 * f.getbbox("HXg")[3] + smm(0.9) > band_h:
                 continue
             got = _wrap_two(draw, words, _FONT_BOLD, max_w, size)
             if got:
@@ -714,12 +722,27 @@ def _render_portrait(first_name, last_name, token, W, H, base=None):
     if lines is None:                                        # last resort
         given = " ".join(words[:-1]) if len(words) > 1 else name
         sur = words[-1] if len(words) > 1 else ""
-        f2, t2 = _fit(draw, sur or given, _FONT_BOLD, max_w, _mm(3.4), _mm(2.6))
+        f2, t2 = _fit(draw, sur or given, _FONT_BOLD, max_w, smm(3.4), smm(2.6))
         if sur:
-            f1, t1 = _fit(draw, given, _FONT_BOLD, max_w, f2.size, _mm(2.4))
+            f1, t1 = _fit(draw, given, _FONT_BOLD, max_w, f2.size, smm(2.4))
             lines = (f2, [t1, t2])
         else:
             lines = (f2, [t2])
+        # _fit stops at a floor size and can still leave a line wider than the
+        # label; it used to print anyway and run off both edges. Nothing leaves
+        # the label now: the surname stays whole, the given names drop to the
+        # first given name, and whatever still does not fit ends in an ellipsis.
+        f, texts = lines
+        fixed = []
+        for i, t in enumerate(texts):
+            if draw.textlength(t, font=f) <= max_w:
+                fixed.append(t); continue
+            if sur and i == 0 and words[:-1]:
+                t = words[0]
+            while t and draw.textlength(t + "…", font=f) > max_w:
+                t = t[:-1].rstrip()
+            fixed.append((t + "…") if t != texts[i] else t)
+        lines = (f, fixed)
 
     # 3. Compose name and QR as ONE block and centre that on the label.
     #
@@ -733,7 +756,7 @@ def _render_portrait(first_name, last_name, token, W, H, base=None):
     bb = f.getbbox("HXg")
     ink_top = bb[1]          # the blank the font leaves above a capital
     line_h = bb[3]
-    lead = _mm(0.9)
+    lead = smm(0.9)
     block_h = line_h * len(texts) + lead * (len(texts) - 1)
     # Centre the INK, not the text box. A capital sits below its box top by the
     # font's ascender bearing, so centring the box leaves the label looking
@@ -743,8 +766,8 @@ def _render_portrait(first_name, last_name, token, W, H, base=None):
     # pushes everything visibly high on the sticker. Balance the INK.
     quiet = 2 * box
     # The typed-code line, if the roll is tall enough to carry it.
-    code_f = _font(_FONT_REG, _mm(2.6))
-    code_gap = _mm(0.6)
+    code_f = _font(_FONT_REG, smm(2.6))
+    code_gap = smm(0.6)
     code_h = code_f.getbbox("HXg")[3]
     if H - top - bottom < block_h + gap + qimg.height + code_gap + code_h:
         code_h = 0                                   # no room; the QR wins
@@ -824,10 +847,14 @@ def _render_landscape(first_name, last_name, token, W, H, qr_mm, base=None):
 # it looks. The 40x50 design target is kept selectable in case a genuine roll is
 # sourced; the DEFAULT is a size that can be bought today, with the identical
 # layout (full name over the same 32.7 mm QR) and 10 mm more air around it.
+# Sizes are roll width x length in mm. "76x127" is the 3 x 5 inch label
+# (76.2 x 127 mm) used on a 3"-wide label printer; the portrait layout scales
+# its type and margins to the width, so the sticker reads at arm's length.
 LABEL_SIZES = {"40x60": (40, 60), "40x50": (40, 50), "40x40": (40, 40),
-               "50x30": (50, 30), "40x30": (40, 30), "50x40": (50, 40)}
+               "50x30": (50, 30), "40x30": (40, 30), "50x40": (50, 40),
+               "76x127": (76.2, 127)}
 LABEL_STOCKED = {"40x60": True, "40x40": True, "50x30": True, "40x30": True,
-                 "40x50": False, "50x40": False}
+                 "40x50": False, "50x40": False, "76x127": True}
 DEFAULT_LABEL = "40x60"
 
 

@@ -9,16 +9,15 @@ import SearchIcon from '@mui/icons-material/Search';
 import ClearIcon from '@mui/icons-material/Clear';
 import HowToRegIcon from '@mui/icons-material/HowToReg';
 import PrintIcon from '@mui/icons-material/Print';
-import IosShareIcon from '@mui/icons-material/IosShare';
-import BluetoothIcon from '@mui/icons-material/Bluetooth';
 import UndoIcon from '@mui/icons-material/Undo';
 import VisibilityIcon from '@mui/icons-material/Visibility';
 import PersonAddIcon from '@mui/icons-material/PersonAdd';
 import QrCodeScannerIcon from '@mui/icons-material/QrCodeScanner';
 import TuneIcon from '@mui/icons-material/Tune';
 import { Html5QrcodeScanner } from 'html5-qrcode';
-import { authorizeScan, getScanLogs, searchAttendees, getEvents, walkInCreate, getTicketTypes, badgeLabelBlob, recordBadgePrint, undoCheckIn, clearScanLogs, setDoorTestMode, getEvent } from '../utils/api';
+import { authorizeScan, getScanLogs, searchAttendees, getEvents, walkInCreate, getTicketTypes, undoCheckIn, clearScanLogs, setDoorTestMode, getEvent } from '../utils/api';
 import { formatVenueTime, statusLabel, isFlaggedStatus } from '../utils/datetime';
+import BadgeLabelDialog, { STATION_KEY, LABEL_SIZE_KEY, LABEL_ROLLS, DEFAULT_LABEL_SIZE, rollText, fullName, physicalCard } from './BadgeLabelDialog';
 
 // The access zones a scanner can be checking. The BACKEND decides the outcome;
 // the operator only tells it which door/zone this is.
@@ -42,81 +41,6 @@ const LOG_STATE = {
 const HEADLINE = {
     GRANTED: 'ADMITTED', LIMITED: 'CHECK THIS ONE', DENIED: 'DENIED', UNDO: 'UNDONE',
 };
-const STATION_KEY = 'gha_station';
-const LABEL_SIZE_KEY = 'gha_label_size';
-// Every roll the station can print on. Key = the server's size id (width x
-// length, mm); w/h are the exact page dimensions the print window is sized
-// to, so nothing is scaled. The 3 x 5 inch label is 76.2 x 127 mm on a
-// 3"-wide printer and gets the same name-over-QR design, scaled to the width.
-const LABEL_ROLLS = {
-    '40x60':  { w: 40,   h: 60,  text: '40 × 60 mm',      menu: '40 × 60 mm · portrait — in stock' },
-    '40x50':  { w: 40,   h: 50,  text: '40 × 50 mm',      menu: '40 × 50 mm · portrait — design target, roll not sold by NIIMBOT' },
-    '40x40':  { w: 40,   h: 40,  text: '40 × 40 mm',      menu: '40 × 40 mm — in stock' },
-    '40x30':  { w: 40,   h: 30,  text: '40 × 30 mm',      menu: '40 × 30 mm — in stock' },
-    '50x30':  { w: 50,   h: 30,  text: '50 × 30 mm',      menu: '50 × 30 mm · landscape — in stock' },
-    '76x127': { w: 76.2, h: 127, text: '3 × 5 in (76 × 127 mm)', menu: '3 × 5 in · portrait (76 × 127 mm) — 3" label printer' },
-};
-const rollText = (key) => (LABEL_ROLLS[key] ? LABEL_ROLLS[key].text : key.replace('x', ' × ') + ' mm');
-
-// ── Direct Bluetooth printing (NIIMBOT B1) ─────────────────────────────────
-// The door printer is a NIIMBOT B1: 203 dpi, 384-dot (48 mm) printhead, paper
-// centred under the head by its spring guides. The label PNG the server renders
-// is already 203 dpi (40 mm = 320 px), so it is dropped 1:1 onto a full-width
-// canvas, centred — a 40 mm roll gets 4 mm of white each side, a 50 mm roll
-// loses the 1 mm per side the head cannot reach anyway. The driver (MIT,
-// public/vendor/niimbot-*.js) speaks the B1's BLE protocol from the page, so
-// Chrome (desktop / Android) and Bluefy on iPhone print without the NIIMBOT
-// app. It resolves only once the printer confirmed the page — no “Printed ✓”
-// tap needed on that path.
-const NIIMBOT_DRIVER_URL = `${process.env.PUBLIC_URL || ''}/vendor/niimbot-2.6.0.js`;
-const B1_MODEL = { name_prefixes: ['B1'], task: 'b1', density: 3, label_type: 1, speed: 1 };
-const B1_DPI = 203;
-const B1_HEAD_PX = 384;                       // 48 mm at 203 dpi
-const B1_OFFSET_Y_PX = 4;                     // paper registration measured on a B1 (driver's T50x30_b1)
-const B1_MAX_ROLL_MM = 50;                    // widest roll the B1 takes
-const canPrintBluetooth = () => { try { return Boolean(navigator.bluetooth); } catch (e) { return false; } };
-let niimbotLoading = null;
-const loadNiimbot = () => {
-    if (window.Niimbot) return Promise.resolve(window.Niimbot);
-    if (!niimbotLoading) {
-        niimbotLoading = new Promise((resolve, reject) => {
-            const el = document.createElement('script');
-            el.src = NIIMBOT_DRIVER_URL; el.async = true;
-            el.onload = () => (window.Niimbot ? resolve(window.Niimbot) : reject(new Error('Printer driver did not initialise.')));
-            el.onerror = () => { niimbotLoading = null; reject(new Error('Could not load the printer driver — check the connection and try again.')); };
-            document.head.appendChild(el);
-        });
-    }
-    return niimbotLoading;
-};
-// Label PNG → { url, w_px, h_px } for the B1: full head width, label centred,
-// pixels untouched (a 1-bit source through a smoothing scaler would grey the QR).
-const composeForB1 = async (blob) => {
-    const bmp = await createImageBitmap(blob);
-    const h = bmp.height;
-    const canvas = document.createElement('canvas');
-    canvas.width = B1_HEAD_PX; canvas.height = h;
-    const ctx = canvas.getContext('2d');
-    ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, B1_HEAD_PX, h);
-    ctx.imageSmoothingEnabled = false;
-    ctx.drawImage(bmp, Math.round((B1_HEAD_PX - bmp.width) / 2), 0);   // 320 px → 32 px white each side; 400 px → 8 px cropped each side
-    bmp.close && bmp.close();
-    const out = await new Promise((resolve, reject) => canvas.toBlob((b) => (b ? resolve(b) : reject(new Error('Could not prepare the label.'))), 'image/png'));
-    return { url: URL.createObjectURL(out), w_px: B1_HEAD_PX, h_px: h };
-};
-// What the operator reads when a Bluetooth print does not go through.
-const bluetoothError = (err) => {
-    const name = err && err.name; const msg = String((err && err.message) || err || '');
-    if (name === 'NotFoundError') return '';                                   // chooser closed without picking a printer
-    if (name === 'NotAllowedError' || name === 'SecurityError') return 'Bluetooth was blocked for this site — allow it in the browser and try again.';
-    if (name === 'NetworkError' || /GATT|disconnected|Not connected/i.test(msg)) return 'Lost the printer — switch the B1 on (blue light), keep it near, and try again.';
-    if (/Web Bluetooth/i.test(msg)) return 'This browser cannot talk to the printer. Use Chrome on a laptop/Android, or the Bluefy browser on iPhone.';
-    if (/Connected printer is/i.test(msg)) return 'That is not a B1 — this station is set up for the NIIMBOT B1.';
-    if (/counter stopped|never acknowledged/i.test(msg)) return 'The printer did not confirm the label — check the paper (lid closed, roll seated) and look at what came out.';
-    return msg.length > 140 ? msg.slice(0, 137) + '…' : (msg || 'Print failed.');
-};
-
-// The desk faces a queue. Contact details are masked until the operator asks.
 const maskEmail = (email) => {
     const s = String(email || '');
     const at = s.indexOf('@');
@@ -127,13 +51,6 @@ const maskPhone = (phone) => {
     const d = String(phone || '').replace(/\D/g, '');
     return d ? '••• ••• ' + d.slice(-4) : '';
 };
-// Which of the pre-printed coloured cards to hand over. The sticker never
-// repeats the tier; the card already says it.
-const physicalCard = (attendee) => {
-    const code = attendee?.effective_access?.base_ticket?.code || attendee?.ticket_type_code || '';
-    return code === 'VIP' ? 'VIP' : 'ATTENDEE';
-};
-
 function CheckIn({ timezone: timezoneProp }) {
     const { id: eventIdFromRoute } = useParams();
     const [pickedEvent, setPickedEvent] = useState(null);
@@ -190,10 +107,9 @@ function CheckIn({ timezone: timezoneProp }) {
     const [truncated, setTruncated] = useState(false);
     const [revealId, setRevealId] = useState(null);
     const [station, setStation] = useState(() => { try { return localStorage.getItem(STATION_KEY) || ''; } catch (e) { return ''; } });
-    const [labelSize, setLabelSize] = useState(() => { try { return localStorage.getItem(LABEL_SIZE_KEY) || '40x60'; } catch (e) { return '40x60'; } });
+    const [labelSize, setLabelSize] = useState(() => { try { return localStorage.getItem(LABEL_SIZE_KEY) || DEFAULT_LABEL_SIZE; } catch (e) { return DEFAULT_LABEL_SIZE; } });
     // The label preview: check-in has ALREADY committed by the time this opens.
-    const [label, setLabel] = useState(null);   // { attendee, url, attemptId, checkedInNow, error }
-    const [btStatus, setBtStatus] = useState('');   // progress line while a Bluetooth print runs ('' = idle)
+    const [labelReq, setLabelReq] = useState(null);   // { attendee, checkedInNow, labelSize } → BadgeLabelDialog
     const [undoTarget, setUndoTarget] = useState(null);
     const [undoReason, setUndoReason] = useState('');
     const [stationOpen, setStationOpen] = useState(false);
@@ -366,103 +282,8 @@ function CheckIn({ timezone: timezoneProp }) {
     // cost a check-in, and a reprint can never check anyone in twice.
     const rememberStation = (value) => { setStation(value); try { localStorage.setItem(STATION_KEY, value); } catch (e) { /* noop */ } };
     const rememberLabelSize = (value) => { setLabelSize(value); try { localStorage.setItem(LABEL_SIZE_KEY, value); } catch (e) { /* noop */ } };
-    const attemptId = () => (window.crypto?.randomUUID ? window.crypto.randomUUID() : String(Date.now()) + Math.random());
-
-    const openLabel = async (attendee, checkedInNow = false) => {
-        if (label?.url) URL.revokeObjectURL(label.url);
-        setLabel({ attendee, url: null, attemptId: attemptId(), checkedInNow, error: '' });
-        try {
-            const response = await badgeLabelBlob(eventId, attendee.id, labelSize);
-            setLabel((l) => (l && l.attendee.id === attendee.id ? { ...l, url: URL.createObjectURL(response.data), blob: response.data } : l));
-        } catch (err) {
-            setLabel((l) => (l ? { ...l, error: err.response?.data?.detail || 'Could not render the label.' } : l));
-        }
-    };
-    const closeLabel = () => { if (label?.url) URL.revokeObjectURL(label.url); setLabel(null); };
-
-    // Sends the sticker to whatever printer the browser can reach (the NIIMBOT
-    // desktop driver, or a bridge that registers as a system printer). The
-    // page is sized to the roll so nothing is scaled.
-    const sendToPrinter = () => {
-        if (!label?.url) return;
-        const roll = LABEL_ROLLS[labelSize] || { w: Number(labelSize.split('x')[0]), h: Number(labelSize.split('x')[1]) };
-        const w = roll.w, h = roll.h;             // page = the roll, in mm, exactly
-        const win = window.open('', '_blank', 'width=520,height=360');
-        if (!win) { setFeedback({ severity: 'warning', message: 'Pop-up blocked — allow pop-ups for this site to print.' }); return; }
-        win.document.write(`<!doctype html><title>Badge label</title><style>@page{size:${w}mm ${h}mm;margin:0}html,body{margin:0;padding:0}img{display:block;width:${w}mm;height:${h}mm;image-rendering:pixelated}</style><img src="${label.url}" onload="setTimeout(function(){window.print();},150)">`);
-        win.document.close();
-    };
-    // iPhone: no NIIMBOT printer driver exists (the printers are Bluetooth-only,
-    // no AirPrint), and the NIIMBOT app has no link that takes an image. The one
-    // route iOS gives a web page is the share sheet: hand the PNG over as a
-    // file, the operator picks NIIMBOT (or Save Image, then NIIMBOT → Image
-    // label). Android Chrome shows the same sheet. Desktop keeps Print.
-    const canShareLabel = () => {
-        try {
-            if (!label?.blob || !navigator.canShare) return false;
-            return navigator.canShare({ files: [new File([label.blob], 'badge.png', { type: 'image/png' })] });
-        } catch (e) { return false; }
-    };
-    const shareToApp = async () => {
-        if (!label?.blob) return;
-        const a = label.attendee;
-        const file = new File([label.blob], `badge-${a.qr_code || a.id}.png`, { type: 'image/png' });
-        try {
-            await navigator.share({ files: [file], title: `${fullName(a)} — badge label` });
-            setFeedback({ severity: 'info', message: `Label sent. In NIIMBOT: Image label → this picture → Print. Then tap “Printed ✓” here.` });
-        } catch (err) {
-            if (err && err.name === 'AbortError') return;          // operator closed the sheet
-            setFeedback({ severity: 'warning', message: 'Could not open the share sheet — use Download PNG and open it in NIIMBOT.' });
-        }
-    };
-    // One tap, no app: pair the B1 (chooser on first use, then it stays
-    // connected), push the label over BLE, and record the print once the
-    // printer itself has confirmed the page. Anything less than confirmation
-    // leaves the dialog open with the reason, so the operator decides.
-    const printOnB1 = async () => {
-        if (!label?.blob || btStatus) return;
-        const roll = LABEL_ROLLS[labelSize] || { w: Number(labelSize.split('x')[0]), h: Number(labelSize.split('x')[1]) };
-        if (roll.w > B1_MAX_ROLL_MM) {
-            setFeedback({ severity: 'warning', message: `${rollText(labelSize)} is wider than the B1's 48 mm printhead. Pick a 40 or 50 mm roll in Station setup, or use Print / Send for the 3-inch printer.` });
-            return;
-        }
-        const a = label.attendee;
-        let composed = null;
-        setBtStatus('loading driver…');
-        try {
-            const Niimbot = await loadNiimbot();
-            setBtStatus('preparing label…');
-            composed = await composeForB1(label.blob);
-            await Niimbot.printImage(composed.url, {
-                model: B1_MODEL,
-                size: { w_px: composed.w_px, h_px: composed.h_px, offset_y_px: B1_OFFSET_Y_PX, dpi: B1_DPI },
-                onProgress: (s) => setBtStatus(String(s || '')),
-            });
-            setBtStatus('');
-            await finishPrint('printed');
-        } catch (err) {
-            setBtStatus('');
-            const why = bluetoothError(err);
-            if (why) setFeedback({ severity: 'warning', message: `${fullName(a)} — B1 print failed: ${why}` });
-        } finally {
-            if (composed?.url) URL.revokeObjectURL(composed.url);
-        }
-    };
-    const finishPrint = async (result, error = '') => {
-        if (!label) return;
-        const a = label.attendee;
-        try {
-            await recordBadgePrint(eventId, a.id, { result, station: station || undefined, error: error || undefined, client_attempt_id: label.attemptId });
-            setFeedback(result === 'printed'
-                ? { severity: 'success', message: `${fullName(a)} — badge printed${label.checkedInNow ? ' · checked in' : ''}` }
-                : { severity: 'warning', message: `${fullName(a)} — ${label.checkedInNow ? '✓ checked in · ' : ''}⚠ badge NOT printed. Use Retry print.` });
-            await refreshSearch();
-        } catch (err) {
-            setFeedback({ severity: 'error', message: err.response?.data?.detail || 'Could not record the print.' });
-        }
-        if (result === 'printed') closeLabel();
-        else setLabel((l) => (l ? { ...l, attemptId: attemptId() } : l));
-    };
+    const openLabel = (attendee, checkedInNow = false) => setLabelReq({ attendee, checkedInNow, labelSize });
+    const closeLabel = () => setLabelReq(null);
 
     // "Check in & print": authorise EVENT_ENTRY, and only THEN open the label.
     const checkInAndPrint = async (attendee) => {
@@ -502,7 +323,6 @@ function CheckIn({ timezone: timezoneProp }) {
         }
     };
 
-    const fullName = (attendee) => (`${attendee.first_name || ''} ${attendee.last_name || ''}`.trim() || attendee.email);
     const accessOf = (a) => a && a.effective_access;
 
     const resultRow = (attendee) => {
@@ -988,45 +808,8 @@ function CheckIn({ timezone: timezoneProp }) {
 
 
             {/* Label preview. Check-in (if any) has already committed; this only prints. */}
-            <Dialog open={Boolean(label)} onClose={closeLabel} maxWidth="sm" fullWidth>
-                <DialogTitle>
-                    {label ? fullName(label.attendee) : ''}
-                    {label?.checkedInNow && <Chip size="small" color="success" label="✓ Checked in" sx={{ ml: 1 }} />}
-                </DialogTitle>
-                <DialogContent dividers>
-                    {label && (
-                        <Stack spacing={1.5} alignItems="center">
-                            <Typography variant="body2" color="text.secondary" alignSelf="flex-start">
-                                Hand over the <strong>{physicalCard(label.attendee)}</strong> card. Sticker: {rollText(labelSize)} — full name over the badge QR, nothing else.
-                            </Typography>
-                            <Box sx={{ p: 2, bgcolor: '#fff', borderRadius: 1, border: '1px solid', borderColor: 'divider', width: '100%', display: 'flex', justifyContent: 'center' }}>
-                                {label.url
-                                    ? <img src={label.url} alt="Badge label preview" style={{ maxWidth: '100%', maxHeight: 420, imageRendering: 'pixelated' }} />
-                                    : (label.error ? <Alert severity="error">{label.error}</Alert> : <CircularProgress size={28} />)}
-                            </Box>
-                            <Typography variant="caption" color="text.secondary" alignSelf="flex-start">
-                                {canPrintBluetooth()
-                                    ? 'Print on B1 records the print by itself once the printer confirms it. Any other route: print, then tell the system what happened.'
-                                    : 'Print, then tell the system what happened.'} A failed print never undoes the check-in; a reprint never checks anyone in twice.
-                            </Typography>
-                        </Stack>
-                    )}
-                </DialogContent>
-                <DialogActions sx={{ flexWrap: 'wrap', gap: 0.5 }}>
-                    <Button onClick={closeLabel}>Close</Button>
-                    {label?.url && <Button component="a" href={label.url} download={`badge-${label.attendee.qr_code}.png`}>Download PNG</Button>}
-                    {canPrintBluetooth() && (
-                        <Button variant="contained" startIcon={btStatus ? <CircularProgress size={16} color="inherit" /> : <BluetoothIcon />}
-                            disabled={!label?.blob || Boolean(btStatus)} onClick={printOnB1}>
-                            {btStatus ? `B1: ${btStatus}` : 'Print on B1'}
-                        </Button>
-                    )}
-                    {canShareLabel() && <Button variant="outlined" startIcon={<IosShareIcon />} onClick={shareToApp}>Send to NIIMBOT app</Button>}
-                    <Button variant="outlined" startIcon={<PrintIcon />} disabled={!label?.url} onClick={sendToPrinter}>Print</Button>
-                    <Button color="warning" onClick={() => finishPrint('failed', 'Operator reported a failed print')}>Mark failed</Button>
-                    <Button variant="contained" color="success" onClick={() => finishPrint('printed')}>Printed ✓</Button>
-                </DialogActions>
-            </Dialog>
+            <BadgeLabelDialog request={labelReq} eventId={eventId} station={station}
+                onClose={closeLabel} onRecorded={refreshSearch} notify={setFeedback} />
 
             <Dialog open={clearLogsOpen} onClose={() => setClearLogsOpen(false)}>
                 <DialogTitle>Clear the scan history?</DialogTitle>

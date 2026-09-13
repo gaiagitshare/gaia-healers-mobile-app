@@ -517,10 +517,13 @@ function Attendees({ timezone }) {
                         </>
                     )}
                 </Box>
-                <Box display="flex" gap={1} flexDirection={{ xs: 'column', sm: 'row' }} sx={{ flexShrink: 0 }}>
-                    <Button size="small" variant="outlined" startIcon={<UploadFileIcon />} onClick={() => setOpenImportDialog(true)}>Bulk Import CSV</Button>
-                    <Button size="small" variant="outlined" onClick={handleExport}>Export CSV</Button>
+                {/* One row that wraps, never a stack of three full-width buttons:
+                    on a phone that stack pushed the search — the point of the
+                    page — below the fold. Add is the one that gets used at the desk. */}
+                <Box display="flex" gap={1} flexWrap="wrap" sx={{ flexShrink: 0 }}>
                     <Button size="small" variant="contained" startIcon={<AddIcon />} onClick={() => setOpenDialog(true)}>Add Attendee</Button>
+                    <Button size="small" variant="outlined" startIcon={<UploadFileIcon />} onClick={() => setOpenImportDialog(true)}>Import CSV</Button>
+                    <Button size="small" variant="outlined" onClick={handleExport}>Export CSV</Button>
                 </Box>
             </Box>
 

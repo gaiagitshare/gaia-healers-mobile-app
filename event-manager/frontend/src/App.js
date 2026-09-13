@@ -53,6 +53,8 @@ const theme = createTheme({
         borderRadius: 12,
     },
     components: {
+        // On a phone or tablet (a coarse pointer — a thumb) every control gets
+        // the platform's minimum tap height; a mouse keeps the dense sizes.
         MuiButton: {
             styleOverrides: {
                 root: {
@@ -61,6 +63,7 @@ const theme = createTheme({
                     '&:hover': {
                         boxShadow: '0 4px 12px rgba(45, 90, 61, 0.25)',
                     },
+                    '@media (pointer: coarse)': { minHeight: 40 },
                 },
                 containedPrimary: {
                     background: 'linear-gradient(135deg, #2d5a3d 0%, #4a7c59 100%)',
@@ -75,6 +78,10 @@ const theme = createTheme({
                 },
             },
         },
+        MuiIconButton: { styleOverrides: { root: { '@media (pointer: coarse)': { minWidth: 44, minHeight: 44 } } } },
+        MuiMenuItem: { styleOverrides: { root: { '@media (pointer: coarse)': { minHeight: 44 } } } },
+        MuiListItemButton: { styleOverrides: { root: { '@media (pointer: coarse)': { minHeight: 48 } } } },
+        MuiChip: { styleOverrides: { clickable: { '@media (pointer: coarse)': { minHeight: 32 } } } },
     },
 });
 

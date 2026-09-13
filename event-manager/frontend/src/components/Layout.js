@@ -97,8 +97,9 @@ function Layout({ children, user, onLogout }) {
                     {menuItems.map((item) => (
                         <ListItem key={item.text} disablePadding>
                             <ListItemButton
-                                selected={location.pathname === item.path}
+                                selected={location.pathname === item.path || location.pathname.startsWith(item.path + '/')}
                                 onClick={() => handleNavigate(item.path)}
+                                sx={{ minHeight: 48 }}
                             >
                                 <ListItemIcon>{item.icon}</ListItemIcon>
                                 <ListItemText primary={item.text} />
@@ -137,7 +138,7 @@ function Layout({ children, user, onLogout }) {
                         component="div"
                         sx={{ flexGrow: 1, fontSize: { xs: '1rem', sm: '1.25rem' } }}
                     >
-                        Gaia Healers Event Manager
+                        <Box component="span" sx={{ display: { xs: 'none', sm: 'inline' } }}>Gaia Healers </Box>Event Manager
                     </Typography>
                     <IconButton onClick={handleProfileClick} color="inherit">
                         <Avatar sx={{ width: 32, height: 32 }}>

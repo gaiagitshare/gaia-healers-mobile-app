@@ -55,6 +55,7 @@ const B1_DPI = 203;
 const B1_HEAD_PX = 384;                       // 48 mm at 203 dpi
 const B1_OFFSET_Y_PX = 4;                     // paper registration measured on a B1 (driver's T50x30_b1)
 const B1_MAX_ROLL_MM = 50;                    // widest roll the B1 takes
+const B1_STALL_MS = 20000;                    // no word from the driver or printer for this long = stalled (its own timeouts are all shorter)
 export const canPrintBluetooth = () => { try { return Boolean(navigator.bluetooth); } catch (e) { return false; } };
 let niimbotLoading = null;
 const loadNiimbot = () => {
@@ -106,12 +107,13 @@ export default function BadgeLabelDialog({ request, eventId, station, onClose, o
     const [btStatus, setBtStatus] = useState('');   // progress line while a Bluetooth print runs ('' = idle)
     const [btAnyDevice, setBtAnyDevice] = useState(false);   // after an empty chooser: next attempt lists every nearby device, not just "B1…"
     const [btHint, setBtHint] = useState('');        // stays in the dialog (a toast is gone in 4 s) until the next attempt
+    const [btTrace, setBtTrace] = useState([]);      // the driver's own log lines for this attempt — a phone has no console, so the dialog is the console
     const attendee = request?.attendee || null;
     const labelSize = request?.labelSize || savedLabelSize();
     const tell = (feedback) => { if (notify) notify(feedback); };
 
     useEffect(() => {
-        if (!request) { setJob(null); setBtStatus(''); setBtHint(''); setBtAnyDevice(false); return undefined; }
+        if (!request) { setJob(null); setBtStatus(''); setBtHint(''); setBtTrace([]); setBtAnyDevice(false); return undefined; }
         let url = null; let alive = true;
         setJob({ url: null, blob: null, error: '', attemptId: attemptId() });
         badgeLabelBlob(eventId, request.attendee.id, request.labelSize || savedLabelSize())
@@ -182,21 +184,62 @@ export default function BadgeLabelDialog({ request, eventId, station, onClose, o
             tell({ severity: 'warning', message: `${rollText(labelSize)} is wider than the B1's 48 mm printhead. Pick a 40 or 50 mm roll in Station setup, or use Print / Send for the 3-inch printer.` });
             return;
         }
-        let composed = null;
-        setBtHint(''); setBtStatus('loading driver…');
+        let composed = null; let Niimbot = null;
+        // Every line the driver logs (it says which step it is on: device name,
+        // characteristic, identification, write mode, handshake, packets) is
+        // mirrored into the dialog, and a step that goes quiet for B1_STALL_MS is
+        // called a stall — with the last line named, so "stuck on connecting"
+        // becomes "stuck after <this>".
+        const trace = []; let lastLine = ''; let lastActivity = Date.now();
+        const note = (line) => {
+            lastLine = line; lastActivity = Date.now();
+            trace.push(`${new Date().toLocaleTimeString([], { hour12: false })} ${line}`);
+            if (trace.length > 120) trace.shift();
+            setBtTrace(trace.slice());
+        };
+        const origLog = console.log; let prevDebug = null; let stallTimer = null;
+        console.log = function (...args) {
+            try {
+                const text = args.map((a) => (typeof a === 'string' ? a : JSON.stringify(a))).join(' ');
+                if (text.startsWith('[niimbot')) note(text.replace(/^\[niimbot[^\]]*\]\s*/, ''));
+            } catch (e) { /* logging never breaks printing */ }
+            return origLog.apply(console, args);
+        };
+        setBtHint(''); setBtTrace([]); setBtStatus('loading driver…');
         try {
-            const Niimbot = await loadNiimbot();
+            Niimbot = await loadNiimbot();
+            prevDebug = Niimbot.DEBUG; Niimbot.DEBUG = true;
             setBtStatus('preparing label…');
             composed = await composeForB1(job.blob);
-            await Niimbot.printImage(composed.url, {
-                model: btAnyDevice ? { ...B1_MODEL, name_prefixes: [] } : B1_MODEL,   // no prefix = the driver's discovery path
-                size: { w_px: composed.w_px, h_px: composed.h_px, offset_y_px: B1_OFFSET_Y_PX, dpi: B1_DPI },
-                onProgress: (s) => setBtStatus(String(s || '')),
+            note(`label ${composed.w_px}×${composed.h_px} px ready; asking for the printer${btAnyDevice ? ' (all devices)' : ''}`);
+            const stalled = new Promise((resolve, reject) => {
+                stallTimer = setInterval(() => {
+                    if (Date.now() - lastActivity > B1_STALL_MS) {
+                        clearInterval(stallTimer); stallTimer = null;
+                        const e = new Error(`stalled after: ${lastLine || 'connecting'}`); e.name = 'StallError'; reject(e);
+                    }
+                }, 1000);
             });
+            await Promise.race([
+                Niimbot.printImage(composed.url, {
+                    model: btAnyDevice ? { ...B1_MODEL, name_prefixes: [] } : B1_MODEL,   // no prefix = the driver's discovery path
+                    size: { w_px: composed.w_px, h_px: composed.h_px, offset_y_px: B1_OFFSET_Y_PX, dpi: B1_DPI },
+                    onProgress: (st) => { const t = String(st || ''); setBtStatus(t); note(`progress: ${t}`); },
+                }),
+                stalled,
+            ]);
             setBtStatus(''); setBtAnyDevice(false);
             await finishPrint('printed');
         } catch (err) {
             setBtStatus('');
+            note(`✗ ${(err && (err.name + ': ' + err.message)) || err}`);
+            if (err && err.name === 'StallError') {
+                // Drop the link so the next tap starts clean instead of reusing a
+                // half-open connection the driver would happily consider "connected".
+                try { if (Niimbot) await Niimbot.disconnect(); } catch (e) { /* already gone */ }
+                setBtHint(`The printer stopped answering (${err.message}). Switch the B1 off and on again, make sure the NIIMBOT app is closed, and tap Print on B1 again. The printer log below shows the last step reached.`);
+                return;
+            }
             if (err && err.name === 'NotFoundError') {
                 // The chooser closed with nothing picked — usually because it was
                 // empty. A B1 that is off, asleep, or still held by the NIIMBOT app
@@ -208,6 +251,9 @@ export default function BadgeLabelDialog({ request, eventId, station, onClose, o
             const why = bluetoothError(err);
             if (why) tell({ severity: 'warning', message: `${fullName(attendee)} — B1 print failed: ${why}` });
         } finally {
+            if (stallTimer) clearInterval(stallTimer);
+            console.log = origLog;
+            if (Niimbot && prevDebug !== null) Niimbot.DEBUG = prevDebug;
             if (composed?.url) URL.revokeObjectURL(composed.url);
         }
     };
@@ -230,6 +276,14 @@ export default function BadgeLabelDialog({ request, eventId, station, onClose, o
                                 : (job.error ? <Alert severity="error">{job.error}</Alert> : <CircularProgress size={28} />)}
                         </Box>
                         {btHint && <Alert severity="info" sx={{ width: '100%' }}>{btHint}</Alert>}
+                        {btTrace.length > 0 && (
+                            <Box component="details" open={Boolean(btHint)} sx={{ width: '100%', fontSize: 12, color: 'text.secondary' }}>
+                                <Box component="summary" sx={{ cursor: 'pointer' }}>Printer log · last: {btTrace[btTrace.length - 1].replace(/^\S+\s/, '')}</Box>
+                                <Box component="pre" sx={{ m: 0, mt: 0.5, p: 1, maxHeight: 180, overflow: 'auto', bgcolor: 'action.hover', borderRadius: 1, fontSize: 11, whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
+                                    {btTrace.join('\n')}
+                                </Box>
+                            </Box>
+                        )}
                         <Typography variant="caption" color="text.secondary" alignSelf="flex-start">
                             {canPrintBluetooth()
                                 ? 'Print on B1 records the print by itself once the printer confirms it. Any other route: print, then tell the system what happened.'

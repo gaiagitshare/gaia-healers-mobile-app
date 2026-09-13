@@ -104,12 +104,14 @@ const bluetoothError = (err) => {
 export default function BadgeLabelDialog({ request, eventId, station, onClose, onRecorded, notify }) {
     const [job, setJob] = useState(null);           // { url, blob, error, attemptId } for the current request
     const [btStatus, setBtStatus] = useState('');   // progress line while a Bluetooth print runs ('' = idle)
+    const [btAnyDevice, setBtAnyDevice] = useState(false);   // after an empty chooser: next attempt lists every nearby device, not just "B1…"
+    const [btHint, setBtHint] = useState('');        // stays in the dialog (a toast is gone in 4 s) until the next attempt
     const attendee = request?.attendee || null;
     const labelSize = request?.labelSize || savedLabelSize();
     const tell = (feedback) => { if (notify) notify(feedback); };
 
     useEffect(() => {
-        if (!request) { setJob(null); setBtStatus(''); return undefined; }
+        if (!request) { setJob(null); setBtStatus(''); setBtHint(''); setBtAnyDevice(false); return undefined; }
         let url = null; let alive = true;
         setJob({ url: null, blob: null, error: '', attemptId: attemptId() });
         badgeLabelBlob(eventId, request.attendee.id, request.labelSize || savedLabelSize())
@@ -181,20 +183,28 @@ export default function BadgeLabelDialog({ request, eventId, station, onClose, o
             return;
         }
         let composed = null;
-        setBtStatus('loading driver…');
+        setBtHint(''); setBtStatus('loading driver…');
         try {
             const Niimbot = await loadNiimbot();
             setBtStatus('preparing label…');
             composed = await composeForB1(job.blob);
             await Niimbot.printImage(composed.url, {
-                model: B1_MODEL,
+                model: btAnyDevice ? { ...B1_MODEL, name_prefixes: [] } : B1_MODEL,   // no prefix = the driver's discovery path
                 size: { w_px: composed.w_px, h_px: composed.h_px, offset_y_px: B1_OFFSET_Y_PX, dpi: B1_DPI },
                 onProgress: (s) => setBtStatus(String(s || '')),
             });
-            setBtStatus('');
+            setBtStatus(''); setBtAnyDevice(false);
             await finishPrint('printed');
         } catch (err) {
             setBtStatus('');
+            if (err && err.name === 'NotFoundError') {
+                // The chooser closed with nothing picked — usually because it was
+                // empty. A B1 that is off, asleep, or still held by the NIIMBOT app
+                // does not advertise. Offer the wide net for the next attempt.
+                setBtAnyDevice(true);
+                setBtHint('No printer was picked. If the list was empty: switch the B1 on (hold the power button until its light is on) and close the NIIMBOT app so it lets go of the printer — a printer held by another app does not show up. Then tap Print on B1 again; the list will show every nearby Bluetooth device.');
+                return;
+            }
             const why = bluetoothError(err);
             if (why) tell({ severity: 'warning', message: `${fullName(attendee)} — B1 print failed: ${why}` });
         } finally {
@@ -219,6 +229,7 @@ export default function BadgeLabelDialog({ request, eventId, station, onClose, o
                                 ? <img src={job.url} alt="Badge label preview" style={{ maxWidth: '100%', maxHeight: 420, imageRendering: 'pixelated' }} />
                                 : (job.error ? <Alert severity="error">{job.error}</Alert> : <CircularProgress size={28} />)}
                         </Box>
+                        {btHint && <Alert severity="info" sx={{ width: '100%' }}>{btHint}</Alert>}
                         <Typography variant="caption" color="text.secondary" alignSelf="flex-start">
                             {canPrintBluetooth()
                                 ? 'Print on B1 records the print by itself once the printer confirms it. Any other route: print, then tell the system what happened.'

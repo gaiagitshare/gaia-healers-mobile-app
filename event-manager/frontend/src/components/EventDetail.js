@@ -124,40 +124,32 @@ function EventDetail({ section }) {
 
     return (
         <Box>
-            <Box
-                display="flex"
-                justifyContent="space-between"
-                alignItems={{ xs: 'stretch', sm: 'center' }}
-                flexDirection={{ xs: 'column', sm: 'row' }}
-                gap={1}
-                mb={3}
-            >
-                <Typography variant="h4" sx={{ fontSize: { xs: '1.55rem', sm: '2.125rem' } }}>
-                    {event.name}
-                </Typography>
-                <Box display="flex" gap={1} flexDirection={{ xs: 'column', sm: 'row' }}>
-                    <Button
-                        variant="outlined"
-                        startIcon={<EditIcon />}
-                        onClick={() => setEditMode(!editMode)}
-                    >
-                        {editMode ? 'Cancel' : 'Edit'}
-                    </Button>
-                    <Button
-                        variant="outlined"
-                        startIcon={<ScheduleIcon />}
-                        onClick={() => navigate(`/events/${id}/agenda`)}
-                    >
-                        Agenda &amp; Speakers
-                    </Button>
-                    <Button
-                        variant="contained"
-                        startIcon={<PeopleIcon />}
-                        onClick={() => navigate(`/events/${id}/attendees`)}
-                    >
-                        Manage Attendees
-                    </Button>
-                </Box>
+            {/* The workspace header above already carries the event's name and
+                state; repeating it here cost a phone its first screen. Just the
+                actions, wrapping as a row rather than stacking three full-width
+                buttons. */}
+            <Box display="flex" gap={1} flexWrap="wrap" mb={3}>
+                <Button
+                    variant="outlined"
+                    startIcon={<EditIcon />}
+                    onClick={() => setEditMode(!editMode)}
+                >
+                    {editMode ? 'Cancel' : 'Edit'}
+                </Button>
+                <Button
+                    variant="outlined"
+                    startIcon={<ScheduleIcon />}
+                    onClick={() => navigate(`/events/${id}/schedule`)}
+                >
+                    Schedule &amp; Speakers
+                </Button>
+                <Button
+                    variant="contained"
+                    startIcon={<PeopleIcon />}
+                    onClick={() => navigate(`/events/${id}/attendees`)}
+                >
+                    Manage Attendees
+                </Button>
             </Box>
 
             <Card sx={{ mb: 3 }}>

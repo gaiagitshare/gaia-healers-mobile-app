@@ -2,7 +2,6 @@ import React, { useState } from 'react';
 import {
     Box, Button, Stack, Typography, Drawer, IconButton, Divider, useMediaQuery, useTheme,
 } from '@mui/material';
-import MenuIcon from '@mui/icons-material/Menu';
 import CloseIcon from '@mui/icons-material/Close';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 
@@ -37,7 +36,7 @@ export const NAV_GROUPS = [
     { label: 'Setup', keys: ['setup', 'mappings'] },
 ];
 
-function NavButton({ label, active, onClick, full }) {
+function NavButton({ label, active, onClick, full, tall }) {
     return (
         <Button
             size="small"
@@ -47,7 +46,8 @@ function NavButton({ label, active, onClick, full }) {
             color={active ? 'primary' : 'inherit'}
             sx={{
                 px: 1.1, py: 0.4, minWidth: 0, borderRadius: 1.5,
-                fontSize: 13, fontWeight: active ? 700 : 500, lineHeight: 1.5,
+                minHeight: tall ? 44 : undefined,           // a thumb, not a mouse pointer
+                fontSize: tall ? 15 : 13, fontWeight: active ? 700 : 500, lineHeight: 1.5,
                 textTransform: 'none', whiteSpace: 'nowrap',
                 justifyContent: full ? 'flex-start' : 'center',
                 width: full ? '100%' : 'auto',
@@ -118,37 +118,51 @@ export default function EventNav({ sections, active, onSelect }) {
     // Narrow: the section you are in, and a way to see every other one. No
     // sideways scrolling, because a strip that scrolls off-screen does not tell
     // you it has more in it.
+    //
+    // It reads as a PICKER, not a menu: the app bar one row above already has
+    // the hamburger that opens the app's own navigation, and a second ≡ under
+    // it made two different menus look like the same one. So: a small
+    // "Section" caption, the current section's name, a chevron — the shape of
+    // a select, which is what it is. The sheet says where it goes.
     return (
         <>
             <Button
                 fullWidth
                 onClick={() => setOpen(true)}
                 endIcon={<ExpandMoreIcon />}
-                startIcon={<MenuIcon />}
+                aria-label={`Section: ${activeLabel}. Change section`}
                 sx={{
                     mb: 2, justifyContent: 'space-between', textTransform: 'none',
-                    borderRadius: 1.5, border: 1, borderColor: 'divider',
-                    px: 1.5, py: 1, color: 'text.primary', fontWeight: 700,
+                    borderRadius: 1.5, border: 1, borderColor: 'primary.dark', bgcolor: 'action.hover',
+                    px: 1.5, py: 0.75, color: 'text.primary', minHeight: 48,
                 }}
             >
-                <Box sx={{ flex: 1, textAlign: 'left', ml: 0.5 }}>{activeLabel}</Box>
+                <Box sx={{ flex: 1, textAlign: 'left' }}>
+                    <Typography component="span" sx={{ display: 'block', fontSize: 10, fontWeight: 700, letterSpacing: '.09em',
+                                                       textTransform: 'uppercase', color: 'text.secondary', lineHeight: 1.2 }}>
+                        Section
+                    </Typography>
+                    <Typography component="span" sx={{ display: 'block', fontWeight: 700, fontSize: 15, lineHeight: 1.3 }}>
+                        {activeLabel}
+                    </Typography>
+                </Box>
             </Button>
 
             <Drawer anchor="bottom" open={open} onClose={() => setOpen(false)}
                     PaperProps={{ sx: { borderTopLeftRadius: 12, borderTopRightRadius: 12, maxHeight: '85vh' } }}>
                 <Stack direction="row" alignItems="center" justifyContent="space-between" sx={{ px: 2, pt: 1.5 }}>
-                    <Typography variant="subtitle1" fontWeight={700}>Sections</Typography>
-                    <IconButton size="small" onClick={() => setOpen(false)} aria-label="Close sections">
+                    <Typography variant="subtitle1" fontWeight={700}>Go to section</Typography>
+                    <IconButton onClick={() => setOpen(false)} aria-label="Close">
                         <CloseIcon fontSize="small" />
                     </IconButton>
                 </Stack>
-                <Box sx={{ px: 2, pb: 3, pt: 1 }}>
+                <Box sx={{ px: 2, pb: 'max(24px, env(safe-area-inset-bottom))', pt: 1 }}>
                     {NAV_GROUPS.map((group) => (
-                        <Box key={group.label} sx={{ mb: 2 }}>
+                        <Box key={group.label} sx={{ mb: 1.5 }}>
                             <GroupLabel>{group.label}</GroupLabel>
                             <Stack spacing={0.25}>
                                 {group.keys.map((key) => (
-                                    <NavButton key={key} label={labelOf(key)} full
+                                    <NavButton key={key} label={labelOf(key)} full tall
                                                active={active === key}
                                                onClick={() => { onSelect(key); setOpen(false); }} />
                                 ))}

@@ -20,14 +20,15 @@ export const DEFAULT_LABEL_SIZE = '50x30v';
 // marks the vertical 3 x 5 cm sticker: designed 30 wide x 50 tall, printed
 // turned on the 50 x 30 roll, shown in the preview the way it reads on the card.
 export const LABEL_ROLLS = {
-    '50x30v': { w: 50, h: 30, upright: true, text: '3 × 5 cm · vertical (50 × 30 mm)', menu: '3 × 5 cm (50 × 30 mm) · vertical on the card — in stock' },
-    '50x30':  { w: 50, h: 30, text: '50 × 30 mm · horizontal', menu: '50 × 30 mm · horizontal, QR beside the name — in stock' },
+    '50x30v': { w: 50, h: 30, upright: true, text: '3 × 5 cm · vertical (50 × 30 mm)', short: '3 × 5 cm vertical', menu: '3 × 5 cm (50 × 30 mm) · vertical on the card — in stock' },
+    '50x30':  { w: 50, h: 30, text: '50 × 30 mm · horizontal', short: '50 × 30 horizontal', menu: '50 × 30 mm · horizontal, QR beside the name — in stock' },
     '40x60':  { w: 40, h: 60, text: '40 × 60 mm',      menu: '40 × 60 mm · portrait — in stock' },
     '40x50':  { w: 40, h: 50, text: '40 × 50 mm',      menu: '40 × 50 mm · portrait — design target, roll not sold by NIIMBOT' },
     '40x40':  { w: 40, h: 40, text: '40 × 40 mm',      menu: '40 × 40 mm — in stock' },
     '40x30':  { w: 40, h: 30, text: '40 × 30 mm',      menu: '40 × 30 mm — in stock' },
 };
 export const rollText = (key) => (LABEL_ROLLS[key] ? LABEL_ROLLS[key].text : key.replace('x', ' × ') + ' mm');
+export const rollShort = (key) => (LABEL_ROLLS[key] ? (LABEL_ROLLS[key].short || LABEL_ROLLS[key].text) : key.replace('x', ' × ') + ' mm');
 const rollOf = (key) => LABEL_ROLLS[key] || { w: Number(String(key).split('x')[0]), h: Number(String(key).split('x')[1]) };
 // A roll this build no longer offers (a station set up on an older build) falls back to the default rather than a 400 from the server.
 export const savedLabelSize = () => { try { const v = localStorage.getItem(LABEL_SIZE_KEY); return LABEL_ROLLS[v] ? v : DEFAULT_LABEL_SIZE; } catch (e) { return DEFAULT_LABEL_SIZE; } };

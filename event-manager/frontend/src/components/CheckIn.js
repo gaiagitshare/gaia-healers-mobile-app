@@ -3,7 +3,7 @@ import { useParams } from 'react-router-dom';
 import {
     Alert, Box, Button, Chip, CircularProgress,
     Dialog, DialogActions, DialogContent, DialogTitle, Divider, IconButton,
-    InputAdornment, MenuItem, Paper, Snackbar, Stack, TextField, Typography,
+    InputAdornment, MenuItem, Paper, Snackbar, Stack, TextField, Typography, useMediaQuery, useTheme,
 } from '@mui/material';
 import SearchIcon from '@mui/icons-material/Search';
 import ClearIcon from '@mui/icons-material/Clear';
@@ -17,7 +17,7 @@ import TuneIcon from '@mui/icons-material/Tune';
 import { Html5QrcodeScanner } from 'html5-qrcode';
 import { authorizeScan, getScanLogs, searchAttendees, getEvents, walkInCreate, getTicketTypes, undoCheckIn, clearScanLogs, setDoorTestMode, getEvent } from '../utils/api';
 import { formatVenueTime, statusLabel, isFlaggedStatus } from '../utils/datetime';
-import BadgeLabelDialog, { STATION_KEY, LABEL_SIZE_KEY, LABEL_ROLLS, savedLabelSize, rollText, fullName, physicalCard } from './BadgeLabelDialog';
+import BadgeLabelDialog, { STATION_KEY, LABEL_SIZE_KEY, LABEL_ROLLS, savedLabelSize, rollShort, fullName, physicalCard } from './BadgeLabelDialog';
 
 // The access zones a scanner can be checking. The BACKEND decides the outcome;
 // the operator only tells it which door/zone this is.
@@ -115,6 +115,12 @@ function CheckIn({ timezone: timezoneProp }) {
     const [stationOpen, setStationOpen] = useState(false);
     const [logFilter, setLogFilter] = useState('');
     const [expandedLog, setExpandedLog] = useState(null);
+    // Below lg the activity feed sits UNDER the search results, not beside them,
+    // so a hundred rows there is a wall the operator scrolls past to find the
+    // queue. Folded until asked for, and paged once open.
+    const sideBySide = useMediaQuery(useTheme().breakpoints.up('lg'));
+    const [activityOpen, setActivityOpen] = useState(false);
+    const [activityLimit, setActivityLimit] = useState(25);
     const [showDecisionDetail, setShowDecisionDetail] = useState(false);
 
     // The door's own state: has this event started, and is a rehearsal running.
@@ -518,7 +524,7 @@ function CheckIn({ timezone: timezoneProp }) {
                     <TextField select fullWidth size="small" label="Which event's door is this?"
                         value={pickedEvent ? pickedEvent.id : ''}
                         onChange={(e) => setPickedEvent(events.find((event) => event.id === Number(e.target.value)) || null)}
-                        helperText="Access checks are scoped to one event. Badges from any other event are refused.">
+                        helperText="Badges from any other event are refused.">
                         {events.map((event) => <MenuItem key={event.id} value={event.id}>{event.name}</MenuItem>)}
                     </TextField>
                 </Paper>
@@ -545,7 +551,7 @@ function CheckIn({ timezone: timezoneProp }) {
                             </Typography>
                             <Typography variant="body2" color="text.secondary">·</Typography>
                             <Typography variant="body2" color="text.secondary">
-                                {rollText(labelSize)} label
+                                {rollShort(labelSize)} label
                             </Typography>
                             <Box flexGrow={1} />
                             <Button size="small" onClick={() => setStationOpen((v) => !v)}
@@ -595,7 +601,12 @@ function CheckIn({ timezone: timezoneProp }) {
                                             {rehearsal ? 'Rehearsal mode — scans are practice, not admission' : 'Event hasn’t started'}
                                         </Typography>
                                     </Stack>
-                                    <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.25 }}>
+                                    <Stack direction="row" sx={{ display: { xs: 'flex', sm: 'none' } }}>
+                                        <Typography variant="caption" color="text.secondary" sx={{ mt: 0.25 }}>
+                                            {rehearsal ? 'Nothing counts as a real check-in. End it before the doors open.' : 'Real check-in is locked until the event starts.'}
+                                        </Typography>
+                                    </Stack>
+                                    <Typography variant="caption" color="text.secondary" sx={{ display: { xs: 'none', sm: 'block' }, mt: 0.25 }}>
                                         {rehearsal
                                             ? 'Every other rule still applies — a refunded ticket, another event’s badge or a single-day pass is refused exactly as on the day. Turn this off before the doors open.'
                                             : 'Real check-in is locked. Practise now rather than in front of a queue.'}
@@ -626,7 +637,7 @@ function CheckIn({ timezone: timezoneProp }) {
                                alignItems: 'start' }}>
                         <Stack spacing={2} sx={{ minWidth: 0 }}>
                             {/* ── The primary action ───────────────────────────── */}
-                            <Paper variant="outlined" sx={{ p: 2 }}>
+                            <Paper variant="outlined" sx={{ p: { xs: 1.5, sm: 2 } }}>
                                 <Button fullWidth size="large"
                                     variant={scanning ? 'outlined' : 'contained'}
                                     color={scanning ? 'inherit' : 'primary'}
@@ -705,19 +716,28 @@ function CheckIn({ timezone: timezoneProp }) {
                         {/* ── Activity ─────────────────────────────────────────── */}
                         <Paper variant="outlined" sx={{ minWidth: 0 }}>
                             <Stack direction="row" justifyContent="space-between" alignItems="center"
-                                   sx={{ px: 1.5, pt: 1.5, pb: 1 }} gap={1} flexWrap="wrap">
-                                <Typography variant="subtitle2" sx={{ fontWeight: 700 }}>Recent activity</Typography>
+                                   sx={{ px: 1.5, pt: 1.5, pb: (sideBySide || activityOpen) ? 1 : 1.5 }} gap={1} flexWrap="wrap">
+                                <Typography variant="subtitle2" sx={{ fontWeight: 700 }}>
+                                    Recent activity{!sideBySide && scanLogs.length > 0 ? ` · ${scanLogs.length}` : ''}
+                                </Typography>
                                 <Stack direction="row" spacing={0.5}>
-                                    <Button size="small" onClick={refreshScanLogs} disabled={logsLoading}>
-                                        {logsLoading ? 'Loading…' : 'Refresh'}
-                                    </Button>
-                                    {scanLogs.length > 0 && (
+                                    {!sideBySide && scanLogs.length > 0 && (
+                                        <Button size="small" onClick={() => setActivityOpen((v) => !v)}>
+                                            {activityOpen ? 'Hide' : 'Show'}
+                                        </Button>
+                                    )}
+                                    {(sideBySide || activityOpen) && (
+                                        <Button size="small" onClick={refreshScanLogs} disabled={logsLoading}>
+                                            {logsLoading ? 'Loading…' : 'Refresh'}
+                                        </Button>
+                                    )}
+                                    {(sideBySide || activityOpen) && scanLogs.length > 0 && (
                                         <Button size="small" color="error" onClick={() => setClearLogsOpen(true)}>Clear</Button>
                                     )}
                                 </Stack>
                             </Stack>
 
-                            {scanLogs.length > 0 && (
+                            {(sideBySide || activityOpen) && scanLogs.length > 0 && (
                                 <Stack direction="row" spacing={0.5} flexWrap="wrap" useFlexGap sx={{ px: 1.5, pb: 1.25 }}>
                                     {[['', 'All', scanLogs.length], ['GRANTED', 'Granted', logCounts.GRANTED || 0],
                                       ['DENIED', 'Denied', logCounts.DENIED || 0], ['LIMITED', 'Limited', logCounts.LIMITED || 0],
@@ -739,9 +759,9 @@ function CheckIn({ timezone: timezoneProp }) {
                                         Nothing scanned yet. Decisions appear here the moment a badge is read.
                                     </Typography>
                                 </Box>
-                            ) : (
+                            ) : !(sideBySide || activityOpen) ? null : (
                                 <Box sx={{ maxHeight: { lg: 620 }, overflowY: 'auto' }}>
-                                    {shownLogs.map((log, i) => {
+                                    {(sideBySide ? shownLogs : shownLogs.slice(0, activityLimit)).map((log, i) => {
                                         const st = logState(log);
                                         const v = LOG_STATE[st] || LOG_STATE.DENIED;
                                         const open = expandedLog === log.id;
@@ -797,6 +817,13 @@ function CheckIn({ timezone: timezoneProp }) {
                                     {shownLogs.length === 0 && (
                                         <Box sx={{ px: 1.5, py: 2 }}>
                                             <Typography variant="body2" color="text.secondary">Nothing with that status.</Typography>
+                                        </Box>
+                                    )}
+                                    {!sideBySide && shownLogs.length > activityLimit && (
+                                        <Box sx={{ p: 1, borderTop: '1px solid', borderColor: 'divider' }}>
+                                            <Button fullWidth size="small" onClick={() => setActivityLimit((n) => n + 50)}>
+                                                Show {Math.min(50, shownLogs.length - activityLimit)} more of {shownLogs.length}
+                                            </Button>
                                         </Box>
                                     )}
                                 </Box>

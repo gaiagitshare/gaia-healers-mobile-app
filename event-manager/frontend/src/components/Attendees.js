@@ -21,9 +21,10 @@ import {
     getAttendees, getAttendee, getTicketCounts, createAttendee, updateAttendee, deleteAttendee,
     generateBadge, importAttendees, searchAttendees, getTicketTypes, exportAttendees,
     revokeAttendee, reinstateAttendee, changePass, setAddonDay,
-    getAcquisitionReport, badgeLabelBlob , getDoorReport, getUnmappedSales, dismissUnmappedSale,
+    getAcquisitionReport, getDoorReport, getUnmappedSales, dismissUnmappedSale,
     getTicketMetrics, undoCheckIn} from '../utils/api';
 import MapReconcile from './MapReconcile';
+import BadgeLabelDialog, { savedLabelSize, savedStation } from './BadgeLabelDialog';
 import { formatVenueTime, STATUS_LABELS, statusLabel } from '../utils/datetime';
 
 // The organiser's GHL location, for the authoritative refund/payment record.
@@ -96,6 +97,7 @@ function Attendees({ timezone }) {
     const [newAttendee, setNewAttendee] = useState({ first_name: '', last_name: '', email: '', company: '', job_title: '', phone: '' });
     // manage
     const [manage, setManage] = useState(null);
+    const [labelReq, setLabelReq] = useState(null);   // { attendee, labelSize } → BadgeLabelDialog
     const [manageDetail, setManageDetail] = useState(null);
     const [manageBusy, setManageBusy] = useState(false);
     const [manageTier, setManageTier] = useState('');
@@ -287,12 +289,15 @@ function Attendees({ timezone }) {
         );
     };
 
-    // The thermal sticker for this person, opened in a tab for a quick print.
-    const openLabel = async (attendee) => {
-        try {
-            const response = await badgeLabelBlob(eventId, attendee.id, (localStorage.getItem('gha_label_size') || '40x60'));
-            window.open(URL.createObjectURL(response.data), '_blank', 'noopener');
-        } catch (error) { console.error('Failed to render label:', error); }
+    // The thermal sticker for this person — the same dialog the door uses
+    // (B1 over Bluetooth, share sheet, system print), recorded the same way.
+    // It used to open the PNG in a new tab after the download, which every
+    // pop-up blocker (and every iPhone browser) swallows silently.
+    const openLabel = (attendee) => setLabelReq({ attendee, labelSize: savedLabelSize() });
+    const closeLabel = () => setLabelReq(null);
+    const afterLabel = async (result, attendee) => {
+        if (result === 'printed') setManage((m) => (m && m.id === attendee.id ? { ...m, badge_print_count: (m.badge_print_count || 0) + 1 } : m));
+        await refreshCurrentView();
     };
 
     // One visible action. Everything the six icons used to do is still here,
@@ -1306,6 +1311,9 @@ function Attendees({ timezone }) {
                     <Button variant="contained" onClick={saveEdit}>Save Changes</Button>
                 </DialogActions>
             </Dialog>
+
+            <BadgeLabelDialog request={labelReq} eventId={eventId} station={savedStation()}
+                onClose={closeLabel} onRecorded={afterLabel} notify={setFeedback} />
 
             <Snackbar open={Boolean(feedback)} autoHideDuration={4000} onClose={() => setFeedback(null)} anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}>
                 {feedback ? <Alert severity={feedback.severity}>{feedback.message}</Alert> : undefined}

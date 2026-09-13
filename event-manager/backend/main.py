@@ -8824,10 +8824,12 @@ def identity_networking_connect_by_token(payload: schemas.ConnectByToken, db: Se
 
 # ── Admin side: label, print record, undo ───────────────────────────────────
 @app.get("/events/{event_id}/attendees/{attendee_id}/badge-label.png")
-def badge_label_png(event_id: int, attendee_id: int, size: str = badge_card.DEFAULT_LABEL,
+def badge_label_png(event_id: int, attendee_id: int, size: str = badge_card.DEFAULT_LABEL, view: str = "roll",
                     db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
     """The sticker, rendered server-side at 203 dpi so every station prints
-    the same thing. `size` is the roll; 40x50 portrait is the approved design."""
+    the same thing. `size` is the roll. `view=card` returns a sticker that is
+    printed turned (the vertical 3 x 5 cm) the way it reads on the card -- for
+    the preview only; a printer always gets the default roll orientation."""
     _get_event_or_404(event_id, db)
     authz.require_cap(db, current_user, event_id, "attendee.read")
     a = db.query(models.Attendee).filter(models.Attendee.id == attendee_id,
@@ -8839,11 +8841,13 @@ def badge_label_png(event_id: int, attendee_id: int, size: str = badge_card.DEFA
     w, h = badge_card.LABEL_SIZES[size or badge_card.DEFAULT_LABEL]
     token = badge_card.ensure_public_token(db, models, a)
     png, meta = badge_card.render_label(a.first_name, a.last_name, token, width_mm=w, height_mm=h,
-                                        qr_mm=min(26, h - 6))
+                                        qr_mm=min(26, h - 6), layout=badge_card.LABEL_LAYOUT.get(size),
+                                        view="card" if view == "card" else "roll")
     return Response(content=png, media_type="image/png",
                     headers={"Cache-Control": "private, no-store",
                              "X-Label-Payload": meta["payload"],
-                             "X-Label-Size": "%dx%d" % (w, h)})
+                             "X-Label-Size": "%dx%d" % (w, h),
+                             "X-Label-Layout": meta.get("layout", "")})
 
 
 @app.post("/events/{event_id}/attendees/{attendee_id}/badge-print")

@@ -17,7 +17,7 @@ import TuneIcon from '@mui/icons-material/Tune';
 import { Html5QrcodeScanner } from 'html5-qrcode';
 import { authorizeScan, getScanLogs, searchAttendees, getEvents, walkInCreate, getTicketTypes, undoCheckIn, clearScanLogs, setDoorTestMode, getEvent } from '../utils/api';
 import { formatVenueTime, statusLabel, isFlaggedStatus } from '../utils/datetime';
-import BadgeLabelDialog, { STATION_KEY, LABEL_SIZE_KEY, LABEL_ROLLS, DEFAULT_LABEL_SIZE, rollText, fullName, physicalCard } from './BadgeLabelDialog';
+import BadgeLabelDialog, { STATION_KEY, LABEL_SIZE_KEY, LABEL_ROLLS, savedLabelSize, rollText, fullName, physicalCard } from './BadgeLabelDialog';
 
 // The access zones a scanner can be checking. The BACKEND decides the outcome;
 // the operator only tells it which door/zone this is.
@@ -107,7 +107,7 @@ function CheckIn({ timezone: timezoneProp }) {
     const [truncated, setTruncated] = useState(false);
     const [revealId, setRevealId] = useState(null);
     const [station, setStation] = useState(() => { try { return localStorage.getItem(STATION_KEY) || ''; } catch (e) { return ''; } });
-    const [labelSize, setLabelSize] = useState(() => { try { return localStorage.getItem(LABEL_SIZE_KEY) || DEFAULT_LABEL_SIZE; } catch (e) { return DEFAULT_LABEL_SIZE; } });
+    const [labelSize, setLabelSize] = useState(savedLabelSize);
     // The label preview: check-in has ALREADY committed by the time this opens.
     const [labelReq, setLabelReq] = useState(null);   // { attendee, checkedInNow, labelSize } → BadgeLabelDialog
     const [undoTarget, setUndoTarget] = useState(null);

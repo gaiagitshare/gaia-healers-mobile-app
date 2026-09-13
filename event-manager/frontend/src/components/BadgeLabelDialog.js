@@ -13,22 +13,24 @@ import { badgeLabelBlob, recordBadgePrint } from '../utils/api';
 
 export const STATION_KEY = 'gha_station';
 export const LABEL_SIZE_KEY = 'gha_label_size';
-export const DEFAULT_LABEL_SIZE = '40x60';
+export const DEFAULT_LABEL_SIZE = '50x30v';
 // Every roll the station can print on. Key = the server's size id (width x
-// length, mm); w/h are the exact page dimensions the print window is sized
-// to, so nothing is scaled. The 3 x 5 inch label is 76.2 x 127 mm on a
-// 3"-wide printer and gets the same name-over-QR design, scaled to the width.
+// length of the label AS THE ROLL FEEDS, mm); w/h are the exact page
+// dimensions the print window is sized to, so nothing is scaled. `upright`
+// marks the vertical 3 x 5 cm sticker: designed 30 wide x 50 tall, printed
+// turned on the 50 x 30 roll, shown in the preview the way it reads on the card.
 export const LABEL_ROLLS = {
-    '40x60':  { w: 40,   h: 60,  text: '40 × 60 mm',      menu: '40 × 60 mm · portrait — in stock' },
-    '40x50':  { w: 40,   h: 50,  text: '40 × 50 mm',      menu: '40 × 50 mm · portrait — design target, roll not sold by NIIMBOT' },
-    '40x40':  { w: 40,   h: 40,  text: '40 × 40 mm',      menu: '40 × 40 mm — in stock' },
-    '40x30':  { w: 40,   h: 30,  text: '40 × 30 mm',      menu: '40 × 30 mm — in stock' },
-    '50x30':  { w: 50,   h: 30,  text: '50 × 30 mm',      menu: '50 × 30 mm · landscape — in stock' },
-    '76x127': { w: 76.2, h: 127, text: '3 × 5 in (76 × 127 mm)', menu: '3 × 5 in · portrait (76 × 127 mm) — 3" label printer' },
+    '50x30v': { w: 50, h: 30, upright: true, text: '3 × 5 cm · vertical (50 × 30 mm)', menu: '3 × 5 cm (50 × 30 mm) · vertical on the card — in stock' },
+    '50x30':  { w: 50, h: 30, text: '50 × 30 mm · horizontal', menu: '50 × 30 mm · horizontal, QR beside the name — in stock' },
+    '40x60':  { w: 40, h: 60, text: '40 × 60 mm',      menu: '40 × 60 mm · portrait — in stock' },
+    '40x50':  { w: 40, h: 50, text: '40 × 50 mm',      menu: '40 × 50 mm · portrait — design target, roll not sold by NIIMBOT' },
+    '40x40':  { w: 40, h: 40, text: '40 × 40 mm',      menu: '40 × 40 mm — in stock' },
+    '40x30':  { w: 40, h: 30, text: '40 × 30 mm',      menu: '40 × 30 mm — in stock' },
 };
 export const rollText = (key) => (LABEL_ROLLS[key] ? LABEL_ROLLS[key].text : key.replace('x', ' × ') + ' mm');
 const rollOf = (key) => LABEL_ROLLS[key] || { w: Number(String(key).split('x')[0]), h: Number(String(key).split('x')[1]) };
-export const savedLabelSize = () => { try { return localStorage.getItem(LABEL_SIZE_KEY) || DEFAULT_LABEL_SIZE; } catch (e) { return DEFAULT_LABEL_SIZE; } };
+// A roll this build no longer offers (a station set up on an older build) falls back to the default rather than a 400 from the server.
+export const savedLabelSize = () => { try { const v = localStorage.getItem(LABEL_SIZE_KEY); return LABEL_ROLLS[v] ? v : DEFAULT_LABEL_SIZE; } catch (e) { return DEFAULT_LABEL_SIZE; } };
 export const savedStation = () => { try { return localStorage.getItem(STATION_KEY) || ''; } catch (e) { return ''; } };
 export const fullName = (attendee) => (`${attendee.first_name || ''} ${attendee.last_name || ''}`.trim() || attendee.email);
 // Which of the pre-printed coloured cards to hand over. The sticker never
@@ -114,16 +116,22 @@ export default function BadgeLabelDialog({ request, eventId, station, onClose, o
 
     useEffect(() => {
         if (!request) { setJob(null); setBtStatus(''); setBtHint(''); setBtTrace([]); setBtAnyDevice(false); return undefined; }
-        let url = null; let alive = true;
-        setJob({ url: null, blob: null, error: '', attemptId: attemptId() });
-        badgeLabelBlob(eventId, request.attendee.id, request.labelSize || savedLabelSize())
-            .then((response) => {
+        let url = null; let previewUrl = null; let alive = true;
+        const size = request.labelSize || savedLabelSize();
+        setJob({ url: null, previewUrl: null, blob: null, error: '', attemptId: attemptId() });
+        // The printers always get the roll orientation. A sticker that is
+        // printed turned is previewed the way it reads on the card.
+        const wanted = [badgeLabelBlob(eventId, request.attendee.id, size)];
+        if (LABEL_ROLLS[size]?.upright) wanted.push(badgeLabelBlob(eventId, request.attendee.id, size, 'card'));
+        Promise.all(wanted)
+            .then(([roll, card]) => {
                 if (!alive) return;
-                url = URL.createObjectURL(response.data);
-                setJob((j) => (j ? { ...j, url, blob: response.data } : j));
+                url = URL.createObjectURL(roll.data);
+                previewUrl = card ? URL.createObjectURL(card.data) : url;
+                setJob((j) => (j ? { ...j, url, previewUrl, blob: roll.data } : j));
             })
             .catch((err) => { if (alive) setJob((j) => (j ? { ...j, error: err.response?.data?.detail || 'Could not render the label.' } : j)); });
-        return () => { alive = false; if (url) URL.revokeObjectURL(url); };
+        return () => { alive = false; if (url) URL.revokeObjectURL(url); if (previewUrl && previewUrl !== url) URL.revokeObjectURL(previewUrl); };
     }, [request, eventId]);
 
     // Sends the sticker to whatever printer the browser can reach (the NIIMBOT
@@ -268,11 +276,11 @@ export default function BadgeLabelDialog({ request, eventId, station, onClose, o
                 {attendee && job && (
                     <Stack spacing={1.5} alignItems="center">
                         <Typography variant="body2" color="text.secondary" alignSelf="flex-start">
-                            Hand over the <strong>{physicalCard(attendee)}</strong> card. Sticker: {rollText(labelSize)} — full name over the badge QR, nothing else.
+                            Hand over the <strong>{physicalCard(attendee)}</strong> card. Sticker: {rollText(labelSize)} — name over the badge QR, nothing else.{LABEL_ROLLS[labelSize]?.upright ? ' It comes out of the printer sideways; turn it once and it sits upright on the card.' : ''}
                         </Typography>
                         <Box sx={{ p: 2, bgcolor: '#fff', borderRadius: 1, border: '1px solid', borderColor: 'divider', width: '100%', display: 'flex', justifyContent: 'center' }}>
                             {job.url
-                                ? <img src={job.url} alt="Badge label preview" style={{ maxWidth: '100%', maxHeight: 420, imageRendering: 'pixelated' }} />
+                                ? <img src={job.previewUrl || job.url} alt="Badge label preview" style={{ maxWidth: '100%', maxHeight: 420, imageRendering: 'pixelated' }} />
                                 : (job.error ? <Alert severity="error">{job.error}</Alert> : <CircularProgress size={28} />)}
                         </Box>
                         {btHint && <Alert severity="info" sx={{ width: '100%' }}>{btHint}</Alert>}

@@ -173,8 +173,10 @@ export const getAttendeeQR = (id) => api.get(`/attendees/${id}/qr`);
 export const generateBadge = (id) => api.get(`/attendees/${id}/badge`);
 // The thermal sticker (name + badge QR) as a 1-bit PNG at 203 dpi. Fetched
 // through the API layer so the auth header travels with it.
-export const badgeLabelBlob = (eventId, attendeeId, size = '50x30') =>
-    api.get(`/events/${eventId}/attendees/${attendeeId}/badge-label.png`, { params: { size }, responseType: 'blob' });
+// `view: 'card'` asks for a sticker that is printed turned (the vertical
+// 3 x 5 cm) the way it reads on the card -- for the preview only.
+export const badgeLabelBlob = (eventId, attendeeId, size = '50x30v', view = 'roll') =>
+    api.get(`/events/${eventId}/attendees/${attendeeId}/badge-label.png`, { params: { size, view }, responseType: 'blob' });
 // A print attempt, success or failure. Separate from check-in by design.
 export const recordBadgePrint = (eventId, attendeeId, data) =>
     api.post(`/events/${eventId}/attendees/${attendeeId}/badge-print`, data);

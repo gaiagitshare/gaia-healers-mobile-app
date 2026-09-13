@@ -866,6 +866,13 @@ def _v_surname(draw, sur, max_w):
                 a, b = " ".join(words[:k]), " ".join(words[k:])
                 if draw.textlength(a, font=f) <= max_w and draw.textlength(b, font=f) <= max_w:
                     return [(f, a), (f, b)]
+    if "-" in sur.strip("-"):                            # "PAPADOPOULOS-KARAMANLIS" -> break at its own hyphen
+        for size in range(_mm(4.2), _mm(2.8) - 1, -1):
+            f = _font(_FONT_NARROW_BOLD, size)
+            for i in [i for i, ch in enumerate(sur) if ch == "-"]:
+                a, b = sur[:i + 1], sur[i + 1:]
+                if draw.textlength(a, font=f) <= max_w and draw.textlength(b, font=f) <= max_w:
+                    return [(f, a), (f, b)]
     for size in range(_mm(4.0), _mm(2.8) - 1, -1):      # one long word -> hyphenate
         f = _font(_FONT_NARROW_BOLD, size)
         for i in range(len(sur) - 2, 2, -1):

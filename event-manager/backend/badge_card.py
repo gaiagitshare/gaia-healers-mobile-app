@@ -627,6 +627,12 @@ def render_not_found_html(app_base: str = None) -> str:
 DPI = 203
 _FONT_BOLD = "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"
 _FONT_REG = "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"
+# The vertical 3 x 5 cm sticker is set in a Helvetica-style face: tighter than
+# DejaVu on a 30 mm-wide line, with a Narrow cut for the surnames that still
+# will not fit. (_font falls back to Pillow's default if a file is missing.)
+_FONT_SANS_BOLD = "/usr/share/fonts/opentype/urw-base35/NimbusSans-Bold.otf"
+_FONT_NARROW_BOLD = "/usr/share/fonts/opentype/urw-base35/NimbusSansNarrow-Bold.otf"
+_FONT_SANS_REG = "/usr/share/fonts/opentype/urw-base35/NimbusSans-Regular.otf"
 
 
 def _mm(v):
@@ -676,10 +682,10 @@ def _render_portrait(first_name, last_name, token, W, H, base=None):
     surname is never cut before the given names are."""
     img = Image.new("L", (W, H), 255)
     draw = ImageDraw.Draw(img)
-    # Every millimetre below was tuned on a 40 mm-wide roll. A wider label (the
-    # 3 x 5 inch, 76 mm) gets the same design at the same proportions -- type,
-    # margins and leading all grow with the width -- instead of a 40 mm-sized
-    # name floating over a QR that fills the sheet. Rolls up to 40 mm wide are
+    # Every millimetre below was tuned on a 40 mm-wide roll. A wider label
+    # gets the same design at the same proportions -- type, margins and
+    # leading all grow with the width -- instead of a 40 mm-sized name
+    # floating over a QR that fills the sheet. Rolls up to 40 mm wide are
     # untouched: the factor never drops below 1.
     scale = max(1.0, W / float(_mm(40)))
     def smm(v):
@@ -808,6 +814,118 @@ def _render_portrait(first_name, last_name, token, W, H, base=None):
     return img, meta
 
 
+# ── The vertical sticker for the 3 x 5 cm roll ─────────────────────────────
+# The roll feeds 50 mm wide x 30 mm tall, but the sticker sits UPRIGHT on the
+# card, so it is designed as 30 mm wide x 50 mm tall and printed turned 90°.
+# GIVEN NAME big, SURNAME under it, the QR beneath, the typed code at the foot.
+# Each name line is fitted on its own: a long surname shrinks or drops to the
+# Narrow face without touching the given name; a compound surname wraps; a
+# middle name is dropped before anything goes small; one absurdly long word
+# is hyphenated; only after all of that is anything cut with an ellipsis.
+def _v_largest(draw, text, max_w, path, hi_mm, lo_mm):
+    for size in range(_mm(hi_mm), _mm(lo_mm) - 1, -1):
+        f = _font(path, size)
+        if draw.textlength(text, font=f) <= max_w:
+            return f
+    return None
+
+
+def _v_cut(draw, text, max_w, f):
+    while text and draw.textlength(text + "\u2026", font=f) > max_w:
+        text = text[:-1].rstrip()
+    return text + "\u2026"
+
+
+def _v_given(draw, given, max_w):
+    words = given.split()
+    tries = (given, words[0]) if len(words) > 1 else (given,)
+    for text in tries:                                   # whole, then first name only
+        f = _v_largest(draw, text, max_w, _FONT_SANS_BOLD, 6.0, 4.2)
+        if f:
+            return [(f, text)]
+    for text in tries:
+        f = _v_largest(draw, text, max_w, _FONT_NARROW_BOLD, 5.0, 3.2)
+        if f:
+            return [(f, text)]
+    f = _font(_FONT_NARROW_BOLD, _mm(3.2))
+    return [(f, _v_cut(draw, words[0], max_w, f))]
+
+
+def _v_surname(draw, sur, max_w):
+    f = _v_largest(draw, sur, max_w, _FONT_SANS_BOLD, 5.2, 3.8)
+    if f:
+        return [(f, sur)]
+    f = _v_largest(draw, sur, max_w, _FONT_NARROW_BOLD, 4.6, 2.8)
+    if f:
+        return [(f, sur)]
+    words = sur.split()
+    if len(words) > 1:                                   # "RIBEIRO DE SOUZA" -> two lines
+        for size in range(_mm(4.2), _mm(2.8) - 1, -1):
+            f = _font(_FONT_NARROW_BOLD, size)
+            for k in range(1, len(words)):
+                a, b = " ".join(words[:k]), " ".join(words[k:])
+                if draw.textlength(a, font=f) <= max_w and draw.textlength(b, font=f) <= max_w:
+                    return [(f, a), (f, b)]
+    for size in range(_mm(4.0), _mm(2.8) - 1, -1):      # one long word -> hyphenate
+        f = _font(_FONT_NARROW_BOLD, size)
+        for i in range(len(sur) - 2, 2, -1):
+            a, b = sur[:i] + "-", sur[i:]
+            if draw.textlength(a, font=f) <= max_w and draw.textlength(b, font=f) <= max_w:
+                return [(f, a), (f, b)]
+    f = _font(_FONT_NARROW_BOLD, _mm(2.8))
+    return [(f, _v_cut(draw, sur, max_w, f))]
+
+
+def _render_vertical(first_name, last_name, token, W, H, base=None):
+    """W x H is the sticker as it sits on the card (30 x 50 mm); the caller
+    turns it to the roll. Returns the upright image."""
+    img = Image.new("L", (W, H), 255)
+    draw = ImageDraw.Draw(img)
+    side, top, gap, lead = _mm(2.0), _mm(2.5), _mm(2.0), _mm(0.7)
+    max_w = W - 2 * side
+    given = (first_name or "").strip().upper()
+    sur = (last_name or "").strip().upper()
+    lines = (_v_given(draw, given, max_w) if given else []) + (_v_surname(draw, sur, max_w) if sur else [])
+    if not lines:
+        lines = [(_font(_FONT_SANS_BOLD, _mm(5.0)), "\u2014")]
+
+    q = qrcode.QRCode(error_correction=qrcode.constants.ERROR_CORRECT_M, border=2, box_size=1)
+    q.add_data(printed_payload(token, base))
+    q.make(fit=True)
+    n = q.modules_count + 4
+    box = max(1, max_w // n)
+    quiet = 2 * box
+    qimg = q.make_image(fill_color="black", back_color="white").convert("L").resize((n * box, n * box), Image.NEAREST)
+    modules = qimg.height - 2 * quiet
+
+    code_f = _font(_FONT_SANS_REG, _mm(2.8))
+    cbb = code_f.getbbox("HXG")
+    code_ink = cbb[3] - cbb[1]
+    code_gap = max(_mm(0.9), quiet + _mm(0.3))           # the code stays clear of the quiet zone
+
+    # Centre the INK: name lines | gap | QR modules | code. Quiet zones are white.
+    boxes = [f.getbbox("HXG") for f, _ in lines]
+    inks = [b[3] - b[1] for b in boxes]
+    name_ink = sum(inks) + lead * (len(lines) - 1)
+    content = name_ink + gap + modules + code_gap + code_ink
+    y = max(top, (H - content) // 2)
+    for (f, t), b, ink in zip(lines, boxes, inks):
+        draw.text(((W - draw.textlength(t, font=f)) / 2, y - b[1]), t, font=f, fill=0)
+        y += ink + lead
+    y -= lead
+    qr_y = y + gap - quiet
+    img.paste(qimg, ((W - qimg.width) // 2, qr_y))
+    code_txt = (token or "").upper()
+    cy = qr_y + qimg.height - quiet + code_gap
+    draw.text(((W - draw.textlength(code_txt, font=code_f)) / 2, cy - cbb[1]), code_txt, font=code_f, fill=0)
+
+    meta = {"layout": "vertical", "name_lines": len(lines),
+            "name_pt_mm": [round(f.size * 25.4 / DPI, 1) for f, _ in lines],
+            "content_mm": round(content * 25.4 / DPI, 1), "code_printed": True,
+            "qr_mm": round(modules * 25.4 / DPI, 1), "qr_modules": q.modules_count, "qr_box_px": box}
+    return img, meta
+
+
 def _render_landscape(first_name, last_name, token, W, H, qr_mm, base=None):
     img = Image.new("L", (W, H), 255)
     draw = ImageDraw.Draw(img)
@@ -850,23 +968,41 @@ def _render_landscape(first_name, last_name, token, W, H, qr_mm, base=None):
 # Sizes are roll width x length in mm. "76x127" is the 3 x 5 inch label
 # (76.2 x 127 mm) used on a 3"-wide label printer; the portrait layout scales
 # its type and margins to the width, so the sticker reads at arm's length.
-LABEL_SIZES = {"40x60": (40, 60), "40x50": (40, 50), "40x40": (40, 40),
-               "50x30": (50, 30), "40x30": (40, 30), "50x40": (50, 40),
-               "76x127": (76.2, 127)}
-LABEL_STOCKED = {"40x60": True, "40x40": True, "50x30": True, "40x30": True,
-                 "40x50": False, "50x40": False, "76x127": True}
-DEFAULT_LABEL = "40x60"
+# Key = roll id (width x length of the label AS THE ROLL FEEDS, mm). "50x30v"
+# is the same 3 x 5 cm roll as "50x30", printed turned 90° so the sticker sits
+# upright on the card (see LABEL_LAYOUT / _render_vertical).
+LABEL_SIZES = {"50x30v": (50, 30), "50x30": (50, 30),
+               "40x60": (40, 60), "40x50": (40, 50), "40x40": (40, 40),
+               "40x30": (40, 30), "50x40": (50, 40)}
+LABEL_STOCKED = {"50x30v": True, "50x30": True, "40x60": True, "40x40": True, "40x30": True,
+                 "40x50": False, "50x40": False}
+LABEL_LAYOUT = {"50x30v": "vertical"}
+DEFAULT_LABEL = "50x30v"
 
 
-def render_label(first_name, last_name, token, width_mm=40, height_mm=50, qr_mm=26, base=None):
-    """A 1-bit PNG at 203 dpi, sized for the roll. Portrait rolls (the approved
-    40 x 50) get NAME over QR; a landscape roll falls back to QR beside name."""
+def render_label(first_name, last_name, token, width_mm=40, height_mm=50, qr_mm=26, base=None,
+                 layout=None, view="roll"):
+    """A 1-bit PNG at 203 dpi, sized for the roll. Portrait rolls get NAME over
+    QR; a landscape roll gets QR beside name; layout="vertical" designs the
+    sticker upright (length x width) and turns it to the roll. view="card"
+    returns that upright design unturned -- for a preview, never for a printer."""
     W, H = _mm(width_mm), _mm(height_mm)
-    if H >= W:
+    if layout == "vertical":
+        img, meta = _render_vertical(first_name, last_name, token, H, W, base)
+        if view != "card":
+            img = img.transpose(Image.ROTATE_90)         # exact 90° (rotate() resamples); top of the sticker to the left of the roll
+        else:
+            W, H = H, W
+    elif H >= W:
         img, meta = _render_portrait(first_name, last_name, token, W, H, base)
     else:
         img, meta = _render_landscape(first_name, last_name, token, W, H, qr_mm, base)
     out = io.BytesIO()
+    if layout == "vertical":
+        # Threshold, don't dither: dithered letter edges print ragged on a
+        # thermal head, and the same sticker must come out identical whether
+        # it is turned before or after going to 1-bit.
+        img = img.point(lambda v: 255 if v > 127 else 0).convert("1", dither=Image.NONE)
     img.convert("1").save(out, format="PNG")
     meta.update({"width_px": W, "height_px": H, "dpi": DPI, "payload": printed_payload(token, base)})
     return out.getvalue(), meta

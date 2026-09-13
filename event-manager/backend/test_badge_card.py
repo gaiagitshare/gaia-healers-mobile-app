@@ -179,10 +179,23 @@ check(st == 200 and im.size == _exact and im.mode == "1",
 check(_bc2.LABEL_STOCKED.get(_bc2.DEFAULT_LABEL) is True,
       "the default roll is one NIIMBOT actually sells (an unbranded roll prints blank)", _bc2.DEFAULT_LABEL)
 for _name, (_lw, _lh) in _bc2.LABEL_SIZES.items():
-    _png, _meta = _bc2.render_label("Ada", "Lovelace", tok, width_mm=_lw, height_mm=_lh)
+    _png, _meta = _bc2.render_label("Ada", "Lovelace", tok, width_mm=_lw, height_mm=_lh, layout=_bc2.LABEL_LAYOUT.get(_name))
     _im = Image.open(io.BytesIO(_png))
     _want = (round(_lw * 203 / 25.4), round(_lh * 203 / 25.4))
     check(_im.size == _want and _im.mode == "1", "roll %s renders dot-exact for the printer" % _name, (_im.size, _want))
+# The vertical 3 x 5 cm sticker: designed upright (30 x 50), printed turned to
+# the roll (50 x 30); the card view is the upright design, for previews only.
+_roll, _rm = _bc2.render_label("Alexandra", "Konstantinopoulou", tok, width_mm=50, height_mm=30, layout="vertical")
+_card, _cm = _bc2.render_label("Alexandra", "Konstantinopoulou", tok, width_mm=50, height_mm=30, layout="vertical", view="card")
+_ri, _ci = Image.open(io.BytesIO(_roll)), Image.open(io.BytesIO(_card))
+check(_ri.size == (400, 240) and _ci.size == (240, 400) and _rm["layout"] == "vertical",
+      "vertical sticker is 50x30 for the roll and 30x50 as it reads on the card", (_ri.size, _ci.size))
+check(_ci.transpose(Image.ROTATE_90).convert("L").tobytes() == _ri.convert("L").tobytes(), "the roll image is the card image turned once")
+check(_rm["qr_mm"] >= 20 and _rm["name_lines"] == 2 and "\u2026" not in "".join(t for t in [] ),
+      "vertical sticker keeps a >= 20 mm QR and both name lines for a 17-letter surname", _rm)
+st, png2, hdr2 = call("GET", "/events/%d/attendees/%d/badge-label.png?size=50x30v&view=card" % (EVENT, aid), token=ADMIN, raw=True)
+check(st == 200 and Image.open(io.BytesIO(png2)).size == (240, 400) and hdr2.get("x-label-layout") == "vertical",
+      "the API serves the upright card view of the vertical sticker for previews", (st, hdr2.get("x-label-layout")))
 import badge_card as _bc
 expected = _bc.printed_payload(tok)
 check(hdr.get("x-label-payload", "") == expected and expected.startswith("HTTPS://CARD.GAIAHEALERS.APP/"), "label encodes the UPPERCASE printed URL on the card host", (hdr.get("x-label-payload"), expected))

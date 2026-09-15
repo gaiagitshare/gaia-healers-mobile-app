@@ -624,7 +624,17 @@ def render_not_found_html(app_base: str = None) -> str:
 # ---------------------------------------------------------------------------
 # Thermal label
 # ---------------------------------------------------------------------------
-DPI = 203
+DPI = 203                       # the default (NIIMBOT B1); render_label(dpi=300) for the B1 Pro
+# The dots-per-mm the current render is drawing at. A context variable, not
+# a global rewrite: FastAPI runs these handlers on a thread pool, and two
+# stations with different printers can be rendering at the same moment.
+import contextvars
+_DPI = contextvars.ContextVar("badge_dpi", default=DPI)
+LABEL_DPIS = (203, 300)
+
+
+def _dpi():
+    return _DPI.get()
 _FONT_BOLD = "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"
 _FONT_REG = "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"
 # The vertical 3 x 5 cm sticker is set in a Helvetica-style face: tighter than
@@ -636,7 +646,7 @@ _FONT_SANS_REG = "/usr/share/fonts/opentype/urw-base35/NimbusSans-Regular.otf"
 
 
 def _mm(v):
-    return int(round(v * DPI / 25.4))
+    return int(round(v * _dpi() / 25.4))
 
 
 def _font(path, size):
@@ -808,9 +818,9 @@ def _render_portrait(first_name, last_name, token, W, H, base=None):
         cw = draw.textlength(code_txt, font=code_f)
         draw.text(((W - cw) / 2, qr_y + qimg.height + code_gap), code_txt, font=code_f, fill=0)
 
-    meta = {"layout": "portrait", "name_lines": len(texts), "name_pt_mm": round(f.size * 25.4 / DPI, 1),
-            "content_mm": round(content_h * 25.4 / DPI, 1), "code_printed": bool(code_h),
-            "qr_mm": round(qimg.width * 25.4 / DPI, 1), "qr_modules": q.modules_count, "qr_box_px": box}
+    meta = {"layout": "portrait", "name_lines": len(texts), "name_pt_mm": round(f.size * 25.4 / _dpi(), 1),
+            "content_mm": round(content_h * 25.4 / _dpi(), 1), "code_printed": bool(code_h),
+            "qr_mm": round(qimg.width * 25.4 / _dpi(), 1), "qr_modules": q.modules_count, "qr_box_px": box}
     return img, meta
 
 
@@ -927,9 +937,9 @@ def _render_vertical(first_name, last_name, token, W, H, base=None):
     draw.text(((W - draw.textlength(code_txt, font=code_f)) / 2, cy - cbb[1]), code_txt, font=code_f, fill=0)
 
     meta = {"layout": "vertical", "name_lines": len(lines),
-            "name_pt_mm": [round(f.size * 25.4 / DPI, 1) for f, _ in lines],
-            "content_mm": round(content * 25.4 / DPI, 1), "code_printed": True,
-            "qr_mm": round(modules * 25.4 / DPI, 1), "qr_modules": q.modules_count, "qr_box_px": box}
+            "name_pt_mm": [round(f.size * 25.4 / _dpi(), 1) for f, _ in lines],
+            "content_mm": round(content * 25.4 / _dpi(), 1), "code_printed": True,
+            "qr_mm": round(modules * 25.4 / _dpi(), 1), "qr_modules": q.modules_count, "qr_box_px": box}
     return img, meta
 
 
@@ -988,11 +998,22 @@ DEFAULT_LABEL = "50x30v"
 
 
 def render_label(first_name, last_name, token, width_mm=40, height_mm=50, qr_mm=26, base=None,
-                 layout=None, view="roll"):
-    """A 1-bit PNG at 203 dpi, sized for the roll. Portrait rolls get NAME over
-    QR; a landscape roll gets QR beside name; layout="vertical" designs the
-    sticker upright (length x width) and turns it to the roll. view="card"
-    returns that upright design unturned -- for a preview, never for a printer."""
+                 layout=None, view="roll", dpi=DPI):
+    """A 1-bit PNG at the printer's dpi (203 for the B1, 300 for the B1 Pro),
+    sized for the roll. Portrait rolls get NAME over QR; a landscape roll gets
+    QR beside name; layout="vertical" designs the sticker upright (length x
+    width) and turns it to the roll. view="card" returns that upright design
+    unturned -- for a preview, never for a printer."""
+    if dpi not in LABEL_DPIS:
+        raise ValueError("unsupported dpi %r" % (dpi,))
+    token_dpi = _DPI.set(int(dpi))
+    try:
+        return _render_label(first_name, last_name, token, width_mm, height_mm, qr_mm, base, layout, view)
+    finally:
+        _DPI.reset(token_dpi)
+
+
+def _render_label(first_name, last_name, token, width_mm, height_mm, qr_mm, base, layout, view):
     W, H = _mm(width_mm), _mm(height_mm)
     if layout == "vertical":
         img, meta = _render_vertical(first_name, last_name, token, H, W, base)
@@ -1011,7 +1032,7 @@ def render_label(first_name, last_name, token, width_mm=40, height_mm=50, qr_mm=
         # it is turned before or after going to 1-bit.
         img = img.point(lambda v: 255 if v > 127 else 0).convert("1", dither=Image.NONE)
     img.convert("1").save(out, format="PNG")
-    meta.update({"width_px": W, "height_px": H, "dpi": DPI, "payload": printed_payload(token, base)})
+    meta.update({"width_px": W, "height_px": H, "dpi": _dpi(), "payload": printed_payload(token, base)})
     return out.getvalue(), meta
 
 

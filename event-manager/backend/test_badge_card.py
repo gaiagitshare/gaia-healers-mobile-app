@@ -193,6 +193,13 @@ check(_ri.size == (400, 240) and _ci.size == (240, 400) and _rm["layout"] == "ve
 check(_ci.transpose(Image.ROTATE_90).convert("L").tobytes() == _ri.convert("L").tobytes(), "the roll image is the card image turned once")
 check(_rm["qr_mm"] >= 20 and _rm["name_lines"] == 2 and "\u2026" not in "".join(t for t in [] ),
       "vertical sticker keeps a >= 20 mm QR and both name lines for a 17-letter surname", _rm)
+# The B1 Pro prints at 300 dpi: the same roll must come back dot-exact for
+# that head (50 x 30 mm -> 591 x 354), from the same design.
+st, png3, hdr3 = call("GET", "/events/%d/attendees/%d/badge-label.png?size=50x30v&dpi=300" % (EVENT, aid), token=ADMIN, raw=True)
+check(st == 200 and Image.open(io.BytesIO(png3)).size == (591, 354) and hdr3.get("x-label-dpi") == "300",
+      "the API renders the vertical sticker at 300 dpi for the B1 Pro", (st, Image.open(io.BytesIO(png3)).size, hdr3.get("x-label-dpi")))
+st, _, _ = call("GET", "/events/%d/attendees/%d/badge-label.png?size=50x30v&dpi=600" % (EVENT, aid), token=ADMIN, raw=True)
+check(st == 400, "an unsupported dpi is refused", st)
 st, png2, hdr2 = call("GET", "/events/%d/attendees/%d/badge-label.png?size=50x30v&view=card" % (EVENT, aid), token=ADMIN, raw=True)
 check(st == 200 and Image.open(io.BytesIO(png2)).size == (240, 400) and hdr2.get("x-label-layout") == "vertical",
       "the API serves the upright card view of the vertical sticker for previews", (st, hdr2.get("x-label-layout")))

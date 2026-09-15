@@ -198,7 +198,7 @@ export default function Exhibitors({ eventId, onCountChange }) {
             if (stageFilter && (r.stage || 'confirmed') !== stageFilter) return false;
             if (!needle) return true;
             return [r.company_name, r.category, r.booth_number, r.package,
-                    r.contact_email, r.public_email, r.website, r.tagline]
+                    r.contact_name, r.contact_email, r.public_email, r.website, r.tagline, r.sheet_notes]
                 .filter(Boolean).join(' ').toLowerCase().includes(needle);
         });
     }, [rows, q, stageFilter]);
@@ -872,10 +872,16 @@ function ExhibitorDialog({ row, saving, onClose, onSave, onMediaChanged }) {
                     {field('Address', 'address')}
 
                     <Divider textAlign="left"><Typography variant="caption">Our contact — internal</Typography></Divider>
+                    {field('Contact name', 'contact_name', { helperText: 'Who to call. Mirrored from the planning sheet daily.' })}
                     <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2}>
                         {field('Email', 'contact_email')}
                         {field('Phone', 'contact_phone')}
                     </Stack>
+                    {f.sheet_notes && (
+                        <Typography variant="caption" color="text.secondary">
+                            Sheet notes: {f.sheet_notes}{f.sheet_synced_at ? ` · last mirrored ${new Date(f.sheet_synced_at + (f.sheet_synced_at.endsWith('Z') ? '' : 'Z')).toLocaleString()}` : ''}
+                        </Typography>
+                    )}
                     {toggle('show_contact_publicly', 'Also show our contact in the directory',
                             'Off by default. This is whoever booked the booth and is often a personal '
                             + 'mobile — the directory already uses the public details above.')}
@@ -907,7 +913,7 @@ function ExhibitorDialog({ row, saving, onClose, onSave, onMediaChanged }) {
                         const body = {};
                         ['company_name', 'stage', 'booth_number', 'category', 'website', 'description',
                          'tagline', 'logo_url', 'public_email', 'public_phone', 'address',
-                         'contact_email', 'contact_phone', 'package', 'payment_note'].forEach((k) => {
+                         'contact_name', 'contact_email', 'contact_phone', 'package', 'payment_note'].forEach((k) => {
                             if (f[k] !== undefined) body[k] = f[k] === '' ? null : f[k];
                         });
                         body.payment_status = f.payment_status || 'unpaid';

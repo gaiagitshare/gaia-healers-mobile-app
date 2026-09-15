@@ -69,18 +69,43 @@ const PROFILES = {
     b1: { label: 'NIIMBOT B1',     task: 'b1', dpi: 203, headPx: 384, offsetY: 4, model: { name_prefixes: NAME_PREFIXES, task: 'b1', density: 3, label_type: 1, speed: 1 } },
     v4: { label: 'NIIMBOT B1 Pro', task: 'v4', dpi: 300, headPx: 576, offsetY: 0, model: { name_prefixes: NAME_PREFIXES, task: 'v4', density: 3, label_type: 1, speed: 1 } },
 };
+// Which printer the desk runs: 'auto' asks the printer; 'v4' / 'b1' force a
+// profile for the day an identification read is missed (a job for the wrong
+// head prints small and off to one side — the B1's 384 columns on the Pro's
+// 576-dot head land left of centre at two-thirds size).
+export const PRINTER_KEY = 'gha_printer';
+export const PRINTER_CHOICES = [['auto', 'Ask the printer (auto)'], ['v4', 'NIIMBOT B1 Pro · 300 dpi'], ['b1', 'NIIMBOT B1 · 203 dpi']];
+export const savedPrinter = () => { try { const v = localStorage.getItem(PRINTER_KEY); return v === 'v4' || v === 'b1' ? v : 'auto'; } catch (e) { return 'auto'; } };
 const profileFor = (info) => {
+    const forced = savedPrinter();
+    if (forced !== 'auto') return { ...PROFILES[forced], label: `${PROFILES[forced].label} (set on this station)` };
     if (info && info.task === 'v4') return { ...PROFILES.v4, label: info.label || PROFILES.v4.label };
-    return { ...PROFILES.b1, label: (info && info.label) || PROFILES.b1.label };
+    if (info && info.task === 'b1') return { ...PROFILES.b1, label: info.label || PROFILES.b1.label };
+    // No answer from the printer: assume the one this desk runs today.
+    return { ...PROFILES.v4, label: 'NIIMBOT B1 Pro (assumed — printer did not identify)' };
 };
+const MODEL_TASKS = { 4096: 'b1', 4098: 'b1', 4097: 'v4' };   // B1, B1 SE, B1 Pro (driver registry ids)
 // Ask the printer what it is (pairing on the first call — that one needs a
-// tap) and return the profile to print with.
+// tap) and return the profile to print with. If the identification read
+// during connect went unanswered, ask again — a missed reply must not turn
+// into a job for the wrong head.
 const identifyPrinter = async (anyDevice) => {
     const Niimbot = await loadNiimbot();
     // The connect model only matters for the chooser filter and, if the
     // printer cannot be identified, the task fallback; the driver arms the
     // link from the printer's own answer.
-    const info = await Niimbot.identify(anyDevice ? { ...PROFILES.b1.model, name_prefixes: [] } : PROFILES.b1.model);
+    let info = await Niimbot.identify(anyDevice ? { ...PROFILES.b1.model, name_prefixes: [] } : PROFILES.b1.model);
+    for (let i = 0; i < 3 && !(info && info.task) && Niimbot.probe; i++) {
+        try {
+            await new Promise((r) => setTimeout(r, 400));
+            const r = await Niimbot.probe(0x40, [0x08], 1200);             // PrinterModelId, the same read connect() makes
+            if (r && r.data && r.data.length >= 1) {
+                const modelId = r.data.length >= 2 ? ((r.data[0] << 8) | r.data[1]) : (r.data[0] << 8);
+                const task = MODEL_TASKS[modelId] || null;
+                if (task) info = { ...(info || {}), modelId, task, dpi: PROFILES[task].dpi, label: PROFILES[task].label };
+            }
+        } catch (e) { /* try again */ }
+    }
     return { info, profile: profileFor(info) };
 };
 const B1_STALL_MS = 20000;                    // no word from the driver or printer for this long = stalled (its own timeouts are all shorter)

@@ -18,7 +18,7 @@ import { Html5QrcodeScanner } from 'html5-qrcode';
 import { authorizeScan, getScanLogs, searchAttendees, getEvents, walkInCreate, getTicketTypes, undoCheckIn, clearScanLogs, setDoorTestMode, getEvent, badgeLabelBlob, recordBadgePrint } from '../utils/api';
 import { formatVenueTime, statusLabel, isFlaggedStatus } from '../utils/datetime';
 import BadgeLabelDialog, { STATION_KEY, LABEL_SIZE_KEY, LABEL_ROLLS, savedLabelSize, rollShort, fullName, physicalCard,
-    canPrintBluetooth, useB1, b1Connect, b1IsConnected, b1Enqueue, b1PrintBlob, b1Dpi, rollFitsB1 } from './BadgeLabelDialog';
+    canPrintBluetooth, useB1, b1Connect, b1IsConnected, b1Enqueue, b1PrintBlob, b1Dpi, rollFitsB1, PRINTER_KEY, PRINTER_CHOICES, savedPrinter } from './BadgeLabelDialog';
 import BluetoothIcon from '@mui/icons-material/Bluetooth';
 
 // The access zones a scanner can be checking. The BACKEND decides the outcome;
@@ -125,6 +125,8 @@ function CheckIn({ timezone: timezoneProp }) {
     const [printerBusy, setPrinterBusy] = useState(false);      // the Connect button
     const [connectAny, setConnectAny] = useState(false);        // after an empty chooser: the next tap lists every nearby device
     const [printerHint, setPrinterHint] = useState('');
+    const [printerModel, setPrinterModel] = useState(savedPrinter);
+    const rememberPrinterModel = (v) => { setPrinterModel(v); try { localStorage.setItem(PRINTER_KEY, v); } catch (e) { /* noop */ } };
     // What happened to the sticker for the person on screen: { attendeeId, phase, message }
     const [autoJob, setAutoJob] = useState(null);
     const printedIds = useRef(new Set());                        // printed this session — a re-scan never prints twice
@@ -706,6 +708,13 @@ function CheckIn({ timezone: timezoneProp }) {
                                             <MenuItem key={key} value={key}>{roll.menu}</MenuItem>
                                         ))}
                                     </TextField>
+                                    {canPrintBluetooth() && (
+                                        <TextField select size="small" label="Printer" value={printerModel}
+                                            onChange={(e) => rememberPrinterModel(e.target.value)} sx={{ minWidth: 210 }}
+                                            helperText="Auto asks the printer; set it if a print comes out small or off-centre">
+                                            {PRINTER_CHOICES.map(([v, text]) => <MenuItem key={v} value={v}>{text}</MenuItem>)}
+                                        </TextField>
+                                    )}
                                 </Stack>
                                 <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 1 }}>{zoneNote}</Typography>
                             </Box>

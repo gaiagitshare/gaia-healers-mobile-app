@@ -398,15 +398,25 @@ def _stamp_card_state(db, attendees):
     ids = [a.id for a in rows]
     profs = {p.attendee_id: p for p in db.query(models.NetworkingProfile).filter(
         models.NetworkingProfile.attendee_id.in_(ids)).all()}
+    # The printed QR resolves to the PERSON's card (member_cards), which is
+    # what check-in and printing switch on -- so that is what the chip reads;
+    # the per-event profile only adds "set up" when the person edited it.
+    tokens = [a.public_token for a in rows if a.public_token]
+    cards = {m.public_token: m for m in db.query(models.MemberCard).filter(
+        models.MemberCard.public_token.in_(tokens)).all()} if tokens else {}
     for a in rows:
         p = profs.get(a.id)
-        if p and p.card_public:
+        m = cards.get(a.public_token) if a.public_token else None
+        edited = bool(m and ((m.card or {}) or (m.bio or "").strip())) or bool(
+            p and (p.card_claimed_at or (p.card and any(v for k, v in (p.card or {}).items() if k != "tags")) or (p.card or {}).get("tags")))
+        if (m and m.card_public) or (p and p.card_public):
             state = "public"
-        elif p and (p.card_claimed_at or (p.card and any(v for k, v in (p.card or {}).items() if k != "tags")) or (p.card or {}).get("tags")):
+        elif edited or (m and (m.activated_at or m.card_claimed_at)):
             state = "private"
         else:
             state = "unclaimed"
         a.card_state = state
+        a.card_active = bool(m and m.activated_at)
         a.card_url = badge_card.card_url(a.public_token) if a.public_token else None
     return rows
 
@@ -1809,8 +1819,13 @@ def update_attendee(
         raise HTTPException(status_code=404, detail="Attendee not found")
     authz.require_cap(db, current_user, attendee.event_id, "attendee.write")
     
-    for key, value in attendee_update.dict(exclude_unset=True).items():
+    changes = attendee_update.dict(exclude_unset=True)
+    for key, value in changes.items():
         setattr(attendee, key, value)
+    # A consent choice recorded here is the person's word: stamped so that a
+    # later check-in or print does not switch sharing back on over it.
+    if "share_email_with_exhibitors" in changes or "share_phone_with_exhibitors" in changes:
+        attendee.consent_updated_at = datetime.utcnow()
     
     db.commit()
     db.refresh(attendee)
@@ -8200,22 +8215,21 @@ def _activate_member_card(db, attendee):
     their card off has decided something, and walking past a scanner again must
     not quietly undo it -- so activated_at is the guard, not card_public.
     """
-    token = getattr(attendee, "public_token", None)
-    if not token:
-        return None
-    card = db.query(models.MemberCard).filter(
-        models.MemberCard.public_token == token).first()
+    card = _member_card_for_attendee(db, attendee, create=True)
     if card is None or card.activated_at is not None:
         return card
     card.activated_at = datetime.utcnow()
-    # Publishing is for cards nobody has claimed yet -- the great majority, who
-    # will never open the editor and whose card would otherwise stay dark all
-    # weekend. Someone who HAS claimed theirs has already decided whether it is
-    # public, and a scanner at the door must not overrule them. Getting this
-    # wrong published a real attendee who had deliberately kept hers private.
-    if card.visibility_set_at is None and not card.card_claimed_at:
+    # Publish, unless the OWNER has said whether the card is public
+    # (visibility_set_at -- the only record of a deliberate choice; a claim
+    # stamp is not one, it is written by activation itself). The great
+    # majority never open the editor, and a card that stayed dark all weekend
+    # was the failure this exists to prevent. Getting the guard wrong once
+    # published an attendee who had deliberately kept hers private; the guard
+    # is her choice, not her claim.
+    if card.visibility_set_at is None:
         card.card_public = True
-        card.card_claimed_at = card.activated_at
+        if not card.card_claimed_at:
+            card.card_claimed_at = card.activated_at
     return card
 
 
@@ -8889,6 +8903,9 @@ def badge_print_record(event_id: int, attendee_id: int, body: schemas.BadgePrint
     if result == "printed":
         a.badge_printed_at = datetime.utcnow()
         a.badge_print_count = (a.badge_print_count or 0) + 1
+        # The sticker in their hand is the card in the world: live from this
+        # moment, whether or not a scan has happened yet.
+        _activate_member_card(db, a)
     db.commit()
     db.refresh(a)
     a.effective_access = _effective_access(db, a)

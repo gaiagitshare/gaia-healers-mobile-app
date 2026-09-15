@@ -42,22 +42,42 @@ export const physicalCard = (attendee) => {
 };
 const attemptId = () => (window.crypto?.randomUUID ? window.crypto.randomUUID() : String(Date.now()) + Math.random());
 
-// ── Direct Bluetooth printing (NIIMBOT B1) ─────────────────────────────────
-// The door printer is a NIIMBOT B1: 203 dpi, 384-dot (48 mm) printhead, paper
-// centred under the head by its spring guides. The label PNG the server renders
-// is already 203 dpi (40 mm = 320 px), so it is dropped 1:1 onto a full-width
-// canvas, centred — a 40 mm roll gets 4 mm of white each side, a 50 mm roll
-// loses the 1 mm per side the head cannot reach anyway. The driver (MIT,
-// public/vendor/niimbot-*.js) speaks the B1's BLE protocol from the page, so
+// ── Direct Bluetooth printing (NIIMBOT B1 / B1 Pro) ────────────────────────
+// The door printer is a NIIMBOT B1 or B1 Pro. Both advertise as "B1…"; the
+// driver asks the printer which it is on connect, and everything below keys
+// off the answer: the B1 is 203 dpi with a 384-dot (48 mm) head and speaks
+// the "b1" task, the B1 Pro is 300 dpi with a 576-dot head and speaks "v4".
+// The server renders the label at the printer's dpi, so it is dropped 1:1
+// onto a full-width canvas, centred — the paper sits centred under the head
+// on its spring guides; a 40 mm roll gets white either side, a 50 mm roll
+// loses the sliver the head cannot reach anyway. The driver (MIT,
+// public/vendor/niimbot-*.js) speaks the BLE protocol from the page, so
 // Chrome (desktop / Android) and Bluefy on iPhone print without the NIIMBOT
 // app. It resolves only once the printer confirmed the page — no “Printed ✓”
 // tap needed on that path.
 const NIIMBOT_DRIVER_URL = `${process.env.PUBLIC_URL || ''}/vendor/niimbot-2.6.0.js`;
-const B1_MODEL = { name_prefixes: ['B1'], task: 'b1', density: 3, label_type: 1, speed: 1 };
-const B1_DPI = 203;
-const B1_HEAD_PX = 384;                       // 48 mm at 203 dpi
-const B1_OFFSET_Y_PX = 4;                     // paper registration measured on a B1 (driver's T50x30_b1)
-const B1_MAX_ROLL_MM = 50;                    // widest roll the B1 takes
+const NAME_PREFIXES = ['B1'];
+const B1_MAX_ROLL_MM = 50;                    // widest roll either printer takes
+// Per-printer print profile, chosen from what the printer says it is. Values
+// are the driver registry's (validated on real hardware there).
+const PROFILES = {
+    b1: { label: 'NIIMBOT B1',     task: 'b1', dpi: 203, headPx: 384, offsetY: 4, model: { name_prefixes: NAME_PREFIXES, task: 'b1', density: 3, label_type: 1, speed: 1 } },
+    v4: { label: 'NIIMBOT B1 Pro', task: 'v4', dpi: 300, headPx: 576, offsetY: 0, model: { name_prefixes: NAME_PREFIXES, task: 'v4', density: 3, label_type: 1, speed: 1 } },
+};
+const profileFor = (info) => {
+    if (info && info.task === 'v4') return { ...PROFILES.v4, label: info.label || PROFILES.v4.label };
+    return { ...PROFILES.b1, label: (info && info.label) || PROFILES.b1.label };
+};
+// Ask the printer what it is (pairing on the first call — that one needs a
+// tap) and return the profile to print with.
+const identifyPrinter = async (anyDevice) => {
+    const Niimbot = await loadNiimbot();
+    // The connect model only matters for the chooser filter and, if the
+    // printer cannot be identified, the task fallback; the driver arms the
+    // link from the printer's own answer.
+    const info = await Niimbot.identify(anyDevice ? { ...PROFILES.b1.model, name_prefixes: [] } : PROFILES.b1.model);
+    return { info, profile: profileFor(info) };
+};
 const B1_STALL_MS = 20000;                    // no word from the driver or printer for this long = stalled (its own timeouts are all shorter)
 export const canPrintBluetooth = () => { try { return Boolean(navigator.bluetooth); } catch (e) { return false; } };
 let niimbotLoading = null;
@@ -76,18 +96,18 @@ const loadNiimbot = () => {
 };
 // Label PNG → { url, w_px, h_px } for the B1: full head width, label centred,
 // pixels untouched (a 1-bit source through a smoothing scaler would grey the QR).
-const composeForB1 = async (blob) => {
+const composeForB1 = async (blob, headPx) => {
     const bmp = await createImageBitmap(blob);
     const h = bmp.height;
     const canvas = document.createElement('canvas');
-    canvas.width = B1_HEAD_PX; canvas.height = h;
+    canvas.width = headPx; canvas.height = h;
     const ctx = canvas.getContext('2d');
-    ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, B1_HEAD_PX, h);
+    ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, headPx, h);
     ctx.imageSmoothingEnabled = false;
-    ctx.drawImage(bmp, Math.round((B1_HEAD_PX - bmp.width) / 2), 0);   // 320 px → 32 px white each side; 400 px → 8 px cropped each side
+    ctx.drawImage(bmp, Math.round((headPx - bmp.width) / 2), 0);   // narrower than the head → white either side; wider → the sliver past the head is cropped, centred
     bmp.close && bmp.close();
     const out = await new Promise((resolve, reject) => canvas.toBlob((b) => (b ? resolve(b) : reject(new Error('Could not prepare the label.'))), 'image/png'));
-    return { url: URL.createObjectURL(out), w_px: B1_HEAD_PX, h_px: h };
+    return { url: URL.createObjectURL(out), w_px: headPx, h_px: h };
 };
 // What the operator reads when a Bluetooth print does not go through.
 const bluetoothError = (err) => {
@@ -96,7 +116,7 @@ const bluetoothError = (err) => {
     if (name === 'NotAllowedError' || name === 'SecurityError') return 'Bluetooth was blocked for this site — allow it in the browser and try again.';
     if (name === 'NetworkError' || /GATT|disconnected|Not connected/i.test(msg)) return 'Lost the printer — switch the B1 on (blue light), keep it near, and try again.';
     if (/Web Bluetooth/i.test(msg)) return 'This browser cannot talk to the printer. Use Chrome on a laptop/Android, or the Bluefy browser on iPhone.';
-    if (/Connected printer is/i.test(msg)) return 'That is not a B1 — this station is set up for the NIIMBOT B1.';
+    if (/Connected printer is/i.test(msg)) return 'That printer is not a B1 or B1 Pro — this station only prints to those.';
     if (/counter stopped|never acknowledged/i.test(msg)) return 'The printer did not confirm the label — check the paper (lid closed, roll seated) and look at what came out.';
     return msg.length > 140 ? msg.slice(0, 137) + '…' : (msg || 'Print failed.');
 };
@@ -108,8 +128,11 @@ const bluetoothError = (err) => {
 // a scan with no tap at all. Every print — automatic or from the dialog —
 // goes through one queue, because two jobs on one link interleave into
 // garbage on paper.
-const b1 = { busy: false, current: null, queue: [], listeners: new Set(), lastError: '' };
-const b1State = () => ({ connected: b1IsConnected(), busy: b1.busy, current: b1.current, queued: b1.queue.length, lastError: b1.lastError });
+const b1 = { busy: false, current: null, queue: [], listeners: new Set(), lastError: '', info: null };
+const b1State = () => ({ connected: b1IsConnected(), busy: b1.busy, current: b1.current, queued: b1.queue.length, lastError: b1.lastError,
+                         info: b1.info, label: profileFor(b1.info).label, dpi: profileFor(b1.info).dpi });
+// The dpi a label must be rendered at for the paired printer (203 until one is identified).
+export const b1Dpi = () => profileFor(b1.info).dpi;
 const b1Emit = () => { const st = b1State(); b1.listeners.forEach((fn) => { try { fn(st); } catch (e) { /* a listener never breaks printing */ } }); };
 export const b1IsConnected = () => { try { return Boolean(window.Niimbot && window.Niimbot.isConnected && window.Niimbot.isConnected()); } catch (e) { return false; } };
 // React view of the session; polls so a printer that went to sleep shows as
@@ -124,13 +147,12 @@ export const useB1 = () => {
     return st;
 };
 // Pair (a tap) and identify, without printing.
-export const b1Connect = async () => {
-    const Niimbot = await loadNiimbot();
-    const info = await Niimbot.identify(B1_MODEL);
-    b1.lastError = ''; b1Emit();
-    return info;
+export const b1Connect = async (anyDevice = false) => {
+    const { info, profile } = await identifyPrinter(anyDevice);
+    b1.info = info; b1.lastError = ''; b1Emit();
+    return { ...info, label: profile.label, dpi: profile.dpi };
 };
-export const b1Disconnect = async () => { try { if (window.Niimbot) await window.Niimbot.disconnect(); } catch (e) { /* gone */ } b1Emit(); };
+export const b1Disconnect = async () => { try { if (window.Niimbot) await window.Niimbot.disconnect(); } catch (e) { /* gone */ } b1.info = null; b1Emit(); };
 // Run `fn` when the printer is free. `label` is what the queue shows.
 export const b1Enqueue = (label, fn) => new Promise((resolve, reject) => {
     b1.queue.push({ label, fn, resolve, reject }); b1Emit(); b1Pump();
@@ -144,15 +166,16 @@ async function b1Pump() {
     catch (e) { b1.lastError = (e && e.message) || String(e); next.reject(e); }
     finally { b1.busy = false; b1.current = null; b1Emit(); b1Pump(); }
 }
-// Compose and print one label blob on the connected B1. Throws on anything
-// short of the printer confirming the page.
+// Compose and print one label blob — rendered at b1Dpi() — on the paired
+// printer. Throws on anything short of the printer confirming the page.
 export const b1PrintBlob = async (blob, opts = {}) => {
     const Niimbot = await loadNiimbot();
-    const composed = await composeForB1(blob);
+    const profile = profileFor(b1.info);
+    const composed = await composeForB1(blob, profile.headPx);
     try {
         await Niimbot.printImage(composed.url, {
-            model: opts.anyDevice ? { ...B1_MODEL, name_prefixes: [] } : B1_MODEL,
-            size: { w_px: composed.w_px, h_px: composed.h_px, offset_y_px: B1_OFFSET_Y_PX, dpi: B1_DPI },
+            model: opts.anyDevice ? { ...profile.model, name_prefixes: [] } : profile.model,
+            size: { w_px: composed.w_px, h_px: composed.h_px, offset_y_px: profile.offsetY, dpi: profile.dpi },
             onProgress: opts.onProgress,
         });
     } finally { URL.revokeObjectURL(composed.url); }
@@ -248,7 +271,7 @@ export default function BadgeLabelDialog({ request, eventId, station, onClose, o
     const printOnB1 = async () => {
         if (!job?.blob || btStatus || !attendee) return;
         if (rollOf(labelSize).w > B1_MAX_ROLL_MM) {
-            tell({ severity: 'warning', message: `${rollText(labelSize)} is wider than the B1's 48 mm printhead. Pick a 40 or 50 mm roll in Station setup, or use Print / Send for the 3-inch printer.` });
+            tell({ severity: 'warning', message: `${rollText(labelSize)} is wider than the printer's 48 mm head. Pick a 40 or 50 mm roll in Station setup.` });
             return;
         }
         let composed = null; let Niimbot = null;
@@ -276,9 +299,16 @@ export default function BadgeLabelDialog({ request, eventId, station, onClose, o
         try {
             Niimbot = await loadNiimbot();
             prevDebug = Niimbot.DEBUG; Niimbot.DEBUG = true;
+            // Pair / identify first (this tap is the gesture the chooser needs),
+            // then render the label at the dpi of whatever answered.
+            setBtStatus(`connecting…${btAnyDevice ? ' (all devices)' : ''}`);
+            const paired = await b1Connect(btAnyDevice);
+            const profile = profileFor(paired);
+            note(`printer: ${profile.label} (${profile.dpi} dpi, ${profile.headPx} px head)`);
             setBtStatus('preparing label…');
-            composed = await composeForB1(job.blob);
-            note(`label ${composed.w_px}×${composed.h_px} px ready; asking for the printer${btAnyDevice ? ' (all devices)' : ''}`);
+            const roll = await badgeLabelBlob(eventId, attendee.id, labelSize, 'roll', profile.dpi);
+            composed = await composeForB1(roll.data, profile.headPx);
+            note(`label ${composed.w_px}×${composed.h_px} px ready`);
             const stalled = new Promise((resolve, reject) => {
                 stallTimer = setInterval(() => {
                     if (Date.now() - lastActivity > B1_STALL_MS) {
@@ -289,8 +319,8 @@ export default function BadgeLabelDialog({ request, eventId, station, onClose, o
             });
             await Promise.race([
                 b1Enqueue(fullName(attendee), () => Niimbot.printImage(composed.url, {
-                    model: btAnyDevice ? { ...B1_MODEL, name_prefixes: [] } : B1_MODEL,   // no prefix = the driver's discovery path
-                    size: { w_px: composed.w_px, h_px: composed.h_px, offset_y_px: B1_OFFSET_Y_PX, dpi: B1_DPI },
+                    model: profile.model,
+                    size: { w_px: composed.w_px, h_px: composed.h_px, offset_y_px: profile.offsetY, dpi: profile.dpi },
                     onProgress: (st) => { const t = String(st || ''); setBtStatus(t); note(`progress: ${t}`); },
                 })),
                 stalled,
@@ -304,7 +334,7 @@ export default function BadgeLabelDialog({ request, eventId, station, onClose, o
                 // Drop the link so the next tap starts clean instead of reusing a
                 // half-open connection the driver would happily consider "connected".
                 try { if (Niimbot) await Niimbot.disconnect(); } catch (e) { /* already gone */ }
-                setBtHint(`The printer stopped answering (${err.message}). Switch the B1 off and on again, make sure the NIIMBOT app is closed, and tap Print on B1 again. The printer log below shows the last step reached.`);
+                setBtHint(`The printer stopped answering (${err.message}). Switch the printer off and on again, make sure the NIIMBOT app is closed, and tap Print on B1 again. The printer log below shows the last step reached.`);
                 return;
             }
             if (err && err.name === 'NotFoundError') {
@@ -312,7 +342,7 @@ export default function BadgeLabelDialog({ request, eventId, station, onClose, o
                 // empty. A B1 that is off, asleep, or still held by the NIIMBOT app
                 // does not advertise. Offer the wide net for the next attempt.
                 setBtAnyDevice(true);
-                setBtHint('No printer was picked. If the list was empty: switch the B1 on (hold the power button until its light is on) and close the NIIMBOT app so it lets go of the printer — a printer held by another app does not show up. Then tap Print on B1 again; the list will show every nearby Bluetooth device.');
+                setBtHint('No printer was picked. If the list was empty: switch the printer on (hold the power button until its light is on) and close the NIIMBOT app so it lets go of the printer — a printer held by another app does not show up. Then tap the print button again; the list will show every nearby Bluetooth device.');
                 return;
             }
             const why = bluetoothError(err);
@@ -353,7 +383,7 @@ export default function BadgeLabelDialog({ request, eventId, station, onClose, o
                         )}
                         <Typography variant="caption" color="text.secondary" alignSelf="flex-start">
                             {canPrintBluetooth()
-                                ? 'Print on B1 records the print by itself once the printer confirms it. Any other route: print, then tell the system what happened.'
+                                ? 'Print on B1 / B1 Pro records the print by itself once the printer confirms it. Any other route: print, then tell the system what happened.'
                                 : 'Print, then tell the system what happened.'} A failed print never undoes the check-in; a reprint never checks anyone in twice.
                         </Typography>
                     </Stack>
@@ -365,7 +395,7 @@ export default function BadgeLabelDialog({ request, eventId, station, onClose, o
                 {canPrintBluetooth() && (
                     <Button variant="contained" startIcon={btStatus ? <CircularProgress size={16} color="inherit" /> : <BluetoothIcon />}
                         disabled={!job?.blob || Boolean(btStatus)} onClick={printOnB1}>
-                        {btStatus ? `B1: ${btStatus}` : 'Print on B1'}
+                        {btStatus ? `Printer: ${btStatus}` : 'Print on B1 / B1 Pro'}
                     </Button>
                 )}
                 {canShareLabel() && <Button variant="outlined" startIcon={<IosShareIcon />} onClick={shareToApp}>Send to NIIMBOT app</Button>}

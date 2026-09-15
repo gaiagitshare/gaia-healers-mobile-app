@@ -18,7 +18,7 @@ import { Html5QrcodeScanner } from 'html5-qrcode';
 import { authorizeScan, getScanLogs, searchAttendees, getEvents, walkInCreate, getTicketTypes, undoCheckIn, clearScanLogs, setDoorTestMode, getEvent, badgeLabelBlob, recordBadgePrint } from '../utils/api';
 import { formatVenueTime, statusLabel, isFlaggedStatus } from '../utils/datetime';
 import BadgeLabelDialog, { STATION_KEY, LABEL_SIZE_KEY, LABEL_ROLLS, savedLabelSize, rollShort, fullName, physicalCard,
-    canPrintBluetooth, useB1, b1Connect, b1IsConnected, b1Enqueue, b1PrintBlob, rollFitsB1 } from './BadgeLabelDialog';
+    canPrintBluetooth, useB1, b1Connect, b1IsConnected, b1Enqueue, b1PrintBlob, b1Dpi, rollFitsB1 } from './BadgeLabelDialog';
 import BluetoothIcon from '@mui/icons-material/Bluetooth';
 
 // The access zones a scanner can be checking. The BACKEND decides the outcome;
@@ -271,7 +271,7 @@ function CheckIn({ timezone: timezoneProp }) {
                 && !printedIds.current.has(d.attendee_id) && !(Number(d.badge_print_count) > 0)) {
                 if (canAutoPrint()) autoPrintBadge(attendeeFromDecision(d), Boolean(d.checked_in_now));
                 else if (autoPrint) setAutoJob({ attendeeId: d.attendee_id, phase: 'failed',
-                    message: canPrintBluetooth() ? 'Badge not printed — printer not connected. Tap Connect B1, or print from here.' : 'Badge not printed here — print from the button below.' });
+                    message: canPrintBluetooth() ? 'Badge not printed — printer not connected. Tap Connect printer, or print from here.' : 'Badge not printed here — print from the button below.' });
             }
             refreshScanLogs();
             // The camera comes back as soon as the same code cannot be read
@@ -323,7 +323,7 @@ function CheckIn({ timezone: timezoneProp }) {
         setPrinterBusy(true);
         try {
             const info = await b1Connect();
-            setFeedback({ severity: 'success', message: `${(info && info.label) || 'Printer'} connected — admitted scans now print by themselves.` });
+            setFeedback({ severity: 'success', message: `${(info && info.label) || 'Printer'} connected (${(info && info.dpi) || 203} dpi) — admitted scans now print by themselves.` });
         } catch (err) {
             if (!(err && err.name === 'NotFoundError')) setFeedback({ severity: 'warning', message: `Could not connect the printer: ${(err && err.message) || err}` });
         } finally { setPrinterBusy(false); }
@@ -335,9 +335,9 @@ function CheckIn({ timezone: timezoneProp }) {
         const attemptId = (window.crypto?.randomUUID ? window.crypto.randomUUID() : String(Date.now()) + Math.random());
         setAutoJob({ attendeeId: id, phase: 'queued', message: printer.busy ? `Badge queued behind ${printer.current}` : 'Printing badge…' });
         try {
-            const response = await badgeLabelBlob(eventId, id, labelSize);
+            const response = await badgeLabelBlob(eventId, id, labelSize, 'roll', b1Dpi());   // dot-exact for the paired printer (203 B1 / 300 B1 Pro)
             await b1Enqueue(name, async () => {
-                setAutoJob({ attendeeId: id, phase: 'printing', message: 'Printing badge on the B1…' });
+                setAutoJob({ attendeeId: id, phase: 'printing', message: 'Printing badge…' });
                 await b1PrintBlob(response.data, { onProgress: (st) => setAutoJob({ attendeeId: id, phase: 'printing', message: `Badge: ${st}` }) });
             });
             printedIds.current.add(id);
@@ -661,13 +661,13 @@ function CheckIn({ timezone: timezoneProp }) {
                                       color={printer.connected ? 'success' : 'default'}
                                       variant={printer.connected ? 'filled' : 'outlined'}
                                       label={printer.connected
-                                          ? (printer.busy ? `B1 · printing ${printer.current}${printer.queued ? ` · ${printer.queued} waiting` : ''}` : 'B1 connected')
-                                          : 'B1 not connected'}
+                                          ? (printer.busy ? `${printer.label} · printing ${printer.current}${printer.queued ? ` · ${printer.queued} waiting` : ''}` : `${printer.label} connected`)
+                                          : 'Printer not connected'}
                                       sx={{ height: 24 }} />
                                 {!printer.connected && (
                                     <Button size="small" variant="contained" onClick={connectPrinter} disabled={printerBusy}
                                             startIcon={<BluetoothIcon />}>
-                                        {printerBusy ? 'Connecting…' : 'Connect B1'}
+                                        {printerBusy ? 'Connecting…' : 'Connect printer'}
                                     </Button>
                                 )}
                                 <Button size="small" onClick={() => rememberAutoPrint(!autoPrint)}

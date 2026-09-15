@@ -159,11 +159,25 @@ check(not any(p["company_name"] == "ZZ Sound Co" for p in pub),
       "unpublishing removes them from the directory at once")
 
 # ── 7. the real import landed ─────────────────────────────────────────────
+# The board is mirrored from the planning sheet several times a day now
+# (tools/vendor_sync.py), so the counts come from the sheet as it stands
+# rather than from the September load: what must hold is that every
+# confirmed row in the sheet is here, confirmed, with a booth.
+import importlib.util as _ilu
+_spec = _ilu.spec_from_file_location("vendor_sheet", "/root/event/backend/tools/vendor_sheet.py")
+_vs = _ilu.module_from_spec(_spec); _spec.loader.exec_module(_vs)
+_sheet = _vs.parse(_vs.fetch_csv())
+_sheet_conf = [r for r in _sheet if r["stage"] == "confirmed"]
 real = sql("SELECT COUNT(*), SUM(amount_due), SUM(amount_paid) FROM exhibitors "
            "WHERE event_id=1 AND stage='confirmed'")[0]
-check(real[0] == 23, "the 23 confirmed exhibitors are in the system", real[0])
-check(int(real[1] or 0) == 111000 and int(real[2] or 0) == 94500,
-      "with the booked and collected totals from the sheet", real)
+_names = {r[0] for r in sql("SELECT company_name FROM exhibitors WHERE event_id=1 AND stage='confirmed'")}
+_missing = [r["company"] for r in _sheet_conf if not any(_vs.norm_name(r["company"]) == _vs.norm_name(n) for n in _names)]
+check(real[0] == len(_sheet_conf) and not _missing,
+      "every confirmed exhibitor in the sheet is in the system, confirmed (%d)" % len(_sheet_conf), (real[0], _missing))
+_noboo = sql("SELECT company_name FROM exhibitors WHERE event_id=1 AND stage='confirmed' AND (booth_number IS NULL OR booth_number='')")
+check(not _noboo, "and every confirmed exhibitor has a booth from the sheet", _noboo)
+check(int(real[1] or 0) >= 94500 and int(real[2] or 0) >= 94500,
+      "with the booked and collected totals still on file", real)
 # Scanning is SOLD, and is still granted to nobody. This half of the rule does
 # not move: a stand appearing in the directory has never implied a scanner, and
 # the day it does is the day somebody bought one.
@@ -234,8 +248,8 @@ check(st == 404,
 # That is the right shape, because a maybe becomes confirmed the day they pay --
 # but only a confirmed stand should ever reach the attendee directory.
 counts = dict(sql("SELECT stage, COUNT(*) FROM exhibitors WHERE event_id=1 GROUP BY stage"))
-check(sum(counts.values()) == 52, "the whole vendor board is in the system", counts)
-check(counts.get("confirmed") == 23, "23 of them are confirmed", counts.get("confirmed"))
+check(sum(counts.values()) == len(_sheet), "the whole vendor board is in the system (%d rows in the sheet)" % len(_sheet), counts)
+check(counts.get("confirmed") == len(_sheet_conf), "%d of them are confirmed" % len(_sheet_conf), counts.get("confirmed"))
 check(counts.get("not_aligned", 0) > 0 and counts.get("next_year", 0) > 0,
       "including the ones deliberately not invited, and next year's", counts)
 

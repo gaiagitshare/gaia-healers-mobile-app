@@ -8915,6 +8915,13 @@ def undo_checkin(event_id: int, attendee_id: int, body: schemas.UndoCheckIn,
     was = a.checked_in_at.isoformat() if a.checked_in_at else "?"
     a.is_checked_in = False
     a.checked_in_at = None
+    # The sticker state goes back too: the next real check-in must print a
+    # fresh badge without anyone remembering to press Reprint. The print
+    # history in badge_print_logs is untouched — the audit stays.
+    a.badge_print_count = 0
+    a.badge_printed_at = None
+    a.badge_last_result = None
+    a.badge_last_error = None
     # Undo the activation the check-in performed. Scanning the wrong badge is
     # exactly the case this endpoint exists for, and a card that stayed switched
     # on afterwards would leave a stranger published because staff mis-scanned.

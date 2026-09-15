@@ -254,9 +254,21 @@ function CheckIn({ timezone: timezoneProp }) {
         return () => clearTimeout(timer);
     }, [term, eventId]);
 
+    // The camera comes back 2 s after a read, and the badge is usually still
+    // in front of it. Re-reading the same code then sent a second scan that
+    // came back "already checked in" and replaced the ADMITTED card with a
+    // refusal — which looked like the check-in had failed. The same code is
+    // ignored for a while after it was acted on; a different badge goes
+    // through at once.
+    const lastRead = useRef({ code: '', at: 0 });
+    const REPEAT_READ_MS = 15000;
     const onScanSuccess = async (decodedText) => {
+        const code = String(decodedText || '').trim();
+        const now = Date.now();
+        if (code && code === lastRead.current.code && now - lastRead.current.at < REPEAT_READ_MS) return;
+        lastRead.current = { code, at: now };
         if (scannerRef.current) scannerRef.current.pause();
-        await runScan(decodedText);
+        await runScan(code);
     };
     const onScanError = () => {};
 
@@ -269,10 +281,12 @@ function CheckIn({ timezone: timezoneProp }) {
             });
             const d = response.data;
             setResult(d); setAutoJob(null);
-            // Admitted at the entry, and no sticker yet (a returning scan of
-            // someone who already has one prints nothing): print it now.
-            if (d.result === 'GRANTED' && d.access_type === 'EVENT_ENTRY' && d.attendee_id
-                && !printedIds.current.has(d.attendee_id) && !(Number(d.badge_print_count) > 0)) {
+            // A fresh check-in always prints — once per check-in, so an undo
+            // and a re-scan print again. An admitted re-scan of someone already
+            // checked in prints only if they never got a sticker.
+            const freshCheckIn = Boolean(d.checked_in_now);
+            const neverPrinted = !printedIds.current.has(d.attendee_id) && !(Number(d.badge_print_count) > 0);
+            if (d.result === 'GRANTED' && d.access_type === 'EVENT_ENTRY' && d.attendee_id && (freshCheckIn || neverPrinted)) {
                 if (canAutoPrint()) autoPrintBadge(attendeeFromDecision(d), Boolean(d.checked_in_now));
                 else if (autoPrint) setAutoJob({ attendeeId: d.attendee_id, phase: 'failed',
                     message: canPrintBluetooth() ? 'Badge not printed — printer not connected. Tap Connect printer, or print from here.' : 'Badge not printed here — print from the button below.' });
@@ -288,7 +302,7 @@ function CheckIn({ timezone: timezoneProp }) {
     };
 
     const handleManualCheckIn = () => {
-        if (manualCode.trim()) { runScan(manualCode.trim()); setManualCode(''); }
+        if (manualCode.trim()) { lastRead.current = { code: '', at: 0 }; runScan(manualCode.trim()); setManualCode(''); }
     };
 
     const refreshSearch = async () => {
@@ -344,6 +358,7 @@ function CheckIn({ timezone: timezoneProp }) {
     // is recorded as one and the decision card offers the dialog instead.
     const autoPrintBadge = async (attendee, checkedInNow) => {
         const id = attendee.id; const name = fullName(attendee);
+        if (checkedInNow) printedIds.current.delete(id);   // a new check-in is a new sticker
         const attemptId = (window.crypto?.randomUUID ? window.crypto.randomUUID() : String(Date.now()) + Math.random());
         setAutoJob({ attendeeId: id, phase: 'queued', message: printer.busy ? `Badge queued behind ${printer.current}` : 'Printing badge…' });
         try {

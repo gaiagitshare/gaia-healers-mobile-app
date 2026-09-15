@@ -215,7 +215,15 @@ now_in = c.execute("SELECT is_checked_in FROM attendees WHERE id=?", (aid,)).fet
 entry_ok = d.get("result") in ("GRANTED", "DENIED")   # date window may deny before the event
 if d.get("result") == "GRANTED":
     check(now_in == 1, "EVENT_ENTRY via the printed URL checks the person in")
+    # A recorded print before the undo: the undo must hand back a fresh
+    # sticker state (count 0) while the print log keeps its row.
+    _pre = c.execute("SELECT count(*) FROM badge_print_logs WHERE attendee_id=?", (aid,)).fetchone()[0]
+    call("POST", "/events/%d/attendees/%d/badge-print" % (EVENT, aid), {"result": "printed", "client_attempt_id": "undo-" + uuid.uuid4().hex}, ADMIN)
     st, u, _ = call("POST", "/events/%d/attendees/%d/undo-checkin" % (EVENT, aid), {"reason": "test: wrong person"}, ADMIN)
+    _cnt, _res = c.execute("SELECT badge_print_count, badge_last_result FROM attendees WHERE id=?", (aid,)).fetchone()
+    _post = c.execute("SELECT count(*) FROM badge_print_logs WHERE attendee_id=?", (aid,)).fetchone()[0]
+    check(st == 200 and _cnt == 0 and _res is None and _post == _pre + 1,
+          "undo resets the sticker state (next check-in prints again) and keeps the print log", (st, _cnt, _res, _pre, _post))
     back = c.execute("SELECT is_checked_in FROM attendees WHERE id=?", (aid,)).fetchone()[0]
     undo_log = c.execute("SELECT count(*) FROM scan_logs WHERE attendee_id=? AND result='UNDO'", (aid,)).fetchone()[0]
     check(st == 200 and back == 0 and undo_log >= 1, "undo reverses the check-in and leaves an UNDO audit row", (st, back, undo_log))

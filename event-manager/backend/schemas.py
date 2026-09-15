@@ -170,6 +170,7 @@ class Attendee(AttendeeBase):
     # set it up. unclaimed | private | public
     card_url: Optional[str] = None
     card_state: Optional[str] = None
+    card_active: Optional[bool] = None
     # How they arrived (immutable), why they get a badge, and any money taken
     # at our own desk — never GHL-verified revenue.
     registration_source: Optional[str] = None

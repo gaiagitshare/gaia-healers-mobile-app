@@ -850,7 +850,7 @@ def _v_given(draw, given, max_w):
     words = given.split()
     tries = (given, words[0]) if len(words) > 1 else (given,)
     for text in tries:                                   # whole, then first name only
-        f = _v_largest(draw, text, max_w, _FONT_SANS_BOLD, 6.0, 4.2)
+        f = _v_largest(draw, text, max_w, _FONT_SANS_BOLD, 7.2, 4.2)
         if f:
             return [(f, text)]
     for text in tries:
@@ -862,7 +862,7 @@ def _v_given(draw, given, max_w):
 
 
 def _v_surname(draw, sur, max_w):
-    f = _v_largest(draw, sur, max_w, _FONT_SANS_BOLD, 5.2, 3.8)
+    f = _v_largest(draw, sur, max_w, _FONT_SANS_BOLD, 6.2, 3.8)
     if f:
         return [(f, sur)]
     f = _v_largest(draw, sur, max_w, _FONT_NARROW_BOLD, 4.6, 2.8)
@@ -898,7 +898,10 @@ def _render_vertical(first_name, last_name, token, W, H, base=None):
     turns it to the roll. Returns the upright image."""
     img = Image.new("L", (W, H), 255)
     draw = ImageDraw.Draw(img)
-    side, top, gap, lead = _mm(2.0), _mm(2.5), _mm(2.0), _mm(0.7)
+    # 1.4 mm at the sides: the QR carries its own white quiet zone, so the
+    # modules still sit 3+ mm in from the edge while the code itself is as
+    # large as a 30 mm sticker allows (27 mm on the 300 dpi head).
+    side, top, gap, lead = _mm(1.4), _mm(2.5), _mm(2.0), _mm(0.7)
     max_w = W - 2 * side
     given = (first_name or "").strip().upper()
     sur = (last_name or "").strip().upper()

@@ -1,9 +1,9 @@
 [Unit]
-Description=Daily exhibitor sheet mirror (06:10 Orlando time)
+Description=Exhibitor sheet mirror, six times a day (Orlando time)
 
 [Timer]
-OnCalendar=*-*-* 06:10:00 America/New_York
-RandomizedDelaySec=300
+OnCalendar=*-*-* 00,04,08,12,16,20:10:00 America/New_York
+RandomizedDelaySec=120
 Persistent=true
 
 [Install]

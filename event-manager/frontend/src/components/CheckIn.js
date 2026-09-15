@@ -15,9 +15,11 @@ import PersonAddIcon from '@mui/icons-material/PersonAdd';
 import QrCodeScannerIcon from '@mui/icons-material/QrCodeScanner';
 import TuneIcon from '@mui/icons-material/Tune';
 import { Html5QrcodeScanner } from 'html5-qrcode';
-import { authorizeScan, getScanLogs, searchAttendees, getEvents, walkInCreate, getTicketTypes, undoCheckIn, clearScanLogs, setDoorTestMode, getEvent } from '../utils/api';
+import { authorizeScan, getScanLogs, searchAttendees, getEvents, walkInCreate, getTicketTypes, undoCheckIn, clearScanLogs, setDoorTestMode, getEvent, badgeLabelBlob, recordBadgePrint } from '../utils/api';
 import { formatVenueTime, statusLabel, isFlaggedStatus } from '../utils/datetime';
-import BadgeLabelDialog, { STATION_KEY, LABEL_SIZE_KEY, LABEL_ROLLS, savedLabelSize, rollShort, fullName, physicalCard } from './BadgeLabelDialog';
+import BadgeLabelDialog, { STATION_KEY, LABEL_SIZE_KEY, LABEL_ROLLS, savedLabelSize, rollShort, fullName, physicalCard,
+    canPrintBluetooth, useB1, b1Connect, b1IsConnected, b1Enqueue, b1PrintBlob, rollFitsB1 } from './BadgeLabelDialog';
+import BluetoothIcon from '@mui/icons-material/Bluetooth';
 
 // The access zones a scanner can be checking. The BACKEND decides the outcome;
 // the operator only tells it which door/zone this is.
@@ -110,6 +112,20 @@ function CheckIn({ timezone: timezoneProp }) {
     const [labelSize, setLabelSize] = useState(savedLabelSize);
     // The label preview: check-in has ALREADY committed by the time this opens.
     const [labelReq, setLabelReq] = useState(null);   // { attendee, checkedInNow, labelSize } → BadgeLabelDialog
+    // ── Straight-through printing ──────────────────────────────────────────
+    // A queue at the door is the whole reason the sticker exists, so the
+    // default is: scan → admitted → sticker comes out of the B1, nothing
+    // tapped. The desk pairs the printer once per shift (the browser needs a
+    // tap for that); after that every admitted scan prints by itself. The
+    // dialog stays as the fallback for anything the automatic path cannot do.
+    const AUTO_PRINT_KEY = 'gha_auto_print';
+    const [autoPrint, setAutoPrint] = useState(() => { try { return localStorage.getItem(AUTO_PRINT_KEY) !== '0'; } catch (e) { return true; } });
+    const rememberAutoPrint = (on) => { setAutoPrint(on); try { localStorage.setItem(AUTO_PRINT_KEY, on ? '1' : '0'); } catch (e) { /* noop */ } };
+    const printer = useB1();
+    const [printerBusy, setPrinterBusy] = useState(false);      // the Connect button
+    // What happened to the sticker for the person on screen: { attendeeId, phase, message }
+    const [autoJob, setAutoJob] = useState(null);
+    const printedIds = useRef(new Set());                        // printed this session — a re-scan never prints twice
     const [undoTarget, setUndoTarget] = useState(null);
     const [undoReason, setUndoReason] = useState('');
     const [stationOpen, setStationOpen] = useState(false);
@@ -247,9 +263,21 @@ function CheckIn({ timezone: timezoneProp }) {
             const response = await authorizeScan(eventId, {
                 qr_code: qrCode, access_type: accessType,
             });
-            setResult(response.data);
-            await refreshScanLogs();
-            setTimeout(() => { if (scannerRef.current && scanning) scannerRef.current.resume(); }, 3500);
+            const d = response.data;
+            setResult(d); setAutoJob(null);
+            // Admitted at the entry, and no sticker yet (a returning scan of
+            // someone who already has one prints nothing): print it now.
+            if (d.result === 'GRANTED' && d.access_type === 'EVENT_ENTRY' && d.attendee_id
+                && !printedIds.current.has(d.attendee_id) && !(Number(d.badge_print_count) > 0)) {
+                if (canAutoPrint()) autoPrintBadge(attendeeFromDecision(d), Boolean(d.checked_in_now));
+                else if (autoPrint) setAutoJob({ attendeeId: d.attendee_id, phase: 'failed',
+                    message: canPrintBluetooth() ? 'Badge not printed — printer not connected. Tap Connect B1, or print from here.' : 'Badge not printed here — print from the button below.' });
+            }
+            refreshScanLogs();
+            // The camera comes back as soon as the same code cannot be read
+            // twice; the sticker prints in the background while the next
+            // person steps up.
+            setTimeout(() => { if (scannerRef.current && scanning) scannerRef.current.resume(); }, 2000);
         } catch (err) {
             setError(err.response?.data?.detail || 'Scan failed');
         }
@@ -290,6 +318,50 @@ function CheckIn({ timezone: timezoneProp }) {
     const rememberLabelSize = (value) => { setLabelSize(value); try { localStorage.setItem(LABEL_SIZE_KEY, value); } catch (e) { /* noop */ } };
     const openLabel = (attendee, checkedInNow = false) => setLabelReq({ attendee, checkedInNow, labelSize });
     const closeLabel = () => setLabelReq(null);
+    const canAutoPrint = () => autoPrint && canPrintBluetooth() && b1IsConnected() && rollFitsB1(labelSize);
+    const connectPrinter = async () => {
+        setPrinterBusy(true);
+        try {
+            const info = await b1Connect();
+            setFeedback({ severity: 'success', message: `${(info && info.label) || 'Printer'} connected — admitted scans now print by themselves.` });
+        } catch (err) {
+            if (!(err && err.name === 'NotFoundError')) setFeedback({ severity: 'warning', message: `Could not connect the printer: ${(err && err.message) || err}` });
+        } finally { setPrinterBusy(false); }
+    };
+    // Print without the dialog: render, queue on the B1, record. Any failure
+    // is recorded as one and the decision card offers the dialog instead.
+    const autoPrintBadge = async (attendee, checkedInNow) => {
+        const id = attendee.id; const name = fullName(attendee);
+        const attemptId = (window.crypto?.randomUUID ? window.crypto.randomUUID() : String(Date.now()) + Math.random());
+        setAutoJob({ attendeeId: id, phase: 'queued', message: printer.busy ? `Badge queued behind ${printer.current}` : 'Printing badge…' });
+        try {
+            const response = await badgeLabelBlob(eventId, id, labelSize);
+            await b1Enqueue(name, async () => {
+                setAutoJob({ attendeeId: id, phase: 'printing', message: 'Printing badge on the B1…' });
+                await b1PrintBlob(response.data, { onProgress: (st) => setAutoJob({ attendeeId: id, phase: 'printing', message: `Badge: ${st}` }) });
+            });
+            printedIds.current.add(id);
+            setAutoJob({ attendeeId: id, phase: 'printed', message: checkedInNow ? 'Checked in · badge printed' : 'Badge printed' });
+            try { await recordBadgePrint(eventId, id, { result: 'printed', station: station || undefined, client_attempt_id: attemptId }); } catch (e) { /* the sticker is out; the record can be re-tried from the row */ }
+            refreshSearch();
+        } catch (err) {
+            const why = (err && err.message) || String(err || 'print failed');
+            setAutoJob({ attendeeId: id, phase: 'failed', message: `Badge not printed — ${why.length > 120 ? why.slice(0, 117) + '…' : why}` });
+            try { await recordBadgePrint(eventId, id, { result: 'failed', station: station || undefined, error: `auto: ${why}`.slice(0, 200), client_attempt_id: attemptId }); } catch (e) { /* noop */ }
+        }
+    };
+    // The one entry point for "print this person's badge": automatic when it
+    // can be, the dialog when it cannot (no printer paired, Bluetooth off,
+    // a roll the B1 cannot take).
+    const printBadge = (attendee, checkedInNow = false) => {
+        if (canAutoPrint()) autoPrintBadge(attendee, checkedInNow);
+        else openLabel(attendee, checkedInNow);
+    };
+    const attendeeFromDecision = (d) => ({
+        id: d.attendee_id, qr_code: d.qr_code,
+        first_name: d.first_name || d.name || '', last_name: d.last_name || '',
+        effective_access: { base_ticket: d.base_ticket },
+    });
 
     // "Check in & print": authorise EVENT_ENTRY, and only THEN open the label.
     const checkInAndPrint = async (attendee) => {
@@ -307,7 +379,8 @@ function CheckIn({ timezone: timezoneProp }) {
         }
         setBusyId(null);
         if (d.result === 'GRANTED' || d.checked_in) {
-            openLabel(attendee, Boolean(d.checked_in_now));
+            setAutoJob(null);
+            printBadge(attendee, Boolean(d.checked_in_now));
         } else {
             setFeedback({ severity: d.result === 'LIMITED' ? 'warning' : 'error', message: `${d.result} — ${d.reason || ''}. Badge not printed.` });
         }
@@ -401,7 +474,7 @@ function CheckIn({ timezone: timezoneProp }) {
                                 {busyId === attendee.id ? 'Scanning…' : `Scan ${ZONES.find((z) => z.value === accessType)?.label.split(' ')[0] || ''}`}
                             </Button>
                         )}
-                        <Button variant="outlined" size="small" startIcon={<PrintIcon />} onClick={() => openLabel(attendee, false)}>
+                        <Button variant="outlined" size="small" startIcon={<PrintIcon />} onClick={() => { setAutoJob(null); printBadge(attendee, false); }}>
                             {prints > 0 ? 'Reprint' : (attendee.badge_last_result === 'failed' ? 'Retry print' : 'Print only')}
                         </Button>
                         {attendee.is_checked_in && (
@@ -459,6 +532,26 @@ function CheckIn({ timezone: timezoneProp }) {
                     )}
                     <Typography variant="body2" sx={{ mt: 1 }}>{reason}</Typography>
 
+                    {/* The sticker, right under the decision: printing / printed /
+                        not printed and why, with the dialog one tap away. */}
+                    {d.attendee_id && (d.result === 'GRANTED' || d.checked_in) && (() => {
+                        const job = autoJob && autoJob.attendeeId === d.attendee_id ? autoJob : null;
+                        const tone = job ? ({ printed: 'success.main', failed: 'warning.main' }[job.phase] || 'text.secondary') : 'text.secondary';
+                        return (
+                            <Stack direction="row" alignItems="center" gap={1} flexWrap="wrap" sx={{ mt: 1.25 }}>
+                                {job && (job.phase === 'queued' || job.phase === 'printing') && <CircularProgress size={14} />}
+                                <Typography variant="body2" sx={{ color: tone, fontWeight: job && job.phase !== 'printed' ? 600 : 500 }}>
+                                    {job ? job.message : (Number(d.badge_print_count) > 0 || printedIds.current.has(d.attendee_id) ? 'Badge already printed' : 'Badge not printed')}
+                                </Typography>
+                                {(!job || job.phase === 'failed' || job.phase === 'printed') && (
+                                    <Button size="small" variant={job && job.phase === 'failed' ? 'contained' : 'text'} startIcon={<PrintIcon />}
+                                            onClick={() => { setAutoJob(null); openLabel(attendeeFromDecision(d), Boolean(d.checked_in_now)); }}>
+                                        {job && job.phase === 'printed' ? 'Print again' : 'Print badge'}
+                                    </Button>
+                                )}
+                            </Stack>
+                        );
+                    })()}
                     <Stack direction="row" spacing={0.5} flexWrap="wrap" useFlexGap sx={{ mt: 1.5 }}>
                         {d.checked_in && (
                             <Chip size="small" color="success"
@@ -559,6 +652,30 @@ function CheckIn({ timezone: timezoneProp }) {
                                 {stationOpen ? 'Done' : 'Station setup'}
                             </Button>
                         </Stack>
+                        {/* The printer line. Green = paired and admitted scans print by
+                            themselves; otherwise the one tap that makes it so. */}
+                        {canPrintBluetooth() && (
+                            <Stack direction="row" alignItems="center" gap={1} flexWrap="wrap"
+                                   sx={{ px: 1.5, pb: 1, mt: -0.5 }}>
+                                <Chip size="small" icon={<BluetoothIcon />}
+                                      color={printer.connected ? 'success' : 'default'}
+                                      variant={printer.connected ? 'filled' : 'outlined'}
+                                      label={printer.connected
+                                          ? (printer.busy ? `B1 · printing ${printer.current}${printer.queued ? ` · ${printer.queued} waiting` : ''}` : 'B1 connected')
+                                          : 'B1 not connected'}
+                                      sx={{ height: 24 }} />
+                                {!printer.connected && (
+                                    <Button size="small" variant="contained" onClick={connectPrinter} disabled={printerBusy}
+                                            startIcon={<BluetoothIcon />}>
+                                        {printerBusy ? 'Connecting…' : 'Connect B1'}
+                                    </Button>
+                                )}
+                                <Button size="small" onClick={() => rememberAutoPrint(!autoPrint)}
+                                        color={autoPrint ? 'primary' : 'inherit'}>
+                                    {autoPrint ? 'Auto-print: on' : 'Auto-print: off'}
+                                </Button>
+                            </Stack>
+                        )}
                         {stationOpen && (
                             <Box sx={{ px: 1.5, pb: 1.5, pt: 0.5, borderTop: 1, borderColor: 'divider' }}>
                                 <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1.5} sx={{ mt: 1.5 }}>

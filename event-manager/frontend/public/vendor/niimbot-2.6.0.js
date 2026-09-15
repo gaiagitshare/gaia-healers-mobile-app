@@ -1451,6 +1451,8 @@
     set FORCE_PACING(v) { setWriteOverride(v ? "paced" : null); },
     get printer() { return printerInfo; },   // { modelId, protocolVersion, label, task, dpi } after connect
     isSupported: () => !!navigator.bluetooth,
+    // Gaia addition (not upstream): is the BLE link to the printer up right now?
+    isConnected: () => !!(characteristic && device && device.gatt && device.gatt.connected),
     // NOT PUBLISHED API — reaches the notification dispatcher (pendingQueue,
     // registerWait/clearWait, onNotify) directly for test/dispatch.test.js. Every real
     // caller today (sendWait, getPrintStatus) awaits one waiter before registering the

@@ -101,6 +101,64 @@ const bluetoothError = (err) => {
     return msg.length > 140 ? msg.slice(0, 137) + '…' : (msg || 'Print failed.');
 };
 
+// ── One printer session for the whole page ─────────────────────────────────
+// The driver keeps a single BLE link. Pairing needs a tap (the browser will
+// not open its device chooser from a camera callback), so the desk connects
+// once at the start of the shift; after that the label prints straight off
+// a scan with no tap at all. Every print — automatic or from the dialog —
+// goes through one queue, because two jobs on one link interleave into
+// garbage on paper.
+const b1 = { busy: false, current: null, queue: [], listeners: new Set(), lastError: '' };
+const b1State = () => ({ connected: b1IsConnected(), busy: b1.busy, current: b1.current, queued: b1.queue.length, lastError: b1.lastError });
+const b1Emit = () => { const st = b1State(); b1.listeners.forEach((fn) => { try { fn(st); } catch (e) { /* a listener never breaks printing */ } }); };
+export const b1IsConnected = () => { try { return Boolean(window.Niimbot && window.Niimbot.isConnected && window.Niimbot.isConnected()); } catch (e) { return false; } };
+// React view of the session; polls so a printer that went to sleep shows as
+// disconnected without anyone touching it.
+export const useB1 = () => {
+    const [st, setSt] = useState(b1State);
+    useEffect(() => {
+        b1.listeners.add(setSt);
+        const t = setInterval(() => setSt(b1State()), 3000);
+        return () => { b1.listeners.delete(setSt); clearInterval(t); };
+    }, []);
+    return st;
+};
+// Pair (a tap) and identify, without printing.
+export const b1Connect = async () => {
+    const Niimbot = await loadNiimbot();
+    const info = await Niimbot.identify(B1_MODEL);
+    b1.lastError = ''; b1Emit();
+    return info;
+};
+export const b1Disconnect = async () => { try { if (window.Niimbot) await window.Niimbot.disconnect(); } catch (e) { /* gone */ } b1Emit(); };
+// Run `fn` when the printer is free. `label` is what the queue shows.
+export const b1Enqueue = (label, fn) => new Promise((resolve, reject) => {
+    b1.queue.push({ label, fn, resolve, reject }); b1Emit(); b1Pump();
+});
+async function b1Pump() {
+    if (b1.busy) return;
+    const next = b1.queue.shift();
+    if (!next) { b1Emit(); return; }
+    b1.busy = true; b1.current = next.label; b1Emit();
+    try { next.resolve(await next.fn()); b1.lastError = ''; }
+    catch (e) { b1.lastError = (e && e.message) || String(e); next.reject(e); }
+    finally { b1.busy = false; b1.current = null; b1Emit(); b1Pump(); }
+}
+// Compose and print one label blob on the connected B1. Throws on anything
+// short of the printer confirming the page.
+export const b1PrintBlob = async (blob, opts = {}) => {
+    const Niimbot = await loadNiimbot();
+    const composed = await composeForB1(blob);
+    try {
+        await Niimbot.printImage(composed.url, {
+            model: opts.anyDevice ? { ...B1_MODEL, name_prefixes: [] } : B1_MODEL,
+            size: { w_px: composed.w_px, h_px: composed.h_px, offset_y_px: B1_OFFSET_Y_PX, dpi: B1_DPI },
+            onProgress: opts.onProgress,
+        });
+    } finally { URL.revokeObjectURL(composed.url); }
+};
+export const rollFitsB1 = (key) => (LABEL_ROLLS[key] ? LABEL_ROLLS[key].w : Number(String(key).split('x')[0])) <= B1_MAX_ROLL_MM;
+
 // `request` = { attendee, checkedInNow?, labelSize? } while the dialog is open,
 // null when closed. Whoever opens it has already done whatever check-in it
 // meant to do: this only renders, prints and records. A failed print never
@@ -230,11 +288,11 @@ export default function BadgeLabelDialog({ request, eventId, station, onClose, o
                 }, 1000);
             });
             await Promise.race([
-                Niimbot.printImage(composed.url, {
+                b1Enqueue(fullName(attendee), () => Niimbot.printImage(composed.url, {
                     model: btAnyDevice ? { ...B1_MODEL, name_prefixes: [] } : B1_MODEL,   // no prefix = the driver's discovery path
                     size: { w_px: composed.w_px, h_px: composed.h_px, offset_y_px: B1_OFFSET_Y_PX, dpi: B1_DPI },
                     onProgress: (st) => { const t = String(st || ''); setBtStatus(t); note(`progress: ${t}`); },
-                }),
+                })),
                 stalled,
             ]);
             setBtStatus(''); setBtAnyDevice(false);

@@ -1,5 +1,5 @@
 niimbot-web-bluetooth 2.6.0 — https://github.com/iscarelli/niimbot-web-bluetooth
-Vendored unmodified as niimbot-2.6.0.js. Licence:
+Vendored as niimbot-2.6.0.js with one addition: `Niimbot.isConnected()` (reports whether the BLE link is up). Licence:
 
 MIT License
 

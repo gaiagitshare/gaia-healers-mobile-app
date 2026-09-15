@@ -1440,6 +1440,11 @@ def authorize_scan(event_id: int, payload: schemas.AuthorizeRequest,
     db.commit()
     dec["checked_in"] = bool(att.is_checked_in)
     dec["checked_in_now"] = checked_in_now
+    # The door prints the sticker straight off a successful scan; this is how
+    # it knows a returning scan already has one and must not print another.
+    dec["badge_print_count"] = int(att.badge_print_count or 0)
+    dec["first_name"] = att.first_name
+    dec["last_name"] = att.last_name
     return dec
 
 

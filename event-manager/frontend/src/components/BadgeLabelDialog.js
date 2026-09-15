@@ -56,7 +56,12 @@ const attemptId = () => (window.crypto?.randomUUID ? window.crypto.randomUUID() 
 // app. It resolves only once the printer confirmed the page — no “Printed ✓”
 // tap needed on that path.
 const NIIMBOT_DRIVER_URL = `${process.env.PUBLIC_URL || ''}/vendor/niimbot-2.6.0.js`;
-const NAME_PREFIXES = ['B1'];
+// Chooser filter (prefixes are OR-ed, case-sensitive). The B1 advertises as
+// "B1-…", the B1 Pro as "B1 Pro-…" (a space, then the hyphen) — both start
+// with "B1" — but the list is padded with the other spellings seen in the
+// wild so a firmware that says "NIIMBOT…" is still offered. The discovery
+// path (every nearby device) is one tap away when the list comes up empty.
+const NAME_PREFIXES = ['B1', 'B1 Pro', 'B1P', 'B2', 'NIIMBOT', 'Niimbot', 'niimbot'];
 const B1_MAX_ROLL_MM = 50;                    // widest roll either printer takes
 // Per-printer print profile, chosen from what the printer says it is. Values
 // are the driver registry's (validated on real hardware there).

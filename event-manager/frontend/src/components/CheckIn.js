@@ -123,6 +123,8 @@ function CheckIn({ timezone: timezoneProp }) {
     const rememberAutoPrint = (on) => { setAutoPrint(on); try { localStorage.setItem(AUTO_PRINT_KEY, on ? '1' : '0'); } catch (e) { /* noop */ } };
     const printer = useB1();
     const [printerBusy, setPrinterBusy] = useState(false);      // the Connect button
+    const [connectAny, setConnectAny] = useState(false);        // after an empty chooser: the next tap lists every nearby device
+    const [printerHint, setPrinterHint] = useState('');
     // What happened to the sticker for the person on screen: { attendeeId, phase, message }
     const [autoJob, setAutoJob] = useState(null);
     const printedIds = useRef(new Set());                        // printed this session — a re-scan never prints twice
@@ -320,12 +322,20 @@ function CheckIn({ timezone: timezoneProp }) {
     const closeLabel = () => setLabelReq(null);
     const canAutoPrint = () => autoPrint && canPrintBluetooth() && b1IsConnected() && rollFitsB1(labelSize);
     const connectPrinter = async () => {
-        setPrinterBusy(true);
+        setPrinterBusy(true); setPrinterHint('');
         try {
-            const info = await b1Connect();
+            const info = await b1Connect(connectAny);
+            setConnectAny(false);
             setFeedback({ severity: 'success', message: `${(info && info.label) || 'Printer'} connected (${(info && info.dpi) || 203} dpi) — admitted scans now print by themselves.` });
         } catch (err) {
-            if (!(err && err.name === 'NotFoundError')) setFeedback({ severity: 'warning', message: `Could not connect the printer: ${(err && err.message) || err}` });
+            if (err && err.name === 'NotFoundError') {
+                // Nothing picked — usually an empty list. Next tap casts the wide
+                // net, and the three things that empty the list are spelled out.
+                setConnectAny(true);
+                setPrinterHint('No printer picked. Tap “Show all devices” and look for “B1 Pro-…” or “B1-…”. If it is not there either: (1) hold the printer’s power button until its light is on, (2) close the NIIMBOT app completely — a printer it holds is invisible to everyone else, (3) on iPhone check Settings → Bluefy → Bluetooth is on.');
+            } else {
+                setPrinterHint(`Could not connect: ${(err && err.message) || err}`);
+            }
         } finally { setPrinterBusy(false); }
     };
     // Print without the dialog: render, queue on the B1, record. Any failure
@@ -667,13 +677,16 @@ function CheckIn({ timezone: timezoneProp }) {
                                 {!printer.connected && (
                                     <Button size="small" variant="contained" onClick={connectPrinter} disabled={printerBusy}
                                             startIcon={<BluetoothIcon />}>
-                                        {printerBusy ? 'Connecting…' : 'Connect printer'}
+                                        {printerBusy ? 'Connecting…' : (connectAny ? 'Show all devices' : 'Connect printer')}
                                     </Button>
                                 )}
                                 <Button size="small" onClick={() => rememberAutoPrint(!autoPrint)}
                                         color={autoPrint ? 'primary' : 'inherit'}>
                                     {autoPrint ? 'Auto-print: on' : 'Auto-print: off'}
                                 </Button>
+                                {printerHint && (
+                                    <Typography variant="caption" sx={{ width: '100%', color: 'warning.main' }}>{printerHint}</Typography>
+                                )}
                             </Stack>
                         )}
                         {stationOpen && (

@@ -295,6 +295,12 @@ class Exhibitor(Base):
     # want them in the directory -- but that is their call, not a default, and
     # some of these addresses are a personal mailbox. Off unless switched on.
     show_contact_publicly = Column(Boolean, default=False)
+    # From the planning sheet, for the team only: who to call, the sheet's
+    # notes/speaking/video columns, and when the row last mirrored the sheet.
+    # ExhibitorPublic never carries these.
+    contact_name = Column(String)
+    sheet_notes = Column(Text)
+    sheet_synced_at = Column(DateTime, nullable=True)
     # PUBLIC contact, taken from the company's own website — separate from
     # contact_email/contact_phone above, which is the person who booked the
     # booth and is frequently their personal mobile. A directory that published

@@ -349,6 +349,8 @@ class ExhibitorUpdate(BaseModel):
     amount_paid: Optional[float] = None
     payment_note: Optional[str] = None
     show_contact_publicly: Optional[bool] = None
+    contact_name: Optional[str] = None
+    sheet_notes: Optional[str] = None
 
 class Exhibitor(ExhibitorBase):
     id: int
@@ -370,6 +372,9 @@ class Exhibitor(ExhibitorBase):
     public_phone: Optional[str] = None
     address: Optional[str] = None
     tagline: Optional[str] = None
+    contact_name: Optional[str] = None            # admin-only, from the planning sheet
+    sheet_notes: Optional[str] = None
+    sheet_synced_at: Optional[datetime] = None
     tables: Optional[int] = None
     logo_on_dark: Optional[bool] = None
     package: Optional[str] = None

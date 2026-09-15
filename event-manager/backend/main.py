@@ -95,7 +95,8 @@ def _ensure_event_columns():
                        ("address", "VARCHAR"), ("tagline", "VARCHAR"),
                        ("logo_on_dark", "BOOLEAN DEFAULT 0"), ("tables", "INTEGER"),
                        ("setup_token_hash", "VARCHAR"), ("setup_sent_at", "DATETIME"),
-                       ("setup_expires_at", "DATETIME"), ("activated_at", "DATETIME")):
+                       ("setup_expires_at", "DATETIME"), ("activated_at", "DATETIME"),
+                       ("contact_name", "VARCHAR"), ("sheet_notes", "TEXT"), ("sheet_synced_at", "DATETIME")):
         if _ex and _col not in _ex:
             stmts.append("ALTER TABLE exhibitors ADD COLUMN %s %s" % (_col, _ddl))
     if "door_test_mode" not in cols:

@@ -1,0 +1,10 @@
+[Unit]
+Description=Daily exhibitor sheet mirror (06:10 Orlando time)
+
+[Timer]
+OnCalendar=*-*-* 06:10:00 America/New_York
+RandomizedDelaySec=300
+Persistent=true
+
+[Install]
+WantedBy=timers.target

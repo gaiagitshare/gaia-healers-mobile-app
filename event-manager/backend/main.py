@@ -3255,7 +3255,11 @@ def get_public_speakers(
 # booth. Sharing a secret between those two would mean a forwarded setup email
 # handed somebody a lead list.
 
-VENDOR_SETUP_TTL_DAYS = 21
+# Long enough to be sent now and still work at the stand on show day: links
+# go out in September for a November event, and a stand that opens its link
+# during move-in to add one more photo must not find it dead. Issuing a new
+# link still retires the old one, which is the real revocation.
+VENDOR_SETUP_TTL_DAYS = int(os.environ.get("VENDOR_SETUP_TTL_DAYS", "120"))
 
 
 def _vendor_token_hash(tok):

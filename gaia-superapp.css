@@ -506,6 +506,20 @@ body.gaia-v2 .gaia-chakra-map__list-item, body.gaia-v2 .gaia-chakra-map--screen 
 .g-event-stat:focus-visible { outline: 2px solid var(--super-accent); outline-offset: 2px; }
 @media (min-width: 560px) { .g-event-stats { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
 
+/* The holder's own pass, above the tabs: at a venue this is the page. Green
+   enough to find without reading, quiet enough not to shout over the event. */
+.g-mypass { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; margin-top: 12px; padding: 14px 16px; border: 1px solid rgba(166, 237, 104, .38); border-radius: 18px; background: linear-gradient(180deg, rgba(166, 237, 104, .1), rgba(166, 237, 104, .03)); }
+.g-mypass__text { min-width: 0; display: grid; gap: 3px; }
+.g-mypass__kicker { margin: 0; color: var(--super-accent); font-size: 10px; font-weight: 800; letter-spacing: .14em; text-transform: uppercase; }
+.g-mypass__name { margin: 0; display: flex; flex-wrap: wrap; align-items: center; gap: 6px; color: var(--g-text); font-size: 16px; font-weight: 700; }
+.g-mypass__vip, .g-mypass__addon { padding: 2px 8px; border: 1px solid var(--super-line); border-radius: 999px; font-size: 11px; font-weight: 700; letter-spacing: .04em; }
+.g-mypass__vip { color: var(--super-accent-ink); background: var(--super-accent); border-color: var(--super-accent); }
+.g-mypass__addon { color: var(--super-muted); font-weight: 600; }
+.g-mypass__status { margin: 0; font-size: 12px; font-weight: 600; color: var(--super-muted); }
+.g-mypass__status.is-good { color: var(--super-accent); }
+.g-mypass__status.is-bad { color: #ff9c8a; }
+.g-mypass__go { flex: 0 0 auto; }
+
 /* Horizontal-scroll tabs on narrow screens; the row never wraps the layout.
    Sticky, because the hero and the stats sit above them: without this, every
    section change meant scrolling back up to reach the next one. */

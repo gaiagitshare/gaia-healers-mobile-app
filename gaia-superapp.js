@@ -1224,6 +1224,51 @@
       + '<span class="g-ev-link__go" aria-hidden="true">' + icon('arrow-up-right') + '</span></a>').join('') + '</div>';
   }
 
+  // Someone who already holds a ticket does not need "Buy ticket" — at a venue
+  // they need the QR, and before it they want to know which pass they hold.
+  // The list is the one GaiaMyEvents already caches, so this costs no extra
+  // round trip, and the sheet it opens is the same one the Events hub opens:
+  // one ticket screen, not two.
+  function myTicketHtml(held) {
+    const t = held.ticket || {};
+    const status = (window.GaiaMyEvents && window.GaiaMyEvents.ticketStatus)
+      ? window.GaiaMyEvents.ticketStatus(t) : { text: '', tone: 'idle' };
+    const pass = (t.baseTicket && t.baseTicket.name) || t.passLabel || 'Ticket';
+    const addons = (t.addons || []).map((a) => '<span class="g-mypass__addon">+ '
+      + esc(a.label) + (a.day ? ' \u00b7 ' + esc(a.day) : '') + '</span>').join('');
+    return '<section class="g-mypass" data-my-pass>'
+      + '<div class="g-mypass__text">'
+      + '<p class="g-mypass__kicker">Your ticket</p>'
+      + '<p class="g-mypass__name">' + esc(pass)
+      + (t.isVip ? '<span class="g-mypass__vip">VIP</span>' : '') + addons + '</p>'
+      + (status.text ? '<p class="g-mypass__status is-' + esc(status.tone) + '">' + esc(status.text) + '</p>' : '')
+      + '</div>'
+      + '<button type="button" class="g-btn g-btn--primary g-mypass__go" data-my-ticket="' + esc(String(held.id)) + '">'
+      + icon('qr-code') + ' Show my QR</button>'
+      + '</section>';
+  }
+
+  async function injectMyTicket(root, eventId) {
+    if (!memberState().authed || !window.GaiaMyEvents || !window.GaiaMyEvents.mine) return;
+    try {
+      const mine = await window.GaiaMyEvents.mine();
+      const held = (mine && mine.ok === true && Array.isArray(mine.events))
+        ? mine.events.find((e) => String(e.id) === String(eventId)) : null;
+      // The page may have moved on while this was in flight.
+      if (!held || !held.ticket || !document.body.contains(root)) return;
+      const anchor = root.querySelector('.g-event-stats') || root.querySelector('.g-eventpage-hero');
+      if (!anchor || root.querySelector('[data-my-pass]')) return;
+      anchor.insertAdjacentHTML('afterend', myTicketHtml(held));
+      root.querySelectorAll('[data-my-ticket]').forEach((button) => {
+        button.addEventListener('click', () => window.GaiaMyEvents.openTicket(button.dataset.myTicket));
+      });
+      // They have one. Offering to sell them another is noise.
+      if (held.ticket.valid !== false) {
+        root.querySelectorAll('.g-event-overview .g-btn--primary[href]').forEach((cta) => cta.remove());
+      }
+    } catch (_) { /* the programme never waits on a member call */ }
+  }
+
   function eventHero(item) {
     return item && item.heroImageUrl
       ? '<img src="' + esc(item.heroImageUrl) + '" alt="" loading="lazy" />'
@@ -1749,6 +1794,7 @@
         if (pin) pin.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'center' });
       });
     });
+    injectMyTicket(root, eventId);
     if (eventUI.tab === 'exhibitors') bindDirectory(root);
     if (eventUI.tab === 'community') { bindCommunity(root, eventId); ensureFeed(eventId); } else { stopFeedPolling(); }
     bind(root);

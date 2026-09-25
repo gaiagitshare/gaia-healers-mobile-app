@@ -497,5 +497,7 @@
     btn.disabled = false; pushBusy = false;
   });
 
-  window.GaiaMyEvents = { render, openTicket, closeTicket, panelHtml, ticketStatus, dateRange };
+  // `mine` is the cached list, exported so the event page can show a holder
+  // their own pass without a second round trip or a second implementation.
+  window.GaiaMyEvents = { render, openTicket, closeTicket, panelHtml, ticketStatus, dateRange, mine: loadMine };
 }());

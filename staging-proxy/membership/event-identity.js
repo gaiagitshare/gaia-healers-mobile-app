@@ -205,7 +205,11 @@ async function myTicket(session, eventId) {
  * which is a deploy, not a request. */
 let walletStatusCache = { at: 0, value: { apple: false, google: false } };
 async function walletStatus() {
-  if (Date.now() - walletStatusCache.at < 5 * 60 * 1000) return walletStatusCache.value;
+  // "Nothing is configured" is the answer that changes the moment somebody
+  // installs a certificate, so it is re-asked every minute; a store that IS
+  // issuing will not stop, and is worth five.
+  const has = walletStatusCache.value.apple || walletStatusCache.value.google;
+  if (Date.now() - walletStatusCache.at < (has ? 5 * 60 * 1000 : 60 * 1000)) return walletStatusCache.value;
   const svc = serviceCall();
   if (!svc) return { apple: false, google: false };
   try {
@@ -249,6 +253,32 @@ async function walletPass(session, eventId, store) {
     return { ok: false, authenticated: true, reason: (body && body.reason) || `event_manager_${response.status}` };
   } catch (_err) {
     return { ok: false, authenticated: true, reason: 'event_manager_unreachable' };
+  }
+}
+
+/** A wallet pass for the badge token printed on a badge — the form a link in
+ * an e-mail can take, since a mail carries no session and a Google save link
+ * is signed for an hour. */
+async function walletPassByToken(token, store) {
+  const which = String(store || '').toLowerCase();
+  if (which !== 'apple' && which !== 'google') return { ok: false, reason: 'unknown_wallet' };
+  const svc = serviceCall();
+  if (!svc) return { ok: false, reason: 'identity_not_configured' };
+  try {
+    const response = await fetch(`${svc.base}/identity/wallet/by-token`, {
+      method: 'POST',
+      headers: { ...svc.headers, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ token: String(token || '').trim(), store: which }),
+    });
+    const type = response.headers.get('content-type') || '';
+    if (which === 'apple' && type.includes('pkpass')) {
+      return { ok: true, store: 'apple', pkpass: Buffer.from(await response.arrayBuffer()) };
+    }
+    const body = type.includes('json') ? await response.json() : null;
+    if (body && body.ok === true) return body;
+    return { ok: false, reason: (body && body.reason) || `event_manager_${response.status}` };
+  } catch (_err) {
+    return { ok: false, reason: 'event_manager_unreachable' };
   }
 }
 
@@ -717,4 +747,4 @@ async function cardOwner(session, token) {
            claimed: Boolean(result.claimed), public: Boolean(result.public) };
 }
 
-export { announcements, myEvents, myTicket, walletStatus, walletPass, myUpgrades, mySchedule, changeSchedule, changeWorkshop, networking, feedback, pushVapidKey, pushSubscribe, pushUnsubscribe, identityFromSession, phaseOf, toAppRow , communityFeed, createPost, postAction , uploadPostImage, myCard, updateCard, uploadCardPhoto, cardOwner, cardVerifyDestinations, cardVerifyStart, cardVerifyConfirm, cardVerifyNewStart, cardVerifyNewConfirm, setCardMailer };
+export { announcements, myEvents, myTicket, walletStatus, walletPass, walletPassByToken, myUpgrades, mySchedule, changeSchedule, changeWorkshop, networking, feedback, pushVapidKey, pushSubscribe, pushUnsubscribe, identityFromSession, phaseOf, toAppRow , communityFeed, createPost, postAction , uploadPostImage, myCard, updateCard, uploadCardPhoto, cardOwner, cardVerifyDestinations, cardVerifyStart, cardVerifyConfirm, cardVerifyNewStart, cardVerifyNewConfirm, setCardMailer };

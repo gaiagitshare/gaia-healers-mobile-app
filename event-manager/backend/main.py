@@ -4756,6 +4756,60 @@ def identity_wallet(
                              "Cache-Control": "private, no-store"})
 
 
+@app.post("/identity/wallet/by-token")
+def identity_wallet_by_token(
+    payload: schemas.WalletByToken,
+    db: Session = Depends(get_db),
+    _: bool = Depends(require_service_token),
+):
+    """A wallet pass for the badge token printed on somebody's badge.
+
+    This is the form a LINK can take: an emailed "add your ticket to your
+    phone" cannot carry a session, and a Google save link is signed for an
+    hour, so the durable thing in the mail has to be resolved when it is
+    clicked. The token is the one already on the printed badge and already
+    accepted by the door scanner, so a link carrying it gives away nothing
+    the badge in their hand does not.
+    """
+    store = (payload.store or "").strip().lower()
+    token = (payload.token or "").strip().upper()
+    if store not in ("apple", "google"):
+        raise HTTPException(status_code=400, detail="Unknown wallet")
+    if not token:
+        return {"ok": False, "reason": "no_token"}
+    if (store == "apple" and not wallet.apple_ready()) or (store == "google" and not wallet.google_ready()):
+        return {"ok": False, "reason": "wallet_not_configured", "store": store}
+    rows = db.query(models.Attendee).filter(
+        func.upper(models.Attendee.public_token) == token).order_by(models.Attendee.id.desc()).all()
+    if not rows:
+        return {"ok": False, "reason": "unknown_token"}
+    # A badge token belongs to the PERSON, so a returning attendee has one row
+    # per year under the same token. The newest row is not the answer -- ids
+    # were backfilled out of order, and last year's conference is archived.
+    # The pass they want is for the event that is still running.
+    live = {e.id for e in db.query(models.Event).filter(models.Event.is_active == True).all()}  # noqa: E712
+    attendee = next((a for a in rows if a.event_id in live and _ticket_active(a)), None)
+    if not attendee:
+        attendee = next((a for a in rows if _ticket_active(a)), None)
+    if not attendee:
+        return {"ok": False, "reason": "ticket_not_valid"}
+    event = db.query(models.Event).filter(models.Event.id == attendee.event_id).first()
+    if not event:
+        return {"ok": False, "reason": "event_not_found"}
+    pass_name = identity_lib.pass_label(attendee)
+    try:
+        if store == "google":
+            return {"ok": True, "store": "google", "event_name": event.name,
+                    "save_url": wallet.google_save_url(attendee, event, pass_name, event.location or "")}
+        blob = wallet.apple_pkpass(attendee, event, pass_name, event.location or "")
+    except Exception as exc:
+        print("wallet pass failed (%s): %s" % (store, exc), flush=True)
+        return {"ok": False, "reason": "wallet_unavailable", "store": store}
+    return Response(content=blob, media_type="application/vnd.apple.pkpass",
+                    headers={"Content-Disposition": 'attachment; filename="gaia-ticket.pkpass"',
+                             "Cache-Control": "private, no-store"})
+
+
 @app.get("/identity/wallet/status")
 def identity_wallet_status(_: bool = Depends(require_service_token)):
     """Which stores can actually issue today. The app asks before it offers."""

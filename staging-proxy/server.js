@@ -394,6 +394,21 @@ function gaiaKnowledgePrompt(event) {
   ].join('\n');
 }
 
+// A plain page for a link clicked out of an e-mail: no app, no bundle, no
+// session — somebody standing in a hotel lobby with one bar of signal.
+function walletPage({ title = 'Your ticket', body = '' } = {}) {
+  const esc = (v) => String(v || '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+  return `<!doctype html><html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1"><title>${esc(title)} · Gaia Healers</title>
+<style>body{margin:0;min-height:100vh;display:grid;place-items:center;padding:24px;
+background:#0a160e;color:#ecf3e9;font:16px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",system-ui,sans-serif}
+main{max-width:30rem;text-align:center}h1{font-size:1.4rem;margin:0 0 12px}
+p{margin:0 0 18px;color:#a6b1a3}a{display:inline-block;min-height:44px;line-height:44px;padding:0 20px;
+border-radius:999px;background:#a6ed68;color:#0d1a06;font-weight:700;text-decoration:none}</style></head>
+<body><main><h1>${esc(title)}</h1><p>${esc(body)}</p>
+<a href="${APP_PUBLIC_URL}">Open the Gaia Healers app</a></main></body></html>`;
+}
+
 function corsHeaders(origin) {
   const allowOrigin = origin
     ? (ALLOWED_ORIGINS.includes(origin) ? origin : 'null')
@@ -6795,6 +6810,64 @@ const server = http.createServer(async (req, res) => {
       sendJson(res, result.authenticated === false ? 401 : (result.ok ? 200 : 400), rest, origin, {
         'Cache-Control': 'private, no-store',
       });
+      return;
+    }
+    // ── The link that goes in an e-mail ──────────────────────────────────
+    // A mail carries no session, and a Google save link is signed for an
+    // hour, so what travels in the mail is a durable address that is resolved
+    // when somebody clicks it — months later, on a phone, at a door.
+    //   /wallet                 the person signed into the app
+    //   /wallet/<badge token>   the token already printed on their badge
+    // Both answer a PERSON, so both answer in HTML when the store is not
+    // named: a page with the buttons that store can actually issue.
+    if (req.method === 'GET' && /^\/wallet(\/[A-Za-z0-9_-]{4,64})?$/.test(url.pathname)) {
+      const token = (url.pathname.split('/')[2] || '').trim();
+      const want = String(url.searchParams.get('store') || '').toLowerCase();
+      const caps = await eventIdentity.walletStatus();
+      if (!caps.apple && !caps.google) {
+        res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store' });
+        res.end(walletPage({ title: 'Not available yet',
+          body: 'Phone passes are not switched on for this event yet. Your badge QR in the app works at the door today.' }));
+        return;
+      }
+      const store = (want === 'apple' || want === 'google') ? want
+        : (caps.apple && /iPhone|iPad|iPod|Macintosh/i.test(req.headers['user-agent'] || '') ? 'apple'
+          : (caps.google ? 'google' : 'apple'));
+      const result = token
+        ? await eventIdentity.walletPassByToken(token, store)
+        : await eventIdentity.walletPass(cookieForRequest(req), url.searchParams.get('event') || '', store);
+
+      if (!token && result.authenticated === false) {
+        // Nobody is signed in: send them to the app, which knows how, and
+        // bring them back to their ticket rather than to a home screen.
+        const back = `${APP_PUBLIC_URL}${String(APP_PUBLIC_URL).includes('?') ? '&' : '?'}view=events`;
+        res.writeHead(302, { Location: back, 'Cache-Control': 'no-store' });
+        res.end();
+        return;
+      }
+      if (result.ok && result.store === 'apple' && result.pkpass) {
+        res.writeHead(200, {
+          'Content-Type': 'application/vnd.apple.pkpass',
+          'Content-Disposition': 'attachment; filename="gaia-ticket.pkpass"',
+          'Content-Length': result.pkpass.length,
+          'Cache-Control': 'private, no-store',
+        });
+        res.end(result.pkpass);
+        return;
+      }
+      if (result.ok && result.save_url) {
+        res.writeHead(302, { Location: result.save_url, 'Cache-Control': 'private, no-store' });
+        res.end();
+        return;
+      }
+      const why = {
+        unknown_token: 'That link does not match a ticket. Check you used the most recent e-mail, or open the Gaia Healers app.',
+        ticket_not_valid: 'This ticket is no longer valid for entry. The registration desk can help.',
+        no_ticket_for_event: 'No ticket found for this account yet.',
+        wallet_not_configured: 'Phone passes are not switched on for this event yet.',
+      }[result.reason] || 'The pass could not be prepared just now. Your badge QR in the app works at the door.';
+      res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store' });
+      res.end(walletPage({ title: 'Ticket pass', body: why }));
       return;
     }
     if (req.method === 'GET' && /^\/api\/events\/wallet-status$/.test(url.pathname)) {

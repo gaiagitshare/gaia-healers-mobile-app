@@ -788,6 +788,12 @@ class WalletPassRequest(IdentityTicketLookup):
     store: str
 
 
+class WalletByToken(BaseModel):
+    """A wallet pass fetched by the badge token printed on the badge itself."""
+    token: str
+    store: str
+
+
 class ScheduleChange(IdentityTicketLookup):
     """Saving or removing one session from an attendee's own schedule."""
     session_id: int

@@ -6732,6 +6732,29 @@ def reconcile_invoice(payload: schemas.ReconcileInvoice, db: Session = Depends(g
             "upgraded": bool(existing.ticket_type_id != old_tt and not created)}
 
 
+def _close_unmapped_for_order(db, order_id, note):
+    """A sale filed for review has become an attendee — close its row.
+
+    The review queue closes itself when a PRODUCT is mapped, which covers the
+    case it was built for. It cannot cover a payment that arrived with no
+    product id at all: there is no product to map, and when the reconciler
+    later turns that same order into an attendee the row stays pending for
+    ever. Three such rows sat in the queue for a fortnight, which is how a
+    queue stops being read.
+    """
+    ref = (order_id or "").strip()
+    if not ref:
+        return 0
+    rows = db.query(models.UnmappedSale).filter(
+        models.UnmappedSale.reference == ref,
+        models.UnmappedSale.status == "pending").all()
+    for r in rows:
+        r.status = "mapped"
+        r.resolved_at = datetime.utcnow()
+        r.note = note
+    return len(rows)
+
+
 @app.post("/identity/reconcile-attendee")
 def reconcile_attendee(payload: schemas.ReconcileAttendee, db: Session = Depends(get_db),
                        _: bool = Depends(require_service_token)):
@@ -6774,6 +6797,7 @@ def reconcile_attendee(payload: schemas.ReconcileAttendee, db: Session = Depends
         if payload.contact_id:
             cd["contact_id"] = payload.contact_id
         att.custom_data = cd
+        _close_unmapped_for_order(db, payload.order_id, "Reconciled as an add-on for this attendee")
         db.commit(); db.refresh(att)
         return {"ok": True, "created": created, "addon": payload.addon_code,
                 "attendee_id": att.id, "qr_code": att.qr_code}
@@ -6840,6 +6864,7 @@ def reconcile_attendee(payload: schemas.ReconcileAttendee, db: Session = Depends
         stamp_registration(existing, _inferred_source(existing), "paid")
         link_ghl_order(db, existing, payload.order_id)
         attach_member_identity(db, existing)
+        _close_unmapped_for_order(db, payload.order_id, "Reconciled onto an existing attendee")
         db.commit(); db.refresh(existing)
         upgraded = bool(payload.ticket_type_id and existing.ticket_type_id != old_tt)
         if upgraded and existing.ticket_type:
@@ -6861,6 +6886,7 @@ def reconcile_attendee(payload: schemas.ReconcileAttendee, db: Session = Depends
     stamp_registration(attendee, "ghl_order", "paid")
     link_ghl_order(db, attendee, payload.order_id)
     attach_member_identity(db, attendee)
+    _close_unmapped_for_order(db, payload.order_id, "Reconciled into a new attendee")
     db.commit(); db.refresh(attendee)
     return {"ok": True, "created": True, "upgraded": False,
             "attendee_id": attendee.id, "qr_code": attendee.qr_code,

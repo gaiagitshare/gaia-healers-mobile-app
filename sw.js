@@ -1,4 +1,4 @@
-const CACHE_NAME = 'gaia-healers-20260925a-event-ui';
+const CACHE_NAME = 'gaia-healers-20260925b-event-ui';
 /**
  * Precache ONLY what the page requests by exactly this URL.
  *

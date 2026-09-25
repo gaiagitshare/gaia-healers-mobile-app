@@ -495,13 +495,16 @@ body.gaia-v2 .gaia-chakra-map__list-item, body.gaia-v2 .gaia-chakra-map--screen 
 
 /* What the event is, in four numbers. Each tile is the way into its section,
    which is also why they sit above the tab strip rather than inside a panel. */
-.g-event-stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(84px, 1fr)); gap: 8px; margin-top: 14px; }
+/* Two up on a phone, four across from 560px: auto-fit left the fourth tile
+   alone on a second row, which reads as a mistake rather than a layout. */
+.g-event-stats { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; margin-top: 14px; }
 .g-event-stat { display: flex; flex-direction: column; align-items: flex-start; justify-content: center; gap: 2px; min-height: 66px; padding: 10px 12px; border: 1px solid var(--super-line); border-radius: 16px; background: var(--super-panel); color: var(--super-muted); font: inherit; text-align: left; cursor: pointer; transition: border-color .15s ease, background .15s ease, transform .15s ease; }
 .g-event-stat.is-static { cursor: default; }
 .g-event-stat b { color: var(--g-text); font-size: 22px; font-weight: 700; line-height: 1; font-variant-numeric: tabular-nums; }
 .g-event-stat span { font-size: 11px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; }
 .g-event-stat:not(.is-static):hover { border-color: var(--super-accent); background: var(--super-panel-2); transform: translateY(-1px); }
 .g-event-stat:focus-visible { outline: 2px solid var(--super-accent); outline-offset: 2px; }
+@media (min-width: 560px) { .g-event-stats { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
 
 /* Horizontal-scroll tabs on narrow screens; the row never wraps the layout.
    Sticky, because the hero and the stats sit above them: without this, every

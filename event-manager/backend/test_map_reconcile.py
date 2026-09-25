@@ -246,6 +246,25 @@ shown2 = {i["product_name"] for i in u2["items"]}
 check("Bio-Well 3.0 Combo" in shown2 and "The Ambassador" in shown2,
       "and they are all still retrievable for audit", shown2)
 
+# ── 11. a payment with no product id, later reconciled, leaves the queue ──
+# The queue closes itself when a PRODUCT is mapped. A payment that arrives
+# with no product id has no product to map, so before this it stayed pending
+# for ever even after the same order became an attendee -- and a queue full of
+# answered rows stops being read.
+call("POST", "/identity/report-unmapped-sale",
+     {"reference": "zz-u-noprod", "source": "ghl_order", "product_name": "Weekend Admission Pass",
+      "buyer_email": "zz-mr-noprod@example.invalid", "amount": 99.0,
+      "paid_at": "2026-06-02", "event_id": EV}, SVC)
+_pending = sql("SELECT status FROM unmapped_sales WHERE reference='zz-u-noprod'")
+check(_pending and _pending[0][0] == "pending", "a sale with no product id is filed for review", _pending)
+reconcile("zz-mr-noprod@example.invalid", BASE_TT, None, "zz-u-noprod", at=plus(400), first="Zed", last="NoProd")
+_after = sql("SELECT status, note FROM unmapped_sales WHERE reference='zz-u-noprod'")
+check(_after and _after[0][0] != "pending",
+      "and it leaves the queue once that same order becomes an attendee", _after)
+st, _u3 = call("GET", "/events/%d/unmapped-sales" % EV, token=ADMIN)
+check(not any(i.get("reference") == "zz-u-noprod" for i in _u3["items"]),
+      "so the review panel stops asking about work already done", [i.get("reference") for i in _u3["items"]])
+
 # ── cleanup ────────────────────────────────────────────────────────────────
 write("DELETE FROM ticket_mappings WHERE event_id=?", (EV,))
 write("DELETE FROM unmapped_sales WHERE reference LIKE 'zz-u-%'", ())
@@ -253,7 +272,7 @@ call("DELETE", "/events/%d" % EV, token=ADMIN)
 left = sql("SELECT COUNT(*) FROM attendees WHERE email LIKE 'zz-mr-%'")
 check(left[0][0] == 0, "the throwaway event and its people are gone afterwards", left)
 
-print("\n%d checks, %d failed" % (28, len(fails)))
+print("\n%d checks, %d failed" % (31, len(fails)))
 if fails:
     print("FAILED: " + "; ".join(fails))
 sys.exit(1 if fails else 0)

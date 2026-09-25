@@ -30,10 +30,23 @@ EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 URL_RE = re.compile(r"^(https?://)?([a-z0-9-]+\.)+[a-z]{2,}(/.*)?$", re.I)
 
 
-def fetch_csv(url=CSV_URL, timeout=30):
-    req = urllib.request.Request(url, headers={"User-Agent": "gaia-event-manager/vendor-sync"})
-    with urllib.request.urlopen(req, timeout=timeout) as r:
-        return r.read().decode("utf-8-sig")
+def fetch_csv(url=CSV_URL, timeout=30, attempts=3):
+    """Google occasionally takes longer than the timeout on the redirect to the
+    export host; one run in nine died that way and simply skipped a sync. Retry
+    a couple of times before giving up -- a sheet that answers slowly is not a
+    sheet that has changed."""
+    import time
+    last = None
+    for i in range(max(1, attempts)):
+        try:
+            req = urllib.request.Request(url, headers={"User-Agent": "gaia-event-manager/vendor-sync"})
+            with urllib.request.urlopen(req, timeout=timeout) as r:
+                return r.read().decode("utf-8-sig")
+        except Exception as e:                      # timeout, transient 5xx, redirect stall
+            last = e
+            if i + 1 < attempts:
+                time.sleep(5 * (i + 1))
+    raise last
 
 
 def _clean(v):

@@ -4759,6 +4759,26 @@ def identity_wallet(
                              "Cache-Control": "private, no-store"})
 
 
+def _attendee_for_badge_token(db, token: str):
+    """The person a printed badge token belongs to, for the event still running.
+
+    A badge token belongs to the PERSON, so a returning attendee has one row
+    per year under the same token. The newest row is not the answer -- ids were
+    backfilled out of order, and last year's conference is archived. The ticket
+    they want is for the event that has not happened yet.
+    """
+    token = (token or "").strip().upper()
+    if not token:
+        return None
+    rows = db.query(models.Attendee).filter(
+        func.upper(models.Attendee.public_token) == token).order_by(models.Attendee.id.desc()).all()
+    if not rows:
+        return None
+    live = {e.id for e in db.query(models.Event).filter(models.Event.is_active == True).all()}  # noqa: E712
+    return (next((a for a in rows if a.event_id in live and _ticket_active(a)), None)
+            or next((a for a in rows if _ticket_active(a)), None))
+
+
 @app.post("/identity/wallet/by-token")
 def identity_wallet_by_token(
     payload: schemas.WalletByToken,
@@ -4782,18 +4802,10 @@ def identity_wallet_by_token(
         return {"ok": False, "reason": "no_token"}
     if (store == "apple" and not wallet.apple_ready()) or (store == "google" and not wallet.google_ready()):
         return {"ok": False, "reason": "wallet_not_configured", "store": store}
-    rows = db.query(models.Attendee).filter(
-        func.upper(models.Attendee.public_token) == token).order_by(models.Attendee.id.desc()).all()
-    if not rows:
+    if not db.query(models.Attendee).filter(
+            func.upper(models.Attendee.public_token) == token).first():
         return {"ok": False, "reason": "unknown_token"}
-    # A badge token belongs to the PERSON, so a returning attendee has one row
-    # per year under the same token. The newest row is not the answer -- ids
-    # were backfilled out of order, and last year's conference is archived.
-    # The pass they want is for the event that is still running.
-    live = {e.id for e in db.query(models.Event).filter(models.Event.is_active == True).all()}  # noqa: E712
-    attendee = next((a for a in rows if a.event_id in live and _ticket_active(a)), None)
-    if not attendee:
-        attendee = next((a for a in rows if _ticket_active(a)), None)
+    attendee = _attendee_for_badge_token(db, token)
     if not attendee:
         return {"ok": False, "reason": "ticket_not_valid"}
     event = db.query(models.Event).filter(models.Event.id == attendee.event_id).first()
@@ -4811,6 +4823,58 @@ def identity_wallet_by_token(
     return Response(content=blob, media_type="application/vnd.apple.pkpass",
                     headers={"Content-Disposition": 'attachment; filename="gaia-ticket.pkpass"',
                              "Cache-Control": "private, no-store"})
+
+
+@app.get("/identity/ticket/by-token/{token}")
+def identity_ticket_by_token(token: str, db: Session = Depends(get_db),
+                             _: bool = Depends(require_service_token)):
+    """The ticket behind a printed badge token: everything a ticket page shows.
+
+    The e-mailed ticket cannot assume a session -- most of the people it is for
+    have never opened the app. The token is the one already on the badge and
+    already accepted by the door scanner, so it is the right key for a link.
+    """
+    attendee = _attendee_for_badge_token(db, token)
+    if not attendee:
+        return {"ok": False, "reason": "unknown_token"}
+    event = db.query(models.Event).filter(models.Event.id == attendee.event_id).first()
+    if not event:
+        return {"ok": False, "reason": "event_not_found"}
+    return {
+        "ok": True,
+        "first_name": attendee.first_name or "",
+        "last_name": attendee.last_name or "",
+        "pass_label": identity_lib.pass_label(attendee),
+        "qr_code": attendee.qr_code,
+        "qr_image": generate_qr_code(attendee.qr_code),
+        "event_id": event.id,
+        "event_name": event.name,
+        "location": event.location or "",
+        "start_date": event.start_date.isoformat() if event.start_date else "",
+        "end_date": event.end_date.isoformat() if event.end_date else "",
+        "checked_in": bool(attendee.is_checked_in),
+    }
+
+
+@app.get("/identity/badge-qr/{token}")
+def identity_badge_qr(token: str, db: Session = Depends(get_db),
+                      _: bool = Depends(require_service_token)):
+    """The badge QR as a PNG, for an <img> in an e-mail.
+
+    Mail clients strip data: URIs, so the code a person is asked to show at the
+    door has to be fetched from somewhere. It carries the same value the
+    scanner reads off the printed sticker and nothing else.
+    """
+    attendee = _attendee_for_badge_token(db, token)
+    if not attendee:
+        raise HTTPException(status_code=404, detail="Unknown ticket")
+    qr = qrcode.QRCode(version=1, box_size=10, border=2)
+    qr.add_data(attendee.qr_code)
+    qr.make(fit=True)
+    buf = io.BytesIO()
+    qr.make_image(fill_color="black", back_color="white").save(buf, format="PNG")
+    return Response(content=buf.getvalue(), media_type="image/png",
+                    headers={"Cache-Control": "public, max-age=86400"})
 
 
 @app.get("/identity/wallet/status")

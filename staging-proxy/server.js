@@ -409,6 +409,76 @@ border-radius:999px;background:#a6ed68;color:#0d1a06;font-weight:700;text-decora
 <a href="${APP_PUBLIC_URL}">Open the Gaia Healers app</a></main></body></html>`;
 }
 
+function eventDateLine(startIso = '', endIso = '') {
+  const m = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+  const a = startIso ? new Date(startIso) : null;
+  const b = endIso ? new Date(endIso) : null;
+  if (!a || Number.isNaN(a.getTime())) return '';
+  if (!b || Number.isNaN(b.getTime())) return `${m[a.getMonth()]} ${a.getDate()}, ${a.getFullYear()}`;
+  if (a.getMonth() === b.getMonth() && a.getFullYear() === b.getFullYear()) {
+    return `${m[a.getMonth()]} ${a.getDate()}–${b.getDate()}, ${a.getFullYear()}`;
+  }
+  return `${m[a.getMonth()]} ${a.getDate()} – ${m[b.getMonth()]} ${b.getDate()}, ${b.getFullYear()}`;
+}
+
+// The ticket somebody opens from an e-mail. It has to work for a person who
+// has never opened the app, on a phone, possibly on hotel wifi at the door —
+// so it is one self-contained page with the code already on it, nothing to
+// sign into and nothing to load.
+function ticketPage(t, { walletUrl = '' } = {}) {
+  const esc = (v) => String(v == null ? '' : v).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+  const name = [t.first_name, t.last_name].filter(Boolean).join(' ');
+  const when = eventDateLine(t.start_date, t.end_date);
+  return `<!doctype html><html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>${esc(name)} · Your ticket</title>
+<style>
+  :root{color-scheme:dark}
+  *{box-sizing:border-box}
+  body{margin:0;min-height:100vh;padding:24px 16px;background:#0a160e;color:#ecf3e9;
+       font:16px/1.55 -apple-system,BlinkMacSystemFont,"Segoe UI",system-ui,sans-serif;
+       display:flex;align-items:center;justify-content:center}
+  .card{width:100%;max-width:26rem;background:#11211501;border:1px solid #21331f;border-radius:20px;
+        padding:26px 22px;text-align:center;background:#101d13}
+  .eyebrow{margin:0 0 4px;font-size:12px;letter-spacing:.14em;text-transform:uppercase;color:#7f8a7c}
+  h1{margin:0 0 10px;font-size:1.55rem;line-height:1.2;text-wrap:balance}
+  .pill{display:inline-block;padding:5px 14px;border-radius:999px;background:#1c2f1d;color:#a6ed68;
+        font-size:13px;font-weight:700;letter-spacing:.02em}
+  .qr{margin:20px auto 10px;width:min(240px,68vw);aspect-ratio:1;background:#fff;border-radius:14px;
+      padding:12px;display:block}
+  .qr img{width:100%;height:100%;display:block;image-rendering:pixelated}
+  .code{margin:0 0 20px;font:600 13px/1 ui-monospace,SFMono-Regular,Menlo,monospace;letter-spacing:.08em;color:#a6b1a3}
+  dl{margin:0 0 20px;text-align:left;border-top:1px solid #21331f}
+  div.row{display:flex;justify-content:space-between;gap:16px;padding:11px 2px;border-bottom:1px solid #21331f}
+  dt{margin:0;color:#7f8a7c;font-size:14px}
+  dd{margin:0;text-align:right;font-size:14px;font-weight:600}
+  a.btn{display:block;margin:0 0 10px;min-height:48px;line-height:48px;border-radius:999px;
+        background:#a6ed68;color:#0d1a06;font-weight:700;text-decoration:none}
+  a.ghost{display:block;min-height:48px;line-height:48px;border-radius:999px;border:1px solid #2c422a;
+          color:#ecf3e9;text-decoration:none;font-weight:600}
+  .note{margin:18px 0 0;font-size:12.5px;color:#7f8a7c}
+  @media print{body{background:#fff;color:#000}.card{background:#fff;border-color:#ccc}
+    a.btn,a.ghost,.note{display:none}dt,.eyebrow,.code{color:#555}}
+</style></head>
+<body><main class="card">
+  ${t.past ? '<p style="margin:0 0 14px;padding:10px 12px;border-radius:12px;background:#2a2113;color:#e8cd8a;font-size:13.5px">This event has already taken place. Your ticket is shown for your records.</p>' : ''}
+  <p class="eyebrow">${esc(t.event_name || 'Your ticket')}</p>
+  <h1>${esc(name)}</h1>
+  <p style="margin:0"><span class="pill">${esc(t.pass_label || 'Ticket')}</span></p>
+  <div class="qr"><img alt="Your entry code" src="/t/${encodeURIComponent(t.token)}.png"></div>
+  <p class="code">${esc(t.qr_code || '')}</p>
+  <dl>
+    ${when ? `<div class="row"><dt>When</dt><dd>${esc(when)}</dd></div>` : ''}
+    ${t.location ? `<div class="row"><dt>Where</dt><dd>${esc(t.location)}</dd></div>` : ''}
+    <div class="row"><dt>Doors</dt><dd>Show this code at check-in</dd></div>
+  </dl>
+  ${walletUrl ? `<a class="btn" href="${esc(walletUrl)}">Add to my phone</a>` : ''}
+  <a class="ghost" href="${APP_PUBLIC_URL}">Open the Gaia Healers app</a>
+  <p class="note">Screenshot this page or bookmark it — you will not need signal at the door.
+  We will print your name badge when you arrive.</p>
+</main></body></html>`;
+}
+
 function corsHeaders(origin) {
   const allowOrigin = origin
     ? (ALLOWED_ORIGINS.includes(origin) ? origin : 'null')
@@ -6810,6 +6880,44 @@ const server = http.createServer(async (req, res) => {
       sendJson(res, result.authenticated === false ? 401 : (result.ok ? 200 : 400), rest, origin, {
         'Cache-Control': 'private, no-store',
       });
+      return;
+    }
+    // ── The ticket itself, opened from an e-mail ─────────────────────────
+    // /t/<token>.png  the entry code as an image, for an <img> in the mail
+    // /ticket/<token> the whole ticket as a page, for the button under it
+    if (req.method === 'GET' && /^\/t\/[A-Za-z0-9_-]{4,64}\.png$/.test(url.pathname)) {
+      const token = url.pathname.slice(3, -4);
+      const png = await eventIdentity.badgeQr(token);
+      if (!png) { res.writeHead(404, { 'Cache-Control': 'no-store' }); res.end(); return; }
+      res.writeHead(200, {
+        'Content-Type': 'image/png',
+        'Content-Length': png.length,
+        // A year, because the code on a badge never changes once printed.
+        'Cache-Control': 'public, max-age=31536000, immutable',
+      });
+      res.end(png);
+      return;
+    }
+    if (req.method === 'GET' && /^\/ticket\/[A-Za-z0-9_-]{4,64}$/.test(url.pathname)) {
+      const token = url.pathname.split('/')[2];
+      const t = await eventIdentity.ticketByToken(token);
+      if (!t || t.ok !== true) {
+        res.writeHead(t && t.reason === 'unknown_token' ? 404 : 200,
+          { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store' });
+        res.end(walletPage({
+          title: 'Ticket not found',
+          body: 'That link does not match a ticket. Check you used the most recent e-mail, or open the Gaia Healers app and sign in with the address you booked with.',
+        }));
+        return;
+      }
+      // A badge token belongs to the person, so somebody who came last year and
+      // not this one still resolves — to an event that is over. Say so rather
+      // than presenting a finished conference as a live ticket.
+      const ended = t.end_date ? new Date(t.end_date).getTime() < Date.now() : false;
+      const caps = await eventIdentity.walletStatus();
+      const walletUrl = (!ended && (caps.apple || caps.google)) ? `/wallet/${encodeURIComponent(token)}` : '';
+      res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'private, no-store' });
+      res.end(ticketPage({ ...t, token, past: ended }, { walletUrl }));
       return;
     }
     // ── The link that goes in an e-mail ──────────────────────────────────

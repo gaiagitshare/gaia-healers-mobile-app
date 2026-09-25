@@ -282,6 +282,41 @@ async function walletPassByToken(token, store) {
   }
 }
 
+/** The ticket behind a printed badge token — for the e-mailed ticket page,
+ * which cannot assume a session because most of the people it is for have
+ * never opened the app. */
+async function ticketByToken(token) {
+  const svc = serviceCall();
+  if (!svc) return { ok: false, reason: 'identity_not_configured' };
+  const code = String(token || '').trim();
+  if (!code) return { ok: false, reason: 'unknown_token' };
+  try {
+    const response = await fetch(`${svc.base}/identity/ticket/by-token/${encodeURIComponent(code)}`,
+      { headers: svc.headers });
+    if (!response.ok) return { ok: false, reason: `event_manager_${response.status}` };
+    return await response.json();
+  } catch (_err) {
+    return { ok: false, reason: 'event_manager_unreachable' };
+  }
+}
+
+/** The badge QR as PNG bytes, so an <img> in an e-mail can show the code the
+ * door scanner reads. Mail clients strip data: URIs, so it has to be fetched. */
+async function badgeQr(token) {
+  const svc = serviceCall();
+  if (!svc) return null;
+  const code = String(token || '').trim();
+  if (!code) return null;
+  try {
+    const response = await fetch(`${svc.base}/identity/badge-qr/${encodeURIComponent(code)}`,
+      { headers: svc.headers });
+    if (!response.ok) return null;
+    return Buffer.from(await response.arrayBuffer());
+  } catch (_err) {
+    return null;
+  }
+}
+
 /** Eligible upgrades from this person's current pass for one event. Resolution
  * and rank rules live in the Event Manager; price is filled in by the caller
  * from GHL so it is always the real configured amount. */
@@ -747,4 +782,4 @@ async function cardOwner(session, token) {
            claimed: Boolean(result.claimed), public: Boolean(result.public) };
 }
 
-export { announcements, myEvents, myTicket, walletStatus, walletPass, walletPassByToken, myUpgrades, mySchedule, changeSchedule, changeWorkshop, networking, feedback, pushVapidKey, pushSubscribe, pushUnsubscribe, identityFromSession, phaseOf, toAppRow , communityFeed, createPost, postAction , uploadPostImage, myCard, updateCard, uploadCardPhoto, cardOwner, cardVerifyDestinations, cardVerifyStart, cardVerifyConfirm, cardVerifyNewStart, cardVerifyNewConfirm, setCardMailer };
+export { announcements, myEvents, myTicket, walletStatus, walletPass, walletPassByToken, ticketByToken, badgeQr, myUpgrades, mySchedule, changeSchedule, changeWorkshop, networking, feedback, pushVapidKey, pushSubscribe, pushUnsubscribe, identityFromSession, phaseOf, toAppRow , communityFeed, createPost, postAction , uploadPostImage, myCard, updateCard, uploadCardPhoto, cardOwner, cardVerifyDestinations, cardVerifyStart, cardVerifyConfirm, cardVerifyNewStart, cardVerifyNewConfirm, setCardMailer };

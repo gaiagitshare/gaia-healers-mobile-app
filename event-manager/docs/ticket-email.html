@@ -1,0 +1,129 @@
+<!-- ══════════════════════════════════════════════════════════════════════
+     GAIA HEALERS — "Your ticket" e-mail
+     Paste into GHL as a Custom HTML / Source block.
+
+     SUBJECT:  Your ticket for Elevate 2026 — November 20–22, Orlando
+     PREVIEW:  Your entry code is inside. Nothing to print.
+
+     MERGE FIELDS USED
+       {{contact.first_name}}
+       {{contact.gaia_badge_token}}   ← import this first (see ticket-email.md)
+
+     If the token field is empty for a contact, the QR will not load and the
+     button lands on "ticket not found" — so send ONLY to the segment where
+     that field is set.
+     ══════════════════════════════════════════════════════════════════════ -->
+
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"
+       style="margin:0;padding:0;background:#f4f6f3;">
+ <tr><td align="center" style="padding:28px 12px;">
+
+  <table role="presentation" width="600" cellpadding="0" cellspacing="0" border="0"
+         style="width:100%;max-width:600px;background:#ffffff;border-radius:18px;overflow:hidden;
+                border:1px solid #e2e8de;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Arial,sans-serif;">
+
+   <!-- header -->
+   <tr><td style="background:#0a160e;padding:26px 28px;">
+     <p style="margin:0;font-size:12px;letter-spacing:.16em;text-transform:uppercase;color:#a6ed68;">
+       Gaia Healers · Elevate 2026
+     </p>
+     <p style="margin:6px 0 0;font-size:22px;line-height:1.25;font-weight:700;color:#ffffff;">
+       Your ticket is ready
+     </p>
+   </td></tr>
+
+   <!-- greeting -->
+   <tr><td style="padding:26px 28px 0;">
+     <p style="margin:0 0 14px;font-size:16px;line-height:1.6;color:#1b2419;">
+       Hi {{contact.first_name}},
+     </p>
+     <p style="margin:0 0 6px;font-size:16px;line-height:1.6;color:#1b2419;">
+       You're all set for the Gaia Healers Elevate Conference. This is your entry code —
+       show it at check-in and we'll print your name badge on the spot.
+     </p>
+   </td></tr>
+
+   <!-- the code -->
+   <tr><td align="center" style="padding:22px 28px 6px;">
+     <table role="presentation" cellpadding="0" cellspacing="0" border="0"
+            style="border:1px solid #e2e8de;border-radius:16px;">
+       <tr><td align="center" style="padding:18px 18px 10px;background:#ffffff;border-radius:16px;">
+         <img src="https://api.gaiahealers.app/t/{{contact.gaia_badge_token}}.png"
+              width="200" height="200" alt="Your entry code"
+              style="display:block;width:200px;height:200px;border:0;outline:none;image-rendering:pixelated;">
+         <p style="margin:12px 0 0;font:700 15px/1 'SFMono-Regular',Consolas,Menlo,monospace;
+                   letter-spacing:.1em;color:#0a160e;">{{contact.gaia_badge_token}}</p>
+         <p style="margin:6px 0 0;font-size:12px;color:#6b7668;">Your check-in code</p>
+       </td></tr>
+     </table>
+   </td></tr>
+
+   <!-- button -->
+   <tr><td align="center" style="padding:18px 28px 4px;">
+     <table role="presentation" cellpadding="0" cellspacing="0" border="0">
+       <tr><td align="center" style="border-radius:999px;background:#0a160e;">
+         <a href="https://api.gaiahealers.app/ticket/{{contact.gaia_badge_token}}"
+            style="display:inline-block;padding:15px 34px;font-size:16px;font-weight:700;
+                   color:#a6ed68;text-decoration:none;border-radius:999px;">
+           Open my ticket
+         </a>
+       </td></tr>
+     </table>
+     <p style="margin:12px 0 0;font-size:13px;line-height:1.5;color:#6b7668;">
+       Can't see the code above? Tap <b>Open my ticket</b> — it works on any phone,
+       and you can save it for the day.
+     </p>
+   </td></tr>
+
+   <!-- details -->
+   <tr><td style="padding:24px 28px 0;">
+     <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"
+            style="border-top:1px solid #e9eee7;">
+       <tr>
+         <td style="padding:12px 0;border-bottom:1px solid #e9eee7;font-size:14px;color:#6b7668;">When</td>
+         <td align="right" style="padding:12px 0;border-bottom:1px solid #e9eee7;font-size:14px;font-weight:600;color:#1b2419;">
+           November 20–22, 2026</td>
+       </tr>
+       <tr>
+         <td style="padding:12px 0;border-bottom:1px solid #e9eee7;font-size:14px;color:#6b7668;">Where</td>
+         <td align="right" style="padding:12px 0;border-bottom:1px solid #e9eee7;font-size:14px;font-weight:600;color:#1b2419;">
+           Rosen Shingle Creek, Orlando, FL</td>
+       </tr>
+     </table>
+   </td></tr>
+
+   <!-- what to expect -->
+   <tr><td style="padding:22px 28px 0;">
+     <p style="margin:0 0 8px;font-size:15px;font-weight:700;color:#1b2419;">On the day</p>
+     <p style="margin:0 0 6px;font-size:15px;line-height:1.65;color:#3b463a;">
+       Come to the registration desk and show this code — on your phone is fine, a screenshot
+       is fine, printed is fine. We'll scan it and hand you your badge. You do not need
+       signal or the app to get in.
+     </p>
+   </td></tr>
+
+   <!-- hotel — VERIFY THE ROOM BLOCK BEFORE SENDING (see ticket-email.md) -->
+   <tr><td style="padding:18px 28px 0;">
+     <p style="margin:0;font-size:14px;line-height:1.6;color:#3b463a;">
+       Still need a room? There is a discounted block at the venue —
+       <a href="https://be.synxis.com/?adult=1&amp;arrive=2026-11-19&amp;chain=10237&amp;child=0&amp;config=ORLRS&amp;currency=USD&amp;depart=2026-11-22&amp;group=GRP_GAIA26&amp;hotel=69867&amp;level=hotel&amp;locale=en-US&amp;productcurrency=USD&amp;rooms=1&amp;theme=ORLRS"
+          style="color:#2f6b2a;font-weight:600;">book at Rosen Shingle Creek</a>,
+       or quote group code <b>GRP_GAIA26</b> when you call.
+     </p>
+   </td></tr>
+
+   <!-- footer -->
+   <tr><td style="padding:24px 28px 30px;">
+     <p style="margin:0 0 4px;font-size:15px;line-height:1.6;color:#3b463a;">
+       See you in Orlando,
+     </p>
+     <p style="margin:0;font-size:15px;font-weight:700;color:#1b2419;">The Gaia Healers team</p>
+     <p style="margin:16px 0 0;font-size:12px;line-height:1.5;color:#8b958a;">
+       Questions about your booking? Just reply to this e-mail.
+     </p>
+   </td></tr>
+
+  </table>
+
+ </td></tr>
+</table>

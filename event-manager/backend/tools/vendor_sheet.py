@@ -127,9 +127,33 @@ def parse(csv_text):
 
 
 def booth_label(rec, prefer="booth"):
-    """The booth as the Event Manager should show it: '#7 & #8' -> '7 & 8'."""
-    v = rec.get(prefer) or rec.get("booth_old") or ""
-    return re.sub(r"#", "", v).strip()
+    """The booth as an ATTENDEE should read it.
+
+    The cell is a planning note as often as a number: '#7 & #8', '#14 (maybe
+    #15 also)', '?', 'Foyar 6&7'. Attendees saw "Booth 14 (maybe 15 also)" in
+    the directory, which is a note to the team, not a place to stand. So: the
+    hashes go, an aside in brackets goes, a placeholder with no number at all
+    ('?', 'TBD', '-') is no booth rather than a printed question mark, and a
+    named location that carries numbers ('Foyar 6&7') is kept as typed. The
+    aside is not lost -- clean_booth_note() reports it.
+    """
+    v = (rec.get(prefer) or rec.get("booth_old") or "").strip()
+    v = re.sub(r"\([^)]*\)", " ", v)            # "(maybe #15 also)" is a note, not a booth
+    v = re.sub(r"#", "", v)
+    v = re.sub(r"\s*,\s*", ", ", v)
+    v = re.sub(r"\s+", " ", v).strip(" ,;/-")
+    if not re.search(r"\d", v):                  # "?", "TBD", "-", "" -> no booth yet
+        return ""
+    return v
+
+
+def booth_note(rec, prefer="booth"):
+    """What was dropped from the booth cell, so nobody has to diff the sheet."""
+    raw = (rec.get(prefer) or rec.get("booth_old") or "").strip()
+    shown = booth_label(rec, prefer)
+    if not raw or re.sub(r"[#\s]", "", raw) == re.sub(r"\s", "", shown):
+        return ""
+    return "booth cell reads %r; attendees are shown %s" % (raw, ("%r" % shown) if shown else "no booth")
 
 
 def norm_name(s):

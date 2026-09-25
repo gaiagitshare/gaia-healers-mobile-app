@@ -404,6 +404,10 @@ class Speaker(Base):
     # Featured reuses this same record — a speaker is never duplicated to be
     # highlighted somewhere.
     is_featured = Column(Boolean, default=False)
+    # Mirrored from the planning sheet for the team: session length, topic and
+    # the headshot/bio/deck checklist. Never shown to attendees.
+    sheet_notes = Column(Text)
+    sheet_synced_at = Column(DateTime, nullable=True)
     is_published = Column(Boolean, default=False)
     created_at = Column(DateTime, default=datetime.utcnow)
 

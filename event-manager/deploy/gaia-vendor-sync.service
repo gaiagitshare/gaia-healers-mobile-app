@@ -1,11 +1,12 @@
 [Unit]
-Description=Gaia Event Manager - mirror the exhibitor planning sheet
+Description=Gaia Event Manager - mirror the planning sheet (exhibitors, speakers)
 After=network-online.target
 
 [Service]
 Type=oneshot
 WorkingDirectory=/root/event/backend
-# Report-only until the desk turns it on: add --apply here (or set
-# VENDOR_SHEET_APPLY=1 in the environment file) and the sheet writes through.
+# Report-only until the desk turns it on: set VENDOR_SHEET_APPLY=1 in the
+# environment file and both mirrors write.
 EnvironmentFile=-/root/event/backend/vendor-sync.env
 ExecStart=/bin/sh -c 'python3 tools/vendor_sync.py ${VENDOR_SHEET_APPLY:+--apply}'
+ExecStart=/bin/sh -c 'python3 tools/speaker_sync.py ${VENDOR_SHEET_APPLY:+--apply}'

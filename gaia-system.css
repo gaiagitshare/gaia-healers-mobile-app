@@ -1024,6 +1024,19 @@ body{overscroll-behavior-y:none;-webkit-tap-highlight-color:transparent}
 .g-ticket__status.is-bad{color:#FF8A80}
 .g-ticket__hint{margin:10px 0 0;font-size:.8rem;color:rgba(255,255,255,.45);max-width:34ch}
 
+/* Wallet passes, under the QR. Each store's own black pill, because that is
+   what people are looking for -- a Gaia-green button here would read as ours
+   rather than as Apple's or Google's. */
+.g-wallet{display:flex;flex-direction:column;align-items:center;gap:8px;margin:14px 0 0;width:min(300px,78vw)}
+.g-wallet__btn{display:flex;align-items:center;justify-content:center;gap:8px;width:100%;min-height:44px;
+  padding:0 16px;border:1px solid rgba(255,255,255,.28);border-radius:12px;background:#000;color:#fff;
+  font:inherit;font-size:.92rem;font-weight:650;text-decoration:none;cursor:pointer}
+.g-wallet__btn:hover{border-color:rgba(255,255,255,.6)}
+.g-wallet__btn:focus-visible{outline:2px solid #a6ed68;outline-offset:2px}
+.g-wallet__btn[disabled]{opacity:.65;cursor:default}
+.g-wallet__btn i{font-size:1.15em}
+.g-wallet__note{margin:0;font-size:.76rem;color:rgba(255,255,255,.45);max-width:32ch;text-align:center}
+
 @media (min-width:760px){
   .g-mye__name{font-size:1.28rem}
   .g-ticket__qr{width:320px}

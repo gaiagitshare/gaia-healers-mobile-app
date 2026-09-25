@@ -6774,6 +6774,35 @@ const server = http.createServer(async (req, res) => {
       });
       return;
     }
+    // A wallet pass: Apple answers with the .pkpass file itself, Google with a
+    // save link. Personal either way, so never cached by any hop.
+    if (req.method === 'GET' && /^\/api\/events\/\d+\/wallet\/(apple|google)$/.test(url.pathname)) {
+      const session = cookieForRequest(req);
+      const parts = url.pathname.split('/');
+      const result = await eventIdentity.walletPass(session, parts[3], parts[5]);
+      if (result.ok && result.store === 'apple' && result.pkpass) {
+        res.writeHead(200, {
+          'Content-Type': 'application/vnd.apple.pkpass',
+          'Content-Disposition': 'attachment; filename="gaia-ticket.pkpass"',
+          'Content-Length': result.pkpass.length,
+          'Cache-Control': 'private, no-store',
+          ...corsHeaders(origin),
+        });
+        res.end(result.pkpass);
+        return;
+      }
+      const { pkpass, ...rest } = result;
+      sendJson(res, result.authenticated === false ? 401 : (result.ok ? 200 : 400), rest, origin, {
+        'Cache-Control': 'private, no-store',
+      });
+      return;
+    }
+    if (req.method === 'GET' && /^\/api\/events\/wallet-status$/.test(url.pathname)) {
+      sendJson(res, 200, { ok: true, ...(await eventIdentity.walletStatus()) }, origin, {
+        'Cache-Control': 'public, max-age=300',
+      });
+      return;
+    }
     if (req.method === 'GET' && /^\/api\/events\/\d+\/schedule$/.test(url.pathname)) {
       const session = cookieForRequest(req);
       const result = await eventIdentity.mySchedule(session, url.pathname.split('/')[3]);

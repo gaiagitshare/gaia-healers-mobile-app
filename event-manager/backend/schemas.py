@@ -783,6 +783,11 @@ class IdentityTicketLookup(IdentityLookup):
     event_id: int
 
 
+class WalletPassRequest(IdentityTicketLookup):
+    """One person's ticket as a phone wallet pass. `store` is apple | google."""
+    store: str
+
+
 class ScheduleChange(IdentityTicketLookup):
     """Saving or removing one session from an attendee's own schedule."""
     session_id: int

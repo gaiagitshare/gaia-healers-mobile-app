@@ -199,6 +199,59 @@ async function myTicket(session, eventId) {
   };
 }
 
+/** Which phone wallets can issue today. The app asks before it offers a
+ * button: a store the organiser has not set up must not appear as a broken
+ * one. Cached briefly — the answer changes when a certificate is installed,
+ * which is a deploy, not a request. */
+let walletStatusCache = { at: 0, value: { apple: false, google: false } };
+async function walletStatus() {
+  if (Date.now() - walletStatusCache.at < 5 * 60 * 1000) return walletStatusCache.value;
+  const svc = serviceCall();
+  if (!svc) return { apple: false, google: false };
+  try {
+    const response = await fetch(`${svc.base}/identity/wallet/status`, { headers: svc.headers });
+    if (!response.ok) return walletStatusCache.value;
+    const body = await response.json();
+    walletStatusCache = { at: Date.now(), value: { apple: !!body.apple, google: !!body.google } };
+  } catch (_err) { /* keep the last answer; a wallet button is not worth an outage */ }
+  return walletStatusCache.value;
+}
+
+/** This person's ticket as a wallet pass. Apple answers with the .pkpass
+ * bytes, Google with a save link; ownership is proved in the Event Manager,
+ * exactly as it is for the QR itself. */
+async function walletPass(session, eventId, store) {
+  const identity = identityFromSession(session);
+  if (!identity) return { ok: false, authenticated: false, reason: 'auth_required' };
+  const numericId = Number(eventId);
+  if (!Number.isInteger(numericId) || numericId <= 0) {
+    return { ok: false, authenticated: true, reason: 'bad_event_id' };
+  }
+  const which = String(store || '').toLowerCase();
+  if (which !== 'apple' && which !== 'google') {
+    return { ok: false, authenticated: true, reason: 'unknown_wallet' };
+  }
+  const svc = serviceCall();
+  if (!svc) return { ok: false, authenticated: true, reason: 'identity_not_configured' };
+  try {
+    const response = await fetch(`${svc.base}/identity/wallet`, {
+      method: 'POST',
+      headers: { ...svc.headers, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ...identity, event_id: numericId, store: which }),
+    });
+    const type = response.headers.get('content-type') || '';
+    if (which === 'apple' && type.includes('pkpass')) {
+      const bytes = Buffer.from(await response.arrayBuffer());
+      return { ok: true, authenticated: true, store: 'apple', pkpass: bytes };
+    }
+    const body = type.includes('json') ? await response.json() : null;
+    if (body && body.ok === true) return { ...body, authenticated: true };
+    return { ok: false, authenticated: true, reason: (body && body.reason) || `event_manager_${response.status}` };
+  } catch (_err) {
+    return { ok: false, authenticated: true, reason: 'event_manager_unreachable' };
+  }
+}
+
 /** Eligible upgrades from this person's current pass for one event. Resolution
  * and rank rules live in the Event Manager; price is filled in by the caller
  * from GHL so it is always the real configured amount. */
@@ -664,4 +717,4 @@ async function cardOwner(session, token) {
            claimed: Boolean(result.claimed), public: Boolean(result.public) };
 }
 
-export { announcements, myEvents, myTicket, myUpgrades, mySchedule, changeSchedule, changeWorkshop, networking, feedback, pushVapidKey, pushSubscribe, pushUnsubscribe, identityFromSession, phaseOf, toAppRow , communityFeed, createPost, postAction , uploadPostImage, myCard, updateCard, uploadCardPhoto, cardOwner, cardVerifyDestinations, cardVerifyStart, cardVerifyConfirm, cardVerifyNewStart, cardVerifyNewConfirm, setCardMailer };
+export { announcements, myEvents, myTicket, walletStatus, walletPass, myUpgrades, mySchedule, changeSchedule, changeWorkshop, networking, feedback, pushVapidKey, pushSubscribe, pushUnsubscribe, identityFromSession, phaseOf, toAppRow , communityFeed, createPost, postAction , uploadPostImage, myCard, updateCard, uploadCardPhoto, cardOwner, cardVerifyDestinations, cardVerifyStart, cardVerifyConfirm, cardVerifyNewStart, cardVerifyNewConfirm, setCardMailer };

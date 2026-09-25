@@ -184,6 +184,8 @@ def _ensure_event_columns():
     for table, column, ddl in (
         ("speakers", "is_featured", "ALTER TABLE speakers ADD COLUMN is_featured BOOLEAN"),
         ("sessions", "is_featured", "ALTER TABLE sessions ADD COLUMN is_featured BOOLEAN"),
+        ("speakers", "sheet_notes", "ALTER TABLE speakers ADD COLUMN sheet_notes TEXT"),
+        ("speakers", "sheet_synced_at", "ALTER TABLE speakers ADD COLUMN sheet_synced_at DATETIME"),
     ):
         try:
             if column not in {c["name"] for c in inspector.get_columns(table)}:

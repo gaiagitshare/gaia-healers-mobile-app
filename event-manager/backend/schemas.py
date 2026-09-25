@@ -502,6 +502,7 @@ class SpeakerCreate(SpeakerBase):
 
 class SpeakerUpdate(BaseModel):
     name: Optional[str] = None
+    sheet_notes: Optional[str] = None
     is_featured: Optional[bool] = None
     role: Optional[str] = None
     company: Optional[str] = None
@@ -515,6 +516,9 @@ class Speaker(SpeakerBase):
     id: int
     event_id: int
     created_at: datetime
+    # From the planning sheet, for the team only (SpeakerPublic never carries them).
+    sheet_notes: Optional[str] = None
+    sheet_synced_at: Optional[datetime] = None
 
     class Config:
         from_attributes = True

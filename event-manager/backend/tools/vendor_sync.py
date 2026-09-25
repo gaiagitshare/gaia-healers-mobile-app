@@ -59,7 +59,10 @@ def desired(rec):
                                   ("Intro video sent: " + rec["video"]) if rec["video"] else ""] if x)
     d = {
         "stage": rec["stage"],
-        "booth_number": vs.booth_label(rec, prefer="booth") if rec["booth"] else None,   # only the live "Booth #" column
+        # Only the live "Booth #" column, cleaned for an attendee to read. A
+        # cell that carries no number at all ('?') clears the stored booth
+        # rather than printing a question mark in the directory.
+        "booth_number": (vs.booth_label(rec, prefer="booth") or "") if rec["booth"] else None,
         "tables": to_int(rec["tables"]),
         "contact_name": rec["contact"] or None,
         "contact_email": rec["email"].lower() if rec["email"] and vs.EMAIL_RE.match(rec["email"]) else None,
@@ -105,6 +108,12 @@ def main():
         if r is None:
             creates.append((rec, want)); continue
         diff = {f: v for f, v in want.items() if v not in (None, "") and not same(f, r[f], v)}
+        # One deliberate exception to "a blank cell never blanks a value": a
+        # booth cell the sheet has emptied or filled with a placeholder means
+        # this stand has no booth yet, and a stale number on the floor plan is
+        # worse than none.
+        if want["booth_number"] == "" and (r["booth_number"] or "").strip():
+            diff["booth_number"] = ""
         # A company that moved section carries its old status text with it
         # ("Not aligned with our event" on a row now confirmed) unless the
         # sheet gives a new one -- the one case a blank cell does clear a value.
@@ -136,6 +145,7 @@ def main():
         for r in gone: lines.append("- %s (id %d, %s)" % (r["company_name"], r["id"], r["stage"]))
         lines.append("")
     issues = [(rec["row"], rec["company"], i) for rec in sheet for i in rec["issues"]]
+    issues += [(rec["row"], rec["company"], n) for rec in sheet for n in [vs.booth_note(rec)] if n]
     if issues:
         lines.append("## Sheet rows worth a look")
         for row, name, i in issues: lines.append("- row %d %s: %s" % (row, name, i))

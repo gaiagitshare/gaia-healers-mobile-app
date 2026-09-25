@@ -174,8 +174,17 @@ _names = {r[0] for r in sql("SELECT company_name FROM exhibitors WHERE event_id=
 _missing = [r["company"] for r in _sheet_conf if not any(_vs.norm_name(r["company"]) == _vs.norm_name(n) for n in _names)]
 check(real[0] == len(_sheet_conf) and not _missing,
       "every confirmed exhibitor in the sheet is in the system, confirmed (%d)" % len(_sheet_conf), (real[0], _missing))
-_noboo = sql("SELECT company_name FROM exhibitors WHERE event_id=1 AND stage='confirmed' AND (booth_number IS NULL OR booth_number='')")
-check(not _noboo, "and every confirmed exhibitor has a booth from the sheet", _noboo)
+# A booth the sheet has not decided ("?") is stored as no booth, on purpose:
+# the directory says nothing rather than printing a question mark at an
+# attendee. So the check is that every confirmed stand the sheet HAS placed is
+# placed here too, and that nothing nonsensical reached the floor plan.
+_want_booth = {r["company"]: _vs.booth_label(r) for r in _sheet_conf if _vs.booth_label(r)}
+_have = {r[0]: (r[1] or "") for r in sql("SELECT company_name, booth_number FROM exhibitors WHERE event_id=1 AND stage='confirmed'")}
+_missing = [n for n, b in _want_booth.items() if not any(_vs.norm_name(n) == _vs.norm_name(h) and v for h, v in _have.items())]
+check(not _missing, "every confirmed exhibitor the sheet has placed has that booth here", _missing)
+import re as _re
+_junk = [ (n, b) for n, b in _have.items() if b and not _re.search(r"\d", b) ]
+check(not _junk, "and no placeholder reached the floor plan", _junk)
 check(int(real[1] or 0) >= 94500 and int(real[2] or 0) >= 94500,
       "with the booked and collected totals still on file", real)
 # Scanning is SOLD, and is still granted to nobody. This half of the rule does
@@ -484,7 +493,7 @@ call("DELETE", "/events/%d" % EV, token=ADMIN)
 check(sql("SELECT COUNT(*) FROM exhibitors WHERE company_name='ZZ Sound Co'")[0][0] == 0,
       "the throwaway vendor is gone afterwards")
 
-print("\n%d checks, %d failed" % (76, len(fails)))
+print("\n%d checks, %d failed" % (77, len(fails)))
 if fails:
     print("FAILED: " + "; ".join(fails))
 sys.exit(1 if fails else 0)

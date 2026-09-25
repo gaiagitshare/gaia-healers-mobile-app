@@ -1,5 +1,5 @@
 [Unit]
-Description=Gaia Event Manager - mirror the planning sheet (exhibitors, speakers)
+Description=Gaia Event Manager - mirror the planning sheet (exhibitors, speakers, schedule)
 After=network-online.target
 
 [Service]
@@ -10,3 +10,4 @@ WorkingDirectory=/root/event/backend
 EnvironmentFile=-/root/event/backend/vendor-sync.env
 ExecStart=/bin/sh -c 'python3 tools/vendor_sync.py ${VENDOR_SHEET_APPLY:+--apply}'
 ExecStart=/bin/sh -c 'python3 tools/speaker_sync.py ${VENDOR_SHEET_APPLY:+--apply}'
+ExecStart=/bin/sh -c 'python3 tools/session_sync.py ${VENDOR_SHEET_APPLY:+--apply}'

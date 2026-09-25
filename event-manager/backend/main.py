@@ -35,6 +35,7 @@ import workshops as workshops_lib
 import networking as networking_lib
 import push as push_lib
 import badge_card
+import wallet
 import vendor_page
 import payments
 from fastapi import Response
@@ -4704,6 +4705,61 @@ def identity_ticket(
     row["qr_image"] = generate_qr_code(attendee.qr_code)
     row["resolution"] = report
     return row
+
+
+@app.post("/identity/wallet")
+def identity_wallet(
+    payload: schemas.WalletPassRequest,
+    db: Session = Depends(get_db),
+    _: bool = Depends(require_service_token),
+):
+    """This person's ticket as a phone wallet pass.
+
+    A badge QR on a web page needs the app to open, the session to hold and
+    the signal to reach, at a door with three hundred people behind you. A
+    wallet pass needs none of those. Ownership is proved exactly as it is for
+    the QR itself -- same resolver, same re-proof, no shortcut because the
+    answer happens to be a file.
+    """
+    store = (payload.store or "").strip().lower()
+    if store not in ("apple", "google"):
+        raise HTTPException(status_code=400, detail="Unknown wallet")
+    if (store == "apple" and not wallet.apple_ready()) or (store == "google" and not wallet.google_ready()):
+        # Not an error the member caused: the organiser has not set up that
+        # store yet, and the app hides the button for exactly this reason.
+        return {"ok": False, "reason": "wallet_not_configured", "store": store}
+    attendees, _evidence, report = identity_lib.resolve_attendees(
+        db,
+        contact_id=payload.contact_id,
+        email=payload.email,
+        email_verified=bool(payload.email_verified),
+    )
+    attendee = next((a for a in attendees if a.event_id == payload.event_id), None)
+    if not attendee:
+        return {"ok": False, "reason": "no_ticket_for_event", "resolution": report}
+    if not _ticket_active(attendee):
+        return {"ok": False, "reason": "ticket_not_valid"}
+    event = db.query(models.Event).filter(models.Event.id == attendee.event_id).first()
+    if not event:
+        return {"ok": False, "reason": "event_not_found"}
+    pass_name = identity_lib.pass_label(attendee)
+    try:
+        if store == "google":
+            return {"ok": True, "store": "google",
+                    "save_url": wallet.google_save_url(attendee, event, pass_name, event.location or "")}
+        blob = wallet.apple_pkpass(attendee, event, pass_name, event.location or "")
+    except Exception as exc:                      # a broken certificate is ours, not theirs
+        print("wallet pass failed (%s): %s" % (store, exc), flush=True)
+        return {"ok": False, "reason": "wallet_unavailable", "store": store}
+    return Response(content=blob, media_type="application/vnd.apple.pkpass",
+                    headers={"Content-Disposition": 'attachment; filename="gaia-ticket.pkpass"',
+                             "Cache-Control": "private, no-store"})
+
+
+@app.get("/identity/wallet/status")
+def identity_wallet_status(_: bool = Depends(require_service_token)):
+    """Which stores can actually issue today. The app asks before it offers."""
+    return {"ok": True, **wallet.status()}
 
 
 def _resolve_own_attendee(payload, db):

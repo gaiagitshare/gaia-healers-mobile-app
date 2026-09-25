@@ -290,6 +290,72 @@
       + '</div>';
   }
 
+  // ── Wallet passes ────────────────────────────────────────────────────────
+  // The QR above needs this app, this session and a signal. A wallet pass
+  // needs none of them, which is the whole point of offering it at a door.
+  // Only a store the organiser has actually set up is offered; the platform
+  // decides which one leads.
+  let walletCapability = null;
+  async function walletStatus() {
+    if (walletCapability) return walletCapability;
+    try {
+      const r = await api('/api/events/wallet-status');
+      walletCapability = (r && r.ok) ? { apple: !!r.apple, google: !!r.google } : { apple: false, google: false };
+    } catch (_) { walletCapability = { apple: false, google: false }; }
+    return walletCapability;
+  }
+
+  function isApplePlatform() {
+    const ua = navigator.userAgent || '';
+    return /iPhone|iPad|iPod|Macintosh/i.test(ua);
+  }
+
+  function walletHtml(eventId, caps) {
+    const buttons = [];
+    if (caps.apple) {
+      buttons.push('<a class="g-wallet__btn g-wallet__btn--apple" href="/api/events/' + esc(String(eventId))
+        + '/wallet/apple" data-wallet="apple"><i class="ph ph-apple-logo" aria-hidden="true"></i>'
+        + '<span>Add to Apple Wallet</span></a>');
+    }
+    if (caps.google) {
+      buttons.push('<button type="button" class="g-wallet__btn g-wallet__btn--google" data-wallet="google"'
+        + ' data-event-id="' + esc(String(eventId)) + '"><i class="ph ph-google-logo" aria-hidden="true"></i>'
+        + '<span>Save to Google Wallet</span></button>');
+    }
+    if (!buttons.length) return '';
+    // On an iPhone the Apple button leads; on anything else, Google does.
+    if (!isApplePlatform()) buttons.reverse();
+    return '<div class="g-wallet">' + buttons.join('')
+      + '<p class="g-wallet__note">Keeps working with no signal and without opening the app.</p></div>';
+  }
+
+  async function injectWallet(eventId, shell) {
+    const caps = await walletStatus();
+    const panel = shell.querySelector('.g-ticket__panel');
+    if (!caps || (!caps.apple && !caps.google) || !panel || panel.querySelector('.g-wallet')) return;
+    const anchor = panel.querySelector('.g-ticket__code') || panel.querySelector('.g-ticket__qr');
+    if (!anchor) return;
+    anchor.insertAdjacentHTML('afterend', walletHtml(eventId, caps));
+    panel.querySelectorAll('[data-wallet="google"]').forEach((button) => {
+      button.addEventListener('click', async () => {
+        const original = button.innerHTML;
+        button.disabled = true;
+        button.innerHTML = '<span>Preparing…</span>';
+        try {
+          const r = await api('/api/events/' + encodeURIComponent(button.dataset.eventId) + '/wallet/google');
+          if (r && r.ok && r.save_url) window.open(r.save_url, '_blank', 'noopener');
+          else throw new Error((r && r.reason) || 'unavailable');
+        } catch (_) {
+          button.innerHTML = '<span>Could not prepare the pass</span>';
+          setTimeout(() => { button.innerHTML = original; button.disabled = false; }, 2600);
+          return;
+        }
+        button.innerHTML = original;
+        button.disabled = false;
+      });
+    });
+  }
+
   function priceLabel(u) {
     if (u && u.price && typeof u.price.amount === 'number') {
       const cur = u.price.currency || 'USD';
@@ -336,6 +402,7 @@
       state.ticket = data;
       shell.innerHTML = ticketHtml(data);
       injectUpgrades(eventId, shell);
+      injectWallet(eventId, shell);
       if (window.GaiaCard) window.GaiaCard.inject(eventId, shell);
     }
   }
@@ -382,6 +449,7 @@
       state.ticket = data;
       shell.innerHTML = ticketHtml(data);
       injectUpgrades(eventId, shell);
+      injectWallet(eventId, shell);
       if (window.GaiaCard) window.GaiaCard.inject(eventId, shell);
       // Returning from the external checkout: re-fetch so a newly paid tier shows.
       state._onVis = () => { if (document.visibilityState === 'visible') refreshTicketPanel(eventId, shell); };

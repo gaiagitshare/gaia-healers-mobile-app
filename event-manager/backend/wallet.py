@@ -219,6 +219,14 @@ def google_class_id():
     return "%s.gaia_event_ticket" % _env("GOOGLE_WALLET_ISSUER_ID")
 
 
+def _localized(value):
+    return {"defaultValue": {"language": "en-US", "value": value}}
+
+
+def _image(url, description=""):
+    return {"sourceUri": {"uri": url}, "contentDescription": _localized(description or "Gaia Healers")}
+
+
 def google_object(attendee, event, pass_name, venue):
     f = _fields(attendee, event, pass_name, venue)
     obj = {
@@ -231,27 +239,38 @@ def google_object(attendee, event, pass_name, venue):
         "barcode": {"type": "QR_CODE", "value": f["qr"], "alternateText": f["qr"]},
         "textModulesData": [{"header": "Pass", "body": f["pass_name"], "id": "pass"}],
     }
-    start = _iso(f["start"])
-    if start or venue:
-        obj["eventTicketClass"] = None       # the class carries the event; see google_class()
+    if venue:
+        obj["textModulesData"].append({"header": "Venue", "body": venue, "id": "venue"})
     return obj
 
 
 def google_class(event, venue):
+    """The event itself, shared by every ticket for it.
+
+    Google draws what the class gives it, so the logo and the event's own
+    artwork go here: a pass with neither is a grey rectangle in a wallet full
+    of branded ones, which is not what a $999 ticket should look like.
+    """
     start, end = _iso(getattr(event, "start_date", None)), _iso(getattr(event, "end_date", None))
+    app_base = _env("APP_PUBLIC_BASE", "https://gaiahealers.app").rstrip("/")
     cls = {
         "id": google_class_id(),
         "issuerName": "Gaia Healers",
         "reviewStatus": "UNDER_REVIEW",
-        "eventName": {"defaultValue": {"language": "en-US",
-                                       "value": getattr(event, "name", "") or "Gaia Healers event"}},
+        "eventName": _localized(getattr(event, "name", "") or "Gaia Healers event"),
         "hexBackgroundColor": "#0a160e",
+        "logo": _image(_env("WALLET_LOGO_URL", app_base + "/assets/icon-512.png"), "Gaia Healers"),
     }
+    hero = (getattr(event, "hero_image_url", "") or "").strip()
+    if hero.startswith("https://"):
+        cls["heroImage"] = _image(hero, getattr(event, "name", "") or "Event")
     if venue:
-        cls["venue"] = {"name": {"defaultValue": {"language": "en-US", "value": venue}},
-                        "address": {"defaultValue": {"language": "en-US", "value": venue}}}
+        cls["venue"] = {"name": _localized(venue), "address": _localized(venue)}
     if start or end:
         cls["dateTime"] = {k: v for k, v in (("start", start), ("end", end)) if v}
+    # Somewhere to go from the pass itself, rather than back through the app.
+    links = [u for u in (app_base + "/home.html?view=events&event=%s" % getattr(event, "id", ""),) if u]
+    cls["linksModuleData"] = {"uris": [{"uri": links[0], "description": "Event programme", "id": "programme"}]}
     return cls
 
 
@@ -271,7 +290,14 @@ def google_save_url(attendee, event, pass_name, venue):
         "typ": "savetowallet",
         "iat": int(time.time()),
         "exp": int(time.time() + timedelta(hours=1).total_seconds()),
-        "origins": [o for o in (_env("APP_PUBLIC_BASE", "https://gaiahealers.app"),) if o],
+        # Every origin the save link may be opened from. A missing one is the
+        # usual cause of a link that opens and then refuses to save.
+        "origins": sorted({o for o in (
+            _env("APP_PUBLIC_BASE", "https://gaiahealers.app").rstrip("/"),
+            "https://gaiahealers.app",
+            "https://www.gaiahealers.app",
+            "https://api.gaiahealers.app",
+        ) if o}),
         "payload": {"eventTicketClasses": [google_class(event, venue)], "eventTicketObjects": [obj]},
     }
     token = jose_jwt.encode(payload, sa["private_key"], algorithm="RS256")

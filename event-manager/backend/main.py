@@ -5119,9 +5119,15 @@ def feedback_summary(
 # ── Ticket types and roles: what the admin configures per event ─────────────
 
 def _tt_payload(tt):
+    # What a pass actually opens, all of it: the conference flag and the rank
+    # were set on the row and then left out of every answer, so Admin could not
+    # show them and a caller could not read back what it had just written.
     return {"id": tt.id, "code": tt.code or "", "name": tt.name or "",
             "description": tt.description or "", "is_vip": bool(tt.is_vip),
             "grants_workshops": bool(tt.grants_workshops),
+            "grants_conference": bool(getattr(tt, "grants_conference", False)),
+            "upgrade_rank": int(getattr(tt, "upgrade_rank", 0) or 0),
+            "valid_day": getattr(tt, "valid_day", None),
             "sort_order": tt.sort_order or 0}
 
 
@@ -5155,6 +5161,11 @@ def create_ticket_type(event_id: int, payload: schemas.TicketTypeCreate,
                            description=payload.description or "",
                            is_vip=bool(payload.is_vip),
                            grants_workshops=bool(payload.grants_workshops),
+                           grants_conference=bool(payload.grants_conference),
+                           # Where this pass sits when somebody holds two. Left
+                           # at 0 a staff pass ranks below General Admission and
+                           # the next purchase overwrites it.
+                           upgrade_rank=int(payload.upgrade_rank or 0),
                            # A single-day pass is only a single-day pass if this
                            # is stored. The field was accepted and then dropped,
                            # so a day pass created here silently became valid for

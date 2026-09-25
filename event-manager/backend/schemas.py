@@ -838,6 +838,11 @@ class TicketTypeCreate(BaseModel):
     description: Optional[str] = None
     is_vip: bool = False
     grants_workshops: bool = False
+    # Both were accepted nowhere and defaulted to 0, so a pass created through
+    # the API could never open the conference room, and ranked below General
+    # Admission -- a later ticket purchase would quietly replace it.
+    grants_conference: bool = False
+    upgrade_rank: Optional[int] = 0
     sort_order: Optional[int] = 0
 
 
@@ -849,6 +854,8 @@ class TicketTypeUpdate(BaseModel):
     description: Optional[str] = None
     is_vip: Optional[bool] = None
     grants_workshops: Optional[bool] = None
+    grants_conference: Optional[bool] = None
+    upgrade_rank: Optional[int] = None
     sort_order: Optional[int] = None
 
 

@@ -29,6 +29,7 @@ class Ev:
     id = 1; name = "Gaia Healers Elevate Conference 2026"
     start_date = "2026-11-20T09:00:00"; end_date = "2026-11-22T18:00:00"
     location = "Rosen Shingle Creek, Orlando, FL"
+    hero_image_url = "https://gaiahealers.app/assets/gaia-elevate-poster.jpg"
 
 class At:
     id = 42; first_name = "Jane"; last_name = "Oelke"
@@ -116,9 +117,21 @@ check(obj["ticketHolderName"] == "Jane Oelke" and cls["eventName"]["defaultValue
       "the holder's name and the event on the class it creates", (obj["ticketHolderName"], cls["eventName"]))
 check(obj["id"].startswith("3388000000000000000.") and cls["id"].startswith("3388000000000000000."),
       "both namespaced under the organiser's issuer id", (obj["id"], cls["id"]))
+# A pass with no logo and no artwork is a grey rectangle in a wallet full of
+# branded ones, and the save link fails quietly when the page it opens from is
+# not declared as an origin.
+check(cls.get("logo", {}).get("sourceUri", {}).get("uri", "").startswith("https://"),
+      "the class carries the Gaia logo", cls.get("logo"))
+check(cls.get("heroImage", {}).get("sourceUri", {}).get("uri", "") == Ev.hero_image_url,
+      "and the event's own artwork", cls.get("heroImage"))
+check(cls["venue"]["name"]["defaultValue"]["value"] == Ev.location
+      and cls["dateTime"]["start"] == Ev.start_date,
+      "with the venue and the dates on it", (cls.get("venue"), cls.get("dateTime")))
+check("https://gaiahealers.app" in claims["origins"] and "https://www.gaiahealers.app" in claims["origins"],
+      "and every origin the save link may be opened from", claims["origins"])
 
 subprocess.run(["rm", "-rf", tmp])
-print("\n%d checks, %d failed" % (17, len(fails)))
+print("\n%d checks, %d failed" % (21, len(fails)))
 if fails:
     print("FAILED: " + "; ".join(fails))
 sys.exit(1 if fails else 0)

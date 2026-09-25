@@ -114,9 +114,25 @@ check("no attendee is missing a QR code",
       n("select count(*) from attendees where event_id=? and (qr_code is null or qr_code='')") == 0)
 check("no attendee is missing a ticket type",
       n("select count(*) from attendees where event_id=? and ticket_type_id is null") == 0)
-check("no attendee lacks a settled payment",
+# Money is the usual reason to hold a ticket, and it is not the only one: the
+# volunteers working the floor and the guests of the house have badges and paid
+# nothing. What must never happen is a ticket with neither -- no payment AND no
+# recorded reason -- because that is a ticket nobody can account for.
+check("no attendee lacks a settled payment without a reason on the record",
       n("""select count(*) from attendees a where a.event_id=? and not exists
-             (select 1 from payment_events p where p.attendee_id=a.id and p.status='paid')""") == 0)
+             (select 1 from payment_events p where p.attendee_id=a.id and p.status='paid')
+           and coalesce(a.attendance_type,'paid') not in
+               ('complimentary','staff','speaker','exhibitor')""") == 0,
+      "; ".join("%s %s" % (r[0], r[1]) for r in c.execute(
+          """select coalesce(first_name,'')||' '||coalesce(last_name,''), coalesce(attendance_type,'paid')
+               from attendees a where a.event_id=? and not exists
+                 (select 1 from payment_events p where p.attendee_id=a.id and p.status='paid')
+               and coalesce(a.attendance_type,'paid') not in
+                   ('complimentary','staff','speaker','exhibitor') limit 5""", (EVENT_ID,)).fetchall()))
+check("and every unpaid badge says what it is",
+      n("""select count(*) from attendees a where a.event_id=?
+             and coalesce(a.attendance_type,'paid') in ('complimentary','staff','speaker','exhibitor')
+             and (a.ticket_type_id is null)""") == 0)
 check("no duplicate QR codes anywhere",
       c.execute("select count(*) from (select qr_code from attendees group by 1 having count(*)>1)").fetchone()[0] == 0)
 check("no duplicate attendee email within the event",

@@ -36,7 +36,9 @@ def main():
     sheet = ss.parse(open(SRC, encoding="utf-8-sig").read() if SRC else ss.fetch())
     if len(sheet) < 3:
         raise SystemExit("refusing: the speaker tab parsed with fewer than 3 speakers — layout changed?")
-    db = sqlite3.connect(DB); db.row_factory = sqlite3.Row
+        # Wait for the door, rather than skipping a sync: the service writes to
+    # the same file, and a busy moment is exactly when the sheet matters.
+    db = sqlite3.connect(DB, timeout=30); db.row_factory = sqlite3.Row
     cols = {r[1] for r in db.execute("PRAGMA table_info(speakers)")}
     for col, ddl in (("sheet_notes", "TEXT"), ("sheet_synced_at", "DATETIME")):
         if col not in cols:

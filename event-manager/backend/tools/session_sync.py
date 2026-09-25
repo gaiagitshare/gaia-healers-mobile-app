@@ -59,7 +59,9 @@ def want_of(rec):
 def main():
     os.makedirs(DATA, exist_ok=True)
     started = datetime.now(timezone.utc)
-    db = sqlite3.connect(DB); db.row_factory = sqlite3.Row
+        # Wait for the door, rather than skipping a sync: the service writes to
+    # the same file, and a busy moment is exactly when the sheet matters.
+    db = sqlite3.connect(DB, timeout=30); db.row_factory = sqlite3.Row
     ev = db.execute("SELECT id, name, start_date FROM events WHERE id=?", (EVENT,)).fetchone()
     if not ev:
         raise SystemExit("no event %d" % EVENT)

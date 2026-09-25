@@ -93,7 +93,9 @@ def main():
     sheet = vs.parse(text)
     if len([s for s in sheet if s["stage"] == "confirmed"]) < 5:
         raise SystemExit("refusing: the sheet parsed with fewer than 5 confirmed exhibitors — layout changed?")
-    db = sqlite3.connect(DB); db.row_factory = sqlite3.Row
+        # Wait for the door, rather than skipping a sync: the service writes to
+    # the same file, and a busy moment is exactly when the sheet matters.
+    db = sqlite3.connect(DB, timeout=30); db.row_factory = sqlite3.Row
     cols = {r[1] for r in db.execute("PRAGMA table_info(exhibitors)")}
     for col, ddl in (("contact_name", "VARCHAR"), ("sheet_notes", "TEXT"), ("sheet_synced_at", "DATETIME")):
         if col not in cols: db.execute("ALTER TABLE exhibitors ADD COLUMN %s %s" % (col, ddl))

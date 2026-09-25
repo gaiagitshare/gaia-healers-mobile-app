@@ -7,7 +7,8 @@
 
      MERGE FIELDS USED
        {{contact.first_name}}
-       {{contact.gaia_badge_token}}   ← import this first (see ticket-email.md)
+       {{contact.gaia_badge_token}}   ← import both of these first
+       {{contact.gaia_pass}}           (see ticket-email.md)
 
      If the token field is empty for a contact, the QR will not load and the
      button lands on "ticket not found" — so send ONLY to the segment where
@@ -39,7 +40,8 @@
      </p>
      <p style="margin:0 0 6px;font-size:16px;line-height:1.6;color:#1b2419;">
        You're all set for the Gaia Healers Elevate Conference. This is your entry code —
-       show it at check-in and we'll print your name badge on the spot.
+       show it at check-in and we'll print your name badge on the spot. Your pass is
+       listed below &mdash; if it names a single day, that is the day it admits you.
      </p>
    </td></tr>
 
@@ -79,6 +81,11 @@
    <tr><td style="padding:24px 28px 0;">
      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"
             style="border-top:1px solid #e9eee7;">
+       <tr>
+         <td style="padding:12px 0;border-bottom:1px solid #e9eee7;font-size:14px;color:#6b7668;">Your pass</td>
+         <td align="right" style="padding:12px 0;border-bottom:1px solid #e9eee7;font-size:14px;font-weight:600;color:#1b2419;">
+           {{contact.gaia_pass}}</td>
+       </tr>
        <tr>
          <td style="padding:12px 0;border-bottom:1px solid #e9eee7;font-size:14px;color:#6b7668;">When</td>
          <td align="right" style="padding:12px 0;border-bottom:1px solid #e9eee7;font-size:14px;font-weight:600;color:#1b2419;">

@@ -2120,6 +2120,30 @@ def _effective_access(db, attendee):
     }
 
 
+def _pass_display(db, attendee) -> str:
+    """One line that tells somebody exactly what they hold.
+
+    A day-pass holder needs the DAY more than the name -- 14 people for 2026
+    can only come on one specific day, and a ticket that says only "Friday
+    Exhibit Hall" leaves them working out which Friday. Everything else is
+    unrestricted, so it says nothing extra and stays short.
+    """
+    eff = _effective_access(db, attendee)
+    label = eff.get("effective_label") or "Ticket"
+    days = eff.get("valid_days") or []
+    if days and not eff.get("unrestricted_days"):
+        names = []
+        for d in days:
+            try:
+                dt = datetime.strptime(str(d)[:10], "%Y-%m-%d")
+                names.append("%s %d %s" % (dt.strftime("%A"), dt.day, dt.strftime("%B")))
+            except Exception:
+                names.append(str(d))
+        if names and not any(n.lower() in label.lower() for n in names):
+            label = "%s \u2014 %s only" % (label, " and ".join(names))
+    return label
+
+
 def _event_local_today(event, at=None):
     """The event's current calendar date (event timezone), or an explicit ISO test
     override. Day rules are judged here, never in UTC or the browser's zone."""
@@ -4620,7 +4644,7 @@ def _attendee_event_payload(attendee: models.Attendee, event: models.Event, db=N
             "registration_status": attendee.registration_status or "registered",
             "is_checked_in": bool(attendee.is_checked_in),
             "checked_in_at": attendee.checked_in_at,
-            "pass_label": identity_lib.pass_label(attendee),
+            "pass_label": _pass_display(db, attendee),
             "ticket_type_code": attendee.ticket_type.code if attendee.ticket_type else None,
             "is_vip": grants["is_vip"],
             "grants_workshops": grants["workshops"],
@@ -4745,7 +4769,7 @@ def identity_wallet(
     event = db.query(models.Event).filter(models.Event.id == attendee.event_id).first()
     if not event:
         return {"ok": False, "reason": "event_not_found"}
-    pass_name = identity_lib.pass_label(attendee)
+    pass_name = _pass_display(db, attendee)
     try:
         if store == "google":
             return {"ok": True, "store": "google",
@@ -4811,7 +4835,7 @@ def identity_wallet_by_token(
     event = db.query(models.Event).filter(models.Event.id == attendee.event_id).first()
     if not event:
         return {"ok": False, "reason": "event_not_found"}
-    pass_name = identity_lib.pass_label(attendee)
+    pass_name = _pass_display(db, attendee)
     try:
         if store == "google":
             return {"ok": True, "store": "google", "event_name": event.name,
@@ -4844,7 +4868,7 @@ def identity_ticket_by_token(token: str, db: Session = Depends(get_db),
         "ok": True,
         "first_name": attendee.first_name or "",
         "last_name": attendee.last_name or "",
-        "pass_label": identity_lib.pass_label(attendee),
+        "pass_label": _pass_display(db, attendee),
         "qr_code": attendee.qr_code,
         "qr_image": generate_qr_code(attendee.qr_code),
         "event_id": event.id,
@@ -5471,7 +5495,7 @@ def export_attendees(event_id: int, db: Session = Depends(get_db),
                      "base_ticket", "add_ons", "add_on_day", "effective_access",
                      "registration_status", "checked_in", "checked_in_at",
                      "qr_code", "source", "order_ref",
-                     "gaia_badge_token", "gaia_wallet_link"])
+                     "gaia_badge_token", "gaia_wallet_link", "gaia_pass"])
     for a in rows:
         _eff = _effective_access(db, a)
         _bt = _eff.get("base_ticket") or {}
@@ -5488,7 +5512,8 @@ def export_attendees(event_id: int, db: Session = Depends(get_db),
                          # The two columns a mail merge needs: the badge token,
                          # and the wallet link already built out of it.
                          a.public_token or "",
-                         (WALLET_LINK_BASE + "/wallet/" + a.public_token) if a.public_token else ""])
+                         (WALLET_LINK_BASE + "/wallet/" + a.public_token) if a.public_token else "",
+                         _pass_display(db, a)])
     db.add(models.ExportAudit(event_id=event_id, user_id=current_user.id, kind="attendees", count=len(rows)))
     db.commit()
     return _Response(content=buf.getvalue(), media_type="text/csv",

@@ -472,17 +472,24 @@
   function speakersSection(detail) {
     const speakers = Array.isArray(detail?.speakers) ? detail.speakers : [];
     if (!speakers.length) return '';
-    return '<section class="g-super-list"><div class="g-super-section-head"><div><p class="g-super-kicker">Who is speaking</p><h2>Speakers</h2></div></div>'
+    // Cards rather than a stack of rows: a speaker is a face and a claim, and
+    // at three columns on a laptop the whole line-up is one glance instead of
+    // a scroll. The bio is clamped so one long paragraph cannot set the height
+    // of every card beside it.
+    return '<section class="g-super-list"><div class="g-super-section-head"><div><p class="g-super-kicker">Who is speaking</p><h2>Speakers</h2>'
+      + '<p class="g-super-count">' + speakers.length + (speakers.length === 1 ? ' speaker' : ' speakers') + '</p></div></div>'
+      + '<div class="g-speaker-grid">'
       + speakers.map((speaker) => {
           const lead = speaker.photo_url
-            ? '<span class="g-super-row__avatar"><img src="' + esc(speaker.photo_url) + '" alt="" loading="lazy" decoding="async"></span>'
-            : '<span class="g-super-row__icon">' + icon('microphone-stage') + '</span>';
-          const meta = esc([speaker.role, speaker.company].filter(Boolean).join(' · '));
-          const bio = speaker.bio ? '<em class="g-super-row__bio">' + esc(speaker.bio) + '</em>' : '';
-          return '<div class="g-super-row g-super-row--speaker">' + lead
-            + '<span><strong>' + esc(speaker.name) + '</strong>' + (meta ? '<em>' + meta + '</em>' : '') + bio + '</span></div>';
+            ? '<span class="g-speaker__photo"><img src="' + esc(speaker.photo_url) + '" alt="" loading="lazy" decoding="async"></span>'
+            : '<span class="g-speaker__photo g-speaker__photo--none">' + icon('microphone-stage') + '</span>';
+          const meta = esc([speaker.role, speaker.company].filter(Boolean).join(' \u00b7 '));
+          const bio = speaker.bio ? '<p class="g-speaker__bio">' + esc(speaker.bio) + '</p>' : '';
+          return '<article class="g-speaker">' + lead
+            + '<div class="g-speaker__text"><h3>' + esc(speaker.name) + '</h3>'
+            + (meta ? '<p class="g-speaker__meta">' + meta + '</p>' : '') + bio + '</div></article>';
         }).join('')
-      + '</section>';
+      + '</div></section>';
   }
 
   function directorySection(detail) {
@@ -1173,6 +1180,50 @@
       + esc(item.registrationUrl) + '" target="_blank" rel="noopener noreferrer">' + esc(label) + ' ' + icon('arrow-up-right') + '</a>';
   }
 
+  // What this event IS, in four numbers, each one a way in. Only counts that
+  // exist are shown -- an empty schedule says nothing rather than "0 sessions".
+  function eventStats(item, detail) {
+    const days = (() => {
+      const a = item.startDate ? new Date(item.startDate) : null;
+      const b = item.endDate ? new Date(item.endDate) : null;
+      if (!a || !Number.isFinite(+a)) return 0;
+      if (!b || !Number.isFinite(+b)) return 1;
+      return Math.max(1, Math.round((new Date(b.getFullYear(), b.getMonth(), b.getDate())
+        - new Date(a.getFullYear(), a.getMonth(), a.getDate())) / 86400000) + 1);
+    })();
+    const sessions = (detail?.agenda?.days || []).reduce((n, d) => n + ((d.items || d.sessions || []).length), 0);
+    const tiles = [
+      days ? [days, days === 1 ? 'day' : 'days', ''] : null,
+      sessions ? [sessions, sessions === 1 ? 'session' : 'sessions', 'agenda'] : null,
+      (detail && detail.speakers && detail.speakers.length) ? [detail.speakers.length, 'speakers', 'speakers'] : null,
+      (detail && detail.exhibitors && detail.exhibitors.length) ? [detail.exhibitors.length, 'stands', 'exhibitors'] : null,
+      (detail && detail.sponsors && detail.sponsors.length) ? [detail.sponsors.length, 'sponsors', 'sponsors'] : null,
+    ].filter(Boolean).slice(0, 4);
+    if (!tiles.length) return '';
+    return '<div class="g-event-stats">' + tiles.map(([n, label, tab]) => (tab
+      ? '<button type="button" class="g-event-stat" data-event-tab="' + esc(tab) + '"><b>' + n + '</b><span>' + esc(label) + '</span></button>'
+      : '<div class="g-event-stat is-static"><b>' + n + '</b><span>' + esc(label) + '</span></div>')).join('') + '</div>';
+  }
+
+  // Where it is and what to book, as links rather than as facts to copy out.
+  function eventQuickLinks(item, detail) {
+    const links = [];
+    if (item.venue) {
+      links.push(['map-pin', item.venue, 'Open in Maps',
+        'https://www.google.com/maps/search/?api=1&query=' + encodeURIComponent(item.venue)]);
+    }
+    (Array.isArray(detail && detail.resources) ? detail.resources : []).slice(0, 3).forEach((r) => {
+      if (r && r.url) links.push(['link', r.title || 'Event resource', r.description || '', r.url]);
+    });
+    if (!links.length) return '';
+    return '<div class="g-ev-links">' + links.map(([ico, title, note, href]) =>
+      '<a class="g-ev-link" href="' + esc(href) + '" target="_blank" rel="noopener noreferrer">'
+      + '<span class="g-ev-link__icon">' + icon(ico) + '</span>'
+      + '<span class="g-ev-link__text"><strong>' + esc(title) + '</strong>'
+      + (note ? '<em>' + esc(note) + '</em>' : '') + '</span>'
+      + '<span class="g-ev-link__go" aria-hidden="true">' + icon('arrow-up-right') + '</span></a>').join('') + '</div>';
+  }
+
   function eventHero(item) {
     return item && item.heroImageUrl
       ? '<img src="' + esc(item.heroImageUrl) + '" alt="" loading="lazy" />'
@@ -1622,11 +1673,14 @@
         : countdown ? '<span class="g-event-status">' + esc(countdown) + '</span>' : '';
 
     const overview = '<section class="g-event-overview">'
-      + (item.description ? '<p>' + esc(item.description) + '</p>' : '')
+      // Long descriptions are the norm and they buried everything under them,
+      // so the text is clamped with a way to open it where the screen is small.
+      + (item.description ? '<div class="g-ev-about"><p>' + esc(item.description) + '</p>'
+          + '<button type="button" class="g-ev-about__more" data-ev-more hidden>Read more</button></div>' : '')
       + '<dl><div><dt>Dates</dt><dd>' + esc(humanDates(item) || 'To be announced') + '</dd></div>'
       + '<div><dt>Venue</dt><dd>' + esc(item.venue || 'To be announced') + '</dd></div>'
       + (item.timezone ? '<div><dt>Local time</dt><dd>' + esc(String(item.timezone).replace(/_/g, ' ')) + '</dd></div>' : '')
-      + '</dl>' + registrationCta(item) + '</section>';
+      + '</dl>' + eventQuickLinks(item, detail) + registrationCta(item) + '</section>';
 
     // Marked seen BEFORE the tab bar is built: the dot is computed from the
     // same stored value, and marking afterwards leaves a stale dot standing
@@ -1649,13 +1703,34 @@
       + '<h1>' + esc(item.name) + '</h1>'
       + '<p class="g-event-headmeta">' + esc([humanDates(item), item.venue].filter(Boolean).join(' · ')) + ' ' + statusChip + '</p></div>'
       + '<div class="g-eventpage-hero">' + eventHero(item) + '</div>'
+      + eventStats(item, detail)
       + offlineLine
       + liveSection(live)
       + tabBar
       + '<div class="g-event-panel">' + (eventUI.tab === 'overview' ? overview : eventTabPanel(eventUI.tab, detail, live)) + '</div>';
 
     root.querySelectorAll('[data-event-tab]').forEach((button) => {
-      button.addEventListener('click', () => { eventUI.tab = button.getAttribute('data-event-tab'); render(); });
+      button.addEventListener('click', () => {
+        eventUI.tab = button.getAttribute('data-event-tab');
+        render();
+        // A tile sits above the tab strip, so switching from one has to bring
+        // the strip into view or the panel changes somewhere off-screen.
+        if (!button.classList.contains('g-event-tab')) {
+          const strip = document.querySelector('.g-event-tabs');
+          if (strip) strip.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }
+      });
+    });
+    // The clamp only earns a button when there is something clamped.
+    root.querySelectorAll('[data-ev-more]').forEach((button) => {
+      const box = button.closest('.g-ev-about');
+      const body = box && box.querySelector('p');
+      if (!box || !body) return;
+      if (body.scrollHeight - body.clientHeight > 4) button.hidden = false;
+      button.addEventListener('click', () => {
+        const open = box.classList.toggle('is-open');
+        button.textContent = open ? 'Show less' : 'Read more';
+      });
     });
     // Saving redraws only its own button, so the agenda does not jump under the
     // finger that tapped it. The My Schedule panel is refreshed on the next

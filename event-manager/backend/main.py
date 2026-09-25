@@ -3313,6 +3313,9 @@ def vendor_activation_link(exhibitor_id: int, db: Session = Depends(get_db),
 # app, deep-linked to this event's tab. It used to point at the API root, which
 # answered a person's question about the hall with a JSON document.
 APP_PUBLIC_BASE = os.getenv("APP_PUBLIC_BASE", "https://gaiahealers.app").rstrip("/")
+# The wallet link is served by the PROXY, not the app: it has to resolve a
+# pass for somebody who is not signed in, months after the mail was sent.
+WALLET_LINK_BASE = os.getenv("WALLET_LINK_BASE", "https://api.gaiahealers.app").rstrip("/")
 
 
 def _directory_url(event_id):
@@ -5403,7 +5406,8 @@ def export_attendees(event_id: int, db: Session = Depends(get_db),
     writer.writerow(["first_name", "last_name", "email", "phone", "company", "job_title",
                      "base_ticket", "add_ons", "add_on_day", "effective_access",
                      "registration_status", "checked_in", "checked_in_at",
-                     "qr_code", "source", "order_ref"])
+                     "qr_code", "source", "order_ref",
+                     "gaia_badge_token", "gaia_wallet_link"])
     for a in rows:
         _eff = _effective_access(db, a)
         _bt = _eff.get("base_ticket") or {}
@@ -5416,7 +5420,11 @@ def export_attendees(event_id: int, db: Session = Depends(get_db),
                          _eff.get("effective_label") or "",
                          a.registration_status, "yes" if a.is_checked_in else "no",
                          a.checked_in_at.isoformat() if a.checked_in_at else "", a.qr_code,
-                         _cd.get("source") or "", _cd.get("order_id") or ""])
+                         _cd.get("source") or "", _cd.get("order_id") or "",
+                         # The two columns a mail merge needs: the badge token,
+                         # and the wallet link already built out of it.
+                         a.public_token or "",
+                         (WALLET_LINK_BASE + "/wallet/" + a.public_token) if a.public_token else ""])
     db.add(models.ExportAudit(event_id=event_id, user_id=current_user.id, kind="attendees", count=len(rows)))
     db.commit()
     return _Response(content=buf.getvalue(), media_type="text/csv",

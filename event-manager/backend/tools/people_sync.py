@@ -78,10 +78,40 @@ def main():
     st, attendees = call("GET", "/events/%d/attendees?limit=2000" % EVENT)
     rows = attendees.get("items", attendees) if isinstance(attendees, dict) else attendees
     by_email = {(a.get("email") or "").lower(): a for a in rows if a.get("email")}
+    # Also by name: the sheet has no e-mail for seven of these people, and one
+    # of them (Vlad Spivak, on the list as Vladimir) already had a badge. A
+    # volunteer who is already an attendee must be recognised, not reported as
+    # missing for ever. First name and surname must both match, allowing the
+    # short form of a first name ("Vlad" for "Vladimir"), and only when that
+    # lands on exactly ONE person.
+    def key(first, last):
+        return (re.sub(r"[^a-z]", "", (first or "").lower()), re.sub(r"[^a-z]", "", (last or "").lower()))
+    by_last = {}
+    for a in rows:
+        k = key(a.get("first_name"), a.get("last_name"))
+        if k[1]:
+            by_last.setdefault(k[1], []).append((k[0], a))
 
-    creates = [p for p in people if p["email"] and p["email"] not in by_email]
-    known = [(p, by_email[p["email"]]) for p in people if p["email"] and p["email"] in by_email]
-    no_email = [p for p in people if not p["email"]]
+    def by_name(p):
+        f, l = key(p["first_name"], p["last_name"])
+        if not l:
+            return None
+        cands = [a for fn, a in by_last.get(l, []) if fn and (fn.startswith(f) or f.startswith(fn))]
+        return cands[0] if len(cands) == 1 else None
+
+    creates, known, no_email = [], [], []
+    for p in people:
+        hit = by_email.get(p["email"]) if p["email"] else None
+        how = "e-mail" if hit else ""
+        if hit is None:
+            hit = by_name(p)
+            how = "name" if hit else ""
+        if hit is not None:
+            known.append((p, hit, how))
+        elif p["email"]:
+            creates.append(p)
+        else:
+            no_email.append(p)
 
     L = ["# Volunteers & guests sync — %s (%s)" % (started.strftime("%Y-%m-%d %H:%M UTC"), "APPLIED" if APPLY else "dry run"), ""]
     L.append("Sheet: %d people (%d volunteers, %d guests) · already have a badge: %d · to add: %d · cannot be added yet: %d"
@@ -95,8 +125,9 @@ def main():
         L.append("")
     if known:
         L.append("## Already on the list (ticket left exactly as it is)")
-        for p, a in known:
-            L.append("- %s — %s" % (p["name"], a.get("ticket_type_name") or a.get("ticket_type", {}).get("name") if isinstance(a.get("ticket_type"), dict) else "on file"))
+        for p, a, how in known:
+            who = ("%s %s" % (a.get("first_name") or "", a.get("last_name") or "")).strip()
+            L.append("- %s — matched by %s%s" % (p["name"], how, ("" if who.lower() == p["name"].lower() else ", on the list as **%s**" % who)))
         L.append("")
     if no_email:
         L.append("## No badge yet: the sheet has no e-mail for them")

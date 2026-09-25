@@ -6864,7 +6864,9 @@ const server = http.createServer(async (req, res) => {
         unknown_token: 'That link does not match a ticket. Check you used the most recent e-mail, or open the Gaia Healers app.',
         ticket_not_valid: 'This ticket is no longer valid for entry. The registration desk can help.',
         no_ticket_for_event: 'No ticket found for this account yet.',
-        wallet_not_configured: 'Phone passes are not switched on for this event yet.',
+        wallet_not_configured: store === 'apple'
+          ? 'Apple Wallet is not switched on for this event yet. Try Google Wallet, or use your badge QR in the app.'
+          : 'Google Wallet is not switched on for this event yet. Your badge QR in the app works at the door.',
       }[result.reason] || 'The pass could not be prepared just now. Your badge QR in the app works at the door.';
       res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store' });
       res.end(walletPage({ title: 'Ticket pass', body: why }));

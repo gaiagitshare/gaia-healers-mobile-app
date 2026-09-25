@@ -1,0 +1,70 @@
+<!-- ────────────────────────────────────────────────────────────────────────
+     GAIA HEALERS — "Add your ticket to your phone" block
+     Paste this into the GHL confirmation e-mail (Source / Custom HTML block).
+
+     A) EVERYONE, TODAY — no data work, no merge field.
+        The link asks who is signed in to the Gaia Healers app. If nobody is,
+        it opens the app so they can sign in and lands them on their ticket.
+        Use this block as-is.
+
+     B) PER-PERSON — no sign-in needed, one tap.
+        Requires the badge token in a GHL custom field. Export it from the
+        admin panel (Attendees → Export CSV → columns gaia_badge_token and
+        gaia_wallet_link), import it as a contact field named
+        gaia_badge_token, then change the two href values below from
+          https://api.gaiahealers.app/wallet
+        to
+          https://api.gaiahealers.app/wallet/{{contact.gaia_badge_token}}
+
+     Until a wallet store is switched on, the link opens a friendly page
+     saying phone passes are not on yet — it never 404s and never errors.
+     ──────────────────────────────────────────────────────────────────── -->
+
+<table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%"
+       style="margin:28px 0;border-collapse:collapse;">
+  <tr>
+    <td align="center" style="padding:24px 20px;background:#0a160e;border-radius:16px;">
+      <p style="margin:0 0 6px;font:700 18px/1.3 -apple-system,BlinkMacSystemFont,'Segoe UI',Arial,sans-serif;color:#ecf3e9;">
+        Keep your ticket on your phone
+      </p>
+      <p style="margin:0 0 18px;font:14px/1.5 -apple-system,BlinkMacSystemFont,'Segoe UI',Arial,sans-serif;color:#a6b1a3;">
+        One tap at the door — no app to open, no signal needed.
+      </p>
+      <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin:0 auto;">
+        <tr>
+          <td align="center" style="border-radius:999px;background:#a6ed68;">
+            <a href="https://api.gaiahealers.app/wallet"
+               style="display:inline-block;padding:14px 28px;font:700 16px/1 -apple-system,BlinkMacSystemFont,'Segoe UI',Arial,sans-serif;color:#0d1a06;text-decoration:none;border-radius:999px;">
+              Add my ticket to my phone
+            </a>
+          </td>
+        </tr>
+      </table>
+      <p style="margin:16px 0 0;font:12px/1.5 -apple-system,BlinkMacSystemFont,'Segoe UI',Arial,sans-serif;color:#7f8a7c;">
+        Works with Google Wallet and Apple Wallet. Your badge QR in the
+        Gaia Healers app works at the door either way.
+      </p>
+    </td>
+  </tr>
+</table>
+
+<!-- ── OPTIONAL: two explicit buttons, once BOTH stores are switched on ──
+     Replace the single-button table above with this one.
+
+<table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin:0 auto;">
+  <tr>
+    <td style="padding:0 6px;">
+      <a href="https://api.gaiahealers.app/wallet?store=google"
+         style="display:inline-block;padding:14px 22px;border-radius:999px;background:#a6ed68;color:#0d1a06;font:700 15px/1 Arial,sans-serif;text-decoration:none;">
+        Google Wallet
+      </a>
+    </td>
+    <td style="padding:0 6px;">
+      <a href="https://api.gaiahealers.app/wallet?store=apple"
+         style="display:inline-block;padding:14px 22px;border-radius:999px;background:#ecf3e9;color:#0d1a06;font:700 15px/1 Arial,sans-serif;text-decoration:none;">
+        Apple Wallet
+      </a>
+    </td>
+  </tr>
+</table>
+── -->

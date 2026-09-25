@@ -487,11 +487,26 @@ body.gaia-v2 .gaia-chakra-map__list-item, body.gaia-v2 .gaia-chakra-map--screen 
 .g-event-headmeta { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 10px !important; color: var(--super-muted); font-size: 13px; }
 .g-event-status { display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; border: 1px solid var(--super-line); border-radius: 999px; color: var(--super-muted); font-size: 11px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; }
 .g-event-status.is-live { color: var(--super-accent); border-color: var(--super-accent); }
+/* The hero is a banner, not a poster. At 16/9 it was 730px tall on a laptop
+   and ate the first screen on every tab, so the aspect ratio is capped: the
+   picture sets the mood, the event sets the page. */
 .g-eventpage-hero { margin-top: 16px; border: 1px solid var(--super-line); border-radius: 22px; overflow: hidden; }
-.g-eventpage-hero img { display: block; width: 100%; aspect-ratio: 16 / 9; object-fit: cover; }
+.g-eventpage-hero img { display: block; width: 100%; aspect-ratio: 16 / 9; max-height: clamp(168px, 30vh, 320px); object-fit: cover; }
 
-/* Horizontal-scroll tabs on narrow screens; the row never wraps the layout. */
-.g-event-tabs { margin-top: 18px; display: flex; gap: 8px; overflow-x: auto; scrollbar-width: none; -webkit-overflow-scrolling: touch; padding-bottom: 4px; }
+/* What the event is, in four numbers. Each tile is the way into its section,
+   which is also why they sit above the tab strip rather than inside a panel. */
+.g-event-stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(84px, 1fr)); gap: 8px; margin-top: 14px; }
+.g-event-stat { display: flex; flex-direction: column; align-items: flex-start; justify-content: center; gap: 2px; min-height: 66px; padding: 10px 12px; border: 1px solid var(--super-line); border-radius: 16px; background: var(--super-panel); color: var(--super-muted); font: inherit; text-align: left; cursor: pointer; transition: border-color .15s ease, background .15s ease, transform .15s ease; }
+.g-event-stat.is-static { cursor: default; }
+.g-event-stat b { color: var(--g-text); font-size: 22px; font-weight: 700; line-height: 1; font-variant-numeric: tabular-nums; }
+.g-event-stat span { font-size: 11px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; }
+.g-event-stat:not(.is-static):hover { border-color: var(--super-accent); background: var(--super-panel-2); transform: translateY(-1px); }
+.g-event-stat:focus-visible { outline: 2px solid var(--super-accent); outline-offset: 2px; }
+
+/* Horizontal-scroll tabs on narrow screens; the row never wraps the layout.
+   Sticky, because the hero and the stats sit above them: without this, every
+   section change meant scrolling back up to reach the next one. */
+.g-event-tabs { position: sticky; top: 72px; z-index: 18; margin-top: 16px; display: flex; gap: 8px; overflow-x: auto; scrollbar-width: none; -webkit-overflow-scrolling: touch; padding: 8px 0; background: linear-gradient(180deg, var(--g-bg, #060f09) 62%, rgba(6, 15, 9, 0)); }
 .g-event-tabs::-webkit-scrollbar { display: none; }
 .g-event-tab { flex: 0 0 auto; min-height: 44px; padding: 0 16px; color: var(--super-muted); border: 1px solid var(--super-line); border-radius: 999px; background: #0b160f; font-size: 13px; font-weight: 700; cursor: pointer; }
 .g-event-tab.is-active { color: var(--super-accent-ink); background: var(--super-accent); border-color: var(--super-accent); }
@@ -505,11 +520,48 @@ body.gaia-v2 .gaia-chakra-map__list-item, body.gaia-v2 .gaia-chakra-map--screen 
 .g-event-overview dt { color: var(--super-accent); font-size: 10px; font-weight: 800; letter-spacing: .14em; text-transform: uppercase; }
 .g-event-overview dd { margin: 4px 0 0; color: var(--g-text); font-size: 14px; }
 
+/* The description, kept to a readable column and to a readable height. */
+.g-ev-about p { max-width: 68ch; display: -webkit-box; -webkit-line-clamp: 6; -webkit-box-orient: vertical; overflow: hidden; }
+.g-ev-about.is-open p { display: block; overflow: visible; }
+.g-ev-about__more { margin: -8px 0 16px; padding: 0; border: 0; background: none; color: var(--super-accent); font: inherit; font-size: 13px; font-weight: 700; cursor: pointer; }
+.g-ev-about__more:focus-visible { outline: 2px solid var(--super-accent); outline-offset: 2px; }
+
+/* Venue and the links that go with it: somewhere to tap, not a line to copy. */
+.g-ev-links { display: grid; gap: 8px; margin: 0 0 18px; }
+.g-ev-link { display: grid; grid-template-columns: 34px minmax(0, 1fr) 18px; align-items: center; gap: 10px; padding: 10px 12px; border: 1px solid var(--super-line); border-radius: 14px; background: var(--super-panel-2); color: var(--g-text); text-decoration: none; }
+.g-ev-link:hover { border-color: var(--super-accent); }
+.g-ev-link__icon { display: grid; place-items: center; width: 34px; height: 34px; border-radius: 11px; background: rgba(166, 237, 104, .1); color: var(--super-accent); font-size: 17px; }
+.g-ev-link__text { min-width: 0; display: grid; gap: 2px; }
+.g-ev-link__text strong { font-size: 14px; font-weight: 600; }
+.g-ev-link__text em { color: var(--super-muted); font-size: 12px; font-style: normal; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.g-ev-link__go { color: var(--super-muted); }
+
+/* Speakers: a face, a claim, and enough of the bio to know whether to listen. */
+.g-super-count { margin: 2px 0 0; color: var(--super-muted); font-size: 12px; }
+.g-speaker-grid { display: grid; grid-template-columns: 1fr; gap: 10px; }
+.g-speaker { display: grid; grid-template-columns: 56px minmax(0, 1fr); gap: 12px; align-items: start; padding: 14px; border: 1px solid var(--super-line); border-radius: 18px; background: var(--super-panel); }
+.g-speaker__photo { display: block; width: 56px; height: 56px; border-radius: 50%; overflow: hidden; background: var(--super-panel-2); }
+.g-speaker__photo img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.g-speaker__photo--none { display: grid; place-items: center; color: var(--super-accent); font-size: 22px; }
+.g-speaker__text { min-width: 0; }
+.g-speaker__text h3 { margin: 0; font-size: 15px; font-weight: 700; line-height: 1.3; }
+.g-speaker__meta { margin: 3px 0 0; color: var(--super-accent); font-size: 12px; font-weight: 600; }
+.g-speaker__bio { margin: 7px 0 0; color: var(--super-muted); font-size: 13px; line-height: 1.55; display: -webkit-box; -webkit-line-clamp: 4; -webkit-box-orient: vertical; overflow: hidden; }
+
 @media (min-width: 720px) {
   .g-event-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .g-event-card { grid-template-columns: 132px minmax(0, 1fr); }
   .g-event-card__art img { width: 132px; min-height: 132px; }
   .g-event-overview dl { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .g-ev-links { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .g-speaker-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  /* Room for the whole description once there is room for it. */
+  .g-ev-about p { -webkit-line-clamp: unset; display: block; overflow: visible; }
+  .g-ev-about__more { display: none; }
+}
+
+@media (min-width: 1080px) {
+  .g-speaker-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 }
 
 /* ── Membership: Member Pass, My Access, Included, Next Level ──────────────

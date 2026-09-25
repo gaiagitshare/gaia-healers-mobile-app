@@ -187,11 +187,16 @@ _junk = [ (n, b) for n, b in _have.items() if b and not _re.search(r"\d", b) ]
 check(not _junk, "and no placeholder reached the floor plan", _junk)
 check(int(real[1] or 0) >= 94500 and int(real[2] or 0) >= 94500,
       "with the booked and collected totals still on file", real)
-# Scanning is SOLD, and is still granted to nobody. This half of the rule does
-# not move: a stand appearing in the directory has never implied a scanner, and
-# the day it does is the day somebody bought one.
-scanning = sql("SELECT COUNT(*) FROM exhibitors WHERE event_id=1 AND can_scan_leads=1")[0][0]
-check(scanning == 0, "and not one of them can scan a badge until somebody buys it", scanning)
+# Scanning is SOLD and granted deliberately. The organiser has now granted it
+# to the stands that paid in full, so the check is no longer "nobody" -- it is
+# the rule that survived that grant: a scanner is never implied by being in the
+# directory, and never reaches a stand that has not settled.
+_scan = sql("SELECT company_name, stage, payment_status, is_published FROM exhibitors"
+            " WHERE event_id=1 AND can_scan_leads=1")
+_unsettled = [(n, st, p) for n, st, p, _pub in _scan if st != "confirmed" or p not in ("paid", "comp")]
+check(not _unsettled, "no stand can scan a badge unless it is confirmed and settled", _unsettled)
+_listed_no_scan = sql("SELECT COUNT(*) FROM exhibitors WHERE event_id=1 AND is_published=1 AND can_scan_leads=0")[0][0]
+check(_listed_no_scan > 0, "and being in the directory still does not carry a scanner with it", _listed_no_scan)
 # Publication, unlike scanning, HAS been decided: twenty stands were reviewed
 # and listed on 2026-09-06. Three were deliberately held back, and those three
 # are what this now guards -- an accidental publish of any of them is exactly
@@ -493,7 +498,7 @@ call("DELETE", "/events/%d" % EV, token=ADMIN)
 check(sql("SELECT COUNT(*) FROM exhibitors WHERE company_name='ZZ Sound Co'")[0][0] == 0,
       "the throwaway vendor is gone afterwards")
 
-print("\n%d checks, %d failed" % (77, len(fails)))
+print("\n%d checks, %d failed" % (78, len(fails)))
 if fails:
     print("FAILED: " + "; ".join(fails))
 sys.exit(1 if fails else 0)

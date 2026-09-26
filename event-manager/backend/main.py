@@ -3509,6 +3509,10 @@ def vendor_setup_save(token: str, payload: schemas.VendorSetup,
         raise HTTPException(status_code=404, detail="This setup link is not valid, or has expired.")
     if payload.company_name is not None and payload.company_name.strip():
         ex.company_name = payload.company_name.strip()[:120]
+    if payload.tagline is not None:
+        # One line under the name in the directory. Short on purpose: a tagline
+        # that runs to three lines is a description in the wrong place.
+        ex.tagline = payload.tagline.strip()[:140] or None
     if payload.description is not None:
         ex.description = payload.description.strip()[:1200]
     if payload.website is not None:

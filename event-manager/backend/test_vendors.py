@@ -198,11 +198,21 @@ check(not _unsettled, "no stand can scan a badge unless it is confirmed and sett
 _listed_no_scan = sql("SELECT COUNT(*) FROM exhibitors WHERE event_id=1 AND is_published=1 AND can_scan_leads=0")[0][0]
 check(_listed_no_scan > 0, "and being in the directory still does not carry a scanner with it", _listed_no_scan)
 # Publication, unlike scanning, HAS been decided: twenty stands were reviewed
-# and listed on 2026-09-06. Three were deliberately held back, and those three
-# are what this now guards -- an accidental publish of any of them is exactly
-# the mistake worth catching.
-held = sql("SELECT id, company_name FROM exhibitors WHERE id IN (1, 18, 20) AND is_published=1")
-check(not held, "and the three stands held back are still not in the directory", held)
+# and listed on 2026-09-06, and three were deliberately held back. One of the
+# three -- Vibroacoustic Solutions -- was released on 2026-09-26 once its
+# listing turned out to be complete and merely unpublished. The other two are
+# held back because they have NO logo and NO description, and publishing
+# either would put a blank card in the hall directory. That is what this
+# guards, and it guards the reason rather than the ids: a held-back stand
+# becomes publishable by being filled in, not by someone flipping a flag.
+held = sql("SELECT id, company_name FROM exhibitors WHERE id IN (18, 20) AND is_published=1")
+check(not held, "the two stands with no listing yet are still not in the directory", held)
+# The floor for being in the directory is WORDS. A stand with no description
+# is a blank card an attendee cannot act on; a missing logo is a gap to chase,
+# not a reason to hide somebody who paid, so it is not asserted here.
+_wordless = sql("SELECT company_name FROM exhibitors WHERE event_id=1 AND is_published=1"
+                " AND COALESCE(description,'')='' AND company_name NOT LIKE 'ZZ %'")
+check(not _wordless, "and no published stand is a blank card", _wordless)
 
 # ── 8. the setup link lets a stand write its own listing ──────────────────
 st, link = call("POST", "/exhibitors/%d/activation-link" % VID, None, ADMIN)
@@ -261,7 +271,8 @@ check(st == 404,
 # The sheet keeps maybes and refusals in the same list, separated by a heading.
 # That is the right shape, because a maybe becomes confirmed the day they pay --
 # but only a confirmed stand should ever reach the attendee directory.
-counts = dict(sql("SELECT stage, COUNT(*) FROM exhibitors WHERE event_id=1 GROUP BY stage"))
+counts = dict(sql("SELECT stage, COUNT(*) FROM exhibitors WHERE event_id=1"
+                  " AND company_name NOT LIKE 'ZZ %' GROUP BY stage"))
 check(sum(counts.values()) == len(_sheet), "the whole vendor board is in the system (%d rows in the sheet)" % len(_sheet), counts)
 check(counts.get("confirmed") == len(_sheet_conf), "%d of them are confirmed" % len(_sheet_conf), counts.get("confirmed"))
 check(counts.get("not_aligned", 0) > 0 and counts.get("next_year", 0) > 0,

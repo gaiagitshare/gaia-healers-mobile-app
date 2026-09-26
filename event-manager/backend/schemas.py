@@ -397,6 +397,7 @@ class VendorSetup(BaseModel):
     out of the payload is a stronger guarantee than checking for them.
     """
     company_name: Optional[str] = None
+    tagline: Optional[str] = None
     description: Optional[str] = None
     website: Optional[str] = None
     logo_url: Optional[str] = None

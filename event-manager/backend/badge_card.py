@@ -1084,6 +1084,14 @@ button[disabled]{opacity:.55;cursor:default}
 .msg.ok{color:#2e7d32;font-weight:600}
 .msg.bad{color:#b3261e}
 .foot{margin:24px 0 0;font-size:12.5px;color:#8a998f;text-align:center}
+.logo{display:flex;gap:14px;align-items:center;margin:0 0 16px;padding:13px;
+  border:1px solid #e3eae4;border-radius:13px;background:#fbfdfb}
+.logobox{width:76px;height:76px;flex:0 0 auto;border-radius:12px;overflow:hidden;background:#eef3ee;
+  display:flex;align-items:center;justify-content:center;color:#9db0a3;font-size:12.5px;text-align:center}
+.logobox img{width:100%;height:100%;object-fit:contain;display:block}
+.logotxt{flex:1;min-width:0}
+.logotxt b{display:block;font-size:14.5px}
+.logotxt small{display:block;margin:2px 0 9px;font-size:12.5px;color:#8a998f;line-height:1.45}
 .media{margin:26px 0 0;padding-top:22px;border-top:1px solid #e3eae4}
 .media h2{margin:0 0 3px;font-size:15px}
 .media .hint{margin:0 0 13px;font-size:13px;color:#8a998f;line-height:1.5}
@@ -1118,7 +1126,9 @@ button[disabled]{opacity:.55;cursor:default}
   h1,.check b,.locked b{color:#e8efe9}
   .sub,label>span,small,.top,.locked{color:#9db0a3}
   .media{border-top-color:#243026}
-  .thumb,.item{border-color:#2b382e;background:#101811}
+  .thumb,.item,.logo{border-color:#2b382e;background:#101811}
+  .logobox{background:#1b241d}
+  .logotxt b{color:#e8efe9}
   .item .no,.item img{background:#1b241d}
   .newitem,.empty2{border-color:#2b382e}
   .addbtn{border-color:#7dd956;color:#7dd956}
@@ -1148,6 +1158,8 @@ def vendor_setup_html(ex, event_name, token):
         "<form id=\"f\">"
         "<label><span>Company name</span>"
         "<input type=\"text\" name=\"company_name\" value=\"%s\" maxlength=\"120\" required></label>"
+        "<div class=\"logo\">"        "<div class=\"logobox\" id=\"lgp\">%s</div>"        "<div class=\"logotxt\"><b>Your logo</b>"        "<small>Square works best. JPG, PNG, WEBP or GIF, up to 8MB.</small>"        "<input type=\"file\" id=\"lgf\" accept=\"image/*\" hidden>"        "<button type=\"button\" class=\"addbtn\" id=\"lgb\">%s</button>"        "<span class=\"msg\" id=\"lgm\" role=\"status\"></span></div>"        "</div>"
+        "<label><span>Tagline</span>"        "<input type=\"text\" name=\"tagline\" value=\"%s\" maxlength=\"140\" placeholder=\"Six or seven words on what you do.\">"        "<small>Sits under your name in the directory.</small></label>"
         "<label><span>About your stand</span>"
         "<textarea name=\"description\" maxlength=\"1200\" "
         "placeholder=\"What you do, and what people will find at your booth.\">%s</textarea>"
@@ -1200,7 +1212,10 @@ def vendor_setup_html(ex, event_name, token):
         % (v(event_name), v(ex.company_name),
            "Update how your stand appears to attendees." if done
            else "Fill this in and your stand goes live in the attendee directory.",
-           v(ex.company_name), v(ex.description), v(ex.website),
+           v(ex.company_name),
+           ('<img src="%s" alt="">' % v(ex.logo_url)) if ex.logo_url else "<span>No logo</span>",
+           "Change logo" if ex.logo_url else "Choose a logo",
+           v(ex.tagline), v(ex.description), v(ex.website),
            v(ex.contact_email), v(ex.contact_phone),
            " checked" if ex.show_contact_publicly else "",
            "Save changes" if done else "Publish my stand")
@@ -1210,7 +1225,7 @@ def vendor_setup_html(ex, event_name, token):
         "f.addEventListener('submit',async function(e){e.preventDefault();"
         "var b=f.querySelector('button');b.disabled=true;m.className='msg';m.textContent='Saving\\u2026';"
         "var d=new FormData(f),p={publish:true};"
-        "['company_name','description','website','contact_email','contact_phone']"
+        "['company_name','tagline','description','website','contact_email','contact_phone']"
         ".forEach(function(k){p[k]=String(d.get(k)||'');});"
         "p.show_contact_publicly=d.get('show_contact_publicly')==='on';"
         "try{var r=await fetch(%s,{method:'POST',headers:{'Content-Type':'application/json'},"
@@ -1280,7 +1295,7 @@ def vendor_setup_html(ex, event_name, token):
         "if(!confirm('Remove this item?'))return;"
         "try{await api('/products/'+b.getAttribute('data-pr'),{method:'DELETE'});await load();}"
         "catch(err){say(prm,err.message,1);}});"
-        "load();})();</script>"
+        "var lgp=document.getElementById('lgp'),lgf=document.getElementById('lgf'),""lgb=document.getElementById('lgb'),lgm=document.getElementById('lgm');""lgb.addEventListener('click',function(){lgf.click();});""lgf.addEventListener('change',async function(){""var file=lgf.files&&lgf.files[0];if(!file)return;""lgb.disabled=true;say(lgm,'Uploading\u2026');""try{var url=await upload(file);""await api('',{method:'POST',headers:{'Content-Type':'application/json'},""body:JSON.stringify({logo_url:url})});""lgp.innerHTML='<img alt=\"\">';lgp.firstChild.src=url;""lgb.textContent='Change logo';say(lgm,'Logo saved.');}""catch(e){say(lgm,e.message,1);}lgf.value='';lgb.disabled=false;});""load();})();</script>"
         % ("'/event-api/vendor-setup/" + _h(token) + "'")
     )
     return vendor_page_html(ex.company_name or "Your stand", body + script + media_script)

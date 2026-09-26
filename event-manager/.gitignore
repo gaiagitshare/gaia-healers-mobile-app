@@ -1,2 +1,48 @@
+# Gaia Event Manager — source, config and tests only.
+#
+# This repository exists to give the application code an auditable history and a
+# rollback point. It is deliberately LOCAL ONLY: there is no remote, because
+# everything this server holds about attendees, payments and identity is real
+# production data and must not be pushed anywhere.
+#
+# Nothing below is source. Most of it is either a secret, live customer data, or
+# something a build regenerates.
+
+# Secrets and credentials
+.env
+.env.*
+*.pem
+*.key
+secrets/
+# Anything generated for an operator to act on: vendor setup links are live
+# capability URLs, and the snapshots beside them are real contact data.
+exports/
+
+# Live database and every snapshot of it — real attendee and payment records
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
+*.db.*
+_backups/
+event-backups/
+
+# Uploaded user content (badge photos, exhibitor assets)
+backend/uploads/
+backend/.mimosa/
+
+# Logs, pids, runtime droppings
+*.log
+*.log.*
+*.gz
+*.pid
+__pycache__/
+*.pyc
+.pytest_cache/
+
+# Build output and dependencies — regenerated, and 547MB of node_modules
+frontend/node_modules/
+frontend/build/
+node_modules/
 backend/vendor-sync.env
 backend/data/

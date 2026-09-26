@@ -176,7 +176,8 @@ check(st == 404, "an unpublished event has no directory at all", st)
 call("DELETE", "/exhibitors/%d" % LISTED, token=ADMIN)
 call("DELETE", "/exhibitors/%d" % HIDDEN, token=ADMIN)
 call("DELETE", "/events/%d" % EV, token=ADMIN)
-check(sql("SELECT COUNT(*) FROM exhibitors WHERE company_name LIKE 'ZZ %Stand'")[0][0] == 0,
+check(sql("SELECT COUNT(*) FROM exhibitors WHERE company_name IN"
+          " ('ZZ Listed Stand', 'ZZ Withheld Stand')")[0][0] == 0,
       "the throwaway stands are gone afterwards")
 check(sql("SELECT COUNT(*) FROM events WHERE name='ZZ dir test'")[0][0] == 0,
       "and so is the throwaway event")

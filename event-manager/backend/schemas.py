@@ -397,6 +397,7 @@ class VendorSetup(BaseModel):
     out of the payload is a stronger guarantee than checking for them.
     """
     company_name: Optional[str] = None
+    tagline: Optional[str] = None
     description: Optional[str] = None
     website: Optional[str] = None
     logo_url: Optional[str] = None
@@ -785,6 +786,12 @@ class IdentityTicketLookup(IdentityLookup):
 
 class WalletPassRequest(IdentityTicketLookup):
     """One person's ticket as a phone wallet pass. `store` is apple | google."""
+    store: str
+
+
+class WalletByToken(BaseModel):
+    """A wallet pass fetched by the badge token printed on the badge itself."""
+    token: str
     store: str
 
 

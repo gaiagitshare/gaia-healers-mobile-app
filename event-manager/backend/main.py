@@ -2120,6 +2120,85 @@ def _effective_access(db, attendee):
     }
 
 
+def _pass_display(db, attendee) -> str:
+    """One line that tells somebody exactly what they hold.
+
+    A day-pass holder needs the DAY more than the name -- 14 people for 2026
+    can only come on one specific day, and a ticket that says only "Friday
+    Exhibit Hall" leaves them working out which Friday. Everything else is
+    unrestricted, so it says nothing extra and stays short.
+    """
+    eff = _effective_access(db, attendee)
+    label = eff.get("effective_label") or "Ticket"
+    days = eff.get("valid_days") or []
+    if days and not eff.get("unrestricted_days"):
+        names = []
+        for d in days:
+            try:
+                dt = datetime.strptime(str(d)[:10], "%Y-%m-%d")
+                names.append("%s %d %s" % (dt.strftime("%A"), dt.day, dt.strftime("%B")))
+            except Exception:
+                names.append(str(d))
+        if names and not any(n.lower() in label.lower() for n in names):
+            label = "%s \u2014 %s only" % (label, " and ".join(names))
+    return label
+
+
+def _pass_includes(db, attendee, event=None) -> str:
+    """One sentence saying what this pass actually admits.
+
+    Built from the same three flags the door enforces -- conference, workshop,
+    VIP -- plus the days, so it can never promise more than the scanner will
+    give. 256 people for 2026 hold plain General Admission, which does NOT
+    include the conference sessions; saying so in the ticket is cheaper than
+    saying it to their face at a session door.
+    """
+    eff = _effective_access(db, attendee)
+    base = eff.get("base_ticket") or None
+    if not eff.get("active") or not base:
+        return ""
+    tt = db.query(models.TicketType).filter(models.TicketType.id == base.get("id")).first()
+    if event is None:
+        event = db.query(models.Event).filter(models.Event.id == attendee.event_id).first()
+
+    days = eff.get("valid_days") or []
+    if eff.get("unrestricted_days") or not days:
+        span = 0
+        if event and event.start_date and event.end_date:
+            span = (event.end_date.date() - event.start_date.date()).days + 1
+        words = {2: "both", 3: "all three", 4: "all four", 5: "all five"}.get(span)
+        parts = ["the exhibit hall on %s days" % words] if words else ["the exhibit hall"]
+    else:
+        named = []
+        for d in days:
+            try:
+                dt = datetime.strptime(str(d)[:10], "%Y-%m-%d")
+                named.append("%s %d %s" % (dt.strftime("%A"), dt.day, dt.strftime("%B")))
+            except Exception:
+                named.append(str(d))
+        parts = ["the exhibit hall on %s" % " and ".join(named)]
+
+    conf = _conference_grant(tt, eff.get("addons") or [], "")
+    if tt is not None and getattr(tt, "grants_conference", False):
+        parts.append("all conference sessions")
+    else:
+        addon = next((a for a in (eff.get("addons") or []) if a.get("code") == "ONE_DAY_CONFERENCE"), None)
+        if addon and addon.get("day"):
+            parts.append("conference sessions on %s" % addon["day"])
+        elif addon:
+            parts.append("one day of conference sessions (day not yet chosen)")
+    if tt is not None and getattr(tt, "grants_workshops", False):
+        parts.append("the workshops")
+    if tt is not None and getattr(tt, "is_vip", False):
+        parts.append("the VIP areas")
+
+    if len(parts) == 1:
+        body = parts[0]
+    else:
+        body = ", ".join(parts[:-1]) + " and " + parts[-1]
+    return "Includes %s." % body
+
+
 def _event_local_today(event, at=None):
     """The event's current calendar date (event timezone), or an explicit ISO test
     override. Day rules are judged here, never in UTC or the browser's zone."""
@@ -3313,6 +3392,9 @@ def vendor_activation_link(exhibitor_id: int, db: Session = Depends(get_db),
 # app, deep-linked to this event's tab. It used to point at the API root, which
 # answered a person's question about the hall with a JSON document.
 APP_PUBLIC_BASE = os.getenv("APP_PUBLIC_BASE", "https://gaiahealers.app").rstrip("/")
+# The wallet link is served by the PROXY, not the app: it has to resolve a
+# pass for somebody who is not signed in, months after the mail was sent.
+WALLET_LINK_BASE = os.getenv("WALLET_LINK_BASE", "https://api.gaiahealers.app").rstrip("/")
 
 
 def _directory_url(event_id):
@@ -3427,6 +3509,10 @@ def vendor_setup_save(token: str, payload: schemas.VendorSetup,
         raise HTTPException(status_code=404, detail="This setup link is not valid, or has expired.")
     if payload.company_name is not None and payload.company_name.strip():
         ex.company_name = payload.company_name.strip()[:120]
+    if payload.tagline is not None:
+        # One line under the name in the directory. Short on purpose: a tagline
+        # that runs to three lines is a description in the wrong place.
+        ex.tagline = payload.tagline.strip()[:140] or None
     if payload.description is not None:
         ex.description = payload.description.strip()[:1200]
     if payload.website is not None:
@@ -4617,7 +4703,8 @@ def _attendee_event_payload(attendee: models.Attendee, event: models.Event, db=N
             "registration_status": attendee.registration_status or "registered",
             "is_checked_in": bool(attendee.is_checked_in),
             "checked_in_at": attendee.checked_in_at,
-            "pass_label": identity_lib.pass_label(attendee),
+            "pass_label": _pass_display(db, attendee),
+            "pass_includes": _pass_includes(db, attendee, event),
             "ticket_type_code": attendee.ticket_type.code if attendee.ticket_type else None,
             "is_vip": grants["is_vip"],
             "grants_workshops": grants["workshops"],
@@ -4742,7 +4829,7 @@ def identity_wallet(
     event = db.query(models.Event).filter(models.Event.id == attendee.event_id).first()
     if not event:
         return {"ok": False, "reason": "event_not_found"}
-    pass_name = identity_lib.pass_label(attendee)
+    pass_name = _pass_display(db, attendee)
     try:
         if store == "google":
             return {"ok": True, "store": "google",
@@ -4754,6 +4841,125 @@ def identity_wallet(
     return Response(content=blob, media_type="application/vnd.apple.pkpass",
                     headers={"Content-Disposition": 'attachment; filename="gaia-ticket.pkpass"',
                              "Cache-Control": "private, no-store"})
+
+
+def _attendee_for_badge_token(db, token: str):
+    """The person a printed badge token belongs to, for the event still running.
+
+    A badge token belongs to the PERSON, so a returning attendee has one row
+    per year under the same token. The newest row is not the answer -- ids were
+    backfilled out of order, and last year's conference is archived. The ticket
+    they want is for the event that has not happened yet.
+    """
+    token = (token or "").strip().upper()
+    if not token:
+        return None
+    rows = db.query(models.Attendee).filter(
+        func.upper(models.Attendee.public_token) == token).order_by(models.Attendee.id.desc()).all()
+    if not rows:
+        return None
+    live = {e.id for e in db.query(models.Event).filter(models.Event.is_active == True).all()}  # noqa: E712
+    return (next((a for a in rows if a.event_id in live and _ticket_active(a)), None)
+            or next((a for a in rows if _ticket_active(a)), None))
+
+
+@app.post("/identity/wallet/by-token")
+def identity_wallet_by_token(
+    payload: schemas.WalletByToken,
+    db: Session = Depends(get_db),
+    _: bool = Depends(require_service_token),
+):
+    """A wallet pass for the badge token printed on somebody's badge.
+
+    This is the form a LINK can take: an emailed "add your ticket to your
+    phone" cannot carry a session, and a Google save link is signed for an
+    hour, so the durable thing in the mail has to be resolved when it is
+    clicked. The token is the one already on the printed badge and already
+    accepted by the door scanner, so a link carrying it gives away nothing
+    the badge in their hand does not.
+    """
+    store = (payload.store or "").strip().lower()
+    token = (payload.token or "").strip().upper()
+    if store not in ("apple", "google"):
+        raise HTTPException(status_code=400, detail="Unknown wallet")
+    if not token:
+        return {"ok": False, "reason": "no_token"}
+    if (store == "apple" and not wallet.apple_ready()) or (store == "google" and not wallet.google_ready()):
+        return {"ok": False, "reason": "wallet_not_configured", "store": store}
+    if not db.query(models.Attendee).filter(
+            func.upper(models.Attendee.public_token) == token).first():
+        return {"ok": False, "reason": "unknown_token"}
+    attendee = _attendee_for_badge_token(db, token)
+    if not attendee:
+        return {"ok": False, "reason": "ticket_not_valid"}
+    event = db.query(models.Event).filter(models.Event.id == attendee.event_id).first()
+    if not event:
+        return {"ok": False, "reason": "event_not_found"}
+    pass_name = _pass_display(db, attendee)
+    try:
+        if store == "google":
+            return {"ok": True, "store": "google", "event_name": event.name,
+                    "save_url": wallet.google_save_url(attendee, event, pass_name, event.location or "")}
+        blob = wallet.apple_pkpass(attendee, event, pass_name, event.location or "")
+    except Exception as exc:
+        print("wallet pass failed (%s): %s" % (store, exc), flush=True)
+        return {"ok": False, "reason": "wallet_unavailable", "store": store}
+    return Response(content=blob, media_type="application/vnd.apple.pkpass",
+                    headers={"Content-Disposition": 'attachment; filename="gaia-ticket.pkpass"',
+                             "Cache-Control": "private, no-store"})
+
+
+@app.get("/identity/ticket/by-token/{token}")
+def identity_ticket_by_token(token: str, db: Session = Depends(get_db),
+                             _: bool = Depends(require_service_token)):
+    """The ticket behind a printed badge token: everything a ticket page shows.
+
+    The e-mailed ticket cannot assume a session -- most of the people it is for
+    have never opened the app. The token is the one already on the badge and
+    already accepted by the door scanner, so it is the right key for a link.
+    """
+    attendee = _attendee_for_badge_token(db, token)
+    if not attendee:
+        return {"ok": False, "reason": "unknown_token"}
+    event = db.query(models.Event).filter(models.Event.id == attendee.event_id).first()
+    if not event:
+        return {"ok": False, "reason": "event_not_found"}
+    return {
+        "ok": True,
+        "first_name": attendee.first_name or "",
+        "last_name": attendee.last_name or "",
+        "pass_label": _pass_display(db, attendee),
+        "pass_includes": _pass_includes(db, attendee, event),
+        "qr_code": attendee.qr_code,
+        "qr_image": generate_qr_code(attendee.qr_code),
+        "event_id": event.id,
+        "event_name": event.name,
+        "location": event.location or "",
+        "start_date": event.start_date.isoformat() if event.start_date else "",
+        "end_date": event.end_date.isoformat() if event.end_date else "",
+        "checked_in": bool(attendee.is_checked_in),
+    }
+
+
+@app.get("/identity/badge-qr/{token}")
+def identity_badge_qr(token: str, db: Session = Depends(get_db),
+                      _: bool = Depends(require_service_token)):
+    """The badge QR as a PNG, for an <img> in an e-mail.
+
+    Mail clients strip data: URIs, so the code a person is asked to show at the
+    door has to be fetched from somewhere. It carries the same value the
+    scanner reads off the printed sticker and nothing else.
+    """
+    attendee = _attendee_for_badge_token(db, token)
+    if not attendee:
+        raise HTTPException(status_code=404, detail="Unknown ticket")
+    qr = qrcode.QRCode(version=1, box_size=10, border=2)
+    qr.add_data(attendee.qr_code)
+    qr.make(fit=True)
+    buf = io.BytesIO()
+    qr.make_image(fill_color="black", back_color="white").save(buf, format="PNG")
+    return Response(content=buf.getvalue(), media_type="image/png",
+                    headers={"Cache-Control": "public, max-age=86400"})
 
 
 @app.get("/identity/wallet/status")
@@ -5349,7 +5555,8 @@ def export_attendees(event_id: int, db: Session = Depends(get_db),
     writer.writerow(["first_name", "last_name", "email", "phone", "company", "job_title",
                      "base_ticket", "add_ons", "add_on_day", "effective_access",
                      "registration_status", "checked_in", "checked_in_at",
-                     "qr_code", "source", "order_ref"])
+                     "qr_code", "source", "order_ref",
+                     "gaia_badge_token", "gaia_wallet_link", "gaia_pass", "gaia_pass_includes"])
     for a in rows:
         _eff = _effective_access(db, a)
         _bt = _eff.get("base_ticket") or {}
@@ -5362,7 +5569,12 @@ def export_attendees(event_id: int, db: Session = Depends(get_db),
                          _eff.get("effective_label") or "",
                          a.registration_status, "yes" if a.is_checked_in else "no",
                          a.checked_in_at.isoformat() if a.checked_in_at else "", a.qr_code,
-                         _cd.get("source") or "", _cd.get("order_id") or ""])
+                         _cd.get("source") or "", _cd.get("order_id") or "",
+                         # The two columns a mail merge needs: the badge token,
+                         # and the wallet link already built out of it.
+                         a.public_token or "",
+                         (WALLET_LINK_BASE + "/wallet/" + a.public_token) if a.public_token else "",
+                         _pass_display(db, a), _pass_includes(db, a)])
     db.add(models.ExportAudit(event_id=event_id, user_id=current_user.id, kind="attendees", count=len(rows)))
     db.commit()
     return _Response(content=buf.getvalue(), media_type="text/csv",

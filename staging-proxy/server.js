@@ -444,7 +444,8 @@ function ticketPage(t, { walletUrl = '' } = {}) {
   h1{margin:0 0 10px;font-size:1.55rem;line-height:1.2;text-wrap:balance}
   .pill{display:inline-block;padding:5px 14px;border-radius:999px;background:#1c2f1d;color:#a6ed68;
         font-size:13px;font-weight:700;letter-spacing:.02em}
-  .qr{margin:20px auto 10px;width:min(240px,68vw);aspect-ratio:1;background:#fff;border-radius:14px;
+  .includes{margin:10px auto 0;max-width:22rem;font-size:13.5px;line-height:1.5;color:#a6b1a3}
+  .qr{margin:16px auto 10px;width:min(240px,68vw);aspect-ratio:1;background:#fff;border-radius:14px;
       padding:12px;display:block}
   .qr img{width:100%;height:100%;display:block;image-rendering:pixelated}
   .code{margin:0 0 20px;font:600 13px/1 ui-monospace,SFMono-Regular,Menlo,monospace;letter-spacing:.08em;color:#a6b1a3}
@@ -465,6 +466,7 @@ function ticketPage(t, { walletUrl = '' } = {}) {
   <p class="eyebrow">${esc(t.event_name || 'Your ticket')}</p>
   <h1>${esc(name)}</h1>
   <p style="margin:0"><span class="pill">${esc(t.pass_label || 'Ticket')}</span></p>
+  ${t.pass_includes ? `<p class="includes">${esc(t.pass_includes)}</p>` : ''}
   <div class="qr"><img alt="Your entry code" src="/t/${encodeURIComponent(t.token)}.png"></div>
   <p class="code">${esc(t.qr_code || '')}</p>
   <dl>

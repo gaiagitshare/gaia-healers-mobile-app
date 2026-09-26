@@ -2144,6 +2144,61 @@ def _pass_display(db, attendee) -> str:
     return label
 
 
+def _pass_includes(db, attendee, event=None) -> str:
+    """One sentence saying what this pass actually admits.
+
+    Built from the same three flags the door enforces -- conference, workshop,
+    VIP -- plus the days, so it can never promise more than the scanner will
+    give. 256 people for 2026 hold plain General Admission, which does NOT
+    include the conference sessions; saying so in the ticket is cheaper than
+    saying it to their face at a session door.
+    """
+    eff = _effective_access(db, attendee)
+    base = eff.get("base_ticket") or None
+    if not eff.get("active") or not base:
+        return ""
+    tt = db.query(models.TicketType).filter(models.TicketType.id == base.get("id")).first()
+    if event is None:
+        event = db.query(models.Event).filter(models.Event.id == attendee.event_id).first()
+
+    days = eff.get("valid_days") or []
+    if eff.get("unrestricted_days") or not days:
+        span = 0
+        if event and event.start_date and event.end_date:
+            span = (event.end_date.date() - event.start_date.date()).days + 1
+        words = {2: "both", 3: "all three", 4: "all four", 5: "all five"}.get(span)
+        parts = ["the exhibit hall on %s days" % words] if words else ["the exhibit hall"]
+    else:
+        named = []
+        for d in days:
+            try:
+                dt = datetime.strptime(str(d)[:10], "%Y-%m-%d")
+                named.append("%s %d %s" % (dt.strftime("%A"), dt.day, dt.strftime("%B")))
+            except Exception:
+                named.append(str(d))
+        parts = ["the exhibit hall on %s" % " and ".join(named)]
+
+    conf = _conference_grant(tt, eff.get("addons") or [], "")
+    if tt is not None and getattr(tt, "grants_conference", False):
+        parts.append("all conference sessions")
+    else:
+        addon = next((a for a in (eff.get("addons") or []) if a.get("code") == "ONE_DAY_CONFERENCE"), None)
+        if addon and addon.get("day"):
+            parts.append("conference sessions on %s" % addon["day"])
+        elif addon:
+            parts.append("one day of conference sessions (day not yet chosen)")
+    if tt is not None and getattr(tt, "grants_workshops", False):
+        parts.append("the workshops")
+    if tt is not None and getattr(tt, "is_vip", False):
+        parts.append("the VIP areas")
+
+    if len(parts) == 1:
+        body = parts[0]
+    else:
+        body = ", ".join(parts[:-1]) + " and " + parts[-1]
+    return "Includes %s." % body
+
+
 def _event_local_today(event, at=None):
     """The event's current calendar date (event timezone), or an explicit ISO test
     override. Day rules are judged here, never in UTC or the browser's zone."""
@@ -4645,6 +4700,7 @@ def _attendee_event_payload(attendee: models.Attendee, event: models.Event, db=N
             "is_checked_in": bool(attendee.is_checked_in),
             "checked_in_at": attendee.checked_in_at,
             "pass_label": _pass_display(db, attendee),
+            "pass_includes": _pass_includes(db, attendee, event),
             "ticket_type_code": attendee.ticket_type.code if attendee.ticket_type else None,
             "is_vip": grants["is_vip"],
             "grants_workshops": grants["workshops"],
@@ -4869,6 +4925,7 @@ def identity_ticket_by_token(token: str, db: Session = Depends(get_db),
         "first_name": attendee.first_name or "",
         "last_name": attendee.last_name or "",
         "pass_label": _pass_display(db, attendee),
+        "pass_includes": _pass_includes(db, attendee, event),
         "qr_code": attendee.qr_code,
         "qr_image": generate_qr_code(attendee.qr_code),
         "event_id": event.id,
@@ -5495,7 +5552,7 @@ def export_attendees(event_id: int, db: Session = Depends(get_db),
                      "base_ticket", "add_ons", "add_on_day", "effective_access",
                      "registration_status", "checked_in", "checked_in_at",
                      "qr_code", "source", "order_ref",
-                     "gaia_badge_token", "gaia_wallet_link", "gaia_pass"])
+                     "gaia_badge_token", "gaia_wallet_link", "gaia_pass", "gaia_pass_includes"])
     for a in rows:
         _eff = _effective_access(db, a)
         _bt = _eff.get("base_ticket") or {}
@@ -5513,7 +5570,7 @@ def export_attendees(event_id: int, db: Session = Depends(get_db),
                          # and the wallet link already built out of it.
                          a.public_token or "",
                          (WALLET_LINK_BASE + "/wallet/" + a.public_token) if a.public_token else "",
-                         _pass_display(db, a)])
+                         _pass_display(db, a), _pass_includes(db, a)])
     db.add(models.ExportAudit(event_id=event_id, user_id=current_user.id, kind="attendees", count=len(rows)))
     db.commit()
     return _Response(content=buf.getvalue(), media_type="text/csv",

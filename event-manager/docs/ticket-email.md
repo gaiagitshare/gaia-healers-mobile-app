@@ -15,10 +15,18 @@ that puts an actual ticket in someone's hand.
 
 ## Before you send
 
-1. **Import the badge token into GHL.** Admin panel → the event → Attendees →
-   Export CSV. Two columns are there for this: `gaia_badge_token` and
-   `gaia_wallet_link`. Import `gaia_badge_token` as a contact custom field with
-   exactly that name.
+1. **Import three fields into GHL.** Admin panel → the event → Attendees →
+   Export CSV. Import these as contact custom fields, with exactly these names:
+
+   | Field | What it holds |
+   |---|---|
+   | `gaia_badge_token` | the code on their badge — drives the QR and the link |
+   | `gaia_pass` | e.g. `Friday Exhibit Hall — Friday 20 November only` |
+   | `gaia_pass_includes` | e.g. `Includes the exhibit hall on Friday 20 November.` |
+
+   `gaia_pass` and `gaia_pass_includes` are computed from the same three flags
+   the door scanner enforces — conference, workshop, VIP — plus the days, so
+   the e-mail can never promise more access than the scanner will give.
 2. **Send only to contacts where that field is set.** If it is empty the QR will
    not load and the button lands on "ticket not found".
 3. **Check the hotel block.** The link uses group code `GRP_GAIA26` and dates
@@ -35,6 +43,21 @@ that puts an actual ticket in someone's hand.
 |---|---|
 | the QR image | `api.gaiahealers.app/t/<token>.png` — the same code the door scanner reads |
 | **Open my ticket** | `api.gaiahealers.app/ticket/<token>` — the whole ticket as a page |
+
+## What each pass says
+
+| Pass | 2026 holders | The line they see |
+|---|---|---|
+| General Admission | 256 | Includes the exhibit hall on all three days. |
+| General Admission + Conference | 67 | …on all three days and all conference sessions. |
+| Friday Exhibit Hall | 13 | Includes the exhibit hall on Friday 20 November. |
+| Volunteer / Staff | 9 | …all three days, all conference sessions and the workshops. |
+| VIP Pass | 2 | …all three days, all conference sessions, the workshops and the VIP areas. |
+| Sunday Exhibit Hall | 1 | Includes the exhibit hall on Sunday 22 November. |
+| Gaia Guest | 1 | …on all three days and all conference sessions. |
+
+Plain General Admission does **not** include the conference sessions. 256
+people hold it, and until now nothing told them.
 
 The ticket page needs no sign-in and no app. It shows the name, the pass, the
 code, the dates and the venue, and prints cleanly. If someone who only came in

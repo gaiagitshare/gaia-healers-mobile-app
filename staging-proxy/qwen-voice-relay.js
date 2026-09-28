@@ -238,7 +238,7 @@ function runSession(browser, grant, ip) {
   const finish = (why) => {
     if (closed) return;
     closed = true;
-    clearTimeout(stallTimer); clearTimeout(sessionTimer); clearTimeout(connectTimer);
+    clearTimeout(stallTimer); clearTimeout(sessionTimer); clearTimeout(connectTimer); clearInterval(keepAlive);
     openSessions = Math.max(0, openSessions - 1);
     const n = (live.get(ip) || 1) - 1;
     if (n > 0) live.set(ip, n); else live.delete(ip);
@@ -279,6 +279,10 @@ function runSession(browser, grant, ip) {
   const disarmStall = () => { clearTimeout(stallTimer); stallTimer = null; };
 
   const sessionTimer = setTimeout(() => handover('session_limit'), cfg.maxSessionSeconds * 1000);
+  // nginx drops a proxied socket after 300 s without traffic, and a member
+  // who is thinking sends none (the orb gates silence) while Qwen waits too.
+  const keepAlive = setInterval(() => { try { browser.ping(); } catch { /* closing */ } }, 25 * 1000);
+  keepAlive.unref?.();
   const connectTimer = setTimeout(() => { if (!setupDone) failEarly('connect_timeout'); }, cfg.connectMs);
 
   upstream = new WebSocket(`${cfg.wsBase}/api-ws/v1/realtime?model=${encodeURIComponent(cfg.model)}`, {

@@ -774,3 +774,35 @@ body.gaia-v2 .gaia-assist.gaia-assist--minimized .gaia-assist__minimize {
     width: calc((100% - 20px) / 2.55);
   }
 }
+
+/* ---------- 6b. Tighter action cards (owner review, 2026-09-28) --------
+   The mockup has compact cards with two-line labels, so nearly three sit
+   side by side on a phone instead of one and a half. Each label is only as
+   wide as its longest word (min-content) with a small floor, so "Energy
+   check" and "Join free" wrap onto two lines, "Book a session" breaks after
+   "a", and a one-word label ("Memberships") keeps its whole word. The
+   discovery card keeps a wider label and its teal emphasis. */
+body.gaia-v2 .gaia-assist:not(.gaia-assist--minimized) .gaia-assist__chip {
+  width: auto;
+  min-height: 56px;
+  gap: 7px;
+  padding: 7px 9px 7px 7px;
+  border-radius: 22px;
+  font-size: 13px;
+  line-height: 1.2;
+}
+body.gaia-v2 .gaia-assist:not(.gaia-assist--minimized) .gaia-assist__chip-icon {
+  width: 34px;
+  height: 34px;
+  font-size: 17px;
+}
+body.gaia-v2 .gaia-assist:not(.gaia-assist--minimized) .gaia-assist__chip-label {
+  width: min-content;
+  min-width: 4.3em;
+  max-width: none;
+}
+body.gaia-v2 .gaia-assist:not(.gaia-assist--minimized) .gaia-assist__chip--primary .gaia-assist__chip-label {
+  width: auto;
+  max-width: 7.4em;
+}
+body.gaia-v2 .gaia-assist:not(.gaia-assist--minimized) .gaia-assist__chip-caret { font-size: 11px; }

@@ -144,16 +144,27 @@ body.gaia-v2 [data-screen="academy"] .g-access--link .g-access__meta {
 }
 body.gaia-v2 [data-screen="academy"] .g-access--link .g-access__meta:empty { display: none; }
 
-/* Tier chip (Silver / Free / Your access), lifted onto the footer line. */
-body.gaia-v2 [data-screen="academy"] .g-access--link .g-access__name > .g-chip:first-of-type {
-  position: absolute;
-  left: var(--acc-pad);
-  bottom: calc(var(--acc-pad) + 4px);
+/* Tier and learner-count chips: their own line (g-access__tags), sharing the
+   footer row with the action pill — left and right of the same grid cell. */
+body.gaia-v2 [data-screen="academy"] .g-access--link > .g-access__tags {
+  grid-column: -2;
+  grid-row: 2;
+  justify-self: start;
+  align-self: center;
+  display: flex;
+  flex-wrap: nowrap;
+  gap: 6px;
+  max-width: 52%;
+  min-width: 0;
+  overflow: hidden;
+}
+body.gaia-v2 [data-screen="academy"] .g-access--link > .g-access__tags .g-chip {
   display: inline-flex;
   align-items: center;
+  flex: 0 1 auto;
+  min-width: 0;
   min-height: 24px;
-  max-width: 40%;
-  margin: 0 !important;
+  margin: 0;
   padding: 3px 10px;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -161,16 +172,9 @@ body.gaia-v2 [data-screen="academy"] .g-access--link .g-access__name > .g-chip:f
   font-size: 10px;
   line-height: 1;
 }
-body.gaia-v2 [data-screen="academy"] .g-access--link:has(> .g-access__img) .g-access__name > .g-chip:first-of-type {
-  left: calc(var(--acc-pad) + var(--acc-thumb) + var(--acc-gap));
-}
-/* Any further chip (learner count) stays inline, as a quiet label. */
-body.gaia-v2 [data-screen="academy"] .g-access--link .g-access__name > .g-chip ~ .g-chip {
-  min-height: 0;
-  margin-left: 6px !important;
-  padding: 2px 8px;
-  font-size: 10px;
-  vertical-align: 1px;
+body.gaia-v2 [data-screen="academy"] .g-access--link > .g-access__tags .g-chip--count {
+  flex-shrink: 2;
+  opacity: 0.85;
 }
 
 /* The action: a compact pill at the right end of the footer line. */
@@ -1275,4 +1279,22 @@ body.gaia-v2 [data-screen="inbox"] .g-super-list__footer {
   body.gaia-v2 [data-screen="events"] .g-event-card__art:hover img {
     transform: none;
   }
+}
+
+/* A circle the member asked about (product_*_interest): still locked, but
+   pending rather than a "members only" wall — a calm cyan note, not gold. */
+body.gaia-v2 [data-screen="community"] #community-body .g-access--interested {
+  border-color: rgba(88, 199, 232, 0.28);
+}
+body.gaia-v2 [data-screen="community"] #community-body .g-access--interested::before {
+  background: var(--lc-ic-soon) center / 21px no-repeat, rgba(88, 199, 232, 0.12);
+  box-shadow: inset 0 0 0 1px rgba(88, 199, 232, 0.34);
+}
+body.gaia-v2 [data-screen="community"] #community-body .g-access--interested .g-access__meta {
+  color: var(--v3-text-2);
+}
+body.gaia-v2 [data-screen="community"] #community-body .g-chip--pending {
+  border: 1px solid rgba(88, 199, 232, 0.4);
+  background: rgba(88, 199, 232, 0.12);
+  color: #8fdcf2;
 }

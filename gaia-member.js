@@ -967,19 +967,24 @@ body.gaia-booking-open{overflow:hidden;}
       const descClean = (function (d, n) { d = String(d || '').replace(/\s+/g, ' ').trim(); n = String(n || '').trim(); if (n && d.toLowerCase().indexOf(n.toLowerCase()) === 0) d = d.slice(n.length).replace(/^[\s:\u2022\-\u2013\u2014]+/, '').trim(); return d; })(t.desc, t.name);
       const url = t.grant?.openUrl || t.portalUrl || hub;
       const badge = owned
-        ? '<span class="g-chip g-chip--on" style="margin-left:.5rem">Your access</span>'
-        : (t.accessLevel ? '<span class="g-chip" style="margin-left:.5rem">' + esc(t.accessLevel.charAt(0).toUpperCase() + t.accessLevel.slice(1)) + '</span>' : '');
+        ? '<span class="g-chip g-chip--on">Your access</span>'
+        : (t.accessLevel ? '<span class="g-chip">' + esc(t.accessLevel.charAt(0).toUpperCase() + t.accessLevel.slice(1)) + '</span>' : '');
       const count = Number(t.memberCount) || 0;
-      const countChip = count > 0 ? '<span class="g-chip" style="margin-left:.35rem;opacity:.85">' + count + ' learners</span>' : '';
+      const countChip = count > 0 ? '<span class="g-chip g-chip--count">' + count + ' learners</span>' : '';
+      // The chips sit on their own line, not inside the title: inside it, a
+      // long course name clamped to three lines cut the learner count off.
+      const tags = badge || countChip ? '<span class="g-access__tags">' + badge + countChip + '</span>' : '';
       const img = t.image ? '<img src="' + esc(t.image) + '" alt="" class="g-access__img" style="width:48px;height:48px;border-radius:8px;object-fit:cover;flex-shrink:0" />' : '';
       return openable
         ? '<button type="button" class="g-access g-access--unlocked g-access--link" data-course-open="' + esc(url) + '"' + (isFree && !owned ? ' data-course-free="1"' : '') + ' data-course-title="' + esc(t.name) + '">'
           + img
-          + '<div class="g-access__body"><span class="g-access__name">' + esc(t.name) + badge + countChip + '</span><span class="g-access__meta">' + esc(descClean) + '</span></div>'
+          + '<div class="g-access__body"><span class="g-access__name">' + esc(t.name) + '</span><span class="g-access__meta">' + esc(descClean) + '</span></div>'
+          + tags
           + '<span class="g-chip g-chip--on g-access__act">Open →</span></button>'
         : '<button type="button" class="g-access g-access--locked g-access--link" ' + (state.authed ? 'data-track-cta' : 'data-academy-signin') + '>'
           + img
-          + '<div class="g-access__body"><span class="g-access__name">' + esc(t.name) + badge + countChip + '</span><span class="g-access__meta">' + esc(descClean) + '</span></div>'
+          + '<div class="g-access__body"><span class="g-access__name">' + esc(t.name) + '</span><span class="g-access__meta">' + esc(descClean) + '</span></div>'
+          + tags
           + '<span class="g-chip g-access__act">' + (state.authed ? 'Get access →' : 'Sign in →') + '</span></button>';
     };
     const academyHead = hasAccess
@@ -1036,7 +1041,11 @@ body.gaia-booking-open{overflow:hidden;}
       + (action || '') + '</div>' + inner + '</section>';
   }
   function accessItem(c, kind) {
-    const cls = kind === 'unlocked' ? 'g-access--unlocked' : (kind === 'soon' ? 'g-access--soon' : 'g-access--locked');
+    // "interested" is a locked community the member asked about (their
+    // product_*_interest tag): still locked, but it should not read as a
+    // plain "members only" wall — Gaia Healers is going to confirm it.
+    const interested = kind !== 'unlocked' && c.state === 'interested';
+    const cls = kind === 'unlocked' ? 'g-access--unlocked' : (kind === 'soon' ? 'g-access--soon' : 'g-access--locked' + (interested ? ' g-access--interested' : ''));
     let meta;
     let act;
     if (kind === 'unlocked') {
@@ -1047,7 +1056,9 @@ body.gaia-booking-open{overflow:hidden;}
       act = '<span class="g-chip g-access__act">Soon</span>';
     } else {
       meta = c.reason || 'Not included in your membership';
-      act = '<span class="g-chip g-chip--lock g-access__act">Members</span>';
+      act = interested
+        ? '<span class="g-chip g-chip--pending g-access__act">Requested</span>'
+        : '<span class="g-chip g-chip--lock g-access__act">Members</span>';
     }
     return '<div class="g-access ' + cls + '"><div class="g-access__body">'
       + '<span class="g-access__name">' + esc(c.name) + '</span>'
@@ -1222,7 +1233,9 @@ body.gaia-booking-open{overflow:hidden;}
   // Official Gaia 2.0 tiers from join.gaiahealers.com/membership.
   // Membership tier card = g-card composition (g-tier list + g-badge).
   function tierCard(o) {
-    return '<article class="g-card' + (o.active ? ' g-card--feature' : '') + '">'
+    return '<article class="g-card g-tier' + (o.active ? ' g-card--feature' : '') + (o.featured ? ' g-tier--featured' : '') + '"'
+      + (o.planKey ? ' data-plan="' + esc(o.planKey) + '"' : '') + '>'
+      + (o.featured && !o.active ? '<span class="g-tier__flag">Most popular</span>' : '')
       + '<div class="g-tier__head"><p class="g-card__label">' + esc(o.name) + '</p>'
       + (o.statusLabel ? '<span class="g-badge' + (o.active ? ' g-badge--on' : '') + '">' + esc(o.statusLabel) + '</span>' : '') + '</div>'
       + '<ul class="g-tier__list">' + o.abilities.map((a) => '<li>' + esc(a) + '</li>').join('') + '</ul>'
@@ -1236,6 +1249,7 @@ body.gaia-booking-open{overflow:hidden;}
   // from GET /api/membership/plans so there is exactly one source for them.
   // `membership.key` is used only to mark which card is the member's current
   // plan — it never decides what any plan contains.
+  const FEATURED_PLAN_FALLBACK = 'gold';
   function membershipCards() {
     // Only a live membership marks its own plan as "current". A cancelled or
     // expired Gold shows Gold's price again, because buying it back is exactly
@@ -1252,12 +1266,16 @@ body.gaia-booking-open{overflow:hidden;}
     if (!plans.length) {
       return '<article class="g-card"><p class="g-card__meta">Membership plans are unavailable right now.</p></article>';
     }
-    const intro = '<article class="g-card"><p class="g-card__label">Gaia 2.0 Practitioners</p>'
+    const intro = '<article class="g-card g-tier-intro"><p class="g-card__label">Gaia 2.0 Practitioners</p>'
       + '<p class="g-card__meta">Choose a practitioner path that matches your stage.</p></article>';
     return intro + plans.map((plan) => {
       const isCurrent = currentKey && plan.key === currentKey;
       const price = (plan.prices && (plan.prices.monthly || plan.prices.annual)) || '';
       return tierCard({
+        planKey: plan.key,
+        // The plans API may name its own featured plan; until it does, Gold is
+        // the one Gaia Healers chose to highlight (owner, 2026-09-28).
+        featured: plan.featured === true || (!plans.some((p) => p.featured === true) && plan.key === FEATURED_PLAN_FALLBACK),
         name: plan.label,
         statusLabel: isCurrent ? 'Current plan' : price,
         active: isCurrent,

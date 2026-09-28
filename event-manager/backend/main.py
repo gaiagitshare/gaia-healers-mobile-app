@@ -1473,7 +1473,7 @@ def authorize_scan(event_id: int, payload: schemas.AuthorizeRequest,
     dec["last_name"] = att.last_name
     # Everything the desk might have to answer or fix, on the same response as
     # the decision. A second round-trip is a second queue.
-    dec["door"] = _door_card(db, att, event)
+    dec["door"] = _door_card(db, att, event, current_user)
     return dec
 
 
@@ -1529,7 +1529,7 @@ def override_admit(event_id: int, attendee_id: int, body: schemas.OverrideAdmit,
                 "checked_in": bool(att.is_checked_in), "checked_in_now": checked_in_now,
                 "badge_print_count": int(att.badge_print_count or 0),
                 "first_name": att.first_name, "last_name": att.last_name,
-                "door": _door_card(db, att, event)})
+                "door": _door_card(db, att, event, current_user)})
     return out
 
 
@@ -1585,7 +1585,7 @@ def door_identity(event_id: int, attendee_id: int, body: schemas.DoorIdentity,
             changes["email"] = {"from": att.email or "", "to": email}
             att.email = email
     if not changes:
-        return {"ok": True, "changed": {}, "door": _door_card(db, att, event)}
+        return {"ok": True, "changed": {}, "door": _door_card(db, att, event, current_user)}
     cd = dict(att.custom_data or {})
     named = "first_name" in changes or "last_name" in changes
     if named and cd.get("needs_name_check"):
@@ -1597,7 +1597,7 @@ def door_identity(event_id: int, attendee_id: int, body: schemas.DoorIdentity,
     db.commit(); db.refresh(att)
     return {"ok": True, "changed": changes,
             "name": ("%s %s" % (att.first_name or "", att.last_name or "")).strip(),
-            "door": _door_card(db, att, event)}
+            "door": _door_card(db, att, event, current_user)}
 
 
 @app.post("/events/{event_id}/attendees/{attendee_id}/add-seat")
@@ -1706,7 +1706,7 @@ def add_party_seat(event_id: int, attendee_id: int, body: schemas.AddPartySeat,
             "paid_by_payment": (seat.custom_data or {}).get("paid_by_payment"),
             "name": ("%s %s" % (seat.first_name or "", seat.last_name or "")).strip(),
             "seat": "%d of %d" % (seat_no, party["paid_for"]),
-            "door": _door_card(db, seat, event)}
+            "door": _door_card(db, seat, event, current_user)}
 
 
 @app.post("/events/{event_id}/door-test-mode")
@@ -2731,10 +2731,19 @@ def _money_for(db, attendee):
             "attendance_type": attendee.attendance_type or None}
 
 
-def _door_card(db, attendee, event):
-    """The whole picture of one person, for the screen the door actually reads."""
+def _door_card(db, attendee, event, user=None):
+    """The whole picture of one person, for the screen the door actually reads.
+
+    It carries what THIS operator is allowed to do, so the screen can offer the
+    desk what the desk can do rather than showing everybody every button and
+    letting the refusals explain it afterwards.
+    """
     cd = attendee.custom_data or {}
+    _organiser = bool(user and authz.can(db, user, event.id, "attendee.write"))
     return {"attendee_id": attendee.id,
+            "may": {"comp": _organiser, "downgrade": _organiser,
+                    "revoke": _organiser, "change_email": _organiser,
+                    "sell_upgrade": True, "fix_name": True, "override": True},
             "email": attendee.email,
             "phone": attendee.phone,
             "pass_display": _pass_display(db, attendee),
@@ -8251,16 +8260,31 @@ def reinstate_attendee(attendee_id: int, payload: schemas.RevokeTicket,
 def change_pass(attendee_id: int, payload: schemas.ChangePass,
                 db: Session = Depends(get_db),
                 current_user: models.User = Depends(get_current_user)):
-    """Admin changes an attendee's pass (comp upgrade, or explicit downgrade).
+    """Change an attendee's pass. Never a second attendee, always the same QR.
 
-    Never a second attendee, always the same QR. A complimentary change records
-    that no payment occurred. Downgrades are refused unless allow_downgrade is
-    set, so a mis-click cannot strip a paid VIP. Fully audited (old->new, who,
-    reason) and the attendee is notified of the new access."""
+    Two people use this and they are trusted with different things.
+
+    An ORGANISER may do anything: comp somebody up, or explicitly downgrade
+    them. Downgrades still need allow_downgrade, so a mis-click cannot strip a
+    paid VIP.
+
+    DOOR STAFF may SELL an upgrade and nothing else. That is the thing they are
+    standing there to do -- somebody decides on the day that they want the
+    conference after all -- and it is safe to hand over because it is bounded by
+    arithmetic rather than by trust: it must go UP, and money must be recorded
+    against it. What they cannot do is give a pass away, or take one back; a comp
+    and a downgrade are decisions about somebody else's money and stay with the
+    organiser.
+
+    Fully audited either way (old->new, who, why, and the amount) and the
+    attendee is notified of the new access.
+    """
     attendee = db.query(models.Attendee).filter(models.Attendee.id == attendee_id).first()
     if not attendee:
         raise HTTPException(status_code=404, detail="Attendee not found")
-    authz.require_cap(db, current_user, attendee.event_id, "attendee.write")
+    _organiser = authz.can(db, current_user, attendee.event_id, "attendee.write")
+    if not _organiser:
+        authz.require_cap(db, current_user, attendee.event_id, "checkin.perform")
     tt = db.query(models.TicketType).filter(
         models.TicketType.id == payload.ticket_type_id,
         models.TicketType.event_id == attendee.event_id).first()
@@ -8270,6 +8294,18 @@ def change_pass(attendee_id: int, payload: schemas.ChangePass,
     if old_tt == tt.id:
         return attendee
     is_downgrade = _tt_rank(db, tt.id) < _tt_rank(db, old_tt)
+    if not _organiser:
+        # The door's bound, stated as three refusals rather than one permission.
+        if is_downgrade:
+            raise HTTPException(status_code=403,
+                                detail="A pass can only be moved up at the desk. "
+                                       "Ask an organiser to change it down.")
+        if not getattr(payload, "paid_at_door", False):
+            raise HTTPException(status_code=403,
+                                detail="An upgrade sold at the desk has to be paid for. "
+                                       "Only an organiser can give one away.")
+        if float(getattr(payload, "amount", 0) or 0) <= 0:
+            raise HTTPException(status_code=400, detail="Say how much was taken")
     if is_downgrade and not payload.allow_downgrade:
         raise HTTPException(status_code=409,
                             detail="This is a downgrade. Re-submit with allow_downgrade to confirm.")

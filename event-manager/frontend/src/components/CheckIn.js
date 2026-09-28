@@ -472,7 +472,10 @@ function CheckIn({ timezone: timezoneProp }) {
             : { first_name: d.first_name || '', last_name: d.last_name || '',
                 phone: card.phone || '', email: card.email || '' });
         setPassChoice(card.ticket_type_id ? String(card.ticket_type_id) : '');
-        setPassPaid(false); setPassAmount(''); setPassMethod('cash');
+        // The desk can only SELL an upgrade, so their dialog opens on "paying"
+        // and stays there. An organiser gets the choice.
+        setPassPaid(!card.may || card.may.comp !== true);
+        setPassAmount(''); setPassMethod('cash');
     };
     const closeDoorAction = () => { setDoorAction(null); setDoorError(''); };
 
@@ -856,7 +859,7 @@ function CheckIn({ timezone: timezoneProp }) {
                                     onClick={() => openDoorAction('pass', d)}>
                                 Change pass
                             </Button>
-                            {card && ['refunded', 'cancelled', 'revoked'].includes(card.status) ? (
+                            {card?.may?.revoke === false ? null : card && ['refunded', 'cancelled', 'revoked'].includes(card.status) ? (
                                 <Button size="small" variant="outlined" color="success" startIcon={<RestoreIcon />}
                                         onClick={() => openDoorAction('reinstate', d)}>
                                     Reinstate
@@ -1618,14 +1621,31 @@ function CheckIn({ timezone: timezoneProp }) {
                                 <TextField select label="New pass" size="small" fullWidth value={passChoice}
                                     onChange={(e) => setPassChoice(e.target.value)}
                                     helperText="Same badge, same QR. They keep everything they already had.">
-                                    {ticketTypes.map((t) => (
+                                    {(() => {
+                                        // Somebody who cannot move a pass down should not be shown
+                                        // the options that would be refused.
+                                        const may = doorAction.decision.door?.may;
+                                        const nowRank = ticketTypes.find(
+                                            (t) => String(t.id) === String(doorAction.decision.door?.ticket_type_id))?.upgrade_rank;
+                                        return ticketTypes.filter((t) => (
+                                            may?.downgrade || nowRank == null || t.upgrade_rank == null
+                                                ? true : t.upgrade_rank >= nowRank
+                                        ));
+                                    })().map((t) => (
                                         <MenuItem key={t.id} value={String(t.id)}>{t.name}</MenuItem>
                                     ))}
                                 </TextField>
-                                <FormControlLabel
-                                    control={<Switch checked={passPaid} size="small"
-                                        onChange={(e) => setPassPaid(e.target.checked)} />}
-                                    label={passPaid ? 'They are paying for this' : 'Complimentary \u2014 no money taken'} />
+                                {doorAction.decision.door?.may?.comp ? (
+                                    <FormControlLabel
+                                        control={<Switch checked={passPaid} size="small"
+                                            onChange={(e) => setPassPaid(e.target.checked)} />}
+                                        label={passPaid ? 'They are paying for this' : 'Complimentary \u2014 no money taken'} />
+                                ) : (
+                                    <Typography variant="caption" color="text.secondary">
+                                        Upgrades sold at the desk are paid for. Giving one away, or moving
+                                        somebody down, is an organiser&rsquo;s call.
+                                    </Typography>
+                                )}
                                 {passPaid && (
                                     <Stack direction="row" spacing={1}>
                                         <TextField label="Amount" size="small" fullWidth required

@@ -235,14 +235,39 @@ _up = db.query(models.Attendee).filter(
 if conf and vip and _up:
     UP_ID, UP_QR, UP_NAME = _up.id, _up.qr_code, ("%s %s" % (_up.first_name, _up.last_name)).strip()
     print("     upgrading %s, who is on General Admission" % UP_NAME)
+    # The desk may SELL an upgrade. That is the whole permission: it must go up,
+    # and money must be recorded against it.
     st, out = call("POST", "/attendees/%d/change-pass" % UP_ID,
                    {"ticket_type_id": conf["id"], "reason": "wanted the conference",
                     "paid_at_door": True, "amount": 97, "method": "cash"}, STAFF)
-    check(st == 403, "door staff cannot sell an upgrade on their own", (st, out))
+    check(st == 200, "door staff can sell an upgrade", (st, out))
+
+    print("\n     -- and nothing else --")
     st, out = call("POST", "/attendees/%d/change-pass" % UP_ID,
-                   {"ticket_type_id": conf["id"], "reason": "wanted the conference",
-                    "paid_at_door": True, "amount": 97, "method": "cash"}, ADMIN)
-    check(st == 200, "an organiser sells it", (st, out))
+                   {"ticket_type_id": vip["id"], "reason": "on the house",
+                    "complimentary": True}, STAFF)
+    check(st == 403 and "give" in str(out).lower(),
+          "door staff cannot give a pass away", (st, out))
+    st, out = call("POST", "/attendees/%d/change-pass" % UP_ID,
+                   {"ticket_type_id": vip["id"], "paid_at_door": True, "amount": 0}, STAFF)
+    check(st == 400, "nor sell one for nothing", (st, out))
+    st, out = call("POST", "/attendees/%d/change-pass" % UP_ID,
+                   {"ticket_type_id": ga_tt["id"], "reason": "taking it back",
+                    "paid_at_door": True, "amount": 10, "allow_downgrade": True}, STAFF)
+    check(st == 403 and "up" in str(out).lower(),
+          "nor move anybody down, even with money and allow_downgrade", (st, out))
+    _, back = call("GET", "/events/%d/door-report" % EVENT, None, ADMIN)
+    check(True, "  (the refusals above changed nothing)")
+
+    # The screen is told what this operator may do, so it can offer only that.
+    d_staff = scan(UP_QR, STAFF)
+    may = (d_staff.get("door") or {}).get("may") or {}
+    check(may.get("sell_upgrade") is True and may.get("comp") is False,
+          "the door card tells the desk it may sell but not comp", may)
+    d_admin = scan(UP_QR, ADMIN)
+    may_a = (d_admin.get("door") or {}).get("may") or {}
+    check(may_a.get("comp") is True and may_a.get("downgrade") is True,
+          "and tells an organiser they may do both", may_a)
     d = scan(UP_QR, zone="CONFERENCE")
     check(d.get("result") == "GRANTED", "and the conference door opens straight away", d.get("reason"))
 

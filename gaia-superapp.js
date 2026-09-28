@@ -1754,6 +1754,16 @@
       + tabBar
       + '<div class="g-event-panel">' + (eventUI.tab === 'overview' ? overview : eventTabPanel(eventUI.tab, detail, live)) + '</div>';
 
+    // The strip is re-drawn on every tab change, which resets its sideways
+    // scroll: on a phone, choosing Sponsors or Info left the selected tab
+    // off-screen to the right. Centre it in the strip (the strip's own scroll
+    // only, so the page does not jump).
+    const tabStrip = root.querySelector('.g-event-tabs');
+    const selectedTab = tabStrip && tabStrip.querySelector('[aria-selected="true"]');
+    if (tabStrip && selectedTab && tabStrip.scrollWidth > tabStrip.clientWidth) {
+      tabStrip.scrollLeft = Math.max(0, selectedTab.offsetLeft - (tabStrip.clientWidth - selectedTab.offsetWidth) / 2);
+    }
+
     root.querySelectorAll('[data-event-tab]').forEach((button) => {
       button.addEventListener('click', () => {
         eventUI.tab = button.getAttribute('data-event-tab');

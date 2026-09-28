@@ -1,0 +1,922 @@
+/* ============================================================
+   Gaia app — shared visual language, "v3" (2026-09-28)
+
+   The Assist panel redesign (gaia-assist-v3.css) was approved, and the
+   owner asked for the same look across the whole app. This file is the
+   shared foundation for that: one colour system and the building blocks
+   every screen is made of (page, top bar, tab bar, screen header, cards,
+   buttons, segmented tabs, action rows, inputs, chips). Per-screen
+   polish is layered on top of it later; nothing here is screen-specific
+   unless a shared block needed a nudge on one screen to line up.
+
+   Load order matters. home.html links this after gaia-fit.css, so it can
+   repaint what the six older layers built without editing them, and
+   before gaia-assist-v3.css, so the Assist panel keeps its own finish.
+
+   How it works:
+   - Most of the old layers paint through tokens (--g-*, --super-*), so
+     the cheapest, most consistent change is to redefine those tokens on
+     body.gaia-v2 (which outranks the :root definitions). Headings and
+     eyebrows were serif/monospace only because --g-font-serif and
+     --g-font-mono said so; pointing both at the sans face moves every
+     heading in the app to the Assist style in one place.
+   - The Assist panel lives inside body too, so it would inherit the new
+     tokens. It gets the old values back (section 0b) and every
+     component rule that could match inside it is fenced off with
+     :not(.gaia-assist *). Net effect on Assist: none.
+   - Paint, not layout. Sizes, grids and breakpoints stay with the older
+     layers (they encode a lot of hard-won overflow fixes); this file
+     changes colour, radius, border, shadow, type and touch feedback, and
+     only raises a size where a tap target was under 44px.
+   - No backdrop-filter on repeated cards: the directory renders ~215 of
+     them and blur on each is a scroll-jank risk on mid-range phones.
+     Glass blur is kept for the few fixed surfaces (top bar, tab bar).
+   ============================================================ */
+
+/* ---------- 0. Colour system ------------------------------------------ */
+
+body.gaia-v2 {
+  /* The owner's palette, named once. */
+  --v3-page: #020805;
+  --v3-card: rgba(5, 16, 11, 0.9);
+  --v3-card-2: rgba(16, 31, 24, 0.72);
+  --v3-green: #75f05a;
+  --v3-green-hi: #8bff70;
+  --v3-emerald: #42db86;
+  --v3-cyan: #58c7e8;
+  --v3-text: #f5f7f5;
+  --v3-text-2: #a8b3ad;
+  --v3-muted: #718079;
+  --v3-border: rgba(160, 255, 185, 0.16);
+  --v3-border-strong: rgba(120, 245, 145, 0.42);
+  /* Eyebrow labels: calm sage, not the interactive green. */
+  --v3-label: #8fc39c;
+  --v3-ease: cubic-bezier(0.22, 1, 0.36, 1);
+  --v3-radius: 24px;
+  --v3-radius-lg: 28px;
+  --v3-card-bg:
+    radial-gradient(120% 80% at 0% 0%, rgba(117, 240, 90, 0.05), transparent 55%),
+    var(--v3-card);
+  --v3-card-shadow:
+    inset 0 1px 0 rgba(200, 255, 210, 0.05),
+    0 0 40px -18px rgba(117, 240, 90, 0.16),
+    0 22px 44px -30px rgba(0, 0, 0, 0.9);
+
+  /* The older layers' tokens, re-pointed at the palette. */
+  --g-bg: var(--v3-page);
+  --g-surface: var(--v3-card);
+  --g-surface-hi: var(--v3-card-2);
+  --g-line: var(--v3-border);
+  --g-line-strong: rgba(160, 255, 185, 0.26);
+  --g-text: var(--v3-text);
+  --g-text-muted: var(--v3-text-2);
+  --g-text-faint: #7d8c85;
+  --g-accent: var(--v3-green);
+  --g-accent-deep: #5fd84a;
+  --g-on-accent: #06170d;
+  --g-good: var(--v3-emerald);
+  --g-teal: var(--v3-cyan);
+  --g-font-serif: var(--g-font);
+  --g-font-mono: var(--g-font);
+  --g-r-md: 18px;
+  --g-r-lg: var(--v3-radius);
+  --g-r-xl: var(--v3-radius-lg);
+  --g-focus: 0 0 0 2px var(--v3-page), 0 0 0 4px rgba(117, 240, 90, 0.75);
+  --g-glow: 0 0 26px rgba(117, 240, 90, 0.35);
+  --super-bg: var(--v3-page);
+  --super-panel: var(--v3-card);
+  --super-panel-2: var(--v3-card-2);
+  --super-line: var(--v3-border);
+  --super-muted: var(--v3-text-2);
+  --super-accent: var(--v3-green);
+  --super-accent-ink: #06170d;
+  /* gaia-ui-v2.css dark-theme tokens behind the header and tab bar. */
+  --gh-header-bg: rgba(2, 8, 5, 0.78);
+  --gh-tabbar-bg: rgba(5, 16, 11, 0.84);
+  --gh-tabbar-link: var(--v3-text-2);
+  --gh-tabbar-link-active: var(--v3-green-hi);
+  --gh-tabbar-ring: var(--v3-page);
+}
+
+/* ---------- 0b. Assist keeps its own finish ---------------------------- */
+/* The values the Assist panel resolved before this file existed (the
+   :root sets in gaia-system.css and gaia-reshape.css), so anything the
+   older layers paint inside it through a token is unchanged. */
+body.gaia-v2 .gaia-assist {
+  --g-bg: #07100b;
+  --g-surface: #0f1912;
+  --g-surface-hi: #15231a;
+  --g-line: rgba(232, 242, 230, 0.13);
+  --g-line-strong: rgba(232, 242, 230, 0.22);
+  --g-text: #f3f6f1;
+  --g-text-muted: #a9b5a6;
+  --g-text-faint: #829080;
+  --g-accent: #9ee565;
+  --g-accent-deep: #72c63f;
+  --g-on-accent: #071309;
+  --g-good: #5cb82e;
+  --g-teal: #5ce1e6;
+  --g-font-serif: "Cormorant Garamond", Georgia, serif;
+  --g-font-mono: ui-monospace, SFMono-Regular, Menlo, monospace;
+  --g-r-md: 16px;
+  --g-r-lg: 20px;
+  --g-r-xl: 26px;
+  --g-focus: 0 0 0 2px #07100b, 0 0 0 4px #9ee565;
+  --g-glow: 0 0 26px rgba(182, 242, 92, 0.4);
+  --super-bg: #07100a;
+  --super-panel: #0d1811;
+  --super-panel-2: #111f16;
+  --super-line: rgba(196, 230, 184, 0.13);
+  --super-muted: #a6b1a3;
+  --super-accent: #a6ed68;
+  --super-accent-ink: #0a250c;
+}
+
+/* ---------- 1. Page ------------------------------------------------------ */
+
+html { background: #020805; }
+
+/* A deep black-green page with one soft green glow near the top, the
+   same setting the Assist card floats in. Fixed, so it does not scroll
+   away and leave long screens flat. !important only to match the older
+   dark-first rule in gaia-system.css that also uses it. */
+body.gaia-v2,
+body.gaia-v2[data-theme="light"] {
+  background:
+    radial-gradient(110% 420px at 50% -80px, rgba(117, 240, 90, 0.09), transparent 70%),
+    radial-gradient(80% 360px at 100% 45%, rgba(66, 219, 134, 0.035), transparent 70%),
+    var(--v3-page) !important;
+  background-attachment: fixed !important;
+  color: var(--v3-text);
+}
+
+/* The shell painted its own solid colour over the glow. */
+body.gaia-v2 .gaia-shell { background: transparent; }
+
+body.gaia-v2 ::selection { background: rgba(117, 240, 90, 0.28); color: var(--v3-text); }
+
+/* ---------- 2. Top bar --------------------------------------------------- */
+
+body.gaia-v2 .g-topbar {
+  background: rgba(2, 8, 5, 0.78);
+  border-bottom: 1px solid rgba(160, 255, 185, 0.08);
+  -webkit-backdrop-filter: blur(22px) saturate(140%);
+  backdrop-filter: blur(22px) saturate(140%);
+}
+body.gaia-v2 .g-topbar__brand {
+  color: var(--v3-text);
+  font-weight: 600;
+  letter-spacing: -0.02em;
+}
+/* The logo is the unchanged assets/gaia-mark.svg; only a faint halo. */
+body.gaia-v2 .g-topbar__brand img {
+  filter: drop-shadow(0 0 8px rgba(117, 240, 90, 0.28));
+}
+
+/* Menu and sign-in: the round translucent controls from the Assist card. */
+body.gaia-v2 .g-topbar__nav,
+body.gaia-v2 .gaia-header-signin,
+body.gaia-v2 .g-topbar .gaia-menu-button {
+  min-width: 44px;
+  min-height: 44px;
+  border: 1px solid var(--v3-border);
+  border-radius: 999px;
+  background: rgba(16, 31, 24, 0.55);
+  color: var(--v3-text-2);
+  transition: background 0.18s ease, border-color 0.18s ease, color 0.18s ease, transform 0.18s ease;
+}
+body.gaia-v2 .g-topbar__nav:active,
+body.gaia-v2 .gaia-header-signin:active { transform: scale(0.94); }
+@media (hover: hover) {
+  body.gaia-v2 .g-topbar__nav:hover,
+  body.gaia-v2 .gaia-header-signin:hover,
+  body.gaia-v2 .g-topbar .gaia-menu-button:hover {
+    border-color: var(--v3-border-strong);
+    background: rgba(28, 52, 40, 0.8);
+    color: var(--v3-text);
+  }
+}
+
+/* ---------- 3. Bottom tab bar ------------------------------------------ */
+/* Geometry (sizes, the phone/desktop layouts) stays with the older
+   layers; this is the glass pill, its active state and the orb.
+   !important where the older paint used it. */
+
+body.gaia-v2 .gaia-tabbar__inner {
+  border: 1px solid rgba(140, 255, 170, 0.18) !important;
+  background:
+    radial-gradient(60% 120% at 50% 0%, rgba(117, 240, 90, 0.07), transparent 70%),
+    rgba(5, 16, 11, 0.92) !important;
+  box-shadow:
+    inset 0 1px 0 rgba(200, 255, 210, 0.06),
+    0 0 40px -14px rgba(117, 240, 90, 0.2),
+    0 18px 44px -12px rgba(0, 0, 0, 0.8) !important;
+  -webkit-backdrop-filter: blur(24px) saturate(140%);
+  backdrop-filter: blur(24px) saturate(140%);
+}
+@media (max-width: 999px) {
+  body.gaia-v2 .gaia-tabbar__inner { border-radius: 28px !important; }
+}
+
+/* The scrim above the bar fades content into the new page colour. */
+body.gaia-v2 .gaia-tabbar::before {
+  background: linear-gradient(to top, rgba(2, 8, 5, 0.9), transparent);
+}
+
+body.gaia-v2 .gaia-tabbar__link {
+  color: var(--v3-text-2) !important;
+  transition: color 0.2s ease;
+}
+body.gaia-v2 .gaia-tabbar__link::before { transition: background 0.2s ease, box-shadow 0.2s ease; }
+body.gaia-v2 .gaia-tabbar__link.is-active { color: var(--v3-green-hi) !important; }
+/* The links are content-sized (gaia-fit.css), so the default inset hugged
+   the label; a few px of overhang reads as a pill, not a capsule. */
+body.gaia-v2 .gaia-tabbar__link.is-active::before {
+  inset: 2px -5px;
+  border: 1px solid rgba(117, 240, 90, 0.26);
+  border-radius: 18px;
+  background: rgba(117, 240, 90, 0.1);
+  box-shadow: 0 0 18px -6px rgba(117, 240, 90, 0.35);
+}
+body.gaia-v2 .gaia-tabbar__link.is-active .gaia-tabbar__icon {
+  filter: drop-shadow(0 0 6px rgba(139, 255, 112, 0.45));
+}
+body.gaia-v2 .gaia-tabbar__label { font-weight: 600; }
+body.gaia-v2 .gaia-tabbar__link:active .gaia-tabbar__icon { transform: scale(0.92); }
+body.gaia-v2 .gaia-tabbar__icon { transition: transform 0.18s ease; }
+
+/* The centre orb, matched to the Assist orb: a dark-green well with a
+   lime rim and a faint outer ring, the unchanged logo inside. Its
+   data-state variants (holding, speaking …) keep their animations from
+   gaia-shared.css; only the colours they paint are reset here. */
+body.gaia-v2 .gaia-tabbar__assist,
+body.gaia-v2 .gaia-tabbar__assist[data-state] {
+  background: radial-gradient(circle at 50% 42%, #123a22 0%, #0a2415 58%, #06170d 100%);
+  box-shadow:
+    0 0 0 2px var(--v3-green),
+    0 0 0 5px rgba(2, 8, 5, 0.9),
+    0 0 0 6px rgba(117, 240, 90, 0.18),
+    0 0 24px rgba(117, 240, 90, 0.32),
+    inset 0 0 16px rgba(117, 240, 90, 0.2);
+}
+body.gaia-v2 .gaia-tabbar__assist.is-active,
+body.gaia-v2 .gaia-tabbar__assist.is-pressed,
+body.gaia-v2 .gaia-tabbar__assist[data-state="holding"],
+body.gaia-v2 .gaia-tabbar__assist[data-state="ready"],
+body.gaia-v2 .gaia-tabbar__assist[data-state="speaking"] {
+  box-shadow:
+    0 0 0 2px var(--v3-green-hi),
+    0 0 0 5px rgba(2, 8, 5, 0.9),
+    0 0 0 7px rgba(139, 255, 112, 0.24),
+    0 0 34px rgba(117, 240, 90, 0.5),
+    inset 0 0 20px rgba(117, 240, 90, 0.26);
+}
+body.gaia-v2 .gaia-tabbar__assist-mark {
+  width: 58%;
+  height: 58%;
+  filter: drop-shadow(0 0 8px rgba(117, 240, 90, 0.4));
+}
+body.gaia-v2 .gaia-tabbar__assist-pulse {
+  border-color: rgba(139, 255, 112, 0.22);
+}
+
+/* ---------- 4. Type ------------------------------------------------------ */
+/* With --g-font-serif now the sans face, the old serif headings render in
+   Plus Jakarta Sans. The serif sizes were set for a face that reads
+   small; the same numbers in sans read loud, so the main heading roles
+   get the Assist treatment: semibold, warm white, slightly tight. */
+
+body.gaia-v2 .gaia-main :is(
+  .g-page__title, .g-store__title, .g-super-page-head h1, .g-super-hero h1,
+  .g-super-section-head h2, .g-section__title, .g-card__value, .g-quiz__title,
+  .g-de__title, .g-why-join__intro h2, .g-super-empty-panel h2, .g-booking-item h2,
+  .g-feature-event__title, .g-energy-intro h2, .g-mye h2, .g-pass__title,
+  .g-chakra-hero__title, .g-chakra-guide__name, .g-event-card h3, .g-energy-note strong,
+  .g-event-day h3, .g-sky__illum strong, .g-num__theme, .g-upgrade__title
+) {
+  font-family: var(--g-font);
+  font-weight: 600;
+  color: var(--v3-text);
+  letter-spacing: -0.022em;
+}
+
+/* Screen titles: 28px on a phone, a little more on wide screens. */
+body.gaia-v2 .gaia-main :is(.g-page__title, .g-store__title, .g-super-page-head h1) {
+  font-size: clamp(1.625rem, 6.6vw, 2.25rem) !important;
+  line-height: 1.12;
+}
+body.gaia-v2 .gaia-main .g-super-hero h1 { line-height: 1.1; }
+body.gaia-v2 .gaia-main :is(.g-super-section-head h2, .g-section__title, .g-mye h2) {
+  font-size: clamp(1.2rem, 4.8vw, 1.45rem);
+  line-height: 1.2;
+}
+body.gaia-v2 .gaia-main :is(.g-card__value, .g-card__value--lg, .g-why-join__intro h2, .g-super-empty-panel h2, .g-booking-item h2, .g-energy-intro h2, .g-pass__title) {
+  font-size: clamp(1.25rem, 5.2vw, 1.55rem);
+  line-height: 1.2;
+}
+body.gaia-v2 .gaia-main :is(.g-quiz__title, .g-de__title, .g-chakra-guide__name) {
+  font-size: clamp(1.15rem, 4.8vw, 1.35rem);
+  line-height: 1.25;
+}
+body.gaia-v2 .gaia-main .g-event-card h3 { font-size: 1.02rem; line-height: 1.3; }
+/* The chakra hero's display title was sized for the serif; in sans the
+   same clamp filled half the screen. Its <em> is the one accent word the
+   markup already carries: green, upright, like "Gaia" in the Assist title. */
+body.gaia-v2 .gaia-main .g-chakra-hero__title {
+  font-size: clamp(2rem, 9vw, 2.6rem);
+  line-height: 1.05;
+  letter-spacing: -0.03em;
+}
+body.gaia-v2 .gaia-main .g-chakra-hero__title em {
+  font-style: normal;
+  color: var(--v3-green);
+}
+
+/* Eyebrows: small, calm, letter-spaced labels in sage (they were tiny
+   monospace in the interactive green). */
+body.gaia-v2 :is(
+  .g-page__kicker, .g-store__kicker, .g-super-kicker, .g-super-date, .g-card__label,
+  .g-sec-head__kicker, .g-chakra-hero__kicker, .g-chakra-guide__kicker,
+  .g-feature-event__kicker, .g-de__kicker, .g-sky__kicker, .g-event-hero__kicker,
+  .gaia-menu-sheet__kicker, .gaia-mini-label, .gaia-product-modal__kicker
+):not(.gaia-assist *) {
+  font-family: var(--g-font);
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1.3;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--v3-label);
+}
+
+/* Lead / body copy under headings. */
+body.gaia-v2 .gaia-main :is(.g-page__sub, .g-store__sub, .g-super-page-head > p:last-child, .g-card__meta, .g-section__lead p) {
+  color: var(--v3-text-2);
+  line-height: 1.55;
+}
+
+/* ---------- 5. Screen header card --------------------------------------- */
+/* Every screen opens with the same glass card: eyebrow, title, lead.
+   g-super-page-head (Events, Bookings, Inbox) used to be bare text while
+   g-page__head / g-store__head were cards; now they match. */
+
+body.gaia-v2 .gaia-main :is(.g-page__head, .g-store__head, .g-super-page-head) {
+  position: relative;
+  overflow: hidden;
+  min-height: 0;
+  justify-content: flex-end;
+  gap: 6px;
+  padding: 22px 20px 20px;
+  border: 1px solid var(--v3-border);
+  border-radius: var(--v3-radius-lg);
+  background:
+    radial-gradient(90% 120% at 100% 0%, rgba(117, 240, 90, 0.11), transparent 58%),
+    radial-gradient(70% 90% at 0% 100%, rgba(66, 219, 134, 0.05), transparent 70%),
+    var(--v3-card);
+  box-shadow: var(--v3-card-shadow);
+}
+/* g-super-page-head is a plain block; make it a column so the card's gap
+   spaces eyebrow, title and lead the same way as the other two. */
+body.gaia-v2 .gaia-main .g-super-page-head {
+  display: flex;
+  flex-direction: column;
+}
+body.gaia-v2 .gaia-main .g-super-page-head > * { margin: 0; }
+body.gaia-v2 .gaia-main .g-super-page-head > p:last-child { margin-top: 4px; }
+@media (min-width: 700px) {
+  body.gaia-v2 .gaia-main :is(.g-page__head, .g-store__head, .g-super-page-head) {
+    padding: 28px 28px 26px;
+  }
+}
+
+/* The Energy page's <main> also carries .g-energy, the class of a small
+   result card in gaia-system.css, and inherited its border and fill; with
+   the brighter border that showed as a frame around the whole screen. */
+body.gaia-v2 .g-page.g-energy {
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+}
+
+/* ---------- 6. Cards ----------------------------------------------------- */
+/* The generic containers: large rounded glass cards with a thin
+   green-tinted border and a very faint glow. */
+
+body.gaia-v2 .gaia-main :is(
+  .g-card, .g-super-list, .g-super-services, .g-super-auth, .g-super-empty-panel,
+  .g-booking-item, .g-mye, .g-pass, .g-energy-note, .g-member-access, .g-degraded
+) {
+  border: 1px solid var(--v3-border);
+  border-radius: var(--v3-radius);
+  background: var(--v3-card-bg);
+  box-shadow: var(--v3-card-shadow);
+}
+body.gaia-v2 .gaia-main .g-card--feature {
+  border-color: rgba(140, 255, 170, 0.24);
+  background:
+    radial-gradient(110% 90% at 100% 0%, rgba(117, 240, 90, 0.12), transparent 60%),
+    var(--v3-card);
+}
+/* The compact join card was bare text on wide screens and a card on
+   phones; with the frame now drawn at every width it needs the padding. */
+body.gaia-v2 .gaia-main .g-super-auth--compact { padding: 22px; }
+@media (min-width: 700px) {
+  body.gaia-v2 .gaia-main .g-super-auth--compact { padding: 28px; }
+}
+/* Cards nested inside a list card should not stack a second frame. */
+body.gaia-v2 .gaia-main :is(.g-super-list, .g-super-services) :is(.g-card, .g-super-empty-panel) {
+  box-shadow: none;
+  background: var(--v3-card-2);
+}
+/* Accordion bodies and drop-downs keep their frameless cards. */
+body.gaia-v2 .gaia-main :is(.g-tk__inner, .g-drop__body) .g-card {
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+}
+body.gaia-v2 .gaia-main a.g-card:active { transform: scale(0.985); }
+
+/* Media cards: today's hero, the featured event, event cards, store
+   tiles and directory cards share the radius and the border. */
+body.gaia-v2 .gaia-main :is(.g-super-hero, .g-feature-event, .g-de, .g-sky, .g-chakra-hero) {
+  border-color: var(--v3-border);
+  border-radius: var(--v3-radius-lg);
+  box-shadow: var(--v3-card-shadow);
+}
+body.gaia-v2 .gaia-main .g-event-card {
+  border: 1px solid var(--v3-border);
+  border-radius: var(--v3-radius);
+  background: var(--v3-card-2);
+}
+body.gaia-v2 .gaia-main .g-event-card__art,
+body.gaia-v2 .gaia-main .g-event-card__art img { border-radius: 16px; }
+
+/* Store tiles: photo on a soft rounded mat, text below. */
+body.gaia-v2 .gaia-main .g-tile__media {
+  border: 1px solid rgba(160, 255, 185, 0.1);
+  border-radius: 20px;
+}
+body.gaia-v2 .gaia-main .g-tile__title { color: var(--v3-text); font-weight: 600; }
+body.gaia-v2 .gaia-main .g-tile__price { color: var(--v3-text); font-weight: 700; }
+body.gaia-v2 .gaia-main .g-tile__was { color: var(--v3-muted); }
+
+/* "In 2 months" on the featured event: a soft green tag, not a solid
+   neon block competing with the Buy Ticket button beside it. */
+body.gaia-v2 .gaia-main .g-feature-event__badge {
+  border: 1px solid rgba(117, 240, 90, 0.34);
+  border-radius: 999px;
+  background: rgba(117, 240, 90, 0.12);
+  color: var(--v3-green-hi);
+}
+
+/* Free tools grid on Today. */
+body.gaia-v2 .gaia-main .g-free-tool {
+  border: 1px solid var(--v3-border);
+  border-radius: 22px;
+  background: var(--v3-card-2);
+  transition: transform 0.18s ease, border-color 0.18s ease, background 0.18s ease;
+}
+body.gaia-v2 .gaia-main .g-free-tool:active { transform: scale(0.97); }
+
+/* Directory cards: one glass card per practitioner. Paint only; the list
+   and its data are untouched. */
+body.gaia-v2 .gaia-main .g-dir-card {
+  border: 1px solid var(--v3-border);
+  border-radius: 22px;
+  background: var(--v3-card-2);
+  color: var(--v3-text);
+  transition: transform 0.18s ease, border-color 0.18s ease, background 0.18s ease;
+}
+body.gaia-v2 .gaia-main .g-dir-card:active { transform: scale(0.985); background: rgba(24, 46, 34, 0.85); }
+body.gaia-v2 .gaia-main .g-dir-card__photo,
+body.gaia-v2 .gaia-main .g-dir-card__img { border-radius: 16px; }
+body.gaia-v2 .gaia-main .g-dir-card__loc,
+body.gaia-v2 .gaia-main .g-dir-card__avail { color: var(--v3-text-2); }
+body.gaia-v2 .gaia-main .g-dir-card__loc .ph,
+body.gaia-v2 .gaia-main .g-dir-card__avail .ph { color: var(--v3-emerald); }
+/* Initials stand in when a practitioner has no photo: a tinted well,
+   not a solid neon square repeated down the list. */
+body.gaia-v2 .gaia-main .g-dir-avatar {
+  background: rgba(117, 240, 90, 0.12);
+  box-shadow: inset 0 0 0 1px rgba(117, 240, 90, 0.3);
+  color: var(--v3-green-hi);
+}
+body.gaia-v2 .gaia-main .g-dir__map {
+  border: 1px solid var(--v3-border);
+  border-radius: 22px;
+  overflow: hidden;
+}
+/* Keep the map credit clear of the rounded corner; it must stay legible. */
+body.gaia-v2 .gaia-main .g-dir__map .leaflet-control-attribution {
+  padding: 2px 16px 2px 8px;
+  border-top-left-radius: 10px;
+}
+
+/* Membership tiers: the price badge sits to the right of the tier name. */
+body.gaia-v2 .gaia-main .g-tier__list li { color: var(--v3-text-2); }
+body.gaia-v2 .gaia-main .g-tier__list li::marker,
+body.gaia-v2 .gaia-main .g-tier__list li::before { color: var(--v3-emerald); }
+
+/* ---------- 7. Buttons --------------------------------------------------- */
+/* Pills. Primary is the bright green with a soft glow and dark text;
+   secondary is translucent dark with a thin green border; ghost is a
+   quiet text link in green. Sizes stay where the older layers put them,
+   apart from a 44px floor. */
+
+body.gaia-v2 .g-btn:not(.gaia-assist *) {
+  min-height: 44px;
+  border-radius: 999px;
+  font-family: var(--g-font);
+  font-weight: 600;
+  letter-spacing: -0.005em;
+  transition: transform 0.18s var(--v3-ease), box-shadow 0.2s ease, background 0.2s ease,
+    border-color 0.18s ease, color 0.18s ease, filter 0.18s ease;
+  -webkit-tap-highlight-color: transparent;
+}
+body.gaia-v2 .g-btn--primary:not(.gaia-assist *) {
+  border: 0;
+  background: linear-gradient(180deg, var(--v3-green-hi), var(--v3-green) 60%, #62dd4b);
+  color: #06170d;
+  font-weight: 700;
+  box-shadow:
+    0 0 0 1px rgba(139, 255, 112, 0.45),
+    0 0 22px -4px rgba(117, 240, 90, 0.45),
+    inset 0 1px 0 rgba(255, 255, 255, 0.4);
+}
+body.gaia-v2 .g-btn--secondary:not(.gaia-assist *) {
+  border: 1px solid rgba(117, 240, 90, 0.3);
+  background: rgba(16, 31, 24, 0.6);
+  color: var(--v3-text);
+}
+body.gaia-v2 .g-btn--ghost:not(.gaia-assist *) {
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--v3-green);
+  padding-inline: 14px;
+}
+body.gaia-v2 .g-btn:not(.gaia-assist *):active { transform: scale(0.97); }
+body.gaia-v2 .g-btn--secondary:not(.gaia-assist *):active,
+body.gaia-v2 .g-btn--ghost:not(.gaia-assist *):active { background: rgba(24, 46, 34, 0.85); }
+body.gaia-v2 .g-btn:not(.gaia-assist *):focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--v3-page), 0 0 0 4px rgba(117, 240, 90, 0.75);
+}
+body.gaia-v2 .g-btn:not(.gaia-assist *):disabled,
+body.gaia-v2 .g-btn:not(.gaia-assist *)[aria-disabled="true"] { opacity: 0.5; box-shadow: none; }
+@media (hover: hover) {
+  body.gaia-v2 .g-btn--primary:not(.gaia-assist *):hover {
+    filter: brightness(1.04);
+    box-shadow:
+      0 0 0 1px rgba(139, 255, 112, 0.55),
+      0 0 30px -4px rgba(117, 240, 90, 0.6),
+      inset 0 1px 0 rgba(255, 255, 255, 0.45);
+  }
+  body.gaia-v2 .g-btn--secondary:not(.gaia-assist *):hover {
+    border-color: var(--v3-border-strong);
+    background: rgba(24, 46, 34, 0.75);
+  }
+  body.gaia-v2 .g-btn--ghost:not(.gaia-assist *):hover { color: var(--v3-green-hi); }
+}
+
+/* ---------- 8. Segmented tabs and switchers ------------------------------ */
+/* Shop / Membership and Energy check / Horoscope / Chakra match: a dark
+   glass track, the selected option lit in green (tint, thin rim, green
+   label) rather than a solid neon block. */
+
+body.gaia-v2 .gaia-main :is(.g-tabs, .g-energy-switcher) {
+  border: 1px solid var(--v3-border);
+  background: rgba(5, 16, 11, 0.86);
+  box-shadow: inset 0 1px 0 rgba(200, 255, 210, 0.04), 0 10px 30px -18px rgba(0, 0, 0, 0.9);
+  -webkit-backdrop-filter: blur(18px) saturate(140%);
+  backdrop-filter: blur(18px) saturate(140%);
+}
+body.gaia-v2 .gaia-main .g-tabs { border-radius: 999px; padding: 4px; }
+body.gaia-v2 .gaia-main .g-energy-switcher { border-radius: var(--v3-radius); }
+
+body.gaia-v2 .gaia-main .g-tab,
+body.gaia-v2 .gaia-main .g-energy-switcher button {
+  border: 1px solid transparent;
+  background: transparent !important;
+  color: var(--v3-text-2) !important;
+  font-family: var(--g-font);
+  font-weight: 600;
+  box-shadow: none;
+  transition: background 0.2s ease, border-color 0.2s ease, color 0.2s ease, transform 0.18s ease;
+  -webkit-tap-highlight-color: transparent;
+}
+body.gaia-v2 .gaia-main .g-tab { min-height: 44px; border-radius: 999px; }
+body.gaia-v2 .gaia-main .g-energy-switcher button { border-radius: 18px; }
+body.gaia-v2 .gaia-main .g-tab.is-active,
+body.gaia-v2 .gaia-main .g-tab[aria-selected="true"],
+body.gaia-v2 .gaia-main .g-energy-switcher button[aria-selected="true"] {
+  border-color: rgba(117, 240, 90, 0.4);
+  background: rgba(117, 240, 90, 0.12) !important;
+  color: var(--v3-green-hi) !important;
+  box-shadow: 0 0 20px -8px rgba(117, 240, 90, 0.5);
+}
+body.gaia-v2 .gaia-main .g-tab:active,
+body.gaia-v2 .gaia-main .g-energy-switcher button:active { transform: scale(0.97); }
+@media (hover: hover) {
+  body.gaia-v2 .gaia-main .g-tab:not(.is-active):hover,
+  body.gaia-v2 .gaia-main .g-energy-switcher button[aria-selected="false"]:hover {
+    color: var(--v3-text) !important;
+    background: rgba(16, 31, 24, 0.7) !important;
+  }
+}
+
+/* ---------- 9. Action rows ----------------------------------------------- */
+/* Rows that go somewhere, styled like the Assist quick-action cards: a
+   round tinted icon on the left, label and line of detail, chevron on
+   the right, on a translucent dark card with a thin border.
+   - g-energy-launch__card: Community "Find a Healer / Schedule with Dr.
+     Nima / Book a Session", Energy's scan launcher;
+   - g-super-row: Bookings, Inbox and the other super-app lists;
+   - g-tk__head: the Energy toolkit accordion (its colour comes from the
+     tool's own --tint, so each tool keeps its identity);
+   - g-access: Academy courses and Community circles;
+   - g-ritual-cta / g-guide-row: chakra guide actions. */
+
+body.gaia-v2 .gaia-main :is(.g-energy-launch__card, .g-super-row, .g-ritual-cta) {
+  min-height: 64px;
+  border: 1px solid var(--v3-border);
+  border-radius: 22px;
+  background: var(--v3-card-2);
+  color: var(--v3-text);
+  transition: transform 0.18s ease, border-color 0.18s ease, background 0.18s ease;
+  -webkit-tap-highlight-color: transparent;
+}
+body.gaia-v2 .gaia-main :is(.g-energy-launch__card, .g-super-row, .g-ritual-cta):active {
+  transform: scale(0.98);
+  background: rgba(24, 46, 34, 0.85);
+}
+@media (hover: hover) {
+  body.gaia-v2 .gaia-main :is(.g-energy-launch__card, .g-super-row:not(.g-super-row--static), .g-ritual-cta):hover {
+    border-color: var(--v3-border-strong);
+    background: rgba(22, 42, 32, 0.82);
+  }
+  body.gaia-v2 .gaia-main :is(.g-energy-launch__card, .g-super-row):hover > .ph:last-child,
+  body.gaia-v2 .gaia-main .g-energy-launch__card:hover .g-energy-launch__go {
+    transform: translateX(2px);
+    color: var(--v3-text);
+  }
+}
+
+/* g-super-row was a divider-separated list row; as a card it needs its
+   own padding and a gap between rows. */
+body.gaia-v2 .gaia-main .g-super-row {
+  margin-top: 10px;
+  padding: 12px 16px 12px 12px;
+  border-top: 1px solid var(--v3-border);
+}
+body.gaia-v2 .gaia-main .g-super-list > .g-super-row:first-of-type { border-top: 1px solid var(--v3-border); }
+body.gaia-v2 .gaia-main .g-super-row.is-active { border-color: var(--v3-border-strong); }
+body.gaia-v2 .gaia-main .g-super-row--static.is-unread { background: rgba(117, 240, 90, 0.07); }
+body.gaia-v2 .gaia-main .g-super-row strong { color: var(--v3-text); font-weight: 600; }
+body.gaia-v2 .gaia-main .g-super-row em { color: var(--v3-text-2); }
+body.gaia-v2 .gaia-main .g-super-row small { color: var(--v3-label); letter-spacing: 0.12em; }
+
+body.gaia-v2 .gaia-main .g-energy-launch__card { padding: 12px 16px 12px 12px; }
+body.gaia-v2 .gaia-main .g-energy-launch__body strong { font-weight: 600; color: var(--v3-text); }
+body.gaia-v2 .gaia-main .g-energy-launch__body small { color: var(--v3-text-2); }
+
+/* The round tinted icon. */
+body.gaia-v2 .gaia-main :is(.g-energy-launch__icon, .g-super-row__icon, .g-super-service__icon) {
+  display: grid;
+  place-items: center;
+  flex: 0 0 auto;
+  width: 44px;
+  height: 44px;
+  border: 0;
+  border-radius: 999px;
+  background: rgba(117, 240, 90, 0.14);
+  box-shadow: inset 0 0 0 1px rgba(117, 240, 90, 0.3);
+  color: var(--v3-green-hi);
+  font-size: 21px;
+}
+/* A little colour variety down a list, as on the Assist cards, so a run
+   of rows does not read as one green stripe. */
+body.gaia-v2 .gaia-main .g-energy-launch__card:nth-child(3n+2) .g-energy-launch__icon,
+body.gaia-v2 .gaia-main .g-super-row:nth-of-type(3n+2) .g-super-row__icon {
+  background: rgba(88, 199, 232, 0.14);
+  box-shadow: inset 0 0 0 1px rgba(88, 199, 232, 0.32);
+  color: #7fd8f2;
+}
+body.gaia-v2 .gaia-main .g-energy-launch__card:nth-child(3n+3) .g-energy-launch__icon,
+body.gaia-v2 .gaia-main .g-super-row:nth-of-type(3n+3) .g-super-row__icon {
+  background: rgba(66, 219, 134, 0.14);
+  box-shadow: inset 0 0 0 1px rgba(66, 219, 134, 0.32);
+  color: #6fe6a4;
+}
+
+/* The chevron. */
+body.gaia-v2 .gaia-main :is(.g-energy-launch__go, .g-super-row > .ph:last-child, .g-ritual-cta__go) {
+  color: var(--v3-muted);
+  font-size: 16px;
+  transition: transform 0.18s ease, color 0.18s ease;
+}
+
+/* Energy toolkit accordion. */
+body.gaia-v2 .gaia-main .g-tk {
+  border: 1px solid var(--v3-border);
+  border-radius: 22px;
+  background: var(--v3-card-2);
+  transition: border-color 0.2s ease, background 0.2s ease;
+}
+body.gaia-v2 .gaia-main .g-tk:has(> .g-tk__head[aria-expanded="true"]) {
+  border-color: rgba(140, 255, 170, 0.28);
+  background: var(--v3-card);
+}
+body.gaia-v2 .gaia-main .g-tk__head {
+  min-height: 64px;
+  padding: 12px 16px 12px 12px;
+  border-radius: 22px;
+  transition: background 0.18s ease;
+  -webkit-tap-highlight-color: transparent;
+}
+body.gaia-v2 .gaia-main .g-tk__head:active { background: rgba(24, 46, 34, 0.6); }
+body.gaia-v2 .gaia-main .g-tk__icon {
+  width: 44px;
+  height: 44px;
+  border-radius: 999px;
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--tint, var(--v3-green)) 34%, transparent);
+}
+body.gaia-v2 .gaia-main .g-tk__text strong { color: var(--v3-text); font-weight: 600; }
+body.gaia-v2 .gaia-main .g-tk__text small { color: var(--v3-text-2); }
+body.gaia-v2 .gaia-main .g-tk__chev { color: var(--v3-muted); }
+
+/* Access rows (courses, circles). */
+body.gaia-v2 .gaia-main .g-access {
+  border: 1px solid var(--v3-border);
+  border-radius: 22px;
+  background: var(--v3-card-2);
+}
+body.gaia-v2 .gaia-main .g-access::before { display: none; }
+body.gaia-v2 .gaia-main .g-access--unlocked { border-color: rgba(117, 240, 90, 0.3); }
+body.gaia-v2 .gaia-main .g-access__img { border-radius: 14px; }
+body.gaia-v2 .gaia-main .g-access__name { color: var(--v3-text); font-weight: 600; }
+body.gaia-v2 .gaia-main .g-access__meta { color: var(--v3-text-2); }
+
+body.gaia-v2 .gaia-main .g-guide-row {
+  border: 1px solid var(--v3-border);
+  border-radius: 18px;
+  background: var(--v3-card-2);
+}
+
+/* ---------- 10. Inputs --------------------------------------------------- */
+/* The Assist input: a dark translucent field with a thin green rim that
+   brightens on focus. Text fields are rounded rather than full pills so
+   two-line values and selects still look right. */
+
+body.gaia-v2 :is(.g-input, .g-textarea, .g-dir__search input):not(.gaia-assist *) {
+  min-height: 48px;
+  border: 1px solid rgba(117, 240, 90, 0.24);
+  border-radius: 18px;
+  background: rgba(8, 22, 15, 0.9);
+  color: var(--v3-text);
+  font-family: var(--g-font);
+  transition: border-color 0.18s ease, box-shadow 0.2s ease;
+}
+body.gaia-v2 .gaia-main .g-dir__search input { border-radius: 999px; padding-left: 44px; }
+body.gaia-v2 .gaia-main .g-dir__search .ph { color: var(--v3-green); }
+body.gaia-v2 :is(.g-input, .g-textarea, .g-dir__search input):not(.gaia-assist *)::placeholder {
+  color: var(--v3-muted);
+  opacity: 1;
+}
+body.gaia-v2 :is(.g-input, .g-textarea, .g-dir__search input):not(.gaia-assist *):focus {
+  outline: none;
+  border-color: rgba(117, 240, 90, 0.6);
+  box-shadow: 0 0 0 3px rgba(117, 240, 90, 0.14), 0 0 26px -10px rgba(117, 240, 90, 0.5);
+}
+body.gaia-v2 .g-label:not(.gaia-assist *) { color: var(--v3-text-2); font-weight: 600; }
+
+/* ---------- 11. Chips, badges, filter pills ------------------------------ */
+
+/* Status chips (MEMBERS, SIGN IN →, OPEN →, SILVER …): small calm pills,
+   sans now that --g-font-mono is the sans face. */
+body.gaia-v2 .gaia-main .g-chip {
+  min-height: 26px;
+  padding: 5px 10px;
+  border: 1px solid var(--v3-border);
+  border-radius: 999px;
+  background: rgba(16, 31, 24, 0.6);
+  color: var(--v3-text-2);
+  font-family: var(--g-font);
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+}
+body.gaia-v2 .gaia-main .g-chip--on {
+  border-color: rgba(117, 240, 90, 0.34);
+  background: rgba(117, 240, 90, 0.12);
+  color: var(--v3-green-hi);
+}
+body.gaia-v2 .gaia-main .g-chip--lock {
+  border-color: rgba(240, 200, 90, 0.3);
+  background: rgba(240, 200, 90, 0.1);
+  color: #f3d77a;
+}
+
+/* Prices and plan badges. */
+body.gaia-v2 .gaia-main .g-badge {
+  padding: 6px 11px;
+  border: 1px solid rgba(117, 240, 90, 0.28);
+  border-radius: 999px;
+  background: rgba(117, 240, 90, 0.08);
+  color: var(--v3-green-hi);
+  font-family: var(--g-font);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+}
+
+/* Directory filters: pills that light green when on. The specialty row
+   is quieter (outline only) so the two rows read as two levels. */
+body.gaia-v2 .gaia-main :is(.g-dir-fchip, .g-dir-schip) {
+  min-height: 40px;
+  border: 1px solid var(--v3-border);
+  border-radius: 999px;
+  background: rgba(16, 31, 24, 0.6);
+  color: var(--v3-text-2);
+  font-family: var(--g-font);
+  font-weight: 600;
+  transition: background 0.18s ease, border-color 0.18s ease, color 0.18s ease, transform 0.18s ease;
+  -webkit-tap-highlight-color: transparent;
+}
+body.gaia-v2 .gaia-main .g-dir-schip { background: transparent; }
+body.gaia-v2 .gaia-main :is(.g-dir-fchip, .g-dir-schip).is-on {
+  border-color: rgba(117, 240, 90, 0.45);
+  background: rgba(117, 240, 90, 0.14);
+  color: var(--v3-green-hi);
+}
+body.gaia-v2 .gaia-main :is(.g-dir-fchip, .g-dir-schip):active { transform: scale(0.96); }
+body.gaia-v2 .gaia-main .g-dir-chip {
+  border: 1px solid rgba(160, 255, 185, 0.12);
+  border-radius: 999px;
+  background: rgba(16, 31, 24, 0.6);
+  color: var(--v3-text-2);
+}
+
+/* ---------- 12. Sheets: menu, sign-in, product detail ------------------- */
+/* The shared bottom sheets are glass cards like the Assist panel. Their
+   titles were 34-36px serif display type, which in sans filled the sheet;
+   they drop to the screen-title size. */
+
+body.gaia-v2 :is(.gaia-menu-sheet__panel, .gaia-auth-modal__panel) {
+  border: 1px solid rgba(140, 255, 170, 0.2);
+  background:
+    radial-gradient(100% 50% at 50% 0%, rgba(117, 240, 90, 0.09), transparent 65%),
+    rgba(5, 16, 11, 0.97);
+  box-shadow:
+    inset 0 1px 0 rgba(200, 255, 210, 0.06),
+    0 0 48px -12px rgba(117, 240, 90, 0.18),
+    0 30px 80px -20px rgba(0, 0, 0, 0.8);
+}
+body.gaia-v2 :is(.gaia-menu-sheet__title, .gaia-auth-modal__title, .gaia-product-modal__title) {
+  font-family: var(--g-font);
+  font-size: clamp(1.5rem, 6.4vw, 1.9rem);
+  font-weight: 600;
+  line-height: 1.15;
+  letter-spacing: -0.022em;
+  color: var(--v3-text);
+}
+body.gaia-v2 .gaia-auth-modal__kicker { color: var(--v3-label); font: 600 11px/1.3 var(--g-font); letter-spacing: 0.12em; }
+body.gaia-v2 .gaia-auth-modal__input {
+  border: 1px solid rgba(117, 240, 90, 0.24);
+  border-radius: 18px;
+  background: rgba(8, 22, 15, 0.9);
+  transition: border-color 0.18s ease, box-shadow 0.2s ease;
+}
+body.gaia-v2 .gaia-auth-modal__input:focus {
+  border-color: rgba(117, 240, 90, 0.6);
+  box-shadow: 0 0 0 3px rgba(117, 240, 90, 0.14), 0 0 26px -10px rgba(117, 240, 90, 0.5);
+}
+body.gaia-v2 .gaia-auth-modal__submit { border-radius: 999px; }
+body.gaia-v2 .gaia-sheet-close:not(.gaia-assist *) {
+  border: 1px solid var(--v3-border);
+  border-radius: 999px;
+  background: rgba(16, 31, 24, 0.6);
+  color: var(--v3-text-2);
+  transition: background 0.18s ease, border-color 0.18s ease, color 0.18s ease;
+}
+body.gaia-v2 .gaia-sheet-close:not(.gaia-assist *):active { background: rgba(28, 52, 40, 0.8); color: var(--v3-text); }
+/* Menu links stay a divided list (a radius would curl the divider). */
+body.gaia-v2 .gaia-menu-sheet__link {
+  color: var(--v3-text);
+  transition: background 0.18s ease;
+}
+body.gaia-v2 .gaia-menu-sheet__link:active { background: rgba(24, 46, 34, 0.85); }
+
+/* ---------- 13. Reduced motion ------------------------------------------ */
+
+@media (prefers-reduced-motion: reduce) {
+  body.gaia-v2 :is(
+    .g-btn, .g-tab, .g-energy-switcher button, .g-energy-launch__card, .g-super-row,
+    .g-ritual-cta, .g-tk, .g-tk__head, .g-free-tool, .g-dir-card, .g-dir-fchip, .g-dir-schip,
+    .gaia-tabbar__link, .gaia-tabbar__icon, .g-topbar__nav, .gaia-header-signin
+  ):not(.gaia-assist *) {
+    transition: none !important;
+  }
+  body.gaia-v2 :is(.g-btn, .g-tab, .g-energy-launch__card, .g-super-row, .g-dir-card, .g-free-tool):not(.gaia-assist *):active {
+    transform: none;
+  }
+}

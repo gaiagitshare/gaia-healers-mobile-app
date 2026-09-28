@@ -982,6 +982,60 @@ body.gaia-v2 .gaia-assist--ready .gaia-assist__orb-ring {
   animation-duration: 1.6s;
 }
 
+/* Hold-to-talk. The orb looks different on purpose: the gesture has changed,
+   and a member who has been told to hold should be able to see that the thing
+   they are holding knows it. A dashed ring reads as "waiting on you" where the
+   solid one reads as "already listening". */
+body.gaia-v2 .gaia-assist--pipeline .gaia-assist__orb-ring {
+  border-style: dashed;
+  border-color: rgba(125, 217, 86, 0.55);
+  animation-duration: 3.2s;
+}
+
+body.gaia-v2 .gaia-assist--pipeline .gaia-assist__orb-visual {
+  box-shadow:
+    0 0 0 2px rgba(125, 217, 86, 0.22),
+    0 8px 24px rgba(92, 184, 46, 0.22),
+    inset 0 1px 2px rgba(255, 255, 255, 0.35);
+}
+
+/* Held right now: press it in, and light it the way live listening is lit, so
+   the two modes feel like the same assistant rather than two products. */
+body.gaia-v2 .gaia-assist--holding-orb .gaia-assist__orb-visual {
+  transform: scale(0.94);
+  box-shadow:
+    0 0 0 3px rgba(125, 217, 86, 0.5),
+    0 0 28px rgba(125, 217, 86, 0.55),
+    inset 0 1px 2px rgba(255, 255, 255, 0.4);
+}
+
+body.gaia-v2 .gaia-assist--holding-orb .gaia-assist__orb-ring {
+  border-style: solid;
+  border-color: var(--gh-accent-bright);
+  animation-duration: 1.2s;
+}
+
+body.gaia-v2 .gaia-assist--holding-orb .gaia-assist__wave span {
+  animation: gh-wave 0.75s ease-in-out infinite;
+  background: var(--gh-accent);
+}
+
+/* The orb is held down, so nothing underneath it should be selected or
+   long-press a context menu into the middle of a sentence. */
+body.gaia-v2 .gaia-assist--pipeline [data-gaia-tab-assist] {
+  -webkit-touch-callout: none;
+  -webkit-user-select: none;
+  user-select: none;
+  touch-action: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  body.gaia-v2 .gaia-assist--holding-orb .gaia-assist__orb-visual { transform: none; }
+  body.gaia-v2 .gaia-assist--pipeline .gaia-assist__orb-ring,
+  body.gaia-v2 .gaia-assist--holding-orb .gaia-assist__orb-ring { animation: none; }
+  body.gaia-v2 .gaia-assist--holding-orb .gaia-assist__wave span { animation: none; }
+}
+
 body.gaia-v2 .gaia-assist--thinking .gaia-assist__orb-visual {
   animation: gh-orb-think 1.5s ease-in-out infinite;
 }

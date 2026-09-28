@@ -183,6 +183,10 @@ class Attendee(AttendeeBase):
     door_payment_reference: Optional[str] = None
     door_payment_at: Optional[datetime] = None
     door_payment_note: Optional[str] = None
+    # The name on the payment, when it is not this person's. Couples buy one
+    # ticket each on one card, so the payer and the badge are routinely
+    # different people -- and at a door the payer is the name they say.
+    paid_by: Optional[str] = None
     is_checked_in: bool
     checked_in_at: Optional[datetime]
     registration_status: str

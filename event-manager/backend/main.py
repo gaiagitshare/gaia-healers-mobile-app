@@ -2130,6 +2130,63 @@ def _effective_access(db, attendee):
     }
 
 
+def _payer_names(db, attendee_ids):
+    """{attendee_id: [(name, email), ...]} from their own successful payments."""
+    out = {}
+    if not attendee_ids:
+        return out
+    for pay in db.query(models.PaymentEvent).filter(
+            models.PaymentEvent.attendee_id.in_(attendee_ids),
+            models.PaymentEvent.status == "paid").all():
+        who = (pay.buyer_name or "").strip().lower()
+        addr = (pay.buyer_email or "").strip().lower()
+        if not who and not addr:
+            continue
+        seen = out.setdefault(pay.attendee_id, [])
+        if (who, addr) not in seen:
+            seen.append((who, addr))
+    return out
+
+
+def _same_person(a: str, b: str) -> bool:
+    """Is this the same human, spelled differently?
+
+    "Caroline Hatch" and "Caroline Duncil-Hatch" are one person; so are
+    "Francis Meedernach" and "Francis Medernach". "Alicia Faulkner" and "Chris
+    Faulkner" are two, and that is the case the door needs to see -- so the
+    test is a shared FIRST name plus a last name that is only a spelling apart.
+    """
+    ta = [t for t in re.split(r"[^a-z]+", (a or "").lower()) if t]
+    tb = [t for t in re.split(r"[^a-z]+", (b or "").lower()) if t]
+    if not ta or not tb or ta[0] != tb[0]:
+        return False
+    la, lb = " ".join(ta[1:]), " ".join(tb[1:])
+    if not la or not lb or la == lb or la in lb or lb in la:
+        return True
+    if abs(len(la) - len(lb)) > 2:
+        return False
+    prev = list(range(len(lb) + 1))                      # Levenshtein, small strings
+    for i, ca in enumerate(la, 1):
+        cur = [i]
+        for j, cb in enumerate(lb, 1):
+            cur.append(min(prev[j] + 1, cur[j - 1] + 1, prev[j - 1] + (ca != cb)))
+        prev = cur
+    return prev[-1] <= 2
+
+
+def _payer_label(entries, attendee) -> str:
+    """The payer's name, but only when it is somebody ELSE.
+
+    A misspelling of the attendee's own name is not news at a door; a partner's
+    name is the whole point.
+    """
+    mine = ("%s %s" % (attendee.first_name or "", attendee.last_name or "")).strip()
+    for who, _addr in entries or ():
+        if who and not _same_person(who, mine):
+            return who.title()
+    return None
+
+
 def _pass_display(db, attendee) -> str:
     """One line that tells somebody exactly what they hold.
 
@@ -4139,6 +4196,12 @@ def search_attendees(
     digits = re.sub(r"\D", "", term)
     words = [w for w in re.split(r"\s+", term) if w]
     rows = db.query(models.Attendee).filter(models.Attendee.event_id == event_id).all()
+    # Who paid, where that is not the person on the badge. Couples buy two
+    # tickets on one card and only one name reaches the roll: "I'm Alicia
+    # Faulkner" against a badge reading Chris Faulkner looks like an error to
+    # somebody with a queue behind them. The payer is a name they will say, so
+    # it has to be findable.
+    payers = _payer_names(db, [a.id for a in rows])
     scored = []
     for a in rows:
         first = (a.first_name or "").strip().lower()
@@ -4169,6 +4232,16 @@ def search_attendees(
             score = 30
         if not score and len(digits) >= 4 and phone_d and digits in phone_d:
             score = 70 if phone_d.endswith(digits) else 50
+        if not score:
+            # Ranked below every match on the attendee's own details, so their
+            # own name always wins when both could match.
+            for who, addr in payers.get(a.id, ()):
+                if who == term or term in who or (words and all(w in who for w in words)):
+                    score = 45
+                    break
+                if addr and (addr == term or term in addr):
+                    score = 42
+                    break
         if score:
             scored.append((score, last, first, a))
     scored.sort(key=lambda t: (-t[0], t[1], t[2]))
@@ -4178,6 +4251,7 @@ def search_attendees(
         response.headers["X-Search-Truncated"] = "1" if len(scored) > 50 else "0"
     for _a in out:
         _a.effective_access = _effective_access(db, _a)
+        _a.paid_by = _payer_label(payers.get(_a.id, ()), _a)
     _stamp_card_state(db, out)
     return out
 

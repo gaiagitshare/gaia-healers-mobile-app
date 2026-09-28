@@ -406,7 +406,12 @@
     }
 
     function buildSetupMessage(meta) {
-      const model = String(meta.model || 'gemini-3.1-flash-live-preview').replace(/^models\//, '');
+      // The server checks its configured live model against the account's own
+      // catalogue before handing it over, so meta.model is one that exists.
+      // fallbackModel is the pinned stable spare for the day the preview
+      // model is withdrawn; the hard-coded name is the last resort only.
+      const model = String(meta.model || meta.fallbackModel || 'gemini-3.8-live')
+        .replace(/^models\//, '');
       return {
         setup: {
           model: `models/${model}`,

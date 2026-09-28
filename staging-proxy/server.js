@@ -2471,6 +2471,12 @@ function clampNumber(value, min, max, fallback) {
 
 const GEMINI_LIVE_MODEL = process.env.GEMINI_LIVE_MODEL || 'gemini-3.1-flash-live-preview';
 const GEMINI_LIVE_VOICE = process.env.GEMINI_LIVE_VOICE || 'Puck';
+// The live model is a PREVIEW model, and preview models are withdrawn with
+// little notice. The token mint does not name a model, so a withdrawal would
+// not fail here -- it would fail later, inside the member's browser, on the
+// WebSocket setup. So the primary is checked against the account's own model
+// list before it is handed out, and a stable model is named as the fallback.
+const GEMINI_LIVE_FALLBACK_MODEL = process.env.GEMINI_LIVE_FALLBACK_MODEL || 'gemini-3.8-live';
 const GEMINI_LIVE_MAX_SECONDS = clampNumber(
   Number(process.env.GEMINI_LIVE_MAX_SECONDS || 900),
   30,
@@ -4322,6 +4328,28 @@ async function getGeminiClient() {
   }
 }
 
+let liveModelCache = { at: 0, model: '', ok: null };
+async function liveModelAvailable(model) {
+  // An hour: a model does not appear or vanish inside one, and a member
+  // waiting on the voice orb should not wait on a catalogue lookup.
+  if (liveModelCache.model === model && Date.now() - liveModelCache.at < 60 * 60 * 1000) {
+    return liveModelCache.ok;
+  }
+  const key = geminiApiKey();
+  if (!key) return false;
+  try {
+    const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${encodeURIComponent(key)}&pageSize=200`);
+    if (!r.ok) return true;          // cannot tell — do not break a working orb
+    const body = await r.json();
+    const names = new Set((body.models || []).map((m) => String(m.name || '').replace(/^models\//, '')));
+    const ok = names.has(model);
+    liveModelCache = { at: Date.now(), model, ok };
+    return ok;
+  } catch {
+    return true;                     // same: a lookup failure is not a model failure
+  }
+}
+
 function gaiaLiveVoiceConfig() {
   const geminiReady = Boolean(geminiApiKey());
   const explicit = process.env.GAIA_LIVE_VOICE_ENABLED ?? process.env.GAIA_REALTIME_VOICE_ENABLED;
@@ -4332,6 +4360,7 @@ function gaiaLiveVoiceConfig() {
     enabled: enabled && geminiReady,
     provider: 'gemini',
     model: GEMINI_LIVE_MODEL,
+    fallbackModel: GEMINI_LIVE_FALLBACK_MODEL,
     voice: GEMINI_LIVE_VOICE,
     maxSessionSeconds: GEMINI_LIVE_MAX_SECONDS,
   };
@@ -4560,8 +4589,19 @@ async function assistLiveToken(req, res, origin, url) {
       throw new Error('Gemini auth token missing name');
     }
 
+    // If the preview model has been withdrawn, say so HERE rather than letting
+    // the browser find out when the socket refuses its setup message.
+    const primaryLives = await liveModelAvailable(cfg.model);
+    const model = primaryLives ? cfg.model : cfg.fallbackModel;
+    if (!primaryLives) {
+      console.warn('[Gaia Assist] live model unavailable, using the pinned fallback', {
+        configured: cfg.model, using: model,
+      });
+    }
+
     console.log('[Gaia Assist] gemini live token ready', {
-      model: cfg.model,
+      model,
+      fallbackModel: cfg.fallbackModel,
       voice: cfg.voice,
       view,
       latencyMs: Date.now() - startedAt,
@@ -4571,7 +4611,8 @@ async function assistLiveToken(req, res, origin, url) {
       ok: true,
       token,
       provider: cfg.provider,
-      model: cfg.model,
+      model,
+      fallbackModel: model === cfg.fallbackModel ? '' : cfg.fallbackModel,
       voice: cfg.voice,
       instructions: buildGaiaLiveInstructions({ view, memberContext }),
       personalized: Boolean(memberContext),

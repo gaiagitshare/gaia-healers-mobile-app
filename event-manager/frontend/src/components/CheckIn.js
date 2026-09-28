@@ -736,6 +736,39 @@ function CheckIn({ timezone: timezoneProp }) {
                         )}
                     </Paper>
 
+                    {/* ── Which event this door belongs to ──────────────────────
+                        A door scanning last year's event refuses every badge in
+                        the queue and gives the same answer each time, so the
+                        person holding the scanner has no way to tell a wrong
+                        event from a broken one. It says so here, permanently,
+                        and loudly when the event is not the live one. */}
+                    {doorEvent && (
+                        <Paper variant="outlined"
+                               sx={{ mb: 2, p: 1.25,
+                                     borderColor: doorEvent.is_active ? 'divider' : 'error.main',
+                                     ...(doorEvent.is_active ? {} : { bgcolor: 'error.dark',
+                                         backgroundImage: 'linear-gradient(rgba(0,0,0,.7),rgba(0,0,0,.7))' }) }}>
+                            <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap">
+                                <Typography variant="caption" sx={{ color: 'text.secondary',
+                                            textTransform: 'uppercase', letterSpacing: '.08em' }}>
+                                    Door for
+                                </Typography>
+                                <Typography variant="subtitle2" sx={{ fontWeight: 700,
+                                            color: doorEvent.is_active ? 'text.primary' : 'error.main' }}>
+                                    {doorEvent.name}
+                                </Typography>
+                                {!doorEvent.is_active && (
+                                    <Chip size="small" color="error" label="Archived — badges will not admit" />
+                                )}
+                            </Stack>
+                            {!doorEvent.is_active && (
+                                <Typography variant="caption" sx={{ display: 'block', mt: 0.5, color: 'error.light' }}>
+                                    Every scan here will be refused. Switch to the live event before the queue starts.
+                                </Typography>
+                            )}
+                        </Paper>
+                    )}
+
                     {/* ── Door status ───────────────────────────────────────────
                         The calendar window is what stops last year's badge opening
                         this year's door, so it is never removed — it is waived,

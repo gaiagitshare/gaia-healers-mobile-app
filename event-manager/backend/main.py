@@ -102,6 +102,12 @@ def _ensure_event_columns():
             stmts.append("ALTER TABLE exhibitors ADD COLUMN %s %s" % (_col, _ddl))
     if "door_test_mode" not in cols:
         stmts.append("ALTER TABLE events ADD COLUMN door_test_mode BOOLEAN DEFAULT 0")
+    if "allow_reentry" not in cols:
+        # Off, exactly as it has always been. A conference where people go out
+        # for lunch needs this ON; a single-admission gate needs it OFF. Which
+        # one an event is, is the organiser's call, and shipping this must not
+        # make it for them.
+        stmts.append("ALTER TABLE events ADD COLUMN allow_reentry BOOLEAN DEFAULT 0")
     if "source_url" not in cols:
         stmts.append("ALTER TABLE events ADD COLUMN source_url VARCHAR")
     if "locked_fields" not in cols:
@@ -1707,6 +1713,29 @@ def set_door_test_mode(event_id: int, payload: schemas.DoorTestMode,
     return {"ok": True, "event_id": event_id, "door_test_mode": bool(event.door_test_mode)}
 
 
+@app.post("/events/{event_id}/re-entry")
+def set_reentry(event_id: int, payload: schemas.DoorTestMode,
+                db: Session = Depends(get_db),
+                current_user: models.User = Depends(get_current_user)):
+    """May one badge open the door more than once?
+
+    Off, a badge admits one body and no more -- which is what a single-session
+    gate wants, and what stops one ticket walking two people in. On, the same
+    badge readmits all weekend, which is what a three-day conference wants the
+    moment anybody steps out for lunch or comes back on the second morning.
+
+    It is a switch rather than a setting buried in the registration form,
+    because the day somebody discovers they need it is the day there is a queue
+    in front of them.
+    """
+    event = _get_event_or_404(event_id, db)
+    authz.require_cap(db, current_user, event_id, "event.write")
+    _assert_event_writable(db, event, "change its door settings")
+    event.allow_reentry = bool(payload.enabled)
+    db.commit()
+    return {"ok": True, "event_id": event_id, "allow_reentry": bool(event.allow_reentry)}
+
+
 @app.delete("/events/{event_id}/scan-logs")
 def clear_scan_logs(event_id: int, db: Session = Depends(get_db),
                     current_user: models.User = Depends(get_current_user)):
@@ -2686,8 +2715,12 @@ def _authorize_decision(db, attendee, event, access_type, at=None):
     # gate above returns first on every day that is not an event day, so the
     # first scan to get this far would have been the first scan of the event
     # itself. Read the setting from whichever shape the column holds.
+    # The column is the setting. custom_fields is still read after it, because
+    # that is where this lived before there was a switch for it.
     _cf = event.custom_fields
-    if isinstance(_cf, dict):
+    if getattr(event, "allow_reentry", False):
+        allow_reentry_raw = True
+    elif isinstance(_cf, dict):
         allow_reentry_raw = _cf.get("allow_reentry")
     elif isinstance(_cf, list):
         allow_reentry_raw = next(

@@ -22,7 +22,7 @@ import GroupsIcon from '@mui/icons-material/Groups';
 import TuneIcon from '@mui/icons-material/Tune';
 import { Html5QrcodeScanner } from 'html5-qrcode';
 import { authorizeScan, getScanLogs, searchAttendees, getEvents, walkInCreate, getTicketTypes, undoCheckIn, clearScanLogs, setDoorTestMode, getEvent, badgeLabelBlob, recordBadgePrint,
-    overrideAdmit, doorIdentity, addPartySeat, changePass, revokeAttendee, reinstateAttendee } from '../utils/api';
+    overrideAdmit, doorIdentity, addPartySeat, setReEntry as setDoorReEntry, changePass, revokeAttendee, reinstateAttendee } from '../utils/api';
 import { formatVenueTime, statusLabel, isFlaggedStatus } from '../utils/datetime';
 import BadgeLabelDialog, { STATION_KEY, LABEL_SIZE_KEY, LABEL_ROLLS, savedLabelSize, rollShort, fullName, physicalCard,
     canPrintBluetooth, useB1, b1Connect, b1IsConnected, b1Enqueue, b1PrintBlob, b1Dpi, rollFitsB1, PRINTER_KEY, PRINTER_CHOICES, savedPrinter } from './BadgeLabelDialog';
@@ -115,6 +115,11 @@ function CheckIn({ timezone: timezoneProp }) {
     const [clearing, setClearing] = useState(false);
     const [rehearsal, setRehearsal] = useState(false);
     const [rehearsalBusy, setRehearsalBusy] = useState(false);
+    // One badge, more than one entry. Off, the second scan of the same badge is
+    // refused — which is right for a one-session gate and wrong for a three-day
+    // conference the moment anybody steps out for lunch.
+    const [reEntry, setReEntry] = useState(false);
+    const [reEntryBusy, setReEntryBusy] = useState(false);
     const [truncated, setTruncated] = useState(false);
     const [revealId, setRevealId] = useState(null);
     const [station, setStation] = useState(() => { try { return localStorage.getItem(STATION_KEY) || ''; } catch (e) { return ''; } });
@@ -170,7 +175,7 @@ function CheckIn({ timezone: timezoneProp }) {
     useEffect(() => {
         if (!eventId) { setDoorEvent(null); return; }
         getEvent(eventId)
-            .then((r) => { setDoorEvent(r.data); setRehearsal(Boolean(r.data?.door_test_mode)); })
+            .then((r) => { setDoorEvent(r.data); setRehearsal(Boolean(r.data?.door_test_mode)); setReEntry(Boolean(r.data?.allow_reentry)); })
             .catch(() => setDoorEvent(null));
     }, [eventId]);
     const doorNotOpenYet = (() => {
@@ -1079,6 +1084,48 @@ function CheckIn({ timezone: timezoneProp }) {
                                         } finally { setRehearsalBusy(false); }
                                     }}>
                                     {rehearsalBusy ? 'Working…' : (rehearsal ? 'End rehearsal' : 'Start rehearsal')}
+                                </Button>
+                            </Stack>
+                        </Paper>
+                    )}
+
+                    {/* ── Re-entry ──────────────────────────────────────────────
+                        The one door setting whose cost arrives all at once. With it
+                        off, everybody who checked in yesterday is refused this
+                        morning — three hundred people, at the same time, at eight
+                        o'clock. It lives here, next to the scanner, because the
+                        moment anybody discovers they need it there is a queue. */}
+                    {doorEvent && (
+                        <Paper variant="outlined" sx={{ p: 1.5, mb: 2,
+                                                        borderColor: reEntry ? 'divider' : 'warning.main' }}>
+                            <Stack direction="row" spacing={1.5} alignItems="center" justifyContent="space-between" flexWrap="wrap" useFlexGap>
+                                <Box sx={{ minWidth: 0 }}>
+                                    <Typography variant="body2" sx={{ fontWeight: 700 }}>
+                                        {reEntry ? 'Re-entry is on — a badge readmits all weekend'
+                                                 : 'Re-entry is off — one badge, one entry, for the whole event'}
+                                    </Typography>
+                                    <Typography variant="caption" color={reEntry ? 'text.secondary' : 'warning.main'}>
+                                        {reEntry
+                                            ? 'Somebody who steps out for lunch, or comes back tomorrow morning, scans straight back in.'
+                                            : 'Everybody who checked in on a previous day will be refused when they scan again. For a three-day conference, turn this on.'}
+                                    </Typography>
+                                </Box>
+                                <Button size="small" variant={reEntry ? 'outlined' : 'contained'}
+                                    color={reEntry ? 'inherit' : 'warning'} disabled={reEntryBusy}
+                                    onClick={async () => {
+                                        setReEntryBusy(true);
+                                        try {
+                                            const r = await setDoorReEntry(eventId, !reEntry);
+                                            setReEntry(Boolean(r.data?.allow_reentry));
+                                            setFeedback({ severity: 'success',
+                                                message: r.data?.allow_reentry
+                                                    ? 'Re-entry on — badges readmit for the rest of the event.'
+                                                    : 'Re-entry off — each badge admits once.' });
+                                        } catch (err) {
+                                            setFeedback({ severity: 'error', message: err.response?.data?.detail || 'Could not change that.' });
+                                        } finally { setReEntryBusy(false); }
+                                    }}>
+                                    {reEntryBusy ? 'Working…' : (reEntry ? 'Turn off' : 'Turn on re-entry')}
                                 </Button>
                             </Stack>
                         </Paper>

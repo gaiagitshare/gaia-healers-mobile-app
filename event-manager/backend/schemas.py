@@ -96,6 +96,7 @@ class Event(EventBase):
     # rehearsal was already running — every scan practice, the screen implying
     # real admission.
     door_test_mode: bool = False
+    allow_reentry: bool = False
     map_image_url: Optional[str] = None
     # Unambiguous instants: the same moment however the reader's device is set.
     # start_date/end_date above stay venue-local for display.

@@ -189,6 +189,7 @@ export const doorIdentity = (eventId, attendeeId, data) =>
     api.post(`/events/${eventId}/attendees/${attendeeId}/door-identity`, data);
 export const addPartySeat = (eventId, attendeeId, data) =>
     api.post(`/events/${eventId}/attendees/${attendeeId}/add-seat`, data);
+export const setReEntry = (eventId, enabled) => api.post(`/events/${eventId}/re-entry`, { enabled });
 export const undoCheckIn = (eventId, attendeeId, reason) =>
     api.post(`/events/${eventId}/attendees/${attendeeId}/undo-checkin`, { reason });
 

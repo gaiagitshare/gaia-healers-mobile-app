@@ -268,6 +268,32 @@ if solo_party is None:
                    {"first_name": "Nobody"}, STAFF)
     check(st == 409, "a single ticket cannot sprout a second seat", (st, out))
 
+print("\nCOMING BACK TOMORROW MORNING")
+# The most expensive refusal available: with re-entry off, everybody who checked
+# in yesterday is refused today, all at once, at eight o'clock. Off is right for
+# a one-session gate and wrong for a three-day conference, so it is a switch --
+# and this pins both sides of it.
+back = db.query(models.Attendee).filter(
+    models.Attendee.event_id == EVENT, models.Attendee.is_checked_in == False,
+    models.Attendee.registration_status.in_(("active", "registered"))).order_by(models.Attendee.id).first()
+BACK_QR = back.qr_code
+st, out = call("POST", "/events/%d/re-entry" % EVENT, {"enabled": False}, ADMIN)
+check(st == 200 and out.get("allow_reentry") is False, "re-entry starts off, as it always has", (st, out))
+d = scan(BACK_QR)
+check(d.get("result") == "GRANTED", "first entry of the weekend is admitted", d.get("reason"))
+d = scan(BACK_QR)
+check(d.get("granted") is False, "and the second is refused while re-entry is off", d.get("reason"))
+print("     with it off: %r" % d.get("reason"))
+
+st, out = call("POST", "/events/%d/re-entry" % EVENT, {"enabled": True}, ADMIN)
+check(st == 200 and out.get("allow_reentry") is True, "an organiser can turn it on from the door screen", (st, out))
+d = scan(BACK_QR)
+check(d.get("granted") is True, "the same badge now readmits", d.get("reason"))
+check(d.get("checked_in") is True, "without checking anybody in twice")
+
+st, _ = call("POST", "/events/%d/re-entry" % EVENT, {"enabled": True}, STAFF)
+check(st == 403, "but door staff cannot change the rule itself", st)
+
 print("\nNOBODY ELSE'S DOOR")
 st, _ = override({"reason": "wrong event on purpose"}, STAFF, event_id=2)
 check(st in (403, 404), "a badge cannot be overridden at an event it does not belong to", st)

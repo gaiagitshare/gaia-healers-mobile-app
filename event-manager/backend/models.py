@@ -105,6 +105,9 @@ class Event(Base):
     # taken this way is recorded as a rehearsal so it can never be mistaken for
     # real attendance.
     door_test_mode = Column(Boolean, default=False)
+    # One badge, more than one entry. Off is the secure default; a multi-day
+    # conference turns it on.
+    allow_reentry = Column(Boolean, default=False)
     created_at = Column(DateTime, default=datetime.utcnow)
 
     attendees = relationship("Attendee", back_populates="event")

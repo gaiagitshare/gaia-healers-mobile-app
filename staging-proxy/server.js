@@ -498,6 +498,23 @@ function corsHeaders(origin) {
   };
 }
 
+/** Where a request says it came from: Origin, else the Referer's origin. */
+function requestSourceOrigin(req) {
+  const o = String(req.headers.origin || '').trim();
+  if (o) return o;
+  try { return req.headers.referer ? new URL(req.headers.referer).origin : ''; } catch { return 'null'; }
+}
+
+export function isCrossSiteMemberWrite(req) {
+  if (!['POST', 'PUT', 'PATCH', 'DELETE'].includes(req.method)) return false;
+  const cookie = String(req.headers.cookie || '');
+  if (!cookie.split(/;\s*/).some((c) => c.startsWith(`${AUTH_SESSION_COOKIE}=`))) return false; // no member, nothing to forge
+  const from = requestSourceOrigin(req);
+  if (!from) return false; // not a browser: browsers name the origin on every cross-site write
+  const own = [`https://${String(req.headers.host || '').split(',')[0].trim()}`, ...ALLOWED_ORIGINS];
+  return !own.includes(from);
+}
+
 function sendJson(res, status, data, origin, extraHeaders = {}) {
   res.writeHead(status, {
     'Content-Type': 'application/json; charset=utf-8',
@@ -3497,12 +3514,19 @@ async function getMemberFromGhl({ email = '', memberId = '', contactId = '' } = 
 const ACCESS_CATALOG = {
   communities: [
     { id: 'all-gaia',  name: 'All Gaia Healers',            matchTags: ['gaia-community-all-gaia', 'community-active', 'community-starthere-access'] },
-    { id: 'biowell',   name: 'Bio-Well Practitioners',      matchTags: ['community-biowell-member', 'community_biowell', 'product_biowell_interest'] },
-    { id: 'biopulsar', name: 'BioPulsar Practitioners',     matchTags: ['community-biopulsar-member', 'product_biopulsar_interest'] },
+    // interestTags never unlock: a member can add them to themselves by telling
+    // Gaia Assist they are interested (/api/assist/interest, the onboarding
+    // survey). They show the community as "interested" instead. On 2026-09-28,
+    // 45 Bio-Well and 27 BioPulsar contacts were "members" only this way.
+    { id: 'biowell',   name: 'Bio-Well Practitioners',      matchTags: ['community-biowell-member', 'community_biowell'], interestTags: ['product_biowell_interest'] },
+    { id: 'biopulsar', name: 'BioPulsar Practitioners',     matchTags: ['community-biopulsar-member'], interestTags: ['product_biopulsar_interest'] },
     { id: 'biotekna',  name: 'Biotekna Practitioners',      matchTags: ['community-biotekna-member'] },
-    { id: 'asea',      name: 'ASEA Community',               matchTags: ['community-asea-member', 'product_asea_interest'] },
+    // No contact in GHL carries community-asea-member or community-lifewave-member
+    // yet (2026-09-28), so until Gaia Healers adds those tags nobody shows as a
+    // member of these two — interested contacts see "interested".
+    { id: 'asea',      name: 'ASEA Community',               matchTags: ['community-asea-member'], interestTags: ['product_asea_interest'] },
     { id: 'braintap',  name: 'BrainTap Community',           matchTags: ['community-braintap-member'] },
-    { id: 'lifewave',  name: 'LifeWave Community',           matchTags: ['community-lifewave-member', 'product_lifewave_interest'] },
+    { id: 'lifewave',  name: 'LifeWave Community',           matchTags: ['community-lifewave-member'], interestTags: ['product_lifewave_interest'] },
     { id: 'golden-practitioner', name: 'Golden Practitioner Circle', matchTags: ['goldenpractitioner-community-member'] },
   ],
   productOwnerPattern: /^product_(.+)_owner$/i,
@@ -3630,7 +3654,7 @@ function resolveSubscriptionTier(subscriptions = []) {
   };
 }
 
-function buildMemberAccess(rawTags = [], customFields = [], member = {}, entitlements = null, subscriptions = []) {
+export function buildMemberAccess(rawTags = [], customFields = [], member = {}, entitlements = null, subscriptions = []) {
   // Prefer live GHL subscription data. A GHL-exported backfill snapshot is only
   // used when the live payments lookup is unavailable or returns no records.
   const effectiveSubscriptions = Array.isArray(subscriptions) && subscriptions.length
@@ -3653,8 +3677,12 @@ function buildMemberAccess(rawTags = [], customFields = [], member = {}, entitle
     // secondary signal like community-starthere-access isn't mislabeled unknown.
     c.matchTags.forEach((t) => { if (has(t)) matched.add(t.toLowerCase()); });
     const hit = c.matchTags.find((t) => has(t));
+    const interest = (c.interestTags || []).find((t) => has(t));
     if (hit) {
       unlocked.push({ id: c.id, name: c.name, state: 'unlocked', matchedBy: lower.get(hit.toLowerCase()) || hit, ...link });
+    } else if (interest) {
+      matched.add(interest.toLowerCase());
+      locked.push({ id: c.id, name: c.name, state: 'interested', reason: 'You asked about this community — Gaia Healers will confirm your access.', matchedBy: lower.get(interest.toLowerCase()) || interest, ...link });
     } else {
       locked.push({ id: c.id, name: c.name, state: 'locked', reason: 'Not included in your membership', matchedBy: null, ...link });
     }
@@ -6862,6 +6890,17 @@ const server = http.createServer(async (req, res) => {
   if (req.method === 'OPTIONS') {
     res.writeHead(204, corsHeaders(origin));
     res.end();
+    return;
+  }
+
+  // The member cookie is SameSite=None (the app runs inside GHL's iframe), so
+  // a browser attaches it to requests from ANY site. CORS only stops that site
+  // reading the answer — the write itself still happened: another page could
+  // add "memories" to a member's Gaia, tag their contact, or file CRM notes.
+  // A write that carries the cookie must come from one of our own pages.
+  if (isCrossSiteMemberWrite(req)) {
+    console.warn('[Gaia] cross-site member write refused', { path: String(req.url || '').split('?')[0], from: requestSourceOrigin(req) });
+    sendJson(res, 403, { ok: false, error: 'This request did not come from a Gaia Healers page.' }, origin);
     return;
   }
 

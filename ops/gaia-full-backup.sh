@@ -104,7 +104,7 @@ now = __import__('datetime').datetime.now(__import__('datetime').timezone.utc) \
         .strftime('%Y-%m-%dT%H:%M:%SZ')
 
 local_dir = g('S_LOCAL_DIR')
-archives = sorted(glob.glob(os.path.join(local_dir, 'gaia-production-*.tar.gz')))
+archives = sorted(glob.glob(os.path.join(local_dir, 'gaia-production-*.tar.gz.gpg')))
 local_bytes = sum(os.path.getsize(p) for p in archives if os.path.exists(p))
 
 state = {
@@ -393,10 +393,15 @@ print(c.execute("pragma integrity_check").fetchone()[0] + ":" + str(c.execute("s
 CHECK_DB_IN_ARCHIVE="ok"
 rm -rf "$STAGING/verify"
 
-# ── keep the verified local copy before anything else can go wrong ───────────
+# ── keep the checksum and the manifest before anything else can go wrong ─────
+# The ARCHIVE itself is deliberately not kept here in plain text. It holds every
+# attendee's e-mail and phone number and both .env files, and a local copy that
+# needs no key is a copy an attacker needs no key for either. Only the encrypted
+# archive is stored, a few steps below. The one exception is a run that cannot
+# encrypt at all -- see the no-recipient branch, where plain text is better than
+# nothing because nothing is the alternative.
 STAGE="store_local"
 install -d -m 0700 "$LOCAL_DIR"
-install -m 0600 "$ARCHIVE" "$LOCAL_DIR/${NAME}.tar.gz"
 install -m 0600 "$STAGING/${NAME}.tar.gz.sha256" "$LOCAL_DIR/${NAME}.tar.gz.sha256"
 tar -xzOf "$ARCHIVE" gaia-backup/manifest.txt > "$LOCAL_DIR/${NAME}.manifest.txt"
 chmod 0600 "$LOCAL_DIR/${NAME}.manifest.txt"
@@ -409,6 +414,9 @@ if [ -z "$RECIPIENT" ]; then
   OUTCOME="local_only"
   REASON="no GPG recipient configured — archive built and verified locally, not encrypted, not uploaded"
   CHECK_ENCRYPT="not_configured"
+  # Nothing can be encrypted, so an unencrypted archive is the only backup this
+  # run can leave. It is kept, and the Critical alert for no-offsite stands.
+  install -m 0600 "$ARCHIVE" "$LOCAL_DIR/${NAME}.tar.gz"
   write_state
   echo "gaia-full-backup: local archive verified; encryption not configured, so nothing was uploaded." >&2
   exit 0

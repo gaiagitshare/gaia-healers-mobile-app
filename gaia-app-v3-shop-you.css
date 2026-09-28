@@ -1,0 +1,939 @@
+/* ============================================================
+   Gaia app v3 — phase 2: Shop, Membership, You, and the app-wide sheets.
+
+   Built on gaia-app-v3.css (tokens --v3-*, shared cards, buttons, tabs,
+   chips) and loaded straight after it. Paint and light layout only; no
+   markup or JS was changed, so every link, button and data hook is the
+   one gaia-store.js, gaia-member.js, gaia-membership-ui.js and
+   gaia-ui.js already render.
+
+   Scope:
+   - Shop / Membership: [data-screen="store"] (#store-products,
+     #store-memberships)
+   - You: [data-screen="profile"] (#member-me)
+   - Sheets (appended to <body>, so body-scoped by their own classes):
+     .gaia-menu-sheet, .gaia-auth-modal, .gaia-product-modal,
+     .gaia-share-modal, .gaia-onboard-modal. The iframe booking sheet
+     (.gaia-booking-modal without .gaia-product-modal) is not touched.
+   ============================================================ */
+
+/* ---------- 1. Shop: category heads -------------------------------------- */
+
+body.gaia-v2 [data-screen="store"] #store-products { gap: 30px; }
+
+body.gaia-v2 [data-screen="store"] .g-store-cat .g-section { align-items: flex-end; }
+body.gaia-v2 [data-screen="store"] .g-store-cat .g-section__lead {
+  display: flex;
+  flex-direction: row;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  width: 100%;
+}
+body.gaia-v2 [data-screen="store"] .g-store-cat .g-section__title {
+  font-family: var(--g-font);
+  font-size: clamp(1.15rem, 4.6vw, 1.35rem);
+  font-weight: 600;
+  line-height: 1.2;
+  letter-spacing: -0.02em;
+  color: var(--v3-text);
+}
+/* "16 items": a quiet count on the right of the heading. */
+body.gaia-v2 [data-screen="store"] .g-store-cat .g-section__meta {
+  flex: 0 0 auto;
+  margin: 0;
+  color: var(--v3-muted);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  opacity: 1;
+}
+
+/* ---------- 2. Shop: the rail ------------------------------------------- */
+/* On phones the rail is a horizontal scroller. It now bleeds to the screen
+   edges (so the next tile visibly peeks in instead of being cut at the
+   card column), keeps the page gutter as its scroll padding, and fades
+   out at the right edge so the cut reads as "more this way". */
+
+@media (max-width: 767px) {
+  body.gaia-v2 [data-screen="store"] .g-store-rail {
+    max-width: none;
+    margin-inline: calc(-1 * var(--fit-pad, 16px));
+    padding: 4px var(--fit-pad, 16px) 10px;
+    scroll-padding-inline: var(--fit-pad, 16px);
+    gap: 12px;
+    scrollbar-width: none;
+    -webkit-mask-image: linear-gradient(90deg, transparent 0, #000 var(--fit-pad, 16px), #000 calc(100% - 36px), transparent 100%);
+    mask-image: linear-gradient(90deg, transparent 0, #000 var(--fit-pad, 16px), #000 calc(100% - 36px), transparent 100%);
+  }
+  body.gaia-v2 [data-screen="store"] .g-store-rail::-webkit-scrollbar { display: none; }
+  body.gaia-v2 [data-screen="store"] .g-store-rail > .g-store-tile {
+    flex: 0 0 clamp(9.5rem, 41vw, 11rem);
+  }
+}
+
+/* ---------- 3. Shop: product tiles ------------------------------------- */
+/* One glass card per product: photo on a rounded mat, a two-line title,
+   the price (with the struck "was" price), and a quiet outline buy pill
+   pinned to the bottom so every tile in a row lines up. */
+
+body.gaia-v2 [data-screen="store"] .g-store-tile {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  min-width: 0;
+  padding: 8px;
+  border: 1px solid var(--v3-border);
+  border-radius: 24px;
+  background:
+    radial-gradient(120% 60% at 0% 0%, rgba(117, 240, 90, 0.04), transparent 60%),
+    var(--v3-card);
+  box-shadow: inset 0 1px 0 rgba(200, 255, 210, 0.04), 0 18px 36px -28px rgba(0, 0, 0, 0.9);
+  transition: border-color 0.2s ease, transform 0.24s var(--v3-ease), background 0.2s ease;
+}
+body.gaia-v2 [data-screen="store"] .g-store-tile:active { transform: scale(0.985); }
+@media (hover: hover) {
+  body.gaia-v2 [data-screen="store"] .g-store-tile:hover {
+    transform: translateY(-2px);
+    border-color: var(--v3-border-strong);
+  }
+}
+
+body.gaia-v2 [data-screen="store"] .g-store-tile .g-tile__media {
+  aspect-ratio: 1;
+  border: 0;
+  border-radius: 18px;
+  background: var(--v3-card-2);
+  box-shadow: inset 0 0 0 1px rgba(160, 255, 185, 0.08);
+}
+body.gaia-v2 [data-screen="store"] .g-store-tile .g-tile__media img { border-radius: inherit; }
+body.gaia-v2 [data-screen="store"] .g-store-tile .g-tile__media--empty {
+  background:
+    radial-gradient(60% 60% at 50% 45%, rgba(117, 240, 90, 0.08), transparent 70%),
+    var(--v3-card-2);
+}
+body.gaia-v2 [data-screen="store"] .g-store-tile:hover .g-tile__media { transform: none; }
+
+body.gaia-v2 [data-screen="store"] .g-store-tile .g-tile__body {
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 10px 4px 2px;
+}
+/* The title is the button that opens the detail sheet (44px floor from
+   gaia-system.css); two lines, always reserving two lines of height. */
+body.gaia-v2 [data-screen="store"] .g-store-tile .g-tile__title { margin: 0; }
+body.gaia-v2 [data-screen="store"] .g-store-tile .g-tile__open {
+  min-height: calc(2 * 1.35em);
+  color: var(--v3-text);
+  font-family: var(--g-font);
+  font-size: 13.5px;
+  font-weight: 600;
+  line-height: 1.35;
+  letter-spacing: -0.01em;
+  -webkit-line-clamp: 2;
+}
+body.gaia-v2 [data-screen="store"] .g-store-tile .g-tile__price {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  column-gap: 6px;
+  margin: 2px 0 0;
+  color: var(--v3-text);
+  font-size: 14.5px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+body.gaia-v2 [data-screen="store"] .g-store-tile .g-tile__was {
+  margin: 0;
+  color: var(--v3-muted);
+  font-size: 12px;
+  font-weight: 500;
+  opacity: 1;
+  text-decoration-color: rgba(168, 179, 173, 0.7);
+}
+body.gaia-v2 [data-screen="store"] .g-store-tile .g-tile__price--muted {
+  color: var(--v3-text-2);
+  font-size: 12.5px;
+  font-weight: 500;
+  opacity: 1;
+}
+body.gaia-v2 [data-screen="store"] .g-store-tile .g-tile__meta {
+  color: var(--v3-muted);
+  font-size: 12px;
+  opacity: 1;
+}
+
+/* Buy pill: secondary outline, not a full neon block on every tile. The
+   bright primary is kept for the product sheet's main call to action. */
+body.gaia-v2 [data-screen="store"] .g-store-tile .g-card__actions {
+  margin-top: auto;
+  padding-top: 10px;
+}
+body.gaia-v2 [data-screen="store"] .g-store-tile .g-card__actions .g-btn,
+body.gaia-v2 [data-screen="store"] .g-store-tile .g-card__actions .g-btn--primary {
+  width: 100%;
+  min-height: 44px;
+  padding: 0 12px;
+  border: 1px solid rgba(117, 240, 90, 0.34);
+  background: rgba(117, 240, 90, 0.06);
+  color: var(--v3-green-hi);
+  font-size: 13px;
+  font-weight: 600;
+  box-shadow: none;
+  filter: none;
+}
+body.gaia-v2 [data-screen="store"] .g-store-tile .g-card__actions .g-btn:active {
+  background: rgba(117, 240, 90, 0.16);
+}
+@media (hover: hover) {
+  body.gaia-v2 [data-screen="store"] .g-store-tile .g-card__actions .g-btn:hover {
+    border-color: rgba(117, 240, 90, 0.6);
+    background: rgba(117, 240, 90, 0.12);
+    box-shadow: 0 0 18px -8px rgba(117, 240, 90, 0.5);
+  }
+}
+
+body.gaia-v2 [data-screen="store"] .g-store-note {
+  margin: 0;
+  padding: 0 4px;
+  color: var(--v3-muted);
+  font-size: 12px;
+  opacity: 1;
+}
+
+/* ---------- 4. Membership --------------------------------------------- */
+
+/* "Gaia 2.0 Practitioners" intro: a section heading, not a thin card. */
+body.gaia-v2 [data-screen="store"] #store-memberships > .g-card:first-child:not(:has(.g-tier__head)) {
+  padding: 6px 4px 0;
+  border: 0;
+  background: none;
+  box-shadow: none;
+}
+body.gaia-v2 [data-screen="store"] #store-memberships > .g-card:first-child:not(:has(.g-tier__head)) .g-card__label {
+  margin: 0;
+  color: var(--v3-text);
+  font-size: clamp(1.3rem, 5.4vw, 1.6rem);
+  font-weight: 600;
+  line-height: 1.2;
+  letter-spacing: -0.022em;
+  text-transform: none;
+}
+body.gaia-v2 [data-screen="store"] #store-memberships > .g-card:first-child:not(:has(.g-tier__head)) .g-card__meta {
+  margin: 6px 0 0;
+  color: var(--v3-text-2);
+  font-size: 14px;
+}
+
+/* Tier cards. */
+body.gaia-v2 [data-screen="store"] #store-memberships > .g-card:has(.g-tier__head) {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 22px 20px 20px;
+}
+body.gaia-v2 [data-screen="store"] #store-memberships .g-tier__head {
+  align-items: center;
+  gap: 12px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid rgba(160, 255, 185, 0.1);
+}
+/* Tier name: the card's heading (it was a small eyebrow). */
+body.gaia-v2 [data-screen="store"] #store-memberships .g-tier__head .g-card__label {
+  margin: 0;
+  color: var(--v3-text);
+  font-size: clamp(1.3rem, 5.6vw, 1.55rem);
+  font-weight: 600;
+  line-height: 1.15;
+  letter-spacing: -0.022em;
+  text-transform: none;
+}
+/* Price: the badge becomes the card's price figure. */
+body.gaia-v2 [data-screen="store"] #store-memberships .g-tier__head .g-badge:not(.g-badge--on) {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--v3-text);
+  font-size: clamp(1.15rem, 5vw, 1.35rem);
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  text-transform: none;
+  white-space: nowrap;
+}
+/* Current plan: a lit pill instead of a price, on a lit card. */
+body.gaia-v2 [data-screen="store"] #store-memberships .g-tier__head .g-badge--on {
+  padding: 7px 12px;
+  border: 1px solid rgba(117, 240, 90, 0.45);
+  background: rgba(117, 240, 90, 0.14);
+  color: var(--v3-green-hi);
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+body.gaia-v2 [data-screen="store"] #store-memberships > .g-card--feature {
+  border-color: var(--v3-border-strong);
+  background:
+    radial-gradient(110% 70% at 100% 0%, rgba(117, 240, 90, 0.13), transparent 60%),
+    var(--v3-card);
+  box-shadow:
+    inset 0 1px 0 rgba(200, 255, 210, 0.07),
+    0 0 0 1px rgba(117, 240, 90, 0.08),
+    0 0 44px -14px rgba(117, 240, 90, 0.3),
+    0 22px 44px -30px rgba(0, 0, 0, 0.9);
+}
+
+/* Feature list with round check marks. */
+body.gaia-v2 [data-screen="store"] #store-memberships .g-tier__list {
+  gap: 11px;
+  margin: 0;
+}
+body.gaia-v2 [data-screen="store"] #store-memberships .g-tier__list li {
+  padding-left: 32px;
+  min-height: 20px;
+  color: var(--v3-text-2);
+  font-size: 14.5px;
+  line-height: 1.4;
+}
+body.gaia-v2 [data-screen="store"] #store-memberships .g-tier__list li::before {
+  content: "\2713";
+  top: 0;
+  display: grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 999px;
+  background: rgba(66, 219, 134, 0.14);
+  box-shadow: inset 0 0 0 1px rgba(66, 219, 134, 0.34);
+  color: #6fe6a4;
+  font-size: 11px;
+  font-weight: 800;
+  line-height: 1;
+}
+body.gaia-v2 [data-screen="store"] #store-memberships > .g-card > .g-card__meta { margin: 0; }
+
+/* One call to action, full width at the foot of the card. */
+body.gaia-v2 [data-screen="store"] #store-memberships > .g-card .g-card__actions { margin: 4px 0 0; }
+body.gaia-v2 [data-screen="store"] #store-memberships > .g-card .g-card__actions .g-btn {
+  width: 100%;
+  min-height: 50px;
+  font-size: 15px;
+}
+
+/* "Your access" block on the member's own plan card. */
+body.gaia-v2 [data-screen="store"] #store-memberships .g-tier__access {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 14px;
+  border: 1px solid var(--v3-border);
+  border-radius: 20px;
+  background: var(--v3-card-2);
+}
+body.gaia-v2 [data-screen="store"] #store-memberships .g-tier__access-head {
+  margin: 0;
+  color: var(--v3-label);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+body.gaia-v2 [data-screen="store"] #store-memberships .g-tier__access-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+body.gaia-v2 [data-screen="store"] #store-memberships .g-tier__access-link {
+  display: flex;
+  align-items: center;
+  gap: 4px 10px;
+  flex-wrap: wrap;
+  min-height: 48px;
+  padding: 8px 12px;
+  border-radius: 14px;
+  background: rgba(5, 16, 11, 0.6);
+  color: var(--v3-text);
+  text-decoration: none;
+}
+body.gaia-v2 [data-screen="store"] #store-memberships .g-tier__access-name { flex: 1 1 auto; font-weight: 600; font-size: 14px; }
+body.gaia-v2 [data-screen="store"] #store-memberships .g-tier__access-meta { color: var(--v3-text-2); font-size: 12.5px; }
+body.gaia-v2 [data-screen="store"] #store-memberships .g-tier__access-chev { color: var(--v3-muted); }
+body.gaia-v2 [data-screen="store"] #store-memberships .g-tier__access-all { margin: 2px 0 0; font-size: 13px; }
+body.gaia-v2 [data-screen="store"] #store-memberships .g-tier__access-all a { color: var(--v3-green); font-weight: 600; text-decoration: none; }
+
+/* Wide screens: the tier cards sit two to a row. */
+@media (min-width: 900px) {
+  body.gaia-v2 [data-screen="store"] #store-memberships:not([hidden]) {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 18px;
+    align-items: stretch;
+  }
+  body.gaia-v2 [data-screen="store"] #store-memberships > .g-card:first-child:not(:has(.g-tier__head)) {
+    grid-column: 1 / -1;
+  }
+  body.gaia-v2 [data-screen="store"] #store-memberships > .g-card .g-card__actions { margin-top: auto; }
+}
+
+/* ---------- 5. You (profile) ------------------------------------------- */
+
+body.gaia-v2 [data-screen="profile"] #member-me { gap: 16px; }
+/* The header card sat 30px above the first card while the cards below
+   are 16px apart; one rhythm down the screen. */
+body.gaia-v2 [data-screen="profile"] .g-page__head--profile { margin-bottom: 6px; }
+
+/* Signed out: "Sign in securely" and "Join free" share the row, "Compare
+   plans" sits under them as a quiet link. */
+body.gaia-v2 [data-screen="profile"] #member-me .g-card { padding: 22px 20px 20px; }
+body.gaia-v2 [data-screen="profile"] #member-me .g-card .g-card__label { margin: 0 0 8px; }
+body.gaia-v2 [data-screen="profile"] #member-me .g-card .g-card__value--lg { margin: 0 0 8px; }
+body.gaia-v2 [data-screen="profile"] #member-me .g-card__actions {
+  gap: 10px;
+  margin-top: 18px;
+}
+body.gaia-v2 [data-screen="profile"] #member-me .g-card__actions > .g-btn--primary,
+body.gaia-v2 [data-screen="profile"] #member-me .g-card__actions > .g-btn--secondary {
+  flex: 1 1 9rem;
+  min-height: 48px;
+}
+body.gaia-v2 [data-screen="profile"] #member-me .g-card__actions > .g-btn--ghost {
+  flex: 1 1 100%;
+  min-height: 44px;
+}
+
+/* Rows inside the account cards. */
+body.gaia-v2 [data-screen="profile"] #member-me .g-row {
+  min-height: 48px;
+  border-color: rgba(160, 255, 185, 0.1);
+  color: var(--v3-text);
+}
+body.gaia-v2 [data-screen="profile"] #member-me .g-row__meta { color: var(--v3-text-2); }
+body.gaia-v2 [data-screen="profile"] #member-me .g-row--link .g-row__meta { color: var(--v3-green); font-weight: 600; }
+body.gaia-v2 [data-screen="profile"] #member-me .g-empty { color: var(--v3-text-2); }
+
+/* Member Pass: the premium card at the top of the signed-in screen. */
+body.gaia-v2 [data-screen="profile"] .g-pass {
+  position: relative;
+  overflow: hidden;
+  padding: 24px 20px 20px;
+  border: 1px solid var(--v3-border-strong);
+  border-radius: var(--v3-radius-lg);
+  background:
+    radial-gradient(90% 90% at 100% 0%, rgba(117, 240, 90, 0.15), transparent 60%),
+    radial-gradient(70% 80% at 0% 100%, rgba(88, 199, 232, 0.06), transparent 70%),
+    var(--v3-card);
+  box-shadow:
+    inset 0 1px 0 rgba(200, 255, 210, 0.07),
+    0 0 44px -16px rgba(117, 240, 90, 0.28),
+    0 22px 44px -30px rgba(0, 0, 0, 0.9);
+}
+body.gaia-v2 [data-screen="profile"] .g-pass--none {
+  border-color: var(--v3-border);
+  background: var(--v3-card-bg);
+  box-shadow: var(--v3-card-shadow);
+}
+body.gaia-v2 [data-screen="profile"] .g-pass__kicker {
+  margin: 0 0 8px;
+  color: var(--v3-label);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+body.gaia-v2 [data-screen="profile"] .g-pass__title {
+  margin: 0;
+  font-family: var(--g-font);
+  font-size: clamp(1.6rem, 7vw, 2rem);
+  font-weight: 600;
+  letter-spacing: -0.025em;
+  color: var(--v3-text);
+}
+body.gaia-v2 [data-screen="profile"] .g-pass--none .g-pass__title { font-size: clamp(1.25rem, 5.2vw, 1.5rem); }
+body.gaia-v2 [data-screen="profile"] .g-pass__subtitle { margin: 4px 0 14px; color: var(--v3-emerald); font-weight: 600; }
+body.gaia-v2 [data-screen="profile"] .g-pass__status { margin: 0 0 10px; }
+body.gaia-v2 [data-screen="profile"] .g-pass__meta { margin: 0 0 2px; color: var(--v3-text-2); line-height: 1.5; }
+body.gaia-v2 [data-screen="profile"] .g-pass__actions { margin-top: 18px; }
+body.gaia-v2 [data-screen="profile"] .g-pass__actions .g-btn { flex: 1 1 100%; min-height: 48px; }
+
+/* My Access, Included, Next Level: section headings + glass lists. */
+body.gaia-v2 [data-screen="profile"] :is(.g-ma__title, .g-inc__title) {
+  margin: 8px 4px 12px;
+  font-family: var(--g-font);
+  font-size: clamp(1.2rem, 4.8vw, 1.45rem);
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  color: var(--v3-text);
+}
+body.gaia-v2 [data-screen="profile"] .g-ma-rows,
+body.gaia-v2 [data-screen="profile"] .g-inc__list {
+  overflow: hidden;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  border: 1px solid var(--v3-border);
+  border-radius: var(--v3-radius);
+  background: var(--v3-card);
+  box-shadow: var(--v3-card-shadow);
+}
+body.gaia-v2 [data-screen="profile"] .g-ma-row + .g-ma-row { border-top-color: rgba(160, 255, 185, 0.1); }
+body.gaia-v2 [data-screen="profile"] .g-ma-row__button {
+  min-height: 60px;
+  padding: 12px 18px;
+  color: var(--v3-text);
+  font-weight: 600;
+  transition: background 0.18s ease;
+}
+/* One line per row: name left, value right (they stacked on phones). */
+body.gaia-v2 [data-screen="profile"] .g-ma-row__button { flex-wrap: nowrap; text-align: left; }
+body.gaia-v2 [data-screen="profile"] .g-ma-row__value {
+  order: 0;
+  width: auto;
+  max-width: 55%;
+  text-align: right;
+  font-size: 13.5px;
+}
+body.gaia-v2 [data-screen="profile"] .g-ma-row__button:hover { background: transparent; }
+@media (hover: hover) {
+  body.gaia-v2 [data-screen="profile"] .g-ma-row__button:hover { background: rgba(22, 42, 32, 0.6); }
+}
+body.gaia-v2 [data-screen="profile"] .g-ma-row__button:active { background: rgba(24, 46, 34, 0.85); }
+body.gaia-v2 [data-screen="profile"] .g-ma-row__value { color: var(--v3-text-2); font-weight: 500; }
+body.gaia-v2 [data-screen="profile"] .g-ma-row__chev { color: var(--v3-muted); }
+body.gaia-v2 [data-screen="profile"] .g-ma-row__button[aria-expanded="true"] { background: rgba(117, 240, 90, 0.06); }
+body.gaia-v2 [data-screen="profile"] .g-ma-row__panel { padding: 4px 18px 14px; background: rgba(2, 8, 5, 0.5); }
+body.gaia-v2 [data-screen="profile"] .g-inc__row {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 50px;
+  align-items: center;
+  padding: 10px 18px;
+  color: var(--v3-text);
+}
+body.gaia-v2 [data-screen="profile"] .g-inc__row + .g-inc__row { border-top: 1px solid rgba(160, 255, 185, 0.1); }
+body.gaia-v2 [data-screen="profile"] .g-inc__value { color: var(--v3-text-2); }
+body.gaia-v2 [data-screen="profile"] .g-inc__note { margin: 10px 4px 0; color: var(--v3-muted); font-size: 12.5px; }
+
+body.gaia-v2 [data-screen="profile"] .g-next {
+  padding: 22px 20px 20px;
+  border: 1px solid var(--v3-border);
+  border-radius: var(--v3-radius);
+  background:
+    radial-gradient(90% 90% at 100% 0%, rgba(88, 199, 232, 0.08), transparent 60%),
+    var(--v3-card);
+  box-shadow: var(--v3-card-shadow);
+}
+body.gaia-v2 [data-screen="profile"] .g-next__kicker {
+  margin: 0 0 8px;
+  color: var(--v3-label);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+body.gaia-v2 [data-screen="profile"] .g-next__title {
+  margin: 0;
+  font-family: var(--g-font);
+  font-size: clamp(1.3rem, 5.4vw, 1.55rem);
+  font-weight: 600;
+  letter-spacing: -0.022em;
+  color: var(--v3-text);
+}
+body.gaia-v2 [data-screen="profile"] .g-next__subtitle { margin: 4px 0 0; color: var(--v3-cyan); font-weight: 600; }
+body.gaia-v2 [data-screen="profile"] .g-next__lead { margin: 14px 0 8px; color: var(--v3-text-2); }
+body.gaia-v2 [data-screen="profile"] .g-next__list { margin: 0; padding: 0; list-style: none; display: grid; gap: 8px; }
+body.gaia-v2 [data-screen="profile"] .g-next__list li {
+  position: relative;
+  padding-left: 30px;
+  color: var(--v3-text-2);
+  line-height: 1.4;
+}
+body.gaia-v2 [data-screen="profile"] .g-next__list li::before {
+  content: "+";
+  position: absolute;
+  left: 0;
+  top: 0;
+  display: grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 999px;
+  background: rgba(88, 199, 232, 0.14);
+  box-shadow: inset 0 0 0 1px rgba(88, 199, 232, 0.34);
+  color: #7fd8f2;
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1;
+}
+body.gaia-v2 [data-screen="profile"] .g-next__list strong { color: var(--v3-text); }
+body.gaia-v2 [data-screen="profile"] .g-next__actions { margin-top: 18px; display: flex; }
+body.gaia-v2 [data-screen="profile"] .g-next__actions .g-btn { flex: 1 1 100%; min-height: 48px; }
+
+body.gaia-v2 [data-screen="profile"] .g-profile-signout {
+  align-self: center;
+  min-height: 44px;
+  margin-top: 8px;
+  color: var(--v3-text-2);
+}
+
+/* ---------- 6. Sheets: shared panel, close button, inputs -------------- */
+/* Glass panels like the Assist card: 32px corners, a green glow from the
+   top, a 48px round close button in the top-right corner. */
+
+body.gaia-v2 :is(.gaia-menu-sheet, .gaia-auth-modal, .gaia-share-modal, .gaia-onboard-modal) {
+  background:
+    radial-gradient(70% 45% at 50% 85%, rgba(66, 219, 134, 0.1), transparent 70%),
+    rgba(2, 8, 5, 0.74);
+  -webkit-backdrop-filter: blur(14px);
+  backdrop-filter: blur(14px);
+}
+body.gaia-v2 .gaia-product-modal .gaia-booking-modal__backdrop {
+  background:
+    radial-gradient(70% 45% at 50% 85%, rgba(66, 219, 134, 0.1), transparent 70%),
+    rgba(2, 8, 5, 0.74);
+  -webkit-backdrop-filter: blur(14px);
+  backdrop-filter: blur(14px);
+}
+
+body.gaia-v2 :is(.gaia-menu-sheet__panel, .gaia-auth-modal__panel, .gaia-share-modal__panel, .gaia-onboard-modal__panel, .gaia-product-modal .g-store-sheet, .gaia-product-modal .gaia-booking-modal__sheet) {
+  border: 1px solid rgba(140, 255, 170, 0.2);
+  border-radius: 32px;
+  background:
+    radial-gradient(120% 45% at 50% 0%, rgba(117, 240, 90, 0.11), transparent 60%),
+    radial-gradient(90% 35% at 50% 100%, rgba(66, 219, 134, 0.06), transparent 70%),
+    rgba(5, 16, 11, 0.97);
+  box-shadow:
+    inset 0 1px 0 rgba(200, 255, 210, 0.08),
+    0 0 0 1px rgba(117, 240, 90, 0.04),
+    0 0 48px -8px rgba(117, 240, 90, 0.16),
+    0 30px 80px -20px rgba(0, 0, 0, 0.8);
+  color: var(--v3-text);
+  animation: v3sy-sheet-in 0.42s var(--v3-ease);
+}
+body.gaia-v2 :is(.gaia-menu-sheet__panel, .gaia-auth-modal__panel) { padding: 24px 22px 22px; }
+@keyframes v3sy-sheet-in {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: none; }
+}
+
+/* The close button, matched to the Assist close: 48px glass circle. */
+body.gaia-v2 :is(.gaia-menu-sheet, .gaia-auth-modal, .gaia-share-modal, .gaia-onboard-modal) .gaia-sheet-close,
+body.gaia-v2 .gaia-product-modal .gaia-booking-modal__close {
+  flex: 0 0 auto;
+  display: grid;
+  place-items: center;
+  width: 48px;
+  height: 48px;
+  min-width: 48px;
+  min-height: 48px;
+  padding: 0;
+  border: 1px solid var(--v3-border) !important;
+  border-radius: 999px;
+  background: rgba(16, 31, 24, 0.72) !important;
+  color: var(--v3-text-2) !important;
+  font: 400 24px/1 system-ui, sans-serif;
+  -webkit-backdrop-filter: blur(10px);
+  backdrop-filter: blur(10px);
+  cursor: pointer;
+  transition: background 0.18s ease, border-color 0.18s ease, color 0.18s ease;
+}
+body.gaia-v2 :is(.gaia-menu-sheet, .gaia-auth-modal, .gaia-share-modal, .gaia-onboard-modal) .gaia-sheet-close:active,
+body.gaia-v2 .gaia-product-modal .gaia-booking-modal__close:active {
+  background: rgba(28, 52, 40, 0.9) !important;
+  color: var(--v3-text) !important;
+}
+@media (hover: hover) {
+  body.gaia-v2 :is(.gaia-menu-sheet, .gaia-auth-modal, .gaia-share-modal, .gaia-onboard-modal) .gaia-sheet-close:hover,
+  body.gaia-v2 .gaia-product-modal .gaia-booking-modal__close:hover {
+    border-color: var(--v3-border-strong) !important;
+    background: rgba(28, 52, 40, 0.8) !important;
+    color: var(--v3-text) !important;
+  }
+}
+body.gaia-v2 :is(.gaia-menu-sheet, .gaia-auth-modal, .gaia-share-modal, .gaia-onboard-modal) .gaia-sheet-close:focus-visible,
+body.gaia-v2 .gaia-product-modal .gaia-booking-modal__close:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--v3-page), 0 0 0 4px rgba(117, 240, 90, 0.75);
+}
+
+/* Eyebrows and titles inside the sheets. */
+body.gaia-v2 :is(.gaia-share-modal__kicker, .g-onb__kicker) {
+  font-family: var(--g-font);
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1.3;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--v3-label);
+}
+body.gaia-v2 .gaia-menu-sheet__kicker,
+body.gaia-v2 .gaia-auth-modal__kicker { margin: 4px 0 8px; }
+body.gaia-v2 :is(.gaia-menu-sheet__top, .gaia-auth-modal__top) { align-items: flex-start; }
+body.gaia-v2 .gaia-auth-modal__body {
+  margin-top: 12px;
+  color: var(--v3-text-2);
+  font-size: 14.5px;
+  line-height: 1.55;
+}
+
+/* Inputs: the Assist input — a dark field inside a thin green-to-cyan rim,
+   a soft glow when focused. */
+body.gaia-v2 .gaia-auth-modal__input,
+body.gaia-v2 .gaia-onboard-modal .g-onb__row input,
+body.gaia-v2 .gaia-onboard-modal .g-onb__dob-fields :is(select, input) {
+  min-height: 54px;
+  padding: 0 20px;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  background:
+    linear-gradient(rgba(8, 22, 15, 0.96), rgba(8, 22, 15, 0.96)) padding-box,
+    linear-gradient(100deg, rgba(117, 240, 90, 0.5), rgba(66, 219, 134, 0.3) 50%, rgba(88, 199, 232, 0.5)) border-box;
+  color: var(--v3-text);
+  font: 500 16px var(--g-font);
+  box-shadow: 0 0 26px -14px rgba(117, 240, 90, 0.4);
+  transition: box-shadow 0.2s ease, background 0.2s ease;
+}
+body.gaia-v2 .gaia-onboard-modal .g-onb__dob-fields :is(select, input) { padding: 0 14px; }
+body.gaia-v2 :is(.gaia-auth-modal__input, .gaia-onboard-modal input, .gaia-onboard-modal select)::placeholder {
+  color: var(--v3-muted);
+  opacity: 1;
+}
+body.gaia-v2 .gaia-auth-modal__input:focus,
+body.gaia-v2 .gaia-onboard-modal .g-onb__row input:focus,
+body.gaia-v2 .gaia-onboard-modal .g-onb__dob-fields :is(select, input):focus {
+  outline: none;
+  background:
+    linear-gradient(rgba(8, 22, 15, 0.96), rgba(8, 22, 15, 0.96)) padding-box,
+    linear-gradient(100deg, rgba(117, 240, 90, 0.85), rgba(66, 219, 134, 0.55) 50%, rgba(88, 199, 232, 0.85)) border-box;
+  box-shadow: 0 0 0 3px rgba(117, 240, 90, 0.14), 0 0 34px -10px rgba(117, 240, 90, 0.6);
+}
+body.gaia-v2 :is(.gaia-auth-modal__submit, .g-onb__submit, .gaia-share-modal__actions .g-btn) {
+  min-height: 54px;
+  border-radius: 999px;
+  font-size: 15.5px;
+}
+
+/* ---------- 7. Menu sheet ---------------------------------------------- */
+/* The three links become Assist-style action cards (the divided list read
+   as a settings page). The "Explore →" hint is a quiet green label. */
+
+body.gaia-v2 .gaia-menu-sheet__nav { gap: 10px; margin-top: 20px; }
+body.gaia-v2 .gaia-menu-sheet__link {
+  min-height: 64px;
+  padding: 12px 16px 12px 18px;
+  border: 1px solid var(--v3-border);
+  border-radius: 22px;
+  background: var(--v3-card-2);
+  color: var(--v3-text);
+  font: 600 16px/1.3 var(--g-font);
+  letter-spacing: -0.01em;
+  transition: background 0.18s ease, border-color 0.18s ease, transform 0.18s ease;
+  -webkit-tap-highlight-color: transparent;
+}
+body.gaia-v2 .gaia-menu-sheet__link:active { transform: scale(0.98); background: rgba(24, 46, 34, 0.9); }
+@media (hover: hover) {
+  body.gaia-v2 .gaia-menu-sheet__link:hover {
+    border-color: var(--v3-border-strong);
+    background: rgba(22, 42, 32, 0.85);
+  }
+}
+body.gaia-v2 .gaia-menu-sheet__link:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--v3-page), 0 0 0 4px rgba(117, 240, 90, 0.75);
+}
+body.gaia-v2 .gaia-menu-sheet__link span {
+  flex: 0 0 auto;
+  padding: 6px 12px;
+  border: 1px solid rgba(117, 240, 90, 0.28);
+  border-radius: 999px;
+  background: rgba(117, 240, 90, 0.08);
+  color: var(--v3-green-hi);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+/* ---------- 8. Sign-in sheet ------------------------------------------- */
+
+body.gaia-v2 .gaia-auth-modal__form { gap: 12px; margin-top: 20px; }
+body.gaia-v2 .gaia-auth-modal__status { color: var(--v3-text-2); }
+body.gaia-v2 .gaia-auth-modal__status.is-sent {
+  border-color: rgba(117, 240, 90, 0.34);
+  border-radius: 20px;
+  background: rgba(117, 240, 90, 0.08);
+}
+body.gaia-v2 .gaia-auth-modal__sent-title { color: var(--v3-green-hi); }
+body.gaia-v2 .gaia-auth-modal__join {
+  margin-top: 16px;
+  padding-top: 14px;
+  border-top-color: rgba(160, 255, 185, 0.1);
+  color: var(--v3-text-2);
+}
+body.gaia-v2 .gaia-auth-modal__joinlink,
+body.gaia-v2 .gaia-auth-modal__joinalt { color: var(--v3-green); }
+/* Provider buttons keep their brand colours (white Google, black Apple);
+   only the shape follows the pills. */
+body.gaia-v2 .gaia-auth-modal__social-btn {
+  min-height: 52px;
+  border-radius: 999px;
+}
+body.gaia-v2 .gaia-auth-modal__social-btn[data-oauth="apple"] { border-color: rgba(255, 255, 255, 0.22); }
+body.gaia-v2 .gaia-auth-modal__or { color: var(--v3-muted); }
+body.gaia-v2 .gaia-auth-modal__or::before,
+body.gaia-v2 .gaia-auth-modal__or::after { background: rgba(160, 255, 185, 0.12); }
+
+/* ---------- 9. Product sheet ------------------------------------------- */
+
+body.gaia-v2 .gaia-product-modal .g-store-sheet {
+  gap: 14px;
+  padding: 18px 18px 20px;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(160, 255, 185, 0.2) transparent;
+}
+@media (max-width: 640px) {
+  body.gaia-v2 .gaia-product-modal { padding: 12px; }
+  body.gaia-v2 .gaia-product-modal .g-store-sheet { border-radius: 32px; max-height: calc(100dvh - 24px); }
+}
+body.gaia-v2 .gaia-product-modal .g-store-sheet > .gaia-booking-modal__close { top: 26px; right: 26px; }
+body.gaia-v2 .gaia-product-modal .g-store-sheet__media {
+  aspect-ratio: 4 / 3;
+  border-radius: 22px;
+  background: var(--v3-card-2);
+  box-shadow: inset 0 0 0 1px rgba(160, 255, 185, 0.08);
+}
+body.gaia-v2 .gaia-product-modal .g-store-sheet__title {
+  margin-top: 4px;
+  font-family: var(--g-font);
+  font-size: clamp(1.35rem, 5.6vw, 1.6rem);
+  font-weight: 600;
+  line-height: 1.2;
+  letter-spacing: -0.022em;
+  color: var(--v3-text);
+}
+body.gaia-v2 .gaia-product-modal .g-store-sheet__meta { color: var(--v3-text-2); opacity: 1; }
+body.gaia-v2 .gaia-product-modal .g-store-sheet__meta:empty { display: none; }
+body.gaia-v2 .gaia-product-modal .g-tag {
+  padding: 5px 10px;
+  border: 1px solid var(--v3-border);
+  border-radius: 999px;
+  background: rgba(16, 31, 24, 0.6);
+  color: var(--v3-text-2);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+body.gaia-v2 .gaia-product-modal .g-store-sheet__price {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 10px;
+  color: var(--v3-text);
+  font-size: 1.35rem;
+  letter-spacing: -0.02em;
+}
+body.gaia-v2 .gaia-product-modal .g-store-sheet__price s {
+  margin: 0;
+  color: var(--v3-muted);
+  font-size: 0.95rem;
+  opacity: 1;
+}
+body.gaia-v2 .gaia-product-modal .g-store-sheet__price.g-tile__price--muted { font-size: 1rem; color: var(--v3-text-2); }
+body.gaia-v2 .gaia-product-modal .g-store-sheet__body { color: var(--v3-text-2); opacity: 1; font-size: 14.5px; }
+body.gaia-v2 .gaia-product-modal .g-label {
+  margin: 6px 0 0;
+  color: var(--v3-label);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+body.gaia-v2 .gaia-product-modal .g-store-sheet__list { color: var(--v3-text-2); opacity: 1; }
+body.gaia-v2 .gaia-product-modal .g-store-sheet__list li::marker { color: var(--v3-emerald); }
+/* The main call to action: the one bright primary in the Shop. It sits
+   in a sticky foot so it stays in reach under a long description. */
+body.gaia-v2 .gaia-product-modal .g-store-sheet .g-card__actions {
+  position: sticky;
+  bottom: -20px;
+  z-index: 1;
+  flex-wrap: nowrap;
+  gap: 10px;
+  margin: 4px -18px -20px;
+  padding: 14px 18px 20px;
+  background: linear-gradient(to bottom, rgba(5, 16, 11, 0), rgba(5, 16, 11, 0.96) 30%);
+}
+body.gaia-v2 .gaia-product-modal .g-store-sheet .g-card__actions .g-btn { min-height: 52px; }
+body.gaia-v2 .gaia-product-modal .g-store-sheet .g-card__actions .g-btn--primary,
+body.gaia-v2 .gaia-product-modal .g-store-sheet .g-card__actions .g-btn--secondary { flex: 1 1 auto; font-size: 15.5px; }
+body.gaia-v2 .gaia-product-modal .g-store-sheet .g-card__actions .g-btn--ghost { flex: 0 0 auto; color: var(--v3-text-2); }
+
+/* The older product sheet (Today's "From the store" tiles). */
+body.gaia-v2 .gaia-product-modal .gaia-booking-modal__sheet { overflow: hidden; }
+body.gaia-v2 .gaia-product-modal .gaia-booking-modal__head { background: transparent; border-color: rgba(160, 255, 185, 0.1) !important; }
+body.gaia-v2 .gaia-product-modal .gaia-booking-modal__title {
+  font-family: var(--g-font);
+  font-size: 11px !important;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--v3-label) !important;
+}
+body.gaia-v2 .gaia-product-modal .gaia-product-modal__body { background: transparent; }
+body.gaia-v2 .gaia-product-modal .gaia-product-modal__image { border-radius: 22px; width: calc(100% - 32px); margin: 16px 16px 0; }
+body.gaia-v2 .gaia-product-modal .gaia-product-modal__description,
+body.gaia-v2 .gaia-product-modal .gaia-product-modal__note { color: var(--v3-text-2); }
+body.gaia-v2 .gaia-product-modal .gaia-product-modal__buy { min-height: 54px; border-radius: 999px; }
+
+/* ---------- 10. Share and onboarding sheets ------------------------------ */
+
+body.gaia-v2 :is(.gaia-share-modal__panel, .gaia-onboard-modal__panel) {
+  padding: 24px 20px calc(20px + env(safe-area-inset-bottom, 0px));
+}
+/* The close button sat in the text flow above the eyebrow; it moves to
+   the top-right corner like every other sheet. */
+body.gaia-v2 :is(.gaia-share-modal__panel, .gaia-onboard-modal__panel) > .gaia-sheet-close {
+  position: absolute;
+  top: 14px;
+  right: 14px;
+  z-index: 2;
+}
+body.gaia-v2 .gaia-share-modal__kicker { min-height: 48px; display: flex; align-items: center; margin: -10px 60px 8px 0; }
+body.gaia-v2 .g-onb__kicker { min-height: 48px; display: flex; align-items: center; margin: -10px 60px 0 0; }
+body.gaia-v2 .g-onb__title {
+  margin-top: 2px;
+  font-family: var(--g-font);
+  font-size: clamp(1.5rem, 6.4vw, 1.9rem);
+  font-weight: 600;
+  line-height: 1.15;
+  letter-spacing: -0.022em;
+  color: var(--v3-text);
+}
+body.gaia-v2 :is(.g-onb__lead, .g-onb__row, .g-onb__dob-label, .gaia-share-modal__note) { color: var(--v3-text-2); }
+body.gaia-v2 :is(.g-onb__note) { color: var(--v3-muted); opacity: 1; }
+body.gaia-v2 .g-onb__row { gap: 8px; margin-bottom: 14px; font-weight: 600; font-size: 13px; }
+body.gaia-v2 .g-onb__row input { width: 100%; }
+body.gaia-v2 .g-onb__status,
+body.gaia-v2 .gaia-share-modal__status { color: var(--v3-green-hi); }
+body.gaia-v2 .gaia-share-modal__preview {
+  border-radius: 22px;
+  box-shadow: inset 0 0 0 1px rgba(160, 255, 185, 0.1);
+}
+body.gaia-v2 .gaia-share-modal__toggle { min-height: 44px; color: var(--v3-text); }
+body.gaia-v2 .gaia-share-modal__toggle input { width: 20px; height: 20px; accent-color: var(--v3-green); }
+
+/* ---------- 11. Reduced motion ----------------------------------------- */
+
+@media (prefers-reduced-motion: reduce) {
+  body.gaia-v2 :is(.gaia-menu-sheet__panel, .gaia-auth-modal__panel, .gaia-share-modal__panel, .gaia-onboard-modal__panel, .gaia-product-modal .g-store-sheet, .gaia-product-modal .gaia-booking-modal__sheet) {
+    animation: none;
+  }
+  body.gaia-v2 :is([data-screen="store"] .g-store-tile, [data-screen="profile"] .g-ma-row__button, .gaia-menu-sheet__link, .gaia-sheet-close, .gaia-product-modal .gaia-booking-modal__close) {
+    transition: none !important;
+  }
+  body.gaia-v2 :is([data-screen="store"] .g-store-tile, .gaia-menu-sheet__link):is(:active, :hover) { transform: none; }
+}

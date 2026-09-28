@@ -1,0 +1,970 @@
+/* ============================================================
+   Gaia app v3 — phase 2: Today, Energy and the tab bar labels
+   (2026-09-28)
+
+   Built on gaia-app-v3.css (tokens --v3-*, shared cards, buttons,
+   segmented tabs, action rows, chips). This file only carries what is
+   specific to the Today screen, the Energy screen (all three tabs, the
+   chakra guide, the self-discovery toolkit and the panels it opens, the
+   Energy Pulse and Coherence Breathing modals) and the legibility of the
+   bottom tab bar labels.
+
+   Scope: every screen rule is fenced to
+     body.gaia-v2 [data-screen="today"]    (Today, #home-superapp)
+     body.gaia-v2 [data-screen="wellness"] (Energy)
+   so nothing here can reach another screen. The two modals (.gp-*,
+   .gb-*) are appended to <body> by gaia-pulse.js / gaia-breath.js and
+   are only ever opened from these two screens, so they are scoped by
+   their own class. The tab bar rules are global (this file owns them).
+
+   Identity colours (a chakra's colour, a tool's tint, the moon's
+   violet) survive only as small accents: a ring, a dot, a glow, an
+   icon well — never as a full-bleed gradient panel. Green is kept for
+   what can be tapped or is selected.
+
+   Paint first. Geometry is only changed where the redesign needs it
+   (the Explore free tiles become icon-row cards, the tab bar labels
+   grow) and every such change was checked at 360 / 390 / 430 / 1280
+   for overlap and horizontal overflow.
+   ============================================================ */
+
+/* ---------- 0. Local helpers --------------------------------------------- */
+
+body.gaia-v2 :is([data-screen="today"], [data-screen="wellness"]) {
+  /* An inset panel inside a card: the Assist "card-2" well. */
+  --te-well: rgba(16, 31, 24, 0.62);
+  --te-well-border: rgba(160, 255, 185, 0.12);
+  /* Accent-tinted icon circle, fed by --te-tint. */
+  --te-tint: var(--v3-green);
+}
+
+/* ---------- 1. Today: hero ----------------------------------------------- */
+
+/* The art card keeps its photograph; the copy sits on a slightly deeper
+   bottom scrim so the date and the question read on any crop. */
+body.gaia-v2 [data-screen="today"] .g-super-hero {
+  border: 1px solid var(--v3-border);
+  background: var(--v3-card);
+}
+body.gaia-v2 [data-screen="today"] .g-super-hero h1 {
+  text-shadow: 0 2px 18px rgba(0, 0, 0, 0.55);
+}
+body.gaia-v2 [data-screen="today"] .g-super-hero__intro .g-super-date {
+  color: rgba(214, 236, 220, 0.82);
+  text-shadow: 0 1px 10px rgba(0, 0, 0, 0.7);
+}
+body.gaia-v2 [data-screen="today"] .g-super-hero__intro > p:not(.g-super-date) {
+  color: var(--v3-text);
+  text-shadow: 0 1px 12px rgba(0, 0, 0, 0.7);
+}
+
+/* ---------- 2. Today's energy card (g-de) -------------------------------- */
+/* Was a panel washed in the day's chakra colour with a glossy colour
+   ball. Now a v3 glass card; the chakra colour lives on in a small
+   "centre" well (dark core, coloured rim and glow) and a dot beside the
+   eyebrow — the Assist orb language, in miniature. */
+
+body.gaia-v2 [data-screen="today"] .g-de {
+  padding: 20px 18px 18px;
+  border: 1px solid var(--v3-border);
+  border-radius: var(--v3-radius-lg);
+  background:
+    radial-gradient(70% 60% at 0% 0%, color-mix(in srgb, var(--de-c, #75f05a) 9%, transparent), transparent 70%),
+    var(--v3-card-bg);
+  box-shadow: var(--v3-card-shadow);
+}
+body.gaia-v2 [data-screen="today"] .g-de__aura {
+  inset: -60px auto auto -60px;
+  width: 220px;
+  height: 220px;
+  opacity: 0.35;
+  filter: blur(30px);
+}
+body.gaia-v2 [data-screen="today"] .g-de__kicker {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  color: var(--v3-label);
+}
+body.gaia-v2 [data-screen="today"] .g-de__kicker::before {
+  content: "";
+  flex: 0 0 auto;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--de-c, var(--v3-green));
+  box-shadow: 0 0 8px color-mix(in srgb, var(--de-c, #75f05a) 70%, transparent);
+}
+body.gaia-v2 [data-screen="today"] .g-de__focus { gap: 14px; margin-top: 14px; }
+body.gaia-v2 [data-screen="today"] .g-de__orb {
+  width: 52px;
+  height: 52px;
+  background:
+    radial-gradient(circle at 50% 50%, color-mix(in srgb, var(--de-c, #75f05a) 85%, #fff) 0 5px, transparent 6px),
+    radial-gradient(circle at 50% 42%, color-mix(in srgb, var(--de-c, #75f05a) 22%, #06170d) 0%, #06140c 72%);
+  box-shadow:
+    0 0 0 1.5px color-mix(in srgb, var(--de-c, #75f05a) 80%, transparent),
+    0 0 0 5px rgba(2, 8, 5, 0.9),
+    0 0 0 6px color-mix(in srgb, var(--de-c, #75f05a) 18%, transparent),
+    0 0 22px color-mix(in srgb, var(--de-c, #75f05a) 30%, transparent),
+    inset 0 0 14px color-mix(in srgb, var(--de-c, #75f05a) 26%, transparent);
+}
+/* The breathing core stays (slow), but as a soft halo, not a white gloss. */
+body.gaia-v2 [data-screen="today"] .g-de__orb-core {
+  box-shadow: inset 0 0 10px color-mix(in srgb, var(--de-c, #75f05a) 45%, transparent);
+  animation-duration: 5s;
+}
+body.gaia-v2 [data-screen="today"] .g-de__title {
+  font-size: clamp(1.2rem, 5vw, 1.4rem);
+  line-height: 1.2;
+}
+body.gaia-v2 [data-screen="today"] .g-de__chakra {
+  margin: 4px 0 0;
+  color: var(--v3-text-2);
+  font-size: 13px;
+}
+body.gaia-v2 [data-screen="today"] .g-de__tip { color: var(--v3-text); }
+body.gaia-v2 [data-screen="today"] .g-de__practice {
+  margin-top: 16px;
+  padding: 14px 16px;
+  border: 1px solid var(--te-well-border);
+  border-radius: 18px;
+  background: var(--te-well);
+}
+body.gaia-v2 [data-screen="today"] .g-de__label {
+  margin: 0 0 6px;
+  color: var(--v3-label);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+}
+body.gaia-v2 [data-screen="today"] .g-de__practice p:not(.g-de__label) {
+  color: var(--v3-text);
+  font-size: 14.5px;
+  line-height: 1.55;
+}
+body.gaia-v2 [data-screen="today"] .g-de__personalise {
+  margin-top: 16px;
+  padding-top: 16px;
+  border-top: 1px solid rgba(160, 255, 185, 0.1);
+}
+body.gaia-v2 [data-screen="today"] .g-de__personalise p {
+  margin: 0 0 14px;
+  color: var(--v3-text-2);
+  font-size: 13.5px;
+  line-height: 1.55;
+}
+body.gaia-v2 [data-screen="today"] .g-de__personalise strong { color: var(--v3-text); font-weight: 600; }
+body.gaia-v2 [data-screen="today"] .g-de__actions { gap: 10px; margin-top: 14px; }
+body.gaia-v2 [data-screen="today"] .g-de__personalise .g-de__actions { margin-top: 0; }
+/* Personalised state: streak, week dots, done, journal. */
+body.gaia-v2 [data-screen="today"] .g-de__streak { color: var(--v3-text); }
+body.gaia-v2 [data-screen="today"] .g-de__streak small,
+body.gaia-v2 [data-screen="today"] .g-de__streak--rest,
+body.gaia-v2 [data-screen="today"] .g-de__day em { color: var(--v3-text-2); }
+body.gaia-v2 [data-screen="today"] .g-de__day i { background: rgba(160, 255, 185, 0.1); }
+body.gaia-v2 [data-screen="today"] .g-de__milestone { color: var(--v3-green-hi); }
+body.gaia-v2 [data-screen="today"] .g-de__done.is-done {
+  border: 1px solid rgba(117, 240, 90, 0.4);
+  background: rgba(117, 240, 90, 0.12);
+  color: var(--v3-green-hi);
+  box-shadow: none;
+}
+body.gaia-v2 [data-screen="today"] .g-de__journal summary {
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+  color: var(--v3-text-2);
+}
+body.gaia-v2 [data-screen="today"] .g-de__journal summary::before { color: var(--v3-green); }
+body.gaia-v2 [data-screen="today"] .g-de--loading .g-de__skeleton {
+  border-radius: 18px;
+  background: linear-gradient(90deg, rgba(160, 255, 185, 0.04), rgba(160, 255, 185, 0.09), rgba(160, 255, 185, 0.04));
+  background-size: 200% 100%;
+}
+
+/* ---------- 3. Today: next gathering ------------------------------------- */
+
+body.gaia-v2 [data-screen="today"] .g-feature-event {
+  border: 1px solid var(--v3-border);
+  background: var(--v3-card);
+}
+body.gaia-v2 [data-screen="today"] .g-feature-event__kicker { gap: 8px; }
+body.gaia-v2 [data-screen="today"] .g-feature-event__kicker .ph { color: var(--v3-emerald); }
+body.gaia-v2 [data-screen="today"] .g-feature-event__badge {
+  font-size: 10.5px;
+  letter-spacing: 0.04em;
+  text-transform: none;
+}
+body.gaia-v2 [data-screen="today"] .g-feature-event__meta { color: var(--v3-text-2); }
+
+/* ---------- 4. Today: Explore free -------------------------------------- */
+/* The Assist quick-action card: round tinted icon, label, chevron, on a
+   translucent card. Two per row on phones (label only), four per row
+   from 700px (with the line of detail). Each tool keeps its own tint in
+   the icon circle only (--tool is set inline by gaia-superapp.js). */
+
+body.gaia-v2 [data-screen="today"] .g-free-tools {
+  border: 1px solid var(--v3-border);
+  border-radius: var(--v3-radius-lg);
+  background: var(--v3-card-bg);
+  box-shadow: var(--v3-card-shadow);
+}
+body.gaia-v2 [data-screen="today"] .g-free-tools__grid { gap: 10px; }
+body.gaia-v2 [data-screen="today"] .g-free-tool {
+  position: relative;
+  display: grid;
+  grid-template-columns: 40px minmax(0, 1fr) 10px;
+  grid-auto-flow: row;
+  align-items: center;
+  align-content: center;
+  justify-items: start;
+  column-gap: 10px;
+  row-gap: 2px;
+  min-height: 64px;
+  height: auto;
+  padding: 10px 12px 10px 10px;
+  border: 1px solid var(--v3-border);
+  border-radius: 22px;
+  background: var(--v3-card-2);
+  color: var(--v3-text);
+  text-align: left;
+  box-shadow: none;
+  outline: none;
+  -webkit-tap-highlight-color: transparent;
+}
+body.gaia-v2 [data-screen="today"] .g-free-tool > span {
+  grid-column: 1;
+  grid-row: 1 / span 2;
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--tool, var(--v3-green)) 15%, transparent);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--tool, var(--v3-green)) 34%, transparent);
+  color: color-mix(in srgb, var(--tool, var(--v3-green)) 82%, #fff);
+  font-size: 20px;
+}
+body.gaia-v2 [data-screen="today"] .g-free-tool strong {
+  grid-column: 2;
+  align-self: center;
+  color: var(--v3-text);
+  font-size: 13.5px;
+  font-weight: 600;
+  line-height: 1.22;
+  letter-spacing: -0.005em;
+  overflow-wrap: normal;
+  hyphens: manual;
+}
+body.gaia-v2 [data-screen="today"] .g-free-tool small { display: none; }
+/* Chevron, drawn in CSS so it needs no markup. */
+body.gaia-v2 [data-screen="today"] .g-free-tool::after {
+  content: "";
+  grid-column: 3;
+  grid-row: 1 / span 2;
+  justify-self: end;
+  width: 7px;
+  height: 7px;
+  border-top: 1.5px solid var(--v3-muted);
+  border-right: 1.5px solid var(--v3-muted);
+  transform: rotate(45deg);
+  transition: transform 0.18s ease, border-color 0.18s ease;
+}
+body.gaia-v2 [data-screen="today"] .g-free-tool:active {
+  transform: scale(0.97);
+  background: rgba(24, 46, 34, 0.85);
+}
+body.gaia-v2 [data-screen="today"] .g-free-tool:focus-visible {
+  box-shadow: 0 0 0 2px var(--v3-page), 0 0 0 4px rgba(117, 240, 90, 0.75);
+}
+@media (hover: hover) {
+  body.gaia-v2 [data-screen="today"] .g-free-tool:hover {
+    border-color: var(--v3-border-strong);
+    background: rgba(22, 42, 32, 0.82);
+    outline: none;
+  }
+  body.gaia-v2 [data-screen="today"] .g-free-tool:hover::after {
+    transform: translateX(2px) rotate(45deg);
+    border-color: var(--v3-text);
+  }
+}
+/* Phones: two cards a row leave ~150px each, so the label gets the
+   chevron's room and the icon steps down to 36px. */
+@media (max-width: 459px) {
+  body.gaia-v2 [data-screen="today"] .g-free-tools__grid { gap: 8px; }
+  body.gaia-v2 [data-screen="today"] .g-free-tool {
+    grid-template-columns: 36px minmax(0, 1fr);
+    column-gap: 9px;
+    padding: 10px 10px 10px 9px;
+  }
+  body.gaia-v2 [data-screen="today"] .g-free-tool > span { width: 36px; height: 36px; font-size: 18px; }
+  body.gaia-v2 [data-screen="today"] .g-free-tool::after { display: none; }
+}
+@media (min-width: 700px) {
+  body.gaia-v2 [data-screen="today"] .g-free-tool {
+    grid-template-columns: 44px minmax(0, 1fr) 10px;
+    min-height: 76px;
+    padding: 12px 14px 12px 12px;
+    height: auto !important;
+  }
+  body.gaia-v2 [data-screen="today"] .g-free-tool > span { width: 44px; height: 44px; font-size: 21px; }
+  body.gaia-v2 [data-screen="today"] .g-free-tool strong { align-self: end; font-size: 14px; }
+  body.gaia-v2 [data-screen="today"] .g-free-tool small {
+    display: block;
+    grid-column: 2;
+    align-self: start;
+    max-width: none;
+    color: var(--v3-text-2);
+    font-size: 12px;
+    line-height: 1.35;
+  }
+}
+
+/* ---------- 5. Today's sky (Today and the Energy toolkit) --------------- */
+/* Was an indigo panel with a solid violet pill. Now the v3 card; the
+   moon keeps its soft violet halo (drawn in the SVG) as the one accent,
+   and the pill, chips and "Try this" block use the v3 chip / well. */
+
+body.gaia-v2 :is([data-screen="today"], [data-screen="wellness"]) .g-sky {
+  border: 1px solid var(--v3-border);
+  border-radius: var(--v3-radius-lg);
+  background:
+    radial-gradient(60% 70% at 0% 10%, rgba(167, 139, 250, 0.07), transparent 70%),
+    var(--v3-card-bg);
+  box-shadow: var(--v3-card-shadow);
+}
+body.gaia-v2 [data-screen="today"] [data-sky-host] .g-sky { max-width: none; }
+body.gaia-v2 :is([data-screen="today"], [data-screen="wellness"]) .g-sky__head .g-sky__kicker { color: var(--v3-label); }
+body.gaia-v2 :is([data-screen="today"], [data-screen="wellness"]) .g-sky__tofull {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 26px;
+  padding: 4px 11px;
+  border: 1px solid rgba(167, 139, 250, 0.32);
+  border-radius: 999px;
+  background: rgba(167, 139, 250, 0.1);
+  color: #cfc3ff;
+  font-family: var(--g-font);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+body.gaia-v2 :is([data-screen="today"], [data-screen="wellness"]) .g-sky__phase {
+  font-family: var(--g-font);
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  color: var(--v3-text);
+}
+body.gaia-v2 :is([data-screen="today"], [data-screen="wellness"]) .g-sky__day { color: var(--v3-text-2); }
+body.gaia-v2 :is([data-screen="today"], [data-screen="wellness"]) .g-sky__illum strong { color: var(--v3-text); }
+body.gaia-v2 :is([data-screen="today"], [data-screen="wellness"]) .g-sky__illum i { color: var(--v3-green); font-style: normal; }
+body.gaia-v2 :is([data-screen="today"], [data-screen="wellness"]) .g-sky__illum span { color: var(--v3-label); letter-spacing: 0.12em; }
+body.gaia-v2 :is([data-screen="today"], [data-screen="wellness"]) .g-sky__facts span {
+  display: inline-flex;
+  align-items: center;
+  min-height: 26px;
+  padding: 4px 11px;
+  border: 1px solid var(--v3-border);
+  border-radius: 999px;
+  background: rgba(16, 31, 24, 0.6);
+  color: var(--v3-text-2);
+  font-size: 12px;
+  font-weight: 600;
+}
+body.gaia-v2 :is([data-screen="today"], [data-screen="wellness"]) .g-sky__facts .g-sky__chakra {
+  gap: 7px;
+  color: var(--v3-text);
+}
+body.gaia-v2 :is([data-screen="today"], [data-screen="wellness"]) .g-sky__facts .g-sky__chakra::before {
+  content: "";
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--ck, var(--v3-green));
+  box-shadow: 0 0 8px color-mix(in srgb, var(--ck, #75f05a) 70%, transparent);
+}
+body.gaia-v2 :is([data-screen="today"], [data-screen="wellness"]) .g-sky__theme {
+  color: var(--v3-label);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+}
+body.gaia-v2 :is([data-screen="today"], [data-screen="wellness"]) .g-sky__invitation { color: var(--v3-text); }
+body.gaia-v2 :is([data-screen="today"], [data-screen="wellness"]) .g-sky__practice {
+  padding: 14px 16px;
+  border: 1px solid var(--te-well-border);
+  border-left: 1px solid var(--te-well-border);
+  border-radius: 18px;
+  background: var(--te-well);
+  color: var(--v3-text);
+}
+body.gaia-v2 :is([data-screen="today"], [data-screen="wellness"]) .g-sky__practice strong {
+  margin-bottom: 4px;
+  color: var(--v3-label);
+  font-weight: 600;
+  letter-spacing: 0.12em;
+}
+body.gaia-v2 :is([data-screen="today"], [data-screen="wellness"]) .g-sky__personal-line {
+  border: 1px solid var(--te-well-border);
+  border-radius: 16px;
+  background: var(--te-well);
+  color: var(--v3-text);
+}
+body.gaia-v2 :is([data-screen="today"], [data-screen="wellness"]) .g-sky__ring-fill { stroke: var(--v3-green); }
+body.gaia-v2 :is([data-screen="today"], [data-screen="wellness"]) .g-sky__invite { border-color: var(--v3-border); }
+/* Inside the toolkit accordion the sky card is the panel content: no
+   second frame inside the open row. */
+body.gaia-v2 [data-screen="wellness"] .g-tk__inner .g-sky {
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+/* ---------- 6. Today: join card ----------------------------------------- */
+
+body.gaia-v2 [data-screen="today"] .g-why-join__list li { color: var(--v3-text-2); }
+body.gaia-v2 [data-screen="today"] .g-why-join__list .ph { color: var(--v3-emerald); }
+
+/* ---------- 7. Energy: header, switcher, personalise -------------------- */
+
+body.gaia-v2 [data-screen="wellness"] .g-energy-switcher button {
+  min-height: 64px;
+  gap: 6px;
+  font-size: 12.5px;
+}
+body.gaia-v2 [data-screen="wellness"] .g-energy-switcher button .ph { font-size: 20px; }
+body.gaia-v2 [data-screen="wellness"] .g-energy-switcher button[aria-selected="true"] .ph {
+  filter: drop-shadow(0 0 6px rgba(139, 255, 112, 0.45));
+}
+
+/* "Personalise your day" / "Your sign" nudge cards and the sign-up form. */
+body.gaia-v2 [data-screen="wellness"] .g-well {
+  padding: 20px 18px;
+  border-radius: var(--v3-radius-lg);
+}
+body.gaia-v2 [data-screen="wellness"] .g-well__lead { color: var(--v3-text-2); line-height: 1.55; }
+body.gaia-v2 [data-screen="wellness"] .g-well__lead strong { color: var(--v3-text); font-weight: 600; }
+body.gaia-v2 [data-screen="wellness"] .g-well .g-card__actions .g-btn { width: 100%; }
+/* Result "orbs" (chakra quiz, colour test, match, cosmic map): the
+   glossy colour ball becomes a dark well with a ring and a bright core
+   in the result's colour, like Today's energy centre. */
+body.gaia-v2 [data-screen="wellness"] .g-well-orb:not(.g-well-orb--empty) {
+  background:
+    radial-gradient(circle at 50% 50%, color-mix(in srgb, var(--ck, #75f05a) 85%, #fff) 0 6px, transparent 7px),
+    radial-gradient(circle at 50% 42%, color-mix(in srgb, var(--ck, #75f05a) 24%, #06170d) 0%, #06140c 72%);
+  box-shadow:
+    0 0 0 1.5px color-mix(in srgb, var(--ck, #75f05a) 80%, transparent),
+    0 0 0 5px rgba(2, 8, 5, 0.9),
+    0 0 0 6px color-mix(in srgb, var(--ck, #75f05a) 18%, transparent),
+    0 0 22px color-mix(in srgb, var(--ck, #75f05a) 30%, transparent),
+    inset 0 0 14px color-mix(in srgb, var(--ck, #75f05a) 26%, transparent);
+}
+body.gaia-v2 [data-screen="wellness"] .g-well-orb:not(.g-well-orb--empty) span {
+  background: none;
+  box-shadow: inset 0 0 10px color-mix(in srgb, var(--ck, #75f05a) 40%, transparent);
+}
+body.gaia-v2 [data-screen="wellness"] .g-well-orb--empty {
+  background: radial-gradient(circle at 50% 42%, #0f2a1a 0%, #06140c 72%);
+  box-shadow: 0 0 0 1px var(--v3-border-strong), 0 0 18px rgba(117, 240, 90, 0.18);
+}
+/* Chakra quiz recommendations: v3 rows; the featured one keeps a thin
+   rim in the result's colour instead of a filled colour block. */
+body.gaia-v2 [data-screen="wellness"] .g-cq-rec {
+  min-height: 56px;
+  justify-content: center;
+  padding: 12px 16px;
+  border: 1px solid var(--v3-border);
+  border-radius: 18px;
+  background: var(--v3-card-2);
+}
+body.gaia-v2 [data-screen="wellness"] .g-cq-rec--primary {
+  border-color: color-mix(in srgb, var(--ck, #75f05a) 45%, transparent);
+  background:
+    linear-gradient(135deg, color-mix(in srgb, var(--ck, #75f05a) 9%, transparent), transparent 70%),
+    var(--v3-card-2);
+}
+body.gaia-v2 [data-screen="wellness"] .g-cq-rec strong { color: var(--v3-text); }
+body.gaia-v2 [data-screen="wellness"] .g-cq-rec small { color: var(--v3-text-2); }
+
+/* Section intro above the toolkit. */
+body.gaia-v2 [data-screen="wellness"] .g-energy-intro h2 { margin-top: 4px; }
+body.gaia-v2 [data-screen="wellness"] .g-energy-intro p:last-child { color: var(--v3-text-2); line-height: 1.55; }
+
+/* ---------- 8. Energy: toolkit accordion ------------------------------- */
+/* Rows are the phase-1 action row; here the tool's tint feeds the icon
+   circle the same way the Assist cards colour theirs, and the open
+   row's panel gets consistent inner spacing. */
+
+body.gaia-v2 [data-screen="wellness"] .g-tk__icon {
+  background: color-mix(in srgb, var(--tint, var(--v3-green)) 15%, transparent);
+  color: color-mix(in srgb, var(--tint, var(--v3-green)) 78%, #fff);
+  font-size: 21px;
+}
+body.gaia-v2 [data-screen="wellness"] .g-tk__head[aria-expanded="true"] .g-tk__chev { color: var(--v3-green); }
+body.gaia-v2 [data-screen="wellness"] .g-tk__chev { transition: transform 0.3s var(--v3-ease), color 0.18s ease; }
+body.gaia-v2 [data-screen="wellness"] .g-tk__head:focus-visible {
+  outline: none;
+  box-shadow: inset 0 0 0 2px rgba(117, 240, 90, 0.6);
+}
+@media (hover: hover) {
+  body.gaia-v2 [data-screen="wellness"] .g-tk:not(:has(> .g-tk__head[aria-expanded="true"])):hover {
+    border-color: var(--v3-border-strong);
+  }
+}
+/* A hairline between the row and its open panel. */
+body.gaia-v2 [data-screen="wellness"] .g-tk__inner {
+  border-top: 1px solid rgba(160, 255, 185, 0.08);
+}
+/* Every panel's content gets the same 16px inner gutter. Numerology and
+   the sky host render bare (no card of their own), so they need it
+   most; the frameless cards (phase 1 made them borderless) get it too. */
+body.gaia-v2 [data-screen="wellness"] .g-tk__inner > :is(.g-page-sec, [data-numerology-host]) {
+  padding: 16px 16px 18px;
+}
+body.gaia-v2 [data-screen="wellness"] .g-tk__inner .g-card:not(.g-sky) { padding: 0; }
+
+/* ---------- 9. Energy: tool panels ------------------------------------- */
+
+/* Quizzes (chakra balance, colour test) and match: title, lead, options. */
+body.gaia-v2 [data-screen="wellness"] .g-quiz__title { margin: 4px 0 6px; }
+body.gaia-v2 [data-screen="wellness"] :is(.g-quiz, .g-match, .g-moon) .g-card__meta { color: var(--v3-text-2); }
+body.gaia-v2 [data-screen="wellness"] :is(.g-quiz, .g-match, .g-moon, .g-num) .g-card__actions .g-btn { width: 100%; }
+body.gaia-v2 [data-screen="wellness"] .g-quiz__q {
+  color: var(--v3-text);
+  font-weight: 600;
+  line-height: 1.35;
+}
+body.gaia-v2 [data-screen="wellness"] .g-quiz__kicker { color: var(--v3-label); letter-spacing: 0.12em; }
+body.gaia-v2 [data-screen="wellness"] .g-quiz-opts { gap: 8px; }
+body.gaia-v2 [data-screen="wellness"] .g-quiz-opt {
+  min-height: 52px;
+  padding: 12px 16px;
+  border: 1px solid var(--v3-border);
+  border-radius: 18px;
+  background: var(--v3-card-2);
+  color: var(--v3-text);
+  font-family: var(--g-font);
+  font-weight: 500;
+  transition: transform 0.18s ease, border-color 0.18s ease, background 0.18s ease;
+  -webkit-tap-highlight-color: transparent;
+}
+body.gaia-v2 [data-screen="wellness"] .g-quiz-opt:active { transform: scale(0.98); background: rgba(24, 46, 34, 0.85); }
+body.gaia-v2 [data-screen="wellness"] :is(.g-quiz-opt.is-on, .g-quiz-opt[aria-pressed="true"], .g-quiz-opt.is-selected) {
+  border-color: rgba(117, 240, 90, 0.45);
+  background: rgba(117, 240, 90, 0.1);
+}
+@media (hover: hover) {
+  body.gaia-v2 [data-screen="wellness"] .g-quiz-opt:hover {
+    transform: none;
+    border-color: var(--v3-border-strong);
+    background: rgba(22, 42, 32, 0.82);
+  }
+}
+body.gaia-v2 [data-screen="wellness"] .g-quiz-dot { width: 12px; height: 12px; }
+body.gaia-v2 [data-screen="wellness"] .g-quiz__result-name { color: var(--v3-text); font-weight: 600; letter-spacing: -0.02em; }
+body.gaia-v2 [data-screen="wellness"] :is(.g-cq-try, .g-cq-lead) {
+  border-color: var(--te-well-border);
+  border-radius: 18px;
+}
+body.gaia-v2 [data-screen="wellness"] :is(.g-cq-try, .g-cq-lead) { background: var(--te-well); }
+body.gaia-v2 [data-screen="wellness"] :is(.g-cq-try__label, .g-cq-recs__head, .g-cq-lead__head) {
+  color: var(--v3-label);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+/* Energy match: the date fields side by side. */
+body.gaia-v2 [data-screen="wellness"] .g-match-person .g-label {
+  display: block;
+  margin: 14px 0 8px;
+  color: var(--v3-label);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+body.gaia-v2 [data-screen="wellness"] .g-match-dob { gap: 8px; }
+body.gaia-v2 [data-screen="wellness"] .g-match-err { color: #ffb4a8; }
+
+/* Moon rituals: the moon keeps its lit disc; the crystal tip is a well. */
+body.gaia-v2 [data-screen="wellness"] .g-moon__phase { color: var(--v3-text); font-weight: 600; letter-spacing: -0.02em; }
+body.gaia-v2 [data-screen="wellness"] .g-moon__sign { color: var(--v3-text-2); }
+body.gaia-v2 [data-screen="wellness"] .g-moon__ritual-title { color: var(--v3-text); font-weight: 600; }
+body.gaia-v2 [data-screen="wellness"] .g-moon__crystal {
+  padding: 14px 16px;
+  border: 1px solid var(--te-well-border);
+  border-radius: 18px;
+  background: var(--te-well);
+}
+body.gaia-v2 [data-screen="wellness"] .g-moon__next {
+  color: var(--v3-label);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+}
+
+/* Numerology: form row, then the three number cards. */
+body.gaia-v2 [data-screen="wellness"] .g-num__intro { margin-top: 0; color: var(--v3-text-2); line-height: 1.55; }
+body.gaia-v2 [data-screen="wellness"] .g-num .g-label {
+  color: var(--v3-label);
+  font-size: 11px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+body.gaia-v2 [data-screen="wellness"] .g-num__row { gap: 8px; }
+body.gaia-v2 [data-screen="wellness"] .g-num__row .g-input { min-width: 0; }
+body.gaia-v2 [data-screen="wellness"] .g-num__note { color: var(--v3-muted); font-size: 12px; line-height: 1.5; }
+body.gaia-v2 [data-screen="wellness"] .g-num__card {
+  padding: 14px 16px;
+  border: 1px solid var(--te-well-border);
+  border-radius: 18px;
+  background: var(--te-well);
+}
+body.gaia-v2 [data-screen="wellness"] .g-num__figure { color: var(--v3-green-hi); font-weight: 700; }
+body.gaia-v2 [data-screen="wellness"] .g-num__kind { color: var(--v3-label); letter-spacing: 0.12em; }
+body.gaia-v2 [data-screen="wellness"] :is(.g-num__meta, .g-num__practice, .g-num__journal, .g-num__foot) { color: var(--v3-text-2); }
+@media (max-width: 379px) {
+  body.gaia-v2 [data-screen="wellness"] .g-num__row { flex-wrap: wrap; }
+  body.gaia-v2 [data-screen="wellness"] .g-num__row > * { flex: 1 1 100%; }
+}
+
+/* Cosmic map note / unlock. */
+body.gaia-v2 [data-screen="wellness"] .g-cosmic__unlock {
+  border-color: var(--te-well-border);
+  border-radius: 18px;
+  background: var(--te-well);
+}
+body.gaia-v2 [data-screen="wellness"] .g-cosmic__note { color: var(--v3-text-2); }
+
+/* ---------- 10. Energy: chakra guide ----------------------------------- */
+
+body.gaia-v2 [data-screen="wellness"] .g-chakra-hero {
+  border: 1px solid var(--v3-border);
+  background: var(--v3-card);
+}
+body.gaia-v2 [data-screen="wellness"] .g-chakra-hero__caption { color: var(--v3-text-2); }
+/* The hit targets on the figure: a thin ring in the centre's colour. */
+body.gaia-v2 [data-screen="wellness"] .g-chakra-hero__hit.is-active {
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--ck) 80%, #fff), 0 0 18px var(--ck);
+}
+body.gaia-v2 [data-screen="wellness"] .g-chakra-guide {
+  border-top: 1px solid rgba(160, 255, 185, 0.1);
+  background:
+    radial-gradient(80% 60% at 0% 0%, color-mix(in srgb, var(--active-chakra, #75f05a) 8%, transparent), transparent 70%),
+    var(--v3-card);
+}
+body.gaia-v2 [data-screen="wellness"] .g-chakra-guide__name {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+}
+body.gaia-v2 [data-screen="wellness"] .g-chakra-guide__name::before {
+  content: "";
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: var(--active-chakra, var(--v3-green));
+  box-shadow: 0 0 10px var(--active-chakra, var(--v3-green));
+}
+body.gaia-v2 [data-screen="wellness"] .g-chakra-guide__meta { color: var(--v3-text-2); }
+/* "Support this centre": a v3 secondary pill, sized to 44px. */
+body.gaia-v2 [data-screen="wellness"] .g-chakra-guide__shop {
+  min-height: 44px;
+  padding-inline: 16px;
+  white-space: nowrap;
+}
+/* On phones the pill beside the name squeezed the centre's description
+   into a narrow column; below 440px it sits under it instead. */
+@media (max-width: 439px) {
+  body.gaia-v2 [data-screen="wellness"] .g-chakra-guide { grid-template-columns: minmax(0, 1fr); }
+  body.gaia-v2 [data-screen="wellness"] .g-chakra-guide__shop { justify-self: start; }
+}
+/* Try now / Journal rows: the icon becomes a round tinted well in the
+   centre's colour; labels are calm eyebrows. */
+body.gaia-v2 [data-screen="wellness"] .g-guide-row {
+  padding: 14px 16px 14px 12px;
+  gap: 12px;
+  border-radius: 20px;
+}
+body.gaia-v2 [data-screen="wellness"] .g-chakra-hero .g-guide-row__ic,
+body.gaia-v2 [data-screen="wellness"] .g-ritual-cta__ic {
+  width: 40px;
+  height: 40px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--active-chakra, var(--v3-green)) 15%, transparent);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--active-chakra, var(--v3-green)) 34%, transparent);
+  color: color-mix(in srgb, var(--active-chakra, var(--v3-green)) 78%, #fff);
+  font-size: 19px;
+}
+body.gaia-v2 [data-screen="wellness"] .g-guide-row__k {
+  color: var(--v3-label);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+}
+body.gaia-v2 [data-screen="wellness"] .g-guide-row__b p { color: var(--v3-text); line-height: 1.5; }
+/* Ask Gaia: the one green, interactive row. */
+body.gaia-v2 [data-screen="wellness"] .g-chakra-guide__ask {
+  padding: 12px 16px 12px 12px;
+  border-color: rgba(117, 240, 90, 0.26);
+}
+body.gaia-v2 [data-screen="wellness"] .g-chakra-guide__ask .g-ritual-cta__ic {
+  background: rgba(117, 240, 90, 0.14);
+  box-shadow: inset 0 0 0 1px rgba(117, 240, 90, 0.3);
+  color: var(--v3-green-hi);
+}
+body.gaia-v2 [data-screen="wellness"] .g-ritual-cta__t strong { color: var(--v3-text); font-weight: 600; }
+body.gaia-v2 [data-screen="wellness"] .g-ritual-cta__t small { color: var(--v3-text-2); }
+
+/* Selector pips: seven slim dots in a glass track; each shows its own
+   centre's colour faintly, the selected one is lit and wider. The pips
+   are 44px-tall tap targets with the visible dot drawn inside. */
+body.gaia-v2 [data-screen="wellness"] .g-chakra-guide__steps {
+  gap: 2px;
+  padding: 0 6px;
+  border: 1px solid var(--v3-border);
+  border-radius: 999px;
+  background: rgba(5, 16, 11, 0.7);
+}
+body.gaia-v2 [data-screen="wellness"] .g-chakra-guide__steps button {
+  position: relative;
+  min-width: 0;
+  height: 44px;
+  min-height: 44px;
+  padding: 0;
+  border: 0;
+  border-radius: 999px;
+  background: transparent !important;
+  box-shadow: none !important;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+body.gaia-v2 [data-screen="wellness"] .g-chakra-guide__steps button::before {
+  content: "";
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 10px;
+  height: 10px;
+  border-radius: 999px;
+  background: rgba(168, 179, 173, 0.35);
+  transform: translate(-50%, -50%);
+  transition: width 0.3s var(--v3-ease), background 0.2s ease, box-shadow 0.2s ease;
+}
+body.gaia-v2 [data-screen="wellness"] .g-chakra-guide__steps button[data-guide-ck="root"]::before { background: rgba(229, 57, 53, 0.5); }
+body.gaia-v2 [data-screen="wellness"] .g-chakra-guide__steps button[data-guide-ck="sacral"]::before { background: rgba(251, 140, 0, 0.5); }
+body.gaia-v2 [data-screen="wellness"] .g-chakra-guide__steps button[data-guide-ck="solar"]::before { background: rgba(253, 216, 53, 0.5); }
+body.gaia-v2 [data-screen="wellness"] .g-chakra-guide__steps button[data-guide-ck="heart"]::before { background: rgba(67, 160, 71, 0.6); }
+body.gaia-v2 [data-screen="wellness"] .g-chakra-guide__steps button[data-guide-ck="throat"]::before { background: rgba(41, 168, 242, 0.5); }
+body.gaia-v2 [data-screen="wellness"] .g-chakra-guide__steps button[data-guide-ck="third-eye"]::before { background: rgba(79, 70, 229, 0.6); }
+body.gaia-v2 [data-screen="wellness"] .g-chakra-guide__steps button[data-guide-ck="crown"]::before { background: rgba(142, 36, 170, 0.6); }
+body.gaia-v2 [data-screen="wellness"] .g-chakra-guide__steps button:is(.is-active, [aria-pressed="true"])::before {
+  width: 26px;
+  background: var(--ck, var(--v3-green));
+  box-shadow: 0 0 0 1.5px rgba(245, 247, 245, 0.55), 0 0 12px var(--ck, var(--v3-green));
+}
+body.gaia-v2 [data-screen="wellness"] .g-chakra-guide__steps button:focus-visible {
+  outline: none;
+  box-shadow: inset 0 0 0 2px rgba(117, 240, 90, 0.6) !important;
+}
+
+/* Energy-path / birth-map result cards (signed-up horoscope state). */
+body.gaia-v2 [data-screen="wellness"] .g-energy-path__support a {
+  border: 1px solid var(--v3-border);
+  border-radius: 20px;
+  background: var(--v3-card-2);
+  color: var(--v3-text);
+}
+body.gaia-v2 [data-screen="wellness"] .g-energy-path__support a .ph:first-child { color: var(--v3-green); }
+body.gaia-v2 [data-screen="wellness"] .g-energy-path__support small { color: var(--v3-text-2); }
+body.gaia-v2 [data-screen="wellness"] .g-cosmic-map__details summary { min-height: 44px; color: var(--v3-text); }
+
+/* ---------- 11. Energy Pulse and Coherence Breathing modals ------------ */
+/* Full-screen practice cards appended to <body>; given the Assist panel's
+   finish: dark glass card, sage eyebrow, v3 pill buttons, round close. */
+
+body.gaia-v2 :is(.gp-modal__backdrop, .gb-modal__backdrop) {
+  background:
+    radial-gradient(70% 45% at 50% 30%, rgba(66, 219, 134, 0.1), transparent 70%),
+    rgba(2, 8, 5, 0.88);
+}
+body.gaia-v2 :is(.gp-card, .gb-card) {
+  border: 1px solid rgba(140, 255, 170, 0.2);
+  border-radius: 32px;
+  background:
+    radial-gradient(120% 45% at 50% 0%, rgba(117, 240, 90, 0.1), transparent 60%),
+    var(--v3-card);
+  box-shadow:
+    inset 0 1px 0 rgba(200, 255, 210, 0.08),
+    0 0 48px -8px rgba(117, 240, 90, 0.14),
+    0 30px 80px -20px rgba(0, 0, 0, 0.8);
+  color: var(--v3-text);
+  font-family: var(--g-font);
+}
+body.gaia-v2 :is(.gp-close, .gb-close) {
+  width: 44px;
+  height: 44px;
+  top: 12px;
+  right: 12px;
+  border: 1px solid var(--v3-border);
+  background: rgba(16, 31, 24, 0.6);
+  color: var(--v3-text-2);
+  transition: background 0.18s ease, color 0.18s ease;
+}
+body.gaia-v2 :is(.gp-close, .gb-close):active { background: rgba(28, 52, 40, 0.8); color: var(--v3-text); }
+body.gaia-v2 :is(.gp-eyebrow, .gb-eyebrow) {
+  color: var(--v3-label);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+}
+body.gaia-v2 :is(.gp-title, .gb-title) {
+  color: var(--v3-text);
+  font-family: var(--g-font);
+  font-weight: 600;
+  letter-spacing: -0.022em;
+}
+body.gaia-v2 :is(.gp-lead, .gb-lead) { color: var(--v3-text-2); }
+body.gaia-v2 :is(.gp-lead, .gb-lead) strong { color: var(--v3-text); font-weight: 600; }
+body.gaia-v2 :is(.gp-note, .gb-note) { color: var(--v3-muted); }
+body.gaia-v2 .gp-pill {
+  border-color: rgba(117, 240, 90, 0.3);
+  background: rgba(117, 240, 90, 0.08);
+  color: var(--v3-text);
+  font-weight: 600;
+}
+body.gaia-v2 .gp-pill em { color: var(--v3-text-2); }
+body.gaia-v2 .gp-pill .ph { color: var(--v3-green-hi); }
+body.gaia-v2 .gp-other { color: var(--v3-label); letter-spacing: 0.12em; }
+/* Primary pill: the v3 green. */
+body.gaia-v2 :is(.gp-btn, .gb-btn):not(.gp-btn--ghost):not(.gp-btn--link):not(.gb-btn--ghost):not(.gb-btn--link) {
+  min-height: 50px;
+  border: 0;
+  border-radius: 999px;
+  background: linear-gradient(180deg, var(--v3-green-hi), var(--v3-green) 60%, #62dd4b);
+  color: #06170d;
+  font-family: var(--g-font);
+  font-weight: 700;
+  box-shadow:
+    0 0 0 1px rgba(139, 255, 112, 0.45),
+    0 0 22px -4px rgba(117, 240, 90, 0.45),
+    inset 0 1px 0 rgba(255, 255, 255, 0.4);
+  transition: transform 0.18s var(--v3-ease), filter 0.18s ease;
+}
+body.gaia-v2 :is(.gp-btn, .gb-btn):active { transform: scale(0.97); }
+/* Secondary: translucent pill with a thin green rim (was a square box). */
+body.gaia-v2 :is(.gp-btn--ghost, .gb-btn--ghost) {
+  min-height: 48px;
+  border: 1px solid rgba(117, 240, 90, 0.3);
+  border-radius: 999px;
+  background: rgba(16, 31, 24, 0.6);
+  color: var(--v3-text);
+  font-family: var(--g-font);
+  font-weight: 600;
+}
+body.gaia-v2 .gp-diag__bar .gp-btn--ghost { min-height: 36px; }
+body.gaia-v2 :is(.gp-btn--link, .gb-btn--link) {
+  min-height: 44px;
+  color: var(--v3-green);
+  font-family: var(--g-font);
+}
+/* Breath length choices: the v3 segmented option. */
+body.gaia-v2 .gb-choice {
+  min-height: 56px;
+  border: 1px solid var(--v3-border);
+  border-radius: 18px;
+  background: var(--v3-card-2);
+  color: var(--v3-text);
+  font-family: var(--g-font);
+  font-weight: 600;
+  transition: background 0.2s ease, border-color 0.2s ease, color 0.2s ease;
+}
+body.gaia-v2 .gb-choice small { color: var(--v3-text-2); font-weight: 500; }
+body.gaia-v2 .gb-choice.on {
+  border-color: rgba(117, 240, 90, 0.45);
+  background: rgba(117, 240, 90, 0.12);
+  color: var(--v3-green-hi);
+  box-shadow: 0 0 20px -8px rgba(117, 240, 90, 0.5);
+}
+body.gaia-v2 .gb-choice.on small { color: var(--v3-green); }
+/* The breathing orb: the Assist orb's green, calmer than the old lime. */
+body.gaia-v2 .gb-orb {
+  background: radial-gradient(circle at 50% 42%, rgba(139, 255, 112, 0.85), rgba(66, 219, 134, 0.55) 55%, rgba(10, 36, 21, 0.9) 100%);
+  box-shadow: 0 0 60px rgba(117, 240, 90, 0.35), inset 0 0 0 1px rgba(200, 255, 210, 0.18);
+}
+body.gaia-v2 .gb-ripple { border-color: rgba(139, 255, 112, 0.22); }
+body.gaia-v2 .gb-meta { color: var(--v3-text-2); }
+
+/* ---------- 12. Bottom tab bar: legible labels ------------------------- */
+/* gaia-fit.css shrank the labels to 8px (0.5rem) so seven items fit at
+   320px. They were unreadable. At 11px they still fit from 360px up:
+   the links are content-sized and space-around (gaia-fit.css), so the
+   long "Community" takes the slack from "Shop" and "You"; the icon
+   shrinks slightly and the orb's side margin is trimmed to give the
+   labels the room. Below 360px they step down to 10px. */
+
+@media (max-width: 999px) {
+  body.gaia-v2 .gaia-tabbar__inner .gaia-tabbar__label {
+    font-size: 11px !important;
+    line-height: 1.15;
+    letter-spacing: 0 !important;
+    white-space: nowrap;
+  }
+  body.gaia-v2 .gaia-tabbar__inner .gaia-tabbar__link {
+    gap: 3px;
+    padding-left: 3px;
+    padding-right: 3px;
+  }
+  body.gaia-v2 .gaia-tabbar__inner .gaia-tabbar__icon {
+    width: 1.3rem;
+    height: 1.3rem;
+    font-size: 1.3rem;
+  }
+}
+@media (max-width: 999px) {
+  body.gaia-v2 .gaia-tabbar__inner { padding-left: 6px !important; padding-right: 6px !important; }
+  /* Bigger labels leave less air between tabs; the active pill hugs its
+     label a little closer so it never touches the next one. */
+  body.gaia-v2 .gaia-tabbar__link.is-active::before { inset: 2px -2px; }
+}
+@media (max-width: 379px) {
+  body.gaia-v2 .gaia-tabbar__inner .gaia-tabbar__label { font-size: 10.5px !important; }
+  body.gaia-v2 .gaia-tabbar__inner .gaia-tabbar__link { padding-left: 2px; padding-right: 2px; }
+  body.gaia-v2 .gaia-tabbar__assist { margin-left: 0; margin-right: 0; }
+}
+/* Below the 360px design floor (old 320px phones): 10px labels and no
+   side padding, so "Academy" still fits whole. */
+@media (max-width: 339px) {
+  body.gaia-v2 .gaia-tabbar__inner { padding-left: 4px !important; padding-right: 4px !important; }
+  body.gaia-v2 .gaia-tabbar__inner .gaia-tabbar__label { font-size: 10px !important; }
+  body.gaia-v2 .gaia-tabbar__inner .gaia-tabbar__link { padding-left: 0; padding-right: 0; }
+  body.gaia-v2 .gaia-tabbar__inner .gaia-tabbar__icon { width: 1.2rem; height: 1.2rem; font-size: 1.2rem; }
+}
+/* Side rail (>= 1000px): room to spare, so the same 11px. */
+@media (min-width: 1000px) {
+  body.gaia-v2 .gaia-tabbar__label {
+    font-size: 11px !important;
+    letter-spacing: 0;
+  }
+}
+
+/* ---------- 13. Reduced motion ----------------------------------------- */
+
+@media (prefers-reduced-motion: reduce) {
+  body.gaia-v2 [data-screen="today"] .g-free-tool,
+  body.gaia-v2 [data-screen="today"] .g-free-tool::after,
+  body.gaia-v2 [data-screen="wellness"] :is(.g-quiz-opt, .g-tk__chev),
+  body.gaia-v2 [data-screen="wellness"] .g-chakra-guide__steps button::before,
+  body.gaia-v2 :is(.gb-choice, .gp-btn, .gb-btn, .gp-close, .gb-close) {
+    transition: none !important;
+  }
+  body.gaia-v2 [data-screen="today"] .g-free-tool:active,
+  body.gaia-v2 [data-screen="wellness"] .g-quiz-opt:active,
+  body.gaia-v2 :is(.gp-btn, .gb-btn):active { transform: none; }
+  body.gaia-v2 [data-screen="today"] .g-de__orb-core { animation: none; }
+}

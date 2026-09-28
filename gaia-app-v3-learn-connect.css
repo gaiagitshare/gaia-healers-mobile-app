@@ -1,0 +1,1278 @@
+/* ============================================================
+   Gaia app v3 — phase 2: learn & connect screens (2026-09-28)
+
+   Academy (course catalogue, in-app course player), Community, Events
+   (list, My tickets, an event's detail page and its tabs), Bookings and
+   Inbox. Built on gaia-app-v3.css: it uses the --v3-* tokens and the
+   shared cards / buttons / action rows from there, and only adds what
+   these screens need on top.
+
+   Every rule is fenced to its own screen ([data-screen="…"]) or to a
+   surface only these screens open (.gaia-acad, the course player), so
+   the classes these screens share with others (g-access, g-super-list,
+   g-super-auth, g-super-row …) are untouched elsewhere. Paint and layout
+   only: no markup or behaviour depends on anything here.
+   ============================================================ */
+
+/* ---------- 0. Shared bits for these screens ---------------------------- */
+
+body.gaia-v2 {
+  /* Stroke icons drawn as data URIs, for rows whose markup has no icon.
+     Colour is baked into each (the state it stands for). */
+  --lc-ic-lock: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23f3d77a' stroke-width='1.8' stroke-linejoin='round' stroke-linecap='round'%3E%3Crect x='5' y='10.5' width='14' height='9.5' rx='2.6'/%3E%3Cpath d='M8.5 10.5V8a3.5 3.5 0 0 1 7 0v2.5'/%3E%3C/svg%3E");
+  --lc-ic-circle: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%238bff70' stroke-width='1.8' stroke-linecap='round'%3E%3Ccircle cx='9' cy='8.5' r='3.1'/%3E%3Cpath d='M3.6 19c.8-3.1 2.9-4.9 5.4-4.9s4.6 1.8 5.4 4.9'/%3E%3Ccircle cx='16.6' cy='9.4' r='2.5'/%3E%3Cpath d='M15.9 14.4c2.2-.2 4 1.3 4.6 4.1'/%3E%3C/svg%3E");
+  --lc-ic-soon: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23a8b3ad' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='12' cy='12' r='8.2'/%3E%3Cpath d='M12 7.8V12l2.9 1.9'/%3E%3C/svg%3E");
+  --lc-ic-check: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%238bff70' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6.5 12.5l3.6 3.4 7.4-7.8'/%3E%3C/svg%3E");
+}
+
+/* Section titles inside the learn/connect screens: the Assist size. */
+body.gaia-v2 :is([data-screen="academy"], [data-screen="community"]) .g-section__title {
+  font-size: clamp(1.15rem, 4.6vw, 1.35rem);
+  font-weight: 600;
+  letter-spacing: -0.02em;
+}
+
+/* ---------- 1. Academy: course rows ------------------------------------- */
+/* gaia-member.js renders each course as
+     button.g-access.g-access--link > img.g-access__img
+       + .g-access__body > (.g-access__name > title + .g-chip tier)
+                           + .g-access__meta
+       + .g-chip.g-access__act ("Sign in →" / "Open →" / "Get access →")
+   The action chip sat to the right and squeezed long titles to 5–6
+   lines. Now: an Assist-style action card on a grid — thumbnail left,
+   title (3 lines max) and description (2) beside it, and a footer line
+   under them with the tier chip on the left and the action on the right.
+   The tier chip lives inside the title span, so it is lifted out of the
+   title's flow with absolute positioning onto that footer line (the
+   title's own overflow clip does not reach it: its containing block is
+   the card). A second chip in the title (the "N learners" count) stays
+   in the title's flow. */
+
+body.gaia-v2 [data-screen="academy"] .g-access-grid { gap: 12px; }
+
+body.gaia-v2 [data-screen="academy"] .g-access--link {
+  --acc-pad: 14px;
+  --acc-thumb: 60px;
+  --acc-gap: 14px;
+  position: relative;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: auto auto;
+  align-items: start;
+  column-gap: var(--acc-gap);
+  row-gap: 12px;
+  width: 100%;
+  min-height: 0;
+  padding: var(--acc-pad) 14px var(--acc-pad) var(--acc-pad);
+  border: 1px solid var(--v3-border);
+  border-radius: 24px;
+  background: var(--v3-card-2);
+  color: var(--v3-text);
+  text-align: left;
+  cursor: pointer;
+  transition: transform 0.18s ease, border-color 0.18s ease, background 0.18s ease;
+  -webkit-tap-highlight-color: transparent;
+}
+body.gaia-v2 [data-screen="academy"] .g-access--link:has(> .g-access__img) {
+  grid-template-columns: var(--acc-thumb) minmax(0, 1fr);
+}
+body.gaia-v2 [data-screen="academy"] .g-access--link.g-access--unlocked {
+  border-color: rgba(117, 240, 90, 0.26);
+  background:
+    linear-gradient(135deg, rgba(117, 240, 90, 0.07), transparent 60%),
+    var(--v3-card-2);
+}
+body.gaia-v2 [data-screen="academy"] .g-access--link:active {
+  transform: scale(0.985);
+  background: rgba(24, 46, 34, 0.85);
+}
+body.gaia-v2 [data-screen="academy"] .g-access--link:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--v3-page), 0 0 0 4px rgba(117, 240, 90, 0.75);
+}
+@media (hover: hover) {
+  body.gaia-v2 [data-screen="academy"] .g-access--link:hover {
+    transform: none;
+    border-color: var(--v3-border-strong);
+    background: rgba(22, 42, 32, 0.82);
+  }
+  body.gaia-v2 [data-screen="academy"] .g-access--link:hover .g-access__act { color: var(--v3-text); }
+  body.gaia-v2 [data-screen="academy"] .g-access--link.g-access--unlocked:hover .g-access__act { color: var(--v3-green-hi); }
+}
+
+/* The thumbnail: a soft rounded tile (sizes are inline in the markup). */
+body.gaia-v2 [data-screen="academy"] .g-access--link > .g-access__img {
+  grid-column: 1;
+  grid-row: 1 / span 2;
+  width: var(--acc-thumb) !important;
+  height: var(--acc-thumb) !important;
+  border: 1px solid rgba(160, 255, 185, 0.14);
+  border-radius: 18px !important;
+  background: #0a1a12;
+  object-fit: cover;
+}
+
+body.gaia-v2 [data-screen="academy"] .g-access--link > .g-access__body {
+  grid-column: -2;
+  grid-row: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  min-width: 0;
+}
+body.gaia-v2 [data-screen="academy"] .g-access--link .g-access__name {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+  overflow: hidden;
+  white-space: normal;
+  color: var(--v3-text);
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 1.3;
+  letter-spacing: -0.012em;
+  overflow-wrap: anywhere;
+}
+body.gaia-v2 [data-screen="academy"] .g-access--link .g-access__meta {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+  color: var(--v3-text-2);
+  font-size: 12.5px;
+  line-height: 1.45;
+}
+body.gaia-v2 [data-screen="academy"] .g-access--link .g-access__meta:empty { display: none; }
+
+/* Tier chip (Silver / Free / Your access), lifted onto the footer line. */
+body.gaia-v2 [data-screen="academy"] .g-access--link .g-access__name > .g-chip:first-of-type {
+  position: absolute;
+  left: var(--acc-pad);
+  bottom: calc(var(--acc-pad) + 4px);
+  display: inline-flex;
+  align-items: center;
+  min-height: 24px;
+  max-width: 40%;
+  margin: 0 !important;
+  padding: 3px 10px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 10px;
+  line-height: 1;
+}
+body.gaia-v2 [data-screen="academy"] .g-access--link:has(> .g-access__img) .g-access__name > .g-chip:first-of-type {
+  left: calc(var(--acc-pad) + var(--acc-thumb) + var(--acc-gap));
+}
+/* Any further chip (learner count) stays inline, as a quiet label. */
+body.gaia-v2 [data-screen="academy"] .g-access--link .g-access__name > .g-chip ~ .g-chip {
+  min-height: 0;
+  margin-left: 6px !important;
+  padding: 2px 8px;
+  font-size: 10px;
+  vertical-align: 1px;
+}
+
+/* The action: a compact pill at the right end of the footer line. */
+body.gaia-v2 [data-screen="academy"] .g-access--link > .g-access__act {
+  grid-column: -2;
+  grid-row: 2;
+  justify-self: end;
+  display: inline-flex;
+  align-items: center;
+  min-height: 32px;
+  max-width: 58%;
+  padding: 6px 13px;
+  white-space: nowrap;
+  text-align: center;
+  font-size: 10.5px;
+  transition: color 0.18s ease, border-color 0.18s ease;
+}
+body.gaia-v2 [data-screen="academy"] .g-access--link.g-access--locked > .g-access__act {
+  border-color: rgba(160, 255, 185, 0.2);
+  background: rgba(5, 16, 11, 0.6);
+  color: var(--v3-text-2);
+}
+
+/* The Academy intro card's button: a pill, not a full-width bar, on
+   wide screens. */
+@media (min-width: 700px) {
+  body.gaia-v2 [data-screen="academy"] #member-academy .g-card--feature .g-card__actions .g-btn { min-width: 220px; }
+}
+
+/* Signed-in "Your courses" rows (gaia-member.js renderSyncedAcademy). */
+body.gaia-v2 [data-screen="academy"] .gaia-acad-cta {
+  border: 1px solid rgba(117, 240, 90, 0.3);
+  border-radius: 24px;
+  background:
+    linear-gradient(135deg, rgba(117, 240, 90, 0.07), transparent 60%),
+    var(--v3-card-2);
+  color: var(--v3-text);
+}
+body.gaia-v2 [data-screen="academy"] .g-acadprog { background: rgba(160, 255, 185, 0.12); }
+body.gaia-v2 [data-screen="academy"] .g-acadprog > span {
+  background: linear-gradient(90deg, var(--v3-emerald), var(--v3-green));
+  box-shadow: 0 0 10px rgba(117, 240, 90, 0.45);
+}
+
+/* ---------- 2. Academy: the in-app course player ------------------------ */
+/* gaia-academy-player.js mounts .gaia-acad on <body>; only the Academy
+   opens it. */
+
+body.gaia-v2 .gaia-acad {
+  background:
+    radial-gradient(110% 380px at 50% -60px, rgba(117, 240, 90, 0.08), transparent 70%),
+    var(--v3-page);
+  color: var(--v3-text);
+}
+body.gaia-v2 .gaia-acad__bar {
+  gap: 12px;
+  border-bottom: 1px solid rgba(160, 255, 185, 0.08);
+  background: rgba(2, 8, 5, 0.82);
+  -webkit-backdrop-filter: blur(22px) saturate(140%);
+  backdrop-filter: blur(22px) saturate(140%);
+}
+body.gaia-v2 .gaia-acad__back,
+body.gaia-v2 .gaia-acad__fs {
+  width: 44px;
+  height: 44px;
+  border: 1px solid var(--v3-border);
+  border-radius: 999px;
+  background: rgba(16, 31, 24, 0.55);
+  color: var(--v3-text-2);
+  transition: background 0.18s ease, border-color 0.18s ease, color 0.18s ease, transform 0.18s ease;
+}
+body.gaia-v2 .gaia-acad__back:active,
+body.gaia-v2 .gaia-acad__fs:active { transform: scale(0.94); }
+@media (hover: hover) {
+  body.gaia-v2 .gaia-acad__back:hover,
+  body.gaia-v2 .gaia-acad__fs:hover {
+    border-color: var(--v3-border-strong);
+    background: rgba(28, 52, 40, 0.8);
+    color: var(--v3-text);
+  }
+}
+body.gaia-v2 .gaia-acad__title {
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  color: var(--v3-text);
+}
+body.gaia-v2 .gaia-acad__unavail { background: #010402; }
+body.gaia-v2 .gaia-acad__unavail .ph { color: var(--v3-muted); }
+body.gaia-v2 .gaia-acad__locked .ph { color: #f3d77a; }
+body.gaia-v2 .gaia-acad__unavail-title { font-weight: 600; letter-spacing: -0.015em; color: var(--v3-text); }
+body.gaia-v2 .gaia-acad__unavail-body { color: var(--v3-text-2); }
+body.gaia-v2 .gaia-acad__nowplaying {
+  padding: 18px 18px 4px;
+  font-family: var(--g-font);
+  font-size: 19px;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  color: var(--v3-text);
+}
+body.gaia-v2 .gaia-acad__list { padding-inline: 16px; }
+body.gaia-v2 .gaia-acad__sec { margin-top: 14px; }
+body.gaia-v2 .gaia-acad__seclabel {
+  margin-bottom: 10px;
+  font: 600 11px/1.3 var(--g-font);
+  letter-spacing: 0.12em;
+  color: var(--v3-label);
+}
+body.gaia-v2 .gaia-acad__lesson {
+  min-height: 64px;
+  margin-bottom: 10px;
+  padding: 10px 16px 10px 10px;
+  border: 1px solid var(--v3-border);
+  border-radius: 22px;
+  background: var(--v3-card-2);
+  color: var(--v3-text);
+  transition: transform 0.18s ease, border-color 0.18s ease, background 0.18s ease;
+  -webkit-tap-highlight-color: transparent;
+}
+body.gaia-v2 .gaia-acad__lesson:active { transform: scale(0.985); background: rgba(24, 46, 34, 0.85); }
+body.gaia-v2 .gaia-acad__lesson.is-active {
+  border-color: rgba(117, 240, 90, 0.42);
+  background:
+    linear-gradient(135deg, rgba(117, 240, 90, 0.1), transparent 65%),
+    var(--v3-card-2);
+  box-shadow: 0 0 22px -12px rgba(117, 240, 90, 0.6);
+}
+body.gaia-v2 .gaia-acad__lesson.is-locked { opacity: 0.78; }
+body.gaia-v2 .gaia-acad__play {
+  width: 44px;
+  height: 44px;
+  border-radius: 999px;
+  background: rgba(117, 240, 90, 0.12);
+  box-shadow: inset 0 0 0 1px rgba(117, 240, 90, 0.28);
+  color: var(--v3-green-hi);
+  font-size: 18px;
+}
+body.gaia-v2 .gaia-acad__lesson.is-active .gaia-acad__play {
+  background: rgba(117, 240, 90, 0.2);
+  box-shadow: inset 0 0 0 1px rgba(139, 255, 112, 0.55), 0 0 16px -4px rgba(117, 240, 90, 0.55);
+  color: var(--v3-green-hi);
+}
+body.gaia-v2 .gaia-acad__lesson.is-locked .gaia-acad__play {
+  background: rgba(16, 31, 24, 0.8);
+  box-shadow: inset 0 0 0 1px var(--v3-border);
+  color: var(--v3-muted);
+}
+body.gaia-v2 .gaia-acad__ltext strong { font-size: 14.5px; font-weight: 600; line-height: 1.3; }
+body.gaia-v2 .gaia-acad__ltext small { color: var(--v3-text-2); }
+body.gaia-v2 .gaia-acad__lcheck { border-color: rgba(160, 255, 185, 0.22); }
+body.gaia-v2 .gaia-acad__lcheck.is-done {
+  border-color: var(--v3-green);
+  background: var(--v3-green);
+  box-shadow: 0 0 10px rgba(117, 240, 90, 0.45);
+}
+
+/* ---------- 3. Community ------------------------------------------------ */
+
+/* "Your circles": the sign-in prompt was a feature card inside the list
+   card (card in card). It becomes the opening block of the one card:
+   the list's own eyebrow and title already say "Discussions / Your
+   circles", so the inner card loses its frame and its repeated label. */
+body.gaia-v2 [data-screen="community"] #community-body > .g-card {
+  margin: 0;
+  padding: 2px 0 4px;
+  border: 0;
+  border-radius: 0;
+  background: none;
+  box-shadow: none;
+}
+body.gaia-v2 [data-screen="community"] #community-body > .g-card--feature > .g-card__label { display: none; }
+body.gaia-v2 [data-screen="community"] #community-body > .g-card::before,
+body.gaia-v2 [data-screen="community"] #community-body > .g-card::after { display: none; }
+body.gaia-v2 [data-screen="community"] #community-body > .g-card .g-card__value {
+  font-size: 1.08rem;
+  line-height: 1.3;
+}
+body.gaia-v2 [data-screen="community"] #community-body > .g-card .g-card__meta { font-size: 14px; }
+/* The empty "Your communities" note (signed in, nothing unlocked). */
+body.gaia-v2 [data-screen="community"] #community-body > .g-card:not(.g-card--feature) > .g-card__label {
+  margin-bottom: 4px;
+}
+
+/* Sub-sections inside the card ("What's inside", "Your communities",
+   "Unlock with membership", "Coming soon") read as sub-heads, separated
+   by a hairline instead of each being a new card. */
+body.gaia-v2 [data-screen="community"] #community-body > .g-page-sec {
+  gap: 12px;
+  margin-top: 18px;
+  padding-top: 18px;
+  border-top: 1px solid rgba(160, 255, 185, 0.1);
+}
+body.gaia-v2 [data-screen="community"] #community-body > .g-page-sec:first-child {
+  margin-top: 4px;
+  padding-top: 0;
+  border-top: 0;
+}
+body.gaia-v2 [data-screen="community"] #community-body .g-section {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 4px 12px;
+}
+body.gaia-v2 [data-screen="community"] #community-body .g-section__title {
+  font-size: 1.02rem;
+  line-height: 1.3;
+}
+body.gaia-v2 [data-screen="community"] #community-body .g-section__action {
+  min-height: 40px;
+  margin: -4px -10px 0;
+  padding-inline: 10px;
+  font-size: 13px;
+  white-space: nowrap;
+}
+
+/* Signed-in counters: three small glass tiles. */
+body.gaia-v2 [data-screen="community"] #community-body .g-stats { gap: 8px; margin-bottom: 4px; }
+body.gaia-v2 [data-screen="community"] #community-body .g-stat {
+  padding: 12px;
+  border: 1px solid var(--v3-border);
+  border-radius: 18px;
+  background: var(--v3-card-2);
+}
+body.gaia-v2 [data-screen="community"] #community-body .g-stat__n {
+  color: var(--v3-text);
+  font-family: var(--g-font);
+  font-weight: 600;
+}
+body.gaia-v2 [data-screen="community"] #community-body .g-stat__n--accent { color: var(--v3-green-hi); }
+body.gaia-v2 [data-screen="community"] #community-body .g-stat__l {
+  color: var(--v3-text-2);
+  font-family: var(--g-font);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+}
+
+/* Circle rows: Assist action cards — a round tinted state icon (the
+   rows have no icon in their markup, so it is drawn in ::before, which
+   the older layers used for a coloured edge bar), name and one or two
+   lines of reason, and the state chip or Open button on the right.
+   Unlocked: green circle icon. Locked (including "you asked about this
+   community — Gaia Healers will confirm your access"): a warm lock and
+   room for the whole reason. Soon: a quiet clock, dimmed. */
+body.gaia-v2 [data-screen="community"] #community-body .g-access-grid { gap: 10px; }
+body.gaia-v2 [data-screen="community"] #community-body .g-access {
+  display: grid;
+  grid-template-columns: 44px minmax(0, 1fr) auto;
+  grid-template-rows: auto auto;
+  align-items: center;
+  column-gap: 11px;
+  row-gap: 2px;
+  min-height: 68px;
+  padding: 11px 11px 11px 10px;
+  border: 1px solid var(--v3-border);
+  border-radius: 22px;
+  background: var(--v3-card-2);
+}
+/* The body is unwrapped so the name shares the first line with the
+   state chip and the reason below gets the full width. */
+body.gaia-v2 [data-screen="community"] #community-body .g-access__body { display: contents; }
+body.gaia-v2 [data-screen="community"] #community-body .g-access::before {
+  content: "";
+  position: static;
+  grid-column: 1;
+  grid-row: 1 / span 2;
+  align-self: center;
+  display: block;
+  width: 44px;
+  height: 44px;
+  border-radius: 999px;
+  background: var(--lc-ic-lock) center / 21px no-repeat, rgba(240, 200, 90, 0.1);
+  box-shadow: inset 0 0 0 1px rgba(240, 200, 90, 0.28);
+}
+body.gaia-v2 [data-screen="community"] #community-body .g-access--unlocked {
+  border-color: rgba(117, 240, 90, 0.28);
+  background:
+    linear-gradient(135deg, rgba(117, 240, 90, 0.07), transparent 60%),
+    var(--v3-card-2);
+}
+body.gaia-v2 [data-screen="community"] #community-body .g-access--unlocked::before {
+  background: var(--lc-ic-circle) center / 22px no-repeat, rgba(117, 240, 90, 0.14);
+  box-shadow: inset 0 0 0 1px rgba(117, 240, 90, 0.32);
+}
+body.gaia-v2 [data-screen="community"] #community-body .g-access--soon { background: rgba(10, 22, 16, 0.6); }
+body.gaia-v2 [data-screen="community"] #community-body .g-access--soon::before {
+  background: var(--lc-ic-soon) center / 21px no-repeat, rgba(16, 31, 24, 0.8);
+  box-shadow: inset 0 0 0 1px var(--v3-border);
+}
+body.gaia-v2 [data-screen="community"] #community-body .g-access--soon .g-access__name { color: var(--v3-text-2); }
+body.gaia-v2 [data-screen="community"] #community-body .g-access__name {
+  grid-column: 2;
+  grid-row: 1;
+  align-self: end;
+  color: var(--v3-text);
+  font-size: 14.5px;
+  font-weight: 600;
+  line-height: 1.3;
+}
+body.gaia-v2 [data-screen="community"] #community-body .g-access__meta {
+  grid-column: 2 / -1;
+  grid-row: 2;
+  align-self: start;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+  overflow: hidden;
+  color: var(--v3-text-2);
+  font-size: 12.5px;
+  line-height: 1.4;
+}
+body.gaia-v2 [data-screen="community"] #community-body .g-access__act {
+  grid-column: 3;
+  grid-row: 1;
+  align-self: center;
+  justify-self: end;
+  max-width: none;
+  margin: 0;
+  white-space: nowrap;
+}
+body.gaia-v2 [data-screen="community"] #community-body .g-chip.g-access__act {
+  min-height: 22px;
+  padding: 3px 8px;
+  font-size: 9.5px;
+  letter-spacing: 0.07em;
+}
+/* Unlocked rows: the Open button is 44px tall, so it spans both lines. */
+body.gaia-v2 [data-screen="community"] #community-body .g-btn.g-access__act {
+  grid-row: 1 / span 2;
+  padding-inline: 16px;
+}
+body.gaia-v2 [data-screen="community"] #community-body .g-access:has(> .g-btn.g-access__act) .g-access__meta { grid-column: 2; }
+
+/* Announcements above the circles. */
+body.gaia-v2 [data-screen="community"] #community-body .g-ann {
+  border: 1px solid var(--v3-border);
+  border-radius: 20px;
+  background: var(--v3-card-2);
+}
+
+/* Connect / What's happening / Messages rows (shared action rows from
+   gaia-app-v3.css) — only a steadier gap between them here. The Find a
+   Healer screen they open is not styled here. */
+body.gaia-v2 [data-screen="community"] .g-energy-launch { gap: 10px; }
+
+/* ---------- 4. Events: list, event card, My tickets --------------------- */
+
+/* The event card: the poster was a 108px-wide strip that cut the artwork
+   to ".EVAT". Now a stacked card: the poster on a rounded mat across
+   the top (cropped a little from the bottom, where the crowd is, so the
+   title artwork stays whole), text and the two actions below. */
+body.gaia-v2 [data-screen="events"] .g-event-card {
+  grid-template-columns: minmax(0, 1fr);
+  gap: 14px;
+  padding: 10px 10px 14px;
+  border-radius: 26px;
+  background: var(--v3-card-2);
+  box-shadow: none;
+}
+body.gaia-v2 [data-screen="events"] .g-event-card__art {
+  display: block;
+  overflow: hidden;
+  border: 1px solid rgba(160, 255, 185, 0.12);
+  border-radius: 18px;
+}
+body.gaia-v2 [data-screen="events"] .g-event-card__art img {
+  display: block;
+  width: 100%;
+  height: auto;
+  min-height: 0;
+  aspect-ratio: 16 / 11;
+  border: 0;
+  border-radius: 0;
+  object-fit: cover;
+  object-position: 50% 28%;
+  transition: transform 0.6s var(--v3-ease);
+}
+@media (hover: hover) {
+  body.gaia-v2 [data-screen="events"] .g-event-card__art:hover img { transform: scale(1.025); }
+}
+body.gaia-v2 [data-screen="events"] .g-event-card__body { gap: 8px; padding: 0 6px; }
+body.gaia-v2 [data-screen="events"] .g-event-card__body h3 {
+  font-size: 1.15rem;
+  line-height: 1.25;
+}
+body.gaia-v2 [data-screen="events"] .g-event-card__meta {
+  margin: 0;
+  color: var(--v3-text-2);
+  font-size: 13.5px;
+  line-height: 1.5;
+}
+body.gaia-v2 [data-screen="events"] .g-event-card__countdown {
+  display: inline-flex;
+  align-items: center;
+  align-self: start;
+  justify-self: start;
+  gap: 6px;
+  margin: 2px 0 0;
+  padding: 5px 11px;
+  border: 1px solid rgba(117, 240, 90, 0.3);
+  border-radius: 999px;
+  background: rgba(117, 240, 90, 0.1);
+  color: var(--v3-green-hi);
+  font-size: 12px;
+  font-weight: 600;
+}
+body.gaia-v2 [data-screen="events"] .g-event-card__actions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  margin-top: 6px;
+}
+body.gaia-v2 [data-screen="events"] .g-event-card__actions .g-btn {
+  justify-content: center;
+  width: 100%;
+  min-height: 46px;
+  gap: 6px;
+}
+/* "View event" as a quiet secondary pill so the pair reads as one set. */
+body.gaia-v2 [data-screen="events"] .g-event-card__actions .g-btn--ghost {
+  border: 1px solid rgba(117, 240, 90, 0.3);
+  background: rgba(16, 31, 24, 0.6);
+  color: var(--v3-text);
+}
+
+/* The events list heading card on the list screen and the "Coming up"
+   list: nothing extra. */
+
+/* My tickets (gaia-myevents.js). Signed out / empty / problem: one card
+   in the shared join-card style (section 7). Signed in: the wrapper was
+   a frame around the ticket cards (card in card); now the wrapper is
+   bare and each ticket is the card. */
+body.gaia-v2 [data-screen="events"] .g-mye:not(.g-mye--prompt):not(.g-mye--empty):not(.g-mye--problem) {
+  gap: 18px;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: none;
+  box-shadow: none;
+}
+body.gaia-v2 [data-screen="events"] .gaia-main h2.g-mye__grouphead {
+  margin: 4px 4px 0;
+  font-family: var(--g-font);
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1.3;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--v3-label);
+}
+body.gaia-v2 [data-screen="events"] .g-mye__card {
+  gap: 14px;
+  padding: 20px;
+  border: 1px solid rgba(117, 240, 90, 0.26);
+  border-radius: var(--v3-radius);
+  background:
+    radial-gradient(90% 120% at 100% 0%, rgba(117, 240, 90, 0.1), transparent 58%),
+    var(--v3-card);
+  box-shadow: var(--v3-card-shadow);
+}
+body.gaia-v2 [data-screen="events"] .g-mye__when {
+  color: var(--v3-label);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+}
+body.gaia-v2 [data-screen="events"] .g-mye__name {
+  font-size: 1.2rem;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  color: var(--v3-text);
+}
+body.gaia-v2 [data-screen="events"] .g-mye__where { color: var(--v3-text-2); }
+body.gaia-v2 [data-screen="events"] .g-mye__pass {
+  gap: 8px;
+  padding: 10px 12px;
+  border: 1px solid var(--v3-border);
+  border-radius: 18px;
+  background: var(--v3-card-2);
+}
+body.gaia-v2 [data-screen="events"] .g-mye__passname {
+  border: 1px solid rgba(117, 240, 90, 0.3);
+  background: rgba(117, 240, 90, 0.1);
+  color: var(--v3-text);
+  font-size: 13px;
+  font-weight: 600;
+}
+body.gaia-v2 [data-screen="events"] .g-mye__vip {
+  border: 1px solid rgba(240, 200, 90, 0.36);
+  background: rgba(240, 200, 90, 0.12);
+  color: #f3d77a;
+  font-size: 10.5px;
+  font-weight: 700;
+}
+body.gaia-v2 [data-screen="events"] .g-mye__status { font-size: 13px; }
+body.gaia-v2 [data-screen="events"] .g-mye__status.is-idle { color: var(--v3-text-2); }
+body.gaia-v2 [data-screen="events"] .g-mye__status.is-good { color: var(--v3-green-hi); }
+body.gaia-v2 [data-screen="events"] .g-mye__chip {
+  border-color: var(--v3-border);
+  background: rgba(16, 31, 24, 0.6);
+  color: var(--v3-text-2);
+}
+body.gaia-v2 [data-screen="events"] .g-mye__chip.is-live {
+  border: 1px solid rgba(117, 240, 90, 0.4);
+  background: rgba(117, 240, 90, 0.14);
+  color: var(--v3-green-hi);
+}
+body.gaia-v2 [data-screen="events"] .g-mye__actions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+body.gaia-v2 [data-screen="events"] .g-mye__actions .g-btn { width: 100%; }
+@media (min-width: 700px) {
+  body.gaia-v2 [data-screen="events"] .g-mye__actions { grid-template-columns: repeat(2, minmax(0, 220px)); }
+}
+body.gaia-v2 [data-screen="events"] .g-mye__actions .g-btn--ghost {
+  border: 1px solid rgba(117, 240, 90, 0.3);
+  background: rgba(16, 31, 24, 0.6);
+  color: var(--v3-text);
+}
+body.gaia-v2 [data-screen="events"] .g-mye__rate {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  padding-top: 12px;
+  border-top: 1px solid rgba(160, 255, 185, 0.1);
+  color: var(--v3-text-2);
+}
+body.gaia-v2 [data-screen="events"] .g-mye__star {
+  min-width: 40px;
+  min-height: 40px;
+  color: var(--v3-green-hi);
+}
+
+/* ---------- 5. Events: an event's page ----------------------------------- */
+
+body.gaia-v2 [data-screen="events"] .g-event-back {
+  align-self: flex-start;
+  margin: -8px 0 0 -6px;
+  padding: 0 12px 0 8px;
+  border-radius: 999px;
+  color: var(--v3-green);
+  font-size: 13px;
+  font-weight: 600;
+  transition: background 0.18s ease, color 0.18s ease;
+}
+body.gaia-v2 [data-screen="events"] .g-event-back:active { background: rgba(24, 46, 34, 0.85); }
+@media (hover: hover) {
+  body.gaia-v2 [data-screen="events"] .g-event-back:hover { color: var(--v3-green-hi); background: rgba(16, 31, 24, 0.6); }
+}
+body.gaia-v2 [data-screen="events"] .g-event-headmeta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  color: var(--v3-text-2);
+  line-height: 1.5;
+}
+body.gaia-v2 [data-screen="events"] .g-event-status {
+  border-color: rgba(117, 240, 90, 0.3);
+  background: rgba(117, 240, 90, 0.1);
+  color: var(--v3-green-hi);
+  font-family: var(--g-font);
+  font-weight: 600;
+  letter-spacing: 0.06em;
+}
+
+/* The poster: whole artwork, on the same rounded mat as the cards. */
+body.gaia-v2 [data-screen="events"] .g-eventpage-hero {
+  border: 1px solid var(--v3-border);
+  border-radius: var(--v3-radius-lg);
+  background: var(--v3-card);
+  box-shadow: var(--v3-card-shadow);
+}
+body.gaia-v2 [data-screen="events"] .g-eventpage-hero img {
+  aspect-ratio: 16 / 10;
+  max-height: clamp(200px, 42vh, 380px);
+  object-position: 50% 30%;
+}
+
+/* Stats: small glass tiles; the tappable ones behave like the rows. */
+body.gaia-v2 [data-screen="events"] .g-event-stats { gap: 10px; }
+body.gaia-v2 [data-screen="events"] .g-event-stat {
+  min-height: 70px;
+  padding: 12px 14px;
+  border: 1px solid var(--v3-border);
+  border-radius: 20px;
+  background: var(--v3-card-2);
+  color: var(--v3-text-2);
+  font-family: var(--g-font);
+  text-align: left;
+  transition: transform 0.18s ease, border-color 0.18s ease, background 0.18s ease;
+  -webkit-tap-highlight-color: transparent;
+}
+body.gaia-v2 [data-screen="events"] .g-event-stat b { color: var(--v3-text); font-weight: 600; letter-spacing: -0.02em; }
+body.gaia-v2 [data-screen="events"] .g-event-stat span {
+  color: var(--v3-label);
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+}
+body.gaia-v2 [data-screen="events"] .g-event-stat:not(.is-static):active { transform: scale(0.97); background: rgba(24, 46, 34, 0.85); }
+@media (hover: hover) {
+  body.gaia-v2 [data-screen="events"] .g-event-stat:not(.is-static):hover {
+    transform: none;
+    border-color: var(--v3-border-strong);
+    background: rgba(22, 42, 32, 0.82);
+  }
+}
+@media (min-width: 700px) {
+  body.gaia-v2 [data-screen="events"] .g-event-stats { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+}
+
+/* The tab strip: a horizontal scroller of glass pills, the selected one
+   lit green (tint, rim, green label), not a solid neon block. It stays
+   sticky under the top bar on a page-coloured fade. */
+body.gaia-v2 [data-screen="events"] .g-event-tabs {
+  gap: 8px;
+  margin-inline: -4px;
+  padding: 10px 4px;
+  background: linear-gradient(180deg, var(--v3-page) 66%, rgba(2, 8, 5, 0));
+  scroll-padding-inline: 4px;
+}
+body.gaia-v2 [data-screen="events"] .g-event-tab {
+  position: relative;
+  padding: 0 18px;
+  border: 1px solid var(--v3-border);
+  background: rgba(10, 24, 17, 0.9);
+  color: var(--v3-text-2);
+  font-family: var(--g-font);
+  font-size: 13.5px;
+  font-weight: 600;
+  transition: background 0.2s ease, border-color 0.2s ease, color 0.2s ease, transform 0.18s ease;
+  -webkit-tap-highlight-color: transparent;
+}
+body.gaia-v2 [data-screen="events"] .g-event-tab.is-active {
+  border-color: rgba(117, 240, 90, 0.42);
+  background: rgba(20, 52, 30, 0.95);
+  color: var(--v3-green-hi);
+  box-shadow: 0 0 20px -8px rgba(117, 240, 90, 0.55);
+}
+body.gaia-v2 [data-screen="events"] .g-event-tab:active { transform: scale(0.97); }
+body.gaia-v2 [data-screen="events"] .g-event-tab:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--v3-page), 0 0 0 4px rgba(117, 240, 90, 0.75);
+}
+@media (hover: hover) {
+  body.gaia-v2 [data-screen="events"] .g-event-tab:not(.is-active):hover {
+    border-color: var(--v3-border-strong);
+    color: var(--v3-text);
+  }
+}
+body.gaia-v2 [data-screen="events"] .g-tab-dot { background: var(--v3-green-hi); box-shadow: 0 0 8px rgba(139, 255, 112, 0.6); }
+
+/* Overview. */
+body.gaia-v2 [data-screen="events"] .g-event-overview {
+  padding: 22px 20px;
+  border: 1px solid var(--v3-border);
+  border-radius: var(--v3-radius);
+  background: var(--v3-card-bg);
+  box-shadow: var(--v3-card-shadow);
+}
+body.gaia-v2 [data-screen="events"] .g-event-overview p { color: var(--v3-text-2); font-size: 14.5px; }
+body.gaia-v2 [data-screen="events"] .g-ev-about__more {
+  min-height: 40px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--v3-green);
+  font: 600 14px/1 var(--g-font);
+}
+body.gaia-v2 [data-screen="events"] .g-event-overview dl {
+  gap: 0;
+  margin: 4px 0 18px;
+  padding: 4px 14px;
+  border: 1px solid var(--v3-border);
+  border-radius: 20px;
+  background: var(--v3-card-2);
+}
+body.gaia-v2 [data-screen="events"] .g-event-overview dl > div { padding: 11px 0; }
+body.gaia-v2 [data-screen="events"] .g-event-overview dl > div + div { border-top: 1px solid rgba(160, 255, 185, 0.08); }
+body.gaia-v2 [data-screen="events"] .g-event-overview dt {
+  color: var(--v3-label);
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+}
+body.gaia-v2 [data-screen="events"] .g-event-overview dd { color: var(--v3-text); font-size: 14.5px; }
+@media (min-width: 700px) {
+  body.gaia-v2 [data-screen="events"] .g-event-overview dl > div { padding: 12px 14px; }
+  body.gaia-v2 [data-screen="events"] .g-event-overview dl > div + div { border-top: 0; border-left: 1px solid rgba(160, 255, 185, 0.08); }
+  body.gaia-v2 [data-screen="events"] .g-event-overview dl { padding: 4px 0; }
+}
+body.gaia-v2 [data-screen="events"] .g-event-overview > .g-btn--primary {
+  width: 100%;
+  justify-content: center;
+  min-height: 50px;
+  margin-top: 4px;
+}
+@media (min-width: 700px) {
+  body.gaia-v2 [data-screen="events"] .g-event-overview > .g-btn--primary { width: auto; min-width: 240px; }
+}
+
+/* Link rows (Maps, event page, hotel), resources and vendors: action
+   cards like the shared rows, with a round tinted icon. */
+body.gaia-v2 [data-screen="events"] .g-ev-links { gap: 10px; }
+body.gaia-v2 [data-screen="events"] :is(.g-ev-link, .g-resource) {
+  min-height: 64px;
+  padding: 11px 16px 11px 11px;
+  border: 1px solid var(--v3-border);
+  border-radius: 22px;
+  background: var(--v3-card-2);
+  color: var(--v3-text);
+  transition: transform 0.18s ease, border-color 0.18s ease, background 0.18s ease;
+  -webkit-tap-highlight-color: transparent;
+}
+body.gaia-v2 [data-screen="events"] .g-ev-link { grid-template-columns: 44px minmax(0, 1fr) 18px; gap: 12px; }
+body.gaia-v2 [data-screen="events"] .g-resource { padding-left: 16px; }
+body.gaia-v2 [data-screen="events"] :is(.g-ev-link, .g-resource):active { transform: scale(0.985); background: rgba(24, 46, 34, 0.85); }
+@media (hover: hover) {
+  body.gaia-v2 [data-screen="events"] :is(.g-ev-link, .g-resource):hover {
+    border-color: var(--v3-border-strong);
+    background: rgba(22, 42, 32, 0.82);
+  }
+}
+body.gaia-v2 [data-screen="events"] .g-ev-link__icon {
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  border: 0;
+  border-radius: 999px;
+  background: rgba(117, 240, 90, 0.14);
+  box-shadow: inset 0 0 0 1px rgba(117, 240, 90, 0.3);
+  color: var(--v3-green-hi);
+  font-size: 20px;
+}
+body.gaia-v2 [data-screen="events"] .g-ev-link:nth-child(3n+2) .g-ev-link__icon {
+  background: rgba(88, 199, 232, 0.14);
+  box-shadow: inset 0 0 0 1px rgba(88, 199, 232, 0.32);
+  color: #7fd8f2;
+}
+body.gaia-v2 [data-screen="events"] .g-ev-link:nth-child(3n+3) .g-ev-link__icon {
+  background: rgba(66, 219, 134, 0.14);
+  box-shadow: inset 0 0 0 1px rgba(66, 219, 134, 0.32);
+  color: #6fe6a4;
+}
+body.gaia-v2 [data-screen="events"] :is(.g-ev-link__text, .g-resource__body) strong {
+  color: var(--v3-text);
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 1.3;
+}
+body.gaia-v2 [data-screen="events"] :is(.g-ev-link__text, .g-resource__body) em {
+  color: var(--v3-text-2);
+  font-size: 12.5px;
+  font-style: normal;
+  line-height: 1.4;
+}
+body.gaia-v2 [data-screen="events"] :is(.g-ev-link__go, .g-resource__go) { color: var(--v3-muted); }
+
+/* Tab panels: each is a g-super-list card (from gaia-app-v3.css). */
+body.gaia-v2 [data-screen="events"] .g-event-panel > .g-super-list + .g-super-list { margin-top: 14px; }
+body.gaia-v2 [data-screen="events"] :is(.g-super-count, .g-super-sub) { color: var(--v3-text-2); }
+
+/* Speakers. */
+body.gaia-v2 [data-screen="events"] .g-speaker {
+  gap: 14px;
+  padding: 14px;
+  border: 1px solid var(--v3-border);
+  border-radius: 22px;
+  background: var(--v3-card-2);
+}
+body.gaia-v2 [data-screen="events"] .g-speaker__photo,
+body.gaia-v2 [data-screen="events"] .g-speaker__photo img {
+  border-radius: 999px;
+}
+body.gaia-v2 [data-screen="events"] .g-speaker__photo {
+  box-shadow: 0 0 0 1px rgba(117, 240, 90, 0.3), 0 0 16px -6px rgba(117, 240, 90, 0.45);
+}
+body.gaia-v2 [data-screen="events"] .g-speaker h3 {
+  margin: 0;
+  color: var(--v3-text);
+  font-family: var(--g-font);
+  font-size: 15.5px;
+  font-weight: 600;
+  letter-spacing: -0.015em;
+}
+body.gaia-v2 [data-screen="events"] .g-speaker__meta { color: var(--v3-emerald); font-size: 12.5px; font-weight: 600; }
+body.gaia-v2 [data-screen="events"] .g-speaker__bio { color: var(--v3-text-2); font-size: 13px; line-height: 1.5; }
+
+/* Exhibitors: search, then a list of rows. */
+body.gaia-v2 [data-screen="events"] .g-dir-search .g-input { border-radius: 999px; padding-inline: 18px; }
+body.gaia-v2 [data-screen="events"] .g-vendors {
+  gap: 10px;
+  border: 0;
+  border-radius: 0;
+  background: none;
+  overflow: visible;
+}
+body.gaia-v2 [data-screen="events"] .g-vendor {
+  min-height: 68px;
+  padding: 11px 16px 11px 11px;
+  border: 1px solid var(--v3-border);
+  border-radius: 22px;
+  background: var(--v3-card-2);
+  color: var(--v3-text);
+  transition: transform 0.18s ease, border-color 0.18s ease, background 0.18s ease;
+  -webkit-tap-highlight-color: transparent;
+}
+body.gaia-v2 [data-screen="events"] .g-vendor:active { transform: scale(0.985); background: rgba(24, 46, 34, 0.85); }
+@media (hover: hover) {
+  body.gaia-v2 [data-screen="events"] .g-vendor:hover { border-color: var(--v3-border-strong); background: rgba(22, 42, 32, 0.82); }
+}
+body.gaia-v2 [data-screen="events"] .g-vendor__logo { width: 46px; height: 46px; border-radius: 14px; }
+body.gaia-v2 [data-screen="events"] .g-vendor__text strong { color: var(--v3-text); font-weight: 600; }
+body.gaia-v2 [data-screen="events"] .g-vendor__text em { color: var(--v3-label); font-style: normal; font-size: 12px; }
+body.gaia-v2 [data-screen="events"] .g-vendor__blurb { color: var(--v3-text-2); }
+body.gaia-v2 [data-screen="events"] .g-vendor > .ph:last-child { color: var(--v3-muted); }
+
+/* Sponsors: logo tiles, logo above name and tier so narrow tiles never
+   push text out of the frame. */
+body.gaia-v2 [data-screen="events"] .g-live-sponsor-row {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 140px), 1fr));
+  gap: 10px;
+}
+body.gaia-v2 [data-screen="events"] .g-live-sponsor {
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 10px;
+  min-width: 0;
+  min-height: 64px;
+  padding: 12px;
+  border: 1px solid var(--v3-border);
+  border-radius: 20px;
+  background: var(--v3-card-2);
+  color: var(--v3-text);
+}
+body.gaia-v2 [data-screen="events"] .g-live-sponsor > span { min-width: 0; max-width: 100%; }
+body.gaia-v2 [data-screen="events"] a.g-live-sponsor { transition: border-color 0.18s ease, background 0.18s ease; }
+@media (hover: hover) {
+  body.gaia-v2 [data-screen="events"] a.g-live-sponsor:hover { border-color: var(--v3-border-strong); background: rgba(22, 42, 32, 0.82); }
+}
+body.gaia-v2 [data-screen="events"] .g-live-sponsor img { max-width: calc(100% - 14px); border-radius: 10px; }
+body.gaia-v2 [data-screen="events"] .g-live-sponsor strong { color: var(--v3-text); font-weight: 600; overflow-wrap: anywhere; }
+body.gaia-v2 [data-screen="events"] .g-live-sponsor em { color: var(--v3-label); font-weight: 600; }
+
+/* Community feed. */
+body.gaia-v2 [data-screen="events"] .g-feed-signin {
+  border: 1px dashed rgba(160, 255, 185, 0.22);
+  border-radius: 22px;
+  background: rgba(16, 31, 24, 0.45);
+  color: var(--v3-text-2);
+}
+body.gaia-v2 [data-screen="events"] .g-feed-empty { color: var(--v3-text-2); }
+body.gaia-v2 [data-screen="events"] .g-feed-empty .ph { color: var(--v3-emerald); }
+body.gaia-v2 [data-screen="events"] .g-feed-item {
+  border-color: var(--v3-border);
+  border-radius: 20px;
+  background: var(--v3-card-2);
+}
+
+/* Info: FAQ accordion rows. */
+body.gaia-v2 [data-screen="events"] .g-info-list { gap: 10px; }
+body.gaia-v2 [data-screen="events"] .g-info-item {
+  border: 1px solid var(--v3-border);
+  border-radius: 20px;
+  background: var(--v3-card-2);
+  transition: border-color 0.2s ease, background 0.2s ease;
+}
+body.gaia-v2 [data-screen="events"] .g-info-item[open] { border-color: rgba(140, 255, 170, 0.28); background: var(--v3-card); }
+body.gaia-v2 [data-screen="events"] .g-info-item > summary {
+  min-height: 54px;
+  padding: 14px 16px;
+  color: var(--v3-text);
+  font-size: 14.5px;
+  font-weight: 600;
+  -webkit-tap-highlight-color: transparent;
+}
+body.gaia-v2 [data-screen="events"] .g-info-item > summary::after { color: var(--v3-green); font-weight: 400; }
+body.gaia-v2 [data-screen="events"] .g-info-item__body { color: var(--v3-text-2); font-size: 14px; }
+
+/* Agenda, map, people, updates (tabs shown only when the event has that
+   content): the same card language, defensively. */
+body.gaia-v2 [data-screen="events"] :is(.g-event-day, .g-event-timeline__item, .g-map__row, .g-live-now, .g-live-next__item, .g-update-pin) {
+  border-color: var(--v3-border);
+  border-radius: 20px;
+  background: var(--v3-card-2);
+}
+body.gaia-v2 [data-screen="events"] .g-event-current { border-color: rgba(117, 240, 90, 0.42); }
+body.gaia-v2 [data-screen="events"] .g-map__plan { border: 1px solid var(--v3-border); border-radius: 22px; overflow: hidden; }
+
+/* The signed-in "my pass" strip on the event page. */
+body.gaia-v2 [data-screen="events"] .g-mypass {
+  border: 1px solid rgba(117, 240, 90, 0.3);
+  border-radius: 22px;
+  background:
+    linear-gradient(135deg, rgba(117, 240, 90, 0.08), transparent 60%),
+    var(--v3-card-2);
+}
+body.gaia-v2 [data-screen="events"] .g-mypass__kicker { color: var(--v3-label); letter-spacing: 0.12em; }
+body.gaia-v2 [data-screen="events"] .g-mypass__vip {
+  border: 1px solid rgba(240, 200, 90, 0.36);
+  background: rgba(240, 200, 90, 0.12);
+  color: #f3d77a;
+}
+
+/* ---------- 6. Bookings ------------------------------------------------- */
+
+/* Booking catalogue rows are the shared action rows; the list card gets a
+   touch more room between them. Signed-in appointments: a card with the
+   status as an eyebrow, the title, when, and Join on the right/below. */
+body.gaia-v2 [data-screen="bookings"] .g-super-list > .g-super-row:first-of-type { margin-top: 14px; }
+body.gaia-v2 [data-screen="bookings"] .g-booking-item {
+  gap: 16px;
+  padding: 20px;
+  border-color: rgba(117, 240, 90, 0.26);
+  background:
+    radial-gradient(90% 120% at 100% 0%, rgba(117, 240, 90, 0.1), transparent 58%),
+    var(--v3-card);
+}
+body.gaia-v2 [data-screen="bookings"] .g-booking-item p:not(.g-super-kicker) { color: var(--v3-text-2); }
+body.gaia-v2 [data-screen="bookings"] .g-booking-item h2 { margin: 4px 0 6px; }
+@media (max-width: 699px) {
+  body.gaia-v2 [data-screen="bookings"] .g-booking-item { display: flex; flex-direction: column; align-items: stretch; }
+  body.gaia-v2 [data-screen="bookings"] .g-booking-item .g-btn { width: 100%; justify-content: center; }
+}
+
+/* ---------- 7. The join card (Bookings, Inbox) and ticket prompt -------- */
+/* g-super-auth.g-why-join appears on Bookings (--compact) and Inbox; the
+   two differed (stacked full-width buttons on one, a row on the other).
+   One component now, in the Assist manner: eyebrow, title, lead, the
+   benefits as a list with round green check icons, then Join free and
+   Sign in as a pair of pills and Compare plans as a quiet link. */
+body.gaia-v2 :is([data-screen="bookings"], [data-screen="inbox"]) .g-super-auth.g-why-join {
+  display: block;
+  padding: 22px 20px 18px;
+  border: 1px solid rgba(140, 255, 170, 0.22);
+  border-radius: var(--v3-radius-lg);
+  background:
+    radial-gradient(90% 70% at 100% 0%, rgba(117, 240, 90, 0.12), transparent 60%),
+    radial-gradient(70% 60% at 0% 100%, rgba(66, 219, 134, 0.05), transparent 70%),
+    var(--v3-card);
+  box-shadow: var(--v3-card-shadow);
+  text-align: left;
+}
+body.gaia-v2 :is([data-screen="bookings"], [data-screen="inbox"]) .g-why-join__intro h2 {
+  margin: 6px 0 8px;
+  font-family: var(--g-font);
+  font-size: clamp(1.3rem, 5.4vw, 1.6rem);
+  font-weight: 600;
+  line-height: 1.2;
+  letter-spacing: -0.022em;
+  color: var(--v3-text);
+}
+body.gaia-v2 :is([data-screen="bookings"], [data-screen="inbox"]) .g-why-join__intro p:not(.g-super-kicker) {
+  margin: 0;
+  color: var(--v3-text-2);
+  font-size: 14.5px;
+  line-height: 1.55;
+}
+body.gaia-v2 :is([data-screen="bookings"], [data-screen="inbox"]) .g-why-join__list {
+  display: grid;
+  gap: 8px;
+  margin: 18px 0 0;
+  padding: 0;
+  list-style: none;
+}
+body.gaia-v2 :is([data-screen="bookings"], [data-screen="inbox"]) .g-why-join__list li {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 52px;
+  padding: 8px 14px 8px 8px;
+  border: 1px solid var(--v3-border);
+  border-radius: 18px;
+  background: var(--v3-card-2);
+  color: var(--v3-text);
+  font-size: 14px;
+  line-height: 1.4;
+}
+/* The markup's check-circle glyph is replaced by a round tinted check,
+   the Assist icon well at a smaller size. */
+body.gaia-v2 :is([data-screen="bookings"], [data-screen="inbox"]) .g-why-join__list li > :is(i, svg) {
+  flex: 0 0 auto;
+  width: 34px;
+  height: 34px;
+  margin: 0;
+  border-radius: 999px;
+  background: var(--lc-ic-check) center / 18px no-repeat, rgba(117, 240, 90, 0.14);
+  box-shadow: inset 0 0 0 1px rgba(117, 240, 90, 0.3);
+  color: transparent;
+  font-size: 0;
+}
+body.gaia-v2 :is([data-screen="bookings"], [data-screen="inbox"]) .g-why-join__list li > i::before { content: none; }
+body.gaia-v2 :is([data-screen="bookings"], [data-screen="inbox"]) .g-why-join .g-super-actions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  width: 100%;
+  margin-top: 20px;
+}
+body.gaia-v2 :is([data-screen="bookings"], [data-screen="inbox"]) .g-why-join .g-super-actions .g-btn {
+  justify-content: center;
+  width: 100%;
+  min-width: 0;
+  min-height: 48px;
+  margin: 0;
+}
+body.gaia-v2 :is([data-screen="bookings"], [data-screen="inbox"]) .g-why-join .g-super-actions .g-btn--ghost {
+  grid-column: 1 / -1;
+  min-height: 44px;
+  font-size: 14px;
+}
+@media (min-width: 700px) {
+  body.gaia-v2 :is([data-screen="bookings"], [data-screen="inbox"]) .g-super-auth.g-why-join { padding: 28px 28px 22px; }
+  body.gaia-v2 :is([data-screen="bookings"], [data-screen="inbox"]) .g-why-join__list { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  body.gaia-v2 :is([data-screen="bookings"], [data-screen="inbox"]) .g-why-join__list li { align-items: flex-start; padding: 12px 14px 12px 10px; }
+  body.gaia-v2 :is([data-screen="bookings"], [data-screen="inbox"]) .g-why-join .g-super-actions {
+    grid-template-columns: repeat(2, minmax(0, 200px)) 1fr;
+  }
+  body.gaia-v2 :is([data-screen="bookings"], [data-screen="inbox"]) .g-why-join .g-super-actions .g-btn--ghost {
+    grid-column: auto;
+    justify-self: start;
+  }
+}
+
+/* Events' "Your tickets live here" (and its empty / problem variants):
+   the same card family as the join card. */
+body.gaia-v2 [data-screen="events"] :is(.g-mye--prompt, .g-mye--empty, .g-mye--problem) {
+  gap: 8px;
+  margin-bottom: 0;
+  padding: 22px 20px 20px;
+  border: 1px solid rgba(140, 255, 170, 0.22);
+  border-radius: var(--v3-radius-lg);
+  background:
+    radial-gradient(90% 90% at 100% 0%, rgba(117, 240, 90, 0.11), transparent 60%),
+    var(--v3-card);
+  box-shadow: var(--v3-card-shadow);
+}
+body.gaia-v2 [data-screen="events"] .g-mye--problem { border-color: rgba(240, 200, 90, 0.34); }
+body.gaia-v2 [data-screen="events"] :is(.g-mye--prompt, .g-mye--empty, .g-mye--problem) h2 {
+  font-size: clamp(1.2rem, 4.8vw, 1.45rem);
+  font-weight: 600;
+  letter-spacing: -0.022em;
+  color: var(--v3-text);
+}
+body.gaia-v2 [data-screen="events"] .g-mye--problem h2 { color: #f3d77a; }
+body.gaia-v2 [data-screen="events"] :is(.g-mye--prompt, .g-mye--empty, .g-mye--problem) p {
+  color: var(--v3-text-2);
+  font-size: 14.5px;
+}
+body.gaia-v2 [data-screen="events"] :is(.g-mye--prompt, .g-mye--empty, .g-mye--problem) .g-btn {
+  justify-content: center;
+  min-width: 160px;
+  min-height: 48px;
+  margin-top: 10px;
+}
+@media (max-width: 699px) {
+  body.gaia-v2 [data-screen="events"] :is(.g-mye--prompt, .g-mye--empty, .g-mye--problem) .g-btn { align-self: stretch; }
+}
+
+/* ---------- 8. Inbox ---------------------------------------------------- */
+
+body.gaia-v2 [data-screen="inbox"] .g-super-list > .g-super-row:first-child { margin-top: 0; }
+body.gaia-v2 [data-screen="inbox"] .g-super-row--static { align-items: flex-start; }
+body.gaia-v2 [data-screen="inbox"] .g-super-row--static strong { line-height: 1.35; }
+body.gaia-v2 [data-screen="inbox"] .g-super-row--static em { font-size: 12px; font-style: normal; color: var(--v3-muted); }
+body.gaia-v2 [data-screen="inbox"] .g-super-row--static.is-unread {
+  border-color: rgba(117, 240, 90, 0.3);
+  background:
+    linear-gradient(135deg, rgba(117, 240, 90, 0.09), transparent 60%),
+    var(--v3-card-2);
+}
+body.gaia-v2 [data-screen="inbox"] .g-super-row--static.is-unread small { color: var(--v3-green-hi); }
+body.gaia-v2 [data-screen="inbox"] .g-super-list__footer {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 14px;
+}
+@media (max-width: 699px) {
+  body.gaia-v2 [data-screen="inbox"] .g-super-list__footer .g-btn { width: 100%; justify-content: center; }
+}
+
+/* ---------- 9. Reduced motion ------------------------------------------- */
+
+@media (prefers-reduced-motion: reduce) {
+  body.gaia-v2 [data-screen="academy"] .g-access--link,
+  body.gaia-v2 [data-screen="academy"] .g-access__act,
+  body.gaia-v2 .gaia-acad :is(.gaia-acad__back, .gaia-acad__fs, .gaia-acad__lesson),
+  body.gaia-v2 [data-screen="events"] :is(.g-event-card__art img, .g-event-stat, .g-event-tab, .g-ev-link, .g-resource, .g-vendor, .g-info-item, .g-event-back),
+  body.gaia-v2 [data-screen="events"] a.g-live-sponsor {
+    transition: none !important;
+  }
+  body.gaia-v2 [data-screen="academy"] .g-access--link:active,
+  body.gaia-v2 .gaia-acad :is(.gaia-acad__back, .gaia-acad__fs, .gaia-acad__lesson):active,
+  body.gaia-v2 [data-screen="events"] :is(.g-event-stat, .g-event-tab, .g-ev-link, .g-resource, .g-vendor):active,
+  body.gaia-v2 [data-screen="events"] .g-event-card__art:hover img {
+    transform: none;
+  }
+}

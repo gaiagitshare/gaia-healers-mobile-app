@@ -26,6 +26,7 @@ import {
 } from './membership/oauth-core.js';
 import { classifyMembershipEvent, membershipFromEvent } from './membership/events.js';
 import { attachQwenVoiceRelay, qwenRouting, issueQwenTicket, qwenVoiceConfig } from './qwen-voice-relay.js';
+import { allowSpend, callerKey, spendKindFor, ASSIST_MAX_PROMPT_CHARS, ASSIST_MAX_TTS_CHARS } from './assist-guard.js';
 import { normalizeMembership } from './membership/ledger.js';
 import {
   fixturesAvailable, fixtureKeyMatches, fixtureAccessGranted,
@@ -4605,25 +4606,12 @@ async function assistLiveToken(req, res, origin, url) {
   }
   if (route.reason !== 'disabled') console.log('[Gaia Assist] voice routed to gemini', { reason: route.reason });
 
-  const expireTime = new Date(Date.now() + 30 * 60 * 1000).toISOString();
+  // A token lives as long as one session may, not half an hour.
+  const expireTime = new Date(Date.now() + (cfg.maxSessionSeconds + 60) * 1000).toISOString();
   const newSessionExpireTime = new Date(Date.now() + 60 * 1000).toISOString();
 
   try {
     const client = await getGeminiClient();
-
-    const authToken = await client.authTokens.create({
-      config: {
-        uses: 1,
-        expireTime,
-        newSessionExpireTime,
-        httpOptions: { apiVersion: 'v1alpha' },
-      },
-    });
-
-    const token = authToken?.name || authToken?.token || '';
-    if (!token) {
-      throw new Error('Gemini auth token missing name');
-    }
 
     // If the preview model has been withdrawn, say so HERE rather than letting
     // the browser find out when the socket refuses its setup message.
@@ -4633,6 +4621,34 @@ async function assistLiveToken(req, res, origin, url) {
       console.warn('[Gaia Assist] live model unavailable, using the pinned fallback', {
         configured: cfg.model, using: model,
       });
+    }
+    const instructions = buildGaiaLiveInstructions({ view, memberContext });
+
+    // The token is LOCKED to Gaia: this model, these instructions, spoken
+    // answers, this voice. Unlocked, anyone could mint one and use the socket
+    // as a free, general-purpose Gemini Live on our key. The page still sets
+    // its tools, transcription and turn-taking, which are not locked.
+    const authToken = await client.authTokens.create({
+      config: {
+        uses: 1,
+        expireTime,
+        newSessionExpireTime,
+        liveConnectConstraints: {
+          model,
+          config: {
+            responseModalities: ['AUDIO'],
+            systemInstruction: { parts: [{ text: instructions }] },
+            speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName: cfg.voice } } },
+          },
+        },
+        lockAdditionalFields: [],
+        httpOptions: { apiVersion: 'v1alpha' },
+      },
+    });
+
+    const token = authToken?.name || authToken?.token || '';
+    if (!token) {
+      throw new Error('Gemini auth token missing name');
     }
 
     console.log('[Gaia Assist] gemini live token ready', {
@@ -4650,7 +4666,7 @@ async function assistLiveToken(req, res, origin, url) {
       model,
       fallbackModel: model === cfg.fallbackModel ? '' : cfg.fallbackModel,
       voice: cfg.voice,
-      instructions: buildGaiaLiveInstructions({ view, memberContext }),
+      instructions,
       personalized: Boolean(memberContext),
       maxSessionSeconds: cfg.maxSessionSeconds,
       expireTime,
@@ -6324,7 +6340,8 @@ async function assistLiveDataBlock(query) {
   try { const r = await gaiaLookup(query); const body = formatLookup(r, query); return body ? ('LIVE GAIA HEALERS DATA for this question (use ONLY these real facts for prices/products/practitioners/courses/events; never invent others):\n' + body) : ''; } catch (e) { return ''; }
 }
 async function assistChat(body) {
-  const prompt = String(body.prompt || body.transcript || '').trim();
+  // A question, not a document: capped so one request cannot carry ~250k tokens.
+  const prompt = String(body.prompt || body.transcript || '').trim().slice(0, ASSIST_MAX_PROMPT_CHARS);
   if (!prompt) {
     return { ok: false, error: 'Prompt is required' };
   }
@@ -6367,7 +6384,7 @@ async function assistChat(body) {
 }
 
 async function assistChatStream(body, res, origin) {
-  const prompt = String(body.prompt || body.transcript || '').trim();
+  const prompt = String(body.prompt || body.transcript || '').trim().slice(0, ASSIST_MAX_PROMPT_CHARS);
   if (!prompt) {
     sendJson(res, 400, { ok: false, error: 'Prompt is required' }, origin);
     return;
@@ -6448,7 +6465,7 @@ async function assistTts(body) {
   if (requestedProvider === 'browser') {
     return { ok: false, status: 503, error: 'Browser speech requested; use SpeechSynthesis fallback.', provider: 'browser' };
   }
-  const providers = requestedProvider && requestedProvider !== 'auto'
+  const providers = requestedProvider && requestedProvider !== 'auto' && TTS_PROVIDER_ORDER.includes(requestedProvider)
     ? [requestedProvider]
     : TTS_PROVIDER_ORDER;
   const attempts = [];
@@ -6505,7 +6522,11 @@ async function callTtsProvider(provider, text, body = {}) {
 
   if (provider === 'elevenlabs') {
     if (!process.env.ELEVENLABS_API_KEY) return { skipped: true, reason: 'missing-api-key' };
-    const voiceId = String(body.voiceId || ELEVENLABS_VOICE_ID).trim();
+    // Only voices we chose: a caller could otherwise speak through any voice in
+    // the account (including private or cloned ones). Unknown ids fall back.
+    const allowedVoices = new Set([ELEVENLABS_VOICE_ID, ...String(process.env.ELEVENLABS_ALLOWED_VOICE_IDS || '').split(',')].map((v) => v.trim()).filter(Boolean));
+    const asked = String(body.voiceId || '').trim();
+    const voiceId = allowedVoices.has(asked) ? asked : ELEVENLABS_VOICE_ID;
     if (!voiceId) return { skipped: true, reason: 'missing-voice-id' };
     console.log('[Gaia Assist] TTS provider attempt', { provider: 'elevenlabs', model: ELEVENLABS_MODEL, voice: voiceId, outputFormat: ELEVENLABS_OUTPUT_FORMAT });
     const response = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${encodeURIComponent(voiceId)}?output_format=${encodeURIComponent(ELEVENLABS_OUTPUT_FORMAT)}&optimize_streaming_latency=3`, {
@@ -7514,7 +7535,18 @@ const server = http.createServer(async (req, res) => {
     // Gaia Assist routes are member-only: they proxy paid LLM/voice/tts calls,
     // so every request must carry a valid Gaia Healers member session cookie.
     if (url.pathname.startsWith('/api/assist/')) {
-      /* Gaia Assist is open to all visitors (member or not); nginx rate-limits /api/assist/ for quota protection. Sign-in gate disabled per product decision. */
+      // Gaia Assist stays open to every visitor (product decision); what it
+      // may SPEND per caller and per day is capped here (assist-guard.js).
+      // TTS is counted in characters inside its handler, once the text is known.
+      const kind = spendKindFor(req.method, url.pathname);
+      if (kind && kind !== 'tts') {
+        const verdict = allowSpend({ kind, caller: callerKey(req), member: Boolean(sessionMemberContext(req)) });
+        if (!verdict.ok) {
+          res.setHeader('Retry-After', String(verdict.retryAfter));
+          sendJson(res, 429, { ok: false, reason: verdict.reason, error: 'Gaia Assist is busy right now. Please try again in a little while.' }, origin);
+          return;
+        }
+      }
     }
     if (req.method === 'POST' && url.pathname === '/api/assist/lookup') {
       const body = await readJsonBody(req).catch(() => ({}));
@@ -7673,6 +7705,13 @@ const server = http.createServer(async (req, res) => {
     }
     if (req.method === 'POST' && url.pathname === '/api/assist/tts') {
       const body = await readJsonBody(req);
+      body.text = String(body.text || '').slice(0, ASSIST_MAX_TTS_CHARS);
+      const verdict = allowSpend({ kind: 'tts', caller: callerKey(req), member: Boolean(sessionMemberContext(req)), units: Math.max(1, body.text.length) });
+      if (!verdict.ok) {
+        res.setHeader('Retry-After', String(verdict.retryAfter));
+        sendJson(res, 429, { ok: false, reason: verdict.reason, provider: 'browser', error: 'Voice is busy; use browser speech.' }, origin);
+        return;
+      }
       try {
         const payload = await assistTts(body);
         if (!payload.ok) {
@@ -7754,8 +7793,10 @@ server.listen(PORT, HOST, () => {
 // closeAllConnections() matters as much as close(): close() stops new
 // connections but waits on established keep-alive sockets, and undici (the
 // fetch tests use) holds those open, so close() alone never calls back.
+// X-Real-IP is set by nginx from the connection; the first X-Forwarded-For
+// entry is whatever the caller sent (nginx appends), so it is not used.
 function requestIpOf(req) {
-  return firstNonEmptyString(String(req.headers['x-forwarded-for'] || '').split(',')[0], req.headers['x-real-ip'], req.socket?.remoteAddress, 'unknown');
+  return callerKey(req);
 }
 attachQwenVoiceRelay(server, { clientIp: requestIpOf });
 

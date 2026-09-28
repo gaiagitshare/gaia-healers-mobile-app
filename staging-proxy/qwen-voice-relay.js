@@ -150,6 +150,16 @@ export function qwenToBrowser(evt, state = {}) {
   }
 }
 
+/**
+ * Text the APP sends as a hidden instruction (the opening greeting, the
+ * panel's welcome, a handover's CONTINUE) rather than words the member said
+ * or typed. Kept out of the handover transcript: Gemini was being told the
+ * member had said "BEGIN: The member just opened Gaia Assist…".
+ */
+export function isAppInstruction(text) {
+  return /^(BEGIN|CONTINUE):|^Start the live app session now\./.test(String(text || '').trim());
+}
+
 /** Speech Qwen may not answer in: hand these to Gemini. */
 export function needsGeminiForLanguage(text) {
   return /[؀-ۿݐ-ݿﭐ-﷿ﹰ-﻿]/.test(String(text || ''));
@@ -359,7 +369,9 @@ function runSession(browser, grant, ip) {
       sendSetup();
       return;
     }
-    if (msg.realtimeInput?.text) transcript.push({ role: 'user', text: String(msg.realtimeInput.text).slice(0, 400) });
+    if (msg.realtimeInput?.text && !isAppInstruction(msg.realtimeInput.text)) {
+      transcript.push({ role: 'user', text: String(msg.realtimeInput.text).slice(0, 400) });
+    }
     const events = browserToQwen(msg);
     if (events.some((e) => e.type === 'response.create')) armStall();
     for (const e of events) toQwen(e);

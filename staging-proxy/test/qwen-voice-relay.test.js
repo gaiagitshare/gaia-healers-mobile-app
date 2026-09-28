@@ -253,10 +253,12 @@ test('a Qwen that never answers is handed to Gemini, not left silent', async () 
   const page = await openPage();
   page.ws.send(JSON.stringify(SETUP));
   await page.until((m) => m.setupComplete);
+  page.ws.send(JSON.stringify({ realtimeInput: { text: 'BEGIN: The member just opened Gaia Assist. Greet them.' } }));
   page.ws.send(JSON.stringify({ realtimeInput: { text: 'hello?' } }));
   const h = await page.until((m) => m.gaiaHandover, 3000);
   assert.equal(h.gaiaHandover.reason, 'stall');
-  assert.equal(h.gaiaHandover.transcript.at(-1).text, 'hello?');
+  assert.deepEqual(h.gaiaHandover.transcript.map((t) => t.text), ['hello?'],
+    'the app\'s own greeting instruction is not something the member said');
 });
 
 test('a Qwen that fails before setup closes with 4502 so the page starts Gemini', async () => {

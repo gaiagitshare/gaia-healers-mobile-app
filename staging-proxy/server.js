@@ -26,7 +26,7 @@ import {
 } from './membership/oauth-core.js';
 import { classifyMembershipEvent, membershipFromEvent } from './membership/events.js';
 import { attachQwenVoiceRelay, qwenRouting, issueQwenTicket, qwenVoiceConfig } from './qwen-voice-relay.js';
-import { allowSpend, callerKey, spendKindFor, ASSIST_MAX_PROMPT_CHARS, ASSIST_MAX_TTS_CHARS } from './assist-guard.js';
+import { allowSpend, callerKey, guardSubject, spendKindFor, ASSIST_MAX_PROMPT_CHARS, ASSIST_MAX_TTS_CHARS } from './assist-guard.js';
 import { deadline, idleWatch } from './provider-timeouts.js';
 import { SAFETY_FIRST, detectCrisis, crisisReply } from './assist-safety.js';
 import { normalizeMembership } from './membership/ledger.js';
@@ -7621,7 +7621,10 @@ const server = http.createServer(async (req, res) => {
       // TTS is counted in characters inside its handler, once the text is known.
       const kind = spendKindFor(req.method, url.pathname);
       if (kind && kind !== 'tts') {
-        const verdict = allowSpend({ kind, caller: callerKey(req), member: Boolean(sessionMemberContext(req)) });
+        // A signed-in member is charged to their own id; everyone else shares
+        // the address they arrived from.
+        const who = guardSubject(req, sessionMemberContext(req));
+        const verdict = allowSpend({ kind, caller: who.key, member: who.member });
         if (!verdict.ok) {
           res.setHeader('Retry-After', String(verdict.retryAfter));
           sendJson(res, 429, { ok: false, reason: verdict.reason, error: 'Gaia Assist is busy right now. Please try again in a little while.' }, origin);
@@ -7787,7 +7790,8 @@ const server = http.createServer(async (req, res) => {
     if (req.method === 'POST' && url.pathname === '/api/assist/tts') {
       const body = await readJsonBody(req);
       body.text = String(body.text || '').slice(0, ASSIST_MAX_TTS_CHARS);
-      const verdict = allowSpend({ kind: 'tts', caller: callerKey(req), member: Boolean(sessionMemberContext(req)), units: Math.max(1, body.text.length) });
+      const whoTts = guardSubject(req, sessionMemberContext(req));
+      const verdict = allowSpend({ kind: 'tts', caller: whoTts.key, member: whoTts.member, units: Math.max(1, body.text.length) });
       if (!verdict.ok) {
         res.setHeader('Retry-After', String(verdict.retryAfter));
         sendJson(res, 429, { ok: false, reason: verdict.reason, provider: 'browser', error: 'Voice is busy; use browser speech.' }, origin);

@@ -5907,7 +5907,65 @@ async function callChatProvider(provider, prompt, context = {}) {
   };
 }
 
+async function streamGeminiChat(prompt, context = {}, onDelta = () => {}) {
+  // The non-streaming path special-cases Gemini because its API is not
+  // OpenAI-shaped. The streaming path did not, so with an order of
+  // "gemini,groq" every streamed answer silently came from Groq instead --
+  // the configured first choice was skipped as an unknown provider.
+  const key = geminiApiKey();
+  if (!key) return { skipped: true, reason: 'missing-api-key' };
+  const model = process.env.GEMINI_TEXT_MODEL || 'gemini-2.5-flash';
+  const isVoice = String(context.source || '').includes('voice');
+  const response = await fetch(
+    `https://generativelanguage.googleapis.com/v1beta/models/${model}:streamGenerateContent?alt=sse&key=${encodeURIComponent(key)}`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        systemInstruction: { parts: [{ text: assistSystemPrompt(context.memberContext) }] },
+        contents: [{ role: 'user', parts: [{ text: assistUserPrompt(prompt, context) }] }],
+        generationConfig: { temperature: 0.35, maxOutputTokens: isVoice ? 220 : 640 },
+      }),
+    });
+  if (!response.ok || !response.body) {
+    const details = await response.text();
+    throw new Error(`gemini stream request failed with ${response.status}: ${details.slice(0, 280)}`);
+  }
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = '';
+  let reply = '';
+  for (;;) {
+    const { value, done } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+    const lines = buffer.split(/\r?\n/);
+    buffer = lines.pop() || '';
+    for (const line of lines) {
+      const trimmed = line.trim();
+      if (!trimmed.startsWith('data:')) continue;
+      const data = trimmed.slice(5).trim();
+      if (!data || data === '[DONE]') continue;
+      try {
+        const payload = JSON.parse(data);
+        const parts = payload.candidates?.[0]?.content?.parts || [];
+        const delta = parts.map((part) => part.text || '').join('');
+        if (delta) {
+          reply += delta;
+          onDelta(delta);
+        }
+      } catch {
+        // Ignore malformed provider keepalive chunks.
+      }
+    }
+  }
+  const text = reply.trim();
+  if (!text) return { skipped: true, reason: 'empty-reply' };
+  return { provider: 'gemini', model, reply: text };
+}
+
 async function streamChatProvider(provider, prompt, context = {}, onDelta = () => {}) {
+  if (provider === 'gemini') return streamGeminiChat(prompt, context, onDelta);
   const config = providerConfig(provider);
   if (!config) {
     return { skipped: true, reason: 'unknown-provider' };
@@ -5970,11 +6028,12 @@ async function streamChatProvider(provider, prompt, context = {}, onDelta = () =
     }
   }
 
-  return {
-    provider,
-    model: config.model,
-    reply: reply.trim() || fallbackAssistReply(prompt, context.intent),
-  };
+  // A provider that returns nothing has NOT answered. Emitting the canned
+  // fallback here looked like success while sending no deltas at all, so the
+  // member watched an empty bubble. Hand it to the next provider instead.
+  const text = reply.trim();
+  if (!text) return { skipped: true, reason: 'empty-reply' };
+  return { provider, model: config.model, reply: text };
 }
 
 async function callAssistProviders(prompt, context = {}) {

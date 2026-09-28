@@ -6162,17 +6162,47 @@ async function applyOnboardingStep(contactId, stepKey, selections, freeText, com
   return { tagsAdded: tags, matched: r.matched, unmatched: r.unmatched, complete: !!complete };
 }
 function priceFromCents(c) { if (c == null || isNaN(c)) return ''; const n = Number(c) / 100; return '$' + (Number.isInteger(n) ? n : n.toFixed(2)); }
+// Words that carry no intent. Without this list "what is the price" scores on
+// "the", and indexOf() makes "well" match every product in a WELLNESS store --
+// so the assistant was handed six arbitrary products on almost any question and
+// told they were the relevant facts for it.
+const LOOKUP_STOPWORDS = new Set([
+  'the', 'and', 'for', 'are', 'you', 'your', 'our', 'with', 'that', 'this', 'from', 'have',
+  'has', 'how', 'what', 'when', 'where', 'which', 'who', 'why', 'can', 'could', 'would',
+  'should', 'does', 'did', 'was', 'were', 'any', 'all', 'about', 'there', 'their', 'them',
+  'they', 'many', 'much', 'some', 'get', 'got', 'give', 'tell', 'find', 'need', 'want',
+  'like', 'please', 'thanks', 'hello', 'not', 'but', 'its', 'his', 'her', 'one', 'two',
+  'gaia', 'healers', 'healer',   // in the name of nearly everything here
+]);
+
 async function gaiaLookup(query) {
   const q = String(query || '').toLowerCase();
-  const terms = q.split(/[^a-z0-9]+/).filter((t) => t.length > 2);
-  const score = (text) => { const t = String(text || '').toLowerCase(); let sc = 0; terms.forEach((w) => { if (t.indexOf(w) >= 0) sc++; }); return sc; };
-  const out = { ok: true, query: String(query || '') };
+  const terms = q.split(/[^a-z0-9]+/)
+    .filter((t) => t.length > 2 && !LOOKUP_STOPWORDS.has(t));
+  // Whole words, not substrings: "well" must not match "wellness", and
+  // "bio-well" has to survive being written biowell or bio well.
+  const patterns = terms.map((t) => new RegExp(
+    `(^|[^a-z0-9])${t.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}([^a-z0-9]|$)`, 'i'));
+  const hits = (text) => {
+    const t = String(text || '').toLowerCase().replace(/[-_/]+/g, ' ');
+    let sc = 0;
+    patterns.forEach((re) => { if (re.test(t)) sc += 1; });
+    return sc;
+  };
+  // A name, a type or a tag is a claim about what something IS. A description
+  // is prose, where "well" is just an adverb -- so it counts for half, and a
+  // description-only hit cannot carry a result on its own.
+  const score = (name, prose = '') => hits(name) + 0.5 * hits(prose);
+  // One hit out of several meaningful words is a coincidence; two is a topic.
+  const minScore = terms.length >= 3 ? 2 : 1;
+  const out = { ok: true, query: String(query || ''), terms };
   try {
     const cat = loadStoreCatalog(); const prods = (cat && cat.products) ? Object.values(cat.products) : [];
     out.storeTotal = prods.length;
     out.store = prods.filter((p) => p && !p.hidden && p.title)
-      .map((p) => ({ p, s: score(p.title + ' ' + (p.productType || '') + ' ' + ((p.tags || []).join(' ')) + ' ' + String(p.description || '').slice(0, 200)) }))
-      .filter((x) => x.s > 0).sort((a, b) => b.s - a.s).slice(0, 6)
+      .map((p) => ({ p, s: score(p.title + ' ' + (p.productType || '') + ' ' + ((p.tags || []).join(' ')),
+                                 String(p.description || '').slice(0, 200)) }))
+      .filter((x) => x.s >= minScore).sort((a, b) => b.s - a.s).slice(0, 6)
       .map((x) => ({ title: x.p.title, price: (x.p.priceVaries ? 'from ' : '') + priceFromCents(x.p.priceCents), available: x.p.available !== false, type: x.p.productType || '', url: x.p.url || '' }));
   } catch (e) { out.store = []; }
   try {
@@ -6180,21 +6210,53 @@ async function gaiaLookup(query) {
     const list = (dir && dir.practitioners) || [];
     out.practitionerTotal = list.length;
     out.practitioners = list.map((p) => ({ p, s: score(p.name + ' ' + (p.city || '') + ' ' + (p.state || '') + ' ' + (p.specialty || '') + ' ' + ((p.tags || []).join(' '))) }))
-      .filter((x) => x.s > 0).sort((a, b) => b.s - a.s).slice(0, 6)
+      .filter((x) => x.s >= minScore).sort((a, b) => b.s - a.s).slice(0, 6)
       .map((x) => ({ name: x.p.name, location: [x.p.city, x.p.state].filter(Boolean).join(', '), specialty: x.p.specialty || '', link: x.p.profileLink || '' }));
   } catch (e) { out.practitioners = []; }
-  try { const cs = (loadAcademyManifest().courses || []).map((c) => c.title); out.courseTotal = cs.length; out.courses = cs.filter((t) => score(t) > 0).slice(0, 8); } catch (e) { out.courses = []; }
-  try { if (_lastPublishedEvent && _lastPublishedEvent.name) out.event = { name: _lastPublishedEvent.name, date: _lastPublishedEvent.date || '', venue: _lastPublishedEvent.venue || '' }; } catch (e) {}
+  try { const cs = (loadAcademyManifest().courses || []).map((c) => c.title); out.courseTotal = cs.length; out.allCourses = cs; out.courses = cs.filter((t) => score(t) >= minScore).slice(0, 8); } catch (e) { out.courses = []; }
+  try {
+    // The cache is filled by whoever happened to render an event card first, so
+    // straight after a restart the assistant did not know a conference existed
+    // at all. Ask for it rather than waiting to be told.
+    let ev = _lastPublishedEvent;
+    if (!ev || !ev.name) ev = await getEventSummary().catch(() => null);
+    if (ev && ev.name) out.event = { name: ev.name, date: ev.date || '', venue: ev.venue || '' };
+  } catch (e) {}
   return out;
 }
 function formatLookup(r, query) {
-  const parts = [];
-  if (r.store && r.store.length) parts.push('Store products: ' + r.store.map((p) => p.title + (p.price ? ' — ' + p.price : '') + (p.available ? '' : ' (sold out)')).join(' | '));
-  if (r.practitioners && r.practitioners.length) parts.push('Practitioners (' + r.practitionerTotal + ' total): ' + r.practitioners.map((p) => p.name + (p.location ? ' (' + p.location + ')' : '') + (p.specialty ? ' — ' + p.specialty : '')).join(' | '));
-  else if (/practitioner|healer|how many|directory/i.test(String(query || '')) && r.practitionerTotal) parts.push('The directory has ' + r.practitionerTotal + ' practitioners.');
-  if (r.courses && r.courses.length) parts.push('Courses: ' + r.courses.join(', '));
-  if (r.event) parts.push('Current event: ' + r.event.name + (r.event.date ? ' — ' + r.event.date : ''));
-  return parts.join('\n');
+  const q = String(query || '');
+  const blocks = {};
+  if (r.store && r.store.length) {
+    blocks.store = 'Store products: ' + r.store.map((p) => p.title + (p.price ? ' — ' + p.price : '') + (p.available ? '' : ' (sold out)')).join(' | ');
+  }
+  if (r.practitioners && r.practitioners.length) {
+    blocks.practitioners = 'Practitioners (' + r.practitionerTotal + ' total): ' + r.practitioners.map((p) => p.name + (p.location ? ' (' + p.location + ')' : '') + (p.specialty ? ' — ' + p.specialty : '')).join(' | ');
+  } else if (/practitioner|healer|directory/i.test(q) && r.practitionerTotal) {
+    blocks.practitioners = 'The directory has ' + r.practitionerTotal + ' practitioners.';
+  }
+  if (r.courses && r.courses.length) {
+    blocks.courses = 'Courses: ' + r.courses.join(', ');
+  } else if (/course|class|academy|training|certif/i.test(q) && r.courseTotal) {
+    // "What courses do you have" named nothing to match on, and answering
+    // nothing reads as "we have none". The count and the titles are both known.
+    blocks.courses = 'Courses (' + r.courseTotal + ' in the Academy): ' + (r.allCourses || []).slice(0, 10).join(', ');
+  }
+  if (r.event) {
+    blocks.event = 'Current event: ' + r.event.name + (r.event.date ? ' — ' + r.event.date : '')
+      + (r.event.venue ? ' at ' + r.event.venue : '');
+  }
+  // Lead with what was actually asked about. A question about the conference
+  // that opens with three store products reads as a shop trying to sell.
+  const order = [];
+  if (/event|conference|elevate|exhibit|venue|ticket/i.test(q)) order.push('event');
+  if (/practitioner|healer|directory|near me/i.test(q)) order.push('practitioners');
+  if (/course|class|academy|training|certif/i.test(q)) order.push('courses');
+  if (/price|cost|buy|shop|store|product|device|sell/i.test(q)) order.push('store');
+  for (const key of ['event', 'practitioners', 'courses', 'store']) {
+    if (!order.includes(key)) order.push(key);
+  }
+  return order.map((k) => blocks[k]).filter(Boolean).join('\n');
 }
 const LIVE_Q_RE = /\b(price|prices|cost|costs|how much|buy|purchase|order|shop|store|in stock|available|product|products|device|devices|bio-?well|biopulsar|biotekna|braintap|healy|asea|lifewave|spray|sprays|crystal|crystals|mala|malas|practitioner|practitioners|healer|healers|near me|how many|course|courses|class|classes|event|events|conference|elevate)\b/i;
 async function assistLiveDataBlock(query) {
@@ -6914,6 +6976,30 @@ const server = http.createServer(async (req, res) => {
       } catch (e) {
         sendJson(res, 502, { ok: false, error: String((e && e.message) || e) }, origin);
       }
+      return;
+    }
+    // Send one transactional e-mail on the Event Manager's behalf.
+    //
+    // The Event Manager holds no GHL credentials by design, and the ticket
+    // confirmation must not depend on somebody remembering to attach a GHL
+    // workflow when they add a product -- which is exactly how 88 of 339
+    // buyers were never told the dates. So the system that KNOWS who holds a
+    // ticket asks here to say so, and the credential stays on this side.
+    if (req.method === 'POST' && url.pathname === '/api/event/notify') {
+      const svc = (process.env.IDENTITY_SERVICE_TOKEN || '').trim();
+      const auth = String(req.headers.authorization || '').replace(/^Bearer\s+/i, '').trim();
+      if (!svc || auth !== svc) { sendJson(res, 401, { ok: false, error: 'unauthorized' }, origin); return; }
+      const body = await readJsonBody(req, 512 * 1024).catch(() => ({}));
+      const contactId = String(body.contactId || '').trim();
+      const subject = String(body.subject || '').trim();
+      const html = String(body.html || '');
+      if (!contactId || !subject || !html) {
+        sendJson(res, 400, { ok: false, error: 'contactId, subject and html are required' }, origin);
+        return;
+      }
+      const sent = await ghlSendEmail({ contactId, subject, html });
+      console.log('[Gaia Event] notify', { contactId, subject: subject.slice(0, 60), ok: sent.ok, reason: sent.reason });
+      sendJson(res, sent.ok ? 200 : 502, sent, origin, { 'Cache-Control': 'no-store' });
       return;
     }
     // Identity verification for the card's protected fields. Every one of these

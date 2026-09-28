@@ -67,3 +67,12 @@ test('bootstrap never carries a provider key', async () => {
   assert.ok(!text.includes('test-gemini-key'), 'Gemini key leaked into bootstrap');
   assert.ok(!text.includes('test-eleven-key'), 'ElevenLabs key leaked into bootstrap');
 });
+
+test('a page from before Qwen (no lang) is always given a Gemini token', async () => {
+  process.env.QWEN_VOICE_ENABLED = 'true';
+  process.env.QWEN_API_KEY = 'test-qwen-key';
+  const r = await fetch(`http://127.0.0.1:${PORT}/api/assist/voice/token?view=today`, { method: 'POST' });
+  const body = await r.json();
+  assert.notEqual(body.provider, 'qwen', 'an old page cannot use a relay ticket and would lose live voice');
+  assert.ok(!body.relayUrl);
+});

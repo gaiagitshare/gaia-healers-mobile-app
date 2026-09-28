@@ -25,6 +25,7 @@ import {
   googleAuthUrl, appleAuthUrl, providerConfig as oauthProviderConfig, OAUTH_ENDPOINTS,
 } from './membership/oauth-core.js';
 import { classifyMembershipEvent, membershipFromEvent } from './membership/events.js';
+import { attachQwenVoiceRelay, qwenRouting, issueQwenTicket, qwenVoiceConfig } from './qwen-voice-relay.js';
 import { normalizeMembership } from './membership/ledger.js';
 import {
   fixturesAvailable, fixtureKeyMatches, fixtureAccessGranted,
@@ -4569,6 +4570,36 @@ async function assistLiveToken(req, res, origin, url) {
 
   const view = String(url.searchParams.get('view') || 'today').trim() || 'today';
   const memberContext = await buildMemberVoiceContext(req);
+
+  // Qwen first, Gemini as the fallback (qwen-voice-relay.js). The browser gets
+  // a one-minute ticket for the relay, never a Qwen key, and the instructions
+  // stay on the server with the ticket. Anything that rules Qwen out — off,
+  // Persian/Arabic phone, breaker open, full — falls through to Gemini below.
+  const ip = requestIpOf(req);
+  const route = qwenRouting({
+    ip,
+    lang: url.searchParams.get('lang') || '',
+    forced: url.searchParams.get('provider') || '',
+  });
+  if (route.use) {
+    const qcfg = qwenVoiceConfig();
+    const ticket = issueQwenTicket({ instructions: buildGaiaLiveInstructions({ view, memberContext }), ip });
+    const proto = String(req.headers['x-forwarded-proto'] || '').includes('https') ? 'wss' : 'ws';
+    console.log('[Gaia Assist] qwen voice ticket ready', { model: qcfg.model, view, latencyMs: Date.now() - startedAt });
+    sendJson(res, 200, {
+      ok: true,
+      provider: 'qwen',
+      relayUrl: `${proto}://${req.headers.host}/api/assist/voice/qwen?ticket=${ticket}`,
+      model: qcfg.model,
+      voice: qcfg.voice,
+      personalized: Boolean(memberContext),
+      maxSessionSeconds: qcfg.maxSessionSeconds,
+      expireTime: new Date(Date.now() + 60 * 1000).toISOString(),
+    }, origin);
+    return;
+  }
+  if (route.reason !== 'disabled') console.log('[Gaia Assist] voice routed to gemini', { reason: route.reason });
+
   const expireTime = new Date(Date.now() + 30 * 60 * 1000).toISOString();
   const newSessionExpireTime = new Date(Date.now() + 60 * 1000).toISOString();
 
@@ -7718,6 +7749,11 @@ server.listen(PORT, HOST, () => {
 // closeAllConnections() matters as much as close(): close() stops new
 // connections but waits on established keep-alive sockets, and undici (the
 // fetch tests use) holds those open, so close() alone never calls back.
+function requestIpOf(req) {
+  return firstNonEmptyString(String(req.headers['x-forwarded-for'] || '').split(',')[0], req.headers['x-real-ip'], req.socket?.remoteAddress, 'unknown');
+}
+attachQwenVoiceRelay(server, { clientIp: requestIpOf });
+
 export { server };
 export async function closeServer() {
   server.closeAllConnections?.();

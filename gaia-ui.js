@@ -1503,7 +1503,7 @@
           <form class="gaia-assist__form">
             <label class="gaia-assist__label" for="gaia-assist-prompt">Ask Gaia</label>
             <div class="gaia-assist__input-row">
-              <input id="gaia-assist-prompt" name="prompt" type="text" autocomplete="off" placeholder="Ask about energy, courses, or membership…" />
+              <input id="gaia-assist-prompt" name="prompt" type="text" autocomplete="off" placeholder="Ask Gaia anything…" />
               <button type="submit" aria-label="Send">↑</button>
             </div>
           </form>
@@ -1916,7 +1916,7 @@
       stopSpeaking();
       clearPendingVoice(true);
       setError('');
-      setAssistVoiceState('idle', reason === 'voice' ? 'Listening next…' : 'Stopped');
+      setAssistVoiceState('idle', reason === 'voice' ? 'Starting the microphone…' : 'Stopped');
       assistLog('assistant interrupted', { reason });
     }
 
@@ -2370,7 +2370,7 @@
       holding: 'Listening…',
       listening: 'Listening… speak naturally',
       thinking: 'Gaia is thinking…',
-      speaking: 'Gaia is speaking… listening pauses automatically',
+      speaking: 'Gaia is speaking…',
       error: 'Voice unavailable — type your question',
     };
 
@@ -2608,6 +2608,16 @@
       root.classList.toggle('gaia-assist--connecting', state === 'connecting');
       root.classList.toggle('gaia-assist--holding', state === 'holding');
       root.classList.toggle('gaia-assist--ready', state === 'ready');
+      // "Speak naturally" and "Pause listening" describe a live, hands-free
+      // session. Shown at any other time they promise a microphone that is
+      // not open, and people talk into it and wait.
+      let liveSession = false;
+      try {
+        // realtimeVoice is a later `let`; an early call must not throw on it.
+        liveSession = Boolean(realtimeVoice && realtimeVoice.isActive && realtimeVoice.isActive()
+          && !inPipelineMode() && state !== 'idle' && state !== 'error');
+      } catch (_) { /* not initialised yet */ }
+      root.classList.toggle('gaia-assist--live-session', liveSession);
       document.body.classList.toggle('gaia-voice-holding', state === 'holding');
       document.body.classList.toggle('gaia-voice-speaking', state === 'speaking');
       document.body.classList.toggle('gaia-voice-thinking', state === 'thinking');

@@ -5183,7 +5183,31 @@ async function bootstrap(req) {
         liveData,
         mode: liveData ? 'live' : 'proxy-connected',
         authenticated: Boolean(session?.member),
+        // The app decides between Gemini Live and the record-then-reply
+        // fallback from THIS block (gaia-ui.js realtimeConfig / ttsConfig).
+        // It was dropped with the unused renderer fields on 2026-09-12, and
+        // from then on every member got the fallback — and the voice picker,
+        // with no ElevenLabs voice to offer, sent browser voice names to
+        // ElevenLabs. test/bootstrap-voice.test.js keeps it here.
+        voice: publicVoiceConfig(),
       },
+    },
+  };
+}
+
+function publicVoiceConfig() {
+  const live = gaiaLiveVoiceConfig();
+  return {
+    enabled: process.env.GAIA_ASSIST_VOICE_ENABLED === 'true',
+    live,
+    realtime: live,
+    tts: {
+      configured: hasAnyBackendTtsProvider(),
+      providerOrder: publicTtsOrder(),
+      openaiVoice: OPENAI_TTS_VOICE,
+      elevenLabsConfigured: Boolean(process.env.ELEVENLABS_API_KEY && ELEVENLABS_VOICE_ID),
+      elevenLabsVoice: ELEVENLABS_VOICE_NAME,
+      elevenLabsVoiceId: ELEVENLABS_VOICE_ID,
     },
   };
 }

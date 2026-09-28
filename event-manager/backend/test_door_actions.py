@@ -222,6 +222,54 @@ if other:
           "and the very next scan shows the new one", (d.get("door") or {}).get("ticket_type_id"))
     check(d.get("qr_code") == SEAT_QR, "on the same badge \u2014 never a second one")
 
+print("\nUPGRADING SOMEBODY AT THE DESK, WITH AND WITHOUT MONEY")
+_, tts2 = call("GET", "/events/%d/ticket-types" % EVENT, None, ADMIN)
+conf = next((t for t in (tts2 or []) if t["name"] == "General Admission + Conference"), None)
+vip = next((t for t in (tts2 or []) if t["name"] == "VIP Pass"), None)
+# Somebody still on plain General Admission, so the change really is an upgrade.
+ga_tt = next((t for t in (tts2 or []) if t["name"] == "General Admission"), None)
+_up = db.query(models.Attendee).filter(
+    models.Attendee.event_id == EVENT,
+    models.Attendee.ticket_type_id == (ga_tt or {}).get("id"),
+    models.Attendee.id != SEAT_ID).order_by(models.Attendee.id).first()
+if conf and vip and _up:
+    UP_ID, UP_QR, UP_NAME = _up.id, _up.qr_code, ("%s %s" % (_up.first_name, _up.last_name)).strip()
+    print("     upgrading %s, who is on General Admission" % UP_NAME)
+    st, out = call("POST", "/attendees/%d/change-pass" % UP_ID,
+                   {"ticket_type_id": conf["id"], "reason": "wanted the conference",
+                    "paid_at_door": True, "amount": 97, "method": "cash"}, STAFF)
+    check(st == 403, "door staff cannot sell an upgrade on their own", (st, out))
+    st, out = call("POST", "/attendees/%d/change-pass" % UP_ID,
+                   {"ticket_type_id": conf["id"], "reason": "wanted the conference",
+                    "paid_at_door": True, "amount": 97, "method": "cash"}, ADMIN)
+    check(st == 200, "an organiser sells it", (st, out))
+    d = scan(UP_QR, zone="CONFERENCE")
+    check(d.get("result") == "GRANTED", "and the conference door opens straight away", d.get("reason"))
+
+    # The money has to be findable afterwards, or it is not a sale.
+    _, money = call("GET", "/events/%d/door-report" % EVENT, None, ADMIN)
+    du = (money or {}).get("door_upgrades") or {}
+    check(du.get("collected_total", 0) >= 97,
+          "the $97 shows in the door's takings", du.get("collected_total"))
+    check(any(abs(float(i.get("amount") or 0) - 97) < 0.01 for i in (du.get("items") or [])),
+          "named against the person who paid it", (du.get("items") or [])[:1])
+    print("     door upgrades so far: %s x $%s" % (du.get("collected_count"), du.get("collected_total")))
+
+    # An amount is not optional once you say money changed hands.
+    st, out = call("POST", "/attendees/%d/change-pass" % UP_ID,
+                   {"ticket_type_id": vip["id"], "paid_at_door": True, "amount": 0}, ADMIN)
+    check(st == 400, "saying they paid, with no amount, is refused", (st, out))
+
+    # A comp still works and is still recorded as a comp.
+    st, out = call("POST", "/attendees/%d/change-pass" % UP_ID,
+                   {"ticket_type_id": vip["id"], "reason": "comped by the organiser",
+                    "complimentary": True}, ADMIN)
+    check(st == 200, "a complimentary upgrade still works", (st, out))
+    _, money2 = call("GET", "/events/%d/door-report" % EVENT, None, ADMIN)
+    du2 = (money2 or {}).get("door_upgrades") or {}
+    check(du2.get("collected_total") == du.get("collected_total"),
+          "and adds nothing to the takings", (du.get("collected_total"), du2.get("collected_total")))
+
 print("\nFINISHING A BOOKING THAT PAID FOR MORE SEATS THAN IT NAMED")
 # Jessica Star Ison bought four and only three could be rebuilt: the fourth
 # name never reached any system. That seat is paid for, and the entrance is

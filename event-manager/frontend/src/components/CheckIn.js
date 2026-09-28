@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useParams } from 'react-router-dom';
 import {
     Alert, Box, Button, Chip, CircularProgress,
-    Dialog, DialogActions, DialogContent, DialogTitle, Divider, IconButton,
+    Dialog, DialogActions, DialogContent, DialogTitle, Divider, FormControlLabel, IconButton, Switch,
     InputAdornment, MenuItem, Paper, Snackbar, Stack, TextField, Typography, useMediaQuery, useTheme,
 } from '@mui/material';
 import SearchIcon from '@mui/icons-material/Search';
@@ -158,6 +158,12 @@ function CheckIn({ timezone: timezoneProp }) {
     const [fixForm, setFixForm] = useState({ first_name: '', last_name: '', phone: '', email: '' });
     const [actionReason, setActionReason] = useState('');
     const [passChoice, setPassChoice] = useState('');
+    // An upgrade bought at the desk is real money. Recording it as
+    // complimentary because there was nowhere to type the amount is how a
+    // weekend's takings end up short.
+    const [passPaid, setPassPaid] = useState(false);
+    const [passAmount, setPassAmount] = useState('');
+    const [passMethod, setPassMethod] = useState('cash');
     const [undoReason, setUndoReason] = useState('');
     const [stationOpen, setStationOpen] = useState(false);
     const [logFilter, setLogFilter] = useState('');
@@ -466,6 +472,7 @@ function CheckIn({ timezone: timezoneProp }) {
             : { first_name: d.first_name || '', last_name: d.last_name || '',
                 phone: card.phone || '', email: card.email || '' });
         setPassChoice(card.ticket_type_id ? String(card.ticket_type_id) : '');
+        setPassPaid(false); setPassAmount(''); setPassMethod('cash');
     };
     const closeDoorAction = () => { setDoorAction(null); setDoorError(''); };
 
@@ -523,7 +530,10 @@ function CheckIn({ timezone: timezoneProp }) {
             await changePass(d.attendee_id, {
                 ticket_type_id: Number(passChoice),
                 reason: actionReason.trim() || 'changed at the door',
-                complimentary: true, allow_downgrade: true,
+                complimentary: !passPaid, allow_downgrade: true,
+                paid_at_door: passPaid,
+                amount: passPaid ? Number(passAmount) : undefined,
+                method: passPaid ? passMethod : undefined,
             });
         },
         'Pass changed. Print the badge again so it shows the new one.');
@@ -1604,13 +1614,38 @@ function CheckIn({ timezone: timezoneProp }) {
                         )}
 
                         {doorAction?.kind === 'pass' && (
-                            <TextField select label="New pass" size="small" fullWidth value={passChoice}
-                                onChange={(e) => setPassChoice(e.target.value)}
-                                helperText="Recorded as a complimentary change. No money is taken here.">
-                                {ticketTypes.map((t) => (
-                                    <MenuItem key={t.id} value={String(t.id)}>{t.name}</MenuItem>
-                                ))}
-                            </TextField>
+                            <>
+                                <TextField select label="New pass" size="small" fullWidth value={passChoice}
+                                    onChange={(e) => setPassChoice(e.target.value)}
+                                    helperText="Same badge, same QR. They keep everything they already had.">
+                                    {ticketTypes.map((t) => (
+                                        <MenuItem key={t.id} value={String(t.id)}>{t.name}</MenuItem>
+                                    ))}
+                                </TextField>
+                                <FormControlLabel
+                                    control={<Switch checked={passPaid} size="small"
+                                        onChange={(e) => setPassPaid(e.target.checked)} />}
+                                    label={passPaid ? 'They are paying for this' : 'Complimentary \u2014 no money taken'} />
+                                {passPaid && (
+                                    <Stack direction="row" spacing={1}>
+                                        <TextField label="Amount" size="small" fullWidth required
+                                            type="number" inputProps={{ min: 0, step: '0.01' }}
+                                            value={passAmount} onChange={(e) => setPassAmount(e.target.value)}
+                                            InputProps={{ startAdornment: <InputAdornment position="start">$</InputAdornment> }} />
+                                        <TextField select label="Method" size="small" fullWidth
+                                            value={passMethod} onChange={(e) => setPassMethod(e.target.value)}>
+                                            {['cash', 'card', 'other'].map((m) => (
+                                                <MenuItem key={m} value={m}>{m}</MenuItem>
+                                            ))}
+                                        </TextField>
+                                    </Stack>
+                                )}
+                                <Alert severity="info" icon={false} sx={{ py: 0.5 }}>
+                                    {passPaid
+                                        ? 'Recorded in Gaia and reported with the door\u2019s takings. Take the money on your usual till \u2014 nothing is written to GHL.'
+                                        : 'Recorded as a complimentary change. Nothing is written to GHL.'}
+                                </Alert>
+                            </>
                         )}
 
                         <TextField label={doorAction?.kind === 'override' ? 'Why are you letting them in? (required)' : 'Reason (for the record)'}
@@ -1636,8 +1671,13 @@ function CheckIn({ timezone: timezoneProp }) {
                             onClick={submitAddSeat}>{doorBusy ? 'Adding\u2026' : 'Add this seat'}</Button>
                     )}
                     {doorAction?.kind === 'pass' && (
-                        <Button variant="contained" disabled={doorBusy || !passChoice || String(passChoice) === String(doorAction?.decision?.door?.ticket_type_id)}
-                            onClick={submitPassChange}>{doorBusy ? 'Changing\u2026' : 'Change pass'}</Button>
+                        <Button variant="contained"
+                            disabled={doorBusy || !passChoice
+                                || String(passChoice) === String(doorAction?.decision?.door?.ticket_type_id)
+                                || (passPaid && !(Number(passAmount) > 0))}
+                            onClick={submitPassChange}>
+                            {doorBusy ? 'Changing\u2026' : (passPaid ? `Take $${passAmount || '0'} & upgrade` : 'Change pass')}
+                        </Button>
                     )}
                     {doorAction?.kind === 'revoke' && (
                         <Button variant="contained" color="error" disabled={doorBusy}

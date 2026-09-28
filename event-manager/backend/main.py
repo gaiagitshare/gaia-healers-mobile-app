@@ -1934,6 +1934,7 @@ def door_report(event_id: int, db: Session = Depends(get_db),
                           for k, v in door_method.items()},
             "basis": "Gaia-recorded at the door. Not a GHL transaction and not part of GHL revenue.",
         },
+        "door_upgrades": _door_upgrade_totals(db, event_id),
         "verified_ghl_revenue": {
             "orders": ghl_orders,
             "amount": round(ghl_revenue, 2),
@@ -2316,7 +2317,13 @@ def _effective_access(db, attendee):
     if base_ents:
         base_tt = max(base_ents, key=lambda e: _tt_rank(db, e.get("ticket_type_id"))).get("ticket_type_id")
     if cd.get("admin_tier"):
-        base_tt = cd.get("admin_tier")
+        # An admin-set tier is a FLOOR, not a ceiling. It exists so a comp or a
+        # correction cannot be quietly undone by the payment ledger -- not so it
+        # can cap somebody who later pays for something better. Reading it as an
+        # override meant a corrected attendee could buy a VIP upgrade, be
+        # charged for it, and still be refused at the VIP door.
+        if base_tt is None or _tt_rank(db, cd["admin_tier"]) >= _tt_rank(db, base_tt):
+            base_tt = cd.get("admin_tier")
     if base_tt is None:
         base_tt = attendee.ticket_type_id
     base = db.query(models.TicketType).filter(models.TicketType.id == base_tt).first() if base_tt else None
@@ -3517,6 +3524,39 @@ def attach_event_times(event: models.Event) -> models.Event:
     event.end_at = event.end_date.replace(tzinfo=tz).isoformat() if event.end_date else None
     event.server_time = datetime.now(tz).isoformat(timespec="seconds")
     return event
+
+
+def _door_upgrade_totals(db, event_id: int) -> dict:
+    """Money taken at the desk for an upgrade, read back off the lifecycle.
+
+    An upgrade sold at the door is real revenue and belongs in the same summary
+    as a door ticket sale -- otherwise the only record of it is a line in one
+    person's history, and the weekend's takings are short by however many people
+    decided on the day that they wanted the conference after all.
+    """
+    total, count, by_method, rows = 0.0, 0, {}, []
+    for a in db.query(models.Attendee).filter(models.Attendee.event_id == event_id).all():
+        for entry in ((a.custom_data or {}).get("lifecycle") or []):
+            if entry.get("action") != "paid_upgrade" or not entry.get("paid_at_door"):
+                continue
+            amt = float(entry.get("amount") or 0)
+            method = entry.get("method") or "unspecified"
+            total += amt
+            count += 1
+            slot = by_method.setdefault(method, {"count": 0, "amount": 0.0})
+            slot["count"] += 1
+            slot["amount"] += amt
+            rows.append({"attendee_id": a.id,
+                         "name": ("%s %s" % (a.first_name or "", a.last_name or "")).strip(),
+                         "amount": amt, "method": method,
+                         "currency": entry.get("currency") or "USD",
+                         "reference": entry.get("reference"),
+                         "by": entry.get("actor"), "at": entry.get("ts")})
+    return {"collected_count": count, "collected_total": round(total, 2),
+            "by_method": {k: {"count": v["count"], "amount": round(v["amount"], 2)}
+                          for k, v in by_method.items()},
+            "items": rows,
+            "basis": "Upgrades sold at the desk. Gaia-recorded, never written to GHL."}
 
 
 def _roll_counts(db, event_id: int) -> dict:
@@ -7835,11 +7875,14 @@ def reconcile_invoice(payload: schemas.ReconcileInvoice, db: Session = Depends(g
     old_tt = existing.ticket_type_id
     # Tier behaviour matches the order path: a base sets it when unset, an
     # upgrade only ever lifts.
-    if custom.get("admin_tier") is None:
-        if tt_id and not mapping.is_upgrade and not existing.ticket_type_id:
-            existing.ticket_type_id = tt_id
-        if tt_id and mapping.is_upgrade and _tt_rank(db, tt_id) >= _tt_rank(db, existing.ticket_type_id):
-            existing.ticket_type_id = tt_id
+    if tt_id and not mapping.is_upgrade and not existing.ticket_type_id:
+        existing.ticket_type_id = tt_id
+    if tt_id and mapping.is_upgrade and _tt_rank(db, tt_id) >= _tt_rank(db, existing.ticket_type_id):
+        existing.ticket_type_id = tt_id
+    # The admin tier holds the line underneath, and only underneath.
+    _floor = custom.get("admin_tier")
+    if _floor is not None and _tt_rank(db, _floor) > _tt_rank(db, existing.ticket_type_id):
+        existing.ticket_type_id = _floor
     for f in ("first_name", "last_name", "phone"):
         v = getattr(payload, f)
         if v and not getattr(existing, f):
@@ -7962,10 +8005,12 @@ def reconcile_attendee(payload: schemas.ReconcileAttendee, db: Session = Depends
                     quantity=payload.quantity, amount=payload.amount,
                     purchased_at=getattr(payload, "purchased_at", None))
         _order_refunded = bool(payload.order_id and payload.order_id in set(custom.get("refunded_order_ids") or []))
-        # Purchase-side tier behavior is unchanged (base sets if unset; upgrades
-        # never downgrade) EXCEPT: an admin override wins, and a refunded order
-        # never re-applies its tier (so a re-seen refunded upgrade cannot re-lift).
-        if custom.get("admin_tier") is None and not _order_refunded:
+        # Base sets the tier if unset; an upgrade only ever lifts; a refunded
+        # order never re-applies its tier, so a re-seen refunded upgrade cannot
+        # re-lift. An admin-set tier is applied as a FLOOR after this, not as a
+        # veto before it -- vetoing it meant somebody who had been corrected or
+        # comped could pay for an upgrade and never receive it.
+        if not _order_refunded:
             if payload.ticket_type_id and not payload.is_upgrade:
                 if not existing.ticket_type_id:
                     existing.ticket_type_id = payload.ticket_type_id
@@ -7978,6 +8023,9 @@ def reconcile_attendee(payload: schemas.ReconcileAttendee, db: Session = Depends
                                     "to_tt": payload.ticket_type_id, "order_id": payload.order_id})
                         custom["lifecycle"] = _ll
                     existing.ticket_type_id = payload.ticket_type_id
+        _floor = custom.get("admin_tier")
+        if _floor is not None and _tt_rank(db, _floor) > _tt_rank(db, existing.ticket_type_id):
+            existing.ticket_type_id = _floor
         for f in ("first_name", "last_name", "phone"):
             v = getattr(payload, f)
             if v and not getattr(existing, f):
@@ -8228,9 +8276,27 @@ def change_pass(attendee_id: int, payload: schemas.ChangePass,
     attendee.ticket_type_id = tt.id
     _cp_cd = dict(attendee.custom_data or {}); _cp_cd["admin_tier"] = tt.id
     attendee.custom_data = _cp_cd
-    _lifecycle_append(attendee, "comp_downgrade" if is_downgrade else "comp_upgrade",
+    # Money taken at the desk for an upgrade has nowhere else to go. The walk-in
+    # door-payment columns belong to a walk-in's own ticket and are only
+    # aggregated for walk-ins, so an upgrade recorded there would simply not be
+    # counted -- somebody hands over $97 at the desk and the event never sees it.
+    # It is recorded on the lifecycle entry instead, which is per-event, additive,
+    # and already the thing that says what happened to this ticket.
+    _paid = bool(getattr(payload, "paid_at_door", False))
+    _amount = float(getattr(payload, "amount", 0) or 0)
+    if _paid and _amount <= 0:
+        raise HTTPException(status_code=400,
+                            detail="Say how much was taken, or record it as complimentary")
+    _lifecycle_append(attendee,
+                      "paid_upgrade" if _paid else ("comp_downgrade" if is_downgrade else "comp_upgrade"),
                       actor=(current_user.email or "admin"), from_tt=old_tt, to_tt=tt.id,
-                      complimentary=bool(payload.complimentary), reason=payload.reason)
+                      complimentary=(False if _paid else bool(payload.complimentary)),
+                      reason=payload.reason,
+                      paid_at_door=(True if _paid else None),
+                      amount=(_amount if _paid else None),
+                      currency=((getattr(payload, "currency", None) or "USD") if _paid else None),
+                      method=((getattr(payload, "method", None) or "cash") if _paid else None),
+                      reference=(getattr(payload, "reference", None) if _paid else None))
     db.commit(); db.refresh(attendee)
     try:
         _notify_ticket_change(db, attendee, tt)

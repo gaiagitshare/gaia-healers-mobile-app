@@ -1004,6 +1004,13 @@ class ChangePass(BaseModel):
     reason: Optional[str] = None
     complimentary: Optional[bool] = True
     allow_downgrade: Optional[bool] = False
+    # Money taken at the desk for this upgrade. Recorded on the lifecycle and
+    # reported with the rest of the door's takings; never written to GHL.
+    paid_at_door: Optional[bool] = False
+    amount: Optional[float] = None
+    currency: Optional[str] = "USD"
+    method: Optional[str] = "cash"
+    reference: Optional[str] = None
     label: Optional[str] = None
     is_active: Optional[bool] = True
 

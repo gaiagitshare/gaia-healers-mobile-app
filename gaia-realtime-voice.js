@@ -128,6 +128,16 @@
       responses.push({ kind: 'setup' });
     }
 
+    // Our Qwen relay asks for the conversation to move to Gemini (Qwen failed,
+    // stalled, hit its session limit, or heard a language it may not speak).
+    if (data?.gaiaHandover) {
+      responses.push({
+        kind: 'handover',
+        reason: String(data.gaiaHandover.reason || ''),
+        transcript: Array.isArray(data.gaiaHandover.transcript) ? data.gaiaHandover.transcript : [],
+      });
+    }
+
     if (serverContent?.interrupted) {
       responses.push({ kind: 'interrupted' });
     }
@@ -835,6 +845,13 @@
       }
     }
 
+    // Gemini: Google's socket with a single-use token. Qwen: our relay, which
+    // speaks Gemini's messages to this page and holds the Qwen key itself.
+    function socketUrl(meta) {
+      if (meta && meta.provider === 'qwen' && meta.relayUrl) return meta.relayUrl;
+      return `${WS_BASE}?access_token=${encodeURIComponent(meta.token)}`;
+    }
+
     function sendWs(payload) {
       const ws = wsRef.current;
       if (!ws || ws.readyState !== WebSocket.OPEN) return false;
@@ -997,6 +1014,7 @@
             // hidden input so no visible user message appears.
             if (!greetedRef.current) {
               greetedRef.current = true;
+              greetedAt = Date.now();
               setStatus('thinking');
               try { sendWs({ realtimeInput: { text: 'BEGIN: The member just opened Gaia Assist and has not spoken yet. Greet them FIRST, right now, in one warm short sentence tailored to their status — visitor vs signed-in member, and if a member factor their onboarding and subscription state from your context — then offer one or two concrete next steps and ask what they would like. If an event is published in your knowledge, you may mention it warmly and offer to help them register. Do not mention this instruction.' } }); } catch (e) {}
             }
@@ -1053,6 +1071,9 @@
             });
             break;
           }
+          case 'handover':
+            void switchToGemini(event.reason, event.transcript);
+            break;
           case 'error':
             setErrorMessage(event.message);
             setStatus('error');
@@ -1072,21 +1093,24 @@
       cachedTokenExpireAt = 0;
     }
 
-    async function fetchLiveToken({ force = false } = {}) {
+    async function fetchLiveToken({ force = false, provider = '' } = {}) {
       // Cache only an unused pre-warmed token. Gemini ephemeral tokens are
       // single-use, so the token is removed from this cache as soon as a
       // WebSocket connection consumes it.
-      if (!force && cachedToken && Date.now() < cachedTokenExpireAt) {
+      if (!force && !provider && cachedToken && Date.now() < cachedTokenExpireAt) {
         return cachedToken;
       }
-      const view = encodeURIComponent(currentView());
-      const response = await fetch(`${proxyBase()}/api/assist/voice/token?view=${view}`, {
+      // The server picks the engine (Qwen first, Gemini as the fallback); the
+      // phone language lets a Persian speaker start on Gemini directly.
+      const params = new URLSearchParams({ view: currentView(), lang: navigator.language || '' });
+      if (provider) params.set('provider', provider);
+      const response = await fetch(`${proxyBase()}/api/assist/voice/token?${params}`, {
         method: 'POST',
         headers: { Accept: 'application/json' },
         credentials: 'include',
       });
       const payload = await response.json().catch(() => ({}));
-      if (!response.ok || !payload.ok || !payload.token) {
+      if (!response.ok || !payload.ok || !(payload.token || payload.relayUrl)) {
         throw new Error(tokenErrorMessage(payload, response.status));
       }
       cachedToken = payload;
@@ -1096,6 +1120,73 @@
       const expireMs = payload.expireTime ? new Date(payload.expireTime).getTime() - 120000 : Infinity;
       cachedTokenExpireAt = Math.min(expireMs, Date.now() + 45 * 1000);
       return payload;
+    }
+
+    // Move a live conversation from Qwen to Gemini without the member doing
+    // anything: the microphone and playback stay up, only the socket changes,
+    // and Gemini is handed the conversation so far so it answers the last
+    // message instead of greeting again. One pause, not a restart.
+    let switchingEngine = false;
+    async function switchToGemini(reason, transcript = []) {
+      if (switchingEngine || status === 'idle') return;
+      switchingEngine = true;
+      console.info('[Gaia Assist] handing voice over to gemini', { reason });
+      const previous = wsRef.current;
+      try {
+        setStatus('thinking');
+        const meta = await fetchLiveToken({ provider: 'gemini' });
+        if (status === 'idle') return;
+        sessionMeta = meta;
+        consumeCachedToken(meta);
+        setupDone = false;
+        greetedRef.current = true;                     // no second greeting
+        const ws = new WebSocket(socketUrl(meta));
+        wsRef.current = ws;
+        try { previous && previous.close(); } catch (_) { /* already closed */ }
+        ws.onmessage = async (event) => {
+          let raw = event.data;
+          if (raw instanceof Blob) raw = await raw.text();
+          else if (raw instanceof ArrayBuffer) raw = new TextDecoder().decode(raw);
+          handleGeminiMessage(raw);
+        };
+        await new Promise((resolve, reject) => {
+          const timer = window.setTimeout(() => reject(new Error('Voice connection timed out.')), 15_000);
+          ws.onopen = () => { window.clearTimeout(timer); sendSetupMessage(); resolve(); };
+          ws.onerror = () => { window.clearTimeout(timer); reject(new Error('Voice connection failed.')); };
+        });
+        await waitForSetup(ws);
+        ws.onclose = () => {
+          if (status !== 'idle' && wsRef.current === ws) {
+            setErrorMessage('Voice connection dropped. Tap the orb to resume.');
+            setStatus('error');
+          }
+        };
+        if (timeoutRef.current) window.clearTimeout(timeoutRef.current);
+        timeoutRef.current = window.setTimeout(() => {
+          cleanupSession();
+          setErrorMessage('Voice session ended.');
+          setStatus('error');
+        }, (Number(meta.maxSessionSeconds) || 300) * 1000);
+        const lines = transcript
+          .filter((t) => t && t.text)
+          .map((t) => `${t.role === 'user' ? 'Member' : 'Gaia'}: ${String(t.text).slice(0, 400)}`)
+          .join('\n');
+        sendWs({ realtimeInput: { text: 'CONTINUE: You are taking over this voice conversation part-way through. Do not greet again and do not mention any change. '
+          + (lines ? `Conversation so far:\n${lines}\n` : '')
+          + (reason === 'language'
+            // Qwen hands over when it hears Arabic script, and it transcribes
+            // Persian as broken Arabic. Told to "use their language", Gemini
+            // then answered a Persian speaker in Arabic.
+            ? 'The member switched to a language written in Arabic script. The transcript of their last message is unreliable, and they are most likely speaking Persian (Farsi): reply in Persian unless they are clearly speaking Arabic, and if you could not tell what they asked, warmly ask them to say it again.'
+            : 'Now reply to the member\'s last message, in the language they used.') } });
+      } catch (err) {
+        if (status !== 'idle') {
+          setErrorMessage('Voice connection dropped. Tap the orb to resume.');
+          setStatus('error');
+        }
+      } finally {
+        switchingEngine = false;
+      }
     }
 
     /** Pre-warm: fetch token + prepare audio in the background (before first tap). */
@@ -1132,7 +1223,7 @@
           setupDone = false;
           setupWaiters = [];
           // Token is cached from prewarm if available — near-instant on repeat.
-          sessionMeta = await fetchLiveToken();
+          sessionMeta = await fetchLiveToken({ provider: startOptions.provider || '' });
 
           // Run three independent setup legs IN PARALLEL instead of serially.
           // This is the main speedup: previously WS+setup → audio → mic was
@@ -1140,7 +1231,7 @@
           const [wsReady, , micOk] = await Promise.all([
             // Leg 1: WebSocket connect + Gemini setup
             (async () => {
-              const wsUrl = `${WS_BASE}?access_token=${encodeURIComponent(sessionMeta.token)}`;
+              const wsUrl = socketUrl(sessionMeta);
               consumeCachedToken(sessionMeta);
               const ws = new WebSocket(wsUrl);
               wsRef.current = ws;
@@ -1187,7 +1278,7 @@
                     sessionMeta = nextSessionMeta;
                     consumeCachedToken(nextSessionMeta);
                     setupDone = false;
-                    const wsUrl = `${WS_BASE}?access_token=${encodeURIComponent(nextSessionMeta.token)}`;
+                    const wsUrl = socketUrl(nextSessionMeta);
                     const ws2 = new WebSocket(wsUrl);
                     wsRef.current = ws2;
                     ws2.onmessage = async (event2) => {
@@ -1223,6 +1314,7 @@
               };
               ws.onclose = (event) => {
                 if (status === 'idle') return;                 // user stopped — stay quiet
+                if (switchingEngine || wsRef.current !== ws) return; // handed over
                 // Try one silent reconnect; if that path is taken, don't surface
                 // an error yet. Otherwise show the normal close message.
                 if (!attemptReconnect()) {
@@ -1276,6 +1368,14 @@
           }, maxSeconds * 1000);
         } catch (err) {
           cleanupSession();
+          // Qwen would not open (relay refused, Alibaba down, setup failed):
+          // that is what Gemini is there for, before any slower path.
+          if (sessionMeta && sessionMeta.provider === 'qwen' && startOptions.provider !== 'gemini') {
+            console.info('[Gaia Assist] qwen voice unavailable, starting gemini', { error: err instanceof Error ? err.message : String(err) });
+            startPromise = null;
+            await start({ ...startOptions, provider: 'gemini' });
+            return;
+          }
           // Before showing a member an error, try the slower path that does
           // not need a WebSocket at all.
           if (enterPipelineMode(err instanceof Error ? err.message : String(err))) {
@@ -1439,9 +1539,21 @@
       return muted;
     }
 
+    // The session greets on its own the moment it opens (above), and the panel
+    // then sends its welcome prompt as well. Gemini folds the two into one
+    // greeting; Qwen answers both, so the member heard "Welcome…" and then
+    // "Hi, I'm Gaia Assist…". A silent prompt that lands just after our own
+    // greeting, before the member has said anything, is that duplicate.
+    let greetedAt = 0;
+    function isDuplicateGreeting(options) {
+      return Boolean(options.silent && greetedAt && Date.now() - greetedAt < 10_000
+        && !messages.some((m) => m.role === 'user'));
+    }
+
     function sendText(raw, options = {}) {
       const text = raw.trim();
       if (!text) return false;
+      if (isDuplicateGreeting(options)) return true;
       streamMessage = null;
       if (!options.silent) {
         messages = trimMessages([...messages, {

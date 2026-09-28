@@ -5930,7 +5930,12 @@ async function callChatProvider(provider, prompt, context = {}) {
         { role: 'user', content: assistUserPrompt(prompt, context) },
       ],
       temperature: 0.35,
-      max_tokens: String(context.source || '').includes('voice') ? 150 : 520,
+      // 150 was too tight for any model that thinks before it answers: the
+      // reasoning consumed the budget and the reply came back EMPTY, which
+      // is what a member heard as silence. Groq's catalogue no longer has a
+      // non-reasoning instruct model, so the budget has to allow for it.
+      // Brevity is the system prompt's job, not the token limit's.
+      max_tokens: String(context.source || '').includes('voice') ? 320 : 520,
       presence_penalty: 0.1,
     }),
   });
@@ -6029,7 +6034,12 @@ async function streamChatProvider(provider, prompt, context = {}, onDelta = () =
         { role: 'user', content: assistUserPrompt(prompt, context) },
       ],
       temperature: 0.35,
-      max_tokens: String(context.source || '').includes('voice') ? 150 : 520,
+      // 150 was too tight for any model that thinks before it answers: the
+      // reasoning consumed the budget and the reply came back EMPTY, which
+      // is what a member heard as silence. Groq's catalogue no longer has a
+      // non-reasoning instruct model, so the budget has to allow for it.
+      // Brevity is the system prompt's job, not the token limit's.
+      max_tokens: String(context.source || '').includes('voice') ? 320 : 520,
       presence_penalty: 0.1,
       stream: true,
     }),

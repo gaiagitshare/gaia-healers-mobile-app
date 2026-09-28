@@ -120,9 +120,22 @@ test('Qwen audio, transcripts and turn ends come back as Gemini serverContent', 
   const [audio] = qwenToBrowser({ type: 'response.audio.delta', delta: 'UENN' }, st);
   assert.equal(audio.serverContent.modelTurn.parts[0].inlineData.data, 'UENN');
   assert.match(audio.serverContent.modelTurn.parts[0].inlineData.mimeType, /rate=24000/);
-  assert.equal(qwenToBrowser({ type: 'response.audio_transcript.delta', delta: 'Hi' }, st)[0].serverContent.outputTranscription.text, 'Hi');
+  assert.deepEqual(qwenToBrowser({ type: 'response.audio_transcript.delta', delta: 'Hi' }, st), [], 'a word is held until it is whole');
   assert.equal(qwenToBrowser({ type: 'conversation.item.input_audio_transcription.completed', transcript: 'what' }, st)[0].serverContent.inputTranscription.finished, true);
-  assert.deepEqual(qwenToBrowser({ type: 'response.done' }, st), [{ serverContent: { turnComplete: true } }]);
+  assert.deepEqual(qwenToBrowser({ type: 'response.done' }, st), [{ serverContent: { outputTranscription: { text: 'Hi' } } }, { serverContent: { turnComplete: true } }]);
+});
+
+test('words split across Qwen deltas reach the page whole (the orb joins pieces with a space)', () => {
+  // Mirror of gaia-realtime-voice.js joinTranscriptText.
+  const join = (l, r) => (!l ? r : !r ? l : (/[\s"'([{/<-]$/.test(l) || /^[\s.,!?;:)'"\]}]/.test(r)) ? l + r : `${l} ${r}`);
+  const st = {};
+  qwenToBrowser({ type: 'response.created' }, st);
+  let shown = '';
+  for (const delta of ['Welcome', ' back to', ' Ga', 'ia He', 'alers.', ' What', ' next?']) {
+    for (const m of qwenToBrowser({ type: 'response.audio_transcript.delta', delta }, st)) shown = join(shown, m.serverContent.outputTranscription.text);
+  }
+  for (const m of qwenToBrowser({ type: 'response.done' }, st)) if (m.serverContent.outputTranscription) shown = join(shown, m.serverContent.outputTranscription.text);
+  assert.equal(shown, 'Welcome back to Gaia Healers. What next?');
 });
 
 test('a response that only called a tool is not the end of the turn', () => {

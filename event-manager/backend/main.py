@@ -252,6 +252,11 @@ def _ensure_badge_columns():
         ("badge_last_station", "ALTER TABLE attendees ADD COLUMN badge_last_station VARCHAR"),
         ("badge_last_result", "ALTER TABLE attendees ADD COLUMN badge_last_result VARCHAR"),
         ("badge_last_error", "ALTER TABLE attendees ADD COLUMN badge_last_error VARCHAR"),
+        # When WE told this person they hold a ticket. Not GHL: a workflow
+        # nobody remembered to attach to a new product is how 88 of 339
+        # buyers were never sent the dates or the venue.
+        ("confirmation_sent_at", "ALTER TABLE attendees ADD COLUMN confirmation_sent_at DATETIME"),
+        ("confirmation_result", "ALTER TABLE attendees ADD COLUMN confirmation_result VARCHAR"),
     ):
         if col not in att:
             stmts.append(ddl)

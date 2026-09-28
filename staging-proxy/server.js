@@ -6916,6 +6916,30 @@ const server = http.createServer(async (req, res) => {
       }
       return;
     }
+    // Send one transactional e-mail on the Event Manager's behalf.
+    //
+    // The Event Manager holds no GHL credentials by design, and the ticket
+    // confirmation must not depend on somebody remembering to attach a GHL
+    // workflow when they add a product -- which is exactly how 88 of 339
+    // buyers were never told the dates. So the system that KNOWS who holds a
+    // ticket asks here to say so, and the credential stays on this side.
+    if (req.method === 'POST' && url.pathname === '/api/event/notify') {
+      const svc = (process.env.IDENTITY_SERVICE_TOKEN || '').trim();
+      const auth = String(req.headers.authorization || '').replace(/^Bearer\s+/i, '').trim();
+      if (!svc || auth !== svc) { sendJson(res, 401, { ok: false, error: 'unauthorized' }, origin); return; }
+      const body = await readJsonBody(req, 512 * 1024).catch(() => ({}));
+      const contactId = String(body.contactId || '').trim();
+      const subject = String(body.subject || '').trim();
+      const html = String(body.html || '');
+      if (!contactId || !subject || !html) {
+        sendJson(res, 400, { ok: false, error: 'contactId, subject and html are required' }, origin);
+        return;
+      }
+      const sent = await ghlSendEmail({ contactId, subject, html });
+      console.log('[Gaia Event] notify', { contactId, subject: subject.slice(0, 60), ok: sent.ok, reason: sent.reason });
+      sendJson(res, sent.ok ? 200 : 502, sent, origin, { 'Cache-Control': 'no-store' });
+      return;
+    }
     // Identity verification for the card's protected fields. Every one of these
     // needs a real Gaia session -- a public badge token can view a card and can
     // never change one, so none of them accept a token.

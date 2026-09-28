@@ -1469,7 +1469,223 @@ def authorize_scan(event_id: int, payload: schemas.AuthorizeRequest,
     dec["badge_print_count"] = int(att.badge_print_count or 0)
     dec["first_name"] = att.first_name
     dec["last_name"] = att.last_name
+    # Everything the desk might have to answer or fix, on the same response as
+    # the decision. A second round-trip is a second queue.
+    dec["door"] = _door_card(db, att, event)
     return dec
+
+
+@app.post("/events/{event_id}/attendees/{attendee_id}/override-admit")
+def override_admit(event_id: int, attendee_id: int, body: schemas.OverrideAdmit,
+                   db: Session = Depends(get_db),
+                   current_user: models.User = Depends(get_current_user)):
+    """Let somebody in that the rules refused, on a named person's say-so.
+
+    Every door has this moment: the pass is for Saturday, they are standing
+    there on Friday with a receipt, and the queue is thirty deep. The answer is
+    not to weaken the rule -- a Saturday pass must still refuse on Friday for
+    everyone else -- it is to let a human take responsibility in one tap and
+    leave a record of having done so.
+
+    So the refusal is computed first and kept. The scan log gets its own
+    OVERRIDE row carrying what the door would have said, who overrode it and
+    why; the attendee's lifecycle gets the same. Nothing about the ticket is
+    altered: a refunded ticket that is let in is still refunded tomorrow.
+    """
+    event = _get_event_or_404(event_id, db)
+    authz.require_cap(db, current_user, event_id, "checkin.perform")
+    att = db.query(models.Attendee).filter(models.Attendee.id == attendee_id,
+                                           models.Attendee.event_id == event_id).first()
+    if not att:
+        raise HTTPException(status_code=404, detail="That badge does not belong to this event")
+    reason = (body.reason or "").strip()
+    if len(reason) < 3:
+        raise HTTPException(status_code=400, detail="Say why this person is being let in")
+    az = (body.access_type or "EVENT_ENTRY").upper()
+    refused = _authorize_decision(db, att, event, az)
+    checked_in_now = False
+    if az == "EVENT_ENTRY" and not att.is_checked_in:
+        att.is_checked_in = True
+        att.checked_in_at = datetime.utcnow()
+        checked_in_now = True
+        _activate_member_card(db, att)
+    _lifecycle_append(att, "door_override", actor=(current_user.email or "staff"),
+                      reason=reason, zone=az, refused=refused.get("reason"),
+                      would_have_been=refused.get("result"))
+    db.add(models.ScanLog(event_id=event_id, attendee_id=att.id, qr_code=att.qr_code,
+                          access_type=az, result="OVERRIDE",
+                          reason="OVERRIDE of %s \u2014 %s (was: %s)" % (
+                              refused.get("result") or "DENIED", reason,
+                              refused.get("reason") or "no reason recorded"),
+                          staff_user_id=current_user.id, session_id=body.session_id))
+    db.commit()
+    out = _authorize_decision(db, att, event, az)
+    out.update({"result": "OVERRIDE", "granted": True, "overridden": True,
+                "reason": "Let in by %s \u2014 %s" % (current_user.email or "staff", reason),
+                "refused_result": refused.get("result"),
+                "refused_reason": refused.get("reason"),
+                "checked_in": bool(att.is_checked_in), "checked_in_now": checked_in_now,
+                "badge_print_count": int(att.badge_print_count or 0),
+                "first_name": att.first_name, "last_name": att.last_name,
+                "door": _door_card(db, att, event)})
+    return out
+
+
+@app.post("/events/{event_id}/attendees/{attendee_id}/door-identity")
+def door_identity(event_id: int, attendee_id: int, body: schemas.DoorIdentity,
+                  db: Session = Depends(get_db),
+                  current_user: models.User = Depends(get_current_user)):
+    """Correct who a badge belongs to, at the desk, while they stand there.
+
+    Fourteen of this year's seats were rebuilt from a payment whose buyer bought
+    for other people, so the name on the seat is the buyer's best guess. Those
+    are flagged `needs_name_check` and are meant to be settled at the entrance:
+    typing the right name is the single most likely door correction there is,
+    and it must not require an organiser login.
+
+    Name and phone therefore sit under the door capability. Email does not: it
+    is the key the GHL sync matches on and the address that claims the permanent
+    card, so changing it stays an organiser's decision. Both are audited with
+    the old value, and a name typed here clears the needs-a-check flag.
+    """
+    event = _get_event_or_404(event_id, db)
+    authz.require_cap(db, current_user, event_id, "checkin.perform")
+    _assert_event_writable(db, event, "correct an attendee at its door")
+    att = db.query(models.Attendee).filter(models.Attendee.id == attendee_id,
+                                           models.Attendee.event_id == event_id).first()
+    if not att:
+        raise HTTPException(status_code=404, detail="That badge does not belong to this event")
+    changes = {}
+    for field in ("first_name", "last_name", "phone"):
+        val = getattr(body, field, None)
+        if val is None:
+            continue
+        val = str(val).strip()
+        if val != (getattr(att, field) or ""):
+            changes[field] = {"from": getattr(att, field) or "", "to": val}
+            setattr(att, field, val)
+    if body.email is not None:
+        email = str(body.email).strip().lower()
+        if email and email != (att.email or "").lower():
+            # Changing the address is an organiser's call, and it must stay
+            # unique at this event or two people claim one card.
+            authz.require_cap(db, current_user, event_id, "attendee.write")
+            if not re.match(r"^[^@\s]+@[^@\s]+\.[^@\s]+$", email):
+                raise HTTPException(status_code=400, detail="That is not a valid email address")
+            clash = db.query(models.Attendee).filter(
+                models.Attendee.event_id == event_id,
+                func.lower(models.Attendee.email) == email,
+                models.Attendee.id != att.id).first()
+            if clash:
+                raise HTTPException(status_code=409,
+                                    detail="%s already belongs to %s %s at this event" % (
+                                        email, clash.first_name or "", clash.last_name or ""))
+            changes["email"] = {"from": att.email or "", "to": email}
+            att.email = email
+    if not changes:
+        return {"ok": True, "changed": {}, "door": _door_card(db, att, event)}
+    cd = dict(att.custom_data or {})
+    named = "first_name" in changes or "last_name" in changes
+    if named and cd.get("needs_name_check"):
+        cd.pop("needs_name_check", None)
+        att.custom_data = cd
+    _lifecycle_append(att, "door_identity_fix", actor=(current_user.email or "staff"),
+                      reason=(body.reason or None), changed=changes,
+                      name_confirmed=(True if named else None))
+    db.commit(); db.refresh(att)
+    return {"ok": True, "changed": changes,
+            "name": ("%s %s" % (att.first_name or "", att.last_name or "")).strip(),
+            "door": _door_card(db, att, event)}
+
+
+@app.post("/events/{event_id}/attendees/{attendee_id}/add-seat")
+def add_party_seat(event_id: int, attendee_id: int, body: schemas.AddPartySeat,
+                   db: Session = Depends(get_db),
+                   current_user: models.User = Depends(get_current_user)):
+    """Name a seat the booking already paid for.
+
+    Somebody bought four tickets and one of those four has no badge, because the
+    order carried only the buyer's name. That seat is not a new entitlement --
+    the money is already in -- it is a name that was never collected, and the
+    place it will finally be collected is the entrance, with the person standing
+    there.
+
+    So this is a door capability, and it is bounded by arithmetic rather than by
+    trust: it refuses the moment the booking has as many badges as it paid for.
+    A desk can finish a party of four; it cannot turn it into a party of five.
+    Anybody genuinely new is a walk-in, which is a different form with a
+    different question at the top of it.
+    """
+    event = _get_event_or_404(event_id, db)
+    authz.require_cap(db, current_user, event_id, "checkin.perform")
+    _assert_event_writable(db, event, "add a seat at its door")
+    anchor = db.query(models.Attendee).filter(models.Attendee.id == attendee_id,
+                                              models.Attendee.event_id == event_id).first()
+    if not anchor:
+        raise HTTPException(status_code=404, detail="That badge does not belong to this event")
+    party = _party_members(db, anchor)
+    if not party:
+        raise HTTPException(status_code=409,
+                            detail="This badge is not part of a multi-seat booking. Use Add visitor instead.")
+    if party["unnamed"] < 1:
+        raise HTTPException(status_code=409,
+                            detail="This booking already has all %d badges it paid for. Anybody else is a walk-in."
+                                   % party["paid_for"])
+    first = (body.first_name or "").strip()
+    last = (body.last_name or "").strip()
+    if not first:
+        raise HTTPException(status_code=400, detail="A first name is required")
+    buyer = db.query(models.Attendee).filter(models.Attendee.id == party["buyer_attendee_id"]).first()
+    # The seat inherits the buyer's pass, because it is one of the tickets the
+    # buyer paid for. Its address is derived from theirs so the row is unique
+    # without inventing a mailbox that nobody reads.
+    base, _, domain = (buyer.email or "").partition("@")
+    email = (body.email or "").strip().lower()
+    if email:
+        clash = db.query(models.Attendee).filter(
+            models.Attendee.event_id == event_id,
+            func.lower(models.Attendee.email) == email).first()
+        if clash:
+            raise HTTPException(status_code=409, detail="%s is already on the roll for this event" % email)
+    else:
+        # Derived from the buyer's, and stepped until it is free: a seat that was
+        # removed and re-added must not collide with the address it used to have.
+        for n in range(party["size"] + 1, party["size"] + 40):
+            email = "%s+seat%d@%s" % (base or "seat", n, domain or "gaiahealers.app")
+            if not db.query(models.Attendee).filter(
+                    models.Attendee.event_id == event_id,
+                    func.lower(models.Attendee.email) == email).first():
+                break
+        else:
+            raise HTTPException(status_code=409, detail="Could not make a unique address for this seat")
+    seat_no = party["size"] + 1
+    seat = models.Attendee(
+        event_id=event_id, email=email, first_name=first, last_name=last,
+        phone=(body.phone or "").strip() or None,
+        ticket_type_id=buyer.ticket_type_id,
+        registration_status="registered", attendance_type=(buyer.attendance_type or "paid"),
+        registration_source="door_seat",
+        qr_code="ATT-%s" % uuid.uuid4().hex[:12].upper(),
+        custom_data={
+            "source": "door_seat",
+            "bought_by": party["buyer"],
+            "bought_by_attendee": buyer.id,
+            "seat_of_party": "%d of %d" % (seat_no, party["paid_for"]),
+            "lifecycle": [{"ts": datetime.utcnow().isoformat(), "action": "seat_named_at_door",
+                           "actor": (current_user.email or "staff"),
+                           "reason": (body.reason or
+                                      "Seat %d of the %s booking, named at the entrance."
+                                      % (seat_no, party["buyer"])),
+                           "buyer_attendee": buyer.id}],
+        })
+    db.add(seat)
+    db.commit(); db.refresh(seat)
+    _ensure_public_tokens()
+    db.refresh(seat)
+    return {"ok": True, "attendee_id": seat.id, "qr_code": seat.qr_code,
+            "name": ("%s %s" % (seat.first_name or "", seat.last_name or "")).strip(),
+            "seat": "%d of %d" % (seat_no, party["paid_for"]),
+            "door": _door_card(db, seat, event)}
 
 
 @app.post("/events/{event_id}/door-test-mode")
@@ -2174,6 +2390,13 @@ def _same_person(a: str, b: str) -> bool:
     return prev[-1] <= 2
 
 
+def _party_of(attendee):
+    """The booking a rebuilt seat belongs to: (buyer name, "2 of 4")."""
+    cd = attendee.custom_data or {}
+    who = str(cd.get("bought_by") or "").strip()
+    return (who, str(cd.get("seat_of_party") or "").strip()) if who else ("", "")
+
+
 def _payer_label(entries, attendee) -> str:
     """The payer's name, but only when it is somebody ELSE.
 
@@ -2298,6 +2521,118 @@ def _conference_grant(tt, addons, today):
             return {"allowed": True, "reason": "One-Day Speaker Access \u2014 " + (addon.get("day") or dd)}
         return {"allowed": False, "reason": "Conference access valid " + (addon.get("day") or dd) + " only"}
     return {"allowed": False, "reason": "Pass does not include conference access"}
+
+
+# --- What the door needs to see, and what it is allowed to change ------------
+# Everything below exists for one reason: on the day, the person at the desk has
+# a queue behind the badge in their hand. Every answer they need has to be on the
+# decision screen already, and every fix they are allowed to make has to be one
+# tap from it. Walking over to the attendee list to correct a name is the same
+# as not being able to correct it.
+
+# A seat that exists because somebody ELSE paid for it. Two ways in: the rebuild
+# that recovered them from the payment ledger, and the desk naming one on the
+# day. Listed here rather than inferred, so a booking cannot quietly stop being
+# a booking the moment a new source is added.
+PARTY_SEAT_SOURCES = ("rebuilt_seat", "door_seat")
+
+
+def _party_members(db, attendee):
+    """Every badge on one booking, buyer first -- or None if it is a party of one.
+
+    A booking is keyed on the BUYER'S attendee id, stamped on each extra seat
+    when the seat was rebuilt. Never on the spelling of a name: the names on the
+    extra seats are precisely the ones the door exists to correct.
+    """
+    cd = attendee.custom_data or {}
+    buyer_id = int(cd.get("bought_by_attendee") or 0) or attendee.id
+    buyer = (attendee if buyer_id == attendee.id
+             else db.query(models.Attendee).filter(models.Attendee.id == buyer_id).first())
+    if not buyer:
+        return None
+    seats = [a for a in db.query(models.Attendee).filter(
+                 models.Attendee.event_id == buyer.event_id,
+                 models.Attendee.registration_source.in_(PARTY_SEAT_SOURCES)).all()
+             if int((a.custom_data or {}).get("bought_by_attendee") or 0) == buyer.id]
+    if not seats:
+        return None
+    size = len(seats) + 1
+
+    def row(a, is_buyer):
+        _cd = a.custom_data or {}
+        return {"attendee_id": a.id,
+                "name": ("%s %s" % (a.first_name or "", a.last_name or "")).strip() or a.email,
+                "qr_code": a.qr_code,
+                "checked_in": bool(a.is_checked_in),
+                "is_buyer": is_buyer,
+                "is_this_one": a.id == attendee.id,
+                "needs_name_check": bool(_cd.get("needs_name_check")),
+                "seat": str(_cd.get("seat_of_party") or "1 of %d" % size)}
+
+    members = [row(buyer, True)] + [row(a, False) for a in sorted(seats, key=lambda x: x.id)]
+    # How many seats the booking PAID for, which is not always how many badges
+    # exist: the rebuild could only name the seats whose buyer was identifiable,
+    # and one of this year's four-seat bookings is still a body short. The desk
+    # has to be told that outright, because the family arrives together.
+    paid_for = size
+    for m in members:
+        bits = str(m["seat"]).split(" of ")
+        if len(bits) == 2 and bits[1].strip().isdigit():
+            paid_for = max(paid_for, int(bits[1].strip()))
+    return {"buyer": ("%s %s" % (buyer.first_name or "", buyer.last_name or "")).strip(),
+            "buyer_attendee_id": buyer.id,
+            "size": size,
+            "paid_for": paid_for,
+            "unnamed": max(0, paid_for - size),
+            "checked_in": sum(1 for m in members if m["checked_in"]),
+            "seat": str(cd.get("seat_of_party") or "1 of %d" % size),
+            "members": members}
+
+
+def _money_for(db, attendee):
+    """What was paid for this badge, and where the money came from."""
+    rows = []
+    for pay in db.query(models.PaymentEvent).filter(
+            models.PaymentEvent.attendee_id == attendee.id,
+            models.PaymentEvent.status == "paid").all():
+        rows.append({"amount": float(pay.amount or 0),
+                     "refunded": float(pay.amount_refunded or 0),
+                     "currency": (pay.currency or "USD").upper(),
+                     "source": (pay.provider or pay.source_type or "GHL"),
+                     "at": pay.occurred_at.isoformat() if pay.occurred_at else None,
+                     "buyer": (pay.buyer_name or "").strip() or None})
+    door = None
+    if (attendee.door_payment_status or "none") not in ("", "none"):
+        door = {"status": attendee.door_payment_status,
+                "method": attendee.door_payment_method,
+                "amount": float(attendee.door_payment_amount or 0),
+                "currency": (attendee.door_payment_currency or "USD").upper(),
+                "reference": attendee.door_payment_reference}
+    return {"payments": rows,
+            "total": round(sum(r["amount"] - r["refunded"] for r in rows), 2),
+            "currency": (rows[0]["currency"] if rows else "USD"),
+            "count": len(rows),
+            "door": door,
+            "attendance_type": attendee.attendance_type or None}
+
+
+def _door_card(db, attendee, event):
+    """The whole picture of one person, for the screen the door actually reads."""
+    cd = attendee.custom_data or {}
+    return {"attendee_id": attendee.id,
+            "email": attendee.email,
+            "phone": attendee.phone,
+            "pass_display": _pass_display(db, attendee),
+            "pass_includes": _pass_includes(db, attendee, event),
+            "status": _ticket_status(attendee),
+            "attendance_type": attendee.attendance_type or None,
+            "source": attendee.registration_source or None,
+            "needs_name_check": bool(cd.get("needs_name_check")),
+            "party": _party_members(db, attendee),
+            "money": _money_for(db, attendee),
+            "badge_print_count": int(attendee.badge_print_count or 0),
+            "ticket_type_id": attendee.ticket_type_id,
+            "public_token": attendee.public_token}
 
 
 def _authorize_decision(db, attendee, event, access_type, at=None):
@@ -4233,6 +4568,13 @@ def search_attendees(
         if not score and len(digits) >= 4 and phone_d and digits in phone_d:
             score = 70 if phone_d.endswith(digits) else 50
         if not score:
+            # "I'm with the Ison booking" has to find every seat on it.
+            booking, _seat = _party_of(a)
+            if booking:
+                b = booking.lower()
+                if b == term or term in b or (words and all(w in b for w in words)):
+                    score = 44
+        if not score:
             # Ranked below every match on the attendee's own details, so their
             # own name always wins when both could match.
             for who, addr in payers.get(a.id, ()):
@@ -4251,7 +4593,9 @@ def search_attendees(
         response.headers["X-Search-Truncated"] = "1" if len(scored) > 50 else "0"
     for _a in out:
         _a.effective_access = _effective_access(db, _a)
-        _a.paid_by = _payer_label(payers.get(_a.id, ()), _a)
+        _booking, _seat = _party_of(_a)
+        _a.paid_by = _booking or _payer_label(payers.get(_a.id, ()), _a)
+        _a.party_seat = _seat or None
     _stamp_card_state(db, out)
     return out
 

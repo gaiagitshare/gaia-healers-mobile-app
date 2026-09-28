@@ -187,6 +187,9 @@ class Attendee(AttendeeBase):
     # ticket each on one card, so the payer and the badge are routinely
     # different people -- and at a door the payer is the name they say.
     paid_by: Optional[str] = None
+    # "2 of 4" for a seat rebuilt onto somebody else's booking, so the desk can
+    # see at a glance that a party is not all present.
+    party_seat: Optional[str] = None
     is_checked_in: bool
     checked_in_at: Optional[datetime]
     registration_status: str
@@ -1118,6 +1121,34 @@ class BadgePrintRecord(BaseModel):
 
 class UndoCheckIn(BaseModel):
     reason: str
+
+
+class OverrideAdmit(BaseModel):
+    """Letting somebody in that the rules refused. The reason is not optional:
+    it is the whole difference between an override and a hole in the door."""
+    reason: str
+    access_type: str = 'EVENT_ENTRY'
+    session_id: Optional[int] = None
+
+
+class AddPartySeat(BaseModel):
+    """Naming a seat a booking already paid for. Never a new ticket -- the
+    endpoint refuses once the badges match what was bought."""
+    first_name: str
+    last_name: Optional[str] = ''
+    phone: Optional[str] = None
+    email: Optional[str] = None
+    reason: Optional[str] = None
+
+
+class DoorIdentity(BaseModel):
+    """Correcting who a badge belongs to, at the desk. Every field is optional
+    so the desk can fix a surname without retyping anything else."""
+    first_name: Optional[str] = None
+    last_name: Optional[str] = None
+    phone: Optional[str] = None
+    email: Optional[str] = None
+    reason: Optional[str] = None
 
 
 class PaymentSyncIn(BaseModel):

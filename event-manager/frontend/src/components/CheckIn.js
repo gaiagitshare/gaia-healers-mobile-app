@@ -13,9 +13,16 @@ import UndoIcon from '@mui/icons-material/Undo';
 import VisibilityIcon from '@mui/icons-material/Visibility';
 import PersonAddIcon from '@mui/icons-material/PersonAdd';
 import QrCodeScannerIcon from '@mui/icons-material/QrCodeScanner';
+import EditIcon from '@mui/icons-material/Edit';
+import LockOpenIcon from '@mui/icons-material/LockOpen';
+import SwapHorizIcon from '@mui/icons-material/SwapHoriz';
+import BlockIcon from '@mui/icons-material/Block';
+import RestoreIcon from '@mui/icons-material/Restore';
+import GroupsIcon from '@mui/icons-material/Groups';
 import TuneIcon from '@mui/icons-material/Tune';
 import { Html5QrcodeScanner } from 'html5-qrcode';
-import { authorizeScan, getScanLogs, searchAttendees, getEvents, walkInCreate, getTicketTypes, undoCheckIn, clearScanLogs, setDoorTestMode, getEvent, badgeLabelBlob, recordBadgePrint } from '../utils/api';
+import { authorizeScan, getScanLogs, searchAttendees, getEvents, walkInCreate, getTicketTypes, undoCheckIn, clearScanLogs, setDoorTestMode, getEvent, badgeLabelBlob, recordBadgePrint,
+    overrideAdmit, doorIdentity, addPartySeat, changePass, revokeAttendee, reinstateAttendee } from '../utils/api';
 import { formatVenueTime, statusLabel, isFlaggedStatus } from '../utils/datetime';
 import BadgeLabelDialog, { STATION_KEY, LABEL_SIZE_KEY, LABEL_ROLLS, savedLabelSize, rollShort, fullName, physicalCard,
     canPrintBluetooth, useB1, b1Connect, b1IsConnected, b1Enqueue, b1PrintBlob, b1Dpi, rollFitsB1, PRINTER_KEY, PRINTER_CHOICES, savedPrinter } from './BadgeLabelDialog';
@@ -38,10 +45,12 @@ const LOG_STATE = {
     LIMITED:   { label: 'Limited',   mark: '!', color: 'warning', variant: 'outlined' },
     DENIED:    { label: 'Denied',    mark: '✕', color: 'error',   variant: 'filled' },
     UNDO:      { label: 'Undo',      mark: '↶', color: 'info',    variant: 'outlined' },
+    OVERRIDE:  { label: 'Let in',    mark: '⚠', color: 'warning', variant: 'filled' },
     REHEARSAL: { label: 'Rehearsal', mark: '◐', color: 'warning', variant: 'filled' },
 };
 const HEADLINE = {
     GRANTED: 'ADMITTED', LIMITED: 'CHECK THIS ONE', DENIED: 'DENIED', UNDO: 'UNDONE',
+    OVERRIDE: 'LET IN ANYWAY',
 };
 const maskEmail = (email) => {
     const s = String(email || '');
@@ -131,6 +140,19 @@ function CheckIn({ timezone: timezoneProp }) {
     const [autoJob, setAutoJob] = useState(null);
     const printedIds = useRef(new Set());                        // printed this session — a re-scan never prints twice
     const [undoTarget, setUndoTarget] = useState(null);
+    // ── Fixing things at the desk ───────────────────────────────────────────
+    // Five things go wrong at a door, and all five have to be fixable without
+    // leaving this screen: the rules refuse somebody who should be let in, the
+    // name on a seat is the buyer's guess, they bought the wrong pass, the
+    // badge should not work at all, or it should work again. Each opens one
+    // dialog, each writes one audited change, and each hands back a fresh
+    // decision so the screen never shows a stale verdict.
+    const [doorAction, setDoorAction] = useState(null);   // { kind, decision, ... }
+    const [doorBusy, setDoorBusy] = useState(false);
+    const [doorError, setDoorError] = useState('');
+    const [fixForm, setFixForm] = useState({ first_name: '', last_name: '', phone: '', email: '' });
+    const [actionReason, setActionReason] = useState('');
+    const [passChoice, setPassChoice] = useState('');
     const [undoReason, setUndoReason] = useState('');
     const [stationOpen, setStationOpen] = useState(false);
     const [logFilter, setLogFilter] = useState('');
@@ -429,6 +451,117 @@ function CheckIn({ timezone: timezoneProp }) {
         }
     };
 
+    // ── Door actions ────────────────────────────────────────────────────────
+    const openDoorAction = (kind, d) => {
+        setDoorAction({ kind, decision: d });
+        setDoorError(''); setActionReason('');
+        const card = d.door || {};
+        setFixForm(kind === 'addseat'
+            ? { first_name: '', last_name: '', phone: '', email: '' }
+            : { first_name: d.first_name || '', last_name: d.last_name || '',
+                phone: card.phone || '', email: card.email || '' });
+        setPassChoice(card.ticket_type_id ? String(card.ticket_type_id) : '');
+    };
+    const closeDoorAction = () => { setDoorAction(null); setDoorError(''); };
+
+    // After any correction the screen must agree with the database again, so
+    // every action ends by re-asking the backend for the decision rather than
+    // patching the card in place.
+    const rescanCurrent = async (d, zone) => {
+        try {
+            const again = await authorizeScan(eventId, { qr_code: d.qr_code, access_type: zone || d.access_type || accessType });
+            setResult(again.data);
+            return again.data;
+        } catch (err) { return null; }
+    };
+
+    const runDoorAction = async (fn, message, { rescan = true } = {}) => {
+        const d = doorAction?.decision;
+        if (!d) return;
+        setDoorBusy(true); setDoorError('');
+        try {
+            const out = await fn(d);
+            closeDoorAction();
+            if (rescan) await rescanCurrent(d);
+            else if (out) setResult(out);
+            await Promise.all([refreshSearch(), refreshScanLogs()]);
+            setFeedback({ severity: 'success', message });
+        } catch (err) {
+            setDoorError(err.response?.data?.detail || 'That did not go through. Nothing was changed.');
+        } finally { setDoorBusy(false); }
+    };
+
+    const submitOverride = () => runDoorAction(
+        async (d) => {
+            const response = await overrideAdmit(eventId, d.attendee_id, {
+                reason: actionReason.trim(), access_type: d.access_type || accessType,
+            });
+            return response.data;
+        },
+        'Let in, and logged with your reason.',
+        { rescan: false });
+
+    const submitFix = () => runDoorAction(
+        async (d) => {
+            const before = d.door || {};
+            const body = { reason: actionReason.trim() || undefined };
+            if (fixForm.first_name.trim() !== (d.first_name || '')) body.first_name = fixForm.first_name.trim();
+            if (fixForm.last_name.trim() !== (d.last_name || '')) body.last_name = fixForm.last_name.trim();
+            if (fixForm.phone.trim() !== (before.phone || '')) body.phone = fixForm.phone.trim();
+            if (fixForm.email.trim().toLowerCase() !== (before.email || '').toLowerCase()) body.email = fixForm.email.trim();
+            await doorIdentity(eventId, d.attendee_id, body);
+        },
+        'Details corrected. Print the badge again so it carries the right name.');
+
+    const submitPassChange = () => runDoorAction(
+        async (d) => {
+            await changePass(d.attendee_id, {
+                ticket_type_id: Number(passChoice),
+                reason: actionReason.trim() || 'changed at the door',
+                complimentary: true, allow_downgrade: true,
+            });
+        },
+        'Pass changed. Print the badge again so it shows the new one.');
+
+    // Finish a party the order paid for but never named. The backend refuses
+    // once the badges match what was bought, so this can only ever complete a
+    // booking — never inflate one.
+    const submitAddSeat = () => runDoorAction(
+        async (d) => {
+            const response = await addPartySeat(eventId, d.attendee_id, {
+                first_name: fixForm.first_name.trim(), last_name: fixForm.last_name.trim(),
+                phone: fixForm.phone.trim() || undefined,
+                reason: actionReason.trim() || undefined,
+            });
+            const made = response.data || {};
+            // Land on the new badge, ready to print.
+            const again = await authorizeScan(eventId, { qr_code: made.qr_code, access_type: accessType });
+            return again.data;
+        },
+        'Seat named. Print their badge from here.',
+        { rescan: false });
+
+    const submitRevoke = () => runDoorAction(
+        async (d) => { await revokeAttendee(d.attendee_id, actionReason.trim()); },
+        'Badge revoked. It will be refused at every door from now on.');
+
+    const submitReinstate = () => runDoorAction(
+        async (d) => { await reinstateAttendee(d.attendee_id, actionReason.trim()); },
+        'Badge is valid again.');
+
+    // Pull up anybody else on the same booking without asking for their badge —
+    // a family arrives together and only one of them is holding a phone.
+    const openPartyMember = async (member) => {
+        setError('');
+        try {
+            const response = await authorizeScan(eventId, { qr_code: member.qr_code, access_type: accessType });
+            setResult(response.data); setAutoJob(null);
+            refreshScanLogs();
+        } catch (err) {
+            setFeedback({ severity: 'error', message: err.response?.data?.detail || 'Could not open that seat.' });
+        }
+    };
+
     const accessOf = (a) => a && a.effective_access;
 
     const resultRow = (attendee) => {
@@ -463,6 +596,7 @@ function CheckIn({ timezone: timezoneProp }) {
                             // payer is who they will introduce themselves as.
                             <Typography variant="caption" sx={{ display: 'block', mt: 0.5, color: 'info.main' }}>
                                 Paid by {attendee.paid_by}
+                                {attendee.party_seat ? ` \u00b7 seat ${attendee.party_seat}` : ''}
                             </Typography>
                         )}
                         {(attendee.registration_source === 'walk_in' || (attendee.attendance_type && attendee.attendance_type !== 'paid')) && (
@@ -542,6 +676,25 @@ function CheckIn({ timezone: timezoneProp }) {
             : (HEADLINE[d.result] || d.result);
         const reason = String(d.reason || '').replace(/^REHEARSAL\s*—\s*/i, '');
         const addons = d.addons || [];
+        const card = d.door || null;
+        // One line for the money question. A comp and a door sale read
+        // differently from an online order, and the desk is asked about all three.
+        const money = (() => {
+            if (!card) return '';
+            const m = card.money || {};
+            const bits = [];
+            if (m.total > 0) {
+                const src = (m.payments[0] || {}).source || 'online';
+                const when = (m.payments[0] || {}).at ? String(m.payments[0].at).slice(0, 10) : '';
+                bits.push(`Paid $${m.total} ${m.currency} \u00b7 ${src}${when ? ` \u00b7 ${when}` : ''}${m.count > 1 ? ` \u00b7 ${m.count} payments` : ''}`);
+            }
+            if (m.door) bits.push(`At the door: $${m.door.amount} ${m.door.method || ''} (${m.door.status})`);
+            if (!m.total && !m.door) bits.push(m.attendance_type && m.attendance_type !== 'paid' ? `No payment \u2014 ${m.attendance_type}` : 'No payment on record');
+            else if (m.attendance_type && m.attendance_type !== 'paid') bits.push(m.attendance_type);
+            if (card.source === 'walk_in') bits.push('walk-in');
+            if (card.source === 'rebuilt_seat') bits.push('seat rebuilt from a paid order');
+            return bits.join(' \u00b7 ');
+        })();
         return (
             <Paper variant="outlined"
                 sx={{ borderColor: `${v.color}.main`, borderWidth: 2, overflow: 'hidden' }}>
@@ -566,6 +719,73 @@ function CheckIn({ timezone: timezoneProp }) {
                         </Typography>
                     )}
                     <Typography variant="body2" sx={{ mt: 1 }}>{reason}</Typography>
+                    {d.refused_reason && (
+                        // An override keeps the refusal visible. The screen must never
+                        // read as though the rules had agreed.
+                        <Typography variant="caption" sx={{ display: 'block', mt: 0.5, color: 'warning.main' }}>
+                            The door had refused: {d.refused_reason}
+                        </Typography>
+                    )}
+
+                    {/* What they paid, who paid it, and what kind of attendance
+                        this is — the three questions a desk gets asked back. */}
+                    {card && (
+                        <Typography variant="body2" color="text.secondary" sx={{ mt: 0.75 }}>
+                            {money}
+                        </Typography>
+                    )}
+
+                    {/* A seat whose name came off the buyer's order. This is the
+                        single most likely correction of the weekend, so it says so
+                        and puts the fix in the same place. */}
+                    {card?.needs_name_check && (
+                        <Alert severity="warning" icon={false} sx={{ mt: 1, py: 0.5 }}>
+                            <strong>Check this name.</strong> This seat was rebuilt from a paid order —
+                            the name shown is the buyer&rsquo;s, not necessarily this person&rsquo;s.
+                            Ask them, then tap <em>Fix details</em>.
+                        </Alert>
+                    )}
+
+                    {/* The rest of the booking. Somebody buying four tickets is one
+                        of the two things that broke this year's roll, so the door
+                        shows the whole party and who of them is already inside. */}
+                    {card?.party && (
+                        <Box sx={{ mt: 1.25, p: 1.25, borderRadius: 1, bgcolor: 'action.hover' }}>
+                            <Stack direction="row" spacing={0.75} alignItems="center" sx={{ mb: 0.75 }}>
+                                <GroupsIcon sx={{ fontSize: 18, color: 'text.secondary' }} />
+                                <Typography variant="body2" sx={{ fontWeight: 700 }}>
+                                    Seat {card.party.seat} &middot; {card.party.buyer}&rsquo;s booking
+                                </Typography>
+                                <Typography variant="caption" color="text.secondary">
+                                    {card.party.checked_in} of {card.party.size} here
+                                </Typography>
+                            </Stack>
+                            <Stack direction="row" spacing={0.5} flexWrap="wrap" useFlexGap>
+                                {card.party.members.map((m) => (
+                                    <Chip key={m.attendee_id} size="small"
+                                        variant={m.is_this_one ? 'filled' : 'outlined'}
+                                        color={m.checked_in ? 'success' : (m.needs_name_check ? 'warning' : 'default')}
+                                        onClick={m.is_this_one ? undefined : () => openPartyMember(m)}
+                                        label={`${m.checked_in ? '\u2713 ' : ''}${m.name}${m.is_buyer ? ' (bought)' : ''}`} />
+                                ))}
+                            </Stack>
+                            {card.party.unnamed > 0 ? (
+                                <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap" useFlexGap sx={{ mt: 1 }}>
+                                    <Typography variant="caption" sx={{ color: 'warning.main', fontWeight: 700 }}>
+                                        {card.party.unnamed} of the {card.party.paid_for} seats they paid for has no badge yet.
+                                    </Typography>
+                                    <Button size="small" variant="contained" color="warning" startIcon={<PersonAddIcon />}
+                                            onClick={() => openDoorAction('addseat', d)}>
+                                        Name seat {card.party.size + 1}
+                                    </Button>
+                                </Stack>
+                            ) : (
+                                <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.75 }}>
+                                    Tap any of them to pull up their badge without scanning it.
+                                </Typography>
+                            )}
+                        </Box>
+                    )}
 
                     {/* The sticker, right under the decision: printing / printed /
                         not printed and why, with the dialog one tap away. */}
@@ -600,6 +820,46 @@ function CheckIn({ timezone: timezoneProp }) {
                         <Chip size="small" variant="outlined"
                               label={ZONES.find((z) => z.value === d.access_type)?.label || d.access_type} />
                     </Stack>
+
+                    {/* Everything the desk is allowed to change, one tap from the
+                        verdict. Each is audited; none of them weakens a rule for
+                        anybody else. */}
+                    {d.attendee_id && (
+                        <Stack direction="row" spacing={0.75} flexWrap="wrap" useFlexGap sx={{ mt: 1.5 }}>
+                            {!d.granted && (
+                                <Button size="small" variant="contained" color="warning" startIcon={<LockOpenIcon />}
+                                        onClick={() => openDoorAction('override', d)}>
+                                    Let in anyway
+                                </Button>
+                            )}
+                            <Button size="small" variant="outlined" startIcon={<EditIcon />}
+                                    color={card?.needs_name_check ? 'warning' : 'inherit'}
+                                    onClick={() => openDoorAction('fix', d)}>
+                                Fix details
+                            </Button>
+                            <Button size="small" variant="outlined" color="inherit" startIcon={<SwapHorizIcon />}
+                                    onClick={() => openDoorAction('pass', d)}>
+                                Change pass
+                            </Button>
+                            {card && ['refunded', 'cancelled', 'revoked'].includes(card.status) ? (
+                                <Button size="small" variant="outlined" color="success" startIcon={<RestoreIcon />}
+                                        onClick={() => openDoorAction('reinstate', d)}>
+                                    Reinstate
+                                </Button>
+                            ) : (
+                                <Button size="small" variant="outlined" color="error" startIcon={<BlockIcon />}
+                                        onClick={() => openDoorAction('revoke', d)}>
+                                    Revoke
+                                </Button>
+                            )}
+                            {d.checked_in && (
+                                <Button size="small" color="inherit" startIcon={<UndoIcon />}
+                                        onClick={() => { setUndoTarget({ id: d.attendee_id, first_name: d.first_name, last_name: d.last_name }); setUndoReason(''); }}>
+                                    Undo check-in
+                                </Button>
+                            )}
+                        </Stack>
+                    )}
 
                     <Button size="small" sx={{ mt: 1.5, px: 0, minWidth: 0 }}
                             onClick={() => setShowDecisionDetail((x) => !x)}>
@@ -1232,6 +1492,114 @@ function CheckIn({ timezone: timezoneProp }) {
                         <Button variant="contained" onClick={() => checkInAndPrint(confirmFlagged)}>Check in &amp; print anyway</Button>
                     )}
                     <Button variant="contained" color="warning" onClick={() => checkInAttendee(confirmFlagged)}>Scan anyway</Button>
+                </DialogActions>
+            </Dialog>
+
+            {/* One dialog, five jobs. They share a reason box because every one of
+                them is a thing somebody will ask about on Monday. */}
+            <Dialog open={Boolean(doorAction)} onClose={doorBusy ? undefined : closeDoorAction} fullWidth maxWidth="xs">
+                <DialogTitle>
+                    {doorAction?.kind === 'override' && 'Let them in anyway'}
+                    {doorAction?.kind === 'fix' && 'Fix these details'}
+                    {doorAction?.kind === 'addseat' && 'Name the next seat'}
+                    {doorAction?.kind === 'pass' && 'Change this pass'}
+                    {doorAction?.kind === 'revoke' && 'Revoke this badge'}
+                    {doorAction?.kind === 'reinstate' && 'Make this badge valid again'}
+                </DialogTitle>
+                <DialogContent>
+                    <Stack spacing={2} sx={{ mt: 0.5 }}>
+                        <Typography variant="body2" color="text.secondary">
+                            {doorAction ? (`${doorAction.decision.first_name || ''} ${doorAction.decision.last_name || ''}`.trim() || doorAction.decision.name) : ''}
+                            {doorAction?.decision?.attendee_id ? ` \u00b7 #${doorAction.decision.attendee_id}` : ''}
+                        </Typography>
+
+                        {doorAction?.kind === 'override' && (
+                            <Alert severity="warning" icon={false}>
+                                The door refused this badge: <strong>{doorAction.decision.reason}</strong>.
+                                Letting them in does not change the ticket — it records that you decided to,
+                                with your name against it.
+                            </Alert>
+                        )}
+                        {doorAction?.kind === 'revoke' && (
+                            <Alert severity="error" icon={false}>
+                                This badge stops working at every door, straight away. No money moves —
+                                a refund is a separate thing. It can be reinstated from this same screen.
+                            </Alert>
+                        )}
+
+                        {doorAction?.kind === 'addseat' && (
+                            <Alert severity="info" icon={false}>
+                                This booking paid for <strong>{doorAction.decision.door?.party?.paid_for}</strong> seats
+                                and has <strong>{doorAction.decision.door?.party?.size}</strong> badges.
+                                This names the next one and gives them their own badge on the same booking.
+                                Anybody who is <em>not</em> on this order is a walk-in, not a seat.
+                            </Alert>
+                        )}
+
+                        {(doorAction?.kind === 'fix' || doorAction?.kind === 'addseat') && (
+                            <>
+                                <Stack direction="row" spacing={1}>
+                                    <TextField label="First name" size="small" fullWidth autoFocus
+                                        value={fixForm.first_name}
+                                        onChange={(e) => setFixForm({ ...fixForm, first_name: e.target.value })} />
+                                    <TextField label="Last name" size="small" fullWidth
+                                        value={fixForm.last_name}
+                                        onChange={(e) => setFixForm({ ...fixForm, last_name: e.target.value })} />
+                                </Stack>
+                                <TextField label="Phone" size="small" fullWidth value={fixForm.phone}
+                                    onChange={(e) => setFixForm({ ...fixForm, phone: e.target.value })} />
+                                {doorAction?.kind === 'fix' && (
+                                    <TextField label="Email" size="small" fullWidth value={fixForm.email}
+                                        onChange={(e) => setFixForm({ ...fixForm, email: e.target.value })}
+                                        helperText="Changing the email needs an organiser login — it is how their card is claimed." />
+                                )}
+                            </>
+                        )}
+
+                        {doorAction?.kind === 'pass' && (
+                            <TextField select label="New pass" size="small" fullWidth value={passChoice}
+                                onChange={(e) => setPassChoice(e.target.value)}
+                                helperText="Recorded as a complimentary change. No money is taken here.">
+                                {ticketTypes.map((t) => (
+                                    <MenuItem key={t.id} value={String(t.id)}>{t.name}</MenuItem>
+                                ))}
+                            </TextField>
+                        )}
+
+                        <TextField label={doorAction?.kind === 'override' ? 'Why are you letting them in? (required)' : 'Reason (for the record)'}
+                            size="small" fullWidth multiline minRows={2}
+                            required={doorAction?.kind === 'override'}
+                            value={actionReason} onChange={(e) => setActionReason(e.target.value)} />
+
+                        {doorError && <Alert severity="error">{doorError}</Alert>}
+                    </Stack>
+                </DialogContent>
+                <DialogActions>
+                    <Button onClick={closeDoorAction} disabled={doorBusy}>Cancel</Button>
+                    {doorAction?.kind === 'override' && (
+                        <Button variant="contained" color="warning" disabled={doorBusy || actionReason.trim().length < 3}
+                            onClick={submitOverride}>{doorBusy ? 'Working\u2026' : 'Let them in'}</Button>
+                    )}
+                    {doorAction?.kind === 'fix' && (
+                        <Button variant="contained" disabled={doorBusy || !fixForm.first_name.trim()}
+                            onClick={submitFix}>{doorBusy ? 'Saving\u2026' : 'Save'}</Button>
+                    )}
+                    {doorAction?.kind === 'addseat' && (
+                        <Button variant="contained" color="warning" disabled={doorBusy || !fixForm.first_name.trim()}
+                            onClick={submitAddSeat}>{doorBusy ? 'Adding\u2026' : 'Add this seat'}</Button>
+                    )}
+                    {doorAction?.kind === 'pass' && (
+                        <Button variant="contained" disabled={doorBusy || !passChoice || String(passChoice) === String(doorAction?.decision?.door?.ticket_type_id)}
+                            onClick={submitPassChange}>{doorBusy ? 'Changing\u2026' : 'Change pass'}</Button>
+                    )}
+                    {doorAction?.kind === 'revoke' && (
+                        <Button variant="contained" color="error" disabled={doorBusy}
+                            onClick={submitRevoke}>{doorBusy ? 'Revoking\u2026' : 'Revoke'}</Button>
+                    )}
+                    {doorAction?.kind === 'reinstate' && (
+                        <Button variant="contained" color="success" disabled={doorBusy}
+                            onClick={submitReinstate}>{doorBusy ? 'Working\u2026' : 'Reinstate'}</Button>
+                    )}
                 </DialogActions>
             </Dialog>
 

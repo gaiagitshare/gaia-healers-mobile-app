@@ -181,6 +181,14 @@ export const badgeLabelBlob = (eventId, attendeeId, size = '50x30v', view = 'rol
 // A print attempt, success or failure. Separate from check-in by design.
 export const recordBadgePrint = (eventId, attendeeId, data) =>
     api.post(`/events/${eventId}/attendees/${attendeeId}/badge-print`, data);
+// Door-side corrections. Both live under the event so the audit trail names
+// the door that made them, not just the person.
+export const overrideAdmit = (eventId, attendeeId, data) =>
+    api.post(`/events/${eventId}/attendees/${attendeeId}/override-admit`, data);
+export const doorIdentity = (eventId, attendeeId, data) =>
+    api.post(`/events/${eventId}/attendees/${attendeeId}/door-identity`, data);
+export const addPartySeat = (eventId, attendeeId, data) =>
+    api.post(`/events/${eventId}/attendees/${attendeeId}/add-seat`, data);
 export const undoCheckIn = (eventId, attendeeId, reason) =>
     api.post(`/events/${eventId}/attendees/${attendeeId}/undo-checkin`, { reason });
 

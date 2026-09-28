@@ -53,6 +53,34 @@ export function guardConfig(env = process.env) {
   return out;
 }
 
+/**
+ * Who is being charged for this request.
+ *
+ * A verified member is keyed by their OWN id, not by the address they are
+ * sitting behind. 350 people on one hotel NAT are one address, and without
+ * this a member's allowance is spent by the 349 strangers next to them.
+ *
+ * The id comes from `sessionMemberContext(req)`, which reads the session
+ * cookie through `readSignedToken`: HMAC-SHA256 over the payload with the
+ * server's own secret, compared with `crypto.timingSafeEqual`, expiry checked,
+ * null on any failure. The cookie is HttpOnly and Secure, and its contents
+ * were written by this server at sign-in. Nothing a client can set — a header,
+ * a query parameter, a body field — reaches this function. A forged or edited
+ * cookie fails the signature, `sessionMemberContext` returns null, and the
+ * caller falls back to the anonymous address bucket. It cannot be used to
+ * escape a limit, only to land in the shared one.
+ *
+ * The prefixes matter: without them a member whose id happened to look like an
+ * address would share that address's bucket.
+ */
+export function guardSubject(req, identity = null) {
+  const id = String(
+    (identity && (identity.memberId || identity.contactId || identity.email)) || '',
+  ).trim().toLowerCase();
+  if (id) return { key: 'member:' + id, member: true };
+  return { key: 'ip:' + callerKey(req), member: false };
+}
+
 /** The caller, as nginx saw it. IPv6 grouped by /64. */
 export function callerKey(req) {
   const raw = String(req.headers['x-real-ip'] || req.socket?.remoteAddress || 'unknown').trim().replace(/^::ffff:/, '');

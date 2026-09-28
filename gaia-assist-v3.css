@@ -1,0 +1,776 @@
+/* ============================================================
+   Gaia Assist panel — visual redesign (2026-09-28, "v3")
+
+   Loaded last by home.html, after gaia-fit.css, so it can restyle the
+   panel in one place instead of editing the six older layers that
+   built it up. Everything is scoped to body.gaia-v2 .gaia-assist.
+
+   It is a coat of paint, not a new panel: the markup, the state
+   classes set in gaia-ui.js (--listening, --speaking, --live-session,
+   --minimized, --welcome …) and every behaviour behind them are the
+   ones the older layers already style. Where those layers made a
+   deliberate choice this block keeps it:
+   - hint line and Pause listening only during a live session
+     (gaia-fit.css, 2026-09-28);
+   - close and minimise side by side, never stacked;
+   - the conversation gets the room, so the decorative waveform steps
+     aside as soon as there is a message to read.
+
+   The big-panel rules carry :not(.gaia-assist--minimized) so they
+   never outrank the compact minimised card, which has its own
+   section near the end.
+   ============================================================ */
+
+body.gaia-v2 .gaia-assist {
+  --ga-page: #020805;
+  --ga-card: rgba(5, 16, 11, 0.9);
+  --ga-card-2: rgba(16, 31, 24, 0.72);
+  --ga-green: #75f05a;
+  --ga-green-hi: #8bff70;
+  --ga-emerald: #42db86;
+  --ga-cyan: #58c7e8;
+  --ga-text: #f5f7f5;
+  --ga-text-2: #a8b3ad;
+  --ga-muted: #718079;
+  --ga-border: rgba(160, 255, 185, 0.16);
+  --ga-border-strong: rgba(120, 245, 145, 0.42);
+  --ga-ease: cubic-bezier(0.22, 1, 0.36, 1);
+  --ga-orb: 112px;
+  --ga-gap: 14px;
+}
+
+/* ---------- 1. The card ------------------------------------------------ */
+
+/* :not(--welcome) as well, only to outrank today's height cap in
+   gaia-fit.css; the welcome card gets its own height further down. */
+body.gaia-v2 .gaia-assist:not(.gaia-assist--minimized):not(.gaia-assist--welcome) .gaia-assist__panel,
+body.gaia-v2 .gaia-assist.gaia-assist--welcome:not(.gaia-assist--minimized) .gaia-assist__panel {
+  width: calc(100% - 32px);
+  max-width: 620px;
+  bottom: calc(16px + env(safe-area-inset-bottom, 0px));
+  /* The redesign is taller than the old sheet; let it use the screen
+     rather than squeeze the conversation (which is what got cut off). */
+  max-height: min(calc(100vh - 32px), 50rem);
+  max-height: min(calc(100dvh - 32px - env(safe-area-inset-top, 0px)), 50rem);
+  border-radius: 32px;
+  border: 1px solid rgba(140, 255, 170, 0.2);
+  background:
+    radial-gradient(120% 55% at 50% 0%, rgba(117, 240, 90, 0.13), transparent 60%),
+    radial-gradient(90% 40% at 50% 100%, rgba(66, 219, 134, 0.07), transparent 70%),
+    var(--ga-card);
+  box-shadow:
+    inset 0 1px 0 rgba(200, 255, 210, 0.08),
+    0 0 0 1px rgba(117, 240, 90, 0.04),
+    0 0 48px -8px rgba(117, 240, 90, 0.16),
+    0 30px 80px -20px rgba(0, 0, 0, 0.8);
+  backdrop-filter: blur(24px) saturate(140%);
+  -webkit-backdrop-filter: blur(24px) saturate(140%);
+  color: var(--ga-text);
+  animation: ga-panel-in 0.42s var(--ga-ease);
+}
+
+/* The soft green glow the card floats on. */
+body.gaia-v2 .gaia-assist:not(.gaia-assist--minimized) .gaia-assist__backdrop {
+  background:
+    radial-gradient(70% 45% at 50% 78%, rgba(66, 219, 134, 0.12), transparent 70%),
+    rgba(2, 8, 5, 0.72);
+}
+
+@keyframes ga-panel-in {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: none; }
+}
+
+body.gaia-v2 .gaia-assist:not(.gaia-assist--minimized) .gaia-assist__sheet {
+  gap: var(--ga-gap);
+  padding: 20px 20px 20px;
+}
+
+/* A drag handle promised a gesture the card does not have. */
+body.gaia-v2 .gaia-assist .gaia-assist__handle { display: none; }
+
+/* ---------- 10. Minimise and close ------------------------------------- */
+
+body.gaia-v2 .gaia-assist:not(.gaia-assist--minimized) .gaia-assist__close,
+body.gaia-v2 .gaia-assist:not(.gaia-assist--minimized) .gaia-assist__minimize {
+  top: 14px;
+  width: 48px;
+  height: 48px;
+  min-width: 48px;
+  min-height: 48px;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border: 1px solid var(--ga-border);
+  border-radius: 999px;
+  background: rgba(16, 31, 24, 0.6);
+  color: var(--ga-text-2);
+  font: 500 1.15rem/1 system-ui, sans-serif;
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  transition: background 0.18s ease, border-color 0.18s ease, color 0.18s ease;
+  z-index: 4;
+}
+body.gaia-v2 .gaia-assist:not(.gaia-assist--minimized) .gaia-assist__close { right: 14px; }
+body.gaia-v2 .gaia-assist:not(.gaia-assist--minimized) .gaia-assist__minimize { right: calc(14px + 48px + 10px); }
+
+@media (hover: hover) {
+  body.gaia-v2 .gaia-assist .gaia-assist__close:hover,
+  body.gaia-v2 .gaia-assist .gaia-assist__minimize:hover {
+    background: rgba(28, 52, 40, 0.8);
+    border-color: var(--ga-border-strong);
+    color: var(--ga-text);
+  }
+}
+
+/* ---------- 2. The orb ------------------------------------------------- */
+
+body.gaia-v2 .gaia-assist:not(.gaia-assist--minimized) .gaia-assist__aura {
+  gap: 12px;
+  padding: 14px 0 0;
+}
+
+/* The logo is the unchanged assets/gaia-mark.svg; the orb is the setting
+   around it: a dark-green well, a lime rim, and two faint rings. */
+body.gaia-v2 .gaia-assist:not(.gaia-assist--minimized) .gaia-assist__orb-visual {
+  width: var(--ga-orb);
+  height: var(--ga-orb);
+  background: radial-gradient(circle at 50% 42%, #123a22 0%, #0a2415 58%, #06170d 100%);
+  box-shadow:
+    0 0 0 3px var(--ga-green),
+    0 0 0 5px rgba(117, 240, 90, 0.18),
+    0 0 28px rgba(117, 240, 90, 0.35),
+    0 0 60px rgba(66, 219, 134, 0.16),
+    inset 0 0 22px rgba(117, 240, 90, 0.18);
+  animation: ga-orb-breathe 5s ease-in-out infinite;
+  transition: transform 0.2s var(--ga-ease), box-shadow 0.4s ease, width 0.3s var(--ga-ease), height 0.3s var(--ga-ease);
+}
+
+body.gaia-v2 .gaia-assist:not(.gaia-assist--minimized) .gaia-assist__orb-visual:active {
+  transform: scale(0.96);
+}
+
+body.gaia-v2 .gaia-assist:not(.gaia-assist--minimized) .gaia-assist__orb-icon {
+  width: 54%;
+  height: 54%;
+  filter: drop-shadow(0 0 10px rgba(117, 240, 90, 0.35));
+}
+
+/* Concentric rings: still, faint and transparent at rest. */
+body.gaia-v2 .gaia-assist:not(.gaia-assist--minimized) .gaia-assist__orb-ring {
+  opacity: 1;
+  border: 1px solid rgba(139, 255, 112, 0.2);
+  animation: none;
+}
+body.gaia-v2 .gaia-assist:not(.gaia-assist--minimized) .gaia-assist__orb-ring--1 { inset: -10px; }
+body.gaia-v2 .gaia-assist:not(.gaia-assist--minimized) .gaia-assist__orb-ring--2 {
+  inset: -20px;
+  border-color: rgba(139, 255, 112, 0.09);
+}
+
+/* Listening: a slow breath, and the rings swell with it. */
+body.gaia-v2 .gaia-assist--listening:not(.gaia-assist--minimized) .gaia-assist__orb-visual,
+body.gaia-v2 .gaia-assist--holding:not(.gaia-assist--minimized) .gaia-assist__orb-visual,
+body.gaia-v2 .gaia-assist--ready:not(.gaia-assist--minimized) .gaia-assist__orb-visual {
+  animation: ga-orb-pulse 2.4s ease-in-out infinite;
+  box-shadow:
+    0 0 0 3px var(--ga-green-hi),
+    0 0 0 6px rgba(139, 255, 112, 0.22),
+    0 0 36px rgba(117, 240, 90, 0.5),
+    0 0 80px rgba(66, 219, 134, 0.22),
+    inset 0 0 24px rgba(117, 240, 90, 0.24);
+}
+body.gaia-v2 .gaia-assist--listening:not(.gaia-assist--minimized) .gaia-assist__orb-ring,
+body.gaia-v2 .gaia-assist--holding:not(.gaia-assist--minimized) .gaia-assist__orb-ring,
+body.gaia-v2 .gaia-assist--ready:not(.gaia-assist--minimized) .gaia-assist__orb-ring {
+  animation: ga-ring-breathe 2.4s ease-in-out infinite;
+}
+body.gaia-v2 .gaia-assist:not(.gaia-assist--minimized) .gaia-assist__orb-ring--2 { animation-delay: 0.3s; }
+
+body.gaia-v2 .gaia-assist--speaking:not(.gaia-assist--minimized) .gaia-assist__orb-visual {
+  animation: ga-orb-pulse 1.8s ease-in-out infinite;
+  box-shadow:
+    0 0 0 3px var(--ga-green-hi),
+    0 0 0 7px rgba(88, 199, 232, 0.16),
+    0 0 44px rgba(117, 240, 90, 0.55),
+    0 0 90px rgba(88, 199, 232, 0.18),
+    inset 0 0 26px rgba(117, 240, 90, 0.28);
+}
+body.gaia-v2 .gaia-assist--thinking:not(.gaia-assist--minimized) .gaia-assist__orb-visual,
+body.gaia-v2 .gaia-assist--connecting:not(.gaia-assist--minimized) .gaia-assist__orb-visual {
+  animation: ga-orb-think 1.8s ease-in-out infinite;
+}
+
+/* Hold-to-talk keeps its dashed "waiting on you" ring (gaia-ui-v2.css). */
+body.gaia-v2 .gaia-assist--pipeline:not(.gaia-assist--minimized) .gaia-assist__orb-ring {
+  border-style: dashed;
+  border-color: rgba(139, 255, 112, 0.35);
+}
+body.gaia-v2 .gaia-assist--holding-orb:not(.gaia-assist--minimized) .gaia-assist__orb-visual {
+  transform: scale(0.95);
+}
+
+@keyframes ga-orb-breathe {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.015); }
+}
+@keyframes ga-orb-pulse {
+  0%, 100% { transform: scale(1); filter: brightness(1); }
+  50% { transform: scale(1.04); filter: brightness(1.08); }
+}
+@keyframes ga-orb-think {
+  0%, 100% { filter: brightness(0.92); }
+  50% { filter: brightness(1.12); }
+}
+@keyframes ga-ring-breathe {
+  0%, 100% { transform: scale(1); opacity: 0.9; }
+  50% { transform: scale(1.05); opacity: 0.45; }
+}
+
+/* The small voice-activity bars under the orb. */
+body.gaia-v2 .gaia-assist:not(.gaia-assist--minimized) .gaia-assist__wave {
+  gap: 4px;
+  height: 18px;
+}
+body.gaia-v2 .gaia-assist:not(.gaia-assist--minimized) .gaia-assist__wave span {
+  width: 3px;
+  height: 4px;
+  border-radius: 999px;
+  background: rgba(117, 240, 90, 0.28);
+  animation: none;
+  transition: background 0.3s ease;
+}
+body.gaia-v2 .gaia-assist--listening:not(.gaia-assist--minimized) .gaia-assist__wave span,
+body.gaia-v2 .gaia-assist--holding:not(.gaia-assist--minimized) .gaia-assist__wave span,
+body.gaia-v2 .gaia-assist--holding-orb:not(.gaia-assist--minimized) .gaia-assist__wave span,
+body.gaia-v2 .gaia-assist--speaking:not(.gaia-assist--minimized) .gaia-assist__wave span {
+  background: var(--ga-green);
+  animation: ga-bar 1.6s ease-in-out infinite;
+}
+body.gaia-v2 .gaia-assist--thinking:not(.gaia-assist--minimized) .gaia-assist__wave span {
+  background: rgba(117, 240, 90, 0.55);
+  animation: ga-bar 2.4s ease-in-out infinite;
+}
+body.gaia-v2 .gaia-assist .gaia-assist__wave span:nth-child(1) { animation-delay: -0.2s; }
+body.gaia-v2 .gaia-assist .gaia-assist__wave span:nth-child(2) { animation-delay: -1.1s; }
+body.gaia-v2 .gaia-assist .gaia-assist__wave span:nth-child(3) { animation-delay: -0.6s; }
+body.gaia-v2 .gaia-assist .gaia-assist__wave span:nth-child(4) { animation-delay: -1.4s; }
+body.gaia-v2 .gaia-assist .gaia-assist__wave span:nth-child(5) { animation-delay: -0.4s; }
+body.gaia-v2 .gaia-assist .gaia-assist__wave span:nth-child(6) { animation-delay: -0.9s; }
+body.gaia-v2 .gaia-assist .gaia-assist__wave span:nth-child(7) { animation-delay: -0.1s; }
+
+@keyframes ga-bar {
+  0%, 100% { height: 4px; }
+  30% { height: 14px; }
+  55% { height: 7px; }
+  80% { height: 17px; }
+}
+
+/* ---------- 3. Heading and status ------------------------------------- */
+
+body.gaia-v2 .gaia-assist:not(.gaia-assist--minimized) .gaia-assist__headline {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+}
+body.gaia-v2 .gaia-assist:not(.gaia-assist--minimized) .gaia-assist__headline h2 {
+  margin: 0;
+  color: var(--ga-text);
+  font-size: 32px;
+  font-weight: 600;
+  line-height: 1.12;
+  letter-spacing: -0.02em;
+}
+body.gaia-v2 .gaia-assist .gaia-assist__name-accent { color: var(--ga-green); }
+body.gaia-v2 .gaia-assist:not(.gaia-assist--minimized) .gaia-assist__status {
+  margin: 0;
+  color: var(--ga-text-2);
+  font-size: 18px;
+  line-height: 1.35;
+}
+
+/* ---------- 4. Sound ---------------------------------------------------- */
+/* No chevron: the only thing it could open is the hidden voice-settings
+   panel, and those settings do not reach the live Gemini voice people
+   actually hear, so it would be a control that changes nothing. */
+body.gaia-v2 .gaia-assist:not(.gaia-assist--minimized) .gaia-assist__sound-toggle {
+  min-width: 132px;
+  min-height: 48px;
+  margin: 8px auto 0;
+  padding: 0 20px;
+  gap: 10px;
+  border: 1px solid rgba(117, 240, 90, 0.3);
+  border-radius: 999px;
+  background: rgba(16, 31, 24, 0.55);
+  box-shadow: 0 0 18px -6px rgba(117, 240, 90, 0.35);
+  color: var(--ga-text);
+  font-size: 15px;
+  font-weight: 500;
+  transition: border-color 0.18s ease, background 0.18s ease, box-shadow 0.18s ease;
+}
+body.gaia-v2 .gaia-assist:not(.gaia-assist--minimized) .gaia-assist__sound-toggle .ph {
+  color: var(--ga-green);
+  font-size: 20px;
+}
+body.gaia-v2 .gaia-assist .gaia-assist__sound-toggle[aria-pressed="true"] {
+  border-color: var(--ga-border);
+  box-shadow: none;
+  color: var(--ga-text-2);
+}
+body.gaia-v2 .gaia-assist .gaia-assist__sound-toggle[aria-pressed="true"] .ph { color: var(--ga-muted); }
+@media (hover: hover) {
+  body.gaia-v2 .gaia-assist .gaia-assist__sound-toggle:hover {
+    border-color: var(--ga-border-strong);
+    background: rgba(24, 46, 34, 0.7);
+  }
+}
+
+/* ---------- 5. Waveform ------------------------------------------------- */
+
+body.gaia-v2 .gaia-assist .gaia-assist__waveform {
+  flex: 0 0 auto;
+  height: 52px;
+  margin: 0 -20px;
+  overflow: hidden;
+  pointer-events: none;
+  -webkit-mask-image: linear-gradient(to right, transparent, #000 18%, #000 82%, transparent);
+  mask-image: linear-gradient(to right, transparent, #000 18%, #000 82%, transparent);
+  transform: scaleY(0.45);
+  opacity: 0.7;
+  transition: transform 0.8s var(--ga-ease), opacity 0.8s ease;
+}
+body.gaia-v2 .gaia-assist .gaia-assist__waveform svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+}
+body.gaia-v2 .gaia-assist .gaia-assist__waveform-line {
+  fill: none;
+  stroke-width: 1.6;
+  stroke-linecap: round;
+  vector-effect: non-scaling-stroke;
+  animation: ga-wave-200 9s linear infinite;
+}
+body.gaia-v2 .gaia-assist .gaia-assist__waveform-line--1 { stroke: var(--ga-green); opacity: 0.85; }
+body.gaia-v2 .gaia-assist .gaia-assist__waveform-line--2 { stroke: var(--ga-emerald); opacity: 0.45; animation-name: ga-wave-300; animation-duration: 14s; }
+body.gaia-v2 .gaia-assist .gaia-assist__waveform-line--3 { stroke: var(--ga-cyan); opacity: 0.4; animation-name: ga-wave-240; animation-duration: 11s; }
+body.gaia-v2 .gaia-assist .gaia-assist__waveform-line--4 { stroke: var(--ga-green-hi); opacity: 0.3; animation-name: ga-wave-150; animation-duration: 7s; }
+
+/* Awake while Gaia listens or talks; a quiet line otherwise. */
+body.gaia-v2 .gaia-assist--listening .gaia-assist__waveform,
+body.gaia-v2 .gaia-assist--holding .gaia-assist__waveform,
+body.gaia-v2 .gaia-assist--speaking .gaia-assist__waveform {
+  transform: scaleY(1);
+  opacity: 1;
+}
+body.gaia-v2 .gaia-assist--thinking .gaia-assist__waveform {
+  transform: scaleY(0.6);
+  opacity: 0.8;
+}
+body.gaia-v2 .gaia-assist--listening .gaia-assist__waveform-line,
+body.gaia-v2 .gaia-assist--speaking .gaia-assist__waveform-line {
+  animation-duration: 4s;
+}
+body.gaia-v2 .gaia-assist--listening .gaia-assist__waveform-line--2,
+body.gaia-v2 .gaia-assist--speaking .gaia-assist__waveform-line--2 { animation-duration: 6s; }
+body.gaia-v2 .gaia-assist--listening .gaia-assist__waveform-line--3,
+body.gaia-v2 .gaia-assist--speaking .gaia-assist__waveform-line--3 { animation-duration: 5s; }
+body.gaia-v2 .gaia-assist--listening .gaia-assist__waveform-line--4,
+body.gaia-v2 .gaia-assist--speaking .gaia-assist__waveform-line--4 { animation-duration: 3s; }
+
+/* Each line slides exactly one of its own periods, so the loop is seamless
+   (the paths are built that way by assistWavePath in gaia-ui.js). */
+@keyframes ga-wave-200 { to { transform: translateX(-200px); } }
+@keyframes ga-wave-300 { to { transform: translateX(-300px); } }
+@keyframes ga-wave-240 { to { transform: translateX(-240px); } }
+@keyframes ga-wave-150 { to { transform: translateX(-150px); } }
+
+/* Once there is a conversation it owns this space: the waveform goes, and
+   the orb and heading tighten, so answers are not cut off again. */
+body.gaia-v2 .gaia-assist .gaia-assist__sheet:has(.gaia-assist__transcript > .gaia-assist__bubble) .gaia-assist__waveform,
+body.gaia-v2 .gaia-assist--welcome .gaia-assist__waveform,
+body.gaia-v2 .gaia-assist--minimized .gaia-assist__waveform {
+  display: none;
+}
+body.gaia-v2 .gaia-assist:not(.gaia-assist--minimized) .gaia-assist__sheet:has(.gaia-assist__transcript > .gaia-assist__bubble) {
+  --ga-orb: 72px;
+  --ga-gap: 10px;
+}
+body.gaia-v2 .gaia-assist:not(.gaia-assist--minimized) .gaia-assist__sheet:has(.gaia-assist__transcript > .gaia-assist__bubble) .gaia-assist__aura {
+  gap: 8px;
+  padding-top: 8px;
+}
+body.gaia-v2 .gaia-assist:not(.gaia-assist--minimized) .gaia-assist__sheet:has(.gaia-assist__transcript > .gaia-assist__bubble) .gaia-assist__orb-ring--2 { inset: -14px; }
+body.gaia-v2 .gaia-assist:not(.gaia-assist--minimized) .gaia-assist__sheet:has(.gaia-assist__transcript > .gaia-assist__bubble) .gaia-assist__headline h2 { font-size: 24px; }
+body.gaia-v2 .gaia-assist:not(.gaia-assist--minimized) .gaia-assist__sheet:has(.gaia-assist__transcript > .gaia-assist__bubble) .gaia-assist__status { font-size: 15px; }
+body.gaia-v2 .gaia-assist:not(.gaia-assist--minimized) .gaia-assist__sheet:has(.gaia-assist__transcript > .gaia-assist__bubble) .gaia-assist__sound-toggle {
+  min-height: 44px;
+  margin-top: 4px;
+}
+
+/* ---------- Conversation ---------------------------------------------- */
+
+body.gaia-v2 .gaia-assist:not(.gaia-assist--minimized):not(.gaia-assist--welcome) .gaia-assist__transcript {
+  gap: 10px;
+  padding: 2px 2px 4px;
+  /* Room for three or four exchanges; it still scrolls beyond that. */
+  max-height: min(44vh, 24rem);
+  max-height: min(44dvh, 24rem);
+}
+body.gaia-v2 .gaia-assist:not(.gaia-assist--minimized) .gaia-assist__transcript:empty {
+  display: none;
+}
+body.gaia-v2 .gaia-assist:not(.gaia-assist--minimized) .gaia-assist__bubble {
+  max-width: 86%;
+  padding: 11px 15px;
+  border-radius: 20px;
+  font-size: 15px;
+  line-height: 1.5;
+}
+body.gaia-v2 .gaia-assist:not(.gaia-assist--minimized) .gaia-assist__bubble--bot {
+  border: 1px solid rgba(160, 255, 185, 0.1);
+  border-bottom-left-radius: 8px;
+  background: var(--ga-card-2);
+  color: var(--ga-text);
+}
+body.gaia-v2 .gaia-assist:not(.gaia-assist--minimized) .gaia-assist__bubble--user {
+  border: 1px solid rgba(117, 240, 90, 0.3);
+  border-bottom-right-radius: 8px;
+  background: rgba(117, 240, 90, 0.12);
+  color: var(--ga-text);
+}
+body.gaia-v2 .gaia-assist:not(.gaia-assist--minimized) .gaia-assist__bubble--live {
+  border: 1px dashed var(--ga-border-strong);
+  background: transparent;
+  color: var(--ga-text-2);
+}
+
+body.gaia-v2 .gaia-assist:not(.gaia-assist--minimized) .gaia-assist__route {
+  border-radius: 20px;
+  border-color: var(--ga-border);
+  background: var(--ga-card-2);
+}
+
+/* ---------- 6. Quick actions ------------------------------------------ */
+
+body.gaia-v2 .gaia-assist:not(.gaia-assist--minimized) .gaia-assist__chips {
+  gap: 10px;
+  margin: 0 -20px;
+  padding: 2px 20px;
+  scroll-padding-inline: 20px;
+  -webkit-mask-image: linear-gradient(to right, transparent, #000 20px, #000 calc(100% - 28px), transparent);
+  mask-image: linear-gradient(to right, transparent, #000 20px, #000 calc(100% - 28px), transparent);
+}
+body.gaia-v2 .gaia-assist:not(.gaia-assist--minimized) .gaia-assist__chips::after {
+  /* Lets the last card scroll clear of the faded edge. */
+  content: '';
+  flex: 0 0 8px;
+}
+body.gaia-v2 .gaia-assist:not(.gaia-assist--minimized) .gaia-assist__chip {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 224px;
+  max-width: none; /* gaia-shared.css caps chips at 10rem */
+  min-height: 72px;
+  margin: 0;
+  padding: 12px 14px 12px 12px;
+  border: 1px solid var(--ga-border);
+  border-radius: 24px;
+  background: var(--ga-card-2);
+  color: var(--ga-text);
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 1.25;
+  text-align: left;
+  white-space: normal;
+  cursor: pointer;
+  box-shadow: none;
+  transition: transform 0.18s ease, border-color 0.18s ease, background 0.18s ease;
+  -webkit-tap-highlight-color: transparent;
+}
+body.gaia-v2 .gaia-assist:not(.gaia-assist--minimized) .gaia-assist__chip--primary {
+  border-color: rgba(88, 199, 232, 0.38);
+  background:
+    linear-gradient(135deg, rgba(88, 199, 232, 0.12), rgba(66, 219, 134, 0.05) 70%),
+    var(--ga-card-2);
+  box-shadow: 0 0 22px -10px rgba(88, 199, 232, 0.55);
+}
+body.gaia-v2 .gaia-assist:not(.gaia-assist--minimized) .gaia-assist__chip:active {
+  transform: scale(0.97);
+  background: rgba(24, 46, 34, 0.85);
+}
+body.gaia-v2 .gaia-assist .gaia-assist__chip:disabled { opacity: 0.55; }
+@media (hover: hover) {
+  body.gaia-v2 .gaia-assist:not(.gaia-assist--minimized) .gaia-assist__chip:hover {
+    border-color: var(--ga-border-strong);
+    background: rgba(22, 42, 32, 0.82);
+  }
+  body.gaia-v2 .gaia-assist .gaia-assist__chip:hover .gaia-assist__chip-caret {
+    transform: translateX(2px);
+    color: var(--ga-text);
+  }
+}
+body.gaia-v2 .gaia-assist .gaia-assist__chip-icon {
+  flex: 0 0 auto;
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  border-radius: 999px;
+  font-size: 22px;
+}
+body.gaia-v2 .gaia-assist .gaia-assist__chip-icon--green { background: rgba(117, 240, 90, 0.16); color: var(--ga-green-hi); box-shadow: inset 0 0 0 1px rgba(117, 240, 90, 0.3); }
+body.gaia-v2 .gaia-assist .gaia-assist__chip-icon--teal { background: rgba(88, 199, 232, 0.16); color: #7fd8f2; box-shadow: inset 0 0 0 1px rgba(88, 199, 232, 0.34); }
+body.gaia-v2 .gaia-assist .gaia-assist__chip-icon--violet { background: rgba(167, 139, 250, 0.16); color: #c4b5fd; box-shadow: inset 0 0 0 1px rgba(167, 139, 250, 0.32); }
+body.gaia-v2 .gaia-assist .gaia-assist__chip-icon--gold { background: rgba(240, 200, 90, 0.14); color: #f3d77a; box-shadow: inset 0 0 0 1px rgba(240, 200, 90, 0.3); }
+body.gaia-v2 .gaia-assist .gaia-assist__chip-label {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+body.gaia-v2 .gaia-assist .gaia-assist__chip-caret {
+  flex: 0 0 auto;
+  color: var(--ga-muted);
+  font-size: 16px;
+  transition: transform 0.18s ease, color 0.18s ease;
+}
+
+/* ---------- 7. The input ---------------------------------------------- */
+
+body.gaia-v2 .gaia-assist:not(.gaia-assist--minimized) .gaia-assist__input-row {
+  gap: 10px;
+  min-height: 80px;
+  padding: 9px 9px 9px 22px;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  /* A thin green-to-cyan rim: the fill paints the padding box, the
+     gradient only shows through the transparent border. */
+  background:
+    linear-gradient(rgba(8, 22, 15, 0.96), rgba(8, 22, 15, 0.96)) padding-box,
+    linear-gradient(100deg, rgba(117, 240, 90, 0.7), rgba(66, 219, 134, 0.45) 50%, rgba(88, 199, 232, 0.7)) border-box;
+  box-shadow: 0 0 30px -12px rgba(117, 240, 90, 0.45);
+  transition: box-shadow 0.2s ease;
+}
+body.gaia-v2 .gaia-assist:not(.gaia-assist--minimized) .gaia-assist__input-row:focus-within {
+  box-shadow: 0 0 0 3px rgba(117, 240, 90, 0.14), 0 0 34px -10px rgba(117, 240, 90, 0.6);
+}
+body.gaia-v2 .gaia-assist .gaia-assist__input-icon {
+  flex: 0 0 auto;
+  color: var(--ga-green);
+  font-size: 22px;
+}
+body.gaia-v2 .gaia-assist:not(.gaia-assist--minimized) .gaia-assist__input-row input {
+  flex: 1 1 auto;
+  min-width: 0;
+  height: 100%;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--ga-text);
+  font-size: 17px;
+  text-overflow: ellipsis;
+  box-shadow: none;
+  outline: none;
+}
+body.gaia-v2 .gaia-assist:not(.gaia-assist--minimized) .gaia-assist__input-row input::placeholder {
+  color: var(--ga-muted);
+  opacity: 1;
+}
+body.gaia-v2 .gaia-assist:not(.gaia-assist--minimized) .gaia-assist__input-row .gaia-assist__send {
+  flex: 0 0 auto;
+  display: grid;
+  place-items: center;
+  width: 62px;
+  height: 62px;
+  min-width: 62px;
+  padding: 0;
+  border: 0;
+  border-radius: 999px;
+  background: radial-gradient(circle at 35% 30%, var(--ga-green-hi), var(--ga-green) 55%, #52cf45);
+  box-shadow:
+    0 0 0 1px rgba(139, 255, 112, 0.5),
+    0 0 26px rgba(117, 240, 90, 0.42),
+    inset 0 1px 1px rgba(255, 255, 255, 0.45);
+  color: #06170d;
+  font-size: 26px;
+  cursor: pointer;
+  transition: transform 0.18s ease, box-shadow 0.2s ease;
+}
+body.gaia-v2 .gaia-assist .gaia-assist__send:active { transform: scale(0.94); }
+body.gaia-v2 .gaia-assist .gaia-assist__send .ph { grid-area: 1 / 1; font-weight: 700; }
+body.gaia-v2 .gaia-assist .gaia-assist__send[data-mode="send"] .gaia-assist__voice-icon,
+body.gaia-v2 .gaia-assist .gaia-assist__send[data-mode="voice"] .gaia-assist__send-icon {
+  display: none;
+}
+/* Inside a live session the mic is already open; the button shows it. */
+body.gaia-v2 .gaia-assist:not(.gaia-assist--minimized) .gaia-assist__send.is-live {
+  animation: ga-send-live 2.4s ease-in-out infinite;
+}
+@keyframes ga-send-live {
+  0%, 100% { box-shadow: 0 0 0 1px rgba(139, 255, 112, 0.5), 0 0 22px rgba(117, 240, 90, 0.4), inset 0 1px 1px rgba(255, 255, 255, 0.45); }
+  50% { box-shadow: 0 0 0 5px rgba(139, 255, 112, 0.16), 0 0 34px rgba(117, 240, 90, 0.6), inset 0 1px 1px rgba(255, 255, 255, 0.45); }
+}
+
+/* ---------- 8 + 9. Helper line and Pause listening -------------------- */
+/* Shown only in a live session; gaia-fit.css hides them otherwise. */
+
+body.gaia-v2 .gaia-assist:not(.gaia-assist--minimized) .gaia-assist__toolbar {
+  flex-direction: column;
+  gap: 12px;
+  margin-top: -2px;
+}
+body.gaia-v2 .gaia-assist:not(.gaia-assist--live-session) .gaia-assist__toolbar { display: none; }
+body.gaia-v2 .gaia-assist:not(.gaia-assist--minimized) .gaia-assist__hint-line {
+  margin: 0;
+  color: var(--ga-muted);
+  font-size: 15px;
+  line-height: 1.35;
+  text-align: center;
+  text-wrap: balance;
+}
+body.gaia-v2 .gaia-assist:not(.gaia-assist--minimized) .gaia-assist__listen-toggle {
+  min-width: 190px;
+  min-height: 48px;
+  gap: 10px;
+  padding: 0 22px;
+  border: 1px solid rgba(168, 179, 173, 0.24);
+  border-radius: 999px;
+  background: rgba(16, 31, 24, 0.35);
+  color: var(--ga-text-2);
+  font-size: 15px;
+  font-weight: 500;
+  transition: border-color 0.18s ease, color 0.18s ease, background 0.18s ease;
+}
+body.gaia-v2 .gaia-assist:not(.gaia-assist--minimized) .gaia-assist__listen-toggle .ph { font-size: 19px; }
+body.gaia-v2 .gaia-assist:not(.gaia-assist--minimized) .gaia-assist__listen-toggle.is-paused {
+  border-color: var(--ga-border-strong);
+  background: rgba(117, 240, 90, 0.08);
+  color: var(--ga-green-hi);
+}
+@media (hover: hover) {
+  body.gaia-v2 .gaia-assist .gaia-assist__listen-toggle:hover {
+    border-color: var(--ga-border-strong);
+    color: var(--ga-text);
+  }
+}
+
+body.gaia-v2 .gaia-assist:not(.gaia-assist--minimized) .gaia-assist__error {
+  border-radius: 18px;
+}
+
+/* ---------- 14. Welcome (passive open) -------------------------------- */
+
+body.gaia-v2 .gaia-assist--welcome:not(.gaia-assist--minimized) {
+  --ga-orb: 84px;
+}
+body.gaia-v2 .gaia-assist.gaia-assist--welcome:not(.gaia-assist--minimized) .gaia-assist__panel {
+  max-height: min(78vh, 40rem);
+  max-height: min(78dvh, 40rem);
+}
+body.gaia-v2 .gaia-assist--welcome:not(.gaia-assist--minimized) .gaia-assist__bubble--bot {
+  font-size: 15px;
+}
+
+/* ---------- 14. Minimised --------------------------------------------- */
+
+body.gaia-v2 .gaia-assist.gaia-assist--minimized .gaia-assist__panel {
+  border-radius: 26px;
+  border: 1px solid rgba(140, 255, 170, 0.2);
+  background:
+    radial-gradient(80% 90% at 0% 50%, rgba(117, 240, 90, 0.12), transparent 70%),
+    var(--ga-card);
+  box-shadow: 0 0 36px -10px rgba(117, 240, 90, 0.25), 0 20px 50px -18px rgba(0, 0, 0, 0.8);
+}
+body.gaia-v2 .gaia-assist.gaia-assist--minimized .gaia-assist__orb-visual {
+  background: radial-gradient(circle at 50% 42%, #123a22 0%, #0a2415 58%, #06170d 100%);
+  box-shadow: 0 0 0 2px var(--ga-green), 0 0 18px rgba(117, 240, 90, 0.35);
+}
+body.gaia-v2 .gaia-assist.gaia-assist--minimized .gaia-assist__orb-ring { display: none; }
+/* The grid's last column was sized for the old 2rem button; at 44px it
+   pushed the expand button onto the card's edge. */
+body.gaia-v2 .gaia-assist.gaia-assist--minimized .gaia-assist__sheet {
+  grid-template-columns: 3.25rem minmax(0, 1fr) 44px;
+  gap: 0.6rem;
+}
+body.gaia-v2 .gaia-assist.gaia-assist--minimized .gaia-assist__headline h2 { color: var(--ga-text); }
+body.gaia-v2 .gaia-assist.gaia-assist--minimized .gaia-assist__status { color: var(--ga-text-2); }
+body.gaia-v2 .gaia-assist.gaia-assist--minimized .gaia-assist__minimize {
+  width: 44px;
+  height: 44px;
+  min-width: 44px;
+  min-height: 44px;
+  border: 1px solid var(--ga-border);
+  background: rgba(16, 31, 24, 0.6);
+  color: var(--ga-text-2);
+}
+
+/* ---------- 13. Phones ------------------------------------------------- */
+
+@media (max-width: 400px) {
+  body.gaia-v2 .gaia-assist {
+    --ga-orb: 104px;
+    --ga-gap: 12px;
+  }
+  body.gaia-v2 .gaia-assist:not(.gaia-assist--minimized) .gaia-assist__sheet { padding: 16px 16px 16px; }
+  body.gaia-v2 .gaia-assist:not(.gaia-assist--minimized) .gaia-assist__close,
+  body.gaia-v2 .gaia-assist:not(.gaia-assist--minimized) .gaia-assist__minimize { top: 12px; width: 46px; height: 46px; min-width: 46px; min-height: 46px; }
+  body.gaia-v2 .gaia-assist:not(.gaia-assist--minimized) .gaia-assist__close { right: 12px; }
+  body.gaia-v2 .gaia-assist:not(.gaia-assist--minimized) .gaia-assist__minimize { right: calc(12px + 46px + 8px); }
+  /* Low enough that the orb's outer ring clears the minimise button. */
+  body.gaia-v2 .gaia-assist:not(.gaia-assist--minimized) .gaia-assist__aura { padding-top: 28px; }
+  body.gaia-v2 .gaia-assist:not(.gaia-assist--minimized) .gaia-assist__orb-ring--1 { inset: -8px; }
+  body.gaia-v2 .gaia-assist:not(.gaia-assist--minimized) .gaia-assist__orb-ring--2 { inset: -15px; }
+  body.gaia-v2 .gaia-assist:not(.gaia-assist--minimized) .gaia-assist__headline h2 { font-size: 29px; }
+  body.gaia-v2 .gaia-assist:not(.gaia-assist--minimized) .gaia-assist__status { font-size: 17px; }
+  body.gaia-v2 .gaia-assist:not(.gaia-assist--minimized) .gaia-assist__waveform { height: 44px; margin: 0 -16px; }
+  body.gaia-v2 .gaia-assist:not(.gaia-assist--minimized) .gaia-assist__chips { margin: 0 -16px; padding: 2px 16px; scroll-padding-inline: 16px; }
+  body.gaia-v2 .gaia-assist:not(.gaia-assist--minimized) .gaia-assist__chip { width: 214px; padding: 10px 12px 10px 10px; font-size: 14.5px; gap: 10px; }
+  body.gaia-v2 .gaia-assist .gaia-assist__chip-icon { width: 40px; height: 40px; font-size: 20px; }
+  body.gaia-v2 .gaia-assist:not(.gaia-assist--minimized) .gaia-assist__input-row { min-height: 72px; padding: 7px 7px 7px 18px; gap: 8px; }
+  body.gaia-v2 .gaia-assist:not(.gaia-assist--minimized) .gaia-assist__input-row input { font-size: 16px; }
+  body.gaia-v2 .gaia-assist:not(.gaia-assist--minimized) .gaia-assist__input-row .gaia-assist__send { width: 56px; height: 56px; min-width: 56px; font-size: 24px; }
+  body.gaia-v2 .gaia-assist:not(.gaia-assist--minimized) .gaia-assist__hint-line { font-size: 14px; }
+}
+
+@media (max-width: 374px) {
+  body.gaia-v2 .gaia-assist:not(.gaia-assist--minimized) .gaia-assist__hint-line { font-size: 13px; }
+}
+
+/* Short phones: the card is capped by the screen, so trim the fixed parts
+   before the transcript has to give way. */
+@media (max-height: 740px) {
+  body.gaia-v2 .gaia-assist { --ga-orb: 92px; --ga-gap: 10px; }
+  body.gaia-v2 .gaia-assist:not(.gaia-assist--minimized) .gaia-assist__waveform { height: 36px; }
+}
+
+/* ---------- 12. Reduced motion ---------------------------------------- */
+
+@media (prefers-reduced-motion: reduce) {
+  body.gaia-v2 .gaia-assist .gaia-assist__panel,
+  body.gaia-v2 .gaia-assist .gaia-assist__orb-visual,
+  body.gaia-v2 .gaia-assist .gaia-assist__orb-ring,
+  body.gaia-v2 .gaia-assist .gaia-assist__wave span,
+  body.gaia-v2 .gaia-assist .gaia-assist__waveform-line,
+  body.gaia-v2 .gaia-assist .gaia-assist__send {
+    animation: none !important;
+  }
+  body.gaia-v2 .gaia-assist .gaia-assist__wave span { height: 8px; }
+  body.gaia-v2 .gaia-assist .gaia-assist__waveform,
+  body.gaia-v2 .gaia-assist .gaia-assist__chip,
+  body.gaia-v2 .gaia-assist .gaia-assist__chip-caret { transition: none; }
+}
+
+/* Wide screens: a little over two and a half cards in view, so every
+   label fits on two lines and the row still reads as scrollable. */
+@media (min-width: 640px) {
+  body.gaia-v2 .gaia-assist:not(.gaia-assist--minimized) .gaia-assist__chip {
+    width: calc((100% - 20px) / 2.55);
+  }
+}

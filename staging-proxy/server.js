@@ -6464,6 +6464,62 @@ async function openAiCompatibleTts({ endpoint, apiKey, model, voice, text, speed
   return { ok: true, provider, model, voice, audio };
 }
 
+// Speech in. Ordered, because the cheapest and fastest option is not the one
+// that was wired first: Groq's whisper-large-v3-turbo answers in ~325ms on a
+// key we already hold, and every character it handles is one ElevenLabs does
+// not bill for.
+const STT_PROVIDER_ORDER = (process.env.STT_PROVIDER_ORDER || 'groq,elevenlabs,openai')
+  .split(',').map((s) => s.trim().toLowerCase()).filter(Boolean);
+
+async function sttGroq(audioBuffer, mimeType, filename) {
+  if (!process.env.GROQ_API_KEY) return { skipped: true, reason: 'missing-api-key' };
+  const model = process.env.GROQ_STT_MODEL || 'whisper-large-v3-turbo';
+  const form = new FormData();
+  form.append('file', new Blob([audioBuffer], { type: mimeType }), filename);
+  form.append('model', model);
+  const response = await fetch('https://api.groq.com/openai/v1/audio/transcriptions', {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${process.env.GROQ_API_KEY}` },
+    body: form,
+  });
+  if (!response.ok) throw new Error(`groq stt ${response.status}: ${(await response.text()).slice(0, 180)}`);
+  const payload = await response.json();
+  return { transcript: String(payload.text || '').trim(), provider: 'groq', model };
+}
+
+async function sttElevenLabs(audioBuffer, mimeType, filename) {
+  if (!process.env.ELEVENLABS_API_KEY) return { skipped: true, reason: 'missing-api-key' };
+  const model = process.env.ELEVENLABS_STT_MODEL || 'scribe_v1';
+  const form = new FormData();
+  form.append('file', new Blob([audioBuffer], { type: mimeType }), filename);
+  form.append('model_id', model);
+  const response = await fetch('https://api.elevenlabs.io/v1/speech-to-text', {
+    method: 'POST',
+    headers: { 'xi-api-key': process.env.ELEVENLABS_API_KEY },
+    body: form,
+  });
+  if (!response.ok) throw new Error(`elevenlabs stt ${response.status}: ${(await response.text()).slice(0, 180)}`);
+  const payload = await response.json();
+  return { transcript: String(payload.text || payload.transcript || '').trim(), provider: 'elevenlabs', model };
+}
+
+async function sttOpenAi(audioBuffer, mimeType, filename) {
+  if (!process.env.OPENAI_API_KEY) return { skipped: true, reason: 'missing-api-key' };
+  const model = process.env.OPENAI_TRANSCRIBE_MODEL || 'whisper-1';
+  const form = new FormData();
+  form.append('file', new Blob([audioBuffer], { type: mimeType }), filename);
+  form.append('model', model);
+  form.append('language', 'en');
+  const response = await fetch('https://api.openai.com/v1/audio/transcriptions', {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${process.env.OPENAI_API_KEY}` },
+    body: form,
+  });
+  if (!response.ok) throw new Error(`openai stt ${response.status}: ${(await response.text()).slice(0, 180)}`);
+  const payload = await response.json();
+  return { transcript: String(payload.text || '').trim(), provider: 'openai-whisper', model };
+}
+
 async function assistTranscribe(body) {
   const started = Date.now();
   const audioBase64 = String(body.audioBase64 || '').trim();
@@ -6475,81 +6531,34 @@ async function assistTranscribe(body) {
   }
 
   const mimeType = String(body.mimeType || 'audio/webm').trim() || 'audio/webm';
-  const extension = mimeType.includes('mp4') || mimeType.includes('aac') ? 'voice.m4a' : 'voice.webm';
+  const filename = mimeType.includes('mp4') || mimeType.includes('aac') ? 'voice.m4a' : 'voice.webm';
   const audioBuffer = Buffer.from(audioBase64, 'base64');
   console.log('[Gaia Assist] STT request received', { bytes: audioBuffer.length, mimeType });
 
-  if (process.env.ELEVENLABS_API_KEY) {
+  const runners = { groq: sttGroq, elevenlabs: sttElevenLabs, openai: sttOpenAi };
+  const attempts = [];
+  for (const provider of STT_PROVIDER_ORDER) {
+    const runner = runners[provider];
+    if (!runner) { attempts.push({ provider, status: 'skipped', reason: 'unknown-provider' }); continue; }
+    const providerStarted = Date.now();
     try {
-      const providerStarted = Date.now();
-      const form = new FormData();
-      form.append('file', new Blob([audioBuffer], { type: mimeType }), extension);
-      form.append('model_id', process.env.ELEVENLABS_STT_MODEL || 'scribe_v1');
-      const response = await fetch('https://api.elevenlabs.io/v1/speech-to-text', {
-        method: 'POST',
-        headers: { 'xi-api-key': process.env.ELEVENLABS_API_KEY },
-        body: form,
+      const result = await runner(audioBuffer, mimeType, filename);
+      if (result.skipped) { attempts.push({ provider, status: 'skipped', reason: result.reason }); continue; }
+      // Silence transcribes to an empty string, and so does a failure the
+      // provider did not report. Either way the next one should have a go.
+      if (!result.transcript) { attempts.push({ provider, status: 'empty' }); continue; }
+      console.log('[Gaia Assist] STT response ready', {
+        provider: result.provider, model: result.model,
+        latencyMs: Date.now() - started, providerLatencyMs: Date.now() - providerStarted,
       });
-      if (response.ok) {
-        const payload = await response.json();
-        const transcript = String(payload.text || payload.transcript || '').trim();
-        if (transcript) {
-          const latencyMs = Date.now() - started;
-          console.log('[Gaia Assist] STT response ready', {
-            provider: 'elevenlabs',
-            model: process.env.ELEVENLABS_STT_MODEL || 'scribe_v1',
-            latencyMs,
-            providerLatencyMs: Date.now() - providerStarted,
-          });
-          return {
-            ok: true,
-            transcript,
-            provider: 'elevenlabs',
-            model: process.env.ELEVENLABS_STT_MODEL || 'scribe_v1',
-          };
-        }
-      } else {
-        const details = await response.text();
-        console.error('[Gaia Assist] ElevenLabs STT failed', { status: response.status, details: details.slice(0, 180) });
-      }
+      attempts.push({ provider, status: 'ok', latencyMs: Date.now() - providerStarted });
+      return { ok: true, transcript: result.transcript, provider: result.provider, model: result.model, attempts };
     } catch (error) {
-      console.error('[Gaia Assist] ElevenLabs STT error', { error: error.message.split('\n')[0] });
+      attempts.push({ provider, status: 'failed', error: error.message.slice(0, 200) });
+      console.error('[Gaia Assist] STT provider failed', { provider, error: error.message.split('\n')[0] });
     }
   }
-
-  if (!process.env.OPENAI_API_KEY) {
-    return { ok: false, status: 503, error: 'Speech transcription is not configured on the proxy' };
-  }
-
-  const form = new FormData();
-  form.append('file', new Blob([audioBuffer], { type: mimeType }), extension);
-  form.append('model', process.env.OPENAI_TRANSCRIBE_MODEL || 'whisper-1');
-  form.append('language', 'en');
-
-  const response = await fetch('https://api.openai.com/v1/audio/transcriptions', {
-    method: 'POST',
-    headers: { Authorization: `Bearer ${process.env.OPENAI_API_KEY}` },
-    body: form,
-  });
-
-  if (!response.ok) {
-    const details = await response.text();
-    throw new Error(`Whisper transcription failed with ${response.status}: ${details.slice(0, 280)}`);
-  }
-
-  const payload = await response.json();
-  const transcript = String(payload.text || '').trim();
-  console.log('[Gaia Assist] STT response ready', {
-    provider: 'openai-whisper',
-    model: process.env.OPENAI_TRANSCRIBE_MODEL || 'whisper-1',
-    latencyMs: Date.now() - started,
-  });
-  return {
-    ok: true,
-    transcript,
-    provider: 'openai-whisper',
-    model: process.env.OPENAI_TRANSCRIBE_MODEL || 'whisper-1',
-  };
+  return { ok: false, status: 502, error: 'Could not transcribe that audio', attempts };
 }
 
 async function listHostedVoices() {
@@ -7425,6 +7434,76 @@ const server = http.createServer(async (req, res) => {
       const memberContext = await buildMemberVoiceContext(req);
       const payload = await assistChat({ ...body, prompt: transcript, transcript, source: body.source || 'voice', memberContext });
       sendJson(res, payload.ok === false ? 400 : 200, payload, origin);
+      return;
+    }
+    // ── The pipeline fallback: one turn of voice, in one round trip ──────
+    // When the Gemini Live socket will not open -- a withdrawn model, a
+    // network that blocks WebSockets, a Google outage -- the orb does not have
+    // to go silent. It can hold-to-talk instead, and this is the whole turn:
+    // speech in, answer out, spoken. Three legs the proxy already had, joined
+    // so the phone makes ONE request instead of three.
+    if (req.method === 'POST' && url.pathname === '/api/assist/voice/turn') {
+      const body = await readJsonBody(req, 3 * 1024 * 1024);
+      const turnStarted = Date.now();
+      const timings = {};
+      try {
+        let t = Date.now();
+        const heard = await assistTranscribe(body);
+        timings.sttMs = Date.now() - t;
+        if (!heard.ok || !heard.transcript) {
+          sendJson(res, 200, {
+            ok: false, stage: 'transcribe',
+            reason: heard.error || 'nothing_heard',
+            attempts: heard.attempts, timings,
+          }, origin);
+          return;
+        }
+
+        t = Date.now();
+        const memberContext0 = await buildMemberVoiceContext(req);
+        const liveData = await assistLiveDataBlock(heard.transcript).catch(() => '');
+        const memberContext = [memberContext0, liveData].filter(Boolean).join('\n\n');
+        const answer = await assistChat({
+          prompt: heard.transcript,
+          // "voice" keeps the reply short enough to be listened to rather
+          // than read, the same as every other spoken path.
+          source: 'voice',
+          intent: body.intent,
+          view: body.view,
+          memberContext,
+        });
+        timings.llmMs = Date.now() - t;
+        let reply = String(answer.reply || '').trim();
+        try { const ex = await executeOnboardingMarkers(req, reply); reply = ex.clean; } catch (e) {}
+        if (!reply) {
+          sendJson(res, 200, { ok: false, stage: 'chat', transcript: heard.transcript, timings }, origin);
+          return;
+        }
+
+        t = Date.now();
+        const spoken = await assistTts({ text: reply, voice: body.voice });
+        timings.ttsMs = Date.now() - t;
+        timings.totalMs = Date.now() - turnStarted;
+        console.log('[Gaia Assist] pipeline turn', {
+          stt: heard.provider, llm: answer.provider, tts: spoken.provider || 'none', ...timings,
+        });
+
+        sendJson(res, 200, {
+          ok: true,
+          transcript: heard.transcript,
+          reply,
+          // Audio is optional on purpose: a failed voice is a reply the member
+          // can still READ, which beats an error where an answer should be.
+          audioBase64: spoken.ok && spoken.audio ? Buffer.from(spoken.audio).toString('base64') : '',
+          audioMimeType: spoken.ok ? (spoken.mimeType || 'audio/mpeg') : '',
+          providers: { stt: heard.provider, llm: answer.provider, tts: spoken.ok ? spoken.provider : null },
+          model: answer.model,
+          timings,
+        }, origin);
+      } catch (error) {
+        console.error('[Gaia Assist] pipeline turn failed', { error: error.message.split('\n')[0] });
+        sendJson(res, 200, { ok: false, stage: 'unknown', reason: error.message.slice(0, 200), timings }, origin);
+      }
       return;
     }
     if (req.method === 'POST' && url.pathname === '/api/assist/transcribe') {

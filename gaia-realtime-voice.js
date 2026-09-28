@@ -1270,8 +1270,14 @@
           }, maxSeconds * 1000);
         } catch (err) {
           cleanupSession();
-          setErrorMessage(err instanceof Error ? err.message : 'Could not start live voice.');
-          setStatus('error');
+          // Before showing a member an error, try the slower path that does
+          // not need a WebSocket at all.
+          if (enterPipelineMode(err instanceof Error ? err.message : String(err))) {
+            setErrorMessage('Live voice is unavailable here — hold the orb and speak instead.');
+          } else {
+            setErrorMessage(err instanceof Error ? err.message : 'Could not start live voice.');
+            setStatus('error');
+          }
         } finally {
           startPromise = null;
         }
@@ -1281,17 +1287,127 @@
       return startTask;
     }
 
+    // ── The pipeline fallback ────────────────────────────────────────────
+    // Gemini Live is one WebSocket carrying audio both ways, and there are
+    // networks it simply cannot cross — conference wifi that blocks ws://,
+    // a captive portal, a withdrawn model, a Google outage. None of those are
+    // reasons for a member standing in a hall to get silence.
+    //
+    // So when the live session will not start, the orb does not die: it
+    // becomes hold-to-talk. Record while held, send the clip to one endpoint
+    // that transcribes, answers and speaks, and play the reply back. Slower
+    // and not interruptible, but it answers, and it uses the same assistant
+    // with the same knowledge.
+    let pipelineMode = false;
+    let recorder = null;
+    let recordedChunks = [];
+    let replyAudio = null;
+
+    function pipelineSupported() {
+      return typeof window.MediaRecorder === 'function'
+        && Boolean(navigator.mediaDevices?.getUserMedia);
+    }
+
+    function enterPipelineMode(reason) {
+      if (pipelineMode || !pipelineSupported()) return false;
+      pipelineMode = true;
+      console.warn('[Gaia Voice] live session unavailable, falling back to hold-to-talk', reason);
+      setErrorMessage('');
+      setStatus('idle');
+      emit('message', { messages: [...messages], role: 'system', text: '', finalize: true });
+      return true;
+    }
+
+    function stopReplyAudio() {
+      if (!replyAudio) return;
+      try { replyAudio.pause(); } catch { /* ignore */ }
+      replyAudio = null;
+    }
+
+    async function pipelineRecordStart() {
+      stopReplyAudio();
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      streamRef.current = stream;
+      recordedChunks = [];
+      // webm/opus everywhere except Safari, which gives mp4; the proxy reads
+      // the mime type and names the file accordingly, so either is fine.
+      const mimeType = ['audio/webm;codecs=opus', 'audio/webm', 'audio/mp4']
+        .find((type) => window.MediaRecorder.isTypeSupported?.(type)) || '';
+      recorder = mimeType ? new window.MediaRecorder(stream, { mimeType }) : new window.MediaRecorder(stream);
+      recorder.ondataavailable = (event) => {
+        if (event.data && event.data.size) recordedChunks.push(event.data);
+      };
+      recorder.start();
+      setStatus('listening');
+    }
+
+    async function pipelineRecordEnd() {
+      const active = recorder;
+      if (!active || active.state === 'inactive') return;
+      setStatus('thinking');
+      const blob = await new Promise((resolve) => {
+        active.onstop = () => resolve(new Blob(recordedChunks, { type: active.mimeType || 'audio/webm' }));
+        try { active.stop(); } catch { resolve(null); }
+      });
+      recorder = null;
+      streamRef.current?.getTracks?.().forEach((track) => track.stop());
+      streamRef.current = null;
+      // Anything this short is a mis-tap, not a question.
+      if (!blob || blob.size < 1200) { setStatus('idle'); return; }
+
+      try {
+        const audioBase64 = await new Promise((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onerror = () => reject(new Error('Could not read the recording.'));
+          reader.onloadend = () => resolve(String(reader.result || '').split(',')[1] || '');
+          reader.readAsDataURL(blob);
+        });
+        const response = await fetch(`${proxyBase()}/api/assist/voice/turn`, {
+          method: 'POST',
+          credentials: 'include',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ audioBase64, mimeType: blob.type || 'audio/webm', view: currentView() }),
+        });
+        const payload = await response.json().catch(() => ({}));
+        if (!payload.ok) {
+          setErrorMessage(payload.stage === 'transcribe'
+            ? 'I did not catch that — hold the orb and speak again.'
+            : 'Gaia Assist could not answer just now.');
+          setStatus('idle');
+          return;
+        }
+        if (payload.transcript) upsertStreamingMessage('user', payload.transcript, true);
+        upsertStreamingMessage('assistant', payload.reply, true);
+        if (payload.audioBase64) {
+          setStatus('speaking');
+          replyAudio = new Audio(`data:${payload.audioMimeType || 'audio/mpeg'};base64,${payload.audioBase64}`);
+          replyAudio.onended = () => { replyAudio = null; setStatus('idle'); };
+          replyAudio.onerror = () => { replyAudio = null; setStatus('idle'); };
+          // A blocked autoplay is not an error: the reply is on screen to read.
+          await replyAudio.play().catch(() => { replyAudio = null; setStatus('idle'); });
+        } else {
+          setStatus('idle');
+        }
+      } catch (err) {
+        setErrorMessage('No connection. Please try again.');
+        setStatus('idle');
+      }
+    }
+
     async function holdStart() {
+      if (pipelineMode) { await pipelineRecordStart(); return; }
       await start();
     }
 
     function holdEnd() {
+      if (pipelineMode) { pipelineRecordEnd(); return; }
       /* continuous VAD — no hold-to-talk */
     }
 
     function stop() {
       holding = false;
       maySendAudio = false;
+      stopReplyAudio();
       cleanupSession();
       interruptPlayback();
       setStatus('idle');
@@ -1330,6 +1446,28 @@
         emit('message', { messages: [...messages], role: 'user', text, finalize: true });
       }
       setStatus('thinking');
+      if (pipelineMode) {
+        // No socket to send down: ask over HTTP and speak the answer back.
+        (async () => {
+          try {
+            const response = await fetch(`${proxyBase()}/api/assist/chat`, {
+              method: 'POST',
+              credentials: 'include',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ prompt: text, source: 'voice', view: currentView() }),
+            });
+            const payload = await response.json().catch(() => ({}));
+            const reply = String(payload.reply || '').trim();
+            if (!reply) { setErrorMessage('Gaia Assist could not answer just now.'); setStatus('idle'); return; }
+            upsertStreamingMessage('assistant', reply, true);
+            setStatus('idle');
+          } catch {
+            setErrorMessage('No connection. Please try again.');
+            setStatus('idle');
+          }
+        })();
+        return true;
+      }
       return sendWs({ realtimeInput: { text } });
     }
 
@@ -1352,6 +1490,9 @@
       get messages() { return [...messages]; },
       get muted() { return muted; },
       get isHolding() { return holding; },
+      // True once the live socket has been given up on: the orb is
+      // hold-to-talk now, and the UI should say so.
+      get pipelineMode() { return pipelineMode; },
       isActive,
       start,
       holdStart,

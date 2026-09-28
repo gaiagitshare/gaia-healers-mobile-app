@@ -3077,7 +3077,13 @@
 
       try {
         const streamed = await streamAssistantReply(base, cleanPrompt, intent, source, fromVoice);
-        if (streamed) return;
+        // The streamed path returned before the finally below, so Send, the
+        // quick actions and the microphone stayed disabled after every
+        // typed answer.
+        if (streamed) {
+          setBusy(false);
+          return;
+        }
       } catch (err) {
         if (err.name === 'AbortError') {
           assistLog('proxy stream aborted', { intent, source });

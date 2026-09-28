@@ -151,6 +151,9 @@ export const importAttendees = (eventId, file, options = {}) => {
 };
 export const searchAttendees = (eventId, q) =>
     api.get(`/events/${eventId}/attendees/search`, { params: { q } });
+// What may the person holding this screen do here? Asked before any scan,
+// because the walk-in form has no badge behind it.
+export const getMyCapabilities = (eventId) => api.get(`/events/${eventId}/my-capabilities`);
 export const walkInCheck = (eventId, data) => api.post(`/events/${eventId}/walk-in/check`, data);
 export const walkInCreate = (eventId, data) => api.post(`/events/${eventId}/walk-in`, data);
 export const updateAttendee = (id, data) => api.put(`/attendees/${id}`, data);

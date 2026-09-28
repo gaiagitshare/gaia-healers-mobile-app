@@ -367,6 +367,62 @@ check(d.get("checked_in") is True, "without checking anybody in twice")
 st, _ = call("POST", "/events/%d/re-entry" % EVENT, {"enabled": True}, STAFF)
 check(st == 403, "but door staff cannot change the rule itself", st)
 
+print("\nREGISTERING SOMEBODY NEW AT THE DESK")
+import time as _t
+_stamp = str(int(_t.time()))
+def walkin(who, **over):
+    body = {"first_name": "Desk", "last_name": "Walkin" + _stamp[-4:],
+            "email": "desk-walkin-%s@example.invalid" % _stamp,
+            "phone": "+15550000000", "attendance_type": "paid",
+            "door_payment_status": "collected", "door_payment_method": "cash",
+            "door_payment_amount": 99, "confirm_new": True}
+    body.update(over)
+    return call("POST", "/events/%d/walk-in" % EVENT, body, who)
+
+# The desk takes money and registers the person. This is the whole point.
+st, out = walkin(STAFF)
+check(st == 200, "door staff can register somebody who is paying", (st, str(out)[:160]))
+_made = (out or {}).get("attendee") or {}
+check(bool(_made.get("qr_code")), "who leaves with a real badge", _made.get("qr_code"))
+
+# The commonest door case: they paid online and cannot be found. No money is
+# taken, so it is not trusted -- it is made visible for reconciliation.
+st, out = walkin(STAFF, door_payment_status="none", door_payment_amount=None,
+                 email="desk-paid-%s@example.invalid" % _stamp)
+check(st == 200, "and somebody who says they already paid online", (st, str(out)[:160]))
+_paid_id = ((out or {}).get("attendee") or {}).get("id")
+_, rep = call("GET", "/events/%d/door-report" % EVENT, None, ADMIN)
+_await = [r for r in ((rep or {}).get("lists") or {}).get("awaiting_ghl_reconciliation", [])
+          if r.get("attendee_id") == _paid_id]
+check(bool(_await), "which lands in the awaiting-reconciliation list, not out of sight", _await[:1])
+
+print("\n     -- and nothing else --")
+st, out = walkin(STAFF, attendance_type="complimentary", door_payment_status="waived",
+                 door_payment_amount=None, email="desk-comp-%s@example.invalid" % _stamp)
+check(st == 403 and "organiser" in str(out).lower(),
+      "door staff cannot hand out a complimentary badge", (st, str(out)[:160]))
+st, out = walkin(STAFF, attendance_type="staff", door_payment_status="none",
+                 door_payment_amount=None, email="desk-crew-%s@example.invalid" % _stamp)
+check(st == 403, "nor a crew badge", (st, str(out)[:160]))
+st, out = walkin(STAFF, door_payment_amount=0, email="desk-free-%s@example.invalid" % _stamp)
+check(st == 400, "nor take a payment of nothing", (st, str(out)[:160]))
+
+# An organiser still may.
+st, out = walkin(ADMIN, attendance_type="complimentary", door_payment_status="waived",
+                 door_payment_amount=None, note="authorised in the test",
+                 email="admin-comp-%s@example.invalid" % _stamp)
+check(st == 200, "an organiser can still comp somebody in", (st, str(out)[:160]))
+
+print("\nTHE SCREEN IS TOLD, BEFORE ANYBODY IS SCANNED")
+st, capsS = call("GET", "/events/%d/my-capabilities" % EVENT, None, STAFF)
+st2, capsA = call("GET", "/events/%d/my-capabilities" % EVENT, None, ADMIN)
+check(st == 200 and st2 == 200, "both can ask what they may do", (st, st2))
+check(capsS["may"]["register_paying_walk_in"] is True
+      and capsS["may"]["register_free_badge"] is False,
+      "the desk is told it may take money but not give a badge away", capsS["may"])
+check(capsA["may"]["register_free_badge"] is True and capsA["is_organiser"] is True,
+      "the organiser is told they may do both", capsA["may"])
+
 print("\nNOBODY ELSE'S DOOR")
 st, _ = override({"reason": "wrong event on purpose"}, STAFF, event_id=2)
 check(st in (403, 404), "a badge cannot be overridden at an event it does not belong to", st)

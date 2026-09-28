@@ -4574,6 +4574,43 @@ def _walk_in_matches(db, event_id, email, phone, first, last):
     return rows[:8]
 
 
+@app.get("/events/{event_id}/my-capabilities")
+def my_capabilities(event_id: int, db: Session = Depends(get_db),
+                    current_user: models.User = Depends(get_current_user)):
+    """What may the person holding this screen do at this event?
+
+    The door screen needs this before anybody has been scanned -- the walk-in
+    form has no badge behind it -- so that it can offer the desk what the desk
+    can do, rather than showing every option and letting the refusals explain
+    it afterwards.
+    """
+    _get_event_or_404(event_id, db)
+    caps = authz.capabilities_for(db, current_user, event_id)
+    if not caps:
+        raise HTTPException(status_code=403, detail="Not authorized for this event")
+    organiser = "attendee.write" in caps
+    return {
+        "event_id": event_id,
+        "capabilities": sorted(caps),
+        "is_organiser": organiser,
+        "may": {
+            # Everything a door can do, named as the door thinks of it.
+            "check_in": "checkin.perform" in caps,
+            "override": "checkin.perform" in caps,
+            "fix_name": "checkin.perform" in caps,
+            "name_seat": "checkin.perform" in caps,
+            "sell_upgrade": "checkin.perform" in caps,
+            "register_paying_walk_in": "checkin.perform" in caps,
+            # ...and everything that is somebody deciding to give an entry away.
+            "comp": organiser,
+            "downgrade": organiser,
+            "revoke": organiser,
+            "change_email": organiser,
+            "register_free_badge": organiser,
+        },
+    }
+
+
 @app.post("/events/{event_id}/walk-in/check")
 def walk_in_check(event_id: int, payload: schemas.WalkInCheck,
                   db: Session = Depends(get_db),
@@ -4604,7 +4641,33 @@ def walk_in_create(event_id: int, payload: schemas.WalkInCreate,
     online three months ago.
     """
     event = _get_event_or_404(event_id, db)
-    authz.require_cap(db, current_user, event_id, "attendee.write")
+    # An ORGANISER may register anybody, for any reason.
+    #
+    # The DESK may register somebody who is paying, and somebody who says they
+    # already paid online and cannot be found -- which is the commonest thing
+    # that actually happens at a door, and the one case where sending them away
+    # to find an organiser is worst. That second kind takes no money, so it is
+    # not trusted, it is made VISIBLE: the row is stamped `walk_in` with no door
+    # payment, which is exactly what puts it in the awaiting-reconciliation list
+    # for somebody to check against GHL afterwards.
+    #
+    # What the desk may NOT do is mint a free badge on its own say-so. A
+    # complimentary guest and a crew badge are somebody deciding to give an
+    # entry away, and that decision stays with the organiser -- the same line
+    # drawn for upgrades, for the same reason.
+    if not authz.can(db, current_user, event_id, "attendee.write"):
+        authz.require_cap(db, current_user, event_id, "checkin.perform")
+        _kind = (payload.attendance_type or "paid").strip().lower()
+        _pay = (payload.door_payment_status or "none").strip().lower()
+        if _kind != "paid":
+            raise HTTPException(status_code=403,
+                                detail="A complimentary or crew badge is an organiser's call. "
+                                       "At the desk, register them as paying or as already paid.")
+        if _pay not in ("none", "collected"):
+            raise HTTPException(status_code=403,
+                                detail="At the desk a walk-in is either paying now or has already paid.")
+        if _pay == "collected" and float(payload.door_payment_amount or 0) <= 0:
+            raise HTTPException(status_code=400, detail="Say how much was taken")
     _assert_event_writable(db, event, "register a walk-in for it")
     email = (payload.email or "").strip().lower()
     if not email or not re.match(r"^[^@\s]+@[^@\s]+\.[^@\s]+$", email):

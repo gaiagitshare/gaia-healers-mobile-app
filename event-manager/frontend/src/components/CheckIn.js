@@ -22,7 +22,8 @@ import GroupsIcon from '@mui/icons-material/Groups';
 import TuneIcon from '@mui/icons-material/Tune';
 import { Html5QrcodeScanner } from 'html5-qrcode';
 import { authorizeScan, getScanLogs, searchAttendees, getEvents, walkInCreate, getTicketTypes, undoCheckIn, clearScanLogs, setDoorTestMode, getEvent, badgeLabelBlob, recordBadgePrint,
-    overrideAdmit, doorIdentity, addPartySeat, setReEntry as setDoorReEntry, changePass, revokeAttendee, reinstateAttendee } from '../utils/api';
+    overrideAdmit, doorIdentity, addPartySeat, setReEntry as setDoorReEntry, changePass, revokeAttendee, reinstateAttendee,
+    getMyCapabilities } from '../utils/api';
 import { formatVenueTime, statusLabel, isFlaggedStatus } from '../utils/datetime';
 import BadgeLabelDialog, { STATION_KEY, LABEL_SIZE_KEY, LABEL_ROLLS, savedLabelSize, rollShort, fullName, physicalCard,
     canPrintBluetooth, useB1, b1Connect, b1IsConnected, b1Enqueue, b1PrintBlob, b1Dpi, rollFitsB1, PRINTER_KEY, PRINTER_CHOICES, savedPrinter } from './BadgeLabelDialog';
@@ -85,16 +86,20 @@ function CheckIn({ timezone: timezoneProp }) {
     // Why they need a badge is asked FIRST and never inferred. A walk-in is
     // not the same thing as a paid ticket.
     const DOOR_REASONS = [
-        { key: 'already_paid', label: 'Already paid — can’t find them',
+        { key: 'already_paid', needs: 'register_paying_walk_in',
+          label: 'Already paid — can’t find them',
           hint: 'Usually a sync delay. Their GHL order will reconcile onto this record when it arrives.',
           attendance_type: 'paid', door_payment_status: 'none' },
-        { key: 'pay_at_door', label: 'Paying at the door',
+        { key: 'pay_at_door', needs: 'register_paying_walk_in',
+          label: 'Paying at the door',
           hint: 'Recorded as a Gaia door payment. Nothing is written to GHL — take the money on your usual till.',
           attendance_type: 'paid', door_payment_status: 'collected' },
-        { key: 'complimentary', label: 'Complimentary / guest',
+        { key: 'complimentary', needs: 'register_free_badge',
+          label: 'Complimentary / guest',
           hint: 'No payment expected. Say who authorised it.',
           attendance_type: 'complimentary', door_payment_status: 'waived' },
-        { key: 'crew', label: 'Staff / speaker / exhibitor',
+        { key: 'crew', needs: 'register_free_badge',
+          label: 'Staff / speaker / exhibitor',
           hint: 'Working the event. No ticket payment.',
           attendance_type: 'staff', door_payment_status: 'none' },
     ];
@@ -178,6 +183,13 @@ function CheckIn({ timezone: timezoneProp }) {
 
     // The door's own state: has this event started, and is a rehearsal running.
     const [doorEvent, setDoorEvent] = useState(null);
+    // What this operator may do here, asked once. The walk-in form has no badge
+    // behind it, so it cannot wait for a scan to find out.
+    const [may, setMay] = useState(null);
+    useEffect(() => {
+        if (!eventId) { setMay(null); return; }
+        getMyCapabilities(eventId).then((r) => setMay(r.data?.may || null)).catch(() => setMay(null));
+    }, [eventId]);
     useEffect(() => {
         if (!eventId) { setDoorEvent(null); return; }
         getEvent(eventId)
@@ -1438,7 +1450,12 @@ function CheckIn({ timezone: timezoneProp }) {
                             <Box>
                                 <Typography variant="subtitle2" gutterBottom>Why do they need a badge?</Typography>
                                 <Stack spacing={1}>
-                                    {DOOR_REASONS.map((r) => (
+                                    {/* Offer the desk only the reasons the desk can
+                                        act on. A free badge is somebody deciding to
+                                        give an entry away, and that stays with an
+                                        organiser — saying so here beats a refusal
+                                        after the form has been filled in. */}
+                                    {DOOR_REASONS.filter((r) => !may || may[r.needs] !== false).map((r) => (
                                         <Paper key={r.key} variant="outlined"
                                             onClick={() => setVisitor({ ...visitor, reason: r.key,
                                                 attendance_type: r.attendance_type,
@@ -1451,6 +1468,11 @@ function CheckIn({ timezone: timezoneProp }) {
                                         </Paper>
                                     ))}
                                 </Stack>
+                                {may && may.register_free_badge === false && (
+                                    <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 1 }}>
+                                        A complimentary guest, a speaker or a crew badge is an organiser&rsquo;s call.
+                                    </Typography>
+                                )}
                             </Box>
 
                             {visitor?.reason === 'already_paid' && (

@@ -27,6 +27,8 @@ import {
 import { classifyMembershipEvent, membershipFromEvent } from './membership/events.js';
 import { attachQwenVoiceRelay, qwenRouting, issueQwenTicket, qwenVoiceConfig } from './qwen-voice-relay.js';
 import { allowSpend, callerKey, spendKindFor, ASSIST_MAX_PROMPT_CHARS, ASSIST_MAX_TTS_CHARS } from './assist-guard.js';
+import { deadline, idleWatch } from './provider-timeouts.js';
+import { SAFETY_FIRST, detectCrisis, crisisReply } from './assist-safety.js';
 import { normalizeMembership } from './membership/ledger.js';
 import {
   fixturesAvailable, fixtureKeyMatches, fixtureAccessGranted,
@@ -4368,7 +4370,7 @@ async function liveModelAvailable(model) {
   const key = geminiApiKey();
   if (!key) return false;
   try {
-    const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${encodeURIComponent(key)}&pageSize=200`);
+    const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${encodeURIComponent(key)}&pageSize=200`, { signal: deadline('catalog') });
     if (!r.ok) return true;          // cannot tell — do not break a working orb
     const body = await r.json();
     const names = new Set((body.models || []).map((m) => String(m.name || '').replace(/^models\//, '')));
@@ -4396,11 +4398,12 @@ function gaiaLiveVoiceConfig() {
   };
 }
 
-function buildGaiaLiveInstructions(context = {}) {
+export function buildGaiaLiveInstructions(context = {}) {
   const view = String(context.view || 'today').trim() || 'today';
   const memberContext = String(context.memberContext || '').trim();
   return [
     'You are Gaia Assist, the warm, knowledgeable voice concierge built into the Gaia Healers app. You help both first-time visitors and signed-in members from arrival through their next useful step.',
+    SAFETY_FIRST,
     gaiaKnowledgePrompt(),
     memberContext,
     `The person is currently on the ${view} screen. Assume questions relate to what they are looking at unless they say otherwise, and tailor your help to that screen first.`,
@@ -5894,9 +5897,10 @@ function fallbackAssistReply(prompt, intent = '') {
   return 'I can help across the full Gaia Healers ecosystem: Energy, Academy, Community, events, bookings, membership, live products, practitioners, research, articles, demos, certification, practitioner tools, contact, or Dr. Nima. What would you like to explore?';
 }
 
-function assistSystemPrompt(memberContext = '') {
+export function assistSystemPrompt(memberContext = '') {
   return [
     'You are Gaia Assist, the smart concierge for the Gaia Healers mobile app. You guide first-time visitors and signed-in members from arrival through their next useful step.',
+    SAFETY_FIRST,
     memberContext
       ? 'This is a signed-in member. Personalize only from the supplied member context. Treat active GHL subscriptions/offers as primary tier evidence and tags as secondary. Show courses and communities only from exact GHL entitlements; never infer them from tier.'
       : 'This is a visitor unless they say otherwise. Help them explore, join free, compare memberships, sign in with their GHL-contact email, find a practitioner, or book a session. Never imply they already own access.',
@@ -5974,6 +5978,7 @@ async function aiComplete(system, user, { maxTokens = 160, temperature = 0.6 } =
     try {
       const r = await fetch(config.endpoint, {
         method: 'POST',
+        signal: deadline('chat'),
         headers: { Authorization: `Bearer ${config.key}`, 'Content-Type': 'application/json', ...config.headers },
         body: JSON.stringify({
           model: config.model,
@@ -5997,6 +6002,7 @@ async function callGeminiChat(prompt, context = {}) {
   const isVoice = String(context.source || '').includes('voice');
   const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${encodeURIComponent(key)}`, {
     method: 'POST',
+    signal: deadline('chat'),
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
       systemInstruction: { parts: [{ text: assistSystemPrompt(context.memberContext) }] },
@@ -6022,6 +6028,7 @@ async function callChatProvider(provider, prompt, context = {}) {
 
   const response = await fetch(config.endpoint, {
     method: 'POST',
+    signal: deadline('chat'),
     headers: {
       Authorization: `Bearer ${config.key}`,
       'Content-Type': 'application/json',
@@ -6066,10 +6073,12 @@ async function streamGeminiChat(prompt, context = {}, onDelta = () => {}) {
   if (!key) return { skipped: true, reason: 'missing-api-key' };
   const model = process.env.GEMINI_TEXT_MODEL || 'gemini-2.5-flash';
   const isVoice = String(context.source || '').includes('voice');
+  const watch = idleWatch(context.abortSignal);
   const response = await fetch(
     `https://generativelanguage.googleapis.com/v1beta/models/${model}:streamGenerateContent?alt=sse&key=${encodeURIComponent(key)}`,
     {
       method: 'POST',
+      signal: watch.signal,
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         systemInstruction: { parts: [{ text: assistSystemPrompt(context.memberContext) }] },
@@ -6088,6 +6097,7 @@ async function streamGeminiChat(prompt, context = {}, onDelta = () => {}) {
   for (;;) {
     const { value, done } = await reader.read();
     if (done) break;
+    watch.bump();
     buffer += decoder.decode(value, { stream: true });
     const lines = buffer.split(/\r?\n/);
     buffer = lines.pop() || '';
@@ -6109,6 +6119,7 @@ async function streamGeminiChat(prompt, context = {}, onDelta = () => {}) {
       }
     }
   }
+  watch.stop();
   const text = reply.trim();
   if (!text) return { skipped: true, reason: 'empty-reply' };
   return { provider: 'gemini', model, reply: text };
@@ -6124,8 +6135,10 @@ async function streamChatProvider(provider, prompt, context = {}, onDelta = () =
     return { skipped: true, reason: 'missing-api-key' };
   }
 
+  const watch = idleWatch(context.abortSignal);
   const response = await fetch(config.endpoint, {
     method: 'POST',
+    signal: watch.signal,
     headers: {
       Authorization: `Bearer ${config.key}`,
       'Content-Type': 'application/json',
@@ -6162,6 +6175,7 @@ async function streamChatProvider(provider, prompt, context = {}, onDelta = () =
   for (;;) {
     const { value, done } = await reader.read();
     if (done) break;
+    watch.bump();
     buffer += decoder.decode(value, { stream: true });
     const lines = buffer.split(/\r?\n/);
     buffer = lines.pop() || '';
@@ -6186,6 +6200,7 @@ async function streamChatProvider(provider, prompt, context = {}, onDelta = () =
   // A provider that returns nothing has NOT answered. Emitting the canned
   // fallback here looked like success while sending no deltas at all, so the
   // member watched an empty bubble. Hand it to the next provider instead.
+  watch.stop();
   const text = reply.trim();
   if (!text) return { skipped: true, reason: 'empty-reply' };
   return { provider, model: config.model, reply: text };
@@ -6310,7 +6325,7 @@ async function gaiaLookup(query) {
       .map((x) => ({ title: x.p.title, price: (x.p.priceVaries ? 'from ' : '') + priceFromCents(x.p.priceCents), available: x.p.available !== false, type: x.p.productType || '', url: x.p.url || '' }));
   } catch (e) { out.store = []; }
   try {
-    const dir = await fetch('http://127.0.0.1:8787/api/directory').then((r) => r.json()).catch(() => null);
+    const dir = await fetch(`http://127.0.0.1:${PORT}/api/directory`, { signal: deadline('catalog') }).then((r) => r.json()).catch(() => null);
     const list = (dir && dir.practitioners) || [];
     out.practitionerTotal = list.length;
     out.practitioners = list.map((p) => ({ p, s: score(p.name + ' ' + (p.city || '') + ' ' + (p.state || '') + ' ' + (p.specialty || '') + ' ' + ((p.tags || []).join(' '))) }))
@@ -6373,6 +6388,12 @@ async function assistChat(body) {
   if (!prompt) {
     return { ok: false, error: 'Prompt is required' };
   }
+  // A crisis gets the fixed, reviewed reply (assist-safety.js), not a model.
+  const crisis = detectCrisis(prompt);
+  if (crisis) {
+    console.warn('[Gaia Assist] safety reply', { kind: crisis, source: body.source || 'unknown' });
+    return { ok: true, provider: 'safety', model: 'fixed', reply: crisisReply(crisis, prompt), safety: crisis };
+  }
 
   console.log('[Gaia Assist] request received', {
     intent: body.intent || 'general',
@@ -6421,7 +6442,21 @@ async function assistChatStream(body, res, origin) {
   sendSseHeaders(res, origin);
   writeSse(res, 'meta', { ok: true, source: body.source || 'stream', generatedAt: new Date().toISOString() });
 
-  const context = { intent: body.intent, page: body.page, source: body.source || 'chat-stream', memberContext: body.memberContext };
+  const crisis = detectCrisis(prompt);
+  if (crisis) {
+    const reply = crisisReply(crisis, prompt);
+    console.warn('[Gaia Assist] safety reply', { kind: crisis, source: body.source || 'chat-stream' });
+    writeSse(res, 'delta', { text: reply });
+    writeSse(res, 'done', { ok: true, provider: 'safety', model: 'fixed', reply, safety: crisis, attempts: [] });
+    res.end();
+    return;
+  }
+
+  // The page aborts a stream when the member sends the next message or closes
+  // the chat; stop generating (and paying) for an answer nobody will read.
+  const gone = new AbortController();
+  res.on('close', () => { if (!res.writableEnded) gone.abort(new Error('client closed')); });
+  const context = { intent: body.intent, page: body.page, source: body.source || 'chat-stream', memberContext: body.memberContext, abortSignal: gone.signal };
   const attempts = [];
 
   if (process.env.GAIA_ASSIST_VOICE_ENABLED !== 'true') {
@@ -6433,6 +6468,7 @@ async function assistChatStream(body, res, origin) {
   }
 
   for (const provider of ASSIST_PROVIDER_ORDER) {
+    if (gone.signal.aborted) return;
     const started = Date.now();
     try {
       const result = await streamChatProvider(provider, prompt, context, (text) => {
@@ -6559,6 +6595,7 @@ async function callTtsProvider(provider, text, body = {}) {
     console.log('[Gaia Assist] TTS provider attempt', { provider: 'elevenlabs', model: ELEVENLABS_MODEL, voice: voiceId, outputFormat: ELEVENLABS_OUTPUT_FORMAT });
     const response = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${encodeURIComponent(voiceId)}?output_format=${encodeURIComponent(ELEVENLABS_OUTPUT_FORMAT)}&optimize_streaming_latency=3`, {
       method: 'POST',
+      signal: deadline('tts'),
       headers: {
         'xi-api-key': process.env.ELEVENLABS_API_KEY,
         Accept: 'audio/mpeg',
@@ -6613,6 +6650,7 @@ async function callTtsProvider(provider, text, body = {}) {
 async function openAiCompatibleTts({ endpoint, apiKey, model, voice, text, speed, provider }) {
   const response = await fetch(endpoint, {
     method: 'POST',
+    signal: deadline('tts'),
     headers: {
       Authorization: `Bearer ${apiKey}`,
       'Content-Type': 'application/json',
@@ -6650,6 +6688,7 @@ async function sttGroq(audioBuffer, mimeType, filename) {
   form.append('model', model);
   const response = await fetch('https://api.groq.com/openai/v1/audio/transcriptions', {
     method: 'POST',
+    signal: deadline('stt'),
     headers: { Authorization: `Bearer ${process.env.GROQ_API_KEY}` },
     body: form,
   });
@@ -6666,6 +6705,7 @@ async function sttElevenLabs(audioBuffer, mimeType, filename) {
   form.append('model_id', model);
   const response = await fetch('https://api.elevenlabs.io/v1/speech-to-text', {
     method: 'POST',
+    signal: deadline('stt'),
     headers: { 'xi-api-key': process.env.ELEVENLABS_API_KEY },
     body: form,
   });
@@ -6683,6 +6723,7 @@ async function sttOpenAi(audioBuffer, mimeType, filename) {
   form.append('language', 'en');
   const response = await fetch('https://api.openai.com/v1/audio/transcriptions', {
     method: 'POST',
+    signal: deadline('stt'),
     headers: { Authorization: `Bearer ${process.env.OPENAI_API_KEY}` },
     body: form,
   });
@@ -6744,6 +6785,7 @@ async function listHostedVoices() {
   }
   try {
     const response = await fetch('https://api.elevenlabs.io/v1/voices', {
+      signal: deadline('catalog'),
       headers: { 'xi-api-key': process.env.ELEVENLABS_API_KEY, Accept: 'application/json' },
     });
     if (!response.ok) throw new Error(`voices ${response.status}`);

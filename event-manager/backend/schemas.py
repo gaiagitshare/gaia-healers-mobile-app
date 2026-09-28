@@ -104,7 +104,9 @@ class Event(EventBase):
     end_at: Optional[str] = None
     server_time: Optional[str] = None   # authoritative now, same format
     created_at: datetime
-    attendee_count: Optional[int] = 0
+    attendee_count: Optional[int] = 0        # people the door will admit
+    blocked_count: Optional[int] = 0         # refunded / cancelled / revoked, kept on the roll
+    roll_rows: Optional[int] = 0             # every row, including the blocked ones
     checked_in_count: Optional[int] = 0
     # Real counts, so the app never has to invent or hardcode them.
     exhibitor_count: Optional[int] = 0

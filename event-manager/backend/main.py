@@ -1044,13 +1044,7 @@ def get_events(
     
     # Add counts
     for event in events:
-        event.attendee_count = db.query(models.Attendee).filter(
-            models.Attendee.event_id == event.id
-        ).count()
-        event.checked_in_count = db.query(models.Attendee).filter(
-            models.Attendee.event_id == event.id,
-            models.Attendee.is_checked_in == True
-        ).count()
+        _apply_roll_counts(event, db)
     
     return events
 
@@ -1113,13 +1107,7 @@ def get_event(
         raise HTTPException(status_code=404, detail="Event not found")
     authz.require_cap(db, current_user, event_id, "event.read")
     
-    event.attendee_count = db.query(models.Attendee).filter(
-        models.Attendee.event_id == event.id
-    ).count()
-    event.checked_in_count = db.query(models.Attendee).filter(
-        models.Attendee.event_id == event.id,
-        models.Attendee.is_checked_in == True
-    ).count()
+    _apply_roll_counts(event, db)
     # Declared on the schema since the stats card was written, but never filled
     # in here, so the card only had a number while something else happened to be
     # loading the whole exhibitor list.
@@ -2073,7 +2061,12 @@ def event_ticket_counts(event_id: int, db: Session = Depends(get_db),
         base[(bt["code"] if bt else "none")] += 1
         for ad in (eff.get("addons") or []):
             addon[ad["code"]] += 1
-    return {"total": len(atts), "checked_in": checked, "not_checked_in": len(atts) - checked,
+    # "total" is every row, which is the right number for a ledger and the wrong
+    # one for a headcount: the blocked rows are still listed here by status, but
+    # nothing should read `total` as the size of the event.
+    _blocked = sum(n for st, n in status.items() if st in TICKET_BLOCKED_STATUSES)
+    return {"total": len(atts), "admitting": len(atts) - _blocked, "blocked": _blocked,
+            "checked_in": checked, "not_checked_in": len(atts) - _blocked - checked,
             "by_base_ticket": dict(base), "by_addon": dict(addon), "by_status": dict(status)}
 
 
@@ -3395,13 +3388,13 @@ def get_dashboard_stats(
     _live_event_ids = db.query(models.Event.id).filter(
         (models.Event.is_archived == False) | (models.Event.is_archived.is_(None))  # noqa: E712
     )
-    total_attendees = db.query(models.Attendee).filter(
-        models.Attendee.event_id.in_(_live_event_ids)
-    ).count()
-    total_checked_in = db.query(models.Attendee).filter(
-        models.Attendee.event_id.in_(_live_event_ids),
-        models.Attendee.is_checked_in == True
-    ).count()
+    # Same rule as every per-event card: a refunded or revoked ticket keeps its
+    # row and is refused at the door, so it is not somebody the event is
+    # expecting. Counting it here is how a headline quietly overstates an event.
+    _live_rolls = [_roll_counts(db, _row[0]) for _row in _live_event_ids.all()]
+    total_attendees = sum(r["admitting"] for r in _live_rolls)
+    total_blocked = sum(r["blocked"] for r in _live_rolls)
+    total_checked_in = sum(r["checked_in"] for r in _live_rolls)
     total_exhibitors = db.query(models.Exhibitor).count()
     total_leads = db.query(models.Lead).count()
     all_attendees = db.query(models.Attendee).all()
@@ -3429,11 +3422,9 @@ def get_dashboard_stats(
             if next_event is None or event.start_date < next_event.start_date:
                 next_event = event
 
-        attendee_count = db.query(models.Attendee).filter(models.Attendee.event_id == event.id).count()
-        checked_in_count = db.query(models.Attendee).filter(
-            models.Attendee.event_id == event.id,
-            models.Attendee.is_checked_in == True
-        ).count()
+        _roll = _roll_counts(db, event.id)
+        attendee_count = _roll["admitting"]
+        checked_in_count = _roll["checked_in"]
         exhibitor_count = db.query(models.Exhibitor).filter(models.Exhibitor.event_id == event.id).count()
         lead_count = db.query(models.Lead).join(models.Exhibitor).filter(
             models.Exhibitor.event_id == event.id
@@ -3448,6 +3439,8 @@ def get_dashboard_stats(
             "status": event_status,
             "days_until": (event.start_date.date() - now.date()).days if event.start_date else None,
             "attendee_count": attendee_count,
+            "blocked_count": _roll["blocked"],
+            "roll_rows": _roll["rows"],
             "checked_in_count": checked_in_count,
             "check_in_rate": round(checked_in_count / attendee_count * 100, 2) if attendee_count > 0 else 0,
             "exhibitor_count": exhibitor_count,
@@ -3461,6 +3454,7 @@ def get_dashboard_stats(
         "live_events": live_events,
         "past_events": past_events,
         "total_attendees": total_attendees,
+        "total_blocked": total_blocked,
         "total_checked_in": total_checked_in,
         "check_in_rate": round(total_checked_in / total_attendees * 100, 2) if total_attendees > 0 else 0,
         "total_exhibitors": total_exhibitors,
@@ -3525,15 +3519,47 @@ def attach_event_times(event: models.Event) -> models.Event:
     return event
 
 
+def _roll_counts(db, event_id: int) -> dict:
+    """How many people is this event actually expecting?
+
+    A row on the roll is not the same as a body through the door. A refunded,
+    cancelled or revoked ticket keeps its row -- deliberately, because the
+    history of a ticket is worth more than the space it saves -- and the door
+    refuses it. Counting rows therefore overstates the event by however many
+    people have pulled out, and does so silently: the number only drifts
+    further from the truth as refunds come in.
+
+    So the headline is who will be ADMITTED, and the blocked rows are reported
+    beside it rather than folded away. Both read the same status list the
+    scanner enforces, so the panel and the door cannot disagree.
+    """
+    rows = db.query(models.Attendee).filter(models.Attendee.event_id == event_id).all()
+    blocked = sum(1 for a in rows if _ticket_status(a) in TICKET_BLOCKED_STATUSES)
+    live = [a for a in rows if _ticket_status(a) not in TICKET_BLOCKED_STATUSES]
+    return {
+        "rows": len(rows),
+        "admitting": len(live),
+        "blocked": blocked,
+        "checked_in": sum(1 for a in live if a.is_checked_in),
+        "staff": sum(1 for a in live if (a.attendance_type or "") == "staff"),
+        "complimentary": sum(1 for a in live if (a.attendance_type or "") == "complimentary"),
+    }
+
+
+def _apply_roll_counts(event, db):
+    _roll = _roll_counts(db, event.id)
+    # attendee_count is what every screen reads, so it is the number that has to
+    # be true: people the door will admit, not rows in a table.
+    event.attendee_count = _roll["admitting"]
+    event.blocked_count = _roll["blocked"]
+    event.roll_rows = _roll["rows"]
+    event.checked_in_count = _roll["checked_in"]
+    return _roll
+
+
 def attach_event_counts(event: models.Event, db: Session) -> models.Event:
     """Real counts for an event. Nothing here is estimated or hardcoded."""
-    event.attendee_count = db.query(models.Attendee).filter(
-        models.Attendee.event_id == event.id
-    ).count()
-    event.checked_in_count = db.query(models.Attendee).filter(
-        models.Attendee.event_id == event.id,
-        models.Attendee.is_checked_in == True
-    ).count()
+    _apply_roll_counts(event, db)
     event.exhibitor_count = db.query(models.Exhibitor).filter(
         models.Exhibitor.event_id == event.id
     ).count()

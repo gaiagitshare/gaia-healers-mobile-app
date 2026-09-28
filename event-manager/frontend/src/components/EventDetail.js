@@ -378,8 +378,14 @@ function EventDetail({ section }) {
                                 Event Stats
                             </Typography>
                             <Typography variant="body1">
-                                <strong>{event.attendee_count}</strong> Registered
+                                <strong>{event.attendee_count}</strong> Admitting
                             </Typography>
+                            {event.blocked_count > 0 && (
+                                <Typography variant="body2" color="text.secondary">
+                                    {event.blocked_count} refunded, cancelled or revoked &mdash; still on the roll,
+                                    refused at the door, not counted above
+                                </Typography>
+                            )}
                             <Typography variant="body1">
                                 <strong>{event.checked_in_count}</strong> Checked In
                             </Typography>

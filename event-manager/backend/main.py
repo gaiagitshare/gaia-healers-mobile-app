@@ -5553,6 +5553,46 @@ def export_attendees(event_id: int, db: Session = Depends(get_db),
     if not authz.can(db, current_user, event_id, "attendee.read"):
         raise HTTPException(status_code=403, detail="Not authorized for this event")
     rows = db.query(models.Attendee).filter(models.Attendee.event_id == event_id).all()
+
+    # What each person actually paid, and through what. Summed rather than read
+    # off acq_price, because an upgrade is a second payment and a refund is a
+    # third -- a single price field quietly misreports all three.
+    money = {}
+    for pay in db.query(models.PaymentEvent).filter(
+            models.PaymentEvent.attendee_id.in_([a.id for a in rows] or [0])).all():
+        m = money.setdefault(pay.attendee_id, {
+            "paid": 0.0, "refunded": 0.0, "currency": "", "providers": [],
+            "sources": [], "funnels": [], "products": [], "first_paid_at": None})
+        status = (pay.status or "").lower()
+        if status == "paid":
+            m["paid"] += float(pay.amount or 0)
+            m["currency"] = m["currency"] or (pay.currency or "").upper()
+            for key, value in (("providers", pay.provider), ("sources", pay.source_type),
+                               ("funnels", pay.funnel_name)):
+                if value and value not in m[key]:
+                    m[key].append(value)
+            # product_names is a JSON column, so it arrives as a list already --
+            # except on rows written before it was, which hold a string.
+            raw = pay.product_names
+            if isinstance(raw, list):
+                names = raw
+            elif isinstance(raw, str) and raw.strip():
+                try:
+                    names = json.loads(raw)
+                except Exception:
+                    names = [raw]
+                if not isinstance(names, list):
+                    names = [str(names)]
+            else:
+                names = []
+            for n in names:
+                if n and n not in m["products"]:
+                    m["products"].append(n)
+            if pay.occurred_at and (m["first_paid_at"] is None or pay.occurred_at < m["first_paid_at"]):
+                m["first_paid_at"] = pay.occurred_at
+        elif status == "refunded":
+            m["refunded"] += float(pay.amount_refunded or pay.amount or 0)
+
     import io as _io
     from fastapi.responses import Response as _Response
     buf = _io.StringIO()
@@ -5561,8 +5601,12 @@ def export_attendees(event_id: int, db: Session = Depends(get_db),
                      "base_ticket", "add_ons", "add_on_day", "effective_access",
                      "registration_status", "checked_in", "checked_in_at",
                      "qr_code", "source", "order_ref",
-                     "gaia_badge_token", "gaia_wallet_link", "gaia_pass", "gaia_pass_includes"])
+                     "gaia_badge_token", "gaia_wallet_link", "gaia_pass", "gaia_pass_includes",
+                     "amount_paid", "currency", "amount_refunded", "paid_at",
+                     "payment_provider", "payment_source", "funnel", "product_purchased",
+                     "door_payment_method", "door_payment_amount"])
     for a in rows:
+        _m = money.get(a.id)
         _eff = _effective_access(db, a)
         _bt = _eff.get("base_ticket") or {}
         _addons = _eff.get("addons") or []
@@ -5579,7 +5623,21 @@ def export_attendees(event_id: int, db: Session = Depends(get_db),
                          # and the wallet link already built out of it.
                          a.public_token or "",
                          (WALLET_LINK_BASE + "/wallet/" + a.public_token) if a.public_token else "",
-                         _pass_display(db, a), _pass_includes(db, a)])
+                         _pass_display(db, a), _pass_includes(db, a),
+                         # The money. Blank rather than 0 where nobody paid, so a
+                         # comp or a volunteer does not read as a failed sale.
+                         ("%.2f" % _m["paid"]) if _m and _m["paid"] else
+                         (("%.2f" % a.acq_price) if a.acq_price else ""),
+                         (_m["currency"] if _m else "") or ("USD" if a.acq_price else ""),
+                         ("%.2f" % _m["refunded"]) if _m and _m["refunded"] else "",
+                         (_m["first_paid_at"].isoformat() if _m and _m["first_paid_at"] else
+                          (a.acq_purchased_at or "")),
+                         "; ".join(_m["providers"]) if _m else "",
+                         "; ".join(_m["sources"]) if _m else (a.registration_source or ""),
+                         ("; ".join(_m["funnels"]) if _m else "") or (a.acq_funnel_name or ""),
+                         ("; ".join(_m["products"]) if _m else "") or (a.acq_product_name or ""),
+                         a.door_payment_method or "",
+                         ("%.2f" % a.door_payment_amount) if a.door_payment_amount else ""])
     db.add(models.ExportAudit(event_id=event_id, user_id=current_user.id, kind="attendees", count=len(rows)))
     db.commit()
     return _Response(content=buf.getvalue(), media_type="text/csv",

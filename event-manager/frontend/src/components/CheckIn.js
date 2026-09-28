@@ -457,6 +457,14 @@ function CheckIn({ timezone: timezoneProp }) {
                         {accessOf(attendee)?.effective_label && (
                             <Typography variant="body2" sx={{ mt: 0.5 }}><strong>{accessOf(attendee).effective_label}</strong></Typography>
                         )}
+                        {attendee.paid_by && (
+                            // The name on the card is not always the name they
+                            // say. Couples buy two tickets on one card, and the
+                            // payer is who they will introduce themselves as.
+                            <Typography variant="caption" sx={{ display: 'block', mt: 0.5, color: 'info.main' }}>
+                                Paid by {attendee.paid_by}
+                            </Typography>
+                        )}
                         {(attendee.registration_source === 'walk_in' || (attendee.attendance_type && attendee.attendance_type !== 'paid')) && (
                             <Stack direction="row" spacing={0.5} sx={{ mt: 0.5 }} flexWrap="wrap" useFlexGap>
                                 {attendee.registration_source === 'walk_in' && <Chip size="small" variant="outlined" label="Walk-in" />}

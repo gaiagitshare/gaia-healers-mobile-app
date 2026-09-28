@@ -227,3 +227,93 @@ test('a notification carries enough to act on and no payload, id or secret', () 
   assert.ok(!/\b\+?\d{10,}\b/.test(msg.text), 'never a phone number');
   assert.ok(msg.text.includes('sub_9f2c'), 'but the subscription reference IS kept — it is how you trace it');
 });
+
+// ── The complete off-site backup ────────────────────────────────────────────
+// The failure this guards against is the comfortable one: a green backup light
+// over an archive that never left the machine, or that cannot be read back.
+// `health()` only overlays components it already lists, so this one is added.
+const backupHealth = (over) => {
+  const h = health();
+  h.components.push({ key: 'full_backup', kind: 'job', ...over });
+  return h;
+};
+
+test('a verified off-site backup raises nothing', () => {
+  const d = detect(backupHealth({
+    state: 'ok', encryptionConfigured: true, offsiteConfigured: true,
+    lastSuccessAt: '2026-09-05T02:04:00Z',
+  }));
+  assert.deepEqual(keys(d), [], 'a backup that reached the far end is not an incident');
+});
+
+test('a backup that never leaves the server is critical, not OK', () => {
+  const d = detect(backupHealth({
+    state: 'degraded', encryptionConfigured: false, offsiteConfigured: false,
+    localNewest: 'gaia-production-2026-09-05.tar.gz',
+  }));
+  assert.deepEqual(keys(d), ['backup:no-offsite']);
+  assert.equal(d[0].severity, 'critical');
+  assert.match(d[0].why, /only on the machine it protects|stored only on the machine/);
+});
+
+test('each backup failure stage names its own distinct incident', () => {
+  const stages = {
+    sqlite_snapshot: 'backup:snapshot-failed',
+    sqlite_integrity: 'backup:database-corrupt',
+    collect_state: 'backup:state-unreadable',
+    archive: 'backup:archive-failed',
+    verify_gzip: 'backup:archive-unreadable',
+    verify_listing: 'backup:archive-incomplete',
+    verify_database_in_archive: 'backup:archive-database-bad',
+    encrypt: 'backup:encryption-failed',
+    upload: 'backup:upload-failed',
+    verify_remote: 'backup:remote-verify-failed',
+  };
+  for (const [stage, key] of Object.entries(stages)) {
+    const d = detect(backupHealth({
+      state: 'failed', lastFailureStage: stage, lastFailureReason: 'reason recorded',
+      encryptionConfigured: true, offsiteConfigured: true,
+    }));
+    assert.deepEqual(keys(d), [key], `${stage} should raise ${key}`);
+    assert.equal(d[0].severity, 'critical');
+  }
+});
+
+test('an unrecognised failure stage still raises, rather than passing silently', () => {
+  const d = detect(backupHealth({
+    state: 'failed', lastFailureStage: 'something_new', encryptionConfigured: true, offsiteConfigured: true,
+  }));
+  assert.deepEqual(keys(d), ['backup:failure']);
+});
+
+test('a backup gone quiet is a warning, and yesterday is still protected', () => {
+  const d = detect(backupHealth({
+    state: 'stale', encryptionConfigured: true, offsiteConfigured: true,
+    lastSuccessAt: '2026-09-02T02:00:00Z',
+  }));
+  assert.deepEqual(keys(d), ['backup:stale']);
+  assert.equal(d[0].severity, 'warning');
+});
+
+test('a failing backup is one incident however many nights it fails', () => {
+  const store = emptyStore();
+  const failing = backupHealth({
+    state: 'failed', lastFailureStage: 'upload', lastFailureReason: 'destination unreachable',
+    encryptionConfigured: true, offsiteConfigured: true,
+  });
+  for (let night = 0; night < 5; night += 1) reconcile(store, detect(failing));
+  assert.equal(store.incidents.length, 1, 'five failed nights are one problem');
+  assert.equal(store.incidents[0].key, 'backup:upload-failed');
+});
+
+test('a backup incident carries no credential, path secret or environment value', () => {
+  const store = emptyStore();
+  reconcile(store, detect(backupHealth({
+    state: 'failed', lastFailureStage: 'upload',
+    lastFailureReason: 'the upload to the off-site destination did not complete',
+    encryptionConfigured: true, offsiteConfigured: true,
+  })));
+  const msg = renderNotification(store.incidents[0], 'opened');
+  assert.ok(!/access[_-]?key|secret|token|password|R2_|rclone\.conf/i.test(msg.text),
+    'a backup alert must never quote what it uses to authenticate');
+});

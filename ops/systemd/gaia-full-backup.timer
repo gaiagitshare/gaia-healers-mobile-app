@@ -1,0 +1,15 @@
+[Unit]
+Description=Daily complete Gaia production backup
+
+[Timer]
+# 02:00, an hour before the event-database snapshot at 03:15, so the two do
+# not contend and the full backup is the first thing the day records.
+OnCalendar=*-*-* 02:00:00
+# A backup missed because the machine was off is a backup that should still
+# happen, not one that waits for tomorrow.
+Persistent=true
+RandomizedDelaySec=300
+AccuracySec=1min
+
+[Install]
+WantedBy=timers.target

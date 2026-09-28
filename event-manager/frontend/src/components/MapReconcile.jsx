@@ -4,7 +4,7 @@ import {
     MenuItem, FormControlLabel, Checkbox, Box, Typography, Alert, Divider,
     CircularProgress,
 } from '@mui/material';
-import { mapReconcilePreview, mapReconcileApply, getTicketTypes } from '../utils/api';
+import { mapReconcilePreview, mapReconcileApply, getTicketTypes, getEvent } from '../utils/api';
 
 /**
  * Map an unmapped GHL product to a ticket type, and replay its history.
@@ -19,6 +19,7 @@ import { mapReconcilePreview, mapReconcileApply, getTicketTypes } from '../utils
  */
 export default function MapReconcile({ eventId, open, onClose, productId, productName, onDone }) {
     const [ticketTypes, setTicketTypes] = useState([]);
+    const [eventInfo, setEventInfo] = useState(null);
     const [ticketTypeId, setTicketTypeId] = useState('');
     const [isUpgrade, setIsUpgrade] = useState(false);
     const [preview, setPreview] = useState(null);
@@ -30,6 +31,9 @@ export default function MapReconcile({ eventId, open, onClose, productId, produc
         if (!open) return;
         setPreview(null); setResult(null); setError(''); setTicketTypeId(''); setIsUpgrade(false);
         getTicketTypes(eventId).then((r) => setTicketTypes(r.data || [])).catch(() => setTicketTypes([]));
+        // This dialog CREATES attendees. Doing that against last year's event
+        // would be quiet and wrong, so it says which one it is writing to.
+        getEvent(eventId).then((r) => setEventInfo(r.data || null)).catch(() => setEventInfo(null));
     }, [open, eventId]);
 
     const runPreview = async () => {
@@ -68,7 +72,16 @@ export default function MapReconcile({ eventId, open, onClose, productId, produc
 
     return (
         <Dialog open={open} onClose={busy ? undefined : onClose} maxWidth="sm" fullWidth>
-            <DialogTitle>Map &amp; Reconcile</DialogTitle>
+            <DialogTitle sx={{ pb: 0.5 }}>
+                Map &amp; Reconcile
+                {eventInfo && (
+                    <Typography variant="caption" sx={{ display: 'block', fontWeight: 600,
+                                color: eventInfo.is_active ? 'text.secondary' : 'error.main' }}>
+                        {eventInfo.is_active ? eventInfo.name
+                            : `${eventInfo.name} — ARCHIVED, do not write to this event`}
+                    </Typography>
+                )}
+            </DialogTitle>
             <DialogContent dividers>
                 <Typography variant="body2" sx={{ mb: 0.5 }}>{productName || 'Unnamed product'}</Typography>
                 <Typography variant="caption" color="text.secondary"

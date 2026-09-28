@@ -96,13 +96,28 @@ export default function Payments() {
                 <Typography variant="caption" color="text.secondary">
                     Read-only from GHL{summary?.last_checked ? ` · checked ${clock(summary.last_checked)}` : ''}
                 </Typography>
+                {(() => {
+                    // Payments for a finished year look like payments for this
+                    // one until you read the numbers, so say which is on screen.
+                    const ev = events.find((e) => String(e.id) === String(eventId));
+                    if (!ev || ev.is_active) return null;
+                    return (
+                        <Typography variant="caption" sx={{ fontWeight: 700, color: 'error.main' }}>
+                            Showing {ev.name} — an archived event
+                        </Typography>
+                    );
+                })()}
             </Stack>
 
             <Paper variant="outlined" sx={{ p: 2, mb: 2 }}>
                 <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1.5} alignItems={{ sm: 'flex-start' }}>
                     <TextField select size="small" label="Event" value={eventId}
                         onChange={(e) => setEventId(e.target.value)} sx={{ minWidth: 250 }}>
-                        {events.map((ev) => <MenuItem key={ev.id} value={String(ev.id)}>{ev.name}</MenuItem>)}
+                        {events.map((ev) => (
+                            <MenuItem key={ev.id} value={String(ev.id)}>
+                                {ev.name}{ev.is_active ? '' : '  · archived'}
+                            </MenuItem>
+                        ))}
                     </TextField>
                     <TextField size="small" label="Search" placeholder="name, email, phone, order or transaction id"
                         value={q} onChange={(e) => setQ(e.target.value)} sx={{ minWidth: 280, flex: 1 }} />

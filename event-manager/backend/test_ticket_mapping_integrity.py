@@ -138,6 +138,39 @@ names97 = {(_n[0] if isinstance(_n, (list, tuple)) else str(_n))
            for _n in (p.product_names for p in paid if abs(float(p.amount or 0) - 97.0) < 0.005)}
 print("     what $97 actually is: %s" % list(names97)[:1])
 
+print("\nONE PRODUCT SOLD UNDER TWO NAMES")
+# GoHighLevel sells several storefront variants through ONE product id. Product
+# 69b463a1... arrives as "GENERAL ADMISSION (EXHIBIT HALL ONLY)" and as
+# "GENERAL ADMISSION + CONFERENCE", and at $104.94 under BOTH names -- so
+# neither the id nor the price can separate them. Only the name can.
+PRODUCT = "69b463a14181e967e2fc2cfe"
+cands = db.query(models.TicketMapping).filter(
+    models.TicketMapping.event_id == EVENT,
+    models.TicketMapping.external_product_id == PRODUCT).all()
+check(len(cands) >= 2, "the product has a mapping for each variant", len(cands))
+pick = main._pick_mapping
+hall = pick(cands, "GENERAL ADMISSION (EXHIBIT HALL ONLY)")
+conf = pick(cands, "GENERAL ADMISSION + CONFERENCE")
+three = pick(cands, "GENERAL ADMISSION (EXHIBIT HALL ONLY + CONFERENCE 3 DAYS)")
+both = pick(cands, "GENERAL ADMISSION (EXHIBIT HALL + CONFERENCE)")
+name_of = lambda m: (db.query(models.TicketType).filter(
+    models.TicketType.id == m.ticket_type_id).first().name if m else None)
+check(name_of(hall) == "General Admission",
+      "exhibit hall only resolves to the hall pass", name_of(hall))
+check(name_of(conf) == "General Admission + Conference",
+      "the conference variant resolves to the conference pass", name_of(conf))
+check(name_of(three) == "General Admission + Conference",
+      "so does the three-day wording", name_of(three))
+check(name_of(both) == "General Admission + Conference",
+      "and the hall+conference wording", name_of(both))
+check(name_of(pick(cands, "")) == "General Admission",
+      "a sale with no name at all falls back, it does not guess upward",
+      name_of(pick(cands, "")))
+# The price is not consulted, and must not be: $104.94 is sold under both names.
+check(name_of(pick(cands, "GENERAL ADMISSION (EXHIBIT HALL ONLY)")) !=
+      name_of(pick(cands, "GENERAL ADMISSION + CONFERENCE")),
+      "two sales at the SAME price resolve differently, by name alone")
+
 print("\nGATE ON LIVE DATA")
 live = main._mapping_audit(db, EVENT)
 errors = [f for f in live if f["severity"] == "error"]

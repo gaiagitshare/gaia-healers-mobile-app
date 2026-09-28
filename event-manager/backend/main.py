@@ -102,6 +102,14 @@ def _ensure_event_columns():
             stmts.append("ALTER TABLE exhibitors ADD COLUMN %s %s" % (_col, _ddl))
     if "door_test_mode" not in cols:
         stmts.append("ALTER TABLE events ADD COLUMN door_test_mode BOOLEAN DEFAULT 0")
+    try:
+        _tm = {c["name"] for c in inspector.get_columns("ticket_mappings")}
+    except Exception:
+        _tm = set()
+    if _tm and "product_name_match" not in _tm:
+        # One GHL product id is sold under several names. Nothing but the name
+        # can tell those variants apart, so a mapping may now require one.
+        stmts.append("ALTER TABLE ticket_mappings ADD COLUMN product_name_match VARCHAR")
     if "allow_reentry" not in cols:
         # Off, exactly as it has always been. A conference where people go out
         # for lunch needs this ON; a single-admission gate needs it OFF. Which
@@ -5052,6 +5060,36 @@ def _mapping_covers(mapping, when):
     return True
 
 
+def _pick_mapping(candidates, product_name=None, when=None):
+    """Which mapping does this sale actually go through?
+
+    A product id used to be enough. It is not: GoHighLevel sells several
+    storefront variants through ONE product, so id 69b463a1... arrives as
+    "GENERAL ADMISSION (EXHIBIT HALL ONLY)" and as "GENERAL ADMISSION +
+    CONFERENCE" at four different prices. One mapping cannot be right for both,
+    and the price cannot separate them either -- $104.94 is sold under both
+    names. Only the name the buyer actually saw can.
+
+    So a mapping may carry `product_name_match`, and a mapping that names a
+    variant beats the one that does not. The unpatterned mapping stays as the
+    fallback, which means adding a variant never changes what anything else did.
+    """
+    usable = [m for m in candidates if _mapping_covers(m, when)]
+    if not usable:
+        return None
+    name = str(product_name or "").upper()
+    if name:
+        specific = [m for m in usable
+                    if (getattr(m, "product_name_match", None) or "").strip()
+                    and str(m.product_name_match).strip().upper() in name]
+        if specific:
+            # The longest pattern is the most specific claim on this name.
+            specific.sort(key=lambda m: -len(str(m.product_name_match).strip()))
+            return specific[0]
+    plain = [m for m in usable if not (getattr(m, "product_name_match", None) or "").strip()]
+    return plain[0] if plain else None
+
+
 def _assert_sale_in_window(db, event, product_id, purchased_at):
     """A sale may only become an attendee of the event whose sales window it
     falls in.
@@ -5122,10 +5160,12 @@ async def registration_webhook(request: FastAPIRequest, db: Session = Depends(ge
         _log_webhook_noop("no_product_id", email, payload)
         return {"ok": True, "created": False, "no_op": True, "reason": "no_product_id",
                 "detail": "No authoritative product id; refusing to infer an event ticket."}
-    _mapping = db.query(models.TicketMapping).filter(
-        models.TicketMapping.external_product_id == str(_product_id).strip(),
-        models.TicketMapping.is_active == True,  # noqa: E712
-    ).first()
+    _sold_name = (_pick(payload, "product_name", "productName", "product") or "")
+    _mapping = _pick_mapping(
+        db.query(models.TicketMapping).filter(
+            models.TicketMapping.external_product_id == str(_product_id).strip(),
+            models.TicketMapping.is_active == True,  # noqa: E712
+        ).all(), _sold_name, payload.get("created_at") or payload.get("date"))
     if not _mapping or (getattr(_mapping, "entitlement_type", "EVENT_TICKET") or "EVENT_TICKET") not in _EVENT_TYPES:
         _log_webhook_noop("unmapped_or_non_event_product", email, payload, product_id=_product_id)
         return {"ok": True, "created": False, "no_op": True, "reason": "unmapped_or_non_event_product",
@@ -7019,12 +7059,15 @@ def _pe_upsert(db, tx, order, mappings, source):
     # years, so a 2025 ticket bought through a product that is still on sale
     # would otherwise be judged against the 2026 roster and reported as money
     # received from somebody with no ticket.
+    _sold_name = None
+    try:
+        _n = pe.product_names if isinstance(pe.product_names, (list, tuple)) else json.loads(pe.product_names or "[]")
+        _sold_name = (_n[0] if _n else None)
+    except Exception:
+        _sold_name = None
     hit = None
     for p in pids:
-        for m in mappings.get(p, []):
-            if _mapping_covers(m, pe.occurred_at):
-                hit = m
-                break
+        hit = _pick_mapping(mappings.get(p, []), _sold_name, pe.occurred_at)
         if hit:
             break
     pe.event_id = hit.event_id if hit else None
@@ -7121,12 +7164,14 @@ def payments_reclassify(db: Session = Depends(get_db),
 
     for pe in rows:
         before = (pe.event_id, pe.recon_state, pe.severity, pe.attendee_id)
+        try:
+            _n = pe.product_names if isinstance(pe.product_names, (list, tuple)) else json.loads(pe.product_names or "[]")
+            _sold_name = (_n[0] if _n else None)
+        except Exception:
+            _sold_name = None
         hit = None
         for p in (pe.product_ids or []):
-            for m in maps.get(p, []):
-                if _mapping_covers(m, pe.occurred_at):
-                    hit = m
-                    break
+            hit = _pick_mapping(maps.get(p, []), _sold_name, pe.occurred_at)
             if hit:
                 break
         pe.event_id = hit.event_id if hit else None

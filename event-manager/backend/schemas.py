@@ -961,6 +961,7 @@ class EventResource(EventResourceBase):
 
 
 class TicketMappingBase(BaseModel):
+    product_name_match: Optional[str] = None
     provider: Optional[str] = "ghl"
     external_product_id: str
     external_price_id: Optional[str] = None
@@ -1008,6 +1009,7 @@ class TicketMappingCreate(TicketMappingBase):
     pass
 
 class TicketMappingUpdate(BaseModel):
+    product_name_match: Optional[str] = None
     external_product_id: Optional[str] = None
     external_price_id: Optional[str] = None
     ticket_type_id: Optional[int] = None

@@ -940,6 +940,10 @@ class TicketMapping(Base):
     label = Column(String)
     checkout_url = Column(String, nullable=True)  # authoritative GHL checkout for this upgrade product
     from_ticket_type_id = Column(Integer, nullable=True)  # per-source upgrade pricing: show only to this current tier
+    # One GHL product may be sold under several names. A mapping that names a
+    # variant wins over the one that does not; the unpatterned mapping stays the
+    # fallback, so adding a variant never changes what anything else did.
+    product_name_match = Column(String, nullable=True)
     # Explicit destination discriminator so separation is DECLARED, not implicit.
     # EVENT_TICKET | EVENT_UPGRADE (only event types are honored by the ticket path).
     entitlement_type = Column(String, default="EVENT_TICKET")

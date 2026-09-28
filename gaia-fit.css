@@ -2322,3 +2322,48 @@ body.gaia-app, body.gaia-v2 { min-height: 100svh; min-height: 100dvh; }
     padding-bottom: max(6rem, calc(92px + env(safe-area-inset-bottom, 0px)));
   }
 }
+
+/* ============================================================
+   Gaia Assist panel (2026-09-28)
+   - Close and minimise sat on top of each other: the 44px tap-target
+     rule widened close, but minimise was still placed for a 36px one.
+   - "Speak naturally" / "Pause listening" only while a live session is
+     actually listening (gaia-assist--live-session, set in gaia-ui.js).
+   - The suggestion chips scroll sideways; fade the edge so the cut-off
+     chip reads as "more this way", not as a layout bug.
+   ============================================================ */
+body.gaia-v2 .gaia-assist__close,
+body.gaia-v2 .gaia-assist__minimize {
+  top: 0.75rem;
+  width: 44px;
+  height: 44px;
+  min-width: 44px;
+  min-height: 44px;
+}
+body.gaia-v2 .gaia-assist__close { right: 0.75rem; }
+body.gaia-v2 .gaia-assist__minimize { right: calc(0.75rem + 44px + 0.5rem); }
+
+body.gaia-v2 .gaia-assist:not(.gaia-assist--live-session) .gaia-assist__hint-line,
+body.gaia-v2 .gaia-assist:not(.gaia-assist--live-session) .gaia-assist__listen-toggle {
+  display: none;
+}
+
+body.gaia-v2 .gaia-assist__chips {
+  padding-right: 2rem;
+  scroll-snap-type: x proximity;
+  -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 2rem), transparent);
+  mask-image: linear-gradient(to right, #000 calc(100% - 2rem), transparent);
+}
+body.gaia-v2 .gaia-assist__chips button { scroll-snap-align: start; }
+
+/* The conversation was capped at 5.5rem (~3 lines), so a spoken answer
+   showed only its last line and the question above it scrolled away.
+   Give it the room, and keep the chips from being squashed by it. */
+body.gaia-v2 .gaia-assist:not(.gaia-assist--minimized):not(.gaia-assist--welcome) .gaia-assist__transcript {
+  max-height: min(36vh, 18rem);
+}
+body.gaia-v2 .gaia-assist__chips { flex-shrink: 0; }
+body.gaia-v2 .gaia-assist:not(.gaia-assist--minimized):not(.gaia-assist--welcome) .gaia-assist__panel {
+  max-height: min(82vh, 42rem);
+  max-height: min(82dvh, 42rem);
+}

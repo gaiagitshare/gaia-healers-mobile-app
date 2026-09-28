@@ -34,7 +34,27 @@ function readEnvFile() {
 // process.env wins, so a runner can supply a single key to turn one of these on.
 const env = { ...readEnvFile(), ...process.env };
 const liveEnv = fs.existsSync(envPath) || Boolean(process.env.GAIA_LIVE_TESTS);
-const apiBase = (env.APP_PUBLIC_API_BASE || 'https://api.gaiahealers.app').replace(/\/+$/, '');
+
+// Talk to the proxy directly, not through nginx.
+//
+// nginx caps /api/assist/ at 30 requests a minute, shared by IP, to protect the
+// paid model quota. A test run makes far more than that: it turns itself red
+// with 503s AND spends a limit that real members are sharing at the time. The
+// local port has no limiter and no TLS handshake, and is the same process.
+const PUBLIC_BASE = (env.APP_PUBLIC_API_BASE || 'https://api.gaiahealers.app').replace(/\/+$/, '');
+const LOCAL_BASE = 'http://127.0.0.1:' + (env.PORT || '8787');
+
+async function reachable(base) {
+  try {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 1500);
+    const r = await fetch(`${base}/api/events/wallet-status`, { signal: controller.signal });
+    clearTimeout(timer);
+    return r.ok;
+  } catch { return false; }
+}
+
+const apiBase = (liveEnv && await reachable(LOCAL_BASE)) ? LOCAL_BASE : PUBLIC_BASE;
 
 /** A test that needs the proxy's own environment and the network. */
 function liveTest(name, fn, requires = []) {

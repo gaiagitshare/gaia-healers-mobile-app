@@ -959,6 +959,10 @@
           localSpeechActive = false;
           speechCandidateAt = 0;
           localSilenceAt = 0;
+          // The gate stops sending here, so Gemini's own end-of-speech detector
+          // is left waiting for audio that never comes — and never answers.
+          // audioStreamEnd tells it the stream has paused and flushes the turn.
+          sendWs({ realtimeInput: { audioStreamEnd: true } });
         }
       };
 
@@ -1086,9 +1090,11 @@
         throw new Error(tokenErrorMessage(payload, response.status));
       }
       cachedToken = payload;
-      // Expire 2 minutes early as a safety margin.
-      const expireMs = payload.expireTime ? new Date(payload.expireTime).getTime() : 0;
-      cachedTokenExpireAt = expireMs ? expireMs - 120000 : Date.now() + 25 * 60 * 1000;
+      // A token lives 30 minutes, but Google only lets it OPEN a session in
+      // the first minute (newSessionExpireTime on the server). A pre-warmed
+      // token older than that is refused, so reuse one for 45 seconds at most.
+      const expireMs = payload.expireTime ? new Date(payload.expireTime).getTime() - 120000 : Infinity;
+      cachedTokenExpireAt = Math.min(expireMs, Date.now() + 45 * 1000);
       return payload;
     }
 

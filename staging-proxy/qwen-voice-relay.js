@@ -115,11 +115,21 @@ export function qwenToBrowser(evt, state = {}) {
       return [{ setupComplete: {} }];
     case 'response.created':
       state.calledTool = false;
+      state.pendingText = '';
       return [];
     case 'response.audio.delta':
       return [{ serverContent: { modelTurn: { parts: [{ inlineData: { mimeType: 'audio/pcm;rate=24000', data: evt.delta } }] } } }];
-    case 'response.audio_transcript.delta':
-      return evt.delta ? [{ serverContent: { outputTranscription: { text: evt.delta } } }] : [];
+    case 'response.audio_transcript.delta': {
+      // Qwen splits words across deltas ("Ga" + "ia Healers."), and the orb
+      // joins Gemini-style pieces with a space, which printed "Ga ia". Send
+      // only whole words, each piece ending in whitespace; hold the fragment
+      // after the last space until the rest of the word arrives.
+      const text = (state.pendingText || '') + (evt.delta || '');
+      const cut = Math.max(text.lastIndexOf(' '), text.lastIndexOf('\n'));
+      if (cut < 0) { state.pendingText = text; return []; }
+      state.pendingText = text.slice(cut + 1);
+      return [{ serverContent: { outputTranscription: { text: text.slice(0, cut + 1) } } }];
+    }
     case 'conversation.item.input_audio_transcription.completed':
       return evt.transcript ? [{ serverContent: { inputTranscription: { text: evt.transcript, finished: true } } }] : [];
     case 'response.function_call_arguments.done': {
@@ -128,10 +138,13 @@ export function qwenToBrowser(evt, state = {}) {
       try { args = JSON.parse(evt.arguments || '{}'); } catch { /* model sent junk: run with none */ }
       return [{ toolCall: { functionCalls: [{ id: evt.call_id, name: evt.name, args }] } }];
     }
-    case 'response.done':
+    case 'response.done': {
+      const tail = state.pendingText ? [{ serverContent: { outputTranscription: { text: state.pendingText } } }] : [];
+      state.pendingText = '';
       // A response that only called a tool is not the end of the turn: the
       // answer comes after the tool result. Gemini sends no turnComplete then.
-      return state.calledTool ? [] : [{ serverContent: { turnComplete: true } }];
+      return state.calledTool ? tail : [...tail, { serverContent: { turnComplete: true } }];
+    }
     default:
       return [];
   }

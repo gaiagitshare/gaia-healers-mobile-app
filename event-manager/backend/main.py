@@ -1685,10 +1685,29 @@ def add_party_seat(event_id: int, attendee_id: int, body: schemas.AddPartySeat,
                            "buyer_attendee": buyer.id}],
         })
     db.add(seat)
+    db.flush()
+    # Hand the seat the payment that bought it. The buyer's surplus tickets are
+    # the ones beyond the first -- the first is their own -- minus any a sibling
+    # seat has already claimed. Stamping it here is what stops the reconciler
+    # taking the money straight back off this badge.
+    claimed = set(_payment_claims(db, event_id))
+    surplus = [pe for pe in db.query(models.PaymentEvent).filter(
+                   models.PaymentEvent.event_id == event_id,
+                   models.PaymentEvent.attendee_id == buyer.id,
+                   models.PaymentEvent.status == "paid").order_by(models.PaymentEvent.id).all()
+               if pe.id not in claimed]
+    mine = surplus[1:2] if len(surplus) > 1 else []
+    if mine:
+        pe = mine[0]
+        cd = dict(seat.custom_data or {})
+        cd["paid_by_payment"] = pe.id
+        seat.custom_data = cd
+        pe.attendee_id = seat.id
     db.commit(); db.refresh(seat)
     _ensure_public_tokens()
     db.refresh(seat)
     return {"ok": True, "attendee_id": seat.id, "qr_code": seat.qr_code,
+            "paid_by_payment": (seat.custom_data or {}).get("paid_by_payment"),
             "name": ("%s %s" % (seat.first_name or "", seat.last_name or "")).strip(),
             "seat": "%d of %d" % (seat_no, party["paid_for"]),
             "door": _door_card(db, seat, event)}
@@ -2564,6 +2583,65 @@ def _conference_grant(tt, addons, today):
 # day. Listed here rather than inferred, so a booking cannot quietly stop being
 # a booking the moment a new source is added.
 PARTY_SEAT_SOURCES = ("rebuilt_seat", "door_seat")
+
+
+def _payment_claims(db, event_id):
+    """{payment_id: attendee_id} for seats that were created FROM a payment.
+
+    Somebody who buys four tickets produces four payments carrying their own
+    email. Matching a payment to "the attendee whose email is the buyer's"
+    therefore collapses all four onto the buyer's badge, and the three people
+    they bought for read as unpaid -- which is exactly what the 2026 roll did.
+
+    A seat that was built from one specific payment records which one, and that
+    is a claim: a deliberate assignment, made once, which must survive every
+    later reconcile. Without this the reconciler silently took the money back
+    off those seats within the minute, every minute.
+    """
+    claims = {}
+    rows = db.query(models.Attendee).filter(
+        models.Attendee.event_id == event_id,
+        models.Attendee.registration_source.in_(PARTY_SEAT_SOURCES)).all()
+    for a in rows:
+        cd = a.custom_data or {}
+        pid = cd.get("paid_by_payment")
+        if pid is None:
+            # The first fourteen seats recorded it inside their lifecycle entry,
+            # before there was a field for it. Read it from there too, so they
+            # keep their money without a migration.
+            for entry in (cd.get("lifecycle") or []):
+                if entry.get("from_payment"):
+                    pid = entry["from_payment"]
+                    break
+        if pid is not None:
+            try:
+                claims[int(pid)] = a.id
+            except (TypeError, ValueError):
+                continue
+    return claims
+
+
+def _attendee_for_payment(db, pe, claims=None):
+    """Whose payment is this?
+
+    A CLAIM beats a guess. If a seat exists because of this exact payment, the
+    payment is theirs and stays theirs. Otherwise fall back to the buyer's email,
+    which is right for the overwhelming majority -- one person, one ticket.
+    """
+    if not pe.event_id:
+        return None
+    if claims is None:
+        claims = _payment_claims(db, pe.event_id)
+    claimed = claims.get(pe.id)
+    if claimed:
+        return db.query(models.Attendee).filter(
+            models.Attendee.id == claimed,
+            models.Attendee.event_id == pe.event_id).first()
+    if not pe.buyer_email:
+        return None
+    return db.query(models.Attendee).filter(
+        models.Attendee.event_id == pe.event_id,
+        func.lower(models.Attendee.email) == pe.buyer_email).first()
 
 
 def _party_members(db, attendee):
@@ -6256,6 +6334,175 @@ def duplicate_event(event_id: int, db: Session = Depends(get_db),
     return new
 
 
+# --- Does what we sold match what the badge opens? ---------------------------
+# A ticket mapping is written by hand, once, and then believed forever. Nothing
+# ever read it back against the product it maps, so "GENERAL ADMISSION +
+# CONFERENCE" could point at a General Admission pass -- which does not include
+# the conference -- and the first time anybody found out would be a person at
+# the conference room door holding a receipt for it.
+#
+# This is the read-back. It takes what the product's NAME sold, takes what the
+# mapped pass actually GRANTS, and reports every place the second is smaller
+# than the first. It reads the names that really appeared on payments as well as
+# the mapping's own label, because a storefront can sell several products, at
+# several prices, through one mapping -- which is exactly how this was missed.
+
+_PROMISE_PATTERNS = (
+    # A product name sells conference access in all of these shapes.
+    ("conference", re.compile(r"\+\s*CONFERENCE|CONFERENCE\s*3\s*DAYS|HALL\s*\+\s*CONFERENCE"
+                              r"|SPEAKER ACCESS|SPEAKER UPGRADE", re.I)),
+    ("workshop",   re.compile(r"WORKSHOP", re.I)),
+    ("vip",        re.compile(r"\bVIP\b", re.I)),
+)
+
+
+# "ELEVATE Upgrade - Workshop to Three-Day" names the tier it comes FROM as well
+# as the one it sells. Only the second half is a promise; reading the whole label
+# accuses the mapping of selling a workshop it never offered.
+_UPGRADE_LABEL = re.compile(r"^\s*.*?upgrade\s*[-\u2013:]\s*(.+?)\s+to\s+(.+?)\s*$", re.I)
+
+
+def _product_promises(name: str, is_upgrade: bool = False) -> set:
+    """What the wording of a product name sells, as plain entitlement words."""
+    text = str(name or "")
+    if is_upgrade:
+        m = _UPGRADE_LABEL.match(text)
+        if m:
+            text = m.group(2)
+    return {word for word, pattern in _PROMISE_PATTERNS if pattern.search(text)}
+
+
+def _pass_grants(tt) -> set:
+    """What a ticket type actually opens, in those same words."""
+    out = set()
+    if tt is None:
+        return out
+    if getattr(tt, "grants_conference", False):
+        out.add("conference")
+    if getattr(tt, "grants_workshops", False):
+        out.add("workshop")
+    if getattr(tt, "is_vip", False):
+        out.add("vip")
+    return out
+
+
+def _mapping_audit(db, event_id: int):
+    """Every way a mapping can quietly sell something the badge will not open.
+
+    Returns a list of findings, worst first. An `error` is somebody who paid for
+    access they do not have; a `warning` is a mapping that cannot be checked or
+    that gives away more than it sold.
+    """
+    maps = db.query(models.TicketMapping).filter(
+        models.TicketMapping.event_id == event_id).all()
+    types = {t.id: t for t in db.query(models.TicketType).filter(
+        models.TicketType.event_id == event_id).all()}
+
+    # Which product names actually came through each mapping, and how many
+    # people they represent. The name on a real payment is the thing the buyer
+    # saw; the mapping's label is only what somebody typed here.
+    sold = {}
+    by_pid = {m.external_product_id: m for m in maps if m.external_product_id}
+    for pay in db.query(models.PaymentEvent).filter(
+            models.PaymentEvent.event_id == event_id,
+            models.PaymentEvent.status == "paid").all():
+        def _list(v):
+            # The column is declared JSON, so SQLAlchemy may hand back a list
+            # already; older rows arrive as the raw string. Reading only one of
+            # the two shapes is what made this audit report nothing at all.
+            if isinstance(v, (list, tuple)):
+                return list(v)
+            try:
+                out = json.loads(v or "[]")
+            except Exception:
+                return []
+            return out if isinstance(out, list) else [out]
+        pids, names = _list(pay.product_ids), _list(pay.product_names)
+        mapping = next((by_pid[x] for x in pids if x in by_pid), None)
+        if not mapping:
+            continue
+        name = (names[0] if names else "") or ""
+        entry = sold.setdefault((mapping.id, name), {"payments": 0, "attendees": set(), "amounts": set()})
+        entry["payments"] += 1
+        entry["amounts"].add(float(pay.amount or 0))
+        if pay.attendee_id:
+            entry["attendees"].add(pay.attendee_id)
+
+    findings = []
+
+    def add(severity, kind, mapping, detail, **extra):
+        row = {"severity": severity, "kind": kind,
+               "mapping_id": mapping.id if mapping is not None else None,
+               "label": (mapping.label if mapping is not None else None),
+               "ticket_type": (types.get(mapping.ticket_type_id).name
+                               if mapping is not None and types.get(mapping.ticket_type_id) else None),
+               "detail": detail}
+        row.update(extra)
+        findings.append(row)
+
+    for mapping in maps:
+        tt = types.get(mapping.ticket_type_id)
+        if tt is None:
+            add("error", "unmapped_pass", mapping,
+                "This mapping does not point at a pass that belongs to this event, so a sale "
+                "through it cannot be given any access at all.")
+            continue
+        granted = _pass_grants(tt)
+
+        # The mapping's own label, and every product name that really sold through it.
+        checked = [(mapping.label or "", None)]
+        checked += [(name, sold[(mid, name)]) for (mid, name) in sold if mid == mapping.id]
+        for name, usage in checked:
+            missing = _product_promises(name, mapping.is_upgrade) - granted
+            if not missing:
+                continue
+            where = ("its own label" if usage is None
+                     else "%d paid %s" % (usage["payments"],
+                                          "payment" if usage["payments"] == 1 else "payments"))
+            add("error" if usage else "warning", "sold_but_not_granted", mapping,
+                "\u201c%s\u201d sells %s; the %s pass it maps to does not include %s. "
+                "Anybody who bought it will be refused at that door."
+                % (name.strip(), " and ".join(sorted(missing)), tt.name, " or ".join(sorted(missing))),
+                product_name=name.strip(),
+                promised=sorted(_product_promises(name, mapping.is_upgrade)),
+                granted=sorted(granted), missing=sorted(missing),
+                payments=(usage["payments"] if usage else 0),
+                people=sorted(usage["attendees"]) if usage else [],
+                amounts=sorted(usage["amounts"]) if usage else [],
+                seen_in=where)
+
+        # An upgrade has to go somewhere better than where it came from.
+        if mapping.is_upgrade and mapping.from_ticket_type_id:
+            src = types.get(mapping.from_ticket_type_id)
+            if src is not None and (tt.upgrade_rank or 0) <= (src.upgrade_rank or 0):
+                add("warning", "upgrade_not_upward", mapping,
+                    "This is sold as an upgrade from %s to %s, which is not a better pass."
+                    % (src.name, tt.name))
+
+    order = {"error": 0, "warning": 1}
+    findings.sort(key=lambda f: (order.get(f["severity"], 2), -(f.get("payments") or 0)))
+    return findings
+
+
+@app.get("/events/{event_id}/ticket-mapping-audit")
+def ticket_mapping_audit(event_id: int, db: Session = Depends(get_db),
+                         current_user: models.User = Depends(get_current_user)):
+    """Read every mapping back against the product it maps, and say what is wrong.
+
+    Worth running after any storefront change, and worth reading before an event
+    opens: it is the only thing standing between a renamed product and a person
+    being refused at a door they paid for.
+    """
+    _get_event_or_404(event_id, db)
+    authz.require_cap(db, current_user, event_id, "event.read")
+    findings = _mapping_audit(db, event_id)
+    return {"event_id": event_id,
+            "errors": sum(1 for f in findings if f["severity"] == "error"),
+            "warnings": sum(1 for f in findings if f["severity"] == "warning"),
+            "people_affected": sorted({p for f in findings for p in (f.get("people") or [])}),
+            "findings": findings}
+
+
 @app.get("/events/{event_id}/ticket-mappings", response_model=List[schemas.TicketMapping])
 def list_ticket_mappings(event_id: int, db: Session = Depends(get_db),
                          current_user: models.User = Depends(get_current_user)):
@@ -6782,11 +7029,7 @@ def _pe_upsert(db, tx, order, mappings, source):
             break
     pe.event_id = hit.event_id if hit else None
 
-    attendee = None
-    if pe.event_id and pe.buyer_email:
-        attendee = db.query(models.Attendee).filter(
-            models.Attendee.event_id == pe.event_id,
-            func.lower(models.Attendee.email) == pe.buyer_email).first()
+    attendee = _attendee_for_payment(db, pe)
     pe.attendee_id = attendee.id if attendee else None
     active = bool(attendee and _ticket_active(attendee))
     # Did this buyer get money through for this event by any route? A card that
@@ -6872,6 +7115,9 @@ def payments_reclassify(db: Session = Depends(get_db),
     for r in rows:
         if r.event_id and r.buyer_email and r.status in payments.PAID:
             paid_by_event.setdefault(r.event_id, set()).add(r.buyer_email)
+    # Built once per sweep rather than per payment: the sweep walks every
+    # payment this system has ever seen.
+    _claims_by_event = {}
 
     for pe in rows:
         before = (pe.event_id, pe.recon_state, pe.severity, pe.attendee_id)
@@ -6884,11 +7130,9 @@ def payments_reclassify(db: Session = Depends(get_db),
             if hit:
                 break
         pe.event_id = hit.event_id if hit else None
-        attendee = None
-        if pe.event_id and pe.buyer_email:
-            attendee = db.query(models.Attendee).filter(
-                models.Attendee.event_id == pe.event_id,
-                func.lower(models.Attendee.email) == pe.buyer_email).first()
+        if pe.event_id not in _claims_by_event:
+            _claims_by_event[pe.event_id] = _payment_claims(db, pe.event_id) if pe.event_id else {}
+        attendee = _attendee_for_payment(db, pe, _claims_by_event[pe.event_id])
         pe.attendee_id = attendee.id if attendee else None
         active = bool(attendee and _ticket_active(attendee))
         person_paid = (pe.status not in payments.PAID and pe.buyer_email

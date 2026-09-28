@@ -287,6 +287,9 @@ export const createTicketType = (eventId, data) => api.post(`/events/${eventId}/
 export const updateTicketType = (id, data) => api.put(`/ticket-types/${id}`, data);
 export const deleteTicketType = (id) => api.delete(`/ticket-types/${id}`);
 export const getTicketMappings = (eventId) => api.get(`/events/${eventId}/ticket-mappings`);
+// Reads every mapping back against the product it maps, so a renamed or
+// re-pointed product cannot quietly sell access the badge will not open.
+export const getTicketMappingAudit = (eventId) => api.get(`/events/${eventId}/ticket-mapping-audit`);
 export const createTicketMapping = (eventId, data) => api.post(`/events/${eventId}/ticket-mappings`, data);
 export const updateTicketMapping = (id, data) => api.put(`/ticket-mappings/${id}`, data);
 export const deleteTicketMapping = (id) => api.delete(`/ticket-mappings/${id}`);

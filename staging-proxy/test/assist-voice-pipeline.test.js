@@ -15,21 +15,8 @@
  *   node --test test/assist-voice-pipeline.test.js
  */
 import assert from 'node:assert';
-import fs from 'node:fs';
-import path from 'node:path';
-import test from 'node:test';
-import { fileURLToPath } from 'node:url';
+import { env, apiBase as BASE, liveTest } from './_live-env.js';
 
-const here = path.dirname(fileURLToPath(import.meta.url));
-const env = {};
-for (const line of fs.readFileSync(path.join(here, '..', '.env'), 'utf8').split('\n')) {
-  const s = line.trim();
-  if (s && !s.startsWith('#') && s.includes('=')) {
-    const i = s.indexOf('=');
-    env[s.slice(0, i).trim()] = s.slice(i + 1).trim().replace(/^["']|["']$/g, '');
-  }
-}
-const BASE = env.APP_PUBLIC_API_BASE || 'https://api.gaiahealers.app';
 const turn = (body) => fetch(`${BASE}/api/assist/voice/turn`, {
   method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
 });
@@ -48,7 +35,7 @@ async function spokenClip() {
   return clip;
 }
 
-test('a spoken question comes back transcribed, answered and spoken', async () => {
+liveTest('a spoken question comes back transcribed, answered and spoken', async () => {
   const r = await turn({ audioBase64: await spokenClip(), mimeType: 'audio/mpeg', view: 'events' });
   assert.strictEqual(r.status, 200);
   const body = await r.json();
@@ -57,9 +44,9 @@ test('a spoken question comes back transcribed, answered and spoken', async () =
   assert.ok(body.reply && body.reply.length > 3, 'no reply came back');
   assert.ok(body.audioBase64, 'the reply was never spoken');
   assert.ok(Buffer.from(body.audioBase64, 'base64').length > 1000, 'the spoken reply is too small to be audio');
-});
+}, ['GROQ_API_KEY']);
 
-test('and says which provider served each leg', async () => {
+liveTest('and says which provider served each leg', async () => {
   const body = await (await turn({ audioBase64: await spokenClip(), mimeType: 'audio/mpeg' })).json();
   assert.ok(body.providers?.stt, 'no speech-to-text provider named');
   assert.ok(body.providers?.llm, 'no language model named');
@@ -67,16 +54,16 @@ test('and says which provider served each leg', async () => {
   for (const leg of ['sttMs', 'llmMs', 'ttsMs', 'totalMs']) {
     assert.ok(Number.isFinite(body.timings?.[leg]), `${leg} was not measured`);
   }
-});
+}, ['GROQ_API_KEY']);
 
-test('an empty request names the stage rather than just failing', async () => {
+liveTest('an empty request names the stage rather than just failing', async () => {
   const body = await (await turn({})).json();
   assert.strictEqual(body.ok, false);
   assert.strictEqual(body.stage, 'transcribe');
   assert.match(String(body.reason), /audioBase64/);
-});
+}, ['GROQ_API_KEY']);
 
-test('audio nobody could transcribe is reported, with every provider tried', async () => {
+liveTest('audio nobody could transcribe is reported, with every provider tried', async () => {
   const body = await (await turn({
     audioBase64: Buffer.from('this is not audio').toString('base64'),
     mimeType: 'audio/webm',
@@ -86,11 +73,11 @@ test('audio nobody could transcribe is reported, with every provider tried', asy
   const tried = (body.attempts || []).map((a) => a.provider);
   assert.ok(tried.length >= 2,
     `only ${tried.join(', ') || 'nothing'} was tried — a single STT outage would take voice down`);
-});
+}, ['GROQ_API_KEY']);
 
-test('speech-to-text prefers the provider that is fastest and free to us', async () => {
+liveTest('speech-to-text prefers the provider that is fastest and free to us', async () => {
   const order = (env.STT_PROVIDER_ORDER || 'groq,elevenlabs,openai').split(',').map((s) => s.trim());
   assert.strictEqual(order[0], 'groq',
     'Groq whisper answers in ~250ms on a key we already hold; anything else first costs money or time');
   assert.ok(order.length >= 2, 'a single speech-to-text provider is a single point of failure');
-});
+}, ['GROQ_API_KEY']);

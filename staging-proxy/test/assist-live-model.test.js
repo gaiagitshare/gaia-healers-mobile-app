@@ -14,21 +14,7 @@
  *   node --test test/assist-live-model.test.js
  */
 import assert from 'node:assert';
-import fs from 'node:fs';
-import path from 'node:path';
-import test from 'node:test';
-import { fileURLToPath } from 'node:url';
-
-const here = path.dirname(fileURLToPath(import.meta.url));
-const env = {};
-for (const line of fs.readFileSync(path.join(here, '..', '.env'), 'utf8').split('\n')) {
-  const s = line.trim();
-  if (s && !s.startsWith('#') && s.includes('=')) {
-    const i = s.indexOf('=');
-    env[s.slice(0, i).trim()] = s.slice(i + 1).trim().replace(/^["']|["']$/g, '');
-  }
-}
-const BASE = env.APP_PUBLIC_API_BASE || 'https://api.gaiahealers.app';
+import { env, apiBase as BASE, liveTest } from './_live-env.js';
 
 async function catalogue() {
   const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${encodeURIComponent(env.GEMINI_API_KEY)}&pageSize=200`);
@@ -37,22 +23,22 @@ async function catalogue() {
   return new Set((body.models || []).map((m) => String(m.name || '').replace(/^models\//, '')));
 }
 
-test('a stable live model is pinned behind the preview one', () => {
+liveTest('a stable live model is pinned behind the preview one', () => {
   const fallback = env.GEMINI_LIVE_FALLBACK_MODEL;
   assert.ok(fallback, 'GEMINI_LIVE_FALLBACK_MODEL is not set');
   assert.ok(!/preview/i.test(fallback),
     `the fallback is itself a preview model (${fallback}) — it can be withdrawn too`);
   assert.notStrictEqual(fallback, env.GEMINI_LIVE_MODEL,
     'the fallback is the same model as the primary, so it is not a fallback');
-});
+}, ['GEMINI_API_KEY']);
 
-test('the fallback model actually exists in this account', async () => {
+liveTest('the fallback model actually exists in this account', async () => {
   const models = await catalogue();
   assert.ok(models.has(env.GEMINI_LIVE_FALLBACK_MODEL),
     `${env.GEMINI_LIVE_FALLBACK_MODEL} is not offered to this API key`);
-});
+}, ['GEMINI_API_KEY']);
 
-test('the token endpoint only hands out a model that exists', async () => {
+liveTest('the token endpoint only hands out a model that exists', async () => {
   const r = await fetch(`${BASE}/api/assist/voice/token`);
   assert.strictEqual(r.status, 200, `token endpoint returned ${r.status}`);
   const body = await r.json();
@@ -60,9 +46,9 @@ test('the token endpoint only hands out a model that exists', async () => {
   const models = await catalogue();
   assert.ok(models.has(body.model),
     `the browser was handed "${body.model}", which is not in the catalogue — the socket would refuse it`);
-});
+}, ['GEMINI_API_KEY']);
 
-test('and names the spare, unless it is already serving it', async () => {
+liveTest('and names the spare, unless it is already serving it', async () => {
   const body = await (await fetch(`${BASE}/api/assist/voice/token`)).json();
   if (body.model === env.GEMINI_LIVE_FALLBACK_MODEL) {
     assert.strictEqual(body.fallbackModel, '', 'no spare should be named when already on the spare');
@@ -70,4 +56,4 @@ test('and names the spare, unless it is already serving it', async () => {
     assert.strictEqual(body.fallbackModel, env.GEMINI_LIVE_FALLBACK_MODEL,
       'the client is not told which model to fall back to');
   }
-});
+}, ['GEMINI_API_KEY']);

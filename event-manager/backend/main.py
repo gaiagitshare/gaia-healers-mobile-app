@@ -1021,7 +1021,12 @@ def get_events(
         query = query.join(models.EventRole, models.EventRole.event_id == models.Event.id).filter(
             models.EventRole.user_id == current_user.id
         ).distinct()
-    events = query.offset(skip).limit(limit).all()
+    # Live events first, then most recent. Without an order this came back in
+    # primary-key order, which puts a 2025 event that is over above the 2026 one
+    # that is not -- and an archived roll is the easiest thing in here to act on
+    # by mistake.
+    events = query.order_by(models.Event.is_active.desc(),
+                            models.Event.start_date.desc()).offset(skip).limit(limit).all()
     
     # Add counts
     for event in events:
@@ -2147,6 +2152,12 @@ def _pass_display(db, attendee) -> str:
         if names and not any(n.lower() in label.lower() for n in names):
             label = "%s \u2014 %s only" % (label, " and ".join(names))
     return label
+
+
+def _slug(text: str) -> str:
+    """A file name somebody can recognise a week later."""
+    out = re.sub(r"[^a-z0-9]+", "-", str(text or "").lower()).strip("-")
+    return out[:60] or "event"
 
 
 def _pass_includes(db, attendee, event=None) -> str:
@@ -5549,7 +5560,7 @@ def export_attendees(event_id: int, db: Session = Depends(get_db),
                      current_user: models.User = Depends(get_current_user)):
     """Attendee CSV. Every export is written to the audit trail so who took the
     data — and how much — is always recoverable."""
-    _get_event_or_404(event_id, db)
+    _ev = _get_event_or_404(event_id, db)
     if not authz.can(db, current_user, event_id, "attendee.read"):
         raise HTTPException(status_code=403, detail="Not authorized for this event")
     rows = db.query(models.Attendee).filter(models.Attendee.event_id == event_id).all()
@@ -5641,7 +5652,10 @@ def export_attendees(event_id: int, db: Session = Depends(get_db),
     db.add(models.ExportAudit(event_id=event_id, user_id=current_user.id, kind="attendees", count=len(rows)))
     db.commit()
     return _Response(content=buf.getvalue(), media_type="text/csv",
-                     headers={"Content-Disposition": f'attachment; filename="attendees_event_{event_id}.csv"'})
+                     headers={"Content-Disposition":
+                              'attachment; filename="%s-attendees-%s.csv"'
+                              % (_slug(_ev.name or ("event-%d" % event_id)),
+                                 datetime.utcnow().date().isoformat())})
 
 
 @app.get("/events/{event_id}/exports")

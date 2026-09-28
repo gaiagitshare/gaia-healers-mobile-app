@@ -22,7 +22,7 @@ import {
     generateBadge, importAttendees, searchAttendees, getTicketTypes, exportAttendees,
     revokeAttendee, reinstateAttendee, changePass, setAddonDay,
     getAcquisitionReport, getDoorReport, getUnmappedSales, dismissUnmappedSale,
-    getTicketMetrics, undoCheckIn} from '../utils/api';
+    getTicketMetrics, undoCheckIn, getEvent} from '../utils/api';
 import MapReconcile from './MapReconcile';
 import BadgeLabelDialog, { savedLabelSize, savedStation } from './BadgeLabelDialog';
 import { formatVenueTime, STATUS_LABELS, statusLabel } from '../utils/datetime';
@@ -53,6 +53,7 @@ function Attendees({ timezone }) {
     const [importFile, setImportFile] = useState(null);
     const [markPaidMember, setMarkPaidMember] = useState(true);
     const [importSource, setImportSource] = useState('paid_member_csv');
+    const [eventInfo, setEventInfo] = useState(null);
     const [importResult, setImportResult] = useState(null);
     const [importing, setImporting] = useState(false);
     const [query, setQuery] = useState('');
@@ -121,6 +122,10 @@ function Attendees({ timezone }) {
         setAttendees([]); setResults(null); setQuery(''); setEditing(null); setConfirmDelete(null);
         loadAttendees(); loadCounts();
         getTicketTypes(eventId).then((r) => setTicketTypes(r.data || [])).catch(() => setTicketTypes([]));
+        // Which event this roll belongs to. The page said only "Attendees", so an
+        // archived year and the live one looked identical -- and an export of the
+        // wrong 368 people looks exactly like a broken export of the right 350.
+        getEvent(eventId).then((r) => setEventInfo(r.data || null)).catch(() => setEventInfo(null));
     }, [eventId]);
 
     useEffect(() => {
@@ -236,7 +241,11 @@ function Attendees({ timezone }) {
         try {
             const res = await exportAttendees(eventId);
             const url = window.URL.createObjectURL(new Blob([res.data], { type: 'text/csv' }));
-            const a = document.createElement('a'); a.href = url; a.download = `attendees_event_${eventId}.csv`;
+            // attendees_event_2.csv tells nobody anything; the name does.
+            const slug = String((eventInfo && eventInfo.name) || `event_${eventId}`)
+                .toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 60);
+            const stamp = new Date().toISOString().slice(0, 10);
+            const a = document.createElement('a'); a.href = url; a.download = `${slug}-attendees-${stamp}.csv`;
             document.body.appendChild(a); a.click(); a.remove(); window.URL.revokeObjectURL(url);
         } catch (e) { /* no-op */ }
     };
@@ -496,7 +505,18 @@ function Attendees({ timezone }) {
             <Box display="flex" justifyContent="space-between" alignItems={{ xs: 'stretch', sm: 'flex-start' }}
                 flexDirection={{ xs: 'column', sm: 'row' }} gap={1} mb={1.5}>
                 <Box sx={{ minWidth: 0 }}>
-                    <Typography variant="h5" sx={{ fontWeight: 600 }}>Attendees</Typography>
+                    <Box display="flex" alignItems="center" gap={1} flexWrap="wrap">
+                        <Typography variant="h5" sx={{ fontWeight: 600 }}>Attendees</Typography>
+                        {eventInfo && !eventInfo.is_active && (
+                            <Chip size="small" color="warning" label="Archived event" />
+                        )}
+                    </Box>
+                    {eventInfo && (
+                        <Typography variant="body2" sx={{ fontWeight: 600,
+                            color: eventInfo.is_active ? 'text.secondary' : 'warning.main' }}>
+                            {eventInfo.name}
+                        </Typography>
+                    )}
                     {counts && (
                         <>
                             <Typography variant="body2" color="text.secondary" sx={{ mt: 0.25 }}>

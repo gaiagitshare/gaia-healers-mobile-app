@@ -1018,6 +1018,11 @@ function Attendees({ timezone }) {
                         <Paper key={attendee.id} variant="outlined" sx={{ p: 2 }}>
                             <Typography variant="subtitle1" sx={{ fontWeight: 600 }}>{attendee.first_name} {attendee.last_name}</Typography>
                             <Typography variant="body2" color="text.secondary" sx={{ wordBreak: 'break-all' }}>{attendee.email}</Typography>
+                            {attendee.paid_by && (
+                                <Typography variant="caption" sx={{ display: 'block', color: 'info.main' }}>
+                                    Paid by {attendee.paid_by}
+                                </Typography>
+                            )}
                             {attendee.phone && <Typography variant="body2" color="text.secondary">{attendee.phone}</Typography>}
                             <Box sx={{ mt: 1 }}>{accessCell(attendee)}</Box>
                             <Stack direction="row" spacing={0.5} flexWrap="wrap" useFlexGap sx={{ mt: 1 }}>

@@ -2374,6 +2374,30 @@
       error: 'Voice unavailable — type your question',
     };
 
+    // When the live socket cannot be opened the orb becomes hold-to-talk. That
+    // is a different gesture, so it needs different words: a member who is
+    // told "tap to start" will tap, get a quarter-second of nothing, and
+    // conclude the assistant is broken.
+    const PIPELINE_STATUS_COPY = {
+      idle: 'Hold Gaia and speak, then let go',
+      ready: 'Hold Gaia and speak, then let go',
+      connecting: 'Starting…',
+      holding: 'Listening… let go when you finish',
+      listening: 'Listening… let go when you finish',
+      thinking: 'Gaia is thinking…',
+      speaking: 'Gaia is speaking…',
+      error: 'Voice unavailable — type your question',
+    };
+
+    function inPipelineMode() {
+      return Boolean(realtimeVoice && realtimeVoice.pipelineMode);
+    }
+
+    function statusCopy(state) {
+      const table = inPipelineMode() ? PIPELINE_STATUS_COPY : REALTIME_STATUS_COPY;
+      return table[state] || table.idle;
+    }
+
     function showPassiveWelcome() {
       if (passiveWelcomeShown || sessionStorage.getItem(ASSIST_WELCOME_KEY) === '1') return;
       if (!document.body.classList.contains('gaia-v2')) return;
@@ -2494,7 +2518,39 @@
       if (root.dataset.gaiaAssistDockBound) return;
       root.dataset.gaiaAssistDockBound = '1';
 
+      // Hold-to-talk, but only once the live socket has been given up on.
+      // In live mode the orb is a TAP and the microphone stays open; in
+      // pipeline mode it is a HOLD, because each press is one whole turn.
+      let holdingOrb = false;
+
+      const handleAssistPress = (event) => {
+        if (!inPipelineMode()) return;
+        const button = event.target.closest('[data-gaia-tab-assist]');
+        if (!button) return;
+        event.preventDefault();
+        event.stopPropagation();
+        holdingOrb = true;
+        root.classList.add('gaia-assist--holding-orb');
+        setOpen(true);
+        try { realtimeVoice.holdStart(); } catch (_) {}
+      };
+
+      const releaseOrb = () => {
+        if (!holdingOrb) return;
+        holdingOrb = false;
+        root.classList.remove('gaia-assist--holding-orb');
+        try { realtimeVoice.holdEnd(); } catch (_) {}
+      };
+
       const handleAssistTap = (event) => {
+        // A release that ends a hold is not a tap, and must not toggle the
+        // session off underneath the turn that is about to be sent.
+        if (holdingOrb) {
+          event.preventDefault();
+          event.stopPropagation();
+          releaseOrb();
+          return;
+        }
         const button = event.target.closest('[data-gaia-tab-assist]');
         if (!button) return;
         event.preventDefault();
@@ -2502,7 +2558,12 @@
         void onAssistTap();
       };
 
+      document.addEventListener('pointerdown', handleAssistPress, { capture: true, passive: false });
       document.addEventListener('pointerup', handleAssistTap, { capture: true, passive: false });
+      // A finger that slides off the orb, or a call arriving mid-sentence,
+      // still ends the turn rather than leaving the recorder running.
+      document.addEventListener('pointercancel', releaseOrb, { capture: true });
+      window.addEventListener('blur', releaseOrb);
       document.addEventListener('click', (event) => {
         if (!event.target.closest('[data-gaia-tab-assist]')) return;
         event.preventDefault();
@@ -2694,7 +2755,8 @@
       realtimeVoice = window.GaiaRealtimeVoice.create();
       realtimeVoice.on('status', (nextStatus) => {
         setRealtimeVoiceProvider();
-        setAssistVoiceState(nextStatus, REALTIME_STATUS_COPY[nextStatus] || REALTIME_STATUS_COPY.idle);
+        root.classList.toggle('gaia-assist--pipeline', inPipelineMode());
+        setAssistVoiceState(nextStatus, statusCopy(nextStatus));
         if (nextStatus === 'speaking') {
           void realtimeVoice.resumePlayback();
         }

@@ -1,4 +1,4 @@
-const CACHE_NAME = 'gaia-healers-20260925d-wallet';
+const CACHE_NAME = 'gaia-healers-20260928c-holdtalk';
 /**
  * Precache ONLY what the page requests by exactly this URL.
  *

@@ -394,6 +394,93 @@ function gaiaKnowledgePrompt(event) {
   ].join('\n');
 }
 
+// A plain page for a link clicked out of an e-mail: no app, no bundle, no
+// session — somebody standing in a hotel lobby with one bar of signal.
+function walletPage({ title = 'Your ticket', body = '' } = {}) {
+  const esc = (v) => String(v || '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+  return `<!doctype html><html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1"><title>${esc(title)} · Gaia Healers</title>
+<style>body{margin:0;min-height:100vh;display:grid;place-items:center;padding:24px;
+background:#0a160e;color:#ecf3e9;font:16px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",system-ui,sans-serif}
+main{max-width:30rem;text-align:center}h1{font-size:1.4rem;margin:0 0 12px}
+p{margin:0 0 18px;color:#a6b1a3}a{display:inline-block;min-height:44px;line-height:44px;padding:0 20px;
+border-radius:999px;background:#a6ed68;color:#0d1a06;font-weight:700;text-decoration:none}</style></head>
+<body><main><h1>${esc(title)}</h1><p>${esc(body)}</p>
+<a href="${APP_PUBLIC_URL}">Open the Gaia Healers app</a></main></body></html>`;
+}
+
+function eventDateLine(startIso = '', endIso = '') {
+  const m = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+  const a = startIso ? new Date(startIso) : null;
+  const b = endIso ? new Date(endIso) : null;
+  if (!a || Number.isNaN(a.getTime())) return '';
+  if (!b || Number.isNaN(b.getTime())) return `${m[a.getMonth()]} ${a.getDate()}, ${a.getFullYear()}`;
+  if (a.getMonth() === b.getMonth() && a.getFullYear() === b.getFullYear()) {
+    return `${m[a.getMonth()]} ${a.getDate()}–${b.getDate()}, ${a.getFullYear()}`;
+  }
+  return `${m[a.getMonth()]} ${a.getDate()} – ${m[b.getMonth()]} ${b.getDate()}, ${b.getFullYear()}`;
+}
+
+// The ticket somebody opens from an e-mail. It has to work for a person who
+// has never opened the app, on a phone, possibly on hotel wifi at the door —
+// so it is one self-contained page with the code already on it, nothing to
+// sign into and nothing to load.
+function ticketPage(t, { walletUrl = '' } = {}) {
+  const esc = (v) => String(v == null ? '' : v).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+  const name = [t.first_name, t.last_name].filter(Boolean).join(' ');
+  const when = eventDateLine(t.start_date, t.end_date);
+  return `<!doctype html><html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>${esc(name)} · Your ticket</title>
+<style>
+  :root{color-scheme:dark}
+  *{box-sizing:border-box}
+  body{margin:0;min-height:100vh;padding:24px 16px;background:#0a160e;color:#ecf3e9;
+       font:16px/1.55 -apple-system,BlinkMacSystemFont,"Segoe UI",system-ui,sans-serif;
+       display:flex;align-items:center;justify-content:center}
+  .card{width:100%;max-width:26rem;background:#11211501;border:1px solid #21331f;border-radius:20px;
+        padding:26px 22px;text-align:center;background:#101d13}
+  .eyebrow{margin:0 0 4px;font-size:12px;letter-spacing:.14em;text-transform:uppercase;color:#7f8a7c}
+  h1{margin:0 0 10px;font-size:1.55rem;line-height:1.2;text-wrap:balance}
+  .pill{display:inline-block;padding:5px 14px;border-radius:999px;background:#1c2f1d;color:#a6ed68;
+        font-size:13px;font-weight:700;letter-spacing:.02em}
+  .includes{margin:10px auto 0;max-width:22rem;font-size:13.5px;line-height:1.5;color:#a6b1a3}
+  .qr{margin:16px auto 10px;width:min(240px,68vw);aspect-ratio:1;background:#fff;border-radius:14px;
+      padding:12px;display:block}
+  .qr img{width:100%;height:100%;display:block;image-rendering:pixelated}
+  .code{margin:0 0 20px;font:600 13px/1 ui-monospace,SFMono-Regular,Menlo,monospace;letter-spacing:.08em;color:#a6b1a3}
+  dl{margin:0 0 20px;text-align:left;border-top:1px solid #21331f}
+  div.row{display:flex;justify-content:space-between;gap:16px;padding:11px 2px;border-bottom:1px solid #21331f}
+  dt{margin:0;color:#7f8a7c;font-size:14px}
+  dd{margin:0;text-align:right;font-size:14px;font-weight:600}
+  a.btn{display:block;margin:0 0 10px;min-height:48px;line-height:48px;border-radius:999px;
+        background:#a6ed68;color:#0d1a06;font-weight:700;text-decoration:none}
+  a.ghost{display:block;min-height:48px;line-height:48px;border-radius:999px;border:1px solid #2c422a;
+          color:#ecf3e9;text-decoration:none;font-weight:600}
+  .note{margin:18px 0 0;font-size:12.5px;color:#7f8a7c}
+  @media print{body{background:#fff;color:#000}.card{background:#fff;border-color:#ccc}
+    a.btn,a.ghost,.note{display:none}dt,.eyebrow,.code{color:#555}}
+</style></head>
+<body><main class="card">
+  ${t.past ? '<p style="margin:0 0 14px;padding:10px 12px;border-radius:12px;background:#2a2113;color:#e8cd8a;font-size:13.5px">This event has already taken place. Your ticket is shown for your records.</p>' : ''}
+  <p class="eyebrow">${esc(t.event_name || 'Your ticket')}</p>
+  <h1>${esc(name)}</h1>
+  <p style="margin:0"><span class="pill">${esc(t.pass_label || 'Ticket')}</span></p>
+  ${t.pass_includes ? `<p class="includes">${esc(t.pass_includes)}</p>` : ''}
+  <div class="qr"><img alt="Your entry code" src="/t/${encodeURIComponent(t.token)}.png"></div>
+  <p class="code">${esc(t.qr_code || '')}</p>
+  <dl>
+    ${when ? `<div class="row"><dt>When</dt><dd>${esc(when)}</dd></div>` : ''}
+    ${t.location ? `<div class="row"><dt>Where</dt><dd>${esc(t.location)}</dd></div>` : ''}
+    <div class="row"><dt>Doors</dt><dd>Show this code at check-in</dd></div>
+  </dl>
+  ${walletUrl ? `<a class="btn" href="${esc(walletUrl)}">Add to my phone</a>` : ''}
+  <a class="ghost" href="${APP_PUBLIC_URL}">Open the Gaia Healers app</a>
+  <p class="note">Screenshot this page or bookmark it — you will not need signal at the door.
+  We will print your name badge when you arrive.</p>
+</main></body></html>`;
+}
+
 function corsHeaders(origin) {
   const allowOrigin = origin
     ? (ALLOWED_ORIGINS.includes(origin) ? origin : 'null')
@@ -2384,6 +2471,12 @@ function clampNumber(value, min, max, fallback) {
 
 const GEMINI_LIVE_MODEL = process.env.GEMINI_LIVE_MODEL || 'gemini-3.1-flash-live-preview';
 const GEMINI_LIVE_VOICE = process.env.GEMINI_LIVE_VOICE || 'Puck';
+// The live model is a PREVIEW model, and preview models are withdrawn with
+// little notice. The token mint does not name a model, so a withdrawal would
+// not fail here -- it would fail later, inside the member's browser, on the
+// WebSocket setup. So the primary is checked against the account's own model
+// list before it is handed out, and a stable model is named as the fallback.
+const GEMINI_LIVE_FALLBACK_MODEL = process.env.GEMINI_LIVE_FALLBACK_MODEL || 'gemini-3.8-live';
 const GEMINI_LIVE_MAX_SECONDS = clampNumber(
   Number(process.env.GEMINI_LIVE_MAX_SECONDS || 900),
   30,
@@ -4235,6 +4328,28 @@ async function getGeminiClient() {
   }
 }
 
+let liveModelCache = { at: 0, model: '', ok: null };
+async function liveModelAvailable(model) {
+  // An hour: a model does not appear or vanish inside one, and a member
+  // waiting on the voice orb should not wait on a catalogue lookup.
+  if (liveModelCache.model === model && Date.now() - liveModelCache.at < 60 * 60 * 1000) {
+    return liveModelCache.ok;
+  }
+  const key = geminiApiKey();
+  if (!key) return false;
+  try {
+    const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${encodeURIComponent(key)}&pageSize=200`);
+    if (!r.ok) return true;          // cannot tell — do not break a working orb
+    const body = await r.json();
+    const names = new Set((body.models || []).map((m) => String(m.name || '').replace(/^models\//, '')));
+    const ok = names.has(model);
+    liveModelCache = { at: Date.now(), model, ok };
+    return ok;
+  } catch {
+    return true;                     // same: a lookup failure is not a model failure
+  }
+}
+
 function gaiaLiveVoiceConfig() {
   const geminiReady = Boolean(geminiApiKey());
   const explicit = process.env.GAIA_LIVE_VOICE_ENABLED ?? process.env.GAIA_REALTIME_VOICE_ENABLED;
@@ -4245,6 +4360,7 @@ function gaiaLiveVoiceConfig() {
     enabled: enabled && geminiReady,
     provider: 'gemini',
     model: GEMINI_LIVE_MODEL,
+    fallbackModel: GEMINI_LIVE_FALLBACK_MODEL,
     voice: GEMINI_LIVE_VOICE,
     maxSessionSeconds: GEMINI_LIVE_MAX_SECONDS,
   };
@@ -4473,8 +4589,19 @@ async function assistLiveToken(req, res, origin, url) {
       throw new Error('Gemini auth token missing name');
     }
 
+    // If the preview model has been withdrawn, say so HERE rather than letting
+    // the browser find out when the socket refuses its setup message.
+    const primaryLives = await liveModelAvailable(cfg.model);
+    const model = primaryLives ? cfg.model : cfg.fallbackModel;
+    if (!primaryLives) {
+      console.warn('[Gaia Assist] live model unavailable, using the pinned fallback', {
+        configured: cfg.model, using: model,
+      });
+    }
+
     console.log('[Gaia Assist] gemini live token ready', {
-      model: cfg.model,
+      model,
+      fallbackModel: cfg.fallbackModel,
       voice: cfg.voice,
       view,
       latencyMs: Date.now() - startedAt,
@@ -4484,7 +4611,8 @@ async function assistLiveToken(req, res, origin, url) {
       ok: true,
       token,
       provider: cfg.provider,
-      model: cfg.model,
+      model,
+      fallbackModel: model === cfg.fallbackModel ? '' : cfg.fallbackModel,
       voice: cfg.voice,
       instructions: buildGaiaLiveInstructions({ view, memberContext }),
       personalized: Boolean(memberContext),
@@ -5802,7 +5930,12 @@ async function callChatProvider(provider, prompt, context = {}) {
         { role: 'user', content: assistUserPrompt(prompt, context) },
       ],
       temperature: 0.35,
-      max_tokens: String(context.source || '').includes('voice') ? 150 : 520,
+      // 150 was too tight for any model that thinks before it answers: the
+      // reasoning consumed the budget and the reply came back EMPTY, which
+      // is what a member heard as silence. Groq's catalogue no longer has a
+      // non-reasoning instruct model, so the budget has to allow for it.
+      // Brevity is the system prompt's job, not the token limit's.
+      max_tokens: String(context.source || '').includes('voice') ? 320 : 520,
       presence_penalty: 0.1,
     }),
   });
@@ -5820,7 +5953,65 @@ async function callChatProvider(provider, prompt, context = {}) {
   };
 }
 
+async function streamGeminiChat(prompt, context = {}, onDelta = () => {}) {
+  // The non-streaming path special-cases Gemini because its API is not
+  // OpenAI-shaped. The streaming path did not, so with an order of
+  // "gemini,groq" every streamed answer silently came from Groq instead --
+  // the configured first choice was skipped as an unknown provider.
+  const key = geminiApiKey();
+  if (!key) return { skipped: true, reason: 'missing-api-key' };
+  const model = process.env.GEMINI_TEXT_MODEL || 'gemini-2.5-flash';
+  const isVoice = String(context.source || '').includes('voice');
+  const response = await fetch(
+    `https://generativelanguage.googleapis.com/v1beta/models/${model}:streamGenerateContent?alt=sse&key=${encodeURIComponent(key)}`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        systemInstruction: { parts: [{ text: assistSystemPrompt(context.memberContext) }] },
+        contents: [{ role: 'user', parts: [{ text: assistUserPrompt(prompt, context) }] }],
+        generationConfig: { temperature: 0.35, maxOutputTokens: isVoice ? 220 : 640 },
+      }),
+    });
+  if (!response.ok || !response.body) {
+    const details = await response.text();
+    throw new Error(`gemini stream request failed with ${response.status}: ${details.slice(0, 280)}`);
+  }
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = '';
+  let reply = '';
+  for (;;) {
+    const { value, done } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+    const lines = buffer.split(/\r?\n/);
+    buffer = lines.pop() || '';
+    for (const line of lines) {
+      const trimmed = line.trim();
+      if (!trimmed.startsWith('data:')) continue;
+      const data = trimmed.slice(5).trim();
+      if (!data || data === '[DONE]') continue;
+      try {
+        const payload = JSON.parse(data);
+        const parts = payload.candidates?.[0]?.content?.parts || [];
+        const delta = parts.map((part) => part.text || '').join('');
+        if (delta) {
+          reply += delta;
+          onDelta(delta);
+        }
+      } catch {
+        // Ignore malformed provider keepalive chunks.
+      }
+    }
+  }
+  const text = reply.trim();
+  if (!text) return { skipped: true, reason: 'empty-reply' };
+  return { provider: 'gemini', model, reply: text };
+}
+
 async function streamChatProvider(provider, prompt, context = {}, onDelta = () => {}) {
+  if (provider === 'gemini') return streamGeminiChat(prompt, context, onDelta);
   const config = providerConfig(provider);
   if (!config) {
     return { skipped: true, reason: 'unknown-provider' };
@@ -5843,7 +6034,12 @@ async function streamChatProvider(provider, prompt, context = {}, onDelta = () =
         { role: 'user', content: assistUserPrompt(prompt, context) },
       ],
       temperature: 0.35,
-      max_tokens: String(context.source || '').includes('voice') ? 150 : 520,
+      // 150 was too tight for any model that thinks before it answers: the
+      // reasoning consumed the budget and the reply came back EMPTY, which
+      // is what a member heard as silence. Groq's catalogue no longer has a
+      // non-reasoning instruct model, so the budget has to allow for it.
+      // Brevity is the system prompt's job, not the token limit's.
+      max_tokens: String(context.source || '').includes('voice') ? 320 : 520,
       presence_penalty: 0.1,
       stream: true,
     }),
@@ -5883,11 +6079,12 @@ async function streamChatProvider(provider, prompt, context = {}, onDelta = () =
     }
   }
 
-  return {
-    provider,
-    model: config.model,
-    reply: reply.trim() || fallbackAssistReply(prompt, context.intent),
-  };
+  // A provider that returns nothing has NOT answered. Emitting the canned
+  // fallback here looked like success while sending no deltas at all, so the
+  // member watched an empty bubble. Hand it to the next provider instead.
+  const text = reply.trim();
+  if (!text) return { skipped: true, reason: 'empty-reply' };
+  return { provider, model: config.model, reply: text };
 }
 
 async function callAssistProviders(prompt, context = {}) {
@@ -6267,6 +6464,62 @@ async function openAiCompatibleTts({ endpoint, apiKey, model, voice, text, speed
   return { ok: true, provider, model, voice, audio };
 }
 
+// Speech in. Ordered, because the cheapest and fastest option is not the one
+// that was wired first: Groq's whisper-large-v3-turbo answers in ~325ms on a
+// key we already hold, and every character it handles is one ElevenLabs does
+// not bill for.
+const STT_PROVIDER_ORDER = (process.env.STT_PROVIDER_ORDER || 'groq,elevenlabs,openai')
+  .split(',').map((s) => s.trim().toLowerCase()).filter(Boolean);
+
+async function sttGroq(audioBuffer, mimeType, filename) {
+  if (!process.env.GROQ_API_KEY) return { skipped: true, reason: 'missing-api-key' };
+  const model = process.env.GROQ_STT_MODEL || 'whisper-large-v3-turbo';
+  const form = new FormData();
+  form.append('file', new Blob([audioBuffer], { type: mimeType }), filename);
+  form.append('model', model);
+  const response = await fetch('https://api.groq.com/openai/v1/audio/transcriptions', {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${process.env.GROQ_API_KEY}` },
+    body: form,
+  });
+  if (!response.ok) throw new Error(`groq stt ${response.status}: ${(await response.text()).slice(0, 180)}`);
+  const payload = await response.json();
+  return { transcript: String(payload.text || '').trim(), provider: 'groq', model };
+}
+
+async function sttElevenLabs(audioBuffer, mimeType, filename) {
+  if (!process.env.ELEVENLABS_API_KEY) return { skipped: true, reason: 'missing-api-key' };
+  const model = process.env.ELEVENLABS_STT_MODEL || 'scribe_v1';
+  const form = new FormData();
+  form.append('file', new Blob([audioBuffer], { type: mimeType }), filename);
+  form.append('model_id', model);
+  const response = await fetch('https://api.elevenlabs.io/v1/speech-to-text', {
+    method: 'POST',
+    headers: { 'xi-api-key': process.env.ELEVENLABS_API_KEY },
+    body: form,
+  });
+  if (!response.ok) throw new Error(`elevenlabs stt ${response.status}: ${(await response.text()).slice(0, 180)}`);
+  const payload = await response.json();
+  return { transcript: String(payload.text || payload.transcript || '').trim(), provider: 'elevenlabs', model };
+}
+
+async function sttOpenAi(audioBuffer, mimeType, filename) {
+  if (!process.env.OPENAI_API_KEY) return { skipped: true, reason: 'missing-api-key' };
+  const model = process.env.OPENAI_TRANSCRIBE_MODEL || 'whisper-1';
+  const form = new FormData();
+  form.append('file', new Blob([audioBuffer], { type: mimeType }), filename);
+  form.append('model', model);
+  form.append('language', 'en');
+  const response = await fetch('https://api.openai.com/v1/audio/transcriptions', {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${process.env.OPENAI_API_KEY}` },
+    body: form,
+  });
+  if (!response.ok) throw new Error(`openai stt ${response.status}: ${(await response.text()).slice(0, 180)}`);
+  const payload = await response.json();
+  return { transcript: String(payload.text || '').trim(), provider: 'openai-whisper', model };
+}
+
 async function assistTranscribe(body) {
   const started = Date.now();
   const audioBase64 = String(body.audioBase64 || '').trim();
@@ -6278,81 +6531,34 @@ async function assistTranscribe(body) {
   }
 
   const mimeType = String(body.mimeType || 'audio/webm').trim() || 'audio/webm';
-  const extension = mimeType.includes('mp4') || mimeType.includes('aac') ? 'voice.m4a' : 'voice.webm';
+  const filename = mimeType.includes('mp4') || mimeType.includes('aac') ? 'voice.m4a' : 'voice.webm';
   const audioBuffer = Buffer.from(audioBase64, 'base64');
   console.log('[Gaia Assist] STT request received', { bytes: audioBuffer.length, mimeType });
 
-  if (process.env.ELEVENLABS_API_KEY) {
+  const runners = { groq: sttGroq, elevenlabs: sttElevenLabs, openai: sttOpenAi };
+  const attempts = [];
+  for (const provider of STT_PROVIDER_ORDER) {
+    const runner = runners[provider];
+    if (!runner) { attempts.push({ provider, status: 'skipped', reason: 'unknown-provider' }); continue; }
+    const providerStarted = Date.now();
     try {
-      const providerStarted = Date.now();
-      const form = new FormData();
-      form.append('file', new Blob([audioBuffer], { type: mimeType }), extension);
-      form.append('model_id', process.env.ELEVENLABS_STT_MODEL || 'scribe_v1');
-      const response = await fetch('https://api.elevenlabs.io/v1/speech-to-text', {
-        method: 'POST',
-        headers: { 'xi-api-key': process.env.ELEVENLABS_API_KEY },
-        body: form,
+      const result = await runner(audioBuffer, mimeType, filename);
+      if (result.skipped) { attempts.push({ provider, status: 'skipped', reason: result.reason }); continue; }
+      // Silence transcribes to an empty string, and so does a failure the
+      // provider did not report. Either way the next one should have a go.
+      if (!result.transcript) { attempts.push({ provider, status: 'empty' }); continue; }
+      console.log('[Gaia Assist] STT response ready', {
+        provider: result.provider, model: result.model,
+        latencyMs: Date.now() - started, providerLatencyMs: Date.now() - providerStarted,
       });
-      if (response.ok) {
-        const payload = await response.json();
-        const transcript = String(payload.text || payload.transcript || '').trim();
-        if (transcript) {
-          const latencyMs = Date.now() - started;
-          console.log('[Gaia Assist] STT response ready', {
-            provider: 'elevenlabs',
-            model: process.env.ELEVENLABS_STT_MODEL || 'scribe_v1',
-            latencyMs,
-            providerLatencyMs: Date.now() - providerStarted,
-          });
-          return {
-            ok: true,
-            transcript,
-            provider: 'elevenlabs',
-            model: process.env.ELEVENLABS_STT_MODEL || 'scribe_v1',
-          };
-        }
-      } else {
-        const details = await response.text();
-        console.error('[Gaia Assist] ElevenLabs STT failed', { status: response.status, details: details.slice(0, 180) });
-      }
+      attempts.push({ provider, status: 'ok', latencyMs: Date.now() - providerStarted });
+      return { ok: true, transcript: result.transcript, provider: result.provider, model: result.model, attempts };
     } catch (error) {
-      console.error('[Gaia Assist] ElevenLabs STT error', { error: error.message.split('\n')[0] });
+      attempts.push({ provider, status: 'failed', error: error.message.slice(0, 200) });
+      console.error('[Gaia Assist] STT provider failed', { provider, error: error.message.split('\n')[0] });
     }
   }
-
-  if (!process.env.OPENAI_API_KEY) {
-    return { ok: false, status: 503, error: 'Speech transcription is not configured on the proxy' };
-  }
-
-  const form = new FormData();
-  form.append('file', new Blob([audioBuffer], { type: mimeType }), extension);
-  form.append('model', process.env.OPENAI_TRANSCRIBE_MODEL || 'whisper-1');
-  form.append('language', 'en');
-
-  const response = await fetch('https://api.openai.com/v1/audio/transcriptions', {
-    method: 'POST',
-    headers: { Authorization: `Bearer ${process.env.OPENAI_API_KEY}` },
-    body: form,
-  });
-
-  if (!response.ok) {
-    const details = await response.text();
-    throw new Error(`Whisper transcription failed with ${response.status}: ${details.slice(0, 280)}`);
-  }
-
-  const payload = await response.json();
-  const transcript = String(payload.text || '').trim();
-  console.log('[Gaia Assist] STT response ready', {
-    provider: 'openai-whisper',
-    model: process.env.OPENAI_TRANSCRIBE_MODEL || 'whisper-1',
-    latencyMs: Date.now() - started,
-  });
-  return {
-    ok: true,
-    transcript,
-    provider: 'openai-whisper',
-    model: process.env.OPENAI_TRANSCRIBE_MODEL || 'whisper-1',
-  };
+  return { ok: false, status: 502, error: 'Could not transcribe that audio', attempts };
 }
 
 async function listHostedVoices() {
@@ -6797,6 +7003,104 @@ const server = http.createServer(async (req, res) => {
       });
       return;
     }
+    // ── The ticket itself, opened from an e-mail ─────────────────────────
+    // /t/<token>.png  the entry code as an image, for an <img> in the mail
+    // /ticket/<token> the whole ticket as a page, for the button under it
+    if (req.method === 'GET' && /^\/t\/[A-Za-z0-9_-]{4,64}\.png$/.test(url.pathname)) {
+      const token = url.pathname.slice(3, -4);
+      const png = await eventIdentity.badgeQr(token);
+      if (!png) { res.writeHead(404, { 'Cache-Control': 'no-store' }); res.end(); return; }
+      res.writeHead(200, {
+        'Content-Type': 'image/png',
+        'Content-Length': png.length,
+        // A year, because the code on a badge never changes once printed.
+        'Cache-Control': 'public, max-age=31536000, immutable',
+      });
+      res.end(png);
+      return;
+    }
+    if (req.method === 'GET' && /^\/ticket\/[A-Za-z0-9_-]{4,64}$/.test(url.pathname)) {
+      const token = url.pathname.split('/')[2];
+      const t = await eventIdentity.ticketByToken(token);
+      if (!t || t.ok !== true) {
+        res.writeHead(t && t.reason === 'unknown_token' ? 404 : 200,
+          { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store' });
+        res.end(walletPage({
+          title: 'Ticket not found',
+          body: 'That link does not match a ticket. Check you used the most recent e-mail, or open the Gaia Healers app and sign in with the address you booked with.',
+        }));
+        return;
+      }
+      // A badge token belongs to the person, so somebody who came last year and
+      // not this one still resolves — to an event that is over. Say so rather
+      // than presenting a finished conference as a live ticket.
+      const ended = t.end_date ? new Date(t.end_date).getTime() < Date.now() : false;
+      const caps = await eventIdentity.walletStatus();
+      const walletUrl = (!ended && (caps.apple || caps.google)) ? `/wallet/${encodeURIComponent(token)}` : '';
+      res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'private, no-store' });
+      res.end(ticketPage({ ...t, token, past: ended }, { walletUrl }));
+      return;
+    }
+    // ── The link that goes in an e-mail ──────────────────────────────────
+    // A mail carries no session, and a Google save link is signed for an
+    // hour, so what travels in the mail is a durable address that is resolved
+    // when somebody clicks it — months later, on a phone, at a door.
+    //   /wallet                 the person signed into the app
+    //   /wallet/<badge token>   the token already printed on their badge
+    // Both answer a PERSON, so both answer in HTML when the store is not
+    // named: a page with the buttons that store can actually issue.
+    if (req.method === 'GET' && /^\/wallet(\/[A-Za-z0-9_-]{4,64})?$/.test(url.pathname)) {
+      const token = (url.pathname.split('/')[2] || '').trim();
+      const want = String(url.searchParams.get('store') || '').toLowerCase();
+      const caps = await eventIdentity.walletStatus();
+      if (!caps.apple && !caps.google) {
+        res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store' });
+        res.end(walletPage({ title: 'Not available yet',
+          body: 'Phone passes are not switched on for this event yet. Your badge QR in the app works at the door today.' }));
+        return;
+      }
+      const store = (want === 'apple' || want === 'google') ? want
+        : (caps.apple && /iPhone|iPad|iPod|Macintosh/i.test(req.headers['user-agent'] || '') ? 'apple'
+          : (caps.google ? 'google' : 'apple'));
+      const result = token
+        ? await eventIdentity.walletPassByToken(token, store)
+        : await eventIdentity.walletPass(cookieForRequest(req), url.searchParams.get('event') || '', store);
+
+      if (!token && result.authenticated === false) {
+        // Nobody is signed in: send them to the app, which knows how, and
+        // bring them back to their ticket rather than to a home screen.
+        const back = `${APP_PUBLIC_URL}${String(APP_PUBLIC_URL).includes('?') ? '&' : '?'}view=events`;
+        res.writeHead(302, { Location: back, 'Cache-Control': 'no-store' });
+        res.end();
+        return;
+      }
+      if (result.ok && result.store === 'apple' && result.pkpass) {
+        res.writeHead(200, {
+          'Content-Type': 'application/vnd.apple.pkpass',
+          'Content-Disposition': 'attachment; filename="gaia-ticket.pkpass"',
+          'Content-Length': result.pkpass.length,
+          'Cache-Control': 'private, no-store',
+        });
+        res.end(result.pkpass);
+        return;
+      }
+      if (result.ok && result.save_url) {
+        res.writeHead(302, { Location: result.save_url, 'Cache-Control': 'private, no-store' });
+        res.end();
+        return;
+      }
+      const why = {
+        unknown_token: 'That link does not match a ticket. Check you used the most recent e-mail, or open the Gaia Healers app.',
+        ticket_not_valid: 'This ticket is no longer valid for entry. The registration desk can help.',
+        no_ticket_for_event: 'No ticket found for this account yet.',
+        wallet_not_configured: store === 'apple'
+          ? 'Apple Wallet is not switched on for this event yet. Try Google Wallet, or use your badge QR in the app.'
+          : 'Google Wallet is not switched on for this event yet. Your badge QR in the app works at the door.',
+      }[result.reason] || 'The pass could not be prepared just now. Your badge QR in the app works at the door.';
+      res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store' });
+      res.end(walletPage({ title: 'Ticket pass', body: why }));
+      return;
+    }
     if (req.method === 'GET' && /^\/api\/events\/wallet-status$/.test(url.pathname)) {
       sendJson(res, 200, { ok: true, ...(await eventIdentity.walletStatus()) }, origin, {
         'Cache-Control': 'public, max-age=300',
@@ -7130,6 +7434,76 @@ const server = http.createServer(async (req, res) => {
       const memberContext = await buildMemberVoiceContext(req);
       const payload = await assistChat({ ...body, prompt: transcript, transcript, source: body.source || 'voice', memberContext });
       sendJson(res, payload.ok === false ? 400 : 200, payload, origin);
+      return;
+    }
+    // ── The pipeline fallback: one turn of voice, in one round trip ──────
+    // When the Gemini Live socket will not open -- a withdrawn model, a
+    // network that blocks WebSockets, a Google outage -- the orb does not have
+    // to go silent. It can hold-to-talk instead, and this is the whole turn:
+    // speech in, answer out, spoken. Three legs the proxy already had, joined
+    // so the phone makes ONE request instead of three.
+    if (req.method === 'POST' && url.pathname === '/api/assist/voice/turn') {
+      const body = await readJsonBody(req, 3 * 1024 * 1024);
+      const turnStarted = Date.now();
+      const timings = {};
+      try {
+        let t = Date.now();
+        const heard = await assistTranscribe(body);
+        timings.sttMs = Date.now() - t;
+        if (!heard.ok || !heard.transcript) {
+          sendJson(res, 200, {
+            ok: false, stage: 'transcribe',
+            reason: heard.error || 'nothing_heard',
+            attempts: heard.attempts, timings,
+          }, origin);
+          return;
+        }
+
+        t = Date.now();
+        const memberContext0 = await buildMemberVoiceContext(req);
+        const liveData = await assistLiveDataBlock(heard.transcript).catch(() => '');
+        const memberContext = [memberContext0, liveData].filter(Boolean).join('\n\n');
+        const answer = await assistChat({
+          prompt: heard.transcript,
+          // "voice" keeps the reply short enough to be listened to rather
+          // than read, the same as every other spoken path.
+          source: 'voice',
+          intent: body.intent,
+          view: body.view,
+          memberContext,
+        });
+        timings.llmMs = Date.now() - t;
+        let reply = String(answer.reply || '').trim();
+        try { const ex = await executeOnboardingMarkers(req, reply); reply = ex.clean; } catch (e) {}
+        if (!reply) {
+          sendJson(res, 200, { ok: false, stage: 'chat', transcript: heard.transcript, timings }, origin);
+          return;
+        }
+
+        t = Date.now();
+        const spoken = await assistTts({ text: reply, voice: body.voice });
+        timings.ttsMs = Date.now() - t;
+        timings.totalMs = Date.now() - turnStarted;
+        console.log('[Gaia Assist] pipeline turn', {
+          stt: heard.provider, llm: answer.provider, tts: spoken.provider || 'none', ...timings,
+        });
+
+        sendJson(res, 200, {
+          ok: true,
+          transcript: heard.transcript,
+          reply,
+          // Audio is optional on purpose: a failed voice is a reply the member
+          // can still READ, which beats an error where an answer should be.
+          audioBase64: spoken.ok && spoken.audio ? Buffer.from(spoken.audio).toString('base64') : '',
+          audioMimeType: spoken.ok ? (spoken.mimeType || 'audio/mpeg') : '',
+          providers: { stt: heard.provider, llm: answer.provider, tts: spoken.ok ? spoken.provider : null },
+          model: answer.model,
+          timings,
+        }, origin);
+      } catch (error) {
+        console.error('[Gaia Assist] pipeline turn failed', { error: error.message.split('\n')[0] });
+        sendJson(res, 200, { ok: false, stage: 'unknown', reason: error.message.slice(0, 200), timings }, origin);
+      }
       return;
     }
     if (req.method === 'POST' && url.pathname === '/api/assist/transcribe') {

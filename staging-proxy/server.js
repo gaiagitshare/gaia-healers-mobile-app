@@ -4576,11 +4576,16 @@ async function assistLiveToken(req, res, origin, url) {
   // stay on the server with the ticket. Anything that rules Qwen out — off,
   // Persian/Arabic phone, breaker open, full — falls through to Gemini below.
   const ip = requestIpOf(req);
-  const route = qwenRouting({
-    ip,
-    lang: url.searchParams.get('lang') || '',
-    forced: url.searchParams.get('provider') || '',
-  });
+  // Only a page that sends `lang` knows what a relay ticket is. A copy of the
+  // app from before Qwen (cached, or an installed PWA not yet refreshed) sends
+  // no `lang`, expects a Gemini token, and would otherwise drop to hold-to-talk.
+  const route = url.searchParams.has('lang')
+    ? qwenRouting({
+      ip,
+      lang: url.searchParams.get('lang') || '',
+      forced: url.searchParams.get('provider') || '',
+    })
+    : { use: false, reason: 'client_without_qwen' };
   if (route.use) {
     const qcfg = qwenVoiceConfig();
     const ticket = issueQwenTicket({ instructions: buildGaiaLiveInstructions({ view, memberContext }), ip });

@@ -1447,6 +1447,46 @@
     });
   }
 
+  // "Gaia Assist" is drawn with its last word in Gaia green. The name comes
+  // from config, so it is escaped first; a one-word name stays plain.
+  function assistNameMarkup(name) {
+    const safe = escapeHtml(name);
+    const split = safe.match(/^(.*\S)\s+(\S+)$/);
+    return split ? `${split[1]} <span class="gaia-assist__name-accent">${split[2]}</span>` : safe;
+  }
+
+  // One line of the panel's waveform: a smooth wave of the given period,
+  // drawn one period wider than the 600-unit viewBox so sliding it left by
+  // exactly one period (in CSS) loops without a seam.
+  function assistWavePath(period, amplitude) {
+    const mid = 30;
+    let d = `M0 ${mid} Q ${period / 4} ${mid - amplitude} ${period / 2} ${mid}`;
+    for (let x = period; x <= 600 + period; x += period / 2) d += ` T ${x} ${mid}`;
+    return d;
+  }
+
+  // The quick actions are generated per visitor, so each one borrows an icon
+  // and colour from what it does rather than from its wording. Anything new
+  // falls back to the sparkle, so a chip never renders without an icon.
+  const ASSIST_CHIP_LOOK = {
+    energy: { icon: 'lightning', tone: 'green' },
+    ecosystem: { icon: 'book-open', tone: 'teal', primary: true },
+    'join-free': { icon: 'users-three', tone: 'violet' },
+    membership: { icon: 'crown-simple', tone: 'gold' },
+    access: { icon: 'key', tone: 'green' },
+    booking: { icon: 'calendar-check', tone: 'teal' },
+    academy: { icon: 'graduation-cap', tone: 'violet' },
+    'sign-in': { icon: 'sign-in', tone: 'green' },
+  };
+
+  function assistChipMarkup(item) {
+    const look = ASSIST_CHIP_LOOK[item.intent] || { icon: 'sparkle', tone: 'green' };
+    return `<button type="button" class="gaia-assist__chip${look.primary ? ' gaia-assist__chip--primary' : ''}" data-intent="${escapeHtml(item.intent)}">`
+      + `<span class="gaia-assist__chip-icon gaia-assist__chip-icon--${look.tone}" aria-hidden="true"><i class="ph ph-${look.icon}"></i></span>`
+      + `<span class="gaia-assist__chip-label">${item.label}</span>`
+      + '<i class="ph ph-caret-right gaia-assist__chip-caret" aria-hidden="true"></i></button>';
+  }
+
   function initGaiaAssist() {
     if (!document.body.classList.contains('gaia-page')) return;
     if (document.getElementById('gaia-assist')) return;
@@ -1489,13 +1529,21 @@
               <img class="gaia-assist__orb-icon" src="assets/gaia-mark.svg" alt="Gaia Healers" />
             </button>
             <div class="gaia-assist__wave" aria-hidden="true">
-              <span></span><span></span><span></span><span></span><span></span>
+              <span></span><span></span><span></span><span></span><span></span><span></span><span></span>
             </div>
           </div>
           <div class="gaia-assist__headline">
-            <h2>${assistant.name || 'Gaia'}</h2>
+            <h2>${assistNameMarkup(assistant.name || 'Gaia')}</h2>
             <p class="gaia-assist__status" data-assist-state="idle" role="status" aria-live="polite">Tap Gaia for live voice</p>
             <button type="button" class="gaia-assist__sound-toggle" aria-pressed="false"><i class="ph ph-speaker-high" aria-hidden="true"></i><span>Sound on</span></button>
+          </div>
+          <div class="gaia-assist__waveform" aria-hidden="true">
+            <svg viewBox="0 0 600 60" preserveAspectRatio="none" focusable="false">
+              <path class="gaia-assist__waveform-line gaia-assist__waveform-line--1" d="${assistWavePath(200, 14)}" />
+              <path class="gaia-assist__waveform-line gaia-assist__waveform-line--2" d="${assistWavePath(300, 20)}" />
+              <path class="gaia-assist__waveform-line gaia-assist__waveform-line--3" d="${assistWavePath(240, 9)}" />
+              <path class="gaia-assist__waveform-line gaia-assist__waveform-line--4" d="${assistWavePath(150, 6)}" />
+            </svg>
           </div>
           <div class="gaia-assist__transcript"></div>
           <div class="gaia-assist__route" hidden></div>
@@ -1503,8 +1551,9 @@
           <form class="gaia-assist__form">
             <label class="gaia-assist__label" for="gaia-assist-prompt">Ask Gaia</label>
             <div class="gaia-assist__input-row">
-              <input id="gaia-assist-prompt" name="prompt" type="text" autocomplete="off" placeholder="Ask Gaia anything…" />
-              <button type="submit" aria-label="Send">↑</button>
+              <i class="ph ph-sparkle gaia-assist__input-icon" aria-hidden="true"></i>
+              <input id="gaia-assist-prompt" name="prompt" type="text" autocomplete="off" placeholder="Ask about energy, courses, or members…" />
+              <button type="submit" class="gaia-assist__send" data-mode="send" aria-label="Send"><i class="ph ph-arrow-up gaia-assist__send-icon" aria-hidden="true"></i><i class="ph ph-microphone gaia-assist__voice-icon" aria-hidden="true"></i></button>
             </div>
           </form>
           <div class="gaia-assist__toolbar">
@@ -1541,6 +1590,7 @@
     const chips = root.querySelector('.gaia-assist__chips');
     const form = root.querySelector('.gaia-assist__form');
     const promptInput = root.querySelector('#gaia-assist-prompt');
+    const sendButton = root.querySelector('.gaia-assist__send');
     const error = root.querySelector('.gaia-assist__error');
     const errorText = root.querySelector('.gaia-assist__error-text');
     const errorRetry = root.querySelector('.gaia-assist__error-retry');
@@ -1691,7 +1741,7 @@
 
     function renderAssistSuggestions() {
       suggestionMap = assistSuggestions();
-      chips.innerHTML = suggestionMap.map((item) => `<button type="button" data-intent="${item.intent}">${item.label}</button>`).join('');
+      chips.innerHTML = suggestionMap.map(assistChipMarkup).join('');
     }
     renderAssistSuggestions();
 
@@ -2626,6 +2676,30 @@
       });
       if (status) status.dataset.assistState = state;
       if (message && status) status.textContent = message;
+      syncAssistSendButton();
+    }
+
+    // The round button at the end of the input is Send while there is text,
+    // and the microphone while there is none. As a microphone it does exactly
+    // what the orb does: start voice, or, inside a live session, pause and
+    // resume listening through the existing Pause listening control. It is
+    // only a submit button while it sends, so Enter in an empty box never
+    // opens the microphone by accident.
+    function syncAssistSendButton() {
+      if (!sendButton || !promptInput) return;
+      const typing = promptInput.value.trim().length > 0;
+      const live = root.classList.contains('gaia-assist--live-session');
+      const paused = Boolean(listenToggle && listenToggle.classList.contains('is-paused'));
+      let label = 'Send';
+      if (!typing) {
+        if (!live) label = 'Start voice conversation with Gaia';
+        else label = paused ? 'Resume listening' : 'Pause listening';
+      }
+      sendButton.dataset.mode = typing ? 'send' : 'voice';
+      sendButton.type = typing ? 'submit' : 'button';
+      sendButton.classList.toggle('is-live', !typing && live && !paused);
+      sendButton.setAttribute('aria-label', label);
+      sendButton.setAttribute('title', label);
     }
 
     let realtimeVoice = null;
@@ -3003,7 +3077,13 @@
 
       try {
         const streamed = await streamAssistantReply(base, cleanPrompt, intent, source, fromVoice);
-        if (streamed) return;
+        // The streamed path returned before the finally below, so Send, the
+        // quick actions and the microphone stayed disabled after every
+        // typed answer.
+        if (streamed) {
+          setBusy(false);
+          return;
+        }
       } catch (err) {
         if (err.name === 'AbortError') {
           assistLog('proxy stream aborted', { intent, source });
@@ -3410,6 +3490,7 @@
           return;
         }
         promptInput.value = event.detail.prompt;
+        syncAssistSendButton();
         promptInput.focus();
       }
     });
@@ -3617,6 +3698,7 @@
       unlockVoicePlayback();
       const prompt = promptInput.value;
       promptInput.value = '';
+      syncAssistSendButton();
       showRoute(prompt);
       if (realtimeVoice?.isActive()) {
         if (!realtimeVoice.sendText(prompt)) {
@@ -3626,6 +3708,18 @@
       }
       sendPrompt(prompt, 'typed', 'text');
     });
+
+    promptInput.addEventListener('input', syncAssistSendButton);
+    sendButton?.addEventListener('click', (event) => {
+      if (sendButton.dataset.mode !== 'voice') return;
+      event.preventDefault();
+      if (root.classList.contains('gaia-assist--live-session') && listenToggle) {
+        listenToggle.click();
+        return;
+      }
+      void onAssistTap();
+    });
+    syncAssistSendButton();
 
     function runSuggestionAction(intent) {
       if (intent === 'join-free') {

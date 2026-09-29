@@ -9519,7 +9519,10 @@ def _card_context(db, token: str):
                     -(e.start_date.timestamp() if (e and e.start_date) else 0))
         rows.sort(key=ev_key)
         event = events.get(rows[0].event_id)
-    return card, event
+    # The row for the event the card names, so the card can say what that
+    # person actually holds. A badge in a drawer whose events are all gone has
+    # none, and still renders.
+    return card, event, (rows[0] if rows else None)
 
 
 def _serve_card(token: str, request: FastAPIRequest, db, fmt: str):
@@ -9530,8 +9533,14 @@ def _serve_card(token: str, request: FastAPIRequest, db, fmt: str):
         if fmt == "html":
             return HTMLResponse(badge_card.render_not_found_html(), status_code=404)
         raise HTTPException(status_code=404, detail="Card not found")
-    card, event = ctx
+    card, event, attendee = ctx
     view = badge_card.public_view(card, event, _participation(db, card))
+    # What this person holds, in the same words the door and the ticket email
+    # use. Read from the ONE resolver, so a card can never describe access the
+    # scanner would refuse.
+    if attendee is not None and event is not None and not getattr(event, "is_archived", 0):
+        view["pass_display"] = _pass_display(db, attendee)
+        view["pass_includes"] = _pass_includes(db, attendee, event)
     tok = card.public_token
     if fmt == "vcf":
         if not view.get("public"):

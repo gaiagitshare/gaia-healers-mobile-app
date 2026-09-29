@@ -627,11 +627,18 @@ function CheckIn({ timezone: timezoneProp }) {
                 reason: actionReason.trim() || undefined,
             });
             const made = response.data || {};
-            // Land on the new badge, ready to print.
+            // Land on the new badge and print it. Naming somebody at the desk is
+            // not a filing exercise — they are standing there waiting for the
+            // sticker, and a second tap to produce it is a second queue.
             const again = await authorizeScan(eventId, { qr_code: made.qr_code, access_type: accessType });
-            return again.data;
+            const fresh = again.data;
+            if (fresh?.attendee_id) {
+                setAutoJob(null);
+                printBadge(attendeeFromDecision(fresh), false);
+            }
+            return fresh;
         },
-        'Seat named. Print their badge from here.',
+        'Seat named — their badge is printing.',
         { rescan: false });
 
     const submitRevoke = () => runDoorAction(

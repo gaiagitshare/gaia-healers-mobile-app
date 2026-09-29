@@ -295,6 +295,43 @@ if conf and vip and _up:
     check(du2.get("collected_total") == du.get("collected_total"),
           "and adds nothing to the takings", (du.get("collected_total"), du2.get("collected_total")))
 
+print("\nA BOOKING IS A BOOKING BEFORE ANYBODY IS NAMED")
+# A seat that has been named holds its own payment, so it leaves the buyer's
+# badge. What stays on the buyer's badge beyond their own first ticket is
+# therefore exactly the seats still waiting for a person -- and until that was
+# read, a buyer whose extra seats had NEVER been named showed no party at all.
+# The desk saw "$198 from 2 payments" and was told nothing about the second
+# person owed a badge.
+_sess = SessionLocal()
+def _party_of_name(first, last):
+    a = _sess.query(models.Attendee).filter(
+        models.Attendee.event_id == EVENT, models.Attendee.first_name == first,
+        models.Attendee.last_name == last).first()
+    _sess.expire_all()
+    return (main._party_members(_sess, a) if a else None), a
+
+_p, _a = _party_of_name("Betty", "Bruinsma")
+check(_p is not None, "a buyer with an unnamed extra seat shows a party at all")
+check(_p and _p["paid_for"] == 2 and _p["size"] == 1 and _p["unnamed"] == 1,
+      "saying they paid for 2 and only 1 has a badge", _p)
+
+_p, _ = _party_of_name("Francis", "Medernach")
+check(_p and _p["unnamed"] == 2, "and 2 unnamed where 3 were bought", _p and _p["unnamed"])
+
+_p, _ = _party_of_name("Jessica", "Star Ison")
+check(_p and _p["paid_for"] == 4 and _p["size"] == 3 and _p["unnamed"] == 1,
+      "a part-named booking still counts what is left", _p)
+
+# The two cases that must NOT look like a party: one person buying up.
+for _f, _l, _why in (("Jeannie", "Morgan", "bought GA then Workshop Access"),
+                     ("Lana", "Warren", "bought GA then a bundled GA + conference")):
+    _p, _ = _party_of_name(_f, _l)
+    check(_p is None, "%s %s is one person, not a booking (%s)" % (_f, _l, _why), _p)
+
+_p, _ = _party_of_name("Ann", "Forrester")
+check(_p is None, "and one ticket is never a party")
+_sess.close()
+
 print("\nFINISHING A BOOKING THAT PAID FOR MORE SEATS THAN IT NAMED")
 # Jessica Star Ison bought four and only three could be rebuilt: the fourth
 # name never reached any system. That seat is paid for, and the entrance is

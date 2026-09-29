@@ -2652,6 +2652,71 @@ def _attendee_for_payment(db, pe, claims=None):
         func.lower(models.Attendee.email) == pe.buyer_email).first()
 
 
+def _sold_rank(db, pe, mapping_for):
+    """How good a pass this payment BOUGHT, judged by the product's own name as
+    well as the mapping. A storefront that sells several variants through one
+    product can only be told apart by the name, so a rule that reads the mapping
+    alone inherits whatever the mapping got wrong."""
+    m = mapping_for(pe)
+    rank = 0
+    if m and m.ticket_type_id:
+        tt = db.query(models.TicketType).filter(models.TicketType.id == m.ticket_type_id).first()
+        rank = (tt.upgrade_rank or 0) if tt else 0
+    names = pe.product_names if isinstance(pe.product_names, (list, tuple)) else None
+    if names is None:
+        try: names = json.loads(pe.product_names or "[]")
+        except Exception: names = []
+    name = (names[0] if names else "").upper()
+    for word, promised in (("WORKSHOP", 3),):
+        if word in name:
+            rank = max(rank, promised)
+    if re.search(r"\+\s*CONFERENCE|CONFERENCE\s*3\s*DAYS|HALL\s*\+\s*CONFERENCE|SPEAKER", name):
+        rank = max(rank, 2)
+    if re.search(r"\bVIP\b", name):
+        rank = max(rank, 5)
+    return rank
+
+
+def _surplus_seats(db, buyer):
+    """Tickets this person PAID for that nobody is standing in yet.
+
+    A seat that has been named holds its own payment, so it is no longer on the
+    buyer's badge. What is left on the buyer's badge beyond their own first
+    ticket is therefore exactly the seats still waiting for a person -- and
+    until this was read, a buyer whose extra seats had never been named showed
+    no party at all. The desk saw "$198 from 2 payments" and was told nothing
+    about the second person owed a badge.
+
+    A second purchase of something BETTER is that person buying up, not a seat;
+    that is the one case this must not count, and it is judged on what the
+    product sold rather than on its price.
+    """
+    maps = {m.external_product_id: m for m in db.query(models.TicketMapping).filter(
+        models.TicketMapping.event_id == buyer.event_id).all() if m.external_product_id}
+
+    def mapping_for(pe):
+        ids = pe.product_ids if isinstance(pe.product_ids, (list, tuple)) else None
+        if ids is None:
+            try: ids = json.loads(pe.product_ids or "[]")
+            except Exception: ids = []
+        return next((maps[i] for i in ids if i in maps), None)
+
+    rows = []
+    for pe in db.query(models.PaymentEvent).filter(
+            models.PaymentEvent.event_id == buyer.event_id,
+            models.PaymentEvent.attendee_id == buyer.id,
+            models.PaymentEvent.status == "paid").order_by(models.PaymentEvent.occurred_at,
+                                                           models.PaymentEvent.id).all():
+        m = mapping_for(pe)
+        if not m or m.is_upgrade:
+            continue                                   # an upgrade is never a seat
+        rows.append((pe, _sold_rank(db, pe, mapping_for)))
+    if len(rows) < 2:
+        return []
+    first_rank = rows[0][1]
+    return [pe for pe, rank in rows[1:] if rank <= first_rank]
+
+
 def _party_members(db, attendee):
     """Every badge on one booking, buyer first -- or None if it is a party of one.
 
@@ -2669,7 +2734,10 @@ def _party_members(db, attendee):
                  models.Attendee.event_id == buyer.event_id,
                  models.Attendee.registration_source.in_(PARTY_SEAT_SOURCES)).all()
              if int((a.custom_data or {}).get("bought_by_attendee") or 0) == buyer.id]
-    if not seats:
+    # Seats paid for that nobody holds yet. A booking is a booking from the
+    # moment the money arrives, not from the moment somebody gets named.
+    waiting = _surplus_seats(db, buyer)
+    if not seats and not waiting:
         return None
     size = len(seats) + 1
 
@@ -2689,7 +2757,7 @@ def _party_members(db, attendee):
     # exist: the rebuild could only name the seats whose buyer was identifiable,
     # and one of this year's four-seat bookings is still a body short. The desk
     # has to be told that outright, because the family arrives together.
-    paid_for = size
+    paid_for = size + len(waiting)
     for m in members:
         bits = str(m["seat"]).split(" of ")
         if len(bits) == 2 and bits[1].strip().isdigit():

@@ -1876,7 +1876,18 @@ def set_addon_day(attendee_id: int, payload: schemas.AddonDay,
     att = db.query(models.Attendee).filter(models.Attendee.id == attendee_id).first()
     if not att:
         raise HTTPException(status_code=404, detail="Attendee not found")
-    authz.require_cap(db, current_user, att.event_id, "attendee.write")
+    # The product says "one day of your choosing", so the choosing happens where
+    # the person is -- at the desk, on the morning they turn up. An organiser may
+    # set any date; the desk may only set a day this event actually runs, which
+    # is the only thing anybody would ever want anyway and makes it safe to hand
+    # over.
+    if not authz.can(db, current_user, att.event_id, "attendee.write"):
+        authz.require_cap(db, current_user, att.event_id, "checkin.perform")
+        _ev = db.query(models.Event).filter(models.Event.id == att.event_id).first()
+        _days = _event_days(_ev)
+        if str(payload.day_date)[:10] not in _days:
+            raise HTTPException(status_code=400,
+                                detail="Pick a day this event runs: %s" % ", ".join(_days))
     cd = dict(att.custom_data or {})
     ents = list(cd.get("entitlements") or [])
     prev = None; hit = False
@@ -2603,6 +2614,19 @@ def _pass_includes(db, attendee, event=None) -> str:
     return "Includes %s." % body
 
 
+def _event_days(event):
+    """Every date this event runs, in its own calendar, oldest first."""
+    if event is None or not event.start_date:
+        return []
+    start = event.start_date.date()
+    end = (event.end_date or event.start_date).date()
+    out, day = [], start
+    while day <= end and len(out) < 32:
+        out.append(day.isoformat())
+        day = day + timedelta(days=1)
+    return out
+
+
 def _event_local_today(event, at=None):
     """The event's current calendar date (event timezone), or an explicit ISO test
     override. Day rules are judged here, never in UTC or the browser's zone."""
@@ -2872,6 +2896,9 @@ def _door_card(db, attendee, event, user=None):
             "attendance_type": attendee.attendance_type or None,
             "source": attendee.registration_source or None,
             "needs_name_check": bool(cd.get("needs_name_check")),
+            # A one-day add-on with no day chosen yet. The door refuses it until
+            # one is picked, so the screen has to say so and offer the days.
+            "event_days": _event_days(event),
             "sharing": {"email": bool(attendee.share_email_with_exhibitors),
                         "phone": bool(attendee.share_phone_with_exhibitors),
                         # Whether anybody ever actually asked them, as opposed
@@ -8256,6 +8283,24 @@ def reconcile_attendee(payload: schemas.ReconcileAttendee, db: Session = Depends
     existing = db.query(models.Attendee).filter(
         models.Attendee.event_id == event.id,
         func.lower(models.Attendee.email) == email).first()
+    # The MAPPING is what says whether a product is an add-on, and no caller was
+    # reading it. The proxy, the mirror and a replay all pass the tier and the
+    # upgrade flag and stop there -- so a product mapped as a one-day add-on was
+    # granted as a full tier upgrade instead, and everybody who bought one day of
+    # the conference was quietly given all three.
+    #
+    # Deriving it here rather than in each caller keeps the mapping as the single
+    # answer to "what does this product grant", which is the whole reason the
+    # table exists.
+    if not (payload.addon_code or "").strip() and payload.product_id:
+        _m = _pick_mapping(db.query(models.TicketMapping).filter(
+            models.TicketMapping.event_id == event.id,
+            models.TicketMapping.external_product_id == str(payload.product_id),
+            models.TicketMapping.is_active == True).all(),           # noqa: E712
+            None, payload.purchased_at)
+        if _m is not None and (_m.addon_code or "").strip():
+            payload.addon_code = _m.addon_code.strip()
+
     # ADD-ON: additive event entitlement (e.g. one-day speaker). Never sets or
     # raises the base tier; idempotent per (order, addon). Creates a base-less
     # attendee if the buyer has no base ticket yet.

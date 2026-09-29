@@ -23,7 +23,7 @@ import TuneIcon from '@mui/icons-material/Tune';
 import { Html5QrcodeScanner } from 'html5-qrcode';
 import { authorizeScan, getScanLogs, searchAttendees, getEvents, walkInCreate, getTicketTypes, undoCheckIn, clearScanLogs, setDoorTestMode, getEvent, badgeLabelBlob, recordBadgePrint,
     overrideAdmit, doorIdentity, addPartySeat, setReEntry as setDoorReEntry, changePass, revokeAttendee, reinstateAttendee,
-    getMyCapabilities, getPrintReport, setSharing } from '../utils/api';
+    getMyCapabilities, getPrintReport, setSharing, setAddonDay } from '../utils/api';
 import { formatVenueTime, statusLabel, isFlaggedStatus } from '../utils/datetime';
 import BadgeLabelDialog, { STATION_KEY, LABEL_SIZE_KEY, LABEL_ROLLS, savedLabelSize, rollShort, fullName, physicalCard,
     canPrintBluetooth, useB1, b1Connect, b1IsConnected, b1Enqueue, b1PrintBlob, b1Dpi, rollFitsB1, PRINTER_KEY, PRINTER_CHOICES, savedPrinter } from './BadgeLabelDialog';
@@ -643,6 +643,20 @@ function CheckIn({ timezone: timezoneProp }) {
 
     // Somebody says "please don't give my details to the stands". One tap, and
     // the answer is stamped so no default ever writes over it again.
+    // "One day of your choosing" — and the choosing happens here, on the
+    // morning they turn up, because that is when they know which day they want.
+    const submitAddonDay = (iso) => runDoorAction(
+        async (d) => {
+            const when = new Date(iso + 'T12:00:00');
+            await setAddonDay(d.attendee_id, {
+                addon_code: 'ONE_DAY_CONFERENCE',
+                day_label: when.toLocaleDateString(undefined, { weekday: 'long', day: 'numeric', month: 'long' }),
+                day_date: iso,
+                reason: actionReason.trim() || 'chosen at the desk',
+            });
+        },
+        'Day set — the conference room will let them in on that day.');
+
     const submitSharing = (share) => runDoorAction(
         async (d) => { await setSharing(eventId, d.attendee_id, {
             share_email: share, share_phone: share,
@@ -960,6 +974,13 @@ function CheckIn({ timezone: timezoneProp }) {
                                 <Button size="small" variant="outlined" color="error" startIcon={<BlockIcon />}
                                         onClick={() => openDoorAction('revoke', d)}>
                                     Revoke
+                                </Button>
+                            )}
+                            {(d.addons || []).some((a) => a.code === 'ONE_DAY_CONFERENCE' && !a.day) && (
+                                <Button size="small" variant="contained" color="warning"
+                                        startIcon={<TuneIcon />}
+                                        onClick={() => openDoorAction('addonday', d)}>
+                                    Pick their conference day
                                 </Button>
                             )}
                             {card?.sharing && (
@@ -1708,6 +1729,7 @@ function CheckIn({ timezone: timezoneProp }) {
                     {doorAction?.kind === 'revoke' && 'Revoke this badge'}
                     {doorAction?.kind === 'reinstate' && 'Make this badge valid again'}
                     {doorAction?.kind === 'sharing' && 'Their details at the stands'}
+                    {doorAction?.kind === 'addonday' && 'Which day is their conference day?'}
                 </DialogTitle>
                 <DialogContent>
                     <Stack spacing={2} sx={{ mt: 0.5 }}>
@@ -1728,6 +1750,26 @@ function CheckIn({ timezone: timezoneProp }) {
                                 This badge stops working at every door, straight away. No money moves —
                                 a refund is a separate thing. It can be reinstated from this same screen.
                             </Alert>
+                        )}
+
+                        {doorAction?.kind === 'addonday' && (
+                            <>
+                                <Alert severity="info" icon={false}>
+                                    They bought the One-Day Speaker Access &mdash; one day of their
+                                    choosing. Until a day is picked the conference room refuses them,
+                                    and once it is picked it admits them on that day only.
+                                </Alert>
+                                <Stack spacing={1}>
+                                    {(doorAction.decision.door?.event_days || []).map((iso) => (
+                                        <Button key={iso} variant="outlined" disabled={doorBusy}
+                                            onClick={() => submitAddonDay(iso)}>
+                                            {new Date(iso + 'T12:00:00').toLocaleDateString(undefined,
+                                                { weekday: 'long', day: 'numeric', month: 'long' })}
+                                            {iso === doorAction.decision.event_local_date ? ' \u2014 today' : ''}
+                                        </Button>
+                                    ))}
+                                </Stack>
+                            </>
                         )}
 
                         {doorAction?.kind === 'sharing' && (

@@ -23,7 +23,7 @@ import TuneIcon from '@mui/icons-material/Tune';
 import { Html5QrcodeScanner } from 'html5-qrcode';
 import { authorizeScan, getScanLogs, searchAttendees, getEvents, walkInCreate, getTicketTypes, undoCheckIn, clearScanLogs, setDoorTestMode, getEvent, badgeLabelBlob, recordBadgePrint,
     overrideAdmit, doorIdentity, addPartySeat, setReEntry as setDoorReEntry, changePass, revokeAttendee, reinstateAttendee,
-    getMyCapabilities, getPrintReport } from '../utils/api';
+    getMyCapabilities, getPrintReport, setSharing } from '../utils/api';
 import { formatVenueTime, statusLabel, isFlaggedStatus } from '../utils/datetime';
 import BadgeLabelDialog, { STATION_KEY, LABEL_SIZE_KEY, LABEL_ROLLS, savedLabelSize, rollShort, fullName, physicalCard,
     canPrintBluetooth, useB1, b1Connect, b1IsConnected, b1Enqueue, b1PrintBlob, b1Dpi, rollFitsB1, PRINTER_KEY, PRINTER_CHOICES, savedPrinter } from './BadgeLabelDialog';
@@ -641,6 +641,16 @@ function CheckIn({ timezone: timezoneProp }) {
         'Seat named — their badge is printing.',
         { rescan: false });
 
+    // Somebody says "please don't give my details to the stands". One tap, and
+    // the answer is stamped so no default ever writes over it again.
+    const submitSharing = (share) => runDoorAction(
+        async (d) => { await setSharing(eventId, d.attendee_id, {
+            share_email: share, share_phone: share,
+            reason: actionReason.trim() || (share ? 'asked to share' : 'asked not to share'),
+        }); },
+        share ? 'Recorded — their details go to the stands they visit.'
+              : 'Recorded — no stand will get their email or phone.');
+
     const submitRevoke = () => runDoorAction(
         async (d) => { await revokeAttendee(d.attendee_id, actionReason.trim()); },
         'Badge revoked. It will be refused at every door from now on.');
@@ -950,6 +960,14 @@ function CheckIn({ timezone: timezoneProp }) {
                                 <Button size="small" variant="outlined" color="error" startIcon={<BlockIcon />}
                                         onClick={() => openDoorAction('revoke', d)}>
                                     Revoke
+                                </Button>
+                            )}
+                            {card?.sharing && (
+                                <Button size="small" variant="outlined"
+                                        color={card.sharing.email ? 'inherit' : 'warning'}
+                                        startIcon={<VisibilityIcon />}
+                                        onClick={() => openDoorAction('sharing', d)}>
+                                    {card.sharing.email ? 'Sharing on' : 'Not sharing'}
                                 </Button>
                             )}
                             {d.checked_in && (
@@ -1689,6 +1707,7 @@ function CheckIn({ timezone: timezoneProp }) {
                     {doorAction?.kind === 'pass' && 'Change this pass'}
                     {doorAction?.kind === 'revoke' && 'Revoke this badge'}
                     {doorAction?.kind === 'reinstate' && 'Make this badge valid again'}
+                    {doorAction?.kind === 'sharing' && 'Their details at the stands'}
                 </DialogTitle>
                 <DialogContent>
                     <Stack spacing={2} sx={{ mt: 0.5 }}>
@@ -1708,6 +1727,17 @@ function CheckIn({ timezone: timezoneProp }) {
                             <Alert severity="error" icon={false}>
                                 This badge stops working at every door, straight away. No money moves —
                                 a refund is a separate thing. It can be reinstated from this same screen.
+                            </Alert>
+                        )}
+
+                        {doorAction?.kind === 'sharing' && (
+                            <Alert severity={doorAction.decision.door?.sharing?.email ? 'info' : 'warning'} icon={false}>
+                                {doorAction.decision.door?.sharing?.email
+                                    ? 'A stand they hand their badge to gets their name, email and phone. That is what lead retrieval is, and the ticket was sold on it.'
+                                    : 'No stand gets their email or phone — only their name.'}
+                                {doorAction.decision.door?.sharing?.asked
+                                    ? ' They have been asked, and this is their answer.'
+                                    : ' Nobody has asked them; this is the default.'}
                             </Alert>
                         )}
 
@@ -1826,6 +1856,19 @@ function CheckIn({ timezone: timezoneProp }) {
                     {doorAction?.kind === 'revoke' && (
                         <Button variant="contained" color="error" disabled={doorBusy}
                             onClick={submitRevoke}>{doorBusy ? 'Revoking\u2026' : 'Revoke'}</Button>
+                    )}
+                    {doorAction?.kind === 'sharing' && (
+                        doorAction.decision.door?.sharing?.email ? (
+                            <Button variant="contained" color="warning" disabled={doorBusy}
+                                onClick={() => submitSharing(false)}>
+                                {doorBusy ? 'Saving\u2026' : 'They asked not to share'}
+                            </Button>
+                        ) : (
+                            <Button variant="contained" disabled={doorBusy}
+                                onClick={() => submitSharing(true)}>
+                                {doorBusy ? 'Saving\u2026' : 'They are happy to share'}
+                            </Button>
+                        )
                     )}
                     {doorAction?.kind === 'reinstate' && (
                         <Button variant="contained" color="success" disabled={doorBusy}

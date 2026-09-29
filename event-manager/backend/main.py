@@ -154,14 +154,27 @@ def _ensure_event_columns():
         attendee_cols = set()
     if "ticket_type_id" not in attendee_cols:
         stmts.append("ALTER TABLE attendees ADD COLUMN ticket_type_id INTEGER")
-    # Consent defaults to 0 — an existing attendee does not retroactively agree
-    # to have their contact details shared because a column appeared.
+    # Sharing contact details with a stand is what lead retrieval IS, and it is
+    # what the ticket was sold on: handing a badge over at a stand is the
+    # agreement. So these default to 1.
+    #
+    # The line that keeps that honest is consent_updated_at. An explicit choice
+    # stamps it, and nothing below -- no default, no backfill -- touches a row
+    # that carries one. Somebody who says no stays no.
     if "share_email_with_exhibitors" not in attendee_cols:
-        stmts.append("ALTER TABLE attendees ADD COLUMN share_email_with_exhibitors BOOLEAN DEFAULT 0")
+        stmts.append("ALTER TABLE attendees ADD COLUMN share_email_with_exhibitors BOOLEAN DEFAULT 1")
     if "share_phone_with_exhibitors" not in attendee_cols:
-        stmts.append("ALTER TABLE attendees ADD COLUMN share_phone_with_exhibitors BOOLEAN DEFAULT 0")
+        stmts.append("ALTER TABLE attendees ADD COLUMN share_phone_with_exhibitors BOOLEAN DEFAULT 1")
     if "consent_updated_at" not in attendee_cols:
         stmts.append("ALTER TABLE attendees ADD COLUMN consent_updated_at DATETIME")
+    if attendee_cols and "consent_updated_at" in attendee_cols:
+        # Rows created while the default was 0 and never asked. They are brought
+        # in line with the policy; anybody who actually answered the question is
+        # left exactly as they answered it.
+        stmts.append("UPDATE attendees SET share_email_with_exhibitors=1 "
+                     "WHERE consent_updated_at IS NULL AND COALESCE(share_email_with_exhibitors,0)=0")
+        stmts.append("UPDATE attendees SET share_phone_with_exhibitors=1 "
+                     "WHERE consent_updated_at IS NULL AND COALESCE(share_phone_with_exhibitors,0)=0")
     if "can_scan_leads" not in exhibitor_cols:
         # Also 0: scanning becomes something an organiser grants, not something
         # every exhibitor row silently acquires by existing.
@@ -1600,6 +1613,45 @@ def door_identity(event_id: int, attendee_id: int, body: schemas.DoorIdentity,
             "door": _door_card(db, att, event, current_user)}
 
 
+@app.post("/events/{event_id}/attendees/{attendee_id}/sharing")
+def set_sharing(event_id: int, attendee_id: int, body: schemas.SharingChoice,
+                db: Session = Depends(get_db),
+                current_user: models.User = Depends(get_current_user)):
+    """Record what this person says about their details being shared.
+
+    Sharing is ON by default: buying a ticket and handing a badge to a stand is
+    the agreement, and it is what lead retrieval is sold on. A default is only
+    honest if it can be refused, though, and the place somebody refuses it is
+    the desk or a stand -- out loud, to a person, not in a settings screen they
+    will never open.
+
+    So this is a door capability, and it writes consent_updated_at. That stamp
+    is what protects the answer: no backfill, no import and no future default
+    ever writes over a row that carries one. Somebody who says no stays no.
+    """
+    event = _get_event_or_404(event_id, db)
+    authz.require_cap(db, current_user, event_id, "checkin.perform")
+    _assert_event_writable(db, event, "change a sharing choice on it")
+    att = db.query(models.Attendee).filter(models.Attendee.id == attendee_id,
+                                           models.Attendee.event_id == event_id).first()
+    if not att:
+        raise HTTPException(status_code=404, detail="That badge does not belong to this event")
+    before = (bool(att.share_email_with_exhibitors), bool(att.share_phone_with_exhibitors))
+    att.share_email_with_exhibitors = bool(body.share_email)
+    att.share_phone_with_exhibitors = bool(body.share_phone)
+    att.consent_updated_at = datetime.utcnow()
+    _lifecycle_append(att, "sharing_choice", actor=(current_user.email or "staff"),
+                      reason=(body.reason or None),
+                      **{"from": {"email": before[0], "phone": before[1]},
+                         "to": {"email": bool(body.share_email), "phone": bool(body.share_phone)}})
+    db.commit(); db.refresh(att)
+    return {"ok": True,
+            "share_email": bool(att.share_email_with_exhibitors),
+            "share_phone": bool(att.share_phone_with_exhibitors),
+            "asked_at": att.consent_updated_at,
+            "door": _door_card(db, att, event, current_user)}
+
+
 @app.post("/events/{event_id}/attendees/{attendee_id}/add-seat")
 def add_party_seat(event_id: int, attendee_id: int, body: schemas.AddPartySeat,
                    db: Session = Depends(get_db),
@@ -2820,6 +2872,11 @@ def _door_card(db, attendee, event, user=None):
             "attendance_type": attendee.attendance_type or None,
             "source": attendee.registration_source or None,
             "needs_name_check": bool(cd.get("needs_name_check")),
+            "sharing": {"email": bool(attendee.share_email_with_exhibitors),
+                        "phone": bool(attendee.share_phone_with_exhibitors),
+                        # Whether anybody ever actually asked them, as opposed
+                        # to the default answering on their behalf.
+                        "asked": attendee.consent_updated_at is not None},
             "party": _party_members(db, attendee),
             "money": _money_for(db, attendee),
             "badge_print_count": int(attendee.badge_print_count or 0),

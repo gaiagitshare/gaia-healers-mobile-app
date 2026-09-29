@@ -197,6 +197,9 @@ export const overrideAdmit = (eventId, attendeeId, data) =>
     api.post(`/events/${eventId}/attendees/${attendeeId}/override-admit`, data);
 export const doorIdentity = (eventId, attendeeId, data) =>
     api.post(`/events/${eventId}/attendees/${attendeeId}/door-identity`, data);
+// What somebody says about their details reaching the stands they visit.
+export const setSharing = (eventId, attendeeId, data) =>
+    api.post(`/events/${eventId}/attendees/${attendeeId}/sharing`, data);
 export const addPartySeat = (eventId, attendeeId, data) =>
     api.post(`/events/${eventId}/attendees/${attendeeId}/add-seat`, data);
 export const setReEntry = (eventId, enabled) => api.post(`/events/${eventId}/re-entry`, { enabled });

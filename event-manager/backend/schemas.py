@@ -1153,6 +1153,14 @@ class AddPartySeat(BaseModel):
     reason: Optional[str] = None
 
 
+class SharingChoice(BaseModel):
+    """What somebody says about their details reaching the stands they visit.
+    Recording it stamps consent_updated_at, which no default may overwrite."""
+    share_email: bool = True
+    share_phone: bool = True
+    reason: Optional[str] = None
+
+
 class DoorIdentity(BaseModel):
     """Correcting who a badge belongs to, at the desk. Every field is optional
     so the desk can fix a surname without retyping anything else."""

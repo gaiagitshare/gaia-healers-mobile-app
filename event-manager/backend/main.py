@@ -2391,11 +2391,20 @@ def _effective_access(db, attendee):
         base_tt = attendee.ticket_type_id
     base = db.query(models.TicketType).filter(models.TicketType.id == base_tt).first() if base_tt else None
     # add-ons (dedup by code, keep the first paid one)
+    #
+    # An add-on that the base tier already covers is not shown. Somebody who
+    # bought one day of the conference and was later given all three still has
+    # the one-day purchase on their record -- it is what they paid for and the
+    # history keeps it -- but listing it beside a pass that already opens every
+    # day reads as a restriction that no longer exists, and offers them a day to
+    # choose that no longer means anything.
     addons = []
     seen = set()
     for e in paid:
         code = e.get("addon_code")
         if not code or code in seen:
+            continue
+        if code == "ONE_DAY_CONFERENCE" and base is not None and getattr(base, "grants_conference", False):
             continue
         seen.add(code)
         addons.append({"code": code, "label": _addon_label(code), "day": e.get("day"),

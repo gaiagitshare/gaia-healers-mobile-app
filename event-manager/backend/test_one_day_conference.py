@@ -95,6 +95,21 @@ if holder is None:
 name = ("%s %s" % (holder.first_name or "", holder.last_name or "")).strip()
 print("     %s" % name)
 
+# Everybody who bought one day has since been given all three, complimentary.
+# That is a decision about this event, not about how a one-day add-on behaves,
+# so the rule is tested on a copy with the comp lifted -- otherwise the next
+# event to sell one inherits a rule nothing checks any more.
+ga = s.query(models.TicketType).filter(
+    models.TicketType.event_id == EVENT, models.TicketType.name == "General Admission").first()
+comped = (holder.custom_data or {}).get("admin_tier") is not None
+if comped:
+    _cd = dict(holder.custom_data or {})
+    _cd.pop("admin_tier", None)
+    holder.custom_data = _cd
+    holder.ticket_type_id = ga.id
+    s.commit()
+    print("     (comp lifted on this copy, to test the add-on rule itself)")
+
 eff = main._effective_access(s, holder)
 base = (eff.get("base_ticket") or {}).get("name")
 check(base == "General Admission",
@@ -167,6 +182,32 @@ st, out = call("POST", "/attendees/%d/addon-day" % holder.id,
                {"addon_code": ADDON, "day_label": "some Tuesday", "day_date": "2027-03-02"}, STAFF)
 check(st == 400 and "day this event runs" in str(out),
       "but not a day it does not run", (st, out))
+
+print("\nA COMP TO THE FULL CONFERENCE COVERS THE ADD-ON")
+# What the organiser actually decided: give them all three days. The one-day
+# purchase stays on the ledger, and stops being displayed, because listing
+# "one day, still to be chosen" beside a pass that opens every day reads as a
+# restriction that no longer exists.
+conf = s.query(models.TicketType).filter(
+    models.TicketType.event_id == EVENT,
+    models.TicketType.name == "General Admission + Conference").first()
+_cd = dict(holder.custom_data or {})
+_cd["admin_tier"] = conf.id
+holder.custom_data = _cd
+holder.ticket_type_id = conf.id
+s.commit()
+s.expire_all()
+holder = s.query(models.Attendee).filter(models.Attendee.id == holder.id).first()
+eff = main._effective_access(s, holder)
+check((eff.get("base_ticket") or {}).get("name") == "General Admission + Conference",
+      "the comp gives them the full conference", eff.get("effective_label"))
+check(not eff.get("addons"),
+      "and the one-day add-on stops being listed, because the pass covers it", eff.get("addons"))
+check(any(e.get("addon_code") == ADDON for e in (holder.custom_data or {}).get("entitlements") or []),
+      "but the purchase is still on the ledger \u2014 it is what they paid for")
+for day in DAYS:
+    d = door("CONFERENCE", at=day)
+    check(d.get("granted") is True, "the conference room admits them on %s" % day, d.get("reason"))
 
 print("\nNOBODY ELSE MOVED")
 lana = s.query(models.Attendee).filter(

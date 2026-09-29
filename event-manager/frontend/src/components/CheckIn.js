@@ -204,10 +204,43 @@ function CheckIn({ timezone: timezoneProp }) {
         return today < String(start).slice(0, 10) || today > String(end).slice(0, 10);
     })();
 
+    // ── Which door is this, before anybody asks ────────────────────────────
+    // The screen used to open empty, so the first thing a staffer did on the
+    // morning of the event was pick the right conference out of a list that
+    // also contains last year's. Getting that wrong refuses everybody, and the
+    // person it refuses is standing in front of them.
+    //
+    // So it picks, but only when there is nothing to get wrong: exactly one
+    // event that is live and not archived. Two live events is a real question
+    // and it stays a question — a guess there is the same mistake in a nicer
+    // coat. A deliberate choice is remembered on this device, so somebody who
+    // switched to another door keeps it when the page reloads.
+    const DOOR_EVENT_KEY = 'gha_door_event';
+    const [autoPicked, setAutoPicked] = useState(false);
     useEffect(() => {
         if (eventIdFromRoute) return;
-        getEvents().then((response) => setEvents(response.data)).catch(() => setEvents([]));
+        getEvents().then((response) => {
+            const rows = response.data || [];
+            setEvents(rows);
+            setPickedEvent((current) => {
+                if (current) return current;
+                let remembered = null;
+                try { remembered = localStorage.getItem(DOOR_EVENT_KEY); } catch (e) { /* noop */ }
+                const kept = rows.find((ev) => String(ev.id) === String(remembered) && !ev.is_archived);
+                if (kept) return kept;
+                const live = rows.filter((ev) => ev.is_active && !ev.is_archived);
+                if (live.length === 1) { setAutoPicked(true); return live[0]; }
+                return null;
+            });
+        }).catch(() => setEvents([]));
     }, [eventIdFromRoute]);
+    const chooseEvent = (ev) => {
+        setPickedEvent(ev); setAutoPicked(false);
+        try {
+            if (ev) localStorage.setItem(DOOR_EVENT_KEY, String(ev.id));
+            else localStorage.removeItem(DOOR_EVENT_KEY);
+        } catch (e) { /* noop */ }
+    };
 
     useEffect(() => {
         setQuery(''); setResults(null); setResult(null); setError(''); setConfirmFlagged(null);
@@ -941,9 +974,15 @@ function CheckIn({ timezone: timezoneProp }) {
                 <Paper variant="outlined" sx={{ p: 2, mb: 2 }}>
                     <TextField select fullWidth size="small" label="Which event's door is this?"
                         value={pickedEvent ? pickedEvent.id : ''}
-                        onChange={(e) => setPickedEvent(events.find((event) => event.id === Number(e.target.value)) || null)}
-                        helperText="Badges from any other event are refused.">
-                        {events.map((event) => <MenuItem key={event.id} value={event.id}>{event.name}</MenuItem>)}
+                        onChange={(e) => chooseEvent(events.find((event) => event.id === Number(e.target.value)) || null)}
+                        helperText={autoPicked
+                            ? 'The only conference running. Change it if this door is for something else — badges from any other event are refused.'
+                            : 'Badges from any other event are refused.'}>
+                        {events.map((event) => (
+                            <MenuItem key={event.id} value={event.id} disabled={Boolean(event.is_archived)}>
+                                {event.name}{event.is_archived ? ' — archived, cannot be used' : ''}
+                            </MenuItem>
+                        ))}
                     </TextField>
                 </Paper>
             )}

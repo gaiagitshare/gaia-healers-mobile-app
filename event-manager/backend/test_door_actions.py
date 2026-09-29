@@ -423,6 +423,30 @@ check(capsS["may"]["register_paying_walk_in"] is True
 check(capsA["may"]["register_free_badge"] is True and capsA["is_organiser"] is True,
       "the organiser is told they may do both", capsA["may"])
 
+print("\nTHE DOOR KNOWS WHICH CONFERENCE IT IS")
+# The check-in screen picks its own event when exactly one is live and not
+# archived, so nobody has to choose the right conference out of a list that
+# also contains last year's on the morning of the event. That default is only
+# safe while the API keeps saying which is which -- these are the two facts it
+# rests on, and they are the ones that would break it silently.
+_, evs = call("GET", "/events", None, ADMIN)
+check(isinstance(evs, list) and len(evs) >= 2, "the door is offered more than one event", len(evs or []))
+check(all("is_archived" in e and "is_active" in e for e in evs),
+      "every event says whether it is live and whether it is archived",
+      [sorted(set(e) & {"is_active", "is_archived"}) for e in (evs or [])][:2])
+_live = [e for e in evs if e.get("is_active") and not e.get("is_archived")]
+check(len(_live) == 1, "exactly one is live and unarchived, so the default is unambiguous",
+      [e["name"] for e in _live])
+check(_live and _live[0]["id"] == EVENT, "and it is this year's conference", _live and _live[0]["name"])
+_arch = [e for e in evs if e.get("is_archived")]
+check(bool(_arch), "last year's is marked archived, so it can be greyed out", len(_arch))
+# And it really would refuse everybody, which is why picking it by mistake matters.
+if _arch:
+    st, out = call("POST", "/events/%d/authorize" % _arch[0]["id"],
+                   {"qr_code": SEAT_QR, "access_type": "EVENT_ENTRY"}, ADMIN)
+    check(st == 200 and out.get("granted") is False,
+          "a 2026 badge at the archived door is refused", out.get("reason"))
+
 print("\nNOBODY ELSE'S DOOR")
 st, _ = override({"reason": "wrong event on purpose"}, STAFF, event_id=2)
 check(st in (403, 404), "a badge cannot be overridden at an event it does not belong to", st)

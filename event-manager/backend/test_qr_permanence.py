@@ -19,8 +19,9 @@ for line in open("/root/event/backend/.env"):
 SECRET = env.get("SECRET_KEY"); SVC = env.get("IDENTITY_SERVICE_TOKEN")
 from jose import jwt
 ADMIN = jwt.encode({"sub": "1"}, SECRET, algorithm="HS256")
-BASE = "http://127.0.0.1:8002"
-DB = "/root/event/backend/event.db"
+import sys as _sys; _sys.path.insert(0, "/root/event/backend")
+import testbed
+BASE, DB = testbed.start()
 TEST_EMAIL = "qr-permanence-test@example.invalid"
 EVENT = 1
 

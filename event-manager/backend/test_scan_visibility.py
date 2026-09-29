@@ -23,7 +23,9 @@ Run:  python3 /root/event/backend/test_scan_visibility.py
 import json, sqlite3, sys, urllib.request, urllib.error
 
 HERE = "/root/event/backend"
-BASE = "http://127.0.0.1:8002"
+import sys as _sys; _sys.path.insert(0, "/root/event/backend")
+import testbed
+BASE, _DB = testbed.start()
 db = sqlite3.connect("file:%s/event.db?mode=ro" % HERE, uri=True)
 db.row_factory = sqlite3.Row
 sys.path.insert(0, HERE)

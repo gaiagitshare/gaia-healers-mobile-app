@@ -23,7 +23,13 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import vendor_sheet as vs
 
 HERE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-DB = os.path.join(HERE, "event.db")
+# Honour DATABASE_URL like everything else does. Without it this tool could
+# only ever be pointed at the live file, so a test that runs it against a
+# copy silently wrote to production instead -- and a dry run had nowhere
+# safe to be dry against.
+_DBURL = os.environ.get("DATABASE_URL", "")
+DB = (_DBURL.split("sqlite:///", 1)[1] if _DBURL.startswith("sqlite:///")
+      else os.path.join(HERE, "event.db"))
 DATA = os.path.join(HERE, "data")
 LOG = os.path.join(DATA, "vendor-sync.log")
 LATEST = os.path.join(DATA, "vendor-sync-latest.md")

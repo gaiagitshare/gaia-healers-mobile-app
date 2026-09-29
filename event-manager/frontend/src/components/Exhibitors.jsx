@@ -15,7 +15,7 @@ import {
 } from '@mui/icons-material';
 import {
     getExhibitors, createExhibitor, updateExhibitor, deleteExhibitor,
-    getExhibitorLeads, vendorActivationLink,
+    getExhibitorLeads, vendorActivationLink, getScanHistory,
     uploadExhibitorImage, addExhibitorPhoto, deleteExhibitorPhoto,
     addExhibitorProduct, updateExhibitorProduct, deleteExhibitorProduct,
 } from '../utils/api';
@@ -105,6 +105,18 @@ export default function Exhibitors({ eventId, onCountChange }) {
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState('');
     const [view, setView] = useState('roster');
+    // A stand could see its own leads and the door could see its own log, and
+    // nobody could see both — so "who scanned my badge?" had no screen that
+    // answered it.
+    const [scans, setScans] = useState(null);
+    const [scansLoading, setScansLoading] = useState(false);
+    useEffect(() => {
+        if (view !== 'scans' || !eventId) return;
+        setScansLoading(true);
+        getScanHistory(eventId).then((r) => setScans(r.data || null))
+            .catch(() => setScans(null))
+            .finally(() => setScansLoading(false));
+    }, [view, eventId]);
     const [q, setQ] = useState('');
     const [stageFilter, setStageFilter] = useState('');
     const [editing, setEditing] = useState(null);
@@ -318,6 +330,7 @@ export default function Exhibitors({ eventId, onCountChange }) {
                     onChange={(_, v) => v && setView(v)}>
                     <ToggleButton value="roster">Roster</ToggleButton>
                     <ToggleButton value="commercial">Commercial</ToggleButton>
+                    <ToggleButton value="scans">Who scanned who</ToggleButton>
                 </ToggleButtonGroup>
             </Stack>
 
@@ -331,7 +344,112 @@ export default function Exhibitors({ eventId, onCountChange }) {
                 </Paper>
             )}
 
-            {grouped.map(({ stage, group }) => {
+            {/* Two kinds of scan, never merged. A stand capturing a lead is an
+                exchange the attendee agreed to; a door reading a badge is an
+                access decision. Adding them together would answer neither
+                question. */}
+            {view === 'scans' && (
+                scansLoading ? <CircularProgress size={26} /> : !scans ? (
+                    <Paper variant="outlined" sx={{ p: 3, color: 'text.secondary' }}>
+                        <Typography variant="body2">Scan history is not available for this event.</Typography>
+                    </Paper>
+                ) : (
+                    <Stack spacing={2}>
+                        <Paper variant="outlined" sx={{ p: 2 }}>
+                            <Typography variant="subtitle1" fontWeight={700} gutterBottom>
+                                Stands scanning attendees
+                            </Typography>
+                            <Typography variant="body2" color="text.secondary" sx={{ mb: 1.5 }}>
+                                {scans.stand_scans.total} scan{scans.stand_scans.total === 1 ? '' : 's'} ·{' '}
+                                {scans.stand_scans.stands_scanning} stand{scans.stand_scans.stands_scanning === 1 ? '' : 's'} ·{' '}
+                                {scans.stand_scans.people_scanned} {scans.stand_scans.people_scanned === 1 ? 'person' : 'people'}
+                            </Typography>
+                            {scans.stand_scans.total === 0 ? (
+                                <Typography variant="body2" color="text.secondary">
+                                    No stand has scanned a badge yet. Lead retrieval starts on the day.
+                                </Typography>
+                            ) : (
+                                <>
+                                    <Stack direction="row" spacing={0.75} flexWrap="wrap" useFlexGap sx={{ mb: 1.5 }}>
+                                        {scans.stand_scans.by_stand.slice(0, 12).map((b) => (
+                                            <Chip key={b.stand} size="small" variant="outlined"
+                                                  label={`${b.stand} · ${b.scans}`} />
+                                        ))}
+                                    </Stack>
+                                    <Table size="small">
+                                        <TableHead>
+                                            <TableRow>
+                                                <TableCell>When</TableCell>
+                                                <TableCell>Stand</TableCell>
+                                                <TableCell>Scanned</TableCell>
+                                                <TableCell>Rating</TableCell>
+                                            </TableRow>
+                                        </TableHead>
+                                        <TableBody>
+                                            {scans.stand_scans.items.slice(0, 100).map((r) => (
+                                                <TableRow key={r.lead_id}>
+                                                    <TableCell>{r.at ? new Date(r.at).toLocaleString() : ''}</TableCell>
+                                                    <TableCell>{r.stand || r.exhibitor}{r.booth ? ` · ${r.booth}` : ''}</TableCell>
+                                                    <TableCell>{r.attendee || `#${r.attendee_id}`}</TableCell>
+                                                    <TableCell>{r.rating || ''}{r.has_notes ? ' · note' : ''}</TableCell>
+                                                </TableRow>
+                                            ))}
+                                        </TableBody>
+                                    </Table>
+                                </>
+                            )}
+                        </Paper>
+
+                        {scans.stand_scans.most_scanned.length > 0 && (
+                            <Paper variant="outlined" sx={{ p: 2 }}>
+                                <Typography variant="subtitle1" fontWeight={700} gutterBottom>
+                                    Most visited badges
+                                </Typography>
+                                <Stack direction="row" spacing={0.75} flexWrap="wrap" useFlexGap>
+                                    {scans.stand_scans.most_scanned.map((m) => (
+                                        <Chip key={m.attendee} size="small"
+                                              label={`${m.attendee} · ${m.stands} stand${m.stands === 1 ? '' : 's'}`} />
+                                    ))}
+                                </Stack>
+                            </Paper>
+                        )}
+
+                        <Paper variant="outlined" sx={{ p: 2 }}>
+                            <Typography variant="subtitle1" fontWeight={700} gutterBottom>
+                                Doors reading badges
+                            </Typography>
+                            <Typography variant="body2" color="text.secondary" sx={{ mb: 1.5 }}>
+                                {scans.door_scans.total} scan{scans.door_scans.total === 1 ? '' : 's'} — an access
+                                decision, not a lead. Counted apart on purpose.
+                            </Typography>
+                            <Table size="small">
+                                <TableHead>
+                                    <TableRow>
+                                        <TableCell>When</TableCell>
+                                        <TableCell>Who</TableCell>
+                                        <TableCell>Zone</TableCell>
+                                        <TableCell>Result</TableCell>
+                                        <TableCell>Operator</TableCell>
+                                    </TableRow>
+                                </TableHead>
+                                <TableBody>
+                                    {scans.door_scans.items.slice(0, 60).map((r, i) => (
+                                        <TableRow key={i}>
+                                            <TableCell>{r.at ? new Date(r.at).toLocaleString() : ''}</TableCell>
+                                            <TableCell>{r.attendee || (r.attendee_id ? `#${r.attendee_id}` : 'unknown badge')}</TableCell>
+                                            <TableCell>{r.zone}</TableCell>
+                                            <TableCell>{r.result}</TableCell>
+                                            <TableCell>{r.by || ''}</TableCell>
+                                        </TableRow>
+                                    ))}
+                                </TableBody>
+                            </Table>
+                        </Paper>
+                    </Stack>
+                )
+            )}
+
+            {view !== 'scans' && grouped.map(({ stage, group }) => {
                 const open = openStages[stage.key] !== false
                     && (openStages[stage.key] || stage.key === 'confirmed' || Boolean(q) || Boolean(stageFilter));
                 return (

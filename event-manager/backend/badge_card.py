@@ -499,17 +499,12 @@ def render_card_html(view: dict, token: str, app_base: str = None) -> str:
             "<div class=\"top\">%s<span><b>Gaia Healers</b> \u00b7 digital badge</span></div>"
             % (_h(og_title), _h(og_title), _h(og_desc), _h(og_img), _CSS, theme_css, _MARK))
 
-    # What they hold, in the same words the door uses. It sits with the event
-    # name because that is the question somebody opens their own card to answer
-    # -- "what did I actually buy" -- and it is the one thing the card could say
-    # and did not.
+    # The pass is deliberately NOT here. This page is reached by anybody who
+    # opens the link -- the QR is worn on a badge all weekend -- and what tier
+    # somebody bought is not a stranger's business. It is shown to the people
+    # who actually scan the badge instead: the door, and the stand the person
+    # chose to hand their badge to.
     pass_block = ""
-    if view.get("pass_display"):
-        pass_block = ("<div class=\"pass\"><p class=\"pass__k\">Your pass</p>"
-                      "<p class=\"pass__t\">%s</p>%s</div>"
-                      % (_h(view["pass_display"]),
-                         ("<p class=\"pass__i\">%s</p>" % _h(view["pass_includes"]))
-                         if view.get("pass_includes") else ""))
 
     if not view.get("public"):
         first = _h(view.get("first_name") or "the owner")

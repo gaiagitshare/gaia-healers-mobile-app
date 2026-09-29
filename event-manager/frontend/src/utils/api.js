@@ -184,6 +184,11 @@ export const badgeLabelBlob = (eventId, attendeeId, size = '50x30v', view = 'rol
 // A print attempt, success or failure. Separate from check-in by design.
 // Which desk printed what, and what failed there.
 export const getPrintReport = (eventId) => api.get(`/events/${eventId}/print-report`);
+// Who scanned whom, across the whole floor — stands and doors, never merged.
+export const getScanHistory = (eventId, limit = 500) =>
+    api.get(`/events/${eventId}/scan-history`, { params: { limit } });
+export const getAttendeeScans = (eventId, attendeeId) =>
+    api.get(`/events/${eventId}/attendees/${attendeeId}/scans`);
 export const recordBadgePrint = (eventId, attendeeId, data) =>
     api.post(`/events/${eventId}/attendees/${attendeeId}/badge-print`, data);
 // Door-side corrections. Both live under the event so the audit trail names

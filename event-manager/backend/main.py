@@ -3161,7 +3161,7 @@ def scan_qr_code(
         return schemas.QRScanResponse(
             success=True,
             message="Lead already captured",
-            attendee=authz.lead_view(attendee),
+            attendee=dict(authz.lead_view(attendee), **authz.pass_for_scanner(db, attendee)),
             lead_id=existing_lead.id
         )
 
@@ -3176,7 +3176,7 @@ def scan_qr_code(
     return schemas.QRScanResponse(
         success=True,
         message=f"Lead captured for {attendee.first_name} {attendee.last_name}",
-        attendee=authz.lead_view(attendee),
+        attendee=dict(authz.lead_view(attendee), **authz.pass_for_scanner(db, attendee)),
         lead_id=lead.id
     )
 
@@ -3203,7 +3203,11 @@ def get_public_exhibitor_leads(
             "id": lead.id, "exhibitor_id": lead.exhibitor_id,
             "attendee_id": lead.attendee_id, "scanned_at": lead.scanned_at,
             "notes": lead.notes, "rating": lead.rating,
-            "attendee": authz.lead_public_view(lead),
+            # The stand they handed their badge to sees the pass; the public
+            # card page does not.
+            "attendee": (dict(authz.lead_public_view(lead) or {},
+                              **authz.pass_for_scanner(db, lead.attendee))
+                         if lead.attendee is not None else None),
         }
         for lead in leads
     ]
@@ -3262,6 +3266,117 @@ def update_lead_notes(
     
     db.commit()
     return {"message": "Lead updated"}
+
+@app.get("/events/{event_id}/scan-history")
+def scan_history(event_id: int, limit: int = 500, db: Session = Depends(get_db),
+                 current_user: models.User = Depends(get_current_user)):
+    """Who scanned whom, across the whole floor.
+
+    A stand could always see its own leads and the door could see its own log,
+    and nobody could see both, or either one across every stand. So the one
+    question an organiser actually gets asked -- "who scanned my badge?", or
+    "which stands did this person visit?" -- had no screen that answered it.
+
+    Two kinds of scan appear here and they are NEVER merged: a stand capturing
+    a lead is an exchange the attendee consented to, and a door reading a badge
+    is an access decision. They are counted and listed apart.
+    """
+    _get_event_or_404(event_id, db)
+    authz.require_cap(db, current_user, event_id, "lead.read")
+
+    exhibitors = {e.id: e for e in db.query(models.Exhibitor).filter(
+        models.Exhibitor.event_id == event_id).all()}
+    leads = db.query(models.Lead).filter(
+        models.Lead.exhibitor_id.in_(list(exhibitors) or [0])).order_by(
+        models.Lead.scanned_at.desc()).limit(limit).all()
+    att = {a.id: a for a in db.query(models.Attendee).filter(
+        models.Attendee.event_id == event_id).all()}
+
+    def who(aid):
+        a = att.get(aid)
+        return ("%s %s" % (a.first_name or "", a.last_name or "")).strip() if a else None
+
+    rows = [{"lead_id": l.id,
+             "exhibitor_id": l.exhibitor_id,
+             "exhibitor": (exhibitors[l.exhibitor_id].company_name
+                           if l.exhibitor_id in exhibitors else None),
+             "booth": (exhibitors[l.exhibitor_id].booth_number
+                       if l.exhibitor_id in exhibitors else None),
+             "attendee_id": l.attendee_id,
+             "attendee": who(l.attendee_id),
+             "at": l.scanned_at,
+             "rating": l.rating,
+             "has_notes": bool((l.notes or "").strip())}
+            for l in leads]
+
+    by_stand, by_person = {}, {}
+    for r in rows:
+        by_stand[r["exhibitor"] or "(unknown stand)"] = by_stand.get(r["exhibitor"] or "(unknown stand)", 0) + 1
+        if r["attendee"]:
+            by_person[r["attendee"]] = by_person.get(r["attendee"], 0) + 1
+
+    door = db.query(models.ScanLog).filter(
+        models.ScanLog.event_id == event_id).order_by(
+        models.ScanLog.created_at.desc()).limit(limit).all()
+    users = {u.id: (u.email or "") for u in db.query(models.User).all()}
+
+    return {
+        "event_id": event_id,
+        "stand_scans": {
+            "total": len(rows),
+            "stands_scanning": len(by_stand),
+            "people_scanned": len(by_person),
+            "by_stand": sorted(({"stand": k, "scans": v} for k, v in by_stand.items()),
+                               key=lambda x: -x["scans"]),
+            "most_scanned": sorted(({"attendee": k, "stands": v} for k, v in by_person.items()),
+                                   key=lambda x: -x["stands"])[:20],
+            "items": rows,
+        },
+        "door_scans": {
+            "total": len(door),
+            "items": [{"attendee_id": d.attendee_id,
+                       "attendee": who(d.attendee_id),
+                       "zone": d.access_type, "result": d.result, "reason": d.reason,
+                       "by": users.get(d.staff_user_id), "at": d.created_at}
+                      for d in door[:limit]],
+        },
+    }
+
+
+@app.get("/events/{event_id}/attendees/{attendee_id}/scans")
+def attendee_scans(event_id: int, attendee_id: int, db: Session = Depends(get_db),
+                   current_user: models.User = Depends(get_current_user)):
+    """Everywhere one badge has been read. The answer to "who scanned me?",
+    asked by the person it happened to."""
+    _get_event_or_404(event_id, db)
+    authz.require_cap(db, current_user, event_id, "lead.read")
+    a = db.query(models.Attendee).filter(models.Attendee.id == attendee_id,
+                                         models.Attendee.event_id == event_id).first()
+    if not a:
+        raise HTTPException(status_code=404, detail="That badge does not belong to this event")
+    exhibitors = {e.id: e for e in db.query(models.Exhibitor).filter(
+        models.Exhibitor.event_id == event_id).all()}
+    leads = db.query(models.Lead).filter(
+        models.Lead.attendee_id == attendee_id).order_by(models.Lead.scanned_at.desc()).all()
+    users = {u.id: (u.email or "") for u in db.query(models.User).all()}
+    door = db.query(models.ScanLog).filter(
+        models.ScanLog.event_id == event_id,
+        models.ScanLog.attendee_id == attendee_id).order_by(
+        models.ScanLog.created_at.desc()).all()
+    return {
+        "attendee_id": a.id,
+        "name": ("%s %s" % (a.first_name or "", a.last_name or "")).strip(),
+        "stands": [{"exhibitor_id": l.exhibitor_id,
+                    "stand": (exhibitors[l.exhibitor_id].company_name
+                              if l.exhibitor_id in exhibitors else None),
+                    "booth": (exhibitors[l.exhibitor_id].booth_number
+                              if l.exhibitor_id in exhibitors else None),
+                    "at": l.scanned_at, "rating": l.rating}
+                   for l in leads],
+        "doors": [{"zone": d.access_type, "result": d.result, "reason": d.reason,
+                   "by": users.get(d.staff_user_id), "at": d.created_at} for d in door],
+    }
+
 
 @app.get("/exhibitors/{exhibitor_id}/leads", response_model=List[schemas.Lead])
 def get_exhibitor_leads(
@@ -9535,12 +9650,6 @@ def _serve_card(token: str, request: FastAPIRequest, db, fmt: str):
         raise HTTPException(status_code=404, detail="Card not found")
     card, event, attendee = ctx
     view = badge_card.public_view(card, event, _participation(db, card))
-    # What this person holds, in the same words the door and the ticket email
-    # use. Read from the ONE resolver, so a card can never describe access the
-    # scanner would refuse.
-    if attendee is not None and event is not None and not getattr(event, "is_archived", 0):
-        view["pass_display"] = _pass_display(db, attendee)
-        view["pass_includes"] = _pass_includes(db, attendee, event)
     tok = card.public_token
     if fmt == "vcf":
         if not view.get("public"):

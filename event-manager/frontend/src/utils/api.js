@@ -182,6 +182,8 @@ export const generateBadge = (id) => api.get(`/attendees/${id}/badge`);
 export const badgeLabelBlob = (eventId, attendeeId, size = '50x30v', view = 'roll', dpi = 203) =>
     api.get(`/events/${eventId}/attendees/${attendeeId}/badge-label.png`, { params: { size, view, dpi }, responseType: 'blob' });
 // A print attempt, success or failure. Separate from check-in by design.
+// Which desk printed what, and what failed there.
+export const getPrintReport = (eventId) => api.get(`/events/${eventId}/print-report`);
 export const recordBadgePrint = (eventId, attendeeId, data) =>
     api.post(`/events/${eventId}/attendees/${attendeeId}/badge-print`, data);
 // Door-side corrections. Both live under the event so the audit trail names

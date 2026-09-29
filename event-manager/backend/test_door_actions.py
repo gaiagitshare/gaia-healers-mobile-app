@@ -423,6 +423,42 @@ check(capsS["may"]["register_paying_walk_in"] is True
 check(capsA["may"]["register_free_badge"] is True and capsA["is_organiser"] is True,
       "the organiser is told they may do both", capsA["may"])
 
+print("\nWHICH DESK PRINTED IT")
+# Every print attempt has been logged since badges existed, and nothing ever
+# read the log back -- so the station name on it was a field people were asked
+# to fill in for no visible reason, and did not. A record nobody can see is not
+# a record.
+_, pr0 = call("GET", "/events/%d/print-report" % EVENT, None, STAFF)
+check(isinstance(pr0, dict) and "stations" in pr0, "the door can read its own print log", str(pr0)[:120])
+_before = pr0.get("printed", 0)
+
+for _i, (_st, _res) in enumerate((("Desk 1", "printed"), ("Desk 1", "printed"),
+                                  ("Desk 2", "printed"), ("Desk 2", "failed"))):
+    # A unique id per attempt: re-sending one is how a retry is deduplicated,
+    # which is correct and is not what is being measured here.
+    call("POST", "/events/%d/attendees/%d/badge-print" % (EVENT, SEAT_ID),
+         {"result": _res, "station": _st, "error": ("printer offline" if _res == "failed" else None),
+          "client_attempt_id": "t-%d-%s-%s-%s" % (_i, _st, _res, _stamp)}, STAFF)
+# A desk that never named itself must still be attributable to somebody.
+call("POST", "/events/%d/attendees/%d/badge-print" % (EVENT, SEAT_ID),
+     {"result": "printed", "client_attempt_id": "t-anon-%s" % _stamp}, STAFF)
+
+_, pr = call("GET", "/events/%d/print-report" % EVENT, None, ADMIN)
+by = {s["station"]: s for s in pr["stations"]}
+check(pr["printed"] == _before + 4, "prints are counted", (pr["printed"], _before))
+check("Desk 1" in by and by["Desk 1"]["printed"] == 2, "and grouped by the desk that made them", by.get("Desk 1"))
+check("Desk 2" in by and by["Desk 2"]["failed"] == 1 and by["Desk 2"]["failure_rate"] == 50,
+      "a desk that is failing is visible as a rate, not buried in a total", by.get("Desk 2"))
+_anon = [k for k in by if k.startswith("(unnamed") and staff.email in k]
+check(bool(_anon),
+      "a print from an unnamed desk is filed under whoever was signed in",
+      [k for k in by if k.startswith("(unnamed")])
+check(pr["unnamed_stations"] >= 1, "and the screen is told how many devices have not named themselves")
+_fails = [f for f in pr["recent_failures"] if f.get("station") == "Desk 2"]
+check(_fails and "printer offline" in (_fails[0].get("error") or ""),
+      "the failure says what went wrong, and where", _fails[:1])
+print("     %d attempts across %d desk(s)" % (pr["attempts"], len(pr["stations"])))
+
 print("\nTHE DOOR KNOWS WHICH CONFERENCE IT IS")
 # The check-in screen picks its own event when exactly one is live and not
 # archived, so nobody has to choose the right conference out of a list that

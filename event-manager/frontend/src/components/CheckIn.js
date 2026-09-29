@@ -23,7 +23,7 @@ import TuneIcon from '@mui/icons-material/Tune';
 import { Html5QrcodeScanner } from 'html5-qrcode';
 import { authorizeScan, getScanLogs, searchAttendees, getEvents, walkInCreate, getTicketTypes, undoCheckIn, clearScanLogs, setDoorTestMode, getEvent, badgeLabelBlob, recordBadgePrint,
     overrideAdmit, doorIdentity, addPartySeat, setReEntry as setDoorReEntry, changePass, revokeAttendee, reinstateAttendee,
-    getMyCapabilities } from '../utils/api';
+    getMyCapabilities, getPrintReport } from '../utils/api';
 import { formatVenueTime, statusLabel, isFlaggedStatus } from '../utils/datetime';
 import BadgeLabelDialog, { STATION_KEY, LABEL_SIZE_KEY, LABEL_ROLLS, savedLabelSize, rollShort, fullName, physicalCard,
     canPrintBluetooth, useB1, b1Connect, b1IsConnected, b1Enqueue, b1PrintBlob, b1Dpi, rollFitsB1, PRINTER_KEY, PRINTER_CHOICES, savedPrinter } from './BadgeLabelDialog';
@@ -171,6 +171,13 @@ function CheckIn({ timezone: timezoneProp }) {
     const [passMethod, setPassMethod] = useState('cash');
     const [undoReason, setUndoReason] = useState('');
     const [stationOpen, setStationOpen] = useState(false);
+    // A print from a desk with no name tells you it happened and not where. That
+    // only matters once there is more than one desk — which is the day it stops
+    // being possible to go back and ask. So the name is collected once, at the
+    // moment of the first print, instead of being a field somebody was supposed
+    // to have filled in earlier.
+    const [namePrompt, setNamePrompt] = useState(null);   // the print waiting on a name
+    const STATION_PRESETS = ['Desk 1', 'Desk 2', 'Desk 3', 'Registration', 'VIP desk', 'Exhibitor desk'];
     const [logFilter, setLogFilter] = useState('');
     const [expandedLog, setExpandedLog] = useState(null);
     // Below lg the activity feed sits UNDER the search results, not beside them,
@@ -178,6 +185,15 @@ function CheckIn({ timezone: timezoneProp }) {
     // queue. Folded until asked for, and paged once open.
     const sideBySide = useMediaQuery(useTheme().breakpoints.up('lg'));
     const [activityOpen, setActivityOpen] = useState(false);
+    // The print log has always been written and never read. Reading it back is
+    // what makes naming a desk worth doing.
+    const [printReport, setPrintReport] = useState(null);
+    const [printOpen, setPrintOpen] = useState(false);
+    const refreshPrintReport = () => {
+        if (!eventId) { setPrintReport(null); return; }
+        getPrintReport(eventId).then((r) => setPrintReport(r.data || null)).catch(() => setPrintReport(null));
+    };
+    useEffect(() => { refreshPrintReport(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [eventId]);
     const [activityLimit, setActivityLimit] = useState(25);
     const [showDecisionDetail, setShowDecisionDetail] = useState(false);
 
@@ -446,6 +462,7 @@ function CheckIn({ timezone: timezoneProp }) {
                 await b1PrintBlob(response.data, { onProgress: (st) => setAutoJob({ attendeeId: id, phase: 'printing', message: `Badge: ${st}` }) });
             });
             printedIds.current.add(id);
+            refreshPrintReport();
             setAutoJob({ attendeeId: id, phase: 'printed', message: checkedInNow ? 'Checked in · badge printed' : 'Badge printed' });
             try { await recordBadgePrint(eventId, id, { result: 'printed', station: station || undefined, client_attempt_id: attemptId }); } catch (e) { /* the sticker is out; the record can be re-tried from the row */ }
             refreshSearch();
@@ -459,8 +476,21 @@ function CheckIn({ timezone: timezoneProp }) {
     // can be, the dialog when it cannot (no printer paired, Bluetooth off,
     // a roll the B1 cannot take).
     const printBadge = (attendee, checkedInNow = false) => {
+        if (!station.trim()) { setNamePrompt({ attendee, checkedInNow }); return; }
         if (canAutoPrint()) autoPrintBadge(attendee, checkedInNow);
         else openLabel(attendee, checkedInNow);
+    };
+    // Named, then the print carries straight on — the badge is still the thing
+    // being asked for.
+    const nameStationAndPrint = (value) => {
+        const name = (value || '').trim();
+        if (!name) return;
+        rememberStation(name);
+        const waiting = namePrompt;
+        setNamePrompt(null);
+        if (!waiting) return;
+        if (canAutoPrint()) autoPrintBadge(waiting.attendee, waiting.checkedInNow);
+        else openLabel(waiting.attendee, waiting.checkedInNow);
     };
     const attendeeFromDecision = (d) => ({
         id: d.attendee_id, qr_code: d.qr_code,
@@ -1004,7 +1034,7 @@ function CheckIn({ timezone: timezoneProp }) {
                                   label={zoneLabel} sx={{ height: 24 }} />
                             <Typography variant="body2" color="text.secondary">·</Typography>
                             <Typography variant="body2" sx={{ fontWeight: 600 }}>
-                                {station || <Box component="span" sx={{ color: 'text.disabled', fontWeight: 400 }}>Unnamed station</Box>}
+                                {station || <Box component="span" sx={{ color: 'warning.main', fontWeight: 600 }}>Name this desk</Box>}
                             </Typography>
                             <Typography variant="body2" color="text.secondary">·</Typography>
                             <Typography variant="body2" color="text.secondary">
@@ -1616,6 +1646,32 @@ function CheckIn({ timezone: timezoneProp }) {
                 </DialogActions>
             </Dialog>
 
+            {/* Asked once, at the moment it first matters. */}
+            <Dialog open={Boolean(namePrompt)} onClose={() => setNamePrompt(null)} fullWidth maxWidth="xs">
+                <DialogTitle>Which desk is this?</DialogTitle>
+                <DialogContent>
+                    <Stack spacing={2} sx={{ mt: 0.5 }}>
+                        <Typography variant="body2" color="text.secondary">
+                            Every badge this device prints is recorded against the name you give here,
+                            so a desk that starts failing can be found without asking around.
+                            Saved on this device &mdash; you will not be asked again.
+                        </Typography>
+                        <Stack direction="row" spacing={0.75} flexWrap="wrap" useFlexGap>
+                            {STATION_PRESETS.map((n) => (
+                                <Chip key={n} label={n} onClick={() => nameStationAndPrint(n)} variant="outlined" />
+                            ))}
+                        </Stack>
+                        <TextField autoFocus size="small" fullWidth label="Or type a name"
+                            placeholder="e.g. Main entrance"
+                            onKeyDown={(e) => { if (e.key === 'Enter') nameStationAndPrint(e.target.value); }}
+                            helperText="Press Enter to save and print" />
+                    </Stack>
+                </DialogContent>
+                <DialogActions>
+                    <Button onClick={() => setNamePrompt(null)}>Not now</Button>
+                </DialogActions>
+            </Dialog>
+
             {/* One dialog, five jobs. They share a reason box because every one of
                 them is a thing somebody will ask about on Monday. */}
             <Dialog open={Boolean(doorAction)} onClose={doorBusy ? undefined : closeDoorAction} fullWidth maxWidth="xs">
@@ -1770,6 +1826,60 @@ function CheckIn({ timezone: timezoneProp }) {
                     )}
                 </DialogActions>
             </Dialog>
+
+            {eventId && printReport && printReport.attempts > 0 && (
+                <Paper variant="outlined" sx={{ p: 1.5, mt: 2 }}>
+                    <Stack direction="row" alignItems="center" justifyContent="space-between" flexWrap="wrap" useFlexGap>
+                        <Typography variant="subtitle2">
+                            Badges printed &middot; {printReport.printed}
+                            {printReport.failed > 0 && (
+                                <Box component="span" sx={{ color: 'warning.main', ml: 1 }}>
+                                    {printReport.failed} failed
+                                </Box>
+                            )}
+                        </Typography>
+                        <Button size="small" onClick={() => { setPrintOpen((x) => !x); refreshPrintReport(); }}>
+                            {printOpen ? 'Hide' : 'By desk'}
+                        </Button>
+                    </Stack>
+                    {printOpen && (
+                        <Box sx={{ mt: 1.5 }}>
+                            <Stack spacing={1}>
+                                {printReport.stations.map((st) => (
+                                    <Stack key={st.station} direction="row" spacing={1} alignItems="baseline"
+                                           justifyContent="space-between" flexWrap="wrap" useFlexGap>
+                                        <Typography variant="body2" sx={{ fontWeight: st.named ? 700 : 400,
+                                                                          color: st.named ? 'text.primary' : 'text.secondary' }}>
+                                            {st.station}
+                                        </Typography>
+                                        <Typography variant="caption" color="text.secondary">
+                                            {st.printed} printed
+                                            {st.failed > 0 ? ` \u00b7 ${st.failed} failed (${st.failure_rate}%)` : ''}
+                                            {st.operators.length ? ` \u00b7 ${st.operators.join(', ')}` : ''}
+                                        </Typography>
+                                    </Stack>
+                                ))}
+                            </Stack>
+                            {printReport.unnamed_stations > 0 && (
+                                <Typography variant="caption" sx={{ display: 'block', mt: 1, color: 'warning.main' }}>
+                                    {printReport.unnamed_stations} device(s) printed without naming a desk &mdash;
+                                    those are filed under whoever was signed in.
+                                </Typography>
+                            )}
+                            {printReport.recent_failures.length > 0 && (
+                                <Box sx={{ mt: 1.5 }}>
+                                    <Typography variant="caption" sx={{ fontWeight: 700 }}>Recent failures</Typography>
+                                    {printReport.recent_failures.slice(0, 5).map((f, i) => (
+                                        <Typography key={i} variant="caption" color="text.secondary" sx={{ display: 'block' }}>
+                                            {f.name || `#${f.attendee_id}`} &middot; {f.station || 'unnamed'} &middot; {String(f.error || '').slice(0, 70)}
+                                        </Typography>
+                                    ))}
+                                </Box>
+                            )}
+                        </Box>
+                    )}
+                </Paper>
+            )}
 
             <Snackbar open={Boolean(feedback)} autoHideDuration={4000} onClose={() => setFeedback(null)} anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}>
                 {feedback ? <Alert severity={feedback.severity}>{feedback.message}</Alert> : undefined}

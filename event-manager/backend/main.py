@@ -10200,6 +10200,69 @@ def badge_label_png(event_id: int, attendee_id: int, size: str = badge_card.DEFA
                              "X-Label-Dpi": str(meta.get("dpi", dpi))})
 
 
+@app.get("/events/{event_id}/print-report")
+def print_report(event_id: int, db: Session = Depends(get_db),
+                 current_user: models.User = Depends(get_current_user)):
+    """Which desk printed what, and what failed there.
+
+    Every print attempt has been logged since badges existed, and nothing has
+    ever read the log back -- so the station name on it was a field people were
+    asked to fill in for no visible reason, and predictably did not. A record
+    nobody can see is not a record.
+
+    Failures matter more than successes here: a station that is quietly failing
+    is a queue forming at one desk while the others move, and the person on it
+    is the last to know it is not just them.
+    """
+    _get_event_or_404(event_id, db)
+    authz.require_cap(db, current_user, event_id, "checkin.perform")
+    rows = db.query(models.BadgePrintLog).filter(
+        models.BadgePrintLog.event_id == event_id).all()
+    users = {u.id: (u.email or "") for u in db.query(models.User).all()}
+    stations = {}
+    for r in rows:
+        # A print from a desk that never named itself is still a print; it is
+        # filed under the person, so the log is never anonymous.
+        key = (r.station or "").strip() or ("(unnamed — %s)" % (users.get(r.staff_user_id) or "unknown"))
+        slot = stations.setdefault(key, {"station": key, "printed": 0, "failed": 0,
+                                         "named": bool((r.station or "").strip()),
+                                         "last_at": None, "operators": set()})
+        slot["printed" if r.result == "printed" else "failed"] += 1
+        if r.staff_user_id in users:
+            slot["operators"].add(users[r.staff_user_id])
+        when = getattr(r, "created_at", None)
+        if when and (slot["last_at"] is None or str(when) > str(slot["last_at"])):
+            slot["last_at"] = when
+    out = []
+    for slot in stations.values():
+        total = slot["printed"] + slot["failed"]
+        out.append({**slot,
+                    "operators": sorted(slot["operators"]),
+                    "attempts": total,
+                    "failure_rate": (round(slot["failed"] / total * 100) if total else 0)})
+    out.sort(key=lambda x: -x["attempts"])
+    recent = sorted([r for r in rows if r.result == "failed"],
+                    key=lambda r: str(getattr(r, "created_at", "")), reverse=True)[:20]
+    att = {a.id: a for a in db.query(models.Attendee).filter(
+        models.Attendee.id.in_([r.attendee_id for r in recent]))} if recent else {}
+    return {
+        "event_id": event_id,
+        "attempts": len(rows),
+        "printed": sum(1 for r in rows if r.result == "printed"),
+        "failed": sum(1 for r in rows if r.result == "failed"),
+        "stations": out,
+        "unnamed_stations": sum(1 for s in out if not s["named"]),
+        "recent_failures": [
+            {"attendee_id": r.attendee_id,
+             "name": (("%s %s" % (att[r.attendee_id].first_name or "", att[r.attendee_id].last_name or "")).strip()
+                      if r.attendee_id in att else None),
+             "station": (r.station or "").strip() or None,
+             "by": users.get(r.staff_user_id),
+             "error": r.error, "at": getattr(r, "created_at", None)}
+            for r in recent],
+    }
+
+
 @app.post("/events/{event_id}/attendees/{attendee_id}/badge-print")
 def badge_print_record(event_id: int, attendee_id: int, body: schemas.BadgePrintRecord,
                        db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):

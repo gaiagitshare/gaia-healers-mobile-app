@@ -85,7 +85,7 @@ function EntitlementReview() {
                 <Paper variant="outlined" sx={{ p: 1.5, mb: 2, borderColor: 'primary.main' }}>
                     <Typography variant="subtitle2" gutterBottom>Live event attendance — the real numbers</Typography>
                     <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
-                        Actual registered people per event, live from the Event Manager (the source of truth for attendance — unlike the per-product ticket counts, which are a snapshot). Click an event to see its attendees.
+                        People each event will admit, live from the Event Manager (the source of truth for attendance — unlike the per-product ticket counts, which are a snapshot). Refunded and revoked tickets keep their rows and are counted out. Click an event to see its attendees.
                     </Typography>
                     <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
                         {data.events_live.map((e) => (
@@ -93,7 +93,10 @@ function EntitlementReview() {
                                 variant="outlined" sx={{ px: 1.5, py: 1, textDecoration: 'none', display: 'block', minWidth: 160, '&:hover': { borderColor: 'primary.main' } }}>
                                 <Typography variant="h6" sx={{ fontWeight: 700, color: 'primary.main' }}>{e.attendees}</Typography>
                                 <Typography variant="body2" sx={{ fontWeight: 600 }}>{e.name}</Typography>
-                                <Typography variant="caption" color="text.secondary">{e.checked_in != null ? `${e.checked_in} checked in · ` : ''}view attendees →</Typography>
+                                <Typography variant="caption" color="text.secondary">
+                                    {e.checked_in != null ? `${e.checked_in} checked in · ` : ''}
+                                    {e.blocked ? `${e.blocked} refunded/revoked · ` : ''}view attendees →
+                                </Typography>
                             </Paper>
                         ))}
                     </Stack>

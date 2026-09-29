@@ -3290,10 +3290,15 @@ def entitlement_review(db: Session = Depends(get_db), current_user: models.User 
     events_live=[]
     try:
         for e in db.query(models.Event).all():
-            total=db.query(models.Attendee).filter(models.Attendee.event_id==e.id).count()
-            try: checked=db.query(models.Attendee).filter(models.Attendee.event_id==e.id, models.Attendee.is_checked_in==True).count()
-            except Exception: checked=None
-            events_live.append({"event_id":e.id, "name":e.name, "attendees":total, "checked_in":checked})
+            # The fifth copy of this count, and the one that got away: it still
+            # read rows, so this page said 369 while the dashboard said 368 --
+            # the same app disagreeing with itself about the same event.
+            _roll = _roll_counts(db, e.id)
+            events_live.append({"event_id": e.id, "name": e.name,
+                                "attendees": _roll["admitting"],
+                                "blocked": _roll["blocked"],
+                                "rows": _roll["rows"],
+                                "checked_in": _roll["checked_in"]})
         events_live.sort(key=lambda x:-(x["attendees"] or 0))
     except Exception: pass
     rev=_load("/root/gaia-staging-proxy/data/payment-review.json").get("items") or {}

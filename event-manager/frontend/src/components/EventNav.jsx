@@ -28,7 +28,7 @@ export const NAV_GROUPS = [
     // The event and what is on at it.
     { label: 'Event', keys: ['overview', 'schedule', 'speakers', 'sponsors', 'exhibitors'] },
     // Who is coming, who is through the door, and what they are saying.
-    { label: 'People', keys: ['attendees', 'checkin', 'community'] },
+    { label: 'People', keys: ['attendees', 'checkin', 'review', 'community'] },
     // Everything we push out to attendees, live or written ahead.
     { label: 'Comms', keys: ['live', 'updates', 'notify', 'info', 'resources'] },
     // Wiring. Rarely touched during an event, and it should not sit next to the

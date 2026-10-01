@@ -1143,6 +1143,15 @@ class OverrideAdmit(BaseModel):
     session_id: Optional[int] = None
 
 
+class ReviewResolve(BaseModel):
+    """Closing one review item. The note is the point -- an item closed with no
+    reason is indistinguishable from one nobody looked at."""
+    attendee_id: int
+    ref: str
+    kind: Optional[str] = None
+    note: str
+
+
 class AddPartySeat(BaseModel):
     """Naming a seat a booking already paid for. Never a new ticket -- the
     endpoint refuses once the badges match what was bought."""

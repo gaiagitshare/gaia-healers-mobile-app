@@ -77,7 +77,15 @@ function CheckIn({ timezone: timezoneProp }) {
     const [error, setError] = useState('');
     const scannerRef = useRef(null);
 
-    const [query, setQuery] = useState('');
+    // Opened from the review queue with somebody already named: ?q=<name>. The
+    // queue's job is to hand the desk a person, and making staff retype a name
+    // they are looking straight at is how a worklist stops being used.
+    const [query, setQuery] = useState(() => {
+        try {
+            const q = new URLSearchParams(window.location.hash.split('?')[1] || '').get('q');
+            return q ? String(q) : '';
+        } catch (err) { return ''; }
+    });
     const [results, setResults] = useState(null);
     const [searching, setSearching] = useState(false);
     // New visitor at the door. Nothing is written until staff have seen who it
@@ -150,6 +158,10 @@ function CheckIn({ timezone: timezoneProp }) {
     const [autoJob, setAutoJob] = useState(null);
     const printedIds = useRef(new Set());                        // printed this session — a re-scan never prints twice
     const [undoTarget, setUndoTarget] = useState(null);
+    // Somebody else on the same booking, tapped from the party block. Held here
+    // rather than scanned straight away: a tap meant to find out who seat 3 is
+    // must not be what checks seat 3 in.
+    const [partyTarget, setPartyTarget] = useState(null);
     // ── Fixing things at the desk ───────────────────────────────────────────
     // Five things go wrong at a door, and all five have to be fixable without
     // leaving this screen: the rules refuse somebody who should be let in, the
@@ -675,8 +687,21 @@ function CheckIn({ timezone: timezoneProp }) {
 
     // Pull up anybody else on the same booking without asking for their badge —
     // a family arrives together and only one of them is holding a phone.
-    const openPartyMember = async (member) => {
+    // Tapping a seat in the booking ASKS about that person. It used to authorize
+    // them, and an EVENT_ENTRY authorization checks somebody in and switches
+    // their card on -- so finding out who seat 3 of 4 is admitted them, with
+    // nobody having asked their name. Admitting is now its own deliberate tap,
+    // one person at a time, which is what the desk needs when a family arrives
+    // on one booking.
+    const openPartyMember = (member) => {
         setError('');
+        setPartyTarget(member);
+    };
+
+    const admitPartyMember = async () => {
+        const member = partyTarget;
+        if (!member) return;
+        setPartyTarget(null);
         try {
             const response = await authorizeScan(eventId, { qr_code: member.qr_code, access_type: accessType });
             setResult(response.data); setAutoJob(null);
@@ -1518,6 +1543,42 @@ function CheckIn({ timezone: timezoneProp }) {
                 <DialogActions>
                     <Button onClick={() => setUndoTarget(null)}>Cancel</Button>
                     <Button variant="contained" color="warning" disabled={undoReason.trim().length < 3} onClick={submitUndo}>Undo check-in</Button>
+                </DialogActions>
+            </Dialog>
+
+            {/* Another seat on the same booking. Opened by a tap, admitted only by
+                a second one, so a family on one booking goes through one at a
+                time and nobody is checked in by somebody reading the list. */}
+            <Dialog open={Boolean(partyTarget)} onClose={() => setPartyTarget(null)} maxWidth="xs" fullWidth>
+                <DialogTitle>{partyTarget?.name || 'This seat'}</DialogTitle>
+                <DialogContent dividers>
+                    <Typography variant="body2" color="text.secondary">
+                        Seat {partyTarget?.seat}{partyTarget?.is_buyer ? ' · bought the booking' : ''}
+                    </Typography>
+                    {partyTarget?.checked_in ? (
+                        <Alert severity="success" icon={false} sx={{ mt: 1.5, py: 0.5 }}>
+                            Already checked in. Open their own badge to undo it.
+                        </Alert>
+                    ) : (
+                        <Alert severity="info" icon={false} sx={{ mt: 1.5, py: 0.5 }}>
+                            Not checked in yet.
+                        </Alert>
+                    )}
+                    {partyTarget?.needs_name_check && (
+                        <Alert severity="warning" icon={false} sx={{ mt: 1, py: 0.5 }}>
+                            <strong>Ask their name first.</strong> This seat carries the buyer&rsquo;s
+                            name because the order held no other. Check them in, then tap
+                            <em> Fix details</em> on their badge.
+                        </Alert>
+                    )}
+                </DialogContent>
+                <DialogActions>
+                    <Button onClick={() => setPartyTarget(null)}>Cancel</Button>
+                    <Button variant="contained" startIcon={<HowToRegIcon />}
+                            disabled={Boolean(partyTarget?.checked_in)}
+                            onClick={admitPartyMember}>
+                        Check in this person
+                    </Button>
                 </DialogActions>
             </Dialog>
 

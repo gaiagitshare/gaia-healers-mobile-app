@@ -44,6 +44,8 @@ BASE, DB = testbed.start()
 
 import sqlite3, urllib.error, urllib.request                # noqa: E402
 import main, models                                         # noqa: E402
+from sqlalchemy import func                                 # noqa: E402
+HERE_ENV = "/root/event/backend/.env"
 from database import SessionLocal                           # noqa: E402
 
 EVENT = 1
@@ -208,6 +210,109 @@ check(any(e.get("addon_code") == ADDON for e in (holder.custom_data or {}).get("
 for day in DAYS:
     d = door("CONFERENCE", at=day)
     check(d.get("granted") is True, "the conference room admits them on %s" % day, d.get("reason"))
+
+print("\nONE ORDER, ARRIVING TWICE")
+# The mirror and a replay call the same endpoint, and the later call often
+# carries only the ticket type. It cannot re-derive the add-on from a product
+# id it was not given, so it used to record the order a SECOND time as a full
+# tier -- which is how a $97 purchase became three days, twenty-eight seconds
+# after being granted correctly.
+env = {}
+for line in open(HERE_ENV):
+    t = line.strip()
+    if "=" in t and not t.startswith("#"):
+        k, v = t.split("=", 1)
+        env[k] = v.strip().strip('"').strip("'")
+SVC = {"Authorization": "Bearer " + env["IDENTITY_SERVICE_TOKEN"]}
+EM, ORDER = "zz-twice@example.invalid", "zz-order-twice"
+st1, _ = call("POST", "/identity/reconcile-attendee",
+              {"event_id": EVENT, "email": EM, "first_name": "Twice", "last_name": "Over",
+               "order_id": ORDER, "product_id": ONE_DAY_PRODUCT, "ticket_type_id": 7,
+               "amount": 97, "purchased_at": "2026-10-01"}, SVC)
+st2, _ = call("POST", "/identity/reconcile-attendee",
+              {"event_id": EVENT, "email": EM, "first_name": "Twice", "last_name": "Over",
+               "order_id": ORDER, "ticket_type_id": 7, "quantity": 1}, SVC)
+check(st1 == 200 and st2 == 200, "both calls succeed", (st1, st2))
+s.expire_all()
+twice = s.query(models.Attendee).filter(
+    models.Attendee.event_id == EVENT, func.lower(models.Attendee.email) == EM).first()
+ents = (twice.custom_data or {}).get("entitlements") or []
+check(len(ents) == 1, "one order leaves one entitlement, not two", [e.get("addon_code") for e in ents])
+check(ents and ents[0].get("addon_code") == ADDON,
+      "and it is still the add-on after the second call", ents and ents[0].get("addon_code"))
+check(twice.ticket_type_id != 7, "the second call did not lift them to the full conference",
+      twice.ticket_type_id)
+
+print("\nTHE TRANSACTION DECIDES, NOT THE NAME ON IT")
+# What a confirmed transaction BOUGHT is what says whether it is another person.
+# An upgrade is an upgrade OF something, so it belongs to whoever holds the
+# ticket it upgrades, whatever address the buyer typed that time. A second
+# TICKET has no such reading -- it might genuinely be a seat for a friend --
+# so the same contact id must NOT merge those.
+C = "zz-rule-contact"
+_t = call("POST", "/identity/reconcile-attendee",
+          {"event_id": EVENT, "email": "zz-rule-a@example.invalid", "first_name": "Rule",
+           "last_name": "Ticket", "contact_id": C, "order_id": "zz-rule-ticket",
+           "product_id": "69ffab66233a0d773296e989", "ticket_type_id": 8,
+           "amount": 104.94, "purchased_at": "2026-10-01"}, SVC)[1]
+_u = call("POST", "/identity/reconcile-attendee",
+          {"event_id": EVENT, "email": "zz-rule-b@example.invalid", "first_name": "Rule",
+           "last_name": "Ticket", "contact_id": C, "order_id": "zz-rule-upgrade",
+           "product_id": ONE_DAY_PRODUCT, "ticket_type_id": 7,
+           "amount": 97, "purchased_at": "2026-10-01"}, SVC)[1]
+check(_u.get("attendee_id") == _t.get("attendee_id"),
+      "an upgrade under a different email joins the ticket it upgrades",
+      (_t.get("attendee_id"), _u.get("attendee_id")))
+check(_u.get("created") is False, "and does not mint a second person")
+
+_f = call("POST", "/identity/reconcile-attendee",
+          {"event_id": EVENT, "email": "zz-rule-friend@example.invalid", "first_name": "Rule",
+           "last_name": "Friend", "contact_id": C, "order_id": "zz-rule-ticket-2",
+           "product_id": "69ffab66233a0d773296e989", "ticket_type_id": 8,
+           "amount": 99, "purchased_at": "2026-10-01"}, SVC)[1]
+check(_f.get("attendee_id") != _t.get("attendee_id"),
+      "but a second TICKET on the same contact stays a separate person \u2014 it may be a friend",
+      (_t.get("attendee_id"), _f.get("attendee_id")))
+
+_o = call("POST", "/identity/reconcile-attendee",
+          {"event_id": EVENT, "email": "zz-rule-orphan@example.invalid", "first_name": "Rule",
+           "last_name": "Orphan", "contact_id": "zz-rule-nobody", "order_id": "zz-rule-orphan",
+           "product_id": ONE_DAY_PRODUCT, "ticket_type_id": 7,
+           "amount": 97, "purchased_at": "2026-10-01"}, SVC)[1]
+s.expire_all()
+_orow = s.query(models.Attendee).filter(models.Attendee.id == _o.get("attendee_id")).first()
+check((_orow.custom_data or {}).get("needs_identity_review") is True,
+      "an upgrade with no ticket under it is flagged, not silently an attendee",
+      (_orow.custom_data or {}).get("needs_identity_review"))
+check(any(e.get("addon_code") == ADDON for e in ((_orow.custom_data or {}).get("entitlements") or [])),
+      "  and the money it represents is still recorded")
+check(_orow.ticket_type_id is None, "  with no pass invented for it")
+
+print("\nA DUPLICATE ROW HANDS ITS ORDERS ON")
+# Somebody who checks out twice under two email addresses becomes two rows.
+# Once one is ruled a duplicate it keeps its email, so orders keep arriving at
+# it -- and every sync re-grants the purchase to somebody revoked whose badge
+# nobody holds. The duplicate points at the person it IS, and the order follows.
+dup = models.Attendee(event_id=EVENT, email="zz-dup@example.invalid",
+                      first_name="Dup", last_name="Row", registration_status="revoked",
+                      qr_code="ATT-ZZDUPROW01",
+                      custom_data={"duplicate_of": twice.id})
+s.add(dup); s.commit()
+st, _ = call("POST", "/identity/reconcile-attendee",
+             {"event_id": EVENT, "email": "zz-dup@example.invalid", "order_id": "zz-order-dup",
+              "product_id": ONE_DAY_PRODUCT, "ticket_type_id": 7, "amount": 97,
+              "purchased_at": "2026-10-01"}, SVC)
+s.expire_all()
+dup = s.query(models.Attendee).filter(models.Attendee.id == dup.id).first()
+canon = s.query(models.Attendee).filter(models.Attendee.id == twice.id).first()
+check(st == 200, "the order is accepted", st)
+check(not ((dup.custom_data or {}).get("entitlements") or []),
+      "the revoked duplicate is left with nothing",
+      (dup.custom_data or {}).get("entitlements"))
+check(any(e.get("order_id") == "zz-order-dup"
+          for e in ((canon.custom_data or {}).get("entitlements") or [])),
+      "and the person it points at got the purchase instead",
+      [e.get("order_id") for e in ((canon.custom_data or {}).get("entitlements") or [])])
 
 print("\nNOBODY ELSE MOVED")
 lana = s.query(models.Attendee).filter(

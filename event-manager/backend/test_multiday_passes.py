@@ -37,8 +37,9 @@ for line in open("/root/event/backend/.env"):
 from jose import jwt
 ADMIN = jwt.encode({"sub": "1"}, env["SECRET_KEY"], algorithm="HS256")
 SVC = env["IDENTITY_SERVICE_TOKEN"]
-BASE = "http://127.0.0.1:8002"
-DB = "/root/event/backend/event.db"
+import sys as _sys; _sys.path.insert(0, "/root/event/backend")
+import testbed
+BASE, DB = testbed.start()
 
 fails = []
 def check(ok, label, detail=""):

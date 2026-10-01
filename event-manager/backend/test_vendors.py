@@ -32,8 +32,9 @@ for line in open("/root/event/backend/.env"):
 from jose import jwt
 ADMIN = jwt.encode({"sub": "1"}, env["SECRET_KEY"], algorithm="HS256")
 SVC = env["IDENTITY_SERVICE_TOKEN"]
-BASE = "http://127.0.0.1:8002"
-DB = "/root/event/backend/event.db"
+import sys as _sys; _sys.path.insert(0, "/root/event/backend")
+import testbed
+BASE, DB = testbed.start()
 
 fails = []
 def check(ok, label, detail=""):
@@ -408,6 +409,12 @@ check("4075551100" not in raw and "+1407555110" not in raw, "not a phone number"
 check(r.get("leads") == [], "and no leads until they have scanned somebody")
 
 # ── 17. a scan is what releases one person, and only one ──────────────────
+# Sharing is ON by default now -- the ticket is sold on it -- so the refusal
+# below is set deliberately rather than inherited. That is the case worth
+# testing: somebody who said no.
+write("UPDATE attendees SET share_email_with_exhibitors=0, share_phone_with_exhibitors=0, "
+      "consent_updated_at=CURRENT_TIMESTAMP WHERE event_id=? AND lower(email)=?",
+      (EV, "zz-roster-a@example.invalid"))
 tok = sql("SELECT public_token FROM attendees WHERE event_id=? AND lower(email)=?",
           (EV, "zz-roster-a@example.invalid"))[0][0]
 st, sc = call("POST", "/scan", {"qr_code": tok, "access_token": TOK4})
@@ -422,7 +429,7 @@ check("Person1" not in raw, "the one they did NOT scan is still not named")
 # ── 18. even a scanned person shares only what they agreed to ─────────────
 lead = r["leads"][0]["attendee"]
 check(lead.get("email") is None and lead.get("phone") is None,
-      "with consent off, a scan yields a name and no contact details", lead)
+      "somebody who said no yields a name and no contact details", lead)
 # Consent is snapshotted at the MOMENT of the scan, so granting it afterwards
 # does not retroactively hand over an exchange that already happened.
 write("UPDATE attendees SET share_email_with_exhibitors=1 WHERE event_id=? AND lower(email)=?",
@@ -433,8 +440,9 @@ check(lead.get("email") is None,
       "agreeing AFTER the scan does not retroactively share that exchange", lead)
 
 # Agreeing BEFORE the scan does share — and only the field they agreed to.
-write("UPDATE attendees SET share_email_with_exhibitors=1, share_phone_with_exhibitors=0 "
-      "WHERE event_id=? AND lower(email)=?", (EV, "zz-roster-b@example.invalid"))
+write("UPDATE attendees SET share_email_with_exhibitors=1, share_phone_with_exhibitors=0, "
+      "consent_updated_at=CURRENT_TIMESTAMP WHERE event_id=? AND lower(email)=?",
+      (EV, "zz-roster-b@example.invalid"))
 tok_b = sql("SELECT public_token FROM attendees WHERE event_id=? AND lower(email)=?",
             (EV, "zz-roster-b@example.invalid"))[0][0]
 call("POST", "/scan", {"qr_code": tok_b, "access_token": TOK4})

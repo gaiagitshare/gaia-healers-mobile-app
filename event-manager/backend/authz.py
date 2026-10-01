@@ -108,6 +108,25 @@ def require_admin(user: models.User) -> None:
 ALWAYS_SHARED = ("first_name", "last_name", "company", "job_title")
 
 
+def pass_for_scanner(db, attendee) -> dict:
+    """What this badge holds, for somebody who has just scanned it.
+
+    Shown to a scanner and to nobody else. The public card page is reached by
+    anybody who opens the link -- the QR is worn all weekend and gets
+    photographed, forwarded and left on tables -- so what tier somebody bought
+    does not belong there. A stand the person chose to hand their badge to is a
+    different matter, and so is the door.
+
+    Imported lazily: authz is the module main imports, not the other way round.
+    """
+    try:
+        import main                                          # noqa: WPS433
+        return {"pass_display": main._pass_display(db, attendee),
+                "pass_includes": main._pass_includes(db, attendee)}
+    except Exception:
+        return {}
+
+
 def lead_view(attendee: models.Attendee) -> dict:
     """The attendee, as an exhibitor is permitted to see them.
 

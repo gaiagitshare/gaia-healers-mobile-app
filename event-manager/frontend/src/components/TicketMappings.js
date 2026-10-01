@@ -5,7 +5,7 @@ import {
     IconButton, Chip, Divider, Alert, FormControlLabel, Checkbox, Link,
 } from '@mui/material';
 import DeleteIcon from '@mui/icons-material/Delete';
-import { getTicketMappings, createTicketMapping, deleteTicketMapping, getTicketTypes } from '../utils/api';
+import { getTicketMappings, createTicketMapping, deleteTicketMapping, getTicketTypes, getTicketMappingAudit } from '../utils/api';
 
 // Ticket mappings are the ONE source of truth that makes registration dynamic:
 // a GHL product id resolves to an event + pass/tier here, and BOTH the instant
@@ -24,10 +24,16 @@ function TicketMappings() {
     const [isUpgrade, setIsUpgrade] = useState(false);
     const [saving, setSaving] = useState(false);
     const [error, setError] = useState(null);
+    // What we SOLD, read back against what the badge OPENS. A mapping is typed
+    // once and believed forever; this is the only thing between a product named
+    // "+ CONFERENCE" pointing at a pass that has none, and somebody being turned
+    // away at a door they paid for.
+    const [audit, setAudit] = useState(null);
 
     const load = useCallback(() => {
         getTicketMappings(id).then((r) => setRows(r.data || [])).catch(() => setRows([]));
         getTicketTypes(id).then((r) => setTypes(r.data || [])).catch(() => setTypes([]));
+        getTicketMappingAudit(id).then((r) => setAudit(r.data || null)).catch(() => setAudit(null));
     }, [id]);
     useEffect(() => { load(); }, [load]);
 
@@ -92,6 +98,35 @@ function TicketMappings() {
                 and — for upgrades — what the attendee app shows and links to. Base tickets need only the product and
                 tier; <strong>upgrades</strong> also need a checkout URL. Price is read live from GHL, never typed here.
             </Typography>
+
+            {audit && audit.errors > 0 && (
+                <Alert severity="error" sx={{ mb: 3 }}>
+                    <Typography variant="subtitle2" sx={{ fontWeight: 700, mb: 0.5 }}>
+                        {audit.errors === 1 ? 'One product sells' : `${audit.errors} products sell`} access the badge does not open
+                        {audit.people_affected?.length ? ` — ${audit.people_affected.length} people have already bought it` : ''}
+                    </Typography>
+                    <Stack spacing={1} sx={{ mt: 1 }}>
+                        {audit.findings.filter((f) => f.severity === 'error').map((f, i) => (
+                            <Box key={i}>
+                                <Typography variant="body2">{f.detail}</Typography>
+                                {f.payments > 0 && (
+                                    <Typography variant="caption" color="text.secondary">
+                                        {f.seen_in}
+                                        {f.amounts?.length ? ` · ${f.amounts.map((a) => `$${a}`).join(', ')}` : ''}
+                                        {' · fix the mapping below, then move those people onto the right pass.'}
+                                    </Typography>
+                                )}
+                            </Box>
+                        ))}
+                    </Stack>
+                </Alert>
+            )}
+            {audit && audit.errors === 0 && (
+                <Alert severity="success" sx={{ mb: 3 }} icon={false}>
+                    Every product sold through these mappings grants what its name says.
+                    {audit.warnings > 0 ? ` ${audit.warnings} warning(s) worth a look.` : ''}
+                </Alert>
+            )}
 
             <Card sx={{ mb: 3 }}>
                 <CardContent>

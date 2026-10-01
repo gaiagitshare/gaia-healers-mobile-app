@@ -150,7 +150,13 @@ function Dashboard() {
                     <StatCard
                         title="Attendees"
                         value={stats?.total_attendees || 0}
-                        detail={`${stats?.paid_members || 0} paid members`}
+                        detail={
+                            // The headline is who the door will admit. Refunded
+                            // and revoked tickets keep their rows and are refused,
+                            // so they are said out loud rather than folded in.
+                            `${stats?.paid_members || 0} paid members`
+                            + (stats?.total_blocked ? ` \u00b7 ${stats.total_blocked} refunded/revoked, not counted` : '')
+                        }
                         icon={<PeopleIcon fontSize="large" />}
                         color="#4a7c59"
                         onClick={goToPrimaryAttendees}
@@ -256,7 +262,10 @@ function Dashboard() {
                                             />
                                         </Box>
                                         <Grid container spacing={1} sx={{ mt: 1 }}>
-                                            <Grid item xs={6} sm={3}><Typography variant="caption">{event.attendee_count} attendees</Typography></Grid>
+                                            <Grid item xs={6} sm={3}><Typography variant="caption">
+                                                {event.attendee_count} attendees
+                                                {event.blocked_count ? ` (+${event.blocked_count} refunded/revoked)` : ''}
+                                            </Typography></Grid>
                                             <Grid item xs={6} sm={3}><Typography variant="caption">{event.checked_in_count} checked in</Typography></Grid>
                                             <Grid item xs={6} sm={3}><Typography variant="caption">{event.exhibitor_count} exhibitors</Typography></Grid>
                                             <Grid item xs={6} sm={3}><Typography variant="caption">{event.lead_count} leads</Typography></Grid>

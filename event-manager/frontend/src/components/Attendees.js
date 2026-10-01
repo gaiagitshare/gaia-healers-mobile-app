@@ -1021,6 +1021,7 @@ function Attendees({ timezone }) {
                             {attendee.paid_by && (
                                 <Typography variant="caption" sx={{ display: 'block', color: 'info.main' }}>
                                     Paid by {attendee.paid_by}
+                                    {attendee.party_seat ? ` \u00b7 seat ${attendee.party_seat}` : ''}
                                 </Typography>
                             )}
                             {attendee.phone && <Typography variant="body2" color="text.secondary">{attendee.phone}</Typography>}

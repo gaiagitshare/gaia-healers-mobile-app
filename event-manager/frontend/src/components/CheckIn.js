@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useParams } from 'react-router-dom';
 import {
     Alert, Box, Button, Chip, CircularProgress,
-    Dialog, DialogActions, DialogContent, DialogTitle, Divider, IconButton,
+    Dialog, DialogActions, DialogContent, DialogTitle, Divider, FormControlLabel, IconButton, Switch,
     InputAdornment, MenuItem, Paper, Snackbar, Stack, TextField, Typography, useMediaQuery, useTheme,
 } from '@mui/material';
 import SearchIcon from '@mui/icons-material/Search';
@@ -13,9 +13,17 @@ import UndoIcon from '@mui/icons-material/Undo';
 import VisibilityIcon from '@mui/icons-material/Visibility';
 import PersonAddIcon from '@mui/icons-material/PersonAdd';
 import QrCodeScannerIcon from '@mui/icons-material/QrCodeScanner';
+import EditIcon from '@mui/icons-material/Edit';
+import LockOpenIcon from '@mui/icons-material/LockOpen';
+import SwapHorizIcon from '@mui/icons-material/SwapHoriz';
+import BlockIcon from '@mui/icons-material/Block';
+import RestoreIcon from '@mui/icons-material/Restore';
+import GroupsIcon from '@mui/icons-material/Groups';
 import TuneIcon from '@mui/icons-material/Tune';
 import { Html5QrcodeScanner } from 'html5-qrcode';
-import { authorizeScan, getScanLogs, searchAttendees, getEvents, walkInCreate, getTicketTypes, undoCheckIn, clearScanLogs, setDoorTestMode, getEvent, badgeLabelBlob, recordBadgePrint } from '../utils/api';
+import { authorizeScan, getScanLogs, searchAttendees, getEvents, walkInCreate, getTicketTypes, undoCheckIn, clearScanLogs, setDoorTestMode, getEvent, badgeLabelBlob, recordBadgePrint,
+    overrideAdmit, doorIdentity, addPartySeat, setReEntry as setDoorReEntry, changePass, revokeAttendee, reinstateAttendee,
+    getMyCapabilities, getPrintReport, setSharing, setAddonDay } from '../utils/api';
 import { formatVenueTime, statusLabel, isFlaggedStatus } from '../utils/datetime';
 import BadgeLabelDialog, { STATION_KEY, LABEL_SIZE_KEY, LABEL_ROLLS, savedLabelSize, rollShort, fullName, physicalCard,
     canPrintBluetooth, useB1, b1Connect, b1IsConnected, b1Enqueue, b1PrintBlob, b1Dpi, rollFitsB1, PRINTER_KEY, PRINTER_CHOICES, savedPrinter } from './BadgeLabelDialog';
@@ -38,10 +46,12 @@ const LOG_STATE = {
     LIMITED:   { label: 'Limited',   mark: '!', color: 'warning', variant: 'outlined' },
     DENIED:    { label: 'Denied',    mark: '✕', color: 'error',   variant: 'filled' },
     UNDO:      { label: 'Undo',      mark: '↶', color: 'info',    variant: 'outlined' },
+    OVERRIDE:  { label: 'Let in',    mark: '⚠', color: 'warning', variant: 'filled' },
     REHEARSAL: { label: 'Rehearsal', mark: '◐', color: 'warning', variant: 'filled' },
 };
 const HEADLINE = {
     GRANTED: 'ADMITTED', LIMITED: 'CHECK THIS ONE', DENIED: 'DENIED', UNDO: 'UNDONE',
+    OVERRIDE: 'LET IN ANYWAY',
 };
 const maskEmail = (email) => {
     const s = String(email || '');
@@ -76,16 +86,20 @@ function CheckIn({ timezone: timezoneProp }) {
     // Why they need a badge is asked FIRST and never inferred. A walk-in is
     // not the same thing as a paid ticket.
     const DOOR_REASONS = [
-        { key: 'already_paid', label: 'Already paid — can’t find them',
+        { key: 'already_paid', needs: 'register_paying_walk_in',
+          label: 'Already paid — can’t find them',
           hint: 'Usually a sync delay. Their GHL order will reconcile onto this record when it arrives.',
           attendance_type: 'paid', door_payment_status: 'none' },
-        { key: 'pay_at_door', label: 'Paying at the door',
+        { key: 'pay_at_door', needs: 'register_paying_walk_in',
+          label: 'Paying at the door',
           hint: 'Recorded as a Gaia door payment. Nothing is written to GHL — take the money on your usual till.',
           attendance_type: 'paid', door_payment_status: 'collected' },
-        { key: 'complimentary', label: 'Complimentary / guest',
+        { key: 'complimentary', needs: 'register_free_badge',
+          label: 'Complimentary / guest',
           hint: 'No payment expected. Say who authorised it.',
           attendance_type: 'complimentary', door_payment_status: 'waived' },
-        { key: 'crew', label: 'Staff / speaker / exhibitor',
+        { key: 'crew', needs: 'register_free_badge',
+          label: 'Staff / speaker / exhibitor',
           hint: 'Working the event. No ticket payment.',
           attendance_type: 'staff', door_payment_status: 'none' },
     ];
@@ -106,6 +120,11 @@ function CheckIn({ timezone: timezoneProp }) {
     const [clearing, setClearing] = useState(false);
     const [rehearsal, setRehearsal] = useState(false);
     const [rehearsalBusy, setRehearsalBusy] = useState(false);
+    // One badge, more than one entry. Off, the second scan of the same badge is
+    // refused — which is right for a one-session gate and wrong for a three-day
+    // conference the moment anybody steps out for lunch.
+    const [reEntry, setReEntry] = useState(false);
+    const [reEntryBusy, setReEntryBusy] = useState(false);
     const [truncated, setTruncated] = useState(false);
     const [revealId, setRevealId] = useState(null);
     const [station, setStation] = useState(() => { try { return localStorage.getItem(STATION_KEY) || ''; } catch (e) { return ''; } });
@@ -131,8 +150,34 @@ function CheckIn({ timezone: timezoneProp }) {
     const [autoJob, setAutoJob] = useState(null);
     const printedIds = useRef(new Set());                        // printed this session — a re-scan never prints twice
     const [undoTarget, setUndoTarget] = useState(null);
+    // ── Fixing things at the desk ───────────────────────────────────────────
+    // Five things go wrong at a door, and all five have to be fixable without
+    // leaving this screen: the rules refuse somebody who should be let in, the
+    // name on a seat is the buyer's guess, they bought the wrong pass, the
+    // badge should not work at all, or it should work again. Each opens one
+    // dialog, each writes one audited change, and each hands back a fresh
+    // decision so the screen never shows a stale verdict.
+    const [doorAction, setDoorAction] = useState(null);   // { kind, decision, ... }
+    const [doorBusy, setDoorBusy] = useState(false);
+    const [doorError, setDoorError] = useState('');
+    const [fixForm, setFixForm] = useState({ first_name: '', last_name: '', phone: '', email: '' });
+    const [actionReason, setActionReason] = useState('');
+    const [passChoice, setPassChoice] = useState('');
+    // An upgrade bought at the desk is real money. Recording it as
+    // complimentary because there was nowhere to type the amount is how a
+    // weekend's takings end up short.
+    const [passPaid, setPassPaid] = useState(false);
+    const [passAmount, setPassAmount] = useState('');
+    const [passMethod, setPassMethod] = useState('cash');
     const [undoReason, setUndoReason] = useState('');
     const [stationOpen, setStationOpen] = useState(false);
+    // A print from a desk with no name tells you it happened and not where. That
+    // only matters once there is more than one desk — which is the day it stops
+    // being possible to go back and ask. So the name is collected once, at the
+    // moment of the first print, instead of being a field somebody was supposed
+    // to have filled in earlier.
+    const [namePrompt, setNamePrompt] = useState(null);   // the print waiting on a name
+    const STATION_PRESETS = ['Desk 1', 'Desk 2', 'Desk 3', 'Registration', 'VIP desk', 'Exhibitor desk'];
     const [logFilter, setLogFilter] = useState('');
     const [expandedLog, setExpandedLog] = useState(null);
     // Below lg the activity feed sits UNDER the search results, not beside them,
@@ -140,15 +185,31 @@ function CheckIn({ timezone: timezoneProp }) {
     // queue. Folded until asked for, and paged once open.
     const sideBySide = useMediaQuery(useTheme().breakpoints.up('lg'));
     const [activityOpen, setActivityOpen] = useState(false);
+    // The print log has always been written and never read. Reading it back is
+    // what makes naming a desk worth doing.
+    const [printReport, setPrintReport] = useState(null);
+    const [printOpen, setPrintOpen] = useState(false);
+    const refreshPrintReport = () => {
+        if (!eventId) { setPrintReport(null); return; }
+        getPrintReport(eventId).then((r) => setPrintReport(r.data || null)).catch(() => setPrintReport(null));
+    };
+    useEffect(() => { refreshPrintReport(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [eventId]);
     const [activityLimit, setActivityLimit] = useState(25);
     const [showDecisionDetail, setShowDecisionDetail] = useState(false);
 
     // The door's own state: has this event started, and is a rehearsal running.
     const [doorEvent, setDoorEvent] = useState(null);
+    // What this operator may do here, asked once. The walk-in form has no badge
+    // behind it, so it cannot wait for a scan to find out.
+    const [may, setMay] = useState(null);
+    useEffect(() => {
+        if (!eventId) { setMay(null); return; }
+        getMyCapabilities(eventId).then((r) => setMay(r.data?.may || null)).catch(() => setMay(null));
+    }, [eventId]);
     useEffect(() => {
         if (!eventId) { setDoorEvent(null); return; }
         getEvent(eventId)
-            .then((r) => { setDoorEvent(r.data); setRehearsal(Boolean(r.data?.door_test_mode)); })
+            .then((r) => { setDoorEvent(r.data); setRehearsal(Boolean(r.data?.door_test_mode)); setReEntry(Boolean(r.data?.allow_reentry)); })
             .catch(() => setDoorEvent(null));
     }, [eventId]);
     const doorNotOpenYet = (() => {
@@ -159,10 +220,43 @@ function CheckIn({ timezone: timezoneProp }) {
         return today < String(start).slice(0, 10) || today > String(end).slice(0, 10);
     })();
 
+    // ── Which door is this, before anybody asks ────────────────────────────
+    // The screen used to open empty, so the first thing a staffer did on the
+    // morning of the event was pick the right conference out of a list that
+    // also contains last year's. Getting that wrong refuses everybody, and the
+    // person it refuses is standing in front of them.
+    //
+    // So it picks, but only when there is nothing to get wrong: exactly one
+    // event that is live and not archived. Two live events is a real question
+    // and it stays a question — a guess there is the same mistake in a nicer
+    // coat. A deliberate choice is remembered on this device, so somebody who
+    // switched to another door keeps it when the page reloads.
+    const DOOR_EVENT_KEY = 'gha_door_event';
+    const [autoPicked, setAutoPicked] = useState(false);
     useEffect(() => {
         if (eventIdFromRoute) return;
-        getEvents().then((response) => setEvents(response.data)).catch(() => setEvents([]));
+        getEvents().then((response) => {
+            const rows = response.data || [];
+            setEvents(rows);
+            setPickedEvent((current) => {
+                if (current) return current;
+                let remembered = null;
+                try { remembered = localStorage.getItem(DOOR_EVENT_KEY); } catch (e) { /* noop */ }
+                const kept = rows.find((ev) => String(ev.id) === String(remembered) && !ev.is_archived);
+                if (kept) return kept;
+                const live = rows.filter((ev) => ev.is_active && !ev.is_archived);
+                if (live.length === 1) { setAutoPicked(true); return live[0]; }
+                return null;
+            });
+        }).catch(() => setEvents([]));
     }, [eventIdFromRoute]);
+    const chooseEvent = (ev) => {
+        setPickedEvent(ev); setAutoPicked(false);
+        try {
+            if (ev) localStorage.setItem(DOOR_EVENT_KEY, String(ev.id));
+            else localStorage.removeItem(DOOR_EVENT_KEY);
+        } catch (e) { /* noop */ }
+    };
 
     useEffect(() => {
         setQuery(''); setResults(null); setResult(null); setError(''); setConfirmFlagged(null);
@@ -368,6 +462,7 @@ function CheckIn({ timezone: timezoneProp }) {
                 await b1PrintBlob(response.data, { onProgress: (st) => setAutoJob({ attendeeId: id, phase: 'printing', message: `Badge: ${st}` }) });
             });
             printedIds.current.add(id);
+            refreshPrintReport();
             setAutoJob({ attendeeId: id, phase: 'printed', message: checkedInNow ? 'Checked in · badge printed' : 'Badge printed' });
             try { await recordBadgePrint(eventId, id, { result: 'printed', station: station || undefined, client_attempt_id: attemptId }); } catch (e) { /* the sticker is out; the record can be re-tried from the row */ }
             refreshSearch();
@@ -381,8 +476,21 @@ function CheckIn({ timezone: timezoneProp }) {
     // can be, the dialog when it cannot (no printer paired, Bluetooth off,
     // a roll the B1 cannot take).
     const printBadge = (attendee, checkedInNow = false) => {
+        if (!station.trim()) { setNamePrompt({ attendee, checkedInNow }); return; }
         if (canAutoPrint()) autoPrintBadge(attendee, checkedInNow);
         else openLabel(attendee, checkedInNow);
+    };
+    // Named, then the print carries straight on — the badge is still the thing
+    // being asked for.
+    const nameStationAndPrint = (value) => {
+        const name = (value || '').trim();
+        if (!name) return;
+        rememberStation(name);
+        const waiting = namePrompt;
+        setNamePrompt(null);
+        if (!waiting) return;
+        if (canAutoPrint()) autoPrintBadge(waiting.attendee, waiting.checkedInNow);
+        else openLabel(waiting.attendee, waiting.checkedInNow);
     };
     const attendeeFromDecision = (d) => ({
         id: d.attendee_id, qr_code: d.qr_code,
@@ -429,6 +537,155 @@ function CheckIn({ timezone: timezoneProp }) {
         }
     };
 
+    // ── Door actions ────────────────────────────────────────────────────────
+    const openDoorAction = (kind, d) => {
+        setDoorAction({ kind, decision: d });
+        setDoorError(''); setActionReason('');
+        const card = d.door || {};
+        setFixForm(kind === 'addseat'
+            ? { first_name: '', last_name: '', phone: '', email: '' }
+            : { first_name: d.first_name || '', last_name: d.last_name || '',
+                phone: card.phone || '', email: card.email || '' });
+        setPassChoice(card.ticket_type_id ? String(card.ticket_type_id) : '');
+        // The desk can only SELL an upgrade, so their dialog opens on "paying"
+        // and stays there. An organiser gets the choice.
+        setPassPaid(!card.may || card.may.comp !== true);
+        setPassAmount(''); setPassMethod('cash');
+    };
+    const closeDoorAction = () => { setDoorAction(null); setDoorError(''); };
+
+    // After any correction the screen must agree with the database again, so
+    // every action ends by re-asking the backend for the decision rather than
+    // patching the card in place.
+    const rescanCurrent = async (d, zone) => {
+        try {
+            const again = await authorizeScan(eventId, { qr_code: d.qr_code, access_type: zone || d.access_type || accessType });
+            setResult(again.data);
+            return again.data;
+        } catch (err) { return null; }
+    };
+
+    const runDoorAction = async (fn, message, { rescan = true } = {}) => {
+        const d = doorAction?.decision;
+        if (!d) return;
+        setDoorBusy(true); setDoorError('');
+        try {
+            const out = await fn(d);
+            closeDoorAction();
+            if (rescan) await rescanCurrent(d);
+            else if (out) setResult(out);
+            await Promise.all([refreshSearch(), refreshScanLogs()]);
+            setFeedback({ severity: 'success', message });
+        } catch (err) {
+            setDoorError(err.response?.data?.detail || 'That did not go through. Nothing was changed.');
+        } finally { setDoorBusy(false); }
+    };
+
+    const submitOverride = () => runDoorAction(
+        async (d) => {
+            const response = await overrideAdmit(eventId, d.attendee_id, {
+                reason: actionReason.trim(), access_type: d.access_type || accessType,
+            });
+            return response.data;
+        },
+        'Let in, and logged with your reason.',
+        { rescan: false });
+
+    const submitFix = () => runDoorAction(
+        async (d) => {
+            const before = d.door || {};
+            const body = { reason: actionReason.trim() || undefined };
+            if (fixForm.first_name.trim() !== (d.first_name || '')) body.first_name = fixForm.first_name.trim();
+            if (fixForm.last_name.trim() !== (d.last_name || '')) body.last_name = fixForm.last_name.trim();
+            if (fixForm.phone.trim() !== (before.phone || '')) body.phone = fixForm.phone.trim();
+            if (fixForm.email.trim().toLowerCase() !== (before.email || '').toLowerCase()) body.email = fixForm.email.trim();
+            await doorIdentity(eventId, d.attendee_id, body);
+        },
+        'Details corrected. Print the badge again so it carries the right name.');
+
+    const submitPassChange = () => runDoorAction(
+        async (d) => {
+            await changePass(d.attendee_id, {
+                ticket_type_id: Number(passChoice),
+                reason: actionReason.trim() || 'changed at the door',
+                complimentary: !passPaid, allow_downgrade: true,
+                paid_at_door: passPaid,
+                amount: passPaid ? Number(passAmount) : undefined,
+                method: passPaid ? passMethod : undefined,
+            });
+        },
+        'Pass changed. Print the badge again so it shows the new one.');
+
+    // Finish a party the order paid for but never named. The backend refuses
+    // once the badges match what was bought, so this can only ever complete a
+    // booking — never inflate one.
+    const submitAddSeat = () => runDoorAction(
+        async (d) => {
+            const response = await addPartySeat(eventId, d.attendee_id, {
+                first_name: fixForm.first_name.trim(), last_name: fixForm.last_name.trim(),
+                phone: fixForm.phone.trim() || undefined,
+                reason: actionReason.trim() || undefined,
+            });
+            const made = response.data || {};
+            // Land on the new badge and print it. Naming somebody at the desk is
+            // not a filing exercise — they are standing there waiting for the
+            // sticker, and a second tap to produce it is a second queue.
+            const again = await authorizeScan(eventId, { qr_code: made.qr_code, access_type: accessType });
+            const fresh = again.data;
+            if (fresh?.attendee_id) {
+                setAutoJob(null);
+                printBadge(attendeeFromDecision(fresh), false);
+            }
+            return fresh;
+        },
+        'Seat named — their badge is printing.',
+        { rescan: false });
+
+    // Somebody says "please don't give my details to the stands". One tap, and
+    // the answer is stamped so no default ever writes over it again.
+    // "One day of your choosing" — and the choosing happens here, on the
+    // morning they turn up, because that is when they know which day they want.
+    const submitAddonDay = (iso) => runDoorAction(
+        async (d) => {
+            const when = new Date(iso + 'T12:00:00');
+            await setAddonDay(d.attendee_id, {
+                addon_code: 'ONE_DAY_CONFERENCE',
+                day_label: when.toLocaleDateString(undefined, { weekday: 'long', day: 'numeric', month: 'long' }),
+                day_date: iso,
+                reason: actionReason.trim() || 'chosen at the desk',
+            });
+        },
+        'Day set — the conference room will let them in on that day.');
+
+    const submitSharing = (share) => runDoorAction(
+        async (d) => { await setSharing(eventId, d.attendee_id, {
+            share_email: share, share_phone: share,
+            reason: actionReason.trim() || (share ? 'asked to share' : 'asked not to share'),
+        }); },
+        share ? 'Recorded — their details go to the stands they visit.'
+              : 'Recorded — no stand will get their email or phone.');
+
+    const submitRevoke = () => runDoorAction(
+        async (d) => { await revokeAttendee(d.attendee_id, actionReason.trim()); },
+        'Badge revoked. It will be refused at every door from now on.');
+
+    const submitReinstate = () => runDoorAction(
+        async (d) => { await reinstateAttendee(d.attendee_id, actionReason.trim()); },
+        'Badge is valid again.');
+
+    // Pull up anybody else on the same booking without asking for their badge —
+    // a family arrives together and only one of them is holding a phone.
+    const openPartyMember = async (member) => {
+        setError('');
+        try {
+            const response = await authorizeScan(eventId, { qr_code: member.qr_code, access_type: accessType });
+            setResult(response.data); setAutoJob(null);
+            refreshScanLogs();
+        } catch (err) {
+            setFeedback({ severity: 'error', message: err.response?.data?.detail || 'Could not open that seat.' });
+        }
+    };
+
     const accessOf = (a) => a && a.effective_access;
 
     const resultRow = (attendee) => {
@@ -463,6 +720,7 @@ function CheckIn({ timezone: timezoneProp }) {
                             // payer is who they will introduce themselves as.
                             <Typography variant="caption" sx={{ display: 'block', mt: 0.5, color: 'info.main' }}>
                                 Paid by {attendee.paid_by}
+                                {attendee.party_seat ? ` \u00b7 seat ${attendee.party_seat}` : ''}
                             </Typography>
                         )}
                         {(attendee.registration_source === 'walk_in' || (attendee.attendance_type && attendee.attendance_type !== 'paid')) && (
@@ -542,6 +800,25 @@ function CheckIn({ timezone: timezoneProp }) {
             : (HEADLINE[d.result] || d.result);
         const reason = String(d.reason || '').replace(/^REHEARSAL\s*—\s*/i, '');
         const addons = d.addons || [];
+        const card = d.door || null;
+        // One line for the money question. A comp and a door sale read
+        // differently from an online order, and the desk is asked about all three.
+        const money = (() => {
+            if (!card) return '';
+            const m = card.money || {};
+            const bits = [];
+            if (m.total > 0) {
+                const src = (m.payments[0] || {}).source || 'online';
+                const when = (m.payments[0] || {}).at ? String(m.payments[0].at).slice(0, 10) : '';
+                bits.push(`Paid $${m.total} ${m.currency} \u00b7 ${src}${when ? ` \u00b7 ${when}` : ''}${m.count > 1 ? ` \u00b7 ${m.count} payments` : ''}`);
+            }
+            if (m.door) bits.push(`At the door: $${m.door.amount} ${m.door.method || ''} (${m.door.status})`);
+            if (!m.total && !m.door) bits.push(m.attendance_type && m.attendance_type !== 'paid' ? `No payment \u2014 ${m.attendance_type}` : 'No payment on record');
+            else if (m.attendance_type && m.attendance_type !== 'paid') bits.push(m.attendance_type);
+            if (card.source === 'walk_in') bits.push('walk-in');
+            if (card.source === 'rebuilt_seat') bits.push('seat rebuilt from a paid order');
+            return bits.join(' \u00b7 ');
+        })();
         return (
             <Paper variant="outlined"
                 sx={{ borderColor: `${v.color}.main`, borderWidth: 2, overflow: 'hidden' }}>
@@ -566,6 +843,73 @@ function CheckIn({ timezone: timezoneProp }) {
                         </Typography>
                     )}
                     <Typography variant="body2" sx={{ mt: 1 }}>{reason}</Typography>
+                    {d.refused_reason && (
+                        // An override keeps the refusal visible. The screen must never
+                        // read as though the rules had agreed.
+                        <Typography variant="caption" sx={{ display: 'block', mt: 0.5, color: 'warning.main' }}>
+                            The door had refused: {d.refused_reason}
+                        </Typography>
+                    )}
+
+                    {/* What they paid, who paid it, and what kind of attendance
+                        this is — the three questions a desk gets asked back. */}
+                    {card && (
+                        <Typography variant="body2" color="text.secondary" sx={{ mt: 0.75 }}>
+                            {money}
+                        </Typography>
+                    )}
+
+                    {/* A seat whose name came off the buyer's order. This is the
+                        single most likely correction of the weekend, so it says so
+                        and puts the fix in the same place. */}
+                    {card?.needs_name_check && (
+                        <Alert severity="warning" icon={false} sx={{ mt: 1, py: 0.5 }}>
+                            <strong>Check this name.</strong> This seat was rebuilt from a paid order —
+                            the name shown is the buyer&rsquo;s, not necessarily this person&rsquo;s.
+                            Ask them, then tap <em>Fix details</em>.
+                        </Alert>
+                    )}
+
+                    {/* The rest of the booking. Somebody buying four tickets is one
+                        of the two things that broke this year's roll, so the door
+                        shows the whole party and who of them is already inside. */}
+                    {card?.party && (
+                        <Box sx={{ mt: 1.25, p: 1.25, borderRadius: 1, bgcolor: 'action.hover' }}>
+                            <Stack direction="row" spacing={0.75} alignItems="center" sx={{ mb: 0.75 }}>
+                                <GroupsIcon sx={{ fontSize: 18, color: 'text.secondary' }} />
+                                <Typography variant="body2" sx={{ fontWeight: 700 }}>
+                                    Seat {card.party.seat} &middot; {card.party.buyer}&rsquo;s booking
+                                </Typography>
+                                <Typography variant="caption" color="text.secondary">
+                                    {card.party.checked_in} of {card.party.size} here
+                                </Typography>
+                            </Stack>
+                            <Stack direction="row" spacing={0.5} flexWrap="wrap" useFlexGap>
+                                {card.party.members.map((m) => (
+                                    <Chip key={m.attendee_id} size="small"
+                                        variant={m.is_this_one ? 'filled' : 'outlined'}
+                                        color={m.checked_in ? 'success' : (m.needs_name_check ? 'warning' : 'default')}
+                                        onClick={m.is_this_one ? undefined : () => openPartyMember(m)}
+                                        label={`${m.checked_in ? '\u2713 ' : ''}${m.name}${m.is_buyer ? ' (bought)' : ''}`} />
+                                ))}
+                            </Stack>
+                            {card.party.unnamed > 0 ? (
+                                <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap" useFlexGap sx={{ mt: 1 }}>
+                                    <Typography variant="caption" sx={{ color: 'warning.main', fontWeight: 700 }}>
+                                        {card.party.unnamed} of the {card.party.paid_for} seats they paid for has no badge yet.
+                                    </Typography>
+                                    <Button size="small" variant="contained" color="warning" startIcon={<PersonAddIcon />}
+                                            onClick={() => openDoorAction('addseat', d)}>
+                                        Name seat {card.party.size + 1}
+                                    </Button>
+                                </Stack>
+                            ) : (
+                                <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.75 }}>
+                                    Tap any of them to pull up their badge without scanning it.
+                                </Typography>
+                            )}
+                        </Box>
+                    )}
 
                     {/* The sticker, right under the decision: printing / printed /
                         not printed and why, with the dialog one tap away. */}
@@ -600,6 +944,61 @@ function CheckIn({ timezone: timezoneProp }) {
                         <Chip size="small" variant="outlined"
                               label={ZONES.find((z) => z.value === d.access_type)?.label || d.access_type} />
                     </Stack>
+
+                    {/* Everything the desk is allowed to change, one tap from the
+                        verdict. Each is audited; none of them weakens a rule for
+                        anybody else. */}
+                    {d.attendee_id && (
+                        <Stack direction="row" spacing={0.75} flexWrap="wrap" useFlexGap sx={{ mt: 1.5 }}>
+                            {!d.granted && (
+                                <Button size="small" variant="contained" color="warning" startIcon={<LockOpenIcon />}
+                                        onClick={() => openDoorAction('override', d)}>
+                                    Let in anyway
+                                </Button>
+                            )}
+                            <Button size="small" variant="outlined" startIcon={<EditIcon />}
+                                    color={card?.needs_name_check ? 'warning' : 'inherit'}
+                                    onClick={() => openDoorAction('fix', d)}>
+                                Fix details
+                            </Button>
+                            <Button size="small" variant="outlined" color="inherit" startIcon={<SwapHorizIcon />}
+                                    onClick={() => openDoorAction('pass', d)}>
+                                Change pass
+                            </Button>
+                            {card?.may?.revoke === false ? null : card && ['refunded', 'cancelled', 'revoked'].includes(card.status) ? (
+                                <Button size="small" variant="outlined" color="success" startIcon={<RestoreIcon />}
+                                        onClick={() => openDoorAction('reinstate', d)}>
+                                    Reinstate
+                                </Button>
+                            ) : (
+                                <Button size="small" variant="outlined" color="error" startIcon={<BlockIcon />}
+                                        onClick={() => openDoorAction('revoke', d)}>
+                                    Revoke
+                                </Button>
+                            )}
+                            {(d.addons || []).some((a) => a.code === 'ONE_DAY_CONFERENCE' && !a.day) && (
+                                <Button size="small" variant="contained" color="warning"
+                                        startIcon={<TuneIcon />}
+                                        onClick={() => openDoorAction('addonday', d)}>
+                                    Pick their conference day
+                                </Button>
+                            )}
+                            {card?.sharing && (
+                                <Button size="small" variant="outlined"
+                                        color={card.sharing.email ? 'inherit' : 'warning'}
+                                        startIcon={<VisibilityIcon />}
+                                        onClick={() => openDoorAction('sharing', d)}>
+                                    {card.sharing.email ? 'Sharing on' : 'Not sharing'}
+                                </Button>
+                            )}
+                            {d.checked_in && (
+                                <Button size="small" color="inherit" startIcon={<UndoIcon />}
+                                        onClick={() => { setUndoTarget({ id: d.attendee_id, first_name: d.first_name, last_name: d.last_name }); setUndoReason(''); }}>
+                                    Undo check-in
+                                </Button>
+                            )}
+                        </Stack>
+                    )}
 
                     <Button size="small" sx={{ mt: 1.5, px: 0, minWidth: 0 }}
                             onClick={() => setShowDecisionDetail((x) => !x)}>
@@ -651,9 +1050,15 @@ function CheckIn({ timezone: timezoneProp }) {
                 <Paper variant="outlined" sx={{ p: 2, mb: 2 }}>
                     <TextField select fullWidth size="small" label="Which event's door is this?"
                         value={pickedEvent ? pickedEvent.id : ''}
-                        onChange={(e) => setPickedEvent(events.find((event) => event.id === Number(e.target.value)) || null)}
-                        helperText="Badges from any other event are refused.">
-                        {events.map((event) => <MenuItem key={event.id} value={event.id}>{event.name}</MenuItem>)}
+                        onChange={(e) => chooseEvent(events.find((event) => event.id === Number(e.target.value)) || null)}
+                        helperText={autoPicked
+                            ? 'The only conference running. Change it if this door is for something else — badges from any other event are refused.'
+                            : 'Badges from any other event are refused.'}>
+                        {events.map((event) => (
+                            <MenuItem key={event.id} value={event.id} disabled={Boolean(event.is_archived)}>
+                                {event.name}{event.is_archived ? ' — archived, cannot be used' : ''}
+                            </MenuItem>
+                        ))}
                     </TextField>
                 </Paper>
             )}
@@ -675,7 +1080,7 @@ function CheckIn({ timezone: timezoneProp }) {
                                   label={zoneLabel} sx={{ height: 24 }} />
                             <Typography variant="body2" color="text.secondary">·</Typography>
                             <Typography variant="body2" sx={{ fontWeight: 600 }}>
-                                {station || <Box component="span" sx={{ color: 'text.disabled', fontWeight: 400 }}>Unnamed station</Box>}
+                                {station || <Box component="span" sx={{ color: 'warning.main', fontWeight: 600 }}>Name this desk</Box>}
                             </Typography>
                             <Typography variant="body2" color="text.secondary">·</Typography>
                             <Typography variant="body2" color="text.secondary">
@@ -819,6 +1224,48 @@ function CheckIn({ timezone: timezoneProp }) {
                                         } finally { setRehearsalBusy(false); }
                                     }}>
                                     {rehearsalBusy ? 'Working…' : (rehearsal ? 'End rehearsal' : 'Start rehearsal')}
+                                </Button>
+                            </Stack>
+                        </Paper>
+                    )}
+
+                    {/* ── Re-entry ──────────────────────────────────────────────
+                        The one door setting whose cost arrives all at once. With it
+                        off, everybody who checked in yesterday is refused this
+                        morning — three hundred people, at the same time, at eight
+                        o'clock. It lives here, next to the scanner, because the
+                        moment anybody discovers they need it there is a queue. */}
+                    {doorEvent && (
+                        <Paper variant="outlined" sx={{ p: 1.5, mb: 2,
+                                                        borderColor: reEntry ? 'divider' : 'warning.main' }}>
+                            <Stack direction="row" spacing={1.5} alignItems="center" justifyContent="space-between" flexWrap="wrap" useFlexGap>
+                                <Box sx={{ minWidth: 0 }}>
+                                    <Typography variant="body2" sx={{ fontWeight: 700 }}>
+                                        {reEntry ? 'Re-entry is on — a badge readmits all weekend'
+                                                 : 'Re-entry is off — one badge, one entry, for the whole event'}
+                                    </Typography>
+                                    <Typography variant="caption" color={reEntry ? 'text.secondary' : 'warning.main'}>
+                                        {reEntry
+                                            ? 'Somebody who steps out for lunch, or comes back tomorrow morning, scans straight back in.'
+                                            : 'Everybody who checked in on a previous day will be refused when they scan again. For a three-day conference, turn this on.'}
+                                    </Typography>
+                                </Box>
+                                <Button size="small" variant={reEntry ? 'outlined' : 'contained'}
+                                    color={reEntry ? 'inherit' : 'warning'} disabled={reEntryBusy}
+                                    onClick={async () => {
+                                        setReEntryBusy(true);
+                                        try {
+                                            const r = await setDoorReEntry(eventId, !reEntry);
+                                            setReEntry(Boolean(r.data?.allow_reentry));
+                                            setFeedback({ severity: 'success',
+                                                message: r.data?.allow_reentry
+                                                    ? 'Re-entry on — badges readmit for the rest of the event.'
+                                                    : 'Re-entry off — each badge admits once.' });
+                                        } catch (err) {
+                                            setFeedback({ severity: 'error', message: err.response?.data?.detail || 'Could not change that.' });
+                                        } finally { setReEntryBusy(false); }
+                                    }}>
+                                    {reEntryBusy ? 'Working…' : (reEntry ? 'Turn off' : 'Turn on re-entry')}
                                 </Button>
                             </Stack>
                         </Paper>
@@ -1118,7 +1565,12 @@ function CheckIn({ timezone: timezoneProp }) {
                             <Box>
                                 <Typography variant="subtitle2" gutterBottom>Why do they need a badge?</Typography>
                                 <Stack spacing={1}>
-                                    {DOOR_REASONS.map((r) => (
+                                    {/* Offer the desk only the reasons the desk can
+                                        act on. A free badge is somebody deciding to
+                                        give an entry away, and that stays with an
+                                        organiser — saying so here beats a refusal
+                                        after the form has been filled in. */}
+                                    {DOOR_REASONS.filter((r) => !may || may[r.needs] !== false).map((r) => (
                                         <Paper key={r.key} variant="outlined"
                                             onClick={() => setVisitor({ ...visitor, reason: r.key,
                                                 attendance_type: r.attendance_type,
@@ -1131,6 +1583,11 @@ function CheckIn({ timezone: timezoneProp }) {
                                         </Paper>
                                     ))}
                                 </Stack>
+                                {may && may.register_free_badge === false && (
+                                    <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 1 }}>
+                                        A complimentary guest, a speaker or a crew badge is an organiser&rsquo;s call.
+                                    </Typography>
+                                )}
                             </Box>
 
                             {visitor?.reason === 'already_paid' && (
@@ -1234,6 +1691,287 @@ function CheckIn({ timezone: timezoneProp }) {
                     <Button variant="contained" color="warning" onClick={() => checkInAttendee(confirmFlagged)}>Scan anyway</Button>
                 </DialogActions>
             </Dialog>
+
+            {/* Asked once, at the moment it first matters. */}
+            <Dialog open={Boolean(namePrompt)} onClose={() => setNamePrompt(null)} fullWidth maxWidth="xs">
+                <DialogTitle>Which desk is this?</DialogTitle>
+                <DialogContent>
+                    <Stack spacing={2} sx={{ mt: 0.5 }}>
+                        <Typography variant="body2" color="text.secondary">
+                            Every badge this device prints is recorded against the name you give here,
+                            so a desk that starts failing can be found without asking around.
+                            Saved on this device &mdash; you will not be asked again.
+                        </Typography>
+                        <Stack direction="row" spacing={0.75} flexWrap="wrap" useFlexGap>
+                            {STATION_PRESETS.map((n) => (
+                                <Chip key={n} label={n} onClick={() => nameStationAndPrint(n)} variant="outlined" />
+                            ))}
+                        </Stack>
+                        <TextField autoFocus size="small" fullWidth label="Or type a name"
+                            placeholder="e.g. Main entrance"
+                            onKeyDown={(e) => { if (e.key === 'Enter') nameStationAndPrint(e.target.value); }}
+                            helperText="Press Enter to save and print" />
+                    </Stack>
+                </DialogContent>
+                <DialogActions>
+                    <Button onClick={() => setNamePrompt(null)}>Not now</Button>
+                </DialogActions>
+            </Dialog>
+
+            {/* One dialog, five jobs. They share a reason box because every one of
+                them is a thing somebody will ask about on Monday. */}
+            <Dialog open={Boolean(doorAction)} onClose={doorBusy ? undefined : closeDoorAction} fullWidth maxWidth="xs">
+                <DialogTitle>
+                    {doorAction?.kind === 'override' && 'Let them in anyway'}
+                    {doorAction?.kind === 'fix' && 'Fix these details'}
+                    {doorAction?.kind === 'addseat' && 'Name the next seat'}
+                    {doorAction?.kind === 'pass' && 'Change this pass'}
+                    {doorAction?.kind === 'revoke' && 'Revoke this badge'}
+                    {doorAction?.kind === 'reinstate' && 'Make this badge valid again'}
+                    {doorAction?.kind === 'sharing' && 'Their details at the stands'}
+                    {doorAction?.kind === 'addonday' && 'Which day is their conference day?'}
+                </DialogTitle>
+                <DialogContent>
+                    <Stack spacing={2} sx={{ mt: 0.5 }}>
+                        <Typography variant="body2" color="text.secondary">
+                            {doorAction ? (`${doorAction.decision.first_name || ''} ${doorAction.decision.last_name || ''}`.trim() || doorAction.decision.name) : ''}
+                            {doorAction?.decision?.attendee_id ? ` \u00b7 #${doorAction.decision.attendee_id}` : ''}
+                        </Typography>
+
+                        {doorAction?.kind === 'override' && (
+                            <Alert severity="warning" icon={false}>
+                                The door refused this badge: <strong>{doorAction.decision.reason}</strong>.
+                                Letting them in does not change the ticket — it records that you decided to,
+                                with your name against it.
+                            </Alert>
+                        )}
+                        {doorAction?.kind === 'revoke' && (
+                            <Alert severity="error" icon={false}>
+                                This badge stops working at every door, straight away. No money moves —
+                                a refund is a separate thing. It can be reinstated from this same screen.
+                            </Alert>
+                        )}
+
+                        {doorAction?.kind === 'addonday' && (
+                            <>
+                                <Alert severity="info" icon={false}>
+                                    They bought the One-Day Speaker Access &mdash; one day of their
+                                    choosing. Until a day is picked the conference room refuses them,
+                                    and once it is picked it admits them on that day only.
+                                </Alert>
+                                <Stack spacing={1}>
+                                    {(doorAction.decision.door?.event_days || []).map((iso) => (
+                                        <Button key={iso} variant="outlined" disabled={doorBusy}
+                                            onClick={() => submitAddonDay(iso)}>
+                                            {new Date(iso + 'T12:00:00').toLocaleDateString(undefined,
+                                                { weekday: 'long', day: 'numeric', month: 'long' })}
+                                            {iso === doorAction.decision.event_local_date ? ' \u2014 today' : ''}
+                                        </Button>
+                                    ))}
+                                </Stack>
+                            </>
+                        )}
+
+                        {doorAction?.kind === 'sharing' && (
+                            <Alert severity={doorAction.decision.door?.sharing?.email ? 'info' : 'warning'} icon={false}>
+                                {doorAction.decision.door?.sharing?.email
+                                    ? 'A stand they hand their badge to gets their name, email and phone. That is what lead retrieval is, and the ticket was sold on it.'
+                                    : 'No stand gets their email or phone — only their name.'}
+                                {doorAction.decision.door?.sharing?.asked
+                                    ? ' They have been asked, and this is their answer.'
+                                    : ' Nobody has asked them; this is the default.'}
+                            </Alert>
+                        )}
+
+                        {doorAction?.kind === 'addseat' && (
+                            <Alert severity="info" icon={false}>
+                                This booking paid for <strong>{doorAction.decision.door?.party?.paid_for}</strong> seats
+                                and has <strong>{doorAction.decision.door?.party?.size}</strong> badges.
+                                This names the next one and gives them their own badge on the same booking.
+                                Anybody who is <em>not</em> on this order is a walk-in, not a seat.
+                            </Alert>
+                        )}
+
+                        {(doorAction?.kind === 'fix' || doorAction?.kind === 'addseat') && (
+                            <>
+                                <Stack direction="row" spacing={1}>
+                                    <TextField label="First name" size="small" fullWidth autoFocus
+                                        value={fixForm.first_name}
+                                        onChange={(e) => setFixForm({ ...fixForm, first_name: e.target.value })} />
+                                    <TextField label="Last name" size="small" fullWidth
+                                        value={fixForm.last_name}
+                                        onChange={(e) => setFixForm({ ...fixForm, last_name: e.target.value })} />
+                                </Stack>
+                                <TextField label="Phone" size="small" fullWidth value={fixForm.phone}
+                                    onChange={(e) => setFixForm({ ...fixForm, phone: e.target.value })} />
+                                {doorAction?.kind === 'fix' && (
+                                    <TextField label="Email" size="small" fullWidth value={fixForm.email}
+                                        onChange={(e) => setFixForm({ ...fixForm, email: e.target.value })}
+                                        helperText="Changing the email needs an organiser login — it is how their card is claimed." />
+                                )}
+                            </>
+                        )}
+
+                        {doorAction?.kind === 'pass' && (
+                            <>
+                                <TextField select label="New pass" size="small" fullWidth value={passChoice}
+                                    onChange={(e) => setPassChoice(e.target.value)}
+                                    helperText="Same badge, same QR. They keep everything they already had.">
+                                    {(() => {
+                                        // Somebody who cannot move a pass down should not be shown
+                                        // the options that would be refused.
+                                        const may = doorAction.decision.door?.may;
+                                        const nowRank = ticketTypes.find(
+                                            (t) => String(t.id) === String(doorAction.decision.door?.ticket_type_id))?.upgrade_rank;
+                                        return ticketTypes.filter((t) => (
+                                            may?.downgrade || nowRank == null || t.upgrade_rank == null
+                                                ? true : t.upgrade_rank >= nowRank
+                                        ));
+                                    })().map((t) => (
+                                        <MenuItem key={t.id} value={String(t.id)}>{t.name}</MenuItem>
+                                    ))}
+                                </TextField>
+                                {doorAction.decision.door?.may?.comp ? (
+                                    <FormControlLabel
+                                        control={<Switch checked={passPaid} size="small"
+                                            onChange={(e) => setPassPaid(e.target.checked)} />}
+                                        label={passPaid ? 'They are paying for this' : 'Complimentary \u2014 no money taken'} />
+                                ) : (
+                                    <Typography variant="caption" color="text.secondary">
+                                        Upgrades sold at the desk are paid for. Giving one away, or moving
+                                        somebody down, is an organiser&rsquo;s call.
+                                    </Typography>
+                                )}
+                                {passPaid && (
+                                    <Stack direction="row" spacing={1}>
+                                        <TextField label="Amount" size="small" fullWidth required
+                                            type="number" inputProps={{ min: 0, step: '0.01' }}
+                                            value={passAmount} onChange={(e) => setPassAmount(e.target.value)}
+                                            InputProps={{ startAdornment: <InputAdornment position="start">$</InputAdornment> }} />
+                                        <TextField select label="Method" size="small" fullWidth
+                                            value={passMethod} onChange={(e) => setPassMethod(e.target.value)}>
+                                            {['cash', 'card', 'other'].map((m) => (
+                                                <MenuItem key={m} value={m}>{m}</MenuItem>
+                                            ))}
+                                        </TextField>
+                                    </Stack>
+                                )}
+                                <Alert severity="info" icon={false} sx={{ py: 0.5 }}>
+                                    {passPaid
+                                        ? 'Recorded in Gaia and reported with the door\u2019s takings. Take the money on your usual till \u2014 nothing is written to GHL.'
+                                        : 'Recorded as a complimentary change. Nothing is written to GHL.'}
+                                </Alert>
+                            </>
+                        )}
+
+                        <TextField label={doorAction?.kind === 'override' ? 'Why are you letting them in? (required)' : 'Reason (for the record)'}
+                            size="small" fullWidth multiline minRows={2}
+                            required={doorAction?.kind === 'override'}
+                            value={actionReason} onChange={(e) => setActionReason(e.target.value)} />
+
+                        {doorError && <Alert severity="error">{doorError}</Alert>}
+                    </Stack>
+                </DialogContent>
+                <DialogActions>
+                    <Button onClick={closeDoorAction} disabled={doorBusy}>Cancel</Button>
+                    {doorAction?.kind === 'override' && (
+                        <Button variant="contained" color="warning" disabled={doorBusy || actionReason.trim().length < 3}
+                            onClick={submitOverride}>{doorBusy ? 'Working\u2026' : 'Let them in'}</Button>
+                    )}
+                    {doorAction?.kind === 'fix' && (
+                        <Button variant="contained" disabled={doorBusy || !fixForm.first_name.trim()}
+                            onClick={submitFix}>{doorBusy ? 'Saving\u2026' : 'Save'}</Button>
+                    )}
+                    {doorAction?.kind === 'addseat' && (
+                        <Button variant="contained" color="warning" disabled={doorBusy || !fixForm.first_name.trim()}
+                            onClick={submitAddSeat}>{doorBusy ? 'Adding\u2026' : 'Add this seat'}</Button>
+                    )}
+                    {doorAction?.kind === 'pass' && (
+                        <Button variant="contained"
+                            disabled={doorBusy || !passChoice
+                                || String(passChoice) === String(doorAction?.decision?.door?.ticket_type_id)
+                                || (passPaid && !(Number(passAmount) > 0))}
+                            onClick={submitPassChange}>
+                            {doorBusy ? 'Changing\u2026' : (passPaid ? `Take $${passAmount || '0'} & upgrade` : 'Change pass')}
+                        </Button>
+                    )}
+                    {doorAction?.kind === 'revoke' && (
+                        <Button variant="contained" color="error" disabled={doorBusy}
+                            onClick={submitRevoke}>{doorBusy ? 'Revoking\u2026' : 'Revoke'}</Button>
+                    )}
+                    {doorAction?.kind === 'sharing' && (
+                        doorAction.decision.door?.sharing?.email ? (
+                            <Button variant="contained" color="warning" disabled={doorBusy}
+                                onClick={() => submitSharing(false)}>
+                                {doorBusy ? 'Saving\u2026' : 'They asked not to share'}
+                            </Button>
+                        ) : (
+                            <Button variant="contained" disabled={doorBusy}
+                                onClick={() => submitSharing(true)}>
+                                {doorBusy ? 'Saving\u2026' : 'They are happy to share'}
+                            </Button>
+                        )
+                    )}
+                    {doorAction?.kind === 'reinstate' && (
+                        <Button variant="contained" color="success" disabled={doorBusy}
+                            onClick={submitReinstate}>{doorBusy ? 'Working\u2026' : 'Reinstate'}</Button>
+                    )}
+                </DialogActions>
+            </Dialog>
+
+            {eventId && printReport && printReport.attempts > 0 && (
+                <Paper variant="outlined" sx={{ p: 1.5, mt: 2 }}>
+                    <Stack direction="row" alignItems="center" justifyContent="space-between" flexWrap="wrap" useFlexGap>
+                        <Typography variant="subtitle2">
+                            Badges printed &middot; {printReport.printed}
+                            {printReport.failed > 0 && (
+                                <Box component="span" sx={{ color: 'warning.main', ml: 1 }}>
+                                    {printReport.failed} failed
+                                </Box>
+                            )}
+                        </Typography>
+                        <Button size="small" onClick={() => { setPrintOpen((x) => !x); refreshPrintReport(); }}>
+                            {printOpen ? 'Hide' : 'By desk'}
+                        </Button>
+                    </Stack>
+                    {printOpen && (
+                        <Box sx={{ mt: 1.5 }}>
+                            <Stack spacing={1}>
+                                {printReport.stations.map((st) => (
+                                    <Stack key={st.station} direction="row" spacing={1} alignItems="baseline"
+                                           justifyContent="space-between" flexWrap="wrap" useFlexGap>
+                                        <Typography variant="body2" sx={{ fontWeight: st.named ? 700 : 400,
+                                                                          color: st.named ? 'text.primary' : 'text.secondary' }}>
+                                            {st.station}
+                                        </Typography>
+                                        <Typography variant="caption" color="text.secondary">
+                                            {st.printed} printed
+                                            {st.failed > 0 ? ` \u00b7 ${st.failed} failed (${st.failure_rate}%)` : ''}
+                                            {st.operators.length ? ` \u00b7 ${st.operators.join(', ')}` : ''}
+                                        </Typography>
+                                    </Stack>
+                                ))}
+                            </Stack>
+                            {printReport.unnamed_stations > 0 && (
+                                <Typography variant="caption" sx={{ display: 'block', mt: 1, color: 'warning.main' }}>
+                                    {printReport.unnamed_stations} device(s) printed without naming a desk &mdash;
+                                    those are filed under whoever was signed in.
+                                </Typography>
+                            )}
+                            {printReport.recent_failures.length > 0 && (
+                                <Box sx={{ mt: 1.5 }}>
+                                    <Typography variant="caption" sx={{ fontWeight: 700 }}>Recent failures</Typography>
+                                    {printReport.recent_failures.slice(0, 5).map((f, i) => (
+                                        <Typography key={i} variant="caption" color="text.secondary" sx={{ display: 'block' }}>
+                                            {f.name || `#${f.attendee_id}`} &middot; {f.station || 'unnamed'} &middot; {String(f.error || '').slice(0, 70)}
+                                        </Typography>
+                                    ))}
+                                </Box>
+                            )}
+                        </Box>
+                    )}
+                </Paper>
+            )}
 
             <Snackbar open={Boolean(feedback)} autoHideDuration={4000} onClose={() => setFeedback(null)} anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}>
                 {feedback ? <Alert severity={feedback.severity}>{feedback.message}</Alert> : undefined}

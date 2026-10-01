@@ -441,6 +441,10 @@ h1{margin:18px 0 0;font-size:28px;line-height:1.1;text-align:center;font-weight:
    over block characters -- the real values were never sent, so there is nothing
    to find in the page source. */
 .locked{margin:14px 0 0;padding:12px 14px;border:1px dashed rgba(0,0,0,.18);border-radius:12px}
+.pass{margin:12px 0 0;padding:11px 14px;border-radius:12px;border:1px solid rgba(182,242,92,.34);background:rgba(182,242,92,.08)}
+.pass__k{margin:0;font-size:.7rem;letter-spacing:.09em;text-transform:uppercase;opacity:.6;font-weight:700}
+.pass__t{margin:3px 0 0;font-size:1rem;line-height:1.35;font-weight:700;color:var(--text)}
+.pass__i{margin:5px 0 0;font-size:.85rem;line-height:1.5;opacity:.78}
 .dormant{margin:12px 0 0;padding:12px 14px;border-radius:12px;background:rgba(0,0,0,.045)}
 .dormant__k{margin:0;font-size:.72rem;letter-spacing:.09em;text-transform:uppercase;opacity:.55;font-weight:700}
 .dormant__t{margin:5px 0 0;font-size:.85rem;line-height:1.55;opacity:.75}
@@ -495,6 +499,13 @@ def render_card_html(view: dict, token: str, app_base: str = None) -> str:
             "<div class=\"top\">%s<span><b>Gaia Healers</b> \u00b7 digital badge</span></div>"
             % (_h(og_title), _h(og_title), _h(og_desc), _h(og_img), _CSS, theme_css, _MARK))
 
+    # The pass is deliberately NOT here. This page is reached by anybody who
+    # opens the link -- the QR is worn on a badge all weekend -- and what tier
+    # somebody bought is not a stranger's business. It is shown to the people
+    # who actually scan the badge instead: the door, and the stand the person
+    # chose to hand their badge to.
+    pass_block = ""
+
     if not view.get("public"):
         first = _h(view.get("first_name") or "the owner")
         # Dormant, not empty. Before its owner has checked in the card is real
@@ -502,16 +513,16 @@ def render_card_html(view: dict, token: str, app_base: str = None) -> str:
         # Saying that is better than an unexplained blank profile, and it tells
         # a scanner at the door exactly what will happen next.
         if not view.get("activated"):
-            state = ("<p class=\"role\">Attending <b>%s</b></p>"
+            state = ("<p class=\"role\">Attending <b>%s</b></p>%s"
                      "<div class=\"dormant\"><p class=\"dormant__k\">Card not active yet</p>"
                      "<p class=\"dormant__t\">It switches on when %s checks in at the event. "
                      "The same QR does both, so nothing here changes and nothing gets reprinted.</p></div>"
-                     % (event, first))
+                     % (event, pass_block, first))
         else:
-            state = ("<p class=\"role\">Attending <b>%s</b></p>"
+            state = ("<p class=\"role\">Attending <b>%s</b></p>%s"
                      "<div class=\"dormant\"><p class=\"dormant__k\">Card is private</p>"
                      "<p class=\"dormant__t\">%s has this card switched off, so only their name is shown.</p></div>"
-                     % (event, first))
+                     % (event, pass_block, first))
         locked = ""
         if view.get("contact_on_file"):
             locked = ("<div class=\"locked\">"
@@ -585,11 +596,11 @@ def render_card_html(view: dict, token: str, app_base: str = None) -> str:
                                      % (_h(e.get("label")), _h(e.get("role") or "Participant"))
                                      for e in view["events"]))
         body = ("<div class=\"card\"><span class=\"event\">%s</span>"
-                "<div class=\"avatar\">%s</div><h1>%s</h1>%s%s%s%s%s%s"
+                "<div class=\"avatar\">%s</div><h1>%s</h1>%s%s%s%s%s%s%s"
                 "<div class=\"actions\">%s<a class=\"btn %s\" href=\"%s.vcf\" download>%s Save contact</a>"
                 "<a class=\"btn btn--secondary\" href=\"%s\">Connect in the Gaia Healers app</a>"
                 "<a class=\"btn btn--ghost\" href=\"%s\" data-owner-edit hidden>Edit my card</a></div>%s%s%s</div>"
-                % (event, avatar, name, headline, role, city, tags, bio, services, booking,
+                % (event, avatar, name, headline, role, city, tags, bio, services, pass_block, booking,
                    "btn--secondary" if booking else "btn--primary", _h(token),
                    _ICON["mail"].replace("currentColor", "#0B1408" if not booking else "currentColor"),
                    _h(connect_url), _h(claim_url), links_html, locked_html, events_html))

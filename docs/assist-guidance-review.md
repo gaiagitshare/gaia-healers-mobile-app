@@ -16,6 +16,18 @@ Text uses Gemini `gemini-3.6-flash` first, then Groq `qwen/qwen3.8-27b` on this 
 
 Eight synthetic live guidance questions were reviewed: events, Bio-Well, profile changes, next step, Water interest, courses, casual greeting and an explicit request to flirt. The final samples answered without intimate address or unsolicited membership upgrade. Profile guidance correctly identified support instead of an imaginary edit icon; next-step guidance selected one action. This is a small sampled behavioral check, not a guarantee across conversations. Before/after raw provider samples are in the gallery; markers in raw samples are hidden/executed by the existing app layer. The final onboarding sample uses an incomplete-member fixture, while the baseline fixture was complete, so those two answers are not a controlled personality comparison.
 
+## GHL persistence and personalization verification
+
+The authenticated contact is resolved before onboarding. Each structured answer writes the existing custom field and server-defined workflow tags, then reads the contact back to confirm both. A successful HTTP status without persisted tags is a save failure; the selected answer remains available for retry. Product ownership tags retain their existing semantics. Browser requests cannot supply arbitrary tags or field IDs.
+
+The new `gaia_app_onboarding_started` marker is written before the first app field mutation. A started journey cannot accidentally become historically complete merely because its fields saved before a failed tag request. Resume checks required tags as well as answers for started journeys; explicit GHL form completion and valid historical completed profiles still bypass without repeating questions. Existing historical partial answers are preserved and their mapped tags are reconciled when the app journey starts.
+
+Read-only checks against location `WkKl1K5RuZNQ60xR48k6` confirmed all 16 fields already exist. The published survey `cxEHVXROFQI0tMKQofPr` uses Client Needs field `lZimCwbcpPF330TfxdXx`, key `contact.what_are_your_clients_most_often_asking_for_right_now_select_all_that_apply`. The supplied correction pointed to another question (`wJJUthQQvLq0RZ6v16wB`); the implementation now targets the published question. That active field's metadata option list differs from the published checkbox values. Published values are preserved and this disagreement is recorded in the public verification JSON rather than modifying live field definitions. Step-specific straight/curly apostrophes are mapped exactly; conversational legacy aliases remain supported.
+
+Assist now receives the member's saved structured choices even after completion and prefers current choices over retained historical tags when guiding Store, Energy, Academy and Community. Interest does not establish ownership, access, medical conclusions or intent to purchase. No speculative recommendation engine was added.
+
+Contract tests compare every structured choice to its persisted field value and tags, verify tag-readback failures, started-journey resume/completion, historical partial resume, and the published survey field IDs/options. No production contact was written. A dedicated live test contact remains a release check for actual API option acceptance, Other Devices text-list shape and downstream GHL automations.
+
 ## Visual implementation
 
 CSS, lightweight inline SVG and the browser animation API provide a soft ambient field, brief intro ripples, responsive life/field/water selection pulses, tactile checks, question crossfades, branch completion acknowledgement, a moving progress point, and selected-symbol/chip completion reveal. No new animation library, video background, canvas loop or bitmap download was added. Entrance animations run on scene changes; selection updates reuse the existing DOM. Resume uses a shorter entrance. Outgoing content is inert, hidden from assistive technology and loses live control selectors. Reduced-motion disables CSS and interaction animations; buttons remain immediately usable.
@@ -41,7 +53,7 @@ The orb now uses actual microphone/output amplitude. “Speaking” begins when 
 
 ## Validation and reproduction
 
-Local backend: 552 passed, 15 live integration checks skipped. Frontend: 90 passed. Added checks cover common guide policy, bounded history/context, exact capability limits, Qwen navigation refresh without a reply, and clearing interrupted stereo PCM. Existing onboarding, voice relay, text streaming, tools, safety and prompt-budget checks pass.
+Local backend: 558 passed, 15 live integration checks skipped. Frontend: 90 passed. Added checks cover common guide policy, bounded history/context, exact capability limits, Qwen navigation refresh without a reply, and clearing interrupted stereo PCM. Existing onboarding, voice relay, text streaming, tools, safety and prompt-budget checks pass.
 
 Run backend `npm test` in `staging-proxy`, frontend `node --test tests/*.test.cjs` in the repository root. Use `node scripts/onboarding-preview.mjs` for synthetic UI. Playwright CLI `run-code` takes the function in `scripts/onboarding-browser-qa.js`; `scripts/onboarding-motion-record.js` records the companion demonstration. The recording needs Playwright's ffmpeg binary. Export to MP4 with normal ffmpeg if desired.
 
@@ -49,4 +61,4 @@ Opt-in model QA: `node scripts/assist-guidance-probe.mjs --env /private/provider
 
 Main implementation files: `staging-proxy/assist-guide.js`, `staging-proxy/server.js`, `staging-proxy/qwen-voice-relay.js`, `gaia-ui.js`, `gaia-realtime-voice.js`, `gaia-assist-v3.css`, `gaia-journey.js`, `gaia-journey.css`, `home.html`, `index.html`, `sw.js`. Tests, QA scripts, screenshots, JSON samples and this review accompany them.
 
-See [screenshot and motion gallery](../output/playwright/onboarding/index.html) and [original onboarding/GHL review](onboarding-review.md). Live GHL metadata, exact answer/tag workflow verification, visual/behavior approval, and full acoustic voice QA remain release checks. Do not merge, deploy or restart production from this draft.
+See [screenshot and motion gallery](../output/playwright/onboarding/index.html) and [original onboarding/GHL review](onboarding-review.md). Exact live contact answer/tag workflow verification, visual/behavior approval, and full acoustic voice QA remain release checks. Do not merge, deploy or restart production from this draft.

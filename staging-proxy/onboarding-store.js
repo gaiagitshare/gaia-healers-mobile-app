@@ -1,5 +1,5 @@
 // GHL is the only durable answer store. Dependencies are injected for offline tests.
-import { STEPS, STEP_BY_KEY, COMPLETE_TAG, mapStep, onboardingPath, onboardingState, validAnswer, uiSchema } from './gaia-onboarding.js';
+import { STEPS, STEP_BY_KEY, COMPLETE_TAG, STARTED_TAG, mapStep, onboardingPath, onboardingState, validAnswer, uiSchema } from './gaia-onboarding.js';
 export const FIELD_KEYS = {
   primary_interests: 'im_most_interested_in_exploring',
   why_join: 'what_made_you_want_to_join_gaia_healers',
@@ -13,7 +13,7 @@ export const FIELD_KEYS = {
   growth_needs: 'contactwhat_are_you_most_focused_on_improving_right_nowselect_all_that_apply_27s_copy',
   devices_owned: 'do_you_currently_own_any_of_these_devices',
   devices_other: 'if_other_devices_was_checked_please_share_what_other_devices_you_use_in_your_practice',
-  client_needs: 'contactcheckbox_17sna_wk6_copy_ag5_copy',
+  client_needs: 'what_are_your_clients_most_often_asking_for_right_now_select_all_that_apply',
   can_offer: 'contactwhat_are_your_clients_most_often_asking_for_right_now_select_all_that_apply_xzl_copy',
   want_receive: 'contactcontactwhat_are_your_clients_most_often_asking_for_right_now_select_all_that_apply_xzl_copy_o8w_copy',
   final_notes: 'before_we_wrap_up_is_there_anything_else_youd_like_us_to_know_about_you_and_where_you_are_in_growing_your_practice',
@@ -24,6 +24,12 @@ const STORED_LABELS = {
   'Water': 'Water: I am interested in healing and restructuring our water systems',
   'Clinic or office': 'Clinic of office',
 };
+const STEP_STORED_LABELS = {
+  living_beings_who: { "I'm not sure yet": 'I’m not sure yet' },
+  water: { "I'm still exploring": 'I’m still exploring' },
+  invest_timing: { "I'm ready now": 'I’m ready now', "I'm just exploring right now": 'I’m just exploring right now' },
+};
+const storedLabel = (stepKey, label) => STEP_STORED_LABELS[stepKey]?.[label] || STORED_LABELS[label] || label;
 const fail = (reason, status = 503) => Object.assign(new Error(reason), { status, reason });
 export function resolveFields(definitions) {
   const fields = {};
@@ -42,7 +48,7 @@ export function readAnswers(customFields, fields) {
     const value = values[fields[step.key]];
     if (step.freeTextOnly) { if (value) answers[step.key] = String(value); continue; }
     const list = Array.isArray(value) ? value : value ? [value] : [];
-    const labels = list.map(v => step.options.find(o => o.label === v || STORED_LABELS[o.label] === v)?.label);
+    const labels = list.map(v => step.options.find(o => o.label === v || storedLabel(step.key, o.label) === v)?.label);
     if (labels.length && labels.every(Boolean) && validAnswer(step, labels)) answers[step.key] = labels;
   }
   const other = values[fields.devices_other];
@@ -73,7 +79,7 @@ export function createOnboardingStore({ get, post, put, locationId, invalidate =
     }
     const answers = readAnswers(contact.customFields, ids);
     const complete = onboardingState(contact.tags, answers) === 'complete';
-    const next = onboardingPath(answers).find(s => !s.freeTextOnly && !validAnswer(s, answers[s.key])) || STEP_BY_KEY.final_notes;
+    const next = onboardingPath(answers).find(s => !s.freeTextOnly && (!validAnswer(s, answers[s.key]) || contact.tags?.includes(STARTED_TAG) && mapStep(s.key, answers[s.key] || []).tags.some(tag => !contact.tags?.includes(tag)))) || STEP_BY_KEY.final_notes;
     return { contact, ids, answers, state: complete ? 'complete' : 'incomplete', nextStep: complete ? null : next.key };
   }
   async function saveNow(contactId, stepKey, selections = [], freeText = '', complete = false, strict = false) {
@@ -84,10 +90,10 @@ export function createOnboardingStore({ get, post, put, locationId, invalidate =
     const aliases = {
       'Less than 1 year': '< 1 year',
       'Business infrastructure: website, scheduling and systems': 'Business infrastructure (website, scheduling, systems)',
-      'Other': ['can_offer', 'want_receive'].includes(stepKey) ? 'Other (please specify)' : 'Other',
+      'Other': ['can_offer', 'want_receive', 'client_needs'].includes(stepKey) ? 'Other (please specify)' : 'Other',
     };
     const canonical = selections.map(value => step.options.find(o => o.label === value || (!strict && (
-      normalize(o.label) === normalize(value) || STORED_LABELS[o.label] === value || aliases[value] === o.label
+      normalize(o.label) === normalize(value) || storedLabel(step.key, o.label) === value || aliases[value] === o.label
     )))?.label);
     if (canonical.some(value => !value)) throw fail('invalid_onboarding_answer', 400);
     const mapped = mapStep(stepKey, canonical);
@@ -97,15 +103,22 @@ export function createOnboardingStore({ get, post, put, locationId, invalidate =
     const before = await load(contactId);
     if (!before.ids) throw fail('onboarding_field_unavailable');
     if (step.showIf && !(before.answers.primary_interests || []).includes(step.showIf)) throw fail('inactive_onboarding_branch', 400);
-    if (complete && onboardingPath(before.answers).some(s => !s.freeTextOnly && !validAnswer(s, before.answers[s.key]))) throw fail('onboarding_steps_missing', 400);
-    const customFields = [{ id: before.ids[stepKey], fieldValue: step.freeTextOnly ? freeText : step.multi ? chosen.map(v => STORED_LABELS[v] || v) : (STORED_LABELS[chosen[0]] || chosen[0]) }];
+    if (complete && onboardingPath(before.answers).some(s => !s.freeTextOnly && (!validAnswer(s, before.answers[s.key]) || before.contact.tags?.includes(STARTED_TAG) && mapStep(s.key, before.answers[s.key] || []).tags.some(tag => !before.contact.tags?.includes(tag))))) throw fail('onboarding_steps_missing', 400);
+    const customFields = [{ id: before.ids[stepKey], fieldValue: step.freeTextOnly ? freeText : step.multi ? chosen.map(v => storedLabel(stepKey, v)) : storedLabel(stepKey, chosen[0]) }];
     if (stepKey === 'primary_interests') {
       for (const branch of STEPS.filter(s => s.showIf && (before.answers.primary_interests || []).includes(s.showIf) && !chosen.includes(s.showIf))) customFields.push({ id: before.ids[branch.key], fieldValue: [] });
     }
     if (stepKey === 'devices_owned') customFields.push({ id: before.ids.devices_other, fieldValue: chosen.includes('Other') ? freeText.split('\n').map(x => x.trim()).filter(Boolean).slice(0, 6) : [] });
     const path = `/contacts/${encodeURIComponent(contactId)}`;
+    // Mark a new app journey before any field mutation. This distinguishes
+    // confirmed app saves from historical form data without re-asking history.
+    const startTags = !before.contact.tags?.includes(STARTED_TAG)
+      ? [...new Set([STARTED_TAG, ...onboardingPath(before.answers).flatMap(s => mapStep(s.key, before.answers[s.key] || []).tags)])]
+      : [];
+    if (startTags.length && !await post(path + '/tags', { tags: startTags })) throw fail('onboarding_tags_failed');
     if (!await put(path, { customFields })) throw fail('onboarding_save_failed');
     const tags = mapped.tags.slice();
+
     if (complete && !before.contact.tags?.includes(COMPLETE_TAG)) tags.push(COMPLETE_TAG);
     if (tags.length && !await post(path + '/tags', { tags })) throw fail('onboarding_tags_failed');
     // Free text without a corresponding GHL field retains the existing notes path.
@@ -114,13 +127,18 @@ export function createOnboardingStore({ get, post, put, locationId, invalidate =
     }
     invalidate(contactId);
     const after = await load(contactId);
+    if ([...startTags, ...tags].some(tag => !after.contact.tags?.includes(tag))) throw fail('onboarding_tags_unconfirmed');
+    if (stepKey === 'devices_owned') {
+      const expectedOther = chosen.includes('Other') ? freeText.split('\n').map(x => x.trim()).filter(Boolean).slice(0, 6).join('\n') : '';
+      if ((after.answers.devices_other || '') !== expectedOther) throw fail('onboarding_other_devices_unconfirmed');
+    }
     const saved = after.answers[stepKey];
     if (!step.freeTextOnly && (!saved || JSON.stringify([...saved].sort()) !== JSON.stringify([...chosen].sort()))) throw fail('onboarding_save_unconfirmed');
     if (step.freeTextOnly && (saved || '') !== freeText) throw fail('onboarding_save_unconfirmed');
     if (stepKey === 'primary_interests' && STEPS.some(s => s.showIf && (before.answers.primary_interests || []).includes(s.showIf) && !chosen.includes(s.showIf) && after.answers[s.key])) throw fail('onboarding_branch_clear_unconfirmed');
     if (complete && !after.contact.tags?.includes(COMPLETE_TAG)) throw fail('onboarding_completion_unconfirmed');
     console.info('[Gaia Onboarding]', { event: complete ? 'completed' : 'step_saved', stepKey });
-    return { tagsAdded: tags, matched: chosen, unmatched: [], complete: complete && after.state === 'complete', answers: after.answers, state: after.state, nextStep: after.nextStep };
+    return { tagsAdded: [...new Set([...startTags, ...tags])], matched: chosen, unmatched: [], complete: complete && after.state === 'complete', answers: after.answers, state: after.state, nextStep: after.nextStep };
   }
   return {
     load: async contactId => { const s = await load(contactId); return { ok: true, state: s.state, answers: s.answers, nextStep: s.nextStep, schema: uiSchema(), completedByTag: (s.contact.tags || []).some(t => [COMPLETE_TAG, 'gaia_practitioner_form_complete'].includes(t)), member: { name: s.contact.firstName || s.contact.name || '', email: s.contact.email || '' } }; },

@@ -6,13 +6,13 @@ The server supplies the safe UI schema from `staging-proxy/gaia-onboarding.js`. 
 
 ## Corrected mappings and behavior
 
-- Apply all 16 field keys from the supplied October 1 correction file; resolve IDs by exact field key from the location metadata at runtime.
+- Resolve all 16 existing field IDs by exact field key from live location metadata. The published survey corrects the supplied Client Needs field key; see the GHL verification below.
 - Five formerly single-select steps now allow multiple selections. Canonical business, infrastructure, and Other labels match the correction. Primary interests and the clinic typo have explicit display-to-storage mappings.
 - Reject unknown steps, unsupported selections, inactive branches, and premature completion. Normalized/explicit legacy label compatibility remains for conversational answers; arbitrary substring matches cannot save.
-- Save custom fields and existing workflow tags, then read back to confirm the answer. Failed writes retain the visual selection and expose retry. Contact reads and writes have timeouts.
+- Save custom fields and existing workflow tags, then read back to confirm the answer and every required tag. Failed writes retain the visual selection and expose retry. Contact reads and writes have timeouts.
 - Removing a previously selected branch clears its answer fields, verifies the clearing, and preserves workflow tags. **Owner decision for a future change:** whether deselected branches should also remove their historical tags. This PR preserves them as instructed.
 - Persist Other Devices in the mapped text-list field (up to six entries); other free text retains the notes path. Final notes remain optional.
-- Completion accepts `gaia_app_onboarding_complete`, `gaia_practitioner_form_complete`, or valid answers for every required question on the selected path. The old three-tag heuristic is removed. Explicit completion tags still bypass the gate if custom-field metadata is temporarily unavailable.
+- Completion accepts `gaia_app_onboarding_complete`, `gaia_practitioner_form_complete`, or valid historical answers for every required question on the selected path when the app-started marker is absent. New app journeys require the authoritative completion tag. The old three-tag heuristic is removed. Explicit completion tags still bypass the gate if custom-field metadata is temporarily unavailable.
 - Completing the visual journey saves final notes, adds and confirms the app completion tag, invalidates cached Assist context, and reveals a deterministic Gaia Path summary. Enter Gaia unlocks the panel without rechecking stale local state.
 - No contact information is re-asked; the introduction uses the GHL first name. There is no new phone/address requirement, since the app has no existing mandatory requirement for those fields.
 - Same-origin `/api/` responses are excluded from service-worker caching; decorative assets retain the existing cache behavior.
@@ -36,7 +36,7 @@ node scripts/onboarding-preview.mjs
 
 Run `npm test` in `staging-proxy`, and `node --test` for each `tests/*.cjs`. New store and endpoint tests cover fields, branching, resume, completion, failure/retry, voice/text-compatible values, exact contact resolution, ambiguous emails, cross-site protection, and ignored client-supplied contact/tag targets.
 
-The supplied correction file was the authority for the live form mapping. **No production GHL contact was read or changed.** Maintainer validation against a dedicated live test contact remains required: verify location metadata, text-list storage shape, option strings, field clearing, and the completion/interest workflows. The implementation uses HighLevel’s documented PUT contact custom-field API and existing tag/notes helpers.
+Live GHL location metadata and the published survey were checked read-only. All 16 mapped fields already exist; no duplicate fields were created. **No production GHL contact was read or changed.** A dedicated live test contact remains required to verify text-list storage shape, option acceptance, field clearing, and downstream completion/interest workflows. The implementation uses HighLevel’s documented PUT contact custom-field API and existing tag/notes helpers.
 
 A small existing test-path bug was also fixed: `assist-tools-contract.test.js` used URL `.pathname` as a filesystem path, which fails in a checkout whose directory name contains spaces. It now uses `fileURLToPath`.
 

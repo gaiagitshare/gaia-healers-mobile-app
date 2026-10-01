@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { STEPS, onboardingPath, onboardingState, uiSchema } from '../gaia-onboarding.js';
+import { STEPS, onboardingPath, onboardingState, uiSchema, mapStep } from '../gaia-onboarding.js';
 import { FIELD_KEYS, createOnboardingStore } from '../onboarding-store.js';
 function fixture() {
   const defs = Object.entries(FIELD_KEYS).map(([key, value]) => ({ id: 'id-' + key, fieldKey: 'contact.' + value, model: 'contact' }));
@@ -93,4 +93,69 @@ test('free-form compatibility never treats arbitrary substrings as allowed answe
 test('existing completion markers bypass a temporary custom-field metadata outage', async () => {
   const store = createOnboardingStore({ locationId: () => 'x', get: async url => url.includes('/contacts/') ? { contact: { id: 'done', tags: ['gaia_practitioner_form_complete'] } } : null, post: async () => null, put: async () => null });
   assert.equal((await store.load('done')).state, 'complete');
+});
+
+
+test('every structured choice writes its GHL field and all mapped workflow tags', async () => {
+  const f = fixture();
+  await f.store.save('member-a', 'primary_interests', ['Living Beings', 'Environment', 'Water'], '', false, true);
+  for (const step of STEPS.filter(s => !s.freeTextOnly && s.key !== 'primary_interests')) {
+    for (const option of step.options) {
+      const expected = mapStep(step.key, [option.label]).tags;
+      await f.store.save('member-a', step.key, [option.label], step.key === 'devices_owned' && option.label === 'Other' ? 'Synthetic device' : '', false, true);
+      assert.deepEqual((await f.store.load('member-a')).answers[step.key], [option.label]);
+      assert.ok(expected.every(tag => f.contact.tags.includes(tag)), `${step.key}: ${option.label}`);
+      assert.ok(f.contact.customFields.some(field => field.id === 'id-' + step.key));
+    }
+  }
+});
+
+test('a successful tags HTTP response without persisted tags is not a confirmed save', async () => {
+  const defs = Object.entries(FIELD_KEYS).map(([key, value]) => ({ id: key, fieldKey: 'contact.' + value, model: 'contact' }));
+  const contact = { id: 'member-a', tags: [], customFields: [] };
+  const store = createOnboardingStore({ locationId: () => 'location', get: async path => path.includes('/locations/') ? { customFields: defs } : { contact }, put: async (_path, body) => { contact.customFields = body.customFields; return {}; }, post: async () => ({ success: true }) });
+  await assert.rejects(store.save('member-a', 'primary_interests', ['Water'], '', false, true), /onboarding_tags_unconfirmed/);
+});
+
+
+test('live survey smart apostrophes are stored exactly and resume to stable UI labels', async () => {
+  const f = fixture();
+  await f.store.save('member-a', 'primary_interests', ['Living Beings', 'Water'], '', false, true);
+  for (const [step, label, stored] of [ ['living_beings_who', "I'm not sure yet", 'I’m not sure yet'], ['water', "I'm still exploring", 'I’m still exploring'], ['invest_timing', "I'm ready now", 'I’m ready now'] ]) {
+    await f.store.save('member-a', step, [label], '', false, true);
+    const value = f.contact.customFields.find(field => field.id === 'id-' + step).value;
+    assert.deepEqual(value, step === 'invest_timing' ? stored : [stored]);
+    assert.deepEqual((await f.store.load('member-a')).answers[step], [label]);
+  }
+  assert.equal(FIELD_KEYS.client_needs, 'what_are_your_clients_most_often_asking_for_right_now_select_all_that_apply');
+  await f.store.save('member-a', 'client_needs', ['Other'], '', false);
+  assert.deepEqual((await f.store.load('member-a')).answers.client_needs, ['Other (please specify)']);
+});
+
+
+test('a partial field/tag write resumes the unconfirmed step instead of skipping its tags', async () => {
+  const f = fixture(); f.failPost(true);
+  await assert.rejects(f.store.save('member-a', 'primary_interests', ['Water'], '', false, true), /tags_failed/);
+  assert.equal((await f.store.load('member-a')).nextStep, 'primary_interests');
+  f.failPost(false);
+  await f.store.save('member-a', 'primary_interests', ['Water'], '', false, true);
+  assert.equal((await f.store.load('member-a')).nextStep, 'why_join');
+  for (const step of onboardingPath({ primary_interests: ['Water'] }).filter(s => s.key !== 'primary_interests' && !s.freeTextOnly)) await f.store.save('member-a', step.key, answer(step), '', false, true);
+  assert.equal((await f.store.load('member-a')).state, 'incomplete');
+  assert.equal((await f.store.load('member-a')).nextStep, 'final_notes');
+  await f.store.save('member-a', 'final_notes', [], '', true, true);
+  assert.equal((await f.store.load('member-a')).state, 'complete');
+});
+
+
+test('existing historical answers resume without repeating them; an app tag failure remains pending', async () => {
+  const f = fixture();
+  f.contact.customFields = [{ id: 'id-primary_interests', value: ['Water: I am interested in healing and restructuring our water systems'] }];
+  assert.equal((await f.store.load('member-a')).nextStep, 'why_join');
+  await f.store.save('member-a', 'why_join', answer(STEPS.find(s => s.key === 'why_join')), '', false, true);
+  assert.ok(f.contact.tags.includes('interest_water_drinking') === false); // Not inferred before answering water.
+  assert.ok(mapStep('primary_interests', ['Water']).tags.every(tag => f.contact.tags.includes(tag)));
+  f.failPost(true);
+  await assert.rejects(f.store.save('member-a', 'water', answer(STEPS.find(s => s.key === 'water')), '', false, true), /tags_failed/);
+  assert.equal((await f.store.load('member-a')).nextStep, 'water');
 });

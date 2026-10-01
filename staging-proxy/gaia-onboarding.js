@@ -7,6 +7,7 @@
 'use strict';
 
 const COMPLETE_TAG = 'gaia_app_onboarding_complete';
+const STARTED_TAG = 'gaia_app_onboarding_started';
 
 // Each step: { key, title, question, multi, branch?, options:[{label, tags[]}], freeText? }
 const STEPS = [
@@ -163,7 +164,7 @@ const STEPS = [
       { label: 'Optimizing physical health and body composition', tags: ['interest_client_physical'] },
       { label: 'Receiving remote or in-person energy/wellness support', tags: ['interest_client_energy'] },
       { label: 'Enhancing their environment or water quality', tags: ['interest_client_environment'] },
-      { label: 'Other', tags: [] },
+      { label: 'Other (please specify)', tags: [] },
     ],
     freeText: 'If Other, share more.',
   },
@@ -235,10 +236,11 @@ function mapOnboardingAnswers(answers) {
 }
 
 // Has this member already done the onboarding survey? (complete marker, or the
-// GHL form-complete tag, or a solid cluster of survey-built interest tags.)
+// GHL form-complete tag, or a fully answered historical form.)
 function onboardingState(tags, answers = {}) {
   const set = new Set((tags || []).map((t) => String(t).toLowerCase()));
   if (set.has(COMPLETE_TAG) || set.has('gaia_practitioner_form_complete')) return 'complete';
+  if (set.has(STARTED_TAG)) return 'incomplete'; // New app journeys require confirmed completion.
   const path = onboardingPath(answers);
   return answers.primary_interests?.length && path.filter(s => !s.freeTextOnly).every(s => validAnswer(s, answers[s.key])) ? 'complete' : 'incomplete';
 }
@@ -395,7 +397,7 @@ function formatTargeting(rec) {
 }
 
 export {
-  COMPLETE_TAG, STEPS, STEP_BY_KEY,
+  COMPLETE_TAG, STARTED_TAG, STEPS, STEP_BY_KEY,
   mapStep, mapOnboardingAnswers, onboardingState, onboardingPath, validAnswer, uiSchema, onboardingPromptBlock, suggestOffers,
   interestFromTopic, buildTargeting, formatTargeting,
 };

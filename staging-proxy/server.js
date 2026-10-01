@@ -4421,7 +4421,9 @@ async function buildMemberVoiceContext(req) {
       lines.push('ONBOARDING PROFILE: ' + (obState === 'complete'
         ? 'DONE — do NOT run the onboarding survey again; use their interests below to tailor suggestions.'
         : 'NOT DONE — resume at ' + obProfile.nextStep + '. Use the saved answers, never repeat completed questions. Structured answer cards are available in Assist.'));
-      if (obState !== 'complete') lines.push('Saved onboarding answers: ' + JSON.stringify(obProfile.answers));
+      const profileChoices = Object.fromEntries(Object.entries(obProfile.answers).filter(([, value]) => Array.isArray(value)));
+      lines.push('CURRENT GAIA PROFILE CHOICES: ' + JSON.stringify(profileChoices));
+      lines.push('Use these saved choices for relevant Store, Energy, Academy and Community guidance. Choices are current; historical interest tags can remain after a branch change. Interests never prove device ownership, purchase intent or course access.');
       const interestTags = (b.tags || []).filter((t) => /^(interest_|product_.*_(interest|owner)|practice_stage_|invest_|community_feature_|need_)/.test(String(t).toLowerCase()));
       if (interestTags.length) lines.push('What we already know (profile tags): ' + interestTags.slice(0, 40).join(', ') + '.');
       const hasPaidSub = Array.isArray(b.subscriptions) && b.subscriptions.some((x) => /active|trialing/i.test(String(x.status || '')));

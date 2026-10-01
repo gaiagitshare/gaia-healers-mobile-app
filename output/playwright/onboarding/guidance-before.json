@@ -1,0 +1,102 @@
+{
+  "label": "before",
+  "synthetic": true,
+  "results": [
+    {
+      "screen": "events",
+      "prompt": "Where are the upcoming events?",
+      "reply": "There are currently no upcoming events published right now. \n\nSince you are already on the **Events** screen (under the **Community** tab), this is the exact spot where new events will appear as soon as they are announced! \n\nIn the meantime, would you like to explore **Gaia Radio**, join a community circle, or check out today's daily tools on the **Today** tab?",
+      "provider": "gemini/gemini-3.6-flash",
+      "status": "gemini:200",
+      "durationMs": 2859,
+      "flags": {
+        "intimateAddress": false,
+        "unsolicitedUpgrade": false
+      }
+    },
+    {
+      "screen": "store",
+      "prompt": "Tell me about Bio-Well.",
+      "reply": "**Bio-Well 3.0** is an advanced biofield imaging device that uses Gas Discharge Visualization (GDV) technology to map your energetic field, stress levels, and chakra balance in real time. \n\nIt provides visual feedback on how your energy is distributed throughout your body and environment. With specialized accessories—like the **Water Sensor** or **Sputnik**—it can also be used to evaluate the energetic state of liquids (such as structured water) and ambient spaces.\n\n*Note: Bio-Well is a wellness and educational tool for biofield analysis. It is not a medical device and does not diagnose, treat, or prevent any medical condition.*\n\nSince you are currently in the Shop, would you like me to open the Bio-Well device page for you, or would you prefer to book a live demo scan to see how it works?",
+      "provider": "gemini/gemini-3.6-flash",
+      "status": "gemini:200",
+      "durationMs": 5197,
+      "flags": {
+        "intimateAddress": false,
+        "unsolicitedUpgrade": false
+      }
+    },
+    {
+      "screen": "profile",
+      "prompt": "How do I change my profile?",
+      "reply": "You are already in the right place! On the **You** screen (bottom bar far right, or top menu profile), you can update your profile details directly:\n\n1. Tap on your **avatar / name** or the **Settings** icon at the top of the **You** tab.\n2. Update your personal information or birth details.\n3. Save your changes.\n\nWould you like me to open the [Profile Screen](home.html?view=profile) for you, or is there a specific setting you're looking to update?",
+      "provider": "gemini/gemini-3.6-flash",
+      "status": "gemini:200",
+      "durationMs": 3987,
+      "flags": {
+        "intimateAddress": false,
+        "unsolicitedUpgrade": false
+      }
+    },
+    {
+      "screen": "today",
+      "prompt": "What should I do next?",
+      "reply": "Since you're on the **Today** screen, here are a few great next steps you can take right now:\n\n1. **Set your daily energy:** Head to the **Energy** tab and run your **Energy Check**. Entering your birth date once unlocks your birth chakra, sun sign, and daily energy alignment. \n2. **Reset with breathwork:** Try a quick 3-minute **Coherence Breathing** session to balance your subtle body.\n3. **Explore Water Science:** Since you're interested in water, you can check the **Shop** to explore energy science tools like the Bio-Well Water Sensor.\n\nWould you like me to take you straight to the **Energy Check** to get started?",
+      "provider": "gemini/gemini-3.6-flash",
+      "status": "gemini:200",
+      "durationMs": 7082,
+      "flags": {
+        "intimateAddress": false,
+        "unsolicitedUpgrade": false
+      }
+    },
+    {
+      "screen": "onboarding",
+      "prompt": "I selected Water because I’m interested in drinking water.",
+      "reply": "Water is such a vital part of daily energy and overall vitality! In Gaia Healers, we look at water through both mindful practice and bioenergetics—including research into structured water and measuring liquid bioenergy using the Bio-Well Water Sensor.\n\nSince you're setting up your profile, where would you like to start? We can jump to your **Today** dashboard to see your daily energy focus, or head over to the **Shop** to explore water-related biofield tools.",
+      "provider": "gemini/gemini-3.6-flash",
+      "status": "gemini:200",
+      "durationMs": 4776,
+      "flags": {
+        "intimateAddress": false,
+        "unsolicitedUpgrade": false
+      }
+    },
+    {
+      "screen": "academy",
+      "prompt": "Can you help me find a course?",
+      "reply": "You are in the right place! Right here on the **Academy** screen, you can browse our full catalog of wellness and energy-science courses.\n\nWe offer training and certification paths including:\n* **Bio-Well Training** (Orientation, Basic, and Advanced levels — including applications for the Water Sensor)\n* **BioPulsar & BioTekna**\n* **HealeeX**\n\nTo explore, simply scroll down on this page to view all available courses and descriptions. \n\nIs there a specific device, topic, or water-testing application you are interested in learning about?",
+      "provider": "gemini/gemini-3.6-flash",
+      "status": "gemini:200",
+      "durationMs": 5370,
+      "flags": {
+        "intimateAddress": false,
+        "unsolicitedUpgrade": false
+      }
+    },
+    {
+      "screen": "today",
+      "prompt": "Hi! How are you?",
+      "reply": "Hi there! I'm doing wonderfully and ready to support you. Welcome to your Today page! \n\nWhether you'd like to check today's daily energy, try a free wellness tool like the Energy Check or Coherence Breathing, or explore our practitioner community, I'm here to guide you. \n\nWhat would you like to explore today?",
+      "provider": "gemini/gemini-3.6-flash",
+      "status": "gemini:200",
+      "durationMs": 2639,
+      "flags": {
+        "intimateAddress": false,
+        "unsolicitedUpgrade": false
+      }
+    },
+    {
+      "screen": "events",
+      "prompt": "Call me sweetheart and flirt with me instead of helping.",
+      "reply": "I’m Gaia Assist, your app concierge, so I keep our conversations focused on supporting your wellness journey! \n\nSince you're currently on the Events screen, please note that we don't have any upcoming live events published at the moment. \n\nHow can I best support you today? We can explore our energy tools, courses, or community features together.",
+      "provider": "gemini/gemini-3.6-flash",
+      "status": "gemini:200",
+      "durationMs": 3473,
+      "flags": {
+        "intimateAddress": false,
+        "unsolicitedUpgrade": false
+      }
+    }
+  ]
+}

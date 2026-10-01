@@ -17,7 +17,7 @@
   const VOICE_SPEED_KEY = 'gaia-assist-voice-speed';
   const ASSIST_WELCOME_KEY = 'gaia-assist-welcome-v3';
   const GHL_CUSTOM_MENU_URL = 'https://crm.gaiahealers.com/v2/location/WkKl1K5RuZNQ60xR48k6/custom-menu-link/328efaea-4e94-42ec-9ce2-4358a64657db';
-  const APP_VIEWS = new Set(['today', 'journey', 'wellness', 'academy', 'community', 'events', 'bookings', 'inbox', 'profile', 'store', 'directory']);
+  const APP_VIEWS = new Set(Object.keys(window.GaiaAssistGuide.screens));
   const AUTH_HINT_KEYS = ['memberId', 'contactId', 'email', 'name', 'displayName', 'role', 'cohort', 'locationId', 'bridge', 'sharedSecret'];
   const AUTH_STATE = {
     authenticated: false,
@@ -2145,7 +2145,7 @@
       let resumeTimer = null;
       utterance.onstart = () => {
         setVoiceProvider('browser', voice?.name || 'system');
-        status.textContent = 'Speaking…';
+        setAssistVoiceState('speaking', 'Speaking…');
         assistLog('speech started', { provider: 'browser', voice: voice?.name || 'system', speed: selectedSpeed() });
         resumeTimer = window.setInterval(() => {
           if (!window.speechSynthesis.speaking) {
@@ -2188,7 +2188,7 @@
         }
         setVoiceHint('');
         setVoiceProvider(provider, voice);
-        status.textContent = 'Speaking…';
+        setAssistVoiceState('speaking', 'Speaking…');
         assistLog('speech started', { provider, voice, speed: selectedSpeed() });
       };
       audio.onplay = onPlay;
@@ -2238,7 +2238,7 @@
             };
             source.onerror = reject;
             setVoiceProvider(provider, voice);
-            status.textContent = 'Speaking…';
+            setAssistVoiceState('speaking', 'Speaking…');
             playbackStarted = true;
             source.start(0);
           });
@@ -2304,7 +2304,7 @@
       const fromVoice = options.fromVoice === true;
       stopSpeaking();
       await unlockVoicePlayback(isMobileWebKit || fromVoice);
-      setAssistVoiceState('speaking', 'Speaking with ElevenLabs…');
+      setAssistVoiceState('thinking', 'Preparing audio…');
       const providerSetting = selectedProvider();
       if (providerSetting === 'browser') {
         await speakWithBrowser(cleanText);
@@ -2837,6 +2837,10 @@
       if (!canUseRealtimeVoice() || realtimeVoice) return;
       realtimeEnabled = true;
       realtimeVoice = window.GaiaRealtimeVoice.create();
+      realtimeVoice.on('audioLevel', level => {
+        if (root.classList.contains('gaia-assist--listening')) root.style.setProperty('--gaia-input-level', String(level));
+      });
+      realtimeVoice.on('outputLevel', level => root.style.setProperty('--gaia-output-level', String(level)));
       realtimeVoice.on('status', (nextStatus) => {
         setRealtimeVoiceProvider();
         root.classList.toggle('gaia-assist--pipeline', inPipelineMode());
@@ -2960,6 +2964,15 @@
       transcript.scrollTop = transcript.scrollHeight;
     }
 
+    const assistHistory = [];
+    const pageContext = () => window.GaiaAssistGuide.context(window.GaiaJourney?.context || { screen: window.GaiaAppShell?.currentView?.() || 'today' });
+    const rememberTurn = (role, content) => {
+      assistHistory.push({ role, content });
+      if (assistHistory.length > 8) assistHistory.shift();
+    };
+    window.addEventListener('gaia:signed-out', () => { assistHistory.length = 0; activeChatController?.abort(); stopSpeaking(); });
+    document.addEventListener('gaia:auth', () => { assistHistory.length = 0; activeChatController?.abort(); });
+
     async function streamAssistantReply(base, cleanPrompt, intent, source, fromVoice) {
       const controller = new AbortController();
       activeChatController?.abort();
@@ -2984,6 +2997,8 @@
           intent,
           source,
           page: window.location.pathname.split('/').pop() || 'home.html',
+          appContext: pageContext(),
+          history: window.GaiaAssistGuide.history(assistHistory),
         }),
       });
 
@@ -3039,6 +3054,7 @@
         botBubble = appendMessage('bot', fullReply);
       }
       if (!fullReply) return false;
+      rememberTurn('user', cleanPrompt); rememberTurn('assistant', fullReply);
       await speakReply(fullReply, { fromVoice });
       if (donePayload?.warning) setError(donePayload.warning);
       return true;
@@ -3108,6 +3124,8 @@
             intent,
             source,
             page: window.location.pathname.split('/').pop() || 'home.html',
+          appContext: pageContext(),
+          history: window.GaiaAssistGuide.history(assistHistory),
           }),
         });
         assistLog('proxy response received', { status: response.status });
@@ -3116,6 +3134,7 @@
           throw new Error(payload.error || `Proxy returned ${response.status}`);
         }
         const reply = payload.reply || resolveLocalReply(cleanPrompt, intent);
+        rememberTurn('user', cleanPrompt); rememberTurn('assistant', reply);
         await deliverReply(reply, { warning: payload.warning || '', fromVoice });
       } catch (err) {
         if (err.name === 'AbortError') {

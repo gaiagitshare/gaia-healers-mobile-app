@@ -17,7 +17,7 @@ function loadPlaybackProcessor() {
   const end = src.indexOf('`;', start);
   const worklet = src.slice(start + 'const PLAYBACK_WORKLET = `'.length, end);
   let Processor;
-  const FakeBase = class { constructor() { this.port = { onmessage: null }; } };
+  const FakeBase = class { constructor() { this.port = { onmessage: null, postMessage() {} }; } };
   new Function('AudioWorkletProcessor', 'registerProcessor', worklet)(FakeBase, (name, cls) => { Processor = cls; });
   return new Processor();
 }
@@ -264,6 +264,7 @@ test('boot smoke: gaia-ui.js boots on a home-like DOM without throwing', () => {
   global.fetch = () => new Promise(() => {}); // pending forever: no async paths run
   global.history = { replaceState() {}, pushState() {}, state: null, length: 1, scrollRestoration: 'manual' };
 
+  new Function(read('staging-proxy/assist-guide.js'))();
   const ui = read('gaia-ui.js');
   assert.doesNotThrow(() => {
     new Function('window', 'document', 'navigator', 'localStorage', 'sessionStorage', 'CustomEvent', 'fetch', 'setTimeout', 'clearTimeout', 'requestAnimationFrame', 'matchMedia', ui)(
@@ -311,4 +312,18 @@ test('inactive splash slides are removed from the accessibility tree', () => {
   const activeIdx = css.indexOf('.splash-step.active');
   const activeRule = css.slice(activeIdx, css.indexOf('}', activeIdx));
   assert.ok(/visibility:\s*visible/.test(activeRule), 'the active slide must be re-exposed');
+});
+
+
+test('interrupt clears all queued PCM and offsets before another turn', () => {
+  const proc = loadPlaybackProcessor();
+  proc.port.onmessage({ data: new Float32Array(512).fill(.5) });
+  proc.process([], [[new Float32Array(128), new Float32Array(128)]]);
+  proc.port.onmessage({ data: 'interrupt' });
+  const left = new Float32Array(128), right = new Float32Array(128);
+  proc.process([], [[left, right]]);
+  assert.ok(left.every(v => v === 0));
+  assert.ok(right.every(v => v === 0));
+  assert.equal(proc.audioQueue.length, 0);
+  assert.equal(proc.currentOffset, 0);
 });

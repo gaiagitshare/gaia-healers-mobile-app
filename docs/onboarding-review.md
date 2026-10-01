@@ -41,3 +41,7 @@ The supplied correction file was the authority for the live form mapping. **No p
 A small existing test-path bug was also fixed: `assist-tools-contract.test.js` used URL `.pathname` as a filesystem path, which fails in a checkout whose directory name contains spaces. It now uses `fileURLToPath`.
 
 **Branch and PR only. Do not merge, deploy, or restart production until visual approval and the maintainer’s live GHL check.**
+
+## Guidance and motion pass
+
+See [the second-pass review](assist-guidance-review.md) for shared behavior instructions, verified navigation limits, live model samples, measured voice boundaries and the motion recording. The user prioritized behavior and guidance over further voice optimization.

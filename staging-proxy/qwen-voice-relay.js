@@ -1,3 +1,4 @@
+import './assist-guide.js';
 /**
  * GAIA ASSIST VOICE — Qwen Omni realtime, behind a relay that speaks Gemini.
  *
@@ -113,6 +114,8 @@ export function qwenToBrowser(evt, state = {}) {
   switch (evt?.type) {
     case 'session.updated':
       return [{ setupComplete: {} }];
+    case 'input_audio_buffer.speech_stopped':
+      return [{ gaiaTiming: { stage: 'speech_stopped' } }];
     case 'response.created':
       state.calledTool = false;
       state.pendingText = '';
@@ -330,10 +333,12 @@ function runSession(browser, grant, ip) {
       failEarly('qwen_error');
       return;
     }
+    if (evt.type === 'session.updated' && setupDone) return;
     if (evt.type === 'session.updated' && !setupDone) {
       setupDone = true;
       clearTimeout(connectTimer);
     }
+    if (evt.type === 'response.created') toBrowser({ gaiaTiming: { stage: 'model_request' } });
     if (evt.type === 'response.audio.delta' || evt.type === 'response.audio_transcript.delta' || evt.type === 'response.function_call_arguments.done') {
       disarmStall();
       if (!firstAudioAt && evt.type === 'response.audio.delta') firstAudioAt = Date.now() - startedAt;
@@ -364,6 +369,11 @@ function runSession(browser, grant, ip) {
   browser.on('message', (raw) => {
     let msg;
     try { msg = JSON.parse(String(raw)); } catch { return; }
+    if (msg.gaiaContext && setupDone) {
+      const context = globalThis.GaiaAssistGuide.context(msg.gaiaContext);
+      toQwen({ type: 'session.update', session: { instructions: grant.instructions + '\nCURRENT NAVIGATION (hints only; explicit user intent takes priority): ' + JSON.stringify(context) } });
+      return;
+    }
     if (msg.setup) {
       pendingSetup = msg.setup;
       sendSetup();

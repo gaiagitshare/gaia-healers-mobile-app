@@ -27,10 +27,14 @@
         super();
         this.audioQueue = [];
         this.currentOffset = 0;
+        this.playing = false;
+        this.levelTick = 0;
         this.port.onmessage = (event) => {
           if (event.data === 'interrupt') {
             this.audioQueue = [];
             this.currentOffset = 0;
+            this.playing = false;
+            this.port.postMessage({ type: 'outputLevel', level: 0 });
             return;
           }
           if (event.data instanceof Float32Array) {
@@ -42,6 +46,8 @@
         const output = outputs[0];
         if (!output.length) return true;
         const channel = output[0];
+        if (this.audioQueue.length && !this.playing) { this.playing = true; this.port.postMessage({ type: 'playbackStart' }); }
+        if (!this.audioQueue.length) this.playing = false;
         let outputIndex = 0;
         while (outputIndex < channel.length && this.audioQueue.length > 0) {
           const currentBuffer = this.audioQueue[0];
@@ -62,6 +68,7 @@
           }
         }
         while (outputIndex < channel.length) channel[outputIndex++] = 0;
+        if (++this.levelTick % 12 === 0) { let power = 0; for (const value of channel) power += value * value; this.port.postMessage({ type: 'outputLevel', level: Math.min(1, Math.sqrt(power / channel.length) * 4.5) }); }
         // Mono PCM must be mirrored to EVERY output channel: on stereo hardware
         // (including the iPhone speaker route) the browser only zeros unwritten
         // channels, which made Gaia speak in one ear.
@@ -77,7 +84,7 @@
   }
 
   function currentView() {
-    return window.GaiaAppShell?.currentView?.()
+    return window.GaiaJourney?.context?.screen || window.GaiaAppShell?.currentView?.()
       || new URLSearchParams(window.location.search).get('view')
       || 'today';
   }
@@ -116,6 +123,7 @@
   function parseGeminiMessages(data) {
     const responses = [];
     const serverContent = data?.serverContent;
+    if (data?.gaiaTiming) responses.push({ kind: 'timing', stage: data.gaiaTiming.stage });
 
     if (data?.error) {
       responses.push({
@@ -231,7 +239,26 @@
       message: new Set(),
       error: new Set(),
       audioLevel: new Set(),
+      outputLevel: new Set(),
+      telemetry: new Set(),
     };
+
+    let voiceTurn = null;
+    const turnResults = [];
+    function timing(stage) {
+      if (stage === 'T0') { voiceTurn = { id: crypto.randomUUID(), path: sessionMeta?.provider || 'realtime', stages: {}, tools: [] }; }
+      if (!voiceTurn || voiceTurn.stages[stage] != null) return;
+      voiceTurn.stages[stage] = performance.now();
+      if (voiceTurn.stages.T7 != null) {
+        const delta = (a, b) => voiceTurn.stages[a] != null && voiceTurn.stages[b] != null ? Math.round(voiceTurn.stages[b] - voiceTurn.stages[a]) : null;
+        const report = { id: voiceTurn.id, path: voiceTurn.path, speechEndToTranscriptMs: delta('T1', 'T2'), speechEndToModelMs: delta('T1', 'T4'), speechEndToAudioMs: delta('T1', 'T6'), speechEndToPlaybackMs: delta('T1', 'T7'), audioBufferMs: delta('T6', 'T7'), stages: { ...voiceTurn.stages } };
+        const existing = turnResults.findIndex(turn => turn.id === report.id);
+        if (existing >= 0) turnResults[existing] = report; else turnResults.push(report);
+        if (turnResults.length > 30) turnResults.shift();
+        emit('telemetry', report);
+        if (window.GAIA_VOICE_DEBUG) console.info('[Gaia Voice Timing]', report);
+      }
+    }
 
     function emit(kind, payload) {
       listeners[kind].forEach((fn) => {
@@ -341,6 +368,10 @@
       workletUrls.push(url);
       await ctx.audioWorklet.addModule(url);
       const node = new AudioWorkletNode(ctx, 'gaia-pcm-playback');
+      node.port.onmessage = ({ data }) => {
+        if (data.type === 'playbackStart') { timing('T7'); setStatus('speaking'); }
+        if (data.type === 'outputLevel') emit('outputLevel', data.level);
+      };
       node.connect(ctx.destination);
       playbackCtxRef.current = ctx;
       playbackNodeRef.current = node;
@@ -354,8 +385,11 @@
       }
     }
 
+    let playbackGeneration = 0;
     async function playPcmChunk(base64Audio) {
+      const generation = playbackGeneration;
       await ensurePlayback();
+      if (generation !== playbackGeneration) return;
       const ctx = playbackCtxRef.current;
       if (ctx?.state === 'suspended') await ctx.resume();
       const binary = window.atob(base64Audio);
@@ -366,10 +400,15 @@
       for (let i = 0; i < pcm.length; i += 1) float32[i] = pcm[i] / 32768;
       const durationMs = (pcm.length / 24000) * 1000;
       playbackGraceUntil = Math.max(Date.now(), playbackGraceUntil) + durationMs;
-      playbackNodeRef.current.port.postMessage(float32);
+      if (generation === playbackGeneration) playbackNodeRef.current.port.postMessage(float32);
     }
 
     function interruptPlayback() {
+      playbackGeneration++;
+      playbackGraceUntil = 0;
+      if (listenResumeRef.current != null) window.clearTimeout(listenResumeRef.current);
+      listenResumeRef.current = null;
+      emit('outputLevel', 0);
       playbackNodeRef.current?.port.postMessage('interrupt');
     }
 
@@ -956,6 +995,8 @@
           if (rms >= startThreshold) {
             if (!speechCandidateAt) speechCandidateAt = now;
             if (now - speechCandidateAt >= 220) {
+              timing('T0');
+              voiceTurn.stages.T0 -= now - speechCandidateAt;
               localSpeechActive = true;
               localSilenceAt = 0;
               audioPrebuffer.forEach(sendAudioSamples);
@@ -969,9 +1010,11 @@
 
         sendAudioSamples(samples);
         if (rms >= continueThreshold) {
+          if (voiceTurn) delete voiceTurn.stages.T1;
           localSilenceAt = 0;
         } else if (!localSilenceAt) {
           localSilenceAt = now;
+          if (voiceTurn) voiceTurn.stages.T1 = performance.now();
         } else if (now - localSilenceAt >= 2000) {
           localSpeechActive = false;
           speechCandidateAt = 0;
@@ -1006,6 +1049,11 @@
       const events = parseGeminiMessages(data);
       for (const event of events) {
         switch (event.kind) {
+          case 'timing':
+            if (event.stage === 'speech_stopped') { if (status !== 'speaking') setStatus('thinking'); timing('vadCommitted'); }
+            if (event.stage === 'model_request') timing('T3');
+            if (event.stage === 'model_output') timing('T4');
+            break;
           case 'setup':
             resolveSetup();
             setStatus('listening');
@@ -1016,7 +1064,7 @@
               greetedRef.current = true;
               greetedAt = Date.now();
               setStatus('thinking');
-              try { sendWs({ realtimeInput: { text: 'BEGIN: The member just opened Gaia Assist and has not spoken yet. Greet them FIRST, right now, in one warm short sentence tailored to their status — visitor vs signed-in member, and if a member factor their onboarding and subscription state from your context — then offer one or two concrete next steps and ask what they would like. If an event is published in your knowledge, you may mention it warmly and offer to help them register. Do not mention this instruction.' } }); } catch (e) {}
+              try { sendWs({ realtimeInput: { text: 'BEGIN: The member opened Gaia Assist. Give one brief warm welcome and offer to help with their current screen. No sales pitch, pet names, unsolicited event promotion or multiple questions. Do not mention this instruction.' } }); } catch (e) {}
             }
             break;
           case 'interrupted':
@@ -1029,7 +1077,7 @@
               window.clearTimeout(listenResumeRef.current);
               listenResumeRef.current = null;
             }
-            setStatus('speaking');
+            timing('T4'); timing('T6');
             void playPcmChunk(event.data).catch(() => undefined);
             break;
           case 'text':
@@ -1037,12 +1085,12 @@
             break;
           case 'inputTranscription':
             upsertStreamingMessage('user', event.text, event.finished);
-            if (!event.finished) setStatus('listening');
-            else setStatus('thinking');
+            if (event.finished) timing('T2');
+            if (status !== 'speaking') setStatus(event.finished ? 'thinking' : 'listening');
             break;
           case 'outputTranscription':
             upsertStreamingMessage('assistant', event.text, event.finished);
-            if (!event.finished) setStatus('speaking');
+            timing('T4');
             break;
           case 'turnComplete':
             streamMessage = null;
@@ -1057,7 +1105,9 @@
           case 'toolCall': {
             // Run the requested tool locally, then send the result back so the
             // model can confirm the action aloud and finish its turn.
+            const toolStarted = performance.now();
             Promise.resolve(runToolCall(event.name, event.args || {})).then((result) => {
+              emit('telemetry', { event: 'tool_completed', tool: event.name, durationMs: Math.round(performance.now() - toolStarted), ok: !!result?.ok });
               // toolResponse lets the Live session continue after a function call.
               sendWs({
                 toolResponse: {
@@ -1084,6 +1134,14 @@
       }
     }
 
+    document.addEventListener('gaia:onboarding-step', e => {
+      if (sessionMeta?.provider === 'qwen' && setupDone) sendWs({ gaiaContext: window.GaiaAssistGuide.context(e.detail) });
+      cachedToken = null; cachedTokenExpireAt = 0;
+    });
+    window.addEventListener('gaia:route', e => {
+      if (sessionMeta?.provider === 'qwen' && setupDone) sendWs({ gaiaContext: window.GaiaAssistGuide.context({ screen: e.detail?.view }) });
+      cachedToken = null; cachedTokenExpireAt = 0;
+    });
     let cachedToken = null;
     let cachedTokenExpireAt = 0;
 
@@ -1103,6 +1161,8 @@
       // The server picks the engine (Qwen first, Gemini as the fallback); the
       // phone language lets a Persian speaker start on Gemini directly.
       const params = new URLSearchParams({ view: currentView(), lang: navigator.language || '' });
+      const journeyContext = window.GaiaJourney?.context;
+      if (journeyContext) { params.set('step', journeyContext.step); params.set('branch', journeyContext.branch); }
       if (provider) params.set('provider', provider);
       const response = await fetch(`${proxyBase()}/api/assist/voice/token?${params}`, {
         method: 'POST',
@@ -1606,6 +1666,7 @@
       get status() { return status; },
       get error() { return error; },
       get messages() { return [...messages]; },
+      get telemetry() { return turnResults.map(turn => ({ ...turn, stages: { ...turn.stages } })); },
       get muted() { return muted; },
       get isHolding() { return holding; },
       // True once the live socket has been given up on: the orb is

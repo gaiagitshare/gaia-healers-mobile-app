@@ -4,7 +4,7 @@ body.gaia-journey-open{overflow:hidden}
 .journey-header{display:flex;align-items:center;gap:12px;max-width:1120px;margin:24px auto 0;color:var(--v3-text-2);font-size:13px;}
 .journey-header img{width:34px;height:34px}.journey-header button{margin-left:auto}
 .journey-stage{max-width:850px;margin:clamp(32px,7vh,80px) auto 40px;animation:journey-arrive .3s var(--v3-ease);}
-.journey-stage h1,.journey-embedded h1{font-family:inherit;font-size:clamp(28px,4vw,46px);font-weight:500;letter-spacing:-.035em;line-height:1.16;margin:14px 0 18px;color:var(--v3-text);outline:none;}
+.journey-stage h1,.journey-embedded h1,.journey-departing-title{font-family:inherit;font-size:clamp(28px,4vw,46px);font-weight:500;letter-spacing:-.035em;line-height:1.16;margin:14px 0 18px;color:var(--v3-text);outline:none;}
 .journey-kicker{font-size:12px;letter-spacing:.15em;text-transform:uppercase;color:var(--v3-label);margin:20px 0 0;}
 .journey-subtitle{color:var(--v3-text-2);font-size:16px;line-height:1.65;max-width:520px;margin:0 0 26px;}
 .journey-duration{color:var(--v3-text-2);font-size:13px;margin:30px 0 18px;}
@@ -54,3 +54,46 @@ body.gaia-v2 .gaia-assist:not(.gaia-assist--minimized) .gaia-assist__sheet:has(.
 .journey-embedded{flex-shrink:0;}
 .journey-choice-icon{font-size:28px;color:var(--v3-label);}
 @media(max-width:600px){.journey-choices--compact{grid-template-columns:repeat(2,minmax(0,1fr));}.journey-choices--compact .journey-choice{flex-direction:column;align-items:flex-start;min-height:132px;padding:16px;}.journey-choices--compact .journey-check{position:absolute;top:14px;right:14px;}}
+/* Intentional motion: scene entrances only; selections update existing nodes. */
+.gaia-journey{--journey-accent:var(--v3-emerald);isolation:isolate}
+.gaia-journey[data-branch="Water"]{--journey-accent:var(--v3-cyan)}
+.gaia-journey[data-branch="Environment"]{--journey-accent:#c0bc88}
+.journey-header,.journey-stage{position:relative;z-index:1}
+.journey-stage{animation:none}
+.journey-ambient{position:fixed;inset:0;pointer-events:none;overflow:hidden;z-index:-1;color:var(--journey-accent);transition:color .4s}
+.journey-ambient span{position:absolute;width:70vw;height:70vw;max-width:900px;max-height:900px;top:-30%;right:-20%;border-radius:50%;background:radial-gradient(ellipse,currentColor,transparent 65%);opacity:.065;animation:journey-drift 28s ease-in-out infinite alternate}
+.journey-ambient svg{position:absolute;inset:0;width:100%;height:100%;fill:none;stroke:currentColor;stroke-width:1;opacity:.055;transform:rotate(-8deg)}
+.journey-enter{animation:journey-arrive .38s ease-out both}
+.journey-enter--intro:not(.journey-resume) .journey-intro-art i{animation:journey-symbol .65s ease-out both}
+.journey-enter--intro:not(.journey-resume) .journey-art:before{animation:journey-ring .9s ease-out both}
+.journey-enter--intro:not(.journey-resume) .journey-art:after{animation:journey-ring 1.1s .12s ease-out both}
+.journey-intro-art .journey-art{animation:journey-breathe 12s ease-in-out infinite}
+.journey-choice{overflow:hidden;transition:border-color .25s,background .25s,transform .25s,box-shadow .25s}
+.journey-choice:active,.journey-primary:active,.journey-secondary:active{transform:scale(.985)}
+.journey-choice .journey-art i{transition:transform .25s ease-out}
+.journey-choice:hover .journey-art--plant i{transform:rotate(-5deg) scale(1.08)}
+.journey-choice:hover .journey-art--mountains:before{transform:scaleX(1.45);transition:transform .3s}
+.journey-tap-ring{position:absolute;pointer-events:none;left:50%;top:40%;width:80px;height:80px;border:1px solid var(--v3-emerald);border-radius:50%;animation:journey-touch .48s ease-out both}
+[data-motif="Water"] .journey-tap-ring{border-color:var(--v3-cyan)}
+[data-motif="Environment"] .journey-tap-ring{border-color:#c0bc88;border-radius:30%}
+.journey-check{transition:transform .25s,background .25s}
+.is-selected .journey-check{transform:scale(1.04)}
+.journey-progress{position:relative;overflow:visible}
+.journey-progress i{position:absolute;top:-2px;width:7px;height:7px;border-radius:50%;background:var(--journey-accent);box-shadow:0 0 12px var(--journey-accent);transition:left .4s ease-out;transform:translateX(-50%)}
+.journey-branch-notice{color:var(--v3-label);font-size:13px;line-height:1.6;margin:0}
+.journey-branch-notice:empty{display:none}
+.journey-reveal-art{width:240px;max-width:100%;display:flex;position:relative;gap:0}
+.journey-reveal-art>div{flex:1;min-width:0}
+.journey-reveal-art .journey-art{height:100px}.journey-reveal-art .journey-art i{font-size:38px}
+.journey-enter--reveal .journey-reveal-art>div{animation:journey-converge .85s calc(var(--symbol-index)*.08s) ease-out both}
+.journey-enter--reveal h1{animation:journey-arrive .4s .3s ease-out both}
+.journey-enter--reveal .journey-summary span{animation:journey-arrive .35s calc(.45s + var(--chip-index)*.06s) ease-out both}
+.journey-resume{animation-duration:.2s}
+@keyframes journey-touch{from{opacity:.35;transform:translate(-50%,-50%) scale(.4)}to{opacity:0;transform:translate(-50%,-50%) scale(4)}}
+@keyframes journey-ring{from{opacity:0;transform:scale(.45)}40%{opacity:.22}to{opacity:.1;transform:scaleX(1.3)}}
+@keyframes journey-symbol{from{opacity:0;transform:scale(.9) translateY(8px)}to{opacity:1;transform:none}}
+@keyframes journey-converge{from{opacity:0;transform:translateX(calc((1 - var(--symbol-index))*22px)) scale(.9)}to{opacity:1;transform:none}}
+@keyframes journey-drift{to{transform:translate(-6%,12%) scale(1.06)}}
+@media(prefers-reduced-motion:reduce){.gaia-journey *,.gaia-journey *:before,.gaia-journey *:after,.journey-embedded *{animation:none!important;transition:none!important}}
+.journey-outgoing{position:absolute;margin:0;left:50%;width:min(850px,calc(100% - 40px));pointer-events:none;z-index:0}
+@media(prefers-reduced-motion:reduce){.journey-outgoing{display:none}}

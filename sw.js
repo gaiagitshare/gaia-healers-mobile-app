@@ -1,4 +1,4 @@
-const CACHE_NAME = 'gaia-healers-20261001a-journey';
+const CACHE_NAME = 'gaia-healers-20261002a-guidance';
 /**
  * Precache ONLY what the page requests by exactly this URL.
  *
@@ -21,6 +21,7 @@ const CACHE_NAME = 'gaia-healers-20261001a-journey';
 const APP_SHELL = [
   '/',
   '/home.html',
+  '/staging-proxy/assist-guide.js',
   '/manifest.webmanifest',
   '/assets/gaia-mark.svg',
   '/assets/gaia-hero-moon-wide.webp',

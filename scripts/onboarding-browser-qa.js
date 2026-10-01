@@ -10,7 +10,7 @@ async (page) => {
   });
   await page.addInitScript(() => { localStorage.setItem('gaia-assist-welcome-v3', '1'); localStorage.setItem('gaia-app-tour-v3', '1'); });
   const reset = async scenario => { await page.request.get(base + '/__qa/reset?scenario=' + scenario); await page.goto(base + '/home.html?proxy=' + base); };
-  const shot = async (width, name) => { await page.waitForTimeout(450); await page.screenshot({ path: `output/playwright/onboarding/${width}-${name}.png` }); const overflow = await page.locator('.gaia-journey').evaluate(el => el.scrollWidth > el.clientWidth); if (overflow) throw new Error('Horizontal overflow: ' + width + '-' + name); };
+  const shot = async (width, name) => { await page.waitForTimeout(name.startsWith('completion') ? 1500 : name === 'intro' ? 1200 : 450); await page.screenshot({ path: `output/playwright/onboarding/${width}-${name}.png` }); const overflow = await page.locator('.gaia-journey').evaluate(el => el.scrollWidth > el.clientWidth); if (overflow) throw new Error('Horizontal overflow: ' + width + '-' + name); };
   const shell = () => page.locator('.gaia-journey');
   const next = async () => { const before = await shell().locator('h1').innerText(); await shell().locator('[data-next]').click(); await page.waitForFunction(old => document.querySelector('.gaia-journey h1')?.textContent !== old, before); };
   for (const width of [360, 390, 430, 1280]) {
@@ -42,5 +42,10 @@ async (page) => {
   }
   await reset('complete'); await page.waitForFunction(() => window.GaiaJourney?.complete); if (await shell().count()) throw new Error('Historical completed member gated');
   await reset('visitor'); await page.waitForTimeout(300); if (await shell().count()) throw new Error('Visitor gated');
+  await page.emulateMedia({ reducedMotion: 'reduce' });
+  await reset('new'); await shell().locator('[data-begin]').waitFor();
+  await shell().locator('[data-begin]').click(); await shell().locator('[data-choice]').first().click();
+  if (await shell().evaluate(el => el.getAnimations({ subtree: true }).some(a => a.playState === 'running'))) throw new Error('Reduced motion left an animation running');
+  await page.emulateMedia({ reducedMotion: 'no-preference' });
   return result;
 }

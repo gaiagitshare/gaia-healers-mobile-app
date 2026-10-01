@@ -3,7 +3,8 @@
   'use strict';
   const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   const state = { schema: [], answers: {}, step: null, mode: 'loading', busy: false, selected: [], text: '', error: '', authed: false, generation: 0, done: false };
-  let overlay, embedded, checkPromise, lastFocus;
+  let overlay, embedded, checkPromise, lastFocus, renderedScene = '', branchNotice = '', lastProgress = 0;
+  const reduced = () => matchMedia('(prefers-reduced-motion: reduce)').matches;
   const log = (event, stepKey) => console.info('[Gaia Onboarding]', { event, ...(stepKey ? { stepKey } : {}) });
   const base = () => String(window.GAIA_SYNC?.proxyBase || window.GAIA_APP_URLS?.production?.proxy || 'https://api.gaiahealers.app').replace(/\/+$/, '');
   async function request(method, body) {
@@ -21,6 +22,7 @@
     state.selected = Array.isArray(state.answers[key]) ? [...state.answers[key]] : [];
     state.text = s?.freeTextOnly ? state.answers[key] || '' : key === 'devices_owned' ? state.answers.devices_other || '' : '';
     render();
+    document.dispatchEvent(new CustomEvent('gaia:onboarding-step', { detail: { screen: 'onboarding', step: key, branch: s?.showIf || '' } }));
     overlay?.querySelector('h1')?.focus();
   }
   const background = new Map();
@@ -57,7 +59,7 @@
   }
   const visual = (label) => {
     const icon = label === 'Living Beings' ? 'plant' : label === 'Environment' ? 'mountains' : 'drop';
-    return `<span class="journey-art journey-art--${icon}" aria-hidden="true"><i class="ph ph-${icon}"></i><span></span></span>`;
+    return `<span class="journey-art journey-art--${icon}" aria-hidden="true"><i class="ph ph-${icon}"></i><span class="journey-field-ring"></span></span>`;
   };
   function questionMarkup() {
     const s = current(); if (!s) return '';
@@ -65,14 +67,15 @@
     const primary = s.key === 'primary_interests';
     const other = s.freeText && state.selected.some(x => /^Other/.test(x));
     const canContinue = s.freeTextOnly || state.selected.length;
-    return `<div class="journey-progress" role="progressbar" aria-label="Your Gaia journey" aria-valuemin="0" aria-valuemax="${route.length}" aria-valuenow="${index}"><span style="width:${index / route.length * 100}%"></span></div>
+    return `<div class="journey-progress" role="progressbar" aria-label="Your Gaia journey" aria-valuemin="0" aria-valuemax="${route.length}" aria-valuenow="${index}"><span style="width:${index / route.length * 100}%"></span><i style="left:${index / route.length * 100}%" aria-hidden="true"></i></div>
+      <p class="journey-branch-notice" role="status">${esc(branchNotice)}</p>
       <p class="journey-kicker">${esc(s.showIf || (index < 2 ? 'Your path' : /offer|receive|notes/.test(s.key) ? 'Your community' : 'Your practice'))}</p>
       <h1 tabindex="-1">${esc(primary ? 'What calls to you?' : s.question)}</h1>
       <p class="journey-subtitle">${s.freeTextOnly ? 'Share a little more, or leave this blank. This part is optional.' : s.multi ? 'Choose everything that feels right for you.' : 'Choose the one that feels right for you.'}</p>
       <div class="journey-choices ${primary ? 'journey-choices--paths' : s.key === 'living_beings_who' ? 'journey-choices--compact' : ''}">${s.options.map(o => {
         const active = state.selected.includes(o.label);
         const sub = { 'Living Beings': 'People · Animals · Wellbeing', Environment: 'Spaces · Land · Energy', Water: 'Restore · Structure · Explore' }[o.label];
-        return `<button type="button" class="journey-choice ${active ? 'is-selected' : ''}" data-choice="${esc(o.label)}" aria-pressed="${active}" ${state.busy ? 'disabled' : ''}>${primary ? visual(o.label) : s.key === 'living_beings_who' ? `<i class="ph ph-${({ Myself: 'user', 'Other People': 'users', Pets: 'paw-print', 'Livestock or farm animals': 'cow', 'Wildlife or sanctuaries': 'bird' }[o.label] || 'sparkle')} journey-choice-icon" aria-hidden="true"></i>` : ''}<span class="journey-choice-copy"><strong>${esc(o.label)}</strong>${primary ? `<small>${sub}</small>` : ''}</span><span class="journey-check" aria-hidden="true">${active ? '✓' : '+'}</span></button>`;
+        return `<button type="button" class="journey-choice ${active ? 'is-selected' : ''}" data-choice="${esc(o.label)}" data-motif="${esc(primary ? o.label : s.showIf || s.key)}" aria-pressed="${active}" ${state.busy ? 'disabled' : ''}>${primary ? visual(o.label) : s.key === 'living_beings_who' ? `<i class="ph ph-${({ Myself: 'user', 'Other People': 'users', Pets: 'paw-print', 'Livestock or farm animals': 'cow', 'Wildlife or sanctuaries': 'bird' }[o.label] || 'sparkle')} journey-choice-icon" aria-hidden="true"></i>` : ''}<span class="journey-choice-copy"><strong>${esc(o.label)}</strong>${primary ? `<small>${sub}</small>` : ''}</span><span class="journey-check" aria-hidden="true">${active ? '✓' : '+'}</span></button>`;
       }).join('')}</div>
       ${s.freeTextOnly || other ? `<label class="journey-text-label">${esc(s.freeTextOnly ? 'Your thoughts' : s.freeText)}<textarea maxlength="4000" rows="4" ${state.busy ? 'disabled' : ''}>${esc(state.text)}</textarea></label>` : ''}
       <p class="journey-error" role="alert">${esc(state.error)}</p>
@@ -80,16 +83,36 @@
   }
   function revealMarkup() {
     const groups = [['Your path', ['primary_interests']], ['You’re here to explore', ['living_beings_support', 'environment_areas', 'water']], ['You’re looking for', ['growth_needs', 'want_receive']]];
-    return `<div class="journey-reveal-art">${visual('Living Beings')}</div><p class="journey-kicker">Made from what you shared</p><h1 tabindex="-1">Your Gaia Path</h1><p class="journey-subtitle">Your journey is ready, ${esc(state.name || 'friend')}.</p>${groups.map(([title, keys]) => {
+    return `<div class="journey-reveal-art">${(state.answers.primary_interests || []).map((v, i) => `<div style="--symbol-index:${i}">${visual(v)}</div>`).join('')}</div><p class="journey-kicker">Made from what you shared</p><h1 tabindex="-1">Your Gaia Path</h1><p class="journey-subtitle">Your journey is ready, ${esc(state.name || 'friend')}.</p>${groups.map(([title, keys]) => {
       const values = keys.flatMap(k => state.answers[k] || []);
-      return values.length ? `<section class="journey-summary"><h2>${title}</h2><div>${values.map(v => `<span>${esc(v)}</span>`).join('')}</div></section>` : '';
+      return values.length ? `<section class="journey-summary"><h2>${title}</h2><div>${values.map((v, i) => `<span style="--chip-index:${Math.min(i, 8)}">${esc(v)}</span>`).join('')}</div></section>` : '';
     }).join('')}<button type="button" class="journey-primary" data-enter>Enter Gaia →</button>`;
   }
   function render() {
     if (!state.authed || state.mode === 'bypass') return;
     ensure();
     const content = state.mode === 'question' ? questionMarkup() : state.mode === 'reveal' ? revealMarkup() : state.mode === 'intro' ? `<div class="journey-intro-art">${visual('Water')}</div><p class="journey-kicker">${Object.keys(state.answers).length ? 'Welcome back' : 'Welcome'}, ${esc(state.name || 'friend')}</p><h1 tabindex="-1">Let’s discover<br>your Gaia path.</h1><p class="journey-subtitle">A little about you. A world of possibilities.<br>Help Gaia connect you with the education, tools and community that feel right.</p><p class="journey-duration">About 2 minutes · Saved as you go</p><button type="button" class="journey-primary" data-begin>${Object.keys(state.answers).length ? 'Continue my journey' : 'Begin my journey'} →</button>` : `<p class="journey-kicker">Your Gaia profile</p><h1 tabindex="-1">${state.mode === 'loading' ? 'Finding your path…' : 'Let’s reconnect.'}</h1><p class="journey-subtitle" role="status">${esc(state.error || 'Checking your saved Gaia profile.')}</p>${state.mode === 'error' ? '<button class="journey-primary" data-retry>Try again →</button>' : ''}`;
-    overlay.innerHTML = `<header class="journey-header"><img src="assets/gaia-mark.svg" alt="Gaia Healers"><span>Your Gaia journey</span><button type="button" data-logout class="journey-secondary">Sign out</button></header><div class="journey-stage" data-branch="${esc(current()?.showIf || '')}">${content}${state.mode === 'question' ? '<button type="button" class="journey-assist-link" data-assist>Answer with Gaia Assist ↗</button>' : ''}</div>`;
+    const scene = `${state.mode}:${state.step || ''}`;
+    const enter = scene !== renderedScene;
+    const departing = enter && !reduced() && overlay.querySelector('.journey-stage')?.cloneNode(true);
+    const departingTop = overlay.querySelector('.journey-stage')?.offsetTop;
+    renderedScene = scene;
+    overlay.dataset.branch = current()?.showIf || '';
+    overlay.innerHTML = `<div class="journey-ambient" aria-hidden="true"><span></span><svg viewBox="0 0 900 650" preserveAspectRatio="xMidYMid slice"><path d="M-100 450 Q250 50 550 360 T1000 140"/><path d="M-100 500 Q300 120 550 410 T1000 200"/><ellipse cx="570" cy="330" rx="260" ry="120"/></svg></div><header class="journey-header"><img src="assets/gaia-mark.svg" alt="Gaia Healers"><span>Your Gaia journey</span><button type="button" data-logout class="journey-secondary">Sign out</button></header><div class="journey-stage ${enter ? 'journey-enter journey-enter--' + state.mode : ''} ${state.mode === 'intro' && Object.keys(state.answers).length ? 'journey-resume' : ''}" data-branch="${esc(current()?.showIf || '')}">${content}${state.mode === 'question' ? '<button type="button" class="journey-assist-link" data-assist>Answer with Gaia Assist ↗</button>' : ''}</div>`;
+    if (departing) {
+      departing.querySelectorAll('h1').forEach(heading => { const echo = document.createElement('p'); echo.className = 'journey-departing-title'; echo.innerHTML = heading.innerHTML; heading.replaceWith(echo); });
+      departing.querySelectorAll('*').forEach(node => { for (const attr of [...node.attributes]) if (attr.name.startsWith('data-')) node.removeAttribute(attr.name); });
+      departing.className = 'journey-stage journey-outgoing'; departing.inert = true; departing.setAttribute('aria-hidden', 'true');
+      departing.style.top = departingTop + 'px'; departing.style.marginLeft = '-'+ (overlay.querySelector('.journey-stage').getBoundingClientRect().width / 2) + 'px'; overlay.appendChild(departing);
+      const animation = departing.animate([{ opacity: .35, transform: 'translateY(0)' }, { opacity: 0, transform: 'translateY(-12px)' }], { duration: 200, easing: 'ease-out' });
+      animation.onfinish = () => departing.remove();
+    }
+    const point = overlay.querySelector('.journey-progress i');
+    if (point && enter) {
+      const nextProgress = parseFloat(point.style.left);
+      if (!reduced()) point.animate([{ left: lastProgress + '%' }, { left: nextProgress + '%' }], { duration: 380, easing: 'ease-out' });
+      lastProgress = nextProgress;
+    }
     bind(overlay);
     renderEmbedded();
   }
@@ -104,8 +127,29 @@
     root.querySelectorAll('[data-choice]').forEach(b => b.addEventListener('click', () => {
       const s = current(), label = b.dataset.choice;
       state.selected = s.multi ? state.selected.includes(label) ? state.selected.filter(v => v !== label) : [...state.selected, label] : [label];
-      state.error = ''; render();
-      root.querySelector(`[data-choice="${CSS.escape(label)}"]`)?.focus();
+      state.error = '';
+      const needsText = !!s.freeText && state.selected.some(v => /^Other/.test(v));
+      if (needsText !== !!root.querySelector('textarea')) { render(); }
+      else for (const context of [overlay, embedded].filter(Boolean)) {
+        context.querySelectorAll('[data-choice]').forEach(choice => {
+          const active = state.selected.includes(choice.dataset.choice);
+          choice.classList.toggle('is-selected', active);
+          choice.setAttribute('aria-pressed', String(active));
+          choice.querySelector('.journey-check').textContent = active ? '✓' : '+';
+        });
+        const next = context.querySelector('[data-next]');
+        next.disabled = !state.selected.length && !s.freeTextOnly;
+        next.textContent = s.key === 'primary_interests' && state.selected.length ? `Continue with ${state.selected.length} ${state.selected.length === 1 ? 'path' : 'paths'} →` : 'Continue →';
+        context.querySelector('.journey-error').textContent = '';
+      }
+      const target = root.querySelector(`[data-choice="${CSS.escape(label)}"]`);
+      if (target && !reduced()) {
+        target.animate([{ transform: 'scale(.985)' }, { transform: state.selected.includes(label) ? 'translateY(-2px)' : 'none' }], { duration: 280, easing: 'ease-out' });
+        const ring = document.createElement('span'); ring.className = 'journey-tap-ring'; ring.setAttribute('aria-hidden', 'true'); target.appendChild(ring);
+        ring.addEventListener('animationend', () => ring.remove(), { once: true });
+        target.querySelector('.journey-art i, .journey-choice-icon')?.animate([{ transform: 'scale(.94)' }, { transform: 'scale(1.1)' }, { transform: 'none' }], { duration: 320, easing: 'ease-out' });
+      }
+      target?.focus();
     }));
     root.querySelector('textarea')?.addEventListener('input', e => { state.text = e.target.value; });
     root.querySelector('[data-next]')?.addEventListener('click', save);
@@ -127,6 +171,7 @@
   async function save() {
     if (state.busy) return;
     const generation = state.generation, s = current();
+    let advanced = false;
     state.busy = true; state.error = ''; render();
     try {
       const result = await request('POST', { stepKey: s.key, selections: state.selected, freeText: state.text, complete: !!s.freeTextOnly, source: 'visual' });
@@ -138,10 +183,12 @@
         state.done = true; state.mode = 'reveal';
       } else {
         const route = path(), index = route.findIndex(x => x.key === s.key);
-        state.busy = false; chooseStep(route[index + 1].key);
+        const next = route[index + 1];
+        branchNotice = s.showIf && s.showIf !== next.showIf ? `✓ ${s.showIf} · ${next.showIf ? 'Now exploring ' + next.showIf : 'Your path is taking shape'}` : '';
+        state.busy = false; chooseStep(next.key); advanced = true;
       }
     } catch (e) { log('step_save_failed', s.key); if (generation === state.generation) state.error = e.message; }
-    finally { if (generation === state.generation) { state.busy = false; render(); } }
+    finally { if (generation === state.generation) { state.busy = false; if (!advanced) render(); } }
   }
   function check(force = false) {
     if (!state.authed) return Promise.resolve(true);
@@ -190,5 +237,5 @@
     if (document.querySelector('.gaia-assist__transcript')) watchAssist();
     else { const observer = new MutationObserver(() => { if (document.querySelector('.gaia-assist__transcript')) { observer.disconnect(); watchAssist(); } }); observer.observe(document.body, { childList: true }); }
   });
-  window.GaiaJourney = { check, get complete() { return state.done && state.mode === 'bypass'; } };
+  window.GaiaJourney = { check, get context() { return state.mode === 'question' ? { screen: 'onboarding', step: state.step, branch: current()?.showIf || '' } : null; }, get complete() { return state.done && state.mode === 'bypass'; } };
 })();

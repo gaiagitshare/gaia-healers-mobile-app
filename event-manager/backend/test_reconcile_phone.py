@@ -65,14 +65,15 @@ def row(email):
         "select id, phone, qr_code, ticket_type_id from attendees where event_id=? and lower(email)=?",
         (EV, email.lower())).fetchall()
 
-def replay(email, tt, order_id, phone, first="Repl", last="Ay", product_id="prod-phone-test"):
+def replay(email, tt, order_id, phone, first="Repl", last="Ay", product_id="prod-phone-test",
+           purchased_at="2026-09-05"):
     """Exactly the payload map_reconcile_apply builds for one replayed order."""
     return call("POST", "/identity/reconcile-attendee", {
         "event_id": EV, "email": email, "ticket_type_id": tt,
         "is_upgrade": False, "addon_code": None,
         "contact_id": "ctc-test", "order_id": order_id,
         "product_id": product_id, "quantity": 1, "amount": 97.0,
-        "purchased_at": "2026-09-05", "phone": phone,
+        "purchased_at": purchased_at, "phone": phone,
         "first_name": first, "last_name": last}, SVC)
 
 # ── the plumbing that carries the phone, asserted at the source ─────────────
@@ -130,11 +131,36 @@ check(r4 and r4[0][1] == OTHER, "and a different incoming phone does not replace
 
 print()
 print("== 4) a blank phone is filled when one finally arrives ==")
+# A SECOND ticket order on one address is a second seat now, not an update --
+# two confirmed ticket purchases are two people. The buyer's own blank fields
+# are still filled from it, because filling a blank is safe in a way that
+# overwriting one is not, and a card with no phone can never be published.
 em5 = "phone-late@example.invalid"
 replay(em5, TT1, "PH-ORD-5", None)
 check(not row(em5)[0][1], "starts blank")
 replay(em5, TT1, "PH-ORD-6", PHONE)
 check(row(em5)[0][1] == PHONE, "and is filled by a later sale that has one", row(em5)[0][1])
+
+
+def _seat_count():
+    return sqlite3.connect("file:%s?mode=ro" % DB, uri=True).execute(
+        "SELECT count(*) FROM attendees WHERE event_id=? AND registration_source='reconciled_seat'",
+        (EV,)).fetchone()[0]
+
+
+# Same product, same amount, same DAY. That is the shape of a payment that
+# looked like it failed and was made again, not of a ticket for a friend, so it
+# must not quietly become a badge -- it goes to a human instead. The buyer's
+# blank fields are still filled from it, because filling a blank is safe in a
+# way that handing out a seat is not.
+check(_seat_count() == 0,
+      "a same-day repeat of the same charge does NOT become a seat", _seat_count())
+
+# A week later is a separate decision to buy, and that IS another person.
+replay(em5, TT1, "PH-ORD-7", PHONE, purchased_at="2026-09-12")
+check(_seat_count() >= 1,
+      "but a ticket bought a week later becomes a seat of its own",
+      _seat_count())
 
 print()
 print("== 5) replaying the same order changes nothing ==")

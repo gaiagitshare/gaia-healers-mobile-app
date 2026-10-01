@@ -14,6 +14,7 @@ import EventInfoAdmin from './EventInfoAdmin';
 import EventResources from './EventResources';
 import CommunityAdmin from './CommunityAdmin';
 import TicketMappings from './TicketMappings';
+import ReviewQueue from './ReviewQueue';
 
 // One workspace per event. The sections are structural, not configured, so any
 // event — the first or the twentieth — gets all of them the moment it exists.
@@ -33,6 +34,7 @@ const SECTIONS = [
     ['attendees', 'Attendees'],
     ['setup', 'Setup'],
     ['mappings', 'Ticket Mappings'],
+    ['review', 'Review Queue'],
     ['live', 'Live'],
     ['checkin', 'Check-In'],
 ];
@@ -69,6 +71,7 @@ function EventWorkspace() {
             case 'community': return <CommunityAdmin />;
             case 'setup': return <EventSetup />;
             case 'mappings': return <TicketMappings />;
+            case 'review': return <ReviewQueue />;
             case 'checkin': return <CheckIn timezone={event?.timezone} />;
             default: return <EventDetail section="overview" />;
         }

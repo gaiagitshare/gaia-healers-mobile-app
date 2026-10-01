@@ -45,6 +45,12 @@ CAPABILITIES = {
     CHECKIN_STAFF: {
         # Enough to work a door: find someone, admit them. Not enough to export
         # the attendee list or read anyone's leads.
+        #
+        # "attendee.read" is looking ONE person up, which is the job all
+        # weekend. Taking the whole roster in a single call is a different act
+        # with a different risk, and it is guarded by attendee.export along with
+        # the CSV -- the format does not change what the data is. Money is
+        # analytics.read and is nobody's door job.
         "attendee.read", "checkin.perform", "event.read",
     },
     EXHIBITOR_MANAGER: {

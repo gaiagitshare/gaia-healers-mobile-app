@@ -118,17 +118,25 @@ check("no attendee is missing a ticket type",
 # volunteers working the floor and the guests of the house have badges and paid
 # nothing. What must never happen is a ticket with neither -- no payment AND no
 # recorded reason -- because that is a ticket nobody can account for.
+# A REVOKED, refunded or cancelled ticket is the one case where holding no
+# money is the whole point: the money went back, or the row was ruled a
+# duplicate and its payment followed the person who actually holds the badge.
+# That is a reason on the record, which is what this check asks for.
 check("no attendee lacks a settled payment without a reason on the record",
       n("""select count(*) from attendees a where a.event_id=? and not exists
              (select 1 from payment_events p where p.attendee_id=a.id and p.status='paid')
            and coalesce(a.attendance_type,'paid') not in
-               ('complimentary','staff','speaker','exhibitor')""") == 0,
+               ('complimentary','staff','speaker','exhibitor')
+           and lower(coalesce(a.registration_status,'active')) not in
+               ('refunded','cancelled','revoked')""") == 0,
       "; ".join("%s %s" % (r[0], r[1]) for r in c.execute(
           """select coalesce(first_name,'')||' '||coalesce(last_name,''), coalesce(attendance_type,'paid')
                from attendees a where a.event_id=? and not exists
                  (select 1 from payment_events p where p.attendee_id=a.id and p.status='paid')
                and coalesce(a.attendance_type,'paid') not in
-                   ('complimentary','staff','speaker','exhibitor') limit 5""", (EVENT_ID,)).fetchall()))
+                   ('complimentary','staff','speaker','exhibitor')
+               and lower(coalesce(a.registration_status,'active')) not in
+                   ('refunded','cancelled','revoked') limit 5""", (EVENT_ID,)).fetchall()))
 check("and every unpaid badge says what it is",
       n("""select count(*) from attendees a where a.event_id=?
              and coalesce(a.attendance_type,'paid') in ('complimentary','staff','speaker','exhibitor')

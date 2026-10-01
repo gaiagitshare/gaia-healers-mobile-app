@@ -131,6 +131,11 @@ export const getPaymentsSummary = (eventId) => api.get(`/events/${eventId}/payme
 export const getPaymentsAttention = (eventId) => api.get(`/events/${eventId}/payments/attention`);
 export const getPaymentsRecovery = (eventId) => api.get(`/events/${eventId}/payments/recovery`);
 export const getTicketMetrics = (eventId) => cachedGet(`/events/${eventId}/ticket-metrics`);
+// Everything waiting on a person. Not cached: the point of opening it is to see
+// what is outstanding right now, and a stale list reads as work already done.
+export const getReviewQueue = (eventId) => api.get(`/events/${eventId}/review-queue`);
+export const resolveReviewItem = (eventId, data) =>
+    api.post(`/events/${eventId}/review-queue/resolve`, data);
 // Map & Reconcile: preview reads GHL and changes nothing; apply needs confirm:true.
 export const mapReconcilePreview = (eventId, body) => api.post(`/events/${eventId}/map-reconcile/preview`, body);
 export const mapReconcileApply = (eventId, body) => api.post(`/events/${eventId}/map-reconcile/apply`, { ...body, confirm: true });

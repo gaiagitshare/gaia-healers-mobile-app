@@ -1,5 +1,5 @@
 // gaia-onboarding.js — the conversational onboarding survey for Gaia Assist.
-// Mirrors the live GHL onboarding form (join.gaiahealers.com/onboarding, 14 steps
+// Mirrors the live GHL onboarding form (join.gaiahealers.com/onboarding, 15 steps
 // with the Living Beings / Environment / Water branch). The ASSISTANT asks the
 // questions; the SERVER maps chosen option labels -> GHL tags deterministically
 // (the model never invents tag names). Existing GHL tags reuse the real
@@ -21,7 +21,7 @@ const STEPS = [
     ],
   },
   {
-    key: 'why_join', title: 'Why join', multi: false,
+    key: 'why_join', title: 'Why join', multi: true,
     question: 'What made you want to join Gaia Healers?',
     options: [
       { label: 'For my own healing / consciousness', tags: ['interest_personal_healing'] },
@@ -29,7 +29,7 @@ const STEPS = [
     ],
   },
   {
-    key: 'living_beings_who', title: 'Who you support', multi: false, showIf: 'Living Beings',
+    key: 'living_beings_who', title: 'Who you support', multi: true, showIf: 'Living Beings',
     question: 'Who are you primarily interested in supporting?',
     options: [
       { label: 'Myself', tags: ['interest_personal_health'] },
@@ -71,7 +71,7 @@ const STEPS = [
     ],
   },
   {
-    key: 'environment_spaces', title: 'Spaces', multi: false, showIf: 'Environment',
+    key: 'environment_spaces', title: 'Spaces', multi: true, showIf: 'Environment',
     question: 'What types of spaces are you most interested in working with?',
     options: [
       { label: 'Home or personal living spaces', tags: ['interest_space_home'] },
@@ -83,7 +83,7 @@ const STEPS = [
     ],
   },
   {
-    key: 'water', title: 'Water', multi: false, showIf: 'Water',
+    key: 'water', title: 'Water', multi: true, showIf: 'Water',
     question: 'How are you most interested in working with water?',
     options: [
       { label: 'Drinking water for personal or family use', tags: ['interest_water_drinking', 'product_general_water_interest'] },
@@ -95,14 +95,14 @@ const STEPS = [
     ],
   },
   {
-    key: 'business_length', title: 'Business length', multi: false,
+    key: 'business_length', title: 'Business length', multi: true,
     question: 'How long have you been in business with your practice?',
     options: [
       { label: "I haven't started it yet, but I'm ready to get going!", tags: ['practice_stage_prelaunch'] },
-      { label: 'Less than 1 year', tags: ['practice_stage_early'] },
-      { label: '1–3 years', tags: ['practice_stage_growth'] },
-      { label: '3–5 years', tags: ['practice_stage_established'] },
-      { label: '5–10 years', tags: ['practice_stage_scaling'] },
+      { label: '< 1 year', tags: ['practice_stage_early'] },
+      { label: '1 - 3 years', tags: ['practice_stage_growth'] },
+      { label: '3 - 5 years', tags: ['practice_stage_established'] },
+      { label: '5 - 10 years', tags: ['practice_stage_scaling'] },
       { label: '10+ years', tags: ['practice_stage_mature'] },
     ],
   },
@@ -120,7 +120,7 @@ const STEPS = [
     key: 'growth_needs', title: 'Growth needs', multi: true,
     question: 'What kind of support would be most helpful for you right now?',
     options: [
-      { label: 'Business infrastructure: website, scheduling and systems', tags: ['need_infrastructure'] },
+      { label: 'Business infrastructure (website, scheduling, systems)', tags: ['need_infrastructure'] },
       { label: 'Automation or software tools', tags: ['need_software', 'crm_interest_education'] },
       { label: 'Client visibility or referrals', tags: ['need_visibility'] },
       { label: 'Education and training', tags: ['community_feature_education'] },
@@ -177,7 +177,7 @@ const STEPS = [
       { label: 'Community leadership or moderation', tags: ['interest_community_moderator'] },
       { label: 'Volunteering for events', tags: ['interest_community_volunteer'] },
       { label: 'Bringing my offer to the community and support it', tags: ['interest_community_general'] },
-      { label: 'Other', tags: [] },
+      { label: 'Other (please specify)', tags: [] },
     ],
     freeText: 'If Other, share more.',
   },
@@ -191,7 +191,7 @@ const STEPS = [
       { label: 'Support for personal healing or wellbeing', tags: ['community_feature_personalsupport'] },
       { label: 'Support for professional or practice growth', tags: ['community_feature_practicegrowth'] },
       { label: 'Community connection, collaboration, and shared learning', tags: ['community_feature_general'] },
-      { label: 'Other', tags: ['community_feature_other'] },
+      { label: 'Other (please specify)', tags: ['community_feature_other'] },
     ],
     freeText: 'If Other, share more.',
   },
@@ -236,18 +236,32 @@ function mapOnboardingAnswers(answers) {
 
 // Has this member already done the onboarding survey? (complete marker, or the
 // GHL form-complete tag, or a solid cluster of survey-built interest tags.)
-function onboardingState(tags) {
+function onboardingState(tags, answers = {}) {
   const set = new Set((tags || []).map((t) => String(t).toLowerCase()));
   if (set.has(COMPLETE_TAG) || set.has('gaia_practitioner_form_complete')) return 'complete';
-  let signals = 0;
-  set.forEach((t) => { if (/^practice_stage_|^community_feature_|^interest_(personal|professional|pet|livestock|wildlife|general_beings)_|^invest_/.test(t)) signals++; });
-  return signals >= 3 ? 'complete' : 'incomplete';
+  const path = onboardingPath(answers);
+  return answers.primary_interests?.length && path.filter(s => !s.freeTextOnly).every(s => validAnswer(s, answers[s.key])) ? 'complete' : 'incomplete';
+}
+
+function onboardingPath(answers = {}) {
+  const interests = answers.primary_interests || [];
+  return STEPS.filter(s => !s.showIf || interests.includes(s.showIf));
+}
+function validAnswer(step, value) {
+  return Array.isArray(value) && value.length > 0 && (step.multi || value.length === 1)
+    && value.every(v => step.options.some(o => o.label === v));
+}
+function uiSchema() {
+  return STEPS.map(({ key, title, question, multi, showIf, freeText, freeTextOnly, options }) => ({
+    key, title, question, multi, showIf, freeText, freeTextOnly,
+    required: !freeTextOnly, options: options.map(({ label }) => ({ label })),
+  }));
 }
 
 // The compact survey script injected into the assistant's system prompt.
 function onboardingPromptBlock() {
   const lines = [];
-  lines.push('ONBOARDING SURVEY (run this in conversation when a signed-in member has NOT completed it). Ask ONE step at a time, in order, in your own warm words — never dump the whole list. Read the options naturally; let them pick one or several (multi = choose all that apply). After each step, RECORD it via your save mechanism (described just above) using the EXACT option label(s) they chose so their tags are created; do not say tag names out loud. Keep it light — it is a friendly getting-to-know-you, ~2 minutes, not an interrogation. They may skip any step.');
+  lines.push('ONBOARDING SURVEY (run this in conversation when a signed-in member has NOT completed it). Ask ONE step at a time, in order, in your own warm words — never dump the whole list. Read the options naturally; let them pick one or several (multi = choose all that apply). After each step, RECORD it via your save mechanism (described just above) using the EXACT option label(s) they chose so their tags are created; do not say tag names out loud. Keep it light — it is a friendly getting-to-know-you, ~2 minutes, not an interrogation. Only final_notes is optional. Resume from the first unanswered required step.');
   lines.push('BRANCHING: Step "primary_interests" decides the path. Only ask living_beings_* if they picked Living Beings; only ask environment_* if Environment; only ask water if Water. Skip the branches they did not pick.');
   STEPS.forEach((s, i) => {
     const cond = s.showIf ? ` [only if "${s.showIf}" chosen]` : '';
@@ -382,6 +396,6 @@ function formatTargeting(rec) {
 
 export {
   COMPLETE_TAG, STEPS, STEP_BY_KEY,
-  mapStep, mapOnboardingAnswers, onboardingState, onboardingPromptBlock, suggestOffers,
+  mapStep, mapOnboardingAnswers, onboardingState, onboardingPath, validAnswer, uiSchema, onboardingPromptBlock, suggestOffers,
   interestFromTopic, buildTargeting, formatTargeting,
 };

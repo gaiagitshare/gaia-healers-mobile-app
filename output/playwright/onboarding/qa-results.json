@@ -1,0 +1,26 @@
+[
+  {
+    "width": 360,
+    "states": 12,
+    "flow": "completed, bypassed, resumed, embedded-save",
+    "overflow": false
+  },
+  {
+    "width": 390,
+    "states": 12,
+    "flow": "completed, bypassed, resumed, embedded-save",
+    "overflow": false
+  },
+  {
+    "width": 430,
+    "states": 12,
+    "flow": "completed, bypassed, resumed, embedded-save",
+    "overflow": false
+  },
+  {
+    "width": 1280,
+    "states": 12,
+    "flow": "completed, bypassed, resumed, embedded-save",
+    "overflow": false
+  }
+]

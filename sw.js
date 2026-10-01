@@ -1,4 +1,4 @@
-const CACHE_NAME = 'gaia-healers-20260928c-holdtalk';
+const CACHE_NAME = 'gaia-healers-20261001a-journey';
 /**
  * Precache ONLY what the page requests by exactly this URL.
  *
@@ -53,7 +53,7 @@ self.addEventListener('activate', (event) => {
 self.addEventListener('fetch', (event) => {
   if (event.request.method !== 'GET') return;
   const url = new URL(event.request.url);
-  if (url.origin !== self.location.origin) return;
+  if (url.origin !== self.location.origin || url.pathname.startsWith('/api/')) return;
 
   if (event.request.mode === 'navigate') {
     event.respondWith(

@@ -1,3 +1,4 @@
+import { createOnboardingStore } from './onboarding-store.js';
 import http from 'node:http';
 import crypto from 'node:crypto';
 import fs from 'node:fs';
@@ -2398,8 +2399,8 @@ async function fetchJson(url, headers = {}) {
   return response.json();
 }
 
-async function fetchJsonIfOk(url, headers = {}) {
-  const response = await fetch(url, { headers });
+async function fetchJsonIfOk(url, headers = {}, options = {}) {
+  const response = await fetch(url, { headers, ...options });
   if (!response.ok) return null;
   try {
     return await response.json();
@@ -2997,7 +2998,7 @@ async function handleGhlPaymentWebhook(req, res, origin) {
   }
 }
 
-async function ghlGet(path, params = {}) {
+async function ghlGet(path, params = {}, timeoutMs = 0) {
   const cfg = ghlConfig();
   if (!cfg.enabled) return null;
   const query = new URLSearchParams(
@@ -3008,10 +3009,10 @@ async function ghlGet(path, params = {}) {
     }, {}),
   );
   const url = `${cfg.base}${path}${query.toString() ? `?${query.toString()}` : ''}`;
-  return fetchJsonIfOk(url, ghlHeaders(cfg.token, cfg.version));
+  return fetchJsonIfOk(url, ghlHeaders(cfg.token, cfg.version), timeoutMs ? { signal: AbortSignal.timeout(timeoutMs) } : {});
 }
 
-async function ghlPost(path, body = {}, version = '') {
+async function ghlPost(path, body = {}, version = '', timeoutMs = 0) {
   const cfg = ghlConfig();
   if (!cfg.enabled) return null;
   const response = await fetch(`${cfg.base}${path}`, {
@@ -3021,6 +3022,7 @@ async function ghlPost(path, body = {}, version = '') {
       'Content-Type': 'application/json',
     },
     body: JSON.stringify(body),
+    ...(timeoutMs ? { signal: AbortSignal.timeout(timeoutMs) } : {}),
   });
   if (!response.ok) return null;
   try {
@@ -3029,6 +3031,21 @@ async function ghlPost(path, body = {}, version = '') {
     return null;
   }
 }
+
+async function ghlPut(path, body) {
+  const cfg = ghlConfig();
+  if (!cfg.enabled) return null;
+  const response = await fetch(`${cfg.base}${path}`, {
+    method: 'PUT', headers: { ...ghlHeaders(cfg.token, cfg.version), 'Content-Type': 'application/json' },
+    body: JSON.stringify(body), signal: AbortSignal.timeout(15000),
+  });
+  if (!response.ok) return null;
+  return response.json().catch(() => null);
+}
+const onboardingStore = createOnboardingStore({
+  get: (p, q) => ghlGet(p, q, 15000), post: (p, b) => ghlPost(p, b, '', 15000), put: ghlPut, locationId: () => ghlConfig().locationId,
+  invalidate: cid => _memberAiCtxCache.delete(cid),
+});
 
 // Upsert a contact into GHL (create or update by email). Requires the PIT to
 // carry contacts.write — returns scope_required until that scope is enabled.
@@ -4394,10 +4411,12 @@ async function buildMemberVoiceContext(req) {
 
     try {
       const mem = memoryContextLine(cid); if (mem) lines.push(mem);
-      const obState = onboarding.onboardingState(b.tags);
+      const obProfile = await onboardingStore.load(cid);
+      const obState = obProfile.state;
       lines.push('ONBOARDING PROFILE: ' + (obState === 'complete'
         ? 'DONE — do NOT run the onboarding survey again; use their interests below to tailor suggestions.'
-        : 'NOT DONE — when the moment fits, warmly offer the quick 2-minute getting-to-know-you and run the ONBOARDING SURVEY, saving each step.'));
+        : 'NOT DONE — resume at ' + obProfile.nextStep + '. Use the saved answers, never repeat completed questions. Structured answer cards are available in Assist.'));
+      if (obState !== 'complete') lines.push('Saved onboarding answers: ' + JSON.stringify(obProfile.answers));
       const interestTags = (b.tags || []).filter((t) => /^(interest_|product_.*_(interest|owner)|practice_stage_|invest_|community_feature_|need_)/.test(String(t).toLowerCase()));
       if (interestTags.length) lines.push('What we already know (profile tags): ' + interestTags.slice(0, 40).join(', ') + '.');
       const hasPaidSub = Array.isArray(b.subscriptions) && b.subscriptions.some((x) => /active|trialing/i.test(String(x.status || '')));
@@ -6130,13 +6149,8 @@ async function executeOnboardingMarkers(req, text) {
   } catch (e) {}
   return out;
 }
-async function applyOnboardingStep(contactId, stepKey, selections, freeText, complete) {
-  const r = onboarding.mapStep(stepKey, selections);
-  const tags = r.tags.slice();
-  if (complete) tags.push(onboarding.COMPLETE_TAG);
-  if (tags.length) await ghlPost(`/contacts/${encodeURIComponent(contactId)}/tags`, { tags }).catch(() => null);
-  if (freeText) { try { await ghlPost(`/contacts/${encodeURIComponent(contactId)}/notes`, { body: 'Gaia Assist onboarding (' + stepKey + '): ' + String(freeText).slice(0, 800) }); } catch (e) {} }
-  return { tagsAdded: tags, matched: r.matched, unmatched: r.unmatched, complete: !!complete };
+async function applyOnboardingStep(contactId, stepKey, selections, freeText, complete, strict = false) {
+  return onboardingStore.save(contactId, stepKey, selections, freeText, complete, strict);
 }
 function priceFromCents(c) { if (c == null || isNaN(c)) return ''; const n = Number(c) / 100; return '$' + (Number.isInteger(n) ? n : n.toFixed(2)); }
 // Words that carry no intent. Without this list "what is the price" scores on
@@ -7527,14 +7541,24 @@ const server = http.createServer(async (req, res) => {
       sendJson(res, 200, { ok: true, matched: info.matched, saved, tags: info.tags, route: info.route }, origin);
       return;
     }
-    if (req.method === 'POST' && url.pathname === '/api/assist/onboarding') {
-      const sm = sessionMemberContext(req);
-      if (!sm) { sendJson(res, 200, { ok: false, reason: 'not_signed_in' }, origin); return; }
-      const body = await readJsonBody(req).catch(() => ({}));
-      const b = await fetchMemberBundle(sm);
-      if (!b || !b.contactId) { sendJson(res, 200, { ok: false, reason: 'no_contact' }, origin); return; }
-      const result = await applyOnboardingStep(b.contactId, String(body.stepKey || ''), Array.isArray(body.selections) ? body.selections : [], String(body.freeText || ''), Boolean(body.complete));
-      sendJson(res, 200, { ok: true, stepKey: body.stepKey || '', ...result }, origin);
+    if (['GET', 'POST'].includes(req.method) && url.pathname === '/api/assist/onboarding') {
+      const sm = requireSessionMember(req, res, origin);
+      if (!sm) return;
+      try {
+        const b = await fetchMemberBundle(sm);
+        if (!b.resolved || !b.contactId) {
+          sendJson(res, 503, { ok: false, reason: 'onboarding_contact_unavailable' }, origin); return;
+        }
+        if (req.method === 'GET') {
+          sendJson(res, 200, await onboardingStore.load(b.contactId), origin); return;
+        }
+        const body = await readJsonBody(req);
+        const result = await applyOnboardingStep(b.contactId, body.stepKey, body.selections, body.freeText || '', body.complete === true, body.source === 'visual');
+        sendJson(res, 200, { ok: true, stepKey: body.stepKey, ...result }, origin);
+      } catch (e) {
+        console.warn('[Gaia Onboarding]', { event: 'request_failed', reason: e.reason || 'unavailable' });
+        sendJson(res, e.status || 503, { ok: false, reason: e.reason || 'onboarding_unavailable' }, origin);
+      }
       return;
     }
     if (req.method === 'POST' && url.pathname === '/api/assist/chat') {

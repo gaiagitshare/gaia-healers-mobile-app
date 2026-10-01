@@ -139,6 +139,7 @@ body.gaia-booking-open{overflow:hidden;}
   }
 
   async function loadMember() {
+    if (window.GaiaJourney && !await window.GaiaJourney.check()) return;
     const [profile, access, appts, notif, devices, purchases, forms, courses, products, activity, events] = await Promise.all([
       getJson('/api/member/profile'), getJson('/api/member/access'),
       getJson('/api/member/appointments'), getJson('/api/member/notifications'),
@@ -1349,6 +1350,7 @@ body.gaia-booking-open{overflow:hidden;}
     loadCatalog(); // live course catalog from the GHL webhook sync (public)
     loadPlans(); // public plan catalogue — must not wait on a signed-in member
   });
+  document.addEventListener('gaia:onboarding-complete', loadMember);
   document.addEventListener('gaia:auth', (e) => {
     if (e && e.detail && e.detail.authenticated) loadMember();
     else { state.authed = false; state.data = {}; render(); }

@@ -124,10 +124,22 @@ export function saveToken(contactId, row, file = TOKEN_FILE) {
   return row;
 }
 
+/**
+ * The stored row, or null if this contact never connected.
+ *
+ * A row whose chain has broken still comes back, flagged. "Never connected" and
+ * "connected, then the renewal was refused" need different words in front of the
+ * practitioner -- Connect versus Reconnect -- and the second needs to name the
+ * account it was, which a null would throw away.
+ */
 export function tokenFor(contactId, file = TOKEN_FILE) {
   const row = readTokens(file)[String(contactId)];
-  if (!row?.access_token) return null;
-  return { ...row, expired: Boolean(row.expires_at && row.expires_at < Date.now()) };
+  if (!row) return null;
+  return {
+    ...row,
+    expired: Boolean(row.expires_at && row.expires_at < Date.now()),
+    usable: Boolean(row.access_token) && !row.needs_reconnect,
+  };
 }
 
 export function forgetToken(contactId, file = TOKEN_FILE) {
@@ -141,9 +153,19 @@ export function forgetToken(contactId, file = TOKEN_FILE) {
 /** What the app may know: connected or not, and to whom. Never the token. */
 export function connectionStatus(contactId, file = TOKEN_FILE) {
   const row = tokenFor(contactId, file);
-  if (!row) return { connected: false };
+  if (!row) return { connected: false, needs_reconnect: false };
+  if (row.needs_reconnect) {
+    return {
+      connected: false,
+      needs_reconnect: true,
+      practitioner_name: row.practitioner_name || '',
+      practitioner_email: row.practitioner_email || '',
+      broken_at: row.broken_at || '',
+    };
+  }
   return {
-    connected: !row.expired,
+    connected: row.usable && !row.expired,
+    needs_reconnect: false,
     expired: row.expired,
     practitioner_name: row.practitioner_name || '',
     practitioner_email: row.practitioner_email || '',
@@ -176,6 +198,98 @@ export async function exchangeCode(cfg, { code, verifier }, fetchImpl = fetch) {
   }
   return json;
 }
+
+/**
+ * Renew an access token. Their refresh tokens are SINGLE USE: the response
+ * carries a new one, and the old one is dead the moment this succeeds.
+ */
+export async function refreshAccess(cfg, refreshToken, fetchImpl = fetch) {
+  const body = new URLSearchParams({
+    grant_type: 'refresh_token',
+    refresh_token: refreshToken,
+    client_id: cfg.clientId,
+  });
+  if (cfg.clientSecret) body.set('client_secret', cfg.clientSecret);
+  const r = await fetchImpl(`${cfg.base}/api/oauth/token`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded', Accept: 'application/json' },
+    body: body.toString(),
+  });
+  const text = await r.text();
+  let json = {};
+  try { json = JSON.parse(text); } catch { /* not always JSON on error */ }
+  if (!r.ok || !json.access_token) {
+    const why = json.error_description || json.error || json.message || text.slice(0, 200);
+    throw Object.assign(new Error(`refresh failed (${r.status}): ${why}`), { status: r.status });
+  }
+  return json;
+}
+
+// One refresh per practitioner at a time.
+//
+// A single-use refresh token punishes races specifically. Two requests arriving
+// together would both read the same stored token, both spend it, and one of them
+// would be told it is already used -- and because the winner has already written
+// its replacement, the loser can overwrite that replacement with nothing. The
+// chain would then be broken permanently and the practitioner would have to
+// consent again, for no reason other than having been busy. So concurrent
+// callers wait on the same refresh rather than starting their own.
+const refreshing = new Map();
+
+/**
+ * The access token to use for this practitioner right now, renewed if it is
+ * spent or nearly spent. Returns null when they have never connected, and throws
+ * `needs_reconnect` when the chain is broken and only a human can fix it.
+ */
+export async function validAccessToken(cfg, contactId, { file = TOKEN_FILE, fetchImpl = fetch,
+                                                         marginMs = 5 * 60 * 1000 } = {}) {
+  const key = String(contactId);
+  const row = tokenFor(key, file);
+  if (!row) return null;
+  if (row.needs_reconnect) {
+    throw Object.assign(new Error('reconnect required'), { code: 'needs_reconnect' });
+  }
+
+  const expiringSoon = row.expires_at && row.expires_at - marginMs < Date.now();
+  if (!expiringSoon) return row.access_token;
+  if (!row.refresh_token) {
+    throw Object.assign(new Error('token expired and no refresh token held'), { code: 'needs_reconnect' });
+  }
+
+  if (refreshing.has(key)) return refreshing.get(key);
+  const work = (async () => {
+    try {
+      const fresh = await refreshAccess(cfg, row.refresh_token, fetchImpl);
+      saveToken(key, {
+        ...row,
+        access_token: fresh.access_token,
+        // Keep the old one only if they sent none back; losing a rotated token
+        // because the response shape surprised us is the one unrecoverable bug.
+        refresh_token: fresh.refresh_token || row.refresh_token,
+        scope: fresh.scope || row.scope,
+        expires_at: Date.now() + (Number(fresh.expires_in || 0) * 1000),
+        refreshed_at: new Date().toISOString(),
+      }, file);
+      return fresh.access_token;
+    } catch (e) {
+      // A refusal means the chain is done: the stored token is spent and no new
+      // one arrived. Say so plainly rather than leaving a dead token in place
+      // for every later call to rediscover.
+      if (e.status === 400 || e.status === 401) {
+        saveToken(key, { ...row, access_token: '', refresh_token: '', needs_reconnect: true,
+                         broken_at: new Date().toISOString(), broke_because: String(e.message).slice(0, 160) }, file);
+        throw Object.assign(new Error('reconnect required'), { code: 'needs_reconnect' });
+      }
+      throw e;                      // a network blip is not a broken chain
+    } finally {
+      refreshing.delete(key);
+    }
+  })();
+  refreshing.set(key, work);
+  return work;
+}
+
+export function _refreshingSize() { return refreshing.size; }
 
 /** One MCP tools/call. The token is chosen by the caller, never by an argument. */
 export async function mcpCall(cfg, accessToken, name, args = {}, fetchImpl = fetch) {

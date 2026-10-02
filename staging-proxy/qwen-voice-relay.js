@@ -179,7 +179,7 @@ function lowerTypes(schema) {
 }
 
 /** The session.update that opens a Qwen session from a Gemini setup. */
-export function sessionUpdateFor(setup, { instructions, voice }) {
+export function sessionUpdateFor(setup, { instructions, voice, tools = null }) {
   const session = {
     modalities: ['text', 'audio'],
     instructions,
@@ -188,7 +188,13 @@ export function sessionUpdateFor(setup, { instructions, voice }) {
     // The orb already gates the mic locally and waits through short pauses;
     // this only has to notice the end of a sentence.
     turn_detection: { type: 'server_vad', silence_duration_ms: 900 },
-    tools: toQwenTools(setup),
+    // The server's list wins when there is one. The page used to decide what
+    // the model could call, which was survivable while the tools only moved
+    // somebody around their own app -- and is not, now that one of them reads a
+    // client's health data. An empty server list means exactly that: no tools.
+    tools: Array.isArray(tools)
+      ? toQwenTools({ tools: [{ functionDeclarations: tools }] })
+      : toQwenTools(setup),
   };
   if (voice) session.voice = voice;
   return { type: 'session.update', session };
@@ -317,11 +323,12 @@ export function qwenRouting({ cfg = qwenVoiceConfig(), ip = '', lang = '', force
 }
 
 /** A one-use, one-minute ticket that lets the browser open the relay. */
-export function issueQwenTicket({ instructions, ip }) {
+export function issueQwenTicket({ instructions, ip, tools = null }) {
   const ticket = crypto.randomBytes(18).toString('base64url');
   const now = Date.now();
   for (const [k, v] of tickets) if (v.exp < now) tickets.delete(k);
-  tickets.set(ticket, { instructions: String(instructions || ''), ip, exp: now + 60 * 1000 });
+  tickets.set(ticket, { instructions: String(instructions || ''), ip, tools,
+                       exp: now + 60 * 1000 });
   return ticket;
 }
 
@@ -426,7 +433,8 @@ function runSession(browser, grant, ip) {
   let pendingSetup = null;
   const sendSetup = () => {
     if (!pendingSetup || upstream.readyState !== WebSocket.OPEN) return;
-    toQwen(sessionUpdateFor(pendingSetup, { instructions: grant.instructions, voice: cfg.voice }));
+    toQwen(sessionUpdateFor(pendingSetup, { instructions: grant.instructions, voice: cfg.voice,
+                                            tools: grant.tools }));
     pendingSetup = null;
   };
   upstream.on('open', sendSetup);

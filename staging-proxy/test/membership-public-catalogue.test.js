@@ -22,7 +22,6 @@ import { appTest as rawAppTest, readApp } from './_app-present.js';
 // Every test here reads gaia-member.js, so the guard checks that file.
 const appTest = (name, fn) => rawAppTest(name, fn, 'gaia-member.js');
 
-const appRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
 // Read through the guard: a module-level readFileSync would throw at import
 // time on the proxy host, taking the whole file down before any skip applies.
 const SOURCE = readApp('gaia-member.js');

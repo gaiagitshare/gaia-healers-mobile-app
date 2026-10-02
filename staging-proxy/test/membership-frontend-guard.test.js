@@ -13,7 +13,6 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { appTest, readApp } from './_app-present.js';
 
-const appRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
 const APP_FILES = ['gaia-member.js', 'gaia-membership-ui.js', 'gaia-ui.js', 'gaia-superapp.js'];
 const read = (file) => readApp(file);
 

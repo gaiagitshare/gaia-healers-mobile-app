@@ -15,7 +15,6 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { appTest, readApp } from './_app-present.js';
 
-const appRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
 const SOURCE = readApp('gaia-practice.js');
 
 /** Boot the module against a minimal DOM and an in-memory localStorage. */
@@ -171,7 +170,7 @@ appTest('the journal listens for the wellness panel rather than owning it', () =
 });
 
 appTest('the wellness panel emits what the journal needs', () => {
-  const wellness = fs.readFileSync(path.join(appRoot, 'gaia-wellness.js'), 'utf8');
+  const wellness = readApp('gaia-wellness.js');
   assert.ok(wellness.includes("'gaia:wellness-rendered'"), 'the event is dispatched');
   assert.ok(/data-practice-host/.test(wellness), 'and a host element exists to draw into');
 });

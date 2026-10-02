@@ -22,11 +22,20 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 
+/**
+ * An app file, wherever the app sits relative to the proxy: inside the repo as
+ * `staging-proxy/` in CI, or a sibling checkout under /root on the server.
+ *
+ * The sibling path used to carry one `../` too many and resolved to a
+ * directory at the filesystem root that exists nowhere. Every read returned
+ * null, every assertion returned early, and the suite REPORTED A PASS without
+ * opening a single file. A test that cannot find its subject has to say so.
+ */
 function read(name) {
-  for (const base of ['../../', '../../../gaia-healers-mobile-app-1/']) {
+  for (const base of ['../../', '../../gaia-healers-mobile-app-1/']) {
     try { return fs.readFileSync(new URL(base + name, import.meta.url), 'utf8'); } catch { /* next */ }
   }
-  return null;
+  throw new Error(`${name} not found beside the proxy; these assertions would otherwise pass without reading it`);
 }
 
 const ui = read('gaia-practitioner.js');
@@ -39,7 +48,6 @@ const FAST_ON_OPEN = ['practitioner_get_client', 'practitioner_suggested_service
 
 test('the practitioner screen is a separate file from the practice journal', () => {
   const journal = read('gaia-practice.js');
-  if (journal === null || ui === null) return;
   assert.match(journal, /practice journal/i, 'gaia-practice.js is the member journal');
   assert.ok(!/GaiaPractitioner/.test(journal), 'the journal must not have been overwritten');
   assert.match(ui, /window\.GaiaPractitioner/, 'the practitioner screen owns its own global');
@@ -47,7 +55,6 @@ test('the practitioner screen is a separate file from the practice journal', () 
 });
 
 test('opening a client fetches nothing slow', () => {
-  if (ui === null) return;
   const i = ui.indexOf('async function showClient');
   const j = ui.indexOf('const CARD_TOOL');
   assert.ok(i > 0 && j > i, 'showClient must exist, and end before the card tools');
@@ -62,7 +69,6 @@ test('opening a client fetches nothing slow', () => {
 });
 
 test('the landing screen fetches nothing slow either', () => {
-  if (ui === null) return;
   const i = ui.indexOf('async function showList');
   const j = ui.indexOf('function onSearch');
   const body = ui.slice(i, j);
@@ -75,14 +81,12 @@ test('the landing screen fetches nothing slow either', () => {
 });
 
 test('a slow card says how long before it is long', () => {
-  if (ui === null) return;
   assert.match(ui, /about ten seconds/,
     'a spinner alone reads as broken at eleven seconds');
   assert.match(ui, /data-prac-elapsed/, 'and an elapsed count proves it is still working');
 });
 
 test('a card that is already loaded is not fetched twice', () => {
-  if (ui === null) return;
   const i = ui.indexOf('async function openCard');
   const body = ui.slice(i, i + 1600);
   assert.match(body, /const cached = \(loaded\.get\(openClient\) \|\| \{\}\)\[kind\]/,
@@ -91,7 +95,6 @@ test('a card that is already loaded is not fetched twice', () => {
 });
 
 test('a result that arrives after the practitioner moved on is discarded', () => {
-  if (ui === null) return;
   const i = ui.indexOf('async function openCard');
   const body = ui.slice(i, i + 1800);
   assert.match(body, /if \(openClient !== forClient\) return/,
@@ -99,7 +102,6 @@ test('a result that arrives after the practitioner moved on is discarded', () =>
 });
 
 test('every state a practitioner can be in has its own words', () => {
-  if (ui === null) return;
   assert.match(ui, /Connect your Gaia Practitioners account/, 'never connected');
   assert.match(ui, /connection to Gaia Practitioners expired/, 'needs reconnect');
   assert.match(ui, /practitioner_email/, 'and names the account, so a wrong one is visible');
@@ -109,7 +111,6 @@ test('every state a practitioner can be in has its own words', () => {
 });
 
 test('nothing in the screen sends an identity', () => {
-  if (ui === null) return;
   const i = ui.indexOf('async function tool(');
   const body = ui.slice(i, i + 700);
   assert.match(body, /credentials: 'include'/, 'the cookie is what identifies the caller');
@@ -118,7 +119,6 @@ test('nothing in the screen sends an identity', () => {
 });
 
 test('the screen never offers to write anything', () => {
-  if (ui === null) return;
   // The scope is mcp.read. A control that looks like it saves would be a lie,
   // and there is no endpoint behind it to make true later.
   assert.ok(!/>\s*(Save|Update|Delete|Edit|Book)\b/i.test(ui),
@@ -126,7 +126,6 @@ test('the screen never offers to write anything', () => {
 });
 
 test('the Practice tab is hidden until the server says practitioner', () => {
-  if (ui === null || home === null) return;
   assert.match(home, /data-profile-tabs hidden/,
     'the tab row ships hidden and is revealed by the status call');
   const i = ui.indexOf('async function mount');
@@ -137,14 +136,12 @@ test('the Practice tab is hidden until the server says practitioner', () => {
 });
 
 test('Gaia can open a client without a reload', () => {
-  if (ui === null) return;
   assert.match(ui, /gaia:open-client/, 'the assistant needs a way in');
   assert.match(ui, /params\.get\('client'\)/, 'and a deep link has to work too');
 });
 
 test('the styles use the existing tokens rather than new colours', () => {
   const css = read('gaia-app-v3-shop-you.css');
-  if (css === null) return;
   const i = css.indexOf('.g-prac {');
   if (i < 0) return;
   const block = css.slice(i);

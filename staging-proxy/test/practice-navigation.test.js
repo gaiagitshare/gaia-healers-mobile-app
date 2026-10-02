@@ -29,11 +29,20 @@ const { toolDeclarationsFor, TOOLS } = t;
 const MEMBER = { contactId: 'C-m', isPractitioner: false };
 const PRACTITIONER = { contactId: 'C-p', isPractitioner: true };
 
+/**
+ * An app file, wherever the app sits relative to the proxy: inside the repo as
+ * `staging-proxy/` in CI, or a sibling checkout under /root on the server.
+ *
+ * The sibling path used to carry one `../` too many and resolved to a
+ * directory at the filesystem root that exists nowhere. Every read returned
+ * null, every assertion returned early, and the suite REPORTED A PASS without
+ * opening a single file. A test that cannot find its subject has to say so.
+ */
 function read(name) {
-  for (const base of ['../../', '../../../gaia-healers-mobile-app-1/']) {
+  for (const base of ['../../', '../../gaia-healers-mobile-app-1/']) {
     try { return fs.readFileSync(new URL(base + name, import.meta.url), 'utf8'); } catch { /* next */ }
   }
-  return null;
+  throw new Error(`${name} not found beside the proxy; these assertions would otherwise pass without reading it`);
 }
 const navOf = (ctx) => toolDeclarationsFor(ctx).find((d) => d.name === 'navigate');
 
@@ -156,7 +165,6 @@ test('the member description is left exactly as it was', () => {
 
 test('every documented destination is reachable and nothing else is', () => {
   const orb = read('gaia-realtime-voice.js');
-  if (orb === null) return;
   assert.match(orb, /const PRACTICE_CARDS = \['latest', 'trend', 'compare'\]/);
   assert.match(orb, /const PRACTICE_SECTIONS = \['attention', 'followups', 'clients'\]/);
   // Anything outside those lists is dropped rather than passed through, so a
@@ -167,7 +175,6 @@ test('every documented destination is reachable and nothing else is', () => {
 
 test('Practice is reached through the existing hooks, not a new mechanism', () => {
   const orb = read('gaia-realtime-voice.js');
-  if (orb === null) return;
   const i = orb.indexOf("if (screen === 'practice')");
   assert.ok(i > 0, 'navigate must handle the practice screen');
   const body = orb.slice(i, i + 1600);
@@ -179,7 +186,6 @@ test('Practice is reached through the existing hooks, not a new mechanism', () =
 
 test('the panel accepts a client, a card and a section from the one hook', () => {
   const ui = read('gaia-practitioner.js');
-  if (ui === null) return;
   const i = ui.indexOf("addEventListener('gaia:open-client'");
   const body = ui.slice(i, i + 900);
   assert.match(body, /if \(d\.client\)/, 'a client opens that client');
@@ -190,7 +196,6 @@ test('the panel accepts a client, a card and a section from the one hook', () =>
 
 test('a deep link does the same thing as the hook', () => {
   const ui = read('gaia-practitioner.js');
-  if (ui === null) return;
   assert.match(ui, /params\.get\('client'\)/);
   assert.match(ui, /params\.get\('open'\)/);
   assert.match(ui, /params\.get\('tab'\) === 'practice'/);
@@ -200,7 +205,6 @@ test('a deep link does the same thing as the hook', () => {
 
 test('opening a card tells the model to wait rather than invent readings', () => {
   const orb = read('gaia-realtime-voice.js');
-  if (orb === null) return;
   const i = orb.indexOf("if (screen === 'practice')");
   const body = orb.slice(i, i + 2000);
   assert.match(body, /do not read out any numbers yet/i,
@@ -210,7 +214,6 @@ test('opening a card tells the model to wait rather than invent readings', () =>
 
 test('opening a client asks for brevity, not a summary of the screen', () => {
   const orb = read('gaia-realtime-voice.js');
-  if (orb === null) return;
   const i = orb.indexOf("if (screen === 'practice')");
   const body = orb.slice(i, i + 2200);
   assert.match(body, /do not list details that are already visible/i);
@@ -224,7 +227,6 @@ test('navigation is not the authorization boundary and does not pretend to be', 
   // that is not theirs. This test pins that the fetch is what happens next --
   // not a client-side allow-list that could be edited in a browser.
   const ui = read('gaia-practitioner.js');
-  if (ui === null) return;
   const i = ui.indexOf('async function showClient');
   const body = ui.slice(i, i + 2600);
   assert.match(body, /tool\('practitioner_get_client', \{ clientId \}\)/,
@@ -253,7 +255,6 @@ test('asking for a scan opens the card, without relying on the model to say so',
   // nothing had opened. Telling it to call navigate as well would make that a
   // second thing it has to remember; the page does it instead, so it is a fact.
   const orb = read('gaia-realtime-voice.js');
-  if (orb === null) return;
   assert.match(orb, /const PRACTITIONER_CARD = \{/);
   for (const [tool, card] of [['practitioner_client_latest_scan', 'latest'],
                               ['practitioner_client_trend', 'trend'],
@@ -268,7 +269,6 @@ test('asking for a scan opens the card, without relying on the model to say so',
 test('one question costs one ten-second call, not two', () => {
   const orb = read('gaia-realtime-voice.js');
   const ui = read('gaia-practitioner.js');
-  if (orb === null || ui === null) return;
   assert.match(orb, /awaiting: true/, 'the page tells the panel an answer is coming');
   assert.match(orb, /gaia:client-data/, 'and hands it the same result the model got');
   const i = ui.indexOf('async function openCard');
@@ -280,7 +280,6 @@ test('one question costs one ten-second call, not two', () => {
 
 test('the screen and the spoken answer come from the same fetch', () => {
   const ui = read('gaia-practitioner.js');
-  if (ui === null) return;
   const i = ui.indexOf('function fillCard');
   const body = ui.slice(i, i + 900);
   assert.match(body, /renderCard\(kind, payload\.data\)/,

@@ -67,10 +67,83 @@ test('the model is told where a client id may come from', () => {
   assert.match(d, /Never invent one/i);
 });
 
-test('the practitioner description asks for the card instead of a recital', () => {
+test('navigate tells the model it answers nothing, so it stops competing with the data tools', () => {
+  // This assertion used to require "Prefer this over describing readings
+  // aloud", which was wrong in a way that only showed up under repetition:
+  // navigate returns no data, so preferring it for a reading left the model
+  // with nothing to say but "it is on your screen" -- the exact failure the
+  // acceptance test caught, at about a third of attempts. Measured over 8
+  // repetitions of 19 phrasings, "compare his last two scans" and its
+  // paraphrases went to navigate often enough to be the single biggest cause
+  // of a practitioner question that fetched nothing.
   const nav = navOf(PRACTITIONER);
-  assert.match(nav.description, /open the card, then say one short sentence/i,
-    'otherwise the model reads out what the practitioner is already looking at');
+  assert.match(nav.description, /returns no data/i,
+    'the model has to know a screen change is not an answer');
+  assert.match(nav.description, /practitioner_ tool/,
+    'and where the answer does come from');
+  assert.ok(!/prefer this over describing readings/i.test(nav.description),
+    'preferring a screen change over the tool is what made the tools feel optional');
+  assert.match(nav.description, /say one short sentence/i,
+    'the brevity it did get right is kept');
+});
+
+test('a practitioner is told their own clients are theirs to ask about', () => {
+  // Several runs refused outright -- "I cannot track specific people", with a
+  // line about consent -- because MEMBER CONTEXT says never to reference data
+  // belonging to other members, and nothing distinguished a client of theirs
+  // from another member. A refusal is a worse failure than a missing call.
+  const src = fs.readFileSync(new URL('../assist-guide.js', import.meta.url), 'utf8');
+  const sandbox = {};
+  new Function('globalThis', src)(sandbox);
+  const policy = sandbox.GaiaAssistGuide.statePolicy('practitioner');
+  assert.match(policy, /THEIR OWN CLIENTS ARE THEIRS TO ASK ABOUT/);
+  assert.match(policy, /never refuse, deflect/i);
+});
+
+test('a practitioner is told client facts come from a tool every time', () => {
+  const src = fs.readFileSync(new URL('../assist-guide.js', import.meta.url), 'utf8');
+  const sandbox = {};
+  new Function('globalThis', src)(sandbox);
+  const policy = sandbox.GaiaAssistGuide.statePolicy('practitioner');
+  assert.match(policy, /NEVER FROM MEMORY/);
+  assert.match(policy, /called in the same turn/,
+    'a turn that only talks about fetching is the dead end we are closing');
+  assert.match(policy, /follow-up about a client already discussed/,
+    '"compare those two" is the case that failed most');
+  assert.match(policy, /a scan already in this conversation/,
+    'the model would otherwise answer "has he improved" from one reading it had');
+});
+
+test('the other roles are left exactly as they were', () => {
+  // The fix is deliberately inside the practitioner branch: a member session
+  // must not start calling tools during ordinary conversation because of it.
+  const src = fs.readFileSync(new URL('../assist-guide.js', import.meta.url), 'utf8');
+  const sandbox = {};
+  new Function('globalThis', src)(sandbox);
+  const { statePolicy } = sandbox.GaiaAssistGuide;
+  assert.equal(statePolicy('member'),
+    'COMPLETED MEMBER: help them use their verified access and preferences; do not offer the Gaia test again.');
+  assert.match(statePolicy('visitor'), /^VISITOR: account and previous completion are unknown\./);
+  for (const state of ['member', 'visitor', 'onboarding', 'unavailable']) {
+    assert.ok(!/practitioner_ tool/.test(statePolicy(state)),
+      `${state} must not be told about the practitioner tools`);
+  }
+});
+
+test('a slow tool is told to call, not to announce', () => {
+  // "tell the practitioner you are fetching it before you call it" described a
+  // turn containing speech and no call, and that is what we got: "I'll check
+  // what services address his readings", nothing fetched. The card shows its
+  // own ten-second wait, so the preamble was never carrying anything.
+  for (const name of ['practitioner_client_latest_scan', 'practitioner_client_trend',
+                      'practitioner_compare_sessions']) {
+    const d = toolDeclarationsFor(PRACTITIONER).find((x) => x.name === name).description;
+    assert.match(d, /about ten seconds/, 'the practitioner still has to be told it is slow');
+    assert.match(d, /Never say you are fetching it without calling it in the same turn/,
+      `${name} must not invite a turn that speaks instead of calling`);
+    assert.ok(!/(tell the practitioner you are fetching|say you are looking it up first|say you are checking first)/i.test(d),
+      `${name} still asks for a preamble before the call`);
+  }
 });
 
 test('the member description is left exactly as it was', () => {

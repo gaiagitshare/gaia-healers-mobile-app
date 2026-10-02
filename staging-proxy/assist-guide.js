@@ -13,6 +13,7 @@
     profile: 'You / Profile: Member Pass, access, purchases, bookings, forms and messages. This screen has NO general name/email editor and NO avatar edit button. For account contact corrections, use Gaia support at gaiahealers.com/pages/contact-us. Birth date is entered in Energy Check, not a profile edit form',
     store: 'Shop / Store: Gaia technologies and products, with Shop and Membership tabs. There is NO separate Devices tab',
     directory: 'Find a Healer: practitioner directory',
+    practice: 'Practice (inside You): a PRACTITIONER\u2019s own clients, their Bio-Well readings, who needs attention and who is due a follow-up. Only exists for practitioners.',
   });
   const policy = [
     'ROLE: You are Gaia’s professional concierge and customer-service guide. Warmth comes from useful help and remembered context. Never flirt, imply romance, comment on attractiveness or use pet names, exaggerated praise or spiritual filler. Briefly acknowledge distress when relevant, then help. Casual conversation can be friendly without becoming a companion relationship.',

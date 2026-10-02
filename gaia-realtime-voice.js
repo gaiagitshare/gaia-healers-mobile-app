@@ -899,7 +899,13 @@
     // declares tools it runs itself, and this is how they get there.
     function runToolCall(name, args = {}) {
       if (window.GaiaAppGuard && !window.GaiaAppGuard.canEnter && !['save_onboarding_step', 'sign_in'].includes(name)) return { ok: false, reason: 'onboarding_required' };
-      if (serverToolNames && !serverToolNames.includes(name)) return runServerToolCall(name, args);
+      if (serverToolNames && !serverToolNames.includes(name)) {
+        if (serverSlowTools.includes(name)) {
+          emit('telemetry', { event: 'tool_slow_started', tool: name });
+          setStatus('thinking');
+        }
+        return runServerToolCall(name, args);
+      }
       switch (name) {
         case 'navigate': return handleNavigateToolCall(args);
         case 'book_session': return handleBookSessionToolCall(args);
@@ -1186,6 +1192,7 @@
     let cachedToken = null;
     let serverToolNames = null;
     let serverToolEndpoint = '';
+    let serverSlowTools = [];
     let cachedTokenExpireAt = 0;
 
     function consumeCachedToken(payload) {
@@ -1227,6 +1234,10 @@
       // then the page behaves exactly as it did before.
       serverToolNames = Array.isArray(payload.clientTools) ? payload.clientTools : null;
       serverToolEndpoint = typeof payload.toolEndpoint === 'string' ? payload.toolEndpoint : '';
+      // Some tools take about ten seconds, because their side fetches from
+      // Bio-Well. The model is told to say so; this is what stops the orb
+      // looking frozen while it does.
+      serverSlowTools = Array.isArray(payload.slowTools) ? payload.slowTools : [];
       // A token lives 30 minutes, but Google only lets it OPEN a session in
       // the first minute (newSessionExpireTime on the server). A pre-warmed
       // token older than that is refused, so reuse one for 45 seconds at most.

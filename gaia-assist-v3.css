@@ -806,3 +806,7 @@ body.gaia-v2 .gaia-assist:not(.gaia-assist--minimized) .gaia-assist__chip--prima
   max-width: 7.4em;
 }
 body.gaia-v2 .gaia-assist:not(.gaia-assist--minimized) .gaia-assist__chip-caret { font-size: 11px; }
+/* Real audio amplitude, with quiet processing feedback between turns. */
+body.gaia-v2 .gaia-assist--listening:not(.gaia-assist--minimized) .gaia-assist__orb-ring--1{animation:none;transform:scale(calc(1 + var(--gaia-input-level,0)*.12));transition:transform 80ms linear}
+body.gaia-v2 .gaia-assist--speaking:not(.gaia-assist--minimized) .gaia-assist__orb-ring--1{animation:none;transform:scale(calc(1 + var(--gaia-output-level,0)*.12));transition:transform 80ms linear}
+@media(prefers-reduced-motion:reduce){body.gaia-v2 .gaia-assist .gaia-assist__orb-ring--1{transform:none!important;transition:none!important}}

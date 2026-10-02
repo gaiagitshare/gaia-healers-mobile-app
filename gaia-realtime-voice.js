@@ -1,4 +1,4 @@
-/** Gaia Assist — Gemini Live API voice (WebSocket + ephemeral token). */
+/** Gaia Assist — Qwen-only live voice through the authenticated relay. */
 (function () {
   'use strict';
 
@@ -27,10 +27,14 @@
         super();
         this.audioQueue = [];
         this.currentOffset = 0;
+        this.playing = false;
+        this.levelTick = 0;
         this.port.onmessage = (event) => {
           if (event.data === 'interrupt') {
             this.audioQueue = [];
             this.currentOffset = 0;
+            this.playing = false;
+            this.port.postMessage({ type: 'outputLevel', level: 0 });
             return;
           }
           if (event.data instanceof Float32Array) {
@@ -42,6 +46,8 @@
         const output = outputs[0];
         if (!output.length) return true;
         const channel = output[0];
+        if (this.audioQueue.length && !this.playing) { this.playing = true; this.port.postMessage({ type: 'playbackStart' }); }
+        if (!this.audioQueue.length) this.playing = false;
         let outputIndex = 0;
         while (outputIndex < channel.length && this.audioQueue.length > 0) {
           const currentBuffer = this.audioQueue[0];
@@ -62,6 +68,7 @@
           }
         }
         while (outputIndex < channel.length) channel[outputIndex++] = 0;
+        if (++this.levelTick % 12 === 0) { let power = 0; for (const value of channel) power += value * value; this.port.postMessage({ type: 'outputLevel', level: Math.min(1, Math.sqrt(power / channel.length) * 4.5) }); }
         // Mono PCM must be mirrored to EVERY output channel: on stereo hardware
         // (including the iPhone speaker route) the browser only zeros unwritten
         // channels, which made Gaia speak in one ear.
@@ -77,7 +84,7 @@
   }
 
   function currentView() {
-    return window.GaiaAppShell?.currentView?.()
+    return window.GaiaJourney?.context?.screen || window.GaiaAppShell?.currentView?.()
       || new URLSearchParams(window.location.search).get('view')
       || 'today';
   }
@@ -116,6 +123,7 @@
   function parseGeminiMessages(data) {
     const responses = [];
     const serverContent = data?.serverContent;
+    if (data?.gaiaTiming) responses.push({ kind: 'timing', stage: data.gaiaTiming.stage });
 
     if (data?.error) {
       responses.push({
@@ -231,7 +239,26 @@
       message: new Set(),
       error: new Set(),
       audioLevel: new Set(),
+      outputLevel: new Set(),
+      telemetry: new Set(),
     };
+
+    let voiceTurn = null;
+    const turnResults = [];
+    function timing(stage) {
+      if (stage === 'T0') { voiceTurn = { id: crypto.randomUUID(), path: sessionMeta?.provider || 'realtime', stages: {}, tools: [] }; }
+      if (!voiceTurn || voiceTurn.stages[stage] != null) return;
+      voiceTurn.stages[stage] = performance.now();
+      if (voiceTurn.stages.T7 != null) {
+        const delta = (a, b) => voiceTurn.stages[a] != null && voiceTurn.stages[b] != null ? Math.round(voiceTurn.stages[b] - voiceTurn.stages[a]) : null;
+        const report = { id: voiceTurn.id, path: voiceTurn.path, speechEndToTranscriptMs: delta('T1', 'T2'), speechEndToModelMs: delta('T1', 'T4'), speechEndToAudioMs: delta('T1', 'T6'), speechEndToPlaybackMs: delta('T1', 'T7'), audioBufferMs: delta('T6', 'T7'), stages: { ...voiceTurn.stages } };
+        const existing = turnResults.findIndex(turn => turn.id === report.id);
+        if (existing >= 0) turnResults[existing] = report; else turnResults.push(report);
+        if (turnResults.length > 30) turnResults.shift();
+        emit('telemetry', report);
+        if (window.GAIA_VOICE_DEBUG) console.info('[Gaia Voice Timing]', report);
+      }
+    }
 
     function emit(kind, payload) {
       listeners[kind].forEach((fn) => {
@@ -341,6 +368,10 @@
       workletUrls.push(url);
       await ctx.audioWorklet.addModule(url);
       const node = new AudioWorkletNode(ctx, 'gaia-pcm-playback');
+      node.port.onmessage = ({ data }) => {
+        if (data.type === 'playbackStart') { timing('T7'); setStatus('speaking'); }
+        if (data.type === 'outputLevel') emit('outputLevel', data.level);
+      };
       node.connect(ctx.destination);
       playbackCtxRef.current = ctx;
       playbackNodeRef.current = node;
@@ -354,8 +385,11 @@
       }
     }
 
+    let playbackGeneration = 0;
     async function playPcmChunk(base64Audio) {
+      const generation = playbackGeneration;
       await ensurePlayback();
+      if (generation !== playbackGeneration) return;
       const ctx = playbackCtxRef.current;
       if (ctx?.state === 'suspended') await ctx.resume();
       const binary = window.atob(base64Audio);
@@ -366,10 +400,15 @@
       for (let i = 0; i < pcm.length; i += 1) float32[i] = pcm[i] / 32768;
       const durationMs = (pcm.length / 24000) * 1000;
       playbackGraceUntil = Math.max(Date.now(), playbackGraceUntil) + durationMs;
-      playbackNodeRef.current.port.postMessage(float32);
+      if (generation === playbackGeneration) playbackNodeRef.current.port.postMessage(float32);
     }
 
     function interruptPlayback() {
+      playbackGeneration++;
+      playbackGraceUntil = 0;
+      if (listenResumeRef.current != null) window.clearTimeout(listenResumeRef.current);
+      listenResumeRef.current = null;
+      emit('outputLevel', 0);
       playbackNodeRef.current?.port.postMessage('interrupt');
     }
 
@@ -510,7 +549,7 @@
               },
               {
                 name: 'gaia_lookup',
-                description: 'Look up LIVE Gaia Healers facts to answer a question accurately: store products and prices (gaiahealers.com), the practitioner directory (count and who/where), which courses exist, and the current event. Call this whenever they ask about a price, whether something is sold, a specific product or device, a practitioner or where to find one, how many practitioners, what courses/events exist. Answer only from what it returns; never invent a price, count, or name.',
+                description: 'Look up LIVE Gaia Healers facts to answer a question accurately: store products and prices (gaiahealers.com), the practitioner directory (count and who/where), which courses exist, and the current event. Call when current verified context is missing for a price, product, membership, practitioner, course or event. Current page IDs resolve on the server; no need to repeat a lookup already answered by current context. Answer only from what it returns; never invent a price, count, or name.',
                 parameters: { type: 'object', properties: { query: { type: 'string', description: 'What to look up, in the member\'s words (e.g. "Bio-Well price", "practitioner in California", "chakra sprays", "what courses").' } }, required: ['query'] },
               },
               {
@@ -743,10 +782,10 @@
       const query = String(args.query || args.q || '').trim();
       if (!query) return { ok: false, message: 'Ask what they want to look up.' };
       try {
-        const res = await fetch(proxyBase() + '/api/assist/lookup', { method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'include', body: JSON.stringify({ query }) });
+        const res = await fetch(proxyBase() + '/api/assist/lookup', { method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'include', body: JSON.stringify({ query, appContext: window.GaiaAssistContext?.().appContext }) });
         const d = await res.json().catch(() => ({}));
         const summary = (d && d.summary) ? d.summary : '';
-        if (!summary) return { ok: true, message: 'I did not find a live match for that. Answer from what you know, or offer to open the store or directory.' };
+        if (!summary) return { ok: true, message: 'I did not find a live match for that. Say the current facts are unavailable; do not substitute remembered prices, availability or access. Offer the relevant screen if useful.' };
         return { ok: true, message: 'LIVE DATA (answer only from this, do not invent): ' + summary };
       } catch (e) { return { ok: false, message: 'I could not look that up right now.' }; }
     }
@@ -818,7 +857,7 @@
         if (!d || !d.ok) {
           return { ok: false, message: (d && d.reason === 'not_signed_in')
             ? 'They need to sign in before I can save their answers.'
-            : 'I could not save that step; keep going and I will try again.' };
+            : 'I could not save that step. Keep the answer on this step and retry; do not advance or claim it was saved.' };
         }
         return { ok: true, message: 'Saved.' + (d.complete ? ' Their onboarding profile is now complete.' : ' Continue to the next question.') };
       } catch (e) {
@@ -828,6 +867,7 @@
 
     // Central tool dispatcher: routes a toolCall to the right handler.
     function runToolCall(name, args = {}) {
+      if (window.GaiaAppGuard && !window.GaiaAppGuard.canEnter && !['save_onboarding_step', 'sign_in'].includes(name)) return { ok: false, reason: 'onboarding_required' };
       switch (name) {
         case 'navigate': return handleNavigateToolCall(args);
         case 'book_session': return handleBookSessionToolCall(args);
@@ -849,7 +889,7 @@
     // speaks Gemini's messages to this page and holds the Qwen key itself.
     function socketUrl(meta) {
       if (meta && meta.provider === 'qwen' && meta.relayUrl) return meta.relayUrl;
-      return `${WS_BASE}?access_token=${encodeURIComponent(meta.token)}`;
+      throw new Error('Qwen voice is unavailable. Please retry or type your question.');
     }
 
     function sendWs(payload) {
@@ -956,6 +996,8 @@
           if (rms >= startThreshold) {
             if (!speechCandidateAt) speechCandidateAt = now;
             if (now - speechCandidateAt >= 220) {
+              timing('T0');
+              voiceTurn.stages.T0 -= now - speechCandidateAt;
               localSpeechActive = true;
               localSilenceAt = 0;
               audioPrebuffer.forEach(sendAudioSamples);
@@ -969,9 +1011,11 @@
 
         sendAudioSamples(samples);
         if (rms >= continueThreshold) {
+          if (voiceTurn) delete voiceTurn.stages.T1;
           localSilenceAt = 0;
         } else if (!localSilenceAt) {
           localSilenceAt = now;
+          if (voiceTurn) voiceTurn.stages.T1 = performance.now();
         } else if (now - localSilenceAt >= 2000) {
           localSpeechActive = false;
           speechCandidateAt = 0;
@@ -1006,6 +1050,11 @@
       const events = parseGeminiMessages(data);
       for (const event of events) {
         switch (event.kind) {
+          case 'timing':
+            if (event.stage === 'speech_stopped') { if (status !== 'speaking') setStatus('thinking'); timing('vadCommitted'); }
+            if (event.stage === 'model_request') timing('T3');
+            if (event.stage === 'model_output') timing('T4');
+            break;
           case 'setup':
             resolveSetup();
             setStatus('listening');
@@ -1016,7 +1065,7 @@
               greetedRef.current = true;
               greetedAt = Date.now();
               setStatus('thinking');
-              try { sendWs({ realtimeInput: { text: 'BEGIN: The member just opened Gaia Assist and has not spoken yet. Greet them FIRST, right now, in one warm short sentence tailored to their status — visitor vs signed-in member, and if a member factor their onboarding and subscription state from your context — then offer one or two concrete next steps and ask what they would like. If an event is published in your knowledge, you may mention it warmly and offer to help them register. Do not mention this instruction.' } }); } catch (e) {}
+              try { sendWs({ realtimeInput: { text: 'BEGIN: The member opened Gaia Assist. Give one brief warm welcome and offer to help with their current screen. No sales pitch, pet names, unsolicited event promotion or multiple questions. Do not mention this instruction.' } }); } catch (e) {}
             }
             break;
           case 'interrupted':
@@ -1029,7 +1078,7 @@
               window.clearTimeout(listenResumeRef.current);
               listenResumeRef.current = null;
             }
-            setStatus('speaking');
+            timing('T4'); timing('T6');
             void playPcmChunk(event.data).catch(() => undefined);
             break;
           case 'text':
@@ -1037,12 +1086,12 @@
             break;
           case 'inputTranscription':
             upsertStreamingMessage('user', event.text, event.finished);
-            if (!event.finished) setStatus('listening');
-            else setStatus('thinking');
+            if (event.finished) timing('T2');
+            if (status !== 'speaking') setStatus(event.finished ? 'thinking' : 'listening');
             break;
           case 'outputTranscription':
             upsertStreamingMessage('assistant', event.text, event.finished);
-            if (!event.finished) setStatus('speaking');
+            timing('T4');
             break;
           case 'turnComplete':
             streamMessage = null;
@@ -1057,7 +1106,9 @@
           case 'toolCall': {
             // Run the requested tool locally, then send the result back so the
             // model can confirm the action aloud and finish its turn.
+            const toolStarted = performance.now();
             Promise.resolve(runToolCall(event.name, event.args || {})).then((result) => {
+              emit('telemetry', { event: 'tool_completed', tool: event.name, durationMs: Math.round(performance.now() - toolStarted), ok: !!result?.ok });
               // toolResponse lets the Live session continue after a function call.
               sendWs({
                 toolResponse: {
@@ -1072,7 +1123,7 @@
             break;
           }
           case 'handover':
-            void switchToGemini(event.reason, event.transcript);
+            cleanupSession(); setErrorMessage('Qwen voice is unavailable. Tap Gaia to retry or type your question.'); setStatus('error');
             break;
           case 'error':
             setErrorMessage(event.message);
@@ -1084,6 +1135,14 @@
       }
     }
 
+    document.addEventListener('gaia:onboarding-step', e => {
+      if (sessionMeta?.provider === 'qwen' && setupDone) sendWs({ gaiaContext: window.GaiaAssistGuide.context(e.detail) });
+      cachedToken = null; cachedTokenExpireAt = 0;
+    });
+    window.addEventListener('gaia:route', e => {
+      if (sessionMeta?.provider === 'qwen' && setupDone) sendWs({ gaiaContext: window.GaiaAssistGuide.context({ screen: e.detail?.view }) });
+      cachedToken = null; cachedTokenExpireAt = 0;
+    });
     let cachedToken = null;
     let cachedTokenExpireAt = 0;
 
@@ -1103,6 +1162,10 @@
       // The server picks the engine (Qwen first, Gemini as the fallback); the
       // phone language lets a Persian speaker start on Gemini directly.
       const params = new URLSearchParams({ view: currentView(), lang: navigator.language || '' });
+      const itemId = window.GaiaAssistContext?.().appContext?.itemId;
+      if (itemId) params.set('itemId', itemId);
+      const journeyContext = window.GaiaJourney?.context;
+      if (journeyContext) { params.set('step', journeyContext.step); params.set('branch', journeyContext.branch); }
       if (provider) params.set('provider', provider);
       const response = await fetch(`${proxyBase()}/api/assist/voice/token?${params}`, {
         method: 'POST',
@@ -1110,6 +1173,7 @@
         credentials: 'include',
       });
       const payload = await response.json().catch(() => ({}));
+      if (payload.ok && payload.provider !== 'qwen') throw new Error('Qwen voice is required.');
       if (!response.ok || !payload.ok || !(payload.token || payload.relayUrl)) {
         throw new Error(tokenErrorMessage(payload, response.status));
       }
@@ -1120,73 +1184,6 @@
       const expireMs = payload.expireTime ? new Date(payload.expireTime).getTime() - 120000 : Infinity;
       cachedTokenExpireAt = Math.min(expireMs, Date.now() + 45 * 1000);
       return payload;
-    }
-
-    // Move a live conversation from Qwen to Gemini without the member doing
-    // anything: the microphone and playback stay up, only the socket changes,
-    // and Gemini is handed the conversation so far so it answers the last
-    // message instead of greeting again. One pause, not a restart.
-    let switchingEngine = false;
-    async function switchToGemini(reason, transcript = []) {
-      if (switchingEngine || status === 'idle') return;
-      switchingEngine = true;
-      console.info('[Gaia Assist] handing voice over to gemini', { reason });
-      const previous = wsRef.current;
-      try {
-        setStatus('thinking');
-        const meta = await fetchLiveToken({ provider: 'gemini' });
-        if (status === 'idle') return;
-        sessionMeta = meta;
-        consumeCachedToken(meta);
-        setupDone = false;
-        greetedRef.current = true;                     // no second greeting
-        const ws = new WebSocket(socketUrl(meta));
-        wsRef.current = ws;
-        try { previous && previous.close(); } catch (_) { /* already closed */ }
-        ws.onmessage = async (event) => {
-          let raw = event.data;
-          if (raw instanceof Blob) raw = await raw.text();
-          else if (raw instanceof ArrayBuffer) raw = new TextDecoder().decode(raw);
-          handleGeminiMessage(raw);
-        };
-        await new Promise((resolve, reject) => {
-          const timer = window.setTimeout(() => reject(new Error('Voice connection timed out.')), 15_000);
-          ws.onopen = () => { window.clearTimeout(timer); sendSetupMessage(); resolve(); };
-          ws.onerror = () => { window.clearTimeout(timer); reject(new Error('Voice connection failed.')); };
-        });
-        await waitForSetup(ws);
-        ws.onclose = () => {
-          if (status !== 'idle' && wsRef.current === ws) {
-            setErrorMessage('Voice connection dropped. Tap the orb to resume.');
-            setStatus('error');
-          }
-        };
-        if (timeoutRef.current) window.clearTimeout(timeoutRef.current);
-        timeoutRef.current = window.setTimeout(() => {
-          cleanupSession();
-          setErrorMessage('Voice session ended.');
-          setStatus('error');
-        }, (Number(meta.maxSessionSeconds) || 300) * 1000);
-        const lines = transcript
-          .filter((t) => t && t.text)
-          .map((t) => `${t.role === 'user' ? 'Member' : 'Gaia'}: ${String(t.text).slice(0, 400)}`)
-          .join('\n');
-        sendWs({ realtimeInput: { text: 'CONTINUE: You are taking over this voice conversation part-way through. Do not greet again and do not mention any change. '
-          + (lines ? `Conversation so far:\n${lines}\n` : '')
-          + (reason === 'language'
-            // Qwen hands over when it hears Arabic script, and it transcribes
-            // Persian as broken Arabic. Told to "use their language", Gemini
-            // then answered a Persian speaker in Arabic.
-            ? 'The member switched to a language written in Arabic script. The transcript of their last message is unreliable, and they are most likely speaking Persian (Farsi): reply in Persian unless they are clearly speaking Arabic, and if you could not tell what they asked, warmly ask them to say it again.'
-            : 'Now reply to the member\'s last message, in the language they used.') } });
-      } catch (err) {
-        if (status !== 'idle') {
-          setErrorMessage('Voice connection dropped. Tap the orb to resume.');
-          setStatus('error');
-        }
-      } finally {
-        switchingEngine = false;
-      }
     }
 
     /** Pre-warm: fetch token + prepare audio in the background (before first tap). */
@@ -1368,22 +1365,8 @@
           }, maxSeconds * 1000);
         } catch (err) {
           cleanupSession();
-          // Qwen would not open (relay refused, Alibaba down, setup failed):
-          // that is what Gemini is there for, before any slower path.
-          if (sessionMeta && sessionMeta.provider === 'qwen' && startOptions.provider !== 'gemini') {
-            console.info('[Gaia Assist] qwen voice unavailable, starting gemini', { error: err instanceof Error ? err.message : String(err) });
-            startPromise = null;
-            await start({ ...startOptions, provider: 'gemini' });
-            return;
-          }
-          // Before showing a member an error, try the slower path that does
-          // not need a WebSocket at all.
-          if (enterPipelineMode(err instanceof Error ? err.message : String(err))) {
-            setErrorMessage('Live voice is unavailable here — hold the orb and speak instead.');
-          } else {
-            setErrorMessage(err instanceof Error ? err.message : 'Could not start live voice.');
-            setStatus('error');
-          }
+          setErrorMessage('Qwen voice is unavailable. Tap Gaia to retry or type your question.');
+          setStatus('error');
         } finally {
           startPromise = null;
         }
@@ -1393,127 +1376,12 @@
       return startTask;
     }
 
-    // ── The pipeline fallback ────────────────────────────────────────────
-    // Gemini Live is one WebSocket carrying audio both ways, and there are
-    // networks it simply cannot cross — conference wifi that blocks ws://,
-    // a captive portal, a withdrawn model, a Google outage. None of those are
-    // reasons for a member standing in a hall to get silence.
-    //
-    // So when the live session will not start, the orb does not die: it
-    // becomes hold-to-talk. Record while held, send the clip to one endpoint
-    // that transcribes, answers and speaks, and play the reply back. Slower
-    // and not interruptible, but it answers, and it uses the same assistant
-    // with the same knowledge.
-    let pipelineMode = false;
-    let recorder = null;
-    let recordedChunks = [];
-    let replyAudio = null;
-
-    function pipelineSupported() {
-      return typeof window.MediaRecorder === 'function'
-        && Boolean(navigator.mediaDevices?.getUserMedia);
-    }
-
-    function enterPipelineMode(reason) {
-      if (pipelineMode || !pipelineSupported()) return false;
-      pipelineMode = true;
-      console.warn('[Gaia Voice] live session unavailable, falling back to hold-to-talk', reason);
-      setErrorMessage('');
-      setStatus('idle');
-      emit('message', { messages: [...messages], role: 'system', text: '', finalize: true });
-      return true;
-    }
-
-    function stopReplyAudio() {
-      if (!replyAudio) return;
-      try { replyAudio.pause(); } catch { /* ignore */ }
-      replyAudio = null;
-    }
-
-    async function pipelineRecordStart() {
-      stopReplyAudio();
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      streamRef.current = stream;
-      recordedChunks = [];
-      // webm/opus everywhere except Safari, which gives mp4; the proxy reads
-      // the mime type and names the file accordingly, so either is fine.
-      const mimeType = ['audio/webm;codecs=opus', 'audio/webm', 'audio/mp4']
-        .find((type) => window.MediaRecorder.isTypeSupported?.(type)) || '';
-      recorder = mimeType ? new window.MediaRecorder(stream, { mimeType }) : new window.MediaRecorder(stream);
-      recorder.ondataavailable = (event) => {
-        if (event.data && event.data.size) recordedChunks.push(event.data);
-      };
-      recorder.start();
-      setStatus('listening');
-    }
-
-    async function pipelineRecordEnd() {
-      const active = recorder;
-      if (!active || active.state === 'inactive') return;
-      setStatus('thinking');
-      const blob = await new Promise((resolve) => {
-        active.onstop = () => resolve(new Blob(recordedChunks, { type: active.mimeType || 'audio/webm' }));
-        try { active.stop(); } catch { resolve(null); }
-      });
-      recorder = null;
-      streamRef.current?.getTracks?.().forEach((track) => track.stop());
-      streamRef.current = null;
-      // Anything this short is a mis-tap, not a question.
-      if (!blob || blob.size < 1200) { setStatus('idle'); return; }
-
-      try {
-        const audioBase64 = await new Promise((resolve, reject) => {
-          const reader = new FileReader();
-          reader.onerror = () => reject(new Error('Could not read the recording.'));
-          reader.onloadend = () => resolve(String(reader.result || '').split(',')[1] || '');
-          reader.readAsDataURL(blob);
-        });
-        const response = await fetch(`${proxyBase()}/api/assist/voice/turn`, {
-          method: 'POST',
-          credentials: 'include',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ audioBase64, mimeType: blob.type || 'audio/webm', view: currentView() }),
-        });
-        const payload = await response.json().catch(() => ({}));
-        if (!payload.ok) {
-          setErrorMessage(payload.stage === 'transcribe'
-            ? 'I did not catch that — hold the orb and speak again.'
-            : 'Gaia Assist could not answer just now.');
-          setStatus('idle');
-          return;
-        }
-        if (payload.transcript) upsertStreamingMessage('user', payload.transcript, true);
-        upsertStreamingMessage('assistant', payload.reply, true);
-        if (payload.audioBase64) {
-          setStatus('speaking');
-          replyAudio = new Audio(`data:${payload.audioMimeType || 'audio/mpeg'};base64,${payload.audioBase64}`);
-          replyAudio.onended = () => { replyAudio = null; setStatus('idle'); };
-          replyAudio.onerror = () => { replyAudio = null; setStatus('idle'); };
-          // A blocked autoplay is not an error: the reply is on screen to read.
-          await replyAudio.play().catch(() => { replyAudio = null; setStatus('idle'); });
-        } else {
-          setStatus('idle');
-        }
-      } catch (err) {
-        setErrorMessage('No connection. Please try again.');
-        setStatus('idle');
-      }
-    }
-
-    async function holdStart() {
-      if (pipelineMode) { await pipelineRecordStart(); return; }
-      await start();
-    }
-
-    function holdEnd() {
-      if (pipelineMode) { pipelineRecordEnd(); return; }
-      /* continuous VAD — no hold-to-talk */
-    }
+    async function holdStart() { await start(); }
+    function holdEnd() { /* Continuous Qwen VAD. */ }
 
     function stop() {
       holding = false;
       maySendAudio = false;
-      stopReplyAudio();
       cleanupSession();
       interruptPlayback();
       setStatus('idle');
@@ -1564,28 +1432,6 @@
         emit('message', { messages: [...messages], role: 'user', text, finalize: true });
       }
       setStatus('thinking');
-      if (pipelineMode) {
-        // No socket to send down: ask over HTTP and speak the answer back.
-        (async () => {
-          try {
-            const response = await fetch(`${proxyBase()}/api/assist/chat`, {
-              method: 'POST',
-              credentials: 'include',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ prompt: text, source: 'voice', view: currentView() }),
-            });
-            const payload = await response.json().catch(() => ({}));
-            const reply = String(payload.reply || '').trim();
-            if (!reply) { setErrorMessage('Gaia Assist could not answer just now.'); setStatus('idle'); return; }
-            upsertStreamingMessage('assistant', reply, true);
-            setStatus('idle');
-          } catch {
-            setErrorMessage('No connection. Please try again.');
-            setStatus('idle');
-          }
-        })();
-        return true;
-      }
       return sendWs({ realtimeInput: { text } });
     }
 
@@ -1606,11 +1452,12 @@
       get status() { return status; },
       get error() { return error; },
       get messages() { return [...messages]; },
+      get telemetry() { return turnResults.map(turn => ({ ...turn, stages: { ...turn.stages } })); },
       get muted() { return muted; },
       get isHolding() { return holding; },
       // True once the live socket has been given up on: the orb is
       // hold-to-talk now, and the UI should say so.
-      get pipelineMode() { return pipelineMode; },
+      get pipelineMode() { return false; },
       isActive,
       start,
       holdStart,

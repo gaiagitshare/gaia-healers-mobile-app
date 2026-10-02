@@ -59,3 +59,6 @@ event-manager/import/*.csv
 .claude/
 prototype/
 gaia-healers-visual-assets.zip
+
+# Review artefacts (screenshots, recordings, transcripts) stay off the published site.
+/output

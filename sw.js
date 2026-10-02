@@ -1,4 +1,4 @@
-const CACHE_NAME = 'gaia-healers-20260928c-holdtalk';
+const CACHE_NAME = 'gaia-healers-20261002d-qwen-journey';
 /**
  * Precache ONLY what the page requests by exactly this URL.
  *
@@ -21,6 +21,8 @@ const CACHE_NAME = 'gaia-healers-20260928c-holdtalk';
 const APP_SHELL = [
   '/',
   '/home.html',
+  '/staging-proxy/assist-guide.js',
+  '/gaia-app-guard.js',
   '/manifest.webmanifest',
   '/assets/gaia-mark.svg',
   '/assets/gaia-hero-moon-wide.webp',
@@ -53,7 +55,7 @@ self.addEventListener('activate', (event) => {
 self.addEventListener('fetch', (event) => {
   if (event.request.method !== 'GET') return;
   const url = new URL(event.request.url);
-  if (url.origin !== self.location.origin) return;
+  if (url.origin !== self.location.origin || url.pathname.startsWith('/api/')) return;
 
   if (event.request.mode === 'navigate') {
     event.respondWith(

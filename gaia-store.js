@@ -83,7 +83,9 @@
     } catch (_) { return ''; }
   }
 
+  let assistItem = '';
   function closeProduct() {
+    assistItem = '';
     if (productKeyHandler) document.removeEventListener('keydown', productKeyHandler);
     productKeyHandler = null;
     if (productModal) productModal.remove();
@@ -94,6 +96,7 @@
   function openProduct(p) {
     if (!p || !p.handle) return;
     closeProduct();
+    assistItem = String(p.id || p.handle);
     const image = firstImage(p);
     const description = plainDescription(p.body_html);
     const url = SHOP + '/products/' + p.handle;
@@ -397,5 +400,5 @@
   }
 
   // expose for the chakra→Colour-Energy cross-sell and future callers
-  window.GaiaStore = { load: loadStoreProducts, openSheet, closeSheet, shopBase: SHOP, chakraShopUrl: chakraShopUrl, colourFor: (id) => CHAKRA_COLOUR[String(id || '').toLowerCase()] || '', openProduct, closeProduct };
+  window.GaiaStore = { currentItem: () => assistItem, load: loadStoreProducts, openSheet, closeSheet, shopBase: SHOP, chakraShopUrl: chakraShopUrl, colourFor: (id) => CHAKRA_COLOUR[String(id || '').toLowerCase()] || '', openProduct, closeProduct };
 })();

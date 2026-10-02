@@ -1,3 +1,5 @@
+import { installCompletedProfileFixture } from './completed-profile-fixture.js';
+installCompletedProfileFixture();
 /**
  * /api/academy/webhook grants land in the entitlement ledger, not a side file.
  *

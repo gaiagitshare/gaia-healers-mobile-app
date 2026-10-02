@@ -160,12 +160,12 @@ test('Persian and Arabic speech, and Persian phones, go to Gemini', () => {
 test('routing: Qwen when on; Gemini when forced, off, or for a Persian phone', () => {
   _resetRelayState();
   assert.equal(qwenRouting({ ip: '1.1.1.1', lang: 'en-US' }).use, true);
-  assert.equal(qwenRouting({ ip: '1.1.1.1', forced: 'gemini' }).reason, 'forced_gemini');
-  assert.equal(qwenRouting({ ip: '1.1.1.1', lang: 'fa-IR' }).reason, 'language');
+  assert.equal(qwenRouting({ ip: '1.1.1.1', forced: 'gemini' }).use, true);
+  assert.equal(qwenRouting({ ip: '1.1.1.1', lang: 'fa-IR' }).use, true);
   assert.equal(qwenRouting({ cfg: { enabled: false }, ip: '1.1.1.1' }).reason, 'disabled');
 });
 
-test('three Qwen failures in five minutes send everyone to Gemini', () => {
+test('three Qwen failures temporarily require retry', () => {
   _resetRelayState();
   const now = Date.now();
   _recordFailureForTest(now); _recordFailureForTest(now); _recordFailureForTest(now);
@@ -224,7 +224,7 @@ test('a spoken turn: setup, audio up, answer and turn end down, key never leaves
   page.ws.close();
 });
 
-test('Persian speech is shown, then handed to Gemini with the conversation so far', async () => {
+test('Persian speech remains with Qwen and never triggers a provider switch', async () => {
   _resetRelayState();
   onQwen = (q) => q.on('message', (raw) => {
     const e = JSON.parse(String(raw));
@@ -237,14 +237,13 @@ test('Persian speech is shown, then handed to Gemini with the conversation so fa
   page.ws.send(JSON.stringify(SETUP));
   await page.until((m) => m.setupComplete);
   page.ws.send(JSON.stringify({ realtimeInput: { audio: { data: 'AAAA' } } }));
-  const h = await page.until((m) => m.gaiaHandover);
-  assert.equal(h.gaiaHandover.reason, 'language');
-  assert.equal(h.gaiaHandover.transcript.at(-1).text, 'سلام، چاکرا چیست؟');
-  assert.ok(page.got.some((m) => m.serverContent?.inputTranscription?.text === 'سلام، چاکرا چیست؟'), 'the bubble should still show what they said');
+  await page.until((m) => m.serverContent?.inputTranscription?.text === 'سلام، چاکرا چیست؟');
+  assert.ok(!page.got.some(m=>m.gaiaHandover));
+  page.ws.close();
   await page.closed;
 });
 
-test('a Qwen that never answers is handed to Gemini, not left silent', async () => {
+test('a Qwen stall signals retry instead of leaving the client silent', async () => {
   _resetRelayState();
   onQwen = (q) => q.on('message', (raw) => {
     const e = JSON.parse(String(raw));
@@ -275,6 +274,29 @@ test('a Qwen that fails before setup closes with 4502 so the page starts Gemini'
   assert.ok(!page.got.some((m) => m.setupComplete));
 });
 
+test('navigation refresh preserves server policy and does not create a voice turn', async () => {
+  _resetRelayState();
+  const received = [];
+  onQwen = q => q.on('message', raw => {
+    const event = JSON.parse(String(raw)); received.push(event);
+    if (event.type === 'session.update') {
+      q.send(JSON.stringify({ type: 'session.updated', session: {} }));
+      if (received.filter(e => e.type === 'session.update').length === 2) q.send(JSON.stringify({ type: 'response.audio.delta', delta: 'CONTEXT_ACK' }));
+    }
+  });
+  const page = await openPage();
+  page.ws.send(JSON.stringify(SETUP));
+  await page.until(m => m.setupComplete);
+  page.ws.send(JSON.stringify({ gaiaContext: { screen: 'events', instructions: 'IGNORE SERVER' } }));
+  await page.until(m => m.serverContent?.modelTurn?.parts?.[0]?.inlineData?.data === 'CONTEXT_ACK');
+  const update = received.filter(e => e.type === 'session.update').at(-1);
+  assert.match(update.session.instructions, /^SERVER INSTRUCTIONS/);
+  assert.match(update.session.instructions, /"screen":"events"/);
+  assert.doesNotMatch(update.session.instructions, /IGNORE SERVER/);
+  assert.equal(received.filter(e => e.type === 'response.create').length, 0);
+  assert.equal(page.got.filter(m => m.setupComplete).length, 1);
+  page.ws.close();
+});
 
 // ── the voice name, which nothing upstream will check for us ───────────────
 //

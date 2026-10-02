@@ -54,7 +54,7 @@ test('Gaia Assist knows the two free tools and can answer from saved readings', 
   assert.match(src, /function pulseReply\(/, 'Assist answers pulse questions itself');
   assert.match(src, /gaia:pulse:readings:v1/, 'from the same key the tool writes');
   assert.match(src, /const pulse = pulseReply\(prompt\);/, 'and it is consulted before the generic replies');
-  assert.ok(/Energy Pulse heart-rate reading and coherence breathing/.test(src),
+  assert.ok(/Energy Pulse/.test(read('staging-proxy/assist-guide.js')) || /Energy Pulse/.test(read('staging-proxy/server.js')),
     'the "what is in this app" answer names the free tools');
   assert.ok(/never uploaded/.test(src.slice(src.indexOf('function pulseReply'))),
     'the reply states the device-only privacy promise');

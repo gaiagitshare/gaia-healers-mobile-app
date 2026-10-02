@@ -16,7 +16,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { todaySky, PHASES, PHASE_GUIDANCE, SIGNS, phaseFor } from '../membership/sky.js';
-import { appTest } from './_app-present.js';
+import { appTest, readApp } from './_app-present.js';
 
 const at = (iso) => new Date(iso);
 const proxyRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -164,7 +164,10 @@ test('an ephemeris failure says so rather than inventing a moon', () => {
 import vm from 'node:vm';
 
 function loadClient() {
-  const source = fs.readFileSync(path.resolve(proxyRoot, '..', 'gaia-sky.js'), 'utf8');
+  // readApp, not a path of our own: `proxyRoot/..` is the app repo in CI and
+  // plain /root on the server, where these tests then failed on a file that was
+  // sitting next door the whole time.
+  const source = readApp('gaia-sky.js');
   const sandbox = {
     // The client subscribes to a wellness-updated event on load. The stub only
     // has to accept the listener -- these tests read the SVG geometry it emits,
@@ -232,7 +235,7 @@ appTest('the countdown names the nearer of the two moons, and reads like a perso
 appTest('the card is rendered for a visitor with no account, and asks them for nothing', () => {
   // The entire point of this feature. A gate here would put it behind the same
   // wall as everything else and it would stop being a reason to come back.
-  const source = fs.readFileSync(path.resolve(proxyRoot, '..', 'gaia-sky.js'), 'utf8');
+  const source = readApp('gaia-sky.js');
   assert.ok(!/signedUp|authed|memberState|isMember/.test(source),
     'the sky card must not consult sign-in state before deciding to draw');
 

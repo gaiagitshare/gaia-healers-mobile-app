@@ -26,10 +26,9 @@ import fs from 'node:fs';
 import path from 'node:path';
 import test from 'node:test';
 import { fileURLToPath } from 'node:url';
-import { appPresent, appRoot, appTest } from './_app-present.js';
+import { appPresent, appTest, readApp } from './_app-present.js';
 
 const proxyRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const readApp = (file) => fs.readFileSync(path.join(appRoot, file), 'utf8');
 
 /**
  * Parse a flat single-quoted string array literal assigned to `name`.

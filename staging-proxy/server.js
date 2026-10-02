@@ -1,4 +1,5 @@
 import { createMemberOnboardingGuard, protectedMemberPath } from './member-onboarding-guard.js';
+import { createOnboardingFunnel } from './onboarding-funnel.js';
 import './assist-guide.js';
 const assistGuide = globalThis.GaiaAssistGuide;
 import { createOnboardingStore } from './onboarding-store.js';
@@ -2997,6 +2998,8 @@ const onboardingStore = createOnboardingStore({
 
 // Contacts GHL has confirmed complete, kept on disk so a GHL outage cannot lock
 // finished members out (member-onboarding-guard.js). Only ever added to.
+// Survey drop-off tracking (hashed ids and step keys only); report: tools/onboarding-report.mjs
+const onboardingFunnel = createOnboardingFunnel({ file: path.join(process.cwd(), 'data', 'onboarding-funnel.json') });
 const ONBOARDING_COMPLETE_FILE = path.join(process.cwd(), 'data', 'onboarding-complete.json');
 const onboardingCompleted = (() => {
   let ids = null;
@@ -5895,8 +5898,12 @@ async function executeOnboardingMarkers(req, text) {
   } catch (e) {}
   return out;
 }
-async function applyOnboardingStep(contactId, stepKey, selections, freeText, complete, strict = false) {
-  return onboardingStore.save(contactId, stepKey, selections, freeText, complete, strict);
+async function applyOnboardingStep(contactId, stepKey, selections, freeText, complete, strict = false, source = 'text') {
+  let result;
+  try { result = await onboardingStore.save(contactId, stepKey, selections, freeText, complete, strict); }
+  catch (e) { onboardingFunnel.step(contactId, stepKey, source, null); throw e; }
+  onboardingFunnel.step(contactId, stepKey, source, result);
+  return result;
 }
 function priceFromCents(c) { if (c == null || isNaN(c)) return ''; const n = Number(c) / 100; return '$' + (Number.isInteger(n) ? n : n.toFixed(2)); }
 // Words that carry no intent. Without this list "what is the price" scores on
@@ -7051,6 +7058,7 @@ const server = http.createServer(async (req, res) => {
         // complete got the outage screen despite the gate's own record.
         if (req.method === 'GET') {
           const profile = await memberOnboardingGuard.check(req, sm, true);
+          onboardingFunnel.gate((profile.contact && profile.contact.id) || sm.contactId, profile);
           if (profile.state === 'unavailable') { sendJson(res, 503, { ok: false, onboardingStatus: 'unavailable', reason: profile.reason }, origin); return; }
           sendJson(res, 200, profile, origin); return;
         }
@@ -7060,7 +7068,7 @@ const server = http.createServer(async (req, res) => {
         }
         const body = await readJsonBody(req);
         memberOnboardingGuard.invalidate(req);
-        const result = await applyOnboardingStep(b.contactId, body.stepKey, body.selections, body.freeText || '', body.complete === true, body.source === 'visual');
+        const result = await applyOnboardingStep(b.contactId, body.stepKey, body.selections, body.freeText || '', body.complete === true, body.source === 'visual', body.source === 'visual' ? 'visual' : 'voice');
         sendJson(res, 200, { ok: true, stepKey: body.stepKey, ...result }, origin);
       } catch (e) {
         console.warn('[Gaia Onboarding]', { event: 'request_failed', reason: e.reason || 'unavailable' });

@@ -916,7 +916,42 @@
      * session cookie says who is asking, and the server decides both what they
      * may run and whose data comes back. Nothing here can claim an identity.
      */
+    // Which card a practitioner tool is really asking to see.
+    //
+    // "Show me his latest scan" is a request to LOOK at something, and the model
+    // answered it by fetching the data and describing it -- then saying "it is on
+    // screen" when nothing had opened. Telling the model to call navigate as well
+    // would make that a second thing it has to remember; doing it here makes it
+    // a fact. The card opens the moment the tool is called, shows its waiting
+    // state, and is filled from the SAME result the model gets, so the ten
+    // seconds is paid once rather than twice.
+    const PRACTITIONER_CARD = {
+      practitioner_client_latest_scan: 'latest',
+      practitioner_client_trend: 'trend',
+      practitioner_compare_sessions: 'compare',
+      practitioner_get_client: '',
+      practitioner_suggested_services: '',
+      practitioner_client_files: '',
+    };
+
+    function openPractitionerView(name, args) {
+      const card = PRACTITIONER_CARD[name];
+      if (card === undefined) return false;
+      const client = String((args && args.clientId) || '').trim();
+      if (!client) return false;
+      try {
+        window.GaiaAppShell?.go?.('profile', { tab: 'practice' });
+        // `awaiting` tells the panel the answer is already on its way, so it
+        // shows the waiting state without starting an eleven-second call of its
+        // own beside the one that is already running.
+        window.dispatchEvent(new CustomEvent('gaia:open-client',
+          { detail: { client, open: card, awaiting: true } }));
+      } catch (e) { return false; }
+      return true;
+    }
+
     async function runServerToolCall(name, args) {
+      const showing = openPractitionerView(name, args);
       const endpoint = serverToolEndpoint || '/api/assist/tool';
       try {
         const res = await fetch(`${proxyBase()}${endpoint}`, {
@@ -926,7 +961,21 @@
           body: JSON.stringify({ name, args: args || {} }),
         });
         const body = await res.json().catch(() => ({}));
-        if (res.ok && body.ok) return { ok: true, data: body.result };
+        if (res.ok && body.ok) {
+          // Hand the card the result the model is about to be given, so the
+          // screen and the answer come from one fetch and cannot disagree.
+          if (showing) {
+            window.dispatchEvent(new CustomEvent('gaia:client-data', {
+              detail: { client: String(args.clientId), open: PRACTITIONER_CARD[name], data: body.result },
+            }));
+          }
+          return { ok: true, data: body.result, shown: showing };
+        }
+        if (showing) {
+          window.dispatchEvent(new CustomEvent('gaia:client-data', {
+            detail: { client: String(args.clientId), open: PRACTITIONER_CARD[name], error: body.error || 'failed' },
+          }));
+        }
         if (body.error === 'not_connected' || body.error === 'needs_reconnect') {
           return { ok: false, message: 'Their Gaia Practitioners account is not connected yet. They can connect it from their profile.' };
         }

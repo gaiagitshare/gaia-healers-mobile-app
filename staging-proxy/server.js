@@ -7190,7 +7190,8 @@ const server = http.createServer(async (req, res) => {
         // for arguments that make no sense, 409 when the practitioner simply has
         // not connected yet -- each one is a different thing for the page to say.
         const status = { forbidden: 403, unknown_tool: 404, client_tool: 400,
-                         bad_args: 400, not_connected: 409, needs_reconnect: 409 }[code] || 502;
+                         bad_args: 400, not_connected: 409, needs_reconnect: 409,
+                         upstream_unavailable: 504 }[code] || 502;
         if (status >= 500) {
           console.error('[Gaia Assist] tool failed', { name, code, error: String(e.message || e).slice(0, 160) });
         }

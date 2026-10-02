@@ -172,3 +172,70 @@ test('the Practice screen is in the shared vocabulary both sides read', async ()
   assert.match(screens.practice, /practitioner/i);
   assert.match(screens.practice, /Only exists for practitioners/i);
 });
+
+// ── the two faults the acceptance test found ──────────────────────────────
+
+test('asking for a scan opens the card, without relying on the model to say so', () => {
+  // The model fetched the data, described it, and said "it is on screen" when
+  // nothing had opened. Telling it to call navigate as well would make that a
+  // second thing it has to remember; the page does it instead, so it is a fact.
+  const orb = read('gaia-realtime-voice.js');
+  if (orb === null) return;
+  assert.match(orb, /const PRACTITIONER_CARD = \{/);
+  for (const [tool, card] of [['practitioner_client_latest_scan', 'latest'],
+                              ['practitioner_client_trend', 'trend'],
+                              ['practitioner_compare_sessions', 'compare']]) {
+    assert.ok(new RegExp(`${tool}: '${card}'`).test(orb), `${tool} must open the ${card} card`);
+  }
+  const i = orb.indexOf('async function runServerToolCall');
+  assert.match(orb.slice(i, i + 200), /openPractitionerView\(name, args\)/,
+    'every practitioner tool call opens its view first');
+});
+
+test('one question costs one ten-second call, not two', () => {
+  const orb = read('gaia-realtime-voice.js');
+  const ui = read('gaia-practitioner.js');
+  if (orb === null || ui === null) return;
+  assert.match(orb, /awaiting: true/, 'the page tells the panel an answer is coming');
+  assert.match(orb, /gaia:client-data/, 'and hands it the same result the model got');
+  const i = ui.indexOf('async function openCard');
+  const body = ui.slice(i, i + 1400);
+  assert.match(body, /if \(awaiting\) return;/,
+    'the panel shows the wait but must not start a second fetch beside it');
+  assert.match(ui, /addEventListener\('gaia:client-data'/, 'and fills from the pushed result');
+});
+
+test('the screen and the spoken answer come from the same fetch', () => {
+  const ui = read('gaia-practitioner.js');
+  if (ui === null) return;
+  const i = ui.indexOf('function fillCard');
+  const body = ui.slice(i, i + 900);
+  assert.match(body, /renderCard\(kind, payload\.data\)/,
+    'two fetches would be two chances to disagree about the same numbers');
+  assert.match(body, /Bio-Well did not answer/, 'and an upstream failure reaches the card');
+});
+
+test('an MCP call cannot hang for ever', () => {
+  const src = fs.readFileSync(new URL('../practitioners-oauth.js', import.meta.url), 'utf8');
+  assert.match(src, /const MCP_TIMEOUT_MS = \d+/, 'there has to be one');
+  const ms = Number(/const MCP_TIMEOUT_MS = (\d+)/.exec(src)[1]);
+  assert.ok(ms >= 20000, `${ms}ms would cut off a scan that legitimately takes twelve seconds`);
+  assert.ok(ms <= 60000, `${ms}ms is longer than anybody waits`);
+  assert.match(src, /signal: AbortSignal\.timeout\(MCP_TIMEOUT_MS\)/);
+  assert.match(src, /code: 'upstream_unavailable'/,
+    'the card needs to tell a hung server apart from an empty answer');
+});
+
+test('a token call has its own, shorter, limit', () => {
+  const src = fs.readFileSync(new URL('../practitioners-oauth.js', import.meta.url), 'utf8');
+  const ms = Number(/const TOKEN_TIMEOUT_MS = (\d+)/.exec(src)[1]);
+  assert.ok(ms > 0 && ms < 20000, 'an OAuth exchange is not a Bio-Well fetch and should not wait like one');
+  assert.equal((src.match(/AbortSignal\.timeout\(TOKEN_TIMEOUT_MS\)/g) || []).length, 2,
+    'both the code exchange and the refresh need it');
+});
+
+test('an upstream that did not answer is a 504, not a generic failure', () => {
+  const src = fs.readFileSync(new URL('../server.js', import.meta.url), 'utf8');
+  assert.match(src, /upstream_unavailable: 504/,
+    'the page shows different words for "their server is down" and "you may not do that"');
+});

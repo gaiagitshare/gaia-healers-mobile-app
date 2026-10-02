@@ -29,6 +29,14 @@ import { WebSocket, WebSocketServer } from 'ws';
 
 const RELAY_PATH = '/api/assist/voice/qwen';
 
+// How long an upstream error is treated as provisional before the turn is
+// re-requested. Measured against the live endpoint: a recoverable error was
+// followed by response.created in well under a second, so this only has to
+// outlast that.
+const QWEN_ERROR_GRACE_MS = 2500;
+// A bound, so a session that errors on every attempt ends rather than looping.
+const QWEN_MAX_RETRIES = 3;
+
 // Every voice qwen3.8-omni-flash-realtime accepts, from Alibaba's reference:
 // https://www.alibabacloud.com/help/en/model-studio/omni-voice-list
 //
@@ -368,6 +376,27 @@ function runSession(browser, grant, ip) {
   let turns = 0;
   const usage = { input: 0, output: 0 };
 
+  // ── an upstream error is provisional until the turn proves it fatal ─────
+  //
+  // Any `error` event used to hand the member straight over to Gemini, which
+  // changes the voice mid-call. Measured against the live endpoint, most errors
+  // do not end the turn at all: "Conversation already has an active response"
+  // and an invalid event type were each followed by a complete, successful
+  // response. Handing over on those throws away a session that was about to
+  // answer. So an error waits to see whether the turn recovers.
+  //
+  // If it does not, the turn is re-requested once. The invariant that makes
+  // that safe is `emittedSinceCreate`: nothing of this response has reached the
+  // member yet -- no audio, no transcript, no tool call -- so asking for it
+  // again cannot repeat anything they already heard. Errors also arrive with no
+  // `code`, so nothing here keys off one.
+  let errorTimer = null;
+  let pendingError = null;
+  let emittedSinceCreate = false;
+  let retriedSinceCreate = false;
+  let recovered = 0;
+  let retried = 0;
+
   openSessions += 1;
   live.set(ip, (live.get(ip) || 0) + 1);
 
@@ -378,6 +407,7 @@ function runSession(browser, grant, ip) {
     if (closed) return;
     closed = true;
     clearTimeout(stallTimer); clearTimeout(sessionTimer); clearTimeout(connectTimer); clearInterval(keepAlive);
+    clearTimeout(errorTimer);
     openSessions = Math.max(0, openSessions - 1);
     const n = (live.get(ip) || 1) - 1;
     if (n > 0) live.set(ip, n); else live.delete(ip);
@@ -417,6 +447,42 @@ function runSession(browser, grant, ip) {
   };
   const disarmStall = () => { clearTimeout(stallTimer); stallTimer = null; };
 
+  const clearPendingError = (why) => {
+    if (!pendingError) return;
+    clearTimeout(errorTimer);
+    errorTimer = null;
+    recovered += 1;
+    console.warn('[Gaia Assist] qwen voice error recovered', { reason: pendingError, by: why, recovered });
+    pendingError = null;
+  };
+
+  /**
+   * The turn produced nothing after an error. Ask for it once more if nothing
+   * of this response has reached the member; otherwise hand over as before.
+   */
+  const resolvePendingError = () => {
+    errorTimer = null;
+    const reason = pendingError || 'qwen_error';
+    pendingError = null;
+    if (emittedSinceCreate || retriedSinceCreate || retried >= QWEN_MAX_RETRIES) {
+      failEarly(reason);
+      return;
+    }
+    retriedSinceCreate = true;
+    retried += 1;
+    console.warn('[Gaia Assist] qwen voice retrying the turn', { reason, retried });
+    toQwen({ type: 'response.create' });
+    armStall();                 // a retry that also goes quiet must still end
+  };
+
+  const noteError = (reason) => {
+    if (!setupDone) { failEarly(reason); return; }        // nothing heard yet
+    if (emittedSinceCreate) { failEarly(reason); return; } // mid-speech: cannot repeat
+    if (pendingError) { clearTimeout(errorTimer); resolvePendingError(); return; }
+    pendingError = reason;
+    errorTimer = setTimeout(resolvePendingError, QWEN_ERROR_GRACE_MS);
+  };
+
   const sessionTimer = setTimeout(() => handover('session_limit'), cfg.maxSessionSeconds * 1000);
   // nginx drops a proxied socket after 300 s without traffic, and a member
   // who is thinking sends none (the orb gates silence) while Qwen waits too.
@@ -443,8 +509,10 @@ function runSession(browser, grant, ip) {
     let evt;
     try { evt = JSON.parse(String(raw)); } catch { return; }
     if (evt.type === 'error') {
-      console.error('[Gaia Assist] qwen voice error', { code: evt.error?.code, message: String(evt.error?.message || '').slice(0, 160) });
-      failEarly('qwen_error');
+      const detail = String(evt.error?.message || '').slice(0, 160);
+      console.error('[Gaia Assist] qwen voice error', { code: evt.error?.code, message: detail });
+      // Provisional: the turn may still answer. noteError decides.
+      noteError('qwen_error:' + (evt.error?.code || detail.slice(0, 40) || 'unknown'));
       return;
     }
     if (evt.type === 'session.updated' && setupDone) return;
@@ -452,8 +520,15 @@ function runSession(browser, grant, ip) {
       setupDone = true;
       clearTimeout(connectTimer);
     }
-    if (evt.type === 'response.created') toBrowser({ gaiaTiming: { stage: 'model_request' } });
+    if (evt.type === 'response.created') {
+      // A response starting IS the recovery: the error before it was noise.
+      emittedSinceCreate = false;
+      clearPendingError('response.created');
+      toBrowser({ gaiaTiming: { stage: 'model_request' } });
+    }
     if (evt.type === 'response.audio.delta' || evt.type === 'response.audio_transcript.delta' || evt.type === 'response.function_call_arguments.done') {
+      emittedSinceCreate = true;
+      clearPendingError(evt.type);
       disarmStall();
       if (!firstAudioAt && evt.type === 'response.audio.delta') firstAudioAt = Date.now() - startedAt;
     }
@@ -464,6 +539,7 @@ function runSession(browser, grant, ip) {
 
     }
     if (evt.type === 'response.done') {
+      clearPendingError('response.done');
       disarmStall();
       turns += 1;
       if (assistantLine.trim()) transcript.push({ role: 'assistant', text: assistantLine.trim() });
@@ -492,7 +568,13 @@ function runSession(browser, grant, ip) {
       transcript.push({ role: 'user', text: String(msg.realtimeInput.text).slice(0, 400) });
     }
     const events = browserToQwen(msg);
-    if (events.some((e) => e.type === 'response.create')) armStall();
+    if (events.some((e) => e.type === 'response.create')) {
+      // Whatever the last response emitted is behind us; this one has sent
+      // nothing yet, so it is retryable again.
+      emittedSinceCreate = false;
+      retriedSinceCreate = false;
+      armStall();
+    }
     for (const e of events) toQwen(e);
   });
   browser.on('close', () => finish('client_closed'));

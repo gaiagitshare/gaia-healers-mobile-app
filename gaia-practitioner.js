@@ -224,7 +224,7 @@
     }
 
     // —— Phase 2: one client ——
-    async function showClient(clientId, openSection) {
+    async function showClient(clientId, openSection, awaiting) {
       openClient = String(clientId);
       loaded.set(openClient, loaded.get(openClient) || {});
       paint(`
@@ -287,7 +287,33 @@
           : empty('No files for this client yet.'); })
         .catch(() => { filesHost.innerHTML = empty('No files for this client yet.'); });
 
-      if (openSection) openCard(openSection);
+      if (openSection) openCard(openSection, awaiting);
+    }
+
+    /**
+     * Fill a card from a result somebody else already fetched.
+     *
+     * When Gaia asks for a scan, the page opens the card and the answer arrives
+     * through the same call the model made. Re-fetching here would mean two
+     * eleven-second calls for one question -- and, worse, two chances for the
+     * screen and the spoken answer to disagree about the same numbers.
+     */
+    function fillCard(kind, payload) {
+      const card = root.querySelector(`[data-prac-card="${kind}"]`);
+      const body = root.querySelector(`[data-prac-body="${kind}"]`);
+      if (!card || !body) return;
+      body.hidden = false;
+      const cta = card.querySelector('.g-prac__card-cta');
+      if (cta) cta.textContent = 'Hide';
+      if (payload && payload.error) {
+        body.innerHTML = empty(payload.error === 'upstream_unavailable'
+          ? 'Bio-Well did not answer. Try again.'
+          : 'Could not load that just now.', { action: `retry-${kind}`, label: 'Try again' });
+        return;
+      }
+      const html = renderCard(kind, payload.data);
+      body.innerHTML = html;      // replaces the waiting state and its timer
+      if (openClient) (loaded.get(openClient) || {})[kind] = html;
     }
 
     const CARD_TOOL = {
@@ -296,7 +322,7 @@
       compare: ['practitioner_compare_sessions', 'Comparing sessions'],
     };
 
-    async function openCard(kind) {
+    async function openCard(kind, awaiting) {
       const card = root.querySelector(`[data-prac-card="${kind}"]`);
       const body = root.querySelector(`[data-prac-body="${kind}"]`);
       if (!card || !body) return;
@@ -306,10 +332,16 @@
       if (cta) cta.textContent = 'Hide';
       const cached = (loaded.get(openClient) || {})[kind];
       if (cached) { body.innerHTML = cached; return; }
+      // Gaia opened this card and its own call is still in flight; let that one
+      // land rather than starting a second eleven-second fetch beside it.
+      if (body.querySelector('[data-prac-loading]')) return;
 
       const [toolName, label] = CARD_TOOL[kind];
       body.innerHTML = loadingCard(label);
       const stop = startElapsed(body);
+      // Gaia is already fetching this. Show the wait; let its result fill the
+      // card through gaia:client-data rather than asking their server twice.
+      if (awaiting) return;
       const forClient = openClient;
       try {
         const data = await tool(toolName, { clientId: openClient });
@@ -404,6 +436,13 @@
       if (event.target.matches('[data-prac-search]')) onSearch(event.target.value);
     });
 
+    // The result of the call Gaia just made, pushed in rather than fetched again.
+    window.addEventListener('gaia:client-data', (event) => {
+      const d = event.detail || {};
+      if (!d.open || String(d.client) !== String(openClient)) return;
+      fillCard(d.open, d);
+    });
+
     async function start(deepLink) {
       paint(skeleton(4));
       const status = await connection();
@@ -412,7 +451,7 @@
         return;
       }
       if (status.needs_reconnect) { await showGate(status); return; }
-      if (deepLink && deepLink.client) await showClient(deepLink.client, deepLink.open);
+      if (deepLink && deepLink.client) await showClient(deepLink.client, deepLink.open, deepLink.awaiting);
       else await showList();
       return true;
     }
@@ -481,7 +520,7 @@
       select('practice');
       started = true;
       if (d.client) {
-        view.start({ client: String(d.client), open: d.open || '' });
+        view.start({ client: String(d.client), open: d.open || '', awaiting: Boolean(d.awaiting) });
         return;
       }
       view.start().then(() => {

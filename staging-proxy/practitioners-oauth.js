@@ -31,6 +31,14 @@ import fs from 'fs';
 import path from 'path';
 
 const TOKEN_FILE = '/root/gaia-staging-proxy/data/practitioner-tokens.json';
+// A scan legitimately takes nine to twelve seconds, because their side fetches
+// it live from Bio-Well -- so a timeout has to be generous enough not to cut off
+// a call that is working. Without one at all, a hung server holds the card in
+// "loading" for ever and the "Bio-Well did not answer" state can never be
+// reached: the one place the practitioner is already waiting is the one place a
+// missing timeout costs most.
+const MCP_TIMEOUT_MS = 30000;
+const TOKEN_TIMEOUT_MS = 15000;
 const STATE_TTL_MS = 10 * 60 * 1000;      // their code is short-lived; so is our state
 const PENDING_MAX = 200;                   // a bounded map cannot be grown into a leak
 
@@ -188,6 +196,7 @@ export async function exchangeCode(cfg, { code, verifier }, fetchImpl = fetch) {
     method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded', Accept: 'application/json' },
     body: body.toString(),
+    signal: AbortSignal.timeout(TOKEN_TIMEOUT_MS),
   });
   const text = await r.text();
   let json = {};
@@ -214,6 +223,7 @@ export async function refreshAccess(cfg, refreshToken, fetchImpl = fetch) {
     method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded', Accept: 'application/json' },
     body: body.toString(),
+    signal: AbortSignal.timeout(TOKEN_TIMEOUT_MS),
   });
   const text = await r.text();
   let json = {};
@@ -293,18 +303,29 @@ export function _refreshingSize() { return refreshing.size; }
 
 /** One MCP tools/call. The token is chosen by the caller, never by an argument. */
 export async function mcpCall(cfg, accessToken, name, args = {}, fetchImpl = fetch) {
-  const r = await fetchImpl(cfg.mcpUrl, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Accept: 'application/json, text/event-stream',
-      Authorization: `Bearer ${accessToken}`,
-    },
-    body: JSON.stringify({
-      jsonrpc: '2.0', id: Date.now(), method: 'tools/call',
-      params: { name, arguments: args },
-    }),
-  });
+  let r;
+  try {
+    r = await fetchImpl(cfg.mcpUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Accept: 'application/json, text/event-stream',
+        Authorization: `Bearer ${accessToken}`,
+      },
+      body: JSON.stringify({
+        jsonrpc: '2.0', id: Date.now(), method: 'tools/call',
+        params: { name, arguments: args },
+      }),
+      signal: AbortSignal.timeout(MCP_TIMEOUT_MS),
+    });
+  } catch (e) {
+    // A timeout and a refused connection are the same thing to the person
+    // waiting, and both have to end the spinner.
+    const timedOut = e?.name === 'TimeoutError' || e?.name === 'AbortError';
+    throw Object.assign(new Error(timedOut
+      ? `${name}: Bio-Well did not answer within ${MCP_TIMEOUT_MS / 1000}s`
+      : `${name}: could not reach Gaia Practitioners`), { code: 'upstream_unavailable' });
+  }
   const text = await r.text();
   if (r.status === 401) throw Object.assign(new Error('practitioner token rejected'), { code: 401 });
   let json = {};

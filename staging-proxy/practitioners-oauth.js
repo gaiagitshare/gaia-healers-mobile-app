@@ -1,0 +1,263 @@
+/**
+ * GAIA PRACTITIONERS — connecting a practitioner's account, and holding the token.
+ *
+ * Gaia Practitioners exposes a read-only MCP server at POST /api/mcp, guarded by
+ * OAuth 2.1. There is no service credential and cannot be one: their authorization
+ * server supports only the authorization_code grant, so no single key lets Gaia
+ * read every practitioner's data. Each practitioner authorizes Gaia individually
+ * and we hold one token per practitioner.
+ *
+ * That shape is a gift rather than an obstacle. Because the token IS the
+ * practitioner, their server decides what it returns — every tool is documented
+ * as returning "your" customers. Gaia cannot reach practitioner B's clients with
+ * practitioner A's token even if a model asks for them in those words. The
+ * authorization boundary is theirs, enforced server to server, and no prompt can
+ * argue with it.
+ *
+ * What this file is responsible for is the half they cannot enforce: making sure
+ * the token we send is the token belonging to the person actually signed in.
+ *
+ *   - Identity comes from the signed session cookie, read server-side. Never from
+ *     a query parameter, a body field, or anything a model produced.
+ *   - The state parameter is single-use, short-lived, and bound to the contact id
+ *     that started the flow, so a code cannot be redeemed into somebody else's row.
+ *   - Tokens are written to disk with mode 600 and never leave this process. The
+ *     browser sees the consent screen on THEIR domain and nothing else.
+ *
+ * Everything here is inert until GAIA_PRACTITIONERS_ENABLED is 'true'.
+ */
+import crypto from 'crypto';
+import fs from 'fs';
+import path from 'path';
+
+const TOKEN_FILE = '/root/gaia-staging-proxy/data/practitioner-tokens.json';
+const STATE_TTL_MS = 10 * 60 * 1000;      // their code is short-lived; so is our state
+const PENDING_MAX = 200;                   // a bounded map cannot be grown into a leak
+
+/** Config, read per call so a restart is all that is needed to change it. */
+export function practitionersConfig(env = process.env) {
+  const base = String(env.GAIA_PRACTITIONERS_OAUTH_BASE || '').trim().replace(/\/+$/, '');
+  return {
+    enabled: env.GAIA_PRACTITIONERS_ENABLED === 'true'
+      && Boolean(env.GAIA_PRACTITIONERS_CLIENT_ID)
+      && Boolean(base),
+    base,
+    mcpUrl: String(env.GAIA_PRACTITIONERS_MCP_URL || (base ? `${base}/api/mcp` : '')).trim(),
+    clientId: env.GAIA_PRACTITIONERS_CLIENT_ID || '',
+    clientSecret: env.GAIA_PRACTITIONERS_CLIENT_SECRET || '',
+    redirectUri: String(env.GAIA_PRACTITIONERS_REDIRECT_URI || '').trim(),
+    scope: String(env.GAIA_PRACTITIONERS_SCOPE || 'mcp.read').trim(),
+  };
+}
+
+// ── PKCE ───────────────────────────────────────────────────────────────────
+// S256 is the only method their server advertises, and the only one worth using:
+// a plain verifier in a redirect is a verifier in somebody's browser history.
+export function makePkce() {
+  const verifier = crypto.randomBytes(48).toString('base64url');
+  const challenge = crypto.createHash('sha256').update(verifier).digest('base64url');
+  return { verifier, challenge };
+}
+
+export function authorizeUrl(cfg, { state, challenge }) {
+  const q = new URLSearchParams({
+    response_type: 'code',
+    client_id: cfg.clientId,
+    redirect_uri: cfg.redirectUri,
+    scope: cfg.scope,
+    state,
+    code_challenge: challenge,
+    code_challenge_method: 'S256',
+  });
+  return `${cfg.base}/api/oauth/authorize?${q.toString()}`;
+}
+
+// ── pending flows ──────────────────────────────────────────────────────────
+// In memory on purpose. A flow that does not complete within ten minutes should
+// be started again, and a restart losing them costs one extra click.
+const pending = new Map();
+
+export function rememberFlow(state, row) {
+  if (pending.size >= PENDING_MAX) {
+    for (const [k, v] of pending) if (v.exp < Date.now()) pending.delete(k);
+    if (pending.size >= PENDING_MAX) pending.delete(pending.keys().next().value);
+  }
+  pending.set(state, { ...row, exp: Date.now() + STATE_TTL_MS });
+}
+
+/**
+ * Take a flow back, once. Returns null for unknown, expired or replayed state —
+ * which is the whole job: an attacker who can make a practitioner's browser hit
+ * the callback with their own code must not be able to bind it to this session.
+ */
+export function claimFlow(state) {
+  const row = pending.get(String(state || ''));
+  if (!row) return null;
+  pending.delete(state);
+  return row.exp < Date.now() ? null : row;
+}
+
+export function _pendingSize() { return pending.size; }
+export function _resetFlows() { pending.clear(); }
+
+// ── the token store ────────────────────────────────────────────────────────
+// A JSON file beside the others in data/, keyed by GHL contact id, written 600.
+// The contact id is the key because it is what the session cookie proves and what
+// the rest of Gaia already identifies people by; an email would be a key that the
+// owner can change out from under us.
+export function readTokens(file = TOKEN_FILE) {
+  try { return JSON.parse(fs.readFileSync(file, 'utf8')); } catch { return {}; }
+}
+
+export function writeTokens(all, file = TOKEN_FILE) {
+  fs.mkdirSync(path.dirname(file), { recursive: true });
+  const tmp = `${file}.tmp`;
+  fs.writeFileSync(tmp, JSON.stringify(all, null, 2), { mode: 0o600 });
+  fs.renameSync(tmp, file);        // atomic: a crash mid-write cannot truncate it
+  try { fs.chmodSync(file, 0o600); } catch { /* best effort */ }
+}
+
+export function saveToken(contactId, row, file = TOKEN_FILE) {
+  const all = readTokens(file);
+  all[String(contactId)] = row;
+  writeTokens(all, file);
+  return row;
+}
+
+export function tokenFor(contactId, file = TOKEN_FILE) {
+  const row = readTokens(file)[String(contactId)];
+  if (!row?.access_token) return null;
+  return { ...row, expired: Boolean(row.expires_at && row.expires_at < Date.now()) };
+}
+
+export function forgetToken(contactId, file = TOKEN_FILE) {
+  const all = readTokens(file);
+  if (!(String(contactId) in all)) return false;
+  delete all[String(contactId)];
+  writeTokens(all, file);
+  return true;
+}
+
+/** What the app may know: connected or not, and to whom. Never the token. */
+export function connectionStatus(contactId, file = TOKEN_FILE) {
+  const row = tokenFor(contactId, file);
+  if (!row) return { connected: false };
+  return {
+    connected: !row.expired,
+    expired: row.expired,
+    practitioner_name: row.practitioner_name || '',
+    practitioner_email: row.practitioner_email || '',
+    connected_at: row.connected_at || '',
+    expires_at: row.expires_at || 0,
+  };
+}
+
+// ── talking to them ────────────────────────────────────────────────────────
+export async function exchangeCode(cfg, { code, verifier }, fetchImpl = fetch) {
+  const body = new URLSearchParams({
+    grant_type: 'authorization_code',
+    code,
+    client_id: cfg.clientId,
+    redirect_uri: cfg.redirectUri,
+    code_verifier: verifier,
+  });
+  if (cfg.clientSecret) body.set('client_secret', cfg.clientSecret);
+  const r = await fetchImpl(`${cfg.base}/api/oauth/token`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded', Accept: 'application/json' },
+    body: body.toString(),
+  });
+  const text = await r.text();
+  let json = {};
+  try { json = JSON.parse(text); } catch { /* their error bodies are not always JSON */ }
+  if (!r.ok || !json.access_token) {
+    const why = json.error_description || json.error || json.message || text.slice(0, 200);
+    throw new Error(`token exchange failed (${r.status}): ${why}`);
+  }
+  return json;
+}
+
+/** One MCP tools/call. The token is chosen by the caller, never by an argument. */
+export async function mcpCall(cfg, accessToken, name, args = {}, fetchImpl = fetch) {
+  const r = await fetchImpl(cfg.mcpUrl, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Accept: 'application/json, text/event-stream',
+      Authorization: `Bearer ${accessToken}`,
+    },
+    body: JSON.stringify({
+      jsonrpc: '2.0', id: Date.now(), method: 'tools/call',
+      params: { name, arguments: args },
+    }),
+  });
+  const text = await r.text();
+  if (r.status === 401) throw Object.assign(new Error('practitioner token rejected'), { code: 401 });
+  let json = {};
+  try { json = JSON.parse(text); } catch {
+    // Streamable HTTP may answer as SSE; take the last data: line.
+    const last = text.trim().split('\n').filter((l) => l.startsWith('data:')).pop();
+    if (last) { try { json = JSON.parse(last.slice(5).trim()); } catch { /* fall through */ } }
+  }
+  if (json.error) throw new Error(`${name}: ${json.error.message || JSON.stringify(json.error)}`);
+  return json.result ?? json;
+}
+
+/**
+ * Who did this token turn out to be?
+ *
+ * Called once, right after consent. This is the identity mapping: rather than
+ * matching records across two systems by name or email, we let the practitioner
+ * prove both sides in one act — they were signed into Gaia when they started, and
+ * they signed into Gaia Practitioners to approve it. Storing the pair records a
+ * fact instead of a guess, and showing them the resolved name is what makes a
+ * wrong-account connection visible to the one person who can tell.
+ */
+/**
+ * Unwrap an MCP tool result into the object it is really carrying.
+ *
+ * Tools answer in an envelope: `{ content: [{ type: 'text', text: '<json>' }] }`,
+ * where the payload is JSON encoded AS A STRING inside that text field. Reading
+ * the envelope as though it were the data finds nothing, and reading it with a
+ * regex finds the escaped form and still nothing. Every tool uses this shape, so
+ * every caller needs this.
+ */
+export function unwrapMcp(result) {
+  if (result == null) return null;
+  const content = result.content ?? result.result?.content;
+  if (Array.isArray(content)) {
+    for (const part of content) {
+      const text = part?.text;
+      if (typeof text !== 'string') continue;
+      try { return JSON.parse(text); } catch { return text; }
+    }
+  }
+  if (result.structuredContent) return result.structuredContent;
+  return result.result ?? result;
+}
+
+export async function resolveProfile(cfg, accessToken, fetchImpl = fetch) {
+  try {
+    const out = await mcpCall(cfg, accessToken, 'get_practitioner_profile', {}, fetchImpl);
+    const data = unwrapMcp(out);
+    const pick = (...keys) => {
+      for (const k of keys) {
+        const v = data?.[k];
+        if (typeof v === 'string' && v.trim()) return v.trim();
+        if (typeof v === 'number') return String(v);
+      }
+      return '';
+    };
+    return {
+      practitioner_name: pick('name', 'fullName', 'displayName'),
+      practitioner_email: pick('email'),
+      practitioner_id: pick('id', 'practitionerId', 'userId'),
+      raw_ok: true,
+    };
+  } catch (e) {
+    // A token that cannot read its own profile is still a token; record that we
+    // could not confirm who it belongs to rather than inventing an identity.
+    return { practitioner_name: '', practitioner_email: '', practitioner_id: '', raw_ok: false,
+             note: String(e.message || e).slice(0, 140) };
+  }
+}

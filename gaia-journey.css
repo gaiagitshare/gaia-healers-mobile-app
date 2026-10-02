@@ -254,7 +254,9 @@ body.gaia-journey-open{overflow:hidden}
   .journey-choices--many .journey-tile-icon{width:36px;height:36px}
   .journey-choices--many .journey-check{right:9px;width:24px;height:24px;margin-top:-12px}
   .journey-choices--paths{grid-template-columns:1fr;gap:18px}
-  .journey-path-card{min-height:168px;justify-content:center;border-radius:24px}
+  /* 142px (was 168): all three paths fit above the Back/Continue bar on an
+     844px-tall phone, without scrolling (owner, 2026-10-02). */
+  .journey-path-card{min-height:142px;justify-content:center;border-radius:24px}
   .journey-path-card .journey-art{left:30%;border-radius:0 24px 24px 0;-webkit-mask-image:linear-gradient(90deg,transparent,#000 42%);mask-image:linear-gradient(90deg,transparent,#000 42%)}
   .journey-path-card .journey-art:after{background:linear-gradient(90deg,rgba(3,10,6,.5),transparent 45%),linear-gradient(180deg,transparent 60%,rgba(3,10,6,.5))}
   .journey-path-card:before{background:radial-gradient(70% 120% at 85% 30%,rgba(var(--accent-rgb),.28),transparent 65%)}
@@ -347,4 +349,12 @@ body.gaia-v2 .gaia-assist:not(.gaia-assist--minimized) .gaia-assist__sheet:has(.
   .journey-outgoing,.journey-tap-ring,.journey-branch-sweep,.journey-link b,.journey-thread b{display:none}
   .gj-ripple{opacity:.5;transform:scale(1.4)}
   .journey-branch-emblem b{opacity:0}
+}
+
+/* Desktop: the completion page is taller than the window, so "Enter Gaia"
+   stays pinned to the bottom of the screen instead of waiting below the fold
+   (owner, 2026-10-02). Phones already keep it in the bottom bar. */
+@media(min-width:601px){
+  .journey-enter-wrap{position:sticky;bottom:0;z-index:6;justify-content:center;margin-top:28px;padding:18px 0 calc(18px + env(safe-area-inset-bottom));background:linear-gradient(180deg,rgba(2,8,5,0),rgba(2,8,5,.9) 45%)}
+  .journey-enter-wrap .journey-primary{min-width:260px}
 }

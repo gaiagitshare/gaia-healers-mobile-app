@@ -1,6 +1,14 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
+  <style>
+    html:not([data-gaia-eligibility="ready"]):not([data-gaia-eligibility="visitor"]) #gaia-app-shell { display: none !important; }
+    #gaia-bootstrap { position:fixed; inset:0; z-index:999; display:grid; place-content:center; text-align:center; background:#06110c; color:#d6e8dc; font-family:system-ui; }
+    #gaia-bootstrap img { width:56px; margin:auto; animation:gaia-preparing 1.4s ease-in-out infinite alternate; }
+    @keyframes gaia-preparing { to { opacity:.6; transform:scale(.96); } }
+    @media(prefers-reduced-motion:reduce) { #gaia-bootstrap img { animation:none; } }
+    html[data-gaia-eligibility] #gaia-bootstrap { display:none; }
+  </style>
   <meta charset="UTF-8" />
   <script>try{localStorage.setItem('gaia-onboarded','1');}catch(e){}</script>
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
@@ -71,6 +79,7 @@
   <link rel="stylesheet" href="vendor/leaflet/MarkerCluster.Default.css?v=1.5.3" />
 </head>
 <body class="gaia-app gaia-page gaia-single-app gaia-v2">
+  <div id="gaia-bootstrap" role="status"><img src="assets/gaia-mark.svg" alt=""><p>Preparing your Gaia experience…</p></div>
   <a class="gaia-skip-link" href="#gaia-app-shell">Skip to app content</a>
   <script>try{document.body.dataset.theme=document.documentElement.dataset.theme||'light';}catch(e){}</script>
   <svg width="0" height="0" aria-hidden="true"><defs><linearGradient id="gaia-ring-gradient" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="#7DD956"/><stop offset="100%" stop-color="#449422"/></linearGradient></defs></svg>
@@ -79,7 +88,7 @@
          HOME — rebuilt on the new Gaia design system (gaia-system.css).
          Reference screen. Other screens keep their old CSS for now.
          ============================================================ -->
-    <section class="gaia-screen is-active" data-screen="today" aria-label="Home">
+    <section class="gaia-screen" data-screen="today" aria-label="Home">
       <header class="g-topbar">
         <button type="button" class="g-topbar__nav" data-app-nav-btn aria-label="Home"><i class="ph ph-house" aria-hidden="true"></i></button>
         <a href="home.html?view=today" class="g-topbar__brand g-topbar__brand--stack"><img src="assets/gaia-mark.svg" alt="" /><span>Gaia Healers</span></a>
@@ -406,6 +415,7 @@
   <script defer src="shared-nav.js?v=20260821b"></script>
   <script defer src="gaia-realtime-voice.js?v=20260928q"></script>
   <script defer src="gaia-membership-ui.js?v=20260912c"></script>
+  <script defer src="gaia-app-guard.js"></script>
   <script defer src="gaia-journey.js?v=20261001a"></script>
   <script defer src="gaia-member.js?v=20261001a"></script>
   <script defer src="gaia-academy-player.js?v=20260912i"></script>

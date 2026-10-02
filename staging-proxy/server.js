@@ -1,3 +1,4 @@
+import { createMemberOnboardingGuard, protectedMemberPath } from './member-onboarding-guard.js';
 import './assist-guide.js';
 const assistGuide = globalThis.GaiaAssistGuide;
 import { createOnboardingStore } from './onboarding-store.js';
@@ -3049,6 +3050,15 @@ const onboardingStore = createOnboardingStore({
   invalidate: cid => _memberAiCtxCache.delete(cid),
 });
 
+const memberOnboardingGuard = createMemberOnboardingGuard({
+  store: onboardingStore,
+  key: req => crypto.createHash('sha256').update(String(req.headers.cookie || '')).digest('hex'),
+  resolveContact: async member => {
+    const found = await getMemberFromGhl(member);
+    return found?.memberResolved ? found.member?.contactId || found.member?.memberId : null;
+  },
+});
+
 // Upsert a contact into GHL (create or update by email). Requires the PIT to
 // carry contacts.write — returns scope_required until that scope is enabled.
 async function ghlUpsertContact(fields = {}) {
@@ -4367,6 +4377,10 @@ async function buildMemberVoiceContext(req) {
   try {
     const member = sessionMemberContext(req);
     if (!member) return ''; // anonymous / public → generic Gaia
+    const eligibility = req.onboardingEligibility || await memberOnboardingGuard.check(req, member);
+    if (eligibility.state !== 'complete') {
+      return 'ONBOARDING PROFILE: NOT DONE. onboarding_required=true. Normal member features are locked. Help only with completing the required Gaia profile, sign out or recovery. Resume at ' + (eligibility.nextStep || 'primary_interests') + '. Saved answers: ' + JSON.stringify(eligibility.answers || {}) + '. Use save_onboarding_step or conversational ONBOARD markers for answers. Do not navigate, open portals, recommend products, book or run other member actions until confirmed completion.';
+    }
     const b = await fetchMemberBundle(member);
     const cid = b.contactId;
     const cached = cid && _memberAiCtxCache.get(cid);
@@ -5186,9 +5200,11 @@ function publicVoiceConfig() {
 async function authSession(req, res, origin, url) {
   const session = cookieForRequest(req);
   const memberResolved = Boolean(session?.member?.email || session?.member?.memberId || session?.member?.contactId);
+  const eligibility = memberResolved ? await memberOnboardingGuard.check(req, session.member, true) : null;
   sendJson(res, 200, {
     ok: true,
     ...sessionPublicShape(session),
+    onboardingStatus: eligibility?.state || null,
     memberResolved,
     methods: {
       embeddedClaim: true,
@@ -5200,6 +5216,7 @@ async function authSession(req, res, origin, url) {
 }
 
 async function authLogout(_req, res, origin) {
+  memberOnboardingGuard.invalidate(_req);
   sendJson(res, 200, { ok: true, authenticated: false }, origin, {
     'Set-Cookie': buildClearCookie(),
   });
@@ -6850,6 +6867,25 @@ const server = http.createServer(async (req, res) => {
 
   const url = new URL(req.url, `http://${req.headers.host}`);
   try {
+    if (protectedMemberPath(url.pathname)) {
+      const member = sessionMemberContext(req);
+      if (member) {
+        const eligibility = await memberOnboardingGuard.check(req, member);
+        if (eligibility.state !== 'complete') {
+          sendJson(res, eligibility.state === 'unavailable' ? 503 : 403, { ok: false, onboardingStatus: eligibility.state, reason: eligibility.state === 'unavailable' ? 'onboarding_unavailable' : 'onboarding_required' }, origin);
+          return;
+        }
+      }
+    }
+    if (url.pathname.startsWith('/api/assist/') && !['/api/assist/onboarding', '/api/assist/voices'].includes(url.pathname)) {
+      const member = sessionMemberContext(req);
+      if (member) {
+        req.onboardingEligibility = await memberOnboardingGuard.check(req, member);
+        if (req.onboardingEligibility.state === 'unavailable') {
+          sendJson(res, 503, { ok: false, onboardingStatus: 'unavailable', reason: 'onboarding_unavailable' }, origin); return;
+        }
+      }
+    }
     if (req.method === 'GET' && url.pathname === '/health') {
       sendJson(res, 200, { ok: true }, origin);
       return;
@@ -7566,9 +7602,12 @@ const server = http.createServer(async (req, res) => {
           sendJson(res, 503, { ok: false, reason: 'onboarding_contact_unavailable' }, origin); return;
         }
         if (req.method === 'GET') {
-          sendJson(res, 200, await onboardingStore.load(b.contactId), origin); return;
+          const profile = await memberOnboardingGuard.check(req, sm, true);
+          if (profile.state === 'unavailable') { sendJson(res, 503, { ok: false, onboardingStatus: 'unavailable', reason: profile.reason }, origin); return; }
+          sendJson(res, 200, profile, origin); return;
         }
         const body = await readJsonBody(req);
+        memberOnboardingGuard.invalidate(req);
         const result = await applyOnboardingStep(b.contactId, body.stepKey, body.selections, body.freeText || '', body.complete === true, body.source === 'visual');
         sendJson(res, 200, { ok: true, stepKey: body.stepKey, ...result }, origin);
       } catch (e) {

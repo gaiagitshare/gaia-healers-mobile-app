@@ -1,3 +1,5 @@
+import { installCompletedProfileFixture } from './completed-profile-fixture.js';
+installCompletedProfileFixture();
 /**
  * Membership Admin, end to end against the real proxy.
  *
@@ -29,7 +31,7 @@ process.chdir(workdir);
 // stub GHL — the admin path must not depend on it, but the server boots with it
 const stub = http.createServer((req, res) => {
   res.writeHead(200, { 'content-type': 'application/json' });
-  res.end(JSON.stringify({ contacts: [{ id: CONTACT_ID, email: 'e2e@example.test', tags: [], customFields: [] }], data: [] }));
+  res.end(JSON.stringify(req.url.startsWith('/contacts/' + CONTACT_ID) ? { contact: { id: CONTACT_ID, email: 'e2e@example.test', tags: ['gaia_app_onboarding_complete'], customFields: [] } } : { contacts: [{ id: CONTACT_ID, email: 'e2e@example.test', tags: [], customFields: [] }], data: [] }));
 });
 await new Promise((r) => stub.listen(0, '127.0.0.1', r));
 

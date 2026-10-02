@@ -39,6 +39,8 @@ export function resolveFields(definitions) {
     if (!field?.id) throw fail('onboarding_field_unavailable');
     fields[key] = field.id;
   }
+  const other = definitions.find(f => f.id === fields.devices_other);
+  Object.defineProperty(fields, 'deviceSlots', { value: (other?.picklistOptions || []).map(o => o.id).filter(Boolean) });
   return fields;
 }
 export function readAnswers(customFields, fields) {
@@ -52,7 +54,9 @@ export function readAnswers(customFields, fields) {
     if (labels.length && labels.every(Boolean) && validAnswer(step, labels)) answers[step.key] = labels;
   }
   const other = values[fields.devices_other];
-  if (Array.isArray(other) ? other.length : other) answers.devices_other = Array.isArray(other) ? other.join('\n') : String(other);
+  const deviceValues = Array.isArray(other) ? other : other && typeof other === 'object' ? (fields.deviceSlots?.length ? fields.deviceSlots.map(id => other[id]) : Object.values(other)) : other ? [String(other)] : [];
+  const deviceText = deviceValues.filter(v => typeof v === 'string' && v.trim()).join('\n');
+  if (deviceText) answers.devices_other = deviceText;
   return answers;
 }
 export function createOnboardingStore({ get, post, put, locationId, invalidate = () => {} }) {
@@ -108,7 +112,11 @@ export function createOnboardingStore({ get, post, put, locationId, invalidate =
     if (stepKey === 'primary_interests') {
       for (const branch of STEPS.filter(s => s.showIf && (before.answers.primary_interests || []).includes(s.showIf) && !chosen.includes(s.showIf))) customFields.push({ id: before.ids[branch.key], fieldValue: [] });
     }
-    if (stepKey === 'devices_owned') customFields.push({ id: before.ids.devices_other, fieldValue: chosen.includes('Other') ? freeText.split('\n').map(x => x.trim()).filter(Boolean).slice(0, 6) : [] });
+    if (stepKey === 'devices_owned') {
+      const entries = chosen.includes('Other') ? freeText.split('\n').map(x => x.trim()).filter(Boolean).slice(0, 6) : [];
+      const slots = before.ids.deviceSlots || [];
+      customFields.push({ id: before.ids.devices_other, fieldValue: slots.length ? Object.fromEntries(slots.map((id, index) => [id, entries[index] || ''])) : entries });
+    }
     const path = `/contacts/${encodeURIComponent(contactId)}`;
     // Mark a new app journey before any field mutation. This distinguishes
     // confirmed app saves from historical form data without re-asking history.
@@ -141,7 +149,21 @@ export function createOnboardingStore({ get, post, put, locationId, invalidate =
     return { tagsAdded: [...new Set([...startTags, ...tags])], matched: chosen, unmatched: [], complete: complete && after.state === 'complete', answers: after.answers, state: after.state, nextStep: after.nextStep };
   }
   return {
-    load: async contactId => { const s = await load(contactId); return { ok: true, state: s.state, answers: s.answers, nextStep: s.nextStep, schema: uiSchema(), completedByTag: (s.contact.tags || []).some(t => [COMPLETE_TAG, 'gaia_practitioner_form_complete'].includes(t)), member: { name: s.contact.firstName || s.contact.name || '', email: s.contact.email || '' } }; },
+    load: async contactId => { const s = await load(contactId);
+      if (s.state === 'complete' && s.ids && !s.contact.tags?.includes(COMPLETE_TAG)) {
+        try {
+          if (!await post(`/contacts/${encodeURIComponent(contactId)}/tags`, { tags: [COMPLETE_TAG] })) throw fail('onboarding_backfill_failed');
+          const verified = await get(`/contacts/${encodeURIComponent(contactId)}`);
+          const contact = verified?.contact || verified?.data?.contact || verified?.data || verified;
+          if (!contact?.tags?.includes(COMPLETE_TAG)) throw fail('onboarding_backfill_unconfirmed');
+          s.contact = contact; invalidate(contactId);
+        } catch {
+          // Completion was already proven by the live legacy record. A failed
+          // compatibility tag must not force that member through onboarding.
+          console.warn('[Gaia Onboarding]', { event: 'legacy_backfill_pending' });
+        }
+      }
+      return { ok: true, state: s.state, answers: s.answers, nextStep: s.nextStep, schema: uiSchema(), completedByTag: (s.contact.tags || []).some(t => [COMPLETE_TAG, 'gaia_practitioner_form_complete'].includes(t)), member: { name: s.contact.firstName || s.contact.name || '', email: s.contact.email || '' } }; },
     save(contactId, ...args) {
       const previous = pending.get(contactId) || Promise.resolve();
       const task = previous.catch(() => {}).then(() => saveNow(contactId, ...args));

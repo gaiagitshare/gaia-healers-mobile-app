@@ -7,9 +7,9 @@ import { createOnboardingStore, FIELD_KEYS } from '../staging-proxy/onboarding-s
 import { STEPS, onboardingPath } from '../staging-proxy/gaia-onboarding.js';
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const definitions = Object.entries(FIELD_KEYS).map(([key, value]) => ({ id: key, fieldKey: 'contact.' + value, model: 'contact' }));
-let contact, loggedIn = true, fail = false;
+let contact, loggedIn = true, fail = false, scenarioUnavailable = false;
 function reset(scenario) {
-  loggedIn = scenario !== 'visitor'; fail = false;
+  loggedIn = scenario !== 'visitor'; fail = false; scenarioUnavailable = scenario === 'unavailable';
   contact = { id: 'preview-contact', firstName: 'Ada', email: 'ada@example.test', tags: scenario === 'complete' ? ['gaia_practitioner_form_complete'] : [], customFields: [] };
   if (scenario === 'resume') contact.customFields = [{ id: 'primary_interests', value: ['Water: I am interested in healing and restructuring our water systems'] }, { id: 'why_join', value: ['For my own healing / consciousness'] }];
 }
@@ -26,6 +26,7 @@ http.createServer(async (req, res) => {
     if (url.pathname === '/__qa/reset') { reset(url.searchParams.get('scenario')); return json(200, { ok: true }); }
     if (url.pathname === '/__qa/fail') { fail = url.searchParams.get('value') === 'true'; return json(200, { ok: true }); }
     if (url.pathname === '/api/assist/onboarding') {
+      if (url.searchParams.get('unavailable') === '1' || scenarioUnavailable) return json(503, {ok:false});
       if (!loggedIn) return json(401, { ok: false });
       if (req.method === 'GET') return json(200, await store.load(contact.id));
       let input = ''; for await (const chunk of req) input += chunk;

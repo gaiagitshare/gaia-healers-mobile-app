@@ -867,6 +867,7 @@
 
     // Central tool dispatcher: routes a toolCall to the right handler.
     function runToolCall(name, args = {}) {
+      if (window.GaiaAppGuard && !window.GaiaAppGuard.canEnter && !['save_onboarding_step', 'sign_in'].includes(name)) return { ok: false, reason: 'onboarding_required' };
       switch (name) {
         case 'navigate': return handleNavigateToolCall(args);
         case 'book_session': return handleBookSessionToolCall(args);

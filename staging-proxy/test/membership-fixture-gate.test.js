@@ -1,3 +1,5 @@
+import { installCompletedProfileFixture } from './completed-profile-fixture.js';
+installCompletedProfileFixture();
 /**
  * Fixture gate and plan-catalogue separation.
  *

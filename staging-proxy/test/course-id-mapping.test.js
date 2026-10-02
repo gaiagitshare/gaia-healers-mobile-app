@@ -1,3 +1,5 @@
+import { installCompletedProfileFixture } from './completed-profile-fixture.js';
+installCompletedProfileFixture();
 /**
  * Stable GHL ids become the primary course identity once seen; names stay
  * the fallback. And content in the catalog never grants anyone anything.

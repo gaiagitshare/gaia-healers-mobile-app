@@ -89,7 +89,7 @@
     }).join('')}<button type="button" class="journey-primary" data-enter>Enter Gaia →</button>`;
   }
   function render() {
-    if (!state.authed || state.mode === 'bypass') return;
+    if ((!state.authed && state.mode !== 'error') || state.mode === 'bypass') return;
     ensure();
     const content = state.mode === 'question' ? questionMarkup() : state.mode === 'reveal' ? revealMarkup() : state.mode === 'intro' ? `<div class="journey-intro-art">${visual('Water')}</div><p class="journey-kicker">${Object.keys(state.answers).length ? 'Welcome back' : 'Welcome'}, ${esc(state.name || 'friend')}</p><h1 tabindex="-1">Let’s discover<br>your Gaia path.</h1><p class="journey-subtitle">A little about you. A world of possibilities.<br>Help Gaia connect you with the education, tools and community that feel right.</p><p class="journey-duration">About 2 minutes · Saved as you go</p><button type="button" class="journey-primary" data-begin>${Object.keys(state.answers).length ? 'Continue my journey' : 'Begin my journey'} →</button>` : `<p class="journey-kicker">Your Gaia profile</p><h1 tabindex="-1">${state.mode === 'loading' ? 'Finding your path…' : 'Let’s reconnect.'}</h1><p class="journey-subtitle" role="status">${esc(state.error || 'Checking your saved Gaia profile.')}</p>${state.mode === 'error' ? '<button class="journey-primary" data-retry>Try again →</button>' : ''}`;
     const scene = `${state.mode}:${state.step || ''}`;
@@ -158,9 +158,10 @@
       if (i > 0) chooseStep(route[i - 1].key); else { state.mode = 'intro'; render(); }
     });
     root.querySelector('[data-begin]')?.addEventListener('click', () => { log(Object.keys(state.answers).length ? 'resumed' : 'started'); chooseStep(state.nextStep || 'primary_interests'); });
-    root.querySelector('[data-retry]')?.addEventListener('click', () => check(true));
+    root.querySelector('[data-retry]')?.addEventListener('click', () => state.authed ? check(true) : window.GaiaAuth?.refresh());
     root.querySelector('[data-enter]')?.addEventListener('click', () => {
-      state.mode = 'bypass'; lock(false);
+      if (!state.done) return;
+      state.mode = 'bypass'; lock(false); window.GaiaAppGuard?.set('ready');
       document.dispatchEvent(new CustomEvent('gaia:onboarding-complete'));
     });
     root.querySelector('[data-logout]')?.addEventListener('click', () => document.querySelector('[data-sign-out]')?.click());
@@ -195,20 +196,22 @@
     if (state.done && !force) return Promise.resolve(state.mode === 'bypass');
     if (checkPromise && !force) return checkPromise;
     const generation = state.generation;
+    window.GaiaAppGuard?.set('checking_profile');
     state.mode = 'loading'; state.error = ''; render();
     checkPromise = request('GET').then(data => {
       if (generation !== state.generation) return false;
       state.schema = data.schema; state.answers = data.answers; state.name = data.member.name.split(/\s+/)[0]; state.nextStep = data.nextStep;
-      if (data.state === 'complete') { state.done = true; state.mode = 'bypass'; lock(false); if (force) document.dispatchEvent(new CustomEvent('gaia:onboarding-complete')); return true; }
-      state.mode = 'intro'; render(); return false;
-    }).catch(e => { if (generation === state.generation) { state.mode = 'error'; state.error = e.message; render(); } return false; });
+      if (data.state === 'complete') { state.done = true; state.mode = 'bypass'; lock(false); window.GaiaAppGuard?.set('ready'); if (force) document.dispatchEvent(new CustomEvent('gaia:onboarding-complete')); return true; }
+      window.GaiaAppGuard?.set('onboarding_required'); state.mode = 'intro'; render(); return false;
+    }).catch(e => { if (generation === state.generation) { window.GaiaAppGuard?.set('unavailable'); state.mode = 'error'; state.error = e.message; render(); } return false; });
     return checkPromise;
   }
   document.addEventListener('gaia:auth', e => {
     state.generation++; checkPromise = null; state.done = false;
     state.authed = !!e.detail?.authenticated;
+    if (e.detail?.unavailable) { state.mode = 'error'; state.error = 'We’re having trouble loading your Gaia profile. Reload to try again.'; render(); return; }
     state.answers = {}; state.selected = []; state.text = ''; state.busy = false;
-    if (state.authed) { check(); overlay?.querySelector('h1')?.focus(); } else { state.mode = 'bypass'; lock(false); }
+    if (state.authed) { check(); overlay?.querySelector('h1')?.focus(); } else { state.mode = 'bypass'; lock(false); window.GaiaAppGuard?.set('visitor'); }
   });
   window.addEventListener('gaia:signed-out', () => { state.authed = false; state.generation++; checkPromise = null; lock(false); });
   // Voice and free-form chat continue using their existing tools/markers. Refresh

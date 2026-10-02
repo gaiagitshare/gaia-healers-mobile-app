@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { STEPS, onboardingPath, onboardingState, uiSchema, mapStep } from '../gaia-onboarding.js';
-import { FIELD_KEYS, createOnboardingStore } from '../onboarding-store.js';
+import { FIELD_KEYS, createOnboardingStore, resolveFields, readAnswers } from '../onboarding-store.js';
 function fixture() {
   const defs = Object.entries(FIELD_KEYS).map(([key, value]) => ({ id: 'id-' + key, fieldKey: 'contact.' + value, model: 'contact' }));
   const contact = { id: 'member-a', firstName: 'Ada', email: 'ada@example.test', tags: [], customFields: [] };
@@ -158,4 +158,25 @@ test('existing historical answers resume without repeating them; an app tag fail
   f.failPost(true);
   await assert.rejects(f.store.save('member-a', 'water', answer(STEPS.find(s => s.key === 'water')), '', false, true), /tags_failed/);
   assert.equal((await f.store.load('member-a')).nextStep, 'water');
+});
+test('deterministically complete legacy profile is backfilled and partial history is never backfilled', async () => {
+  const f = fixture();
+  f.contact.tags = ['gaia_practitioner_form_complete'];
+  assert.equal((await f.store.load('member-a')).state, 'complete');
+  assert.ok(f.contact.tags.includes('gaia_app_onboarding_complete'));
+  const partial = fixture();
+  partial.contact.customFields = [{ id: 'id-primary_interests', value: ['Water: I am interested in healing and restructuring our water systems'] }];
+  assert.equal((await partial.store.load('member-a')).state, 'incomplete');
+  assert.ok(!partial.contact.tags.includes('gaia_app_onboarding_complete'));
+});
+test('GHL keyed Other Devices text lists decode slots and ignore empty objects', () => {
+  const defs=Object.entries(FIELD_KEYS).map(([k,v])=>({id:k,fieldKey:'contact.'+v,...(k==='devices_other'?{picklistOptions:[{id:'slot-a'},{id:'slot-b'}]}:{})}));
+  const fields=resolveFields(defs);
+  assert.equal(readAnswers([{id:'devices_other',value:{'slot-b':'Device B','slot-a':'Device A'}}],fields).devices_other,'Device A\nDevice B');
+  assert.equal(readAnswers([{id:'devices_other',value:{}}],fields).devices_other,undefined);
+});
+test('a failed legacy backfill does not re-ask a contact whose form marker already proves completion', async () => {
+  const f=fixture();f.contact.tags=['gaia_practitioner_form_complete'];f.failPost(true);
+  assert.equal((await f.store.load('member-a')).state,'complete');
+  assert.ok(!f.contact.tags.includes('gaia_app_onboarding_complete'));
 });

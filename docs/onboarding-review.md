@@ -36,7 +36,7 @@ node scripts/onboarding-preview.mjs
 
 Run `npm test` in `staging-proxy`, and `node --test` for each `tests/*.cjs`. New store and endpoint tests cover fields, branching, resume, completion, failure/retry, voice/text-compatible values, exact contact resolution, ambiguous emails, cross-site protection, and ignored client-supplied contact/tag targets.
 
-Live GHL location metadata and the published survey were checked read-only. All 16 mapped fields already exist; no duplicate fields were created. **No production GHL contact was read or changed.** A dedicated live test contact remains required to verify text-list storage shape, option acceptance, field clearing, and downstream completion/interest workflows. The implementation uses HighLevel’s documented PUT contact custom-field API and existing tag/notes helpers.
+Live GHL location metadata and the published survey were checked read-only. All 16 mapped fields already exist; no duplicate fields were created. **The later gate verification read an aggregate legacy sample and modified only dedicated QA contacts.** Live option acceptance, text-list storage and completion/interest tags are now verified; see [mandatory gate proof](onboarding-gate-proof.md). Downstream automation side effects are not claimed as fully validated. The implementation uses HighLevel’s documented PUT contact custom-field API and existing tag/notes helpers.
 
 A small existing test-path bug was also fixed: `assist-tools-contract.test.js` used URL `.pathname` as a filesystem path, which fails in a checkout whose directory name contains spaces. It now uses `fileURLToPath`.
 
@@ -45,3 +45,7 @@ A small existing test-path bug was also fixed: `assist-tools-contract.test.js` u
 ## Guidance and motion pass
 
 See [the second-pass review](assist-guidance-review.md) for shared behavior instructions, verified navigation limits, live model samples, measured voice boundaries and the motion recording. The user prioritized behavior and guidance over further voice optimization.
+
+## Mandatory gate enforcement pass
+
+The previous overlay was insufficient. [Mandatory gate proof](onboarding-gate-proof.md) documents the centralized router/API guard, exact legacy criteria, actual live GHL API checks, and browser evidence.

@@ -1,0 +1,31 @@
+{
+  "scope": "Actual PR server in isolated temporary directory on localhost port 8957. Only two owned QA contacts. No production service restart.",
+  "results": [
+    {
+      "case": "completed live contact",
+      "bootstrap": "complete",
+      "protectedApiStatus": 200
+    },
+    {
+      "case": "controlled empty live QA contact",
+      "bootstrap": "incomplete",
+      "protectedApiStatus": 403,
+      "nextStep": "primary_interests"
+    },
+    {
+      "case": "partial live QA contact",
+      "status": "incomplete",
+      "nextStep": "living_beings_who"
+    },
+    {
+      "case": "legacy fields through session bootstrap",
+      "status": "complete",
+      "backfillConfirmed": true
+    },
+    {
+      "case": "verified final save through API",
+      "complete": true,
+      "protectedApiStatus": 200
+    }
+  ]
+}

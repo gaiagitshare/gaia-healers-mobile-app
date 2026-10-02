@@ -62,3 +62,26 @@ test('ambiguous emails and GHL outages produce a recovery response without guess
   unavailable = true; assert.equal((await call()).status, 503); unavailable = false;
   assert.equal((await call()).status, 200);
 });
+
+test('central member gate denies protected APIs for new/partial contacts and GHL failures', async () => {
+  contact.tags = []; contact.customFields = [];
+  for (const path of ['/api/member/profile', '/api/member/courses', '/api/member/communities', '/api/member/events', '/api/academy/manifest', '/api/assist/lookup']) {
+    const r = await realFetch(`http://127.0.0.1:${PORT}${path}`, { method: path.endsWith('lookup') ? 'POST' : 'GET', headers: { cookie: cookie(), origin: 'https://gaiahealers.app', 'content-type': 'application/json' }, ...(path.endsWith('lookup') ? { body: '{}' } : {}) });
+    assert.equal(r.status, 403, path); assert.equal((await r.json()).reason, 'onboarding_required');
+  }
+  await call({ body: { stepKey: 'primary_interests', selections: ['Water'], source: 'visual' } });
+  const partial = await call(); assert.equal(partial.data.state, 'incomplete'); assert.equal(partial.data.nextStep, 'why_join');
+  unavailable = true;
+  const outage = await realFetch(`http://127.0.0.1:${PORT}/api/member/profile`, { headers: { cookie: cookie() } });
+  assert.equal(outage.status, 503); unavailable = false;
+});
+test('session bootstrap checks GHL and completed marker permits the member API', async () => {
+  contact.tags = ['gaia_app_onboarding_complete'];
+  const r = await realFetch(`http://127.0.0.1:${PORT}/api/auth/session`, { headers: { cookie: cookie() } });
+  assert.equal((await r.json()).onboardingStatus, 'complete');
+  const profile = await realFetch(`http://127.0.0.1:${PORT}/api/member/profile`, { headers: { cookie: cookie() } });
+  assert.equal(profile.status, 200);
+  unavailable = true;
+  const fresh = await realFetch(`http://127.0.0.1:${PORT}/api/auth/session`, { headers: { cookie: cookie() } });
+  assert.equal((await fresh.json()).onboardingStatus, 'unavailable'); unavailable = false;
+});

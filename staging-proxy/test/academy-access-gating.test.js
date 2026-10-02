@@ -1,3 +1,5 @@
+import { installCompletedProfileFixture } from './completed-profile-fixture.js';
+installCompletedProfileFixture();
 /**
  * A course video is served only to a session that owns the course.
  *

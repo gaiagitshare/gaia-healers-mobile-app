@@ -1,3 +1,5 @@
+import { installCompletedProfileFixture } from './completed-profile-fixture.js';
+installCompletedProfileFixture();
 /**
  * My Access rows must lead somewhere, and a member who keeps coming back must
  * stay signed in.

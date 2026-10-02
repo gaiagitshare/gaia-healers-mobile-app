@@ -140,6 +140,7 @@
   }
 
   function openPortalWorkspace(section = 'home', explicitUrl = '') {
+    if (!window.GaiaAppGuard?.canEnter) return;
     const root = ensurePortalWorkspace();
     const title = root.querySelector('.gaia-portal-workspace__title');
     const note = root.querySelector('.gaia-portal-workspace__note');
@@ -495,9 +496,11 @@
     async function refreshSession() {
       try {
         const response = await fetch(`${syncProxyBase()}/api/auth/session`, {
+          signal: AbortSignal.timeout(30000),
           headers: { Accept: 'application/json' },
           credentials: 'include',
         });
+        if (!response.ok) throw new Error('session_unavailable');
         const payload = await response.json();
         AUTH_STATE.authenticated = Boolean(payload.authenticated);
         AUTH_STATE.checked = true;
@@ -509,6 +512,7 @@
         AUTH_STATE.checked = true;
         AUTH_STATE.authenticated = false;
         AUTH_STATE.member = null;
+        document.dispatchEvent(new CustomEvent('gaia:auth', { detail: { ...AUTH_STATE, unavailable: true } }));
         renderAuthUi();
         return AUTH_STATE;
       }
@@ -572,7 +576,7 @@
 
     // Let other modules (e.g. the wellness sign-up member bridge) open the
     // sign-in modal, optionally pre-filling the email.
-    window.GaiaAuth = { open: (email) => openModal(email) };
+    window.GaiaAuth = { open: (email) => openModal(email), refresh: refreshSession };
 
     document.querySelectorAll('a.gaia-login-pill, a.gaia-login-btn').forEach((link) => {
       link.dataset.gaiaAuthBound = '1';
@@ -1226,6 +1230,10 @@
     }
 
     function showView(view, options = {}) {
+      if (!window.GaiaAppGuard?.canEnter) {
+        screens.forEach(screen => { screen.classList.remove('is-active'); screen.setAttribute('aria-hidden', 'true'); });
+        return null;
+      }
       if (view === 'biowell' || view === 'chakras') {
         return showView('wellness', { ...options, tab: options.tab || (view === 'biowell' ? 'check' : view) });
       }
@@ -1332,6 +1340,10 @@
       showView(route.view, { tab: route.tab, replace: true });
     });
 
+    document.addEventListener('gaia:eligibility', () => {
+      const route = routeFromUrl();
+      showView(route.view, { tab: route.tab, event: route.event, replace: true });
+    });
     const route = routeFromUrl();
     navigate(route.view, { tab: route.tab, event: route.event, replace: true });
 
@@ -3599,6 +3611,7 @@
     // via GaiaAppShell, external links open a new tab. Used by the typed shortcut
     // chip AND by spoken voice requests (see maybeRouteVoice).
     function routeIntent(text) {
+      if (window.GaiaAppGuard && !window.GaiaAppGuard.canEnter) return null;
       const t = String(text || '').toLowerCase();
       if (!t.trim()) return null;
       // Founder and booking routes — specific before the generic "book/scan".

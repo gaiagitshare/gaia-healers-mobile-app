@@ -1,0 +1,59 @@
+[
+  {
+    "case": "pending authentication and profile",
+    "locked": true,
+    "noDashboardFlash": true
+  },
+  {
+    "case": "restored session in a new tab",
+    "locked": true
+  },
+  {
+    "case": "direct today, refresh, spoofed storage, navigation/history",
+    "locked": true
+  },
+  {
+    "case": "direct academy, refresh, spoofed storage, navigation/history",
+    "locked": true
+  },
+  {
+    "case": "direct community, refresh, spoofed storage, navigation/history",
+    "locked": true
+  },
+  {
+    "case": "direct events, refresh, spoofed storage, navigation/history",
+    "locked": true
+  },
+  {
+    "case": "direct store, refresh, spoofed storage, navigation/history",
+    "locked": true
+  },
+  {
+    "case": "direct profile, refresh, spoofed storage, navigation/history",
+    "locked": true
+  },
+  {
+    "case": "direct wellness, refresh, spoofed storage, navigation/history",
+    "locked": true
+  },
+  {
+    "case": "completed contact",
+    "dashboard": true
+  },
+  {
+    "case": "partial resume and onboarding Assist",
+    "locked": true
+  },
+  {
+    "case": "GHL failure",
+    "locked": true
+  },
+  {
+    "case": "final save failure",
+    "locked": true
+  },
+  {
+    "case": "verified completion",
+    "dashboard": true
+  }
+]

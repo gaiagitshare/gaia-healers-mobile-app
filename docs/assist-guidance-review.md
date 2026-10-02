@@ -1,6 +1,6 @@
 # Gaia Assist guidance and onboarding polish review
 
-PR #180 remains draft. All changes are in an isolated server Git worktree at `/root/gaia-onboarding-pr180`; production services, checkout and CRM contacts were not changed. This pass prioritizes behavior and guidance, as requested.
+PR #180 remains draft. All changes are in an isolated server Git worktree at `/root/gaia-onboarding-pr180`; production services, checkout and customer contacts were not changed. This pass prioritizes behavior and guidance, as requested.
 
 ## Behavior audit and changes
 
@@ -26,7 +26,7 @@ Read-only checks against location `WkKl1K5RuZNQ60xR48k6` confirmed all 16 fields
 
 Assist now receives the member's saved structured choices even after completion and prefers current choices over retained historical tags when guiding Store, Energy, Academy and Community. Interest does not establish ownership, access, medical conclusions or intent to purchase. No speculative recommendation engine was added.
 
-Contract tests compare every structured choice to its persisted field value and tags, verify tag-readback failures, started-journey resume/completion, historical partial resume, and the published survey field IDs/options. No production contact was written. A dedicated live test contact remains a release check for actual API option acceptance, Other Devices text-list shape and downstream GHL automations.
+Contract tests compare every structured choice to its persisted field value and tags, verify tag-readback failures, started-journey resume/completion, historical partial resume, and the published survey field IDs/options. The later gate verification used two owned QA contacts to verify actual option acceptance, keyed Other Devices storage and persisted tags. See [mandatory gate proof](onboarding-gate-proof.md); downstream workflow delivery is not claimed.
 
 ## Visual implementation
 
@@ -61,4 +61,4 @@ Opt-in model QA: `node scripts/assist-guidance-probe.mjs --env /private/provider
 
 Main implementation files: `staging-proxy/assist-guide.js`, `staging-proxy/server.js`, `staging-proxy/qwen-voice-relay.js`, `gaia-ui.js`, `gaia-realtime-voice.js`, `gaia-assist-v3.css`, `gaia-journey.js`, `gaia-journey.css`, `home.html`, `index.html`, `sw.js`. Tests, QA scripts, screenshots, JSON samples and this review accompany them.
 
-See [screenshot and motion gallery](../output/playwright/onboarding/index.html) and [original onboarding/GHL review](onboarding-review.md). Exact live contact answer/tag workflow verification, visual/behavior approval, and full acoustic voice QA remain release checks. Do not merge, deploy or restart production from this draft.
+See [screenshot and motion gallery](../output/playwright/onboarding/index.html) and [original onboarding/GHL review](onboarding-review.md). Visual/behavior approval, downstream workflow review, and full acoustic voice QA remain release checks. Do not merge, deploy or restart production from this draft.

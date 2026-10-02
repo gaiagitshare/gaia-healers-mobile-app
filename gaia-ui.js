@@ -1955,7 +1955,16 @@
       }
       if (muted) {
         stopSpeaking();
-        setAssistVoiceState('idle', 'Sound is off — tap Sound on to hear Gaia');
+        // stopSpeaking() silences the OLD audio paths -- the <audio> element,
+        // speechSynthesis, the legacy TTS fetch -- and the live voice uses none
+        // of them. It plays through an AudioWorklet that never consulted this
+        // flag, so turning the sound off changed the icon and left Gaia talking.
+        // Somebody who wants to stop the voice and type instead gets that now,
+        // and the microphone is released with it rather than left open.
+        if (realtimeVoice?.isActive?.()) {
+          try { realtimeVoice.stop(); } catch (_) { /* already gone */ }
+        }
+        setAssistVoiceState('idle', 'Voice off — type your question below');
       } else if (!realtimeVoice?.isActive?.()) {
         setAssistVoiceState('idle', 'Sound on — tap Gaia to talk');
       }
@@ -2251,6 +2260,10 @@
       // A tap TOGGLES OFF only when a voice session is genuinely live (or
       // connecting) — then it stops and closes. This also lets a user abort a
       // slow/hung connect with a second tap.
+      // Tapping the orb is an unambiguous request to talk, so it clears a
+      // previous "sound off" rather than starting a session nobody can hear.
+      if (muted && !realtimeVoice?.isActive?.()) setMuted(false);
+
       const voiceLive = !!realtimeVoice?.isActive?.();
       if (voiceLive) {
         assistSessionBusy = false;
@@ -2396,6 +2409,17 @@
           && !inPipelineMode() && state !== 'idle' && state !== 'error');
       } catch (_) { /* not initialised yet */ }
       root.classList.toggle('gaia-assist--live-session', liveSession);
+      // The orb is the control people reach for, and it has always read "Start
+      // voice conversation" -- including while a session was running and a tap
+      // would end it. Somebody wanting to stop Gaia talking had no label
+      // telling them the orb was the way, so they hunted for one that was not
+      // there. It now says what the next tap will do.
+      const orbButton = root.querySelector('[data-gaia-orb-tap]');
+      if (orbButton) {
+        const label = liveSession ? 'Stop talking with Gaia' : 'Start voice conversation with Gaia';
+        orbButton.setAttribute('aria-label', label);
+        orbButton.setAttribute('title', label);
+      }
       document.body.classList.toggle('gaia-voice-holding', state === 'holding');
       document.body.classList.toggle('gaia-voice-speaking', state === 'speaking');
       document.body.classList.toggle('gaia-voice-thinking', state === 'thinking');

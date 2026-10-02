@@ -113,8 +113,7 @@ test('the server answers 429 with Retry-After once a caller is over the limit, w
       headers: { 'content-type': 'application/json', 'x-real-ip': '198.51.100.10' },
       body: JSON.stringify({ text }),
     });
-    await speak('x'.repeat(90));
-    assert.equal((await speak('x'.repeat(20))).status, 429, 'the character budget applies to speech');
+    assert.equal((await speak('x'.repeat(90))).status, 410, 'legacy TTS cannot invoke an alternate voice provider');
   } finally {
     await closeServer();
   }

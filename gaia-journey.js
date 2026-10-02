@@ -59,8 +59,19 @@
   }
   const visual = (label) => {
     const icon = label === 'Living Beings' ? 'plant' : label === 'Environment' ? 'mountains' : 'drop';
-    return `<span class="journey-art journey-art--${icon}" aria-hidden="true"><i class="ph ph-${icon}"></i><span class="journey-field-ring"></span></span>`;
+    const scenes = {
+      plant: '<circle cx="120" cy="55" r="36" fill="currentColor" opacity=".08"/><path d="M15 119Q67 82 118 115T225 112" fill="currentColor" opacity=".12"/><path d="M110 119V70M109 94C67 96 58 67 61 48C87 47 114 63 109 94ZM111 82C146 83 165 55 158 32C128 36 111 54 111 82Z" fill="currentColor" fill-opacity=".16" stroke="currentColor" stroke-width="2"/><path d="M70 59L110 96M148 43L111 82" stroke="currentColor" opacity=".6"/><circle cx="176" cy="90" r="9" fill="currentColor" opacity=".65"/><path d="M165 116V112Q176 98 187 112V116" stroke="currentColor" stroke-width="2" fill="none"/><path d="M29 79Q37 70 45 79Q53 70 61 79" fill="none" stroke="currentColor" opacity=".65"/>',
+      mountains: '<circle cx="164" cy="37" r="17" fill="currentColor" opacity=".4"/><path d="M15 111L78 30L141 111Z" fill="currentColor" fill-opacity=".12" stroke="currentColor" stroke-width="1.8"/><path d="M98 111L146 57L208 111Z" fill="currentColor" fill-opacity=".18" stroke="currentColor" stroke-width="1.8"/><path d="M59 54L78 62L93 50M130 75L146 85L162 71" stroke="currentColor" fill="none" opacity=".8"/><path d="M10 126Q74 106 132 128T227 121M24 137Q80 120 140 140" stroke="currentColor" fill="none" opacity=".35"/>',
+      drop: '<ellipse cx="116" cy="111" rx="94" ry="24" fill="currentColor" opacity=".06"/><g fill="none" stroke="currentColor"><ellipse cx="116" cy="111" rx="88" ry="21" opacity=".25"/><ellipse cx="116" cy="111" rx="62" ry="14" opacity=".45"/><ellipse cx="116" cy="111" rx="32" ry="7" opacity=".7"/><path d="M116 17C116 17 87 55 87 71A29 29 0 0 0 145 71C145 55 116 17 116 17Z" fill="currentColor" fill-opacity=".15" stroke-width="2"/><path d="M132 70Q135 84 121 90" stroke-width="2" stroke-linecap="round"/></g>'
+    };
+    return `<span class="journey-art journey-art--${icon}" aria-hidden="true"><svg class="journey-scene" viewBox="0 0 240 150" focusable="false">${scenes[icon]}</svg><span class="journey-field-ring"></span></span>`;
   };
+  function choiceIcon(step, label) {
+    if (step.key === 'living_beings_who') return ({Myself:'user','Other People':'users',Pets:'paw-print','Livestock or farm animals':'cow','Wildlife or sanctuaries':'bird'}[label] || 'compass');
+    if (step.key === 'water') return /drink/i.test(label) ? 'drop' : /crop|farm/i.test(label) ? 'plant' : /measur/i.test(label) ? 'ruler' : /sound/i.test(label) ? 'waveform' : /explor/i.test(label) ? 'compass' : 'waves';
+    if (step.showIf === 'Environment') return /home/i.test(label) ? 'house' : /land|farm/i.test(label) ? 'mountains' : /sound|frequency/i.test(label) ? 'waveform' : /measur/i.test(label) ? 'ruler' : 'circles-three';
+    return '';
+  }
   function questionMarkup() {
     const s = current(); if (!s) return '';
     const route = path(), index = route.findIndex(x => x.key === s.key);
@@ -75,7 +86,7 @@
       <div class="journey-choices ${primary ? 'journey-choices--paths' : s.key === 'living_beings_who' ? 'journey-choices--compact' : ''}">${s.options.map(o => {
         const active = state.selected.includes(o.label);
         const sub = { 'Living Beings': 'People · Animals · Wellbeing', Environment: 'Spaces · Land · Energy', Water: 'Restore · Structure · Explore' }[o.label];
-        return `<button type="button" class="journey-choice ${active ? 'is-selected' : ''}" data-choice="${esc(o.label)}" data-motif="${esc(primary ? o.label : s.showIf || s.key)}" aria-pressed="${active}" ${state.busy ? 'disabled' : ''}>${primary ? visual(o.label) : s.key === 'living_beings_who' ? `<i class="ph ph-${({ Myself: 'user', 'Other People': 'users', Pets: 'paw-print', 'Livestock or farm animals': 'cow', 'Wildlife or sanctuaries': 'bird' }[o.label] || 'sparkle')} journey-choice-icon" aria-hidden="true"></i>` : ''}<span class="journey-choice-copy"><strong>${esc(o.label)}</strong>${primary ? `<small>${sub}</small>` : ''}</span><span class="journey-check" aria-hidden="true">${active ? '✓' : '+'}</span></button>`;
+        return `<button type="button" class="journey-choice ${active ? 'is-selected' : ''}" data-choice="${esc(o.label)}" data-motif="${esc(primary ? o.label : s.showIf || s.key)}" aria-pressed="${active}" ${state.busy ? 'disabled' : ''}>${primary ? visual(o.label) : choiceIcon(s, o.label) ? `<i class="ph ph-${choiceIcon(s, o.label)} journey-choice-icon" aria-hidden="true"></i>` : ''}<span class="journey-choice-copy"><strong>${esc(o.label)}</strong>${primary ? `<small>${sub}</small>` : ''}</span><span class="journey-check" aria-hidden="true">${active ? '✓' : '+'}</span></button>`;
       }).join('')}</div>
       ${s.freeTextOnly || other ? `<label class="journey-text-label">${esc(s.freeTextOnly ? 'Your thoughts' : s.freeText)}<textarea maxlength="4000" rows="4" ${state.busy ? 'disabled' : ''}>${esc(state.text)}</textarea></label>` : ''}
       <p class="journey-error" role="alert">${esc(state.error)}</p>
@@ -91,7 +102,7 @@
   function render() {
     if ((!state.authed && state.mode !== 'error') || state.mode === 'bypass') return;
     ensure();
-    const content = state.mode === 'question' ? questionMarkup() : state.mode === 'reveal' ? revealMarkup() : state.mode === 'intro' ? `<div class="journey-intro-art">${visual('Water')}</div><p class="journey-kicker">${Object.keys(state.answers).length ? 'Welcome back' : 'Welcome'}, ${esc(state.name || 'friend')}</p><h1 tabindex="-1">Let’s discover<br>your Gaia path.</h1><p class="journey-subtitle">A little about you. A world of possibilities.<br>Help Gaia connect you with the education, tools and community that feel right.</p><p class="journey-duration">About 2 minutes · Saved as you go</p><button type="button" class="journey-primary" data-begin>${Object.keys(state.answers).length ? 'Continue my journey' : 'Begin my journey'} →</button>` : `<p class="journey-kicker">Your Gaia profile</p><h1 tabindex="-1">${state.mode === 'loading' ? 'Finding your path…' : 'Let’s reconnect.'}</h1><p class="journey-subtitle" role="status">${esc(state.error || 'Checking your saved Gaia profile.')}</p>${state.mode === 'error' ? '<button class="journey-primary" data-retry>Try again →</button>' : ''}`;
+    const content = state.mode === 'question' ? questionMarkup() : state.mode === 'reveal' ? revealMarkup() : state.mode === 'intro' ? `<div class="journey-intro-art journey-intro-landscape">${['Living Beings','Environment','Water'].map(visual).join('')}</div><p class="journey-kicker">${Object.keys(state.answers).length ? 'Welcome back' : 'Welcome'}, ${esc(state.name || 'friend')}</p><h1 tabindex="-1">Let’s discover<br>your Gaia path.</h1><p class="journey-subtitle">A little about you. A world of possibilities.<br>Help Gaia connect you with the education, tools and community that feel right.</p><p class="journey-duration">About 2 minutes · Saved as you go</p><button type="button" class="journey-primary" data-begin>${Object.keys(state.answers).length ? 'Continue my journey' : 'Begin my journey'} →</button>` : `<p class="journey-kicker">Your Gaia profile</p><h1 tabindex="-1">${state.mode === 'loading' ? 'Finding your path…' : 'Let’s reconnect.'}</h1><p class="journey-subtitle" role="status">${esc(state.error || 'Checking your saved Gaia profile.')}</p>${state.mode === 'error' ? '<button class="journey-primary" data-retry>Try again →</button>' : ''}`;
     const scene = `${state.mode}:${state.step || ''}`;
     const enter = scene !== renderedScene;
     const departing = enter && !reduced() && overlay.querySelector('.journey-stage')?.cloneNode(true);
@@ -157,7 +168,7 @@
       const route = path(), i = route.findIndex(s => s.key === state.step);
       if (i > 0) chooseStep(route[i - 1].key); else { state.mode = 'intro'; render(); }
     });
-    root.querySelector('[data-begin]')?.addEventListener('click', () => { log(Object.keys(state.answers).length ? 'resumed' : 'started'); chooseStep(state.nextStep || 'primary_interests'); });
+    root.querySelector('[data-begin]')?.addEventListener('click', () => { log(Object.keys(state.answers).length ? 'resumed' : 'started'); document.dispatchEvent(new CustomEvent('gaia:analytics',{detail:{event:'gaia_assist_test_started',source:document.querySelector('.gaia-assist--open')?'assist':'journey'}})); chooseStep(state.nextStep || 'primary_interests'); });
     root.querySelector('[data-retry]')?.addEventListener('click', () => state.authed ? check(true) : window.GaiaAuth?.refresh());
     root.querySelector('[data-enter]')?.addEventListener('click', () => {
       if (!state.done) return;
@@ -181,7 +192,7 @@
       state.answers = result.answers;
       if (s.freeTextOnly) {
         if (!result.complete) throw new Error('Your profile is saved. Please retry to confirm completion.');
-        state.done = true; state.mode = 'reveal';
+        state.done = true; state.mode = 'reveal'; document.dispatchEvent(new CustomEvent('gaia:analytics',{detail:{event:'gaia_assist_test_completed'}}));
       } else {
         const route = path(), index = route.findIndex(x => x.key === s.key);
         const next = route[index + 1];
@@ -230,7 +241,7 @@
         try {
           const data = await request('GET');
           state.answers = data.answers;
-          if (data.completedByTag) { state.done = true; state.mode = 'reveal'; render(); }
+          if (data.completedByTag) { state.done = true; state.mode = 'reveal'; document.dispatchEvent(new CustomEvent('gaia:analytics',{detail:{event:'gaia_assist_test_completed'}})); render(); }
           else chooseStep(data.nextStep || 'final_notes');
         } catch (_) {}
       }, 1200);

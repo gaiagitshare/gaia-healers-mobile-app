@@ -97,3 +97,17 @@ body.gaia-v2 .gaia-assist:not(.gaia-assist--minimized) .gaia-assist__sheet:has(.
 @media(prefers-reduced-motion:reduce){.gaia-journey *,.gaia-journey *:before,.gaia-journey *:after,.journey-embedded *{animation:none!important;transition:none!important}}
 .journey-outgoing{position:absolute;margin:0;left:50%;width:min(850px,calc(100% - 40px));pointer-events:none;z-index:0}
 @media(prefers-reduced-motion:reduce){.journey-outgoing{display:none}}
+
+/* Small original SVG landscapes: immediate rendering, no image downloads. */
+.journey-scene{display:block;width:100%;height:100%;overflow:visible;transition:transform .25s ease-out}
+.journey-art:before,.journey-art:after{display:none}
+.journey-choices--paths .journey-art{height:164px;width:100%}
+.journey-choice:hover .journey-scene,.journey-choice.is-selected .journey-scene{transform:translateY(-3px) scale(1.04)}
+.journey-intro-landscape{display:flex;width:420px;max-width:100%;height:155px;align-items:center;gap:0;border-bottom:1px solid var(--v3-border)}
+.journey-intro-landscape .journey-art{width:33.33%;height:140px;animation:none}
+.journey-reveal-art{width:420px}.journey-reveal-art .journey-art{height:120px}
+.journey-stage[data-branch="Water"] .journey-choice-icon{color:var(--v3-cyan)}
+.journey-stage[data-branch="Environment"] .journey-choice-icon{color:#c0bc88}
+@media(max-width:600px){.journey-choices--paths .journey-art{width:106px;height:96px}.journey-choices--paths .journey-choice{padding:16px 14px;gap:10px;min-height:130px}.journey-choices--paths strong{font-size:18px}.journey-choices--paths small{font-size:11px}.journey-intro-landscape{height:125px}.journey-intro-landscape .journey-art{height:115px}}
+.journey-embedded .journey-choices--paths .journey-art{width:84px;height:74px}
+@media(max-width:360px){.journey-choices--paths .journey-art{width:84px}.journey-choices--paths .journey-choice{padding:14px 10px}.journey-choices--paths strong{font-size:17px}}

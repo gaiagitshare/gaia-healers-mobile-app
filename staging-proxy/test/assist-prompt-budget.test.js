@@ -51,15 +51,15 @@ test('safety comes before everything else that tells Gaia how to behave', () => 
   for (const p of [VISITOR_VOICE, VISITOR_TEXT]) {
     const safety = p.indexOf(SAFETY_FIRST);
     assert.ok(safety > 0 && safety < 400, 'SAFETY FIRST must follow the identity line');
-    assert.ok(safety < p.indexOf('HOW TO HELP'));
+    assert.ok(safety < p.indexOf('ROLE:'));
   }
 });
 
 test('the facts people ask about most are still there, stated once', () => {
   for (const p of [VISITOR_VOICE, VISITOR_TEXT]) {
     assert.match(p, /Dr\. Nima Farshid/);
-    assert.match(p, /Gold \$497\/mo or \$4,997\/yr/);
-    assert.match(p, /join\.gaiahealers\.com\/silver/);
+    assert.doesNotMatch(p, /Gold \$497/);
+    assert.match(p, /configured plans/);
     assert.match(p, /videos PLAY in the app/, 'courses play in the app, not the portal');
     assert.match(p, /not a medical device, not HRV/, 'Energy Pulse is an estimate');
     assert.match(p, /tool=numerology/);

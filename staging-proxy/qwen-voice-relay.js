@@ -13,11 +13,10 @@ import './assist-guide.js';
  * one client code path, and everything Qwen-specific can be fixed here without
  * shipping the app.
  *
- * Gemini stays the fallback. The relay hands a conversation over (gaiaHandover)
+ * Qwen is the only voice provider; the legacy gaiaHandover event now signals a retry. The relay hands a conversation over (gaiaHandover)
  * when Qwen fails, stalls, nears its session limit, or hears Persian/Arabic
- * script it may not speak; the client then opens Gemini Live and carries the
- * conversation across. A circuit breaker sends everyone to Gemini for a while
- * after repeated Qwen failures.
+ * session failure; the client displays retry or typed chat. A circuit breaker
+ * pauses new voice sessions after repeated Qwen failures. No provider handoff.
  *
  * Why these defaults (2026-09-28 comparison, six spoken questions x2 runs, the
  * real Gaia instructions): qwen3.8-omni-flash-realtime answered as well as
@@ -187,7 +186,7 @@ function recordFailure(now = Date.now()) {
   if (failures.length >= 3) {
     breakerOpenUntil = now + 10 * 60 * 1000;
     failures.length = 0;
-    console.warn('[Gaia Assist] qwen voice breaker OPEN — Gemini for 10 minutes');
+    console.warn('[Gaia Assist] qwen voice breaker OPEN — voice retry required');
   }
 }
 
@@ -198,12 +197,10 @@ export function _recordFailureForTest(now) { recordFailure(now); }
 
 /**
  * Should this token request get Qwen? Returns a reason when it should not, so
- * the log says why a member was sent to Gemini.
+ * the UI explains why Qwen needs a retry.
  */
 export function qwenRouting({ cfg = qwenVoiceConfig(), ip = '', lang = '', forced = '' } = {}) {
-  if (forced === 'gemini') return { use: false, reason: 'forced_gemini' };
   if (!cfg.enabled) return { use: false, reason: 'disabled' };
-  if (forced !== 'qwen' && prefersGemini(lang)) return { use: false, reason: 'language' };
   if (Date.now() < breakerOpenUntil) return { use: false, reason: 'breaker_open' };
   if (openSessions >= cfg.maxSessions) return { use: false, reason: 'capacity' };
   if ((live.get(ip) || 0) >= cfg.maxSessionsPerIp) return { use: false, reason: 'ip_capacity' };
@@ -347,12 +344,7 @@ function runSession(browser, grant, ip) {
     if (evt.type === 'response.audio_transcript.delta') assistantLine += evt.delta || '';
     if (evt.type === 'conversation.item.input_audio_transcription.completed') {
       transcript.push({ role: 'user', text: evt.transcript || '' });
-      if (needsGeminiForLanguage(evt.transcript)) {
-        // Forward what they said first, so the bubble shows it, then hand over.
-        toBrowser({ serverContent: { inputTranscription: { text: evt.transcript, finished: true } } });
-        handover('language');
-        return;
-      }
+
     }
     if (evt.type === 'response.done') {
       disarmStall();

@@ -1518,10 +1518,7 @@
             <div class="gaia-assist__settings-grid">
               <label>Provider
                 <select class="gaia-assist__voice-provider">
-                  <option value="auto">Auto</option>
-                  <option value="browser">Browser</option>
-                  <option value="openai">OpenAI</option>
-                  <option value="elevenlabs">ElevenLabs</option>
+                  <option value="qwen">Qwen</option>
                 </select>
               </label>
               <label>Voice
@@ -1792,58 +1789,21 @@
         const spread = recent.length > 1 ? ' Your last ' + recent.length + ' readings average ' + average + ' BPM.' : '';
         return 'Your most recent Energy Pulse reading was ' + latest.bpm + ' BPM on ' + when
           + ' (' + (latest.method === 'tap' ? 'tapped at the wrist' : 'camera') + ').' + spread
-          + ' Readings are saved only on this device, never uploaded. I can open Energy Pulse if you want to measure again.';
+          + ' Readings are saved only on this device, never uploaded. Open Energy Pulse to measure again; this is an estimate, not a clinical reading.';
       }
       if (wantsHistory) {
         return 'I do not have a saved Energy Pulse reading on this device yet. Open Energy Pulse from Home, hold a fingertip over the flash-lit camera for about fifteen seconds, and I will keep the result here for you.';
       }
-      return 'Energy Pulse measures your heart rate with the phone camera — a fingertip over the flash-lit lens for about fifteen seconds, or you can tap along with your wrist pulse instead. It shows a number only once the signal passes every quality check, and it is a pulse estimate for reflection, not a medical device. Want me to open it?';
+      return 'Energy Pulse measures your heart rate with the phone camera — a fingertip over the flash-lit lens for about fifteen seconds, or you can tap along with your wrist pulse instead. It shows a number only once the signal passes every quality check, and it is a pulse estimate for reflection, not a medical device. Open it from Energy when you want to measure.';
     }
 
-    function resolveLocalReply(prompt, intent = 'general') {
-      const pulse = pulseReply(prompt);
-      if (pulse) return pulse;
-      const responses = assistant.responses || {};
-      const intentReplies = {
-        event: responses.event,
-        devices: responses.scan,
-        scan: responses.scan,
-        biowell: responses.scan,
-        chakra: responses.scan,
-        academy: responses.academy,
-        access: responses.academy,
-        booking: responses.event,
-        'join-free': 'You can join Gaia Healers for free from the Home member card. Tap Join free, complete the secure enrollment, then return here and sign in with the same email.',
-        membership: 'Open Store and choose Memberships to compare the official Free, Silver, Gold, and Diamond paths. Your app access always mirrors what your account has been granted.',
-        'sign-in': 'Tap Sign in and enter the email on your account. I will send a secure one-time link so you can open your own courses and communities.',
-        ghl: responses.ghl,
-        services: responses.event,
-        voice: responses.scan,
-        ecosystem: 'Gaia Healers has six places: Today for your daily energy; Energy for energy check, horoscope, chakras, numerology, colour test, today sky, Bio-Well and the free tools (Energy Pulse heart-rate reading and coherence breathing); Academy for courses, certifications and the library; Community for your circles, Find a Healer, events, Gaia Radio, booking a session and messages; Shop for the live store; and You for your membership, access, bookings and practitioner tools. Tell me what you want and I will open the verified source.',
-        general: null,
-      };
-      if (intentReplies[intent]) return intentReplies[intent];
-
-      const normalized = `${intent} ${prompt}`.toLowerCase();
-      if (/research|study|studies|article|blog|scientific/.test(normalized)) {
-        return 'Gaia Healers has a public Bio-Well research library plus current wellness and technology articles. I can open the verified research page or the Gaia Healers articles for you.';
+    function resolveLocalReply(prompt) {
+      // Keep device-only pulse history local; urgent concerns use the safety fallback first.
+      if (!/chest pain|cannot breathe|can.t breathe|suicid|kill myself|medication|diagnos|cancer|cure/i.test(prompt) && window.GaiaAppGuard?.canEnter) {
+        const pulse = pulseReply(prompt);
+        if (pulse) return pulse;
       }
-      if (/affiliate|marketplace|software|contact|support|practitioner tools?/.test(normalized)) {
-        return 'I can open the verified Gaia Healers destination for affiliate access, practitioner CRM/software/marketplace, certification requests, or contact support. Which one do you need?';
-      }
-      if (/service|what do you do|device|bio-well|biowell|scan|chakra|energy/.test(normalized)) {
-        return responses.scan || responses.event || 'Gaia Healers connects Bio-Well, certification, communities, and Elevate event operations.';
-      }
-      if (/badge|elevate|event|check-in/.test(normalized)) {
-        return responses.event || 'I can help prepare your Elevate badge flow and check QR status in review mode.';
-      }
-      if (/course|academy|certification|module|exam/.test(normalized)) {
-        return responses.academy || 'Open Academy to see the courses in your account. I can guide you there, but I will not guess a course or progress level.';
-      }
-      if (/ghl|follow-up|crm|registration/.test(normalized)) {
-        return responses.ghl || 'Registration and tickets are handled on our events platform. I can draft follow-up copy for your review before anything is sent.';
-      }
-      return responses.scan || 'Gaia Assist is ready. Ask about today’s energy, Academy, community, events, membership, products, your profile, or meeting the founder.';
+      return window.GaiaAssistGuide.fallback(prompt, window.GaiaAppGuard?.status === 'onboarding_required' ? 'onboarding' : authState().authenticated ? 'member' : 'visitor', [...declinedPrompts]);
     }
 
     function currentAssistView() {
@@ -1937,7 +1897,7 @@
 
     function setRealtimeVoiceProvider() {
       const live = realtimeConfig();
-      setVoiceProvider('Gaia', live.voice || 'Puck');
+      setVoiceProvider('Qwen', live.voice || '');
     }
 
     function clearPendingVoice(revoke = true) {
@@ -2002,7 +1962,7 @@
     }
 
     function selectedProvider() {
-      return voiceProviderSelect.value || 'auto';
+      return 'qwen';
     }
 
     function selectedSpeed() {
@@ -2010,177 +1970,22 @@
       return Number.isFinite(speed) ? speed : 1;
     }
 
-    function naturalVoiceScore(voice) {
-      const name = `${voice.name} ${voice.voiceURI}`.toLowerCase();
-      let score = 0;
-      if (/samantha|ava|allison|susan|victoria|karen|moira|tessa|serena|google us english|microsoft .*natural|zira/.test(name)) score += 50;
-      if (/enhanced|premium|natural|neural/.test(name)) score += 25;
-      if (/en-us|en_us/.test(`${voice.lang} ${voice.name}`.toLowerCase())) score += 12;
-      if (/en/.test(voice.lang.toLowerCase())) score += 6;
-      if (voice.localService) score += 2;
-      return score;
-    }
-
-    function bestBrowserVoice() {
-      if (!browserVoices.length) return null;
-      const saved = localStorage.getItem(VOICE_NAME_KEY);
-      const savedVoice = browserVoices.find((voice) => voice.name === saved);
-      if (savedVoice) return savedVoice;
-      return [...browserVoices].sort((a, b) => naturalVoiceScore(b) - naturalVoiceScore(a))[0] || null;
-    }
-
-    function ttsConfig() {
-      return window.GAIA?.sync?.voice?.tts || {};
-    }
-
-    function refreshBrowserVoicesOnly() {
-      browserVoices = window.speechSynthesis?.getVoices?.() || [];
-      const best = bestBrowserVoice();
-      const selectedName = localStorage.getItem(VOICE_NAME_KEY) || best?.name || '';
-      const options = browserVoices.length
-        ? browserVoices.map((voice) => {
-            const label = `${voice.name}${voice.lang ? ` (${voice.lang})` : ''}`;
-            return `<option value="${escapeHtml(voice.name)}" ${voice.name === selectedName ? 'selected' : ''}>${escapeHtml(label)}</option>`;
-          }).join('')
-        : '<option value="">System default</option>';
-      voiceNameSelect.innerHTML = options;
-      if (selectedName) voiceNameSelect.value = selectedName;
-    }
-
     function refreshVoiceOptions() {
-      const provider = selectedProvider();
-      const tts = ttsConfig();
-      if (provider === 'elevenlabs' || (provider === 'auto' && tts.elevenLabsConfigured)) {
-        const voices = hostedVoices.length
-          ? hostedVoices
-          : (tts.elevenLabsVoiceId
-            ? [{ id: tts.elevenLabsVoiceId, name: tts.elevenLabsVoice || 'Gaia voice' }]
-            : []);
-        if (voices.length) {
-          const saved = localStorage.getItem(VOICE_NAME_KEY);
-          voiceNameSelect.innerHTML = voices.map((voice) => {
-            const selected = voice.id === saved || voice.name === saved;
-            return `<option value="${escapeHtml(voice.id)}" ${selected ? 'selected' : ''}>${escapeHtml(voice.name)}</option>`;
-          }).join('');
-          return;
-        }
-      }
-      if (provider === 'openai') {
-        const openaiVoice = tts.openaiVoice || 'alloy';
-        const saved = localStorage.getItem(VOICE_NAME_KEY) || openaiVoice;
-        voiceNameSelect.innerHTML = ['alloy', 'ash', 'coral', 'echo', 'fable', 'nova', 'onyx', 'sage', 'shimmer'].map(
-          (name) => `<option value="${name}" ${name === saved ? 'selected' : ''}>${name}</option>`,
-        ).join('');
-        return;
-      }
-      refreshBrowserVoicesOnly();
-    }
-
-    async function loadHostedVoices() {
-      const base = proxyBase();
-      if (!base) return;
-      try {
-        const response = await fetch(`${base}/api/assist/voices`, {
-          headers: { Accept: 'application/json' },
-          credentials: 'include',
-        });
-        if (!response.ok) return;
-        const payload = await response.json();
-        hostedVoices = payload.voices || [];
-        refreshVoiceOptions();
-      } catch (err) {
-        assistLog('hosted voices unavailable', { error: err.message });
-      }
+      voiceProviderSelect.value = 'qwen';
+      voiceProviderSelect.disabled = true;
+      voiceNameSelect.innerHTML = '<option>Qwen</option>';
+      voiceNameSelect.disabled = true;
     }
 
     function configureVoiceFromBootstrap() {
-      initRealtimeVoice();
-      if (canUseRealtimeVoice()) {
-        setRealtimeVoiceProvider();
-      }
-      const tts = ttsConfig();
-      const savedProvider = localStorage.getItem(VOICE_PROVIDER_KEY);
-      if (tts.elevenLabsConfigured) {
-        if (!savedProvider || savedProvider === 'auto' || savedProvider === 'browser') {
-          voiceProviderSelect.value = 'elevenlabs';
-          localStorage.setItem(VOICE_PROVIDER_KEY, 'elevenlabs');
-        }
-      } else if (tts.configured && (!savedProvider || savedProvider === 'browser')) {
-        voiceProviderSelect.value = 'auto';
-        localStorage.setItem(VOICE_PROVIDER_KEY, 'auto');
-      }
-      refreshVoiceOptions();
-      const provider = voiceProviderSelect.value;
-      const label = tts.elevenLabsVoice || tts.openaiVoice || 'hosted';
-      if (!canUseRealtimeVoice()) {
-        setVoiceProvider(provider === 'browser' ? 'browser' : provider, provider === 'auto' ? 'auto' : label);
-      }
-      if (tts.configured) loadHostedVoices();
+      initRealtimeVoice(); refreshVoiceOptions(); setRealtimeVoiceProvider();
     }
-
-    function refreshBrowserVoices() {
-      refreshVoiceOptions();
-    }
-
     function initVoiceSettings() {
-      const savedProvider = localStorage.getItem(VOICE_PROVIDER_KEY);
-      voiceProviderSelect.value = savedProvider || 'auto';
-      localStorage.setItem(VOICE_PROVIDER_KEY, voiceProviderSelect.value);
-      voiceSpeed.value = localStorage.getItem(VOICE_SPEED_KEY) || '1';
-      voiceSpeedLabel.textContent = `${Number(voiceSpeed.value).toFixed(2)}x`;
-      refreshVoiceOptions();
-      window.speechSynthesis?.addEventListener?.('voiceschanged', refreshBrowserVoicesOnly);
-      ensureBrowserVoices().then(refreshBrowserVoicesOnly);
+      localStorage.setItem(VOICE_PROVIDER_KEY, 'qwen');
+      localStorage.removeItem(VOICE_NAME_KEY);
+      voiceSpeed.value = '1'; voiceSpeed.disabled = true;
+      voiceSpeedLabel.textContent = '1.00x';
       configureVoiceFromBootstrap();
-    }
-
-    function selectedBrowserVoice() {
-      const selected = voiceNameSelect.value || localStorage.getItem(VOICE_NAME_KEY);
-      return browserVoices.find((voice) => voice.name === selected) || bestBrowserVoice();
-    }
-
-    async function speakWithBrowser(text) {
-      if (!window.speechSynthesis || !window.SpeechSynthesisUtterance) {
-        setVoiceProvider('browser');
-        setError('This browser cannot speak responses aloud. You can still read the reply.');
-        assistError('speech error', { provider: 'browser', error: 'speechSynthesis unavailable' });
-        return;
-      }
-      await ensureBrowserVoices();
-      window.speechSynthesis.cancel();
-      const utterance = new SpeechSynthesisUtterance(text);
-      const voice = selectedBrowserVoice();
-      if (voice) utterance.voice = voice;
-      utterance.lang = voice?.lang || 'en-US';
-      utterance.rate = selectedSpeed();
-      utterance.pitch = 1;
-      let resumeTimer = null;
-      utterance.onstart = () => {
-        setVoiceProvider('browser', voice?.name || 'system');
-        setAssistVoiceState('speaking', 'Speaking…');
-        assistLog('speech started', { provider: 'browser', voice: voice?.name || 'system', speed: selectedSpeed() });
-        resumeTimer = window.setInterval(() => {
-          if (!window.speechSynthesis.speaking) {
-            window.clearInterval(resumeTimer);
-            resumeTimer = null;
-            return;
-          }
-          window.speechSynthesis.pause();
-          window.speechSynthesis.resume();
-        }, 8000);
-      };
-      utterance.onend = () => {
-        if (resumeTimer) window.clearInterval(resumeTimer);
-        status.textContent = 'Ready for next prompt';
-        assistLog('speech ended', { provider: 'browser' });
-      };
-      utterance.onerror = (event) => {
-        if (resumeTimer) window.clearInterval(resumeTimer);
-        setVoiceProvider('browser');
-        setError(`Speech failed: ${event.error || 'browser speech error'}`);
-        assistError('speech error', { provider: 'browser', error: event.error });
-      };
-      window.speechSynthesis.speak(utterance);
     }
 
     async function playAudioElement(audioUrl, provider, voice) {
@@ -2285,99 +2090,9 @@
       setVoiceHint('Tap Hear Gaia if playback is blocked.');
     }
 
-    function buildTtsRequestBody(cleanText, providerSetting) {
-      const tts = ttsConfig();
-      const body = {
-        text: cleanText,
-        provider: providerSetting,
-        speed: selectedSpeed(),
-      };
-      if (providerSetting === 'elevenlabs' || providerSetting === 'auto') {
-        body.voiceId = voiceNameSelect.value || tts.elevenLabsVoiceId || undefined;
-      } else if (providerSetting === 'openai') {
-        body.voice = voiceNameSelect.value || tts.openaiVoice || undefined;
-      } else if (voiceNameSelect.value && providerSetting !== 'browser') {
-        body.voice = voiceNameSelect.value;
-      }
-      return body;
-    }
-
-    function speechPreviewText(text) {
-      const clean = String(text || '').replace(/\s+/g, ' ').trim();
-      if (clean.length <= 360) return clean;
-      const sentenceCut = clean.slice(0, 360).match(/^(.+[.!?])\s+/);
-      return `${(sentenceCut?.[1] || clean.slice(0, 320)).trim()} I can keep the full answer on screen.`;
-    }
-
     async function speakReply(text, options = {}) {
-      const cleanText = String(text || '').trim();
-      if (!cleanText || muted) return;
-      const voiceText = speechPreviewText(cleanText);
-      const fromVoice = options.fromVoice === true;
-      stopSpeaking();
-      await unlockVoicePlayback(isMobileWebKit || fromVoice);
-      setAssistVoiceState('thinking', 'Preparing audio…');
-      const providerSetting = selectedProvider();
-      if (providerSetting === 'browser') {
-        await speakWithBrowser(cleanText);
-        return;
-      }
-      const base = proxyBase();
-      if (!base) {
-        await speakWithBrowser(cleanText);
-        return;
-      }
-
-      try {
-        const ttsStarted = performance.now();
-        activeTtsController?.abort();
-        activeTtsController = new AbortController();
-        const response = await fetch(`${base}/api/assist/tts`, {
-          method: 'POST',
-          headers: {
-            Accept: 'audio/mpeg,application/json',
-            'Content-Type': 'application/json',
-          },
-          credentials: 'include',
-          signal: activeTtsController.signal,
-          body: JSON.stringify(buildTtsRequestBody(voiceText, providerSetting)),
-        });
-        if (!response.ok) {
-          const payload = await response.json().catch(() => ({}));
-          throw new Error(payload.error || `TTS returned ${response.status}`);
-        }
-        if (!response.headers.get('content-type')?.includes('audio')) {
-          throw new Error('TTS returned a non-audio response');
-        }
-        const blob = await response.blob();
-        assistLog('TTS audio received', {
-          provider: response.headers.get('X-Gaia-Voice-Provider') || providerSetting,
-          bytes: blob.size,
-          latencyMs: Math.round(performance.now() - ttsStarted),
-        });
-        const audioUrl = URL.createObjectURL(blob);
-        const provider = response.headers.get('X-Gaia-Voice-Provider') || (providerSetting === 'auto' ? 'hosted' : providerSetting);
-        const voice = response.headers.get('X-Gaia-Voice-Name') || '';
-        try {
-          await playAudioElement(audioUrl, provider, voice);
-        } catch (playError) {
-          assistError('speech error', { provider, error: playError.message || 'autoplay blocked' });
-          if (playButton) playButton.hidden = false;
-          showManualVoicePlayback(audioUrl, provider, voice);
-        }
-      } catch (err) {
-        if (err.name === 'AbortError') {
-          assistLog('TTS request aborted', { provider: providerSetting });
-          return;
-        }
-        setVoiceProvider('browser');
-        assistError('speech error', { provider: providerSetting, error: err.message });
-        await speakWithBrowser(cleanText);
-      } finally {
-        activeTtsController = null;
-        const audio = getSharedAudio();
-        if (!pendingVoice && audio.paused && !activeWebAudio) setAssistVoiceState('idle', REALTIME_STATUS_COPY.idle);
-      }
+      // Qwen speaks in its live session. Typed chat stays readable without another TTS provider.
+      if (options.fromVoice && !realtimeVoice?.isActive()) setError('Qwen voice is unavailable. Tap Gaia to retry.');
     }
 
     function dockButtons() {
@@ -2397,6 +2112,7 @@
     }
 
     function setOpen(open, options = {}) {
+      if (open && panel.hidden) document.dispatchEvent(new CustomEvent('gaia:analytics',{detail:{event:'gaia_assist_opened'}}));
       if (open && !options.passive) {
         void ensureMobileVoiceReady();
       }
@@ -2870,6 +2586,10 @@
       realtimeVoice.on('message', ({ role, text, finalize, messages }) => {
         if (Array.isArray(messages) && messages.length) {
           renderAssistMessageList(messages, { streamingRole: role, finalize });
+          if (finalize && role === 'user' && text) {
+            if (/no thanks|do not want|don.t (?:ask|suggest)|stop (?:asking|suggesting)/i.test(text)) declinedPrompts.add('discovery');
+            maybeRouteVoice(text);
+          }
           return;
         }
         const cleanText = sanitizeRealtimeTranscript(role, text, finalize);
@@ -2977,13 +2697,21 @@
     }
 
     const assistHistory = [];
-    const pageContext = () => window.GaiaAssistGuide.context(window.GaiaJourney?.context || { screen: window.GaiaAppShell?.currentView?.() || 'today' });
+    const declinedPrompts = new Set();
+    const measure = (event, action) => document.dispatchEvent(new CustomEvent('gaia:analytics', {detail:{event, ...(action?{action:action.type}:{}), screen:pageContext().screen}}));
+    const pageContext = () => { const screen=window.GaiaAppShell?.currentView?.() || 'today'; return window.GaiaAssistGuide.context(window.GaiaJourney?.context || {screen, itemId:screen==='store'?window.GaiaStore?.currentItem?.() || '':screen==='events'?new URLSearchParams(location.search).get('event') || String(window.GaiaMember?.event?.id || '').replace(/^event-/, ''):''}); };
     const rememberTurn = (role, content) => {
       assistHistory.push({ role, content });
       if (assistHistory.length > 8) assistHistory.shift();
     };
-    window.addEventListener('gaia:signed-out', () => { assistHistory.length = 0; activeChatController?.abort(); stopSpeaking(); });
-    document.addEventListener('gaia:auth', () => { assistHistory.length = 0; activeChatController?.abort(); });
+    window.addEventListener('gaia:signed-out', () => { assistHistory.length = 0; declinedPrompts.clear(); activeChatController?.abort(); stopSpeaking(); });
+    let conversationAccount = AUTH_STATE.authenticated ? String(AUTH_STATE.member?.contactId || AUTH_STATE.member?.memberId || AUTH_STATE.member?.email || 'member') : 'visitor';
+    document.addEventListener('gaia:auth', () => {
+      const account = AUTH_STATE.authenticated ? String(AUTH_STATE.member?.contactId || AUTH_STATE.member?.memberId || AUTH_STATE.member?.email || 'member') : 'visitor';
+      if (account !== conversationAccount) { assistHistory.length = 0; declinedPrompts.clear(); activeChatController?.abort(); conversationAccount = account; }
+    });
+    window.GaiaAssistContext = () => ({appContext:pageContext(), history:assistHistory.slice(), declined:[...declinedPrompts]});
+    document.addEventListener('gaia:assist-action', event => showConciergeAction(event.detail));
 
     async function streamAssistantReply(base, cleanPrompt, intent, source, fromVoice) {
       const controller = new AbortController();
@@ -3011,6 +2739,7 @@
           page: window.location.pathname.split('/').pop() || 'home.html',
           appContext: pageContext(),
           history: window.GaiaAssistGuide.history(assistHistory),
+          declined: [...declinedPrompts],
         }),
       });
 
@@ -3031,7 +2760,7 @@
         const data = line.slice(5).trim();
         if (!data) return;
         const payload = JSON.parse(data);
-        if (eventName === 'delta') {
+        if (eventName === 'meta') { showConciergeAction(payload.action); } else if (eventName === 'delta') {
           const text = payload.text || '';
           if (!text) return;
           if (!botBubble) botBubble = appendMessage('bot', '');
@@ -3084,6 +2813,7 @@
         setError('Type or speak a prompt first.');
         return;
       }
+      if (/no thanks|do not want|don.t (?:ask|suggest)|stop (?:asking|suggesting)/i.test(cleanPrompt)) declinedPrompts.add('discovery');
       const fromVoice = source === 'voice' || source === 'voice-recorder';
       if (!fromVoice) {
         await unlockVoicePlayback();
@@ -3138,6 +2868,7 @@
             page: window.location.pathname.split('/').pop() || 'home.html',
           appContext: pageContext(),
           history: window.GaiaAssistGuide.history(assistHistory),
+          declined: [...declinedPrompts],
           }),
         });
         assistLog('proxy response received', { status: response.status });
@@ -3145,6 +2876,7 @@
         if (!response.ok || payload.ok === false) {
           throw new Error(payload.error || `Proxy returned ${response.status}`);
         }
+        showConciergeAction(payload.action);
         const reply = payload.reply || resolveLocalReply(cleanPrompt, intent);
         rememberTurn('user', cleanPrompt); rememberTurn('assistant', reply);
         await deliverReply(reply, { warning: payload.warning || '', fromVoice });
@@ -3482,28 +3214,9 @@
     }
 
     async function startVoicePrompt() {
-      if (recognizing) {
-        stopRecognition();
-        return;
-      }
-      if (activeRecorder?.state === 'recording') {
-        stopActiveRecording();
-        return;
-      }
-
-      if (pendingVoice || activeTtsController || activeChatController || window.speechSynthesis?.speaking || !getSharedAudio().paused) {
-        interruptAssistant('voice');
-      }
-      setError('');
-      clearLiveTranscript();
-      await unlockVoicePlayback(true);
-
-      if (SpeechRecognition && !preferRecorderFirst) {
-        beginSpeechRecognition();
-        return;
-      }
-
-      await recordLiveVoice();
+      initRealtimeVoice();
+      if (!realtimeVoice) { setError('Qwen voice is unavailable. Please retry or type your question.'); return; }
+      await realtimeVoice.start();
     }
 
     bindAssistDock();
@@ -3698,9 +3411,32 @@
       if (closePanel) setOpen(false);
       else setMinimized(true);
     }
+    function showConciergeAction(action) {
+      if (!routeBox) return;
+      routeBox.replaceChildren(); routeBox.hidden=true;
+      if (!action || !['start_path','continue_path','check_path','membership','support','navigate','sign_in'].includes(action.type)) return;
+      const gated=window.GaiaAppGuard && !window.GaiaAppGuard.canEnter;
+      if (gated && !['continue_path','check_path','support'].includes(action.type)) return;
+      if (declinedPrompts.has('discovery') && ['start_path','membership'].includes(action.type)) return;
+      routeBox.hidden=false;
+      const button=document.createElement('button');button.type='button';button.className='gaia-assist__route-btn';button.textContent=action.label+' →';
+      button.addEventListener('click',()=>{
+        routeBox.hidden=true;measure(action.type==='membership'?'gaia_assist_membership_clicked':'gaia_assist_navigation_action',action);
+        if (action.type==='start_path'||action.type==='sign_in') {setOpen(false);window.GaiaAuth?.open();}
+        else if (action.type==='continue_path') {setOpen(false);document.querySelector('.gaia-journey [data-begin]')?.click();}
+        else if (action.type==='check_path') {setOpen(false);window.GaiaJourney?.check(true);}
+        else if (action.type==='support') window.open('https://gaiahealers.com/pages/contact-us','_blank','noopener');
+        else if (action.type==='membership') runRoute({view:'store',tab:'membership'});
+        else if (APP_VIEWS.has(action.view)) runRoute({view:action.view});
+      });routeBox.append(button);
+      if(action.type==='start_path'){const note=document.createElement('p');note.textContent='Sign in or create an account to save your path. No paid subscription required.';routeBox.append(note);measure('gaia_assist_test_suggested',action);}
+      if(action.type==='membership')measure('gaia_assist_membership_shown',action);
+      if(['start_path','membership'].includes(action.type)){const decline=document.createElement('button');decline.type='button';decline.className='gaia-assist__route-btn';decline.textContent='Not now';decline.addEventListener('click',()=>{declinedPrompts.add('discovery');routeBox.hidden=true;if(realtimeVoice?.isActive())realtimeVoice.sendText('No thanks. Please do not suggest the Gaia test or membership again in this conversation.');});routeBox.append(decline);}
+    }
+
     function showRoute(text) {
       if (!routeBox) return;
-      const r = routeIntent(text);
+      const r = /^(?:open|show|take me|go to|find)\b/i.test(String(text)) ? routeIntent(text) : null;
       if (!r) { routeBox.hidden = true; routeBox.innerHTML = ''; return; }
       routeBox.hidden = false;
       routeBox.innerHTML = '<button type="button" class="gaia-assist__route-btn"></button>';
@@ -3714,6 +3450,8 @@
     // (booking, shop, directory) still surface the tap chip, because opening a
     // new tab reliably needs a real click.
     function maybeRouteVoice(text) {
+      const state = window.GaiaAppGuard?.status === 'onboarding_required' ? 'onboarding' : AUTH_STATE.authenticated ? 'member' : 'visitor';
+      showConciergeAction(window.GaiaAssistGuide.chooseAction(text, {state,history:assistHistory,declined:[...declinedPrompts],appContext:pageContext()}));
       const r = routeIntent(text);
       if (!r) return;
       // Actions (run) and external links always need a real tap — never fire
@@ -3722,7 +3460,6 @@
       if (r.run || r.url) { showRoute(text); return; }
       const commanded = /\b(take me|bring me|open|go to|show me|navigate|jump to|switch to|head to|pull up|let'?s go|can you open|i want to see)\b/.test(String(text || '').toLowerCase());
       if (r.view && commanded) { runRoute(r, { closePanel: false }); return; }
-      showRoute(text);
     }
 
     form.addEventListener('submit', (event) => {
@@ -3731,7 +3468,6 @@
       const prompt = promptInput.value;
       promptInput.value = '';
       syncAssistSendButton();
-      showRoute(prompt);
       if (realtimeVoice?.isActive()) {
         if (!realtimeVoice.sendText(prompt)) {
           setError('Voice session is still connecting. Try again in a moment.');

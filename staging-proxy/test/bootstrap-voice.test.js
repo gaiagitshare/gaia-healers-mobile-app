@@ -1,16 +1,4 @@
-/**
- * GAIA ASSIST — the app must be told that live voice exists.
- *
- * gaia-ui.js chooses between Gemini Live (tap once, talk hands-free) and the
- * record-then-reply fallback by reading gaia.sync.voice.live from
- * /api/app/bootstrap. On 2026-09-12 that block went out with the renderer
- * fields nobody read, and every member silently got the fallback: one answer,
- * then an orb that said "Listening next…" and never listened again.
- *
- * It also carries the ElevenLabs voice. Without it the voice picker offered
- * browser voice names, and ElevenLabs answered "voice_id 'Samantha' was not
- * found".
- */
+// Qwen-only bootstrap and token policy; no alternate voice provider.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -31,6 +19,7 @@ Object.assign(process.env, {
   GHL_API_BASE_URL: 'http://127.0.0.1:9', GHL_API_TOKEN: 'x', GHL_LOCATION_ID: 'x',
   EVENT_MANAGER_BASE_URL: 'http://127.0.0.1:9',
   GAIA_ASSIST_VOICE_ENABLED: 'true',
+  QWEN_VOICE_ENABLED:'true', QWEN_API_KEY:'test-qwen-key',
   GEMINI_API_KEY: 'test-gemini-key',
   GEMINI_LIVE_MODEL: 'gemini-3.8-live',
   ELEVENLABS_API_KEY: 'test-eleven-key',
@@ -51,15 +40,12 @@ test('bootstrap tells the app that live voice is on, and with which model', asyn
   const { voice } = await bootstrap();
   assert.ok(voice, 'gaia.sync.voice is missing — the app will fall back to record-then-reply');
   assert.equal(voice.live.enabled, true);
-  assert.equal(voice.live.model, 'gemini-3.8-live');
+  assert.equal(voice.live.model, 'qwen3.8-omni-flash-realtime');
   assert.deepEqual(voice.realtime, voice.live, 'gaia-ui.js reads either name');
 });
 
-test('bootstrap names the ElevenLabs voice, so the picker never sends a browser voice name', async () => {
-  const { voice } = await bootstrap();
-  assert.equal(voice.tts.elevenLabsConfigured, true);
-  assert.equal(voice.tts.elevenLabsVoiceId, 'pNInz6obpgDQGcFmaJgB');
-  assert.equal(voice.tts.elevenLabsVoice, 'Adam');
+test('bootstrap disables alternate TTS even when old credentials exist', async () => {
+  const {voice}=await bootstrap();assert.deepEqual(voice.tts,{configured:false,providerOrder:[]});assert.equal(voice.live.provider,'qwen');
 });
 
 test('bootstrap never carries a provider key', async () => {
@@ -68,11 +54,17 @@ test('bootstrap never carries a provider key', async () => {
   assert.ok(!text.includes('test-eleven-key'), 'ElevenLabs key leaked into bootstrap');
 });
 
-test('a page from before Qwen (no lang) is always given a Gemini token', async () => {
-  process.env.QWEN_VOICE_ENABLED = 'true';
-  process.env.QWEN_API_KEY = 'test-qwen-key';
-  const r = await fetch(`http://127.0.0.1:${PORT}/api/assist/voice/token?view=today`, { method: 'POST' });
-  const body = await r.json();
-  assert.notEqual(body.provider, 'qwen', 'an old page cannot use a relay ticket and would lose live voice');
-  assert.ok(!body.relayUrl);
+test('token requests cannot select Gemini, including old clients without a language hint', async () => {
+  for(const query of ['', '?provider=gemini', '?lang=fa-IR']) {
+    const r=await fetch(`http://127.0.0.1:${PORT}/api/assist/voice/token${query}`,{method:'POST'});
+    const body=await r.json();assert.equal(body.provider,'qwen');assert.ok(body.relayUrl);assert.ok(!body.token);
+  }
+});
+test('legacy audio endpoints are disabled without invoking any provider', async () => {
+  for(const route of ['tts','transcribe','voice/turn']) {
+    const r=await fetch(`http://127.0.0.1:${PORT}/api/assist/${route}`,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({text:'hi',audioBase64:'AAAA',provider:'gemini'})});
+    assert.equal(r.status,410);assert.equal((await r.json()).reason,'qwen_live_only');
+  }
+  const voices=await (await fetch(`http://127.0.0.1:${PORT}/api/assist/voices`)).json();
+  assert.ok(voices.voices.every(v=>v.provider==='qwen'));
 });

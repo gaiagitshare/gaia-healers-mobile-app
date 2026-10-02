@@ -970,3 +970,80 @@ body.gaia-v2 [data-screen="store"] #store-memberships .g-tier__flag {
   white-space: nowrap;
   box-shadow: 0 6px 18px -6px rgba(117, 240, 90, 0.6);
 }
+
+/* ── Practice: a practitioner's clients, inside You ──────────────────────────
+   Built entirely from the existing tokens, so it inherits the theme, the dark
+   mode and the radii without introducing a second visual language. Every value
+   below is a --g-* or a multiple of the spacing already in use here.
+
+   Mobile first and single column throughout: the person using this is a
+   practitioner on a phone between sessions, and the whole screen has to be
+   readable at arm's length without a horizontal scroll anywhere. */
+.g-prac { display: flex; flex-direction: column; gap: 20px; }
+.g-prac__sec { display: flex; flex-direction: column; gap: 8px; }
+.g-prac__h { font: 600 15px/1.3 var(--g-font-serif, inherit); margin: 4px 0 2px; color: var(--g-text); }
+.g-prac__h4 { font: 600 13px/1.3 inherit; margin: 12px 0 4px; color: var(--g-text-muted); }
+.g-prac__muted { color: var(--g-text-muted); font-size: 13px; margin: 0; }
+.g-prac__num { font-variant-numeric: tabular-nums; font-size: 13px; color: var(--g-text-muted); min-width: 56px; text-align: right; }
+
+/* A client is a button, not a row with a link in it: the whole card is the
+   target, which is what a thumb needs. */
+.g-prac__client {
+  display: flex; flex-direction: column; gap: 2px; width: 100%; text-align: left;
+  padding: 12px 14px; border: 1px solid var(--g-line); border-radius: var(--g-r-md);
+  background: var(--g-surface); color: var(--g-text); cursor: pointer;
+  min-height: 56px;
+}
+.g-prac__client:hover { border-color: var(--g-line-strong); }
+.g-prac__client:focus-visible { outline: 2px solid var(--g-focus, var(--g-accent)); outline-offset: 2px; }
+.g-prac__client-name { font-weight: 600; font-size: 15px; }
+.g-prac__client-meta { color: var(--g-text-muted); font-size: 12px; }
+.g-prac__when { color: var(--g-text-muted); font-size: 12px; margin-top: 2px; }
+
+/* Concern chips. Severity is carried by colour AND by the word inside, so it
+   survives being read by somebody who cannot tell the two greens apart. */
+.g-prac__flags { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 6px; }
+.g-prac__flag {
+  font-size: 11px; padding: 2px 8px; border-radius: 999px;
+  background: var(--g-surface-hi); color: var(--g-text-muted); border: 1px solid var(--g-line);
+}
+.g-prac__flag.is-elevated { color: var(--g-accent-deep, var(--g-accent)); border-color: var(--g-accent); }
+.g-prac__flag.is-high { color: var(--g-on-accent, #fff); background: var(--g-accent-deep, var(--g-accent)); border-color: transparent; }
+.g-prac__tag { font-size: 11px; color: var(--g-text-muted); }
+
+.g-prac__search { width: 100%; margin-bottom: 4px; }
+
+/* The three Bio-Well cards. Collapsed by default: open is a ten-second call,
+   and nobody should pay for one they did not ask for. */
+.g-prac__cards { display: flex; flex-direction: column; gap: 8px; }
+.g-prac__card { border: 1px solid var(--g-line); border-radius: var(--g-r-md); background: var(--g-surface); overflow: hidden; }
+.g-prac__card-head {
+  display: flex; justify-content: space-between; align-items: center; gap: 12px;
+  width: 100%; padding: 14px; background: none; border: 0; color: var(--g-text);
+  font: 600 14px/1.2 inherit; cursor: pointer; min-height: 48px;
+}
+.g-prac__card-head:focus-visible { outline: 2px solid var(--g-focus, var(--g-accent)); outline-offset: -2px; }
+.g-prac__card-cta { color: var(--g-accent); font-size: 13px; font-weight: 500; }
+.g-prac__card-body { padding: 0 14px 14px; }
+
+.g-prac__loading-note { color: var(--g-text-muted); font-size: 12px; margin: 8px 0 0; }
+
+.g-prac__metrics { display: flex; gap: 10px; margin: 10px 0; }
+.g-prac__metrics .gaia-metric { flex: 1; min-width: 0; }
+
+/* One reading. The bar is decoration over a number that is always present, so
+   nothing depends on reading the bar. */
+.g-prac__row { display: flex; align-items: center; gap: 10px; padding: 5px 0; font-size: 13px; min-width: 0; }
+.g-prac__row > span:first-child { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.g-prac__row em { font-style: normal; font-size: 11px; }
+.g-prac__bar { flex: 0 0 72px; height: 5px; border-radius: 999px; background: var(--g-surface-hi); overflow: hidden; }
+.g-prac__bar > span { display: block; height: 100%; background: var(--g-accent); }
+
+.g-prac__profile { padding: 2px 0 4px; }
+.g-prac__name { font: 600 20px/1.2 var(--g-font-serif, inherit); margin: 0 0 4px; }
+.g-prac__service { display: flex; flex-direction: column; gap: 2px; padding: 10px 14px; border: 1px solid var(--g-line); border-radius: var(--g-r-md); background: var(--g-surface); }
+.g-prac__service-name { font-weight: 600; font-size: 14px; }
+.g-prac__file { padding: 10px 14px; border: 1px solid var(--g-line); border-radius: var(--g-r-md); font-size: 13px; }
+.g-prac__compare + .g-prac__compare { margin-top: 14px; padding-top: 14px; border-top: 1px solid var(--g-line); }
+
+@media (prefers-reduced-motion: reduce) { .g-prac__bar > span { transition: none; } }

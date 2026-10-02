@@ -461,6 +461,80 @@ export const TOOLS = [
     },
   },
 
+  {
+    name: 'practitioner_client_files',
+    role: 'practitioner',
+    where: 'server',
+    mcp: 'get_customer_files',
+    description: "List the files on a client's record — scans, PDFs and the like. Fast. Returns an empty list today: their platform exposes the listing but not the files themselves.",
+    parameters: {
+      type: 'object',
+      properties: { clientId: { type: 'string', description: 'The client id.' } },
+      required: ['clientId'],
+    },
+    async handler(args, ctx) {
+      const clientId = requireString(args, 'clientId');
+      const out = await readMcp(ctx, 'get_customer_files', { customerId: clientId });
+      return {
+        count: out?.count ?? 0,
+        // Nothing retrieves a file, so a name and a date are all that can
+        // honestly be offered. No download link is built that cannot work.
+        files: (out?.files || []).slice(0, 50).map((f) => ({
+          name: f.name || f.filename || 'File',
+          kind: f.type || f.mime || '',
+          added: String(f.created_at || f.uploaded_at || '').slice(0, 10),
+        })),
+      };
+    },
+  },
+
+  {
+    name: 'practitioner_suggested_services',
+    role: 'practitioner',
+    where: 'server',
+    description: "Which of the practitioner's OWN services address what a client's readings show. Use when they ask what to do about a client, or what to offer them. Fast.",
+    parameters: {
+      type: 'object',
+      properties: { clientId: { type: 'string', description: 'The client id.' } },
+      required: ['clientId'],
+    },
+    async handler(args, ctx) {
+      const clientId = requireString(args, 'clientId');
+      // Built from the two FAST calls, not from the trend. list_flagged_customers
+      // already carries each flagged client's concerns by name, and services carry
+      // the same vocabulary -- so this answers in about a second instead of the
+      // ten the trend would cost, and it is the answer a practitioner actually
+      // wants: not "what is wrong" but "what do I do about it".
+      const [flagged, services] = await Promise.all([
+        readMcp(ctx, 'list_flagged_customers'),
+        readMcp(ctx, 'list_services'),
+      ]);
+      const row = (flagged?.flaggedCustomers || [])
+        .find((f) => String(f.customer?.id) === String(clientId));
+      const concerns = (row?.flags || []).map((f) => ({
+        name: String(f.name || ''), area: String(f.category || '').replace(/s$/, ''),
+        value: round(f.value), severity: f.severity || '',
+      })).filter((c) => c.name);
+      if (!concerns.length) return { concerns: [], services: [], note: 'Nothing is currently flagged for this client.' };
+
+      const wanted = new Set(concerns.map((c) => c.name.toLowerCase()));
+      const matches = (services?.services || []).map((sv) => {
+        const covers = String(sv.attributes || '').split(',')
+          .map((a) => a.trim()).filter((a) => wanted.has(a.toLowerCase()));
+        return { id: String(sv.id ?? ''), name: sv.name || '', price: sv.price ?? null,
+                 duration: sv.duration ?? null, covers: [...new Set(covers)] };
+      }).filter((sv) => sv.covers.length)
+        .sort((a, b) => b.covers.length - a.covers.length);
+      return {
+        concerns,
+        services: matches,
+        // Said plainly, because "no matches" is a real answer here rather than a
+        // failure: it means nothing they offer addresses what the scan shows.
+        note: matches.length ? '' : 'None of your services list these areas.',
+      };
+    },
+  },
+
   // —— practice-wide, and fast ——
   {
     name: 'practitioner_flagged_clients',

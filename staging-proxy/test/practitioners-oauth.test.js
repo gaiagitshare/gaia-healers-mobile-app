@@ -252,6 +252,86 @@ test('a tool error surfaces rather than passing as a result', async () => {
   await assert.rejects(() => mcpCall(CFG, 't', 'get_customer', { customerId: 'x' }, fake), /no such customer/);
 });
 
+// ── their server being briefly unavailable ────────────────────────────────
+//
+// Measured over ~2,500 attempts on 2 Oct 2026, the upstream flapped on a
+// timescale of minutes. Everything under mcp.read is a read, so repeating a
+// call has no consequence and a bad minute becomes a slower answer.
+
+test('a 5xx fails instead of passing as an empty result', async () => {
+  // It used to fall through: the body would not parse, json stayed {}, the
+  // handler found no scans and told the practitioner their client had NONE ON
+  // FILE. A wrong answer about a client's readings is worse than a card that
+  // says it could not load, so this is the most important assertion here.
+  for (const [status, body] of [[503, 'Service Unavailable'], [502, '<html>Bad Gateway</html>'], [500, '{"message":"boom"}']]) {
+    const fake = async () => ({ ok: false, status, text: async () => body });
+    await assert.rejects(
+      () => mcpCall(CFG, 't', 'get_customer_scan', { customerId: '474' }, fake),
+      (e) => e.code === 'upstream_unavailable' && e.status === status,
+      `HTTP ${status} must not look like an answer`,
+    );
+  }
+});
+
+test('a 5xx is retried once, and a second chance is enough to recover', async () => {
+  let calls = 0;
+  const fake = async () => {
+    calls += 1;
+    return calls === 1
+      ? { ok: false, status: 503, text: async () => 'Service Unavailable' }
+      : { ok: true, status: 200, text: async () => JSON.stringify({ jsonrpc: '2.0', id: 1, result: { scans: [{ scanned_at: '2026-09-24' }] } }) };
+  };
+  const out = await mcpCall(CFG, 't', 'get_customer_scan', { customerId: '474' }, fake);
+  assert.equal(calls, 2, 'the first failure has to be retried');
+  assert.equal(out.scans.length, 1, 'and the second answer is the one returned');
+});
+
+test('a refused connection is retried; a timeout is not', async () => {
+  // The difference is what it costs the practitioner. A refused connection
+  // comes back in milliseconds. A timeout has already spent thirty seconds
+  // against a card that promised about ten, and doing it twice is a worse
+  // answer than saying it did not come back.
+  let refused = 0;
+  await assert.rejects(() => mcpCall(CFG, 't', 'list_customers', {}, async () => {
+    refused += 1;
+    throw Object.assign(new Error('connect ECONNREFUSED'), { name: 'TypeError' });
+  }), (e) => e.code === 'upstream_unavailable');
+  assert.equal(refused, 2, 'a transport failure is worth one more try');
+
+  let timeouts = 0;
+  await assert.rejects(() => mcpCall(CFG, 't', 'get_customer_scan', { customerId: '474' }, async () => {
+    timeouts += 1;
+    throw Object.assign(new Error('timed out'), { name: 'TimeoutError' });
+  }), (e) => e.code === 'upstream_unavailable' && /did not answer within/.test(e.message));
+  assert.equal(timeouts, 1, 'a timeout must not be doubled');
+});
+
+test('a 4xx and a 401 are answers about the request, so neither is retried', async () => {
+  let n = 0;
+  await assert.rejects(() => mcpCall(CFG, 't', 'get_customer', { customerId: 'x' }, async () => {
+    n += 1; return { ok: false, status: 404, text: async () => 'no such tool' };
+  }), (e) => e.code === 'upstream_unavailable' && e.status === 404);
+  assert.equal(n, 1, 'retrying a 404 would just ask the same wrong question again');
+
+  let m401 = 0;
+  await assert.rejects(() => mcpCall(CFG, 't', 'list_customers', {}, async () => {
+    m401 += 1; return { ok: false, status: 401, text: async () => 'Unauthorized' };
+  }), (e) => e.code === 401);
+  assert.equal(m401, 1, 'a rejected token needs re-consent, not another attempt');
+});
+
+test('a call that works is made exactly once', async () => {
+  // A scan already takes nine to twelve seconds. Retrying a success, or
+  // speculatively doubling up, would be the expensive mistake here.
+  let calls = 0;
+  const fake = async () => {
+    calls += 1;
+    return { ok: true, status: 200, text: async () => JSON.stringify({ jsonrpc: '2.0', id: 1, result: { ok: true } }) };
+  };
+  await mcpCall(CFG, 't', 'get_dashboard_summary', {}, fake);
+  assert.equal(calls, 1);
+});
+
 test('an unreadable profile records that it is unknown, never a guessed identity', async () => {
   const fake = async () => ({ ok: false, status: 401, text: async () => '{"error":"Unauthorized"}' });
   const who = await resolveProfile(CFG, 't', fake);

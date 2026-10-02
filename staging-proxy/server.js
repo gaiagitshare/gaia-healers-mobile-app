@@ -30,6 +30,8 @@ import {
 } from './membership/oauth-core.js';
 import { classifyMembershipEvent, membershipFromEvent } from './membership/events.js';
 import { attachQwenVoiceRelay, qwenRouting, issueQwenTicket, qwenVoiceConfig, voiceBootLine } from './qwen-voice-relay.js';
+import { practitionersConfig, makePkce, authorizeUrl, rememberFlow, claimFlow,
+         exchangeCode, resolveProfile, saveToken, forgetToken, connectionStatus } from './practitioners-oauth.js';
 import { allowSpend, callerKey, guardSubject, spendKindFor, ASSIST_MAX_PROMPT_CHARS, ASSIST_MAX_TTS_CHARS } from './assist-guard.js';
 import { deadline, idleWatch } from './provider-timeouts.js';
 import { SAFETY_FIRST, detectCrisis, crisisReply } from './assist-safety.js';
@@ -7117,6 +7119,111 @@ const server = http.createServer(async (req, res) => {
     }
     if ((req.method === 'GET' || req.method === 'POST') && url.pathname === '/api/assist/voice/token') {
       await assistLiveToken(req, res, origin, url);
+      return;
+    }
+
+    // —— Gaia Practitioners: connecting one practitioner's account ——
+    //
+    // Three routes and no more. The browser never sees a token: it is sent to
+    // THEIR consent screen, comes back with a code, and everything after that
+    // happens here. Who the practitioner is comes from the signed session cookie
+    // on both legs — never from the query string, which is the one part of this
+    // flow an attacker controls.
+    if (req.method === 'GET' && url.pathname === '/api/practitioners/status') {
+      const member = sessionMemberContext(req);
+      if (!member?.contactId) { sendJson(res, 401, { ok: false, error: 'not_signed_in' }, origin); return; }
+      const cfg = practitionersConfig();
+      sendJson(res, 200, {
+        ok: true,
+        available: cfg.enabled,
+        ...connectionStatus(member.contactId),
+      }, origin);
+      return;
+    }
+
+    if (req.method === 'GET' && url.pathname === '/api/practitioners/connect') {
+      const cfg = practitionersConfig();
+      if (!cfg.enabled) { sendJson(res, 503, { ok: false, error: 'not_configured' }, origin); return; }
+      const member = sessionMemberContext(req);
+      if (!member?.contactId) { sendJson(res, 401, { ok: false, error: 'not_signed_in' }, origin); return; }
+
+      // Only a practitioner may start this. The answer comes from their GHL tags,
+      // which is authenticated server state -- not from anything they told us and
+      // not from anything a model concluded during a conversation.
+      let isPractitioner = false;
+      try {
+        const bundle = await fetchMemberBundle(member);
+        const access = buildMemberAccess(bundle.tags, bundle.customFields, bundle.member,
+                                         bundle.entitlements, bundle.subscriptions);
+        isPractitioner = Boolean(access?.member?.practitioner);
+      } catch (e) {
+        console.error('[Gaia Practitioners] could not read member access', { error: String(e.message || e).slice(0, 120) });
+        sendJson(res, 502, { ok: false, error: 'could_not_verify_role' }, origin);
+        return;
+      }
+      if (!isPractitioner) { sendJson(res, 403, { ok: false, error: 'not_a_practitioner' }, origin); return; }
+
+      const { verifier, challenge } = makePkce();
+      const state = crypto.randomBytes(24).toString('base64url');
+      rememberFlow(state, { contactId: member.contactId, verifier, ip: requestIpOf(req) });
+      console.log('[Gaia Practitioners] consent started', { contact: member.contactId });
+      sendRedirect(res, authorizeUrl(cfg, { state, challenge }), origin);
+      return;
+    }
+
+    if (req.method === 'GET' && url.pathname === '/api/practitioners/callback') {
+      const cfg = practitionersConfig();
+      const back = (ok, why) => `${APP_PUBLIC_URL}${APP_PUBLIC_URL.includes('?') ? '&' : '?'}practitioners=${ok ? 'connected' : 'failed'}${why ? `&reason=${encodeURIComponent(why)}` : ''}`;
+      const denied = url.searchParams.get('error');
+      if (denied) { sendRedirect(res, back(false, denied), origin); return; }
+
+      const code = String(url.searchParams.get('code') || '');
+      const flow = claimFlow(url.searchParams.get('state'));
+      // An unknown, expired or already-used state means this callback did not come
+      // from a flow we started. Nothing is stored and nothing is exchanged.
+      if (!code || !flow) { sendRedirect(res, back(false, 'bad_state'), origin); return; }
+
+      // The session must still be the one that began the flow. Without this a code
+      // could be redeemed while a different member is signed in on this browser,
+      // and their row would be given somebody else's practitioner token.
+      const member = sessionMemberContext(req);
+      if (!member?.contactId || member.contactId !== flow.contactId) {
+        console.warn('[Gaia Practitioners] callback session does not match the flow');
+        sendRedirect(res, back(false, 'session_changed'), origin);
+        return;
+      }
+
+      try {
+        const tok = await exchangeCode(cfg, { code, verifier: flow.verifier });
+        const who = await resolveProfile(cfg, tok.access_token);
+        saveToken(member.contactId, {
+          access_token: tok.access_token,
+          refresh_token: tok.refresh_token || '',
+          scope: tok.scope || cfg.scope,
+          expires_at: Date.now() + (Number(tok.expires_in || 0) * 1000),
+          connected_at: new Date().toISOString(),
+          ...who,
+        });
+        console.log('[Gaia Practitioners] connected', {
+          contact: member.contactId,
+          resolved: who.raw_ok ? (who.practitioner_name || who.practitioner_id || 'unnamed') : 'profile unreadable',
+          refreshable: Boolean(tok.refresh_token),
+          expires_in_days: Math.round(Number(tok.expires_in || 0) / 86400),
+        });
+        sendRedirect(res, back(true), origin);
+      } catch (e) {
+        console.error('[Gaia Practitioners] connect failed', { error: String(e.message || e).slice(0, 200) });
+        sendRedirect(res, back(false, 'exchange_failed'), origin);
+      }
+      return;
+    }
+
+    if (req.method === 'POST' && url.pathname === '/api/practitioners/disconnect') {
+      const member = sessionMemberContext(req);
+      if (!member?.contactId) { sendJson(res, 401, { ok: false, error: 'not_signed_in' }, origin); return; }
+      // Somebody who connected an account must be able to unconnect it without
+      // asking us, or consent is not consent.
+      sendJson(res, 200, { ok: true, removed: forgetToken(member.contactId) }, origin);
       return;
     }
     sendJson(res, 404, { ok: false, error: 'Not found' }, origin);

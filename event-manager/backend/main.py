@@ -102,6 +102,20 @@ def _ensure_event_columns():
             stmts.append("ALTER TABLE exhibitors ADD COLUMN %s %s" % (_col, _ddl))
     if "door_test_mode" not in cols:
         stmts.append("ALTER TABLE events ADD COLUMN door_test_mode BOOLEAN DEFAULT 0")
+    try:
+        _tm = {c["name"] for c in inspector.get_columns("ticket_mappings")}
+    except Exception:
+        _tm = set()
+    if _tm and "product_name_match" not in _tm:
+        # One GHL product id is sold under several names. Nothing but the name
+        # can tell those variants apart, so a mapping may now require one.
+        stmts.append("ALTER TABLE ticket_mappings ADD COLUMN product_name_match VARCHAR")
+    if "allow_reentry" not in cols:
+        # Off, exactly as it has always been. A conference where people go out
+        # for lunch needs this ON; a single-admission gate needs it OFF. Which
+        # one an event is, is the organiser's call, and shipping this must not
+        # make it for them.
+        stmts.append("ALTER TABLE events ADD COLUMN allow_reentry BOOLEAN DEFAULT 0")
     if "source_url" not in cols:
         stmts.append("ALTER TABLE events ADD COLUMN source_url VARCHAR")
     if "locked_fields" not in cols:
@@ -140,14 +154,27 @@ def _ensure_event_columns():
         attendee_cols = set()
     if "ticket_type_id" not in attendee_cols:
         stmts.append("ALTER TABLE attendees ADD COLUMN ticket_type_id INTEGER")
-    # Consent defaults to 0 — an existing attendee does not retroactively agree
-    # to have their contact details shared because a column appeared.
+    # Sharing contact details with a stand is what lead retrieval IS, and it is
+    # what the ticket was sold on: handing a badge over at a stand is the
+    # agreement. So these default to 1.
+    #
+    # The line that keeps that honest is consent_updated_at. An explicit choice
+    # stamps it, and nothing below -- no default, no backfill -- touches a row
+    # that carries one. Somebody who says no stays no.
     if "share_email_with_exhibitors" not in attendee_cols:
-        stmts.append("ALTER TABLE attendees ADD COLUMN share_email_with_exhibitors BOOLEAN DEFAULT 0")
+        stmts.append("ALTER TABLE attendees ADD COLUMN share_email_with_exhibitors BOOLEAN DEFAULT 1")
     if "share_phone_with_exhibitors" not in attendee_cols:
-        stmts.append("ALTER TABLE attendees ADD COLUMN share_phone_with_exhibitors BOOLEAN DEFAULT 0")
+        stmts.append("ALTER TABLE attendees ADD COLUMN share_phone_with_exhibitors BOOLEAN DEFAULT 1")
     if "consent_updated_at" not in attendee_cols:
         stmts.append("ALTER TABLE attendees ADD COLUMN consent_updated_at DATETIME")
+    if attendee_cols and "consent_updated_at" in attendee_cols:
+        # Rows created while the default was 0 and never asked. They are brought
+        # in line with the policy; anybody who actually answered the question is
+        # left exactly as they answered it.
+        stmts.append("UPDATE attendees SET share_email_with_exhibitors=1 "
+                     "WHERE consent_updated_at IS NULL AND COALESCE(share_email_with_exhibitors,0)=0")
+        stmts.append("UPDATE attendees SET share_phone_with_exhibitors=1 "
+                     "WHERE consent_updated_at IS NULL AND COALESCE(share_phone_with_exhibitors,0)=0")
     if "can_scan_leads" not in exhibitor_cols:
         # Also 0: scanning becomes something an organiser grants, not something
         # every exhibitor row silently acquires by existing.
@@ -1030,13 +1057,7 @@ def get_events(
     
     # Add counts
     for event in events:
-        event.attendee_count = db.query(models.Attendee).filter(
-            models.Attendee.event_id == event.id
-        ).count()
-        event.checked_in_count = db.query(models.Attendee).filter(
-            models.Attendee.event_id == event.id,
-            models.Attendee.is_checked_in == True
-        ).count()
+        _apply_roll_counts(event, db)
     
     return events
 
@@ -1099,13 +1120,7 @@ def get_event(
         raise HTTPException(status_code=404, detail="Event not found")
     authz.require_cap(db, current_user, event_id, "event.read")
     
-    event.attendee_count = db.query(models.Attendee).filter(
-        models.Attendee.event_id == event.id
-    ).count()
-    event.checked_in_count = db.query(models.Attendee).filter(
-        models.Attendee.event_id == event.id,
-        models.Attendee.is_checked_in == True
-    ).count()
+    _apply_roll_counts(event, db)
     # Declared on the schema since the stats card was written, but never filled
     # in here, so the card only had a number while something else happened to be
     # loading the whole exhibitor list.
@@ -1242,7 +1257,7 @@ def get_attendees(
     db: Session = Depends(get_db),
     current_user: models.User = Depends(get_current_user)
 ):
-    authz.require_cap(db, current_user, event_id, "attendee.read")
+    authz.require_cap(db, current_user, event_id, "attendee.export")
     attendees = db.query(models.Attendee).filter(
         models.Attendee.event_id == event_id
     ).offset(skip).limit(limit).all()
@@ -1469,7 +1484,281 @@ def authorize_scan(event_id: int, payload: schemas.AuthorizeRequest,
     dec["badge_print_count"] = int(att.badge_print_count or 0)
     dec["first_name"] = att.first_name
     dec["last_name"] = att.last_name
+    # Everything the desk might have to answer or fix, on the same response as
+    # the decision. A second round-trip is a second queue.
+    dec["door"] = _door_card(db, att, event, current_user)
     return dec
+
+
+@app.post("/events/{event_id}/attendees/{attendee_id}/override-admit")
+def override_admit(event_id: int, attendee_id: int, body: schemas.OverrideAdmit,
+                   db: Session = Depends(get_db),
+                   current_user: models.User = Depends(get_current_user)):
+    """Let somebody in that the rules refused, on a named person's say-so.
+
+    Every door has this moment: the pass is for Saturday, they are standing
+    there on Friday with a receipt, and the queue is thirty deep. The answer is
+    not to weaken the rule -- a Saturday pass must still refuse on Friday for
+    everyone else -- it is to let a human take responsibility in one tap and
+    leave a record of having done so.
+
+    So the refusal is computed first and kept. The scan log gets its own
+    OVERRIDE row carrying what the door would have said, who overrode it and
+    why; the attendee's lifecycle gets the same. Nothing about the ticket is
+    altered: a refunded ticket that is let in is still refunded tomorrow.
+    """
+    event = _get_event_or_404(event_id, db)
+    authz.require_cap(db, current_user, event_id, "checkin.perform")
+    att = db.query(models.Attendee).filter(models.Attendee.id == attendee_id,
+                                           models.Attendee.event_id == event_id).first()
+    if not att:
+        raise HTTPException(status_code=404, detail="That badge does not belong to this event")
+    reason = (body.reason or "").strip()
+    if len(reason) < 3:
+        raise HTTPException(status_code=400, detail="Say why this person is being let in")
+    az = (body.access_type or "EVENT_ENTRY").upper()
+    refused = _authorize_decision(db, att, event, az)
+    checked_in_now = False
+    if az == "EVENT_ENTRY" and not att.is_checked_in:
+        att.is_checked_in = True
+        att.checked_in_at = datetime.utcnow()
+        checked_in_now = True
+        _activate_member_card(db, att)
+    _lifecycle_append(att, "door_override", actor=(current_user.email or "staff"),
+                      reason=reason, zone=az, refused=refused.get("reason"),
+                      would_have_been=refused.get("result"))
+    db.add(models.ScanLog(event_id=event_id, attendee_id=att.id, qr_code=att.qr_code,
+                          access_type=az, result="OVERRIDE",
+                          reason="OVERRIDE of %s \u2014 %s (was: %s)" % (
+                              refused.get("result") or "DENIED", reason,
+                              refused.get("reason") or "no reason recorded"),
+                          staff_user_id=current_user.id, session_id=body.session_id))
+    db.commit()
+    out = _authorize_decision(db, att, event, az)
+    out.update({"result": "OVERRIDE", "granted": True, "overridden": True,
+                "reason": "Let in by %s \u2014 %s" % (current_user.email or "staff", reason),
+                "refused_result": refused.get("result"),
+                "refused_reason": refused.get("reason"),
+                "checked_in": bool(att.is_checked_in), "checked_in_now": checked_in_now,
+                "badge_print_count": int(att.badge_print_count or 0),
+                "first_name": att.first_name, "last_name": att.last_name,
+                "door": _door_card(db, att, event, current_user)})
+    return out
+
+
+@app.post("/events/{event_id}/attendees/{attendee_id}/door-identity")
+def door_identity(event_id: int, attendee_id: int, body: schemas.DoorIdentity,
+                  db: Session = Depends(get_db),
+                  current_user: models.User = Depends(get_current_user)):
+    """Correct who a badge belongs to, at the desk, while they stand there.
+
+    Fourteen of this year's seats were rebuilt from a payment whose buyer bought
+    for other people, so the name on the seat is the buyer's best guess. Those
+    are flagged `needs_name_check` and are meant to be settled at the entrance:
+    typing the right name is the single most likely door correction there is,
+    and it must not require an organiser login.
+
+    Name and phone therefore sit under the door capability. Email does not: it
+    is the key the GHL sync matches on and the address that claims the permanent
+    card, so changing it stays an organiser's decision. Both are audited with
+    the old value, and a name typed here clears the needs-a-check flag.
+    """
+    event = _get_event_or_404(event_id, db)
+    authz.require_cap(db, current_user, event_id, "checkin.perform")
+    _assert_event_writable(db, event, "correct an attendee at its door")
+    att = db.query(models.Attendee).filter(models.Attendee.id == attendee_id,
+                                           models.Attendee.event_id == event_id).first()
+    if not att:
+        raise HTTPException(status_code=404, detail="That badge does not belong to this event")
+    changes = {}
+    for field in ("first_name", "last_name", "phone"):
+        val = getattr(body, field, None)
+        if val is None:
+            continue
+        val = str(val).strip()
+        if val != (getattr(att, field) or ""):
+            changes[field] = {"from": getattr(att, field) or "", "to": val}
+            setattr(att, field, val)
+    if body.email is not None:
+        email = str(body.email).strip().lower()
+        if email and email != (att.email or "").lower():
+            # Changing the address is an organiser's call, and it must stay
+            # unique at this event or two people claim one card.
+            authz.require_cap(db, current_user, event_id, "attendee.write")
+            if not re.match(r"^[^@\s]+@[^@\s]+\.[^@\s]+$", email):
+                raise HTTPException(status_code=400, detail="That is not a valid email address")
+            clash = db.query(models.Attendee).filter(
+                models.Attendee.event_id == event_id,
+                func.lower(models.Attendee.email) == email,
+                models.Attendee.id != att.id).first()
+            if clash:
+                raise HTTPException(status_code=409,
+                                    detail="%s already belongs to %s %s at this event" % (
+                                        email, clash.first_name or "", clash.last_name or ""))
+            changes["email"] = {"from": att.email or "", "to": email}
+            att.email = email
+    if not changes:
+        return {"ok": True, "changed": {}, "door": _door_card(db, att, event, current_user)}
+    cd = dict(att.custom_data or {})
+    named = "first_name" in changes or "last_name" in changes
+    if named and cd.get("needs_name_check"):
+        cd.pop("needs_name_check", None)
+        att.custom_data = cd
+    _lifecycle_append(att, "door_identity_fix", actor=(current_user.email or "staff"),
+                      reason=(body.reason or None), changed=changes,
+                      name_confirmed=(True if named else None))
+    db.commit(); db.refresh(att)
+    return {"ok": True, "changed": changes,
+            "name": ("%s %s" % (att.first_name or "", att.last_name or "")).strip(),
+            "door": _door_card(db, att, event, current_user)}
+
+
+@app.post("/events/{event_id}/attendees/{attendee_id}/sharing")
+def set_sharing(event_id: int, attendee_id: int, body: schemas.SharingChoice,
+                db: Session = Depends(get_db),
+                current_user: models.User = Depends(get_current_user)):
+    """Record what this person says about their details being shared.
+
+    Sharing is ON by default: buying a ticket and handing a badge to a stand is
+    the agreement, and it is what lead retrieval is sold on. A default is only
+    honest if it can be refused, though, and the place somebody refuses it is
+    the desk or a stand -- out loud, to a person, not in a settings screen they
+    will never open.
+
+    So this is a door capability, and it writes consent_updated_at. That stamp
+    is what protects the answer: no backfill, no import and no future default
+    ever writes over a row that carries one. Somebody who says no stays no.
+    """
+    event = _get_event_or_404(event_id, db)
+    authz.require_cap(db, current_user, event_id, "checkin.perform")
+    _assert_event_writable(db, event, "change a sharing choice on it")
+    att = db.query(models.Attendee).filter(models.Attendee.id == attendee_id,
+                                           models.Attendee.event_id == event_id).first()
+    if not att:
+        raise HTTPException(status_code=404, detail="That badge does not belong to this event")
+    before = (bool(att.share_email_with_exhibitors), bool(att.share_phone_with_exhibitors))
+    att.share_email_with_exhibitors = bool(body.share_email)
+    att.share_phone_with_exhibitors = bool(body.share_phone)
+    att.consent_updated_at = datetime.utcnow()
+    _lifecycle_append(att, "sharing_choice", actor=(current_user.email or "staff"),
+                      reason=(body.reason or None),
+                      **{"from": {"email": before[0], "phone": before[1]},
+                         "to": {"email": bool(body.share_email), "phone": bool(body.share_phone)}})
+    db.commit(); db.refresh(att)
+    return {"ok": True,
+            "share_email": bool(att.share_email_with_exhibitors),
+            "share_phone": bool(att.share_phone_with_exhibitors),
+            "asked_at": att.consent_updated_at,
+            "door": _door_card(db, att, event, current_user)}
+
+
+@app.post("/events/{event_id}/attendees/{attendee_id}/add-seat")
+def add_party_seat(event_id: int, attendee_id: int, body: schemas.AddPartySeat,
+                   db: Session = Depends(get_db),
+                   current_user: models.User = Depends(get_current_user)):
+    """Name a seat the booking already paid for.
+
+    Somebody bought four tickets and one of those four has no badge, because the
+    order carried only the buyer's name. That seat is not a new entitlement --
+    the money is already in -- it is a name that was never collected, and the
+    place it will finally be collected is the entrance, with the person standing
+    there.
+
+    So this is a door capability, and it is bounded by arithmetic rather than by
+    trust: it refuses the moment the booking has as many badges as it paid for.
+    A desk can finish a party of four; it cannot turn it into a party of five.
+    Anybody genuinely new is a walk-in, which is a different form with a
+    different question at the top of it.
+    """
+    event = _get_event_or_404(event_id, db)
+    authz.require_cap(db, current_user, event_id, "checkin.perform")
+    _assert_event_writable(db, event, "add a seat at its door")
+    anchor = db.query(models.Attendee).filter(models.Attendee.id == attendee_id,
+                                              models.Attendee.event_id == event_id).first()
+    if not anchor:
+        raise HTTPException(status_code=404, detail="That badge does not belong to this event")
+    party = _party_members(db, anchor)
+    if not party:
+        raise HTTPException(status_code=409,
+                            detail="This badge is not part of a multi-seat booking. Use Add visitor instead.")
+    if party["unnamed"] < 1:
+        raise HTTPException(status_code=409,
+                            detail="This booking already has all %d badges it paid for. Anybody else is a walk-in."
+                                   % party["paid_for"])
+    first = (body.first_name or "").strip()
+    last = (body.last_name or "").strip()
+    if not first:
+        raise HTTPException(status_code=400, detail="A first name is required")
+    buyer = db.query(models.Attendee).filter(models.Attendee.id == party["buyer_attendee_id"]).first()
+    # The seat inherits the buyer's pass, because it is one of the tickets the
+    # buyer paid for. Its address is derived from theirs so the row is unique
+    # without inventing a mailbox that nobody reads.
+    base, _, domain = (buyer.email or "").partition("@")
+    email = (body.email or "").strip().lower()
+    if email:
+        clash = db.query(models.Attendee).filter(
+            models.Attendee.event_id == event_id,
+            func.lower(models.Attendee.email) == email).first()
+        if clash:
+            raise HTTPException(status_code=409, detail="%s is already on the roll for this event" % email)
+    else:
+        # Derived from the buyer's, and stepped until it is free: a seat that was
+        # removed and re-added must not collide with the address it used to have.
+        for n in range(party["size"] + 1, party["size"] + 40):
+            email = "%s+seat%d@%s" % (base or "seat", n, domain or "gaiahealers.app")
+            if not db.query(models.Attendee).filter(
+                    models.Attendee.event_id == event_id,
+                    func.lower(models.Attendee.email) == email).first():
+                break
+        else:
+            raise HTTPException(status_code=409, detail="Could not make a unique address for this seat")
+    seat_no = party["size"] + 1
+    seat = models.Attendee(
+        event_id=event_id, email=email, first_name=first, last_name=last,
+        phone=(body.phone or "").strip() or None,
+        ticket_type_id=buyer.ticket_type_id,
+        registration_status="registered", attendance_type=(buyer.attendance_type or "paid"),
+        registration_source="door_seat",
+        qr_code="ATT-%s" % uuid.uuid4().hex[:12].upper(),
+        custom_data={
+            "source": "door_seat",
+            "bought_by": party["buyer"],
+            "bought_by_attendee": buyer.id,
+            "seat_of_party": "%d of %d" % (seat_no, party["paid_for"]),
+            "lifecycle": [{"ts": datetime.utcnow().isoformat(), "action": "seat_named_at_door",
+                           "actor": (current_user.email or "staff"),
+                           "reason": (body.reason or
+                                      "Seat %d of the %s booking, named at the entrance."
+                                      % (seat_no, party["buyer"])),
+                           "buyer_attendee": buyer.id}],
+        })
+    db.add(seat)
+    db.flush()
+    # Hand the seat the payment that bought it. The buyer's surplus tickets are
+    # the ones beyond the first -- the first is their own -- minus any a sibling
+    # seat has already claimed. Stamping it here is what stops the reconciler
+    # taking the money straight back off this badge.
+    claimed = set(_payment_claims(db, event_id))
+    surplus = [pe for pe in db.query(models.PaymentEvent).filter(
+                   models.PaymentEvent.event_id == event_id,
+                   models.PaymentEvent.attendee_id == buyer.id,
+                   models.PaymentEvent.status == "paid").order_by(models.PaymentEvent.id).all()
+               if pe.id not in claimed]
+    mine = surplus[1:2] if len(surplus) > 1 else []
+    if mine:
+        pe = mine[0]
+        cd = dict(seat.custom_data or {})
+        cd["paid_by_payment"] = pe.id
+        seat.custom_data = cd
+        pe.attendee_id = seat.id
+    db.commit(); db.refresh(seat)
+    _ensure_public_tokens()
+    db.refresh(seat)
+    return {"ok": True, "attendee_id": seat.id, "qr_code": seat.qr_code,
+            "paid_by_payment": (seat.custom_data or {}).get("paid_by_payment"),
+            "name": ("%s %s" % (seat.first_name or "", seat.last_name or "")).strip(),
+            "seat": "%d of %d" % (seat_no, party["paid_for"]),
+            "door": _door_card(db, seat, event, current_user)}
 
 
 @app.post("/events/{event_id}/door-test-mode")
@@ -1489,6 +1778,29 @@ def set_door_test_mode(event_id: int, payload: schemas.DoorTestMode,
     event.door_test_mode = bool(payload.enabled)
     db.commit()
     return {"ok": True, "event_id": event_id, "door_test_mode": bool(event.door_test_mode)}
+
+
+@app.post("/events/{event_id}/re-entry")
+def set_reentry(event_id: int, payload: schemas.DoorTestMode,
+                db: Session = Depends(get_db),
+                current_user: models.User = Depends(get_current_user)):
+    """May one badge open the door more than once?
+
+    Off, a badge admits one body and no more -- which is what a single-session
+    gate wants, and what stops one ticket walking two people in. On, the same
+    badge readmits all weekend, which is what a three-day conference wants the
+    moment anybody steps out for lunch or comes back on the second morning.
+
+    It is a switch rather than a setting buried in the registration form,
+    because the day somebody discovers they need it is the day there is a queue
+    in front of them.
+    """
+    event = _get_event_or_404(event_id, db)
+    authz.require_cap(db, current_user, event_id, "event.write")
+    _assert_event_writable(db, event, "change its door settings")
+    event.allow_reentry = bool(payload.enabled)
+    db.commit()
+    return {"ok": True, "event_id": event_id, "allow_reentry": bool(event.allow_reentry)}
 
 
 @app.delete("/events/{event_id}/scan-logs")
@@ -1564,7 +1876,18 @@ def set_addon_day(attendee_id: int, payload: schemas.AddonDay,
     att = db.query(models.Attendee).filter(models.Attendee.id == attendee_id).first()
     if not att:
         raise HTTPException(status_code=404, detail="Attendee not found")
-    authz.require_cap(db, current_user, att.event_id, "attendee.write")
+    # The product says "one day of your choosing", so the choosing happens where
+    # the person is -- at the desk, on the morning they turn up. An organiser may
+    # set any date; the desk may only set a day this event actually runs, which
+    # is the only thing anybody would ever want anyway and makes it safe to hand
+    # over.
+    if not authz.can(db, current_user, att.event_id, "attendee.write"):
+        authz.require_cap(db, current_user, att.event_id, "checkin.perform")
+        _ev = db.query(models.Event).filter(models.Event.id == att.event_id).first()
+        _days = _event_days(_ev)
+        if str(payload.day_date)[:10] not in _days:
+            raise HTTPException(status_code=400,
+                                detail="Pick a day this event runs: %s" % ", ".join(_days))
     cd = dict(att.custom_data or {})
     ents = list(cd.get("entitlements") or [])
     prev = None; hit = False
@@ -1674,6 +1997,7 @@ def door_report(event_id: int, db: Session = Depends(get_db),
                           for k, v in door_method.items()},
             "basis": "Gaia-recorded at the door. Not a GHL transaction and not part of GHL revenue.",
         },
+        "door_upgrades": _door_upgrade_totals(db, event_id),
         "verified_ghl_revenue": {
             "orders": ghl_orders,
             "amount": round(ghl_revenue, 2),
@@ -1701,7 +2025,7 @@ def acquisition_report(event_id: int, db: Session = Depends(get_db),
     that order's own checkout session.
     """
     _get_event_or_404(event_id, db)
-    authz.require_cap(db, current_user, event_id, "attendee.read")
+    authz.require_cap(db, current_user, event_id, "analytics.read")
     atts = db.query(models.Attendee).filter(models.Attendee.event_id == event_id).all()
     tt_name = {t.id: t.name for t in db.query(models.TicketType).filter(
         models.TicketType.event_id == event_id).all()}
@@ -1801,7 +2125,12 @@ def event_ticket_counts(event_id: int, db: Session = Depends(get_db),
         base[(bt["code"] if bt else "none")] += 1
         for ad in (eff.get("addons") or []):
             addon[ad["code"]] += 1
-    return {"total": len(atts), "checked_in": checked, "not_checked_in": len(atts) - checked,
+    # "total" is every row, which is the right number for a ledger and the wrong
+    # one for a headcount: the blocked rows are still listed here by status, but
+    # nothing should read `total` as the size of the event.
+    _blocked = sum(n for st, n in status.items() if st in TICKET_BLOCKED_STATUSES)
+    return {"total": len(atts), "admitting": len(atts) - _blocked, "blocked": _blocked,
+            "checked_in": checked, "not_checked_in": len(atts) - _blocked - checked,
             "by_base_ticket": dict(base), "by_addon": dict(addon), "by_status": dict(status)}
 
 
@@ -2038,6 +2367,39 @@ def _addon_label(code):
         return code
     return ADDON_LABELS.get(code) or code.replace("_", " ").title()
 
+def _held_tiers(db, attendee):
+    """Every tier this person has paid for, highest rank first.
+
+    Access is the UNION of them, never only the top-ranked one. The ranks put a
+    single order on products that are not actually ordered: Workshop Access
+    carries the workshops and no conference, GA + Conference carries the
+    conference and no workshops, and whichever of the two ranks higher, reading
+    it alone takes away something that was paid for. Both upgrades between them
+    are on sale right now, and each one silently removed a zone the buyer
+    already held.
+
+    The fallback matches _effective_access exactly: the attendee's own ticket
+    type counts only when there is no paid tier and no admin floor to read, so
+    a downgrade still means what it says.
+    """
+    cd = attendee.custom_data or {}
+    ids = [e.get("ticket_type_id") for e in (cd.get("entitlements") or [])
+           if e.get("status") == "paid" and not e.get("addon_code") and e.get("ticket_type_id")]
+    if cd.get("admin_tier"):
+        ids.append(cd["admin_tier"])
+    if not ids and attendee.ticket_type_id:
+        ids.append(attendee.ticket_type_id)
+    out, seen = [], set()
+    for i in ids:
+        if i in seen:
+            continue
+        seen.add(i)
+        t = db.query(models.TicketType).filter(models.TicketType.id == i).first()
+        if t:
+            out.append(t)
+    return sorted(out, key=lambda t: _tt_rank(db, t.id), reverse=True)
+
+
 def _effective_access(db, attendee):
     """Resolve an attendee into a human-readable access picture: a base ticket PLUS
     additive add-ons (each with an optional day). Everyone — roster, detail view,
@@ -2051,16 +2413,31 @@ def _effective_access(db, attendee):
     if base_ents:
         base_tt = max(base_ents, key=lambda e: _tt_rank(db, e.get("ticket_type_id"))).get("ticket_type_id")
     if cd.get("admin_tier"):
-        base_tt = cd.get("admin_tier")
+        # An admin-set tier is a FLOOR, not a ceiling. It exists so a comp or a
+        # correction cannot be quietly undone by the payment ledger -- not so it
+        # can cap somebody who later pays for something better. Reading it as an
+        # override meant a corrected attendee could buy a VIP upgrade, be
+        # charged for it, and still be refused at the VIP door.
+        if base_tt is None or _tt_rank(db, cd["admin_tier"]) >= _tt_rank(db, base_tt):
+            base_tt = cd.get("admin_tier")
     if base_tt is None:
         base_tt = attendee.ticket_type_id
     base = db.query(models.TicketType).filter(models.TicketType.id == base_tt).first() if base_tt else None
     # add-ons (dedup by code, keep the first paid one)
+    #
+    # An add-on that the base tier already covers is not shown. Somebody who
+    # bought one day of the conference and was later given all three still has
+    # the one-day purchase on their record -- it is what they paid for and the
+    # history keeps it -- but listing it beside a pass that already opens every
+    # day reads as a restriction that no longer exists, and offers them a day to
+    # choose that no longer means anything.
     addons = []
     seen = set()
     for e in paid:
         code = e.get("addon_code")
         if not code or code in seen:
+            continue
+        if code == "ONE_DAY_CONFERENCE" and base is not None and getattr(base, "grants_conference", False):
             continue
         seen.add(code)
         addons.append({"code": code, "label": _addon_label(code), "day": e.get("day"),
@@ -2174,6 +2551,13 @@ def _same_person(a: str, b: str) -> bool:
     return prev[-1] <= 2
 
 
+def _party_of(attendee):
+    """The booking a rebuilt seat belongs to: (buyer name, "2 of 4")."""
+    cd = attendee.custom_data or {}
+    who = str(cd.get("bought_by") or "").strip()
+    return (who, str(cd.get("seat_of_party") or "").strip()) if who else ("", "")
+
+
 def _payer_label(entries, attendee) -> str:
     """The payer's name, but only when it is somebody ELSE.
 
@@ -2251,8 +2635,10 @@ def _pass_includes(db, attendee, event=None) -> str:
                 named.append(str(d))
         parts = ["the exhibit hall on %s" % " and ".join(named)]
 
-    conf = _conference_grant(tt, eff.get("addons") or [], "")
-    if tt is not None and getattr(tt, "grants_conference", False):
+    _held = _held_tiers(db, attendee)
+    conf = _conference_grant(_held or tt, eff.get("addons") or [], "")
+    if any(getattr(t, "grants_conference", False) for t in _held) or (
+            tt is not None and getattr(tt, "grants_conference", False)):
         parts.append("all conference sessions")
     else:
         addon = next((a for a in (eff.get("addons") or []) if a.get("code") == "ONE_DAY_CONFERENCE"), None)
@@ -2260,9 +2646,11 @@ def _pass_includes(db, attendee, event=None) -> str:
             parts.append("conference sessions on %s" % addon["day"])
         elif addon:
             parts.append("one day of conference sessions (day not yet chosen)")
-    if tt is not None and getattr(tt, "grants_workshops", False):
+    if any(getattr(t, "grants_workshops", False) for t in _held) or (
+            tt is not None and getattr(tt, "grants_workshops", False)):
         parts.append("the workshops")
-    if tt is not None and getattr(tt, "is_vip", False):
+    if any(getattr(t, "is_vip", False) for t in _held) or (
+            tt is not None and getattr(tt, "is_vip", False)):
         parts.append("the VIP areas")
 
     if len(parts) == 1:
@@ -2270,6 +2658,19 @@ def _pass_includes(db, attendee, event=None) -> str:
     else:
         body = ", ".join(parts[:-1]) + " and " + parts[-1]
     return "Includes %s." % body
+
+
+def _event_days(event):
+    """Every date this event runs, in its own calendar, oldest first."""
+    if event is None or not event.start_date:
+        return []
+    start = event.start_date.date()
+    end = (event.end_date or event.start_date).date()
+    out, day = [], start
+    while day <= end and len(out) < 32:
+        out.append(day.isoformat())
+        day = day + timedelta(days=1)
+    return out
 
 
 def _event_local_today(event, at=None):
@@ -2285,10 +2686,16 @@ def _event_local_today(event, at=None):
 
 
 def _conference_grant(tt, addons, today):
-    """Decide conference/speaker access. A conference-granting base tier is always
-    in; otherwise a ONE_DAY_CONFERENCE add-on grants it only on its selected day."""
-    if tt is not None and getattr(tt, "grants_conference", False):
-        return {"allowed": True, "reason": (tt.name or "Pass") + " includes conference access"}
+    """Decide conference/speaker access. A conference-granting tier is always in;
+    otherwise a ONE_DAY_CONFERENCE add-on grants it only on its selected day.
+
+    `tt` may be one ticket type or every tier the person holds. Any one of them
+    granting conference is enough -- buying a workshop upgrade must not close a
+    conference door the buyer already paid to walk through.
+    """
+    for _t in ([tt] if (tt is None or not isinstance(tt, (list, tuple))) else tt):
+        if _t is not None and getattr(_t, "grants_conference", False):
+            return {"allowed": True, "reason": (_t.name or "Pass") + " includes conference access"}
     addon = next((a for a in (addons or []) if a.get("code") == "ONE_DAY_CONFERENCE"), None)
     if addon:
         dd = addon.get("day_date")
@@ -2298,6 +2705,297 @@ def _conference_grant(tt, addons, today):
             return {"allowed": True, "reason": "One-Day Speaker Access \u2014 " + (addon.get("day") or dd)}
         return {"allowed": False, "reason": "Conference access valid " + (addon.get("day") or dd) + " only"}
     return {"allowed": False, "reason": "Pass does not include conference access"}
+
+
+# --- What the door needs to see, and what it is allowed to change ------------
+# Everything below exists for one reason: on the day, the person at the desk has
+# a queue behind the badge in their hand. Every answer they need has to be on the
+# decision screen already, and every fix they are allowed to make has to be one
+# tap from it. Walking over to the attendee list to correct a name is the same
+# as not being able to correct it.
+
+# A seat that exists because somebody ELSE paid for it. Two ways in: the rebuild
+# that recovered them from the payment ledger, and the desk naming one on the
+# day. Listed here rather than inferred, so a booking cannot quietly stop being
+# a booking the moment a new source is added.
+PARTY_SEAT_SOURCES = ("rebuilt_seat", "door_seat", "reconciled_seat")
+
+
+def _payment_claims(db, event_id):
+    """{payment_id: attendee_id} for seats that were created FROM a payment.
+
+    Somebody who buys four tickets produces four payments carrying their own
+    email. Matching a payment to "the attendee whose email is the buyer's"
+    therefore collapses all four onto the buyer's badge, and the three people
+    they bought for read as unpaid -- which is exactly what the 2026 roll did.
+
+    A seat that was built from one specific payment records which one, and that
+    is a claim: a deliberate assignment, made once, which must survive every
+    later reconcile. Without this the reconciler silently took the money back
+    off those seats within the minute, every minute.
+    """
+    claims = {}
+    rows = db.query(models.Attendee).filter(
+        models.Attendee.event_id == event_id,
+        models.Attendee.registration_source.in_(PARTY_SEAT_SOURCES)).all()
+    for a in rows:
+        cd = a.custom_data or {}
+        pid = cd.get("paid_by_payment")
+        if pid is None:
+            # The first fourteen seats recorded it inside their lifecycle entry,
+            # before there was a field for it. Read it from there too, so they
+            # keep their money without a migration.
+            for entry in (cd.get("lifecycle") or []):
+                if entry.get("from_payment"):
+                    pid = entry["from_payment"]
+                    break
+        if pid is not None:
+            try:
+                claims[int(pid)] = a.id
+            except (TypeError, ValueError):
+                continue
+    return claims
+
+
+def _attendee_for_payment(db, pe, claims=None):
+    """Whose payment is this?
+
+    A CLAIM beats a guess. If a seat exists because of this exact payment, the
+    payment is theirs and stays theirs. Otherwise fall back to the buyer's email,
+    which is right for the overwhelming majority -- one person, one ticket.
+    """
+    if not pe.event_id:
+        return None
+    if claims is None:
+        claims = _payment_claims(db, pe.event_id)
+    claimed = claims.get(pe.id)
+    if claimed:
+        return db.query(models.Attendee).filter(
+            models.Attendee.id == claimed,
+            models.Attendee.event_id == pe.event_id).first()
+    if not pe.buyer_email:
+        return None
+    return db.query(models.Attendee).filter(
+        models.Attendee.event_id == pe.event_id,
+        func.lower(models.Attendee.email) == pe.buyer_email).first()
+
+
+def _sold_rank(db, pe, mapping_for):
+    """How good a pass this payment BOUGHT, judged by the product's own name as
+    well as the mapping. A storefront that sells several variants through one
+    product can only be told apart by the name, so a rule that reads the mapping
+    alone inherits whatever the mapping got wrong."""
+    m = mapping_for(pe)
+    rank = 0
+    if m and m.ticket_type_id:
+        tt = db.query(models.TicketType).filter(models.TicketType.id == m.ticket_type_id).first()
+        rank = (tt.upgrade_rank or 0) if tt else 0
+    names = pe.product_names if isinstance(pe.product_names, (list, tuple)) else None
+    if names is None:
+        try: names = json.loads(pe.product_names or "[]")
+        except Exception: names = []
+    name = (names[0] if names else "").upper()
+    for word, promised in (("WORKSHOP", 3),):
+        if word in name:
+            rank = max(rank, promised)
+    if re.search(r"\+\s*CONFERENCE|CONFERENCE\s*3\s*DAYS|HALL\s*\+\s*CONFERENCE|SPEAKER", name):
+        rank = max(rank, 2)
+    if re.search(r"\bVIP\b", name):
+        rank = max(rank, 5)
+    return rank
+
+
+def _surplus_seats(db, buyer):
+    """Tickets this person PAID for that nobody is standing in yet.
+
+    A seat that has been named holds its own payment, so it is no longer on the
+    buyer's badge. What is left on the buyer's badge beyond their own first
+    ticket is therefore exactly the seats still waiting for a person -- and
+    until this was read, a buyer whose extra seats had never been named showed
+    no party at all. The desk saw "$198 from 2 payments" and was told nothing
+    about the second person owed a badge.
+
+    A second purchase of something BETTER is that person buying up, not a seat;
+    that is the one case this must not count, and it is judged on what the
+    product sold rather than on its price.
+    """
+    maps = {m.external_product_id: m for m in db.query(models.TicketMapping).filter(
+        models.TicketMapping.event_id == buyer.event_id).all() if m.external_product_id}
+
+    def mapping_for(pe):
+        ids = pe.product_ids if isinstance(pe.product_ids, (list, tuple)) else None
+        if ids is None:
+            try: ids = json.loads(pe.product_ids or "[]")
+            except Exception: ids = []
+        return next((maps[i] for i in ids if i in maps), None)
+
+    rows = []
+    for pe in db.query(models.PaymentEvent).filter(
+            models.PaymentEvent.event_id == buyer.event_id,
+            models.PaymentEvent.attendee_id == buyer.id,
+            models.PaymentEvent.status == "paid").order_by(models.PaymentEvent.occurred_at,
+                                                           models.PaymentEvent.id).all():
+        m = mapping_for(pe)
+        if not m or m.is_upgrade:
+            continue                                   # an upgrade is never a seat
+        rows.append((pe, _sold_rank(db, pe, mapping_for)))
+    if len(rows) < 2:
+        return []
+    first_rank = rows[0][1]
+    return [pe for pe, rank in rows[1:] if rank <= first_rank]
+
+
+def _party_members(db, attendee):
+    """Every badge on one booking, buyer first -- or None if it is a party of one.
+
+    A booking is keyed on the BUYER'S attendee id, stamped on each extra seat
+    when the seat was rebuilt. Never on the spelling of a name: the names on the
+    extra seats are precisely the ones the door exists to correct.
+    """
+    cd = attendee.custom_data or {}
+    buyer_id = int(cd.get("bought_by_attendee") or 0) or attendee.id
+    buyer = (attendee if buyer_id == attendee.id
+             else db.query(models.Attendee).filter(models.Attendee.id == buyer_id).first())
+    if not buyer:
+        return None
+    seats = [a for a in db.query(models.Attendee).filter(
+                 models.Attendee.event_id == buyer.event_id,
+                 models.Attendee.registration_source.in_(PARTY_SEAT_SOURCES)).all()
+             if int((a.custom_data or {}).get("bought_by_attendee") or 0) == buyer.id]
+    # Seats paid for that nobody holds yet. A booking is a booking from the
+    # moment the money arrives, not from the moment somebody gets named.
+    waiting = _surplus_seats(db, buyer)
+    # Those are counted one per PAYMENT, which misses the buyer who asked for
+    # three seats in a single checkout: that is one payment carrying a quantity,
+    # and reading payments alone showed such a booking no party at all while the
+    # money report was already counting the other two seats.
+    #
+    # Only the QUANTITY on an order adds seats here. Counting one per entitlement
+    # instead would turn every person who bought a second, better product into a
+    # booking of two -- "GA, then Workshop Access" is one person buying up, and
+    # a second ticket that really is another person now holds its own badge and
+    # is already among the seats above.
+    slots = 0
+    for _row in [buyer] + seats:
+        for _e in ((_row.custom_data or {}).get("entitlements") or []):
+            if _e.get("status") == "paid" and not _e.get("addon_code") and not _e.get("is_upgrade"):
+                slots += max(1, int(_e.get("quantity") or 1)) - 1
+    # A seat named against a multi-seat order has no payment of its own to hold:
+    # the one payment carrying the quantity is the buyer's. Those seats are the
+    # ones that filled a quantity slot, so they stop it being counted as waiting
+    # -- otherwise naming the people a booking paid for would keep asking for
+    # them for ever.
+    if slots:
+        _filled = sum(1 for _s in seats if not db.query(models.PaymentEvent).filter(
+            models.PaymentEvent.attendee_id == _s.id,
+            models.PaymentEvent.status == "paid").first())
+        slots = max(0, slots - _filled)
+    if not seats and not waiting and slots < 1:
+        return None
+    size = len(seats) + 1
+
+    def row(a, is_buyer):
+        _cd = a.custom_data or {}
+        return {"attendee_id": a.id,
+                "name": ("%s %s" % (a.first_name or "", a.last_name or "")).strip() or a.email,
+                "qr_code": a.qr_code,
+                "checked_in": bool(a.is_checked_in),
+                "is_buyer": is_buyer,
+                "is_this_one": a.id == attendee.id,
+                "needs_name_check": bool(_cd.get("needs_name_check")),
+                "seat": str(_cd.get("seat_of_party") or "1 of %d" % size)}
+
+    members = [row(buyer, True)] + [row(a, False) for a in sorted(seats, key=lambda x: x.id)]
+    # Each seat stamped its denominator when it was created, so a booking that
+    # grew read "2 of 2" beside "3 of 3". The numerator is the seat's own; how
+    # many seats there are is a fact about the booking, known only here.
+    _total = max(len(members), *( [1] + [
+        int(str(m["seat"]).split(" of ")[1]) for m in members
+        if len(str(m["seat"]).split(" of ")) == 2 and str(m["seat"]).split(" of ")[1].strip().isdigit()]))
+    for _i, _m in enumerate(members, start=1):
+        _bits = str(_m["seat"]).split(" of ")
+        _num = _bits[0].strip() if _bits and _bits[0].strip().isdigit() else str(_i)
+        _m["seat"] = "%s of %d" % (_num, _total)
+    # How many seats the booking PAID for, which is not always how many badges
+    # exist: the rebuild could only name the seats whose buyer was identifiable,
+    # and one of this year's four-seat bookings is still a body short. The desk
+    # has to be told that outright, because the family arrives together.
+    paid_for = size + len(waiting) + slots
+    for m in members:
+        bits = str(m["seat"]).split(" of ")
+        if len(bits) == 2 and bits[1].strip().isdigit():
+            paid_for = max(paid_for, int(bits[1].strip()))
+    return {"buyer": ("%s %s" % (buyer.first_name or "", buyer.last_name or "")).strip(),
+            "buyer_attendee_id": buyer.id,
+            "size": size,
+            "paid_for": paid_for,
+            "unnamed": max(0, paid_for - size),
+            "checked_in": sum(1 for m in members if m["checked_in"]),
+            "seat": str(cd.get("seat_of_party") or "1 of %d" % size),
+            "members": members}
+
+
+def _money_for(db, attendee):
+    """What was paid for this badge, and where the money came from."""
+    rows = []
+    for pay in db.query(models.PaymentEvent).filter(
+            models.PaymentEvent.attendee_id == attendee.id,
+            models.PaymentEvent.status == "paid").all():
+        rows.append({"amount": float(pay.amount or 0),
+                     "refunded": float(pay.amount_refunded or 0),
+                     "currency": (pay.currency or "USD").upper(),
+                     "source": (pay.provider or pay.source_type or "GHL"),
+                     "at": pay.occurred_at.isoformat() if pay.occurred_at else None,
+                     "buyer": (pay.buyer_name or "").strip() or None})
+    door = None
+    if (attendee.door_payment_status or "none") not in ("", "none"):
+        door = {"status": attendee.door_payment_status,
+                "method": attendee.door_payment_method,
+                "amount": float(attendee.door_payment_amount or 0),
+                "currency": (attendee.door_payment_currency or "USD").upper(),
+                "reference": attendee.door_payment_reference}
+    return {"payments": rows,
+            "total": round(sum(r["amount"] - r["refunded"] for r in rows), 2),
+            "currency": (rows[0]["currency"] if rows else "USD"),
+            "count": len(rows),
+            "door": door,
+            "attendance_type": attendee.attendance_type or None}
+
+
+def _door_card(db, attendee, event, user=None):
+    """The whole picture of one person, for the screen the door actually reads.
+
+    It carries what THIS operator is allowed to do, so the screen can offer the
+    desk what the desk can do rather than showing everybody every button and
+    letting the refusals explain it afterwards.
+    """
+    cd = attendee.custom_data or {}
+    _organiser = bool(user and authz.can(db, user, event.id, "attendee.write"))
+    return {"attendee_id": attendee.id,
+            "may": {"comp": _organiser, "downgrade": _organiser,
+                    "revoke": _organiser, "change_email": _organiser,
+                    "sell_upgrade": True, "fix_name": True, "override": True},
+            "email": attendee.email,
+            "phone": attendee.phone,
+            "pass_display": _pass_display(db, attendee),
+            "pass_includes": _pass_includes(db, attendee, event),
+            "status": _ticket_status(attendee),
+            "attendance_type": attendee.attendance_type or None,
+            "source": attendee.registration_source or None,
+            "needs_name_check": bool(cd.get("needs_name_check")),
+            # A one-day add-on with no day chosen yet. The door refuses it until
+            # one is picked, so the screen has to say so and offer the days.
+            "event_days": _event_days(event),
+            "sharing": {"email": bool(attendee.share_email_with_exhibitors),
+                        "phone": bool(attendee.share_phone_with_exhibitors),
+                        # Whether anybody ever actually asked them, as opposed
+                        # to the default answering on their behalf.
+                        "asked": attendee.consent_updated_at is not None},
+            "party": _party_members(db, attendee),
+            "money": _money_for(db, attendee),
+            "badge_print_count": int(attendee.badge_print_count or 0),
+            "ticket_type_id": attendee.ticket_type_id,
+            "public_token": attendee.public_token}
 
 
 def _authorize_decision(db, attendee, event, access_type, at=None):
@@ -2351,8 +3049,12 @@ def _authorize_decision(db, attendee, event, access_type, at=None):
     # gate above returns first on every day that is not an event day, so the
     # first scan to get this far would have been the first scan of the event
     # itself. Read the setting from whichever shape the column holds.
+    # The column is the setting. custom_fields is still read after it, because
+    # that is where this lived before there was a switch for it.
     _cf = event.custom_fields
-    if isinstance(_cf, dict):
+    if getattr(event, "allow_reentry", False):
+        allow_reentry_raw = True
+    elif isinstance(_cf, dict):
         allow_reentry_raw = _cf.get("allow_reentry")
     elif isinstance(_cf, list):
         allow_reentry_raw = next(
@@ -2367,12 +3069,18 @@ def _authorize_decision(db, attendee, event, access_type, at=None):
                     "reason": "Badge already checked in; re-entry is not enabled"})
         return out
     has_base = base is not None
-    conf = _conference_grant(tt, addons, today)
+    # Every tier they paid for, not just the top-ranked one: two of the upgrades
+    # on sale grant a tier that lacks a zone the pass below it had, and reading
+    # one tier alone turned a purchase into a loss.
+    held = _held_tiers(db, attendee)
+    conf = _conference_grant(held or tt, addons, today)
     zones = {
         "exhibit": has_base,
         "conference": conf,
-        "workshop": bool(tt and getattr(tt, "grants_workshops", False)),
-        "vip": bool(tt and getattr(tt, "is_vip", False)),
+        "workshop": any(getattr(t, "grants_workshops", False) for t in held) or bool(
+            tt and getattr(tt, "grants_workshops", False)),
+        "vip": any(getattr(t, "is_vip", False) for t in held) or bool(
+            tt and getattr(tt, "is_vip", False)),
     }
     out["zones"] = zones
     # A day pass admits on its own day and no other -- but a person may hold
@@ -2630,7 +3338,7 @@ def scan_qr_code(
         return schemas.QRScanResponse(
             success=True,
             message="Lead already captured",
-            attendee=authz.lead_view(attendee),
+            attendee=dict(authz.lead_view(attendee), **authz.pass_for_scanner(db, attendee)),
             lead_id=existing_lead.id
         )
 
@@ -2645,7 +3353,7 @@ def scan_qr_code(
     return schemas.QRScanResponse(
         success=True,
         message=f"Lead captured for {attendee.first_name} {attendee.last_name}",
-        attendee=authz.lead_view(attendee),
+        attendee=dict(authz.lead_view(attendee), **authz.pass_for_scanner(db, attendee)),
         lead_id=lead.id
     )
 
@@ -2672,7 +3380,11 @@ def get_public_exhibitor_leads(
             "id": lead.id, "exhibitor_id": lead.exhibitor_id,
             "attendee_id": lead.attendee_id, "scanned_at": lead.scanned_at,
             "notes": lead.notes, "rating": lead.rating,
-            "attendee": authz.lead_public_view(lead),
+            # The stand they handed their badge to sees the pass; the public
+            # card page does not.
+            "attendee": (dict(authz.lead_public_view(lead) or {},
+                              **authz.pass_for_scanner(db, lead.attendee))
+                         if lead.attendee is not None else None),
         }
         for lead in leads
     ]
@@ -2731,6 +3443,117 @@ def update_lead_notes(
     
     db.commit()
     return {"message": "Lead updated"}
+
+@app.get("/events/{event_id}/scan-history")
+def scan_history(event_id: int, limit: int = 500, db: Session = Depends(get_db),
+                 current_user: models.User = Depends(get_current_user)):
+    """Who scanned whom, across the whole floor.
+
+    A stand could always see its own leads and the door could see its own log,
+    and nobody could see both, or either one across every stand. So the one
+    question an organiser actually gets asked -- "who scanned my badge?", or
+    "which stands did this person visit?" -- had no screen that answered it.
+
+    Two kinds of scan appear here and they are NEVER merged: a stand capturing
+    a lead is an exchange the attendee consented to, and a door reading a badge
+    is an access decision. They are counted and listed apart.
+    """
+    _get_event_or_404(event_id, db)
+    authz.require_cap(db, current_user, event_id, "lead.read")
+
+    exhibitors = {e.id: e for e in db.query(models.Exhibitor).filter(
+        models.Exhibitor.event_id == event_id).all()}
+    leads = db.query(models.Lead).filter(
+        models.Lead.exhibitor_id.in_(list(exhibitors) or [0])).order_by(
+        models.Lead.scanned_at.desc()).limit(limit).all()
+    att = {a.id: a for a in db.query(models.Attendee).filter(
+        models.Attendee.event_id == event_id).all()}
+
+    def who(aid):
+        a = att.get(aid)
+        return ("%s %s" % (a.first_name or "", a.last_name or "")).strip() if a else None
+
+    rows = [{"lead_id": l.id,
+             "exhibitor_id": l.exhibitor_id,
+             "exhibitor": (exhibitors[l.exhibitor_id].company_name
+                           if l.exhibitor_id in exhibitors else None),
+             "booth": (exhibitors[l.exhibitor_id].booth_number
+                       if l.exhibitor_id in exhibitors else None),
+             "attendee_id": l.attendee_id,
+             "attendee": who(l.attendee_id),
+             "at": l.scanned_at,
+             "rating": l.rating,
+             "has_notes": bool((l.notes or "").strip())}
+            for l in leads]
+
+    by_stand, by_person = {}, {}
+    for r in rows:
+        by_stand[r["exhibitor"] or "(unknown stand)"] = by_stand.get(r["exhibitor"] or "(unknown stand)", 0) + 1
+        if r["attendee"]:
+            by_person[r["attendee"]] = by_person.get(r["attendee"], 0) + 1
+
+    door = db.query(models.ScanLog).filter(
+        models.ScanLog.event_id == event_id).order_by(
+        models.ScanLog.created_at.desc()).limit(limit).all()
+    users = {u.id: (u.email or "") for u in db.query(models.User).all()}
+
+    return {
+        "event_id": event_id,
+        "stand_scans": {
+            "total": len(rows),
+            "stands_scanning": len(by_stand),
+            "people_scanned": len(by_person),
+            "by_stand": sorted(({"stand": k, "scans": v} for k, v in by_stand.items()),
+                               key=lambda x: -x["scans"]),
+            "most_scanned": sorted(({"attendee": k, "stands": v} for k, v in by_person.items()),
+                                   key=lambda x: -x["stands"])[:20],
+            "items": rows,
+        },
+        "door_scans": {
+            "total": len(door),
+            "items": [{"attendee_id": d.attendee_id,
+                       "attendee": who(d.attendee_id),
+                       "zone": d.access_type, "result": d.result, "reason": d.reason,
+                       "by": users.get(d.staff_user_id), "at": d.created_at}
+                      for d in door[:limit]],
+        },
+    }
+
+
+@app.get("/events/{event_id}/attendees/{attendee_id}/scans")
+def attendee_scans(event_id: int, attendee_id: int, db: Session = Depends(get_db),
+                   current_user: models.User = Depends(get_current_user)):
+    """Everywhere one badge has been read. The answer to "who scanned me?",
+    asked by the person it happened to."""
+    _get_event_or_404(event_id, db)
+    authz.require_cap(db, current_user, event_id, "lead.read")
+    a = db.query(models.Attendee).filter(models.Attendee.id == attendee_id,
+                                         models.Attendee.event_id == event_id).first()
+    if not a:
+        raise HTTPException(status_code=404, detail="That badge does not belong to this event")
+    exhibitors = {e.id: e for e in db.query(models.Exhibitor).filter(
+        models.Exhibitor.event_id == event_id).all()}
+    leads = db.query(models.Lead).filter(
+        models.Lead.attendee_id == attendee_id).order_by(models.Lead.scanned_at.desc()).all()
+    users = {u.id: (u.email or "") for u in db.query(models.User).all()}
+    door = db.query(models.ScanLog).filter(
+        models.ScanLog.event_id == event_id,
+        models.ScanLog.attendee_id == attendee_id).order_by(
+        models.ScanLog.created_at.desc()).all()
+    return {
+        "attendee_id": a.id,
+        "name": ("%s %s" % (a.first_name or "", a.last_name or "")).strip(),
+        "stands": [{"exhibitor_id": l.exhibitor_id,
+                    "stand": (exhibitors[l.exhibitor_id].company_name
+                              if l.exhibitor_id in exhibitors else None),
+                    "booth": (exhibitors[l.exhibitor_id].booth_number
+                              if l.exhibitor_id in exhibitors else None),
+                    "at": l.scanned_at, "rating": l.rating}
+                   for l in leads],
+        "doors": [{"zone": d.access_type, "result": d.result, "reason": d.reason,
+                   "by": users.get(d.staff_user_id), "at": d.created_at} for d in door],
+    }
+
 
 @app.get("/exhibitors/{exhibitor_id}/leads", response_model=List[schemas.Lead])
 def get_exhibitor_leads(
@@ -2827,10 +3650,15 @@ def entitlement_review(db: Session = Depends(get_db), current_user: models.User 
     events_live=[]
     try:
         for e in db.query(models.Event).all():
-            total=db.query(models.Attendee).filter(models.Attendee.event_id==e.id).count()
-            try: checked=db.query(models.Attendee).filter(models.Attendee.event_id==e.id, models.Attendee.is_checked_in==True).count()
-            except Exception: checked=None
-            events_live.append({"event_id":e.id, "name":e.name, "attendees":total, "checked_in":checked})
+            # The fifth copy of this count, and the one that got away: it still
+            # read rows, so this page said 369 while the dashboard said 368 --
+            # the same app disagreeing with itself about the same event.
+            _roll = _roll_counts(db, e.id)
+            events_live.append({"event_id": e.id, "name": e.name,
+                                "attendees": _roll["admitting"],
+                                "blocked": _roll["blocked"],
+                                "rows": _roll["rows"],
+                                "checked_in": _roll["checked_in"]})
         events_live.sort(key=lambda x:-(x["attendees"] or 0))
     except Exception: pass
     rev=_load("/root/gaia-staging-proxy/data/payment-review.json").get("items") or {}
@@ -2941,13 +3769,13 @@ def get_dashboard_stats(
     _live_event_ids = db.query(models.Event.id).filter(
         (models.Event.is_archived == False) | (models.Event.is_archived.is_(None))  # noqa: E712
     )
-    total_attendees = db.query(models.Attendee).filter(
-        models.Attendee.event_id.in_(_live_event_ids)
-    ).count()
-    total_checked_in = db.query(models.Attendee).filter(
-        models.Attendee.event_id.in_(_live_event_ids),
-        models.Attendee.is_checked_in == True
-    ).count()
+    # Same rule as every per-event card: a refunded or revoked ticket keeps its
+    # row and is refused at the door, so it is not somebody the event is
+    # expecting. Counting it here is how a headline quietly overstates an event.
+    _live_rolls = [_roll_counts(db, _row[0]) for _row in _live_event_ids.all()]
+    total_attendees = sum(r["admitting"] for r in _live_rolls)
+    total_blocked = sum(r["blocked"] for r in _live_rolls)
+    total_checked_in = sum(r["checked_in"] for r in _live_rolls)
     total_exhibitors = db.query(models.Exhibitor).count()
     total_leads = db.query(models.Lead).count()
     all_attendees = db.query(models.Attendee).all()
@@ -2975,11 +3803,9 @@ def get_dashboard_stats(
             if next_event is None or event.start_date < next_event.start_date:
                 next_event = event
 
-        attendee_count = db.query(models.Attendee).filter(models.Attendee.event_id == event.id).count()
-        checked_in_count = db.query(models.Attendee).filter(
-            models.Attendee.event_id == event.id,
-            models.Attendee.is_checked_in == True
-        ).count()
+        _roll = _roll_counts(db, event.id)
+        attendee_count = _roll["admitting"]
+        checked_in_count = _roll["checked_in"]
         exhibitor_count = db.query(models.Exhibitor).filter(models.Exhibitor.event_id == event.id).count()
         lead_count = db.query(models.Lead).join(models.Exhibitor).filter(
             models.Exhibitor.event_id == event.id
@@ -2994,6 +3820,8 @@ def get_dashboard_stats(
             "status": event_status,
             "days_until": (event.start_date.date() - now.date()).days if event.start_date else None,
             "attendee_count": attendee_count,
+            "blocked_count": _roll["blocked"],
+            "roll_rows": _roll["rows"],
             "checked_in_count": checked_in_count,
             "check_in_rate": round(checked_in_count / attendee_count * 100, 2) if attendee_count > 0 else 0,
             "exhibitor_count": exhibitor_count,
@@ -3007,6 +3835,7 @@ def get_dashboard_stats(
         "live_events": live_events,
         "past_events": past_events,
         "total_attendees": total_attendees,
+        "total_blocked": total_blocked,
         "total_checked_in": total_checked_in,
         "check_in_rate": round(total_checked_in / total_attendees * 100, 2) if total_attendees > 0 else 0,
         "total_exhibitors": total_exhibitors,
@@ -3071,15 +3900,80 @@ def attach_event_times(event: models.Event) -> models.Event:
     return event
 
 
+def _door_upgrade_totals(db, event_id: int) -> dict:
+    """Money taken at the desk for an upgrade, read back off the lifecycle.
+
+    An upgrade sold at the door is real revenue and belongs in the same summary
+    as a door ticket sale -- otherwise the only record of it is a line in one
+    person's history, and the weekend's takings are short by however many people
+    decided on the day that they wanted the conference after all.
+    """
+    total, count, by_method, rows = 0.0, 0, {}, []
+    for a in db.query(models.Attendee).filter(models.Attendee.event_id == event_id).all():
+        for entry in ((a.custom_data or {}).get("lifecycle") or []):
+            if entry.get("action") != "paid_upgrade" or not entry.get("paid_at_door"):
+                continue
+            amt = float(entry.get("amount") or 0)
+            method = entry.get("method") or "unspecified"
+            total += amt
+            count += 1
+            slot = by_method.setdefault(method, {"count": 0, "amount": 0.0})
+            slot["count"] += 1
+            slot["amount"] += amt
+            rows.append({"attendee_id": a.id,
+                         "name": ("%s %s" % (a.first_name or "", a.last_name or "")).strip(),
+                         "amount": amt, "method": method,
+                         "currency": entry.get("currency") or "USD",
+                         "reference": entry.get("reference"),
+                         "by": entry.get("actor"), "at": entry.get("ts")})
+    return {"collected_count": count, "collected_total": round(total, 2),
+            "by_method": {k: {"count": v["count"], "amount": round(v["amount"], 2)}
+                          for k, v in by_method.items()},
+            "items": rows,
+            "basis": "Upgrades sold at the desk. Gaia-recorded, never written to GHL."}
+
+
+def _roll_counts(db, event_id: int) -> dict:
+    """How many people is this event actually expecting?
+
+    A row on the roll is not the same as a body through the door. A refunded,
+    cancelled or revoked ticket keeps its row -- deliberately, because the
+    history of a ticket is worth more than the space it saves -- and the door
+    refuses it. Counting rows therefore overstates the event by however many
+    people have pulled out, and does so silently: the number only drifts
+    further from the truth as refunds come in.
+
+    So the headline is who will be ADMITTED, and the blocked rows are reported
+    beside it rather than folded away. Both read the same status list the
+    scanner enforces, so the panel and the door cannot disagree.
+    """
+    rows = db.query(models.Attendee).filter(models.Attendee.event_id == event_id).all()
+    blocked = sum(1 for a in rows if _ticket_status(a) in TICKET_BLOCKED_STATUSES)
+    live = [a for a in rows if _ticket_status(a) not in TICKET_BLOCKED_STATUSES]
+    return {
+        "rows": len(rows),
+        "admitting": len(live),
+        "blocked": blocked,
+        "checked_in": sum(1 for a in live if a.is_checked_in),
+        "staff": sum(1 for a in live if (a.attendance_type or "") == "staff"),
+        "complimentary": sum(1 for a in live if (a.attendance_type or "") == "complimentary"),
+    }
+
+
+def _apply_roll_counts(event, db):
+    _roll = _roll_counts(db, event.id)
+    # attendee_count is what every screen reads, so it is the number that has to
+    # be true: people the door will admit, not rows in a table.
+    event.attendee_count = _roll["admitting"]
+    event.blocked_count = _roll["blocked"]
+    event.roll_rows = _roll["rows"]
+    event.checked_in_count = _roll["checked_in"]
+    return _roll
+
+
 def attach_event_counts(event: models.Event, db: Session) -> models.Event:
     """Real counts for an event. Nothing here is estimated or hardcoded."""
-    event.attendee_count = db.query(models.Attendee).filter(
-        models.Attendee.event_id == event.id
-    ).count()
-    event.checked_in_count = db.query(models.Attendee).filter(
-        models.Attendee.event_id == event.id,
-        models.Attendee.is_checked_in == True
-    ).count()
+    _apply_roll_counts(event, db)
     event.exhibitor_count = db.query(models.Exhibitor).filter(
         models.Exhibitor.event_id == event.id
     ).count()
@@ -4045,6 +4939,43 @@ def _walk_in_matches(db, event_id, email, phone, first, last):
     return rows[:8]
 
 
+@app.get("/events/{event_id}/my-capabilities")
+def my_capabilities(event_id: int, db: Session = Depends(get_db),
+                    current_user: models.User = Depends(get_current_user)):
+    """What may the person holding this screen do at this event?
+
+    The door screen needs this before anybody has been scanned -- the walk-in
+    form has no badge behind it -- so that it can offer the desk what the desk
+    can do, rather than showing every option and letting the refusals explain
+    it afterwards.
+    """
+    _get_event_or_404(event_id, db)
+    caps = authz.capabilities_for(db, current_user, event_id)
+    if not caps:
+        raise HTTPException(status_code=403, detail="Not authorized for this event")
+    organiser = "attendee.write" in caps
+    return {
+        "event_id": event_id,
+        "capabilities": sorted(caps),
+        "is_organiser": organiser,
+        "may": {
+            # Everything a door can do, named as the door thinks of it.
+            "check_in": "checkin.perform" in caps,
+            "override": "checkin.perform" in caps,
+            "fix_name": "checkin.perform" in caps,
+            "name_seat": "checkin.perform" in caps,
+            "sell_upgrade": "checkin.perform" in caps,
+            "register_paying_walk_in": "checkin.perform" in caps,
+            # ...and everything that is somebody deciding to give an entry away.
+            "comp": organiser,
+            "downgrade": organiser,
+            "revoke": organiser,
+            "change_email": organiser,
+            "register_free_badge": organiser,
+        },
+    }
+
+
 @app.post("/events/{event_id}/walk-in/check")
 def walk_in_check(event_id: int, payload: schemas.WalkInCheck,
                   db: Session = Depends(get_db),
@@ -4075,7 +5006,33 @@ def walk_in_create(event_id: int, payload: schemas.WalkInCreate,
     online three months ago.
     """
     event = _get_event_or_404(event_id, db)
-    authz.require_cap(db, current_user, event_id, "attendee.write")
+    # An ORGANISER may register anybody, for any reason.
+    #
+    # The DESK may register somebody who is paying, and somebody who says they
+    # already paid online and cannot be found -- which is the commonest thing
+    # that actually happens at a door, and the one case where sending them away
+    # to find an organiser is worst. That second kind takes no money, so it is
+    # not trusted, it is made VISIBLE: the row is stamped `walk_in` with no door
+    # payment, which is exactly what puts it in the awaiting-reconciliation list
+    # for somebody to check against GHL afterwards.
+    #
+    # What the desk may NOT do is mint a free badge on its own say-so. A
+    # complimentary guest and a crew badge are somebody deciding to give an
+    # entry away, and that decision stays with the organiser -- the same line
+    # drawn for upgrades, for the same reason.
+    if not authz.can(db, current_user, event_id, "attendee.write"):
+        authz.require_cap(db, current_user, event_id, "checkin.perform")
+        _kind = (payload.attendance_type or "paid").strip().lower()
+        _pay = (payload.door_payment_status or "none").strip().lower()
+        if _kind != "paid":
+            raise HTTPException(status_code=403,
+                                detail="A complimentary or crew badge is an organiser's call. "
+                                       "At the desk, register them as paying or as already paid.")
+        if _pay not in ("none", "collected"):
+            raise HTTPException(status_code=403,
+                                detail="At the desk a walk-in is either paying now or has already paid.")
+        if _pay == "collected" and float(payload.door_payment_amount or 0) <= 0:
+            raise HTTPException(status_code=400, detail="Say how much was taken")
     _assert_event_writable(db, event, "register a walk-in for it")
     email = (payload.email or "").strip().lower()
     if not email or not re.match(r"^[^@\s]+@[^@\s]+\.[^@\s]+$", email):
@@ -4233,6 +5190,13 @@ def search_attendees(
         if not score and len(digits) >= 4 and phone_d and digits in phone_d:
             score = 70 if phone_d.endswith(digits) else 50
         if not score:
+            # "I'm with the Ison booking" has to find every seat on it.
+            booking, _seat = _party_of(a)
+            if booking:
+                b = booking.lower()
+                if b == term or term in b or (words and all(w in b for w in words)):
+                    score = 44
+        if not score:
             # Ranked below every match on the attendee's own details, so their
             # own name always wins when both could match.
             for who, addr in payers.get(a.id, ()):
@@ -4251,7 +5215,9 @@ def search_attendees(
         response.headers["X-Search-Truncated"] = "1" if len(scored) > 50 else "0"
     for _a in out:
         _a.effective_access = _effective_access(db, _a)
-        _a.paid_by = _payer_label(payers.get(_a.id, ()), _a)
+        _booking, _seat = _party_of(_a)
+        _a.paid_by = _booking or _payer_label(payers.get(_a.id, ()), _a)
+        _a.party_seat = _seat or None
     _stamp_card_state(db, out)
     return out
 
@@ -4597,6 +5563,36 @@ def _mapping_covers(mapping, when):
     return True
 
 
+def _pick_mapping(candidates, product_name=None, when=None):
+    """Which mapping does this sale actually go through?
+
+    A product id used to be enough. It is not: GoHighLevel sells several
+    storefront variants through ONE product, so id 69b463a1... arrives as
+    "GENERAL ADMISSION (EXHIBIT HALL ONLY)" and as "GENERAL ADMISSION +
+    CONFERENCE" at four different prices. One mapping cannot be right for both,
+    and the price cannot separate them either -- $104.94 is sold under both
+    names. Only the name the buyer actually saw can.
+
+    So a mapping may carry `product_name_match`, and a mapping that names a
+    variant beats the one that does not. The unpatterned mapping stays as the
+    fallback, which means adding a variant never changes what anything else did.
+    """
+    usable = [m for m in candidates if _mapping_covers(m, when)]
+    if not usable:
+        return None
+    name = str(product_name or "").upper()
+    if name:
+        specific = [m for m in usable
+                    if (getattr(m, "product_name_match", None) or "").strip()
+                    and str(m.product_name_match).strip().upper() in name]
+        if specific:
+            # The longest pattern is the most specific claim on this name.
+            specific.sort(key=lambda m: -len(str(m.product_name_match).strip()))
+            return specific[0]
+    plain = [m for m in usable if not (getattr(m, "product_name_match", None) or "").strip()]
+    return plain[0] if plain else None
+
+
 def _assert_sale_in_window(db, event, product_id, purchased_at):
     """A sale may only become an attendee of the event whose sales window it
     falls in.
@@ -4667,10 +5663,12 @@ async def registration_webhook(request: FastAPIRequest, db: Session = Depends(ge
         _log_webhook_noop("no_product_id", email, payload)
         return {"ok": True, "created": False, "no_op": True, "reason": "no_product_id",
                 "detail": "No authoritative product id; refusing to infer an event ticket."}
-    _mapping = db.query(models.TicketMapping).filter(
-        models.TicketMapping.external_product_id == str(_product_id).strip(),
-        models.TicketMapping.is_active == True,  # noqa: E712
-    ).first()
+    _sold_name = (_pick(payload, "product_name", "productName", "product") or "")
+    _mapping = _pick_mapping(
+        db.query(models.TicketMapping).filter(
+            models.TicketMapping.external_product_id == str(_product_id).strip(),
+            models.TicketMapping.is_active == True,  # noqa: E712
+        ).all(), _sold_name, payload.get("created_at") or payload.get("date"))
     if not _mapping or (getattr(_mapping, "entitlement_type", "EVENT_TICKET") or "EVENT_TICKET") not in _EVENT_TYPES:
         _log_webhook_noop("unmapped_or_non_event_product", email, payload, product_id=_product_id)
         return {"ok": True, "created": False, "no_op": True, "reason": "unmapped_or_non_event_product",
@@ -5633,10 +6631,17 @@ def public_event_info(event_id: int, db: Session = Depends(get_db)):
 def export_attendees(event_id: int, db: Session = Depends(get_db),
                      current_user: models.User = Depends(get_current_user)):
     """Attendee CSV. Every export is written to the audit trail so who took the
-    data — and how much — is always recoverable."""
+    data — and how much — is always recoverable.
+
+    Gated on attendee.EXPORT, not attendee.read. The two are different questions
+    and the capability existed for exactly this one: door staff look people up
+    one at a time all weekend, which is the job, and that is nothing like
+    walking out with every name, email, phone number and amount paid in one
+    file. Reading the wrong capability here meant the moment the first door
+    account existed, it could do the second.
+    """
     _ev = _get_event_or_404(event_id, db)
-    if not authz.can(db, current_user, event_id, "attendee.read"):
-        raise HTTPException(status_code=403, detail="Not authorized for this event")
+    authz.require_cap(db, current_user, event_id, "attendee.export")
     rows = db.query(models.Attendee).filter(models.Attendee.event_id == event_id).all()
 
     # What each person actually paid, and through what. Summed rather than read
@@ -5879,6 +6884,429 @@ def duplicate_event(event_id: int, db: Session = Depends(get_db),
     return new
 
 
+# --- Does what we sold match what the badge opens? ---------------------------
+# A ticket mapping is written by hand, once, and then believed forever. Nothing
+# ever read it back against the product it maps, so "GENERAL ADMISSION +
+# CONFERENCE" could point at a General Admission pass -- which does not include
+# the conference -- and the first time anybody found out would be a person at
+# the conference room door holding a receipt for it.
+#
+# This is the read-back. It takes what the product's NAME sold, takes what the
+# mapped pass actually GRANTS, and reports every place the second is smaller
+# than the first. It reads the names that really appeared on payments as well as
+# the mapping's own label, because a storefront can sell several products, at
+# several prices, through one mapping -- which is exactly how this was missed.
+
+_PROMISE_PATTERNS = (
+    # A product name sells conference access in all of these shapes.
+    ("conference", re.compile(r"\+\s*CONFERENCE|CONFERENCE\s*3\s*DAYS|HALL\s*\+\s*CONFERENCE"
+                              r"|SPEAKER ACCESS|SPEAKER UPGRADE", re.I)),
+    ("workshop",   re.compile(r"WORKSHOP", re.I)),
+    ("vip",        re.compile(r"\bVIP\b", re.I)),
+)
+
+
+# "ELEVATE Upgrade - Workshop to Three-Day" names the tier it comes FROM as well
+# as the one it sells. Only the second half is a promise; reading the whole label
+# accuses the mapping of selling a workshop it never offered.
+_UPGRADE_LABEL = re.compile(r"^\s*.*?upgrade\s*[-\u2013:]\s*(.+?)\s+to\s+(.+?)\s*$", re.I)
+
+
+def _product_promises(name: str, is_upgrade: bool = False) -> set:
+    """What the wording of a product name sells, as plain entitlement words."""
+    text = str(name or "")
+    if is_upgrade:
+        m = _UPGRADE_LABEL.match(text)
+        if m:
+            text = m.group(2)
+    return {word for word, pattern in _PROMISE_PATTERNS if pattern.search(text)}
+
+
+def _pass_grants(tt) -> set:
+    """What a ticket type actually opens, in those same words."""
+    out = set()
+    if tt is None:
+        return out
+    if getattr(tt, "grants_conference", False):
+        out.add("conference")
+    if getattr(tt, "grants_workshops", False):
+        out.add("workshop")
+    if getattr(tt, "is_vip", False):
+        out.add("vip")
+    return out
+
+
+def _mapping_audit(db, event_id: int):
+    """Every way a mapping can quietly sell something the badge will not open.
+
+    Returns a list of findings, worst first. An `error` is somebody who paid for
+    access they do not have; a `warning` is a mapping that cannot be checked or
+    that gives away more than it sold.
+    """
+    maps = db.query(models.TicketMapping).filter(
+        models.TicketMapping.event_id == event_id).all()
+    types = {t.id: t for t in db.query(models.TicketType).filter(
+        models.TicketType.event_id == event_id).all()}
+
+    # Which product names actually came through each mapping, and how many
+    # people they represent. The name on a real payment is the thing the buyer
+    # saw; the mapping's label is only what somebody typed here.
+    sold = {}
+    by_pid = {m.external_product_id: m for m in maps if m.external_product_id}
+    for pay in db.query(models.PaymentEvent).filter(
+            models.PaymentEvent.event_id == event_id,
+            models.PaymentEvent.status == "paid").all():
+        def _list(v):
+            # The column is declared JSON, so SQLAlchemy may hand back a list
+            # already; older rows arrive as the raw string. Reading only one of
+            # the two shapes is what made this audit report nothing at all.
+            if isinstance(v, (list, tuple)):
+                return list(v)
+            try:
+                out = json.loads(v or "[]")
+            except Exception:
+                return []
+            return out if isinstance(out, list) else [out]
+        pids, names = _list(pay.product_ids), _list(pay.product_names)
+        mapping = next((by_pid[x] for x in pids if x in by_pid), None)
+        if not mapping:
+            continue
+        name = (names[0] if names else "") or ""
+        entry = sold.setdefault((mapping.id, name), {"payments": 0, "attendees": set(), "amounts": set()})
+        entry["payments"] += 1
+        entry["amounts"].add(float(pay.amount or 0))
+        if pay.attendee_id:
+            entry["attendees"].add(pay.attendee_id)
+
+    findings = []
+
+    def add(severity, kind, mapping, detail, **extra):
+        row = {"severity": severity, "kind": kind,
+               "mapping_id": mapping.id if mapping is not None else None,
+               "label": (mapping.label if mapping is not None else None),
+               "ticket_type": (types.get(mapping.ticket_type_id).name
+                               if mapping is not None and types.get(mapping.ticket_type_id) else None),
+               "detail": detail}
+        row.update(extra)
+        findings.append(row)
+
+    for mapping in maps:
+        tt = types.get(mapping.ticket_type_id)
+        if tt is None:
+            add("error", "unmapped_pass", mapping,
+                "This mapping does not point at a pass that belongs to this event, so a sale "
+                "through it cannot be given any access at all.")
+            continue
+        granted = _pass_grants(tt)
+
+        # The mapping's own label, and every product name that really sold through it.
+        checked = [(mapping.label or "", None)]
+        checked += [(name, sold[(mid, name)]) for (mid, name) in sold if mid == mapping.id]
+        for name, usage in checked:
+            missing = _product_promises(name, mapping.is_upgrade) - granted
+            if not missing:
+                continue
+            where = ("its own label" if usage is None
+                     else "%d paid %s" % (usage["payments"],
+                                          "payment" if usage["payments"] == 1 else "payments"))
+            add("error" if usage else "warning", "sold_but_not_granted", mapping,
+                "\u201c%s\u201d sells %s; the %s pass it maps to does not include %s. "
+                "Anybody who bought it will be refused at that door."
+                % (name.strip(), " and ".join(sorted(missing)), tt.name, " or ".join(sorted(missing))),
+                product_name=name.strip(),
+                promised=sorted(_product_promises(name, mapping.is_upgrade)),
+                granted=sorted(granted), missing=sorted(missing),
+                payments=(usage["payments"] if usage else 0),
+                people=sorted(usage["attendees"]) if usage else [],
+                amounts=sorted(usage["amounts"]) if usage else [],
+                seen_in=where)
+
+        # An upgrade has to go somewhere better than where it came from.
+        if mapping.is_upgrade and mapping.from_ticket_type_id:
+            src = types.get(mapping.from_ticket_type_id)
+            if src is not None and (tt.upgrade_rank or 0) <= (src.upgrade_rank or 0):
+                add("warning", "upgrade_not_upward", mapping,
+                    "This is sold as an upgrade from %s to %s, which is not a better pass."
+                    % (src.name, tt.name))
+
+    order = {"error": 0, "warning": 1}
+    findings.sort(key=lambda f: (order.get(f["severity"], 2), -(f.get("payments") or 0)))
+    return findings
+
+
+# ---------------------------------------------------------------------------
+# The review queue
+#
+# Every rule that declines to guess writes its reasoning somewhere and moves on:
+# a duplicate charge held back from becoming a badge, a seat carrying the buyer's
+# name until somebody asks, a sale whose product nobody mapped, a payment that
+# never settled. Each of those was readable, and none of them was anywhere a
+# person would look -- the held charges sat in an attendee's lifecycle log.
+#
+# So this is one list of everything waiting on a human, built from the records
+# themselves rather than from a parallel queue table that could drift out of step
+# with them. Most items leave on their own: a name gets confirmed, a payment
+# settles, a product gets mapped. The ones that cannot -- a charge we decided not
+# to seat -- are closed explicitly, and closing one is logged like any other act.
+REVIEW_HELD_ACTION = "second_ticket_held_for_review"
+REVIEW_RESOLVED_ACTION = "review_resolved"
+
+
+def _review_resolved_refs(attendee) -> set:
+    return {str(l.get("ref")) for l in ((attendee.custom_data or {}).get("lifecycle") or [])
+            if l.get("action") == REVIEW_RESOLVED_ACTION and l.get("ref")}
+
+
+def _review_queue(db, event_id: int, with_money: bool) -> dict:
+    """Everything waiting on a person, newest concern first.
+
+    `with_money` is the analytics.read split. A door lead may see that fourteen
+    seats need a name -- that is their weekend -- without seeing what anybody
+    paid or which charges are in dispute.
+    """
+    _get_event_or_404(event_id, db)
+    attendees = db.query(models.Attendee).filter(models.Attendee.event_id == event_id).all()
+    by_id = {a.id: a for a in attendees}
+    items = []
+
+    def add(kind, title, detail, *, severity="warning", attendee=None, ref=None,
+            amount=None, when=None, action=None, who=None, email=None):
+        row = {"kind": kind, "title": title, "detail": detail, "severity": severity,
+               "ref": ref, "when": when, "resolvable": bool(attendee is not None and ref)}
+        if attendee is not None:
+            row.update({"attendee_id": attendee.id, "qr_code": attendee.qr_code,
+                        "name": ("%s %s" % (attendee.first_name or "", attendee.last_name or "")).strip()
+                                or attendee.email,
+                        "email": attendee.email})
+        else:
+            # Half of these are about somebody with no badge at all -- that is
+            # usually the whole problem -- so the name has to come off the
+            # payment or the sale instead, or the row reads as being about nobody.
+            if who:
+                row["name"] = who
+            if email:
+                row["email"] = email
+        if with_money and amount is not None:
+            row["amount"] = round(float(amount), 2)
+        if action:
+            row["action"] = action
+        items.append(row)
+
+    # 1. Seats carrying somebody else's name. The door asks, the desk fixes it.
+    for a in attendees:
+        cd = a.custom_data or {}
+        if not cd.get("needs_name_check"):
+            continue
+        if str(a.id) in _review_resolved_refs(a):
+            continue
+        add("name_to_confirm", "Confirm who this seat belongs to",
+            "The badge carries the buyer's name because the order held no other. "
+            "Ask at the desk, then use Fix details.",
+            severity="warning", attendee=a, ref=str(a.id), action="fix_name")
+
+    # 2. Seats a booking paid for that nobody holds yet.
+    for a in attendees:
+        if (a.custom_data or {}).get("bought_by_attendee"):
+            continue                      # count the booking once, on its buyer
+        party = _party_members(db, a)
+        if not party or not party.get("unnamed"):
+            continue
+        # A booking may have paid for somebody who is simply not coming, and then
+        # naming the seat never happens -- so this one can be closed by hand, and
+        # the check has to use the SAME ref the row carries or closing it does
+        # nothing and the queue starts lying about what has been dealt with.
+        if ("party-%d" % a.id) in _review_resolved_refs(a):
+            continue
+        add("seat_unnamed", "%d seat%s paid for with no badge" % (
+                party["unnamed"], "" if party["unnamed"] == 1 else "s"),
+            "%s paid for %d and %d ha%s a badge. Name the rest at the desk when they arrive."
+            % (party["buyer"], party["paid_for"], party["size"],
+               "s" if party["size"] == 1 else "ve"),
+            severity="warning", attendee=a, ref="party-%d" % a.id, action="add_seat")
+
+    # 3. Identity the reconciler would not guess at.
+    for a in attendees:
+        if not (a.custom_data or {}).get("needs_identity_review"):
+            continue
+        if ("ident-%d" % a.id) in _review_resolved_refs(a):
+            continue
+        add("identity_review", "Who is this record?",
+            "An add-on arrived for an address with no matching badge, so it was "
+            "parked here rather than attached to a guess.",
+            severity="error", attendee=a, ref="ident-%d" % a.id)
+
+    if not with_money:
+        items.sort(key=lambda r: (0 if r["severity"] == "error" else 1, r["kind"]))
+        return {"event_id": event_id, "money_visible": False,
+                "count": len(items), "items": items,
+                "summary": _review_summary(items)}
+
+    # 4. Charges a rule declined to turn into a badge.
+    for a in attendees:
+        done = _review_resolved_refs(a)
+        for l in ((a.custom_data or {}).get("lifecycle") or []):
+            if l.get("action") != REVIEW_HELD_ACTION:
+                continue
+            ref = str(l.get("order_id") or l.get("payment_event") or "")
+            if ref and ref in done:
+                continue
+            add("charge_held", "A second charge was not turned into a badge",
+                l.get("reason") or "Held for review.",
+                severity="error", attendee=a, ref=ref or ("held-%d" % a.id),
+                when=l.get("ts"))
+
+    # 5. Repeat charges the money report cannot tell apart.
+    maps = db.query(models.TicketMapping).filter(
+        models.TicketMapping.event_id == event_id,
+        models.TicketMapping.is_active == True).all()                   # noqa: E712
+    upgrade_pids = {m.external_product_id for m in maps if m.is_upgrade}
+    upgrade_tt_ids = {m.ticket_type_id for m in maps if m.is_upgrade}
+    bundles = {}
+    for a in attendees:
+        cd = a.custom_data or {}
+        owner = int(cd.get("bought_by_attendee") or 0) or a.id
+        bundles.setdefault(owner, []).extend(cd.get("entitlements") or [])
+    for owner, ents in bundles.items():
+        a = by_id.get(owner)
+        if a is None:
+            continue
+        done = _review_resolved_refs(a)
+        for r in _tm_classify(ents, upgrade_tt_ids, upgrade_pids)["repeat"]:
+            if r["repeat_kind"] == "additional_paid_seat":
+                continue                  # a seat, not a question
+            ref = str(r.get("order_id") or r.get("invoice_id") or "")
+            if ref and ref in done:
+                continue
+            gap = r.get("gap_minutes")
+            when_said = ("%.0f minutes apart" % gap if gap is not None and gap < 120
+                         else "%.1f hours apart" % (gap / 60.0) if gap is not None
+                         else "no purchase date on one of them")
+            add("payment_repeat",
+                "Paid twice for the same thing — duplicate?"
+                if r["repeat_kind"] == "duplicate_suspected"
+                else "Paid twice for the same thing — unclear",
+                "Two settled charges for the same product, %s. If it was taken "
+                "twice it needs refunding; if they meant to buy another ticket it "
+                "needs a badge." % when_said,
+                severity="error" if r["repeat_kind"] == "duplicate_suspected" else "warning",
+                attendee=a, ref=ref or ("repeat-%d" % a.id),
+                amount=r.get("amount"), when=r.get("purchased_at"))
+
+    # 6. Money that never settled. Nobody is refused over this -- an unsettled
+    #    charge grants nothing -- but every one of them is somebody who tried to
+    #    pay, and there is still time to ask.
+    for pe in db.query(models.PaymentEvent).filter(
+            models.PaymentEvent.event_id == event_id,
+            models.PaymentEvent.status.in_(("pending", "failed"))).order_by(
+            models.PaymentEvent.occurred_at.desc()).all():
+        a = by_id.get(pe.attendee_id) if pe.attendee_id else None
+        who = (pe.buyer_name or (a and ("%s %s" % (a.first_name or "", a.last_name or "")).strip())
+               or pe.buyer_email or "Unknown buyer")
+        add("payment_unsettled", "A %s payment" % pe.status,
+            "%s — %s. An unsettled charge grants nothing, so they have no badge "
+            "unless they paid another way." % (who, pe.status),
+            severity="warning" if pe.status == "pending" else "info",
+            attendee=a, ref="pay-%d" % pe.id, amount=pe.amount,
+            who=who, email=pe.buyer_email,
+            when=str(pe.occurred_at or "")[:19])
+
+    # 7. Sales whose product nobody mapped to a ticket.
+    for r in db.query(models.UnmappedSale).filter(
+            ((models.UnmappedSale.event_id == event_id) | (models.UnmappedSale.event_id.is_(None))),
+            models.UnmappedSale.status == "pending").all():
+        if (r.relevance or "event_like") == "unrelated":
+            continue
+        add("sale_unmapped", "A sale with no ticket behind it",
+            "%s bought \"%s\" and nothing maps that product to a ticket, so no "
+            "badge exists for it." % (r.buyer_name or r.buyer_email or "Someone",
+                                     r.product_name or "(unnamed product)"),
+            severity="error", ref="sale-%d" % r.id, amount=r.amount,
+            who=r.buyer_name or r.buyer_email, email=r.buyer_email,
+            action="dismiss_sale:%d" % r.id,
+            when=str(r.paid_at or "")[:19])
+
+    order = {"error": 0, "warning": 1, "info": 2}
+    items.sort(key=lambda r: (order.get(r["severity"], 3), r["kind"], r.get("when") or ""))
+    return {"event_id": event_id, "money_visible": True,
+            "count": len(items), "items": items, "summary": _review_summary(items)}
+
+
+def _review_summary(items) -> dict:
+    out = {}
+    for r in items:
+        k = r["kind"]
+        cell = out.setdefault(k, {"count": 0, "amount": 0.0, "severity": r["severity"]})
+        cell["count"] += 1
+        if r.get("amount"):
+            cell["amount"] = round(cell["amount"] + float(r["amount"]), 2)
+    for cell in out.values():
+        if not cell["amount"]:
+            cell.pop("amount")
+    return out
+
+
+@app.get("/events/{event_id}/review-queue")
+def review_queue(event_id: int, db: Session = Depends(get_db),
+                 current_user: models.User = Depends(get_current_user)):
+    """One list of everything waiting on a person.
+
+    attendee.read to see the work; analytics.read to see the money with it. A
+    door lead can read "fourteen seats need a name" without reading the ledger.
+    """
+    authz.require_cap(db, current_user, event_id, "attendee.read")
+    return _review_queue(db, event_id,
+                         with_money=authz.can(db, current_user, event_id, "analytics.read"))
+
+
+@app.post("/events/{event_id}/review-queue/resolve")
+def review_queue_resolve(event_id: int, body: schemas.ReviewResolve,
+                         db: Session = Depends(get_db),
+                         current_user: models.User = Depends(get_current_user)):
+    """Close one item that cannot close itself, with a reason.
+
+    Nothing is deleted. The item stops being asked about because a named person
+    said it had been dealt with, and that is now part of the record -- which is
+    the only version of "resolved" worth having when the question was about
+    somebody's money.
+    """
+    _get_event_or_404(event_id, db)
+    authz.require_cap(db, current_user, event_id, "analytics.read")
+    a = db.query(models.Attendee).filter(models.Attendee.id == body.attendee_id,
+                                         models.Attendee.event_id == event_id).first()
+    if not a:
+        raise HTTPException(status_code=404, detail="Not found on this event")
+    if len((body.note or "").strip()) < 3:
+        raise HTTPException(status_code=400, detail="Say what was done")
+    _lifecycle_append(a, REVIEW_RESOLVED_ACTION, actor=(current_user.email or "staff"),
+                      ref=str(body.ref), kind=body.kind, reason=body.note.strip())
+    db.commit()
+    return {"ok": True, "attendee_id": a.id, "ref": body.ref}
+
+
+@app.get("/events/{event_id}/ticket-mapping-audit")
+def ticket_mapping_audit(event_id: int, db: Session = Depends(get_db),
+                         current_user: models.User = Depends(get_current_user)):
+    """Read every mapping back against the product it maps, and say what is wrong.
+
+    Worth running after any storefront change, and worth reading before an event
+    opens: it is the only thing standing between a renamed product and a person
+    being refused at a door they paid for.
+
+    analytics.read, not event.read. It reads back the whole storefront -- every
+    product, what tier it sells and what it is priced at -- which is commercial
+    configuration, and event.read is held by door staff and exhibitor managers
+    alike.
+    """
+    _get_event_or_404(event_id, db)
+    authz.require_cap(db, current_user, event_id, "analytics.read")
+    findings = _mapping_audit(db, event_id)
+    return {"event_id": event_id,
+            "errors": sum(1 for f in findings if f["severity"] == "error"),
+            "warnings": sum(1 for f in findings if f["severity"] == "warning"),
+            "people_affected": sorted({p for f in findings for p in (f.get("people") or [])}),
+            "findings": findings}
+
+
 @app.get("/events/{event_id}/ticket-mappings", response_model=List[schemas.TicketMapping])
 def list_ticket_mappings(event_id: int, db: Session = Depends(get_db),
                          current_user: models.User = Depends(get_current_user)):
@@ -6103,7 +7531,7 @@ def unmapped_sales(event_id: int, include_resolved: bool = False,
                    current_user: models.User = Depends(get_current_user)):
     """Paid products nobody has mapped to a ticket. Review required."""
     _get_event_or_404(event_id, db)
-    authz.require_cap(db, current_user, event_id, "attendee.read")
+    authz.require_cap(db, current_user, event_id, "analytics.read")
     q = db.query(models.UnmappedSale).filter(
         (models.UnmappedSale.event_id == event_id) | (models.UnmappedSale.event_id.is_(None)))
     if not include_resolved:
@@ -6289,6 +7717,60 @@ def _mr_preview(db, event, product_id, ticket_type_id, is_upgrade):
 REPEAT_DUPLICATE_WINDOW_MIN = 15
 
 
+def _repeat_kind(first, e):
+    """What a second settled charge for the same product actually is.
+
+    One rule, because the money report and the decision to hand out a badge
+    must never disagree about the same two payments:
+
+      duplicate_suspected  same amount, minutes apart. Overwhelmingly a card or
+                           PayPal attempt that looked like it failed and was
+                           tried again. One person, one seat, flagged.
+      additional_paid_seat a day or more later. A separate decision to buy
+                           another ticket -- a friend, a partner, a colleague.
+      needs_review         anything in between, or undated. A human looks.
+
+    Only the middle one may create a seat. Somebody buying several seats in one
+    go says so with a quantity on one order, which needs none of this guesswork.
+    """
+    gap = None
+    try:
+        a = (first.get("purchased_at") or first.get("ts") or "")[:19]
+        b = (e.get("purchased_at") or e.get("ts") or "")[:19]
+        if a and b:
+            gap = abs((datetime.fromisoformat(b) - datetime.fromisoformat(a)).total_seconds()) / 60.0
+    except Exception:                               # noqa: BLE001
+        gap = None
+    same_amount = (e.get("amount") is not None and first.get("amount") is not None
+                   and abs(float(e["amount"]) - float(first["amount"])) < 0.01)
+    if gap is not None and gap <= REPEAT_DUPLICATE_WINDOW_MIN and same_amount:
+        return "duplicate_suspected", gap
+    if gap is not None and gap > 1440:
+        return "additional_paid_seat", gap
+    return "needs_review", gap
+
+
+def _repeat_peer(entitlements, product_id, ticket_type_id):
+    """The settled entitlement that a new order would be a repeat of, or None.
+
+    A second order only means a second seat when it buys the SAME thing again.
+    Somebody who bought Saturday and then came back for Sunday is one person
+    collecting days, and giving them a second badge would both lose them a day
+    and invent an attendee. Buying the same pass twice is the different case:
+    either two people, or one charge too many -- and those two are told apart
+    by whether both charges settled, never here."""
+    key = product_id or ticket_type_id
+    if key is None:
+        return None
+    for e in entitlements or []:
+        if e.get("status") != "paid" or e.get("addon_code"):
+            continue
+        if (e.get("product_id") or e.get("ticket_type_id")) == key:
+            return e
+    return None
+
+
+
 def _tm_classify(entitlements, upgrade_tt_ids, upgrade_pids):
     """Split one attendee's paid ledger into the categories that mean different
     things. Classification is driven by the mapping (is this product an upgrade?)
@@ -6306,23 +7788,7 @@ def _tm_classify(entitlements, upgrade_tt_ids, upgrade_pids):
             continue
         key = pid or e.get("ticket_type_id")
         if key in seen_base_products:
-            first = seen_base_products[key]
-            gap = None
-            try:
-                a = (first.get("purchased_at") or first.get("ts") or "")[:19]
-                b = (e.get("purchased_at") or e.get("ts") or "")[:19]
-                if a and b:
-                    gap = abs((datetime.fromisoformat(b) - datetime.fromisoformat(a)).total_seconds()) / 60.0
-            except Exception:                       # noqa: BLE001
-                gap = None
-            same_amount = (e.get("amount") is not None and first.get("amount") is not None
-                           and abs(float(e["amount"]) - float(first["amount"])) < 0.01)
-            if gap is not None and gap <= REPEAT_DUPLICATE_WINDOW_MIN and same_amount:
-                kind = "duplicate_suspected"
-            elif gap is not None and gap > 1440:
-                kind = "additional_paid_seat"
-            else:
-                kind = "needs_review"
+            kind, gap = _repeat_kind(seen_base_products[key], e)
             out["repeat"].append({**e, "repeat_kind": kind, "gap_minutes": gap})
         else:
             seen_base_products[key] = e
@@ -6395,21 +7861,20 @@ def _pe_upsert(db, tx, order, mappings, source):
     # years, so a 2025 ticket bought through a product that is still on sale
     # would otherwise be judged against the 2026 roster and reported as money
     # received from somebody with no ticket.
+    _sold_name = None
+    try:
+        _n = pe.product_names if isinstance(pe.product_names, (list, tuple)) else json.loads(pe.product_names or "[]")
+        _sold_name = (_n[0] if _n else None)
+    except Exception:
+        _sold_name = None
     hit = None
     for p in pids:
-        for m in mappings.get(p, []):
-            if _mapping_covers(m, pe.occurred_at):
-                hit = m
-                break
+        hit = _pick_mapping(mappings.get(p, []), _sold_name, pe.occurred_at)
         if hit:
             break
     pe.event_id = hit.event_id if hit else None
 
-    attendee = None
-    if pe.event_id and pe.buyer_email:
-        attendee = db.query(models.Attendee).filter(
-            models.Attendee.event_id == pe.event_id,
-            func.lower(models.Attendee.email) == pe.buyer_email).first()
+    attendee = _attendee_for_payment(db, pe)
     pe.attendee_id = attendee.id if attendee else None
     active = bool(attendee and _ticket_active(attendee))
     # Did this buyer get money through for this event by any route? A card that
@@ -6495,23 +7960,26 @@ def payments_reclassify(db: Session = Depends(get_db),
     for r in rows:
         if r.event_id and r.buyer_email and r.status in payments.PAID:
             paid_by_event.setdefault(r.event_id, set()).add(r.buyer_email)
+    # Built once per sweep rather than per payment: the sweep walks every
+    # payment this system has ever seen.
+    _claims_by_event = {}
 
     for pe in rows:
         before = (pe.event_id, pe.recon_state, pe.severity, pe.attendee_id)
+        try:
+            _n = pe.product_names if isinstance(pe.product_names, (list, tuple)) else json.loads(pe.product_names or "[]")
+            _sold_name = (_n[0] if _n else None)
+        except Exception:
+            _sold_name = None
         hit = None
         for p in (pe.product_ids or []):
-            for m in maps.get(p, []):
-                if _mapping_covers(m, pe.occurred_at):
-                    hit = m
-                    break
+            hit = _pick_mapping(maps.get(p, []), _sold_name, pe.occurred_at)
             if hit:
                 break
         pe.event_id = hit.event_id if hit else None
-        attendee = None
-        if pe.event_id and pe.buyer_email:
-            attendee = db.query(models.Attendee).filter(
-                models.Attendee.event_id == pe.event_id,
-                func.lower(models.Attendee.email) == pe.buyer_email).first()
+        if pe.event_id not in _claims_by_event:
+            _claims_by_event[pe.event_id] = _payment_claims(db, pe.event_id) if pe.event_id else {}
+        attendee = _attendee_for_payment(db, pe, _claims_by_event[pe.event_id])
         pe.attendee_id = attendee.id if attendee else None
         active = bool(attendee and _ticket_active(attendee))
         person_paid = (pe.status not in payments.PAID and pe.buyer_email
@@ -6585,7 +8053,7 @@ def event_payments(event_id: int,
     """The live feed. Payment state and reconciliation state are separate
     fields, deliberately, because the useful rows are where they disagree."""
     _get_event_or_404(event_id, db)
-    authz.require_cap(db, current_user, event_id, "attendee.read")
+    authz.require_cap(db, current_user, event_id, "analytics.read")
     rows = _pe_rows(db, event_id, include_non_event=include_other)
     if since_days:
         cutoff = datetime.utcnow() - timedelta(days=since_days)
@@ -6619,7 +8087,7 @@ def event_payments(event_id: int,
 def event_payments_summary(event_id: int, db: Session = Depends(get_db),
                            current_user: models.User = Depends(get_current_user)):
     _get_event_or_404(event_id, db)
-    authz.require_cap(db, current_user, event_id, "attendee.read")
+    authz.require_cap(db, current_user, event_id, "analytics.read")
     rows = _pe_rows(db, event_id)
     today = datetime.utcnow().replace(hour=0, minute=0, second=0, microsecond=0)
     latest = max((r.last_checked_at for r in rows if r.last_checked_at), default=None)
@@ -6637,7 +8105,7 @@ def event_payments_attention(event_id: int, db: Session = Depends(get_db),
                              current_user: models.User = Depends(get_current_user)):
     """What actually needs a person, worst first."""
     _get_event_or_404(event_id, db)
-    authz.require_cap(db, current_user, event_id, "attendee.read")
+    authz.require_cap(db, current_user, event_id, "analytics.read")
     rows = [r for r in _pe_rows(db, event_id) if (r.severity or 0) > 0]
     rows.sort(key=lambda r: (-(r.severity or 0), -(r.amount or 0)))
     unmapped = db.query(models.UnmappedSale).filter(
@@ -6657,7 +8125,7 @@ def event_payments_recovery(event_id: int, db: Session = Depends(get_db),
     another way marked as resolved, because chasing them would be an apology
     sent to a paying customer."""
     _get_event_or_404(event_id, db)
-    authz.require_cap(db, current_user, event_id, "attendee.read")
+    authz.require_cap(db, current_user, event_id, "analytics.read")
     rows = _pe_rows(db, event_id)
     out = payments.recovery_rows(rows)
     return {"event_id": event_id,
@@ -6822,9 +8290,14 @@ def attendees_by_contact(contact_id: str = "", email: str = "",
 @app.get("/events/{event_id}/ticket-metrics")
 def ticket_metrics(event_id: int, db: Session = Depends(get_db),
                    current_user: models.User = Depends(get_current_user)):
-    """Unambiguous figures. Never one blended "purchases" count."""
+    """Unambiguous figures. Never one blended "purchases" count.
+
+    Money, so analytics.read. It was attendee.read, which every door account
+    holds -- looking one person up is the job all weekend -- and this returns
+    gross and net revenue for the whole event.
+    """
     event = _get_event_or_404(event_id, db)
-    authz.require_cap(db, current_user, event_id, "attendee.read")
+    authz.require_cap(db, current_user, event_id, "analytics.read")
 
     maps = db.query(models.TicketMapping).filter(
         models.TicketMapping.event_id == event_id,
@@ -6845,6 +8318,44 @@ def ticket_metrics(event_id: int, db: Session = Depends(get_db),
     unassigned_seats = 0
     blocked = 0
 
+    # A repeat charge is a property of the BUYER, not of a badge row. A second
+    # ticket bought on one account now gets its own badge so it can be checked
+    # in on its own -- which puts the two charges on two different rows, where a
+    # per-row reading sees one charge each and reports no duplicate at all. The
+    # stuck-then-retried payments this event actually has are precisely what
+    # that blindness would hide, so the ledger is bundled back together under
+    # whoever paid before anything classifies it.
+    bundles = {}
+    for a in attendees:
+        cd = a.custom_data or {}
+        owner = int(cd.get("bought_by_attendee") or 0) or a.id
+        b = bundles.setdefault(owner, {"row": None, "ents": [], "orders": set()})
+        b["ents"].extend(cd.get("entitlements") or [])
+        if cd.get("from_order"):
+            # This row IS the seat some repeat charge paid for, so that charge
+            # must not also be counted as a seat nobody has claimed.
+            b["orders"].add(cd["from_order"])
+        if a.id == owner:
+            b["row"] = a
+    for owner, b in bundles.items():
+        a = b["row"] or next((x for x in attendees if x.id == owner), None)
+        if a is None:
+            continue
+        c = _tm_classify(b["ents"], upgrade_tt_ids, upgrade_pids)
+        base_n += len(c["base"])
+        upgrade_n += len(c["upgrade"])
+        for r in c["repeat"]:
+            repeats[r["repeat_kind"]] = repeats.get(r["repeat_kind"], 0) + 1
+            repeat_rows.append({
+                "email": a.email, "name": ("%s %s" % (a.first_name or "", a.last_name or "")).strip(),
+                "kind": r["repeat_kind"], "gap_minutes": round(r["gap_minutes"], 1) if r.get("gap_minutes") is not None else None,
+                "amount": r.get("amount"), "reference": r.get("order_id") or r.get("invoice_id"),
+                "purchased_at": r.get("purchased_at"),
+                "seated": bool(r.get("order_id") and r.get("order_id") in b["orders"])})
+            if r["repeat_kind"] == "additional_paid_seat" and not (
+                    r.get("order_id") and r.get("order_id") in b["orders"]):
+                unassigned_seats += max(1, int(r.get("quantity") or 1))
+
     for a in attendees:
         cd = a.custom_data or {}
         ents = cd.get("entitlements") or []
@@ -6857,18 +8368,6 @@ def ticket_metrics(event_id: int, db: Session = Depends(get_db),
             # No paid ledger at all: comp, staff, speaker, exhibitor or a door
             # registration. Real attendees, but they are not ticket sales.
             comp += 1
-        c = _tm_classify(ents, upgrade_tt_ids, upgrade_pids)
-        base_n += len(c["base"])
-        upgrade_n += len(c["upgrade"])
-        for r in c["repeat"]:
-            repeats[r["repeat_kind"]] = repeats.get(r["repeat_kind"], 0) + 1
-            repeat_rows.append({
-                "email": a.email, "name": ("%s %s" % (a.first_name or "", a.last_name or "")).strip(),
-                "kind": r["repeat_kind"], "gap_minutes": round(r["gap_minutes"], 1) if r.get("gap_minutes") is not None else None,
-                "amount": r.get("amount"), "reference": r.get("order_id") or r.get("invoice_id"),
-                "purchased_at": r.get("purchased_at")})
-            if r["repeat_kind"] == "additional_paid_seat":
-                unassigned_seats += max(1, int(r.get("quantity") or 1))
         for e in ents:
             q = max(1, int(e.get("quantity") or 1))
             if q > 1:
@@ -7060,7 +8559,7 @@ def map_reconcile_runs(event_id: int, db: Session = Depends(get_db),
                        current_user: models.User = Depends(get_current_user)):
     """The audit trail: who mapped what, what they were shown, what it did."""
     _get_event_or_404(event_id, db)
-    authz.require_cap(db, current_user, event_id, "attendee.read")
+    authz.require_cap(db, current_user, event_id, "analytics.read")
     rows = db.query(models.MapReconcileRun).filter(
         models.MapReconcileRun.event_id == event_id).order_by(
         models.MapReconcileRun.created_at.desc()).limit(50).all()
@@ -7143,11 +8642,14 @@ def reconcile_invoice(payload: schemas.ReconcileInvoice, db: Session = Depends(g
     old_tt = existing.ticket_type_id
     # Tier behaviour matches the order path: a base sets it when unset, an
     # upgrade only ever lifts.
-    if custom.get("admin_tier") is None:
-        if tt_id and not mapping.is_upgrade and not existing.ticket_type_id:
-            existing.ticket_type_id = tt_id
-        if tt_id and mapping.is_upgrade and _tt_rank(db, tt_id) >= _tt_rank(db, existing.ticket_type_id):
-            existing.ticket_type_id = tt_id
+    if tt_id and not mapping.is_upgrade and not existing.ticket_type_id:
+        existing.ticket_type_id = tt_id
+    if tt_id and mapping.is_upgrade and _tt_rank(db, tt_id) >= _tt_rank(db, existing.ticket_type_id):
+        existing.ticket_type_id = tt_id
+    # The admin tier holds the line underneath, and only underneath.
+    _floor = custom.get("admin_tier")
+    if _floor is not None and _tt_rank(db, _floor) > _tt_rank(db, existing.ticket_type_id):
+        existing.ticket_type_id = _floor
     for f in ("first_name", "last_name", "phone"):
         v = getattr(payload, f)
         if v and not getattr(existing, f):
@@ -7204,17 +8706,98 @@ def reconcile_attendee(payload: schemas.ReconcileAttendee, db: Session = Depends
     existing = db.query(models.Attendee).filter(
         models.Attendee.event_id == event.id,
         func.lower(models.Attendee.email) == email).first()
+
+    # A row that was ruled a duplicate keeps its email, so orders keep arriving
+    # at it -- and every sync re-grants the purchase to somebody who is revoked
+    # and whose badge nobody holds. Marie Moreau checked out twice under two
+    # addresses, and after her second row was revoked the reconciler refilled it
+    # within half a minute, twice, because the email still matched.
+    #
+    # The duplicate carries a pointer to the person it IS. Follow it, so the
+    # order lands on the row that has the badge instead.
+    _hops = 0
+    while (existing is not None and (existing.custom_data or {}).get("duplicate_of") and _hops < 4):
+        _canonical = db.query(models.Attendee).filter(
+            models.Attendee.id == int((existing.custom_data or {}).get("duplicate_of")),
+            models.Attendee.event_id == event.id).first()
+        if _canonical is None or _canonical.id == existing.id:
+            break
+        existing = _canonical
+        _hops += 1
+
+    # The MAPPING is what says whether a product is an add-on, and no caller was
+    # reading it. The proxy, the mirror and a replay all pass the tier and the
+    # upgrade flag and stop there -- so a product mapped as a one-day add-on was
+    # granted as a full tier upgrade instead, and everybody who bought one day of
+    # the conference was quietly given all three.
+    #
+    # Deriving it here rather than in each caller keeps the mapping as the single
+    # answer to "what does this product grant", which is the whole reason the
+    # table exists.
+    if not (payload.addon_code or "").strip() and payload.product_id:
+        _m = _pick_mapping(db.query(models.TicketMapping).filter(
+            models.TicketMapping.event_id == event.id,
+            models.TicketMapping.external_product_id == str(payload.product_id),
+            models.TicketMapping.is_active == True).all(),           # noqa: E712
+            None, payload.purchased_at)
+        if _m is not None and (_m.addon_code or "").strip():
+            payload.addon_code = _m.addon_code.strip()
+
+    # The same order arriving twice. The first call carries a product id and
+    # resolves the mapping; a later one -- the mirror, a replay -- often carries
+    # only the ticket type, cannot re-derive the add-on, and would then record
+    # the order a SECOND time as a tier. That is how one person ended up with
+    # both an add-on and a full conference pass from a single $97 purchase,
+    # twenty-eight seconds apart.
+    #
+    # The ORDER is the key this endpoint claims to be idempotent on, so read it:
+    # if this order has already granted an add-on, it still grants an add-on.
+    if not (payload.addon_code or "").strip() and payload.order_id and existing is not None:
+        for _e in ((existing.custom_data or {}).get("entitlements") or []):
+            if _e.get("order_id") == payload.order_id and _e.get("addon_code"):
+                payload.addon_code = _e["addon_code"]
+                break
+
     # ADD-ON: additive event entitlement (e.g. one-day speaker). Never sets or
     # raises the base tier; idempotent per (order, addon). Creates a base-less
     # attendee if the buyer has no base ticket yet.
     if payload.addon_code:
         att = existing
         created = False
+        if att is None and payload.contact_id:
+            # An upgrade is an upgrade OF something. Whatever address the buyer
+            # typed this time, they are improving a ticket they already hold, so
+            # the right owner is the person GHL says bought it -- not whoever
+            # happens to share an email string.
+            #
+            # This is safe for an upgrade in a way it would NOT be for a ticket:
+            # a second TICKET under a different email might genuinely be a seat
+            # for a friend, and merging those on contact id would be wrong. An
+            # upgrade has no such reading.
+            #
+            # Marie Moreau checked out twice under two addresses five minutes
+            # apart. Her ticket went to one row and her $97 upgrade minted a
+            # second one, and her badge -- which resolves to the ticket -- then
+            # refused her at the conference room she had paid for.
+            att = db.query(models.Attendee).filter(
+                models.Attendee.event_id == event.id,
+                func.json_extract(models.Attendee.custom_data, "$.contact_id") == payload.contact_id,
+                models.Attendee.ticket_type_id.isnot(None)).order_by(models.Attendee.id).first()
+            if att is not None:
+                _lifecycle_append(att, "addon_matched_by_contact", actor="reconcile",
+                                  reason=("An upgrade arrived under a different email address. "
+                                          "Matched to this person by their GHL contact, because an "
+                                          "upgrade belongs to whoever holds the ticket it upgrades."),
+                                  order_id=payload.order_id, email_on_order=email)
         if att is None:
+            # Nobody to upgrade. The money is real and must not be dropped, so
+            # the row is still created -- but it is marked, because an add-on
+            # with no ticket under it is a question, not an attendee.
             att = models.Attendee(event_id=event.id, email=email,
                 first_name=payload.first_name or "", last_name=payload.last_name or "",
                 phone=payload.phone, ticket_type_id=None,
-                custom_data={"contact_id": payload.contact_id, "order_id": payload.order_id, "source": "ghl_reconcile"},
+                custom_data={"contact_id": payload.contact_id, "order_id": payload.order_id,
+                             "source": "ghl_reconcile", "needs_identity_review": True},
                 qr_code=f"ATT-{uuid.uuid4().hex[:12].upper()}")
             db.add(att); db.flush(); created = True
         cd = dict(att.custom_data or {})
@@ -7236,6 +8819,130 @@ def reconcile_attendee(payload: schemas.ReconcileAttendee, db: Session = Depends
     if existing:
         # A refunded/cancelled/revoked ticket must not be silently revived by the
         # reconciler re-seeing the same completed order. A genuinely new order
+        # A SECOND ticket on the same address is a second SEAT, not an update.
+        #
+        # Two confirmed ticket transactions are two people -- somebody buying
+        # for a partner or a friend puts both on their own account, because
+        # that is the only account the checkout offers them. Folding the second
+        # order onto the first row gave one badge for two seats, and the second
+        # person existed only as an extra entitlement nobody looks at. That is
+        # exactly how seven paid seats on this event ended up with nobody on
+        # them, found only by reconciling the money months later.
+        #
+        # So the new order gets its own row, carrying the buyer's name until
+        # somebody asks at the desk whose seat it is. An UPGRADE never reaches
+        # here -- it was handled above, and an upgrade is not a person.
+        # Only a repeat of something they ALREADY hold can be a second seat. A
+        # new day, a different product or a first purchase all travel the normal
+        # grant path, which is what keeps "Saturday, then Sunday" one person.
+        _held = _repeat_peer((existing.custom_data or {}).get("entitlements"),
+                             payload.product_id, payload.ticket_type_id)
+        _this_order_seen = payload.order_id and any(
+            e.get("order_id") == payload.order_id for e in ((existing.custom_data or {}).get("entitlements") or []))
+        # Two settled charges for the same product are not automatically two
+        # people. The common case this event actually has is a PayPal attempt
+        # that looked like it failed and was paid again minutes later -- seating
+        # that would hand out a badge for money taken once and inflate the roll.
+        # So only a repeat the shared rule calls a separate decision to buy
+        # becomes a seat; the rest stay on the buyer, flagged for a human.
+        _kind = None
+        if _held:
+            _kind, _ = _repeat_kind(_held, {
+                "amount": payload.amount,
+                "purchased_at": getattr(payload, "purchased_at", None)})
+        # The gap rule reads a day or more as a separate decision to buy. That is
+        # true of a friend's ticket and false of a PayPal charge that sat pending
+        # for a week and then settled -- by which time the buyer had long since
+        # paid again. This ledger holds 39 pending and 43 failed payments, and a
+        # dozen people carry both a failed and a paid one, so that is not a
+        # hypothetical: the stuck charge arrives late, clears the 24-hour test,
+        # and would hand one person a second badge.
+        #
+        # An unsettled charge on this buyer for the same amount is therefore read
+        # as the thing now settling, and it goes to a human instead of the door.
+        _stuck = None
+        if _kind == "additional_paid_seat" and payload.amount is not None:
+            try:
+                _amt = float(payload.amount)
+                _stuck = db.query(models.PaymentEvent).filter(
+                    models.PaymentEvent.event_id == event.id,
+                    models.PaymentEvent.attendee_id == existing.id,
+                    models.PaymentEvent.status.in_(("pending", "failed")),
+                    models.PaymentEvent.amount >= _amt - 0.01,
+                    models.PaymentEvent.amount <= _amt + 0.01).first()
+            except (TypeError, ValueError):
+                _stuck = None
+        if _stuck is not None:
+            _lifecycle_append(existing, "second_ticket_held_for_review", actor="reconcile",
+                              reason=("A second settled charge of %s, but this account also has a %s "
+                                      "payment of the same amount (#%d). That is the shape of a stuck "
+                                      "charge finally going through, not of another ticket, so no "
+                                      "badge was made. Check the gateway before adding a seat."
+                                      % (payload.amount, _stuck.status, _stuck.id)),
+                              order_id=payload.order_id, payment_event=_stuck.id)
+        if (payload.order_id and payload.ticket_type_id and _held and not _this_order_seen
+                and _kind == "additional_paid_seat" and _stuck is None
+                and not payload.day and not payload.day_date
+                and not payload.is_upgrade and _ticket_active(existing)):
+            # Idempotency first: if this order already made a seat, that seat IS
+            # the answer. Only a genuinely new order creates another one.
+            _seat = next((a for a in db.query(models.Attendee).filter(
+                              models.Attendee.event_id == event.id,
+                              models.Attendee.registration_source == "reconciled_seat").all()
+                          if (a.custom_data or {}).get("from_order") == payload.order_id), None)
+            _made = _seat is None
+            if _seat is None:
+                _n = 2 + sum(1 for a in db.query(models.Attendee).filter(
+                                 models.Attendee.event_id == event.id,
+                                 models.Attendee.registration_source == "reconciled_seat").all()
+                             if int((a.custom_data or {}).get("bought_by_attendee") or 0) == existing.id)
+                _buyer = ("%s %s" % (existing.first_name or "", existing.last_name or "")).strip()
+                _base, _, _dom = (existing.email or "").partition("@")
+                _seat = models.Attendee(
+                    event_id=event.id,
+                    email="%s+seat%d@%s" % (_base or "seat", _n, _dom or "gaiahealers.app"),
+                    first_name=payload.first_name or existing.first_name or "",
+                    last_name=payload.last_name or existing.last_name or "",
+                    phone=payload.phone or existing.phone,
+                    ticket_type_id=payload.ticket_type_id,
+                    registration_status="registered", attendance_type="paid",
+                    registration_source="reconciled_seat",
+                    qr_code="ATT-%s" % uuid.uuid4().hex[:12].upper(),
+                    custom_data={"source": "reconciled_seat", "bought_by": _buyer,
+                                 "bought_by_attendee": existing.id, "from_order": payload.order_id,
+                                 "seat_of_party": "%d of %d" % (_n, _n),
+                                 "needs_name_check": True, "contact_id": payload.contact_id})
+                db.add(_seat); db.flush()
+                _ent_record(_seat.custom_data, payload.order_id, None, payload.ticket_type_id, False,
+                            event_id=event.id, product_id=payload.product_id,
+                            quantity=payload.quantity, amount=payload.amount,
+                            purchased_at=getattr(payload, "purchased_at", None))
+                _seat.custom_data = dict(_seat.custom_data)
+                _lifecycle_append(_seat, "seat_from_second_order", actor="reconcile",
+                                  reason=("A second ticket bought on %s's account. Two confirmed "
+                                          "ticket purchases are two people; the name on this seat is "
+                                          "the buyer's until somebody asks at the desk."
+                                          % (_buyer or "the same account")),
+                                  bought_by=existing.id, order_id=payload.order_id)
+                _lifecycle_append(existing, "bought_another_seat", actor="reconcile",
+                                  reason="A second ticket on this account became its own badge.",
+                                  seat=_seat.id, order_id=payload.order_id)
+                # The order still carries the buyer's own details. Filling a
+                # BLANK field is always safe and is how a card that had no phone
+                # finally gets one; overwriting a field that already has a value
+                # is not, because the second order may carry the friend's.
+                for _f in ("phone", "first_name", "last_name"):
+                    _v = getattr(payload, _f, None)
+                    if _v and not getattr(existing, _f, None):
+                        setattr(existing, _f, _v)
+                _close_unmapped_for_order(db, payload.order_id, "Reconciled as a second seat")
+            db.commit(); db.refresh(_seat)
+            _ensure_public_tokens()
+            db.refresh(_seat)
+            return {"ok": True, "created": _made, "seat_of": existing.id,
+                    "needs_name_check": True,
+                    "attendee_id": _seat.id, "qr_code": _seat.qr_code}
+
         # (different order_id) is allowed to reactivate; the same order is not.
         if not _ticket_active(existing):
             refunded_oids = set((existing.custom_data or {}).get("refunded_order_ids") or [])
@@ -7270,10 +8977,12 @@ def reconcile_attendee(payload: schemas.ReconcileAttendee, db: Session = Depends
                     quantity=payload.quantity, amount=payload.amount,
                     purchased_at=getattr(payload, "purchased_at", None))
         _order_refunded = bool(payload.order_id and payload.order_id in set(custom.get("refunded_order_ids") or []))
-        # Purchase-side tier behavior is unchanged (base sets if unset; upgrades
-        # never downgrade) EXCEPT: an admin override wins, and a refunded order
-        # never re-applies its tier (so a re-seen refunded upgrade cannot re-lift).
-        if custom.get("admin_tier") is None and not _order_refunded:
+        # Base sets the tier if unset; an upgrade only ever lifts; a refunded
+        # order never re-applies its tier, so a re-seen refunded upgrade cannot
+        # re-lift. An admin-set tier is applied as a FLOOR after this, not as a
+        # veto before it -- vetoing it meant somebody who had been corrected or
+        # comped could pay for an upgrade and never receive it.
+        if not _order_refunded:
             if payload.ticket_type_id and not payload.is_upgrade:
                 if not existing.ticket_type_id:
                     existing.ticket_type_id = payload.ticket_type_id
@@ -7286,6 +8995,9 @@ def reconcile_attendee(payload: schemas.ReconcileAttendee, db: Session = Depends
                                     "to_tt": payload.ticket_type_id, "order_id": payload.order_id})
                         custom["lifecycle"] = _ll
                     existing.ticket_type_id = payload.ticket_type_id
+        _floor = custom.get("admin_tier")
+        if _floor is not None and _tt_rank(db, _floor) > _tt_rank(db, existing.ticket_type_id):
+            existing.ticket_type_id = _floor
         for f in ("first_name", "last_name", "phone"):
             v = getattr(payload, f)
             if v and not getattr(existing, f):
@@ -7511,16 +9223,31 @@ def reinstate_attendee(attendee_id: int, payload: schemas.RevokeTicket,
 def change_pass(attendee_id: int, payload: schemas.ChangePass,
                 db: Session = Depends(get_db),
                 current_user: models.User = Depends(get_current_user)):
-    """Admin changes an attendee's pass (comp upgrade, or explicit downgrade).
+    """Change an attendee's pass. Never a second attendee, always the same QR.
 
-    Never a second attendee, always the same QR. A complimentary change records
-    that no payment occurred. Downgrades are refused unless allow_downgrade is
-    set, so a mis-click cannot strip a paid VIP. Fully audited (old->new, who,
-    reason) and the attendee is notified of the new access."""
+    Two people use this and they are trusted with different things.
+
+    An ORGANISER may do anything: comp somebody up, or explicitly downgrade
+    them. Downgrades still need allow_downgrade, so a mis-click cannot strip a
+    paid VIP.
+
+    DOOR STAFF may SELL an upgrade and nothing else. That is the thing they are
+    standing there to do -- somebody decides on the day that they want the
+    conference after all -- and it is safe to hand over because it is bounded by
+    arithmetic rather than by trust: it must go UP, and money must be recorded
+    against it. What they cannot do is give a pass away, or take one back; a comp
+    and a downgrade are decisions about somebody else's money and stay with the
+    organiser.
+
+    Fully audited either way (old->new, who, why, and the amount) and the
+    attendee is notified of the new access.
+    """
     attendee = db.query(models.Attendee).filter(models.Attendee.id == attendee_id).first()
     if not attendee:
         raise HTTPException(status_code=404, detail="Attendee not found")
-    authz.require_cap(db, current_user, attendee.event_id, "attendee.write")
+    _organiser = authz.can(db, current_user, attendee.event_id, "attendee.write")
+    if not _organiser:
+        authz.require_cap(db, current_user, attendee.event_id, "checkin.perform")
     tt = db.query(models.TicketType).filter(
         models.TicketType.id == payload.ticket_type_id,
         models.TicketType.event_id == attendee.event_id).first()
@@ -7530,15 +9257,45 @@ def change_pass(attendee_id: int, payload: schemas.ChangePass,
     if old_tt == tt.id:
         return attendee
     is_downgrade = _tt_rank(db, tt.id) < _tt_rank(db, old_tt)
+    if not _organiser:
+        # The door's bound, stated as three refusals rather than one permission.
+        if is_downgrade:
+            raise HTTPException(status_code=403,
+                                detail="A pass can only be moved up at the desk. "
+                                       "Ask an organiser to change it down.")
+        if not getattr(payload, "paid_at_door", False):
+            raise HTTPException(status_code=403,
+                                detail="An upgrade sold at the desk has to be paid for. "
+                                       "Only an organiser can give one away.")
+        if float(getattr(payload, "amount", 0) or 0) <= 0:
+            raise HTTPException(status_code=400, detail="Say how much was taken")
     if is_downgrade and not payload.allow_downgrade:
         raise HTTPException(status_code=409,
                             detail="This is a downgrade. Re-submit with allow_downgrade to confirm.")
     attendee.ticket_type_id = tt.id
     _cp_cd = dict(attendee.custom_data or {}); _cp_cd["admin_tier"] = tt.id
     attendee.custom_data = _cp_cd
-    _lifecycle_append(attendee, "comp_downgrade" if is_downgrade else "comp_upgrade",
+    # Money taken at the desk for an upgrade has nowhere else to go. The walk-in
+    # door-payment columns belong to a walk-in's own ticket and are only
+    # aggregated for walk-ins, so an upgrade recorded there would simply not be
+    # counted -- somebody hands over $97 at the desk and the event never sees it.
+    # It is recorded on the lifecycle entry instead, which is per-event, additive,
+    # and already the thing that says what happened to this ticket.
+    _paid = bool(getattr(payload, "paid_at_door", False))
+    _amount = float(getattr(payload, "amount", 0) or 0)
+    if _paid and _amount <= 0:
+        raise HTTPException(status_code=400,
+                            detail="Say how much was taken, or record it as complimentary")
+    _lifecycle_append(attendee,
+                      "paid_upgrade" if _paid else ("comp_downgrade" if is_downgrade else "comp_upgrade"),
                       actor=(current_user.email or "admin"), from_tt=old_tt, to_tt=tt.id,
-                      complimentary=bool(payload.complimentary), reason=payload.reason)
+                      complimentary=(False if _paid else bool(payload.complimentary)),
+                      reason=payload.reason,
+                      paid_at_door=(True if _paid else None),
+                      amount=(_amount if _paid else None),
+                      currency=((getattr(payload, "currency", None) or "USD") if _paid else None),
+                      method=((getattr(payload, "method", None) or "cash") if _paid else None),
+                      reference=(getattr(payload, "reference", None) if _paid else None))
     db.commit(); db.refresh(attendee)
     try:
         _notify_ticket_change(db, attendee, tt)
@@ -8589,7 +10346,10 @@ def _card_context(db, token: str):
                     -(e.start_date.timestamp() if (e and e.start_date) else 0))
         rows.sort(key=ev_key)
         event = events.get(rows[0].event_id)
-    return card, event
+    # The row for the event the card names, so the card can say what that
+    # person actually holds. A badge in a drawer whose events are all gone has
+    # none, and still renders.
+    return card, event, (rows[0] if rows else None)
 
 
 def _serve_card(token: str, request: FastAPIRequest, db, fmt: str):
@@ -8600,7 +10360,7 @@ def _serve_card(token: str, request: FastAPIRequest, db, fmt: str):
         if fmt == "html":
             return HTMLResponse(badge_card.render_not_found_html(), status_code=404)
         raise HTTPException(status_code=404, detail="Card not found")
-    card, event = ctx
+    card, event, attendee = ctx
     view = badge_card.public_view(card, event, _participation(db, card))
     tok = card.public_token
     if fmt == "vcf":
@@ -9336,6 +11096,69 @@ def badge_label_png(event_id: int, attendee_id: int, size: str = badge_card.DEFA
                              "X-Label-Size": "%dx%d" % (w, h),
                              "X-Label-Layout": meta.get("layout", ""),
                              "X-Label-Dpi": str(meta.get("dpi", dpi))})
+
+
+@app.get("/events/{event_id}/print-report")
+def print_report(event_id: int, db: Session = Depends(get_db),
+                 current_user: models.User = Depends(get_current_user)):
+    """Which desk printed what, and what failed there.
+
+    Every print attempt has been logged since badges existed, and nothing has
+    ever read the log back -- so the station name on it was a field people were
+    asked to fill in for no visible reason, and predictably did not. A record
+    nobody can see is not a record.
+
+    Failures matter more than successes here: a station that is quietly failing
+    is a queue forming at one desk while the others move, and the person on it
+    is the last to know it is not just them.
+    """
+    _get_event_or_404(event_id, db)
+    authz.require_cap(db, current_user, event_id, "checkin.perform")
+    rows = db.query(models.BadgePrintLog).filter(
+        models.BadgePrintLog.event_id == event_id).all()
+    users = {u.id: (u.email or "") for u in db.query(models.User).all()}
+    stations = {}
+    for r in rows:
+        # A print from a desk that never named itself is still a print; it is
+        # filed under the person, so the log is never anonymous.
+        key = (r.station or "").strip() or ("(unnamed — %s)" % (users.get(r.staff_user_id) or "unknown"))
+        slot = stations.setdefault(key, {"station": key, "printed": 0, "failed": 0,
+                                         "named": bool((r.station or "").strip()),
+                                         "last_at": None, "operators": set()})
+        slot["printed" if r.result == "printed" else "failed"] += 1
+        if r.staff_user_id in users:
+            slot["operators"].add(users[r.staff_user_id])
+        when = getattr(r, "created_at", None)
+        if when and (slot["last_at"] is None or str(when) > str(slot["last_at"])):
+            slot["last_at"] = when
+    out = []
+    for slot in stations.values():
+        total = slot["printed"] + slot["failed"]
+        out.append({**slot,
+                    "operators": sorted(slot["operators"]),
+                    "attempts": total,
+                    "failure_rate": (round(slot["failed"] / total * 100) if total else 0)})
+    out.sort(key=lambda x: -x["attempts"])
+    recent = sorted([r for r in rows if r.result == "failed"],
+                    key=lambda r: str(getattr(r, "created_at", "")), reverse=True)[:20]
+    att = {a.id: a for a in db.query(models.Attendee).filter(
+        models.Attendee.id.in_([r.attendee_id for r in recent]))} if recent else {}
+    return {
+        "event_id": event_id,
+        "attempts": len(rows),
+        "printed": sum(1 for r in rows if r.result == "printed"),
+        "failed": sum(1 for r in rows if r.result == "failed"),
+        "stations": out,
+        "unnamed_stations": sum(1 for s in out if not s["named"]),
+        "recent_failures": [
+            {"attendee_id": r.attendee_id,
+             "name": (("%s %s" % (att[r.attendee_id].first_name or "", att[r.attendee_id].last_name or "")).strip()
+                      if r.attendee_id in att else None),
+             "station": (r.station or "").strip() or None,
+             "by": users.get(r.staff_user_id),
+             "error": r.error, "at": getattr(r, "created_at", None)}
+            for r in recent],
+    }
 
 
 @app.post("/events/{event_id}/attendees/{attendee_id}/badge-print")

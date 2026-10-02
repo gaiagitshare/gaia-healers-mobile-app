@@ -32,8 +32,9 @@ for line in open("/root/event/backend/.env"):
 from jose import jwt
 ADMIN = jwt.encode({"sub": "1"}, env["SECRET_KEY"], algorithm="HS256")
 SVC = env["IDENTITY_SERVICE_TOKEN"]
-BASE = "http://127.0.0.1:8002"
-DB = "/root/event/backend/event.db"
+import sys as _sys; _sys.path.insert(0, "/root/event/backend")
+import testbed
+BASE, DB = testbed.start()
 
 fails = []
 def check(ok, label, detail=""):
@@ -146,10 +147,22 @@ check(m["payments"]["repeat_breakdown"].get("additional_paid_seat") == 1,
       m["payments"]["repeat_breakdown"])
 check(m["payments"]["upgrade_payments"] == 1,
       "it is NOT silently promoted to an upgrade", m["payments"])
-check(m["seats"]["unassigned_paid_seats"] == 1,
-      "the seat is counted", m["seats"])
-check(m["people"]["unique_attendees"] == 2,
-      "and no attendee is invented for whoever will sit in it", m["people"])
+# A confirmed second purchase now gets its own badge, because that is the only
+# thing that can be scanned and checked in on its own at the door. The name on
+# it is the buyer's until somebody asks, so it carries a flag saying so -- and
+# it must NOT also be counted as a seat nobody has claimed, or the roll would
+# show this one ticket twice.
+seat = sql("SELECT registration_source, custom_data FROM attendees "
+           "WHERE event_id=? AND registration_source='reconciled_seat' "
+           "AND custom_data LIKE '%\"from_order\": \"zz-o-4\"%'", (EV,))
+check(len(seat) == 1 and seat[0][0] == "reconciled_seat",
+      "the second confirmed purchase becomes its own badge", seat)
+check(len(seat) == 1 and '"needs_name_check": true' in (seat[0][1] or "").lower(),
+      "and the badge says the name still has to be confirmed", seat)
+check(m["seats"]["unassigned_paid_seats"] == 0,
+      "and it is not counted a second time as an unclaimed seat", m["seats"])
+check(m["people"]["unique_attendees"] == 3,
+      "so the roll holds one person per paid seat", m["people"])
 
 # ── 3. the same ticket twice within minutes is a suspected duplicate ───────
 E3 = "zz-mr-dupe@example.invalid"
@@ -164,11 +177,15 @@ check(any(r["email"] == E3 for r in m["needs_review"]),
 
 # ── 4. quantity > 1 is seats, never invented people ────────────────────────
 E4 = "zz-mr-qty@example.invalid"
+# Measured as this order's OWN contribution. A total would silently depend on
+# what earlier sections left behind, which is how this check came to assert a
+# number its own label disagreed with.
+un_before = metrics()["seats"]["unassigned_paid_seats"]
 reconcile(E4, BASE_TT, P_BASE, "zz-o-7", qty=3, at=T0, amount=297.0)
 m = metrics()
-before_people = m["people"]["unique_attendees"]
-check(m["seats"]["unassigned_paid_seats"] >= 3,
-      "buying three seats records two more seats than attendees", m["seats"])
+check(m["seats"]["unassigned_paid_seats"] - un_before == 2,
+      "buying three seats records two more seats than attendees",
+      (un_before, m["seats"]))
 names = sql("SELECT COUNT(*) FROM attendees WHERE event_id=? AND email LIKE 'zz-mr-qty%'", (EV,))
 check(names[0][0] == 1,
       "only the named buyer becomes an attendee; the other seats stay unassigned", names)

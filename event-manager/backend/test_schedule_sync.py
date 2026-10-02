@@ -23,8 +23,9 @@ for line in open("/root/event/backend/.env"):
         env[k] = v.strip().strip('"').strip("'")
 from jose import jwt
 ADMIN = jwt.encode({"sub": "1"}, env["SECRET_KEY"], algorithm="HS256")
-BASE = "http://127.0.0.1:8002"
-DB = "/root/event/backend/event.db"
+import sys as _sys; _sys.path.insert(0, "/root/event/backend")
+import testbed
+BASE, DB = testbed.start()
 HERE = os.path.dirname(os.path.abspath(__file__))
 TMP = "/tmp/zz-schedule-sync.csv"
 

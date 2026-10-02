@@ -31,6 +31,7 @@ const {
   toQwenTools, sessionUpdateFor, browserToQwen, qwenToBrowser,
   needsGeminiForLanguage, prefersGemini, qwenRouting, issueQwenTicket,
   attachQwenVoiceRelay, _resetRelayState, _recordFailureForTest,
+  QWEN_VOICES, resolveVoice, nearestVoices, qwenVoiceConfig, voiceBootLine,
 } = relay;
 
 // What the fake Qwen does with each connection; set per test.
@@ -295,4 +296,125 @@ test('navigation refresh preserves server policy and does not create a voice tur
   assert.equal(received.filter(e => e.type === 'response.create').length, 0);
   assert.equal(page.got.filter(m => m.setupComplete).length, 1);
   page.ws.close();
+});
+
+// ── the voice name, which nothing upstream will check for us ───────────────
+//
+// Qwen accepts a voice it does not have and replies `session.updated` as though
+// it took it, then speaks as somebody else. Proven against the live API: it
+// accepted "__definitely_not_a_voice__" without complaint. So a misspelling in
+// QWEN_VOICE_NAME is invisible — wrong voice, clean logs — and this is the only
+// layer that can catch it.
+
+test('a real voice is passed through untouched', () => {
+  for (const name of ['Zane', 'Jennifer', 'Tina', 'Roya', 'Ono Anna']) {
+    assert.deepEqual(resolveVoice(name), { voice: name, issue: null }, name);
+  }
+});
+
+test('an unknown voice is NOT sent upstream', () => {
+  const r = resolveVoice('Zayne');
+  assert.equal(r.voice, '', 'a name Qwen would misread must not reach it');
+  assert.equal(r.issue.kind, 'unknown');
+  assert.equal(r.issue.given, 'Zayne');
+  assert.ok(r.issue.suggestions.includes('Zane'), r.issue.suggestions.join(','));
+});
+
+test('the suggestion names the voice that was actually meant', () => {
+  // The three mistakes this exists for: a dropped letter, a swapped pair, a
+  // wrong vowel. Each has to put the intended voice in the list.
+  for (const [typed, meant] of [['Jenifer', 'Jennifer'], ['Zain', 'Zane'],
+                                ['Katrina', 'Katerina'], ['Serina', 'Serena'],
+                                ['Tna', 'Tina']]) {
+    assert.ok(nearestVoices(typed).includes(meant),
+      `${typed} should suggest ${meant}, got ${nearestVoices(typed).join(', ')}`);
+  }
+});
+
+test('nonsense gets no confident guess', () => {
+  assert.deepEqual(nearestVoices('__definitely_not_a_voice__'), []);
+});
+
+test('only the capitals being wrong keeps the voice and still reports it', () => {
+  const r = resolveVoice('zane');
+  assert.equal(r.voice, 'Zane', 'losing the voice over capitals would be worse than fixing it');
+  assert.equal(r.issue.kind, 'case');
+  assert.equal(r.issue.used, 'Zane');
+});
+
+test('no voice set is not an error', () => {
+  assert.deepEqual(resolveVoice(''), { voice: '', issue: null });
+  assert.deepEqual(resolveVoice(undefined), { voice: '', issue: null });
+});
+
+test('the config reports the voice and the problem together', () => {
+  const base = { QWEN_VOICE_ENABLED: 'true', QWEN_API_KEY: 'k' };
+  const good = qwenVoiceConfig({ ...base, QWEN_VOICE_NAME: 'Zane' });
+  assert.equal(good.voice, 'Zane');
+  assert.equal(good.voiceIssue, null);
+
+  const bad = qwenVoiceConfig({ ...base, QWEN_VOICE_NAME: 'Zayne' });
+  assert.equal(bad.voice, '', 'the bad name is dropped, not forwarded');
+  assert.equal(bad.voiceIssue.kind, 'unknown');
+});
+
+test('a dropped voice means the model default, never a bogus name on the wire', () => {
+  const cfg = qwenVoiceConfig({ QWEN_VOICE_ENABLED: 'true', QWEN_API_KEY: 'k',
+                                QWEN_VOICE_NAME: 'NotAVoice' });
+  const update = sessionUpdateFor(SETUP.setup, { instructions: 'S', voice: cfg.voice });
+  assert.ok(!('voice' in update.session),
+    'session.update must carry no voice at all rather than one Qwen will misread');
+});
+
+test('the voice list is the real catalogue, not a sample of it', () => {
+  // Fewer than this and a legitimate voice gets rejected as a typo, which is a
+  // worse failure than the one this guards against.
+  assert.ok(QWEN_VOICES.length >= 55, `only ${QWEN_VOICES.length} voices listed`);
+  assert.equal(new Set(QWEN_VOICES).size, QWEN_VOICES.length, 'duplicates in the list');
+  for (const name of ['Zane', 'Jennifer', 'Tina', 'Roya', 'Cici', 'Emilien']) {
+    assert.ok(QWEN_VOICES.includes(name), `${name} missing from the list`);
+  }
+});
+
+test('the model is pinned in config, not only in code', () => {
+  // The fallback exists so a missing value cannot break voice, but relying on it
+  // leaves the live model version recorded nowhere anybody reads.
+  const cfg = qwenVoiceConfig({ QWEN_VOICE_MODEL: 'qwen9-test-realtime' });
+  assert.equal(cfg.model, 'qwen9-test-realtime');
+  assert.ok(qwenVoiceConfig({}).model.startsWith('qwen'), 'a sane fallback is still there');
+});
+
+test('the boot line is loud exactly when the voice is wrong', () => {
+  const on = { QWEN_VOICE_ENABLED: 'true', QWEN_API_KEY: 'k' };
+
+  const ok = voiceBootLine(qwenVoiceConfig({ ...on, QWEN_VOICE_NAME: 'Zane' }));
+  assert.equal(ok.level, 'log');
+  assert.match(ok.message, /voice: 'Zane'/);
+
+  const cased = voiceBootLine(qwenVoiceConfig({ ...on, QWEN_VOICE_NAME: 'zane' }));
+  assert.equal(cased.level, 'warn', 'wrong capitals is worth a warning, not an error');
+  assert.match(cased.message, /Zane/);
+
+  // The branch that is the whole point. It must say the name that was typed, say
+  // it was not used, and name the voice that was probably meant -- a quiet line
+  // here is the failure this feature exists to prevent.
+  const bad = voiceBootLine(qwenVoiceConfig({ ...on, QWEN_VOICE_NAME: 'Zayne' }));
+  assert.equal(bad.level, 'error');
+  assert.match(bad.message, /Zayne/);
+  assert.match(bad.message, /NOT sent/);
+  assert.match(bad.message, /Did you mean: .*Zane/);
+
+  const off = voiceBootLine(qwenVoiceConfig({ QWEN_VOICE_NAME: 'Zane' }));
+  assert.equal(off.level, 'log');
+  assert.match(off.message, /OFF/);
+});
+
+test('every level the boot line returns is a real console method', () => {
+  for (const env of [{}, { QWEN_VOICE_ENABLED: 'true', QWEN_API_KEY: 'k' },
+                     { QWEN_VOICE_ENABLED: 'true', QWEN_API_KEY: 'k', QWEN_VOICE_NAME: 'zane' },
+                     { QWEN_VOICE_ENABLED: 'true', QWEN_API_KEY: 'k', QWEN_VOICE_NAME: 'nope' }]) {
+    const line = voiceBootLine(qwenVoiceConfig(env));
+    assert.equal(typeof console[line.level], 'function', `console.${line.level} is not callable`);
+    assert.ok(line.message.length > 20);
+  }
 });

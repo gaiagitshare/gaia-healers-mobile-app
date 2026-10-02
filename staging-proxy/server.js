@@ -29,8 +29,8 @@ import {
   googleAuthUrl, appleAuthUrl, providerConfig as oauthProviderConfig, OAUTH_ENDPOINTS,
 } from './membership/oauth-core.js';
 import { classifyMembershipEvent, membershipFromEvent } from './membership/events.js';
-import { attachQwenVoiceRelay, qwenRouting, issueQwenTicket, qwenVoiceConfig } from './qwen-voice-relay.js';
-import { allowSpend, callerKey, guardSubject, spendKindFor, ASSIST_MAX_PROMPT_CHARS } from './assist-guard.js';
+import { attachQwenVoiceRelay, qwenRouting, issueQwenTicket, qwenVoiceConfig, voiceBootLine } from './qwen-voice-relay.js';
+import { allowSpend, callerKey, guardSubject, spendKindFor, ASSIST_MAX_PROMPT_CHARS, ASSIST_MAX_TTS_CHARS } from './assist-guard.js';
 import { deadline, idleWatch } from './provider-timeouts.js';
 import { SAFETY_FIRST, detectCrisis, crisisReply } from './assist-safety.js';
 import { createMarkerFilter } from './assist-markers.js';
@@ -7103,6 +7103,19 @@ const server = http.createServer(async (req, res) => {
 
 server.listen(PORT, HOST, () => {
   console.log(`Gaia staging proxy listening on ${HOST}:${PORT}`);
+
+  // Say which voice the assistant will speak with, every boot.
+  //
+  // Qwen accepts a voice name it does not have and answers `session.updated` as
+  // though it took it, then speaks as somebody else. Nothing upstream reports
+  // the mistake, so a misspelling in QWEN_VOICE_NAME used to be invisible: the
+  // voice was wrong, every log said fine, and the only way to catch it was to
+  // listen. The relay now refuses to forward a name it cannot find and says so
+  // here, which is where somebody looks after changing a setting and restarting.
+  {
+    const line = voiceBootLine(qwenVoiceConfig());
+    console[line.level](line.message);
+  }
 
   // Evaluate alerts on a timer, not on page load.
   //

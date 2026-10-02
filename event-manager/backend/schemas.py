@@ -96,6 +96,7 @@ class Event(EventBase):
     # rehearsal was already running — every scan practice, the screen implying
     # real admission.
     door_test_mode: bool = False
+    allow_reentry: bool = False
     map_image_url: Optional[str] = None
     # Unambiguous instants: the same moment however the reader's device is set.
     # start_date/end_date above stay venue-local for display.
@@ -103,7 +104,9 @@ class Event(EventBase):
     end_at: Optional[str] = None
     server_time: Optional[str] = None   # authoritative now, same format
     created_at: datetime
-    attendee_count: Optional[int] = 0
+    attendee_count: Optional[int] = 0        # people the door will admit
+    blocked_count: Optional[int] = 0         # refunded / cancelled / revoked, kept on the roll
+    roll_rows: Optional[int] = 0             # every row, including the blocked ones
     checked_in_count: Optional[int] = 0
     # Real counts, so the app never has to invent or hardcode them.
     exhibitor_count: Optional[int] = 0
@@ -187,6 +190,9 @@ class Attendee(AttendeeBase):
     # ticket each on one card, so the payer and the badge are routinely
     # different people -- and at a door the payer is the name they say.
     paid_by: Optional[str] = None
+    # "2 of 4" for a seat rebuilt onto somebody else's booking, so the desk can
+    # see at a glance that a party is not all present.
+    party_seat: Optional[str] = None
     is_checked_in: bool
     checked_in_at: Optional[datetime]
     registration_status: str
@@ -957,6 +963,7 @@ class EventResource(EventResourceBase):
 
 
 class TicketMappingBase(BaseModel):
+    product_name_match: Optional[str] = None
     provider: Optional[str] = "ghl"
     external_product_id: str
     external_price_id: Optional[str] = None
@@ -997,6 +1004,13 @@ class ChangePass(BaseModel):
     reason: Optional[str] = None
     complimentary: Optional[bool] = True
     allow_downgrade: Optional[bool] = False
+    # Money taken at the desk for this upgrade. Recorded on the lifecycle and
+    # reported with the rest of the door's takings; never written to GHL.
+    paid_at_door: Optional[bool] = False
+    amount: Optional[float] = None
+    currency: Optional[str] = "USD"
+    method: Optional[str] = "cash"
+    reference: Optional[str] = None
     label: Optional[str] = None
     is_active: Optional[bool] = True
 
@@ -1004,6 +1018,7 @@ class TicketMappingCreate(TicketMappingBase):
     pass
 
 class TicketMappingUpdate(BaseModel):
+    product_name_match: Optional[str] = None
     external_product_id: Optional[str] = None
     external_price_id: Optional[str] = None
     ticket_type_id: Optional[int] = None
@@ -1118,6 +1133,51 @@ class BadgePrintRecord(BaseModel):
 
 class UndoCheckIn(BaseModel):
     reason: str
+
+
+class OverrideAdmit(BaseModel):
+    """Letting somebody in that the rules refused. The reason is not optional:
+    it is the whole difference between an override and a hole in the door."""
+    reason: str
+    access_type: str = 'EVENT_ENTRY'
+    session_id: Optional[int] = None
+
+
+class ReviewResolve(BaseModel):
+    """Closing one review item. The note is the point -- an item closed with no
+    reason is indistinguishable from one nobody looked at."""
+    attendee_id: int
+    ref: str
+    kind: Optional[str] = None
+    note: str
+
+
+class AddPartySeat(BaseModel):
+    """Naming a seat a booking already paid for. Never a new ticket -- the
+    endpoint refuses once the badges match what was bought."""
+    first_name: str
+    last_name: Optional[str] = ''
+    phone: Optional[str] = None
+    email: Optional[str] = None
+    reason: Optional[str] = None
+
+
+class SharingChoice(BaseModel):
+    """What somebody says about their details reaching the stands they visit.
+    Recording it stamps consent_updated_at, which no default may overwrite."""
+    share_email: bool = True
+    share_phone: bool = True
+    reason: Optional[str] = None
+
+
+class DoorIdentity(BaseModel):
+    """Correcting who a badge belongs to, at the desk. Every field is optional
+    so the desk can fix a surname without retyping anything else."""
+    first_name: Optional[str] = None
+    last_name: Optional[str] = None
+    phone: Optional[str] = None
+    email: Optional[str] = None
+    reason: Optional[str] = None
 
 
 class PaymentSyncIn(BaseModel):

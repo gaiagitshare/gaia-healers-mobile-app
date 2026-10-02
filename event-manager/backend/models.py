@@ -105,6 +105,9 @@ class Event(Base):
     # taken this way is recorded as a rehearsal so it can never be mistaken for
     # real attendance.
     door_test_mode = Column(Boolean, default=False)
+    # One badge, more than one entry. Off is the secure default; a multi-day
+    # conference turns it on.
+    allow_reentry = Column(Boolean, default=False)
     created_at = Column(DateTime, default=datetime.utcnow)
 
     attendees = relationship("Attendee", back_populates="event")
@@ -153,8 +156,16 @@ class Attendee(Base):
     # badge. Nothing is assumed: buying a ticket is not consent to have your
     # phone number handed to every stand in the hall. Both default to False and
     # only the attendee can turn them on.
-    share_email_with_exhibitors = Column(Boolean, default=False)
-    share_phone_with_exhibitors = Column(Boolean, default=False)
+    # Buying a ticket and handing a badge to a stand IS the agreement: the
+    # organiser's stated policy, and the thing lead retrieval is sold on. So
+    # these default ON.
+    #
+    # What makes that defensible is the column below them. An explicit choice
+    # stamps consent_updated_at, and nothing -- no backfill, no import, no
+    # default -- ever writes over a row that carries one. Somebody who says no
+    # stays no, for good.
+    share_email_with_exhibitors = Column(Boolean, default=True)
+    share_phone_with_exhibitors = Column(Boolean, default=True)
     consent_updated_at = Column(DateTime, nullable=True)
 
     # --- How they got here, and why they get a badge ------------------
@@ -937,6 +948,10 @@ class TicketMapping(Base):
     label = Column(String)
     checkout_url = Column(String, nullable=True)  # authoritative GHL checkout for this upgrade product
     from_ticket_type_id = Column(Integer, nullable=True)  # per-source upgrade pricing: show only to this current tier
+    # One GHL product may be sold under several names. A mapping that names a
+    # variant wins over the one that does not; the unpatterned mapping stays the
+    # fallback, so adding a variant never changes what anything else did.
+    product_name_match = Column(String, nullable=True)
     # Explicit destination discriminator so separation is DECLARED, not implicit.
     # EVENT_TICKET | EVENT_UPGRADE (only event types are honored by the ticket path).
     entitlement_type = Column(String, default="EVENT_TICKET")

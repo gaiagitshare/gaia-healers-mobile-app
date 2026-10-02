@@ -131,6 +131,11 @@ export const getPaymentsSummary = (eventId) => api.get(`/events/${eventId}/payme
 export const getPaymentsAttention = (eventId) => api.get(`/events/${eventId}/payments/attention`);
 export const getPaymentsRecovery = (eventId) => api.get(`/events/${eventId}/payments/recovery`);
 export const getTicketMetrics = (eventId) => cachedGet(`/events/${eventId}/ticket-metrics`);
+// Everything waiting on a person. Not cached: the point of opening it is to see
+// what is outstanding right now, and a stale list reads as work already done.
+export const getReviewQueue = (eventId) => api.get(`/events/${eventId}/review-queue`);
+export const resolveReviewItem = (eventId, data) =>
+    api.post(`/events/${eventId}/review-queue/resolve`, data);
 // Map & Reconcile: preview reads GHL and changes nothing; apply needs confirm:true.
 export const mapReconcilePreview = (eventId, body) => api.post(`/events/${eventId}/map-reconcile/preview`, body);
 export const mapReconcileApply = (eventId, body) => api.post(`/events/${eventId}/map-reconcile/apply`, { ...body, confirm: true });
@@ -151,6 +156,9 @@ export const importAttendees = (eventId, file, options = {}) => {
 };
 export const searchAttendees = (eventId, q) =>
     api.get(`/events/${eventId}/attendees/search`, { params: { q } });
+// What may the person holding this screen do here? Asked before any scan,
+// because the walk-in form has no badge behind it.
+export const getMyCapabilities = (eventId) => api.get(`/events/${eventId}/my-capabilities`);
 export const walkInCheck = (eventId, data) => api.post(`/events/${eventId}/walk-in/check`, data);
 export const walkInCreate = (eventId, data) => api.post(`/events/${eventId}/walk-in`, data);
 export const updateAttendee = (id, data) => api.put(`/attendees/${id}`, data);
@@ -179,8 +187,27 @@ export const generateBadge = (id) => api.get(`/attendees/${id}/badge`);
 export const badgeLabelBlob = (eventId, attendeeId, size = '50x30v', view = 'roll', dpi = 203) =>
     api.get(`/events/${eventId}/attendees/${attendeeId}/badge-label.png`, { params: { size, view, dpi }, responseType: 'blob' });
 // A print attempt, success or failure. Separate from check-in by design.
+// Which desk printed what, and what failed there.
+export const getPrintReport = (eventId) => api.get(`/events/${eventId}/print-report`);
+// Who scanned whom, across the whole floor — stands and doors, never merged.
+export const getScanHistory = (eventId, limit = 500) =>
+    api.get(`/events/${eventId}/scan-history`, { params: { limit } });
+export const getAttendeeScans = (eventId, attendeeId) =>
+    api.get(`/events/${eventId}/attendees/${attendeeId}/scans`);
 export const recordBadgePrint = (eventId, attendeeId, data) =>
     api.post(`/events/${eventId}/attendees/${attendeeId}/badge-print`, data);
+// Door-side corrections. Both live under the event so the audit trail names
+// the door that made them, not just the person.
+export const overrideAdmit = (eventId, attendeeId, data) =>
+    api.post(`/events/${eventId}/attendees/${attendeeId}/override-admit`, data);
+export const doorIdentity = (eventId, attendeeId, data) =>
+    api.post(`/events/${eventId}/attendees/${attendeeId}/door-identity`, data);
+// What somebody says about their details reaching the stands they visit.
+export const setSharing = (eventId, attendeeId, data) =>
+    api.post(`/events/${eventId}/attendees/${attendeeId}/sharing`, data);
+export const addPartySeat = (eventId, attendeeId, data) =>
+    api.post(`/events/${eventId}/attendees/${attendeeId}/add-seat`, data);
+export const setReEntry = (eventId, enabled) => api.post(`/events/${eventId}/re-entry`, { enabled });
 export const undoCheckIn = (eventId, attendeeId, reason) =>
     api.post(`/events/${eventId}/attendees/${attendeeId}/undo-checkin`, { reason });
 
@@ -278,6 +305,9 @@ export const createTicketType = (eventId, data) => api.post(`/events/${eventId}/
 export const updateTicketType = (id, data) => api.put(`/ticket-types/${id}`, data);
 export const deleteTicketType = (id) => api.delete(`/ticket-types/${id}`);
 export const getTicketMappings = (eventId) => api.get(`/events/${eventId}/ticket-mappings`);
+// Reads every mapping back against the product it maps, so a renamed or
+// re-pointed product cannot quietly sell access the badge will not open.
+export const getTicketMappingAudit = (eventId) => api.get(`/events/${eventId}/ticket-mapping-audit`);
 export const createTicketMapping = (eventId, data) => api.post(`/events/${eventId}/ticket-mappings`, data);
 export const updateTicketMapping = (id, data) => api.put(`/ticket-mappings/${id}`, data);
 export const deleteTicketMapping = (id) => api.delete(`/ticket-mappings/${id}`);

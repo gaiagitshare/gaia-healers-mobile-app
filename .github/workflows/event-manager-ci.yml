@@ -1,0 +1,124 @@
+name: Event Manager CI
+
+# What this can and cannot check, stated plainly so nobody reads a green tick as
+# more than it is.
+#
+# The Event Manager's 40 test suites are the real safety net, and they do not run
+# here. They hardcode /root/event/backend and read a copy of the live database:
+# that is deliberate — asserting against the actual roll is what caught a
+# duplicate-payment report that had gone blind, two upgrades that removed access
+# somebody had paid for, and a booking the door could not see. Porting them means
+# rewriting ~54 absolute paths across 38 files, committing a database fixture
+# (the live one holds 373 real people) and a test .env, and it is not something
+# to do to every test weeks before the conference. Run them on the server:
+#
+#     cd /root/event/backend && for t in test_*.py; do python3 "$t"; done
+#
+# So this workflow checks the things that break a deploy and that nobody can
+# catch by reading: that the backend imports at all, and that the admin panel
+# still builds. Both were done by hand before today.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "event-manager/**"
+      - ".github/workflows/event-manager-ci.yml"
+  pull_request:
+    paths:
+      - "event-manager/**"
+      - ".github/workflows/event-manager-ci.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  backend:
+    name: Backend imports and compiles
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: event-manager/backend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: event-manager/backend/requirements.txt
+      - run: pip install -r requirements.txt
+
+      # A syntax error in a 10,000-line module is invisible until the service
+      # restarts, which is after the deploy has already replaced the old one.
+      - name: Every Python file parses
+        run: python -m compileall -q . && echo "all modules parse"
+
+      # Importing main.py builds every route and Pydantic model. A mistyped
+      # response model or a decorator on the wrong function fails here rather
+      # than at the first request on the day.
+      - name: The app imports and its routes build
+        env:
+          DATABASE_URL: sqlite:///./ci-check.db
+          SECRET_KEY: ci-only-not-a-real-secret-0000000000
+          ACCESS_TOKEN_EXPIRE_MINUTES: "1440"
+        run: |
+          python - <<'PY'
+          import importlib, main
+          routes = [r for r in main.app.routes if getattr(r, "methods", None)]
+          print(f"{len(routes)} routes built")
+          assert len(routes) > 150, "far fewer routes than expected — did an import fail silently?"
+          # Two things worth asserting outright, because both were real bugs:
+          # revenue must never sit behind a capability a door account holds, and
+          # the voice of every capability check must be a known one.
+          import authz
+          desk = authz.CAPABILITIES[authz.CHECKIN_STAFF]
+          assert "analytics.read" not in desk, "a door account must not hold analytics.read"
+          assert "attendee.export" not in desk, "a door account must not hold attendee.export"
+          print("door capabilities still bounded")
+          PY
+
+  frontend:
+    name: Admin panel builds
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: event-manager/frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: event-manager/frontend/package-lock.json
+
+      # `npm install`, not `npm ci`, because the committed lockfile is out of sync
+      # with package.json (@types/react, picomatch, yaml, typescript) and `ci`
+      # refuses outright. Both the live tree and the mirror carry the same
+      # mismatch, so this is the repository's state rather than a CI quirk.
+      # Regenerating the lockfile would re-resolve transitive versions in a build
+      # that currently works, which is not a change to make close to the event, so
+      # it is left for afterwards: once `npm install && git add package-lock.json`
+      # lands, this becomes `npm ci` and the build is reproducible as well as
+      # checked.
+      - run: npm install --no-audit --no-fund
+
+      # The build is the check. A missing import or a bad JSX tag fails it, and
+      # a failed build means the panel the door runs on does not load — which was
+      # previously only discovered by building it by hand before each deploy.
+      - name: Build
+        env:
+          CI: "false" # warnings are not failures here; the repo carries known ones
+        run: npm run build
+
+      # Lint only what the change touched, so a long-standing warning elsewhere
+      # does not block work unrelated to it.
+      - name: Lint the changed files
+        if: github.event_name == 'pull_request'
+        run: |
+          git fetch --no-tags --depth=1 origin "${{ github.base_ref }}"
+          changed=$(git diff --name-only "origin/${{ github.base_ref }}"...HEAD \
+            -- 'event-manager/frontend/src/**/*.js' 'event-manager/frontend/src/**/*.jsx' \
+            | sed 's|event-manager/frontend/||')
+          if [ -z "$changed" ]; then echo "no frontend sources changed"; exit 0; fi
+          echo "$changed"
+          npx eslint $changed

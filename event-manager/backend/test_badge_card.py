@@ -26,8 +26,9 @@ for line in open("/root/event/backend/.env"):
 from jose import jwt
 ADMIN = jwt.encode({"sub": "1"}, env["SECRET_KEY"], algorithm="HS256")
 SVC = env["IDENTITY_SERVICE_TOKEN"]
-BASE = "http://127.0.0.1:8002"
-DB = "/root/event/backend/event.db"
+import sys as _sys; _sys.path.insert(0, "/root/event/backend")
+import testbed
+BASE, DB = testbed.start()
 EVENT = 1
 
 def call(method, path, body=None, token=None, raw=False):
@@ -84,6 +85,13 @@ check(not shared, "no token is shared by two different people (email or contact 
 qr, tok, aid, was_in = c.execute(
     "SELECT qr_code, public_token, id, is_checked_in FROM attendees WHERE event_id=? AND is_checked_in=0 ORDER BY id LIMIT 1", (EVENT,)).fetchone()
 url = "HTTPS://API.GAIAHEALERS.APP/C/" + tok
+# This suite prints against a REAL attendee on the live roll -- the first
+# person not yet checked in -- so every row it writes has to come back out by
+# its own attempt id. Tidying by station missed the one print made with no
+# station, and twenty-four of those had piled up on attendee #1, whose card the
+# last of them had switched on months before she arrives.
+mine = []
+_pre_all = c.execute("SELECT count(*) FROM badge_print_logs WHERE attendee_id=?", (aid,)).fetchone()[0]
 results = {}
 for label, payload in (("raw", qr), ("token", tok.lower()), ("url", url), ("card-host", "HTTPS://CARD.GAIAHEALERS.APP/" + tok), ("card-host-c", "https://card.gaiahealers.app/c/%s" % tok.lower()), ("url-lower-vcf", "api.gaiahealers.app/c/%s.vcf" % tok.lower())):
     st, d, _ = call("POST", "/events/%d/authorize" % EVENT, {"qr_code": payload, "access_type": "CONFERENCE"}, ADMIN)
@@ -218,7 +226,9 @@ if d.get("result") == "GRANTED":
     # A recorded print before the undo: the undo must hand back a fresh
     # sticker state (count 0) while the print log keeps its row.
     _pre = c.execute("SELECT count(*) FROM badge_print_logs WHERE attendee_id=?", (aid,)).fetchone()[0]
-    call("POST", "/events/%d/attendees/%d/badge-print" % (EVENT, aid), {"result": "printed", "client_attempt_id": "undo-" + uuid.uuid4().hex}, ADMIN)
+    _undo_attempt = "undo-" + uuid.uuid4().hex
+    mine.append(_undo_attempt)
+    call("POST", "/events/%d/attendees/%d/badge-print" % (EVENT, aid), {"result": "printed", "client_attempt_id": _undo_attempt}, ADMIN)
     st, u, _ = call("POST", "/events/%d/attendees/%d/undo-checkin" % (EVENT, aid), {"reason": "test: wrong person"}, ADMIN)
     _cnt, _res = c.execute("SELECT badge_print_count, badge_last_result FROM attendees WHERE id=?", (aid,)).fetchone()
     _post = c.execute("SELECT count(*) FROM badge_print_logs WHERE attendee_id=?", (aid,)).fetchone()[0]
@@ -237,20 +247,33 @@ check(st == 400, "undo without a real reason is refused", st)
 # 7 ── print record, idempotent, independent of check-in
 before_in = c.execute("SELECT is_checked_in, badge_print_count FROM attendees WHERE id=?", (aid,)).fetchone()
 att_id = str(uuid.uuid4())
+mine.append(att_id)
 st, p1, _ = call("POST", "/events/%d/attendees/%d/badge-print" % (EVENT, aid), {"result": "printed", "station": "test-desk", "client_attempt_id": att_id}, ADMIN)
 st2, p2, _ = call("POST", "/events/%d/attendees/%d/badge-print" % (EVENT, aid), {"result": "printed", "station": "test-desk", "client_attempt_id": att_id}, ADMIN)
 after = c.execute("SELECT is_checked_in, badge_print_count, badge_last_result FROM attendees WHERE id=?", (aid,)).fetchone()
 check(st == 200 and st2 == 200 and p2.get("already") is True and after[1] == (before_in[1] or 0) + 1, "same attempt id recorded once; print count +1", (p1.get("already"), p2.get("already"), before_in, after))
 check(after[0] == before_in[0], "printing did not change check-in state")
-st, p3, _ = call("POST", "/events/%d/attendees/%d/badge-print" % (EVENT, aid), {"result": "failed", "station": "test-desk", "error": "printer offline"}, ADMIN)
+_fail_attempt = str(uuid.uuid4())
+mine.append(_fail_attempt)
+st, p3, _ = call("POST", "/events/%d/attendees/%d/badge-print" % (EVENT, aid), {"result": "failed", "station": "test-desk", "error": "printer offline", "client_attempt_id": _fail_attempt}, ADMIN)
 after2 = c.execute("SELECT badge_print_count, badge_last_result, badge_last_error FROM attendees WHERE id=?", (aid,)).fetchone()
 check(after2[0] == after[1] and after2[1] == "failed" and after2[2] == "printer offline", "a failed attempt is recorded without bumping the count", after2)
 logs = c.execute("SELECT count(*) FROM badge_print_logs WHERE attendee_id=?", (aid,)).fetchone()[0]
 check(logs >= 2, "every attempt is in badge_print_logs", logs)
-# tidy the test's own print rows
+# Tidy every row this run wrote, by the attempt ids it generated -- not by
+# station, which leaves behind anything printed without one. A print also
+# switches the person's card on, and that has to go back too: this attendee has
+# not checked in, and their card should still be dormant tomorrow.
+c.executemany("DELETE FROM badge_print_logs WHERE attendee_id=? AND client_attempt_id=?",
+              [(aid, x) for x in mine])
 c.execute("DELETE FROM badge_print_logs WHERE attendee_id=? AND station='test-desk'", (aid,))
 c.execute("UPDATE attendees SET badge_print_count=?, badge_last_result=NULL, badge_last_error=NULL, badge_last_station=NULL, badge_printed_at=NULL WHERE id=?", (before_in[1] or 0, aid))
+if not was_in:
+    c.execute("UPDATE member_cards SET activated_at=NULL WHERE public_token=? "
+              "AND ?=(SELECT is_checked_in FROM attendees WHERE id=?)", (tok, 0, aid))
 c.commit()
+_left = c.execute("SELECT count(*) FROM badge_print_logs WHERE attendee_id=?", (aid,)).fetchone()[0]
+check(_left == _pre_all, "this suite leaves no print rows behind on a real attendee", (_left, _pre_all))
 
 # 8 ── search at the door
 for q, want in (("(407) 285-2639", True), ("orourke nicole", True), ("e", True)):

@@ -29,14 +29,123 @@ import { WebSocket, WebSocketServer } from 'ws';
 
 const RELAY_PATH = '/api/assist/voice/qwen';
 
+// Every voice qwen3.8-omni-flash-realtime accepts, from Alibaba's reference:
+// https://www.alibabacloud.com/help/en/model-studio/omni-voice-list
+//
+// This list exists because the API does not validate the name. Sending it
+// `__definitely_not_a_voice__` returns `session.updated` with that value
+// accepted, and then the assistant simply speaks as somebody else -- no error,
+// no warning, nothing in any log to connect the wrong voice to the typo that
+// caused it. The only place that can catch a misspelling is here.
+export const QWEN_VOICES = [
+  'Tina', 'Cindy', 'Liora Mira', 'Raymond', 'Zane', 'Katerina', 'Ryan', 'Mia',
+  'Cici', 'Theo Calm', 'Serena', 'Maia', 'Evan', 'Qiao', 'Momo', 'Wil', 'Angel',
+  'Li Cassian', 'Joyner', 'Gold', 'Jennifer', 'Aiden', 'Mione', 'Sunny', 'Dylan',
+  'Eric', 'Peter', 'Joseph Chen', 'Marcus', 'Li', 'Rocky', 'Kiki', 'Sohee',
+  'Eli\u0161ka', 'Alek', 'Arda', 'Dolce', 'Lenn', 'Ono Anna', 'Sonrisa', 'Bodega',
+  'Andre', 'Radio Gol', 'Rizky', 'Roya', 'Hana', 'Jakub', 'Griet', 'Marina',
+  'Siiri', 'Ingrid', 'Sigga', 'Bea', 'Chloe', 'Emilien',
+];
+
+/** Closest known voices to what was typed, for the "did you mean" in the log. */
+export function nearestVoices(name, voices = QWEN_VOICES, limit = 3) {
+  const want = String(name || '').trim().toLowerCase();
+  if (!want) return [];
+  // Edit distance, because the mistakes this has to catch are a dropped letter
+  // ("Jenifer"), a swapped pair, and a wrong vowel ("Zain" for "Zane"). Counting
+  // shared characters instead ranked "Tina" level with "Zane" for "Zain", which
+  // is the one suggestion that needed to be right.
+  const score = (v) => {
+    const cand = v.toLowerCase();
+    if (cand === want) return 0;
+    const prev = new Array(want.length + 1);
+    for (let j = 0; j <= want.length; j += 1) prev[j] = j;
+    for (let i = 1; i <= cand.length; i += 1) {
+      let diag = prev[0];
+      prev[0] = i;
+      for (let j = 1; j <= want.length; j += 1) {
+        const cost = cand[i - 1] === want[j - 1] ? 0 : 1;
+        const next = Math.min(prev[j] + 1, prev[j - 1] + 1, diag + cost);
+        diag = prev[j];
+        prev[j] = next;
+      }
+    }
+    // A name typed as part of a longer one is a near miss however far the
+    // distance says, so it stays ahead of anything unrelated.
+    return cand.startsWith(want) || want.startsWith(cand)
+      ? Math.min(prev[want.length], 1)
+      : prev[want.length];
+  };
+  return voices
+    .map((v) => ({ v, s: score(v) }))
+    .filter((x) => x.s <= Math.max(2, Math.ceil(want.length / 2)))
+    .sort((a, b) => a.s - b.s || a.v.localeCompare(b.v))
+    .slice(0, limit)
+    .map((x) => x.v);
+}
+
+/**
+ * The configured voice, and what is wrong with it if anything.
+ *
+ * An unknown name is NOT passed upstream. Sending it would buy the worst of
+ * both: the wrong voice AND the appearance of a working setting. Dropping it
+ * means the model uses its own documented default (Tina), which is at least a
+ * known voice, and `issue` carries the reason so the caller can say so out loud.
+ */
+export function resolveVoice(name, voices = QWEN_VOICES) {
+  const raw = String(name || '').trim();
+  if (!raw) return { voice: '', issue: null };
+  const exact = voices.find((v) => v === raw);
+  if (exact) return { voice: exact, issue: null };
+  // A name that is right but for its capitals is a typo worth fixing, not a
+  // reason to lose the voice, so it is corrected and reported.
+  const cased = voices.find((v) => v.toLowerCase() === raw.toLowerCase());
+  if (cased) {
+    return { voice: cased, issue: { kind: 'case', given: raw, used: cased } };
+  }
+  return { voice: '', issue: { kind: 'unknown', given: raw, suggestions: nearestVoices(raw, voices) } };
+}
+
+/**
+ * The one line to log at boot about the voice, and how loudly.
+ *
+ * Lives here rather than inline at startup so all three branches are tested. The
+ * branch that matters is `error`: it is the only notice anybody will ever get
+ * that QWEN_VOICE_NAME is wrong, because Qwen itself reports nothing.
+ */
+export function voiceBootLine(cfg) {
+  if (!cfg.enabled) {
+    return { level: 'log', message: '[Gaia Assist] qwen voice OFF \u2014 Gemini Live only' };
+  }
+  const issue = cfg.voiceIssue;
+  if (!issue) {
+    return { level: 'log',
+             message: `[Gaia Assist] qwen voice ON { model: '${cfg.model}', voice: '${cfg.voice || "Qwen's default (Tina)"}' }` };
+  }
+  if (issue.kind === 'case') {
+    return { level: 'warn',
+             message: `[Gaia Assist] QWEN_VOICE_NAME is "${issue.given}" but the voice is `
+               + `"${issue.used}" \u2014 using it; fix the capitals in .env` };
+  }
+  const guess = (issue.suggestions || []).join(', ');
+  return { level: 'error',
+           message: `[Gaia Assist] QWEN_VOICE_NAME="${issue.given}" is not a voice this model has. `
+             + 'Qwen would have accepted it silently and spoken as somebody else, so it was NOT '
+             + "sent: the assistant is using Qwen's default (Tina) instead."
+             + (guess ? ` Did you mean: ${guess}?` : ' No known voice is close to it.') };
+}
+
+
 export function qwenVoiceConfig(env = process.env) {
   const base = String(env.QWEN_BASE_URL || 'https://dashscope-intl.aliyuncs.com').trim().replace(/\/+$/, '');
+  const picked = resolveVoice(env.QWEN_VOICE_NAME);
   return {
     enabled: env.QWEN_VOICE_ENABLED === 'true' && Boolean(env.QWEN_API_KEY),
     apiKey: env.QWEN_API_KEY || '',
     wsBase: base.replace(/^http/, 'ws'),
     model: env.QWEN_VOICE_MODEL || 'qwen3.8-omni-flash-realtime',
-    voice: env.QWEN_VOICE_NAME || '',
+    voice: picked.voice,
+    voiceIssue: picked.issue,
     // Qwen keeps at most 600 s of audio history per session; hand over first.
     maxSessionSeconds: Number(env.QWEN_VOICE_MAX_SECONDS || 540),
     maxSessions: Number(env.QWEN_VOICE_MAX_SESSIONS || 20),

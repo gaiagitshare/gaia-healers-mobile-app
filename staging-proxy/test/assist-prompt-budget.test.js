@@ -38,6 +38,32 @@ test('the visitor prompts stay within budget (~4 characters a token)', () => {
   assert.ok(VISITOR_TEXT.length < 11_000, `text prompt grew to ${VISITOR_TEXT.length} chars`);
 });
 
+test('the practitioner prompt is budgeted too, not just the visitor one', () => {
+  // It was not, and it is the longest of the three: the determinism work added
+  // about 870 characters of practitioner-only policy, which nothing would have
+  // noticed growing. A practitioner session also carries their own tool
+  // declarations on top of this, so the ceiling is not generous.
+  const PRACTITIONER = buildGaiaLiveInstructions({
+    view: 'profile',
+    memberContext: 'GAIA SESSION STATE: practitioner\nMEMBER CONTEXT: Babak.\nStatus: certified practitioner.\nONBOARDING PROFILE: complete.',
+  });
+  assert.match(PRACTITIONER, /VERIFIED PRACTITIONER/, 'the fixture has to actually be a practitioner session');
+  assert.ok(PRACTITIONER.length < 14_000, `practitioner instructions grew to ${PRACTITIONER.length} chars`);
+  // And the practitioner-only policy must not be leaking into other roles.
+  assert.ok(!/CLIENT FACTS COME FROM A TOOL/.test(VISITOR_VOICE),
+    'a visitor is being told about tools they do not have');
+  assert.ok(!/CLIENT FACTS COME FROM A TOOL/.test(buildGaiaLiveInstructions({ memberContext: DONE_MEMBER })),
+    'a member is being told about the practitioner tools');
+});
+
+test('the visitor voice prompt has little headroom left', () => {
+  // 11,874 of 12,000 when this was written. Not a failure -- a marker, so the
+  // next person to add a paragraph to the shared policy finds out here rather
+  // than from a truncated session.
+  assert.ok(12_000 - VISITOR_VOICE.length < 1_000,
+    'there is now real headroom; raise or retire this reminder');
+});
+
 test('the onboarding survey is sent only to a member who still needs it', () => {
   const surveyMark = /save_onboarding_step|<<ONBOARD/;
   assert.doesNotMatch(VISITOR_VOICE, surveyMark);

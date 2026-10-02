@@ -139,7 +139,7 @@ export const TOOLS = [
       if (!ctx?.isPractitioner) return this;
       return {
         description: this.description
-          + ' For a PRACTITIONER this also opens the Practice screen (inside You) on one of their clients: pass screen="practice" with the client id, and `open` to show a particular result card. Prefer this over describing readings aloud -- open the card, then say one short sentence about what it shows.',
+          + ' For a PRACTITIONER this also opens the Practice screen (inside You): pass screen="practice", with a client id to open one of their clients. Use it only when they ask to be taken somewhere. It moves the screen and returns no data, so it can never answer a question: anything about a client or a reading goes to the matching practitioner_ tool, which opens the same card itself and is the only thing that returns the numbers. After it, say one short sentence and do not list what is already visible.',
         parameters: {
           type: 'object',
           properties: {
@@ -380,7 +380,7 @@ export const TOOLS = [
     where: 'server',
     slow: true,
     mcp: 'get_customer_scan',
-    description: "The client's most recent Bio-Well reading: stress, energy, the seven chakras, and the areas furthest out of balance. SLOW — takes about ten seconds, so tell the practitioner you are fetching it before you call it. Needs a client id.",
+    description: "The client's most recent Bio-Well reading: stress, energy, the seven chakras, and the areas furthest out of balance. SLOW — about ten seconds; the card opens and shows the wait by itself, so call it rather than announcing it. Never say you are fetching it without calling it in the same turn. Needs a client id.",
     parameters: {
       type: 'object',
       properties: { clientId: { type: 'string', description: 'The client id.' } },
@@ -408,7 +408,7 @@ export const TOOLS = [
     where: 'server',
     slow: true,
     mcp: 'get_scan_trend',
-    description: "How a client has changed over their scan history: the range and latest value for energy and stress, and which areas are worsening or improving, with anything automatically flagged as a concern. Use for 'how has she been', 'is he improving', 'what should I watch'. SLOW — about ten seconds, so say you are looking it up first. Needs a client id.",
+    description: "How a client has changed over their scan history: the range and latest value for energy and stress, and which areas are worsening or improving, with anything automatically flagged as a concern. Use for 'how has she been', 'is he improving', 'what should I watch'. SLOW — about ten seconds; the card opens and shows the wait by itself, so call it rather than announcing it. Never say you are fetching it without calling it in the same turn. Needs a client id.",
     parameters: {
       type: 'object',
       properties: { clientId: { type: 'string', description: 'The client id.' } },
@@ -452,7 +452,7 @@ export const TOOLS = [
     where: 'server',
     slow: true,
     mcp: 'compare_protocol_before_after',
-    description: "Compare a client's scans before and after a session or protocol: how stress and energy moved, and which areas changed most. Use for 'what changed since last time' or 'did the protocol help'. SLOW — about ten seconds, so say you are checking first. Needs a client id.",
+    description: "Compare a client's scans before and after a session or protocol: how stress and energy moved, and which areas changed most. Use for 'what changed since last time' or 'did the protocol help'. SLOW — about ten seconds; the card opens and shows the wait by itself, so call it rather than announcing it. Never say you are fetching it without calling it in the same turn. Needs a client id.",
     parameters: {
       type: 'object',
       properties: {

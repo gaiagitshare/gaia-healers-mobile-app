@@ -83,7 +83,11 @@ test('session bootstrap checks GHL and completed marker permits the member API',
   assert.equal((await r.json()).onboardingStatus, 'complete');
   const profile = await realFetch(`http://127.0.0.1:${PORT}/api/member/profile`, { headers: { cookie: cookie() } });
   assert.equal(profile.status, 200);
+  // GHL confirmed this member complete above, so an outage now lets them in on
+  // the server's record instead of locking a finished member out
+  // (member-onboarding-guard.js). An unfinished member still gets 503 — see the
+  // outage check in the test before this one.
   unavailable = true;
   const fresh = await realFetch(`http://127.0.0.1:${PORT}/api/auth/session`, { headers: { cookie: cookie() } });
-  assert.equal((await fresh.json()).onboardingStatus, 'unavailable'); unavailable = false;
+  assert.equal((await fresh.json()).onboardingStatus, 'complete'); unavailable = false;
 });

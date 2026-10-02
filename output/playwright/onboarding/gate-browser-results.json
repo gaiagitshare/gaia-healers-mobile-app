@@ -37,6 +37,34 @@
     "locked": true
   },
   {
+    "case": "direct bookings, refresh, spoofed storage, navigation/history",
+    "locked": true
+  },
+  {
+    "case": "direct inbox, refresh, spoofed storage, navigation/history",
+    "locked": true
+  },
+  {
+    "case": "direct directory, refresh, spoofed storage, navigation/history",
+    "locked": true
+  },
+  {
+    "case": "legacy direct academy.html",
+    "locked": true
+  },
+  {
+    "case": "legacy direct community.html",
+    "locked": true
+  },
+  {
+    "case": "legacy direct profile.html",
+    "locked": true
+  },
+  {
+    "case": "legacy direct biowell.html",
+    "locked": true
+  },
+  {
     "case": "completed contact",
     "dashboard": true
   },

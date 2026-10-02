@@ -18,13 +18,18 @@ async (page) => {
   const tab=await ctx.newPage();await tab.goto(base+'/home.html?proxy='+base+'&view=academy');await tab.locator('[data-begin]').waitFor();
   if(!await tab.locator('#gaia-app-shell').isHidden())throw Error('new tab bypass');await tab.close();
   results.push({case:'restored session in a new tab',locked:true});
-  for(const view of ['today','academy','community','events','store','profile','wellness']) {
+  for(const view of ['today','academy','community','events','store','profile','wellness','bookings','inbox','directory']) {
     await reset('new',view);await page.locator('[data-begin]').waitFor();await assertLocked();
     await page.reload();await page.locator('[data-begin]').waitFor();await assertLocked();
     await page.evaluate(()=>{window.GaiaAppShell.go('academy');window.GaiaAppShell.go('community');});await assertLocked();
     await page.goBack();await assertLocked();await page.goForward();await assertLocked();
     results.push({case:'direct '+view+', refresh, spoofed storage, navigation/history',locked:true});
     if(view==='today') await page.waitForTimeout(650);await page.screenshot({path:'output/playwright/onboarding/gate-direct-dashboard.png'});
+  }
+  for (const file of ['academy.html','community.html','profile.html','biowell.html']) {
+    await page.request.get(base+'/__qa/reset?scenario=new');
+    await page.goto(base+'/'+file+'?proxy='+base);await page.locator('[data-begin]').waitFor();await assertLocked();
+    results.push({case:'legacy direct '+file,locked:true});
   }
   await reset('complete');await page.waitForFunction(()=>window.GaiaAppGuard?.status==='ready');
   if(!await page.locator('#gaia-app-shell').isVisible())throw Error('completed member locked');

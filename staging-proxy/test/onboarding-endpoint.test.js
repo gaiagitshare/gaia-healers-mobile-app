@@ -71,6 +71,8 @@ test('central member gate denies protected APIs for new/partial contacts and GHL
   }
   await call({ body: { stepKey: 'primary_interests', selections: ['Water'], source: 'visual' } });
   const partial = await call(); assert.equal(partial.data.state, 'incomplete'); assert.equal(partial.data.nextStep, 'why_join');
+  const partialAccess = await realFetch(`http://127.0.0.1:${PORT}/api/member/profile`, { headers: { cookie: cookie() } });
+  assert.equal(partialAccess.status, 403);
   unavailable = true;
   const outage = await realFetch(`http://127.0.0.1:${PORT}/api/member/profile`, { headers: { cookie: cookie() } });
   assert.equal(outage.status, 503); unavailable = false;

@@ -639,7 +639,9 @@
     // calls it as a functionCall; handleGeminiMessage routes it to
     // window.GaiaAppShell.go(), then sends a toolResponse back so the model
     // can confirm the move aloud.
-    const NAVIGATE_SCREENS = ['today', 'academy', 'community', 'events', 'bookings', 'inbox', 'directory', 'store', 'profile', 'wellness'];
+    const NAVIGATE_SCREENS = ['today', 'academy', 'community', 'events', 'bookings', 'inbox', 'directory', 'store', 'profile', 'wellness', 'practice'];
+    const PRACTICE_CARDS = ['latest', 'trend', 'compare'];
+    const PRACTICE_SECTIONS = ['attention', 'followups', 'clients'];
 
     function handleNavigateToolCall(args = {}) {
       const screen = String(args.screen || '').trim().toLowerCase();
@@ -652,6 +654,48 @@
       if (!shell || typeof shell.go !== 'function') {
         return { ok: false, message: 'The app navigation is still loading. Tell the member where to tap for now.' };
       }
+
+      // Practice is a tab inside You, not a route of its own, so it is reached
+      // through the hooks that screen already listens on rather than a second
+      // navigation mechanism. The client id is whatever the model was given by
+      // the listing tools; if it invents one, the card's own fetch goes out with
+      // this practitioner's token and their server answers "not owned by this
+      // practitioner", so a guess reaches a refusal and never data.
+      if (screen === 'practice') {
+        const client = String(args.client || '').trim();
+        const open = String(args.open || '').trim().toLowerCase();
+        const section = String(args.section || '').trim().toLowerCase();
+        try {
+          shell.go('profile', { tab: 'practice' });
+          window.dispatchEvent(new CustomEvent('gaia:open-client', {
+            detail: {
+              client: client || null,
+              open: PRACTICE_CARDS.includes(open) ? open : '',
+              section: PRACTICE_SECTIONS.includes(section) ? section : '',
+            },
+          }));
+          window.dispatchEvent(new CustomEvent('gaia:assist-minimize', {
+            detail: { screen: 'practice', client, open },
+          }));
+        } catch (e) {
+          return { ok: false, message: 'Could not open Practice. Tell them to look under You.' };
+        }
+        // The card is on screen and fills itself. Saying the numbers as well
+        // would be reading out what they are already looking at, so the model is
+        // told what is visible and asked for one short sentence -- and told to
+        // expect the wait, so it does not announce readings that are not there.
+        if (client && open) {
+          return { ok: true, opened: true,
+            message: `Their ${open === 'latest' ? 'latest reading' : open === 'trend' ? 'trend' : 'before-and-after comparison'} is opening on screen and takes about ten seconds to load. Say one short sentence — that you are pulling it up — and do not read out any numbers yet.` };
+        }
+        if (client) {
+          return { ok: true, opened: true,
+            message: 'Their client card is open on screen. Acknowledge in one short sentence; do not list details that are already visible.' };
+        }
+        return { ok: true, opened: true,
+          message: `Practice is open${section ? ' on ' + section : ''}. Acknowledge briefly; the list is on screen.` };
+      }
+
       try {
         shell.go(screen, tab ? { tab } : {});
         // The Energy tools are accordion panels and modals, not routes, so the

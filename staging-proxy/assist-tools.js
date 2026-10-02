@@ -113,29 +113,51 @@ export const TOOLS = [
   {
     role: 'member',
     where: 'client',
-
-                  name: 'navigate',
-                  description: 'Navigate the member to a screen in the Gaia Healers app. Call this whenever the member asks to open, go to, show, or see a specific screen, tab, or feature — for example "take me to my courses", "open the store", "show my profile", "find a healer", "go to wellness". Do not just describe the path; call this tool to actually move them there.',
-                  parameters: {
-                    type: 'object',
-                    properties: {
-                      screen: {
-                        type: 'string',
-                        description: 'The destination screen. today=Home, academy=Courses & Library, community=Community/Find a Healer/Events/Gaia Radio/Book a session, events=gatherings, bookings=your sessions, inbox=messages, directory=Find a Healer, store=Shop & Membership, profile=You (account & access), wellness=Energy (energy check, horoscope, chakras, numerology, colour test, Bio-Well).',
-                        enum: ['today', 'academy', 'community', 'events', 'bookings', 'inbox', 'directory', 'store', 'profile', 'wellness'],
-                      },
-                      tab: {
-                        type: 'string',
-                        description: 'Optional tab within the screen. store: "shop" or "membership". wellness: "check", "horoscope", or "chakras". community: "discussion", "members", or "events". Omit if unsure.',
-                      },
-                      tool: {
-                        type: 'string',
-                        description: 'Optional single Energy tool to open on the wellness screen, instead of leaving the member to scroll for it. Each value is the card the member will see: pulse=Energy Pulse (camera heart-rate reading), breath=Coherence Breathing, numerology=Numerology, sky=Today\u2019s Sky, colour=Colour Test, chakra=Chakra Balance, match=Energy Match, cosmic=Cosmic Map, moon=Moon Rituals. Only valid with screen=wellness.',
-                        enum: ['pulse', 'breath', 'numerology', 'sky', 'colour', 'chakra', 'match', 'cosmic', 'moon'],
-                      },
-                    },
-                    required: ['screen'],
-                  },
+    name: 'navigate',
+    description: 'Navigate the member to a screen in the Gaia Healers app. Call this whenever the member asks to open, go to, show, or see a specific screen, tab, or feature.',
+    parameters: {
+      type: 'object',
+      properties: {
+        screen: { type: 'string', description: 'today=Home, academy=Courses, community=Community, events, bookings, inbox, directory=Find a Healer, store, profile, wellness=Energy.',
+                  enum: ['today', 'academy', 'community', 'events', 'bookings', 'inbox', 'directory', 'store', 'profile', 'wellness'] },
+        tab: { type: 'string', description: 'Optional tab within the screen.' },
+        tool: { type: 'string', description: 'Optional Energy tool to open on the wellness screen.',
+                enum: ['pulse', 'breath', 'numerology', 'sky', 'colour', 'chakra', 'match', 'cosmic', 'moon'] },
+      },
+      required: ['screen'],
+    },
+    /**
+     * A practitioner gets one more destination and two more arguments.
+     *
+     * `client` must be an id this practitioner's own tools returned. That is not
+     * enforced by hope: opening a client fetches it with their token, and their
+     * server answers "not owned by this practitioner" for anything that is not
+     * theirs -- tested against eight ids that were not. A guessed id therefore
+     * reaches a refusal, never data.
+     */
+    declare(ctx) {
+      if (!ctx?.isPractitioner) return this;
+      return {
+        description: this.description
+          + ' For a PRACTITIONER this also opens the Practice screen (inside You) on one of their clients: pass screen="practice" with the client id, and `open` to show a particular result card. Prefer this over describing readings aloud -- open the card, then say one short sentence about what it shows.',
+        parameters: {
+          type: 'object',
+          properties: {
+            screen: { type: 'string', description: 'today=Home, academy=Courses, community=Community, events, bookings, inbox, directory=Find a Healer, store, profile, wellness=Energy, practice=your clients and their readings.',
+                      enum: ['today', 'academy', 'community', 'events', 'bookings', 'inbox', 'directory', 'store', 'profile', 'wellness', 'practice'] },
+            tab: { type: 'string', description: 'Optional tab within the screen.' },
+            tool: { type: 'string', description: 'Optional Energy tool to open on the wellness screen.',
+                    enum: ['pulse', 'breath', 'numerology', 'sky', 'colour', 'chakra', 'match', 'cosmic', 'moon'] },
+            client: { type: 'string', description: 'With screen="practice": the client id to open, exactly as returned by practitioner_list_clients, practitioner_find_client, practitioner_flagged_clients or practitioner_follow_ups. Never invent one.' },
+            open: { type: 'string', description: 'With a client: which result card to open. latest=their most recent Bio-Well reading, trend=how they have changed, compare=before and after a session. Each takes about ten seconds to load, and the screen shows the waiting state.',
+                    enum: ['latest', 'trend', 'compare'] },
+            section: { type: 'string', description: 'With screen="practice" and NO client: which part of the Practice screen to show. attention=clients with concerning readings, followups=clients due a follow-up, clients=the full list.',
+                       enum: ['attention', 'followups', 'clients'] },
+          },
+          required: ['screen'],
+        },
+      };
+    },
   },
   {
     role: 'member',
@@ -613,11 +635,14 @@ export function allowed(tool, ctx) {
  * not having the option.
  */
 export function toolDeclarationsFor(ctx) {
-  return TOOLS.filter((t) => allowed(t, ctx)).map((t) => ({
-    name: t.name,
-    description: t.description,
-    parameters: t.parameters,
-  }));
+  return TOOLS.filter((t) => allowed(t, ctx)).map((t) => {
+    // A tool may describe itself differently to different roles. navigate is the
+    // only one that does: a practitioner can be sent to a client's readings, and
+    // a member who has no Practice screen should not be offered a destination
+    // that does not exist for them.
+    const d = typeof t.declare === 'function' ? t.declare(ctx) : t;
+    return { name: t.name, description: d.description, parameters: d.parameters };
+  });
 }
 
 /** Names the PAGE is expected to execute; everything else comes back here. */

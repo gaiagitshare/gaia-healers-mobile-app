@@ -164,7 +164,7 @@
           <section class="g-prac__sec" data-prac-followups>
             <h3 class="g-prac__h">Due a follow-up</h3>${skeleton(1)}
           </section>
-          <section class="g-prac__sec" data-prac-clients>
+          <section class="g-prac__sec" data-prac-clients-sec>
             <h3 class="g-prac__h">Your clients</h3>
             <input type="search" class="g-input g-prac__search" placeholder="Search by name or email"
                    aria-label="Search your clients" data-prac-search />
@@ -414,6 +414,7 @@
       if (status.needs_reconnect) { await showGate(status); return; }
       if (deepLink && deepLink.client) await showClient(deepLink.client, deepLink.open);
       else await showList();
+      return true;
     }
 
     return { start, showClient, showList };
@@ -472,13 +473,25 @@
       if (button) select(button.getAttribute('data-profile-tab'));
     });
 
-    // Gaia asks for a client; the panel opens on it without a reload.
+    // Gaia asks for a client, a card, or just a section of the list. One hook
+    // for all three: a second navigation mechanism would be a second thing to
+    // keep in step with the first.
     window.addEventListener('gaia:open-client', (event) => {
-      const id = event.detail && event.detail.client;
-      if (!id) return;
+      const d = event.detail || {};
       select('practice');
       started = true;
-      view.start({ client: String(id), open: event.detail.open });
+      if (d.client) {
+        view.start({ client: String(d.client), open: d.open || '' });
+        return;
+      }
+      view.start().then(() => {
+        if (!d.section) return;
+        // The landing sections are already on screen; bring the asked-for one
+        // into view rather than reloading anything.
+        const host = panel.querySelector(`[data-prac-${
+          d.section === 'attention' ? 'flagged' : d.section === 'followups' ? 'followups' : 'clients-sec'}]`);
+        if (host && host.scrollIntoView) host.scrollIntoView({ block: 'start', behavior: 'smooth' });
+      });
     });
 
     select(wantsPractice ? 'practice' : 'me');

@@ -377,7 +377,16 @@
           <p class="g-page__sub" id="profile-sub">Sign in to see your memberships, devices, and bookings.</p>
         </div>
 
+        <!-- Practice sits inside You rather than the bottom bar: it is daily for
+             practitioners and irrelevant to everybody else, and this tab row only
+             appears for a member the SERVER says is a practitioner. -->
+        <div class="g-tabs" role="tablist" aria-label="Profile sections" data-profile-tabs hidden>
+          <button type="button" class="g-tab is-active" data-profile-tab="me" role="tab" aria-selected="true" aria-controls="member-me">You</button>
+          <button type="button" class="g-tab" data-profile-tab="practice" role="tab" aria-selected="false" aria-controls="practitioner-panel">Practice</button>
+        </div>
+
         <div id="member-me" class="g-page-sec"></div>
+        <div id="practitioner-panel" class="g-page-sec" role="tabpanel" aria-label="Practice" hidden></div>
 
 
         <button type="button" class="g-btn g-btn--ghost g-btn--sm g-profile-signout" data-sign-out hidden>Sign out</button>
@@ -446,6 +455,7 @@
   </script>
   <script src="gaia-install.js?v=20260820a" defer></script>
   <script src="gaia-practice.js?v=20260818a" defer></script>
+  <script src="gaia-practitioner.js" defer></script>
   <script src="gaia-sky.js?v=20260907b" defer></script>
   <script src="gaia-numerology.js?v=20260907c" defer></script>
   <script src="gaia-push.js?v=20260822a" defer></script>

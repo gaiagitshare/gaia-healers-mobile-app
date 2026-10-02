@@ -39,6 +39,26 @@ const TOKEN_FILE = '/root/gaia-staging-proxy/data/practitioner-tokens.json';
 // missing timeout costs most.
 const MCP_TIMEOUT_MS = 30000;
 const TOKEN_TIMEOUT_MS = 15000;
+
+// Their side flaps. Every call we make under mcp.read is a read, so repeating
+// one is free of consequence, and a refused connection or a 503 comes back in
+// milliseconds -- one more attempt costs the practitioner almost nothing and
+// turns most of the flapping into a slightly slower answer instead of a failed
+// card.
+//
+// A TIMEOUT is deliberately not retried. The card tells the practitioner about
+// ten seconds and counts the elapsed time; a second thirty-second wait on top
+// of the first is a worse answer than saying it did not come back.
+//
+// This applies to MCP calls ONLY. The token endpoints are deliberately left
+// alone: their refresh tokens are single-use and rotating, so if a refresh
+// succeeded upstream and only the response was lost, retrying with the token we
+// still hold would present an already-spent one -- turning a dropped packet
+// into a practitioner who has to reconnect. validAccessToken already shares one
+// in-flight refresh for exactly that reason.
+const MCP_ATTEMPTS = 2;
+const MCP_RETRY_DELAY_MS = 400;
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const STATE_TTL_MS = 10 * 60 * 1000;      // their code is short-lived; so is our state
 const PENDING_MAX = 200;                   // a bounded map cannot be grown into a leak
 
@@ -302,7 +322,24 @@ export async function validAccessToken(cfg, contactId, { file = TOKEN_FILE, fetc
 export function _refreshingSize() { return refreshing.size; }
 
 /** One MCP tools/call. The token is chosen by the caller, never by an argument. */
-export async function mcpCall(cfg, accessToken, name, args = {}, fetchImpl = fetch) {
+/** Their answer, classified. `retryable` is the only judgement made here. */
+function mcpFailure(name, { timedOut = false, status = 0, detail = '' } = {}) {
+  const message = timedOut
+    ? `${name}: Bio-Well did not answer within ${MCP_TIMEOUT_MS / 1000}s`
+    : status
+      ? `${name}: Gaia Practitioners answered ${status}${detail ? ' — ' + detail : ''}`
+      : `${name}: could not reach Gaia Practitioners`;
+  return Object.assign(new Error(message), {
+    code: 'upstream_unavailable',
+    status: status || undefined,
+    // A timeout is not retried: see MCP_ATTEMPTS. A transport error, a 5xx and
+    // a 429 are all their side being briefly unavailable, which is what a
+    // retry is for. A 4xx is an answer about the request itself.
+    retryable: !timedOut && (status === 0 || status === 429 || status >= 500),
+  });
+}
+
+async function mcpAttempt(cfg, accessToken, name, args, fetchImpl) {
   let r;
   try {
     r = await fetchImpl(cfg.mcpUrl, {
@@ -322,12 +359,17 @@ export async function mcpCall(cfg, accessToken, name, args = {}, fetchImpl = fet
     // A timeout and a refused connection are the same thing to the person
     // waiting, and both have to end the spinner.
     const timedOut = e?.name === 'TimeoutError' || e?.name === 'AbortError';
-    throw Object.assign(new Error(timedOut
-      ? `${name}: Bio-Well did not answer within ${MCP_TIMEOUT_MS / 1000}s`
-      : `${name}: could not reach Gaia Practitioners`), { code: 'upstream_unavailable' });
+    throw mcpFailure(name, { timedOut });
   }
+
   const text = await r.text();
   if (r.status === 401) throw Object.assign(new Error('practitioner token rejected'), { code: 401 });
+  // Anything else that is not a success has to FAIL rather than fall through.
+  // It used to fall through: a 503 left json as {}, the handler saw no scans
+  // and told the practitioner their client had none on file. A wrong answer
+  // about a client's readings is worse than a card that says it could not load.
+  if (!r.ok) throw mcpFailure(name, { status: r.status, detail: text.trim().slice(0, 120) });
+
   let json = {};
   try { json = JSON.parse(text); } catch {
     // Streamable HTTP may answer as SSE; take the last data: line.
@@ -336,6 +378,23 @@ export async function mcpCall(cfg, accessToken, name, args = {}, fetchImpl = fet
   }
   if (json.error) throw new Error(`${name}: ${json.error.message || JSON.stringify(json.error)}`);
   return json.result ?? json;
+}
+
+export async function mcpCall(cfg, accessToken, name, args = {}, fetchImpl = fetch) {
+  let last;
+  for (let attempt = 1; attempt <= MCP_ATTEMPTS; attempt += 1) {
+    try {
+      return await mcpAttempt(cfg, accessToken, name, args, fetchImpl);
+    } catch (e) {
+      last = e;
+      if (!e?.retryable || attempt === MCP_ATTEMPTS) break;
+      console.warn('[Gaia Practitioners]', JSON.stringify({
+        event: 'mcp_retry', tool: name, attempt, of: MCP_ATTEMPTS, status: e.status || null,
+      }));
+      await sleep(MCP_RETRY_DELAY_MS);
+    }
+  }
+  throw last;
 }
 
 /**

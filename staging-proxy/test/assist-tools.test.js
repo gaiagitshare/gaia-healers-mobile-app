@@ -53,7 +53,8 @@ test('nobody signed in is offered nothing', () => {
 
 test('the page is told only the tools it is expected to perform', () => {
   const client = clientToolNames(PRACTITIONER);
-  assert.deepEqual(client.sort(), ['navigate', 'save_onboarding_step']);
+  assert.ok(client.includes('navigate') && client.includes('gaia_lookup'),
+    'the page performs all the member tools, not a selection of them');
   for (const n of client) {
     assert.ok(!n.startsWith('practitioner_'),
       'a tool that reads client data must never be handed to the page to run');
@@ -212,4 +213,68 @@ test('assistContext treats an unknown role as a member, never as a practitioner'
   assert.ok(/let isPractitioner = false/.test(block), 'the default must be false');
   assert.ok(/catch/.test(block) && /role unknown/.test(block),
     'a GHL outage must not silently promote anyone');
+});
+
+// ── parity with the page, which is how this broke once ─────────────────────
+
+/** The orb's source when it is checked out beside us, else null. */
+function readOrb() {
+  for (const rel of ['../../gaia-realtime-voice.js', '../../../gaia-healers-mobile-app-1/gaia-realtime-voice.js']) {
+    try { return fs.readFileSync(new URL(rel, import.meta.url), 'utf8'); } catch { /* try the next */ }
+  }
+  return null;
+}
+
+test('every tool the page can perform is still declared by the server', () => {
+  // The server's list REPLACES the page's. A tool declared in the orb but
+  // missing here is a tool the model can no longer call -- and that is not a
+  // failure anybody sees, it is Gaia quietly losing an ability. It happened:
+  // the first registry declared two of the twelve, which removed gaia_lookup,
+  // the one the system prompt tells the model to use for every live fact.
+  const orb = readOrb();
+  if (orb === null) return;   // deployed proxy: the app source is not checked out beside it
+  const i = orb.indexOf('functionDeclarations:');
+  if (i < 0) return;          // the orb no longer declares its own; nothing to compare
+  let depth = 0, j = orb.indexOf('[', i), start = j;
+  do { if (orb[j] === '[') depth += 1; else if (orb[j] === ']') depth -= 1; j += 1; } while (depth && j < orb.length);
+  const declared = [...orb.slice(start, j).matchAll(/name:\s*'([a-z_]+)'/g)].map((m) => m[1]);
+  const served = TOOLS.map((t) => t.name);
+  const missing = declared.filter((n) => !served.includes(n));
+  assert.deepEqual(missing, [], `the page can perform these but the server never offers them: ${missing.join(', ')}`);
+});
+
+test('every client-executed tool has somewhere to be executed', () => {
+  // The mirror image: a tool the server offers as the page's job, that the page
+  // has no handler for, is a call that dead-ends.
+  const orb = readOrb();
+  if (orb === null) return;
+  const i = orb.indexOf('function runToolCall');
+  if (i < 0) return;
+  const dispatcher = orb.slice(i, i + 2500);
+  const unhandled = TOOLS.filter((t) => t.where === 'client')
+    .map((t) => t.name)
+    .filter((n) => !dispatcher.includes(`case '${n}'`));
+  assert.deepEqual(unhandled, [], `the server offers these for the page to run, but it has no handler: ${unhandled.join(', ')}`);
+});
+
+test('the page sends tools it does not perform back to the server', () => {
+  const orb = readOrb();
+  if (orb === null) return;
+  assert.ok(/serverToolNames\s*&&\s*!serverToolNames\.includes\(name\)/.test(orb),
+    'the dispatcher must route an unhandled name to the server, not answer "not available"');
+  assert.ok(/runServerToolCall/.test(orb), 'there must be a server path at all');
+  assert.ok(/credentials:\s*'include'/.test(orb.slice(orb.indexOf('runServerToolCall'), orb.indexOf('runServerToolCall') + 900)),
+    'the session cookie is what identifies the caller, so it has to be sent');
+  const call = orb.slice(orb.indexOf('async function runServerToolCall'), orb.indexOf('async function runServerToolCall') + 900);
+  assert.ok(!/contactId|practitioner_?id|token/i.test(call),
+    'the page must not put an identity in the request; the cookie carries it');
+});
+
+test('a fetched result reaches the model as data, not as "Done."', () => {
+  const orb = readOrb();
+  if (orb === null) return;
+  const i = orb.indexOf('functionResponses');
+  const block = orb.slice(i, i + 700);
+  assert.ok(/result\.data !== undefined/.test(block),
+    'a tool that fetched something must return the something, or the model has nothing to answer from');
 });

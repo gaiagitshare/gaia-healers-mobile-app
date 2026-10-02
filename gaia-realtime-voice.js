@@ -865,9 +865,41 @@
       }
     }
 
+    /**
+     * Ask the server to run a tool this page does not perform itself.
+     *
+     * The call carries the tool name and its arguments and nothing else: the
+     * session cookie says who is asking, and the server decides both what they
+     * may run and whose data comes back. Nothing here can claim an identity.
+     */
+    async function runServerToolCall(name, args) {
+      const endpoint = serverToolEndpoint || '/api/assist/tool';
+      try {
+        const res = await fetch(`${proxyBase()}${endpoint}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+          credentials: 'include',
+          body: JSON.stringify({ name, args: args || {} }),
+        });
+        const body = await res.json().catch(() => ({}));
+        if (res.ok && body.ok) return { ok: true, data: body.result };
+        if (body.error === 'not_connected' || body.error === 'needs_reconnect') {
+          return { ok: false, message: 'Their Gaia Practitioners account is not connected yet. They can connect it from their profile.' };
+        }
+        if (body.error === 'forbidden') return { ok: false, message: 'That is not available for this account.' };
+        return { ok: false, message: 'I could not fetch that just now.' };
+      } catch (e) {
+        return { ok: false, message: 'I could not reach that right now.' };
+      }
+    }
+
     // Central tool dispatcher: routes a toolCall to the right handler.
+    //
+    // A name this page has no case for is not an error any more -- the server
+    // declares tools it runs itself, and this is how they get there.
     function runToolCall(name, args = {}) {
       if (window.GaiaAppGuard && !window.GaiaAppGuard.canEnter && !['save_onboarding_step', 'sign_in'].includes(name)) return { ok: false, reason: 'onboarding_required' };
+      if (serverToolNames && !serverToolNames.includes(name)) return runServerToolCall(name, args);
       switch (name) {
         case 'navigate': return handleNavigateToolCall(args);
         case 'book_session': return handleBookSessionToolCall(args);
@@ -1115,7 +1147,15 @@
                   functionResponses: [{
                     id: event.id || '',
                     name: event.name || '',
-                    response: { result: (result && result.message) || (result && result.ok ? 'Done.' : 'Unavailable.') },
+                    // A tool that FETCHED something has to return the something.
+                    // Sending "Done." for a client list would leave the model
+                    // confirming an action it was never asked to take, with
+                    // nothing to answer the question from.
+                    response: {
+                      result: (result && result.data !== undefined)
+                        ? result.data
+                        : ((result && result.message) || (result && result.ok ? 'Done.' : 'Unavailable.')),
+                    },
                   }],
                 },
               });
@@ -1144,6 +1184,8 @@
       cachedToken = null; cachedTokenExpireAt = 0;
     });
     let cachedToken = null;
+    let serverToolNames = null;
+    let serverToolEndpoint = '';
     let cachedTokenExpireAt = 0;
 
     function consumeCachedToken(payload) {
@@ -1178,6 +1220,13 @@
         throw new Error(tokenErrorMessage(payload, response.status));
       }
       cachedToken = payload;
+      // What the model may call is the server's decision now, and it travels
+      // with the ticket. The page is told only which of those it is expected to
+      // perform itself; anything else goes back to the server to run, with the
+      // session deciding whose data it is. Older proxies send neither field, and
+      // then the page behaves exactly as it did before.
+      serverToolNames = Array.isArray(payload.clientTools) ? payload.clientTools : null;
+      serverToolEndpoint = typeof payload.toolEndpoint === 'string' ? payload.toolEndpoint : '';
       // A token lives 30 minutes, but Google only lets it OPEN a session in
       // the first minute (newSessionExpireTime on the server). A pre-warmed
       // token older than that is refused, so reuse one for 45 seconds at most.

@@ -22,6 +22,7 @@ const {
   practitionersConfig, makePkce, authorizeUrl, rememberFlow, claimFlow,
   exchangeCode, mcpCall, resolveProfile,
   readTokens, writeTokens, saveToken, tokenFor, forgetToken, connectionStatus, unwrapMcp,
+  refreshAccess, validAccessToken, _refreshingSize,
   _resetFlows, _pendingSize,
 } = m;
 
@@ -305,4 +306,138 @@ test('the MCP envelope is unwrapped however a tool happens to answer', () => {
     'prose stays prose rather than throwing');
   assert.equal(unwrapMcp(null), null);
   assert.deepEqual(unwrapMcp({ content: [] }), { content: [] }, 'an empty envelope is not data');
+});
+
+// ── renewal, where a single-use token makes the races matter ───────────────
+// Their refresh tokens work once. The response carries the replacement, and the
+// old one dies on success -- so losing the replacement, or spending the same one
+// twice, breaks the chain permanently and costs the practitioner a re-consent.
+
+test('a live token is used as-is, with no renewal and no network call', async () => {
+  const f = tmpStore();
+  saveToken('C1', { access_token: 'still-good', refresh_token: 'r', expires_at: Date.now() + 9e6 }, f);
+  const never = async () => { throw new Error('must not call the token endpoint'); };
+  assert.equal(await validAccessToken(CFG, 'C1', { file: f, fetchImpl: never }), 'still-good');
+});
+
+test('a token near its end is renewed before it is actually spent', async () => {
+  const f = tmpStore();
+  saveToken('C1', { access_token: 'old', refresh_token: 'r1', expires_at: Date.now() + 60 * 1000 }, f);
+  const fake = async () => ({ ok: true, status: 200, text: async () =>
+    JSON.stringify({ access_token: 'new', refresh_token: 'r2', expires_in: 2592000 }) });
+  assert.equal(await validAccessToken(CFG, 'C1', { file: f, fetchImpl: fake }), 'new',
+    'a token a minute from expiry must not be handed out');
+});
+
+test('the rotated refresh token replaces the spent one', async () => {
+  const f = tmpStore();
+  saveToken('C1', { access_token: 'old', refresh_token: 'r1', expires_at: Date.now() - 1 }, f);
+  const fake = async () => ({ ok: true, status: 200, text: async () =>
+    JSON.stringify({ access_token: 'new', refresh_token: 'r2', expires_in: 2592000 }) });
+  await validAccessToken(CFG, 'C1', { file: f, fetchImpl: fake });
+  const row = tokenFor('C1', f);
+  assert.equal(row.refresh_token, 'r2', 'keeping r1 would spend a dead token next time');
+  assert.equal(row.access_token, 'new');
+  assert.ok(row.expires_at > Date.now(), 'the new expiry must be stored too');
+});
+
+test('a response with no new refresh token keeps the one we hold', async () => {
+  const f = tmpStore();
+  saveToken('C1', { access_token: 'old', refresh_token: 'r1', expires_at: Date.now() - 1 }, f);
+  const fake = async () => ({ ok: true, status: 200, text: async () =>
+    JSON.stringify({ access_token: 'new', expires_in: 2592000 }) });
+  await validAccessToken(CFG, 'C1', { file: f, fetchImpl: fake });
+  assert.equal(tokenFor('C1', f).refresh_token, 'r1',
+    'blanking the chain because the shape surprised us is the unrecoverable bug');
+});
+
+test('two callers at once share one renewal and spend one token', async () => {
+  const f = tmpStore();
+  saveToken('C1', { access_token: 'old', refresh_token: 'r1', expires_at: Date.now() - 1 }, f);
+  let calls = 0;
+  const slow = async () => {
+    calls += 1;
+    await new Promise((r) => setTimeout(r, 25));
+    return { ok: true, status: 200, text: async () =>
+      JSON.stringify({ access_token: `new${calls}`, refresh_token: `r${calls + 1}`, expires_in: 2592000 }) };
+  };
+  const [a, b, c] = await Promise.all([
+    validAccessToken(CFG, 'C1', { file: f, fetchImpl: slow }),
+    validAccessToken(CFG, 'C1', { file: f, fetchImpl: slow }),
+    validAccessToken(CFG, 'C1', { file: f, fetchImpl: slow }),
+  ]);
+  assert.equal(calls, 1, `three callers caused ${calls} refreshes; a single-use token allows one`);
+  assert.equal(a, b); assert.equal(b, c);
+  assert.equal(_refreshingSize(), 0, 'the in-flight entry must be cleared');
+});
+
+test('two different practitioners renew independently', async () => {
+  const f = tmpStore();
+  saveToken('C1', { access_token: 'o1', refresh_token: 'r1', expires_at: Date.now() - 1 }, f);
+  saveToken('C2', { access_token: 'o2', refresh_token: 'r2', expires_at: Date.now() - 1 }, f);
+  const fake = async (_u, opts) => {
+    const sent = new URLSearchParams(String(opts.body)).get('refresh_token');
+    return { ok: true, status: 200, text: async () =>
+      JSON.stringify({ access_token: `new-for-${sent}`, refresh_token: `${sent}x`, expires_in: 9999 }) };
+  };
+  const [a, b] = await Promise.all([
+    validAccessToken(CFG, 'C1', { file: f, fetchImpl: fake }),
+    validAccessToken(CFG, 'C2', { file: f, fetchImpl: fake }),
+  ]);
+  assert.equal(a, 'new-for-r1');
+  assert.equal(b, 'new-for-r2', 'one practitioner must never be renewed with another\'s token');
+});
+
+test('a refused refresh ends the chain and says a reconnect is needed', async () => {
+  const f = tmpStore();
+  saveToken('C1', { access_token: 'old', refresh_token: 'spent', expires_at: Date.now() - 1 }, f);
+  const refuse = async () => ({ ok: false, status: 400, text: async () => JSON.stringify({ error: 'invalid_grant' }) });
+  await assert.rejects(() => validAccessToken(CFG, 'C1', { file: f, fetchImpl: refuse }),
+    (e) => e.code === 'needs_reconnect');
+  const row = tokenFor('C1', f);
+  assert.equal(row.access_token, '', 'a dead token must not be left for every later call to rediscover');
+  assert.equal(row.needs_reconnect, true);
+  assert.equal(connectionStatus('C1', f).connected, false);
+  assert.equal(connectionStatus('C1', f).needs_reconnect, true,
+    'the app must say Reconnect, not Connect');
+  // A second call must still refuse rather than hand out the blank token.
+  await assert.rejects(() => validAccessToken(CFG, 'C1', { file: f, fetchImpl: refuse }),
+    (e) => e.code === 'needs_reconnect');
+});
+
+test('a network blip is not treated as a broken chain', async () => {
+  const f = tmpStore();
+  saveToken('C1', { access_token: 'old', refresh_token: 'r1', expires_at: Date.now() - 1 }, f);
+  const down = async () => { throw new Error('ECONNRESET'); };
+  await assert.rejects(() => validAccessToken(CFG, 'C1', { file: f, fetchImpl: down }), /ECONNRESET/);
+  assert.equal(tokenFor('C1', f).refresh_token, 'r1',
+    'their server being briefly unreachable must not cost a re-consent');
+  assert.notEqual(tokenFor('C1', f).needs_reconnect, true);
+});
+
+test('a practitioner who never connected has no token and no error', async () => {
+  const f = tmpStore();
+  assert.equal(await validAccessToken(CFG, 'nobody', { file: f }), null);
+  assert.deepEqual(connectionStatus('nobody', f), { connected: false, needs_reconnect: false },
+    'never connected is not the same state as a broken connection');
+});
+
+test('an expired token with no refresh token asks for a reconnect', async () => {
+  const f = tmpStore();
+  saveToken('C1', { access_token: 'old', expires_at: Date.now() - 1 }, f);
+  await assert.rejects(() => validAccessToken(CFG, 'C1', { file: f }), (e) => e.code === 'needs_reconnect');
+});
+
+test('the refresh request sends the grant and the secret in the body', async () => {
+  let seen;
+  const fake = async (u, opts) => {
+    seen = { url: u, body: String(opts.body) };
+    return { ok: true, status: 200, text: async () => JSON.stringify({ access_token: 'a', expires_in: 10 }) };
+  };
+  await refreshAccess(CFG, 'the-refresh-token', fake);
+  const body = new URLSearchParams(seen.body);
+  assert.equal(body.get('grant_type'), 'refresh_token');
+  assert.equal(body.get('refresh_token'), 'the-refresh-token');
+  assert.equal(body.get('client_secret'), CFG.clientSecret);
+  assert.ok(!seen.url.includes('the-refresh-token'), 'never in the url');
 });

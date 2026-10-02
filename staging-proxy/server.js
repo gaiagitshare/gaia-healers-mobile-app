@@ -31,6 +31,7 @@ import {
 } from './membership/oauth-core.js';
 import { classifyMembershipEvent, membershipFromEvent } from './membership/events.js';
 import { attachQwenVoiceRelay, qwenRouting, issueQwenTicket, qwenVoiceConfig, voiceBootLine } from './qwen-voice-relay.js';
+import { toolDeclarationsFor, clientToolNames, runTool } from './assist-tools.js';
 import { practitionersConfig, makePkce, authorizeUrl, rememberFlow, claimFlow,
          exchangeCode, resolveProfile, saveToken, forgetToken, connectionStatus } from './practitioners-oauth.js';
 import { allowSpend, callerKey, guardSubject, spendKindFor, ASSIST_MAX_PROMPT_CHARS, ASSIST_MAX_TTS_CHARS } from './assist-guard.js';
@@ -4388,6 +4389,29 @@ async function buildMemberVoiceContext(req) {
   }
 }
 
+/**
+ * Who is asking, and what are they allowed to do.
+ *
+ * Built from the signed session cookie and the GHL tags on that contact --
+ * never from the request body, a query parameter, or anything a model said.
+ * This is the only thing a tool handler is told about identity.
+ */
+async function assistContext(req) {
+  const member = sessionMemberContext(req);
+  if (!member?.contactId) return null;
+  let isPractitioner = false;
+  try {
+    const bundle = await fetchMemberBundle(member);
+    const access = buildMemberAccess(bundle.tags, bundle.customFields, bundle.member,
+                                     bundle.entitlements, bundle.subscriptions);
+    isPractitioner = Boolean(access?.member?.practitioner);
+  } catch (e) {
+    // A GHL outage must not silently promote anyone. Unknown means member.
+    console.warn('[Gaia Assist] role unknown, treating as member', { error: String(e.message || e).slice(0, 100) });
+  }
+  return { contactId: member.contactId, memberId: member.memberId, isPractitioner };
+}
+
 async function assistLiveToken(req, res, origin, url) {
   const startedAt = Date.now();
   const cfg = gaiaLiveVoiceConfig();
@@ -4407,15 +4431,28 @@ async function assistLiveToken(req, res, origin, url) {
   const route = qwenRouting({ip});
   if (route.use) {
     const qcfg = qwenVoiceConfig();
-    const ticket = issueQwenTicket({ instructions: buildGaiaLiveInstructions({ view, memberContext, appContext }), ip });
+    // The tool list is decided HERE, from the session, and travels with the
+    // ticket. The page is told which of them it is expected to perform and
+    // nothing else: what the model may call is no longer whatever the page says.
+    const toolCtx = await assistContext(req);
+    const declarations = toolDeclarationsFor(toolCtx);
+    const ticket = issueQwenTicket({
+      instructions: buildGaiaLiveInstructions({ view, memberContext, appContext }),
+      ip,
+      tools: declarations,
+    });
     const proto = String(req.headers['x-forwarded-proto'] || '').includes('https') ? 'wss' : 'ws';
-    console.log('[Gaia Assist] qwen voice ticket ready', { model: qcfg.model, view, latencyMs: Date.now() - startedAt });
+    console.log('[Gaia Assist] qwen voice ticket ready', {
+      model: qcfg.model, view, tools: declarations.length,
+      practitioner: Boolean(toolCtx?.isPractitioner), latencyMs: Date.now() - startedAt });
     sendJson(res, 200, {
       ok: true,
       provider: 'qwen',
       relayUrl: `${proto}://${req.headers.host}/api/assist/voice/qwen?ticket=${ticket}`,
       model: qcfg.model,
       voice: qcfg.voice,
+      clientTools: clientToolNames(toolCtx),
+      toolEndpoint: '/api/assist/tool',
       personalized: ['member', 'practitioner', 'onboarding'].includes(assistGuide.sessionState(memberContext)),
       maxSessionSeconds: qcfg.maxSessionSeconds,
       expireTime: new Date(Date.now() + 60 * 1000).toISOString(),
@@ -7127,6 +7164,38 @@ const server = http.createServer(async (req, res) => {
     }
     if ((req.method === 'GET' || req.method === 'POST') && url.pathname === '/api/assist/voice/token') {
       await assistLiveToken(req, res, origin, url);
+      return;
+    }
+
+    // Run one server-side Assist tool.
+    //
+    // The model names a tool and supplies its arguments; it supplies nothing
+    // else. Who is asking comes from the cookie, what they may run comes from
+    // their role, and whose data comes back is decided by their own token on
+    // the other side. There is no argument that can change any of those.
+    if (req.method === 'POST' && url.pathname === '/api/assist/tool') {
+      const ctx = await assistContext(req);
+      if (!ctx) { sendJson(res, 401, { ok: false, error: 'not_signed_in' }, origin); return; }
+      const body = await readJsonBody(req, 64 * 1024).catch(() => ({}));
+      const name = String(body?.name || '').slice(0, 64);
+      const started = Date.now();
+      try {
+        const result = await runTool(name, body?.args, ctx);
+        console.log('[Gaia Assist] tool', { name, ms: Date.now() - started, contact: ctx.contactId });
+        sendJson(res, 200, { ok: true, name, result }, origin);
+      } catch (e) {
+        const code = e.code || 'tool_failed';
+        // 403 for a tool they may not run, 404 for one that does not exist, 400
+        // for arguments that make no sense, 409 when the practitioner simply has
+        // not connected yet -- each one is a different thing for the page to say.
+        const status = { forbidden: 403, unknown_tool: 404, client_tool: 400,
+                         bad_args: 400, not_connected: 409, needs_reconnect: 409 }[code] || 502;
+        if (status >= 500) {
+          console.error('[Gaia Assist] tool failed', { name, code, error: String(e.message || e).slice(0, 160) });
+        }
+        sendJson(res, status, { ok: false, name, error: code,
+                                detail: String(e.message || e).slice(0, 200) }, origin);
+      }
       return;
     }
 

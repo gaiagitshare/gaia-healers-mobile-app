@@ -89,5 +89,11 @@ test('session bootstrap checks GHL and completed marker permits the member API',
   // outage check in the test before this one.
   unavailable = true;
   const fresh = await realFetch(`http://127.0.0.1:${PORT}/api/auth/session`, { headers: { cookie: cookie() } });
-  assert.equal((await fresh.json()).onboardingStatus, 'complete'); unavailable = false;
+  assert.equal((await fresh.json()).onboardingStatus, 'complete');
+  // The app asks this route on every load; it must use the same record, not
+  // fail on the member lookup that used to run before the gate.
+  const status = await call();
+  assert.equal(status.status, 200, 'a finished member must not get the outage screen');
+  assert.equal(status.data.state, 'complete');
+  unavailable = false;
 });

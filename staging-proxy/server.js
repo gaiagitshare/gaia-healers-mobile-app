@@ -7043,14 +7043,18 @@ const server = http.createServer(async (req, res) => {
       const sm = requireSessionMember(req, res, origin);
       if (!sm) return;
       try {
-        const b = await fetchMemberBundle(sm);
-        if (!b.resolved || !b.contactId) {
-          sendJson(res, 503, { ok: false, reason: 'onboarding_contact_unavailable' }, origin); return;
-        }
+        // The status check runs first and on its own: the app asks it on every
+        // load, and the full member bundle (several GHL calls) used to come
+        // first — so when GHL was down, members GHL had already confirmed
+        // complete got the outage screen despite the gate's own record.
         if (req.method === 'GET') {
           const profile = await memberOnboardingGuard.check(req, sm, true);
           if (profile.state === 'unavailable') { sendJson(res, 503, { ok: false, onboardingStatus: 'unavailable', reason: profile.reason }, origin); return; }
           sendJson(res, 200, profile, origin); return;
+        }
+        const b = await fetchMemberBundle(sm);
+        if (!b.resolved || !b.contactId) {
+          sendJson(res, 503, { ok: false, reason: 'onboarding_contact_unavailable' }, origin); return;
         }
         const body = await readJsonBody(req);
         memberOnboardingGuard.invalidate(req);

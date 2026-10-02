@@ -1544,7 +1544,10 @@
           <div class="gaia-assist__headline">
             <h2>${assistNameMarkup(assistant.name || 'Gaia')}</h2>
             <p class="gaia-assist__status" data-assist-state="idle" role="status" aria-live="polite">Tap Gaia for live voice</p>
-            <button type="button" class="gaia-assist__sound-toggle" aria-pressed="false"><i class="ph ph-speaker-high" aria-hidden="true"></i><span>Sound on</span></button>
+            <div class="gaia-assist__mode" role="group" aria-label="Choose how to use Gaia">
+              <button type="button" class="gaia-assist__mode-btn" data-assist-mode="talk" aria-selected="true"><i class="ph ph-microphone" aria-hidden="true"></i><span>Talk</span></button>
+              <button type="button" class="gaia-assist__mode-btn" data-assist-mode="chat" aria-selected="false"><i class="ph ph-keyboard" aria-hidden="true"></i><span>Chat</span></button>
+            </div>
           </div>
           <div class="gaia-assist__waveform" aria-hidden="true">
             <svg viewBox="0 0 600 60" preserveAspectRatio="none" focusable="false">
@@ -1592,7 +1595,7 @@
     const close = root.querySelector('.gaia-assist__close');
     const mic = root.querySelector('.gaia-assist__mic');
     const status = root.querySelector('.gaia-assist__status');
-    const soundToggle = root.querySelector('.gaia-assist__sound-toggle');
+    const modeButtons = Array.from(root.querySelectorAll('[data-assist-mode]'));
     const listenToggle = root.querySelector('.gaia-assist__listen-toggle');
     const transcript = root.querySelector('.gaia-assist__transcript');
     const routeBox = root.querySelector('.gaia-assist__route');
@@ -1949,10 +1952,16 @@
         muteButton.textContent = muted ? 'Unmute' : 'Mute';
         muteButton.setAttribute('aria-pressed', String(muted));
       }
-      if (soundToggle) {
-        soundToggle.setAttribute('aria-pressed', String(muted));
-        soundToggle.innerHTML = '<i class="ph ph-' + (muted ? 'speaker-slash' : 'speaker-high') + '" aria-hidden="true"></i><span>' + (muted ? 'Sound off' : 'Sound on') + '</span>';
-      }
+      // `muted` has always been the mode -- turning the sound off stops the
+      // live session and releases the microphone. It was wearing a speaker
+      // icon, so nobody read it as "I would rather type". Same state, said out
+      // loud: Talk or Chat, with the current one visibly chosen.
+      modeButtons.forEach((button) => {
+        const isChat = button.dataset.assistMode === 'chat';
+        button.setAttribute('aria-selected', String(isChat === muted));
+      });
+      root.classList.toggle('gaia-assist--chat-mode', muted);
+      syncAssistSendButton();
       if (muted) {
         stopSpeaking();
         // stopSpeaking() silences the OLD audio paths -- the <audio> element,
@@ -2268,6 +2277,10 @@
       if (voiceLive) {
         assistSessionBusy = false;
         try { realtimeVoice.stop(); } catch (_) {}
+        // Stopping the voice IS choosing Chat, so the switch says so. Otherwise
+        // it would still read "Talk" with nothing running, which is the kind of
+        // control-that-lies this switch exists to get rid of.
+        if (!muted) setMuted(true);
         setOpen(false);
         setAssistVoiceState('idle', REALTIME_STATUS_COPY.idle);
         return;
@@ -2442,14 +2455,18 @@
       const typing = promptInput.value.trim().length > 0;
       const live = root.classList.contains('gaia-assist--live-session');
       const paused = Boolean(listenToggle && listenToggle.classList.contains('is-paused'));
+      // In Chat the button never becomes a microphone. It used to, whenever the
+      // box was empty, which is a sixth thing that starts the voice and the
+      // last place somebody who chose Chat would expect to find one.
+      const chatOnly = root.classList.contains('gaia-assist--chat-mode');
       let label = 'Send';
-      if (!typing) {
+      if (!typing && !chatOnly) {
         if (!live) label = 'Start voice conversation with Gaia';
         else label = paused ? 'Resume listening' : 'Pause listening';
       }
-      sendButton.dataset.mode = typing ? 'send' : 'voice';
-      sendButton.type = typing ? 'submit' : 'button';
-      sendButton.classList.toggle('is-live', !typing && live && !paused);
+      sendButton.dataset.mode = (typing || chatOnly) ? 'send' : 'voice';
+      sendButton.type = (typing || chatOnly) ? 'submit' : 'button';
+      sendButton.classList.toggle('is-live', !typing && !chatOnly && live && !paused);
       sendButton.setAttribute('aria-label', label);
       sendButton.setAttribute('title', label);
     }
@@ -3244,7 +3261,24 @@
     }
 
     bindAssistDock();
-    soundToggle?.addEventListener('click', () => setMuted(!muted));
+
+    // Talk and Chat each do the whole thing, so neither leaves the other half
+    // of the old behaviour behind: Chat stops the session and releases the
+    // microphone, Talk starts one. Picking the mode you are already in does
+    // nothing rather than toggling you out of it -- a segmented control that
+    // turns itself off on a second tap is the confusion this replaces.
+    modeButtons.forEach((button) => {
+      button.addEventListener('click', () => {
+        const wantChat = button.dataset.assistMode === 'chat';
+        if (wantChat) {
+          if (!muted) setMuted(true);
+          try { promptInput?.focus({ preventScroll: true }); } catch (_) { promptInput?.focus(); }
+          return;
+        }
+        if (muted) setMuted(false);
+        if (!realtimeVoice?.isActive?.()) void onAssistTap();
+      });
+    });
     window.addEventListener('gaia:open-assist', (event) => {
       unlockVoicePlayback();
       setOpen(true);

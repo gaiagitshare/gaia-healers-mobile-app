@@ -290,40 +290,96 @@ body.gaia-v2 .gaia-assist:not(.gaia-assist--minimized) .gaia-assist__status {
   line-height: 1.35;
 }
 
-/* ---------- 4. Sound ---------------------------------------------------- */
-/* No chevron: the only thing it could open is the hidden voice-settings
-   panel, and those settings do not reach the live Gemini voice people
-   actually hear, so it would be a control that changes nothing. */
-body.gaia-v2 .gaia-assist:not(.gaia-assist--minimized) .gaia-assist__sound-toggle {
-  min-width: 132px;
-  min-height: 48px;
-  margin: 8px auto 0;
-  padding: 0 20px;
-  gap: 10px;
-  border: 1px solid rgba(117, 240, 90, 0.3);
+/* ---------- 4. Talk / Chat switch --------------------------------------- */
+
+/* This replaced a "Sound on / Sound off" button. That button did work -- off
+   stopped the live session and released the microphone -- but it was wearing a
+   speaker icon, so nobody read it as "I would rather type", and it was one of
+   five controls that each did something different to the voice.
+
+   One control instead of five. The pill-with-aria-selected shape is the same
+   one .g-tabs and .g-energy-switcher use elsewhere in the app, so this reads
+   as a mode choice rather than as a new kind of button. */
+
+body.gaia-v2 .gaia-assist .gaia-assist__mode {
+  display: flex;
+  gap: 4px;
+  width: -moz-fit-content;
+  width: fit-content;
+  margin: 10px auto 0;
+  padding: 4px;
+  border: 1px solid var(--ga-border);
   border-radius: 999px;
-  background: rgba(16, 31, 24, 0.55);
-  box-shadow: 0 0 18px -6px rgba(117, 240, 90, 0.35);
-  color: var(--ga-text);
-  font-size: 15px;
-  font-weight: 500;
-  transition: border-color 0.18s ease, background 0.18s ease, box-shadow 0.18s ease;
+  background: rgba(5, 16, 11, 0.86);
+  -webkit-backdrop-filter: blur(18px) saturate(140%);
+  backdrop-filter: blur(18px) saturate(140%);
 }
-body.gaia-v2 .gaia-assist:not(.gaia-assist--minimized) .gaia-assist__sound-toggle .ph {
-  color: var(--ga-green);
-  font-size: 20px;
-}
-body.gaia-v2 .gaia-assist .gaia-assist__sound-toggle[aria-pressed="true"] {
-  border-color: var(--ga-border);
-  box-shadow: none;
+
+body.gaia-v2 .gaia-assist .gaia-assist__mode-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  /* 44px is the smallest comfortable touch target, and this is the control the
+     whole panel now hangs off. */
+  min-width: 104px;
+  min-height: 44px;
+  padding: 0 18px;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  background: transparent;
   color: var(--ga-text-2);
+  font-family: var(--g-font, inherit);
+  font-size: 15px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.18s ease, border-color 0.18s ease, color 0.18s ease, transform 0.16s ease;
+  -webkit-tap-highlight-color: transparent;
 }
-body.gaia-v2 .gaia-assist .gaia-assist__sound-toggle[aria-pressed="true"] .ph { color: var(--ga-muted); }
+
+body.gaia-v2 .gaia-assist .gaia-assist__mode-btn .ph {
+  color: currentColor;
+  font-size: 19px;
+}
+
+body.gaia-v2 .gaia-assist .gaia-assist__mode-btn[aria-selected="true"] {
+  border-color: rgba(117, 240, 90, 0.4);
+  background: rgba(117, 240, 90, 0.12);
+  color: var(--ga-green-hi);
+  box-shadow: 0 0 20px -8px rgba(117, 240, 90, 0.5);
+}
+
+body.gaia-v2 .gaia-assist .gaia-assist__mode-btn:active { transform: scale(0.97); }
+
 @media (hover: hover) {
-  body.gaia-v2 .gaia-assist .gaia-assist__sound-toggle:hover {
+  body.gaia-v2 .gaia-assist .gaia-assist__mode-btn:not([aria-selected="true"]):hover {
     border-color: var(--ga-border-strong);
-    background: rgba(24, 46, 34, 0.7);
+    color: var(--ga-text);
   }
+}
+
+/* Chat hides the things that only mean anything while talking, so there is no
+   second control arguing with the first.
+
+   The toolbar -- "Speak naturally" and "Pause listening" -- is already hidden
+   unless .gaia-assist--live-session, and choosing Chat ends the session, so
+   this mostly covers the instant between the two: without it, Pause listening
+   flashes on screen just as the voice is being switched off. The waveform has
+   no such rule and is always drawn, so for that this is the only thing hiding
+   it. */
+body.gaia-v2 .gaia-assist--chat-mode .gaia-assist__waveform,
+body.gaia-v2 .gaia-assist--chat-mode .gaia-assist__wave,
+body.gaia-v2 .gaia-assist--chat-mode .gaia-assist__toolbar {
+  display: none;
+}
+
+/* The orb stays: tapping it is still an unambiguous "I want to talk", and it
+   switches the mode back itself. Dimmed so it does not compete with the box. */
+body.gaia-v2 .gaia-assist--chat-mode .gaia-assist__aura { opacity: 0.62; }
+
+@media (prefers-reduced-motion: reduce) {
+  body.gaia-v2 .gaia-assist .gaia-assist__mode-btn { transition: none; }
+  body.gaia-v2 .gaia-assist .gaia-assist__mode-btn:active { transform: none; }
 }
 
 /* ---------- 5. Waveform ------------------------------------------------- */
@@ -405,11 +461,6 @@ body.gaia-v2 .gaia-assist:not(.gaia-assist--minimized) .gaia-assist__sheet:has(.
 body.gaia-v2 .gaia-assist:not(.gaia-assist--minimized) .gaia-assist__sheet:has(.gaia-assist__transcript > .gaia-assist__bubble) .gaia-assist__orb-ring--2 { inset: -14px; }
 body.gaia-v2 .gaia-assist:not(.gaia-assist--minimized) .gaia-assist__sheet:has(.gaia-assist__transcript > .gaia-assist__bubble) .gaia-assist__headline h2 { font-size: 24px; }
 body.gaia-v2 .gaia-assist:not(.gaia-assist--minimized) .gaia-assist__sheet:has(.gaia-assist__transcript > .gaia-assist__bubble) .gaia-assist__status { font-size: 15px; }
-body.gaia-v2 .gaia-assist:not(.gaia-assist--minimized) .gaia-assist__sheet:has(.gaia-assist__transcript > .gaia-assist__bubble) .gaia-assist__sound-toggle {
-  min-height: 44px;
-  margin-top: 4px;
-}
-
 /* ---------- Conversation ---------------------------------------------- */
 
 body.gaia-v2 .gaia-assist:not(.gaia-assist--minimized):not(.gaia-assist--welcome) .gaia-assist__transcript {

@@ -64,6 +64,44 @@ async function readMcp(ctx, tool, args = {}) {
   return unwrapMcp(await mcpCall(cfg, token, tool, args));
 }
 
+
+// ── shaping scan data ──────────────────────────────────────────────────────
+// get_customer_scan returns the client's WHOLE history: a hundred scans at about
+// sixteen kilobytes each, 1.6 MB in all, which is somewhere near four hundred
+// thousand tokens. Most of each scan is a raw JSON-RPC envelope under `data`
+// that carries no meaning at all. What a practitioner is actually asking about
+// is the newest reading and the handful of things furthest out of balance, so
+// that is what gets built here and nothing else travels.
+
+const TOP_N = 6;
+const round = (n, dp = 1) => (typeof n === 'number' && Number.isFinite(n)
+  ? Number(n.toFixed(dp)) : null);
+
+/** The few readings furthest out of balance, worst first. */
+function worstDisbalances(labeled = {}, limit = TOP_N) {
+  const rows = [];
+  for (const group of ['organs', 'meridians', 'systems']) {
+    for (const r of labeled[group] || []) {
+      if (typeof r?.disbalance === 'number') {
+        rows.push({ area: group.replace(/s$/, ''), name: r.name, disbalance: round(r.disbalance) });
+      }
+    }
+  }
+  return rows.sort((a, b) => b.disbalance - a.disbalance).slice(0, limit);
+}
+
+/** One scan, reduced to what somebody would actually say about it. */
+function slimScan(scan = {}) {
+  const l = scan.labeled || {};
+  return {
+    scanned_at: String(scan.scanned_at || '').slice(0, 10),
+    stress: round(l.stress, 2),
+    energy: round(l.energy),
+    chakras: (l.chakras || []).map((c) => ({ name: c.name, value: round(c.value, 2), alignment: round(c.align) })),
+    most_out_of_balance: worstDisbalances(l),
+  };
+}
+
 export const TOOLS = [
   // —— available to everyone, performed by the page ——
   //
@@ -305,6 +343,182 @@ export const TOOLS = [
       };
     },
   },
+
+  // —— the scan tools ——
+  //
+  // These are the slow ones. Measured against their staging server: nine to
+  // twelve seconds, against about 470 ms for everything above, because their
+  // side goes out to Bio-Well for them. The descriptions say so, so the model
+  // tells the practitioner it is fetching rather than leaving a silence in the
+  // middle of a conversation, and `slow` is published to the page so it can show
+  // that it is working.
+  {
+    name: 'practitioner_client_latest_scan',
+    role: 'practitioner',
+    where: 'server',
+    slow: true,
+    mcp: 'get_customer_scan',
+    description: "The client's most recent Bio-Well reading: stress, energy, the seven chakras, and the areas furthest out of balance. SLOW — takes about ten seconds, so tell the practitioner you are fetching it before you call it. Needs a client id.",
+    parameters: {
+      type: 'object',
+      properties: { clientId: { type: 'string', description: 'The client id.' } },
+      required: ['clientId'],
+    },
+    async handler(args, ctx) {
+      const clientId = requireString(args, 'clientId');
+      const out = await readMcp(ctx, 'get_customer_scan', { customerId: clientId });
+      const scans = out?.scans || [];
+      if (!scans.length) return { found: false, reason: 'No Bio-Well scans are on file for this client.' };
+      // Newest first, whatever order their history arrives in.
+      const newest = [...scans].sort((a, b) =>
+        String(b.scanned_at || '').localeCompare(String(a.scanned_at || '')))[0];
+      return {
+        found: true,
+        client: { id: String(out?.customer?.id ?? clientId), name: out?.customer?.name || '' },
+        scans_on_file: scans.length,
+        latest: slimScan(newest),
+      };
+    },
+  },
+  {
+    name: 'practitioner_client_trend',
+    role: 'practitioner',
+    where: 'server',
+    slow: true,
+    mcp: 'get_scan_trend',
+    description: "How a client has changed over their scan history: the range and latest value for energy and stress, and which areas are worsening or improving, with anything automatically flagged as a concern. Use for 'how has she been', 'is he improving', 'what should I watch'. SLOW — about ten seconds, so say you are looking it up first. Needs a client id.",
+    parameters: {
+      type: 'object',
+      properties: { clientId: { type: 'string', description: 'The client id.' } },
+      required: ['clientId'],
+    },
+    async handler(args, ctx) {
+      const clientId = requireString(args, 'clientId');
+      // summary_only drops the bulky per-scan series their docs warn about.
+      const out = await readMcp(ctx, 'get_scan_trend', { customerId: clientId, summary_only: true });
+      const band = (b) => (b ? { lowest: round(b.min), highest: round(b.max),
+                                 average: round(b.avg), latest: round(b.latest) } : null);
+      const trend = (t) => ({
+        area: String(t.category || '').replace(/s$/, ''),
+        name: t.name,
+        direction: t.direction,
+        change: round(t.delta),
+        latest: round(t.latest),
+        flagged: Boolean(t.flagged),
+        reason: t.flagReason || '',
+      });
+      const flags = (out?.flags || []).map(trend);
+      // The whole organTrends array is 39 entries and most of them are quiet.
+      // Only the movers are worth a sentence.
+      const movers = (out?.organTrends || [])
+        .filter((t) => !t.flagged && Math.abs(Number(t.delta) || 0) >= 5)
+        .sort((a, b) => Math.abs(b.delta) - Math.abs(a.delta))
+        .slice(0, TOP_N).map(trend);
+      return {
+        client: { id: String(out?.customer?.id ?? clientId), name: out?.customer?.name || '' },
+        scans_on_file: out?.scanCount ?? 0,
+        energy: band(out?.summary?.energy),
+        stress: band(out?.summary?.stress),
+        flagged: flags,
+        other_movements: movers,
+      };
+    },
+  },
+  {
+    name: 'practitioner_compare_sessions',
+    role: 'practitioner',
+    where: 'server',
+    slow: true,
+    mcp: 'compare_protocol_before_after',
+    description: "Compare a client's scans before and after a session or protocol: how stress and energy moved, and which areas changed most. Use for 'what changed since last time' or 'did the protocol help'. SLOW — about ten seconds, so say you are checking first. Needs a client id.",
+    parameters: {
+      type: 'object',
+      properties: {
+        clientId: { type: 'string', description: 'The client id.' },
+        limit: { type: 'number', description: 'How many before/after pairs to compare. Defaults to 2, most recent first.' },
+      },
+      required: ['clientId'],
+    },
+    async handler(args, ctx) {
+      const clientId = requireString(args, 'clientId');
+      const want = Math.min(Math.max(Number(args?.limit) || 2, 1), 5);
+      const out = await readMcp(ctx, 'compare_protocol_before_after', { customerId: clientId, limit: want });
+      const pairs = (out?.comparisons || []).slice(0, want).map((c) => ({
+        basis: c.source === 'time' ? 'consecutive sessions' : (c.protocol || 'a labelled protocol'),
+        from: String(c.before?.date || '').slice(0, 10),
+        to: String(c.after?.date || '').slice(0, 10),
+        note: c.before?.comment || c.after?.comment || '',
+        stress_change: round(c.deltas?.stress, 2),
+        energy_change: round(c.deltas?.energy, 2),
+        biggest_changes: (c.deltas?.disbalance || []).slice(0, TOP_N).map((d) => ({
+          area: String(d.category || '').replace(/s$/, ''),
+          name: d.name, before: round(d.before), after: round(d.after), change: round(d.delta),
+        })),
+      }));
+      if (!pairs.length) return { found: false, reason: 'There are not two comparable scans on file for this client yet.' };
+      return { found: true, client: { id: String(out?.customer?.id ?? clientId), name: out?.customer?.name || '' },
+               comparisons: pairs };
+    },
+  },
+
+  // —— practice-wide, and fast ——
+  {
+    name: 'practitioner_flagged_clients',
+    role: 'practitioner',
+    where: 'server',
+    mcp: 'list_flagged_customers',
+    description: "Which of the practitioner's clients have concerning readings right now — raised disbalance, rising stress or falling energy. Use for 'who needs attention' or 'anyone I should look at'. Fast.",
+    parameters: {
+      type: 'object',
+      properties: { minSeverity: { type: 'string', description: 'Optional: "elevated" or "high".', enum: ['elevated', 'high'] } },
+    },
+    async handler(args, ctx) {
+      const sev = args?.minSeverity;
+      const out = await readMcp(ctx, 'list_flagged_customers',
+        sev === 'elevated' || sev === 'high' ? { minSeverity: sev } : {});
+      return {
+        count: out?.count ?? 0,
+        clients: (out?.flaggedCustomers || []).map((f) => ({
+          id: String(f.customer?.id ?? ''),
+          name: f.customer?.name || '',
+          last_scan: String(f.latestScan?.scanned_at || '').slice(0, 10),
+          concerns: (f.flags || []).slice(0, TOP_N).map((x) => ({
+            area: String(x.category || '').replace(/s$/, ''),
+            name: x.name, value: round(x.value), severity: x.severity,
+          })),
+        })),
+      };
+    },
+  },
+  {
+    name: 'practitioner_follow_ups',
+    role: 'practitioner',
+    where: 'server',
+    mcp: 'suggest_follow_ups',
+    description: "Which clients are due a follow-up, based on their own flagged readings and how often they usually come in. Use for 'who should I book back in' or 'who am I due to see'. Fast. No arguments.",
+    parameters: { type: 'object', properties: {} },
+    async handler(_args, ctx) {
+      const out = await readMcp(ctx, 'suggest_follow_ups');
+      return {
+        count: out?.count ?? 0,
+        suggestions: (out?.suggestions || []).map((sg) => {
+          // Their flags repeat the same `type` once per affected area, so the
+          // reason is the AREAS, not the type said three times.
+          const concerns = (sg.flags || []).slice(0, TOP_N)
+            .map((f) => `${f.name} (${f.severity || 'flagged'})`).filter(Boolean);
+          const w = sg.suggestedFollowUp;
+          return {
+            id: String(sg.customer?.id ?? ''),
+            name: sg.customer?.name || '',
+            concerns,
+            last_seen: sg.lastAppointment ? String(sg.lastAppointment).slice(0, 10) : 'no appointment on record',
+            usual_gap_days: sg.typicalCadenceDays ?? null,
+            suggested_window: w?.start ? `${String(w.start).slice(0, 10)} to ${String(w.end || '').slice(0, 10)}` : '',
+          };
+        }),
+      };
+    },
+  },
 ];
 
 const BY_NAME = new Map(TOOLS.map((t) => [t.name, t]));
@@ -333,6 +547,11 @@ export function toolDeclarationsFor(ctx) {
 }
 
 /** Names the PAGE is expected to execute; everything else comes back here. */
+/** Tools that take many seconds, so the page can say so rather than look stuck. */
+export function slowToolNames(ctx) {
+  return TOOLS.filter((t) => allowed(t, ctx) && t.slow).map((t) => t.name);
+}
+
 export function clientToolNames(ctx) {
   return TOOLS.filter((t) => allowed(t, ctx) && t.where === 'client').map((t) => t.name);
 }

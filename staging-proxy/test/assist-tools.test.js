@@ -20,7 +20,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 
 const t = await import('../assist-tools.js');
-const { TOOLS, allowed, toolDeclarationsFor, clientToolNames, runTool } = t;
+const { TOOLS, allowed, toolDeclarationsFor, clientToolNames, slowToolNames, runTool } = t;
 
 const MEMBER = { contactId: 'C-member', isPractitioner: false };
 const PRACTITIONER = { contactId: 'C-prac', isPractitioner: true };
@@ -277,4 +277,83 @@ test('a fetched result reaches the model as data, not as "Done."', () => {
   const block = orb.slice(i, i + 700);
   assert.ok(/result\.data !== undefined/.test(block),
     'a tool that fetched something must return the something, or the model has nothing to answer from');
+});
+
+// ── the scan tools, where the shaping is the whole point ───────────────────
+
+test('the slow tools are named as slow, and the fast ones are not', () => {
+  const slow = slowToolNames(PRACTITIONER);
+  assert.deepEqual(slow.sort(), [
+    'practitioner_client_latest_scan', 'practitioner_client_trend', 'practitioner_compare_sessions',
+  ], 'these three go out to Bio-Well and take about ten seconds');
+  assert.ok(!slow.includes('practitioner_flagged_clients'), 'that one answers in under a second');
+  assert.deepEqual(slowToolNames(MEMBER), [], 'a member has no slow tools because it has none of these');
+});
+
+test('a slow tool tells the model to say so before calling it', () => {
+  for (const name of slowToolNames(PRACTITIONER)) {
+    const d = toolDeclarationsFor(PRACTITIONER).find((x) => x.name === name);
+    assert.match(d.description, /SLOW/,
+      `${name} must warn the model, or it leaves a ten-second silence mid-conversation`);
+  }
+});
+
+test('the scan tools take a client id and nothing resembling an identity', () => {
+  for (const name of ['practitioner_client_latest_scan', 'practitioner_client_trend', 'practitioner_compare_sessions']) {
+    const tool = TOOLS.find((x) => x.name === name);
+    const keys = Object.keys(tool.parameters.properties);
+    assert.ok(keys.includes('clientId'), `${name} needs a client id`);
+    for (const k of keys) {
+      assert.ok(!/practitioner|contact|token|member/i.test(k), `${name} takes "${k}"`);
+    }
+  }
+});
+
+test('a missing client id is refused before any ten-second call is made', async () => {
+  for (const name of ['practitioner_client_latest_scan', 'practitioner_client_trend', 'practitioner_compare_sessions']) {
+    const started = Date.now();
+    await assert.rejects(() => runTool(name, {}, PRACTITIONER), (e) => e.code === 'bad_args', name);
+    assert.ok(Date.now() - started < 200, `${name} went to the network before validating its arguments`);
+  }
+});
+
+test('the comparison limit is bounded, whatever the model asks for', () => {
+  // Not a security matter -- a limit of 500 would simply make a slow tool
+  // slower and return more than anyone reads.
+  const src = fs.readFileSync(new URL('../assist-tools.js', import.meta.url), 'utf8');
+  const i = src.indexOf("name: 'practitioner_compare_sessions'");
+  const block = src.slice(i, i + 1400);
+  assert.ok(/Math\.min\(Math\.max\(Number\(args\?\.limit\)/.test(block),
+    'the limit must be clamped at both ends');
+});
+
+test('scan shaping drops the raw envelope and keeps what is meaningful', () => {
+  // get_customer_scan returns 100 scans at ~16 KB each: 1.6 MB, of which most is
+  // a JSON-RPC envelope under `data` that means nothing to anybody.
+  const src = fs.readFileSync(new URL('../assist-tools.js', import.meta.url), 'utf8');
+  const i = src.indexOf('function slimScan');
+  const block = src.slice(i, i + 700);
+  assert.ok(block.includes('scan.labeled'), 'the labelled readings are the signal');
+  assert.ok(!/scan\.data/.test(block), 'the raw envelope must never be forwarded');
+  assert.ok(block.includes('most_out_of_balance'), 'the point is which areas are furthest out');
+});
+
+test('only the worst few readings travel, not all fifty-one', () => {
+  const src = fs.readFileSync(new URL('../assist-tools.js', import.meta.url), 'utf8');
+  const i = src.indexOf('function worstDisbalances');
+  const block = src.slice(i, i + 600);
+  assert.ok(/organs/.test(block) && /meridians/.test(block) && /systems/.test(block),
+    'all three groups are candidates');
+  assert.ok(/sort\(/.test(block) && /slice\(0, limit\)/.test(block),
+    'they must be ranked and cut, or 51 readings reach the model');
+});
+
+test('the page is told which tools are slow', () => {
+  const src = fs.readFileSync(new URL('../server.js', import.meta.url), 'utf8');
+  assert.ok(src.includes('slowTools: slowToolNames(toolCtx)'),
+    'without this the orb cannot show it is working through a ten-second wait');
+  const orb = readOrb();
+  if (orb === null) return;
+  assert.ok(/serverSlowTools/.test(orb), 'the page must read it');
+  assert.ok(/serverSlowTools\.includes\(name\)/.test(orb), 'and act on it');
 });

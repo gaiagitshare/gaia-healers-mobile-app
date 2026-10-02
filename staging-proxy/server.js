@@ -31,7 +31,7 @@ import {
 } from './membership/oauth-core.js';
 import { classifyMembershipEvent, membershipFromEvent } from './membership/events.js';
 import { attachQwenVoiceRelay, qwenRouting, issueQwenTicket, qwenVoiceConfig, voiceBootLine } from './qwen-voice-relay.js';
-import { toolDeclarationsFor, clientToolNames, runTool } from './assist-tools.js';
+import { toolDeclarationsFor, clientToolNames, slowToolNames, runTool } from './assist-tools.js';
 import { practitionersConfig, makePkce, authorizeUrl, rememberFlow, claimFlow,
          exchangeCode, resolveProfile, saveToken, forgetToken, connectionStatus } from './practitioners-oauth.js';
 import { allowSpend, callerKey, guardSubject, spendKindFor, ASSIST_MAX_PROMPT_CHARS, ASSIST_MAX_TTS_CHARS } from './assist-guard.js';
@@ -4452,6 +4452,7 @@ async function assistLiveToken(req, res, origin, url) {
       model: qcfg.model,
       voice: qcfg.voice,
       clientTools: clientToolNames(toolCtx),
+      slowTools: slowToolNames(toolCtx),
       toolEndpoint: '/api/assist/tool',
       personalized: ['member', 'practitioner', 'onboarding'].includes(assistGuide.sessionState(memberContext)),
       maxSessionSeconds: qcfg.maxSessionSeconds,

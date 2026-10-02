@@ -2993,7 +2993,27 @@ const onboardingStore = createOnboardingStore({
   invalidate: cid => _memberAiCtxCache.delete(cid),
 });
 
+// Contacts GHL has confirmed complete, kept on disk so a GHL outage cannot lock
+// finished members out (member-onboarding-guard.js). Only ever added to.
+const ONBOARDING_COMPLETE_FILE = path.join(process.cwd(), 'data', 'onboarding-complete.json');
+const onboardingCompleted = (() => {
+  let ids = null;
+  const load = () => {
+    if (ids) return ids;
+    try { ids = new Set(JSON.parse(fs.readFileSync(ONBOARDING_COMPLETE_FILE, 'utf8')).contacts || []); } catch { ids = new Set(); }
+    return ids;
+  };
+  return {
+    has: (id) => load().has(id),
+    add: (id) => {
+      if (load().has(id)) return;
+      ids.add(id);
+      try { writeJsonAtomic(ONBOARDING_COMPLETE_FILE, { updatedAt: new Date().toISOString(), contacts: [...ids] }); } catch (_) { /* fallback only */ }
+    },
+  };
+})();
 const memberOnboardingGuard = createMemberOnboardingGuard({
+  completed: onboardingCompleted,
   store: onboardingStore,
   key: req => crypto.createHash('sha256').update(String(req.headers.cookie || '')).digest('hex'),
   resolveContact: async member => {

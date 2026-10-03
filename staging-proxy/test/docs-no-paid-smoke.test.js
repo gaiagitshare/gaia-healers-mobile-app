@@ -21,7 +21,7 @@ const LABEL = /PAID LIVE TEST\s*[—-]+\s*OWNER APPROVAL REQUIRED/;
 
 // A runnable line that would send a prompt or open a model session.
 const PAID_ENDPOINT = /api\/assist\/(chat(\/stream)?|voice|tts|transcribe|tool)\b/;
-const PAID_SCRIPT = /(assist-quality-probe|assist-guidance-probe|voice-latency-probe|determinism-harness|assist-health|assist-live-check)\.mjs/;
+const PAID_SCRIPT = /(assist-quality-probe|assist-guidance-probe|voice-latency-probe|determinism-harness|assist-health|assist-live-check|qwen-access-check)\.mjs/;
 const RUNNABLE = /^\s*(\$ )?(curl|node|npm|npx|bash|sh|wget|http)\b|^\s*-d\s|^\s*--data/;
 
 function markdownFiles(root) {

@@ -23,6 +23,12 @@
  *   node tools/assist-usage-report.mjs --json           # machine-readable
  *   node tools/assist-usage-report.mjs --yesterday --write-daily
  *                                   # also saves data/usage-reports/YYYY-MM-DD.txt
+ *   node tools/assist-usage-report.mjs --alerts other.json
+ *                                   # the incident ledger to summarise (default data/system-alerts.json)
+ *
+ * The report ends with the open SYSTEM ALERTS from the proxy's incident ledger
+ * (counts and delivery counters only -- never an incident's evidence text), so
+ * one daily file says both what Assist cost and what is still burning.
  */
 import dns from 'node:dns';
 dns.lookup = (host, opts, cb) => { const e = new Error('usage report is offline: refused ' + host); e.code = 'ENOTFOUND'; (typeof opts === 'function' ? opts : cb)(e); };
@@ -138,6 +144,38 @@ const report = {
   },
 };
 
+// ── system alerts (offline: the ledger the proxy's sweep maintains) ───────
+// Keys, severities and counters only. `evidence`, `title`, `why` and
+// `affected` can name a member and never enter the report.
+function systemAlerts() {
+  const file = value('--alerts') || path.join(root, 'data', 'system-alerts.json');
+  const rel = path.isAbsolute(file) && file.startsWith(root) ? path.relative(root, file) : file;
+  if (!fs.existsSync(file)) return { file: rel, available: false, reason: 'no incident ledger on file' };
+  let ledger;
+  try { ledger = JSON.parse(fs.readFileSync(file, 'utf8')); } catch (e) { return { file: rel, available: false, reason: 'unreadable: ' + String(e.message || e).slice(0, 80) }; }
+  const incidents = Array.isArray(ledger?.incidents) ? ledger.incidents : [];
+  const tally = (state) => incidents.filter((i) => (i?.state || 'open') === state).reduce((m, i) => { const k = i?.severity || 'unknown'; m[k] = (m[k] || 0) + 1; return m; }, {});
+  const now = Date.now();
+  const open = incidents.filter((i) => (i?.state || 'open') !== 'resolved').map((i) => {
+    const n = i?.notified || {};
+    const first = Date.parse(i?.firstDetectedAt || '') || null;
+    return {
+      key: String(i?.key || ''), subsystem: String(i?.subsystem || ''), severity: String(i?.severity || 'unknown'),
+      occurrences: Number(i?.occurrences) || 0,
+      first_detected: i?.firstDetectedAt || null, last_detected: i?.lastDetectedAt || null,
+      age_days: first ? Math.round((now - first) / 864000) / 100 : null,
+      delivery: { attempts: Number(n.attempts) || 0, sent_at: n.sentAt || null, last_error: n.lastError ? String(n.lastError).slice(0, 60) : null },
+    };
+  }).sort((a, b) => (a.severity === 'critical' ? 0 : 1) - (b.severity === 'critical' ? 0 : 1) || b.occurrences - a.occurrences);
+  const undelivered = open.filter((i) => i.delivery.attempts > 0 && !i.delivery.sent_at);
+  return {
+    file: rel, available: true, updated_at: ledger?.updatedAt || null,
+    open: tally('open'), resolved: tally('resolved'), open_incidents: open,
+    delivery_failing: undelivered.length ? `${undelivered.length} open incident(s) have delivery attempts but were never sent (${[...new Set(undelivered.map((i) => i.delivery.last_error || 'no error recorded'))].join('; ')}). The sweep retries every minute; set ALERT_CONTACT_ID or resolve them.` : null,
+  };
+}
+report.system_alerts = systemAlerts();
+
 // ── print ─────────────────────────────────────────────────────────────────
 function fmt(n) { return n == null ? 'unavailable' : (typeof n === 'number' ? n.toLocaleString('en-US') : String(n)); }
 function renderBlock(name, b) {
@@ -156,13 +194,28 @@ function renderText() {
   L.push(`GAIA ASSIST USAGE — ${report.window}`);
   L.push(`generated ${report.generatedAt}   files: ${report.files.join(', ') || '(none)'}`);
   L.push(`records on file ${fmt(report.records_on_file)}, in window ${fmt(report.records_in_window)}, malformed lines ${fmt(report.malformed_lines)}` + (report.first ? `   first ${report.first}  last ${report.last}` : ''));
-  if (!report.records_in_window) { L.push('\nNo records in this window. (Zero real records is a valid result; nothing is estimated from nothing.)'); return L.join('\n'); }
+  if (!report.records_in_window) { L.push('\nNo records in this window. (Zero real records is a valid result; nothing is estimated from nothing.)'); L.push(''); L.push(renderAlerts(report.system_alerts)); return L.join('\n'); }
   L.push(''); L.push(renderBlock('TOTAL', report.total));
   for (const [title, groups] of [['BY CHANNEL', report.by_channel], ['BY PROVIDER / MODEL', report.by_provider_model], ['BY SESSION STATE', report.by_state]]) {
     L.push(''); L.push(`== ${title} ==`);
     for (const [k, b] of Object.entries(groups)) { L.push(renderBlock(k, b)); }
   }
   L.push(''); L.push('REPORTED = provider-reported counts. ESTIMATED = computed from counts and assist-pricing.js (never exact). UNAVAILABLE = not reported / no price on file.');
+  L.push(''); L.push(renderAlerts(report.system_alerts));
+  return L.join('\n');
+}
+function renderAlerts(a) {
+  const L = [];
+  L.push(`== SYSTEM ALERTS (offline, ${a.file}) ==`);
+  if (!a.available) { L.push(`  UNAVAILABLE: ${a.reason}`); return L.join('\n'); }
+  const tally = (t) => Object.entries(t).sort().map(([k, v]) => `${fmt(v)} ${k}`).join(', ') || 'none';
+  L.push(`  ledger updated ${a.updated_at || 'unknown'}   open: ${tally(a.open)}   resolved: ${tally(a.resolved)}`);
+  for (const i of a.open_incidents) {
+    const d = i.delivery;
+    L.push(`  ${i.severity.padEnd(8)} ${i.key}  [${i.subsystem}]  seen ${fmt(i.occurrences)}x since ${(i.first_detected || '?').slice(0, 10)} (${i.age_days == null ? '?' : i.age_days + ' d'}), last ${(i.last_detected || '?').slice(0, 16)}Z;  delivery attempts ${fmt(d.attempts)}, ${d.sent_at ? 'sent ' + d.sent_at.slice(0, 16) + 'Z' : 'never sent' + (d.last_error ? ' (' + d.last_error + ')' : '')}`);
+  }
+  if (!a.open_incidents.length) L.push('  no open incidents');
+  if (a.delivery_failing) L.push(`  NOTE: ${a.delivery_failing}`);
   return L.join('\n');
 }
 

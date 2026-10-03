@@ -1,0 +1,14 @@
+[Unit]
+Description=Gaia Assist: summarise yesterday's usage accounting log into a local report file
+Documentation=file:///root/gaia-staging-proxy/tools/assist-usage-report.mjs
+
+[Service]
+Type=oneshot
+User=root
+WorkingDirectory=/root/gaia-staging-proxy
+# Read-only over local files. Makes no network request of any kind: the report
+# tool refuses to resolve any host, and the unit forbids it anyway.
+ExecStart=/usr/bin/node /root/gaia-staging-proxy/tools/assist-usage-report.mjs --yesterday --write-daily
+IPAddressDeny=any
+PrivateNetwork=true
+NoNewPrivileges=true

@@ -26,7 +26,7 @@ import './assist-guide.js';
  */
 import crypto from 'node:crypto';
 import { WebSocket, WebSocketServer } from 'ws';
-import { normalizeUsage, recordUsage, sumUsage, emptyUsage } from './assist-usage.js';
+import { normalizeUsage, recordUsage, sumUsage, emptyUsage, errorCategory } from './assist-usage.js';
 
 const RELAY_PATH = '/api/assist/voice/qwen';
 
@@ -445,10 +445,14 @@ function runSession(browser, grant, ip) {
       firstAudioMs: firstAudioAt || null, inputTokens: usage.input, outputTokens: usage.output,
       cachedInputTokens: reported.cachedInput, audioInputTokens: reported.audioIn,
     });
-    if (turns > 0 || reported.input != null) {
-      recordUsage({ channel: 'voice', provider: 'qwen', model: cfg.model, state: grant.state,
-        turns, seconds: Math.round((Date.now() - startedAt) / 1000), usage: reported });
-    }
+    // Every session that reached the upstream is accounted for, including one
+    // that failed before setup: a refused session may still bill, and knowing
+    // how many fail -- and why, by category -- is the point. `why` is one of
+    // ours; the provider's message is never stored.
+    const outcome = why.startsWith('failed:') ? 'failed' : (turns > 0 ? 'ok' : 'ended');
+    const error = outcome === 'ok' ? null : errorCategory(why.replace(/^(failed|handover):/, ''));
+    recordUsage({ channel: 'voice', provider: 'qwen', model: cfg.model, state: grant.state,
+      turns, seconds: Math.round((Date.now() - startedAt) / 1000), usage: reported, outcome, error });
   };
 
   // Hand the conversation to Gemini: the client reconnects there and carries

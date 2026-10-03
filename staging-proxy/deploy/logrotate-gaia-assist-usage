@@ -1,0 +1,20 @@
+# Gaia Assist usage accounting log. Installed at /etc/logrotate.d/gaia-assist-usage.
+#
+# One JSON line per text reply or voice session, counts only (no content), so
+# it is small -- about 300 bytes a record -- but it is appended to for ever.
+# Weekly rotation keeping a year of history is plenty for trend analysis and
+# bounds it at a few tens of megabytes.
+#
+# Plain rename rotation, NOT copytruncate: the proxy opens the file for every
+# append (fs.appendFileSync), so after a rename the next record simply creates
+# the new file and nothing is lost in between. tools/assist-usage-report.mjs
+# reads the rotated .gz files as well as the live one.
+/root/gaia-staging-proxy/data/assist-usage.jsonl {
+    weekly
+    rotate 52
+    compress
+    delaycompress
+    missingok
+    notifempty
+    create 0600 root root
+}

@@ -322,6 +322,17 @@ curl -fsS \
   https://api.gaiahealers.app/api/assist/chat
 ```
 
+Has Qwen stopped refusing the account (`AccessDenied.Unpurchased`, 3 Oct 2026)?
+One realtime session, one `session.update`, no audio, ~0 tokens; exit 0 =
+access OK, 3 = still refused, 4 = no answer. Guarded to one call; run it only
+when the owner asks.
+
+```bash
+# PAID LIVE TEST — OWNER APPROVAL REQUIRED (one session, ~0 tokens)
+node /root/gaia-staging-proxy/tools/qwen-access-check.mjs --dry-run
+node /root/gaia-staging-proxy/tools/qwen-access-check.mjs
+```
+
 ### Usage accounting
 
 Every text reply, failed attempt and voice session is recorded, counts only,

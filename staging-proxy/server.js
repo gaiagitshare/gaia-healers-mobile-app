@@ -5688,6 +5688,18 @@ async function aiComplete(system, user, { maxTokens = 160, temperature = 0.6 } =
   return '';
 }
 
+// Text chat is two or three sentences of navigation, and on 3 Oct 2026 one
+// real reply spent 806 thinking tokens on 70 reply tokens -- 56% of its cost
+// and most of its 5.6 s. Gemini 3 Flash cannot switch thinking off; "low" is
+// the approved level. GEMINI_TEXT_THINKING_LEVEL=default restores the model's
+// own choice (a one-line revert); voice is Qwen and does not pass through here.
+export function geminiTextGenerationConfig(isVoice) {
+  const config = { temperature: 0.35, maxOutputTokens: isVoice ? 1024 : 2048 };
+  const level = String(process.env.GEMINI_TEXT_THINKING_LEVEL || 'low').trim().toLowerCase();
+  if (['minimal', 'low', 'medium', 'high'].includes(level)) config.thinkingConfig = { thinkingLevel: level };
+  return config;
+}
+
 async function callGeminiChat(prompt, context = {}) {
   const key = geminiApiKey();
   if (!key) return { skipped: true, reason: 'missing-api-key' };
@@ -5700,7 +5712,7 @@ async function callGeminiChat(prompt, context = {}) {
     body: JSON.stringify({
       systemInstruction: { parts: [{ text: assistSystemPrompt(context.memberContext) }] },
       contents: [{ role: 'user', parts: [{ text: assistUserPrompt(prompt, context) }] }],
-      generationConfig: { temperature: 0.35, maxOutputTokens: isVoice ? 1024 : 2048 },
+      generationConfig: geminiTextGenerationConfig(isVoice),
     }),
   });
   if (!res.ok) { const d = await res.text(); throw new Error(`gemini chat request failed with ${res.status}: ${d.slice(0, 280)}`); }
@@ -5777,7 +5789,7 @@ async function streamGeminiChat(prompt, context = {}, onDelta = () => {}) {
       body: JSON.stringify({
         systemInstruction: { parts: [{ text: assistSystemPrompt(context.memberContext) }] },
         contents: [{ role: 'user', parts: [{ text: assistUserPrompt(prompt, context) }] }],
-        generationConfig: { temperature: 0.35, maxOutputTokens: isVoice ? 1024 : 2048 },
+        generationConfig: geminiTextGenerationConfig(isVoice),
       }),
     });
   if (!response.ok || !response.body) {

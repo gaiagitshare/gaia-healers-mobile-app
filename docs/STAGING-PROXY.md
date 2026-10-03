@@ -276,9 +276,45 @@ Nginx config: /etc/nginx/sites-available/api.gaiahealers.app
 
 ## Assistant Smoke Tests
 
+These checks exercise routing, configuration and the deployed code **without
+calling any model provider**, so they are free to run as often as you like
+(see the paid-API rule in [AGENTS.md](../AGENTS.md)):
+
 ```bash
+# the service is up
 curl -fsS https://api.gaiahealers.app/health
 
+# the chat routes are wired: an empty prompt is rejected BEFORE any provider is called
+curl -sS -o /dev/null -w '%{http_code}\n' -X POST \
+  -H 'Origin: https://gaiahealers.app' -H 'Content-Type: application/json' \
+  -d '{"prompt":""}' https://api.gaiahealers.app/api/assist/chat          # expect 400
+
+# live-facts lookup answers from local catalogues only (no model)
+curl -fsS -X POST -H 'Content-Type: application/json' \
+  -d '{"query":"how much is the bio-well"}' https://api.gaiahealers.app/api/assist/lookup
+
+# voice routing is wired: a ticket is issued without opening a Qwen session
+curl -fsS -X POST -H 'Origin: https://gaiahealers.app' \
+  'https://api.gaiahealers.app/api/assist/voice/token?view=today'           # expect ok:true, provider:"qwen"
+```
+
+On the server, the provider health table and the offline usage report are
+also provider-free in their default forms:
+
+```bash
+node /root/gaia-staging-proxy/tools/assist-health.mjs --dry-run
+node /root/gaia-staging-proxy/tools/assist-usage-report.mjs --last 7
+```
+
+### PAID LIVE TEST — OWNER APPROVAL REQUIRED
+
+The request below makes a real model call and is billed. It is the only way
+to see which provider actually answers (`provider`, `model`, `attempts` in
+the response). Under the project rule it needs the account owner's explicit
+approval first; one request is enough, and it must not be scripted or looped.
+
+```bash
+# PAID LIVE TEST — OWNER APPROVAL REQUIRED (one request, billed)
 curl -fsS \
   -H 'Origin: https://gaiagitshare.github.io' \
   -H 'Content-Type: application/json' \
@@ -286,7 +322,18 @@ curl -fsS \
   https://api.gaiahealers.app/api/assist/chat
 ```
 
-The response includes `provider`, `model`, and `attempts` so staging can confirm whether Groq, OpenRouter, OpenAI, or the local fallback answered.
+### Usage accounting
+
+Every text reply, failed attempt and voice session is recorded, counts only,
+in `/root/gaia-staging-proxy/data/assist-usage.jsonl` (0600; rotated weekly
+by `/etc/logrotate.d/gaia-assist-usage`, 52 kept, `.gz` beside it). Fields:
+`at channel provider model state turns seconds outcome error usageReported
+attempt input cachedInput output reasoning textIn audioIn textOut audioOut
+estCostUsd priceList`. No prompt, reply, name, email, contact id or IP is ever
+written; `error` is a category, never a message. Prices live in
+`assist-pricing.js` (dated, sourced from the provider); `estCostUsd` is an
+estimate recomputable from the raw counts. A daily summary lands in
+`data/usage-reports/YYYY-MM-DD.txt`.
 
 For spoken replies, the UI logs:
 

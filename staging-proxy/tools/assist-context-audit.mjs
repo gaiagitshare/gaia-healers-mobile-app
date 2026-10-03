@@ -148,6 +148,56 @@ for (const [role, r] of Object.entries(ROLES)) {
 const prefix = sharedPrefix(Object.values(instructionsByRole));
 report.sharedStaticPrefix = { chars: prefix, tokens: tok('x'.repeat(prefix)) };
 
+// ── cache friendliness: how long is the identical prefix between two turns? ──
+//
+// A provider that caches a shared prefix (Gemini implicit caching; Qwen for
+// some models -- unverified for realtime) re-bills only what follows the first
+// byte that differs. So what matters is WHERE the first difference sits and
+// WHAT causes it. Measured for the pairs that occur in practice.
+function firstDifference(a, b) {
+  const n = sharedPrefix([a, b]);
+  const lineStart = a.lastIndexOf('\n', n) + 1;
+  const line = a.slice(lineStart, a.indexOf('\n', n) < 0 ? undefined : a.indexOf('\n', n));
+  return { identicalTokens: tok('x'.repeat(n)), identicalPct: Math.round((n / Math.max(a.length, b.length)) * 100), firstDifferentBlock: line.slice(0, 60) };
+}
+const memberB = memberContext('member').replace('Sara Keshavarz', 'Daniel Osei').replace('"Sara"', '"Daniel"').replace('Gold member', 'Silver member');
+const build = (ctx, screen = 'today') => srv.buildGaiaLiveInstructions({ view: screen, memberContext: ctx, appContext: { screen } });
+report.cachePrefix = {
+  'same member, next turn (nothing changed)': firstDifference(build(ROLES.member.context), build(ROLES.member.context)),
+  'same member, different screen': firstDifference(build(ROLES.member.context, 'today'), build(ROLES.member.context, 'academy')),
+  'two different members': firstDifference(build(ROLES.member.context), build(memberB)),
+  'member vs practitioner': firstDifference(build(ROLES.member.context), build(ROLES.practitioner.context)),
+  'visitor vs onboarding': firstDifference(build(''), build(ONBOARDING)),
+  'visitor vs member': firstDifference(build(''), build(ROLES.member.context)),
+};
+// Text chat: same question for the Gemini system prompt.
+const tbuild = (ctx) => srv.assistSystemPrompt(ctx);
+report.cachePrefixText = {
+  'two different members': firstDifference(tbuild(ROLES.member.context), tbuild(memberB)),
+  'member vs practitioner': firstDifference(tbuild(ROLES.member.context), tbuild(ROLES.practitioner.context)),
+  'visitor vs member': firstDifference(tbuild(''), tbuild(ROLES.member.context)),
+};
+
+// ── tool results: what comes back into the model's context, and how big ──
+//
+// Measured on the handlers' own shaping, with upper-bound inputs: a lookup
+// that matches the maximum of everything, and a practitioner with the maximum
+// client list. These are the payloads that then sit in a voice session's
+// history for its whole life.
+const bigLookup = { ok: true, query: 'q', terms: ['x'],
+  store: Array.from({ length: 6 }, (_, i) => ({ title: `Bio-Well Professional Kit Edition ${i}`, price: 'from $1,950', available: true, type: 'device', url: 'https://gaiahealers.com/products/x' })),
+  practitionerTotal: 215, practitioners: Array.from({ length: 6 }, (_, i) => ({ name: `Practitioner Name ${i}`, location: 'Orlando, FL', specialty: 'Bio-Well practitioner, Reiki Master, Sound Healer', link: 'https://x' })),
+  courseTotal: 60, allCourses: Array.from({ length: 60 }, (_, i) => `Course Title Number ${i}`), courses: Array.from({ length: 8 }, (_, i) => `Bio-Well Course ${i}`),
+  event: { name: 'Gaia Healers Elevate Conference 2026', date: '2026-11-20T09:00:00 - 2026-11-22T18:00:00', venue: 'Rosen Shingle Creek, Orlando, FL' } };
+const lookupText = typeof srv.formatLookup === 'function' ? srv.formatLookup(bigLookup, 'how much is the bio-well and what courses') : null;
+report.toolResults = {
+  gaia_lookup_worst_case: lookupText ? { tokens: tok('LIVE DATA (answer only from this, do not invent): ' + lookupText), chars: lookupText.length } : 'formatLookup not exported; see server.js',
+  practitioner_list_clients_worst_case: { tokens: tok(JSON.stringify({ count: 200, clients: Array.from({ length: 200 }, (_, i) => ({ id: String(1000 + i), name: `Client Name ${i}`, email: `client${i}@example.com`, has_biowell_card: true })) })), note: 'MAX_CUSTOMERS = 200; slimCustomer keeps id, name, email, card flag' },
+  practitioner_scan_cards: { tokens: tok(JSON.stringify({ found: true, client: { id: '474', name: 'Client Name' }, scans_on_file: 100, latest: { scanned_at: '2026-09-24', stress: 3.9, energy: 54, chakras: Array.from({ length: 7 }, (_, i) => ({ name: 'Chakra ' + i, value: 4.1, alignment: -0.8 })), most_out_of_balance: ['Solar Plexus', 'Root'] } })), note: 'slimScan: 7 chakras + 6 worst areas' },
+  navigate_and_other_client_tools: { tokens: tok(JSON.stringify({ ok: true, opened: true, message: 'Their latest reading is opening on screen and takes about ten seconds to load. Say one short sentence — that you are pulling it up — and do not read out any numbers yet.' })) },
+  note: 'In voice every tool result stays in the Qwen session for its whole life and is re-processed on every later reply; in text chat tool results never enter history (history() keeps user/assistant only).',
+};
+
 // Repeated navigation: what the relay sends after N screen changes.
 {
   const base = instructionsByRole.member;
@@ -213,6 +263,12 @@ for (const [role, v] of Object.entries(r)) {
   lines.push(`${role.padEnd(13)}${String(v.voicePerReply).padStart(7)}${String(v.fixedSetup).padStart(8)}${String(v.toolSchemas).padStart(8)}${String(v.dynamicContext).padStart(10)}${String(v.textSystemPrompt).padStart(19)}   ${v.tools.length}`);
 }
 lines.push(`\nshared static prefix (identical for every role): ${report.sharedStaticPrefix.tokens} tokens`);
+lines.push('\nCACHE PREFIX (voice): identical leading tokens between two prompts, and the first block that differs');
+for (const [k, v] of Object.entries(report.cachePrefix)) lines.push(`  ${k.padEnd(44)} ${String(v.identicalTokens).padStart(6)} tok (${v.identicalPct}%)  first diff: ${v.firstDifferentBlock}`);
+lines.push('CACHE PREFIX (text chat system prompt):');
+for (const [k, v] of Object.entries(report.cachePrefixText)) lines.push(`  ${k.padEnd(44)} ${String(v.identicalTokens).padStart(6)} tok (${v.identicalPct}%)  first diff: ${v.firstDifferentBlock}`);
+lines.push('\nTOOL RESULTS (tokens re-processed on every later voice reply):');
+for (const [k, v] of Object.entries(report.toolResults)) lines.push(`  ${k.padEnd(40)} ${typeof v === 'object' && v.tokens != null ? v.tokens + ' tok' + (v.note ? '  — ' + v.note : '') : v}`);
 lines.push('\nREPEATED NAVIGATION (member): ' + JSON.stringify(report.navigation));
 lines.push('\nHISTORY:');
 for (const [k, v] of Object.entries(report.history)) lines.push(`  ${k.padEnd(34)} ${JSON.stringify(v)}`);

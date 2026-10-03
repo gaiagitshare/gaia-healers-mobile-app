@@ -31,6 +31,7 @@ import {
 } from './membership/oauth-core.js';
 import { classifyMembershipEvent, membershipFromEvent } from './membership/events.js';
 import { attachQwenVoiceRelay, qwenRouting, issueQwenTicket, qwenVoiceConfig, voiceBootLine } from './qwen-voice-relay.js';
+import { normalizeUsage, recordUsage } from './assist-usage.js';
 import { toolDeclarationsFor, clientToolNames, slowToolNames, runTool } from './assist-tools.js';
 import { practitionersConfig, makePkce, authorizeUrl, rememberFlow, claimFlow,
          exchangeCode, resolveProfile, saveToken, forgetToken, connectionStatus } from './practitioners-oauth.js';
@@ -4243,17 +4244,20 @@ export function buildGaiaLiveInstructions(context = {}) {
   const memberContext = String(context.memberContext || '').trim();
   const survey = needsOnboardingSurvey(memberContext);
   return [
+    // ORDER MATTERS FOR CACHING, NOT MEANING. Text that is identical for every
+    // session comes first, so a provider that caches a shared prefix can reuse
+    // it; then what depends on the session's state; then this member; then the
+    // screen, which changes most. Nothing was reworded to get here. The opening
+    // instruction stays last because it governs the first turn.
     'You are Gaia Assist, the warm, knowledgeable voice concierge inside the Gaia Healers app. You help first-time visitors and signed-in members from arrival to their next useful step.',
     SAFETY_FIRST,
     assistGuide.policy,
     assistGuide.appMap,
     gaiaKnowledgePrompt(),
-    memberContext,
-    `CURRENT NAVIGATION (hints only): ${JSON.stringify(assistGuide.context(context.appContext || { screen: view }))}`,
-    `Current screen: ${assistGuide.context({ screen: view }).screen}. Page context helps interpret ambiguous requests; explicit user intent takes priority.`,
-    assistGuide.statePolicy(assistGuide.sessionState(memberContext)),
     'VOICE: a calm, friendly phone-call voice. One or two helpful sentences; no alternative list or routine follow-up invitation; ask a question only if needed. More detail only when asked. Wait until they have clearly finished; ignore background noise, coughs and fragments. If something was unclear, ask them to say it again rather than guess. Accept corrections briefly and carry on. Never narrate your reasoning. When asked to say exact words, say only those words.',
     'ACT WITH YOUR TOOLS — do it, do not just describe it. navigate opens a screen, a tab, or one Energy tool directly (screen=wellness with tool=…); book_session, open_community, open_portal, play_course, express_interest and register_event do what their names say; find_practitioner opens Find a Healer for someone looking for a healer or practitioner (with their city or specialty); sign_in only when they are signed out. For live facts missing from verified context — prices, stock, practitioner availability, event details or course access — call gaia_lookup and use only what it returns; if it has nothing, say so and offer the right screen. After any action you are still their guide: say what is now on screen and the next step. Never claim you booked, bought, emailed or changed anything a tool did not do.',
+    // ── depends on the session's state ──
+    assistGuide.statePolicy(assistGuide.sessionState(memberContext)),
     ['member', 'practitioner'].includes(assistGuide.sessionState(memberContext))
       ? 'MEMORY (only for a verified member, never a visitor): use WHAT YOU REMEMBER lightly to continue where you left off, never re-ask what you know. When you learn something durable (an interest, goal, decision, objection, follow-up), call remember_member with short facts — never trivia, health details or anything financial.'
       : '',
@@ -4261,6 +4265,9 @@ export function buildGaiaLiveInstructions(context = {}) {
       ? 'ONBOARDING (this member has not done it): when onboarding is relevant, guide the required Gaia profile journey with one short contextual sentence. To record each step call save_onboarding_step { stepKey, selections: [exact option labels], freeText?, complete? } — after it succeeds you may say you noted it. Afterwards give a short recap and the single best next step.'
       : '',
     survey ? onboarding.onboardingPromptBlock() : '',
+    // ── this member, then the screen (replaced in place on navigation) ──
+    memberContext,
+    assistGuide.navigationBlock(context.appContext || { screen: view }),
     'Open a new visit with one brief welcome and offer help. Do not lead with sales, unsolicited events, or several questions.',
   ].filter(Boolean).join('\n');
 }
@@ -4435,11 +4442,22 @@ async function assistLiveToken(req, res, origin, url) {
     // ticket. The page is told which of them it is expected to perform and
     // nothing else: what the model may call is no longer whatever the page says.
     const toolCtx = await assistContext(req);
+    // The session's state decides which actions are worth offering (a visitor
+    // gets sign_in, a finished member does not get the onboarding step). It
+    // comes from the same server-built context as the prompt, never the page.
+    const state = assistGuide.sessionState(accountContext);
+    if (toolCtx) {
+      toolCtx.state = state;
+      // The same test buildGaiaLiveInstructions uses to include the survey
+      // script, so the prompt never asks for an action that was not offered.
+      toolCtx.surveyActive = needsOnboardingSurvey(accountContext);
+    }
     const declarations = toolDeclarationsFor(toolCtx);
     const ticket = issueQwenTicket({
       instructions: buildGaiaLiveInstructions({ view, memberContext, appContext }),
       ip,
       tools: declarations,
+      state,
     });
     const proto = String(req.headers['x-forwarded-proto'] || '').includes('https') ? 'wss' : 'ws';
     console.log('[Gaia Assist] qwen voice ticket ready', {
@@ -5570,8 +5588,10 @@ export function assistSystemPrompt(memberContext = '') {
     assistGuide.policy,
     assistGuide.appMap,
     gaiaKnowledgePrompt(),
-    assistGuide.statePolicy(assistGuide.sessionState(memberContext)),
+    // Static first (as in the voice prompt): ANSWERS is the same for everyone,
+    // so it sits before the state policy rather than after it.
     'ANSWERS: concise, warm and practical, with no obligatory follow-up question. For "how do I…", name the exact screen and step and offer to open it. When LIVE GAIA HEALERS DATA is provided, use only those facts for prices, counts, products and names; if you do not know, say so and point to the exact page. Never claim an action succeeded without a confirmed tool/save result. Text chat explains the exact available steps.',
+    assistGuide.statePolicy(assistGuide.sessionState(memberContext)),
     ['member', 'practitioner'].includes(assistGuide.sessionState(memberContext))
       ? 'MEMORY (only for a verified member, never a visitor): use WHAT YOU REMEMBER lightly and never re-ask it. When you learn something durable (an interest, goal, decision, objection, follow-up), add a final line <<REMEMBER: fact one ;; fact two>> — the app saves and hides it. Never save trivia, health details or anything financial.'
       : '',
@@ -5676,7 +5696,7 @@ async function callGeminiChat(prompt, context = {}) {
   const j = await res.json();
   const parts = (j.candidates && j.candidates[0] && j.candidates[0].content && j.candidates[0].content.parts) || [];
   const text = parts.map((p) => p.text || '').join('').trim();
-  return { provider: 'gemini', model, reply: text || fallbackAssistReply(prompt, context.intent, context.memberContext, context.declined) };
+  return { provider: 'gemini', model, usage: j.usageMetadata || null, reply: text || fallbackAssistReply(prompt, context.intent, context.memberContext, context.declined) };
 }
 async function callChatProvider(provider, prompt, context = {}) {
   if (provider === 'gemini') return callGeminiChat(prompt, context);
@@ -5722,6 +5742,7 @@ async function callChatProvider(provider, prompt, context = {}) {
   return {
     provider,
     model: config.model,
+    usage: payload.usage || null,
     reply: chatOutputText(payload) || fallbackAssistReply(prompt, context.intent, context.memberContext, context.declined),
   };
 }
@@ -5756,6 +5777,7 @@ async function streamGeminiChat(prompt, context = {}, onDelta = () => {}) {
   const decoder = new TextDecoder();
   let buffer = '';
   let reply = '';
+  let usage = null;
   for (;;) {
     const { value, done } = await reader.read();
     if (done) break;
@@ -5770,6 +5792,7 @@ async function streamGeminiChat(prompt, context = {}, onDelta = () => {}) {
       if (!data || data === '[DONE]') continue;
       try {
         const payload = JSON.parse(data);
+        if (payload.usageMetadata) usage = payload.usageMetadata;
         const parts = payload.candidates?.[0]?.content?.parts || [];
         const delta = parts.map((part) => part.text || '').join('');
         if (delta) {
@@ -5784,7 +5807,7 @@ async function streamGeminiChat(prompt, context = {}, onDelta = () => {}) {
   watch.stop();
   const text = reply.trim();
   if (!text) return { skipped: true, reason: 'empty-reply' };
-  return { provider: 'gemini', model, reply: text };
+  return { provider: 'gemini', model, usage, reply: text };
 }
 
 async function streamChatProvider(provider, prompt, context = {}, onDelta = () => {}) {
@@ -5833,6 +5856,7 @@ async function streamChatProvider(provider, prompt, context = {}, onDelta = () =
   const decoder = new TextDecoder();
   let buffer = '';
   let reply = '';
+  let usage = null;
 
   for (;;) {
     const { value, done } = await reader.read();
@@ -5848,6 +5872,8 @@ async function streamChatProvider(provider, prompt, context = {}, onDelta = () =
       if (!data || data === '[DONE]') continue;
       try {
         const payload = JSON.parse(data);
+        if (payload.usage) usage = payload.usage;
+        else if (payload.x_groq?.usage) usage = payload.x_groq.usage;
         const delta = payload.choices?.[0]?.delta?.content || '';
         if (delta) {
           reply += delta;
@@ -5865,7 +5891,7 @@ async function streamChatProvider(provider, prompt, context = {}, onDelta = () =
   watch.stop();
   const text = reply.trim();
   if (!text) return { skipped: true, reason: 'empty-reply' };
-  return { provider, model: config.model, reply: text };
+  return { provider, model: config.model, usage, reply: text };
 }
 
 async function callAssistProviders(prompt, context = {}) {
@@ -6120,6 +6146,8 @@ async function assistChat(body) {
       memberContext: body.memberContext,
     });
     console.log('[Gaia Assist] proxy response ready', { provider: result.provider, model: result.model || 'none' });
+    if (result.usage) recordUsage({ channel: 'text', provider: result.provider, model: result.model,
+      state: assistGuide.sessionState(body.memberContext), usage: normalizeUsage(result.provider, result.usage) });
     return {
       ok: true,
       reply: result.reply,
@@ -6208,6 +6236,8 @@ async function assistChatStream(body, res, origin, req = null) {
         latencyMs,
         source: body.source || 'chat-stream',
       });
+      if (result.usage) recordUsage({ channel: 'text', provider: result.provider, model: result.model,
+        state: assistGuide.sessionState(body.memberContext), usage: normalizeUsage(result.provider, result.usage) });
       const tail = codes.flush();
       if (tail) writeSse(res, 'delta', { text: tail });
       let reply = result.reply;

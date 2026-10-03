@@ -107,11 +107,32 @@
   }
   function history(value) {
     if (!Array.isArray(value)) return [];
+    // The budget is spent from the NEWEST message backwards. It used to be
+    // spent oldest-first, so once messages were long the most recent ones --
+    // the ones the next reply depends on most -- were cut to nothing and
+    // dropped. Same window (last 8), same 6,000-character budget, same
+    // 1,500-character cap per message: only the order of spending changed.
+    // The page runs this before sending and the server runs it again, so the
+    // fix applies on both sides.
+    const recent = value.slice(-8).filter(m => m && ['user', 'assistant'].includes(m.role) && typeof m.content === 'string');
     let budget = 6000;
-    return value.slice(-8).filter(m => m && ['user', 'assistant'].includes(m.role) && typeof m.content === 'string').map(m => {
-      const content = m.content.slice(0, Math.min(1500, budget)); budget -= content.length;
-      return { role: m.role, content };
-    }).filter(m => m.content);
+    const kept = [];
+    for (let i = recent.length - 1; i >= 0 && budget > 0; i -= 1) {
+      const content = recent[i].content.slice(0, Math.min(1500, budget));
+      if (!content) continue;
+      budget -= content.length;
+      kept.unshift({ role: recent[i].role, content });
+    }
+    return kept;
   }
-  root.GaiaAssistGuide = Object.freeze({ screens, policy, sessionState, statePolicy, chooseAction, turnGuidance, reviewedReply, fallback, context, history, appMap: 'CURRENT APP: ' + Object.entries(screens).map(([key, label]) => `${key} = ${label}`).join('; ') });
+  // The ONE place the current-screen lines are written. The voice prompt is
+  // built with it, and a screen change mid-session replaces these lines rather
+  // than appending another copy beside the stale ones.
+  const NAVIGATION_HEAD = 'CURRENT NAVIGATION (hints only): ';
+  function navigationBlock(appContext) {
+    const c = context(appContext || {});
+    return NAVIGATION_HEAD + JSON.stringify(c)
+      + '\nCurrent screen: ' + c.screen + '. Page context helps interpret ambiguous requests; explicit user intent takes priority.';
+  }
+  root.GaiaAssistGuide = Object.freeze({ screens, policy, sessionState, statePolicy, chooseAction, turnGuidance, reviewedReply, fallback, context, history, navigationBlock, NAVIGATION_HEAD, appMap: 'CURRENT APP: ' + Object.entries(screens).map(([key, label]) => `${key} = ${label}`).join('; ') });
 })(globalThis);

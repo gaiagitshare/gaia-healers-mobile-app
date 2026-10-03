@@ -26,8 +26,30 @@ import './assist-guide.js';
  */
 import crypto from 'node:crypto';
 import { WebSocket, WebSocketServer } from 'ws';
+import { normalizeUsage, recordUsage, sumUsage, emptyUsage } from './assist-usage.js';
 
 const RELAY_PATH = '/api/assist/voice/qwen';
+
+/**
+ * The instructions with ONE current-screen block, for this context.
+ *
+ * A screen change mid-session used to send the whole instruction block again
+ * with a new navigation line APPENDED -- and the original line, naming the
+ * screen the session started on, stayed where it was. After the first
+ * navigation the model held two "current" screens, one of them stale. This
+ * replaces the block in place, so it is the same size after ten navigations as
+ * after one, and only the newest screen is named.
+ */
+export function instructionsWithNavigation(instructions, appContext) {
+  const guide = globalThis.GaiaAssistGuide;
+  const block = guide.navigationBlock(appContext);
+  const lines = String(instructions || '').split('\n');
+  const at = lines.findIndex((l) => l.startsWith(guide.NAVIGATION_HEAD));
+  if (at < 0) return lines.concat(block.split('\n')).join('\n');
+  const span = lines[at + 1]?.startsWith('Current screen: ') ? 2 : 1;
+  lines.splice(at, span, ...block.split('\n'));
+  return lines.join('\n');
+}
 
 // How long an upstream error is treated as provisional before the turn is
 // re-requested. Measured against the live endpoint: a recoverable error was
@@ -331,11 +353,11 @@ export function qwenRouting({ cfg = qwenVoiceConfig(), ip = '', lang = '', force
 }
 
 /** A one-use, one-minute ticket that lets the browser open the relay. */
-export function issueQwenTicket({ instructions, ip, tools = null }) {
+export function issueQwenTicket({ instructions, ip, tools = null, state = null }) {
   const ticket = crypto.randomBytes(18).toString('base64url');
   const now = Date.now();
   for (const [k, v] of tickets) if (v.exp < now) tickets.delete(k);
-  tickets.set(ticket, { instructions: String(instructions || ''), ip, tools,
+  tickets.set(ticket, { instructions: String(instructions || ''), ip, tools, state,
                        exp: now + 60 * 1000 });
   return ticket;
 }
@@ -375,6 +397,11 @@ function runSession(browser, grant, ip) {
   let firstAudioAt = 0;
   let turns = 0;
   const usage = { input: 0, output: 0 };
+  // The provider's own per-response counts, kept with the cache and audio
+  // split so a session's real cost can be read back later (assist-usage.js).
+  let reported = emptyUsage();
+  // What the model was last told; navigation replaces its screen lines.
+  let currentInstructions = grant.instructions;
 
   // ── an upstream error is provisional until the turn proves it fatal ─────
   //
@@ -416,7 +443,12 @@ function runSession(browser, grant, ip) {
     console.log('[Gaia Assist] qwen voice session ended', {
       why, turns, seconds: Math.round((Date.now() - startedAt) / 1000),
       firstAudioMs: firstAudioAt || null, inputTokens: usage.input, outputTokens: usage.output,
+      cachedInputTokens: reported.cachedInput, audioInputTokens: reported.audioIn,
     });
+    if (turns > 0 || reported.input != null) {
+      recordUsage({ channel: 'voice', provider: 'qwen', model: cfg.model, state: grant.state,
+        turns, seconds: Math.round((Date.now() - startedAt) / 1000), usage: reported });
+    }
   };
 
   // Hand the conversation to Gemini: the client reconnects there and carries
@@ -430,8 +462,9 @@ function runSession(browser, grant, ip) {
 
   const failEarly = (reason) => {
     recordFailure();
-    // Before setup the client has not heard anything yet: a close is enough,
-    // and it falls back to Gemini on its own.
+    // Before setup the client has not heard anything yet: a close is enough.
+    // (There is no Gemini fallback any more -- the orb accepts only Qwen and
+    // shows "Qwen voice is unavailable" after one silent retry.)
     if (!setupDone) {
       console.warn('[Gaia Assist] qwen voice failed before setup', { reason });
       try { browser.close(4502, 'qwen_unavailable'); } catch { /* gone */ }
@@ -547,6 +580,7 @@ function runSession(browser, grant, ip) {
       const u = evt.response?.usage || {};
       usage.input += u.input_tokens || 0;
       usage.output += u.output_tokens || 0;
+      if (evt.response?.usage) reported = sumUsage(reported, normalizeUsage('qwen', evt.response.usage));
     }
     for (const m of qwenToBrowser(evt, state)) toBrowser(m);
   });
@@ -555,8 +589,12 @@ function runSession(browser, grant, ip) {
     let msg;
     try { msg = JSON.parse(String(raw)); } catch { return; }
     if (msg.gaiaContext && setupDone) {
-      const context = globalThis.GaiaAssistGuide.context(msg.gaiaContext);
-      toQwen({ type: 'session.update', session: { instructions: grant.instructions + '\nCURRENT NAVIGATION (hints only; explicit user intent takes priority): ' + JSON.stringify(context) } });
+      // Replace the screen lines in place; send nothing if nothing changed.
+      const next = instructionsWithNavigation(currentInstructions, msg.gaiaContext);
+      if (next !== currentInstructions) {
+        currentInstructions = next;
+        toQwen({ type: 'session.update', session: { instructions: next } });
+      }
       return;
     }
     if (msg.setup) {

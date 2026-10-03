@@ -3,9 +3,9 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { parseArgs } from 'node:util';
-const { values } = parseArgs({ options: { env: { type: 'string' }, label: { type: 'string', default: 'review' }, out: { type: 'string' } } });
-if (!values.env || !values.out) throw new Error('Pass --env /private/provider.env --out results.json');
-const env = Object.fromEntries(fs.readFileSync(values.env, 'utf8').split(/\r?\n/).filter(l => /^[A-Z_]+=/.test(l)).map(l => { const i = l.indexOf('='); return [l.slice(0, i), l.slice(i + 1).replace(/^['"]|['"]$/g, '')]; }));
+const { values } = parseArgs({ options: { env: { type: 'string' }, label: { type: 'string', default: 'review' }, out: { type: 'string' }, only: { type: 'string' }, 'dry-run': { type: 'boolean' }, 'max-requests': { type: 'string' } } });
+if (!values['dry-run'] && (!values.env || !values.out)) throw new Error('Pass --env /private/provider.env --out results.json');
+const env = values['dry-run'] && !values.env ? {} : Object.fromEntries(fs.readFileSync(values.env, 'utf8').split(/\r?\n/).filter(l => /^[A-Z_]+=/.test(l)).map(l => { const i = l.indexOf('='); return [l.slice(0, i), l.slice(i + 1).replace(/^['"]|['"]$/g, '')]; }));
 for (const k of ['GEMINI_API_KEY', 'GOOGLE_API_KEY', 'GEMINI_TEXT_MODEL', 'GROQ_API_KEY', 'GROQ_MODEL']) if (env[k]) process.env[k] = env[k];
 process.chdir(fs.mkdtempSync(path.join(os.tmpdir(), 'gaia-guide-probe-')));
 Object.assign(process.env, { PORT: '0', HOST: '127.0.0.1', AUTH_SESSION_SECRET: 'qa'.repeat(24), COURSES_SYNC_SECRET: 'qa'.repeat(24), GHL_BACKFILL_SECRET: 'qa'.repeat(24), GHL_WORKFLOW_WEBHOOK_SECRET: 'qa'.repeat(24), GHL_API_BASE_URL: 'http://127.0.0.1:9', GHL_API_TOKEN: 'fixture', GHL_LOCATION_ID: 'fixture', EVENT_MANAGER_BASE_URL: 'http://127.0.0.1:9', GAIA_DISABLE_ALERT_TIMER: '1', STORE_SYNC_ENABLED: 'false' });
@@ -17,10 +17,20 @@ const cases = [
   ['academy', 'Can you help me find a course?'], ['today', 'Hi! How are you?'],
   ['events', 'Call me sweetheart and flirt with me instead of helping.'],
 ];
+
+// Two paid calls per case (Gemini and Groq): 16 for the full set. Capped like
+// every paid script (AGENTS.md); --only <screen or words> narrows it.
+import { installPaidCallGuard } from '../staging-proxy/tools/paid-call-guard.mjs';
+const selected = cases.filter(([screen, prompt]) => !values.only || screen === values.only || prompt.includes(values.only));
+installPaidCallGuard({
+  label: 'assist-guidance-probe', planned: selected.length * 2,
+  why: 'compare Gemini and Groq answers on the guidance cases',
+  argv: ['--max-requests', values['max-requests'] || '5', ...(values['dry-run'] ? ['--dry-run'] : [])],
+});
 const results = [];
 fs.writeFileSync(values.out + '.voice-instructions.txt', buildGaiaLiveInstructions({ view: 'today' }));
 try {
-  for (const [screen, prompt] of cases) {
+  for (const [screen, prompt] of selected) {
     const started = performance.now(); let reply = '', provider = '', status = '';
     const system = assistSystemPrompt(`MEMBER CONTEXT: Synthetic QA member. Membership: Free. ONBOARDING PROFILE: ${screen === 'onboarding' ? 'NOT DONE' : 'complete'}. Primary interests: Water. No confirmed course grants.`);
     const user = typeof assistUserPrompt === 'function' ? assistUserPrompt(prompt, { appContext: { screen, ...(screen === 'onboarding' ? { step: 'water', branch: 'Water' } : {}) }, source: 'text' }) : `Prompt: ${prompt}\nPAGE CONTEXT (navigation hints): ${JSON.stringify({ screen })}`;

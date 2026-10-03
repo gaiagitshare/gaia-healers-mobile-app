@@ -3,7 +3,16 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { parseArgs } from 'node:util';
 import { WebSocket } from 'ws';
-const { values } = parseArgs({ options: { env: { type: 'string' }, instructions: { type: 'string' }, 'audio-dir': { type: 'string' }, out: { type: 'string' }, label: { type: 'string', default: 'review' } } });
+const { values } = parseArgs({ options: { env: { type: 'string' }, instructions: { type: 'string' }, 'audio-dir': { type: 'string' }, out: { type: 'string' }, label: { type: 'string', default: 'review' }, repeats: { type: 'string', default: '1' }, 'dry-run': { type: 'boolean' }, 'max-requests': { type: 'string' } } });
+// One Qwen session per sample per repeat. It used to repeat twice by default (6
+// sessions); the default is now one pass (3), under the project cap (AGENTS.md).
+import { installPaidCallGuard } from '../tools/paid-call-guard.mjs';
+const REPEATS = Math.max(1, Number(values.repeats) || 1);
+const paidGuard = installPaidCallGuard({
+  label: 'voice-latency-probe', planned: REPEATS * 3,
+  why: 'measure speech-end to first-audio latency on three recorded samples',
+  argv: ['--max-requests', values['max-requests'] || '5', ...(values['dry-run'] ? ['--dry-run'] : [])],
+});
 for (const key of ['env', 'instructions', 'audio-dir', 'out']) if (!values[key]) throw new Error(`Missing --${key}`);
 const env = Object.fromEntries(fs.readFileSync(values.env, 'utf8').split(/\r?\n/).filter(l => /^[A-Z_]+=/.test(l)).map(l => { const i = l.indexOf('='); return [l.slice(0, i), l.slice(i + 1).replace(/^['"]|['"]$/g, '')]; }));
 if (!env.QWEN_API_KEY) throw new Error('Qwen key unavailable');
@@ -16,6 +25,7 @@ async function turn(sample) {
   while (lastSpeechByte > 2 && Math.abs(audio.readInt16LE(lastSpeechByte - 2)) < 180) lastSpeechByte -= 2;
   const stages = {}; const events = []; let done, error = null, sendTimer;
   const finished = new Promise(resolve => { done = resolve; });
+  paidGuard.count(endpoint);
   const ws = new WebSocket(endpoint, { headers: { Authorization: `Bearer ${env.QWEN_API_KEY}` } });
   const timer = setTimeout(() => { error = 'timeout'; done(); }, 45000);
   ws.on('error', () => { error = 'connection_error'; done(); });
@@ -55,7 +65,7 @@ async function turn(sample) {
   return { sample, error, earlyVadCommits, speechEndToVadMs: elapsed('vadCommitted'), speechEndToTranscriptMs: elapsed('T2'), speechEndToModelMs: elapsed('T4'), speechEndToAudioMs: elapsed('T6'), playbackMs: null };
 }
 const results = [];
-for (let repeat = 0; repeat < 2; repeat++) for (const sample of ['water', 'normal', 'pauses']) {
+for (let repeat = 0; repeat < REPEATS; repeat++) for (const sample of ['water', 'normal', 'pauses']) {
   const result = await turn(sample); results.push(result); console.log(JSON.stringify({ label: values.label, ...result }));
 }
 const summary = {};

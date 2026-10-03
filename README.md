@@ -2,6 +2,10 @@
 
 Production PWA for Gaia Healers members: [gaiahealers.app](https://gaiahealers.app/home.html).
 
+> **Before running any test or script that calls a paid API or AI model, read
+> [AGENTS.md](AGENTS.md).** Default limit: 5 live paid requests per run; anything
+> larger needs the owner's explicit approval first. Scripts enforce it in code.
+
 The app is a responsive service hub for membership access, courses, communities,
 events, bookings, purchases, messages, wellness tools, and Gaia Assist. GoHighLevel
 (GHL) remains the source of truth for member identity and entitlements.

@@ -21,6 +21,16 @@ for (const line of fs.readFileSync('/root/gaia-staging-proxy/.env', 'utf8').spli
   }
 }
 const PROMPT = 'Say OK';
+
+// One tiny prompt per configured provider, never repeated -- but every one is a
+// paid call, so the count is stated and capped like any other (AGENTS.md).
+import { installPaidCallGuard } from './paid-call-guard.mjs';
+const plannedCalls = [env.GEMINI_API_KEY, env.GROQ_API_KEY, env.OPENAI_API_KEY, env.OPENROUTER_API_KEY]
+  .filter(Boolean).length + (env.ELEVENLABS_API_KEY ? 2 : 0);
+installPaidCallGuard({
+  label: 'assist-health', planned: plannedCalls,
+  why: 'one "Say OK" per configured provider, to see which ones answer',
+});
 const rows = [];
 const add = (name, role, ok, note) => rows.push({ name, role, ok, note: String(note).replace(/\s+/g, ' ').slice(0, 74) });
 const order = (env.ASSIST_PROVIDER_ORDER || 'gemini,groq').split(',').map((s) => s.trim());

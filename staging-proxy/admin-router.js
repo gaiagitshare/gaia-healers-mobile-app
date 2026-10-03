@@ -312,6 +312,10 @@ async function loadSubscriptions(deps) {
     // looks like a product Gaia does not sell — so the alert could not tell a
     // genuine mapping gap from a stuck membership. Carried, not re-derived.
     n.recurringProduct = s.recurringProduct || null;
+    // So does the subscription's own id: normSub drops it too, which is why
+    // every incident read "subscription unknown" and why the alert could not
+    // see that a membership elsewhere in the ledger was written from it.
+    n.subscriptionId = s._id || s.id || s.subscriptionId || null;
     return n;
   });
   _subCache = { at: now, byContact: byContact, summary: summary, list: list };
@@ -1010,6 +1014,16 @@ async function alertExtras(deps) {
       if (!cid) continue;
       const rec = contacts[cid];
       if (rec && rec.membership && rec.membership.status === 'active') continue;
+      // A subscription can name a contact GHL has since merged away (3 Oct
+      // 2026: a Diamond member's old contact id answered 400 while the sweep
+      // had long since repaired the subscription, by email, onto her current
+      // contact, where Diamond is active). The sweep's repair is not repeated
+      // here -- that would be a GHL round trip per subscription per minute --
+      // but its result is in the ledger: the membership it wrote carries this
+      // subscription as its evidence. Held actively anywhere, it is not missing.
+      const subId = String(sub._id || sub.id || sub.subscriptionId || '');
+      if (subId && Object.values(contacts).some((r) => r && r.membership
+        && r.membership.status === 'active' && String(r.membership.evidence_id || '') === subId)) continue;
       // Two very different situations look identical from a distance, and an
       // operator told the same thing five times learns nothing. Either the
       // product is not one Gaia sells as a tier — a mapping question — or it is,
@@ -1420,4 +1434,4 @@ async function handle(req, res, url, deps) {
   return sendJson(res, 404, { ok: false, reason: 'unknown_admin_route' }, origin);
 }
 
-export { handle, publishedAnnouncements, publishedEvents };
+export { handle, publishedAnnouncements, publishedEvents, alertExtras };

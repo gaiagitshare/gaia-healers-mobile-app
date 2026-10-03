@@ -1,9 +1,10 @@
 /**
- * TEXT CHAT THINKS "low" (owner-approved 3 Oct 2026, Phase B item 4).
+ * TEXT CHAT THINKS "minimal" (owner-approved 3 Oct 2026, Phase B item 4).
  *
- * One real reply spent 806 thinking tokens on 70 reply tokens. Both Gemini
- * text calls -- the one-shot and the stream -- now send
- * generationConfig.thinkingConfig.thinkingLevel = "low" unless
+ * One real reply spent 806 thinking tokens on 70 reply tokens; "low" left
+ * 320, "minimal" left none with the same reply. Both Gemini text calls --
+ * the one-shot and the stream -- now send
+ * generationConfig.thinkingConfig.thinkingLevel = "minimal" unless
  * GEMINI_TEXT_THINKING_LEVEL says otherwise; "default" sends nothing, so the
  * revert is one environment line.
  */
@@ -25,14 +26,14 @@ globalThis.fetch = async (u) => { if (!/^(127\.|localhost$)/.test(new URL(String
 const srv = await import(new URL('../server.js', import.meta.url).href);
 test.after(() => srv.closeServer?.());
 
-test('by default both text-chat shapes think "low", with the same temperature and output caps as before', () => {
-  assert.deepEqual(srv.geminiTextGenerationConfig(false), { temperature: 0.35, maxOutputTokens: 2048, thinkingConfig: { thinkingLevel: 'low' } });
-  assert.deepEqual(srv.geminiTextGenerationConfig(true), { temperature: 0.35, maxOutputTokens: 1024, thinkingConfig: { thinkingLevel: 'low' } });
+test('by default both text-chat shapes think "minimal", with the same temperature and output caps as before', () => {
+  assert.deepEqual(srv.geminiTextGenerationConfig(false), { temperature: 0.35, maxOutputTokens: 2048, thinkingConfig: { thinkingLevel: 'minimal' } });
+  assert.deepEqual(srv.geminiTextGenerationConfig(true), { temperature: 0.35, maxOutputTokens: 1024, thinkingConfig: { thinkingLevel: 'minimal' } });
 });
 
 test('GEMINI_TEXT_THINKING_LEVEL=default (or anything unknown) sends no thinkingConfig at all -- the revert', () => {
   process.env.GEMINI_TEXT_THINKING_LEVEL = '';
-  assert.deepEqual(srv.geminiTextGenerationConfig(false).thinkingConfig, { thinkingLevel: 'low' }, 'an empty variable is the same as unset');
+  assert.deepEqual(srv.geminiTextGenerationConfig(false).thinkingConfig, { thinkingLevel: 'minimal' }, 'an empty variable is the same as unset');
   for (const v of ['default', 'off', 'none', '  ', '42']) {
     process.env.GEMINI_TEXT_THINKING_LEVEL = v;
     assert.equal(srv.geminiTextGenerationConfig(false).thinkingConfig, undefined, JSON.stringify(v));

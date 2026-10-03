@@ -5690,12 +5690,15 @@ async function aiComplete(system, user, { maxTokens = 160, temperature = 0.6 } =
 
 // Text chat is two or three sentences of navigation, and on 3 Oct 2026 one
 // real reply spent 806 thinking tokens on 70 reply tokens -- 56% of its cost
-// and most of its 5.6 s. Gemini 3 Flash cannot switch thinking off; "low" is
-// the approved level. GEMINI_TEXT_THINKING_LEVEL=default restores the model's
-// own choice (a one-line revert); voice is Qwen and does not pass through here.
+// and most of its 5.6 s. Verified the same day with one call each: "low" left
+// 320 thinking tokens; "minimal" (which gemini-3.6-flash accepts) left none,
+// with the same reply, in 1.8 s. "minimal" is the approved default.
+// GEMINI_TEXT_THINKING_LEVEL overrides it (minimal | low | medium | high);
+// "default" restores the model's own choice, a one-line revert. Voice is Qwen
+// and does not pass through here.
 export function geminiTextGenerationConfig(isVoice) {
   const config = { temperature: 0.35, maxOutputTokens: isVoice ? 1024 : 2048 };
-  const level = String(process.env.GEMINI_TEXT_THINKING_LEVEL || 'low').trim().toLowerCase();
+  const level = String(process.env.GEMINI_TEXT_THINKING_LEVEL || 'minimal').trim().toLowerCase();
   if (['minimal', 'low', 'medium', 'high'].includes(level)) config.thinkingConfig = { thinkingLevel: level };
   return config;
 }

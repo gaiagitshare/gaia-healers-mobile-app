@@ -1,7 +1,15 @@
 # Gaia Assist — Phase B decision report
 
 3 October 2026. Prepared after Phase 1 (#201) and the hardening pass (#202–#205).
-**Nothing in this document is implemented.** It is the plan to approve or amend.
+
+**Status:** architecture **A** (items 2, 3, 5) was approved by the owner on
+3 October and implemented the same day (branch `assist/phase-b-a`). Measured
+after A, same offline method: visitor 5,201 → **5,099**, member 6,238 →
+**6,176**, onboarding 7,488 → **7,386**, practitioner 8,207 → **8,144**; the
+prefix two different members share went from 3,522 (80%) to **3,748 (87%)**,
+and a member's own block is now facts only (907 → 557 tokens). Items 4 and
+6–12 remain **not implemented**; they wait on real usage data and the decisions
+in §5.
 Every number below is from the offline reconstruction in
 `staging-proxy/tools/assist-context-audit.mjs` (same method as the Phase 1
 baseline, ±10%), unless marked **REAL**. No paid model was called to produce it.

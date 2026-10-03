@@ -90,9 +90,14 @@ test('the knowledge does not disclaim an ability Assist now has', () => {
 test('the proxy declares its tool list once and builds the prose from it', () => {
   assert.ok(proxyIds.length >= 1);
   // A hardcoded &tool=a|b|c list would drift silently the moment the array
-  // changed. The knowledge string must be generated from the array instead.
-  assert.match(proxySource, /&tool=' \+ ASSIST_TOOL_IDS\.join\('\|'\) \+ '/,
-    'the &tool= line in GAIA_KNOWLEDGE must be built from ASSIST_TOOL_IDS, not written out by hand');
+  // changed. Since Phase B-A the prose carries no URL list at all (the
+  // navigate enum is built from the array); what remains is that every id in
+  // the array is still described, once, in ENERGY TOOLS -- so the prose and
+  // the array cannot drift apart.
+  assert.doesNotMatch(proxySource, /&tool=[a-z]+\|[a-z]+/, 'a hand-written &tool=a|b list has crept back into the prose');
+  for (const id of proxyIds) {
+    assert.equal((proxySource.match(new RegExp(`tool=${id}\\)`, 'g')) || []).length, 1, `ENERGY TOOLS must describe tool=${id} exactly once`);
+  }
   assert.equal(new Set(proxyIds).size, proxyIds.length, 'no duplicate tool ids');
 });
 

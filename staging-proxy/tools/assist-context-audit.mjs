@@ -50,7 +50,7 @@ const tok = (s) => Math.round(String(s || '').length / CPT);
 // line templates so its size matches what a real member produces.
 const memberContext = (state) => [
   `GAIA SESSION STATE: ${state}`,
-  'MEMBER CONTEXT (private — this is the currently signed-in member). Use it ONLY to personalize answers for this person. Never read it aloud verbatim, never disclose it to anyone else, and never reference data belonging to other members.',
+  'MEMBER CONTEXT (private)',
   'You are speaking with Sara Keshavarz. Use their first name sparingly ("Sara").',
   `Status: member · 2025 cohort · Gold member${state === 'practitioner' ? ' · certified practitioner' : ''}.`,
   'Community access (unlocked): Gaia Circle, Bio-Well Users, Energy Medicine Hub, Members Lounge.',
@@ -60,12 +60,8 @@ const memberContext = (state) => [
   'Account: 6 completed purchase(s), 1 subscription(s) on file. Do NOT say amounts, prices, or card details out loud.',
   'Has 1 upcoming appointment(s) booked.',
   'Has submitted 2 form(s) and 1 survey(s).',
-  'WHAT YOU CAN SEE: their profile, memberships/communities, which courses they are entitled to (by name), products/devices, purchases & subscriptions (counts only), appointments, form/survey submissions, unread messages, and what you remember from past visits.',
-  'WHAT YOU CANNOT SEE: how far along a lesson they are, grades, or community post/discussion content — the backend does not expose these. You CAN tell them which courses they have (by name) and open them; you cannot tell them which lesson they are on or how much they have finished. If they ask, say so plainly and offer to open the course so they can see their place.',
-  'Privacy: discuss only THIS member’s own data, and only when they ask about it. Do not proactively recite sensitive details.',
   'ONBOARDING PROFILE: DONE — do NOT run the onboarding survey again; use their interests below to tailor suggestions.',
   'CURRENT GAIA PROFILE CHOICES: {"primary_interests":["Energy healing","Bio-Well"],"goals":["Better sleep","Reduce stress"],"experience":["Some experience"]}',
-  'Use these saved choices for relevant Store, Energy, Academy and Community guidance. Choices are current; historical interest tags can remain after a branch change. Interests guide suggestions but do not establish eligibility, ownership or access.',
   'What we already know (profile tags): interest_energy_healing, interest_biowell, product_biowell_owner, practice_stage_practitioner, need_sleep, need_stress, community_feature_events, interest_sound, interest_chakra, invest_course.',
   'SUBSCRIPTION: This member is a PAID subscriber — do NOT pitch a plan they already pay for; focus on helping them get more value from it.',
 ].join('\n');
@@ -79,7 +75,7 @@ const ROLES = {
 };
 
 // ── the parts of one voice reply ──────────────────────────────────────────
-const DYNAMIC = /^(GAIA SESSION STATE|MEMBER CONTEXT|You are speaking|Status:|Community access|Not included|Device ownership|Course access|Account:|Has |WHAT YOU|Privacy:|ONBOARDING PROFILE|CURRENT GAIA PROFILE|Use these saved|What we already know|SUBSCRIPTION:|CURRENT NAVIGATION|Current screen|CURRENT SCREEN|CURRENT PAGE)/;
+const DYNAMIC = /^(GAIA SESSION STATE|MEMBER CONTEXT \(private\)$|You are speaking|Status:|Community access|Not included|Device ownership|Course access|Account:|Has |ONBOARDING PROFILE|CURRENT GAIA PROFILE|What we already know|SUBSCRIPTION:|CURRENT NAVIGATION|Current screen|CURRENT SCREEN|CURRENT PAGE)/;
 function split(instructions) {
   let fixed = 0; let dynamic = 0;
   for (const line of instructions.split('\n')) {

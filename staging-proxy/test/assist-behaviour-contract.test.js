@@ -58,7 +58,7 @@ const CONTRACT = [
   ['keeps the safety boundary: crisis first, emergencies to 911/local, no diagnosis', ['visitor', 'member', 'onboarding', 'practitioner'],
     [/SAFETY FIRST/, /988/, /911/, /Never diagnose/i, /not medical devices|not a medical device/i]],
   ['never fabricates live prices or platform facts', ['visitor', 'member', 'onboarding', 'practitioner'],
-    [/never a remembered price|only from live data|use only what it returns|use ONLY these/i]],
+    [/use only what it returns|use only those facts|use ONLY these/i]],
   ['keeps the onboarding gate: no selling or navigating away until the profile is done', ['onboarding'],
     [/ONBOARDING REQUIRED/, /do not sell|do not navigate/i]],
   ['treats a practitioner\'s own clients as theirs to ask about, with facts from tools', ['practitioner'],

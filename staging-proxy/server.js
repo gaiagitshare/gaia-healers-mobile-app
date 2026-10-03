@@ -240,8 +240,7 @@ const GAIA_BRIEF = [
   'ABOUT: Gaia Healers is a holistic wellness network: biofield / energy-science devices, practitioner certification, a member community, live events and a wellness store. Founder: Dr. Nima Farshid. This background does not establish medical efficacy.',
   'SITES (different sites, never confuse them): gaiahealers.app = THIS app; gaiahealers.com = the Shopify store (payment happens there); education.gaiahealers.com = the course and community portal, with its own login (only for community discussions, portal-only courses, or portal login); gaiapractitioners.com = the practitioner directory (also in the app as Find a Healer); elevate.gaiahealers.com = the Elevate conference; join.gaiahealers.com = membership enrolment.',
   'ENERGY TOOLS (free, reflective/symbolic, not clinical): Energy Check (tab=check) saves birth date for birth chakra/sun sign; other tools reuse it. Horoscope (tab=horoscope) uses birth city/time for a symbolic sky-to-chakra map. Chakra Match (tab=chakras) has practices and journaling. Chakra Balance (tool=chakra) is an 8-question reflection. Colour Test (tool=colour) is a 5-question colour reflection. Numerology (tool=numerology) shows Life Path/Birth Day/Personal Year. Today’s Sky (tool=sky), Moon Rituals (tool=moon), Cosmic Map (tool=cosmic), and Energy Match (tool=match) are symbolic reflections, never predictions. Energy Pulse (tool=pulse) estimates heart rate with camera or tapping — not a medical device, not HRV, not a Bio-Well reading. Coherence Breathing (tool=breath) guides 5-in/5-out breathing; it does not measure coherence. Wellness signup includes a daily body point and 8-week chakra challenge.',
-  'DEVICES & STORE: Bio-Well 3.0 (biofield / GDV imaging; Sputnik, Glove, Water Sensor, Bio Cor), BioPulsar, BioTekna, HealeeX; Colour Energy sprays, crystals, malas, courses. They are wellness and education tools, not medical devices. Prices and stock only from live data — never a remembered price.',
-  'ENERGY ROUTING: home.html?view=wellness&tool=' + ASSIST_TOOL_IDS.join('|') + '. Choose one supported tool when requested.',
+  'DEVICES & STORE: Bio-Well 3.0 (biofield / GDV imaging; Sputnik, Glove, Water Sensor, Bio Cor), BioPulsar, BioTekna, HealeeX; Colour Energy sprays, crystals, malas, courses. They are wellness and education tools, not medical devices.',
   'LINKS: Bio-Well research gaiahealers.com/pages/bio-well-research; articles gaiahealers.com/blogs/news; affiliates af.uppromote.com/gaia/register; practitioner CRM nextlevel.gaiahealers.com; contact gaiahealers.com/pages/contact-us.',
   'SIGN-IN: tap Sign in (top right, or Menu > Sign in), enter the member email, then tap the one-time link emailed to them. The education portal has its own separate login.',
 ];
@@ -249,7 +248,7 @@ const GAIA_BRIEF = [
 let _lastPublishedEvent = null;
 
 function gaiaKnowledgePrompt(event) {
-  return [...GAIA_BRIEF, 'EVENTS: use a current structured lookup, never a remembered schedule. Missing data means unavailable, not no events. MEMBERSHIP: Shop > Membership reads configured plans; use that data for benefits and prices, never infer individual grants.'].join('\n');
+  return [...GAIA_BRIEF, 'EVENTS: missing data means unavailable, not no events. MEMBERSHIP: Shop > Membership reads configured plans; use that data for benefits and prices, never infer individual grants.'].join('\n');
 }
 
 // A plain page for a link clicked out of an e-mail: no app, no bundle, no
@@ -4239,6 +4238,21 @@ function needsOnboardingSurvey(memberContext) {
   return /ONBOARDING PROFILE:\s*NOT DONE/.test(String(memberContext || ''));
 }
 
+// The rules for reading a member's private block are the same for every
+// member, so they are sent once as static text (cacheable) rather than inside
+// each member's own block. buildMemberVoiceContext sends only the facts.
+const MEMBER_CONTEXT_RULES = [
+  'MEMBER CONTEXT RULES — the MEMBER CONTEXT (private) block describes the currently signed-in member. Use it ONLY to personalize answers for this person. Never read it aloud verbatim, never disclose it to anyone else, and never reference data belonging to other members.',
+  'WHAT YOU CAN SEE: their profile, memberships/communities, which courses they are entitled to (by name), products/devices, purchases & subscriptions (counts only), appointments, forms/surveys submitted, and conversation notifications.',
+  'WHAT YOU CANNOT SEE: how far along a lesson they are, grades, or community post/discussion content — the backend does not expose these. You CAN tell them which courses they have access to and open the course for them; you cannot report lesson-by-lesson progress or a scan reading. If asked for those, say plainly you can open the course or community in the portal but cannot read the detail from here. NEVER invent progress, grades, posts, scan numbers, or history.',
+  'Privacy: discuss only THIS member’s own data, and only when they ask about it. Do not proactively recite sensitive details.',
+  'Use the saved CURRENT GAIA PROFILE CHOICES for relevant Store, Energy, Academy and Community guidance. Choices are current; historical interest tags can remain after a branch change. Interests never prove device ownership, purchase intent or course access.',
+].join('\n');
+
+function memberContextRules(memberContext) {
+  return ['member', 'practitioner'].includes(assistGuide.sessionState(memberContext)) ? MEMBER_CONTEXT_RULES : '';
+}
+
 export function buildGaiaLiveInstructions(context = {}) {
   const view = String(context.view || 'today').trim() || 'today';
   const memberContext = String(context.memberContext || '').trim();
@@ -4258,6 +4272,7 @@ export function buildGaiaLiveInstructions(context = {}) {
     'ACT WITH YOUR TOOLS — do it, do not just describe it. navigate opens a screen, a tab, or one Energy tool directly (screen=wellness with tool=…); book_session, open_community, open_portal, play_course, express_interest and register_event do what their names say; find_practitioner opens Find a Healer for someone looking for a healer or practitioner (with their city or specialty); sign_in only when they are signed out. For live facts missing from verified context — prices, stock, practitioner availability, event details or course access — call gaia_lookup and use only what it returns; if it has nothing, say so and offer the right screen. After any action you are still their guide: say what is now on screen and the next step. Never claim you booked, bought, emailed or changed anything a tool did not do.',
     // ── depends on the session's state ──
     assistGuide.statePolicy(assistGuide.sessionState(memberContext)),
+    memberContextRules(memberContext),
     ['member', 'practitioner'].includes(assistGuide.sessionState(memberContext))
       ? 'MEMORY (only for a verified member, never a visitor): use WHAT YOU REMEMBER lightly to continue where you left off, never re-ask what you know. When you learn something durable (an interest, goal, decision, objection, follow-up), call remember_member with short facts — never trivia, health details or anything financial.'
       : '',
@@ -4347,7 +4362,7 @@ async function buildMemberVoiceContext(req) {
 
     const lines = [
       'GAIA SESSION STATE: ' + (access.member.practitioner ? 'practitioner' : 'member'),
-      'MEMBER CONTEXT (private — this is the currently signed-in member). Use it ONLY to personalize answers for this person. Never read it aloud verbatim, never disclose it to anyone else, and never reference data belonging to other members.',
+      'MEMBER CONTEXT (private)',
       `You are speaking with ${b.member.displayName || firstName}. Use their first name sparingly ("${firstName}").`,
     ];
     const status = [b.member.role, b.member.cohort, access.member.membershipTier ? `${access.member.membershipTier} member` : '', access.member.practitioner ? (access.member.practitionerCertified ? 'certified practitioner' : 'practitioner') : ''].filter(Boolean).join(' · ');
@@ -4366,10 +4381,6 @@ async function buildMemberVoiceContext(req) {
     if (formSubs.length || surveySubs.length) lines.push(`Has submitted ${formSubs.length} form(s) and ${surveySubs.length} survey(s).`);
     if (unread) lines.push(`Has ${unread} unread message(s) in their Gaia Healers conversations.`);
 
-    lines.push('WHAT YOU CAN SEE: their profile, memberships/communities, which courses they are entitled to (by name), products/devices, purchases & subscriptions (counts only), appointments, forms/surveys submitted, and conversation notifications.');
-    lines.push('WHAT YOU CANNOT SEE: how far along a lesson they are, grades, or community post/discussion content — the backend does not expose these. You CAN tell them which courses they have access to and open the course for them; you cannot report lesson-by-lesson progress or a scan reading. If asked for those, say plainly you can open the course or community in the portal but cannot read the detail from here. NEVER invent progress, grades, posts, scan numbers, or history.');
-    lines.push('Privacy: discuss only THIS member’s own data, and only when they ask about it. Do not proactively recite sensitive details.');
-
     try {
       const mem = memoryContextLine(cid); if (mem) lines.push(mem);
       const obProfile = await onboardingStore.load(cid);
@@ -4379,7 +4390,6 @@ async function buildMemberVoiceContext(req) {
         : 'NOT DONE — resume at ' + obProfile.nextStep + '. Use the saved answers, never repeat completed questions. Structured answer cards are available in Assist.'));
       const profileChoices = Object.fromEntries(Object.entries(obProfile.answers).filter(([, value]) => Array.isArray(value)));
       lines.push('CURRENT GAIA PROFILE CHOICES: ' + JSON.stringify(profileChoices));
-      lines.push('Use these saved choices for relevant Store, Energy, Academy and Community guidance. Choices are current; historical interest tags can remain after a branch change. Interests never prove device ownership, purchase intent or course access.');
       const interestTags = (b.tags || []).filter((t) => /^(interest_|product_.*_(interest|owner)|practice_stage_|invest_|community_feature_|need_)/.test(String(t).toLowerCase()));
       if (interestTags.length) lines.push('What we already know (profile tags): ' + interestTags.slice(0, 40).join(', ') + '.');
       const hasPaidSub = Array.isArray(b.subscriptions) && b.subscriptions.some((x) => /active|trialing/i.test(String(x.status || '')));
@@ -5592,6 +5602,7 @@ export function assistSystemPrompt(memberContext = '') {
     // so it sits before the state policy rather than after it.
     'ANSWERS: concise, warm and practical, with no obligatory follow-up question. For "how do I…", name the exact screen and step and offer to open it. When LIVE GAIA HEALERS DATA is provided, use only those facts for prices, counts, products and names; if you do not know, say so and point to the exact page. Never claim an action succeeded without a confirmed tool/save result. Text chat explains the exact available steps.',
     assistGuide.statePolicy(assistGuide.sessionState(memberContext)),
+    memberContextRules(memberContext),
     ['member', 'practitioner'].includes(assistGuide.sessionState(memberContext))
       ? 'MEMORY (only for a verified member, never a visitor): use WHAT YOU REMEMBER lightly and never re-ask it. When you learn something durable (an interest, goal, decision, objection, follow-up), add a final line <<REMEMBER: fact one ;; fact two>> — the app saves and hides it. Never save trivia, health details or anything financial.'
       : '',

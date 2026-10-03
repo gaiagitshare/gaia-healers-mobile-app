@@ -48,7 +48,11 @@ test('the practitioner prompt is budgeted too, not just the visitor one', () => 
     memberContext: 'GAIA SESSION STATE: practitioner\nMEMBER CONTEXT: Babak.\nStatus: certified practitioner.\nONBOARDING PROFILE: complete.',
   });
   assert.match(PRACTITIONER, /VERIFIED PRACTITIONER/, 'the fixture has to actually be a practitioner session');
-  assert.ok(PRACTITIONER.length < 14_000, `practitioner instructions grew to ${PRACTITIONER.length} chars`);
+  // Since Phase B-A the member-block rules (~1,350 chars) are static text in
+  // every member/practitioner session instead of inside the member's own
+  // block; this minimal fixture never carried a block, so it grew while a real
+  // practitioner prompt shrank (8,207 -> 8,144 tokens; test/assist-phase-b-a).
+  assert.ok(PRACTITIONER.length < 15_000, `practitioner instructions grew to ${PRACTITIONER.length} chars`);
   // And the practitioner-only policy must not be leaking into other roles.
   assert.ok(!/CLIENT FACTS COME FROM A TOOL/.test(VISITOR_VOICE),
     'a visitor is being told about tools they do not have');

@@ -14,6 +14,8 @@ before/after numbers.
 
 `gaia-staging-proxy/tools/determinism-harness.mjs`.
 
+> **PAID LIVE TEST — OWNER APPROVAL REQUIRED.** Every session this harness opens is billed. It refuses above 5 sessions unless `--max-sessions N` is passed after the owner has approved N; use `--dry-run` for the estimate and `--only <case>` to narrow it (AGENTS.md).
+
 It drives the production decision path: the same realtime model the orb talks
 to (`qwen3.8-omni-flash-realtime`), the instruction string from the real
 `buildGaiaLiveInstructions()`, and the declarations from the real

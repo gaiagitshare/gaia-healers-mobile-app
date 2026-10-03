@@ -6,19 +6,31 @@ import {detectCrisis,crisisReply} from '../staging-proxy/assist-safety.js';
 import { createRequire } from 'node:module';
 const {WebSocket}=createRequire(new URL('../staging-proxy/package.json',import.meta.url))('ws');
 import { parseArgs } from 'node:util';
-const { values } = parseArgs({ options: { env: { type: 'string' }, label: { type: 'string', default: 'review' }, out: { type: 'string' }, only: {type:'string'} } });
-if (!values.env || !values.out) throw new Error('Pass --env /private/provider.env --out results.json');
-const env = Object.fromEntries(fs.readFileSync(values.env, 'utf8').split(/\r?\n/).filter(l => /^[A-Z_]+=/.test(l)).map(l => { const i = l.indexOf('='); return [l.slice(0, i), l.slice(i + 1).replace(/^['"]|['"]$/g, '')]; }));
+const { values } = parseArgs({ options: { env: { type: 'string' }, label: { type: 'string', default: 'review' }, out: { type: 'string' }, only: {type:'string'}, 'dry-run': {type:'boolean'}, 'max-requests': {type:'string'} } });
+if (!values['dry-run'] && (!values.env || !values.out)) throw new Error('Pass --env /private/provider.env --out results.json');
+const env = values['dry-run'] && !values.env ? {} : Object.fromEntries(fs.readFileSync(values.env, 'utf8').split(/\r?\n/).filter(l => /^[A-Z_]+=/.test(l)).map(l => { const i = l.indexOf('='); return [l.slice(0, i), l.slice(i + 1).replace(/^['"]|['"]$/g, '')]; }));
 for (const k of ['GEMINI_API_KEY', 'GOOGLE_API_KEY', 'GEMINI_TEXT_MODEL', 'GROQ_API_KEY', 'GROQ_MODEL']) if (env[k]) process.env[k] = env[k];
 process.chdir(fs.mkdtempSync(path.join(os.tmpdir(), 'gaia-guide-probe-')));
 Object.assign(process.env, { PORT: '0', HOST: '127.0.0.1', AUTH_SESSION_SECRET: 'qa'.repeat(24), COURSES_SYNC_SECRET: 'qa'.repeat(24), GHL_BACKFILL_SECRET: 'qa'.repeat(24), GHL_WORKFLOW_WEBHOOK_SECRET: 'qa'.repeat(24), GHL_API_BASE_URL: 'http://127.0.0.1:9', GHL_API_TOKEN: 'fixture', GHL_LOCATION_ID: 'fixture', EVENT_MANAGER_BASE_URL: 'http://127.0.0.1:9', GAIA_DISABLE_ALERT_TIMER: '1', STORE_SYNC_ENABLED: 'false' });
 const { assistSystemPrompt, assistUserPrompt, buildGaiaLiveInstructions, closeServer } = await import('../staging-proxy/server.js');
 const cases = JSON.parse(fs.readFileSync(new URL('./assist-quality-cases.json', import.meta.url)));
+
+// Up to two paid text calls per text case (Gemini and Groq) and one Qwen voice
+// session per voice case: 100 for the full set. Capped like every paid script
+// (AGENTS.md); --only narrows it to the cases that matter.
+import { installPaidCallGuard } from '../staging-proxy/tools/paid-call-guard.mjs';
+const selected = cases.filter((c) => !values.only || values.only.split(',').includes(c.id));
+const paidGuard = installPaidCallGuard({
+  label: 'assist-quality-probe',
+  planned: selected.reduce((n, c) => n + (c.mode === 'voice' ? 1 : 2), 0),
+  why: 'review Assist answers across the quality cases',
+  argv: ['--max-requests', values['max-requests'] || '5', ...(values['dry-run'] ? ['--dry-run'] : [])],
+});
 async function qwenVoice(system, user) {
   const base=(env.QWEN_BASE_URL||'https://dashscope-intl.aliyuncs.com').replace(/^http/,'ws').replace(/\/+$/,'');
   const model=env.QWEN_VOICE_MODEL||'qwen3.8-omni-flash-realtime';
   return new Promise((resolve,reject)=>{
-    const ws=new WebSocket(`${base}/api-ws/v1/realtime?model=${encodeURIComponent(model)}`,{headers:{Authorization:`Bearer ${env.QWEN_API_KEY}`}});
+    paidGuard.count(base); const ws=new WebSocket(`${base}/api-ws/v1/realtime?model=${encodeURIComponent(model)}`,{headers:{Authorization:`Bearer ${env.QWEN_API_KEY}`}});
     let reply='',audioBytes=0,sent=false;
     const timer=setTimeout(()=>{ws.close();reject(new Error('qwen-timeout'));},45000);
     ws.on('error',()=>{clearTimeout(timer);reject(new Error('qwen-unavailable'));});

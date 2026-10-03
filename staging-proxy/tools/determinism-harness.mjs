@@ -28,6 +28,12 @@ import path from 'node:path';
 import { WebSocket } from 'ws';
 import { qwenVoiceConfig, sessionUpdateFor } from '../qwen-voice-relay.js';
 import { toolDeclarationsFor } from '../assist-tools.js';
+import { installPaidCallGuard } from './paid-call-guard.mjs';
+
+// Set once the plan has passed the spending check below; every session counts
+// against it before connecting, so a run cannot open more sessions than were
+// approved even if the plan was miscounted.
+let paidGuard = null;
 
 // ── env, without ever printing it ─────────────────────────────────────────
 for (const line of fs.readFileSync(path.join(process.cwd(), '.env'), 'utf8').split('\n')) {
@@ -153,6 +159,8 @@ const PRACTITIONER_TOOLS = new Set(Object.keys(STUBS));
 
 async function runConversation({ turns, tools, instructions, label }) {
   const url = `${cfg.wsBase}/api-ws/v1/realtime?model=${encodeURIComponent(cfg.model)}`;
+  if (!paidGuard) throw new Error('paid-call guard not installed; refusing to open a paid session');
+  paidGuard.count(url);
   const ws = new WebSocket(url, { headers: { Authorization: `Bearer ${cfg.apiKey}` } });
   const result = { label, turns: [], error: null };
 
@@ -367,7 +375,7 @@ function downgradeTools(decls) {
 // ── scoring ───────────────────────────────────────────────────────────────
 const args = process.argv.slice(2);
 const arg = (k, d) => { const i = args.indexOf(k); return i < 0 ? d : args[i + 1]; };
-const REPS = Number(arg('--reps', 8));
+const REPS = Number(arg('--reps', 1));
 const OUT = arg('--out', 'determinism.json');
 const CONCURRENCY = Number(arg('--jobs', 4));
 
@@ -383,12 +391,24 @@ if (!/VERIFIED PRACTITIONER/.test(instructions)) {
 }
 const toolsAfter = toolDeclarationsFor(CTX);
 const memberTools = toolDeclarationsFor(MEMBER_CTX);
+// A third wording, to test one hypothesis: that mentioning the utterance at all
+// is what invites it. Twice now a clause of the form "never say you are
+// fetching it" has coincided with MORE turns that say exactly that and call
+// nothing -- 14 -> 20 for the clause that was reverted, 7 -> 16 for the one
+// that shipped. `quiet` says the tool is slow and says nothing whatsoever about
+// speaking, which is the only way to tell priming from coincidence.
+const QUIET_SLOW = 'SLOW \u2014 about ten seconds; the card opens and shows the wait by itself.';
+const quietTools = (decls) => decls.map((d) => (OLD_SLOW[d.name] && d.description.includes(NEW_SLOW)
+  ? { ...d, description: d.description.replace(NEW_SLOW, QUIET_SLOW) }
+  : d));
+
 const VARIANTS = {
   after: { instructions: built.practitioner, tools: toolsAfter },
   before: { instructions: downgradeInstructions(built.practitioner), tools: downgradeTools(toolsAfter) },
+  quiet: { instructions: built.practitioner, tools: quietTools(toolsAfter) },
 };
 const WANT = String(arg('--variant', 'after'));
-const PICKED = WANT === 'both' ? ['before', 'after'] : [WANT];
+const PICKED = WANT === 'both' ? ['before', 'after'] : WANT.split(',').map((v) => v.trim()).filter(Boolean);
 for (const v of PICKED) {
   if (!VARIANTS[v]) { console.error('unknown variant ' + v); process.exit(1); }
 }
@@ -498,6 +518,63 @@ async function runJob(job) {
   } catch { /* a failed flush must not lose the run */ }
   process.stderr.write(`\r${completed}/${jobs.length} jobs`);
 }
+
+// ── spending guard ────────────────────────────────────────────────────────
+//
+// Every session here is billed to a pay-as-you-go account. On 2-3 Oct 2026 this
+// script ran ~5,400 requests and ~90 million tokens to measure consistency --
+// about 99% of that month's bill, against ~1% from every real member combined.
+// Nobody had approved that volume, because nothing asked.
+//
+// Project rule since then: default to 3-5 requests, and anything larger needs
+// the owner's explicit approval, given in advance, with the request count,
+// tokens and cost stated. So this refuses -- it does not trim the run quietly
+// and carry on -- and it prints exactly what it would have cost.
+// --only narrows the run to the cases that matter -- "compare", "follow-ups",
+// "control/greeting" -- so a question can be answered with three requests
+// rather than three hundred.
+const ONLY = arg('--only', '');
+if (ONLY) {
+  const keep = jobs.filter((j) => [j.kind, j.spec?.id, j.intent?.id, j.say]
+    .some((v) => v && String(v).includes(ONLY)));
+  jobs.length = 0;
+  jobs.push(...keep);
+  if (!jobs.length) { console.error(`--only "${ONLY}" matched nothing`); process.exit(2); }
+}
+const TURNS_PER_JOB = (job) => (job.kind === 'conversation' ? job.spec.turns.length
+  : job.kind === 'single' ? 3 : job.spec.turns.length);
+const turnsPlanned = jobs.reduce((n, j) => n + TURNS_PER_JOB(j), 0);
+// Measured on the live account: one voice turn re-bills ~8-12k input tokens,
+// and the October bill came to ~$0.24 per million tokens all-in.
+const TOKENS_PER_TURN = 10000;
+const USD_PER_MILLION = 0.24;
+const tokensPlanned = turnsPlanned * TOKENS_PER_TURN;
+const TURNS_PER_JOB_AVG = () => Math.round((turnsPlanned / Math.max(1, jobs.length)) * TOKENS_PER_TURN);
+const costPlanned = (tokensPlanned / 1e6) * USD_PER_MILLION;
+const DEFAULT_MAX_SESSIONS = 5;
+const MAX_SESSIONS = Number(arg('--max-sessions', DEFAULT_MAX_SESSIONS));
+const estimate = `${jobs.length} sessions, ~${turnsPlanned} model turns, ~${(tokensPlanned / 1e6).toFixed(1)}M tokens, ~$${costPlanned.toFixed(2)}`;
+console.error(`planned: ${estimate}`);
+if (!Number.isFinite(MAX_SESSIONS) || MAX_SESSIONS < 1) {
+  console.error('--max-sessions must be a positive number'); process.exit(2);
+}
+if (jobs.length > MAX_SESSIONS) {
+  console.error(`\nREFUSED: ${jobs.length} sessions exceeds the cap of ${MAX_SESSIONS}.`);
+  console.error('This calls a paid model. Runs above the default of ' + DEFAULT_MAX_SESSIONS
+    + ' need explicit approval from the account owner first, with the estimate above.');
+  console.error(`Once approved, re-run with --max-sessions ${jobs.length}. Use --only to narrow the run instead.`);
+  process.exit(2);
+}
+if (args.includes('--dry-run')) { console.error('dry run: nothing sent.'); process.exit(0); }
+
+// The runtime half of the cap. --max-sessions is this script's own name for it;
+// the shared guard takes the same number, and never raises it.
+paidGuard = installPaidCallGuard({
+  label: 'determinism-harness', planned: jobs.length,
+  tokensPerCall: TURNS_PER_JOB_AVG(), usdPerMillion: USD_PER_MILLION,
+  why: 'measure how consistently the model calls practitioner tools',
+  argv: ['--max-requests', String(MAX_SESSIONS)],
+});
 
 const queue = [...jobs];
 await Promise.all(Array.from({ length: CONCURRENCY }, async () => {

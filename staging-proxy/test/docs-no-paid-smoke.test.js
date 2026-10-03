@@ -59,11 +59,16 @@ test('no documentation offers a billed model call without the owner-approval lab
       seen.add(real);
       const lines = fs.readFileSync(file, 'utf8').split('\n');
       let inFence = false;
+      let continued = false;   // the previous fenced line ended in "\", so this one is part of the same command
       lines.forEach((line, i) => {
-        if (/^\s*```/.test(line)) inFence = !inFence;
+        if (/^\s*```/.test(line)) { inFence = !inFence; continued = false; }
         // A route LISTING ("POST {proxy}/api/assist/chat") is reference, not a
-        // command; only a runnable shape counts, in a fence or in backticks.
-        const runnable = RUNNABLE.test(line) || /`[^`]*\b(curl|node|npm|npx)\b [^`]*`/.test(line);
+        // command; only a runnable shape counts, in a fence or in backticks. A
+        // multi-line curl bills on the line that names the endpoint, which is
+        // usually the LAST one, with no "curl" on it -- so continuations count.
+        const partOfCommand = RUNNABLE.test(line) || continued;
+        continued = inFence && partOfCommand && /\\\s*$/.test(line);
+        const runnable = partOfCommand || /`[^`]*\b(curl|node|npm|npx)\b [^`]*`/.test(line);
         const paid = (PAID_ENDPOINT.test(line) || PAID_SCRIPT.test(line)) && runnable;
         if (!paid || safeByConstruction(line)) return;
         // A curl whose -d/--data is on a LATER line: the endpoint line is still the one that bills.

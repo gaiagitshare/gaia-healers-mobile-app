@@ -132,3 +132,56 @@ test('--write-daily saves a private report file for the day', () => {
   assert.equal(fs.statSync(f).mode & 0o777, 0o600);
   assert.equal(fs.statSync(path.join(data, 'usage-reports')).mode & 0o777, 0o700);
 });
+
+// ── the system-alerts tail ────────────────────────────────────────────────
+
+function alertsFixture(dir) {
+  const file = path.join(dir, 'system-alerts.json');
+  fs.writeFileSync(file, JSON.stringify({ updatedAt: '2026-10-03T17:39:29.241Z', incidents: [
+    { id: 'a', key: 'payments:refunded-active', severity: 'critical', subsystem: 'Payments', state: 'open', title: 'Refunded payment still active', why: 'x',
+      evidence: 'contact arman.secret@example.com order #991', affected: { email: 'arman.secret@example.com' },
+      firstDetectedAt: '2026-09-28T19:14:18.112Z', lastDetectedAt: '2026-10-03T17:39:29.241Z', occurrences: 2169,
+      notified: { attempts: 2169, sentAt: null, lastAttemptAt: '2026-10-03T17:39:29.241Z', lastError: 'not_configured', resolvedNoticeAt: null } },
+    { id: 'b', key: 'membership:unmapped:abc', severity: 'warning', subsystem: 'Membership', state: 'open', evidence: 'sleep clinic member', firstDetectedAt: '2026-10-02T11:18:59.887Z', lastDetectedAt: '2026-10-03T17:39:29.241Z', occurrences: 3, notified: { attempts: 0, sentAt: null } },
+    { id: 'c', key: 'old:thing', severity: 'critical', subsystem: 'Payments', state: 'resolved', evidence: 'z', firstDetectedAt: '2026-09-01T00:00:00Z', lastDetectedAt: '2026-09-02T00:00:00Z', occurrences: 9, notified: { attempts: 1, sentAt: '2026-09-01T00:01:00Z' }, resolvedAt: '2026-09-02T00:00:00Z' },
+  ] }));
+  return file;
+}
+
+test('the report ends with the open incidents and their delivery counters, even when there are no usage records', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'rep-')); fs.mkdirSync(path.join(dir, 'data'));
+  const { file } = synthetic(path.join(dir, 'data'));
+  const alerts = alertsFixture(dir);
+  const j = JSON.parse(run(['--file', file, '--json', '--alerts', alerts], dir).stdout);
+  const a = j.system_alerts;
+  assert.equal(a.available, true);
+  assert.deepEqual(a.open, { critical: 1, warning: 1 });
+  assert.deepEqual(a.resolved, { critical: 1 });
+  assert.equal(a.open_incidents.length, 2);
+  assert.equal(a.open_incidents[0].key, 'payments:refunded-active', 'critical first');
+  assert.equal(a.open_incidents[0].occurrences, 2169);
+  assert.equal(a.open_incidents[0].delivery.attempts, 2169);
+  assert.equal(a.open_incidents[0].delivery.sent_at, null);
+  assert.equal(a.open_incidents[0].delivery.last_error, 'not_configured');
+  assert.match(a.delivery_failing, /1 open incident\(s\).*never sent.*not_configured.*ALERT_CONTACT_ID/);
+  // an empty usage window still carries the alerts
+  const empty = run(['--file', file, '--from', '2030-01-01', '--alerts', alerts], dir).stdout;
+  assert.match(empty, /No records in this window/);
+  assert.match(empty, /== SYSTEM ALERTS/);
+  assert.match(empty, /critical\s+payments:refunded-active\s+\[Payments\]\s+seen 2,169x since 2026-09-28/);
+  assert.match(empty, /delivery attempts 2,169, never sent \(not_configured\)/);
+  assert.match(empty, /NOTE: 1 open incident/);
+});
+
+test('an incident\'s evidence, title, why and affected never reach the report; a missing ledger is said, not crashed on', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'rep-')); fs.mkdirSync(path.join(dir, 'data'));
+  const { file } = synthetic(path.join(dir, 'data'));
+  const alerts = alertsFixture(dir);
+  const out = run(['--file', file, '--alerts', alerts], dir).stdout + run(['--file', file, '--json', '--alerts', alerts], dir).stdout;
+  assert.ok(!/arman\.secret|example\.com|#991|Refunded payment still active|sleep clinic/.test(out), 'incident text leaked');
+  const missing = run(['--file', file, '--alerts', path.join(dir, 'nope.json')], dir);
+  assert.equal(missing.status, 0);
+  assert.match(missing.stdout, /SYSTEM ALERTS[\s\S]*UNAVAILABLE: no incident ledger on file/);
+  fs.writeFileSync(path.join(dir, 'bad.json'), '{not json');
+  assert.match(run(['--file', file, '--alerts', path.join(dir, 'bad.json')], dir).stdout, /UNAVAILABLE: unreadable/);
+});

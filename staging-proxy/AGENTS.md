@@ -92,3 +92,29 @@ are bounded (`QWEN_MAX_RETRIES = 3` in `qwen-voice-relay.js`; one MCP retry in
 - Qwen: <https://home.qwencloud.com/billing/pay-as-you-go> — usage at
   `/analytics/pay-as-you-go/usage`. Set a **Spending Alert Limit** there.
 - Each other provider has its own console; set a spend alert on each.
+
+---
+
+## RULE: TOKEN EFFICIENCY in prompts, context, history, retrieval and tools
+
+When modifying AI prompts, context construction, conversation history,
+retrieval, or tool schemas, developers and agents **must consider token
+efficiency** and avoid unnecessarily resending static, duplicated, irrelevant,
+or excessively verbose context.
+
+**Cost optimization must never silently weaken safety, tool reliability,
+memory, or user experience.** A change that saves tokens but makes Gaia less
+safe, less able to pick the right tool, more forgetful, or worse to talk to is
+not an optimization. If a reduction risks any of those, say so explicitly and
+measure it before shipping — within the paid-API testing limits above.
+
+Practical meaning:
+
+- Know what each change adds to **every** turn. Something sent once per turn is
+  multiplied by every reply of every conversation.
+- Prefer loading context by **role, state, page and intent** over sending
+  everything to everyone (a member does not need practitioner-only tools).
+- Do not carry large tool results or stale context forward forever; keep the
+  facts, not the raw payload.
+- Keep static content stable and at the front where caching applies, so it is
+  not re-billed at full price.

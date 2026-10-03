@@ -31,7 +31,7 @@ import {
 } from './membership/oauth-core.js';
 import { classifyMembershipEvent, membershipFromEvent } from './membership/events.js';
 import { attachQwenVoiceRelay, qwenRouting, issueQwenTicket, qwenVoiceConfig, voiceBootLine } from './qwen-voice-relay.js';
-import { normalizeUsage, recordUsage } from './assist-usage.js';
+import { normalizeUsage, recordUsage, recordFailure } from './assist-usage.js';
 import { toolDeclarationsFor, clientToolNames, slowToolNames, runTool } from './assist-tools.js';
 import { practitionersConfig, makePkce, authorizeUrl, rememberFlow, claimFlow,
          exchangeCode, resolveProfile, saveToken, forgetToken, connectionStatus } from './practitioners-oauth.js';
@@ -5894,6 +5894,12 @@ async function streamChatProvider(provider, prompt, context = {}, onDelta = () =
   return { provider, model: config.model, usage, reply: text };
 }
 
+/** The model a provider would be asked for, for accounting a failed attempt. */
+function providerModelName(provider) {
+  if (provider === 'gemini') return process.env.GEMINI_TEXT_MODEL || 'gemini-2.5-flash';
+  return providerConfig(provider)?.model || 'unknown';
+}
+
 async function callAssistProviders(prompt, context = {}) {
   const attempts = [];
   if (process.env.GAIA_ASSIST_VOICE_ENABLED !== 'true') {
@@ -5912,6 +5918,10 @@ async function callAssistProviders(prompt, context = {}) {
       if (result.skipped) {
         attempts.push({ provider, status: 'skipped', reason: result.reason });
         console.log('[Gaia Assist] provider skipped', { provider, reason: result.reason });
+        // An empty reply was a request the provider answered, and may bill; a
+        // missing key or unknown provider was never sent.
+        if (result.reason === 'empty-reply') recordFailure({ channel: 'text', provider, model: providerModelName(provider),
+          state: assistGuide.sessionState(context.memberContext), error: 'empty', attempt: attempts.length });
         continue;
       }
       attempts.push({ provider, status: 'ok', latencyMs: Date.now() - started, model: result.model });
@@ -5924,6 +5934,9 @@ async function callAssistProviders(prompt, context = {}) {
         error: error.message.replace(/Bearer\s+[A-Za-z0-9._-]+/g, 'Bearer [redacted]'),
       });
       console.error('[Gaia Assist] provider failed', { provider, error: error.message.split('\n')[0] });
+      // Category only (assist-usage.js errorCategory); never the message or body.
+      recordFailure({ channel: 'text', provider, model: providerModelName(provider),
+        state: assistGuide.sessionState(context.memberContext), error, attempt: attempts.length });
     }
   }
 
@@ -6226,6 +6239,8 @@ async function assistChatStream(body, res, origin, req = null) {
       });
       if (result.skipped) {
         attempts.push({ provider, status: 'skipped', reason: result.reason });
+        if (result.reason === 'empty-reply') recordFailure({ channel: 'text', provider, model: providerModelName(provider),
+          state: assistGuide.sessionState(body.memberContext), error: 'empty', attempt: attempts.length });
         continue;
       }
       const latencyMs = Date.now() - started;
@@ -6266,6 +6281,8 @@ async function assistChatStream(body, res, origin, req = null) {
         error: error.message.replace(/Bearer\s+[A-Za-z0-9._-]+/g, 'Bearer [redacted]').slice(0, 320),
       });
       console.error('[Gaia Assist] stream provider failed', { provider, error: error.message.split('\n')[0] });
+      recordFailure({ channel: 'text', provider, model: providerModelName(provider),
+        state: assistGuide.sessionState(body.memberContext), error, attempt: attempts.length });
     }
   }
 
@@ -7375,6 +7392,11 @@ const server = http.createServer(async (req, res) => {
     }
     sendJson(res, 404, { ok: false, error: 'Not found' }, origin);
   } catch (error) {
+    // A streamed reply has already sent its headers; writing a JSON error on
+    // top throws ERR_HTTP_HEADERS_SENT from inside this catch, which nothing
+    // catches, and the whole proxy exits. End the response instead.
+    console.error('[Gaia] request failed', { path: String(req.url || '').split('?')[0], error: String(error?.message || error).slice(0, 160) });
+    if (res.headersSent) { try { res.end(); } catch { /* gone */ } return; }
     sendJson(res, 500, { ok: false, error: error.message }, origin);
   }
 });

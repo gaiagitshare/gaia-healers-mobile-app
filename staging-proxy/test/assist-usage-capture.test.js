@@ -42,6 +42,10 @@ globalThis.fetch = async (url, opts) => {
   const u = new URL(String(url));
   if (/^(127\.|localhost$)/.test(u.hostname)) return realFetch(url, opts);
   outbound.push(u.hostname);
+  if (u.hostname === 'generativelanguage.googleapis.com' && /FAIL-ME/.test(String(opts?.body || ''))) {
+    return new Response('{"error":{"code":503,"message":"The model is overloaded. Echo: FAIL-ME secret-prompt-text"}}',
+      { status: 503, headers: { 'content-type': 'application/json' } });
+  }
   if (u.hostname === 'generativelanguage.googleapis.com' && u.pathname.endsWith(':streamGenerateContent')) {
     const chunk = (o) => `data: ${JSON.stringify(o)}\n\n`;
     const body = chunk({ candidates: [{ content: { parts: [{ text: 'Breathing slowly ' }] } }] })
@@ -78,7 +82,12 @@ test('a streamed Gemini reply records its usage, including thinking tokens', asy
   assert.equal(rec.reasoning, 412, 'thinking tokens are billed as output and must be visible');
   assert.equal(rec.cachedInput, 0, 'and so is whether caching hit');
   assert.equal(rec.state, 'visitor');
-  assert.equal(rec.estCostUsd, null, 'no published price is on file for this model, so no cost is invented');
+  // gemini-3.6-flash has a dated entry in the price book, so a cost is estimated
+  // from the reported counts and the entry used is named on the record.
+  assert.ok(rec.estCostUsd > 0 && rec.estCostUsd < 0.01, `cost ${rec.estCostUsd}`);
+  assert.match(rec.priceList, /^gemini-3\.6-flash\//);
+  assert.equal(rec.outcome, 'ok');
+  assert.equal(rec.usageReported, true);
 });
 
 test('a plain (non-streamed) Gemini reply records its usage too', async () => {
@@ -90,9 +99,22 @@ test('a plain (non-streamed) Gemini reply records its usage too', async () => {
   assert.equal(rec.reasoning, 412);
 });
 
+test('a provider failure is recorded as a failed attempt, by category, with no body', async () => {
+  const before = records().length;
+  const r = await post('/api/assist/chat/stream', { prompt: 'FAIL-ME please' });
+  await r.text();
+  const rec = records().slice(before).find((x) => x.outcome === 'failed');
+  assert.ok(rec, 'a failed attempt must be accounted for -- it may still bill');
+  assert.equal(rec.provider, 'gemini');
+  assert.equal(rec.error, 'server');
+  assert.equal(rec.usageReported, false);
+  assert.equal(rec.attempt, 1);
+  assert.ok(!/overloaded|FAIL-ME|secret-prompt/.test(JSON.stringify(rec)), 'the provider body never reaches the log');
+});
+
 test('no record contains what anybody said', () => {
   const all = JSON.stringify(records());
-  assert.ok(!/tense|Hello there|Breathing|can help/.test(all));
+  assert.ok(!/tense|Hello there|Breathing|can help|FAIL-ME|overloaded/.test(all));
 });
 
 test('only the faked provider was called', () => {

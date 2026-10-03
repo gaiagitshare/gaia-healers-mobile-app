@@ -222,7 +222,7 @@ test('a number the provider did not report stays null -- nothing is guessed', ()
   const u = usage.normalizeUsage('gemini', { promptTokenCount: 10 });
   assert.equal(u.cachedInput, null);
   assert.equal(u.reasoning, null);
-  assert.equal(usage.estimateCost('gemini-3.6-flash', u), null, 'no published price on file, so no cost');
+  assert.equal(usage.estimateCost('groq/qwen3.8-27b', u), null, 'no published price on file for this model, so no cost');
 });
 
 test('cost is computed only from reported counts and a published price', () => {
@@ -244,8 +244,7 @@ test('a usage record carries counts, never conversation content', () => {
       usage: usage.normalizeUsage('gemini', { promptTokenCount: 5, candidatesTokenCount: 2 }),
       prompt: 'I cannot sleep', reply: 'Try breathing', contactId: 'C-123' });
     const rec = JSON.parse(fs.readFileSync(file, 'utf8').trim());
-    assert.deepEqual(Object.keys(rec).sort(), ['at', 'audioIn', 'audioOut', 'cachedInput', 'channel', 'estCostUsd',
-      'input', 'model', 'output', 'priceList', 'provider', 'reasoning', 'seconds', 'state', 'textIn', 'textOut', 'turns'].sort());
+    assert.deepEqual(Object.keys(rec), [...usage.USAGE_FIELDS], 'the record must carry exactly USAGE_FIELDS, in order');
     assert.ok(!/sleep|breathing|C-123/.test(JSON.stringify(rec)), 'no prompt, reply or identity may be written');
   } finally { delete process.env.GAIA_USAGE_LOG; }
 });

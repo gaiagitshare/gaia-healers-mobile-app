@@ -7,9 +7,11 @@
 after A, same offline method: visitor 5,201 → **5,099**, member 6,238 →
 **6,176**, onboarding 7,488 → **7,386**, practitioner 8,207 → **8,144**; the
 prefix two different members share went from 3,522 (80%) to **3,748 (87%)**,
-and a member's own block is now facts only (907 → 557 tokens). Items 4 and
-6–12 remain **not implemented**; they wait on real usage data and the decisions
-in §5.
+and a member's own block is now facts only (907 → 557 tokens). Item 6 was decided by the owner the same day (40 names, no email) and shipped:
+`practitioner_list_clients` now returns at most 40 clients without email, the
+true count, and a pointer to `practitioner_find_client` — worst case 5,451 →
+~700 tokens. Items 4 and 7–12 remain **not implemented**; they wait on real
+usage data and the decisions in §5.
 Every number below is from the offline reconstruction in
 `staging-proxy/tools/assist-context-audit.mjs` (same method as the Phase 1
 baseline, ±10%), unless marked **REAL**. No paid model was called to produce it.

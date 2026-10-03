@@ -31,6 +31,10 @@ import assert from 'node:assert/strict';
 import http from 'node:http';
 import { WebSocket, WebSocketServer } from 'ws';
 
+// Fake sessions must never reach the real usage log, even when this file is run
+// directly rather than through npm test.
+process.env.GAIA_USAGE_LOG = '';
+
 /** A stand-in for Qwen that replays a scripted reaction to response.create. */
 function fakeQwen(script) {
   const wss = new WebSocketServer({ port: 0 });

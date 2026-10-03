@@ -162,6 +162,12 @@ export const TOOLS = [
   {
     role: 'member',
     where: 'client',
+    // Only while the profile journey is unfinished. That is the 'onboarding'
+    // state, OR any session whose prompt carries the survey script (a 'member'
+    // whose profile still reads NOT DONE) -- the prompt tells the model to call
+    // this, so it must be offered whenever the prompt says so.
+    offeredIn: ['onboarding'],
+    offeredWithSurvey: true,
 
                   name: 'save_onboarding_step',
                   description: 'Record ONE step of the Gaia Healers getting-to-know-you (onboarding) survey for the signed-in member, which creates their interest tags. Call this right after the member answers each step, passing the EXACT option label(s) they chose. Use complete=true only on the final step. Only for signed-in members.',
@@ -200,6 +206,8 @@ export const TOOLS = [
   {
     role: 'member',
     where: 'client',
+    // Needs a signed-in member; a visitor's call can only fail (/api/assist/memory -> not_signed_in).
+    offeredIn: ['member', 'practitioner', 'onboarding'],
 
                   name: 'remember_member',
                   description: 'Save durable facts about the signed-in member so you can continue naturally next visit. Call this when you learn something worth remembering — a real interest, a goal, a decision they made, an objection they raised, or a follow-up for next time. Do NOT save trivia, one-off logistics, or sensitive personal/financial details.',
@@ -293,6 +301,8 @@ export const TOOLS = [
   {
     role: 'member',
     where: 'client',
+    // Only for someone who is signed out; its own description says not to call it otherwise.
+    offeredIn: ['visitor'],
 
                   name: 'sign_in',
                   description: 'Open the in-app sign-in form so the member can sign in with their email (a one-tap magic link is sent). Call this when the member asks to sign in, log in, access their account, or says they are not signed in — for example "sign me in", "I want to log in", "help me sign in", "let me access my account". Do not call this if the member is already signed in.',
@@ -627,6 +637,29 @@ export function allowed(tool, ctx) {
 }
 
 /**
+ * Is it worth OFFERING this tool to this session? Separate from permission on
+ * purpose: `allowed` decides what may run and is unchanged; this only stops the
+ * model being handed actions that cannot succeed for who it is talking to.
+ *
+ * A visitor was offered remember_member and save_onboarding_step; a finished
+ * member was offered sign_in and save_onboarding_step. None of those can do
+ * anything for them, so each is a wrong option the model may pick -- and ~450
+ * to ~550 tokens re-sent on every reply.
+ *
+ * When the session's state is not known (no `state` on the context, or GHL was
+ * unreachable), EVERY allowed tool is offered, exactly as before. Being unsure
+ * must never cost someone an action they need.
+ */
+export function offered(tool, ctx) {
+  if (!allowed(tool, ctx)) return false;
+  if (!Array.isArray(tool.offeredIn)) return true;
+  if (tool.offeredWithSurvey && ctx?.surveyActive) return true;
+  const state = ctx ? ctx.state : 'visitor';
+  if (!state || state === 'unavailable') return true;
+  return tool.offeredIn.includes(state);
+}
+
+/**
  * The declarations to hand the model, in Gemini's shape, filtered by role.
  *
  * A member who is not a practitioner is not told the practitioner tools exist.
@@ -635,7 +668,7 @@ export function allowed(tool, ctx) {
  * not having the option.
  */
 export function toolDeclarationsFor(ctx) {
-  return TOOLS.filter((t) => allowed(t, ctx)).map((t) => {
+  return TOOLS.filter((t) => offered(t, ctx)).map((t) => {
     // A tool may describe itself differently to different roles. navigate is the
     // only one that does: a practitioner can be sent to a client's readings, and
     // a member who has no Practice screen should not be offered a destination
@@ -648,11 +681,11 @@ export function toolDeclarationsFor(ctx) {
 /** Names the PAGE is expected to execute; everything else comes back here. */
 /** Tools that take many seconds, so the page can say so rather than look stuck. */
 export function slowToolNames(ctx) {
-  return TOOLS.filter((t) => allowed(t, ctx) && t.slow).map((t) => t.name);
+  return TOOLS.filter((t) => offered(t, ctx) && t.slow).map((t) => t.name);
 }
 
 export function clientToolNames(ctx) {
-  return TOOLS.filter((t) => allowed(t, ctx) && t.where === 'client').map((t) => t.name);
+  return TOOLS.filter((t) => offered(t, ctx) && t.where === 'client').map((t) => t.name);
 }
 
 /**

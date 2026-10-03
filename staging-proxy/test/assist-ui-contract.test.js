@@ -178,3 +178,45 @@ test('the only working Stop button is still hidden, so the visible ones must wor
   assert.ok(/gaia-assist__stop/.test(block),
     'the Stop button lives in there; the visible controls are what people use');
 });
+
+// ── voice that cannot start ───────────────────────────────────────────────
+//
+// With Qwen refusing the account (AccessDenied.Unpurchased, 3 Oct 2026) a tap
+// on the orb made TWO billed attempts: the relay failed before setup, the orb
+// took that close as a dropped connection and silently reconnected, the relay
+// failed again, and the member read "Voice connection dropped" -- which is
+// not what happened. Now the relay says what category of failure it was and
+// the orb retries only when a retry could help.
+
+function readOrb() {
+  for (const rel of ['../../gaia-realtime-voice.js', '../../gaia-healers-mobile-app-1/gaia-realtime-voice.js']) {
+    try { return fs.readFileSync(new URL(rel, import.meta.url), 'utf8'); } catch { /* next */ }
+  }
+  throw new Error('gaia-realtime-voice.js not found beside the proxy');
+}
+
+test('a permanent refusal is not retried: the orb asks the shared classifier before reconnecting', () => {
+  const src = readOrb();
+  const i = src.indexOf('ws.onclose = (event) => {');
+  assert.ok(i > 0);
+  const block = src.slice(i, i + 1400);
+  const check = block.indexOf('voiceClosePermanent');
+  const retry = block.indexOf('attemptReconnect()');
+  assert.ok(check > 0 && retry > 0 && check < retry, 'the permanence check must come before the one silent reconnect');
+  assert.match(block.slice(check, retry), /return;/, 'and a permanent failure returns without reconnecting');
+});
+
+test('what the member reads names no provider and points at the keyboard', () => {
+  const src = readOrb();
+  const m = /const VOICE_UNAVAILABLE_COPY = '([^']+)'/.exec(src);
+  assert.ok(m, 'one shared sentence for voice that cannot start');
+  assert.ok(!/qwen|gemini|alibaba|billing|purchas|denied|token|error/i.test(m[1]), m[1]);
+  assert.match(m[1], /type/i, 'typing must be offered as the way forward');
+  assert.match(m[1], /tap Gaia/i, 'and trying again stays available');
+  assert.ok(!/'Qwen voice is unavailable/.test(src), 'no user-facing string names the provider');
+});
+
+test('a transient failure keeps exactly one silent reconnect', () => {
+  const src = readOrb();
+  assert.match(src, /if \(reconnectAttempted\) return false;\s*\/\/ only once/);
+});

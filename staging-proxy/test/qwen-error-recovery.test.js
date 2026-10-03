@@ -218,3 +218,82 @@ test('a clean turn is never re-requested and never delayed', async () => {
   assert.equal(out.handover, null);
   assert.match(out.transcript, /All good/);
 });
+
+// ── a refusal that will not change in a second ───────────────────────────
+
+test('an entitlement refusal arrives as a bare {code,message} frame and is recognised as an error', async () => {
+  // Observed on 3 Oct 2026: {"code":"AccessDenied.Unpurchased","message":"Access
+  // to model denied..."} with no `type`. It used to fall through every branch.
+  const qwen = fakeQwen(() => []);
+  const prev = process.env.QWEN_BASE_URL;
+  process.env.QWEN_BASE_URL = `http://127.0.0.1:${qwen.port}`;
+  const relay = await import(`../qwen-voice-relay.js?t=${Date.now()}_denied`);
+  const server = http.createServer();
+  relay.attachQwenVoiceRelay(server);
+  await new Promise((r) => server.listen(0, '127.0.0.1', r));
+  const ticket = relay.issueQwenTicket({ instructions: 'x', ip: '127.0.0.1', tools: [] });
+  qwen.wss.removeAllListeners('connection');
+  qwen.wss.on('connection', (ws) => {
+    ws.on('message', () => {
+      ws.send(JSON.stringify({ type: 'session.created' }));
+      ws.send(JSON.stringify({ code: 'AccessDenied.Unpurchased', message: 'Access to model denied. Please make sure you are eligible for using the model.', request_id: 'r1' }));
+      setTimeout(() => ws.close(1006), 50);
+    });
+  });
+  const ws = new WebSocket(`ws://127.0.0.1:${server.address().port}/api/assist/voice/qwen?ticket=${ticket}`);
+  await new Promise((res, rej) => { ws.once('open', res); ws.once('error', rej); });
+  const closed = await new Promise((resolve) => {
+    ws.on('close', (code, reason) => resolve({ code, reason: String(reason) }));
+    ws.send(JSON.stringify({ setup: {} }));
+    setTimeout(() => resolve({ code: 0, reason: 'timeout' }), 5000);
+  });
+  try { ws.close(); } catch { /* closed */ }
+  await new Promise((r) => server.close(r));
+  qwen.close();
+  if (prev === undefined) delete process.env.QWEN_BASE_URL; else process.env.QWEN_BASE_URL = prev;
+  assert.equal(closed.code, 4502);
+  assert.equal(closed.reason, 'qwen_unavailable:access_denied', 'the category travels in the close reason, the message does not');
+  assert.ok(!/eligible|Unpurchased/.test(closed.reason));
+});
+
+test('a pre-setup timeout is categorised as transient, so the orb may still retry once', async () => {
+  const qwen = fakeQwen(() => []);
+  const prev = process.env.QWEN_BASE_URL; const prevConnect = process.env.QWEN_VOICE_CONNECT_MS;
+  process.env.QWEN_BASE_URL = `http://127.0.0.1:${qwen.port}`;
+  process.env.QWEN_VOICE_CONNECT_MS = '300';
+  const relay = await import(`../qwen-voice-relay.js?t=${Date.now()}_slow`);
+  const server = http.createServer();
+  relay.attachQwenVoiceRelay(server);
+  await new Promise((r) => server.listen(0, '127.0.0.1', r));
+  const ticket = relay.issueQwenTicket({ instructions: 'x', ip: '127.0.0.1', tools: [] });
+  qwen.wss.removeAllListeners('connection');
+  qwen.wss.on('connection', () => { /* never answers the setup */ });
+  const ws = new WebSocket(`ws://127.0.0.1:${server.address().port}/api/assist/voice/qwen?ticket=${ticket}`);
+  await new Promise((res, rej) => { ws.once('open', res); ws.once('error', rej); });
+  const closed = await new Promise((resolve) => {
+    ws.on('close', (code, reason) => resolve({ code, reason: String(reason) }));
+    ws.send(JSON.stringify({ setup: {} }));
+    setTimeout(() => resolve({ code: 0, reason: 'test timeout' }), 5000);
+  });
+  try { ws.close(); } catch { /* closed */ }
+  await new Promise((r) => server.close(r));
+  qwen.close();
+  if (prev === undefined) delete process.env.QWEN_BASE_URL; else process.env.QWEN_BASE_URL = prev;
+  if (prevConnect === undefined) delete process.env.QWEN_VOICE_CONNECT_MS; else process.env.QWEN_VOICE_CONNECT_MS = prevConnect;
+  assert.equal(closed.code, 4502);
+  assert.equal(closed.reason, 'qwen_unavailable:timeout');
+});
+
+test('the shared classifier: only a deterministic refusal is permanent', async () => {
+  await import('../assist-guide.js');
+  const g = globalThis.GaiaAssistGuide;
+  assert.equal(g.voiceClosePermanent(4502, 'qwen_unavailable:access_denied'), true);
+  assert.equal(g.voiceClosePermanent(4502, 'qwen_unavailable:auth'), true);
+  assert.equal(g.voiceClosePermanent(4502, 'qwen_unavailable:bad_request'), true);
+  for (const transient of ['timeout', 'network', 'server', 'unknown', 'rate_limit']) {
+    assert.equal(g.voiceClosePermanent(4502, 'qwen_unavailable:' + transient), false, `${transient} may still get one retry`);
+  }
+  assert.equal(g.voiceClosePermanent(1006, 'qwen_unavailable:access_denied'), false, 'only the relay\'s own close code counts');
+  assert.equal(g.voiceClosePermanent(4502, ''), false);
+  assert.equal(g.voiceClosePermanent(4502, 'qwen_unavailable'), false, 'the old uncategorised reason is treated as transient');
+});

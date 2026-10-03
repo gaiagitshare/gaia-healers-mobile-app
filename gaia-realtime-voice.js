@@ -2,6 +2,10 @@
 (function () {
   'use strict';
 
+  // What a member reads when voice cannot start. No provider name, no billing
+  // detail, and the way forward in the same breath.
+  const VOICE_UNAVAILABLE_COPY = 'Voice is unavailable right now. Tap Gaia to try again, or type your question below.';
+
   const TOKEN_ERRORS = {
     gaia_voice_disabled: 'Live voice is not enabled yet. Type your question instead.',
     missing_gemini_api_key: 'Live voice is not configured yet. Type your question instead.',
@@ -1020,7 +1024,7 @@
     // speaks Gemini's messages to this page and holds the Qwen key itself.
     function socketUrl(meta) {
       if (meta && meta.provider === 'qwen' && meta.relayUrl) return meta.relayUrl;
-      throw new Error('Qwen voice is unavailable. Please retry or type your question.');
+      throw new Error('voice relay unavailable');   // internal; the member sees VOICE_UNAVAILABLE_COPY
     }
 
     function sendWs(payload) {
@@ -1262,7 +1266,7 @@
             break;
           }
           case 'handover':
-            cleanupSession(); setErrorMessage('Qwen voice is unavailable. Tap Gaia to retry or type your question.'); setStatus('error');
+            cleanupSession(); setErrorMessage(VOICE_UNAVAILABLE_COPY); setStatus('error');
             break;
           case 'error':
             setErrorMessage(event.message);
@@ -1465,6 +1469,18 @@
               ws.onclose = (event) => {
                 if (status === 'idle') return;                 // user stopped — stay quiet
                 if (switchingEngine || wsRef.current !== ws) return; // handed over
+                // The relay could not start the session for a reason that will
+                // not change in a second (the account is not entitled to the
+                // model, the key was rejected). A silent reconnect here is a
+                // second billed attempt that fails the same way, and then shows
+                // "connection dropped" -- which is not what happened. Say what
+                // did, calmly, and leave the keyboard.
+                if (window.GaiaAssistGuide?.voiceClosePermanent?.(event?.code, event?.reason)) {
+                  cleanupSession();
+                  setErrorMessage(VOICE_UNAVAILABLE_COPY);
+                  setStatus('error');
+                  return;
+                }
                 // Try one silent reconnect; if that path is taken, don't surface
                 // an error yet. Otherwise show the normal close message.
                 if (!attemptReconnect()) {
@@ -1518,7 +1534,7 @@
           }, maxSeconds * 1000);
         } catch (err) {
           cleanupSession();
-          setErrorMessage('Qwen voice is unavailable. Tap Gaia to retry or type your question.');
+          setErrorMessage(VOICE_UNAVAILABLE_COPY);
           setStatus('error');
         } finally {
           startPromise = null;

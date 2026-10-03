@@ -125,6 +125,25 @@
     }
     return kept;
   }
+  /**
+   * A voice session the relay could not even start, and whether trying again
+   * right now could possibly help.
+   *
+   * The relay closes the browser socket with 4502 and a reason of
+   * "qwen_unavailable:<category>". A category that is DETERMINISTIC -- the
+   * account is not entitled to the model, the key is rejected, the request is
+   * malformed -- will fail identically a second later, so the orb must not make
+   * a second billed attempt. Anything else (timeout, network, server) is left
+   * to its one bounded reconnect, exactly as before.
+   */
+  const VOICE_UNAVAILABLE_CODE = 4502;
+  const PERMANENT_VOICE_FAILURES = ['access_denied', 'auth', 'bad_request'];
+  function voiceClosePermanent(code, reason) {
+    if (Number(code) !== VOICE_UNAVAILABLE_CODE) return false;
+    const m = /^qwen_unavailable:([a-z_]+)$/.exec(String(reason || ''));
+    return Boolean(m && PERMANENT_VOICE_FAILURES.includes(m[1]));
+  }
+
   // The ONE place the current-screen lines are written. The voice prompt is
   // built with it, and a screen change mid-session replaces these lines rather
   // than appending another copy beside the stale ones.
@@ -134,5 +153,5 @@
     return NAVIGATION_HEAD + JSON.stringify(c)
       + '\nCurrent screen: ' + c.screen + '. Page context helps interpret ambiguous requests; explicit user intent takes priority.';
   }
-  root.GaiaAssistGuide = Object.freeze({ screens, policy, sessionState, statePolicy, chooseAction, turnGuidance, reviewedReply, fallback, context, history, navigationBlock, NAVIGATION_HEAD, appMap: 'CURRENT APP: ' + Object.entries(screens).map(([key, label]) => `${key} = ${label}`).join('; ') });
+  root.GaiaAssistGuide = Object.freeze({ screens, policy, sessionState, statePolicy, chooseAction, turnGuidance, reviewedReply, fallback, context, history, navigationBlock, NAVIGATION_HEAD, voiceClosePermanent, VOICE_UNAVAILABLE_CODE, PERMANENT_VOICE_FAILURES, appMap: 'CURRENT APP: ' + Object.entries(screens).map(([key, label]) => `${key} = ${label}`).join('; ') });
 })(globalThis);

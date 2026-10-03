@@ -470,8 +470,13 @@ function runSession(browser, grant, ip) {
     // (There is no Gemini fallback any more -- the orb accepts only Qwen and
     // shows "Qwen voice is unavailable" after one silent retry.)
     if (!setupDone) {
-      console.warn('[Gaia Assist] qwen voice failed before setup', { reason });
-      try { browser.close(4502, 'qwen_unavailable'); } catch { /* gone */ }
+      // The close reason carries the failure CATEGORY (never the provider's
+      // message), so the orb can tell "the account is not entitled to this
+      // model" -- which will fail again in a second -- from a timeout worth
+      // one retry. assist-guide.js voiceClosePermanent() reads it.
+      const category = errorCategory(reason.replace(/^qwen_error:/, ''));
+      console.warn('[Gaia Assist] qwen voice failed before setup', { reason, category });
+      try { browser.close(globalThis.GaiaAssistGuide.VOICE_UNAVAILABLE_CODE, 'qwen_unavailable:' + category); } catch { /* gone */ }
       finish('failed:' + reason);
     } else {
       handover(reason);
@@ -545,6 +550,14 @@ function runSession(browser, grant, ip) {
   upstream.on('message', (raw) => {
     let evt;
     try { evt = JSON.parse(String(raw)); } catch { return; }
+    // Alibaba sends an entitlement refusal as a bare {code, message} frame with
+    // no `type` at all -- observed on 3 Oct 2026 as
+    // {"code":"AccessDenied.Unpurchased","message":"Access to model denied..."}.
+    // It used to fall through every branch and the session died a moment later
+    // on the 1006 close, which could only be reported as "upstream closed".
+    if (!evt.type && typeof evt.code === 'string' && evt.message) {
+      evt = { type: 'error', error: { code: evt.code, message: evt.message } };
+    }
     if (evt.type === 'error') {
       const detail = String(evt.error?.message || '').slice(0, 160);
       console.error('[Gaia Assist] qwen voice error', { code: evt.error?.code, message: detail });

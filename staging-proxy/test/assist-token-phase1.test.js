@@ -291,3 +291,21 @@ test('the OpenAI-shaped fallbacks keep their usage too, without changing the req
   const plain = src.slice(src.indexOf('async function callChatProvider'), src.indexOf('async function callChatProvider') + 2600);
   assert.match(plain, /usage: payload\.usage \|\| null,/);
 });
+
+test('a test run can never write into the real usage log', async () => {
+  // Six fake voice sessions reached the production file on 3 Oct, from relay
+  // suites that do not redirect it. Under node:test the default path is off.
+  const { spawnSync } = await import('node:child_process');
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'usage-default-'));
+  const body = `
+    const u = await import(${JSON.stringify(new URL('../assist-usage.js', import.meta.url).href)});
+    u.recordUsage({ channel: 'voice', provider: 'qwen', model: 'm', usage: u.emptyUsage() });`;
+  const env = { ...process.env, NODE_TEST_CONTEXT: 'child' };
+  delete env.GAIA_USAGE_LOG;
+  spawnSync(process.execPath, ['--input-type=module', '-e', body], { cwd: dir, env });
+  assert.ok(!fs.existsSync(path.join(dir, 'data', 'assist-usage.jsonl')), 'the default log must not be written under test');
+  // ...while an explicitly named file still works, which is what the capture tests use.
+  const named = path.join(dir, 'named.jsonl');
+  spawnSync(process.execPath, ['--input-type=module', '-e', body], { cwd: dir, env: { ...env, GAIA_USAGE_LOG: named } });
+  assert.ok(fs.existsSync(named));
+});

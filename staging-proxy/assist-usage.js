@@ -108,7 +108,14 @@ export function estimateCost(model, u) {
 function logPath() {
   const configured = process.env.GAIA_USAGE_LOG;
   if (configured === '') return null;
-  return configured || path.join(process.cwd(), 'data', 'assist-usage.jsonl');
+  if (configured) return configured;
+  // Under the test runner, never fall back to the real log. Two relay suites
+  // open fake Qwen sessions without redirecting it, and running the suite in
+  // the live directory on 3 Oct wrote six fake sessions into the production
+  // file -- the very data the next optimisation decision is meant to rest on.
+  // A test that wants records must name a file explicitly.
+  if (process.env.NODE_TEST_CONTEXT) return null;
+  return path.join(process.cwd(), 'data', 'assist-usage.jsonl');
 }
 
 /**

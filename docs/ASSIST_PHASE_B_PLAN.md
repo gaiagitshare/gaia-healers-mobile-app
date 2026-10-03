@@ -10,7 +10,8 @@ prefix two different members share went from 3,522 (80%) to **3,748 (87%)**,
 and a member's own block is now facts only (907 → 557 tokens). Item 6 was decided by the owner the same day (40 names, no email) and shipped:
 `practitioner_list_clients` now returns at most 40 clients without email, the
 true count, and a pointer to `practitioner_find_client` — worst case 5,451 →
-~700 tokens. Items 4 and 7–12 remain **not implemented**; they wait on real
+~700 tokens. Item 4 was measured with **one owner-approved live call** (see §1a); the budget
+itself is not yet set. Items 7–12 remain **not implemented**; they wait on real
 usage data and the decisions in §5.
 Every number below is from the offline reconstruction in
 `staging-proxy/tools/assist-context-audit.mjs` (same method as the Phase 1
@@ -44,6 +45,38 @@ unchanged by the hardening pass; nothing in #202–#205 touches a prompt.
 Text chat (Gemini) system prompt: visitor 3,104 · member 4,046 · onboarding
 4,975 · practitioner 4,305, plus a ~120–350-token user prompt with up to
 1,739 tokens of history.
+
+### 1a. REAL — one approved Gemini sample (3 Oct 2026, 18:3x CEST)
+
+One `generateContent` call to `gemini-3.6-flash` (the live text model), the
+real member system prompt, one realistic question ("I keep waking up at 3am —
+which of my courses or energy tools should I start with tonight?"), the live
+`generationConfig` (no `thinkingConfig`). Guarded to exactly one call.
+
+| | tokens | at the price book | share of this reply's cost |
+|---|---|---|---|
+| prompt (system + user) | 2,828 | $0.0021 | 39% |
+| **thinking** (`thoughtsTokenCount`) | **806** | **$0.0030** | **56%** |
+| reply (`candidatesTokenCount`) | 70 | $0.0003 | 5% |
+| total | 3,704 | **$0.0054** | 5.6 s latency |
+
+Two things this settles:
+
+1. **Thinking is the largest line of a text reply** — 11.5× the reply itself,
+   and more than the whole prompt. Item 4 (a thinking budget / low thinking
+   level for text chat, where a reply is two or three sentences of
+   navigation) is the single biggest lever for text chat: at this ratio it
+   could remove up to ~half of a text reply's cost and most of its latency.
+   It is **not set yet**; setting it changes model behaviour and needs one
+   more approved call to confirm the reply quality holds.
+2. **The offline tokenizer overestimates Gemini by ~24%**: 12,822 system
+   chars came to ~2,600 Gemini tokens, not the ~3,700 the 3.45-chars/token
+   rule gives. Every Phase 1 / Phase B number in this document is therefore a
+   ceiling for Gemini; the relative savings hold. (Qwen's tokenizer is still
+   unmeasured.)
+
+`cachedContentTokenCount` was absent, so no implicit cache hit on a first
+request — expected; only repeated traffic can show caching.
 
 ### Cache friendliness, measured
 
@@ -118,7 +151,7 @@ approval, or an approved larger run.
 | 1 | **Read the usage log** (cache hits, Gemini thinking, audio/text split) | — | decides #2, #7, #9 | none | none | none | none | none | none | **first; wait for data** |
 | 2 | Move member boilerplate (357) into the static block | 6,238 | 0 now; +357 cacheable | none | none | none | none | none | small | do, if #1 shows caching |
 | 3 | Drop `ENERGY ROUTING` (43) | 6,238 | −43 (−0.7%) | none | none | none | none | none | trivial | do |
-| 4 | Gemini thinking budget (text only) | unknown | **possibly the largest line**, unknown until #1 | low–medium; sample | low | none | none | **better** | trivial | after #1, with one approved sample |
+| 4 | Gemini thinking budget (text only) | **806 thinking vs 70 reply tokens (REAL)** | **up to ~−50% of a text reply's cost, most of its latency** | low–medium; needs one approved check | low | none | none | **better** | trivial | **measured; awaiting approval to set it** |
 | 5 | Consolidate the live-price rule (5 → 1) | 6,238 | −90 (−1.4%) | none | none | low | none | none | small | do, contract test covers it |
 | 6 | Cap `practitioner_list_clients` sent to the model (e.g. 40 names+ids, email omitted, count kept) | 5,451 worst | −4,000+ on that session | low (names still there) | none | low | none | none | small | **product decision** — ask |
 | 7 | Replace old user **audio** in voice history with its transcript | ~48% of a 50-reply session | −30–50% on long sessions | none expected | none | none | none | none | medium; undocumented Qwen behaviour | after #1 shows the audio share; approved sample |

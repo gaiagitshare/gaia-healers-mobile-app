@@ -357,3 +357,36 @@ test('the page is told which tools are slow', () => {
   assert.ok(/serverSlowTools/.test(orb), 'the page must read it');
   assert.ok(/serverSlowTools\.includes\(name\)/.test(orb), 'and act on it');
 });
+
+// ── what a practitioner hears when they ask for their clients ─────────────
+
+test('the client list is capped at 40 names without email, keeps the true count, and points past the cap', async () => {
+  const { shapeClientList } = await import('../assist-tools.js');
+  const customers = Array.from({ length: 200 }, (_, i) => ({ id: 1000 + i, name: `Client ${i}`, email: `c${i}@example.com`, hasBioWellCard: i % 2 === 0 }));
+  const r = shapeClientList({ count: 200, customers });
+  assert.equal(r.count, 200);
+  assert.equal(r.shown, 40);
+  assert.equal(r.clients.length, 40);
+  assert.deepEqual(Object.keys(r.clients[0]).sort(), ['has_biowell', 'id', 'name'], 'no email in a spoken list');
+  assert.equal(r.clients[0].id, '1000');
+  assert.match(r.more, /Showing 40 of 200/);
+  assert.match(r.more, /practitioner_find_client/);
+  assert.ok(JSON.stringify(r).length < 2_600, `a full list is now ${JSON.stringify(r).length} chars (was ~18,800)`);
+});
+
+test('a short client list is complete, with no "more" pointer, and an empty one is honest', async () => {
+  const { shapeClientList } = await import('../assist-tools.js');
+  const small = shapeClientList({ count: 3, customers: [{ id: 1, name: 'A' }, { id: 2, name: 'B' }, { id: 3, name: 'C' }] });
+  assert.equal(small.shown, 3); assert.equal(small.count, 3); assert.equal(small.more, undefined);
+  const none = shapeClientList({ customers: [] });
+  assert.deepEqual(none, { count: 0, shown: 0, clients: [] });
+  assert.deepEqual(shapeClientList(undefined), { count: 0, shown: 0, clients: [] });
+});
+
+test('the list tool tells the model about the cap; the find tool still returns email, which a search can need', () => {
+  const list = TOOLS.find((t) => t.name === 'practitioner_list_clients');
+  assert.match(list.description, /up to 40 clients/);
+  assert.match(list.description, /practitioner_find_client/);
+  const src = fs.readFileSync(new URL('../assist-tools.js', import.meta.url), 'utf8');
+  assert.match(src, /name: 'practitioner_find_client'[\s\S]*?slice\(0, MAX_CUSTOMERS\)\.map\(slimCustomer\)/, 'find keeps the default (email on) shape');
+});

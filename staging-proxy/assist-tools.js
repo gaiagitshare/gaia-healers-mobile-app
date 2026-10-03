@@ -29,16 +29,34 @@
 import { practitionersConfig, validAccessToken, mcpCall, unwrapMcp } from './practitioners-oauth.js';
 
 const MAX_QUERY = 120;
-const MAX_CUSTOMERS = 200;
+const MAX_CUSTOMERS = 200;       // a search is already narrow
+const MAX_LISTED_CLIENTS = 40;   // the whole list: what a spoken session can carry (owner, 3 Oct 2026)
 
 /** A customer, reduced to what a practitioner's question actually needs. */
-function slimCustomer(c = {}) {
-  return {
+function slimCustomer(c = {}, { email = true } = {}) {
+  const slim = {
     id: String(c.id ?? ''),
     name: c.name || '',
-    email: c.email || '',
     has_biowell: Boolean(c.hasBioWellCard),
   };
+  if (email) slim.email = c.email || '';
+  return slim;
+}
+
+/**
+ * The list a practitioner hears. With 200 clients the full list was 5,451
+ * tokens, and in voice it is re-processed on every later reply of the
+ * session. A name resolves to an id; an email never does in speech. So: at
+ * most MAX_LISTED_CLIENTS names, no email, the true count, and a pointer to
+ * practitioner_find_client for anyone not shown.
+ */
+export function shapeClientList(out = {}) {
+  const all = Array.isArray(out?.customers) ? out.customers : [];
+  const count = Number.isFinite(Number(out?.count)) && out?.count !== null && out?.count !== undefined ? Number(out.count) : all.length;
+  const clients = all.slice(0, MAX_LISTED_CLIENTS).map((c) => slimCustomer(c, { email: false }));
+  const result = { count, shown: clients.length, clients };
+  if (count > clients.length) result.more = `Showing ${clients.length} of ${count}. For anyone not listed, use practitioner_find_client with their name.`;
+  return result;
 }
 
 function requireString(args, key, { max = 64, required = true } = {}) {
@@ -320,12 +338,10 @@ export const TOOLS = [
     role: 'practitioner',
     where: 'server',
     mcp: 'list_customers',
-    description: "List the practitioner's own clients. Use when they ask to see their clients, patients or customers. Returns id, name, email and whether a Bio-Well card is linked. Takes no arguments — whose clients these are is already known.",
+    description: "List the practitioner's own clients. Use when they ask to see their clients, patients or customers. Returns the total count and up to 40 clients (id, name, whether a Bio-Well card is linked); for a specific person, or anyone beyond the first 40, use practitioner_find_client. Takes no arguments — whose clients these are is already known.",
     parameters: { type: 'object', properties: {} },
     async handler(_args, ctx) {
-      const out = await readMcp(ctx, 'list_customers');
-      const list = (out?.customers || []).slice(0, MAX_CUSTOMERS).map(slimCustomer);
-      return { count: out?.count ?? list.length, clients: list };
+      return shapeClientList(await readMcp(ctx, 'list_customers'));
     },
   },
   {

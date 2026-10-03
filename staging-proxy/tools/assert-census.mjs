@@ -37,7 +37,7 @@ const rows = [];
 for (const file of files) {
   try {
     execFileSync(process.execPath, ['--import', register, file],
-      { stdio: 'ignore', timeout: 180000, env: { ...process.env, AUDIT_OUT: out, AUDIT_FILE: file } });
+      { stdio: 'ignore', timeout: 180000, env: { ...process.env, AUDIT_OUT: out, AUDIT_FILE: file, GAIA_USAGE_LOG: process.env.GAIA_USAGE_LOG ?? '' } });
   } catch { /* a failing suite still reports its count on exit */ }
   const line = fs.readFileSync(out, 'utf8').trim().split('\n').filter(Boolean).pop();
   const executed = line ? JSON.parse(line).executed : 0;

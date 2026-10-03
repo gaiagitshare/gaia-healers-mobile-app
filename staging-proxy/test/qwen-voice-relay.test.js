@@ -19,6 +19,8 @@ import { WebSocket, WebSocketServer } from 'ws';
 const fakeQwen = new WebSocketServer({ port: 0 });
 await new Promise((r) => fakeQwen.on('listening', r));
 Object.assign(process.env, {
+  GAIA_USAGE_LOG: '',   // fake sessions must never reach the real usage log
+
   QWEN_VOICE_ENABLED: 'true',
   QWEN_API_KEY: 'test-qwen-key',
   QWEN_BASE_URL: `http://127.0.0.1:${fakeQwen.address().port}`,

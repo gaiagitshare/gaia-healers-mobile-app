@@ -52,6 +52,7 @@ Object.assign(process.env, {
   GAIA_DISABLE_ALERT_TIMER: '1', STORE_SYNC_ENABLED: 'false',
   ALLOWED_ORIGINS: 'https://gaiahealers.app',
   GAIA_ASSIST_VOICE_ENABLED: 'true', ASSIST_PROVIDER_ORDER: 'groq', GROQ_API_KEY: 'test-groq',
+  GAIA_USAGE_LOG: '',   // a stubbed provider reply must never reach the real usage log
 });
 
 // Signing in now costs a GHL lookup: every /api/assist/* request from a MEMBER

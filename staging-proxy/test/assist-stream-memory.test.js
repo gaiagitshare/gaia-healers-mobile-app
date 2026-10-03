@@ -37,6 +37,8 @@ test('a lone "<" that is not a code is kept; an unfinished code at the end is dr
 });
 
 // ── the real route, with a fake provider ─────────────────────────────────────
+import { installCompletedProfileFixture } from './completed-profile-fixture.js';
+
 const workdir = fs.mkdtempSync(path.join(os.tmpdir(), 'gaia-stream-memory-'));
 fs.mkdirSync(path.join(workdir, 'data'), { recursive: true });
 process.chdir(workdir);
@@ -52,7 +54,17 @@ Object.assign(process.env, {
   GAIA_ASSIST_VOICE_ENABLED: 'true', ASSIST_PROVIDER_ORDER: 'groq', GROQ_API_KEY: 'test-groq',
 });
 
-// The provider: an OpenAI-style SSE stream, codes cut mid-token.
+// Signing in now costs a GHL lookup: every /api/assist/* request from a MEMBER
+// passes the onboarding guard first, and a guard that cannot reach GHL answers
+// 503 rather than guess. These tests point GHL at a dead port, so the member
+// case stopped reaching the provider at all -- and the two assertions that
+// matter, that a save code never reaches the page, passed VACUOUSLY against an
+// empty string. The fixture answers the contact lookup as a completed profile,
+// which is what the ten suites written after the guard already do.
+installCompletedProfileFixture();
+
+// The provider: an OpenAI-style SSE stream, codes cut mid-token. Captured AFTER
+// the fixture, so a request that is not Groq still reaches it.
 const realFetch = globalThis.fetch;
 const CHUNKS = ['Coherence Breathing is lovely before sleep. ', 'Want me to open it? <', '<REMEMBER: wants better sleep ', ';; interested in Silver>>'];
 globalThis.fetch = async (url, opts) => {

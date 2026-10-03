@@ -6033,14 +6033,32 @@ function formatLookup(r, query) {
   if (/event|conference|elevate|exhibit|venue|ticket/i.test(q)) order.push('event');
   if (/practitioner|healer|directory|near me/i.test(q)) order.push('practitioners');
   if (/course|class|academy|training|certif/i.test(q)) order.push('courses');
-  if (/price|cost|buy|shop|store|product|device|sell/i.test(q)) order.push('store');
+  // "how much" is the commonest way anybody asks a price, and it was missing
+  // here while being present in LIVE_Q_RE -- so "how much is the Bio-Well"
+  // passed the gate, fetched the right product, and then led with the
+  // conference and put the price fourth.
+  if (/price|cost|how much|buy|shop|store|product|device|sell/i.test(q)) order.push('store');
   for (const key of ['event', 'practitioners', 'courses', 'store']) {
     if (!order.includes(key)) order.push(key);
   }
   return order.map((k) => blocks[k]).filter(Boolean).join('\n');
 }
 const LIVE_Q_RE = /\b(price|prices|cost|costs|how much|buy|purchase|order|shop|store|in stock|available|product|products|device|devices|bio-?well|biopulsar|biotekna|braintap|healy|asea|lifewave|spray|sprays|crystal|crystals|mala|malas|practitioner|practitioners|healer|healers|near me|how many|course|courses|class|classes|event|events|conference|elevate)\b/i;
-export async function assistLiveDataBlock(query, appContext = {}) {
+/**
+ * The live facts for a question, in all three forms the callers need.
+ *
+ *   data  — the structured result, which is the only way to assert that the
+ *           scoring is PRECISE rather than merely non-empty. The prompt tells
+ *           the model to use only what comes back, so precision is a
+ *           correctness property.
+ *   body  — the prose, with no preamble.
+ *   block — body under the "use ONLY these real facts" heading, which is what
+ *           gets injected into a model turn.
+ *
+ * One gaiaLookup() per call: it reads three catalogues and fetches the
+ * directory, so asking for the structured form must not cost a second one.
+ */
+export async function assistLiveFacts(query, appContext = {}) {
   const hint = assistGuide.context(appContext);
   const extra = [];
   if (/membership|subscription|join|discount|tier|plan/i.test(query)) extra.push('CURRENT MEMBERSHIP POLICY (configured catalog, not individual grants): ' + JSON.stringify(membershipPlans(loadMembershipPolicy())));
@@ -6055,9 +6073,19 @@ export async function assistLiveDataBlock(query, appContext = {}) {
       if (event) extra.push('CURRENT EVENT (public server lookup): ' + JSON.stringify({id:event.id,name:event.name||event.title,startAt:event.start_at,endAt:event.end_at,timezone:event.timezone,location:event.location}).slice(0,2200));
     }
   }
-  if (extra.length) return extra.join('\n');
-  if (!LIVE_Q_RE.test(String(query || ''))) return '';
-  try { const r = await gaiaLookup(query); const body = formatLookup(r, query); return body ? ('LIVE GAIA HEALERS DATA for this question (use ONLY these real facts for prices/products/practitioners/courses/events; never invent others):\n' + body) : ''; } catch (e) { return ''; }
+  if (extra.length) { const body = extra.join('\n'); return { data: null, body, block: body }; }
+  if (!LIVE_Q_RE.test(String(query || ''))) return { data: null, body: '', block: '' };
+  try {
+    const data = await gaiaLookup(query);
+    const body = formatLookup(data, query);
+    return { data, body, block: body ? (LIVE_FACTS_HEADING + body) : '' };
+  } catch (e) { return { data: null, body: '', block: '' }; }
+}
+
+const LIVE_FACTS_HEADING = 'LIVE GAIA HEALERS DATA for this question (use ONLY these real facts for prices/products/practitioners/courses/events; never invent others):\n';
+
+export async function assistLiveDataBlock(query, appContext = {}) {
+  return (await assistLiveFacts(query, appContext)).block;
 }
 async function assistChat(body) {
   // A question, not a document: capped so one request cannot carry ~250k tokens.
@@ -7065,8 +7093,18 @@ const server = http.createServer(async (req, res) => {
     }
     if (req.method === 'POST' && url.pathname === '/api/assist/lookup') {
       const body = await readJsonBody(req).catch(() => ({}));
-      const summary = await assistLiveDataBlock(String(body.query || body.q || ''), body.appContext).catch(() => '');
-      sendJson(res, 200, { ok: true, summary }, origin);
+      const query = String(body.query || body.q || '');
+      const facts = await assistLiveFacts(query, body.appContext).catch(() => ({ data: null, body: '', block: '' }));
+      // `summary` is the prose WITHOUT the "use ONLY these real facts" heading.
+      // The caller adds its own -- the orb prepends "LIVE DATA (answer only
+      // from this, do not invent)" -- so returning the heading too put two
+      // preambles in front of every fact the model was given.
+      //
+      // `data` is the structured result. Whoever called this endpoint asked for
+      // a lookup outright, so they get one even where LIVE_Q_RE would decline
+      // to inject facts into a model turn it did not think was about them.
+      const data = facts.data || await gaiaLookup(query).catch(() => null);
+      sendJson(res, 200, { ok: true, summary: facts.body, data }, origin);
       return;
     }
     if (req.method === 'POST' && url.pathname === '/api/assist/memory') {

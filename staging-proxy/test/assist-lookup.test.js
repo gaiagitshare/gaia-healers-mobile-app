@@ -66,6 +66,17 @@ liveTest('a place in the question finds practitioners in that place', async () =
   assert.ok(named.some((n) => n.includes('orlando')), `none of ${named.length} results is in Orlando`);
 });
 
+liveTest('a price question leads with the price, not with the conference', async () => {
+  // Every lookup carries the current event, so whatever is listed FIRST is what
+  // the model reaches for. "how much" was missing from the ordering rules while
+  // being present in the gate, so the commonest phrasing of a price question
+  // answered with the conference and buried the product fourth.
+  const { summary, data } = await look('how much is the bio-well');
+  assert.ok((data.store || []).length > 0, 'no products matched a question about a product we sell');
+  assert.ok(String(summary).startsWith('Store products:'),
+    `a price question did not lead with products: ${String(summary).slice(0, 120)}`);
+});
+
 liveTest('the event is known even from a cold cache, and leads when asked about', async () => {
   const { summary, data } = await look('when and where is the conference');
   assert.ok(data.event && data.event.name, 'the assistant does not know an event exists');

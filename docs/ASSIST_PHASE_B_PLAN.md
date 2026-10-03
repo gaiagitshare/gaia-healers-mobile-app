@@ -10,8 +10,9 @@ prefix two different members share went from 3,522 (80%) to **3,748 (87%)**,
 and a member's own block is now facts only (907 → 557 tokens). Item 6 was decided by the owner the same day (40 names, no email) and shipped:
 `practitioner_list_clients` now returns at most 40 clients without email, the
 true count, and a pointer to `practitioner_find_client` — worst case 5,451 →
-~700 tokens. Item 4 was measured with **one owner-approved live call** (see §1a); the budget
-itself is not yet set. Items 7–12 remain **not implemented**; they wait on real
+~700 tokens. Item 4 was measured with one owner-approved live call and then **set and
+verified with a second** (see §1a): text chat now thinks `low`
+(`GEMINI_TEXT_THINKING_LEVEL`, default `low`; `default` reverts). Items 7–12 remain **not implemented**; they wait on real
 usage data and the decisions in §5.
 Every number below is from the offline reconstruction in
 `staging-proxy/tools/assist-context-audit.mjs` (same method as the Phase 1
@@ -77,6 +78,19 @@ Two things this settles:
 
 `cachedContentTokenCount` was absent, so no implicit cache hit on a first
 request — expected; only repeated traffic can show caching.
+
+**Verification (REAL, second approved call, same prompt, `thinkingLevel: "low"`):**
+
+| | default thinking | `low` | change |
+|---|---|---|---|
+| thinking tokens | 806 | **320** | −60% |
+| reply tokens | 70 | 57 | same two sentences, slightly more concrete navigation |
+| cost per reply | $0.0054 | **$0.0035** | **−35%** |
+| latency | 5.6 s | **3.1 s** | −45% |
+
+`low` is now the live default for both Gemini text calls (one-shot and
+stream). Gemini 3.6 Flash also accepts `minimal`; it was not approved and is
+not measured. Voice (Qwen) is untouched.
 
 ### Cache friendliness, measured
 
@@ -151,7 +165,7 @@ approval, or an approved larger run.
 | 1 | **Read the usage log** (cache hits, Gemini thinking, audio/text split) | — | decides #2, #7, #9 | none | none | none | none | none | none | **first; wait for data** |
 | 2 | Move member boilerplate (357) into the static block | 6,238 | 0 now; +357 cacheable | none | none | none | none | none | small | do, if #1 shows caching |
 | 3 | Drop `ENERGY ROUTING` (43) | 6,238 | −43 (−0.7%) | none | none | none | none | none | trivial | do |
-| 4 | Gemini thinking budget (text only) | **806 thinking vs 70 reply tokens (REAL)** | **up to ~−50% of a text reply's cost, most of its latency** | low–medium; needs one approved check | low | none | none | **better** | trivial | **measured; awaiting approval to set it** |
+| 4 | Gemini thinking level `low` (text only) | **806 → 320 thinking tokens (REAL)** | **−35% cost, −45% latency per text reply (REAL)** | none seen in the one check | low | none | none | **better** | trivial | **shipped**; `minimal` would be the next step, unmeasured |
 | 5 | Consolidate the live-price rule (5 → 1) | 6,238 | −90 (−1.4%) | none | none | low | none | none | small | do, contract test covers it |
 | 6 | Cap `practitioner_list_clients` sent to the model (e.g. 40 names+ids, email omitted, count kept) | 5,451 worst | −4,000+ on that session | low (names still there) | none | low | none | none | small | **product decision** — ask |
 | 7 | Replace old user **audio** in voice history with its transcript | ~48% of a 50-reply session | −30–50% on long sessions | none expected | none | none | none | none | medium; undocumented Qwen behaviour | after #1 shows the audio share; approved sample |

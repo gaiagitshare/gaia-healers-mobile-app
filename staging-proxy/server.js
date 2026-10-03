@@ -6044,7 +6044,7 @@ async function gaiaLookup(query) {
   } catch (e) {}
   return out;
 }
-function formatLookup(r, query) {
+export function formatLookup(r, query) {
   const q = String(query || '');
   const blocks = {};
   if (r.store && r.store.length) {

@@ -118,7 +118,12 @@
     let budget = 6000;
     const kept = [];
     for (let i = recent.length - 1; i >= 0 && budget > 0; i -= 1) {
-      const content = recent[i].content.slice(0, Math.min(1500, budget));
+      let content = recent[i].content.slice(0, Math.min(1500, budget));
+      // A cut inside a surrogate pair (an emoji at the boundary) leaves a lone
+      // high surrogate, which is not valid text and which some providers
+      // reject outright. Drop the half rather than send it.
+      const tail = content.charCodeAt(content.length - 1);
+      if (tail >= 0xD800 && tail <= 0xDBFF) content = content.slice(0, -1);
       if (!content) continue;
       budget -= content.length;
       kept.unshift({ role: recent[i].role, content });

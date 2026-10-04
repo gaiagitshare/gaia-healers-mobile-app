@@ -97,6 +97,10 @@ test('the in-app window always has a reachable Close, and bookings send a member
   assert.match(dir, /function isBioWell\(p\) \{ return \/bio-\?well\/i\.test/, 'Bio-Well practitioners are found by specialty or tag');
   assert.match(dir, /window\.GaiaDirectory = \{ open: openWith \}/);
   assert.match(dir, /Book a Bio-Well scan/); assert.match(dir, /SCAN_FALLBACK = 'https:\/\/api\.leadconnectorhq\.com\/widget\/bookings\/scans'/, 'a practitioner without a calendar still books through the Gaia scan calendar, in the app');
+  assert.match(dir, /function nearMe\(\)/); assert.match(dir, /navigator\.geolocation\.getCurrentPosition/, 'near me sorts by distance, only when tapped');
+  assert.doesNotMatch(dir.slice(dir.indexOf('async function load()')), /getCurrentPosition/, 'never on load');
+  assert.match(dir, /Bio-Well practitioners'\)/, 'the count names what is shown');
+  assert.match(dir, /function embeds\(url\) \{ return \/\^https\?:/, 'Calendly and GHL calendars open in the app');
   const sa2 = read('gaia-superapp.js');
   assert.match(sa2, /name: 'Bio-Well energy scan', intent: 'scan'/, 'Home: the scan action opens the directory with the intent');
   assert.match(sa2, /data-dir-intent\]'\)\.forEach/);

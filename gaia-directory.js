@@ -24,6 +24,26 @@
   var intent = '';
   var SCAN_FALLBACK = 'https://api.leadconnectorhq.com/widget/bookings/scans';
   function isBioWell(p) { return /bio-?well/i.test((p.specialty || []).join(' ') + ' ' + (p.tags || []).join(' ')); }
+  // "Near me": only when the member taps it (the browser asks for location
+  // then, never on load). The list is sorted by distance and each card says
+  // how far. Nothing is stored.
+  var origin = null, locating = false;
+  function km(a, b) { var R = 6371, dLat = (b.lat - a.lat) * Math.PI / 180, dLng = (b.lng - a.lng) * Math.PI / 180; var h = Math.sin(dLat / 2) * Math.sin(dLat / 2) + Math.cos(a.lat * Math.PI / 180) * Math.cos(b.lat * Math.PI / 180) * Math.sin(dLng / 2) * Math.sin(dLng / 2); return 2 * R * Math.asin(Math.sqrt(h)); }
+  function distanceOf(p) { return (origin && p.lat != null && p.lng != null) ? km(origin, { lat: p.lat, lng: p.lng }) : null; }
+  function nearMe() {
+    if (locating || !navigator.geolocation) return;
+    locating = true; paintList();
+    navigator.geolocation.getCurrentPosition(function (pos) { origin = { lat: pos.coords.latitude, lng: pos.coords.longitude }; locating = false; paintList(); },
+      function () { locating = false; origin = null; paintList(); }, { enableHighAccuracy: false, timeout: 8000, maximumAge: 300000 });
+  }
+  // The practitioner's own calendar opens inside the app when it is a calendar
+  // we know embeds (Calendly, GHL); anything else opens in a new tab.
+  function embeds(url) { return /^https?:\/\/([^/]*\.)?(calendly\.com|leadconnectorhq\.com|gohighlevel\.com)\//i.test(String(url || '')); }
+  function bookButton(url, label, title) {
+    return embeds(url)
+      ? '<button type="button" class="g-btn g-btn--primary" data-book-inline="' + esc(url) + '" data-book-title="' + esc(title) + '"><i class="ph ph-calendar-check"></i> ' + esc(label) + '</button>'
+      : '<a class="g-btn g-btn--primary" href="' + esc(url) + '" target="_blank" rel="noopener noreferrer"><i class="ph ph-calendar-check"></i> ' + esc(label) + '</a>';
+  }
   var loaded = false, loading = false;
   var map = null, cluster = null;
 
@@ -48,6 +68,7 @@
   function filtered() {
     var list = ALL.filter(matches);
     if (intent === 'scan') { var bw = list.filter(isBioWell); if (bw.length) list = bw; }
+    if (origin) list = list.slice().sort(function (a, b) { var da = distanceOf(a), db = distanceOf(b); if (da == null && db == null) return 0; if (da == null) return 1; if (db == null) return -1; return da - db; });
     return list;
   }
 
@@ -76,6 +97,7 @@
 
   function cardHtml(p) {
     var loc = [p.city, p.state].filter(Boolean).join(', ');
+    var d = distanceOf(p); if (d != null) loc = (loc ? loc + ' · ' : '') + (d < 1 ? 'under 1 km' : Math.round(d) + ' km');
     var specs = p.specialty.slice(0, 3).map(function (s) { return '<span class="g-dir-chip">' + esc(s) + '</span>'; }).join('');
     return '<button type="button" class="g-dir-card" data-dir-open="' + esc(p.id) + '">'
       + '<span class="g-dir-card__photo">' + photoHtml(p, 'g-dir-card__img') + '</span>'
@@ -89,13 +111,14 @@
 
   function controlsHtml() {
     var avail = ['In-person', 'Remote', 'Both'];
-    var availChips = '<button type="button" class="g-dir-fchip' + (filters.availability === '' ? ' is-on' : '') + '" data-dir-avail="">All</button>'
+    var availChips = '<button type="button" class="g-dir-fchip' + (origin ? ' is-on' : '') + '" data-dir-near><i class="ph ph-crosshair"></i> Near me</button>'
+      + '<button type="button" class="g-dir-fchip' + (filters.availability === '' ? ' is-on' : '') + '" data-dir-avail="">All</button>'
       + avail.map(function (a) { return '<button type="button" class="g-dir-fchip' + (filters.availability === a ? ' is-on' : '') + '" data-dir-avail="' + esc(a) + '">' + esc(a) + '</button>'; }).join('');
     var specChips = topSpecialties(10).map(function (s) {
       return '<button type="button" class="g-dir-schip' + (filters.specialty === s ? ' is-on' : '') + '" data-dir-spec="' + esc(s) + '">' + esc(s) + '</button>';
     }).join('');
     var intro = intent === 'scan'
-      ? '<div class="g-dir__intent"><i class="ph ph-pulse"></i><div><strong>Book a Bio-Well scan</strong><span>Choose a practitioner near you, then take a time on their calendar.</span></div><button type="button" class="g-dir__intent-x" data-dir-intent-clear aria-label="Show all practitioners">×</button></div>'
+      ? '<div class="g-dir__intent"><i class="ph ph-pulse"></i><div><strong>Book a Bio-Well scan</strong><span>Choose a practitioner near you, then take a time on their calendar.</span></div><button type="button" class="g-btn g-btn--secondary g-btn--sm" data-dir-near><i class="ph ph-crosshair"></i> Near me</button><button type="button" class="g-dir__intent-x" data-dir-intent-clear aria-label="Show all practitioners">×</button></div>'
       : '';
     return intro + '<div class="g-dir__controls">'
       + '<div class="g-dir__search"><i class="ph ph-magnifying-glass"></i>'
@@ -110,7 +133,8 @@
     var list = filtered();
     var listEl = host.querySelector('[data-dir-list]');
     var countEl = host.querySelector('[data-dir-count]');
-    if (countEl) countEl.textContent = list.length + (list.length === 1 ? ' practitioner' : ' practitioners');
+    var scanShown = intent === 'scan' && list.length && list.every(isBioWell);
+    if (countEl) countEl.textContent = (locating ? 'Finding you… · ' : (origin ? 'Nearest first · ' : '')) + list.length + (scanShown ? (list.length === 1 ? ' Bio-Well practitioner' : ' Bio-Well practitioners') : (list.length === 1 ? ' practitioner' : ' practitioners'));
     if (listEl) {
       listEl.innerHTML = list.length
         ? list.map(cardHtml).join('')
@@ -172,9 +196,9 @@
     if (intent === 'scan') {
       // Their own calendar when they publish one; otherwise the Gaia scan calendar, in the app, with their name on it.
       actions += p.meetingLink
-        ? '<a class="g-btn g-btn--primary" href="' + esc(p.meetingLink) + '" target="_blank" rel="noopener noreferrer"><i class="ph ph-calendar-check"></i> Book a Bio-Well scan</a>'
+        ? bookButton(p.meetingLink, 'Book a Bio-Well scan', 'Bio-Well scan with ' + p.name)
         : '<button type="button" class="g-btn g-btn--primary" data-book-inline="' + esc(SCAN_FALLBACK) + '" data-book-title="Bio-Well scan with ' + esc(p.name) + '"><i class="ph ph-calendar-check"></i> Book a Bio-Well scan</button>';
-    } else if (p.meetingLink) actions += '<a class="g-btn g-btn--primary" href="' + esc(p.meetingLink) + '" target="_blank" rel="noopener noreferrer"><i class="ph ph-calendar-check"></i> Book a session</a>';
+    } else if (p.meetingLink) actions += bookButton(p.meetingLink, 'Book a session', 'Session with ' + p.name);
     if (p.profileLink) actions += '<a class="g-btn g-btn--secondary" href="' + esc(p.profileLink) + '" target="_blank" rel="noopener noreferrer"><i class="ph ph-arrow-up-right"></i> Website</a>';
     actions += '<a class="g-btn ' + (actions ? 'g-btn--ghost' : 'g-btn--secondary') + '" href="https://gaiapractitioners.com" target="_blank" rel="noopener noreferrer">View in directory</a>';
     body.innerHTML = '<div class="gaia-dirprofile__hero">' + photoHtml(p, 'gaia-dirprofile__img')
@@ -196,6 +220,8 @@
       if (sp) { var v = sp.getAttribute('data-dir-spec'); filters.specialty = (filters.specialty === v ? '' : v); paintList(); return; }
       var op = e.target.closest('[data-dir-open]');
       if (op) { openProfile(op.getAttribute('data-dir-open')); return; }
+      var nm = e.target.closest('[data-dir-near]');
+      if (nm) { if (origin) { origin = null; paintList(); } else nearMe(); return; }
       var ix = e.target.closest('[data-dir-intent-clear]');
       if (ix) { intent = ''; var h = mount(); if (h) { var c = h.querySelector('.g-dir__intent'); if (c) c.remove(); } paintList(); return; }
     });

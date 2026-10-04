@@ -40,6 +40,7 @@
   // practitioner signed in and saw only the member side). Same resolution
   // as the rest of the app now, with the production API as the last word.
   function proxyBase() {
+    const shared = window.GaiaApi && window.GaiaApi.base && window.GaiaApi.base(); if (shared) return shared;
     return String(
       (window.GAIA_SYNC && window.GAIA_SYNC.proxyBase)
       || (window.GAIA_APP_URLS && window.GAIA_APP_URLS.production && window.GAIA_APP_URLS.production.proxy)
@@ -67,6 +68,14 @@
     throw err;
   }
 
+  /** The role, where the account is named: a small chip on the You header once the practitioner account is linked. */
+  function badge(status) {
+    const head = document.querySelector('.g-page__head--profile .g-page__sub, #profile-sub');
+    if (!head) return;
+    head.querySelector('.g-prac-badge')?.remove();
+    if (status?.state !== 'connected') return;
+    head.insertAdjacentHTML('beforeend', ` <span class="g-prac-badge">Practitioner${status.practitioner_name ? ' · ' + esc(status.practitioner_name) : ''}</span>`);
+  }
   /** Which clients share their readings through Gaia (their customer id -> { opened, ... }). Local to our server, fast. */
   async function linkedClients() {
     try {
@@ -147,13 +156,53 @@
 
     function paint(html) { root.innerHTML = html; }
 
+    const REASONS = {
+      access_denied: 'You cancelled on Gaia Practitioners.',
+      denied: 'You cancelled on Gaia Practitioners.',
+      bad_state: 'The sign-in did not come back to this session. Please try again.',
+      session_changed: 'A different member was signed in when Gaia Practitioners answered. Please try again.',
+      exchange_failed: 'Gaia Practitioners did not accept the sign-in. Please try again in a moment.',
+      not_practitioner: 'That Gaia Practitioners account is not a practitioner account.',
+      unverified: 'We could not read your practitioner profile. Please try again.',
+    };
+    // What the last connect attempt brought back, if the page was just returned to.
+    function lastAttempt() {
+      try {
+        const p = new URLSearchParams(window.location.search);
+        if (p.get('practitioners') !== 'failed') return '';
+        const r = p.get('reason') || '';
+        return `<p class="g-prac__attempt" role="alert">${esc(REASONS[r] || 'The connection did not complete.')}</p>`;
+      } catch (e) { return ''; }
+    }
     async function showGate(status) {
       if (status.offline) {
         paint(empty('Could not reach Gaia right now. Check your connection and try again.',
           { action: 'retry', label: 'Try again' }));
         return;
       }
-      if (status.needs_reconnect) {
+      if (status.state === 'not_practitioner') {
+        // Signed in fine; the account is not a practitioner. Say so, name the
+        // account, and offer the two honest ways out.
+        paint(`<div class="gaia-empty">
+          ${lastAttempt()}
+          <p class="gaia-empty__text">The Gaia Practitioners account you connected is not a practitioner account.</p>
+          ${status.practitioner_email ? `<p class="g-prac__muted">Connected as ${esc(status.practitioner_email)}</p>` : ''}
+          <p class="g-prac__muted">If you practise with Gaia, sign in with your practitioner account. If you are a client, your readings are under You.</p>
+          <a class="g-btn g-btn--sm" href="${esc(proxyBase())}/api/practitioners/connect">Connect a different account</a>
+          <button type="button" class="g-btn g-btn--ghost g-btn--sm" data-prac-action="disconnect">Disconnect</button>
+        </div>`);
+        return;
+      }
+      if (status.state === 'unverified') {
+        paint(`<div class="gaia-empty">
+          ${lastAttempt()}
+          <p class="gaia-empty__text">Your account is connected, but we could not read your practitioner profile.</p>
+          ${status.practitioner_email ? `<p class="g-prac__muted">Connected as ${esc(status.practitioner_email)}</p>` : ''}
+          <a class="g-btn g-btn--sm" href="${esc(proxyBase())}/api/practitioners/connect">Try again</a>
+        </div>`);
+        return;
+      }
+      if (status.needs_reconnect || status.state === 'needs_reconnect') {
         // Deliberately distinct from never-connected: naming the account is how
         // somebody notices they connected the wrong one.
         paint(`<div class="gaia-empty">
@@ -164,9 +213,15 @@
         return;
       }
       paint(`<div class="gaia-empty">
+        ${lastAttempt()}
         <p class="gaia-empty__text">Connect your Gaia Practitioners account to see your clients here.</p>
+        <p class="g-prac__muted">Your Gaia login stays as it is. This links your practitioner account to it.</p>
         <a class="g-btn g-btn--sm" href="${esc(proxyBase())}/api/practitioners/connect">Connect</a>
       </div>`);
+    }
+    async function disconnect() {
+      try { await fetch(`${proxyBase()}/api/practitioners/disconnect`, { method: 'POST', credentials: 'include' }); } catch (e) { /* ignore */ }
+      start();
     }
 
     // —— Phase 1: the landing screen ——
@@ -455,6 +510,7 @@
       if (action) {
         const a = action.getAttribute('data-prac-action');
         if (a === 'retry') { start(); return; }
+        if (a === 'disconnect') { disconnect(); return; }
         if (a.startsWith('retry-')) {
           const kind = a.slice(6);
           const body = root.querySelector(`[data-prac-body="${kind}"]`);
@@ -479,11 +535,8 @@
     async function start(deepLink) {
       paint(skeleton(4));
       const status = await connection();
-      if (!status.available || (!status.connected && !status.needs_reconnect)) {
-        await showGate(status);
-        return;
-      }
-      if (status.needs_reconnect) { await showGate(status); return; }
+      badge(status);
+      if (status.state !== 'connected') { await showGate(status); return; }
       if (deepLink && deepLink.client) await showClient(deepLink.client, deepLink.open, deepLink.awaiting);
       else await showList();
       return true;

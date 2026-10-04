@@ -1214,3 +1214,5 @@ body.gaia-v2 [data-screen="profile"] .g-pass-stack > .g-next .g-next__lead { mar
 body.gaia-v2 [data-screen="profile"] .g-pass-stack > .g-next.is-collapsed { padding: 12px 20px; }
 /* My readings, folded */
 .g-readings--folded .g-readings__summary { margin-top: 10px; }
+.g-prac-badge { display: inline-block; margin-left: 6px; padding: 2px 9px; border-radius: 999px; font-size: 0.72rem; font-weight: 700; letter-spacing: .04em; color: var(--g-accent); background: color-mix(in srgb, var(--g-accent) 12%, transparent); border: 1px solid color-mix(in srgb, var(--g-accent) 40%, transparent); vertical-align: middle; }
+.g-prac__attempt { margin: 0 0 10px; padding: 9px 12px; border-radius: 12px; font-size: 0.9em; color: var(--g-text); background: color-mix(in srgb, var(--g-danger) 12%, transparent); border: 1px solid color-mix(in srgb, var(--g-danger) 40%, transparent); }

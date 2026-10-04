@@ -9,7 +9,7 @@
   if (!box) return;
   const SHOP = (window.GaiaStore && window.GaiaStore.shopBase) || 'https://gaiahealers.com';
   function esc(s) { return String(s == null ? '' : s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c])); }
-  function proxyBase() { return String((window.GAIA_SYNC && window.GAIA_SYNC.proxyBase) || 'https://api.gaiahealers.app').replace(/\/+$/, ''); }
+  function proxyBase() { const shared = window.GaiaApi && window.GaiaApi.base && window.GaiaApi.base(); if (shared) return shared; return String((window.GAIA_SYNC && window.GAIA_SYNC.proxyBase) || 'https://api.gaiahealers.app').replace(/\/+$/, ''); }
 
   const RITUALS = {
     'new': { title: 'Plant a seed', body: 'A dark sky is a blank page. Write one clear intention for this cycle and keep it somewhere you will see it.', crystal: 'Set your intention with your chakra set or a clear quartz nearby.' },

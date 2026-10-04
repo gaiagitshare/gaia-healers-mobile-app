@@ -408,7 +408,7 @@
   }
 
   /* Wire the expand/collapse behaviour of My Access rows. */
-  const PROXY = () => (window.GaiaConfig && window.GaiaConfig.proxyBase) || window.GAIA_PROXY_BASE || 'https://api.gaiahealers.app';
+  const PROXY = () => (window.GaiaApi && window.GaiaApi.base && window.GaiaApi.base()) || (window.GaiaConfig && window.GaiaConfig.proxyBase) || window.GAIA_PROXY_BASE || 'https://api.gaiahealers.app';
   function setNextCollapsed(root, collapsed) {
     const sec = root.querySelector('[data-next-level]'); if (!sec) return;
     sec.classList.toggle('is-collapsed', collapsed);

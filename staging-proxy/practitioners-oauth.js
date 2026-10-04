@@ -213,27 +213,52 @@ export function forgetToken(contactId, file = TOKEN_FILE) {
   return true;
 }
 
-/** What the app may know: connected or not, and to whom. Never the token. */
-export function connectionStatus(contactId, file = TOKEN_FILE) {
+/**
+ * Is the account they signed into a practitioner account? Gaia Practitioners
+ * is the source of truth: their profile tool answers for a practitioner and
+ * carries an id. A profile we could not read is not a verdict either way.
+ */
+export function verifyPractitioner(who) {
+  if (!who || who.raw_ok === false) return { verified: null, reason: 'profile_unreadable' };
+  if (String(who.practitioner_id || '').trim()) return { verified: true, reason: '' };
+  return { verified: false, reason: 'no_practitioner_profile' };
+}
+
+/**
+ * THE link state, used by /status, by the role the tools run with, and by the
+ * screen. One function, so the UI and the backend cannot disagree:
+ *   not_connected     nothing stored
+ *   connected         a usable token for a verified practitioner account
+ *   needs_reconnect   stored, but the token is broken or expired
+ *   not_practitioner  signed in fine, but the account is not a practitioner
+ *   unverified        signed in, profile could not be read (try again)
+ */
+export function linkState(contactId, file = TOKEN_FILE) {
   const row = tokenFor(contactId, file);
-  if (!row) return { connected: false, needs_reconnect: false };
-  if (row.needs_reconnect) {
-    return {
-      connected: false,
-      needs_reconnect: true,
-      practitioner_name: row.practitioner_name || '',
-      practitioner_email: row.practitioner_email || '',
-      broken_at: row.broken_at || '',
-    };
-  }
+  const who = row ? { practitioner_name: row.practitioner_name || '', practitioner_email: row.practitioner_email || '', practitioner_id: row.practitioner_id || '' } : {};
+  if (!row) return { state: 'not_connected' };
+  // rows written before verification existed carry no `verified`; a practitioner id is the same evidence
+  const verified = row.verified === true || (row.verified == null && Boolean(row.practitioner_id));
+  if (row.verified === false) return { state: 'not_practitioner', reason: row.verify_reason || 'no_practitioner_profile', ...who, connected_at: row.connected_at || '' };
+  if (row.needs_reconnect || row.expired || !row.usable) return { state: 'needs_reconnect', ...who, broken_at: row.broken_at || '', expired: Boolean(row.expired) };
+  if (!verified) return { state: 'unverified', reason: row.verify_reason || 'profile_unreadable', ...who, connected_at: row.connected_at || '' };
+  return { state: 'connected', ...who, connected_at: row.connected_at || '', expires_at: row.expires_at || 0 };
+}
+export const isLinkedPractitioner = (contactId, file = TOKEN_FILE) => linkState(contactId, file).state === 'connected';
+
+/** The older shape the app reads (connected / needs_reconnect), derived from linkState so the two can never differ. */
+export function connectionStatus(contactId, file = TOKEN_FILE) {
+  const s = linkState(contactId, file);
+  if (s.state === 'not_connected') return { connected: false, needs_reconnect: false };
   return {
-    connected: row.usable && !row.expired,
-    needs_reconnect: false,
-    expired: row.expired,
-    practitioner_name: row.practitioner_name || '',
-    practitioner_email: row.practitioner_email || '',
-    connected_at: row.connected_at || '',
-    expires_at: row.expires_at || 0,
+    connected: s.state === 'connected',
+    needs_reconnect: s.state === 'needs_reconnect',
+    expired: Boolean(s.expired),
+    practitioner_name: s.practitioner_name || '',
+    practitioner_email: s.practitioner_email || '',
+    connected_at: s.connected_at || '',
+    expires_at: s.expires_at || 0,
+    broken_at: s.broken_at || '',
   };
 }
 

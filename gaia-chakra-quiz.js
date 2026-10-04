@@ -111,7 +111,7 @@
     const email = ((input && input.value) || '').trim();
     if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) { if (status) status.textContent = 'Please enter a valid email address.'; return; }
     if (status) status.textContent = 'Sending…';
-    const base = (window.GAIA_SYNC && window.GAIA_SYNC.proxyBase) || 'https://api.gaiahealers.app';
+    const base = (window.GaiaApi && window.GaiaApi.base && window.GaiaApi.base()) || (window.GAIA_SYNC && window.GAIA_SYNC.proxyBase) || 'https://api.gaiahealers.app';
     fetch(base + '/api/quiz/lead', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email: email, chakra: ck, tool: 'chakra-balance' }) })
       .then((r) => r.json()).then(() => {
         const lead = box.querySelector('[data-cq-lead]');

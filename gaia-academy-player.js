@@ -14,6 +14,7 @@
   var manifest = null, manifestPromise = null;
 
   function proxyBase() {
+    const shared = window.GaiaApi && window.GaiaApi.base && window.GaiaApi.base(); if (shared) return shared;
     return String((window.GAIA_SYNC && window.GAIA_SYNC.proxyBase) || 'https://api.gaiahealers.app').replace(/\/+$/, '');
   }
   function esc(s) {

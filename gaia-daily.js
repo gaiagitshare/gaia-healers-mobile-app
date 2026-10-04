@@ -14,6 +14,7 @@
   'use strict';
 
   function proxyBase() {
+    const shared = window.GaiaApi && window.GaiaApi.base && window.GaiaApi.base(); if (shared) return shared;
     return String((window.GAIA_SYNC && window.GAIA_SYNC.proxyBase)
       || (window.GAIA_APP_URLS && window.GAIA_APP_URLS.production && window.GAIA_APP_URLS.production.proxy)
       || 'https://api.gaiahealers.app').replace(/\/+$/, '');

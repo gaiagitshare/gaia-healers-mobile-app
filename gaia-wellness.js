@@ -9,6 +9,7 @@
   if (!boxes.length) return;
 
   function proxyBase() {
+    const shared = window.GaiaApi && window.GaiaApi.base && window.GaiaApi.base(); if (shared) return shared;
     const localOverride = /^(127\.0\.0\.1|localhost)$/.test(window.location.hostname)
       ? new URLSearchParams(window.location.search).get('apiBase') : '';
     if (localOverride && /^https?:\/\/127\.0\.0\.1(?::\d+)?$/.test(localOverride)) return localOverride.replace(/\/+$/, '');

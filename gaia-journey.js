@@ -6,7 +6,7 @@
   let overlay, embedded, checkPromise, lastFocus, renderedScene = '', branchNotice = '';
   const reduced = () => matchMedia('(prefers-reduced-motion: reduce)').matches;
   const log = (event, stepKey) => console.info('[Gaia Onboarding]', { event, ...(stepKey ? { stepKey } : {}) });
-  const base = () => String(window.GAIA_SYNC?.proxyBase || window.GAIA_APP_URLS?.production?.proxy || 'https://api.gaiahealers.app').replace(/\/+$/, '');
+  const base = () => (window.GaiaApi && window.GaiaApi.base && window.GaiaApi.base()) || String(window.GAIA_SYNC?.proxyBase || window.GAIA_APP_URLS?.production?.proxy || 'https://api.gaiahealers.app').replace(/\/+$/, '');
   async function request(method, body) {
     const r = await fetch(base() + '/api/assist/onboarding', { method, credentials: 'include', cache: 'no-store', headers: { 'Content-Type': 'application/json' }, body: body ? JSON.stringify(body) : undefined, signal: AbortSignal.timeout(25000) });
     const data = await r.json();

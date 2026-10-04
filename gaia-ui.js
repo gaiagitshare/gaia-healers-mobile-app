@@ -1898,6 +1898,7 @@
     }
 
     function proxyBase() {
+    const shared = window.GaiaApi && window.GaiaApi.base && window.GaiaApi.base(); if (shared) return shared;
       return (window.GAIA_SYNC?.proxyBase || DEFAULT_PROXY).replace(/\/+$/, '');
     }
 

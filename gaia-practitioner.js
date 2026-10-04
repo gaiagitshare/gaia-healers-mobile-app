@@ -56,6 +56,15 @@
     throw err;
   }
 
+  /** Which clients share their readings through Gaia (their customer id -> { opened, ... }). Local to our server, fast. */
+  async function linkedClients() {
+    try {
+      const res = await fetch(`${proxyBase()}/api/practitioners/linked-clients`, { credentials: 'include', headers: { Accept: 'application/json' } });
+      const j = await res.json();
+      return new Map((j.clients || []).map((c) => [String(c.customer_id), c]));
+    } catch (_) { return new Map(); }
+  }
+  const sharesTag = (l) => (l ? `<span class="g-prac__tag g-prac__tag--shares" title="This client asked to see their own readings in the Gaia app">Sees their readings${l.opened ? '' : ' · not opened yet'}</span>` : '');
   async function connection() {
     try {
       const res = await fetch(`${proxyBase()}/api/practitioners/status`,
@@ -175,6 +184,15 @@
       const flaggedHost = root.querySelector('[data-prac-flagged]');
       const followHost = root.querySelector('[data-prac-followups]');
       const listHost = root.querySelector('[data-prac-client-list]');
+      // Who shares their readings through Gaia: a local lookup, so it is used
+      // the moment the list arrives, and a one-line count above the list.
+      const linked = linkedClients();
+      linked.then((m) => {
+        if (openClient !== null || !m.size) return;
+        const opened = [...m.values()].filter((l) => l.opened).length;
+        const sec = root.querySelector('[data-prac-clients-sec] .g-prac__h');
+        if (sec) sec.insertAdjacentHTML('afterend', `<p class="g-prac__muted" data-prac-linked-count>${m.size} client${m.size === 1 ? '' : 's'} can see their own readings in the Gaia app · ${opened} ${opened === 1 ? 'has' : 'have'} opened them</p>`);
+      });
 
       // Three independent fast calls. One failing must not blank the other two.
       tool('practitioner_flagged_clients', {}).then((r) => {
@@ -195,11 +213,12 @@
           : empty('No follow-ups suggested.'));
       }).catch(() => { followHost.innerHTML = `<h3 class="g-prac__h">Due a follow-up</h3>` + empty('Could not load this just now.'); });
 
-      tool('practitioner_list_clients', {}).then((r) => {
+      tool('practitioner_list_clients', {}).then(async (r) => {
         const rows = r.clients || [];
+        const m = await linked;
         listHost.innerHTML = rows.length
-          ? rows.map((c) => clientRow(c, c.has_biowell
-              ? '<span class="g-prac__tag">Bio-Well</span>' : '')).join('')
+          ? rows.map((c) => clientRow(c, (c.has_biowell
+              ? '<span class="g-prac__tag">Bio-Well</span>' : '') + sharesTag(m.get(String(c.id))))).join('')
           : empty('No clients on your list yet.');
       }).catch((e) => { listHost.innerHTML = empty(e.code === 'not_connected'
           ? 'Connect your Gaia Practitioners account to see your clients.'
@@ -253,8 +272,10 @@
         </div>`);
 
       const head = root.querySelector('[data-prac-header]');
-      tool('practitioner_get_client', { clientId }).then((c) => {
+      const linkedOne = linkedClients().then((m) => m.get(String(clientId)) || null);
+      tool('practitioner_get_client', { clientId }).then(async (c) => {
         if (openClient !== String(clientId)) return;
+        const l = await linkedOne;
         head.innerHTML = c.found === false
           ? empty('That client is not on your list.')
           : `<div class="g-prac__profile">
@@ -262,6 +283,7 @@
                <p class="g-prac__muted">${[c.email, c.phone, c.city].filter(Boolean).map(esc).join(' · ')}</p>
                <p class="g-prac__muted">${[c.sex, c.date_of_birth ? `born ${esc(c.date_of_birth)}` : ''].filter(Boolean).join(' · ')}
                  ${c.has_biowell ? '<span class="g-prac__tag">Bio-Well linked</span>' : ''}</p>
+               ${l ? `<p class="g-prac__shares">Also a Gaia member: they can see this reading too, in their own app${l.opened ? (l.opened_latest ? ' · they have opened the latest one' : ' · they have opened an earlier one') : ' · not opened yet'}.</p>` : ''}
              </div>`;
       }).catch(() => { head.innerHTML = empty('Could not load this client.'); });
 

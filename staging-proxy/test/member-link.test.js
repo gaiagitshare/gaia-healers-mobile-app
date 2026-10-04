@@ -366,3 +366,29 @@ test('"read this first": a pinned document, in any spelling, comes first and is 
   for (const f of [{ read_first: true }, { readFirst: 1 }, { pinned: true }, { featured: true }, { primary: true }, { tags: ['Read First'] }, { tags: ['pinned'] }]) assert.equal(readFirst(f), true, JSON.stringify(f));
   assert.equal(readFirst({ tags: ['notes'] }), false);
 });
+
+test('a practitioner sees which of THEIR clients share their readings, by customer id only, never a Gaia member id', () => {
+  const dir5 = fs.mkdtempSync(path.join(os.tmpdir(), 'mlink5-')); const f = path.join(dir5, 'links.json');
+  for (const [m, c, p] of [['mA', 'c1', 'p-9'], ['mB', 'c2', 'p-9'], ['mC', 'c3', 'p-other']]) { const code = ml.mintCode(m, { file: f }); ml.redeemCode(code.code, { customer_id: c, practitioner_id: p }, { file: f }); }
+  ml.rememberLatest('mA', '2026-06-14', { file: f }); ml.markSeen('mA', '2026-06-14', { file: f });
+  ml.rememberLatest('mB', '2026-06-14', { file: f });
+  const mine = ml.linksForPractitioner('p-9', f);
+  assert.deepEqual(mine.map((x) => x.customer_id).sort(), ['c1', 'c2']);
+  const a = mine.find((x) => x.customer_id === 'c1'), b = mine.find((x) => x.customer_id === 'c2');
+  assert.equal(a.opened, true); assert.equal(a.opened_latest, true); assert.equal(b.opened, false);
+  assert.ok(mine.every((x) => !('gaia_member_id' in x) && !('memberId' in x)));
+  assert.deepEqual(ml.linksForPractitioner('', f), []);
+  ml.revokeLink({ memberId: 'mA' }, 'member', { file: f });
+  assert.deepEqual(ml.linksForPractitioner('p-9', f).map((x) => x.customer_id), ['c2'], 'a revoked link is gone from the practitioner view');
+});
+
+test('the offline member flow check walks the whole path and passes', async () => {
+  const { spawn } = await import('node:child_process');
+  const out = await new Promise((resolve) => {
+    const p = spawn(process.execPath, [new URL('../tools/member-flow-check.mjs', import.meta.url).pathname, '--json'], { env: { ...process.env, GAIA_MEMBER_LINK_FILE: '', GAIA_MEMBER_PREFS_FILE: '' } });
+    let s = ''; p.stdout.on('data', (d) => { s += d; }); p.on('close', (code) => resolve({ code, s }));
+  });
+  assert.equal(out.code, 0, out.s.slice(-600));
+  const j = JSON.parse(out.s.slice(out.s.indexOf('{')));
+  assert.equal(j.ok, true); assert.ok(j.steps.length >= 18); assert.ok(j.steps.every((x) => x.ok));
+});

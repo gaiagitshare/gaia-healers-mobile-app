@@ -33,7 +33,7 @@ import { priceFor, costFromUsage } from './assist-pricing.js';
 
 /** Every field a record may carry, in order. Tests fail on anything else. */
 export const USAGE_FIELDS = Object.freeze([
-  'at', 'channel', 'provider', 'model', 'state', 'turns', 'seconds',
+  'at', 'channel', 'provider', 'model', 'account', 'state', 'turns', 'seconds',
   'outcome', 'error', 'usageReported', 'attempt',
   'input', 'cachedInput', 'output', 'reasoning', 'textIn', 'audioIn', 'textOut', 'audioOut',
   'estCostUsd', 'priceList',
@@ -158,6 +158,9 @@ export function buildRecord(r) {
     channel: r.channel === 'voice' ? 'voice' : 'text',
     provider: String(r.provider || 'unknown').slice(0, 40),
     model: String(r.model || 'unknown').slice(0, 80),
+    // Which of the provider's accounts served it (Qwen has two since 4 Oct
+    // 2026); null where a provider has one.
+    account: r.account == null ? null : num(r.account),
     state: r.state == null ? null : String(r.state).slice(0, 20),
     turns: num(r.turns),
     seconds: num(r.seconds),

@@ -331,7 +331,16 @@ when the owner asks.
 # PAID LIVE TEST — OWNER APPROVAL REQUIRED (one session, ~0 tokens)
 node /root/gaia-staging-proxy/tools/qwen-access-check.mjs --dry-run
 node /root/gaia-staging-proxy/tools/qwen-access-check.mjs
+node /root/gaia-staging-proxy/tools/qwen-access-check.mjs --account 2
 ```
+
+Voice uses two Qwen accounts since 4 Oct 2026: `QWEN_API_KEY` + `QWEN_BASE_URL`
+(account 1) and `QWEN_API_KEY_2` + `QWEN_BASE_URL_2` (account 2, its own
+workspace host). The relay opens every session on account 1 and tries account 2
+only when account 1 refuses permanently (entitlement or key); a timeout or a
+dropped socket is never retried on the other account. The usage record's
+`account` field says which one served a session, so the two bills stay
+attributable.
 
 ### Usage accounting
 

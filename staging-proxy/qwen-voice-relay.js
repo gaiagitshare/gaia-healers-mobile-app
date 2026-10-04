@@ -185,6 +185,23 @@ export function qwenVoiceConfig(env = process.env) {
   };
 }
 
+/**
+ * The Qwen accounts a session may use, in order. Account 2 is optional
+ * (QWEN_API_KEY_2 + QWEN_BASE_URL_2, its own workspace host) and is tried only
+ * when account 1 refuses a session for a PERMANENT reason -- an entitlement or
+ * key refusal -- never for a timeout or a dropped socket, so a transient
+ * failure cannot double the attempts. Added 4 Oct 2026, the day account 1 was
+ * suspended for a failed card charge.
+ */
+export function qwenVoiceAccounts(env = process.env) {
+  const ws = (v, d) => String(v || d).trim().replace(/\/+$/, '').replace(/^http/, 'ws');
+  const list = [];
+  if (env.QWEN_API_KEY) list.push({ index: 1, apiKey: env.QWEN_API_KEY, wsBase: ws(env.QWEN_BASE_URL, 'https://dashscope-intl.aliyuncs.com') });
+  if (env.QWEN_API_KEY_2) list.push({ index: 2, apiKey: env.QWEN_API_KEY_2, wsBase: ws(env.QWEN_BASE_URL_2, 'https://dashscope-intl.aliyuncs.com') });
+  return list;
+}
+export const PERMANENT_ACCOUNT_FAILURES = Object.freeze(['access_denied', 'auth']);
+
 // ── pure translation (unit-tested in test/qwen-voice-relay.test.js) ────────
 
 /** Gemini functionDeclarations → Qwen/OpenAI-realtime tools. */
@@ -386,6 +403,10 @@ export function attachQwenVoiceRelay(server, { clientIp = (req) => req.socket.re
 
 function runSession(browser, grant, ip) {
   const cfg = qwenVoiceConfig();
+  const accounts = qwenVoiceAccounts();
+  let accountIndex = 0;
+  let account = accounts[0] || { index: 1, apiKey: cfg.apiKey, wsBase: cfg.wsBase };
+  let lastSetup = null;
   const startedAt = Date.now();
   const state = { calledTool: false };
   const transcript = [];               // [{ role, text }] for a handover
@@ -451,7 +472,7 @@ function runSession(browser, grant, ip) {
     // ours; the provider's message is never stored.
     const outcome = why.startsWith('failed:') ? 'failed' : (turns > 0 ? 'ok' : 'ended');
     const error = outcome === 'ok' ? null : errorCategory(why.replace(/^(failed|handover):/, ''));
-    recordUsage({ channel: 'voice', provider: 'qwen', model: cfg.model, state: grant.state,
+    recordUsage({ channel: 'voice', provider: 'qwen', model: cfg.model, account: account.index, state: grant.state,
       turns, seconds: Math.round((Date.now() - startedAt) / 1000), usage: reported, outcome, error });
   };
 
@@ -465,7 +486,6 @@ function runSession(browser, grant, ip) {
   };
 
   const failEarly = (reason) => {
-    recordFailure();
     // Before setup the client has not heard anything yet: a close is enough.
     // (There is no Gemini fallback any more -- the orb accepts only Qwen and
     // shows "Qwen voice is unavailable" after one silent retry.)
@@ -475,10 +495,24 @@ function runSession(browser, grant, ip) {
       // model" -- which will fail again in a second -- from a timeout worth
       // one retry. assist-guide.js voiceClosePermanent() reads it.
       const category = errorCategory(reason.replace(/^qwen_error:/, ''));
-      console.warn('[Gaia Assist] qwen voice failed before setup', { reason, category });
+      // A permanent refusal of THIS account is not yet a failure of the
+      // session: the next account, if there is one, gets the same setup. A
+      // timeout or a dropped socket is not retried on another account -- that
+      // would turn one slow network into two billed attempts.
+      if (PERMANENT_ACCOUNT_FAILURES.includes(category) && accountIndex + 1 < accounts.length) {
+        console.warn('[Gaia Assist] qwen voice account refused, trying the next', { account: account.index, category });
+        accountIndex += 1;
+        account = accounts[accountIndex];
+        pendingSetup = lastSetup;
+        connectUpstream();
+        return;
+      }
+      recordFailure();
+      console.warn('[Gaia Assist] qwen voice failed before setup', { reason, category, account: account.index });
       try { browser.close(globalThis.GaiaAssistGuide.VOICE_UNAVAILABLE_CODE, 'qwen_unavailable:' + category); } catch { /* gone */ }
       finish('failed:' + reason);
     } else {
+      recordFailure();
       handover(reason);
     }
   };
@@ -530,24 +564,37 @@ function runSession(browser, grant, ip) {
   // who is thinking sends none (the orb gates silence) while Qwen waits too.
   const keepAlive = setInterval(() => { try { browser.ping(); } catch { /* closing */ } }, 25 * 1000);
   keepAlive.unref?.();
-  const connectTimer = setTimeout(() => { if (!setupDone) failEarly('connect_timeout'); }, cfg.connectMs);
-
-  upstream = new WebSocket(`${cfg.wsBase}/api-ws/v1/realtime?model=${encodeURIComponent(cfg.model)}`, {
-    headers: { Authorization: `Bearer ${cfg.apiKey}` },
-  });
-  upstream.on('error', (e) => failEarly('upstream_error:' + String(e.message || e).slice(0, 80)));
-  upstream.on('close', (code) => { if (!closed) failEarly('upstream_closed:' + code); });
+  let connectTimer = null;
 
   let pendingSetup = null;
   const sendSetup = () => {
-    if (!pendingSetup || upstream.readyState !== WebSocket.OPEN) return;
+    if (!pendingSetup || upstream?.readyState !== WebSocket.OPEN) return;
     toQwen(sessionUpdateFor(pendingSetup, { instructions: grant.instructions, voice: cfg.voice,
                                             tools: grant.tools }));
     pendingSetup = null;
   };
-  upstream.on('open', sendSetup);
 
-  upstream.on('message', (raw) => {
+  // Opens the upstream for the CURRENT account. Called once at the start and
+  // once more if that account refuses permanently. Handlers of a socket that
+  // has been replaced ignore themselves: the old account's close must not end
+  // the session the new account is serving.
+  function connectUpstream() {
+    clearTimeout(connectTimer);
+    connectTimer = setTimeout(() => { if (!setupDone) failEarly('connect_timeout'); }, cfg.connectMs);
+    const previous = upstream;
+    const sock = new WebSocket(`${account.wsBase}/api-ws/v1/realtime?model=${encodeURIComponent(cfg.model)}`, {
+      headers: { Authorization: `Bearer ${account.apiKey}` },
+    });
+    upstream = sock;
+    try { previous?.close(); } catch { /* already gone */ }
+    sock.on('error', (e) => { if (sock !== upstream) return; failEarly('upstream_error:' + String(e.message || e).slice(0, 80)); });
+    sock.on('close', (code) => { if (sock !== upstream || closed) return; failEarly('upstream_closed:' + code); });
+    sock.on('open', sendSetup);
+    sock.on('message', onUpstreamMessage(sock));
+  }
+
+  const onUpstreamMessage = (sock) => (raw) => {
+    if (sock !== upstream) return;
     let evt;
     try { evt = JSON.parse(String(raw)); } catch { return; }
     // Alibaba sends an entitlement refusal as a bare {code, message} frame with
@@ -600,7 +647,8 @@ function runSession(browser, grant, ip) {
       if (evt.response?.usage) reported = sumUsage(reported, normalizeUsage('qwen', evt.response.usage));
     }
     for (const m of qwenToBrowser(evt, state)) toBrowser(m);
-  });
+  };
+  connectUpstream();
 
   browser.on('message', (raw) => {
     let msg;
@@ -616,6 +664,7 @@ function runSession(browser, grant, ip) {
     }
     if (msg.setup) {
       pendingSetup = msg.setup;
+      lastSetup = msg.setup;
       sendSetup();
       return;
     }

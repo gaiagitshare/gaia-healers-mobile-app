@@ -459,16 +459,30 @@ What that profile really looks like (measured on staging 4 Oct 2026 with
 `tools/practitioner-profile-shape.mjs`, field names only): `id` (number),
 `name`, `firstname`, `lastname`, `email`, `sex`, `specialty`, `city`, `state`,
 `address`, `zipcode`, `tags`, `imageURL`, `status` (the test account says
-`"pending"`). There is NO `role` and NO `practitionerId`: the plain `id` is the
-practitioner id, and `verifyPractitioner` says `true` for any readable profile
-with an id. It says `false` only for an explicit non-practitioner `role` (if the
-partner ever adds one) or a `status` in `INACTIVE_STATUSES` (suspended,
-disabled, …; reason `account_not_active`), and `null` when the profile could not
-be read or has no id. `status` is stored as `profile_status` and carried by
-`linkState`. Rows written before the verdict existed keep working from their
-practitioner id. Fixture pinning the shape: `REAL_PROFILE` in
-`test/practitioner-link-state.test.js`. Open question for huMan: the full list
-of `status` values (is "pending" a practitioner who may already use the tools?). `linkState(contactId)`
+`"pending"`). There is NO `role` and NO `practitionerId`. The documented practitioner-scoped
+`get_practitioner_profile` tool's `id` is accepted as practitioner evidence;
+an arbitrary user profile or `userId` is not. The one observed staging account
+confirms the response shape, not that client accounts are rejected. The partner
+docs describe practitioner OAuth and an own-practitioner-profile tool; a client
+negative test or explicit partner guarantee remains desirable.
+
+The temporary policy accepts `active` and `pending`. Pending access is retained
+for compatibility pending huMan's confirmation, not asserted as a proven
+entitlement rule. Unknown/missing lifecycle status, malformed responses, tool
+errors, or missing ids are unverified; explicit non-practitioner roles and
+inactive statuses are rejected. `profile_source` records the tool provenance;
+verification version 3 records this policy. Old generic-ID records without that
+provenance must reconnect to re-read the scoped profile. Legacy handling only
+applies when `verified` is genuinely absent; explicit null/false never inherits
+an id as verification.
+
+GHL is consulted for role authorization only when there is no link record.
+Once any record exists, its state is authoritative for status, practitioner
+tools, member/voice role reporting, and linked-client reads. GHL failures grant
+no role. Connect starts consent for any signed-in member and grants no role
+until the profile callback verifies. Expired tokens with refresh tokens remain
+connected and renew on the next practitioner read; revoked renewal requires
+reconnect. `linkState(contactId)`
 in `practitioners-oauth.js` is the one authority — `not_connected`,
 `connected`, `needs_reconnect`, `not_practitioner`, `unverified` — used by
 `/status` (spread into the answer), by the role the Assist tools run with

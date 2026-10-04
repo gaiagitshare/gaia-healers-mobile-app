@@ -225,12 +225,19 @@ export function forgetToken(contactId, file = TOKEN_FILE) {
  * account is switched off is not a practitioner in our app either. A profile
  * we could not read is not a verdict either way.
  */
+export const PROFILE_SOURCE = 'get_practitioner_profile';
+export const VERIFICATION_VERSION = 3;
+// Temporary compatibility policy: pending practitioner profiles may connect.
+// This is not a confirmed partner entitlement rule; huMan must confirm it.
+const ALLOWED_PROFILE_STATUSES = new Set(['active', 'pending']);
 export const INACTIVE_STATUSES = new Set(['suspended', 'disabled', 'inactive', 'rejected', 'banned', 'deleted', 'blocked', 'archived']);
 export function verifyPractitioner(who) {
   if (!who || who.raw_ok === false) return { verified: null, reason: 'profile_unreadable' };
+  if (who.profile_source !== PROFILE_SOURCE) return { verified: null, reason: 'profile_unreadable' };
   if (who.profile_role && who.profile_role !== 'practitioner') return { verified: false, reason: 'no_practitioner_profile' };
   if (!String(who.practitioner_id || '').trim()) return { verified: null, reason: 'profile_unreadable' };
   if (INACTIVE_STATUSES.has(String(who.profile_status || '').toLowerCase())) return { verified: false, reason: 'account_not_active' };
+  if (!ALLOWED_PROFILE_STATUSES.has(String(who.profile_status || '').toLowerCase())) return { verified: null, reason: 'profile_unreadable' };
   return { verified: true, reason: '' };
 }
 
@@ -247,16 +254,44 @@ export function linkState(contactId, file = TOKEN_FILE) {
   const row = tokenFor(contactId, file);
   const who = row ? { practitioner_name: row.practitioner_name || '', practitioner_email: row.practitioner_email || '', practitioner_id: row.practitioner_id || '', profile_status: row.profile_status || '' } : {};
   if (!row) return { state: 'not_connected' };
-  // Rows written before the verdict existed (before 4 Oct 2026) carry the same
-  // evidence the verdict now uses: the practitioner id from THEIR profile. They
-  // stay connected; nobody is sent back through OAuth for a bookkeeping field.
-  const verified = row.verified === true || (row.verified == null && Boolean(String(row.practitioner_id || '').trim()));
+  const hasVerdict = Object.hasOwn(row, 'verified');
+  const provenance = row.profile_source === PROFILE_SOURCE && row.verification_version === VERIFICATION_VERSION;
+  const currentVerdict = provenance ? verifyPractitioner(row) : { verified: null };
+  // Explicit null/false never inherits a legacy id. Unproven old records must
+  // reconnect to re-read the practitioner-scoped tool, not silently promote.
+  const verified = currentVerdict.verified === true
+    && (hasVerdict ? row.verified === true : provenance);
   if (row.verified === false) return { state: 'not_practitioner', reason: row.verify_reason || 'no_practitioner_profile', ...who, connected_at: row.connected_at || '' };
+  if (currentVerdict.verified === false) return { state: 'not_practitioner', reason: currentVerdict.reason, ...who };
   if (row.needs_reconnect || (row.expired && !row.refresh_token) || !row.usable) return { state: 'needs_reconnect', ...who, broken_at: row.broken_at || '', expired: Boolean(row.expired) };
   if (!verified) return { state: 'unverified', reason: row.verify_reason || 'profile_unreadable', ...who, connected_at: row.connected_at || '' };
   return { state: 'connected', ...who, connected_at: row.connected_at || '', expires_at: row.expires_at || 0 };
 }
 export const isLinkedPractitioner = (contactId, file = TOKEN_FILE) => linkState(contactId, file).state === 'connected';
+
+/** Shared role policy. GHL is legacy evidence only before any link exists. */
+export async function practitionerAuthorization(contactId, readGhlRole, file = TOKEN_FILE) {
+  const state = linkState(contactId, file).state;
+  if (state !== 'not_connected') return state === 'connected';
+  try {
+    const fallback = Boolean(await readGhlRole());
+    // Consent may finish while the CRM read is in flight. Recheck precedence.
+    const latest = linkState(contactId, file).state;
+    return latest === 'not_connected' ? fallback : latest === 'connected';
+  } catch { return false; }
+}
+export function applyPractitionerLink(access, contactId, file = TOKEN_FILE, ghlConfirmed = true) {
+  const state = linkState(contactId, file).state;
+  if (!ghlConfirmed && state === 'not_connected') {
+    access.member.practitioner = false;
+    access.member.practitionerCertified = false;
+  }
+  if (state !== 'not_connected') {
+    access.member.practitioner = state === 'connected';
+    access.member.practitionerCertified = access.member.practitioner && access.member.practitionerCertified;
+  }
+  return access;
+}
 
 /** The older shape the app reads (connected / needs_reconnect), derived from linkState so the two can never differ. */
 export function connectionStatus(contactId, file = TOKEN_FILE) {
@@ -505,7 +540,9 @@ export function unwrapMcp(result) {
 export async function resolveProfile(cfg, accessToken, fetchImpl = fetch) {
   try {
     const out = await mcpCall(cfg, accessToken, 'get_practitioner_profile', {}, fetchImpl);
+    if (out?.isError) throw new Error('profile tool returned an error');
     const data = unwrapMcp(out);
+    if (!data || typeof data !== 'object' || Array.isArray(data)) throw new Error('invalid practitioner profile');
     const pick = (...keys) => {
       for (const k of keys) {
         const v = data?.[k];
@@ -522,6 +559,7 @@ export async function resolveProfile(cfg, accessToken, fetchImpl = fetch) {
       practitioner_id: pick('practitionerId', 'practitioner_id', 'id'),
       profile_role: String(data?.role || '').toLowerCase(),
       profile_status: String(data?.status || '').toLowerCase(),
+      profile_source: PROFILE_SOURCE,
       raw_ok: true,
     };
   } catch (e) {

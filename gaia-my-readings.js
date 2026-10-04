@@ -143,7 +143,7 @@
     const { linked, fresh, scannedAt } = todayState;
     document.querySelectorAll('a[data-app-nav="profile"]').forEach((a) => a.classList.toggle('has-new-reading', linked && fresh));
     const place = () => {
-      const home = document.querySelector('#home-superapp .g-super-home');
+      const home = document.querySelector('#daily-superapp [data-today-readings]') || document.querySelector('#home-superapp .g-super-home');
       let el = document.getElementById('readings-nudge');
       if (!linked) { el?.remove(); return; }
       if (!home) return;
@@ -151,8 +151,8 @@
         el = document.createElement('a');
         el.id = 'readings-nudge'; el.href = 'home.html?view=profile&section=readings';
         el.addEventListener('click', (e) => { e.preventDefault(); try { window.GaiaAppShell?.go?.('profile'); } catch { /* ignore */ } window.setTimeout(() => window.dispatchEvent(new CustomEvent('gaia:open-readings')), 80); });
-        // Right under the greeting, above the daily energy and the service tiles.
-        const hero = home.querySelector('.g-super-hero');
+        // On Today: its own slot under the greeting. On Home: right under the hero.
+        const hero = home.matches('[data-today-readings]') ? null : home.querySelector('.g-super-hero');
         if (hero) hero.insertAdjacentElement('afterend', el); else home.prepend(el);
       }
       el.className = `g-readings-nudge${fresh ? ' is-new' : ''}`;
@@ -167,8 +167,8 @@
     };
     place();
     if (linked && !nudgeObserver) {
-      const root = document.getElementById('home-superapp');
-      if (root && 'MutationObserver' in window) { nudgeObserver = new MutationObserver(place); nudgeObserver.observe(root, { childList: true }); }
+      const root = document.getElementById('daily-superapp') || document.getElementById('home-superapp');
+      if (root && 'MutationObserver' in window) { nudgeObserver = new MutationObserver(place); nudgeObserver.observe(root, { childList: true, subtree: true }); }
     }
     if (!linked && nudgeObserver) { nudgeObserver.disconnect(); nudgeObserver = null; }
   }

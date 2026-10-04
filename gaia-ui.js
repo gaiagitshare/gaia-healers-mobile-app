@@ -1216,7 +1216,8 @@
 
     function setDocumentTitle(view) {
       const labels = {
-        today: 'Today',
+        today: 'Home',
+        daily: 'Today',
         journey: 'Journey',
         wellness: 'Energy',
         biowell: 'Energy',
@@ -3301,6 +3302,12 @@
     window.addEventListener('gaia:open-assist', (event) => {
       unlockVoicePlayback();
       setOpen(true);
+      // A greeting written by the opener (the avatar) is shown as Gaia's line
+      // in the transcript. It is local text: nothing is sent, nothing billed.
+      if (event.detail?.greeting && !transcript.querySelector('.gaia-assist__bubble--user')) {
+        const last = transcript.querySelector('.gaia-assist__bubble:last-child');
+        if (!last || last.textContent !== event.detail.greeting) appendMessage('assistant', String(event.detail.greeting).slice(0, 300));
+      }
       if (event.detail?.welcome) {
         if (realtimeVoice?.isActive()) sendRealtimeWelcome('event');
         return;

@@ -856,14 +856,13 @@
         // member already has the whole Energy tab -- for them it was a second
         // door to a room they were standing in, pushing the daily reading to
         // fourth on their own home page.
-        ? '<div data-daily-host></div>'
+        ? todayDoor(true)
           + eventFeatureCarousel()
           + primaryMemberAction()
           // The next booking sits above the generic service tiles, not below
           // them -- unless the primary card above is already that booking.
           + (courseGrants()[0]?.openUrl ? nextBookingCard() : '')
           + '<section class="g-super-services"><div class="g-super-section-head"><div><p class="g-super-kicker">Your access</p><h2>Everything Gaia Healers</h2></div><a href="home.html?view=profile">Your account</a></div><div class="g-super-services__grid">' + services + '</div></section>'
-          + '<div data-sky-host></div>'
           + '<div id="home-book"></div>'
           // The upsell goes last, after everything a member already pays for.
           // It used to sit fourth, between two sections both called "Your
@@ -873,17 +872,56 @@
           + '<section class="g-super-sync">' + icon('check-circle') + '<div><strong>Your access is synced</strong><span>Courses, communities, plans and purchases reflect your Gaia Healers account.</span></div></section>'
         // Logged-out flow: daily energy, then the free tools a stranger can use
         // right now, the event, and one clear way in.
-        : '<div data-daily-host></div>'
+        : todayDoor(false)
           + eventFeatureCarousel()
           + freeTools()
-          + '<div data-sky-host></div>'
           + authPrompt(true)
           + '<div id="home-book"></div>')
       + '</div>';
     bind(root);
+    renderToday();
     // Panels that live inside the home screen but are owned by their own files
     // follow this rather than the superapp having to know they exist.
     document.dispatchEvent(new CustomEvent('gaia:superapp-rendered', { detail: { authed } }));
+  }
+
+  /** Home's door to Today: one card, the date, what waits there. */
+  function todayDoor(authed) {
+    return '<a class="g-super-primary g-super-today-door" href="home.html?view=daily" data-app-nav="daily"><p class="g-super-kicker">Today</p>'
+      + '<h2>' + esc(dateLabel()) + '</h2>'
+      + '<p>' + (authed ? 'Your daily energy check, today\u2019s sky, your readings and your next session.' : 'Your daily energy check and today\u2019s sky, free, right now.') + '</p>'
+      + '<span class="g-btn g-btn--primary g-super-primary__button">' + icon('sun') + ' Open Today ' + icon('arrow-right') + '</span></a>';
+  }
+
+  /**
+   * TODAY — the day itself, nothing that belongs to the account. The daily
+   * energy check leads (the one thing that changed since yesterday), then
+   * today's sky, the readings shortcut (the readings panel places it), the
+   * next booking and the booking card. Everything here is owned by the file
+   * that already renders it; this only lays the hosts out in order.
+   */
+  function renderToday() {
+    const root = $('daily-superapp');
+    if (!root) return;
+    const authed = memberState().authed;
+    const p = profile();
+    const firstName = String(p.name || '').trim().split(/\s+/)[0];
+    const hour = new Date().getHours();
+    const part = hour < 12 ? 'morning' : hour < 18 ? 'afternoon' : 'evening';
+    root.innerHTML = '<div class="g-super-home g-super-today">'
+      + '<section class="g-super-today__head"><p class="g-super-kicker">' + esc(dateLabel()) + '</p>'
+      + '<h1>Good ' + part + (authed && firstName ? ', ' + esc(firstName) : '') + '</h1>'
+      + '<p>' + (authed ? 'What does today ask for?' : 'What does your energy need today?') + '</p></section>'
+      + '<div data-today-readings></div>'
+      + '<div data-daily-host></div>'
+      + (authed ? nextBookingCard() : '')
+      + '<div data-sky-host></div>'
+      + (authed ? '' : authPrompt(true))
+      + '<div id="today-book"></div>'
+      + '</div>';
+    bind(root);
+    const book = root.querySelector('#today-book'); const homeBook = $('home-book');
+    if (book && homeBook && homeBook.innerHTML) book.innerHTML = homeBook.innerHTML;
   }
 
   /** The member's way back into their course — real grants only. No invented

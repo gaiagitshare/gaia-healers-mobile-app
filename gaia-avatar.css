@@ -138,3 +138,10 @@
 .gaia-tabbar__home { text-decoration: none; cursor: pointer; }
 .gaia-tabbar__home:focus-visible { outline: 2px solid #6fe9ff; outline-offset: 3px; }
 body.gaia-v2 .gaia-tabbar__inner a.gaia-tabbar__home { border-radius: 999px !important; }
+/* ── Today (the day) and Home's door to it ── */
+.g-super-today__head { padding: 6px 4px 2px; }
+.g-super-today__head h1 { font-family: var(--g-font-serif, "Cormorant Garamond", serif); font-weight: 600; font-size: clamp(1.9rem, 6vw, 2.6rem); margin: 4px 0 2px; line-height: 1.05; }
+.g-super-today__head p { margin: 0; color: var(--g-text-muted, #a8b3ad); }
+.g-super-today__head .g-super-kicker { margin-bottom: 2px; }
+.g-super-today-door { display: block; text-decoration: none; color: inherit; }
+.g-super-today-door .g-super-primary__button { display: inline-flex; align-items: center; gap: 8px; }

@@ -47,7 +47,7 @@ test('nothing in the avatar can cost a token: no fetch, no model route, no promp
   assert.doesNotMatch(js, /api\/assist\/(chat|voice|tool)/);
   assert.doesNotMatch(js, /XMLHttpRequest|WebSocket|EventSource/);
   assert.doesNotMatch(js, /prompt: '/, 'no chip carries a prompt of its own; only the member\'s typed words reach the box, and the shell only pre-fills');
-  assert.match(js, /detail: text \? \{ source: 'avatar', prompt: text \} : \{ source: 'avatar' \}/);
+  assert.match(js, /detail: text \? \{ source: 'avatar', prompt: text \} : \{ source: 'avatar', greeting: greetingLine\(\) \}/);
   // the bubble is a table keyed on screen and member state
   assert.match(js, /function bubbleFor\(\)/);
   for (const key of ["case 'profile'", "case 'wellness'", "case 'academy'", "case 'community'", "case 'store'", 'default:']) assert.ok(js.includes(key), key);

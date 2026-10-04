@@ -74,6 +74,7 @@
       case 'profile': return r.linked
         ? { text: `${hello}Your readings are on this screen. What shall we do?`, chips: ['readings', 'explain', 'talk'] }
         : { text: `${hello}This is your account. Want to see your Bio-Well readings here?`, chips: ['share', practitioner() ? 'practice' : 'tour', 'talk'] };
+      case 'daily': return { text: `${hello}This is your day: energy, sky, readings, your next session.`, chips: ['energy', r.linked ? 'readings' : 'breath', 'talk'] };
       case 'wellness': return { text: `${hello}Choose what you need today.`, chips: ['energy', 'breath', 'talk'] };
       case 'academy': return { text: `${hello}Your courses live here.`, chips: ['academy', 'chat', 'talk'] };
       case 'community': return { text: `${hello}Your circles are here.`, chips: ['community', 'chat', 'talk'] };
@@ -87,7 +88,16 @@
     hideBubble();
     const text = String(typed || '').trim().slice(0, 300);
     // the member's own words go into the box, not off to the model: the shell only pre-fills and focuses
-    window.dispatchEvent(new CustomEvent('gaia:open-assist', { detail: text ? { source: 'avatar', prompt: text } : { source: 'avatar' } }));
+    window.dispatchEvent(new CustomEvent('gaia:open-assist', { detail: text ? { source: 'avatar', prompt: text } : { source: 'avatar', greeting: greetingLine() } }));
+  }
+  /** One local line so the sheet never opens empty. Written here, shown by the shell, never sent to a model. */
+  function greetingLine() {
+    const name = firstName(), r = readings(), v = view();
+    const who = name ? `Hi ${name}. ` : 'Hi. ';
+    if (r.new_reading) return who + 'A new reading from your practitioner is waiting. Ask me to open it, or ask me anything.';
+    if (v === 'profile' && r.linked) return who + 'Your readings are on this screen. I can explain what the sections mean, or open anything for you.';
+    if (v === 'daily') return who + 'This is your day. Ask me about your energy check, the sky, or anything in the app.';
+    return who + 'I\'m here. Ask me anything about the app, your energy or your readings, or tell me where to go.';
   }
   /** The tap itself gets a reaction: a quick hop, whatever else follows. */
   function hop() { if (!root || reduced()) return; root.classList.add('is-hop'); setTimeout(() => root.classList.remove('is-hop'), 650); }
@@ -100,7 +110,8 @@
     const member = authed();
     const steps = [
       { sel: '.gaia-tabbar', eyebrow: 'Your navigation', title: 'Six places, one tap', body: 'Today, Energy, Academy, Community, Shop and You. Everything lives in the bar.' },
-      { sel: '[data-app-nav="wellness"]', eyebrow: 'Energy', title: 'Your daily check', body: 'Energy, horoscope, chakras and the tools. Start the day here.' },
+      { sel: '[data-app-nav="daily"]', eyebrow: 'Today', title: 'The day itself', body: 'Your daily energy check, today\'s sky, your readings and your next session.' },
+      { sel: '[data-app-nav="wellness"]', eyebrow: 'Energy', title: 'The tools', body: 'Energy check, horoscope, chakras, breath, moon and more.' },
       { sel: '[data-app-nav="academy"]', eyebrow: 'Academy', title: 'Learn and get certified', body: member ? 'Your courses and progress.' : 'Courses open with a free account.' },
       { sel: '[data-app-nav="community"]', eyebrow: 'Community', title: 'Your circles', body: 'Boards and circles for the people on the same path.' },
       { sel: '[data-app-nav="profile"]', eyebrow: 'You', title: member ? 'Your account and readings' : 'Your account', body: member ? 'Your pass, your access, and My readings from your practitioner.' : 'Sign in to keep your readings and unlock more.' },
@@ -415,7 +426,12 @@
     readPrefs(window.GaiaMember?.data?.prefs?.prefs);
     // the member's own moments
     window.addEventListener('gaia:readings-loaded', () => setTimeout(() => moment('bounce', 950), 300));
-    window.addEventListener('gaia:readings-status', (e) => { if (e.detail?.new_reading && view() === 'today') setTimeout(() => glanceAt(document.getElementById('readings-nudge')), 700); });
+    window.addEventListener('gaia:readings-status', (e) => { if (e.detail?.new_reading && (view() === 'today' || view() === 'daily')) setTimeout(() => glanceAt(document.getElementById('readings-nudge')), 700); });
+    // The tab the member is about to need, once per session each: You when a
+    // reading waits, Today in the morning before the daily check.
+    const glanced = { you: false, today: false };
+    window.addEventListener('gaia:readings-status', (e) => { if (e.detail?.new_reading && !glanced.you && view() !== 'profile') { glanced.you = true; setTimeout(() => glanceAt(document.querySelector('[data-app-nav="profile"]'), 1800), 1500); } });
+    document.addEventListener('gaia:superapp-rendered', () => { if (!glanced.today && new Date().getHours() < 11 && view() === 'today') { glanced.today = true; setTimeout(() => glanceAt(document.querySelector('[data-app-nav="daily"]'), 1800), 2500); } });
     document.addEventListener('visibilitychange', () => { if (document.hidden) stopIdleAnim(); });
     // Anything else happening to her ends an idle animation at once.
     if ('MutationObserver' in window) new MutationObserver(() => { if (state !== 'idle' || pointing || !bubble.hidden || root.classList.contains('is-behind') || root.classList.contains('is-dragging')) stopIdleAnim(); }).observe(root, { attributes: true, attributeFilter: ['data-state', 'class'] });

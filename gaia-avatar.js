@@ -101,7 +101,7 @@
   }
 
   // ── DOM ──────────────────────────────────────────────────────────────────
-  let root, char, bubble, ring, pos = { side: 'right', y: null }, state = 'idle', bubbleTimer = null, pointing = false, homeTimer = null;
+  let root, char, bubble, ring, pos = { side: 'right', y: null }, state = 'idle', bubbleTimer = null, pointing = false, homeTimer = null, pointedAt = 0;
   function build() {
     if (!document.getElementById('gava-defs')) {
       const d = document.createElement('div'); d.id = 'gava-defs'; d.setAttribute('aria-hidden', 'true');
@@ -167,7 +167,7 @@
     bubble.hidden = false; char.setAttribute('aria-expanded', 'true');
     if (b.mood === 'new') setState('new'); else if (state === 'idle') setState('speaking');
     clearTimeout(bubbleTimer);
-    if (!sticky) bubbleTimer = setTimeout(hideBubble, 12000);
+    if (!sticky) bubbleTimer = setTimeout(hideBubble, 25000);
   }
   function hideBubble() {
     if (!bubble || bubble.hidden) return;
@@ -179,11 +179,17 @@
   function pointAt(target, { text = 'Here you go.', duration = 4200 } = {}) {
     const el = typeof target === 'string' ? document.querySelector(target) : target;
     if (!el || !root) return false;
-    try { el.scrollIntoView({ block: 'center', behavior: reduced() ? 'auto' : 'smooth' }); } catch (_) { /* ignore */ }
+    // A tall target (the whole readings card) scrolls to its top; a small one to the middle.
+    const tall = el.getBoundingClientRect().height > window.innerHeight * 0.6;
+    try { el.scrollIntoView({ block: tall ? 'start' : 'center', behavior: reduced() ? 'auto' : 'smooth' }); } catch (_) { /* ignore */ }
     clearTimeout(homeTimer);
+    pointedAt = Date.now();
     setTimeout(() => {
-      const r = el.getBoundingClientRect();
-      if (!r.width) return;
+      const full = el.getBoundingClientRect();
+      if (!full.width) return;
+      // Ring the part that is on screen, so a card taller than the viewport is still ringed where the eye is.
+      const top = Math.max(8, full.top), bottom = Math.min(window.innerHeight - 8, full.bottom);
+      const r = { left: full.left, right: full.right, width: full.width, top, bottom, height: Math.max(40, bottom - top) };
       ring.hidden = false;
       ring.style.left = (r.left - 6) + 'px'; ring.style.top = (r.top - 6) + 'px'; ring.style.width = (r.width + 12) + 'px'; ring.style.height = (r.height + 12) + 'px';
       pointing = true; setState('pointing');
@@ -256,6 +262,8 @@
   // ── what the rest of the app tells us ─────────────────────────────────────
   function listen() {
     window.addEventListener('resize', () => { if (!pointing) home(); else unpoint(); });
+    // The ring is fixed to where the target was; once the member scrolls on, it goes.
+    window.addEventListener('scroll', () => { if (pointing && Date.now() - pointedAt > 1200) unpoint(); }, { passive: true });
     document.addEventListener('gaia:view-changed', () => { if (pointing) unpoint(); else hideBubble(); });
     // Assist opened the readings: point at them.
     window.addEventListener('gaia:open-readings', () => { setTimeout(() => pointAt('#member-readings', { text: 'Here are your readings.' }), 500); });

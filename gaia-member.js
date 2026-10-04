@@ -138,6 +138,12 @@ body.gaia-booking-open{overflow:hidden;}
     render();
   }
 
+  // "Show hidden cards again" lives in Your data and sharing; when it fires,
+  // the preferences are re-read and You is drawn again.
+  document.addEventListener('gaia:prefs-reset', async () => {
+    try { state.data.prefs = await getJson('/api/member/prefs'); } catch (_) { /* keep what we have */ }
+    renderMe();
+  });
   async function loadMember() {
     if (window.GaiaJourney && !await window.GaiaJourney.check()) return;
     const [profile, access, appts, notif, devices, purchases, forms, courses, products, activity, events, prefs] = await Promise.all([
@@ -845,31 +851,18 @@ body.gaia-booking-open{overflow:hidden;}
         + '<button type="button" class="g-btn g-btn--ghost g-btn--sm" data-dismiss-practitioner>Not now</button></div>'));
     }
 
-    // Anything folded or dismissed on this screen can be brought back here,
-    // without asking anyone: one tap clears every preference.
-    const prefMap = (d.prefs && d.prefs.prefs) || {};
-    const anyHidden = Object.keys(prefMap).some((k) => prefMap[k] === true);
+    // Anything folded or dismissed on this screen comes back from "Your data
+    // and sharing" (the card under this one), which fires gaia:prefs-reset.
     cards.push(gMeCard('Account', gRows([
       gRowLink('Store & memberships', 'Shop →', 'home.html?view=store', false),
       gRowLink('Open Gaia Healers portal', 'education.gaiahealers.com', portalBase(), true),
-    ]) + (anyHidden ? '<div class="g-card__actions"><button type="button" class="g-btn g-btn--ghost g-btn--sm" data-reset-prefs>Show hidden cards again</button></div>' : '')));
+    ])));
 
     box.innerHTML = cards.join('');
     // The person's badge card sits at the top of their account: the thing they
     // just created by scanning their badge is the first thing they see here.
     box.insertAdjacentHTML('afterbegin', '<div data-badgecard-host></div>');
     window.GaiaMembershipUI?.bind?.(box);
-    box.querySelector('[data-reset-prefs]')?.addEventListener('click', async (e) => {
-      e.currentTarget.disabled = true;
-      const cleared = {}; Object.keys((state.data.prefs && state.data.prefs.prefs) || {}).forEach((k) => { cleared[k] = false; });
-      try {
-        const r = await fetch(proxyBase() + '/api/member/prefs', { method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json', Accept: 'application/json' }, body: JSON.stringify({ prefs: cleared }) });
-        const j = await r.json().catch(() => ({}));
-        state.data.prefs = { ok: true, prefs: (j && j.prefs) || cleared };
-      } catch (_) { state.data.prefs = { ok: true, prefs: cleared }; }
-      renderMe();
-      const readings = el('member-readings'); if (readings && window.GaiaMyReadings?.render) window.GaiaMyReadings.render(readings);
-    });
     box.querySelector('[data-dismiss-practitioner]')?.addEventListener('click', (e) => {
       e.currentTarget.closest('.g-card')?.remove();
       if (state.data.prefs && state.data.prefs.prefs) state.data.prefs.prefs.practitioner_card_dismissed = true;

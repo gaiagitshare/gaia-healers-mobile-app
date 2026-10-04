@@ -164,6 +164,19 @@ export function detect(health, extra = {}) {
     });
   }
 
+  // ── Member results (Gaia Practitioners link) ─────────────────────────────
+  // Members stopping sharing faster than they start, in one day, is the
+  // early sign of a partner-side problem (their revoke firing by mistake, or
+  // readings failing so members give up). Counts only; nobody is named.
+  const ml = extra.memberLinks;
+  if (ml && ml.links_revoked >= 2 && ml.links_revoked > ml.links_confirmed) {
+    add({ key: 'member-links:revocations', severity: 'warning', subsystem: 'Practitioners',
+      title: `${ml.links_revoked} members stopped sharing their readings today, more than started`,
+      why: 'Links are revoked from either side. More revocations than confirmations in a day usually means the partner side is revoking by mistake or readings are failing and members are giving up — check the proxy log for "member link revoked" and the partner\'s staging/production status.',
+      evidence: `today ${ml.day}: ${ml.links_revoked} revoked · ${ml.links_confirmed} confirmed · ${ml.readings_opened} opened · ${ml.codes_issued} codes · standing ${ml.confirmed} sharing, ${ml.revoked} stopped`,
+      affected: null });
+  }
+
   // ── Event mirror ─────────────────────────────────────────────────────────
   const em = byKey.event_mirror;
   if (em) {

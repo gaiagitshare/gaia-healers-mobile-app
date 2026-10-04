@@ -19,6 +19,7 @@ import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import * as membershipAdmin from './membership/admin-api.js';
 import * as alerts from './alerts.js';
+import { linkDayCounts, memberReadingsEnabled } from './member-link.js';
 import * as ghlAdapter from './membership/adapters/ghl-membership.js';
 import * as membershipConfig from './membership/config.js';
 
@@ -1000,7 +1001,10 @@ async function pipelineHealth(deps) {
  * component about a single service.
  */
 async function alertExtras(deps) {
-  const extra = { membershipExceptions: [], payments: null };
+  const extra = { membershipExceptions: [], payments: null, memberLinks: null };
+  // Member results: today's link counts, so the sweep notices members leaving
+  // faster than they arrive. Counts only; a missing store is simply null.
+  try { if (memberReadingsEnabled()) extra.memberLinks = linkDayCounts(); } catch (_) { extra.memberLinks = null; }
 
   // Paid, but no membership. The sweep can exit cleanly and still skip one
   // person; this is what would catch that. Evidence only — never a grant.

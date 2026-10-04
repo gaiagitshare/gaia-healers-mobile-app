@@ -344,13 +344,33 @@
   }
   const note = (text, action) => card(`<p class="g-readings__lead">${esc(text)}</p>${action ? `<div class="g-card__actions"><button type="button" class="g-btn g-btn--secondary g-btn--sm" data-readings-action="${esc(action.id)}">${esc(action.label)}</button></div>` : ''}`);
 
+  /** One place under Account: what is shared with whom, how to stop, and the hidden cards. Plain words, no values. */
+  function dataSharingCard(status, prefs) {
+    const anyHidden = Object.values(prefs || {}).some((v) => v === true);
+    const who = status.practitioner_name || 'your practitioner';
+    const sharing = status.linked
+      ? `<div class="g-row"><span>Bio-Well readings</span><span class="g-row__meta">shared by ${esc(who)} since ${esc(when(status.linked_at))}</span></div>`
+      : `<div class="g-row"><span>Bio-Well readings</span><span class="g-row__meta">${status.code_active ? 'code waiting for your practitioner' : 'not shared'}</span></div>`;
+    return `<article class="g-card g-readings g-datashare"><p class="g-card__label">Your data and sharing</p>
+      <div class="g-rows">${sharing}
+        <div class="g-row"><span>Daily energy, journal, messages, courses, bookings</span><span class="g-row__meta">only you</span></div>
+        <div class="g-row"><span>Gaia Assist</span><span class="g-row__meta">never reads your reading values</span></div>
+      </div>
+      ${status.linked ? `<p class="g-readings__muted">${esc(who)} sees the readings they recorded, that you asked to see them in Gaia, and whether you opened the latest one. Nothing else in your app. Gaia keeps no copy.</p>` : '<p class="g-readings__muted">Sharing starts only when you ask for a code in My readings and your practitioner confirms it is you.</p>'}
+      <div class="g-card__actions">
+        ${status.linked ? '<button type="button" class="g-btn g-btn--ghost g-btn--sm" data-readings-action="unlink">Stop sharing</button>' : '<button type="button" class="g-btn g-btn--secondary g-btn--sm" data-readings-action="goto">Open My readings</button>'}
+        ${anyHidden ? '<button type="button" class="g-btn g-btn--ghost g-btn--sm" data-readings-action="reset-prefs">Show hidden cards again</button>' : ''}
+      </div></article>`;
+  }
   let lastSummary = null, lastReadings = null;
   async function render(root) {
     const [st, pf] = await Promise.all([api('/api/practitioners/member-link/status'), api('/api/member/prefs').catch(() => ({ ok: false, body: {} }))]);
     const prefs = (pf.ok && pf.body.prefs) || {};
-    if (!st.ok) { root.hidden = true; setTodayLink({ linked: false, fresh: false }); return; }             // not signed in, or feature off (404)
+    const share = document.getElementById('member-data-sharing');
+    if (!st.ok) { root.hidden = true; if (share) { share.hidden = true; share.innerHTML = ''; } setTodayLink({ linked: false, fresh: false }); return; }             // not signed in, or feature off (404)
     root.hidden = false;
     const status = st.body;
+    if (share) { share.hidden = false; share.innerHTML = dataSharingCard(status, prefs); }
     lastSummary = null; lastReadings = null;
     setTodayLink({ linked: Boolean(status.linked), fresh: Boolean(status.new_reading), scannedAt: status.latest_scanned_at || null });
     if (!status.linked) { root.innerHTML = consentCard(status); return; }
@@ -396,7 +416,7 @@
   async function mount() {
     const root = document.getElementById('member-readings');
     if (!root) return;
-    root.addEventListener('click', async (e) => {
+    const onClick = async (e) => {
       const btn = e.target.closest('[data-readings-action]');
       if (!btn) return;
       const action = btn.getAttribute('data-readings-action');
@@ -410,6 +430,14 @@
           const tool = btn.getAttribute('data-tool') || 'chakra';
           try { window.GaiaAppShell?.go?.('wellness'); } catch { /* ignore */ }
           window.requestAnimationFrame(() => { try { window.GaiaTools?.open?.(tool); } catch { /* ignore */ } });
+          return;
+        }
+        if (action === 'goto') { reveal(root); return; }
+        if (action === 'reset-prefs') {
+          const cleared = {}; for (const k of ['next_level_collapsed', 'readings_explainer_collapsed', 'practitioner_card_dismissed']) cleared[k] = false;
+          await api('/api/member/prefs', { method: 'POST', body: { prefs: cleared } }).catch(() => {});
+          document.dispatchEvent(new CustomEvent('gaia:prefs-reset'));
+          await render(root);
           return;
         }
         if (action === 'whosees') {
@@ -435,7 +463,10 @@
         }
         await render(root);
       } finally { btn.disabled = false; }
-    });
+    };
+    root.addEventListener('click', onClick);
+    // The data-and-sharing card under Account has the same buttons; same handler.
+    document.getElementById('member-data-sharing')?.addEventListener('click', onClick);
     root.addEventListener('change', (e) => { if (e.target.matches('[data-pick]')) pickOut(root, lastReadings?.series || []); });
     root.addEventListener('toggle', (e) => {
       if (!e.target.matches('.g-readings__explain')) return;
@@ -443,7 +474,8 @@
     }, true);
     let pendingReveal = false;
     window.addEventListener('gaia:open-readings', () => { if (!reveal(root)) pendingReveal = true; });
-    window.addEventListener('gaia:signed-out', () => { root.hidden = true; root.innerHTML = ''; setTodayLink({ linked: false, fresh: false }); });
+    window.addEventListener('gaia:signed-out', () => { root.hidden = true; root.innerHTML = ''; const share = document.getElementById('member-data-sharing'); if (share) { share.hidden = true; share.innerHTML = ''; } setTodayLink({ linked: false, fresh: false }); });
+
     try { if (new URLSearchParams(location.search).get('section') === 'readings') pendingReveal = true; } catch { /* ignore */ }
     await render(root);
     if (pendingReveal) { pendingReveal = false; window.setTimeout(() => reveal(root), 120); }

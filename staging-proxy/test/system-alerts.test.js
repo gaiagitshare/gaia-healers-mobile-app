@@ -354,3 +354,15 @@ test('course access within tolerance of GHL raises nothing', () => {
   h.components.push({ key: 'academy_access_drift', kind: 'reconcile', state: 'ok', courses: [{ title: 'x', ghl: 520, ledger: 517, gap: 3 }], drifted: [] });
   assert.deepEqual(detect(h), []);
 });
+
+test('members stopping sharing faster than they start, in a day, raises a warning that names nobody', () => {
+  const quiet = { day: '2026-10-04', codes_issued: 3, links_confirmed: 2, readings_opened: 1, links_revoked: 1, confirmed: 5, revoked: 1 };
+  assert.deepEqual(detect(health(), { memberLinks: quiet }), [], 'one revocation is a person changing their mind');
+  assert.deepEqual(detect(health(), { memberLinks: { ...quiet, links_revoked: 2, links_confirmed: 2 } }), [], 'as many as started: nothing');
+  const d = detect(health(), { memberLinks: { ...quiet, links_revoked: 3, links_confirmed: 1 } });
+  assert.deepEqual(keys(d), ['member-links:revocations']);
+  assert.equal(d[0].severity, 'warning'); assert.equal(d[0].subsystem, 'Practitioners');
+  assert.match(d[0].evidence, /3 revoked · 1 confirmed/);
+  assert.equal(d[0].affected, null, 'counts only; nobody is named');
+  assert.deepEqual(detect(health(), { memberLinks: null }), [], 'no store, no alert');
+});

@@ -42,11 +42,12 @@
     const latest = r.latest;
     const chakras = latest ? (latest.chakras || []).map((c) => `<li><span>${esc(c.name)}</span><span>${esc(c.value ?? '—')}</span></li>`).join('') : '';
     const worst = latest ? (latest.most_out_of_balance || []).map((d) => `<li>${esc(d.name)} <span class="g-prac__muted">(${esc(d.area)})</span></li>`).join('') : '';
-    const flagged = r.trend ? (r.trend.flagged || []).map((f) => `<li>${esc(f.name)}: ${esc(f.direction)}${f.reason ? ` <span class="g-prac__muted">— ${esc(f.reason)}</span>` : ''}</li>`).join('') : '';
+    const flagged = r.trend ? (r.trend.flagged || []).map((f) => `<li>${esc(f.name)}: ${esc(f.direction)}${f.severity ? ` <span class="g-prac__muted">(${esc(f.severity)})</span>` : ''}</li>`).join('') : '';
+    const compares = (r.comparisons || []).map((c) => `<li>${esc(c.from)} → ${esc(c.to)} <span class="g-prac__muted">(${esc(c.basis)})</span>: stress ${c.stress_change > 0 ? '+' : ''}${esc(c.stress_change ?? '—')}, energy ${c.energy_change > 0 ? '+' : ''}${esc(c.energy_change ?? '—')}</li>`).join('');
     const files = (r.files || []).map((f) => `<li>${f.url ? `<a href="${esc(f.url)}" target="_blank" rel="noopener">${esc(f.name)}</a>` : esc(f.name)}${f.uploaded_at ? ` <span class="g-prac__muted">${esc(f.uploaded_at)}</span>` : ''}</li>`).join('');
     return `<div class="g-card g-readings">
       <h2 class="g-card__title">My readings</h2>
-      <p class="g-prac__muted">Shared by ${esc(r.practitioner?.name || 'your practitioner')} since ${esc(when(r.linked_at))}${r.scans_on_file != null ? ` · ${esc(r.scans_on_file)} reading${r.scans_on_file === 1 ? '' : 's'} on file` : ''}.</p>
+      <p class="g-prac__muted">Shared by ${esc(r.practitioner?.name || 'your practitioner')}${r.practitioner?.specialty ? ` (${esc(r.practitioner.specialty)})` : ''} since ${esc(when(r.linked_at))}${r.scans_on_file != null ? ` · ${esc(r.scans_on_file)} reading${r.scans_on_file === 1 ? '' : 's'} on file` : ''}.</p>
       ${latest ? `<h3 class="g-card__sub">Latest reading · ${esc(latest.scanned_at)}</h3>
         <p class="g-card__text">Energy ${esc(latest.energy ?? '—')} · Stress ${esc(latest.stress ?? '—')}</p>
         ${chakras ? `<ul class="g-readings__list g-readings__chakras">${chakras}</ul>` : ''}
@@ -54,6 +55,7 @@
       ${r.trend && (r.trend.energy || r.trend.stress) ? `<h3 class="g-card__sub">Last 90 days</h3>
         <p class="g-card__text">Energy ${esc(r.trend.energy?.lowest ?? '—')}–${esc(r.trend.energy?.highest ?? '—')} (latest ${esc(r.trend.energy?.latest ?? '—')}) · Stress ${esc(r.trend.stress?.lowest ?? '—')}–${esc(r.trend.stress?.highest ?? '—')} (latest ${esc(r.trend.stress?.latest ?? '—')})</p>
         ${flagged ? `<ul class="g-readings__list">${flagged}</ul>` : ''}` : ''}
+      ${compares ? `<h3 class="g-card__sub">Before and after sessions</h3><ul class="g-readings__list">${compares}</ul>` : ''}
       ${files ? `<h3 class="g-card__sub">Documents from your practitioner</h3><ul class="g-readings__list">${files}</ul>` : ''}
       <p class="g-prac__muted">These are the readings your practitioner recorded. They are reflective wellness measurements, not a diagnosis; questions about them belong with your practitioner.</p>
       <button type="button" class="g-btn g-btn--ghost g-btn--sm" data-readings-action="unlink">Stop sharing</button>
@@ -67,7 +69,7 @@
     root.hidden = false;
     const status = st.body;
     if (!status.linked) { root.innerHTML = consentCard(status); return; }
-    root.innerHTML = note('Loading your readings…');
+    root.innerHTML = note('Loading your readings… this fetches live from Bio-Well and can take about 20 seconds.');
     const r = await api('/api/practitioners/my-readings');
     if (r.ok) { root.innerHTML = readingsCard(r.body); return; }
     if (r.body.error === 'member_not_linked' || r.body.error === 'link_revoked') { root.innerHTML = consentCard({ ...status, linked: false }); return; }

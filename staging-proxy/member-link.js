@@ -214,7 +214,9 @@ export async function serverAccessToken(cfg, env = process.env, fetchImpl = fetc
 
 /** One scan, reduced to what the member's card shows (same shape as the practitioner's). */
 export function memberScanView(scan = {}) {
-  const l = scan.labeled || scan;
+  // Their member MCP sends the values under `values`; the practitioner MCP
+  // under `labeled`; a flat scan is accepted too.
+  const l = scan.values || scan.labeled || scan;
   const num = (v, d = 0) => (typeof v === 'number' && Number.isFinite(v) ? Number(v.toFixed(d)) : null);
   const rows = [];
   for (const group of ['organs', 'meridians', 'systems']) for (const r of l[group] || []) if (typeof r?.disbalance === 'number') rows.push({ area: group.replace(/s$/, ''), name: r.name, disbalance: num(r.disbalance) });
@@ -263,13 +265,17 @@ export async function memberReadings(cfg0, memberId, { env = process.env, fetchI
   const call = async (tool, args) => { try { return unwrapMcp(await mcpCall(cfg, token, tool, args, fetchImpl)); } catch (e) { throw partnerError(e); } };
   const scoped = { gaia_member_id: memberId };
   const byCustomer = { customerId: link.customer_id };
-  const customer = has('get_member_customer') ? await call('get_member_customer', scoped)
-    : (has('get_customer') ? await call('get_customer', byCustomer) : null);
-  const [scan, trend, files] = await Promise.all([
-    (has('get_member_scan') ? call('get_member_scan', { ...scoped, which: 'latest' }) : call('get_customer_scan', byCustomer))
-      .catch((e) => (e.code === 'member_not_linked' ? Promise.reject(e) : null)),
-    (has('get_member_scan_trend') ? call('get_member_scan_trend', { ...scoped, window: '90d' }) : call('get_scan_trend', { ...byCustomer, summary_only: true })).catch(() => null),
-    (has('get_member_files') ? call('get_member_files', scoped) : call('get_customer_files', byCustomer)).catch(() => null),
+  // Three vocabularies, in order of preference: theirs as built on staging
+  // (get_my_*, 4 Oct 2026), the member-named tools we proposed, and the
+  // practitioner-named tools scoped by the member token.
+  const pick = (mine, ours, theirs, args) =>
+    (has(mine) ? call(mine, args.mine) : has(ours) ? call(ours, args.ours) : call(theirs, args.theirs));
+  const [customer, scan, trend, compare, files] = await Promise.all([
+    pick('get_my_profile', 'get_member_customer', 'get_customer', { mine: {}, ours: scoped, theirs: byCustomer }).catch((e) => (e.code === 'member_not_linked' ? Promise.reject(e) : null)),
+    pick('get_my_latest_scan', 'get_member_scan', 'get_customer_scan', { mine: {}, ours: { ...scoped, which: 'latest' }, theirs: byCustomer }).catch((e) => (e.code === 'member_not_linked' ? Promise.reject(e) : null)),
+    pick('get_my_scan_trend', 'get_member_scan_trend', 'get_scan_trend', { mine: {}, ours: { ...scoped, window: '90d' }, theirs: { ...byCustomer, summary_only: true } }).catch(() => null),
+    pick('get_my_before_after', 'compare_member_before_after', 'compare_protocol_before_after', { mine: {}, ours: scoped, theirs: { ...byCustomer, limit: 2 } }).catch(() => null),
+    pick('list_my_shared_files', 'get_member_files', 'get_customer_files', { mine: {}, ours: scoped, theirs: byCustomer }).catch(() => null),
   ]);
   // get_customer_scan answers with the whole history; take the newest.
   const latestOf = (s) => {
@@ -278,14 +284,24 @@ export async function memberReadings(cfg0, memberId, { env = process.env, fetchI
     if (Array.isArray(s.scans)) return [...s.scans].sort((a, b) => String(b.scanned_at || '').localeCompare(String(a.scanned_at || '')))[0] || null;
     return (s.scanned_at || s.labeled) ? s : null;
   };
-  const band = (b) => (b ? { lowest: b.min ?? null, highest: b.max ?? null, average: b.avg ?? null, latest: b.latest ?? null } : null);
+  const num = (v, d = 0) => (typeof v === 'number' && Number.isFinite(v) ? Number(v.toFixed(d)) : null);
+  const band = (b) => (b ? { lowest: num(b.min, 1), highest: num(b.max, 1), average: num(b.avg, 1), latest: num(b.latest, 1) } : null);
+  const prac = customer?.practitioner || {};
+  const comparisons = (compare?.comparisons || []).slice(0, 2).map((c) => ({
+    basis: c.source === 'time' ? 'consecutive sessions' : (c.protocol || 'a labelled protocol'),
+    from: String(c.before?.date || '').slice(0, 10), to: String(c.after?.date || '').slice(0, 10),
+    stress_change: num(c.deltas?.stress, 2), energy_change: num(c.deltas?.energy, 1),
+    biggest_changes: (Array.isArray(c.deltas?.disbalance) ? c.deltas.disbalance : []).slice(0, 4).map((d) => ({ name: d.name, before: num(d.before), after: num(d.after), change: num(d.delta) })),
+  }));
   return {
-    practitioner: { id: String(customer?.practitioner?.id ?? link.practitioner_id), name: customer?.practitioner?.name || link.practitioner_name || '' },
-    linked_at: link.linked_at,
-    scans_on_file: customer?.scans_on_file ?? trend?.scanCount ?? (Array.isArray(scan?.scans) ? scan.scans.length : null),
+    practitioner: { id: String(prac.id ?? link.practitioner_id), name: prac.name || link.practitioner_name || '', specialty: prac.specialty || '', location: [prac.city, prac.state].filter(Boolean).join(', ') },
+    linked_at: customer?.member?.linked_at || link.linked_at,
+    scans_on_file: scan?.scanCount ?? customer?.scans_on_file ?? trend?.scanCount ?? (Array.isArray(scan?.scans) ? scan.scans.length : null),
     latest: latestOf(scan) ? memberScanView(latestOf(scan)) : null,
-    trend: trend ? { energy: band(trend.summary?.energy), stress: band(trend.summary?.stress), flagged: (trend.flags || []).slice(0, 6).map((t) => ({ name: t.name, direction: t.direction, reason: t.flagReason || '' })) } : null,
-    files: (files?.files || []).filter((f) => f?.shareable !== false).slice(0, 20).map((f) => ({ id: String(f.id ?? ''), name: f.name || f.filename || 'document', uploaded_at: String(f.uploaded_at || f.created_at || '').slice(0, 10), url: f.url || null })),
+    trend: trend ? { energy: band(trend.summary?.energy), stress: band(trend.summary?.stress),
+      flagged: (trend.flags || []).slice(0, 6).map((t) => ({ name: t.name, area: String(t.category || '').replace(/s$/, ''), direction: t.direction, severity: t.severity || '', change: num(t.delta), reason: t.flagReason || '' })) } : null,
+    comparisons,
+    files: (files?.files || []).filter((f) => f?.shareable !== false).slice(0, 20).map((f) => ({ id: String(f.id ?? ''), name: f.name || f.filename || f.original_name || 'document', uploaded_at: String(f.uploaded_at || f.created_at || f.uploadedAt || '').slice(0, 10), url: f.download_url || f.url || null })),
   };
 }
 

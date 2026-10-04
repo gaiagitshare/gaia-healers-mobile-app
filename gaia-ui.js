@@ -920,8 +920,8 @@
   function tourSeen() { try { return localStorage.getItem(TOUR_KEY) === '1'; } catch (_) { return true; } }
   function markTourSeen() { try { localStorage.setItem(TOUR_KEY, '1'); } catch (_) {} }
 
-  function runTour() {
-    const steps = [
+  function runTour(customSteps, { remember = true } = {}) {
+    const steps = (customSteps || [
       { sel: '.g-free-tools', eyebrow: 'Free · no sign-up', title: 'Try your energy — free',
         body: 'Energy, Horoscope, Chakra &amp; Moon readings, right now. Your results save when you join.' },
       { sel: '.gaia-tabbar', eyebrow: 'Your navigation', title: 'Six places, one tap',
@@ -930,8 +930,9 @@
         body: 'Tap the centre orb to talk or type — your AI wellness guide for anything in the app.' },
       { sel: '.gaia-header-signin', eyebrow: 'Save it', title: 'Keep your readings',
         body: 'Create a free account to save your progress and unlock member courses &amp; communities.' },
-    ].filter((st) => document.querySelector(st.sel));
-    if (!steps.length) { markTourSeen(); return; }
+    ]).filter((st) => document.querySelector(st.sel));
+    if (!steps.length) { if (remember) markTourSeen(); return; }
+    document.querySelector('.gaia-tour')?.remove();
 
     let i = 0;
     const overlay = document.createElement('div');
@@ -941,7 +942,7 @@
     const card = overlay.querySelector('.gaia-tour__card');
     document.body.appendChild(overlay);
 
-    const finish = () => { markTourSeen(); overlay.remove(); window.removeEventListener('resize', place); };
+    const finish = () => { if (remember) markTourSeen(); overlay.remove(); window.removeEventListener('resize', place); };
     function place() {
       const el = document.querySelector(steps[i].sel);
       if (!el) return;
@@ -974,6 +975,10 @@
     window.addEventListener('resize', place);
     render();
   }
+
+  // The same spotlight walk, on request: the avatar's "Take a tour" uses it
+  // with steps for a member; the guest first-run tour stays as it was.
+  window.GaiaTour = { run: (steps, opts) => runTour(steps, opts), seen: tourSeen };
 
   function initCoachMark() {
     if (window.location.pathname.split('/').pop() !== 'home.html') return;
@@ -1249,6 +1254,7 @@
 
       activeView = nextView;
       setDocumentTitle(nextView);
+      document.dispatchEvent(new CustomEvent('gaia:view-changed', { detail: { view: nextView } }));
       if (nextView === 'community') {
         window.GaiaCommunityTabs?.activate(options.tab || 'discussion');
       }
@@ -3278,6 +3284,18 @@
         if (muted) setMuted(false);
         if (!realtimeVoice?.isActive?.()) void onAssistTap();
       });
+    });
+    // Voice through the same door the orb uses. In live mode a start is the
+    // orb's tap; in pipeline mode start/end are the orb's hold and release.
+    window.addEventListener('gaia:assist-voice', (event) => {
+      const hold = event.detail?.hold || 'start';
+      unlockVoicePlayback();
+      if (inPipelineMode()) {
+        if (hold === 'start') { setOpen(true); try { realtimeVoice?.holdStart?.(); } catch (_) {} }
+        else { try { realtimeVoice?.holdEnd?.(); } catch (_) {} }
+        return;
+      }
+      if (hold === 'start') { setOpen(true); if (!realtimeVoice?.isActive?.()) void onAssistTap(); }
     });
     window.addEventListener('gaia:open-assist', (event) => {
       unlockVoicePlayback();

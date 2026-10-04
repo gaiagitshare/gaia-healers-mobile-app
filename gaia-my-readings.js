@@ -362,14 +362,16 @@
         ${anyHidden ? '<button type="button" class="g-btn g-btn--ghost g-btn--sm" data-readings-action="reset-prefs">Show hidden cards again</button>' : ''}
       </div></article>`;
   }
-  let lastSummary = null, lastReadings = null;
+  let lastSummary = null, lastReadings = null, lastStatus = null;
   async function render(root) {
     const [st, pf] = await Promise.all([api('/api/practitioners/member-link/status'), api('/api/member/prefs').catch(() => ({ ok: false, body: {} }))]);
     const prefs = (pf.ok && pf.body.prefs) || {};
     const share = document.getElementById('member-data-sharing');
-    if (!st.ok) { root.hidden = true; if (share) { share.hidden = true; share.innerHTML = ''; } setTodayLink({ linked: false, fresh: false }); return; }             // not signed in, or feature off (404)
+    if (!st.ok) { root.hidden = true; lastStatus = null; if (share) { share.hidden = true; share.innerHTML = ''; } setTodayLink({ linked: false, fresh: false }); return; }             // not signed in, or feature off (404)
     root.hidden = false;
     const status = st.body;
+    lastStatus = status;
+    window.dispatchEvent(new CustomEvent('gaia:readings-status', { detail: { linked: Boolean(status.linked), new_reading: Boolean(status.new_reading), latest_scanned_at: status.latest_scanned_at || null } }));
     if (share) { share.hidden = false; share.innerHTML = dataSharingCard(status, prefs); }
     lastSummary = null; lastReadings = null;
     setTodayLink({ linked: Boolean(status.linked), fresh: Boolean(status.new_reading), scannedAt: status.latest_scanned_at || null });
@@ -398,6 +400,7 @@
     const d = lastReadings?.latest?.scanned_at;
     if (!d || seenFor === d) return;
     seenFor = d; setNewReading(false);
+    if (lastStatus) { lastStatus = { ...lastStatus, new_reading: false, seen_scanned_at: d }; window.dispatchEvent(new CustomEvent('gaia:readings-status', { detail: { linked: true, new_reading: false, latest_scanned_at: lastStatus.latest_scanned_at || null } })); }
     api('/api/practitioners/member-link/seen', { method: 'POST', body: { scanned_at: d } }).catch(() => {});
   }
   function watchSeen(root) {
@@ -484,6 +487,6 @@
     if (pendingReveal) { pendingReveal = false; window.setTimeout(() => reveal(root), 120); }
   }
 
-  window.GaiaMyReadings = { mount, render, reveal };
+  window.GaiaMyReadings = { mount, render, reveal, status: () => (lastStatus ? { linked: Boolean(lastStatus.linked), new_reading: Boolean(lastStatus.new_reading), latest_scanned_at: lastStatus.latest_scanned_at || null, code_active: Boolean(lastStatus.code_active) } : {}) };
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', mount); else mount();
 })();

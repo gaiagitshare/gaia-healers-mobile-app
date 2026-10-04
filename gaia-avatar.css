@@ -1,0 +1,86 @@
+/* ── Gaia Avatar: the character as a layer over the app ─────────────────────
+   The artwork and its six states are the approved design; the geometry here
+   is placement, bubble and ring. Sits below the Assist sheet (z 54) so an
+   open conversation covers it, above everything else. */
+.gava { position: fixed; z-index: 52; display: flex; flex-direction: column; align-items: flex-end; gap: 8px; width: max-content; max-width: calc(100vw - 24px); pointer-events: none; }
+.gava[data-side="left"] { align-items: flex-start; }
+.gava > * { pointer-events: auto; }
+.gava.is-behind { opacity: 0; pointer-events: none; transition: opacity .2s; }
+.gava.is-behind > * { pointer-events: none; }
+.gava-char { -webkit-appearance: none; appearance: none; background: none; border: 0; padding: 0; margin: 0; width: 72px; height: 72px; cursor: grab; touch-action: none; -webkit-tap-highlight-color: transparent; border-radius: 50%; filter: drop-shadow(0 10px 24px rgba(63, 217, 200, .28)); }
+@media (min-width: 900px) { .gava-char { width: 84px; height: 84px; } }
+.gava.is-dragging .gava-char { cursor: grabbing; }
+.gava-char:focus-visible { outline: 2px solid #6fe9ff; outline-offset: 4px; }
+.gava-char svg { width: 100%; height: 100%; display: block; overflow: visible; }
+
+/* the character's states (the approved animation set) */
+.gava-whole { transform-origin: 100px 110px; animation: gava-breathe 4.4s ease-in-out infinite; }
+.gava-aura { transform-origin: 100px 108px; animation: gava-aura 4.4s ease-in-out infinite; }
+.gava-lb, .gava-lf { transform-origin: 100px 108px; }
+.gava-lb { animation: gava-sway 6s ease-in-out infinite; }
+.gava-lf { animation: gava-sway 6s ease-in-out -1.5s infinite; }
+.gava-sprout { transform-origin: 100px 52px; animation: gava-sprout 5s ease-in-out infinite; }
+.gava-f { display: none; } .gava-f-idle { display: block; }
+@keyframes gava-breathe { 0%,100% { transform: translateY(0) scale(1); } 50% { transform: translateY(-2px) scale(1.02); } }
+@keyframes gava-aura { 0%,100% { transform: scale(1); opacity: .75; } 50% { transform: scale(1.08); opacity: 1; } }
+@keyframes gava-sway { 0%,100% { transform: rotate(-1.6deg); } 50% { transform: rotate(1.6deg); } }
+@keyframes gava-sprout { 0%,100% { transform: rotate(-4deg); } 50% { transform: rotate(4deg); } }
+.gava[data-state="listening"] .gava-f-idle { display: none; } .gava[data-state="listening"] .gava-f-listen { display: block; }
+.gava[data-state="listening"] .gava-whole { animation: none; }
+.gava[data-state="listening"] .gava-aura { animation: gava-auraL 1.2s ease-in-out infinite; }
+.gava[data-state="listening"] .gava-pulse { display: block; animation: gava-pulse 1.6s ease-out infinite; }
+.gava[data-state="listening"] .gava-pulse.p2 { animation-delay: .5s; } .gava[data-state="listening"] .gava-pulse.p3 { animation-delay: 1s; }
+.gava-pulse { display: none; transform-origin: 100px 106px; fill: none; stroke: #6fe9ff; stroke-width: 3; }
+@keyframes gava-pulse { 0% { transform: scale(.98); opacity: .9; } 100% { transform: scale(1.42); opacity: 0; } }
+@keyframes gava-auraL { 0%,100% { transform: scale(1); opacity: .8; } 50% { transform: scale(1.12); opacity: 1; } }
+.gava-bar { transform-origin: center; transform-box: fill-box; animation: gava-bar .9s ease-in-out infinite; }
+.gava-bar:nth-child(2) { animation-delay: .12s; } .gava-bar:nth-child(3) { animation-delay: .24s; } .gava-bar:nth-child(4) { animation-delay: .36s; } .gava-bar:nth-child(5) { animation-delay: .48s; }
+@keyframes gava-bar { 0%,100% { transform: scaleY(.45); } 50% { transform: scaleY(1.15); } }
+.gava[data-state="speaking"] .gava-f-idle { display: none; } .gava[data-state="speaking"] .gava-f-speak { display: block; }
+.gava[data-state="speaking"] .gava-mouth { transform-origin: 100px 124px; animation: gava-talk .42s ease-in-out infinite alternate; }
+.gava[data-state="speaking"] .gava-marks { animation: gava-marks .84s ease-in-out infinite; }
+@keyframes gava-talk { from { transform: scaleY(.35); } to { transform: scaleY(1); } }
+@keyframes gava-marks { 0%,100% { opacity: .25; transform: translate(0,0); } 50% { opacity: 1; transform: translate(2px,-2px); } }
+.gava[data-state="thinking"] .gava-f-idle { display: none; } .gava[data-state="thinking"] .gava-f-think { display: block; }
+.gava[data-state="thinking"] .gava-whole { animation: gava-tilt 3s ease-in-out infinite; }
+.gava[data-state="thinking"] .gava-dot { animation: gava-dots 1.6s ease-in-out infinite; } .gava[data-state="thinking"] .gava-dot.d2 { animation-delay: .3s; } .gava[data-state="thinking"] .gava-dot.d3 { animation-delay: .6s; }
+@keyframes gava-tilt { 0%,100% { transform: rotate(-2deg); } 50% { transform: rotate(2deg); } }
+@keyframes gava-dots { 0%,100% { opacity: .2; transform: translateY(0); } 50% { opacity: 1; transform: translateY(-2px); } }
+.gava[data-state="pointing"] .gava-f-idle { display: none; } .gava[data-state="pointing"] .gava-f-point { display: block; }
+.gava[data-state="pointing"] .gava-whole { animation: gava-nudge 1.4s ease-in-out infinite; }
+.gava[data-side="left"][data-state="pointing"] .gava-whole { animation-name: gava-nudge; }
+@keyframes gava-nudge { 0%,100% { transform: translateX(0); } 50% { transform: translateX(5px); } }
+.gava[data-state="new"] .gava-f-idle { display: none; } .gava[data-state="new"] .gava-f-speak { display: block; } .gava[data-state="new"] .gava-badge, .gava[data-state="new"] .gava-sparks { display: block; }
+.gava[data-state="new"] .gava-whole { animation: gava-bounce 1.6s cubic-bezier(.34,1.56,.64,1) infinite; }
+.gava[data-state="new"] .gava-aura { animation: gava-auraN 1.6s ease-in-out infinite; }
+.gava-badge, .gava-sparks { display: none; }
+.gava-badge { transform-origin: 156px 38px; animation: gava-pop 1.6s ease-in-out infinite; }
+@keyframes gava-bounce { 0%,100% { transform: translateY(0); } 30% { transform: translateY(-8px); } 50% { transform: translateY(0); } 65% { transform: translateY(-3px); } 80% { transform: translateY(0); } }
+@keyframes gava-pop { 0%,100% { transform: scale(1); } 30% { transform: scale(1.15); } }
+@keyframes gava-auraN { 0%,100% { transform: scale(1); opacity: .85; } 30% { transform: scale(1.15); opacity: 1; } }
+.gava.is-holding .gava-char { transform: scale(1.06); }
+
+/* speech bubble */
+.gava-bubble { position: relative; width: min(280px, calc(100vw - 24px)); background: linear-gradient(180deg, #16263a, #101b2b); border: 1px solid rgba(140, 160, 255, .22); border-radius: 18px 18px 6px 18px; padding: 12px 36px 10px 14px; color: #eef6f3; font: 500 14px/1.4 var(--g-font, "Plus Jakarta Sans", system-ui, sans-serif); box-shadow: 0 12px 36px rgba(0, 0, 0, .45); animation: gava-in .22s ease; }
+.gava[data-side="left"] .gava-bubble { border-radius: 18px 18px 18px 6px; }
+@keyframes gava-in { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+.gava-bubble[hidden] { display: none; }
+.gava-bubble__x { position: absolute; top: 8px; right: 10px; background: none; border: 0; color: #9fb3ab; font-size: 18px; line-height: 1; cursor: pointer; padding: 2px 4px; }
+.gava-bubble__text { margin: 0; }
+.gava-bubble__chips { display: flex; flex-direction: column; gap: 6px; margin: 10px -22px 0 0; }
+.gava-bubble__chips:empty { display: none; }
+.gava-chip { display: flex; align-items: center; gap: 10px; width: 100%; padding: 9px 12px; border-radius: 12px; background: rgba(22, 38, 58, .9); border: 1px solid rgba(140, 160, 255, .18); color: #eef6f3; font: 500 13.5px/1.2 inherit; font-family: inherit; text-align: left; cursor: pointer; }
+.gava-chip:hover, .gava-chip:focus-visible { border-color: rgba(111, 233, 255, .5); outline: none; }
+.gava-chip i { width: 22px; height: 22px; border-radius: 50%; display: inline-grid; place-items: center; font-size: 13px; background: rgba(111, 233, 255, .14); color: #6fe9ff; flex: none; }
+.gava-chip span { flex: 1 1 auto; min-width: 0; }
+.gava-chip em { font-style: normal; color: #9fb3ab; }
+
+/* guide ring on the thing Gaia is pointing at */
+.gava-ring { position: fixed; z-index: 51; border-radius: 18px; border: 2px solid #3fd9c8; box-shadow: 0 0 0 6px rgba(63, 217, 200, .16), 0 0 26px rgba(63, 217, 200, .45); pointer-events: none; animation: gava-ring 1.6s ease-in-out infinite; }
+.gava-ring[hidden] { display: none; }
+@keyframes gava-ring { 0%,100% { opacity: .6; } 50% { opacity: 1; } }
+
+@media (prefers-reduced-motion: reduce) {
+  .gava *, .gava-ring, .gava-bubble { animation: none !important; }
+}
+@media print { .gava, .gava-ring { display: none; } }

@@ -982,3 +982,7 @@ body.gaia-v2 .g-super-home .g-super-hero .g-super-hero__intro{position:relative;
 }
 /* while the bar sits at the bottom (phone and tablet) the page ends above the avatar */
 @media (max-width: 1023px) { .g-super-home--v2 { padding-bottom: 110px; } }
+.g-home2__also { display: flex; align-items: center; gap: 8px; margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--super-line); color: var(--super-muted); font-size: 13px; text-decoration: none; }
+.g-home2__also:hover { color: var(--g-text); }
+/* the guest Home, in its compact form: no booking card, the gathering small */
+.g-super-home > .g-home2__event { grid-column: 1 / -1; border: 1px solid var(--super-line); border-radius: 22px; background: var(--super-panel); }

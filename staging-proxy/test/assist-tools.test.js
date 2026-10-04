@@ -210,13 +210,8 @@ test('assistContext treats an unknown role as a member, never as a practitioner'
   const src = fs.readFileSync(new URL('../server.js', import.meta.url), 'utf8');
   const i = src.indexOf('async function assistContext(req)');
   const block = src.slice(i, i + 1200);
-  // Since 4 Oct 2026 the link to Gaia Practitioners (verified by their own
-  // profile) is the first word; the GHL tag is a mirror, read only when there
-  // is no verified link. Neither path may promote on an outage.
-  assert.ok(/let isPractitioner = isLinkedPractitioner\(member\.contactId\);/.test(block), 'the verified link is the source of truth');
-  assert.ok(/if \(!isPractitioner\) \{/.test(block), 'the GHL tag is consulted only as a fallback');
-  assert.ok(/catch/.test(block) && /role unknown/.test(block),
-    'a GHL outage must not silently promote anyone');
+  assert.match(block, /await practitionerAuthorization\(member\.contactId/);
+  assert.match(src, /isPractitioner: Boolean\(\(await assistContext\(req\)\)/, 'status uses the same authorization');
 });
 
 // ── parity with the page, which is how this broke once ─────────────────────

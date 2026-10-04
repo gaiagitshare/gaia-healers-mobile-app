@@ -36,7 +36,7 @@ import { toolDeclarationsFor, clientToolNames, slowToolNames, runTool, modelView
 import { getPrefs, setPrefs } from './member-prefs.js';
 import { memberReadingsEnabled, memberAllowed, mintCode, redeemCode, revokeLink, linkStatus, linkFor, partnerAuthorized, memberReadings, notifyPartnerUnlink, rememberLatest, markSeen, refreshLatest, linksForPractitioner } from './member-link.js';
 import { practitionersConfig, makePkce, authorizeUrl, rememberFlow, claimFlow,
-         exchangeCode, resolveProfile, saveToken, forgetToken, connectionStatus, practitionersBootLine, tokenFor, linkState, isLinkedPractitioner, verifyPractitioner } from './practitioners-oauth.js';
+         exchangeCode, resolveProfile, saveToken, forgetToken, connectionStatus, practitionersBootLine, tokenFor, linkState, isLinkedPractitioner, verifyPractitioner, practitionerAuthorization, applyPractitionerLink, VERIFICATION_VERSION } from './practitioners-oauth.js';
 import { allowSpend, callerKey, guardSubject, spendKindFor, ASSIST_MAX_PROMPT_CHARS, ASSIST_MAX_TTS_CHARS } from './assist-guard.js';
 import { deadline, idleWatch } from './provider-timeouts.js';
 import { SAFETY_FIRST, detectCrisis, crisisReply } from './assist-safety.js';
@@ -3847,6 +3847,7 @@ async function memberAccess(req, res, origin, url) {
   // canonical membership/entitlement view is added next to it so the UI can be
   // migrated screen by screen instead of in one breaking release.
   const contactId = liveMember.contactId || liveMember.memberId || sessionMember.contactId || '';
+  applyPractitionerLink(access, sessionMember.contactId || contactId, undefined, live && !sourceError);
   // A successful live GHL read IS a confirmation of current state. Stamp it
   // (debounced) and drive freshness off it; on a failed read, fall back to the
   // last stored confirmation so the honesty banner still fires when it should.
@@ -3942,7 +3943,7 @@ function placeholderEnvelope(reason, extra) {
 async function memberProfile(req, res, origin) {
   const sm = requireSessionMember(req, res, origin); if (!sm) return;
   const b = await fetchMemberBundle(sm);
-  const access = buildMemberAccess(b.tags, b.customFields, b.member, b.entitlements, b.subscriptions);
+  const access = applyPractitionerLink(buildMemberAccess(b.tags, b.customFields, b.member, b.entitlements, b.subscriptions), sm.contactId, undefined, b.resolved);
   sendJson(res, 200, memberEnvelope(b, {
     profile: {
       name: b.member.displayName || b.member.name || 'Gaia Healers member',
@@ -3964,7 +3965,7 @@ async function memberProfile(req, res, origin) {
 async function memberCommunities(req, res, origin) {
   const sm = requireSessionMember(req, res, origin); if (!sm) return;
   const b = await fetchMemberBundle(sm);
-  const access = buildMemberAccess(b.tags, b.customFields, b.member, b.entitlements, b.subscriptions);
+  const access = applyPractitionerLink(buildMemberAccess(b.tags, b.customFields, b.member, b.entitlements, b.subscriptions), sm.contactId, undefined, b.resolved);
   sendJson(res, 200, memberEnvelope(b, { communities: access.communities, unknownAccessTags: access.unknownAccessTags }), origin);
 }
 
@@ -4341,10 +4342,11 @@ async function buildMemberVoiceContext(req) {
     }
     const b = await fetchMemberBundle(member);
     const cid = b.contactId;
+    const roleKey = JSON.stringify([linkState(member.contactId).state, b.resolved, b.tags]);
     const cached = cid && _memberAiCtxCache.get(cid);
-    if (cached && (Date.now() - cached.at) < 60000) return cached.text;
+    if (cached && cached.roleKey === roleKey && (Date.now() - cached.at) < 60000) return cached.text;
 
-    const access = buildMemberAccess(b.tags, b.customFields, b.member, b.entitlements, b.subscriptions);
+    const access = applyPractitionerLink(buildMemberAccess(b.tags, b.customFields, b.member, b.entitlements, b.subscriptions), member.contactId, undefined, b.resolved);
     const [apptsRaw, convos, orders, subs, formSubs, surveySubs] = await Promise.all([
       cid ? ghlGet(`/contacts/${encodeURIComponent(cid)}/appointments`).then((r) => r?.events || r?.appointments || []).catch(() => []) : [],
       cid ? ghlMemberConversations(cid, 5).catch(() => []) : [],
@@ -4407,7 +4409,7 @@ async function buildMemberVoiceContext(req) {
 
     } catch (e) {}
     const text = lines.join('\n');
-    if (cid) _memberAiCtxCache.set(cid, { at: Date.now(), text });
+    if (cid) _memberAiCtxCache.set(cid, { at: Date.now(), text, roleKey });
     return text;
   } catch {
     return 'GAIA SESSION STATE: unavailable';
@@ -4424,20 +4426,13 @@ async function buildMemberVoiceContext(req) {
 async function assistContext(req) {
   const member = sessionMemberContext(req);
   if (!member?.contactId) return null;
-  // A practitioner is somebody whose Gaia Practitioners account is linked and
-  // verified (the source of truth), or whose GHL contact carries the tag (the
-  // mirror). A GHL outage must not silently promote anyone: unknown is member.
-  let isPractitioner = isLinkedPractitioner(member.contactId);
-  if (!isPractitioner) {
-    try {
-      const bundle = await fetchMemberBundle(member);
-      const access = buildMemberAccess(bundle.tags, bundle.customFields, bundle.member,
-                                       bundle.entitlements, bundle.subscriptions);
-      isPractitioner = Boolean(access?.member?.practitioner);
-    } catch (e) {
-      console.warn('[Gaia Assist] role unknown, treating as member', { error: String(e.message || e).slice(0, 100) });
-    }
-  }
+  const isPractitioner = await practitionerAuthorization(member.contactId, async () => {
+    const bundle = await fetchMemberBundle(member);
+    if (!bundle.resolved) return false;
+    const access = buildMemberAccess(bundle.tags, bundle.customFields, bundle.member,
+                                     bundle.entitlements, bundle.subscriptions);
+    return access.member.practitioner;
+  });
   return { contactId: member.contactId, memberId: member.memberId, isPractitioner };
 }
 
@@ -7350,6 +7345,7 @@ const server = http.createServer(async (req, res) => {
         ok: true,
         available: cfg.enabled,
         environment: cfg.environment,
+        isPractitioner: Boolean((await assistContext(req))?.isPractitioner),
         ...connectionStatus(member.contactId),
         ...linkState(member.contactId),   // state: not_connected | connected | needs_reconnect | not_practitioner | unverified
       }, origin);
@@ -7361,7 +7357,7 @@ const server = http.createServer(async (req, res) => {
     if (req.method === 'GET' && url.pathname === '/api/practitioners/linked-clients') {
       const member = sessionMemberContext(req);
       if (!member?.contactId) { sendJson(res, 401, { ok: false, error: 'not_signed_in' }, origin); return; }
-      const row = tokenFor(member.contactId);
+      const row = isLinkedPractitioner(member.contactId) ? tokenFor(member.contactId) : null;
       if (!row) { sendJson(res, 200, { ok: true, practitioner_known: false, clients: [] }, origin); return; }
       const pid = String(row.practitioner_id || '');
       sendJson(res, 200, { ok: true, practitioner_known: Boolean(pid), clients: memberReadingsEnabled() && pid ? linksForPractitioner(pid) : [] }, origin);
@@ -7420,6 +7416,7 @@ const server = http.createServer(async (req, res) => {
           connected_at: new Date().toISOString(),
           ...who,
           verified: verdict.verified,
+          verification_version: VERIFICATION_VERSION,
           verify_reason: verdict.reason,
         });
         console.log('[Gaia Practitioners] connected', {
@@ -7436,7 +7433,7 @@ const server = http.createServer(async (req, res) => {
             .then(() => console.log('[Gaia Practitioners] GHL practitioner tag mirrored', { contact: member.contactId }))
             .catch((e) => console.warn('[Gaia Practitioners] GHL tag mirror failed (not blocking)', { error: String(e?.message || e).slice(0, 100) }));
         }
-        sendRedirect(res, back(verdict.verified !== false, verdict.verified === false ? 'not_practitioner' : (verdict.verified === null ? 'unverified' : '')), origin);
+        sendRedirect(res, back(verdict.verified === true, verdict.verified === false ? (verdict.reason === 'account_not_active' ? 'account_not_active' : 'not_practitioner') : (verdict.verified === null ? 'unverified' : '')), origin);
       } catch (e) {
         console.error('[Gaia Practitioners] connect failed', { error: String(e.message || e).slice(0, 200) });
         sendRedirect(res, back(false, 'exchange_failed'), origin);

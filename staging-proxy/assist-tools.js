@@ -26,7 +26,7 @@
  *      1.6 MB -- roughly four hundred thousand tokens of raw readings. Nothing
  *      goes into a context window unshaped, ever.
  */
-import { practitionersConfig, validAccessToken, mcpCall, unwrapMcp } from './practitioners-oauth.js';
+import { practitionersConfig, validAccessToken, mcpCall, unwrapMcp, linkState } from './practitioners-oauth.js';
 
 const MAX_QUERY = 120;
 const MAX_CUSTOMERS = 200;       // a search is already narrow
@@ -75,6 +75,8 @@ function requireString(args, key, { max = 64, required = true } = {}) {
 /** One MCP read, with this practitioner's own token and nobody else's. */
 async function readMcp(ctx, tool, args = {}) {
   const cfg = practitionersConfig();
+  const state = linkState(ctx.contactId).state;
+  if (state !== 'connected') throw Object.assign(new Error('practitioner link is not authorized'), { code: state });
   const token = await validAccessToken(cfg, ctx.contactId);
   if (!token) {
     throw Object.assign(new Error('not connected'), { code: 'not_connected' });

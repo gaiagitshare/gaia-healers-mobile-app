@@ -453,7 +453,36 @@ Practitioners account from You > Practice > Connect: `/api/practitioners/connect
 starts the OAuth for ANY signed-in member (no GHL gate since 4 Oct 2026);
 at `/callback` the token is exchanged and `resolveProfile` asks THEIR
 `get_practitioner_profile`; `verifyPractitioner(who)` decides
-(`verified: true | false | null`), stored on the token row. `linkState(contactId)`
+(`verified: true | false | null`), stored on the token row.
+
+What that profile really looks like (measured on staging 4 Oct 2026 with
+`tools/practitioner-profile-shape.mjs`, field names only): `id` (number),
+`name`, `firstname`, `lastname`, `email`, `sex`, `specialty`, `city`, `state`,
+`address`, `zipcode`, `tags`, `imageURL`, `status` (the test account says
+`"pending"`). There is NO `role` and NO `practitionerId`. The documented practitioner-scoped
+`get_practitioner_profile` tool's `id` is accepted as practitioner evidence;
+an arbitrary user profile or `userId` is not. The one observed staging account
+confirms the response shape, not that client accounts are rejected. The partner
+docs describe practitioner OAuth and an own-practitioner-profile tool; a client
+negative test or explicit partner guarantee remains desirable.
+
+The temporary policy accepts `active` and `pending`. Pending access is retained
+for compatibility pending huMan's confirmation, not asserted as a proven
+entitlement rule. Unknown/missing lifecycle status, malformed responses, tool
+errors, or missing ids are unverified; explicit non-practitioner roles and
+inactive statuses are rejected. `profile_source` records the tool provenance;
+verification version 3 records this policy. Old generic-ID records without that
+provenance must reconnect to re-read the scoped profile. Legacy handling only
+applies when `verified` is genuinely absent; explicit null/false never inherits
+an id as verification.
+
+GHL is consulted for role authorization only when there is no link record.
+Once any record exists, its state is authoritative for status, practitioner
+tools, member/voice role reporting, and linked-client reads. GHL failures grant
+no role. Connect starts consent for any signed-in member and grants no role
+until the profile callback verifies. Expired tokens with refresh tokens remain
+connected and renew on the next practitioner read; revoked renewal requires
+reconnect. `linkState(contactId)`
 in `practitioners-oauth.js` is the one authority — `not_connected`,
 `connected`, `needs_reconnect`, `not_practitioner`, `unverified` — used by
 `/status` (spread into the answer), by the role the Assist tools run with

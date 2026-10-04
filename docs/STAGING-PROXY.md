@@ -435,6 +435,19 @@ provider, the practitioner scan tools give the model only "the reading is on
 screen"; the Practice card still shows everything. Set `on` once a BAA-covered
 provider serves those turns.
 
+### Gaia Avatar (app layer, no server part)
+
+`gaia-avatar.js` + `gaia-avatar.css` draw the approved character (six
+states, SVG/CSS) as a floating layer: tap = contextual bubble with three
+deterministic chips (a table keyed on screen, member state and readings
+status), second tap = chat via `gaia:open-assist`, press-and-hold = voice via
+`gaia:assist-voice` (the orb's own path), pointing with a guide ring on
+`gaia:open-readings` and Assist navigation, tour via `GaiaTour.run(steps)`.
+State mirrors the orb's `data-state`. Placement is remembered in
+`localStorage` (device only). It makes no request and no model call; the
+contract test `test/avatar-contract.test.js` enforces that. Preview page:
+`/gaia-avatar.html`.
+
 ### Member preferences
 
 `GET`/`POST /api/member/prefs` (session cookie): a flat map of allowed

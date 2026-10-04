@@ -49,6 +49,7 @@
       <h2 class="g-card__title">My readings</h2>
       <p class="g-prac__muted">Shared by ${esc(r.practitioner?.name || 'your practitioner')}${r.practitioner?.specialty ? ` (${esc(r.practitioner.specialty)})` : ''} since ${esc(when(r.linked_at))}${r.scans_on_file != null ? ` · ${esc(r.scans_on_file)} reading${r.scans_on_file === 1 ? '' : 's'} on file` : ''}.</p>
       ${latest ? `<h3 class="g-card__sub">Latest reading · ${esc(latest.scanned_at)}</h3>
+        ${latest.source === 'trend' ? '<p class="g-prac__muted">Taken from your reading history; the full detail of this scan was not available.</p>' : ''}
         <p class="g-card__text">Energy ${esc(latest.energy ?? '—')} · Stress ${esc(latest.stress ?? '—')}</p>
         ${chakras ? `<ul class="g-readings__list g-readings__chakras">${chakras}</ul>` : ''}
         ${worst ? `<p class="g-card__text">Most out of balance</p><ul class="g-readings__list">${worst}</ul>` : ''}` : '<p class="g-card__text">No reading on file yet.</p>'}

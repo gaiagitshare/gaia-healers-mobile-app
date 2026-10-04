@@ -425,6 +425,14 @@ provider, the practitioner scan tools give the model only "the reading is on
 screen"; the Practice card still shows everything. Set `on` once a BAA-covered
 provider serves those turns.
 
+### Member preferences
+
+`GET`/`POST /api/member/prefs` (session cookie): a flat map of allowed
+booleans per member (`member-prefs.js`, `PREF_KEYS`), kept server-side in
+`data/member-prefs.json` (0600) so every device agrees. Unknown keys and
+non-booleans are dropped. Today: `next_level_collapsed` (the Next level card
+on You folded to one line).
+
 ### Usage accounting
 
 Every text reply, failed attempt and voice session is recorded, counts only,

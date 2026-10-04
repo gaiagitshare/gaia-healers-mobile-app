@@ -33,6 +33,7 @@ import { classifyMembershipEvent, membershipFromEvent } from './membership/event
 import { attachQwenVoiceRelay, qwenRouting, issueQwenTicket, qwenVoiceConfig, voiceBootLine } from './qwen-voice-relay.js';
 import { normalizeUsage, recordUsage, recordFailure } from './assist-usage.js';
 import { toolDeclarationsFor, clientToolNames, slowToolNames, runTool, modelView } from './assist-tools.js';
+import { getPrefs, setPrefs } from './member-prefs.js';
 import { memberReadingsEnabled, memberAllowed, mintCode, redeemCode, revokeLink, linkStatus, linkFor, partnerAuthorized, memberReadings, notifyPartnerUnlink, rememberLatest, markSeen, refreshLatest } from './member-link.js';
 import { practitionersConfig, makePkce, authorizeUrl, rememberFlow, claimFlow,
          exchangeCode, resolveProfile, saveToken, forgetToken, connectionStatus, practitionersBootLine } from './practitioners-oauth.js';
@@ -7082,6 +7083,15 @@ const server = http.createServer(async (req, res) => {
       hub.memberResolved = Boolean(memberContext?.email || memberContext?.memberId || memberContext?.contactId);
       sendJson(res, 200, hub, origin);
       return;
+    }
+    // A member's few folded-away things, kept here so every device agrees.
+    if (url.pathname === '/api/member/prefs' && (req.method === 'GET' || req.method === 'POST')) {
+      const memberContext = requireSessionMember(req, res, origin);
+      if (!memberContext) return;
+      const id = memberContext.contactId || memberContext.memberId || '';
+      if (req.method === 'GET') { sendJson(res, 200, { ok: true, prefs: getPrefs(id) }, origin); return; }
+      let body = {}; try { body = await readJsonBody(req, 4 * 1024); } catch { sendJson(res, 400, { ok: false, error: 'bad_json' }, origin); return; }
+      sendJson(res, 200, { ok: true, prefs: setPrefs(id, body?.prefs || body) || getPrefs(id) }, origin); return;
     }
     if (req.method === 'GET' && url.pathname === '/api/member/access') {
       await memberAccess(req, res, origin, url);

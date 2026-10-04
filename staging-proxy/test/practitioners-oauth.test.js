@@ -342,7 +342,7 @@ test('an unreadable profile records that it is unknown, never a guessed identity
 
 test('a readable profile is what gets stored as the identity mapping', async () => {
   const body = JSON.stringify({ jsonrpc: '2.0', id: 1, result: {
-    content: [{ type: 'text', text: JSON.stringify({ id: 'prac_42', name: 'Dr Example', email: 'dr@example.invalid' }) }] } });
+    content: [{ type: 'text', text: JSON.stringify({ practitionerId: 'prac_42', name: 'Dr Example', email: 'dr@example.invalid' }) }] } });
   const fake = async () => ({ ok: true, status: 200, text: async () => body });
   const who = await resolveProfile(CFG, 't', fake);
   assert.equal(who.raw_ok, true);

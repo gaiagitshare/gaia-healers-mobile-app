@@ -220,8 +220,9 @@ export function forgetToken(contactId, file = TOKEN_FILE) {
  */
 export function verifyPractitioner(who) {
   if (!who || who.raw_ok === false) return { verified: null, reason: 'profile_unreadable' };
+  if (who.profile_role && who.profile_role !== 'practitioner') return { verified: false, reason: 'no_practitioner_profile' };
   if (String(who.practitioner_id || '').trim()) return { verified: true, reason: '' };
-  return { verified: false, reason: 'no_practitioner_profile' };
+  return { verified: null, reason: 'profile_unreadable' };
 }
 
 /**
@@ -229,7 +230,7 @@ export function verifyPractitioner(who) {
  * screen. One function, so the UI and the backend cannot disagree:
  *   not_connected     nothing stored
  *   connected         a usable token for a verified practitioner account
- *   needs_reconnect   stored, but the token is broken or expired
+ *   needs_reconnect   token is broken, missing, or expired without refresh
  *   not_practitioner  signed in fine, but the account is not a practitioner
  *   unverified        signed in, profile could not be read (try again)
  */
@@ -237,10 +238,10 @@ export function linkState(contactId, file = TOKEN_FILE) {
   const row = tokenFor(contactId, file);
   const who = row ? { practitioner_name: row.practitioner_name || '', practitioner_email: row.practitioner_email || '', practitioner_id: row.practitioner_id || '' } : {};
   if (!row) return { state: 'not_connected' };
-  // rows written before verification existed carry no `verified`; a practitioner id is the same evidence
-  const verified = row.verified === true || (row.verified == null && Boolean(row.practitioner_id));
+  // Older verdicts may have relied on a generic user id. Verify once again.
+  const verified = row.verified === true && row.verification_version === 2;
   if (row.verified === false) return { state: 'not_practitioner', reason: row.verify_reason || 'no_practitioner_profile', ...who, connected_at: row.connected_at || '' };
-  if (row.needs_reconnect || row.expired || !row.usable) return { state: 'needs_reconnect', ...who, broken_at: row.broken_at || '', expired: Boolean(row.expired) };
+  if (row.needs_reconnect || (row.expired && !row.refresh_token) || !row.usable) return { state: 'needs_reconnect', ...who, broken_at: row.broken_at || '', expired: Boolean(row.expired) };
   if (!verified) return { state: 'unverified', reason: row.verify_reason || 'profile_unreadable', ...who, connected_at: row.connected_at || '' };
   return { state: 'connected', ...who, connected_at: row.connected_at || '', expires_at: row.expires_at || 0 };
 }
@@ -505,7 +506,10 @@ export async function resolveProfile(cfg, accessToken, fetchImpl = fetch) {
     return {
       practitioner_name: pick('name', 'fullName', 'displayName'),
       practitioner_email: pick('email'),
-      practitioner_id: pick('id', 'practitionerId', 'userId'),
+      // A generic user id is identity, not evidence of a practitioner role.
+      practitioner_id: pick('practitionerId', 'practitioner_id')
+        || (String(data?.role || '').toLowerCase() === 'practitioner' ? pick('id') : ''),
+      profile_role: String(data?.role || '').toLowerCase(),
       raw_ok: true,
     };
   } catch (e) {

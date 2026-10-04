@@ -4424,20 +4424,8 @@ async function buildMemberVoiceContext(req) {
 async function assistContext(req) {
   const member = sessionMemberContext(req);
   if (!member?.contactId) return null;
-  // A practitioner is somebody whose Gaia Practitioners account is linked and
-  // verified (the source of truth), or whose GHL contact carries the tag (the
-  // mirror). A GHL outage must not silently promote anyone: unknown is member.
-  let isPractitioner = isLinkedPractitioner(member.contactId);
-  if (!isPractitioner) {
-    try {
-      const bundle = await fetchMemberBundle(member);
-      const access = buildMemberAccess(bundle.tags, bundle.customFields, bundle.member,
-                                       bundle.entitlements, bundle.subscriptions);
-      isPractitioner = Boolean(access?.member?.practitioner);
-    } catch (e) {
-      console.warn('[Gaia Assist] role unknown, treating as member', { error: String(e.message || e).slice(0, 100) });
-    }
-  }
+  // Only the verified account link grants access to practitioner tools.
+  const isPractitioner = isLinkedPractitioner(member.contactId);
   return { contactId: member.contactId, memberId: member.memberId, isPractitioner };
 }
 
@@ -7420,6 +7408,7 @@ const server = http.createServer(async (req, res) => {
           connected_at: new Date().toISOString(),
           ...who,
           verified: verdict.verified,
+          verification_version: 2,
           verify_reason: verdict.reason,
         });
         console.log('[Gaia Practitioners] connected', {
@@ -7436,7 +7425,7 @@ const server = http.createServer(async (req, res) => {
             .then(() => console.log('[Gaia Practitioners] GHL practitioner tag mirrored', { contact: member.contactId }))
             .catch((e) => console.warn('[Gaia Practitioners] GHL tag mirror failed (not blocking)', { error: String(e?.message || e).slice(0, 100) }));
         }
-        sendRedirect(res, back(verdict.verified !== false, verdict.verified === false ? 'not_practitioner' : (verdict.verified === null ? 'unverified' : '')), origin);
+        sendRedirect(res, back(verdict.verified === true, verdict.verified === false ? 'not_practitioner' : (verdict.verified === null ? 'unverified' : '')), origin);
       } catch (e) {
         console.error('[Gaia Practitioners] connect failed', { error: String(e.message || e).slice(0, 200) });
         sendRedirect(res, back(false, 'exchange_failed'), origin);

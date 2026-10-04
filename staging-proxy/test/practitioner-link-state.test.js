@@ -26,7 +26,7 @@ const tmp = () => path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'plink-')), 't
 
 test('verifyPractitioner: their profile is the verdict; an unreadable profile is no verdict', () => {
   assert.deepEqual(o.verifyPractitioner({ raw_ok: true, practitioner_id: '477', practitioner_name: 'Dr N' }), { verified: true, reason: '' });
-  assert.deepEqual(o.verifyPractitioner({ raw_ok: true, practitioner_id: '', practitioner_email: 'client@example.invalid' }), { verified: false, reason: 'no_practitioner_profile' });
+  assert.deepEqual(o.verifyPractitioner({ raw_ok: true, practitioner_id: '', practitioner_email: 'client@example.invalid', profile_role: 'client' }), { verified: false, reason: 'no_practitioner_profile' });
   assert.deepEqual(o.verifyPractitioner({ raw_ok: false }), { verified: null, reason: 'profile_unreadable' });
   assert.deepEqual(o.verifyPractitioner(null), { verified: null, reason: 'profile_unreadable' });
 });
@@ -36,7 +36,7 @@ test('linkState: the five states, from what is stored, and connectionStatus is d
   assert.deepEqual(o.linkState('c1', file), { state: 'not_connected' });
   assert.equal(o.connectionStatus('c1', file).connected, false);
   const future = Date.now() + 3600e3;
-  o.saveToken('c1', { access_token: 't', refresh_token: 'r', expires_at: future, connected_at: '2026-10-04T20:00:00Z', practitioner_id: '477', practitioner_name: 'Dr N', practitioner_email: 'n@example.invalid', verified: true, verify_reason: '' }, file);
+  o.saveToken('c1', { access_token: 't', refresh_token: 'r', expires_at: future, connected_at: '2026-10-04T20:00:00Z', practitioner_id: '477', practitioner_name: 'Dr N', practitioner_email: 'n@example.invalid', verified: true, verification_version: 2, verify_reason: '' }, file);
   let s = o.linkState('c1', file);
   assert.equal(s.state, 'connected'); assert.equal(s.practitioner_name, 'Dr N'); assert.equal(o.isLinkedPractitioner('c1', file), true);
   assert.equal(o.connectionStatus('c1', file).connected, true);
@@ -52,9 +52,11 @@ test('linkState: the five states, from what is stored, and connectionStatus is d
   assert.equal(o.linkState('c4', file).state, 'needs_reconnect'); assert.equal(o.connectionStatus('c4', file).needs_reconnect, true);
   o.saveToken('c5', { access_token: 't', expires_at: Date.now() - 1000, practitioner_id: '9', verified: true }, file);
   assert.equal(o.linkState('c5', file).state, 'needs_reconnect', 'expired is a reconnect, not a silent use');
-  // a row written before verification existed: the practitioner id is the same evidence
+  // old rows may contain generic ids and must be checked again
   o.saveToken('c6', { access_token: 't', expires_at: future, practitioner_id: '12', practitioner_name: 'Old Row' }, file);
-  assert.equal(o.linkState('c6', file).state, 'connected');
+  assert.equal(o.linkState('c6', file).state, 'unverified', 'old verdicts require the stricter profile check');
+  o.saveToken('old-verdict', { access_token: 't', expires_at: future, practitioner_id: 'generic-user', verified: true }, file);
+  assert.equal(o.isLinkedPractitioner('old-verdict', file), false);
   o.saveToken('c7', { access_token: 't', expires_at: future, practitioner_name: 'No id, no verdict' }, file);
   assert.equal(o.linkState('c7', file).state, 'unverified');
 });
@@ -65,11 +67,11 @@ test('the server: connect has no GHL gate, the callback verifies and mirrors, st
   assert.doesNotMatch(connect, /not_a_practitioner|could_not_verify_role|buildMemberAccess/, 'any signed-in member may start the link; the verdict comes from Gaia Practitioners');
   const callback = srv.slice(srv.indexOf("url.pathname === '/api/practitioners/callback'"), srv.indexOf('Gaia Practitioners: a MEMBER'));
   assert.match(callback, /const verdict = verifyPractitioner\(who\);/);
-  assert.match(callback, /verified: verdict\.verified,\n\s+verify_reason: verdict\.reason,/);
+  assert.match(callback, /verified: verdict\.verified,\n\s+verification_version: 2,\n\s+verify_reason: verdict\.reason,/);
   assert.match(callback, /if \(verdict\.verified === true\) \{\n\s+ghlPost\(`\/contacts\/\$\{encodeURIComponent\(member\.contactId\)\}\/tags`, \{ tags: \['gaiapractitioner'\] \}\)/, 'the GHL tag is mirrored after verification, best effort');
-  assert.match(callback, /back\(verdict\.verified !== false, verdict\.verified === false \? 'not_practitioner' : \(verdict\.verified === null \? 'unverified' : ''\)\)/);
+  assert.match(callback, /back\(verdict\.verified === true, verdict\.verified === false \? 'not_practitioner' : \(verdict\.verified === null \? 'unverified' : ''\)\)/);
   assert.match(srv, /\.\.\.connectionStatus\(member\.contactId\),\n\s+\.\.\.linkState\(member\.contactId\),/, '/status carries the one state');
-  assert.match(srv, /let isPractitioner = isLinkedPractitioner\(member\.contactId\);/, 'the role the tools run with starts from the link');
+  assert.match(srv, /const isPractitioner = isLinkedPractitioner\(member\.contactId\);/, 'the role the tools run with starts from the link');
 });
 
 test('the screen tells the four states apart and names what the last attempt brought back', () => {
@@ -102,4 +104,30 @@ test('every script that calls the API asks the shared resolver first', () => {
     if (/window\.GaiaAppUrls/.test(src)) offenders.push(f + ' (GaiaAppUrls)');
   }
   assert.deepEqual(offenders, [], 'scripts resolving the API host on their own');
+});
+
+
+test('expired verified links with refresh tokens stay connected until renewal is refused', async () => {
+  const file = tmp();
+  o.saveToken('refreshable', { access_token: 'old', refresh_token: 'refresh', expires_at: Date.now() - 1000, verified: true, verification_version: 2, practitioner_id: '42' }, file);
+  assert.equal(o.linkState('refreshable', file).state, 'connected');
+  assert.equal(o.isLinkedPractitioner('refreshable', file), true);
+  await o.validAccessToken({ base: 'https://example.invalid', clientId: 'test' }, 'refreshable', { file, fetchImpl: async () => new Response(JSON.stringify({ access_token: 'new', refresh_token: 'rotated', expires_in: 3600 }), { status: 200 }) });
+  assert.equal(o.tokenFor('refreshable', file).access_token, 'new');
+  o.saveToken('refreshable', { ...o.tokenFor('refreshable', file), expires_at: Date.now() - 1000 }, file);
+  await assert.rejects(o.validAccessToken({ base: 'https://example.invalid', clientId: 'test' }, 'refreshable', { file, fetchImpl: async () => new Response('{}', { status: 401 }) }), { code: 'needs_reconnect' });
+  assert.equal(o.linkState('refreshable', file).state, 'needs_reconnect');
+});
+
+test('profile identity alone never verifies a practitioner, and an explicit client role wins', async () => {
+  for (const [data, verified] of [
+    [{ userId: 'client-1', role: 'client' }, false],
+    [{ id: 'unknown-1' }, null],
+    [{ practitionerId: '42' }, true],
+    [{ id: '42', role: 'practitioner' }, true],
+    [{ practitionerId: '42', role: 'client' }, false],
+  ]) {
+    const who = await o.resolveProfile({ mcpUrl: 'https://example.invalid' }, 'mock', async () => new Response(JSON.stringify({ jsonrpc: '2.0', id: 1, result: { content: [{ type: 'text', text: JSON.stringify(data) }] } }), { status: 200 }));
+    assert.equal(o.verifyPractitioner(who).verified, verified, JSON.stringify(data));
+  }
 });

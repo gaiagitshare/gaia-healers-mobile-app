@@ -1305,3 +1305,15 @@ body.gaia-v2 [data-screen="community"] #community-body .g-chip--pending {
   body.gaia-v2 [data-screen="academy"] #member-academy .g-access-grid,
   body.gaia-v2 [data-screen="community"] #community-body .g-access-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 }
+
+/* Phones: a course card is a row the thumb can scan -- title on two lines,
+   one line of description, chips on the footer line as before. The empty
+   "no course grant" card folds to label + sentence + button. */
+@media (max-width: 639px) {
+  body.gaia-v2 [data-screen="academy"] .g-access--link .g-access__name { -webkit-line-clamp: 2; }
+  body.gaia-v2 [data-screen="academy"] .g-access--link .g-access__meta { -webkit-line-clamp: 1; }
+  body.gaia-v2 [data-screen="academy"] .g-access--link { --acc-pad: 12px; --acc-thumb: 48px; --acc-gap: 10px; }
+  body.gaia-v2 [data-screen="academy"] #member-academy > .g-card:not(.g-card--feature) { padding: 14px 16px; }
+  body.gaia-v2 [data-screen="academy"] #member-academy > .g-card:not(.g-card--feature) .g-card__meta { margin: 4px 0 8px; font-size: 0.9em; }
+  body.gaia-v2 [data-screen="academy"] #member-academy > .g-card:not(.g-card--feature) .g-card__actions { margin-top: 0; }
+}

@@ -151,7 +151,9 @@
         el = document.createElement('a');
         el.id = 'readings-nudge'; el.href = 'home.html?view=profile&section=readings';
         el.addEventListener('click', (e) => { e.preventDefault(); try { window.GaiaAppShell?.go?.('profile'); } catch { /* ignore */ } window.setTimeout(() => window.dispatchEvent(new CustomEvent('gaia:open-readings')), 80); });
-        home.prepend(el);
+        // Right under the greeting, above the daily energy and the service tiles.
+        const hero = home.querySelector('.g-super-hero');
+        if (hero) hero.insertAdjacentElement('afterend', el); else home.prepend(el);
       }
       el.className = `g-readings-nudge${fresh ? ' is-new' : ''}`;
       // The two headline numbers ride along once the readings have loaded (they

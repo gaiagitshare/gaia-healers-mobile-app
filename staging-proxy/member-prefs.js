@@ -14,6 +14,7 @@ export const PREFS_FILE = process.env.GAIA_MEMBER_PREFS_FILE || '/root/gaia-stag
 export const PREF_KEYS = Object.freeze({
   next_level_collapsed: 'the Next level card on You is folded to one line',
   readings_explainer_collapsed: 'the "What these mean" explainer on My readings is folded',
+  practitioner_card_dismissed: 'the "Become a practitioner" card on You was dismissed',
 });
 
 function load(file) {

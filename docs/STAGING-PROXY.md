@@ -446,7 +446,13 @@ status), second tap = chat via `gaia:open-assist`, press-and-hold = voice via
 State mirrors the orb's `data-state`. Placement is remembered in
 `localStorage` (device only). It makes no request and no model call; the
 contract test `test/avatar-contract.test.js` enforces that. Preview page:
-`/gaia-avatar.html`.
+`/gaia-avatar.html`. Idle personality: every 8–15 s one small CSS animation
+(peek, wave, look, bounce, blink+smile, wiggle, curious) on the existing
+parts; a rarer hello (45–90 s, stops after being ignored twice); never while
+dragging, bubble open, Assist open, voice live, tour running or pointing, and
+only 8 s after the last touch; reduced motion keeps breathing and the glow;
+on desktop the eyes follow a nearby cursor. The orb's mark is her small face,
+mirroring the orb's `data-state`.
 
 ### Member preferences
 

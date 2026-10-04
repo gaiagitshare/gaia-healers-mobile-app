@@ -80,7 +80,58 @@
 .gava-ring[hidden] { display: none; }
 @keyframes gava-ring { 0%,100% { opacity: .6; } 50% { opacity: 1; } }
 
+/* ── idle personality: one small thing at a time, on the existing parts ── */
+/* open eyes without the thinking dots and smile: peek, look, cursor */
+.gava.is-anim-peek .gava-f-idle, .gava.is-anim-look .gava-f-idle, .gava.is-looking[data-state="idle"] .gava-f-idle { display: none; }
+.gava.is-anim-peek .gava-f-think, .gava.is-anim-look .gava-f-think, .gava.is-looking[data-state="idle"] .gava-f-think { display: block; }
+.gava.is-anim-peek .gava-f-think .gava-dot, .gava.is-anim-look .gava-f-think .gava-dot, .gava.is-looking[data-state="idle"] .gava-f-think .gava-dot { display: none; }
+.gava.is-anim-peek .gava-f-think, .gava.is-anim-look .gava-f-think, .gava.is-looking[data-state="idle"] .gava-f-think { transform: translate(calc(var(--gava-ex, 0) * 1px), calc(var(--gava-ey, 0) * 1px)); transition: transform .18s ease; }
+.gava.is-anim-peek .gava-whole { animation: gava-peek 1.7s ease-in-out 1; }
+.gava[data-side="left"].is-anim-peek .gava-whole { animation-name: gava-peek-l; }
+@keyframes gava-peek { 0%,100% { transform: translate(0,0) rotate(0); } 35%,65% { transform: translate(-7px,-2px) rotate(-5deg); } }
+@keyframes gava-peek-l { 0%,100% { transform: translate(0,0) rotate(0); } 35%,65% { transform: translate(7px,-2px) rotate(5deg); } }
+.gava.is-anim-wave .gava-lf path:nth-child(2) { transform-origin: 138px 120px; animation: gava-wave 1.5s ease-in-out 1; }
+@keyframes gava-wave { 0%,100% { transform: rotate(0); } 20% { transform: rotate(-28deg); } 40% { transform: rotate(6deg); } 60% { transform: rotate(-24deg); } 80% { transform: rotate(4deg); } }
+.gava.is-anim-look .gava-f-think { animation: gava-look 1.9s ease-in-out 1; }
+@keyframes gava-look { 0%,100% { transform: translate(0,0); } 25%,40% { transform: translate(-6px,0); } 60%,78% { transform: translate(6px,0); } }
+.gava.is-anim-bounce .gava-whole { animation: gava-bounce1 .95s cubic-bezier(.34,1.56,.64,1) 1; }
+.gava.is-anim-bounce .gava-aura { animation: gava-auraN .95s ease-in-out 1; }
+@keyframes gava-bounce1 { 0%,100% { transform: translateY(0); } 35% { transform: translateY(-10px); } 70% { transform: translateY(-2px); } }
+.gava.is-anim-blinksmile .gava-f-idle path { transform-origin: 100px 104px; animation: gava-blink 1.5s ease-in-out 1; }
+.gava.is-anim-blinksmile .gava-f-think { display: block; animation: gava-smile 1.5s ease-in-out 1; }
+.gava.is-anim-blinksmile .gava-f-think ellipse, .gava.is-anim-blinksmile .gava-f-think circle { display: none; }
+@keyframes gava-blink { 0%,20%,100% { transform: scaleY(1); } 10% { transform: scaleY(.08); } }
+@keyframes gava-smile { 0%,25%,90%,100% { opacity: 0; } 40%,75% { opacity: 1; } }
+.gava.is-anim-wiggle .gava-sprout { animation: gava-wiggle 1.3s ease-in-out 1; }
+.gava.is-anim-wiggle .gava-whole { animation: gava-tilt1 1.3s ease-in-out 1; }
+@keyframes gava-wiggle { 0%,100% { transform: rotate(0); } 20% { transform: rotate(14deg); } 40% { transform: rotate(-12deg); } 60% { transform: rotate(9deg); } 80% { transform: rotate(-6deg); } }
+@keyframes gava-tilt1 { 0%,100% { transform: rotate(0); } 50% { transform: rotate(3deg); } }
+.gava.is-anim-curious .gava-whole { animation: gava-curious 1.2s ease-in-out 1; }
+.gava.is-anim-curious .gava-sparks { display: block; animation: gava-sparkle 1.2s ease-in-out 1; }
+@keyframes gava-curious { 0%,100% { transform: rotate(0); } 30%,70% { transform: rotate(-7deg); } }
+@keyframes gava-sparkle { 0%,100% { opacity: 0; } 30%,70% { opacity: 1; } }
+/* the cursor: a few degrees of tilt, eyes toward it */
+.gava.is-looking[data-state="idle"] .gava-whole { transform: rotate(var(--gava-tilt, 0deg)); transition: transform .25s ease; animation: none; }
+.gava-bubble__text--hello { font-size: 13.5px; color: #cfe9ff; }
+.gava-bubble:has(> .gava-bubble__text--hello) { padding: 9px 12px; width: auto; max-width: 220px; }
+
+/* the orb wears her small face */
+.gaia-tabbar__assist .gava-mini { position: absolute; inset: 10%; display: block; pointer-events: none; }
+.gaia-tabbar__assist .gava-mini svg { width: 100%; height: 100%; display: block; overflow: visible; }
+.gaia-tabbar__assist .gava-mini .gava-aura, .gaia-tabbar__assist .gava-mini .gava-pulse { display: none; }
+.gaia-tabbar__assist .gava-mini .gava-f { display: none; } .gaia-tabbar__assist .gava-mini .gava-f-idle { display: block; }
+.gaia-tabbar__assist[data-state="listening"] .gava-mini .gava-f-idle, .gaia-tabbar__assist[data-state="holding"] .gava-mini .gava-f-idle, .gaia-tabbar__assist[data-state="ready"] .gava-mini .gava-f-idle,
+.gaia-tabbar__assist[data-state="thinking"] .gava-mini .gava-f-idle, .gaia-tabbar__assist[data-state="connecting"] .gava-mini .gava-f-idle, .gaia-tabbar__assist[data-state="speaking"] .gava-mini .gava-f-idle { display: none; }
+.gaia-tabbar__assist[data-state="listening"] .gava-mini .gava-f-listen, .gaia-tabbar__assist[data-state="holding"] .gava-mini .gava-f-listen, .gaia-tabbar__assist[data-state="ready"] .gava-mini .gava-f-listen { display: block; }
+.gaia-tabbar__assist[data-state="thinking"] .gava-mini .gava-f-think, .gaia-tabbar__assist[data-state="connecting"] .gava-mini .gava-f-think { display: block; }
+.gaia-tabbar__assist[data-state="speaking"] .gava-mini .gava-f-speak { display: block; }
+.gaia-tabbar__assist[data-state="speaking"] .gava-mini .gava-mouth { transform-origin: 100px 124px; animation: gava-talk .42s ease-in-out infinite alternate; }
+
 @media (prefers-reduced-motion: reduce) {
   .gava *, .gava-ring, .gava-bubble { animation: none !important; }
+  .gava .gava-whole, .gava .gava-sprout, .gava .gava-lb, .gava .gava-lf { animation: none !important; transform: none !important; }
+  .gava .gava-aura { animation: gava-aura 6s ease-in-out infinite !important; }
+  .gava.is-anim-blinksmile .gava-f-idle path { animation: gava-blink 1.5s ease-in-out 1 !important; }
+  .gava.is-looking .gava-f-think { transition: none; }
 }
 @media print { .gava, .gava-ring { display: none; } }

@@ -78,3 +78,55 @@ test('the preview page is the same artwork, published as its own page', () => {
   assert.match(page, /48, 72, 96 and 140/);
   assert.doesNotMatch(page, /api\/assist/);
 });
+
+// ── idle personality ─────────────────────────────────────────────────────
+
+const section = (src, from, to) => { const a = src.indexOf(from), b = src.indexOf(to); if (a < 0 || b < 0 || b < a) throw new Error('idle section markers missing'); return src.slice(a, b); };
+
+test('the idle personality is a timer, a class and a keyframe: it never fetches, dispatches, navigates, opens Assist or starts voice', () => {
+  const js = read('gaia-avatar.js');
+  const idle = section(js, '// ── idle personality', '// ── end idle personality');
+  for (const forbidden of ['fetch(', 'dispatchEvent', 'gaia:open-assist', 'gaia:assist-voice', 'openChat(', 'startVoice(', 'GaiaAppShell', 'pointAt(', 'runTour(', 'location.', 'XMLHttpRequest', 'WebSocket', 'api/assist']) {
+    assert.ok(!idle.includes(forbidden), `idle section must not contain ${forbidden}`);
+  }
+  assert.match(idle, /root\.classList\.add\('is-anim-' \+ a\.name\)/, 'an animation is a class on the root');
+  assert.match(idle, /const IDLE_MIN_MS = 8000, IDLE_MAX_MS = 15000, IDLE_RESUME_MS = 8000;/);
+  assert.match(idle, /const HELLO_MIN_MS = 45000, HELLO_MAX_MS = 90000, HELLO_IGNORED_MAX = 2;/);
+  for (const a of ['peek', 'wave', 'look', 'bounce', 'blinksmile', 'wiggle', 'curious']) assert.ok(idle.includes(`name: '${a}'`), a);
+});
+
+test('never two at once, never while anything else is happening, and it waits after the last touch', () => {
+  const js = read('gaia-avatar.js');
+  const idle = section(js, '// ── idle personality', '// ── end idle personality');
+  assert.match(idle, /if \(state !== 'idle' \|\| pointing \|\| animating\) return false;/);
+  assert.match(idle, /!bubble\.hidden \|\| root\.classList\.contains\('is-dragging'\) \|\| root\.classList\.contains\('is-holding'\) \|\| root\.classList\.contains\('is-behind'\)/);
+  assert.match(idle, /gaia-assist-panel-open'\) \|\| document\.querySelector\('\.gaia-tour'\)/);
+  assert.match(idle, /Date\.now\(\) - lastTouch >= IDLE_RESUME_MS/);
+  assert.match(idle, /helloIgnored < HELLO_IGNORED_MAX/, 'a hello that is ignored twice stops');
+  assert.match(js, /function touched\(\) \{ lastTouch = Date\.now\(\);[^\n]*stopIdleAnim\(\); \}/);
+  // interactions reset the clock
+  assert.match(js, /char\.addEventListener\('pointerdown', \(e\) => \{\n\s+if \(e\.button != null && e\.button !== 0\) return;\n\s+touched\(\);/);
+  assert.match(js, /const b = spec \|\| bubbleFor\(\);\n\s+touched\(\);/);
+});
+
+test('reduced motion keeps breathing and the glow, drops bouncing, waving and tilting; the cursor is desktop only', () => {
+  const js = read('gaia-avatar.js');
+  const css = read('gaia-avatar.css');
+  assert.match(js, /reduced\(\) \? IDLE_ANIMS\.filter\(\(a\) => a\.name === 'blinksmile'\) : IDLE_ANIMS/);
+  assert.match(js, /if \(!window\.matchMedia\('\(hover: hover\) and \(pointer: fine\)'\)\.matches \|\| reduced\(\)\) return;/, 'no cursor tracking on touch or with reduced motion');
+  assert.match(css, /prefers-reduced-motion: reduce\) \{[\s\S]*\.gava \.gava-whole, \.gava \.gava-sprout, \.gava \.gava-lb, \.gava \.gava-lf \{ animation: none !important; transform: none !important; \}/);
+  assert.match(css, /--gava-tilt/); assert.match(css, /--gava-ex/);
+  // the artwork is untouched: idle animations target existing classes only
+  for (const cls of ['.gava-lf path:nth-child(2)', '.gava-sprout', '.gava-f-think', '.gava-sparks', '.gava-whole', '.gava-aura']) assert.ok(css.includes(cls), cls);
+  assert.doesNotMatch(js, /SVG_BODY = "[^"]*gava-eye-new|<path class="gava-extra/, 'no new SVG parts');
+});
+
+test('the orb wears the same face, every chip that moves the screen points at where it landed, and "meet Gaia" happens once', () => {
+  const js = read('gaia-avatar.js');
+  assert.match(js, /function dressOrb\(\)/); assert.match(js, /mark\.replaceWith\(holder\)/);
+  const css = read('gaia-avatar.css');
+  assert.match(css, /\.gaia-tabbar__assist\[data-state="speaking"\] \.gava-mini \.gava-f-speak \{ display: block; \}/);
+  assert.match(js, /const goAndPoint = /);
+  for (const k of ['energy', 'academy', 'community', 'plans']) assert.match(js, new RegExp(`${k}: \\{[^\\n]*goAndPoint\\(`));
+  assert.match(js, /localStorage\.getItem\('gaia-avatar-met'\)/);
+});

@@ -379,6 +379,9 @@
     if (r.ok) {
       lastSummary = r.body.summary || null; lastReadings = r.body;
       root.innerHTML = readingsCard(r.body, status, prefs);
+      // The link record may hold no practitioner name (their redeem call sends
+      // none); once the readings are in, the sharing card can say who.
+      if (share && r.body.practitioner?.name && !status.practitioner_name) share.innerHTML = dataSharingCard({ ...status, practitioner_name: r.body.practitioner.name }, prefs);
       pickOut(root, r.body.series || []);
       setTodayLink({});   // the shortcut on Today picks up the two numbers
       // Seen means seen: recorded only once the card is actually on screen

@@ -369,6 +369,8 @@ one a connection belongs to.
 
 `GAIA_MEMBER_READINGS_ENABLED=true` turns on the member side of the link
 (docs/PRACTITIONERS_MEMBER_RESULTS_SPEC.md). Off, the routes do not exist.
+`GAIA_MEMBER_READINGS_MEMBERS=<id,id>` limits it to named members while it is
+being proven (others get 404 and see no panel); unset = every member.
 
 - Member (session cookie): `GET /api/practitioners/member-link/status`,
   `POST /api/practitioners/member-link/code` (asking is the consent; 8-char

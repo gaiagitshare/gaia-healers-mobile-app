@@ -50,6 +50,13 @@ test('the daily energy check and the sky render on Today only; the member Home i
   assert.match(member, /<header class="g-home2__greet"><h1>' \+ greeting \+ '<\/h1>/, 'the greeting is the page heading');
   for (const part of ['nextStep()', 'eventCompact()', "serviceLink(v, i, t, m)", 'bookActions()', 'membershipStrip()']) assert.ok(member.includes(part), part);
   assert.match(member, /meta\.degraded \|\| meta\.stale/, 'sync is said only when something is wrong');
+  assert.match(sa, /class="g-home2__also" href="home\.html\?view=bookings"/, 'a course and a booking: the booking is named on a second line');
+  const guest = sa.slice(sa.indexOf('this is the\n      // guest on-ramp'), sa.indexOf('bind(root);\n    renderToday();'));
+  assert.match(guest, /freeTools\(\)[\s\S]*authPrompt\(true\)[\s\S]*eventCompact\(\)/, 'guest: tools, the way in, the gathering compact');
+  assert.doesNotMatch(guest, /eventFeatureCarousel\(\)/);
+  const ui = read('gaia-ui.js');
+  assert.match(ui, /sel: '\.gava-char', eyebrow: 'Your guide', title: 'That is Gaia'/, 'the first-run guidance points at her, not the old orb');
+  assert.doesNotMatch(ui, /sel: '\.gaia-tabbar__assist', eyebrow: 'Your guide'/);
   // every destination is the one that was here before
   for (const id of ['scans', 'bio-welldemo', 'mgf6oviyhPwrLBi03gzq', 'gVzfo7sRfbLnMzQqSnJL']) assert.ok(sa.includes(id), id);
   assert.match(sa, /href="home\.html\?view=store&tab=membership"/); assert.match(sa, /href="home\.html\?view=events"/);

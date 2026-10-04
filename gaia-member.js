@@ -797,50 +797,26 @@ body.gaia-booking-open{overflow:hidden;}
     // The four activity cards are ordered by what the member actually has:
     // cards with something in them first, empty states after, so a member
     // with bookings sees them before "No purchases yet".
-    const activity = [];
+    // Your activity: one card, four rows, each a link to where the thing lives.
+    // Rows with something in them come first; empty ones say so in a few words.
     const pcnt = (d.purchases && d.purchases.counts) || {};
-    activity.push({ active: Boolean(pcnt.orders || pcnt.subscriptions), html: gMeCard('Purchases & subscriptions', (pcnt.orders || pcnt.subscriptions)
-      ? gRows([gRow((pcnt.orders || 0) + ' order' + ((pcnt.orders === 1) ? '' : 's'), (pcnt.subscriptions || 0) + ' subscription' + ((pcnt.subscriptions === 1) ? '' : 's'))])
-      : '<p class="g-empty">No purchases yet.</p>') });
-
     const appts = (d.appts && d.appts.appointments) || [];
     const now = Date.now();
     const upcoming = appts.filter((a) => { const x = Date.parse(a.startTime || ''); return isFinite(x) && x > now; });
     const booking = Array.isArray(d.appts && d.appts.bookingLinks) ? d.appts.bookingLinks : [];
-    // Render each upcoming appointment with date/time +, if it has a video
-    // meeting link (Zoom/Google Meet), a "Join meeting" button.
-    const apptRow = (a) => {
-      const dt = new Date(a.startTime);
-      const dateStr = isFinite(dt) ? dt.toLocaleDateString([], { month: 'short', day: 'numeric' }) + ' · ' + dt.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }) : '';
-      const meet = a.meetingLocation || '';
-      const isVideo = a.isVideo || /^(https?:)?\/\//.test(meet);
-      const meetType = a.meetingLocationType || '';
-      const meetLabel = meetType === 'zoom' ? 'Join Zoom' : meetType === 'gmeet' ? 'Join Google Meet' : meetType === 'phone' ? 'Phone call' : isVideo ? 'Join meeting' : '';
-      const joinBtn = (isVideo && meet)
-        ? '<a class="g-btn g-btn--primary g-btn--sm" href="' + esc(meet) + '" target="_blank" rel="noopener noreferrer">' + esc(meetLabel) + ' →</a>'
-        : (meetType === 'phone' && meet) ? '<span class="g-row__meta">' + esc(meet) + '</span>' : '';
-      return '<div class="g-row"><div class="flex-1"><p class="text-headline text-ink">' + esc(a.title || 'Appointment') + '</p><p class="gaia-caption">' + esc(dateStr) + (a.address ? ' · ' + esc(a.address) : '') + '</p></div>' + joinBtn + '</div>';
-    };
-    activity.push({ active: upcoming.length > 0, html: gMeCard('My bookings',
-      (upcoming.length
-        ? upcoming.slice(0, 3).map(apptRow).join('')
-        : '<p class="g-empty">No upcoming appointments.</p>')
-      // A member books with a practitioner near them: the directory comes first;
-      // the generic booking link, when there is one, stays as the second choice.
-      + '<div class="g-card__actions"><a class="g-btn g-btn--secondary g-btn--sm" href="home.html?view=directory" data-app-nav="directory">Find a practitioner near you →</a>'
-      + (booking[0] ? '<a class="g-btn g-btn--ghost g-btn--sm" href="' + esc(booking[0].openUrl) + '" target="_blank" rel="noopener noreferrer">Book a ' + esc(booking[0].name) + ' →</a>' : '') + '</div>') });
-
     const fcnt = (d.forms && d.forms.counts) || {};
-    activity.push({ active: Boolean(fcnt.forms || fcnt.surveys), html: gMeCard('Forms & surveys', (fcnt.forms || fcnt.surveys)
-      ? gRows([gRow((fcnt.forms || 0) + ' form' + ((fcnt.forms === 1) ? '' : 's') + ' submitted', (fcnt.surveys || 0) + ' survey' + ((fcnt.surveys === 1) ? '' : 's'))])
-      : '<p class="g-empty">No submissions yet.</p>') });
-
     const ncnt = (d.notif && d.notif.counts) || {};
-    activity.push({ active: Boolean(ncnt.unread || ncnt.conversations), html: gMeCard('Messages', (ncnt.unread || ncnt.conversations)
-      ? gRows([gRow(ncnt.unread ? ncnt.unread + ' unread' : 'All caught up', (ncnt.conversations || 0) + ' conversation' + ((ncnt.conversations === 1) ? '' : 's'))])
-      : '<p class="g-empty">All caught up. No conversations yet.</p>') });
-    // Stable: active cards keep their relative order, then the empty ones.
-    activity.filter((c) => c.active).concat(activity.filter((c) => !c.active)).forEach((c) => cards.push(c.html));
+    const n = (k, one, many) => k + ' ' + (k === 1 ? one : many);
+    const apptLine = (a) => { const dt = new Date(a.startTime); return (a.title || 'Appointment') + (isFinite(dt) ? ' · ' + dt.toLocaleDateString([], { month: 'short', day: 'numeric' }) + ' ' + dt.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }) : ''); };
+    const activityRows = [
+      { active: upcoming.length > 0, html: gRowLink('Bookings', upcoming.length ? apptLine(upcoming[0]) + (upcoming.length > 1 ? ' +' + (upcoming.length - 1) : '') : 'No upcoming sessions', 'home.html?view=bookings', false) },
+      { active: Boolean(pcnt.orders || pcnt.subscriptions), html: gRowLink('Purchases & subscriptions', (pcnt.orders || pcnt.subscriptions) ? n(pcnt.orders || 0, 'order', 'orders') + ' · ' + n(pcnt.subscriptions || 0, 'subscription', 'subscriptions') : 'None yet', 'home.html?view=store', false) },
+      { active: Boolean(ncnt.unread || ncnt.conversations), html: gRowLink('Messages', ncnt.unread ? n(ncnt.unread, 'unread', 'unread') : (ncnt.conversations ? n(ncnt.conversations, 'conversation', 'conversations') : 'All caught up'), 'home.html?view=inbox', false) },
+      { active: Boolean(fcnt.forms || fcnt.surveys), html: gRow('Forms & surveys', (fcnt.forms || fcnt.surveys) ? n(fcnt.forms || 0, 'form', 'forms') + ' · ' + n(fcnt.surveys || 0, 'survey', 'surveys') : 'No submissions yet') },
+    ];
+    cards.push(gMeCard('Your activity', gRows(activityRows.filter((r) => r.active).concat(activityRows.filter((r) => !r.active)).map((r) => r.html))
+      + '<div class="g-card__actions"><a class="g-btn g-btn--secondary g-btn--sm" href="home.html?view=directory" data-app-nav="directory">Find a practitioner near you →</a>'
+      + (booking[0] ? '<a class="g-btn g-btn--ghost g-btn--sm" href="' + esc(booking[0].openUrl) + '" target="_blank" rel="noopener noreferrer">Book a ' + esc(booking[0].name) + ' →</a>' : '') + '</div>'));
 
     // My communities + events — canonical homes are the Community / Events hubs.
     const myCircles = ((d.access && d.access.communities && d.access.communities.unlocked) || []);

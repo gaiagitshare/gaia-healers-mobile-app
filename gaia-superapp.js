@@ -848,11 +848,13 @@
       + '<p class="g-super-date">' + esc(dateLabel()) + '</p>'
       + '<p>' + (authed ? 'Your healing journey is waiting.' : 'What does your energy need today?') + '</p>'
       + (authed ? '' : '<div class="g-super-discover g-super-discover--solo"><a class="g-btn g-btn--primary" href="home.html?view=wellness&tab=check">' + icon('sparkle') + ' Check my energy</a></div>') + '</div><div class="g-super-hero__art"><picture><source media="(min-width: 900px)" type="image/webp" srcset="assets/gaia-hero-moon.webp" /><source media="(min-width: 900px)" srcset="assets/gaia-hero-moon.png" /><source type="image/webp" srcset="assets/gaia-hero-moon-wide.webp" /><img src="assets/gaia-hero-moon-wide.png" alt="Person meditating in lotus pose under a full moon over mountains" width="1024" height="576" loading="eager" /></picture></div></section>'
-      // A member never reaches this point (renderHomeMember above); this is the guest on-ramp.
-      + (eventFeatureCarousel()
-          + freeTools()
+      // A member never reaches this point (renderHomeMember above); this is the
+      // guest on-ramp: the tools a stranger can use now, one way in, and the
+      // gathering in its compact form. The booking card host stays for Today.
+      + (freeTools()
           + authPrompt(true)
-          + '<div id="home-book"></div>')
+          + eventCompact()
+          + '<div id="home-book" hidden></div>')
       + '</div>';
     bind(root);
     renderToday();
@@ -911,9 +913,11 @@
     const firstCourse = courseGrants()[0];
     const nextAppointment = upcomingAppointments()[0];
     if (firstCourse?.openUrl) {
+      // Both a course and a booking: the course leads, the booking is named on a second line.
+      const also = nextAppointment ? '<a class="g-home2__also" href="home.html?view=bookings">' + icon('calendar-check') + ' Also coming up: ' + esc(nextAppointment.title || 'your appointment') + ' · ' + esc(appointmentWhen(nextAppointment)) + '</a>' : '';
       return '<section class="g-home2__next"><p class="g-super-kicker">Continue learning</p><h2>' + esc(firstCourse.title || firstCourse.name || 'Your course') + '</h2>'
         + '<p>Lessons and verified progress open in your Academy workspace.</p>'
-        + '<button type="button" class="g-btn g-btn--primary g-btn--sm" data-super-course="' + esc(firstCourse.openUrl) + '" data-super-course-title="' + esc(firstCourse.title || firstCourse.name || 'Gaia Healers Academy') + '">' + icon('book-open') + ' Open course</button></section>';
+        + '<button type="button" class="g-btn g-btn--primary g-btn--sm" data-super-course="' + esc(firstCourse.openUrl) + '" data-super-course-title="' + esc(firstCourse.title || firstCourse.name || 'Gaia Healers Academy') + '">' + icon('book-open') + ' Open course</button>' + also + '</section>';
     }
     if (nextAppointment) {
       return '<section class="g-home2__next"><p class="g-super-kicker">Coming up</p><h2>' + esc(nextAppointment.title || 'Your appointment') + '</h2>'

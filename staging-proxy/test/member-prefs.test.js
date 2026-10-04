@@ -32,7 +32,8 @@ test('the app: Next level folds through the prefs route, empty cards fold to one
   assert.doesNotMatch(ui, /localStorage/, 'kept on the server, not in the browser');
   const member = read('gaia-member.js');
   assert.match(member, /g-card--empty/);
-  assert.match(member, /activity\.filter\(\(c\) => c\.active\)\.concat\(activity\.filter\(\(c\) => !c\.active\)\)/, 'You: cards with something in them come before the empty ones');
+  assert.match(member, /activityRows\.filter\(\(r\) => r\.active\)\.concat\(activityRows\.filter\(\(r\) => !r\.active\)\)/, 'You: one activity card; rows with something in them come first');
+  assert.match(member, /gMeCard\('Your activity'/); assert.doesNotMatch(member, /gMeCard\('Purchases & subscriptions'|gMeCard\('My bookings'|gMeCard\('Forms & surveys'|gMeCard\('Messages'/, 'the four cards are gone');
   assert.match(member, /practitioner_card_dismissed/, '"Not now" on Become a practitioner is a server preference');
   assert.match(member, /getJson\('\/api\/member\/prefs'\)/, 'loaded with the rest of the member data, so the card never flashes');
   const today = read('gaia-superapp.js');

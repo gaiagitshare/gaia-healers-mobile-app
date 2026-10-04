@@ -136,27 +136,36 @@
   }
 
   // ── Today nudge and the dot on the You tab: only "a newer reading exists", never a value ──
-  let nudgeObserver = null;
-  function setNewReading(on, scannedAt) {
-    document.querySelectorAll('a[data-app-nav="profile"]').forEach((a) => a.classList.toggle('has-new-reading', on));
+  let nudgeObserver = null, todayState = { linked: false, fresh: false, scannedAt: null };
+  /** The Today shortcut: always there for a linked member, lit while a reading is newer than the last one opened. The dot on You only while new. */
+  function setTodayLink(next) {
+    todayState = { ...todayState, ...next };
+    const { linked, fresh, scannedAt } = todayState;
+    document.querySelectorAll('a[data-app-nav="profile"]').forEach((a) => a.classList.toggle('has-new-reading', linked && fresh));
     const place = () => {
       const home = document.querySelector('#home-superapp .g-super-home');
-      const old = document.getElementById('readings-nudge');
-      if (!on) { old?.remove(); return; }
-      if (!home || old) return;
-      const el = document.createElement('a');
-      el.id = 'readings-nudge'; el.href = 'home.html?view=profile&section=readings'; el.className = 'g-readings-nudge';
-      el.innerHTML = `<i class="ph ph-pulse" aria-hidden="true"></i><span><strong>A new reading from your practitioner</strong>${scannedAt ? ` · ${esc(when(scannedAt))}` : ''}</span><em>Open</em>`;
-      el.addEventListener('click', (e) => { e.preventDefault(); try { window.GaiaAppShell?.go?.('profile'); } catch { /* ignore */ } window.setTimeout(() => window.dispatchEvent(new CustomEvent('gaia:open-readings')), 80); });
-      home.prepend(el);
+      let el = document.getElementById('readings-nudge');
+      if (!linked) { el?.remove(); return; }
+      if (!home) return;
+      if (!el) {
+        el = document.createElement('a');
+        el.id = 'readings-nudge'; el.href = 'home.html?view=profile&section=readings';
+        el.addEventListener('click', (e) => { e.preventDefault(); try { window.GaiaAppShell?.go?.('profile'); } catch { /* ignore */ } window.setTimeout(() => window.dispatchEvent(new CustomEvent('gaia:open-readings')), 80); });
+        home.prepend(el);
+      }
+      el.className = `g-readings-nudge${fresh ? ' is-new' : ''}`;
+      el.innerHTML = fresh
+        ? `<i class="ph ph-pulse" aria-hidden="true"></i><span><strong>A new reading from your practitioner</strong>${scannedAt ? ` · ${esc(when(scannedAt))}` : ''}</span><em>Open</em>`
+        : `<i class="ph ph-pulse" aria-hidden="true"></i><span><strong>My readings</strong>${scannedAt ? ` · latest ${esc(when(scannedAt))}` : ''}</span><em>Open</em>`;
     };
     place();
-    if (on && !nudgeObserver) {
+    if (linked && !nudgeObserver) {
       const root = document.getElementById('home-superapp');
       if (root && 'MutationObserver' in window) { nudgeObserver = new MutationObserver(place); nudgeObserver.observe(root, { childList: true }); }
     }
-    if (!on && nudgeObserver) { nudgeObserver.disconnect(); nudgeObserver = null; }
+    if (!linked && nudgeObserver) { nudgeObserver.disconnect(); nudgeObserver = null; }
   }
+  const setNewReading = (fresh, scannedAt) => setTodayLink(scannedAt === undefined ? { fresh } : { fresh, scannedAt });
 
   // ── graphics: inline SVG, drawn to scale, coloured through the theme tokens ──
   /** A three-quarter arc gauge. `value` on [min,max]; `good` is the comfortable band, drawn under the arc. */
@@ -316,11 +325,11 @@
   let lastSummary = null, lastReadings = null;
   async function render(root) {
     const st = await api('/api/practitioners/member-link/status');
-    if (!st.ok) { root.hidden = true; setNewReading(false); return; }             // not signed in, or feature off (404)
+    if (!st.ok) { root.hidden = true; setTodayLink({ linked: false, fresh: false }); return; }             // not signed in, or feature off (404)
     root.hidden = false;
     const status = st.body;
     lastSummary = null; lastReadings = null;
-    setNewReading(Boolean(status.new_reading), status.latest_scanned_at);
+    setTodayLink({ linked: Boolean(status.linked), fresh: Boolean(status.new_reading), scannedAt: status.latest_scanned_at || null });
     if (!status.linked) { root.innerHTML = consentCard(status); return; }
     root.innerHTML = note('Loading your readings… this fetches live from Bio-Well and can take about 20 seconds.');
     const r = await api('/api/practitioners/my-readings');
@@ -401,7 +410,7 @@
     root.addEventListener('change', (e) => { if (e.target.matches('[data-pick]')) pickOut(root, lastReadings?.series || []); });
     let pendingReveal = false;
     window.addEventListener('gaia:open-readings', () => { if (!reveal(root)) pendingReveal = true; });
-    window.addEventListener('gaia:signed-out', () => { root.hidden = true; root.innerHTML = ''; });
+    window.addEventListener('gaia:signed-out', () => { root.hidden = true; root.innerHTML = ''; setTodayLink({ linked: false, fresh: false }); });
     try { if (new URLSearchParams(location.search).get('section') === 'readings') pendingReveal = true; } catch { /* ignore */ }
     await render(root);
     if (pendingReveal) { pendingReveal = false; window.setTimeout(() => reveal(root), 120); }

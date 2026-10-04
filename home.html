@@ -72,7 +72,7 @@
   <link rel="stylesheet" href="gaia-app-v3.css?v=20260928b" />
   <link rel="stylesheet" href="gaia-app-v3-today-energy.css?v=20260928a" />
   <link rel="stylesheet" href="gaia-app-v3-learn-connect.css?v=20260928b" />
-  <link rel="stylesheet" href="gaia-app-v3-shop-you.css?v=20261004d" />
+  <link rel="stylesheet" href="gaia-app-v3-shop-you.css?v=20261004e" />
   <link rel="stylesheet" href="gaia-assist-v3.css?v=20260928c" />
   <link rel="stylesheet" href="vendor/leaflet/leaflet.css?v=1.9.4" />
   <link rel="stylesheet" href="vendor/leaflet/MarkerCluster.css?v=1.5.3" />
@@ -385,11 +385,12 @@
           <button type="button" class="g-tab" data-profile-tab="practice" role="tab" aria-selected="false" aria-controls="practitioner-panel">Practice</button>
         </div>
 
-        <div id="member-me" class="g-page-sec"></div>
         <!-- My readings: a member's own Bio-Well results, shared with their
              practitioner by a code the member asks for. Rendered by
-             gaia-my-readings.js only when the server says the feature is on. -->
+             gaia-my-readings.js only when the server says the feature is on.
+             It sits first: it is the one thing on You that changes week to week. -->
         <div id="member-readings" class="g-page-sec" aria-label="My readings" hidden></div>
+        <div id="member-me" class="g-page-sec"></div>
         <div id="practitioner-panel" class="g-page-sec" role="tabpanel" aria-label="Practice" hidden></div>
 
 
@@ -460,7 +461,7 @@
   <script src="gaia-install.js?v=20260820a" defer></script>
   <script src="gaia-practice.js?v=20260818a" defer></script>
   <script src="gaia-practitioner.js" defer></script>
-  <script src="gaia-my-readings.js?v=20261004f" defer></script>
+  <script src="gaia-my-readings.js?v=20261004g" defer></script>
   <script src="gaia-sky.js?v=20260907b" defer></script>
   <script src="gaia-numerology.js?v=20260907c" defer></script>
   <script src="gaia-push.js?v=20260822a" defer></script>

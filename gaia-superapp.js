@@ -835,6 +835,7 @@
       + serviceLink('events', 'calendar-dots', 'Events', eventData()?.name ? 'Upcoming gathering available' : 'Gatherings and live sessions')
       + serviceLink('bookings', 'calendar-check', 'Bookings', stateMeta('Sessions and consultations', upcomingAppointments().length, 'upcoming booking', 'upcoming bookings'));
 
+    if (authed) { renderHomeMember(root, greeting); renderToday(); document.dispatchEvent(new CustomEvent('gaia:superapp-rendered', { detail: { authed } })); return; }
     root.innerHTML = '<div class="g-super-home">'
       // Admin-published announcements (rendered by gaia-member.js from
       // /api/app/bootstrap) sit above everything, for members and guests alike.
@@ -847,33 +848,8 @@
       + '<p class="g-super-date">' + esc(dateLabel()) + '</p>'
       + '<p>' + (authed ? 'Your healing journey is waiting.' : 'What does your energy need today?') + '</p>'
       + (authed ? '' : '<div class="g-super-discover g-super-discover--solo"><a class="g-btn g-btn--primary" href="home.html?view=wellness&tab=check">' + icon('sparkle') + ' Check my energy</a></div>') + '</div><div class="g-super-hero__art"><picture><source media="(min-width: 900px)" type="image/webp" srcset="assets/gaia-hero-moon.webp" /><source media="(min-width: 900px)" srcset="assets/gaia-hero-moon.png" /><source type="image/webp" srcset="assets/gaia-hero-moon-wide.webp" /><img src="assets/gaia-hero-moon-wide.png" alt="Person meditating in lotus pose under a full moon over mountains" width="1024" height="576" loading="eager" /></picture></div></section>'
-      + (authed
-        // Member flow: the daily energy leads, because it is the one thing on
-        // this page that changed since yesterday and the only reason to open
-        // the app before breakfast. The event and real access follow it.
-        //
-        // No free-tools grid here. It is the on-ramp a stranger needs, and a
-        // member already has the whole Energy tab -- for them it was a second
-        // door to a room they were standing in, pushing the daily reading to
-        // fourth on their own home page.
-        ? todayDoor(true)
-          + eventFeatureCarousel()
-          + primaryMemberAction()
-          // The next booking sits above the generic service tiles, not below
-          // them -- unless the primary card above is already that booking.
-          + (courseGrants()[0]?.openUrl ? nextBookingCard() : '')
-          + '<section class="g-super-services"><div class="g-super-section-head"><div><p class="g-super-kicker">Your access</p><h2>Everything Gaia Healers</h2></div><a href="home.html?view=profile">Your account</a></div><div class="g-super-services__grid">' + services + '</div></section>'
-          + '<div id="home-book"></div>'
-          // The upsell goes last, after everything a member already pays for.
-          // It used to sit fourth, between two sections both called "Your
-          // access", so a member met "Unlock your full practice" before they
-          // reached their own sky. Sell after the page has finished giving.
-          + (activeMembership() ? '' : upgradeCard())
-          + '<section class="g-super-sync">' + icon('check-circle') + '<div><strong>Your access is synced</strong><span>Courses, communities, plans and purchases reflect your Gaia Healers account.</span></div></section>'
-        // Logged-out flow: daily energy, then the free tools a stranger can use
-        // right now, the event, and one clear way in.
-        : todayDoor(false)
-          + eventFeatureCarousel()
+      // A member never reaches this point (renderHomeMember above); this is the guest on-ramp.
+      + (eventFeatureCarousel()
           + freeTools()
           + authPrompt(true)
           + '<div id="home-book"></div>')
@@ -885,12 +861,106 @@
     document.dispatchEvent(new CustomEvent('gaia:superapp-rendered', { detail: { authed } }));
   }
 
-  /** Home's door to Today: one card, the date, what waits there. */
-  function todayDoor(authed) {
-    return '<a class="g-super-primary g-super-today-door' + (authed ? '' : ' g-super-today-door--wide') + '" href="home.html?view=daily" data-app-nav="daily"><p class="g-super-kicker">Today</p>'
-      + '<h2>' + esc(dateLabel()) + '</h2>'
-      + '<p>' + (authed ? 'Your daily energy check, today\u2019s sky, your readings and your next session.' : 'Your daily energy check and today\u2019s sky, free, right now.') + '</p>'
-      + '<span class="g-btn g-btn--primary g-super-primary__button">' + icon('sun') + ' Open Today ' + icon('arrow-right') + '</span></a>';
+  /**
+   * HOME for a member -- the dashboard, said once.
+   *
+   *   Welcome back, Name            the heading of the page, not text on art
+   *   -> one next step              course / booking / readings / daily check
+   *   -> the next gathering         compact, with its real buttons
+   *   -> Your Gaia                  Academy, Community, Events, Bookings: whole rows tap
+   *   -> Book a session             four actions, one line each (same links)
+   *   -> membership, compact        the plan you have, or the plans
+   *   -> sync, only when wrong      a normal sync says nothing
+   *
+   * Nothing is listed twice; every destination and link is the one that was
+   * here before. The guest Home keeps its own on-ramp (the hero, free tools).
+   */
+  function renderHomeMember(root, greeting) {
+    const d = memberState().data || {};
+    const rows = [
+      ['academy', 'graduation-cap', 'Academy', stateMeta('Courses and certifications', courseGrants().length, 'course', 'courses')],
+      ['community', 'users-three', 'Community', stateMeta('Boards and circles', communities().length, 'community', 'communities')],
+      ['events', 'calendar-dots', 'Events', eventData()?.name ? 'Next gathering is on' : 'Gatherings and live sessions'],
+      ['bookings', 'calendar-check', 'Bookings', stateMeta('Sessions and consultations', upcomingAppointments().length, 'upcoming booking', 'upcoming bookings')],
+    ].map(([v, i, t, m]) => serviceLink(v, i, t, m)).join('');
+    const meta = (d.access && d.access.meta) || {};
+    const sync = (meta.degraded || meta.stale)
+      ? '<p class="g-home2__sync" role="status">' + icon('warning-circle') + ' Your access may not be up to date' + (meta.confirmed_at ? ' (last confirmed ' + esc(String(meta.confirmed_at).slice(0, 10)) + ')' : '') + '. Courses, communities and plans refresh on their own; nothing has been removed.</p>'
+      : '';
+    root.innerHTML = '<div class="g-super-home g-super-home--v2 g-home2">'
+      + '<div id="home-announcements"></div>'
+      + '<header class="g-home2__greet"><h1>' + greeting + '</h1><p>' + esc(homeLine()) + '</p></header>'
+      + '<div class="g-home2__top">' + nextStep() + eventCompact() + '</div>'
+      + '<section class="g-home2__gaia" aria-label="Your Gaia"><p class="g-super-kicker">Your Gaia</p><div class="g-home2__rows">' + rows + '</div></section>'
+      + bookActions()
+      + membershipStrip()
+      + sync
+      + '<div id="home-book" hidden></div>'   // gaia-member still writes its booking card here; Today copies it
+      + '</div>';
+    bind(root);
+  }
+  /** One short line under the greeting, only when there is something to say. */
+  function homeLine() {
+    const n = upcomingAppointments().length, c = courseGrants().length;
+    if (n) return n === 1 ? 'One session coming up.' : n + ' sessions coming up.';
+    if (c) return c === 1 ? 'Your course is waiting.' : c + ' courses in your account.';
+    return dateLabel();
+  }
+  /** The one next step: a course, a booking, your readings, or today\u2019s check. Same destinations as before. */
+  function nextStep() {
+    const firstCourse = courseGrants()[0];
+    const nextAppointment = upcomingAppointments()[0];
+    if (firstCourse?.openUrl) {
+      return '<section class="g-home2__next"><p class="g-super-kicker">Continue learning</p><h2>' + esc(firstCourse.title || firstCourse.name || 'Your course') + '</h2>'
+        + '<p>Lessons and verified progress open in your Academy workspace.</p>'
+        + '<button type="button" class="g-btn g-btn--primary g-btn--sm" data-super-course="' + esc(firstCourse.openUrl) + '" data-super-course-title="' + esc(firstCourse.title || firstCourse.name || 'Gaia Healers Academy') + '">' + icon('book-open') + ' Open course</button></section>';
+    }
+    if (nextAppointment) {
+      return '<section class="g-home2__next"><p class="g-super-kicker">Coming up</p><h2>' + esc(nextAppointment.title || 'Your appointment') + '</h2>'
+        + '<p>' + esc(appointmentWhen(nextAppointment)) + '</p><a class="g-btn g-btn--primary g-btn--sm" href="home.html?view=bookings">' + icon('calendar-check') + ' View booking</a></section>';
+    }
+    const r = (window.GaiaMyReadings && window.GaiaMyReadings.status && window.GaiaMyReadings.status()) || {};
+    if (r.linked) {
+      return '<section class="g-home2__next"><p class="g-super-kicker">' + (r.new_reading ? 'New reading' : 'Your readings') + '</p><h2>' + (r.new_reading ? 'A new reading from your practitioner' : 'Your Bio-Well readings') + '</h2>'
+        + '<p>Summary, energy and stress, your seven centres, and how things moved.</p><a class="g-btn g-btn--primary g-btn--sm" href="home.html?view=profile&section=readings">' + icon('pulse') + ' Open my readings</a></section>';
+    }
+    return '<section class="g-home2__next"><p class="g-super-kicker">Today</p><h2>Your daily energy check</h2>'
+      + '<p>Which centre today asks for, today\u2019s sky, and a streak that saves.</p><a class="g-btn g-btn--primary g-btn--sm" href="home.html?view=daily" data-app-nav="daily">' + icon('sun') + ' Start today\u2019s check</a></section>';
+  }
+  /** The next gathering, compact: thumbnail, name, when and where, the same two buttons. */
+  function eventCompact() {
+    loadEventsList();
+    const event = upcomingFeatureEvents()[0] || eventData();
+    if (!event?.name) return '';
+    const art = event.heroImageUrl || 'assets/gaia-elevate-hero.png';
+    const when = eventDate(event), location = event.location || event.venue || '', countdown = eventCountdown(event);
+    const register = event.registrationUrl ? '<a class="g-btn g-btn--primary g-btn--sm" href="' + esc(event.registrationUrl) + '" target="_blank" rel="noopener noreferrer">' + esc(event.registrationLabel || 'Get tickets') + '</a>' : '';
+    return '<section class="g-home2__event"><img class="g-home2__event-art" src="' + esc(art) + '" alt="" width="426" height="358" loading="lazy" />'
+      + '<div class="g-home2__event-body"><p class="g-super-kicker">Next gathering' + (countdown ? ' <span class="g-home2__badge">' + esc(countdown) + '</span>' : '') + '</p>'
+      + '<h2>' + esc(event.name) + '</h2>'
+      + (when || location ? '<p>' + [when, location].filter(Boolean).map(esc).join(' \u00b7 ') + '</p>' : '')
+      + '<div class="g-home2__actions"><a class="g-btn g-btn--secondary g-btn--sm" href="home.html?view=events">Event details</a>' + register + '</div></div></section>';
+  }
+  /** Book a session: the same four links, each with one line that says what it is. */
+  function bookActions() {
+    const bk = 'https://api.leadconnectorhq.com/widget/bookings/', fm = 'https://api.leadconnectorhq.com/widget/form/';
+    const items = [
+      { name: 'Bio-Well energy scan', href: bk + 'scans', icon: 'pulse', what: 'A biofield reading with a practitioner.' },
+      { name: 'Bio-Well demo', href: bk + 'bio-welldemo', icon: 'monitor-play', what: 'See the device in action, no commitment.' },
+      { name: 'Free discovery call', href: fm + 'mgf6oviyhPwrLBi03gzq', icon: 'phone', what: 'A short chat about where to start.' },
+      { name: 'Wellness coaching', href: fm + 'gVzfo7sRfbLnMzQqSnJL', icon: 'leaf', what: 'Work one-to-one with a Gaia coach.' },
+    ];
+    return '<section class="g-home2__book" aria-label="Book a session"><p class="g-super-kicker">Book a session</p><div class="g-home2__book-grid">'
+      + items.map((b) => '<button type="button" class="g-home2__action" data-book-inline="' + esc(b.href) + '" data-book-title="' + esc(b.name) + '"><span class="g-home2__action-icon">' + icon(b.icon) + '</span><span class="g-home2__action-copy"><strong>' + esc(b.name) + '</strong><small>' + esc(b.what) + '</small></span>' + icon('caret-right', 'g-home2__action-arrow') + '</button>').join('')
+      + '</div></section>';
+  }
+  /** Membership, in one strip: the plan you have and its next action, or the plans. */
+  function membershipStrip() {
+    const m = activeMembership();
+    if (m) {
+      return '<a class="g-home2__plan" href="home.html?view=profile"><span class="g-home2__plan-copy"><strong>' + esc(m.label || m.key || 'Member') + ' member</strong><small>Your pass, access and billing live in You.</small></span><span class="g-home2__plan-cta">Manage ' + icon('caret-right') + '</span></a>';
+    }
+    return '<a class="g-home2__plan" href="home.html?view=store&tab=membership"><span class="g-home2__plan-copy"><strong>Gaia 2.0 membership</strong><small>Certifications, practitioner communities, a directory listing, CRM tools. Start free, upgrade any time.</small></span><span class="g-home2__plan-cta">See plans ' + icon('caret-right') + '</span></a>';
   }
 
   /**

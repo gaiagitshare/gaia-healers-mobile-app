@@ -71,3 +71,12 @@ test('the avatar: Today in the bubble and the tour, a local greeting line, and g
   assert.match(idle, /glanceAt\(document\.querySelector\('\[data-app-nav="profile"\]'\), 1800\)/);
   assert.match(idle, /new Date\(\)\.getHours\(\) < 11/, 'the morning glance toward Today');
 });
+
+test('the in-app window always has a reachable Close, and bookings send a member to the directory first', () => {
+  const member = read('gaia-member.js');
+  assert.match(member, /height:min\(92dvh,100%\);max-height:100%/, 'the sheet never grows past the screen');
+  assert.match(member, /gaia-booking-modal__foot"><button type="button" class="gaia-booking-modal__done" data-book-close>Close<\/button>/, 'a Close at the thumb');
+  assert.match(member, /href="home\.html\?view=directory" data-app-nav="directory">Find a practitioner near you/);
+  const css = read('gaia-avatar.css');
+  assert.match(css, /\.g-super-home > \.g-super-today-door \{ grid-column: 1;/); assert.match(css, /\.g-super-primary:not\(\.g-super-today-door\) \{ grid-column: 2;/);
+});

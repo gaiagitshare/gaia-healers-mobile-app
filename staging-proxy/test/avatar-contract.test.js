@@ -124,6 +124,9 @@ test('reduced motion keeps breathing and the glow, drops bouncing, waving and ti
 test('the orb wears the same face, every chip that moves the screen points at where it landed, and "meet Gaia" happens once', () => {
   const js = read('gaia-avatar.js');
   assert.match(js, /function dressOrb\(\)/); assert.match(js, /mark\.replaceWith\(holder\)/);
+  assert.match(js, /gava-mini__logo'\)\.appendChild\(mark\)/, 'the logo is kept: it is one side of the coin');
+  assert.match(css, /@keyframes gava-coin \{ 0%,42% \{ transform: rotateY\(0\); \} 50%,92% \{ transform: rotateY\(180deg\); \}/, 'logo and face take turns');
+  assert.match(css, /\.gaia-tabbar__assist:not\(\[data-state="idle"\]\):not\(\[data-state="error"\]\) \.gava-mini__coin \{ animation: none; transform: rotateY\(180deg\);/, 'a live conversation keeps the face up');
   const css = read('gaia-avatar.css');
   assert.match(css, /\.gaia-tabbar__assist\[data-state="speaking"\] \.gava-mini \.gava-f-speak \{ display: block; \}/);
   assert.match(js, /const goAndPoint = /);

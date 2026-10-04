@@ -374,12 +374,18 @@
   }
   // ── end idle personality ──────────────────────────────────────────────
 
-  /** The orb and the avatar are one character: the orb's mark becomes her small face, mirroring the same states. */
+  /**
+   * The orb and the avatar are one character. The orb keeps the Gaia logo and
+   * gains her small face on the back of a coin that turns slowly while idle;
+   * the face stays up whenever a conversation is live (the orb's data-state).
+   */
   function dressOrb() {
     const orb = document.querySelector('[data-gaia-tab-assist]'); const mark = orb?.querySelector('.gaia-tabbar__assist-mark');
     if (!orb || !mark || orb.querySelector('.gava-mini')) return;
-    const holder = document.createElement('span'); holder.className = 'gava-mini'; holder.setAttribute('aria-hidden', 'true'); holder.innerHTML = SVG_BODY;
+    const holder = document.createElement('span'); holder.className = 'gava-mini'; holder.setAttribute('aria-hidden', 'true');
+    holder.innerHTML = '<span class="gava-mini__coin"><span class="gava-mini__logo"></span><span class="gava-mini__face">' + SVG_BODY + '</span></span>';
     mark.replaceWith(holder);
+    holder.querySelector('.gava-mini__logo').appendChild(mark);
   }
   /** Once per device: how she works, in one bubble. */
   function meet() {

@@ -26,6 +26,11 @@
  *   node tools/assist-usage-report.mjs --alerts other.json
  *                                   # the incident ledger to summarise (default data/system-alerts.json)
  *
+ * Before the alerts, a MEMBER LINKS line counts the member-results events in
+ * the window (codes asked for, links confirmed, readings opened, links
+ * revoked) from data/member-links.json's audit -- counts only, never an id
+ * (--links other.json to point elsewhere).
+ *
  * The report ends with the open SYSTEM ALERTS from the proxy's incident ledger
  * (counts and delivery counters only -- never an incident's evidence text), so
  * one daily file says both what Assist cost and what is still burning.
@@ -144,6 +149,27 @@ const report = {
   },
 };
 
+// ── member links (offline: the audit in the link store) ───────────────────
+// Counts of events inside the window and the standing totals. The audit rows
+// carry member and customer ids; none of them is read into the report.
+function memberLinks() {
+  const file = value('--links') || path.join(root, 'data', 'member-links.json');
+  const rel = path.isAbsolute(file) && file.startsWith(root) ? path.relative(root, file) : file;
+  if (!fs.existsSync(file)) return { file: rel, available: false, reason: 'no link store on file' };
+  let store;
+  try { store = JSON.parse(fs.readFileSync(file, 'utf8')); } catch (e) { return { file: rel, available: false, reason: 'unreadable: ' + String(e.message || e).slice(0, 80) }; }
+  const rows = Array.isArray(store?.audit) ? store.audit : [];
+  const inside = rows.filter((r) => { const d = String(r?.at || '').slice(0, 10); return (!from || d >= from) && (!to || d <= to); });
+  const count = (ev) => inside.filter((r) => r?.event === ev).length;
+  const links = Object.values(store?.links || {});
+  return {
+    file: rel, available: true,
+    in_window: { codes_issued: count('consent_code_issued'), links_confirmed: count('link_confirmed'), readings_opened: count('reading_opened'), links_revoked: count('link_revoked') },
+    standing: { confirmed: links.filter((l) => l?.status === 'confirmed').length, revoked: links.filter((l) => l?.status === 'revoked').length,
+      confirmed_and_opened: links.filter((l) => l?.status === 'confirmed' && l?.seen_scanned_at).length },
+  };
+}
+
 // ── system alerts (offline: the ledger the proxy's sweep maintains) ───────
 // Keys, severities and counters only. `evidence`, `title`, `why` and
 // `affected` can name a member and never enter the report.
@@ -174,6 +200,7 @@ function systemAlerts() {
     delivery_failing: undelivered.length ? `${undelivered.length} open incident(s) have delivery attempts but were never sent (${[...new Set(undelivered.map((i) => i.delivery.last_error || 'no error recorded'))].join('; ')}). The sweep retries every minute; set ALERT_CONTACT_ID or resolve them.` : null,
   };
 }
+report.member_links = memberLinks();
 report.system_alerts = systemAlerts();
 
 // ── print ─────────────────────────────────────────────────────────────────
@@ -194,14 +221,24 @@ function renderText() {
   L.push(`GAIA ASSIST USAGE — ${report.window}`);
   L.push(`generated ${report.generatedAt}   files: ${report.files.join(', ') || '(none)'}`);
   L.push(`records on file ${fmt(report.records_on_file)}, in window ${fmt(report.records_in_window)}, malformed lines ${fmt(report.malformed_lines)}` + (report.first ? `   first ${report.first}  last ${report.last}` : ''));
-  if (!report.records_in_window) { L.push('\nNo records in this window. (Zero real records is a valid result; nothing is estimated from nothing.)'); L.push(''); L.push(renderAlerts(report.system_alerts)); return L.join('\n'); }
+  if (!report.records_in_window) { L.push('\nNo records in this window. (Zero real records is a valid result; nothing is estimated from nothing.)'); L.push(''); L.push(renderLinks(report.member_links)); L.push(''); L.push(renderAlerts(report.system_alerts)); return L.join('\n'); }
   L.push(''); L.push(renderBlock('TOTAL', report.total));
   for (const [title, groups] of [['BY CHANNEL', report.by_channel], ['BY PROVIDER / MODEL', report.by_provider_model], ['BY SESSION STATE', report.by_state]]) {
     L.push(''); L.push(`== ${title} ==`);
     for (const [k, b] of Object.entries(groups)) { L.push(renderBlock(k, b)); }
   }
   L.push(''); L.push('REPORTED = provider-reported counts. ESTIMATED = computed from counts and assist-pricing.js (never exact). UNAVAILABLE = not reported / no price on file.');
+  L.push(''); L.push(renderLinks(report.member_links));
   L.push(''); L.push(renderAlerts(report.system_alerts));
+  return L.join('\n');
+}
+function renderLinks(m) {
+  const L = [];
+  L.push(`== MEMBER LINKS (offline, ${m.file}) ==`);
+  if (!m.available) { L.push(`  UNAVAILABLE: ${m.reason}`); return L.join('\n'); }
+  const w = m.in_window, s = m.standing;
+  L.push(`  in window: ${fmt(w.codes_issued)} codes asked for, ${fmt(w.links_confirmed)} links confirmed, ${fmt(w.readings_opened)} readings opened, ${fmt(w.links_revoked)} links revoked`);
+  L.push(`  standing:  ${fmt(s.confirmed)} members sharing (${fmt(s.confirmed_and_opened)} have opened their readings), ${fmt(s.revoked)} stopped`);
   return L.join('\n');
 }
 function renderAlerts(a) {

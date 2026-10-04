@@ -392,3 +392,13 @@ test('the offline member flow check walks the whole path and passes', async () =
   const j = JSON.parse(out.s.slice(out.s.indexOf('{')));
   assert.equal(j.ok, true); assert.ok(j.steps.length >= 18); assert.ok(j.steps.every((x) => x.ok));
 });
+
+test('the first opening of each reading date is audited (counts for the daily line), later openings are not', () => {
+  const dir6 = fs.mkdtempSync(path.join(os.tmpdir(), 'mlink6-')); const f = path.join(dir6, 'links.json');
+  const c = ml.mintCode('m12', { file: f }); ml.redeemCode(c.code, { customer_id: 'c12', practitioner_id: 'p12' }, { file: f });
+  ml.markSeen('m12', '2026-06-14', { file: f }); ml.markSeen('m12', '2026-06-14', { file: f }); ml.markSeen('m12', '2026-06-01', { file: f });
+  const audit = JSON.parse(fs.readFileSync(f, 'utf8')).audit.filter((a) => a.event === 'reading_opened');
+  assert.equal(audit.length, 1); assert.equal(audit[0].scanned_at, '2026-06-14');
+  ml.markSeen('m12', '2026-07-01', { file: f });
+  assert.equal(JSON.parse(fs.readFileSync(f, 'utf8')).audit.filter((a) => a.event === 'reading_opened').length, 2, 'a newer reading opened is a new event');
+});

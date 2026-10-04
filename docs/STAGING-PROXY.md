@@ -447,7 +447,10 @@ in `/root/gaia-staging-proxy/data/assist-usage.jsonl` (0600; rotated weekly
 by `/etc/logrotate.d/gaia-assist-usage`, 52 kept, `.gz` beside it). Fields:
 `at channel provider model state turns seconds outcome error usageReported
 attempt input cachedInput output reasoning textIn audioIn textOut audioOut
-estCostUsd priceList`. No prompt, reply, name, email, contact id or IP is ever
+estCostUsd priceList`. The daily report also carries a MEMBER LINKS line
+(codes asked for, links confirmed, readings opened, links revoked in the
+window; members sharing / opened / stopped standing), counts only, from the
+link store's audit. No prompt, reply, name, email, contact id or IP is ever
 written; `error` is a category, never a message. Prices live in
 `assist-pricing.js` (dated, sourced from the provider); `estCostUsd` is an
 estimate recomputable from the raw counts. A daily summary lands in

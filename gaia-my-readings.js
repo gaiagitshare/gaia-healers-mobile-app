@@ -292,7 +292,20 @@
     const spark = sparkline(r.series);
     const note = latest?.note ? `<section class="g-readings__sec g-readings__pnote"><p class="g-readings__kicker">A note from ${esc(practitioner.name || 'your practitioner')}</p><p class="g-readings__lead g-readings__pnote-text">${esc(latest.note)}</p></section>` : '';
     return card(`
-      <p class="g-card__meta">Shared by <strong>${esc(practitioner.name || 'your practitioner')}</strong>${practitioner.specialty ? ` · ${esc(practitioner.specialty)}` : ''}${practitioner.location ? ` · ${esc(practitioner.location)}` : ''}<br>since ${esc(when(r.linked_at))}${r.scans_on_file != null ? ` · ${esc(r.scans_on_file)} reading${r.scans_on_file === 1 ? '' : 's'} on file` : ''}</p>
+      <p class="g-card__meta">Shared by <strong>${esc(practitioner.name || 'your practitioner')}</strong>${practitioner.specialty ? ` · ${esc(practitioner.specialty)}` : ''}${practitioner.location ? ` · ${esc(practitioner.location)}` : ''}<br>since ${esc(when(r.linked_at))}${r.scans_on_file != null ? ` · ${esc(r.scans_on_file)} reading${r.scans_on_file === 1 ? '' : 's'} on file` : ''} · <button type="button" class="g-readings__linkbtn" data-readings-action="whosees" aria-expanded="false">What can they see?</button></p>
+      <div class="g-readings__whosees" hidden>
+        <p class="g-readings__kicker">What ${esc(practitioner.name || 'your practitioner')} can see</p>
+        <ul class="g-readings__lines">
+          <li>The readings they recorded in Bio-Well. They always had these; sharing changed nothing on their side.</li>
+          <li>That you asked to see them in Gaia (since ${esc(when(r.linked_at))}) and whether you have opened the latest one.</li>
+        </ul>
+        <p class="g-readings__kicker">What they cannot see</p>
+        <ul class="g-readings__lines">
+          <li>Anything else in your Gaia app: your daily energy checks, journal, messages, courses or bookings.</li>
+          <li>Your Gaia account itself. Their system knows you only as their client; Gaia never sends them your member details.</li>
+        </ul>
+        <p class="g-readings__muted">Gaia keeps no copy of the readings and no AI reads the values. Stop sharing below at any time; they are told the same minute.</p>
+      </div>
 
       ${summary.headline ? `<div class="g-readings__summary">
         <p class="g-readings__kicker">In short</p>
@@ -397,6 +410,11 @@
           const tool = btn.getAttribute('data-tool') || 'chakra';
           try { window.GaiaAppShell?.go?.('wellness'); } catch { /* ignore */ }
           window.requestAnimationFrame(() => { try { window.GaiaTools?.open?.(tool); } catch { /* ignore */ } });
+          return;
+        }
+        if (action === 'whosees') {
+          const box = root.querySelector('.g-readings__whosees');
+          if (box) { box.hidden = !box.hidden; btn.setAttribute('aria-expanded', String(!box.hidden)); }
           return;
         }
         if (action === 'copy') {

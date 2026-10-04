@@ -34,7 +34,7 @@ import { attachQwenVoiceRelay, qwenRouting, issueQwenTicket, qwenVoiceConfig, vo
 import { normalizeUsage, recordUsage, recordFailure } from './assist-usage.js';
 import { toolDeclarationsFor, clientToolNames, slowToolNames, runTool } from './assist-tools.js';
 import { practitionersConfig, makePkce, authorizeUrl, rememberFlow, claimFlow,
-         exchangeCode, resolveProfile, saveToken, forgetToken, connectionStatus } from './practitioners-oauth.js';
+         exchangeCode, resolveProfile, saveToken, forgetToken, connectionStatus, practitionersBootLine } from './practitioners-oauth.js';
 import { allowSpend, callerKey, guardSubject, spendKindFor, ASSIST_MAX_PROMPT_CHARS, ASSIST_MAX_TTS_CHARS } from './assist-guard.js';
 import { deadline, idleWatch } from './provider-timeouts.js';
 import { SAFETY_FIRST, detectCrisis, crisisReply } from './assist-safety.js';
@@ -7326,6 +7326,7 @@ const server = http.createServer(async (req, res) => {
       sendJson(res, 200, {
         ok: true,
         available: cfg.enabled,
+        environment: cfg.environment,
         ...connectionStatus(member.contactId),
       }, origin);
       return;
@@ -7439,6 +7440,8 @@ server.listen(PORT, HOST, () => {
   // listen. The relay now refuses to forward a name it cannot find and says so
   // here, which is where somebody looks after changing a setting and restarting.
   {
+    { const pl = practitionersBootLine(); console[pl.level](pl.message); }
+
     const line = voiceBootLine(qwenVoiceConfig());
     console[line.level](line.message);
   }

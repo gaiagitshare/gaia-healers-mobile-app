@@ -62,20 +62,55 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const STATE_TTL_MS = 10 * 60 * 1000;      // their code is short-lived; so is our state
 const PENDING_MAX = 200;                   // a bounded map cannot be grown into a leak
 
-/** Config, read per call so a restart is all that is needed to change it. */
+/**
+ * The two Gaia Practitioners environments. Accounts, OAuth clients and tokens
+ * are separate on each: a practitioner registered on production cannot sign in
+ * on staging and vice versa. Until their production MCP exists (4 Oct 2026:
+ * staging only), Gaia points at staging.
+ */
+export const PRACTITIONERS_HOSTS = Object.freeze({
+  staging: 'https://staging.gaiapractitioners.com',
+  production: 'https://gaiapractitioners.com',
+});
+
+/**
+ * Config, read per call so a restart is all that is needed to change it.
+ *
+ * GAIA_PRACTITIONERS_ENV=staging|production picks the host; an explicit
+ * GAIA_PRACTITIONERS_OAUTH_BASE / _MCP_URL still wins, so nothing that works
+ * today changes. `warnings` names the combinations that cannot be right.
+ */
 export function practitionersConfig(env = process.env) {
-  const base = String(env.GAIA_PRACTITIONERS_OAUTH_BASE || '').trim().replace(/\/+$/, '');
+  const named = String(env.GAIA_PRACTITIONERS_ENV || '').trim().toLowerCase();
+  const known = Object.prototype.hasOwnProperty.call(PRACTITIONERS_HOSTS, named) ? named : null;
+  const base = String(env.GAIA_PRACTITIONERS_OAUTH_BASE || (known ? PRACTITIONERS_HOSTS[known] : '')).trim().replace(/\/+$/, '');
+  const mcpUrl = String(env.GAIA_PRACTITIONERS_MCP_URL || (base ? `${base}/api/mcp` : '')).trim();
+  const detected = Object.entries(PRACTITIONERS_HOSTS).find(([, host]) => host === base)?.[0] || (base ? 'custom' : null);
+  const warnings = [];
+  if (named && !known) warnings.push(`GAIA_PRACTITIONERS_ENV=${named} is not staging or production`);
+  if (known && detected && detected !== 'custom' && detected !== known) warnings.push(`GAIA_PRACTITIONERS_ENV=${known} but GAIA_PRACTITIONERS_OAUTH_BASE is the ${detected} host`);
+  if (base && mcpUrl && !mcpUrl.startsWith(base + '/')) warnings.push('GAIA_PRACTITIONERS_MCP_URL is not under GAIA_PRACTITIONERS_OAUTH_BASE');
+  if (base && !/^https:\/\//.test(base)) warnings.push('GAIA_PRACTITIONERS_OAUTH_BASE is not https');
   return {
     enabled: env.GAIA_PRACTITIONERS_ENABLED === 'true'
       && Boolean(env.GAIA_PRACTITIONERS_CLIENT_ID)
       && Boolean(base),
+    environment: known || detected,
+    warnings,
     base,
-    mcpUrl: String(env.GAIA_PRACTITIONERS_MCP_URL || (base ? `${base}/api/mcp` : '')).trim(),
+    mcpUrl,
     clientId: env.GAIA_PRACTITIONERS_CLIENT_ID || '',
     clientSecret: env.GAIA_PRACTITIONERS_CLIENT_SECRET || '',
     redirectUri: String(env.GAIA_PRACTITIONERS_REDIRECT_URI || '').trim(),
     scope: String(env.GAIA_PRACTITIONERS_SCOPE || 'mcp.read').trim(),
   };
+}
+
+/** One log line at boot: which environment, never a secret. */
+export function practitionersBootLine(cfg = practitionersConfig()) {
+  if (!cfg.enabled) return { level: 'log', message: '[Gaia Practitioners] OFF' + (cfg.warnings.length ? ' — ' + cfg.warnings.join('; ') : '') };
+  return { level: cfg.warnings.length ? 'warn' : 'log',
+           message: `[Gaia Practitioners] ON { environment: '${cfg.environment}', base: '${cfg.base}' }` + (cfg.warnings.length ? ' — ' + cfg.warnings.join('; ') : '') };
 }
 
 // ── PKCE ───────────────────────────────────────────────────────────────────

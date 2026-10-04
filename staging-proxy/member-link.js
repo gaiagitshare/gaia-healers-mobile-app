@@ -37,6 +37,15 @@ const AUDIT_MAX = 5000;
 export function memberReadingsEnabled(env = process.env) {
   return env.GAIA_MEMBER_READINGS_ENABLED === 'true';
 }
+/**
+ * While the link is being proven on staging, only named members see it:
+ * GAIA_MEMBER_READINGS_MEMBERS is a comma-separated list of Gaia member ids.
+ * Empty or unset = every signed-in member (the eventual state).
+ */
+export function memberAllowed(memberId, env = process.env) {
+  const list = String(env.GAIA_MEMBER_READINGS_MEMBERS || '').split(',').map((s) => s.trim()).filter(Boolean);
+  return list.length === 0 || list.includes(String(memberId || ''));
+}
 
 // ── store ─────────────────────────────────────────────────────────────────
 function load(file = LINK_FILE) {

@@ -33,7 +33,7 @@ import { classifyMembershipEvent, membershipFromEvent } from './membership/event
 import { attachQwenVoiceRelay, qwenRouting, issueQwenTicket, qwenVoiceConfig, voiceBootLine } from './qwen-voice-relay.js';
 import { normalizeUsage, recordUsage, recordFailure } from './assist-usage.js';
 import { toolDeclarationsFor, clientToolNames, slowToolNames, runTool, modelView } from './assist-tools.js';
-import { memberReadingsEnabled, mintCode, redeemCode, revokeLink, linkStatus, linkFor, partnerAuthorized, memberReadings, notifyPartnerUnlink } from './member-link.js';
+import { memberReadingsEnabled, memberAllowed, mintCode, redeemCode, revokeLink, linkStatus, linkFor, partnerAuthorized, memberReadings, notifyPartnerUnlink } from './member-link.js';
 import { practitionersConfig, makePkce, authorizeUrl, rememberFlow, claimFlow,
          exchangeCode, resolveProfile, saveToken, forgetToken, connectionStatus, practitionersBootLine } from './practitioners-oauth.js';
 import { allowSpend, callerKey, guardSubject, spendKindFor, ASSIST_MAX_PROMPT_CHARS, ASSIST_MAX_TTS_CHARS } from './assist-guard.js';
@@ -7446,6 +7446,9 @@ const server = http.createServer(async (req, res) => {
       // The member → us. Identity from the session cookie, as everywhere else.
       const member = sessionMemberContext(req);
       if (!member?.contactId) { sendJson(res, 401, { ok: false, error: 'not_signed_in' }, origin); return; }
+      // Not on the allow-list: the feature does not exist for this member, so
+      // the app shows nothing (the panel renders only on a 200).
+      if (!memberAllowed(member.contactId)) { sendJson(res, 404, { ok: false, error: 'Not found' }, origin); return; }
       const cfg = practitionersConfig();
       if (req.method === 'GET' && sub === 'member-link/status') {
         sendJson(res, 200, { ok: true, available: cfg.enabled, environment: cfg.environment, ...linkStatus(member.contactId) }, origin); return;

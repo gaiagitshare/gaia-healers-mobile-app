@@ -216,3 +216,14 @@ test('memberBackend: staging by default, production host for the production envi
   assert.equal(ml.memberBackend({ environment: 'production' }, {}), 'https://backend.gaiapractitioners.com');
   assert.equal(ml.memberBackend({ environment: 'production' }, { GAIA_PRACTITIONERS_MEMBER_BACKEND: 'https://x.example/' }), 'https://x.example');
 });
+
+test('the allow-list: named members see the feature, everyone else gets 404 (so the panel stays hidden)', async () => {
+  assert.equal(ml.memberAllowed('x', {}), true, 'unset = everyone');
+  assert.equal(ml.memberAllowed('x', { GAIA_MEMBER_READINGS_MEMBERS: 'a, x ,b' }), true);
+  assert.equal(ml.memberAllowed('y', { GAIA_MEMBER_READINGS_MEMBERS: 'a,x' }), false);
+  process.env.GAIA_MEMBER_READINGS_MEMBERS = 'member-A';
+  try {
+    assert.equal((await call('/api/practitioners/member-link/status', { headers: { cookie: session('member-Z') } })).status, 404);
+    assert.equal((await call('/api/practitioners/member-link/status', { headers: { cookie: session('member-A') } })).status, 200);
+  } finally { delete process.env.GAIA_MEMBER_READINGS_MEMBERS; }
+});

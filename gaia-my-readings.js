@@ -313,12 +313,27 @@
       lastSummary = r.body.summary || null; lastReadings = r.body;
       root.innerHTML = readingsCard(r.body);
       pickOut(root, r.body.series || []);
-      // Opened: the newest reading is now seen, so the nudge and the dot go.
-      if (r.body.latest?.scanned_at) { setNewReading(false); api('/api/practitioners/member-link/seen', { method: 'POST', body: { scanned_at: r.body.latest.scanned_at } }).catch(() => {}); }
+      // Seen means seen: recorded only once the card is actually on screen
+      // (the script runs on every view of the shell, not just You).
+      watchSeen(root);
       return;
     }
     if (r.body.error === 'member_not_linked' || r.body.error === 'link_revoked') { root.innerHTML = consentCard({ ...status, linked: false }); return; }
     root.innerHTML = note('Your readings are not available right now. Please try again in a moment.', { id: 'refresh', label: 'Try again' });
+  }
+
+  let seenObserver = null, seenFor = null;
+  function markSeenNow() {
+    const d = lastReadings?.latest?.scanned_at;
+    if (!d || seenFor === d) return;
+    seenFor = d; setNewReading(false);
+    api('/api/practitioners/member-link/seen', { method: 'POST', body: { scanned_at: d } }).catch(() => {});
+  }
+  function watchSeen(root) {
+    if (seenObserver) { seenObserver.disconnect(); seenObserver = null; }
+    if (!('IntersectionObserver' in window)) { if (root.offsetParent !== null) markSeenNow(); return; }
+    seenObserver = new IntersectionObserver((entries) => { if (entries.some((e) => e.isIntersecting)) { markSeenNow(); seenObserver.disconnect(); seenObserver = null; } }, { threshold: 0.2 });
+    seenObserver.observe(root);
   }
 
   /** Bring the card into view and let it glow for a moment (Assist "open my readings", or ?section=readings). */

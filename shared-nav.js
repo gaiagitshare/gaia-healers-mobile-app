@@ -6,7 +6,7 @@
   if (!window.location.hash) window.scrollTo({ top: 0, left: 0, behavior: 'instant' });
 
   const tabs = [
-    { id: 'today', href: 'home.html?view=today', label: 'Today', icon: 'ph-sun' },
+    { id: 'daily', href: 'home.html?view=daily', label: 'Today', icon: 'ph-sun' },
     { id: 'wellness', href: 'home.html?view=wellness', label: 'Energy', icon: 'ph-sparkle' },
     { id: 'academy', href: 'home.html?view=academy', label: 'Academy', icon: 'ph-graduation-cap' },
     { id: 'community', href: 'home.html?view=community', label: 'Community', icon: 'ph-users-three' },
@@ -20,7 +20,7 @@
   // bookmarks resolve to a screen with the correct tab active. Canonical homes
   // are built stage by stage; until then the child screens still render in place.
   const VIEW_TO_TAB = {
-    today: 'today',
+    daily: 'daily',
     wellness: 'wellness', biowell: 'wellness', chakras: 'wellness',
     academy: 'academy',
     community: 'community', events: 'community', directory: 'community', inbox: 'community',

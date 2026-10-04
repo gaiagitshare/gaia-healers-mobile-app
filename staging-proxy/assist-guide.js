@@ -2,7 +2,8 @@
 (function (root) {
   'use strict';
   const screens = Object.freeze({
-    today: 'Today: member dashboard and useful next steps',
+    today: 'Home: the member dashboard (greeting, what is new, your access, next steps); the centre button of the bar',
+    daily: 'Today: the day itself -- your daily energy check, today\u2019s sky, your readings shortcut, your next booking',
     journey: 'Journey: personal Gaia journey',
     wellness: 'Energy: wellness tools',
     academy: 'Academy: member courses, more courses and library; access depends on actual member grants. Course videos PLAY in the app when available; portal-only courses open the education portal. Browse cards and open a course for details; never claim an enrolled course exists without verified grants',

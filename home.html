@@ -69,7 +69,7 @@
   <link rel="stylesheet" href="gaia-superapp.css?v=20260925c" />
   <link rel="stylesheet" href="gaia-fit.css?v=20260928v" />
   <link rel="stylesheet" href="gaia-journey.css?v=20261002b" />
-  <link rel="stylesheet" href="gaia-avatar.css?v=20261004f" />
+  <link rel="stylesheet" href="gaia-avatar.css?v=20261004g" />
   <link rel="stylesheet" href="gaia-app-v3.css?v=20260928b" />
   <link rel="stylesheet" href="gaia-app-v3-today-energy.css?v=20260928a" />
   <link rel="stylesheet" href="gaia-app-v3-learn-connect.css?v=20261004c" />
@@ -97,6 +97,18 @@
       </header>
 
       <main class="gaia-main gaia-main--today g-home" id="home-superapp" aria-live="polite"></main>
+    </section>
+
+    <!-- Today: the day itself. Home (the centre button) is the dashboard;
+         this tab is what today asks for -- the daily energy check, today's
+         sky, the readings shortcut, the next booking. -->
+    <section class="gaia-screen" data-screen="daily" aria-label="Today">
+      <header class="g-topbar">
+        <button type="button" class="g-topbar__nav" data-app-nav-btn aria-label="Home"><i class="ph ph-house" aria-hidden="true"></i></button>
+        <a href="home.html?view=today" class="g-topbar__brand g-topbar__brand--stack"><img src="assets/gaia-mark.svg" alt="" /><span>Gaia Healers</span></a>
+        <div class="g-topbar__actions gaia-header-actions" data-gaia-header-actions></div>
+      </header>
+      <main class="gaia-main gaia-main--today g-home" id="daily-superapp" aria-live="polite"></main>
     </section>
 
     <section class="gaia-screen" data-screen="events" aria-label="Events">
@@ -430,8 +442,8 @@
     <!-- Admin is NOT part of the public app. It lives on a separate,
          password-gated surface served by the proxy: api.gaiahealers.app/admin -->
   </div>
-  <script defer src="shared-nav.js?v=20261004a"></script>
-  <script defer src="gaia-realtime-voice.js?v=20260928q"></script>
+  <script defer src="shared-nav.js?v=20261004b"></script>
+  <script defer src="gaia-realtime-voice.js?v=20261004a"></script>
   <script defer src="gaia-membership-ui.js?v=20261004a"></script>
   <script defer src="gaia-app-guard.js"></script>
   <script defer src="gaia-journey.js?v=20261002a"></script>
@@ -449,8 +461,8 @@
   <script defer src="gaia-toolkit.js?v=20260907d"></script>
   <script defer src="gaia-store.js?v=20260907a"></script>
   <script defer src="staging-proxy/assist-guide.js"></script>
-  <script defer src="gaia-ui.js?v=20261004b"></script>
-  <script defer src="gaia-superapp.js?v=20261004b"></script>
+  <script defer src="gaia-ui.js?v=20261004c"></script>
+  <script defer src="gaia-superapp.js?v=20261004c"></script>
   <script defer src="vendor/leaflet/leaflet.js?v=1.9.4"></script>
   <script defer src="vendor/leaflet/markercluster.js?v=1.5.3"></script>
   <script defer src="gaia-directory.js?v=20260820r"></script>
@@ -465,12 +477,12 @@
   <script src="gaia-install.js?v=20260820a" defer></script>
   <script src="gaia-practice.js?v=20260818a" defer></script>
   <script src="gaia-practitioner.js?v=20261004b" defer></script>
-  <script src="gaia-my-readings.js?v=20261004o" defer></script>
+  <script src="gaia-my-readings.js?v=20261004p" defer></script>
   <script src="gaia-sky.js?v=20260907b" defer></script>
   <script src="gaia-numerology.js?v=20260907c" defer></script>
   <script src="gaia-push.js?v=20260822a" defer></script>
   <!-- Gaia as a character: a layer over Assist, voice and navigation; nothing of its own -->
-  <script src="gaia-avatar.js?v=20261004f" defer></script>
+  <script src="gaia-avatar.js?v=20261004g" defer></script>
   <script src="gaia-myevents.js?v=20260925d" defer></script>
   <script src="gaia-myschedule.js?v=20260819an" defer></script>
   <script src="gaia-people.js?v=20260818a" defer></script>

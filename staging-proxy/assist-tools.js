@@ -159,8 +159,8 @@ export const TOOLS = [
     parameters: {
       type: 'object',
       properties: {
-        screen: { type: 'string', description: 'today=Home, academy=Courses, community=Community, events, bookings, inbox, directory=Find a Healer, store, profile, wellness=Energy.',
-                  enum: ['today', 'academy', 'community', 'events', 'bookings', 'inbox', 'directory', 'store', 'profile', 'wellness'] },
+        screen: { type: 'string', description: 'today=Home (dashboard), daily=Today (daily energy check, today\'s sky, readings shortcut, next booking), academy=Courses, community=Community, events, bookings, inbox, directory=Find a Healer, store, profile, wellness=Energy.',
+                  enum: ['today', 'daily', 'academy', 'community', 'events', 'bookings', 'inbox', 'directory', 'store', 'profile', 'wellness'] },
         tab: { type: 'string', description: 'Optional tab within the screen.' },
         tool: { type: 'string', description: 'Optional Energy tool to open on the wellness screen.',
                 enum: ['pulse', 'breath', 'numerology', 'sky', 'colour', 'chakra', 'match', 'cosmic', 'moon'] },
@@ -185,8 +185,8 @@ export const TOOLS = [
         parameters: {
           type: 'object',
           properties: {
-            screen: { type: 'string', description: 'today=Home, academy=Courses, community=Community, events, bookings, inbox, directory=Find a Healer, store, profile, wellness=Energy, practice=your clients and their readings.',
-                      enum: ['today', 'academy', 'community', 'events', 'bookings', 'inbox', 'directory', 'store', 'profile', 'wellness', 'practice'] },
+            screen: { type: 'string', description: 'today=Home (dashboard), daily=Today (daily energy check, today\'s sky, readings shortcut, next booking), academy=Courses, community=Community, events, bookings, inbox, directory=Find a Healer, store, profile, wellness=Energy, practice=your clients and their readings.',
+                      enum: ['today', 'daily', 'academy', 'community', 'events', 'bookings', 'inbox', 'directory', 'store', 'profile', 'wellness', 'practice'] },
             tab: { type: 'string', description: 'Optional tab within the screen.' },
             tool: { type: 'string', description: 'Optional Energy tool to open on the wellness screen.',
                     enum: ['pulse', 'breath', 'numerology', 'sky', 'colour', 'chakra', 'match', 'cosmic', 'moon'] },

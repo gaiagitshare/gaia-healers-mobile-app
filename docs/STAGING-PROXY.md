@@ -435,6 +435,17 @@ provider, the practitioner scan tools give the model only "the reading is on
 screen"; the Practice card still shows everything. Set `on` once a BAA-covered
 provider serves those turns.
 
+### Home and Today (app screens)
+
+Since 4 Oct (evening) the centre of the tab bar is **Home** (view `today`:
+the dashboard — greeting, what is new, your access, next steps, and a door
+to Today) and the first tab is **Today** (view `daily`: the day itself — the
+daily energy check, today's sky, the readings shortcut, the next booking).
+`assist-guide.js` lists both; `navigate` accepts `daily`; the voice page too.
+`renderToday()` in `gaia-superapp.js` lays out the hosts; each panel is still
+owned by the file that renders it (`gaia-daily.js`, `gaia-sky.js`,
+`gaia-my-readings.js`).
+
 ### Gaia Avatar (app layer, no server part)
 
 `gaia-avatar.js` + `gaia-avatar.css` draw the approved character (six

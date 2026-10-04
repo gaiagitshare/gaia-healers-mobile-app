@@ -643,7 +643,7 @@
     // calls it as a functionCall; handleGeminiMessage routes it to
     // window.GaiaAppShell.go(), then sends a toolResponse back so the model
     // can confirm the move aloud.
-    const NAVIGATE_SCREENS = ['today', 'academy', 'community', 'events', 'bookings', 'inbox', 'directory', 'store', 'profile', 'wellness', 'practice'];
+    const NAVIGATE_SCREENS = ['today', 'daily', 'academy', 'community', 'events', 'bookings', 'inbox', 'directory', 'store', 'profile', 'wellness', 'practice'];
     const PRACTICE_CARDS = ['latest', 'trend', 'compare'];
     const PRACTICE_SECTIONS = ['attention', 'followups', 'clients'];
 

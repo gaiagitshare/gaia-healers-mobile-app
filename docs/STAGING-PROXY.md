@@ -342,6 +342,29 @@ dropped socket is never retried on the other account. The usage record's
 `account` field says which one served a session, so the two bills stay
 attributable.
 
+### Gaia Practitioners — switching from their staging to production
+
+The integration (OAuth 2 + PKCE, MCP tools, the Practice screen) points at
+`staging.gaiapractitioners.com` until the partner rolls MCP out to production.
+Accounts, OAuth clients and tokens are separate per environment. The switch is
+three config values and a restart:
+
+1. Register Gaia Assist on production (their `/docs/mcp`) → a new client id and
+   secret. Put them in the proxy `.env` as `GAIA_PRACTITIONERS_CLIENT_ID` /
+   `GAIA_PRACTITIONERS_CLIENT_SECRET` (prompted, never pasted in chat).
+2. Set `GAIA_PRACTITIONERS_ENV=production` and remove the explicit
+   `GAIA_PRACTITIONERS_OAUTH_BASE` / `GAIA_PRACTITIONERS_MCP_URL` lines (or set
+   them to the production host; an explicit URL always wins and a contradiction
+   is logged at boot).
+3. `node /root/gaia-staging-proxy/tools/practitioners-readiness.mjs --probe`
+   must print READY (three plain HTTPS GETs, no credentials, nothing billed),
+   then restart the proxy. Existing staging connections become invalid; the
+   Practice screen shows Connect again and practitioners connect with their
+   production account.
+
+`GET /api/practitioners/status` returns `environment` so the app can tell which
+one a connection belongs to.
+
 ### Usage accounting
 
 Every text reply, failed attempt and voice session is recorded, counts only,

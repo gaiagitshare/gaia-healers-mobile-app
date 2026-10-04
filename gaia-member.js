@@ -140,16 +140,18 @@ body.gaia-booking-open{overflow:hidden;}
 
   async function loadMember() {
     if (window.GaiaJourney && !await window.GaiaJourney.check()) return;
-    const [profile, access, appts, notif, devices, purchases, forms, courses, products, activity, events] = await Promise.all([
+    const [profile, access, appts, notif, devices, purchases, forms, courses, products, activity, events, prefs] = await Promise.all([
       getJson('/api/member/profile'), getJson('/api/member/access'),
       getJson('/api/member/appointments'), getJson('/api/member/notifications'),
       getJson('/api/member/devices'), getJson('/api/member/purchases'),
       getJson('/api/member/forms'), getJson('/api/member/courses'),
       getJson('/api/member/products'), getJson('/api/member/activity'),
       getJson('/api/member/events'),
+      // The few things a member folded or dismissed, kept on the server.
+      getJson('/api/member/prefs'),
     ]);
     state.authed = !!(profile && profile.ok && profile.authenticated);
-    state.data = { profile, access, appts, notif, devices, purchases, forms, courses, products, activity, events };
+    state.data = { profile, access, appts, notif, devices, purchases, forms, courses, products, activity, events, prefs };
     document.dispatchEvent(new CustomEvent('gaia:member', { detail: state.data }));
     render();
   }
@@ -830,13 +832,18 @@ body.gaia-booking-open{overflow:hidden;}
     ])));
 
     // For Practitioners \u2014 adaptive: acquisition for seekers, tools for practitioners.
-    cards.push(p.practitioner
-      ? gMeCard('For practitioners', gRows([
-          gRowLink('Practitioner tools', 'Open \u2192', 'https://nextlevel.gaiahealers.com', true),
-          gRowLink('Your public listing', 'gaiapractitioners.com', 'https://gaiapractitioners.com', true),
-        ]))
-      : gMeCard('Become a practitioner', '<p class="g-empty">List your practice on Gaia Healers and get discovered by seekers looking for your work.</p>'
-        + '<div class="g-card__actions"><a class="g-btn g-btn--secondary g-btn--sm" href="https://gaiapractitioners.com/register" target="_blank" rel="noopener noreferrer">List your practice \u2192</a></div>'));
+    // A seeker who said "Not now" once does not see the pitch again (server preference).
+    const dismissedPitch = Boolean(d.prefs && d.prefs.prefs && d.prefs.prefs.practitioner_card_dismissed);
+    if (p.practitioner) {
+      cards.push(gMeCard('For practitioners', gRows([
+        gRowLink('Practitioner tools', 'Open \u2192', 'https://nextlevel.gaiahealers.com', true),
+        gRowLink('Your public listing', 'gaiapractitioners.com', 'https://gaiapractitioners.com', true),
+      ])));
+    } else if (!dismissedPitch) {
+      cards.push(gMeCard('Become a practitioner', '<p class="g-empty">List your practice on Gaia Healers and get discovered by seekers looking for your work.</p>'
+        + '<div class="g-card__actions"><a class="g-btn g-btn--secondary g-btn--sm" href="https://gaiapractitioners.com/register" target="_blank" rel="noopener noreferrer">List your practice \u2192</a>'
+        + '<button type="button" class="g-btn g-btn--ghost g-btn--sm" data-dismiss-practitioner>Not now</button></div>'));
+    }
 
     cards.push(gMeCard('Account', gRows([
       gRowLink('Store & memberships', 'Shop →', 'home.html?view=store', false),
@@ -848,6 +855,11 @@ body.gaia-booking-open{overflow:hidden;}
     // just created by scanning their badge is the first thing they see here.
     box.insertAdjacentHTML('afterbegin', '<div data-badgecard-host></div>');
     window.GaiaMembershipUI?.bind?.(box);
+    box.querySelector('[data-dismiss-practitioner]')?.addEventListener('click', (e) => {
+      e.currentTarget.closest('.g-card')?.remove();
+      if (state.data.prefs && state.data.prefs.prefs) state.data.prefs.prefs.practitioner_card_dismissed = true;
+      fetch(proxyBase() + '/api/member/prefs', { method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json', Accept: 'application/json' }, body: JSON.stringify({ prefs: { practitioner_card_dismissed: true } }) }).catch(() => {});
+    });
     document.dispatchEvent(new CustomEvent('gaia:profile-rendered'));
   }
 

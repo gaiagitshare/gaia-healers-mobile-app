@@ -432,7 +432,8 @@ booleans per member (`member-prefs.js`, `PREF_KEYS`), kept server-side in
 `data/member-prefs.json` (0600) so every device agrees. Unknown keys and
 non-booleans are dropped. Today: `next_level_collapsed` (the Next level card
 on You folded to one line) and `readings_explainer_collapsed` ("What these
-mean" on My readings folded).
+mean" on My readings folded) and `practitioner_card_dismissed` ("Become a
+practitioner" on You dismissed with Not now).
 
 ### Usage accounting
 

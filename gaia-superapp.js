@@ -859,9 +859,11 @@
         ? '<div data-daily-host></div>'
           + eventFeatureCarousel()
           + primaryMemberAction()
+          // The next booking sits above the generic service tiles, not below
+          // them -- unless the primary card above is already that booking.
+          + (courseGrants()[0]?.openUrl ? nextBookingCard() : '')
           + '<section class="g-super-services"><div class="g-super-section-head"><div><p class="g-super-kicker">Your access</p><h2>Everything Gaia Healers</h2></div><a href="home.html?view=profile">Your account</a></div><div class="g-super-services__grid">' + services + '</div></section>'
           + '<div data-sky-host></div>'
-          + nextBookingCard()
           + '<div id="home-book"></div>'
           // The upsell goes last, after everything a member already pays for.
           // It used to sit fourth, between two sections both called "Your

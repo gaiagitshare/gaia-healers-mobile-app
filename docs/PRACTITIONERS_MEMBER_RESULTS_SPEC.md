@@ -9,8 +9,8 @@ staging tools are pending.
 
 - **The member asks for a code; the practitioner enters it.** Asking is the
   HIPAA authorization and is timestamped (`consent_code_issued`). Code: 8
-  characters from an unambiguous alphabet, **15-minute TTL, single use**. A
-  typo can only fail.
+  characters from an unambiguous alphabet, **24-hour TTL (their request, 4 Oct),
+  single use, case-insensitive**. A typo can only fail.
 - **Their server redeems it against Gaia:** `POST https://api.gaiahealers.app/api/practitioners/member-link/redeem
   { code, customer_id, practitioner_id, practitioner_name? }` with
   `Authorization: Bearer <shared link secret>` → `{ gaia_member_id, status: "confirmed", linked_at }`.
@@ -22,6 +22,12 @@ staging tools are pending.
   practitioner scan tools no longer narrate values (the Practice card shows
   them; the model is told only that the reading is on screen), and the
   member's *My readings* screen involves no AI at all.
+- **Their side, as built (4 Oct):** all on `https://staging-backend.gaiapractitioners.com`
+  with Gaia's API key as a bearer — `POST /api/gaia/member-token { gaiaMemberId }`
+  → 1-hour token for that one member, used on their member-only MCP
+  `/api/member-mcp`; `GET /api/gaia/member-links/{gaia_member_id}` (status);
+  `DELETE /api/gaia/member-links/{gaia_member_id}` (unlink). Their revoke call
+  to us sends `{ gaia_member_id, customer_id, practitioner_id }` — accepted.
 - **Test member for their staging link:** Gaia member id `sgWsiYukX76ekCrxoM1E`.
 
 ## 1. Goal

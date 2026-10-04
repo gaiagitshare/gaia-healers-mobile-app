@@ -372,17 +372,24 @@ one a connection belongs to.
 
 - Member (session cookie): `GET /api/practitioners/member-link/status`,
   `POST /api/practitioners/member-link/code` (asking is the consent; 8-char
-  code, 15 min, single use), `POST /api/practitioners/member-link/unlink`,
+  code, 24 h, single use), `POST /api/practitioners/member-link/unlink`,
   `GET /api/practitioners/my-readings`.
 - Their server (`Authorization: Bearer $GAIA_PRACTITIONERS_LINK_SECRET`, ≥16
   chars, agreed out of band): `POST /api/practitioners/member-link/redeem
   { code, customer_id, practitioner_id, practitioner_name? }` →
   `{ gaia_member_id, status: "confirmed" }`; `POST /api/practitioners/member-link/revoke
   { customer_id | gaia_member_id }`.
-- Reads use Gaia's server credential (`GAIA_PRACTITIONERS_SERVER_CLIENT_ID` /
-  `_SECRET`, client-credentials, scope `members.read`; falls back to the app
-  client) against their member-only tools. Store: `data/member-links.json`
-  (codes, links, audit — never scan data), 0600.
+- Reads go through **their backend** with Gaia's API key
+  (`GAIA_PRACTITIONERS_MEMBER_API_KEY`, bearer; host
+  `GAIA_PRACTITIONERS_MEMBER_BACKEND`, default
+  `https://staging-backend.gaiapractitioners.com`, production
+  `https://backend.gaiapractitioners.com`): `POST /api/gaia/member-token
+  { gaiaMemberId }` → a one-hour token for that member → their member-only MCP
+  at `/api/member-mcp`; `GET`/`DELETE /api/gaia/member-links/{gaia_member_id}`
+  for status / unlink. Without the key the OAuth server credential
+  (`GAIA_PRACTITIONERS_SERVER_CLIENT_ID`/`_SECRET`, `members.read`) is the
+  fallback. Store: `data/member-links.json` (codes, links, audit — never scan
+  data), 0600. Codes last **24 hours**, single use, case-insensitive.
 
 `GAIA_SCAN_NARRATION` (default off): while no BAA covers the voice/text
 provider, the practitioner scan tools give the model only "the reading is on

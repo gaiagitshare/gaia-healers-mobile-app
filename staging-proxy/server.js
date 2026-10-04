@@ -7463,7 +7463,7 @@ const server = http.createServer(async (req, res) => {
         console.log('[Gaia Practitioners] member link revoked by member', { member: member.contactId, revoked: out.revoked });
         // Their copy is told after ours is already revoked: a member who stops
         // sharing has stopped sharing even if their server is down right now.
-        if (out.revoked && out.customer_id) notifyPartnerUnlink(cfg, out.customer_id).catch(() => {});
+        if (out.revoked) notifyPartnerUnlink(cfg, { memberId: member.contactId, customerId: out.customer_id }).catch(() => {});
         sendJson(res, 200, { ok: true, ...out }, origin);
         return;
       }

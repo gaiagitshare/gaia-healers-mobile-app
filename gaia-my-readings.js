@@ -161,14 +161,16 @@
       const l = lastReadings?.latest;
       const nums = l && (typeof l.energy === 'number' || typeof l.stress === 'number')
         ? `<span class="g-readings-nudge__nums">${typeof l.energy === 'number' ? `<b>${esc(fmt(l.energy))}</b> energy` : ''}${typeof l.energy === 'number' && typeof l.stress === 'number' ? ' · ' : ''}${typeof l.stress === 'number' ? `<b>${esc(fmt(l.stress, 2))}</b> stress` : ''}</span>` : '';
-      el.innerHTML = fresh
+      const html = fresh
         ? `<i class="ph ph-pulse" aria-hidden="true"></i><span><strong>A new reading from your practitioner</strong>${scannedAt ? ` · ${esc(when(scannedAt))}` : ''}${nums}</span><em>Open</em>`
         : `<i class="ph ph-pulse" aria-hidden="true"></i><span><strong>My readings</strong>${scannedAt ? ` · latest ${esc(when(scannedAt))}` : ''}${nums}</span><em>Open</em>`;
+      // Only rewrite when something changed: the observer watches the screen's children and a rewrite must never re-trigger it.
+      if (el.innerHTML !== html) el.innerHTML = html;
     };
     place();
     if (linked && !nudgeObserver) {
       const root = document.getElementById('daily-superapp') || document.getElementById('home-superapp');
-      if (root && 'MutationObserver' in window) { nudgeObserver = new MutationObserver(place); nudgeObserver.observe(root, { childList: true, subtree: true }); }
+      if (root && 'MutationObserver' in window) { nudgeObserver = new MutationObserver(place); nudgeObserver.observe(root, { childList: true }); }   // childList only: never the row's own contents
     }
     if (!linked && nudgeObserver) { nudgeObserver.disconnect(); nudgeObserver = null; }
   }

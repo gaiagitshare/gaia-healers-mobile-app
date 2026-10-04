@@ -50,6 +50,10 @@ test('the daily energy check and the sky render on Today only; Home has a door t
   assert.match(sa, /renderToday\(\);\n/, 'Today is drawn whenever Home is');
   const readings = read('gaia-my-readings.js');
   assert.match(readings, /#daily-superapp \[data-today-readings\]/, 'the readings shortcut sits on Today');
+  // The observer that re-places the row must never watch the row's own contents: a rewrite re-triggered it forever (seen live, 4 Oct).
+  assert.match(readings, /nudgeObserver\.observe\(root, \{ childList: true \}\)/);
+  assert.doesNotMatch(readings, /subtree: true/);
+  assert.match(readings, /if \(el\.innerHTML !== html\) el\.innerHTML = html;/);
 });
 
 test('the avatar: Today in the bubble and the tour, a local greeting line, and glances toward the next tab', () => {

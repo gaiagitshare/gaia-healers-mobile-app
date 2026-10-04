@@ -384,6 +384,21 @@ body.gaia-v2 [data-screen="store"] #store-memberships .g-tier__access-all a { co
 /* ---------- 5. You (profile) ------------------------------------------- */
 
 body.gaia-v2 [data-screen="profile"] #member-me { gap: 16px; }
+body.gaia-v2 [data-screen="profile"] #member-me > div:empty { display: none; }
+/* From tablet width the account cards sit two abreast: most of them are
+   short (an empty state and a button), and a single 1300px column of them
+   put My readings a screen and a half down. Pass, access and next level keep
+   the full width; so does My readings above. */
+@media (min-width: 760px) {
+  body.gaia-v2 [data-screen="profile"] #member-me { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: stretch; }
+  body.gaia-v2 [data-screen="profile"] #member-me > .g-pass,
+  body.gaia-v2 [data-screen="profile"] #member-me > .g-ma,
+  body.gaia-v2 [data-screen="profile"] #member-me > .g-next,
+  body.gaia-v2 [data-screen="profile"] #member-me > .g-card--feature { grid-column: 1 / -1; }
+  body.gaia-v2 [data-screen="profile"] #member-me > .g-card { margin: 0; }
+}
+body.gaia-v2 [data-screen="profile"] #member-readings { margin-bottom: 16px; }
+body.gaia-v2 [data-screen="profile"] #member-readings[hidden] { display: none; }
 /* The header card sat 30px above the first card while the cards below
    are 16px apart; one rhythm down the screen. */
 body.gaia-v2 [data-screen="profile"] .g-page__head--profile { margin-bottom: 6px; }
@@ -1155,7 +1170,8 @@ body.gaia-v2 [data-screen="store"] #store-memberships .g-tier__flag {
 .g-readings__first { background: color-mix(in srgb, var(--g-accent) 8%, var(--g-surface-hi)); border: 1px solid color-mix(in srgb, var(--g-accent) 28%, var(--g-line)); border-radius: var(--g-r-md); padding: 12px 14px; }
 .g-readings__first .g-readings__kicker { color: var(--g-accent); }
 /* Today nudge and the dot on the You tab: "a newer reading exists", nothing more */
-.g-readings-nudge { display: flex; align-items: center; gap: 12px; margin: 0 0 14px; padding: 12px 14px; border-radius: var(--g-r-md); background: color-mix(in srgb, var(--g-accent) 10%, var(--g-surface)); border: 1px solid color-mix(in srgb, var(--g-accent) 32%, var(--g-line)); color: var(--g-text); text-decoration: none; }
+.g-readings-nudge { display: flex; align-items: center; gap: 12px; margin: 0 0 14px; padding: 12px 14px; border-radius: var(--g-r-md); background: var(--g-surface); border: 1px solid var(--g-line); color: var(--g-text); text-decoration: none; }
+.g-readings-nudge.is-new { background: color-mix(in srgb, var(--g-accent) 10%, var(--g-surface)); border-color: color-mix(in srgb, var(--g-accent) 32%, var(--g-line)); }
 .g-readings-nudge i { font-size: 1.3rem; color: var(--g-accent); flex: none; }
 .g-readings-nudge span { flex: 1 1 auto; min-width: 0; font-size: 0.92rem; line-height: 1.35; }
 .g-readings-nudge strong { font-weight: 600; }

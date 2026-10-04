@@ -37,10 +37,13 @@ test('the tool route sends `model` beside `result`, and the voice page hands the
 test('My readings panel: present in the profile screen, script loaded, talks only to the link/readings routes, no AI', () => {
   const html = readApp('home.html');
   assert.match(html, /id="member-readings"[^>]*hidden/);
+  assert.ok(html.indexOf('id="member-readings"') < html.indexOf('id="member-me"'), 'My readings sits first inside You: it is the one thing there that changes week to week');
+
   assert.match(html, /gaia-my-readings\.js/);
   const js = readApp('gaia-my-readings.js');
   for (const route of ['/api/practitioners/member-link/status', '/api/practitioners/member-link/code', '/api/practitioners/member-link/unlink', '/api/practitioners/my-readings']) assert.ok(js.includes(route), route);
   assert.doesNotMatch(js, /api\/assist\/(chat|voice|tool)/, 'phase 1 involves no model');
+  assert.match(js, /function setTodayLink/, 'Today carries a shortcut for every linked member, lit while a reading is new');
   assert.match(js, /You can stop sharing at any time/);
   assert.match(js, /not a diagnosis/);
   assert.match(js, /credentials: 'include'/);
@@ -48,7 +51,7 @@ test('My readings panel: present in the profile screen, script loaded, talks onl
   // Graphics are drawn to scale from the server's numbers, and the summary is the server's words -- nothing is computed by a model.
   for (const piece of ['function gauge', 'function sparkline', 'function spectrum', 'r.summary', 'r.series', 'gaia:open-readings', "get('section') === 'readings'",
     // the extras: all from the same two routes and the same numbers, none from a model
-    'function centreOfTheWeek', 'function comparePicker', 'async function saveImage', 'function setNewReading', '/api/practitioners/member-link/seen', 'latest.note', 'function explainer', 'Read this first']) assert.ok(js.includes(piece), piece);
+    'function centreOfTheWeek', 'function comparePicker', 'async function saveImage', 'function setTodayLink', '/api/practitioners/member-link/seen', 'latest.note', 'function explainer', 'Read this first']) assert.ok(js.includes(piece), piece);
   assert.match(js, /const firstVisit = !status\.seen_scanned_at/, 'first visit is derived from the server, not from browser storage');
   assert.doesNotMatch(js, /fetch\([^)]*(https?:)?\/\/(?!\$\{proxyBase)/, 'the image is never uploaded anywhere: it is shared or downloaded from the device');
   const css = fs.readFileSync(new URL('../../gaia-app-v3-shop-you.css', import.meta.url), 'utf8');

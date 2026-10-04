@@ -24,7 +24,11 @@ import path from 'path';
 import { mcpCall, unwrapMcp } from './practitioners-oauth.js';
 
 export const LINK_FILE = process.env.GAIA_MEMBER_LINK_FILE || '/root/gaia-staging-proxy/data/member-links.json';
-export const CODE_TTL_MS = 15 * 60 * 1000;
+// 24 hours, at the partner's request (4 Oct): a member who is not in the
+// clinic messages the code and the practitioner may not see it for hours.
+// Still single use, still only redeemable by a practitioner against one of
+// their own customers, so the longer window adds little.
+export const CODE_TTL_MS = 24 * 60 * 60 * 1000;
 export const CODE_LENGTH = 8;
 // No 0/O/1/I/L: a code is read aloud and typed by somebody else.
 const ALPHABET = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
@@ -134,11 +138,55 @@ export function partnerAuthorized(req, env = process.env) {
   return given.length === want.length && crypto.timingSafeEqual(given, want);
 }
 
-// ── member-only reads on their MCP ────────────────────────────────────────
-// Gaia's own server credential (client-credentials, scope members.read) --
-// never a practitioner's token and never anything the browser sees.
+// ── their backend, as agreed 4 Oct 2026 ───────────────────────────────────
+// All member calls go to their backend host with Gaia's API key as a bearer:
+//   GET    /api/gaia/member-links/{gaia_member_id}     link status
+//   DELETE /api/gaia/member-links/{gaia_member_id}     unlink (our "unlink_customer_member")
+//   POST   /api/gaia/member-token { gaiaMemberId }     a 1-hour token for that ONE member
+// and the member-only MCP at /api/member-mcp, called with that member token.
+// The key is read from the environment per call and never leaves this module.
+export function memberBackend(cfg, env = process.env) {
+  const explicit = String(env.GAIA_PRACTITIONERS_MEMBER_BACKEND || '').trim().replace(/\/+$/, '');
+  if (explicit) return explicit;
+  if (cfg?.environment === 'production') return 'https://backend.gaiapractitioners.com';
+  return 'https://staging-backend.gaiapractitioners.com';
+}
+const memberApiKey = (env = process.env) => String(env.GAIA_PRACTITIONERS_MEMBER_API_KEY || '').trim();
+
+const _memberTokens = new Map();   // gaia_member_id -> { value, exp }
+export function _resetServerTokenForTest() { _serverToken = null; _memberTokens.clear(); }
+async function backendCall(cfg, method, pathname, { env = process.env, fetchImpl = fetch, body } = {}) {
+  const key = memberApiKey(env);
+  if (!key) throw Object.assign(new Error('no member api key'), { code: 'not_configured' });
+  const r = await fetchImpl(`${memberBackend(cfg, env)}${pathname}`, {
+    method, headers: { Authorization: `Bearer ${key}`, Accept: 'application/json', ...(body ? { 'Content-Type': 'application/json' } : {}) },
+    body: body ? JSON.stringify(body) : undefined, signal: AbortSignal.timeout(15000),
+  });
+  const text = await r.text();
+  let json = null; try { json = JSON.parse(text); } catch { /* not json */ }
+  if (!r.ok) throw Object.assign(new Error(`${method} ${pathname} ${r.status}`), { status: r.status, body: json, code: json?.code || json?.error || (r.status === 401 || r.status === 403 ? 'forbidden_scope' : r.status === 404 ? 'member_not_linked' : 'upstream_unavailable') });
+  return json;
+}
+/** A one-member, one-hour token from their backend; cached until shortly before expiry. */
+export async function memberToken(cfg, memberId, { env = process.env, fetchImpl = fetch, now = Date.now() } = {}) {
+  const hit = _memberTokens.get(memberId);
+  if (hit && hit.exp > now + 60_000) return hit.value;
+  const j = await backendCall(cfg, 'POST', '/api/gaia/member-token', { env, fetchImpl, body: { gaiaMemberId: memberId } });
+  const value = j?.token || j?.access_token || j?.memberToken;
+  if (!value) throw Object.assign(new Error('no token in response'), { code: 'upstream_unavailable' });
+  const ttl = Math.max(60, Number(j.expires_in || j.expiresIn || 3600)) * 1000;
+  _memberTokens.set(memberId, { value, exp: now + ttl });
+  return value;
+}
+/** Their record of the link, for reconciling ours. */
+export async function partnerLinkStatus(cfg, memberId, opts = {}) {
+  return backendCall(cfg, 'GET', `/api/gaia/member-links/${encodeURIComponent(memberId)}`, opts);
+}
+
+// ── Gaia's own OAuth client credential (members.read) — kept as the fallback
+// when no member API key is configured. Never a practitioner's token and
+// never anything the browser sees.
 let _serverToken = null;
-export function _resetServerTokenForTest() { _serverToken = null; }
 export async function serverAccessToken(cfg, env = process.env, fetchImpl = fetch) {
   if (_serverToken && _serverToken.exp > Date.now() + 30_000) return _serverToken.value;
   const clientId = env.GAIA_PRACTITIONERS_SERVER_CLIENT_ID || cfg.clientId;
@@ -177,32 +225,67 @@ function partnerError(e) {
   return Object.assign(new Error('readings_unavailable'), { code: e?.code === 'not_configured' ? 'not_configured' : 'readings_unavailable', status: 503 });
 }
 
-/** Everything the member's "My readings" screen shows, from their MCP, for one confirmed link. */
-export async function memberReadings(cfg, memberId, { env = process.env, fetchImpl = fetch, file = LINK_FILE } = {}) {
+/** The tool names their member-only MCP offers, learned once per token. */
+async function memberToolNames(cfg, token, fetchImpl) {
+  try {
+    const r = await fetchImpl(cfg.mcpUrl, { method: 'POST', headers: { 'Content-Type': 'application/json', Accept: 'application/json', Authorization: `Bearer ${token}` },
+      body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/list', params: {} }), signal: AbortSignal.timeout(15000) });
+    const j = await r.json();
+    return new Set((j?.result?.tools || j?.tools || []).map((t) => t?.name).filter(Boolean));
+  } catch { return new Set(); }
+}
+
+/**
+ * Everything the member's "My readings" screen shows, from their member-only
+ * MCP, for one confirmed link. With their API key configured the token is a
+ * one-member token from their backend; otherwise the OAuth server credential.
+ * Their member-only MCP may expose either the member-named tools we proposed
+ * or the practitioner-named ones scoped by the token; both shapes are read.
+ */
+export async function memberReadings(cfg0, memberId, { env = process.env, fetchImpl = fetch, file = LINK_FILE } = {}) {
   const link = linkFor(memberId, file);
   if (!link) throw Object.assign(new Error('member_not_linked'), { code: 'member_not_linked', status: 404 });
+  const viaKey = Boolean(memberApiKey(env));
+  const cfg = viaKey ? { ...cfg0, mcpUrl: `${memberBackend(cfg0, env)}/api/member-mcp` } : cfg0;
   let token;
-  try { token = await serverAccessToken(cfg, env, fetchImpl); } catch (e) { throw partnerError(e); }
-  const call = async (tool, args) => { try { return unwrapMcp(await mcpCall(cfg, token, tool, { gaia_member_id: memberId, ...args }, fetchImpl)); } catch (e) { throw partnerError(e); } };
-  const customer = await call('get_member_customer', {});
+  try { token = viaKey ? await memberToken(cfg0, memberId, { env, fetchImpl }) : await serverAccessToken(cfg0, env, fetchImpl); } catch (e) { throw partnerError(e); }
+  const names = await memberToolNames(cfg, token, fetchImpl);
+  const has = (n) => names.size === 0 || names.has(n);
+  const call = async (tool, args) => { try { return unwrapMcp(await mcpCall(cfg, token, tool, args, fetchImpl)); } catch (e) { throw partnerError(e); } };
+  const scoped = { gaia_member_id: memberId };
+  const byCustomer = { customerId: link.customer_id };
+  const customer = has('get_member_customer') ? await call('get_member_customer', scoped)
+    : (has('get_customer') ? await call('get_customer', byCustomer) : null);
   const [scan, trend, files] = await Promise.all([
-    call('get_member_scan', { which: 'latest' }).catch((e) => (e.code === 'member_not_linked' ? Promise.reject(e) : null)),
-    call('get_member_scan_trend', { window: '90d' }).catch(() => null),
-    call('get_member_files', {}).catch(() => null),
+    (has('get_member_scan') ? call('get_member_scan', { ...scoped, which: 'latest' }) : call('get_customer_scan', byCustomer))
+      .catch((e) => (e.code === 'member_not_linked' ? Promise.reject(e) : null)),
+    (has('get_member_scan_trend') ? call('get_member_scan_trend', { ...scoped, window: '90d' }) : call('get_scan_trend', { ...byCustomer, summary_only: true })).catch(() => null),
+    (has('get_member_files') ? call('get_member_files', scoped) : call('get_customer_files', byCustomer)).catch(() => null),
   ]);
+  // get_customer_scan answers with the whole history; take the newest.
+  const latestOf = (s) => {
+    if (!s) return null;
+    if (s.scan) return s.scan;
+    if (Array.isArray(s.scans)) return [...s.scans].sort((a, b) => String(b.scanned_at || '').localeCompare(String(a.scanned_at || '')))[0] || null;
+    return (s.scanned_at || s.labeled) ? s : null;
+  };
   const band = (b) => (b ? { lowest: b.min ?? null, highest: b.max ?? null, average: b.avg ?? null, latest: b.latest ?? null } : null);
   return {
     practitioner: { id: String(customer?.practitioner?.id ?? link.practitioner_id), name: customer?.practitioner?.name || link.practitioner_name || '' },
     linked_at: link.linked_at,
-    scans_on_file: customer?.scans_on_file ?? trend?.scanCount ?? null,
-    latest: scan?.scan ? memberScanView(scan.scan) : (scan?.scanned_at || scan?.labeled ? memberScanView(scan) : null),
+    scans_on_file: customer?.scans_on_file ?? trend?.scanCount ?? (Array.isArray(scan?.scans) ? scan.scans.length : null),
+    latest: latestOf(scan) ? memberScanView(latestOf(scan)) : null,
     trend: trend ? { energy: band(trend.summary?.energy), stress: band(trend.summary?.stress), flagged: (trend.flags || []).slice(0, 6).map((t) => ({ name: t.name, direction: t.direction, reason: t.flagReason || '' })) } : null,
     files: (files?.files || []).filter((f) => f?.shareable !== false).slice(0, 20).map((f) => ({ id: String(f.id ?? ''), name: f.name || f.filename || 'document', uploaded_at: String(f.uploaded_at || f.created_at || '').slice(0, 10), url: f.url || null })),
   };
 }
 
 /** Best effort: tell their server the member stopped sharing. Local revoke never waits on it. */
-export async function notifyPartnerUnlink(cfg, customerId, { env = process.env, fetchImpl = fetch } = {}) {
-  try { const token = await serverAccessToken(cfg, env, fetchImpl); await mcpCall(cfg, token, 'unlink_customer_member', { customer_id: customerId }, fetchImpl); return true; }
-  catch (e) { console.warn('[Gaia Practitioners] member unlink not delivered to partner', { code: e.code || null }); return false; }
+export async function notifyPartnerUnlink(cfg, { memberId, customerId }, { env = process.env, fetchImpl = fetch } = {}) {
+  try {
+    if (memberApiKey(env)) { await backendCall(cfg, 'DELETE', `/api/gaia/member-links/${encodeURIComponent(memberId)}`, { env, fetchImpl }); _memberTokens.delete(memberId); return true; }
+    const token = await serverAccessToken(cfg, env, fetchImpl);
+    await mcpCall(cfg, token, 'unlink_customer_member', { customer_id: customerId }, fetchImpl);
+    return true;
+  } catch (e) { console.warn('[Gaia Practitioners] member unlink not delivered to partner', { code: e.code || null }); return false; }
 }

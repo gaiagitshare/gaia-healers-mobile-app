@@ -13,14 +13,14 @@ const { getPrefs, setPrefs, PREF_KEYS } = await import('../member-prefs.js');
 
 test('defaults are false; only allowed boolean keys are stored; unknown keys are dropped', () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'prefs-')); const file = path.join(dir, 'p.json');
-  assert.deepEqual(getPrefs('c1', { file }), { next_level_collapsed: false, readings_explainer_collapsed: false, practitioner_card_dismissed: false });
-  assert.deepEqual(setPrefs('c1', { next_level_collapsed: true, evil: '<script>', next_level_collapsed_x: true }, { file }), { next_level_collapsed: true, readings_explainer_collapsed: false, practitioner_card_dismissed: false });
+  assert.deepEqual(getPrefs('c1', { file }), { next_level_collapsed: false, readings_explainer_collapsed: false, practitioner_card_dismissed: false, avatar_idle_off: false, avatar_hello_chime: false });
+  assert.deepEqual(setPrefs('c1', { next_level_collapsed: true, evil: '<script>', next_level_collapsed_x: true }, { file }), { next_level_collapsed: true, readings_explainer_collapsed: false, practitioner_card_dismissed: false, avatar_idle_off: false, avatar_hello_chime: false });
   const raw = JSON.parse(fs.readFileSync(file, 'utf8'));
   assert.deepEqual(Object.keys(raw.c1).sort(), ['next_level_collapsed', 'updated_at']);
   assert.equal(setPrefs('c1', { next_level_collapsed: 'yes' }, { file }).next_level_collapsed, true, 'a string is not a boolean: ignored');
   assert.equal(setPrefs('c1', { next_level_collapsed: false }, { file }).next_level_collapsed, false);
   assert.equal(setPrefs('', { next_level_collapsed: true }, { file }), null, 'no member, nothing stored');
-  assert.deepEqual(getPrefs('c2', { file }), { next_level_collapsed: false, readings_explainer_collapsed: false, practitioner_card_dismissed: false }, 'members do not see each other');
+  assert.deepEqual(getPrefs('c2', { file }), { next_level_collapsed: false, readings_explainer_collapsed: false, practitioner_card_dismissed: false, avatar_idle_off: false, avatar_hello_chime: false }, 'members do not see each other');
   assert.equal((fs.statSync(file).mode & 0o777), 0o600);
   assert.ok(Object.keys(PREF_KEYS).length >= 1);
 });

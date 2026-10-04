@@ -37,8 +37,8 @@ test('every door the avatar opens already exists; it builds none of its own', ()
   for (const door of ['GaiaAppShell?.go', 'gaia:open-readings', 'GaiaTools?.open', 'GaiaAuth?.open', 'GaiaTour?.run', 'gaia:open-client']) assert.ok(js.includes(door), door);
   assert.match(ui, /window\.GaiaTour = \{ run: \(steps, opts\) => runTour\(steps, opts\), seen: tourSeen \}/);
   assert.match(ui, /gaia:view-changed/);
-  // the state of a live conversation is read from the orb, never tracked twice
-  assert.match(js, /data-gaia-tab-assist/); assert.match(js, /attributeFilter: \['data-state'\]/);
+  // the state of a live conversation comes from the shell's own announcement, never tracked twice
+  assert.match(js, /addEventListener\('gaia:assist-state'/); assert.match(ui, /gaia:assist-state/);
 });
 
 test('nothing in the avatar can cost a token: no fetch, no model route, no prompt', () => {
@@ -46,7 +46,8 @@ test('nothing in the avatar can cost a token: no fetch, no model route, no promp
   assert.doesNotMatch(js, /\bfetch\(/, 'the avatar makes no request of its own');
   assert.doesNotMatch(js, /api\/assist\/(chat|voice|tool)/);
   assert.doesNotMatch(js, /XMLHttpRequest|WebSocket|EventSource/);
-  assert.doesNotMatch(js, /prompt:/, 'no chip pre-fills or sends a prompt; a conversation starts only when the member opens chat or holds to talk');
+  assert.doesNotMatch(js, /prompt: '/, 'no chip carries a prompt of its own; only the member\'s typed words reach the box, and the shell only pre-fills');
+  assert.match(js, /detail: text \? \{ source: 'avatar', prompt: text \} : \{ source: 'avatar' \}/);
   // the bubble is a table keyed on screen and member state
   assert.match(js, /function bubbleFor\(\)/);
   for (const key of ["case 'profile'", "case 'wellness'", "case 'academy'", "case 'community'", "case 'store'", 'default:']) assert.ok(js.includes(key), key);
@@ -65,9 +66,12 @@ test('the approved artwork and all six states are the ones in the character', ()
 test('placement is remembered on this device only, and the shell is not restructured', () => {
   const js = read('gaia-avatar.js');
   assert.match(js, /const STORE = 'gaia-avatar-pos'/); assert.match(js, /localStorage\.setItem\(STORE/);
-  assert.doesNotMatch(js, /gaia-tabbar__assist'\)\s*\?*\.remove|\.gaia-tabbar'\)\s*\?*\.(remove|replaceWith)/, 'the orb and tab bar stay');
+  assert.doesNotMatch(js, /\.gaia-tabbar'\)\s*\?*\.(remove|replaceWith)/, 'the tab bar stays');
   const sharedNav = read('shared-nav.js');
-  assert.match(sharedNav, /data-gaia-tab-assist/, 'the orb is still rendered by the nav');
+  assert.match(sharedNav, /class="gaia-tabbar__assist gaia-tabbar__home" href="home\.html\?view=today" data-app-nav="today" aria-label="Home"/, 'the centre of the bar is Home; Gaia Assist lives in the avatar');
+  assert.doesNotMatch(sharedNav, /data-gaia-tab-assist/, 'no second door to Assist in the bar');
+  assert.match(js, /function hop\(\)/, 'the tap itself gets a reaction');
+  assert.match(js, /gava-bubble__input/, 'the member can type from the bubble');
   const html = read('home.html');
   assert.match(html, /id="member-readings"/);
 });
@@ -121,15 +125,32 @@ test('reduced motion keeps breathing and the glow, drops bouncing, waving and ti
   assert.doesNotMatch(js, /SVG_BODY = "[^"]*gava-eye-new|<path class="gava-extra/, 'no new SVG parts');
 });
 
-test('the orb wears the same face, every chip that moves the screen points at where it landed, and "meet Gaia" happens once', () => {
+test('every chip that moves the screen points at where it landed, and "meet Gaia" happens once', () => {
   const js = read('gaia-avatar.js');
-  const css = read('gaia-avatar.css');
-  assert.match(js, /function dressOrb\(\)/); assert.match(js, /mark\.replaceWith\(holder\)/);
-  assert.match(js, /gava-mini__logo'\)\.appendChild\(mark\)/, 'the logo is kept: it is one side of the coin');
-  assert.match(css, /@keyframes gava-coin \{ 0%,42% \{ transform: rotateY\(0\); \} 50%,92% \{ transform: rotateY\(180deg\); \}/, 'logo and face take turns');
-  assert.match(css, /\.gaia-tabbar__assist:not\(\[data-state="idle"\]\):not\(\[data-state="error"\]\) \.gava-mini__coin \{ animation: none; transform: rotateY\(180deg\);/, 'a live conversation keeps the face up');
-  assert.match(css, /\.gaia-tabbar__assist\[data-state="speaking"\] \.gava-mini \.gava-f-speak \{ display: block; \}/);
+  assert.doesNotMatch(js, /dressOrb/, 'the centre button is Home and stays the logo');
   assert.match(js, /const goAndPoint = /);
   for (const k of ['energy', 'academy', 'community', 'plans']) assert.match(js, new RegExp(`${k}: \\{[^\\n]*goAndPoint\\(`));
   assert.match(js, /localStorage\.getItem\('gaia-avatar-met'\)/);
+});
+
+test("moments, the two switches and the chime: still no fetch, no event, no model; sound only when chosen and after a touch", () => {
+  const js = read('gaia-avatar.js');
+  const idle = section(js, '// ── idle personality', '// ── end idle personality');
+  assert.match(idle, /function moment\(name, ms\)/); assert.match(idle, /function glanceAt\(el, ms = 1600\)/);
+  assert.match(idle, /if \(!root \|\| prefs\.idleOff \|\| reduced\(\) \|\| document\.hidden\) return;/, 'a moment respects the switch and reduced motion');
+  assert.match(idle, /gaia:readings-loaded/); assert.match(idle, /gaia:readings-status/);
+  assert.match(idle, /if \(!root \|\| document\.hidden \|\| prefs\.idleOff\) return false;/, 'the idle switch gates everything');
+  // the switches arrive from the app, never fetched by the avatar
+  assert.match(idle, /document\.addEventListener\('gaia:prefs-changed', \(e\) => readPrefs\(e\.detail\?\.prefs\)\)/);
+  assert.doesNotMatch(js, /\bfetch\(/);
+  // the chime: Web Audio, no file, off by default, only after a touch and only when chosen
+  assert.match(idle, /if \(!prefs\.chime \|\| !audioUnlocked \|\| document\.hidden\) return;/);
+  assert.match(idle, /createOscillator\(\)/); assert.doesNotMatch(idle, /new Audio\(|\.mp3|\.wav|\.ogg/, 'no audio file, nothing to download');
+  assert.match(idle, /const prefs = \{ idleOff: false, chime: false \};/, 'defaults: animations on, chime off');
+  // the settings rows under Account write the server preferences
+  const member = read('gaia-member.js');
+  assert.ok(member.includes("prefRow(\"Gaia's idle animations\", 'avatar_idle_off'")); assert.ok(member.includes("prefRow('Soft chime on her hello', 'avatar_hello_chime'")); assert.ok(member.includes('data-pref-toggle="\' + key + \'"'));
+  assert.match(member, /gaia:prefs-changed/);
+  const prefsMod = read('staging-proxy/member-prefs.js');
+  assert.match(prefsMod, /avatar_idle_off/); assert.match(prefsMod, /avatar_hello_chime/);
 });

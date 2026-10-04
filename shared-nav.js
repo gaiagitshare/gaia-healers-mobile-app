@@ -58,11 +58,11 @@
     const right = tabs.slice(3);
     inner.innerHTML = `
       <div class="gaia-tabbar__group gaia-tabbar__group--left">${left.map((t) => tabLink(t, active === t.id)).join('')}</div>
-      <button type="button" class="gaia-tabbar__assist" data-gaia-tab-assist data-state="idle" aria-label="Open Gaia Assist — live voice" aria-expanded="false">
+      <a class="gaia-tabbar__assist gaia-tabbar__home" href="home.html?view=today" data-app-nav="today" aria-label="Home">
         <span class="gaia-tabbar__assist-pulse" aria-hidden="true"></span>
         <img class="gaia-tabbar__assist-mark" src="assets/gaia-mark.svg" alt="" aria-hidden="true" />
-        <span class="sr-only">Gaia Assist</span>
-      </button>
+        <span class="sr-only">Home</span>
+      </a>
       <div class="gaia-tabbar__group gaia-tabbar__group--right">${right.map((t) => tabLink(t, active === t.id)).join('')}</div>`;
   }
 
@@ -71,8 +71,8 @@
     const inner = document.querySelector('.gaia-tabbar__inner');
     if (!inner) return;
 
-    const assist = inner.querySelector('[data-gaia-tab-assist]');
-    if (!assist) {
+    const centre = inner.querySelector('.gaia-tabbar__home');
+    if (!centre) {
       buildTabbar(inner, active);
       window.dispatchEvent(new CustomEvent('gaia:tabbar-ready'));
       return;

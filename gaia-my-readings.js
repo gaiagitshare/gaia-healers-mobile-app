@@ -381,6 +381,7 @@
     if (r.ok) {
       lastSummary = r.body.summary || null; lastReadings = r.body;
       root.innerHTML = readingsCard(r.body, status, prefs);
+      window.dispatchEvent(new CustomEvent('gaia:readings-loaded', { detail: { scanned_at: r.body.latest?.scanned_at || null } }));
       // The link record may hold no practitioner name (their redeem call sends
       // none); once the readings are in, the sharing card can say who.
       if (share && r.body.practitioner?.name && !status.practitioner_name) share.innerHTML = dataSharingCard({ ...status, practitioner_name: r.body.practitioner.name }, prefs);
@@ -440,7 +441,7 @@
         }
         if (action === 'goto') { reveal(root); return; }
         if (action === 'reset-prefs') {
-          const cleared = {}; for (const k of ['next_level_collapsed', 'readings_explainer_collapsed', 'practitioner_card_dismissed']) cleared[k] = false;
+          const cleared = {}; for (const k of ['next_level_collapsed', 'readings_explainer_collapsed', 'practitioner_card_dismissed']) cleared[k] = false;   // the avatar's own two switches are settings, not hidden cards
           await api('/api/member/prefs', { method: 'POST', body: { prefs: cleared } }).catch(() => {});
           document.dispatchEvent(new CustomEvent('gaia:prefs-reset'));
           await render(root);

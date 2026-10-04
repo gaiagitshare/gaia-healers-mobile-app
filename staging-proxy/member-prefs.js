@@ -15,6 +15,8 @@ export const PREF_KEYS = Object.freeze({
   next_level_collapsed: 'the Next level card on You is folded to one line',
   readings_explainer_collapsed: 'the "What these mean" explainer on My readings is folded',
   practitioner_card_dismissed: 'the "Become a practitioner" card on You was dismissed',
+  avatar_idle_off: "Gaia's idle animations are switched off",
+  avatar_hello_chime: 'a soft chime plays with the hello (off unless chosen)',
 });
 
 function load(file) {

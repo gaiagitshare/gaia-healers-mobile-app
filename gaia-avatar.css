@@ -115,29 +115,8 @@
 .gava-bubble__text--hello { font-size: 13.5px; color: #cfe9ff; }
 .gava-bubble:has(> .gava-bubble__text--hello) { padding: 9px 12px; width: auto; max-width: 220px; }
 
-/* the orb: logo on one side of a coin, her face on the other; it turns slowly while idle */
-.gaia-tabbar__assist .gava-mini { position: absolute; inset: 10%; display: block; pointer-events: none; perspective: 160px; }
-.gaia-tabbar__assist .gava-mini__coin { position: absolute; inset: 0; transform-style: preserve-3d; animation: gava-coin 16s ease-in-out infinite; }
-.gaia-tabbar__assist .gava-mini__logo, .gaia-tabbar__assist .gava-mini__face { position: absolute; inset: 0; backface-visibility: hidden; -webkit-backface-visibility: hidden; display: block; }
-.gaia-tabbar__assist .gava-mini__face { transform: rotateY(180deg); }
-/* the logo at the size it always had (58% of the orb): the coin is 80% of the orb, so 72% of the coin */
-body.gaia-v2 .gaia-tabbar__assist .gava-mini__logo .gaia-tabbar__assist-mark, .gaia-tabbar__assist .gava-mini__logo img { position: absolute; inset: 0; margin: auto; width: 72%; height: 72%; display: block; object-fit: contain; }
-@keyframes gava-coin { 0%,42% { transform: rotateY(0); } 50%,92% { transform: rotateY(180deg); } 100% { transform: rotateY(360deg); } }
-/* a live conversation: the face stays up */
-.gaia-tabbar__assist:not([data-state="idle"]):not([data-state="error"]) .gava-mini__coin { animation: none; transform: rotateY(180deg); transition: transform .5s ease; }
-.gaia-tabbar__assist .gava-mini svg { width: 100%; height: 100%; display: block; overflow: visible; }
-.gaia-tabbar__assist .gava-mini .gava-aura, .gaia-tabbar__assist .gava-mini .gava-pulse { display: none; }
-.gaia-tabbar__assist .gava-mini .gava-f { display: none; } .gaia-tabbar__assist .gava-mini .gava-f-idle { display: block; }
-.gaia-tabbar__assist[data-state="listening"] .gava-mini .gava-f-idle, .gaia-tabbar__assist[data-state="holding"] .gava-mini .gava-f-idle, .gaia-tabbar__assist[data-state="ready"] .gava-mini .gava-f-idle,
-.gaia-tabbar__assist[data-state="thinking"] .gava-mini .gava-f-idle, .gaia-tabbar__assist[data-state="connecting"] .gava-mini .gava-f-idle, .gaia-tabbar__assist[data-state="speaking"] .gava-mini .gava-f-idle { display: none; }
-.gaia-tabbar__assist[data-state="listening"] .gava-mini .gava-f-listen, .gaia-tabbar__assist[data-state="holding"] .gava-mini .gava-f-listen, .gaia-tabbar__assist[data-state="ready"] .gava-mini .gava-f-listen { display: block; }
-.gaia-tabbar__assist[data-state="thinking"] .gava-mini .gava-f-think, .gaia-tabbar__assist[data-state="connecting"] .gava-mini .gava-f-think { display: block; }
-.gaia-tabbar__assist[data-state="speaking"] .gava-mini .gava-f-speak { display: block; }
-.gaia-tabbar__assist[data-state="speaking"] .gava-mini .gava-mouth { transform-origin: 100px 124px; animation: gava-talk .42s ease-in-out infinite alternate; }
 
 @media (prefers-reduced-motion: reduce) {
-  .gaia-tabbar__assist .gava-mini__coin { animation: gava-coin-fade 16s ease-in-out infinite; transform: none; }
-  .gaia-tabbar__assist .gava-mini__face { transform: none; opacity: 0; animation: gava-coin-face 16s ease-in-out infinite; }
   .gava *, .gava-ring, .gava-bubble { animation: none !important; }
   .gava .gava-whole, .gava .gava-sprout, .gava .gava-lb, .gava .gava-lf { animation: none !important; transform: none !important; }
   .gava .gava-aura { animation: gava-aura 6s ease-in-out infinite !important; }
@@ -145,5 +124,16 @@ body.gaia-v2 .gaia-tabbar__assist .gava-mini__logo .gaia-tabbar__assist-mark, .g
   .gava.is-looking .gava-f-think { transition: none; }
 }
 @media print { .gava, .gava-ring { display: none; } }
-@keyframes gava-coin-fade { 0%,100% { opacity: 1; } }
-@keyframes gava-coin-face { 0%,42% { opacity: 0; } 50%,92% { opacity: 1; } 100% { opacity: 0; } }
+/* the tap: a quick hop, whatever else follows */
+.gava.is-hop .gava-char { animation: gava-hop .65s cubic-bezier(.34,1.56,.64,1) 1; }
+@keyframes gava-hop { 0%,100% { transform: translateY(0) scale(1); } 35% { transform: translateY(-9px) scale(1.05); } 70% { transform: translateY(-1px) scale(1); } }
+/* type to Gaia from the bubble */
+.gava-bubble__ask { display: flex; gap: 6px; margin: 10px -22px 0 0; }
+.gava-bubble__input { flex: 1 1 auto; min-width: 0; padding: 9px 12px; border-radius: 12px; border: 1px solid rgba(140, 160, 255, .22); background: rgba(10, 20, 34, .9); color: #eef6f3; font: 500 13.5px/1.2 inherit; font-family: inherit; }
+.gava-bubble__input::placeholder { color: #8fa3b5; }
+.gava-bubble__input:focus { outline: none; border-color: rgba(111, 233, 255, .6); }
+.gava-bubble__send { flex: none; width: 38px; border-radius: 12px; border: 1px solid rgba(111, 233, 255, .4); background: rgba(111, 233, 255, .14); color: #6fe9ff; font-size: 16px; cursor: pointer; display: grid; place-items: center; }
+@media (prefers-reduced-motion: reduce) { .gava.is-hop .gava-char { animation: none; } }
+/* the centre of the bar is Home: the orb's look, a link's behaviour */
+.gaia-tabbar__home { text-decoration: none; cursor: pointer; }
+.gaia-tabbar__home:focus-visible { outline: 2px solid #6fe9ff; outline-offset: 3px; }

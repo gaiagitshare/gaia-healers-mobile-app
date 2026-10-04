@@ -2374,4 +2374,6 @@ body.gaia-v2 .gaia-assist:not(.gaia-assist--minimized):not(.gaia-assist--welcome
 .g-dir__intent div { flex: 1 1 auto; min-width: 0; display: grid; gap: 2px; }
 .g-dir__intent strong { font-size: 15px; }
 .g-dir__intent span { font-size: 13px; color: var(--g-text-dim, #93A597); }
+.g-dir__intent .g-btn { flex: none; }
 .g-dir__intent-x { flex: none; background: none; border: 0; color: var(--g-text-dim, #93A597); font-size: 20px; line-height: 1; cursor: pointer; padding: 4px 6px; }
+@media (max-width: 480px) { .g-dir__intent { flex-wrap: wrap; } .g-dir__intent div { flex-basis: calc(100% - 40px); } .g-dir__intent .g-btn { margin-left: 34px; } }

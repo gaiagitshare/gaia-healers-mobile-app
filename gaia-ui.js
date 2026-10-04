@@ -914,73 +914,209 @@
   }
 
 
-  // First-run tour: a once-ever, guest-only spotlight walk that shows a new
-  // visitor the free tools, Ask Gaia, the Menu, and how to save their readings.
+  // One tour for first-run visitors and the avatar's replay action.
   const TOUR_KEY = 'gaia-tour-v1';
   function tourSeen() { try { return localStorage.getItem(TOUR_KEY) === '1'; } catch (_) { return true; } }
   function markTourSeen() { try { localStorage.setItem(TOUR_KEY, '1'); } catch (_) {} }
-
+  let closeTour = null;
+  let tourLinkState = 'not_connected';
+  document.addEventListener('gaia:practitioner-state', event => {
+    const next = event.detail?.available === false ? 'not_connected' : event.detail?.state || 'not_connected';
+    if (next !== tourLinkState) closeTour?.({ restore: false });
+    tourLinkState = next;
+  });
+  function tourSteps() {
+    const member = authState().authenticated;
+    return [
+      { sel: '.gaia-tabbar__home', view: 'today', title: 'Start from Home',
+        body: 'Use the green Home button to return here whenever you need a fresh start.' },
+      ...(!member ? [{ sel: '.g-free-tool[href*="view=wellness&tab=check"], .g-super-discover--solo > a', view: 'today', title: 'Try an energy check',
+        body: 'Start with a free energy check. You can explore before creating an account.' }] : []),
+      { sel: '#wellness-tabs', view: 'wellness', tab: 'check', title: 'Choose your energy tool',
+        body: 'Switch between Energy check, Horoscope and Chakra match. Pick what you need today.' },
+      ...(member && tourHasCourses() ? [{ sel: '[data-screen="academy"] .g-page__head', view: 'academy', requiresCourses: true, title: 'Find your learning',
+        body: 'Academy shows the courses available to your account. Open a course to continue learning.' }] : []),
+      { sel: '.g-page__head--profile', view: 'profile', title: member ? 'Manage your account' : 'Make it yours',
+        body: member ? 'You is home to your account and access. Practitioner readings appear here when you connect them.' : 'Sign in from You when you want to keep your progress and readings.' },
+      ...(member && tourLinkState === 'connected' ? [{ sel: '[data-profile-tab="practice"]', view: 'profile', title: 'Open your practice',
+        requiresPractitioner: true, body: 'Your practitioner account is connected. Open Practice to see your client list.' }] : []),
+      { sel: '.gava-char', title: 'Get a little guidance',
+        body: 'Tap Gaia for shortcuts and suggested next steps whenever you need a hand.' },
+    ];
+  }
+  function tourHasCourses() {
+    const courses = window.GaiaMember?.data?.courses?.courses;
+    return Array.isArray(courses) && courses.length > 0;
+  }
+  function tourTarget(step) {
+    if (window.GaiaAppGuard && !window.GaiaAppGuard.canEnter) return null;
+    if (step.requiresCourses && !tourHasCourses()) return null;
+    if (step.requiresPractitioner && (!authState().authenticated || tourLinkState !== 'connected')) return null;
+    try {
+      return [...document.querySelectorAll(step.sel)].find(el => {
+        if (el.closest('[hidden], [inert], [aria-hidden="true"]')) return false;
+        for (let node = el; node instanceof Element; node = node.parentElement) {
+          const style = getComputedStyle(node);
+          if (style.display === 'none' || style.visibility !== 'visible' || Number(style.opacity) === 0) return false;
+        }
+        const r = el.getBoundingClientRect();
+        return r.width > 0 && r.height > 0;
+      }) || null;
+    } catch (_) { return null; } // A stale or invalid selector must never trap the user.
+  }
+  function tourCardPosition(r, width, height, vw, vh) {
+    const margin = 16, gap = 16;
+    const clamp = (value, max) => Math.max(margin, Math.min(max - margin, value));
+    const centeredX = clamp(r.left + (r.width - width) / 2, vw - width);
+    const centeredY = clamp(r.top + (r.height - height) / 2, vh - height);
+    if (r.bottom + gap + height <= vh - margin) return { x: centeredX, y: r.bottom + gap };
+    if (r.top - gap - height >= margin) return { x: centeredX, y: r.top - gap - height };
+    if (r.right + gap + width <= vw - margin) return { x: r.right + gap, y: centeredY };
+    if (r.left - gap - width >= margin) return { x: r.left - gap - width, y: centeredY };
+    return { x: clamp((vw - width) / 2, vw - width), y: Math.max(margin, vh - margin - height) };
+  }
   function runTour(customSteps, { remember = true } = {}) {
-    const steps = (customSteps || [
-      { sel: '.g-free-tools', eyebrow: 'Free · no sign-up', title: 'Try your energy — free',
-        body: 'Energy, Horoscope, Chakra &amp; Moon readings, right now. Your results save when you join.' },
-      { sel: '.gaia-tabbar', eyebrow: 'Your navigation', title: 'Six places, one tap',
-        body: 'Today, Energy, Academy, Community, Shop and You. The green button in the middle brings you home.' },
-      { sel: '[data-app-nav="daily"]', eyebrow: 'Today', title: 'The day itself',
-        body: 'Your daily energy check and today\u2019s sky live here, every day.' },
-      { sel: '.gava-char', eyebrow: 'Your guide', title: 'That is Gaia',
-        body: 'Tap her for ideas or to type, hold her to talk. She can open any screen for you.' },
-      { sel: '.gaia-header-signin', eyebrow: 'Save it', title: 'Keep your readings',
-        body: 'Create a free account to save your progress and unlock member courses &amp; communities.' },
-    ]).filter((st) => document.querySelector(st.sel));
-    if (!steps.length) { if (remember) markTourSeen(); return; }
-    document.querySelector('.gaia-tour')?.remove();
-
-    let i = 0;
+    closeTour?.();
+    if (window.GaiaAppGuard && !window.GaiaAppGuard.canEnter) return;
+    const steps = customSteps || tourSteps();
+    if (!steps.length) return;
+    const previousFocus = document.activeElement;
+    const initialScroll = { left: window.scrollX, top: window.scrollY };
+    const initialUrl = new URL(window.location.href);
+    const initialView = window.GaiaAppShell?.currentView?.();
+    let i = -1, target = null, finished = false, generation = 0, frame = 0, internalNavigation = false;
     const overlay = document.createElement('div');
     overlay.className = 'gaia-tour';
-    overlay.innerHTML = '<div class="gaia-tour__spot" aria-hidden="true"></div><div class="gaia-tour__card" role="dialog" aria-modal="true"></div>';
+    overlay.innerHTML = '<div class="gaia-tour__spot" aria-hidden="true" hidden></div><div class="gaia-tour__card" role="dialog" aria-modal="true" aria-label="Getting started"></div>';
     const spot = overlay.querySelector('.gaia-tour__spot');
     const card = overlay.querySelector('.gaia-tour__card');
-    document.body.appendChild(overlay);
-
-    const finish = () => { if (remember) markTourSeen(); overlay.remove(); window.removeEventListener('resize', place); };
+    const observer = new MutationObserver(records => {
+      if (records.some(record => !overlay.contains(record.target))) schedule();
+    });
+    const resizeObserver = new ResizeObserver(schedule);
+    function finish({ restore = true } = {}) {
+      if (finished) return;
+      finished = true; generation++;
+      if (remember) markTourSeen();
+      observer.disconnect(); resizeObserver.disconnect(); cancelAnimationFrame(frame);
+      overlay.remove(); closeTour = null;
+      window.removeEventListener('resize', schedule);
+      window.removeEventListener('scroll', schedule, true);
+      window.visualViewport?.removeEventListener('resize', schedule);
+      window.visualViewport?.removeEventListener('scroll', schedule);
+      window.removeEventListener('gaia:route', onRoute);
+      window.removeEventListener('popstate', onLeave);
+      window.removeEventListener('pagehide', onLeave);
+      document.removeEventListener('keydown', onKey);
+      document.removeEventListener('gaia:auth', onLeave);
+      document.removeEventListener('gaia:eligibility', onEligibility);
+      document.removeEventListener('gaia:onboarding-step', onLeave);
+      if (restore && (!window.GaiaAppGuard || window.GaiaAppGuard.canEnter)) {
+        if (initialView) window.GaiaAppShell?.go?.(initialView, { replace: true, tab: initialUrl.searchParams.get('tab') || '' });
+        window.history.replaceState(window.history.state, '', initialUrl.href);
+        window.scrollTo({ ...initialScroll, behavior: 'instant' });
+        if (previousFocus?.isConnected) previousFocus.focus?.({ preventScroll: true });
+      }
+    }
+    function onLeave() { finish({ restore: false }); }
+    function onEligibility() { if (!window.GaiaAppGuard?.canEnter) onLeave(); }
+    function onRoute() { if (!internalNavigation) onLeave(); }
+    function onKey(event) {
+      if (event.key === 'Escape') { event.preventDefault(); finish(); }
+      if (event.key !== 'Tab') return;
+      const buttons = [...card.querySelectorAll('button:not(:disabled)')];
+      const at = buttons.indexOf(document.activeElement);
+      if (event.shiftKey && at <= 0) { event.preventDefault(); buttons.at(-1)?.focus(); }
+      else if (!event.shiftKey && (at < 0 || at === buttons.length - 1)) { event.preventDefault(); buttons[0]?.focus(); }
+    }
+    function schedule() {
+      if (finished || frame) return;
+      frame = requestAnimationFrame(() => { frame = 0; place(); });
+    }
     function place() {
-      const el = document.querySelector(steps[i].sel);
-      if (!el) return;
-      const r = el.getBoundingClientRect();
-      const pad = 8;
-      spot.style.left = Math.max(6, r.left - pad) + 'px';
-      spot.style.top = Math.max(6, r.top - pad) + 'px';
-      spot.style.width = Math.min(window.innerWidth - 12, r.width + pad * 2) + 'px';
-      spot.style.height = (r.height + pad * 2) + 'px';
-      const room = window.innerHeight - r.bottom;
-      if (room > 210) { card.style.top = (r.bottom + 14) + 'px'; card.style.bottom = 'auto'; }
-      else { card.style.top = 'auto'; card.style.bottom = Math.max(14, window.innerHeight - r.top + 14) + 'px'; }
+      if (finished || !target) return false;
+      if (tourTarget(steps[i]) !== target) { void showStep(i + 1, 1); return false; }
+      let r = target.getBoundingClientRect();
+      const vv = window.visualViewport;
+      const vw = vv?.width || window.innerWidth, vh = vv?.height || window.innerHeight;
+      const ox = vv?.offsetLeft || 0, oy = vv?.offsetTop || 0, margin = 16;
+      // Layout changes may move the target; bring it back before measuring.
+      if (r.bottom <= oy || r.top >= oy + vh || r.right <= ox || r.left >= ox + vw) {
+        target.scrollIntoView({ block: 'center', inline: 'nearest', behavior: 'instant' });
+        r = target.getBoundingClientRect();
+      }
+      if (r.bottom <= oy || r.top >= oy + vh || r.right <= ox || r.left >= ox + vw) { void showStep(i + 1, 1); return false; }
+      r = { left: Math.max(0, r.left - ox), top: Math.max(0, r.top - oy), right: Math.min(vw, r.right - ox), bottom: Math.min(vh, r.bottom - oy) };
+      r.width = r.right - r.left; r.height = r.bottom - r.top;
+      spot.hidden = false;
+      Object.assign(spot.style, { left: ox + Math.max(4, r.left - 6) + 'px', top: oy + Math.max(4, r.top - 6) + 'px', width: Math.min(vw - 8, r.width + 12) + 'px', height: Math.min(vh - 8, r.height + 12) + 'px' });
+      const width = Math.min(420, vw - margin * 2);
+      Object.assign(card.style, { width: width + 'px', right: 'auto', bottom: 'auto', margin: '0', maxHeight: Math.max(0, vh - margin * 2) + 'px', overflowY: 'auto' });
+      const height = card.getBoundingClientRect().height;
+      const p = tourCardPosition(r, width, height, vw, vh);
+      card.style.left = ox + p.x + 'px'; card.style.top = oy + p.y + 'px';
+      return true;
     }
-    function render() {
-      const el = document.querySelector(steps[i].sel);
-      if (el && el.scrollIntoView) el.scrollIntoView({ block: 'center', behavior: 'smooth' });
-      window.requestAnimationFrame(() => window.setTimeout(place, 260));
-      const dots = steps.map((_, n) => '<i class="' + (n === i ? 'on' : '') + '"></i>').join('');
-      card.innerHTML = '<p class="gaia-tour__eyebrow">' + steps[i].eyebrow + '</p>'
-        + '<h4 class="gaia-tour__title">' + steps[i].title + '</h4>'
-        + '<p class="gaia-tour__body">' + steps[i].body + '</p>'
-        + '<div class="gaia-tour__row"><div class="gaia-tour__dots">' + dots + '</div>'
-        + '<div class="gaia-tour__btns"><button type="button" class="gaia-tour__skip">Skip</button>'
-        + '<button type="button" class="gaia-tour__next">' + (i === steps.length - 1 ? 'Got it' : 'Next →') + '</button></div></div>';
-      card.querySelector('.gaia-tour__skip').addEventListener('click', finish);
-      card.querySelector('.gaia-tour__next').addEventListener('click', () => {
-        if (i >= steps.length - 1) finish(); else { i += 1; render(); }
-      });
+    async function showStep(index, direction) {
+      const attempt = ++generation;
+      target = null; spot.hidden = true;
+      // Keep Exit working while a screen renders; transitions are bounded.
+      card.querySelectorAll('.gaia-tour__next, .gaia-tour__back').forEach(button => { button.disabled = true; });
+      for (let next = index; next >= 0 && next < steps.length; next += direction) {
+        if (finished || attempt !== generation) return;
+        const step = steps[next];
+        if (step.requiresPractitioner && tourLinkState !== 'connected') continue;
+        if (step.view && window.GaiaAppShell?.currentView?.() !== step.view) {
+          internalNavigation = true;
+          try { window.GaiaAppShell?.go?.(step.view, { replace: true, tab: step.tab || '' }); }
+          catch (_) { continue; }
+          finally { internalNavigation = false; }
+        } else if (step.tab && step.view === 'wellness') {
+          internalNavigation = true;
+          try { document.querySelector(`#wellness-tabs [data-tab="${step.tab}"]`)?.click(); }
+          finally { internalNavigation = false; }
+        }
+        let el = null;
+        for (let tries = 0; tries < 8 && !el; tries++) {
+          await new Promise(resolve => setTimeout(resolve, 50));
+          if (finished || attempt !== generation) return;
+          el = tourTarget(step);
+        }
+        if (!el) continue;
+        el.scrollIntoView({ block: 'center', inline: 'nearest', behavior: 'instant' });
+        const bounds = el.getBoundingClientRect(), viewport = window.visualViewport;
+        const left = viewport?.offsetLeft || 0, top = viewport?.offsetTop || 0;
+        if (bounds.bottom <= top || bounds.top >= top + (viewport?.height || innerHeight) || bounds.right <= left || bounds.left >= left + (viewport?.width || innerWidth)) continue;
+        i = next; target = el; overlay.dataset.tourTarget = step.sel;
+        const escape = value => String(value || '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+        card.innerHTML = '<p class="gaia-tour__eyebrow">Getting started</p><h4 class="gaia-tour__title">' + escape(step.title) + '</h4><p class="gaia-tour__body">' + escape(step.body) + '</p><div class="gaia-tour__row"><span class="gaia-tour__count" aria-live="polite">' + (i + 1) + ' / ' + steps.length + '</span><div class="gaia-tour__btns"><button type="button" class="gaia-tour__skip">Exit</button>' + (i > 0 ? '<button type="button" class="gaia-tour__back">Back</button>' : '') + '<button type="button" class="gaia-tour__next">' + (i === steps.length - 1 ? 'Done' : 'Next') + '</button></div></div>';
+        if (!overlay.isConnected) { window.GaiaAvatar?.hideBubble?.(); document.body.appendChild(overlay); }
+        if (!place()) return;
+        resizeObserver.disconnect(); resizeObserver.observe(target); resizeObserver.observe(card);
+        observer.observe(document.body, { childList: true, subtree: true, attributes: true, attributeFilter: ['class', 'style', 'hidden', 'inert', 'aria-hidden'] });
+        card.querySelector('.gaia-tour__skip').onclick = () => finish();
+        card.querySelector('.gaia-tour__back')?.addEventListener('click', () => { void showStep(i - 1, -1); });
+        card.querySelector('.gaia-tour__next').onclick = () => { void showStep(i + 1, 1); };
+        card.querySelector('.gaia-tour__next').focus({ preventScroll: true });
+        return;
+      }
+      finish();
     }
-    window.addEventListener('resize', place);
-    render();
+    closeTour = finish;
+    window.addEventListener('resize', schedule);
+    window.addEventListener('scroll', schedule, { capture: true, passive: true });
+    window.visualViewport?.addEventListener('resize', schedule);
+    window.visualViewport?.addEventListener('scroll', schedule);
+    window.addEventListener('gaia:route', onRoute);
+    window.addEventListener('popstate', onLeave);
+    window.addEventListener('pagehide', onLeave);
+    document.addEventListener('keydown', onKey);
+    document.addEventListener('gaia:auth', onLeave);
+    document.addEventListener('gaia:eligibility', onEligibility);
+    document.addEventListener('gaia:onboarding-step', onLeave);
+    void showStep(0, 1);
   }
-
-  // The same spotlight walk, on request: the avatar's "Take a tour" uses it
-  // with steps for a member; the guest first-run tour stays as it was.
-  window.GaiaTour = { run: (steps, opts) => runTour(steps, opts), seen: tourSeen };
+  window.GaiaTour = { run: (steps, opts) => runTour(steps, opts), seen: tourSeen, close: () => closeTour?.() };
 
   function initCoachMark() {
     if (window.location.pathname.split('/').pop() !== 'home.html') return;
@@ -994,7 +1130,7 @@
       if (!document.querySelector('.g-free-tools')) return;
       started = true;
       document.removeEventListener('gaia:superapp-rendered', start);
-      window.setTimeout(runTour, 500);
+      window.setTimeout(() => { if (!authState().authenticated && window.GaiaAppShell?.currentView?.() === 'today') runTour(); }, 500);
     };
     document.addEventListener('gaia:superapp-rendered', start);
     start();
@@ -2207,6 +2343,8 @@
     function showPassiveWelcome() {
       if (passiveWelcomeShown || sessionStorage.getItem(ASSIST_WELCOME_KEY) === '1') return;
       if (!document.body.classList.contains('gaia-v2')) return;
+      // Gaia's avatar and first-run tour already provide the welcome.
+      if (document.querySelector('.gaia-tour, .gava-char')) return;
       passiveWelcomeShown = true;
       sessionStorage.setItem(ASSIST_WELCOME_KEY, '1');
       const nudge = document.createElement('button');

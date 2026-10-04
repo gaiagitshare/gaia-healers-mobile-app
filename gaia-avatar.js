@@ -154,17 +154,7 @@
   function runTour() {
     hideBubble();
     const member = authed();
-    const steps = [
-      { sel: '.gaia-tabbar', eyebrow: 'Your navigation', title: 'Six places, one tap', body: 'Today, Energy, Academy, Community, Shop and You. Everything lives in the bar.' },
-      { sel: '[data-app-nav="daily"]', eyebrow: 'Today', title: 'The day itself', body: 'Your daily energy check, today\'s sky, your readings and your next session.' },
-      { sel: '[data-app-nav="wellness"]', eyebrow: 'Energy', title: 'The tools', body: 'Energy check, horoscope, chakras, breath, moon and more.' },
-      { sel: '[data-app-nav="academy"]', eyebrow: 'Academy', title: 'Learn and get certified', body: member ? 'Your courses and progress.' : 'Courses open with a free account.' },
-      { sel: '[data-app-nav="community"]', eyebrow: 'Community', title: 'Your circles', body: 'Boards and circles for the people on the same path.' },
-      { sel: '[data-app-nav="profile"]', eyebrow: 'You', title: member ? 'Your account and readings' : 'Your account', body: member ? 'Your pass, your access, and My readings from your practitioner.' : 'Sign in to keep your readings and unlock more.' },
-      { sel: '.gaia-tabbar__home', eyebrow: 'Home', title: 'Back to Today', body: 'The green button in the middle always brings you home.' },
-      { sel: '.gava-char', eyebrow: 'Gaia', title: 'Ask me anything', body: 'That is me: tap for ideas or to type, hold to talk. I can open any screen for you.' },
-    ];
-    if (window.GaiaTour?.run) window.GaiaTour.run(steps, { remember: !member });
+    if (window.GaiaTour?.run) window.GaiaTour.run(undefined, { remember: !member });
   }
 
   // ── DOM ──────────────────────────────────────────────────────────────────
@@ -230,6 +220,7 @@
 
   // ── bubble ───────────────────────────────────────────────────────────────
   function showBubble(spec, { sticky = false } = {}) {
+    if (document.querySelector('.gaia-tour')) return;
     const b = spec || bubbleFor();
     touched();
     bubble.innerHTML = '<button type="button" class="gava-bubble__x" aria-label="Close">×</button>'

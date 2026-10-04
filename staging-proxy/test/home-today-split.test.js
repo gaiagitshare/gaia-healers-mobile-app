@@ -55,7 +55,7 @@ test('the daily energy check and the sky render on Today only; the member Home i
   assert.match(guest, /freeTools\(\)[\s\S]*authPrompt\(true\)[\s\S]*eventCompact\(\)/, 'guest: tools, the way in, the gathering compact');
   assert.doesNotMatch(guest, /eventFeatureCarousel\(\)/);
   const ui = read('gaia-ui.js');
-  assert.match(ui, /sel: '\.gava-char', eyebrow: 'Your guide', title: 'That is Gaia'/, 'the first-run guidance points at her, not the old orb');
+  assert.match(ui, /sel: '\.gava-char', title: 'Get a little guidance'/, 'the first-run guidance points at her, not the old orb');
   assert.doesNotMatch(ui, /sel: '\.gaia-tabbar__assist', eyebrow: 'Your guide'/);
   // every destination is the one that was here before
   for (const id of ['scans', 'bio-welldemo', 'mgf6oviyhPwrLBi03gzq', 'gVzfo7sRfbLnMzQqSnJL']) assert.ok(sa.includes(id), id);
@@ -74,7 +74,7 @@ test('the daily energy check and the sky render on Today only; the member Home i
 test('the avatar: Today in the bubble and the tour, a local greeting line, and glances toward the next tab', () => {
   const js = read('gaia-avatar.js');
   assert.match(js, /case 'daily': return/);
-  assert.match(js, /sel: '\[data-app-nav="daily"\]', eyebrow: 'Today'/);
+  assert.match(js, /GaiaTour\.run\(undefined, \{ remember: !member \}\)/, 'the avatar replays the shared current tour');
   assert.match(js, /function greetingLine\(\)/);
   assert.match(js, /\{ source: 'avatar', greeting: greetingLine\(\) \}/, 'chat from the bubble opens with one local line, shown in her own log');
   assert.doesNotMatch(js.slice(js.indexOf('function greetingLine()'), js.indexOf('function hop()')), /fetch|dispatchEvent/);

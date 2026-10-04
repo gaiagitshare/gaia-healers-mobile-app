@@ -1220,3 +1220,9 @@ body.gaia-v2 [data-screen="profile"] .g-pass-stack > .g-next.is-collapsed { padd
 .g-prac-link__as { font-size: 0.78rem; color: var(--g-text-muted); }
 .g-prac-link__x { background: none; border: 0; padding: 0; font: inherit; font-size: 0.78rem; font-weight: 600; color: var(--g-text-muted); cursor: pointer; text-decoration: underline; text-underline-offset: 2px; }
 .g-prac-link__x:hover, .g-prac-link__x:focus-visible { color: var(--g-danger); outline: none; }
+
+/* Keep practitioner recovery and empty states readable in the app's dark theme. */
+#practitioner-panel .gaia-empty { background: var(--g-surface); color: var(--g-text); border: 1px solid var(--g-line); }
+#practitioner-panel .gaia-empty__text { color: var(--g-text-muted); }
+#practitioner-panel .gaia-empty .g-btn { color: var(--g-text); }
+[data-prac-disconnect-error] { display: block; margin-top: 8px; color: var(--g-text); font-size: 13px; }

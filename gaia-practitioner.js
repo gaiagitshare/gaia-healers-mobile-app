@@ -68,20 +68,34 @@
     throw err;
   }
 
+  async function unlink() {
+    const res = await fetch(`${proxyBase()}/api/practitioners/disconnect`, {
+      method: 'POST', credentials: 'include', signal: AbortSignal.timeout(12000),
+    });
+    const body = await res.json().catch(() => ({}));
+    if (!res.ok || body.ok !== true) throw new Error('Could not disconnect. Your account is still linked. Please try again.');
+  }
+
   /** The role, where the account is named: a small chip on the You header once the practitioner account is linked. */
   function badge(status) {
     const head = document.querySelector('.g-page__head--profile .g-page__sub, #profile-sub');
     if (!head) return;
     head.querySelector('.g-prac-link')?.remove();
+    head.querySelector('[data-prac-disconnect-error]')?.remove();
     // the rest of the app (the avatar) learns the state the same way, once per start
-    document.dispatchEvent(new CustomEvent('gaia:practitioner-state', { detail: { state: status?.state || 'not_connected', practitioner_name: status?.practitioner_name || '' } }));
+    document.dispatchEvent(new CustomEvent('gaia:practitioner-state', { detail: { state: status?.state || 'not_connected', available: status?.available !== false, practitioner_name: status?.practitioner_name || '' } }));
     if (status?.state !== 'connected') return;
     // The link is managed where the account is: who you are connected as, and the way out.
     head.insertAdjacentHTML('beforeend', ` <span class="g-prac-link"><span class="g-prac-badge">Practitioner${status.practitioner_name ? ' · ' + esc(status.practitioner_name) : ''}</span>${status.practitioner_email ? `<span class="g-prac-link__as">connected as ${esc(status.practitioner_email)}</span>` : ''}<button type="button" class="g-prac-link__x" data-prac-disconnect>Disconnect</button></span>`);
-    head.querySelector('[data-prac-disconnect]')?.addEventListener('click', async () => {
-      try { await fetch(`${proxyBase()}/api/practitioners/disconnect`, { method: 'POST', credentials: 'include' }); } catch (e) { /* ignore */ }
-      head.querySelector('.g-prac-link')?.remove();
-      document.querySelector('[data-profile-tab="practice"]')?.click();
+    head.querySelector('[data-prac-disconnect]')?.addEventListener('click', async (event) => {
+      const button = event.currentTarget;
+      button.disabled = true;
+      head.querySelector('[data-prac-disconnect-error]')?.remove();
+      try { await unlink(); await mount(); }
+      catch (e) {
+        button.disabled = false;
+        head.insertAdjacentHTML('beforeend', '<span role="alert" data-prac-disconnect-error>Could not disconnect. Your account is still linked. Please try again.</span>');
+      }
     });
   }
   /** Which clients share their readings through Gaia (their customer id -> { opened, ... }). Local to our server, fast. */
@@ -96,8 +110,9 @@
   async function connection() {
     try {
       const res = await fetch(`${proxyBase()}/api/practitioners/status`,
-        { credentials: 'include', headers: { Accept: 'application/json' } });
-      if (!res.ok) return { available: false, connected: false };
+        { credentials: 'include', headers: { Accept: 'application/json' }, signal: AbortSignal.timeout(12000) });
+      if (res.status === 401) return { available: false, connected: false, signedOut: true };
+      if (!res.ok) return { available: false, connected: false, offline: true };
       return res.json();
     } catch (e) { return { available: false, connected: false, offline: true }; }
   }
@@ -184,19 +199,28 @@
       } catch (e) { return ''; }
     }
     async function showGate(status) {
+      if (status.signedOut) {
+        paint(empty('Your Gaia session has expired. Sign in again to open your practice.', { action: 'signin', label: 'Sign in' }));
+        return;
+      }
+      if (status.available === false && !status.offline) {
+        paint(empty('Gaia Practitioners is unavailable right now. Try again shortly.', { action: 'retry', label: 'Try again' }));
+        return;
+      }
       if (status.offline) {
         paint(empty('Could not reach Gaia right now. Check your connection and try again.',
           { action: 'retry', label: 'Try again' }));
         return;
       }
       if (status.state === 'not_practitioner') {
+        const inactive = status.reason === 'account_not_active';
         // Signed in fine; the account is not a practitioner. Say so, name the
         // account, and offer the two honest ways out.
         paint(`<div class="gaia-empty">
           ${lastAttempt()}
-          <p class="gaia-empty__text">The Gaia Practitioners account you connected is not a practitioner account.</p>
+          <p class="gaia-empty__text">${inactive ? 'Your Gaia Practitioners account is not active. Contact Gaia Practitioners to restore access, or connect a different account.' : 'The Gaia Practitioners account you connected is not a practitioner account.'}</p>
           ${status.practitioner_email ? `<p class="g-prac__muted">Connected as ${esc(status.practitioner_email)}</p>` : ''}
-          <p class="g-prac__muted">If you practise with Gaia, sign in with your practitioner account. If you are a client, your readings are under You.</p>
+          <p class="g-prac__muted">${inactive ? 'Your Gaia member account is still available in You.' : 'If you practise with Gaia, sign in with your practitioner account. If you are a client, your readings are under You.'}</p>
           <a class="g-btn g-btn--sm" href="${esc(proxyBase())}/api/practitioners/connect">Connect a different account</a>
           <button type="button" class="g-btn g-btn--ghost g-btn--sm" data-prac-action="disconnect">Disconnect</button>
         </div>`);
@@ -208,6 +232,7 @@
           <p class="gaia-empty__text">Your account is connected, but we could not read your practitioner profile.</p>
           ${status.practitioner_email ? `<p class="g-prac__muted">Connected as ${esc(status.practitioner_email)}</p>` : ''}
           <a class="g-btn g-btn--sm" href="${esc(proxyBase())}/api/practitioners/connect">Try again</a>
+          <button type="button" class="g-btn g-btn--ghost g-btn--sm" data-prac-action="disconnect">Disconnect</button>
         </div>`);
         return;
       }
@@ -215,7 +240,7 @@
         // Deliberately distinct from never-connected: naming the account is how
         // somebody notices they connected the wrong one.
         paint(`<div class="gaia-empty">
-          <p class="gaia-empty__text">Your connection to Gaia Practitioners expired.</p>
+          <p class="gaia-empty__text">Your Gaia Practitioners connection needs to be renewed.</p>
           ${status.practitioner_email ? `<p class="g-prac__muted">Connected as ${esc(status.practitioner_email)}</p>` : ''}
           <a class="g-btn g-btn--sm" href="${esc(proxyBase())}/api/practitioners/connect">Reconnect</a>
         </div>`);
@@ -229,8 +254,11 @@
       </div>`);
     }
     async function disconnect() {
-      try { await fetch(`${proxyBase()}/api/practitioners/disconnect`, { method: 'POST', credentials: 'include' }); } catch (e) { /* ignore */ }
-      start();
+      root.querySelector('[data-prac-disconnect-error]')?.remove();
+      try { await unlink(); await start(); await mount(); }
+      catch (e) {
+        root.insertAdjacentHTML('beforeend', '<p role="alert" data-prac-disconnect-error>Could not disconnect. Your account is still linked. Please try again.</p>');
+      }
     }
 
     // —— Phase 1: the landing screen ——
@@ -518,6 +546,7 @@
       const action = event.target.closest('[data-prac-action]');
       if (action) {
         const a = action.getAttribute('data-prac-action');
+        if (a === 'signin') { window.GaiaAuth?.open?.(); return; }
         if (a === 'retry') { start(); return; }
         if (a === 'disconnect') { disconnect(); return; }
         if (a.startsWith('retry-')) {
@@ -542,6 +571,7 @@
     });
 
     async function start(deepLink) {
+      loaded.clear();
       paint(skeleton(4));
       const status = await connection();
       badge(status);
@@ -554,29 +584,35 @@
     return { start, showClient, showList };
   }
 
-  /**
-   * Show the Practice tab only to a practitioner, and only on the SERVER's word.
-   *
-   * /api/practitioners/status answers 401 for anyone not signed in and
-   * `available: false` when the integration is switched off. A member who is not
-   * a practitioner never sees the tab row at all -- not a tab that explains why
-   * they cannot use it, which is just a worse way of saying the same thing to
-   * somebody it does not concern.
-   */
+  // Mount once; refresh after authentication/member renders without duplicate listeners.
+  let mounted = null;
+  let mountGeneration = 0;
   async function mount() {
     const tabs = document.querySelector('[data-profile-tabs]');
     const panel = document.getElementById('practitioner-panel');
     const me = document.getElementById('member-me');
     if (!tabs || !panel || !me) return;
 
-    let status;
-    try {
-      const res = await fetch(`${proxyBase()}/api/practitioners/status`,
-        { credentials: 'include', headers: { Accept: 'application/json' } });
-      if (!res.ok) return;                       // not signed in: nothing to show
-      status = await res.json();
-    } catch (e) { return; }                      // offline: leave Profile as it was
-    if (!status || status.available === false) return;
+    const generation = ++mountGeneration;
+    const status = await connection();
+    if (generation !== mountGeneration) return;
+    if (status.signedOut) {
+      mounted?.invalidate();
+      panel.replaceChildren();
+      tabs.hidden = true; panel.hidden = true; me.hidden = false;
+      document.getElementById('member-readings')?.classList.remove('is-on-practice-tab');
+      document.getElementById('member-data-sharing')?.classList.remove('is-on-practice-tab');
+      badge(status);
+      return;
+    }
+    if (status.offline && !mounted && !window.GaiaMember?.authed) return;
+    badge(status);
+    if (mounted && mounted.tabs === tabs) {
+      tabs.hidden = false;
+      mounted.invalidate();
+      if (tabs.querySelector('[data-profile-tab="practice"]')?.getAttribute('aria-selected') === 'true') mounted.select('practice');
+      return;
+    }
 
     tabs.hidden = false;
     const view = create(panel);
@@ -585,7 +621,7 @@
     // A deep link decides which tab opens, so Gaia can send somebody straight to
     // a client rather than to a tab they then have to find.
     const params = new URLSearchParams(window.location.search);
-    const wantsPractice = params.get('tab') === 'practice' || params.has('client');
+    const wantsPractice = params.get('tab') === 'practice' || params.has('client') || params.has('practitioners');
 
     function select(which) {
       const practice = which === 'practice';
@@ -593,6 +629,7 @@
         const on = b.getAttribute('data-profile-tab') === which;
         b.classList.toggle('is-active', on);
         b.setAttribute('aria-selected', String(on));
+        b.tabIndex = on ? 0 : -1;
       });
       me.hidden = practice;
       panel.hidden = !practice;
@@ -610,6 +647,18 @@
     tabs.addEventListener('click', (event) => {
       const button = event.target.closest('[data-profile-tab]');
       if (button) select(button.getAttribute('data-profile-tab'));
+    });
+
+    tabs.addEventListener('keydown', (event) => {
+      if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return;
+      const buttons = [...tabs.querySelectorAll('[data-profile-tab]')];
+      const current = buttons.indexOf(document.activeElement);
+      if (current < 0) return;
+      event.preventDefault();
+      const next = event.key === 'Home' ? 0 : event.key === 'End' ? buttons.length - 1
+        : (current + (event.key === 'ArrowRight' ? 1 : -1) + buttons.length) % buttons.length;
+      select(buttons[next].getAttribute('data-profile-tab'));
+      buttons[next].focus();
     });
 
     // Gaia asks for a client, a card, or just a section of the list. One hook
@@ -634,11 +683,17 @@
       });
     });
 
+    mounted = { tabs, view, select, invalidate: () => { started = false; } };
+    if (params.has('practitioners')) window.GaiaAppShell?.go?.('profile');
     select(wantsPractice ? 'practice' : 'me');
   }
 
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', mount);
   else mount();
+
+  document.addEventListener('gaia:auth', () => setTimeout(mount, 0));
+  document.addEventListener('gaia:member', () => setTimeout(mount, 0));
+  document.addEventListener('gaia:onboarding-complete', () => setTimeout(mount, 0));
 
   window.GaiaPractitioner = { create, mount };
 })();

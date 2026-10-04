@@ -968,3 +968,25 @@ body.gaia-v2 .gb-meta { color: var(--v3-text-2); }
   body.gaia-v2 :is(.gp-btn, .gb-btn):active { transform: none; }
   body.gaia-v2 [data-screen="today"] .g-de__orb-core { animation: none; }
 }
+
+/* Home cleanup: one frame per tool, consistent sections, restrained effects. */
+body.gaia-v2 [data-screen="today"] .g-free-tools {
+  padding: 0; border: 0; border-radius: 0; background: transparent; box-shadow: none;
+}
+body.gaia-v2 [data-screen="today"] .g-free-tool { box-shadow: none; border-radius: 14px; }
+body.gaia-v2 [data-screen="today"] .g-super-auth,
+body.gaia-v2 [data-screen="today"] .g-super-event { border-radius: var(--v3-radius); box-shadow: none; }
+@media (min-width: 1000px) {
+  body.gaia-v2 .gaia-tabbar__inner { border-radius: 20px !important; box-shadow: none; }
+  body.gaia-v2 .gaia-tabbar__link { min-height: 56px; padding: 8px 4px; }
+  body.gaia-v2 [data-screen="today"] .g-super-home { gap: 24px; }
+}
+@media (min-width: 1000px) {
+  /* Guest Home has no feature card beside the hero: do not reserve a blank column. */
+  body.gaia-v2 [data-screen="today"] .g-super-home:not(:has(> .g-feature-event, > .g-super-event)) > .g-super-hero {
+    grid-column: 1 / -1 !important; min-height: 320px !important; height: 360px !important; max-height: 420px !important;
+  }
+  body.gaia-v2 [data-screen="today"] .g-super-home:not(:has(> .g-feature-event, > .g-super-event)) > .g-super-hero .g-super-hero__intro {
+    min-height: 320px !important; height: 100%; padding: 32px !important; max-width: 700px;
+  }
+}

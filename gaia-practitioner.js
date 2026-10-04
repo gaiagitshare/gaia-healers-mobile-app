@@ -172,6 +172,7 @@
       exchange_failed: 'Gaia Practitioners did not accept the sign-in. Please try again in a moment.',
       not_practitioner: 'That Gaia Practitioners account is not a practitioner account.',
       unverified: 'We could not read your practitioner profile. Please try again.',
+      account_not_active: 'That Gaia Practitioners account is not active. Please contact Gaia Practitioners.',
     };
     // What the last connect attempt brought back, if the page was just returned to.
     function lastAttempt() {

@@ -215,14 +215,23 @@ export function forgetToken(contactId, file = TOKEN_FILE) {
 
 /**
  * Is the account they signed into a practitioner account? Gaia Practitioners
- * is the source of truth: their profile tool answers for a practitioner and
- * carries an id. A profile we could not read is not a verdict either way.
+ * is the source of truth: `get_practitioner_profile` answers for a practitioner
+ * with THEIR practitioner record. Measured on staging, 4 Oct 2026, that record
+ * is: id (number), name, firstname, lastname, email, sex, specialty, city,
+ * state, address, zipcode, tags, imageURL, status ("pending" on the test
+ * account). There is no `role` and no `practitionerId` field, so the plain
+ * `id` IS the practitioner id. A `role` that is present and not "practitioner"
+ * (should the partner add one) is a client account; a status that says the
+ * account is switched off is not a practitioner in our app either. A profile
+ * we could not read is not a verdict either way.
  */
+export const INACTIVE_STATUSES = new Set(['suspended', 'disabled', 'inactive', 'rejected', 'banned', 'deleted', 'blocked', 'archived']);
 export function verifyPractitioner(who) {
   if (!who || who.raw_ok === false) return { verified: null, reason: 'profile_unreadable' };
   if (who.profile_role && who.profile_role !== 'practitioner') return { verified: false, reason: 'no_practitioner_profile' };
-  if (String(who.practitioner_id || '').trim()) return { verified: true, reason: '' };
-  return { verified: null, reason: 'profile_unreadable' };
+  if (!String(who.practitioner_id || '').trim()) return { verified: null, reason: 'profile_unreadable' };
+  if (INACTIVE_STATUSES.has(String(who.profile_status || '').toLowerCase())) return { verified: false, reason: 'account_not_active' };
+  return { verified: true, reason: '' };
 }
 
 /**
@@ -236,10 +245,12 @@ export function verifyPractitioner(who) {
  */
 export function linkState(contactId, file = TOKEN_FILE) {
   const row = tokenFor(contactId, file);
-  const who = row ? { practitioner_name: row.practitioner_name || '', practitioner_email: row.practitioner_email || '', practitioner_id: row.practitioner_id || '' } : {};
+  const who = row ? { practitioner_name: row.practitioner_name || '', practitioner_email: row.practitioner_email || '', practitioner_id: row.practitioner_id || '', profile_status: row.profile_status || '' } : {};
   if (!row) return { state: 'not_connected' };
-  // Older verdicts may have relied on a generic user id. Verify once again.
-  const verified = row.verified === true && row.verification_version === 2;
+  // Rows written before the verdict existed (before 4 Oct 2026) carry the same
+  // evidence the verdict now uses: the practitioner id from THEIR profile. They
+  // stay connected; nobody is sent back through OAuth for a bookkeeping field.
+  const verified = row.verified === true || (row.verified == null && Boolean(String(row.practitioner_id || '').trim()));
   if (row.verified === false) return { state: 'not_practitioner', reason: row.verify_reason || 'no_practitioner_profile', ...who, connected_at: row.connected_at || '' };
   if (row.needs_reconnect || (row.expired && !row.refresh_token) || !row.usable) return { state: 'needs_reconnect', ...who, broken_at: row.broken_at || '', expired: Boolean(row.expired) };
   if (!verified) return { state: 'unverified', reason: row.verify_reason || 'profile_unreadable', ...who, connected_at: row.connected_at || '' };
@@ -506,16 +517,17 @@ export async function resolveProfile(cfg, accessToken, fetchImpl = fetch) {
     return {
       practitioner_name: pick('name', 'fullName', 'displayName'),
       practitioner_email: pick('email'),
-      // A generic user id is identity, not evidence of a practitioner role.
-      practitioner_id: pick('practitionerId', 'practitioner_id')
-        || (String(data?.role || '').toLowerCase() === 'practitioner' ? pick('id') : ''),
+      // Their practitioner record's own id (a number on staging); explicit
+      // practitioner fields win should the partner ever add them.
+      practitioner_id: pick('practitionerId', 'practitioner_id', 'id'),
       profile_role: String(data?.role || '').toLowerCase(),
+      profile_status: String(data?.status || '').toLowerCase(),
       raw_ok: true,
     };
   } catch (e) {
     // A token that cannot read its own profile is still a token; record that we
     // could not confirm who it belongs to rather than inventing an identity.
-    return { practitioner_name: '', practitioner_email: '', practitioner_id: '', raw_ok: false,
+    return { practitioner_name: '', practitioner_email: '', practitioner_id: '', profile_role: '', profile_status: '', raw_ok: false,
              note: String(e.message || e).slice(0, 140) };
   }
 }

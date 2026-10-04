@@ -453,7 +453,22 @@ Practitioners account from You > Practice > Connect: `/api/practitioners/connect
 starts the OAuth for ANY signed-in member (no GHL gate since 4 Oct 2026);
 at `/callback` the token is exchanged and `resolveProfile` asks THEIR
 `get_practitioner_profile`; `verifyPractitioner(who)` decides
-(`verified: true | false | null`), stored on the token row. `linkState(contactId)`
+(`verified: true | false | null`), stored on the token row.
+
+What that profile really looks like (measured on staging 4 Oct 2026 with
+`tools/practitioner-profile-shape.mjs`, field names only): `id` (number),
+`name`, `firstname`, `lastname`, `email`, `sex`, `specialty`, `city`, `state`,
+`address`, `zipcode`, `tags`, `imageURL`, `status` (the test account says
+`"pending"`). There is NO `role` and NO `practitionerId`: the plain `id` is the
+practitioner id, and `verifyPractitioner` says `true` for any readable profile
+with an id. It says `false` only for an explicit non-practitioner `role` (if the
+partner ever adds one) or a `status` in `INACTIVE_STATUSES` (suspended,
+disabled, …; reason `account_not_active`), and `null` when the profile could not
+be read or has no id. `status` is stored as `profile_status` and carried by
+`linkState`. Rows written before the verdict existed keep working from their
+practitioner id. Fixture pinning the shape: `REAL_PROFILE` in
+`test/practitioner-link-state.test.js`. Open question for huMan: the full list
+of `status` values (is "pending" a practitioner who may already use the tools?). `linkState(contactId)`
 in `practitioners-oauth.js` is the one authority — `not_connected`,
 `connected`, `needs_reconnect`, `not_practitioner`, `unverified` — used by
 `/status` (spread into the answer), by the role the Assist tools run with

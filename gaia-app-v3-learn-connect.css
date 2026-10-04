@@ -1298,3 +1298,10 @@ body.gaia-v2 [data-screen="community"] #community-body .g-chip--pending {
   background: rgba(88, 199, 232, 0.12);
   color: #8fdcf2;
 }
+
+/* Wide desktops: the course and community item grids go three abreast, so
+   fourteen 150px cards are not a 1,000px tall stack of two columns. */
+@media (min-width: 1100px) {
+  body.gaia-v2 [data-screen="academy"] #member-academy .g-access-grid,
+  body.gaia-v2 [data-screen="community"] #community-body .g-access-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}

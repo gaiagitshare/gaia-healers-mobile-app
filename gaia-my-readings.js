@@ -267,9 +267,11 @@
       </div>
     </details>`;
   }
-  function readingsCard(r, status = {}) {
+  function readingsCard(r, status = {}, prefs = {}) {
     const latest = r.latest, trend = r.trend, summary = r.summary || {};
-    const firstVisit = !status.seen_scanned_at;
+    // "What these mean" stays open until the member folds it once; the choice
+    // is kept on the server (prefs), so their phone and laptop agree.
+    const firstVisit = !prefs.readings_explainer_collapsed;
     const readFirst = (r.files || []).filter((f) => f.first);
     const practitioner = r.practitioner || {};
     const chakraRow = (c, i) => {
@@ -329,7 +331,8 @@
 
   let lastSummary = null, lastReadings = null;
   async function render(root) {
-    const st = await api('/api/practitioners/member-link/status');
+    const [st, pf] = await Promise.all([api('/api/practitioners/member-link/status'), api('/api/member/prefs').catch(() => ({ ok: false, body: {} }))]);
+    const prefs = (pf.ok && pf.body.prefs) || {};
     if (!st.ok) { root.hidden = true; setTodayLink({ linked: false, fresh: false }); return; }             // not signed in, or feature off (404)
     root.hidden = false;
     const status = st.body;
@@ -340,7 +343,7 @@
     const r = await api('/api/practitioners/my-readings');
     if (r.ok) {
       lastSummary = r.body.summary || null; lastReadings = r.body;
-      root.innerHTML = readingsCard(r.body, status);
+      root.innerHTML = readingsCard(r.body, status, prefs);
       pickOut(root, r.body.series || []);
       setTodayLink({});   // the shortcut on Today picks up the two numbers
       // Seen means seen: recorded only once the card is actually on screen
@@ -414,6 +417,10 @@
       } finally { btn.disabled = false; }
     });
     root.addEventListener('change', (e) => { if (e.target.matches('[data-pick]')) pickOut(root, lastReadings?.series || []); });
+    root.addEventListener('toggle', (e) => {
+      if (!e.target.matches('.g-readings__explain')) return;
+      api('/api/member/prefs', { method: 'POST', body: { prefs: { readings_explainer_collapsed: !e.target.open } } }).catch(() => {});
+    }, true);
     let pendingReveal = false;
     window.addEventListener('gaia:open-readings', () => { if (!reveal(root)) pendingReveal = true; });
     window.addEventListener('gaia:signed-out', () => { root.hidden = true; root.innerHTML = ''; setTodayLink({ linked: false, fresh: false }); });

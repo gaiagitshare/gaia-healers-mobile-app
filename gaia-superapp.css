@@ -912,3 +912,64 @@ body.gaia-v2 .g-super-home .g-super-hero .g-super-hero__intro{position:relative;
 .g-upg__cta { white-space: nowrap; }
 .g-upg__soon { font-size: .8rem; opacity: .6; }
 .g-upg__note { margin: 10px 0 0; font-size: .76rem; opacity: .62; line-height: 1.4; }
+
+/* ─────────────────────────────────────────────────────────────────────────
+   HOME for a member, v2 (4 Oct 2026): the dashboard said once.
+   One heading, one next step, the gathering, Your Gaia, four session
+   actions, one membership strip. No hero, no date card, no sync notice
+   unless something is wrong. Phone first; 768 two columns; 1024 four
+   service rows across; 1440 a measured 1180px column.
+   ───────────────────────────────────────────────────────────────────────── */
+.g-super-home--v2 { display: block !important; max-width: 1180px; margin-inline: auto; padding-bottom: 96px; }
+.g-home2 > * + * { margin-top: 22px; }
+.g-home2__greet { padding: 4px 2px 0; }
+.g-home2__greet h1 { margin: 0; font-family: var(--g-font-serif); font-weight: 600; font-size: clamp(30px, 5.4vw, 44px); line-height: 1.05; letter-spacing: -.01em; color: var(--g-text); text-wrap: balance; }
+.g-home2__greet p { margin: 8px 0 0; color: var(--super-muted); font-size: 15px; }
+.g-home2__top { display: grid; grid-template-columns: 1fr; gap: 14px; }
+.g-home2__next, .g-home2__event { border: 1px solid var(--super-line); border-radius: 22px; background: var(--super-panel); padding: 20px; min-width: 0; }
+.g-home2__next h2, .g-home2__event h2 { margin: 6px 0 0; font-family: var(--g-font-serif); font-weight: 600; font-size: clamp(22px, 3vw, 28px); line-height: 1.12; color: var(--g-text); text-wrap: balance; }
+.g-home2__next > p:not(.g-super-kicker), .g-home2__event-body > p:not(.g-super-kicker) { margin: 8px 0 0; color: var(--super-muted); font-size: 14px; line-height: 1.5; }
+.g-home2__next .g-btn, .g-home2__actions { margin-top: 16px; }
+.g-home2__next .g-btn { display: inline-flex; align-items: center; gap: 8px; }
+.g-home2__event { display: grid; grid-template-columns: 96px minmax(0, 1fr); gap: 16px; align-items: start; }
+.g-home2__event-art { width: 96px; height: 96px; object-fit: cover; border-radius: 16px; border: 1px solid var(--super-line); }
+.g-home2__event-body { min-width: 0; }
+.g-home2__badge { display: inline-block; margin-left: 8px; padding: 2px 8px; border-radius: 999px; font-size: 11px; font-weight: 700; letter-spacing: .04em; text-transform: none; color: var(--super-accent); background: rgba(166, 237, 104, .12); border: 1px solid rgba(166, 237, 104, .3); }
+.g-home2__actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.g-home2__gaia .g-super-kicker, .g-home2__book .g-super-kicker { margin: 0 2px 10px; }
+.g-home2__rows { display: grid; grid-template-columns: 1fr; gap: 10px; }
+.g-home2 .g-super-service { min-height: 0; grid-template-columns: 44px minmax(0, 1fr) 18px; gap: 14px; padding: 14px 16px; border: 1px solid var(--super-line); border-radius: 18px; background: var(--super-panel); }
+.g-home2 .g-super-service__icon { width: 44px; height: 44px; font-size: 21px; }
+.g-home2 .g-super-service__copy { gap: 3px; }
+.g-home2 .g-super-service__copy strong { font-size: 19px; }
+.g-home2 .g-super-service__copy small { font-size: 12.5px; }
+.g-home2__book-grid { display: grid; grid-template-columns: 1fr; gap: 10px; }
+.g-home2__action { -webkit-appearance: none; appearance: none; width: 100%; display: grid; grid-template-columns: 40px minmax(0, 1fr) 18px; align-items: center; gap: 12px; padding: 13px 14px; border: 1px solid var(--super-line); border-radius: 18px; background: var(--super-panel); color: var(--g-text); text-align: left; cursor: pointer; font-family: inherit; min-height: 64px; transition: background-color .18s ease; }
+.g-home2__action:hover, .g-home2__action:focus-visible { background: var(--super-panel-2); outline: none; }
+.g-home2__action-icon { display: grid; place-items: center; width: 40px; height: 40px; border-radius: 50%; border: 1px solid rgba(166, 237, 104, .3); color: var(--super-accent); font-size: 19px; }
+.g-home2__action-copy { min-width: 0; display: grid; gap: 2px; }
+.g-home2__action-copy strong { font-size: 15px; font-weight: 600; }
+.g-home2__action-copy small { color: var(--super-muted); font-size: 12.5px; line-height: 1.4; }
+.g-home2__action-arrow { color: #889285; font-size: 16px; }
+.g-home2__plan { display: flex; align-items: center; justify-content: space-between; gap: 14px; padding: 14px 18px; border-radius: 18px; border: 1px solid rgba(166, 237, 104, .28); background: linear-gradient(135deg, rgba(166, 237, 104, .10), rgba(88, 199, 232, .06)), var(--super-panel); color: var(--g-text); text-decoration: none; }
+.g-home2__plan-copy { min-width: 0; display: grid; gap: 2px; }
+.g-home2__plan-copy strong { font-size: 15px; font-weight: 700; }
+.g-home2__plan-copy small { color: var(--super-muted); font-size: 12.5px; line-height: 1.4; }
+.g-home2__plan-cta { flex: none; display: inline-flex; align-items: center; gap: 4px; color: var(--super-accent); font-size: 13px; font-weight: 700; }
+.g-home2__sync { display: flex; align-items: center; gap: 8px; margin: 0; padding: 10px 14px; border-radius: 14px; border: 1px solid rgba(232, 176, 75, .35); background: rgba(232, 176, 75, .08); color: var(--g-text); font-size: 13px; }
+@media (min-width: 768px) {
+  .g-home2__top { grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr); }
+  .g-home2__rows { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .g-home2__book-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .g-home2__greet h1 { font-size: clamp(34px, 4vw, 44px); }
+}
+@media (min-width: 1024px) {
+  .g-home2 > * + * { margin-top: 26px; }
+  .g-home2__rows { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+  .g-home2 .g-super-service { grid-template-columns: 44px minmax(0, 1fr); padding: 16px; }
+  .g-home2 .g-super-service__arrow { display: none; }
+  .g-home2__event { grid-template-columns: 120px minmax(0, 1fr); }
+  .g-home2__event-art { width: 120px; height: 120px; }
+}
+@media (min-width: 1440px) { .g-super-home--v2 { padding-bottom: 72px; } .g-home2__book-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); } .g-home2__action { grid-template-columns: 40px minmax(0, 1fr); } .g-home2__action-arrow { display: none; } }
+@media (max-width: 767px) { .g-super-home--v2 { padding-bottom: 110px; } }

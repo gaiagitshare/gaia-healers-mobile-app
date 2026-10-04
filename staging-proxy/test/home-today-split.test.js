@@ -39,12 +39,20 @@ test('Assist knows both screens: the guide, the navigate enum on every surface, 
   assert.match(voice, /NAVIGATE_SCREENS = \['today', 'daily',/);
 });
 
-test('the daily energy check and the sky render on Today only; Home has a door to Today instead', () => {
+test('the daily energy check and the sky render on Today only; the member Home is the dashboard said once', () => {
   const sa = read('gaia-superapp.js');
-  assert.match(sa, /function renderToday\(\)/); assert.match(sa, /function todayDoor\(authed\)/);
-  const home = sa.slice(sa.indexOf('function renderHome()'), sa.indexOf('function todayDoor('));
+  assert.match(sa, /function renderToday\(\)/); assert.match(sa, /function renderHomeMember\(root, greeting\)/);
+  assert.doesNotMatch(sa, /todayDoor/, 'no "Open Today" card: Today is a tab');
+  const home = sa.slice(sa.indexOf('function renderHome()'), sa.indexOf('function homeLine()'));
   assert.doesNotMatch(home, /data-daily-host/, 'Home no longer carries the daily check'); assert.doesNotMatch(home, /data-sky-host/, 'nor the sky');
-  assert.match(home, /todayDoor\(true\)/); assert.match(home, /todayDoor\(false\)/);
+  const member = sa.slice(sa.indexOf('function renderHomeMember('), sa.indexOf('function homeLine()'));
+  assert.doesNotMatch(member, /g-super-hero|g-super-services|g-super-sync|upgradeCard\(\)|primaryMemberAction\(\)/, 'no hero, no second access grid, no permanent sync notice, no giant upgrade card');
+  assert.match(member, /<header class="g-home2__greet"><h1>' \+ greeting \+ '<\/h1>/, 'the greeting is the page heading');
+  for (const part of ['nextStep()', 'eventCompact()', "serviceLink(v, i, t, m)", 'bookActions()', 'membershipStrip()']) assert.ok(member.includes(part), part);
+  assert.match(member, /meta\.degraded \|\| meta\.stale/, 'sync is said only when something is wrong');
+  // every destination is the one that was here before
+  for (const id of ['scans', 'bio-welldemo', 'mgf6oviyhPwrLBi03gzq', 'gVzfo7sRfbLnMzQqSnJL']) assert.ok(sa.includes(id), id);
+  assert.match(sa, /href="home\.html\?view=store&tab=membership"/); assert.match(sa, /href="home\.html\?view=events"/);
   const today = sa.slice(sa.indexOf('function renderToday()'), sa.indexOf('/** The member\'s way back'));
   for (const host of ['data-today-readings', 'data-daily-host', 'data-sky-host', 'nextBookingCard()']) assert.ok(today.includes(host), host);
   assert.match(sa, /renderToday\(\);\n/, 'Today is drawn whenever Home is');
@@ -77,6 +85,7 @@ test('the in-app window always has a reachable Close, and bookings send a member
   assert.match(member, /height:min\(92dvh,100%\);max-height:100%/, 'the sheet never grows past the screen');
   assert.match(member, /gaia-booking-modal__foot"><button type="button" class="gaia-booking-modal__done" data-book-close>Close<\/button>/, 'a Close at the thumb');
   assert.match(member, /href="home\.html\?view=directory" data-app-nav="directory">Find a practitioner near you/);
-  const css = read('gaia-avatar.css');
-  assert.match(css, /\.g-super-home > \.g-super-today-door \{ grid-column: 1;/); assert.match(css, /\.g-super-primary:not\(\.g-super-today-door\) \{ grid-column: 2;/);
+  const css = read('gaia-superapp.css');
+  for (const bp of ['min-width: 768px', 'min-width: 1024px', 'min-width: 1440px', 'max-width: 767px']) assert.ok(css.slice(css.indexOf('.g-super-home--v2')).includes(bp), bp);
+  assert.match(css, /\.g-super-home--v2 \{ display: block !important;/, 'the old two-column grid does not apply to the v2 Home');
 });

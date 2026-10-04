@@ -138,23 +138,14 @@
 .gaia-tabbar__home { text-decoration: none; cursor: pointer; }
 .gaia-tabbar__home:focus-visible { outline: 2px solid #6fe9ff; outline-offset: 3px; }
 body.gaia-v2 .gaia-tabbar__inner a.gaia-tabbar__home { border-radius: 999px !important; }
-/* ── Today (the day) and Home's door to it ── */
+/* ── Today (the day) ── */
 .g-super-today__head { padding: 6px 4px 2px; }
 .g-super-today__head h1 { font-family: var(--g-font-serif, "Cormorant Garamond", serif); font-weight: 600; font-size: clamp(1.9rem, 6vw, 2.6rem); margin: 4px 0 2px; line-height: 1.05; }
 .g-super-today__head p { margin: 0; color: var(--g-text-muted, #a8b3ad); }
 .g-super-today__head .g-super-kicker { margin-bottom: 2px; }
-.g-super-today-door { display: block; text-decoration: none; color: inherit; padding: 18px 20px; border: 1px solid var(--g-line, rgba(160,255,185,.16)); border-radius: 22px; background: var(--g-surface, rgba(5,16,11,.9)); margin-top: 20px !important; max-width: none; }
-.g-super-today-door h2 { font-size: clamp(22px, 2.4vw, 28px) !important; line-height: 1.15 !important; }
-.g-super-today-door > p:not(.g-super-kicker) { margin-top: 6px !important; font-size: 14px; }
-.g-super-today-door .g-super-primary__button { display: inline-flex; align-items: center; gap: 8px; margin-top: 14px; min-width: 0; }
 /* wide screens: the Today door and the primary action share a row; the headings stop shouting */
 @media (min-width: 1060px) {
-  .g-super-home > .g-super-today-door { grid-column: 1; margin-top: 0 !important; }
-  .g-super-home > .g-super-today-door--wide { grid-column: 1 / -1; }
-  .g-super-home > .g-super-primary:not(.g-super-today-door) { grid-column: 2; margin-top: 0; max-width: none; }
-  .g-super-home > .g-super-primary:not(.g-super-today-door) h2 { font-size: clamp(26px, 2.4vw, 34px); line-height: 1.1; }
-  .g-super-home > .g-super-primary:not(.g-super-today-door) > p:not(.g-super-kicker) { font-size: 15px; }
-}
+  .g-super-home >   .g-super-home >   .g-super-home > .g-super-primary:not(  .g-super-home > .g-super-primary:not(  .g-super-home > .g-super-primary:not(}
 /* ── the conversation, in her bubble; the engine's own sheet stays hidden ── */
 body.gaia-assist-headless .gaia-assist__panel, body.gaia-assist-headless .gaia-assist__backdrop { display: none !important; }
 body.gaia-assist-headless.gaia-assist-panel-open { overflow: auto !important; }

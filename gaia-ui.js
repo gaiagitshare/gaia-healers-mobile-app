@@ -3289,9 +3289,23 @@
     });
     // Voice through the same door the orb uses. In live mode a start is the
     // orb's tap; in pipeline mode start/end are the orb's hold and release.
+    // A surface that is not this panel (the avatar) sends and closes through
+    // these; the engine, history, tools and billing are exactly the same.
+    window.addEventListener('gaia:assist-send', (event) => {
+      const text = String(event.detail?.text || '').trim().slice(0, 1000);
+      if (!text) return;
+      setOpen(true);
+      void sendPrompt(text, 'general', 'text');
+    });
+    window.addEventListener('gaia:assist-close', () => {
+      if (realtimeVoice?.isActive()) realtimeVoice.stop();
+      setOpen(false);
+      setAssistVoiceState('idle', REALTIME_STATUS_COPY.idle);
+    });
     window.addEventListener('gaia:assist-voice', (event) => {
       const hold = event.detail?.hold || 'start';
       unlockVoicePlayback();
+      if (hold === 'stop') { try { realtimeVoice?.stop?.(); } catch (_) {} setAssistVoiceState('idle', REALTIME_STATUS_COPY.idle); return; }
       if (inPipelineMode()) {
         if (hold === 'start') { setOpen(true); try { realtimeVoice?.holdStart?.(); } catch (_) {} }
         else { try { realtimeVoice?.holdEnd?.(); } catch (_) {} }

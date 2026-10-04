@@ -80,6 +80,12 @@ test('the screen tells the four states apart and names what the last attempt bro
   assert.match(ui, /data-prac-action="disconnect"/); assert.match(ui, /Connect a different account/);
   assert.match(ui, /Your Gaia login stays as it is\. This links your practitioner account to it\./, 'one login; the link sits on top');
   assert.match(ui, /function badge\(status\)/, 'the role shows on the You header once linked');
+  assert.match(ui, /connected as \$\{esc\(status\.practitioner_email\)\}/, 'who you are connected as');
+  assert.match(ui, /data-prac-disconnect/, 'and the way out, where the account is');
+  assert.match(ui, /gaia:practitioner-state/, 'the state is announced for the avatar');
+  const av = read('gaia-avatar.js');
+  assert.match(av, /addEventListener\('gaia:practitioner-state'/); assert.match(av, /Your practice is connected\./);
+  assert.match(av, /chips: \['practice', 'talk'\]/, 'one chip that matters, plus voice');
 });
 
 test('every script that calls the API asks the shared resolver first', () => {

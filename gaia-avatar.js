@@ -356,6 +356,13 @@
     // The readings panel tells us when a new reading is waiting.
     window.addEventListener('gaia:readings-status', (e) => { const d = e.detail || {}; if (d.new_reading && bubble.hidden && !document.body.classList.contains('gaia-assist-panel-open')) showBubble(bubbleFor()); });
     window.addEventListener('gaia:signed-out', () => { hideBubble(); setState('idle'); });
+    // A practitioner whose account is linked hears it once per session, in her words, with the one chip that matters.
+    let saidPractice = false;
+    document.addEventListener('gaia:practitioner-state', (e) => {
+      if (e.detail?.state !== 'connected' || saidPractice || !bubble.hidden || document.body.classList.contains('gaia-assist-panel-open')) return;
+      saidPractice = true;
+      setTimeout(() => { if (bubble.hidden) showBubble({ text: 'Your practice is connected. Ask me about your clients, or open them.', chips: ['practice', 'talk'] }); }, 900);
+    });
   }
 
   // ── idle personality ──────────────────────────────────────────────────

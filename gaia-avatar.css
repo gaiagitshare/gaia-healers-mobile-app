@@ -137,3 +137,4 @@
 /* the centre of the bar is Home: the orb's look, a link's behaviour */
 .gaia-tabbar__home { text-decoration: none; cursor: pointer; }
 .gaia-tabbar__home:focus-visible { outline: 2px solid #6fe9ff; outline-offset: 3px; }
+body.gaia-v2 .gaia-tabbar__inner a.gaia-tabbar__home { border-radius: 999px !important; }

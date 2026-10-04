@@ -103,7 +103,7 @@ test('a result that arrives after the practitioner moved on is discarded', () =>
 
 test('every state a practitioner can be in has its own words', () => {
   assert.match(ui, /Connect your Gaia Practitioners account/, 'never connected');
-  assert.match(ui, /connection to Gaia Practitioners expired/, 'needs reconnect');
+  assert.match(ui, /Gaia Practitioners connection needs to be renewed/, 'needs reconnect');
   assert.match(ui, /practitioner_email/, 'and names the account, so a wrong one is visible');
   assert.match(ui, /Bio-Well did not answer/, 'a failed fetch');
   assert.match(ui, /No files for this client yet/, 'honestly empty rather than hidden');
@@ -125,14 +125,14 @@ test('the screen never offers to write anything', () => {
     'the practitioner acts in their own platform and looks here');
 });
 
-test('the Practice tab is hidden until the server says practitioner', () => {
+test('the Practice tab ships hidden and refreshes from authenticated server status', () => {
   assert.match(home, /data-profile-tabs hidden/,
     'the tab row ships hidden and is revealed by the status call');
   const i = ui.indexOf('async function mount');
   const body = ui.slice(i, i + 1200);
-  assert.match(body, /\/api\/practitioners\/status/, 'the server decides, not the page');
-  assert.match(body, /if \(!res\.ok\) return/, 'not signed in shows nothing');
-  assert.match(body, /available === false/, 'and neither does the integration being off');
+  assert.match(body, /await connection\(\)/, 'status is read by the shared connection helper');
+  assert.match(body, /if \(status.signedOut\)/, 'not signed in shows nothing');
+  assert.match(ui, /status.available === false && !status.offline/, 'integration outages have an explicit recovery state');
 });
 
 test('Gaia can open a client without a reload', () => {

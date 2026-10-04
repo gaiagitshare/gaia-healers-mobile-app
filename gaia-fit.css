@@ -1730,7 +1730,7 @@ body.gaia-v2 .g-topbar__actions.gaia-header-actions { display: flex; align-items
 .gaia-tour { position: fixed; inset: 0; z-index: 1000; }
 .gaia-tour__spot {
   position: fixed; border-radius: 18px; border: 2px solid var(--g-accent, #A6E84B);
-  box-shadow: 0 0 0 9999px rgba(4,8,6,.80), 0 0 34px rgba(166,232,75,.35);
+  box-shadow: 0 0 0 9999px rgba(4,8,6,.62), 0 0 18px rgba(166,232,75,.18);
   transition: left .32s cubic-bezier(.2,.8,.3,1), top .32s cubic-bezier(.2,.8,.3,1),
     width .32s cubic-bezier(.2,.8,.3,1), height .32s cubic-bezier(.2,.8,.3,1);
   pointer-events: none;

@@ -37,11 +37,11 @@
 
 body.gaia-v2 {
   /* The owner's palette, named once. */
-  --v3-page: #020805;
-  --v3-card: rgba(5, 16, 11, 0.9);
-  --v3-card-2: rgba(16, 31, 24, 0.72);
-  --v3-green: #75f05a;
-  --v3-green-hi: #8bff70;
+  --v3-page: #08110d;
+  --v3-card: #101b15;
+  --v3-card-2: #17241c;
+  --v3-green: #9de177;
+  --v3-green-hi: #b2ed92;
   --v3-emerald: #42db86;
   --v3-cyan: #58c7e8;
   --v3-text: #f5f7f5;
@@ -52,15 +52,10 @@ body.gaia-v2 {
   /* Eyebrow labels: calm sage, not the interactive green. */
   --v3-label: #8fc39c;
   --v3-ease: cubic-bezier(0.22, 1, 0.36, 1);
-  --v3-radius: 24px;
-  --v3-radius-lg: 28px;
-  --v3-card-bg:
-    radial-gradient(120% 80% at 0% 0%, rgba(117, 240, 90, 0.05), transparent 55%),
-    var(--v3-card);
-  --v3-card-shadow:
-    inset 0 1px 0 rgba(200, 255, 210, 0.05),
-    0 0 40px -18px rgba(117, 240, 90, 0.16),
-    0 22px 44px -30px rgba(0, 0, 0, 0.9);
+  --v3-radius: 18px;
+  --v3-radius-lg: 22px;
+  --v3-card-bg: var(--v3-card);
+  --v3-card-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
 
   /* The older layers' tokens, re-pointed at the palette. */
   --g-bg: var(--v3-page);
@@ -82,7 +77,7 @@ body.gaia-v2 {
   --g-r-lg: var(--v3-radius);
   --g-r-xl: var(--v3-radius-lg);
   --g-focus: 0 0 0 2px var(--v3-page), 0 0 0 4px rgba(117, 240, 90, 0.75);
-  --g-glow: 0 0 26px rgba(117, 240, 90, 0.35);
+  --g-glow: 0 0 12px rgba(157, 225, 119, 0.16);
   --super-bg: var(--v3-page);
   --super-panel: var(--v3-card);
   --super-panel-2: var(--v3-card-2);
@@ -535,13 +530,10 @@ body.gaia-v2 .g-btn:not(.gaia-assist *) {
 }
 body.gaia-v2 .g-btn--primary:not(.gaia-assist *) {
   border: 0;
-  background: linear-gradient(180deg, var(--v3-green-hi), var(--v3-green) 60%, #62dd4b);
+  background: var(--v3-green);
   color: #06170d;
   font-weight: 700;
-  box-shadow:
-    0 0 0 1px rgba(139, 255, 112, 0.45),
-    0 0 22px -4px rgba(117, 240, 90, 0.45),
-    inset 0 1px 0 rgba(255, 255, 255, 0.4);
+  box-shadow: none;
 }
 body.gaia-v2 .g-btn--secondary:not(.gaia-assist *) {
   border: 1px solid rgba(117, 240, 90, 0.3);

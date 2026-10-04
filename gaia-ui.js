@@ -924,8 +924,8 @@
     const steps = (customSteps || [
       { sel: '.g-free-tools', eyebrow: 'Free · no sign-up', title: 'Try your energy — free',
         body: 'Energy, Horoscope, Chakra &amp; Moon readings, right now. Your results save when you join.' },
-      { sel: '.gaia-tabbar', eyebrow: 'Your navigation', title: 'Six places, one tap',
-        body: 'Today, Energy, Academy, Community, Shop and You. The green button in the middle brings you home.' },
+      { sel: '.gaia-tabbar__inner', eyebrow: 'Your navigation', title: 'Six places, one tap',
+        body: 'Today, Energy, Academy, Community, Shop and You. The green Home button brings you back here.' },
       { sel: '[data-app-nav="daily"]', eyebrow: 'Today', title: 'The day itself',
         body: 'Your daily energy check and today\u2019s sky live here, every day.' },
       { sel: '.gava-char', eyebrow: 'Your guide', title: 'That is Gaia',
@@ -937,31 +937,65 @@
     document.querySelector('.gaia-tour')?.remove();
 
     let i = 0;
+    const previousFocus = document.activeElement;
+    const initialScroll = { left: window.scrollX, top: window.scrollY };
     const overlay = document.createElement('div');
     overlay.className = 'gaia-tour';
-    overlay.innerHTML = '<div class="gaia-tour__spot" aria-hidden="true"></div><div class="gaia-tour__card" role="dialog" aria-modal="true"></div>';
+    overlay.innerHTML = '<div class="gaia-tour__spot" aria-hidden="true"></div><div class="gaia-tour__card" role="dialog" aria-modal="true" aria-label="Getting started"></div>';
     const spot = overlay.querySelector('.gaia-tour__spot');
     const card = overlay.querySelector('.gaia-tour__card');
     document.body.appendChild(overlay);
 
-    const finish = () => { if (remember) markTourSeen(); overlay.remove(); window.removeEventListener('resize', place); };
+    const finish = () => {
+      if (remember) markTourSeen();
+      overlay.remove();
+      window.removeEventListener('resize', place);
+      window.removeEventListener('scroll', place, true);
+      document.removeEventListener('keydown', onKey);
+      window.scrollTo({ ...initialScroll, behavior: 'instant' });
+      if (previousFocus?.isConnected && previousFocus.focus) previousFocus.focus({ preventScroll: true });
+    };
+    function onKey(event) {
+      if (event.key === 'Escape') { event.preventDefault(); finish(); }
+      if (event.key !== 'Tab') return;
+      const buttons = [...card.querySelectorAll('button')];
+      const at = buttons.indexOf(document.activeElement);
+      if (event.shiftKey && at <= 0) { event.preventDefault(); buttons.at(-1)?.focus(); }
+      else if (!event.shiftKey && (at < 0 || at === buttons.length - 1)) { event.preventDefault(); buttons[0]?.focus(); }
+    }
     function place() {
-      const el = document.querySelector(steps[i].sel);
-      if (!el) return;
-      const r = el.getBoundingClientRect();
-      const pad = 8;
-      spot.style.left = Math.max(6, r.left - pad) + 'px';
-      spot.style.top = Math.max(6, r.top - pad) + 'px';
-      spot.style.width = Math.min(window.innerWidth - 12, r.width + pad * 2) + 'px';
-      spot.style.height = (r.height + pad * 2) + 'px';
-      const room = window.innerHeight - r.bottom;
-      if (room > 210) { card.style.top = (r.bottom + 14) + 'px'; card.style.bottom = 'auto'; }
-      else { card.style.top = 'auto'; card.style.bottom = Math.max(14, window.innerHeight - r.top + 14) + 'px'; }
+      if (!overlay.isConnected) return;
+      let el = document.querySelector(steps[i].sel);
+      if (el?.classList.contains('gaia-tabbar')) el = el.querySelector('.gaia-tabbar__inner') || el;
+      const r = el?.getBoundingClientRect();
+      const vw = window.innerWidth, vh = window.innerHeight, margin = 16;
+      const target = r && r.width > 0 && r.height > 0;
+      const left = target ? Math.max(6, r.left - 8) : vw / 2;
+      const top = target ? Math.max(6, r.top - 8) : vh / 2;
+      spot.style.left = left + 'px';
+      spot.style.top = top + 'px';
+      spot.style.width = (target ? Math.max(0, Math.min(vw - 6, r.right + 8) - left) : 0) + 'px';
+      spot.style.height = (target ? Math.max(0, Math.min(vh - 6, r.bottom + 8) - top) : 0) + 'px';
+      const width = Math.min(420, vw - margin * 2);
+      card.style.width = width + 'px';
+      card.style.right = 'auto'; card.style.bottom = 'auto'; card.style.margin = '0';
+      card.style.maxHeight = Math.max(0, vh - margin * 2) + 'px';
+      card.style.overflowY = 'auto';
+      const height = card.getBoundingClientRect().height;
+      let x = (vw - width) / 2, y = (vh - height) / 2;
+      if (target) {
+        if (r.width < vw / 3 && r.right + margin + width <= vw - margin) {
+          x = r.right + margin; y = r.top + (r.height - height) / 2;
+        } else if (r.bottom + margin + height <= vh - margin) y = r.bottom + margin;
+        else if (r.top - margin - height >= margin) y = r.top - margin - height;
+        else y = vh - margin - height;
+      }
+      card.style.left = Math.max(margin, Math.min(vw - width - margin, x)) + 'px';
+      card.style.top = Math.max(margin, Math.min(vh - height - margin, y)) + 'px';
     }
     function render() {
       const el = document.querySelector(steps[i].sel);
-      if (el && el.scrollIntoView) el.scrollIntoView({ block: 'center', behavior: 'smooth' });
-      window.requestAnimationFrame(() => window.setTimeout(place, 260));
+      if (el && el.scrollIntoView && !el.closest('.gaia-tabbar')) el.scrollIntoView({ block: 'center', behavior: 'instant' });
       const dots = steps.map((_, n) => '<i class="' + (n === i ? 'on' : '') + '"></i>').join('');
       card.innerHTML = '<p class="gaia-tour__eyebrow">' + steps[i].eyebrow + '</p>'
         + '<h4 class="gaia-tour__title">' + steps[i].title + '</h4>'
@@ -969,12 +1003,16 @@
         + '<div class="gaia-tour__row"><div class="gaia-tour__dots">' + dots + '</div>'
         + '<div class="gaia-tour__btns"><button type="button" class="gaia-tour__skip">Skip</button>'
         + '<button type="button" class="gaia-tour__next">' + (i === steps.length - 1 ? 'Got it' : 'Next →') + '</button></div></div>';
+      place();
+      card.querySelector('.gaia-tour__next')?.focus({ preventScroll: true });
       card.querySelector('.gaia-tour__skip').addEventListener('click', finish);
       card.querySelector('.gaia-tour__next').addEventListener('click', () => {
         if (i >= steps.length - 1) finish(); else { i += 1; render(); }
       });
     }
     window.addEventListener('resize', place);
+    window.addEventListener('scroll', place, { capture: true, passive: true });
+    document.addEventListener('keydown', onKey);
     render();
   }
 
@@ -2207,6 +2245,8 @@
     function showPassiveWelcome() {
       if (passiveWelcomeShown || sessionStorage.getItem(ASSIST_WELCOME_KEY) === '1') return;
       if (!document.body.classList.contains('gaia-v2')) return;
+      // Gaia's avatar and first-run tour already provide the welcome.
+      if (document.querySelector('.gaia-tour, .gava-char')) return;
       passiveWelcomeShown = true;
       sessionStorage.setItem(ASSIST_WELCOME_KEY, '1');
       const nudge = document.createElement('button');

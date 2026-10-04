@@ -1317,3 +1317,11 @@ body.gaia-v2 [data-screen="community"] #community-body .g-chip--pending {
   body.gaia-v2 [data-screen="academy"] #member-academy > .g-card:not(.g-card--feature) .g-card__meta { margin: 4px 0 8px; font-size: 0.9em; }
   body.gaia-v2 [data-screen="academy"] #member-academy > .g-card:not(.g-card--feature) .g-card__actions { margin-top: 0; }
 }
+
+/* Phones: a circle is one scannable row -- name on two lines, reason on two,
+   the same treatment as the course cards. */
+@media (max-width: 639px) {
+  body.gaia-v2 [data-screen="community"] #community-body .g-access__name { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; }
+  body.gaia-v2 [data-screen="community"] #community-body .g-access__meta { -webkit-line-clamp: 2; }
+  body.gaia-v2 [data-screen="community"] #community-body .g-access { min-height: 60px; padding: 9px 10px 9px 9px; }
+}

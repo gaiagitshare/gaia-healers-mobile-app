@@ -501,6 +501,10 @@
       });
       me.hidden = practice;
       panel.hidden = !practice;
+      // Their own Bio-Well card (a practitioner can be a linked member too)
+      // belongs to the You tab. A class, not `hidden`: the panel's own
+      // `hidden` means "feature off / not signed in" and must not be touched.
+      document.getElementById('member-readings')?.classList.toggle('is-on-practice-tab', practice);
       if (practice && !started) {
         started = true;
         view.start({ client: params.get('client'), open: params.get('open') });
@@ -515,6 +519,7 @@
     // Gaia asks for a client, a card, or just a section of the list. One hook
     // for all three: a second navigation mechanism would be a second thing to
     // keep in step with the first.
+    window.addEventListener('gaia:open-readings', () => select('me'));
     window.addEventListener('gaia:open-client', (event) => {
       const d = event.detail || {};
       select('practice');

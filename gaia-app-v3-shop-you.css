@@ -413,7 +413,7 @@ body.gaia-v2 [data-screen="profile"] .g-next.is-collapsed { padding: 14px 20px; 
 body.gaia-v2 [data-screen="profile"] .g-next.is-collapsed > :not(.g-next__head):not(.g-next__line) { display: none; }
 .g-readings-nudge__nums { display: block; margin-top: 2px; font-size: 0.82em; color: var(--g-text-muted); font-variant-numeric: tabular-nums; }
 .g-readings-nudge__nums b { color: var(--g-text); font-weight: 600; }
-body.gaia-v2 [data-screen="profile"] #member-readings[hidden] { display: none; }
+body.gaia-v2 [data-screen="profile"] #member-readings[hidden], body.gaia-v2 [data-screen="profile"] #member-readings.is-on-practice-tab { display: none; }
 /* The header card sat 30px above the first card while the cards below
    are 16px apart; one rhythm down the screen. */
 body.gaia-v2 [data-screen="profile"] .g-page__head--profile { margin-bottom: 6px; }

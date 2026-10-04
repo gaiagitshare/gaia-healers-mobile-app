@@ -37,7 +37,12 @@ test('the app: Next level folds through the prefs route, empty cards fold to one
   assert.match(member, /getJson\('\/api\/member\/prefs'\)/, 'loaded with the rest of the member data, so the card never flashes');
   const today = read('gaia-superapp.js');
   assert.ok(today.indexOf('nextBookingCard()') < today.indexOf("'<section class=\"g-super-services\">"), 'Today: the next booking sits above the service tiles');
+  assert.match(member, /data-reset-prefs/, 'Account offers "Show hidden cards again" when anything is folded or dismissed');
+  const prac = read('gaia-practitioner.js');
+  assert.match(prac, /member-readings'\)\?\.classList\.toggle\('is-on-practice-tab', practice\)/, 'a practitioner who is also a linked member: the readings card belongs to the You tab');
+  assert.match(prac, /gaia:open-readings', \(\) => select\('me'\)/, '"open my readings" brings the You tab forward');
   const learn = read('gaia-app-v3-learn-connect.css');
+  assert.match(learn, /max-width: 639px[^}]*\n[^}]*#community-body \.g-access__name \{[^}]*-webkit-line-clamp: 2/, 'phones: circle names on two lines');
   assert.match(learn, /max-width: 639px[^}]*\n[^}]*\.g-access__name \{ -webkit-line-clamp: 2/, 'phones: course titles on two lines');
   assert.match(learn, /min-width: 1100px[^}]*\n[^}]*#member-academy \.g-access-grid/, 'Academy goes three abreast on wide desktops');
   const panel = read('gaia-my-readings.js');

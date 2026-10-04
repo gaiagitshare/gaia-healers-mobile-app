@@ -972,4 +972,13 @@ body.gaia-v2 .g-super-home .g-super-hero .g-super-hero__intro{position:relative;
   .g-home2__event-art { width: 120px; height: 120px; }
 }
 @media (min-width: 1440px) { .g-super-home--v2 { padding-bottom: 72px; } .g-home2__book-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); } .g-home2__action { grid-template-columns: 40px minmax(0, 1fr); } .g-home2__action-arrow { display: none; } }
-@media (max-width: 767px) { .g-super-home--v2 { padding-bottom: 110px; } }
+/* the sections keep their air whatever the old grid rules say about children */
+.g-home2 > section + section, .g-home2 > section + a, .g-home2 > a + section, .g-home2 > .g-home2__top + section { margin-top: 26px !important; }
+/* tablet and small desktop: the gathering stacks its art above the words, so the title has room */
+@media (min-width: 768px) and (max-width: 1199px) {
+  .g-home2__top { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+  .g-home2__event { grid-template-columns: 1fr; }
+  .g-home2__event-art { width: 100%; height: 132px; }
+}
+/* while the bar sits at the bottom (phone and tablet) the page ends above the avatar */
+@media (max-width: 1023px) { .g-super-home--v2 { padding-bottom: 110px; } }

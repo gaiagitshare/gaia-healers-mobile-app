@@ -105,9 +105,13 @@
   function spectrum(chakras) {
     const list = (chakras || []).slice(0, 7);
     if (!list.length) return '';
+    // Disc size is relative to this reading's own spread, so the difference between
+    // the most and least active centre is visible even when all seven sit close.
+    const vals = list.map((c) => c.value).filter((v) => typeof v === 'number');
+    const lo = Math.min(...vals), hi = Math.max(...vals), span = (hi - lo) || 1;
     return `<div class="g-readings__spectrum" role="img" aria-label="Seven energy centres, larger when more active">${list.map((c, i) => {
       const m = chakraMeta(c, i), v = typeof c.value === 'number' ? c.value : null;
-      const size = v == null ? 10 : Math.round(12 + clamp(v / 10, 0, 1) * 26);
+      const size = v == null ? 10 : Math.round(14 + clamp((v - lo) / span, 0, 1) * 22);
       return `<span class="g-readings__disc" title="${esc(c.name)} ${esc(fmt(v, 2))}"><i style="width:${size}px;height:${size}px;background:${m.colour}"></i><b>${esc(m.short)}</b></span>`;
     }).join('')}</div>`;
   }

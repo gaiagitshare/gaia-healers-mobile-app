@@ -41,19 +41,21 @@
 
   // ── actions: every chip maps to something the app already does ──────────
   const go = (v, opts) => { try { window.GaiaAppShell?.go?.(v, opts); } catch (_) { /* ignore */ } };
+  /** Move the screen, then point at where the member landed: the page head of the active screen. */
+  const goAndPoint = (v, opts, text) => { go(v, opts); setTimeout(() => { const s = document.querySelector('.gaia-screen.is-active .g-page__head, .gaia-screen.is-active .g-super-hero, .gaia-screen.is-active main'); if (s) pointAt(s, { text: text || 'Here you go.', duration: 3200 }); }, 520); };
   const ACTIONS = {
     chat: { label: 'Chat with Gaia', icon: 'chat', run: () => openChat() },
     talk: { label: 'Talk to Gaia', icon: 'mic', run: () => startVoice() },
-    energy: { label: 'Check my energy', icon: 'bolt', run: () => go('wellness', { tab: 'check' }) },
+    energy: { label: 'Check my energy', icon: 'bolt', run: () => goAndPoint('wellness', { tab: 'check' }, 'Your energy check is here.') },
     tour: { label: 'Take a tour', icon: 'leaf', run: () => runTour() },
     signin: { label: 'Sign in', icon: 'user', run: () => { try { window.GaiaAuth?.open?.(); } catch (_) { /* ignore */ } } },
     readings: { label: 'Open my readings', icon: 'pulse', run: () => { go('profile'); setTimeout(() => window.dispatchEvent(new CustomEvent('gaia:open-readings')), 80); } },
     explain: { label: 'What do these mean?', icon: 'help', run: () => { go('profile'); setTimeout(() => { window.dispatchEvent(new CustomEvent('gaia:open-readings')); const d = document.querySelector('#member-readings .g-readings__explain'); if (d) d.open = true; }, 120); } },
     share: { label: 'Share my readings', icon: 'pulse', run: () => { go('profile'); setTimeout(() => window.dispatchEvent(new CustomEvent('gaia:open-readings')), 80); } },
     practice: { label: 'Open my practice', icon: 'users', run: () => { go('profile', { tab: 'practice' }); setTimeout(() => window.dispatchEvent(new CustomEvent('gaia:open-client', { detail: { section: 'clients' } })), 120); } },
-    academy: { label: 'Continue learning', icon: 'book', run: () => go('academy') },
-    community: { label: 'My communities', icon: 'users', run: () => go('community') },
-    plans: { label: 'See membership plans', icon: 'star', run: () => go('store', { tab: 'membership' }) },
+    academy: { label: 'Continue learning', icon: 'book', run: () => goAndPoint('academy', undefined, 'Your courses are here.') },
+    community: { label: 'My communities', icon: 'users', run: () => goAndPoint('community', undefined, 'Your circles are here.') },
+    plans: { label: 'See membership plans', icon: 'star', run: () => goAndPoint('store', { tab: 'membership' }, 'The plans are here.') },
     breath: { label: 'A minute of breath', icon: 'leaf', run: () => { go('wellness'); requestAnimationFrame(() => { try { window.GaiaTools?.open?.('breath'); } catch (_) { /* ignore */ } }); } },
     later: { label: 'Later', icon: 'x', run: () => hideBubble() },
   };
@@ -160,6 +162,7 @@
   // ── bubble ───────────────────────────────────────────────────────────────
   function showBubble(spec, { sticky = false } = {}) {
     const b = spec || bubbleFor();
+    touched();
     bubble.innerHTML = '<button type="button" class="gava-bubble__x" aria-label="Close">×</button>'
       + '<p class="gava-bubble__text">' + esc(b.text) + '</p>'
       + '<div class="gava-bubble__chips">' + (b.chips || []).filter((k) => ACTIONS[k]).map((k) =>
@@ -216,6 +219,7 @@
     let down = null, moved = false, holding = false, holdTimer = null, startPos = null;
     char.addEventListener('pointerdown', (e) => {
       if (e.button != null && e.button !== 0) return;
+      touched();
       down = { x: e.clientX, y: e.clientY, id: e.pointerId }; moved = false; holding = false;
       const r = root.getBoundingClientRect(); startPos = { left: r.left, top: r.top };
       try { char.setPointerCapture(e.pointerId); } catch (_) { /* ignore */ }
@@ -277,11 +281,122 @@
     window.addEventListener('gaia:signed-out', () => { hideBubble(); setState('idle'); });
   }
 
+  // ── idle personality ──────────────────────────────────────────────────
+  // While nobody is talking to her, Gaia occasionally does one small thing
+  // so people notice she is alive and tappable. Classes on the root, CSS
+  // keyframes on the existing SVG parts: nothing here dispatches, fetches,
+  // navigates or speaks. One animation at a time, never while anything
+  // else is going on, and at least IDLE_RESUME_MS after the last touch.
+  const IDLE_MIN_MS = 8000, IDLE_MAX_MS = 15000, IDLE_RESUME_MS = 8000;
+  const HELLO_MIN_MS = 45000, HELLO_MAX_MS = 90000, HELLO_IGNORED_MAX = 2;
+  const IDLE_ANIMS = [
+    { name: 'peek', ms: 1700, weight: 3 },
+    { name: 'wave', ms: 1500, weight: 3 },
+    { name: 'look', ms: 1900, weight: 3 },
+    { name: 'bounce', ms: 950, weight: 2 },
+    { name: 'blinksmile', ms: 1500, weight: 3 },
+    { name: 'wiggle', ms: 1300, weight: 2 },
+    { name: 'curious', ms: 1200, weight: 2 },
+  ];
+  const HELLO_LINES = ['Need anything?', 'I\'m here ✨', 'Ask me anything'];
+  let lastTouch = Date.now(), animating = false, idleTimer = null, helloTimer = null, helloIgnored = 0, helloShowing = false, tourRunning = false;
+  function touched() { lastTouch = Date.now(); if (helloShowing) { helloShowing = false; helloIgnored = 0; } stopIdleAnim(); }
+  const rnd = (lo, hi) => lo + Math.random() * (hi - lo);
+  function idleEligible() {
+    if (!root || document.hidden) return false;
+    if (state !== 'idle' || pointing || animating) return false;
+    if (!bubble.hidden || root.classList.contains('is-dragging') || root.classList.contains('is-holding') || root.classList.contains('is-behind')) return false;
+    if (document.body.classList.contains('gaia-assist-panel-open') || document.querySelector('.gaia-tour')) return false;
+    return Date.now() - lastTouch >= IDLE_RESUME_MS;
+  }
+  function pickAnim() {
+    const pool = reduced() ? IDLE_ANIMS.filter((a) => a.name === 'blinksmile') : IDLE_ANIMS;
+    const total = pool.reduce((n, a) => n + a.weight, 0);
+    let r = Math.random() * total;
+    for (const a of pool) { r -= a.weight; if (r <= 0) return a; }
+    return pool[pool.length - 1];
+  }
+  function stopIdleAnim() {
+    if (!root) return;
+    animating = false;
+    [...root.classList].filter((c) => c.startsWith('is-anim-')).forEach((c) => root.classList.remove(c));
+  }
+  function runIdleAnim(a) {
+    if (!idleEligible()) return;
+    animating = true;
+    root.classList.add('is-anim-' + a.name);
+    setTimeout(() => { root.classList.remove('is-anim-' + a.name); animating = false; }, a.ms);
+  }
+  function scheduleIdle() {
+    clearTimeout(idleTimer);
+    idleTimer = setTimeout(() => { runIdleAnim(pickAnim()); scheduleIdle(); }, rnd(IDLE_MIN_MS, IDLE_MAX_MS));
+  }
+  /** Much rarer: a small wave with a few words. Stops after being ignored twice. */
+  function scheduleHello() {
+    clearTimeout(helloTimer);
+    helloTimer = setTimeout(() => {
+      if (helloIgnored < HELLO_IGNORED_MAX && idleEligible() && !reduced()) {
+        animating = true; root.classList.add('is-anim-wave');
+        bubble.innerHTML = '<p class="gava-bubble__text gava-bubble__text--hello">' + esc(HELLO_LINES[Math.floor(Math.random() * HELLO_LINES.length)]) + '</p>';
+        bubble.hidden = false; helloShowing = true;
+        setTimeout(() => { root.classList.remove('is-anim-wave'); animating = false; }, 1500);
+        setTimeout(() => { if (helloShowing) { helloShowing = false; helloIgnored += 1; bubble.hidden = true; } }, 4200);
+      }
+      scheduleHello();
+    }, rnd(HELLO_MIN_MS, HELLO_MAX_MS));
+  }
+  /** Desktop only: eyes follow a nearby cursor, the body tilts a few degrees. Nothing on touch. */
+  function cursor() {
+    if (!window.matchMedia('(hover: hover) and (pointer: fine)').matches || reduced()) return;
+    let raf = null, last = null;
+    const apply = () => {
+      raf = null; if (!last || !root) return;
+      const r = char.getBoundingClientRect(), cx = r.left + r.width / 2, cy = r.top + r.height / 2;
+      const dx = last.x - cx, dy = last.y - cy, dist = Math.hypot(dx, dy);
+      const near = dist < 260 && dist > 8 && state === 'idle' && !pointing && !root.classList.contains('is-dragging');
+      root.classList.toggle('is-looking', near);
+      if (near) {
+        const k = Math.min(1, dist / 260);
+        root.style.setProperty('--gava-ex', (dx / dist * 5 * k).toFixed(2));
+        root.style.setProperty('--gava-ey', (dy / dist * 4 * k).toFixed(2));
+        root.style.setProperty('--gava-tilt', (dx / dist * 4 * k).toFixed(2) + 'deg');
+      } else { root.style.removeProperty('--gava-ex'); root.style.removeProperty('--gava-ey'); root.style.removeProperty('--gava-tilt'); }
+    };
+    window.addEventListener('mousemove', (e) => { last = { x: e.clientX, y: e.clientY }; if (!raf) raf = requestAnimationFrame(apply); }, { passive: true });
+    window.addEventListener('mouseleave', () => { last = null; root.classList.remove('is-looking'); });
+  }
+  function startIdle() {
+    scheduleIdle(); scheduleHello(); cursor();
+    document.addEventListener('visibilitychange', () => { if (document.hidden) stopIdleAnim(); });
+    // Anything else happening to her ends an idle animation at once.
+    if ('MutationObserver' in window) new MutationObserver(() => { if (state !== 'idle' || pointing || !bubble.hidden || root.classList.contains('is-behind') || root.classList.contains('is-dragging')) stopIdleAnim(); }).observe(root, { attributes: true, attributeFilter: ['data-state', 'class'] });
+    document.addEventListener('gaia:view-changed', touched);
+  }
+  // ── end idle personality ──────────────────────────────────────────────
+
+  /** The orb and the avatar are one character: the orb's mark becomes her small face, mirroring the same states. */
+  function dressOrb() {
+    const orb = document.querySelector('[data-gaia-tab-assist]'); const mark = orb?.querySelector('.gaia-tabbar__assist-mark');
+    if (!orb || !mark || orb.querySelector('.gava-mini')) return;
+    const holder = document.createElement('span'); holder.className = 'gava-mini'; holder.setAttribute('aria-hidden', 'true'); holder.innerHTML = SVG_BODY;
+    mark.replaceWith(holder);
+  }
+  /** Once per device: how she works, in one bubble. */
+  function meet() {
+    try { if (localStorage.getItem('gaia-avatar-met')) return; } catch (_) { return; }
+    setTimeout(() => {
+      if (!idleEligibleSoft()) return;
+      showBubble({ text: 'Hi, I\'m Gaia. Tap me for ideas, hold me to talk, drag me anywhere.', chips: [] });
+      try { localStorage.setItem('gaia-avatar-met', '1'); } catch (_) { /* ignore */ }
+    }, 2500);
+  }
+  const idleEligibleSoft = () => root && bubble.hidden && !pointing && !document.body.classList.contains('gaia-assist-panel-open') && !document.querySelector('.gaia-tour');
+
   function mount() {
     if (!document.querySelector('.gaia-tabbar') && !document.querySelector('[data-gaia-tab-assist]')) { setTimeout(mount, 400); return; }
-    load(); build(); home(); gestures(); listen(); watchAssist();
+    load(); build(); home(); gestures(); listen(); watchAssist(); dressOrb(); startIdle(); meet();
     setTimeout(home, 600);
   }
-  window.GaiaAvatar = { pointAt, unpoint, showBubble, hideBubble, setState, bubbleFor, runTour, home };
+  window.GaiaAvatar = { pointAt, unpoint, showBubble, hideBubble, setState, bubbleFor, runTour, home, idle: { anims: IDLE_ANIMS.map((a) => a.name), eligible: idleEligible, play: (name) => { const a = IDLE_ANIMS.find((x) => x.name === name); if (a) { lastTouch = 0; runIdleAnim(a); } } } };
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', mount); else mount();
 })();

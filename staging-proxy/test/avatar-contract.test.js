@@ -35,7 +35,7 @@ test('every door the avatar opens already exists; it builds none of its own', ()
   assert.match(ui, /if \(hold === 'start'\) \{ setOpen\(true\); if \(!realtimeVoice\?\.isActive\?\.\(\)\) void onAssistTap\(\); \}/, 'in live mode a start is the orb\'s tap');
   // navigation, readings, tools, sign-in, tour: the existing globals and events
   for (const door of ['GaiaAppShell?.go', 'gaia:open-readings', 'GaiaTools?.open', 'GaiaAuth?.open', 'GaiaTour?.run', 'gaia:open-client']) assert.ok(js.includes(door), door);
-  assert.match(ui, /window\.GaiaTour = \{ run: \(steps, opts\) => runTour\(steps, opts\), seen: tourSeen \}/);
+  assert.match(ui, /window\.GaiaTour = \{ run: \(steps, opts\) => runTour\(steps, opts\), seen: tourSeen, close: \(\) => closeTour\?\.\(\) \}/);
   assert.match(ui, /gaia:view-changed/);
   // the state of a live conversation comes from the shell's own announcement, never tracked twice
   assert.match(js, /addEventListener\('gaia:assist-state'/); assert.match(ui, /gaia:assist-state/);

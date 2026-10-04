@@ -1730,7 +1730,7 @@ body.gaia-v2 .g-topbar__actions.gaia-header-actions { display: flex; align-items
 .gaia-tour { position: fixed; inset: 0; z-index: 1000; }
 .gaia-tour__spot {
   position: fixed; border-radius: 18px; border: 2px solid var(--g-accent, #A6E84B);
-  box-shadow: 0 0 0 9999px rgba(4,8,6,.62), 0 0 18px rgba(166,232,75,.18);
+  box-shadow: 0 0 0 9999px rgba(4,8,6,.48), 0 0 12px rgba(166,232,75,.12);
   transition: left .32s cubic-bezier(.2,.8,.3,1), top .32s cubic-bezier(.2,.8,.3,1),
     width .32s cubic-bezier(.2,.8,.3,1), height .32s cubic-bezier(.2,.8,.3,1);
   pointer-events: none;
@@ -2377,3 +2377,9 @@ body.gaia-v2 .gaia-assist:not(.gaia-assist--minimized):not(.gaia-assist--welcome
 .g-dir__intent .g-btn { flex: none; }
 .g-dir__intent-x { flex: none; background: none; border: 0; color: var(--g-text-dim, #93A597); font-size: 20px; line-height: 1; cursor: pointer; padding: 4px 6px; }
 @media (max-width: 480px) { .g-dir__intent { flex-wrap: wrap; } .g-dir__intent div { flex-basis: calc(100% - 40px); } .g-dir__intent .g-btn { margin-left: 34px; } }
+
+.gaia-tour__back { background: none; border: 1px solid var(--g-line-strong); border-radius: 999px; padding: 8px 12px; color: var(--g-text); cursor: pointer; }
+.gaia-tour__count { color: var(--g-text-muted); font-size: 12px; white-space: nowrap; }
+.gaia-tour__card { font-family: var(--g-font-body, sans-serif); }
+.gaia-tour__spot { transition: none; }
+.gaia-tour__title { font-family: inherit; font-size: 20px; line-height: 1.25; }

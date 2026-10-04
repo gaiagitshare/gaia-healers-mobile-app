@@ -591,6 +591,7 @@
       // belongs to the You tab. A class, not `hidden`: the panel's own
       // `hidden` means "feature off / not signed in" and must not be touched.
       document.getElementById('member-readings')?.classList.toggle('is-on-practice-tab', practice);
+      document.getElementById('member-data-sharing')?.classList.toggle('is-on-practice-tab', practice);
       if (practice && !started) {
         started = true;
         view.start({ client: params.get('client'), open: params.get('open') });

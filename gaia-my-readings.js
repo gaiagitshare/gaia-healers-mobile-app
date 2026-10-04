@@ -154,9 +154,14 @@
         home.prepend(el);
       }
       el.className = `g-readings-nudge${fresh ? ' is-new' : ''}`;
+      // The two headline numbers ride along once the readings have loaded (they
+      // are fetched for this page anyway; nothing is stored for it).
+      const l = lastReadings?.latest;
+      const nums = l && (typeof l.energy === 'number' || typeof l.stress === 'number')
+        ? `<span class="g-readings-nudge__nums">${typeof l.energy === 'number' ? `<b>${esc(fmt(l.energy))}</b> energy` : ''}${typeof l.energy === 'number' && typeof l.stress === 'number' ? ' · ' : ''}${typeof l.stress === 'number' ? `<b>${esc(fmt(l.stress, 2))}</b> stress` : ''}</span>` : '';
       el.innerHTML = fresh
-        ? `<i class="ph ph-pulse" aria-hidden="true"></i><span><strong>A new reading from your practitioner</strong>${scannedAt ? ` · ${esc(when(scannedAt))}` : ''}</span><em>Open</em>`
-        : `<i class="ph ph-pulse" aria-hidden="true"></i><span><strong>My readings</strong>${scannedAt ? ` · latest ${esc(when(scannedAt))}` : ''}</span><em>Open</em>`;
+        ? `<i class="ph ph-pulse" aria-hidden="true"></i><span><strong>A new reading from your practitioner</strong>${scannedAt ? ` · ${esc(when(scannedAt))}` : ''}${nums}</span><em>Open</em>`
+        : `<i class="ph ph-pulse" aria-hidden="true"></i><span><strong>My readings</strong>${scannedAt ? ` · latest ${esc(when(scannedAt))}` : ''}${nums}</span><em>Open</em>`;
     };
     place();
     if (linked && !nudgeObserver) {
@@ -337,6 +342,7 @@
       lastSummary = r.body.summary || null; lastReadings = r.body;
       root.innerHTML = readingsCard(r.body, status);
       pickOut(root, r.body.series || []);
+      setTodayLink({});   // the shortcut on Today picks up the two numbers
       // Seen means seen: recorded only once the card is actually on screen
       // (the script runs on every view of the shell, not just You).
       watchSeen(root);

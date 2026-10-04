@@ -398,6 +398,21 @@ body.gaia-v2 [data-screen="profile"] #member-me > div:empty { display: none; }
   body.gaia-v2 [data-screen="profile"] #member-me > .g-card { margin: 0; }
 }
 body.gaia-v2 [data-screen="profile"] #member-readings { margin-bottom: 16px; }
+/* An empty card is one line: label, then the sentence, no box of nothing. */
+body.gaia-v2 [data-screen="profile"] #member-me .g-card--empty { padding: 14px 20px; display: flex; align-items: baseline; gap: 14px; flex-wrap: wrap; }
+body.gaia-v2 [data-screen="profile"] #member-me .g-card--empty .g-card__label { margin: 0; flex: none; }
+body.gaia-v2 [data-screen="profile"] #member-me .g-card--empty .g-empty { margin: 0; flex: 1 1 12rem; min-width: 0; }
+/* Next level folds to one line on request; the choice lives on the server. */
+body.gaia-v2 [data-screen="profile"] .g-next__head { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+body.gaia-v2 [data-screen="profile"] .g-next__head .g-next__kicker { margin: 0; }
+body.gaia-v2 [data-screen="profile"] .g-next__toggle { background: none; border: 0; padding: 4px 0; color: var(--v3-label); font: inherit; font-size: 0.8rem; font-weight: 600; cursor: pointer; }
+body.gaia-v2 [data-screen="profile"] .g-next__toggle:hover, body.gaia-v2 [data-screen="profile"] .g-next__toggle:focus-visible { color: var(--v3-green); outline: none; }
+body.gaia-v2 [data-screen="profile"] .g-next__line { margin: 6px 0 0; color: var(--v3-text-2); }
+body.gaia-v2 [data-screen="profile"] .g-next__line strong { color: var(--v3-text); font-weight: 600; }
+body.gaia-v2 [data-screen="profile"] .g-next.is-collapsed { padding: 14px 20px; }
+body.gaia-v2 [data-screen="profile"] .g-next.is-collapsed > :not(.g-next__head):not(.g-next__line) { display: none; }
+.g-readings-nudge__nums { display: block; margin-top: 2px; font-size: 0.82em; color: var(--g-text-muted); font-variant-numeric: tabular-nums; }
+.g-readings-nudge__nums b { color: var(--g-text); font-weight: 600; }
 body.gaia-v2 [data-screen="profile"] #member-readings[hidden] { display: none; }
 /* The header card sat 30px above the first card while the cards below
    are 16px apart; one rhythm down the screen. */

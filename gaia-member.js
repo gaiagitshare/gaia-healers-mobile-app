@@ -708,7 +708,10 @@ body.gaia-booking-open{overflow:hidden;}
 
   // ── g-* account helpers (Profile) ───────────────────────────
   function gMeCard(label, inner) {
-    return '<article class="g-card"><p class="g-card__label">' + esc(label) + '</p>' + inner + '</article>';
+    // A card whose whole content is one empty-state line folds to that line:
+    // label and sentence side by side, no tall box around "nothing yet".
+    const empty = /^<p class="g-empty">[^<]*<\/p>$/.test(String(inner).trim());
+    return '<article class="g-card' + (empty ? ' g-card--empty' : '') + '"><p class="g-card__label">' + esc(label) + '</p>' + inner + '</article>';
   }
   function gRows(items) { return '<div class="g-rows">' + items.join('') + '</div>'; }
   function gRow(label, meta) {
@@ -809,7 +812,9 @@ body.gaia-booking-open{overflow:hidden;}
       : '<p class="g-empty">No submissions yet.</p>'));
 
     const ncnt = (d.notif && d.notif.counts) || {};
-    cards.push(gMeCard('Messages', gRows([gRow(ncnt.unread ? ncnt.unread + ' unread' : 'All caught up', (ncnt.conversations || 0) + ' conversation' + ((ncnt.conversations === 1) ? '' : 's'))])));
+    cards.push(gMeCard('Messages', (ncnt.unread || ncnt.conversations)
+      ? gRows([gRow(ncnt.unread ? ncnt.unread + ' unread' : 'All caught up', (ncnt.conversations || 0) + ' conversation' + ((ncnt.conversations === 1) ? '' : 's'))])
+      : '<p class="g-empty">All caught up. No conversations yet.</p>'));
 
     // My communities + events — canonical homes are the Community / Events hubs.
     const myCircles = ((d.access && d.access.communities && d.access.communities.unlocked) || []);

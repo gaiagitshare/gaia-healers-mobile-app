@@ -376,7 +376,10 @@
     const gainRows = gains.map((gain) => '<li>' + esc(labelFor(gain.type))
       + (gain.to != null ? ': <strong>' + esc(gain.to) + '</strong>' : '') + '</li>').join('');
 
-    return '<section class="g-next"><p class="g-next__kicker">Next Level</p>'
+    return '<section class="g-next" data-next-level>'
+      + '<div class="g-next__head"><p class="g-next__kicker">Next Level</p>'
+      + '<button type="button" class="g-next__toggle" data-next-toggle aria-expanded="true">Hide</button></div>'
+      + '<p class="g-next__line" hidden>Next level: <strong>' + esc(plan.label || upgrade.next_key) + '</strong></p>'
       + '<h2 class="g-next__title">' + esc(plan.label || upgrade.next_key) + '</h2>'
       + (plan.subtitle ? '<p class="g-next__subtitle">' + esc(plan.subtitle) + '</p>' : '')
       + (gainRows ? '<p class="g-next__lead">Upgrade to unlock:</p><ul class="g-next__list">' + gainRows + '</ul>' : '')
@@ -405,8 +408,27 @@
   }
 
   /* Wire the expand/collapse behaviour of My Access rows. */
+  const PROXY = () => (window.GaiaConfig && window.GaiaConfig.proxyBase) || window.GAIA_PROXY_BASE || 'https://api.gaiahealers.app';
+  function setNextCollapsed(root, collapsed) {
+    const sec = root.querySelector('[data-next-level]'); if (!sec) return;
+    sec.classList.toggle('is-collapsed', collapsed);
+    const btn = sec.querySelector('[data-next-toggle]');
+    if (btn) { btn.setAttribute('aria-expanded', collapsed ? 'false' : 'true'); btn.textContent = collapsed ? 'Show' : 'Hide'; }
+    const line = sec.querySelector('.g-next__line'); if (line) line.hidden = !collapsed;
+  }
   function bind(root) {
     if (!root) return;
+    // Next level folds to one line; the choice is kept on the server so every device agrees.
+    const nextBtn = root.querySelector('[data-next-toggle]');
+    if (nextBtn) {
+      fetch(PROXY() + '/api/member/prefs', { credentials: 'include', headers: { Accept: 'application/json' } }).then((r) => r.json())
+        .then((j) => { if (j && j.prefs && j.prefs.next_level_collapsed) setNextCollapsed(root, true); }).catch(() => {});
+      nextBtn.addEventListener('click', () => {
+        const collapsed = nextBtn.getAttribute('aria-expanded') === 'true';
+        setNextCollapsed(root, collapsed);
+        fetch(PROXY() + '/api/member/prefs', { method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json', Accept: 'application/json' }, body: JSON.stringify({ prefs: { next_level_collapsed: collapsed } }) }).catch(() => {});
+      });
+    }
     root.querySelectorAll('[data-ma-toggle]').forEach((button) => {
       button.addEventListener('click', () => {
         const panel = root.querySelector('#ma-panel-' + button.getAttribute('data-ma-toggle'));

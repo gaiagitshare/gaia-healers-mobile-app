@@ -205,6 +205,17 @@ export function linksForPractitioner(practitionerId, file = LINK_FILE) {
     .sort((a, b) => String(b.linked_at || '').localeCompare(String(a.linked_at || '')));
 }
 
+/** Today's link events and the standing totals, counts only (for the alert sweep and the daily line). */
+export function linkDayCounts({ now = Date.now(), file = LINK_FILE } = {}) {
+  const store = load(file);
+  const day = new Date(now).toISOString().slice(0, 10);
+  const todays = store.audit.filter((r) => String(r?.at || '').slice(0, 10) === day);
+  const count = (ev) => todays.filter((r) => r.event === ev).length;
+  const links = Object.values(store.links);
+  return { day, codes_issued: count('consent_code_issued'), links_confirmed: count('link_confirmed'), readings_opened: count('reading_opened'), links_revoked: count('link_revoked'),
+    confirmed: links.filter((l) => l.status === 'confirmed').length, revoked: links.filter((l) => l.status === 'revoked').length };
+}
+
 // ── their server calling ours ─────────────────────────────────────────────
 /** Bearer check for the redeem/revoke routes: constant-time, never logged. */
 export function partnerAuthorized(req, env = process.env) {

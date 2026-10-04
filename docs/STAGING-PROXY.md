@@ -420,6 +420,11 @@ being proven (others get 404 and see no panel); unset = every member.
   opened / opened_latest — never a Gaia member id; the Practice screen tags
   them and says so on the client header. `tools/member-flow-check.mjs` walks
   the whole path offline against a loopback fake (20 steps, exit 0/1).
+  The alert sweep reads `linkDayCounts()` and raises
+  `member-links:revocations` (warning) when more links were revoked than
+  confirmed in a day (and at least two); counts only. The app shows "Your
+  data and sharing" under Account: what is shared with whom, Stop sharing,
+  and "Show hidden cards again" (clears every preference).
   Files carry `first: true` when their side marks one as read-first
   (`read_first`/`readFirst`/`pinned`/`featured`/`primary`/tag) and the card
   shows it above the gauges. A three-card "What these mean" explainer is open

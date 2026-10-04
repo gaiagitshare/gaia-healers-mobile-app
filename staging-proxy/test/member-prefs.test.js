@@ -37,7 +37,9 @@ test('the app: Next level folds through the prefs route, empty cards fold to one
   assert.match(member, /getJson\('\/api\/member\/prefs'\)/, 'loaded with the rest of the member data, so the card never flashes');
   const today = read('gaia-superapp.js');
   assert.ok(today.indexOf('nextBookingCard()') < today.indexOf("'<section class=\"g-super-services\">"), 'Today: the next booking sits above the service tiles');
-  assert.match(member, /data-reset-prefs/, 'Account offers "Show hidden cards again" when anything is folded or dismissed');
+  assert.match(member, /gaia:prefs-reset/, 'You redraws when "Show hidden cards again" fires from Your data and sharing');
+  const html = read('home.html');
+  assert.ok(html.indexOf('id="member-me"') < html.indexOf('id="member-data-sharing"'), 'Your data and sharing sits under Account');
   const prac = read('gaia-practitioner.js');
   assert.match(prac, /member-readings'\)\?\.classList\.toggle\('is-on-practice-tab', practice\)/, 'a practitioner who is also a linked member: the readings card belongs to the You tab');
   assert.match(prac, /gaia:open-readings', \(\) => select\('me'\)/, '"open my readings" brings the You tab forward');
@@ -46,6 +48,7 @@ test('the app: Next level folds through the prefs route, empty cards fold to one
   assert.match(learn, /max-width: 639px[^}]*\n[^}]*\.g-access__name \{ -webkit-line-clamp: 2/, 'phones: course titles on two lines');
   assert.match(learn, /min-width: 1100px[^}]*\n[^}]*#member-academy \.g-access-grid/, 'Academy goes three abreast on wide desktops');
   const panel = read('gaia-my-readings.js');
+  assert.match(panel, /function dataSharingCard/); assert.match(panel, /reset-prefs/); assert.match(panel, /gaia:prefs-reset/);
   assert.match(panel, /g-readings-nudge__nums/);
   assert.match(panel, /hero\.insertAdjacentElement\('afterend', el\)/, 'Today: the readings row sits right under the greeting');
   const srv = read('staging-proxy/server.js');

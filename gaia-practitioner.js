@@ -72,9 +72,17 @@
   function badge(status) {
     const head = document.querySelector('.g-page__head--profile .g-page__sub, #profile-sub');
     if (!head) return;
-    head.querySelector('.g-prac-badge')?.remove();
+    head.querySelector('.g-prac-link')?.remove();
+    // the rest of the app (the avatar) learns the state the same way, once per start
+    document.dispatchEvent(new CustomEvent('gaia:practitioner-state', { detail: { state: status?.state || 'not_connected', practitioner_name: status?.practitioner_name || '' } }));
     if (status?.state !== 'connected') return;
-    head.insertAdjacentHTML('beforeend', ` <span class="g-prac-badge">Practitioner${status.practitioner_name ? ' · ' + esc(status.practitioner_name) : ''}</span>`);
+    // The link is managed where the account is: who you are connected as, and the way out.
+    head.insertAdjacentHTML('beforeend', ` <span class="g-prac-link"><span class="g-prac-badge">Practitioner${status.practitioner_name ? ' · ' + esc(status.practitioner_name) : ''}</span>${status.practitioner_email ? `<span class="g-prac-link__as">connected as ${esc(status.practitioner_email)}</span>` : ''}<button type="button" class="g-prac-link__x" data-prac-disconnect>Disconnect</button></span>`);
+    head.querySelector('[data-prac-disconnect]')?.addEventListener('click', async () => {
+      try { await fetch(`${proxyBase()}/api/practitioners/disconnect`, { method: 'POST', credentials: 'include' }); } catch (e) { /* ignore */ }
+      head.querySelector('.g-prac-link')?.remove();
+      document.querySelector('[data-profile-tab="practice"]')?.click();
+    });
   }
   /** Which clients share their readings through Gaia (their customer id -> { opened, ... }). Local to our server, fast. */
   async function linkedClients() {

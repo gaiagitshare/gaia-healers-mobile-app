@@ -145,3 +145,22 @@ body.gaia-v2 .gaia-tabbar__inner a.gaia-tabbar__home { border-radius: 999px !imp
 .g-super-today__head .g-super-kicker { margin-bottom: 2px; }
 .g-super-today-door { display: block; text-decoration: none; color: inherit; }
 .g-super-today-door .g-super-primary__button { display: inline-flex; align-items: center; gap: 8px; }
+/* ── the conversation, in her bubble; the engine's own sheet stays hidden ── */
+body.gaia-assist-headless .gaia-assist__panel, body.gaia-assist-headless .gaia-assist__backdrop { display: none !important; }
+body.gaia-assist-headless.gaia-assist-panel-open { overflow: auto !important; }
+.gava-bubble--talk { width: min(380px, calc(100vw - 24px)); padding: 10px 12px 12px; border-radius: 18px 18px 6px 18px; }
+.gava[data-side="left"] .gava-bubble--talk { border-radius: 18px 18px 18px 6px; }
+.gava-convo__head { display: flex; align-items: center; gap: 10px; padding: 0 0 8px; border-bottom: 1px solid rgba(140, 160, 255, .14); }
+.gava-convo__name { font-weight: 700; color: #cfe9ff; letter-spacing: .02em; }
+.gava-convo__status { flex: 1 1 auto; min-width: 0; font-size: 12px; color: #8fa3b5; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.gava-bubble--talk .gava-bubble__x { position: static; margin-left: auto; }
+.gava-log { max-height: min(42vh, 360px); overflow-y: auto; display: flex; flex-direction: column; gap: 6px; padding: 10px 2px 6px; overscroll-behavior: contain; }
+.gava-msg { margin: 0; max-width: 92%; padding: 8px 11px; border-radius: 14px; font-size: 13.5px; line-height: 1.45; white-space: pre-wrap; word-break: break-word; }
+.gava-msg.is-gaia { align-self: flex-start; background: rgba(22, 38, 58, .95); border: 1px solid rgba(140, 160, 255, .16); border-bottom-left-radius: 4px; }
+.gava-msg.is-me { align-self: flex-end; background: rgba(63, 217, 200, .16); border: 1px solid rgba(63, 217, 200, .3); border-bottom-right-radius: 4px; }
+.gava-msg.is-faint { color: #8fa3b5; }
+.gava-route { align-self: flex-start; margin: 2px 0 6px; padding: 7px 12px; border-radius: 999px; border: 1px solid rgba(111, 233, 255, .4); background: rgba(111, 233, 255, .1); color: #6fe9ff; font: 600 13px/1.2 inherit; font-family: inherit; cursor: pointer; }
+.gava-route[hidden] { display: none; }
+.gava-bubble--talk .gava-bubble__ask { margin: 4px 0 0; }
+.gava-mic { flex: none; width: 38px; border-radius: 12px; border: 1px solid rgba(140, 160, 255, .22); background: rgba(10, 20, 34, .9); color: #cfe9ff; font-size: 16px; cursor: pointer; display: grid; place-items: center; }
+.gava-mic.is-on { color: #6fe9ff; border-color: rgba(111, 233, 255, .6); background: rgba(111, 233, 255, .14); box-shadow: 0 0 0 4px rgba(111, 233, 255, .12); }

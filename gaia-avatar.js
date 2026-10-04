@@ -84,11 +84,57 @@
   }
 
   // ── the existing doors into Assist and voice ─────────────────────────────
+  /**
+   * The conversation happens here, in her bubble. The engine behind it is the
+   * existing Gaia Assist (history, tools, voice, billing, unchanged); its own
+   * sheet stays hidden (body.gaia-assist-headless) and this bubble mirrors
+   * the transcript and sends through the engine's doors.
+   */
   function openChat(typed) {
-    hideBubble();
-    const text = String(typed || '').trim().slice(0, 300);
-    // the member's own words go into the box, not off to the model: the shell only pre-fills and focuses
-    window.dispatchEvent(new CustomEvent('gaia:open-assist', { detail: text ? { source: 'avatar', prompt: text } : { source: 'avatar', greeting: greetingLine() } }));
+    const text = String(typed || '').trim().slice(0, 1000);
+    showConvo();
+    if (text) { window.dispatchEvent(new CustomEvent('gaia:assist-send', { detail: { text, source: 'avatar' } })); setState('thinking'); }
+    else window.dispatchEvent(new CustomEvent('gaia:open-assist', { detail: { source: 'avatar', greeting: greetingLine() } }));
+  }
+  let convoOpen = false, mirror = null, speakTimer = null, voiceOn = false;
+  function convoStatusText() {
+    const s = document.querySelector('.gaia-assist__status')?.textContent?.trim();
+    return voiceOn ? (s || 'Listening…') : (state === 'thinking' ? 'Gaia is thinking…' : '');
+  }
+  function renderConvo() {
+    const log = bubble.querySelector('.gava-log'); if (!log) return;
+    const src = document.querySelector('.gaia-assist__transcript');
+    const items = src ? [...src.querySelectorAll('.gaia-assist__bubble')].slice(-12) : [];
+    log.innerHTML = items.map((b) => `<p class="gava-msg ${b.classList.contains('gaia-assist__bubble--user') ? 'is-me' : 'is-gaia'}">${esc(b.textContent)}</p>`).join('')
+      || '<p class="gava-msg is-gaia is-faint">Say or type anything.</p>';
+    // the engine's one-tap follow-up (open a screen, sign in, support), forwarded to the real button
+    const route = document.querySelector('.gaia-assist__route:not([hidden]) .gaia-assist__route-btn');
+    const rb = bubble.querySelector('.gava-route'); if (rb) { rb.hidden = !route; if (route) rb.textContent = route.textContent; }
+    const st = bubble.querySelector('.gava-convo__status'); if (st) st.textContent = convoStatusText();
+    const mic = bubble.querySelector('.gava-mic'); if (mic) { mic.classList.toggle('is-on', voiceOn); mic.setAttribute('aria-pressed', String(voiceOn)); mic.title = voiceOn ? 'Stop talking' : 'Talk to Gaia'; }
+    log.scrollTop = log.scrollHeight;
+  }
+  function showConvo() {
+    touched(); clearTimeout(bubbleTimer); convoOpen = true;
+    bubble.className = 'gava-bubble gava-bubble--talk';
+    bubble.innerHTML = '<div class="gava-convo__head"><span class="gava-convo__name">Gaia</span><span class="gava-convo__status" aria-live="polite"></span><button type="button" class="gava-bubble__x" aria-label="End the conversation">×</button></div>'
+      + '<div class="gava-log" aria-live="polite"></div>'
+      + '<button type="button" class="gava-route" hidden></button>'
+      + '<form class="gava-bubble__ask"><input type="text" class="gava-bubble__input" placeholder="Type to Gaia…" aria-label="Type to Gaia" autocomplete="off" maxlength="1000"><button type="button" class="gava-mic" aria-label="Talk to Gaia" aria-pressed="false"><i class="ph ph-microphone" aria-hidden="true"></i></button><button type="submit" class="gava-bubble__send" aria-label="Send"><i class="ph ph-paper-plane-right" aria-hidden="true"></i></button></form>';
+    bubble.hidden = false; char.setAttribute('aria-expanded', 'true');
+    if (!mirror && 'MutationObserver' in window) {
+      const src = document.querySelector('.gaia-assist__transcript');
+      if (src) { mirror = new MutationObserver(() => { renderConvo(); if (!voiceOn) { setState('speaking'); clearTimeout(speakTimer); speakTimer = setTimeout(() => { if (!voiceOn && convoOpen) setState('idle'); }, 1400); } }); mirror.observe(src, { childList: true, subtree: true, characterData: true }); }
+      const status = document.querySelector('.gaia-assist__status');
+      if (status) new MutationObserver(renderConvo).observe(status, { childList: true, characterData: true, subtree: true });
+    }
+    renderConvo();
+    setTimeout(() => { try { bubble.querySelector('.gava-bubble__input')?.focus({ preventScroll: true }); } catch (_) { /* ignore */ } }, 80);
+  }
+  function endConvo() {
+    convoOpen = false; voiceOn = false; bubble.className = 'gava-bubble';
+    window.dispatchEvent(new CustomEvent('gaia:assist-close'));
+    hideBubble(); setState('idle');
   }
   /** One local line so the sheet never opens empty. Written here, shown by the shell, never sent to a model. */
   function greetingLine() {
@@ -101,7 +147,7 @@
   }
   /** The tap itself gets a reaction: a quick hop, whatever else follows. */
   function hop() { if (!root || reduced()) return; root.classList.add('is-hop'); setTimeout(() => root.classList.remove('is-hop'), 650); }
-  function startVoice() { hideBubble(); window.dispatchEvent(new CustomEvent('gaia:assist-voice', { detail: { hold: 'start', source: 'avatar' } })); }
+  function startVoice() { window.dispatchEvent(new CustomEvent('gaia:assist-voice', { detail: { hold: 'start', source: 'avatar' } })); }
   function endVoiceHold() { window.dispatchEvent(new CustomEvent('gaia:assist-voice', { detail: { hold: 'end', source: 'avatar' } })); }
 
   /** The tour: the existing spotlight walk with steps for whoever is here. */
@@ -163,14 +209,19 @@
   function setState(s) { state = s; if (root) root.dataset.state = s; }
   /** Mirror the shell: it announces every conversation state (gaia:assist-state), so the avatar never guesses. */
   function watchAssist() {
+    document.body.classList.add('gaia-assist-headless');   // the engine's own sheet never shows; she is the surface
     const map = { idle: 'idle', ready: 'listening', connecting: 'thinking', holding: 'listening', listening: 'listening', thinking: 'thinking', speaking: 'speaking', error: 'idle' };
     let assistState = 'idle';
     const sync = () => {
       const open = document.body.classList.contains('gaia-assist-panel-open');
-      root.classList.toggle('is-behind', open);
-      if (open) hideBubble();
+      // Something else opened the conversation (Today's Ask Gaia, a deep link): show it here.
+      if (open && !convoOpen) showConvo();
+      if (!open && convoOpen) { convoOpen = false; voiceOn = false; bubble.className = 'gava-bubble'; hideBubble(); }
       if (pointing) return;
+      if (['listening', 'holding', 'ready'].includes(assistState)) voiceOn = true;
+      if (assistState === 'idle' || assistState === 'error') voiceOn = false;
       setState(map[assistState] || 'idle');
+      if (convoOpen) renderConvo();
     };
     document.addEventListener('gaia:assist-state', (e) => { assistState = e.detail?.state || 'idle'; sync(); });
     if ('MutationObserver' in window) new MutationObserver(sync).observe(document.body, { attributes: true, attributeFilter: ['class'] });
@@ -195,6 +246,7 @@
   function hideBubble() {
     if (!bubble || bubble.hidden) return;
     bubble.hidden = true; char.setAttribute('aria-expanded', 'false'); clearTimeout(bubbleTimer);
+    if (!convoOpen) bubble.className = 'gava-bubble';
     if (!pointing && (state === 'speaking' || state === 'new')) setState('idle');
   }
 
@@ -243,7 +295,7 @@
       down = { x: e.clientX, y: e.clientY, id: e.pointerId }; moved = false; holding = false;
       const r = root.getBoundingClientRect(); startPos = { left: r.left, top: r.top };
       try { char.setPointerCapture(e.pointerId); } catch (_) { /* ignore */ }
-      holdTimer = setTimeout(() => { if (!moved && down) { holding = true; root.classList.add('is-holding'); if (pointing) unpoint(); startVoice(); } }, HOLD_MS);
+      holdTimer = setTimeout(() => { if (!moved && down) { holding = true; root.classList.add('is-holding'); if (pointing) unpoint(); if (!convoOpen) showConvo(); voiceOn = true; renderConvo(); startVoice(); } }, HOLD_MS);
     });
     char.addEventListener('pointermove', (e) => {
       if (!down || holding) return;
@@ -270,13 +322,16 @@
       if (e.type === 'pointercancel') return;
       if (pointing) { unpoint(); return; }
       hop();
+      if (convoOpen) { if (bubble.hidden) { bubble.hidden = false; char.setAttribute('aria-expanded', 'true'); renderConvo(); } else { bubble.hidden = true; char.setAttribute('aria-expanded', 'false'); } return; }
       if (bubble.hidden) showBubble(); else openChat();
     };
     char.addEventListener('pointerup', end); char.addEventListener('pointercancel', end);
     char.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); hop(); if (bubble.hidden) showBubble(); else openChat(); } if (e.key === 'Escape') hideBubble(); });
-    bubble.addEventListener('submit', (e) => { e.preventDefault(); const v = bubble.querySelector('.gava-bubble__input')?.value || ''; if (v.trim()) openChat(v); });
+    bubble.addEventListener('submit', (e) => { e.preventDefault(); const input = bubble.querySelector('.gava-bubble__input'); const v = input?.value || ''; if (!v.trim()) return; if (input) input.value = ''; openChat(v); });
     bubble.addEventListener('click', (e) => {
-      const x = e.target.closest('.gava-bubble__x'); if (x) { hideBubble(); return; }
+      const x = e.target.closest('.gava-bubble__x'); if (x) { if (convoOpen) endConvo(); else hideBubble(); return; }
+      const mic = e.target.closest('.gava-mic'); if (mic) { if (voiceOn) { voiceOn = false; window.dispatchEvent(new CustomEvent('gaia:assist-voice', { detail: { hold: 'stop', source: 'avatar' } })); } else { voiceOn = true; window.dispatchEvent(new CustomEvent('gaia:assist-voice', { detail: { hold: 'start', source: 'avatar' } })); } renderConvo(); return; }
+      const route = e.target.closest('.gava-route'); if (route) { document.querySelector('.gaia-assist__route:not([hidden]) .gaia-assist__route-btn')?.click(); return; }
       const chip = e.target.closest('[data-act]'); if (!chip) return;
       const act = ACTIONS[chip.dataset.act]; if (!act) return;
       if (chip.dataset.act !== 'later') hideBubble();
@@ -332,7 +387,7 @@
   function idleEligible() {
     if (!root || document.hidden || prefs.idleOff) return false;
     if (state !== 'idle' || pointing || animating) return false;
-    if (!bubble.hidden || root.classList.contains('is-dragging') || root.classList.contains('is-holding') || root.classList.contains('is-behind')) return false;
+    if (convoOpen || !bubble.hidden || root.classList.contains('is-dragging') || root.classList.contains('is-holding') || root.classList.contains('is-behind')) return false;
     if (document.body.classList.contains('gaia-assist-panel-open') || document.querySelector('.gaia-tour')) return false;
     return Date.now() - lastTouch >= IDLE_RESUME_MS;
   }

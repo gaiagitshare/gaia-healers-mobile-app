@@ -61,7 +61,7 @@ test('the avatar: Today in the bubble and the tour, a local greeting line, and g
   assert.match(js, /case 'daily': return/);
   assert.match(js, /sel: '\[data-app-nav="daily"\]', eyebrow: 'Today'/);
   assert.match(js, /function greetingLine\(\)/);
-  assert.match(js, /\{ source: 'avatar', greeting: greetingLine\(\) \}/, 'chat from the bubble opens with one local line');
+  assert.match(js, /\{ source: 'avatar', greeting: greetingLine\(\) \}/, 'chat from the bubble opens with one local line, shown in her own log');
   assert.doesNotMatch(js.slice(js.indexOf('function greetingLine()'), js.indexOf('function hop()')), /fetch|dispatchEvent/);
   const ui = read('gaia-ui.js');
   assert.match(ui, /event\.detail\?\.greeting && !transcript\.querySelector\('\.gaia-assist__bubble--user'\)/, 'the shell shows it only in a fresh transcript');

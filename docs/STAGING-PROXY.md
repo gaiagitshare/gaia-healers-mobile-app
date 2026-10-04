@@ -467,6 +467,11 @@ lives in the avatar only: tap = hop + bubble (chips and a type-to-Gaia line
 that pre-fills the conversation, never sends), second tap = chat, hold =
 voice; the centre of the tab bar is **Home** (`.gaia-tabbar__home`, the Gaia
 logo). The shell announces `gaia:assist-state` for the avatar to mirror.
+The conversation itself happens in her bubble (log mirrored from the
+engine's transcript, type-to-send through `gaia:assist-send`, mic through
+`gaia:assist-voice` start/stop, × through `gaia:assist-close`); the engine's
+own sheet is hidden by `body.gaia-assist-headless`. Same engine, history,
+tools and billing.
 Moments: a bounce when a reading loads (`gaia:readings-loaded`), a glance at a
 new nudge on Today. Two switches under Account, server preferences:
 `avatar_idle_off` and `avatar_hello_chime` (Web Audio two-note chime on the

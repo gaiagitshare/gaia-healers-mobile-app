@@ -46,8 +46,17 @@ test('nothing in the avatar can cost a token: no fetch, no model route, no promp
   assert.doesNotMatch(js, /\bfetch\(/, 'the avatar makes no request of its own');
   assert.doesNotMatch(js, /api\/assist\/(chat|voice|tool)/);
   assert.doesNotMatch(js, /XMLHttpRequest|WebSocket|EventSource/);
-  assert.doesNotMatch(js, /prompt: '/, 'no chip carries a prompt of its own; only the member\'s typed words reach the box, and the shell only pre-fills');
-  assert.match(js, /detail: text \? \{ source: 'avatar', prompt: text \} : \{ source: 'avatar', greeting: greetingLine\(\) \}/);
+  assert.doesNotMatch(js, /prompt: '/, 'no chip carries a prompt of its own');
+  // the conversation runs in her bubble through the engine's doors: send, voice, close -- the member's own words, sent when the member sends them
+  assert.match(js, /gaia:assist-send', \{ detail: \{ text, source: 'avatar' \} \}/);
+  assert.match(js, /gaia:assist-close/);
+  assert.match(js, /document\.body\.classList\.add\('gaia-assist-headless'\)/, 'the engine\'s own sheet never shows');
+  assert.match(js, /\.gaia-assist__transcript/, 'the bubble mirrors the engine\'s transcript rather than keeping its own');
+  const ui = read('gaia-ui.js');
+  assert.match(ui, /addEventListener\('gaia:assist-send'/); assert.match(ui, /addEventListener\('gaia:assist-close'/);
+  assert.match(ui, /void sendPrompt\(text, 'general', 'text'\)/, 'the same sendPrompt as the sheet: history, tools, billing unchanged');
+  const css = read('gaia-avatar.css');
+  assert.match(css, /body\.gaia-assist-headless \.gaia-assist__panel, body\.gaia-assist-headless \.gaia-assist__backdrop \{ display: none !important; \}/);
   // the bubble is a table keyed on screen and member state
   assert.match(js, /function bubbleFor\(\)/);
   for (const key of ["case 'profile'", "case 'wellness'", "case 'academy'", "case 'community'", "case 'store'", 'default:']) assert.ok(js.includes(key), key);
@@ -71,6 +80,7 @@ test('placement is remembered on this device only, and the shell is not restruct
   assert.match(sharedNav, /class="gaia-tabbar__assist gaia-tabbar__home" href="home\.html\?view=today" data-app-nav="today" aria-label="Home"/, 'the centre of the bar is Home; Gaia Assist lives in the avatar');
   assert.doesNotMatch(sharedNav, /data-gaia-tab-assist/, 'no second door to Assist in the bar');
   assert.match(js, /function hop\(\)/, 'the tap itself gets a reaction');
+  assert.match(js, /function showConvo\(\)/); assert.match(js, /function endConvo\(\)/); assert.match(js, /class="gava-mic"/, 'voice from inside the conversation');
   assert.match(js, /gava-bubble__input/, 'the member can type from the bubble');
   const html = read('home.html');
   assert.match(html, /id="member-readings"/);

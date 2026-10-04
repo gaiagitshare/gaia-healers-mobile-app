@@ -390,9 +390,13 @@ export async function memberReadings(cfg0, memberId, { env = process.env, fetchI
     latest: latestView,
     trend: trendView,
     comparisons,
-    files: (files?.files || []).filter((f) => f?.shareable !== false).slice(0, 20).map((f) => ({ id: String(f.id ?? ''), name: f.name || f.filename || f.original_name || 'document', uploaded_at: String(f.uploaded_at || f.created_at || f.uploadedAt || '').slice(0, 10), url: f.download_url || f.url || null })),
+    files: (files?.files || []).filter((f) => f?.shareable !== false).slice(0, 20).map((f) => ({ id: String(f.id ?? ''), name: f.name || f.filename || f.original_name || 'document', uploaded_at: String(f.uploaded_at || f.created_at || f.uploadedAt || '').slice(0, 10), url: f.download_url || f.url || null, first: readFirst(f) }))
+      .sort((a, b) => Number(b.first) - Number(a.first)),
   };
 }
+/** "Read this first": a document the practitioner pinned, in any of the spellings their side might use. */
+export const readFirst = (f) => Boolean(f?.read_first || f?.readFirst || f?.pinned || f?.featured || f?.primary
+  || (Array.isArray(f?.tags) && f.tags.some((t) => /read[\s_-]?first|pinned|featured/i.test(String(t)))));
 
 /**
  * The at-a-glance summary -- plain rules, no model. It compares the latest

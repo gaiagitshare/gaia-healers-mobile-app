@@ -415,6 +415,10 @@ being proven (others get 404 and see no panel); unset = every member.
   image* (canvas, share sheet or download, never uploaded), *compare any two*
   (two dates from the member's own series), and shows a practitioner note on
   the scan if their side ever sends `practitioner_note`/`note`/`comment`.
+  Files carry `first: true` when their side marks one as read-first
+  (`read_first`/`readFirst`/`pinned`/`featured`/`primary`/tag) and the card
+  shows it above the gauges. A three-card "What these mean" explainer is open
+  on the member's first visit (no `seen_scanned_at` yet) and folded after.
 
 `GAIA_SCAN_NARRATION` (default off): while no BAA covers the voice/text
 provider, the practitioner scan tools give the model only "the reading is on

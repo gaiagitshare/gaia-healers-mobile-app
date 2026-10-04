@@ -52,7 +52,8 @@ test('My readings panel: present in the profile screen, script loaded, talks onl
   for (const piece of ['function gauge', 'function sparkline', 'function spectrum', 'r.summary', 'r.series', 'gaia:open-readings', "get('section') === 'readings'",
     // the extras: all from the same two routes and the same numbers, none from a model
     'function centreOfTheWeek', 'function comparePicker', 'async function saveImage', 'function setTodayLink', '/api/practitioners/member-link/seen', 'latest.note', 'function explainer', 'Read this first']) assert.ok(js.includes(piece), piece);
-  assert.match(js, /const firstVisit = !status\.seen_scanned_at/, 'first visit is derived from the server, not from browser storage');
+  assert.match(js, /const firstVisit = !prefs\.readings_explainer_collapsed/, 'the explainer stays open until folded once; the choice is a server preference, not browser storage');
+  assert.match(js, /readings_explainer_collapsed: !e\.target\.open/, 'folding or reopening it is sent to the server');
   assert.doesNotMatch(js, /fetch\([^)]*(https?:)?\/\/(?!\$\{proxyBase)/, 'the image is never uploaded anywhere: it is shared or downloaded from the device');
   const css = fs.readFileSync(new URL('../../gaia-app-v3-shop-you.css', import.meta.url), 'utf8');
   for (const cls of ['.g-readings-nudge', '.has-new-reading', '.g-readings__pick-row', '.g-readings__centre-row', '.g-readings__pnote']) assert.ok(css.includes(cls), cls);

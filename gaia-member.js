@@ -777,10 +777,14 @@ body.gaia-booking-open{overflow:hidden;}
     // ledger is now the single authority; serial numbers, which the ledger does
     // not carry yet, are passed through as display enrichment only.
 
+    // The four activity cards are ordered by what the member actually has:
+    // cards with something in them first, empty states after, so a member
+    // with bookings sees them before "No purchases yet".
+    const activity = [];
     const pcnt = (d.purchases && d.purchases.counts) || {};
-    cards.push(gMeCard('Purchases & subscriptions', (pcnt.orders || pcnt.subscriptions)
+    activity.push({ active: Boolean(pcnt.orders || pcnt.subscriptions), html: gMeCard('Purchases & subscriptions', (pcnt.orders || pcnt.subscriptions)
       ? gRows([gRow((pcnt.orders || 0) + ' order' + ((pcnt.orders === 1) ? '' : 's'), (pcnt.subscriptions || 0) + ' subscription' + ((pcnt.subscriptions === 1) ? '' : 's'))])
-      : '<p class="g-empty">No purchases yet.</p>'));
+      : '<p class="g-empty">No purchases yet.</p>') });
 
     const appts = (d.appts && d.appts.appointments) || [];
     const now = Date.now();
@@ -800,21 +804,23 @@ body.gaia-booking-open{overflow:hidden;}
         : (meetType === 'phone' && meet) ? '<span class="g-row__meta">' + esc(meet) + '</span>' : '';
       return '<div class="g-row"><div class="flex-1"><p class="text-headline text-ink">' + esc(a.title || 'Appointment') + '</p><p class="gaia-caption">' + esc(dateStr) + (a.address ? ' · ' + esc(a.address) : '') + '</p></div>' + joinBtn + '</div>';
     };
-    cards.push(gMeCard('My bookings',
+    activity.push({ active: upcoming.length > 0, html: gMeCard('My bookings',
       (upcoming.length
         ? upcoming.slice(0, 3).map(apptRow).join('')
         : '<p class="g-empty">No upcoming appointments.</p>')
-      + (booking[0] ? '<div class="g-card__actions"><a class="g-btn g-btn--secondary g-btn--sm" href="' + esc(booking[0].openUrl) + '" target="_blank" rel="noopener noreferrer">Book a ' + esc(booking[0].name) + ' →</a></div>' : '')));
+      + (booking[0] ? '<div class="g-card__actions"><a class="g-btn g-btn--secondary g-btn--sm" href="' + esc(booking[0].openUrl) + '" target="_blank" rel="noopener noreferrer">Book a ' + esc(booking[0].name) + ' →</a></div>' : '')) });
 
     const fcnt = (d.forms && d.forms.counts) || {};
-    cards.push(gMeCard('Forms & surveys', (fcnt.forms || fcnt.surveys)
+    activity.push({ active: Boolean(fcnt.forms || fcnt.surveys), html: gMeCard('Forms & surveys', (fcnt.forms || fcnt.surveys)
       ? gRows([gRow((fcnt.forms || 0) + ' form' + ((fcnt.forms === 1) ? '' : 's') + ' submitted', (fcnt.surveys || 0) + ' survey' + ((fcnt.surveys === 1) ? '' : 's'))])
-      : '<p class="g-empty">No submissions yet.</p>'));
+      : '<p class="g-empty">No submissions yet.</p>') });
 
     const ncnt = (d.notif && d.notif.counts) || {};
-    cards.push(gMeCard('Messages', (ncnt.unread || ncnt.conversations)
+    activity.push({ active: Boolean(ncnt.unread || ncnt.conversations), html: gMeCard('Messages', (ncnt.unread || ncnt.conversations)
       ? gRows([gRow(ncnt.unread ? ncnt.unread + ' unread' : 'All caught up', (ncnt.conversations || 0) + ' conversation' + ((ncnt.conversations === 1) ? '' : 's'))])
-      : '<p class="g-empty">All caught up. No conversations yet.</p>'));
+      : '<p class="g-empty">All caught up. No conversations yet.</p>') });
+    // Stable: active cards keep their relative order, then the empty ones.
+    activity.filter((c) => c.active).concat(activity.filter((c) => !c.active)).forEach((c) => cards.push(c.html));
 
     // My communities + events — canonical homes are the Community / Events hubs.
     const myCircles = ((d.access && d.access.communities && d.access.communities.unlocked) || []);

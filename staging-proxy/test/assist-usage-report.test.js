@@ -185,3 +185,33 @@ test('an incident\'s evidence, title, why and affected never reach the report; a
   fs.writeFileSync(path.join(dir, 'bad.json'), '{not json');
   assert.match(run(['--file', file, '--alerts', path.join(dir, 'bad.json')], dir).stdout, /UNAVAILABLE: unreadable/);
 });
+
+// ── the member-links line ─────────────────────────────────────────────────
+
+test('the report carries a MEMBER LINKS line: counts in the window and standing totals, never an id', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'rep-')); fs.mkdirSync(path.join(dir, 'data'));
+  const { file } = synthetic(path.join(dir, 'data'));
+  const links = path.join(dir, 'member-links.json');
+  fs.writeFileSync(links, JSON.stringify({ codes: {}, links: {
+    sgSecretMember1: { status: 'confirmed', customer_id: 'cust-aa', practitioner_id: 'p', seen_scanned_at: '2026-10-03' },
+    sgSecretMember2: { status: 'confirmed', customer_id: 'cust-bb', practitioner_id: 'p' },
+    sgSecretMember3: { status: 'revoked', customer_id: 'cust-cc', practitioner_id: 'p' },
+  }, audit: [
+    { at: '2026-10-03T08:00:00Z', event: 'consent_code_issued', memberId: 'sgSecretMember1' },
+    { at: '2026-10-03T09:00:00Z', event: 'link_confirmed', memberId: 'sgSecretMember1', customer_id: 'cust-aa' },
+    { at: '2026-10-03T10:00:00Z', event: 'reading_opened', memberId: 'sgSecretMember1', customer_id: 'cust-aa', scanned_at: '2026-10-03' },
+    { at: '2026-10-02T10:00:00Z', event: 'link_revoked', memberId: 'sgSecretMember3', customer_id: 'cust-cc' },
+  ] }));
+  const r = run(['--file', file, '--json', '--links', links, '--from', '2026-10-03', '--to', '2026-10-03'], dir);
+  const m = JSON.parse(r.stdout).member_links;
+  assert.deepEqual(m.in_window, { codes_issued: 1, links_confirmed: 1, readings_opened: 1, links_revoked: 0 }, 'the revoke on the 2nd is outside the window');
+  assert.deepEqual(m.standing, { confirmed: 2, revoked: 1, confirmed_and_opened: 1 });
+  assert.ok(!/sgSecretMember|cust-/.test(r.stdout), 'no member or customer id reaches the report');
+  const text = run(['--file', file, '--links', links, '--from', '2026-10-03', '--to', '2026-10-03'], dir).stdout;
+  assert.match(text, /== MEMBER LINKS/);
+  assert.match(text, /1 codes asked for, 1 links confirmed, 1 readings opened, 0 links revoked/);
+  assert.match(text, /2 members sharing \(1 have opened their readings\), 1 stopped/);
+  assert.ok(text.indexOf('== MEMBER LINKS') < text.indexOf('== SYSTEM ALERTS'), 'links before alerts');
+  const none = JSON.parse(run(['--file', file, '--json', '--links', path.join(dir, 'missing.json')], dir).stdout).member_links;
+  assert.equal(none.available, false);
+});

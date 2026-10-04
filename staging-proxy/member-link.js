@@ -153,7 +153,7 @@ export function markSeen(memberId, scannedAt, { file = LINK_FILE } = {}) {
   const id = String(memberId || '').trim(); const d = String(scannedAt || '').slice(0, 10);
   const store = load(file); const link = store.links[id];
   if (!link || link.status !== 'confirmed' || !/^\d{4}-\d{2}-\d{2}$/.test(d)) return false;
-  if ((link.seen_scanned_at || '') < d) { link.seen_scanned_at = d; save(store, file); }
+  if ((link.seen_scanned_at || '') < d) { link.seen_scanned_at = d; audit(store, 'reading_opened', { memberId: id, customer_id: link.customer_id, scanned_at: d }); save(store, file); }
   return true;
 }
 export const LATEST_CHECK_TTL_MS = 6 * 60 * 60 * 1000;

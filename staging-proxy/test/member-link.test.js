@@ -311,3 +311,51 @@ test('memberReadings carries the summary and a sorted, numeric-only series (newe
   assert.ok(r.summary.lines.some((l) => l === 'Heart was your most active centre, Root the quietest.'));
   assert.match(r.summary.lines[r.summary.lines.length - 1], /Dr Series is the person to ask/);
 });
+
+test('a newer reading than the member has opened: remembered from any fetch, cleared by seen, refreshed from their side at most every six hours', async () => {
+  const dir4 = fs.mkdtempSync(path.join(os.tmpdir(), 'mlink4-')); const f = path.join(dir4, 'links.json');
+  const c = ml.mintCode('m11', { file: f }); ml.redeemCode(c.code, { customer_id: 'c11', practitioner_id: 'p11' }, { file: f });
+  assert.equal(ml.linkStatus('m11', { file: f }).new_reading, false, 'nothing known yet');
+  assert.equal(ml.rememberLatest('nobody', '2026-06-14', { file: f }), false, 'only a confirmed link remembers');
+  ml.rememberLatest('m11', '2026-06-14', { file: f });
+  let st = ml.linkStatus('m11', { file: f });
+  assert.equal(st.latest_scanned_at, '2026-06-14'); assert.equal(st.seen_scanned_at, null); assert.equal(st.new_reading, true);
+  ml.markSeen('m11', '2026-06-14', { file: f });
+  st = ml.linkStatus('m11', { file: f }); assert.equal(st.new_reading, false);
+  ml.markSeen('m11', '2026-01-01', { file: f });
+  assert.equal(ml.linkStatus('m11', { file: f }).seen_scanned_at, '2026-06-14', 'seen never goes backwards');
+  assert.equal(ml.markSeen('m11', 'junk', { file: f }), false);
+  // refresh: one small call, then none for six hours
+  let calls = 0;
+  const fetchImpl = async (url, init) => {
+    const u = String(url);
+    const json = (o, status = 200) => new Response(JSON.stringify(o), { status, headers: { 'content-type': 'application/json' } });
+    if (u.endsWith('/api/gaia/member-token')) return json({ token: 'mt', expires_in: 3600 });
+    const rpc = JSON.parse(init.body);
+    if (rpc.method === 'tools/list') return json({ jsonrpc: '2.0', id: 1, result: { tools: [{ name: 'get_my_latest_scan' }] } });
+    calls++; assert.equal(rpc.params.name, 'get_my_latest_scan', 'only the latest scan is asked for');
+    return json({ jsonrpc: '2.0', id: rpc.id, result: { content: [{ type: 'text', text: JSON.stringify({ scan: { scanned_at: '2026-07-01T09:00:00Z', values: {} } }) }] } });
+  };
+  ml._resetServerTokenForTest();
+  const cfg = { environment: 'staging', base: 'https://staging.example', mcpUrl: 'https://staging.example/api/mcp', clientId: 'x', clientSecret: 'y' };
+  const env = { GAIA_PRACTITIONERS_MEMBER_API_KEY: 'k', GAIA_PRACTITIONERS_MEMBER_BACKEND: 'https://backend.example' };
+  const t0 = Date.parse('2026-07-02T00:00:00Z');
+  // the remembered date was written just now, so the first refresh is still inside the window
+  assert.equal(await ml.refreshLatest(cfg, 'm11', { env, fetchImpl, file: f, now: Date.now() }), '2026-06-14'); assert.equal(calls, 0);
+  assert.equal(await ml.refreshLatest(cfg, 'm11', { env, fetchImpl, file: f, now: Date.now() + ml.LATEST_CHECK_TTL_MS + 1000 }), '2026-07-01'); assert.equal(calls, 1);
+  assert.equal(ml.linkStatus('m11', { file: f }).new_reading, true, 'newer than what was seen');
+  assert.equal(await ml.refreshLatest(cfg, 'm11', { env, fetchImpl, file: f, now: Date.now() + ml.LATEST_CHECK_TTL_MS + 2000 }), '2026-07-01'); assert.equal(calls, 1, 'no second call inside six hours');
+  // a failing partner keeps the remembered date and waits another six hours
+  const failing = async () => { throw new Error('down'); };
+  assert.equal(await ml.refreshLatest(cfg, 'm11', { env, fetchImpl: failing, file: f, now: Date.now() + 2 * ml.LATEST_CHECK_TTL_MS + 5000 }), '2026-07-01');
+  assert.equal(await ml.refreshLatest(cfg, 'nobody', { env, fetchImpl, file: f }), null);
+  void t0;
+});
+
+test('a practitioner note travels with the scan when their side sends one; absent otherwise', () => {
+  const { memberScanView } = ml;
+  assert.equal(memberScanView({ scanned_at: '2026-06-14', values: { stress: 3, energy: 50 } }).note, null);
+  assert.equal(memberScanView({ scanned_at: '2026-06-14', practitioner_note: '  Rest more this week.  ', values: {} }).note, 'Rest more this week.');
+  assert.equal(memberScanView({ scanned_at: '2026-06-14', values: { notes: 'x'.repeat(700) } }).note.length, 600);
+  assert.equal(memberScanView({ scanned_at: '2026-06-14', values: { comment: 42 } }).note, null, 'only a string is a note');
+});

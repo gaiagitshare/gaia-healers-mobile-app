@@ -1133,4 +1133,21 @@ body.gaia-v2 [data-screen="store"] #store-memberships .g-tier__flag {
 .g-readings__delta.is-bad { color: var(--rd-high); }
 .g-readings__code { margin: 6px 0 2px; font-family: var(--g-font-mono); font-size: 1.9rem; letter-spacing: 0.14em; color: var(--g-accent); font-variant-numeric: tabular-nums; }
 .g-readings__code-gap { display: inline-block; width: 0.5em; }
+/* Practitioner note, centre of the week, compare-any-two */
+.g-readings__pnote { background: var(--g-surface-hi); border: 1px solid var(--g-line); border-radius: var(--g-r-md); padding: 12px 14px; border-top-width: 1px; }
+.g-readings__pnote-text { font-family: var(--g-font-serif); font-size: 1.1rem; font-weight: 500; line-height: 1.4; white-space: pre-line; }
+.g-readings__centre-row { display: flex; gap: 12px; align-items: flex-start; }
+.g-readings__centre-disc { flex: none; width: 34px; height: 34px; border-radius: 50%; margin-top: 2px; box-shadow: 0 0 0 4px color-mix(in srgb, currentColor 10%, transparent); }
+.g-readings__pick-row { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.g-readings__pick-row label { display: flex; flex-direction: column; gap: 4px; font-size: 0.76rem; color: var(--g-text-muted); min-width: 0; }
+.g-readings__pick-row select { width: 100%; min-width: 0; padding: 8px 10px; border-radius: var(--g-r-md); border: 1px solid var(--g-line); background: var(--g-surface-hi); color: var(--g-text); font: inherit; font-size: 0.92rem; }
+.g-readings__pick-out { margin: 10px 0 0; color: var(--g-text); font-variant-numeric: tabular-nums; }
+/* Today nudge and the dot on the You tab: "a newer reading exists", nothing more */
+.g-readings-nudge { display: flex; align-items: center; gap: 12px; margin: 0 0 14px; padding: 12px 14px; border-radius: var(--g-r-md); background: color-mix(in srgb, var(--g-accent) 10%, var(--g-surface)); border: 1px solid color-mix(in srgb, var(--g-accent) 32%, var(--g-line)); color: var(--g-text); text-decoration: none; }
+.g-readings-nudge i { font-size: 1.3rem; color: var(--g-accent); flex: none; }
+.g-readings-nudge span { flex: 1 1 auto; min-width: 0; font-size: 0.92rem; line-height: 1.35; }
+.g-readings-nudge strong { font-weight: 600; }
+.g-readings-nudge em { font-style: normal; font-weight: 600; color: var(--g-accent); flex: none; }
+.gaia-tabbar__link.has-new-reading .gaia-tabbar__icon { position: relative; }
+.gaia-tabbar__link.has-new-reading .gaia-tabbar__icon::after { content: ''; position: absolute; top: -2px; right: -5px; width: 9px; height: 9px; border-radius: 50%; background: var(--g-accent); box-shadow: 0 0 0 2px var(--g-bg); }
 @media (prefers-reduced-motion: reduce) { .g-readings.is-focus { transition: none; } }

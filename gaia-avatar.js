@@ -221,6 +221,7 @@
   // ── bubble ───────────────────────────────────────────────────────────────
   function showBubble(spec, { sticky = false } = {}) {
     if (document.querySelector('.gaia-tour')) return;
+    delete bubble.dataset.practiceWelcome;
     const b = spec || bubbleFor();
     touched();
     bubble.innerHTML = '<button type="button" class="gava-bubble__x" aria-label="Close">×</button>'
@@ -348,11 +349,21 @@
     window.addEventListener('gaia:readings-status', (e) => { const d = e.detail || {}; if (d.new_reading && bubble.hidden && !document.body.classList.contains('gaia-assist-panel-open')) showBubble(bubbleFor()); });
     window.addEventListener('gaia:signed-out', () => { hideBubble(); setState('idle'); });
     // A practitioner whose account is linked hears it once per session, in her words, with the one chip that matters.
-    let saidPractice = false;
+    let saidPractice = false, practiceConnected = false, practiceGreetingTimer = null;
     document.addEventListener('gaia:practitioner-state', (e) => {
-      if (e.detail?.state !== 'connected' || saidPractice || !bubble.hidden || document.body.classList.contains('gaia-assist-panel-open')) return;
-      saidPractice = true;
-      setTimeout(() => { if (bubble.hidden) showBubble({ text: 'Your practice is connected. Ask me about your clients, or open them.', chips: ['practice', 'talk'] }); }, 900);
+      practiceConnected = e.detail?.state === 'connected' && e.detail?.available !== false;
+      if (!practiceConnected) {
+        clearTimeout(practiceGreetingTimer); practiceGreetingTimer = null;
+        if (bubble.dataset.practiceWelcome === 'true') hideBubble();
+        return;
+      }
+      if (saidPractice || practiceGreetingTimer !== null || !bubble.hidden || document.body.classList.contains('gaia-assist-panel-open')) return;
+      practiceGreetingTimer = setTimeout(() => {
+        practiceGreetingTimer = null;
+        if (!practiceConnected || !authed() || !bubble.hidden || document.querySelector('.gaia-tour') || document.body.classList.contains('gaia-assist-panel-open')) return;
+        showBubble({ text: 'Your practice is connected. Ask me about your clients, or open them.', chips: ['practice', 'talk'] });
+        if (!bubble.hidden) { saidPractice = true; bubble.dataset.practiceWelcome = 'true'; }
+      }, 900);
     });
   }
 

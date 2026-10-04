@@ -14,7 +14,7 @@ if(screenshots)await mkdir(screenshots,{recursive:true});
 async function setup(width,height=900,member=false,link='not_connected',onboarding='complete'){
  const context=await browser.newContext({viewport:{width,height}});const page=await context.newPage();
  const errors=[];page.on('pageerror',error=>errors.push(error.message));
- await page.addInitScript(()=>localStorage.setItem('gaia-tour-v1','1'));
+ await page.addInitScript(()=>{localStorage.setItem('gaia-tour-v1','1');localStorage.setItem('gaia-avatar-met','1');});
  for(const file of ['gaia-ui.js','gaia-avatar.js','gaia-fit.css','gaia-practitioner.js','gaia-app-v3.css','gaia-app-v3-today-energy.css','gaia-app-v3-shop-you.css'])
   await page.route('**/'+file+'*',r=>r.fulfill({path:path.join(root,file),contentType:file.endsWith('.css')?'text/css':'application/javascript'}));
  await page.route('**/api/**',async route=>{
@@ -81,6 +81,14 @@ try{
  await blocked.page.evaluate(()=>GaiaTour.run());await blocked.page.waitForTimeout(200);await closed(blocked.page);assert.equal(await blocked.page.evaluate(()=>GaiaAppGuard.canEnter),false);assert.equal(await blocked.page.locator('#gaia-app-shell').isVisible(),false);await blocked.context.close();console.log('PASS incomplete onboarding retains its own gate without tour interference');
  const {page,context}=await setup(390,844,true);
  const one={sel:'.gaia-tabbar__home',title:'Valid',body:'Visible target'};
+ await page.evaluate(()=>document.dispatchEvent(new CustomEvent('gaia:practitioner-state',{detail:{state:'connected',available:true}})));
+ await page.evaluate(()=>document.dispatchEvent(new CustomEvent('gaia:practitioner-state',{detail:{state:'unverified',available:true}})));
+ await page.waitForTimeout(1100);assert.equal(await page.locator('.gava-bubble:visible').count(),0,'a refused link must cancel the delayed connected greeting');
+ await page.evaluate(()=>document.dispatchEvent(new CustomEvent('gaia:practitioner-state',{detail:{state:'connected',available:true}})));
+ await page.waitForFunction(()=>document.querySelector('.gava-bubble')?.dataset.practiceWelcome==='true');
+ await page.evaluate(()=>document.dispatchEvent(new CustomEvent('gaia:practitioner-state',{detail:{state:'needs_reconnect',available:true}})));
+ assert.equal(await page.locator('.gava-bubble:visible').count(),0,'a visible connected greeting must close when authorization changes');
+ console.log('PASS delayed/visible practitioner greeting is cancelled after loss of authorization');
  for(const state of ['not_connected','not_practitioner','unverified','needs_reconnect','unknown']){
   await page.evaluate(state=>document.dispatchEvent(new CustomEvent('gaia:practitioner-state',{detail:{state}})),state);
   await start(page);const titles=[];

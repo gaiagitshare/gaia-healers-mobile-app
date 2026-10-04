@@ -120,6 +120,29 @@ function slimScan(scan = {}) {
   };
 }
 
+/**
+ * SCAN NARRATION (HIPAA gap, 4 Oct 2026). The scan tools fetch a client's
+ * Bio-Well readings for the Practice screen -- and, through the same result,
+ * for the model to say aloud. The model is a third-party provider (Qwen for
+ * voice, Gemini for text) without a BAA, so until one exists the model is
+ * given only that the reading is on screen; the page keeps the full card.
+ * GAIA_SCAN_NARRATION=on restores the old behaviour once a BAA-covered
+ * provider is in place.
+ */
+export const SCAN_TOOLS = Object.freeze(['practitioner_client_latest_scan', 'practitioner_client_trend', 'practitioner_compare_sessions']);
+export function scanNarrationEnabled(env = process.env) { return env.GAIA_SCAN_NARRATION === 'on'; }
+/** What the MODEL is given for a tool result; the page always gets the full result. */
+export function modelView(name, result, env = process.env) {
+  if (!SCAN_TOOLS.includes(name) || scanNarrationEnabled(env) || !result || typeof result !== 'object') return result;
+  if (result.found === false) return result;
+  return {
+    opened: true,
+    client: result.client || null,
+    scans_on_file: result.scans_on_file ?? null,
+    note: 'The reading is now showing on the practitioner\'s screen. Say that it is up and offer to go through it with them. Do not read out, estimate or summarise any values: they are on screen, not in this reply.',
+  };
+}
+
 export const TOOLS = [
   // —— available to everyone, performed by the page ——
   //

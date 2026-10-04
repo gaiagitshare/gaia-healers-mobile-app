@@ -48,16 +48,20 @@ const fake = http.createServer((req, res) => {
       const who = auth.slice('Bearer mt-'.length);
       const rpc = JSON.parse(body);
       if (rpc.method === 'tools/list') {
-        const names = partner.shape === 'member' ? ['get_member_customer', 'get_member_scan', 'get_member_scan_trend', 'get_member_files'] : ['get_customer', 'get_customer_scan', 'get_scan_trend', 'get_customer_files'];
+        const names = partner.shape === 'member' ? ['get_my_profile', 'get_my_latest_scan', 'get_my_scan_trend', 'get_my_before_after', 'list_my_shared_files'] : ['get_customer', 'get_customer_scan', 'get_scan_trend', 'get_customer_files'];
         res.end(JSON.stringify({ jsonrpc: '2.0', id: rpc.id, result: { tools: names.map((n) => ({ name: n })) } })); return;
       }
       const { name, arguments: args } = rpc.params; partner.calls.push({ name, args, who });
       const text = (o) => JSON.stringify({ jsonrpc: '2.0', id: rpc.id, result: { content: [{ type: 'text', text: JSON.stringify(o) }] } });
       const SCAN = { scanned_at: '2026-09-24T10:00:00Z', labeled: { stress: 3.91, energy: 54.2, chakras: [{ name: 'Root', value: 4.12, align: -0.8 }], organs: [{ name: 'Liver', disbalance: 2.4 }], meridians: [], systems: [] } };
-      if (name === 'get_member_customer' || name === 'get_customer') { res.end(text({ customer_id: 'cust-1', id: 'cust-1', practitioner: { id: 'prac-9', name: 'Dr Test' }, has_biowell_card: true, scans_on_file: 3 })); return; }
-      if (name === 'get_member_scan') { res.end(text({ scan: SCAN })); return; }
+      if (name === 'get_my_profile') { res.end(text({ member: { name: 'Test Member', linked_at: '2026-10-04T13:17:50.000Z' }, practitioner: { name: 'Dr Test', specialty: 'Yoga', city: 'San Dimas', state: 'CA' } })); return; }
+      if (name === 'get_customer') { res.end(text({ customer_id: 'cust-1', id: 'cust-1', practitioner: { id: 'prac-9', name: 'Dr Test' }, has_biowell_card: true, scans_on_file: 3 })); return; }
+      // their real shape (4 Oct): values under `values`, count beside it
+      if (name === 'get_my_latest_scan') { res.end(text({ scan: { exp_id: 1, scanned_at: SCAN.scanned_at, values: SCAN.labeled }, scanCount: 3 })); return; }
+      if (name === 'get_my_before_after') { res.end(text({ comparisons: [{ source: 'time', protocol: null, before: { date: '2026-08-01' }, after: { date: '2026-09-24' }, deltas: { stress: -0.4, energy: 6.2, disbalance: [{ name: 'Liver', before: 4, after: 2, delta: -2 }] } }] })); return; }
+      if (name === 'list_my_shared_files') { res.end(text({ count: 1, files: [{ id: 'f1', name: 'Protocol.pdf', download_url: 'https://x/f1', uploaded_at: '2026-09-25' }] })); return; }
       if (name === 'get_customer_scan') { res.end(text({ customer: { id: 'cust-1' }, scans: [{ ...SCAN, scanned_at: '2026-08-01T10:00:00Z', labeled: { ...SCAN.labeled, stress: 9 } }, SCAN] })); return; }
-      if (name === 'get_member_scan_trend' || name === 'get_scan_trend') { res.end(text({ scanCount: 3, summary: { energy: { min: 40, max: 60, avg: 50, latest: 54 }, stress: { min: 2, max: 4, avg: 3, latest: 3.9 } }, flags: [{ name: 'Heart', direction: 'worsening', flagReason: 'two readings' }] })); return; }
+      if (name === 'get_my_scan_trend' || name === 'get_scan_trend') { res.end(text({ scanCount: 3, summary: { energy: { min: 40, max: 60, avg: 50, latest: 54 }, stress: { min: 2, max: 4, avg: 3, latest: 3.9 } }, flags: [{ category: 'organs', name: 'Heart', direction: 'worsening', flagReason: 'disbalance_high', severity: 'high', delta: 12.3 }] })); return; }
       if (name === 'get_member_files' || name === 'get_customer_files') { res.end(text({ files: [{ id: 'f1', name: 'Protocol.pdf', shareable: true, uploaded_at: '2026-09-25' }, { id: 'f2', name: 'private.pdf', shareable: false }] })); return; }
       res.statusCode = 404; res.end('{}'); return;
     }
@@ -157,9 +161,14 @@ test('the whole flow: consent code -> partner redeems -> readings served from th
   assert.deepEqual(r.json.latest.chakras, [{ name: 'Root', value: 4.12, alignment: -1 }]);
   assert.deepEqual(r.json.latest.most_out_of_balance, [{ area: 'organ', name: 'Liver', disbalance: 2 }]);
   assert.equal(r.json.trend.energy.latest, 54); assert.equal(r.json.trend.flagged[0].name, 'Heart');
-  assert.deepEqual(r.json.files.map((f) => f.name), ['Protocol.pdf'], 'only shareable documents');
+  assert.deepEqual(r.json.files.map((f) => f.name), ['Protocol.pdf']);
   const names = partner.calls.map((c) => c.name);
-  assert.ok(names.includes('get_member_customer') && names.includes('get_member_scan') && names.includes('get_member_scan_trend') && names.includes('get_member_files'));
+  assert.ok(['get_my_profile', 'get_my_latest_scan', 'get_my_scan_trend', 'get_my_before_after', 'list_my_shared_files'].every((n) => names.includes(n)), names.join(','));
+  assert.equal(r.json.practitioner.specialty, 'Yoga'); assert.equal(r.json.practitioner.location, 'San Dimas, CA');
+  assert.equal(r.json.scans_on_file, 3);
+  assert.deepEqual(r.json.trend.flagged[0], { name: 'Heart', area: 'organ', direction: 'worsening', severity: 'high', change: 12, reason: 'disbalance_high' });
+  assert.equal(r.json.comparisons[0].energy_change, 6.2); assert.equal(r.json.comparisons[0].biggest_changes[0].name, 'Liver');
+  assert.equal(r.json.files[0].url, 'https://x/f1');
   assert.ok(partner.calls.every((c) => c.who === 'member-A'), 'every read is made with the one-member token');
   assert.ok(!names.includes('list_customers') && !names.includes('search_customers'));
   assert.equal(partner.tokens, 1, 'one member token, reused within its hour');

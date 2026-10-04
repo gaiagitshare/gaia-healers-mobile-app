@@ -392,6 +392,18 @@ being proven (others get 404 and see no panel); unset = every member.
   (`GAIA_PRACTITIONERS_SERVER_CLIENT_ID`/`_SECRET`, `members.read`) is the
   fallback. Store: `data/member-links.json` (codes, links, audit — never scan
   data), 0600. Codes last **24 hours**, single use, case-insensitive.
+- `my-readings` also returns `summary { headline, lines[] }` — the "In short"
+  block, written by `readingSummary()` from plain rules (latest vs the
+  member's own 90-day average, flagged areas, most/least active centre, last
+  before/after pair, the not-a-diagnosis line) — and `series` (newest 24 dated
+  `{ d, e, s }` points) for the sparkline. No model touches either.
+- **Assist knows the screen exists, not what is on it.** When the member has a
+  confirmed link the member prompt gains one `BIO-WELL READINGS:` line that
+  says where the readings are and to call `navigate { screen: "profile",
+  section: "readings" }`; it is told never to state or estimate a value. The
+  voice page and the text chat (`routeIntent` — "open my readings", "my
+  scan results") dispatch `gaia:open-readings`; the panel scrolls into view
+  and glows. `home.html?view=profile&section=readings` does the same.
 
 `GAIA_SCAN_NARRATION` (default off): while no BAA covers the voice/text
 provider, the practitioner scan tools give the model only "the reading is on

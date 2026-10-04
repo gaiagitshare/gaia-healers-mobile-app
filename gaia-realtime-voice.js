@@ -665,6 +665,11 @@
       // the listing tools; if it invents one, the card's own fetch goes out with
       // this practitioner's token and their server answers "not owned by this
       // practitioner", so a guess reaches a refusal and never data.
+      // My readings is a card inside You; a section asks the card to come into view.
+      if (screen === 'profile' && String(args.section || '').trim().toLowerCase() === 'readings') {
+        try { shell.go('profile'); window.dispatchEvent(new CustomEvent('gaia:open-readings')); } catch (e) { return { ok: false, message: 'Could not open the readings just now.' }; }
+        return { ok: true, message: 'Opened You with My readings on screen. Say that it is up; do not read out any values.' };
+      }
       if (screen === 'practice') {
         const client = String(args.client || '').trim();
         const open = String(args.open || '').trim().toLowerCase();

@@ -310,16 +310,69 @@ export async function memberReadings(cfg0, memberId, { env = process.env, fetchI
     stress_change: num(c.deltas?.stress, 2), energy_change: num(c.deltas?.energy, 1),
     biggest_changes: (Array.isArray(c.deltas?.disbalance) ? c.deltas.disbalance : []).slice(0, 4).map((d) => ({ name: d.name, before: num(d.before), after: num(d.after), change: num(d.delta) })),
   }));
+  const latestView = (() => { const v = latestOf(scan) ? memberScanView(latestOf(scan)) : null; return emptyScan(v) ? (latestFromTrend(trend) || v) : { ...v, source: 'scan' }; })();
+  const trendView = trend ? { energy: band(trend.summary?.energy), stress: band(trend.summary?.stress),
+      flagged: (trend.flags || []).slice(0, 6).map((t) => ({ name: t.name, area: String(t.category || '').replace(/s$/, ''), direction: t.direction, severity: t.severity || '', change: num(t.delta), reason: t.flagReason || '' })) } : null;
+  // A small series for a sparkline: newest 24 dated points with numbers.
+  const series = (trend?.points || []).filter((p) => p?.scanned_at && (typeof p.energy === 'number' || typeof p.stress === 'number'))
+    .sort((a, b) => String(a.scanned_at).localeCompare(String(b.scanned_at))).slice(-24)
+    .map((p) => ({ d: String(p.scanned_at).slice(0, 10), e: num(p.energy, 1), s: num(p.stress, 2) }));
+  const practitionerName = prac.name || link.practitioner_name || 'your practitioner';
   return {
     practitioner: { id: String(prac.id ?? link.practitioner_id), name: prac.name || link.practitioner_name || '', specialty: prac.specialty || '', location: [prac.city, prac.state].filter(Boolean).join(', ') },
+    summary: readingSummary({ latest: latestView, trend: trendView, comparisons, practitionerName }),
+    series,
     linked_at: customer?.member?.linked_at || link.linked_at,
     scans_on_file: scan?.scanCount ?? customer?.scans_on_file ?? trend?.scanCount ?? (Array.isArray(scan?.scans) ? scan.scans.length : null),
-    latest: (() => { const v = latestOf(scan) ? memberScanView(latestOf(scan)) : null; return emptyScan(v) ? (latestFromTrend(trend) || v) : { ...v, source: 'scan' }; })(),
-    trend: trend ? { energy: band(trend.summary?.energy), stress: band(trend.summary?.stress),
-      flagged: (trend.flags || []).slice(0, 6).map((t) => ({ name: t.name, area: String(t.category || '').replace(/s$/, ''), direction: t.direction, severity: t.severity || '', change: num(t.delta), reason: t.flagReason || '' })) } : null,
+    latest: latestView,
+    trend: trendView,
     comparisons,
     files: (files?.files || []).filter((f) => f?.shareable !== false).slice(0, 20).map((f) => ({ id: String(f.id ?? ''), name: f.name || f.filename || f.original_name || 'document', uploaded_at: String(f.uploaded_at || f.created_at || f.uploadedAt || '').slice(0, 10), url: f.download_url || f.url || null })),
   };
+}
+
+/**
+ * The at-a-glance summary -- plain rules, no model. It compares the latest
+ * reading with the member's own 90-day range, names what their practitioner's
+ * system flagged, and says which centres were most and least active. Wording
+ * is reflective, never diagnostic; the member's practitioner is where
+ * questions go. Exported for the test and for the card.
+ */
+export function readingSummary({ latest, trend, comparisons = [], practitionerName = 'your practitioner' } = {}) {
+  const lines = [];
+  const e = latest?.energy, s = latest?.stress;
+  const eAvg = trend?.energy?.average, sAvg = trend?.stress?.average;
+  const word = (v, avg, up, down, same, step) => (typeof v !== 'number' || typeof avg !== 'number') ? null : (v - avg >= step ? up : (avg - v >= step ? down : same));
+  const eWord = word(e, eAvg, 'Energy above your recent average', 'Energy below your recent average', 'Energy around your recent average', 5);
+  const sWord = word(s, sAvg, 'stress higher than usual', 'stress lower than usual', 'stress about usual', 0.5);
+  const headline = eWord && sWord ? `${eWord} · ${sWord}` : (eWord || (sWord ? sWord[0].toUpperCase() + sWord.slice(1) : (latest ? 'Your latest reading' : 'No reading yet')));
+  if (latest && (typeof e === 'number' || typeof s === 'number')) {
+    const parts = [];
+    if (typeof e === 'number') parts.push(`energy ${e}` + (trend?.energy ? ` (your 90-day range ${trend.energy.lowest}–${trend.energy.highest})` : ''));
+    if (typeof s === 'number') parts.push(`stress ${s}` + (trend?.stress ? ` (range ${trend.stress.lowest}–${trend.stress.highest})` : ''));
+    lines.push(`Latest reading ${latest.scanned_at}: ${parts.join(', ')}.`);
+  }
+  const flags = trend?.flagged || [];
+  if (trend) {
+    if (!flags.length) lines.push('Nothing was flagged by your practitioner\'s system in the last 90 days.');
+    else {
+      const high = flags.filter((f) => f.severity === 'high');
+      const names = flags.slice(0, 3).map((f) => f.name).join(', ');
+      lines.push(`${flags.length} area${flags.length === 1 ? ' is' : 's are'} flagged in the last 90 days${high.length ? `, ${high.length} of them high` : ''}: ${names}${flags.length > 3 ? ' and more' : ''}.`);
+    }
+  }
+  const ch = (latest?.chakras || []).filter((c) => typeof c.value === 'number');
+  if (ch.length >= 2) {
+    const sorted = [...ch].sort((a, b) => b.value - a.value);
+    lines.push(`${sorted[0].name} was your most active centre, ${sorted[sorted.length - 1].name} the quietest.`);
+  }
+  const c0 = comparisons[0];
+  if (c0 && (typeof c0.stress_change === 'number' || typeof c0.energy_change === 'number')) {
+    const sgn = (v, d) => (typeof v === 'number' ? `${v > 0 ? '+' : ''}${v.toFixed(d)}` : '—');
+    lines.push(`Across your last pair of sessions (${c0.from} → ${c0.to}): stress ${sgn(c0.stress_change, 2)}, energy ${sgn(c0.energy_change, 1)}.`);
+  }
+  lines.push(`These are reflective measurements, not a diagnosis — ${practitionerName} is the person to ask about them.`);
+  return { headline, lines };
 }
 
 /** Best effort: tell their server the member stopped sharing. Local revoke never waits on it. */

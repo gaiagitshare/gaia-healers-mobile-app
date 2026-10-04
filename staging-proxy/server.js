@@ -4394,6 +4394,12 @@ async function buildMemberVoiceContext(req) {
       const interestTags = (b.tags || []).filter((t) => /^(interest_|product_.*_(interest|owner)|practice_stage_|invest_|community_feature_|need_)/.test(String(t).toLowerCase()));
       if (interestTags.length) lines.push('What we already know (profile tags): ' + interestTags.slice(0, 40).join(', ') + '.');
       const hasPaidSub = Array.isArray(b.subscriptions) && b.subscriptions.some((x) => /active|trialing/i.test(String(x.status || '')));
+      // The member's own Bio-Well readings, when shared. Only the FACT that
+      // they exist and where they are: no value, date or practitioner reaches
+      // the model (no BAA covers the voice/text provider).
+      if (memberReadingsEnabled() && memberAllowed(cid) && linkFor(cid)) {
+        lines.push('BIO-WELL READINGS: this member has Bio-Well readings shared by their practitioner, shown in You > My readings (a summary, the latest reading with the seven chakras, a 90-day trend with flagged areas, before-and-after sessions, shared documents). To show them call navigate { screen: "profile", section: "readings" }. Explain what the sections mean in general terms if asked; never state, estimate or read out any value — they are on screen, not in this conversation, and questions about them belong with their practitioner.');
+      }
       lines.push('SUBSCRIPTION: ' + (hasPaidSub
         ? 'This member is a PAID subscriber — do NOT pitch a plan they already pay for; focus on helping them get more value from it.'
         : 'This member is a FREE member (no active paid subscription). If their onboarding is DONE, help with their requested task. Explain paid membership only when they ask about membership or a verified access limitation requires it.'));

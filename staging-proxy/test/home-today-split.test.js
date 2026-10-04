@@ -86,6 +86,6 @@ test('the in-app window always has a reachable Close, and bookings send a member
   assert.match(member, /gaia-booking-modal__foot"><button type="button" class="gaia-booking-modal__done" data-book-close>Close<\/button>/, 'a Close at the thumb');
   assert.match(member, /href="home\.html\?view=directory" data-app-nav="directory">Find a practitioner near you/);
   const css = read('gaia-superapp.css');
-  for (const bp of ['min-width: 768px', 'min-width: 1024px', 'min-width: 1440px', 'max-width: 767px']) assert.ok(css.slice(css.indexOf('.g-super-home--v2')).includes(bp), bp);
+  for (const bp of ['min-width: 768px', 'min-width: 1024px', 'min-width: 1440px', 'max-width: 1023px']) assert.ok(css.slice(css.indexOf('.g-super-home--v2')).includes(bp), bp);
   assert.match(css, /\.g-super-home--v2 \{ display: block !important;/, 'the old two-column grid does not apply to the v2 Home');
 });

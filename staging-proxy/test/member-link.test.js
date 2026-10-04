@@ -264,3 +264,50 @@ test('an empty latest scan is replaced by the newest trend point, labelled as su
   assert.deepEqual(r.latest.most_out_of_balance[0], { area: 'organ', name: 'Kidneys', disbalance: 46 });
   assert.equal(r.scans_on_file, 104);
 });
+
+test('the server writes the "In short" summary from plain rules and a dated series for the sparkline', async () => {
+  const { readingSummary } = ml;
+  // No model anywhere: the same input always gives the same words.
+  const s = readingSummary({
+    latest: { scanned_at: '2026-06-14', energy: 54, stress: 3.9, chakras: [{ name: 'Root', value: 6.1 }, { name: 'Heart', value: 8.4 }, { name: 'Crown', value: 5.2 }] },
+    trend: { energy: { lowest: 40, highest: 60, average: 50 }, stress: { lowest: 2, highest: 4, average: 3 }, flagged: [{ name: 'Heart', severity: 'high' }, { name: 'Kidneys', severity: 'elevated' }] },
+    comparisons: [{ from: '2026-05-01', to: '2026-06-14', stress_change: -0.4, energy_change: 3.2 }],
+    practitioner: 'Dr Test',
+  });
+  assert.equal(s.headline, 'Energy around your recent average · stress higher than usual');
+  assert.ok(s.lines.some((l) => l.startsWith('Latest reading 2026-06-14: energy 54 (your 90-day range 40–60), stress 3.9 (range 2–4).')));
+  assert.ok(s.lines.some((l) => l === '2 areas are flagged in the last 90 days, 1 of them high: Heart, Kidneys.'));
+  assert.ok(s.lines.some((l) => l === 'Heart was your most active centre, Crown the quietest.'));
+  assert.ok(s.lines.some((l) => l.includes('stress -0.40, energy +3.2')));
+  assert.match(s.lines[s.lines.length - 1], /not a diagnosis/);
+  assert.deepEqual(readingSummary({}), { headline: 'No reading yet', lines: ['These are reflective measurements, not a diagnosis — your practitioner is the person to ask about them.'] });
+  assert.deepEqual(readingSummary({ latest: { scanned_at: '2026-01-01', energy: 50 }, trend: { flagged: [] } }).lines[1], 'Nothing was flagged by your practitioner\'s system in the last 90 days.');
+});
+
+test('memberReadings carries the summary and a sorted, numeric-only series (newest 24 points)', async () => {
+  const { memberReadings } = ml;
+  const points = [{ scanned_at: '2024-09-16T17:16:38Z', energy: null, stress: null }];
+  for (let i = 0; i < 30; i++) points.push({ scanned_at: `2026-0${1 + (i % 6)}-${String(1 + i % 28).padStart(2, '0')}T10:00:00Z`, energy: 50 + i, stress: 2 + i / 10 });
+  const fetchImpl = async (url, init) => {
+    const u = String(url);
+    const json = (o, status = 200) => new Response(JSON.stringify(o), { status, headers: { 'content-type': 'application/json' } });
+    if (u.endsWith('/api/gaia/member-token')) return json({ token: 'mt', expires_in: 3600 });
+    const rpc = JSON.parse(init.body);
+    if (rpc.method === 'tools/list') return json({ jsonrpc: '2.0', id: 1, result: { tools: ['get_my_profile', 'get_my_latest_scan', 'get_my_scan_trend', 'get_my_before_after', 'list_my_shared_files'].map((n) => ({ name: n })) } });
+    const text = (o) => json({ jsonrpc: '2.0', id: rpc.id, result: { content: [{ type: 'text', text: JSON.stringify(o) }] } });
+    if (rpc.params.name === 'get_my_latest_scan') return text({ scan: { exp_id: 1, scanned_at: '2026-06-14T14:49:28Z', values: { stress: 3.9, energy: 54, chakras: [{ name: 'Root', value: 6.1, align: 1 }, { name: 'Heart', value: 8.4, align: 0 }], organs: [], meridians: [], systems: [] } }, scanCount: 31 });
+    if (rpc.params.name === 'get_my_scan_trend') return text({ scanCount: 31, points, summary: { energy: { min: 40, max: 80, avg: 60, latest: 54 }, stress: { min: 2, max: 5, avg: 3, latest: 3.9 } }, organTrends: [], flags: [] });
+    return text({});
+  };
+  const dir3 = fs.mkdtempSync(path.join(os.tmpdir(), 'mlink3-')); const f = path.join(dir3, 'links.json');
+  const c = ml.mintCode('m10', { file: f }); ml.redeemCode(c.code, { customer_id: 'c10', practitioner_id: 'p10', practitioner_name: 'Dr Series' }, { file: f });
+  ml._resetServerTokenForTest();
+  const cfg = { environment: 'staging', base: 'https://staging.example', mcpUrl: 'https://staging.example/api/mcp', clientId: 'x', clientSecret: 'y' };
+  const r = await memberReadings(cfg, 'm10', { env: { GAIA_PRACTITIONERS_MEMBER_API_KEY: 'k', GAIA_PRACTITIONERS_MEMBER_BACKEND: 'https://backend.example' }, fetchImpl, file: f });
+  assert.equal(r.series.length, 24, 'capped at 24');
+  assert.ok(r.series.every((p) => /^\d{4}-\d{2}-\d{2}$/.test(p.d) && typeof p.e === 'number' && typeof p.s === 'number'), 'dated, numeric only; the null 2024 point is dropped');
+  assert.ok(r.series.every((p, i, a) => i === 0 || a[i - 1].d <= p.d), 'oldest to newest');
+  assert.equal(r.summary.headline, 'Energy below your recent average · stress higher than usual');
+  assert.ok(r.summary.lines.some((l) => l === 'Heart was your most active centre, Root the quietest.'));
+  assert.match(r.summary.lines[r.summary.lines.length - 1], /Dr Series is the person to ask/);
+});

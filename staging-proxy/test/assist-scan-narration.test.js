@@ -45,4 +45,12 @@ test('My readings panel: present in the profile screen, script loaded, talks onl
   assert.match(js, /not a diagnosis/);
   assert.match(js, /credentials: 'include'/);
   assert.doesNotMatch(js, /localStorage|sessionStorage/, 'nothing cached in the browser');
+  // Graphics are drawn to scale from the server's numbers, and the summary is the server's words -- nothing is computed by a model.
+  for (const piece of ['function gauge', 'function sparkline', 'function spectrum', 'r.summary', 'r.series', 'gaia:open-readings', "get('section') === 'readings'"]) assert.ok(js.includes(piece), piece);
+  // The member prompt tells the model only THAT readings exist and how to open them; never a value.
+  const srv = fs.readFileSync(new URL('../server.js', import.meta.url), 'utf8');
+  const line = srv.match(/BIO-WELL READINGS:[^\n]*/)?.[0] || '';
+  assert.match(line, /navigate \{ screen: "profile", section: "readings" \}/);
+  assert.match(line, /never state, estimate or read out any value/);
+  assert.match(srv, /memberReadingsEnabled\(\) && memberAllowed\(cid\) && linkFor\(cid\)/, 'only for a member with a confirmed link');
 });

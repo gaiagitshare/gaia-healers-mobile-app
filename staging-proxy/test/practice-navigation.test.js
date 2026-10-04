@@ -52,7 +52,21 @@ test('a member is never told Practice is a screen', () => {
   const nav = navOf(MEMBER);
   assert.ok(!nav.parameters.properties.screen.enum.includes('practice'),
     'for a member it is not a screen, so offering it only invites a failed call');
-  assert.deepEqual(Object.keys(nav.parameters.properties).sort(), ['screen', 'tab', 'tool']);
+  assert.deepEqual(Object.keys(nav.parameters.properties).sort(), ['screen', 'section', 'tab', 'tool']);
+  assert.match(nav.parameters.properties.section.description, /readings/,
+    'the one section a member has is their own readings inside You');
+});
+
+test('My readings is reachable by command on every surface, and the voice page is told not to read values', () => {
+  const voice = read('gaia-realtime-voice.js');
+  assert.match(voice, /screen === 'profile' && String\(args\.section[^\n]*=== 'readings'/, 'voice: profile + section=readings');
+  assert.match(voice, /gaia:open-readings/, 'the card is asked to come into view through one event');
+  assert.match(voice, /do not read out any values/i);
+  const ui = read('gaia-ui.js');
+  assert.match(ui, /Open My readings/, 'text chat: a typed "my readings" routes without a model call');
+  assert.match(ui, /gaia:open-readings/);
+  const panel = read('gaia-my-readings.js');
+  assert.match(panel, /gaia:open-readings/, 'and the panel listens for it');
 });
 
 test('a practitioner is offered Practice and the three ways into it', () => {
@@ -63,7 +77,7 @@ test('a practitioner is offered Practice and the three ways into it', () => {
   assert.ok(props.open, 'a result card to open on them');
   assert.ok(props.section, 'or a section of the list when there is no client');
   assert.deepEqual(props.open.enum.sort(), ['compare', 'latest', 'trend']);
-  assert.deepEqual(props.section.enum.sort(), ['attention', 'clients', 'followups']);
+  assert.deepEqual(props.section.enum.sort(), ['attention', 'clients', 'followups', 'readings']);
 });
 
 test('the model is told where a client id may come from', () => {

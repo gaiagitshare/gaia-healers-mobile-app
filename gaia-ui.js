@@ -3385,6 +3385,8 @@
       if (window.GaiaAppGuard && !window.GaiaAppGuard.canEnter) return null;
       const t = String(text || '').toLowerCase();
       if (!t.trim()) return null;
+      // A member's own Bio-Well readings live in You > My readings.
+      if (/\b(my )?(bio-?well )?(readings?|scan results?|results from my (scan|practitioner))\b/.test(t) && !/\bbook\b/.test(t)) return { label: 'Open My readings', view: 'profile', section: 'readings' };
       // Founder and booking routes — specific before the generic "book/scan".
       if (/\b(founder|dr\.? nima|nima farshid|meet nima)\b/.test(t)) return { label: 'Meet the founder', url: 'https://calendly.com/nimafarshid/gaia-healers-meeting' };
       // tier-name-ok: matches what the USER typed or said ("join gold"), to pick a
@@ -3460,6 +3462,7 @@
       if (r.url) { window.open(r.url, '_blank', 'noopener'); if (closePanel) setOpen(false); return; }
       if (r.view) {
         window.GaiaAppShell?.go?.(r.view, r.tab ? { tab: r.tab } : undefined);
+        if (r.section === 'readings') window.setTimeout(() => window.dispatchEvent(new CustomEvent('gaia:open-readings')), 60);
         // Store's Shop/Membership sub-tabs are driven by their own tab buttons,
         // so click the target so a membership request lands on the right tab.
         if (r.tab) window.setTimeout(() => { document.querySelector(`[data-store-tab="${r.tab}"]`)?.click(); }, 60);

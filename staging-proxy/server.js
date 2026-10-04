@@ -32,7 +32,8 @@ import {
 import { classifyMembershipEvent, membershipFromEvent } from './membership/events.js';
 import { attachQwenVoiceRelay, qwenRouting, issueQwenTicket, qwenVoiceConfig, voiceBootLine } from './qwen-voice-relay.js';
 import { normalizeUsage, recordUsage, recordFailure } from './assist-usage.js';
-import { toolDeclarationsFor, clientToolNames, slowToolNames, runTool } from './assist-tools.js';
+import { toolDeclarationsFor, clientToolNames, slowToolNames, runTool, modelView } from './assist-tools.js';
+import { memberReadingsEnabled, mintCode, redeemCode, revokeLink, linkStatus, linkFor, partnerAuthorized, memberReadings, notifyPartnerUnlink } from './member-link.js';
 import { practitionersConfig, makePkce, authorizeUrl, rememberFlow, claimFlow,
          exchangeCode, resolveProfile, saveToken, forgetToken, connectionStatus, practitionersBootLine } from './practitioners-oauth.js';
 import { allowSpend, callerKey, guardSubject, spendKindFor, ASSIST_MAX_PROMPT_CHARS, ASSIST_MAX_TTS_CHARS } from './assist-guard.js';
@@ -7294,7 +7295,9 @@ const server = http.createServer(async (req, res) => {
       try {
         const result = await runTool(name, body?.args, ctx);
         console.log('[Gaia Assist] tool', { name, ms: Date.now() - started, contact: ctx.contactId });
-        sendJson(res, 200, { ok: true, name, result }, origin);
+        // `result` is for the page; `model` is what the page hands the model
+        // (the same thing, except for scan readings while no BAA exists).
+        sendJson(res, 200, { ok: true, name, result, model: modelView(name, result) }, origin);
       } catch (e) {
         const code = e.code || 'tool_failed';
         // 403 for a tool they may not run, 404 for one that does not exist, 400
@@ -7406,6 +7409,78 @@ const server = http.createServer(async (req, res) => {
         console.error('[Gaia Practitioners] connect failed', { error: String(e.message || e).slice(0, 200) });
         sendRedirect(res, back(false, 'exchange_failed'), origin);
       }
+      return;
+    }
+
+    // —— Gaia Practitioners: a MEMBER's own results ——
+    //
+    // Feature-flagged (GAIA_MEMBER_READINGS_ENABLED) until their staging has
+    // the member tools. Consent is the member asking for a code; their server
+    // redeems it with our link secret; reads use Gaia's server credential and
+    // answer for one confirmed link only. See docs/PRACTITIONERS_MEMBER_RESULTS_SPEC.md.
+    if (url.pathname.startsWith('/api/practitioners/member-link/') || url.pathname === '/api/practitioners/my-readings') {
+      if (!memberReadingsEnabled()) { sendJson(res, 404, { ok: false, error: 'Not found' }, origin); return; }
+      const sub = url.pathname.slice('/api/practitioners/'.length);
+      const fail = (e, fallback = 400) => sendJson(res, e.status || ({ bad_args: 400, code_invalid: 404, code_expired: 410, already_linked: 409, not_configured: 503 }[e.code] || fallback), { ok: false, error: e.code || 'failed' }, origin);
+
+      // Their server → us. The redeem/revoke routes carry no member cookie and are
+      // authorised only by the shared link secret; nothing else is accepted.
+      if (sub === 'member-link/redeem' || sub === 'member-link/revoke') {
+        if (req.method !== 'POST') { sendJson(res, 405, { ok: false, error: 'method' }, origin); return; }
+        if (!partnerAuthorized(req)) { sendJson(res, 401, { ok: false, error: 'unauthorized' }, origin); return; }
+        const body = await readJsonBody(req, 16 * 1024).catch(() => ({}));
+        try {
+          if (sub === 'member-link/redeem') {
+            const out = redeemCode(body?.code, { customer_id: body?.customer_id, practitioner_id: body?.practitioner_id, practitioner_name: body?.practitioner_name });
+            console.log('[Gaia Practitioners] member link confirmed', { member: out.gaia_member_id, practitioner: String(body?.practitioner_id || '') });
+            sendJson(res, 200, { ok: true, ...out }, origin);
+          } else {
+            const out = revokeLink({ memberId: body?.gaia_member_id, customer_id: body?.customer_id }, 'practitioner');
+            console.log('[Gaia Practitioners] member link revoked by practitioner', { revoked: out.revoked });
+            sendJson(res, 200, { ok: true, ...out }, origin);
+          }
+        } catch (e) { fail(e); }
+        return;
+      }
+
+      // The member → us. Identity from the session cookie, as everywhere else.
+      const member = sessionMemberContext(req);
+      if (!member?.contactId) { sendJson(res, 401, { ok: false, error: 'not_signed_in' }, origin); return; }
+      const cfg = practitionersConfig();
+      if (req.method === 'GET' && sub === 'member-link/status') {
+        sendJson(res, 200, { ok: true, available: cfg.enabled, environment: cfg.environment, ...linkStatus(member.contactId) }, origin); return;
+      }
+      if (req.method === 'POST' && sub === 'member-link/code') {
+        try {
+          const out = mintCode(member.contactId);
+          console.log('[Gaia Practitioners] member consent code issued', { member: member.contactId });
+          sendJson(res, 200, { ok: true, ...out }, origin);
+        } catch (e) { fail(e); }
+        return;
+      }
+      if (req.method === 'POST' && sub === 'member-link/unlink') {
+        const out = revokeLink({ memberId: member.contactId }, 'member');
+        console.log('[Gaia Practitioners] member link revoked by member', { member: member.contactId, revoked: out.revoked });
+        // Their copy is told after ours is already revoked: a member who stops
+        // sharing has stopped sharing even if their server is down right now.
+        if (out.revoked && out.customer_id) notifyPartnerUnlink(cfg, out.customer_id).catch(() => {});
+        sendJson(res, 200, { ok: true, ...out }, origin);
+        return;
+      }
+      if (req.method === 'GET' && sub === 'my-readings') {
+        if (!linkFor(member.contactId)) { sendJson(res, 404, { ok: false, error: 'member_not_linked' }, origin); return; }
+        try {
+          const started = Date.now();
+          const out = await memberReadings(cfg, member.contactId);
+          console.log('[Gaia Practitioners] member readings served', { member: member.contactId, ms: Date.now() - started, scans: out.scans_on_file });
+          sendJson(res, 200, { ok: true, ...out }, origin);
+        } catch (e) {
+          if (e.code === 'member_not_linked' || e.code === 'link_revoked') revokeLink({ memberId: member.contactId }, 'practitioner');
+          fail(e, 503);
+        }
+        return;
+      }
+      sendJson(res, 404, { ok: false, error: 'Not found' }, origin);
       return;
     }
 

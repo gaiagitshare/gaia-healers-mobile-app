@@ -973,7 +973,9 @@
               detail: { client: String(args.clientId), open: PRACTITIONER_CARD[name], data: body.result },
             }));
           }
-          return { ok: true, data: body.result, shown: showing };
+          // The server may hand the model a narrower view than the card
+          // (scan readings while no BAA covers the voice provider).
+          return { ok: true, data: body.model !== undefined ? body.model : body.result, shown: showing };
         }
         if (showing) {
           window.dispatchEvent(new CustomEvent('gaia:client-data', {

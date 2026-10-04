@@ -365,6 +365,30 @@ three config values and a restart:
 `GET /api/practitioners/status` returns `environment` so the app can tell which
 one a connection belongs to.
 
+### Members' own Bio-Well results (feature-flagged)
+
+`GAIA_MEMBER_READINGS_ENABLED=true` turns on the member side of the link
+(docs/PRACTITIONERS_MEMBER_RESULTS_SPEC.md). Off, the routes do not exist.
+
+- Member (session cookie): `GET /api/practitioners/member-link/status`,
+  `POST /api/practitioners/member-link/code` (asking is the consent; 8-char
+  code, 15 min, single use), `POST /api/practitioners/member-link/unlink`,
+  `GET /api/practitioners/my-readings`.
+- Their server (`Authorization: Bearer $GAIA_PRACTITIONERS_LINK_SECRET`, ≥16
+  chars, agreed out of band): `POST /api/practitioners/member-link/redeem
+  { code, customer_id, practitioner_id, practitioner_name? }` →
+  `{ gaia_member_id, status: "confirmed" }`; `POST /api/practitioners/member-link/revoke
+  { customer_id | gaia_member_id }`.
+- Reads use Gaia's server credential (`GAIA_PRACTITIONERS_SERVER_CLIENT_ID` /
+  `_SECRET`, client-credentials, scope `members.read`; falls back to the app
+  client) against their member-only tools. Store: `data/member-links.json`
+  (codes, links, audit — never scan data), 0600.
+
+`GAIA_SCAN_NARRATION` (default off): while no BAA covers the voice/text
+provider, the practitioner scan tools give the model only "the reading is on
+screen"; the Practice card still shows everything. Set `on` once a BAA-covered
+provider serves those turns.
+
 ### Usage accounting
 
 Every text reply, failed attempt and voice session is recorded, counts only,

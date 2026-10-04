@@ -271,6 +271,14 @@
       </div>
     </details>`;
   }
+  /** Folded: the In short block and one button. The whole card is one tap away, and Gaia's "open my readings" unfolds it. */
+  function foldedCard(r) {
+    const practitioner = r.practitioner || {}, summary = r.summary || {};
+    return card(`
+      <p class="g-card__meta">Shared by <strong>${esc(practitioner.name || 'your practitioner')}</strong> · since ${esc(when(r.linked_at))}${r.scans_on_file != null ? ` · ${esc(r.scans_on_file)} reading${r.scans_on_file === 1 ? '' : 's'} on file` : ''}</p>
+      ${summary.headline ? `<div class="g-readings__summary"><p class="g-readings__kicker">In short</p><p class="g-readings__headline">${esc(summary.headline)}</p><ul class="g-readings__lines">${(summary.lines || []).slice(0, 2).map((l) => `<li>${esc(l)}</li>`).join('')}</ul></div>` : ''}
+      <div class="g-card__actions"><button type="button" class="g-btn g-btn--primary g-btn--sm" data-readings-action="expand">Open my full readings</button></div>`, ' g-readings--folded');
+  }
   function readingsCard(r, status = {}, prefs = {}) {
     const latest = r.latest, trend = r.trend, summary = r.summary || {};
     // "What these mean" stays open until the member folds it once; the choice
@@ -364,7 +372,7 @@
         ${anyHidden ? '<button type="button" class="g-btn g-btn--ghost g-btn--sm" data-readings-action="reset-prefs">Show hidden cards again</button>' : ''}
       </div></article>`;
   }
-  let lastSummary = null, lastReadings = null, lastStatus = null;
+  let lastSummary = null, lastReadings = null, lastStatus = null, expanded = false, lastPrefs = {};
   async function render(root) {
     const [st, pf] = await Promise.all([api('/api/practitioners/member-link/status'), api('/api/member/prefs').catch(() => ({ ok: false, body: {} }))]);
     const prefs = (pf.ok && pf.body.prefs) || {};
@@ -381,8 +389,8 @@
     root.innerHTML = note('Loading your readings… this fetches live from Bio-Well and can take about 20 seconds.');
     const r = await api('/api/practitioners/my-readings');
     if (r.ok) {
-      lastSummary = r.body.summary || null; lastReadings = r.body;
-      root.innerHTML = readingsCard(r.body, status, prefs);
+      lastSummary = r.body.summary || null; lastReadings = r.body; lastPrefs = prefs;
+      root.innerHTML = expanded ? readingsCard(r.body, status, prefs) : foldedCard(r.body);
       window.dispatchEvent(new CustomEvent('gaia:readings-loaded', { detail: { scanned_at: r.body.latest?.scanned_at || null } }));
       // The link record may hold no practitioner name (their redeem call sends
       // none); once the readings are in, the sharing card can say who.
@@ -416,6 +424,7 @@
   /** Bring the card into view and let it glow for a moment (Assist "open my readings", or ?section=readings). */
   function reveal(root) {
     if (!root || root.hidden) return false;
+    if (!expanded && lastReadings) { expanded = true; root.innerHTML = readingsCard(lastReadings, lastStatus || {}, lastPrefs); pickOut(root, lastReadings.series || []); }
     try { root.scrollIntoView({ behavior: 'smooth', block: 'start' }); } catch { root.scrollIntoView(); }
     root.classList.add('is-focus');
     window.setTimeout(() => root.classList.remove('is-focus'), 1800);
@@ -441,6 +450,7 @@
           window.requestAnimationFrame(() => { try { window.GaiaTools?.open?.(tool); } catch { /* ignore */ } });
           return;
         }
+        if (action === 'expand') { expanded = true; if (lastReadings) { root.innerHTML = readingsCard(lastReadings, lastStatus || {}, lastPrefs); pickOut(root, lastReadings.series || []); } return; }
         if (action === 'goto') { reveal(root); return; }
         if (action === 'reset-prefs') {
           const cleared = {}; for (const k of ['next_level_collapsed', 'readings_explainer_collapsed', 'practitioner_card_dismissed']) cleared[k] = false;   // the avatar's own two switches are settings, not hidden cards

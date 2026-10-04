@@ -444,11 +444,12 @@
   let ENRICHMENT = {};
   function renderMembershipScreen(access, plans, enrichment) {
     ENRICHMENT = (enrichment && typeof enrichment === 'object') ? enrichment : {};
+    // The pass and its next level are one card: what you have, then what is
+    // next, in the same frame.
     return degradedNotice(access)
-      + memberPass(access)
+      + '<div class="g-pass-stack">' + memberPass(access) + nextLevel(access, plans) + '</div>'
       + myAccess(access)
-      + includedInYourAccess(access)
-      + nextLevel(access, plans);
+      + includedInYourAccess(access);
   }
 
   window.GaiaMembershipUI = {

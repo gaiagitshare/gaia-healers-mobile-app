@@ -18,6 +18,12 @@
   var mount = function () { return document.getElementById('directory-body'); };
   var ALL = [];
   var filters = { q: '', availability: '', specialty: '' };
+  // Booking a Bio-Well scan starts here: choose the practitioner, then take a
+  // time on THEIR calendar (gaiapractitioners.com publishes each practitioner's
+  // meetingLink). The intent arrives from Home / You, never from a model.
+  var intent = '';
+  var SCAN_FALLBACK = 'https://api.leadconnectorhq.com/widget/bookings/scans';
+  function isBioWell(p) { return /bio-?well/i.test((p.specialty || []).join(' ') + ' ' + (p.tags || []).join(' ')); }
   var loaded = false, loading = false;
   var map = null, cluster = null;
 
@@ -39,7 +45,11 @@
     }
     return true;
   }
-  function filtered() { return ALL.filter(matches); }
+  function filtered() {
+    var list = ALL.filter(matches);
+    if (intent === 'scan') { var bw = list.filter(isBioWell); if (bw.length) list = bw; }
+    return list;
+  }
 
   // Top specialties by frequency, for quick-filter chips.
   function topSpecialties(n) {
@@ -84,7 +94,10 @@
     var specChips = topSpecialties(10).map(function (s) {
       return '<button type="button" class="g-dir-schip' + (filters.specialty === s ? ' is-on' : '') + '" data-dir-spec="' + esc(s) + '">' + esc(s) + '</button>';
     }).join('');
-    return '<div class="g-dir__controls">'
+    var intro = intent === 'scan'
+      ? '<div class="g-dir__intent"><i class="ph ph-pulse"></i><div><strong>Book a Bio-Well scan</strong><span>Choose a practitioner near you, then take a time on their calendar.</span></div><button type="button" class="g-dir__intent-x" data-dir-intent-clear aria-label="Show all practitioners">×</button></div>'
+      : '';
+    return intro + '<div class="g-dir__controls">'
       + '<div class="g-dir__search"><i class="ph ph-magnifying-glass"></i>'
       + '<input type="search" data-dir-search placeholder="Search name, city, specialty…" value="' + esc(filters.q) + '" aria-label="Search practitioners" /></div>'
       + '<div class="g-dir__fchips">' + availChips + '</div>'
@@ -156,7 +169,12 @@
     var loc = [p.city, p.state].filter(Boolean).join(', ');
     var specs = (p.specialty || []).map(function (s) { return '<span class="g-dir-chip">' + esc(s) + '</span>'; }).join('');
     var actions = '';
-    if (p.meetingLink) actions += '<a class="g-btn g-btn--primary" href="' + esc(p.meetingLink) + '" target="_blank" rel="noopener noreferrer"><i class="ph ph-calendar-check"></i> Book a session</a>';
+    if (intent === 'scan') {
+      // Their own calendar when they publish one; otherwise the Gaia scan calendar, in the app, with their name on it.
+      actions += p.meetingLink
+        ? '<a class="g-btn g-btn--primary" href="' + esc(p.meetingLink) + '" target="_blank" rel="noopener noreferrer"><i class="ph ph-calendar-check"></i> Book a Bio-Well scan</a>'
+        : '<button type="button" class="g-btn g-btn--primary" data-book-inline="' + esc(SCAN_FALLBACK) + '" data-book-title="Bio-Well scan with ' + esc(p.name) + '"><i class="ph ph-calendar-check"></i> Book a Bio-Well scan</button>';
+    } else if (p.meetingLink) actions += '<a class="g-btn g-btn--primary" href="' + esc(p.meetingLink) + '" target="_blank" rel="noopener noreferrer"><i class="ph ph-calendar-check"></i> Book a session</a>';
     if (p.profileLink) actions += '<a class="g-btn g-btn--secondary" href="' + esc(p.profileLink) + '" target="_blank" rel="noopener noreferrer"><i class="ph ph-arrow-up-right"></i> Website</a>';
     actions += '<a class="g-btn ' + (actions ? 'g-btn--ghost' : 'g-btn--secondary') + '" href="https://gaiapractitioners.com" target="_blank" rel="noopener noreferrer">View in directory</a>';
     body.innerHTML = '<div class="gaia-dirprofile__hero">' + photoHtml(p, 'gaia-dirprofile__img')
@@ -178,6 +196,8 @@
       if (sp) { var v = sp.getAttribute('data-dir-spec'); filters.specialty = (filters.specialty === v ? '' : v); paintList(); return; }
       var op = e.target.closest('[data-dir-open]');
       if (op) { openProfile(op.getAttribute('data-dir-open')); return; }
+      var ix = e.target.closest('[data-dir-intent-clear]');
+      if (ix) { intent = ''; var h = mount(); if (h) { var c = h.querySelector('.g-dir__intent'); if (c) c.remove(); } paintList(); return; }
     });
     // popups are added to document by Leaflet — delegate at document level once
   }
@@ -209,6 +229,14 @@
     loading = false;
   }
 
+  /** Open the directory with a purpose (from Home or You): scan = Bio-Well practitioners first. */
+  function openWith(opts) {
+    intent = (opts && opts.intent) || '';
+    try { window.GaiaAppShell && window.GaiaAppShell.go && window.GaiaAppShell.go('directory'); } catch (e) {}
+    if (loaded) { var h = mount(); if (h) { var old = h.querySelector('.g-dir__intent'); if (old) old.remove(); if (intent) h.insertAdjacentHTML('afterbegin', controlsHtml().split('<div class="g-dir__controls">')[0]); } paintList(); }
+    else load();
+  }
+  window.GaiaDirectory = { open: openWith };
   function ensure() {
     if (!mount()) return;
     if (!loaded) load();

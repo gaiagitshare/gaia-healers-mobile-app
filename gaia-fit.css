@@ -2367,3 +2367,11 @@ body.gaia-v2 .gaia-assist:not(.gaia-assist--minimized):not(.gaia-assist--welcome
   max-height: min(82vh, 42rem);
   max-height: min(82dvh, 42rem);
 }
+
+/* the directory, opened with a purpose */
+.g-dir__intent { display: flex; align-items: center; gap: 12px; margin: 0 0 12px; padding: 12px 14px; border-radius: 16px; border: 1px solid rgba(166, 237, 104, .32); background: rgba(166, 237, 104, .08); color: var(--g-text, #EAF3E6); }
+.g-dir__intent i { font-size: 22px; color: var(--g-accent, #A6E84B); flex: none; }
+.g-dir__intent div { flex: 1 1 auto; min-width: 0; display: grid; gap: 2px; }
+.g-dir__intent strong { font-size: 15px; }
+.g-dir__intent span { font-size: 13px; color: var(--g-text-dim, #93A597); }
+.g-dir__intent-x { flex: none; background: none; border: 0; color: var(--g-text-dim, #93A597); font-size: 20px; line-height: 1; cursor: pointer; padding: 4px 6px; }

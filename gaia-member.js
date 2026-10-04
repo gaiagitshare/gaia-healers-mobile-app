@@ -815,7 +815,7 @@ body.gaia-booking-open{overflow:hidden;}
       { active: Boolean(fcnt.forms || fcnt.surveys), html: gRow('Forms & surveys', (fcnt.forms || fcnt.surveys) ? n(fcnt.forms || 0, 'form', 'forms') + ' · ' + n(fcnt.surveys || 0, 'survey', 'surveys') : 'No submissions yet') },
     ];
     cards.push(gMeCard('Your activity', gRows(activityRows.filter((r) => r.active).concat(activityRows.filter((r) => !r.active)).map((r) => r.html))
-      + '<div class="g-card__actions"><a class="g-btn g-btn--secondary g-btn--sm" href="home.html?view=directory" data-app-nav="directory">Find a practitioner near you →</a>'
+      + '<div class="g-card__actions"><a class="g-btn g-btn--secondary g-btn--sm" href="home.html?view=directory" data-dir-intent="scan">Find a practitioner near you →</a>'
       + (booking[0] ? '<a class="g-btn g-btn--ghost g-btn--sm" href="' + esc(booking[0].openUrl) + '" target="_blank" rel="noopener noreferrer">Book a ' + esc(booking[0].name) + ' →</a>' : '') + '</div>'));
 
     // My communities + events — canonical homes are the Community / Events hubs.
@@ -857,6 +857,7 @@ body.gaia-booking-open{overflow:hidden;}
     // just created by scanning their badge is the first thing they see here.
     box.insertAdjacentHTML('afterbegin', '<div data-badgecard-host></div>');
     window.GaiaMembershipUI?.bind?.(box);
+    box.querySelectorAll('[data-dir-intent]').forEach((a) => a.addEventListener('click', (e) => { e.preventDefault(); if (window.GaiaDirectory?.open) window.GaiaDirectory.open({ intent: a.dataset.dirIntent }); else window.GaiaAppShell?.go?.('directory'); }));
     box.querySelectorAll('[data-pref-toggle]').forEach((btn) => btn.addEventListener('click', () => {
       const key = btn.getAttribute('data-pref-toggle');
       const prefs = (state.data.prefs && state.data.prefs.prefs) || (state.data.prefs = { ok: true, prefs: {} }).prefs;

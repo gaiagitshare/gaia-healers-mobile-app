@@ -34,9 +34,9 @@ import { attachQwenVoiceRelay, qwenRouting, issueQwenTicket, qwenVoiceConfig, vo
 import { normalizeUsage, recordUsage, recordFailure } from './assist-usage.js';
 import { toolDeclarationsFor, clientToolNames, slowToolNames, runTool, modelView } from './assist-tools.js';
 import { getPrefs, setPrefs } from './member-prefs.js';
-import { memberReadingsEnabled, memberAllowed, mintCode, redeemCode, revokeLink, linkStatus, linkFor, partnerAuthorized, memberReadings, notifyPartnerUnlink, rememberLatest, markSeen, refreshLatest } from './member-link.js';
+import { memberReadingsEnabled, memberAllowed, mintCode, redeemCode, revokeLink, linkStatus, linkFor, partnerAuthorized, memberReadings, notifyPartnerUnlink, rememberLatest, markSeen, refreshLatest, linksForPractitioner } from './member-link.js';
 import { practitionersConfig, makePkce, authorizeUrl, rememberFlow, claimFlow,
-         exchangeCode, resolveProfile, saveToken, forgetToken, connectionStatus, practitionersBootLine } from './practitioners-oauth.js';
+         exchangeCode, resolveProfile, saveToken, forgetToken, connectionStatus, practitionersBootLine, tokenFor } from './practitioners-oauth.js';
 import { allowSpend, callerKey, guardSubject, spendKindFor, ASSIST_MAX_PROMPT_CHARS, ASSIST_MAX_TTS_CHARS } from './assist-guard.js';
 import { deadline, idleWatch } from './provider-timeouts.js';
 import { SAFETY_FIRST, detectCrisis, crisisReply } from './assist-safety.js';
@@ -7351,6 +7351,17 @@ const server = http.createServer(async (req, res) => {
       return;
     }
 
+    // A practitioner's clients who share their readings through Gaia, and
+    // whether they have opened them. Their own customer ids only.
+    if (req.method === 'GET' && url.pathname === '/api/practitioners/linked-clients') {
+      const member = sessionMemberContext(req);
+      if (!member?.contactId) { sendJson(res, 401, { ok: false, error: 'not_signed_in' }, origin); return; }
+      const row = tokenFor(member.contactId);
+      if (!row) { sendJson(res, 200, { ok: true, practitioner_known: false, clients: [] }, origin); return; }
+      const pid = String(row.practitioner_id || '');
+      sendJson(res, 200, { ok: true, practitioner_known: Boolean(pid), clients: memberReadingsEnabled() && pid ? linksForPractitioner(pid) : [] }, origin);
+      return;
+    }
     if (req.method === 'GET' && url.pathname === '/api/practitioners/connect') {
       const cfg = practitionersConfig();
       if (!cfg.enabled) { sendJson(res, 503, { ok: false, error: 'not_configured' }, origin); return; }

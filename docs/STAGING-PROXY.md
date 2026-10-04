@@ -415,6 +415,11 @@ being proven (others get 404 and see no panel); unset = every member.
   image* (canvas, share sheet or download, never uploaded), *compare any two*
   (two dates from the member's own series), and shows a practitioner note on
   the scan if their side ever sends `practitioner_note`/`note`/`comment`.
+  `GET /api/practitioners/linked-clients` (practitioner session): their
+  clients who share their readings through Gaia — customer id, linked_at,
+  opened / opened_latest — never a Gaia member id; the Practice screen tags
+  them and says so on the client header. `tools/member-flow-check.mjs` walks
+  the whole path offline against a loopback fake (20 steps, exit 0/1).
   Files carry `first: true` when their side marks one as read-first
   (`read_first`/`readFirst`/`pinned`/`featured`/`primary`/tag) and the card
   shows it above the gauges. A three-card "What these mean" explainer is open

@@ -190,6 +190,21 @@ export function linkFor(memberId, file = LINK_FILE) {
   return link && link.status === 'confirmed' ? link : null;
 }
 
+/**
+ * For a practitioner: which of THEIR clients share their readings through
+ * Gaia, and whether each has opened them. Keyed by their customer id, which
+ * is theirs already; the Gaia member id is never returned.
+ */
+export function linksForPractitioner(practitionerId, file = LINK_FILE) {
+  const pid = String(practitionerId || '').trim();
+  if (!pid) return [];
+  return Object.values(load(file).links)
+    .filter((l) => l.status === 'confirmed' && String(l.practitioner_id || '') === pid)
+    .map((l) => ({ customer_id: String(l.customer_id), linked_at: l.linked_at, latest_scanned_at: l.latest_scanned_at || null,
+      opened: Boolean(l.seen_scanned_at), opened_latest: Boolean(l.seen_scanned_at && l.latest_scanned_at && l.seen_scanned_at >= l.latest_scanned_at) }))
+    .sort((a, b) => String(b.linked_at || '').localeCompare(String(a.linked_at || '')));
+}
+
 // ── their server calling ours ─────────────────────────────────────────────
 /** Bearer check for the redeem/revoke routes: constant-time, never logged. */
 export function partnerAuthorized(req, env = process.env) {

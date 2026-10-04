@@ -1040,6 +1040,8 @@ body.gaia-v2 [data-screen="store"] #store-memberships .g-tier__flag {
 .g-prac__flag.is-elevated { color: var(--g-accent-deep, var(--g-accent)); border-color: var(--g-accent); }
 .g-prac__flag.is-high { color: var(--g-on-accent, #fff); background: var(--g-accent-deep, var(--g-accent)); border-color: transparent; }
 .g-prac__tag { font-size: 11px; color: var(--g-text-muted); }
+.g-prac__tag--shares { color: var(--g-accent); margin-left: 6px; }
+.g-prac__shares { margin: 8px 0 0; padding: 8px 12px; border-radius: var(--g-r-md); font-size: 0.86em; color: var(--g-text); background: color-mix(in srgb, var(--g-accent) 9%, var(--g-surface-hi)); border: 1px solid color-mix(in srgb, var(--g-accent) 28%, var(--g-line)); }
 
 .g-prac__search { width: 100%; margin-bottom: 4px; }
 

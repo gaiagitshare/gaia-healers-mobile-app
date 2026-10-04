@@ -236,3 +236,31 @@ test('the allow-list: named members see the feature, everyone else gets 404 (so 
     assert.equal((await call('/api/practitioners/member-link/status', { headers: { cookie: session('member-A') } })).status, 200);
   } finally { delete process.env.GAIA_MEMBER_READINGS_MEMBERS; }
 });
+
+test('an empty latest scan is replaced by the newest trend point, labelled as such', async () => {
+  const { memberReadings } = ml;
+  // a fake partner right here: empty latest scan, full trend
+  const calls = [];
+  const fetchImpl = async (url, init) => {
+    const u = String(url);
+    const json = (o, status = 200) => new Response(JSON.stringify(o), { status, headers: { 'content-type': 'application/json' } });
+    if (u.endsWith('/api/gaia/member-token')) return json({ token: 'mt', expires_in: 3600 });
+    const rpc = JSON.parse(init.body);
+    if (rpc.method === 'tools/list') return json({ jsonrpc: '2.0', id: 1, result: { tools: ['get_my_profile', 'get_my_latest_scan', 'get_my_scan_trend', 'get_my_before_after', 'list_my_shared_files'].map((n) => ({ name: n })) } });
+    const name = rpc.params.name; calls.push(name);
+    const text = (o) => json({ jsonrpc: '2.0', id: rpc.id, result: { content: [{ type: 'text', text: JSON.stringify(o) }] } });
+    if (name === 'get_my_latest_scan') return text({ scan: { exp_id: 1, scanned_at: '2026-06-14T14:49:28Z', values: { stress: null, energy: null, chakras: [], organs: [], meridians: [], systems: [] } }, scanCount: 104 });
+    if (name === 'get_my_scan_trend') return text({ scanCount: 104, points: [{ scanned_at: '2024-09-16T17:16:38Z', energy: null, stress: null }, { scanned_at: '2026-06-14T14:49:28Z', energy: 53.597, stress: 3.0091 }, { scanned_at: '2026-05-01T10:00:00Z', energy: 60, stress: 2 }], summary: { energy: { min: 53.6, max: 76.8, avg: 59.5, latest: 53.6 }, stress: { min: 1.4, max: 3, avg: 1.9, latest: 3 } }, organTrends: [{ category: 'organs', name: 'Kidneys', latest: 46.06, delta: 33.56, direction: 'worsening', flagged: true, flagReason: 'disbalance_high', severity: 'high' }, { category: 'systems', name: 'Nervous system', latest: 7.2 }], flags: [] });
+    return text({});
+  };
+  const dir2 = fs.mkdtempSync(path.join(os.tmpdir(), 'mlink2-')); const f = path.join(dir2, 'links.json');
+  const c = ml.mintCode('m9', { file: f }); ml.redeemCode(c.code, { customer_id: 'c9', practitioner_id: 'p9' }, { file: f });
+  ml._resetServerTokenForTest();
+  const cfg = { environment: 'staging', base: 'https://staging.example', mcpUrl: 'https://staging.example/api/mcp', clientId: 'x', clientSecret: 'y' };
+  const r = await memberReadings(cfg, 'm9', { env: { GAIA_PRACTITIONERS_MEMBER_API_KEY: 'k', GAIA_PRACTITIONERS_MEMBER_BACKEND: 'https://backend.example' }, fetchImpl, file: f });
+  assert.equal(r.latest.source, 'trend');
+  assert.equal(r.latest.scanned_at, '2026-06-14'); assert.equal(r.latest.energy, 54); assert.equal(r.latest.stress, 3.01);
+  assert.deepEqual(r.latest.chakras, []);
+  assert.deepEqual(r.latest.most_out_of_balance[0], { area: 'organ', name: 'Kidneys', disbalance: 46 });
+  assert.equal(r.scans_on_file, 104);
+});

@@ -286,6 +286,23 @@ export async function memberReadings(cfg0, memberId, { env = process.env, fetchI
   };
   const num = (v, d = 0) => (typeof v === 'number' && Number.isFinite(v) ? Number(v.toFixed(d)) : null);
   const band = (b) => (b ? { lowest: num(b.min, 1), highest: num(b.max, 1), average: num(b.avg, 1), latest: num(b.latest, 1) } : null);
+  // Their latest-scan tool can answer with a scan whose values are all empty
+  // (seen on staging, 4 Oct: scan 2026-06-14, every value null) while the
+  // trend for the same member is complete. The newest trend point with
+  // numbers, plus the per-area latest disbalance, is then the latest reading
+  // -- said so with `source: 'trend'`, and without chakras, which the trend
+  // does not carry.
+  const emptyScan = (v) => !v || (v.stress == null && v.energy == null && !(v.chakras || []).length && !(v.most_out_of_balance || []).length);
+  const latestFromTrend = (t) => {
+    const pts = (t?.points || []).filter((p) => typeof p?.energy === 'number' || typeof p?.stress === 'number')
+      .sort((a, b) => String(b.scanned_at || '').localeCompare(String(a.scanned_at || '')));
+    if (!pts.length) return null;
+    const p = pts[0];
+    const worst = (t.organTrends || []).filter((o) => typeof o?.latest === 'number')
+      .map((o) => ({ area: String(o.category || '').replace(/s$/, ''), name: o.name, disbalance: num(o.latest) }))
+      .sort((a, b) => b.disbalance - a.disbalance).slice(0, 6);
+    return { scanned_at: String(p.scanned_at || '').slice(0, 10), stress: num(p.stress, 2), energy: num(p.energy), chakras: [], most_out_of_balance: worst, source: 'trend' };
+  };
   const prac = customer?.practitioner || {};
   const comparisons = (compare?.comparisons || []).slice(0, 2).map((c) => ({
     basis: c.source === 'time' ? 'consecutive sessions' : (c.protocol || 'a labelled protocol'),
@@ -297,7 +314,7 @@ export async function memberReadings(cfg0, memberId, { env = process.env, fetchI
     practitioner: { id: String(prac.id ?? link.practitioner_id), name: prac.name || link.practitioner_name || '', specialty: prac.specialty || '', location: [prac.city, prac.state].filter(Boolean).join(', ') },
     linked_at: customer?.member?.linked_at || link.linked_at,
     scans_on_file: scan?.scanCount ?? customer?.scans_on_file ?? trend?.scanCount ?? (Array.isArray(scan?.scans) ? scan.scans.length : null),
-    latest: latestOf(scan) ? memberScanView(latestOf(scan)) : null,
+    latest: (() => { const v = latestOf(scan) ? memberScanView(latestOf(scan)) : null; return emptyScan(v) ? (latestFromTrend(trend) || v) : { ...v, source: 'scan' }; })(),
     trend: trend ? { energy: band(trend.summary?.energy), stress: band(trend.summary?.stress),
       flagged: (trend.flags || []).slice(0, 6).map((t) => ({ name: t.name, area: String(t.category || '').replace(/s$/, ''), direction: t.direction, severity: t.severity || '', change: num(t.delta), reason: t.flagReason || '' })) } : null,
     comparisons,

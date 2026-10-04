@@ -19,6 +19,7 @@
   const SHOP = 'https://gaiahealers.com';
   const GAIA_API = (function () {
     try { if (window.location.hostname === 'api.gaiahealers.app') return ''; } catch (_) { /* ignore */ }
+    const shared = window.GaiaApi && window.GaiaApi.base && window.GaiaApi.base(); if (shared) return shared;
     return 'https://api.gaiahealers.app';
   }());
   // Curated categories → real Shopify collection handles (verified live).

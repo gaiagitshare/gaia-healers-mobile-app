@@ -36,7 +36,7 @@ import { toolDeclarationsFor, clientToolNames, slowToolNames, runTool, modelView
 import { getPrefs, setPrefs } from './member-prefs.js';
 import { memberReadingsEnabled, memberAllowed, mintCode, redeemCode, revokeLink, linkStatus, linkFor, partnerAuthorized, memberReadings, notifyPartnerUnlink, rememberLatest, markSeen, refreshLatest, linksForPractitioner } from './member-link.js';
 import { practitionersConfig, makePkce, authorizeUrl, rememberFlow, claimFlow,
-         exchangeCode, resolveProfile, saveToken, forgetToken, connectionStatus, practitionersBootLine, tokenFor } from './practitioners-oauth.js';
+         exchangeCode, resolveProfile, saveToken, forgetToken, connectionStatus, practitionersBootLine, tokenFor, linkState, isLinkedPractitioner, verifyPractitioner } from './practitioners-oauth.js';
 import { allowSpend, callerKey, guardSubject, spendKindFor, ASSIST_MAX_PROMPT_CHARS, ASSIST_MAX_TTS_CHARS } from './assist-guard.js';
 import { deadline, idleWatch } from './provider-timeouts.js';
 import { SAFETY_FIRST, detectCrisis, crisisReply } from './assist-safety.js';
@@ -4424,15 +4424,19 @@ async function buildMemberVoiceContext(req) {
 async function assistContext(req) {
   const member = sessionMemberContext(req);
   if (!member?.contactId) return null;
-  let isPractitioner = false;
-  try {
-    const bundle = await fetchMemberBundle(member);
-    const access = buildMemberAccess(bundle.tags, bundle.customFields, bundle.member,
-                                     bundle.entitlements, bundle.subscriptions);
-    isPractitioner = Boolean(access?.member?.practitioner);
-  } catch (e) {
-    // A GHL outage must not silently promote anyone. Unknown means member.
-    console.warn('[Gaia Assist] role unknown, treating as member', { error: String(e.message || e).slice(0, 100) });
+  // A practitioner is somebody whose Gaia Practitioners account is linked and
+  // verified (the source of truth), or whose GHL contact carries the tag (the
+  // mirror). A GHL outage must not silently promote anyone: unknown is member.
+  let isPractitioner = isLinkedPractitioner(member.contactId);
+  if (!isPractitioner) {
+    try {
+      const bundle = await fetchMemberBundle(member);
+      const access = buildMemberAccess(bundle.tags, bundle.customFields, bundle.member,
+                                       bundle.entitlements, bundle.subscriptions);
+      isPractitioner = Boolean(access?.member?.practitioner);
+    } catch (e) {
+      console.warn('[Gaia Assist] role unknown, treating as member', { error: String(e.message || e).slice(0, 100) });
+    }
   }
   return { contactId: member.contactId, memberId: member.memberId, isPractitioner };
 }
@@ -7347,6 +7351,7 @@ const server = http.createServer(async (req, res) => {
         available: cfg.enabled,
         environment: cfg.environment,
         ...connectionStatus(member.contactId),
+        ...linkState(member.contactId),   // state: not_connected | connected | needs_reconnect | not_practitioner | unverified
       }, origin);
       return;
     }
@@ -7368,21 +7373,10 @@ const server = http.createServer(async (req, res) => {
       const member = sessionMemberContext(req);
       if (!member?.contactId) { sendJson(res, 401, { ok: false, error: 'not_signed_in' }, origin); return; }
 
-      // Only a practitioner may start this. The answer comes from their GHL tags,
-      // which is authenticated server state -- not from anything they told us and
-      // not from anything a model concluded during a conversation.
-      let isPractitioner = false;
-      try {
-        const bundle = await fetchMemberBundle(member);
-        const access = buildMemberAccess(bundle.tags, bundle.customFields, bundle.member,
-                                         bundle.entitlements, bundle.subscriptions);
-        isPractitioner = Boolean(access?.member?.practitioner);
-      } catch (e) {
-        console.error('[Gaia Practitioners] could not read member access', { error: String(e.message || e).slice(0, 120) });
-        sendJson(res, 502, { ok: false, error: 'could_not_verify_role' }, origin);
-        return;
-      }
-      if (!isPractitioner) { sendJson(res, 403, { ok: false, error: 'not_a_practitioner' }, origin); return; }
+      // Any signed-in member may START this. Whether they are a practitioner is
+      // decided at the callback by Gaia Practitioners itself (their profile),
+      // not by a GHL tag: a practitioner whose tag was never set must still be
+      // able to connect, and a tag alone must never promote anyone.
 
       const { verifier, challenge } = makePkce();
       const state = crypto.randomBytes(24).toString('base64url');
@@ -7417,6 +7411,7 @@ const server = http.createServer(async (req, res) => {
       try {
         const tok = await exchangeCode(cfg, { code, verifier: flow.verifier });
         const who = await resolveProfile(cfg, tok.access_token);
+        const verdict = verifyPractitioner(who);
         saveToken(member.contactId, {
           access_token: tok.access_token,
           refresh_token: tok.refresh_token || '',
@@ -7424,14 +7419,24 @@ const server = http.createServer(async (req, res) => {
           expires_at: Date.now() + (Number(tok.expires_in || 0) * 1000),
           connected_at: new Date().toISOString(),
           ...who,
+          verified: verdict.verified,
+          verify_reason: verdict.reason,
         });
         console.log('[Gaia Practitioners] connected', {
           contact: member.contactId,
           resolved: who.raw_ok ? (who.practitioner_name || who.practitioner_id || 'unnamed') : 'profile unreadable',
+          verified: verdict.verified, reason: verdict.reason || null,
           refreshable: Boolean(tok.refresh_token),
           expires_in_days: Math.round(Number(tok.expires_in || 0) / 86400),
         });
-        sendRedirect(res, back(true), origin);
+        // A verified practitioner gets the GHL tag written back, best effort:
+        // it is a mirror of the truth, never the source of it.
+        if (verdict.verified === true) {
+          ghlPost(`/contacts/${encodeURIComponent(member.contactId)}/tags`, { tags: ['gaiapractitioner'] })
+            .then(() => console.log('[Gaia Practitioners] GHL practitioner tag mirrored', { contact: member.contactId }))
+            .catch((e) => console.warn('[Gaia Practitioners] GHL tag mirror failed (not blocking)', { error: String(e?.message || e).slice(0, 100) }));
+        }
+        sendRedirect(res, back(verdict.verified !== false, verdict.verified === false ? 'not_practitioner' : (verdict.verified === null ? 'unverified' : '')), origin);
       } catch (e) {
         console.error('[Gaia Practitioners] connect failed', { error: String(e.message || e).slice(0, 200) });
         sendRedirect(res, back(false, 'exchange_failed'), origin);

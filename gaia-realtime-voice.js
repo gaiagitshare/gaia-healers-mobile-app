@@ -84,6 +84,7 @@
   `;
 
   function proxyBase() {
+    const shared = window.GaiaApi && window.GaiaApi.base && window.GaiaApi.base(); if (shared) return shared;
     return (window.GAIA_SYNC?.proxyBase || 'https://api.gaiahealers.app').replace(/\/+$/, '');
   }
 

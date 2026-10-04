@@ -362,8 +362,13 @@ test('the routes take identity from the session and never from the query string'
   assert.ok(!/contactId\s*=\s*url\.searchParams/.test(block), 'a contact id from the query string would be forgeable');
   assert.ok(block.includes('member.contactId !== flow.contactId'),
     'the callback must refuse a session that is not the one that started the flow');
-  assert.ok(block.includes('access?.member?.practitioner'),
-    'only a practitioner may start a consent, decided by GHL tags');
+  // Since 4 Oct 2026 the GHL tag is a mirror, not a gate: any signed-in member
+  // may start the consent, and Gaia Practitioners' own profile decides at the
+  // callback (verifyPractitioner). A tag alone must never promote anyone.
+  assert.ok(!block.slice(0, block.indexOf("'/api/practitioners/callback'")).includes('access?.member?.practitioner'),
+    'connect no longer reads GHL tags');
+  assert.ok(block.includes('const verdict = verifyPractitioner(who);'),
+    'the verdict comes from their profile, at the callback');
 });
 
 test('nothing in the routes sends a token to the browser', () => {

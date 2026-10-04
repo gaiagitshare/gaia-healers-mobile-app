@@ -446,6 +446,22 @@ daily energy check, today's sky, the readings shortcut, the next booking).
 owned by the file that renders it (`gaia-daily.js`, `gaia-sky.js`,
 `gaia-my-readings.js`).
 
+### Practitioner link (one login, a link on top)
+
+A practitioner is not a second login. A member links their Gaia
+Practitioners account from You > Practice > Connect: `/api/practitioners/connect`
+starts the OAuth for ANY signed-in member (no GHL gate since 4 Oct 2026);
+at `/callback` the token is exchanged and `resolveProfile` asks THEIR
+`get_practitioner_profile`; `verifyPractitioner(who)` decides
+(`verified: true | false | null`), stored on the token row. `linkState(contactId)`
+in `practitioners-oauth.js` is the one authority — `not_connected`,
+`connected`, `needs_reconnect`, `not_practitioner`, `unverified` — used by
+`/status` (spread into the answer), by the role the Assist tools run with
+(`isLinkedPractitioner` first, the GHL tag as a mirror second), and by the
+Practice screen, which shows each state in plain words and what the last
+attempt brought back (`?practitioners=failed&reason=`). After a verified link
+the GHL tag `gaiapractitioner` is written to the contact, best effort.
+
 ### Gaia Avatar (app layer, no server part)
 
 `gaia-avatar.js` + `gaia-avatar.css` draw the approved character (six

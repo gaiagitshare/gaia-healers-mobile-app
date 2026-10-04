@@ -135,7 +135,7 @@ const report = {
   last: inWindow.length ? inWindow.map((r) => r.at).sort().pop() : null,
   total: block(inWindow),
   by_channel: groupBy(inWindow, 'channel'),
-  by_provider_model: groupBy(inWindow.map((r) => ({ ...r, pm: `${r.provider}/${r.model}` })), 'pm'),
+  by_provider_model: groupBy(inWindow.map((r) => ({ ...r, pm: `${r.provider}/${r.model}` + (r.account != null ? `#account${r.account}` : '') })), 'pm'),
   by_state: groupBy(inWindow, 'state'),
   legend: {
     REPORTED: 'token counts and turns/seconds come from the provider or the relay, as recorded',

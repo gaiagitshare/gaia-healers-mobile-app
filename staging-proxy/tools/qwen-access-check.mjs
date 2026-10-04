@@ -11,6 +11,7 @@
  *   node tools/qwen-access-check.mjs --dry-run      # prints the plan, opens nothing
  *   node tools/qwen-access-check.mjs                # one session
  *   node tools/qwen-access-check.mjs --env <file>   # another .env (default: the live one)
+ *   node tools/qwen-access-check.mjs --account 2    # the second account (QWEN_API_KEY_2 / QWEN_BASE_URL_2)
  *
  * Exit 0 = session.updated (access OK); 3 = refused; 4 = no answer / closed early.
  * The key is read from the .env file and never printed.
@@ -32,12 +33,19 @@ for (const line of fs.readFileSync(envPath, 'utf8').split('\n')) {
     env[s.slice(0, i).trim()] = s.slice(i + 1).trim().replace(/^["']|["']$/g, '');
   }
 }
+const accountFlag = process.argv.indexOf('--account');
+const accountNo = accountFlag >= 0 ? Number(process.argv[accountFlag + 1]) : 1;
+if (accountNo === 2) {
+  if (!env.QWEN_API_KEY_2) { console.error('QWEN_API_KEY_2 is not set in ' + envPath); process.exit(2); }
+  env.QWEN_API_KEY = env.QWEN_API_KEY_2;
+  env.QWEN_BASE_URL = env.QWEN_BASE_URL_2 || 'https://dashscope-intl.aliyuncs.com';
+} else if (accountNo !== 1) { console.error('--account must be 1 or 2'); process.exit(2); }
 const cfg = qwenVoiceConfig(env);
 if (!cfg.apiKey) { console.error('QWEN_API_KEY is not set in ' + envPath); process.exit(2); }
 
 const WebSocket = createRequire(import.meta.url)('ws');
 const url = `${cfg.wsBase}/api-ws/v1/realtime?model=${encodeURIComponent(cfg.model)}`;
-console.log(`model ${cfg.model}; host ${new URL(url).host}`);
+console.log(`account ${accountNo}; model ${cfg.model}; host ${new URL(url).host}`);
 guard.count(url);
 
 const t0 = Date.now();

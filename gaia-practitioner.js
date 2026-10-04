@@ -33,9 +33,20 @@
   const TOOL_ENDPOINT = '/api/assist/tool';
   const SLOW_HINT_MS = 5000;        // when a wait earns an elapsed counter
 
+  // The API lives on api.gaiahealers.app. This used to read a global that no
+  // script defines, fell back to '' and asked the website for
+  // /api/practitioners/status -- a 404, read as "not available", so the
+  // Practice tab never appeared for anyone (found 4 Oct 2026 when a
+  // practitioner signed in and saw only the member side). Same resolution
+  // as the rest of the app now, with the production API as the last word.
   function proxyBase() {
-    return (window.GaiaAppUrls && window.GaiaAppUrls.proxyBase && window.GaiaAppUrls.proxyBase())
-      || (window.GAIA_PROXY_BASE || '');
+    return String(
+      (window.GAIA_SYNC && window.GAIA_SYNC.proxyBase)
+      || (window.GAIA_APP_URLS && window.GAIA_APP_URLS.production && window.GAIA_APP_URLS.production.proxy)
+      || (window.GaiaConfig && window.GaiaConfig.proxyBase)
+      || window.GAIA_PROXY_BASE
+      || 'https://api.gaiahealers.app',
+    ).replace(/\/+$/, '');
   }
 
   const esc = (v) => String(v ?? '').replace(/[&<>"']/g, (c) => (

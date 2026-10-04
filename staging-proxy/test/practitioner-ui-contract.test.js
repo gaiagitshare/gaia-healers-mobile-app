@@ -151,3 +151,10 @@ test('the styles use the existing tokens rather than new colours', () => {
   assert.match(block, /--g-surface/);
   assert.match(block, /--g-text-muted/);
 });
+
+test('the Practice screen talks to the API host, never to the website (the tab was invisible for everyone until 4 Oct 2026)', () => {
+  const src = read('gaia-practitioner.js');
+  assert.doesNotMatch(src, /window\.GaiaAppUrls/, 'no script defines GaiaAppUrls; reading it resolved to "" and a 404 from the website');
+  assert.match(src, /\|\| 'https:\/\/api\.gaiahealers\.app',\n\s+\)\.replace\(\/\\\/\+\$\/, ''\)/, 'the production API is the last word');
+  assert.match(src, /window\.GAIA_SYNC && window\.GAIA_SYNC\.proxyBase/, 'the same resolution as gaia-member.js');
+});

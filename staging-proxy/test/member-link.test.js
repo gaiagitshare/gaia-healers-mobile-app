@@ -359,3 +359,10 @@ test('a practitioner note travels with the scan when their side sends one; absen
   assert.equal(memberScanView({ scanned_at: '2026-06-14', values: { notes: 'x'.repeat(700) } }).note.length, 600);
   assert.equal(memberScanView({ scanned_at: '2026-06-14', values: { comment: 42 } }).note, null, 'only a string is a note');
 });
+
+test('"read this first": a pinned document, in any spelling, comes first and is marked', () => {
+  const { readFirst } = ml;
+  assert.equal(readFirst({ name: 'a.pdf' }), false);
+  for (const f of [{ read_first: true }, { readFirst: 1 }, { pinned: true }, { featured: true }, { primary: true }, { tags: ['Read First'] }, { tags: ['pinned'] }]) assert.equal(readFirst(f), true, JSON.stringify(f));
+  assert.equal(readFirst({ tags: ['notes'] }), false);
+});

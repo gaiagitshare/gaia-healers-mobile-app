@@ -242,8 +242,21 @@
       <p class="g-readings__muted">Read it to your practitioner. It works once and expires ${esc(when(out.expires_at))}. Your agreement to share was recorded ${esc(when(out.consent_recorded_at))}.</p>
       <div class="g-card__actions"><button type="button" class="g-btn g-btn--secondary g-btn--sm" data-readings-action="refresh">I have given it — check</button></div>`);
   }
-  function readingsCard(r) {
+  /** Three small cards on what the screen shows. Open on the member's first visit (nothing opened yet), folded afterwards. */
+  function explainer(firstVisit) {
+    return `<details class="g-readings__explain"${firstVisit ? ' open' : ''}>
+      <summary>What these mean</summary>
+      <div class="g-readings__explain-grid">
+        <div class="g-readings__explain-card"><strong>Energy</strong><span>How much light your fingertips gave off in the scan, on a 0–100 scale. Most people sit between 40 and 70; higher is not always better.</span></div>
+        <div class="g-readings__explain-card"><strong>Stress</strong><span>How much the pattern looks like a body under load, 0–10. Around 2–4 is comfortable; above 4 is worth a conversation with your practitioner.</span></div>
+        <div class="g-readings__explain-card"><strong>Seven centres</strong><span>The seven chakras from root to crown, each 0–10 for how active it is, and whether it sits centred or pulled to one side. Balance matters more than any single number.</span></div>
+      </div>
+    </details>`;
+  }
+  function readingsCard(r, status = {}) {
     const latest = r.latest, trend = r.trend, summary = r.summary || {};
+    const firstVisit = !status.seen_scanned_at;
+    const readFirst = (r.files || []).filter((f) => f.first);
     const practitioner = r.practitioner || {};
     const chakraRow = (c, i) => {
       const m = chakraMeta(c, i), v = typeof c.value === 'number' ? c.value : null;
@@ -277,7 +290,9 @@
       </div>
       <p class="g-readings__muted g-readings__when">Latest reading ${esc(when(latest.scanned_at))}${latest.source === 'trend' ? ' · taken from your reading history; the full detail of this scan was not available' : ''}</p>` : '<p class="g-empty">No reading on file yet.</p>'}
 
+      ${readFirst.length ? `<section class="g-readings__sec g-readings__first"><p class="g-readings__kicker">Read this first</p><div class="g-rows">${readFirst.map(file).join('')}</div><p class="g-readings__muted">Marked by ${esc(practitioner.name || 'your practitioner')} as the place to start.</p></section>` : ''}
       ${note}
+      ${explainer(firstVisit)}
       <div class="g-readings__grid">
         ${latest && (latest.chakras || []).length ? sec('Your seven centres', `${spark ? spectrum(latest.chakras) : ''}<ul class="g-readings__chakras">${latest.chakras.map(chakraRow).join('')}</ul>`, ' g-readings__sec--wide') : ''}
         ${latest && (latest.most_out_of_balance || []).length ? sec('Most out of balance', `<ul class="g-readings__flags">${latest.most_out_of_balance.map(worst).join('')}</ul>`) : ''}
@@ -288,7 +303,7 @@
           </div>
           ${(trend.flagged || []).length ? `<ul class="g-readings__flags">${trend.flagged.map(sev).join('')}</ul>` : '<p class="g-readings__muted">Nothing flagged in this period.</p>'}`) : ''}
         ${(r.comparisons || []).length ? sec('Before and after sessions', `<ul class="g-readings__pairs">${r.comparisons.map(compare).join('')}</ul>`) : ''}
-        ${(r.files || []).length ? sec('Documents from your practitioner', `<div class="g-rows">${r.files.map(file).join('')}</div>`) : ''}
+        ${(r.files || []).some((f) => !f.first) ? sec('Documents from your practitioner', `<div class="g-rows">${r.files.filter((f) => !f.first).map(file).join('')}</div>`) : ''}
         ${latest ? centreOfTheWeek(latest.chakras) : ''}
         ${comparePicker(r.series)}
       </div>
@@ -311,7 +326,7 @@
     const r = await api('/api/practitioners/my-readings');
     if (r.ok) {
       lastSummary = r.body.summary || null; lastReadings = r.body;
-      root.innerHTML = readingsCard(r.body);
+      root.innerHTML = readingsCard(r.body, status);
       pickOut(root, r.body.series || []);
       // Seen means seen: recorded only once the card is actually on screen
       // (the script runs on every view of the shell, not just You).

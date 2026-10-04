@@ -1142,6 +1142,18 @@ body.gaia-v2 [data-screen="store"] #store-memberships .g-tier__flag {
 .g-readings__pick-row label { display: flex; flex-direction: column; gap: 4px; font-size: 0.76rem; color: var(--g-text-muted); min-width: 0; }
 .g-readings__pick-row select { width: 100%; min-width: 0; padding: 8px 10px; border-radius: var(--g-r-md); border: 1px solid var(--g-line); background: var(--g-surface-hi); color: var(--g-text); font: inherit; font-size: 0.92rem; }
 .g-readings__pick-out { margin: 10px 0 0; color: var(--g-text); font-variant-numeric: tabular-nums; }
+/* First-visit explainer and "read this first" */
+.g-readings__explain { margin: 14px 0 0; border: 1px solid var(--g-line); border-radius: var(--g-r-md); background: var(--g-surface-hi); padding: 0 14px; }
+.g-readings__explain > summary { cursor: pointer; padding: 11px 0; font-size: 0.78rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--g-text-muted); list-style: none; display: flex; align-items: center; justify-content: space-between; }
+.g-readings__explain > summary::-webkit-details-marker { display: none; }
+.g-readings__explain > summary::after { content: '+'; font-size: 1.1rem; font-weight: 500; color: var(--g-accent); }
+.g-readings__explain[open] > summary::after { content: '–'; }
+.g-readings__explain-grid { display: grid; grid-template-columns: 1fr; gap: 10px; padding: 0 0 14px; }
+@media (min-width: 640px) { .g-readings__explain-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+.g-readings__explain-card { display: flex; flex-direction: column; gap: 4px; padding: 10px 12px; border-radius: var(--g-r-md); background: var(--g-surface); border: 1px solid var(--g-line); font-size: 0.86em; line-height: 1.45; color: var(--g-text-muted); }
+.g-readings__explain-card strong { color: var(--g-text); font-weight: 600; }
+.g-readings__first { background: color-mix(in srgb, var(--g-accent) 8%, var(--g-surface-hi)); border: 1px solid color-mix(in srgb, var(--g-accent) 28%, var(--g-line)); border-radius: var(--g-r-md); padding: 12px 14px; }
+.g-readings__first .g-readings__kicker { color: var(--g-accent); }
 /* Today nudge and the dot on the You tab: "a newer reading exists", nothing more */
 .g-readings-nudge { display: flex; align-items: center; gap: 12px; margin: 0 0 14px; padding: 12px 14px; border-radius: var(--g-r-md); background: color-mix(in srgb, var(--g-accent) 10%, var(--g-surface)); border: 1px solid color-mix(in srgb, var(--g-accent) 32%, var(--g-line)); color: var(--g-text); text-decoration: none; }
 .g-readings-nudge i { font-size: 1.3rem; color: var(--g-accent); flex: none; }

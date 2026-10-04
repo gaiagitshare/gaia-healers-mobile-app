@@ -143,7 +143,10 @@ body.gaia-booking-open{overflow:hidden;}
   document.addEventListener('gaia:prefs-reset', async () => {
     try { state.data.prefs = await getJson('/api/member/prefs'); } catch (_) { /* keep what we have */ }
     renderMe();
+    document.dispatchEvent(new CustomEvent('gaia:prefs-changed', { detail: { prefs: { ...((state.data.prefs && state.data.prefs.prefs) || {}) } } }));
   });
+  // Once the member data is in, the avatar learns its two switches the same way.
+  document.addEventListener('gaia:member', () => { document.dispatchEvent(new CustomEvent('gaia:prefs-changed', { detail: { prefs: { ...((state.data.prefs && state.data.prefs.prefs) || {}) } } })); });
   async function loadMember() {
     if (window.GaiaJourney && !await window.GaiaJourney.check()) return;
     const [profile, access, appts, notif, devices, purchases, forms, courses, products, activity, events, prefs] = await Promise.all([
@@ -853,9 +856,15 @@ body.gaia-booking-open{overflow:hidden;}
 
     // Anything folded or dismissed on this screen comes back from "Your data
     // and sharing" (the card under this one), which fires gaia:prefs-reset.
+    // Gaia's two switches: her idle animations (on unless switched off) and
+    // the soft chime on her hello (off unless chosen). Server preferences.
+    const prefsNow = (d.prefs && d.prefs.prefs) || {};
+    const prefRow = (label, key, on, onWord, offWord) => '<div class="g-row"><span>' + esc(label) + '</span><button type="button" class="g-btn g-btn--ghost g-btn--sm g-pref-toggle" data-pref-toggle="' + key + '" aria-pressed="' + String(on) + '">' + (on ? onWord : offWord) + '</button></div>';
     cards.push(gMeCard('Account', gRows([
       gRowLink('Store & memberships', 'Shop →', 'home.html?view=store', false),
       gRowLink('Open Gaia Healers portal', 'education.gaiahealers.com', portalBase(), true),
+      prefRow("Gaia's idle animations", 'avatar_idle_off', !prefsNow.avatar_idle_off, 'On', 'Off'),
+      prefRow('Soft chime on her hello', 'avatar_hello_chime', Boolean(prefsNow.avatar_hello_chime), 'On', 'Off'),
     ])));
 
     box.innerHTML = cards.join('');
@@ -863,6 +872,17 @@ body.gaia-booking-open{overflow:hidden;}
     // just created by scanning their badge is the first thing they see here.
     box.insertAdjacentHTML('afterbegin', '<div data-badgecard-host></div>');
     window.GaiaMembershipUI?.bind?.(box);
+    box.querySelectorAll('[data-pref-toggle]').forEach((btn) => btn.addEventListener('click', () => {
+      const key = btn.getAttribute('data-pref-toggle');
+      const prefs = (state.data.prefs && state.data.prefs.prefs) || (state.data.prefs = { ok: true, prefs: {} }).prefs;
+      // avatar_idle_off is stored inverted (true = off); the button shows the human meaning.
+      const next = !prefs[key];
+      prefs[key] = next;
+      const on = key === 'avatar_idle_off' ? !next : next;
+      btn.textContent = on ? 'On' : 'Off'; btn.setAttribute('aria-pressed', String(on));
+      document.dispatchEvent(new CustomEvent('gaia:prefs-changed', { detail: { prefs: { ...prefs } } }));
+      fetch(proxyBase() + '/api/member/prefs', { method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json', Accept: 'application/json' }, body: JSON.stringify({ prefs: { [key]: next } }) }).catch(() => {});
+    }));
     box.querySelector('[data-dismiss-practitioner]')?.addEventListener('click', (e) => {
       e.currentTarget.closest('.g-card')?.remove();
       if (state.data.prefs && state.data.prefs.prefs) state.data.prefs.prefs.practitioner_card_dismissed = true;

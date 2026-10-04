@@ -451,8 +451,15 @@ contract test `test/avatar-contract.test.js` enforces that. Preview page:
 parts; a rarer hello (45–90 s, stops after being ignored twice); never while
 dragging, bubble open, Assist open, voice live, tour running or pointing, and
 only 8 s after the last touch; reduced motion keeps breathing and the glow;
-on desktop the eyes follow a nearby cursor. The orb's mark is her small face,
-mirroring the orb's `data-state`.
+on desktop the eyes follow a nearby cursor. Since 4 Oct (evening) Gaia Assist
+lives in the avatar only: tap = hop + bubble (chips and a type-to-Gaia line
+that pre-fills the conversation, never sends), second tap = chat, hold =
+voice; the centre of the tab bar is **Home** (`.gaia-tabbar__home`, the Gaia
+logo). The shell announces `gaia:assist-state` for the avatar to mirror.
+Moments: a bounce when a reading loads (`gaia:readings-loaded`), a glance at a
+new nudge on Today. Two switches under Account, server preferences:
+`avatar_idle_off` and `avatar_hello_chime` (Web Audio two-note chime on the
+hello, off by default, only after a touch; iOS's silent switch mutes it).
 
 ### Member preferences
 

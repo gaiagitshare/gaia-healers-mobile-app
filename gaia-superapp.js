@@ -1901,8 +1901,9 @@
     });
     root.querySelectorAll('[data-super-signin]').forEach((button) => button.addEventListener('click', () => window.GaiaAuth?.open?.()));
     root.querySelectorAll('[data-super-join]').forEach((button) => button.addEventListener('click', () => { window.GaiaAuth?.open?.(); setTimeout(() => document.querySelector('[data-join-toggle]')?.click(), 120); }));
+    // "Ask Gaia" on Today opens the conversation through the shell's own door (the avatar uses the same one).
     root.querySelectorAll('[data-gaia-open-assist]').forEach((button) => button.addEventListener('click', () => {
-      document.querySelector('[data-gaia-tab-assist]')?.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, cancelable: true }));
+      window.dispatchEvent(new CustomEvent('gaia:open-assist', { detail: { source: 'today' } }));
     }));
     root.querySelectorAll('[data-super-course]').forEach((button) => button.addEventListener('click', () => {
       const url = button.dataset.superCourse;

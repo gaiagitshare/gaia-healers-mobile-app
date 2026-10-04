@@ -2166,7 +2166,7 @@
     }
 
     const REALTIME_STATUS_COPY = {
-      idle: isCoarsePointer() ? 'Tap Gaia above to begin' : 'Tap Gaia to start',
+      idle: 'Tap Gaia to start',
       ready: 'Listening… speak naturally',
       connecting: 'Connecting…',
       holding: 'Listening…',
@@ -2412,6 +2412,7 @@
 
     function setAssistVoiceState(state, message = '') {
       if (voiceRegion) voiceRegion.dataset.assistState = state;
+      document.dispatchEvent(new CustomEvent('gaia:assist-state', { detail: { state } }));
       root.classList.toggle('gaia-assist--listening', state === 'listening');
       root.classList.toggle('gaia-assist--thinking', state === 'thinking');
       root.classList.toggle('gaia-assist--speaking', state === 'speaking');

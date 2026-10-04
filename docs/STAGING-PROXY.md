@@ -404,6 +404,17 @@ being proven (others get 404 and see no panel); unset = every member.
   voice page and the text chat (`routeIntent` — "open my readings", "my
   scan results") dispatch `gaia:open-readings`; the panel scrolls into view
   and glows. `home.html?view=profile&section=readings` does the same.
+- **Around the card** (all deterministic, same two routes): `status` carries
+  `latest_scanned_at` / `seen_scanned_at` / `new_reading`; a linked member's
+  status call refreshes the newest reading date from their side at most every
+  six hours (`refreshLatest`, one latest-scan call) and every `my-readings`
+  fetch remembers it; `POST member-link/seen { scanned_at }` records that the
+  member opened it. The app shows a one-line nudge on Today and a dot on the
+  You tab while `new_reading` is true. The card also offers *centre of the
+  week* (quietest chakra → matching Energy tool, fixed table), *save as
+  image* (canvas, share sheet or download, never uploaded), *compare any two*
+  (two dates from the member's own series), and shows a practitioner note on
+  the scan if their side ever sends `practitioner_note`/`note`/`comment`.
 
 `GAIA_SCAN_NARRATION` (default off): while no BAA covers the voice/text
 provider, the practitioner scan tools give the model only "the reading is on

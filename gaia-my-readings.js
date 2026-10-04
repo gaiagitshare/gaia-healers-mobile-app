@@ -13,6 +13,16 @@
  * Gaia Assist can only OPEN this card: the voice page and the text chat
  * dispatch `gaia:open-readings` (also honoured as `?section=readings` in the
  * URL) and the card scrolls into view and glows for a moment.
+ *
+ * Around the card, all from the same two routes and the same numbers:
+ *   - a one-line nudge on Today and a dot on the You tab while a reading is
+ *     newer than the last one the member opened (status.new_reading); opening
+ *     the card records it as seen;
+ *   - "centre of the week": the quietest chakra of the latest reading and the
+ *     Energy tool that suits it (a fixed table, no model);
+ *   - "save as image": the summary and gauges drawn on a canvas, kept on the
+ *     device (share sheet where there is one, otherwise a download);
+ *   - "compare any two": the member picks two dates from their own series.
  */
 (function () {
   'use strict';
@@ -47,6 +57,106 @@
     { key: /crown|sahasrara/i, colour: '#a060d8', short: 'Crown' },
   ];
   const chakraMeta = (c, i) => CHAKRAS.find((m) => m.key.test(String(c.name || ''))) || CHAKRAS[i] || { colour: 'var(--g-accent)', short: c.name };
+  // Centre of the week: the quietest centre, and which Energy tool suits it. A fixed table.
+  const CENTRE_CUES = {
+    Root: { tool: 'breath', toolLabel: 'Breath', cue: 'Slow, grounding breaths with both feet on the floor.' },
+    Sacral: { tool: 'colour', toolLabel: 'Colour', cue: 'Warm orange, and let the hips move a little today.' },
+    'Solar plexus': { tool: 'breath', toolLabel: 'Breath', cue: 'A longer exhale than inhale, a few rounds, when the day gets busy.' },
+    Heart: { tool: 'chakra', toolLabel: 'Chakra', cue: 'One kind thought for someone, and one for yourself.' },
+    Throat: { tool: 'colour', toolLabel: 'Colour', cue: 'Hum, sing, or say the thing you have been holding.' },
+    'Third eye': { tool: 'chakra', toolLabel: 'Chakra', cue: 'A quiet minute with your eyes closed, no screen.' },
+    Crown: { tool: 'chakra', toolLabel: 'Chakra', cue: 'Sit still for a moment and let things be as they are.' },
+  };
+  function centreOfTheWeek(chakras) {
+    const list = (chakras || []).map((c, i) => ({ c, m: chakraMeta(c, i) })).filter((x) => typeof x.c.value === 'number');
+    if (list.length < 2) return '';
+    const q = list.reduce((a, b) => (b.c.value < a.c.value ? b : a));
+    const cue = CENTRE_CUES[q.m.short] || CENTRE_CUES.Heart;
+    return `<section class="g-readings__sec g-readings__centre">
+      <p class="g-readings__kicker">Centre of the week</p>
+      <div class="g-readings__centre-row"><i class="g-readings__centre-disc" style="background:${q.m.colour}"></i>
+        <div><p class="g-readings__lead">${esc(q.c.name)} was the quietest in your latest reading.</p><p class="g-readings__muted">${esc(cue.cue)}</p></div></div>
+      <div class="g-card__actions"><button type="button" class="g-btn g-btn--secondary g-btn--sm" data-readings-action="tool" data-tool="${esc(cue.tool)}">Open the ${esc(cue.toolLabel)} tool</button></div>
+    </section>`;
+  }
+  /** The member picks any two dates from their own series; the difference is arithmetic on screen. */
+  function comparePicker(series) {
+    const pts = (series || []).filter((p) => p && p.d);
+    if (pts.length < 2) return '';
+    const opt = (sel) => pts.map((p) => `<option value="${esc(p.d)}"${p.d === sel ? ' selected' : ''}>${esc(short(p.d))}</option>`).join('');
+    return `<section class="g-readings__sec g-readings__pick" data-readings-pick>
+      <p class="g-readings__kicker">Compare any two</p>
+      <div class="g-readings__pick-row">
+        <label><span>From</span><select data-pick="from">${opt(pts[0].d)}</select></label>
+        <label><span>To</span><select data-pick="to">${opt(pts[pts.length - 1].d)}</select></label>
+      </div>
+      <p class="g-readings__pick-out" aria-live="polite"></p>
+    </section>`;
+  }
+  function pickOut(root, series) {
+    const box = root.querySelector('[data-readings-pick]'); if (!box) return;
+    const from = box.querySelector('[data-pick="from"]').value, to = box.querySelector('[data-pick="to"]').value;
+    const a = series.find((p) => p.d === from), b = series.find((p) => p.d === to);
+    const out = box.querySelector('.g-readings__pick-out');
+    if (!a || !b) { out.textContent = ''; return; }
+    const d = (x, y, dec) => (typeof x === 'number' && typeof y === 'number' ? y - x : null);
+    out.innerHTML = `${esc(short(a.d))} → ${esc(short(b.d))}: stress ${signed(d(a.s, b.s), 2, true)} · energy ${signed(d(a.e, b.e), 1)}`;
+  }
+
+  /** The summary and gauges on a canvas, for the member's own camera roll or a message to their practitioner. Stays on the device. */
+  async function saveImage(r) {
+    const W = 1080, H = 1350, c = document.createElement('canvas'); c.width = W; c.height = H;
+    const g = c.getContext('2d');
+    const cs = getComputedStyle(document.documentElement);
+    const tok = (n, fb) => (cs.getPropertyValue(n).trim() || fb);
+    g.fillStyle = '#071009'; g.fillRect(0, 0, W, H);
+    const accent = '#75f05a', text = '#f5f7f5', muted = '#a8b3ad', line = 'rgba(160,255,185,0.18)';
+    const wrap = (s, x, y, max, lh, font, colour) => { g.font = font; g.fillStyle = colour; const words = String(s).split(' '); let ln = ''; for (const w of words) { const t = ln ? ln + ' ' + w : w; if (g.measureText(t).width > max && ln) { g.fillText(ln, x, y); y += lh; ln = w; } else ln = t; } if (ln) { g.fillText(ln, x, y); y += lh; } return y; };
+    g.fillStyle = accent; g.font = '700 26px "Plus Jakarta Sans", sans-serif'; g.fillText('MY READINGS · GAIA HEALERS', 72, 96);
+    g.fillStyle = muted; g.font = '400 26px "Plus Jakarta Sans", sans-serif'; g.fillText(`Shared by ${r.practitioner?.name || 'your practitioner'} · ${when(r.latest?.scanned_at)}`, 72, 140);
+    let y = wrap(r.summary?.headline || '', 72, 220, W - 144, 60, '600 52px "Cormorant Garamond", serif', text);
+    const arc = (cx, cy, val, min, max, good, label, unit, dec) => {
+      const R = 120, s0 = Math.PI * 0.75, sw = Math.PI * 1.5;
+      g.lineWidth = 22; g.lineCap = 'round';
+      g.strokeStyle = line; g.beginPath(); g.arc(cx, cy, R, s0, s0 + sw); g.stroke();
+      if (good) { g.strokeStyle = 'rgba(66,219,134,0.35)'; g.lineCap = 'butt'; g.beginPath(); g.arc(cx, cy, R, s0 + sw * (good[0] - min) / (max - min), s0 + sw * (good[1] - min) / (max - min)); g.stroke(); g.lineCap = 'round'; }
+      if (typeof val === 'number') { const t = clamp((val - min) / (max - min), 0, 1); const ok = good && val >= good[0] && val <= good[1]; g.strokeStyle = ok ? '#42db86' : accent; g.beginPath(); g.arc(cx, cy, R, s0, s0 + sw * t); g.stroke(); }
+      g.fillStyle = text; g.textAlign = 'center'; g.font = '600 64px "Cormorant Garamond", serif'; g.fillText(typeof val === 'number' ? val.toFixed(dec) : '—', cx, cy + 20);
+      g.fillStyle = muted; g.font = '400 24px "Plus Jakarta Sans", sans-serif'; g.fillText(unit, cx, cy + 56); g.fillText(label, cx, cy + R + 60); g.textAlign = 'left';
+    };
+    y += 120; arc(W / 2 - 220, y + 40, r.latest?.energy, 0, 100, [40, 70], 'Energy', 'J ×10⁻²', 0); arc(W / 2 + 220, y + 40, r.latest?.stress, 0, 10, [2, 4], 'Stress', 'of 10', 2);
+    y += 300;
+    for (const l of (r.summary?.lines || [])) { y = wrap('• ' + l, 72, y, W - 144, 40, '400 28px "Plus Jakarta Sans", sans-serif', text) + 10; }
+    g.fillStyle = muted; g.font = '400 22px "Plus Jakarta Sans", sans-serif'; g.fillText('Reflective wellness measurements, not a diagnosis. gaiahealers.app', 72, H - 60);
+    const blob = await new Promise((res) => c.toBlob(res, 'image/png'));
+    const file = new File([blob], `gaia-readings-${r.latest?.scanned_at || 'latest'}.png`, { type: 'image/png' });
+    if (navigator.canShare && navigator.canShare({ files: [file] })) { try { await navigator.share({ files: [file], title: 'My readings' }); return; } catch { /* fall through to download */ } }
+    const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = file.name; document.body.appendChild(a); a.click(); a.remove();
+    window.setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+  }
+
+  // ── Today nudge and the dot on the You tab: only "a newer reading exists", never a value ──
+  let nudgeObserver = null;
+  function setNewReading(on, scannedAt) {
+    document.querySelectorAll('a[data-app-nav="profile"]').forEach((a) => a.classList.toggle('has-new-reading', on));
+    const place = () => {
+      const home = document.querySelector('#home-superapp .g-super-home');
+      const old = document.getElementById('readings-nudge');
+      if (!on) { old?.remove(); return; }
+      if (!home || old) return;
+      const el = document.createElement('a');
+      el.id = 'readings-nudge'; el.href = 'home.html?view=profile&section=readings'; el.className = 'g-readings-nudge';
+      el.innerHTML = `<i class="ph ph-pulse" aria-hidden="true"></i><span><strong>A new reading from your practitioner</strong>${scannedAt ? ` · ${esc(when(scannedAt))}` : ''}</span><em>Open</em>`;
+      el.addEventListener('click', (e) => { e.preventDefault(); try { window.GaiaAppShell?.go?.('profile'); } catch { /* ignore */ } window.setTimeout(() => window.dispatchEvent(new CustomEvent('gaia:open-readings')), 80); });
+      home.prepend(el);
+    };
+    place();
+    if (on && !nudgeObserver) {
+      const root = document.getElementById('home-superapp');
+      if (root && 'MutationObserver' in window) { nudgeObserver = new MutationObserver(place); nudgeObserver.observe(root, { childList: true }); }
+    }
+    if (!on && nudgeObserver) { nudgeObserver.disconnect(); nudgeObserver = null; }
+  }
 
   // ── graphics: inline SVG, drawn to scale, coloured through the theme tokens ──
   /** A three-quarter arc gauge. `value` on [min,max]; `good` is the comfortable band, drawn under the arc. */
@@ -149,6 +259,7 @@
     const sec = (kicker, inner, cls = '') => `<section class="g-readings__sec${cls}"><p class="g-readings__kicker">${kicker}</p>${inner}</section>`;
 
     const spark = sparkline(r.series);
+    const note = latest?.note ? `<section class="g-readings__sec g-readings__pnote"><p class="g-readings__kicker">A note from ${esc(practitioner.name || 'your practitioner')}</p><p class="g-readings__lead g-readings__pnote-text">${esc(latest.note)}</p></section>` : '';
     return card(`
       <p class="g-card__meta">Shared by <strong>${esc(practitioner.name || 'your practitioner')}</strong>${practitioner.specialty ? ` · ${esc(practitioner.specialty)}` : ''}${practitioner.location ? ` · ${esc(practitioner.location)}` : ''}<br>since ${esc(when(r.linked_at))}${r.scans_on_file != null ? ` · ${esc(r.scans_on_file)} reading${r.scans_on_file === 1 ? '' : 's'} on file` : ''}</p>
 
@@ -156,7 +267,7 @@
         <p class="g-readings__kicker">In short</p>
         <p class="g-readings__headline">${esc(summary.headline)}</p>
         <ul class="g-readings__lines">${(summary.lines || []).map((l) => `<li>${esc(l)}</li>`).join('')}</ul>
-        <div class="g-card__actions"><button type="button" class="g-btn g-btn--ghost g-btn--sm" data-readings-action="copy">Copy summary</button></div>
+        <div class="g-card__actions"><button type="button" class="g-btn g-btn--ghost g-btn--sm" data-readings-action="copy">Copy summary</button><button type="button" class="g-btn g-btn--ghost g-btn--sm" data-readings-action="image">Save as image</button></div>
       </div>` : ''}
 
       ${latest ? `<div class="g-readings__hero">
@@ -166,6 +277,7 @@
       </div>
       <p class="g-readings__muted g-readings__when">Latest reading ${esc(when(latest.scanned_at))}${latest.source === 'trend' ? ' · taken from your reading history; the full detail of this scan was not available' : ''}</p>` : '<p class="g-empty">No reading on file yet.</p>'}
 
+      ${note}
       <div class="g-readings__grid">
         ${latest && (latest.chakras || []).length ? sec('Your seven centres', `${spark ? spectrum(latest.chakras) : ''}<ul class="g-readings__chakras">${latest.chakras.map(chakraRow).join('')}</ul>`, ' g-readings__sec--wide') : ''}
         ${latest && (latest.most_out_of_balance || []).length ? sec('Most out of balance', `<ul class="g-readings__flags">${latest.most_out_of_balance.map(worst).join('')}</ul>`) : ''}
@@ -177,6 +289,8 @@
           ${(trend.flagged || []).length ? `<ul class="g-readings__flags">${trend.flagged.map(sev).join('')}</ul>` : '<p class="g-readings__muted">Nothing flagged in this period.</p>'}`) : ''}
         ${(r.comparisons || []).length ? sec('Before and after sessions', `<ul class="g-readings__pairs">${r.comparisons.map(compare).join('')}</ul>`) : ''}
         ${(r.files || []).length ? sec('Documents from your practitioner', `<div class="g-rows">${r.files.map(file).join('')}</div>`) : ''}
+        ${latest ? centreOfTheWeek(latest.chakras) : ''}
+        ${comparePicker(r.series)}
       </div>
 
       <p class="g-readings__muted g-readings__note">These are the readings your practitioner recorded. They are reflective wellness measurements, not a diagnosis; questions about them belong with your practitioner. Ask Gaia “open my readings” any time to come back here.</p>
@@ -184,17 +298,25 @@
   }
   const note = (text, action) => card(`<p class="g-readings__lead">${esc(text)}</p>${action ? `<div class="g-card__actions"><button type="button" class="g-btn g-btn--secondary g-btn--sm" data-readings-action="${esc(action.id)}">${esc(action.label)}</button></div>` : ''}`);
 
-  let lastSummary = null;
+  let lastSummary = null, lastReadings = null;
   async function render(root) {
     const st = await api('/api/practitioners/member-link/status');
-    if (!st.ok) { root.hidden = true; return; }             // not signed in, or feature off (404)
+    if (!st.ok) { root.hidden = true; setNewReading(false); return; }             // not signed in, or feature off (404)
     root.hidden = false;
     const status = st.body;
-    lastSummary = null;
+    lastSummary = null; lastReadings = null;
+    setNewReading(Boolean(status.new_reading), status.latest_scanned_at);
     if (!status.linked) { root.innerHTML = consentCard(status); return; }
     root.innerHTML = note('Loading your readings… this fetches live from Bio-Well and can take about 20 seconds.');
     const r = await api('/api/practitioners/my-readings');
-    if (r.ok) { lastSummary = r.body.summary || null; root.innerHTML = readingsCard(r.body); return; }
+    if (r.ok) {
+      lastSummary = r.body.summary || null; lastReadings = r.body;
+      root.innerHTML = readingsCard(r.body);
+      pickOut(root, r.body.series || []);
+      // Opened: the newest reading is now seen, so the nudge and the dot go.
+      if (r.body.latest?.scanned_at) { setNewReading(false); api('/api/practitioners/member-link/seen', { method: 'POST', body: { scanned_at: r.body.latest.scanned_at } }).catch(() => {}); }
+      return;
+    }
     if (r.body.error === 'member_not_linked' || r.body.error === 'link_revoked') { root.innerHTML = consentCard({ ...status, linked: false }); return; }
     root.innerHTML = note('Your readings are not available right now. Please try again in a moment.', { id: 'refresh', label: 'Try again' });
   }
@@ -217,6 +339,16 @@
       const action = btn.getAttribute('data-readings-action');
       btn.disabled = true;
       try {
+        if (action === 'image') {
+          if (lastReadings) { try { await saveImage(lastReadings); } catch { btn.textContent = 'Could not save'; window.setTimeout(() => { btn.textContent = 'Save as image'; }, 1600); } }
+          return;
+        }
+        if (action === 'tool') {
+          const tool = btn.getAttribute('data-tool') || 'chakra';
+          try { window.GaiaAppShell?.go?.('wellness'); } catch { /* ignore */ }
+          window.requestAnimationFrame(() => { try { window.GaiaTools?.open?.(tool); } catch { /* ignore */ } });
+          return;
+        }
         if (action === 'copy') {
           const text = lastSummary ? [lastSummary.headline, ...(lastSummary.lines || [])].join('\n') : '';
           try { await navigator.clipboard.writeText(text); btn.textContent = 'Copied'; } catch { btn.textContent = 'Could not copy'; }
@@ -236,6 +368,7 @@
         await render(root);
       } finally { btn.disabled = false; }
     });
+    root.addEventListener('change', (e) => { if (e.target.matches('[data-pick]')) pickOut(root, lastReadings?.series || []); });
     let pendingReveal = false;
     window.addEventListener('gaia:open-readings', () => { if (!reveal(root)) pendingReveal = true; });
     window.addEventListener('gaia:signed-out', () => { root.hidden = true; root.innerHTML = ''; });

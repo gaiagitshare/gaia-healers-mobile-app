@@ -46,7 +46,12 @@ test('My readings panel: present in the profile screen, script loaded, talks onl
   assert.match(js, /credentials: 'include'/);
   assert.doesNotMatch(js, /localStorage|sessionStorage/, 'nothing cached in the browser');
   // Graphics are drawn to scale from the server's numbers, and the summary is the server's words -- nothing is computed by a model.
-  for (const piece of ['function gauge', 'function sparkline', 'function spectrum', 'r.summary', 'r.series', 'gaia:open-readings', "get('section') === 'readings'"]) assert.ok(js.includes(piece), piece);
+  for (const piece of ['function gauge', 'function sparkline', 'function spectrum', 'r.summary', 'r.series', 'gaia:open-readings', "get('section') === 'readings'",
+    // the extras: all from the same two routes and the same numbers, none from a model
+    'function centreOfTheWeek', 'function comparePicker', 'async function saveImage', 'function setNewReading', '/api/practitioners/member-link/seen', 'latest.note']) assert.ok(js.includes(piece), piece);
+  assert.doesNotMatch(js, /fetch\([^)]*(https?:)?\/\/(?!\$\{proxyBase)/, 'the image is never uploaded anywhere: it is shared or downloaded from the device');
+  const css = fs.readFileSync(new URL('../../gaia-app-v3-shop-you.css', import.meta.url), 'utf8');
+  for (const cls of ['.g-readings-nudge', '.has-new-reading', '.g-readings__pick-row', '.g-readings__centre-row', '.g-readings__pnote']) assert.ok(css.includes(cls), cls);
   // The member prompt tells the model only THAT readings exist and how to open them; never a value.
   const srv = fs.readFileSync(new URL('../server.js', import.meta.url), 'utf8');
   const line = srv.match(/BIO-WELL READINGS:[^\n]*/)?.[0] || '';

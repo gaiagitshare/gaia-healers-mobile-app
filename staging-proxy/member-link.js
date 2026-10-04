@@ -130,7 +130,60 @@ export function linkStatus(memberId, { now = Date.now(), file = LINK_FILE } = {}
     linked_at: link?.status === 'confirmed' ? link.linked_at : null,
     code_active: Boolean(pending),
     code_expires_at: pending ? new Date(pending[1].exp).toISOString() : null,
+    // Newest reading we know of vs the newest the member has opened: the
+    // Today nudge and the dot on the You tab come from these two dates only.
+    latest_scanned_at: link?.status === 'confirmed' ? (link.latest_scanned_at || null) : null,
+    seen_scanned_at: link?.status === 'confirmed' ? (link.seen_scanned_at || null) : null,
+    new_reading: Boolean(link?.status === 'confirmed' && link.latest_scanned_at && link.latest_scanned_at > (link.seen_scanned_at || '')),
   };
+}
+
+/** Remember the newest reading date for a linked member (from any fetch that learned it). */
+export function rememberLatest(memberId, scannedAt, { now = Date.now(), file = LINK_FILE } = {}) {
+  const id = String(memberId || '').trim(); const d = String(scannedAt || '').slice(0, 10);
+  const store = load(file); const link = store.links[id];
+  if (!link || link.status !== 'confirmed') return false;
+  link.latest_checked_at = new Date(now).toISOString();
+  if (/^\d{4}-\d{2}-\d{2}$/.test(d) && d !== link.latest_scanned_at) { link.latest_scanned_at = d; }
+  save(store, file);
+  return true;
+}
+/** The member has looked at the reading of this date; the nudge and the dot go away. */
+export function markSeen(memberId, scannedAt, { file = LINK_FILE } = {}) {
+  const id = String(memberId || '').trim(); const d = String(scannedAt || '').slice(0, 10);
+  const store = load(file); const link = store.links[id];
+  if (!link || link.status !== 'confirmed' || !/^\d{4}-\d{2}-\d{2}$/.test(d)) return false;
+  if ((link.seen_scanned_at || '') < d) { link.seen_scanned_at = d; save(store, file); }
+  return true;
+}
+export const LATEST_CHECK_TTL_MS = 6 * 60 * 60 * 1000;
+/**
+ * The date of the member's newest reading, refreshed from their side at most
+ * every six hours (one small call: the latest scan only). Anything that
+ * fails leaves the remembered date alone; the status route never waits on
+ * their server for more than the call's own timeout.
+ */
+export async function refreshLatest(cfg0, memberId, { env = process.env, fetchImpl = fetch, file = LINK_FILE, now = Date.now() } = {}) {
+  const link = linkFor(memberId, file);
+  if (!link) return null;
+  const checked = Date.parse(link.latest_checked_at || '') || 0;
+  if (now - checked < LATEST_CHECK_TTL_MS) return link.latest_scanned_at || null;
+  try {
+    const viaKey = Boolean(memberApiKey(env));
+    const cfg = viaKey ? { ...cfg0, mcpUrl: `${memberBackend(cfg0, env)}/api/member-mcp` } : cfg0;
+    const token = viaKey ? await memberToken(cfg0, memberId, { env, fetchImpl }) : await serverAccessToken(cfg0, env, fetchImpl);
+    const names = await memberToolNames(cfg, token, fetchImpl);
+    const has = (n) => names.size === 0 || names.has(n);
+    const [tool, args] = has('get_my_latest_scan') ? ['get_my_latest_scan', {}] : has('get_member_scan') ? ['get_member_scan', { gaia_member_id: memberId, which: 'latest' }] : ['get_customer_scan', { customerId: link.customer_id }];
+    const out = unwrapMcp(await mcpCall(cfg, token, tool, args, fetchImpl));
+    const scan = out?.scan || (Array.isArray(out?.scans) ? [...out.scans].sort((a, b) => String(b.scanned_at || '').localeCompare(String(a.scanned_at || '')))[0] : out);
+    const d = String(scan?.scanned_at || '').slice(0, 10);
+    rememberLatest(memberId, d, { now, file });
+    return d || link.latest_scanned_at || null;
+  } catch {
+    rememberLatest(memberId, '', { now, file });   // tried; try again in six hours
+    return link.latest_scanned_at || null;
+  }
 }
 export function linkFor(memberId, file = LINK_FILE) {
   const link = load(file).links[String(memberId || '').trim()];
@@ -225,8 +278,18 @@ export function memberScanView(scan = {}) {
     stress: num(l.stress, 2), energy: num(l.energy),
     chakras: (l.chakras || []).map((c) => ({ name: c.name, value: num(c.value, 2), alignment: num(c.align) })),
     most_out_of_balance: rows.sort((a, b) => b.disbalance - a.disbalance).slice(0, 6),
+    // A practitioner's own words about this scan, if their side sends any
+    // (none of their current tools do; shown the day they add it).
+    note: practitionerNote(scan) || practitionerNote(l),
   };
 }
+const practitionerNote = (o) => {
+  for (const k of ['practitioner_note', 'practitionerNote', 'note', 'notes', 'comment', 'comments']) {
+    const v = o?.[k];
+    if (typeof v === 'string' && v.trim()) return v.trim().slice(0, 600);
+  }
+  return null;
+};
 
 const PARTNER_ERRORS = { member_not_linked: 404, link_pending: 409, link_revoked: 410, forbidden_scope: 403 };
 function partnerError(e) {

@@ -33,7 +33,7 @@ import { classifyMembershipEvent, membershipFromEvent } from './membership/event
 import { attachQwenVoiceRelay, qwenRouting, issueQwenTicket, qwenVoiceConfig, voiceBootLine } from './qwen-voice-relay.js';
 import { normalizeUsage, recordUsage, recordFailure } from './assist-usage.js';
 import { toolDeclarationsFor, clientToolNames, slowToolNames, runTool, modelView } from './assist-tools.js';
-import { memberReadingsEnabled, memberAllowed, mintCode, redeemCode, revokeLink, linkStatus, linkFor, partnerAuthorized, memberReadings, notifyPartnerUnlink } from './member-link.js';
+import { memberReadingsEnabled, memberAllowed, mintCode, redeemCode, revokeLink, linkStatus, linkFor, partnerAuthorized, memberReadings, notifyPartnerUnlink, rememberLatest, markSeen, refreshLatest } from './member-link.js';
 import { practitionersConfig, makePkce, authorizeUrl, rememberFlow, claimFlow,
          exchangeCode, resolveProfile, saveToken, forgetToken, connectionStatus, practitionersBootLine } from './practitioners-oauth.js';
 import { allowSpend, callerKey, guardSubject, spendKindFor, ASSIST_MAX_PROMPT_CHARS, ASSIST_MAX_TTS_CHARS } from './assist-guard.js';
@@ -7457,7 +7457,13 @@ const server = http.createServer(async (req, res) => {
       if (!memberAllowed(member.contactId)) { sendJson(res, 404, { ok: false, error: 'Not found' }, origin); return; }
       const cfg = practitionersConfig();
       if (req.method === 'GET' && sub === 'member-link/status') {
+        // A linked member's newest reading date, at most one small partner call every six hours.
+        if (linkFor(member.contactId)) await refreshLatest(cfg, member.contactId);
         sendJson(res, 200, { ok: true, available: cfg.enabled, environment: cfg.environment, ...linkStatus(member.contactId) }, origin); return;
+      }
+      if (req.method === 'POST' && sub === 'member-link/seen') {
+        let body = {}; try { body = await readJsonBody(req); } catch { body = {}; }
+        sendJson(res, 200, { ok: true, seen: markSeen(member.contactId, body?.scanned_at) }, origin); return;
       }
       if (req.method === 'POST' && sub === 'member-link/code') {
         try {
@@ -7481,6 +7487,7 @@ const server = http.createServer(async (req, res) => {
         try {
           const started = Date.now();
           const out = await memberReadings(cfg, member.contactId);
+          if (out.latest?.scanned_at) rememberLatest(member.contactId, out.latest.scanned_at);
           console.log('[Gaia Practitioners] member readings served', { member: member.contactId, ms: Date.now() - started, scans: out.scans_on_file });
           sendJson(res, 200, { ok: true, ...out }, origin);
         } catch (e) {

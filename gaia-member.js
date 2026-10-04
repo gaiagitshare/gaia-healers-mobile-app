@@ -14,7 +14,7 @@
     st.textContent = `
 .gaia-booking-modal{position:fixed;inset:0;z-index:100;display:flex;align-items:flex-end;justify-content:center;}
 .gaia-booking-modal__backdrop{position:absolute;inset:0;background:rgba(0,0,0,.5);-webkit-backdrop-filter:blur(2px);backdrop-filter:blur(2px);}
-.gaia-booking-modal__sheet{position:relative;width:100%;max-width:480px;height:92vh;height:92dvh;display:flex;flex-direction:column;
+.gaia-booking-modal__sheet{position:relative;width:100%;max-width:480px;height:92vh;height:min(92dvh,100%);max-height:100%;display:flex;flex-direction:column;
   background:#fff;border-radius:20px 20px 0 0;box-shadow:0 -8px 40px rgba(0,0,0,.18);overflow:hidden;
   animation:gaia-booking-up .25s ease-out;}
 @keyframes gaia-booking-up{from{transform:translateY(100%)}to{transform:translateY(0)}}
@@ -27,6 +27,9 @@
 .gaia-booking-modal__close:active{background:#EFEFF0;}
 .gaia-booking-modal__body{flex:1;position:relative;overflow:auto;-webkit-overflow-scrolling:touch;}
 .gaia-booking-modal__body iframe{position:absolute;inset:0;width:100%;height:100%;border:none;}
+.gaia-booking-modal__foot{flex-shrink:0;display:flex;justify-content:center;padding:10px 16px max(10px,env(safe-area-inset-bottom,0px));border-top:1px solid rgba(0,0,0,.07);background:#fff;}
+.gaia-booking-modal__done{min-width:160px;padding:12px 22px;border:0;border-radius:999px;background:#1C1C1E;color:#fff;font:600 15px/1 inherit;font-family:inherit;cursor:pointer;-webkit-tap-highlight-color:transparent;}
+.gaia-booking-modal__done:active{opacity:.85;}
 .gaia-reader__body{padding:0;}
 .gaia-reader__loading,.gaia-reader__fallback{padding:36px 22px;text-align:center;color:#636366;}
 .gaia-reader__cta{display:inline-block;margin-top:14px;padding:11px 20px;border-radius:999px;
@@ -599,6 +602,9 @@ body.gaia-booking-open{overflow:hidden;}
       + '<iframe src="' + esc(embedUrl) + '" title="' + esc(title || 'Content') + '" scrolling="yes" allow="camera; microphone; fullscreen" loading="lazy"></iframe>'
       + '<div class="gaia-booking-modal__loading"><span class="gaia-booking-modal__spinner"></span>Loading…</div>'
       + '<a class="gaia-booking-modal__fallback" href="' + esc(url) + '" target="_blank" rel="noopener noreferrer">Open in a new tab →</a>'
+      // A second way out, at the thumb: on a phone the header can sit under
+      // the status bar, and a sheet taller than the screen hid the × (4 Oct).
+      + '</div><div class="gaia-booking-modal__foot"><button type="button" class="gaia-booking-modal__done" data-book-close>Close</button>'
       + '</div></div>';
     document.body.appendChild(inAppModal);
     document.body.classList.add('gaia-booking-open');
@@ -819,7 +825,10 @@ body.gaia-booking-open{overflow:hidden;}
       (upcoming.length
         ? upcoming.slice(0, 3).map(apptRow).join('')
         : '<p class="g-empty">No upcoming appointments.</p>')
-      + (booking[0] ? '<div class="g-card__actions"><a class="g-btn g-btn--secondary g-btn--sm" href="' + esc(booking[0].openUrl) + '" target="_blank" rel="noopener noreferrer">Book a ' + esc(booking[0].name) + ' →</a></div>' : '')) });
+      // A member books with a practitioner near them: the directory comes first;
+      // the generic booking link, when there is one, stays as the second choice.
+      + '<div class="g-card__actions"><a class="g-btn g-btn--secondary g-btn--sm" href="home.html?view=directory" data-app-nav="directory">Find a practitioner near you →</a>'
+      + (booking[0] ? '<a class="g-btn g-btn--ghost g-btn--sm" href="' + esc(booking[0].openUrl) + '" target="_blank" rel="noopener noreferrer">Book a ' + esc(booking[0].name) + ' →</a>' : '') + '</div>') });
 
     const fcnt = (d.forms && d.forms.counts) || {};
     activity.push({ active: Boolean(fcnt.forms || fcnt.surveys), html: gMeCard('Forms & surveys', (fcnt.forms || fcnt.surveys)

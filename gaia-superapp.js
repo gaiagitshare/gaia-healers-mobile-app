@@ -887,7 +887,7 @@
 
   /** Home's door to Today: one card, the date, what waits there. */
   function todayDoor(authed) {
-    return '<a class="g-super-primary g-super-today-door" href="home.html?view=daily" data-app-nav="daily"><p class="g-super-kicker">Today</p>'
+    return '<a class="g-super-primary g-super-today-door' + (authed ? '' : ' g-super-today-door--wide') + '" href="home.html?view=daily" data-app-nav="daily"><p class="g-super-kicker">Today</p>'
       + '<h2>' + esc(dateLabel()) + '</h2>'
       + '<p>' + (authed ? 'Your daily energy check, today\u2019s sky, your readings and your next session.' : 'Your daily energy check and today\u2019s sky, free, right now.') + '</p>'
       + '<span class="g-btn g-btn--primary g-super-primary__button">' + icon('sun') + ' Open Today ' + icon('arrow-right') + '</span></a>';

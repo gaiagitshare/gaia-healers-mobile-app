@@ -647,7 +647,7 @@
       + '<li>' + icon('check-circle') + '<span>Events, bookings, community &amp; Store, all in one home</span></li>'
       + '</ul>'
       + '<div class="g-super-actions"><button type="button" class="g-btn g-btn--primary" data-super-join>' + icon('sparkle') + ' Join free</button>'
-      + '<button type="button" class="g-btn g-btn--secondary" data-super-signin>Sign in</button>'
+      + '<button type="button" class="g-btn g-btn--ghost" data-super-signin>Already a member? Sign in</button>'
       // Third and quietest. Join free is the last section of the signed-out
       // home, so this is the plan link at the foot of the page -- there for
       // the reader who wants to know what is above free before they commit,
@@ -949,13 +949,13 @@
   function bookActions() {
     const bk = 'https://api.leadconnectorhq.com/widget/bookings/', fm = 'https://api.leadconnectorhq.com/widget/form/';
     const items = [
-      { name: 'Bio-Well energy scan', href: bk + 'scans', icon: 'pulse', what: 'A biofield reading with a practitioner.' },
+      { name: 'Bio-Well energy scan', intent: 'scan', icon: 'pulse', what: 'Choose a practitioner near you, then a time.' },
       { name: 'Bio-Well demo', href: bk + 'bio-welldemo', icon: 'monitor-play', what: 'See the device in action, no commitment.' },
       { name: 'Free discovery call', href: fm + 'mgf6oviyhPwrLBi03gzq', icon: 'phone', what: 'A short chat about where to start.' },
       { name: 'Wellness coaching', href: fm + 'gVzfo7sRfbLnMzQqSnJL', icon: 'leaf', what: 'Work one-to-one with a Gaia coach.' },
     ];
     return '<section class="g-home2__book" aria-label="Book a session"><p class="g-super-kicker">Book a session</p><div class="g-home2__book-grid">'
-      + items.map((b) => '<button type="button" class="g-home2__action" data-book-inline="' + esc(b.href) + '" data-book-title="' + esc(b.name) + '"><span class="g-home2__action-icon">' + icon(b.icon) + '</span><span class="g-home2__action-copy"><strong>' + esc(b.name) + '</strong><small>' + esc(b.what) + '</small></span>' + icon('caret-right', 'g-home2__action-arrow') + '</button>').join('')
+      + items.map((b) => '<button type="button" class="g-home2__action" ' + (b.intent ? 'data-dir-intent="' + esc(b.intent) + '"' : 'data-book-inline="' + esc(b.href) + '" data-book-title="' + esc(b.name) + '"') + '><span class="g-home2__action-icon">' + icon(b.icon) + '</span><span class="g-home2__action-copy"><strong>' + esc(b.name) + '</strong><small>' + esc(b.what) + '</small></span>' + icon('caret-right', 'g-home2__action-arrow') + '</button>').join('')
       + '</div></section>';
   }
   /** Membership, in one strip: the plan you have and its next action, or the plans. */
@@ -2011,6 +2011,7 @@
         track.scrollTo({ left: n * track.clientWidth, behavior: 'smooth' });
       }));
     });
+    root.querySelectorAll('[data-dir-intent]').forEach((button) => button.addEventListener('click', (e) => { e.preventDefault(); if (window.GaiaDirectory?.open) window.GaiaDirectory.open({ intent: button.dataset.dirIntent }); else window.GaiaAppShell?.go?.('directory'); }));
     root.querySelectorAll('[data-super-signin]').forEach((button) => button.addEventListener('click', () => window.GaiaAuth?.open?.()));
     root.querySelectorAll('[data-super-join]').forEach((button) => button.addEventListener('click', () => { window.GaiaAuth?.open?.(); setTimeout(() => document.querySelector('[data-join-toggle]')?.click(), 120); }));
     // "Ask Gaia" on Today opens the conversation through the shell's own door (the avatar uses the same one).

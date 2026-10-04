@@ -1205,3 +1205,12 @@ body.gaia-v2 [data-screen="profile"] #member-data-sharing[hidden] { display: non
 .gaia-tabbar__link.has-new-reading .gaia-tabbar__icon { position: relative; }
 .gaia-tabbar__link.has-new-reading .gaia-tabbar__icon::after { content: ''; position: absolute; top: -2px; right: -5px; width: 9px; height: 9px; border-radius: 50%; background: var(--g-accent); box-shadow: 0 0 0 2px var(--g-bg); }
 @media (prefers-reduced-motion: reduce) { .g-readings.is-focus { transition: none; } }
+/* the pass and its next level, one card */
+body.gaia-v2 [data-screen="profile"] #member-me > .g-pass-stack { grid-column: 1 / -1; display: flex; flex-direction: column; }
+body.gaia-v2 [data-screen="profile"] .g-pass-stack > .g-pass { border-bottom-left-radius: 0; border-bottom-right-radius: 0; }
+body.gaia-v2 [data-screen="profile"] .g-pass-stack > .g-next { margin-top: 0; border-top: 1px dashed var(--v3-border); border-top-left-radius: 0; border-top-right-radius: 0; padding: 16px 20px 18px; }
+body.gaia-v2 [data-screen="profile"] .g-pass-stack > .g-next .g-next__title { font-size: 1.2rem; }
+body.gaia-v2 [data-screen="profile"] .g-pass-stack > .g-next .g-next__lead { margin-top: 10px; }
+body.gaia-v2 [data-screen="profile"] .g-pass-stack > .g-next.is-collapsed { padding: 12px 20px; }
+/* My readings, folded */
+.g-readings--folded .g-readings__summary { margin-top: 10px; }

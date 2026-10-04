@@ -91,7 +91,22 @@ test('the in-app window always has a reachable Close, and bookings send a member
   const member = read('gaia-member.js');
   assert.match(member, /height:min\(92dvh,100%\);max-height:100%/, 'the sheet never grows past the screen');
   assert.match(member, /gaia-booking-modal__foot"><button type="button" class="gaia-booking-modal__done" data-book-close>Close<\/button>/, 'a Close at the thumb');
-  assert.match(member, /href="home\.html\?view=directory" data-app-nav="directory">Find a practitioner near you/);
+  assert.match(member, /href="home\.html\?view=directory" data-dir-intent="scan">Find a practitioner near you/, 'You: the directory, with the scan intent');
+  // Bio-Well scan: the practitioner first, then a time on THEIR calendar (gaiapractitioners.com publishes meetingLink)
+  const dir = read('gaia-directory.js');
+  assert.match(dir, /function isBioWell\(p\) \{ return \/bio-\?well\/i\.test/, 'Bio-Well practitioners are found by specialty or tag');
+  assert.match(dir, /window\.GaiaDirectory = \{ open: openWith \}/);
+  assert.match(dir, /Book a Bio-Well scan/); assert.match(dir, /SCAN_FALLBACK = 'https:\/\/api\.leadconnectorhq\.com\/widget\/bookings\/scans'/, 'a practitioner without a calendar still books through the Gaia scan calendar, in the app');
+  const sa2 = read('gaia-superapp.js');
+  assert.match(sa2, /name: 'Bio-Well energy scan', intent: 'scan'/, 'Home: the scan action opens the directory with the intent');
+  assert.match(sa2, /data-dir-intent\]'\)\.forEach/);
+  // My readings on You: In short first, the rest one tap away (and Gaia's open-my-readings unfolds it)
+  const readings2 = read('gaia-my-readings.js');
+  assert.match(readings2, /function foldedCard\(r\)/); assert.match(readings2, /expanded \? readingsCard\(r\.body, status, prefs\) : foldedCard\(r\.body\)/);
+  assert.match(readings2, /if \(!expanded && lastReadings\) \{ expanded = true;/, 'reveal unfolds');
+  // the pass and its next level are one card
+  const mui = read('gaia-membership-ui.js');
+  assert.match(mui, /'<div class="g-pass-stack">' \+ memberPass\(access\) \+ nextLevel\(access, plans\) \+ '<\/div>'/);
   const css = read('gaia-superapp.css');
   for (const bp of ['min-width: 768px', 'min-width: 1024px', 'min-width: 1440px', 'max-width: 1023px']) assert.ok(css.slice(css.indexOf('.g-super-home--v2')).includes(bp), bp);
   assert.match(css, /\.g-super-home--v2 \{ display: block !important;/, 'the old two-column grid does not apply to the v2 Home');

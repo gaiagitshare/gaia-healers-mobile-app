@@ -1013,7 +1013,10 @@ body.gaia-booking-open{overflow:hidden;}
       // The chips sit on their own line, not inside the title: inside it, a
       // long course name clamped to three lines cut the learner count off.
       const tags = badge || countChip ? '<span class="g-access__tags">' + badge + countChip + '</span>' : '';
-      const img = t.image ? '<img src="' + esc(t.image) + '" alt="" class="g-access__img" style="width:48px;height:48px;border-radius:8px;object-fit:cover;flex-shrink:0" />' : '';
+      // A course without artwork gets a plain tile, so every title in the
+      // grid starts at the same line.
+      const img = t.image ? '<img src="' + esc(t.image) + '" alt="" class="g-access__img" style="width:48px;height:48px;border-radius:8px;object-fit:cover;flex-shrink:0" />'
+        : '<span class="g-access__img g-access__img--ph" aria-hidden="true"><i class="ph ph-graduation-cap"></i></span>';
       return openable
         ? '<button type="button" class="g-access g-access--unlocked g-access--link" data-course-open="' + esc(url) + '"' + (isFree && !owned ? ' data-course-free="1"' : '') + ' data-course-title="' + esc(t.name) + '">'
           + img
@@ -1128,7 +1131,7 @@ body.gaia-booking-open{overflow:hidden;}
       box.innerHTML =
         announcementsHtml(state.announcements)
         + '<article class="g-card g-card--feature"><p class="g-card__label">Community</p>'
-        + '<p class="g-card__value g-card__value--lg">Open your circles</p>'
+        // No title of its own: the section above already says "Your circles".
         + '<p class="g-card__meta">Sign in to see which Gaia Healers communities your membership unlocks — and open them in one tap.</p>'
         + '<div class="g-card__actions"><button type="button" class="g-btn g-btn--primary g-btn--sm" data-native-signin>Sign in securely →</button></div></article>'
         + gSec('What’s inside', '<div class="g-access-grid">' + preview + '</div>');

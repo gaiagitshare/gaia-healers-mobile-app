@@ -1013,7 +1013,10 @@ body.gaia-booking-open{overflow:hidden;}
       // The chips sit on their own line, not inside the title: inside it, a
       // long course name clamped to three lines cut the learner count off.
       const tags = badge || countChip ? '<span class="g-access__tags">' + badge + countChip + '</span>' : '';
-      const img = t.image ? '<img src="' + esc(t.image) + '" alt="" class="g-access__img" style="width:48px;height:48px;border-radius:8px;object-fit:cover;flex-shrink:0" />' : '';
+      // A course without artwork gets a plain tile, so every title in the
+      // grid starts at the same line.
+      const img = t.image ? '<img src="' + esc(t.image) + '" alt="" class="g-access__img" style="width:48px;height:48px;border-radius:8px;object-fit:cover;flex-shrink:0" />'
+        : '<span class="g-access__img g-access__img--ph" aria-hidden="true"><i class="ph ph-graduation-cap"></i></span>';
       return openable
         ? '<button type="button" class="g-access g-access--unlocked g-access--link" data-course-open="' + esc(url) + '"' + (isFree && !owned ? ' data-course-free="1"' : '') + ' data-course-title="' + esc(t.name) + '">'
           + img

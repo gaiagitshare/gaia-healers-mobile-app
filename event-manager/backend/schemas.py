@@ -1130,6 +1130,7 @@ class PrinterLogRecord(BaseModel):
     station: Optional[str] = None
     error: Optional[str] = None
     printer: Optional[str] = None
+    device: Optional[str] = None
     trace: Optional[List[str]] = None
     client_attempt_id: Optional[str] = None
 

@@ -7,6 +7,7 @@ Proves, against a served copy of the live database:
   3. bad stage/result values are refused
   4. the trace is bounded (newest 150 lines, 300 characters each)
   5. organizers read it back with the trace and the device; a desk cannot
+  6. a desk connecting to a printer another desk used today is told which desk
 
 Run:  python3 /root/event/backend/test_printer_log.py
 """
@@ -91,6 +92,25 @@ check(st == 200 and all(r["result"] == "failed" for r in rows), "failed_only sho
 st, _ = call("GET", "/events/%d/printer-log" % EVENT, None, DESK)
 check(st == 403, "a door desk cannot read everyone's traces", st)
 
-c.execute("DELETE FROM printer_logs WHERE client_attempt_id IN (?, ?)", (aid, aid2)); c.commit()
+# 6 ── one printer, two desks: the second desk is told who else has it
+dev = "B1 Pro-TEST" + uuid.uuid4().hex[:6]
+ids = ["test-" + uuid.uuid4().hex for _ in range(4)]
+st, b = call("POST", "/events/%d/printer-log" % EVENT, {"stage": "connect", "result": "ok", "station": "test-desk-1",
+             "device": dev, "client_attempt_id": ids[0]}, DESK)
+check(st == 200 and b.get("shared_with") == [], "the first desk on a printer hears nothing", (st, b))
+st, b = call("POST", "/events/%d/printer-log" % EVENT, {"stage": "connect", "result": "ok", "station": "test-desk-1",
+             "device": dev, "client_attempt_id": ids[1]}, DESK)
+check(st == 200 and b.get("shared_with") == [], "reconnecting the same desk is not a clash", (st, b))
+st, b = call("POST", "/events/%d/printer-log" % EVENT, {"stage": "connect", "result": "ok", "station": "test-desk-2",
+             "device": dev, "client_attempt_id": ids[2]}, ADMIN)
+check(st == 200 and [r["station"] for r in b.get("shared_with", [])] == ["test-desk-1"],
+      "a second desk is told the first desk has this printer", (st, b))
+st, b = call("POST", "/events/%d/printer-log" % EVENT, {"stage": "connect", "result": "failed", "station": "test-desk-3",
+             "device": "B1 Pro-OTHER", "client_attempt_id": ids[3]}, ADMIN)
+check(st == 200 and b.get("shared_with") == [], "a different printer is nobody else's", (st, b))
+st, rows = call("GET", "/events/%d/printer-log?limit=5" % EVENT, None, ADMIN)
+check(st == 200 and any(r.get("device") == dev for r in rows), "the printer's name is read back", rows)
+
+c.execute("DELETE FROM printer_logs WHERE client_attempt_id IN (%s)" % ",".join("?" * 6), [aid, aid2] + ids); c.commit()
 print("\n%s" % ("ALL PASS" if not fails else "FAILED: %d" % fails))
 sys.exit(1 if fails else 0)

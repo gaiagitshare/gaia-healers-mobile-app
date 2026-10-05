@@ -110,6 +110,14 @@ def _ensure_event_columns():
         # One GHL product id is sold under several names. Nothing but the name
         # can tell those variants apart, so a mapping may now require one.
         stmts.append("ALTER TABLE ticket_mappings ADD COLUMN product_name_match VARCHAR")
+    try:
+        _pl = {c["name"] for c in inspector.get_columns("printer_logs")}
+    except Exception:
+        _pl = set()
+    if _pl and "device" not in _pl:
+        # Which physical printer (its Bluetooth name). Four desks, four B1 Pros
+        # that all say "B1 Pro-…": this is how a desk on the wrong one is told.
+        stmts.append("ALTER TABLE printer_logs ADD COLUMN device VARCHAR")
     if "allow_reentry" not in cols:
         # Off, exactly as it has always been. A conference where people go out
         # for lunch needs this ON; a single-admission gate needs it OFF. Which
@@ -11183,11 +11191,36 @@ def printer_log_record(event_id: int, body: schemas.PrinterLogRecord, request: F
         event_id=event_id, staff_user_id=current_user.id,
         station=(body.station or "")[:60] or None, stage=stage, result=result,
         error=(body.error or "")[:500] or None, printer=(body.printer or "")[:120] or None,
+        device=(body.device or "").strip()[:80] or None,
         trace="\n".join(lines) or None,
         user_agent=(request.headers.get("user-agent") or "")[:300] or None,
         client_attempt_id=(body.client_attempt_id or "")[:80] or None))
     db.commit()
-    return {"ok": True, "already": False}
+    return {"ok": True, "already": False,
+            "shared_with": _printer_shared_with(db, event_id, body.device, body.station, current_user.id)}
+
+
+def _printer_shared_with(db, event_id, device, station, user_id):
+    """Other desks that connected to this same printer in the last 12 hours.
+    A B1 takes one link at a time, so two desks on one printer take turns
+    failing; the second desk is told who else has it, by name."""
+    device = (device or "").strip()
+    if not device:
+        return []
+    mine = (station or "").strip().lower()
+    since = datetime.utcnow() - timedelta(hours=12)
+    rows = db.query(models.PrinterLog).filter(
+        models.PrinterLog.event_id == event_id, models.PrinterLog.device == device,
+        models.PrinterLog.stage == "connect", models.PrinterLog.result == "ok",
+        models.PrinterLog.created_at >= since).order_by(models.PrinterLog.id.desc()).all()
+    out = {}
+    for r in rows:
+        theirs = (r.station or "").strip()
+        if theirs.lower() == mine and (theirs or r.staff_user_id == user_id):
+            continue
+        key = theirs.lower() or ("user:%s" % r.staff_user_id)
+        out.setdefault(key, {"station": theirs or None, "at": r.created_at})
+    return list(out.values())[:5]
 
 
 @app.get("/events/{event_id}/printer-log")
@@ -11204,7 +11237,7 @@ def printer_log_list(event_id: int, limit: int = 50, failed_only: bool = False,
     users = {u.id: (u.email or "") for u in db.query(models.User).filter(
         models.User.id.in_({r.staff_user_id for r in rows if r.staff_user_id}))} if rows else {}
     return [{"id": r.id, "at": r.created_at, "by": users.get(r.staff_user_id), "station": r.station,
-             "stage": r.stage, "result": r.result, "error": r.error, "printer": r.printer,
+             "stage": r.stage, "result": r.result, "error": r.error, "printer": r.printer, "device": r.device,
              "user_agent": r.user_agent, "trace": (r.trace or "").split("\n") if r.trace else []}
             for r in rows]
 

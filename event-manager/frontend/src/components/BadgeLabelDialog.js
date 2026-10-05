@@ -75,6 +75,20 @@ const PROFILES = {
 // 576-dot head land left of centre at two-thirds size).
 export const PRINTER_KEY = 'gha_printer';
 export const PRINTER_CHOICES = [['auto', 'Ask the printer (auto)'], ['v4', 'NIIMBOT B1 Pro · 300 dpi'], ['b1', 'NIIMBOT B1 · 203 dpi']];
+// Which physical printer this desk uses: its Bluetooth name ("B1 Pro-H123"),
+// learned on the first connect. With four desks and four B1 Pros that all
+// show up as "B1 Pro-…", picking a neighbour's printer is easy and costs both
+// desks — the printer takes one link at a time. A different pick is refused
+// with both names, and one tap makes the new one this desk's printer.
+export const STATION_PRINTER_KEY = 'gha_station_printer';
+export const savedStationPrinter = () => { try { return localStorage.getItem(STATION_PRINTER_KEY) || ''; } catch (e) { return ''; } };
+export const rememberStationPrinter = (name) => {
+    try { if (name) localStorage.setItem(STATION_PRINTER_KEY, name); else localStorage.removeItem(STATION_PRINTER_KEY); } catch (e) { /* noop */ }
+    b1Emit();
+};
+// Just the part that tells printers apart ("H123" of "B1 Pro-H123").
+export const printerTag = (name) => { const m = /-([^-]+)$/.exec(name || ''); return m ? m[1] : (name || ''); };
+export const wrongPrinterHint = (err) => `That is printer ${printerTag(err.device)}, but this desk's printer is ${printerTag(err.expected)} (the sticker on the iPad says which). Pick ${printerTag(err.expected)} — another desk is probably using ${printerTag(err.device)}. If this desk really has a new printer now, tap "Use ${printerTag(err.device)} for this desk".`;
 export const savedPrinter = () => { try { const v = localStorage.getItem(PRINTER_KEY); return v === 'v4' || v === 'b1' ? v : 'auto'; } catch (e) { return 'auto'; } };
 const profileFor = (info) => {
     const forced = savedPrinter();
@@ -144,6 +158,7 @@ const bluetoothError = (err) => {
     const name = err && err.name; const msg = String((err && err.message) || err || '');
     if (name === 'NotFoundError') return '';                                   // chooser closed without picking a printer
     if (name === 'ConnectTimeout') return CONNECT_TIMEOUT_HINT;
+    if (name === 'WrongPrinter') return wrongPrinterHint(err);
     if (name === 'NotAllowedError' || name === 'SecurityError') return 'Bluetooth was blocked for this site — allow it in the browser and try again.';
     if (name === 'NetworkError' || /GATT|disconnected|Not connected/i.test(msg)) return 'Lost the printer — switch the B1 on (blue light), keep it near, and try again.';
     if (/Web Bluetooth/i.test(msg)) return 'This browser cannot talk to the printer. Use Chrome on a laptop/Android, or the Bluefy browser on iPhone.';
@@ -159,9 +174,10 @@ const bluetoothError = (err) => {
 // a scan with no tap at all. Every print — automatic or from the dialog —
 // goes through one queue, because two jobs on one link interleave into
 // garbage on paper.
-const b1 = { busy: false, current: null, queue: [], listeners: new Set(), lastError: '', info: null };
+const b1 = { busy: false, current: null, queue: [], listeners: new Set(), lastError: '', info: null, device: null };
 const b1State = () => ({ connected: b1IsConnected(), busy: b1.busy, current: b1.current, queued: b1.queue.length, lastError: b1.lastError,
-                         info: b1.info, label: profileFor(b1.info).label, dpi: profileFor(b1.info).dpi });
+                         info: b1.info, label: profileFor(b1.info).label, dpi: profileFor(b1.info).dpi,
+                         device: b1.device, deskPrinter: savedStationPrinter() });
 // The dpi a label must be rendered at for the paired printer (203 until one is identified).
 export const b1Dpi = () => profileFor(b1.info).dpi;
 const b1Emit = () => { const st = b1State(); b1.listeners.forEach((fn) => { try { fn(st); } catch (e) { /* a listener never breaks printing */ } }); };
@@ -221,8 +237,20 @@ export const b1Connect = async (anyDevice = false) => {
     }
     try {
         const { info, profile } = await Promise.race([identifyPrinter(anyDevice), timedOut]);
-        b1.info = info; b1.lastError = ''; b1Emit();
-        return { ...info, label: profile.label, dpi: profile.dpi, trace: trace.slice() };
+        // A link that was already up skips the chooser, so keep the last name.
+        const device = (picked && picked.name) || b1.device || null;
+        const desk = savedStationPrinter();
+        if (device && desk && device !== desk) {
+            trace.push(`refused: "${device}" is not this desk's printer "${desk}"`);
+            try { await Niimbot.disconnect(); } catch (e) { /* already gone */ }
+            b1.info = null; b1.device = null; b1Emit();
+            const e = new Error(`Picked ${device}, this desk's printer is ${desk}.`);
+            e.name = 'WrongPrinter'; e.device = device; e.expected = desk;
+            throw e;
+        }
+        if (device && !desk) rememberStationPrinter(device);
+        b1.info = info; b1.device = device; b1.lastError = ''; b1Emit();
+        return { ...info, label: profile.label, dpi: profile.dpi, device, trace: trace.slice() };
     } catch (err) {
         try { err.trace = trace.slice(); } catch (e) { /* frozen error object */ }
         if (err && err.name === 'ConnectTimeout') {
@@ -242,19 +270,25 @@ const CONNECT_TIMEOUT_HINT = 'The printer did not answer. It only talks to one d
 export { CONNECT_TIMEOUT_HINT };
 // Send one printer attempt home (POST /events/:id/printer-log). Never throws and
 // never waits on the answer: a report must not slow or break the door.
-export const logPrinter = (eventId, { stage, ok, error, printer, trace, station } = {}) => {
-    if (!eventId) return;
+export const logPrinter = (eventId, { stage, ok, error, printer, trace, station, device } = {}) => {
+    if (!eventId) return Promise.resolve(null);
     const errText = error ? ((error.name && error.name !== 'Error' ? error.name + ': ' : '') + (error.message || String(error))) : undefined;
     try {
         reportPrinter(eventId, {
             stage, result: ok ? 'ok' : 'failed', station: station || undefined,
+            device: device || (error && error.device) || undefined,
             error: errText, printer: printer || undefined,
             trace: (trace || (error && error.trace) || []).slice(-150),
             client_attempt_id: attemptId(),
-        }).catch(() => { /* best effort */ });
-    } catch (e) { /* best effort */ }
+        }).then((r) => (r && r.data) || null).catch(() => null);
+    } catch (e) { return Promise.resolve(null); }
 };
-export const b1Disconnect = async () => { try { if (window.Niimbot) await window.Niimbot.disconnect(); } catch (e) { /* gone */ } b1.info = null; b1Emit(); };
+// "Desk 2 (14:05)" for the desks the server says also used this printer today.
+export const sharedWithText = (rows) => (rows || []).map((r) => {
+    const t = r.at ? new Date(String(r.at).endsWith('Z') ? r.at : r.at + 'Z') : null;
+    return `${r.station || 'a desk with no name'}${t && !isNaN(t) ? ` (${t.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })})` : ''}`;
+}).join(', ');
+export const b1Disconnect = async () => { try { if (window.Niimbot) await window.Niimbot.disconnect(); } catch (e) { /* gone */ } b1.info = null; b1.device = null; b1Emit(); };
 // Run `fn` when the printer is free. `label` is what the queue shows.
 export const b1Enqueue = (label, fn) => new Promise((resolve, reject) => {
     b1.queue.push({ label, fn, resolve, reject }); b1Emit(); b1Pump();
@@ -292,6 +326,7 @@ export default function BadgeLabelDialog({ request, eventId, station, onClose, o
     const [job, setJob] = useState(null);           // { url, blob, error, attemptId } for the current request
     const [btStatus, setBtStatus] = useState('');   // progress line while a Bluetooth print runs ('' = idle)
     const [btAnyDevice, setBtAnyDevice] = useState(false);   // after an empty chooser: next attempt lists every nearby device, not just "B1…"
+    const [btWrong, setBtWrong] = useState(null);   // a WrongPrinter error, for the "use this one" button
     const [btHint, setBtHint] = useState('');        // stays in the dialog (a toast is gone in 4 s) until the next attempt
     const [btTrace, setBtTrace] = useState([]);      // the driver's own log lines for this attempt — a phone has no console, so the dialog is the console
     const attendee = request?.attendee || null;
@@ -397,7 +432,7 @@ export default function BadgeLabelDialog({ request, eventId, station, onClose, o
             } catch (e) { /* logging never breaks printing */ }
             return origLog.apply(console, args);
         };
-        setBtHint(''); setBtTrace([]); setBtStatus('loading driver…');
+        setBtHint(''); setBtWrong(null); setBtTrace([]); setBtStatus('loading driver…');
         try {
             Niimbot = await loadNiimbot();
             prevDebug = Niimbot.DEBUG; Niimbot.DEBUG = true;
@@ -428,12 +463,13 @@ export default function BadgeLabelDialog({ request, eventId, station, onClose, o
                 stalled,
             ]);
             setBtStatus(''); setBtAnyDevice(false);
-            logPrinter(eventId, { stage: 'print', ok: true, printer: `${profile.label} ${profile.dpi} dpi`, trace, station });
+            logPrinter(eventId, { stage: 'print', ok: true, printer: `${profile.label} ${profile.dpi} dpi`, trace, station, device: paired && paired.device });
             await finishPrint('printed');
         } catch (err) {
             setBtStatus('');
             note(`✗ ${(err && (err.name + ': ' + err.message)) || err}`);
-            logPrinter(eventId, { stage: paired ? 'print' : 'connect', ok: false, error: err, printer: paired ? `${profileFor(paired).label}` : undefined, trace, station });
+            logPrinter(eventId, { stage: paired ? 'print' : 'connect', ok: false, error: err, printer: paired ? `${profileFor(paired).label}` : undefined, trace, station, device: paired && paired.device });
+            if (err && err.name === 'WrongPrinter') { setBtWrong(err); setBtHint(wrongPrinterHint(err)); return; }
             if (err && err.name === 'StallError') {
                 // Drop the link so the next tap starts clean instead of reusing a
                 // half-open connection the driver would happily consider "connected".
@@ -477,7 +513,11 @@ export default function BadgeLabelDialog({ request, eventId, station, onClose, o
                                 ? <img src={job.previewUrl || job.url} alt="Badge label preview" style={{ maxWidth: '100%', maxHeight: 420, imageRendering: 'pixelated' }} />
                                 : (job.error ? <Alert severity="error">{job.error}</Alert> : <CircularProgress size={28} />)}
                         </Box>
-                        {btHint && <Alert severity="info" sx={{ width: '100%' }}>{btHint}</Alert>}
+                        {btHint && <Alert severity="info" sx={{ width: '100%' }}
+                            action={btWrong ? (
+                                <Button color="inherit" size="small" onClick={() => { rememberStationPrinter(btWrong.device); setBtWrong(null); setBtHint(`Printer ${printerTag(btWrong.device)} is now this desk's printer. Tap print again.`); }}>
+                                    Use {printerTag(btWrong.device)} for this desk
+                                </Button>) : undefined}>{btHint}</Alert>}
                         {btTrace.length > 0 && (
                             <Box component="details" open={Boolean(btHint)} sx={{ width: '100%', fontSize: 12, color: 'text.secondary' }}>
                                 <Box component="summary" sx={{ cursor: 'pointer' }}>Printer log · last: {btTrace[btTrace.length - 1].replace(/^\S+\s/, '')}</Box>

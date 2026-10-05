@@ -1074,6 +1074,7 @@ class PrinterLog(Base):
     result = Column(String)            # ok | failed
     error = Column(String, nullable=True)
     printer = Column(String, nullable=True)      # what the printer said it is, when it said
+    device = Column(String, nullable=True, index=True)   # its Bluetooth name, e.g. "B1 Pro-H123" — tells the door's printers apart
     trace = Column(Text, nullable=True)          # driver log lines, newest last
     user_agent = Column(String, nullable=True)
     client_attempt_id = Column(String, nullable=True, unique=True)

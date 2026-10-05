@@ -26,7 +26,8 @@ import { authorizeScan, getScanLogs, searchAttendees, getEvents, walkInCreate, g
     getMyCapabilities, getPrintReport, setSharing, setAddonDay } from '../utils/api';
 import { formatVenueTime, statusLabel, isFlaggedStatus } from '../utils/datetime';
 import BadgeLabelDialog, { STATION_KEY, LABEL_SIZE_KEY, LABEL_ROLLS, savedLabelSize, rollShort, fullName, physicalCard,
-    canPrintBluetooth, useB1, b1Connect, b1IsConnected, b1Enqueue, b1PrintBlob, b1Dpi, rollFitsB1, PRINTER_KEY, PRINTER_CHOICES, savedPrinter, CONNECT_TIMEOUT_HINT, logPrinter } from './BadgeLabelDialog';
+    canPrintBluetooth, useB1, b1Connect, b1IsConnected, b1Enqueue, b1PrintBlob, b1Dpi, rollFitsB1, PRINTER_KEY, PRINTER_CHOICES, savedPrinter, CONNECT_TIMEOUT_HINT, logPrinter,
+    rememberStationPrinter, printerTag, wrongPrinterHint, sharedWithText } from './BadgeLabelDialog';
 import BluetoothIcon from '@mui/icons-material/Bluetooth';
 
 // The access zones a scanner can be checking. The BACKEND decides the outcome;
@@ -152,6 +153,7 @@ function CheckIn({ timezone: timezoneProp }) {
     const [printerBusy, setPrinterBusy] = useState(false);      // the Connect button
     const [connectAny, setConnectAny] = useState(false);        // after an empty chooser: the next tap lists every nearby device
     const [printerHint, setPrinterHint] = useState('');
+    const [wrongPrinter, setWrongPrinter] = useState(null);   // the WrongPrinter error, for its "use this one" button
     const [printerModel, setPrinterModel] = useState(savedPrinter);
     const rememberPrinterModel = (v) => { setPrinterModel(v); try { localStorage.setItem(PRINTER_KEY, v); } catch (e) { /* noop */ } };
     // What happened to the sticker for the person on screen: { attendeeId, phase, message }
@@ -444,10 +446,16 @@ function CheckIn({ timezone: timezoneProp }) {
     const closeLabel = () => setLabelReq(null);
     const canAutoPrint = () => autoPrint && canPrintBluetooth() && b1IsConnected() && rollFitsB1(labelSize);
     const connectPrinter = async () => {
-        setPrinterBusy(true); setPrinterHint('');
+        setPrinterBusy(true); setPrinterHint(''); setWrongPrinter(null);
         try {
             const info = await b1Connect(connectAny);
-            logPrinter(eventId, { stage: 'connect', ok: true, printer: `${(info && info.label) || 'Printer'} ${(info && info.dpi) || ''} dpi`, trace: info && info.trace, station });
+            logPrinter(eventId, { stage: 'connect', ok: true, printer: `${(info && info.label) || 'Printer'} ${(info && info.dpi) || ''} dpi`, trace: info && info.trace, station, device: info && info.device })
+                .then((r) => {
+                    // Another desk had this printer today: the two will take turns failing.
+                    if (r && r.shared_with && r.shared_with.length) {
+                        setPrinterHint(`Careful: printer ${printerTag(info.device)} was also connected today from ${sharedWithText(r.shared_with)}. One printer per desk — if that desk is still working, it will lose its printer.`);
+                    }
+                });
             setConnectAny(false);
             setFeedback({ severity: 'success', message: `${(info && info.label) || 'Printer'} connected (${(info && info.dpi) || 203} dpi) — admitted scans now print by themselves.` });
         } catch (err) {
@@ -459,6 +467,8 @@ function CheckIn({ timezone: timezoneProp }) {
                 setPrinterHint('No printer picked. Tap “Show all devices” and look for “B1 Pro-…” or “B1-…”. If it is not there either: (1) hold the printer’s power button until its light is on, (2) close the NIIMBOT app completely — a printer it holds is invisible to everyone else, (3) on iPhone check Settings → Bluefy → Bluetooth is on.');
             } else if (err && err.name === 'ConnectTimeout') {
                 setPrinterHint(CONNECT_TIMEOUT_HINT);
+            } else if (err && err.name === 'WrongPrinter') {
+                setWrongPrinter(err); setPrinterHint(wrongPrinterHint(err));
             } else {
                 setPrinterHint(`Could not connect: ${(err && err.message) || err}`);
             }
@@ -1130,8 +1140,8 @@ function CheckIn({ timezone: timezoneProp }) {
                                       color={printer.connected ? 'success' : 'default'}
                                       variant={printer.connected ? 'filled' : 'outlined'}
                                       label={printer.connected
-                                          ? (printer.busy ? `${printer.label} · printing ${printer.current}${printer.queued ? ` · ${printer.queued} waiting` : ''}` : `${printer.label} connected`)
-                                          : 'Printer not connected'}
+                                          ? (printer.busy ? `${printer.label} · printing ${printer.current}${printer.queued ? ` · ${printer.queued} waiting` : ''}` : `${printer.label}${printer.device ? ` ${printerTag(printer.device)}` : ''} connected`)
+                                          : (printer.deskPrinter ? `Printer ${printerTag(printer.deskPrinter)} not connected` : 'Printer not connected')}
                                       sx={{ height: 24 }} />
                                 {!printer.connected && (
                                     <Button size="small" variant="contained" onClick={connectPrinter} disabled={printerBusy}
@@ -1145,6 +1155,12 @@ function CheckIn({ timezone: timezoneProp }) {
                                 </Button>
                                 {printerHint && (
                                     <Typography variant="caption" sx={{ width: '100%', color: 'warning.main' }}>{printerHint}</Typography>
+                                )}
+                                {wrongPrinter && (
+                                    <Button size="small" variant="outlined" color="warning"
+                                            onClick={() => { rememberStationPrinter(wrongPrinter.device); setWrongPrinter(null); setPrinterHint(`Printer ${printerTag(wrongPrinter.device)} is now this desk's printer. Tap Connect printer again.`); }}>
+                                        Use {printerTag(wrongPrinter.device)} for this desk
+                                    </Button>
                                 )}
                             </Stack>
                         )}
@@ -1173,6 +1189,13 @@ function CheckIn({ timezone: timezoneProp }) {
                                         </TextField>
                                     )}
                                 </Stack>
+                                {canPrintBluetooth() && (
+                                    <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 1 }}>
+                                        {printer.deskPrinter
+                                            ? <>This desk's printer: <b>{printer.deskPrinter}</b> (learned on its first connect; any other printer is refused). <Button size="small" sx={{ py: 0, minWidth: 0 }} onClick={() => rememberStationPrinter('')}>Forget</Button></>
+                                            : "This desk's printer: not set yet — the first printer it connects to becomes its printer."}
+                                    </Typography>
+                                )}
                                 <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 1 }}>{zoneNote}</Typography>
                             </Box>
                         )}

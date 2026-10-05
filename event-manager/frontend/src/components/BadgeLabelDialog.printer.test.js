@@ -4,7 +4,7 @@
 // name, when it picked a neighbour's.
 //
 // Run: CI=true npx react-scripts test --watchAll=false BadgeLabelDialog.printer
-import { b1Connect, b1Disconnect, savedStationPrinter, rememberStationPrinter, STATION_PRINTER_KEY, printerTag } from './BadgeLabelDialog';
+import { b1Connect, b1Disconnect, savedStationPrinter, rememberStationPrinter, STATION_PRINTER_KEY, printerTag, isAppleMobile, canPrintBluetooth } from './BadgeLabelDialog';
 
 jest.mock('../utils/api', () => ({ badgeLabelBlob: jest.fn(), recordBadgePrint: jest.fn(), reportPrinter: jest.fn(() => Promise.resolve({ data: {} })) }));
 
@@ -79,4 +79,25 @@ test('the tag is the part on the sticker', () => {
     expect(printerTag('B1 Pro-H123')).toBe('H123');
     expect(printerTag('B1-77AB')).toBe('77AB');
     expect(printerTag('Printer')).toBe('Printer');
+});
+
+test('an iPad reports as a Mac in Safari; touch is what tells it apart', () => {
+    const ua = Object.getOwnPropertyDescriptor(window.navigator, 'userAgent');
+    const tp = Object.getOwnPropertyDescriptor(window.navigator, 'maxTouchPoints');
+    try {
+        Object.defineProperty(window.navigator, 'userAgent', { value: 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.3 Safari/605.1.15', configurable: true });
+        Object.defineProperty(window.navigator, 'maxTouchPoints', { value: 5, configurable: true });
+        expect(isAppleMobile()).toBe(true);
+        Object.defineProperty(window.navigator, 'maxTouchPoints', { value: 0, configurable: true });
+        expect(isAppleMobile()).toBe(false);                 // a real Mac
+    } finally {
+        if (ua) Object.defineProperty(window.navigator, 'userAgent', ua); else delete window.navigator.userAgent;
+        if (tp) Object.defineProperty(window.navigator, 'maxTouchPoints', tp); else delete window.navigator.maxTouchPoints;
+    }
+});
+
+test('Safari with beacio looks like any Web Bluetooth browser: the injected navigator.bluetooth is all it takes', () => {
+    expect(canPrintBluetooth()).toBe(true);                  // beforeEach installs one, as the extension does
+    Object.defineProperty(navigator, 'bluetooth', { value: undefined, configurable: true });
+    expect(canPrintBluetooth()).toBe(false);                 // plain Safari: the setup hint shows instead
 });

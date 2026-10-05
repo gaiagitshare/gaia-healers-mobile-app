@@ -27,7 +27,8 @@ import { authorizeScan, getScanLogs, searchAttendees, getEvents, walkInCreate, g
 import { formatVenueTime, statusLabel, isFlaggedStatus } from '../utils/datetime';
 import BadgeLabelDialog, { STATION_KEY, LABEL_SIZE_KEY, LABEL_ROLLS, savedLabelSize, rollShort, fullName, physicalCard,
     canPrintBluetooth, useB1, b1Connect, b1IsConnected, b1Enqueue, b1PrintBlob, b1Dpi, rollFitsB1, PRINTER_KEY, PRINTER_CHOICES, savedPrinter, CONNECT_TIMEOUT_HINT, logPrinter,
-    rememberStationPrinter, printerTag, wrongPrinterHint, sharedWithText } from './BadgeLabelDialog';
+    rememberStationPrinter, printerTag, wrongPrinterHint, sharedWithText,
+    preloadNiimbot, isAppleMobile, IOS_BLUETOOTH_SETUP } from './BadgeLabelDialog';
 import BluetoothIcon from '@mui/icons-material/Bluetooth';
 
 // The access zones a scanner can be checking. The BACKEND decides the outcome;
@@ -208,6 +209,7 @@ function CheckIn({ timezone: timezoneProp }) {
         getPrintReport(eventId).then((r) => setPrintReport(r.data || null)).catch(() => setPrintReport(null));
     };
     useEffect(() => { refreshPrintReport(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [eventId]);
+    useEffect(() => { preloadNiimbot(); }, []);   // driver ready before the first Connect tap
     const [activityLimit, setActivityLimit] = useState(25);
     const [showDecisionDetail, setShowDecisionDetail] = useState(false);
 
@@ -464,7 +466,7 @@ function CheckIn({ timezone: timezoneProp }) {
                 // Nothing picked — usually an empty list. Next tap casts the wide
                 // net, and the three things that empty the list are spelled out.
                 setConnectAny(true);
-                setPrinterHint('No printer picked. Tap “Show all devices” and look for “B1 Pro-…” or “B1-…”. If it is not there either: (1) hold the printer’s power button until its light is on, (2) close the NIIMBOT app completely — a printer it holds is invisible to everyone else, (3) on iPhone check Settings → Bluefy → Bluetooth is on.');
+                setPrinterHint('No printer picked. Tap “Show all devices” and look for “B1 Pro-…” or “B1-…”. If it is not there either: (1) hold the printer’s power button until its light is on, (2) close the NIIMBOT app completely — a printer it holds is invisible to everyone else, (3) on iPad/iPhone check Bluetooth is allowed for the browser (Settings → Bluefy → Bluetooth, or for Safari: Settings → Apps → Safari → Extensions → beacio is on for this site).');
             } else if (err && err.name === 'ConnectTimeout') {
                 setPrinterHint(CONNECT_TIMEOUT_HINT);
             } else if (err && err.name === 'WrongPrinter') {
@@ -1131,6 +1133,13 @@ function CheckIn({ timezone: timezoneProp }) {
                                 {stationOpen ? 'Done' : 'Station setup'}
                             </Button>
                         </Stack>
+                        {/* An iPad in plain Safari has no Bluetooth until the beacio
+                            extension is on: say how, instead of showing no printer at all. */}
+                        {!canPrintBluetooth() && isAppleMobile() && (
+                            <Typography variant="caption" sx={{ display: 'block', px: 1.5, pb: 1, mt: -0.5, color: 'warning.main' }}>
+                                {IOS_BLUETOOTH_SETUP}
+                            </Typography>
+                        )}
                         {/* The printer line. Green = paired and admitted scans print by
                             themselves; otherwise the one tap that makes it so. */}
                         {canPrintBluetooth() && (

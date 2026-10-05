@@ -52,7 +52,9 @@ const attemptId = () => (window.crypto?.randomUUID ? window.crypto.randomUUID() 
 // on its spring guides; a 40 mm roll gets white either side, a 50 mm roll
 // loses the sliver the head cannot reach anyway. The driver (MIT,
 // public/vendor/niimbot-*.js) speaks the BLE protocol from the page, so
-// Chrome (desktop / Android) and Bluefy on iPhone print without the NIIMBOT
+// Chrome (desktop / Android), Bluefy on iPhone/iPad, and Safari with the free
+// beacio extension (it installs the same navigator.bluetooth before the page
+// runs, so nothing here differs) print without the NIIMBOT
 // app. It resolves only once the printer confirmed the page — no “Printed ✓”
 // tap needed on that path.
 const NIIMBOT_DRIVER_URL = `${process.env.PUBLIC_URL || ''}/vendor/niimbot-2.6.0.js`;
@@ -123,8 +125,21 @@ const identifyPrinter = async (anyDevice) => {
     return { info, profile: profileFor(info) };
 };
 const B1_STALL_MS = 20000;                    // no word from the driver or printer for this long = stalled (its own timeouts are all shorter)
+// iPhone / iPad (an iPad's Safari says "Macintosh", so touch decides).
+export const isAppleMobile = () => {
+    try {
+        const ua = navigator.userAgent || '';
+        return /iPhone|iPad|iPod/.test(ua) || (/Macintosh/.test(ua) && navigator.maxTouchPoints > 1);
+    } catch (e) { return false; }
+};
+// What an iPad/iPhone needs before it can print here, when it cannot yet.
+export const IOS_BLUETOOTH_SETUP = 'This iPad cannot reach the printer yet. In Safari: install the free “beacio” app from the App Store, then Settings → Apps → Safari → Extensions → beacio: turn it on and set “Allow on every website”, and reload this page (not in a Private tab). Or open this page in the Bluefy browser.';
 export const canPrintBluetooth = () => { try { return Boolean(navigator.bluetooth); } catch (e) { return false; } };
 let niimbotLoading = null;
+// Fetch the driver ahead of the first tap. Safari (and Bluefy) only open the
+// printer chooser straight from a tap; downloading the driver inside that tap
+// can use the moment up, and the first Connect then fails for no visible reason.
+export const preloadNiimbot = () => { if (canPrintBluetooth()) loadNiimbot().catch(() => { /* the tap will retry and say why */ }); };
 const loadNiimbot = () => {
     if (window.Niimbot) return Promise.resolve(window.Niimbot);
     if (!niimbotLoading) {
@@ -161,7 +176,7 @@ const bluetoothError = (err) => {
     if (name === 'WrongPrinter') return wrongPrinterHint(err);
     if (name === 'NotAllowedError' || name === 'SecurityError') return 'Bluetooth was blocked for this site — allow it in the browser and try again.';
     if (name === 'NetworkError' || /GATT|disconnected|Not connected/i.test(msg)) return 'Lost the printer — switch the B1 on (blue light), keep it near, and try again.';
-    if (/Web Bluetooth/i.test(msg)) return 'This browser cannot talk to the printer. Use Chrome on a laptop/Android, or the Bluefy browser on iPhone.';
+    if (/Web Bluetooth/i.test(msg)) return 'This browser cannot talk to the printer. Use Chrome on a laptop/Android; on iPad/iPhone use Safari with the beacio extension, or the Bluefy browser.';
     if (/Connected printer is/i.test(msg)) return 'That printer is not a B1 or B1 Pro — this station only prints to those.';
     if (/counter stopped|never acknowledged/i.test(msg)) return 'The printer did not confirm the label — check the paper (lid closed, roll seated) and look at what came out.';
     return msg.length > 140 ? msg.slice(0, 137) + '…' : (msg || 'Print failed.');
@@ -266,7 +281,7 @@ export const b1Connect = async (anyDevice = false) => {
     }
 };
 // What to say when a picked printer never answered.
-const CONNECT_TIMEOUT_HINT = 'The printer did not answer. It only talks to one device at a time — close Bluefy and the NIIMBOT app on every other phone or iPad near it (or switch their Bluetooth off). If the printer is listed in iPad Settings → Bluetooth, tap it and choose “Forget This Device”. Then switch the printer off and on (wait for the blue light) and try again.';
+const CONNECT_TIMEOUT_HINT = 'The printer did not answer. It only talks to one device at a time — close the check-in page (Safari or Bluefy) and the NIIMBOT app on every other phone or iPad near it (or switch their Bluetooth off). If the printer is listed in iPad Settings → Bluetooth, tap it and choose “Forget This Device”. Then switch the printer off and on (wait for the blue light) and try again.';
 export { CONNECT_TIMEOUT_HINT };
 // Send one printer attempt home (POST /events/:id/printer-log). Never throws and
 // never waits on the answer: a report must not slow or break the door.
@@ -326,6 +341,7 @@ export default function BadgeLabelDialog({ request, eventId, station, onClose, o
     const [job, setJob] = useState(null);           // { url, blob, error, attemptId } for the current request
     const [btStatus, setBtStatus] = useState('');   // progress line while a Bluetooth print runs ('' = idle)
     const [btAnyDevice, setBtAnyDevice] = useState(false);   // after an empty chooser: next attempt lists every nearby device, not just "B1…"
+    useEffect(() => { if (request) preloadNiimbot(); }, [request]);   // driver ready before the print tap
     const [btWrong, setBtWrong] = useState(null);   // a WrongPrinter error, for the "use this one" button
     const [btHint, setBtHint] = useState('');        // stays in the dialog (a toast is gone in 4 s) until the next attempt
     const [btTrace, setBtTrace] = useState([]);      // the driver's own log lines for this attempt — a phone has no console, so the dialog is the console
@@ -525,6 +541,9 @@ export default function BadgeLabelDialog({ request, eventId, station, onClose, o
                                     {btTrace.join('\n')}
                                 </Box>
                             </Box>
+                        )}
+                        {!canPrintBluetooth() && isAppleMobile() && (
+                            <Alert severity="info" sx={{ width: '100%' }}>{IOS_BLUETOOTH_SETUP} Until then, Share → NIIMBOT prints this label.</Alert>
                         )}
                         <Typography variant="caption" color="text.secondary" alignSelf="flex-start">
                             {canPrintBluetooth()

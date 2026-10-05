@@ -23,6 +23,7 @@ if not rows:
 for (i, at, by, st, stage, res, err, prn, devn, ua, trace) in rows:
     dev = "iPad" if ua and "iPad" in ua else "iPhone" if ua and "iPhone" in ua else "Android" if ua and "Android" in ua else "desktop" if ua else "?"
     if ua and "Bluefy" in ua: dev += "/Bluefy"
+    elif ua and "Safari" in ua and "CriOS" not in ua and dev in ("iPad", "iPhone"): dev += "/Safari"
     print("#%d %s UTC  %-7s %-6s %-26s %-14s %-16s %s  %s%s" % (i, str(at)[:19], stage, res, by or "?", st or "-", devn or "-", dev,
           prn or "", ("  — " + err) if err else ""))
     if a.trace:

@@ -990,3 +990,42 @@ body.gaia-v2 [data-screen="today"] .g-super-event { border-radius: var(--v3-radi
     min-height: 320px !important; height: 100%; padding: 32px !important; max-width: 700px;
   }
 }
+
+/* ---------- Energy page on wide screens: one column, the Home's width ------
+   Same 1180px column as Home and Today. Each tab's panel used to stop at
+   72ch (gaia-fit.css), which left the right third of the page empty under a
+   full-width switcher; panels now use the whole column. The toolkit becomes
+   two columns of rows; an open row takes the full width so its tool has room. */
+@media (min-width: 1100px) {
+  body.gaia-v2 [data-screen="wellness"] .g-page.g-energy > * {
+    width: 100%;
+    max-width: 1180px;
+    margin-inline: auto;
+  }
+  body.gaia-v2 [data-screen="wellness"] .g-energy-panel { max-width: none; }
+  body.gaia-v2 [data-screen="wellness"] .g-energy-intro { max-width: 1180px; }
+  body.gaia-v2 [data-screen="wellness"] .g-energy-intro > p:last-child { max-width: 62ch; }
+  body.gaia-v2 [data-screen="wellness"] .g-well--nudge .g-card__actions .g-btn {
+    width: auto;
+    min-width: 260px;
+    padding-inline: 28px;
+  }
+  body.gaia-v2 [data-screen="wellness"] .g-toolkit {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    align-items: start;
+    gap: 12px;
+  }
+  body.gaia-v2 [data-screen="wellness"] .g-toolkit > .g-tk.is-open,
+  body.gaia-v2 [data-screen="wellness"] .g-toolkit > .g-tk:last-child:nth-child(odd) { grid-column: 1 / -1; }
+  /* The button grows to fill its actions row; keep it at its own width. */
+  body.gaia-v2 [data-screen="wellness"] .g-well--nudge .g-card__actions .g-btn { flex: 0 0 auto; }
+  /* The chakra figure is a photo on pure black; on the wider panel its
+     rectangle showed against the card's green-tinted fill. Put the hero back
+     on the near-black it was drawn for, and feather the photo's edges. */
+  body.gaia-v2 [data-screen="wellness"] .g-chakra-hero { background-color: #05070a; }
+  body.gaia-v2 [data-screen="wellness"] .g-chakra-hero__fig img {
+    -webkit-mask-image: radial-gradient(ellipse 72% 80% at 50% 50%, #000 62%, transparent 100%);
+    mask-image: radial-gradient(ellipse 72% 80% at 50% 50%, #000 62%, transparent 100%);
+  }
+}

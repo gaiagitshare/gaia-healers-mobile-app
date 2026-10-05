@@ -1410,3 +1410,15 @@ body.gaia-v2 [data-screen="academy"] .g-access--link > .g-access__img--ph {
   body.gaia-v2 [data-screen="bookings"] .g-bookings > .g-super-list:has(> .g-super-row) > :not(.g-super-row) { grid-column: 1 / -1; }
   body.gaia-v2 [data-screen="bookings"] .g-bookings > .g-super-list > .g-super-row { margin: 0; }
 }
+
+/* Find a Healer: a single practitioner's pin (gaia-directory.js divIcon). */
+.g-dir-pin { background: none; border: 0; }
+.g-dir-pin span {
+  display: block;
+  width: 22px;
+  height: 22px;
+  border: 3px solid #fff;
+  border-radius: 50%;
+  background: #42db86;
+  box-shadow: 0 0 0 4px rgba(66, 219, 134, 0.35), 0 2px 6px rgba(0, 0, 0, 0.35);
+}

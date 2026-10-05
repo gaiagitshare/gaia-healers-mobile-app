@@ -422,6 +422,23 @@ body.gaia-v2 .g-super-home.g-guest > #home-announcements:not(:empty) { margin-bo
   .g-guest .gg-event__art { aspect-ratio: auto; }
 }
 
+/* —— Today, signed out (renderToday adds .g-guest .g-guest-today) ————————
+   Same container as the guest Home; the cards (daily energy, sky) are owned
+   by their own files, so only the spacing between them is set here. */
+body.gaia-v2 .g-super-home.g-guest-today > *,
+body.gaia-v2 .g-super-home.g-guest-today > section.g-super-today__head { margin-top: 0; }
+body.gaia-v2 .g-super-home.g-guest-today > * + :not(:empty) { margin-top: var(--gg-gap); }
+body.gaia-v2 .g-super-home.g-guest-today > .gg-join { margin-top: var(--gg-section); }
+.g-guest-today .g-super-today__head { padding: 4px 0 6px; }
+.g-guest-today .g-super-today__head h1 {
+  margin: 6px 0 4px;
+  font-size: clamp(30px, 6cqi, 44px);
+  font-weight: 600;
+  line-height: 1.08;
+  letter-spacing: -0.02em;
+}
+.g-guest-today .g-super-today__head > p:not(.g-super-kicker) { color: var(--gg-text-2); font-size: clamp(15px, 2.2cqi, 17px); }
+
 /* —— Phones: room for the tab bar; quieter section rhythm —————————————— */
 @media (max-width: 1023px) {
   body.gaia-v2 .g-super-home.g-guest { padding-bottom: 110px; }

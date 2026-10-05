@@ -979,7 +979,7 @@ body.gaia-booking-open{overflow:hidden;}
     const hasAccess = grants.length > 0;
     if (cap) cap.textContent = hasAccess
       ? grants.length + ' course' + (grants.length === 1 ? '' : 's') + ' available in your Academy.'
-      : (state.authed ? 'No courses yet.' : 'Sign in to see your courses.');
+      : (state.authed ? 'No courses yet.' : 'Courses and certifications from Gaia Healers.');
     const hub = courses.portalUrl || (portalBase() + '/courses/library-v2');
     const academyEntry = grants.find((grant) => grant && grant.openUrl)?.openUrl || hub;
     const cat = (state.catalog && Array.isArray(state.catalog.courses) && state.catalog.courses.length)
@@ -1034,7 +1034,7 @@ body.gaia-booking-open{overflow:hidden;}
         + '<p class="g-card__value g-card__value--lg">Continue learning</p>'
         + '<p class="g-card__meta">These are the courses in your account. Lessons and certificates open securely in the Gaia Healers Academy.</p>'
         + '<div class="g-card__actions"><button type="button" class="g-btn g-btn--primary g-btn--sm" data-course-open="' + esc(academyEntry) + '" data-course-title="Gaia Healers Academy">Open Academy →</button></div></article>'
-      : '<article class="g-card g-card--feature"><p class="g-card__label">Academy</p>'
+      : '<article class="g-card g-card--feature">'
         + '<p class="g-card__value g-card__value--lg">Learn & get certified</p>'
         + '<p class="g-card__meta">Your courses and certifications appear here automatically. Browse the catalogue below, or explore a membership to unlock more.</p>'
         + '<div class="g-card__actions"><button type="button" class="g-btn g-btn--primary g-btn--sm" ' + (state.authed ? 'data-track-cta' : 'data-academy-signin') + '>' + (state.authed ? 'View memberships →' : 'Sign in →') + '</button></div></article>';
@@ -1097,14 +1097,14 @@ body.gaia-booking-open{overflow:hidden;}
       meta = c.reason || 'Coming soon to Gaia Healers';
       act = '<span class="g-chip g-access__act">Soon</span>';
     } else {
-      meta = c.reason || 'Not included in your membership';
+      meta = c.reason === '' ? '' : (c.reason || 'Not included in your membership');
       act = interested
         ? '<span class="g-chip g-chip--pending g-access__act">Requested</span>'
         : '<span class="g-chip g-chip--lock g-access__act">Members</span>';
     }
     return '<div class="g-access ' + cls + '"><div class="g-access__body">'
       + '<span class="g-access__name">' + esc(c.name) + '</span>'
-      + '<span class="g-access__meta">' + esc(meta) + '</span></div>' + act + '</div>';
+      + (meta ? '<span class="g-access__meta">' + esc(meta) + '</span>' : '') + '</div>' + act + '</div>';
   }
 
   // Community = the live "My Access" unlock grid (real GHL tags via
@@ -1127,7 +1127,7 @@ body.gaia-booking-open{overflow:hidden;}
     if (!(state.authed && acc && acc.communities)) {
       if (sub) sub.textContent = 'Sign in to see which circles your membership opens.';
       const preview = ['All Gaia Healers', 'Bio-Well Practitioners', 'BioPulsar Practitioners', 'BioTekna Practitioners', 'ASEA Community', 'BrainTap Community', 'LifeWave Community', 'Golden Practitioner Circle']
-        .map((name) => accessItem({ name: name, reason: 'Sign in to check your access' }, 'locked')).join('');
+        .map((name) => accessItem({ name: name, reason: '' }, 'locked')).join('');   // the card above already asks to sign in
       box.innerHTML =
         announcementsHtml(state.announcements)
         + '<article class="g-card g-card--feature"><p class="g-card__label">Community</p>'

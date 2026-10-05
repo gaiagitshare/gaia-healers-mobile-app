@@ -887,13 +887,25 @@ body.gaia-booking-open{overflow:hidden;}
     const p = (state.data && state.data.profile && state.data.profile.profile) || {};
     const email = p.email || ''; const contactId = p.contactId || p.id || '';
     if (!state.authed || (!email && !contactId)) return;
+    // renderAcademy runs more than once (again when owned courses load); only
+    // the newest run may insert, or "Your courses" appeared twice.
+    const run = (renderSyncedAcademy.run = (renderSyncedAcademy.run || 0) + 1);
     const owned = await ensureAcademyOwned();
+    if (run !== renderSyncedAcademy.run || !box.isConnected) return;
     if (!owned || !owned.length) return;
     const data = { courses: owned };
     const prog = state.academyProgress || {};
     try { window.GaiaAcademyPlayer && window.GaiaAcademyPlayer.setMember && window.GaiaAcademyPlayer.setMember({ email: email, contactId: contactId, progress: prog }); } catch (e) {}
-    const shown = data.courses.filter((c) => (c.sections || []).some((sec) => (sec.lessons || []).length));
-    if (!shown.length) return;
+    // Every owned course is listed. One whose videos are not in the app yet
+    // (most GHL courses are not synced) opens in the Academy portal instead of
+    // vanishing: it used to be dropped here AND hidden from the catalogue.
+    const shown = data.courses;
+    const grants = (state.data.courses && Array.isArray(state.data.courses.courses)) ? state.data.courses.courses : [];
+    const portalFor = (c) => {
+      const k = acadKey(c.title);
+      const g = grants.find((x) => acadKey(x.title || x.name) === k && x.openUrl);
+      return (g && g.openUrl) || (state.data.courses && state.data.courses.portalUrl) || (portalBase() + '/courses/library-v2');
+    };
     const courseHtml = shown.map((c) => {
       const lessons = (c.sections || []).reduce((arr, sec) => arr.concat(sec.lessons || []), []);
       const cp = prog[c.id] || {}; const doneSet = new Set(cp.completed || []);
@@ -905,22 +917,25 @@ body.gaia-booking-open{overflow:hidden;}
           + '<span class="g-sync__ltext"><strong>' + esc(l.title) + '</strong></span>'
           + (isDone ? '<span class="g-sync__ldone">Done</span>' : '<i class="ph ph-caret-right g-sync__lgo" aria-hidden="true"></i>')
           + '</button>';
-      }).join('') : '<p class="g-sync__empty">Your videos for this course are syncing — check back shortly.</p>';
+      }).join('') : '<p class="g-sync__empty">This course opens in the Gaia Healers Academy.</p>'
+        + '<button type="button" class="g-btn g-btn--secondary g-btn--sm" data-sync-portal="' + esc(portalFor(c)) + '" data-sync-title="' + esc(c.title) + '">Open in the Academy →</button>';
       return '<details class="g-sync" data-course="' + esc(c.id) + '">'
         + '<summary class="g-sync__head">'
         + (c.poster ? '<img class="g-sync__poster" src="' + esc(c.poster) + '" alt="" loading="lazy"/>' : '<span class="g-sync__poster g-sync__poster--ph"><i class="ph ph-graduation-cap" aria-hidden="true"></i></span>')
         + '<span class="g-sync__meta"><strong>' + esc(c.title) + '</strong>'
-        + '<small>' + lessons.length + ' video' + (lessons.length === 1 ? '' : 's') + (pct ? ' · ' + pct + '% complete' : '') + '</small>'
-        + '<span class="g-acadprog"><span style="width:' + pct + '%"></span></span></span>'
+        + '<small>' + (lessons.length ? lessons.length + ' video' + (lessons.length === 1 ? '' : 's') + (pct ? ' · ' + pct + '% complete' : '') : 'Opens in the Academy') + '</small>'
+        + (lessons.length ? '<span class="g-acadprog"><span style="width:' + pct + '%"></span></span>' : '') + '</span>'
         + '<i class="ph ph-caret-down g-sync__chev" aria-hidden="true"></i></summary>'
         + '<div class="g-sync__lessons">' + rows + '</div></details>';
     }).join('');
     const header = '<article class="g-card g-card--feature"><p class="g-card__label">Your Academy · live from your membership</p>'
       + '<p class="g-card__value g-card__value--lg">Your courses</p>'
       + '<p class="g-card__meta">' + data.courses.length + ' courses unlocked — tap one to see its videos.</p></article>';
-    const host = document.createElement('div'); host.className = 'g-page-sec';
+    box.querySelectorAll('[data-acad-sync]').forEach((n) => n.remove());
+    const host = document.createElement('div'); host.className = 'g-page-sec'; host.setAttribute('data-acad-sync', '');
     host.innerHTML = header + '<div class="g-sync-list">' + courseHtml + '</div>';
     box.insertBefore(host, box.firstChild);
+    host.querySelectorAll('[data-sync-portal]').forEach((b) => b.addEventListener('click', () => window.GaiaInApp?.open?.(b.dataset.syncPortal, b.dataset.syncTitle || 'Gaia Healers Academy')));
     host.querySelectorAll('.g-sync__lesson').forEach((b) => b.addEventListener('click', () => {
       const det = b.closest('.g-sync'); const cid = det && det.dataset.course;
       const course = data.courses.find((c) => c.id === cid);

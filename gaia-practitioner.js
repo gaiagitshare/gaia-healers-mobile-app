@@ -221,7 +221,7 @@
           <p class="gaia-empty__text">${inactive ? 'Your Gaia Practitioners account is not active. Contact Gaia Practitioners to restore access, or connect a different account.' : 'The Gaia Practitioners account you connected is not a practitioner account.'}</p>
           ${status.practitioner_email ? `<p class="g-prac__muted">Connected as ${esc(status.practitioner_email)}</p>` : ''}
           <p class="g-prac__muted">${inactive ? 'Your Gaia member account is still available in You.' : 'If you practise with Gaia, sign in with your practitioner account. If you are a client, your readings are under You.'}</p>
-          <a class="g-btn g-btn--sm" href="${esc(proxyBase())}/api/practitioners/connect">Connect a different account</a>
+          <a class="g-btn g-btn--primary g-btn--sm" href="${esc(proxyBase())}/api/practitioners/connect">Connect a different account</a>
           <button type="button" class="g-btn g-btn--ghost g-btn--sm" data-prac-action="disconnect">Disconnect</button>
         </div>`);
         return;
@@ -231,7 +231,7 @@
           ${lastAttempt()}
           <p class="gaia-empty__text">Your account is connected, but we could not read your practitioner profile.</p>
           ${status.practitioner_email ? `<p class="g-prac__muted">Connected as ${esc(status.practitioner_email)}</p>` : ''}
-          <a class="g-btn g-btn--sm" href="${esc(proxyBase())}/api/practitioners/connect">Try again</a>
+          <a class="g-btn g-btn--primary g-btn--sm" href="${esc(proxyBase())}/api/practitioners/connect">Try again</a>
           <button type="button" class="g-btn g-btn--ghost g-btn--sm" data-prac-action="disconnect">Disconnect</button>
         </div>`);
         return;
@@ -242,7 +242,7 @@
         paint(`<div class="gaia-empty">
           <p class="gaia-empty__text">Your Gaia Practitioners connection needs to be renewed.</p>
           ${status.practitioner_email ? `<p class="g-prac__muted">Connected as ${esc(status.practitioner_email)}</p>` : ''}
-          <a class="g-btn g-btn--sm" href="${esc(proxyBase())}/api/practitioners/connect">Reconnect</a>
+          <a class="g-btn g-btn--primary g-btn--sm" href="${esc(proxyBase())}/api/practitioners/connect">Reconnect</a>
         </div>`);
         return;
       }
@@ -250,7 +250,7 @@
         ${lastAttempt()}
         <p class="gaia-empty__text">Connect your Gaia Practitioners account to see your clients here.</p>
         <p class="g-prac__muted">Your Gaia login stays as it is. This links your practitioner account to it.</p>
-        <a class="g-btn g-btn--sm" href="${esc(proxyBase())}/api/practitioners/connect">Connect</a>
+        <a class="g-btn g-btn--primary g-btn--sm" href="${esc(proxyBase())}/api/practitioners/connect">Connect</a>
       </div>`);
     }
     async function disconnect() {

@@ -848,7 +848,7 @@
       + '<h1>' + greeting + '</h1>'
       + '<p class="g-super-date">' + esc(dateLabel()) + '</p>'
       + '<p>' + (authed ? 'Your healing journey is waiting.' : 'What does your energy need today?') + '</p>'
-      + (authed ? '' : '<div class="g-super-discover g-super-discover--solo"><a class="g-btn g-btn--primary" href="home.html?view=wellness&tab=check">' + icon('sparkle') + ' Check my energy</a></div>') + '</div><div class="g-super-hero__art"><picture><source media="(min-width: 900px)" type="image/webp" srcset="assets/gaia-hero-moon.webp" /><source media="(min-width: 900px)" srcset="assets/gaia-hero-moon.png" /><source type="image/webp" srcset="assets/gaia-hero-moon-wide.webp" /><img src="assets/gaia-hero-moon-wide.png" alt="Person meditating in lotus pose under a full moon over mountains" width="1024" height="576" loading="eager" /></picture></div></section>'
+      + (authed ? '' : '<div class="g-super-discover g-super-discover--solo"><a class="g-btn g-btn--primary" href="home.html?view=wellness&tab=check">' + icon('sparkle') + ' Check my energy</a></div>') + '</div><div class="g-super-hero__art"><picture><source type="image/webp" srcset="assets/gaia-hero-moon-wide.webp" /><img src="assets/gaia-hero-moon-wide.png" alt="Person meditating in lotus pose under a full moon over mountains" width="1024" height="576" loading="eager" /></picture></div></section>'
       // A member never reaches this point (renderHomeMember above); this is the
       // guest on-ramp: the tools a stranger can use now, one way in, and the
       // gathering in its compact form. The booking card host stays for Today.

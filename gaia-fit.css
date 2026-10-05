@@ -801,7 +801,7 @@ body.gaia-v2 .g-super-home .g-super-hero__art img {
 
 @media (min-width: 900px) {
   body.gaia-v2 .g-super-home .g-super-hero__art img {
-    object-position: center 42%;
+    object-position: center 24%;
   }
 }
 
@@ -926,8 +926,11 @@ body.gaia-v2 .g-super-home .g-feature-event__art img {
     border: 0;
   }
 
+  /* The hero is a ~3:1 strip here, so the 16:9 photo is cut top and bottom.
+     Aim the cut at the meditator (and the lower half of the moon) rather
+     than the middle, which used to leave only the top of the figure's head. */
   body.gaia-v2 .g-super-home .g-super-hero__art img {
-    object-position: center 42%;
+    object-position: center 24%;
   }
 
   body.gaia-v2 .g-super-home .g-super-hero .g-super-hero__intro {

@@ -491,6 +491,53 @@ Practice screen, which shows each state in plain words and what the last
 attempt brought back (`?practitioners=failed&reason=`). After a verified link
 the GHL tag `gaiapractitioner` is written to the contact, best effort.
 
+### Gaia Practitioners: the tools their MCP offers (measured 5 Oct 2026)
+
+`tools/list` on staging with the live link answers 22 tools (names only;
+arguments in brackets): list_customers, search_customers(query),
+get_customer(customerId), get_customer_scan(customerId),
+get_scan_trend(customerId, summary_only), compare_protocol_before_after(customerId, limit),
+get_research_results(customerId), get_practice_research_analytics,
+list_flagged_customers(minSeverity), search_customers_by_scan(query, direction, sinceDays),
+suggest_follow_ups, get_client_summary(customerId), get_practice_performance,
+list_appointments(limit), list_products, **get_customer_recommendations(customerId)**
+("the AI-generated recommendations/scripts for a customer"),
+get_customer_files(customerId) (a LISTING: names, no contents), list_orders(limit),
+list_services, get_practitioner_profile, get_customer_reviews(customerId),
+get_dashboard_summary.
+
+So, for Nima's "can our AI read the files or the AI-generated guides": the
+files cannot be read (listing only, no content tool); the guides CAN — they are
+`get_customer_recommendations`, text, per customer. Built 5 Oct 2026:
+
+- `memberGuides(cfg, memberId)` in `member-link.js` reads them by two roads:
+  the member road (their member-mcp, if it ever offers `get_my_recommendations`
+  or similar — it did not on 5 Oct) and the practitioner road (the practitioner
+  who recorded the link has connected THEIR Gaia Practitioners account in our
+  app; their token reads their customer's guides). No road → null, silently.
+- `shapeGuides` keeps at most three items, 400 chars each, newest first, and
+  drops any line that quotes a reading (energy/stress/… followed by a number);
+  `guidesForModel` makes one block ≤ 1400 chars.
+- `buildMemberVoiceContext` adds that block ONLY when `guides_to_assist` is on
+  — checked on every build; the 60 s context cache is keyed on the switch, and
+  a POST to `/api/member/prefs` drops the 10-minute guides cache. Off: the model
+  is told only where the switch lives. On but nothing readable: told not to
+  invent any.
+- Each read is one `guides_read` audit event in `data/member-links.json`
+  (road and item count, never the text); `linkDayCounts` and the usage
+  report's MEMBER LINKS line count them; the alert sweep raises
+  `member-links:guide-reads` (warning) at ≥ 30 reads in a day and more than
+  ten per sharing member. The model is told to say, the first time it draws on
+  a guide, where it comes from.
+- `/api/practitioners/linked-clients` carries `guides_to_assist` per client
+  (a boolean, never the guides); the Practice tab counts them in the one-line
+  summary, tags them in the list and says so on the client card.
+- The partner's response shape for `get_customer_recommendations` is NOT yet
+  measured (no connected practitioner had a Gaia-member client on 5 Oct);
+  `shapeGuides` accepts title/name/subject, content/text/script/recommendation/
+  body/summary and created_at/date, and ignores the rest. First real read:
+  check the proxy log and, if the shape differs, extend `shapeGuides`.
+
 ### Gaia Avatar (app layer, no server part)
 
 `gaia-avatar.js` + `gaia-avatar.css` draw the approved character (six
@@ -530,7 +577,12 @@ booleans per member (`member-prefs.js`, `PREF_KEYS`), kept server-side in
 non-booleans are dropped. Today: `next_level_collapsed` (the Next level card
 on You folded to one line) and `readings_explainer_collapsed` ("What these
 mean" on My readings folded) and `practitioner_card_dismissed` ("Become a
-practitioner" on You dismissed with Not now).
+practitioner" on You dismissed with Not now), `avatar_idle_off`,
+`avatar_hello_chime`, and `guides_to_assist` — a SEPARATE consent, offered in
+"Your data and sharing" only to a linked member, off by default: may Gaia
+Assist read the guides their practitioner wrote for them. Nothing reads it yet;
+it exists so the guide feature below can ship behind a consent that already
+has a record.
 
 ### Usage accounting
 

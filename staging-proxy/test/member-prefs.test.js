@@ -13,14 +13,14 @@ const { getPrefs, setPrefs, PREF_KEYS } = await import('../member-prefs.js');
 
 test('defaults are false; only allowed boolean keys are stored; unknown keys are dropped', () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'prefs-')); const file = path.join(dir, 'p.json');
-  assert.deepEqual(getPrefs('c1', { file }), { next_level_collapsed: false, readings_explainer_collapsed: false, practitioner_card_dismissed: false, avatar_idle_off: false, avatar_hello_chime: false });
-  assert.deepEqual(setPrefs('c1', { next_level_collapsed: true, evil: '<script>', next_level_collapsed_x: true }, { file }), { next_level_collapsed: true, readings_explainer_collapsed: false, practitioner_card_dismissed: false, avatar_idle_off: false, avatar_hello_chime: false });
+  assert.deepEqual(getPrefs('c1', { file }), { next_level_collapsed: false, readings_explainer_collapsed: false, practitioner_card_dismissed: false, avatar_idle_off: false, avatar_hello_chime: false, guides_to_assist: false });
+  assert.deepEqual(setPrefs('c1', { next_level_collapsed: true, evil: '<script>', next_level_collapsed_x: true }, { file }), { next_level_collapsed: true, readings_explainer_collapsed: false, practitioner_card_dismissed: false, avatar_idle_off: false, avatar_hello_chime: false, guides_to_assist: false });
   const raw = JSON.parse(fs.readFileSync(file, 'utf8'));
   assert.deepEqual(Object.keys(raw.c1).sort(), ['next_level_collapsed', 'updated_at']);
   assert.equal(setPrefs('c1', { next_level_collapsed: 'yes' }, { file }).next_level_collapsed, true, 'a string is not a boolean: ignored');
   assert.equal(setPrefs('c1', { next_level_collapsed: false }, { file }).next_level_collapsed, false);
   assert.equal(setPrefs('', { next_level_collapsed: true }, { file }), null, 'no member, nothing stored');
-  assert.deepEqual(getPrefs('c2', { file }), { next_level_collapsed: false, readings_explainer_collapsed: false, practitioner_card_dismissed: false, avatar_idle_off: false, avatar_hello_chime: false }, 'members do not see each other');
+  assert.deepEqual(getPrefs('c2', { file }), { next_level_collapsed: false, readings_explainer_collapsed: false, practitioner_card_dismissed: false, avatar_idle_off: false, avatar_hello_chime: false, guides_to_assist: false }, 'members do not see each other');
   assert.equal((fs.statSync(file).mode & 0o777), 0o600);
   assert.ok(Object.keys(PREF_KEYS).length >= 1);
 });
@@ -55,4 +55,20 @@ test('the app: Next level folds through the prefs route, empty cards fold to one
   const srv = read('staging-proxy/server.js');
   assert.match(srv, /url\.pathname === '\/api\/member\/prefs'/);
   assert.match(srv, /requireSessionMember\(req, res, origin\);\n      if \(!memberContext\) return;\n      const id = memberContext\.contactId/, 'signed-in members only, keyed by their own id');
+});
+
+test('guides_to_assist is a recorded consent: allowed, off by default, and the sharing card offers it only once linked', async () => {
+  assert.ok('guides_to_assist' in PREF_KEYS);
+  const { default: fs } = await import('node:fs');
+  const { default: os } = await import('node:os');
+  const { default: path } = await import('node:path');
+  const file = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'prefs-')), 'p.json');
+  assert.equal(getPrefs('m1', { file }).guides_to_assist, false);
+  assert.equal(setPrefs('m1', { guides_to_assist: true }, { file }).guides_to_assist, true);
+  const ui = fs.readFileSync(new URL('../../gaia-my-readings.js', import.meta.url), 'utf8');
+  const card = ui.slice(ui.indexOf('function dataSharingCard'), ui.indexOf('let lastSummary'));
+  assert.match(card, /status\.linked \? `<div class="g-rows g-datashare__consent">/, 'the consent row exists only for a linked member');
+  assert.match(card, /data-readings-action="toggle-guides"/);
+  assert.match(card, /nothing is read either way/, 'the copy says plainly that nothing reads it yet');
+  assert.match(ui, /body: \{ prefs: \{ guides_to_assist: next \} \}/, 'the toggle is stored server-side');
 });

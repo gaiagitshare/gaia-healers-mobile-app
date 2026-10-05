@@ -10,7 +10,11 @@
   async function request(method, body) {
     const r = await fetch(base() + '/api/assist/onboarding', { method, credentials: 'include', cache: 'no-store', headers: { 'Content-Type': 'application/json' }, body: body ? JSON.stringify(body) : undefined, signal: AbortSignal.timeout(25000) });
     const data = await r.json();
-    if (!r.ok || !data.ok) throw new Error(r.status === 401 ? 'Your session has expired. Sign out and sign in again.' : 'We couldn’t connect to your Gaia profile. Your choices are still here. Please try again.');
+    // The status read answers { ok, state, schema, … } from GHL, or just
+    // { state: 'complete', source: 'record' } when GHL is down and the member
+    // already finished (the outage-safe gate). Both are answers, not failures.
+    const answered = data.ok || (method === 'GET' && typeof data.state === 'string');
+    if (!r.ok || !answered) throw new Error(r.status === 401 ? 'Your session has expired. Sign out and sign in again.' : 'We couldn’t connect to your Gaia profile. Your choices are still here. Please try again.');
     return data;
   }
   function path() { return state.schema.filter(s => !s.showIf || (state.answers.primary_interests || []).includes(s.showIf)); }
@@ -319,7 +323,7 @@
     state.mode = 'loading'; state.error = ''; render();
     checkPromise = request('GET').then(data => {
       if (generation !== state.generation) return false;
-      state.schema = data.schema; state.answers = data.answers; state.name = data.member.name.split(/\s+/)[0]; state.nextStep = data.nextStep;
+      state.schema = data.schema || state.schema; state.answers = data.answers || {}; state.name = String(data.member?.name || '').split(/\s+/)[0]; state.nextStep = data.nextStep;
       if (data.state === 'complete') { state.done = true; state.mode = 'bypass'; lock(false); window.GaiaAppGuard?.set('ready'); if (force) document.dispatchEvent(new CustomEvent('gaia:onboarding-complete')); return true; }
       window.GaiaAppGuard?.set('onboarding_required'); state.mode = 'intro'; render(); return false;
     }).catch(e => { if (generation === state.generation) { window.GaiaAppGuard?.set('unavailable'); state.mode = 'error'; state.error = e.message; render(); } return false; });
@@ -348,7 +352,7 @@
         if (JSON.stringify(state.selected) !== JSON.stringify(state.answers[state.step] || []) || state.text) return;
         try {
           const data = await request('GET');
-          state.answers = data.answers;
+          state.answers = data.answers || state.answers;
           if (data.completedByTag) { state.done = true; state.mode = 'reveal'; document.dispatchEvent(new CustomEvent('gaia:analytics',{detail:{event:'gaia_assist_test_completed'}})); render(); }
           else chooseStep(data.nextStep || 'final_notes');
         } catch (_) {}

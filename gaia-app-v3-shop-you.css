@@ -1312,3 +1312,43 @@ body.gaia-v2 [data-screen="store"] .g-store-tile .g-tile__media--empty {
   }
   body.gaia-v2 [data-screen="store"] .gaia-main.g-store > .g-tabs { width: fit-content; margin-left: max(0px, calc((100% - 1180px) / 2)); margin-right: auto; }
 }
+
+/* ---------- You, signed out: two cards side by side, buttons at their size --
+   Only when the page shows the sign-in card (#member-me holds a
+   [data-native-signin] button); the signed-in You is untouched. From 700px
+   the buttons keep their own width (they each took half the card); from
+   1100px the page uses the 1180px column and "Sync your access" and
+   "Become a practitioner" share one row at equal height. */
+@media (min-width: 700px) {
+  body.gaia-v2 [data-screen="profile"] #member-me:has([data-native-signin]) .g-card__actions { justify-content: flex-start; }
+  body.gaia-v2 [data-screen="profile"] #member-me:has([data-native-signin]) .g-card__actions .g-btn {
+    flex: 0 0 auto;
+    width: auto;
+    padding-inline: 24px;
+  }
+}
+@media (min-width: 700px) and (max-width: 1099px) {
+  body.gaia-v2 [data-screen="profile"] #member-me:has([data-native-signin]) > .g-card { grid-column: 1 / -1; }
+}
+@media (min-width: 1100px) {
+  body.gaia-v2 [data-screen="profile"] .g-page.g-profile > * {
+    width: 100%;
+    max-width: 1180px;
+    margin-inline: auto;
+  }
+  body.gaia-v2 [data-screen="profile"] #member-me:has([data-native-signin]) {
+    display: grid;
+    grid-template-columns: minmax(0, 1.35fr) minmax(0, 1fr);
+    align-items: stretch;
+    gap: 16px;
+  }
+  body.gaia-v2 [data-screen="profile"] #member-me:has([data-native-signin]) > .g-card {
+    grid-column: auto;
+    width: auto;
+    max-width: none;
+    margin: 0;
+    display: flex;
+    flex-direction: column;
+  }
+  body.gaia-v2 [data-screen="profile"] #member-me:has([data-native-signin]) > .g-card .g-card__actions { margin-top: auto; padding-top: 16px; }
+}

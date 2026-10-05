@@ -365,4 +365,11 @@ test('members stopping sharing faster than they start, in a day, raises a warnin
   assert.match(d[0].evidence, /3 revoked · 1 confirmed/);
   assert.equal(d[0].affected, null, 'counts only; nobody is named');
   assert.deepEqual(detect(health(), { memberLinks: null }), [], 'no store, no alert');
+  // guide reads: a sudden spike means a loop or abuse; ordinary use is quiet
+  assert.deepEqual(detect(health(), { memberLinks: { ...quiet, guides_read: 25, confirmed: 2 } }), [], 'under thirty: never');
+  assert.deepEqual(detect(health(), { memberLinks: { ...quiet, guides_read: 60, confirmed: 8 } }), [], 'sixty reads across eight sharing members is ordinary');
+  const g = detect(health(), { memberLinks: { ...quiet, guides_read: 60, confirmed: 2 } });
+  assert.deepEqual(keys(g), ['member-links:guide-reads']);
+  assert.match(g[0].title, /60 guide reads for Gaia Assist today, across 2 sharing members/);
+  assert.doesNotMatch(JSON.stringify(g), /sgSecret|cust-|memberId/, 'counts only');
 });

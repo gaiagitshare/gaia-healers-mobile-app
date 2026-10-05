@@ -25,6 +25,7 @@ import {
 } from '@mui/icons-material';
 import { useNavigate } from 'react-router-dom';
 import { autoSyncEvents, getDashboardStats } from '../utils/api';
+import PrintersCard from './PrintersCard';
 
 function StatCard({ title, value, detail, icon, color, onClick }) {
     return (
@@ -97,6 +98,12 @@ function Dashboard() {
     const checkInRate = stats?.check_in_rate || 0;
     const paidRate = stats?.total_attendees ? Math.round((stats.paid_members / stats.total_attendees) * 100) : 0;
     const primaryEvent = stats?.events?.[0];
+    // The printers card follows the event at the door: the live one, else the
+    // next one coming up, else the first listed.
+    const doorEvent = (stats?.events || []).find((e) => e.status === 'live')
+        || (stats?.events || []).filter((e) => e.status === 'upcoming')
+            .sort((a, b) => (a.days_until ?? 1e9) - (b.days_until ?? 1e9))[0]
+        || primaryEvent;
     const goToPrimaryAttendees = () => {
         if (primaryEvent) {
             navigate(`/events/${primaryEvent.id}/attendees`);
@@ -134,6 +141,12 @@ function Dashboard() {
             </Box>
 
             {notice && <Alert severity={notice.severity} sx={{ mb: 3 }}>{notice.message}</Alert>}
+
+            {doorEvent && (
+                <Box mb={2}>
+                    <PrintersCard eventId={doorEvent.id} eventName={doorEvent.name} />
+                </Box>
+            )}
 
             <Grid container spacing={2}>
                 <Grid item xs={12} sm={6} md={3}>

@@ -198,6 +198,8 @@ export const recordBadgePrint = (eventId, attendeeId, data) =>
     api.post(`/events/${eventId}/attendees/${attendeeId}/badge-print`, data);
 // What a door device's Bluetooth printer did (connect / print), with the driver's trace.
 export const reportPrinter = (eventId, data) => api.post(`/events/${eventId}/printer-log`, data);
+// One row per door desk: its printer, browser, status and last failure (dashboard).
+export const getPrinterStatus = (eventId, hours = 24) => api.get(`/events/${eventId}/printer-status`, { params: { hours } });
 // Door-side corrections. Both live under the event so the audit trail names
 // the door that made them, not just the person.
 export const overrideAdmit = (eventId, attendeeId, data) =>

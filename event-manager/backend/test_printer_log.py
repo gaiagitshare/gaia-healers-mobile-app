@@ -8,6 +8,7 @@ Proves, against a served copy of the live database:
   4. the trace is bounded (newest 150 lines, 300 characters each)
   5. organizers read it back with the trace and the device; a desk cannot
   6. a desk connecting to a printer another desk used today is told which desk
+  7. the dashboard's printer-status: a row per desk, failures first, clashes named
 
 Run:  python3 /root/event/backend/test_printer_log.py
 """
@@ -96,10 +97,10 @@ check(st == 403, "a door desk cannot read everyone's traces", st)
 dev = "B1 Pro-TEST" + uuid.uuid4().hex[:6]
 ids = ["test-" + uuid.uuid4().hex for _ in range(4)]
 st, b = call("POST", "/events/%d/printer-log" % EVENT, {"stage": "connect", "result": "ok", "station": "test-desk-1",
-             "device": dev, "client_attempt_id": ids[0]}, DESK)
+             "device": dev, "client_attempt_id": ids[0]}, DESK, UA)
 check(st == 200 and b.get("shared_with") == [], "the first desk on a printer hears nothing", (st, b))
 st, b = call("POST", "/events/%d/printer-log" % EVENT, {"stage": "connect", "result": "ok", "station": "test-desk-1",
-             "device": dev, "client_attempt_id": ids[1]}, DESK)
+             "device": dev, "client_attempt_id": ids[1]}, DESK, UA)
 check(st == 200 and b.get("shared_with") == [], "reconnecting the same desk is not a clash", (st, b))
 st, b = call("POST", "/events/%d/printer-log" % EVENT, {"stage": "connect", "result": "ok", "station": "test-desk-2",
              "device": dev, "client_attempt_id": ids[2]}, ADMIN)
@@ -110,6 +111,23 @@ st, b = call("POST", "/events/%d/printer-log" % EVENT, {"stage": "connect", "res
 check(st == 200 and b.get("shared_with") == [], "a different printer is nobody else's", (st, b))
 st, rows = call("GET", "/events/%d/printer-log?limit=5" % EVENT, None, ADMIN)
 check(st == 200 and any(r.get("device") == dev for r in rows), "the printer's name is read back", rows)
+
+# 7 ── the dashboard's view: one row per desk, the clash called out by name
+st, ps = call("GET", "/events/%d/printer-status?hours=1" % EVENT, None, ADMIN)
+rows = {d["station"]: d for d in (ps or {}).get("desks", [])}
+d1, d2, d3 = rows.get("test-desk-1"), rows.get("test-desk-2"), rows.get("test-desk-3")
+check(st == 200 and d1 and d2 and d3, "each desk is a row", (st, ps))
+check(d1 and d1["device"] == dev and d1["status"] == "ok" and d1["browser"] == "iPad/Bluefy",
+      "a desk shows its printer, its browser and that it is fine", d1)
+check(d3 and d3["status"] == "failed" and d3["connect_failed"] == 1 and d3["last_failure"]["stage"] == "connect",
+      "a failing desk shows as failed, with the failure", d3)
+check(d1 and d1["shares_printer_with"] == ["test-desk-2"] and d2["shares_printer_with"] == ["test-desk-1"],
+      "two desks on one printer are told about each other", (d1, d2))
+check(any(s_["device"] == dev and s_["desks"] == ["test-desk-1", "test-desk-2"] for s_ in ps.get("shared_printers", [])),
+      "the shared printer is listed once, with both desks", ps.get("shared_printers"))
+check(ps["desks"][0]["status"] == "failed", "failing desks come first", [d["station"] for d in ps["desks"]])
+st, _ = call("GET", "/events/%d/printer-status" % EVENT, None, DESK)
+check(st == 403, "a door desk cannot read the dashboard view", st)
 
 c.execute("DELETE FROM printer_logs WHERE client_attempt_id IN (%s)" % ",".join("?" * 6), [aid, aid2] + ids); c.commit()
 print("\n%s" % ("ALL PASS" if not fails else "FAILED: %d" % fails))

@@ -11242,6 +11242,98 @@ def printer_log_list(event_id: int, limit: int = 50, failed_only: bool = False,
             for r in rows]
 
 
+def _browser_label(ua):
+    """iPad/Safari, iPad/Bluefy, Android/Chrome, … from a user agent."""
+    ua = ua or ""
+    dev = ("iPad" if "iPad" in ua else "iPhone" if "iPhone" in ua else "Android" if "Android" in ua
+           else "Mac" if "Macintosh" in ua else "Windows" if "Windows" in ua else "device")
+    if "Bluefy" in ua:
+        return dev + "/Bluefy"
+    if "CriOS" in ua or "Chrome" in ua:
+        return dev + "/Chrome"
+    if "Safari" in ua:
+        return dev + "/Safari"
+    return dev
+
+
+@app.get("/events/{event_id}/printer-status")
+def printer_status(event_id: int, hours: int = 24, db: Session = Depends(get_db),
+                   current_user: models.User = Depends(get_current_user)):
+    """One row per door desk for the dashboard: its printer, the browser it
+    prints from, what it last did, how many badges it printed or failed, and
+    the last failure with the driver's trace -- so event day can be watched
+    from the office instead of by walking the hall. Printers used by more than
+    one desk are called out: a B1 takes one link at a time, so those desks take
+    turns failing. Organizers only, like the raw printer log."""
+    _get_event_or_404(event_id, db)
+    authz.require_cap(db, current_user, event_id, "event.write")
+    hours = max(1, min(hours, 24 * 14))
+    since = datetime.utcnow() - timedelta(hours=hours)
+    logs = db.query(models.PrinterLog).filter(models.PrinterLog.event_id == event_id,
+                                              models.PrinterLog.created_at >= since).order_by(models.PrinterLog.id).all()
+    prints = db.query(models.BadgePrintLog).filter(models.BadgePrintLog.event_id == event_id,
+                                                   models.BadgePrintLog.created_at >= since).all()
+    uids = {r.staff_user_id for r in logs if r.staff_user_id} | {r.staff_user_id for r in prints if r.staff_user_id}
+    users = {u.id: (u.email or "") for u in db.query(models.User).filter(models.User.id.in_(uids))} if uids else {}
+
+    def key_of(station, uid):
+        st = (station or "").strip()
+        return (st.lower(), st) if st else ("user:%s" % uid, None)
+
+    desks = {}
+    def desk(station, uid):
+        k, name = key_of(station, uid)
+        return desks.setdefault(k, {"station": name, "unnamed_user": None if name else users.get(uid),
+                                    "operators": set(), "device": None, "printer": None, "browser": None,
+                                    "connected_at": None, "last": None, "last_failure": None,
+                                    "printed": 0, "print_failed": 0, "connect_failed": 0})
+    for r in logs:                                   # oldest first: later rows overwrite
+        d = desk(r.station, r.staff_user_id)
+        if r.staff_user_id in users:
+            d["operators"].add(users[r.staff_user_id])
+        if r.user_agent:
+            d["browser"] = _browser_label(r.user_agent)
+        if r.result == "ok" and r.device:
+            d["device"] = r.device
+        if r.result == "ok" and r.printer:
+            d["printer"] = r.printer
+        if r.stage == "connect" and r.result == "ok":
+            d["connected_at"] = r.created_at
+        if r.stage == "connect" and r.result == "failed":
+            d["connect_failed"] += 1
+        d["last"] = {"at": r.created_at, "stage": r.stage, "result": r.result, "error": r.error}
+        if r.result == "failed":
+            d["last_failure"] = {"at": r.created_at, "stage": r.stage, "error": r.error, "device": r.device,
+                                 "trace": (r.trace or "").split("\n")[-25:] if r.trace else []}
+    for r in prints:
+        d = desk(r.station, r.staff_user_id)
+        if r.staff_user_id in users:
+            d["operators"].add(users[r.staff_user_id])
+        d["printed" if r.result == "printed" else "print_failed"] += 1
+        if r.result == "printed" and (d["last"] is None or str(r.created_at) > str(d["last"]["at"])):
+            d["last"] = {"at": r.created_at, "stage": "print", "result": "ok", "error": None}
+
+    # A printer more than one desk connected to in the window.
+    by_device = {}
+    for r in logs:
+        if r.stage == "connect" and r.result == "ok" and r.device:
+            by_device.setdefault(r.device, set()).add(key_of(r.station, r.staff_user_id)[0])
+    shared = {dev: ks for dev, ks in by_device.items() if len(ks) > 1}
+    label = {k: (d["station"] or ("(unnamed — %s)" % (d["unnamed_user"] or "unknown"))) for k, d in desks.items()}
+
+    out = []
+    for k, d in desks.items():
+        last_ok = d["last"] and d["last"]["result"] == "ok"
+        out.append({**d, "station": label[k], "named": bool(d["station"]),
+                    "operators": sorted(d["operators"]),
+                    "status": "ok" if last_ok else ("failed" if d["last"] else "unknown"),
+                    "shares_printer_with": sorted(label[o] for o in shared.get(d["device"], ()) if o != k)})
+    out.sort(key=lambda x: (x["status"] != "failed", x["station"].lower()))
+    return {"event_id": event_id, "hours": hours, "desks": out,
+            "shared_printers": [{"device": dev, "desks": sorted(label[k] for k in ks)} for dev, ks in shared.items()],
+            "printed": sum(d["printed"] for d in out), "failed": sum(d["print_failed"] for d in out)}
+
+
 @app.post("/events/{event_id}/attendees/{attendee_id}/badge-print")
 def badge_print_record(event_id: int, attendee_id: int, body: schemas.BadgePrintRecord,
                        db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):

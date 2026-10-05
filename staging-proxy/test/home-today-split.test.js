@@ -58,7 +58,12 @@ test('the daily energy check and the sky render on Today only; the member Home i
   assert.match(ui, /sel: '\.gava-char', title: 'Get a little guidance'/, 'the first-run guidance points at her, not the old orb');
   assert.doesNotMatch(ui, /sel: '\.gaia-tabbar__assist', eyebrow: 'Your guide'/);
   // every destination is the one that was here before
-  for (const id of ['scans', 'bio-welldemo', 'mgf6oviyhPwrLBi03gzq', 'gVzfo7sRfbLnMzQqSnJL']) assert.ok(sa.includes(id), id);
+  for (const id of ['scans', 'bio-welldemo']) assert.ok(sa.includes(id), id);
+  // Home, Today's card and Bookings offer one set of sessions (Babak, 5 Oct 2026): the Bookings list
+  const book = sa.slice(sa.indexOf('function bookActions()'), sa.indexOf('/** Membership, in one strip'));
+  assert.match(book, /bookingSet\(\)/, 'Home books from the shared list');
+  assert.doesNotMatch(book, /widget\/form\//, 'no separate hard-coded forms on Home');
+  assert.match(read('gaia-member.js'), /window\.GaiaBookingSet/, "Today's booking card reads the shared list");
   assert.match(sa, /href="home\.html\?view=store&tab=membership"/); assert.match(sa, /href="home\.html\?view=events"/);
   const today = sa.slice(sa.indexOf('function renderToday()'), sa.indexOf('// Next booking — the member\'s soonest'));
   for (const host of ['data-today-readings', 'data-daily-host', 'data-sky-host', 'nextBookingCard()']) assert.ok(today.includes(host), host);
@@ -102,7 +107,7 @@ test('the in-app window always has a reachable Close, and bookings send a member
   assert.match(dir, /Bio-Well practitioners'\)/, 'the count names what is shown');
   assert.match(dir, /function embeds\(url\) \{ return \/\^https\?:/, 'Calendly and GHL calendars open in the app');
   const sa2 = read('gaia-superapp.js');
-  assert.match(sa2, /name: 'Bio-Well energy scan', intent: 'scan'/, 'Home: the scan action opens the directory with the intent');
+  assert.match(sa2, /'biowell-scan': \{[^}]*intent: 'scan'/, 'Home: the scan action opens the directory with the intent');
   assert.match(sa2, /data-dir-intent\]'\)\.forEach/);
   // My readings on You: In short first, the rest one tap away (and Gaia's open-my-readings unfolds it)
   const readings2 = read('gaia-my-readings.js');

@@ -961,17 +961,19 @@
   }
   /** Book a session: the same four links, each with one line that says what it is. */
   function bookActions() {
-    const bk = 'https://api.leadconnectorhq.com/widget/bookings/', fm = 'https://api.leadconnectorhq.com/widget/form/';
-    const items = [
-      { name: 'Bio-Well energy scan', intent: 'scan', icon: 'pulse', what: 'Choose a practitioner near you, then a time.' },
-      { name: 'Bio-Well demo', href: bk + 'bio-welldemo', icon: 'monitor-play', what: 'See the device in action, no commitment.' },
-      { name: 'Free discovery call', href: fm + 'mgf6oviyhPwrLBi03gzq', icon: 'phone', what: 'A short chat about where to start.' },
-      { name: 'Wellness coaching', href: fm + 'gVzfo7sRfbLnMzQqSnJL', icon: 'leaf', what: 'Work one-to-one with a Gaia coach.' },
-    ];
+    // Same sessions as the Bookings page (bookingSet), in Home's card style.
+    // The scan still starts at the directory (Bio-Well practitioners first).
+    const LOOK = {
+      'biowell-scan': { icon: 'pulse', what: 'Choose a practitioner near you, then a time.', intent: 'scan' },
+      'biowell-demo': { icon: 'monitor-play', what: 'See the device in action, no commitment.' },
+      'healeex-combo': { icon: 'sparkle', what: 'A Healeex session together with a Bio-Well scan.' },
+    };
+    const items = bookingSet().map((b) => ({ name: b.name || 'Book a session', href: b.openUrl || '', ...(LOOK[b.id] || { icon: 'calendar-plus', what: 'Open the secure booking form.' }) }));
     return '<section class="g-home2__book" aria-label="Book a session"><p class="g-super-kicker">Book a session</p><div class="g-home2__book-grid">'
       + items.map((b) => '<button type="button" class="g-home2__action" ' + (b.intent ? 'data-dir-intent="' + esc(b.intent) + '"' : 'data-book-inline="' + esc(b.href) + '" data-book-title="' + esc(b.name) + '"') + '><span class="g-home2__action-icon">' + icon(b.icon) + '</span><span class="g-home2__action-copy"><strong>' + esc(b.name) + '</strong><small>' + esc(b.what) + '</small></span>' + icon('caret-right', 'g-home2__action-arrow') + '</button>').join('')
       + '</div></section>';
   }
+
   /** Membership, in one strip: the plan you have and its next action, or the plans. */
   function membershipStrip() {
     const m = activeMembership();
@@ -1853,14 +1855,21 @@
     bind(root);
   }
 
-  function bookingCatalog() {
+  /** The one list of bookable sessions, shared by Bookings and the member
+   * Home: the server's curated calendars, or this fallback without them. */
+  function bookingSet() {
     const links = bookingLinks();
-    const fallback = [
-      { name: 'Bio-Well energy scan', openUrl: 'https://api.leadconnectorhq.com/widget/bookings/scans' },
-      { name: 'Bio-Well demo', openUrl: 'https://api.leadconnectorhq.com/widget/bookings/bio-welldemo' },
+    return links.length ? links : [
+      { id: 'biowell-scan', name: 'Bio-Well energy scan', openUrl: 'https://api.leadconnectorhq.com/widget/bookings/scans' },
+      { id: 'biowell-demo', name: 'Bio-Well demo', openUrl: 'https://api.leadconnectorhq.com/widget/bookings/bio-welldemo' },
       { name: 'Meet Dr. Nima Farshid', openUrl: 'https://calendly.com/nimafarshid/gaia-healers-meeting' },
     ];
-    const verified = links.length ? links : fallback;
+  }
+
+  window.GaiaBookingSet = bookingSet;   // Today's booking card (gaia-member.js) reads the same list
+
+  function bookingCatalog() {
+    const verified = bookingSet();
     return '<section class="g-super-list"><div class="g-super-section-head"><div><p class="g-super-kicker">Schedule</p><h2>Book a session</h2></div></div>'
       + verified.map((item) => '<button type="button" class="g-super-row" data-book-inline="' + esc(item.openUrl || '') + '" data-book-title="' + esc(item.name || 'Book a session') + '"><span class="g-super-row__icon">' + icon('calendar-plus') + '</span><span><strong>' + esc(item.name || 'Book a session') + '</strong><em>Open the secure booking form</em></span>' + icon('caret-right') + '</button>').join('') + '</section>';
   }

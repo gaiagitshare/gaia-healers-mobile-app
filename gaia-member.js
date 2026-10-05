@@ -291,20 +291,19 @@ body.gaia-booking-open{overflow:hidden;}
   }
 
   function bookCard() {
-    const bk = 'https://api.leadconnectorhq.com/widget/bookings/';
-    const fm = 'https://api.leadconnectorhq.com/widget/form/';
-    const items = [
-      { name: 'Bio-Well energy scan', href: bk + 'scans', meta: 'Biofield reading' },
-      { name: 'Bio-Well demo', href: bk + 'bio-welldemo', meta: 'See it in action' },
-      { name: 'Free discovery call', href: fm + 'mgf6oviyhPwrLBi03gzq', meta: 'Intro chat' },
-      { name: 'Wellness coaching', href: fm + 'gVzfo7sRfbLnMzQqSnJL', meta: 'Work with us' },
-    ];
+    // The same sessions as the Bookings page and the member Home.
+    const META = { 'biowell-scan': 'Biofield reading', 'biowell-demo': 'See it in action', 'healeex-combo': 'Healeex + Bio-Well' };
+    const set = (typeof window.GaiaBookingSet === 'function' && window.GaiaBookingSet())
+      || (Array.isArray(state.data.appts && state.data.appts.bookingLinks) ? state.data.appts.bookingLinks : []);
+    const items = set.map((b) => ({ name: b.name || 'Book a session', href: b.openUrl || '', meta: META[b.id] || 'Book' }));
+    if (!items.length) return '';
     return '<article class="g-card"><p class="g-card__label">Book a session</p>'
       + '<div class="g-rows">'
       + items.map((b) => '<button type="button" class="g-row g-row--link" data-book-inline="' + esc(b.href) + '" data-book-title="' + esc(b.name) + '">'
         + '<span>' + esc(b.name) + '</span><span class="g-row__meta">' + esc(b.meta) + ' →</span></button>').join('')
       + '</div></article>';
   }
+
 
   // ── In-app modal (reusable) ────────────────────────────────
   // Opens any embeddable page (booking widgets, the education portal, the

@@ -570,7 +570,7 @@ body.gaia-v2 .gaia-chakra-map__list-item, body.gaia-v2 .gaia-chakra-map--screen 
 .g-badge--off{background:color-mix(in srgb,var(--g-text-faint) 22%,transparent);color:var(--g-text-muted)}
 
 .g-ma{margin-bottom:var(--g-s5)}
-.g-ma__title,.g-inc__title,.g-next__title{font-family:var(--g-font-serif);
+.g-ma__title,.g-next__title{font-family:var(--g-font-serif);
   font-size:1.35rem;margin:0 0 var(--g-s3);color:var(--g-text)}
 .g-ma-rows{list-style:none;margin:0;padding:0;border:1px solid var(--g-line);
   border-radius:var(--g-r-md);overflow:hidden;background:var(--g-surface)}
@@ -615,13 +615,6 @@ body.gaia-v2 .gaia-chakra-map__list-item, body.gaia-v2 .gaia-chakra-map--screen 
 .g-ma-meter__fill{height:100%;background:var(--g-accent)}
 .g-ma-meter__label{margin:var(--g-s2) 0 0;font-size:.85rem;color:var(--g-text-muted)}
 .g-ma-note{margin:var(--g-s1) 0 0;font-size:.8rem;color:var(--g-text-faint)}
-
-.g-inc{margin-bottom:var(--g-s5)}
-.g-inc__list{list-style:none;margin:0;padding:0}
-.g-inc__row{display:flex;justify-content:space-between;gap:var(--g-s3);
-  padding:var(--g-s2) 0;border-bottom:1px solid var(--g-line)}
-.g-inc__value{color:var(--g-text-muted);text-align:right}
-.g-inc__note{margin:var(--g-s3) 0 0;font-size:.82rem;color:var(--g-text-faint)}
 
 .g-next{background:var(--g-surface);border:1px solid var(--g-line);
   border-radius:var(--g-r-lg);padding:var(--g-s5);margin-bottom:var(--g-s5)}

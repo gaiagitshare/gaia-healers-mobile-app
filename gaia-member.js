@@ -979,7 +979,7 @@ body.gaia-booking-open{overflow:hidden;}
     const hasAccess = grants.length > 0;
     if (cap) cap.textContent = hasAccess
       ? grants.length + ' course' + (grants.length === 1 ? '' : 's') + ' available in your Academy.'
-      : (state.authed ? 'No courses yet.' : 'Courses and certifications from Gaia Healers.');
+      : 'Courses and certifications from Gaia Healers.';
     const hub = courses.portalUrl || (portalBase() + '/courses/library-v2');
     const academyEntry = grants.find((grant) => grant && grant.openUrl)?.openUrl || hub;
     const cat = (state.catalog && Array.isArray(state.catalog.courses) && state.catalog.courses.length)
@@ -1043,13 +1043,16 @@ body.gaia-booking-open{overflow:hidden;}
     // member does NOT own yet, as a clearly-separate "Explore more courses" block.
     const exploreTracks = tracks.filter((t) => !(state.authed && (t.grant || ownedInApp(t.name))));
     const parts = [];
-    if (!state.authed || !hasAccess) parts.push(academyHead);
+    // Signed out: the sign-in card. Signed in without courses: only the
+    // "no courses yet" card below (it used to follow a second card with the
+    // same "View memberships" button).
+    if (!state.authed) parts.push(academyHead);
     if (exploreTracks.length) {
       parts.push(gSec('Explore more courses',
         '<div class="g-access-grid">' + exploreTracks.map(trackCard).join('') + '</div>'));
     }
     if (state.authed && !hasAccess) {
-      parts.push('<article class="g-card"><p class="g-card__label">No course grant found</p>'
+      parts.unshift('<article class="g-card g-card--feature"><p class="g-card__value g-card__value--lg">No courses on your account yet</p>'
         + '<p class="g-card__meta">You are signed in, but no course or offer has been added to your account yet. If you just joined, it can take a few minutes to appear.</p>'
         + '<div class="g-card__actions"><button type="button" class="g-btn g-btn--primary g-btn--sm" data-track-cta>View memberships →</button></div></article>');
     }
@@ -1163,7 +1166,7 @@ body.gaia-booking-open{overflow:hidden;}
     }
     if (locked.length) {
       parts.push(gSec('Unlock with membership', '<div class="g-access-grid">' + locked.map((x) => accessItem(x, 'locked')).join('') + '</div>',
-        '<button type="button" class="g-btn g-btn--ghost g-btn--sm g-section__action" data-membership-cta>Become a member →</button>'));
+        '<button type="button" class="g-btn g-btn--ghost g-btn--sm g-section__action" data-membership-cta>See plans →</button>'));
     }
     if (soon.length) {
       parts.push(gSec('Coming soon', '<div class="g-access-grid">' + soon.map((x) => accessItem(x, 'soon')).join('') + '</div>'));

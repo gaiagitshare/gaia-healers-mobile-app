@@ -336,33 +336,6 @@
     catch (_) { return '<p class="g-empty">This access could not be displayed.</p>'; }
   }
 
-  /* ── Included in your access ────────────────────────────────────────────
-   * Deliberately NOT "what your tier includes": every line here is an active
-   * entitlement the member actually holds. A tier promise that was never
-   * granted must not appear.                                                */
-  function includedInYourAccess(access) {
-    const entitlements = (access?.entitlements || []).filter((item) => item.status === 'active');
-    if (!entitlements.length) return '';
-    const byType = new Map();
-    for (const item of entitlements) {
-      if (!byType.has(item.type)) byType.set(item.type, []);
-      byType.get(item.type).push(item);
-    }
-    const sections = Array.isArray(access?.sections) ? access.sections : [];
-    const titleFor = (type) => (sections.find((s) => s.type === type)?.title) || type;
-
-    const rows = [...byType.entries()].map(([type, items]) => {
-      const renderer = RENDERERS[type] || genericRenderer;
-      let value; try { value = renderer.summary(items); } catch (_) { value = ''; }
-      return '<li class="g-inc__row"><span>' + esc(titleFor(type)) + '</span>'
-        + '<span class="g-inc__value">' + esc(value) + '</span></li>';
-    }).join('');
-
-    return '<section class="g-inc"><h2 class="g-inc__title">Included in your access</h2>'
-      + '<ul class="g-inc__list">' + rows + '</ul>'
-      + '<p class="g-inc__note">Everything here is active on your account right now.</p></section>';
-  }
-
   /* ── Next Level ─────────────────────────────────────────────────────────
    * Entirely from `access.upgrade`. No upgrade object, no block.            */
   function nextLevel(access, plans) {
@@ -448,15 +421,13 @@
     // next, in the same frame.
     return degradedNotice(access)
       + '<div class="g-pass-stack">' + memberPass(access) + nextLevel(access, plans) + '</div>'
-      + myAccess(access)
-      + includedInYourAccess(access);
+      + myAccess(access);   // one list: "Included in your access" repeated its active rows
   }
 
   window.GaiaMembershipUI = {
     renderMembershipScreen,
     memberPass,
     myAccess,
-    includedInYourAccess,
     nextLevel,
     degradedNotice,
     bind,

@@ -283,16 +283,21 @@
     </details>`;
   }
   /** Folded: the In short block and one button. The whole card is one tap away, and Gaia's "open my readings" unfolds it. */
-  function averageCard(a) {
+  function averageCard(a, series) {
     if (!a || a.count < 3) return '<p class="g-readings__muted">A three-scan average needs three dated readings with both energy and stress.</p>';
     const metric = (label, value, max, decimals) => `<div><span>${label} average</span><strong>${esc(fmt(value, decimals))}</strong><span class="g-readings__bar"><span style="width:${clamp(value / max * 100, 0, 100)}%"></span></span></div>`;
-    return `<p class="g-readings__muted">Average of the latest 3 complete scans · ${esc(when(a.from))}–${esc(when(a.to))}</p><div class="g-readings__averages">${metric('Energy', a.energy, 100, 1)}${metric('Stress', a.stress, 10, 2)}</div>`;
+    // Name the three scans the average is made of (the newest three of the
+    // series, which is what the server averaged), so a wide range is not read
+    // as "all of last winter". Same-day scans keep their own entry.
+    const three = Array.isArray(series) ? series.slice(-3).map((p) => p && p.at).filter(Boolean) : [];
+    const span = three.length === 3 ? three.map((at) => esc(when(at))).join(' · ') : `${esc(when(a.from))}–${esc(when(a.to))}`;
+    return `<p class="g-readings__muted">Average of the latest 3 complete scans · <span class="g-readings__avg-dates">${span}</span></p><div class="g-readings__averages">${metric('Energy', a.energy, 100, 1)}${metric('Stress', a.stress, 10, 2)}</div>`;
   }
   function foldedCard(r) {
     const practitioner = r.practitioner || {}, summary = r.summary || {};
     return card(`
       <p class="g-card__meta">Shared by <strong>${esc(practitioner.name || 'your practitioner')}</strong> · since ${esc(when(r.linked_at))}${r.scans_on_file != null ? ` · ${esc(r.scans_on_file)} reading${r.scans_on_file === 1 ? '' : 's'} on file` : ''}</p>
-      ${summary.headline ? `<div class="g-readings__summary"><p class="g-readings__kicker">In short</p><p class="g-readings__headline">${esc(summary.headline)}</p>${averageCard(r.average_recent)}</div>` : ''}
+      ${summary.headline ? `<div class="g-readings__summary"><p class="g-readings__kicker">In short</p><p class="g-readings__headline">${esc(summary.headline)}</p>${averageCard(r.average_recent, r.series)}</div>` : ''}
       <div class="g-card__actions"><button type="button" class="g-btn g-btn--primary g-btn--sm" data-readings-action="expand">Open my full readings</button></div>`, ' g-readings--folded');
   }
   function readingsCard(r, status = {}, prefs = {}) {
@@ -336,7 +341,7 @@
       ${summary.headline ? `<div class="g-readings__summary">
         <p class="g-readings__kicker">In short</p>
         <p class="g-readings__headline">${esc(summary.headline)}</p>
-        ${averageCard(r.average_recent)}<details><summary>Reading details</summary><ul class="g-readings__lines">${(summary.lines || []).map((l) => `<li>${esc(l)}</li>`).join('')}</ul></details>
+        ${averageCard(r.average_recent, r.series)}<details><summary>Reading details</summary><ul class="g-readings__lines">${(summary.lines || []).map((l) => `<li>${esc(l)}</li>`).join('')}</ul></details>
         <div class="g-card__actions"><button type="button" class="g-btn g-btn--ghost g-btn--sm" data-readings-action="copy">Copy summary</button><button type="button" class="g-btn g-btn--ghost g-btn--sm" data-readings-action="image">Save as image</button></div>
       </div>` : ''}
 

@@ -43,7 +43,10 @@
     try { input.focus(); input.select(); if (!document.execCommand('copy')) throw new Error('Copy unavailable'); }
     finally { input.remove(); previous?.focus?.({ preventScroll: true }); }
   }
-  const when = (iso) => { try { return new Date(iso).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' }); } catch { return ''; } };
+  // A bare "2026-10-02" is read as UTC midnight, which is the day before west
+  // of Greenwich; date-only values are taken as midday local instead.
+  const asDate = (iso) => new Date(/^\d{4}-\d{2}-\d{2}$/.test(String(iso || '')) ? iso + 'T12:00:00' : iso);
+  const when = (iso) => { if (!iso) return ''; try { const d = asDate(iso); return isNaN(d) ? String(iso) : d.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' }); } catch { return ''; } };
   const short = (iso) => { try { return new Date(iso).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }); } catch { return ''; } };
   const fmt = (v, d = 0) => (typeof v === 'number' ? v.toFixed(d) : '—');
   const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
@@ -93,7 +96,12 @@
   function comparePicker(series) {
     const pts = (series || []).filter((p) => p && p.d);
     if (pts.length < 2) return '';
-    const opt = (sel) => pts.map((p) => `<option value="${esc(p.id || p.d)}"${(p.id || p.d) === sel ? ' selected' : ''}>${esc(p.at ? new Date(p.at).toLocaleString() : when(p.d))}</option>`).join('');
+    // The day is enough to tell scans apart; the time is added only when two
+    // fall on the same day (a long date-time was cut off in the select).
+    const dayOf = (p) => when(p.at || p.d);
+    const sameDay = (p) => pts.filter((q) => dayOf(q) === dayOf(p)).length > 1;
+    const label = (p) => (p.at && sameDay(p) ? dayOf(p) + ', ' + new Date(p.at).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' }) : dayOf(p));
+    const opt = (sel) => pts.map((p) => `<option value="${esc(p.id || p.d)}"${(p.id || p.d) === sel ? ' selected' : ''}>${esc(label(p))}</option>`).join('');
     return `<section class="g-readings__sec g-readings__pick" data-readings-pick>
       <p class="g-readings__kicker">Compare available scans</p><p class="g-readings__muted">Choose two readings from the recent history available here.</p>
       <div class="g-readings__pick-row">
@@ -317,10 +325,10 @@
     };
     const sev = (f) => `<li class="g-readings__flag"><span>${esc(f.name)}${f.area ? ` <span class="g-readings__muted">${esc(f.area)}</span>` : ''}</span><span class="g-readings__pill${f.severity === 'high' ? ' is-high' : (f.severity === 'elevated' ? ' is-elevated' : '')}">${esc(f.direction || '')}${f.severity ? ` · ${esc(f.severity)}` : ''}</span></li>`;
     const worst = (d) => `<li class="g-readings__flag"><span>${esc(d.name)} <span class="g-readings__muted">${esc(d.area)}</span></span><span class="g-readings__pill">${esc(fmt(d.disbalance))}%</span></li>`;
-    const compare = (c) => `<li class="g-readings__pair"><span class="g-readings__pair-when">${esc(c.from)} → ${esc(c.to)}<span class="g-readings__muted"> · ${esc(c.basis)}</span></span><span class="g-readings__pair-deltas">stress ${signed(c.stress_change, 2, true)} · energy ${signed(c.energy_change, 1)}</span></li>`;
+    const compare = (c) => `<li class="g-readings__pair"><span class="g-readings__pair-when">${esc(when(c.from))} → ${esc(when(c.to))}<span class="g-readings__muted"> · ${esc(c.basis)}</span></span><span class="g-readings__pair-deltas">stress ${signed(c.stress_change, 2, true)} · energy ${signed(c.energy_change, 1)}</span></li>`;
     const file = (f) => f.url
-      ? `<a class="g-row g-row--link" href="${esc(f.url)}" target="_blank" rel="noopener noreferrer"><span>${esc(f.name)}</span><span class="g-row__meta">${esc(f.uploaded_at || 'open')}</span></a>`
-      : `<div class="g-row"><span>${esc(f.name)}</span><span class="g-row__meta">${esc(f.uploaded_at || '')}</span></div>`;
+      ? `<a class="g-row g-row--link" href="${esc(f.url)}" target="_blank" rel="noopener noreferrer"><span>${esc(f.name)}</span><span class="g-row__meta">${esc(when(f.uploaded_at) || 'open')}</span></a>`
+      : `<div class="g-row"><span>${esc(f.name)}</span><span class="g-row__meta">${esc(when(f.uploaded_at))}</span></div>`;
     const sec = (kicker, inner, cls = '') => `<section class="g-readings__sec${cls}"><p class="g-readings__kicker">${kicker}</p>${inner}</section>`;
 
     const spark = sparkline(r.series);

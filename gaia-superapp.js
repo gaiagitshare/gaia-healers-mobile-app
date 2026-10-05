@@ -1041,7 +1041,9 @@
     const firstName = String(p.name || '').trim().split(/\s+/)[0];
     const hour = new Date().getHours();
     const part = hour < 12 ? 'morning' : hour < 18 ? 'afternoon' : 'evening';
-    root.innerHTML = '<div class="g-super-home g-super-today">'
+    // Signed out, Today shares the guest Home's container, rhythm and Join
+    // section (gaia-guest-home.css), so the two pages read as one site.
+    root.innerHTML = '<div class="g-super-home g-super-today' + (authed ? '' : ' g-guest g-guest-today') + '">'
       + '<section class="g-super-today__head"><p class="g-super-kicker">' + esc(dateLabel()) + '</p>'
       + '<h1>Good ' + part + (authed && firstName ? ', ' + esc(firstName) : '') + '</h1>'
       + '<p>' + (authed ? 'What does today ask for?' : 'What does your energy need today?') + '</p></section>'
@@ -1049,7 +1051,7 @@
       + '<div data-daily-host></div>'
       + (authed ? nextBookingCard() : '')
       + '<div data-sky-host></div>'
-      + (authed ? '' : authPrompt(true))
+      + (authed ? '' : guestJoin())
       + '<div id="today-book"></div>'
       + '</div>';
     bind(root);

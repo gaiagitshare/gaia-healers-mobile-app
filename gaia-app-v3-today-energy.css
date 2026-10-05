@@ -335,7 +335,7 @@ body.gaia-v2 :is([data-screen="today"], [data-screen="wellness"]) .g-sky {
     var(--v3-card-bg);
   box-shadow: var(--v3-card-shadow);
 }
-body.gaia-v2 [data-screen="today"] [data-sky-host] .g-sky { max-width: none; }
+body.gaia-v2 :is([data-screen="today"], [data-screen="daily"]) [data-sky-host] .g-sky { max-width: none; }
 body.gaia-v2 :is([data-screen="today"], [data-screen="wellness"]) .g-sky__head .g-sky__kicker { color: var(--v3-label); }
 body.gaia-v2 :is([data-screen="today"], [data-screen="wellness"]) .g-sky__tofull {
   display: inline-flex;

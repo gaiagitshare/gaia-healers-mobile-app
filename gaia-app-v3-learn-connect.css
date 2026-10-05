@@ -1369,3 +1369,56 @@ body.gaia-v2 [data-screen="academy"] .g-access--link > .g-access__img--ph {
   }
   body.gaia-v2 [data-screen="community"] #community-body .g-card--feature .g-card__actions .g-btn { flex: 0 0 auto; padding-inline: 28px; }
 }
+
+/* ---------- Events on wide screens: Home's column; a lone event spans ------
+   From 1100px the page uses the 1180px column. With a single upcoming event
+   the grid used to show one half-width card and an empty half; that card
+   now runs the full width, artwork left and details right. */
+@media (min-width: 1100px) {
+  body.gaia-v2 [data-screen="events"] .g-page.g-events > * {
+    width: 100%;
+    max-width: 1180px;
+    margin-inline: auto;
+  }
+  body.gaia-v2 [data-screen="events"] .g-event-grid > .g-event-card:only-child {
+    grid-column: 1 / -1;
+    display: grid;
+    grid-template-columns: minmax(0, 0.95fr) minmax(0, 1fr);
+    align-items: center;
+    gap: 8px 28px;
+  }
+  body.gaia-v2 [data-screen="events"] .g-event-grid > .g-event-card:only-child .g-event-card__body { padding: 12px 20px 12px 0; }
+  body.gaia-v2 [data-screen="events"] .g-event-grid > .g-event-card:only-child h3 { font-size: clamp(24px, 2.4vw, 32px); line-height: 1.12; }
+  body.gaia-v2 [data-screen="events"] .g-event-grid > .g-event-card:only-child .g-event-card__actions { display: flex; flex-wrap: wrap; gap: 10px; justify-content: flex-start; }
+  body.gaia-v2 [data-screen="events"] .g-event-grid > .g-event-card:only-child .g-event-card__actions .g-btn { flex: 0 0 auto; width: auto; padding-inline: 24px; }
+}
+
+/* ---------- Bookings and Inbox on wide screens -----------------------------
+   The 1180px column, and the "Book a session" rows as a 3-column grid
+   (heading across the top) instead of full-width bars. */
+@media (min-width: 1100px) {
+  body.gaia-v2 :is([data-screen="bookings"], [data-screen="inbox"]) .gaia-main.g-page > * {
+    width: 100%;
+    max-width: 1180px;
+    margin-inline: auto;
+  }
+  body.gaia-v2 [data-screen="bookings"] .g-bookings > .g-super-list:has(> .g-super-row) {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 12px;
+  }
+  body.gaia-v2 [data-screen="bookings"] .g-bookings > .g-super-list:has(> .g-super-row) > :not(.g-super-row) { grid-column: 1 / -1; }
+  body.gaia-v2 [data-screen="bookings"] .g-bookings > .g-super-list > .g-super-row { margin: 0; }
+}
+
+/* Find a Healer: a single practitioner's pin (gaia-directory.js divIcon). */
+.g-dir-pin { background: none; border: 0; }
+.g-dir-pin span {
+  display: block;
+  width: 22px;
+  height: 22px;
+  border: 3px solid #fff;
+  border-radius: 50%;
+  background: #42db86;
+  box-shadow: 0 0 0 4px rgba(66, 219, 134, 0.35), 0 2px 6px rgba(0, 0, 0, 0.35);
+}

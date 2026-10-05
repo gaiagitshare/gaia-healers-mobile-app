@@ -13,7 +13,7 @@
    tab bar on phones change how much room the page really has.
    ========================================================================== */
 
-body.gaia-v2 .g-super-home.g-guest {
+body.gaia-v2 .g-guest {
   --gg-gap: clamp(12px, 1.4vw, 16px);
   --gg-section: clamp(36px, 5vw, 56px);
   --gg-radius: var(--v3-radius-lg, 22px);
@@ -26,6 +26,8 @@ body.gaia-v2 .g-super-home.g-guest {
   --gg-muted: var(--v3-muted, #718079);
   --gg-green: var(--v3-green, #9de177);
   --gg-ease: var(--v3-ease, cubic-bezier(0.22, 1, 0.36, 1));
+}
+body.gaia-v2 .g-super-home.g-guest {
   display: block !important;
   container-type: inline-size;
   container-name: gg;
@@ -452,4 +454,11 @@ body.gaia-v2 .g-super-home.g-guest-today > .gg-join { margin-top: var(--gg-secti
 @media (prefers-reduced-motion: reduce) {
   .g-guest .gg-feature, .g-guest .gg-tool, .g-guest .gg-cta, .g-guest .gg-cta__arrow, .g-guest .gg-tool__arrow { transition: none !important; }
   .g-guest .gg-feature:hover, .g-guest .gg-tool:hover { transform: none; }
+}
+
+/* —— Join section on other pages (Bookings, Inbox): guestJoinBlock() —————— */
+.g-guest.g-guest-inline {
+  container-type: inline-size;
+  container-name: gg;
+  margin-top: clamp(28px, 4vw, 44px);
 }

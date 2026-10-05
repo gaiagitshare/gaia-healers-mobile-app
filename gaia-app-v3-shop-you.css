@@ -1352,3 +1352,32 @@ body.gaia-v2 [data-screen="store"] .g-store-tile .g-tile__media--empty {
   }
   body.gaia-v2 [data-screen="profile"] #member-me:has([data-native-signin]) > .g-card .g-card__actions { margin-top: auto; padding-top: 16px; }
 }
+
+/* ---------- Membership plans on wide screens: four across, one bright CTA --
+   From 1100px the four plans sit in one row (they were a 2x2 grid that
+   read as two separate pairs). Every "Choose" button was the same bright
+   primary, so the featured plan did not stand out: only the featured
+   plan's button stays primary; the others are outlined. */
+@media (min-width: 1100px) {
+  body.gaia-v2 [data-screen="store"] #store-memberships:has(> .g-tier) {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 14px;
+    align-items: stretch;
+  }
+  body.gaia-v2 [data-screen="store"] #store-memberships:has(> .g-tier) > :not(.g-tier) { grid-column: 1 / -1; }
+  body.gaia-v2 [data-screen="store"] #store-memberships > .g-tier {
+    display: flex;
+    flex-direction: column;
+    margin: 0;
+    padding: 22px 20px;
+  }
+  body.gaia-v2 [data-screen="store"] #store-memberships > .g-tier .g-card__actions { margin-top: auto; padding-top: 18px; }
+  body.gaia-v2 [data-screen="store"] #store-memberships > .g-tier .g-tier__list li { font-size: 14px; }
+}
+body.gaia-v2 [data-screen="store"] #store-memberships:has(> .g-tier--featured) > .g-tier:not(.g-tier--featured) .g-card__actions .g-btn--primary {
+  background: transparent;
+  border: 1px solid var(--v3-border-strong);
+  color: var(--v3-text);
+  box-shadow: none;
+}

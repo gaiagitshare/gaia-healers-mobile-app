@@ -163,7 +163,9 @@
     var pts = [];
     list.forEach(function (p) {
       if (p.lat == null || p.lng == null) return;
-      var m = window.L.marker([p.lat, p.lng]);
+      // Leaflet's default pin is an image the app never shipped (it showed
+      // as a broken image); a drawn dot needs no file.
+      var m = window.L.marker([p.lat, p.lng], { icon: window.L.divIcon({ className: 'g-dir-pin', html: '<span></span>', iconSize: [22, 22], iconAnchor: [11, 11], popupAnchor: [0, -12] }) });
       var loc = [p.city, p.state].filter(Boolean).join(', ');
       m.bindPopup('<div class="g-dir-pop"><strong>' + esc(p.name) + '</strong>'
         + (loc ? '<span>' + esc(loc) + '</span>' : '')
@@ -172,8 +174,20 @@
       cluster.addLayer(m);
       pts.push([p.lat, p.lng]);
     });
-    if (pts.length) { try { map.fitBounds(pts, { padding: [30, 30], maxZoom: 11 }); } catch (e) {} }
-    setTimeout(function () { try { map.invalidateSize(); } catch (e) {} }, 60);
+    lastPts = pts;
+    fitMap();
+    // The screen may still be laying out (or hidden) when the list paints;
+    // fit again once it has its real size.
+    setTimeout(fitMap, 60);
+  }
+  // Measure first, then fit: fitting before Leaflet knows the container's
+  // size picked a zoom for the wrong box (desktop opened deep in one region
+  // instead of showing every practitioner).
+  var lastPts = [];
+  function fitMap() {
+    if (!map) return;
+    try { map.invalidateSize(); } catch (e) {}
+    if (lastPts.length) { try { map.fitBounds(lastPts, { padding: [30, 30], maxZoom: 11 }); } catch (e) {} }
   }
 
   async function openProfile(id) {
@@ -267,7 +281,7 @@
   function ensure() {
     if (!mount()) return;
     if (!loaded) load();
-    else setTimeout(function () { if (map) try { map.invalidateSize(); } catch (e) {} }, 60);
+    else setTimeout(fitMap, 60);
   }
 
   // Delegate marker-popup "View profile" clicks (popups render outside the mount).

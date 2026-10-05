@@ -33,6 +33,16 @@
     const body = await res.json().catch(() => ({}));
     return { ok: res.ok && body.ok !== false, status: res.status, body };
   };
+  async function copyText(text) {
+    if (!text) throw new Error('Nothing to copy');
+    try { await navigator.clipboard.writeText(text); return; } catch { /* older browsers */ }
+    const input = document.createElement('textarea'); input.value = text;
+    input.style.cssText = 'position:fixed;top:0;left:0;opacity:0';
+    document.body.appendChild(input);
+    const previous = document.activeElement;
+    try { input.focus(); input.select(); if (!document.execCommand('copy')) throw new Error('Copy unavailable'); }
+    finally { input.remove(); previous?.focus?.({ preventScroll: true }); }
+  }
   const when = (iso) => { try { return new Date(iso).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' }); } catch { return ''; } };
   const short = (iso) => { try { return new Date(iso).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }); } catch { return ''; } };
   const fmt = (v, d = 0) => (typeof v === 'number' ? v.toFixed(d) : '—');
@@ -83,12 +93,12 @@
   function comparePicker(series) {
     const pts = (series || []).filter((p) => p && p.d);
     if (pts.length < 2) return '';
-    const opt = (sel) => pts.map((p) => `<option value="${esc(p.d)}"${p.d === sel ? ' selected' : ''}>${esc(short(p.d))}</option>`).join('');
+    const opt = (sel) => pts.map((p) => `<option value="${esc(p.id || p.d)}"${(p.id || p.d) === sel ? ' selected' : ''}>${esc(p.at ? new Date(p.at).toLocaleString() : when(p.d))}</option>`).join('');
     return `<section class="g-readings__sec g-readings__pick" data-readings-pick>
-      <p class="g-readings__kicker">Compare any two</p>
+      <p class="g-readings__kicker">Compare available scans</p><p class="g-readings__muted">Choose two readings from the recent history available here.</p>
       <div class="g-readings__pick-row">
-        <label><span>From</span><select data-pick="from">${opt(pts[0].d)}</select></label>
-        <label><span>To</span><select data-pick="to">${opt(pts[pts.length - 1].d)}</select></label>
+        <label><span>From</span><select data-pick="from">${opt(pts[0].id || pts[0].d)}</select></label>
+        <label><span>To</span><select data-pick="to">${opt(pts[pts.length - 1].id || pts[pts.length - 1].d)}</select></label>
       </div>
       <p class="g-readings__pick-out" aria-live="polite"></p>
     </section>`;
@@ -96,9 +106,10 @@
   function pickOut(root, series) {
     const box = root.querySelector('[data-readings-pick]'); if (!box) return;
     const from = box.querySelector('[data-pick="from"]').value, to = box.querySelector('[data-pick="to"]').value;
-    const a = series.find((p) => p.d === from), b = series.find((p) => p.d === to);
+    const a = series.find((p) => (p.id || p.d) === from), b = series.find((p) => (p.id || p.d) === to);
     const out = box.querySelector('.g-readings__pick-out');
     if (!a || !b) { out.textContent = ''; return; }
+    if (from === to) { out.textContent = 'Choose two different scans.'; return; }
     const d = (x, y, dec) => (typeof x === 'number' && typeof y === 'number' ? y - x : null);
     out.innerHTML = `${esc(short(a.d))} → ${esc(short(b.d))}: stress ${signed(d(a.s, b.s), 2, true)} · energy ${signed(d(a.e, b.e), 1)}`;
   }
@@ -256,9 +267,9 @@
     const groups = String(out.code || '').match(/.{1,4}/g) || [];
     return card(`
       <p class="g-readings__lead">Your link code</p>
-      <p class="g-readings__code" aria-label="Link code">${groups.map(esc).join('<span class="g-readings__code-gap"> </span>')}</p>
+      <p class="g-readings__code" data-link-code="${esc(out.code)}" aria-label="Link code">${groups.map(esc).join('<span class="g-readings__code-gap"> </span>')}</p>
       <p class="g-readings__muted">Read it to your practitioner. It works once and expires ${esc(when(out.expires_at))}. Your agreement to share was recorded ${esc(when(out.consent_recorded_at))}.</p>
-      <div class="g-card__actions"><button type="button" class="g-btn g-btn--secondary g-btn--sm" data-readings-action="refresh">I have given it — check</button></div>`);
+      <div class="g-card__actions"><button type="button" class="g-btn g-btn--primary g-btn--sm" data-readings-action="copy-code">Copy code</button><button type="button" class="g-btn g-btn--secondary g-btn--sm" data-readings-action="refresh">I have given it — check</button></div>`);
   }
   /** Three small cards on what the screen shows. Open on the member's first visit (nothing opened yet), folded afterwards. */
   function explainer(firstVisit) {
@@ -272,11 +283,16 @@
     </details>`;
   }
   /** Folded: the In short block and one button. The whole card is one tap away, and Gaia's "open my readings" unfolds it. */
+  function averageCard(a) {
+    if (!a || a.count < 3) return '<p class="g-readings__muted">A three-scan average needs three dated readings with both energy and stress.</p>';
+    const metric = (label, value, max, decimals) => `<div><span>${label} average</span><strong>${esc(fmt(value, decimals))}</strong><span class="g-readings__bar"><span style="width:${clamp(value / max * 100, 0, 100)}%"></span></span></div>`;
+    return `<p class="g-readings__muted">Average of the latest 3 complete scans · ${esc(when(a.from))}–${esc(when(a.to))}</p><div class="g-readings__averages">${metric('Energy', a.energy, 100, 1)}${metric('Stress', a.stress, 10, 2)}</div>`;
+  }
   function foldedCard(r) {
     const practitioner = r.practitioner || {}, summary = r.summary || {};
     return card(`
       <p class="g-card__meta">Shared by <strong>${esc(practitioner.name || 'your practitioner')}</strong> · since ${esc(when(r.linked_at))}${r.scans_on_file != null ? ` · ${esc(r.scans_on_file)} reading${r.scans_on_file === 1 ? '' : 's'} on file` : ''}</p>
-      ${summary.headline ? `<div class="g-readings__summary"><p class="g-readings__kicker">In short</p><p class="g-readings__headline">${esc(summary.headline)}</p><ul class="g-readings__lines">${(summary.lines || []).slice(0, 2).map((l) => `<li>${esc(l)}</li>`).join('')}</ul></div>` : ''}
+      ${summary.headline ? `<div class="g-readings__summary"><p class="g-readings__kicker">In short</p><p class="g-readings__headline">${esc(summary.headline)}</p>${averageCard(r.average_recent)}</div>` : ''}
       <div class="g-card__actions"><button type="button" class="g-btn g-btn--primary g-btn--sm" data-readings-action="expand">Open my full readings</button></div>`, ' g-readings--folded');
   }
   function readingsCard(r, status = {}, prefs = {}) {
@@ -320,7 +336,7 @@
       ${summary.headline ? `<div class="g-readings__summary">
         <p class="g-readings__kicker">In short</p>
         <p class="g-readings__headline">${esc(summary.headline)}</p>
-        <ul class="g-readings__lines">${(summary.lines || []).map((l) => `<li>${esc(l)}</li>`).join('')}</ul>
+        ${averageCard(r.average_recent)}<details><summary>Reading details</summary><ul class="g-readings__lines">${(summary.lines || []).map((l) => `<li>${esc(l)}</li>`).join('')}</ul></details>
         <div class="g-card__actions"><button type="button" class="g-btn g-btn--ghost g-btn--sm" data-readings-action="copy">Copy summary</button><button type="button" class="g-btn g-btn--ghost g-btn--sm" data-readings-action="image">Save as image</button></div>
       </div>` : ''}
 
@@ -464,9 +480,16 @@
           if (box) { box.hidden = !box.hidden; btn.setAttribute('aria-expanded', String(!box.hidden)); }
           return;
         }
+        if (action === 'copy-code') {
+          const code = root.querySelector('[data-link-code]')?.dataset.linkCode || '';
+          try { await copyText(code); btn.textContent = 'Copied'; } catch { btn.textContent = 'Select the code to copy'; }
+          btn.setAttribute('aria-live', 'polite');
+          window.setTimeout(() => { btn.textContent = 'Copy code'; }, 2000);
+          return;
+        }
         if (action === 'copy') {
           const text = lastSummary ? [lastSummary.headline, ...(lastSummary.lines || [])].join('\n') : '';
-          try { await navigator.clipboard.writeText(text); btn.textContent = 'Copied'; } catch { btn.textContent = 'Could not copy'; }
+          try { await copyText(text); btn.textContent = 'Copied'; } catch { btn.textContent = 'Could not copy'; }
           window.setTimeout(() => { btn.textContent = 'Copy summary'; }, 1600);
           return;
         }

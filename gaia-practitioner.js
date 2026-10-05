@@ -356,7 +356,7 @@
           <div data-prac-services></div>
           <section class="g-prac__sec">
             <h3 class="g-prac__h">Bio-Well</h3>
-            <p class="g-prac__muted">Each of these is fetched live from Bio-Well and takes about ten seconds.</p>
+            <p class="g-prac__muted">Readings are fetched live from Bio-Well. Loading a comparison and its scan history may take 10–20 seconds.</p>
             <div class="g-prac__cards">
               ${['latest', 'trend', 'compare'].map((k) => `
                 <div class="g-prac__card" data-prac-card="${k}">
@@ -406,13 +406,18 @@
       }).catch(() => { svcHost.innerHTML = ''; });
 
       const filesHost = root.querySelector('[data-prac-files]');
-      tool('practitioner_client_files', { clientId })
-        .then((r) => { filesHost.innerHTML = (r.files || []).length
-          ? r.files.map((f) => `<div class="g-prac__file">${esc(f.name || 'File')}</div>`).join('')
-          : empty('No files for this client yet.'); })
-        .catch(() => { filesHost.innerHTML = empty('No files for this client yet.'); });
+      loadFiles(clientId, filesHost);
 
       if (openSection) openCard(openSection, awaiting);
+    }
+    function loadFiles(clientId, filesHost) {
+      filesHost.innerHTML = skeleton(1);
+      tool('practitioner_client_files', { clientId })
+        .then((r) => { if (openClient !== String(clientId)) return; filesHost.innerHTML = (r.files || []).length
+          ? r.files.map((f) => `<div class="g-prac__file">${esc(f.name || 'File')}</div>`).join('')
+          : empty('No files for this client yet.'); })
+        .catch(() => { if (openClient !== String(clientId)) return; filesHost.innerHTML = empty('Files could not be loaded.', { action: 'retry-files', label: 'Try again' }); });
+
     }
 
     /**
@@ -437,7 +442,7 @@
         return;
       }
       const html = renderCard(kind, payload.data);
-      body.innerHTML = html;      // replaces the waiting state and its timer
+      body.innerHTML = html; updateScanPicker();      // replaces the waiting state and its timer
       if (openClient) (loaded.get(openClient) || {})[kind] = html;
     }
 
@@ -456,7 +461,7 @@
       body.hidden = false;
       if (cta) cta.textContent = 'Hide';
       const cached = (loaded.get(openClient) || {})[kind];
-      if (cached) { body.innerHTML = cached; return; }
+      if (cached) { body.innerHTML = cached; updateScanPicker(); return; }
       // Gaia opened this card and its own call is still in flight; let that one
       // land rather than starting a second eleven-second fetch beside it.
       if (body.querySelector('[data-prac-loading]')) return;
@@ -469,12 +474,12 @@
       if (awaiting) return;
       const forClient = openClient;
       try {
-        const data = await tool(toolName, { clientId: openClient });
+        const data = await tool(toolName, { clientId: openClient, ...(kind === 'compare' ? { selectScans: true } : {}) });
         stop();
         if (openClient !== forClient) return;      // they moved on; do not paint
         const html = renderCard(kind, data);
-        body.innerHTML = html;
-        loaded.get(forClient)[kind] = html;        // one wait per client per card
+        body.innerHTML = html; updateScanPicker();
+        if (!data.history_unavailable) loaded.get(forClient)[kind] = html;        // one wait per client per card
       } catch (e) {
         stop();
         if (openClient !== forClient) return;
@@ -490,6 +495,23 @@
       const pct = Math.max(0, Math.min(100, (Number(value) / max) * 100));
       return `<span class="g-prac__bar"><span style="width:${pct.toFixed(0)}%"></span></span>`;
     }
+
+    function scanPicker(series = [], average) {
+      if (series.length < 2) return '';
+      const options = selected => series.map(p => `<option value="${esc(p.id)}"${p.id === selected ? ' selected' : ''}>${esc(new Date(p.at).toLocaleString())}</option>`).join('');
+      return `<section data-prac-pick data-prac-series="${esc(JSON.stringify(series))}"><h4 class="g-prac__h4">Compare your chosen scans</h4><p class="g-prac__muted">Energy and stress changes between two readings. This does not establish a therapy's effect.</p><div class="g-readings__pick-row"><label>From<select data-prac-pick-from>${options(series[0].id)}</select></label><label>To<select data-prac-pick-to>${options(series[series.length - 1].id)}</select></label></div><p data-prac-pick-out aria-live="polite"></p>${average ? `<p class="g-prac__muted">Latest 3 scans average: energy ${average.energy.toFixed(1)} · stress ${average.stress.toFixed(2)}</p>` : ''}</section>`;
+    }
+    function updateScanPicker() {
+      const box = root.querySelector('[data-prac-pick]'); if (!box) return;
+      const series = JSON.parse(box.dataset.pracSeries);
+      const a = series.find(p => p.id === box.querySelector('[data-prac-pick-from]').value);
+      const b = series.find(p => p.id === box.querySelector('[data-prac-pick-to]').value);
+      const out = box.querySelector('[data-prac-pick-out]');
+      if (!a || !b || a.id === b.id) { out.textContent = 'Choose two different scans.'; return; }
+      const delta = (key, decimals) => Number.isFinite(a[key]) && Number.isFinite(b[key]) ? `${b[key] - a[key] > 0 ? '+' : ''}${(b[key] - a[key]).toFixed(decimals)}` : 'not available';
+      out.textContent = `Energy change ${delta('e', 1)} · stress change ${delta('s', 2)}`;
+    }
+    root.addEventListener('change', e => { if (e.target.matches('[data-prac-pick-from], [data-prac-pick-to]')) updateScanPicker(); });
 
     function renderCard(kind, d) {
       if (kind === 'latest') {
@@ -524,8 +546,8 @@
             d.other_movements.map((f) => `<div class="g-prac__row"><span>${esc(f.name)}</span>
               <span class="g-prac__muted">${esc(f.direction)} ${f.change > 0 ? '+' : ''}${esc(f.change)}</span></div>`).join('')}` : ''}`;
       }
-      if (d.found === false) return empty(d.reason || 'A comparison needs two scans; this client has one.');
-      return (d.comparisons || []).map((c) => `<div class="g-prac__compare">
+      if (d.found === false) return empty(d.reason || 'Two comparable scans are needed.', d.history_unavailable ? { action: 'retry-compare', label: 'Try again' } : null);
+      return scanPicker(d.series, d.average_recent) + (!(d.series || []).length && !d.history_unavailable ? '<button type="button" class="g-btn g-btn--secondary g-btn--sm" data-prac-action="retry-compare">Choose scans</button>' : '') + (d.history_unavailable ? '<p class="g-prac__muted">Scan selection could not load. Close and reopen this card to try again.</p>' : '') + (d.comparisons || []).map((c) => `<div class="g-prac__compare">
         <p class="g-prac__muted">${esc(c.from)} → ${esc(c.to)} · ${esc(c.basis)}</p>
         <div class="g-prac__metrics">
           <div class="gaia-metric"><span class="gaia-metric__v">${c.energy_change > 0 ? '+' : ''}${esc(c.energy_change)}</span><span class="gaia-metric__k">Energy</span></div>
@@ -549,6 +571,7 @@
         if (a === 'signin') { window.GaiaAuth?.open?.(); return; }
         if (a === 'retry') { start(); return; }
         if (a === 'disconnect') { disconnect(); return; }
+        if (a === 'retry-files') { loadFiles(openClient, root.querySelector('[data-prac-files]')); return; }
         if (a.startsWith('retry-')) {
           const kind = a.slice(6);
           const body = root.querySelector(`[data-prac-body="${kind}"]`);

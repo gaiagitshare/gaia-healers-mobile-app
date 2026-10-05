@@ -55,7 +55,7 @@ try {
   await page.locator('[data-readings-action="expand"]').click();
   await page.locator('.g-readings__averages').waitFor();
   assert.match(await page.locator('.g-readings__averages').innerText(),/60.0/);
-  assert.match(await page.locator('.g-readings__avg-dates').innerText(),/Oct 1.*Oct 4.*Oct 4/s,'the three averaged scans are named, same-day scans separately');
+  assert.match(await page.locator('.g-readings__avg-dates').innerText(),/Oct 1, 2026 · 2 scans on Oct 4, 2026/,'the three averaged scans are named; same-day scans are counted together');
   await page.locator('.g-readings__summary').evaluate(e=>e.scrollIntoView({block:'start'}));
   if(screenshots)await page.screenshot({path:path.join(screenshots,`reading-summary-${width}.png`)});
   const from=page.locator('[data-pick="from"]'),to=page.locator('[data-pick="to"]');

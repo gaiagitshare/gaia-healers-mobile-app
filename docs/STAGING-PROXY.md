@@ -491,6 +491,27 @@ Practice screen, which shows each state in plain words and what the last
 attempt brought back (`?practitioners=failed&reason=`). After a verified link
 the GHL tag `gaiapractitioner` is written to the contact, best effort.
 
+### Gaia Practitioners: the tools their MCP offers (measured 5 Oct 2026)
+
+`tools/list` on staging with the live link answers 22 tools (names only;
+arguments in brackets): list_customers, search_customers(query),
+get_customer(customerId), get_customer_scan(customerId),
+get_scan_trend(customerId, summary_only), compare_protocol_before_after(customerId, limit),
+get_research_results(customerId), get_practice_research_analytics,
+list_flagged_customers(minSeverity), search_customers_by_scan(query, direction, sinceDays),
+suggest_follow_ups, get_client_summary(customerId), get_practice_performance,
+list_appointments(limit), list_products, **get_customer_recommendations(customerId)**
+("the AI-generated recommendations/scripts for a customer"),
+get_customer_files(customerId) (a LISTING: names, no contents), list_orders(limit),
+list_services, get_practitioner_profile, get_customer_reviews(customerId),
+get_dashboard_summary.
+
+So, for Nima's "can our AI read the files or the AI-generated guides": the
+files cannot be read (listing only, no content tool); the guides CAN — they are
+`get_customer_recommendations`, text, per customer, readable with the linked
+practitioner's token exactly as `member-link.js` reads scans. The member-side
+consent for that is `guides_to_assist` (above). Not built yet.
+
 ### Gaia Avatar (app layer, no server part)
 
 `gaia-avatar.js` + `gaia-avatar.css` draw the approved character (six
@@ -530,7 +551,12 @@ booleans per member (`member-prefs.js`, `PREF_KEYS`), kept server-side in
 non-booleans are dropped. Today: `next_level_collapsed` (the Next level card
 on You folded to one line) and `readings_explainer_collapsed` ("What these
 mean" on My readings folded) and `practitioner_card_dismissed` ("Become a
-practitioner" on You dismissed with Not now).
+practitioner" on You dismissed with Not now), `avatar_idle_off`,
+`avatar_hello_chime`, and `guides_to_assist` — a SEPARATE consent, offered in
+"Your data and sharing" only to a linked member, off by default: may Gaia
+Assist read the guides their practitioner wrote for them. Nothing reads it yet;
+it exists so the guide feature below can ship behind a consent that already
+has a record.
 
 ### Usage accounting
 

@@ -17,6 +17,7 @@ export const PREF_KEYS = Object.freeze({
   practitioner_card_dismissed: 'the "Become a practitioner" card on You was dismissed',
   avatar_idle_off: "Gaia's idle animations are switched off",
   avatar_hello_chime: 'a soft chime plays with the hello (off unless chosen)',
+  guides_to_assist: 'Gaia Assist may read the guides their practitioner wrote for them (off unless chosen; a separate consent, recorded before the guide feature exists, and read by nothing until it does)',
 });
 
 function load(file) {

@@ -1,0 +1,438 @@
+/* ==========================================================================
+   Guest Home (signed out) -- gaia-superapp.js guestHero / guestExplore /
+   guestJoin / guestEvent. One container, one grid, one rhythm:
+
+     hero        copy left, artwork right (stacked, art first, below 900px)
+     explore     Energy check featured 2x2, eight doors around it
+     join        visual | benefits, one primary action, the rest quieter
+     gathering   artwork ~36% | details and actions
+
+   Everything is scoped to .g-guest / .gg-* so the layered .g-super-hero and
+   .g-free-tool rules from earlier Home layouts never reach it. Layout steps
+   follow the container (not the viewport): the sidebar on desktop and the
+   tab bar on phones change how much room the page really has.
+   ========================================================================== */
+
+body.gaia-v2 .g-super-home.g-guest {
+  --gg-gap: clamp(12px, 1.4vw, 16px);
+  --gg-section: clamp(36px, 5vw, 56px);
+  --gg-radius: var(--v3-radius-lg, 22px);
+  --gg-card: var(--v3-card, #101b15);
+  --gg-card-2: var(--v3-card-2, #17241c);
+  --gg-line: var(--v3-border, rgba(160, 255, 185, 0.16));
+  --gg-line-hi: var(--v3-border-strong, rgba(120, 245, 145, 0.42));
+  --gg-text: var(--v3-text, #f5f7f5);
+  --gg-text-2: var(--v3-text-2, #a8b3ad);
+  --gg-muted: var(--v3-muted, #718079);
+  --gg-green: var(--v3-green, #9de177);
+  --gg-ease: var(--v3-ease, cubic-bezier(0.22, 1, 0.36, 1));
+  display: block !important;
+  container-type: inline-size;
+  container-name: gg;
+  max-width: 1180px;
+  margin-inline: auto;
+  padding-bottom: 96px;
+}
+
+body.gaia-v2 .g-super-home.g-guest > section + section,
+body.gaia-v2 .g-super-home.g-guest > section {
+  margin-top: var(--gg-section);
+}
+body.gaia-v2 .g-super-home.g-guest > .gg-hero { margin-top: 0; }
+body.gaia-v2 .g-super-home.g-guest > #home-announcements:not(:empty) { margin-bottom: var(--gg-gap); }
+
+.g-guest h1, .g-guest h2 { font-family: var(--g-font); color: var(--gg-text); text-wrap: balance; }
+.g-guest .g-super-kicker { margin: 0; }
+
+/* Shared action motion: the arrow leans in, the fill brightens. */
+.g-guest .gg-cta { gap: 8px; }
+.g-guest .gg-cta__arrow { transition: transform 0.28s var(--gg-ease); }
+.g-guest .gg-cta:hover .gg-cta__arrow,
+.g-guest .gg-cta:focus-visible .gg-cta__arrow,
+.g-guest .gg-feature:hover .gg-cta__arrow,
+.g-guest .gg-feature:focus-visible .gg-cta__arrow { transform: translateX(4px); }
+.g-guest .g-btn.gg-cta { box-shadow: 0 0 0 0 rgba(157, 225, 119, 0); transition: box-shadow 0.3s var(--gg-ease), filter 0.3s var(--gg-ease), transform 0.3s var(--gg-ease); }
+.g-guest .g-btn.gg-cta:hover { box-shadow: 0 8px 28px -8px rgba(157, 225, 119, 0.55); filter: brightness(1.05); }
+.g-guest .g-btn.gg-cta:active { transform: translateY(1px); }
+
+/* —— Hero ——————————————————————————————————————————————————————————— */
+.g-guest .gg-hero {
+  position: relative;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  border: 1px solid var(--gg-line);
+  border-radius: var(--gg-radius);
+  background:
+    radial-gradient(120% 90% at 0% 100%, rgba(66, 219, 134, 0.10), transparent 60%),
+    var(--gg-card);
+  overflow: hidden;
+  isolation: isolate;
+}
+.g-guest .gg-hero__art {
+  position: relative;
+  order: -1;
+  aspect-ratio: 16 / 9;
+  max-height: 300px;
+  width: 100%;
+  -webkit-mask-image: linear-gradient(180deg, #000 55%, transparent 100%);
+  mask-image: linear-gradient(180deg, #000 55%, transparent 100%);
+}
+.g-guest .gg-hero__art picture,
+.g-guest .gg-hero__art img {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+.g-guest .gg-hero__art img { object-fit: cover; object-position: center 30%; }
+.g-guest .gg-hero__copy {
+  position: relative;
+  z-index: 1;
+  margin-top: -36px;
+  padding: 0 clamp(20px, 4cqi, 32px) clamp(24px, 5cqi, 32px);
+}
+.g-guest .gg-hero__greet {
+  margin: 0 0 12px;
+  color: var(--v3-label, #8fc39c);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+.g-guest .gg-hero h1 {
+  margin: 0;
+  max-width: 21ch;
+  font-size: clamp(30px, 5.6cqi, 50px) !important;
+  font-weight: 600;
+  line-height: 1.05 !important;
+  letter-spacing: -0.025em;
+}
+.g-guest .gg-hero h1 span {
+  display: block;
+  background: linear-gradient(90deg, var(--gg-green), var(--v3-emerald, #42db86));
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+.g-guest .gg-hero__lede {
+  margin: 14px 0 0;
+  max-width: 40ch;
+  color: var(--gg-text-2);
+  font-size: clamp(15px, 2.2cqi, 17px);
+  line-height: 1.55;
+}
+.g-guest .gg-hero__actions { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 22px; }
+.g-guest .gg-hero__actions .g-btn { min-height: 48px; padding-inline: 20px; }
+.g-guest .gg-hero__note {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 14px 0 0;
+  color: var(--gg-muted);
+  font-size: 13px;
+}
+.g-guest .gg-hero__note i { color: var(--gg-green); }
+
+/* Two columns from here; the <picture> swaps to the square art at a viewport
+   of 1060px, which is where this container (beside the sidebar) reaches 860. */
+@container gg (min-width: 860px) {
+  .g-guest .gg-hero {
+    grid-template-columns: minmax(0, 1.12fr) minmax(0, 1fr);
+    min-height: 440px;
+  }
+  .g-guest .gg-hero__art {
+    order: 0;
+    aspect-ratio: auto;
+    max-height: none;
+    height: 100%;
+    -webkit-mask-image: linear-gradient(90deg, transparent 0%, #000 30%);
+    mask-image: linear-gradient(90deg, transparent 0%, #000 30%);
+  }
+  .g-guest .gg-hero__art img { position: absolute; inset: 0; object-position: center 60%; }
+  .g-guest .gg-hero h1 { max-width: none; }
+  .g-guest .gg-hero__copy {
+    align-self: center;
+    margin: 0;
+    padding: 48px 8px 48px 52px;
+  }
+}
+
+/* —— Section heads ——————————————————————————————————————————————————— */
+.g-guest .gg-head { margin: 0 0 18px; }
+.g-guest .gg-head h2 {
+  margin: 6px 0 0;
+  font-size: clamp(22px, 3.4cqi, 30px);
+  font-weight: 600;
+  line-height: 1.15;
+  letter-spacing: -0.015em;
+}
+
+/* —— Explore ————————————————————————————————————————————————————————— */
+.g-guest .gg-explore { scroll-margin-top: 88px; }
+.g-guest .gg-explore__grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--gg-gap);
+}
+.g-guest .gg-feature,
+.g-guest .gg-tool {
+  position: relative;
+  border: 1px solid var(--gg-line);
+  border-radius: var(--v3-radius, 18px);
+  background: var(--gg-card);
+  color: var(--gg-text);
+  text-decoration: none;
+  transition: transform 0.3s var(--gg-ease), border-color 0.3s var(--gg-ease), background-color 0.3s var(--gg-ease), box-shadow 0.3s var(--gg-ease);
+}
+.g-guest .gg-feature:focus-visible,
+.g-guest .gg-tool:focus-visible { outline: none; box-shadow: var(--g-focus); }
+
+.g-guest .gg-feature {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 22px;
+  background:
+    radial-gradient(90% 80% at 100% 0%, rgba(157, 225, 119, 0.16), transparent 60%),
+    radial-gradient(70% 70% at 0% 100%, rgba(66, 219, 134, 0.10), transparent 70%),
+    var(--gg-card-2);
+  border-color: rgba(157, 225, 119, 0.28);
+}
+.g-guest .gg-feature__icon {
+  display: grid;
+  place-items: center;
+  width: 52px;
+  height: 52px;
+  border-radius: 16px;
+  background: rgba(157, 225, 119, 0.14);
+  color: var(--gg-green);
+  font-size: 26px;
+}
+.g-guest .gg-feature__copy { display: grid; gap: 6px; }
+.g-guest .gg-feature__copy small {
+  color: var(--v3-label, #8fc39c);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+.g-guest .gg-feature__copy strong { font-size: clamp(22px, 3.2cqi, 28px); font-weight: 600; letter-spacing: -0.015em; line-height: 1.15; }
+.g-guest .gg-feature__copy > span { color: var(--gg-text-2); font-size: 15px; line-height: 1.5; max-width: 34ch; }
+.g-guest .gg-feature__go {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: auto;
+  color: var(--gg-green);
+  font-weight: 600;
+  font-size: 15px;
+}
+
+.g-guest .gg-tool {
+  --tool: var(--gg-green);
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  align-content: start;
+  gap: 10px;
+  padding: 14px;
+  min-width: 0;
+}
+.g-guest .gg-tool__icon {
+  display: grid;
+  place-items: center;
+  width: 38px;
+  height: 38px;
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--tool) 14%, transparent);
+  color: var(--tool);
+  font-size: 19px;
+}
+.g-guest .gg-tool__copy { display: grid; gap: 3px; min-width: 0; }
+.g-guest .gg-tool__copy strong { font-size: 15px; font-weight: 600; line-height: 1.25; }
+.g-guest .gg-tool__copy small { color: var(--gg-text-2); font-size: 13px; line-height: 1.35; }
+.g-guest .gg-tool__arrow { display: none; }
+
+@media (hover: hover) {
+  .g-guest .gg-tool:hover,
+  .g-guest .gg-feature:hover {
+    transform: translateY(-2px);
+    border-color: var(--gg-line-hi);
+    box-shadow: 0 14px 34px -18px color-mix(in srgb, var(--tool, var(--gg-green)) 60%, transparent);
+  }
+  .g-guest .gg-tool:hover { background-color: var(--gg-card-2); }
+  .g-guest .gg-tool:hover .gg-tool__arrow { transform: translateX(3px); color: var(--tool); }
+}
+
+@container gg (min-width: 560px) {
+  .g-guest .gg-tool {
+    grid-template-columns: 40px minmax(0, 1fr) 16px;
+    align-items: center;
+    gap: 12px;
+    padding: 14px 16px;
+  }
+  .g-guest .gg-tool__icon { width: 40px; height: 40px; }
+  .g-guest .gg-tool__arrow { display: block; color: var(--gg-muted); font-size: 16px; transition: transform 0.28s var(--gg-ease), color 0.28s var(--gg-ease); }
+  .g-guest .gg-feature {
+    display: grid;
+    grid-template-columns: 52px minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 18px;
+    padding: 24px 26px;
+  }
+  .g-guest .gg-feature__go { margin-top: 0; }
+}
+
+@container gg (min-width: 860px) {
+  .g-guest .gg-explore__grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+  .g-guest .gg-feature {
+    grid-column: span 2;
+    grid-row: span 4;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 16px;
+    padding: 30px;
+  }
+  .g-guest .gg-feature__icon { width: 60px; height: 60px; font-size: 30px; border-radius: 18px; }
+  .g-guest .gg-feature__go { margin-top: auto; }
+  .g-guest .gg-tool { grid-template-columns: 40px minmax(0, 1fr); }
+  .g-guest .gg-tool__arrow { display: none; }
+}
+@container gg (min-width: 1060px) {
+  .g-guest .gg-explore__grid { grid-template-columns: repeat(2, minmax(0, 1.25fr)) repeat(2, minmax(0, 1fr)); }
+  .g-guest .gg-tool { grid-template-columns: 40px minmax(0, 1fr) 16px; }
+  .g-guest .gg-tool__arrow { display: block; }
+}
+
+/* —— Join ———————————————————————————————————————————————————————————— */
+.g-guest .gg-join {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  border: 1px solid var(--gg-line);
+  border-radius: var(--gg-radius);
+  background: var(--gg-card);
+  overflow: hidden;
+}
+.g-guest .gg-join__visual {
+  position: relative;
+  display: grid;
+  place-items: center;
+  min-height: 132px;
+  background:
+    radial-gradient(closest-side, rgba(157, 225, 119, 0.22), transparent 75%),
+    radial-gradient(120% 120% at 50% 120%, rgba(66, 219, 134, 0.18), transparent 60%),
+    #0b1711;
+}
+.g-guest .gg-join__orb {
+  display: grid;
+  place-items: center;
+  width: 84px;
+  height: 84px;
+  border-radius: 50%;
+  background: rgba(8, 17, 13, 0.6);
+  box-shadow:
+    0 0 0 10px rgba(157, 225, 119, 0.06),
+    0 0 0 22px rgba(157, 225, 119, 0.04),
+    0 0 48px rgba(157, 225, 119, 0.35);
+}
+.g-guest .gg-join__orb img { width: 52px; height: 52px; }
+.g-guest .gg-join__body { padding: clamp(22px, 4.4cqi, 40px); }
+.g-guest .gg-join h2 {
+  margin: 6px 0 0;
+  font-size: clamp(24px, 3.6cqi, 32px);
+  font-weight: 600;
+  line-height: 1.12;
+  letter-spacing: -0.015em;
+}
+.g-guest .gg-join__lede { margin: 10px 0 0; color: var(--gg-text-2); font-size: 15px; line-height: 1.5; }
+.g-guest .gg-join__list { display: grid; gap: 10px; margin: 20px 0 0; padding: 0; list-style: none; }
+.g-guest .gg-join__list li { display: grid; grid-template-columns: 20px minmax(0, 1fr); gap: 10px; align-items: start; color: var(--gg-text); font-size: 15px; line-height: 1.45; }
+.g-guest .gg-join__list i { color: var(--gg-green); font-size: 19px; margin-top: 1px; }
+.g-guest .gg-join__actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 18px; margin-top: 24px; }
+.g-guest .gg-join__actions .g-btn { min-height: 48px; padding-inline: 22px; }
+.g-guest .gg-link {
+  appearance: none;
+  border: 0;
+  background: none;
+  padding: 8px 2px;
+  color: var(--gg-text-2);
+  font: inherit;
+  font-size: 15px;
+  cursor: pointer;
+}
+.g-guest .gg-link strong { color: var(--gg-text); font-weight: 600; text-decoration: underline; text-decoration-color: rgba(157, 225, 119, 0.5); text-underline-offset: 3px; }
+.g-guest .gg-link:hover strong { text-decoration-color: var(--gg-green); }
+.g-guest .gg-join__plans {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: 18px;
+  color: var(--gg-muted);
+  font-size: 13px;
+  text-decoration: none;
+}
+.g-guest .gg-join__plans:hover { color: var(--gg-text-2); }
+
+@container gg (min-width: 720px) {
+  .g-guest .gg-join { grid-template-columns: minmax(0, 0.8fr) minmax(0, 1.2fr); }
+  .g-guest .gg-join__visual { min-height: 100%; }
+  .g-guest .gg-join__orb { width: 120px; height: 120px; }
+  .g-guest .gg-join__orb img { width: 72px; height: 72px; }
+}
+
+/* —— Next gathering ——————————————————————————————————————————————————— */
+.g-guest .gg-event {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  border: 1px solid var(--gg-line);
+  border-radius: var(--gg-radius);
+  background: var(--gg-card);
+  overflow: hidden;
+}
+.g-guest .gg-event__art { position: relative; aspect-ratio: 16 / 9; background: #0b1711; }
+.g-guest .gg-event__art img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; object-position: center 40%; }
+.g-guest .gg-event__body { padding: clamp(22px, 4.4cqi, 40px); display: flex; flex-direction: column; justify-content: center; }
+.g-guest .gg-event h2 {
+  margin: 8px 0 14px;
+  font-size: clamp(24px, 4cqi, 36px);
+  font-weight: 600;
+  line-height: 1.08;
+  letter-spacing: -0.02em;
+}
+.g-guest .gg-badge {
+  display: inline-block;
+  margin-left: 8px;
+  padding: 2px 9px;
+  border: 1px solid rgba(157, 225, 119, 0.35);
+  border-radius: 999px;
+  background: rgba(157, 225, 119, 0.10);
+  color: var(--gg-green);
+  font-size: 11px;
+  letter-spacing: 0.02em;
+  text-transform: none;
+  vertical-align: 1px;
+}
+.g-guest .gg-event__meta { display: flex; align-items: center; gap: 8px; margin: 0 0 6px; color: var(--gg-text-2); font-size: 15px; }
+.g-guest .gg-event__meta i { color: var(--gg-green); font-size: 17px; }
+.g-guest .gg-event__actions { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 18px; }
+.g-guest .gg-event__actions .g-btn { min-height: 46px; padding-inline: 20px; }
+
+@container gg (min-width: 720px) {
+  .g-guest .gg-event { grid-template-columns: minmax(0, 0.36fr) minmax(0, 0.64fr); min-height: 300px; }
+  .g-guest .gg-event__art { aspect-ratio: auto; }
+}
+
+/* —— Phones: room for the tab bar; quieter section rhythm —————————————— */
+@media (max-width: 1023px) {
+  body.gaia-v2 .g-super-home.g-guest { padding-bottom: 110px; }
+}
+@container gg (max-width: 420px) {
+  .g-guest .gg-hero__actions .g-btn { flex: 1 1 100%; justify-content: center; }
+  .g-guest .gg-join__actions .g-btn { flex: 1 1 100%; justify-content: center; }
+  .g-guest .gg-event__actions .g-btn { flex: 1 1 100%; justify-content: center; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .g-guest .gg-feature, .g-guest .gg-tool, .g-guest .gg-cta, .g-guest .gg-cta__arrow, .g-guest .gg-tool__arrow { transition: none !important; }
+  .g-guest .gg-feature:hover, .g-guest .gg-tool:hover { transform: none; }
+}

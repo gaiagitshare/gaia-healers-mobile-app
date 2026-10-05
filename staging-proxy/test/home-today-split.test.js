@@ -52,7 +52,7 @@ test('the daily energy check and the sky render on Today only; the member Home i
   assert.match(member, /meta\.degraded \|\| meta\.stale/, 'sync is said only when something is wrong');
   assert.match(sa, /class="g-home2__also" href="home\.html\?view=bookings"/, 'a course and a booking: the booking is named on a second line');
   const guest = sa.slice(sa.indexOf('this is the\n      // guest on-ramp'), sa.indexOf('bind(root);\n    renderToday();'));
-  assert.match(guest, /freeTools\(\)[\s\S]*authPrompt\(true\)[\s\S]*eventCompact\(\)/, 'guest: tools, the way in, the gathering compact');
+  assert.match(guest, /guestHero\(dayGreeting\)[\s\S]*guestExplore\(\)[\s\S]*guestJoin\(\)[\s\S]*guestEvent\(\)/, 'guest: what Gaia is, the tools, the way in, the gathering');
   assert.doesNotMatch(guest, /eventFeatureCarousel\(\)/);
   const ui = read('gaia-ui.js');
   assert.match(ui, /sel: '\.gava-char', title: 'Get a little guidance'/, 'the first-run guidance points at her, not the old orb');

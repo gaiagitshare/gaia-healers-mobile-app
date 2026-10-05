@@ -930,7 +930,7 @@
     return [
       { sel: '.gaia-tabbar__home', view: 'today', title: 'Start from Home',
         body: 'Use the green Home button to return here whenever you need a fresh start.' },
-      ...(!member ? [{ sel: '.g-free-tool[href*="view=wellness&tab=check"], .g-super-discover--solo > a', view: 'today', title: 'Try an energy check',
+      ...(!member ? [{ sel: '.gg-feature, .g-free-tool[href*="view=wellness&tab=check"], .g-super-discover--solo > a', view: 'today', title: 'Try an energy check',
         body: 'Start with a free energy check. You can explore before creating an account.' }] : []),
       { sel: '#wellness-tabs', view: 'wellness', tab: 'check', title: 'Choose your energy tool',
         body: 'Switch between Energy check, Horoscope and Chakra match. Pick what you need today.' },
@@ -1127,7 +1127,7 @@
       // Guests only — a signed-in member does not need the intro.
       if (authState().authenticated) { markTourSeen(); return; }
       // Wait until the home has actually rendered its free tools.
-      if (!document.querySelector('.g-free-tools')) return;
+      if (!document.querySelector('.gg-explore, .g-free-tools')) return;
       started = true;
       document.removeEventListener('gaia:superapp-rendered', start);
       window.setTimeout(() => { if (!authState().authenticated && window.GaiaAppShell?.currentView?.() === 'today') runTour(); }, 500);

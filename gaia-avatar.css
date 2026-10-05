@@ -143,9 +143,6 @@ body.gaia-v2 .gaia-tabbar__inner a.gaia-tabbar__home { border-radius: 999px !imp
 .g-super-today__head h1 { font-family: var(--g-font-serif, "Cormorant Garamond", serif); font-weight: 600; font-size: clamp(1.9rem, 6vw, 2.6rem); margin: 4px 0 2px; line-height: 1.05; }
 .g-super-today__head p { margin: 0; color: var(--g-text-muted, #a8b3ad); }
 .g-super-today__head .g-super-kicker { margin-bottom: 2px; }
-/* wide screens: the Today door and the primary action share a row; the headings stop shouting */
-@media (min-width: 1060px) {
-  .g-super-home >   .g-super-home >   .g-super-home > .g-super-primary:not(  .g-super-home > .g-super-primary:not(  .g-super-home > .g-super-primary:not(}
 /* ── the conversation, in her bubble; the engine's own sheet stays hidden ── */
 body.gaia-assist-headless .gaia-assist__panel, body.gaia-assist-headless .gaia-assist__backdrop { display: none !important; }
 body.gaia-assist-headless.gaia-assist-panel-open { overflow: auto !important; }

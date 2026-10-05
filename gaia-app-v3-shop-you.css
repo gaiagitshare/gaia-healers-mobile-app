@@ -1295,11 +1295,11 @@ body.gaia-v2 [data-screen="store"] .g-store-cat { scroll-margin-top: 200px; }
   body.gaia-v2 [data-screen="store"] .g-store-cat { scroll-margin-top: 194px; }
 }
 
-body.gaia-v2 [data-screen="store"] .g-store-tile .g-tile__media { background: #f4f6f3; }
+body.gaia-v2 [data-screen="store"] .g-store-tile .g-tile__media { background: var(--g-text); }
 body.gaia-v2 [data-screen="store"] .g-store-tile .g-tile__media--empty {
   display: grid;
   place-items: center;
-  background: #0f1d16;
+  background: var(--g-surface-hi);
   color: var(--v3-muted);
   font-size: 34px;
 }

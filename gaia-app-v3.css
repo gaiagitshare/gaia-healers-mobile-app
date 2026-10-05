@@ -281,14 +281,7 @@ body.gaia-v2 .gaia-tabbar__assist-pulse {
    small; the same numbers in sans read loud, so the main heading roles
    get the Assist treatment: semibold, warm white, slightly tight. */
 
-body.gaia-v2 .gaia-main :is(
-  .g-page__title, .g-store__title, .g-super-page-head h1, .g-super-hero h1,
-  .g-super-section-head h2, .g-section__title, .g-card__value, .g-quiz__title,
-  .g-de__title, .g-why-join__intro h2, .g-super-empty-panel h2, .g-booking-item h2,
-  .g-feature-event__title, .g-energy-intro h2, .g-mye h2, .g-pass__title,
-  .g-chakra-hero__title, .g-chakra-guide__name, .g-event-card h3, .g-energy-note strong,
-  .g-event-day h3, .g-sky__illum strong, .g-num__theme, .g-upgrade__title
-) {
+body.gaia-v2 .gaia-main :is(.g-page__title, .g-store__title, .g-super-page-head h1, .g-super-hero h1, .g-super-section-head h2, .g-section__title, .g-card__value, .g-quiz__title, .g-de__title, .g-super-empty-panel h2, .g-booking-item h2, .g-feature-event__title, .g-energy-intro h2, .g-mye h2, .g-pass__title, .g-chakra-hero__title, .g-chakra-guide__name, .g-event-card h3, .g-energy-note strong, .g-event-day h3, .g-sky__illum strong, .g-num__theme, .g-upgrade__title) {
   font-family: var(--g-font);
   font-weight: 600;
   color: var(--v3-text);
@@ -305,7 +298,7 @@ body.gaia-v2 .gaia-main :is(.g-super-section-head h2, .g-section__title, .g-mye 
   font-size: clamp(1.2rem, 4.8vw, 1.45rem);
   line-height: 1.2;
 }
-body.gaia-v2 .gaia-main :is(.g-card__value, .g-card__value--lg, .g-why-join__intro h2, .g-super-empty-panel h2, .g-booking-item h2, .g-energy-intro h2, .g-pass__title) {
+body.gaia-v2 .gaia-main :is(.g-card__value, .g-card__value--lg, .g-super-empty-panel h2, .g-booking-item h2, .g-energy-intro h2, .g-pass__title) {
   font-size: clamp(1.25rem, 5.2vw, 1.55rem);
   line-height: 1.2;
 }
@@ -397,10 +390,7 @@ body.gaia-v2 .g-page.g-energy {
 /* The generic containers: large rounded glass cards with a thin
    green-tinted border and a very faint glow. */
 
-body.gaia-v2 .gaia-main :is(
-  .g-card, .g-super-list, .g-super-services, .g-super-auth, .g-super-empty-panel,
-  .g-booking-item, .g-mye, .g-pass, .g-energy-note, .g-member-access, .g-degraded
-) {
+body.gaia-v2 .gaia-main :is(.g-card, .g-super-list, .g-super-empty-panel, .g-booking-item, .g-mye, .g-pass, .g-energy-note, .g-member-access, .g-degraded) {
   border: 1px solid var(--v3-border);
   border-radius: var(--v3-radius);
   background: var(--v3-card-bg);
@@ -414,12 +404,8 @@ body.gaia-v2 .gaia-main .g-card--feature {
 }
 /* The compact join card was bare text on wide screens and a card on
    phones; with the frame now drawn at every width it needs the padding. */
-body.gaia-v2 .gaia-main .g-super-auth--compact { padding: 22px; }
-@media (min-width: 700px) {
-  body.gaia-v2 .gaia-main .g-super-auth--compact { padding: 28px; }
-}
 /* Cards nested inside a list card should not stack a second frame. */
-body.gaia-v2 .gaia-main :is(.g-super-list, .g-super-services) :is(.g-card, .g-super-empty-panel) {
+body.gaia-v2 .gaia-main :is(.g-super-list) :is(.g-card, .g-super-empty-panel) {
   box-shadow: none;
   background: var(--v3-card-2);
 }

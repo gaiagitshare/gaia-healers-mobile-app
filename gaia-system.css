@@ -800,8 +800,7 @@ body.gaia-v2 main.gaia-main.gaia-main--today{
 
 /* Press feedback. A native control acknowledges a finger before the work
    starts; without this the app feels dead on tap even when it is fast. */
-.g-tile,.g-card,.g-super-row,.g-store-tile,.g-super-services__grid > *,
-.g-free-tools a,.g-free-tools button,.g-feature-event .g-btn,.g-btn{
+.g-tile,.g-card,.g-super-row,.g-store-tile,.g-free-tools a,.g-free-tools button,.g-feature-event .g-btn,.g-btn{
   transition:transform .12s ease,opacity .12s ease,background-color .16s ease}
 .g-super-row:active,.g-store-tile:active,.g-free-tools a:active,
 .g-free-tools button:active,.g-btn:active{transform:scale(.975)}
@@ -1313,16 +1312,6 @@ body.gaia-v2 .g-super-home .g-super-hero{border:1px solid var(--g-line);
 }
 
 /* Continue your journey — members with a real course grant. Purple family. */
-.g-continue{border:1px solid rgba(167,139,250,.3);border-radius:20px;padding:16px;
-  background:radial-gradient(120% 100% at 15% 0%,rgba(109,79,214,.16) 0%,transparent 60%),var(--g-surface);
-  display:flex;flex-direction:column;gap:10px}
-.g-continue .g-super-kicker{color:#B9A8FF;margin:0}
-.g-continue__row{display:flex;align-items:center;gap:12px}
-.g-continue__art{flex:0 0 auto;display:grid;place-items:center;width:52px;height:52px;
-  border-radius:14px;color:#B9A8FF;background:rgba(167,139,250,.13);font-size:24px}
-.g-continue__body{flex:1;min-width:0}
-.g-continue__body h3{margin:0;font-family:var(--g-font-serif);font-size:1.08rem;font-weight:600;color:#fff}
-.g-continue__body p{margin:2px 0 0;font-size:.82rem;color:rgba(255,255,255,.6)}
 
 
 /* ── Retouch: air, hierarchy, and quiet edges ─────────────────────────────

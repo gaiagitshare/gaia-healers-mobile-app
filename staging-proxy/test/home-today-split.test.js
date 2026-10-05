@@ -60,7 +60,7 @@ test('the daily energy check and the sky render on Today only; the member Home i
   // every destination is the one that was here before
   for (const id of ['scans', 'bio-welldemo', 'mgf6oviyhPwrLBi03gzq', 'gVzfo7sRfbLnMzQqSnJL']) assert.ok(sa.includes(id), id);
   assert.match(sa, /href="home\.html\?view=store&tab=membership"/); assert.match(sa, /href="home\.html\?view=events"/);
-  const today = sa.slice(sa.indexOf('function renderToday()'), sa.indexOf('/** The member\'s way back'));
+  const today = sa.slice(sa.indexOf('function renderToday()'), sa.indexOf('// Next booking — the member\'s soonest'));
   for (const host of ['data-today-readings', 'data-daily-host', 'data-sky-host', 'nextBookingCard()']) assert.ok(today.includes(host), host);
   assert.match(sa, /renderToday\(\);\n/, 'Today is drawn whenever Home is');
   const readings = read('gaia-my-readings.js');

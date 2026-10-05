@@ -425,9 +425,6 @@ body.gaia-v2 [data-screen="wellness"] .g-tk__inner .g-sky {
 
 /* ---------- 6. Today: join card ----------------------------------------- */
 
-body.gaia-v2 [data-screen="today"] .g-why-join__list li { color: var(--v3-text-2); }
-body.gaia-v2 [data-screen="today"] .g-why-join__list .ph { color: var(--v3-emerald); }
-
 /* ---------- 7. Energy: header, switcher, personalise -------------------- */
 
 body.gaia-v2 [data-screen="wellness"] .g-energy-switcher button {
@@ -974,7 +971,6 @@ body.gaia-v2 [data-screen="today"] .g-free-tools {
   padding: 0; border: 0; border-radius: 0; background: transparent; box-shadow: none;
 }
 body.gaia-v2 [data-screen="today"] .g-free-tool { box-shadow: none; border-radius: 14px; }
-body.gaia-v2 [data-screen="today"] .g-super-auth,
 body.gaia-v2 [data-screen="today"] .g-super-event { border-radius: var(--v3-radius); box-shadow: none; }
 @media (min-width: 1000px) {
   body.gaia-v2 .gaia-tabbar__inner { border-radius: 20px !important; box-shadow: none; }

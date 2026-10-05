@@ -508,9 +508,29 @@ get_dashboard_summary.
 
 So, for Nima's "can our AI read the files or the AI-generated guides": the
 files cannot be read (listing only, no content tool); the guides CAN — they are
-`get_customer_recommendations`, text, per customer, readable with the linked
-practitioner's token exactly as `member-link.js` reads scans. The member-side
-consent for that is `guides_to_assist` (above). Not built yet.
+`get_customer_recommendations`, text, per customer. Built 5 Oct 2026:
+
+- `memberGuides(cfg, memberId)` in `member-link.js` reads them by two roads:
+  the member road (their member-mcp, if it ever offers `get_my_recommendations`
+  or similar — it did not on 5 Oct) and the practitioner road (the practitioner
+  who recorded the link has connected THEIR Gaia Practitioners account in our
+  app; their token reads their customer's guides). No road → null, silently.
+- `shapeGuides` keeps at most three items, 400 chars each, newest first, and
+  drops any line that quotes a reading (energy/stress/… followed by a number);
+  `guidesForModel` makes one block ≤ 1400 chars.
+- `buildMemberVoiceContext` adds that block ONLY when `guides_to_assist` is on
+  — checked on every build; the 60 s context cache is keyed on the switch, and
+  a POST to `/api/member/prefs` drops the 10-minute guides cache. Off: the model
+  is told only where the switch lives. On but nothing readable: told not to
+  invent any.
+- `/api/practitioners/linked-clients` carries `guides_to_assist` per client
+  (a boolean, never the guides); the Practice tab counts them in the one-line
+  summary, tags them in the list and says so on the client card.
+- The partner's response shape for `get_customer_recommendations` is NOT yet
+  measured (no connected practitioner had a Gaia-member client on 5 Oct);
+  `shapeGuides` accepts title/name/subject, content/text/script/recommendation/
+  body/summary and created_at/date, and ignores the rest. First real read:
+  check the proxy log and, if the shape differs, extend `shapeGuides`.
 
 ### Gaia Avatar (app layer, no server part)
 

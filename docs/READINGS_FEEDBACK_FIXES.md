@@ -14,8 +14,9 @@ Update 5 Oct 2026 (measured with `tools/list`, see STAGING-PROXY.md): the
 partner has no file-content tool, but it does have
 `get_customer_recommendations` — the AI-generated guides/scripts per customer,
 as text. The guides half of the request is therefore buildable. A member-side
-consent for it, `guides_to_assist`, is now recorded in "Your data and sharing"
-(off by default) ahead of any build; the files half stays impossible.
+consent for it, `guides_to_assist`, is recorded in "Your data and sharing"
+(off by default), and the guide reading itself is built behind it (see
+STAGING-PROXY.md, "the tools their MCP offers"); the files half stays impossible.
 
 The implemented integration and recorded partner evidence expose `get_customer_files` as a listing. No file-content retrieval contract is established here. We have not proven that the partner has no additional private endpoints; the current public docs shell does not establish one. Do not invent download URLs, scrape another session, or imply file contents have been read.
 

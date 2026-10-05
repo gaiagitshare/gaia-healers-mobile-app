@@ -22,7 +22,7 @@ import { readingSeries, recentAverage } from './reading-history.js';
 import crypto from 'crypto';
 import fs from 'fs';
 import path from 'path';
-import { mcpCall, unwrapMcp } from './practitioners-oauth.js';
+import { mcpCall, unwrapMcp, readTokens, validAccessToken } from './practitioners-oauth.js';
 
 export const LINK_FILE = process.env.GAIA_MEMBER_LINK_FILE || '/root/gaia-staging-proxy/data/member-links.json';
 // 24 hours, at the partner's request (4 Oct): a member who is not in the
@@ -196,13 +196,15 @@ export function linkFor(memberId, file = LINK_FILE) {
  * Gaia, and whether each has opened them. Keyed by their customer id, which
  * is theirs already; the Gaia member id is never returned.
  */
-export function linksForPractitioner(practitionerId, file = LINK_FILE) {
+export function linksForPractitioner(practitionerId, file = LINK_FILE, { consent = null } = {}) {
   const pid = String(practitionerId || '').trim();
   if (!pid) return [];
-  return Object.values(load(file).links)
-    .filter((l) => l.status === 'confirmed' && String(l.practitioner_id || '') === pid)
-    .map((l) => ({ customer_id: String(l.customer_id), linked_at: l.linked_at, latest_scanned_at: l.latest_scanned_at || null,
-      opened: Boolean(l.seen_scanned_at), opened_latest: Boolean(l.seen_scanned_at && l.latest_scanned_at && l.seen_scanned_at >= l.latest_scanned_at) }))
+  return Object.entries(load(file).links)
+    .filter(([, l]) => l.status === 'confirmed' && String(l.practitioner_id || '') === pid)
+    .map(([memberId, l]) => ({ customer_id: String(l.customer_id), linked_at: l.linked_at, latest_scanned_at: l.latest_scanned_at || null,
+      opened: Boolean(l.seen_scanned_at), opened_latest: Boolean(l.seen_scanned_at && l.latest_scanned_at && l.seen_scanned_at >= l.latest_scanned_at),
+      // Whether this client lets Gaia Assist use the guides written for them (their own switch; a boolean, never the guides).
+      guides_to_assist: typeof consent === 'function' ? Boolean(consent(memberId)) : false }))
     .sort((a, b) => String(b.linked_at || '').localeCompare(String(a.linked_at || '')));
 }
 
@@ -420,6 +422,77 @@ export async function memberReadings(cfg0, memberId, { env = process.env, fetchI
       .sort((a, b) => Number(b.first) - Number(a.first)),
   };
 }
+/**
+ * The guides their practitioner wrote for them ("AI-generated
+ * recommendations/scripts" on the partner side: `get_customer_recommendations`,
+ * text per customer). Read ONLY when the member switched `guides_to_assist`
+ * on — the caller checks that; this function only fetches and shapes.
+ *
+ * Two roads, in order: the member road (their member-mcp, if it ever offers
+ * a recommendations tool) and the practitioner road: if the practitioner who
+ * recorded the link has connected their own Gaia Practitioners account in our
+ * app, their token reads their customer's guides — the same data they see in
+ * their own Practice tab. No road: null (not an error; nothing to say).
+ *
+ * The partner's response shape for this tool is NOT measured yet (no linked
+ * practitioner had a Gaia-member client on 5 Oct 2026); shapeGuides accepts
+ * the likely spellings and ignores the rest.
+ */
+export async function memberGuides(cfg0, memberId, { env = process.env, fetchImpl = fetch, file = LINK_FILE, tokenFile } = {}) {
+  const link = linkFor(memberId, file);
+  if (!link) return null;
+  // Member road.
+  if (memberApiKey(env)) {
+    try {
+      const cfg = { ...cfg0, mcpUrl: `${memberBackend(cfg0, env)}/api/member-mcp` };
+      const token = await memberToken(cfg0, memberId, { env, fetchImpl });
+      const names = await memberToolNames(cfg, token, fetchImpl);
+      const tool = ['get_my_recommendations', 'get_my_guides', 'get_member_recommendations'].find((n) => names.has(n));
+      if (tool) return shapeGuides(unwrapMcp(await mcpCall(cfg, token, tool, tool === 'get_member_recommendations' ? { gaia_member_id: memberId } : {}, fetchImpl)));
+    } catch { /* fall through to the practitioner road */ }
+  }
+  // Practitioner road.
+  const pid = String(link.practitioner_id || '');
+  const tokens = tokenFile ? readTokens(tokenFile) : readTokens();
+  const contactId = Object.keys(tokens).find((cid) => String(tokens[cid]?.practitioner_id || '') === pid && tokens[cid]?.verified !== false);
+  if (!pid || !contactId) return null;
+  try {
+    const token = await validAccessToken(cfg0, contactId, tokenFile ? { file: tokenFile, fetchImpl } : { fetchImpl });
+    if (!token) return null;
+    return shapeGuides(unwrapMcp(await mcpCall(cfg0, token, 'get_customer_recommendations', { customerId: link.customer_id }, fetchImpl)));
+  } catch { return null; }
+}
+
+const GUIDE_ITEMS = 3, GUIDE_CHARS = 400;
+/** Shape the partner's recommendations into at most three short guides. Lines that carry scan values stay out. */
+export function shapeGuides(raw) {
+  const list = Array.isArray(raw) ? raw
+    : Array.isArray(raw?.recommendations) ? raw.recommendations
+    : Array.isArray(raw?.items) ? raw.items
+    : Array.isArray(raw?.guides) ? raw.guides
+    : (raw && typeof raw === 'object' && (raw.content || raw.text || raw.script || raw.recommendation)) ? [raw] : [];
+  const str = (v) => (typeof v === 'string' ? v.trim() : '');
+  const items = list.map((g) => {
+    const text = str(g?.content) || str(g?.text) || str(g?.script) || str(g?.recommendation) || str(g?.body) || str(g?.summary);
+    const title = str(g?.title) || str(g?.name) || str(g?.subject) || str(g?.type) || 'Guide';
+    const when = String(g?.created_at || g?.createdAt || g?.date || g?.updated_at || '').slice(0, 10);
+    return { title: title.slice(0, 80), when: /^\d{4}-\d{2}-\d{2}$/.test(when) ? when : '', text: clean(text).slice(0, GUIDE_CHARS) };
+  }).filter((g) => g.text)
+    .sort((a, b) => b.when.localeCompare(a.when))
+    .slice(0, GUIDE_ITEMS);
+  return { count: list.length, items };
+}
+// A guide is prose; a line that quotes a reading ("energy 54", "stress: 3.0")
+// is a value, and values never reach the model. Those lines are dropped.
+const clean = (text) => String(text || '').split(/\r?\n/)
+  .filter((line) => !/\b(energy|stress|chakra|meridian|organ|disbalance)\b[^\n]{0,40}\d/i.test(line))
+  .map((l) => l.replace(/\s+/g, ' ').trim()).filter(Boolean).join(' ');
+/** One bounded block for the context window. Empty string when there is nothing. */
+export function guidesForModel(shaped) {
+  if (!shaped?.items?.length) return '';
+  return shaped.items.map((g) => `- ${g.title}${g.when ? ` (${g.when})` : ''}: ${g.text}`).join('\n').slice(0, 1400);
+}
+
 /** "Read this first": a document the practitioner pinned, in any of the spellings their side might use. */
 export const readFirst = (f) => Boolean(f?.read_first || f?.readFirst || f?.pinned || f?.featured || f?.primary
   || (Array.isArray(f?.tags) && f.tags.some((t) => /read[\s_-]?first|pinned|featured/i.test(String(t)))));

@@ -252,7 +252,7 @@
     return '<article class="g-tile g-store-tile">'
       + (card.image
         ? '<div class="g-tile__media"><img src="' + esc(card.image) + '" alt="' + title + '" loading="lazy" /></div>'
-        : '<div class="g-tile__media g-tile__media--empty" aria-hidden="true"></div>')
+        : '<div class="g-tile__media g-tile__media--empty" aria-hidden="true"><i class="ph ph-bag"></i></div>')
       + '<div class="g-tile__body">'
       + '<h3 class="g-tile__title g-clamp-2" title="' + title + '">'
       + '<button type="button" class="g-tile__open" data-store-detail="' + esc(card.externalId) + '">'
@@ -279,7 +279,15 @@
 
     const gaia = await fetchGaiaCatalog();
     if (gaia) {
-      box.innerHTML = gaia.sections.map((section) => '<section class="g-store-cat">'
+      // A row of category buttons above the catalogue: ~130 products in 14
+      // sections is a long scroll, so every section is one tap away.
+      const slug = (label, i) => 'store-cat-' + (String(label || '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || i);
+      const jump = gaia.sections.length > 1
+        ? '<nav class="g-store-jump" aria-label="Shop categories">' + gaia.sections.map((section, i) =>
+          '<button type="button" class="g-store-jump__chip" data-store-jump="' + slug(section.label, i) + '">' + esc(section.label)
+          + '<span>' + section.products.length + '</span></button>').join('') + '</nav>'
+        : '';
+      box.innerHTML = jump + gaia.sections.map((section, i) => '<section class="g-store-cat" id="' + slug(section.label, i) + '">'
         + '<div class="g-section"><div class="g-section__lead">'
         + '<h2 class="g-section__title">' + esc(section.label) + '</h2>'
         + '<p class="g-section__meta">' + section.products.length + ' item'
@@ -290,6 +298,12 @@
           : '<p class="g-store-note">Prices and availability are confirmed on Shopify at checkout.</p>');
       box.querySelectorAll('[data-store-detail]').forEach((button) => button.addEventListener('click',
         () => openSheet(button.dataset.storeDetail, button)));
+      box.querySelectorAll('[data-store-jump]').forEach((button) => button.addEventListener('click', () => {
+        const target = document.getElementById(button.dataset.storeJump);
+        if (!target) return;
+        const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+        target.scrollIntoView({ behavior: reduce ? 'auto' : 'smooth', block: 'start' });
+      }));
       window.dispatchEvent(new CustomEvent('gaia:shop-loaded', { detail: { categories: gaia.sections.length } }));
       return;
     }

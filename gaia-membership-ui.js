@@ -213,6 +213,7 @@
   };
   const titleise = (value) => {
     const text = String(value || '');
+    if (text.toLowerCase() === 'diy') return 'DIY';   // the CRM level, an acronym
     return text ? text.charAt(0).toUpperCase() + text.slice(1) : 'None';
   };
 
@@ -338,16 +339,34 @@
 
   /* ── Next Level ─────────────────────────────────────────────────────────
    * Entirely from `access.upgrade`. No upgrade object, no block.            */
+  /** The My Access value for one access type ("Managed", "Level 2", "3 of 5
+   * used"), for other screens that list the same access. */
+  function summaryFor(access, type) {
+    const items = (access?.entitlements || []).filter((item) => item.type === type);
+    if (!items.length) return '';
+    try { return (RENDERERS[type] || genericRenderer).summary(items) || ''; } catch (_) { return ''; }
+  }
+
   function nextLevel(access, plans) {
     const upgrade = access?.upgrade;
     if (!upgrade || !upgrade.next_key) return '';
     const plan = (plans || []).find((item) => item.key === upgrade.next_key) || {};
     const gains = Array.isArray(upgrade.gains) ? upgrade.gains : [];
     const sections = Array.isArray(access?.sections) ? access.sections : [];
-    const labelFor = (type) => (sections.find((s) => s.type === type)?.title) || type.replace(/_/g, ' ');
+    const labelFor = (type) => (sections.find((s) => s.type === type)?.title) || TITLES[type] || type.replace(/_/g, ' ');
+    // Gains arrive as raw values (crm "diy", directory 3, leads 25, discount 20);
+    // say them the way My Access does.
+    const valueFor = (type, to) => {
+      if (to == null || to === '') return '';
+      if (type === 'crm_access') return titleise(String(to));
+      if (type === 'directory_level') return 'Level ' + to;
+      if (type === 'lead_allocation') return to + ' a month';
+      if (type === 'discount') return to + '% off certifications';
+      return String(to);
+    };
 
-    const gainRows = gains.map((gain) => '<li>' + esc(labelFor(gain.type))
-      + (gain.to != null ? ': <strong>' + esc(gain.to) + '</strong>' : '') + '</li>').join('');
+    const gainRows = gains.map((gain) => { const v = valueFor(gain.type, gain.to); return '<li>' + esc(labelFor(gain.type))
+      + (v ? ': <strong>' + esc(v) + '</strong>' : '') + '</li>'; }).join('');
 
     return '<section class="g-next" data-next-level>'
       + '<div class="g-next__head"><p class="g-next__kicker">Next Level</p>'
@@ -433,5 +452,6 @@
     bind,
     RENDERERS,
     SECTION_LINKS,
+    summaryFor,
   };
 })();

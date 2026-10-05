@@ -1329,21 +1329,27 @@ body.gaia-booking-open{overflow:hidden;}
     }
     const intro = '<article class="g-card g-tier-intro"><p class="g-card__label">Gaia 2.0 Practitioners</p>'
       + '<p class="g-card__meta">Choose a practitioner path that matches your stage.</p></article>';
-    return intro + plans.map((plan) => {
+    // Plans below the member's own are included in it ("Everything in …"):
+    // no "Choose" button pushing a downgrade, and no bright featured button.
+    const currentRank = currentKey ? plans.findIndex((p) => p.key === currentKey) : -1;
+    return intro + plans.map((plan, rank) => {
       const isCurrent = currentKey && plan.key === currentKey;
+      const below = currentRank > 0 && rank < currentRank;
+      const currentLabel = currentRank >= 0 ? plans[currentRank].label : '';
       const price = (plan.prices && (plan.prices.monthly || plan.prices.annual)) || '';
       return tierCard({
         planKey: plan.key,
         // The plans API may name its own featured plan; until it does, Gold is
         // the one Gaia Healers chose to highlight (owner, 2026-09-28).
-        featured: plan.featured === true || (!plans.some((p) => p.featured === true) && plan.key === FEATURED_PLAN_FALLBACK),
+        featured: !below && (plan.featured === true || (!plans.some((p) => p.featured === true) && plan.key === FEATURED_PLAN_FALLBACK)),
         name: plan.label,
         statusLabel: isCurrent ? 'Current plan' : price,
         active: isCurrent,
         abilities: Array.isArray(plan.displayBenefits) ? plan.displayBenefits : [],
         accessHtml: isCurrent ? yourAccessBlock(access) : '',
-        ctaLabel: isCurrent ? '' : ('Choose ' + plan.label),
-        ctaAction: isCurrent ? '' : 'membership',
+        note: below ? 'Included in your ' + currentLabel + ' plan.' : '',
+        ctaLabel: isCurrent || below ? '' : ('Choose ' + plan.label),
+        ctaAction: isCurrent || below ? '' : 'membership',
         ctaUrl: plan.checkoutUrl || '',
       });
     }).join('');
@@ -1362,7 +1368,7 @@ body.gaia-booking-open{overflow:hidden;}
     // is plain — but it is still the member's, so it is still shown.
     const rows = sections.filter((s) => s && s.type).map((s) => {
       const inner = '<span class="g-tier__access-name">' + esc(s.title || s.type) + '</span>'
-        + (s.summary ? '<span class="g-tier__access-meta">' + esc(s.summary) + '</span>' : '');
+        + ((window.GaiaMembershipUI?.summaryFor?.(access, s.type) || s.summary) ? '<span class="g-tier__access-meta">' + esc(window.GaiaMembershipUI?.summaryFor?.(access, s.type) || s.summary) + '</span>' : '');
       return links[s.type]
         ? '<li><a class="g-tier__access-link" href="home.html?' + esc(links[s.type]) + '">' + inner
           + '<span class="g-tier__access-chev" aria-hidden="true">›</span></a></li>'

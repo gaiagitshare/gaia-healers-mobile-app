@@ -62,6 +62,10 @@ test('memberGuides: practitioner road reads the customer\'s guides with the prac
   const g = await ml.memberGuides(cfg, 'member-1', { env: {}, fetchImpl, file: links, tokenFile: tokens });
   assert.deepEqual(seen, [['get_customer_recommendations', { customerId: 'cust-7' }]]);
   assert.equal(g.items[0].title, 'Hydration');
+  const audit = JSON.parse(fs.readFileSync(links, 'utf8')).audit.filter((a) => a.event === 'guides_read');
+  assert.deepEqual(audit.map((a) => [a.road, a.items]), [['practitioner', 1]], 'one read, one count, no text');
+  assert.ok(audit.every((a) => !('text' in a) && !('items_text' in a) && !('title' in a)));
+  assert.equal(ml.linkDayCounts({ file: links }).guides_read, 1);
   // a rejected practitioner link never reads
   o.saveToken('prac-477', { access_token: 'tB', expires_at: Date.now() + 3600e3, practitioner_id: '477', verified: false }, tokens);
   assert.equal(await ml.memberGuides(cfg, 'member-1', { env: {}, fetchImpl, file: links, tokenFile: tokens }), null);
@@ -104,6 +108,10 @@ test('the server: consent gates every build and keys the cache; the switch forge
   assert.match(ctx, /if \(getPrefs\(cid\)\.guides_to_assist\) \{\n\s+const text = await memberGuidesCached\(cid\);/, 'guides are read only behind the switch');
   assert.match(ctx, /PRACTITIONER GUIDES: not shared with you/, 'off: the model is told where the switch is, nothing else');
   assert.match(ctx, /never state scan values/);
+  assert.match(ctx, /the FIRST time you draw on a guide in this conversation say where it comes from/, 'the member always hears where advice comes from');
+  assert.match(srv, /console\.log\('\[Gaia guides\] read for Assist', \{ chars: text\.length \}\)/, 'a count is logged, never the text');
+  const report = read('staging-proxy/tools/assist-usage-report.mjs');
+  assert.match(report, /guides_read: count\('guides_read'\)/); assert.match(report, /guide reads for Gaia Assist/);
   assert.match(srv, /_memberGuidesCache\.delete\(id\);\s+\/\/ a changed switch takes effect on the next turn/);
   assert.match(srv, /linksForPractitioner\(pid, undefined, \{ consent: \(mid\) => getPrefs\(mid\)\.guides_to_assist \}\)/);
   assert.match(srv, /guidesForModel\(await memberGuides\(practitionersConfig\(\), cid\)\)/);

@@ -4307,6 +4307,7 @@ async function memberGuidesCached(cid) {
   if (hit && (Date.now() - hit.at) < 600000) return hit.text;
   let text = '';
   try { text = guidesForModel(await memberGuides(practitionersConfig(), cid)); } catch { text = ''; }
+  console.log('[Gaia guides] read for Assist', { chars: text.length });   // a count, never the text or the member
   _memberGuidesCache.set(cid, { at: Date.now(), text });
   return text;
 }
@@ -4418,7 +4419,7 @@ async function buildMemberVoiceContext(req) {
         if (getPrefs(cid).guides_to_assist) {
           const text = await memberGuidesCached(cid);
           lines.push(text
-            ? 'PRACTITIONER GUIDES (this member switched on "Let Gaia Assist read the guides my practitioner writes for me"; use them only in this member\'s own conversation, as their practitioner\'s advice, never as yours; never state scan values):\n' + text
+            ? 'PRACTITIONER GUIDES (this member switched on "Let Gaia Assist read the guides my practitioner writes for me"; use them only in this member\'s own conversation, as their practitioner\'s advice, never as yours; the FIRST time you draw on a guide in this conversation say where it comes from, e.g. "from the guide your practitioner wrote on 1 October"; never state scan values):\n' + text
             : 'PRACTITIONER GUIDES: the member allowed it, but their practitioner has not written any yet (or they could not be read right now). Do not invent any.');
         } else {
           lines.push('PRACTITIONER GUIDES: not shared with you. If they ask you to use the guides their practitioner wrote, say they can switch it on under You > Your data and sharing.');

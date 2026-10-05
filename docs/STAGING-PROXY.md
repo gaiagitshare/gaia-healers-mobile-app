@@ -523,6 +523,10 @@ files cannot be read (listing only, no content tool); the guides CAN — they ar
   a POST to `/api/member/prefs` drops the 10-minute guides cache. Off: the model
   is told only where the switch lives. On but nothing readable: told not to
   invent any.
+- Each read is one `guides_read` audit event in `data/member-links.json`
+  (road and item count, never the text); `linkDayCounts` and the usage
+  report's MEMBER LINKS line count them. The model is told to say, the first
+  time it draws on a guide, where it comes from.
 - `/api/practitioners/linked-clients` carries `guides_to_assist` per client
   (a boolean, never the guides); the Practice tab counts them in the one-line
   summary, tags them in the list and says so on the client card.

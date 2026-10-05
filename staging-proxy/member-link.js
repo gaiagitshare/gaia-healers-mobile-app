@@ -215,7 +215,7 @@ export function linkDayCounts({ now = Date.now(), file = LINK_FILE } = {}) {
   const todays = store.audit.filter((r) => String(r?.at || '').slice(0, 10) === day);
   const count = (ev) => todays.filter((r) => r.event === ev).length;
   const links = Object.values(store.links);
-  return { day, codes_issued: count('consent_code_issued'), links_confirmed: count('link_confirmed'), readings_opened: count('reading_opened'), links_revoked: count('link_revoked'),
+  return { day, codes_issued: count('consent_code_issued'), links_confirmed: count('link_confirmed'), readings_opened: count('reading_opened'), links_revoked: count('link_revoked'), guides_read: count('guides_read'),
     confirmed: links.filter((l) => l.status === 'confirmed').length, revoked: links.filter((l) => l.status === 'revoked').length };
 }
 
@@ -448,7 +448,7 @@ export async function memberGuides(cfg0, memberId, { env = process.env, fetchImp
       const token = await memberToken(cfg0, memberId, { env, fetchImpl });
       const names = await memberToolNames(cfg, token, fetchImpl);
       const tool = ['get_my_recommendations', 'get_my_guides', 'get_member_recommendations'].find((n) => names.has(n));
-      if (tool) return shapeGuides(unwrapMcp(await mcpCall(cfg, token, tool, tool === 'get_member_recommendations' ? { gaia_member_id: memberId } : {}, fetchImpl)));
+      if (tool) return counted(shapeGuides(unwrapMcp(await mcpCall(cfg, token, tool, tool === 'get_member_recommendations' ? { gaia_member_id: memberId } : {}, fetchImpl))), memberId, 'member', file);
     } catch { /* fall through to the practitioner road */ }
   }
   // Practitioner road.
@@ -459,8 +459,13 @@ export async function memberGuides(cfg0, memberId, { env = process.env, fetchImp
   try {
     const token = await validAccessToken(cfg0, contactId, tokenFile ? { file: tokenFile, fetchImpl } : { fetchImpl });
     if (!token) return null;
-    return shapeGuides(unwrapMcp(await mcpCall(cfg0, token, 'get_customer_recommendations', { customerId: link.customer_id }, fetchImpl)));
+    return counted(shapeGuides(unwrapMcp(await mcpCall(cfg0, token, 'get_customer_recommendations', { customerId: link.customer_id }, fetchImpl))), memberId, 'practitioner', file);
   } catch { return null; }
+}
+/** Each read is one audit event — a count and the road, never the guides — so the usage report can say whether the feature is used. */
+function counted(shaped, memberId, road, file) {
+  try { const store = load(file); audit(store, 'guides_read', { memberId: String(memberId), road, items: shaped.items.length }); save(store, file); } catch { /* counting never blocks reading */ }
+  return shaped;
 }
 
 const GUIDE_ITEMS = 3, GUIDE_CHARS = 400;

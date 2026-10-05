@@ -164,7 +164,7 @@ function memberLinks() {
   const links = Object.values(store?.links || {});
   return {
     file: rel, available: true,
-    in_window: { codes_issued: count('consent_code_issued'), links_confirmed: count('link_confirmed'), readings_opened: count('reading_opened'), links_revoked: count('link_revoked') },
+    in_window: { codes_issued: count('consent_code_issued'), links_confirmed: count('link_confirmed'), readings_opened: count('reading_opened'), links_revoked: count('link_revoked'), guides_read: count('guides_read') },
     standing: { confirmed: links.filter((l) => l?.status === 'confirmed').length, revoked: links.filter((l) => l?.status === 'revoked').length,
       confirmed_and_opened: links.filter((l) => l?.status === 'confirmed' && l?.seen_scanned_at).length },
   };
@@ -237,7 +237,7 @@ function renderLinks(m) {
   L.push(`== MEMBER LINKS (offline, ${m.file}) ==`);
   if (!m.available) { L.push(`  UNAVAILABLE: ${m.reason}`); return L.join('\n'); }
   const w = m.in_window, s = m.standing;
-  L.push(`  in window: ${fmt(w.codes_issued)} codes asked for, ${fmt(w.links_confirmed)} links confirmed, ${fmt(w.readings_opened)} readings opened, ${fmt(w.links_revoked)} links revoked`);
+  L.push(`  in window: ${fmt(w.codes_issued)} codes asked for, ${fmt(w.links_confirmed)} links confirmed, ${fmt(w.readings_opened)} readings opened, ${fmt(w.links_revoked)} links revoked, ${fmt(w.guides_read || 0)} guide reads for Gaia Assist`);
   L.push(`  standing:  ${fmt(s.confirmed)} members sharing (${fmt(s.confirmed_and_opened)} have opened their readings), ${fmt(s.revoked)} stopped`);
   return L.join('\n');
 }

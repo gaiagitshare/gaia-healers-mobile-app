@@ -1131,7 +1131,7 @@ body.gaia-booking-open{overflow:hidden;}
       box.innerHTML =
         announcementsHtml(state.announcements)
         + '<article class="g-card g-card--feature"><p class="g-card__label">Community</p>'
-        + '<p class="g-card__value g-card__value--lg">Open your circles</p>'
+        // No title of its own: the section above already says "Your circles".
         + '<p class="g-card__meta">Sign in to see which Gaia Healers communities your membership unlocks — and open them in one tap.</p>'
         + '<div class="g-card__actions"><button type="button" class="g-btn g-btn--primary g-btn--sm" data-native-signin>Sign in securely →</button></div></article>'
         + gSec('What’s inside', '<div class="g-access-grid">' + preview + '</div>');

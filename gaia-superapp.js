@@ -727,27 +727,6 @@
       + '<div class="gg-event__actions">' + register + '<a class="g-btn g-btn--secondary gg-cta-quiet" href="home.html?view=events">Event details</a></div></div></section>';
   }
 
-  function primaryMemberAction() {
-    const firstCourse = courseGrants()[0];
-    const nextAppointment = upcomingAppointments()[0];
-    if (firstCourse?.openUrl) {
-      return '<section class="g-super-primary"><p class="g-super-kicker">Continue learning</p>'
-        + '<h2>' + esc(firstCourse.title || firstCourse.name || 'Your course') + '</h2>'
-        + '<p>Your access is active. Lessons and verified progress open in your secure Academy workspace.</p>'
-        + '<button type="button" class="g-btn g-btn--primary g-super-primary__button" data-super-course="' + esc(firstCourse.openUrl) + '" data-super-course-title="' + esc(firstCourse.title || firstCourse.name || 'Gaia Healers Academy') + '">'
-        + icon('book-open') + ' Open course ' + icon('arrow-right') + '</button></section>';
-    }
-    if (nextAppointment) {
-      return '<section class="g-super-primary"><p class="g-super-kicker">Coming up</p><h2>' + esc(nextAppointment.title || 'Your appointment') + '</h2>'
-        + '<p>' + esc(appointmentWhen(nextAppointment)) + '</p><a class="g-btn g-btn--primary g-super-primary__button" href="home.html?view=bookings">'
-        + icon('calendar-check') + ' View booking ' + icon('arrow-right') + '</a></section>';
-    }
-    return '<section class="g-super-primary"><p class="g-super-kicker">Your access</p><h2>Your Gaia Healers access is ready</h2>'
-      + '<p>No course or appointment yet. Explore your verified access or choose your next step.</p>'
-      + '<a class="g-btn g-btn--primary g-super-primary__button" href="home.html?view=profile">'
-      + icon('user') + ' View your account ' + icon('arrow-right') + '</a></section>';
-  }
-
   /** "in 12 days", "Tomorrow", "Happening now" — whichever is true. */
   function eventCountdown(event) {
     const start = event.startAt || event.startDate;
@@ -1033,24 +1012,6 @@
     bind(root);
     const book = root.querySelector('#today-book'); const homeBook = $('home-book');
     if (book && homeBook && homeBook.innerHTML) book.innerHTML = homeBook.innerHTML;
-  }
-
-  /** The member's way back into their course — real grants only. No invented
-   * lesson counts or progress bars until real progress data exists. */
-  function continueJourney(authed) {
-    if (!authed) return '';
-    const course = courseGrants()[0];
-    if (!course) return '';
-    const title = course.title || course.name || 'Your course';
-    const url = course.openUrl || memberState().data?.courses?.portalUrl || '';
-    return '<section class="g-continue">'
-      + '<p class="g-super-kicker">Continue your journey</p>'
-      + '<div class="g-continue__row">'
-      + '<span class="g-continue__art" aria-hidden="true">' + icon('book-open') + '</span>'
-      + '<div class="g-continue__body"><h3>' + esc(title) + '</h3>'
-      + '<p>Pick up where you left off</p></div>'
-      + (url ? '<button type="button" class="g-btn g-btn--secondary g-btn--sm" data-super-course="' + esc(url) + '" data-super-course-title="' + esc(title) + '">Continue</button>' : '')
-      + '</div></section>';
   }
 
   // Next booking — the member's soonest real appointment (from the ledger).

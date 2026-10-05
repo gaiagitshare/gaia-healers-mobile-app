@@ -40,7 +40,7 @@ test('home provides real hosts for bootstrap announcements and bookings', () => 
   const superapp = read('gaia-superapp.js');
   const member = read('gaia-member.js');
   assert.match(superapp, /<div id="home-announcements"><\/div>/, 'announcements host in home markup');
-  assert.match(superapp, /<div id="home-book"><\/div>/, 'booking host in home markup');
+  assert.match(superapp, /<div id="home-book"(?: hidden)?><\/div>/, 'booking host in home markup (hidden on Home since #241; Today shows a copy)');
   // renderHome must not target ids that exist nowhere (the fetch-and-drop bug)
   for (const dead of ['home-event-hero', 'home-member-access', 'home-founder']) {
     assert.ok(!member.includes(`el('${dead}')`), `${dead} write removed`);

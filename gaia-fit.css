@@ -45,7 +45,6 @@ body.gaia-v2 .g-store > *,
 body.gaia-v2 .g-card,
 body.gaia-v2 .g-super-list,
 body.gaia-v2 .g-super-empty-panel,
-body.gaia-v2 .g-super-services,
 body.gaia-v2 .g-feature-event,
 body.gaia-v2 .g-free-tools,
 body.gaia-v2 .g-pass,
@@ -990,12 +989,6 @@ body.gaia-v2 .g-super-home .g-feature-event__art img {
     grid-column: 1 / -1;
     grid-row: auto;
   }
-
-  body.gaia-v2 .g-super-home > .g-super-services,
-  body.gaia-v2 .g-super-home > .g-super-auth,
-  body.gaia-v2 .g-super-home > .g-super-sync {
-    grid-column: 1 / -1;
-  }
 }
 
 /* —— First-fold budget (must win last) ——————————————————————————————
@@ -1836,13 +1829,9 @@ body.gaia-v2 .g-topbar__actions.gaia-header-actions { display: flex; align-items
   body.gaia-v2 .g-super-home > .g-feature-event,
   body.gaia-v2 .g-super-home > .g-super-event { grid-column: 2 !important; grid-row: 1 !important; height: 100%; margin: 0; }
   body.gaia-v2 .g-super-home > [data-sky-host],
-  body.gaia-v2 .g-super-home > .g-super-primary,
   body.gaia-v2 .g-super-home > .g-upgrade,
   body.gaia-v2 .g-super-home > .g-free-tools,
-  body.gaia-v2 .g-super-home > .g-super-services,
-  body.gaia-v2 .g-super-home > .g-super-auth,
-  body.gaia-v2 .g-super-home > .g-super-discover-gaia,
-  body.gaia-v2 .g-super-home > .g-super-sync { grid-column: 1 / -1 !important; }
+  body.gaia-v2 .g-super-home > .g-super-discover-gaia { grid-column: 1 / -1 !important; }
   body.gaia-v2 .g-super-home > .g-free-tools .g-free-tools__grid { grid-template-columns: repeat(4, 1fr) !important; }
   body.gaia-v2 .g-super-home > [data-sky-host] .g-sky { max-width: 900px; }
 }
@@ -1957,15 +1946,6 @@ body.gaia-v2 .g-topbar__actions.gaia-header-actions { display: flex; align-items
 .g-onb__note { margin: 10px 0 0; font-size: 11px; line-height: 1.45; color: var(--g-text-dim, #93A597); opacity: 0.85; text-align: center; }
 
 /* Guest 'Make Gaia Healers yours' join section (truthful benefits, in-app Join) */
-.g-why-join { display: block; }
-.g-why-join__intro h2 { font-family: var(--g-font-serif, 'Cormorant Garamond', serif); font-weight: 600; font-size: 26px; line-height: 1.05; margin: 4px 0 6px; }
-.g-why-join__intro p { font-size: 14px; line-height: 1.5; color: var(--g-text-dim, #93A597); margin: 0; }
-.g-why-join__list { list-style: none; margin: 16px 0 0; padding: 0; display: grid; gap: 10px; }
-.g-why-join__list li { display: flex; align-items: flex-start; gap: 10px; font-size: 14px; line-height: 1.4; color: var(--g-text, #E7EFE6); }
-.g-why-join__list li i, .g-why-join__list li svg { color: var(--g-accent, #A6E84B); flex: 0 0 auto; margin-top: 1px; font-size: 18px; width: 18px; height: 18px; }
-.g-why-join .g-super-actions { margin-top: 18px; display: flex; flex-wrap: wrap; gap: 10px; }
-.g-why-join .g-super-actions .g-btn { display: inline-flex; align-items: center; gap: 6px; }
-.g-why-join__note { margin: 14px 0 0; font-size: 11.5px; line-height: 1.45; color: var(--g-text-dim, #93A597); opacity: 0.85; }
 
 /* ============================================================= */
 /* Find a Gaia Healer — practitioner directory (real data)       */
@@ -2058,9 +2038,7 @@ body.gaia-v2 .g-topbar__actions.gaia-header-actions { display: flex; align-items
 
 /* ================= UI polish pass ================= */
 /* Action button rows wrap gracefully — a button never spills past its frame. */
-.g-de__actions, .g-super-actions, .g-card__actions, .gaia-share-modal__actions,
-.gaia-onboard-modal .g-super-actions, .g-feature-event__actions, .g-continue__row,
-.gaia-dirprofile__actions, .g-pass__actions, .g-upgrade__tiers { flex-wrap: wrap; }
+.g-de__actions, .g-super-actions, .g-card__actions, .gaia-share-modal__actions, .gaia-onboard-modal .g-super-actions, .g-feature-event__actions, .gaia-dirprofile__actions, .g-pass__actions, .g-upgrade__tiers { flex-wrap: wrap; }
 
 /* Close (×) buttons: centre the glyph (was baseline-offset) + a real hover state. */
 .gaia-sheet-close, .gaia-booking-modal__close, .gaia-assist__close, .gaia-portal-workspace__close {

@@ -10,7 +10,7 @@
    Every rule is fenced to its own screen ([data-screen="…"]) or to a
    surface only these screens open (.gaia-acad, the course player), so
    the classes these screens share with others (g-access, g-super-list,
-   g-super-auth, g-super-row …) are untouched elsewhere. Paint and layout
+   g-super-row …) are untouched elsewhere. Paint and layout
    only: no markup or behaviour depends on anything here.
    ============================================================ */
 
@@ -1107,107 +1107,8 @@ body.gaia-v2 [data-screen="bookings"] .g-booking-item h2 { margin: 4px 0 6px; }
   body.gaia-v2 [data-screen="bookings"] .g-booking-item .g-btn { width: 100%; justify-content: center; }
 }
 
-/* ---------- 7. The join card (Bookings, Inbox) and ticket prompt -------- */
-/* g-super-auth.g-why-join appears on Bookings (--compact) and Inbox; the
-   two differed (stacked full-width buttons on one, a row on the other).
-   One component now, in the Assist manner: eyebrow, title, lead, the
-   benefits as a list with round green check icons, then Join free and
-   Sign in as a pair of pills and Compare plans as a quiet link. */
-body.gaia-v2 :is([data-screen="bookings"], [data-screen="inbox"]) .g-super-auth.g-why-join {
-  display: block;
-  padding: 22px 20px 18px;
-  border: 1px solid rgba(140, 255, 170, 0.22);
-  border-radius: var(--v3-radius-lg);
-  background:
-    radial-gradient(90% 70% at 100% 0%, rgba(117, 240, 90, 0.12), transparent 60%),
-    radial-gradient(70% 60% at 0% 100%, rgba(66, 219, 134, 0.05), transparent 70%),
-    var(--v3-card);
-  box-shadow: var(--v3-card-shadow);
-  text-align: left;
-}
-body.gaia-v2 :is([data-screen="bookings"], [data-screen="inbox"]) .g-why-join__intro h2 {
-  margin: 6px 0 8px;
-  font-family: var(--g-font);
-  font-size: clamp(1.3rem, 5.4vw, 1.6rem);
-  font-weight: 600;
-  line-height: 1.2;
-  letter-spacing: -0.022em;
-  color: var(--v3-text);
-}
-body.gaia-v2 :is([data-screen="bookings"], [data-screen="inbox"]) .g-why-join__intro p:not(.g-super-kicker) {
-  margin: 0;
-  color: var(--v3-text-2);
-  font-size: 14.5px;
-  line-height: 1.55;
-}
-body.gaia-v2 :is([data-screen="bookings"], [data-screen="inbox"]) .g-why-join__list {
-  display: grid;
-  gap: 8px;
-  margin: 18px 0 0;
-  padding: 0;
-  list-style: none;
-}
-body.gaia-v2 :is([data-screen="bookings"], [data-screen="inbox"]) .g-why-join__list li {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  min-height: 52px;
-  padding: 8px 14px 8px 8px;
-  border: 1px solid var(--v3-border);
-  border-radius: 18px;
-  background: var(--v3-card-2);
-  color: var(--v3-text);
-  font-size: 14px;
-  line-height: 1.4;
-}
-/* The markup's check-circle glyph is replaced by a round tinted check,
-   the Assist icon well at a smaller size. */
-body.gaia-v2 :is([data-screen="bookings"], [data-screen="inbox"]) .g-why-join__list li > :is(i, svg) {
-  flex: 0 0 auto;
-  width: 34px;
-  height: 34px;
-  margin: 0;
-  border-radius: 999px;
-  background: var(--lc-ic-check) center / 18px no-repeat, rgba(117, 240, 90, 0.14);
-  box-shadow: inset 0 0 0 1px rgba(117, 240, 90, 0.3);
-  color: transparent;
-  font-size: 0;
-}
-body.gaia-v2 :is([data-screen="bookings"], [data-screen="inbox"]) .g-why-join__list li > i::before { content: none; }
-body.gaia-v2 :is([data-screen="bookings"], [data-screen="inbox"]) .g-why-join .g-super-actions {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 10px;
-  width: 100%;
-  margin-top: 20px;
-}
-body.gaia-v2 :is([data-screen="bookings"], [data-screen="inbox"]) .g-why-join .g-super-actions .g-btn {
-  justify-content: center;
-  width: 100%;
-  min-width: 0;
-  min-height: 48px;
-  margin: 0;
-}
-body.gaia-v2 :is([data-screen="bookings"], [data-screen="inbox"]) .g-why-join .g-super-actions .g-btn--ghost {
-  grid-column: 1 / -1;
-  min-height: 44px;
-  font-size: 14px;
-}
-@media (min-width: 700px) {
-  body.gaia-v2 :is([data-screen="bookings"], [data-screen="inbox"]) .g-super-auth.g-why-join { padding: 28px 28px 22px; }
-  body.gaia-v2 :is([data-screen="bookings"], [data-screen="inbox"]) .g-why-join__list { grid-template-columns: repeat(3, minmax(0, 1fr)); }
-  body.gaia-v2 :is([data-screen="bookings"], [data-screen="inbox"]) .g-why-join__list li { align-items: flex-start; padding: 12px 14px 12px 10px; }
-  body.gaia-v2 :is([data-screen="bookings"], [data-screen="inbox"]) .g-why-join .g-super-actions {
-    grid-template-columns: repeat(2, minmax(0, 200px)) 1fr;
-  }
-  body.gaia-v2 :is([data-screen="bookings"], [data-screen="inbox"]) .g-why-join .g-super-actions .g-btn--ghost {
-    grid-column: auto;
-    justify-self: start;
-  }
-}
-
-/* Events' "Your tickets live here" (and its empty / problem variants):
-   the same card family as the join card. */
+/* ---------- 7. The ticket prompt (Events) ------------------------------ */
+/* Events' "Your tickets live here" (and its empty / problem variants). */
 body.gaia-v2 [data-screen="events"] :is(.g-mye--prompt, .g-mye--empty, .g-mye--problem) {
   gap: 8px;
   margin-bottom: 0;

@@ -37,7 +37,8 @@ test('the app: Next level folds through the prefs route, empty cards fold to one
   assert.match(member, /practitioner_card_dismissed/, '"Not now" on Become a practitioner is a server preference');
   assert.match(member, /getJson\('\/api\/member\/prefs'\)/, 'loaded with the rest of the member data, so the card never flashes');
   const today = read('gaia-superapp.js');
-  assert.ok(today.indexOf('nextBookingCard()') < today.indexOf("'<section class=\"g-super-services\">"), 'Today: the next booking sits above the service tiles');
+  const todayFn = today.slice(today.indexOf('function renderToday()'));
+  assert.ok(todayFn.indexOf('nextBookingCard()') > 0 && todayFn.indexOf('nextBookingCard()') < todayFn.indexOf('data-sky-host'), 'Today: the next booking sits above the sky card');
   assert.match(member, /gaia:prefs-reset/, 'You redraws when "Show hidden cards again" fires from Your data and sharing');
   const html = read('home.html');
   assert.ok(html.indexOf('id="member-me"') < html.indexOf('id="member-data-sharing"'), 'Your data and sharing sits under Account');

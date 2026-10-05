@@ -4,7 +4,7 @@ test('stale Gemini tokens cannot select a browser audio connection',()=>{
  const source=read('gaia-realtime-voice.js');const fn=source.slice(source.indexOf('function socketUrl(meta)'),source.indexOf('    function sendWs('));
  const socketUrl=new Function(fn+';return socketUrl;')();
  assert.equal(socketUrl({provider:'qwen',relayUrl:'wss://qa.test/relay'}),'wss://qa.test/relay');
- assert.throws(()=>socketUrl({provider:'gemini',token:'old'}),/Qwen/);
+ assert.throws(()=>socketUrl({provider:'gemini',token:'old'}),/voice relay unavailable/); // 9ce6bcf: calm internal message; the member sees VOICE_UNAVAILABLE_COPY
  assert.doesNotMatch(source,/switchToGemini|provider: 'gemini'|new window.MediaRecorder/);
 });
 test('voice settings and reply playback cannot restore a saved alternate provider',()=>{

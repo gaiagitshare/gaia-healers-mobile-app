@@ -1392,3 +1392,21 @@ body.gaia-v2 [data-screen="academy"] .g-access--link > .g-access__img--ph {
   body.gaia-v2 [data-screen="events"] .g-event-grid > .g-event-card:only-child .g-event-card__actions { display: flex; flex-wrap: wrap; gap: 10px; justify-content: flex-start; }
   body.gaia-v2 [data-screen="events"] .g-event-grid > .g-event-card:only-child .g-event-card__actions .g-btn { flex: 0 0 auto; width: auto; padding-inline: 24px; }
 }
+
+/* ---------- Bookings and Inbox on wide screens -----------------------------
+   The 1180px column, and the "Book a session" rows as a 3-column grid
+   (heading across the top) instead of full-width bars. */
+@media (min-width: 1100px) {
+  body.gaia-v2 :is([data-screen="bookings"], [data-screen="inbox"]) .gaia-main.g-page > * {
+    width: 100%;
+    max-width: 1180px;
+    margin-inline: auto;
+  }
+  body.gaia-v2 [data-screen="bookings"] .g-bookings > .g-super-list:has(> .g-super-row) {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 12px;
+  }
+  body.gaia-v2 [data-screen="bookings"] .g-bookings > .g-super-list:has(> .g-super-row) > :not(.g-super-row) { grid-column: 1 / -1; }
+  body.gaia-v2 [data-screen="bookings"] .g-bookings > .g-super-list > .g-super-row { margin: 0; }
+}

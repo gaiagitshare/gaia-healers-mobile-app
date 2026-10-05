@@ -726,6 +726,12 @@
       + '</div></section>';
   }
 
+  /** The guest Join section on a page that is not the guest Home (Bookings,
+   * Inbox): its own container so the section lays out by its own width. */
+  function guestJoinBlock() {
+    return '<div class="g-guest g-guest-inline">' + guestJoin() + '</div>';
+  }
+
   function guestEvent() {
     loadEventsList();
     const event = upcomingFeatureEvents()[0] || eventData();
@@ -2002,7 +2008,7 @@
     const root = $('bookings-body');
     if (!root) return;
     if (!memberState().authed) {
-      root.innerHTML = '<div class="g-super-page-head"><p class="g-super-kicker">Sessions and consultations</p><h1>Book your next step</h1><p>Explore real Gaia Healers sessions now. Member appointments appear after you connect your Member Pass.</p></div>' + bookingCatalog() + authPrompt(true);
+      root.innerHTML = '<div class="g-super-page-head"><p class="g-super-kicker">Sessions and consultations</p><h1>Book your next step</h1><p>Explore real Gaia Healers sessions now. Member appointments appear after you connect your Member Pass.</p></div>' + bookingCatalog() + guestJoinBlock();
       bind(root); return;
     }
     const rows = upcomingAppointments().length ? upcomingAppointments().map((item) => {
@@ -2030,7 +2036,7 @@
     const root = $('inbox-body');
     if (!root) return;
     if (!memberState().authed) {
-      root.innerHTML = '<div class="g-super-page-head"><p class="g-super-kicker">Member messages</p><h1>Inbox</h1><p>Sign in to see your message summaries.</p></div>' + authPrompt(false);
+      root.innerHTML = '<div class="g-super-page-head"><p class="g-super-kicker">Member messages</p><h1>Inbox</h1><p>Sign in to see your message summaries.</p></div>' + guestJoinBlock();
       bind(root); updateInboxBadge(); return;
     }
     const items = notifications();

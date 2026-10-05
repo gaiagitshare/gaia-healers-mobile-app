@@ -1123,6 +1123,17 @@ class PostFeedRequest(IdentityLookup):
     limit: int = 60
 
 
+class PrinterLogRecord(BaseModel):
+    """One printer connect or print attempt reported by a door device."""
+    stage: str                        # connect | print
+    result: str                       # ok | failed
+    station: Optional[str] = None
+    error: Optional[str] = None
+    printer: Optional[str] = None
+    trace: Optional[List[str]] = None
+    client_attempt_id: Optional[str] = None
+
+
 class BadgePrintRecord(BaseModel):
     """One print attempt reported by a station. Never touches check-in."""
     result: str                       # printed | failed

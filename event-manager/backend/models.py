@@ -1059,6 +1059,27 @@ class BadgePrintLog(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
 
 
+class PrinterLog(Base):
+    """What a door device's Bluetooth printer did: connect attempts and badge
+    prints, with the driver's own step-by-step log. The trace lives in the
+    browser and a phone has no console, so without this a failure at the door
+    ("it says connecting and never connects") is invisible from here. Kept apart
+    from BadgePrintLog because a connect has no attendee and carries a trace."""
+    __tablename__ = "printer_logs"
+    id = Column(Integer, primary_key=True, index=True)
+    event_id = Column(Integer, ForeignKey("events.id"), index=True)
+    staff_user_id = Column(Integer, nullable=True)
+    station = Column(String, nullable=True)
+    stage = Column(String)             # connect | print
+    result = Column(String)            # ok | failed
+    error = Column(String, nullable=True)
+    printer = Column(String, nullable=True)      # what the printer said it is, when it said
+    trace = Column(Text, nullable=True)          # driver log lines, newest last
+    user_agent = Column(String, nullable=True)
+    client_attempt_id = Column(String, nullable=True, unique=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+
 class MapReconcileRun(Base):
     """One Map & Reconcile action, kept so the question "who let this product in,
     and what did it create?" always has an answer. The preview that staff

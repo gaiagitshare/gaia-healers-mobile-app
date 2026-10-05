@@ -11161,6 +11161,54 @@ def print_report(event_id: int, db: Session = Depends(get_db),
     }
 
 
+@app.post("/events/{event_id}/printer-log")
+def printer_log_record(event_id: int, body: schemas.PrinterLogRecord, request: FastAPIRequest,
+                       db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
+    """A door device reports what its Bluetooth printer did, with the driver's
+    trace. Fire-and-forget from the page: it never blocks a check-in or a print,
+    and a re-sent attempt id is stored once."""
+    _get_event_or_404(event_id, db)
+    authz.require_cap(db, current_user, event_id, "checkin.perform")
+    stage = (body.stage or "").strip().lower()
+    result = (body.result or "").strip().lower()
+    if stage not in ("connect", "print") or result not in ("ok", "failed"):
+        raise HTTPException(status_code=400, detail="stage must be connect|print and result ok|failed")
+    if body.client_attempt_id:
+        if db.query(models.PrinterLog).filter(
+                models.PrinterLog.client_attempt_id == body.client_attempt_id).first():
+            return {"ok": True, "already": True}
+    # Bounded: the newest 150 lines of at most 300 characters each.
+    lines = [str(x)[:300] for x in (body.trace or [])][-150:]
+    db.add(models.PrinterLog(
+        event_id=event_id, staff_user_id=current_user.id,
+        station=(body.station or "")[:60] or None, stage=stage, result=result,
+        error=(body.error or "")[:500] or None, printer=(body.printer or "")[:120] or None,
+        trace="\n".join(lines) or None,
+        user_agent=(request.headers.get("user-agent") or "")[:300] or None,
+        client_attempt_id=(body.client_attempt_id or "")[:80] or None))
+    db.commit()
+    return {"ok": True, "already": False}
+
+
+@app.get("/events/{event_id}/printer-log")
+def printer_log_list(event_id: int, limit: int = 50, failed_only: bool = False,
+                     db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
+    """The newest printer reports for this event, traces included. Organizers
+    only: a trace names the person and the device."""
+    _get_event_or_404(event_id, db)
+    authz.require_cap(db, current_user, event_id, "event.write")
+    q = db.query(models.PrinterLog).filter(models.PrinterLog.event_id == event_id)
+    if failed_only:
+        q = q.filter(models.PrinterLog.result == "failed")
+    rows = q.order_by(models.PrinterLog.id.desc()).limit(max(1, min(limit, 500))).all()
+    users = {u.id: (u.email or "") for u in db.query(models.User).filter(
+        models.User.id.in_({r.staff_user_id for r in rows if r.staff_user_id}))} if rows else {}
+    return [{"id": r.id, "at": r.created_at, "by": users.get(r.staff_user_id), "station": r.station,
+             "stage": r.stage, "result": r.result, "error": r.error, "printer": r.printer,
+             "user_agent": r.user_agent, "trace": (r.trace or "").split("\n") if r.trace else []}
+            for r in rows]
+
+
 @app.post("/events/{event_id}/attendees/{attendee_id}/badge-print")
 def badge_print_record(event_id: int, attendee_id: int, body: schemas.BadgePrintRecord,
                        db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):

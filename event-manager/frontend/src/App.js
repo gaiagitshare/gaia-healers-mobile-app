@@ -26,6 +26,12 @@ const theme = createTheme({
             dark: '#3f5a2a',
             contrastText: '#0d1a06',
         },
+        // Ticket add-ons (Attendees, Check-in): the same cyan as the member
+        // app's add-on chips, apart from the green "checked in" chip.
+        info: {
+            main: '#58c7e8',
+            contrastText: '#06170d',
+        },
         secondary: {
             main: '#e6b95c', // amber - wellness
             light: '#f0d08a',

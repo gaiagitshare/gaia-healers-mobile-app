@@ -26,7 +26,7 @@ import { authorizeScan, getScanLogs, searchAttendees, getEvents, walkInCreate, g
     getMyCapabilities, getPrintReport, setSharing, setAddonDay } from '../utils/api';
 import { formatVenueTime, statusLabel, isFlaggedStatus } from '../utils/datetime';
 import BadgeLabelDialog, { STATION_KEY, LABEL_SIZE_KEY, LABEL_ROLLS, savedLabelSize, rollShort, fullName, physicalCard,
-    canPrintBluetooth, useB1, b1Connect, b1IsConnected, b1Enqueue, b1PrintBlob, b1Dpi, rollFitsB1, PRINTER_KEY, PRINTER_CHOICES, savedPrinter } from './BadgeLabelDialog';
+    canPrintBluetooth, useB1, b1Connect, b1IsConnected, b1Enqueue, b1PrintBlob, b1Dpi, rollFitsB1, PRINTER_KEY, PRINTER_CHOICES, savedPrinter, CONNECT_TIMEOUT_HINT, logPrinter } from './BadgeLabelDialog';
 import BluetoothIcon from '@mui/icons-material/Bluetooth';
 
 // The access zones a scanner can be checking. The BACKEND decides the outcome;
@@ -447,14 +447,18 @@ function CheckIn({ timezone: timezoneProp }) {
         setPrinterBusy(true); setPrinterHint('');
         try {
             const info = await b1Connect(connectAny);
+            logPrinter(eventId, { stage: 'connect', ok: true, printer: `${(info && info.label) || 'Printer'} ${(info && info.dpi) || ''} dpi`, trace: info && info.trace, station });
             setConnectAny(false);
             setFeedback({ severity: 'success', message: `${(info && info.label) || 'Printer'} connected (${(info && info.dpi) || 203} dpi) — admitted scans now print by themselves.` });
         } catch (err) {
+            logPrinter(eventId, { stage: 'connect', ok: false, error: err, station });
             if (err && err.name === 'NotFoundError') {
                 // Nothing picked — usually an empty list. Next tap casts the wide
                 // net, and the three things that empty the list are spelled out.
                 setConnectAny(true);
                 setPrinterHint('No printer picked. Tap “Show all devices” and look for “B1 Pro-…” or “B1-…”. If it is not there either: (1) hold the printer’s power button until its light is on, (2) close the NIIMBOT app completely — a printer it holds is invisible to everyone else, (3) on iPhone check Settings → Bluefy → Bluetooth is on.');
+            } else if (err && err.name === 'ConnectTimeout') {
+                setPrinterHint(CONNECT_TIMEOUT_HINT);
             } else {
                 setPrinterHint(`Could not connect: ${(err && err.message) || err}`);
             }
@@ -963,7 +967,7 @@ function CheckIn({ timezone: timezoneProp }) {
                         )}
                         {d.base_ticket && <Chip size="small" variant="outlined" label={d.base_ticket.name} />}
                         {addons.map((a) => (
-                            <Chip key={a.code} size="small" color="success" variant="outlined"
+                            <Chip key={a.code} size="small" color="info" variant="outlined"
                                   label={`+ ${a.label}${a.day ? ` · ${a.day}` : ' · day not selected'}`} />
                         ))}
                         <Chip size="small" variant="outlined"

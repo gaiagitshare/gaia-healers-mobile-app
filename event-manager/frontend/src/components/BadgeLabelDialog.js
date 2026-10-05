@@ -5,7 +5,7 @@ import {
 import PrintIcon from '@mui/icons-material/Print';
 import IosShareIcon from '@mui/icons-material/IosShare';
 import BluetoothIcon from '@mui/icons-material/Bluetooth';
-import { badgeLabelBlob, recordBadgePrint } from '../utils/api';
+import { badgeLabelBlob, recordBadgePrint, reportPrinter } from '../utils/api';
 
 // The badge sticker, wherever it is printed from — the check-in desk or an
 // attendee's Manage card. ONE dialog, one set of print routes, one record of
@@ -143,6 +143,7 @@ const composeForB1 = async (blob, headPx) => {
 const bluetoothError = (err) => {
     const name = err && err.name; const msg = String((err && err.message) || err || '');
     if (name === 'NotFoundError') return '';                                   // chooser closed without picking a printer
+    if (name === 'ConnectTimeout') return CONNECT_TIMEOUT_HINT;
     if (name === 'NotAllowedError' || name === 'SecurityError') return 'Bluetooth was blocked for this site — allow it in the browser and try again.';
     if (name === 'NetworkError' || /GATT|disconnected|Not connected/i.test(msg)) return 'Lost the printer — switch the B1 on (blue light), keep it near, and try again.';
     if (/Web Bluetooth/i.test(msg)) return 'This browser cannot talk to the printer. Use Chrome on a laptop/Android, or the Bluefy browser on iPhone.';
@@ -177,10 +178,81 @@ export const useB1 = () => {
     return st;
 };
 // Pair (a tap) and identify, without printing.
+//
+// The driver waits on the Bluetooth link with no limit of its own, and a B1 that
+// is already held by another phone, tablet or the NIIMBOT app (it takes one link
+// at a time) simply never answers — so the page sat on "connecting…" for good.
+// The clock starts once a printer has been PICKED in the chooser (never while
+// the operator is still reading the list), and on expiry the half-open link is
+// dropped so the next tap starts clean.
+const B1_CONNECT_MS = 20000;
 export const b1Connect = async (anyDevice = false) => {
-    const { info, profile } = await identifyPrinter(anyDevice);
-    b1.info = info; b1.lastError = ''; b1Emit();
-    return { ...info, label: profile.label, dpi: profile.dpi };
+    const Niimbot = await loadNiimbot();
+    const bt = navigator.bluetooth;
+    let picked = null; let timer = null; let wrapped = false;
+    // The driver's own lines for this connect, so a failure can be sent home
+    // (logPrinter) — the page shown at the door is the only other place they live.
+    const trace = [];
+    const prevLog = console.log; const prevDebug = Niimbot.DEBUG; Niimbot.DEBUG = true;
+    console.log = function (...args) {
+        try {
+            const text = args.map((a) => (typeof a === 'string' ? a : JSON.stringify(a))).join(' ');
+            if (text.startsWith('[niimbot')) trace.push(`${new Date().toLocaleTimeString([], { hour12: false })} ${text.replace(/^\[niimbot[^\]]*\]\s*/, '')}`);
+        } catch (e) { /* logging never breaks connecting */ }
+        return prevLog.apply(console, args);
+    };
+    let onPicked = () => {};
+    const timedOut = new Promise((resolve, reject) => {
+        onPicked = () => {
+            timer = setTimeout(() => {
+                const e = new Error('The printer did not answer.'); e.name = 'ConnectTimeout'; reject(e);
+            }, B1_CONNECT_MS);
+        };
+    });
+    // Notice the pick by wrapping the chooser call for this one connect.
+    const origRequest = bt && bt.requestDevice;
+    if (origRequest) {
+        try {
+            bt.requestDevice = function (...args) {
+                return origRequest.apply(bt, args).then((d) => { picked = d; trace.push(`picked "${(d && d.name) || '?'}"`); onPicked(); return d; });
+            };
+            wrapped = true;
+        } catch (e) { /* not wrappable here: connect without a limit, as before */ }
+    }
+    try {
+        const { info, profile } = await Promise.race([identifyPrinter(anyDevice), timedOut]);
+        b1.info = info; b1.lastError = ''; b1Emit();
+        return { ...info, label: profile.label, dpi: profile.dpi, trace: trace.slice() };
+    } catch (err) {
+        try { err.trace = trace.slice(); } catch (e) { /* frozen error object */ }
+        if (err && err.name === 'ConnectTimeout') {
+            try { if (picked && picked.gatt) picked.gatt.disconnect(); } catch (e) { /* already gone */ }
+            try { await Niimbot.disconnect(); } catch (e) { /* already gone */ }
+            b1.info = null; b1Emit();
+        }
+        throw err;
+    } finally {
+        console.log = prevLog; Niimbot.DEBUG = prevDebug;
+        if (timer) clearTimeout(timer);
+        if (wrapped) { try { if (bt.requestDevice !== origRequest) delete bt.requestDevice; if (bt.requestDevice !== origRequest) bt.requestDevice = origRequest; } catch (e) { /* noop */ } }
+    }
+};
+// What to say when a picked printer never answered.
+const CONNECT_TIMEOUT_HINT = 'The printer did not answer. It only talks to one device at a time — close Bluefy and the NIIMBOT app on every other phone or iPad near it (or switch their Bluetooth off). If the printer is listed in iPad Settings → Bluetooth, tap it and choose “Forget This Device”. Then switch the printer off and on (wait for the blue light) and try again.';
+export { CONNECT_TIMEOUT_HINT };
+// Send one printer attempt home (POST /events/:id/printer-log). Never throws and
+// never waits on the answer: a report must not slow or break the door.
+export const logPrinter = (eventId, { stage, ok, error, printer, trace, station } = {}) => {
+    if (!eventId) return;
+    const errText = error ? ((error.name && error.name !== 'Error' ? error.name + ': ' : '') + (error.message || String(error))) : undefined;
+    try {
+        reportPrinter(eventId, {
+            stage, result: ok ? 'ok' : 'failed', station: station || undefined,
+            error: errText, printer: printer || undefined,
+            trace: (trace || (error && error.trace) || []).slice(-150),
+            client_attempt_id: attemptId(),
+        }).catch(() => { /* best effort */ });
+    } catch (e) { /* best effort */ }
 };
 export const b1Disconnect = async () => { try { if (window.Niimbot) await window.Niimbot.disconnect(); } catch (e) { /* gone */ } b1.info = null; b1Emit(); };
 // Run `fn` when the printer is free. `label` is what the queue shows.
@@ -304,7 +376,7 @@ export default function BadgeLabelDialog({ request, eventId, station, onClose, o
             tell({ severity: 'warning', message: `${rollText(labelSize)} is wider than the printer's 48 mm head. Pick a 40 or 50 mm roll in Station setup.` });
             return;
         }
-        let composed = null; let Niimbot = null;
+        let composed = null; let Niimbot = null; let paired = null;
         // Every line the driver logs (it says which step it is on: device name,
         // characteristic, identification, write mode, handshake, packets) is
         // mirrored into the dialog, and a step that goes quiet for B1_STALL_MS is
@@ -332,7 +404,7 @@ export default function BadgeLabelDialog({ request, eventId, station, onClose, o
             // Pair / identify first (this tap is the gesture the chooser needs),
             // then render the label at the dpi of whatever answered.
             setBtStatus(`connecting…${btAnyDevice ? ' (all devices)' : ''}`);
-            const paired = await b1Connect(btAnyDevice);
+            paired = await b1Connect(btAnyDevice);
             const profile = profileFor(paired);
             note(`printer: ${profile.label} (${profile.dpi} dpi, ${profile.headPx} px head)`);
             setBtStatus('preparing label…');
@@ -356,10 +428,12 @@ export default function BadgeLabelDialog({ request, eventId, station, onClose, o
                 stalled,
             ]);
             setBtStatus(''); setBtAnyDevice(false);
+            logPrinter(eventId, { stage: 'print', ok: true, printer: `${profile.label} ${profile.dpi} dpi`, trace, station });
             await finishPrint('printed');
         } catch (err) {
             setBtStatus('');
             note(`✗ ${(err && (err.name + ': ' + err.message)) || err}`);
+            logPrinter(eventId, { stage: paired ? 'print' : 'connect', ok: false, error: err, printer: paired ? `${profileFor(paired).label}` : undefined, trace, station });
             if (err && err.name === 'StallError') {
                 // Drop the link so the next tap starts clean instead of reusing a
                 // half-open connection the driver would happily consider "connected".
@@ -367,6 +441,7 @@ export default function BadgeLabelDialog({ request, eventId, station, onClose, o
                 setBtHint(`The printer stopped answering (${err.message}). Switch the printer off and on again, make sure the NIIMBOT app is closed, and tap Print on B1 again. The printer log below shows the last step reached.`);
                 return;
             }
+            if (err && err.name === 'ConnectTimeout') { setBtHint(CONNECT_TIMEOUT_HINT); return; }
             if (err && err.name === 'NotFoundError') {
                 // The chooser closed with nothing picked — usually because it was
                 // empty. A B1 that is off, asleep, or still held by the NIIMBOT app

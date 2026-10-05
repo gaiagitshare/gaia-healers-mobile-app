@@ -290,8 +290,8 @@ function Attendees({ timezone }) {
                 <Typography variant="body2" sx={{ fontWeight: 600 }}>{base}</Typography>
                 <Stack direction="row" spacing={0.5} flexWrap="wrap" useFlexGap sx={{ mt: 0.25 }}>
                     {addons.map((ad) => (
-                        <Chip key={ad.code} size="small" color="success" variant="outlined"
-                            label={`+ ${ad.label}${ad.day ? ` · ${ad.day}` : ' · day TBD'}`} />
+                        <Chip key={ad.code} size="small" color="info" variant="outlined"
+                            label={`+ ${ad.label}${ad.day ? ` · ${ad.day}` : ' · day not selected'}`} />
                     ))}
                 </Stack>
             </Box>

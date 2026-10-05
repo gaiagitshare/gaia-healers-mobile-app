@@ -848,6 +848,8 @@ body.gaia-booking-open{overflow:hidden;}
     cards.push(gMeCard('Account', gRows([
       gRowLink('Store & memberships', 'Shop →', 'home.html?view=store', false),
       gRowLink('Open Gaia Healers portal', 'education.gaiahealers.com', portalBase(), true),
+      // Hidden by gaia-practitioner.js for practitioners, who have the Practice tab.
+      '<button type="button" class="g-row g-row--link" data-prac-optin hidden><span>Already a practitioner?</span><span class="g-row__meta">Connect your practice →</span></button>',
       prefRow("Gaia's idle animations", 'avatar_idle_off', !prefsNow.avatar_idle_off, 'On', 'Off'),
       prefRow('Soft chime on her hello', 'avatar_hello_chime', Boolean(prefsNow.avatar_hello_chime), 'On', 'Off'),
     ])));

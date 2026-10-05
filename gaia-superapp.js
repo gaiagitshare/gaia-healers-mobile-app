@@ -658,28 +658,87 @@
       + '</section>';
   }
 
-  function freeTools() {
+  /*
+   * GUEST HOME -- the signed-out landing, built as one page on one grid:
+   *
+   *   hero        what Gaia is, one action, and the artwork beside it
+   *   explore     Energy check featured, the other free tools around it
+   *   join        why sign up, one Join free, sign in and plans quieter
+   *   gathering   the next event, with its artwork at a size it deserves
+   *
+   * Classes are g-guest / gg-* so none of the layered hero and tool rules
+   * from earlier Home layouts reach it; its own sheet is gaia-guest-home.css.
+   */
+  function guestHero(dayGreeting) {
+    const day = new Intl.DateTimeFormat(undefined, { weekday: 'long', month: 'long', day: 'numeric' }).format(new Date());
+    return '<section class="gg-hero"><div class="gg-hero__copy">'
+      + '<p class="gg-hero__greet">' + esc(dayGreeting) + ' <span aria-hidden="true">·</span> ' + esc(day) + '</p>'
+      + '<h1>Understand your energy. <span>Find what supports you.</span></h1>'
+      + '<p class="gg-hero__lede">Check in with yourself, explore free Gaia tools, and discover your next step.</p>'
+      + '<div class="gg-hero__actions">'
+      + '<a class="g-btn g-btn--primary gg-cta" href="home.html?view=wellness&tab=check">' + icon('sparkle') + ' Check my energy ' + icon('arrow-right', 'gg-cta__arrow') + '</a>'
+      + '<a class="g-btn g-btn--secondary gg-cta-quiet" href="#gg-explore" data-gg-explore>Explore Gaia</a></div>'
+      + '<p class="gg-hero__note">' + icon('check-circle') + ' Free — no account needed to start</p></div>'
+      + '<div class="gg-hero__art"><picture>'
+      + '<source media="(min-width: 1060px)" type="image/webp" srcset="assets/gaia-hero-moon.webp" />'
+      + '<source type="image/webp" srcset="assets/gaia-hero-moon-wide.webp" />'
+      + '<img src="assets/gaia-hero-moon-wide.png" alt="Person meditating in lotus pose under a full moon over mountains" width="1024" height="576" loading="eager" fetchpriority="high" /></picture></div></section>';
+  }
+
+  function guestExplore() {
+    // Energy check leads; the rest are the same free doors as before, plus one
+    // way to every tool so the grid ends on a full row.
     const tools = [
-      ['wellness&tab=check', 'sparkle', 'Energy check', 'Today’s body point and practice'],
-      ['wellness&tool=pulse', 'heartbeat', 'Energy Pulse', 'Camera or tap pulse read'],
-      ['wellness&tool=breath', 'wind', 'Coherence Breath', 'Paced resonance breathing'],
-      ['wellness&tab=horoscope', 'moon-stars', 'Horoscope', 'Your reflective daily guidance'],
-      ['wellness&tab=chakras', 'circles-three-plus', 'Chakra match', 'Explore centres and products'],
-      ['wellness&tool=colour', 'palette', 'Colour test', 'Five free questions'],
-      ['wellness&tool=chakra', 'circles-three-plus', 'Chakra Quiz', 'Find your focus centre'],
-      ['wellness&tool=match', 'heart', 'Energy Match', 'Your compatibility'],
-      ['events', 'calendar-dots', 'Events', 'Gatherings and live sessions'],
-      ['store', 'bag', 'Gaia Healers Store', 'Sprays, tools and memberships'],
+      ['wellness&tool=pulse', 'heartbeat', 'Energy Pulse', 'Camera or tap pulse read', 'var(--g-teal)'],
+      ['wellness&tool=breath', 'wind', 'Coherence Breath', 'Paced resonance breathing', 'var(--g-accent)'],
+      ['wellness&tab=horoscope', 'moon-stars', 'Horoscope', 'Your reflective daily guidance', 'var(--g-teal)'],
+      ['wellness&tab=chakras', 'circles-three-plus', 'Chakra match', 'Explore centres and products', 'var(--g-purple)'],
+      ['wellness&tool=colour', 'palette', 'Colour test', 'Five free questions', 'var(--g-gold)'],
+      ['wellness&tool=chakra', 'circles-three-plus', 'Chakra Quiz', 'Find your focus centre', 'var(--g-gold)'],
+      ['wellness&tool=match', 'heart', 'Energy Match', 'Your compatibility', 'var(--g-accent)'],
+      ['wellness', 'squares-four', 'All energy tools', 'Everything in one place', 'var(--g-text-muted)'],
     ];
-    // The template's four doors, colour-coded: the icons are the wayfinding.
-    const TINT = { 'Energy check': 'var(--g-accent)', 'Energy Pulse': 'var(--g-teal)',
-      'Coherence Breath': 'var(--g-accent)', Horoscope: 'var(--g-teal)',
-      'Chakra match': 'var(--g-purple)', 'Colour test': 'var(--g-gold)',
-      'Chakra Quiz': 'var(--g-gold)', 'Energy Match': 'var(--g-accent)' };
-    const four = tools.filter((t) => TINT[t[2]]);
-    return '<section class="g-free-tools"><div class="g-super-section-head"><div><p class="g-super-kicker">Explore free</p><h2>Try Gaia Healers today</h2></div></div><div class="g-free-tools__grid">'
-      + four.map((item) => '<a class="g-free-tool" style="--tool:' + TINT[item[2]] + '" href="home.html?view=' + item[0] + '"><span>' + icon(item[1]) + '</span><strong>' + esc(item[2]) + '</strong><small>' + esc(item[3]) + '</small></a>').join('')
+    return '<section class="gg-explore" id="gg-explore" aria-labelledby="gg-explore-title">'
+      + '<div class="gg-head"><p class="g-super-kicker">Explore free</p><h2 id="gg-explore-title">Start with a two-minute check-in</h2></div>'
+      + '<div class="gg-explore__grid">'
+      + '<a class="gg-feature" href="home.html?view=wellness&tab=check"><span class="gg-feature__icon">' + icon('sparkle') + '</span>'
+      + '<span class="gg-feature__copy"><small>Most people start here</small><strong>Energy check</strong>'
+      + '<span>Today’s body point and a short practice to match how you feel.</span></span>'
+      + '<span class="gg-feature__go">Start the check ' + icon('arrow-right', 'gg-cta__arrow') + '</span></a>'
+      + tools.map((t) => '<a class="gg-tool" style="--tool:' + t[4] + '" href="home.html?view=' + t[0] + '"><span class="gg-tool__icon">' + icon(t[1]) + '</span>'
+        + '<span class="gg-tool__copy"><strong>' + esc(t[2]) + '</strong><small>' + esc(t[3]) + '</small></span>' + icon('arrow-right', 'gg-tool__arrow') + '</a>').join('')
       + '</div></section>';
+  }
+
+  function guestJoin() {
+    return '<section class="gg-join" aria-labelledby="gg-join-title">'
+      + '<div class="gg-join__visual" aria-hidden="true"><span class="gg-join__orb"><img src="assets/gaia-mark.svg" alt="" width="64" height="64" /></span></div>'
+      + '<div class="gg-join__body"><p class="g-super-kicker">Join free</p><h2 id="gg-join-title">Make Gaia Healers yours</h2>'
+      + '<p class="gg-join__lede">A name and an email — we send a one-tap sign-in link. No password.</p>'
+      + '<ul class="gg-join__list">'
+      + '<li>' + icon('check-circle') + '<span>Save your Daily Energy, streak &amp; readings</span></li>'
+      + '<li>' + icon('check-circle') + '<span>Your real courses, certifications &amp; plan — synced automatically</span></li>'
+      + '<li>' + icon('check-circle') + '<span>Events, bookings, community &amp; Store, all in one home</span></li>'
+      + '</ul>'
+      + '<div class="gg-join__actions"><button type="button" class="g-btn g-btn--primary gg-cta" data-super-join>' + icon('sparkle') + ' Join free ' + icon('arrow-right', 'gg-cta__arrow') + '</button>'
+      + '<button type="button" class="gg-link" data-super-signin>Already a member? <strong>Sign in</strong></button></div>'
+      + '<a class="gg-join__plans" href="home.html?view=store&tab=membership">Compare membership plans ' + icon('caret-right') + '</a>'
+      + '</div></section>';
+  }
+
+  function guestEvent() {
+    loadEventsList();
+    const event = upcomingFeatureEvents()[0] || eventData();
+    if (!event?.name) return '';
+    const art = event.heroImageUrl || 'assets/gaia-elevate-poster.jpg';
+    const when = eventDate(event), location = event.location || event.venue || '', countdown = eventCountdown(event);
+    const register = event.registrationUrl ? '<a class="g-btn g-btn--primary gg-cta" href="' + esc(event.registrationUrl) + '" target="_blank" rel="noopener noreferrer">' + esc(event.registrationLabel || 'Get tickets') + ' ' + icon('arrow-up-right', 'gg-cta__arrow') + '</a>' : '';
+    return '<section class="gg-event" aria-labelledby="gg-event-title"><div class="gg-event__art"><img src="' + esc(art) + '" alt="" width="760" height="639" loading="lazy" /></div>'
+      + '<div class="gg-event__body"><p class="g-super-kicker">Next gathering' + (countdown ? ' <span class="gg-badge">' + esc(countdown) + '</span>' : '') + '</p>'
+      + '<h2 id="gg-event-title">' + esc(event.name) + '</h2>'
+      + (when ? '<p class="gg-event__meta">' + icon('calendar-dots') + '<span>' + esc(when) + '</span></p>' : '')
+      + (location ? '<p class="gg-event__meta">' + icon('map-pin') + '<span>' + esc(location) + '</span></p>' : '')
+      + '<div class="gg-event__actions">' + register + '<a class="g-btn g-btn--secondary gg-cta-quiet" href="home.html?view=events">Event details</a></div></div></section>';
   }
 
   function journeyRail() {
@@ -837,26 +896,25 @@
       + serviceLink('bookings', 'calendar-check', 'Bookings', stateMeta('Sessions and consultations', upcomingAppointments().length, 'upcoming booking', 'upcoming bookings'));
 
     if (authed) { renderHomeMember(root, greeting); renderToday(); document.dispatchEvent(new CustomEvent('gaia:superapp-rendered', { detail: { authed } })); return; }
-    root.innerHTML = '<div class="g-super-home">'
+    root.innerHTML = '<div class="g-super-home g-guest">'
       // Admin-published announcements (rendered by gaia-member.js from
       // /api/app/bootstrap) sit above everything, for members and guests alike.
       + '<div id="home-announcements"></div>'
-      // The greeting opens the card on its own; the date and the question sit
-      // with the actions at the foot. Reordered here rather than with CSS
-      // `order` so what a screen reader hears matches what the eye sees.
-      + '<section class="g-super-hero"><div class="g-super-hero__intro">'
-      + '<h1>' + greeting + '</h1>'
-      + '<p class="g-super-date">' + esc(dateLabel()) + '</p>'
-      + '<p>' + (authed ? 'Your healing journey is waiting.' : 'What does your energy need today?') + '</p>'
-      + (authed ? '' : '<div class="g-super-discover g-super-discover--solo"><a class="g-btn g-btn--primary" href="home.html?view=wellness&tab=check">' + icon('sparkle') + ' Check my energy</a></div>') + '</div><div class="g-super-hero__art"><picture><source type="image/webp" srcset="assets/gaia-hero-moon-wide.webp" /><img src="assets/gaia-hero-moon-wide.png" alt="Person meditating in lotus pose under a full moon over mountains" width="1024" height="576" loading="eager" /></picture></div></section>'
       // A member never reaches this point (renderHomeMember above); this is the
-      // guest on-ramp: the tools a stranger can use now, one way in, and the
-      // gathering in its compact form. The booking card host stays for Today.
-      + (freeTools()
-          + authPrompt(true)
-          + eventCompact()
-          + '<div id="home-book" hidden></div>')
+      // guest on-ramp: what Gaia is, the tools a stranger can use now, one way
+      // in, and the next gathering. The booking card host stays for Today.
+      + guestHero(dayGreeting)
+      + guestExplore()
+      + guestJoin()
+      + guestEvent()
+      + '<div id="home-book" hidden></div>'
       + '</div>';
+    root.querySelector('[data-gg-explore]')?.addEventListener('click', (e) => {
+      const target = root.querySelector('#gg-explore');
+      if (!target) return;
+      e.preventDefault();
+      target.scrollIntoView({ behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth', block: 'start' });
+    });
     bind(root);
     renderToday();
     // Panels that live inside the home screen but are owned by their own files

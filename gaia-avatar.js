@@ -42,7 +42,7 @@
   // ── actions: every chip maps to something the app already does ──────────
   const go = (v, opts) => { try { window.GaiaAppShell?.go?.(v, opts); } catch (_) { /* ignore */ } };
   /** Move the screen, then point at where the member landed: the page head of the active screen. */
-  const goAndPoint = (v, opts, text) => { go(v, opts); setTimeout(() => { const s = document.querySelector('.gaia-screen.is-active .g-page__head, .gaia-screen.is-active .g-super-hero, .gaia-screen.is-active main'); if (s) pointAt(s, { text: text || 'Here you go.', duration: 3200 }); }, 520); };
+  const goAndPoint = (v, opts, text) => { go(v, opts); setTimeout(() => { const s = document.querySelector('.gaia-screen.is-active .g-page__head, .gaia-screen.is-active .g-super-hero, .gaia-screen.is-active .gg-hero, .gaia-screen.is-active main'); if (s) pointAt(s, { text: text || 'Here you go.', duration: 3200 }); }, 520); };
   const ACTIONS = {
     chat: { label: 'Chat with Gaia', icon: 'chat', run: () => openChat() },
     talk: { label: 'Talk to Gaia', icon: 'mic', run: () => startVoice() },
@@ -343,7 +343,7 @@
     // Assist moved the screen (voice or chat navigate): point at the page head.
     window.addEventListener('gaia:assist-minimize', (e) => {
       const d = e.detail || {}; if (!d.screen || d.screen === 'profile') return;
-      setTimeout(() => { const s = document.querySelector('.gaia-screen.is-active .g-page__head, .gaia-screen.is-active .g-super-hero'); if (s) pointAt(s, { text: 'Here you go.', duration: 3200 }); }, 600);
+      setTimeout(() => { const s = document.querySelector('.gaia-screen.is-active .g-page__head, .gaia-screen.is-active .g-super-hero, .gaia-screen.is-active .gg-hero'); if (s) pointAt(s, { text: 'Here you go.', duration: 3200 }); }, 600);
     });
     // The readings panel tells us when a new reading is waiting.
     window.addEventListener('gaia:readings-status', (e) => { const d = e.detail || {}; if (d.new_reading && bubble.hidden && !document.body.classList.contains('gaia-assist-panel-open')) showBubble(bubbleFor()); });

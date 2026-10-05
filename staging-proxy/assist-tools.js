@@ -1,3 +1,4 @@
+import { readingSeries, recentAverage } from './reading-history.js';
 /**
  * GAIA ASSIST — the tools, declared and executed on the server.
  *
@@ -510,6 +511,7 @@ export const TOOLS = [
       properties: {
         clientId: { type: 'string', description: 'The client id.' },
         limit: { type: 'number', description: 'How many before/after pairs to compare. Defaults to 2, most recent first.' },
+        selectScans: { type: 'boolean', description: 'Include dated energy/stress history for manual scan selection in the Practice screen.' },
       },
       required: ['clientId'],
     },
@@ -529,9 +531,19 @@ export const TOOLS = [
           name: d.name, before: round(d.before), after: round(d.after), change: round(d.delta),
         })),
       }));
-      if (!pairs.length) return { found: false, reason: 'There are not two comparable scans on file for this client yet.' };
+      let series = [], history_unavailable = false;
+      if (args?.selectScans === true) {
+        try {
+          const history = await readMcp(ctx, 'get_customer_scan', { customerId: clientId });
+          series = readingSeries((history?.scans || []).map(scan => ({
+            ...scan, energy: scan.values?.energy ?? scan.labeled?.energy,
+            stress: scan.values?.stress ?? scan.labeled?.stress,
+          })));
+        } catch { history_unavailable = true; }
+      }
+      if (!pairs.length && series.length < 2) return { found: false, history_unavailable, reason: history_unavailable ? 'Scan history could not be loaded. Try again.' : 'There are not two comparable scans on file for this client yet.' };
       return { found: true, client: { id: String(out?.customer?.id ?? clientId), name: out?.customer?.name || '' },
-               comparisons: pairs };
+               comparisons: pairs, series, average_recent: recentAverage(series), history_unavailable };
     },
   },
 

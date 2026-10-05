@@ -1226,3 +1226,14 @@ body.gaia-v2 [data-screen="profile"] .g-pass-stack > .g-next.is-collapsed { padd
 #practitioner-panel .gaia-empty__text { color: var(--g-text-muted); }
 #practitioner-panel .gaia-empty .g-btn { color: var(--g-text); }
 [data-prac-disconnect-error] { display: block; margin-top: 8px; color: var(--g-text); font-size: 13px; }
+
+/* Reading sharing must wrap long names and dates on narrow screens. */
+.g-datashare .g-row { flex-wrap: wrap; gap: 6px 16px; }
+.g-datashare .g-row > span { min-width: 0; overflow-wrap: anywhere; white-space: normal; }
+.g-datashare .g-row__meta { flex: 1 1 170px; max-width: 100%; white-space: normal; }
+.g-readings__averages { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 16px; margin: 12px 0; }
+.g-readings__averages > div { display: grid; gap: 8px; }
+.g-readings__averages strong { font-size: 1.6rem; }
+.g-readings__averages .g-readings__bar > span { background: var(--g-accent); }
+@media (max-width: 480px) { .g-datashare .g-row { display: grid; grid-template-columns: 1fr; } .g-datashare .g-row__meta { text-align: left; } }
+.g-readings__summary, .g-readings__pick, [data-prac-pick] { scroll-margin-top: 140px; scroll-margin-bottom: 100px; }

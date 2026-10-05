@@ -1,3 +1,4 @@
+import { readingSeries, recentAverage } from './reading-history.js';
 /**
  * MEMBER ↔ PRACTITIONER LINK — a member's consent to share their Bio-Well
  * results, and the member-only reads that consent allows.
@@ -403,14 +404,13 @@ export async function memberReadings(cfg0, memberId, { env = process.env, fetchI
   const trendView = trend ? { energy: band(trend.summary?.energy), stress: band(trend.summary?.stress),
       flagged: (trend.flags || []).slice(0, 6).map((t) => ({ name: t.name, area: String(t.category || '').replace(/s$/, ''), direction: t.direction, severity: t.severity || '', change: num(t.delta), reason: t.flagReason || '' })) } : null;
   // A small series for a sparkline: newest 24 dated points with numbers.
-  const series = (trend?.points || []).filter((p) => p?.scanned_at && (typeof p.energy === 'number' || typeof p.stress === 'number'))
-    .sort((a, b) => String(a.scanned_at).localeCompare(String(b.scanned_at))).slice(-24)
-    .map((p) => ({ d: String(p.scanned_at).slice(0, 10), e: num(p.energy, 1), s: num(p.stress, 2) }));
+  const series = readingSeries(trend?.points || [], 24);
   const practitionerName = prac.name || link.practitioner_name || 'your practitioner';
   return {
     practitioner: { id: String(prac.id ?? link.practitioner_id), name: prac.name || link.practitioner_name || '', specialty: prac.specialty || '', location: [prac.city, prac.state].filter(Boolean).join(', ') },
     summary: readingSummary({ latest: latestView, trend: trendView, comparisons, practitionerName }),
     series,
+    average_recent: recentAverage(series),
     linked_at: customer?.member?.linked_at || link.linked_at,
     scans_on_file: scan?.scanCount ?? customer?.scans_on_file ?? trend?.scanCount ?? (Array.isArray(scan?.scans) ? scan.scans.length : null),
     latest: latestView,

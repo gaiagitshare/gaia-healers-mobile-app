@@ -305,6 +305,10 @@ test('memberReadings carries the summary and a sorted, numeric-only series (newe
   const cfg = { environment: 'staging', base: 'https://staging.example', mcpUrl: 'https://staging.example/api/mcp', clientId: 'x', clientSecret: 'y' };
   const r = await memberReadings(cfg, 'm10', { env: { GAIA_PRACTITIONERS_MEMBER_API_KEY: 'k', GAIA_PRACTITIONERS_MEMBER_BACKEND: 'https://backend.example' }, fetchImpl, file: f });
   assert.equal(r.series.length, 24, 'capped at 24');
+  assert.equal(r.average_recent.count, 3);
+  assert.equal(r.average_recent.energy, r.series.slice(-3).reduce((n,p)=>n+p.e,0)/3);
+  assert.equal(r.average_recent.stress, r.series.slice(-3).reduce((n,p)=>n+p.s,0)/3);
+  assert.ok(r.series.every(p=>p.id && p.at), 'scan identity and timestamp preserved');
   assert.ok(r.series.every((p) => /^\d{4}-\d{2}-\d{2}$/.test(p.d) && typeof p.e === 'number' && typeof p.s === 'number'), 'dated, numeric only; the null 2024 point is dropped');
   assert.ok(r.series.every((p, i, a) => i === 0 || a[i - 1].d <= p.d), 'oldest to newest');
   assert.equal(r.summary.headline, 'Energy below your recent average · stress higher than usual');

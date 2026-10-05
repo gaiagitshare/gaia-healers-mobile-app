@@ -151,6 +151,14 @@
     return { text: 'Not yet checked in', tone: 'idle' };
   }
 
+  // An add-on on a ticket: a quiet outlined chip in the app's cyan, so it
+  // reads apart from the pass (green) and VIP (gold). Was a light-theme
+  // pale-green pill with inline colours on the dark card.
+  function addonChip(a) {
+    return '<span class="g3-addon g-addon">+ ' + esc(a.label)
+      + '<span class="g-addon__day">' + (a.day ? ' \u00b7 ' + esc(a.day) : ' \u00b7 day not selected') + '</span></span>';
+  }
+
   function eventRow(item) {
     const status = ticketStatus(item.ticket);
     const phaseChip = item.phase === 'live'
@@ -166,7 +174,7 @@
       + '<div class="g-mye__pass">'
       + '<span class="g-mye__passname">' + esc((item.ticket.baseTicket && item.ticket.baseTicket.name) || item.ticket.passLabel || 'Ticket') + '</span>'
       + (item.ticket.isVip ? '<span class="g-mye__vip">VIP</span>' : '')
-      + (item.ticket.addons || []).map(function(a){return '<span class="g3-addon" style="display:inline-block;background:#e6f4ec;color:#1f6f52;border:1px solid #bfe0cd;border-radius:100px;padding:1px 8px;font-size:.78em;margin-left:6px;white-space:nowrap;">+ ' + esc(a.label) + (a.day ? ' \u00b7 ' + esc(a.day) : ' \u00b7 day TBD') + '</span>';}).join('')
+      + (item.ticket.addons || []).map(addonChip).join('')
       + '<span class="g-mye__status is-' + status.tone + '">' + esc(status.text) + '</span>'
       + '</div>'
       + '<div class="g-mye__actions">'
@@ -277,7 +285,7 @@
       + '<div class="g-ticket__meta">'
       + '<span class="g-ticket__pass">' + esc((ticket.baseTicket && ticket.baseTicket.name) || ticket.passLabel || 'Ticket') + '</span>'
       + (ticket.isVip ? '<span class="g-ticket__vip">VIP</span>' : '')
-      + (ticket.addons || []).map(function(a){return '<span class="g3-addon" style="display:inline-block;background:#e6f4ec;color:#1f6f52;border:1px solid #bfe0cd;border-radius:100px;padding:1px 8px;font-size:.78em;margin-left:6px;white-space:nowrap;">+ ' + esc(a.label) + (a.day ? ' \u00b7 ' + esc(a.day) : ' \u00b7 day not selected') + '</span>';}).join('')
+      + (ticket.addons || []).map(addonChip).join('')
       + '</div>'
       + '<p class="g3-access" style="margin:8px 0 0;font-size:.95em;"><span style="opacity:.6;text-transform:uppercase;font-size:.8em;letter-spacing:.04em;">Access</span> <strong>' + esc(ticket.effectiveLabel || ticket.passLabel || '\u2014') + '</strong></p>'
       + ((!ticket.baseTicket && (ticket.addons || []).length) ? '<p class="g3-warn" style="margin:6px 0 0;color:#b3341f;font-size:.9em;">Base admission not found \u2014 please see the registration desk.</p>' : '')

@@ -1237,3 +1237,78 @@ body.gaia-v2 [data-screen="profile"] .g-pass-stack > .g-next.is-collapsed { padd
 .g-readings__averages .g-readings__bar > span { background: var(--g-accent); }
 @media (max-width: 480px) { .g-datashare .g-row { display: grid; grid-template-columns: 1fr; } .g-datashare .g-row__meta { text-align: left; } }
 .g-readings__summary, .g-readings__pick, [data-prac-pick] { scroll-margin-top: 140px; scroll-margin-bottom: 100px; }
+
+/* ---------- Shop: category jump row, one tile background, Home's column ----
+   ~130 products in 14 sections: a row of category buttons (gaia-store.js)
+   sits above the catalogue and sticks under the header while scrolling;
+   each scrolls to its section. Product photos arrive on white, transparent
+   or dark backgrounds, so every image tile is the same light ground; a
+   product with no photo shows a bag icon instead of an empty box. */
+body.gaia-v2 [data-screen="store"] .g-store-jump {
+  /* Sticks just under the Shop | Membership tabs, which are sticky too
+     (72px from the top on desktop, 66px on phones; 54px tall). */
+  position: sticky;
+  top: 134px;
+  z-index: 4;
+  display: flex;
+  gap: 8px;
+  margin: 0 0 18px;
+  padding: 8px;
+  overflow-x: auto;
+  scrollbar-width: none;
+  border: 1px solid var(--v3-border);
+  border-radius: 999px;
+  background: rgba(8, 17, 13, 0.88);
+  -webkit-backdrop-filter: blur(12px);
+  backdrop-filter: blur(12px);
+}
+body.gaia-v2 [data-screen="store"] .g-store-jump::-webkit-scrollbar { display: none; }
+/* More chips than fit: fade the right edge so the row reads as scrollable. */
+body.gaia-v2 [data-screen="store"] .g-store-jump {
+  -webkit-mask-image: linear-gradient(90deg, #000 calc(100% - 48px), transparent);
+  mask-image: linear-gradient(90deg, #000 calc(100% - 48px), transparent);
+}
+body.gaia-v2 [data-screen="store"] .g-store-jump__chip {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 36px;
+  padding: 6px 14px;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--v3-text-2);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background-color 0.2s ease, color 0.2s ease, border-color 0.2s ease;
+}
+body.gaia-v2 [data-screen="store"] .g-store-jump__chip span { color: var(--v3-muted); font-weight: 500; font-size: 12px; }
+body.gaia-v2 [data-screen="store"] .g-store-jump__chip:hover { background: var(--v3-card-2); color: var(--v3-text); }
+body.gaia-v2 [data-screen="store"] .g-store-jump__chip:focus-visible { outline: none; border-color: var(--v3-border-strong); color: var(--v3-text); }
+body.gaia-v2 [data-screen="store"] .g-store-cat { scroll-margin-top: 200px; }
+@media (max-width: 1099px) {
+  body.gaia-v2 [data-screen="store"] .g-store-jump { top: 128px; }
+  body.gaia-v2 [data-screen="store"] .g-store-cat { scroll-margin-top: 194px; }
+}
+
+body.gaia-v2 [data-screen="store"] .g-store-tile .g-tile__media { background: #f4f6f3; }
+body.gaia-v2 [data-screen="store"] .g-store-tile .g-tile__media--empty {
+  display: grid;
+  place-items: center;
+  background: #0f1d16;
+  color: var(--v3-muted);
+  font-size: 34px;
+}
+
+@media (min-width: 1100px) {
+  body.gaia-v2 [data-screen="store"] .gaia-main.g-store > * {
+    width: 100%;
+    max-width: 1180px;
+    margin-inline: auto;
+  }
+  body.gaia-v2 [data-screen="store"] .gaia-main.g-store > .g-tabs { width: fit-content; margin-left: max(0px, calc((100% - 1180px) / 2)); margin-right: auto; }
+}

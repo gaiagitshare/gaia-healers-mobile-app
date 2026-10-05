@@ -1381,3 +1381,6 @@ body.gaia-v2 [data-screen="store"] #store-memberships:has(> .g-tier--featured) >
   .g-prac [data-prac-client-list] > :not(.g-prac__client) { grid-column: 1 / -1; }
   .g-prac [data-prac-client-list] > .g-prac__client, .g-prac__sec > .g-prac__client { margin: 0; }
 }
+
+/* "Already a practitioner?" (Account card): hidden for practitioners, who have the Practice tab. */
+[data-prac-optin][hidden] { display: none !important; }

@@ -631,6 +631,22 @@
     }
     if (status.offline && !mounted && !window.GaiaMember?.authed) return;
     badge(status);
+    // The Practice tab is for practitioners: the GHL practitioner tag or a
+    // verified link (isPractitioner), anyone who has already connected an
+    // account (so its state stays reachable), or a practice deep link -- the
+    // OAuth return, Gaia sending someone to a client, or the Account row
+    // "Already a practitioner?" that opens it for an untagged practitioner.
+    const q = new URLSearchParams(window.location.search);
+    const linkedState = ['connected', 'needs_reconnect', 'unverified', 'not_practitioner'].includes(status.state);
+    const askedFor = q.get('tab') === 'practice' || q.has('client') || q.has('practitioners');
+    let optedIn = false; try { optedIn = sessionStorage.getItem('gaia-prac-optin') === '1'; } catch (_) { /* private mode */ }
+    const showPractice = Boolean(status.isPractitioner || linkedState || askedFor || optedIn);
+    document.querySelectorAll('[data-prac-optin]').forEach((n) => { n.hidden = showPractice || status.available === false; });
+    if (!showPractice) {
+      if (mounted && mounted.tabs === tabs) mounted.select('me');
+      tabs.hidden = true; panel.hidden = true; me.hidden = false;
+      return;
+    }
     if (mounted && mounted.tabs === tabs) {
       tabs.hidden = false;
       mounted.invalidate();
@@ -711,6 +727,16 @@
     if (params.has('practitioners')) window.GaiaAppShell?.go?.('profile');
     select(wantsPractice ? 'practice' : 'me');
   }
+
+  // "Already a practitioner?" in the Account card: an untagged practitioner
+  // opens the Practice tab to connect (connecting is what tags them).
+  document.addEventListener('click', async (event) => {
+    if (!event.target.closest('[data-prac-optin]')) return;
+    try { sessionStorage.setItem('gaia-prac-optin', '1'); } catch (_) { /* private mode */ }
+    await mount();
+    mounted?.select('practice');
+    document.querySelector('[data-profile-tabs]')?.scrollIntoView({ block: 'start', behavior: 'smooth' });
+  });
 
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', mount);
   else mount();

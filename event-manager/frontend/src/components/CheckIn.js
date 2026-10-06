@@ -23,7 +23,7 @@ import TuneIcon from '@mui/icons-material/Tune';
 import { Html5QrcodeScanner } from 'html5-qrcode';
 import { authorizeScan, getScanLogs, searchAttendees, getEvents, walkInCreate, getTicketTypes, undoCheckIn, clearScanLogs, setDoorTestMode, getEvent, badgeLabelBlob, recordBadgePrint,
     overrideAdmit, doorIdentity, addPartySeat, setReEntry as setDoorReEntry, changePass, revokeAttendee, reinstateAttendee,
-    getMyCapabilities, getPrintReport, setSharing, setAddonDay } from '../utils/api';
+    getMyCapabilities, getPrintReport, setSharing, setAddonDay, testLabelBlob } from '../utils/api';
 import { formatVenueTime, statusLabel, isFlaggedStatus } from '../utils/datetime';
 import BadgeLabelDialog, { STATION_KEY, LABEL_SIZE_KEY, LABEL_ROLLS, savedLabelSize, rollShort, fullName, physicalCard,
     canPrintBluetooth, useB1, b1Connect, b1IsConnected, b1Enqueue, b1PrintBlob, b1Dpi, rollFitsB1, PRINTER_KEY, PRINTER_CHOICES, savedPrinter, CONNECT_TIMEOUT_HINT, logPrinter,
@@ -154,7 +154,8 @@ function CheckIn({ timezone: timezoneProp }) {
     const [printerBusy, setPrinterBusy] = useState(false);      // the Connect button
     const [connectAny, setConnectAny] = useState(false);        // after an empty chooser: the next tap lists every nearby device
     const [printerHint, setPrinterHint] = useState('');
-    const [wrongPrinter, setWrongPrinter] = useState(null);   // the WrongPrinter error, for its "use this one" button
+    const [wrongPrinter, setWrongPrinter] = useState(null);
+    const [testPrinting, setTestPrinting] = useState('');      // progress line while a test sticker prints ('' = idle)   // the WrongPrinter error, for its "use this one" button
     const [printerModel, setPrinterModel] = useState(savedPrinter);
     const rememberPrinterModel = (v) => { setPrinterModel(v); try { localStorage.setItem(PRINTER_KEY, v); } catch (e) { /* noop */ } };
     // What happened to the sticker for the person on screen: { attendeeId, phase, message }
@@ -475,6 +476,41 @@ function CheckIn({ timezone: timezoneProp }) {
                 setPrinterHint(`Could not connect: ${(err && err.message) || err}`);
             }
         } finally { setPrinterBusy(false); }
+    };
+    // Test print: prove printer, paper and alignment before the first attendee.
+    // Connects first when needed (this tap is the gesture the chooser needs),
+    // prints a TEST PRINT sticker for this desk at the printer's dpi, and
+    // reports the result like any print, so the dashboard shows it.
+    const testPrint = async () => {
+        if (testPrinting || printerBusy) return;
+        if (!rollFitsB1(labelSize)) { setPrinterHint('This label roll is wider than the printer. Pick a 40 or 50 mm roll above.'); return; }
+        setPrinterHint(''); setWrongPrinter(null);
+        let info = null;
+        try {
+            if (!b1IsConnected()) {
+                setTestPrinting('connecting…');
+                info = await b1Connect(connectAny);
+                setConnectAny(false);
+                logPrinter(eventId, { stage: 'connect', ok: true, printer: `${info.label} ${info.dpi} dpi`, trace: info.trace, station, device: info.device });
+            }
+            setTestPrinting('preparing…');
+            const response = await testLabelBlob(eventId, labelSize, b1Dpi(), station);
+            await b1Enqueue('test print', async () => {
+                setTestPrinting('printing…');
+                await b1PrintBlob(response.data, { onProgress: (st) => setTestPrinting(String(st || 'printing…')) });
+            });
+            // `printer` is this render's snapshot; right after a connect, `info` is newer.
+            const device = (info && info.device) || printer.device;
+            const label = (info && info.label) || printer.label;
+            logPrinter(eventId, { stage: 'print', ok: true, printer: `${label} ${b1Dpi()} dpi (test)`, station, device });
+            setFeedback({ severity: 'success', message: `Test sticker printed on ${device ? `printer ${printerTag(device)}` : 'the printer'} (${label}, ${b1Dpi()} dpi). Check it: name readable, QR sharp and centred, nothing cut off.` });
+        } catch (err) {
+            logPrinter(eventId, { stage: info || b1IsConnected() ? 'print' : 'connect', ok: false, error: err, station });
+            if (err && err.name === 'WrongPrinter') { setWrongPrinter(err); setPrinterHint(wrongPrinterHint(err)); }
+            else if (err && err.name === 'ConnectTimeout') setPrinterHint(CONNECT_TIMEOUT_HINT);
+            else if (err && err.name === 'NotFoundError') { setConnectAny(true); setPrinterHint('No printer picked. Tap Test print again — the list will show every nearby device.'); }
+            else setPrinterHint(`Test print failed: ${(err && err.message) || err}`);
+        } finally { setTestPrinting(''); }
     };
     // Print without the dialog: render, queue on the B1, record. Any failure
     // is recorded as one and the decision card offers the dialog instead.
@@ -1198,6 +1234,17 @@ function CheckIn({ timezone: timezoneProp }) {
                                         </TextField>
                                     )}
                                 </Stack>
+                                {canPrintBluetooth() && (
+                                    <Stack direction="row" alignItems="center" gap={1} flexWrap="wrap" sx={{ mt: 1.5 }}>
+                                        <Button size="small" variant="outlined" startIcon={<BluetoothIcon />}
+                                                onClick={testPrint} disabled={Boolean(testPrinting) || printerBusy || printer.busy}>
+                                            {testPrinting ? `Test print: ${testPrinting}` : 'Test print'}
+                                        </Button>
+                                        <Typography variant="caption" color="text.secondary">
+                                            Prints a TEST PRINT sticker with this desk's name on the roll above — no attendee, and its QR admits no one.
+                                        </Typography>
+                                    </Stack>
+                                )}
                                 {canPrintBluetooth() && (
                                     <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 1 }}>
                                         {printer.deskPrinter

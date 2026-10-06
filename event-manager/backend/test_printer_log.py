@@ -9,10 +9,11 @@ Proves, against a served copy of the live database:
   5. organizers read it back with the trace and the device; a desk cannot
   6. a desk connecting to a printer another desk used today is told which desk
   7. the dashboard's printer-status: a row per desk, failures first, clashes named
+  8. a test sticker renders at either dpi for the head, and admits no one
 
 Run:  python3 /root/event/backend/test_printer_log.py
 """
-import json, urllib.request, urllib.error, sqlite3, sys, uuid
+import json, urllib.request, urllib.error, sqlite3, sys, uuid, io
 
 env = {}
 for line in open("/root/event/backend/.env"):
@@ -128,6 +129,35 @@ check(any(s_["device"] == dev and s_["desks"] == ["test-desk-1", "test-desk-2"] 
 check(ps["desks"][0]["status"] == "failed", "failing desks come first", [d["station"] for d in ps["desks"]])
 st, _ = call("GET", "/events/%d/printer-status" % EVENT, None, DESK)
 check(st == 403, "a door desk cannot read the dashboard view", st)
+
+# 8 ── a test sticker for setting a desk up
+def raw(path, token):
+    req = urllib.request.Request(BASE + path)
+    req.add_header("Authorization", "Bearer " + token)
+    try:
+        with urllib.request.urlopen(req) as r:
+            return r.status, r.read(), dict(r.headers)
+    except urllib.error.HTTPError as e:
+        return e.code, e.read(), dict(e.headers)
+from PIL import Image
+real = c.execute("SELECT id FROM attendees WHERE event_id=? LIMIT 1", (EVENT,)).fetchone()[0]
+for dpi in (203, 300):
+    st, png, hd = raw("/events/%d/test-label.png?dpi=%d&station=Desk%%201" % (EVENT, dpi), DESK)
+    hd = {k.lower(): v for k, v in hd.items()}
+    ok = st == 200 and png[:8] == b"\x89PNG\r\n\x1a\n"
+    im = Image.open(io.BytesIO(png)) if ok else None
+    _, rpng, _ = raw("/events/%d/attendees/%d/badge-label.png?dpi=%d" % (EVENT, real, dpi), DESK)
+    ref = Image.open(io.BytesIO(rpng)).size
+    check(ok and hd.get("x-label-dpi") == str(dpi) and im.size == ref,
+          "a desk gets a test sticker at %d dpi, the exact size of a real badge" % dpi, (st, hd, im and im.size, ref))
+st, _, _ = raw("/events/%d/test-label.png?dpi=150" % EVENT, DESK)
+check(st == 400, "an unknown dpi is refused", st)
+st, _, _ = raw("/events/%d/test-label.png?size=nope" % EVENT, DESK)
+check(st == 400, "an unknown roll is refused", st)
+n = c.execute("SELECT count(*) FROM attendees WHERE public_token='TESTPRNT'").fetchone()[0]
+check(n == 0, "the test sticker's QR belongs to nobody", n)
+st, b = call("POST", "/events/%d/authorize" % EVENT, {"qr_code": "https://card.gaiahealers.app/c/TESTPRNT", "access_type": "EVENT_ENTRY"}, DESK)
+check(st == 200 and b.get("granted") is False and b.get("result") == "DENIED", "scanning a test sticker admits no one", (st, b))
 
 c.execute("DELETE FROM printer_logs WHERE client_attempt_id IN (%s)" % ",".join("?" * 6), [aid, aid2] + ids); c.commit()
 print("\n%s" % ("ALL PASS" if not fails else "FAILED: %d" % fails))

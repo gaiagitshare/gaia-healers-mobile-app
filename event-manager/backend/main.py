@@ -11106,6 +11106,35 @@ def badge_label_png(event_id: int, attendee_id: int, size: str = badge_card.DEFA
                              "X-Label-Dpi": str(meta.get("dpi", dpi))})
 
 
+# A token no attendee holds (new_token() draws 8 of [A-Z2-9]; this one is never
+# issued to a person), so a test sticker that gets scanned is refused as unknown.
+TEST_LABEL_TOKEN = "TESTPRNT"
+
+
+@app.get("/events/{event_id}/test-label.png")
+def test_label_png(event_id: int, size: str = badge_card.DEFAULT_LABEL, dpi: int = badge_card.DPI,
+                   station: str = "", db: Session = Depends(get_db),
+                   current_user: models.User = Depends(get_current_user)):
+    """A sample sticker for setting a desk up: the real layout and roll, at the
+    printer's dpi, reading TEST PRINT and the desk's name, so a desk can prove
+    its printer, paper and alignment before the first attendee arrives. Nothing
+    is recorded against anyone, and its QR resolves to no attendee."""
+    _get_event_or_404(event_id, db)
+    authz.require_cap(db, current_user, event_id, "checkin.perform")
+    if (size or badge_card.DEFAULT_LABEL) not in badge_card.LABEL_SIZES:
+        raise HTTPException(status_code=400, detail="Unsupported label size")
+    if dpi not in badge_card.LABEL_DPIS:
+        raise HTTPException(status_code=400, detail="Unsupported dpi")
+    w, h = badge_card.LABEL_SIZES[size or badge_card.DEFAULT_LABEL]
+    desk = (station or "").strip()[:30] or "Desk"
+    png, meta = badge_card.render_label("TEST PRINT", desk, TEST_LABEL_TOKEN, width_mm=w, height_mm=h,
+                                        qr_mm=min(26, h - 6), layout=badge_card.LABEL_LAYOUT.get(size),
+                                        view="roll", dpi=dpi)
+    return Response(content=png, media_type="image/png",
+                    headers={"Cache-Control": "private, no-store",
+                             "X-Label-Size": "%dx%d" % (w, h), "X-Label-Dpi": str(meta.get("dpi", dpi))})
+
+
 @app.get("/events/{event_id}/print-report")
 def print_report(event_id: int, db: Session = Depends(get_db),
                  current_user: models.User = Depends(get_current_user)):

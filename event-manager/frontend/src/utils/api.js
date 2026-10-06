@@ -186,6 +186,9 @@ export const generateBadge = (id) => api.get(`/attendees/${id}/badge`);
 // `dpi` is the printer's: 203 for the NIIMBOT B1, 300 for the B1 Pro.
 export const badgeLabelBlob = (eventId, attendeeId, size = '50x30v', view = 'roll', dpi = 203) =>
     api.get(`/events/${eventId}/attendees/${attendeeId}/badge-label.png`, { params: { size, view, dpi }, responseType: 'blob' });
+// A sample sticker for setting a desk up (TEST PRINT + desk name; its QR admits no one).
+export const testLabelBlob = (eventId, size = '50x30v', dpi = 203, station = '') =>
+    api.get(`/events/${eventId}/test-label.png`, { params: { size, dpi, station }, responseType: 'blob' });
 // A print attempt, success or failure. Separate from check-in by design.
 // Which desk printed what, and what failed there.
 export const getPrintReport = (eventId) => api.get(`/events/${eventId}/print-report`);

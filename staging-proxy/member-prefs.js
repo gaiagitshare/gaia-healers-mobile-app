@@ -10,14 +10,13 @@ import fs from 'node:fs';
 import path from 'node:path';
 
 export const PREFS_FILE = process.env.GAIA_MEMBER_PREFS_FILE || '/root/gaia-staging-proxy/data/member-prefs.json';
-/** The only keys a member can set, and what they mean. */
+/** The only keys a member can set, and what they mean. (guides_to_assist was removed on 6 Oct 2026 with the guides route; stored values are ignored.) */
 export const PREF_KEYS = Object.freeze({
   next_level_collapsed: 'the Next level card on You is folded to one line',
   readings_explainer_collapsed: 'the "What these mean" explainer on My readings is folded',
   practitioner_card_dismissed: 'the "Become a practitioner" card on You was dismissed',
   avatar_idle_off: "Gaia's idle animations are switched off",
   avatar_hello_chime: 'a soft chime plays with the hello (off unless chosen)',
-  guides_to_assist: 'Gaia Assist may read the guides their practitioner wrote for them (off unless chosen; a separate consent, recorded before the guide feature exists, and read by nothing until it does)',
 });
 
 function load(file) {

@@ -52,11 +52,17 @@
     else if (k === 'service') { if (window.GaiaDirectory?.open) window.GaiaDirectory.open({ q: item.practitioner_name || '' }); else go('directory'); }
     else if (k === 'onboarding') { try { window.GaiaJourney?.check?.(true); } catch { /* ignore */ } }
     else if (k === 'plans') go('store', { tab: 'membership' });
+    else if (k === 'partner_service' || k === 'partner_product') {
+      // The server already validated and rebuilt this link; check again before leaving the app.
+      if (/^https:\/\/(staging\.|www\.)?gaiapractitioners\.com\/shop\?(product=[A-Za-z0-9_-]+(&buy=1)?|service=[A-Za-z0-9_-]+)$/.test(String(a.url || ''))) window.open(a.url, '_blank', 'noopener,noreferrer');
+    }
   }
 
   function itemHtml(it, i) {
-    const prac = it.provenance?.source_type === 'practitioner_manual';
-    const lead = i === 0;
+    const prac = it.provenance?.source_type === 'practitioner_manual' || it.provenance?.source_type === 'partner_approved';
+    const partner = it.provenance?.source_type === 'partner_approved';
+    const product = it.action?.kind === 'partner_product';
+    const lead = i === 0 && !product;
     const meta = [it.session_title ? esc(it.session_title) : '', it.when ? esc(when(it.when)) : '', typeof it.progress === 'number' && it.progress > 0 ? `${esc(it.progress)}% through` : ''].filter(Boolean).join(' · ');
     return `<li class="gpath__item${lead ? ' is-next' : ''}" data-path-key="${esc(it.key)}">
       <p class="gpath__stage">${esc(it.stage_label)}${prac ? ' · <span class="gpath__from"><i class="ph ph-leaf" aria-hidden="true"></i>Recommended by your practitioner</span>' : ''}</p>
@@ -69,6 +75,8 @@
       <div class="gpath__actions">
         ${it.lock
           ? `<button type="button" class="g-btn g-btn--secondary g-btn--sm" data-path-do="plans">${it.lock.kind === 'plan' ? `See ${esc(it.lock.plan.replace(/^./, (c) => c.toUpperCase()))}` : 'See membership plans'}</button>${it.free_alternative ? '<button type="button" class="g-btn g-btn--ghost g-btn--sm" data-path-do="free">Show me a free option</button>' : ''}`
+          : partner
+            ? `<button type="button" class="g-btn ${lead ? 'g-btn--primary' : (product ? 'g-btn--ghost' : 'g-btn--secondary')} g-btn--sm" data-path-do="open">${esc(it.action?.label || 'View')} <i class="ph ph-arrow-square-out" aria-hidden="true"></i></button><span class="gpath__ext">on Gaia Practitioners</span>`
           : it.action?.kind === 'service'
             ? `<button type="button" class="g-btn ${lead ? 'g-btn--primary' : 'g-btn--secondary'} g-btn--sm" data-path-do="detail" aria-expanded="false">View service</button><button type="button" class="g-btn g-btn--ghost g-btn--sm" data-path-do="open">Book with ${esc(it.practitioner_name || 'your practitioner')}</button>`
             : `<button type="button" class="g-btn ${lead ? 'g-btn--primary' : 'g-btn--secondary'} g-btn--sm" data-path-do="open">${esc(it.action?.label || 'Open')}</button>`}
@@ -81,10 +89,12 @@
   function cardHtml(p) {
     if (!p) return '';
     if (p.caught_up) {
+      const also = p.also_recommended || [];
       return `<article class="g-card gpath gpath--calm"><p class="g-card__label">Your Gaia Path</p>
         <p class="gpath__title">You're caught up.</p>
         <p class="gpath__reason">Nothing is waiting for you. You can explore today's energy check, continue learning, or ask Gaia anything.</p>
-        <div class="gpath__actions"><button type="button" class="g-btn g-btn--secondary g-btn--sm" data-path-go="energy">Today's energy check</button><button type="button" class="g-btn g-btn--ghost g-btn--sm" data-path-go="academy">Learning</button></div></article>`;
+        <div class="gpath__actions"><button type="button" class="g-btn g-btn--secondary g-btn--sm" data-path-go="energy">Today's energy check</button><button type="button" class="g-btn g-btn--ghost g-btn--sm" data-path-go="academy">Learning</button></div>
+        ${also.length ? `<ol class="gpath__list gpath__list--also">${also.map((it) => itemHtml(it, 1)).join('')}</ol>` : ''}</article>`;
     }
     return `<article class="g-card gpath"><p class="g-card__label">Your Gaia Path</p>
       <p class="gpath__intro">${p.items.length === 1 ? 'One next step for you.' : 'Your next steps, in order.'}</p>
@@ -107,7 +117,7 @@
       const g = e.target.closest('[data-path-go]');
       if (g) { if (g.dataset.pathGo === 'energy') go('wellness', { tab: 'check' }); else go('academy'); return; }
       const b = e.target.closest('[data-path-do]'); if (!b) return;
-      const li = b.closest('[data-path-key]'); const it = p.items.find((x) => x.key === li?.dataset.pathKey); if (!it) return;
+      const li = b.closest('[data-path-key]'); const it = [...p.items, ...(p.also_recommended || [])].find((x) => x.key === li?.dataset.pathKey); if (!it) return;
       const what = b.dataset.pathDo;
       if (what === 'open') perform(it, { surface });
       else if (what === 'detail') { const d = li.querySelector('[data-path-detail]'); if (d) { d.hidden = !d.hidden; b.setAttribute('aria-expanded', String(!d.hidden)); if (!d.hidden) event('recommendation_opened', { key: it.key, stage: it.stage, surface }); } }

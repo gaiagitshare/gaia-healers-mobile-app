@@ -400,8 +400,6 @@
         <div class="g-row"><span>Gaia Assist</span><span class="g-row__meta">never reads your reading values</span></div>
       </div>
       ${status.linked ? `<p class="g-readings__muted">${esc(who)} sees the readings they recorded, that you asked to see them in Gaia, and whether you opened the latest one. Nothing else in your app. Gaia keeps no copy.</p>` : '<p class="g-readings__muted">Sharing starts only when you ask for a code in My readings and your practitioner confirms it is you.</p>'}
-      ${status.linked ? `<div class="g-rows g-datashare__consent"><div class="g-row"><span>Let Gaia Assist use suggestions from ${esc(who)}'s practice platform</span><button type="button" class="g-btn g-btn--ghost g-btn--sm g-pref-toggle" data-readings-action="toggle-guides" aria-pressed="${prefs && prefs.guides_to_assist ? 'true' : 'false'}">${prefs && prefs.guides_to_assist ? 'On' : 'Off'}</button></div></div>
-      <p class="g-readings__muted">Not available yet. These suggestions are made by software on your practitioner's platform, and Gaia does not read them. Your choice is kept for when your practitioner can review them first; even then, never your scan values.</p>` : ''}
       <div class="g-card__actions">
         ${status.linked ? '<button type="button" class="g-btn g-btn--ghost g-btn--sm" data-readings-action="unlink">Stop sharing</button>' : '<button type="button" class="g-btn g-btn--secondary g-btn--sm" data-readings-action="goto">Open My readings</button>'}
         ${anyHidden ? '<button type="button" class="g-btn g-btn--ghost g-btn--sm" data-readings-action="reset-prefs">Show hidden cards again</button>' : ''}
@@ -497,16 +495,6 @@
         if (action === 'whosees') {
           const box = root.querySelector('.g-readings__whosees');
           if (box) { box.hidden = !box.hidden; btn.setAttribute('aria-expanded', String(!box.hidden)); }
-          return;
-        }
-        if (action === 'toggle-guides') {
-          // A separate consent, recorded server-side, for a separate use of
-          // their data. Nothing reads it until guide reading exists.
-          const next = btn.getAttribute('aria-pressed') !== 'true';
-          btn.setAttribute('aria-pressed', String(next)); btn.textContent = next ? 'On' : 'Off';
-          lastPrefs = { ...(lastPrefs || {}), guides_to_assist: next };
-          const out = await api('/api/member/prefs', { method: 'POST', body: { prefs: { guides_to_assist: next } } });
-          if (!out.ok) { btn.setAttribute('aria-pressed', String(!next)); btn.textContent = next ? 'Off' : 'On'; lastPrefs.guides_to_assist = !next; }
           return;
         }
         if (action === 'copy-code') {

@@ -24,10 +24,10 @@ test('calm: no upsell, guilt or warning language, no red states, no scores', () 
   assert.match(js, /This is included with|lock\.label/); assert.match(js, /Show me a free option/);
 });
 
-test('provenance: "Recommended by your practitioner" only for practitioner_manual items', () => {
+test('provenance: "Recommended by your practitioner" only for practitioner-approved items (manual or partner-approved)', () => {
   const uses = js.match(/Recommended by your practitioner/g) || [];
   assert.ok(uses.length >= 1);
-  assert.match(js, /const prac = it\.provenance\?\.source_type === 'practitioner_manual';/);
+  assert.match(js, /const prac = it\.provenance\?\.source_type === 'practitioner_manual' \|\| it\.provenance\?\.source_type === 'partner_approved';/);
 });
 
 test('practitioner flow: preview before confirm, plain text only, matches are not recommendations', () => {
@@ -58,4 +58,16 @@ test('the breathing practice makes no physiological claim (owner, 6 Oct 2026)', 
   const breath = read('gaia-breath.js');
   assert.doesNotMatch(breath, /heart rhythm|nervous system/i);
   assert.match(breath, /Take a few minutes for slow, paced breathing\./);
+});
+
+test('approved partner steps: link re-checked in the browser and opened safely; products secondary; no completion claim', () => {
+  assert.match(js, /window\.open\(a\.url, '_blank', 'noopener,noreferrer'\)/);
+  assert.match(js, /\^https:\\\/\\\/\(staging\\\.\|www\\\.\)\?gaiapractitioners\\\.com\\\/shop\\\?/);
+  assert.match(js, /const lead = i === 0 && !product;/, 'a product is never styled as the next step');
+  assert.match(js, /it\.completion === 'member' && !it\.lock/, '"I did this" stays self-guided only');
+  assert.match(avatar, /From your practitioner's recommendation: “\$\{it\.reason\}”/, 'why = the partner\'s client-safe summary, verbatim');
+});
+
+test('the old guides setting is gone from the app', () => {
+  assert.doesNotMatch(read('gaia-my-readings.js') + read('gaia-practitioner.js'), /toggle-guides|guides_to_assist|platform suggestions/);
 });

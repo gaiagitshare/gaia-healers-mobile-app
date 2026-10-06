@@ -109,8 +109,8 @@ export function setItemState(memberId, key, next, by = 'user', now = new Date())
 
 export const PATH_EVENTS = Object.freeze(['path_viewed', 'recommendation_opened', 'recommendation_completed', 'recommendation_dismissed',
   'free_alternative_selected', 'membership_required_shown', 'membership_opened', 'scan_rebook_opened']);
-const FIELDS = { item_id: /^(P-[A-Z]+|R|rec_[A-Za-z0-9_-]{6,20}|cat:R-[A-Z0-9-]+)$/, stage: /^(start_now|coming_up|keep_going|recheck)$/, surface: /^(you|home|avatar|assist)$/,
-  items: /^\d{1,2}$/, level: /^(free|silver|gold|diamond)$/, via: /^(user|backend)$/, route: /^(practitioner|directory|booking)$/, source: /^(platform_rule|practitioner_manual)$/ };
+const FIELDS = { item_id: /^(P-[A-Z]+|R|PR)$/, stage: /^(start_now|coming_up|keep_going|recheck)$/, surface: /^(you|home|avatar|assist)$/,
+  items: /^\d{1,2}$/, level: /^(free|silver|gold|diamond)$/, via: /^(user|backend)$/, route: /^(practitioner|directory|booking)$/, source: /^(platform_rule|practitioner_manual|partner_approved)$/ };
 export function hashContact(id) { return crypto.createHash('sha256').update('gaia-path:' + String(id)).digest('hex').slice(0, 16); }
 
 /** One event: whitelisted name and fields only; anything else is dropped, never stored. */

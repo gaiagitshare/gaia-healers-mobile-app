@@ -164,8 +164,9 @@ test('Gaia sees only public path fields: never the note, a date of a scan, ids o
 
 test('completion strategy is fixed per kind; only self-guided steps can be completed by the member', () => {
   assert.deepEqual(COMPLETION_BY_KIND, { tool: 'member', practice: 'member', view: 'member', course: 'course_progress', readings: 'reading_seen', share_readings: 'link_confirmed',
-    bookings: 'appointment_status', service: 'practitioner_booking', scan: 'new_scan', plans: 'entitlement', onboarding: 'onboarding_gate', product: 'order' });
-  for (const k of ['course', 'readings', 'share_readings', 'bookings', 'service', 'scan', 'plans', 'onboarding', 'product', 'mystery', undefined]) assert.equal(memberMayComplete(k), false, String(k));
+    bookings: 'appointment_status', service: 'practitioner_booking', scan: 'new_scan', plans: 'entitlement', onboarding: 'onboarding_gate', product: 'order',
+    partner_service: 'practitioner_booking', partner_product: 'order' });
+  for (const k of ['course', 'readings', 'share_readings', 'bookings', 'service', 'scan', 'plans', 'onboarding', 'product', 'partner_service', 'partner_product', 'mystery', undefined]) assert.equal(memberMayComplete(k), false, String(k));
   assert.equal(completionFor('something-new'), 'none', 'an unknown kind gets no completion at all');
   // A catalogue entry cannot choose its own strategy: it comes from the resource kind.
   const sneaky = rec({ resource: { kind: 'service', id: '7', title: 'A session', completion: 'member' }, completion: 'member' });

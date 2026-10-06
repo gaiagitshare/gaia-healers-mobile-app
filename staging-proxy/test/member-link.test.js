@@ -426,7 +426,7 @@ test("linkDayCounts: today's events and the standing totals, counts only", () =>
   const c = ml.mintCode('m13', { file: f }); ml.redeemCode(c.code, { customer_id: 'c13', practitioner_id: 'p13' }, { file: f });
   ml.markSeen('m13', '2026-06-14', { file: f }); ml.revokeLink({ memberId: 'm13' }, 'member', { file: f });
   const t = ml.linkDayCounts({ file: f });
-  assert.deepEqual(t, { day: new Date().toISOString().slice(0, 10), codes_issued: 1, links_confirmed: 1, readings_opened: 1, links_revoked: 1, guides_read: 0, confirmed: 0, revoked: 1 });
+  assert.deepEqual(t, { day: new Date().toISOString().slice(0, 10), codes_issued: 1, links_confirmed: 1, readings_opened: 1, links_revoked: 1, confirmed: 0, revoked: 1 });
   assert.equal(ml.linkDayCounts({ file: f, now: Date.parse('2020-01-01T00:00:00Z') }).links_confirmed, 0, 'another day: nothing');
   assert.ok(!JSON.stringify(t).includes('m13'));
 });

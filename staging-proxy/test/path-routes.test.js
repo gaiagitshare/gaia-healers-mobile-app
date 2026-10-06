@@ -39,6 +39,8 @@ const PRACS = { 'contact-pa': { state: 'connected', practitioner_id: 'P-A', prac
 const SERVICES = { 'contact-pa': [{ id: 7, name: 'Lymphatic massage', description: '<b>60 min</b>', duration: 60, price: 90 }], 'contact-pb': [{ id: 9, name: 'Reiki', duration: 45 }] };
 
 const sent = [];
+const partnerCalls = [];
+const PARTNER = {};
 const sendJson = (res, status, data) => { res.status = status; res.data = data; sent.push({ status, data }); };
 const routes = createPathRoutes({
   requireSessionMember: (req, res) => req.session || (sendJson(res, 401, { ok: false, reason: 'auth_required' }), null),
@@ -55,6 +57,8 @@ const routes = createPathRoutes({
   academyCourseOwned: (c, ids) => ids.has(c.id),
   appointmentsFor: async () => [], planLevelFor: async () => 'free',
   readMcp: async (ctx, tool) => (tool === 'list_services' ? { services: SERVICES[ctx.contactId] || [] } : {}),
+  // Approved partner recommendations, keyed by the SESSION member the route passes in.
+  partnerRecsFor: async (member) => { partnerCalls.push(member.contactId); if (PARTNER[member.contactId] === 'throw') throw new Error('partner timeout'); return PARTNER[member.contactId] || { items: [] }; },
 });
 const call = async (method, url, session, body) => {
   const res = {}; const u = new URL('https://api.example' + url);
@@ -210,4 +214,36 @@ test('a recommended scan completes itself when a newer scan arrives (opening the
 test('#279 consumes no partner AI recommendations, scripts, videos or reading values', () => {
   const src = ['path-routes.js', 'personal-path.js', 'path-store.js'].map((f) => fs.readFileSync(new URL('../' + f, import.meta.url), 'utf8')).join('\n');
   assert.doesNotMatch(src, /get_customer_recommendations|get_my_recommendations|memberGuides|\.script\b|video_url|video_status|memberReadings\(|get_customer_scan|get_scan_trend|get_client_summary|compare_protocol_before_after/);
+});
+
+test('approved partner recommendations: only the session member\'s own, as path steps; no completion claims; analytics carry no content', async () => {
+  const { shapeApproved, PARTNER_HOSTS } = await import('../partner-recs.js');
+  const shaped = shapeApproved({ recommendations: [{ recommendation_id: 31, approval_status: 'approved', practitioner: { id: 55, name: 'Sam Rivera' },
+    items: [{ rank: 1, type: 'product', id: 12, title: 'Calming spray', summary: 'SENTINEL_SUMMARY', action: { url: 'https://staging.gaiapractitioners.com/shop?product=12&buy=1' } },
+            { rank: 2, type: 'service', id: 7, title: 'Chakra balancing session', summary: 'A gentle session.', action: { url: 'https://staging.gaiapractitioners.com/shop?service=7' } }] }] }, PARTNER_HOSTS.staging).items;
+  PARTNER['member-b'] = { items: shaped };
+  partnerCalls.length = 0;
+  const b = await call('GET', '/api/member/path?member=member-a&customer_id=101', 'member-b');
+  assert.deepEqual(partnerCalls, ['member-b'], 'the partner source is asked for the session member only; query parameters are ignored');
+  const pr = b.data.items.filter((i) => i.key.startsWith('PR:'));
+  assert.equal(pr[0].action.kind, 'partner_service', 'the product the partner ranked first is not the first step');
+  assert.equal(pr[0].action.url, 'https://staging.gaiapractitioners.com/shop?service=7');
+  assert.equal(pr[0].provenance.label, 'Recommended by your practitioner'); assert.equal(pr[0].provenance.source_type, 'partner_approved');
+  const a = await call('GET', '/api/member/path', 'member-a');
+  assert.ok(!a.data.items.some((i) => i.key.startsWith('PR:')), "another member never sees member-b's recommendations");
+  for (const it of pr) assert.equal((await call('POST', '/api/member/path/event', 'member-b', { event: 'recommendation_completed', key: it.key })).status, 409, 'no "I did this" for a booking or a purchase');
+  assert.equal((await call('POST', '/api/member/path/event', 'member-b', { event: 'recommendation_opened', key: pr[0].key, surface: 'you', title: 'Chakra balancing session', summary: 'SENTINEL_SUMMARY' })).status, 200);
+  const last = fs.readFileSync(process.env.GAIA_PATH_EVENTS_FILE, 'utf8').trim().split('\n').pop();
+  assert.match(last, /"item_id":"PR"/); assert.match(last, /"source":"partner_approved"/);
+  assert.doesNotMatch(last, /SENTINEL|Chakra|Calming|shop|:31:|service:7/, 'no partner content, ids or links in analytics');
+  const line = await routes.assistPathLine({}, { contactId: 'member-b' }, { appointments: [] });
+  assert.doesNotMatch(line, /SENTINEL|Chakra|Calming|gentle|Sam Rivera|gaiapractitioners/, 'Gaia gets a generic line only');
+  PARTNER['member-b'] = { items: [] };
+});
+
+test('partner outage never breaks the rest of the path', async () => {
+  PARTNER['member-a'] = 'throw';
+  const r = await call('GET', '/api/member/path', 'member-a');
+  assert.equal(r.status, 200, 'the path still answers'); assert.ok(Array.isArray(r.data.items));
+  PARTNER['member-a'] = undefined;
 });

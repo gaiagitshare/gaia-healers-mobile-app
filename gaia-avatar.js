@@ -171,7 +171,7 @@
 
   // ── Personal Path: "What's next for me?" and the step after a completion ──
   let pathItem = null;
-  const pathSay = (it) => (it.provenance?.source_type === 'practitioner_manual'
+  const pathSay = (it) => (it.provenance?.source_type === 'practitioner_manual' || it.provenance?.source_type === 'partner_approved'
     ? `Your practitioner recommended: ${it.title}.${it.lock ? ' ' + it.lock.label : ' Want to start?'}`
     : `Your next step: ${it.title}.${it.lock ? ' ' + it.lock.label : ''}`);
   let pathAfterItem = null;
@@ -205,9 +205,12 @@
   };
   function pathWhy() {
     const it = pathItem; if (!it) return;
-    const prac = it.provenance?.source_type === 'practitioner_manual';
+    const prac = it.provenance?.source_type === 'practitioner_manual' || it.provenance?.source_type === 'partner_approved';
+    // Only approved words: the practitioner's member-safe reason, the partner's client-safe summary, or a fixed line.
     const text = prac
-      ? (it.reason ? `Your practitioner's reason: “${it.reason}”` : 'Your practitioner recommended this after reviewing your information. I can open it for you, or help you contact them for more detail.')
+      ? (it.reason_source === 'partner_summary' ? `From your practitioner's recommendation: “${it.reason}”`
+        : it.reason_source === 'practitioner' && it.reason ? `Your practitioner's reason: “${it.reason}”`
+        : 'Your practitioner recommended this after reviewing your information. I can open it for you, or help you contact them for more detail.')
       : (it.reason || PATH_WHY[it.id] || 'Gaia suggests this as a useful next step.');
     showBubble({ text, chips: it.lock ? ['plans', ...(it.free_alternative ? ['pathfree'] : [])] : ['pathgo', ...(pathAfterItem ? ['pathafter'] : [])] });
   }

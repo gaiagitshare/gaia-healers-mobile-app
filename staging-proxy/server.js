@@ -34,8 +34,9 @@ import { attachQwenVoiceRelay, qwenRouting, issueQwenTicket, qwenVoiceConfig, vo
 import { normalizeUsage, recordUsage, recordFailure } from './assist-usage.js';
 import { toolDeclarationsFor, clientToolNames, slowToolNames, runTool, modelView, readMcp } from './assist-tools.js';
 import { createPathRoutes } from './path-routes.js';
+import { approvedForMember, partnerRecsGate } from './partner-recs.js';
 import { getPrefs, setPrefs } from './member-prefs.js';
-import { memberReadingsEnabled, memberAllowed, mintCode, redeemCode, revokeLink, linkStatus, linkFor, partnerAuthorized, memberReadings, notifyPartnerUnlink, rememberLatest, markSeen, refreshLatest, linksForPractitioner, memberGuides, guidesForModel, recheckAfterDays, partnerAiRecommendationsEnabled, memberForPractitionerClient } from './member-link.js';
+import { memberReadingsEnabled, memberAllowed, mintCode, redeemCode, revokeLink, linkStatus, linkFor, partnerAuthorized, memberReadings, notifyPartnerUnlink, rememberLatest, markSeen, refreshLatest, linksForPractitioner, recheckAfterDays, memberForPractitionerClient } from './member-link.js';
 import { practitionersConfig, makePkce, authorizeUrl, rememberFlow, claimFlow,
          exchangeCode, resolveProfile, saveToken, forgetToken, connectionStatus, practitionersBootLine, tokenFor, linkState, isLinkedPractitioner, verifyPractitioner, practitionerAuthorization, applyPractitionerLink, VERIFICATION_VERSION } from './practitioners-oauth.js';
 import { allowSpend, callerKey, guardSubject, spendKindFor, ASSIST_MAX_PROMPT_CHARS, ASSIST_MAX_TTS_CHARS } from './assist-guard.js';
@@ -4321,23 +4322,15 @@ async function pathPlanLevel(req, member) {
   const ms = rm?.membership || {};
   return ['active', 'trialing', 'past_due'].includes(ms.status) && ms.key ? String(ms.key) : 'free';
 }
+{ const g = partnerRecsGate(process.env, practitionersConfig().environment); console.log('[Gaia Path] partner approved recommendations:', g.enabled ? `ON (${g.mode})` : `off (${g.reason})`); }
 const pathRoutes = createPathRoutes({
   requireSessionMember: (...a) => requireSessionMember(...a), sendJson, readJsonBody, linkState, tokenFor, memberReadingsEnabled, memberAllowed, linkStatus,
   recheckAfterDays, memberForPractitionerClient, loadAcademyManifest, loadAcademyProgress, academyOwnedIdsForRequest, academyCourseOwned,
   appointmentsFor: pathAppointmentsFor, planLevelFor: pathPlanLevel, readMcp,
+  // Approved partner recommendations: display only, gated (off in production until the BAA is confirmed).
+  partnerRecsFor: (member) => approvedForMember(practitionersConfig(), String(member.contactId || member.memberId || ''), { log: (m, o) => console.log('[Gaia Path]', m, JSON.stringify(o || {})) }),
   log: (msg, o) => console.log('[Gaia Path]', msg, JSON.stringify(o || {})),
 });
-// Guides are fetched from the partner (one or two calls); kept 10 minutes per member.
-const _memberGuidesCache = new Map();
-async function memberGuidesCached(cid) {
-  const hit = _memberGuidesCache.get(cid);
-  if (hit && (Date.now() - hit.at) < 600000) return hit.text;
-  let text = '';
-  try { text = guidesForModel(await memberGuides(practitionersConfig(), cid)); } catch { text = ''; }
-  console.log('[Gaia guides] read for Assist', { chars: text.length });   // a count, never the text or the member
-  _memberGuidesCache.set(cid, { at: Date.now(), text });
-  return text;
-}
 const ASSIST_MEMORY_FILE = path.join(process.cwd(), 'data', 'assist-memory.json');
 function loadAssistMemory() { try { return JSON.parse(fs.readFileSync(ASSIST_MEMORY_FILE, 'utf8')) || { byContact: {} }; } catch (_) { return { byContact: {}, updatedAt: null }; } }
 function saveAssistMemory(m) { try { writeJsonAtomic(ASSIST_MEMORY_FILE, m); } catch (e) {} }
@@ -4394,7 +4387,7 @@ async function buildMemberVoiceContext(req) {
     }
     const b = await fetchMemberBundle(member);
     const cid = b.contactId;
-    const roleKey = JSON.stringify([linkState(member.contactId).state, b.resolved, b.tags, Boolean(getPrefs(member.contactId).guides_to_assist)]);
+    const roleKey = JSON.stringify([linkState(member.contactId).state, b.resolved, b.tags]);
     const cached = cid && _memberAiCtxCache.get(cid);
     if (cached && cached.roleKey === roleKey && (Date.now() - cached.at) < 60000) return cached.text;
 
@@ -4470,25 +4463,6 @@ async function buildMemberVoiceContext(req) {
       const interestTags = (b.tags || []).filter((t) => /^(interest_|product_.*_(interest|owner)|practice_stage_|invest_|community_feature_|need_)/.test(String(t).toLowerCase()));
       if (interestTags.length) lines.push('What we already know (profile tags): ' + interestTags.slice(0, 40).join(', ') + '.');
       const hasPaidSub = Array.isArray(b.subscriptions) && b.subscriptions.some((x) => /active|trialing/i.test(String(x.status || '')));
-      // The member's own Bio-Well readings, when shared. Only the FACT that
-      // they exist and where they are: no value, date or practitioner reaches
-      // the model (no BAA covers the voice/text provider).
-      if (memberReadingsEnabled() && memberAllowed(cid) && linkFor(cid)) {
-        // The guides their practitioner wrote for them: only with the
-        // member's own switch (guides_to_assist, checked on every build —
-        // the cache key carries it), shaped and bounded, values stripped.
-        if (!partnerAiRecommendationsEnabled()) {
-          // Disabled source (see member-link.js): nothing from the partner's AI reaches the model.
-          lines.push('PRACTITIONER GUIDES: not available in Gaia yet. If they ask, say their practitioner can share advice with them directly; never invent or guess any.');
-        } else if (getPrefs(cid).guides_to_assist) {
-          const text = await memberGuidesCached(cid);
-          lines.push(text
-            ? 'PRACTITIONER GUIDES (this member switched on "Let Gaia Assist read the guides my practitioner writes for me"; use them only in this member\'s own conversation, as their practitioner\'s advice, never as yours; the FIRST time you draw on a guide in this conversation say where it comes from, e.g. "from the guide your practitioner wrote on 1 October"; never state scan values):\n' + text
-            : 'PRACTITIONER GUIDES: the member allowed it, but their practitioner has not written any yet (or they could not be read right now). Do not invent any.');
-        } else {
-          lines.push('PRACTITIONER GUIDES: not shared with you. If they ask you to use the guides their practitioner wrote, say they can switch it on under You > Your data and sharing.');
-        }
-      }
       lines.push('SUBSCRIPTION: ' + (hasPaidSub
         ? 'This member is a PAID subscriber — do NOT pitch a plan they already pay for; focus on helping them get more value from it.'
         : 'This member is a FREE member (no active paid subscription). If their onboarding is DONE, help with their requested task. Explain paid membership only when they ask about membership or a verified access limitation requires it.'));
@@ -7200,7 +7174,6 @@ const server = http.createServer(async (req, res) => {
       if (req.method === 'GET') { sendJson(res, 200, { ok: true, prefs: getPrefs(id) }, origin); return; }
       let body = {}; try { body = await readJsonBody(req, 4 * 1024); } catch { sendJson(res, 400, { ok: false, error: 'bad_json' }, origin); return; }
       const saved = setPrefs(id, body?.prefs || body) || getPrefs(id);
-      _memberGuidesCache.delete(id);   // a changed switch takes effect on the next turn
       sendJson(res, 200, { ok: true, prefs: saved }, origin); return;
     }
     if (req.method === 'GET' && url.pathname === '/api/member/access') {
@@ -7471,7 +7444,7 @@ const server = http.createServer(async (req, res) => {
       const row = isLinkedPractitioner(member.contactId) ? tokenFor(member.contactId) : null;
       if (!row) { sendJson(res, 200, { ok: true, practitioner_known: false, clients: [] }, origin); return; }
       const pid = String(row.practitioner_id || '');
-      sendJson(res, 200, { ok: true, practitioner_known: Boolean(pid), clients: memberReadingsEnabled() && pid ? linksForPractitioner(pid, undefined, { consent: (mid) => getPrefs(mid).guides_to_assist }) : [] }, origin);
+      sendJson(res, 200, { ok: true, practitioner_known: Boolean(pid), clients: memberReadingsEnabled() && pid ? linksForPractitioner(pid) : [] }, origin);
       return;
     }
     if (req.method === 'GET' && url.pathname === '/api/practitioners/connect') {

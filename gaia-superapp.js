@@ -1935,7 +1935,7 @@
     link.querySelector('.gaia-tabbar__badge')?.remove();
     const unread = Number(memberState().data?.notif?.counts?.unread || 0);
     // The Inbox row on Community says it too, from the same count (no new data).
-    document.querySelectorAll('[data-screen="community"] a[data-app-nav="inbox"] small, [data-screen="community"] a[data-app-nav="inbox"] .g-energy-launch__meta').forEach((n) => {
+    document.querySelectorAll('[data-screen="community"] a[href="home.html?view=inbox"] small').forEach((n) => {
       if (!n.dataset.base) n.dataset.base = n.textContent;
       n.textContent = memberState().authed && unread > 0 ? unread + ' unread' : n.dataset.base;
     });

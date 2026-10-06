@@ -753,6 +753,7 @@ body.gaia-booking-open{overflow:hidden;}
       if (kicker) kicker.textContent = 'Gaia Healers member pass';
       if (title) title.textContent = 'Member Pass';
       if (sub) sub.textContent = 'One secure sign-in for everything in your account.';
+      { const g = el('member-glance'); if (g) { g.hidden = true; g.innerHTML = ''; } }
       box.innerHTML =
         '<article class="g-card g-card--feature"><p class="g-card__label">Existing members</p>'
         + '<p class="g-card__value g-card__value--lg">Sync your Gaia Healers access</p>'
@@ -787,12 +788,15 @@ body.gaia-booking-open{overflow:hidden;}
       const nBook = ((d.appts && d.appts.appointments) || []).filter((a) => Date.parse(a.startTime || '') > now).length;
       const rd = (window.GaiaMyReadings && window.GaiaMyReadings.status && window.GaiaMyReadings.status()) || {};
       const tile = (icon, value, label, href, attr) => '<a class="g-glance__tile" href="' + esc(href) + '"' + (attr || '') + '><i class="ph ph-' + icon + '" aria-hidden="true"></i><strong>' + esc(value) + '</strong><span>' + esc(label) + '</span></a>';
-      cards.push('<nav class="g-glance" aria-label="At a glance">'
+      const glanceHost = el('member-glance');
+      const glanceHtml = ('<nav class="g-glance" aria-label="At a glance">'
         + tile('pulse', rd.linked ? (rd.new_reading ? 'New' : 'Shared') : 'Not shared', 'Readings', 'home.html?view=profile&section=readings', ' data-open-readings')
         + tile('users-three', String(nCircles), nCircles === 1 ? 'Community' : 'Communities', 'home.html?view=community')
         + tile('graduation-cap', String(nCourses), nCourses === 1 ? 'Course' : 'Courses', 'home.html?view=academy')
         + tile('calendar-check', String(nBook), nBook === 1 ? 'Booking' : 'Bookings', 'home.html?view=bookings')
         + '</nav>');
+      // First under your name, above your readings and your pass.
+      if (glanceHost) { glanceHost.innerHTML = glanceHtml; glanceHost.hidden = false; } else cards.push(glanceHtml);
     }
 
     // Member Pass + My Access + Included + Next Level, rendered entirely from

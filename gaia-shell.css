@@ -30,7 +30,7 @@ body.gaia-v2 .gaia-rail__practice[hidden] { display: none !important; }
   body.gaia-v2 .gaia-rail__practice { display: none !important; }   /* reached from You on phones */
   /* Every item gets an equal share of the bar: at least 44px to tap. */
   body.gaia-v2 .gaia-tabbar__group { flex: 3 1 0; display: flex; }
-  body.gaia-v2 .gaia-tabbar__group .gaia-tabbar__link { flex: 1 1 0; min-width: 44px; }
+  body.gaia-v2 .gaia-tabbar__group .gaia-tabbar__link { flex: 1 1 auto; min-width: 44px; }
   body.gaia-v2 .gaia-tabbar__home .gaia-tabbar__assist-pulse { opacity: 0.35; animation-duration: 6s; }
   body.gaia-v2 .gaia-tabbar__home:not(.is-active) { box-shadow: none !important; }
   body.gaia-v2 .gaia-tabbar__home:not(.is-active) .gaia-tabbar__assist-pulse { display: none; }
@@ -311,3 +311,47 @@ body.gaia-v2 .g-glance__tile strong { white-space: nowrap; }
 body.gaia-v2 .g-home2__state-hint { font-size: 13.5px; color: var(--v3-text-2); }
 body.gaia-v2 .g-linkbtn { appearance: none; background: none; border: 0; padding: 0; color: var(--v3-green); font: inherit; font-weight: 600; cursor: pointer; text-decoration: underline; text-underline-offset: 3px; }
 body.gaia-v2 .g-readings-nudge__hint { display: block; margin-top: 2px; color: var(--v3-text-2); font-size: 12.5px; }
+
+/* ==========================================================================
+   Fewer frames. A page title is a heading, not a card; a section is a heading
+   and its items, not a box around more boxes. Only the things a person taps
+   (tiles, rows, products) keep a surface. Applies on every screen.
+   ========================================================================== */
+body.gaia-v2 .gaia-main :is(.g-page__head, .g-super-page-head, .g-store__head) {
+  background: none !important;
+  border: 0 !important;
+  box-shadow: none !important;
+  padding: 6px 2px 6px !important;
+  min-height: 0 !important;
+  border-radius: 0 !important;
+}
+body.gaia-v2 .gaia-main :is(.g-page__head, .g-super-page-head, .g-store__head)::before,
+body.gaia-v2 .gaia-main :is(.g-page__head, .g-super-page-head, .g-store__head)::after { content: none !important; }
+body.gaia-v2 .gaia-main :is(.g-page__title, .g-store__title, .g-super-page-head h1) { font-size: clamp(30px, 4vw, 42px) !important; letter-spacing: -0.02em; }
+
+body.gaia-v2 :is([data-screen="community"], [data-screen="bookings"], [data-screen="events"], [data-screen="inbox"], [data-screen="academy"]) .gaia-main > .g-super-list,
+body.gaia-v2 :is([data-screen="community"], [data-screen="bookings"], [data-screen="events"], [data-screen="inbox"], [data-screen="academy"]) .gaia-main > section.g-super-list {
+  background: none !important;
+  border: 0 !important;
+  box-shadow: none !important;
+  padding: 0 !important;
+  border-radius: 0 !important;
+}
+body.gaia-v2 :is([data-screen="community"], [data-screen="bookings"], [data-screen="events"], [data-screen="inbox"], [data-screen="academy"]) .gaia-main > .g-super-list > .g-super-section-head { padding-inline: 2px !important; }
+body.gaia-v2 .gaia-main > .g-super-list + .g-super-list { margin-top: 30px !important; }
+/* the circle counts are facts, not cards */
+body.gaia-v2 [data-screen="community"] .g-stats .g-stat { background: none !important; border: 0 !important; padding: 0 18px 0 0 !important; }
+body.gaia-v2 [data-screen="academy"] [data-acad-sync] > .g-card--feature { background: none !important; border: 0 !important; box-shadow: none !important; padding: 8px 2px 4px !important; }
+body.gaia-v2 [data-screen="academy"] [data-acad-sync] > .g-card--feature::before, body.gaia-v2 [data-screen="academy"] [data-acad-sync] > .g-card--feature::after { content: none !important; }
+body.gaia-v2 #member-glance[hidden], body.gaia-v2 #member-glance.is-on-practice-tab { display: none !important; }
+body.gaia-v2 [data-screen="profile"] #member-glance { max-width: 1180px; margin-inline: auto; }
+
+/* Tablet: two plans across, so the four read as a set rather than a long list. */
+@media (min-width: 700px) and (max-width: 1099px) {
+  body.gaia-v2 [data-screen="store"] #store-memberships:has(> .g-tier) { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; align-items: stretch; }
+  body.gaia-v2 [data-screen="store"] #store-memberships:has(> .g-tier) > :not(.g-tier) { grid-column: 1 / -1; }
+  body.gaia-v2 [data-screen="store"] #store-memberships > .g-tier { margin: 0; display: flex; flex-direction: column; }
+  body.gaia-v2 [data-screen="store"] #store-memberships > .g-tier .g-card__actions { margin-top: auto; }
+  /* the event card can use the width */
+  body.gaia-v2 [data-screen="events"] .g-event-grid > .g-event-card:only-child { grid-column: 1 / -1; }
+}

@@ -656,6 +656,7 @@
       tabs.hidden = true; panel.hidden = true; me.hidden = false;
       document.getElementById('member-readings')?.classList.remove('is-on-practice-tab');
       document.getElementById('member-data-sharing')?.classList.remove('is-on-practice-tab');
+      document.getElementById('member-glance')?.classList.remove('is-on-practice-tab');
       badge(status);
       return;
     }
@@ -713,6 +714,7 @@
       // `hidden` means "feature off / not signed in" and must not be touched.
       document.getElementById('member-readings')?.classList.toggle('is-on-practice-tab', practice);
       document.getElementById('member-data-sharing')?.classList.toggle('is-on-practice-tab', practice);
+      document.getElementById('member-glance')?.classList.toggle('is-on-practice-tab', practice);
       if (practice && !started) {
         started = true;
         view.start({ client: params.get('client'), open: params.get('open') });

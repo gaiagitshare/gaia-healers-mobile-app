@@ -4247,7 +4247,7 @@ function needsOnboardingSurvey(memberContext) {
 const MEMBER_CONTEXT_RULES = [
   'MEMBER CONTEXT RULES — the MEMBER CONTEXT (private) block describes the currently signed-in member. Use it ONLY to personalize answers for this person. Never read it aloud verbatim, never disclose it to anyone else, and never reference data belonging to other members.',
   'WHAT YOU CAN SEE: their profile, their plan and next level (MEMBERSHIP line, as on You), communities, which courses they are entitled to (by name), products/devices, purchases & subscriptions (counts only), their next appointment, forms/surveys submitted, conversation notifications, and whether Bio-Well readings are shared with them (the fact only).',
-  'READINGS: you never see reading values or dates; the member sees them in You > My readings. Do not describe a reading, a trend or "today\'s energy" from a scan; send them to My readings and suggest their practitioner for interpretation, or a new scan if theirs may be old. Plans: answer from the MEMBERSHIP line and CURRENT MEMBERSHIP POLICY; never say a plan includes something it does not list.',
+  'READINGS: you never see reading values, dates or who shared them; the member sees them in You > My readings. Do not describe a reading, a trend or "today\'s energy" from a scan; offer to open My readings, explain what the metrics mean in general, and suggest their practitioner for their own result, or a new scan if theirs may be old. A number the member tells you is theirs to discuss in general wellness terms; never say you looked it up. Plans: answer from the MEMBERSHIP line and CURRENT MEMBERSHIP POLICY; never say a plan includes something it does not list.',
   'WHAT YOU CANNOT SEE: how far along a lesson they are, grades, or community post/discussion content — the backend does not expose these. You CAN tell them which courses they have access to and open the course for them; you cannot report lesson-by-lesson progress or a scan reading. If asked for those, say plainly you can open the course or community in the portal but cannot read the detail from here. NEVER invent progress, grades, posts, scan numbers, or history.',
   'Privacy: discuss only THIS member’s own data, and only when they ask about it. Do not proactively recite sensitive details.',
   'Use the saved CURRENT GAIA PROFILE CHOICES for relevant Store, Energy, Academy and Community guidance. Choices are current; historical interest tags can remain after a branch change. Interests never prove device ownership, purchase intent or course access.',
@@ -4343,6 +4343,20 @@ function memoryContextLine(cid) {
   if (rec.summary) lines.push('Summary of them: ' + rec.summary);
   return lines.join('\n');
 }
+/**
+ * One next step for "what should I do next?", in a fixed order. A practitioner
+ * is pointed at their practice first. "A new reading arrived" is a fact about
+ * the link, not about the reading: Gaia never knows what it says.
+ */
+export function suggestedNextStep({ practitioner = false, newReading = false, soonTitle = '', unread = 0, courses = 0 } = {}) {
+  if (practitioner) return 'open Practice to see which clients need attention (navigate screen=profile tab=practice)';
+  if (newReading) return 'a new Bio-Well reading has arrived for them; offer to open it (navigate screen=profile section=readings) -- you cannot see what it says';
+  if (soonTitle) return 'get ready for their session "' + soonTitle.slice(0, 60) + '" (Bookings)';
+  if (unread) return 'read their ' + unread + ' unread message(s) (Inbox)';
+  if (courses) return 'continue a course in Academy (play_course)';
+  return 'take today\'s energy check (navigate screen=wellness tab=check)';
+}
+
 async function buildMemberVoiceContext(req) {
   try {
     const member = sessionMemberContext(req);
@@ -4434,7 +4448,6 @@ async function buildMemberVoiceContext(req) {
       // they exist and where they are: no value, date or practitioner reaches
       // the model (no BAA covers the voice/text provider).
       if (memberReadingsEnabled() && memberAllowed(cid) && linkFor(cid)) {
-        lines.push('BIO-WELL READINGS: this member has Bio-Well readings shared by their practitioner, shown in You > My readings (a summary, the latest reading with the seven chakras, a 90-day trend with flagged areas, before-and-after sessions, shared documents). To show them call navigate { screen: "profile", section: "readings" }. Explain what the sections mean in general terms if asked; never state, estimate or read out any value — they are on screen, not in this conversation, and questions about them belong with their practitioner.');
         // The guides their practitioner wrote for them: only with the
         // member's own switch (guides_to_assist, checked on every build —
         // the cache key carries it), shaped and bounded, values stripped.
@@ -4459,16 +4472,16 @@ async function buildMemberVoiceContext(req) {
       // routes are), so this holds even when the GHL bundle could not be read.
       const rid2 = cid || member.contactId;
       const ls = memberReadingsEnabled() && memberAllowed(rid2) ? linkStatus(rid2) : {};
+      if (memberReadingsEnabled() && memberAllowed(rid2) && ls.linked) {
+        lines.push('BIO-WELL READINGS: this member has Bio-Well readings shared by their practitioner, shown in You > My readings (a summary, the latest reading with the seven chakras, a 90-day trend with flagged areas, before-and-after sessions, shared documents). To show them call navigate { screen: "profile", section: "readings" }. Explain what the sections mean in general terms if asked; never state, estimate or read out any value — they are on screen, not in this conversation, and questions about them belong with their practitioner.');
+      }
       if (memberReadingsEnabled() && memberAllowed(rid2) && !ls.linked) {
         lines.push('READINGS STATUS: no Bio-Well readings shared with this member yet. If they ask about their readings, say you cannot see a Bio-Well reading for them yet; they can ask their practitioner for a sharing code under You > My readings, or book a Bio-Well scan (book_session / find_practitioner). Never invent a reading.');
       }
       const soon = upcoming.find((a) => Date.parse(a.startTime) - now < 7 * 86400000);
-      const step = ls.new_reading ? 'open their new Bio-Well reading (navigate screen=profile section=readings)'
-        : soon ? 'get ready for their session "' + String(soon.title || 'session').slice(0, 60) + '" (Bookings)'
-        : unread ? 'read their ' + unread + ' unread message(s) (Inbox)'
-        : courseNames.length ? 'continue a course in Academy (play_course)'
-        : 'take today\'s energy check (navigate screen=wellness tab=check)';
-      lines.push('SUGGESTED NEXT STEP (only if they ask what to do next, or seem unsure): ' + step + '.');
+      lines.push('SUGGESTED NEXT STEP (only if they ask what to do next, or seem unsure): ' + suggestedNextStep({
+        practitioner: lines[0] === 'GAIA SESSION STATE: practitioner', newReading: Boolean(ls.new_reading),
+        soonTitle: soon ? String(soon.title || 'session') : '', unread, courses: courseNames.length }) + '.');
     } catch (e) { /* optional */ }
     const text = lines.join('\n');
     if (cid) _memberAiCtxCache.set(cid, { at: Date.now(), text, roleKey });

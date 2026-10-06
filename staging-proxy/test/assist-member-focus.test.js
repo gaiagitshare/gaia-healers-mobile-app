@@ -83,7 +83,7 @@ test('no readings shared: Gaia says so and never invents one', async () => {
   const sys = await systemPromptFor(await session('fixture-free'), 'explain my latest reading');
   assert.match(sys, /READINGS STATUS: no Bio-Well readings shared with this member yet/);
   assert.match(sys, /Never invent a reading/);
-  assert.match(sys, /READINGS: you never see reading values or dates/, 'the member rules say what she cannot see');
+  assert.match(sys, /READINGS: you never see reading values, dates or who shared them/, 'the member rules say what she cannot see');
 });
 
 test('a visitor gets no member facts', async () => {

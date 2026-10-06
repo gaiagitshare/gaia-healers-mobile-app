@@ -132,7 +132,7 @@
 
     return '<article class="g-card g-sky" style="--sky-tint:' + esc(tint) + '">'
       + '<div class="g-sky__head">'
-      + '<p class="g-sky__kicker">Today’s sky · ' + (personal ? 'Your chart' : 'Everyone') + '</p>'
+      + '<p class="g-sky__kicker">Today’s sky · ' + (personal ? 'Your chart' : 'For everyone') + '</p>'
       + (toFull != null ? '<span class="g-sky__tofull">' + (toFull === 0 ? 'Full tonight'
         : toFull + (toFull === 1 ? ' day' : ' days') + ' to full') + '</span>' : '')
       + '</div>'

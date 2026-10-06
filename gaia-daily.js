@@ -101,7 +101,7 @@
   function guestHtml(d) {
     return '<section class="g-de g-de--preview" style="--de-c:' + esc(chakraColor(d)) + '">'
       + '<div class="g-de__aura" aria-hidden="true"></div>'
-      + '<div class="g-de__head"><p class="g-de__kicker">Today’s energy · everyone</p></div>'
+      + '<div class="g-de__head"><p class="g-de__kicker">Today’s energy</p></div>'
       + '<div class="g-de__focus">'
       + orb(chakraColor(d))
       + '<div class="g-de__focus-body">'

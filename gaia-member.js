@@ -947,9 +947,9 @@ body.gaia-booking-open{overflow:hidden;}
         + '<i class="ph ph-caret-down g-sync__chev" aria-hidden="true"></i></summary>'
         + '<div class="g-sync__lessons">' + rows + '</div></details>';
     }).join('');
-    const header = '<article class="g-card g-card--feature"><p class="g-card__label">Your Academy · live from your membership</p>'
+    const header = '<article class="g-card g-card--feature"><p class="g-card__label">Your Academy</p>'
       + '<p class="g-card__value g-card__value--lg">Your courses</p>'
-      + '<p class="g-card__meta">' + data.courses.length + ' courses unlocked — tap one to see its videos.</p></article>';
+      + '<p class="g-card__meta">' + data.courses.length + (data.courses.length === 1 ? ' course' : ' courses') + ' on your account. Open one to see its lessons.</p></article>';
     box.querySelectorAll('[data-acad-sync]').forEach((n) => n.remove());
     const host = document.createElement('div'); host.className = 'g-page-sec'; host.setAttribute('data-acad-sync', '');
     host.innerHTML = header + '<div class="g-sync-list">' + courseHtml + '</div>';
@@ -1206,12 +1206,7 @@ body.gaia-booking-open{overflow:hidden;}
     const locked = (cm.locked || []).filter((x) => x.state !== 'unknown');
     const soon = (cm.locked || []).filter((x) => x.state === 'unknown');
     const m = acc.member || {};
-    if (sub) {
-      const bits = [m.name || 'Member'];
-      if (m.membershipTier) bits.push(m.membershipTier + ' member');
-      if (m.practitioner) bits.push(m.practitionerCertified ? 'Certified practitioner' : 'Practitioner');
-      sub.textContent = bits.join(' · ');
-    }
+    if (sub) sub.textContent = 'Your circles, what is on, and the people who can help.';
 
     const parts = [announcementsHtml(state.announcements), '<div class="g-stats">'
       + '<div class="g-stat"><span class="g-stat__n g-stat__n--accent">' + unlocked.length + '</span><span class="g-stat__l">Unlocked</span></div>'
@@ -1370,8 +1365,8 @@ body.gaia-booking-open{overflow:hidden;}
     if (!plans.length) {
       return '<article class="g-card"><p class="g-card__meta">The membership plans could not be loaded just now. Please try again in a moment.</p></article>';
     }
-    const intro = '<article class="g-card g-tier-intro"><p class="g-card__label">Gaia 2.0 Practitioners</p>'
-      + '<p class="g-card__meta">Choose a practitioner path that matches your stage.</p></article>';
+    const intro = '<article class="g-card g-tier-intro"><p class="g-card__label">Membership plans</p>'
+      + '<p class="g-card__meta">Start free, and grow into a plan when you want more for your practice.</p></article>';
     // Plans below the member's own are included in it ("Everything in …"):
     // no "Choose" button pushing a downgrade, and no bright featured button.
     const currentRank = currentKey ? plans.findIndex((p) => p.key === currentKey) : -1;
@@ -1421,7 +1416,7 @@ body.gaia-booking-open{overflow:hidden;}
       + (rows.length
         ? '<ul class="g-tier__access-list">' + rows.join('') + '</ul>'
         : '<p class="g-card__meta">Nothing on record yet — courses and communities you are enrolled in will appear here.</p>')
-      + '<p class="g-tier__access-all"><a href="home.html?view=profile">Everything in My Access &rarr;</a></p></div>';
+      + '<p class="g-tier__access-all"><a href="home.html?view=profile">See all your access &rarr;</a></p></div>';
   }
 
   // Store "Membership" tab. Products live in the "Shop" tab (gaia-store.js);

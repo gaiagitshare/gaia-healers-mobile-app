@@ -151,7 +151,7 @@ appTest('gaia:auth never fires, and the catalogue still loaded', async () => {
 
 appTest('a failing catalogue degrades to the message, it does not crash', async () => {
   const { html } = await bootSignedOut({ plansStatus: 500, plansResponse: {} });
-  assert.ok(html.includes('Membership plans are unavailable right now'),
+  assert.ok(html.includes('The membership plans could not be loaded just now'),
     'when the public endpoint genuinely fails, saying so is correct');
 });
 

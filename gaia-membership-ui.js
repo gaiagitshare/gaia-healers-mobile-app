@@ -254,7 +254,7 @@
       return '<article class="g-pass g-pass--none">'
         + '<p class="g-pass__kicker">Member Pass</p>'
         + '<p class="g-pass__title">You are on the free plan</p>'
-        + '<p class="g-pass__meta">Upgrade to unlock courses, certification, practitioner communities and the tools that grow your practice.</p>'
+        + '<p class="g-pass__meta">Courses, certification, practitioner communities and practice tools come with the paid plans.</p>'
         + '<div class="g-pass__actions"><a class="g-btn g-btn--primary g-btn--sm" href="home.html?view=store&tab=membership">See membership plans &rarr;</a></div>'
         + '</article>';
     }
@@ -374,9 +374,9 @@
       + '<p class="g-next__line" hidden>Next level: <strong>' + esc(plan.label || upgrade.next_key) + '</strong></p>'
       + '<h2 class="g-next__title">' + esc(plan.label || upgrade.next_key) + '</h2>'
       + (plan.subtitle ? '<p class="g-next__subtitle">' + esc(plan.subtitle) + '</p>' : '')
-      + (gainRows ? '<p class="g-next__lead">Upgrade to unlock:</p><ul class="g-next__list">' + gainRows + '</ul>' : '')
+      + (gainRows ? '<p class="g-next__lead">It would add:</p><ul class="g-next__list">' + gainRows + '</ul>' : '')
       + (plan.checkoutUrl
-        ? '<div class="g-next__actions"><a class="g-btn g-btn--primary g-btn--sm" href="' + esc(plan.checkoutUrl)
+        ? '<div class="g-next__actions"><a class="g-btn g-btn--secondary g-btn--sm" href="' + esc(plan.checkoutUrl)
           + '" target="_blank" rel="noopener noreferrer">View ' + esc(plan.label || upgrade.next_key) + '</a></div>'
         : '')
       + '</section>';

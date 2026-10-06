@@ -204,12 +204,12 @@ test('the report carries a MEMBER LINKS line: counts in the window and standing 
   ] }));
   const r = run(['--file', file, '--json', '--links', links, '--from', '2026-10-03', '--to', '2026-10-03'], dir);
   const m = JSON.parse(r.stdout).member_links;
-  assert.deepEqual(m.in_window, { codes_issued: 1, links_confirmed: 1, readings_opened: 1, links_revoked: 0, guides_read: 0 }, 'the revoke on the 2nd is outside the window');
+  assert.deepEqual(m.in_window, { codes_issued: 1, links_confirmed: 1, readings_opened: 1, links_revoked: 0 }, 'the revoke on the 2nd is outside the window');
   assert.deepEqual(m.standing, { confirmed: 2, revoked: 1, confirmed_and_opened: 1 });
   assert.ok(!/sgSecretMember|cust-/.test(r.stdout), 'no member or customer id reaches the report');
   const text = run(['--file', file, '--links', links, '--from', '2026-10-03', '--to', '2026-10-03'], dir).stdout;
   assert.match(text, /== MEMBER LINKS/);
-  assert.match(text, /1 codes asked for, 1 links confirmed, 1 readings opened, 0 links revoked, 0 guide reads for Gaia Assist/);
+  assert.match(text, /1 codes asked for, 1 links confirmed, 1 readings opened, 0 links revoked/);
   assert.match(text, /2 members sharing \(1 have opened their readings\), 1 stopped/);
   assert.ok(text.indexOf('== MEMBER LINKS') < text.indexOf('== SYSTEM ALERTS'), 'links before alerts');
   const none = JSON.parse(run(['--file', file, '--json', '--links', path.join(dir, 'missing.json')], dir).stdout).member_links;

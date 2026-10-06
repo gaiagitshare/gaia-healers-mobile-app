@@ -23,7 +23,7 @@ import { activeForMember, forPractitionerClient, createRecommendation, revokeRec
 function publicItem(i) {
   const out = { key: i.key, id: i.id, title: i.title, stage: i.stage, stage_label: i.stage_label, reason: i.reason || '', state: i.state,
     action: i.action, provenance: { label: i.provenance.label, source_type: i.provenance.source_type }, completion: i.completion };
-  for (const k of ['note', 'practitioner_name', 'when', 'session_title', 'progress', 'lock', 'free_alternative', 'service_detail']) if (i[k] !== undefined && i[k] !== null && i[k] !== '') out[k] = i[k];
+  for (const k of ['note', 'practitioner_name', 'when', 'session_title', 'progress', 'lock', 'free_alternative', 'service_detail', 'reason_source']) if (i[k] !== undefined && i[k] !== null && i[k] !== '') out[k] = i[k];
   return out;
 }
 
@@ -31,7 +31,7 @@ export function createPathRoutes(deps) {
   const {
     requireSessionMember, sendJson, readJsonBody, linkState, tokenFor, memberReadingsEnabled, memberAllowed, linkStatus,
     recheckAfterDays, memberForPractitionerClient, loadAcademyManifest, loadAcademyProgress, academyOwnedIdsForRequest,
-    academyCourseOwned, appointmentsFor, planLevelFor, readMcp, log = () => {},
+    academyCourseOwned, appointmentsFor, planLevelFor, readMcp, partnerRecsFor = async () => ({ items: [] }), log = () => {},
   } = deps;
 
   async function signalsFor(req, member, { appointments, recs = [], catalogue }) {
@@ -69,7 +69,9 @@ export function createPathRoutes(deps) {
     for (const r of recs) if (r.resource?.kind === 'course' && (Number(signals.progress[r.resource.id]?.pct) || 0) >= 100) setItemState(cid, `R:${r.id}`, 'completed', 'backend');
     // A recommended scan is done when a scan newer than the recommendation arrives (opening the booking page is not).
     for (const r of recs) if (r.resource?.kind === 'scan' && signals.readings.latest_scanned_at && signals.readings.latest_scanned_at > String(r.created_at || '').slice(0, 10)) setItemState(cid, `R:${r.id}`, 'completed', 'backend');
-    return buildPath(signals, { catalogue, state: stateFor(cid), recheckDays: recheckAfterDays(), practitionerRecs: recs });
+    // Approved partner recommendations: retrieval/display only, behind its own gate (partner-recs.js); never throws.
+    const partner = await partnerRecsFor(member).catch(() => ({ items: [] }));
+    return buildPath(signals, { catalogue, state: stateFor(cid), recheckDays: recheckAfterDays(), practitionerRecs: recs, partnerRecs: partner.items || [] });
   }
 
   /** The practitioner behind this session: verified link only. */
@@ -101,7 +103,7 @@ export function createPathRoutes(deps) {
     if (p === '/api/member/path' && req.method === 'GET') {
       const sm = requireSessionMember(req, res, origin); if (!sm) return true;
       const path = await memberPath(req, sm);
-      sendJson(res, 200, { ok: true, items: path.items.map(publicItem), caught_up: path.caught_up, recheck_after_days: recheckAfterDays() }, origin);
+      sendJson(res, 200, { ok: true, items: path.items.map(publicItem), also_recommended: (path.also_recommended || []).map(publicItem), caught_up: path.caught_up, recheck_after_days: recheckAfterDays() }, origin);
       return true;
     }
 
@@ -111,7 +113,7 @@ export function createPathRoutes(deps) {
       let body = {}; try { body = await readJsonBody(req, 2048); } catch { sendJson(res, 400, { ok: false, error: 'bad_json' }, origin); return true; }
       const event = String(body.event || ''), key = String(body.key || '').slice(0, 80);
       if (!PATH_EVENTS.includes(event)) { sendJson(res, 400, { ok: false, error: 'unknown_event' }, origin); return true; }
-      if (key && !/^(P-[A-Z]+(:[A-Za-z0-9:.\-T]+)?|R:rec_[A-Za-z0-9_-]{6,20})$/.test(key)) { sendJson(res, 400, { ok: false, error: 'bad_key' }, origin); return true; }
+      if (key && !/^(P-[A-Z]+(:[A-Za-z0-9:.\-T]+)?|R:rec_[A-Za-z0-9_-]{6,20}|PR:[A-Za-z0-9_-]{1,40}:(product|service):[A-Za-z0-9_-]{1,40})$/.test(key)) { sendJson(res, 400, { ok: false, error: 'bad_key' }, origin); return true; }
       let rec = null;
       if (key.startsWith('R:')) { rec = activeForMember(cid).find((r) => `R:${r.id}` === key); if (!rec) { sendJson(res, 404, { ok: false, error: 'not_found' }, origin); return true; } }
       let state = null;
@@ -125,7 +127,7 @@ export function createPathRoutes(deps) {
         state = setItemState(cid, key, 'completed', 'user');
       }
       recordEvent(cid, event, { item_id: key || undefined, stage: body.stage, surface: body.surface, items: body.items, level: body.level,
-        via: event === 'recommendation_completed' ? 'user' : undefined, route: body.route, source: key.startsWith('R:') ? 'practitioner_manual' : (key ? 'platform_rule' : undefined) });
+        via: event === 'recommendation_completed' ? 'user' : undefined, route: body.route, source: key.startsWith('PR:') ? 'partner_approved' : key.startsWith('R:') ? 'practitioner_manual' : (key ? 'platform_rule' : undefined) });
       sendJson(res, 200, { ok: true, state }, origin);
       return true;
     }

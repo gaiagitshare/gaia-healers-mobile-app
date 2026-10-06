@@ -33,3 +33,6 @@
 .gpath-rec__msg { margin: 0; min-height: 1.2em; font-size: 13.5px; color: var(--g-text-muted); }
 .gpath__list--preview { padding: 8px 12px; border-radius: 12px; border: 1px dashed rgba(255,255,255,.18); }
 @media (max-width: 420px) { .gpath__item { padding-left: 28px; } }
+.gpath__ext { font-size: 12px; color: var(--g-text-faint); }
+.gpath__list--also { margin-top: 12px; border-top: 1px solid rgba(255,255,255,.08); }
+.gpath__list--also .gpath__item::before { content: ''; border-style: dashed; }

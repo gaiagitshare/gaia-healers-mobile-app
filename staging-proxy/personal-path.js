@@ -18,13 +18,13 @@
 import fs from 'node:fs';
 import path from 'node:path';
 
-export const SOURCE_TYPES = Object.freeze(['platform_rule', 'practitioner_manual', 'practitioner_service', 'partner_deterministic', 'partner_ai', 'gaia_catalogue']);
+export const SOURCE_TYPES = Object.freeze(['platform_rule', 'practitioner_manual', 'practitioner_service', 'partner_deterministic', 'partner_ai', 'partner_approved', 'gaia_catalogue']);
 /** What a catalogue entry's evidence can be (separate from who produced an item). */
 export const SOURCE_REF_TYPES = Object.freeze(['biowell_official', 'gaia_practitioner', 'gaia_content', 'business_rule']);
 export const REVIEW_STATES = Object.freeze(['not_required', 'pending', 'approved', 'rejected', 'revoked']);
 export const ITEM_STATES = Object.freeze(['active', 'opened', 'completed', 'dismissed', 'expired']);
 export const STAGES = Object.freeze({
-  start_now: 'Start now', coming_up: 'Coming up', keep_going: 'Keep going', recheck: 'Recheck',
+  start_now: 'Start now', coming_up: 'Coming up', keep_going: 'Keep going', recheck: 'Recheck', explore: 'Also recommended',
 });
 export const MAX_ITEMS = 5;
 
@@ -55,6 +55,8 @@ export const COMPLETION_BY_KIND = Object.freeze({
   course: 'course_progress', readings: 'reading_seen', share_readings: 'link_confirmed',
   bookings: 'appointment_status', service: 'practitioner_booking', scan: 'new_scan',
   plans: 'entitlement', onboarding: 'onboarding_gate', product: 'order',
+  // Approved partner recommendations (partner-recs.js): a booking or a purchase on their platform.
+  partner_service: 'practitioner_booking', partner_product: 'order',
 });
 export const completionFor = (kind) => COMPLETION_BY_KIND[kind] || 'none';
 export const memberMayComplete = (kind) => completionFor(kind) === 'member';
@@ -162,6 +164,27 @@ const RULES = {
 };
 export const RULE_IDS = Object.freeze(Object.keys(RULES));
 
+export const DEFAULT_PRACTITIONER_REASON = 'Your practitioner recommended this as part of your current wellness plan.';
+
+/**
+ * An APPROVED partner recommendation item (partner-recs.js shapeApproved):
+ * "Recommended by your practitioner". Services rank with practitioner items;
+ * products sit in "Also recommended" and are never the first step. The only
+ * explanation shown is the partner's client-safe summary, else our fixed line.
+ */
+function partnerItem(it) {
+  const product = it.type === 'product';
+  return {
+    key: it.key, id: 'PR', priority: product ? 20 - Math.min(it.rank || 0, 9) / 10 : 88 - Math.min(it.rank || 0, 9) / 10,
+    stage: product ? 'explore' : 'start_now',
+    title: it.title, reason: it.summary || DEFAULT_PRACTITIONER_REASON, reason_source: it.summary ? 'partner_summary' : 'default',
+    practitioner_name: it.practitioner_name || '',
+    action: { kind: product ? 'partner_product' : 'partner_service', label: it.action.label, url: it.action.url },
+    provenance: { source_type: 'partner_approved', review_state: 'approved', label: 'Recommended by your practitioner' },
+    recommended_at: it.approved_at || it.created_at || '',
+  };
+}
+
 /** A practitioner's confirmed recommendation, as the member sees it. Only approved practitioner_manual records qualify. */
 function practitionerItem(rec, catalogue, signals) {
   if (!rec || rec.source_type !== 'practitioner_manual' || rec.review_state !== 'approved' || rec.revoked_at) return null;
@@ -172,7 +195,7 @@ function practitionerItem(rec, catalogue, signals) {
   return {
     key: `R:${rec.id}`, priority: 90, stage: 'start_now',
     title: rec.resource?.title || 'A recommendation from your practitioner',
-    reason: rec.member_safe_reason || '', note: rec.note || '',
+    reason: rec.member_safe_reason || '', reason_source: rec.member_safe_reason ? 'practitioner' : 'default', note: rec.note || '',
     practitioner_name: rec.practitioner_name || '',
     ...(rec.resource?.kind === 'service' && rec.resource.detail ? { service_detail: rec.resource.detail } : {}),
     action: { kind: rec.resource?.kind || 'none', label: actionLabel(rec.resource), ...(rec.resource?.target ? { target: rec.resource.target } : {}), ...(rec.resource?.id ? { resource_id: rec.resource.id } : {}) },
@@ -192,14 +215,23 @@ export function actionLabel(resource) {
  * per-item record ({key: {state, by}}). Dismissed and completed items stay
  * gone for that key; a new scan or session is a new key.
  */
-export function buildPath(signals = {}, { catalogue = loadCatalogue(), state = {}, now = Date.now(), recheckDays = 60, practitionerRecs = [] } = {}) {
+export function buildPath(signals = {}, { catalogue = loadCatalogue(), state = {}, now = Date.now(), recheckDays = 60, practitionerRecs = [], partnerRecs = [] } = {}) {
   const approvedRules = new Set(servableEntries(catalogue).filter((e) => e.kind === 'rule').map((e) => e.id));
   let items = [];
   // Required onboarding takes the whole path: nothing else is open yet.
   if (approvedRules.has('P-ONBOARD') && signals.onboarding?.required) items = RULES['P-ONBOARD'](signals, now, { recheckDays });
   else {
     for (const id of RULE_IDS) if (id !== 'P-ONBOARD' && approvedRules.has(id)) items.push(...RULES[id](signals, now, { recheckDays }).map((it) => ({ ...it, id })));
-    for (const rec of practitionerRecs) { const it = practitionerItem(rec, catalogue, signals); if (it) items.push(it); }
+    // One step per underlying thing: when the practitioner's approved partner
+    // recommendation and their manual recommendation name the SAME service of
+    // the SAME practitioner, the partner item (it carries their Book link and
+    // summary) is shown and the manual duplicate is suppressed, not deleted.
+    const partnerServices = new Set((partnerRecs || []).filter((p) => p.type === 'service').map((p) => `${p.practitioner_id}|${p.id}`));
+    for (const rec of practitionerRecs) {
+      if (rec?.resource?.kind === 'service' && partnerServices.has(`${rec.practitioner_id}|${rec.resource.id}`)) continue;
+      const it = practitionerItem(rec, catalogue, signals); if (it) items.push(it);
+    }
+    for (const p of partnerRecs || []) if (p && p.key && p.action?.url) items.push(partnerItem(p));
   }
   // No contradictions: a reading that just arrived is not also "old".
   if (items.some((i) => i.key.startsWith('P-NEW:'))) items = items.filter((i) => !i.key.startsWith('P-RECHECK:'));
@@ -207,9 +239,13 @@ export function buildPath(signals = {}, { catalogue = loadCatalogue(), state = {
     .map((i) => ({ ...i, completion: completionFor(i.action?.kind), id: i.id || i.key.split(':')[0], stage_label: STAGES[i.stage] || '', state: state[i.key]?.state || 'active',
       provenance: i.provenance || { source_type: 'platform_rule', review_state: 'not_required', label: 'Suggested by Gaia' } }))
     .filter((i) => i.state !== 'dismissed' && i.state !== 'completed' && i.state !== 'expired')
-    .sort((a, b) => b.priority - a.priority || String(a.recommended_at || '').localeCompare(String(b.recommended_at || '')))
-    .slice(0, MAX_ITEMS);
-  return { items, caught_up: items.length === 0, catalogue_version: catalogue.version };
+    .sort((a, b) => b.priority - a.priority || String(a.recommended_at || '').localeCompare(String(b.recommended_at || '')));
+  // A product is never a first step: steps first, products after them; with no
+  // steps at all, products are only "also recommended" beside "caught up".
+  const steps = items.filter((i) => i.action?.kind !== 'partner_product');
+  const products = items.filter((i) => i.action?.kind === 'partner_product');
+  const shown = steps.length ? [...steps.slice(0, MAX_ITEMS), ...products].slice(0, MAX_ITEMS) : [];
+  return { items: shown, also_recommended: steps.length ? [] : products.slice(0, 3), caught_up: shown.length === 0, catalogue_version: catalogue.version };
 }
 
 /**
@@ -219,7 +255,10 @@ export function buildPath(signals = {}, { catalogue = loadCatalogue(), state = {
  * reading. Pinned by test/personal-path.test.js.
  */
 export function assistView(path) {
-  return (path?.items || []).map((i) => ({
+  return (path?.items || []).map((i) => (i.provenance?.source_type === 'partner_approved'
+    // Partner recommendation content (title, summary, link, practitioner) never goes to the AI provider.
+    ? { id: 'PR', title: 'A recommendation from your practitioner (details on their screen)', stage: i.stage, state: i.state, from: 'Recommended by your practitioner', action: i.action?.label || '' }
+    : {
     id: i.key.startsWith('R:') ? i.key : i.id, title: i.title, stage: i.stage, state: i.state,
     from: i.provenance?.label || 'Suggested by Gaia',
     ...(i.provenance?.source_type === 'practitioner_manual' && i.reason ? { member_safe_reason: i.reason } : {}),

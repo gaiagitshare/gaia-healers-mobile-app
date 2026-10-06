@@ -177,16 +177,6 @@ export function detect(health, extra = {}) {
       affected: null });
   }
 
-  // Guide reads for Gaia Assist are cached ten minutes per member, so even a
-  // member talking all day makes well under 150. Far more reads than the
-  // sharing members could produce means a loop or abuse, the same day.
-  if (ml && (ml.guides_read || 0) >= 30 && ml.guides_read > 10 * Math.max(1, ml.confirmed || 0)) {
-    add({ key: 'member-links:guide-reads', severity: 'warning', subsystem: 'Practitioners',
-      title: `${ml.guides_read} guide reads for Gaia Assist today, across ${ml.confirmed || 0} sharing member${ml.confirmed === 1 ? '' : 's'}`,
-      why: 'Each read is one partner call and lands in a member\'s context window. Reads are cached ten minutes per member, so this many means a retry loop, a cache that stopped working, or someone driving the switch on and off — check the proxy log for "[Gaia guides] read for Assist" and the prefs route.',
-      evidence: `today ${ml.day}: ${ml.guides_read} guide reads · ${ml.readings_opened} readings opened · standing ${ml.confirmed} sharing`,
-      affected: null });
-  }
 
   // ── Event mirror ─────────────────────────────────────────────────────────
   const em = byKey.event_mirror;

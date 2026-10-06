@@ -115,16 +115,13 @@ test('a practitioner tool without an explicit model view fails closed', () => {
   assert.deepEqual(modelView('navigate', { screen: 'today' }, {}), { screen: 'today' }, 'non-practitioner tools are unchanged');
 });
 
-test('partner AI recommendations are a disabled source: no partner call, nothing to the model', async () => {
-  assert.equal(ml.partnerAiRecommendationsEnabled({}), false);
-  assert.equal(ml.partnerAiRecommendationsEnabled({ GAIA_PARTNER_AI_RECOMMENDATIONS: 'true' }), false, 'only the exact value "on"');
-  let calls = 0;
-  const fetchImpl = async () => { calls += 1; return new Response(JSON.stringify(FAKE.get_customer_recommendations)); };
-  assert.equal(await ml.memberGuides({}, 'any-member', { env: { GAIA_PRACTITIONERS_MEMBER_API_KEY: 'k' }, fetchImpl }), null);
-  assert.equal(calls, 0, 'no partner call while disabled');
+test('the old guides route is gone: no partner recommendation text can reach the prompt or a tool result', () => {
+  for (const gone of ['memberGuides', 'guidesForModel', 'shapeGuides', 'partnerAiRecommendationsEnabled']) assert.equal(ml[gone], undefined, gone + ' removed');
   const srv = fs.readFileSync(new URL('../server.js', import.meta.url), 'utf8');
-  const i = srv.indexOf('if (!partnerAiRecommendationsEnabled()) {');
-  assert.ok(i > 0 && i < srv.indexOf('const text = await memberGuidesCached(cid);'), 'the prompt checks the switch before any guide is read');
+  const tools = fs.readFileSync(new URL('../assist-tools.js', import.meta.url), 'utf8');
+  const link = fs.readFileSync(new URL('../member-link.js', import.meta.url), 'utf8');
+  assert.doesNotMatch(srv, /PRACTITIONER GUIDES|memberGuidesCached|guides_to_assist|GAIA_PARTNER_AI_RECOMMENDATIONS/);
+  assert.doesNotMatch(tools + link + srv, /'get_my_recommendations'|"get_my_recommendations"|get_customer_recommendations'/, 'only partner-recs.js may name the tool');
 });
 
 test('the tool route still hands the model the model copy', () => {

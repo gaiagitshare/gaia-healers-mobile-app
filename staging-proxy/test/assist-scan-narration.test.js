@@ -62,5 +62,5 @@ test('My readings panel: present in the profile screen, script loaded, talks onl
   const line = srv.match(/BIO-WELL READINGS:[^\n]*/)?.[0] || '';
   assert.match(line, /navigate \{ screen: "profile", section: "readings" \}/);
   assert.match(line, /never state, estimate or read out any value/);
-  assert.match(srv, /memberReadingsEnabled\(\) && memberAllowed\(cid\) && linkFor\(cid\)/, 'only for a member with a confirmed link');
+  assert.match(srv, /if \(memberReadingsEnabled\(\) && memberAllowed\(rid2\) && ls\.linked\) \{\n\s*lines\.push\('BIO-WELL READINGS:/, 'only for a member with a confirmed link');
 });

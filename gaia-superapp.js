@@ -625,9 +625,10 @@
       + ' · ' + date.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
   }
 
-  function stateMeta(base, count, singular, plural) {
+  function stateMeta(base, count, singular, plural, empty) {
     if (!memberState().authed) return base;
-    if (!count) return 'Nothing available yet';
+    // Nothing here yet is not a failure: say where the door goes instead.
+    if (!count) return empty || base;
     return count + ' ' + (count === 1 ? singular : plural);
   }
 
@@ -894,10 +895,10 @@
   function renderHomeMember(root, greeting) {
     const d = memberState().data || {};
     const rows = [
-      ['academy', 'graduation-cap', 'Academy', stateMeta('Courses and certifications', courseGrants().length, 'course', 'courses')],
-      ['community', 'users-three', 'Community', stateMeta('Boards and circles', communities().length, 'community', 'communities')],
+      ['academy', 'graduation-cap', 'Academy', stateMeta('Courses and certifications', courseGrants().length, 'course', 'courses', 'Browse courses')],
+      ['community', 'users-three', 'Community', stateMeta('Boards and circles', communities().length, 'community', 'communities', 'See the circles')],
       ['events', 'calendar-dots', 'Events', eventData()?.name ? 'Next gathering is on' : 'Gatherings and live sessions'],
-      ['bookings', 'calendar-check', 'Bookings', stateMeta('Sessions and consultations', upcomingAppointments().length, 'upcoming booking', 'upcoming bookings')],
+      ['bookings', 'calendar-check', 'Bookings', stateMeta('Sessions and consultations', upcomingAppointments().length, 'upcoming booking', 'upcoming bookings', 'Nothing booked yet')],
     ].map(([v, i, t, m]) => serviceLink(v, i, t, m)).join('');
     const meta = (d.access && d.access.meta) || {};
     const sync = (meta.degraded || meta.stale)
@@ -1884,7 +1885,7 @@
       const meeting = item.meetingLocation || '';
       const join = item.isVideo && meeting ? '<a class="g-btn g-btn--primary g-btn--sm" href="' + esc(meeting) + '" target="_blank" rel="noopener noreferrer">Join meeting</a>' : '';
       return '<article class="g-booking-item"><div><p class="g-super-kicker">' + esc(item.status || 'Scheduled') + '</p><h2>' + esc(item.title || 'Appointment') + '</h2><p>' + esc(appointmentWhen(item)) + (item.address ? ' · ' + esc(item.address) : '') + '</p></div>' + join + '</article>';
-    }).join('') : '<section class="g-super-empty-panel"><h2>No upcoming appointments</h2><p>Choose a verified Gaia Healers booking option below when you are ready.</p></section>';
+    }).join('') : '<section class="g-super-empty-panel"><h2>Nothing booked yet</h2><p>When you book a session it appears here with its date and time. The sessions you can book are just below.</p></section>';
     root.innerHTML = '<div class="g-super-page-head"><p class="g-super-kicker">Your schedule</p><h1>Bookings</h1><p>Your appointments appear here automatically.</p></div>' + rows + bookingCatalog();
     bind(root);
   }
@@ -1917,7 +1918,7 @@
     }
     const items = notifications();
     const rows = items.length ? items.map((item) => '<article class="g-super-row g-super-row--static' + (item.unread ? ' is-unread' : '') + '"><span class="g-super-row__icon">' + icon(item.unread ? 'chat-circle-dots' : 'chat-circle') + '</span><span><small>' + (item.unread ? esc(item.unread + ' unread') : 'Conversation') + '</small><strong>' + esc(item.lastMessage || 'Open your Gaia Healers portal to continue this conversation.') + '</strong><em>' + esc(item.updatedAt ? new Date(item.updatedAt).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' }) : '') + '</em></span></article>').join('')
-      : '<section class="g-super-empty-panel"><h2>You’re all caught up</h2><p>No messages yet.</p></section>';
+      : '<section class="g-super-empty-panel"><h2>No messages yet</h2><p>Messages from Gaia Healers and your practitioner will appear here.</p></section>';
     root.innerHTML = '<div class="g-super-page-head"><p class="g-super-kicker">Member messages</p><h1>Inbox</h1><p>Read-only summaries of your messages. Continue securely in the member portal.</p></div>'
       + '<section class="g-super-list">' + rows + '<div class="g-super-list__footer"><button type="button" class="g-btn g-btn--secondary" data-open-in-app="' + esc('https://education.gaiahealers.com') + '" data-in-app-title="Gaia Healers member portal">Open member portal</button></div></section>';
     bind(root); updateInboxBadge();

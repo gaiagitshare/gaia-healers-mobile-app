@@ -1157,10 +1157,12 @@ body.gaia-booking-open{overflow:hidden;}
       meta = c.reason || 'Coming soon to Gaia Healers';
       act = '<span class="g-chip g-access__act">Soon</span>';
     } else {
-      meta = c.reason === '' ? '' : (c.reason || 'Not included in your membership');
+      // The chip says it once; repeating "Not included in your membership"
+      // under every circle read as a wall of refusals.
+      meta = interested ? (c.reason || 'Gaia Healers will confirm your access') : (c.reason && c.reason !== 'Not included in your membership' ? c.reason : '');
       act = interested
         ? '<span class="g-chip g-chip--pending g-access__act">Requested</span>'
-        : '<span class="g-chip g-chip--lock g-access__act">Members</span>';
+        : '<span class="g-chip g-chip--lock g-access__act">' + (state.authed ? 'Not in your plan' : 'Members') + '</span>';
     }
     return '<div class="g-access ' + cls + '"><div class="g-access__body">'
       + '<span class="g-access__name">' + esc(c.name) + '</span>'
@@ -1219,7 +1221,7 @@ body.gaia-booking-open{overflow:hidden;}
     if (unlocked.length) {
       parts.push(gSec('Your communities', '<div class="g-access-grid">' + unlocked.map((x) => accessItem(x, 'unlocked')).join('') + '</div>'));
     } else {
-      parts.push('<article class="g-card"><p class="g-card__label">Your communities</p><p class="g-card__meta">No communities unlocked yet — your membership will light them up here.</p></article>');
+      parts.push('<article class="g-card"><p class="g-card__label">Your communities</p><p class="g-card__meta">You are not in a circle yet. Each circle below shows how it opens.</p></article>');
     }
     if (locked.length) {
       parts.push(gSec('Unlock with membership', '<div class="g-access-grid">' + locked.map((x) => accessItem(x, 'locked')).join('') + '</div>',
@@ -1366,7 +1368,7 @@ body.gaia-booking-open{overflow:hidden;}
       : (membership && ['active', 'trialing', 'past_due'].includes(membership.status) ? membership.key : 'free');
     const plans = Array.isArray(state.plans) ? state.plans : [];
     if (!plans.length) {
-      return '<article class="g-card"><p class="g-card__meta">Membership plans are unavailable right now.</p></article>';
+      return '<article class="g-card"><p class="g-card__meta">The membership plans could not be loaded just now. Please try again in a moment.</p></article>';
     }
     const intro = '<article class="g-card g-tier-intro"><p class="g-card__label">Gaia 2.0 Practitioners</p>'
       + '<p class="g-card__meta">Choose a practitioner path that matches your stage.</p></article>';

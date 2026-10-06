@@ -86,6 +86,15 @@
     const show = Boolean(d.isPractitioner || ['connected', 'needs_reconnect', 'unverified', 'not_practitioner'].includes(d.state));
     document.querySelectorAll('[data-rail-practice]').forEach((b) => { b.hidden = !show; });
   });
+  // On You → Practice, the rail says Practice, not You.
+  let profileTab = 'me';
+  function markPractice() {
+    const on = profileTab === 'practice' && activeTabId() === 'profile';
+    document.querySelectorAll('[data-rail-practice]').forEach((b) => setLinkActive(b, on));
+    document.querySelectorAll('.gaia-tabbar__link[data-app-nav="profile"]').forEach((a) => { if (on) setLinkActive(a, false); });
+  }
+  document.addEventListener('gaia:profile-tab', (e) => { profileTab = (e.detail && e.detail.tab) || 'me'; render(); markPractice(); });
+  window.addEventListener('gaia:route', () => setTimeout(markPractice, 0));
   document.addEventListener('click', (e) => {
     if (!e.target.closest('[data-rail-practice]')) return;
     window.GaiaAppShell?.go?.('profile');

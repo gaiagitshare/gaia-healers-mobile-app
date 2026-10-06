@@ -52,9 +52,10 @@ const attemptId = () => (window.crypto?.randomUUID ? window.crypto.randomUUID() 
 // on its spring guides; a 40 mm roll gets white either side, a 50 mm roll
 // loses the sliver the head cannot reach anyway. The driver (MIT,
 // public/vendor/niimbot-*.js) speaks the BLE protocol from the page, so
-// Chrome (desktop / Android), Bluefy on iPhone/iPad, and Safari with the free
-// beacio extension (it installs the same navigator.bluetooth before the page
-// runs, so nothing here differs) print without the NIIMBOT
+// Chrome (desktop / Android), Bluefy on iPhone/iPad, and Safari on iPhone with
+// the free beacio extension (iPhone-only, iOS 26.2+; it installs the same
+// navigator.bluetooth before the page runs, so nothing here differs) print
+// without the NIIMBOT
 // app. It resolves only once the printer confirmed the page — no “Printed ✓”
 // tap needed on that path.
 const NIIMBOT_DRIVER_URL = `${process.env.PUBLIC_URL || ''}/vendor/niimbot-2.6.0.js`;
@@ -132,8 +133,18 @@ export const isAppleMobile = () => {
         return /iPhone|iPad|iPod/.test(ua) || (/Macintosh/.test(ua) && navigator.maxTouchPoints > 1);
     } catch (e) { return false; }
 };
-// What an iPad/iPhone needs before it can print here, when it cannot yet.
-export const IOS_BLUETOOTH_SETUP = 'This iPad cannot reach the printer yet. In Safari: install the free “beacio” app from the App Store, then Settings → Apps → Safari → Extensions → beacio: turn it on and set “Allow on every website”, and reload this page (not in a Private tab). Or open this page in the Bluefy browser.';
+export const isIPad = () => {
+    try {
+        const ua = navigator.userAgent || '';
+        return /iPad/.test(ua) || (/Macintosh/.test(ua) && navigator.maxTouchPoints > 1);
+    } catch (e) { return false; }
+};
+// What an iPad/iPhone needs before it can print here, when it cannot yet. The
+// two differ: beacio (Safari's Web Bluetooth extension) is iPhone-only and
+// needs iOS 26.2+, so an iPad's only route is the Bluefy browser.
+export const iosBluetoothSetup = () => (isIPad()
+    ? 'This browser cannot reach the printer. On iPad, open this page in the free Bluefy browser (App Store) — Safari on iPad cannot talk to the printer (the beacio extension is iPhone-only).'
+    : 'This browser cannot reach the printer. Either open this page in the free Bluefy browser (App Store), or, on iOS 26.2 or later, install the free “beacio” app, then Settings → Apps → Safari → Extensions → beacio: turn it on, set “Allow on every website”, and reload this page in Safari (not in a Private tab).');
 export const canPrintBluetooth = () => { try { return Boolean(navigator.bluetooth); } catch (e) { return false; } };
 let niimbotLoading = null;
 // Fetch the driver ahead of the first tap. Safari (and Bluefy) only open the
@@ -176,7 +187,7 @@ const bluetoothError = (err) => {
     if (name === 'WrongPrinter') return wrongPrinterHint(err);
     if (name === 'NotAllowedError' || name === 'SecurityError') return 'Bluetooth was blocked for this site — allow it in the browser and try again.';
     if (name === 'NetworkError' || /GATT|disconnected|Not connected/i.test(msg)) return 'Lost the printer — switch the B1 on (blue light), keep it near, and try again.';
-    if (/Web Bluetooth/i.test(msg)) return 'This browser cannot talk to the printer. Use Chrome on a laptop/Android; on iPad/iPhone use Safari with the beacio extension, or the Bluefy browser.';
+    if (/Web Bluetooth/i.test(msg)) return 'This browser cannot talk to the printer. Use Chrome on a laptop/Android; on iPad use the Bluefy browser; on iPhone, Bluefy or Safari with the beacio extension (iOS 26.2+).';
     if (/Connected printer is/i.test(msg)) return 'That printer is not a B1 or B1 Pro — this station only prints to those.';
     if (/counter stopped|never acknowledged/i.test(msg)) return 'The printer did not confirm the label — check the paper (lid closed, roll seated) and look at what came out.';
     return msg.length > 140 ? msg.slice(0, 137) + '…' : (msg || 'Print failed.');
@@ -543,7 +554,7 @@ export default function BadgeLabelDialog({ request, eventId, station, onClose, o
                             </Box>
                         )}
                         {!canPrintBluetooth() && isAppleMobile() && (
-                            <Alert severity="info" sx={{ width: '100%' }}>{IOS_BLUETOOTH_SETUP} Until then, Share → NIIMBOT prints this label.</Alert>
+                            <Alert severity="info" sx={{ width: '100%' }}>{iosBluetoothSetup()} Until then, Share → NIIMBOT prints this label.</Alert>
                         )}
                         <Typography variant="caption" color="text.secondary" alignSelf="flex-start">
                             {canPrintBluetooth()

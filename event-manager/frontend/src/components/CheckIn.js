@@ -28,7 +28,7 @@ import { formatVenueTime, statusLabel, isFlaggedStatus } from '../utils/datetime
 import BadgeLabelDialog, { STATION_KEY, LABEL_SIZE_KEY, LABEL_ROLLS, savedLabelSize, rollShort, fullName, physicalCard,
     canPrintBluetooth, useB1, b1Connect, b1IsConnected, b1Enqueue, b1PrintBlob, b1Dpi, rollFitsB1, PRINTER_KEY, PRINTER_CHOICES, savedPrinter, CONNECT_TIMEOUT_HINT, logPrinter,
     rememberStationPrinter, printerTag, wrongPrinterHint, sharedWithText,
-    preloadNiimbot, isAppleMobile, IOS_BLUETOOTH_SETUP } from './BadgeLabelDialog';
+    preloadNiimbot, isAppleMobile, iosBluetoothSetup } from './BadgeLabelDialog';
 import BluetoothIcon from '@mui/icons-material/Bluetooth';
 
 // The access zones a scanner can be checking. The BACKEND decides the outcome;
@@ -466,7 +466,7 @@ function CheckIn({ timezone: timezoneProp }) {
                 // Nothing picked — usually an empty list. Next tap casts the wide
                 // net, and the three things that empty the list are spelled out.
                 setConnectAny(true);
-                setPrinterHint('No printer picked. Tap “Show all devices” and look for “B1 Pro-…” or “B1-…”. If it is not there either: (1) hold the printer’s power button until its light is on, (2) close the NIIMBOT app completely — a printer it holds is invisible to everyone else, (3) on iPad/iPhone check Bluetooth is allowed for the browser (Settings → Bluefy → Bluetooth, or for Safari: Settings → Apps → Safari → Extensions → beacio is on for this site).');
+                setPrinterHint('No printer picked. Tap “Show all devices” and look for “B1 Pro-…” or “B1-…”. If it is not there either: (1) hold the printer’s power button until its light is on, (2) close the NIIMBOT app completely — a printer it holds is invisible to everyone else, (3) on iPad/iPhone check Bluetooth is allowed for the browser (Settings → Bluefy → Bluetooth, or on iPhone with Safari: Settings → Apps → Safari → Extensions → beacio is on for this site).');
             } else if (err && err.name === 'ConnectTimeout') {
                 setPrinterHint(CONNECT_TIMEOUT_HINT);
             } else if (err && err.name === 'WrongPrinter') {
@@ -1133,11 +1133,11 @@ function CheckIn({ timezone: timezoneProp }) {
                                 {stationOpen ? 'Done' : 'Station setup'}
                             </Button>
                         </Stack>
-                        {/* An iPad in plain Safari has no Bluetooth until the beacio
-                            extension is on: say how, instead of showing no printer at all. */}
+                        {/* An iPad/iPhone browser with no Bluetooth (plain Safari): say
+                            which route works on THIS device, instead of no printer line at all. */}
                         {!canPrintBluetooth() && isAppleMobile() && (
                             <Typography variant="caption" sx={{ display: 'block', px: 1.5, pb: 1, mt: -0.5, color: 'warning.main' }}>
-                                {IOS_BLUETOOTH_SETUP}
+                                {iosBluetoothSetup()}
                             </Typography>
                         )}
                         {/* The printer line. Green = paired and admitted scans print by

@@ -4,7 +4,7 @@
 // name, when it picked a neighbour's.
 //
 // Run: CI=true npx react-scripts test --watchAll=false BadgeLabelDialog.printer
-import { b1Connect, b1Disconnect, savedStationPrinter, rememberStationPrinter, STATION_PRINTER_KEY, printerTag, isAppleMobile, canPrintBluetooth } from './BadgeLabelDialog';
+import { b1Connect, b1Disconnect, savedStationPrinter, rememberStationPrinter, STATION_PRINTER_KEY, printerTag, isAppleMobile, isIPad, iosBluetoothSetup, canPrintBluetooth } from './BadgeLabelDialog';
 
 jest.mock('../utils/api', () => ({ badgeLabelBlob: jest.fn(), recordBadgePrint: jest.fn(), reportPrinter: jest.fn(() => Promise.resolve({ data: {} })) }));
 
@@ -100,4 +100,26 @@ test('Safari with beacio looks like any Web Bluetooth browser: the injected navi
     expect(canPrintBluetooth()).toBe(true);                  // beforeEach installs one, as the extension does
     Object.defineProperty(navigator, 'bluetooth', { value: undefined, configurable: true });
     expect(canPrintBluetooth()).toBe(false);                 // plain Safari: the setup hint shows instead
+});
+
+test('an iPad is sent to Bluefy (beacio is iPhone-only); an iPhone is offered both', () => {
+    const ua = Object.getOwnPropertyDescriptor(window.navigator, 'userAgent');
+    const tp = Object.getOwnPropertyDescriptor(window.navigator, 'maxTouchPoints');
+    const set = (u, t) => {
+        Object.defineProperty(window.navigator, 'userAgent', { value: u, configurable: true });
+        Object.defineProperty(window.navigator, 'maxTouchPoints', { value: t, configurable: true });
+    };
+    try {
+        set('Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.3 Safari/605.1.15', 5);
+        expect(isIPad()).toBe(true);
+        expect(iosBluetoothSetup()).toContain('Bluefy');
+        expect(iosBluetoothSetup()).not.toContain('install the free “beacio”');
+        set('Mozilla/5.0 (iPhone; CPU iPhone OS 26_2 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/26.2 Mobile/15E148 Safari/604.1', 5);
+        expect(isIPad()).toBe(false);
+        expect(iosBluetoothSetup()).toContain('beacio');
+        expect(iosBluetoothSetup()).toContain('Bluefy');
+    } finally {
+        if (ua) Object.defineProperty(window.navigator, 'userAgent', ua); else delete window.navigator.userAgent;
+        if (tp) Object.defineProperty(window.navigator, 'maxTouchPoints', tp); else delete window.navigator.maxTouchPoints;
+    }
 });

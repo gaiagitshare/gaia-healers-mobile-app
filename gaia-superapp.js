@@ -625,9 +625,10 @@
       + ' · ' + date.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
   }
 
-  function stateMeta(base, count, singular, plural) {
+  function stateMeta(base, count, singular, plural, empty) {
     if (!memberState().authed) return base;
-    if (!count) return 'Nothing available yet';
+    // Nothing here yet is not a failure: say where the door goes instead.
+    if (!count) return empty || base;
     return count + ' ' + (count === 1 ? singular : plural);
   }
 
@@ -844,7 +845,7 @@
     const firstName = String(p.name || '').trim().split(/\s+/)[0];
     const hour = new Date().getHours();
     const dayGreeting = hour < 12 ? 'Good morning' : hour < 18 ? 'Good afternoon' : 'Good evening';
-    const greeting = authed ? ('Welcome back' + (firstName ? ', ' + esc(firstName) : '')) : dayGreeting;
+    const greeting = authed ? (dayGreeting + (firstName ? ', ' + esc(firstName) : '')) : dayGreeting;
     const services = serviceLink('academy', 'graduation-cap', 'Academy', stateMeta('Courses and certifications', courseGrants().length, 'course', 'courses'))
       + serviceLink('community', 'users-three', 'Community', stateMeta('Boards and circles', communities().length, 'community', 'communities'))
       + serviceLink('events', 'calendar-dots', 'Events', eventData()?.name ? 'Upcoming gathering available' : 'Gatherings and live sessions')
@@ -894,10 +895,10 @@
   function renderHomeMember(root, greeting) {
     const d = memberState().data || {};
     const rows = [
-      ['academy', 'graduation-cap', 'Academy', stateMeta('Courses and certifications', courseGrants().length, 'course', 'courses')],
-      ['community', 'users-three', 'Community', stateMeta('Boards and circles', communities().length, 'community', 'communities')],
+      ['academy', 'graduation-cap', 'Academy', stateMeta('Courses and certifications', courseGrants().length, 'course', 'courses', 'Browse courses')],
+      ['community', 'users-three', 'Community', stateMeta('Boards and circles', communities().length, 'community', 'communities', 'See the circles')],
       ['events', 'calendar-dots', 'Events', eventData()?.name ? 'Next gathering is on' : 'Gatherings and live sessions'],
-      ['bookings', 'calendar-check', 'Bookings', stateMeta('Sessions and consultations', upcomingAppointments().length, 'upcoming booking', 'upcoming bookings')],
+      ['bookings', 'calendar-check', 'Bookings', stateMeta('Sessions and consultations', upcomingAppointments().length, 'upcoming booking', 'upcoming bookings', 'Nothing booked yet')],
     ].map(([v, i, t, m]) => serviceLink(v, i, t, m)).join('');
     const meta = (d.access && d.access.meta) || {};
     const sync = (meta.degraded || meta.stale)
@@ -906,44 +907,88 @@
     root.innerHTML = '<div class="g-super-home g-super-home--v2 g-home2">'
       + '<div id="home-announcements"></div>'
       + '<header class="g-home2__greet"><h1>' + greeting + '</h1><p>' + esc(homeLine()) + '</p></header>'
-      + '<div class="g-home2__top">' + nextStep() + eventCompact() + '</div>'
+      // How am I doing -> what next -> what is happening for me.
+      + stateHero()
+      + forYou()
       + '<section class="g-home2__gaia" aria-label="Your Gaia"><p class="g-super-kicker">Your Gaia</p><div class="g-home2__rows">' + rows + '</div></section>'
       + bookActions()
+      + upcoming()
       + membershipStrip()
       + sync
       + '<div id="home-book" hidden></div>'   // gaia-member still writes its booking card here; Today copies it
       + '</div>';
     bind(root);
   }
+  /**
+   * The first thing on a member's Home: their own state. With a practitioner
+   * sharing readings, the latest energy and stress; otherwise today's check.
+   */
+  function stateHero() {
+    const st = (window.GaiaMyReadings && window.GaiaMyReadings.status && window.GaiaMyReadings.status()) || {};
+    const r = st.linked && window.GaiaMyReadings.latest ? window.GaiaMyReadings.latest() : null;
+    if (st.linked && r && r.latest) {
+      const l = r.latest;
+      const fmt = (v, d) => (typeof v === 'number' ? v.toFixed(d) : '—');
+      const day = l.scanned_at ? new Date(/^\d{4}-\d{2}-\d{2}$/.test(l.scanned_at) ? l.scanned_at + 'T12:00:00' : l.scanned_at).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) : '';
+      // A scan describes the day it was taken; say how long ago that was.
+      const age = window.GaiaMyReadings.ageOf ? window.GaiaMyReadings.ageOf(l.scanned_at) : null;
+      return '<section class="g-home2__state g-home2__state--reading" aria-label="Your latest reading">'
+        + '<p class="g-super-kicker">' + (st.new_reading ? 'New reading' : (age && age.stale ? 'Your last reading' : 'Your latest reading')) + (day ? ' · ' + esc(day) : '') + (age ? ' · ' + esc(age.label) : '') + '</p>'
+        + '<div class="g-home2__nums">'
+        + '<div class="g-home2__num"><strong>' + esc(fmt(l.energy, 0)) + '</strong><span>Energy</span></div>'
+        + '<div class="g-home2__num"><strong>' + esc(fmt(l.stress, 2)) + '</strong><span>Stress</span></div></div>'
+        + (r.summary && r.summary.headline ? '<p class="g-home2__state-line">' + esc(r.summary.headline) + '</p>' : '')
+        + (age && age.stale ? '<p class="g-home2__state-line g-home2__state-hint">This was ' + esc(age.label) + '. A new Bio-Well scan would show where you are now. <button type="button" class="g-linkbtn" data-dir-intent="scan">Book a scan</button></p>' : '')
+        + '<div class="g-home2__actions"><a class="g-btn g-btn--primary g-btn--sm" href="home.html?view=profile&section=readings" data-open-readings>' + icon('pulse') + ' View reading</a>'
+        // Gaia Assist never reads reading values (the promise on You), so the
+        // second action explains the numbers rather than offering an AI read.
+        + '<a class="g-btn g-btn--secondary g-btn--sm" href="home.html?view=profile&section=readings" data-open-readings="explain">' + icon('question') + ' What these numbers mean</a>'
+        + '</div></section>';
+    }
+    if (st.linked) {
+      return '<section class="g-home2__state" aria-label="Your latest reading" aria-busy="true"><p class="g-super-kicker">Your latest reading</p>'
+        + '<p class="g-home2__state-line">Fetching your latest reading from Bio-Well…</p></section>';
+    }
+    return '<section class="g-home2__state"><p class="g-super-kicker">Today</p><h2>Your daily energy check</h2>'
+      + '<p class="g-home2__state-line">Which centre today asks for, a short practice, and a streak that saves.</p>'
+      + '<div class="g-home2__actions"><a class="g-btn g-btn--primary g-btn--sm" href="home.html?view=daily" data-app-nav="daily">' + icon('sun') + ' Start today’s check</a></div></section>';
+  }
+  /** What is happening for me: my course and my next booking. Only what is the
+   * member's own; the gathering is the same for everyone, so it sits below
+   * under Upcoming instead of implying it was chosen for them. */
+  function forYou() {
+    const items = [];
+    const course = courseGrants()[0];
+    const appt = upcomingAppointments()[0];
+    if (course && course.openUrl) items.push('<button type="button" class="g-home2__tile" data-super-course="' + esc(course.openUrl) + '" data-super-course-title="' + esc(course.title || course.name || 'Gaia Healers Academy') + '">'
+      + '<span class="g-home2__tile-icon">' + icon('book-open') + '</span><span class="g-home2__tile-copy"><small>Continue learning</small><strong>' + esc(course.title || course.name || 'Your course') + '</strong></span></button>');
+    if (appt) items.push('<a class="g-home2__tile" href="home.html?view=bookings"><span class="g-home2__tile-icon">' + icon('calendar-check') + '</span><span class="g-home2__tile-copy"><small>Coming up</small><strong>' + esc(appt.title || 'Your appointment') + '</strong><em>' + esc(appointmentWhen(appt)) + '</em></span></a>');
+    if (!items.length) return '';
+    return '<section class="g-home2__for" aria-label="For you"><p class="g-super-kicker">For you</p><div class="g-home2__for-grid">' + items.join('') + '</div></section>';
+  }
+  /** The next gathering, for everyone: a secondary row, not part of For you. */
+  function upcoming() {
+    const ev = eventCompact();
+    return ev ? '<section class="g-home2__upcoming" aria-label="Upcoming"><p class="g-super-kicker">Upcoming</p>' + ev + '</section>' : '';
+  }
+  window.addEventListener('gaia:readings-loaded', () => { if (memberState().authed && document.querySelector('.g-home2')) renderHome(); });
+  document.addEventListener('click', (e) => {
+    const open = e.target.closest('[data-open-readings]');
+    if (open) {
+      e.preventDefault(); window.GaiaAppShell?.go?.('profile');
+      setTimeout(() => {
+        window.dispatchEvent(new CustomEvent('gaia:open-readings'));
+        if (open.getAttribute('data-open-readings') === 'explain') setTimeout(() => { const d = document.querySelector('#member-readings .g-readings__explain'); if (d) { d.open = true; d.scrollIntoView({ block: 'center' }); } }, 400);
+      }, 80);
+    }
+  });
+
   /** One short line under the greeting, only when there is something to say. */
   function homeLine() {
     const n = upcomingAppointments().length, c = courseGrants().length;
     if (n) return n === 1 ? 'One session coming up.' : n + ' sessions coming up.';
     if (c) return c === 1 ? 'Your course is waiting.' : c + ' courses in your account.';
     return dateLabel();
-  }
-  /** The one next step: a course, a booking, your readings, or today\u2019s check. Same destinations as before. */
-  function nextStep() {
-    const firstCourse = courseGrants()[0];
-    const nextAppointment = upcomingAppointments()[0];
-    if (firstCourse?.openUrl) {
-      // Both a course and a booking: the course leads, the booking is named on a second line.
-      const also = nextAppointment ? '<a class="g-home2__also" href="home.html?view=bookings">' + icon('calendar-check') + ' Also coming up: ' + esc(nextAppointment.title || 'your appointment') + ' · ' + esc(appointmentWhen(nextAppointment)) + '</a>' : '';
-      return '<section class="g-home2__next"><p class="g-super-kicker">Continue learning</p><h2>' + esc(firstCourse.title || firstCourse.name || 'Your course') + '</h2>'
-        + '<p>Lessons and verified progress open in your Academy workspace.</p>'
-        + '<button type="button" class="g-btn g-btn--primary g-btn--sm" data-super-course="' + esc(firstCourse.openUrl) + '" data-super-course-title="' + esc(firstCourse.title || firstCourse.name || 'Gaia Healers Academy') + '">' + icon('book-open') + ' Open course</button>' + also + '</section>';
-    }
-    if (nextAppointment) {
-      return '<section class="g-home2__next"><p class="g-super-kicker">Coming up</p><h2>' + esc(nextAppointment.title || 'Your appointment') + '</h2>'
-        + '<p>' + esc(appointmentWhen(nextAppointment)) + '</p><a class="g-btn g-btn--primary g-btn--sm" href="home.html?view=bookings">' + icon('calendar-check') + ' View booking</a></section>';
-    }
-    const r = (window.GaiaMyReadings && window.GaiaMyReadings.status && window.GaiaMyReadings.status()) || {};
-    if (r.linked) {
-      return '<section class="g-home2__next"><p class="g-super-kicker">' + (r.new_reading ? 'New reading' : 'Your readings') + '</p><h2>' + (r.new_reading ? 'A new reading from your practitioner' : 'Your Bio-Well readings') + '</h2>'
-        + '<p>Summary, energy and stress, your seven centres, and how things moved.</p><a class="g-btn g-btn--primary g-btn--sm" href="home.html?view=profile&section=readings">' + icon('pulse') + ' Open my readings</a></section>';
-    }
-    return '<section class="g-home2__next"><p class="g-super-kicker">Today</p><h2>Your daily energy check</h2>'
-      + '<p>Which centre today asks for, today\u2019s sky, and a streak that saves.</p><a class="g-btn g-btn--primary g-btn--sm" href="home.html?view=daily" data-app-nav="daily">' + icon('sun') + ' Start today\u2019s check</a></section>';
   }
   /** The next gathering, compact: thumbnail, name, when and where, the same two buttons. */
   function eventCompact() {
@@ -1850,7 +1895,7 @@
       const meeting = item.meetingLocation || '';
       const join = item.isVideo && meeting ? '<a class="g-btn g-btn--primary g-btn--sm" href="' + esc(meeting) + '" target="_blank" rel="noopener noreferrer">Join meeting</a>' : '';
       return '<article class="g-booking-item"><div><p class="g-super-kicker">' + esc(item.status || 'Scheduled') + '</p><h2>' + esc(item.title || 'Appointment') + '</h2><p>' + esc(appointmentWhen(item)) + (item.address ? ' · ' + esc(item.address) : '') + '</p></div>' + join + '</article>';
-    }).join('') : '<section class="g-super-empty-panel"><h2>No upcoming appointments</h2><p>Choose a verified Gaia Healers booking option below when you are ready.</p></section>';
+    }).join('') : '<section class="g-super-empty-panel"><h2>Nothing booked yet</h2><p>When you book a session it appears here with its date and time. The sessions you can book are just below.</p></section>';
     root.innerHTML = '<div class="g-super-page-head"><p class="g-super-kicker">Your schedule</p><h1>Bookings</h1><p>Your appointments appear here automatically.</p></div>' + rows + bookingCatalog();
     bind(root);
   }
@@ -1871,7 +1916,7 @@
   function bookingCatalog() {
     const verified = bookingSet();
     return '<section class="g-super-list"><div class="g-super-section-head"><div><p class="g-super-kicker">Schedule</p><h2>Book a session</h2></div></div>'
-      + verified.map((item) => '<button type="button" class="g-super-row" data-book-inline="' + esc(item.openUrl || '') + '" data-book-title="' + esc(item.name || 'Book a session') + '"><span class="g-super-row__icon">' + icon('calendar-plus') + '</span><span><strong>' + esc(item.name || 'Book a session') + '</strong><em>Open the secure booking form</em></span>' + icon('caret-right') + '</button>').join('') + '</section>';
+      + verified.map((item) => '<button type="button" class="g-super-row" data-book-inline="' + esc(item.openUrl || '') + '" data-book-title="' + esc(item.name || 'Book a session') + '"><span class="g-super-row__icon">' + icon('calendar-plus') + '</span><span><strong>' + esc(item.name || 'Book a session') + '</strong><em>Choose a time</em></span>' + icon('caret-right') + '</button>').join('') + '</section>';
   }
 
   function renderInbox() {
@@ -1883,8 +1928,8 @@
     }
     const items = notifications();
     const rows = items.length ? items.map((item) => '<article class="g-super-row g-super-row--static' + (item.unread ? ' is-unread' : '') + '"><span class="g-super-row__icon">' + icon(item.unread ? 'chat-circle-dots' : 'chat-circle') + '</span><span><small>' + (item.unread ? esc(item.unread + ' unread') : 'Conversation') + '</small><strong>' + esc(item.lastMessage || 'Open your Gaia Healers portal to continue this conversation.') + '</strong><em>' + esc(item.updatedAt ? new Date(item.updatedAt).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' }) : '') + '</em></span></article>').join('')
-      : '<section class="g-super-empty-panel"><h2>You’re all caught up</h2><p>No messages yet.</p></section>';
-    root.innerHTML = '<div class="g-super-page-head"><p class="g-super-kicker">Member messages</p><h1>Inbox</h1><p>Read-only summaries of your messages. Continue securely in the member portal.</p></div>'
+      : '<section class="g-super-empty-panel"><h2>No messages yet</h2><p>Messages from Gaia Healers and your practitioner will appear here.</p></section>';
+    root.innerHTML = '<div class="g-super-page-head"><p class="g-super-kicker">Member messages</p><h1>Inbox</h1><p>Your latest messages. Reply in the member portal.</p></div>'
       + '<section class="g-super-list">' + rows + '<div class="g-super-list__footer"><button type="button" class="g-btn g-btn--secondary" data-open-in-app="' + esc('https://education.gaiahealers.com') + '" data-in-app-title="Gaia Healers member portal">Open member portal</button></div></section>';
     bind(root); updateInboxBadge();
   }
@@ -1896,6 +1941,11 @@
     if (!link) return;
     link.querySelector('.gaia-tabbar__badge')?.remove();
     const unread = Number(memberState().data?.notif?.counts?.unread || 0);
+    // The Inbox row on Community says it too, from the same count (no new data).
+    document.querySelectorAll('[data-screen="community"] a[href="home.html?view=inbox"] small').forEach((n) => {
+      if (!n.dataset.base) n.dataset.base = n.textContent;
+      n.textContent = memberState().authed && unread > 0 ? unread + ' unread' : n.dataset.base;
+    });
     if (memberState().authed && unread > 0) {
       const badge = document.createElement('span');
       badge.className = 'gaia-tabbar__badge';

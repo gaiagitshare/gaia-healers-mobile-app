@@ -753,6 +753,7 @@ body.gaia-booking-open{overflow:hidden;}
       if (kicker) kicker.textContent = 'Gaia Healers member pass';
       if (title) title.textContent = 'Member Pass';
       if (sub) sub.textContent = 'One secure sign-in for everything in your account.';
+      { const g = el('member-glance'); if (g) { g.hidden = true; g.innerHTML = ''; } }
       box.innerHTML =
         '<article class="g-card g-card--feature"><p class="g-card__label">Existing members</p>'
         + '<p class="g-card__value g-card__value--lg">Sync your Gaia Healers access</p>'
@@ -777,6 +778,26 @@ body.gaia-booking-open{overflow:hidden;}
     if (sub) sub.textContent = bits.join(' · ');
 
     const cards = [];
+
+    // At a glance: the four things a member most often comes to You for, each
+    // a way in. Counts are what the member really has; nothing is invented.
+    {
+      const nCourses = (d.courses && Array.isArray(d.courses.courses)) ? d.courses.courses.length : 0;
+      const nCircles = (state.data.access && state.data.access.communities && Array.isArray(state.data.access.communities.unlocked)) ? state.data.access.communities.unlocked.length : 0;
+      const now = Date.now();
+      const nBook = ((d.appts && d.appts.appointments) || []).filter((a) => Date.parse(a.startTime || '') > now).length;
+      const rd = (window.GaiaMyReadings && window.GaiaMyReadings.status && window.GaiaMyReadings.status()) || {};
+      const tile = (icon, value, label, href, attr) => '<a class="g-glance__tile" href="' + esc(href) + '"' + (attr || '') + '><i class="ph ph-' + icon + '" aria-hidden="true"></i><strong>' + esc(value) + '</strong><span>' + esc(label) + '</span></a>';
+      const glanceHost = el('member-glance');
+      const glanceHtml = ('<nav class="g-glance" aria-label="At a glance">'
+        + tile('pulse', rd.linked ? (rd.new_reading ? 'New' : 'Shared') : 'Not shared', 'Readings', 'home.html?view=profile&section=readings', ' data-open-readings')
+        + tile('users-three', String(nCircles), nCircles === 1 ? 'Community' : 'Communities', 'home.html?view=community')
+        + tile('graduation-cap', String(nCourses), nCourses === 1 ? 'Course' : 'Courses', 'home.html?view=academy')
+        + tile('calendar-check', String(nBook), nBook === 1 ? 'Booking' : 'Bookings', 'home.html?view=bookings')
+        + '</nav>');
+      // First under your name, above your readings and your pass.
+      if (glanceHost) { glanceHost.innerHTML = glanceHtml; glanceHost.hidden = false; } else cards.push(glanceHtml);
+    }
 
     // Member Pass + My Access + Included + Next Level, rendered entirely from
     // the v2 read model. Nothing below infers a benefit from the tier name.
@@ -930,9 +951,9 @@ body.gaia-booking-open{overflow:hidden;}
         + '<i class="ph ph-caret-down g-sync__chev" aria-hidden="true"></i></summary>'
         + '<div class="g-sync__lessons">' + rows + '</div></details>';
     }).join('');
-    const header = '<article class="g-card g-card--feature"><p class="g-card__label">Your Academy · live from your membership</p>'
+    const header = '<article class="g-card g-card--feature"><p class="g-card__label">Your Academy</p>'
       + '<p class="g-card__value g-card__value--lg">Your courses</p>'
-      + '<p class="g-card__meta">' + data.courses.length + ' courses unlocked — tap one to see its videos.</p></article>';
+      + '<p class="g-card__meta">' + data.courses.length + (data.courses.length === 1 ? ' course' : ' courses') + ' on your account. Open one to see its lessons.</p></article>';
     box.querySelectorAll('[data-acad-sync]').forEach((n) => n.remove());
     const host = document.createElement('div'); host.className = 'g-page-sec'; host.setAttribute('data-acad-sync', '');
     host.innerHTML = header + '<div class="g-sync-list">' + courseHtml + '</div>';
@@ -985,6 +1006,11 @@ body.gaia-booking-open{overflow:hidden;}
     } catch (_) { state.academyOwned = []; }
     return state.academyOwned;
   }
+  // The readings tile on You learns the sharing state when it arrives.
+  window.addEventListener('gaia:readings-status', (e) => {
+    const d = e.detail || {};
+    document.querySelectorAll('.g-glance [data-open-readings] strong').forEach((n) => { n.textContent = d.linked ? (d.new_reading ? 'New' : 'Shared') : 'Not shared'; });
+  });
   function renderAcademy() {
     const box = el('member-academy');
     if (!box) return;
@@ -1063,9 +1089,28 @@ body.gaia-booking-open{overflow:hidden;}
     // "no courses yet" card below (it used to follow a second card with the
     // same "View memberships" button).
     if (!state.authed) parts.push(academyHead);
+    // The catalogue in a few named shelves instead of one wall of records:
+    // what is free to start, the certifications, Elevate and its workshops
+    // (they stay here, Babak 5 Oct), and the rest. A shelf longer than six
+    // folds the remainder behind "Show all".
     if (exploreTracks.length) {
-      parts.push(gSec('Explore more courses',
-        '<div class="g-access-grid">' + exploreTracks.map(trackCard).join('') + '</div>'));
+      const isEvent = (t) => /elevate|workshop/i.test(t.name || '');
+      const isFree = (t) => key(t.accessLevel) === 'free';
+      const isCert = (t) => /certif|level \d|training/i.test(t.name || '');
+      const shelves = [
+        ['Start free', 'Open to everyone, no membership needed.', exploreTracks.filter((t) => isFree(t) && !isEvent(t))],
+        ['Certifications', 'Bio-Well and Healeex training, from first steps to expert.', exploreTracks.filter((t) => !isFree(t) && !isEvent(t) && isCert(t))],
+        ['Elevate 2026 & workshops', 'Passes and upgrades for the conference.', exploreTracks.filter(isEvent)],
+      ];
+      const placed = new Set(shelves.flatMap((sh) => sh[2]));
+      shelves.push(['More from the Academy', '', exploreTracks.filter((t) => !placed.has(t))]);
+      shelves.filter((sh) => sh[2].length).forEach(([title, lead, list]) => {
+        const first = list.slice(0, 6).map(trackCard).join('');
+        const rest = list.slice(6).map(trackCard).join('');
+        parts.push(gSec(title, (lead ? '<p class="g-shelf__lead">' + esc(lead) + '</p>' : '')
+          + '<div class="g-access-grid">' + first + '</div>'
+          + (rest ? '<details class="g-shelf__more"><summary>Show all ' + list.length + '</summary><div class="g-access-grid">' + rest + '</div></details>' : '')));
+      });
     }
     if (state.authed && !hasAccess) {
       parts.unshift('<article class="g-card g-card--feature"><p class="g-card__value g-card__value--lg">No courses on your account yet</p>'
@@ -1116,10 +1161,12 @@ body.gaia-booking-open{overflow:hidden;}
       meta = c.reason || 'Coming soon to Gaia Healers';
       act = '<span class="g-chip g-access__act">Soon</span>';
     } else {
-      meta = c.reason === '' ? '' : (c.reason || 'Not included in your membership');
+      // The chip says it once; repeating "Not included in your membership"
+      // under every circle read as a wall of refusals.
+      meta = interested ? (c.reason || 'Gaia Healers will confirm your access') : (c.reason && c.reason !== 'Not included in your membership' ? c.reason : '');
       act = interested
         ? '<span class="g-chip g-chip--pending g-access__act">Requested</span>'
-        : '<span class="g-chip g-chip--lock g-access__act">Members</span>';
+        : '<span class="g-chip g-chip--lock g-access__act">' + (state.authed ? 'Not in your plan' : 'Members') + '</span>';
     }
     return '<div class="g-access ' + cls + '"><div class="g-access__body">'
       + '<span class="g-access__name">' + esc(c.name) + '</span>'
@@ -1163,12 +1210,7 @@ body.gaia-booking-open{overflow:hidden;}
     const locked = (cm.locked || []).filter((x) => x.state !== 'unknown');
     const soon = (cm.locked || []).filter((x) => x.state === 'unknown');
     const m = acc.member || {};
-    if (sub) {
-      const bits = [m.name || 'Member'];
-      if (m.membershipTier) bits.push(m.membershipTier + ' member');
-      if (m.practitioner) bits.push(m.practitionerCertified ? 'Certified practitioner' : 'Practitioner');
-      sub.textContent = bits.join(' · ');
-    }
+    if (sub) sub.textContent = 'Your circles, what is on, and the people who can help.';
 
     const parts = [announcementsHtml(state.announcements), '<div class="g-stats">'
       + '<div class="g-stat"><span class="g-stat__n g-stat__n--accent">' + unlocked.length + '</span><span class="g-stat__l">Unlocked</span></div>'
@@ -1178,7 +1220,7 @@ body.gaia-booking-open{overflow:hidden;}
     if (unlocked.length) {
       parts.push(gSec('Your communities', '<div class="g-access-grid">' + unlocked.map((x) => accessItem(x, 'unlocked')).join('') + '</div>'));
     } else {
-      parts.push('<article class="g-card"><p class="g-card__label">Your communities</p><p class="g-card__meta">No communities unlocked yet — your membership will light them up here.</p></article>');
+      parts.push('<article class="g-card"><p class="g-card__label">Your communities</p><p class="g-card__meta">You are not in a circle yet. Each circle below shows how it opens.</p></article>');
     }
     if (locked.length) {
       parts.push(gSec('Unlock with membership', '<div class="g-access-grid">' + locked.map((x) => accessItem(x, 'locked')).join('') + '</div>',
@@ -1325,10 +1367,10 @@ body.gaia-booking-open{overflow:hidden;}
       : (membership && ['active', 'trialing', 'past_due'].includes(membership.status) ? membership.key : 'free');
     const plans = Array.isArray(state.plans) ? state.plans : [];
     if (!plans.length) {
-      return '<article class="g-card"><p class="g-card__meta">Membership plans are unavailable right now.</p></article>';
+      return '<article class="g-card"><p class="g-card__meta">The membership plans could not be loaded just now. Please try again in a moment.</p></article>';
     }
-    const intro = '<article class="g-card g-tier-intro"><p class="g-card__label">Gaia 2.0 Practitioners</p>'
-      + '<p class="g-card__meta">Choose a practitioner path that matches your stage.</p></article>';
+    const intro = '<article class="g-card g-tier-intro"><p class="g-card__label">Membership plans</p>'
+      + '<p class="g-card__meta">Start free, and grow into a plan when you want more for your practice.</p></article>';
     // Plans below the member's own are included in it ("Everything in …"):
     // no "Choose" button pushing a downgrade, and no bright featured button.
     const currentRank = currentKey ? plans.findIndex((p) => p.key === currentKey) : -1;
@@ -1378,7 +1420,7 @@ body.gaia-booking-open{overflow:hidden;}
       + (rows.length
         ? '<ul class="g-tier__access-list">' + rows.join('') + '</ul>'
         : '<p class="g-card__meta">Nothing on record yet — courses and communities you are enrolled in will appear here.</p>')
-      + '<p class="g-tier__access-all"><a href="home.html?view=profile">Everything in My Access &rarr;</a></p></div>';
+      + '<p class="g-tier__access-all"><a href="home.html?view=profile">See all your access &rarr;</a></p></div>';
   }
 
   // Store "Membership" tab. Products live in the "Shop" tab (gaia-store.js);

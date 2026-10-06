@@ -69,13 +69,14 @@
   <link rel="stylesheet" href="gaia-superapp.css?v=20261005b1" />
   <link rel="stylesheet" href="gaia-fit.css?v=20261005x" />
   <link rel="stylesheet" href="gaia-journey.css?v=20261002b" />
-  <link rel="stylesheet" href="gaia-avatar.css?v=20261005x" />
-  <link rel="stylesheet" href="gaia-app-v3.css?v=20261005x" />
-  <link rel="stylesheet" href="gaia-app-v3-today-energy.css?v=20261005a2" />
+  <link rel="stylesheet" href="gaia-avatar.css?v=20261006f" />
+  <link rel="stylesheet" href="gaia-app-v3.css?v=20261006k" />
+  <link rel="stylesheet" href="gaia-app-v3-today-energy.css?v=20261006k" />
   <link rel="stylesheet" href="gaia-app-v3-learn-connect.css?v=20261005c1" />
-  <link rel="stylesheet" href="gaia-app-v3-shop-you.css?v=20261005t1" />
+  <link rel="stylesheet" href="gaia-app-v3-shop-you.css?v=20261006g" />
   <link rel="stylesheet" href="gaia-guest-home.css?v=20261005g" />
   <link rel="stylesheet" href="gaia-assist-v3.css?v=20260928c" />
+  <link rel="stylesheet" href="gaia-shell.css?v=20261006s" />
   <link rel="stylesheet" href="vendor/leaflet/leaflet.css?v=1.9.4" />
   <link rel="stylesheet" href="vendor/leaflet/MarkerCluster.css?v=1.5.3" />
   <link rel="stylesheet" href="vendor/leaflet/MarkerCluster.Default.css?v=1.5.3" />
@@ -148,33 +149,33 @@
       </header>
       <main class="gaia-main g-page g-energy">
         <div class="g-page__head g-page__head--energy">
-          <p class="g-page__kicker">Your wellness compass</p>
+          <p class="g-page__kicker">How you are, today</p>
           <h1 class="g-page__title">Energy</h1>
           <p class="g-page__sub">Choose what you need today.</p>
         </div>
 
-        <nav id="wellness-tabs" class="g-energy-switcher" aria-label="Energy tools">
-          <button type="button" data-tab="check" aria-selected="true"><i class="ph ph-sparkle" aria-hidden="true"></i><span>Energy check</span></button>
-          <button type="button" data-tab="horoscope" aria-selected="false"><i class="ph ph-moon-stars" aria-hidden="true"></i><span>Horoscope</span></button>
-          <button type="button" data-tab="chakras" aria-selected="false"><i class="ph ph-circles-three-plus" aria-hidden="true"></i><span>Chakra match</span></button>
-        </nav>
+        <div id="wellness-tabs" class="g-energy-switcher" role="tablist" aria-label="Energy tools">
+          <button type="button" role="tab" aria-controls="panel-energy" data-tab="check" aria-selected="true"><i class="ph ph-sparkle" aria-hidden="true"></i><span>Energy check</span></button>
+          <button type="button" role="tab" aria-controls="panel-horoscope" data-tab="horoscope" aria-selected="false"><i class="ph ph-moon-stars" aria-hidden="true"></i><span>Horoscope</span></button>
+          <button type="button" role="tab" aria-controls="panel-chakras" data-tab="chakras" aria-selected="false"><i class="ph ph-circles-three-plus" aria-hidden="true"></i><span>Chakra match</span></button>
+        </div>
 
-        <section id="panel-energy" class="g-energy-panel" data-energy-panel="check">
+        <section id="panel-energy" role="tabpanel" class="g-energy-panel" data-energy-panel="check">
           <section id="me-wellness" class="g-page-sec" data-wellness-mode="check" aria-label="Your daily energy check"></section>
         </section>
 
-        <section id="panel-horoscope" class="g-energy-panel" data-energy-panel="horoscope" hidden>
+        <section id="panel-horoscope" role="tabpanel" class="g-energy-panel" data-energy-panel="horoscope" hidden>
           <section id="horoscope-wellness" class="g-page-sec" data-wellness-mode="horoscope" aria-label="Your wellness horoscope"></section>
         </section>
 
-        <section id="panel-chakras" class="g-energy-panel" data-energy-panel="chakras" hidden>
+        <section id="panel-chakras" role="tabpanel" class="g-energy-panel" data-energy-panel="chakras" hidden>
           <section id="home-chakra-hero" class="g-chakra-hero" aria-label="Interactive chakra match"></section>
         </section>
 
         <section class="g-energy-more" aria-label="More energy tools">
           <div class="g-energy-intro">
-            <p class="g-sec-head__kicker">More in Energy</p>
-            <h2>Your self-discovery toolkit</h2>
+            <p class="g-sec-head__kicker">Explore more</p>
+            <h2>More ways to look inward</h2>
             <p>Reflective tools that read from your birth date and today &mdash; a wellness practice, not a measurement.</p>
           </div>
 
@@ -305,27 +306,6 @@
           <p class="g-page__sub" id="community-sub">Your circles, people and live updates — all in one place.</p>
         </div>
 
-        <section class="g-super-list" aria-label="Connect">
-          <div class="g-super-section-head"><div><p class="g-super-kicker">Connect</p><h2>Find your people</h2></div></div>
-          <div class="g-energy-launch">
-            <a class="g-energy-launch__card" href="home.html?view=directory" data-app-nav="directory">
-              <span class="g-energy-launch__icon"><i class="ph ph-map-pin-line" aria-hidden="true"></i></span>
-              <span class="g-energy-launch__body"><strong>Find a Healer</strong><small>Browse verified Gaia practitioners</small></span>
-              <i class="ph ph-arrow-right g-energy-launch__go" aria-hidden="true"></i>
-            </a>
-            <button type="button" class="g-energy-launch__card" data-open-in-app="https://calendly.com/nimafarshid/gaia-healers-meeting" data-in-app-title="Meet Dr. Nima Farshid">
-              <span class="g-energy-launch__icon"><i class="ph ph-calendar-heart" aria-hidden="true"></i></span>
-              <span class="g-energy-launch__body"><strong>Schedule with Dr. Nima</strong><small>Book a call with the founder</small></span>
-              <i class="ph ph-arrow-right g-energy-launch__go" aria-hidden="true"></i>
-            </button>
-            <a class="g-energy-launch__card" href="home.html?view=bookings" data-app-nav="bookings">
-              <span class="g-energy-launch__icon"><i class="ph ph-calendar-check" aria-hidden="true"></i></span>
-              <span class="g-energy-launch__body"><strong>Book a Session</strong><small>Sessions &amp; consultations</small></span>
-              <i class="ph ph-arrow-right g-energy-launch__go" aria-hidden="true"></i>
-            </a>
-          </div>
-        </section>
-
         <section class="g-super-list" aria-label="Your circles">
           <div class="g-super-section-head"><div><p class="g-super-kicker">Discussions</p><h2>Your circles</h2></div></div>
           <div id="community-body" class="g-page-sec" aria-live="polite"></div>
@@ -344,15 +324,30 @@
               <span class="g-energy-launch__body"><strong>Gaia Radio</strong><small>The Gaia Healers broadcast</small></span>
               <i class="ph ph-arrow-right g-energy-launch__go" aria-hidden="true"></i>
             </button>
-          </div>
-        </section>
-
-        <section class="g-super-list" aria-label="People">
-          <div class="g-super-section-head"><div><p class="g-super-kicker">People</p><h2>Messages</h2></div></div>
-          <div class="g-energy-launch">
             <a class="g-energy-launch__card" href="home.html?view=inbox" data-app-nav="inbox">
               <span class="g-energy-launch__icon"><i class="ph ph-chat-circle-dots" aria-hidden="true"></i></span>
               <span class="g-energy-launch__body"><strong>Inbox</strong><small>Your message summaries</small></span>
+              <i class="ph ph-arrow-right g-energy-launch__go" aria-hidden="true"></i>
+            </a>
+          </div>
+        </section>
+
+        <section class="g-super-list" aria-label="Connect">
+          <div class="g-super-section-head"><div><p class="g-super-kicker">Support</p><h2>Practitioners &amp; sessions</h2></div></div>
+          <div class="g-energy-launch">
+            <a class="g-energy-launch__card" href="home.html?view=directory" data-app-nav="directory">
+              <span class="g-energy-launch__icon"><i class="ph ph-map-pin-line" aria-hidden="true"></i></span>
+              <span class="g-energy-launch__body"><strong>Find a Healer</strong><small>Browse verified Gaia practitioners</small></span>
+              <i class="ph ph-arrow-right g-energy-launch__go" aria-hidden="true"></i>
+            </a>
+            <button type="button" class="g-energy-launch__card" data-open-in-app="https://calendly.com/nimafarshid/gaia-healers-meeting" data-in-app-title="Meet Dr. Nima Farshid">
+              <span class="g-energy-launch__icon"><i class="ph ph-calendar-heart" aria-hidden="true"></i></span>
+              <span class="g-energy-launch__body"><strong>Schedule with Dr. Nima</strong><small>Book a call with the founder</small></span>
+              <i class="ph ph-arrow-right g-energy-launch__go" aria-hidden="true"></i>
+            </button>
+            <a class="g-energy-launch__card" href="home.html?view=bookings" data-app-nav="bookings">
+              <span class="g-energy-launch__icon"><i class="ph ph-calendar-check" aria-hidden="true"></i></span>
+              <span class="g-energy-launch__body"><strong>Book a Session</strong><small>Sessions &amp; consultations</small></span>
               <i class="ph ph-arrow-right g-energy-launch__go" aria-hidden="true"></i>
             </a>
           </div>
@@ -403,6 +398,7 @@
              practitioner by a code the member asks for. Rendered by
              gaia-my-readings.js only when the server says the feature is on.
              It sits first: it is the one thing on You that changes week to week. -->
+        <div id="member-glance" hidden></div>
         <div id="member-readings" class="g-page-sec" aria-label="My readings" hidden></div>
         <div id="member-me" class="g-page-sec" role="tabpanel" aria-label="You"></div>
         <!-- Your data and sharing: one place for what is shared with whom, how to
@@ -425,9 +421,9 @@
       </header>
       <main class="gaia-main g-store">
         <div class="g-store__head">
-          <p class="g-store__kicker">Tools for your practice</p>
+          <p class="g-store__kicker">Shop</p>
           <h1 class="g-store__title">Gaia Healers Store</h1>
-          <p class="g-store__sub">Curated devices and tools to deepen your practice.</p>
+          <p class="g-store__sub">Bio-Well devices, courses, crystals and the tools Gaia Healers use, with membership plans beside them.</p>
         </div>
         <div class="g-tabs" role="tablist" aria-label="Store sections">
           <button type="button" class="g-tab is-active" data-store-tab="shop" role="tab" aria-selected="true" aria-controls="store-products">Shop</button>
@@ -443,14 +439,14 @@
     <!-- Admin is NOT part of the public app. It lives on a separate,
          password-gated surface served by the proxy: api.gaiahealers.app/admin -->
   </div>
-  <script defer src="shared-nav.js?v=20261004b"></script>
+  <script defer src="shared-nav.js?v=20261006k"></script>
   <script defer src="gaia-realtime-voice.js?v=20261004z"></script>
-  <script defer src="gaia-membership-ui.js?v=20261005m2"></script>
+  <script defer src="gaia-membership-ui.js?v=20261006j"></script>
   <script defer src="gaia-app-guard.js"></script>
   <script defer src="gaia-journey.js?v=20261005a"></script>
-  <script defer src="gaia-member.js?v=20261005m1"></script>
+  <script defer src="gaia-member.js?v=20261006p"></script>
   <script defer src="gaia-academy-player.js?v=20261004z"></script>
-  <script defer src="gaia-wellness.js?v=20261004z"></script>
+  <script defer src="gaia-wellness.js?v=20261006a"></script>
   <script defer src="gaia-quiz.js?v=20260815b"></script>
   <script defer src="gaia-chakra-quiz.js?v=20261004z"></script>
   <script defer src="gaia-moon.js?v=20261004z"></script>
@@ -463,12 +459,12 @@
   <script defer src="gaia-store.js?v=20261005a"></script>
   <script defer src="staging-proxy/assist-guide.js?v=20261004a"></script>
   <script defer src="gaia-ui.js?v=20261005g"></script>
-  <script defer src="gaia-superapp.js?v=20261005a2"></script>
+  <script defer src="gaia-superapp.js?v=20261006s"></script>
   <script defer src="vendor/leaflet/leaflet.js?v=1.9.4"></script>
   <script defer src="vendor/leaflet/markercluster.js?v=1.5.3"></script>
   <script defer src="gaia-directory.js?v=20261005b"></script>
   <script defer src="gaia-share.js?v=20260820n"></script>
-  <script defer src="gaia-daily.js?v=20261004z"></script>
+  <script defer src="gaia-daily.js?v=20261006j"></script>
   <script defer src="gaia-onboard.js?v=20261004z"></script>
   <script>
     if ('serviceWorker' in navigator) {
@@ -477,13 +473,13 @@
   </script>
   <script src="gaia-install.js?v=20260820a" defer></script>
   <script src="gaia-practice.js?v=20260818a" defer></script>
-  <script src="gaia-practitioner.js?v=20261005t2" defer></script>
-  <script src="gaia-my-readings.js?v=20261005r2" defer></script>
-  <script src="gaia-sky.js?v=20261004z" defer></script>
+  <script src="gaia-practitioner.js?v=20261006p" defer></script>
+  <script src="gaia-my-readings.js?v=20261006i" defer></script>
+  <script src="gaia-sky.js?v=20261006j" defer></script>
   <script src="gaia-numerology.js?v=20260907c" defer></script>
   <script src="gaia-push.js?v=20261004z" defer></script>
   <!-- Gaia as a character: a layer over Assist, voice and navigation; nothing of its own -->
-  <script src="gaia-avatar.js?v=20261005h" defer></script>
+  <script src="gaia-avatar.js?v=20261006f" defer></script>
   <script src="gaia-myevents.js?v=20261005c1" defer></script>
   <script src="gaia-myschedule.js?v=20261004z" defer></script>
   <script src="gaia-people.js?v=20261004z" defer></script>

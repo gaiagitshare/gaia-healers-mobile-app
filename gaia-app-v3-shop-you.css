@@ -1384,3 +1384,20 @@ body.gaia-v2 [data-screen="store"] #store-memberships:has(> .g-tier--featured) >
 
 /* "Already a practitioner?" (Account card): hidden for practitioners, who have the Practice tab. */
 [data-prac-optin][hidden] { display: none !important; }
+
+/* —— Practice workspace header (gaia-practitioner.js workspaceHead) ——————— */
+.g-prac-ws { display: grid; gap: 14px; margin: 4px 0 22px; padding: 20px 22px; border-radius: 22px; background: radial-gradient(120% 140% at 100% 0%, rgba(88, 199, 232, 0.10), transparent 55%), var(--g-surface-hi); }
+.g-prac-ws__kicker { margin: 0; color: var(--g-accent); font-size: 11.5px; font-weight: 600; letter-spacing: 0.1em; text-transform: uppercase; }
+.g-prac-ws__name { margin: 4px 0 0; font-size: clamp(22px, 2.6vw, 28px); font-weight: 600; letter-spacing: -0.015em; }
+.g-prac-ws__pills { display: flex; flex-wrap: wrap; gap: 8px; }
+.g-prac-ws__pill { display: inline-flex; align-items: center; gap: 6px; padding: 4px 11px; border-radius: 999px; font-size: 12.5px; font-weight: 600; border: 1px solid var(--g-line); color: var(--g-text-muted); }
+.g-prac-ws__pill.is-ok { color: var(--g-accent); border-color: color-mix(in srgb, var(--g-accent) 40%, transparent); }
+.g-prac-ws__pill.is-pending { color: var(--g-warn); border-color: color-mix(in srgb, var(--g-warn) 45%, transparent); }
+.g-prac-ws__stats { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; margin: 0; }
+.g-prac-ws__stats div { padding: 10px 12px; border-radius: 14px; background: var(--g-surface); }
+.g-prac-ws__stats dt { color: var(--g-text-muted); font-size: 12px; }
+.g-prac-ws__stats dd { margin: 2px 0 0; font-size: 22px; font-weight: 600; font-variant-numeric: tabular-nums; }
+@media (min-width: 900px) {
+  .g-prac-ws { grid-template-columns: minmax(0, 1fr) auto; align-items: center; }
+  .g-prac-ws__stats { grid-column: 1 / -1; }
+}

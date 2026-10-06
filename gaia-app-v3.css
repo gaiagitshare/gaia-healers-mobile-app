@@ -46,7 +46,7 @@ body.gaia-v2 {
   --v3-cyan: #58c7e8;
   --v3-text: #f5f7f5;
   --v3-text-2: #a8b3ad;
-  --v3-muted: #718079;
+  --v3-muted: #86958e;   /* 4.5:1 on the card surface (was #718079, 4.25) */
   --v3-border: rgba(160, 255, 185, 0.16);
   --v3-border-strong: rgba(120, 245, 145, 0.42);
   /* Eyebrow labels: calm sage, not the interactive green. */

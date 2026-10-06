@@ -48,9 +48,15 @@ test('the daily energy check and the sky render on Today only; the member Home i
   const member = sa.slice(sa.indexOf('function renderHomeMember('), sa.indexOf('function homeLine()'));
   assert.doesNotMatch(member, /g-super-hero|g-super-services|g-super-sync|upgradeCard\(\)|primaryMemberAction\(\)/, 'no hero, no second access grid, no permanent sync notice, no giant upgrade card');
   assert.match(member, /<header class="g-home2__greet"><h1>' \+ greeting \+ '<\/h1>/, 'the greeting is the page heading');
-  for (const part of ['nextStep()', 'eventCompact()', "serviceLink(v, i, t, m)", 'bookActions()', 'membershipStrip()']) assert.ok(member.includes(part), part);
+  // 6 Oct 2026 hierarchy: my own state first (readings or today's check), then
+  // what is happening for me (course, booking, gathering), then my places.
+  for (const part of ['stateHero()', 'forYou()', "serviceLink(v, i, t, m)", 'bookActions()', 'upcoming()', 'membershipStrip()']) assert.ok(member.includes(part), part);
+  assert.ok(member.indexOf('stateHero()') < member.indexOf('forYou()'), 'my state leads');
+  const fy = sa.slice(sa.indexOf('function forYou()'), sa.indexOf('function upcoming()'));
+  assert.doesNotMatch(fy, /eventCompact\(\)/, 'For you is only the member\'s own things; the gathering is not personalised');
+  assert.match(sa, /function upcoming\(\)[\s\S]*eventCompact\(\)/, 'the gathering sits under Upcoming');
   assert.match(member, /meta\.degraded \|\| meta\.stale/, 'sync is said only when something is wrong');
-  assert.match(sa, /class="g-home2__also" href="home\.html\?view=bookings"/, 'a course and a booking: the booking is named on a second line');
+  assert.match(sa, /<small>Continue learning<\/small>[\s\S]*<small>Coming up<\/small>/, 'a course and a booking each get a For you tile');
   const guest = sa.slice(sa.indexOf('this is the\n      // guest on-ramp'), sa.indexOf('bind(root);\n    renderToday();'));
   assert.match(guest, /guestHero\(dayGreeting\)[\s\S]*guestExplore\(\)[\s\S]*guestJoin\(\)[\s\S]*guestEvent\(\)/, 'guest: what Gaia is, the tools, the way in, the gathering');
   assert.doesNotMatch(guest, /eventFeatureCarousel\(\)/);

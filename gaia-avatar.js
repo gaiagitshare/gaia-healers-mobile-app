@@ -57,7 +57,10 @@
     community: { label: 'My communities', icon: 'users', run: () => goAndPoint('community', undefined, 'Your circles are here.') },
     plans: { label: 'See membership plans', icon: 'star', run: () => goAndPoint('store', { tab: 'membership' }, 'The plans are here.') },
     breath: { label: 'A minute of breath', icon: 'leaf', run: () => { go('wellness'); requestAnimationFrame(() => { try { window.GaiaTools?.open?.('breath'); } catch (_) { /* ignore */ } }); } },
-    later: { label: 'Later', icon: 'x', run: () => hideBubble() },
+    later: { label: 'Not now', icon: 'x', run: () => hideBubble() },
+    startfree: { label: 'Show me what is free', icon: 'book', run: () => { const h = [...document.querySelectorAll('[data-screen="academy"] .g-section__title, [data-screen="academy"] h2')].find((n) => /start free/i.test(n.textContent)); if (h) { h.scrollIntoView({ behavior: reduced() ? 'auto' : 'smooth', block: 'start' }); pointAt(h, { text: 'Open to everyone.', duration: 2600 }); } } },
+    nextlevel: { label: 'Show my next level', icon: 'star', run: () => { go('profile'); setTimeout(() => { const n = document.querySelector('[data-next-level]'); if (n) { n.scrollIntoView({ behavior: reduced() ? 'auto' : 'smooth', block: 'center' }); pointAt(n, { text: 'What it would add for you.', duration: 3000 }); } }, 450); } },
+    clientlatest: { label: 'Open the latest reading', icon: 'pulse', run: () => { const b = document.querySelector('[data-prac-open="latest"]'); const body = document.querySelector('[data-prac-body="latest"]'); if (b && body && body.hidden) b.click(); if (b) b.scrollIntoView({ behavior: reduced() ? 'auto' : 'smooth', block: 'center' }); } },
   };
   const ICONS = {
     chat: 'ph-chat-circle-dots', mic: 'ph-microphone', bolt: 'ph-lightning', leaf: 'ph-leaf', user: 'ph-user', pulse: 'ph-pulse',
@@ -227,13 +230,13 @@
     bubble.innerHTML = '<button type="button" class="gava-bubble__x" aria-label="Close">×</button>'
       + '<p class="gava-bubble__text">' + esc(b.text) + '</p>'
       + '<div class="gava-bubble__chips">' + (b.chips || []).filter((k) => ACTIONS[k]).map((k) =>
-        `<button type="button" class="gava-chip" data-act="${k}"><i class="ph ${ICONS[ACTIONS[k].icon] || 'ph-dot'}" aria-hidden="true"></i><span>${esc(ACTIONS[k].label)}</span><em aria-hidden="true">›</em></button>`).join('') + '</div>'
+        `<button type="button" class="gava-chip${k === 'later' ? ' gava-chip--quiet' : ''}" data-act="${k}"><i class="ph ${ICONS[ACTIONS[k].icon] || 'ph-dot'}" aria-hidden="true"></i><span>${esc(ACTIONS[k].label)}</span><em aria-hidden="true">›</em></button>`).join('') + '</div>'
       // Typing here opens the conversation with the words already in the box; nothing is sent until the member sends it.
-      + ((b.chips || []).length ? '<form class="gava-bubble__ask"><input type="text" class="gava-bubble__input" placeholder="Or type to Gaia…" aria-label="Type to Gaia" autocomplete="off" maxlength="300"><button type="submit" class="gava-bubble__send" aria-label="Open the conversation"><i class="ph ph-paper-plane-right" aria-hidden="true"></i></button></form>' : '');
+      + ((b.chips || []).length && !b.quiet ? '<form class="gava-bubble__ask"><input type="text" class="gava-bubble__input" placeholder="Or type to Gaia…" aria-label="Type to Gaia" autocomplete="off" maxlength="300"><button type="submit" class="gava-bubble__send" aria-label="Open the conversation"><i class="ph ph-paper-plane-right" aria-hidden="true"></i></button></form>' : '');
     bubble.hidden = false; char.setAttribute('aria-expanded', 'true');
     if (b.mood === 'new') setState('new'); else if (state === 'idle') setState('speaking');
     clearTimeout(bubbleTimer);
-    if (!sticky) bubbleTimer = setTimeout(hideBubble, 25000);
+    if (!sticky) bubbleTimer = setTimeout(hideBubble, b.quiet ? 20000 : 25000);
   }
   function hideBubble() {
     if (!bubble || bubble.hidden) return;
@@ -389,7 +392,6 @@
     { name: 'wiggle', ms: 1300, weight: 2 },
     { name: 'curious', ms: 1200, weight: 2 },
   ];
-  const HELLO_LINES = ['Need anything?', 'I\'m here ✨', 'Ask me anything'];
   let lastTouch = Date.now(), animating = false, idleTimer = null, helloTimer = null, helloIgnored = 0, helloShowing = false, tourRunning = false;
   function touched() { lastTouch = Date.now(); if (helloShowing) { helloShowing = false; helloIgnored = 0; } stopIdleAnim(); }
   const rnd = (lo, hi) => lo + Math.random() * (hi - lo);
@@ -439,11 +441,12 @@
     clearTimeout(helloTimer);
     helloTimer = setTimeout(() => {
       if (helloIgnored < HELLO_IGNORED_MAX && idleEligible() && !reduced()) {
+        // A wave, no words: a bubble with nothing useful in it is noise
+        // (contextual suggestions above speak when there is something to say).
         animating = true; root.classList.add('is-anim-wave');
-        bubble.innerHTML = '<p class="gava-bubble__text gava-bubble__text--hello">' + esc(HELLO_LINES[Math.floor(Math.random() * HELLO_LINES.length)]) + '</p>';
-        bubble.hidden = false; helloShowing = true; chime();
+        helloShowing = true; chime();
         setTimeout(() => { root.classList.remove('is-anim-wave'); animating = false; }, 1500);
-        setTimeout(() => { if (helloShowing) { helloShowing = false; helloIgnored += 1; bubble.hidden = true; } }, 4200);
+        setTimeout(() => { if (helloShowing) { helloShowing = false; helloIgnored += 1; } }, 4200);
       }
       scheduleHello();
     }, rnd(HELLO_MIN_MS, HELLO_MAX_MS));
@@ -503,6 +506,56 @@
   }
   // ── end idle personality ──────────────────────────────────────────────
 
+  /*
+   * Contextual suggestions. One short line where Gaia has something useful to
+   * offer, decided from what the page already knows -- a fixed table, never a
+   * model call. Every action is local (navigate, open, scroll); none sends a
+   * message or starts voice. Each suggestion appears at most once per device,
+   * at most two in a session, never over another bubble, a tour or a
+   * conversation, and only after the member has been on the page a while.
+   */
+  const SEEN_KEY = 'gaia-avatar-suggested';
+  const seenSet = () => { try { return new Set(JSON.parse(localStorage.getItem(SEEN_KEY) || '[]')); } catch (_) { return new Set(['*']); } };
+  const markSeen = (k) => { try { const s = seenSet(); s.add(k); localStorage.setItem(SEEN_KEY, JSON.stringify([...s].slice(-40))); } catch (_) { /* ignore */ } };
+  let suggestedThisSession = 0, suggestTimer = null;
+  const pageLoadedAt = Date.now();
+  const SUGGEST = [
+    { key: 'energy-start', on: 'view', when: () => view() === 'wellness' && !authed(),
+      text: () => 'Not sure where to begin? The energy check is the quickest way in, about two minutes.', chips: ['energy', 'later'] },
+    { key: 'academy-start-guest', on: 'view', when: () => view() === 'academy' && !authed(),
+      text: () => 'The Start free shelf is open to everyone, no membership needed.', chips: ['startfree', 'later'] },
+    { key: 'academy-start-member', on: 'view', when: () => view() === 'academy' && authed() && !((window.GaiaMember?.data?.courses?.courses) || []).length,
+      text: () => 'Not sure where to start? Tell me what you would like to learn and I will point you to a course.', chips: ['chat', 'later'] },
+    { key: 'membership-next', on: 'view', when: () => view() === 'store' && authed() && /membership/.test(location.search + (document.querySelector('[data-store-tab="membership"].is-active, [data-store-tab="membership"][aria-selected="true"]') ? 'membership' : '')) && Boolean(window.GaiaMember?.data?.access?.upgrade?.next_key),
+      text: () => 'Want to see what your next level would add for you?', chips: ['nextlevel', 'later'] },
+    { key: 'readings-guide', on: 'readings', when: () => view() === 'profile' && readings().linked,
+      text: () => 'New to these numbers? I can show you what each one means.', chips: ['explain', 'later'] },
+    { key: 'practice-client', on: 'client', when: () => view() === 'profile' && Boolean(document.querySelector('[data-prac-open="latest"]')),
+      text: () => 'Want to open this client’s latest reading?', chips: ['clientlatest', 'later'] },
+  ];
+  let pendingTrigger = null;
+  function considerSuggestions(trigger) {
+    clearTimeout(suggestTimer);
+    pendingTrigger = trigger;
+    const at = view();
+    suggestTimer = setTimeout(() => {
+      pendingTrigger = null;
+      if (view() !== at || suggestedThisSession >= 2 || Date.now() - pageLoadedAt < 15000) return;
+      if (!root || !bubble.hidden || convoOpen || pointing || document.querySelector('.gaia-tour') || document.body.classList.contains('gaia-assist-panel-open')) return;
+      const seen = seenSet(); if (seen.has('*')) return;
+      const s = SUGGEST.find((x) => x.on === trigger && !seen.has(x.key) && (() => { try { return x.when(); } catch (_) { return false; } })());
+      if (!s) return;
+      markSeen(s.key); suggestedThisSession += 1;
+      showBubble({ text: s.text(), chips: s.chips, quiet: true });
+      bubble.dataset.suggest = s.key;
+    }, Math.max(trigger === 'view' ? 6000 : 2500, 15500 - (Date.now() - pageLoadedAt)));
+  }
+  document.addEventListener('gaia:view-changed', () => considerSuggestions('view'));
+  window.addEventListener('gaia:readings-loaded', () => considerSuggestions('readings'));
+  document.addEventListener('gaia:practice-client', () => considerSuggestions('client'));
+  // While the member is busy on the page, wait: a tap postpones, it does not cancel.
+  document.addEventListener('pointerdown', () => { if (pendingTrigger) considerSuggestions(pendingTrigger); }, { capture: true, passive: true });
+
   /** Once per device: how she works, in one bubble. */
   function meet() {
     try { if (localStorage.getItem('gaia-avatar-met')) return; } catch (_) { return; }
@@ -516,9 +569,9 @@
 
   function mount() {
     if (!document.querySelector('.gaia-tabbar')) { setTimeout(mount, 400); return; }
-    load(); build(); home(); gestures(); listen(); watchAssist(); startIdle(); meet();
+    load(); build(); home(); gestures(); listen(); watchAssist(); startIdle(); meet(); considerSuggestions('view');
     setTimeout(home, 600);
   }
-  window.GaiaAvatar = { pointAt, unpoint, showBubble, hideBubble, setState, bubbleFor, runTour, home, moment, glanceAt, prefs: () => ({ ...prefs }), idle: { anims: IDLE_ANIMS.map((a) => a.name), eligible: idleEligible, play: (name) => { const a = IDLE_ANIMS.find((x) => x.name === name); if (a) { lastTouch = 0; runIdleAnim(a); } } } };
+  window.GaiaAvatar = { openChat, pointAt, unpoint, showBubble, hideBubble, setState, bubbleFor, runTour, home, moment, glanceAt, prefs: () => ({ ...prefs }), idle: { anims: IDLE_ANIMS.map((a) => a.name), eligible: idleEligible, play: (name) => { const a = IDLE_ANIMS.find((x) => x.name === name); if (a) { lastTouch = 0; runIdleAnim(a); } } } };
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', mount); else mount();
 })();

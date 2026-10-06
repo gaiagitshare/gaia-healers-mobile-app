@@ -83,7 +83,7 @@
     head.querySelector('.g-prac-link')?.remove();
     head.querySelector('[data-prac-disconnect-error]')?.remove();
     // the rest of the app (the avatar) learns the state the same way, once per start
-    document.dispatchEvent(new CustomEvent('gaia:practitioner-state', { detail: { state: status?.state || 'not_connected', available: status?.available !== false, practitioner_name: status?.practitioner_name || '' } }));
+    document.dispatchEvent(new CustomEvent('gaia:practitioner-state', { detail: { state: status?.state || 'not_connected', available: status?.available !== false, isPractitioner: Boolean(status?.isPractitioner), practitioner_name: status?.practitioner_name || '' } }));
     if (status?.state !== 'connected') return;
     // The link is managed where the account is: who you are connected as, and the way out.
     head.insertAdjacentHTML('beforeend', ` <span class="g-prac-link"><span class="g-prac-badge">Practitioner${status.practitioner_name ? ' · ' + esc(status.practitioner_name) : ''}</span>${status.practitioner_email ? `<span class="g-prac-link__as">connected as ${esc(status.practitioner_email)}</span>` : ''}<button type="button" class="g-prac-link__x" data-prac-disconnect>Disconnect</button></span>`);
@@ -266,9 +266,33 @@
     // Who needs attention comes FIRST, deliberately. A practitioner knows who
     // their clients are; what they cannot know without looking is who has
     // deteriorated since they last met. Both answers cost under a second.
+    // The workspace header: who you are connected as, and whether Gaia
+    // Practitioners has approved your profile -- both from the status the
+    // server returned, nothing inferred. Counts fill in as the lists load.
+    function workspaceHead() {
+      const st = current || {};
+      const pending = String(st.profile_status || '').toLowerCase() === 'pending';
+      return `<header class="g-prac-ws">
+        <div class="g-prac-ws__who">
+          <p class="g-prac-ws__kicker">Your practice</p>
+          <h2 class="g-prac-ws__name">${esc(st.practitioner_name || 'Gaia Practitioners')}</h2>
+        </div>
+        <div class="g-prac-ws__pills">
+          <span class="g-prac-ws__pill is-ok"><i class="ph ph-check-circle" aria-hidden="true"></i> Connected</span>
+          ${pending ? '<span class="g-prac-ws__pill is-pending" title="Your client tools work now; your public directory profile is waiting for approval at Gaia Practitioners.">Profile pending approval</span>' : ''}
+        </div>
+        <dl class="g-prac-ws__stats" data-prac-stats>
+          <div><dt>Need attention</dt><dd data-stat="flagged">–</dd></div>
+          <div><dt>Follow-ups</dt><dd data-stat="followups">–</dd></div>
+          <div><dt>Clients</dt><dd data-stat="clients">–</dd></div>
+        </dl>
+      </header>`;
+    }
+    const setStat = (k, n) => { const el = root.querySelector(`[data-stat="${k}"]`); if (el) el.textContent = String(n); };
+
     async function showList() {
       openClient = null;
-      paint(`
+      paint(`${workspaceHead()}
         <div class="g-prac">
           <section class="g-prac__sec" data-prac-flagged>
             <h3 class="g-prac__h">Needs attention</h3>${skeleton(2)}
@@ -301,6 +325,7 @@
       // Three independent fast calls. One failing must not blank the other two.
       tool('practitioner_flagged_clients', {}).then((r) => {
         const rows = r.clients || [];
+        setStat('flagged', rows.length);
         flaggedHost.innerHTML = `<h3 class="g-prac__h">Needs attention</h3>` + (rows.length
           ? rows.map((c) => clientRow(c, `<span class="g-prac__flags">${
               (c.concerns || []).slice(0, 3).map((x) =>
@@ -311,6 +336,7 @@
 
       tool('practitioner_follow_ups', {}).then((r) => {
         const rows = r.suggestions || [];
+        setStat('followups', rows.length);
         followHost.innerHTML = `<h3 class="g-prac__h">Due a follow-up</h3>` + (rows.length
           ? rows.map((s) => clientRow(s, s.suggested_window
               ? `<span class="g-prac__when">${esc(s.suggested_window)}</span>` : '')).join('')
@@ -319,11 +345,12 @@
 
       tool('practitioner_list_clients', {}).then(async (r) => {
         const rows = r.clients || [];
+        setStat('clients', rows.length);
         const m = await linked;
         listHost.innerHTML = rows.length
           ? rows.map((c) => clientRow(c, (c.has_biowell
               ? '<span class="g-prac__tag">Bio-Well</span>' : '') + sharesTag(m.get(String(c.id))))).join('')
-          : empty('No clients on your list yet.');
+          : empty('No clients on your list yet. Clients you add in Gaia Practitioners appear here.');
       }).catch((e) => { listHost.innerHTML = empty(e.code === 'not_connected'
           ? 'Connect your Gaia Practitioners account to see your clients.'
           : 'Could not load your clients just now.', { action: 'retry', label: 'Try again' }); });
@@ -408,6 +435,7 @@
 
       const filesHost = root.querySelector('[data-prac-files]');
       loadFiles(clientId, filesHost);
+      document.dispatchEvent(new CustomEvent('gaia:practice-client', { detail: { client: String(clientId) } }));
 
       if (openSection) openCard(openSection, awaiting);
     }
@@ -594,10 +622,12 @@
       fillCard(d.open, d);
     });
 
+    let current = null;
     async function start(deepLink) {
       loaded.clear();
       paint(skeleton(4));
       const status = await connection();
+      current = status;
       badge(status);
       if (status.state !== 'connected') { await showGate(status); return; }
       if (deepLink && deepLink.client) await showClient(deepLink.client, deepLink.open, deepLink.awaiting);
@@ -626,6 +656,7 @@
       tabs.hidden = true; panel.hidden = true; me.hidden = false;
       document.getElementById('member-readings')?.classList.remove('is-on-practice-tab');
       document.getElementById('member-data-sharing')?.classList.remove('is-on-practice-tab');
+      document.getElementById('member-glance')?.classList.remove('is-on-practice-tab');
       badge(status);
       return;
     }
@@ -640,7 +671,11 @@
     const linkedState = ['connected', 'needs_reconnect', 'unverified', 'not_practitioner'].includes(status.state);
     const askedFor = q.get('tab') === 'practice' || q.has('client') || q.has('practitioners');
     let optedIn = false; try { optedIn = sessionStorage.getItem('gaia-prac-optin') === '1'; } catch (_) { /* private mode */ }
-    const showPractice = Boolean(status.isPractitioner || linkedState || askedFor || optedIn);
+    // A practitioner seen earlier this session keeps the tab when the status
+    // call fails, so the outage reads as an outage rather than a missing tab.
+    let known = false; try { known = sessionStorage.getItem('gaia-prac-known') === '1'; } catch (_) { /* private mode */ }
+    const showPractice = Boolean(status.isPractitioner || linkedState || askedFor || optedIn || (status.offline && known));
+    if (showPractice && !status.offline) { try { sessionStorage.setItem('gaia-prac-known', '1'); } catch (_) { /* private mode */ } }
     document.querySelectorAll('[data-prac-optin]').forEach((n) => { n.hidden = showPractice || status.available === false; });
     if (!showPractice) {
       if (mounted && mounted.tabs === tabs) mounted.select('me');
@@ -665,6 +700,7 @@
 
     function select(which) {
       const practice = which === 'practice';
+      document.dispatchEvent(new CustomEvent('gaia:profile-tab', { detail: { tab: which } }));
       tabs.querySelectorAll('[data-profile-tab]').forEach((b) => {
         const on = b.getAttribute('data-profile-tab') === which;
         b.classList.toggle('is-active', on);
@@ -678,6 +714,7 @@
       // `hidden` means "feature off / not signed in" and must not be touched.
       document.getElementById('member-readings')?.classList.toggle('is-on-practice-tab', practice);
       document.getElementById('member-data-sharing')?.classList.toggle('is-on-practice-tab', practice);
+      document.getElementById('member-glance')?.classList.toggle('is-on-practice-tab', practice);
       if (practice && !started) {
         started = true;
         view.start({ client: params.get('client'), open: params.get('open') });

@@ -4,7 +4,7 @@ const read = (f) => fs.readFileSync(path.join(__dirname, '..', f), 'utf8');
 // Babak, 5 Oct 2026: the Practice tab is for practitioners only.
 test('the Practice tab shows only for practitioners, a linked account, a deep link or an opt-in', () => {
   const src = read('gaia-practitioner.js');
-  assert.match(src, /const showPractice = Boolean\(status\.isPractitioner \|\| linkedState \|\| askedFor \|\| optedIn\)/);
+  assert.match(src, /const showPractice = Boolean\(status\.isPractitioner \|\| linkedState \|\| askedFor \|\| optedIn \|\| \(status\.offline && known\)\)/);
   assert.match(src, /if \(!showPractice\) \{[\s\S]*?tabs\.hidden = true; panel\.hidden = true; me\.hidden = false;/);
   assert.match(src, /\['connected', 'needs_reconnect', 'unverified', 'not_practitioner'\]\.includes\(status\.state\)/, 'an existing link stays reachable');
 });

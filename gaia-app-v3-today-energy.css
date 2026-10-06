@@ -374,11 +374,11 @@ body.gaia-v2 :is([data-screen="today"], [data-screen="wellness"]) .g-sky__facts 
   font-size: 12px;
   font-weight: 600;
 }
-body.gaia-v2 :is([data-screen="today"], [data-screen="wellness"]) .g-sky__facts .g-sky__chakra {
+body.gaia-v2 :is([data-screen="today"], [data-screen="daily"], [data-screen="wellness"]) .g-sky__facts .g-sky__chakra {
   gap: 7px;
   color: var(--v3-text);
 }
-body.gaia-v2 :is([data-screen="today"], [data-screen="wellness"]) .g-sky__facts .g-sky__chakra::before {
+body.gaia-v2 :is([data-screen="today"], [data-screen="daily"], [data-screen="wellness"]) .g-sky__facts .g-sky__chakra::before {
   content: "";
   width: 7px;
   height: 7px;

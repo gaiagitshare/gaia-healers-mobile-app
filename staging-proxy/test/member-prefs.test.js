@@ -70,6 +70,6 @@ test('guides_to_assist is a recorded consent: allowed, off by default, and the s
   const card = ui.slice(ui.indexOf('function dataSharingCard'), ui.indexOf('let lastSummary'));
   assert.match(card, /status\.linked \? `<div class="g-rows g-datashare__consent">/, 'the consent row exists only for a linked member');
   assert.match(card, /data-readings-action="toggle-guides"/);
-  assert.match(card, /nothing is read either way/, 'the copy says plainly that nothing reads it yet');
+  assert.match(card, /Not available yet\. These suggestions are made by software on your practitioner's platform, and Gaia does not read them\./, 'the copy says plainly that nothing reads it, and who makes them');
   assert.match(ui, /body: \{ prefs: \{ guides_to_assist: next \} \}/, 'the toggle is stored server-side');
 });

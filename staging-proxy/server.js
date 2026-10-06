@@ -34,7 +34,7 @@ import { attachQwenVoiceRelay, qwenRouting, issueQwenTicket, qwenVoiceConfig, vo
 import { normalizeUsage, recordUsage, recordFailure } from './assist-usage.js';
 import { toolDeclarationsFor, clientToolNames, slowToolNames, runTool, modelView } from './assist-tools.js';
 import { getPrefs, setPrefs } from './member-prefs.js';
-import { memberReadingsEnabled, memberAllowed, mintCode, redeemCode, revokeLink, linkStatus, linkFor, partnerAuthorized, memberReadings, notifyPartnerUnlink, rememberLatest, markSeen, refreshLatest, linksForPractitioner, memberGuides, guidesForModel, recheckAfterDays } from './member-link.js';
+import { memberReadingsEnabled, memberAllowed, mintCode, redeemCode, revokeLink, linkStatus, linkFor, partnerAuthorized, memberReadings, notifyPartnerUnlink, rememberLatest, markSeen, refreshLatest, linksForPractitioner, memberGuides, guidesForModel, recheckAfterDays, partnerAiRecommendationsEnabled } from './member-link.js';
 import { practitionersConfig, makePkce, authorizeUrl, rememberFlow, claimFlow,
          exchangeCode, resolveProfile, saveToken, forgetToken, connectionStatus, practitionersBootLine, tokenFor, linkState, isLinkedPractitioner, verifyPractitioner, practitionerAuthorization, applyPractitionerLink, VERIFICATION_VERSION } from './practitioners-oauth.js';
 import { allowSpend, callerKey, guardSubject, spendKindFor, ASSIST_MAX_PROMPT_CHARS, ASSIST_MAX_TTS_CHARS } from './assist-guard.js';
@@ -4451,7 +4451,10 @@ async function buildMemberVoiceContext(req) {
         // The guides their practitioner wrote for them: only with the
         // member's own switch (guides_to_assist, checked on every build —
         // the cache key carries it), shaped and bounded, values stripped.
-        if (getPrefs(cid).guides_to_assist) {
+        if (!partnerAiRecommendationsEnabled()) {
+          // Disabled source (see member-link.js): nothing from the partner's AI reaches the model.
+          lines.push('PRACTITIONER GUIDES: not available in Gaia yet. If they ask, say their practitioner can share advice with them directly; never invent or guess any.');
+        } else if (getPrefs(cid).guides_to_assist) {
           const text = await memberGuidesCached(cid);
           lines.push(text
             ? 'PRACTITIONER GUIDES (this member switched on "Let Gaia Assist read the guides my practitioner writes for me"; use them only in this member\'s own conversation, as their practitioner\'s advice, never as yours; the FIRST time you draw on a guide in this conversation say where it comes from, e.g. "from the guide your practitioner wrote on 1 October"; never state scan values):\n' + text

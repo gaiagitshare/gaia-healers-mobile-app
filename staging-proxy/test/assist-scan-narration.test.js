@@ -22,7 +22,7 @@ test('with narration off, the model view of a scan result carries no values; the
     assert.ok(!/3\.9|54|Root|Liver|latest|energy|stress/.test(s), `values leaked to the model for ${name}: ${s}`);
   }
   assert.deepEqual(modelView('practitioner_client_latest_scan', { found: false, reason: 'none' }, {}), { found: false, reason: 'none' }, 'a "nothing on file" answer passes through');
-  assert.deepEqual(modelView('practitioner_list_clients', { count: 1, clients: [] }, {}), { count: 1, clients: [] }, 'non-scan tools are unchanged');
+  assert.deepEqual(modelView('practitioner_list_clients', { count: 1, shown: 0, clients: [] }, {}), { count: 1, shown: 0, clients: [] }, 'the client list keeps its shape (ids and names only; see practitioner-ai-privacy.test.js)');
   assert.deepEqual(modelView('practitioner_client_latest_scan', FULL, { GAIA_SCAN_NARRATION: 'on' }), FULL, 'the switch restores narration');
 });
 

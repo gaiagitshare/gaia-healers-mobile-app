@@ -2802,9 +2802,24 @@ def _attendee_for_payment(db, pe, claims=None):
             models.Attendee.event_id == pe.event_id).first()
     if not pe.buyer_email:
         return None
-    return db.query(models.Attendee).filter(
+    found = db.query(models.Attendee).filter(
         models.Attendee.event_id == pe.event_id,
         func.lower(models.Attendee.email) == pe.buyer_email).first()
+    # A row ruled a duplicate keeps its email, so a payment made under that
+    # address keeps landing on it -- and is then reported as "money received but
+    # the ticket is not valid", about a person whose real badge is fine. Marie
+    # Moreau's $97 upgrade was moved to her live row on 1 Oct and moved straight
+    # back by the next reclassify. Follow the pointer, as the reconciler does.
+    hops = 0
+    while found is not None and (found.custom_data or {}).get("duplicate_of") and hops < 4:
+        nxt = db.query(models.Attendee).filter(
+            models.Attendee.id == int((found.custom_data or {}).get("duplicate_of")),
+            models.Attendee.event_id == pe.event_id).first()
+        if nxt is None or nxt.id == found.id:
+            break
+        found = nxt
+        hops += 1
+    return found
 
 
 def _sold_rank(db, pe, mapping_for):

@@ -933,12 +933,13 @@
       // A scan describes the day it was taken; say how long ago that was.
       const age = window.GaiaMyReadings.ageOf ? window.GaiaMyReadings.ageOf(l.scanned_at) : null;
       return '<section class="g-home2__state g-home2__state--reading" aria-label="Your latest reading">'
-        + '<p class="g-super-kicker">' + (st.new_reading ? 'New reading' : (age && age.stale ? 'Your last reading' : 'Your latest reading')) + (day ? ' · ' + esc(day) : '') + (age ? ' · ' + esc(age.label) : '') + '</p>'
+        + '<p class="g-super-kicker">' + (st.new_reading ? 'New reading' : 'Your latest reading') + (day ? ' · ' + esc(day) : '') + (age ? ' · ' + esc(age.label) : '') + '</p>'
         + '<div class="g-home2__nums">'
         + '<div class="g-home2__num"><strong>' + esc(fmt(l.energy, 0)) + '</strong><span>Energy</span></div>'
         + '<div class="g-home2__num"><strong>' + esc(fmt(l.stress, 2)) + '</strong><span>Stress</span></div></div>'
         + (r.summary && r.summary.headline ? '<p class="g-home2__state-line">' + esc(r.summary.headline) + '</p>' : '')
-        + (age && age.stale ? '<p class="g-home2__state-line g-home2__state-hint">This was ' + esc(age.label) + '. A new Bio-Well scan would show where you are now. <button type="button" class="g-linkbtn" data-dir-intent="scan">Book a scan</button></p>' : '')
+        // Gaia's product policy for suggesting another scan (days set on the server), not a Bio-Well expiry.
+        + (age && age.recheck ? '<p class="g-home2__state-line g-home2__state-hint">' + esc(window.GaiaMyReadings.recheckLine ? window.GaiaMyReadings.recheckLine() : '') + ' <button type="button" class="g-linkbtn" data-dir-intent="scan">Book a scan</button></p>' : '')
         + '<div class="g-home2__actions"><a class="g-btn g-btn--primary g-btn--sm" href="home.html?view=profile&section=readings" data-open-readings>' + icon('pulse') + ' View reading</a>'
         // Gaia Assist never reads reading values (the promise on You), so the
         // second action explains the numbers rather than offering an AI read.
@@ -975,10 +976,14 @@
   document.addEventListener('click', (e) => {
     const open = e.target.closest('[data-open-readings]');
     if (open) {
-      e.preventDefault(); window.GaiaAppShell?.go?.('profile');
+      e.preventDefault();
+      // "What these numbers mean": Gaia's walk-through of the card when she is on screen (it opens the card itself).
+      const explain = open.getAttribute('data-open-readings') === 'explain';
+      if (explain && window.GaiaAvatar?.explainReadings && document.querySelector('.gava:not(.is-behind)')) { window.GaiaAvatar.explainReadings(); return; }
+      window.GaiaAppShell?.go?.('profile');
       setTimeout(() => {
         window.dispatchEvent(new CustomEvent('gaia:open-readings'));
-        if (open.getAttribute('data-open-readings') === 'explain') setTimeout(() => { const d = document.querySelector('#member-readings .g-readings__explain'); if (d) { d.open = true; d.scrollIntoView({ block: 'center' }); } }, 400);
+        if (explain) setTimeout(() => { const d = document.querySelector('#member-readings .g-readings__explain'); if (d) { d.open = true; d.scrollIntoView({ block: 'center' }); } }, 400);
       }, 80);
     }
   });

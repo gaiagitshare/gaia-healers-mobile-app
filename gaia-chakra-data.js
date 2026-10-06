@@ -17,7 +17,7 @@ window.GAIA_CHAKRAS = [
     practice: 'Stand or sit with both feet supported. Take five slow breaths and notice what is holding you.',
     journalPrompt: 'What would help me feel supported today?',
     learnHref: 'home.html?view=academy',
-    assistPrompt: 'Explain Root chakra trends in Bio-Well scans',
+    assistPrompt: 'What practices does the app have for the Root centre?',
   },
   {
     id: 'sacral',
@@ -33,7 +33,7 @@ window.GAIA_CHAKRAS = [
     practice: 'Move your hips gently, stretch, or drink a glass of water with your full attention.',
     journalPrompt: 'Where can I allow more ease or creativity?',
     learnHref: 'home.html?view=community&tab=discussion',
-    assistPrompt: 'What does a low Sacral reading mean on Bio-Well?',
+    assistPrompt: 'What practices does the app have for the Sacral centre?',
   },
   {
     id: 'solar',
@@ -48,8 +48,8 @@ window.GAIA_CHAKRAS = [
     theme: 'Wisdom & power',
     practice: 'Take three steady breaths into your belly, then choose one small action you can complete.',
     journalPrompt: 'What choice would restore my sense of agency?',
-    learnHref: 'home.html?view=wellness&tab=biowell',
-    assistPrompt: 'How do I improve Solar Plexus balance before sessions?',
+    learnHref: 'home.html?view=academy',
+    assistPrompt: 'What practices does the app have for the Solar Plexus centre?',
   },
   {
     id: 'heart',
@@ -64,8 +64,8 @@ window.GAIA_CHAKRAS = [
     theme: 'Love & healing',
     practice: 'Place a hand over your heart and make your exhale a little longer than your inhale.',
     journalPrompt: 'What can I meet with more compassion?',
-    learnHref: 'home.html?view=wellness&tab=biowell',
-    assistPrompt: 'Summarize Heart chakra stability from my last scans',
+    learnHref: 'home.html?view=academy',
+    assistPrompt: 'What practices does the app have for the Heart centre?',
   },
   {
     id: 'throat',
@@ -80,8 +80,8 @@ window.GAIA_CHAKRAS = [
     theme: 'Communication',
     practice: 'Hum softly for one minute, then name one honest thing you want to express clearly.',
     journalPrompt: 'What wants to be said with care?',
-    learnHref: 'home.html?view=community&tab=learning',
-    assistPrompt: 'Throat chakra and practitioner communication tips',
+    learnHref: 'home.html?view=academy',
+    assistPrompt: 'What practices does the app have for the Throat centre?',
   },
   {
     id: 'third-eye',
@@ -97,7 +97,7 @@ window.GAIA_CHAKRAS = [
     practice: 'Rest your eyes, soften your gaze, and take one quiet screen-free minute.',
     journalPrompt: 'What do I already know when I become still?',
     learnHref: 'home.html?view=academy',
-    assistPrompt: 'Third Eye chakra and Bio-Well interpretation basics',
+    assistPrompt: 'What practices does the app have for the Third Eye centre?',
   },
   {
     id: 'crown',
@@ -113,6 +113,6 @@ window.GAIA_CHAKRAS = [
     practice: 'Sit in silence for two minutes and notice one thing that gives your day meaning.',
     journalPrompt: 'What helps me feel connected to something larger?',
     learnHref: 'https://education.gaiahealers.com/',
-    assistPrompt: 'Crown chakra balance and advanced practitioner practice',
+    assistPrompt: 'What practices does the app have for the Crown centre?',
   },
 ];

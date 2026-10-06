@@ -18,8 +18,9 @@
  *   - a one-line nudge on Today and a dot on the You tab while a reading is
  *     newer than the last one the member opened (status.new_reading); opening
  *     the card records it as seen;
- *   - "centre of the week": the quietest chakra of the latest reading and the
- *     Energy tool that suits it (a fixed table, no model);
+ *   - no interpretation: figures, dates and the member's own averages only;
+ *     no ranges, good/bad colours or reading-to-action rules until an approved
+ *     source exists (docs/BIOWELL_INTERPRETATION_SOURCE_REQUIREMENTS.md);
  *   - "save as image": the summary and gauges drawn on a canvas, kept on the
  *     device (share sheet where there is one, otherwise a download);
  *   - "compare any two": the member picks two dates from their own series.
@@ -48,6 +49,11 @@
   const asDate = (iso) => new Date(/^\d{4}-\d{2}-\d{2}$/.test(String(iso || '')) ? iso + 'T12:00:00' : iso);
   // How old a reading is, said plainly. A scan is a snapshot of the day it was
   // taken: an older one is "your latest reading", never "today's energy".
+  // `recheck`: past Gaia's product policy for suggesting another scan (days
+  // from the server, 60 unless configured). A Gaia policy, not a Bio-Well
+  // expiry: readings do not "go stale".
+  const recheckDays = () => Number(lastStatus?.recheck_after_days || lastReadings?.recheck_after_days) || 60;
+  const recheckLine = () => `Your latest scan was ${recheckDays()}+ days ago. A new scan may give you a more current point of comparison.`;
   function ageOf(iso) {
     if (!iso) return null;
     const d = asDate(iso); if (isNaN(d)) return null;
@@ -55,7 +61,7 @@
     const day = new Date(d); day.setHours(12, 0, 0, 0);
     const days = Math.round((today - day) / 86400000);
     const label = days <= 0 ? 'today' : days === 1 ? 'yesterday' : days < 14 ? days + ' days ago' : days < 60 ? Math.round(days / 7) + ' weeks ago' : Math.round(days / 30) + ' months ago';
-    return { days, label, stale: days > 30 };
+    return { days, label, recheck: days >= recheckDays() };
   }
   const when = (iso) => { if (!iso) return ''; try { const d = asDate(iso); return isNaN(d) ? String(iso) : d.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' }); } catch { return ''; } };
   const short = (iso) => { try { return new Date(iso).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }); } catch { return ''; } };
@@ -63,11 +69,11 @@
   const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
 
   const card = (inner, extra = '') => `<article class="g-card g-readings${extra}"><p class="g-card__label">My readings</p>${inner}</article>`;
-  const signed = (v, d = 1, goodWhenNegative = false) => {
+  // A difference between two scans, signed. No colour for "better" or "worse":
+  // nothing we have says which direction is good for this member.
+  const signed = (v, d = 1) => {
     if (typeof v !== 'number') return '<span class="g-readings__delta">—</span>';
-    const good = goodWhenNegative ? v < 0 : v > 0;
-    const cls = v === 0 ? '' : (good ? ' is-good' : ' is-bad');
-    return `<span class="g-readings__delta${cls}">${v > 0 ? '+' : ''}${v.toFixed(d)}</span>`;
+    return `<span class="g-readings__delta">${v > 0 ? '+' : ''}${v.toFixed(d)}</span>`;
   };
 
   // ── the seven centres: traditional colours, matched by name, else by order ──
@@ -81,28 +87,6 @@
     { key: /crown|sahasrara/i, colour: '#a060d8', short: 'Crown' },
   ];
   const chakraMeta = (c, i) => CHAKRAS.find((m) => m.key.test(String(c.name || ''))) || CHAKRAS[i] || { colour: 'var(--g-accent)', short: c.name };
-  // Centre of the week: the quietest centre, and which Energy tool suits it. A fixed table.
-  const CENTRE_CUES = {
-    Root: { tool: 'breath', toolLabel: 'Breath', cue: 'Slow, grounding breaths with both feet on the floor.' },
-    Sacral: { tool: 'colour', toolLabel: 'Colour', cue: 'Warm orange, and let the hips move a little today.' },
-    'Solar plexus': { tool: 'breath', toolLabel: 'Breath', cue: 'A longer exhale than inhale, a few rounds, when the day gets busy.' },
-    Heart: { tool: 'chakra', toolLabel: 'Chakra', cue: 'One kind thought for someone, and one for yourself.' },
-    Throat: { tool: 'colour', toolLabel: 'Colour', cue: 'Hum, sing, or say the thing you have been holding.' },
-    'Third eye': { tool: 'chakra', toolLabel: 'Chakra', cue: 'A quiet minute with your eyes closed, no screen.' },
-    Crown: { tool: 'chakra', toolLabel: 'Chakra', cue: 'Sit still for a moment and let things be as they are.' },
-  };
-  function centreOfTheWeek(chakras) {
-    const list = (chakras || []).map((c, i) => ({ c, m: chakraMeta(c, i) })).filter((x) => typeof x.c.value === 'number');
-    if (list.length < 2) return '';
-    const q = list.reduce((a, b) => (b.c.value < a.c.value ? b : a));
-    const cue = CENTRE_CUES[q.m.short] || CENTRE_CUES.Heart;
-    return `<section class="g-readings__sec g-readings__centre">
-      <p class="g-readings__kicker">Centre of the week</p>
-      <div class="g-readings__centre-row"><i class="g-readings__centre-disc" style="background:${q.m.colour}"></i>
-        <div><p class="g-readings__lead">${esc(q.c.name)} was the quietest in your latest reading.</p><p class="g-readings__muted">${esc(cue.cue)}</p></div></div>
-      <div class="g-card__actions"><button type="button" class="g-btn g-btn--secondary g-btn--sm" data-readings-action="tool" data-tool="${esc(cue.tool)}">Open the ${esc(cue.toolLabel)} tool</button></div>
-    </section>`;
-  }
   /** The member picks any two dates from their own series; the difference is arithmetic on screen. */
   function comparePicker(series) {
     const pts = (series || []).filter((p) => p && p.d);
@@ -154,7 +138,7 @@
       g.fillStyle = text; g.textAlign = 'center'; g.font = '600 64px "Cormorant Garamond", serif'; g.fillText(typeof val === 'number' ? val.toFixed(dec) : '—', cx, cy + 20);
       g.fillStyle = muted; g.font = '400 24px "Plus Jakarta Sans", sans-serif'; g.fillText(unit, cx, cy + 56); g.fillText(label, cx, cy + R + 60); g.textAlign = 'left';
     };
-    y += 120; arc(W / 2 - 220, y + 40, r.latest?.energy, 0, 100, [40, 70], 'Energy', 'J ×10⁻²', 0); arc(W / 2 + 220, y + 40, r.latest?.stress, 0, 10, [2, 4], 'Stress', 'of 10', 2);
+    y += 120; arc(W / 2 - 220, y + 40, r.latest?.energy, 0, 100, null, 'Energy', 'J ×10⁻²', 0); arc(W / 2 + 220, y + 40, r.latest?.stress, 0, 10, null, 'Stress', 'of 10', 2);
     y += 300;
     for (const l of (r.summary?.lines || [])) { y = wrap('• ' + l, 72, y, W - 144, 40, '400 28px "Plus Jakarta Sans", sans-serif', text) + 10; }
     g.fillStyle = muted; g.font = '400 22px "Plus Jakarta Sans", sans-serif'; g.fillText('Reflective wellness measurements, not a diagnosis. gaiahealers.app', 72, H - 60);
@@ -195,7 +179,7 @@
       const ageText = age ? ` · ${esc(when(scannedAt))}, ${esc(age.label)}` : '';
       const html = fresh
         ? `<i class="ph ph-pulse" aria-hidden="true"></i><span><strong>A new reading from your practitioner</strong>${ageText}${nums}</span><em>Open</em>`
-        : `<i class="ph ph-pulse" aria-hidden="true"></i><span><strong>${age && age.stale ? 'Your last reading' : 'Your latest reading'}</strong>${ageText}${nums}${age && age.stale ? '<small class="g-readings-nudge__hint">A new scan would show where you are now.</small>' : ''}</span><em>Open</em>`;
+        : `<i class="ph ph-pulse" aria-hidden="true"></i><span><strong>Your latest reading</strong>${ageText}${nums}${age && age.recheck ? `<small class="g-readings-nudge__hint">${esc(recheckLine())}</small>` : ''}</span><em>Open</em>`;
       // Only rewrite when something changed: the observer watches the screen's children and a rewrite must never re-trigger it.
       if (el.innerHTML !== html) el.innerHTML = html;
     };
@@ -209,27 +193,27 @@
   const setNewReading = (fresh, scannedAt) => setTodayLink(scannedAt === undefined ? { fresh } : { fresh, scannedAt });
 
   // ── graphics: inline SVG, drawn to scale, coloured through the theme tokens ──
-  /** A three-quarter arc gauge. `value` on [min,max]; `good` is the comfortable band, drawn under the arc. */
-  function gauge({ value, min, max, label, unit, good, decimals = 0, lowerIsBetter = false }) {
+  /**
+   * A three-quarter arc gauge: the value on the scale shown, and the member's
+   * own average beside it. No "comfortable" band and no good/bad colour: no
+   * approved source defines one (docs/BIOWELL_INTERPRETATION_SOURCE_REQUIREMENTS.md).
+   */
+  function gauge({ value, min, max, label, unit, decimals = 0, avg = null }) {
     const has = typeof value === 'number';
     const t = has ? clamp((value - min) / (max - min), 0, 1) : 0;
     const R = 44, C = 56, start = 135, sweep = 270;
     const pt = (deg) => { const a = (deg * Math.PI) / 180; return [C + R * Math.cos(a), C + R * Math.sin(a)]; };
     const arc = (from, to) => { const [x1, y1] = pt(start + from * sweep), [x2, y2] = pt(start + to * sweep); return `M${x1.toFixed(1)} ${y1.toFixed(1)} A${R} ${R} 0 ${(to - from) * sweep > 180 ? 1 : 0} 1 ${x2.toFixed(1)} ${y2.toFixed(1)}`; };
-    const band = good ? arc(clamp((good[0] - min) / (max - min), 0, 1), clamp((good[1] - min) / (max - min), 0, 1)) : '';
-    const inBand = has && good && value >= good[0] && value <= good[1];
-    const tone = !has ? '' : (inBand ? ' is-good' : (lowerIsBetter ? (value > good[1] ? ' is-high' : ' is-low') : (value < good[0] ? ' is-low' : ' is-high')));
-    return `<figure class="g-readings__gauge${tone}" role="img" aria-label="${esc(label)} ${esc(has ? value.toFixed(decimals) : 'not available')}${unit ? ' ' + esc(unit) : ''}">
+    return `<figure class="g-readings__gauge" role="img" aria-label="${esc(label)} ${esc(has ? value.toFixed(decimals) : 'not available')}${unit ? ' ' + esc(unit) : ''}${avg ? `, ${esc(avg.label)} ${esc(fmt(avg.value, avg.decimals))}` : ''}">
       <svg viewBox="0 0 112 96" aria-hidden="true">
         <path class="g-readings__gauge-track" d="${arc(0, 1)}"/>
-        ${band ? `<path class="g-readings__gauge-band" d="${band}"/>` : ''}
         ${has && t > 0 ? `<path class="g-readings__gauge-fill" d="${arc(0, t)}"/>` : ''}
         <text class="g-readings__gauge-n" x="56" y="60" text-anchor="middle">${esc(has ? value.toFixed(decimals) : '—')}</text>
         <text class="g-readings__gauge-u" x="56" y="74" text-anchor="middle">${esc(unit || '')}</text>
         <text class="g-readings__gauge-min" x="22" y="92">${esc(min)}</text>
         <text class="g-readings__gauge-max" x="90" y="92" text-anchor="end">${esc(max)}</text>
       </svg>
-      <figcaption>${esc(label)}${good ? `<span class="g-readings__muted"> · comfortable ${esc(good[0])}–${esc(good[1])}</span>` : ''}</figcaption>
+      <figcaption>${esc(label)}${avg ? `<span class="g-readings__muted"> · ${esc(avg.label)} ${esc(fmt(avg.value, avg.decimals))}</span>` : ''}</figcaption>
     </figure>`;
   }
   /** Energy and stress over the dated points we were given: one line each, newest point emphasised. */
@@ -297,10 +281,11 @@
     return `<details class="g-readings__explain"${firstVisit ? ' open' : ''}>
       <summary>What these mean</summary>
       <div class="g-readings__explain-grid">
-        <div class="g-readings__explain-card"><strong>Energy</strong><span>How much light your fingertips gave off in the scan, on a 0–100 scale. Most people sit between 40 and 70; higher is not always better.</span></div>
-        <div class="g-readings__explain-card"><strong>Stress</strong><span>How much the pattern looks like a body under load, 0–10. Around 2–4 is comfortable; above 4 is worth a conversation with your practitioner.</span></div>
-        <div class="g-readings__explain-card"><strong>Seven centres</strong><span>The seven chakras from root to crown, each 0–10 for how active it is, and whether it sits centred or pulled to one side. Balance matters more than any single number.</span></div>
+        <div class="g-readings__explain-card"><strong>Energy</strong><span>Bio-Well photographs the glow around your fingertips, and its software reports a figure it calls Energy. This card shows that figure and your own average.</span></div>
+        <div class="g-readings__explain-card"><strong>Stress</strong><span>A second figure Bio-Well's software reports from the same scan, shown on this card from 0 to 10, next to your own average.</span></div>
+        <div class="g-readings__explain-card"><strong>Seven centres</strong><span>Bio-Well's software gives a value for each of seven centres, root to crown. The bars show those values side by side.</span></div>
       </div>
+      <p class="g-readings__muted">Gaia shows these figures and how they compare with your own earlier scans. What they mean for you is a question for your practitioner.</p>
     </details>`;
   }
   /** Folded: the In short block and one button. The whole card is one tap away, and Gaia's "open my readings" unfolds it. */
@@ -337,7 +322,7 @@
       return `<li class="g-readings__chakra"><span class="g-readings__chakra-name"><i class="g-readings__dot" style="background:${m.colour}"></i>${esc(c.name)}</span><span class="g-readings__bar" aria-hidden="true"><span style="width:${w}%;background:${m.colour}"></span></span><span class="g-readings__chakra-val">${esc(fmt(v, 2))}</span></li>`;
     };
     const sev = (f) => `<li class="g-readings__flag"><span>${esc(f.name)}${f.area ? ` <span class="g-readings__muted">${esc(f.area)}</span>` : ''}</span><span class="g-readings__pill${f.severity === 'high' ? ' is-high' : (f.severity === 'elevated' ? ' is-elevated' : '')}">${esc(f.direction || '')}${f.severity ? ` · ${esc(f.severity)}` : ''}</span></li>`;
-    const worst = (d) => `<li class="g-readings__flag"><span>${esc(d.name)} <span class="g-readings__muted">${esc(d.area)}</span></span><span class="g-readings__pill">${esc(fmt(d.disbalance))}%</span></li>`;
+    const worst = (d) => `<li class="g-readings__flag"><span>${esc(d.name)} <span class="g-readings__muted">${esc(d.area)}</span></span><span class="g-readings__pill">${esc(fmt(d.disbalance))}</span></li>`;
     const compare = (c) => `<li class="g-readings__pair"><span class="g-readings__pair-when">${esc(when(c.from))} → ${esc(when(c.to))}<span class="g-readings__muted"> · ${esc(c.basis)}</span></span><span class="g-readings__pair-deltas">stress ${signed(c.stress_change, 2, true)} · energy ${signed(c.energy_change, 1)}</span></li>`;
     const file = (f) => f.url
       ? `<a class="g-row g-row--link" href="${esc(f.url)}" target="_blank" rel="noopener noreferrer"><span>${esc(f.name)}</span><span class="g-row__meta">${esc(when(f.uploaded_at) || 'open')}</span></a>`
@@ -345,6 +330,10 @@
     const sec = (kicker, inner, cls = '') => `<section class="g-readings__sec${cls}"><p class="g-readings__kicker">${kicker}</p>${inner}</section>`;
 
     const spark = sparkline(r.series);
+    // The member's own average: the latest three complete scans, else the 90-day figure.
+    const ownAvg = (k) => { const decimals = k === 'stress' ? 2 : 1;
+      return r.average_recent && typeof r.average_recent[k] === 'number' ? { label: '3-scan average', value: r.average_recent[k], decimals }
+        : (typeof trend?.[k]?.average === 'number' ? { label: '90-day average', value: trend[k].average, decimals } : null); };
     const note = latest?.note ? `<section class="g-readings__sec g-readings__pnote"><p class="g-readings__kicker">A note from ${esc(practitioner.name || 'your practitioner')}</p><p class="g-readings__lead g-readings__pnote-text">${esc(latest.note)}</p></section>` : '';
     return card(`
       <p class="g-card__meta">Shared by <strong>${esc(practitioner.name || 'your practitioner')}</strong>${practitioner.specialty ? ` · ${esc(practitioner.specialty)}` : ''}${practitioner.location ? ` · ${esc(practitioner.location)}` : ''}<br>since ${esc(when(r.linked_at))}${r.scans_on_file != null ? ` · ${esc(r.scans_on_file)} reading${r.scans_on_file === 1 ? '' : 's'} on file` : ''} · <button type="button" class="g-readings__linkbtn" data-readings-action="whosees" aria-expanded="false">What can they see?</button></p>
@@ -370,8 +359,8 @@
       </div>` : ''}
 
       ${latest ? `<div class="g-readings__hero">
-        ${gauge({ value: latest.energy, min: 0, max: 100, label: 'Energy', unit: 'J ×10⁻²', good: [40, 70], decimals: 0 })}
-        ${gauge({ value: latest.stress, min: 0, max: 10, label: 'Stress', unit: 'of 10', good: [2, 4], decimals: 2, lowerIsBetter: true })}
+        ${gauge({ value: latest.energy, min: 0, max: 100, label: 'Energy', unit: 'J ×10⁻²', decimals: 0, avg: ownAvg('energy') })}
+        ${gauge({ value: latest.stress, min: 0, max: 10, label: 'Stress', unit: 'of 10', decimals: 2, avg: ownAvg('stress') })}
         ${spark || spectrum(latest.chakras)}
       </div>
       <p class="g-readings__muted g-readings__when">Latest reading ${esc(when(latest.scanned_at))}${latest.source === 'trend' ? ' · taken from your reading history; the full detail of this scan was not available' : ''}</p>` : '<p class="g-empty">No reading on file yet.</p>'}
@@ -381,16 +370,15 @@
       ${explainer(firstVisit)}
       <div class="g-readings__grid">
         ${latest && (latest.chakras || []).length ? sec('Your seven centres', `${spark ? spectrum(latest.chakras) : ''}<ul class="g-readings__chakras">${latest.chakras.map(chakraRow).join('')}</ul>`, ' g-readings__sec--wide') : ''}
-        ${latest && (latest.most_out_of_balance || []).length ? sec('Most out of balance', `<ul class="g-readings__flags">${latest.most_out_of_balance.map(worst).join('')}</ul>`) : ''}
+        ${latest && (latest.most_out_of_balance || []).length ? sec('Highest disbalance figures', `<ul class="g-readings__flags">${latest.most_out_of_balance.map(worst).join('')}</ul><p class="g-readings__muted">As the scan reports them.</p>`) : ''}
         ${trend && (trend.energy || trend.stress) ? sec('Last 90 days', `
           <div class="g-readings__stats">
             <div class="g-readings__stat"><span class="g-readings__stat-n">${esc(fmt(trend.energy?.lowest, 1))}–${esc(fmt(trend.energy?.highest, 1))}</span><span class="g-readings__stat-l">Energy range · avg ${esc(fmt(trend.energy?.average, 1))}</span></div>
             <div class="g-readings__stat"><span class="g-readings__stat-n">${esc(fmt(trend.stress?.lowest, 1))}–${esc(fmt(trend.stress?.highest, 1))}</span><span class="g-readings__stat-l">Stress range · avg ${esc(fmt(trend.stress?.average, 1))}</span></div>
           </div>
-          ${(trend.flagged || []).length ? `<ul class="g-readings__flags">${trend.flagged.map(sev).join('')}</ul>` : '<p class="g-readings__muted">Nothing flagged in this period.</p>'}`) : ''}
+          ${(trend.flagged || []).length ? `<ul class="g-readings__flags">${trend.flagged.map(sev).join('')}</ul><p class="g-readings__muted">Flagged by your practitioner's scan platform; the labels are theirs.</p>` : '<p class="g-readings__muted">Nothing was flagged by your practitioner\'s scan platform in this period.</p>'}`) : ''}
         ${(r.comparisons || []).length ? sec('Before and after sessions', `<ul class="g-readings__pairs">${r.comparisons.map(compare).join('')}</ul>`) : ''}
         ${(r.files || []).some((f) => !f.first) ? sec('Documents from your practitioner', `<div class="g-rows">${r.files.filter((f) => !f.first).map(file).join('')}</div>`) : ''}
-        ${latest ? centreOfTheWeek(latest.chakras) : ''}
         ${comparePicker(r.series)}
       </div>
 
@@ -567,53 +555,53 @@
   // For Home: the latest numbers once they are loaded (nothing extra is fetched).
   /**
    * "What do these mean?": a short walk through the member's own card, one
-   * section at a time. Each step says what that part of the screen shows and
-   * points out what is already in the numbers (dates, highest and lowest,
-   * the member's own average). It adds no ranges or meanings of its own and
-   * involves no model; questions about meaning go to the practitioner.
+   * section at a time. Every sentence is descriptive: dates, the age of the
+   * scan, the member's own averages and differences, highest and lowest
+   * values, and flags attributed to the platform that raised them. It never
+   * says normal, healthy, comfortable or concerning, never says what a value
+   * means, and never says what to do because of one. No model is involved.
+   * Pinned by tests/readings-guide.test.cjs.
    */
   function guide() {
     const r = lastReadings, root = document.getElementById('member-readings');
     if (!r || !root || root.hidden) return [];
     if (!expanded) reveal(root);
     const l = r.latest || null, a = r.average_recent, t = r.trend, who = r.practitioner?.name || 'your practitioner';
-    const steps = [], has = (sel) => root.querySelector(sel);
-    if (r.summary?.headline && has('.g-readings__summary')) {
-      steps.push({ sel: '.g-readings__summary', text: 'This is the short version. It is written from your readings by simple fixed rules, not by AI.' + (a && a.count >= 3 ? ' The bars under it average your latest three complete scans.' : '') });
+    const steps = [];
+    const section = (title) => [...root.querySelectorAll('.g-readings__sec')].find((x) => title.test(x.querySelector('.g-readings__kicker')?.textContent || ''));
+    const summary = root.querySelector('.g-readings__summary');
+    if (r.summary?.headline && summary) {
+      steps.push({ el: summary, text: 'This line compares your latest scan with your own 90-day average. It is arithmetic, not AI.' + (a && a.count >= 3 ? ' The bars average your latest three complete scans.' : '') });
     }
-    if (l && has('.g-readings__hero')) {
+    const hero = root.querySelector('.g-readings__hero');
+    if (l && hero) {
       const age = ageOf(l.scanned_at);
-      const nums = [typeof l.energy === 'number' ? `energy ${fmt(l.energy)}` : '', typeof l.stress === 'number' ? `stress ${fmt(l.stress, 2)}` : ''].filter(Boolean).join(' and ');
-      let text = `Your latest scan${l.scanned_at ? `, ${when(l.scanned_at)}${age ? ` (${age.label})` : ''}` : ''}${nums ? `: ${nums}` : ''}. The shaded part of each arc is the band this card marks as comfortable.`;
-      if (a && a.count >= 3 && typeof a.energy === 'number' && typeof a.stress === 'number') text += ` Your own three-scan average is energy ${fmt(a.energy, 1)}, stress ${fmt(a.stress, 2)}.`;
-      if (age && age.stale) text += ` It shows the day of the scan, not today; a new scan would show where you are now.`;
-      steps.push({ sel: '.g-readings__hero', text });
+      const nums = [typeof l.energy === 'number' ? `energy ${fmt(l.energy)}` : '', typeof l.stress === 'number' ? `stress ${fmt(l.stress, 2)}` : ''].filter(Boolean).join(', ');
+      let text = `Your latest scan${l.scanned_at ? `, ${when(l.scanned_at)}${age ? ` (${age.label})` : ''}` : ''}${nums ? `: ${nums}` : ''}.`;
+      if (a && a.count >= 3 && typeof a.energy === 'number' && typeof a.stress === 'number') text += ` Your 3-scan average: energy ${fmt(a.energy, 1)}, stress ${fmt(a.stress, 2)}.`;
+      if (age && age.recheck) text += ' ' + recheckLine();
+      steps.push({ el: hero, text });
     }
     const centres = (l?.chakras || []).filter((c) => typeof c.value === 'number');
-    const section = (title) => [...root.querySelectorAll('.g-readings__sec')].find((s) => title.test(s.querySelector('.g-readings__kicker')?.textContent || ''));
     if (centres.length >= 2 && section(/seven centres/i)) {
       const hi = centres.reduce((x, y) => (y.value > x.value ? y : x)), lo = centres.reduce((x, y) => (y.value < x.value ? y : x));
-      steps.push({ el: section(/seven centres/i), text: `Your seven centres, root to crown, each on a 0–10 scale. In this scan ${hi.name} was the most active (${fmt(hi.value, 2)}) and ${lo.name} the quietest (${fmt(lo.value, 2)}).` });
+      steps.push({ el: section(/seven centres/i), text: `Seven centres, root to crown, with the value the scan gives each. Highest in this scan: ${hi.name} (${fmt(hi.value, 2)}). Lowest: ${lo.name} (${fmt(lo.value, 2)}).` });
     }
-    if ((l?.most_out_of_balance || []).length && section(/Most out of balance/)) {
-      steps.push({ el: section(/Most out of balance/), text: 'These are the centres this scan lists as most out of balance, with the figure the scan gives for each.' });
+    if ((l?.most_out_of_balance || []).length && section(/disbalance/i)) {
+      steps.push({ el: section(/disbalance/i), text: 'The areas with the highest disbalance figures in this scan, as the scan reports them.' });
     }
-    if (t && (t.energy || t.stress)) {
-      const sec = section(/Last 90 days/);
-      if (sec) {
-        const n = (t.flagged || []).length;
-        steps.push({ el: sec, text: `Your last 90 days: the lowest and highest energy and stress across those scans, and their average.${n ? ` ${n} ${n === 1 ? 'item was' : 'items were'} flagged for this period; the label shows the direction and how strong.` : ' Nothing was flagged for this period.'}` });
-      }
+    if (t && (t.energy || t.stress) && section(/Last 90 days/)) {
+      const n = (t.flagged || []).length;
+      steps.push({ el: section(/Last 90 days/), text: `Your last 90 days: lowest, highest and average energy and stress across those scans.${n ? ` ${n} ${n === 1 ? 'item was' : 'items were'} flagged by your practitioner's scan platform; the labels are theirs.` : ' Nothing was flagged in this period.'}` });
     }
-    if ((r.comparisons || []).length) {
-      const sec = section(/Before and after/);
-      if (sec) steps.push({ el: sec, text: 'Scans taken around your sessions, side by side: how much stress and energy changed between them.' });
+    if ((r.comparisons || []).length && section(/Before and after/)) {
+      steps.push({ el: section(/Before and after/), text: 'Scans taken around your sessions, side by side, and the difference between them.' });
     }
     const ex = root.querySelector('.g-readings__explain');
-    if (ex) steps.push({ el: ex, open: ex, text: `Short definitions of each measure are here. What your numbers mean for you is a question for ${who}; these are wellness readings, not a diagnosis.` });
+    if (ex) steps.push({ el: ex, open: ex, compact: true, text: `What each figure is. What your numbers mean for you is a question for ${who}.` });
     return steps;
   }
   const latest = () => (lastReadings && lastReadings.latest ? { latest: lastReadings.latest, summary: lastReadings.summary || null, average: lastReadings.average_recent || null, practitioner: lastReadings.practitioner?.name || '' } : null);
-  window.GaiaMyReadings = { mount, render, reveal, latest, ageOf, guide, status: () => (lastStatus ? { linked: Boolean(lastStatus.linked), new_reading: Boolean(lastStatus.new_reading), latest_scanned_at: lastStatus.latest_scanned_at || null, code_active: Boolean(lastStatus.code_active) } : {}) };
+  window.GaiaMyReadings = { mount, render, reveal, latest, ageOf, guide, recheckLine, status: () => (lastStatus ? { linked: Boolean(lastStatus.linked), new_reading: Boolean(lastStatus.new_reading), latest_scanned_at: lastStatus.latest_scanned_at || null, code_active: Boolean(lastStatus.code_active) } : {}) };
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', mount); else mount();
 })();

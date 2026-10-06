@@ -187,7 +187,7 @@
     if (!el) { guideStep(i + 1); return; }
     if (step.open) step.open.open = true;
     const last = i === guide.steps.length - 1;
-    pointAt(el, { text: `${i + 1} of ${guide.steps.length} · ${step.text}`, chips: last ? ['done'] : ['next', 'done'], duration: 0 });
+    pointAt(el, { text: `${i + 1} of ${guide.steps.length} · ${step.text}`, chips: last ? ['done'] : ['next', 'done'], duration: 0, mini: Boolean(step.compact) });
   }
   const endGuide = () => unpoint();
 
@@ -277,7 +277,7 @@
   }
 
   // ── pointing: slide next to a target with a guide ring, then go home ────
-  function pointAt(target, { text = 'Here you go.', duration = 4200, chips = [] } = {}) {
+  function pointAt(target, { text = 'Here you go.', duration = 4200, chips = [], mini = false } = {}) {
     const el = typeof target === 'string' ? document.querySelector(target) : target;
     if (!el || !root) return false;
     // A tall target (the whole readings card) scrolls to its top; a small one to the middle.
@@ -303,18 +303,22 @@
       // measured and placed clear of the target: beside it, then below, then
       // above; when the target fills the screen, in her usual corner.
       showBubble({ text, chips, quiet: chips.length > 0 }, { sticky: true });
+      // Compact: the character steps aside and only the bubble is placed (for targets too tall to sit beside).
+      root.classList.toggle('is-mini', mini);
       root.style.transition = 'none'; root.style.left = '0px'; root.style.top = '0px'; root.style.bottom = 'auto'; root.style.right = 'auto';
       const box = root.getBoundingClientRect(), w = box.width, h = box.height, gap = 12, vw = window.innerWidth, vh = window.innerHeight;
       const floor = vh - tabbarInset() + 6;   // keep above the phone tab bar
-      const fitsY = (y) => y >= 8 && y + h <= floor;
-      const midY = Math.min(floor - h, Math.max(8, r.top + r.height / 2 - h / 2));
+      // ...and below the top bar, never over it.
+      // Every screen has its own top bar; only the one on screen counts.
+      const head = Math.max(8, ...[...document.querySelectorAll('.g-topbar')].map((b) => b.getBoundingClientRect()).filter((b) => b.height > 0 && b.top <= 1).map((b) => Math.round(b.bottom))) + 8;
+      const fitsY = (y) => y >= head && y + h <= floor;
+      const midY = Math.min(floor - h, Math.max(head, r.top + r.height / 2 - h / 2));
       let spot = null;
       if (r.left - w - gap >= 8 && fitsY(midY)) spot = { left: r.left - w - gap, top: midY, side: 'left' };
       else if (r.right + gap + w <= vw - 8 && fitsY(midY)) spot = { left: r.right + gap, top: midY, side: 'right' };
       else if (fitsY(r.bottom + gap)) spot = { left: vw - w - 12, top: r.bottom + gap, side: 'right' };
       else if (fitsY(r.top - gap - h)) spot = { left: vw - w - 12, top: r.top - gap - h, side: 'right' };
       // No room on a phone: lift the target to just under the top bar so she fits below it, then place again.
-      const head = Math.max(8, Math.round(document.querySelector('.g-topbar')?.getBoundingClientRect().bottom || 64)) + 8;
       if (!spot && canScroll && full.height + gap + h <= floor - head) {
         ring.hidden = true; root.style.left = (vw - w - 12) + 'px'; root.style.top = (floor - h) + 'px';
         pointedAt = Date.now();
@@ -322,6 +326,8 @@
         setTimeout(() => place(false), reduced() ? 50 : 450);
         return;
       }
+      // Still no room: try again without the character before ever covering the target.
+      if (!spot && !mini) { mini = true; place(true); return; }
       root.style.transition = reduced() ? 'none' : 'left .4s cubic-bezier(.2,.8,.3,1), top .4s cubic-bezier(.2,.8,.3,1), bottom .4s, right .4s';
       if (spot) { root.style.left = Math.max(8, spot.left) + 'px'; root.style.top = spot.top + 'px'; root.dataset.side = spot.side; }
       else home();
@@ -331,7 +337,7 @@
     return true;
   }
   function unpoint() {
-    clearTimeout(homeTimer); guide.steps = []; guide.i = -1;
+    clearTimeout(homeTimer); guide.steps = []; guide.i = -1; root?.classList.remove('is-mini');
     ring.hidden = true; pointing = false; hideBubble(); setState('idle'); home();
   }
 
@@ -627,6 +633,6 @@
     load(); build(); home(); gestures(); listen(); watchAssist(); startIdle(); meet(); considerSuggestions('view');
     setTimeout(home, 600);
   }
-  window.GaiaAvatar = { openChat, pointAt, unpoint, showBubble, hideBubble, setState, bubbleFor, runTour, home, moment, glanceAt, prefs: () => ({ ...prefs }), idle: { anims: IDLE_ANIMS.map((a) => a.name), eligible: idleEligible, play: (name) => { const a = IDLE_ANIMS.find((x) => x.name === name); if (a) { lastTouch = 0; runIdleAnim(a); } } } };
+  window.GaiaAvatar = { openChat, explainReadings, pointAt, unpoint, showBubble, hideBubble, setState, bubbleFor, runTour, home, moment, glanceAt, prefs: () => ({ ...prefs }), idle: { anims: IDLE_ANIMS.map((a) => a.name), eligible: idleEligible, play: (name) => { const a = IDLE_ANIMS.find((x) => x.name === name); if (a) { lastTouch = 0; runIdleAnim(a); } } } };
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', mount); else mount();
 })();

@@ -411,6 +411,7 @@ export async function memberReadings(cfg0, memberId, { env = process.env, fetchI
   return {
     practitioner: { id: String(prac.id ?? link.practitioner_id), name: prac.name || link.practitioner_name || '', specialty: prac.specialty || '', location: [prac.city, prac.state].filter(Boolean).join(', ') },
     summary: readingSummary({ latest: latestView, trend: trendView, comparisons, practitionerName }),
+    recheck_after_days: recheckAfterDays(env),
     series,
     average_recent: recentAverage(series),
     linked_at: customer?.member?.linked_at || link.linked_at,
@@ -503,39 +504,52 @@ export const readFirst = (f) => Boolean(f?.read_first || f?.readFirst || f?.pinn
   || (Array.isArray(f?.tags) && f.tags.some((t) => /read[\s_-]?first|pinned|featured/i.test(String(t)))));
 
 /**
- * The at-a-glance summary -- plain rules, no model. It compares the latest
- * reading with the member's own 90-day range, names what their practitioner's
- * system flagged, and says which centres were most and least active. Wording
- * is reflective, never diagnostic; the member's practitioner is where
- * questions go. Exported for the test and for the card.
+ * Gaia's product policy for suggesting another scan: days since the latest
+ * one (GAIA_SCAN_RECHECK_DAYS, default 60). A Gaia policy, not a Bio-Well
+ * rule: nothing says a reading expires. Sent with the link status and the
+ * readings so the app never hard-codes it.
+ */
+export function recheckAfterDays(env = process.env) {
+  const n = Number.parseInt(env.GAIA_SCAN_RECHECK_DAYS || '', 10);
+  return Number.isFinite(n) && n >= 7 && n <= 730 ? n : 60;
+}
+
+/**
+ * The at-a-glance summary -- plain rules, no model. Descriptive only: the
+ * latest figures compared with the member's own 90-day average as signed
+ * differences, what their practitioner's scan platform flagged (attributed
+ * to it), and the highest and lowest centre values. No step sizes, ranges
+ * or words such as "usual" or "comfortable": no approved source defines
+ * them (docs/BIOWELL_INTERPRETATION_SOURCE_REQUIREMENTS.md). Exported for
+ * the test and for the card.
  */
 export function readingSummary({ latest, trend, comparisons = [], practitionerName = 'your practitioner' } = {}) {
   const lines = [];
   const e = latest?.energy, s = latest?.stress;
   const eAvg = trend?.energy?.average, sAvg = trend?.stress?.average;
-  const word = (v, avg, up, down, same, step) => (typeof v !== 'number' || typeof avg !== 'number') ? null : (v - avg >= step ? up : (avg - v >= step ? down : same));
-  const eWord = word(e, eAvg, 'Energy above your recent average', 'Energy below your recent average', 'Energy around your recent average', 5);
-  const sWord = word(s, sAvg, 'stress higher than usual', 'stress lower than usual', 'stress about usual', 0.5);
-  const headline = eWord && sWord ? `${eWord} · ${sWord}` : (eWord || (sWord ? sWord[0].toUpperCase() + sWord.slice(1) : (latest ? 'Your latest reading' : 'No reading yet')));
+  const diff = (v, avg, d) => (typeof v === 'number' && typeof avg === 'number' ? `${v - avg > 0 ? '+' : (v - avg < 0 ? '−' : '±')}${Math.abs(v - avg).toFixed(d)}` : null);
+  const eD = diff(e, eAvg, 1), sD = diff(s, sAvg, 2);
+  const parts = [eD ? `Energy ${eD}` : '', sD ? `${eD ? 'stress' : 'Stress'} ${sD}` : ''].filter(Boolean);
+  const headline = parts.length ? `${parts.join(' · ')} vs your 90-day average` : (latest ? 'Your latest reading' : 'No reading yet');
   if (latest && (typeof e === 'number' || typeof s === 'number')) {
-    const parts = [];
-    if (typeof e === 'number') parts.push(`energy ${e}` + (trend?.energy ? ` (your 90-day range ${trend.energy.lowest}–${trend.energy.highest})` : ''));
-    if (typeof s === 'number') parts.push(`stress ${s}` + (trend?.stress ? ` (range ${trend.stress.lowest}–${trend.stress.highest})` : ''));
-    lines.push(`Latest reading ${latest.scanned_at}: ${parts.join(', ')}.`);
+    const bits = [];
+    if (typeof e === 'number') bits.push(`energy ${e}` + (trend?.energy ? ` (your 90-day range ${trend.energy.lowest}–${trend.energy.highest}, average ${trend.energy.average})` : ''));
+    if (typeof s === 'number') bits.push(`stress ${s}` + (trend?.stress ? ` (range ${trend.stress.lowest}–${trend.stress.highest}, average ${trend.stress.average})` : ''));
+    lines.push(`Latest reading ${latest.scanned_at}: ${bits.join(', ')}.`);
   }
   const flags = trend?.flagged || [];
   if (trend) {
-    if (!flags.length) lines.push('Nothing was flagged by your practitioner\'s system in the last 90 days.');
+    if (!flags.length) lines.push('Nothing was flagged by your practitioner\'s scan platform in the last 90 days.');
     else {
       const high = flags.filter((f) => f.severity === 'high');
       const names = flags.slice(0, 3).map((f) => f.name).join(', ');
-      lines.push(`${flags.length} area${flags.length === 1 ? ' is' : 's are'} flagged in the last 90 days${high.length ? `, ${high.length} of them high` : ''}: ${names}${flags.length > 3 ? ' and more' : ''}.`);
+      lines.push(`${flags.length} area${flags.length === 1 ? ' was' : 's were'} flagged by your practitioner's scan platform in the last 90 days${high.length ? `, ${high.length} of them labelled high` : ''}: ${names}${flags.length > 3 ? ' and more' : ''}.`);
     }
   }
   const ch = (latest?.chakras || []).filter((c) => typeof c.value === 'number');
   if (ch.length >= 2) {
     const sorted = [...ch].sort((a, b) => b.value - a.value);
-    lines.push(`${sorted[0].name} was your most active centre, ${sorted[sorted.length - 1].name} the quietest.`);
+    lines.push(`Highest centre value: ${sorted[0].name}. Lowest: ${sorted[sorted.length - 1].name}.`);
   }
   const c0 = comparisons[0];
   if (c0 && (typeof c0.stress_change === 'number' || typeof c0.energy_change === 'number')) {

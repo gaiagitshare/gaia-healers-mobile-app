@@ -1,315 +1,359 @@
-# Gaia Personal Path — design for approval
+# Gaia Personal Path — design (revision 2)
 
-Status: **proposal, nothing below is built** except the "What do these mean?"
-walk-through and the avatar placement fix (section 10). No recommendation rule
-is implemented until the mappings in section 6 are approved with a source.
+Status: **architecture approved in principle; the engine is not built.** This
+revision applies the owner's corrections of 6 Oct 2026.
 
-The loop we are building:
+Companion documents:
+- `READINGS_CLAIMS_INVENTORY.md`: every reading claim, classified A–D, and
+  what replaced it.
+- `BIOWELL_INTERPRETATION_SOURCE_REQUIREMENTS.md`: what we have, and the
+  exact questions for Bio-Well and the partner.
+
+The loop:
 
 > measure → understand → recommend → act → learn → check progress → adjust
 
-Bio-Well reading + member context → deterministic interpretation → approved
-recommendation catalogue → prioritised Personal Path → Gaia guides the member
-through it → progress / check-in → updated path.
+Bio-Well reading + member context → descriptive facts → **approved**
+catalogue → prioritised Personal Path → Gaia helps the member open and finish
+items → progress → updated path.
+
+Ground rules:
+- **No interpretation without a source.** No rule may say or imply what a
+  value means until its source is recorded and the rule is approved.
+- **Commerce is never required.** The Path must work with zero product rules.
 
 ---
 
-## 1. Authoritative-source audit (what the project actually knows)
+## 1. Descriptive vs interpretive (applies to every surface)
 
-**Headline finding: no Bio-Well threshold, band or meaning in either repo has a
-stated source.** There is no Bio-Well manual, GDV table, PDF or expert sign-off
-anywhere in the code, data or docs. The only measured facts are field names and
-shapes, recorded against the partner's staging server
-(`docs/PRACTITIONER_AREA_DESIGN.md`, "not taken from documentation").
-
-### 1a. Facts we can use without any approval (pure arithmetic or the partner's own labels)
-
-| Derivable | Where it comes from |
+| Allowed without an interpretation source | Needs a recorded source **and** approval |
 |---|---|
-| Scan date and age in days | `latest.scanned_at` |
-| Latest energy / stress vs the member's **own** average (3-scan or 90-day) | `average_recent`, `trend.*.average` |
-| Highest / lowest chakra **value** in a scan | `latest.chakras[]` |
-| Change between two scans | `series`, `comparisons[]` |
-| Flagged areas with direction and severity | `trend.flagged[]`: **computed by the partner (Bio-Well / gaiapractitioners)**, passed through untouched |
-| Practitioner-written guides / recommendations | `get_my_recommendations` (practitioner-authored, consent-gated) |
-| Number of scans, whether a new one is unseen | link status |
+| Scan date, age of the scan | normal / abnormal, healthy / unhealthy |
+| Member's own averages (3-scan, 90-day) | comfortable, concerning, good, bad, better, worse |
+| Signed difference from the member's own average or earlier scans | balanced / imbalanced, when we compute it ourselves |
+| Highest and lowest value in a scan, as displayed | what a centre means physically or emotionally |
+| Partner/Bio-Well flags, **attributed** to whoever raised them | what a numerical range means |
+| Before/after arithmetic | what someone should do *because of* a value |
 
-### 1b. Already on screen today with **no source** (needs a source or removal)
-
-All arrived in PRs #223–#225 (4 Oct 2026); no source is cited.
-
-| Item | Where | Value |
-|---|---|---|
-| Energy "comfortable" band | `gaia-my-readings.js` gauge + explainer | 40–70, "most people sit between 40 and 70" |
-| Stress "comfortable" band | same | 2–4, "above 4 is worth a conversation" |
-| Headline step sizes | `member-link.js readingSummary` | energy ±5, stress ±0.5 vs 90-day average |
-| Stale scan | `ageOf` | > 30 days |
-| Centre of the week cues (quietest chakra → tool + cue) | `gaia-my-readings.js CENTRE_CUES` | developer table |
-| Chakra → colour spray shop search | `gaia-store.js CHAKRA_COLOUR` | developer table (Jul 2026) |
-| Chakra practices / journal prompts / themes | `gaia-chakra-data.js`, `wellness-router.js CHAKRA_PATHS` | developer-written, "real correspondences" comment, no reviewer |
-| Out-of-balance shown as "%" | member card | unit assumed |
-
-### 1c. Not defined anywhere
-
-- What chakra `alignment` means (scale and direction). The member card never
-  shows it, but the explainer mentions "centred or pulled to one side".
-- `asymmetry`, organ left/right values, the unit and normal range of `disbalance`.
-- The partner's rule for raising a flag and choosing its severity.
-- Units disagree: the UI says `J ×10⁻²`, the design doc says "joules ×100".
-
-**Recommendation:** ask Bio-Well (or Gaia's lead practitioner) for the official
-interpretation guide. Until then, keep the on-screen bands **labelled as Gaia's
-display bands**, or remove them, and build every rule on 1a only.
+Enforced by `tests/readings-guide.test.cjs` (UI) and
+`staging-proxy/test/member-link.test.js` (server summary).
 
 ---
 
-## 2. What exists vs what must be built
-
-| Layer | Exists today | To build |
-|---|---|---|
-| Reading data | Full member payload (`/my-readings`), partner flags, practitioner guides | nothing |
-| Interpretation | `readingSummary` (own-average wording), walk-through (this PR) | `pathSignals()`: named, versioned signals from 1a only |
-| Resources | Energy tools (all free), 14 catalogue courses + 12 manifest courses, 8 communities, directory with Bio-Well filter, 3 booking links, events, 105 Shopify products, 4 membership levels | a **resource registry** with stable ids (today ids differ between `courses.json` and the manifest; store tags are empty) |
-| Recommendations | `CENTRE_CUES`, `CHAKRA_COLOUR`, `practitioner_suggested_services` (practitioner-authored attribute matching) | the **approved catalogue** (section 5) |
-| Path / ranking | `suggestedNextStep()` for Assist (one line, fixed order) | `buildPath()` ranking and staging |
-| Progress | course progress, daily check-ins, challenge check-ins, practice journal (device only), member prefs (6 fixed booleans) | `member-path` store: per-item status, no values |
-| Gaia | avatar chips and SUGGEST table, Assist member facts | a PATH fact line, an `open_path_item` tool, path chips |
-| Membership | `resolveMemberAccess` (level, next level, gains), per-course grants | lock reasons on path items |
-
----
-
-## 3. Architecture
+## 2. Architecture
 
 ```
-Bio-Well partner ──► memberReadings()                  (exists; values never stored)
-                          │
-                          ▼
-                    pathSignals(readings)              L1  deterministic, versioned, unit-tested
-                          │  e.g. scan_age_days=158, stress_vs_own_avg=up,
-                          │       quietest_centre=solar_plexus, partner_flag(liver, worsening)
-                          ▼
- approved catalogue ──► matchRecommendations()         L2  only status=approved entries
-                          │
- member context ──────► buildPath()                    L3  rank, stage, lock, de-duplicate,
- (grants, level,          │                                apply done/dismissed
-  progress, prefs)        ▼
-                     Path { items[≤5] }  ──► My readings "Your Gaia Path" · Today row · avatar
-                          │
-                          ▼
-                 Assist sees titles + status only      L4  never signals, reasons or values
+partner MCP ──► memberReadings()                      exists; values never stored
+                    │
+                    ▼
+              pathFacts(readings)                     descriptive only: scan_age_days, has_new_reading,
+                    │                                 has_readings, flags_present (count), …
+                    │                                 no thresholds beyond Gaia product policy (recheck days)
+ member context ────┤  (grants, course progress, bookings, prefs, onboarding interests)
+                    ▼
+              matchRules(catalogue)                   serves ONLY status=approved rules
+                    ▼
+              buildPath()                             stages, ranking, free-first, locks, done/dismissed
+                    ▼
+              Path { items[≤5] } ──► My readings · Today · avatar
+                    │
+                    ▼
+              Assist view: { id, title, stage, state, action }     nothing else (section 6)
 ```
 
-- **Runs on the proxy**, inside the existing `/my-readings` request: the
-  readings are already fetched there. Same promise as today: values are never
-  written to disk; the path store keeps only recommendation ids and statuses.
-- **L1 signals are the only place readings become words.** Every signal is a
-  named function with a unit test and a version, so a later expert-approved
-  threshold changes one constant, not the UI.
-- **The catalogue is data**, `data/path-catalogue.json`, editable later in the
-  Control Center. Code never contains a mapping.
+- **Where it runs:** on the proxy, inside the existing authenticated
+  member request. The readings are already fetched there and are never
+  written to disk.
+- **What it stores:** only item ids, states, dates and the catalogue version
+  that produced them.
+- **Rules are data** (`data/path-catalogue.json`), so code holds no mapping.
+- **Fact names:** the engine evaluates descriptive facts. A future
+  interpretive fact (for example "stress above own baseline") can be added
+  only with a `biowell_official` source entry (section 3), and rules using it
+  still need approval.
 
 ---
 
-## 4. Data model
+## 3. Catalogue: source and approval are separate
 
-### 4a. Catalogue entry
+### 3a. Rule record
 
 ```jsonc
 {
-  "id": "stress-above-own-average",
-  "version": 1,
-  "trigger": { "signal": "stress_vs_own_avg", "op": "eq", "value": "up" },
-  "reason": "Your latest stress reading is higher than your own recent average.",   // member-facing, reviewed copy
-  "stage": "start_now",            // start_now | this_week | learn | work_with | explore | recheck
-  "priority": 70,                  // 0–100 within the stage
-  "practice":  { "kind": "tool",   "id": "breath" },
-  "learning":  { "kind": "lesson", "id": "<manifest course>/<lesson>" },
-  "service":   { "kind": "practitioner", "id": "linked" },
-  "product":   null,               // optional, never the first item
-  "free_alternative": { "kind": "tool", "id": "breath" },
-  "membership_requirement": "from_resource",   // derived live from grants/resolver, never hard-coded
-  "exclusions": ["no_scan_within_days:365"],
-  "approval": { "status": "draft", "by": null, "at": null },   // draft | approved | retired
-  "source": { "type": "gaia_expert", "ref": null }             // bio_well_doc | gaia_expert | practitioner | business_rule
+  "id": "P-RECHECK",                  // stable public id; what Gaia may see
+  "version": 3,                        // every edit creates a new version
+  "title": "Consider a new Bio-Well scan",   // public, member-facing
+  "trigger": { "fact": "scan_age_days", "op": ">=", "value": { "policy": "recheck_after_days" } },
+  "stage": "recheck",                  // start_now | this_week | learn | work_with | explore | recheck
+  "priority": 50,
+  "action": { "kind": "booking", "id": "biowell-scan", "fallback": { "kind": "directory", "intent": "scan" } },
+  "free_alternative": null,
+  "reason_public": "Your latest scan was 60+ days ago. A new scan may give you a more current point of comparison.",
+  "kind": "service",                   // practice | learning | service | community | event | product
+  "exclusions": [],
+  "sources": [ { "type": "business_rule", "ref": "Gaia product policy, recheck window", "doc_version": "2026-10-06" } ],
+  "status": "approved",                // draft | in_review | approved | retired
+  "approval": { "by": "contact:<reviewer id>", "role": "path_reviewer", "at": "2026-10-07T…", "version": 3 },
+  "created_by": "contact:<author id>"
 }
 ```
 
-### 4b. Member path state (`data/member-path.json`, keyed by contactId)
+**Source types:**
+- `biowell_official`: needs document, version and date.
+- `gaia_practitioner`: needs practitioner id and the item they approved.
+- `gaia_content`: Gaia's own material, such as a course or practice.
+- `business_rule`: Gaia product policy.
 
-```jsonc
-{ "items": { "stress-above-own-average:tool:breath":
-    { "status": "done", "at": "2026-10-06T…", "scan": "2026-10-03" } },   // suggested | started | done | dismissed | snoozed
-  "catalogue_version": 3 }
-```
+A rule may carry several source entries.
 
-No values, only the scan **date** the item was made for. "Done" comes from
-existing signals where possible: course progress, daily or challenge
-check-ins, a booking. The breath tool needs a small "completed" event.
+### 3b. Rules the engine enforces
 
-### 4c. Path output (to the page)
+1. **Approval gates serving.** Only `status = approved` is served, and only
+   when `approval.version == version`. Editing an approved rule creates a new
+   draft version. The previous approved version keeps serving until the new
+   one is approved or the rule is retired.
+2. **Sources match triggers.** A rule whose trigger uses a reading-derived
+   interpretive fact must carry a `biowell_official` source. Without one it
+   cannot be approved; the approval call refuses it.
+3. **Products need content approval.** `kind: product` additionally needs a
+   `gaia_content` or `biowell_official` source naming the mapping (section 7).
+4. **Two people.** The author cannot approve their own version.
+5. **Audit trail:** `data/path-catalogue-audit.jsonl`, append-only. Each line
+   is `{ at, actor, role, action: create|edit|submit|approve|reject|retire, id, version, hash }`.
+   The approval screen shows the diff between versions.
 
-```jsonc
-{ "basis": { "scanned_at": "2026-04-25", "age_days": 164, "stale": true },
-  "items": [ { "stage": "start_now", "rec": "stress-above-own-average", "title": "Coherence Breathing", "minutes": 3,
-               "reason": "…", "source_label": "Gaia practice library", "free": true, "locked": null,
-               "open": { "view": "wellness", "tool": "breath" } } ] }
-```
+### 3c. The reviewer role
 
----
-
-## 5. Ranking rules
-
-1. Stages in order: **Start now → This week → Learn → Work with someone → Explore → Recheck**.
-2. At most one item per stage, at most five in all. The rest sit behind "See more".
-3. **"Recommended by your practitioner"** (their guides) outranks everything in its stage.
-4. Inside a stage: free before paid, owned before locked, shorter before longer.
-5. Products appear only under **Explore**, never as the only item, and never
-   without a free item on the same path.
-6. Done → the next item of the same recommendation ("continue"). Dismissed →
-   hidden 30 days. A new scan → regenerate, keeping dismissals.
-7. A scan older than the recheck window shows a banner at the top ("based on
-   your scan from April 25"). The Recheck item stays in its stage.
-8. Never: diagnosis words, "treats", "fixes", "heals", or ranking by price.
+- **No hard-coded reviewer.** Reviewers are signed-in Gaia members whose
+  contact id holds the `path_reviewer` role. The role list is kept in the
+  Control Center and audited like the rules.
+- **Why not the admin password:** the Control Center today uses one shared
+  admin password, which cannot identify *who* approved. Approval therefore
+  goes through the reviewer's own member sign-in.
+- **Bootstrapping:** the first reviewers are added by the owner.
 
 ---
 
-## 6. Proposed recommendation taxonomy — **for approval, none implemented**
+## 4. Ranking
 
-Every row uses only resources that exist today. "Source" says who must sign it off.
+1. **Stages in order:** Start now → This week → Learn → Work with someone →
+   Explore → Recheck.
+2. **Size:** one item per stage, at most five in all. More items sit behind
+   "See more".
+3. **Within a stage:** practitioner-approved items first (once verifiable,
+   section 8), then free before paid, owned before locked, shorter before longer.
+4. **Products:** only in Explore, never the first item, and never on a path
+   without a free item (section 7).
+5. **Done and dismissed items:**
+   - Done: the item is replaced by the rule's continuation, if one exists.
+   - Dismissed: hidden for 30 days (configurable).
+   - New scan: the path is regenerated and dismissals are kept.
+6. **Recheck** stays in its stage, with the policy wording in section 5.
+7. **Never:** diagnosis, treatment or cure words, urgency, scarcity, or
+   ranking by price.
 
-| # | Trigger (from 1a only) | Stage | Points to (existing) | Source needed | Ready? |
+---
+
+## 5. Recheck window
+
+- **What it is:** an **initial Gaia product policy** of 60 days.
+- **Where it lives:** configured on the server (`GAIA_SCAN_RECHECK_DAYS`,
+  bounded to 7–730). It is sent to the app with the link status and the
+  readings, and is not hard-coded in the UI. *(Built in #276.)*
+- **Wording:** "Your latest scan was 60+ days ago. A new scan may give you a
+  more current point of comparison."
+- **Never:** "stale", "expired" or "out of date".
+- **Bio-Well:** we do not claim Bio-Well defines an interval. Q-T4 asks
+  whether it does.
+
+---
+
+## 6. What Gaia sees
+
+| Gaia receives (per item) | Gaia never receives |
+|---|---|
+| `id` (e.g. `P-RECHECK`) | raw reading values |
+| public `title` | facts or signals computed from readings |
+| `stage` | trigger, thresholds, rule logic |
+| state: `suggested`, `started`, `done`, `dismissed` | the private reason derived from values |
+| `action` (deep link Gaia may open) | practitioner identity, unless independently authorised |
+
+- **Fact line** (about 30 tokens):
+  `PERSONAL PATH: P-RECHECK "Consider a new Bio-Well scan" (recheck, suggested); P-CONT-12 "Continue: Bio-Well Orientation" (learn, started).`
+- **Tool:** `open_path_item(id)` opens the item's action. **"Why this?"**
+  opens the item's on-screen explanation; Gaia does not explain it herself.
+- **No new protected data:** Gaia's prompt already knows whether readings
+  are shared; the fact line adds nothing reading-derived beyond the public
+  title.
+- **Unchanged:** `GAIA_SCAN_NARRATION`, the You-page promise, and the
+  existing reading rules in the prompt.
+
+---
+
+## 7. Products
+
+**Allowed in v1 only if every one of these holds:**
+- **Placement:** only in Explore; never the first item; a free option shown
+  first where one exists.
+- **Approval:** an approved mapping with a recorded source and reviewer. The
+  existing `CHAKRA_COLOUR` shop search does not qualify (inventory item 17).
+- **No effect claims:** nothing like "this product will improve / treat /
+  fix your reading", and no urgency or scarcity.
+- **Labelled clearly:** education or wellness products are distinguished from
+  practitioner services.
+
+**With no approved mappings at launch, v1 ships without products.** Nothing
+in the engine depends on commerce.
+
+---
+
+## 8. Membership
+
+- **Not a recommendation:** there is never a rule like "high stress →
+  upgrade".
+- **Locked items:** when a recommended resource needs more access, the
+  recommendation shows first, then **"This is included with Silver."** with
+  [See Silver] and [Show me a free option].
+- **Lock wording comes from real access:** course access is per grant, so
+  "included with Silver" is said only when the policy actually includes it;
+  otherwise "Needs course access".
+
+---
+
+## 9. Personal Path v1: only rules defensible now
+
+| Id | Trigger (non-interpretive) | Stage | Action | Source | Ready |
 |---|---|---|---|---|---|
-| R1 | No readings shared | start_now | Share-with-practitioner flow; "Book a Bio-Well scan" (`biowell-scan` booking, directory filter `intent:'scan'`) | business rule | **yes**, business decision only |
-| R2 | New reading unseen | start_now | Open readings and the walk-through; "Questions for your practitioner" | business rule | **yes** |
-| R3 | Scan older than *N* days (proposed 60) | recheck | Book a Bio-Well scan with the linked practitioner, else directory | business rule (N) | needs N |
-| R4 | Practitioner guide present (consent on) | start_now / this_week | The guide's own items, labelled "Recommended by {practitioner}" | practitioner | **yes**, already practitioner-authored |
-| R5 | Partner flag, direction *worsening* | work_with | Linked practitioner; their services matched by `practitioner_suggested_services` (practitioner-authored attributes) | practitioner | **yes**, mechanism exists |
-| R6 | Stress above own average (latest vs 3-scan avg) | start_now | Coherence Breathing (free). Learn: Bio-Well Advanced L1 "Stress Scan" lesson (grant-gated) | Gaia expert | draft |
-| R7 | Energy below own average | this_week | **No sourced resource identified.** Experts to propose | Gaia expert | open |
-| R8 | Quietest centre = X | this_week | X's practice from `gaia-chakra-data.js`; 9-Week Chakra Challenge week for X; Chakra Match for X | Gaia expert (also signs off the existing practice copy) | draft |
-| R9 | Quietest centre = X | explore | X colour spray (existing `CHAKRA_COLOUR` search), chakra crystal set | Gaia expert + owner (commerce) | draft |
-| R10 | Onboarding interest "stress and nervous system" | learn | Matching course or community, **once tagged** | owner | needs tagging |
-| R11 | Comparison: change after sessions | work_with | "Talk it through with {practitioner}", with the before/after dates | business rule | **yes** |
+| P-NEW | A reading newer than the last one opened | start_now | Open reading + walk-through | business_rule | **yes** |
+| P-RECHECK | Latest scan ≥ recheck window | recheck | Book a scan (linked practitioner if bookable, else directory `intent:'scan'`) | business_rule (Gaia policy) | **yes** |
+| P-SHARE | Signed in, readings not shared | start_now | How sharing works / book a scan | business_rule | **yes** |
+| P-PREP | Session with their practitioner within 7 days | this_week | "Prepare for your session": open readings; note questions | business_rule | **yes** |
+| P-CONT | A course started and not finished (academy progress) | learn | Continue at the saved lesson | business_rule | **yes** |
+| P-PRAC-SVC | Practitioner explicitly recommends a service or resource to this client (new tick-box in Practice) | work_with | View service / book | gaia_practitioner | **build first** (practitioner UI) |
+| P-GUIDE | Practitioner guide available, consent on | start_now | Open guide | gaia_practitioner | **blocked**: the partner says guides are AI-generated; need Q-P3 |
+| P-INTEREST | Onboarding interest (member-stated) → course in the same category | learn | Open course | gaia_content | needs owner sign-off of the mapping |
 
-Note on existing live mappings: `CENTRE_CUES` (quietest centre → tool) and
-`CHAKRA_COLOUR` (chakra → spray search) are already live without a source. I
-propose they move into the catalogue as R8 and R9 drafts, so they are
-reviewed once along with everything else.
+**Not activated:** R6–R10 from revision 1 (stress vs own average,
+energy vs own average, centre-based practices, centre-based products,
+interest tagging). Each waits for its Bio-Well source and/or Gaia expert
+approval.
 
 ---
 
-## 7. Exact UX
+## 10. Data quality (traced to sources)
 
-### My readings: new "Your Gaia Path" section, under "In short"
+| Finding | Authoritative source | Action |
+|---|---|---|
+| Broken "Learn more" links: `wellness&tab=biowell` (Solar Plexus, Heart), `community&tab=learning` (Throat) | App routes (`gaia-ui.js`): neither tab exists | **Fixed in #276:** they point to the Academy, as Root and Third Eye already did. No per-centre content target exists to point at. |
+| Ask-Gaia chakra prompts asked her to interpret scans she cannot see | `GAIA_SCAN_NARRATION` off; You-page promise | **Fixed in #276:** "What practices does the app have for the {centre} centre?" |
+| "Crystal Quartz Tachyon Energy Chakra Set" shown as a Silver **course** | GHL: it is in the GHL offer list that `courses.json` syncs (`source: ghl-workflow`), alongside "Bio-Well 3.0 Device … + Certification" (a device bundle). Its description is a physical product's. Silver comes from our price/title guess (`server.js:735-737`, `:891-893`), not GHL. | **Prepared, not applied:** the authoritative fix is in GHL (remove it from course offers, or mark it as a product). If GHL keeps it, add an explicit `not_a_course` list in the sync, owned by the owner. Not guessed here. |
+| Two chakra challenges | **9-Week Chakra Challenge**: a real Gaia programme in the GHL Academy (manifest `086ab8c3…`), run Feb–Apr 2026: week 1 intro, weeks 2–8 Root→Crown (Brow), week 9 review. **8-Week Chakra Challenge**: an app feature written by a developer (commit 1d2fff3, 2026-07-05) with an invented "Integration" week. | **Not guessed.** The GHL programme is the authoritative Gaia programme. Owner decision: retire the app challenge, rename it to make clear it is a self-guided practice, or align it to the 9-week programme. |
+| Empty product tags | Shopify: `tags` is empty on almost every product in `data/store-catalog.json` | Prepared: a tag vocabulary for the owner to apply in Shopify (`centre:root…crown`, `type:spray|oil|crystal|device|book`, `use:practice|education`). Only *approved* tags can be used by Path rules. |
+| Course `accessLevel` guessed from price and title | `server.js:735-737`, `:891-893` | Display only; real access is per grant. Path lock wording uses grants and policy (section 8). |
+| Readings units: `J ×10⁻²` (UI) vs "joules ×100" (doc); disbalance "%" assumed; alignment explained but never shown | No source | "%" and the alignment wording **removed in #276**; units are question Q-E2. |
+
+---
+
+## 11. Analytics (no reading data)
+
+**Pattern:** the existing onboarding funnel (`onboarding-funnel.js`). That
+means a hashed contact id (`sha256('gaia-path:' + id)`, 16 hex characters),
+an event key, ids and timestamps, kept in `data/path-events.jsonl` and
+rotated after 180 days.
+
+**Every event is `{ t, who_hash, event, item_id?, stage?, rule_version? }`.
+Never** values, facts, signals, triggers, reasons, practitioner identity,
+product prices or free text.
+
+| Event | Extra fields |
+|---|---|
+| `path_viewed` | `surface` (readings / today / avatar), `items` (count) |
+| `recommendation_opened` | `item_id`, `stage` |
+| `recommendation_completed` | `item_id`, `stage`, `via` (course_progress / tool / booking / manual) |
+| `recommendation_dismissed` | `item_id`, `stage` |
+| `free_alternative_selected` | `item_id` |
+| `membership_required_shown` | `item_id`, `level` (public plan key) |
+| `membership_opened` | `item_id` |
+| `scan_rebook_opened` | `item_id` (`P-RECHECK`), `route` (practitioner / directory) |
+
+**Questions this answers, without readings:**
+- **Did the path help?** Completion rate per item; return within 7 and 30 days.
+- **Did they follow it?** Opened → completed per stage.
+- **Did they book another scan?** `scan_rebook_opened`, joined with a booking
+  confirmation where the booking system reports one.
+- **Did they start learning?** `recommendation_opened` for learn items,
+  joined with academy progress.
+- **Did it lead to membership or product interest?** `membership_required_shown`
+  → `membership_opened`, and later checkout events (counts only).
+
+Reports show aggregates only, and are suppressed below 5 members per cell.
+
+---
+
+## 12. Exact UX (v1)
+
+My readings, under "In short":
 
 ```
-YOUR GAIA PATH                         based on your scan from Apr 25 · 5 months ago
-┌ A new scan would show where you are now.  [Book a scan]                            ┐
-
-START NOW            Coherence Breathing · 3 min · Free            [Start]   ⋯
-                     Why this? ▸
-THIS WEEK            Solar Plexus practice · 10 min · Free          [Open]    ⋯
-LEARN                Chakra Challenge · Week 4 · Included with Silver
-                     You're on Free.  [See Silver benefits]  [Keep exploring free]
-WITH YOUR PRACTITIONER   "My stress rose while energy fell. What would you look at next?"
-                     Sam Rivera  [Message]  [Book]
-EXPLORE              Related from the Gaia shop ▸   (collapsed by default)
-RECHECK              Your next Bio-Well scan  [Book]
-
-These are wellness suggestions, not a diagnosis.  Done ✓ · Not now · Why this?
+YOUR GAIA PATH
+START NOW        Open your new reading · walk-through                 [Open]   ⋯
+THIS WEEK        Prepare for your session with Sam Rivera · Thu 10:00  [Open]   ⋯
+LEARN            Continue: Bio-Well Orientation · lesson 4 of 13       [Continue] ⋯
+                 (locked case) This is included with Silver.  [See Silver] [Show me a free option]
+RECHECK          Your latest scan was 60+ days ago. A new scan may give you
+                 a more current point of comparison.                   [Book a scan] ⋯
+                 Wellness suggestions, not a diagnosis.  ⋯ = Done · Not now · Why this?
 ```
 
-- **"Why this?"** opens the reason and its source label ("Part of Gaia's Solar
-  Plexus material", "Recommended by Sam Rivera").
-- **⋯** menu: Done, Not now, Don't suggest this.
-- Lock wording comes from the member's real grants. Course access is
-  per-grant, not by level, so "Included with Silver" appears only when the
-  policy says so.
-
-### Today
-
-One row: "Next on your path: Coherence Breathing · 3 min" with **Start**.
-
-### Gaia (avatar and Assist)
-
-- **Chip "What's next on my path?"** points at the next item; Start opens it.
-- **After completion:** "You finished that. Continue with Week 4, or see why it
-  was suggested?" The reason is shown on screen, never spoken from the model.
-- **Assist fact line** (~30 tokens): `PERSONAL PATH: next "Coherence Breathing"
-  (free, 3 min); 4 items; 1 done this week.` No trigger, reason, signal or value.
-- **New tool `open_path_item(index)`.** "Why?" → Gaia opens the item's "Why
-  this?" on screen.
+- **"Why this?"** shows `reason_public` and the source label ("Gaia
+  policy", "From Sam Rivera").
+- **Today:** a single row, "Next on your path", with the first item.
+- **Avatar:** the chip "What's next on my path?" points at the first item.
+  After completion: "Done. Next on your path: …".
 
 ---
 
-## 8. Privacy decision Babak must make (Layer 4)
+## 13. Shipped in #276 (no thresholds, no AI)
 
-Even without values, "your path prioritises stress regulation" is **derived
-from health data**. Proposal:
+- **Walk-through:** "What do these mean?" (avatar chip and the Home button)
+  walks through the member's own card. All seven steps are descriptive per
+  section 1, and the last step sends meaning to the practitioner.
+- **Avatar placement:** beside, below or above the target, under the visible
+  top bar and above the tab bar. On a phone the target is lifted under the
+  top bar. If there is still no room, Gaia goes compact (bubble only); she
+  waits for scrolling to settle.
+  - **Verified:** 28 steps (390 px and 1440 px, recent and 4-month-old
+    readings): 0% overlap with the ringed section, never under the top bar
+    or over the tab bar.
+- **Readings card:** neutral copy (inventory items 1–12 and 16).
+- **Recheck policy:** configurable on the server.
+- **Chakra data:** broken links and interpretive prompts fixed.
 
-- **Default:** Assist receives item **titles and statuses only**. The reason
-  stays on screen. The You page promise "never reads your reading values" stays
-  true; I suggest clarifying it to "never reads your readings or why your path
-  suggests something".
-- **Option:** a member consent switch, "Let Gaia talk about why my path
-  suggests things", like the guides switch. It still sends no values, but
-  sends the reason text. Needs your decision; it is not proposed as default.
-- **`GAIA_SCAN_NARRATION`:** unchanged and off. Real conversational analysis
-  ("compare my last three scans") waits for a BAA-covered provider (Layer 5).
+## 14. What ships when
 
----
-
-## 9. Data hygiene found during the audit (fix regardless)
-
-- **Stale deep links in `gaia-chakra-data.js` `learnHref`:** `wellness&tab=biowell`
-  is not a tab, and `community&tab=learning` does not exist.
-- **Mis-filed product:** "Crystal Quartz Tachyon Energy Chakra Set" is in
-  `courses.json` as a silver course.
-- **Two chakra challenges:** a 9-week course (Brow week) and the app's 8-week challenge.
-- **Course `accessLevel` is guessed** from price and a title regex. Grants are
-  what actually unlock courses.
-- **Store data is unusable for matching:** Shopify `tags` are empty on almost
-  every product, so there is nothing to match on.
-- **Member prefs can't hold path state:** they accept only six fixed booleans,
-  so the path needs its own store.
-- **Readings card copy:** the unit is inconsistent (J ×10⁻² vs joules ×100);
-  alignment is explained but never shown; the "%" on disbalance is assumed.
-
----
-
-## 10. Shipped in this PR (no thresholds, no AI)
-
-- **"What do these mean?"** now walks through the member's own card, section by
-  section: In short → latest scan (date, age, own 3-scan average) → seven
-  centres (most active / quietest) → most out of balance → last 90 days
-  (partner flags) → before/after sessions → definitions.
-  - Wording is fixed, and it adds no ranges or meanings.
-  - It ends by sending questions of meaning to the practitioner.
-  - Steps are built by `GaiaMyReadings.guide()`; Gaia only points.
-- **Avatar placement:** when pointing, Gaia and her bubble are measured and
-  placed beside, below or above the target. On a phone the target is lifted
-  under the top bar to make room. She waits for smooth scrolling to settle
-  before measuring.
-  - Checked at 390 px and 1440 px: no overlap with the ringed section on six
-    of seven steps.
-  - Exception: on a phone, the open definitions plus the bubble are taller than
-    the screen, so she uses her corner.
-
-## 11. Build order after approval
-
-1. **Signals and path engine** (L1, L3), plus path store and UI, with only the
-   **ready** rows R1, R2, R4, R5, R11 and R3 (once N is set). About 1 week.
-2. **Resource registry:** stable ids, the fixes in section 9, and course/product tags. About 3–4 days.
-3. **Expert-approved rows** R6–R10 as they are signed off. Data only, no code.
-4. **Gaia:** Assist fact line, `open_path_item`, avatar chips and completion follow-ups. About 3 days.
-5. **Measurement:** path opened, item started/done/dismissed, bookings and
-   purchases after a path item (counts only, no values).
-
-## 12. Decisions needed
-
-1. **Expert reviewer:** who approves catalogue rows and chakra copy (Dr. Nima? Bio-Well?).
-2. **Display bands:** source the 40–70 / 2–4 bands, relabel them as Gaia's display bands, or remove them.
-3. **Recheck window N:** proposed 60 days.
-4. **Layer 4 default:** titles-only, as proposed, or add the consent option.
-5. **Commerce:** whether products appear on the path at all in v1 (proposed: Explore only, collapsed).
-6. **BAA:** whether to pursue it now for Layer 5.
+- **A. Ship now (no outside approval):**
+  - everything in #276;
+  - the Path framework: catalogue with source/approval/audit, reviewer
+    role, engine, path store, UI, analytics;
+  - v1 rules P-NEW, P-RECHECK, P-SHARE, P-PREP and P-CONT, each approved
+    in-app by a reviewer as `business_rule`;
+  - the practitioner "recommend to client" tick-box (P-PRAC-SVC).
+- **B. Needs Bio-Well documentation:** definitions, units, ranges, centre
+  interpretation, disbalance, variability, before/after and rescan wording
+  (Q-E/S/C/B/T/L). Rules on stress/energy versus own average or on centres
+  (old R6–R9).
+- **C. Needs Gaia expert or owner approval:**
+  - every content and product mapping, including `CHAKRA_COLOUR` and centre
+    practices;
+  - chakra practice copy;
+  - the interest → course mapping (P-INTEREST);
+  - 9- versus 8-week challenge;
+  - the crystal set in GHL;
+  - Shopify tags;
+  - the practitioner-view display scales.
+- **Needs the partner:** P-GUIDE (Q-P3), and flag attribution (Q-P1).
+- **D. Needs the BAA / AI path:**
+  - Gaia discussing or comparing actual values;
+  - explaining *why* a reading-based item was chosen in conversation;
+  - any `GAIA_SCAN_NARRATION` change;
+  - member opt-in for reason text to reach the model.

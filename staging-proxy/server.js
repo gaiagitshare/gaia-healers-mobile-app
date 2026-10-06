@@ -34,7 +34,7 @@ import { attachQwenVoiceRelay, qwenRouting, issueQwenTicket, qwenVoiceConfig, vo
 import { normalizeUsage, recordUsage, recordFailure } from './assist-usage.js';
 import { toolDeclarationsFor, clientToolNames, slowToolNames, runTool, modelView } from './assist-tools.js';
 import { getPrefs, setPrefs } from './member-prefs.js';
-import { memberReadingsEnabled, memberAllowed, mintCode, redeemCode, revokeLink, linkStatus, linkFor, partnerAuthorized, memberReadings, notifyPartnerUnlink, rememberLatest, markSeen, refreshLatest, linksForPractitioner, memberGuides, guidesForModel } from './member-link.js';
+import { memberReadingsEnabled, memberAllowed, mintCode, redeemCode, revokeLink, linkStatus, linkFor, partnerAuthorized, memberReadings, notifyPartnerUnlink, rememberLatest, markSeen, refreshLatest, linksForPractitioner, memberGuides, guidesForModel, recheckAfterDays } from './member-link.js';
 import { practitionersConfig, makePkce, authorizeUrl, rememberFlow, claimFlow,
          exchangeCode, resolveProfile, saveToken, forgetToken, connectionStatus, practitionersBootLine, tokenFor, linkState, isLinkedPractitioner, verifyPractitioner, practitionerAuthorization, applyPractitionerLink, VERIFICATION_VERSION } from './practitioners-oauth.js';
 import { allowSpend, callerKey, guardSubject, spendKindFor, ASSIST_MAX_PROMPT_CHARS, ASSIST_MAX_TTS_CHARS } from './assist-guard.js';
@@ -7559,7 +7559,7 @@ const server = http.createServer(async (req, res) => {
       if (req.method === 'GET' && sub === 'member-link/status') {
         // A linked member's newest reading date, at most one small partner call every six hours.
         if (linkFor(member.contactId)) await refreshLatest(cfg, member.contactId);
-        sendJson(res, 200, { ok: true, available: cfg.enabled, environment: cfg.environment, ...linkStatus(member.contactId) }, origin); return;
+        sendJson(res, 200, { ok: true, available: cfg.enabled, environment: cfg.environment, ...linkStatus(member.contactId), recheck_after_days: recheckAfterDays() }, origin); return;
       }
       if (req.method === 'POST' && sub === 'member-link/seen') {
         let body = {}; try { body = await readJsonBody(req); } catch { body = {}; }

@@ -274,14 +274,27 @@ test('the server writes the "In short" summary from plain rules and a dated seri
     comparisons: [{ from: '2026-05-01', to: '2026-06-14', stress_change: -0.4, energy_change: 3.2 }],
     practitioner: 'Dr Test',
   });
-  assert.equal(s.headline, 'Energy around your recent average · stress higher than usual');
-  assert.ok(s.lines.some((l) => l.startsWith('Latest reading 2026-06-14: energy 54 (your 90-day range 40–60), stress 3.9 (range 2–4).')));
-  assert.ok(s.lines.some((l) => l === '2 areas are flagged in the last 90 days, 1 of them high: Heart, Kidneys.'));
-  assert.ok(s.lines.some((l) => l === 'Heart was your most active centre, Crown the quietest.'));
+  // Signed differences from the member's own average: arithmetic, no "usual" or "comfortable".
+  assert.equal(s.headline, 'Energy +4.0 · stress +0.90 vs your 90-day average');
+  assert.ok(s.lines.some((l) => l.startsWith('Latest reading 2026-06-14: energy 54 (your 90-day range 40–60, average 50), stress 3.9 (range 2–4, average 3).')));
+  assert.ok(s.lines.some((l) => l === '2 areas were flagged by your practitioner\'s scan platform in the last 90 days, 1 of them labelled high: Heart, Kidneys.'));
+  assert.ok(s.lines.some((l) => l === 'Highest centre value: Heart. Lowest: Crown.'));
+  // No interpretation words anywhere in the summary.
+  const words = /\b(normal|abnormal|healthy|unhealthy|comfortable|concerning|usual|quietest|balanced|imbalanced|good|bad|better|worse)\b/i;
+  for (const l of [s.headline, ...s.lines]) assert.doesNotMatch(l, words, l);
+  assert.equal(readingSummary({ latest: { scanned_at: '2026-06-14', energy: 50, stress: 3 }, trend: { energy: { average: 50 }, stress: { average: 3 } } }).headline, 'Energy ±0.0 · stress ±0.00 vs your 90-day average');
+  assert.equal(readingSummary({ latest: { scanned_at: '2026-06-14', energy: 50 } }).headline, 'Your latest reading', 'no average, no comparison');
   assert.ok(s.lines.some((l) => l.includes('stress -0.40, energy +3.2')));
   assert.match(s.lines[s.lines.length - 1], /not a diagnosis/);
   assert.deepEqual(readingSummary({}), { headline: 'No reading yet', lines: ['These are reflective measurements, not a diagnosis — your practitioner is the person to ask about them.'] });
-  assert.deepEqual(readingSummary({ latest: { scanned_at: '2026-01-01', energy: 50 }, trend: { flagged: [] } }).lines[1], 'Nothing was flagged by your practitioner\'s system in the last 90 days.');
+  assert.deepEqual(readingSummary({ latest: { scanned_at: '2026-01-01', energy: 50 }, trend: { flagged: [] } }).lines[1], 'Nothing was flagged by your practitioner\'s scan platform in the last 90 days.');
+});
+
+test('the recheck window is Gaia product policy from config: 60 days unless set, bounded', () => {
+  assert.equal(ml.recheckAfterDays({}), 60);
+  assert.equal(ml.recheckAfterDays({ GAIA_SCAN_RECHECK_DAYS: '90' }), 90);
+  assert.equal(ml.recheckAfterDays({ GAIA_SCAN_RECHECK_DAYS: 'soon' }), 60);
+  assert.equal(ml.recheckAfterDays({ GAIA_SCAN_RECHECK_DAYS: '1' }), 60, 'a typo cannot nag every day');
 });
 
 test('memberReadings carries the summary and a sorted, numeric-only series (newest 24 points)', async () => {
@@ -311,8 +324,9 @@ test('memberReadings carries the summary and a sorted, numeric-only series (newe
   assert.ok(r.series.every(p=>p.id && p.at), 'scan identity and timestamp preserved');
   assert.ok(r.series.every((p) => /^\d{4}-\d{2}-\d{2}$/.test(p.d) && typeof p.e === 'number' && typeof p.s === 'number'), 'dated, numeric only; the null 2024 point is dropped');
   assert.ok(r.series.every((p, i, a) => i === 0 || a[i - 1].d <= p.d), 'oldest to newest');
-  assert.equal(r.summary.headline, 'Energy below your recent average · stress higher than usual');
-  assert.ok(r.summary.lines.some((l) => l === 'Heart was your most active centre, Root the quietest.'));
+  assert.equal(r.summary.headline, 'Energy −6.0 · stress +0.90 vs your 90-day average');
+  assert.ok(r.summary.lines.some((l) => l === 'Highest centre value: Heart. Lowest: Root.'));
+  assert.equal(r.recheck_after_days, 60, 'the app is told the recheck policy, never hard-codes it');
   assert.match(r.summary.lines[r.summary.lines.length - 1], /Dr Series is the person to ask/);
 });
 

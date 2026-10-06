@@ -303,3 +303,5 @@ body.gaia-v2 [data-screen="academy"] .g-access--link:hover { background: var(--v
 body.gaia-v2 [data-screen="store"] .g-store-tile { border-color: transparent !important; background: var(--v3-card) !important; }
 body.gaia-v2 [data-screen="store"] .g-store-tile .g-tile__title { font-size: 15px; line-height: 1.35; }
 body.gaia-v2 [data-screen="store"] .g-store-tile .g-tile__price { font-size: 16px; font-weight: 650; color: var(--v3-text); }
+body.gaia-v2 #member-me > .g-glance { grid-column: 1 / -1; width: 100%; }
+body.gaia-v2 .g-glance__tile strong { white-space: nowrap; }

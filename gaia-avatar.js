@@ -50,7 +50,9 @@
     tour: { label: 'Take a tour', icon: 'leaf', run: () => runTour() },
     signin: { label: 'Sign in', icon: 'user', run: () => { try { window.GaiaAuth?.open?.(); } catch (_) { /* ignore */ } } },
     readings: { label: 'Open my readings', icon: 'pulse', run: () => { go('profile'); setTimeout(() => window.dispatchEvent(new CustomEvent('gaia:open-readings')), 80); } },
-    explain: { label: 'What do these mean?', icon: 'help', run: () => { go('profile'); setTimeout(() => { window.dispatchEvent(new CustomEvent('gaia:open-readings')); const d = document.querySelector('#member-readings .g-readings__explain'); if (d) d.open = true; }, 120); } },
+    explain: { label: 'What do these mean?', icon: 'help', run: () => explainReadings() },
+    next: { label: 'Next', icon: 'next', run: () => guideStep(guide.i + 1) },
+    done: { label: 'Done', icon: 'check', run: () => endGuide() },
     share: { label: 'Share my readings', icon: 'pulse', run: () => { go('profile'); setTimeout(() => window.dispatchEvent(new CustomEvent('gaia:open-readings')), 80); } },
     practice: { label: 'Open my practice', icon: 'users', run: () => { go('profile', { tab: 'practice' }); setTimeout(() => window.dispatchEvent(new CustomEvent('gaia:open-client', { detail: { section: 'clients' } })), 120); } },
     academy: { label: 'Continue learning', icon: 'book', run: () => goAndPoint('academy', undefined, 'Your courses are here.') },
@@ -64,7 +66,7 @@
   };
   const ICONS = {
     chat: 'ph-chat-circle-dots', mic: 'ph-microphone', bolt: 'ph-lightning', leaf: 'ph-leaf', user: 'ph-user', pulse: 'ph-pulse',
-    help: 'ph-question', users: 'ph-users-three', book: 'ph-book-open', star: 'ph-star', x: 'ph-x',
+    help: 'ph-question', users: 'ph-users-three', book: 'ph-book-open', star: 'ph-star', x: 'ph-x', next: 'ph-arrow-right', check: 'ph-check',
   };
 
   /** The bubble for this moment: text and up to three chips. A fixed table, never a model. */
@@ -160,6 +162,35 @@
     if (window.GaiaTour?.run) window.GaiaTour.run(undefined, { remember: !member });
   }
 
+  // ── "What do these mean?": a step-by-step walk through the member's own readings card ──
+  // The steps and their words come from GaiaMyReadings.guide() (fixed wording,
+  // arithmetic on the screen's own numbers, no model). Gaia only points.
+  const guide = { steps: [], i: -1 };
+  function explainReadings() {
+    go('profile');
+    setTimeout(() => window.dispatchEvent(new CustomEvent('gaia:open-readings', { detail: { guide: true } })), 80);
+    let tries = 0;
+    const start = () => {
+      const steps = window.GaiaMyReadings?.guide?.() || [];
+      if (steps.length) { guide.steps = steps; guideStep(0); return; }
+      // Readings still loading: wait a little (the first load can take ~20s), then fall back to the definitions.
+      if (++tries < 40) { setTimeout(start, 500); return; }
+      const d = document.querySelector('#member-readings .g-readings__explain'); if (d) { d.open = true; pointAt(d, { text: 'Short definitions of each measure are here.' }); }
+    };
+    setTimeout(start, 600);
+  }
+  function guideStep(i) {
+    const step = guide.steps[i];
+    if (!step) { endGuide(); return; }
+    guide.i = i;
+    const el = step.el && step.el.isConnected ? step.el : (step.sel ? document.querySelector('#member-readings ' + step.sel) : null);
+    if (!el) { guideStep(i + 1); return; }
+    if (step.open) step.open.open = true;
+    const last = i === guide.steps.length - 1;
+    pointAt(el, { text: `${i + 1} of ${guide.steps.length} · ${step.text}`, chips: last ? ['done'] : ['next', 'done'], duration: 0, mini: Boolean(step.compact) });
+  }
+  const endGuide = () => unpoint();
+
   // ── DOM ──────────────────────────────────────────────────────────────────
   let root, char, bubble, ring, pos = { side: 'right', y: null }, state = 'idle', bubbleTimer = null, pointing = false, homeTimer = null, pointedAt = 0;
   function build() {
@@ -246,7 +277,7 @@
   }
 
   // ── pointing: slide next to a target with a guide ring, then go home ────
-  function pointAt(target, { text = 'Here you go.', duration = 4200 } = {}) {
+  function pointAt(target, { text = 'Here you go.', duration = 4200, chips = [], mini = false } = {}) {
     const el = typeof target === 'string' ? document.querySelector(target) : target;
     if (!el || !root) return false;
     // A tall target (the whole readings card) scrolls to its top; a small one to the middle.
@@ -254,30 +285,59 @@
     try { el.scrollIntoView({ block: tall ? 'start' : 'center', behavior: reduced() ? 'auto' : 'smooth' }); } catch (_) { /* ignore */ }
     clearTimeout(homeTimer);
     pointedAt = Date.now();
-    setTimeout(() => {
+    // Measured after the scroll settles; may run twice when the target first has to move up to make room.
+    let lastTop = null, waits = 0;
+    const place = (canScroll) => {
       const full = el.getBoundingClientRect();
       if (!full.width) return;
+      // A smooth scroll may still be moving the page: measure again until it stands still (bounded).
+      if ((lastTop === null || Math.abs(full.top - lastTop) > 1) && waits++ < 8) { lastTop = full.top; setTimeout(() => place(canScroll), 120); return; }
+      lastTop = null; waits = 0;
       // Ring the part that is on screen, so a card taller than the viewport is still ringed where the eye is.
       const top = Math.max(8, full.top), bottom = Math.min(window.innerHeight - 8, full.bottom);
       const r = { left: full.left, right: full.right, width: full.width, top, bottom, height: Math.max(40, bottom - top) };
       ring.hidden = false;
       ring.style.left = (r.left - 6) + 'px'; ring.style.top = (r.top - 6) + 'px'; ring.style.width = (r.width + 12) + 'px'; ring.style.height = (r.height + 12) + 'px';
       pointing = true; setState('pointing');
-      // beside the target when there is room, otherwise just below it
-      const size = root.getBoundingClientRect().width || 72;
-      const left = r.left - size - 14 >= 8;
+      // The bubble first, so the whole of her (bubble and character) can be
+      // measured and placed clear of the target: beside it, then below, then
+      // above; when the target fills the screen, in her usual corner.
+      showBubble({ text, chips, quiet: chips.length > 0 }, { sticky: true });
+      // Compact: the character steps aside and only the bubble is placed (for targets too tall to sit beside).
+      root.classList.toggle('is-mini', mini);
+      root.style.transition = 'none'; root.style.left = '0px'; root.style.top = '0px'; root.style.bottom = 'auto'; root.style.right = 'auto';
+      const box = root.getBoundingClientRect(), w = box.width, h = box.height, gap = 12, vw = window.innerWidth, vh = window.innerHeight;
+      const floor = vh - tabbarInset() + 6;   // keep above the phone tab bar
+      // ...and below the top bar, never over it.
+      // Every screen has its own top bar; only the one on screen counts.
+      const head = Math.max(8, ...[...document.querySelectorAll('.g-topbar')].map((b) => b.getBoundingClientRect()).filter((b) => b.height > 0 && b.top <= 1).map((b) => Math.round(b.bottom))) + 8;
+      const fitsY = (y) => y >= head && y + h <= floor;
+      const midY = Math.min(floor - h, Math.max(head, r.top + r.height / 2 - h / 2));
+      let spot = null;
+      if (r.left - w - gap >= 8 && fitsY(midY)) spot = { left: r.left - w - gap, top: midY, side: 'left' };
+      else if (r.right + gap + w <= vw - 8 && fitsY(midY)) spot = { left: r.right + gap, top: midY, side: 'right' };
+      else if (fitsY(r.bottom + gap)) spot = { left: vw - w - 12, top: r.bottom + gap, side: 'right' };
+      else if (fitsY(r.top - gap - h)) spot = { left: vw - w - 12, top: r.top - gap - h, side: 'right' };
+      // No room on a phone: lift the target to just under the top bar so she fits below it, then place again.
+      if (!spot && canScroll && full.height + gap + h <= floor - head) {
+        ring.hidden = true; root.style.left = (vw - w - 12) + 'px'; root.style.top = (floor - h) + 'px';
+        pointedAt = Date.now();
+        try { window.scrollBy({ top: full.top - head, behavior: reduced() ? 'auto' : 'smooth' }); } catch (_) { window.scrollBy(0, full.top - head); }
+        setTimeout(() => place(false), reduced() ? 50 : 450);
+        return;
+      }
+      // Still no room: try again without the character before ever covering the target.
+      if (!spot && !mini) { mini = true; place(true); return; }
       root.style.transition = reduced() ? 'none' : 'left .4s cubic-bezier(.2,.8,.3,1), top .4s cubic-bezier(.2,.8,.3,1), bottom .4s, right .4s';
-      root.style.bottom = 'auto'; root.style.right = 'auto';
-      root.style.left = (left ? r.left - size - 14 : Math.min(window.innerWidth - size - 12, Math.max(12, r.right - size))) + 'px';
-      root.style.top = (left ? Math.max(8, r.top + r.height / 2 - size / 2) : Math.min(window.innerHeight - size - 8, r.bottom + 10)) + 'px';
-      root.dataset.side = left ? 'left' : 'right';
-      showBubble({ text, chips: [] }, { sticky: true });
-      homeTimer = setTimeout(unpoint, duration);
-    }, reduced() ? 50 : 420);
+      if (spot) { root.style.left = Math.max(8, spot.left) + 'px'; root.style.top = spot.top + 'px'; root.dataset.side = spot.side; }
+      else home();
+      if (duration) homeTimer = setTimeout(unpoint, duration);
+    };
+    setTimeout(() => place(true), reduced() ? 50 : 420);
     return true;
   }
   function unpoint() {
-    clearTimeout(homeTimer);
+    clearTimeout(homeTimer); guide.steps = []; guide.i = -1; root?.classList.remove('is-mini');
     ring.hidden = true; pointing = false; hideBubble(); setState('idle'); home();
   }
 
@@ -332,7 +392,8 @@
       if (chip.dataset.act !== 'later') hideBubble();
       act.run();
     });
-    document.addEventListener('pointerdown', (e) => { if (!root.contains(e.target)) hideBubble(); }, true);
+    // A tap elsewhere closes the bubble; during the readings walk-through it ends the walk (ring and all).
+    document.addEventListener('pointerdown', (e) => { if (!root.contains(e.target)) { if (guide.i >= 0) unpoint(); else hideBubble(); } }, true);
   }
 
   // ── what the rest of the app tells us ─────────────────────────────────────
@@ -342,7 +403,7 @@
     window.addEventListener('scroll', () => { if (pointing && Date.now() - pointedAt > 1200) unpoint(); }, { passive: true });
     document.addEventListener('gaia:view-changed', () => { if (pointing) unpoint(); else hideBubble(); });
     // Assist opened the readings: point at them.
-    window.addEventListener('gaia:open-readings', () => { setTimeout(() => pointAt('#member-readings', { text: 'Here are your readings.' }), 500); });
+    window.addEventListener('gaia:open-readings', (e) => { if (e.detail?.guide) return; setTimeout(() => pointAt('#member-readings', { text: 'Here are your readings.' }), 500); });
     // Assist moved the screen (voice or chat navigate): point at the page head.
     window.addEventListener('gaia:assist-minimize', (e) => {
       const d = e.detail || {}; if (!d.screen || d.screen === 'profile') return;
@@ -572,6 +633,6 @@
     load(); build(); home(); gestures(); listen(); watchAssist(); startIdle(); meet(); considerSuggestions('view');
     setTimeout(home, 600);
   }
-  window.GaiaAvatar = { openChat, pointAt, unpoint, showBubble, hideBubble, setState, bubbleFor, runTour, home, moment, glanceAt, prefs: () => ({ ...prefs }), idle: { anims: IDLE_ANIMS.map((a) => a.name), eligible: idleEligible, play: (name) => { const a = IDLE_ANIMS.find((x) => x.name === name); if (a) { lastTouch = 0; runIdleAnim(a); } } } };
+  window.GaiaAvatar = { openChat, explainReadings, pointAt, unpoint, showBubble, hideBubble, setState, bubbleFor, runTour, home, moment, glanceAt, prefs: () => ({ ...prefs }), idle: { anims: IDLE_ANIMS.map((a) => a.name), eligible: idleEligible, play: (name) => { const a = IDLE_ANIMS.find((x) => x.name === name); if (a) { lastTouch = 0; runIdleAnim(a); } } } };
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', mount); else mount();
 })();

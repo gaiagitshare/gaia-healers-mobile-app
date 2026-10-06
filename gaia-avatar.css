@@ -78,6 +78,9 @@
 /* guide ring on the thing Gaia is pointing at */
 .gava-ring { position: fixed; z-index: 51; border-radius: 18px; border: 2px solid #3fd9c8; box-shadow: 0 0 0 6px rgba(63, 217, 200, .16), 0 0 26px rgba(63, 217, 200, .45); pointer-events: none; animation: gava-ring 1.6s ease-in-out infinite; }
 .gava-ring[hidden] { display: none; }
+/* compact pointing: the bubble alone, so a tall target is never covered */
+.gava.is-mini .gava-char { display: none; }
+.gava.is-mini .gava-bubble { border-radius: 18px; }
 @keyframes gava-ring { 0%,100% { opacity: .6; } 50% { opacity: 1; } }
 
 /* ── idle personality: one small thing at a time, on the existing parts ── */

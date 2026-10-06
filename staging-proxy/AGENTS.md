@@ -82,6 +82,8 @@ without installing the guard — including scripts written in the future.
 | `staging-proxy/tools/assist-live-check.mjs` | 2 calls | — |
 | `staging-proxy/tools/qwen-access-check.mjs` | 1 session (no audio, ~0 tokens) | `--dry-run`; `--account 2` for the second Qwen account; run only when the owner asks whether Qwen access has returned |
 | `staging-proxy/tools/practitioner-profile-shape.mjs` | 1 call to the partner (not a paid model) | prints field names only; `--dry-run` |
+| `staging-proxy/tools/partner-tools-catalog.mjs` | 2 calls to the partner (token refresh + `tools/list`) | tool definitions only, no customer data; `--save <file>`, `--dry-run` |
+| `staging-proxy/tools/partner-recommendation-shape.mjs` | up to 4 calls to the partner | key names/types of one recommendation record only, never values; `--dry-run` |
 | `staging-proxy/tools/member-flow-check.mjs` | 0 (offline: loopback fake partner) | end-to-end member results path: code → redeem → readings → seen → prefs → practitioner view → unlink; also run by the test suite |
 
 Runtime code (the proxy itself) is covered by rule 9: no timer or retry path may

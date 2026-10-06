@@ -28,7 +28,8 @@ import { formatVenueTime, statusLabel, isFlaggedStatus } from '../utils/datetime
 import BadgeLabelDialog, { STATION_KEY, LABEL_SIZE_KEY, LABEL_ROLLS, savedLabelSize, rollShort, fullName, physicalCard,
     canPrintBluetooth, useB1, b1Connect, b1IsConnected, b1Enqueue, b1PrintBlob, b1Dpi, rollFitsB1, PRINTER_KEY, PRINTER_CHOICES, savedPrinter, CONNECT_TIMEOUT_HINT, logPrinter,
     rememberStationPrinter, printerTag, wrongPrinterHint, sharedWithText,
-    preloadNiimbot, isAppleMobile, iosBluetoothSetup, connectPhaseReporter } from './BadgeLabelDialog';
+    preloadNiimbot, isAppleMobile, iosBluetoothSetup, connectPhaseReporter,
+    needsOwnWindow, openOwnWindow, OWN_WINDOW_HINT } from './BadgeLabelDialog';
 import BluetoothIcon from '@mui/icons-material/Bluetooth';
 
 // The access zones a scanner can be checking. The BACKEND decides the outcome;
@@ -1188,7 +1189,15 @@ function CheckIn({ timezone: timezoneProp }) {
                                           ? (printer.busy ? `${printer.label} · printing ${printer.current}${printer.queued ? ` · ${printer.queued} waiting` : ''}` : `${printer.label}${printer.device ? ` ${printerTag(printer.device)}` : ''} connected`)
                                           : (printer.deskPrinter ? `Printer ${printerTag(printer.deskPrinter)} not connected` : 'Printer not connected')}
                                       sx={{ height: 24 }} />
-                                {!printer.connected && (
+                                {!printer.connected && needsOwnWindow() && (
+                                    <Button size="small" variant="contained" onClick={openOwnWindow} startIcon={<BluetoothIcon />}>
+                                        Open check-in full screen
+                                    </Button>
+                                )}
+                                {!printer.connected && needsOwnWindow() && (
+                                    <Typography variant="caption" sx={{ width: '100%', color: 'warning.main' }}>{OWN_WINDOW_HINT}</Typography>
+                                )}
+                                {!printer.connected && !needsOwnWindow() && (
                                     <Button size="small" variant="contained" onClick={connectPrinter} disabled={printerBusy}
                                             startIcon={<BluetoothIcon />}>
                                         {printerBusy ? 'Connecting…' : (connectAny ? 'Show all devices' : 'Connect printer')}
@@ -1237,7 +1246,7 @@ function CheckIn({ timezone: timezoneProp }) {
                                 {canPrintBluetooth() && (
                                     <Stack direction="row" alignItems="center" gap={1} flexWrap="wrap" sx={{ mt: 1.5 }}>
                                         <Button size="small" variant="outlined" startIcon={<BluetoothIcon />}
-                                                onClick={testPrint} disabled={Boolean(testPrinting) || printerBusy || printer.busy}>
+                                                onClick={needsOwnWindow() ? openOwnWindow : testPrint} disabled={Boolean(testPrinting) || printerBusy || printer.busy}>
                                             {testPrinting ? `Test print: ${testPrinting}` : 'Test print'}
                                         </Button>
                                         <Typography variant="caption" color="text.secondary">

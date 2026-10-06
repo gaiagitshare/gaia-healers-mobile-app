@@ -145,6 +145,19 @@ export const isAppleMobile = () => {
         return /iPhone|iPad|iPod/.test(ua) || (/Macintosh/.test(ua) && navigator.maxTouchPoints > 1);
     } catch (e) { return false; }
 };
+// Inside another page (the Gaia Healers Admin shows the Event Manager in a
+// frame). Bluefy's Bluetooth does not reach a framed page: the Connect tap
+// never opens its device list and the page sits on "connecting…" for good.
+// Every iPad attempt on 5-6 Oct was framed and none connected; the one iPhone
+// that opened /event/checkin on its own connected in 4 seconds.
+export const isFramed = () => { try { return window.self !== window.top; } catch (e) { return true; } };
+export const needsOwnWindow = () => isFramed() && isAppleMobile();
+// Same origin as the Admin, so the sign-in (localStorage) carries over.
+export const openOwnWindow = () => {
+    const url = window.location.href;
+    try { window.top.location.assign(url); } catch (e) { window.open(url, '_blank'); }
+};
+export const OWN_WINDOW_HINT = 'On iPad/iPhone the printer only connects when check-in is open on its own, not inside the Admin. Tap “Open check-in full screen”, then connect the printer there.';
 export const isIPad = () => {
     try {
         const ua = navigator.userAgent || '';
@@ -604,7 +617,10 @@ export default function BadgeLabelDialog({ request, eventId, station, onClose, o
             <DialogActions sx={{ flexWrap: 'wrap', gap: 0.5 }}>
                 <Button onClick={onClose}>Close</Button>
                 {job?.url && attendee && <Button component="a" href={job.url} download={`badge-${attendee.qr_code || attendee.id}.png`}>Download PNG</Button>}
-                {canPrintBluetooth() && (
+                {canPrintBluetooth() && needsOwnWindow() && (
+                    <Button variant="contained" startIcon={<BluetoothIcon />} onClick={openOwnWindow}>Open check-in full screen to print</Button>
+                )}
+                {canPrintBluetooth() && !needsOwnWindow() && (
                     <Button variant="contained" startIcon={btStatus ? <CircularProgress size={16} color="inherit" /> : <BluetoothIcon />}
                         disabled={!job?.blob || Boolean(btStatus)} onClick={printOnB1}>
                         {btStatus ? `Printer: ${btStatus}` : 'Print on B1 / B1 Pro'}

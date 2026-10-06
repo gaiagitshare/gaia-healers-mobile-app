@@ -4,7 +4,7 @@
 // name, when it picked a neighbour's.
 //
 // Run: CI=true npx react-scripts test --watchAll=false BadgeLabelDialog.printer
-import { b1Connect, b1Disconnect, savedStationPrinter, rememberStationPrinter, STATION_PRINTER_KEY, printerTag, isAppleMobile, isIPad, iosBluetoothSetup, canPrintBluetooth, logPrinter, b1Dpi, PRINTER_KEY } from './BadgeLabelDialog';
+import { b1Connect, b1Disconnect, savedStationPrinter, rememberStationPrinter, STATION_PRINTER_KEY, printerTag, isAppleMobile, isIPad, iosBluetoothSetup, canPrintBluetooth, logPrinter, b1Dpi, PRINTER_KEY, isFramed, needsOwnWindow } from './BadgeLabelDialog';
 
 jest.mock('../utils/api', () => ({ badgeLabelBlob: jest.fn(), recordBadgePrint: jest.fn(), reportPrinter: jest.fn(() => Promise.resolve({ data: {} })) }));
 
@@ -170,4 +170,22 @@ test('picking in time is not "waiting"', async () => {
     const phases = [];
     await b1Connect(false, { onPhase: (p) => phases.push(p) });
     expect(phases).toEqual(['started']);
+});
+
+test('framed in the Admin on an iPad: the page asks to open on its own instead of hanging', () => {
+    const ua = Object.getOwnPropertyDescriptor(window.navigator, 'userAgent');
+    const top = Object.getOwnPropertyDescriptor(window, 'top');
+    try {
+        Object.defineProperty(window.navigator, 'userAgent', { value: 'Mozilla/5.0 (iPad; CPU OS 16_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148 Version/3.9.3  Bluefy/3.9.3', configurable: true });
+        expect(isFramed()).toBe(false);
+        expect(needsOwnWindow()).toBe(false);                // check-in opened directly: connect as normal
+        Object.defineProperty(window, 'top', { value: {}, configurable: true });
+        expect(isFramed()).toBe(true);
+        expect(needsOwnWindow()).toBe(true);                 // inside the Admin: open full screen first
+        Object.defineProperty(window.navigator, 'userAgent', { value: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/130.0 Safari/537.36', configurable: true });
+        expect(needsOwnWindow()).toBe(false);                // Chrome on a laptop prints from inside the frame
+    } finally {
+        if (ua) Object.defineProperty(window.navigator, 'userAgent', ua); else delete window.navigator.userAgent;
+        if (top) Object.defineProperty(window, 'top', top);
+    }
 });

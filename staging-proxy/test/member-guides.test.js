@@ -14,6 +14,9 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+// These tests cover how guides are read once the source is switched on. It is a DISABLED source
+// by default (practitioner-ai-privacy.test.js); here it is on explicitly.
+const ON = { GAIA_PARTNER_AI_RECOMMENDATIONS: 'on' };
 
 const ml = await import('../member-link.js');
 const o = await import('../practitioners-oauth.js');
@@ -53,13 +56,13 @@ test('memberGuides: practitioner road reads the customer\'s guides with the prac
     return rpcText(rpc, { recommendations: [{ title: 'Hydration', content: 'Two litres a day.', created_at: '2026-10-01' }] });
   };
   // nobody connected: nothing to read, not an error
-  assert.equal(await ml.memberGuides(cfg, 'member-1', { env: {}, fetchImpl, file: links, tokenFile: tokens }), null);
+  assert.equal(await ml.memberGuides(cfg, 'member-1', { env: ON, fetchImpl, file: links, tokenFile: tokens }), null);
   // a different practitioner connected: still nothing
   o.saveToken('prac-other', { access_token: 'tA', expires_at: Date.now() + 3600e3, practitioner_id: '999', verified: true }, tokens);
-  assert.equal(await ml.memberGuides(cfg, 'member-1', { env: {}, fetchImpl, file: links, tokenFile: tokens }), null);
+  assert.equal(await ml.memberGuides(cfg, 'member-1', { env: ON, fetchImpl, file: links, tokenFile: tokens }), null);
   // their practitioner connected: read with THAT token, for THAT customer
   o.saveToken('prac-477', { access_token: 'tB', expires_at: Date.now() + 3600e3, practitioner_id: '477', verified: true }, tokens);
-  const g = await ml.memberGuides(cfg, 'member-1', { env: {}, fetchImpl, file: links, tokenFile: tokens });
+  const g = await ml.memberGuides(cfg, 'member-1', { env: ON, fetchImpl, file: links, tokenFile: tokens });
   assert.deepEqual(seen, [['get_customer_recommendations', { customerId: 'cust-7' }]]);
   assert.equal(g.items[0].title, 'Hydration');
   const audit = JSON.parse(fs.readFileSync(links, 'utf8')).audit.filter((a) => a.event === 'guides_read');
@@ -68,9 +71,9 @@ test('memberGuides: practitioner road reads the customer\'s guides with the prac
   assert.equal(ml.linkDayCounts({ file: links }).guides_read, 1);
   // a rejected practitioner link never reads
   o.saveToken('prac-477', { access_token: 'tB', expires_at: Date.now() + 3600e3, practitioner_id: '477', verified: false }, tokens);
-  assert.equal(await ml.memberGuides(cfg, 'member-1', { env: {}, fetchImpl, file: links, tokenFile: tokens }), null);
+  assert.equal(await ml.memberGuides(cfg, 'member-1', { env: ON, fetchImpl, file: links, tokenFile: tokens }), null);
   // not linked at all
-  assert.equal(await ml.memberGuides(cfg, 'nobody', { env: {}, fetchImpl, file: links, tokenFile: tokens }), null);
+  assert.equal(await ml.memberGuides(cfg, 'nobody', { env: ON, fetchImpl, file: links, tokenFile: tokens }), null);
 });
 
 test('memberGuides: the member road is tried first when their member-mcp offers a recommendations tool', async () => {
@@ -87,7 +90,7 @@ test('memberGuides: the member road is tried first when their member-mcp offers 
   };
   ml._resetServerTokenForTest?.();
   const cfg = { environment: 'staging', base: 'https://staging.example', mcpUrl: 'https://staging.example/api/mcp', clientId: 'x', clientSecret: 'y' };
-  const g = await ml.memberGuides(cfg, 'member-2', { env: { GAIA_PRACTITIONERS_MEMBER_API_KEY: 'k', GAIA_PRACTITIONERS_MEMBER_BACKEND: 'https://backend.example' }, fetchImpl, file: links, tokenFile: tokens });
+  const g = await ml.memberGuides(cfg, 'member-2', { env: { ...ON, GAIA_PRACTITIONERS_MEMBER_API_KEY: 'k', GAIA_PRACTITIONERS_MEMBER_BACKEND: 'https://backend.example' }, fetchImpl, file: links, tokenFile: tokens });
   assert.deepEqual(calls, [[true, 'get_my_recommendations']]);
   assert.equal(g.items[0].title, 'Walks');
 });
@@ -117,5 +120,5 @@ test('the server: consent gates every build and keys the cache; the switch forge
   assert.match(srv, /guidesForModel\(await memberGuides\(practitionersConfig\(\), cid\)\)/);
   const ui = read('gaia-practitioner.js');
   assert.match(ui, /g-prac__tag--guides/);
-  assert.match(ui, /let Gaia Assist use the guides you write for them/);
+  assert.match(ui, /opted in to Gaia Assist using your platform's suggestions \(not active yet\)/);
 });

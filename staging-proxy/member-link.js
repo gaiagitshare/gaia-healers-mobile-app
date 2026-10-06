@@ -439,7 +439,18 @@ export async function memberReadings(cfg0, memberId, { env = process.env, fetchI
  * practitioner had a Gaia-member client on 5 Oct 2026); shapeGuides accepts
  * the likely spellings and ignores the rest.
  */
+/**
+ * Partner AI recommendations ("guides", get_customer_recommendations) are a
+ * DISABLED source (owner, 6 Oct 2026). The partner describes them as
+ * AI-generated, probably from scan values, with no practitioner approval
+ * state; until the partner answers how they are made, reviewed and processed,
+ * nothing reads them -- whatever the member's switch says, and even when the
+ * partner has records. GAIA_PARTNER_AI_RECOMMENDATIONS=on is the only way on.
+ */
+export function partnerAiRecommendationsEnabled(env = process.env) { return env.GAIA_PARTNER_AI_RECOMMENDATIONS === 'on'; }
+
 export async function memberGuides(cfg0, memberId, { env = process.env, fetchImpl = fetch, file = LINK_FILE, tokenFile } = {}) {
+  if (!partnerAiRecommendationsEnabled(env)) return null;   // disabled source: no partner call at all
   const link = linkFor(memberId, file);
   if (!link) return null;
   // Member road.

@@ -106,7 +106,7 @@
       return new Map((j.clients || []).map((c) => [String(c.customer_id), c]));
     } catch (_) { return new Map(); }
   }
-  const sharesTag = (l) => (l ? `<span class="g-prac__tag g-prac__tag--shares" title="This client asked to see their own readings in the Gaia app">Sees their readings${l.opened ? '' : ' · not opened yet'}</span>${l.guides_to_assist ? '<span class="g-prac__tag g-prac__tag--guides" title="This client switched on: let Gaia Assist read the guides their practitioner writes for them">Guides → Gaia Assist</span>' : ''}` : '');
+  const sharesTag = (l) => (l ? `<span class="g-prac__tag g-prac__tag--shares" title="This client asked to see their own readings in the Gaia app">Sees their readings${l.opened ? '' : ' · not opened yet'}</span>${l.guides_to_assist ? '<span class="g-prac__tag g-prac__tag--guides" title="This client opted in to Gaia Assist using suggestions from your platform. Not active yet: Gaia does not read them.">Opted in to platform suggestions</span>' : ''}` : '');
   async function connection() {
     try {
       const res = await fetch(`${proxyBase()}/api/practitioners/status`,
@@ -319,7 +319,7 @@
         const opened = [...m.values()].filter((l) => l.opened).length;
         const guides = [...m.values()].filter((l) => l.guides_to_assist).length;
         const sec = root.querySelector('[data-prac-clients-sec] .g-prac__h');
-        if (sec) sec.insertAdjacentHTML('afterend', `<p class="g-prac__muted" data-prac-linked-count>${m.size} client${m.size === 1 ? '' : 's'} can see their own readings in the Gaia app · ${opened} ${opened === 1 ? 'has' : 'have'} opened them${guides ? ` · ${guides} let Gaia Assist use the guides you write for them` : ''}</p>`);
+        if (sec) sec.insertAdjacentHTML('afterend', `<p class="g-prac__muted" data-prac-linked-count>${m.size} client${m.size === 1 ? '' : 's'} can see their own readings in the Gaia app · ${opened} ${opened === 1 ? 'has' : 'have'} opened them${guides ? ` · ${guides} opted in to Gaia Assist using your platform's suggestions (not active yet)` : ''}</p>`);
       });
 
       // Three independent fast calls. One failing must not blank the other two.
@@ -414,7 +414,7 @@
                <p class="g-prac__muted">${[c.email, c.phone, c.city].filter(Boolean).map(esc).join(' · ')}</p>
                <p class="g-prac__muted">${[c.sex, c.date_of_birth ? `born ${esc(c.date_of_birth)}` : ''].filter(Boolean).join(' · ')}
                  ${c.has_biowell ? '<span class="g-prac__tag">Bio-Well linked</span>' : ''}</p>
-               ${l ? `<p class="g-prac__shares">Also a Gaia member: they can see this reading too, in their own app${l.opened ? (l.opened_latest ? ' · they have opened the latest one' : ' · they have opened an earlier one') : ' · not opened yet'}.${l.guides_to_assist ? ' They let Gaia Assist use the guides you write for them, in their own conversations.' : ''}</p>` : ''}
+               ${l ? `<p class="g-prac__shares">Also a Gaia member: they can see this reading too, in their own app${l.opened ? (l.opened_latest ? ' · they have opened the latest one' : ' · they have opened an earlier one') : ' · not opened yet'}.${l.guides_to_assist ? ' They opted in to Gaia Assist using suggestions from your platform (not active yet: Gaia does not read them).' : ''}</p>` : ''}
              </div>`;
       }).catch(() => { head.innerHTML = empty('Could not load this client.'); });
 

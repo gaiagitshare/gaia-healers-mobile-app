@@ -73,8 +73,13 @@ function requireString(args, key, { max = 64, required = true } = {}) {
   return v;
 }
 
+/** Tests only: answer partner reads from a fixture instead of the network. */
+let mcpReaderForTest = null;
+export function _setMcpReaderForTest(fn) { mcpReaderForTest = typeof fn === 'function' ? fn : null; }
+
 /** One MCP read, with this practitioner's own token and nobody else's. */
 async function readMcp(ctx, tool, args = {}) {
+  if (mcpReaderForTest) return mcpReaderForTest(tool, args, ctx);
   const cfg = practitionersConfig();
   const state = linkState(ctx.contactId).state;
   if (state !== 'connected') throw Object.assign(new Error('practitioner link is not authorized'), { code: state });
@@ -134,16 +139,55 @@ function slimScan(scan = {}) {
  */
 export const SCAN_TOOLS = Object.freeze(['practitioner_client_latest_scan', 'practitioner_client_trend', 'practitioner_compare_sessions']);
 export function scanNarrationEnabled(env = process.env) { return env.GAIA_SCAN_NARRATION === 'on'; }
+/**
+ * WHAT LEAVES FOR THE AI PROVIDER (privacy fix, 6 Oct 2026).
+ *
+ * The page always gets the full result (the practitioner is authorised to see
+ * it on screen). The MODEL gets the least it needs to keep the conversation
+ * going: who the client is (id to chain the next tool, name to say), counts,
+ * and area names marked "flagged" -- never a reading value, a percentage, a
+ * severity, a scan date or id, DOB, sex, phone, email, address, a file name,
+ * a session note or any partner text derived from scans. The provider has no
+ * BAA. Every practitioner tool has an explicit view below; one without a view
+ * fails closed ("it is on screen"), so a tool added later cannot leak by
+ * default. Pinned by test/practitioner-ai-privacy.test.js with planted values.
+ */
+const ON_SCREEN = 'The details are now showing on the practitioner\'s screen. Say that they are up and offer to go through them; do not read out, estimate or summarise values, dates or personal details: they are on screen, not in this reply.';
+const who = (c) => (c && typeof c === 'object' ? { id: String(c.id ?? ''), name: String(c.name || '') } : null);
+const flaggedAreas = (list) => (Array.isArray(list) ? list : []).map((c) => (c && c.name ? `${String(c.name)} (${String(c.area || '').trim() || 'area'}) — flagged` : '')).filter(Boolean);
+const MODEL_VIEWS = {
+  practitioner_list_clients: (r) => ({ count: r.count ?? 0, shown: r.shown ?? 0, clients: (r.clients || []).map(who), ...(r.more ? { more: r.more } : {}) }),
+  practitioner_find_client: (r) => ({ count: r.count ?? 0, clients: (r.clients || []).map(who) }),
+  practitioner_get_client: (r) => (r.found === false ? { found: false, reason: r.reason || '' } : { found: true, ...who(r), note: ON_SCREEN }),
+  practitioner_client_files: (r) => ({ count: r.count ?? 0, note: 'File names are on the practitioner\'s screen; do not guess them.' }),
+  practitioner_suggested_services: (r) => ({
+    flagged: flaggedAreas(r.concerns),
+    services: (r.services || []).map((sv) => ({ id: String(sv.id ?? ''), name: String(sv.name || ''), covers: (sv.covers || []).map(String) })),
+    ...(r.note ? { note: r.note } : {}),
+  }),
+  practitioner_flagged_clients: (r) => ({ count: r.count ?? 0, clients: (r.clients || []).map((c) => ({ ...who(c), flagged: flaggedAreas(c.concerns) })) }),
+  practitioner_follow_ups: (r) => ({
+    count: r.count ?? 0,
+    suggestions: (r.suggestions || []).map((sg) => ({ ...who(sg), flagged_areas: (sg.concerns || []).map((x) => String(x).replace(/\s*\([^)]*\)\s*$/, '')).filter(Boolean),
+      last_seen: sg.last_seen || '', usual_gap_days: sg.usual_gap_days ?? null, suggested_window: sg.suggested_window || '' })),
+  }),
+};
+
 /** What the MODEL is given for a tool result; the page always gets the full result. */
 export function modelView(name, result, env = process.env) {
-  if (!SCAN_TOOLS.includes(name) || scanNarrationEnabled(env) || !result || typeof result !== 'object') return result;
-  if (result.found === false) return result;
-  return {
-    opened: true,
-    client: result.client || null,
-    scans_on_file: result.scans_on_file ?? null,
-    note: 'The reading is now showing on the practitioner\'s screen. Say that it is up and offer to go through it with them. Do not read out, estimate or summarise any values: they are on screen, not in this reply.',
-  };
+  if (!result || typeof result !== 'object') return result;
+  if (SCAN_TOOLS.includes(name)) {
+    if (scanNarrationEnabled(env) || result.found === false) return result;
+    return {
+      opened: true,
+      client: who(result.client),
+      scans_on_file: result.scans_on_file ?? null,
+      note: 'The reading is now showing on the practitioner\'s screen. Say that it is up and offer to go through it with them. Do not read out, estimate or summarise any values: they are on screen, not in this reply.',
+    };
+  }
+  if (MODEL_VIEWS[name]) return MODEL_VIEWS[name](result);
+  if (String(name).startsWith('practitioner_')) return { ok: true, note: ON_SCREEN };   // fail closed
+  return result;
 }
 
 export const TOOLS = [

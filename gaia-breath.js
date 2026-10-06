@@ -1,7 +1,7 @@
 /** Gaia — Coherence Breathing.
  * A guided paced-breathing session at ~6 breaths per minute (5s in / 5s out),
- * the "resonance" pace widely used to steady the heart rhythm and calm the
- * nervous system. This is a breathing *practice* — it does not measure your
+ * a slow, even pace. No physiological claims are made about it (owner,
+ * 6 Oct 2026). This is a breathing *practice* — it does not measure your
  * heart-rate variability or a coherence score. Real timer, real durations,
  * pause/resume and tab-visibility handling; pure client-side, no data
  * collected. Pairs with Energy Pulse for an optional before/after pulse read.
@@ -89,7 +89,7 @@
     card.innerHTML = closeBtn()
       + '<p class="gb-eyebrow">Coherence Breathing</p>'
       + '<h2 class="gb-title">Find your resonant breath</h2>'
-      + '<p class="gb-lead">Follow the orb: breathe <strong>in as it grows</strong>, <strong>out as it shrinks</strong> — about six slow breaths a minute. This resonance pace is widely used to steady the heart rhythm and settle the nervous system.</p>'
+      + '<p class="gb-lead">Follow the orb: breathe <strong>in as it grows</strong>, <strong>out as it shrinks</strong> — about six slow breaths a minute. Take a few minutes for slow, paced breathing.</p>'
       + '<div class="gb-choices">'
       + [[1, 'quick'], [3, 'classic'], [5, 'deep']].map(([m, lbl]) => '<button type="button" class="gb-choice' + (m === minutes ? ' on' : '') + '" data-gb-min="' + m + '">' + m + ' min<small>' + lbl + '</small></button>').join('')
       + '</div>'
@@ -178,7 +178,7 @@
       + '<p class="gb-eyebrow">Session complete</p>'
       + '<div class="gb-stage" style="width:min(52vw,12rem);height:min(52vw,12rem)"><span class="gb-ripple"></span><div class="gb-orb" style="transform:scale(.9)"></div><div class="gb-phase"><i class="ph ph-check" style="font-size:2.6rem;color:#062b0c" aria-hidden="true"></i></div></div>'
       + '<h2 class="gb-title">Nicely done</h2>'
-      + '<p class="gb-lead">Resonant breathing like this is widely used to steady the heart rhythm. Notice how you feel now versus a few minutes ago.</p>'
+      + '<p class="gb-lead">Notice how you feel now versus a few minutes ago.</p>'
       + '<div class="gb-actions">'
       + '<button type="button" class="gb-btn" data-gb-measure><i class="ph ph-heartbeat" aria-hidden="true"></i> See the difference — read my pulse</button>'
       + '<a class="gb-btn--ghost" href="' + esc(BIOWELL_URL) + '">Go deeper with a Bio-Well scan →</a>'

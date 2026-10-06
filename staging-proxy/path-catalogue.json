@@ -1,0 +1,317 @@
+{
+  "version": 4,
+  "about": "Personal Path catalogue. Only status=approved, active=true, approved at the current version is served (personal-path.js servable()). Change entries with tools/path-catalogue.mjs, which records every edit and approval in data/path-catalogue-audit.jsonl. Rules interpret nothing about readings; resources are what a practitioner may choose to recommend. No product entries in V1.",
+  "entries": [
+    {
+      "id": "P-ONBOARD",
+      "kind": "rule",
+      "version": 1,
+      "title": "Finish your Gaia setup",
+      "stage": "start_now",
+      "source_type": "platform_rule",
+      "trigger": "Required Gaia onboarding is not complete (the onboarding gate's own state).",
+      "sources": [
+        {
+          "type": "business_rule",
+          "ref": "Owner brief: Personal Path V1, rule F",
+          "doc_version": "2026-10-06"
+        }
+      ],
+      "status": "approved",
+      "active": true,
+      "approval": {
+        "by": "owner",
+        "role": "owner",
+        "ref": "Owner brief 2026-10-06 (Personal Path V1)",
+        "at": "2026-10-06",
+        "version": 1
+      },
+      "membership_requirement": null,
+      "free_alternative": null,
+      "exclusions": []
+    },
+    {
+      "id": "P-NEW",
+      "kind": "rule",
+      "version": 2,
+      "title": "Open your latest reading",
+      "stage": "start_now",
+      "source_type": "platform_rule",
+      "trigger": "A shared reading is newer than the latest one the member opened (link status). Opening the reading completes this navigation step; it never implies the member, or Gaia, understood or interpreted it.",
+      "sources": [
+        {
+          "type": "business_rule",
+          "ref": "Owner brief: Personal Path V1, rule A",
+          "doc_version": "2026-10-06"
+        }
+      ],
+      "status": "approved",
+      "active": true,
+      "approval": {
+        "by": "owner",
+        "role": "path_reviewer",
+        "at": "2026-10-06T11:34:26.726Z",
+        "version": 2,
+        "note": "Owner instruction 2026-10-06 (#279 final cleanup): title 'Open your latest reading'; opening completes navigation only"
+      },
+      "membership_requirement": null,
+      "free_alternative": null,
+      "exclusions": [
+        "P-RECHECK"
+      ]
+    },
+    {
+      "id": "P-SHARE",
+      "kind": "rule",
+      "version": 1,
+      "title": "Connect your Bio-Well reading",
+      "stage": "start_now",
+      "source_type": "platform_rule",
+      "trigger": "Member readings are available in the app and this member has no shared reading.",
+      "sources": [
+        {
+          "type": "business_rule",
+          "ref": "Owner brief: Personal Path V1, rule B",
+          "doc_version": "2026-10-06"
+        }
+      ],
+      "status": "approved",
+      "active": true,
+      "approval": {
+        "by": "owner",
+        "role": "owner",
+        "ref": "Owner brief 2026-10-06 (Personal Path V1)",
+        "at": "2026-10-06",
+        "version": 1
+      },
+      "membership_requirement": null,
+      "free_alternative": null,
+      "exclusions": []
+    },
+    {
+      "id": "P-RECHECK",
+      "kind": "rule",
+      "version": 1,
+      "title": "Consider a new Bio-Well scan",
+      "stage": "recheck",
+      "source_type": "platform_rule",
+      "trigger": "Latest shared reading is older than the configured Gaia recheck window (GAIA_SCAN_RECHECK_DAYS, default 60). Gaia product policy, not a Bio-Well rule.",
+      "sources": [
+        {
+          "type": "business_rule",
+          "ref": "Owner brief: Personal Path V1, rule C; recheck policy approved with #276",
+          "doc_version": "2026-10-06"
+        }
+      ],
+      "status": "approved",
+      "active": true,
+      "approval": {
+        "by": "owner",
+        "role": "owner",
+        "ref": "Owner brief 2026-10-06 (Personal Path V1)",
+        "at": "2026-10-06",
+        "version": 1
+      },
+      "membership_requirement": null,
+      "free_alternative": null,
+      "exclusions": []
+    },
+    {
+      "id": "P-SESSION",
+      "kind": "rule",
+      "version": 1,
+      "title": "Prepare for your upcoming session",
+      "stage": "coming_up",
+      "source_type": "platform_rule",
+      "trigger": "A confirmed booking (GHL appointment status 'confirmed') starts within 7 days.",
+      "sources": [
+        {
+          "type": "business_rule",
+          "ref": "Owner brief: Personal Path V1, rule D",
+          "doc_version": "2026-10-06"
+        }
+      ],
+      "status": "approved",
+      "active": true,
+      "approval": {
+        "by": "owner",
+        "role": "owner",
+        "ref": "Owner brief 2026-10-06 (Personal Path V1)",
+        "at": "2026-10-06",
+        "version": 1
+      },
+      "membership_requirement": null,
+      "free_alternative": null,
+      "exclusions": []
+    },
+    {
+      "id": "P-COURSE",
+      "kind": "rule",
+      "version": 1,
+      "title": "Continue your course",
+      "stage": "keep_going",
+      "source_type": "platform_rule",
+      "trigger": "An accessible course has saved progress (at least one lesson done or a saved position) and is not finished.",
+      "sources": [
+        {
+          "type": "business_rule",
+          "ref": "Owner brief: Personal Path V1, rule E",
+          "doc_version": "2026-10-06"
+        }
+      ],
+      "status": "approved",
+      "active": true,
+      "approval": {
+        "by": "owner",
+        "role": "owner",
+        "ref": "Owner brief 2026-10-06 (Personal Path V1)",
+        "at": "2026-10-06",
+        "version": 1
+      },
+      "membership_requirement": null,
+      "free_alternative": null,
+      "exclusions": []
+    },
+    {
+      "id": "R-BREATH",
+      "kind": "resource",
+      "version": 2,
+      "title": "Coherence breathing practice",
+      "description": "Take a few minutes for slow, paced breathing.",
+      "stage": "start_now",
+      "source_type": "gaia_catalogue",
+      "resource": {
+        "kind": "tool",
+        "id": "breath"
+      },
+      "content_note": "In-app copy revised 2026-10-06: the unsourced heart-rhythm / nervous-system claim was removed from gaia-breath.js.",
+      "sources": [
+        {
+          "type": "gaia_content",
+          "ref": "gaia-breath.js (Energy tools)",
+          "doc_version": "2026-10-06"
+        }
+      ],
+      "status": "approved",
+      "active": true,
+      "approval": {
+        "by": "owner",
+        "role": "path_reviewer",
+        "at": "2026-10-06T11:34:03.571Z",
+        "version": 2,
+        "note": "Owner instruction 2026-10-06 (#279 final cleanup): approve after the breathing claim was removed"
+      },
+      "membership_requirement": null,
+      "free_alternative": null,
+      "exclusions": []
+    },
+    {
+      "id": "R-ENERGY-CHECK",
+      "kind": "resource",
+      "version": 1,
+      "title": "Daily energy check",
+      "description": "The daily check-in on the Energy page. Free.",
+      "stage": "start_now",
+      "source_type": "gaia_catalogue",
+      "resource": {
+        "kind": "view",
+        "id": "wellness",
+        "target": {
+          "view": "wellness",
+          "tab": "check"
+        }
+      },
+      "sources": [
+        {
+          "type": "gaia_content",
+          "ref": "Energy page, daily check",
+          "doc_version": "2026-10-06"
+        }
+      ],
+      "status": "pending",
+      "active": true,
+      "approval": null,
+      "membership_requirement": null,
+      "free_alternative": null,
+      "exclusions": []
+    },
+    {
+      "id": "R-SCAN",
+      "kind": "resource",
+      "version": 1,
+      "title": "A follow-up Bio-Well scan",
+      "description": "Find or book a Bio-Well scan.",
+      "stage": "start_now",
+      "source_type": "gaia_catalogue",
+      "resource": {
+        "kind": "scan",
+        "id": "scan"
+      },
+      "sources": [
+        {
+          "type": "business_rule",
+          "ref": "Gaia booking routes",
+          "doc_version": "2026-10-06"
+        }
+      ],
+      "status": "pending",
+      "active": true,
+      "approval": null,
+      "membership_requirement": null,
+      "free_alternative": null,
+      "exclusions": []
+    },
+    {
+      "id": "R-COURSE-BW-ORIENTATION",
+      "kind": "resource",
+      "version": 1,
+      "title": "Bio-Well Orientation (course)",
+      "description": "Getting started with Bio-Well: account, software and reports. Needs course access.",
+      "stage": "start_now",
+      "source_type": "gaia_catalogue",
+      "resource": {
+        "kind": "course",
+        "id": "fccceb1a-30f8-4330-9f2b-e9b70a60a72c"
+      },
+      "sources": [
+        {
+          "type": "gaia_content",
+          "ref": "Gaia Academy manifest (GHL)",
+          "doc_version": "2026-10-06"
+        }
+      ],
+      "status": "pending",
+      "active": true,
+      "approval": null,
+      "membership_requirement": null,
+      "free_alternative": null,
+      "exclusions": []
+    },
+    {
+      "id": "R-COURSE-CHAKRA-9WK",
+      "kind": "resource",
+      "version": 1,
+      "title": "9-Week Chakra Challenge (course)",
+      "description": "Gaia's 9-week chakra programme (GHL Academy). Needs course access.",
+      "stage": "start_now",
+      "source_type": "gaia_catalogue",
+      "resource": {
+        "kind": "course",
+        "id": "086ab8c3-8f93-41cb-9e2f-7aba5cb94c34"
+      },
+      "sources": [
+        {
+          "type": "gaia_content",
+          "ref": "Gaia Academy manifest (GHL)",
+          "doc_version": "2026-10-06"
+        }
+      ],
+      "status": "pending",
+      "active": true,
+      "approval": null,
+      "membership_requirement": null,
+      "free_alternative": null,
+      "exclusions": []
+    }
+  ]
+}

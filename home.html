@@ -70,6 +70,7 @@
   <link rel="stylesheet" href="gaia-fit.css?v=20261005x" />
   <link rel="stylesheet" href="gaia-journey.css?v=20261002b" />
   <link rel="stylesheet" href="gaia-avatar.css?v=20261006g" />
+  <link rel="stylesheet" href="gaia-path.css?v=20261006b" />
   <link rel="stylesheet" href="gaia-app-v3.css?v=20261006k" />
   <link rel="stylesheet" href="gaia-app-v3-today-energy.css?v=20261006k" />
   <link rel="stylesheet" href="gaia-app-v3-learn-connect.css?v=20261005c1" />
@@ -399,6 +400,8 @@
              gaia-my-readings.js only when the server says the feature is on.
              It sits first: it is the one thing on You that changes week to week. -->
         <div id="member-glance" hidden></div>
+        <!-- Personal Path: the member's ranked next steps (gaia-path.js). -->
+        <div id="member-path" class="g-page-sec" aria-label="Your Gaia Path" hidden></div>
         <div id="member-readings" class="g-page-sec" aria-label="My readings" hidden></div>
         <div id="member-me" class="g-page-sec" role="tabpanel" aria-label="You"></div>
         <!-- Your data and sharing: one place for what is shared with whom, how to
@@ -453,7 +456,7 @@
   <script defer src="gaia-match.js?v=20260907a"></script>
   <script defer src="gaia-pulse-dsp.js?v=20260902z3"></script>
   <script defer src="gaia-pulse.js?v=20260903b"></script>
-  <script defer src="gaia-breath.js?v=20260902d"></script>
+  <script defer src="gaia-breath.js?v=20261006a"></script>
   <script defer src="gaia-cosmic.js?v=20261004z"></script>
   <script defer src="gaia-toolkit.js?v=20260907d"></script>
   <script defer src="gaia-store.js?v=20261005a"></script>
@@ -462,7 +465,7 @@
   <script defer src="gaia-superapp.js?v=20261006t"></script>
   <script defer src="vendor/leaflet/leaflet.js?v=1.9.4"></script>
   <script defer src="vendor/leaflet/markercluster.js?v=1.5.3"></script>
-  <script defer src="gaia-directory.js?v=20261005b"></script>
+  <script defer src="gaia-directory.js?v=20261006a"></script>
   <script defer src="gaia-share.js?v=20260820n"></script>
   <script defer src="gaia-daily.js?v=20261006j"></script>
   <script defer src="gaia-onboard.js?v=20261004z"></script>
@@ -473,13 +476,14 @@
   </script>
   <script src="gaia-install.js?v=20260820a" defer></script>
   <script src="gaia-practice.js?v=20260818a" defer></script>
-  <script src="gaia-practitioner.js?v=20261006q" defer></script>
+  <script src="gaia-practitioner.js?v=20261006r" defer></script>
   <script src="gaia-my-readings.js?v=20261006l" defer></script>
+  <script src="gaia-path.js?v=20261006b" defer></script>
   <script src="gaia-sky.js?v=20261006j" defer></script>
   <script src="gaia-numerology.js?v=20260907c" defer></script>
   <script src="gaia-push.js?v=20261004z" defer></script>
   <!-- Gaia as a character: a layer over Assist, voice and navigation; nothing of its own -->
-  <script src="gaia-avatar.js?v=20261006h" defer></script>
+  <script src="gaia-avatar.js?v=20261006k" defer></script>
   <script src="gaia-myevents.js?v=20261005c1" defer></script>
   <script src="gaia-myschedule.js?v=20261004z" defer></script>
   <script src="gaia-people.js?v=20261004z" defer></script>

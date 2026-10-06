@@ -273,6 +273,8 @@
   /** Open the directory with a purpose (from Home or You): scan = Bio-Well practitioners first. */
   function openWith(opts) {
     intent = (opts && opts.intent) || '';
+    // Personal Path "Book with {practitioner}": open with their name in the search box.
+    if (opts && typeof opts.q === 'string') filters.q = opts.q.slice(0, 80);
     try { window.GaiaAppShell && window.GaiaAppShell.go && window.GaiaAppShell.go('directory'); } catch (e) {}
     if (loaded) { var h = mount(); if (h) { var old = h.querySelector('.g-dir__intent'); if (old) old.remove(); if (intent) h.insertAdjacentHTML('afterbegin', controlsHtml().split('<div class="g-dir__controls">')[0]); } paintList(); }
     else load();

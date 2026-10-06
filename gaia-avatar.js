@@ -52,6 +52,13 @@
     readings: { label: 'Open my readings', icon: 'pulse', run: () => { go('profile'); setTimeout(() => window.dispatchEvent(new CustomEvent('gaia:open-readings')), 80); } },
     explain: { label: 'What do these mean?', icon: 'help', run: () => explainReadings() },
     next: { label: 'Next', icon: 'next', run: () => guideStep(guide.i + 1) },
+    // Personal Path: the next step comes from the member's path (gaia-path.js), never a model.
+    pathnext: { label: 'What\'s next for me?', icon: 'path', run: () => showPathNext() },
+    pathgo: { label: 'Open', icon: 'next', run: () => { if (pathItem && window.GaiaPath) window.GaiaPath.perform(pathItem, { surface: 'avatar' }); } },
+    pathfree: { label: 'Show me a free option', icon: 'leaf', run: () => { if (pathItem && window.GaiaPath) window.GaiaPath.perform(pathItem, { surface: 'avatar', free: true }); } },
+    pathwhy: { label: 'Why is this recommended?', icon: 'help', run: () => pathWhy() },
+    pathdone: { label: 'I did this', icon: 'check', run: () => { if (pathItem && window.GaiaPath) window.GaiaPath.settle(pathItem, 'done', 'avatar'); } },
+    pathafter: { label: 'What comes after this?', icon: 'next', run: () => pathAfter() },
     done: { label: 'Done', icon: 'check', run: () => endGuide() },
     share: { label: 'Share my readings', icon: 'pulse', run: () => { go('profile'); setTimeout(() => window.dispatchEvent(new CustomEvent('gaia:open-readings')), 80); } },
     practice: { label: 'Open my practice', icon: 'users', run: () => { go('profile', { tab: 'practice' }); setTimeout(() => window.dispatchEvent(new CustomEvent('gaia:open-client', { detail: { section: 'clients' } })), 120); } },
@@ -66,7 +73,7 @@
   };
   const ICONS = {
     chat: 'ph-chat-circle-dots', mic: 'ph-microphone', bolt: 'ph-lightning', leaf: 'ph-leaf', user: 'ph-user', pulse: 'ph-pulse',
-    help: 'ph-question', users: 'ph-users-three', book: 'ph-book-open', star: 'ph-star', x: 'ph-x', next: 'ph-arrow-right', check: 'ph-check',
+    help: 'ph-question', users: 'ph-users-three', book: 'ph-book-open', star: 'ph-star', x: 'ph-x', next: 'ph-arrow-right', check: 'ph-check', path: 'ph-path',
   };
 
   /** The bubble for this moment: text and up to three chips. A fixed table, never a model. */
@@ -77,14 +84,14 @@
     const hello = name ? `Hi ${name}. ` : '';
     switch (v) {
       case 'profile': return r.linked
-        ? { text: `${hello}Your readings are on this screen. What shall we do?`, chips: ['readings', 'explain', 'talk'] }
+        ? { text: `${hello}Your readings are on this screen. What shall we do?`, chips: ['pathnext', 'explain', 'talk'] }
         : { text: `${hello}This is your account. Want to see your Bio-Well readings here?`, chips: ['share', practitioner() ? 'practice' : 'tour', 'talk'] };
-      case 'daily': return { text: `${hello}This is your day: energy, sky, readings, your next session.`, chips: ['energy', r.linked ? 'readings' : 'breath', 'talk'] };
+      case 'daily': return { text: `${hello}This is your day: energy, sky, readings, your next session.`, chips: ['pathnext', 'energy', 'talk'] };
       case 'wellness': return { text: `${hello}Choose what you need today.`, chips: ['energy', 'breath', 'talk'] };
       case 'academy': return { text: `${hello}Your courses live here.`, chips: ['academy', 'chat', 'talk'] };
       case 'community': return { text: `${hello}Your circles are here.`, chips: ['community', 'chat', 'talk'] };
       case 'store': return { text: `${hello}Looking for a plan or a product?`, chips: ['plans', 'chat', 'talk'] };
-      default: return { text: `${hello}Ready when you are. What would you like to do?`, chips: [r.linked ? 'readings' : 'energy', practitioner() ? 'practice' : 'tour', 'talk'] };
+      default: return { text: `${hello}Ready when you are. What would you like to do?`, chips: ['pathnext', practitioner() ? 'practice' : (r.linked ? 'readings' : 'energy'), 'talk'] };
     }
   }
 
@@ -161,6 +168,56 @@
     const member = authed();
     if (window.GaiaTour?.run) window.GaiaTour.run(undefined, { remember: !member });
   }
+
+  // ── Personal Path: "What's next for me?" and the step after a completion ──
+  let pathItem = null;
+  const pathSay = (it) => (it.provenance?.source_type === 'practitioner_manual'
+    ? `Your practitioner recommended: ${it.title}.${it.lock ? ' ' + it.lock.label : ' Want to start?'}`
+    : `Your next step: ${it.title}.${it.lock ? ' ' + it.lock.label : ''}`);
+  let pathAfterItem = null;
+  function pathBubble(it, lead = '', after = null) {
+    pathItem = it; pathAfterItem = after;
+    if (!it) return showBubble({ text: `${lead}You're caught up. You can explore today's energy check, continue learning, or ask me anything.`, chips: ['energy', 'academy', 'chat'] });
+    ACTIONS.pathgo.label = it.action?.kind === 'service' ? 'View service' : (it.action?.label || 'Open');
+    const chips = it.lock
+      ? ['plans', ...(it.free_alternative ? ['pathfree'] : [])]
+      : ['pathgo', ...(it.completion === 'member' ? ['pathdone'] : [])];
+    chips.push('pathwhy');
+    if (after) chips.push('pathafter');
+    showBubble({ text: lead === 'After that: ' ? `After that: ${it.title}.${it.lock ? ' ' + it.lock.label : ''}` : lead + pathSay(it), chips });
+  }
+  async function showPathNext() {
+    const n = window.GaiaPath ? await window.GaiaPath.next() : null;
+    if (!n) { showBubble({ text: 'I could not load your path just now. Try again in a moment.', chips: ['later'] }); return; }
+    pathBubble(n.item, '', n.after);
+  }
+  /**
+   * "Why is this recommended?" -- only what was approved to say. A
+   * practitioner item: its member_safe_reason, or a fixed line; never a
+   * reconstruction. A Gaia suggestion: its own public reason.
+   */
+  const PATH_WHY = {
+    'P-NEW': 'A new Bio-Well reading has been shared with you, and you have not opened it yet.',
+    'P-SHARE': 'Your Bio-Well readings are not shared with you here yet.',
+    'P-SESSION': 'You have a confirmed session coming up this week.',
+    'P-COURSE': 'You have started this course and it is not finished yet.',
+    'P-ONBOARD': 'Your Gaia setup is not finished yet.',
+  };
+  function pathWhy() {
+    const it = pathItem; if (!it) return;
+    const prac = it.provenance?.source_type === 'practitioner_manual';
+    const text = prac
+      ? (it.reason ? `Your practitioner's reason: “${it.reason}”` : 'Your practitioner recommended this after reviewing your information. I can open it for you, or help you contact them for more detail.')
+      : (it.reason || PATH_WHY[it.id] || 'Gaia suggests this as a useful next step.');
+    showBubble({ text, chips: it.lock ? ['plans', ...(it.free_alternative ? ['pathfree'] : [])] : ['pathgo', ...(pathAfterItem ? ['pathafter'] : [])] });
+  }
+  function pathAfter() {
+    const a = pathAfterItem;
+    if (!a) { showBubble({ text: 'That is the last step on your path for now.', chips: ['later'] }); return; }
+    pathBubble(a, 'After that: ', null);
+  }
+  // After they finish (or set aside) the step that was next, offer the one after it.
+  window.addEventListener('gaia:path-updated', (e) => { const d = e.detail || {}; if (d.done && d.was_next) setTimeout(() => pathBubble(d.next, 'Nice, that\'s done. '), 400); });
 
   // ── "What do these mean?": a step-by-step walk through the member's own readings card ──
   // The steps and their words come from GaiaMyReadings.guide() (fixed wording,

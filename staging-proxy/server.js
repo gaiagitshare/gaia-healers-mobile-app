@@ -32,9 +32,10 @@ import {
 import { classifyMembershipEvent, membershipFromEvent } from './membership/events.js';
 import { attachQwenVoiceRelay, qwenRouting, issueQwenTicket, qwenVoiceConfig, voiceBootLine } from './qwen-voice-relay.js';
 import { normalizeUsage, recordUsage, recordFailure } from './assist-usage.js';
-import { toolDeclarationsFor, clientToolNames, slowToolNames, runTool, modelView } from './assist-tools.js';
+import { toolDeclarationsFor, clientToolNames, slowToolNames, runTool, modelView, readMcp } from './assist-tools.js';
+import { createPathRoutes } from './path-routes.js';
 import { getPrefs, setPrefs } from './member-prefs.js';
-import { memberReadingsEnabled, memberAllowed, mintCode, redeemCode, revokeLink, linkStatus, linkFor, partnerAuthorized, memberReadings, notifyPartnerUnlink, rememberLatest, markSeen, refreshLatest, linksForPractitioner, memberGuides, guidesForModel, recheckAfterDays, partnerAiRecommendationsEnabled } from './member-link.js';
+import { memberReadingsEnabled, memberAllowed, mintCode, redeemCode, revokeLink, linkStatus, linkFor, partnerAuthorized, memberReadings, notifyPartnerUnlink, rememberLatest, markSeen, refreshLatest, linksForPractitioner, memberGuides, guidesForModel, recheckAfterDays, partnerAiRecommendationsEnabled, memberForPractitionerClient } from './member-link.js';
 import { practitionersConfig, makePkce, authorizeUrl, rememberFlow, claimFlow,
          exchangeCode, resolveProfile, saveToken, forgetToken, connectionStatus, practitionersBootLine, tokenFor, linkState, isLinkedPractitioner, verifyPractitioner, practitionerAuthorization, applyPractitionerLink, VERIFICATION_VERSION } from './practitioners-oauth.js';
 import { allowSpend, callerKey, guardSubject, spendKindFor, ASSIST_MAX_PROMPT_CHARS, ASSIST_MAX_TTS_CHARS } from './assist-guard.js';
@@ -4301,6 +4302,31 @@ export function buildGaiaLiveInstructions(context = {}) {
 // Returns '' for anonymous visitors (Gaia stays generic/public). Cached ~60s
 // per contact so prewarm+start don't double-hit GHL.
 const _memberAiCtxCache = new Map();
+// ── Personal Path (V1) ─────────────────────────────────────────────────────
+const _pathApptCache = new Map();
+async function pathAppointmentsFor(contactId) {
+  if (!contactId) return [];
+  const hit = _pathApptCache.get(contactId);
+  if (hit && Date.now() - hit.at < 60000) return hit.list;
+  let list = [];
+  try { const r = await ghlGet(`/contacts/${encodeURIComponent(contactId)}/appointments`, {}, 5000); list = (r?.events || r?.appointments || r?.data || []).map(normalizeAppointment); } catch { list = []; }
+  _pathApptCache.set(contactId, { at: Date.now(), list });
+  return list;
+}
+/** The member's plan key for "included with X" (fixture sessions resolve from their profile, as /api/member/access does). */
+async function pathPlanLevel(req, member) {
+  const fx = fixtureAccessGranted(cookieForRequest(req)) ? fixtureProfile(requestedFixtureId(cookieForRequest(req), new URL('http://x/'))) : null;
+  const rm = fx ? resolveMemberAccess({ record: fx.record, subscriptions: fx.subscriptions, tags: fx.tags })
+    : await fetchMemberBundle(member).then((b) => resolveMemberAccess({ record: b.entitlements, subscriptions: b.subscriptions, tags: b.tags, sourceError: !b.resolved }));
+  const ms = rm?.membership || {};
+  return ['active', 'trialing', 'past_due'].includes(ms.status) && ms.key ? String(ms.key) : 'free';
+}
+const pathRoutes = createPathRoutes({
+  requireSessionMember: (...a) => requireSessionMember(...a), sendJson, readJsonBody, linkState, tokenFor, memberReadingsEnabled, memberAllowed, linkStatus,
+  recheckAfterDays, memberForPractitionerClient, loadAcademyManifest, loadAcademyProgress, academyOwnedIdsForRequest, academyCourseOwned,
+  appointmentsFor: pathAppointmentsFor, planLevelFor: pathPlanLevel, readMcp,
+  log: (msg, o) => console.log('[Gaia Path]', msg, JSON.stringify(o || {})),
+});
 // Guides are fetched from the partner (one or two calls); kept 10 minutes per member.
 const _memberGuidesCache = new Map();
 async function memberGuidesCached(cid) {
@@ -4486,6 +4512,8 @@ async function buildMemberVoiceContext(req) {
         practitioner: lines[0] === 'GAIA SESSION STATE: practitioner', newReading: Boolean(ls.new_reading),
         soonTitle: soon ? String(soon.title || 'session') : '', unread, courses: courseNames.length }) + '.');
     } catch (e) { /* optional */ }
+    // The Personal Path, public fields only (id, title, stage, state, approved reason, action): never a value, trigger or note.
+    try { const pl = await pathRoutes.assistPathLine(req, { ...member, contactId: cid || member.contactId }, { appointments: apptsRaw.map(normalizeAppointment) }); if (pl) lines.push(pl); } catch (e) { /* optional */ }
     const text = lines.join('\n');
     if (cid) _memberAiCtxCache.set(cid, { at: Date.now(), text, roleKey });
     return text;
@@ -7162,6 +7190,9 @@ const server = http.createServer(async (req, res) => {
       return;
     }
     // A member's few folded-away things, kept here so every device agrees.
+    if (url.pathname.startsWith('/api/member/path') || url.pathname.startsWith('/api/practitioners/path/')) {
+      if (await pathRoutes.handle(req, res, url, origin)) return;
+    }
     if (url.pathname === '/api/member/prefs' && (req.method === 'GET' || req.method === 'POST')) {
       const memberContext = requireSessionMember(req, res, origin);
       if (!memberContext) return;

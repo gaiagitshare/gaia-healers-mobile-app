@@ -973,29 +973,6 @@
     if (c) return c === 1 ? 'Your course is waiting.' : c + ' courses in your account.';
     return dateLabel();
   }
-  /** The one next step: a course, a booking, your readings, or today\u2019s check. Same destinations as before. */
-  function nextStep() {
-    const firstCourse = courseGrants()[0];
-    const nextAppointment = upcomingAppointments()[0];
-    if (firstCourse?.openUrl) {
-      // Both a course and a booking: the course leads, the booking is named on a second line.
-      const also = nextAppointment ? '<a class="g-home2__also" href="home.html?view=bookings">' + icon('calendar-check') + ' Also coming up: ' + esc(nextAppointment.title || 'your appointment') + ' · ' + esc(appointmentWhen(nextAppointment)) + '</a>' : '';
-      return '<section class="g-home2__next"><p class="g-super-kicker">Continue learning</p><h2>' + esc(firstCourse.title || firstCourse.name || 'Your course') + '</h2>'
-        + '<p>Lessons and verified progress open in your Academy workspace.</p>'
-        + '<button type="button" class="g-btn g-btn--primary g-btn--sm" data-super-course="' + esc(firstCourse.openUrl) + '" data-super-course-title="' + esc(firstCourse.title || firstCourse.name || 'Gaia Healers Academy') + '">' + icon('book-open') + ' Open course</button>' + also + '</section>';
-    }
-    if (nextAppointment) {
-      return '<section class="g-home2__next"><p class="g-super-kicker">Coming up</p><h2>' + esc(nextAppointment.title || 'Your appointment') + '</h2>'
-        + '<p>' + esc(appointmentWhen(nextAppointment)) + '</p><a class="g-btn g-btn--primary g-btn--sm" href="home.html?view=bookings">' + icon('calendar-check') + ' View booking</a></section>';
-    }
-    const r = (window.GaiaMyReadings && window.GaiaMyReadings.status && window.GaiaMyReadings.status()) || {};
-    if (r.linked) {
-      return '<section class="g-home2__next"><p class="g-super-kicker">' + (r.new_reading ? 'New reading' : 'Your readings') + '</p><h2>' + (r.new_reading ? 'A new reading from your practitioner' : 'Your Bio-Well readings') + '</h2>'
-        + '<p>Summary, energy and stress, your seven centres, and how things moved.</p><a class="g-btn g-btn--primary g-btn--sm" href="home.html?view=profile&section=readings">' + icon('pulse') + ' Open my readings</a></section>';
-    }
-    return '<section class="g-home2__next"><p class="g-super-kicker">Today</p><h2>Your daily energy check</h2>'
-      + '<p>Which centre today asks for, today\u2019s sky, and a streak that saves.</p><a class="g-btn g-btn--primary g-btn--sm" href="home.html?view=daily" data-app-nav="daily">' + icon('sun') + ' Start today\u2019s check</a></section>';
-  }
   /** The next gathering, compact: thumbnail, name, when and where, the same two buttons. */
   function eventCompact() {
     loadEventsList();

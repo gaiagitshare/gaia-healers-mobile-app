@@ -199,9 +199,10 @@
   function publicHtml() {
     if (state.expandSignup) return signupFormHtml();
     return '<article class="g-card g-well g-well--nudge">'
-      + '<p class="g-card__label">Personalise your day</p>'
-      + '<p class="g-well__lead">Set up your birth-date chakra to unlock your <strong>daily body point</strong> and <strong>wellness horoscope</strong>.</p>'
-      + '<div class="g-card__actions"><button type="button" class="g-btn g-btn--primary g-btn--sm" data-wexpand>Set up my wellness →</button></div>'
+      + '<p class="g-card__label">Make it yours</p>'
+      + '<p class="g-well__lead">Your birth date tells Gaia which chakra is yours. With it, your <strong>daily body point</strong> and <strong>wellness horoscope</strong> are written for you, not for everyone.</p>'
+      + '<div class="g-card__actions"><button type="button" class="g-btn g-btn--primary g-btn--sm" data-wexpand>Add my birth details →</button></div>'
+      + '<p class="g-hint">Birth date, and the time if you know it. Takes a minute.</p>'
       + '</article>';
   }
 
@@ -277,7 +278,7 @@
       return '<article class="g-card g-well g-well--nudge">'
         + '<p class="g-card__label">Your sign, your daily reflection</p>'
         + '<p class="g-well__lead">Add your birth date once to unlock a <strong>wellness horoscope</strong> made for reflection, not prediction.</p>'
-        + '<div class="g-card__actions"><button type="button" class="g-btn g-btn--primary g-btn--sm" data-wexpand>Set up my horoscope →</button></div>'
+        + '<div class="g-card__actions"><button type="button" class="g-btn g-btn--primary g-btn--sm" data-wexpand>Add my birth details →</button></div>'
         + '<p class="g-hint">No scan or paid membership is required.</p></article>';
     }
     const t = state.today || {}; const guide = ZODIAC[t.sunSign] || {};
@@ -411,7 +412,7 @@
       birthTime.addEventListener('change', updateBirthTime);
       birthTime.addEventListener('blur', updateBirthTime);
     }
-    // "Set up my wellness" on the compact reminder → expand the full form.
+    // "Add my birth details" on the compact reminder → expand the full form.
     const exp = box.querySelector('[data-wexpand]');
     if (exp) exp.addEventListener('click', () => {
       state.expandSignup = true;

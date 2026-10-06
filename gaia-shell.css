@@ -253,3 +253,53 @@ body.gaia-v2 .g-home2__for .g-home2__event-body > p:not(.g-super-kicker) { font-
 body.gaia-v2 .g-home2__for .g-home2__event .g-super-kicker { font-size: 11px; display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
 body.gaia-v2 .g-home2__for .g-home2__actions { margin-top: 10px; gap: 8px; flex-wrap: wrap; }
 body.gaia-v2 .g-home2__for .g-home2__actions .g-btn { min-height: 36px; padding: 6px 14px; font-size: 13px; width: auto; }
+
+/* —— You: at a glance ———————————————————————————————————————————————————— */
+body.gaia-v2 .g-glance { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; margin-bottom: 18px; }
+body.gaia-v2 .g-glance__tile {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  grid-template-rows: auto auto;
+  column-gap: 12px;
+  align-items: center;
+  padding: 14px 16px;
+  border-radius: 18px;
+  background: var(--v3-card);
+  color: var(--v3-text);
+  text-decoration: none;
+  transition: background-color 0.18s ease;
+}
+body.gaia-v2 .g-glance__tile:hover { background: var(--v3-card-2); }
+body.gaia-v2 .g-glance__tile:focus-visible { outline: none; box-shadow: var(--g-focus); }
+body.gaia-v2 .g-glance__tile i { grid-row: 1 / span 2; font-size: 22px; color: var(--v3-green); }
+body.gaia-v2 .g-glance__tile strong { font-size: 19px; font-weight: 600; line-height: 1.15; }
+body.gaia-v2 .g-glance__tile span { font-size: 12.5px; color: var(--v3-text-2); }
+@media (min-width: 760px) { body.gaia-v2 .g-glance { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
+
+/* —— Energy: the chosen experience leads; the toolkit is quieter ————————— */
+body.gaia-v2 [data-screen="wellness"] .g-energy-more { margin-top: 12px; }
+body.gaia-v2 [data-screen="wellness"] .g-energy-intro h2 { font-size: clamp(19px, 2.2vw, 22px) !important; }
+body.gaia-v2 [data-screen="wellness"] .g-tk { border-color: transparent !important; background: var(--v3-card) !important; box-shadow: none !important; }
+body.gaia-v2 [data-screen="wellness"] .g-tk.is-open { border-color: var(--v3-border) !important; }
+body.gaia-v2 [data-screen="wellness"] .g-tk__head { padding-block: 10px !important; }
+body.gaia-v2 [data-screen="wellness"] .g-tk__icon { width: 36px !important; height: 36px !important; }
+
+/* —— Academy shelves ——————————————————————————————————————————————————— */
+body.gaia-v2 .g-shelf__lead { margin: -4px 2px 14px; color: var(--v3-text-2); font-size: 14px; }
+body.gaia-v2 .g-shelf__more { margin-top: 12px; }
+body.gaia-v2 .g-shelf__more > summary { cursor: pointer; color: var(--v3-green); font-weight: 600; font-size: 14px; padding: 6px 2px; list-style: none; }
+body.gaia-v2 .g-shelf__more > summary::-webkit-details-marker { display: none; }
+body.gaia-v2 .g-shelf__more[open] > summary { margin-bottom: 12px; }
+body.gaia-v2 [data-screen="academy"] .g-access--link { border-color: transparent !important; background: var(--v3-card) !important; }
+body.gaia-v2 [data-screen="academy"] .g-access--link:hover { background: var(--v3-card-2) !important; }
+
+/* —— Shop: fewer, larger products per row ———————————————————————————————— */
+@media (min-width: 700px) {
+  body.gaia-v2 [data-screen="store"] .g-store-rail { grid-template-columns: repeat(3, minmax(0, 1fr)) !important; gap: 18px !important; }
+}
+@media (min-width: 1280px) {
+  body.gaia-v2 [data-screen="store"] .g-store-rail { grid-template-columns: repeat(4, minmax(0, 1fr)) !important; }
+}
+body.gaia-v2 [data-screen="store"] .g-store-tile { border-color: transparent !important; background: var(--v3-card) !important; }
+body.gaia-v2 [data-screen="store"] .g-store-tile .g-tile__title { font-size: 15px; line-height: 1.35; }
+body.gaia-v2 [data-screen="store"] .g-store-tile .g-tile__price { font-size: 16px; font-weight: 650; color: var(--v3-text); }

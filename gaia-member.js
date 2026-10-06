@@ -778,6 +778,23 @@ body.gaia-booking-open{overflow:hidden;}
 
     const cards = [];
 
+    // At a glance: the four things a member most often comes to You for, each
+    // a way in. Counts are what the member really has; nothing is invented.
+    {
+      const nCourses = (d.courses && Array.isArray(d.courses.courses)) ? d.courses.courses.length : 0;
+      const nCircles = (state.data.access && state.data.access.communities && Array.isArray(state.data.access.communities.unlocked)) ? state.data.access.communities.unlocked.length : 0;
+      const now = Date.now();
+      const nBook = ((d.appts && d.appts.appointments) || []).filter((a) => Date.parse(a.startTime || '') > now).length;
+      const rd = (window.GaiaMyReadings && window.GaiaMyReadings.status && window.GaiaMyReadings.status()) || {};
+      const tile = (icon, value, label, href, attr) => '<a class="g-glance__tile" href="' + esc(href) + '"' + (attr || '') + '><i class="ph ph-' + icon + '" aria-hidden="true"></i><strong>' + esc(value) + '</strong><span>' + esc(label) + '</span></a>';
+      cards.push('<nav class="g-glance" aria-label="At a glance">'
+        + tile('pulse', rd.linked ? (rd.new_reading ? 'New' : 'Shared') : 'Not shared', 'Readings', 'home.html?view=profile&section=readings', ' data-open-readings')
+        + tile('users-three', String(nCircles), nCircles === 1 ? 'Community' : 'Communities', 'home.html?view=community')
+        + tile('graduation-cap', String(nCourses), nCourses === 1 ? 'Course' : 'Courses', 'home.html?view=academy')
+        + tile('calendar-check', String(nBook), nBook === 1 ? 'Booking' : 'Bookings', 'home.html?view=bookings')
+        + '</nav>');
+    }
+
     // Member Pass + My Access + Included + Next Level, rendered entirely from
     // the v2 read model. Nothing below infers a benefit from the tier name.
     if (window.GaiaMembershipUI) {
@@ -985,6 +1002,11 @@ body.gaia-booking-open{overflow:hidden;}
     } catch (_) { state.academyOwned = []; }
     return state.academyOwned;
   }
+  // The readings tile on You learns the sharing state when it arrives.
+  window.addEventListener('gaia:readings-status', (e) => {
+    const d = e.detail || {};
+    document.querySelectorAll('.g-glance [data-open-readings] strong').forEach((n) => { n.textContent = d.linked ? (d.new_reading ? 'New' : 'Shared') : 'Not shared'; });
+  });
   function renderAcademy() {
     const box = el('member-academy');
     if (!box) return;
@@ -1063,9 +1085,28 @@ body.gaia-booking-open{overflow:hidden;}
     // "no courses yet" card below (it used to follow a second card with the
     // same "View memberships" button).
     if (!state.authed) parts.push(academyHead);
+    // The catalogue in a few named shelves instead of one wall of records:
+    // what is free to start, the certifications, Elevate and its workshops
+    // (they stay here, Babak 5 Oct), and the rest. A shelf longer than six
+    // folds the remainder behind "Show all".
     if (exploreTracks.length) {
-      parts.push(gSec('Explore more courses',
-        '<div class="g-access-grid">' + exploreTracks.map(trackCard).join('') + '</div>'));
+      const isEvent = (t) => /elevate|workshop/i.test(t.name || '');
+      const isFree = (t) => key(t.accessLevel) === 'free';
+      const isCert = (t) => /certif|level \d|training/i.test(t.name || '');
+      const shelves = [
+        ['Start free', 'Open to everyone, no membership needed.', exploreTracks.filter((t) => isFree(t) && !isEvent(t))],
+        ['Certifications', 'Bio-Well and Healeex training, from first steps to expert.', exploreTracks.filter((t) => !isFree(t) && !isEvent(t) && isCert(t))],
+        ['Elevate 2026 & workshops', 'Passes and upgrades for the conference.', exploreTracks.filter(isEvent)],
+      ];
+      const placed = new Set(shelves.flatMap((sh) => sh[2]));
+      shelves.push(['More from the Academy', '', exploreTracks.filter((t) => !placed.has(t))]);
+      shelves.filter((sh) => sh[2].length).forEach(([title, lead, list]) => {
+        const first = list.slice(0, 6).map(trackCard).join('');
+        const rest = list.slice(6).map(trackCard).join('');
+        parts.push(gSec(title, (lead ? '<p class="g-shelf__lead">' + esc(lead) + '</p>' : '')
+          + '<div class="g-access-grid">' + first + '</div>'
+          + (rest ? '<details class="g-shelf__more"><summary>Show all ' + list.length + '</summary><div class="g-access-grid">' + rest + '</div></details>' : '')));
+      });
     }
     if (state.authed && !hasAccess) {
       parts.unshift('<article class="g-card g-card--feature"><p class="g-card__value g-card__value--lg">No courses on your account yet</p>'

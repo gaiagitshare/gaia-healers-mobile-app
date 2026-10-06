@@ -66,7 +66,7 @@
         <span>Gaia Healers</span>
       </a>
       <div class="gaia-tabbar__group gaia-tabbar__group--left">${left.map((t) => tabLink(t, active === t.id)).join('')}</div>
-      <a class="gaia-tabbar__assist gaia-tabbar__home${active === 'today' ? ' is-active' : ''}" href="home.html?view=today" data-app-nav="today" aria-label="Home"${active === 'today' ? ' aria-current="page"' : ''}>
+      <a class="gaia-tabbar__assist gaia-tabbar__home" href="home.html?view=today" data-app-nav="today" aria-label="Home">
         <span class="gaia-tabbar__assist-pulse" aria-hidden="true"></span>
         <img class="gaia-tabbar__assist-mark" src="assets/gaia-mark.svg" alt="" aria-hidden="true" />
         <i class="ph ph-house gaia-tabbar__icon gaia-rail__home-icon" aria-hidden="true"></i>
@@ -100,6 +100,8 @@
     const centre = inner.querySelector('.gaia-tabbar__home');
     if (!centre) {
       buildTabbar(inner, active);
+      const home = inner.querySelector('.gaia-tabbar__home');
+      if (home) setLinkActive(home, active === 'today');
       window.dispatchEvent(new CustomEvent('gaia:tabbar-ready'));
       return;
     }

@@ -15,6 +15,8 @@
 .gpath__meta, .gpath__reason { margin: 3px 0 0; font-size: 14px; color: var(--g-text-muted); line-height: 1.45; }
 .gpath__note { margin: 8px 0 0; padding: 8px 10px; border-radius: 10px; background: rgba(182,242,92,.06); font-style: italic; font-size: 14px; color: var(--g-text); }
 .gpath__note span { font-style: normal; color: var(--g-text-muted); }
+.gpath__detail { margin: 8px 0 0; padding: 8px 10px; border-radius: 10px; background: rgba(255,255,255,.04); font-size: 14px; color: var(--g-text-muted); }
+.gpath__detail p { margin: 2px 0; }
 .gpath__lock { margin: 8px 0 0; font-size: 14px; color: var(--g-text); }
 .gpath__actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; margin-top: 10px; }
 .gpath__quiet { background: none; border: 0; padding: 6px 2px; min-height: 32px; color: var(--g-text-muted); font: 500 13px/1 var(--g-font, inherit); cursor: pointer; }

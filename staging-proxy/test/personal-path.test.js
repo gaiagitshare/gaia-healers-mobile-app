@@ -4,7 +4,7 @@
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { buildPath, servable, selectableResources, assistView, assistLine, loadCatalogue, RULE_IDS, MAX_ITEMS } from '../personal-path.js';
+import { buildPath, servable, selectableResources, assistView, assistLine, loadCatalogue, RULE_IDS, MAX_ITEMS, COMPLETION_BY_KIND, completionFor, memberMayComplete } from '../personal-path.js';
 
 const NOW = Date.parse('2026-10-06T12:00:00Z');
 const day = (n) => new Date(NOW + n * 86400000).toISOString();
@@ -71,7 +71,7 @@ test('course in progress: accessible, actually started, not finished', () => {
   const p = run({ courses });
   assert.deepEqual(p.items.map((i) => i.key), ['P-COURSE:c-1']);
   assert.equal(p.items[0].title, 'Continue Chakra Foundations');
-  assert.equal(p.items[0].completion, 'backend', 'opening a course never completes it');
+  assert.equal(p.items[0].completion, 'course_progress', 'opening a course never completes it');
 });
 
 test('several triggers: ranked onboarding → practitioner → new reading → session → learning → recheck; at most 5', () => {
@@ -157,4 +157,16 @@ test('Gaia sees only public path fields: never the note, a date of a scan, ids o
   assert.match(view, /Recommended by your practitioner/);
   assert.match(view, /Your practitioner recommended this as part of your current wellness plan\./, 'the approved member-safe reason may be explained');
   assert.match(view, /\[P-NEW\] "Review your latest reading"/);
+});
+
+test('completion strategy is fixed per kind; only self-guided steps can be completed by the member', () => {
+  assert.deepEqual(COMPLETION_BY_KIND, { tool: 'member', practice: 'member', view: 'member', course: 'course_progress', readings: 'reading_seen', share_readings: 'link_confirmed',
+    bookings: 'appointment_status', service: 'practitioner_booking', scan: 'new_scan', plans: 'entitlement', onboarding: 'onboarding_gate', product: 'order' });
+  for (const k of ['course', 'readings', 'share_readings', 'bookings', 'service', 'scan', 'plans', 'onboarding', 'product', 'mystery', undefined]) assert.equal(memberMayComplete(k), false, String(k));
+  assert.equal(completionFor('something-new'), 'none', 'an unknown kind gets no completion at all');
+  // A catalogue entry cannot choose its own strategy: it comes from the resource kind.
+  const sneaky = rec({ resource: { kind: 'service', id: '7', title: 'A session', completion: 'member' }, completion: 'member' });
+  assert.equal(run({}, { practitionerRecs: [sneaky] }).items[0].completion, 'practitioner_booking');
+  const p = run({ ...linked({ new_reading: true }), appointments: [{ id: 'a', startTime: day(1), status: 'confirmed' }], courses: [{ id: 'c', title: 'C', pct: 5, accessible: true, started: true }] }, { practitionerRecs: [rec()] });
+  assert.deepEqual(Object.fromEntries(p.items.map((i) => [i.id, i.completion])), { R: 'member', 'P-NEW': 'reading_seen', 'P-SESSION': 'appointment_status', 'P-COURSE': 'course_progress' });
 });

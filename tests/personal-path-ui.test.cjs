@@ -41,3 +41,15 @@ test('Gaia answers "What\'s next for me?" from the path, never a model', () => {
   assert.match(avatar, /You're caught up\. You can explore today's energy check, continue learning, or ask me anything\./);
   assert.match(avatar, /window\.GaiaPath\.next\(\)/);
 });
+
+test('"I did this" only for self-guided steps; a service offers View service and Book instead', () => {
+  assert.match(js, /it\.completion === 'member' && !it\.lock \? '<button type="button" class="gpath__quiet" data-path-do="done">I did this<\/button>'/);
+  assert.match(js, /Book with \$\{esc\(it\.practitioner_name/);
+  assert.match(js, /if \(how === 'done' && it\.completion !== 'member'\) return false;/);
+});
+
+test('Gaia explains only approved reasons and never reconstructs them', () => {
+  assert.match(avatar, /Your practitioner's reason: “\$\{it\.reason\}”/);
+  assert.match(avatar, /Your practitioner recommended this after reviewing your information\. I can open it for you, or help you contact them for more detail\./);
+  for (const k of ['pathwhy', 'pathdone', 'pathafter', 'pathfree']) assert.match(avatar, new RegExp(k + ': \\{ label:'));
+});

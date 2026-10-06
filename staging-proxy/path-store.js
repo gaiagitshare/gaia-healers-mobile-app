@@ -58,7 +58,8 @@ export function createRecommendation({ practitionerContactId, practitionerId, pr
     source_type: 'practitioner_manual', review_state: 'approved',
     practitioner_contact_id: String(practitionerContactId), practitioner_id: String(practitionerId), practitioner_name: String(practitionerName || '').slice(0, 80),
     member_id: String(memberId), customer_id: String(customerId),
-    resource: { kind: resource.kind, id: String(resource.id ?? ''), title: String(resource.title || '').slice(0, 120), ...(resource.catalogue_id ? { catalogue_id: resource.catalogue_id } : {}), ...(resource.target ? { target: resource.target } : {}) },
+    resource: { kind: resource.kind, id: String(resource.id ?? ''), title: String(resource.title || '').slice(0, 120), ...(resource.catalogue_id ? { catalogue_id: resource.catalogue_id } : {}), ...(resource.target ? { target: resource.target } : {}),
+      ...(resource.detail ? { detail: { description: String(resource.detail.description || '').slice(0, 160), duration: Number.isFinite(Number(resource.detail.duration)) ? Number(resource.detail.duration) : null } } : {}) },
     member_safe_reason: memberSafeReason || DEFAULT_REASON, note: note || '',
     catalogue_version: catalogueVersion, created_at: now.toISOString(), revoked_at: null,
   };

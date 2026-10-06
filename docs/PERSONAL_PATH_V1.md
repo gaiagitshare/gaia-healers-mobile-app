@@ -27,7 +27,7 @@ Screenshots are in `docs/ui-proof/personal-path/`, at 390, 768 and 1440 px:
 | P-SESSION | A **confirmed** booking (GHL status `confirmed`) within 7 days | Prepare for your upcoming session | View session | Server: the time passes |
 | P-COURSE | An accessible course with saved progress, not finished | Continue {course} | Resume | Server: 100% progress. Opening is not completion |
 | P-RECHECK | Latest scan ≥ the recheck window (`GAIA_SCAN_RECHECK_DAYS`, 60) | Consider a new Bio-Well scan · "Your latest scan was over 60 days ago. A new scan may give you a more current point of comparison." | Find a scan | Server: a newer scan arrives. Opening the booking page is not booking |
-| R:… | A practitioner explicitly confirmed it for this member | {resource} · **Recommended by your practitioner** · the member-safe reason · optional note | Start / Open / View service | Member ("I did this") for practices and services; server for courses |
+| R:… | A practitioner explicitly confirmed it for this member | {resource} · **Recommended by your practitioner** · the member-safe reason · optional note | Start practice / Open course / [View service] [Book with …] | By kind (section A): the member for practices; the server for courses and scans; no claim for services |
 
 **Ranking:** onboarding → practitioner → new reading → session → learning →
 share → recheck. At most 5 items.
@@ -330,3 +330,223 @@ answers first (Q8 in the partner message):
    `confirmed`. If your calendars leave bookings as `new`, say so and I'll
    include them.
 3. **The two chakra challenges** (section 9).
+
+
+---
+
+# Acceptance pass (6 Oct 2026)
+
+## A. Completion strategy, per action/resource kind
+
+The strategy is fixed in code by kind (`personal-path.js COMPLETION_BY_KIND`).
+A catalogue entry cannot choose or weaken it, and an unknown kind gets
+`none` (dismiss only). Only `member` shows "I did this"; the server refuses a
+member completion for any other kind (409).
+
+| Kind | Examples | Strategy | Completed when | Member "I did this"? |
+|---|---|---|---|---|
+| tool / practice / view | breathing practice, energy check | `member` | the member says so | **yes** |
+| course | Continue a course, a recommended course | `course_progress` | academy progress reaches 100% (server) | no; opening is not completion |
+| readings | Review your latest reading | `reading_seen` | the readings card is opened and the server records "seen" | no; never implies Gaia understood the values |
+| share_readings | Connect your Bio-Well reading | `link_confirmed` | the practitioner confirms the link | no |
+| bookings | Prepare for your upcoming session | `appointment_status` | the confirmed appointment's time passes (GHL) | no |
+| service | a practitioner's own service | `practitioner_booking` | **not auto-completed in V1**: their bookings live on the partner platform and are not linked to the recommended service, so there is no authoritative signal. It stays until the practitioner revokes it or the member chooses "Not now". | no; [View service] [Book with …] instead |
+| scan | Consider a new scan, a recommended scan | `new_scan` | a scan newer than the recommendation arrives | no; opening the booking page is not booking |
+| plans | membership | `entitlement` | the entitlement ledger | no |
+| onboarding | Finish your Gaia setup | `onboarding_gate` | the onboarding gate | no |
+| product (later) | — | `order` | an order record | never |
+
+## B. GHL booking status: what `new` means here
+
+Measured read-only on 6 Oct with 5 GHL calls: calendar settings, plus status
+**counts** only. No names, times or contacts were printed.
+
+- **All 287 calendars have `autoConfirm: true`** (281 active, 6 inactive).
+  GHL therefore creates real bookings as `confirmed`.
+- **The app's own booking calendars** (`scans`, `bio-welldemo`,
+  `healeex-bio-well-combo`) over the last 365 and next 120 days hold only
+  `confirmed` and `cancelled`. **`new` does not occur in our data.**
+- **Conclusion:** `new` can appear only if a calendar is switched to manual
+  confirmation. There it would mean a request not yet accepted, so it is
+  **not** treated as confirmed.
+- **Keep `confirmed`-only.** No real upcoming booking is lost under the current
+  configuration. `cancelled`, `showed`, `noshow` and `invalid` are never
+  "upcoming".
+
+## C. The five pending Gaia resources (for content review)
+
+None is approved. None can be selected by practitioners until a reviewer
+approves it.
+
+**R-BREATH: "Coherence breathing practice"**
+- **Description:** "A guided 5-second-in, 5-second-out breathing practice in the Energy tools. Free."
+- **Type:** tool (self-guided).
+- **Comes from:** `gaia-breath.js` (Gaia app; developer-written copy).
+- **Action:** Energy page → opens the breathing tool (`GaiaTools.open('breath')`).
+- **Membership / free alternative:** none needed / — (it is free).
+- **Intended use:** a short calming practice between sessions.
+- **Claims in its content:**
+  - The intro says: "This resonance pace is widely used to steady the heart rhythm and settle the nervous system."
+  - It also says: "not a measurement and not medical treatment".
+- **Assessment:** self-guided, free, collects nothing, carries a disclaimer.
+  **But the heart-rhythm and nervous-system sentence is an unsourced
+  physiological claim.** Suggest softening it (e.g. "Many people use this slow
+  pace to feel calmer") or citing a source before approval.
+
+**R-ENERGY-CHECK: "Daily energy check"**
+- **Description:** "The daily check-in on the Energy page. Free."
+- **Type:** view (self-guided).
+- **Comes from:** Energy page, daily check (`gaia-daily.js`; text from `wellness-router.js CHAKRA_PATHS` / `gaia-chakra-data.js`).
+- **Action:** `home.html?view=wellness&tab=check`.
+- **Membership / free alternative:** none / —.
+- **Intended use:** a daily reflection habit between sessions.
+- **Claims:** daily intention and practice text based on birth-date chakra
+  symbolism (e.g. "Ground and steady… lengthen your exhale"). Framed as "a
+  reflective tradition—not a measured energy score, diagnosis, or
+  prediction". The chakra copy is developer-written, with no reviewer on
+  record.
+- **Assessment:** low risk (self-guided, free, framed as reflection).
+  **The reviewer should read the seven `CHAKRA_PATHS` texts first.**
+
+**R-SCAN: "A follow-up Bio-Well scan"**
+- **Description:** "Find or book a Bio-Well scan."
+- **Type:** scan.
+- **Comes from:** Gaia booking routes and the directory's "scan" intent.
+- **Action:** the directory, filtered to Bio-Well practitioners (`GaiaDirectory.open({intent:'scan'})`). Completed when a newer scan arrives.
+- **Membership / free alternative:** none (the scan price is the practitioner's) / —.
+- **Intended use:** the practitioner wants a re-scan.
+- **Claims:** none beyond "Choose a practitioner near you, then take a time on their calendar."
+- **Assessment:** no claims, but it **opens all Bio-Well practitioners, not
+  necessarily the recommending one.** A practitioner who wants the client back
+  should recommend their own scan service instead. Consider approving it only
+  as "a scan anywhere".
+
+**R-COURSE-BW-ORIENTATION: "Bio-Well Orientation (course)"**
+- **Description:** "Getting started with Bio-Well: account, software and reports. Needs course access."
+- **Type:** course.
+- **Comes from:** GHL Academy (manifest `fccceb1a…`). It has 13 lessons on account setup, software, calibration, reports and filters.
+- **Action:** opens the course player.
+- **Membership / free alternative:** a course grant, not a plan level / none.
+- **Intended use:** a client who owns or uses a Bio-Well device.
+- **Claims:** technical how-to titles. The videos have not been reviewed.
+- **Assessment:** aimed at device owners and practitioners, not typical
+  clients. Most members lack access and would see "This course needs access."
+  Approve only if that use case matters.
+
+**R-COURSE-CHAKRA-9WK: "9-Week Chakra Challenge (course)"**
+- **Description:** "Gaia's 9-week chakra programme (GHL Academy). Needs course access."
+- **Type:** course.
+- **Comes from:** GHL Academy (manifest `086ab8c3…`). These are live-session recordings from Feb to Apr 2026; week 1 is "value of the program to practitioners".
+- **Action:** opens the course player.
+- **Membership / free alternative:** a course grant / none. The app's 8-week challenge is not offered as one until the 9- vs 8-week decision.
+- **Intended use:** a client who wants structured chakra practice.
+- **Claims:** recorded sessions, not reviewed. Part of it is framed for
+  practitioners.
+- **Assessment:** Gaia's authoritative programme. **The reviewer should
+  watch or skim the recordings** and decide whether it suits clients.
+
+## D. Next administrative improvement: reviewer UI (not in #279)
+
+**The flow:** Catalogue → **Pending review** → inspect the resource (exact
+member-facing title, description, action/deep link, the content it opens),
+its sources, and any claims → **Approve / Reject** with a note → the record
+stores reviewer identity, timestamp and version.
+
+**Rules carried over from the engine:**
+- **Edits reset approval:** editing an approved entry, or its wording or
+  action, creates a new version in **pending review**. The previous approved
+  version keeps serving until the new one is approved, or the entry is
+  retired.
+- **Individual identity:** the reviewer signs in with their own Gaia member
+  account and holds the `path_reviewer` role. **The shared Control Center
+  password is never an approval identity.**
+- **Two people:** the author cannot approve their own version.
+- **Audit:** every action goes to the append-only audit log. The screen shows
+  the diff between versions.
+- **Until then:** `tools/path-catalogue.mjs` provides the same rules from the
+  command line.
+
+## E. Exactly what Gaia Assist receives for the path
+
+`assistView()` / `assistLine()`, per item:
+- `id`
+- `title`
+- `stage`
+- `state` (active or opened)
+- `from` ("Recommended by your practitioner" or "Suggested by Gaia")
+- `member_safe_reason` (practitioner items only, when approved)
+- `action` (its label)
+- `needs` (the lock label, if any)
+
+Example:
+
+```
+1. [R:rec_…] "Coherence breathing practice" (start_now, Recommended by your practitioner;
+   reason: Your practitioner recommended this as part of your current wellness plan.; action: Start practice)
+2. [P-NEW] "Review your latest reading" (start_now, Suggested by Gaia; action: Open reading)
+3. [P-SESSION] "Prepare for your upcoming session" (coming_up, Suggested by Gaia; action: View session)
+```
+
+**Not sent:**
+- **The practitioner's note.** The member sees it on screen, but it is not
+  approved for the AI provider, so it is not sent.
+- **People:** the practitioner's name or id, the member id.
+- **Dates and titles:** scan dates or ids, session titles or times.
+- **Logic and data:** triggers, rule logic, values, derived signals, and any
+  partner AI output.
+
+**Deterministic answers in the avatar, with no model involved:**
+
+| Ask | Answer |
+|---|---|
+| What's next for me? | "Your practitioner recommended: X. Want to start?" or "Your next step: X." |
+| Why is this recommended? | Practitioner item: "Your practitioner's reason: “{member_safe_reason}”". Without a reason: "Your practitioner recommended this after reviewing your information. I can open it for you, or help you contact them for more detail." Gaia suggestion: its own public reason. |
+| Show me a free option | opens the approved free alternative |
+| I did this | self-guided items only; then "Nice, that's done. Your next step: …" |
+| What comes after this? | "After that: X." |
+
+## F. After the partner's answers (6 Oct): three origins, one boundary
+
+**What the partner developer confirmed** (owner's summary):
+- **The pipeline:** Gaia Practitioners already runs scan → Claude analysis →
+  up to 5 ranked product/service recommendations (with ids, relevance,
+  matched systems, reasoning and a video script) → practitioner
+  approve/reject/regenerate.
+- **The trust boundary:** pending and rejected items are practitioner-only;
+  approved items are intentionally member-facing.
+- **Compliance:** their Claude processing of scan data is **not yet under an
+  Anthropic BAA/enterprise plan**.
+- **Thresholds:** the flag thresholds (20% elevated, 40% high, ±5
+  improving/worsening, 3 worsening sessions, stress +2, energy −15) are
+  **Gaia Practitioners' own triage rules, not Bio-Well methodology**.
+
+**What follows for Gaia Healers:**
+
+| Origin | Shown as | Source in code | State |
+|---|---|---|---|
+| Gaia / platform rules | Suggested by Gaia | `platform_rule` | **live in #279** |
+| Manual practitioner choice (an approved Gaia resource or their own service) | Recommended by your practitioner | `practitioner_manual` | **live in #279** (separate source; useful for Gaia practices, courses and services) |
+| Gaia Practitioners **approved** recommendation | Recommended by your practitioner | `partner_ai` (approved on their side) | **not built.** It will come only from their forthcoming member tool that returns approved items only. Gated by `GAIA_PARTNER_AI_RECOMMENDATIONS` (off) until their BAA is in place. |
+
+- **No duplicate review.** We will **not** import pending partner
+  recommendations, and won't make practitioners approve them a second time
+  in our Practice tab.
+- **Fields we'll ask for** in their member tool: id, type, product/service
+  id, title, rank (if member-safe), member-safe reasoning, approved
+  status/date, practitioner, action/link. **Not** body-system matches.
+- **Their reasoning stays out of our AI provider, even after their BAA.** The
+  member-safe reason is displayed directly, and Gaia answers "Why?"
+  deterministically from that field, exactly as for manual recommendations
+  today (section E).
+- **Flags are labelled as triage signals.** In code and docs they are
+  "Gaia Practitioners triage signals", never "Bio-Well interpretation". The
+  member card already says "Flagged by your practitioner's scan platform; the
+  labels are theirs."
+
+**Readings boundary** (pinned by `test/member-readings-ai-boundary.test.js`):
+
+| Data | Member UI | Gaia's AI provider |
+|---|---|---|
+| Member readings, trends, triage flags (partner member access) | **shown** in You → My readings (authorised display) | **never sent.** The context has only "readings are shared" and "a new one is waiting". The page sends only the screen name and an item id with each message. |
+
+`GAIA_SCAN_NARRATION` stays off. `GAIA_PARTNER_AI_RECOMMENDATIONS` stays off.

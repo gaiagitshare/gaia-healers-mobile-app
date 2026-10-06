@@ -26,6 +26,7 @@ fs.writeFileSync(CAT, JSON.stringify({ version: 3, entries: [
   ...RULE_IDS.map((id) => ({ id, kind: 'rule', version: 1, status: 'approved', active: true, approval: ok, sources: [{ type: 'business_rule', ref: 't' }] })),
   { id: 'R-BREATH', kind: 'resource', version: 1, title: 'Coherence breathing practice', resource: { kind: 'tool', id: 'breath' }, status: 'approved', active: true, approval: ok, sources: [{ type: 'gaia_content', ref: 't' }] },
   { id: 'R-COURSE', kind: 'resource', version: 1, title: 'A course', resource: { kind: 'course', id: 'c-1' }, status: 'approved', active: true, approval: ok, sources: [{ type: 'gaia_content', ref: 't' }] },
+  { id: 'R-SCAN', kind: 'resource', version: 1, title: 'A follow-up Bio-Well scan', resource: { kind: 'scan', id: 'scan' }, status: 'approved', active: true, approval: ok, sources: [{ type: 'business_rule', ref: 't' }] },
   { id: 'R-DRAFT', kind: 'resource', version: 1, title: 'Draft', resource: { kind: 'tool', id: 'x' }, status: 'pending', active: true, approval: null, sources: [{ type: 'gaia_content', ref: 't' }] },
 ] }));
 
@@ -72,7 +73,7 @@ test('visitor: no private path', async () => {
 test('practitioner options: only a connected practitioner, only their own linked client', async () => {
   const mine = await call('GET', '/api/practitioners/path/options?customer_id=101', 'contact-pa');
   assert.equal(mine.status, 200);
-  assert.deepEqual(mine.data.resources.map((r) => r.id), ['R-BREATH', 'R-COURSE'], 'approved resources only (no drafts)');
+  assert.deepEqual(mine.data.resources.map((r) => r.id), ['R-BREATH', 'R-COURSE', 'R-SCAN'], 'approved resources only (no drafts)');
   assert.deepEqual(mine.data.services.map((s) => s.title), ['Lymphatic massage']);
   assert.equal(mine.data.services[0].description, '60 min', 'markup stripped from service text');
   assert.equal((await call('GET', '/api/practitioners/path/options?customer_id=202', 'contact-pa')).status, 404, "A cannot reach B's client");
@@ -135,6 +136,17 @@ test('completion: the member may complete a practice; a course is complete only 
   assert.ok(!(await call('GET', '/api/member/path', 'member-a')).data.items.some((i) => i.key === breath.key));
   assert.equal((await call('POST', '/api/member/path/event', 'member-b', { event: 'recommendation_completed', key: breath.key })).status, 404, "B cannot touch A's item");
   assert.equal((await call('POST', '/api/member/path/event', 'member-a', { event: 'recommendation_completed', key: 'P-NEW:2026-10-03' })).status, 409, 'a reading is reviewed by opening it, on the server');
+  for (const k of ['P-SESSION:a1', 'P-RECHECK:2026-06-08', 'P-COURSE:c-1', 'P-SHARE']) assert.equal((await call('POST', '/api/member/path/event', 'member-a', { event: 'recommendation_completed', key: k })).status, 409, k);
+});
+
+test('a practitioner service cannot be completed by a claim; it carries its details for "View service"', async () => {
+  const svc = await recommend('contact-pa', { resource_key: 'svc:7', note: '' });
+  const id = svc.data.recommendation?.id || (await call('GET', '/api/practitioners/path/options?customer_id=101', 'contact-pa')).data.recommendations.find((r) => r.title === 'Lymphatic massage' && r.state === 'active').id;
+  const item = (await call('GET', '/api/member/path', 'member-a')).data.items.find((i) => i.key === `R:${id}`);
+  assert.equal(item.completion, 'practitioner_booking');
+  assert.deepEqual(item.service_detail, { description: '60 min', duration: 60 });
+  assert.equal((await call('POST', '/api/member/path/event', 'member-a', { event: 'recommendation_completed', key: item.key })).status, 409, 'no "I did this" for a booking');
+  await call('POST', '/api/practitioners/path/revoke', 'contact-pa', { id });
 });
 
 test('dismissed recommendation stays dismissed', async () => {
@@ -182,4 +194,20 @@ test('the routes sit behind the session and the onboarding gate', async () => {
   assert.equal(protectedMemberPath('/api/member/path'), true, 'incomplete onboarding never reaches the path: the gate is the first step');
   const srv = fs.readFileSync(new URL('../server.js', import.meta.url), 'utf8');
   assert.match(srv, /url\.pathname\.startsWith\('\/api\/member\/path'\) \|\| url\.pathname\.startsWith\('\/api\/practitioners\/path\/'\)/);
+});
+
+test('a recommended scan completes itself when a newer scan arrives (opening the booking page does not)', async () => {
+  const r = await recommend('contact-pa', { resource_key: 'cat:R-SCAN' });
+  const key = `R:${r.data.recommendation.id}`;
+  await call('POST', '/api/member/path/event', 'member-a', { event: 'recommendation_opened', key });
+  assert.ok((await call('GET', '/api/member/path', 'member-a')).data.items.some((i) => i.key === key), 'opened is not booked');
+  assert.equal((await call('POST', '/api/member/path/event', 'member-a', { event: 'recommendation_completed', key })).status, 409);
+  const later = new Date(Date.now() + 86400000).toISOString().slice(0, 10);
+  ml.rememberLatest('member-a', later, { file: LINKS });
+  assert.ok(!(await call('GET', '/api/member/path', 'member-a')).data.items.some((i) => i.key === key), 'a newer scan completes it');
+});
+
+test('#279 consumes no partner AI recommendations, scripts, videos or reading values', () => {
+  const src = ['path-routes.js', 'personal-path.js', 'path-store.js'].map((f) => fs.readFileSync(new URL('../' + f, import.meta.url), 'utf8')).join('\n');
+  assert.doesNotMatch(src, /get_customer_recommendations|get_my_recommendations|memberGuides|\.script\b|video_url|video_status|memberReadings\(|get_customer_scan|get_scan_trend|get_client_summary|compare_protocol_before_after/);
 });

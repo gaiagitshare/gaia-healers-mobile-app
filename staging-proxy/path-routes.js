@@ -15,7 +15,7 @@
  * gate's own screen is their first step. The engine still ranks P-ONBOARD
  * first for any caller that does reach it with onboarding open.
  */
-import { buildPath, loadCatalogue, selectableResources, entryById, assistLine } from './personal-path.js';
+import { buildPath, loadCatalogue, selectableResources, entryById, assistLine, memberMayComplete } from './personal-path.js';
 import { activeForMember, forPractitionerClient, createRecommendation, revokeRecommendation, stateFor, setItemState,
   recordEvent, PATH_EVENTS, cleanText, REASON_MAX, NOTE_MAX, DEFAULT_REASON } from './path-store.js';
 
@@ -23,7 +23,7 @@ import { activeForMember, forPractitionerClient, createRecommendation, revokeRec
 function publicItem(i) {
   const out = { key: i.key, id: i.id, title: i.title, stage: i.stage, stage_label: i.stage_label, reason: i.reason || '', state: i.state,
     action: i.action, provenance: { label: i.provenance.label, source_type: i.provenance.source_type }, completion: i.completion };
-  for (const k of ['note', 'practitioner_name', 'when', 'session_title', 'progress', 'lock', 'free_alternative']) if (i[k] !== undefined && i[k] !== null && i[k] !== '') out[k] = i[k];
+  for (const k of ['note', 'practitioner_name', 'when', 'session_title', 'progress', 'lock', 'free_alternative', 'service_detail']) if (i[k] !== undefined && i[k] !== null && i[k] !== '') out[k] = i[k];
   return out;
 }
 
@@ -67,6 +67,8 @@ export function createPathRoutes(deps) {
     const signals = await signalsFor(req, member, { appointments, recs, catalogue });
     // Backend completion: a recommended course the member has finished is complete, whatever the page said.
     for (const r of recs) if (r.resource?.kind === 'course' && (Number(signals.progress[r.resource.id]?.pct) || 0) >= 100) setItemState(cid, `R:${r.id}`, 'completed', 'backend');
+    // A recommended scan is done when a scan newer than the recommendation arrives (opening the booking page is not).
+    for (const r of recs) if (r.resource?.kind === 'scan' && signals.readings.latest_scanned_at && signals.readings.latest_scanned_at > String(r.created_at || '').slice(0, 10)) setItemState(cid, `R:${r.id}`, 'completed', 'backend');
     return buildPath(signals, { catalogue, state: stateFor(cid), recheckDays: recheckAfterDays(), practitionerRecs: recs });
   }
 
@@ -116,9 +118,10 @@ export function createPathRoutes(deps) {
       if (event === 'recommendation_opened' && key) state = setItemState(cid, key, 'opened', 'user');
       if (event === 'recommendation_dismissed' && key) state = setItemState(cid, key, 'dismissed', 'user');
       if (event === 'recommendation_completed') {
-        // The member may say they did a practice or saw a service; a course, a
-        // reading, a session or a scan is complete only when the server knows it.
-        if (!rec || rec.resource?.kind === 'course') { sendJson(res, 409, { ok: false, error: 'completed_by_server_only' }, origin); return true; }
+        // Only a self-guided practice or activity may be completed by the member
+        // saying so (personal-path.js COMPLETION_BY_KIND); a course, reading,
+        // session, service, scan, membership or product needs a server fact.
+        if (!rec || !memberMayComplete(rec.resource?.kind)) { sendJson(res, 409, { ok: false, error: 'completed_by_server_only' }, origin); return true; }
         state = setItemState(cid, key, 'completed', 'user');
       }
       recordEvent(cid, event, { item_id: key || undefined, stage: body.stage, surface: body.surface, items: body.items, level: body.level,
@@ -156,7 +159,7 @@ export function createPathRoutes(deps) {
       } else if (key.startsWith('svc:')) {
         let services = []; try { services = await servicesFor(prac); } catch { sendJson(res, 503, { ok: false, error: 'services_unavailable' }, origin); return true; }
         const s = services.find((x) => x.key === key);
-        if (s) resource = { kind: 'service', id: s.id, title: s.title };
+        if (s) resource = { kind: 'service', id: s.id, title: s.title, detail: { description: s.description || '', duration: s.duration ?? null } };
       }
       if (!resource) { sendJson(res, 400, { ok: false, error: 'resource_not_selectable' }, origin); return true; }
       const dup = forPractitionerClient(prac.practitionerId, customerId).find((r) => !r.revoked_at && r.resource?.kind === resource.kind && String(r.resource?.id) === String(resource.id));

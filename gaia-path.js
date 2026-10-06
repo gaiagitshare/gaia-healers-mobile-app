@@ -49,7 +49,7 @@
     else if (k === 'course') { const id = a.course_id || a.resource_id; if (window.GaiaAcademyPlayer?.open) window.GaiaAcademyPlayer.open(id); else go('academy'); }
     else if (k === 'tool') { go('wellness'); requestAnimationFrame(() => { try { window.GaiaTools?.open?.(a.resource_id); } catch { /* ignore */ } }); }
     else if (k === 'view') go(a.target?.view || 'today', a.target?.tab ? { tab: a.target.tab } : undefined);
-    else if (k === 'service') go('directory');
+    else if (k === 'service') { if (window.GaiaDirectory?.open) window.GaiaDirectory.open({ q: item.practitioner_name || '' }); else go('directory'); }
     else if (k === 'onboarding') { try { window.GaiaJourney?.check?.(true); } catch { /* ignore */ } }
     else if (k === 'plans') go('store', { tab: 'membership' });
   }
@@ -65,11 +65,14 @@
       ${it.reason ? `<p class="gpath__reason">${esc(it.reason)}</p>` : ''}
       ${prac && it.note ? `<p class="gpath__note">“${esc(it.note)}”${it.practitioner_name ? ` <span>— ${esc(it.practitioner_name)}</span>` : ''}</p>` : ''}
       ${it.lock ? `<p class="gpath__lock">${esc(it.lock.label)}</p>` : ''}
+      ${it.service_detail ? `<div class="gpath__detail" data-path-detail hidden>${it.service_detail.description ? `<p>${esc(it.service_detail.description)}</p>` : ''}${it.service_detail.duration ? `<p>${esc(it.service_detail.duration)} minutes</p>` : ''}<p>Booked with ${esc(it.practitioner_name || 'your practitioner')}.</p></div>` : ''}
       <div class="gpath__actions">
         ${it.lock
           ? `<button type="button" class="g-btn g-btn--secondary g-btn--sm" data-path-do="plans">${it.lock.kind === 'plan' ? `See ${esc(it.lock.plan.replace(/^./, (c) => c.toUpperCase()))}` : 'See membership plans'}</button>${it.free_alternative ? '<button type="button" class="g-btn g-btn--ghost g-btn--sm" data-path-do="free">Show me a free option</button>' : ''}`
-          : `<button type="button" class="g-btn ${lead ? 'g-btn--primary' : 'g-btn--secondary'} g-btn--sm" data-path-do="open">${esc(it.action?.label || 'Open')}</button>`}
-        ${it.completion === 'user' && !it.lock ? '<button type="button" class="gpath__quiet" data-path-do="done">I did this</button>' : ''}
+          : it.action?.kind === 'service'
+            ? `<button type="button" class="g-btn ${lead ? 'g-btn--primary' : 'g-btn--secondary'} g-btn--sm" data-path-do="detail" aria-expanded="false">View service</button><button type="button" class="g-btn g-btn--ghost g-btn--sm" data-path-do="open">Book with ${esc(it.practitioner_name || 'your practitioner')}</button>`
+            : `<button type="button" class="g-btn ${lead ? 'g-btn--primary' : 'g-btn--secondary'} g-btn--sm" data-path-do="open">${esc(it.action?.label || 'Open')}</button>`}
+        ${it.completion === 'member' && !it.lock ? '<button type="button" class="gpath__quiet" data-path-do="done">I did this</button>' : ''}
         <button type="button" class="gpath__quiet" data-path-do="dismiss">Not now</button>
       </div>
     </li>`;
@@ -107,15 +110,25 @@
       const li = b.closest('[data-path-key]'); const it = p.items.find((x) => x.key === li?.dataset.pathKey); if (!it) return;
       const what = b.dataset.pathDo;
       if (what === 'open') perform(it, { surface });
+      else if (what === 'detail') { const d = li.querySelector('[data-path-detail]'); if (d) { d.hidden = !d.hidden; b.setAttribute('aria-expanded', String(!d.hidden)); if (!d.hidden) event('recommendation_opened', { key: it.key, stage: it.stage, surface }); } }
       else if (what === 'free') perform(it, { surface, free: true });
       else if (what === 'plans') { event('membership_opened', { key: it.key, level: it.lock?.plan }); go('store', { tab: 'membership' }); }
       else if (what === 'done' || what === 'dismiss') {
         b.disabled = true;
-        const r = await event(what === 'done' ? 'recommendation_completed' : 'recommendation_dismissed', { key: it.key, stage: it.stage, surface });
-        if (r.ok) { const before = p.items[0]; await refresh(); window.dispatchEvent(new CustomEvent('gaia:path-updated', { detail: { done: what === 'done' ? it : null, was_next: before?.key === it.key, next: (last?.items || [])[0] || null } })); }
-        else b.disabled = false;
+        if (!(await settle(it, what === 'done' ? 'done' : 'dismiss', surface))) b.disabled = false;
       }
     };
+  }
+
+  /** "I did this" (self-guided only; the server refuses anything else) or "Not now". */
+  async function settle(it, how, surface = 'you') {
+    if (how === 'done' && it.completion !== 'member') return false;
+    const before = (last?.items || [])[0];
+    const r = await event(how === 'done' ? 'recommendation_completed' : 'recommendation_dismissed', { key: it.key, stage: it.stage, surface });
+    if (!r.ok) return false;
+    await refresh();
+    window.dispatchEvent(new CustomEvent('gaia:path-updated', { detail: { done: how === 'done' ? it : null, was_next: before?.key === it.key, next: (last?.items || [])[0] || null } }));
+    return true;
   }
 
   async function render(force) {
@@ -209,5 +222,5 @@
   window.addEventListener('gaia:readings-status', (e) => { const n = Boolean(e.detail?.new_reading); if (last && lastNew !== null && n !== lastNew) render(true); lastNew = n; });
   document.addEventListener('gaia:superapp-rendered', () => placeHomeRow(last));
   document.addEventListener('gaia:view-changed', () => { if (last) placeHomeRow(last); });
-  window.GaiaPath = { load, render, refresh, perform, mountPractice, next: async () => { const p = last || await load(); return p ? { item: (p.items || [])[0] || null, caught_up: Boolean(p.caught_up), count: (p.items || []).length } : null; } };
+  window.GaiaPath = { load, render, refresh, perform, settle, mountPractice, next: async () => { const p = last || await load(); return p ? { item: (p.items || [])[0] || null, after: (p.items || [])[1] || null, caught_up: Boolean(p.caught_up), count: (p.items || []).length } : null; } };
 })();

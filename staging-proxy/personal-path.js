@@ -27,6 +27,37 @@ export const STAGES = Object.freeze({
   start_now: 'Start now', coming_up: 'Coming up', keep_going: 'Keep going', recheck: 'Recheck',
 });
 export const MAX_ITEMS = 5;
+
+/**
+ * HOW EACH KIND OF STEP IS COMPLETED (owner acceptance pass, 6 Oct 2026).
+ * Decided by the action/resource KIND only; a catalogue entry cannot choose
+ * its own strategy, so a future entry cannot inherit a weaker one. Only
+ * 'member' lets the member say "I did this"; everything else is completed by
+ * an authoritative server fact (or, where we have none, not at all: the
+ * member may still set it aside with "Not now"). An unknown kind gets 'none'.
+ *
+ *   member            self-guided practice or activity: the member says so
+ *   course_progress   the academy progress store reaches 100% (opening is not completion)
+ *   reading_seen      the readings card was opened (link status "seen"); never "Gaia understood it"
+ *   link_confirmed    the practitioner confirmed the readings link
+ *   appointment_status  a booking/session: the appointment's own status/time
+ *   practitioner_booking  a practitioner's service: NO authoritative completion signal today
+ *                     (their bookings are on the partner platform and not linked to
+ *                     the service recommended), so it is never completed by a claim
+ *   new_scan          a newer scan arrives (opening the booking page is not booking)
+ *   entitlement       the membership/entitlement ledger
+ *   onboarding_gate   the onboarding gate's own state
+ *   order             a purchase/order record (products, when added later)
+ *   none              no completion; dismiss only
+ */
+export const COMPLETION_BY_KIND = Object.freeze({
+  tool: 'member', practice: 'member', view: 'member',
+  course: 'course_progress', readings: 'reading_seen', share_readings: 'link_confirmed',
+  bookings: 'appointment_status', service: 'practitioner_booking', scan: 'new_scan',
+  plans: 'entitlement', onboarding: 'onboarding_gate', product: 'order',
+});
+export const completionFor = (kind) => COMPLETION_BY_KIND[kind] || 'none';
+export const memberMayComplete = (kind) => completionFor(kind) === 'member';
 const PLAN_ORDER = ['free', 'silver', 'gold', 'diamond'];
 const DAY = 86400000;
 
@@ -87,11 +118,11 @@ export function lockFor(resource, entry, signals) {
 const RULES = {
   'P-ONBOARD': (s) => (s.onboarding?.required ? [{ key: 'P-ONBOARD', priority: 100, stage: 'start_now',
     title: 'Finish your Gaia setup', reason: 'A few questions so Gaia can open the rest of the app for you.',
-    action: { kind: 'onboarding', label: 'Continue setup' }, completion: 'backend' }] : []),
+    action: { kind: 'onboarding', label: 'Continue setup' } }] : []),
 
   'P-NEW': (s) => (s.readings?.linked && s.readings.new_reading && s.readings.latest_scanned_at ? [{ key: `P-NEW:${s.readings.latest_scanned_at}`, priority: 80, stage: 'start_now',
     title: 'Review your latest reading', reason: 'A new Bio-Well reading has been shared with you.',
-    action: { kind: 'readings', label: 'Open reading' }, completion: 'backend' }] : []),
+    action: { kind: 'readings', label: 'Open reading' } }] : []),
 
   'P-SESSION': (s, now) => {
     const soon = (s.appointments || [])
@@ -102,7 +133,7 @@ const RULES = {
     if (!soon) return [];
     return [{ key: `P-SESSION:${soon.id || soon.t}`, priority: 70, stage: 'coming_up',
       title: 'Prepare for your upcoming session', reason: '', when: new Date(soon.t).toISOString(), session_title: String(soon.title || '').slice(0, 80),
-      action: { kind: 'bookings', label: 'View session' }, completion: 'backend' }];
+      action: { kind: 'bookings', label: 'View session' } }];
   },
 
   'P-COURSE': (s) => {
@@ -111,12 +142,12 @@ const RULES = {
     if (!c) return [];
     return [{ key: `P-COURSE:${c.id}`, priority: 60, stage: 'keep_going',
       title: `Continue ${String(c.title || 'your course').slice(0, 80)}`, reason: '', progress: Math.round(c.pct || 0),
-      action: { kind: 'course', label: 'Resume', course_id: c.id }, completion: 'backend' }];
+      action: { kind: 'course', label: 'Resume', course_id: c.id } }];
   },
 
   'P-SHARE': (s) => (s.readings?.enabled && !s.readings.linked ? [{ key: 'P-SHARE', priority: 50, stage: 'start_now',
     title: 'Connect your Bio-Well reading', reason: 'Ask your practitioner to share your readings with you here, or find a scan near you.',
-    action: { kind: 'share_readings', label: 'How sharing works' }, completion: 'backend' }] : []),
+    action: { kind: 'share_readings', label: 'How sharing works' } }] : []),
 
   'P-RECHECK': (s, now, ctx) => {
     const t = day(s.readings?.latest_scanned_at);
@@ -126,7 +157,7 @@ const RULES = {
     return [{ key: `P-RECHECK:${s.readings.latest_scanned_at}`, priority: 40, stage: 'recheck',
       title: 'Consider a new Bio-Well scan',
       reason: `Your latest scan was over ${days} days ago. A new scan may give you a more current point of comparison.`,
-      action: { kind: 'scan', label: 'Find a scan' }, completion: 'backend' }];
+      action: { kind: 'scan', label: 'Find a scan' } }];
   },
 };
 export const RULE_IDS = Object.freeze(Object.keys(RULES));
@@ -143,10 +174,11 @@ function practitionerItem(rec, catalogue, signals) {
     title: rec.resource?.title || 'A recommendation from your practitioner',
     reason: rec.member_safe_reason || '', note: rec.note || '',
     practitioner_name: rec.practitioner_name || '',
+    ...(rec.resource?.kind === 'service' && rec.resource.detail ? { service_detail: rec.resource.detail } : {}),
     action: { kind: rec.resource?.kind || 'none', label: actionLabel(rec.resource), ...(rec.resource?.target ? { target: rec.resource.target } : {}), ...(rec.resource?.id ? { resource_id: rec.resource.id } : {}) },
     lock, free_alternative: free ? { id: free.id, title: free.title, resource: free.resource, action_label: actionLabel(free.resource) } : null,
     provenance: { source_type: 'practitioner_manual', review_state: 'approved', label: 'Recommended by your practitioner' },
-    completion: rec.resource?.kind === 'course' ? 'backend' : 'user',
+    completion: completionFor(rec.resource?.kind),
     recommended_at: rec.created_at,
   };
 }
@@ -172,7 +204,7 @@ export function buildPath(signals = {}, { catalogue = loadCatalogue(), state = {
   // No contradictions: a reading that just arrived is not also "old".
   if (items.some((i) => i.key.startsWith('P-NEW:'))) items = items.filter((i) => !i.key.startsWith('P-RECHECK:'));
   items = items
-    .map((i) => ({ ...i, id: i.id || i.key.split(':')[0], stage_label: STAGES[i.stage] || '', state: state[i.key]?.state || 'active',
+    .map((i) => ({ ...i, completion: completionFor(i.action?.kind), id: i.id || i.key.split(':')[0], stage_label: STAGES[i.stage] || '', state: state[i.key]?.state || 'active',
       provenance: i.provenance || { source_type: 'platform_rule', review_state: 'not_required', label: 'Suggested by Gaia' } }))
     .filter((i) => i.state !== 'dismissed' && i.state !== 'completed' && i.state !== 'expired')
     .sort((a, b) => b.priority - a.priority || String(a.recommended_at || '').localeCompare(String(b.recommended_at || '')))

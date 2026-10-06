@@ -565,7 +565,55 @@
   }
 
   // For Home: the latest numbers once they are loaded (nothing extra is fetched).
+  /**
+   * "What do these mean?": a short walk through the member's own card, one
+   * section at a time. Each step says what that part of the screen shows and
+   * points out what is already in the numbers (dates, highest and lowest,
+   * the member's own average). It adds no ranges or meanings of its own and
+   * involves no model; questions about meaning go to the practitioner.
+   */
+  function guide() {
+    const r = lastReadings, root = document.getElementById('member-readings');
+    if (!r || !root || root.hidden) return [];
+    if (!expanded) reveal(root);
+    const l = r.latest || null, a = r.average_recent, t = r.trend, who = r.practitioner?.name || 'your practitioner';
+    const steps = [], has = (sel) => root.querySelector(sel);
+    if (r.summary?.headline && has('.g-readings__summary')) {
+      steps.push({ sel: '.g-readings__summary', text: 'This is the short version. It is written from your readings by simple fixed rules, not by AI.' + (a && a.count >= 3 ? ' The bars under it average your latest three complete scans.' : '') });
+    }
+    if (l && has('.g-readings__hero')) {
+      const age = ageOf(l.scanned_at);
+      const nums = [typeof l.energy === 'number' ? `energy ${fmt(l.energy)}` : '', typeof l.stress === 'number' ? `stress ${fmt(l.stress, 2)}` : ''].filter(Boolean).join(' and ');
+      let text = `Your latest scan${l.scanned_at ? `, ${when(l.scanned_at)}${age ? ` (${age.label})` : ''}` : ''}${nums ? `: ${nums}` : ''}. The shaded part of each arc is the band this card marks as comfortable.`;
+      if (a && a.count >= 3 && typeof a.energy === 'number' && typeof a.stress === 'number') text += ` Your own three-scan average is energy ${fmt(a.energy, 1)}, stress ${fmt(a.stress, 2)}.`;
+      if (age && age.stale) text += ` It shows the day of the scan, not today; a new scan would show where you are now.`;
+      steps.push({ sel: '.g-readings__hero', text });
+    }
+    const centres = (l?.chakras || []).filter((c) => typeof c.value === 'number');
+    const section = (title) => [...root.querySelectorAll('.g-readings__sec')].find((s) => title.test(s.querySelector('.g-readings__kicker')?.textContent || ''));
+    if (centres.length >= 2 && section(/seven centres/i)) {
+      const hi = centres.reduce((x, y) => (y.value > x.value ? y : x)), lo = centres.reduce((x, y) => (y.value < x.value ? y : x));
+      steps.push({ el: section(/seven centres/i), text: `Your seven centres, root to crown, each on a 0–10 scale. In this scan ${hi.name} was the most active (${fmt(hi.value, 2)}) and ${lo.name} the quietest (${fmt(lo.value, 2)}).` });
+    }
+    if ((l?.most_out_of_balance || []).length && section(/Most out of balance/)) {
+      steps.push({ el: section(/Most out of balance/), text: 'These are the centres this scan lists as most out of balance, with the figure the scan gives for each.' });
+    }
+    if (t && (t.energy || t.stress)) {
+      const sec = section(/Last 90 days/);
+      if (sec) {
+        const n = (t.flagged || []).length;
+        steps.push({ el: sec, text: `Your last 90 days: the lowest and highest energy and stress across those scans, and their average.${n ? ` ${n} ${n === 1 ? 'item was' : 'items were'} flagged for this period; the label shows the direction and how strong.` : ' Nothing was flagged for this period.'}` });
+      }
+    }
+    if ((r.comparisons || []).length) {
+      const sec = section(/Before and after/);
+      if (sec) steps.push({ el: sec, text: 'Scans taken around your sessions, side by side: how much stress and energy changed between them.' });
+    }
+    const ex = root.querySelector('.g-readings__explain');
+    if (ex) steps.push({ el: ex, open: ex, text: `Short definitions of each measure are here. What your numbers mean for you is a question for ${who}; these are wellness readings, not a diagnosis.` });
+    return steps;
+  }
   const latest = () => (lastReadings && lastReadings.latest ? { latest: lastReadings.latest, summary: lastReadings.summary || null, average: lastReadings.average_recent || null, practitioner: lastReadings.practitioner?.name || '' } : null);
-  window.GaiaMyReadings = { mount, render, reveal, latest, ageOf, status: () => (lastStatus ? { linked: Boolean(lastStatus.linked), new_reading: Boolean(lastStatus.new_reading), latest_scanned_at: lastStatus.latest_scanned_at || null, code_active: Boolean(lastStatus.code_active) } : {}) };
+  window.GaiaMyReadings = { mount, render, reveal, latest, ageOf, guide, status: () => (lastStatus ? { linked: Boolean(lastStatus.linked), new_reading: Boolean(lastStatus.new_reading), latest_scanned_at: lastStatus.latest_scanned_at || null, code_active: Boolean(lastStatus.code_active) } : {}) };
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', mount); else mount();
 })();

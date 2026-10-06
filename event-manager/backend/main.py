@@ -11244,8 +11244,12 @@ def printer_log_record(event_id: int, body: schemas.PrinterLogRecord, request: F
     authz.require_cap(db, current_user, event_id, "checkin.perform")
     stage = (body.stage or "").strip().lower()
     result = (body.result or "").strip().lower()
-    if stage not in ("connect", "print") or result not in ("ok", "failed"):
-        raise HTTPException(status_code=400, detail="stage must be connect|print and result ok|failed")
+    # started = the tap reached the page; waiting = the device list has been open
+    # a while with nothing picked. Neither is a success or a failure: they exist
+    # so an attempt that never finishes (6 Oct: an iPad sat on Bluefy's list and
+    # the server heard nothing) is still visible from here.
+    if stage not in ("connect", "print") or result not in ("ok", "failed", "started", "waiting"):
+        raise HTTPException(status_code=400, detail="stage must be connect|print and result ok|failed|started|waiting")
     if body.client_attempt_id:
         if db.query(models.PrinterLog).filter(
                 models.PrinterLog.client_attempt_id == body.client_attempt_id).first():
@@ -11350,7 +11354,7 @@ def printer_status(event_id: int, hours: int = 24, db: Session = Depends(get_db)
         k, name = key_of(station, uid)
         return desks.setdefault(k, {"station": name, "unnamed_user": None if name else users.get(uid),
                                     "operators": set(), "device": None, "printer": None, "browser": None,
-                                    "connected_at": None, "last": None, "last_failure": None,
+                                    "connected_at": None, "last": None, "last_failure": None, "last_attempt": None,
                                     "printed": 0, "print_failed": 0, "connect_failed": 0})
     for r in logs:                                   # oldest first: later rows overwrite
         d = desk(r.station, r.staff_user_id)
@@ -11358,6 +11362,10 @@ def printer_status(event_id: int, hours: int = 24, db: Session = Depends(get_db)
             d["operators"].add(users[r.staff_user_id])
         if r.user_agent:
             d["browser"] = _browser_label(r.user_agent)
+        if r.result in ("started", "waiting"):
+            # An attempt in progress: shown, but it decides nothing.
+            d["last_attempt"] = {"at": r.created_at, "stage": r.stage, "result": r.result, "error": r.error}
+            continue
         if r.result == "ok" and r.device:
             d["device"] = r.device
         if r.result == "ok" and r.printer:

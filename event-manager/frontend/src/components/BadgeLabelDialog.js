@@ -240,10 +240,21 @@ export const useB1 = () => {
 // the operator is still reading the list), and on expiry the half-open link is
 // dropped so the next tap starts clean.
 const B1_CONNECT_MS = 20000;
-export const b1Connect = async (anyDevice = false) => {
+// The device list (Bluefy's, Chrome's) open this long with nothing picked
+// usually means the printer is not advertising: another phone/iPad is still
+// connected to it (a connected printer vanishes from every list), or it is off.
+const B1_CHOOSER_WAIT_MS = 20000;
+export const CHOOSER_WAIT_HINT = 'Still waiting for a printer to be picked. If it is not in the list: another phone or iPad is probably still connected to it (a connected printer disappears from every list). Close Bluefy and the NIIMBOT app on every other device near it, or switch their Bluetooth off; then switch the printer off and on (blue light), close this list, and tap again.';
+// `onPhase('started' | 'waiting')`: the tap reached the page; the list has been
+// open B1_CHOOSER_WAIT_MS with nothing picked. Callers report both, so an
+// attempt that never finishes is still seen from the office (6 Oct: an iPad
+// sat on the list and the server heard nothing).
+export const b1Connect = async (anyDevice = false, { onPhase } = {}) => {
+    const phase = (p) => { try { if (onPhase) onPhase(p); } catch (e) { /* reporting never breaks connecting */ } };
+    phase('started');
     const Niimbot = await loadNiimbot();
     const bt = navigator.bluetooth;
-    let picked = null; let timer = null; let wrapped = false;
+    let picked = null; let timer = null; let wrapped = false; let chooserTimer = null;
     // The driver's own lines for this connect, so a failure can be sent home
     // (logPrinter) — the page shown at the door is the only other place they live.
     const trace = [];
@@ -268,7 +279,11 @@ export const b1Connect = async (anyDevice = false) => {
     if (origRequest) {
         try {
             bt.requestDevice = function (...args) {
-                return origRequest.apply(bt, args).then((d) => { picked = d; trace.push(`picked "${(d && d.name) || '?'}"`); onPicked(); return d; });
+                trace.push('device list opened');
+                chooserTimer = setTimeout(() => { trace.push(`device list open ${B1_CHOOSER_WAIT_MS / 1000} s, nothing picked`); phase('waiting'); }, B1_CHOOSER_WAIT_MS);
+                const done = () => { if (chooserTimer) { clearTimeout(chooserTimer); chooserTimer = null; } };
+                return origRequest.apply(bt, args).then((d) => { done(); picked = d; trace.push(`picked "${(d && d.name) || '?'}"`); onPicked(); return d; },
+                                                       (e) => { done(); throw e; });
             };
             wrapped = true;
         } catch (e) { /* not wrappable here: connect without a limit, as before */ }
@@ -300,6 +315,7 @@ export const b1Connect = async (anyDevice = false) => {
     } finally {
         console.log = prevLog; Niimbot.DEBUG = prevDebug;
         if (timer) clearTimeout(timer);
+        if (chooserTimer) clearTimeout(chooserTimer);
         if (wrapped) { try { if (bt.requestDevice !== origRequest) delete bt.requestDevice; if (bt.requestDevice !== origRequest) bt.requestDevice = origRequest; } catch (e) { /* noop */ } }
     }
 };
@@ -308,18 +324,27 @@ const CONNECT_TIMEOUT_HINT = 'The printer did not answer. It only talks to one d
 export { CONNECT_TIMEOUT_HINT };
 // Send one printer attempt home (POST /events/:id/printer-log). Never throws and
 // never waits on the answer: a report must not slow or break the door.
-export const logPrinter = (eventId, { stage, ok, error, printer, trace, station, device } = {}) => {
+export const logPrinter = (eventId, { stage, ok, result, error, printer, trace, station, device } = {}) => {
     if (!eventId) return Promise.resolve(null);
     const errText = error ? ((error.name && error.name !== 'Error' ? error.name + ': ' : '') + (error.message || String(error))) : undefined;
     try {
         return reportPrinter(eventId, {
-            stage, result: ok ? 'ok' : 'failed', station: station || undefined,
+            stage, result: result || (ok ? 'ok' : 'failed'), station: station || undefined,
             device: device || (error && error.device) || undefined,
             error: errText, printer: printer || undefined,
             trace: (trace || (error && error.trace) || []).slice(-150),
             client_attempt_id: attemptId(),
         }).then((r) => (r && r.data) || null).catch(() => null);
     } catch (e) { return Promise.resolve(null); }
+};
+// The onPhase handler every connect passes: report the tap and a list left
+// open, and put the advice for the latter where the operator is looking.
+export const connectPhaseReporter = (eventId, station, showHint) => (p) => {
+    if (p === 'started') logPrinter(eventId, { stage: 'connect', result: 'started', station });
+    if (p === 'waiting') {
+        logPrinter(eventId, { stage: 'connect', result: 'waiting', error: 'device list open 20 s, nothing picked', station });
+        if (showHint) showHint(CHOOSER_WAIT_HINT);
+    }
 };
 // "Desk 2 (14:05)" for the desks the server says also used this printer today.
 export const sharedWithText = (rows) => (rows || []).map((r) => {
@@ -478,7 +503,7 @@ export default function BadgeLabelDialog({ request, eventId, station, onClose, o
             // Pair / identify first (this tap is the gesture the chooser needs),
             // then render the label at the dpi of whatever answered.
             setBtStatus(`connecting…${btAnyDevice ? ' (all devices)' : ''}`);
-            paired = await b1Connect(btAnyDevice);
+            paired = await b1Connect(btAnyDevice, { onPhase: connectPhaseReporter(eventId, station, setBtHint) });
             const profile = profileFor(paired);
             note(`printer: ${profile.label} (${profile.dpi} dpi, ${profile.headPx} px head)`);
             setBtStatus('preparing label…');

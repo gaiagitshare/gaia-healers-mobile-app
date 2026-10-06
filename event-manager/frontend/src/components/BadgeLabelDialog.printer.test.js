@@ -151,3 +151,23 @@ test('a desk can set the B21 Pro by hand, and an old forced setting still reads'
     await b1Disconnect();
     expect((await b1Connect()).label).toBe('NIIMBOT B1 Pro (set on this station)');
 });
+
+test('a tap is reported at once, and a device list left open 20 s says so', async () => {
+    jest.useFakeTimers();
+    navigator.bluetooth.requestDevice = jest.fn(() => new Promise(() => {}));   // Bluefy's list, nothing picked
+    window.Niimbot.identify = async () => { await navigator.bluetooth.requestDevice({}); return null; };
+    const phases = [];
+    b1Connect(false, { onPhase: (p) => phases.push(p) });
+    expect(phases).toEqual(['started']);
+    await Promise.resolve(); await Promise.resolve(); await Promise.resolve();
+    jest.advanceTimersByTime(19000);
+    expect(phases).toEqual(['started']);
+    jest.advanceTimersByTime(1500);
+    expect(phases).toEqual(['started', 'waiting']);
+});
+
+test('picking in time is not "waiting"', async () => {
+    const phases = [];
+    await b1Connect(false, { onPhase: (p) => phases.push(p) });
+    expect(phases).toEqual(['started']);
+});

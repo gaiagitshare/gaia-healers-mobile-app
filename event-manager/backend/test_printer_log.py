@@ -130,6 +130,20 @@ check(ps["desks"][0]["status"] == "failed", "failing desks come first", [d["stat
 st, _ = call("GET", "/events/%d/printer-status" % EVENT, None, DESK)
 check(st == 403, "a door desk cannot read the dashboard view", st)
 
+# 7b ── an attempt that never finishes is still visible
+ids2 = ["test-" + uuid.uuid4().hex for _ in range(2)]
+st, _ = call("POST", "/events/%d/printer-log" % EVENT, {"stage": "connect", "result": "started", "station": "test-desk-4",
+             "client_attempt_id": ids2[0]}, DESK, UA)
+check(st == 200, "a desk reports that a connect started", st)
+st, _ = call("POST", "/events/%d/printer-log" % EVENT, {"stage": "connect", "result": "waiting", "station": "test-desk-4",
+             "error": "device list open 20 s, nothing picked", "client_attempt_id": ids2[1]}, DESK, UA)
+check(st == 200, "and that the device list is still open with nothing picked", st)
+st, ps = call("GET", "/events/%d/printer-status?hours=1" % EVENT, None, ADMIN)
+d4 = {d["station"]: d for d in ps["desks"]}.get("test-desk-4")
+check(d4 and d4["status"] == "unknown" and d4["last_attempt"]["result"] == "waiting" and d4["connect_failed"] == 0,
+      "the dashboard shows the open attempt without calling it a success or a failure", d4)
+ids += ids2
+
 # 8 ── a test sticker for setting a desk up
 def raw(path, token):
     req = urllib.request.Request(BASE + path)
@@ -159,6 +173,6 @@ check(n == 0, "the test sticker's QR belongs to nobody", n)
 st, b = call("POST", "/events/%d/authorize" % EVENT, {"qr_code": "https://card.gaiahealers.app/c/TESTPRNT", "access_type": "EVENT_ENTRY"}, DESK)
 check(st == 200 and b.get("granted") is False and b.get("result") == "DENIED", "scanning a test sticker admits no one", (st, b))
 
-c.execute("DELETE FROM printer_logs WHERE client_attempt_id IN (%s)" % ",".join("?" * 6), [aid, aid2] + ids); c.commit()
+c.execute("DELETE FROM printer_logs WHERE client_attempt_id IN (%s)" % ",".join("?" * (2 + len(ids))), [aid, aid2] + ids); c.commit()
 print("\n%s" % ("ALL PASS" if not fails else "FAILED: %d" % fails))
 sys.exit(1 if fails else 0)

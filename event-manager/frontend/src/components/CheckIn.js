@@ -28,7 +28,7 @@ import { formatVenueTime, statusLabel, isFlaggedStatus } from '../utils/datetime
 import BadgeLabelDialog, { STATION_KEY, LABEL_SIZE_KEY, LABEL_ROLLS, savedLabelSize, rollShort, fullName, physicalCard,
     canPrintBluetooth, useB1, b1Connect, b1IsConnected, b1Enqueue, b1PrintBlob, b1Dpi, rollFitsB1, PRINTER_KEY, PRINTER_CHOICES, savedPrinter, CONNECT_TIMEOUT_HINT, logPrinter,
     rememberStationPrinter, printerTag, wrongPrinterHint, sharedWithText,
-    preloadNiimbot, isAppleMobile, iosBluetoothSetup } from './BadgeLabelDialog';
+    preloadNiimbot, isAppleMobile, iosBluetoothSetup, connectPhaseReporter } from './BadgeLabelDialog';
 import BluetoothIcon from '@mui/icons-material/Bluetooth';
 
 // The access zones a scanner can be checking. The BACKEND decides the outcome;
@@ -451,7 +451,7 @@ function CheckIn({ timezone: timezoneProp }) {
     const connectPrinter = async () => {
         setPrinterBusy(true); setPrinterHint(''); setWrongPrinter(null);
         try {
-            const info = await b1Connect(connectAny);
+            const info = await b1Connect(connectAny, { onPhase: connectPhaseReporter(eventId, station, setPrinterHint) });
             logPrinter(eventId, { stage: 'connect', ok: true, printer: `${(info && info.label) || 'Printer'} ${(info && info.dpi) || ''} dpi`, trace: info && info.trace, station, device: info && info.device })
                 .then((r) => {
                     // Another desk had this printer today: the two will take turns failing.
@@ -489,7 +489,7 @@ function CheckIn({ timezone: timezoneProp }) {
         try {
             if (!b1IsConnected()) {
                 setTestPrinting('connecting…');
-                info = await b1Connect(connectAny);
+                info = await b1Connect(connectAny, { onPhase: connectPhaseReporter(eventId, station, setPrinterHint) });
                 setConnectAny(false);
                 logPrinter(eventId, { stage: 'connect', ok: true, printer: `${info.label} ${info.dpi} dpi`, trace: info.trace, station, device: info.device });
             }

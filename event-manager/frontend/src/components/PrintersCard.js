@@ -119,6 +119,11 @@ export default function PrintersCard({ eventId, eventName }) {
                                         <TableCell>
                                             <StatusChip desk={d} />
                                             {d.last && <Typography variant="caption" color="textSecondary" display="block">{d.last.stage} · {ago(d.last.at)}</Typography>}
+                                            {d.last_attempt && (!d.last || String(d.last_attempt.at) > String(d.last.at)) && (
+                                                <Typography variant="caption" color="warning.main" display="block">
+                                                    {d.last_attempt.result === 'waiting' ? 'device list open, nothing picked' : 'connect tapped'} · {ago(d.last_attempt.at)}
+                                                </Typography>
+                                            )}
                                         </TableCell>
                                         <TableCell align="right">
                                             <Typography variant="body2">{d.printed}</Typography>

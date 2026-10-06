@@ -4,7 +4,7 @@
 // name, when it picked a neighbour's.
 //
 // Run: CI=true npx react-scripts test --watchAll=false BadgeLabelDialog.printer
-import { b1Connect, b1Disconnect, savedStationPrinter, rememberStationPrinter, STATION_PRINTER_KEY, printerTag, isAppleMobile, isIPad, iosBluetoothSetup, canPrintBluetooth } from './BadgeLabelDialog';
+import { b1Connect, b1Disconnect, savedStationPrinter, rememberStationPrinter, STATION_PRINTER_KEY, printerTag, isAppleMobile, isIPad, iosBluetoothSetup, canPrintBluetooth, logPrinter, b1Dpi, PRINTER_KEY } from './BadgeLabelDialog';
 
 jest.mock('../utils/api', () => ({ badgeLabelBlob: jest.fn(), recordBadgePrint: jest.fn(), reportPrinter: jest.fn(() => Promise.resolve({ data: {} })) }));
 
@@ -122,4 +122,32 @@ test('an iPad is sent to Bluefy (beacio is iPhone-only); an iPhone is offered bo
         if (ua) Object.defineProperty(window.navigator, 'userAgent', ua); else delete window.navigator.userAgent;
         if (tp) Object.defineProperty(window.navigator, 'maxTouchPoints', tp); else delete window.navigator.maxTouchPoints;
     }
+});
+
+test('logPrinter hands back a promise: a desk that connected is not told it failed', async () => {
+    // 5 Oct: it returned undefined, the station's `.then` threw, and a printer
+    // that had just connected was reported as "Could not connect".
+    const p = logPrinter(1, { stage: 'connect', ok: true });
+    expect(p && typeof p.then).toBe('function');
+    await expect(p).resolves.not.toBeUndefined();   // the server's answer, or null — never a throw
+    await expect(logPrinter(null, {})).resolves.toBeNull();
+});
+
+test('a B21 Pro (model 785, unknown to the driver) prints as itself: 300 dpi, 591-dot head', async () => {
+    nextName = 'B21_Pro-I204050468';
+    window.Niimbot.identify = async () => { await navigator.bluetooth.requestDevice({}); return { modelId: 785, task: null, label: 'unknown (id 785)' }; };
+    const info = await b1Connect();
+    expect(info.label).toBe('NIIMBOT B21 Pro');
+    expect(info.dpi).toBe(300);
+    expect(b1Dpi()).toBe(300);
+    expect(info.device).toBe('B21_Pro-I204050468');
+});
+
+test('a desk can set the B21 Pro by hand, and an old forced setting still reads', async () => {
+    localStorage.setItem(PRINTER_KEY, 'b21pro');
+    const info = await b1Connect();
+    expect(info.label).toBe('NIIMBOT B21 Pro (set on this station)');
+    localStorage.setItem(PRINTER_KEY, 'v4');
+    await b1Disconnect();
+    expect((await b1Connect()).label).toBe('NIIMBOT B1 Pro (set on this station)');
 });

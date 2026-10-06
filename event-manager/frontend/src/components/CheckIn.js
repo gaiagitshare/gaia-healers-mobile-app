@@ -467,7 +467,7 @@ function CheckIn({ timezone: timezoneProp }) {
                 // Nothing picked — usually an empty list. Next tap casts the wide
                 // net, and the three things that empty the list are spelled out.
                 setConnectAny(true);
-                setPrinterHint('No printer picked. Tap “Show all devices” and look for “B1 Pro-…” or “B1-…”. If it is not there either: (1) hold the printer’s power button until its light is on, (2) close the NIIMBOT app completely — a printer it holds is invisible to everyone else, (3) on iPad/iPhone check Bluetooth is allowed for the browser (Settings → Bluefy → Bluetooth, or on iPhone with Safari: Settings → Apps → Safari → Extensions → beacio is on for this site).');
+                setPrinterHint('No printer picked. Tap “Show all devices” and look for “B21_Pro-…”, “B1 Pro-…” or “B1-…”. If it is not there either: (1) hold the printer’s power button until its light is on, (2) close the NIIMBOT app completely — a printer it holds is invisible to everyone else, (3) on iPad/iPhone check Bluetooth is allowed for the browser (Settings → Bluefy → Bluetooth, or on iPhone with Safari: Settings → Apps → Safari → Extensions → beacio is on for this site).');
             } else if (err && err.name === 'ConnectTimeout') {
                 setPrinterHint(CONNECT_TIMEOUT_HINT);
             } else if (err && err.name === 'WrongPrinter') {

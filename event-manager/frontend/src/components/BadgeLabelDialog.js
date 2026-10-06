@@ -71,13 +71,18 @@ const B1_MAX_ROLL_MM = 50;                    // widest roll either printer take
 const PROFILES = {
     b1: { label: 'NIIMBOT B1',     task: 'b1', dpi: 203, headPx: 384, offsetY: 4, model: { name_prefixes: NAME_PREFIXES, task: 'b1', density: 3, label_type: 1, speed: 1 } },
     v4: { label: 'NIIMBOT B1 Pro', task: 'v4', dpi: 300, headPx: 576, offsetY: 0, model: { name_prefixes: NAME_PREFIXES, task: 'v4', density: 3, label_type: 1, speed: 1 } },
+    // The door's printers turned out to be B21 Pros ("B21_Pro-…", model id 785,
+    // seen 5 Oct). Same print task as the B1 Pro and 300 dpi, but a 591-dot
+    // head (niimbluelib's registry). Not in this driver's own registry, so it
+    // identifies as "unknown"; the id is mapped here instead.
+    b21pro: { label: 'NIIMBOT B21 Pro', task: 'v4', dpi: 300, headPx: 591, offsetY: 0, model: { name_prefixes: NAME_PREFIXES, task: 'v4', density: 3, label_type: 1, speed: 1 } },
 };
 // Which printer the desk runs: 'auto' asks the printer; 'v4' / 'b1' force a
 // profile for the day an identification read is missed (a job for the wrong
 // head prints small and off to one side — the B1's 384 columns on the Pro's
 // 576-dot head land left of centre at two-thirds size).
 export const PRINTER_KEY = 'gha_printer';
-export const PRINTER_CHOICES = [['auto', 'Ask the printer (auto)'], ['v4', 'NIIMBOT B1 Pro · 300 dpi'], ['b1', 'NIIMBOT B1 · 203 dpi']];
+export const PRINTER_CHOICES = [['auto', 'Ask the printer (auto)'], ['b21pro', 'NIIMBOT B21 Pro · 300 dpi'], ['v4', 'NIIMBOT B1 Pro · 300 dpi'], ['b1', 'NIIMBOT B1 · 203 dpi']];
 // Which physical printer this desk uses: its Bluetooth name ("B1 Pro-H123"),
 // learned on the first connect. With four desks and four B1 Pros that all
 // show up as "B1 Pro-…", picking a neighbour's printer is easy and costs both
@@ -92,16 +97,22 @@ export const rememberStationPrinter = (name) => {
 // Just the part that tells printers apart ("H123" of "B1 Pro-H123").
 export const printerTag = (name) => { const m = /-([^-]+)$/.exec(name || ''); return m ? m[1] : (name || ''); };
 export const wrongPrinterHint = (err) => `That is printer ${printerTag(err.device)}, but this desk's printer is ${printerTag(err.expected)} (the sticker on the iPad says which). Pick ${printerTag(err.expected)} — another desk is probably using ${printerTag(err.device)}. If this desk really has a new printer now, tap "Use ${printerTag(err.device)} for this desk".`;
-export const savedPrinter = () => { try { const v = localStorage.getItem(PRINTER_KEY); return v === 'v4' || v === 'b1' ? v : 'auto'; } catch (e) { return 'auto'; } };
+export const savedPrinter = () => { try { const v = localStorage.getItem(PRINTER_KEY); return PROFILES[v] ? v : 'auto'; } catch (e) { return 'auto'; } };
 const profileFor = (info) => {
     const forced = savedPrinter();
     if (forced !== 'auto') return { ...PROFILES[forced], label: `${PROFILES[forced].label} (set on this station)` };
+    if (info && info.profileKey && PROFILES[info.profileKey]) return { ...PROFILES[info.profileKey] };
     if (info && info.task === 'v4') return { ...PROFILES.v4, label: info.label || PROFILES.v4.label };
     if (info && info.task === 'b1') return { ...PROFILES.b1, label: info.label || PROFILES.b1.label };
     // No answer from the printer: assume the one this desk runs today.
     return { ...PROFILES.v4, label: 'NIIMBOT B1 Pro (assumed — printer did not identify)' };
 };
-const MODEL_TASKS = { 4096: 'b1', 4098: 'b1', 4097: 'v4' };   // B1, B1 SE, B1 Pro (driver registry ids)
+// Model id the printer reports → profile. B1, B1 SE, B1 Pro (driver registry ids); B21 Pro (niimbluelib).
+const MODEL_PROFILES = { 4096: 'b1', 4098: 'b1', 4097: 'v4', 785: 'b21pro' };
+const fromModelId = (info, modelId) => {
+    const key = MODEL_PROFILES[modelId];
+    return key ? { ...(info || {}), modelId, task: PROFILES[key].task, dpi: PROFILES[key].dpi, label: PROFILES[key].label, profileKey: key } : info;
+};
 // Ask the printer what it is (pairing on the first call — that one needs a
 // tap) and return the profile to print with. If the identification read
 // during connect went unanswered, ask again — a missed reply must not turn
@@ -112,14 +123,15 @@ const identifyPrinter = async (anyDevice) => {
     // printer cannot be identified, the task fallback; the driver arms the
     // link from the printer's own answer.
     let info = await Niimbot.identify(anyDevice ? { ...PROFILES.b1.model, name_prefixes: [] } : PROFILES.b1.model);
+    // The driver read the model id but did not know it (the B21 Pro): map it here.
+    if (info && !info.task && info.modelId != null) info = fromModelId(info, info.modelId);
     for (let i = 0; i < 3 && !(info && info.task) && Niimbot.probe; i++) {
         try {
             await new Promise((r) => setTimeout(r, 400));
             const r = await Niimbot.probe(0x40, [0x08], 1200);             // PrinterModelId, the same read connect() makes
             if (r && r.data && r.data.length >= 1) {
                 const modelId = r.data.length >= 2 ? ((r.data[0] << 8) | r.data[1]) : (r.data[0] << 8);
-                const task = MODEL_TASKS[modelId] || null;
-                if (task) info = { ...(info || {}), modelId, task, dpi: PROFILES[task].dpi, label: PROFILES[task].label };
+                info = fromModelId(info, modelId);
             }
         } catch (e) { /* try again */ }
     }
@@ -300,7 +312,7 @@ export const logPrinter = (eventId, { stage, ok, error, printer, trace, station,
     if (!eventId) return Promise.resolve(null);
     const errText = error ? ((error.name && error.name !== 'Error' ? error.name + ': ' : '') + (error.message || String(error))) : undefined;
     try {
-        reportPrinter(eventId, {
+        return reportPrinter(eventId, {
             stage, result: ok ? 'ok' : 'failed', station: station || undefined,
             device: device || (error && error.device) || undefined,
             error: errText, printer: printer || undefined,

@@ -4246,7 +4246,8 @@ function needsOnboardingSurvey(memberContext) {
 // each member's own block. buildMemberVoiceContext sends only the facts.
 const MEMBER_CONTEXT_RULES = [
   'MEMBER CONTEXT RULES — the MEMBER CONTEXT (private) block describes the currently signed-in member. Use it ONLY to personalize answers for this person. Never read it aloud verbatim, never disclose it to anyone else, and never reference data belonging to other members.',
-  'WHAT YOU CAN SEE: their profile, memberships/communities, which courses they are entitled to (by name), products/devices, purchases & subscriptions (counts only), appointments, forms/surveys submitted, and conversation notifications.',
+  'WHAT YOU CAN SEE: their profile, their plan and next level (MEMBERSHIP line, as on You), communities, which courses they are entitled to (by name), products/devices, purchases & subscriptions (counts only), their next appointment, forms/surveys submitted, conversation notifications, and whether Bio-Well readings are shared with them (the fact only).',
+  'READINGS: you never see reading values or dates; the member sees them in You > My readings. Do not describe a reading, a trend or "today\'s energy" from a scan; send them to My readings and suggest their practitioner for interpretation, or a new scan if theirs may be old. Plans: answer from the MEMBERSHIP line and CURRENT MEMBERSHIP POLICY; never say a plan includes something it does not list.',
   'WHAT YOU CANNOT SEE: how far along a lesson they are, grades, or community post/discussion content — the backend does not expose these. You CAN tell them which courses they have access to and open the course for them; you cannot report lesson-by-lesson progress or a scan reading. If asked for those, say plainly you can open the course or community in the portal but cannot read the detail from here. NEVER invent progress, grades, posts, scan numbers, or history.',
   'Privacy: discuss only THIS member’s own data, and only when they ask about it. Do not proactively recite sensitive details.',
   'Use the saved CURRENT GAIA PROFILE CHOICES for relevant Store, Energy, Academy and Community guidance. Choices are current; historical interest tags can remain after a branch change. Interests never prove device ownership, purchase intent or course access.',
@@ -4392,7 +4393,28 @@ async function buildMemberVoiceContext(req) {
       lines.push('Course access (unlocked, ' + courseNames.length + '): ' + courseNames.slice(0, 24).join(', ') + (courseNames.length > 24 ? ', and more' : '') + '. If they ask which courses they have, list these by name. Open the course in Academy; available lessons play in the app, while portal-only content opens the education portal.');
     }
     if (paid.length || subs.length) lines.push(`Account: ${paid.length} completed purchase(s), ${subs.length} subscription(s) on file. Do NOT say amounts, prices, or card details out loud.`);
-    if (upcoming.length) lines.push(`Has ${upcoming.length} upcoming appointment(s) booked.`);
+    // The plan the way You shows it (the membership ledger, not tag guesses), and
+    // what the next level would add -- so "what do I have / which plan" answers
+    // match the screen. Labels and values only; no prices or billing details.
+    try {
+      // A fixture session (development only; unreachable when fixtures are off)
+      // resolves from its profile exactly as /api/member/access does.
+      const fx = fixtureAccessGranted(cookieForRequest(req)) ? fixtureProfile(requestedFixtureId(cookieForRequest(req), new URL('http://x/'))) : null;
+      const rm = fx ? resolveMemberAccess({ record: fx.record, subscriptions: fx.subscriptions, tags: fx.tags })
+        : resolveMemberAccess({ record: b.entitlements, subscriptions: b.subscriptions, tags: b.tags, sourceError: !b.resolved });
+      const ms = rm.membership || {};
+      const live = ['active', 'trialing', 'past_due'].includes(ms.status);
+      lines.push('MEMBERSHIP (same as You > Member Pass): ' + (ms.label && live ? `${ms.label}${ms.subtitle ? ' (' + ms.subtitle + ')' : ''}, ${ms.status}.` : ms.label && ms.status ? `${ms.label}, ${ms.status} — not active now.` : 'Free (no paid plan).')
+        + (rm.upgrade && rm.upgrade.next_key ? ` Next level: ${rm.upgrade.next_key}; it would add ${rm.upgrade.gains.map((g) => g.type.replace(/_/g, ' ') + ' ' + g.to).join(', ') || 'more access'}. Offer it only when they ask about plans or hit a limit.` : ' This is the top level.'));
+      if (rm.meta && rm.meta.degraded) lines.push('ACCESS FRESHNESS: their access could not be re-checked just now; describe it as the last known state, never as removed.');
+    } catch (e) { /* the legacy status line above still stands */ }
+    if (upcoming.length) {
+      const next = upcoming.slice().sort((a, b2) => Date.parse(a.startTime) - Date.parse(b2.startTime))[0];
+      const when = new Date(next.startTime).toLocaleString('en-US', { weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', timeZone: 'UTC' });
+      lines.push(`Has ${upcoming.length} upcoming appointment(s) booked. Next: ${String(next.title || 'a session').slice(0, 80)} on ${when} UTC (convert only if they tell you their time zone).`);
+    } else {
+      lines.push('No upcoming appointments booked.');
+    }
     if (formSubs.length || surveySubs.length) lines.push(`Has submitted ${formSubs.length} form(s) and ${surveySubs.length} survey(s).`);
     if (unread) lines.push(`Has ${unread} unread message(s) in their Gaia Healers conversations.`);
 
@@ -4430,6 +4452,24 @@ async function buildMemberVoiceContext(req) {
         : 'This member is a FREE member (no active paid subscription). If their onboarding is DONE, help with their requested task. Explain paid membership only when they ask about membership or a verified access limitation requires it.'));
 
     } catch (e) {}
+    // One suggested next step for "what should I do next?", from the facts
+    // above, in a fixed order. A suggestion, not an instruction to pitch it.
+    try {
+      // Readings links are keyed by the session's contact id (as the readings
+      // routes are), so this holds even when the GHL bundle could not be read.
+      const rid2 = cid || member.contactId;
+      const ls = memberReadingsEnabled() && memberAllowed(rid2) ? linkStatus(rid2) : {};
+      if (memberReadingsEnabled() && memberAllowed(rid2) && !ls.linked) {
+        lines.push('READINGS STATUS: no Bio-Well readings shared with this member yet. If they ask about their readings, say you cannot see a Bio-Well reading for them yet; they can ask their practitioner for a sharing code under You > My readings, or book a Bio-Well scan (book_session / find_practitioner). Never invent a reading.');
+      }
+      const soon = upcoming.find((a) => Date.parse(a.startTime) - now < 7 * 86400000);
+      const step = ls.new_reading ? 'open their new Bio-Well reading (navigate screen=profile section=readings)'
+        : soon ? 'get ready for their session "' + String(soon.title || 'session').slice(0, 60) + '" (Bookings)'
+        : unread ? 'read their ' + unread + ' unread message(s) (Inbox)'
+        : courseNames.length ? 'continue a course in Academy (play_course)'
+        : 'take today\'s energy check (navigate screen=wellness tab=check)';
+      lines.push('SUGGESTED NEXT STEP (only if they ask what to do next, or seem unsure): ' + step + '.');
+    } catch (e) { /* optional */ }
     const text = lines.join('\n');
     if (cid) _memberAiCtxCache.set(cid, { at: Date.now(), text, roleKey });
     return text;
@@ -6155,7 +6195,7 @@ const LIVE_Q_RE = /\b(price|prices|cost|costs|how much|buy|purchase|order|shop|s
 export async function assistLiveFacts(query, appContext = {}) {
   const hint = assistGuide.context(appContext);
   const extra = [];
-  if (/membership|subscription|join|discount|tier|plan/i.test(query)) extra.push('CURRENT MEMBERSHIP POLICY (configured catalog, not individual grants): ' + JSON.stringify(membershipPlans(loadMembershipPolicy())));
+  if (/membership|subscription|join|discount|tier|plan|price|cost|how much|silver|gold|diamond|upgrade|\bfree\b|which level/i.test(query)) extra.push('CURRENT MEMBERSHIP POLICY (configured catalog, not individual grants): ' + JSON.stringify(membershipPlans(loadMembershipPolicy())));
   if (hint.itemId && /^[a-zA-Z0-9_-]{1,100}$/.test(hint.itemId)) {
     if (hint.screen === 'store') {
       const catalog = loadStoreCatalog();

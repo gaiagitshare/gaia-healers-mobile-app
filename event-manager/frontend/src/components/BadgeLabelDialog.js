@@ -99,9 +99,13 @@ export const printerTag = (name) => { const m = /-([^-]+)$/.exec(name || ''); re
 export const wrongPrinterHint = (err) => `That is printer ${printerTag(err.device)}, but this desk's printer is ${printerTag(err.expected)} (the sticker on the iPad says which). Pick ${printerTag(err.expected)} — another desk is probably using ${printerTag(err.device)}. If this desk really has a new printer now, tap "Use ${printerTag(err.device)} for this desk".`;
 export const savedPrinter = () => { try { const v = localStorage.getItem(PRINTER_KEY); return PROFILES[v] ? v : 'auto'; } catch (e) { return 'auto'; } };
 const profileFor = (info) => {
+    // A printer that names its model is believed over the station setting: on
+    // 6 Oct two desks forced to "B1 Pro" drove B21 Pros (576-dot profile on a
+    // 591-dot head) and printed a little off centre. The setting is for a
+    // printer that does not identify.
+    if (info && info.profileKey && PROFILES[info.profileKey]) return { ...PROFILES[info.profileKey] };
     const forced = savedPrinter();
     if (forced !== 'auto') return { ...PROFILES[forced], label: `${PROFILES[forced].label} (set on this station)` };
-    if (info && info.profileKey && PROFILES[info.profileKey]) return { ...PROFILES[info.profileKey] };
     if (info && info.task === 'v4') return { ...PROFILES.v4, label: info.label || PROFILES.v4.label };
     if (info && info.task === 'b1') return { ...PROFILES.b1, label: info.label || PROFILES.b1.label };
     // No answer from the printer: assume the one this desk runs today.
@@ -191,7 +195,19 @@ const loadNiimbot = () => {
 };
 // Label PNG → { url, w_px, h_px } for the B1: full head width, label centred,
 // pixels untouched (a 1-bit source through a smoothing scaler would grey the QR).
-const composeForB1 = async (blob, headPx) => {
+// Per-desk fine adjustment, in mm, for a roll or printer that sits a little to
+// one side: x across the print head, y along the roll. Saved on this device.
+export const NUDGE_KEY = 'gha_label_nudge';
+export const savedNudge = () => {
+    try {
+        const v = JSON.parse(localStorage.getItem(NUDGE_KEY) || '{}');
+        const clamp = (n) => Math.max(-4, Math.min(4, Number(n) || 0));
+        return { x: clamp(v.x), y: clamp(v.y) };
+    } catch (e) { return { x: 0, y: 0 }; }
+};
+export const rememberNudge = (n) => { try { localStorage.setItem(NUDGE_KEY, JSON.stringify(n)); } catch (e) { /* noop */ } };
+const nudgePx = (dpi) => { const n = savedNudge(); return { x: Math.round(n.x * dpi / 25.4), y: Math.round(n.y * dpi / 25.4) }; };
+const composeForB1 = async (blob, headPx, nudge = { x: 0, y: 0 }) => {
     const bmp = await createImageBitmap(blob);
     const h = bmp.height;
     const canvas = document.createElement('canvas');
@@ -199,7 +215,7 @@ const composeForB1 = async (blob, headPx) => {
     const ctx = canvas.getContext('2d');
     ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, headPx, h);
     ctx.imageSmoothingEnabled = false;
-    ctx.drawImage(bmp, Math.round((headPx - bmp.width) / 2), 0);   // narrower than the head → white either side; wider → the sliver past the head is cropped, centred
+    ctx.drawImage(bmp, Math.round((headPx - bmp.width) / 2) + nudge.x, nudge.y);   // centred under the head (narrower → white either side; wider → the sliver past it cropped), then this desk's nudge
     bmp.close && bmp.close();
     const out = await new Promise((resolve, reject) => canvas.toBlob((b) => (b ? resolve(b) : reject(new Error('Could not prepare the label.'))), 'image/png'));
     return { url: URL.createObjectURL(out), w_px: headPx, h_px: h };
@@ -383,7 +399,7 @@ async function b1Pump() {
 export const b1PrintBlob = async (blob, opts = {}) => {
     const Niimbot = await loadNiimbot();
     const profile = profileFor(b1.info);
-    const composed = await composeForB1(blob, profile.headPx);
+    const composed = await composeForB1(blob, profile.headPx, nudgePx(profile.dpi));
     try {
         await Niimbot.printImage(composed.url, {
             model: opts.anyDevice ? { ...profile.model, name_prefixes: [] } : profile.model,
@@ -521,7 +537,7 @@ export default function BadgeLabelDialog({ request, eventId, station, onClose, o
             note(`printer: ${profile.label} (${profile.dpi} dpi, ${profile.headPx} px head)`);
             setBtStatus('preparing label…');
             const roll = await badgeLabelBlob(eventId, attendee.id, labelSize, 'roll', profile.dpi);
-            composed = await composeForB1(roll.data, profile.headPx);
+            composed = await composeForB1(roll.data, profile.headPx, nudgePx(profile.dpi));
             note(`label ${composed.w_px}×${composed.h_px} px ready`);
             const stalled = new Promise((resolve, reject) => {
                 stallTimer = setInterval(() => {

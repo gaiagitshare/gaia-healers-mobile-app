@@ -118,6 +118,16 @@ def _ensure_event_columns():
         # Which physical printer (its Bluetooth name). Four desks, four B1 Pros
         # that all say "B1 Pro-…": this is how a desk on the wrong one is told.
         stmts.append("ALTER TABLE printer_logs ADD COLUMN device VARCHAR")
+    # Dashboard corrections on both print logs (note, hide, corrected result).
+    for _tbl in ("printer_logs", "badge_print_logs"):
+        try:
+            _have = {c["name"] for c in inspector.get_columns(_tbl)}
+        except Exception:
+            _have = set()
+        for _col, _ddl in (("note", "VARCHAR"), ("hidden", "BOOLEAN DEFAULT 0"), ("original_result", "VARCHAR"),
+                           ("edited_by", "INTEGER"), ("edited_at", "DATETIME")):
+            if _have and _col not in _have:
+                stmts.append("ALTER TABLE %s ADD COLUMN %s %s" % (_tbl, _col, _ddl))
     if "allow_reentry" not in cols:
         # Off, exactly as it has always been. A conference where people go out
         # for lunch needs this ON; a single-admission gate needs it OFF. Which
@@ -11338,10 +11348,12 @@ def printer_status(event_id: int, hours: int = 24, db: Session = Depends(get_db)
     authz.require_cap(db, current_user, event_id, "event.write")
     hours = max(1, min(hours, 24 * 14))
     since = datetime.utcnow() - timedelta(hours=hours)
-    logs = db.query(models.PrinterLog).filter(models.PrinterLog.event_id == event_id,
-                                              models.PrinterLog.created_at >= since).order_by(models.PrinterLog.id).all()
-    prints = db.query(models.BadgePrintLog).filter(models.BadgePrintLog.event_id == event_id,
-                                                   models.BadgePrintLog.created_at >= since).all()
+    logs = [r for r in db.query(models.PrinterLog).filter(models.PrinterLog.event_id == event_id,
+                                                           models.PrinterLog.created_at >= since).order_by(models.PrinterLog.id).all()
+            if not r.hidden]
+    prints = [r for r in db.query(models.BadgePrintLog).filter(models.BadgePrintLog.event_id == event_id,
+                                                                models.BadgePrintLog.created_at >= since).all()
+              if not r.hidden]
     uids = {r.staff_user_id for r in logs if r.staff_user_id} | {r.staff_user_id for r in prints if r.staff_user_id}
     users = {u.id: (u.email or "") for u in db.query(models.User).filter(models.User.id.in_(uids))} if uids else {}
 
@@ -11405,6 +11417,84 @@ def printer_status(event_id: int, hours: int = 24, db: Session = Depends(get_db)
     return {"event_id": event_id, "hours": hours, "desks": out,
             "shared_printers": [{"device": dev, "desks": sorted(label[k] for k in ks)} for dev, ks in shared.items()],
             "printed": sum(d["printed"] for d in out), "failed": sum(d["print_failed"] for d in out)}
+
+
+@app.get("/events/{event_id}/printer-history")
+def printer_history(event_id: int, hours: int = 24, include_hidden: bool = False, limit: int = 200,
+                    db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
+    """Every printer event the dashboard counts -- connects and test prints from
+    the printer log, badge prints from the badge print log -- newest first, so
+    an organiser can correct one: mark it OK or failed, add a note, or hide it
+    (a rehearsal, a test sticker) from the card and its counts."""
+    _get_event_or_404(event_id, db)
+    authz.require_cap(db, current_user, event_id, "event.write")
+    since = datetime.utcnow() - timedelta(hours=max(1, min(hours, 24 * 30)))
+    plogs = db.query(models.PrinterLog).filter(models.PrinterLog.event_id == event_id,
+                                               models.PrinterLog.created_at >= since).all()
+    blogs = db.query(models.BadgePrintLog).filter(models.BadgePrintLog.event_id == event_id,
+                                                  models.BadgePrintLog.created_at >= since).all()
+    uids = {r.staff_user_id for r in plogs + blogs if r.staff_user_id} | {r.edited_by for r in plogs + blogs if r.edited_by}
+    users = {u.id: (u.email or "") for u in db.query(models.User).filter(models.User.id.in_(uids))} if uids else {}
+    att_ids = {r.attendee_id for r in blogs}
+    names = {a.id: ("%s %s" % (a.first_name or "", a.last_name or "")).strip()
+             for a in db.query(models.Attendee).filter(models.Attendee.id.in_(att_ids))} if att_ids else {}
+    out = []
+    for r in plogs:
+        if r.result in ("started", "waiting"):
+            continue                      # in-progress markers, not outcomes
+        out.append({"source": "printer", "id": r.id, "at": r.created_at, "station": r.station,
+                    "by": users.get(r.staff_user_id), "what": r.stage, "device": r.device, "printer": r.printer,
+                    "result": r.result, "error": r.error})
+    for r in blogs:
+        out.append({"source": "badge", "id": r.id, "at": r.created_at, "station": r.station,
+                    "by": users.get(r.staff_user_id), "what": "badge", "attendee": names.get(r.attendee_id),
+                    "result": "ok" if r.result == "printed" else "failed", "error": r.error})
+    rows = {("printer", r.id): r for r in plogs}; rows.update({("badge", r.id): r for r in blogs})
+    for o in out:
+        r = rows[(o["source"], o["id"])]
+        orig = r.original_result
+        if orig is not None and o["source"] == "badge":
+            orig = "ok" if orig == "printed" else "failed"
+        o.update({"note": r.note, "hidden": bool(r.hidden), "original_result": orig,
+                  "edited_by": users.get(r.edited_by), "edited_at": r.edited_at})
+    if not include_hidden:
+        out = [o for o in out if not o["hidden"]]
+    out.sort(key=lambda o: str(o["at"]), reverse=True)
+    return out[:max(1, min(limit, 1000))]
+
+
+@app.patch("/events/{event_id}/printer-history/{source}/{row_id}")
+def printer_history_edit(event_id: int, source: str, row_id: int, body: schemas.PrinterHistoryEdit,
+                         db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
+    """Correct one entry: result ok|failed, a note, or hidden. The first edit of
+    a result keeps what the device reported in original_result. A badge entry's
+    correction changes the dashboard's counts only -- never the attendee's
+    check-in or badge state."""
+    _get_event_or_404(event_id, db)
+    authz.require_cap(db, current_user, event_id, "event.write")
+    model = {"printer": models.PrinterLog, "badge": models.BadgePrintLog}.get(source)
+    if model is None:
+        raise HTTPException(status_code=404, detail="Unknown history source")
+    r = db.query(model).filter(model.id == row_id, model.event_id == event_id).first()
+    if not r:
+        raise HTTPException(status_code=404, detail="Entry not found")
+    if body.result is not None:
+        res = body.result.strip().lower()
+        if res not in ("ok", "failed"):
+            raise HTTPException(status_code=400, detail="result must be ok or failed")
+        stored = ("printed" if res == "ok" else "failed") if source == "badge" else res
+        if stored != r.result:
+            if r.original_result is None:
+                r.original_result = r.result
+            r.result = stored
+    if body.note is not None:
+        r.note = body.note.strip()[:300] or None
+    if body.hidden is not None:
+        r.hidden = bool(body.hidden)
+    r.edited_by = current_user.id
+    r.edited_at = datetime.utcnow()
+    db.commit()
+    return {"ok": True}
 
 
 @app.post("/events/{event_id}/attendees/{attendee_id}/badge-print")

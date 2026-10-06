@@ -1057,6 +1057,13 @@ class BadgePrintLog(Base):
     # A retry re-sends the same id; the log keeps one row per attempt, not per click.
     client_attempt_id = Column(String, nullable=True, unique=True)
     created_at = Column(DateTime, default=datetime.utcnow)
+    # Corrections an organiser makes from the dashboard. The row's own result
+    # is what is shown and counted; what the device reported first is kept.
+    note = Column(String, nullable=True)
+    hidden = Column(Boolean, default=False)
+    original_result = Column(String, nullable=True)
+    edited_by = Column(Integer, nullable=True)
+    edited_at = Column(DateTime, nullable=True)
 
 
 class PrinterLog(Base):
@@ -1079,6 +1086,13 @@ class PrinterLog(Base):
     user_agent = Column(String, nullable=True)
     client_attempt_id = Column(String, nullable=True, unique=True)
     created_at = Column(DateTime, default=datetime.utcnow)
+    # Corrections an organiser makes from the dashboard. The row's own result
+    # is what is shown and counted; what the device reported first is kept.
+    note = Column(String, nullable=True)
+    hidden = Column(Boolean, default=False)
+    original_result = Column(String, nullable=True)
+    edited_by = Column(Integer, nullable=True)
+    edited_at = Column(DateTime, nullable=True)
 
 
 class MapReconcileRun(Base):

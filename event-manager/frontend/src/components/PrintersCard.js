@@ -1,9 +1,10 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import {
-    Alert, Box, Button, Card, CardContent, Chip, Stack, Table, TableBody, TableCell, TableHead, TableRow, Typography,
+    Alert, Box, Button, Card, CardContent, Chip, IconButton, Stack, Table, TableBody, TableCell, TableHead, TableRow,
+    TextField, Tooltip, Typography,
 } from '@mui/material';
-import { Print as PrintIcon, Refresh as RefreshIcon } from '@mui/icons-material';
-import { getPrinterStatus } from '../utils/api';
+import { Print as PrintIcon, Refresh as RefreshIcon, VisibilityOff as HideIcon, Visibility as ShowIcon } from '@mui/icons-material';
+import { editPrinterHistory, getPrinterHistory, getPrinterStatus } from '../utils/api';
 
 // The door printers at a glance, for whoever is NOT at the door: which desk is
 // on which printer, from which browser, whether its last attempt worked, and
@@ -29,10 +30,67 @@ function StatusChip({ desk }) {
     return <Chip size="small" variant="outlined" label="No reports" />;
 }
 
+// One history entry, editable in place: tap the result to flip it, write a
+// note, hide it from the card. What the device reported first stays on record.
+function HistoryRow({ row, onSave }) {
+    const [note, setNote] = useState(row.note || '');
+    useEffect(() => { setNote(row.note || ''); }, [row.note]);
+    const what = row.what === 'badge' ? `Badge${row.attendee ? ` · ${row.attendee}` : ''}` : (row.what === 'connect' ? 'Connect' : 'Print');
+    return (
+        <TableRow sx={row.hidden ? { opacity: 0.5 } : undefined}>
+            <TableCell sx={{ whiteSpace: 'nowrap' }}><Typography variant="body2">{ago(row.at)}</Typography></TableCell>
+            <TableCell><Typography variant="body2">{row.station || '—'}</Typography>
+                {row.by && <Typography variant="caption" color="textSecondary">{row.by}</Typography>}</TableCell>
+            <TableCell><Typography variant="body2">{what}</Typography>
+                {row.device && <Typography variant="caption" color="textSecondary">{tagOf(row.device)}</Typography>}
+                {row.error && <Typography variant="caption" color="error.main" display="block">{row.error}</Typography>}</TableCell>
+            <TableCell>
+                <Tooltip title="Tap to change">
+                    <Chip size="small" clickable color={row.result === 'ok' ? 'success' : 'error'}
+                          label={row.result === 'ok' ? 'OK' : 'Failed'}
+                          onClick={() => onSave(row, { result: row.result === 'ok' ? 'failed' : 'ok' })} />
+                </Tooltip>
+                {row.original_result && row.original_result !== row.result && (
+                    <Typography variant="caption" color="textSecondary" display="block">
+                        was {row.original_result === 'ok' ? 'OK' : 'failed'}{row.edited_by ? ` · edited by ${row.edited_by}` : ''}
+                    </Typography>
+                )}
+            </TableCell>
+            <TableCell sx={{ minWidth: 180 }}>
+                <TextField size="small" variant="standard" placeholder="Add a note" value={note} fullWidth
+                    onChange={(e) => setNote(e.target.value)}
+                    onBlur={() => { if ((note || '') !== (row.note || '')) onSave(row, { note }); }}
+                    onKeyDown={(e) => { if (e.key === 'Enter') e.target.blur(); }} />
+            </TableCell>
+            <TableCell align="right">
+                <Tooltip title={row.hidden ? 'Show on the card again' : 'Hide from the card and its counts (kept on record)'}>
+                    <IconButton size="small" onClick={() => onSave(row, { hidden: !row.hidden })}>
+                        {row.hidden ? <ShowIcon fontSize="small" /> : <HideIcon fontSize="small" />}
+                    </IconButton>
+                </Tooltip>
+            </TableCell>
+        </TableRow>
+    );
+}
+
 export default function PrintersCard({ eventId, eventName }) {
     const [data, setData] = useState(null);
     const [error, setError] = useState('');
     const [hours, setHours] = useState(24);
+    const [historyOpen, setHistoryOpen] = useState(false);
+    const [showHidden, setShowHidden] = useState(false);
+    const [history, setHistory] = useState([]);
+    const loadHistory = useCallback(() => {
+        if (!eventId || !historyOpen) return;
+        getPrinterHistory(eventId, hours, showHidden).then((r) => setHistory(r.data || [])).catch(() => {});
+    }, [eventId, hours, historyOpen, showHidden]);
+    useEffect(() => { loadHistory(); }, [loadHistory]);
+    const saveEntry = async (row, changes) => {
+        try {
+            await editPrinterHistory(eventId, row.source, row.id, changes);
+            loadHistory(); load();
+        } catch (e) { setError(e.response?.data?.detail || 'Could not save that change.'); }
+    };
 
     const load = useCallback(() => {
         if (!eventId) return;
@@ -42,9 +100,9 @@ export default function PrintersCard({ eventId, eventName }) {
     }, [eventId, hours]);
     useEffect(() => {
         load();
-        const t = setInterval(load, REFRESH_MS);
+        const t = setInterval(() => { load(); loadHistory(); }, REFRESH_MS);
         return () => clearInterval(t);
-    }, [load]);
+    }, [load, loadHistory]);
 
     if (!eventId) return null;
     const desks = data?.desks || [];
@@ -153,6 +211,38 @@ export default function PrintersCard({ eventId, eventName }) {
                                 ))}
                             </TableBody>
                         </Table>
+                    </Box>
+                )}
+                <Box sx={{ mt: 1.5 }}>
+                    <Button size="small" onClick={() => setHistoryOpen((v) => !v)}>
+                        {historyOpen ? 'Hide history' : 'History — correct, note or hide entries'}
+                    </Button>
+                    {historyOpen && (
+                        <Button size="small" onClick={() => setShowHidden((v) => !v)}>
+                            {showHidden ? 'Hide hidden entries' : 'Show hidden entries'}
+                        </Button>
+                    )}
+                </Box>
+                {historyOpen && (
+                    <Box sx={{ overflowX: 'auto', mt: 1 }}>
+                        {!history.length ? (
+                            <Typography variant="body2" color="textSecondary">Nothing in this period.</Typography>
+                        ) : (
+                            <Table size="small">
+                                <TableHead>
+                                    <TableRow>
+                                        <TableCell>When</TableCell><TableCell>Desk</TableCell><TableCell>What</TableCell>
+                                        <TableCell>Result</TableCell><TableCell>Note</TableCell><TableCell />
+                                    </TableRow>
+                                </TableHead>
+                                <TableBody>
+                                    {history.map((row) => <HistoryRow key={`${row.source}-${row.id}`} row={row} onSave={saveEntry} />)}
+                                </TableBody>
+                            </Table>
+                        )}
+                        <Typography variant="caption" color="textSecondary" display="block" sx={{ mt: 0.5 }}>
+                            Corrections change this card and its counts only — never an attendee's check-in. What the iPad first reported is kept.
+                        </Typography>
                     </Box>
                 )}
                 <Typography variant="caption" color="textSecondary" display="block" sx={{ mt: 1 }}>

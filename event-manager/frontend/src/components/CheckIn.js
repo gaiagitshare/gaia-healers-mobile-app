@@ -29,7 +29,7 @@ import BadgeLabelDialog, { STATION_KEY, LABEL_SIZE_KEY, LABEL_ROLLS, savedLabelS
     canPrintBluetooth, useB1, b1Connect, b1IsConnected, b1Enqueue, b1PrintBlob, b1Dpi, rollFitsB1, PRINTER_KEY, PRINTER_CHOICES, savedPrinter, CONNECT_TIMEOUT_HINT, logPrinter,
     rememberStationPrinter, printerTag, wrongPrinterHint, sharedWithText,
     preloadNiimbot, isAppleMobile, iosBluetoothSetup, connectPhaseReporter,
-    needsOwnWindow, openOwnWindow, OWN_WINDOW_HINT } from './BadgeLabelDialog';
+    needsOwnWindow, openOwnWindow, OWN_WINDOW_HINT, savedNudge, rememberNudge } from './BadgeLabelDialog';
 import BluetoothIcon from '@mui/icons-material/Bluetooth';
 
 // The access zones a scanner can be checking. The BACKEND decides the outcome;
@@ -66,6 +66,9 @@ const maskPhone = (phone) => {
     const d = String(phone || '').replace(/\D/g, '');
     return d ? '••• ••• ' + d.slice(-4) : '';
 };
+// Label nudge choices, mm (half-millimetre steps; ±4 mm is beyond any real misfeed).
+const NUDGE_STEPS = [-3, -2, -1.5, -1, -0.5, 0, 0.5, 1, 1.5, 2, 3];
+
 function CheckIn({ timezone: timezoneProp }) {
     const { id: eventIdFromRoute } = useParams();
     const [pickedEvent, setPickedEvent] = useState(null);
@@ -156,7 +159,9 @@ function CheckIn({ timezone: timezoneProp }) {
     const [connectAny, setConnectAny] = useState(false);        // after an empty chooser: the next tap lists every nearby device
     const [printerHint, setPrinterHint] = useState('');
     const [wrongPrinter, setWrongPrinter] = useState(null);
-    const [testPrinting, setTestPrinting] = useState('');      // progress line while a test sticker prints ('' = idle)   // the WrongPrinter error, for its "use this one" button
+    const [testPrinting, setTestPrinting] = useState('');
+    const [nudge, setNudge] = useState(savedNudge);            // this desk's label offset in mm ({x, y})
+    const changeNudge = (axis, value) => { const n = { ...nudge, [axis]: Number(value) }; setNudge(n); rememberNudge(n); };      // progress line while a test sticker prints ('' = idle)   // the WrongPrinter error, for its "use this one" button
     const [printerModel, setPrinterModel] = useState(savedPrinter);
     const rememberPrinterModel = (v) => { setPrinterModel(v); try { localStorage.setItem(PRINTER_KEY, v); } catch (e) { /* noop */ } };
     // What happened to the sticker for the person on screen: { attendeeId, phase, message }
@@ -1251,6 +1256,21 @@ function CheckIn({ timezone: timezoneProp }) {
                                         </Button>
                                         <Typography variant="caption" color="text.secondary">
                                             Prints a TEST PRINT sticker with this desk's name on the roll above — no attendee, and its QR admits no one.
+                                        </Typography>
+                                    </Stack>
+                                )}
+                                {canPrintBluetooth() && (
+                                    <Stack direction="row" alignItems="center" gap={1.5} flexWrap="wrap" sx={{ mt: 1.5 }}>
+                                        <TextField select size="small" label="Move label sideways" value={nudge.x}
+                                            onChange={(e) => changeNudge('x', e.target.value)} sx={{ minWidth: 170 }}>
+                                            {NUDGE_STEPS.map((v) => <MenuItem key={v} value={v}>{v === 0 ? 'Centred' : `${Math.abs(v)} mm ${v < 0 ? '← one way' : 'the other way →'}`}</MenuItem>)}
+                                        </TextField>
+                                        <TextField select size="small" label="Move label along roll" value={nudge.y}
+                                            onChange={(e) => changeNudge('y', e.target.value)} sx={{ minWidth: 170 }}>
+                                            {NUDGE_STEPS.map((v) => <MenuItem key={v} value={v}>{v === 0 ? 'No change' : `${Math.abs(v)} mm ${v < 0 ? '↑ earlier' : '↓ later'}`}</MenuItem>)}
+                                        </TextField>
+                                        <Typography variant="caption" color="text.secondary" sx={{ flex: '1 1 220px' }}>
+                                            Only if a Test print still sits off centre: move it, Test print again. Saved on this iPad.
                                         </Typography>
                                     </Stack>
                                 )}

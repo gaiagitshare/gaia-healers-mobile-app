@@ -4,7 +4,7 @@
 // name, when it picked a neighbour's.
 //
 // Run: CI=true npx react-scripts test --watchAll=false BadgeLabelDialog.printer
-import { b1Connect, b1Disconnect, savedStationPrinter, rememberStationPrinter, STATION_PRINTER_KEY, printerTag, isAppleMobile, isIPad, iosBluetoothSetup, canPrintBluetooth, logPrinter, b1Dpi, PRINTER_KEY, isFramed, needsOwnWindow } from './BadgeLabelDialog';
+import { b1Connect, b1Disconnect, savedStationPrinter, rememberStationPrinter, STATION_PRINTER_KEY, printerTag, isAppleMobile, isIPad, iosBluetoothSetup, canPrintBluetooth, logPrinter, b1Dpi, PRINTER_KEY, isFramed, needsOwnWindow, savedNudge, rememberNudge } from './BadgeLabelDialog';
 
 jest.mock('../utils/api', () => ({ badgeLabelBlob: jest.fn(), recordBadgePrint: jest.fn(), reportPrinter: jest.fn(() => Promise.resolve({ data: {} })) }));
 
@@ -150,6 +150,20 @@ test('a desk can set the B21 Pro by hand, and an old forced setting still reads'
     localStorage.setItem(PRINTER_KEY, 'v4');
     await b1Disconnect();
     expect((await b1Connect()).label).toBe('NIIMBOT B1 Pro (set on this station)');
+});
+
+test('a B21 Pro that names itself wins over a station forced to B1 Pro (6 Oct: off-centre labels)', async () => {
+    localStorage.setItem(PRINTER_KEY, 'v4');
+    window.Niimbot.identify = async () => { await navigator.bluetooth.requestDevice({}); return { modelId: 785, task: null }; };
+    const info = await b1Connect();
+    expect(info.label).toBe('NIIMBOT B21 Pro');
+    expect(b1Dpi()).toBe(300);
+});
+
+test('the nudge is kept per device, in mm, within ±4', () => {
+    expect(savedNudge()).toEqual({ x: 0, y: 0 });
+    rememberNudge({ x: 1.5, y: -9 });
+    expect(savedNudge()).toEqual({ x: 1.5, y: -4 });
 });
 
 test('a tap is reported at once, and a device list left open 20 s says so', async () => {

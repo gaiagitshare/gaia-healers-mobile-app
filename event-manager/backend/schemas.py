@@ -1123,6 +1123,13 @@ class PostFeedRequest(IdentityLookup):
     limit: int = 60
 
 
+class PrinterHistoryEdit(BaseModel):
+    """An organiser's correction to one printer-history entry."""
+    result: Optional[str] = None      # ok | failed
+    note: Optional[str] = None
+    hidden: Optional[bool] = None
+
+
 class PrinterLogRecord(BaseModel):
     """One printer connect or print attempt reported by a door device."""
     stage: str                        # connect | print

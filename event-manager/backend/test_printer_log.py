@@ -10,6 +10,7 @@ Proves, against a served copy of the live database:
   6. a desk connecting to a printer another desk used today is told which desk
   7. the dashboard's printer-status: a row per desk, failures first, clashes named
   8. a test sticker renders at either dpi for the head, and admits no one
+  9. organisers correct the history (result, note, hide); the original is kept
 
 Run:  python3 /root/event/backend/test_printer_log.py
 """
@@ -172,6 +173,42 @@ n = c.execute("SELECT count(*) FROM attendees WHERE public_token='TESTPRNT'").fe
 check(n == 0, "the test sticker's QR belongs to nobody", n)
 st, b = call("POST", "/events/%d/authorize" % EVENT, {"qr_code": "https://card.gaiahealers.app/c/TESTPRNT", "access_type": "EVENT_ENTRY"}, DESK)
 check(st == 200 and b.get("granted") is False and b.get("result") == "DENIED", "scanning a test sticker admits no one", (st, b))
+
+# 9 ── the history is editable by organisers, and the original is kept
+st, hist = call("GET", "/events/%d/printer-history?hours=1" % EVENT, None, ADMIN)
+mine = [h for h in (hist or []) if h["source"] == "printer" and h["station"] == "test-desk-3"]
+check(st == 200 and mine and mine[0]["result"] == "failed", "the history lists a desk's failed connect", (st, mine))
+hid = mine[0]["id"] if mine else 0
+st, _ = call("PATCH", "/events/%d/printer-history/printer/%d" % (EVENT, hid), {"result": "ok", "note": "paper reloaded"}, ADMIN)
+st2, hist = call("GET", "/events/%d/printer-history?hours=1" % EVENT, None, ADMIN)
+e = [h for h in hist if h["source"] == "printer" and h["id"] == hid]
+check(st == 200 and e and e[0]["result"] == "ok" and e[0]["original_result"] == "failed" and e[0]["note"] == "paper reloaded"
+      and e[0]["edited_by"], "an organiser marks it OK with a note; what the device said is kept", e)
+st, ps = call("GET", "/events/%d/printer-status?hours=1" % EVENT, None, ADMIN)
+d3b = {d["station"]: d for d in ps["desks"]}.get("test-desk-3")
+check(d3b and d3b["status"] == "ok" and d3b["connect_failed"] == 0, "the dashboard counts the corrected result", d3b)
+st, _ = call("PATCH", "/events/%d/printer-history/printer/%d" % (EVENT, hid), {"hidden": True}, ADMIN)
+st2, hist = call("GET", "/events/%d/printer-history?hours=1" % EVENT, None, ADMIN)
+st3, hist_all = call("GET", "/events/%d/printer-history?hours=1&include_hidden=true" % EVENT, None, ADMIN)
+check(st == 200 and not any(h["id"] == hid and h["source"] == "printer" for h in hist)
+      and any(h["id"] == hid and h["hidden"] for h in hist_all), "hiding takes it off the card, not out of the record", st)
+st, ps = call("GET", "/events/%d/printer-status?hours=1" % EVENT, None, ADMIN)
+check("test-desk-3" not in {d["station"] for d in ps["desks"]}, "a hidden entry no longer counts on the dashboard", [d["station"] for d in ps["desks"]])
+# a badge entry: the correction changes counts only, never the attendee
+row = c.execute("SELECT id, attendee_id, result FROM badge_print_logs WHERE event_id=? ORDER BY id DESC LIMIT 1", (EVENT,)).fetchone()
+if row:
+    before = c.execute("SELECT badge_print_count, badge_last_result, is_checked_in FROM attendees WHERE id=?", (row[1],)).fetchone()
+    flip = "failed" if row[2] == "printed" else "ok"
+    st, _ = call("PATCH", "/events/%d/printer-history/badge/%d" % (EVENT, row[0]), {"result": flip}, ADMIN)
+    after = c.execute("SELECT badge_print_count, badge_last_result, is_checked_in FROM attendees WHERE id=?", (row[1],)).fetchone()
+    stored = c.execute("SELECT result, original_result FROM badge_print_logs WHERE id=?", (row[0],)).fetchone()
+    check(st == 200 and before == after and stored[1] == row[2], "correcting a badge entry never touches the attendee", (st, before, after, stored))
+st, _ = call("PATCH", "/events/%d/printer-history/printer/%d" % (EVENT, hid), {"result": "maybe"}, ADMIN)
+check(st == 400, "only ok or failed", st)
+st, _ = call("PATCH", "/events/%d/printer-history/printer/%d" % (EVENT, hid), {"note": "x"}, DESK)
+check(st == 403, "a door desk cannot edit the history", st)
+st, _ = call("PATCH", "/events/%d/printer-history/nope/%d" % (EVENT, hid), {"note": "x"}, ADMIN)
+check(st == 404, "an unknown source is refused", st)
 
 c.execute("DELETE FROM printer_logs WHERE client_attempt_id IN (%s)" % ",".join("?" * (2 + len(ids))), [aid, aid2] + ids); c.commit()
 print("\n%s" % ("ALL PASS" if not fails else "FAILED: %d" % fails))

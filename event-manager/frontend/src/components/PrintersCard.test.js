@@ -6,9 +6,9 @@ import React from 'react';
 import { createRoot } from 'react-dom/client';
 import { act } from 'react-dom/test-utils';
 import PrintersCard from './PrintersCard';
-import { getPrinterStatus } from '../utils/api';
+import { getPrinterStatus, getPrinterHistory, editPrinterHistory } from '../utils/api';
 
-jest.mock('../utils/api', () => ({ getPrinterStatus: jest.fn() }));
+jest.mock('../utils/api', () => ({ getPrinterStatus: jest.fn(), getPrinterHistory: jest.fn(), editPrinterHistory: jest.fn() }));
 
 const now = new Date(Date.now() - 5 * 60000).toISOString().replace('Z', '');
 const SAMPLE = {
@@ -51,4 +51,21 @@ test('no activity says so instead of an empty table', async () => {
     await act(async () => { root.render(<PrintersCard eventId={1} />); });
     expect(container.textContent).toContain('No printer activity in the last 24 hours');
     expect(container.querySelector('table')).toBeNull();
+});
+
+test('the history opens, and tapping a result corrects it', async () => {
+    getPrinterStatus.mockResolvedValue({ data: SAMPLE });
+    getPrinterHistory.mockResolvedValue({ data: [
+        { source: 'badge', id: 7, at: now, station: 'Desk 1', by: 'desk1@gaiahealers.app', what: 'badge', attendee: 'Bita Jalali',
+          result: 'failed', error: 'printer did not confirm', note: null, hidden: false, original_result: null },
+    ] });
+    editPrinterHistory.mockResolvedValue({ data: { ok: true } });
+    await act(async () => { root.render(<PrintersCard eventId={1} />); });
+    const open = [...container.querySelectorAll('button')].find((b) => b.textContent.startsWith('History'));
+    await act(async () => { open.click(); });
+    expect(getPrinterHistory).toHaveBeenCalledWith(1, 24, false);
+    expect(container.textContent).toContain('Badge · Bita Jalali');
+    const chip = [...container.querySelectorAll('.MuiChip-clickable')].find((c) => c.textContent === 'Failed');
+    await act(async () => { chip.click(); });
+    expect(editPrinterHistory).toHaveBeenCalledWith(1, 'badge', 7, { result: 'ok' });
 });

@@ -203,6 +203,11 @@ export const recordBadgePrint = (eventId, attendeeId, data) =>
 export const reportPrinter = (eventId, data) => api.post(`/events/${eventId}/printer-log`, data);
 // One row per door desk: its printer, browser, status and last failure (dashboard).
 export const getPrinterStatus = (eventId, hours = 24) => api.get(`/events/${eventId}/printer-status`, { params: { hours } });
+// Every printer event the card counts, for organisers to correct (result / note / hidden).
+export const getPrinterHistory = (eventId, hours = 24, includeHidden = false) =>
+    api.get(`/events/${eventId}/printer-history`, { params: { hours, include_hidden: includeHidden } });
+export const editPrinterHistory = (eventId, source, id, changes) =>
+    api.patch(`/events/${eventId}/printer-history/${source}/${id}`, changes);
 // Door-side corrections. Both live under the event so the audit trail names
 // the door that made them, not just the person.
 export const overrideAdmit = (eventId, attendeeId, data) =>

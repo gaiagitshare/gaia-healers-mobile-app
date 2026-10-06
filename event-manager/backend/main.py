@@ -2210,6 +2210,25 @@ def _ticket_status(attendee) -> str:
 def _ticket_active(attendee) -> bool:
     return _ticket_status(attendee) not in TICKET_BLOCKED_STATUSES
 
+def _refund_withdrawn(attendee, pe) -> bool:
+    """A reversed payment whose OWN order is already marked refunded on this
+    attendee, while the badge still stands on a different paid order. Then the
+    valid badge is correct and not a refund leak. Read from the entitlement
+    ledger that the refund path writes; never inferred from amounts or names."""
+    if attendee is None or pe is None:
+        return False
+    ref = getattr(pe, "ghl_entity_id", None)
+    if not ref:
+        return False
+    cd = attendee.custom_data or {}
+    ents = cd.get("entitlements") or []
+    key = lambda e: e.get("order_id") or e.get("invoice_id")
+    mine = [e for e in ents if key(e) == ref]
+    withdrawn = ref in set(cd.get("refunded_order_ids") or []) or (
+        bool(mine) and all(e.get("status") == "refunded" for e in mine))
+    still_paid = any(e.get("status") == "paid" and key(e) != ref for e in ents)
+    return bool(withdrawn and still_paid)
+
 def _blocked_reason(attendee):
     return {
         "refunded": "This ticket was refunded and is no longer valid",
@@ -7894,7 +7913,8 @@ def _pe_upsert(db, tx, order, mappings, source):
             func.lower(models.PaymentEvent.buyer_email) == pe.buyer_email,
             models.PaymentEvent.status.in_(payments.PAID),
         ).first() is not None
-    state, sev, reason = payments.classify(pe, attendee, active, person_paid=person_paid)
+    state, sev, reason = payments.classify(pe, attendee, active, person_paid=person_paid,
+                                           refund_withdrawn=_refund_withdrawn(attendee, pe))
     was_bad = (pe.severity or 0) > 0
     pe.recon_state, pe.severity, pe.recon_reason = state, sev, reason
     pe.last_checked_at = datetime.utcnow()
@@ -7993,7 +8013,8 @@ def payments_reclassify(db: Session = Depends(get_db),
         person_paid = (pe.status not in payments.PAID and pe.buyer_email
                        and pe.buyer_email in paid_by_event.get(pe.event_id, ()))
         state, sev, reason = payments.classify(pe, attendee, active,
-                                               person_paid=bool(person_paid))
+                                               person_paid=bool(person_paid),
+                                               refund_withdrawn=_refund_withdrawn(attendee, pe))
         was_bad = (pe.severity or 0) > 0
         pe.recon_state, pe.severity, pe.recon_reason = state, sev, reason
         pe.last_checked_at = datetime.utcnow()
@@ -8167,7 +8188,7 @@ def payment_exceptions(grace_hours: int = 6, db: Session = Depends(get_db),
                 paid_no_ticket.append(r)
         if r.status in payments.REVERSED and r.attendee_id:
             a = db.query(models.Attendee).filter(models.Attendee.id == r.attendee_id).first()
-            if a and _ticket_active(a):
+            if a and _ticket_active(a) and not _refund_withdrawn(a, r):
                 refunded_active.append(r)
 
     # A provider event Gaia could not tie to a mapped product at all.

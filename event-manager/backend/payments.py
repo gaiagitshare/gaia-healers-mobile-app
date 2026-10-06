@@ -64,7 +64,7 @@ def display_provider(raw):
     return {"stripe": "Stripe", "paypal": "PayPal", "manual": "Manual"}.get(v, (raw or "Unknown"))
 
 
-def classify(pe, attendee, ticket_active, now=None, person_paid=False):
+def classify(pe, attendee, ticket_active, now=None, person_paid=False, refund_withdrawn=False):
     """Is this payment and its ticket in a state a human needs to look at?
 
     `person_paid` is whether this buyer has a successful payment for this event
@@ -72,6 +72,14 @@ def classify(pe, attendee, ticket_active, now=None, person_paid=False):
     one is the single most common shape in the data, and judging each row on its
     own turns every one of those into an alert about a customer who is already
     paid up and holding a valid ticket. The failed row is history, not a fault.
+
+    `refund_withdrawn` is whether THIS order's own entitlement has already been
+    marked refunded on the attendee while their badge stands on a different,
+    still-paid order. A refunded accidental second charge (Amy Paff, 20 Sep: $99
+    paid, $99 refunded two minutes later) leaves a valid badge that is correct,
+    and judging the refund against the badge as a whole called it a critical
+    leak for two weeks. A badge whose only paid order was refunded is still
+    critical, because that is access somebody stopped paying for.
 
     Returns (state, severity, reason). Severity 2 shouts, 1 asks, 0 is silent.
     """
@@ -95,6 +103,9 @@ def classify(pe, attendee, ticket_active, now=None, person_paid=False):
         return "healthy", 0, "Paid, ticket issued"
 
     if st in REVERSED:
+        if attendee is not None and ticket_active and refund_withdrawn:
+            return ("healthy", 0,
+                    "Refunded; that order's access was withdrawn and the ticket stands on another paid order")
         if attendee is not None and ticket_active:
             return ("critical", 2,
                     "Payment was reversed and the ticket is still valid")

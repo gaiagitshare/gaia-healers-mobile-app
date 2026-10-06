@@ -31,14 +31,29 @@ const DRY = args.includes('--dry-run');
 const SINCE_DAYS = Number((args.find((a) => a.startsWith('--since-days=')) || '').split('=')[1] || 14);
 const since = new Date(Date.now() - SINCE_DAYS * 86400000).toISOString();
 const log = (o) => console.log(JSON.stringify({ evt: 'event_mirror', ...o }));
+// Anything thrown (GHL unreachable, a bad response) ends the run as a FAILURE,
+// logged in the same shape as every other line, so the unit is marked failed
+// and event-mirror:failure fires instead of the run passing as a quiet day.
+const fail = (e) => { log({ phase: 'error', error: String((e && e.message) || e).slice(0, 300) }); process.exit(1); };
+process.on('unhandledRejection', fail);
+process.on('uncaughtException', fail);
 
+// A GHL call that keeps failing must FAIL the run. It used to return {} after
+// five tries, which pageAll read as "no more pages": a GHL outage became a
+// short, clean-looking run that reconciled nothing, exited 0, and kept the
+// failure alert quiet. Thrown here, it ends the run with a non-zero exit, the
+// unit is marked failed, and event-mirror:failure fires.
 const ghl = async (p) => {
+  let last = '';
   for (let i = 0; i < 5; i++) {
-    const r = await fetch(GHL + p, { headers: GH });
-    if (r.status === 429 || r.status >= 500) { await new Promise((s) => setTimeout(s, 700 + i * 500)); continue; }
-    try { return await r.json(); } catch (e) { return {}; }
+    let r;
+    try { r = await fetch(GHL + p, { headers: GH }); }
+    catch (e) { last = `network ${e && e.message}`; await new Promise((s) => setTimeout(s, 700 + i * 500)); continue; }
+    if (r.status === 429 || r.status >= 500) { last = `HTTP ${r.status}`; await new Promise((s) => setTimeout(s, 700 + i * 500)); continue; }
+    if (!r.ok) throw new Error(`GHL ${r.status} on ${p.split('?')[0]}`);
+    try { return await r.json(); } catch (e) { throw new Error(`GHL returned non-JSON on ${p.split('?')[0]}`); }
   }
-  return {};
+  throw new Error(`GHL kept failing (${last}) on ${p.split('?')[0]}`);
 };
 const em = async (path, body) => {
   const r = await fetch(EM + path, { method: 'POST',
@@ -61,7 +76,10 @@ async function pageAll(url, key) {
 
 // The mappings are Gaia's, and they decide what counts as a ticket.
 const mapsRes = await fetch(`${EM}/identity/ticket-mappings`, { headers: { Authorization: `Bearer ${SVC}` } });
-const maps = mapsRes.ok ? await mapsRes.json() : { mappings: [] };
+// No mappings means every sale reads as "unmapped": a broken Event Manager must
+// not look like a quiet day.
+if (!mapsRes.ok) { log({ phase: 'error', error: `ticket-mappings HTTP ${mapsRes.status}` }); process.exit(1); }
+const maps = await mapsRes.json();
 const byPid = new Map();
 // Same scope as the webhook: only EVENT mappings can mint an attendee. A
 // membership or course mapping shares the endpoint and must never become a seat.

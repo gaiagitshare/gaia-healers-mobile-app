@@ -748,10 +748,23 @@ async function pipelineHealth(deps) {
   });
 
   // ── Event mirror ──────────────────────────────────────────────────────────
+  // Every 15 minutes since 6 Oct 2026 (was hourly). Stale after four missed
+  // runs, so a stopped mirror is noticed within the hour, not after three.
   add(jobHealth({
     key: 'event_mirror', label: 'Event order mirror',
     service: 'gaia-event-mirror.service', timer: 'gaia-event-mirror.timer',
-    okWithin: 3 * HOUR, cadence: 'hourly',
+    okWithin: 1 * HOUR, cadence: 'every 15 minutes',
+  }));
+
+  // ── Event planning-sheet mirror ─────────────────────────────────────────────
+  // Exhibitors, speakers, schedule and volunteers come from the team's Google
+  // Sheet every 30 minutes (/root/event tools/sheet_sync_all.py). It had no
+  // health check at all, so a broken sheet sync was invisible. The runner exits
+  // non-zero when any of the four parts fails, which is what this reads.
+  add(jobHealth({
+    key: 'event_sheet_sync', label: 'Event planning-sheet mirror',
+    service: 'gaia-vendor-sync.service', timer: 'gaia-vendor-sync.timer',
+    okWithin: 2 * HOUR, cadence: 'every 30 minutes',
   }));
 
   // ── Academy sync + backups ────────────────────────────────────────────────

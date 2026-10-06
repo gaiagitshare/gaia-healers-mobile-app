@@ -184,14 +184,35 @@ export function detect(health, extra = {}) {
     if (em.state === 'failed') {
       add({ key: 'event-mirror:failure', severity: 'critical', subsystem: 'Events',
         title: 'Event order mirror is failing',
-        why: 'The hourly recovery pass that catches orders the webhook missed is exiting with an error. A missed ticket sale would stay missed.',
+        why: 'The recovery pass (every 15 minutes) that catches orders the webhook missed is exiting with an error — including when GHL cannot be reached. A missed ticket sale would stay missed.',
         evidence: `result ${em.lastRunResult || '?'}${em.lastRunExitCode != null ? ` (exit ${em.lastRunExitCode})` : ''} at ${em.lastRunAt || 'unknown'}`,
         affected: null });
     } else if (em.state === 'stale') {
       add({ key: 'event-mirror:stale', severity: 'warning', subsystem: 'Events',
         title: 'Event order mirror has stopped running',
-        why: 'It should complete hourly. While it is stopped, only the live webhook is reconciling orders — nothing is catching what that misses.',
+        why: 'It should complete every 15 minutes. While it is stopped, only the live webhook is reconciling orders — nothing is catching what that misses.',
         evidence: `last success ${em.lastSuccessAt || 'never observed'}`,
+        affected: null });
+    }
+  }
+
+  // ── Event planning-sheet mirror ──────────────────────────────────────────
+  // Exhibitors, speakers, schedule and volunteers. A warning, not critical: no
+  // money or entry depends on it, but a stand dropped in the sheet keeps its
+  // scanner and a new speaker never appears while it is down.
+  const ss = byKey.event_sheet_sync;
+  if (ss) {
+    if (ss.state === 'failed') {
+      add({ key: 'event-sheet-sync:failure', severity: 'warning', subsystem: 'Events',
+        title: 'Event planning-sheet sync is failing',
+        why: 'One or more of the exhibitor, speaker, schedule or volunteer mirrors exited with an error. The others still ran; /root/event/backend/data/sheet-sync-status.json names which one and why.',
+        evidence: `result ${ss.lastRunResult || '?'}${ss.lastRunExitCode != null ? ` (exit ${ss.lastRunExitCode})` : ''} at ${ss.lastRunAt || 'unknown'}`,
+        affected: null });
+    } else if (ss.state === 'stale') {
+      add({ key: 'event-sheet-sync:stale', severity: 'warning', subsystem: 'Events',
+        title: 'Event planning-sheet sync has stopped running',
+        why: 'It should complete every 30 minutes. While it is stopped, changes in the planning sheet (exhibitors, speakers, schedule, volunteers) do not reach the app.',
+        evidence: `last success ${ss.lastSuccessAt || 'never observed'}`,
         affected: null });
     }
   }

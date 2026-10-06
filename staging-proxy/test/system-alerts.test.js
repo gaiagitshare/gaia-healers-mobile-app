@@ -24,6 +24,7 @@ const health = (over = {}) => ({
     { key: 'membership_reconcile', kind: 'job', state: 'ok', lastSuccessAt: '2026-09-05T12:00:00Z' },
     { key: 'event_mirror', kind: 'job', state: 'ok', lastSuccessAt: '2026-09-05T12:00:00Z' },
     { key: 'event_backup', kind: 'job', state: 'ok', lastSuccessAt: '2026-09-05T01:00:00Z' },
+    { key: 'event_sheet_sync', kind: 'job', state: 'ok', lastSuccessAt: '2026-09-05T12:00:00Z' },
   ].map((c) => (over[c.key] ? { ...c, ...over[c.key] } : c)),
 });
 const keys = (ds) => ds.map((d) => d.key).sort();
@@ -72,6 +73,24 @@ test('membership reconcile failure and staleness are different problems', () => 
 test('mirror and backup failures each raise their own incident', () => {
   const d = detect(health({ event_mirror: { state: 'failed' }, event_backup: { state: 'failed', detail: 'archive missing' } }));
   assert.deepEqual(keys(d), ['event-backup:failure', 'event-mirror:failure']);
+});
+
+test('the planning-sheet mirror is watched: failing and stopped are distinct warnings', () => {
+  // It had no health check at all before 6 Oct 2026, so a broken sheet sync
+  // was invisible. A warning, not critical: no money or entry depends on it.
+  const f = detect(health({ event_sheet_sync: { state: 'failed', lastRunResult: 'exit-code', lastRunExitCode: 1 } }));
+  assert.deepEqual(keys(f), ['event-sheet-sync:failure']);
+  assert.equal(f[0].severity, 'warning');
+  assert.match(f[0].why, /sheet-sync-status\.json/, 'says where to look');
+  const st = detect(health({ event_sheet_sync: { state: 'stale', lastSuccessAt: '2026-09-05T08:00:00Z' } }));
+  assert.deepEqual(keys(st), ['event-sheet-sync:stale']);
+  assert.equal(st[0].severity, 'warning');
+  assert.deepEqual(detect(health({ event_sheet_sync: { state: 'running' } })), [], 'a run in progress is not a fault');
+});
+
+test('the event mirror says its real cadence', () => {
+  const st = detect(health({ event_mirror: { state: 'stale' } }));
+  assert.match(st[0].why, /every 15 minutes/);
 });
 
 test('an invalid backup artifact is a failure even when the job exited cleanly', () => {

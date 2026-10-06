@@ -935,7 +935,9 @@
         + '<div class="g-home2__num"><strong>' + esc(fmt(l.stress, 2)) + '</strong><span>Stress</span></div></div>'
         + (r.summary && r.summary.headline ? '<p class="g-home2__state-line">' + esc(r.summary.headline) + '</p>' : '')
         + '<div class="g-home2__actions"><a class="g-btn g-btn--primary g-btn--sm" href="home.html?view=profile&section=readings" data-open-readings>' + icon('pulse') + ' View reading</a>'
-        + (window.GaiaAvatar && window.GaiaAvatar.openChat ? '<button type="button" class="g-btn g-btn--secondary g-btn--sm" data-ask-gaia="What changed in my latest reading?">' + icon('sparkle') + ' Ask Gaia what changed</button>' : '')
+        // Gaia Assist never reads reading values (the promise on You), so the
+        // second action explains the numbers rather than offering an AI read.
+        + '<a class="g-btn g-btn--secondary g-btn--sm" href="home.html?view=profile&section=readings" data-open-readings="explain">' + icon('question') + ' What these numbers mean</a>'
         + '</div></section>';
     }
     if (st.linked) {
@@ -960,10 +962,14 @@
   }
   window.addEventListener('gaia:readings-loaded', () => { if (memberState().authed && document.querySelector('.g-home2')) renderHome(); });
   document.addEventListener('click', (e) => {
-    const ask = e.target.closest('[data-ask-gaia]');
-    if (ask) { window.GaiaAvatar?.openChat?.(ask.getAttribute('data-ask-gaia')); return; }
     const open = e.target.closest('[data-open-readings]');
-    if (open) { e.preventDefault(); window.GaiaAppShell?.go?.('profile'); setTimeout(() => window.dispatchEvent(new CustomEvent('gaia:open-readings')), 80); }
+    if (open) {
+      e.preventDefault(); window.GaiaAppShell?.go?.('profile');
+      setTimeout(() => {
+        window.dispatchEvent(new CustomEvent('gaia:open-readings'));
+        if (open.getAttribute('data-open-readings') === 'explain') setTimeout(() => { const d = document.querySelector('#member-readings .g-readings__explain'); if (d) { d.open = true; d.scrollIntoView({ block: 'center' }); } }, 400);
+      }, 80);
+    }
   });
 
   /** One short line under the greeting, only when there is something to say. */

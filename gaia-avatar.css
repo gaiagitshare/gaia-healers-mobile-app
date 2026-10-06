@@ -162,3 +162,7 @@ body.gaia-assist-headless.gaia-assist-panel-open { overflow: auto !important; }
 .gava-bubble--talk .gava-bubble__ask { margin: 4px 0 0; }
 .gava-mic { flex: none; width: 38px; border-radius: 12px; border: 1px solid rgba(140, 160, 255, .22); background: rgba(10, 20, 34, .9); color: #cfe9ff; font-size: 16px; cursor: pointer; display: grid; place-items: center; }
 .gava-mic.is-on { color: #6fe9ff; border-color: rgba(111, 233, 255, .6); background: rgba(111, 233, 255, .14); box-shadow: 0 0 0 4px rgba(111, 233, 255, .12); }
+/* "Not now" in a suggestion: a quiet text button, not a second action. */
+.gava-chip.gava-chip--quiet { width: auto; align-self: flex-end; padding: 4px 6px; background: none; border: 0; color: #9fb3ab; font-size: 13px; }
+.gava-chip.gava-chip--quiet i, .gava-chip.gava-chip--quiet em { display: none; }
+.gava-chip.gava-chip--quiet:hover, .gava-chip.gava-chip--quiet:focus-visible { color: #eef6f3; text-decoration: underline; }

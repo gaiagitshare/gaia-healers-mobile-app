@@ -408,6 +408,7 @@
 
       const filesHost = root.querySelector('[data-prac-files]');
       loadFiles(clientId, filesHost);
+      document.dispatchEvent(new CustomEvent('gaia:practice-client', { detail: { client: String(clientId) } }));
 
       if (openSection) openCard(openSection, awaiting);
     }

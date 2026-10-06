@@ -1934,6 +1934,11 @@
     if (!link) return;
     link.querySelector('.gaia-tabbar__badge')?.remove();
     const unread = Number(memberState().data?.notif?.counts?.unread || 0);
+    // The Inbox row on Community says it too, from the same count (no new data).
+    document.querySelectorAll('[data-screen="community"] a[data-app-nav="inbox"] small, [data-screen="community"] a[data-app-nav="inbox"] .g-energy-launch__meta').forEach((n) => {
+      if (!n.dataset.base) n.dataset.base = n.textContent;
+      n.textContent = memberState().authed && unread > 0 ? unread + ' unread' : n.dataset.base;
+    });
     if (memberState().authed && unread > 0) {
       const badge = document.createElement('span');
       badge.className = 'gaia-tabbar__badge';

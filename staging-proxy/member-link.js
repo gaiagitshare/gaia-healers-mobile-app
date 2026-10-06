@@ -208,6 +208,19 @@ export function linksForPractitioner(practitionerId, file = LINK_FILE, { consent
     .sort((a, b) => String(b.linked_at || '').localeCompare(String(a.linked_at || '')));
 }
 
+/**
+ * Personal Path: the Gaia member behind THIS practitioner's client, or null.
+ * Server-side only, never returned to the page. The practitioner id comes
+ * from their verified OAuth link (never the browser) and must match the
+ * confirmed link, so practitioner A can never reach practitioner B's client.
+ */
+export function memberForPractitionerClient(practitionerId, customerId, file = LINK_FILE) {
+  const pid = String(practitionerId || '').trim(), cust = String(customerId || '').trim();
+  if (!pid || !cust) return null;
+  const hit = Object.entries(load(file).links).find(([, l]) => l.status === 'confirmed' && String(l.practitioner_id || '') === pid && String(l.customer_id || '') === cust);
+  return hit ? hit[0] : null;
+}
+
 /** Today's link events and the standing totals, counts only (for the alert sweep and the daily line). */
 export function linkDayCounts({ now = Date.now(), file = LINK_FILE } = {}) {
   const store = load(file);

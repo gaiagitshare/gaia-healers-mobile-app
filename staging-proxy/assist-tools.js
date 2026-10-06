@@ -77,8 +77,8 @@ function requireString(args, key, { max = 64, required = true } = {}) {
 let mcpReaderForTest = null;
 export function _setMcpReaderForTest(fn) { mcpReaderForTest = typeof fn === 'function' ? fn : null; }
 
-/** One MCP read, with this practitioner's own token and nobody else's. */
-async function readMcp(ctx, tool, args = {}) {
+/** One MCP read, with this practitioner's own token and nobody else's. Exported for the Personal Path practitioner routes. */
+export async function readMcp(ctx, tool, args = {}) {
   if (mcpReaderForTest) return mcpReaderForTest(tool, args, ctx);
   const cfg = practitionersConfig();
   const state = linkState(ctx.contactId).state;

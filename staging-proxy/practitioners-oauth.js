@@ -30,7 +30,8 @@ import crypto from 'crypto';
 import fs from 'fs';
 import path from 'path';
 
-const TOKEN_FILE = '/root/gaia-staging-proxy/data/practitioner-tokens.json';
+// GAIA_PRACTITIONER_TOKEN_FILE exists for tests (a temp store); production never sets it.
+const TOKEN_FILE = process.env.GAIA_PRACTITIONER_TOKEN_FILE || '/root/gaia-staging-proxy/data/practitioner-tokens.json';
 // A scan legitimately takes nine to twelve seconds, because their side fetches
 // it live from Bio-Well -- so a timeout has to be generous enough not to cut off
 // a call that is working. Without one at all, a hung server holds the card in

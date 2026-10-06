@@ -382,6 +382,7 @@
           <button type="button" class="g-btn g-btn--ghost g-btn--sm" data-prac-back>&larr; All clients</button>
           <div data-prac-header>${skeleton(2)}</div>
           <div data-prac-services></div>
+          <div data-prac-recommend></div>
           <section class="g-prac__sec">
             <h3 class="g-prac__h">Bio-Well</h3>
             <p class="g-prac__muted">Readings are fetched live from Bio-Well. Loading a comparison and its scan history may take 10–20 seconds.</p>
@@ -421,7 +422,10 @@
       // Fast, and the most useful thing on the screen: what the practitioner
       // already offers that addresses what the readings show.
       const svcHost = root.querySelector('[data-prac-services]');
-      tool('practitioner_suggested_services', { clientId }).then((r) => {
+      const suggested = tool('practitioner_suggested_services', { clientId });
+      // Personal Path: a linked Gaia member can be recommended something, confirmed by the practitioner (gaia-path.js).
+      linkedOne.then((l) => { if (l && openClient === String(clientId) && window.GaiaPath?.mountPractice) window.GaiaPath.mountPractice(root.querySelector('[data-prac-recommend]'), clientId, suggested.catch(() => null)); });
+      suggested.then((r) => {
         if (openClient !== String(clientId)) return;
         if (!(r.services || []).length) { svcHost.innerHTML = ''; return; }
         svcHost.innerHTML = `<section class="g-prac__sec">

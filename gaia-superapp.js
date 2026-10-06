@@ -912,6 +912,7 @@
       + forYou()
       + '<section class="g-home2__gaia" aria-label="Your Gaia"><p class="g-super-kicker">Your Gaia</p><div class="g-home2__rows">' + rows + '</div></section>'
       + bookActions()
+      + upcoming()
       + membershipStrip()
       + sync
       + '<div id="home-book" hidden></div>'   // gaia-member still writes its booking card here; Today copies it
@@ -952,7 +953,9 @@
       + '<p class="g-home2__state-line">Which centre today asks for, a short practice, and a streak that saves.</p>'
       + '<div class="g-home2__actions"><a class="g-btn g-btn--primary g-btn--sm" href="home.html?view=daily" data-app-nav="daily">' + icon('sun') + ' Start today’s check</a></div></section>';
   }
-  /** What is happening for me: a course, a booking, the next gathering — smaller than my own state. */
+  /** What is happening for me: my course and my next booking. Only what is the
+   * member's own; the gathering is the same for everyone, so it sits below
+   * under Upcoming instead of implying it was chosen for them. */
   function forYou() {
     const items = [];
     const course = courseGrants()[0];
@@ -960,9 +963,13 @@
     if (course && course.openUrl) items.push('<button type="button" class="g-home2__tile" data-super-course="' + esc(course.openUrl) + '" data-super-course-title="' + esc(course.title || course.name || 'Gaia Healers Academy') + '">'
       + '<span class="g-home2__tile-icon">' + icon('book-open') + '</span><span class="g-home2__tile-copy"><small>Continue learning</small><strong>' + esc(course.title || course.name || 'Your course') + '</strong></span></button>');
     if (appt) items.push('<a class="g-home2__tile" href="home.html?view=bookings"><span class="g-home2__tile-icon">' + icon('calendar-check') + '</span><span class="g-home2__tile-copy"><small>Coming up</small><strong>' + esc(appt.title || 'Your appointment') + '</strong><em>' + esc(appointmentWhen(appt)) + '</em></span></a>');
+    if (!items.length) return '';
+    return '<section class="g-home2__for" aria-label="For you"><p class="g-super-kicker">For you</p><div class="g-home2__for-grid">' + items.join('') + '</div></section>';
+  }
+  /** The next gathering, for everyone: a secondary row, not part of For you. */
+  function upcoming() {
     const ev = eventCompact();
-    if (!items.length && !ev) return '';
-    return '<section class="g-home2__for" aria-label="For you"><p class="g-super-kicker">For you</p><div class="g-home2__for-grid">' + items.join('') + ev + '</div></section>';
+    return ev ? '<section class="g-home2__upcoming" aria-label="Upcoming"><p class="g-super-kicker">Upcoming</p>' + ev + '</section>' : '';
   }
   window.addEventListener('gaia:readings-loaded', () => { if (memberState().authed && document.querySelector('.g-home2')) renderHome(); });
   document.addEventListener('click', (e) => {

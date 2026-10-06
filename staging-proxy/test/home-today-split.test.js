@@ -50,9 +50,11 @@ test('the daily energy check and the sky render on Today only; the member Home i
   assert.match(member, /<header class="g-home2__greet"><h1>' \+ greeting \+ '<\/h1>/, 'the greeting is the page heading');
   // 6 Oct 2026 hierarchy: my own state first (readings or today's check), then
   // what is happening for me (course, booking, gathering), then my places.
-  for (const part of ['stateHero()', 'forYou()', "serviceLink(v, i, t, m)", 'bookActions()', 'membershipStrip()']) assert.ok(member.includes(part), part);
+  for (const part of ['stateHero()', 'forYou()', "serviceLink(v, i, t, m)", 'bookActions()', 'upcoming()', 'membershipStrip()']) assert.ok(member.includes(part), part);
   assert.ok(member.indexOf('stateHero()') < member.indexOf('forYou()'), 'my state leads');
-  assert.match(sa, /function forYou\(\)[\s\S]*eventCompact\(\)/, 'the gathering sits in For you, smaller than my state');
+  const fy = sa.slice(sa.indexOf('function forYou()'), sa.indexOf('function upcoming()'));
+  assert.doesNotMatch(fy, /eventCompact\(\)/, 'For you is only the member\'s own things; the gathering is not personalised');
+  assert.match(sa, /function upcoming\(\)[\s\S]*eventCompact\(\)/, 'the gathering sits under Upcoming');
   assert.match(member, /meta\.degraded \|\| meta\.stale/, 'sync is said only when something is wrong');
   assert.match(sa, /<small>Continue learning<\/small>[\s\S]*<small>Coming up<\/small>/, 'a course and a booking each get a For you tile');
   const guest = sa.slice(sa.indexOf('this is the\n      // guest on-ramp'), sa.indexOf('bind(root);\n    renderToday();'));

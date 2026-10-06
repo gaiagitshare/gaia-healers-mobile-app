@@ -355,3 +355,6 @@ body.gaia-v2 [data-screen="profile"] #member-glance { max-width: 1180px; margin-
   /* the event card can use the width */
   body.gaia-v2 [data-screen="events"] .g-event-grid > .g-event-card:only-child { grid-column: 1 / -1; }
 }
+body.gaia-v2 .g-home2__upcoming { margin-top: 26px; }
+body.gaia-v2 .g-home2__upcoming > .g-super-kicker { margin: 0 2px 10px; }
+body.gaia-v2 .g-home2__upcoming > .g-home2__event { border: 0; background: var(--v3-card); border-radius: 18px; }

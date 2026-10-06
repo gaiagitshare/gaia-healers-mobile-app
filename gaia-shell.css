@@ -30,10 +30,20 @@ body.gaia-v2 .gaia-rail__practice[hidden] { display: none !important; }
   body.gaia-v2 .gaia-rail__practice { display: none !important; }   /* reached from You on phones */
   /* Every item gets an equal share of the bar: at least 44px to tap. */
   body.gaia-v2 .gaia-tabbar__group { flex: 3 1 0; display: flex; }
-  body.gaia-v2 .gaia-tabbar__group .gaia-tabbar__link { flex: 1 1 auto; min-width: 44px; }
+  body.gaia-v2 .gaia-tabbar__group .gaia-tabbar__link { flex: 1 0 auto; min-width: 44px; padding-inline: 2px; }
+  /* Labels never ellipsise: "Community" is the longest and must read whole. */
+  body.gaia-v2 .gaia-tabbar .gaia-tabbar__inner .gaia-tabbar__label { overflow: visible !important; text-overflow: clip !important; max-width: none !important; letter-spacing: -0.01em; }
   body.gaia-v2 .gaia-tabbar__home .gaia-tabbar__assist-pulse { opacity: 0.35; animation-duration: 6s; }
   body.gaia-v2 .gaia-tabbar__home:not(.is-active) { box-shadow: none !important; }
   body.gaia-v2 .gaia-tabbar__home:not(.is-active) .gaia-tabbar__assist-pulse { display: none; }
+}
+
+/* Very narrow phones: a little smaller, still whole words. */
+@media (max-width: 374px) {
+  body.gaia-v2 .gaia-tabbar__group .gaia-tabbar__link { min-width: 36px; padding-inline: 1px; }
+  body.gaia-v2 .gaia-tabbar .gaia-tabbar__inner .gaia-tabbar__label { font-size: 9.5px !important; letter-spacing: -0.02em; }
+  body.gaia-v2 .gaia-tabbar__home { width: 42px !important; height: 42px !important; flex: 0 0 42px !important; }
+  body.gaia-v2 .gaia-tabbar__inner { gap: 2px !important; padding-inline: 4px !important; }
 }
 
 /* —— Tablet and desktop: the rail is part of the page ————————————————————— */

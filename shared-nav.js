@@ -101,6 +101,20 @@
     setTimeout(() => window.dispatchEvent(new CustomEvent('gaia:open-client', { detail: {} })), 60);
   });
 
+  // Home sits in the middle of the phone bar but first in the rail; move it in
+  // the DOM to match, so the tab order is the order on screen.
+  const railQuery = window.matchMedia('(min-width: 700px)');
+  function placeHome() {
+    const inner = document.querySelector('.gaia-tabbar__inner'); if (!inner) return;
+    const home = inner.querySelector('.gaia-tabbar__home');
+    const left = inner.querySelector('.gaia-tabbar__group--left');
+    const right = inner.querySelector('.gaia-tabbar__group--right');
+    if (!home || !left || !right) return;
+    if (railQuery.matches) { if (home.nextElementSibling !== left) inner.insertBefore(home, left); }
+    else if (home.nextElementSibling !== right) inner.insertBefore(home, right);
+  }
+  if (railQuery.addEventListener) railQuery.addEventListener('change', placeHome);
+
   function render() {
     const active = activeTabId();
     const inner = document.querySelector('.gaia-tabbar__inner');
@@ -111,6 +125,7 @@
       buildTabbar(inner, active);
       const home = inner.querySelector('.gaia-tabbar__home');
       if (home) setLinkActive(home, active === 'today');
+      placeHome();
       window.dispatchEvent(new CustomEvent('gaia:tabbar-ready'));
       return;
     }
@@ -126,7 +141,11 @@
   nav.style.paddingBottom = 'max(0.75rem, env(safe-area-inset-bottom))';
   nav.innerHTML = '<div class="gaia-tabbar__inner mx-auto flex max-w-md items-end justify-between gap-1 rounded-2xl px-1 py-1.5 backdrop-blur-xl pointer-events-auto"></div>';
 
-  document.body.appendChild(nav);
+  // In the page's reading order the nav comes before the content (after the
+  // skip link), so keyboard users meet it first, as they see it on desktop.
+  const skip = document.querySelector('.skip-link, a[href^="#"][class*="skip"]');
+  if (skip && skip.parentNode === document.body) skip.insertAdjacentElement('afterend', nav);
+  else document.body.insertBefore(nav, document.body.firstChild);
   document.body.classList.add('gaia-has-tabbar');
   render();
   window.dispatchEvent(new CustomEvent('gaia:tabbar-ready'));

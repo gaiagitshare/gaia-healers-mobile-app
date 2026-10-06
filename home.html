@@ -70,13 +70,13 @@
   <link rel="stylesheet" href="gaia-fit.css?v=20261005x" />
   <link rel="stylesheet" href="gaia-journey.css?v=20261002b" />
   <link rel="stylesheet" href="gaia-avatar.css?v=20261006f" />
-  <link rel="stylesheet" href="gaia-app-v3.css?v=20261005x" />
-  <link rel="stylesheet" href="gaia-app-v3-today-energy.css?v=20261005a2" />
+  <link rel="stylesheet" href="gaia-app-v3.css?v=20261006k" />
+  <link rel="stylesheet" href="gaia-app-v3-today-energy.css?v=20261006k" />
   <link rel="stylesheet" href="gaia-app-v3-learn-connect.css?v=20261005c1" />
   <link rel="stylesheet" href="gaia-app-v3-shop-you.css?v=20261006g" />
   <link rel="stylesheet" href="gaia-guest-home.css?v=20261005g" />
   <link rel="stylesheet" href="gaia-assist-v3.css?v=20260928c" />
-  <link rel="stylesheet" href="gaia-shell.css?v=20261006i" />
+  <link rel="stylesheet" href="gaia-shell.css?v=20261006k" />
   <link rel="stylesheet" href="vendor/leaflet/leaflet.css?v=1.9.4" />
   <link rel="stylesheet" href="vendor/leaflet/MarkerCluster.css?v=1.5.3" />
   <link rel="stylesheet" href="vendor/leaflet/MarkerCluster.Default.css?v=1.5.3" />
@@ -154,21 +154,21 @@
           <p class="g-page__sub">Choose what you need today.</p>
         </div>
 
-        <nav id="wellness-tabs" class="g-energy-switcher" aria-label="Energy tools">
-          <button type="button" data-tab="check" aria-selected="true"><i class="ph ph-sparkle" aria-hidden="true"></i><span>Energy check</span></button>
-          <button type="button" data-tab="horoscope" aria-selected="false"><i class="ph ph-moon-stars" aria-hidden="true"></i><span>Horoscope</span></button>
-          <button type="button" data-tab="chakras" aria-selected="false"><i class="ph ph-circles-three-plus" aria-hidden="true"></i><span>Chakra match</span></button>
-        </nav>
+        <div id="wellness-tabs" class="g-energy-switcher" role="tablist" aria-label="Energy tools">
+          <button type="button" role="tab" aria-controls="panel-energy" data-tab="check" aria-selected="true"><i class="ph ph-sparkle" aria-hidden="true"></i><span>Energy check</span></button>
+          <button type="button" role="tab" aria-controls="panel-horoscope" data-tab="horoscope" aria-selected="false"><i class="ph ph-moon-stars" aria-hidden="true"></i><span>Horoscope</span></button>
+          <button type="button" role="tab" aria-controls="panel-chakras" data-tab="chakras" aria-selected="false"><i class="ph ph-circles-three-plus" aria-hidden="true"></i><span>Chakra match</span></button>
+        </div>
 
-        <section id="panel-energy" class="g-energy-panel" data-energy-panel="check">
+        <section id="panel-energy" role="tabpanel" class="g-energy-panel" data-energy-panel="check">
           <section id="me-wellness" class="g-page-sec" data-wellness-mode="check" aria-label="Your daily energy check"></section>
         </section>
 
-        <section id="panel-horoscope" class="g-energy-panel" data-energy-panel="horoscope" hidden>
+        <section id="panel-horoscope" role="tabpanel" class="g-energy-panel" data-energy-panel="horoscope" hidden>
           <section id="horoscope-wellness" class="g-page-sec" data-wellness-mode="horoscope" aria-label="Your wellness horoscope"></section>
         </section>
 
-        <section id="panel-chakras" class="g-energy-panel" data-energy-panel="chakras" hidden>
+        <section id="panel-chakras" role="tabpanel" class="g-energy-panel" data-energy-panel="chakras" hidden>
           <section id="home-chakra-hero" class="g-chakra-hero" aria-label="Interactive chakra match"></section>
         </section>
 
@@ -438,7 +438,7 @@
     <!-- Admin is NOT part of the public app. It lives on a separate,
          password-gated surface served by the proxy: api.gaiahealers.app/admin -->
   </div>
-  <script defer src="shared-nav.js?v=20261006g"></script>
+  <script defer src="shared-nav.js?v=20261006k"></script>
   <script defer src="gaia-realtime-voice.js?v=20261004z"></script>
   <script defer src="gaia-membership-ui.js?v=20261006j"></script>
   <script defer src="gaia-app-guard.js"></script>

@@ -5,7 +5,15 @@ produce recommendations that a practitioner approves, so that Gaia Healers only
 delivers and coaches? This would replace building our own interpretation
 engine.
 
-**Conclusion: B, gated by D.**
+**Decision (owner, 6 Oct 2026): option B1 approved in principle.**
+- **Flow:** the partner does the analysis; the practitioner reviews and
+  explicitly approves in Gaia's Practice tab; Gaia stores the approvals;
+  Personal Path delivers them; Gaia coaches.
+- **Partner AI recommendations stay disabled** until Q1, Q2, Q4 and Q5 are
+  answered.
+- **Bio-Well is contacted only after the partner replies.**
+
+**Audit conclusion: B, gated by D.**
 - The partner already does the sensitive analysis: deterministic flags,
   trends and comparisons, plus AI-generated recommendations per scan.
 - It has **no approval step, no member-safe output and no write path**.
@@ -141,9 +149,19 @@ Two more tools send client disbalance values to the provider unredacted:
 **Who is affected:** practitioners asking about their own clients, not
 members.
 
-**Proposed fix:** extend `modelView()` to drop `value` from both tools'
-model copies (names and severity stay), with a test. **Not applied: it
-changes what Gaia can tell practitioners, so it needs your OK.**
+**Fixed and deployed in #278 (6 Oct 2026), across every practitioner
+tool, not only these two.**
+- **Before:** the AI provider received DOB, sex, phone, email and city
+  (`get_client`); email (`find_client`); file names and dates
+  (`client_files`); disbalance values, severities and scan dates
+  (`flagged_clients`, `suggested_services`); and severities (`follow_ups`).
+- **Now:** client id and name, counts, and area names marked "flagged".
+- **Fails closed:** a practitioner tool without an explicit model view sends
+  only "it is on screen".
+- **Partner AI guides:** a disabled source (`GAIA_PARTNER_AI_RECOMMENDATIONS`,
+  off).
+- **Tested:** `test/practitioner-ai-privacy.test.js` plants unique values in
+  every partner answer.
 
 ---
 
@@ -289,3 +307,9 @@ deterministically, and B1 or B2 keep the human in the loop.
 10. `get_dashboard_summary` timed out with "Bio-Well did not answer within
     30s": do practice-level tools call Bio-Well live? When will production
     MCP parity with staging be ready?
+11. When your platform returns flags, trends, suggested services or
+    AI-generated recommendations, which fields do you consider
+    safe/intended for display directly to the client, and which are
+    practitioner-only?
+
+The ready-to-send message is in `PARTNER_QUESTIONS_MESSAGE.md`.

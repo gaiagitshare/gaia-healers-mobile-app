@@ -929,12 +929,15 @@
       const l = r.latest;
       const fmt = (v, d) => (typeof v === 'number' ? v.toFixed(d) : '—');
       const day = l.scanned_at ? new Date(/^\d{4}-\d{2}-\d{2}$/.test(l.scanned_at) ? l.scanned_at + 'T12:00:00' : l.scanned_at).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) : '';
+      // A scan describes the day it was taken; say how long ago that was.
+      const age = window.GaiaMyReadings.ageOf ? window.GaiaMyReadings.ageOf(l.scanned_at) : null;
       return '<section class="g-home2__state g-home2__state--reading" aria-label="Your latest reading">'
-        + '<p class="g-super-kicker">' + (st.new_reading ? 'New reading' : 'Your latest reading') + (day ? ' · ' + esc(day) : '') + '</p>'
+        + '<p class="g-super-kicker">' + (st.new_reading ? 'New reading' : (age && age.stale ? 'Your last reading' : 'Your latest reading')) + (day ? ' · ' + esc(day) : '') + (age ? ' · ' + esc(age.label) : '') + '</p>'
         + '<div class="g-home2__nums">'
         + '<div class="g-home2__num"><strong>' + esc(fmt(l.energy, 0)) + '</strong><span>Energy</span></div>'
         + '<div class="g-home2__num"><strong>' + esc(fmt(l.stress, 2)) + '</strong><span>Stress</span></div></div>'
         + (r.summary && r.summary.headline ? '<p class="g-home2__state-line">' + esc(r.summary.headline) + '</p>' : '')
+        + (age && age.stale ? '<p class="g-home2__state-line g-home2__state-hint">This was ' + esc(age.label) + '. A new Bio-Well scan would show where you are now. <button type="button" class="g-linkbtn" data-dir-intent="scan">Book a scan</button></p>' : '')
         + '<div class="g-home2__actions"><a class="g-btn g-btn--primary g-btn--sm" href="home.html?view=profile&section=readings" data-open-readings>' + icon('pulse') + ' View reading</a>'
         // Gaia Assist never reads reading values (the promise on You), so the
         // second action explains the numbers rather than offering an AI read.

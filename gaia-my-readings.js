@@ -46,6 +46,17 @@
   // A bare "2026-10-02" is read as UTC midnight, which is the day before west
   // of Greenwich; date-only values are taken as midday local instead.
   const asDate = (iso) => new Date(/^\d{4}-\d{2}-\d{2}$/.test(String(iso || '')) ? iso + 'T12:00:00' : iso);
+  // How old a reading is, said plainly. A scan is a snapshot of the day it was
+  // taken: an older one is "your latest reading", never "today's energy".
+  function ageOf(iso) {
+    if (!iso) return null;
+    const d = asDate(iso); if (isNaN(d)) return null;
+    const today = new Date(); today.setHours(12, 0, 0, 0);
+    const day = new Date(d); day.setHours(12, 0, 0, 0);
+    const days = Math.round((today - day) / 86400000);
+    const label = days <= 0 ? 'today' : days === 1 ? 'yesterday' : days < 14 ? days + ' days ago' : days < 60 ? Math.round(days / 7) + ' weeks ago' : Math.round(days / 30) + ' months ago';
+    return { days, label, stale: days > 30 };
+  }
   const when = (iso) => { if (!iso) return ''; try { const d = asDate(iso); return isNaN(d) ? String(iso) : d.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' }); } catch { return ''; } };
   const short = (iso) => { try { return new Date(iso).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }); } catch { return ''; } };
   const fmt = (v, d = 0) => (typeof v === 'number' ? v.toFixed(d) : '—');
@@ -180,9 +191,11 @@
       const l = lastReadings?.latest;
       const nums = l && (typeof l.energy === 'number' || typeof l.stress === 'number')
         ? `<span class="g-readings-nudge__nums">${typeof l.energy === 'number' ? `<b>${esc(fmt(l.energy))}</b> energy` : ''}${typeof l.energy === 'number' && typeof l.stress === 'number' ? ' · ' : ''}${typeof l.stress === 'number' ? `<b>${esc(fmt(l.stress, 2))}</b> stress` : ''}</span>` : '';
+      const age = ageOf(scannedAt);
+      const ageText = age ? ` · ${esc(when(scannedAt))}, ${esc(age.label)}` : '';
       const html = fresh
-        ? `<i class="ph ph-pulse" aria-hidden="true"></i><span><strong>A new reading from your practitioner</strong>${scannedAt ? ` · ${esc(when(scannedAt))}` : ''}${nums}</span><em>Open</em>`
-        : `<i class="ph ph-pulse" aria-hidden="true"></i><span><strong>My readings</strong>${scannedAt ? ` · latest ${esc(when(scannedAt))}` : ''}${nums}</span><em>Open</em>`;
+        ? `<i class="ph ph-pulse" aria-hidden="true"></i><span><strong>A new reading from your practitioner</strong>${ageText}${nums}</span><em>Open</em>`
+        : `<i class="ph ph-pulse" aria-hidden="true"></i><span><strong>${age && age.stale ? 'Your last reading' : 'Your latest reading'}</strong>${ageText}${nums}${age && age.stale ? '<small class="g-readings-nudge__hint">A new scan would show where you are now.</small>' : ''}</span><em>Open</em>`;
       // Only rewrite when something changed: the observer watches the screen's children and a rewrite must never re-trigger it.
       if (el.innerHTML !== html) el.innerHTML = html;
     };
@@ -553,6 +566,6 @@
 
   // For Home: the latest numbers once they are loaded (nothing extra is fetched).
   const latest = () => (lastReadings && lastReadings.latest ? { latest: lastReadings.latest, summary: lastReadings.summary || null, average: lastReadings.average_recent || null, practitioner: lastReadings.practitioner?.name || '' } : null);
-  window.GaiaMyReadings = { mount, render, reveal, latest, status: () => (lastStatus ? { linked: Boolean(lastStatus.linked), new_reading: Boolean(lastStatus.new_reading), latest_scanned_at: lastStatus.latest_scanned_at || null, code_active: Boolean(lastStatus.code_active) } : {}) };
+  window.GaiaMyReadings = { mount, render, reveal, latest, ageOf, status: () => (lastStatus ? { linked: Boolean(lastStatus.linked), new_reading: Boolean(lastStatus.new_reading), latest_scanned_at: lastStatus.latest_scanned_at || null, code_active: Boolean(lastStatus.code_active) } : {}) };
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', mount); else mount();
 })();

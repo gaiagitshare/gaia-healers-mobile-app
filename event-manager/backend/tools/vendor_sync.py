@@ -8,8 +8,14 @@ What the sheet decides (per company, matched by name):
   stage (from the section heading), booth (the "Booth #" column), tables,
   contact name/email/phone, website, package, payment status + the status
   text, and the sheet's notes/speaking/video columns.
+What the sheet never turns ON:
+  whether a stand is in the attendee directory, whether it may scan leads.
+  Both are the organiser's grant. The sheet does turn them OFF, and only off:
+  a stand that is no longer confirmed AND paid (or comp) loses its badge
+  scanner, and one that is no longer confirmed leaves the directory -- a
+  vendor who dropped out must not keep scanning attendees or be listed in the
+  hall (Prestige Wellness, 5 Oct: "not attending", scanner still on).
 What the sheet never touches:
-  whether a stand is in the attendee directory, whether it may scan leads,
   its description, logo, photos, products, public contact details, tokens,
   and anything the exhibitor set up themselves. A sheet cell left blank never
   blanks a value here. A company in the Event Manager that the sheet no
@@ -30,7 +36,8 @@ HERE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 _DBURL = os.environ.get("DATABASE_URL", "")
 DB = (_DBURL.split("sqlite:///", 1)[1] if _DBURL.startswith("sqlite:///")
       else os.path.join(HERE, "event.db"))
-DATA = os.path.join(HERE, "data")
+# VENDOR_SYNC_DATA lets a test keep its log and report out of the real ones.
+DATA = os.environ.get("VENDOR_SYNC_DATA") or os.path.join(HERE, "data")
 LOG = os.path.join(DATA, "vendor-sync.log")
 LATEST = os.path.join(DATA, "vendor-sync-latest.md")
 EVENT = int(os.environ.get("VENDOR_SHEET_EVENT", "1"))
@@ -83,6 +90,22 @@ def desired(rec):
     return d
 
 
+SETTLED = ("paid", "comp")
+
+
+def switch_offs(r, diff):
+    """What this stand must lose, given its state after the sheet's changes.
+    Off only: nothing here ever grants a scanner or a listing."""
+    stage = diff.get("stage", r["stage"])
+    pay = diff.get("payment_status", r["payment_status"])
+    off = {}
+    if r["can_scan_leads"] and not (stage == "confirmed" and pay in SETTLED):
+        off["can_scan_leads"] = 0
+    if r["is_published"] and stage != "confirmed":
+        off["is_published"] = 0
+    return off
+
+
 def same(field, a, b):
     a = "" if a is None else str(a).strip(); b = "" if b is None else str(b).strip()
     if field == "contact_phone": return re.sub(r"\D", "", a) == re.sub(r"\D", "", b)
@@ -107,7 +130,7 @@ def main():
         if col not in cols: db.execute("ALTER TABLE exhibitors ADD COLUMN %s %s" % (col, ddl))
     rows = db.execute("SELECT * FROM exhibitors WHERE event_id=?", (EVENT,)).fetchall()
     by_name = {vs.norm_name(r["company_name"]): r for r in rows}
-    seen, changes, creates, report = set(), [], [], []
+    seen, changes, creates, report, offs = set(), [], [], [], []
 
     for rec in sheet:
         key = vs.norm_name(rec["company"]); seen.add(key)
@@ -129,12 +152,15 @@ def main():
             diff["payment_note"] = ""
         if diff:
             changes.append((r, rec, diff))
+        off = switch_offs(r, diff)
+        if off:
+            offs.append((r, diff, off))
 
     gone = [r for r in rows if vs.norm_name(r["company_name"]) not in seen]
 
     lines = ["# Exhibitor sheet sync — %s (%s)" % (started.strftime("%Y-%m-%d %H:%M UTC"), "APPLIED" if APPLY else "dry run"), ""]
-    lines.append("Sheet rows: %d · matched: %d · to create: %d · to update: %d · in Event Manager but not in sheet: %d" % (
-        len(sheet), len(sheet) - len(creates), len(creates), len(changes), len(gone)))
+    lines.append("Sheet rows: %d · matched: %d · to create: %d · to update: %d · switched off: %d · in Event Manager but not in sheet: %d" % (
+        len(sheet), len(sheet) - len(creates), len(creates), len(changes), len(offs), len(gone)))
     lines.append("")
     if creates:
         lines.append("## New in the sheet → created (unpublished, no lead scanning)")
@@ -147,6 +173,13 @@ def main():
             lines.append("- **%s** (id %d)" % (r["company_name"], r["id"]))
             for f, v in diff.items():
                 lines.append("  - %s: `%s` → `%s`" % (f, r[f] if r[f] not in (None, "") else "—", v))
+        lines.append("")
+    if offs:
+        lines.append("## Switched OFF — no longer confirmed and settled")
+        for r, diff, off in offs:
+            why = "%s / %s" % (diff.get("stage", r["stage"]), diff.get("payment_status", r["payment_status"]))
+            what = " and ".join({"can_scan_leads": "badge scanner off", "is_published": "removed from the directory"}[k] for k in off)
+            lines.append("- **%s** (id %d, now %s): %s" % (r["company_name"], r["id"], why, what))
         lines.append("")
     if gone:
         lines.append("## In the Event Manager but not in the sheet (left untouched)")
@@ -175,6 +208,13 @@ def main():
                 db.execute("UPDATE exhibitors SET %s WHERE id=?" % ", ".join("%s=?" % k for k in sets), list(sets.values()) + [r["id"]])
                 log.write(json.dumps({"at": now, "op": "update", "id": r["id"], "company": r["company_name"],
                                       "before": {f: r[f] for f in diff}, "after": diff}, default=str) + "\n")
+            for r, diff, off in offs:
+                db.execute("UPDATE exhibitors SET %s WHERE id=?" % ", ".join("%s=?" % k for k in off), list(off.values()) + [r["id"]])
+                log.write(json.dumps({"at": now, "op": "switch_off", "id": r["id"], "company": r["company_name"],
+                                      "before": {f: r[f] for f in off}, "after": off,
+                                      "because": {"stage": diff.get("stage", r["stage"]),
+                                                  "payment_status": diff.get("payment_status", r["payment_status"])}},
+                                     default=str) + "\n")
             for rec in sheet:   # a clean row still gets its sync stamp
                 r = by_name.get(vs.norm_name(rec["company"]))
                 if r is not None: db.execute("UPDATE exhibitors SET sheet_synced_at=? WHERE id=?", (now, r["id"]))

@@ -83,7 +83,7 @@
     head.querySelector('.g-prac-link')?.remove();
     head.querySelector('[data-prac-disconnect-error]')?.remove();
     // the rest of the app (the avatar) learns the state the same way, once per start
-    document.dispatchEvent(new CustomEvent('gaia:practitioner-state', { detail: { state: status?.state || 'not_connected', available: status?.available !== false, practitioner_name: status?.practitioner_name || '' } }));
+    document.dispatchEvent(new CustomEvent('gaia:practitioner-state', { detail: { state: status?.state || 'not_connected', available: status?.available !== false, isPractitioner: Boolean(status?.isPractitioner), practitioner_name: status?.practitioner_name || '' } }));
     if (status?.state !== 'connected') return;
     // The link is managed where the account is: who you are connected as, and the way out.
     head.insertAdjacentHTML('beforeend', ` <span class="g-prac-link"><span class="g-prac-badge">Practitioner${status.practitioner_name ? ' · ' + esc(status.practitioner_name) : ''}</span>${status.practitioner_email ? `<span class="g-prac-link__as">connected as ${esc(status.practitioner_email)}</span>` : ''}<button type="button" class="g-prac-link__x" data-prac-disconnect>Disconnect</button></span>`);

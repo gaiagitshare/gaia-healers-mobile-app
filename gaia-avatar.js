@@ -519,6 +519,6 @@
     load(); build(); home(); gestures(); listen(); watchAssist(); startIdle(); meet();
     setTimeout(home, 600);
   }
-  window.GaiaAvatar = { pointAt, unpoint, showBubble, hideBubble, setState, bubbleFor, runTour, home, moment, glanceAt, prefs: () => ({ ...prefs }), idle: { anims: IDLE_ANIMS.map((a) => a.name), eligible: idleEligible, play: (name) => { const a = IDLE_ANIMS.find((x) => x.name === name); if (a) { lastTouch = 0; runIdleAnim(a); } } } };
+  window.GaiaAvatar = { openChat, pointAt, unpoint, showBubble, hideBubble, setState, bubbleFor, runTour, home, moment, glanceAt, prefs: () => ({ ...prefs }), idle: { anims: IDLE_ANIMS.map((a) => a.name), eligible: idleEligible, play: (name) => { const a = IDLE_ANIMS.find((x) => x.name === name); if (a) { lastTouch = 0; runIdleAnim(a); } } } };
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', mount); else mount();
 })();

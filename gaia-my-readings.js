@@ -551,6 +551,8 @@
     if (pendingReveal) { pendingReveal = false; window.setTimeout(() => reveal(root), 120); }
   }
 
-  window.GaiaMyReadings = { mount, render, reveal, status: () => (lastStatus ? { linked: Boolean(lastStatus.linked), new_reading: Boolean(lastStatus.new_reading), latest_scanned_at: lastStatus.latest_scanned_at || null, code_active: Boolean(lastStatus.code_active) } : {}) };
+  // For Home: the latest numbers once they are loaded (nothing extra is fetched).
+  const latest = () => (lastReadings && lastReadings.latest ? { latest: lastReadings.latest, summary: lastReadings.summary || null, average: lastReadings.average_recent || null, practitioner: lastReadings.practitioner?.name || '' } : null);
+  window.GaiaMyReadings = { mount, render, reveal, latest, status: () => (lastStatus ? { linked: Boolean(lastStatus.linked), new_reading: Boolean(lastStatus.new_reading), latest_scanned_at: lastStatus.latest_scanned_at || null, code_active: Boolean(lastStatus.code_active) } : {}) };
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', mount); else mount();
 })();

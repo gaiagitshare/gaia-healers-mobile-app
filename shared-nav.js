@@ -20,6 +20,7 @@
   // bookmarks resolve to a screen with the correct tab active. Canonical homes
   // are built stage by stage; until then the child screens still render in place.
   const VIEW_TO_TAB = {
+    today: 'today',
     daily: 'daily',
     wellness: 'wellness', biowell: 'wellness', chakras: 'wellness',
     academy: 'academy',
@@ -53,18 +54,43 @@
     else link.removeAttribute('aria-current');
   }
 
+  // One nav, three shapes (gaia-shell.css): a bottom bar on phones, a compact
+  // rail on tablets, a sidebar with labels on desktop. The brand and the Home
+  // and Practice labels only show where there is room for them.
   function buildTabbar(inner, active) {
     const left = tabs.slice(0, 3);
     const right = tabs.slice(3);
     inner.innerHTML = `
+      <a class="gaia-rail__brand" href="home.html?view=today" aria-label="Gaia Healers home">
+        <img src="assets/gaia-mark.svg" alt="" aria-hidden="true" width="32" height="32" />
+        <span>Gaia Healers</span>
+      </a>
       <div class="gaia-tabbar__group gaia-tabbar__group--left">${left.map((t) => tabLink(t, active === t.id)).join('')}</div>
-      <a class="gaia-tabbar__assist gaia-tabbar__home" href="home.html?view=today" data-app-nav="today" aria-label="Home">
+      <a class="gaia-tabbar__assist gaia-tabbar__home${active === 'today' ? ' is-active' : ''}" href="home.html?view=today" data-app-nav="today" aria-label="Home"${active === 'today' ? ' aria-current="page"' : ''}>
         <span class="gaia-tabbar__assist-pulse" aria-hidden="true"></span>
         <img class="gaia-tabbar__assist-mark" src="assets/gaia-mark.svg" alt="" aria-hidden="true" />
-        <span class="sr-only">Home</span>
+        <i class="ph ph-house gaia-tabbar__icon gaia-rail__home-icon" aria-hidden="true"></i>
+        <span class="gaia-rail__home-label" aria-hidden="true">Home</span>
       </a>
-      <div class="gaia-tabbar__group gaia-tabbar__group--right">${right.map((t) => tabLink(t, active === t.id)).join('')}</div>`;
+      <div class="gaia-tabbar__group gaia-tabbar__group--right">${right.map((t) => tabLink(t, active === t.id)).join('')}</div>
+      <button type="button" class="gaia-tabbar__link gaia-rail__practice" data-rail-practice hidden>
+        <i class="ph ph-stethoscope gaia-tabbar__icon" aria-hidden="true"></i>
+        <span class="gaia-tabbar__label">Practice</span>
+      </button>`;
   }
+
+  // Practice is a section of You; practitioners get a direct way in. Shown
+  // from the same state the Practice tab uses (gaia-practitioner.js).
+  document.addEventListener('gaia:practitioner-state', (e) => {
+    const d = e.detail || {};
+    const show = Boolean(d.isPractitioner || ['connected', 'needs_reconnect', 'unverified', 'not_practitioner'].includes(d.state));
+    document.querySelectorAll('[data-rail-practice]').forEach((b) => { b.hidden = !show; });
+  });
+  document.addEventListener('click', (e) => {
+    if (!e.target.closest('[data-rail-practice]')) return;
+    window.GaiaAppShell?.go?.('profile');
+    setTimeout(() => window.dispatchEvent(new CustomEvent('gaia:open-client', { detail: {} })), 60);
+  });
 
   function render() {
     const active = activeTabId();
@@ -78,7 +104,7 @@
       return;
     }
 
-    inner.querySelectorAll('.gaia-tabbar__link').forEach((link) => {
+    inner.querySelectorAll('.gaia-tabbar__link[data-app-nav], .gaia-tabbar__home').forEach((link) => {
       setLinkActive(link, link.dataset.appNav === active);
     });
   }

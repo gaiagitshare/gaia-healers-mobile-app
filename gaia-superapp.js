@@ -844,7 +844,7 @@
     const firstName = String(p.name || '').trim().split(/\s+/)[0];
     const hour = new Date().getHours();
     const dayGreeting = hour < 12 ? 'Good morning' : hour < 18 ? 'Good afternoon' : 'Good evening';
-    const greeting = authed ? ('Welcome back' + (firstName ? ', ' + esc(firstName) : '')) : dayGreeting;
+    const greeting = authed ? (dayGreeting + (firstName ? ', ' + esc(firstName) : '')) : dayGreeting;
     const services = serviceLink('academy', 'graduation-cap', 'Academy', stateMeta('Courses and certifications', courseGrants().length, 'course', 'courses'))
       + serviceLink('community', 'users-three', 'Community', stateMeta('Boards and circles', communities().length, 'community', 'communities'))
       + serviceLink('events', 'calendar-dots', 'Events', eventData()?.name ? 'Upcoming gathering available' : 'Gatherings and live sessions')
@@ -906,7 +906,9 @@
     root.innerHTML = '<div class="g-super-home g-super-home--v2 g-home2">'
       + '<div id="home-announcements"></div>'
       + '<header class="g-home2__greet"><h1>' + greeting + '</h1><p>' + esc(homeLine()) + '</p></header>'
-      + '<div class="g-home2__top">' + nextStep() + eventCompact() + '</div>'
+      // How am I doing -> what next -> what is happening for me.
+      + stateHero()
+      + forYou()
       + '<section class="g-home2__gaia" aria-label="Your Gaia"><p class="g-super-kicker">Your Gaia</p><div class="g-home2__rows">' + rows + '</div></section>'
       + bookActions()
       + membershipStrip()
@@ -915,6 +917,55 @@
       + '</div>';
     bind(root);
   }
+  /**
+   * The first thing on a member's Home: their own state. With a practitioner
+   * sharing readings, the latest energy and stress; otherwise today's check.
+   */
+  function stateHero() {
+    const st = (window.GaiaMyReadings && window.GaiaMyReadings.status && window.GaiaMyReadings.status()) || {};
+    const r = st.linked && window.GaiaMyReadings.latest ? window.GaiaMyReadings.latest() : null;
+    if (st.linked && r && r.latest) {
+      const l = r.latest;
+      const fmt = (v, d) => (typeof v === 'number' ? v.toFixed(d) : '—');
+      const day = l.scanned_at ? new Date(/^\d{4}-\d{2}-\d{2}$/.test(l.scanned_at) ? l.scanned_at + 'T12:00:00' : l.scanned_at).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) : '';
+      return '<section class="g-home2__state g-home2__state--reading" aria-label="Your latest reading">'
+        + '<p class="g-super-kicker">' + (st.new_reading ? 'New reading' : 'Your latest reading') + (day ? ' · ' + esc(day) : '') + '</p>'
+        + '<div class="g-home2__nums">'
+        + '<div class="g-home2__num"><strong>' + esc(fmt(l.energy, 0)) + '</strong><span>Energy</span></div>'
+        + '<div class="g-home2__num"><strong>' + esc(fmt(l.stress, 2)) + '</strong><span>Stress</span></div></div>'
+        + (r.summary && r.summary.headline ? '<p class="g-home2__state-line">' + esc(r.summary.headline) + '</p>' : '')
+        + '<div class="g-home2__actions"><a class="g-btn g-btn--primary g-btn--sm" href="home.html?view=profile&section=readings" data-open-readings>' + icon('pulse') + ' View reading</a>'
+        + (window.GaiaAvatar && window.GaiaAvatar.openChat ? '<button type="button" class="g-btn g-btn--secondary g-btn--sm" data-ask-gaia="What changed in my latest reading?">' + icon('sparkle') + ' Ask Gaia what changed</button>' : '')
+        + '</div></section>';
+    }
+    if (st.linked) {
+      return '<section class="g-home2__state" aria-label="Your latest reading" aria-busy="true"><p class="g-super-kicker">Your latest reading</p>'
+        + '<p class="g-home2__state-line">Fetching your latest reading from Bio-Well…</p></section>';
+    }
+    return '<section class="g-home2__state"><p class="g-super-kicker">Today</p><h2>Your daily energy check</h2>'
+      + '<p class="g-home2__state-line">Which centre today asks for, a short practice, and a streak that saves.</p>'
+      + '<div class="g-home2__actions"><a class="g-btn g-btn--primary g-btn--sm" href="home.html?view=daily" data-app-nav="daily">' + icon('sun') + ' Start today’s check</a></div></section>';
+  }
+  /** What is happening for me: a course, a booking, the next gathering — smaller than my own state. */
+  function forYou() {
+    const items = [];
+    const course = courseGrants()[0];
+    const appt = upcomingAppointments()[0];
+    if (course && course.openUrl) items.push('<button type="button" class="g-home2__tile" data-super-course="' + esc(course.openUrl) + '" data-super-course-title="' + esc(course.title || course.name || 'Gaia Healers Academy') + '">'
+      + '<span class="g-home2__tile-icon">' + icon('book-open') + '</span><span class="g-home2__tile-copy"><small>Continue learning</small><strong>' + esc(course.title || course.name || 'Your course') + '</strong></span></button>');
+    if (appt) items.push('<a class="g-home2__tile" href="home.html?view=bookings"><span class="g-home2__tile-icon">' + icon('calendar-check') + '</span><span class="g-home2__tile-copy"><small>Coming up</small><strong>' + esc(appt.title || 'Your appointment') + '</strong><em>' + esc(appointmentWhen(appt)) + '</em></span></a>');
+    const ev = eventCompact();
+    if (!items.length && !ev) return '';
+    return '<section class="g-home2__for" aria-label="For you"><p class="g-super-kicker">For you</p><div class="g-home2__for-grid">' + items.join('') + ev + '</div></section>';
+  }
+  window.addEventListener('gaia:readings-loaded', () => { if (memberState().authed && document.querySelector('.g-home2')) renderHome(); });
+  document.addEventListener('click', (e) => {
+    const ask = e.target.closest('[data-ask-gaia]');
+    if (ask) { window.GaiaAvatar?.openChat?.(ask.getAttribute('data-ask-gaia')); return; }
+    const open = e.target.closest('[data-open-readings]');
+    if (open) { e.preventDefault(); window.GaiaAppShell?.go?.('profile'); setTimeout(() => window.dispatchEvent(new CustomEvent('gaia:open-readings')), 80); }
+  });
+
   /** One short line under the greeting, only when there is something to say. */
   function homeLine() {
     const n = upcomingAppointments().length, c = courseGrants().length;

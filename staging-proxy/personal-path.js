@@ -121,7 +121,7 @@ const RULES = {
     action: { kind: 'onboarding', label: 'Continue setup' } }] : []),
 
   'P-NEW': (s) => (s.readings?.linked && s.readings.new_reading && s.readings.latest_scanned_at ? [{ key: `P-NEW:${s.readings.latest_scanned_at}`, priority: 80, stage: 'start_now',
-    title: 'Review your latest reading', reason: 'A new Bio-Well reading has been shared with you.',
+    title: 'Open your latest reading', reason: 'A new Bio-Well reading has been shared with you.',
     action: { kind: 'readings', label: 'Open reading' } }] : []),
 
   'P-SESSION': (s, now) => {

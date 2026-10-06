@@ -35,7 +35,7 @@ test('readings feature off for this member: nothing about readings', () => {
 test('new reading: review it, and never also "old"', () => {
   const p = run(linked({ new_reading: true, latest_scanned_at: day(-90).slice(0, 10) }));
   assert.deepEqual(keys(p), ['P-NEW'], 'a reading that just arrived is not also called old');
-  assert.equal(p.items[0].title, 'Review your latest reading');
+  assert.equal(p.items[0].title, 'Open your latest reading');
   assert.doesNotMatch(JSON.stringify(p.items[0]), /Gaia (has )?read|analy[sz]ed/i, 'never implies Gaia read it');
 });
 
@@ -123,7 +123,10 @@ test('the repo catalogue: V1 rules approved by the owner brief; Gaia resources p
   const rules = real.entries.filter((e) => e.kind === 'rule');
   assert.deepEqual(rules.map((e) => e.id).sort(), [...RULE_IDS].sort());
   assert.ok(rules.every(servable));
-  assert.ok(real.entries.filter((e) => e.kind === 'resource').every((e) => !servable(e)), 'no resource is approved by default');
+  // Owner, 6 Oct 2026: R-BREATH approved (after its claim was removed); the other four stay pending.
+  assert.deepEqual(real.entries.filter((e) => e.kind === 'resource' && servable(e)).map((e) => e.id), ['R-BREATH']);
+  assert.equal(real.entries.find((e) => e.id === 'R-BREATH').description, 'Take a few minutes for slow, paced breathing.');
+  for (const id of ['R-ENERGY-CHECK', 'R-SCAN', 'R-COURSE-BW-ORIENTATION', 'R-COURSE-CHAKRA-9WK']) assert.equal(real.entries.find((e) => e.id === id).status, 'pending', id);
   assert.ok(!real.entries.some((e) => e.resource?.kind === 'product' || e.kind === 'product'), 'no products in V1');
 });
 
@@ -156,7 +159,7 @@ test('Gaia sees only public path fields: never the note, a date of a scan, ids o
   for (const bad of ['SENTINEL_NOTE', 'PRAC-SENTINEL', 'MEMBER-SENTINEL', '2026-10-03', 'Private session title', 'Sam Rivera']) assert.ok(!view.includes(bad), `${bad} reached Gaia: ${view}`);
   assert.match(view, /Recommended by your practitioner/);
   assert.match(view, /Your practitioner recommended this as part of your current wellness plan\./, 'the approved member-safe reason may be explained');
-  assert.match(view, /\[P-NEW\] "Review your latest reading"/);
+  assert.match(view, /\[P-NEW\] "Open your latest reading"/);
 });
 
 test('completion strategy is fixed per kind; only self-guided steps can be completed by the member', () => {

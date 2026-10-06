@@ -53,3 +53,9 @@ test('Gaia explains only approved reasons and never reconstructs them', () => {
   assert.match(avatar, /Your practitioner recommended this after reviewing your information\. I can open it for you, or help you contact them for more detail\./);
   for (const k of ['pathwhy', 'pathdone', 'pathafter', 'pathfree']) assert.match(avatar, new RegExp(k + ': \\{ label:'));
 });
+
+test('the breathing practice makes no physiological claim (owner, 6 Oct 2026)', () => {
+  const breath = read('gaia-breath.js');
+  assert.doesNotMatch(breath, /heart rhythm|nervous system/i);
+  assert.match(breath, /Take a few minutes for slow, paced breathing\./);
+});

@@ -22,7 +22,7 @@ Screenshots are in `docs/ui-proof/personal-path/`, at 390, 768 and 1440 px:
 | Rule | Trigger (no reading values) | Item | Action | Completion |
 |---|---|---|---|---|
 | P-ONBOARD | Required onboarding not complete | Finish your Gaia setup | Continue setup | Server (the gate) |
-| P-NEW | A shared reading is newer than the last one opened | Review your latest reading | Open reading | Server: opening the card marks it seen |
+| P-NEW | A shared reading is newer than the last one opened | Open your latest reading | Open reading | Server: opening the card marks it seen |
 | P-SHARE | Readings are on for them, but none is shared | Connect your Bio-Well reading | How sharing works | Server: link confirmed |
 | P-SESSION | A **confirmed** booking (GHL status `confirmed`) within 7 days | Prepare for your upcoming session | View session | Server: the time passes |
 | P-COURSE | An accessible course with saved progress, not finished | Continue {course} | Resume | Server: 100% progress. Opening is not completion |
@@ -144,7 +144,7 @@ any lock label. For example:
 PERSONAL PATH (for "what next / my plan": item 1 is the next step; …):
 1. [R:rec_…] "Coherence breathing practice" (start_now, Recommended by your practitioner;
    reason: Your practitioner recommended this as part of your current wellness plan.; action: Start practice)
-2. [P-NEW] "Review your latest reading" (start_now, Suggested by Gaia; action: Open reading) …
+2. [P-NEW] "Open your latest reading" (start_now, Suggested by Gaia; action: Open reading) …
 ```
 
 What she never gets:
@@ -347,7 +347,7 @@ member completion for any other kind (409).
 |---|---|---|---|---|
 | tool / practice / view | breathing practice, energy check | `member` | the member says so | **yes** |
 | course | Continue a course, a recommended course | `course_progress` | academy progress reaches 100% (server) | no; opening is not completion |
-| readings | Review your latest reading | `reading_seen` | the readings card is opened and the server records "seen" | no; never implies Gaia understood the values |
+| readings | Open your latest reading | `reading_seen` | the readings card is opened and the server records "seen" | no; never implies Gaia understood the values |
 | share_readings | Connect your Bio-Well reading | `link_confirmed` | the practitioner confirms the link | no |
 | bookings | Prepare for your upcoming session | `appointment_status` | the confirmed appointment's time passes (GHL) | no |
 | service | a practitioner's own service | `practitioner_booking` | **not auto-completed in V1**: their bookings live on the partner platform and are not linked to the recommended service, so there is no authoritative signal. It stays until the practitioner revokes it or the member chooses "Not now". | no; [View service] [Book with …] instead |
@@ -483,7 +483,7 @@ Example:
 ```
 1. [R:rec_…] "Coherence breathing practice" (start_now, Recommended by your practitioner;
    reason: Your practitioner recommended this as part of your current wellness plan.; action: Start practice)
-2. [P-NEW] "Review your latest reading" (start_now, Suggested by Gaia; action: Open reading)
+2. [P-NEW] "Open your latest reading" (start_now, Suggested by Gaia; action: Open reading)
 3. [P-SESSION] "Prepare for your upcoming session" (coming_up, Suggested by Gaia; action: View session)
 ```
 
@@ -550,3 +550,20 @@ Example:
 | Member readings, trends, triage flags (partner member access) | **shown** in You → My readings (authorised display) | **never sent.** The context has only "readings are shared" and "a new one is waiting". The page sends only the screen name and an item id with each message. |
 
 `GAIA_SCAN_NARRATION` stays off. `GAIA_PARTNER_AI_RECOMMENDATIONS` stays off.
+
+## G. Final cleanup (6 Oct 2026, owner)
+- **R-BREATH:** description is now "Take a few minutes for slow, paced
+  breathing." The unsourced heart-rhythm and nervous-system claims were
+  removed from `gaia-breath.js` (intro and end-of-session copy). It is
+  **approved at version 2** (reviewer: owner; the instruction is recorded in
+  the audit log).
+- **Still pending:** R-ENERGY-CHECK, R-SCAN, R-COURSE-BW-ORIENTATION and
+  R-COURSE-CHAKRA-9WK.
+- **The reading item** is now "Open your latest reading" (P-NEW, version 2,
+  re-approved). Opening completes the navigation step only; nothing implies
+  the member, or Gaia, understood or interpreted it.
+- **Unchanged:** `confirmed`-only appointments. `GAIA_PARTNER_AI_RECOMMENDATIONS`
+  and `GAIA_SCAN_NARRATION` stay off.
+- **Partner AI recommendations** are not integrated until their approved-only
+  member tool exists **and** the partner confirms its Anthropic BAA/compliant
+  production arrangement.

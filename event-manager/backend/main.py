@@ -3979,7 +3979,11 @@ def get_dashboard_stats(
                 "name": f"{attendee.first_name} {attendee.last_name}".strip(),
                 "email": attendee.email,
                 "company": attendee.company,
-                "pass_type": (attendee.custom_data or {}).get("pass_type") or (attendee.custom_data or {}).get("Pass Type"),
+                # The pass they hold. The form field this used to read is only
+                # filled by the old website import, so every GHL buyer read
+                # "No access type" on the dashboard.
+                "pass_type": ((attendee.custom_data or {}).get("pass_type") or (attendee.custom_data or {}).get("Pass Type")
+                              or _effective_access(db, attendee).get("effective_label")),
                 "paid_member": bool((attendee.custom_data or {}).get("paid_member")),
                 "created_at": attendee.created_at,
             }
@@ -7310,8 +7314,16 @@ def _review_queue(db, event_id: int, with_money: bool) -> dict:
             ref = "confirm-%s" % (l.get("order_id") or a.id)
             if ref in done:
                 continue
+            # Part of the question may already be answered by the money: if the
+            # ticket they held before has since been refunded in GHL, say so.
+            _earlier_refunded = any(
+                e.get("status") == "refunded" and not e.get("addon_code") and e.get("ticket_type_id")
+                and e.get("order_id") != l.get("order_id")
+                for e in ((a.custom_data or {}).get("entitlements") or []))
             add("confirm_purchase", "Call to confirm this purchase",
-                l.get("reason") or "Confirm with the buyer what they meant to buy.",
+                (l.get("reason") or "Confirm with the buyer what they meant to buy.")
+                + (" Their earlier ticket has since been refunded in GHL, so only ask who the new one is for."
+                   if _earlier_refunded else ""),
                 severity="warning", attendee=a, ref=ref, amount=l.get("amount"),
                 when=l.get("ts"))
 

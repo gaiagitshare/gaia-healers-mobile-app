@@ -78,7 +78,9 @@ export function dueForCheck(store, emailByContact, state, { now = new Date(), re
     if (!access.courses.length && !access.communities.length) continue;
     if (!emailByContact.get(cid)) continue;
     const seen = state.checked[cid];
-    if (seen && Date.parse(seen.at || '') > cutoff) continue;
+    // A contact GHL no longer has, with no survivor found yet, is rechecked on
+    // every pass: there are few of them, and how survivors are found can improve.
+    if (seen && seen.status !== 'gone' && Date.parse(seen.at || '') > cutoff) continue;
     out.push(cid);
   }
   // Least recently checked first, so a capped run always makes progress.

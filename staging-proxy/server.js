@@ -2989,13 +2989,27 @@ async function ghlLiveContactsByEmail(email) {
   const cfg = ghlConfig();
   const e = String(email || '').trim().toLowerCase();
   if (!cfg.enabled || !e) return [];
+  // A GHL merge can keep a DIFFERENT main email on the survivor and file the
+  // old one under additionalEmails (25 Oct 2026, the first real case), which
+  // the email filter does not search. So search by free text, then keep only
+  // contacts that carry the address EXACTLY -- as main email or as an
+  // additional one, read from the contact itself. Fuzzy hits are discarded.
   const r = await ghlPost('/contacts/search', {
-    page: 1, pageLimit: 20, locationId: cfg.locationId,
-    filters: [{ operator: 'eq', field: 'email', value: e }],
+    page: 1, pageLimit: 20, locationId: cfg.locationId, query: e,
   }, '2021-07-28', 10_000);
   if (!r) throw new Error('contact search failed');
   const list = r.contacts || (r.data && r.data.contacts) || r.data || r.results || [];
-  return (Array.isArray(list) ? list : []).filter((c) => String(c && c.email || '').trim().toLowerCase() === e);
+  const out = [];
+  for (const hit of (Array.isArray(list) ? list : []).slice(0, 5)) {
+    if (!hit || !hit.id) continue;
+    const full = await ghlContactStatus(hit.id);
+    if (full.status !== 200 || !full.contact) continue;
+    const c = full.contact;
+    const extra = (Array.isArray(c.additionalEmails) ? c.additionalEmails : [])
+      .map((x) => String((x && typeof x === 'object' ? x.email : x) || '').trim().toLowerCase());
+    if (String(c.email || '').trim().toLowerCase() === e || extra.includes(e)) out.push({ ...c, id: c.id || hit.id });
+  }
+  return out;
 }
 
 const CONTACT_MERGES_FILE = path.join(path.dirname(MEMBER_ENTITLEMENTS_FILE), 'contact-merges.json');

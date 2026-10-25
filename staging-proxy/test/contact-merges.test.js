@@ -81,7 +81,7 @@ test('scan: a checked contact is not asked again for a week, and runs are capped
   assert.equal(Object.keys(state.checked).length <= 2, true, 'capped at maxChecks');
   await scanForMerges(store, emails, state, ghl, { pauseMs: 0, now });
   const due = dueForCheck(store, emails, state, { now: new Date('2026-10-26T12:00:00Z') });
-  assert.deepEqual(due, ['FLAKY'], 'only the contact the outage left unanswered is still due');
+  assert.deepEqual(due.sort(), ['FLAKY', 'TWIN'], 'the outage and the gone-without-survivor contact stay due; the rest wait a week');
   const later = dueForCheck(store, emails, state, { now: new Date('2026-11-02T13:00:00Z') });
   assert.ok(later.includes('LIVE'), 'rechecked after seven days');
 });

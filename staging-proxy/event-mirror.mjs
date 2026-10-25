@@ -62,13 +62,17 @@ const em = async (path, body) => {
   try { return { status: r.status, j: await r.json() }; } catch (e) { return { status: r.status, j: null }; }
 };
 
+function isReversed(t) {
+  return ['refunded', 'partially_refunded'].includes(String((t && t.status) || '').toLowerCase());
+}
+
 async function pageAll(url, key) {
   const out = []; let off = 0;
   for (;;) {
     const j = await ghl(`${url}&limit=100&offset=${off}`);
     const rows = j[key] || j.data || [];
     out.push(...rows);
-    if (rows.length < 100 || off > 3000) break;
+    if (rows.length < 100 || off > 20000) break;   // ~1,800 transactions in Oct 2026; was 3,000 (a silent ceiling)
     off += 100;
   }
   return out;
@@ -219,7 +223,11 @@ const txns = await pageAll(`/payments/transactions?altId=${LOC}&altType=location
 // PayPal checkout still sitting in pending are exactly what the Payments screen
 // exists to show, and neither of them appears in the orders list above.
 {
-  const window = txns.filter((t) => String(t.createdAt || '') >= since);
+  // A refund changes an OLD transaction: GHL keeps its original createdAt, so
+  // a 14-day window by purchase date never sees a refund issued later. Reversed
+  // transactions are therefore always included, whatever their age (there are
+  // few, and the sync is idempotent by transaction id).
+  const window = txns.filter((t) => String(t.createdAt || '') >= since || isReversed(t));
   const rows = [];
   for (const t of window) {
     let order = {};
@@ -242,8 +250,11 @@ const txns = await pageAll(`/payments/transactions?altId=${LOC}&altType=location
   }
 }
 
-const reversed = txns.filter((t) => String(t.createdAt || '') >= since
-  && ['refunded', 'partially_refunded'].includes(String(t.status || '').toLowerCase()));
+// Every refund GHL holds, not only refunds of purchases made inside the window:
+// on 25 Oct 2026 two $99 tickets refunded weeks after purchase still read "paid"
+// here, because this filtered on the purchase date. refund-ticket is keyed on the
+// money reference and is a no-op for one already recorded.
+const reversed = txns.filter(isReversed);
 for (const t of reversed) {
   stats.refunds++;
   if (DRY) continue;

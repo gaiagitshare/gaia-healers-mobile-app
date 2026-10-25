@@ -164,6 +164,17 @@ export function detect(health, extra = {}) {
     });
   }
 
+  // GHL merged two contacts and the access stayed on the id it deleted: the
+  // person signs in on the surviving contact and their courses are missing.
+  const cm = extra.contactMerges;
+  if (cm && cm.pending > 0) {
+    add({ key: 'membership:merged-contact', severity: 'warning', subsystem: 'Course access',
+      title: `${cm.pending} merged contact${cm.pending === 1 ? '' : 's'} still holding access (${cm.courses} course${cm.courses === 1 ? '' : 's'})`,
+      why: 'GHL merged these people\'s contacts and deleted one id; their courses stayed on the deleted one, so they sign in and do not see them. Admin -> Membership -> Merged contacts moves the access in one tap.',
+      evidence: `oldest detected ${cm.oldest || 'unknown'}`,
+      affected: null });
+  }
+
   // ── Member results (Gaia Practitioners link) ─────────────────────────────
   // Members stopping sharing faster than they start, in one day, is the
   // early sign of a partner-side problem (their revoke firing by mistake, or

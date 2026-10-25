@@ -691,8 +691,12 @@
       + '<div id="mAudit" class="crslist"><div class="faint" style="padding:10px 12px">Loading…</div></div>'
       + '<div class="sec-label" style="margin-top:22px">' + svg('member')
       + 'Unresolved <span class="faint">(arrived, but could not be matched to a person or product)</span></div>'
-      + '<div id="mUnres" class="crslist"><div class="faint" style="padding:10px 12px">Loading…</div></div>';
+      + '<div id="mUnres" class="crslist"><div class="faint" style="padding:10px 12px">Loading…</div></div>'
+      + '<div class="sec-label" style="margin-top:22px">' + svg('member')
+      + 'Merged contacts <span class="faint">(GHL merged two contacts; their access is still on the deleted one)</span></div>'
+      + '<div id="mMerges" class="crslist"><div class="faint" style="padding:10px 12px">Loading…</div></div>';
     c.appendChild(mv);
+    loadMerges();
     api('/membership/audit').then(function (d) {
       var box = document.getElementById('mAudit'); if (!box) return;
       var rows = (d && d.entries) || [];
@@ -750,6 +754,57 @@
       });
     });
   }
+  // Access follows the person when GHL merges contacts. The scan (every 6 h,
+  // read-only against GHL) lists each one; Move copies the courses and
+  // communities to the surviving contact and audits both sides.
+  function loadMerges() {
+    var box = document.getElementById('mMerges'); if (!box) return;
+    api('/membership/merges').then(function (d) {
+      var rows = (d && d.merges) || [];
+      var sc = (d && d.scan) || {};
+      var foot = '<div class="faint" style="padding:8px 12px">Last scan ' + (sc.updatedAt ? fmtDate(sc.updatedAt) : 'not yet run')
+        + ' · ' + (sc.checked || 0) + ' contacts checked'
+        + (sc.gone_no_survivor ? ' · ' + sc.gone_no_survivor + ' gone with no single surviving contact (not moved)' : '')
+        + ' <button class="btn btn--ghost" id="mergeScan" style="margin-left:8px">Scan now</button></div>';
+      box.innerHTML = (rows.length ? rows.map(function (m) {
+        return '<div class="crsrow" style="align-items:flex-start">'
+          + '<span class="crsrow__n">' + esc(m.survivorName || m.survivorEmail || m.survivor)
+          + ' <span class="faint">' + esc(m.survivorEmail || '') + '</span><br><span class="faint">'
+          + (m.courses || []).length + ' course' + ((m.courses || []).length === 1 ? '' : 's')
+          + ((m.communities || []).length ? ', ' + m.communities.length + ' communit' + (m.communities.length === 1 ? 'y' : 'ies') : '')
+          + ' on deleted contact ' + esc(String(m.old).slice(0, 10)) + ' · '
+          + esc((m.courses || []).slice(0, 4).join(', ')) + ((m.courses || []).length > 4 ? '…' : '') + '</span></span>'
+          + '<span class="crsrow__m"><button class="btn" data-merge="' + esc(m.old) + '">Move access</button> '
+          + '<button class="btn btn--ghost" data-skip="' + esc(m.old) + '">Not the same person</button></span>'
+          + '<span class="crsrow__d">' + fmtDate(m.detectedAt) + '</span></div>';
+      }).join('') : '<div class="faint" style="padding:10px 12px">No merged contacts are holding access.</div>') + foot;
+      box.querySelectorAll('[data-merge]').forEach(function (b) {
+        b.onclick = function () {
+          b.disabled = true;
+          api('/membership/merges/apply', { method: 'POST', body: JSON.stringify({ old: b.dataset.merge }) }).then(function (r) {
+            if (r && r.ok) { toast('Moved ' + r.moved.courses + ' course(s) to the surviving contact.'); loadMerges(); }
+            else { b.disabled = false; toast('Could not move: ' + ((r && r.reason) || 'error')); }
+          });
+        };
+      });
+      box.querySelectorAll('[data-skip]').forEach(function (b) {
+        b.onclick = function () {
+          var why = window.prompt('Why is this not the same person?');
+          if (!why || why.trim().length < 3) return;
+          api('/membership/merges/dismiss', { method: 'POST', body: JSON.stringify({ old: b.dataset.skip, note: why.trim() }) }).then(function () { loadMerges(); });
+        };
+      });
+      var sb = document.getElementById('mergeScan');
+      if (sb) sb.onclick = function () {
+        sb.disabled = true; sb.textContent = 'Scanning…';
+        api('/membership/merges/scan', { method: 'POST' }).then(function (r) {
+          toast(r && r.ok ? ('Checked ' + r.stats.checked + ' contacts, found ' + r.stats.merged + ' merge(s).') : 'Scan is busy or failed; try again shortly.');
+          loadMerges();
+        });
+      };
+    }).catch(function () { box.innerHTML = '<div class="faint" style="padding:10px 12px">Could not load merged contacts.</div>'; });
+  }
+
   function listSubscribers(status, label) {
     var title = document.getElementById('mtitle'); title.style.display = ''; title.textContent = label + ' subscriptions';
     var box = document.getElementById('mrows'); box.innerHTML = '<div class="skel"></div><div class="skel" style="margin-top:8px"></div>';

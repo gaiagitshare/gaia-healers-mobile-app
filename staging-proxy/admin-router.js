@@ -20,6 +20,7 @@ import { fileURLToPath } from 'node:url';
 import * as membershipAdmin from './membership/admin-api.js';
 import * as alerts from './alerts.js';
 import { linkDayCounts, memberReadingsEnabled } from './member-link.js';
+import { loadMergeState } from './membership/contact-merges.js';
 import * as ghlAdapter from './membership/adapters/ghl-membership.js';
 import * as membershipConfig from './membership/config.js';
 
@@ -1014,7 +1015,18 @@ async function pipelineHealth(deps) {
  * component about a single service.
  */
 async function alertExtras(deps) {
-  const extra = { membershipExceptions: [], payments: null, memberLinks: null };
+  const extra = { membershipExceptions: [], payments: null, memberLinks: null, contactMerges: null };
+  // GHL merged contacts whose access still sits on the deleted id. Counted
+  // from the scan's own file -- no GHL call per sweep.
+  try {
+    if (deps.contactMergesFile) {
+      const ms = loadMergeState(deps.contactMergesFile);
+      const pending = (ms.suggestions || []).filter((x) => x.state === 'pending');
+      extra.contactMerges = { pending: pending.length,
+        courses: pending.reduce((n, x) => n + ((x.courses || []).length), 0),
+        oldest: pending.map((x) => x.detectedAt).sort()[0] || null };
+    }
+  } catch (_) { extra.contactMerges = null; }
   // Member results: today's link counts, so the sweep notices members leaving
   // faster than they arrive. Counts only; a missing store is simply null.
   try { if (memberReadingsEnabled()) extra.memberLinks = linkDayCounts(); } catch (_) { extra.memberLinks = null; }

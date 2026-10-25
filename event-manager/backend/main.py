@@ -3039,10 +3039,40 @@ def _party_members(db, attendee):
         bits = str(m["seat"]).split(" of ")
         if len(bits) == 2 and bits[1].strip().isdigit():
             paid_for = max(paid_for, int(bits[1].strip()))
+    # The evidence behind the count, so the desk can see WHY a booking holds the
+    # seats it does: when, how much, how, which transaction, and how soon after
+    # the same ticket before it. Same price minutes apart is flagged as a
+    # possible double charge -- still a seat (organiser's rule, 25 Oct 2026),
+    # but one to ask about.
+    purchases, last_by_product = [], {}
+    for pe in db.query(models.PaymentEvent).filter(
+            models.PaymentEvent.event_id == buyer.event_id,
+            models.PaymentEvent.attendee_id.in_([buyer.id] + [a.id for a in seats]),
+            models.PaymentEvent.status == "paid").order_by(models.PaymentEvent.occurred_at,
+                                                           models.PaymentEvent.id).all():
+        try:
+            _names = pe.product_names if isinstance(pe.product_names, (list, tuple)) else json.loads(pe.product_names or "[]")
+        except Exception:
+            _names = []
+        _prod = (_names[0] if _names else "") or ""
+        _prev = last_by_product.get(_prod)
+        _gap = ((pe.occurred_at - _prev.occurred_at).total_seconds() / 60.0
+                if _prev is not None and pe.occurred_at and _prev.occurred_at else None)
+        _close = bool(_gap is not None and _gap <= REPEAT_DUPLICATE_WINDOW_MIN
+                      and abs(float(pe.amount or 0) - float(_prev.amount or 0)) < 0.01)
+        purchases.append({"at": pe.occurred_at.isoformat() if pe.occurred_at else None,
+                          "amount": float(pe.amount or 0), "provider": pe.provider or "",
+                          "product": _prod[:60], "transaction": (pe.ghl_transaction_id or "")[-6:],
+                          "on_badge": pe.attendee_id,
+                          "minutes_after_same_ticket": round(_gap, 1) if _gap is not None else None,
+                          "possible_double_charge": _close})
+        last_by_product[_prod] = pe
     return {"buyer": ("%s %s" % (buyer.first_name or "", buyer.last_name or "")).strip(),
             "buyer_attendee_id": buyer.id,
             "size": size,
             "paid_for": paid_for,
+            "purchases": purchases,
+            "possible_double_charges": sum(1 for p in purchases if p["possible_double_charge"]),
             "unnamed": max(0, paid_for - size),
             "checked_in": sum(1 for m in members if m["checked_in"]),
             "seat": str(cd.get("seat_of_party") or "1 of %d" % size),
@@ -7242,11 +7272,15 @@ def _review_queue(db, event_id: int, with_money: bool) -> dict:
         # nothing and the queue starts lying about what has been dealt with.
         if ("party-%d" % a.id) in _review_resolved_refs(a):
             continue
+        _pdc = party.get("possible_double_charges") or 0
         add("seat_unnamed", "%d seat%s paid for with no badge" % (
                 party["unnamed"], "" if party["unnamed"] == 1 else "s"),
-            "%s paid for %d and %d ha%s a badge. Name the rest at the desk when they arrive."
+            "%s paid for %d and %d ha%s a badge. Name the rest at the desk when they arrive.%s"
             % (party["buyer"], party["paid_for"], party["size"],
-               "s" if party["size"] == 1 else "ve"),
+               "s" if party["size"] == 1 else "ve",
+               (" %d of these %s the same price minutes after another: possible double charge, ask "
+                "at the desk; if so, refund it in GHL and the seat closes itself."
+                % (_pdc, "was" if _pdc == 1 else "were")) if _pdc else ""),
             severity="warning", attendee=a, ref="party-%d" % a.id, action="add_seat")
 
     # 3. Identity the reconciler would not guess at.
@@ -7327,42 +7361,11 @@ def _review_queue(db, event_id: int, with_money: bool) -> dict:
                 severity="warning", attendee=a, ref=ref, amount=l.get("amount"),
                 when=l.get("ts"))
 
-    # 5. Repeat charges the money report cannot tell apart.
-    maps = db.query(models.TicketMapping).filter(
-        models.TicketMapping.event_id == event_id,
-        models.TicketMapping.is_active == True).all()                   # noqa: E712
-    upgrade_pids = {m.external_product_id for m in maps if m.is_upgrade}
-    upgrade_tt_ids = {m.ticket_type_id for m in maps if m.is_upgrade}
-    bundles = {}
-    for a in attendees:
-        cd = a.custom_data or {}
-        owner = int(cd.get("bought_by_attendee") or 0) or a.id
-        bundles.setdefault(owner, []).extend(cd.get("entitlements") or [])
-    for owner, ents in bundles.items():
-        a = by_id.get(owner)
-        if a is None:
-            continue
-        done = _review_resolved_refs(a)
-        for r in _tm_classify(ents, upgrade_tt_ids, upgrade_pids)["repeat"]:
-            if r["repeat_kind"] == "additional_paid_seat":
-                continue                  # a seat, not a question
-            ref = str(r.get("order_id") or r.get("invoice_id") or "")
-            if ref and ref in done:
-                continue
-            gap = r.get("gap_minutes")
-            when_said = ("%.0f minutes apart" % gap if gap is not None and gap < 120
-                         else "%.1f hours apart" % (gap / 60.0) if gap is not None
-                         else "no purchase date on one of them")
-            add("payment_repeat",
-                "Paid twice for the same thing — duplicate?"
-                if r["repeat_kind"] == "duplicate_suspected"
-                else "Paid twice for the same thing — unclear",
-                "Two settled charges for the same product, %s. If it was taken "
-                "twice it needs refunding; if they meant to buy another ticket it "
-                "needs a badge." % when_said,
-                severity="error" if r["repeat_kind"] == "duplicate_suspected" else "warning",
-                attendee=a, ref=ref or ("repeat-%d" % a.id),
-                amount=r.get("amount"), when=r.get("purchased_at"))
+    # 5. Repeat charges are no longer a question here. Organiser's rule (25 Oct
+    #    2026): every separate settled ticket transaction is a seat, named at the
+    #    door. The booking's seat count (section 2) already includes it, and a
+    #    close same-price repeat is flagged there as a possible double charge.
+    #    The money report still classifies repeats, as evidence.
 
     # 6. Money that never settled. Nobody is refused over this -- an unsettled
     #    charge grants nothing -- but every one of them is somebody who tried to
@@ -9176,16 +9179,28 @@ def reconcile_attendee(payload: schemas.ReconcileAttendee, db: Session = Depends
                     models.PaymentEvent.amount <= _amt + 0.01).first()
             except (TypeError, ValueError):
                 _stuck = None
+        # Organiser's rule (25 Oct 2026): every separate settled ticket transaction
+        # is a ticket. A same-amount unsettled charge on the account no longer
+        # vetoes the seat -- it FLAGS it, so the desk asks and the team can refund
+        # in GHL (a refund closes the seat by itself).
+        _flag = None
         if _stuck is not None:
-            _lifecycle_append(existing, "second_ticket_held_for_review", actor="reconcile",
-                              reason=("A second settled charge of %s, but this account also has a %s "
-                                      "payment of the same amount (#%d). That is the shape of a stuck "
-                                      "charge finally going through, not of another ticket, so no "
-                                      "badge was made. Check the gateway before adding a seat."
-                                      % (payload.amount, _stuck.status, _stuck.id)),
-                              order_id=payload.order_id, payment_event=_stuck.id)
+            _flag = ("Possible double charge: this account also has a %s payment of the same amount "
+                     "(#%d). Ask at the desk who the seat is for; if it was charged twice, refund it "
+                     "in GHL and this seat closes itself." % (_stuck.status, _stuck.id))
+        elif _held and _kind in ("duplicate_suspected", "needs_review") and not _this_order_seen:
+            _gap = _repeat_kind(_held, {"amount": payload.amount,
+                                        "purchased_at": getattr(payload, "purchased_at", None)})[1]
+            _flag = ("Possible double charge: the same ticket again%s. Counted as a seat to name at "
+                     "the door; if it was charged twice, refund it in GHL and the seat closes itself."
+                     % (" %.0f minutes later" % _gap if _gap is not None else ""))
+            if not any(l.get("action") == "possible_double_charge" and l.get("order_id") == payload.order_id
+                       for l in ((existing.custom_data or {}).get("lifecycle") or [])):
+                _lifecycle_append(existing, "possible_double_charge", actor="reconcile",
+                                  reason=_flag, order_id=payload.order_id, gap_minutes=_gap,
+                                  amount=payload.amount)
         if (payload.order_id and payload.ticket_type_id and _held and not _this_order_seen
-                and _kind == "additional_paid_seat" and _stuck is None
+                and _kind == "additional_paid_seat"
                 and not payload.day and not payload.day_date
                 and not payload.is_upgrade and _ticket_active(existing)):
             # Idempotency first: if this order already made a seat, that seat IS
@@ -9215,7 +9230,8 @@ def reconcile_attendee(payload: schemas.ReconcileAttendee, db: Session = Depends
                     custom_data={"source": "reconciled_seat", "bought_by": _buyer,
                                  "bought_by_attendee": existing.id, "from_order": payload.order_id,
                                  "seat_of_party": "%d of %d" % (_n, _n),
-                                 "needs_name_check": True, "contact_id": payload.contact_id})
+                                 "needs_name_check": True, "contact_id": payload.contact_id,
+                                 **({"possible_double_charge": _flag} if _flag else {})})
                 db.add(_seat); db.flush()
                 _ent_record(_seat.custom_data, payload.order_id, None, payload.ticket_type_id, False,
                             event_id=event.id, product_id=payload.product_id,

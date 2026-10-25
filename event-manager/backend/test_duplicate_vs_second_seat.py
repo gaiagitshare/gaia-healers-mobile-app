@@ -127,11 +127,10 @@ check(isinstance(r3, dict) and r3.get("created") is False,
       "and it reports that it created nothing", r3)
 
 print("\n== 4b) the PayPal charge that sat pending for a week ==")
-# The hard one. The customer paid, it did not go through, they paid again and got
-# in. A week later the first charge settles. The gap rule alone reads that as a
-# separate decision to buy, which would hand one person a second badge for a
-# ticket they bought once -- so an unsettled charge for the same amount on the
-# same account is read as the thing now settling.
+# Organiser's rule (25 Oct 2026): every separate settled ticket transaction is a
+# ticket, named at the door. A same-amount unsettled charge on the account no
+# longer vetoes the seat; the seat is made and flagged as a possible double
+# charge, so the desk asks and the team refunds in GHL if it was one.
 E2b = "zz-dsp-stuck@example.invalid"
 buy(E2b, "zz-st-1", T0.isoformat())
 _b = roll("zz-dsp-stuck%")[0]
@@ -140,12 +139,13 @@ db.add(models.PaymentEvent(event_id=ev.id, attendee_id=_b.id, amount=99.0,
                            provider="paypal", ghl_transaction_id="zz-st-pending"))
 db.commit()
 buy(E2b, "zz-st-2", at(60 * 24 * 7))
-check(len(roll("zz-dsp-stuck%")) == 1,
-      "a stuck charge settling a week later does NOT become a second badge",
-      [(a.id, a.email, a.registration_source) for a in roll("zz-dsp-stuck%")])
-_lc = [l for l in ((_b.custom_data or {}).get("lifecycle") or [])
-       if l.get("action") == "second_ticket_held_for_review"]
-check(len(_lc) == 1, "and the reason it was held is written on the record", _lc)
+_stuck_roll = roll("zz-dsp-stuck%")
+check(len(_stuck_roll) == 2,
+      "a second settled ticket is a seat even with a stuck charge on the account",
+      [(a.id, a.email, a.registration_source) for a in _stuck_roll])
+_seat = [a for a in _stuck_roll if a.registration_source == "reconciled_seat"]
+check(bool(_seat and (_seat[0].custom_data or {}).get("possible_double_charge")),
+      "and the seat is flagged as a possible double charge", _seat and _seat[0].custom_data)
 
 print("\n== 4c) but a clean account still gets its second seat ==")
 # Same timing, no unsettled charge anywhere. This must still seat, or the guard

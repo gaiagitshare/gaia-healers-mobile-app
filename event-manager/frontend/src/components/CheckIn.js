@@ -976,6 +976,26 @@ function CheckIn({ timezone: timezoneProp }) {
                                         label={`${m.checked_in ? '\u2713 ' : ''}${m.name}${m.is_buyer ? ' (bought)' : ''}`} />
                                 ))}
                             </Stack>
+                            {/* Why the booking holds the seats it does: each ticket purchase,
+                                when, how much, how, and which transaction. Same price minutes
+                                apart is still a seat, flagged so the desk can ask. */}
+                            {(card.party.purchases || []).length > 1 && (
+                                <Box sx={{ mt: 1 }}>
+                                    {card.party.possible_double_charges > 0 && (
+                                        <Typography variant="caption" sx={{ display: 'block', color: 'warning.main', fontWeight: 700 }}>
+                                            Possible double charge: {card.party.possible_double_charges === 1 ? 'one ticket was' : `${card.party.possible_double_charges} tickets were`} bought again at the same price minutes later. Ask who it is for; if it was a mistake, the team refunds it in GHL and the seat closes itself.
+                                        </Typography>
+                                    )}
+                                    {card.party.purchases.map((p, i) => (
+                                        <Typography key={i} variant="caption" color={p.possible_double_charge ? 'warning.main' : 'text.secondary'}
+                                                    sx={{ display: 'block', fontVariantNumeric: 'tabular-nums' }}>
+                                            {String(p.at || '').slice(0, 16).replace('T', ' ')} &middot; ${Number(p.amount).toFixed(2)} &middot; {p.provider || 'GHL'} &middot; tx &hellip;{p.transaction}
+                                            {p.minutes_after_same_ticket != null && ` \u00b7 ${p.minutes_after_same_ticket} min after the same ticket`}
+                                            {p.possible_double_charge && ' \u00b7 possible double charge'}
+                                        </Typography>
+                                    ))}
+                                </Box>
+                            )}
                             {card.party.unnamed > 0 ? (
                                 <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap" useFlexGap sx={{ mt: 1 }}>
                                     <Typography variant="caption" sx={{ color: 'warning.main', fontWeight: 700 }}>

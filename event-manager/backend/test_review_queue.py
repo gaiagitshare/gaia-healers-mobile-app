@@ -54,7 +54,7 @@ print("\n== 0) it reads the event as it stands ==")
 check(base["count"] > 0, "there is work waiting on this event", base["count"])
 check(base["money_visible"] is True, "and the organiser's copy includes money")
 check(set(base["summary"].keys()) <= {
-          "payment_repeat", "charge_held", "sale_unmapped", "identity_review",
+          "payment_unplaced", "confirm_purchase", "sale_unmapped", "identity_review",
           "name_to_confirm", "seat_unnamed", "payment_unsettled"},
       "every section is one the UI knows how to render", sorted(base["summary"].keys()))
 for k, cell in base["summary"].items():
@@ -62,8 +62,11 @@ for k, cell in base["summary"].items():
     listed = len(rows(k))
     check(listed == cell["count"], "and %s agrees with its own rows" % k, (cell["count"], listed))
 
-print("\n== 1) a charge held back from becoming a badge shows up ==")
-# The one section with no production data, so it is made here rather than assumed.
+print("\n== 1) a settled repeat is a seat, flagged -- not a held charge ==")
+# Organiser's rule (25 Oct 2026): every separate settled ticket transaction is a
+# ticket, named at the door. The stuck-PayPal shape (an unsettled charge of the
+# same amount on the account) used to hold the second charge back; now it makes
+# the seat and flags it as a possible double charge.
 mp = db.query(models.TicketMapping).filter(
     models.TicketMapping.event_id == EVENT,
     models.TicketMapping.is_upgrade == False,                            # noqa: E712
@@ -85,51 +88,65 @@ buy("zz-rq-ord-1", T0)
 who = db.query(models.Attendee).filter(models.Attendee.event_id == EVENT,
                                        models.Attendee.email == em).first()
 check(who is not None, "the throwaway buyer exists")
-# An unsettled charge of the same amount: the stuck-PayPal shape.
 db.add(models.PaymentEvent(event_id=EVENT, attendee_id=who.id, amount=99.0,
                            status="pending", occurred_at=T0, provider="paypal",
                            ghl_transaction_id="zz-rq-pending"))
 db.commit()
-held_before = len(rows("charge_held"))
 buy("zz-rq-ord-2", T0 + timedelta(days=7))
-held = [r for r in rows("charge_held") if r.get("attendee_id") == who.id]
-check(len(held) == 1, "the held charge appears in the queue, once",
-      [(r["ref"], r["title"]) for r in held])
-check(len(rows("charge_held")) == held_before + 1,
-      "and it did not disturb the other sections", len(rows("charge_held")))
-item = held[0]
-check(item["severity"] == "error", "it is the most serious kind of row", item["severity"])
-check(item["resolvable"] is True, "and it can be closed by hand", item)
-check("pending" in (item["detail"] or ""), "the row says why it was held", item["detail"][:90])
+seat = [a for a in db.query(models.Attendee).filter(models.Attendee.event_id == EVENT).all()
+        if int((a.custom_data or {}).get("bought_by_attendee") or 0) == who.id]
+check(len(seat) == 1, "the second settled ticket became a seat", [(a.id, a.email) for a in seat])
+check(bool(seat and (seat[0].custom_data or {}).get("possible_double_charge")),
+      "and the seat carries the possible-double-charge flag", seat and seat[0].custom_data)
+check(not rows("charge_held") and not rows("payment_repeat"),
+      "nothing is held back or asked as 'paid twice'",
+      [r["kind"] for r in rows("charge_held") + rows("payment_repeat")])
 
-print("\n== 2) closing it needs a reason, and then it is gone ==")
+print("\n== 2) a close repeat counts as a seat to name, flagged in the queue ==")
+em2 = "zz-rq-%s@example.invalid" % uuid.uuid4().hex[:6]
+for i, mins in enumerate((0, 6)):
+    main.reconcile_attendee(schemas.ReconcileAttendee(
+        event_id=EVENT, email=em2, ticket_type_id=mp.ticket_type_id,
+        product_id=mp.external_product_id, order_id="zz-rq-close-%d" % i, amount=99.0,
+        quantity=1, purchased_at=(T0 + timedelta(minutes=mins)).isoformat(), is_upgrade=False,
+        first_name="Zz", last_name="Close"), db=db, _=True)
+    db.add(models.PaymentEvent(event_id=EVENT, amount=99.0, status="paid", provider="stripe",
+                               occurred_at=T0 + timedelta(minutes=mins), ghl_transaction_id="zz-rq-close-tx-%d" % i,
+                               product_ids=[mp.external_product_id], product_names=["Zz ticket"],
+                               buyer_email=em2, recon_state="healthy"))
+    db.commit()
+main.payments_reclassify(db=db, _=True)
+who2 = db.query(models.Attendee).filter(models.Attendee.event_id == EVENT, models.Attendee.email == em2).first()
+party = main._party_members(db, who2)
+check(party and party["paid_for"] == 2 and party["unnamed"] == 1,
+      "two close purchases are a booking of two, one waiting for a name", party and {k: party[k] for k in ("paid_for", "size", "unnamed")})
+check(party and party.get("possible_double_charges") == 1 and party["purchases"][1]["minutes_after_same_ticket"] == 6.0,
+      "with the evidence: 6 minutes after the same ticket, flagged", party and party.get("purchases"))
+it = [r for r in rows("seat_unnamed") if r.get("attendee_id") == who2.id]
+check(it and "possible double charge" in it[0]["detail"], "the queue row names the flag", it and it[0]["detail"])
+check(any(l.get("action") == "possible_double_charge" for l in ((who2.custom_data or {}).get("lifecycle") or [])),
+      "and the buyer's record says why")
+
+print("\n== 3) closing an item needs a reason, and closed means closed ==")
+item = it[0]
 try:
     main.review_queue_resolve(EVENT, schemas.ReviewResolve(
-        attendee_id=who.id, ref=str(item["ref"]), kind=item["kind"], note="x"),
+        attendee_id=item["attendee_id"], ref=str(item["ref"]), kind=item["kind"], note="x"),
         db=db, current_user=admin)
     check(False, "a one-character reason is refused", "it was accepted")
 except Exception as exc:                                     # noqa: BLE001
     check(getattr(exc, "status_code", None) == 400, "a one-character reason is refused", repr(exc))
-
 main.review_queue_resolve(EVENT, schemas.ReviewResolve(
-    attendee_id=who.id, ref=str(item["ref"]), kind=item["kind"],
+    attendee_id=item["attendee_id"], ref=str(item["ref"]), kind=item["kind"],
     note="refunded the duplicate in PayPal"), db=db, current_user=admin)
 db.commit()
-check(not [r for r in rows("charge_held") if r.get("attendee_id") == who.id],
-      "once closed it stops being asked about",
-      [r["ref"] for r in rows("charge_held") if r.get("attendee_id") == who.id])
-
-print("\n== 3) closed means closed, not deleted ==")
-db.refresh(who)
-lc = [l for l in ((who.custom_data or {}).get("lifecycle") or [])
+check(not [r for r in rows("seat_unnamed") if r.get("attendee_id") == who2.id],
+      "once closed it stops being asked about")
+db.refresh(who2)
+lc = [l for l in ((who2.custom_data or {}).get("lifecycle") or [])
       if l.get("action") == main.REVIEW_RESOLVED_ACTION]
-check(len(lc) == 1, "the closure is on the record", lc)
-check(lc[0].get("reason") == "refunded the duplicate in PayPal",
-      "with the reason that was given", lc[0])
-check(lc[0].get("actor") == (admin.email or "staff"), "and who gave it", lc[0].get("actor"))
-held_still = [l for l in ((who.custom_data or {}).get("lifecycle") or [])
-              if l.get("action") == main.REVIEW_HELD_ACTION]
-check(len(held_still) == 1, "the original decision is still in the trail", held_still)
+check(len(lc) == 1 and lc[0].get("reason") == "refunded the duplicate in PayPal",
+      "the closure is on the record, with the reason", lc)
 
 print("\n== 4) an item leaves when the FACT changes, with nobody ticking it off ==")
 flagged = rows("name_to_confirm")

@@ -1055,7 +1055,7 @@ class ReconcileInvoice(BaseModel):
     """A PAID GHL invoice for an event ticket. Distinct from an order: it has
     its own id, and no order id is ever invented for it."""
     event_id: int
-    email: str
+    email: Optional[str] = ""   # may be empty when contact_id names a ticket holder
     invoice_id: str
     transaction_id: Optional[str] = None
     contact_id: Optional[str] = None
@@ -1087,7 +1087,7 @@ class MapReconcileRequest(BaseModel):
 
 class ReconcileAttendee(BaseModel):
     event_id: int
-    email: str
+    email: Optional[str] = ""   # may be empty when contact_id names a ticket holder
     ticket_type_id: Optional[int] = None
     first_name: Optional[str] = ""
     last_name: Optional[str] = ""

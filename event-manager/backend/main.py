@@ -2420,8 +2420,9 @@ def _held_tiers(db, attendee):
     a downgrade still means what it says.
     """
     cd = attendee.custom_data or {}
-    ids = [e.get("ticket_type_id") for e in (cd.get("entitlements") or [])
-           if e.get("status") == "paid" and not e.get("addon_code") and e.get("ticket_type_id")]
+    ids = [e.get("ticket_type_id") for e in _capped_base_ents(cd, [
+               e for e in (cd.get("entitlements") or [])
+               if e.get("status") == "paid" and not e.get("addon_code") and e.get("ticket_type_id")])]
     if cd.get("admin_tier"):
         ids.append(cd["admin_tier"])
     if not ids and attendee.ticket_type_id:
@@ -2437,6 +2438,28 @@ def _held_tiers(db, attendee):
     return sorted(out, key=lambda t: _tt_rank(db, t.id), reverse=True)
 
 
+ADMIN_CAP_KEY = "admin_cap"
+
+
+def _capped_base_ents(cd, base_ents):
+    """Paid tiers that still count after an organiser's downgrade.
+
+    A paid entitlement is history, and history always won: an organiser moving
+    somebody from VIP to GA got a 200, the attendee list said GA, and the badge
+    went on opening the VIP door, because the paid VIP was still on the ledger
+    and access reads the ledger. A downgrade therefore leaves a dated cap. Paid
+    tiers from before it stop counting, and the capped tier stands in for them.
+    Anything paid AFTER the cap still counts -- somebody who was moved down and
+    then pays for an upgrade gets it. An upgrade or comp up clears the cap.
+    """
+    cap = (cd or {}).get(ADMIN_CAP_KEY) or {}
+    if not cap.get("tt"):
+        return base_ents
+    at = str(cap.get("at") or "")
+    newer = [e for e in base_ents if str(e.get("ts") or "") > at]
+    return newer + [{"ticket_type_id": cap["tt"], "status": "paid", "admin_cap": True, "ts": at}]
+
+
 def _effective_access(db, attendee):
     """Resolve an attendee into a human-readable access picture: a base ticket PLUS
     additive add-ons (each with an optional day). Everyone — roster, detail view,
@@ -2445,7 +2468,7 @@ def _effective_access(db, attendee):
     ents = list(cd.get("entitlements") or [])
     paid = [e for e in ents if e.get("status") == "paid"]
     # base tier = highest-rank paid entitlement that is NOT an add-on
-    base_ents = [e for e in paid if not e.get("addon_code") and e.get("ticket_type_id")]
+    base_ents = _capped_base_ents(cd, [e for e in paid if not e.get("addon_code") and e.get("ticket_type_id")])
     base_tt = None
     if base_ents:
         base_tt = max(base_ents, key=lambda e: _tt_rank(db, e.get("ticket_type_id"))).get("ticket_type_id")
@@ -2794,6 +2817,40 @@ def _payment_claims(db, event_id):
     return claims
 
 
+def _attendee_for_contact(db, event_id, contact_id):
+    """The one ticket holder GHL knows as this contact, or None.
+
+    Reads the contact an attendee was reconciled under and any contact ids an
+    organiser linked to them since (`linked_contact_ids` -- GHL gives somebody a
+    second contact when they check out with different details). Seats bought
+    for other people are skipped: they carry the BUYER's contact, and the money
+    belongs to the buyer's own badge. Duplicate rows follow their pointer. Two
+    different people under one contact is ambiguous, and ambiguity returns
+    None rather than a pick.
+    """
+    if not event_id or not contact_id:
+        return None
+    rows = db.query(models.Attendee).filter(models.Attendee.event_id == event_id).all()
+    found = {}
+    for a in rows:
+        cd = a.custom_data or {}
+        if a.registration_source in PARTY_SEAT_SOURCES:
+            continue
+        if cd.get("contact_id") != contact_id and contact_id not in (cd.get("linked_contact_ids") or []):
+            continue
+        hops = 0
+        while (a.custom_data or {}).get("duplicate_of") and hops < 4:
+            nxt = db.query(models.Attendee).filter(
+                models.Attendee.id == int((a.custom_data or {}).get("duplicate_of")),
+                models.Attendee.event_id == event_id).first()
+            if nxt is None or nxt.id == a.id:
+                break
+            a = nxt
+            hops += 1
+        found[a.id] = a
+    return next(iter(found.values())) if len(found) == 1 else None
+
+
 def _attendee_for_payment(db, pe, claims=None):
     """Whose payment is this?
 
@@ -2811,7 +2868,12 @@ def _attendee_for_payment(db, pe, claims=None):
             models.Attendee.id == claimed,
             models.Attendee.event_id == pe.event_id).first()
     if not pe.buyer_email:
-        return None
+        # No email on the payment is not no buyer. GHL still names the contact,
+        # and a contact id is GHL's identity for a person, not a guess at one.
+        # Erika Cunningham paid $1,058.94 for VIP on 22 Oct under a second GHL
+        # contact that had a phone and no email; matching on email alone left
+        # the money reading "paid, no ticket" for three days.
+        return _attendee_for_contact(db, pe.event_id, pe.contact_id)
     found = db.query(models.Attendee).filter(
         models.Attendee.event_id == pe.event_id,
         func.lower(models.Attendee.email) == pe.buyer_email).first()
@@ -3046,7 +3108,10 @@ def _door_card(db, attendee, event, user=None):
             "party": _party_members(db, attendee),
             "money": _money_for(db, attendee),
             "badge_print_count": int(attendee.badge_print_count or 0),
-            "ticket_type_id": attendee.ticket_type_id,
+            # The pass they HOLD, which is what the desk's pass picker ranks
+            # against. The stored column can lag a full-price purchase.
+            "ticket_type_id": ((_effective_access(db, attendee).get("base_ticket") or {}).get("id")
+                               or attendee.ticket_type_id),
             "public_token": attendee.public_token}
 
 
@@ -7102,6 +7167,10 @@ def _mapping_audit(db, event_id: int):
 # to seat -- are closed explicitly, and closing one is logged like any other act.
 REVIEW_HELD_ACTION = "second_ticket_held_for_review"
 REVIEW_RESOLVED_ACTION = "review_resolved"
+# A purchase the system has applied by the organiser's rule, where the buyer's
+# intent is still worth one phone call -- e.g. a GA holder paying full VIP price
+# (an upgrade for themselves, or a ticket for somebody else?).
+REVIEW_CONFIRM_ACTION = "confirm_with_buyer"
 
 
 def _review_resolved_refs(attendee) -> set:
@@ -7205,6 +7274,20 @@ def _review_queue(db, event_id: int, with_money: bool) -> dict:
             add("charge_held", "A second charge was not turned into a badge",
                 l.get("reason") or "Held for review.",
                 severity="error", attendee=a, ref=ref or ("held-%d" % a.id),
+                when=l.get("ts"))
+
+    # 4b. Purchases applied by rule that still need the buyer's word.
+    for a in attendees:
+        done = _review_resolved_refs(a)
+        for l in ((a.custom_data or {}).get("lifecycle") or []):
+            if l.get("action") != REVIEW_CONFIRM_ACTION:
+                continue
+            ref = "confirm-%s" % (l.get("order_id") or a.id)
+            if ref in done:
+                continue
+            add("confirm_purchase", "Call to confirm this purchase",
+                l.get("reason") or "Confirm with the buyer what they meant to buy.",
+                severity="warning", attendee=a, ref=ref, amount=l.get("amount"),
                 when=l.get("ts"))
 
     # 5. Repeat charges the money report cannot tell apart.
@@ -8652,6 +8735,11 @@ def reconcile_invoice(payload: schemas.ReconcileInvoice, db: Session = Depends(g
     if str(payload.status or "").lower() not in ("paid", "partially_paid"):
         return {"ok": False, "reason": "invoice_not_paid", "status": payload.status}
     email = (payload.email or "").strip().lower()
+    if (not email or "@" not in email) and payload.contact_id:
+        # Same rule as an order: a contact id names one ticket holder, or nobody.
+        _by_contact = _attendee_for_contact(db, payload.event_id, payload.contact_id)
+        if _by_contact is not None and _by_contact.email:
+            email = _by_contact.email.strip().lower()
     if not email or "@" not in email:
         raise HTTPException(status_code=400, detail="A contact email is required")
     mapping = db.query(models.TicketMapping).filter(
@@ -8755,6 +8843,15 @@ def reconcile_attendee(payload: schemas.ReconcileAttendee, db: Session = Depends
     _assert_event_writable(db, event, "reconcile an attendee into it")
     _assert_sale_in_window(db, event, payload.product_id, payload.purchased_at)
     email = (payload.email or "").strip().lower()
+    if (not email or "@" not in email) and payload.contact_id:
+        # An order with no email still names its GHL contact. If that contact is
+        # exactly one ticket holder -- the contact they bought under, or one an
+        # organiser linked to them -- the order is theirs, and it travels the
+        # normal path from here: an upgrade lifts, a repeat becomes a seat. A
+        # contact nobody holds stays a 400, and the mirror reports it.
+        _by_contact = _attendee_for_contact(db, event.id, payload.contact_id)
+        if _by_contact is not None and _by_contact.email:
+            email = _by_contact.email.strip().lower()
     if not email or "@" not in email:
         raise HTTPException(status_code=400, detail="A contact email is required")
     existing = db.query(models.Attendee).filter(
@@ -9040,6 +9137,17 @@ def reconcile_attendee(payload: schemas.ReconcileAttendee, db: Session = Depends
             if payload.ticket_type_id and not payload.is_upgrade:
                 if not existing.ticket_type_id:
                     existing.ticket_type_id = payload.ticket_type_id
+                elif (_tt_rank(db, payload.ticket_type_id) > _tt_rank(db, existing.ticket_type_id)
+                      and not custom.get(ADMIN_CAP_KEY)):
+                    # A GA holder who pays full price for VIP holds VIP -- the door
+                    # already reads it from the ledger -- but this column stayed GA,
+                    # so exports, counts and the pass picker said GA. Keep it in step.
+                    _ll = list(custom.get("lifecycle") or [])
+                    _ll.append({"ts": datetime.utcnow().isoformat(), "action": "pass_raised_by_purchase",
+                                "actor": "reconcile", "from_tt": existing.ticket_type_id,
+                                "to_tt": payload.ticket_type_id, "order_id": payload.order_id})
+                    custom["lifecycle"] = _ll
+                    existing.ticket_type_id = payload.ticket_type_id
             if payload.ticket_type_id and payload.is_upgrade:
                 if _tt_rank(db, payload.ticket_type_id) >= _tt_rank(db, existing.ticket_type_id):
                     if existing.ticket_type_id != payload.ticket_type_id:
@@ -9307,8 +9415,13 @@ def change_pass(attendee_id: int, payload: schemas.ChangePass,
         models.TicketType.event_id == attendee.event_id).first()
     if not tt:
         raise HTTPException(status_code=400, detail="That pass does not belong to this event")
-    old_tt = attendee.ticket_type_id
-    if old_tt == tt.id:
+    # Compare with the pass the person actually HOLDS, not the stored column.
+    # The column is only set by the first base ticket, so somebody who bought GA
+    # and later paid full price for VIP still reads GA there: "change to GA" was
+    # then a silent no-op, and a downgrade from VIP was judged an upgrade.
+    _held_now = (_effective_access(db, attendee).get("base_ticket") or {}).get("id")
+    old_tt = _held_now or attendee.ticket_type_id
+    if old_tt == tt.id and attendee.ticket_type_id == tt.id:
         return attendee
     is_downgrade = _tt_rank(db, tt.id) < _tt_rank(db, old_tt)
     if not _organiser:
@@ -9328,6 +9441,11 @@ def change_pass(attendee_id: int, payload: schemas.ChangePass,
                             detail="This is a downgrade. Re-submit with allow_downgrade to confirm.")
     attendee.ticket_type_id = tt.id
     _cp_cd = dict(attendee.custom_data or {}); _cp_cd["admin_tier"] = tt.id
+    if is_downgrade:
+        _cp_cd[ADMIN_CAP_KEY] = {"tt": tt.id, "at": datetime.utcnow().isoformat(),
+                                 "by": (current_user.email or "admin")}
+    else:
+        _cp_cd.pop(ADMIN_CAP_KEY, None)
     attendee.custom_data = _cp_cd
     # Money taken at the desk for an upgrade has nowhere else to go. The walk-in
     # door-payment columns belong to a walk-in's own ticket and are only

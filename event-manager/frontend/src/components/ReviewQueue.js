@@ -31,7 +31,7 @@ import { getReviewQueue, resolveReviewItem, dismissUnmappedSale } from '../utils
 
 // Money first, then people who will turn up without a badge.
 const ORDER = [
-    'payment_repeat', 'charge_held', 'sale_unmapped',
+    'payment_repeat', 'charge_held', 'sale_unmapped', 'confirm_purchase',
     'identity_review', 'name_to_confirm', 'seat_unnamed', 'payment_unsettled',
 ];
 
@@ -39,6 +39,7 @@ const HEADINGS = {
     payment_repeat: 'Paid twice for the same thing',
     charge_held: 'Charges held back from becoming a badge',
     sale_unmapped: 'Sales with no ticket behind them',
+    confirm_purchase: 'Purchases to confirm with the buyer',
     identity_review: 'Records nobody could identify',
     name_to_confirm: 'Seats needing a name confirmed',
     seat_unnamed: 'Seats paid for with no badge yet',
@@ -52,6 +53,7 @@ const WHY = {
     payment_repeat: 'Someone may have been charged twice. Refund it, or give them the second badge they meant to buy.',
     charge_held: 'A second settled charge that was deliberately not turned into a badge. Check the gateway, then close it.',
     sale_unmapped: 'Money arrived for a product that maps to no ticket, so nobody got a badge for it.',
+    confirm_purchase: 'Applied by the house rule, but worth one call: did they mean it for themselves or for somebody else? If someone else, add a seat; then close it.',
     identity_review: 'An add-on arrived for an address with no matching badge and was parked rather than attached to a guess.',
     name_to_confirm: 'The badge carries the buyer’s name. Ask at the desk and correct it.',
     seat_unnamed: 'A booking paid for more seats than it has badges. Name them as people arrive.',

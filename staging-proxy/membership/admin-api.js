@@ -37,6 +37,7 @@ import {
 } from './product-registry.js';
 import { resolveMemberAccess } from './resolver.js';
 import { migrateContactRecord } from './ledger.js';
+import { loadMergeState, saveMergeState, pendingSuggestions, applyContactMerge, markSuggestion } from './contact-merges.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const POLICY_FILE = process.env.MEMBERSHIP_POLICY_FILE
@@ -372,6 +373,49 @@ async function handle(req, res, url, deps) {
         contactId: text(url.searchParams.get('id'), 120),
       }),
     });
+  }
+
+  // ---- contact merges: access follows the person when GHL merges contacts ----
+  if (p === '/api/admin/membership/merges' && method === 'GET') {
+    if (!deps.contactMergesFile) return ok({ merges: [], scan: null });
+    const state = loadMergeState(deps.contactMergesFile);
+    const checked = Object.values(state.checked || {});
+    return ok({
+      merges: pendingSuggestions(state, loadLedger()),
+      scan: { updatedAt: state.updatedAt, checked: checked.length,
+        gone_no_survivor: checked.filter((c) => c.status === 'gone').length },
+    });
+  }
+  if (p === '/api/admin/membership/merges/scan' && method === 'POST') {
+    if (typeof deps.runContactMergeScan !== 'function') return bad('scan_unavailable');
+    const stats = await deps.runContactMergeScan();
+    return stats ? ok({ stats }) : bad('scan_busy_or_failed');
+  }
+  if (p === '/api/admin/membership/merges/apply' && method === 'POST') {
+    const body = await readJsonBody(req).catch(() => ({}));
+    const oldId = text(body.old, 120);
+    const state = loadMergeState(deps.contactMergesFile);
+    const s = (state.suggestions || []).find((x) => x.old === oldId && x.state === 'pending');
+    if (!s) return bad('merge_suggestion_not_found');
+    const store = loadLedger();
+    const result = applyContactMerge(store, s.old, s.survivor, {
+      actor: ACTOR, note: text(body.note, 300) || 'GHL merged these contacts; access moved to the surviving contact',
+    });
+    if (!result.ok) return bad(result.error);
+    saveLedger(store);
+    markSuggestion(state, s.old, 'applied', { moved: result.detail });
+    saveMergeState(deps.contactMergesFile, state);
+    return ok({ moved: result.detail });
+  }
+  if (p === '/api/admin/membership/merges/dismiss' && method === 'POST') {
+    const body = await readJsonBody(req).catch(() => ({}));
+    const note = text(body.note, 300);
+    if (note.length < 3) return bad('say_why');
+    const state = loadMergeState(deps.contactMergesFile);
+    const s = markSuggestion(state, text(body.old, 120), 'dismissed', { note });
+    if (!s) return bad('merge_suggestion_not_found');
+    saveMergeState(deps.contactMergesFile, state);
+    return ok({ dismissed: s.old });
   }
 
   // ---- unresolved identities ----

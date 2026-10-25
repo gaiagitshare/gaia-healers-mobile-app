@@ -20,6 +20,7 @@ import { UNRESOLVED_BILLING_IDS, tierFromBillingIds } from './membership/config.
 import { membershipPlans } from './membership/plans.js';
 import { syncCatalog, storeView, diffMessages, emptyCatalog, productDetail } from './membership/store-catalog.js';
 import { audit as recordAudit } from './membership/audit-log.js';
+import { loadMergeState, saveMergeState, scanForMerges } from './membership/contact-merges.js';
 import { loadPolicy as loadMembershipPolicy, loadRegistry as loadMembershipRegistry, loadModel as loadCommerceModel } from './membership/admin-api.js';
 import {
   resourceKey, eventTimestamp, eventSequence, decideOrder, watermark,
@@ -2969,6 +2970,57 @@ async function ghlGet(path, params = {}, timeoutMs = 0) {
   );
   const url = `${cfg.base}${path}${query.toString() ? `?${query.toString()}` : ''}`;
   return fetchJsonIfOk(url, ghlHeaders(cfg.token, cfg.version), timeoutMs ? { signal: AbortSignal.timeout(timeoutMs) } : {});
+}
+
+// The status matters here, not just the body: a contact that answers 400/404
+// is gone from GHL, while a timeout or a 429 is no evidence of anything.
+async function ghlContactStatus(contactId) {
+  const cfg = ghlConfig();
+  if (!cfg.enabled) return { status: 0, contact: null };
+  try {
+    const r = await fetch(`${cfg.base}/contacts/${encodeURIComponent(contactId)}`, {
+      headers: ghlHeaders(cfg.token, cfg.version), signal: AbortSignal.timeout(10_000) });
+    let j = null; try { j = await r.json(); } catch (_) { j = null; }
+    return { status: r.status, contact: (j && (j.contact || j)) || null };
+  } catch (_) { return { status: 0, contact: null }; }
+}
+
+async function ghlLiveContactsByEmail(email) {
+  const cfg = ghlConfig();
+  const e = String(email || '').trim().toLowerCase();
+  if (!cfg.enabled || !e) return [];
+  const r = await ghlPost('/contacts/search', {
+    page: 1, pageLimit: 20, locationId: cfg.locationId,
+    filters: [{ operator: 'eq', field: 'email', value: e }],
+  }, '2021-07-28', 10_000);
+  if (!r) throw new Error('contact search failed');
+  const list = r.contacts || (r.data && r.data.contacts) || r.data || r.results || [];
+  return (Array.isArray(list) ? list : []).filter((c) => String(c && c.email || '').trim().toLowerCase() === e);
+}
+
+const CONTACT_MERGES_FILE = path.join(path.dirname(MEMBER_ENTITLEMENTS_FILE), 'contact-merges.json');
+const CONTACT_MERGE_SCAN_INTERVAL_MS = Number(process.env.CONTACT_MERGE_SCAN_INTERVAL_MS) || 6 * 60 * 60 * 1000;
+let _mergeScanRunning = false;
+async function runContactMergeScan() {
+  if (_mergeScanRunning) return null;
+  _mergeScanRunning = true;
+  try {
+    let map = {};
+    try { map = (JSON.parse(fs.readFileSync(ACADEMY_EMAIL_TO_CONTACT_FILE, 'utf8')) || {}).map || {}; } catch (_) { map = {}; }
+    const emailByContact = new Map();
+    for (const [email, cid] of Object.entries(map)) if (cid && !emailByContact.has(cid)) emailByContact.set(String(cid), email);
+    const state = loadMergeState(CONTACT_MERGES_FILE);
+    const stats = await scanForMerges(loadMemberEntitlements(), emailByContact, state, {
+      getContact: ghlContactStatus, findByEmail: ghlLiveContactsByEmail,
+    }, { log: (o) => console.warn('[Gaia Merges]', JSON.stringify(o)) });
+    saveMergeState(CONTACT_MERGES_FILE, state);
+    const pending = state.suggestions.filter((x) => x.state === 'pending').length;
+    console.log('[Gaia Merges] scan', JSON.stringify({ ...stats, pending }));
+    return stats;
+  } catch (e) {
+    console.warn('[Gaia Merges] scan failed', String((e && e.message) || e).slice(0, 160));
+    return null;
+  } finally { _mergeScanRunning = false; }
 }
 
 async function ghlPost(path, body = {}, version = '', timeoutMs = 0) {
@@ -7135,6 +7187,7 @@ const server = http.createServer(async (req, res) => {
         loadStoreCatalog, runStoreSync,
         sendAlertEmail,
         loadAcademyVideoReports, loadAcademyManifest, loadAcademyCourseStats,
+        contactMergesFile: CONTACT_MERGES_FILE, runContactMergeScan,
       });
       return;
     }
@@ -7666,6 +7719,7 @@ server.listen(PORT, HOST, () => {
         const out = await adminRouter.evaluateAlerts({
           ghlGet, ghlConfig, ghlHeaders,
           loadLedger: loadMemberEntitlements, saveLedger: saveMemberEntitlements,
+          contactMergesFile: CONTACT_MERGES_FILE,
           loadStoreCatalog, sendAlertEmail,
         });
         if (out.opened || out.resolved || out.notificationsFailed) {
@@ -7680,6 +7734,15 @@ server.listen(PORT, HOST, () => {
     };
     setTimeout(runAlertSweep, 20 * 1000).unref?.();
     setInterval(runAlertSweep, ALERT_INTERVAL_MS).unref?.();
+  }
+
+  // Contact-merge scan. GHL merging two contacts deletes one id and leaves
+  // everything the ledger holds under it behind; this finds those (paced,
+  // read-only, capped per run) and lists them for an operator to move with one
+  // tap in Admin -> Membership. Same test guard as the store sync.
+  if (process.env.CONTACT_MERGE_SCAN !== 'false' && !process.env.MEMBER_ENTITLEMENTS_FILE?.includes('tmp')) {
+    setTimeout(() => { runContactMergeScan(); }, 5 * 60_000).unref();
+    setInterval(() => { runContactMergeScan(); }, CONTACT_MERGE_SCAN_INTERVAL_MS).unref();
   }
 
   // Daily store sync. Disabled under test so the suite never reaches out to a

@@ -2848,7 +2848,12 @@ async function handleGhlPaymentWebhook(req, res, origin) {
     const last = snap.lastName || body.last_name || '';
     const phone = snap.phone || body.phone || '';
     const contactId = tx.contactId || body.contact_id || body.contactId || '';
-    if (!email) { log({ outcome: 'no_buyer_email', order_id: orderId }); sendJson(res, 202, { ok: false, matched: 0, reason: 'no_buyer_email' }, origin); return; }
+    // No email AND no contact: nobody to place it on. With a contact id the order
+    // carries on -- the Event Manager places it on the one ticket holder that
+    // contact belongs to, or refuses, and the mirror logs the refusal. (Erika
+    // Cunningham's $1,058.94 VIP, 22 Oct 2026, had a contact and no email.)
+    if (!email && !contactId) { log({ outcome: 'no_buyer_email', order_id: orderId }); sendJson(res, 202, { ok: false, matched: 0, reason: 'no_buyer_email' }, origin); return; }
+    if (!email) log({ outcome: 'contact_only_order', order_id: orderId, contact_id: contactId });
 
     // 5) Resolve against the single mapping source of truth (Event Manager)
     let maps = [];

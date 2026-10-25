@@ -96,7 +96,34 @@ log({ phase: 'start', since, dry_run: DRY, mapped_products: byPid.size });
 // far enough will meet last year's sales of a product that is still on sale
 // this year, and Gaia correctly declines them. Counting those as errors would
 // make a healthy recovery run look broken.
-const stats = { orders_seen: 0, invoices_seen: 0, reconciled: 0, already: 0, unmapped: 0, out_of_window: 0, refunds: 0, payments: 0, errors: 0 };
+const stats = { orders_seen: 0, invoices_seen: 0, reconciled: 0, already: 0, unmapped: 0, out_of_window: 0, refunds: 0, payments: 0, errors: 0,
+  no_email: 0, no_email_unplaced: 0 };
+
+// A paid order with no email is still a buyer. On 22 Oct 2026 Erika Cunningham
+// paid $1,058.94 for VIP under a second GHL contact that had a phone and no
+// email; this script skipped the order without a word, and the money read
+// "paid, no ticket" for three days. So: ask GHL for the contact's email (read
+// only), and failing that send the order by contact id alone -- the Event
+// Manager places it on the one ticket holder that contact belongs to, or
+// refuses with 400. A refusal is logged per order ('unplaced') and counted; the
+// paid-no-ticket alert carries it from there.
+const contactEmail = new Map();
+async function emailForContact(contactId) {
+  if (!contactId) return '';
+  if (!contactEmail.has(contactId)) {
+    let e = '';
+    try {
+      const j = await ghl(`/contacts/${contactId}`);
+      e = String(((j && (j.contact || j)) || {}).email || '').toLowerCase();
+    } catch (_) { e = ''; }
+    contactEmail.set(contactId, e);
+  }
+  return contactEmail.get(contactId);
+}
+const unplaced = (kind, ref, contactId, why) => {
+  stats.no_email_unplaced++;
+  log({ phase: 'unplaced', kind, ref, contact_id: contactId || null, reason: why });
+};
 
 // ── 1. completed orders ───────────────────────────────────────────────────
 const orders = await pageAll(`/payments/orders?altId=${LOC}&altType=location`, 'data');
@@ -108,8 +135,13 @@ for (const o of orders) {
   const items = ((full && (full.order || full)).items) || [];
   const pids = [...new Set(items.map((i) => (i.product && i.product._id) || i.productId).filter(Boolean))];
   const hits = pids.map((p) => byPid.get(p)).filter(Boolean);
-  const email = String(o.contactEmail || '').toLowerCase();
-  if (!email) continue;
+  let email = String(o.contactEmail || '').toLowerCase();
+  if (!email && hits.length) {
+    stats.no_email++;
+    email = await emailForContact(o.contactId);
+    if (!email && !o.contactId) { unplaced('order', o._id, null, 'no email and no contact on the order'); continue; }
+  }
+  if (!email && !hits.length) continue;     // not a ticket, and nobody to report it under
   if (!hits.length) {
     stats.unmapped++;
     if (!DRY) await em('/identity/report-unmapped-sale', {
@@ -139,6 +171,7 @@ for (const o of orders) {
       first_name: nm[0] || '', last_name: nm.slice(1).join(' ') });
     if (status === 409) stats.out_of_window++;
     else if (j && j.ok) { if (j.created) stats.reconciled++; else stats.already++; }
+    else if (!email && status === 400) unplaced('order', o._id, o.contactId, 'contact holds no ticket');
     else stats.errors++;
   }
 }
@@ -151,13 +184,17 @@ for (const iv of invoices) {
   if (!['paid', 'partially_paid'].includes(String(iv.status || '').toLowerCase())) continue;
   stats.invoices_seen++;
   const cd = iv.contactDetails || {};
-  const email = String(cd.email || '').toLowerCase();
-  if (!email) continue;
+  let email = String(cd.email || '').toLowerCase();
   const full = await ghl(`/invoices/${iv._id}?altId=${LOC}&altType=location`);
   const items = (full && (full.invoiceItems || (full.invoice && full.invoice.invoiceItems))) || iv.invoiceItems || [];
   for (const it of items) {
     const m = byPid.get(String(it.productId || ''));
     if (!m) continue;                       // not a ticket; invoices sell many things
+    if (!email) {
+      stats.no_email++;
+      email = await emailForContact(cd.id);
+      if (!email && !cd.id) { unplaced('invoice', iv._id, null, 'no email and no contact on the invoice'); break; }
+    }
     if (DRY) { stats.reconciled++; continue; }
     const nm = String(cd.name || '').split(' ');
     const { status, j } = await em('/identity/reconcile-invoice', {
@@ -168,6 +205,7 @@ for (const iv of invoices) {
       issued_at: when });
     if (status === 409) stats.out_of_window++;
     else if (j && j.ok) { if (j.created) stats.reconciled++; else stats.already++; }
+    else if (!email && status === 400) unplaced('invoice', iv._id, cd.id, 'contact holds no ticket');
     else stats.errors++;
   }
 }

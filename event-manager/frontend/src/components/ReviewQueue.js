@@ -7,7 +7,7 @@ import {
 import RefreshIcon from '@mui/icons-material/Refresh';
 import DoneIcon from '@mui/icons-material/Done';
 import PersonSearchIcon from '@mui/icons-material/PersonSearch';
-import { getReviewQueue, resolveReviewItem, dismissUnmappedSale } from '../utils/api';
+import { getReviewQueue, resolveReviewItem, dismissUnmappedSale, placePayment } from '../utils/api';
 
 /**
  * The review queue — one list of everything waiting on a person.
@@ -31,11 +31,12 @@ import { getReviewQueue, resolveReviewItem, dismissUnmappedSale } from '../utils
 
 // Money first, then people who will turn up without a badge.
 const ORDER = [
-    'payment_repeat', 'charge_held', 'sale_unmapped', 'confirm_purchase',
+    'payment_unplaced', 'payment_repeat', 'charge_held', 'sale_unmapped', 'confirm_purchase',
     'identity_review', 'name_to_confirm', 'seat_unnamed', 'payment_unsettled',
 ];
 
 const HEADINGS = {
+    payment_unplaced: 'Paid, but on nobody\u2019s badge',
     payment_repeat: 'Paid twice for the same thing',
     charge_held: 'Charges held back from becoming a badge',
     sale_unmapped: 'Sales with no ticket behind them',
@@ -50,6 +51,7 @@ const HEADINGS = {
 // than the mechanism. A heading tells you what a group is; this tells you why
 // it is worth your afternoon.
 const WHY = {
+    payment_unplaced: 'Money arrived and nobody can get in on it yet. If it is somebody who already has a badge, link it; otherwise give them their own.',
     payment_repeat: 'Someone may have been charged twice. Refund it, or give them the second badge they meant to buy.',
     charge_held: 'A second settled charge that was deliberately not turned into a badge. Check the gateway, then close it.',
     sale_unmapped: 'Money arrived for a product that maps to no ticket, so nobody got a badge for it.',
@@ -104,6 +106,19 @@ function ReviewQueue() {
             await load();
         } catch (err) {
             setError(err.response?.data?.detail || 'Could not close that item.');
+        } finally { setBusy(false); }
+    };
+
+    // Link an unplaced payment to the person it belongs to, or give the buyer a
+    // badge of their own. The server runs the normal reconcile path either way.
+    const place = async (item, data, done) => {
+        setBusy(true);
+        try {
+            await placePayment(eventId, item.payment_id, data);
+            setFlash(done);
+            await load();
+        } catch (err) {
+            setError(err.response?.data?.detail || 'Could not place that payment.');
         } finally { setBusy(false); }
     };
 
@@ -222,6 +237,20 @@ function ReviewQueue() {
                                                         Open at desk
                                                     </Button>
                                                 </Tooltip>
+                                            )}
+                                            {r.kind === 'payment_unplaced' && (r.candidates || []).map((c) => (
+                                                <Button key={c.attendee_id} size="small" variant="contained" disabled={busy}
+                                                        onClick={() => place(r, { attendee_id: c.attendee_id },
+                                                            `Linked to ${c.name}. Their badge now carries this payment.`)}>
+                                                    Same person: {c.name}
+                                                </Button>
+                                            ))}
+                                            {r.kind === 'payment_unplaced' && (
+                                                <Button size="small" variant="outlined" disabled={busy}
+                                                        onClick={() => place(r, { new_badge: true },
+                                                            'A badge of their own was made. Find them at the desk to print it.')}>
+                                                    Their own badge
+                                                </Button>
                                             )}
                                             {String(r.action || '').startsWith('dismiss_sale:') && (
                                                 <Button size="small" color="inherit" disabled={busy}

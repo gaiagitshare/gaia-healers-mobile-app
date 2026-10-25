@@ -7276,6 +7276,31 @@ def _review_queue(db, event_id: int, with_money: bool) -> dict:
                 severity="error", attendee=a, ref=ref or ("held-%d" % a.id),
                 when=l.get("ts"))
 
+    # 4a. Money received that sits on nobody's badge, with the likely holder.
+    #     The matcher only ever places a payment on a certainty (a claim, the
+    #     email, or a contact one ticket holder owns). Everything else lands
+    #     here with the candidates a person would check -- same name, same
+    #     phone, same email -- and one tap places it through the normal path.
+    for pe in db.query(models.PaymentEvent).filter(
+            models.PaymentEvent.event_id == event_id,
+            models.PaymentEvent.status.in_(list(payments.PAID)),
+            models.PaymentEvent.attendee_id.is_(None)).order_by(models.PaymentEvent.occurred_at).all():
+        cands = _payment_candidates(attendees, pe)
+        who = pe.buyer_name or pe.buyer_email or "Unknown buyer"
+        if cands:
+            detail = ("%s paid and is on nobody's badge. Likely the same person as: %s. "
+                      "Link it if so, or give them a badge of their own."
+                      % (who, "; ".join("%s (#%d, same %s)" % (c["name"], c["attendee_id"], " + ".join(c["match"]))
+                                        for c in cands)))
+        else:
+            detail = ("%s paid and is on nobody's badge, and no ticket holder shares their name, "
+                      "phone or email. Give them a badge of their own." % who)
+        add("payment_unplaced", "Paid, but on nobody's badge", detail, severity="error",
+            ref="place-%d" % pe.id, amount=pe.amount, who=who, email=pe.buyer_email,
+            action="place_payment:%d" % pe.id, when=str(pe.occurred_at or "")[:19])
+        items[-1]["candidates"] = cands
+        items[-1]["payment_id"] = pe.id
+
     # 4b. Purchases applied by rule that still need the buyer's word.
     for a in attendees:
         done = _review_resolved_refs(a)
@@ -7364,6 +7389,122 @@ def _review_queue(db, event_id: int, with_money: bool) -> dict:
     items.sort(key=lambda r: (order.get(r["severity"], 3), r["kind"], r.get("when") or ""))
     return {"event_id": event_id, "money_visible": True,
             "count": len(items), "items": items, "summary": _review_summary(items)}
+
+
+def _payment_candidates(attendees, pe, limit=3):
+    """Ticket holders a person would check for an unplaced payment.
+
+    Organiser's rule (1 Oct 2026): name first, then phone or email. A candidate
+    is only ever SUGGESTED -- the payment moves when somebody taps Link.
+    """
+    def norm(v):
+        return re.sub(r"[^a-z]", "", str(v or "").lower())
+    name = norm(pe.buyer_name)
+    phone = _digits(pe.buyer_phone)[-10:]
+    email = (pe.buyer_email or "").lower()
+    out = []
+    for a in attendees:
+        if a.registration_source in PARTY_SEAT_SOURCES or (a.custom_data or {}).get("duplicate_of"):
+            continue
+        m = []
+        if name and len(name) > 3 and norm("%s %s" % (a.first_name or "", a.last_name or "")) == name:
+            m.append("name")
+        if phone and len(phone) >= 7 and _digits(a.phone)[-10:] == phone:
+            m.append("phone")
+        if email and (a.email or "").lower() == email:
+            m.append("email")
+        if m:
+            out.append({"attendee_id": a.id, "match": m,
+                        "name": ("%s %s" % (a.first_name or "", a.last_name or "")).strip() or a.email})
+    out.sort(key=lambda c: -len(c["match"]))
+    return out[:limit]
+
+
+@app.post("/events/{event_id}/payments/{payment_id}/place")
+def place_payment(event_id: int, payment_id: int, body: schemas.PlacePayment,
+                  db: Session = Depends(get_db),
+                  current_user: models.User = Depends(get_current_user)):
+    """Put a paid payment that sits on nobody's badge where it belongs.
+
+    Either LINK it to an existing ticket holder -- the payment's GHL contact is
+    added to theirs, so this order and anything later under that contact lands
+    on them by itself -- or give the buyer a NEW badge. Both go through the same
+    reconcile path a live order does, so an upgrade lifts, a repeat becomes a
+    seat, a higher full ticket is applied and flagged for a confirm call.
+    Organisers only: it moves money onto a person.
+    """
+    _get_event_or_404(event_id, db)
+    authz.require_cap(db, current_user, event_id, "attendee.write")
+    pe = db.query(models.PaymentEvent).filter(models.PaymentEvent.id == payment_id,
+                                              models.PaymentEvent.event_id == event_id).first()
+    if not pe:
+        raise HTTPException(status_code=404, detail="No such payment on this event")
+    if pe.status not in payments.PAID:
+        raise HTTPException(status_code=409, detail="Only settled money can be placed")
+    if pe.attendee_id:
+        raise HTTPException(status_code=409, detail="This payment is already on a badge")
+    if bool(body.attendee_id) == bool(body.new_badge):
+        raise HTTPException(status_code=400, detail="Choose a ticket holder to link, or a new badge")
+    try:
+        _names = pe.product_names if isinstance(pe.product_names, (list, tuple)) else json.loads(pe.product_names or "[]")
+    except Exception:
+        _names = []
+    _pids = pe.product_ids if isinstance(pe.product_ids, (list, tuple)) else json.loads(pe.product_ids or "[]")
+    m = None
+    for pid in _pids or []:
+        m = _pick_mapping(db.query(models.TicketMapping).filter(
+            models.TicketMapping.event_id == event_id,
+            models.TicketMapping.external_product_id == str(pid),
+            models.TicketMapping.is_active == True).all(),          # noqa: E712
+            (_names[0] if _names else None), pe.occurred_at)
+        if m:
+            break
+    if m is None:
+        raise HTTPException(status_code=409, detail="This product maps to no ticket; map it first")
+    actor = current_user.email or "staff"
+    reason = (body.reason or "").strip()
+    first, _, last = (pe.buyer_name or "").partition(" ")
+    if body.attendee_id:
+        att = db.query(models.Attendee).filter(models.Attendee.id == body.attendee_id,
+                                               models.Attendee.event_id == event_id).first()
+        if not att:
+            raise HTTPException(status_code=404, detail="That ticket holder is not on this event")
+        cd = dict(att.custom_data or {})
+        if pe.contact_id and pe.contact_id != cd.get("contact_id"):
+            linked = list(cd.get("linked_contact_ids") or [])
+            if pe.contact_id not in linked:
+                linked.append(pe.contact_id)
+            cd["linked_contact_ids"] = linked
+        att.custom_data = cd
+        _lifecycle_append(att, "contact_linked", actor=actor, contact_id=pe.contact_id, payment_event=pe.id,
+                          reason=reason or "Same person, confirmed from the review queue.")
+        db.commit()
+        email = att.email
+    else:
+        email = (pe.buyer_email or "").lower() or "nomail+%s@gaiahealers.app" % (pe.contact_id or "pay%d" % pe.id)
+    is_invoice = (pe.ghl_entity_type or "").lower() == "invoice"
+    when = pe.occurred_at.isoformat()[:19] if pe.occurred_at else None
+    if is_invoice:
+        r = reconcile_invoice(schemas.ReconcileInvoice(
+            event_id=event_id, email=email, invoice_id=pe.ghl_entity_id, transaction_id=pe.ghl_transaction_id,
+            contact_id=pe.contact_id, product_id=m.external_product_id, amount=pe.amount, quantity=1,
+            status="paid", first_name=first, last_name=last, phone=pe.buyer_phone, issued_at=when), db=db, _=True)
+    else:
+        r = reconcile_attendee(schemas.ReconcileAttendee(
+            event_id=event_id, email=email, ticket_type_id=m.ticket_type_id, is_upgrade=bool(m.is_upgrade),
+            first_name=first, last_name=last, phone=pe.buyer_phone, contact_id=pe.contact_id,
+            order_id=pe.ghl_entity_id or pe.ghl_transaction_id, product_id=m.external_product_id,
+            quantity=1, amount=pe.amount, purchased_at=when), db=db, _=True)
+    if body.new_badge and isinstance(r, dict) and r.get("attendee_id"):
+        a = db.query(models.Attendee).filter(models.Attendee.id == r["attendee_id"]).first()
+        if a is not None:
+            _lifecycle_append(a, "badge_from_unplaced_payment", actor=actor, payment_event=pe.id,
+                              reason=reason or "Their own badge, made from the review queue.")
+            db.commit()
+    payments_reclassify(db=db, _=True)
+    db.refresh(pe)
+    return {"ok": True, "payment_id": pe.id, "attendee_id": pe.attendee_id,
+            "recon_state": pe.recon_state, "result": r}
 
 
 def _review_summary(items) -> dict:
@@ -9122,6 +9263,28 @@ def reconcile_attendee(payload: schemas.ReconcileAttendee, db: Session = Depends
                         "actor": "reconcile", "order_id": payload.order_id})
             custom["lifecycle"] = _ll
         old_tt = existing.ticket_type_id
+        # Somebody who already holds a ticket and pays FULL price for a higher
+        # one (not the upgrade product) is folded onto their own badge -- the
+        # house rule, 25 Oct 2026 -- but whether they meant it for themselves or
+        # for a friend is one phone call away, and so is whether they expect the
+        # lower ticket's money back. Ask, automatically, once per order.
+        if payload.ticket_type_id and not payload.is_upgrade and payload.order_id:
+            _prior = [e for e in (custom.get("entitlements") or [])
+                      if e.get("status") == "paid" and not e.get("addon_code") and e.get("ticket_type_id")
+                      and e.get("order_id") != payload.order_id]
+            _top = max((_tt_rank(db, e.get("ticket_type_id")) for e in _prior), default=None)
+            _asked = any(l.get("action") == REVIEW_CONFIRM_ACTION and l.get("order_id") == payload.order_id
+                         for l in (custom.get("lifecycle") or []))
+            if _top is not None and _tt_rank(db, payload.ticket_type_id) > _top and not _asked:
+                _new_tt = db.query(models.TicketType).filter(models.TicketType.id == payload.ticket_type_id).first()
+                _ll = list(custom.get("lifecycle") or [])
+                _ll.append({"ts": datetime.utcnow().isoformat(), "action": REVIEW_CONFIRM_ACTION,
+                            "actor": "reconcile", "order_id": payload.order_id, "amount": payload.amount,
+                            "reason": ("Already held a ticket and paid full price for %s. Applied to their own "
+                                       "badge. Ask: was it for them or for somebody else (then add a seat), and "
+                                       "do they expect the lower ticket refunded?"
+                                       % ((_new_tt.name if _new_tt else "a higher pass")))})
+                custom["lifecycle"] = _ll
         # Ledger this paid order for refund-aware recalculation.
         _ent_record(custom, payload.order_id, None, payload.ticket_type_id, payload.is_upgrade,
                     event_id=event.id, product_id=payload.product_id,

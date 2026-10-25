@@ -1162,6 +1162,13 @@ class OverrideAdmit(BaseModel):
     session_id: Optional[int] = None
 
 
+class PlacePayment(BaseModel):
+    """Place an unplaced paid payment: link it to a ticket holder, or a new badge."""
+    attendee_id: Optional[int] = None
+    new_badge: Optional[bool] = False
+    reason: Optional[str] = None
+
+
 class ReviewResolve(BaseModel):
     """Closing one review item. The note is the point -- an item closed with no
     reason is indistinguishable from one nobody looked at."""

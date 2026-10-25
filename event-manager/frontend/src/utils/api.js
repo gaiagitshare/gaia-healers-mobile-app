@@ -166,6 +166,8 @@ export const deleteAttendee = (id) => api.delete(`/attendees/${id}`);
 export const revokeAttendee = (id, reason) => api.post(`/attendees/${id}/revoke`, { reason });
 export const reinstateAttendee = (id, reason) => api.post(`/attendees/${id}/reinstate`, { reason });
 export const changePass = (id, data) => api.post(`/attendees/${id}/change-pass`, data);
+export const placePayment = (eventId, paymentId, data) =>
+    api.post(`/events/${eventId}/payments/${paymentId}/place`, data);
 export const checkIn = (qrCode) => api.post('/checkin', { qr_code: qrCode });
 
 // Event-scoped check-in. A door scanner belongs to one event, so this is what

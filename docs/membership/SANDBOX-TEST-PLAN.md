@@ -34,8 +34,11 @@ keys unless `allowLive: true` is passed, and nothing passes it.
 - **Partner**: sandbox base URL (https), service token, webhook secret, and a
   sandbox practitioner with ≥2 subscriptions and a coin history spanning ≥2 pages.
 - Secrets are injected at run time and never committed, logged or printed.
-- A runner script, when written, must install `staging-proxy/tools/paid-call-guard.mjs`
-  with the caps in §5 and support `--dry-run`.
+- Stripe runner: `membership-service/src/cli/stripe-sandbox.js` automates A, B, E, H, I, J
+  (Stripe side only; webhook-driven ledger checks still need `stripe listen`). Dry run by
+  default, test keys only, hard cap 25 requests per run at the fetch layer
+  (`src/providers/request-cap.js`, same contract as `paid-call-guard.mjs`), cleanup of its own
+  objects. C, D, F, G and K–N stay manual.
 
 ## 3. Scenarios (mapped to spec §15 QA gates)
 

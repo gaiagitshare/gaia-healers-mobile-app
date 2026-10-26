@@ -20,6 +20,7 @@
 import { createSubscriptionInTx, transitionInTx, canTransition } from '../subscriptions.js';
 import { creditPurchase, clawbackPurchased } from '../coins.js';
 import { fail } from '../errors.js';
+import { linkSubscriptionInTx } from '../migration-offers.js';
 
 const STATUS = {
   incomplete: 'incomplete', incomplete_expired: 'expired', trialing: 'trialing', active: 'active',
@@ -68,9 +69,11 @@ async function subscriptionChanged(c, event, row) {
     if (!ref) return 'ignored';                                   // not a Gaia membership price
     const personId = await personForCustomer(c, s.customer);
     if (!personId) throw new RetryLater('stripe customer not linked to a person yet');
-    await createSubscriptionInTx(c, { personId, planVersionId: ref.plan_version_id, interval: ref.billing_interval, provider: 'stripe',
+    const id = await createSubscriptionInTx(c, { personId, planVersionId: ref.plan_version_id, interval: ref.billing_interval, provider: 'stripe',
       providerSubscriptionId: s.id, status: to, trialEnd: ts(s.trial_end), ...period, providerStateAt: at },
       { actorType: 'provider', actorId: 'stripe' }, { observedFromProvider: true });
+    // A subscription started from a migration offer: link it (the legacy one is still billed by GHL until staff confirm its cancellation).
+    if (s.metadata?.gaia_migration_offer_id) await linkSubscriptionInTx(c, s.metadata.gaia_migration_offer_id, id);
     return 'processed';
   }
   if (ref && (ref.plan_version_id !== local.plan_version_id || ref.billing_interval !== local.billing_interval)

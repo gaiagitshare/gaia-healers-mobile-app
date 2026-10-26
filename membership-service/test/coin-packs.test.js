@@ -73,6 +73,14 @@ test('a refund takes back unspent coins pro rata and never goes below zero', { s
     await send(pool, evt('refund.created', { id: 're_rest', object: 'refund', amount: 500, currency: 'usd', status: 'succeeded', charge: 'ch_fixture_1', payment_intent: 'pi_fixture_1', created: T + 20 }, T + 20));
     await run(pool);
     assert.equal(await bal(pool, p), 0, 'only the 50 unspent coins could be taken back');
+    const { openRefundReviews, resolveRefundReview } = await import('../src/coins.js');
+    const reviews = await openRefundReviews(pool);
+    assert.equal(reviews.length, 1, 'the unrecovered part is flagged for review (the first, fully recovered refund is not)');
+    assert.deepEqual([reviews[0].refund_ref, reviews[0].coins_refunded, reviews[0].coins_recovered, reviews[0].coins_unrecovered, reviews[0].value_cents_unrecovered, reviews[0].currency],
+      ['re_rest', 600, 50, 550, 458, 'USD'], '550 of 600 coins already spent = $4.58 of the $5.00 refund not recovered');
+    await assert.rejects(resolveRefundReview(pool, reviews[0].id, { by: 'admin-fixture', resolution: '' }), (e) => e.code === 'INVALID_INPUT');
+    await resolveRefundReview(pool, reviews[0].id, { by: 'admin-fixture', resolution: 'goodwill: customer keeps the spent coins' });
+    assert.equal((await openRefundReviews(pool)).length, 0);
     assert.equal((await pool.query("SELECT count(*)::int n FROM audit_logs WHERE action = 'coins.adjustment'")).rows[0].n, 2);
     assert.equal((await pool.query('SELECT sum(amount_cents)::int s FROM payment_ledger')).rows[0].s, 0, 'money fully refunded in the ledger');
     assert.deepEqual((await pool.query('SELECT * FROM wallet_mismatches()')).rows, []);

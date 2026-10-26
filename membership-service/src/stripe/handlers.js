@@ -147,7 +147,16 @@ async function bookRefund(c, r, { personId = null, currency, event, row, chargeI
   if (pack) {
     // Refund of a coin pack: take back the refunded share of its coins, as far as they are unspent.
     const coins = Math.min(pack.coins, Math.ceil(pack.coins * Math.abs(r.amount) / Math.max(1, pack.amount_cents)));
-    if (coins > 0) await clawbackPurchased(c, { personId: pack.person_id, coins, idempotencyKey: 'stripe-refund:' + r.id, relatedId: r.id, actor: { actorType: 'provider', actorId: 'stripe' } });
+    if (coins > 0) {
+      const cb = await clawbackPurchased(c, { personId: pack.person_id, coins, idempotencyKey: 'stripe-refund:' + r.id, relatedId: r.id, actor: { actorType: 'provider', actorId: 'stripe' } });
+      if (cb.shortfall > 0) {
+        // Already spent: record what could not be recovered, in coins and money, for a human decision.
+        await c.query(
+          `INSERT INTO coin_refund_reviews (person_id, refund_ref, charge_ref, coins_refunded, coins_recovered, coins_unrecovered, value_cents_unrecovered, currency)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8) ON CONFLICT (provider, refund_ref) DO NOTHING`,
+          [pack.person_id, r.id, charge, coins, cb.clawedBack, cb.shortfall, Math.round(Math.abs(r.amount) * cb.shortfall / coins), String(r.currency || currency || 'usd').toUpperCase()]);
+      }
+    }
   }
   return true;
 }

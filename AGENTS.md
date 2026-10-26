@@ -86,7 +86,7 @@ without installing the guard — including scripts written in the future.
 | `staging-proxy/tools/partner-recs-qa.mjs` | 3 calls to the partner | staging acceptance through the real integration (staging mode only) + a refused unlinked token; counts and shapes only; `--dry-run` |
 | `staging-proxy/tools/member-flow-check.mjs` | 0 (offline: loopback fake partner) | end-to-end member results path: code → redeem → readings → seen → prefs → practitioner view → unlink; also run by the test suite |
 | `membership-service/src/cli/reconcile-daily.js` | dry run (0); with `--run`: 8 Stripe requests (4 lists x 2 pages), cap 8 | `--max-pages` (default 2); cap flag `--max-requests`; live keys refused unless `--allow-live`; not scheduled |
-| `membership-service/src/cli/stripe-sandbox.js` | dry run (0); with `--run`: A 8, B 3, E 6, H 9, I 3, J 4, CHECKOUT 8, RENEW 16, DUNNING 20, CANCEL_END 17, CANCEL_NOW 9, CHANGE 12, 3DS 8, EVENTS 1 Stripe **test-mode** requests (max, cleanup included), cap 25 per run | `--scenario <id>[,…]` required (max 3); test keys only; cleanup included in the count |
+| `membership-service/src/cli/stripe-sandbox.js` | dry run (0); with `--run`: A 8, B 3, E 6, H 9, I 3, J 4, CHECKOUT 8, RENEW 16, DUNNING 20, CANCEL_END 17, CANCEL_NOW 9, CHANGE 12, 3DS 8, EVENTS 1 Stripe **test-mode** requests (max, cleanup included), cap 25 per run | `--scenario <id>[,…]` required (max 3); test keys only; cleanup included in the count; `--total-budget N --budget-ledger <file>` reserves each run's plan in a ledger and refuses any run that would pass the total (first smoke test: 25 total) |
 
 Runtime code (the proxy itself) is covered by rule 9: no timer or retry path may
 call a paid model without a bound. As of 3 Oct 2026 the scheduled jobs

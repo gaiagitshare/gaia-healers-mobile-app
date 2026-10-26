@@ -2,6 +2,7 @@
 /**
  * Stripe SANDBOX runner for docs/membership/SANDBOX-TEST-PLAN.md — Stripe TEST
  * MODE ONLY. Not run by anything; run by hand only after the plan's §1 approvals.
+ * Credentials and permissions: docs/membership/STRIPE-SANDBOX-ACCESS.md.
  *
  *   node src/cli/stripe-sandbox.js --scenario A           # DRY RUN (default): planned requests, nothing sent
  *   node src/cli/stripe-sandbox.js --scenario A,E --run   # execute (needs STRIPE_TEST_SECRET_KEY)
@@ -14,18 +15,30 @@
  *   - Hard request cap per run (default 25, cleanup included). A plan above it
  *     is refused before anything is sent; the request that would exceed it
  *     throws (request-cap.js, counted at the fetch layer, retries included).
+ *     Planned counts are upper bounds: test-clock scenarios include their
+ *     maximum number of clock status polls.
  *   - Prints object ids and statuses only; never keys, emails or names.
  *   - Fictional customers only (sandbox+<run>-<scenario>@example.invalid).
  *   - Cleans up what THIS run created, where Stripe allows: customers deleted
- *     (which cancels their test subscriptions), prices and products archived.
- *     Anything it could not clean up is listed by id.
+ *     (which cancels their test subscriptions), test clocks deleted (which
+ *     deletes their customers and subscriptions), prices and products archived,
+ *     checkout sessions expired. Anything it could not clean up is listed by id.
  *
- * Automated here: A (subscription paid), B (declined), E (refunds), H (cancel at
- * period end), I (coin pack one-time charge), J (reconciliation fetch). The
- * other plan rows need a browser (C), a test clock (D), async disputes (F), the
- * Stripe CLI (G) or other providers (K-N), and are refused with a note.
- * Webhook-driven ledger checks need `stripe listen` and the webhook path; this
- * runner checks the Stripe side.
+ * Automated here (Stripe side only):
+ *   A  subscription paid             B  declined card          E  refunds
+ *   H  cancel at period end (flag)   I  coin pack charge       J  reconciliation fetch
+ *   CHECKOUT    hosted checkout session created (paying it needs a browser) and expired
+ *   RENEW       test clock: one period later the renewal invoice is paid
+ *   DUNNING     test clock: renewal fails (pm_card_chargeCustomerFail), past_due, paid with a good card
+ *   CANCEL_END  test clock: cancel_at_period_end, then past the period end it is canceled
+ *   CANCEL_NOW  immediate cancellation
+ *   CHANGE      upgrade then downgrade (item price change, proration_behavior=none)
+ *   3DS         pm_card_authenticationRequired: the subscription stays incomplete
+ *   EVENTS      one page of recent events (ids and types) to pick from for a resend
+ * Stripe cannot be made to retry a webhook; resends are done with the Dashboard
+ * or `stripe events resend <evt_id>` (see STRIPE-SANDBOX-ACCESS.md §6).
+ * Webhook-driven ledger checks need a webhook delivery path
+ * (src/cli/staging-webhook-server.js); this runner checks the Stripe side.
  *
  * Exit codes: 0 every scenario passed; 1 a scenario failed; 2 refused (key,
  * arguments, cap); 3 unexpected error.
@@ -42,22 +55,76 @@ export const DEFAULT_MAX_REQUESTS = 25;
 export const MAX_SCENARIOS_PER_RUN = 3;
 const TEST_KEY = /^(sk|rk)_test_[A-Za-z0-9_]{8,}$/;
 
-async function subscriptionSetup(ctx, sc) {
+const DAY = 86400;
+/** Advance target for a monthly price: past one period end (and Stripe's ~1 h draft window), below two periods. */
+export const ADVANCE_SECONDS = 33 * DAY;
+/** Test clocks advance asynchronously: at most this many status polls per advance, with these waits before each. */
+export const CLOCK_MAX_POLLS = 5;
+export const CLOCK_POLL_DELAYS_MS = Object.freeze([2000, 3000, 5000, 8000, 12000]);
+export const EVENTS_PAGE_LIMIT = 20;
+const STANDARD_CENTS = 4700;
+const PREMIUM_CENTS = 9700;
+const enc = encodeURIComponent;
+const realSleep = (ms) => new Promise((r) => setTimeout(r, ms));
+const idOf = (x) => (x && typeof x === 'object' ? x.id : x);
+const invoiceOf = (sub) => (typeof sub?.latest_invoice === 'object' ? sub.latest_invoice : null);
+const scenarioError = (code) => Object.assign(new Error(code), { code });
+
+async function productAndPrices(ctx, sc, prices = [{ step: 'price', amount: STANDARD_CENTS }]) {
   const product = await ctx.post(sc, 'product', '/v1/products', { name: `Gaia sandbox ${ctx.runId}`, metadata: ctx.meta(sc) });
   ctx.track('product', product.id);
-  const price = await ctx.post(sc, 'price', '/v1/prices', { product: product.id, currency: 'usd', unit_amount: 4700, recurring: { interval: 'month', interval_count: 1 }, metadata: ctx.meta(sc) });
-  ctx.track('price', price.id);
-  const cus = await ctx.customer(sc);
-  const pm = await ctx.post(sc, 'attach', '/v1/payment_methods/pm_card_visa/attach', { customer: cus.id });
+  const out = [];
+  for (const p of prices) {
+    const price = await ctx.post(sc, p.step, '/v1/prices', { product: product.id, currency: 'usd', unit_amount: p.amount, recurring: { interval: 'month', interval_count: 1 }, metadata: ctx.meta(sc) });
+    ctx.track('price', price.id);
+    out.push(price);
+  }
+  return { product, prices: out };
+}
+
+async function createClock(ctx, sc) {
+  const clock = await ctx.post(sc, 'clock', '/v1/test_helpers/test_clocks', { frozen_time: ctx.clockStart, name: `gaia-sbx-${ctx.runId}-${sc}` });
+  ctx.track('test_clock', clock.id);
+  ctx.log(sc, `test_clock ${clock.id} status=${clock.status} frozen_time=${clock.frozen_time}`);
+  return clock;
+}
+
+/** Advance, then poll (bounded) until Stripe has finished billing. Throws CLOCK_NOT_READY otherwise. */
+async function advanceClock(ctx, sc, clock, seconds = ADVANCE_SECONDS) {
+  let c = await ctx.post(sc, 'advance', `/v1/test_helpers/test_clocks/${enc(clock.id)}/advance`, { frozen_time: ctx.clockStart + seconds });
+  for (let i = 0; i < CLOCK_MAX_POLLS && c.status !== 'ready' && c.status !== 'internal_failure'; i++) {
+    await ctx.sleep(CLOCK_POLL_DELAYS_MS[i]);
+    c = await ctx.stripe.get(`/v1/test_helpers/test_clocks/${enc(clock.id)}`);
+  }
+  ctx.log(sc, `test_clock ${clock.id} status=${c.status} frozen_time=${c.frozen_time}`);
+  ctx.expect(sc, c.status === 'ready', `test clock advanced ${Math.round(seconds / DAY)} days and finished billing`);
+  if (c.status !== 'ready') throw scenarioError('CLOCK_NOT_READY');
+  return c;
+}
+
+async function getSubscription(ctx, sub) {
+  return ctx.stripe.get(`/v1/subscriptions/${enc(sub.id)}`, { 'expand[]': ['latest_invoice'] });
+}
+
+/**
+ * product + price(s) + customer (optionally on a test clock) + card + subscription.
+ * Requests: 1 + prices + 1 + 1 + 1.
+ */
+async function subscriptionSetup(ctx, sc, { clock = null, card = 'pm_card_visa', paymentBehavior = 'error_if_incomplete', prices, expectPaid = true } = {}) {
+  const { prices: made } = await productAndPrices(ctx, sc, prices);
+  const cus = await ctx.customer(sc, { testClock: clock?.id });
+  const pm = await ctx.post(sc, 'attach', `/v1/payment_methods/${enc(card)}/attach`, { customer: cus.id });
   const sub = await ctx.post(sc, 'subscription', '/v1/subscriptions', {
-    customer: cus.id, items: [{ price: price.id }], default_payment_method: pm.id, payment_behavior: 'error_if_incomplete',
+    customer: cus.id, items: [{ price: made[0].id }], default_payment_method: pm.id, payment_behavior: paymentBehavior,
     expand: ['latest_invoice'], metadata: ctx.meta(sc),
   });
-  const invoiceStatus = typeof sub.latest_invoice === 'object' ? sub.latest_invoice?.status : undefined;
-  ctx.log(sc, `subscription ${sub.id} status=${sub.status} invoice=${typeof sub.latest_invoice === 'object' ? sub.latest_invoice?.id : sub.latest_invoice} invoice_status=${invoiceStatus}`);
-  ctx.expect(sc, sub.status === 'active', 'subscription is active');
-  ctx.expect(sc, invoiceStatus === 'paid', 'first invoice is paid');
-  return sub;
+  const inv = invoiceOf(sub);
+  ctx.log(sc, `subscription ${sub.id} status=${sub.status} invoice=${inv ? inv.id : sub.latest_invoice} invoice_status=${inv?.status}`);
+  if (expectPaid) {
+    ctx.expect(sc, sub.status === 'active', 'subscription is active');
+    ctx.expect(sc, inv?.status === 'paid', 'first invoice is paid');
+  }
+  return { sub, pm, customer: cus, prices: made };
 }
 
 async function payNow(ctx, sc, step, { amount, metadata = {}, paymentMethod = 'pm_card_visa' }) {
@@ -68,7 +135,10 @@ async function payNow(ctx, sc, step, { amount, metadata = {}, paymentMethod = 'p
   });
 }
 
-/** Planned counts include cleanup. Keep them exact: the cap is checked against the sum. */
+/**
+ * Planned counts include cleanup. Keep them exact upper bounds: the cap is
+ * checked against the sum. `polls` = clock status polls included in `planned`.
+ */
 export const SCENARIOS = Object.freeze({
   A: { title: 'initial payment success (subscription, 4242 test card)', planned: 5 + 3,
     run: async (ctx) => { await subscriptionSetup(ctx, 'A'); } },
@@ -100,8 +170,8 @@ export const SCENARIOS = Object.freeze({
     } },
   H: { title: 'cancel at period end', planned: 5 + 1 + 3,
     run: async (ctx) => {
-      const sub = await subscriptionSetup(ctx, 'H');
-      const c = await ctx.post('H', 'cancel', `/v1/subscriptions/${encodeURIComponent(sub.id)}`, { cancel_at_period_end: true });
+      const { sub } = await subscriptionSetup(ctx, 'H');
+      const c = await ctx.post('H', 'cancel', `/v1/subscriptions/${enc(sub.id)}`, { cancel_at_period_end: true });
       ctx.log('H', `subscription ${c.id} status=${c.status} cancel_at_period_end=${c.cancel_at_period_end}`);
       ctx.expect('H', c.cancel_at_period_end === true && c.status === 'active', 'scheduled to cancel; access continues until the period end');
     } },
@@ -122,19 +192,141 @@ export const SCENARIOS = Object.freeze({
       const refunds = new Set(page.refunds.map((x) => x.id));
       ctx.expect('J', ctx.ids.charges.every((id) => charges.has(id)) && ctx.ids.refunds.every((id) => refunds.has(id)), 'every charge and refund made earlier in this run is listed');
     } },
+
+  CHECKOUT: { title: 'hosted checkout session (subscription mode) created with Gaia metadata, then expired', planned: 5 + 3,
+    run: async (ctx) => {
+      const sc = 'CHECKOUT';
+      const { prices: [price] } = await productAndPrices(ctx, sc);
+      const cus = await ctx.customer(sc);
+      const meta = ctx.meta(sc);
+      const s = await ctx.post(sc, 'session', '/v1/checkout/sessions', {
+        mode: 'subscription', customer: cus.id, client_reference_id: `sbx-${ctx.runId}`, line_items: [{ price: price.id, quantity: 1 }],
+        success_url: 'https://example.invalid/gaia-sandbox/success', cancel_url: 'https://example.invalid/gaia-sandbox/cancel',
+        metadata: meta, subscription_data: { metadata: meta },
+      });
+      ctx.log(sc, `checkout_session ${s.id} status=${s.status} mode=${s.mode}`);
+      ctx.expect(sc, s.mode === 'subscription' && s.status === 'open' && /^https:\/\/checkout\.stripe\.com\//.test(String(s.url)), 'an open hosted checkout session with a Stripe checkout URL');
+      ctx.expect(sc, s.metadata?.gaia_sandbox_run === ctx.runId, 'session metadata carries the Gaia keys');
+      const x = await ctx.post(sc, 'expire', `/v1/checkout/sessions/${enc(s.id)}/expire`, {});
+      ctx.log(sc, `checkout_session ${x.id} status=${x.status}`);
+      ctx.expect(sc, x.status === 'expired', 'the unpaid session is expired (nothing can be paid on it any more)');
+    } },
+
+  RENEW: { title: 'renewal on a test clock: advance one period, the renewal invoice is paid', planned: 6 + 1 + CLOCK_MAX_POLLS + 1 + 3, polls: CLOCK_MAX_POLLS,
+    run: async (ctx) => {
+      const sc = 'RENEW';
+      const clock = await createClock(ctx, sc);
+      const { sub } = await subscriptionSetup(ctx, sc, { clock });
+      const first = idOf(sub.latest_invoice);
+      await advanceClock(ctx, sc, clock);
+      const s = await getSubscription(ctx, sub);
+      const inv = invoiceOf(s);
+      ctx.log(sc, `subscription ${s.id} status=${s.status} latest_invoice=${inv?.id} invoice_status=${inv?.status} billing_reason=${inv?.billing_reason}`);
+      ctx.expect(sc, !!inv && inv.id !== first, 'a new (renewal) invoice was created');
+      ctx.expect(sc, inv?.status === 'paid' && s.status === 'active', 'the renewal invoice is paid and the subscription stays active');
+    } },
+
+  DUNNING: { title: 'failed renewal on a test clock: past_due, then paid with a good card', planned: 6 + 1 + 1 + 1 + CLOCK_MAX_POLLS + 1 + 1 + 1 + 3, polls: CLOCK_MAX_POLLS,
+    run: async (ctx) => {
+      const sc = 'DUNNING';
+      const clock = await createClock(ctx, sc);
+      const { sub, pm: good, customer } = await subscriptionSetup(ctx, sc, { clock });
+      const bad = await ctx.post(sc, 'attach-fail', '/v1/payment_methods/pm_card_chargeCustomerFail/attach', { customer: customer.id });
+      const u = await ctx.post(sc, 'use-failing-card', `/v1/subscriptions/${enc(sub.id)}`, { default_payment_method: bad.id });
+      ctx.log(sc, `subscription ${u.id} default_payment_method=${idOf(u.default_payment_method)} (attaches, fails on charge)`);
+      await advanceClock(ctx, sc, clock);
+      const s = await getSubscription(ctx, sub);
+      const inv = invoiceOf(s);
+      ctx.log(sc, `subscription ${s.id} status=${s.status} latest_invoice=${inv?.id} invoice_status=${inv?.status} attempt_count=${inv?.attempt_count}`);
+      ctx.expect(sc, s.status === 'past_due', 'the subscription is past_due after the failed renewal');
+      ctx.expect(sc, inv?.status === 'open' && inv?.paid !== true && Number(inv?.attempt_count) >= 1, 'the renewal invoice is open, unpaid, attempted');
+      if (!inv || inv.status !== 'open') throw scenarioError('NO_OPEN_INVOICE');
+      const paid = await ctx.post(sc, 'retry-pay', `/v1/invoices/${enc(inv.id)}/pay`, { payment_method: good.id });
+      ctx.log(sc, `invoice ${paid.id} status=${paid.status} (retried with a good card)`);
+      ctx.expect(sc, paid.status === 'paid', 'the retry with a good card pays the invoice');
+      const after = await getSubscription(ctx, sub);
+      ctx.log(sc, `subscription ${after.id} status=${after.status}`);
+      ctx.expect(sc, after.status === 'active', 'the subscription is active again');
+    } },
+
+  CANCEL_END: { title: 'cancel at period end on a test clock: past the period end the subscription is canceled', planned: 6 + 1 + 1 + CLOCK_MAX_POLLS + 1 + 3, polls: CLOCK_MAX_POLLS,
+    run: async (ctx) => {
+      const sc = 'CANCEL_END';
+      const clock = await createClock(ctx, sc);
+      const { sub } = await subscriptionSetup(ctx, sc, { clock });
+      const c = await ctx.post(sc, 'cancel', `/v1/subscriptions/${enc(sub.id)}`, { cancel_at_period_end: true });
+      ctx.log(sc, `subscription ${c.id} status=${c.status} cancel_at_period_end=${c.cancel_at_period_end}`);
+      ctx.expect(sc, c.cancel_at_period_end === true && c.status === 'active', 'scheduled to cancel; still active before the period end');
+      await advanceClock(ctx, sc, clock);
+      const s = await getSubscription(ctx, sub);
+      const inv = invoiceOf(s);
+      ctx.log(sc, `subscription ${s.id} status=${s.status} latest_invoice=${inv?.id}`);
+      ctx.expect(sc, s.status === 'canceled', 'canceled after the period end');
+      ctx.expect(sc, inv?.id === idOf(sub.latest_invoice), 'no renewal invoice was created');
+    } },
+
+  CANCEL_NOW: { title: 'immediate cancellation', planned: 5 + 1 + 3,
+    run: async (ctx) => {
+      const sc = 'CANCEL_NOW';
+      const { sub } = await subscriptionSetup(ctx, sc);
+      const c = await ctx.stripe.del(`/v1/subscriptions/${enc(sub.id)}`);
+      ctx.log(sc, `subscription ${c.id} status=${c.status} canceled_at=${c.canceled_at ?? '-'}`);
+      ctx.expect(sc, c.status === 'canceled', 'canceled immediately');
+    } },
+
+  CHANGE: { title: 'upgrade then downgrade (item price change, proration_behavior=none)', planned: 6 + 1 + 1 + 4,
+    run: async (ctx) => {
+      const sc = 'CHANGE';
+      const { sub, prices: [standard, premium] } = await subscriptionSetup(ctx, sc, { prices: [{ step: 'price', amount: STANDARD_CENTS }, { step: 'price-premium', amount: PREMIUM_CENTS }] });
+      const item = sub.items?.data?.[0]?.id;
+      ctx.expect(sc, !!item, 'the subscription has one item');
+      if (!item) throw scenarioError('NO_SUBSCRIPTION_ITEM');
+      const first = idOf(sub.latest_invoice);
+      const change = async (step, price) => {
+        const r = await ctx.post(sc, step, `/v1/subscriptions/${enc(sub.id)}`, { items: [{ id: item, price: price.id }], proration_behavior: 'none' });
+        const now = r.items?.data?.[0]?.price;
+        ctx.log(sc, `${step}: subscription ${r.id} status=${r.status} price=${idOf(now)} latest_invoice=${idOf(r.latest_invoice)}`);
+        ctx.expect(sc, idOf(now) === price.id && r.status === 'active', `${step}: the item is on the new price and the subscription is active`);
+        ctx.expect(sc, idOf(r.latest_invoice) === first, `${step}: no invoice was created (proration off, same billing cycle)`);
+      };
+      await change('upgrade', premium);
+      await change('downgrade', standard);
+    } },
+
+  '3DS': { title: '3DS required (pm_card_authenticationRequired): the subscription stays incomplete', planned: 5 + 3,
+    run: async (ctx) => {
+      const sc = '3DS';
+      const { sub } = await subscriptionSetup(ctx, sc, { card: 'pm_card_authenticationRequired', paymentBehavior: 'allow_incomplete', expectPaid: false });
+      const inv = invoiceOf(sub);
+      ctx.expect(sc, sub.status === 'incomplete', 'the subscription is incomplete (no access before authentication)');
+      ctx.expect(sc, inv?.status === 'open', 'the first invoice is open, not paid');
+    } },
+
+  EVENTS: { title: `recent events, one page of at most ${EVENTS_PAGE_LIMIT} (ids and types, to pick one for a resend)`, planned: 1,
+    run: async (ctx) => {
+      const sc = 'EVENTS';
+      const list = await ctx.stripe.get('/v1/events', { limit: EVENTS_PAGE_LIMIT });
+      const data = Array.isArray(list?.data) ? list.data.slice(0, EVENTS_PAGE_LIMIT) : [];
+      for (const e of data) ctx.log(sc, `event ${e.id} type=${e.type}`);
+      ctx.log(sc, `${data.length} event(s)${list?.has_more ? ', more exist (not fetched)' : ''}. Resend one to a test endpoint: stripe events resend <evt_id> --webhook-endpoint <we_id>`);
+      ctx.expect(sc, list?.object === 'list', 'events listed');
+    } },
 });
 export const MANUAL = Object.freeze({
-  C: '3DS needs a browser challenge', D: 'dunning needs a Stripe test clock', F: 'disputes arrive asynchronously',
-  G: 'needs the Stripe CLI (events resend)', K: 'GHL sandbox', L: 'partner sandbox', M: 'partner sandbox', N: 'cross-provider',
+  C: 'the 3DS browser challenge needs a browser; the Stripe side (subscription stays incomplete) is automated as 3DS',
+  D: 'automated as DUNNING (test clock)',
+  F: 'disputes arrive asynchronously',
+  G: 'Stripe cannot be made to retry; list events with EVENTS, then resend with the Dashboard or `stripe events resend` (STRIPE-SANDBOX-ACCESS.md)',
+  K: 'GHL sandbox', L: 'partner sandbox', M: 'partner sandbox', N: 'cross-provider',
 });
 
 export function planRun(ids) {
-  return ids.map((id) => ({ id, title: SCENARIOS[id].title, planned: SCENARIOS[id].planned }));
+  return ids.map((id) => ({ id, title: SCENARIOS[id].title, planned: SCENARIOS[id].planned, polls: SCENARIOS[id].polls || 0 }));
 }
 
 export async function main(argv = process.argv.slice(2), {
   env = process.env, fetch = globalThis.fetch, baseUrl = STRIPE_API_BASE, runId = crypto.randomBytes(5).toString('hex'),
-  out = (s) => process.stdout.write(s + '\n'), err = (s) => process.stderr.write(s + '\n'), sleep,
+  out = (s) => process.stdout.write(s + '\n'), err = (s) => process.stderr.write(s + '\n'), sleep, now = () => Date.now(),
 } = {}) {
   let a;
   try {
@@ -149,14 +341,14 @@ export async function main(argv = process.argv.slice(2), {
   if (!ids.length || ids.length > MAX_SCENARIOS_PER_RUN) { err(`[${LABEL}] REFUSED: give 1 to ${MAX_SCENARIOS_PER_RUN} scenarios per run.`); return 2; }
   for (const id of ids) {
     if (MANUAL[id]) { err(`[${LABEL}] REFUSED: scenario ${id} is not automated (${MANUAL[id]}); run it by hand per the test plan.`); return 2; }
-    if (!SCENARIOS[id]) { err(`[${LABEL}] REFUSED: unknown scenario ${id}.`); return 2; }
+    if (!Object.hasOwn(SCENARIOS, id)) { err(`[${LABEL}] REFUSED: unknown scenario ${id}.`); return 2; }
   }
   const max = a['max-requests'] === undefined ? DEFAULT_MAX_REQUESTS : Number(a['max-requests']);
   if (!Number.isInteger(max) || max < 1) { err(`[${LABEL}] REFUSED: --max-requests must be a positive whole number.`); return 2; }
 
   const plan = planRun(ids);
   const planned = plan.reduce((s, p) => s + p.planned, 0);
-  for (const p of plan) out(`[${LABEL}] scenario ${p.id}: ${p.title} — planned requests: ${p.planned} (cleanup included)`);
+  for (const p of plan) out(`[${LABEL}] scenario ${p.id}: ${p.title} — planned requests: ${p.planned} (cleanup included${p.polls ? `; at most: includes up to ${p.polls} test-clock status polls` : ''})`);
   out(`[${LABEL}] planned Stripe test-mode requests: ${planned} | cap: ${max}`);
   if (planned > max) { err(`[${LABEL}] REFUSED: ${planned} planned requests exceed the cap of ${max}. Run fewer scenarios; raise --max-requests for one run only after approval.`); return 2; }
 
@@ -177,16 +369,21 @@ export async function main(argv = process.argv.slice(2), {
   const created = [];            // only what THIS run created, in creation order
   const failures = [];
   const ctx = {
-    stripe, runId, startedAt: new Date(), customers: new Map(), ids: { charges: [], refunds: [] },
+    stripe, runId, startedAt: new Date(now()), clockStart: Math.floor(now() / 1000), customers: new Map(), ids: { charges: [], refunds: [] },
+    sleep: sleep || realSleep,
     meta: (sc) => ({ gaia_sandbox_run: runId, gaia_sandbox_scenario: sc }),
     log: (sc, s) => out(`[${LABEL}] [${sc}] ${s}`),
     track: (type, id) => { if (id) created.push({ type, id }); },
     expect: (sc, ok, what) => { out(`[${LABEL}] [${sc}] ${ok ? 'ok  ' : 'FAIL'} ${what}`); if (!ok) failures.push(`${sc}: ${what}`); },
     post: (sc, step, path, params) => stripe.post(path, params, { idempotencyKey: `gaia-sbx-${runId}-${sc}-${step}` }),
-    async customer(sc) {
-      const c = await ctx.post(sc, 'customer', '/v1/customers', { email: `sandbox+${runId}-${sc.toLowerCase()}@example.invalid`, name: 'Sandbox Tester', metadata: ctx.meta(sc) });
-      ctx.track('customer', c.id); ctx.customers.set(sc, c);
-      ctx.log(sc, `customer ${c.id} created`);
+    async customer(sc, { testClock } = {}) {
+      const c = await ctx.post(sc, 'customer', '/v1/customers', {
+        email: `sandbox+${runId}-${sc.toLowerCase()}@example.invalid`, name: 'Sandbox Tester', metadata: ctx.meta(sc), ...(testClock ? { test_clock: testClock } : {}),
+      });
+      // A customer on a test clock is deleted with the clock; tracking it too would spend a request on a 404.
+      if (!testClock) ctx.track('customer', c.id);
+      ctx.customers.set(sc, c);
+      ctx.log(sc, `customer ${c.id} created${testClock ? ` on test_clock ${testClock}` : ''}`);
       return c;
     },
   };
@@ -211,9 +408,10 @@ export async function main(argv = process.argv.slice(2), {
   const left = [];
   for (const o of [...created].reverse()) {
     try {
-      if (o.type === 'customer') { const r = await stripe.del(`/v1/customers/${encodeURIComponent(o.id)}`); out(`[${LABEL}] cleanup customer ${o.id} deleted=${r.deleted === true}`); }
-      else if (o.type === 'price') { const r = await stripe.post(`/v1/prices/${encodeURIComponent(o.id)}`, { active: false }, { idempotencyKey: `gaia-sbx-${runId}-archive-${o.id}` }); out(`[${LABEL}] cleanup price ${o.id} active=${r.active}`); }
-      else if (o.type === 'product') { const r = await stripe.post(`/v1/products/${encodeURIComponent(o.id)}`, { active: false }, { idempotencyKey: `gaia-sbx-${runId}-archive-${o.id}` }); out(`[${LABEL}] cleanup product ${o.id} active=${r.active}`); }
+      if (o.type === 'customer') { const r = await stripe.del(`/v1/customers/${enc(o.id)}`); out(`[${LABEL}] cleanup customer ${o.id} deleted=${r.deleted === true}`); }
+      else if (o.type === 'test_clock') { const r = await stripe.del(`/v1/test_helpers/test_clocks/${enc(o.id)}`); out(`[${LABEL}] cleanup test_clock ${o.id} deleted=${r.deleted === true} (its customers and subscriptions go with it)`); }
+      else if (o.type === 'price') { const r = await stripe.post(`/v1/prices/${enc(o.id)}`, { active: false }, { idempotencyKey: `gaia-sbx-${runId}-archive-${o.id}` }); out(`[${LABEL}] cleanup price ${o.id} active=${r.active}`); }
+      else if (o.type === 'product') { const r = await stripe.post(`/v1/products/${enc(o.id)}`, { active: false }, { idempotencyKey: `gaia-sbx-${runId}-archive-${o.id}` }); out(`[${LABEL}] cleanup product ${o.id} active=${r.active}`); }
     } catch (e) {
       left.push(o);
       out(`[${LABEL}] cleanup ${o.type} ${o.id} FAILED (${e.code || e.name})`);

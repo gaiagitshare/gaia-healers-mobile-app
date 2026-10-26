@@ -24,6 +24,16 @@ const PORT = 8972;
 const SELF = `http://127.0.0.1:${PORT}`;
 const ADMIN_PASSWORD = 'csrf-test-operator-password';
 const EVENT_SECRET = 'csrf-event-secret-'.padEnd(48, 'e');
+const SERVICE_TOKEN = 'csrf-identity-service-'.padEnd(48, 'i');
+// Loopback stand-in for the Event Manager identity API: once the Control Center
+// checks that an Event login is a platform admin (PR #286), user 1 is one.
+const http = await import('node:http');
+const fakeEventManager = http.createServer((req, res) => {
+  const ok = req.headers.authorization === 'Bearer ' + SERVICE_TOKEN && req.url === '/identity/staff/1/control-center';
+  res.writeHead(ok ? 200 : 403, { 'content-type': 'application/json' });
+  res.end(ok ? JSON.stringify({ user_id: 1, control_center_admin: true }) : '{}');
+});
+await new Promise((r) => fakeEventManager.listen(0, '127.0.0.1', r));
 Object.assign(process.env, {
   PORT: String(PORT), HOST: '127.0.0.1',
   AUTH_SESSION_SECRET: 'csrf-session-secret-'.padEnd(48, 's'),
@@ -33,6 +43,8 @@ Object.assign(process.env, {
   EVENT_MANAGER_BASE_URL: 'http://127.0.0.1:9',
   GAIA_ADMIN_PASSWORD: ADMIN_PASSWORD,
   EVENT_JWT_SECRET: EVENT_SECRET,
+  IDENTITY_SERVICE_TOKEN: SERVICE_TOKEN,
+  EVENT_MANAGER_INTERNAL_URL: 'http://127.0.0.1:' + fakeEventManager.address().port,
   ALLOWED_ORIGINS: 'https://gaiahealers.app',
   // keep every write inside the temp workdir (the events store is module-relative)
   MEMBER_ENTITLEMENTS_FILE: path.join(workdir, 'data', 'member-entitlements.json'),
@@ -40,7 +52,7 @@ Object.assign(process.env, {
 });
 const { crossSiteAdminWriteReason, closeServer } = await import(new URL('../server.js', import.meta.url).href);
 await new Promise((r) => setTimeout(r, 300));
-test.after(() => closeServer());
+test.after(() => { closeServer(); fakeEventManager.close(); });
 
 async function call(pathname, { method = 'GET', headers = {}, body } = {}) {
   const r = await fetch(`${SELF}${pathname}`, { method, headers, body });
@@ -51,7 +63,7 @@ async function call(pathname, { method = 'GET', headers = {}, body } = {}) {
 
 function eventBearer() {
   const head = Buffer.from(JSON.stringify({ alg: 'HS256', typ: 'JWT' })).toString('base64url');
-  const body = Buffer.from(JSON.stringify({ sub: 'event-admin-1', exp: Math.floor(Date.now() / 1000) + 600 })).toString('base64url');
+  const body = Buffer.from(JSON.stringify({ sub: '1', exp: Math.floor(Date.now() / 1000) + 600 })).toString('base64url');
   const sig = crypto.createHmac('sha256', EVENT_SECRET).update(`${head}.${body}`).digest('base64url');
   return `Bearer ${head}.${body}.${sig}`;
 }

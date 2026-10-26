@@ -1038,7 +1038,7 @@
   function screenRequests(panel) {
     var box = el('div', {}), again = el('div', {});
     panel.appendChild(card('Waiting for a decision', [box]));
-    panel.appendChild(card('Approved but not executed, or failed', [note('These ran once and did not complete. Nothing retries by itself: an operator with the finance role (or the approver role, if higher) can run one again, with a reason. A request that was executed can never run again.'), again]));
+    panel.appendChild(card('Approved but not executed, or failed', [note('These ran once and did not complete. Nothing retries by itself: an operator with the finance role (or the approver role, if higher) can run one again, with a reason, within 72 hours of the approval. A request that was executed can never run again.'), again]));
     function loadAgain() {
       into(again, get('/requests?status=retryable'), function (d) {
         var rows = list(d, 'items').filter(function (r) { return r.status === 'failed' || r.status === 'approved_not_executed'; });
@@ -1046,7 +1046,9 @@
         rows.forEach(function (r) {
           var by = r.requestedBy || {}, dec = r.decidedBy || {}, last = r.lastAttempt || {};
           var acts = el('div', { class: 'm2-acts' });
-          if (r.canExecute) acts.appendChild(actBtn('Execute again', function () { decide(r, 'execute', loadAgain); }));
+          var closed = r.retryUntil && new Date(r.retryUntil) <= new Date();
+          if (closed) acts.appendChild(el('span', { class: 'm2-sub', text: 'The 72-hour retry window closed on ' + fmtWhen(r.retryUntil) + '. Submit a new request if this is still needed.' }));
+          else if (r.canExecute) acts.appendChild(actBtn('Execute again', function () { decide(r, 'execute', loadAgain); }));
           else acts.appendChild(el('span', { class: 'm2-sub', text: r.own && r.dual ? 'Your own request: a second operator runs it again.' : 'Needs the ' + plain(r.executeRole || 'finance') + ' role to run again.' }));
           again.appendChild(el('article', { class: 'm2-card m2-req' }, [
             el('h3', {}, [ACTION_LABELS[r.action] || plain(r.action), ' ', badge(r.money) || el('span', { class: 'm2-badge m2-badge--warn', text: r.status === 'failed' ? 'Failed' : 'Not executed (billing not connected)' })]),
@@ -1055,6 +1057,7 @@
               el('dt', { text: 'Requested by' }), el('dd', { text: plain(by.displayName || by.id) }),
               el('dt', { text: 'Approved by' }), el('dd', { text: r.dual ? plain(dec.displayName || dec.id) : '— (direct action)' }),
               el('dt', { text: 'Why' }), el('dd', { text: plain(r.reason) }),
+              el('dt', { text: 'Can run again until' }), el('dd', { text: r.retryUntil ? fmtWhen(r.retryUntil) : '—' }),
               el('dt', { text: 'Attempts' }), el('dd', { text: fmtInt(r.attempts) + (last.outcome ? ' · last: ' + plain(last.outcome) + (last.code ? ' (' + last.code + ')' : '') + ' by ' + plain(last.executedBy && last.executedBy.displayName) + ', ' + fmtWhen(last.finishedAt || last.startedAt) : '') })
             ]),
             acts

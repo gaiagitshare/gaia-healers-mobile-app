@@ -463,3 +463,10 @@ test('sidebar: real buttons with aria-current; "live from GHL" is not claimed fo
   assert.match(g, /view === 'membership2' \? 'Gaia Healers &middot; Membership 2\.0 database' : 'Gaia Healers &middot; live from GHL'/);
   assert.match(read('admin/gadmin.css'), /\.side \.nav__item:focus-visible\{outline:2px solid/);
 });
+
+test('retries show their 72-hour deadline and are not offered once it has passed', () => {
+  const src = fs.readFileSync(path.join(__dirname, '..', 'admin', 'gadmin-membership2.js'), 'utf8');
+  assert.match(src, /retryUntil && new Date\(r\.retryUntil\) <= new Date\(\)/, 'a closed window hides Execute again');
+  assert.match(src, /72-hour retry window closed/);
+  assert.match(src, /Can run again until/);
+});

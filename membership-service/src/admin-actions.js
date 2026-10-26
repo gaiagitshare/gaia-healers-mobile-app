@@ -187,7 +187,10 @@ const statusOf = (r) => (r.status === 'approved' && r.result?.outcome === 'appro
 /** May this request be executed again by an explicit action? (failed, or approved but not executed) */
 export const retryable = (r) => r.status === 'failed' || (r.status === 'approved' && r.result?.outcome === 'approved_not_executed');
 const executeRole = (r) => (roleRank(r.required_role) > roleRank(EXECUTE_MIN_ROLE) ? r.required_role : EXECUTE_MIN_ROLE);
-const canExecute = (viewer, r) => retryable(r) && atLeast(viewer, executeRole(r)) && !(r.dual && viewer.id === r.requested_by);
+/** Retries close REQUEST_TTL_MS (72 h) after the approval (or, for a direct action, after it was submitted); owner decision 2026-10-26. */
+export const retryUntil = (r) => new Date(new Date(r.decided_at || r.created_at).getTime() + REQUEST_TTL_MS);
+const retryOpen = (r, now = new Date()) => now < retryUntil(r);
+const canExecute = (viewer, r, now) => retryable(r) && retryOpen(r, now) && atLeast(viewer, executeRole(r)) && !(r.dual && viewer.id === r.requested_by);
 
 /**
  * Whether money moved, from the record only: a refund is `stripe_confirmed` when
@@ -203,17 +206,17 @@ function moneyState(r) {
 }
 
 /** API view of a request; approved + PROVIDER_UNAVAILABLE reads as approved_not_executed. */
-export function requestView(r, viewer = null) {
+export function requestView(r, viewer = null, now = new Date()) {
   const status = statusOf(r);
   return {
     id: r.id, action: r.action, params: r.params, reason: r.reason, dual: r.dual, status, requiredRole: r.required_role,
     requestedBy: { id: r.requested_by, displayName: r.requester_name ?? null }, requestedAt: r.created_at,
     decidedBy: r.decided_by ? { id: r.decided_by, displayName: r.decider_name ?? null } : null, decidedAt: r.decided_at, decisionNote: r.decision_note,
-    executedAt: r.executed_at, result: r.result, expiresAt: r.expires_at,
+    executedAt: r.executed_at, result: r.result, expiresAt: r.expires_at, retryUntil: retryable(r) ? retryUntil(r) : null,
     subject: r.subject_person_id ? { personId: r.subject_person_id, email: r.subject_email ?? null, contactId: r.subject_contact_id ?? null } : null,
     attempts: r.attempt_count ?? null, lastAttempt: r.last_attempt ?? null, executeRole: executeRole(r), money: moneyState(r),
-    ...(viewer ? { canApprove: Boolean(r.dual && r.status === 'pending' && new Date(r.expires_at) > new Date() && viewer.id !== r.requested_by && atLeast(viewer, r.required_role)),
-      canExecute: canExecute(viewer, r), own: viewer.id === r.requested_by } : {}),
+    ...(viewer ? { canApprove: Boolean(r.dual && r.status === 'pending' && new Date(r.expires_at) > now && viewer.id !== r.requested_by && atLeast(viewer, r.required_role)),
+      canExecute: canExecute(viewer, r, now), own: viewer.id === r.requested_by } : {}),
   };
 }
 
@@ -295,7 +298,8 @@ const attemptStatus = (a) => ({ executed: 'executed', failed: 'failed', not_exec
  * request the requester may not execute it (the two-person rule keeps money
  * movement in a second pair of hands). Each call is one recorded attempt keyed
  * by the operator's requestId: a replay returns that attempt's outcome. An
- * executed request is CONFLICT.
+ * executed request is CONFLICT, and so is a retry more than 72 h after the
+ * approval (or submission of a direct action): the request must be made again.
  */
 export async function executeRequest(ctx, operator, id, body = {}) {
   const reason = text(body?.reason, 'reason', 10, 1000);
@@ -328,6 +332,10 @@ export async function executeRequest(ctx, operator, id, body = {}) {
         } else fail('CONFLICT', `request is ${statusOf(rq)}; only a failed or approved-but-not-executed request can be executed again`);
       }
       if (rq.dual && rq.requested_by === operator.id) return deny('own_request');
+      if (!retryOpen(rq, ctx.now)) {
+        await audit(c, { ...operatorActor(operator, ctx.requestId), action: 'admin.denied', entityType: 'admin_action_request', entityId: rq.id, reason, after: { why: 'retry_window_closed', retryUntil: retryUntil(rq) } });
+        return { closed: retryUntil(rq) };
+      }
       // A `running` attempt left behind by a process that died is closed as abandoned (never re-used).
       await c.query(`UPDATE admin_action_attempts SET outcome = 'abandoned', finished_at = $2, result = '{"code":"ABANDONED"}'::jsonb
                       WHERE request_id = $1 AND outcome = 'running' AND started_at <= $3`, [rq.id, ctx.now, new Date(ctx.now.getTime() - STALE_ATTEMPT_MS)]);
@@ -342,6 +350,7 @@ export async function executeRequest(ctx, operator, id, body = {}) {
     if (e.code === '23505') { const p = await replayOf(); if (p) return p; fail('CONFLICT', 'this request is being executed by someone else'); }
     throw e;
   }
+  if (started.closed) fail('CONFLICT', `the 72-hour retry window closed at ${started.closed.toISOString()}; submit a new request`);
   if (started.denied) forbidden(started.role, started.denied === 'own_request' ? 'the requester cannot execute their own approved request; a second operator must' : 'your role does not allow this');
   const { row } = await runAttempt(ctx, started.rq, operator, started.attempt);
   return { status: outcome(row), result: row.result, attempt: { attemptNo: started.attempt.attempt_no, kind: 'retry' }, request: requestView(await oneRequest(ctx.pool, id), operator) };

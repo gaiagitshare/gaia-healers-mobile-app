@@ -27,6 +27,7 @@ export async function freshPool() {
   return pool;
 }
 
+if (process.env.CI && !TEST_URL) throw new Error('CI must provide MEMBERSHIP_TEST_DATABASE_URL; database tests may not be skipped');
 export const SKIP = testDbAvailable() ? false : 'MEMBERSHIP_TEST_DATABASE_URL not set (npm run testdb:up)';
 export const actor = { actorType: 'admin', actorId: 'test-admin' };
 

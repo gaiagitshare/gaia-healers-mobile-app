@@ -37,6 +37,34 @@ suite against a Postgres service container (`.github/workflows/membership-servic
 
 Every item above has a test; `test/review-regressions.test.js` covers the scenarios found in the independent review of this PR.
 
+## Internal API (Milestone D)
+
+`src/api/server.js` — service-to-service HTTP API, **not started anywhere**. Each
+caller is an `api_clients` row (token stored as SHA-256, scopes, optional
+practitioner tenant). Coin amounts are never sent by callers: they quote an
+action priced server-side (`coin_action_prices`), then hold against the quote.
+
+| Route | Scope | Notes |
+|---|---|---|
+| `GET /v1/identities/resolve` | identity:read | platform clients only |
+| `GET /v1/persons/:id/subscriptions` | subscriptions:read | with `hasAccess` |
+| `GET /v1/persons/:id/entitlements[?key=]` | entitlements:read | tenant clients see only their plans' benefits |
+| `GET /v1/persons/:id/wallet` | wallet:read | both balances, $ equivalents, next grant date |
+| `POST /v1/coins/quotes` | coins:quote | single-use, 10 min |
+| `POST /v1/coins/holds` (+ `Idempotency-Key`) | coins:debit | double-click → one hold |
+| `POST /v1/coins/holds/:op/capture` / `release` | coins:debit | only the client that held; failed job → release → nothing charged |
+
+Tenant clients (a practitioner integration) get read scopes only (DB CHECK), see
+a person only via a subscription to their own plans, and get NOT_FOUND
+otherwise; denials are audited. Every write is audited with the calling client
+and a request id.
+
+Jobs (`src/jobs/`, one bounded pass via `node src/cli/jobs.js`, not scheduled):
+monthly allowance (once per cycle, largest plan wins, annual plans grant
+monthly, leftovers expire on lapse), stale-hold release, and grace / trial /
+scheduled-cancel closing for Gaia-owned subscriptions (provider-owned ones are
+only counted; the provider stays the billing truth).
+
 ## Reused, not rebuilt
 
 - **The existing consumer membership** (`staging-proxy/membership/`: ledger,

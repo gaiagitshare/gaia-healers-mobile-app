@@ -22,7 +22,7 @@
  * production database exists yet.
  */
 import crypto from 'node:crypto';
-import { withTransaction } from './db.js';
+import { inTransaction } from './db.js';
 import { audit } from './audit.js';
 import { fail, MembershipError } from './errors.js';
 import { COIN_CENTS } from './catalog.js';
@@ -33,6 +33,11 @@ export const DEFAULT_HOLD_SECONDS = 15 * 60;
 
 const posInt = (n, what) => { if (!Number.isSafeInteger(n) || n <= 0) fail('INVALID_INPUT', what + ' must be a positive integer'); return n; };
 const checkKey = (k) => { if (typeof k !== 'string' || k.length < 8 || k.length > 200) fail('INVALID_INPUT', 'idempotencyKey must be 8-200 characters'); return k; };
+/** Actor: 'system', a person id string, or { actorType, actorId, requestId } from the API layer. */
+export function toActor(actor = 'system') {
+  if (actor && typeof actor === 'object') return { actorType: actor.actorType || 'system', actorId: String(actor.actorId || 'system'), requestId: actor.requestId || null };
+  return { actorType: actor === 'system' ? 'system' : 'person', actorId: String(actor), requestId: null };
+}
 const hashOf = (o) => crypto.createHash('sha256').update(JSON.stringify(o)).digest('hex');
 
 export const coinsToCents = (coins) => coins * COIN_CENTS;
@@ -61,16 +66,17 @@ async function move(c, wallet, operationId, type, delta, reason) {
  * Shared idempotent operation wrapper. `apply(c, wallet, op)` writes the rows.
  * Returns { operation, replayed }.
  */
-async function operation(pool, args, apply) {
-  try { return await operationTx(pool, args, apply); }
+async function operation(db, args, apply) {
+  try { return await operationTx(db, args, apply); }
   catch (e) { if (e.code === '23505') throw new MembershipError('CONFLICT', 'conflicting coin operation'); throw e; }
 }
 
-async function operationTx(pool, { personId, walletId, kind, idempotencyKey, coins, reason, relatedType = null, relatedId = null, refundsOperation = null,
+async function operationTx(db, { personId, walletId, kind, idempotencyKey, coins, reason, relatedType = null, relatedId = null, refundsOperation = null,
   status = 'completed', holdExpiresAt = null, actor = 'system' }, apply) {
   checkKey(idempotencyKey); posInt(coins, 'coins');
   const requestHash = hashOf({ kind, coins, reason, relatedType, relatedId, refundsOperation });
-  return withTransaction(pool, async (c) => {
+  const who = toActor(actor);
+  return inTransaction(db, async (c) => {
     const wallet = walletId ? await lockWalletById(c, walletId) : await lockWallet(c, personId);
     if (!wallet) fail('NOT_FOUND', 'wallet not found');
     const prior = (await c.query('SELECT * FROM coin_operations WHERE wallet_id = $1 AND idempotency_key = $2', [wallet.id, idempotencyKey])).rows[0];
@@ -84,9 +90,9 @@ async function operationTx(pool, { personId, walletId, kind, idempotencyKey, coi
       `INSERT INTO coin_operations (wallet_id, kind, idempotency_key, request_hash, coins, status, reason, related_entity_type, related_entity_id,
                                     refunds_operation, hold_expires_at, actor, settled_at)
        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, CASE WHEN $6 = 'held' THEN NULL ELSE now() END) RETURNING *`,
-      [wallet.id, kind, idempotencyKey, requestHash, coins, status, reason, relatedType, relatedId, refundsOperation, holdExpiresAt, actor])).rows[0];
+      [wallet.id, kind, idempotencyKey, requestHash, coins, status, reason, relatedType, relatedId, refundsOperation, holdExpiresAt, who.actorId])).rows[0];
     const extra = await apply(c, wallet, op);
-    await audit(c, { actorType: actor === 'system' ? 'system' : 'person', actorId: actor, action: 'coins.' + kind, entityType: 'coin_operation', entityId: op.id,
+    await audit(c, { ...who, action: 'coins.' + kind, entityType: 'coin_operation', entityId: op.id,
       after: { coins, reason, status, ...(extra || {}) } });
     return { operation: op, replayed: false, ...(extra || {}) };
   });
@@ -153,9 +159,9 @@ function plan(wallet, coins) {
 }
 
 /** Reserve coins before an AI job. The price must already have been quoted and confirmed. */
-export async function holdDebit(pool, { personId, coins, idempotencyKey, reason, relatedType = null, relatedId = null, holdSeconds = DEFAULT_HOLD_SECONDS, now = new Date(), actor = 'system' }) {
+export async function holdDebit(db, { personId, coins, idempotencyKey, reason, relatedType = null, relatedId = null, holdSeconds = DEFAULT_HOLD_SECONDS, now = new Date(), actor = 'system' }) {
   if (!reason) fail('INVALID_INPUT', 'reason is required');
-  return operation(pool, { personId, kind: 'debit', idempotencyKey, coins, reason, relatedType, relatedId, status: 'held', holdExpiresAt: new Date(now.getTime() + holdSeconds * 1000), actor },
+  return operation(db, { personId, kind: 'debit', idempotencyKey, coins, reason, relatedType, relatedId, status: 'held', holdExpiresAt: new Date(now.getTime() + holdSeconds * 1000), actor },
     async (c, wallet, op) => {
       const parts = plan(wallet, coins);
       for (const [t, n] of parts) await move(c, wallet, op.id, t, -n, 'debit_hold');
@@ -163,8 +169,8 @@ export async function holdDebit(pool, { personId, coins, idempotencyKey, reason,
     });
 }
 
-async function settle(pool, operationId, to) {
-  return withTransaction(pool, async (c) => {
+async function settle(db, operationId, to, actor) {
+  return inTransaction(db, async (c) => {
     const op0 = (await c.query('SELECT wallet_id FROM coin_operations WHERE id = $1', [operationId])).rows[0];
     if (!op0) fail('NOT_FOUND', 'operation not found');
     const wallet = await lockWalletById(c, op0.wallet_id);
@@ -179,21 +185,21 @@ async function settle(pool, operationId, to) {
       forfeited = r.forfeited;
     }
     const u = (await c.query('UPDATE coin_operations SET status = $2, settled_at = now() WHERE id = $1 RETURNING *', [op.id, to])).rows[0];
-    await audit(c, { action: 'coins.debit_' + to, entityType: 'coin_operation', entityId: op.id, after: forfeited ? { forfeitedGrantedCoins: forfeited } : null });
+    await audit(c, { ...toActor(actor), action: 'coins.debit_' + to, entityType: 'coin_operation', entityId: op.id, after: forfeited ? { forfeitedGrantedCoins: forfeited } : null });
     return { operation: u, replayed: false, forfeitedGrantedCoins: forfeited };
   });
 }
 
 /** The AI job succeeded: the held coins are spent. */
-export const captureDebit = (pool, operationId) => settle(pool, operationId, 'captured');
+export const captureDebit = (db, operationId, actor = 'system') => settle(db, operationId, 'captured', actor);
 /** The AI job failed or was abandoned: the held coins return to the buckets they came from. */
-export const releaseDebit = (pool, operationId) => settle(pool, operationId, 'released');
+export const releaseDebit = (db, operationId, actor = 'system') => settle(db, operationId, 'released', actor);
 
 /** One-step debit for actions that cannot fail after charging. Same idempotency rules. */
 export async function debitNow(pool, args) {
   const r = await holdDebit(pool, args);
   if (r.replayed && r.operation.status !== 'held') return r;
-  const s = await captureDebit(pool, r.operation.id);
+  const s = await captureDebit(pool, r.operation.id, args.actor);
   return { ...r, operation: s.operation };
 }
 
@@ -221,9 +227,23 @@ export async function releaseExpiredHolds(pool, { now = new Date(), limit = 100 
   const ids = (await pool.query("SELECT id FROM coin_operations WHERE status = 'held' AND hold_expires_at <= $1 ORDER BY hold_expires_at LIMIT $2", [now, limit])).rows;
   let released = 0;
   for (const { id } of ids) {
-    try { const r = await releaseDebit(pool, id); if (!r.replayed) released++; } catch (e) { if (e.code !== 'CONFLICT') throw e; }   // captured meanwhile
+    try { const r = await releaseDebit(pool, id, { actorType: 'system', actorId: 'job:release-expired-holds' }); if (!r.replayed) released++; } catch (e) { if (e.code !== 'CONFLICT') throw e; }   // captured meanwhile
   }
   return released;
+}
+
+/**
+ * The allowance stops when no subscription grants one any more: what is left of
+ * the granted balance expires as a ledger event (never a silent overwrite).
+ * `cycleKey` makes it once per lapse.
+ */
+export async function expireGranted(db, { personId, cycleKey, actor = 'system' }) {
+  return inTransaction(db, async (c) => {
+    const w = (await c.query('SELECT granted_balance FROM coin_wallets WHERE person_id = $1 FOR UPDATE', [personId])).rows[0];
+    if (!w || w.granted_balance <= 0) return { expiredCoins: 0, replayed: false };
+    return operation(c, { personId, kind: 'adjustment', idempotencyKey: 'lapse:' + cycleKey, coins: w.granted_balance, reason: 'allowance_lapsed', relatedType: 'cycle', relatedId: cycleKey, actor },
+      async (c2, wallet, op) => { await move(c2, wallet, op.id, 'granted', -wallet.granted_balance, 'grant_expiry'); return { expiredCoins: op.coins }; });
+  });
 }
 
 /** Wallet screen data (spec §4 UX): both balances with dollar equivalents and the next grant date. */

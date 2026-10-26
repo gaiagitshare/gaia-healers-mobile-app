@@ -91,7 +91,7 @@ export default function MapReconcile({ eventId, open, onClose, productId, produc
 
                 {!result && (
                     <>
-                        <TextField select fullWidth size="small" label="Gaia ticket type this product grants"
+                        <TextField select fullWidth size="small" label="Gaia Healers ticket type this product grants"
                             value={ticketTypeId} onChange={(e) => { setTicketTypeId(e.target.value); setPreview(null); }}
                             sx={{ mb: 1.5 }}>
                             {ticketTypes.map((t) => (
@@ -123,11 +123,11 @@ export default function MapReconcile({ eventId, open, onClose, productId, produc
                         <Divider sx={{ mb: 1.5 }} />
                         <Typography variant="subtitle2" sx={{ mb: 1 }}>What this would do</Typography>
                         <Row label="GHL product" value={preview.product_name || '—'} />
-                        <Row label="Gaia ticket type" value={preview.ticket_type_name || '—'} />
+                        <Row label="Gaia Healers ticket type" value={preview.ticket_type_name || '—'} />
                         <Row label="Successful historical payments" value={preview.successful_payments} />
                         <Row label="Seats represented" value={preview.total_seats} />
                         <Row label="Unique buyers" value={preview.unique_buyers} />
-                        <Row label="Already represented in Gaia" value={preview.already_in_gaia} />
+                        <Row label="Already represented in Gaia Healers" value={preview.already_in_gaia} />
                         <Row label="Expected to create or update" value={preview.expected_to_create_or_update} strong />
                         <Divider sx={{ my: 1 }} />
                         <Row label="Excluded — pending or not paid" value={preview.excluded.not_paid_or_pending} />

@@ -82,7 +82,7 @@ test('the screen tells the four states apart and names what the last attempt bro
   for (const r of ['access_denied', 'bad_state', 'session_changed', 'exchange_failed', 'not_practitioner', 'unverified']) assert.ok(ui.includes(`${r}:`), r);
   assert.match(ui, /practitioners'\) !== 'failed'/, 'the callback result is read from the URL');
   assert.match(ui, /data-prac-action="disconnect"/); assert.match(ui, /Connect a different account/);
-  assert.match(ui, /Your Gaia login stays as it is\. This links your practitioner account to it\./, 'one login; the link sits on top');
+  assert.match(ui, /Your Gaia Healers login stays as it is\. This links your practitioner account to it\./, 'one login; the link sits on top');
   assert.match(ui, /function badge\(status\)/, 'the role shows on the You header once linked');
   assert.match(ui, /connected as \$\{esc\(status\.practitioner_email\)\}/, 'who you are connected as');
   assert.match(ui, /data-prac-disconnect/, 'and the way out, where the account is');

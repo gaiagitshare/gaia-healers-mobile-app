@@ -59,7 +59,7 @@
   function introHtml() {
     return '<article class="g-card g-quiz"><p class="g-card__label">Chakra Balance</p>'
       + '<p class="g-quiz__title">Which centre is asking for your attention?</p>'
-      + '<p class="g-card__meta">Eight quick questions reveal your focus chakra — and the practice and Gaia support that bring it back into balance.</p>'
+      + '<p class="g-card__meta">Eight quick questions reveal your focus chakra — and the practice and Gaia Healers support that bring it back into balance.</p>'
       + '<div class="g-card__actions"><button type="button" class="g-btn g-btn--primary g-btn--sm" data-cq-start>Begin the check →</button></div></article>';
   }
   function questionHtml(i) {
@@ -99,7 +99,7 @@
 
   function shareResult(ck) {
     const c = CH[ck];
-    const text = 'My Gaia focus chakra is ' + c.name + ' (' + c.sanskrit + '). Find yours:';
+    const text = 'My Gaia Healers focus chakra is ' + c.name + ' (' + c.sanskrit + '). Find yours:';
     const url = SHOP.replace(/\/+$/, '') === 'https://gaiahealers.com' ? 'https://gaiahealers.app/home.html?view=wellness&tool=chakra' : (window.location.origin + '/home.html?view=wellness&tool=chakra');
     if (navigator.share) { navigator.share({ title: 'My focus chakra: ' + c.name, text, url }).catch(() => {}); return; }
     try { navigator.clipboard.writeText(text + ' ' + url); } catch (_) { /* ignore */ }

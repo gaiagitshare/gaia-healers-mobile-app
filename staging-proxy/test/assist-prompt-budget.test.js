@@ -52,7 +52,10 @@ test('the practitioner prompt is budgeted too, not just the visitor one', () => 
   // every member/practitioner session instead of inside the member's own
   // block; this minimal fixture never carried a block, so it grew while a real
   // practitioner prompt shrank (8,207 -> 8,144 tokens; test/assist-phase-b-a).
-  assert.ok(PRACTITIONER.length < 15_000, `practitioner instructions grew to ${PRACTITIONER.length} chars`);
+  // 2026-10-26 brand pass: the platform references the assistant repeats now
+  // say "Gaia Healers" instead of "Gaia" (+54 chars, ~13 tokens a turn:
+  // 14,987 -> 15,041). The ceiling moved by that and no more.
+  assert.ok(PRACTITIONER.length < 15_100, `practitioner instructions grew to ${PRACTITIONER.length} chars`);
   // And the practitioner-only policy must not be leaking into other roles.
   assert.ok(!/CLIENT FACTS COME FROM A TOOL/.test(VISITOR_VOICE),
     'a visitor is being told about tools they do not have');

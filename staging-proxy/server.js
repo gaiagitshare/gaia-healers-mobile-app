@@ -979,13 +979,13 @@ const DEFAULT_ACADEMY_MANIFEST = {
   courses: [
     {
       id: 'demo-gaia-player',
-      title: 'Gaia Academy \u2014 Player Preview',
+      title: 'Gaia Healers Academy \u2014 Player Preview',
       poster: '',
       preview: true,          // visible to everyone (beta demo); no grant needed
       grantMatch: [],         // GHL course ids/names this maps to (Phase 2)
       sections: [
         { title: 'Welcome', lessons: [
-          { id: 'demo-1', title: 'Watching your courses inside Gaia', durationSec: 60, type: 'hls', free: true, src: 'https://test-streams.mux.dev/x36xhzz/x36xhzz.m3u8' },
+          { id: 'demo-1', title: 'Watching your courses inside Gaia Healers', durationSec: 60, type: 'hls', free: true, src: 'https://test-streams.mux.dev/x36xhzz/x36xhzz.m3u8' },
           { id: 'demo-2', title: 'Adaptive streaming \u2014 no portal, no leaving', durationSec: 120, type: 'hls', free: true, src: 'https://test-streams.mux.dev/x36xhzz/x36xhzz.m3u8' },
         ] },
       ],
@@ -4268,7 +4268,7 @@ async function memberEvents(req, res, origin) {
     events,
     count: events.length,
     communityEventsAvailable: false,
-    reason: 'GHL Community live-session feeds are not exposed by the public API. Confirmed Gaia events come from the live Event Manager; member appointments are available separately.',
+    reason: 'GHL Community live-session feeds are not exposed by the public API. Confirmed Gaia Healers events come from the live Event Manager; member appointments are available separately.',
   }, origin);
 }
 
@@ -4354,7 +4354,7 @@ export function buildGaiaLiveInstructions(context = {}) {
       ? 'MEMORY (only for a verified member, never a visitor): use WHAT YOU REMEMBER lightly to continue where you left off, never re-ask what you know. When you learn something durable (an interest, goal, decision, objection, follow-up), call remember_member with short facts — never trivia, health details or anything financial.'
       : '',
     survey
-      ? 'ONBOARDING (this member has not done it): when onboarding is relevant, guide the required Gaia profile journey with one short contextual sentence. To record each step call save_onboarding_step { stepKey, selections: [exact option labels], freeText?, complete? } — after it succeeds you may say you noted it. Afterwards give a short recap and the single best next step.'
+      ? 'ONBOARDING (this member has not done it): when onboarding is relevant, guide the required Gaia Healers profile journey with one short contextual sentence. To record each step call save_onboarding_step { stepKey, selections: [exact option labels], freeText?, complete? } — after it succeeds you may say you noted it. Afterwards give a short recap and the single best next step.'
       : '',
     survey ? onboarding.onboardingPromptBlock() : '',
     // ── this member, then the screen (replaced in place on navigation) ──
@@ -5765,7 +5765,7 @@ export function assistSystemPrompt(memberContext = '') {
       ? 'MEMORY (only for a verified member, never a visitor): use WHAT YOU REMEMBER lightly and never re-ask it. When you learn something durable (an interest, goal, decision, objection, follow-up), add a final line <<REMEMBER: fact one ;; fact two>> — the app saves and hides it. Never save trivia, health details or anything financial.'
       : '',
     survey
-      ? 'ONBOARDING (this member has not done it): when onboarding is relevant, guide the required Gaia profile journey with one short contextual sentence, one step at a time. After they answer a step, end your message with its own line exactly: <<ONBOARD step=STEPKEY | SELECTIONS: label one ;; label two | complete=false>> (complete=true on the last step); the app records and hides it. Afterwards give a short recap and the single best next step.'
+      ? 'ONBOARDING (this member has not done it): when onboarding is relevant, guide the required Gaia Healers profile journey with one short contextual sentence, one step at a time. After they answer a step, end your message with its own line exactly: <<ONBOARD step=STEPKEY | SELECTIONS: label one ;; label two | complete=false>> (complete=true on the last step); the app records and hides it. Afterwards give a short recap and the single best next step.'
       : '',
     survey ? onboarding.onboardingPromptBlock() : '',
     String(memberContext || '').trim(),

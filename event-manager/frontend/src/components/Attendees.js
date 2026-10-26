@@ -1464,7 +1464,7 @@ function Attendees({ timezone }) {
                                 )}
 
                                 <Typography variant="overline" color="text.secondary" sx={{ display: 'block', mt: 2 }}>System</Typography>
-                                {row('Gaia record created', fmtWhen(a.created_at))}
+                                {row('Gaia Healers record created', fmtWhen(a.created_at))}
                                 {row('Creation method', ({
                                     webhook: 'Webhook - created moments after payment',
                                     reconciler: 'Reconciler - the minute-by-minute job',

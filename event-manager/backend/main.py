@@ -2013,7 +2013,7 @@ def door_report(event_id: int, db: Session = Depends(get_db),
             "collected_total": round(door_total, 2),
             "by_method": {k: {"count": v["count"], "amount": round(v["amount"], 2)}
                           for k, v in door_method.items()},
-            "basis": "Gaia-recorded at the door. Not a GHL transaction and not part of GHL revenue.",
+            "basis": "Recorded by Gaia Healers at the door. Not a GHL transaction and not part of GHL revenue.",
         },
         "door_upgrades": _door_upgrade_totals(db, event_id),
         "verified_ghl_revenue": {
@@ -4081,7 +4081,7 @@ def _door_upgrade_totals(db, event_id: int) -> dict:
             "by_method": {k: {"count": v["count"], "amount": round(v["amount"], 2)}
                           for k, v in by_method.items()},
             "items": rows,
-            "basis": "Upgrades sold at the desk. Gaia-recorded, never written to GHL."}
+            "basis": "Upgrades sold at the desk. Recorded by Gaia Healers, never written to GHL."}
 
 
 def _roll_counts(db, event_id: int) -> dict:
@@ -8742,7 +8742,7 @@ def map_reconcile_apply(event_id: int, payload: schemas.MapReconcileRequest,
     if not product_id:
         raise HTTPException(status_code=400, detail="A GHL product id is required")
     if not payload.ticket_type_id:
-        raise HTTPException(status_code=400, detail="Choose the Gaia ticket type this product grants")
+        raise HTTPException(status_code=400, detail="Choose the Gaia Healers ticket type this product grants")
     tt = db.query(models.TicketType).filter(
         models.TicketType.id == payload.ticket_type_id,
         models.TicketType.event_id == event.id).first()

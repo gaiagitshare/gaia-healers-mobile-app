@@ -123,7 +123,7 @@
       ? window.GaiaStore.chakraShopUrl(c.id) : 'https://gaiahealers.com/collections/all';
     return '<article class="g-birth-map" style="--ck:' + esc(c.color || '#7DD956') + '">'
       + '<div class="g-birth-map__top">' + orb(c.color)
-      + '<div><p class="g-energy__kicker">Your Gaia birth map</p><p class="g-birth-map__title">' + esc(c.name) + ' <span>· ' + esc(c.sanskrit || '') + '</span></p></div></div>'
+      + '<div><p class="g-energy__kicker">Your Gaia Healers birth map</p><p class="g-birth-map__title">' + esc(c.name) + ' <span>· ' + esc(c.sanskrit || '') + '</span></p></div></div>'
       + '<div class="g-birth-map__chips"><span>' + esc(sign) + '</span><span>' + esc(zodiac.element || c.element) + '</span><span>' + esc(c.theme || c.focus) + '</span></div>'
       + '<p class="g-birth-map__context">Your birth-date number points to the <strong>' + esc(c.name) + '</strong> centre; your sun sign adds a ' + esc((zodiac.theme || 'reflective').toLowerCase()) + ' lens. Use this as a personal reflection, not a scan or prediction.</p>'
       + '<div class="g-birth-map__grid">'
@@ -170,9 +170,9 @@
     return '<article class="g-cosmic-map" style="--ck:' + esc(spotlight.color || '#7DD956') + '">'
       + '<div class="g-cosmic-map__head"><div><p class="g-energy__kicker">Your sky-to-chakra map</p><h3>' + esc(spotlight.name || 'Gaia') + ' spotlight</h3></div><i class="ph ph-planet" aria-hidden="true"></i></div>'
       + '<div class="g-birth-map__chips"><span>' + esc(map.dominantSign) + ' emphasis</span><span>' + esc(map.representedElement) + ' represented</span><span>Invite ' + esc(map.elementToInvite) + '</span></div>'
-      + '<p class="g-birth-map__context">Seven astronomical planet positions are mapped through Gaia’s symbolic chakra lens. This is a reflective tradition—not a measured energy score, diagnosis, or prediction.</p>'
+      + '<p class="g-birth-map__context">Seven astronomical planet positions are mapped through Gaia Healers’ symbolic chakra lens. This is a reflective tradition—not a measured energy score, diagnosis, or prediction.</p>'
       + '<section class="g-energy-path" aria-labelledby="gaia-energy-path-title">'
-      + '<div class="g-energy-path__head"><div><p class="g-energy__kicker">Your Gaia energy path</p><h4 id="gaia-energy-path-title">' + esc(path.intention || 'Pause, notice, choose') + '</h4></div><span>Reflection → action</span></div>'
+      + '<div class="g-energy-path__head"><div><p class="g-energy__kicker">Your Gaia Healers energy path</p><h4 id="gaia-energy-path-title">' + esc(path.intention || 'Pause, notice, choose') + '</h4></div><span>Reflection → action</span></div>'
       + '<p class="g-energy-path__summary">' + esc(path.summary || ('Use the ' + (spotlight.name || 'chakra') + ' spotlight as a prompt for one gentle action today.')) + '</p>'
       + '<ol class="g-energy-path__steps">'
       + '<li><span>1</span><div><strong>Begin with two minutes</strong><p>' + esc(path.practice || 'Take five slow breaths and notice what changes.') + '</p></div></li>'
@@ -200,7 +200,7 @@
     if (state.expandSignup) return signupFormHtml();
     return '<article class="g-card g-well g-well--nudge">'
       + '<p class="g-card__label">Make it yours</p>'
-      + '<p class="g-well__lead">Your birth date tells Gaia which chakra is yours. With it, your <strong>daily body point</strong> and <strong>wellness horoscope</strong> are written for you, not for everyone.</p>'
+      + '<p class="g-well__lead">Your birth date tells Gaia Healers which chakra is yours. With it, your <strong>daily body point</strong> and <strong>wellness horoscope</strong> are written for you, not for everyone.</p>'
       + '<div class="g-card__actions"><button type="button" class="g-btn g-btn--primary g-btn--sm" data-wexpand>Add my birth details →</button></div>'
       + '<p class="g-hint">Birth date, and the time if you know it. Takes a minute.</p>'
       + '</article>';
@@ -452,7 +452,7 @@
       const map = state.cosmicMap || (state.today && state.today.cosmicMap);
       if (!map) return;
       window.dispatchEvent(new CustomEvent('gaia:open-assist', {
-        detail: { prompt: 'Build a gentle 7-day Gaia energy path from my sky-to-chakra map. My symbolic spotlight is ' + map.spotlight.name + ', my most represented element is ' + map.representedElement + ', and the element to gently invite is ' + map.elementToInvite + '. Include one two-minute daily practice, a journal prompt, and explain when a Bio-Well scan, Colour Energy support, a session with Dr. Nima, the free community, or Elevate could be a relevant optional next step. Clearly separate symbolic reflection from device measurement, and do not diagnose or predict.' },
+        detail: { prompt: 'Build a gentle 7-day Gaia Healers energy path from my sky-to-chakra map. My symbolic spotlight is ' + map.spotlight.name + ', my most represented element is ' + map.representedElement + ', and the element to gently invite is ' + map.elementToInvite + '. Include one two-minute daily practice, a journal prompt, and explain when a Bio-Well scan, Colour Energy support, a session with Dr. Nima, the free community, or Elevate could be a relevant optional next step. Clearly separate symbolic reflection from device measurement, and do not diagnose or predict.' },
       }));
     });
   }

@@ -402,7 +402,7 @@ body.gaia-booking-open{overflow:hidden;}
     overlay.innerHTML = '<div class="gaia-transition__panel" role="dialog" aria-modal="true" aria-label="Opening your Academy">'
       + '<p class="gaia-transition__kicker">Opening your Academy</p>'
       + '<h2 class="gaia-transition__title">' + esc(name) + '</h2>'
-      + '<p class="gaia-transition__body">Your courses are hosted in the <strong>Gaia Healers Academy</strong>. The first time, you\u2019ll sign in or set a password. To come back, use your browser\u2019s back button or reopen the Gaia app.</p>'
+      + '<p class="gaia-transition__body">Your courses are hosted in the <strong>Gaia Healers Academy</strong>. The first time, you\u2019ll sign in or set a password. To come back, use your browser\u2019s back button or reopen the Gaia Healers app.</p>'
       + '<div class="gaia-transition__actions">'
       + '<button type="button" class="g-btn g-btn--primary" data-transition-open>Continue to Academy \u2192</button>'
       + '<button type="button" class="g-btn g-btn--secondary" data-transition-cancel>Cancel</button>'

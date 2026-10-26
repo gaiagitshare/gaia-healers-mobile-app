@@ -14,7 +14,7 @@
     // { state: 'complete', source: 'record' } when GHL is down and the member
     // already finished (the outage-safe gate). Both are answers, not failures.
     const answered = data.ok || (method === 'GET' && typeof data.state === 'string');
-    if (!r.ok || !answered) throw new Error(r.status === 401 ? 'Your session has expired. Sign out and sign in again.' : 'We couldn’t connect to your Gaia profile. Your choices are still here. Please try again.');
+    if (!r.ok || !answered) throw new Error(r.status === 401 ? 'Your session has expired. Sign out and sign in again.' : 'We couldn’t connect to your Gaia Healers profile. Your choices are still here. Please try again.');
     return data;
   }
   function path() { return state.schema.filter(s => !s.showIf || (state.answers.primary_interests || []).includes(s.showIf)); }
@@ -51,7 +51,7 @@
     if (overlay) return;
     lastFocus = document.activeElement;
     overlay = document.createElement('section'); overlay.className = 'gaia-journey';
-    overlay.setAttribute('role', 'dialog'); overlay.setAttribute('aria-modal', 'true'); overlay.setAttribute('aria-label', 'Your Gaia journey');
+    overlay.setAttribute('role', 'dialog'); overlay.setAttribute('aria-modal', 'true'); overlay.setAttribute('aria-label', 'Your Gaia Healers journey');
     document.body.appendChild(overlay); lock(true);
     if (!document.getElementById('gaia-journey-defs')) document.body.insertAdjacentHTML('beforeend', DEFS);
     overlay.addEventListener('keydown', e => {
@@ -170,7 +170,7 @@
     const kind = s.showIf ? kindOf(s.showIf) : '';
     const links = primary ? linksFor(s, state.selected) : [];
     const variant = primary ? 'journey-choices--paths' : s.options.length > 10 && s.options.every(o => o.label.length <= 24) ? 'journey-choices--many' : 'journey-choices--tiles';
-    return `<div class="journey-progress" role="progressbar" aria-label="Your Gaia journey" aria-valuemin="0" aria-valuemax="${route.length}" aria-valuenow="${index}"><ol class="journey-path" aria-hidden="true">${pathNodes()}</ol></div>
+    return `<div class="journey-progress" role="progressbar" aria-label="Your Gaia Healers journey" aria-valuemin="0" aria-valuemax="${route.length}" aria-valuenow="${index}"><ol class="journey-path" aria-hidden="true">${pathNodes()}</ol></div>
       <p class="journey-branch-notice ${branchStart ? 'journey-sr' : ''}" role="status">${esc(branchNotice)}</p>
       ${branchStart ? `<div class="journey-branch-intro journey-branch-intro--${kind}" aria-hidden="true"><span class="journey-branch-emblem"><i class="ph ph-${BRANCH_ICON[kind]}"></i><b></b><b></b></span><span><small>Now exploring</small><strong>${esc(s.showIf)}</strong></span><span class="journey-branch-sweep"></span></div><p class="journey-kicker journey-sr">${esc(s.showIf)}</p>` : `<p class="journey-kicker">${esc(groupOf(s))}</p>`}
       <h1 tabindex="-1">${esc(primary ? 'What calls to you?' : s.question)}</h1>
@@ -197,12 +197,12 @@
     return `<div class="journey-constellation" style="--count:${chosen.length}" aria-hidden="true"><span class="journey-thread"><b></b></span>
         <span class="journey-node journey-node--you" style="--n:0"><span class="journey-node-dot">${esc(initial)}</span><em>You</em></span>
         ${chosen.map((label, i) => `<span class="journey-node journey-node--scene" data-kind="${kindOf(label)}" style="--n:${i + 1}"><span class="journey-node-dot">${scene(label)}</span><em>${esc(label)}</em></span>`).join('')}
-        <span class="journey-node journey-node--gaia" style="--n:${chosen.length + 1}"><span class="journey-node-dot"><img src="assets/gaia-mark.svg" alt=""></span><em>Gaia</em></span></div>
+        <span class="journey-node journey-node--gaia" style="--n:${chosen.length + 1}"><span class="journey-node-dot"><img src="assets/gaia-mark.svg" alt=""></span><em>Gaia Healers</em></span></div>
       <p class="journey-kicker">Made from what you shared</p><h1 tabindex="-1">Your Gaia Path</h1><p class="journey-subtitle">Your journey is ready, ${esc(state.name || 'friend')}.</p>
       <div class="journey-summary-grid">${branchCards}${looking.length ? `<section class="journey-summary journey-summary--looking" style="--card-index:${chosen.length}"><h2><i class="ph ph-sparkle" aria-hidden="true"></i>You’re looking for</h2>${list(looking, 0)}</section>` : ''}</div>
-      <div class="journey-enter-wrap"><button type="button" class="journey-primary journey-primary--glow" data-enter>Enter Gaia →</button></div>`;
+      <div class="journey-enter-wrap"><button type="button" class="journey-primary journey-primary--glow" data-enter>Enter Gaia Healers →</button></div>`;
   }
-  const introMarkup = () => `<div class="journey-fan" aria-hidden="true">${['Living Beings', 'Environment', 'Water'].map((l, i) => `<span class="journey-fan-card" style="--i:${i}">${scene(l)}<i class="ph ph-${BRANCH_ICON[kindOf(l)]}"></i></span>`).join('')}</div><p class="journey-kicker">${Object.keys(state.answers).length ? 'Welcome back' : 'Welcome'}, ${esc(state.name || 'friend')}</p><h1 tabindex="-1">Let’s discover<br>your Gaia path.</h1><p class="journey-subtitle">A little about you. A world of possibilities.<br>Help Gaia connect you with the education, tools and community that feel right.</p><p class="journey-duration"><i class="ph ph-clock" aria-hidden="true"></i> About 2 minutes · Saved as you go</p><button type="button" class="journey-primary journey-primary--glow" data-begin>${Object.keys(state.answers).length ? 'Continue my journey' : 'Begin my journey'} →</button>`;
+  const introMarkup = () => `<div class="journey-fan" aria-hidden="true">${['Living Beings', 'Environment', 'Water'].map((l, i) => `<span class="journey-fan-card" style="--i:${i}">${scene(l)}<i class="ph ph-${BRANCH_ICON[kindOf(l)]}"></i></span>`).join('')}</div><p class="journey-kicker">${Object.keys(state.answers).length ? 'Welcome back' : 'Welcome'}, ${esc(state.name || 'friend')}</p><h1 tabindex="-1">Let’s discover<br>your Gaia path.</h1><p class="journey-subtitle">A little about you. A world of possibilities.<br>Help Gaia Healers connect you with the education, tools and community that feel right.</p><p class="journey-duration"><i class="ph ph-clock" aria-hidden="true"></i> About 2 minutes · Saved as you go</p><button type="button" class="journey-primary journey-primary--glow" data-begin>${Object.keys(state.answers).length ? 'Continue my journey' : 'Begin my journey'} →</button>`;
   const AMBIENT = {
     '': '<path d="M-100 450 Q250 50 550 360 T1000 140"/><path d="M-100 500 Q300 120 550 410 T1000 200"/><ellipse cx="570" cy="330" rx="260" ry="120"/>',
     beings: '<g class="gj-amb-float"><circle cx="160" cy="180" r="3"/><circle cx="720" cy="120" r="2.5"/><circle cx="820" cy="460" r="3.5"/><circle cx="90" cy="520" r="2.5"/><circle cx="460" cy="90" r="2"/></g><path d="M-60 640C120 420 300 380 420 230S700 40 980 -40"/><path d="M420 230C380 160 300 130 230 140M560 120C600 60 680 40 760 50M300 360C230 330 150 340 90 380M660 330C740 300 820 320 900 360"/><path d="M-40 700C200 520 420 520 600 420S860 300 980 320"/>',
@@ -212,7 +212,7 @@
   function render() {
     if ((!state.authed && state.mode !== 'error') || state.mode === 'bypass') return;
     ensure();
-    const content = state.mode === 'question' ? questionMarkup() : state.mode === 'reveal' ? revealMarkup() : state.mode === 'intro' ? introMarkup() : `<p class="journey-kicker">Your Gaia profile</p><h1 tabindex="-1">${state.mode === 'loading' ? 'Finding your path…' : 'Let’s reconnect.'}</h1><p class="journey-subtitle" role="status">${esc(state.error || 'Checking your saved Gaia profile.')}</p>${state.mode === 'error' ? '<button class="journey-primary" data-retry>Try again →</button>' : ''}`;
+    const content = state.mode === 'question' ? questionMarkup() : state.mode === 'reveal' ? revealMarkup() : state.mode === 'intro' ? introMarkup() : `<p class="journey-kicker">Your Gaia Healers profile</p><h1 tabindex="-1">${state.mode === 'loading' ? 'Finding your path…' : 'Let’s reconnect.'}</h1><p class="journey-subtitle" role="status">${esc(state.error || 'Checking your saved Gaia Healers profile.')}</p>${state.mode === 'error' ? '<button class="journey-primary" data-retry>Try again →</button>' : ''}`;
     const scene = `${state.mode}:${state.step || ''}`;
     const enter = scene !== renderedScene;
     const departing = enter && !reduced() && overlay.querySelector('.journey-stage')?.cloneNode(true);
@@ -221,7 +221,7 @@
     overlay.dataset.branch = current()?.showIf || '';
     const ambientKind = current()?.showIf && state.mode === 'question' ? kindOf(current().showIf) : '';
     overlay.dataset.kind = ambientKind; overlay.dataset.mode = state.mode;
-    overlay.innerHTML = `<div class="journey-ambient journey-ambient--${ambientKind || 'core'}" aria-hidden="true"><span></span><span></span><svg viewBox="0 0 900 650" preserveAspectRatio="xMidYMid slice">${AMBIENT[ambientKind]}</svg></div><header class="journey-header"><img src="assets/gaia-mark.svg" alt="Gaia Healers"><span>Your Gaia journey</span><button type="button" data-logout class="journey-secondary">Sign out</button></header><div class="journey-stage ${enter ? 'journey-enter journey-enter--' + state.mode : ''} ${state.mode === 'intro' && Object.keys(state.answers).length ? 'journey-resume' : ''}" data-branch="${esc(current()?.showIf || '')}">${content}${state.mode === 'question' ? '<button type="button" class="journey-assist-link" data-assist>Answer with Gaia Assist ↗</button>' : ''}</div>`;
+    overlay.innerHTML = `<div class="journey-ambient journey-ambient--${ambientKind || 'core'}" aria-hidden="true"><span></span><span></span><svg viewBox="0 0 900 650" preserveAspectRatio="xMidYMid slice">${AMBIENT[ambientKind]}</svg></div><header class="journey-header"><img src="assets/gaia-mark.svg" alt="Gaia Healers"><span>Your Gaia Healers journey</span><button type="button" data-logout class="journey-secondary">Sign out</button></header><div class="journey-stage ${enter ? 'journey-enter journey-enter--' + state.mode : ''} ${state.mode === 'intro' && Object.keys(state.answers).length ? 'journey-resume' : ''}" data-branch="${esc(current()?.showIf || '')}">${content}${state.mode === 'question' ? '<button type="button" class="journey-assist-link" data-assist>Answer with Gaia Assist ↗</button>' : ''}</div>`;
     if (departing) {
       departing.querySelectorAll('h1').forEach(heading => { const echo = document.createElement('p'); echo.className = 'journey-departing-title'; echo.innerHTML = heading.innerHTML; heading.replaceWith(echo); });
       departing.querySelectorAll('*').forEach(node => { for (const attr of [...node.attributes]) if (attr.name.startsWith('data-')) node.removeAttribute(attr.name); });
@@ -332,7 +332,7 @@
   document.addEventListener('gaia:auth', e => {
     state.generation++; checkPromise = null; state.done = false;
     state.authed = !!e.detail?.authenticated;
-    if (e.detail?.unavailable) { state.mode = 'error'; state.error = 'We’re having trouble loading your Gaia profile. Reload to try again.'; render(); return; }
+    if (e.detail?.unavailable) { state.mode = 'error'; state.error = 'We’re having trouble loading your Gaia Healers profile. Reload to try again.'; render(); return; }
     state.answers = {}; state.selected = []; state.text = ''; state.busy = false;
     if (state.authed) { check(); overlay?.querySelector('h1')?.focus(); } else { state.mode = 'bypass'; lock(false); window.GaiaAppGuard?.set('visitor'); }
   });

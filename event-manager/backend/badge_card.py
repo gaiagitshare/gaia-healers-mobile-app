@@ -1204,7 +1204,7 @@ def vendor_setup_html(ex, event_name, token):
         "<div class=\"media\">"
         "<h2>What you bring</h2>"
         "<p class=\"hint\">Your catalogue &mdash; what people will find on your table. "
-        "Nothing here is sold through Gaia, so there are no prices and no checkout.</p>"
+        "Nothing here is sold through Gaia Healers, so there are no prices and no checkout.</p>"
         "<div class=\"items\" id=\"pr\"></div>"
         "<p class=\"empty2\" id=\"pr0\">Nothing listed yet.</p>"
         "<button type=\"button\" class=\"addbtn\" id=\"prb\">Add an item</button>"

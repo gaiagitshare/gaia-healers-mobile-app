@@ -671,10 +671,10 @@ async function pipelineHealth(deps) {
       detail = 'A delivery arrived but its signature or shared secret did not verify. Check the webhook credentials in GHL.';
     } else if (kind === 'unknown_resource') {
       webhookState = 'mapping_failure';
-      detail = 'An authenticated delivery arrived for a course or product Gaia could not resolve. Check the course authority and offer mapping.';
+      detail = 'An authenticated delivery arrived for a course or product Gaia Healers could not resolve. Check the course authority and offer mapping.';
     } else if (kind === 'unknown_contact') {
       webhookState = 'identity_failure';
-      detail = 'A valid course event arrived without a contact Gaia could resolve safely. Nothing was granted.';
+      detail = 'A valid course event arrived without a contact Gaia Healers could resolve safely. Nothing was granted.';
     } else if (tele.lastRejectionReason === 'persistence_failed') {
       webhookState = 'processing_failure';
       detail = 'The event was valid and the ledger write failed. This is the one class that loses a grant.';
@@ -904,7 +904,7 @@ async function pipelineHealth(deps) {
   // it saw at the far end — and a run that never reached the off-site copy is
   // reported as exactly that, not as a success.
   const full = jobHealth({
-    key: 'full_backup', label: 'Complete Gaia backup (off-site)',
+    key: 'full_backup', label: 'Complete Gaia Healers backup (off-site)',
     service: 'gaia-full-backup.service', timer: 'gaia-full-backup.timer',
     okWithin: 30 * HOUR, cadence: 'daily',
   });

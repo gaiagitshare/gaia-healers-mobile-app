@@ -61,17 +61,17 @@ Existing assets to reuse:
 | Feature | Component | Status | Dependencies |
 |---|---|---|---|
 | Member gateway `/api/membership2/*` (session → person, flag-gated, origin-checked; OFF by default) | staging-proxy/membership2-gateway.js + membership-service api/member-routes.js | **DONE** (PR gateway) | real gateway + API + Postgres tests; proxy boot test (404 when off) |
-| Staging app stack (staging proxy instance + staging webhook receiver + internal API on loopback) | ops | TODO | gateway |
-| Plan comparison (4 tiers, monthly/annual) | app, Membership view | TODO | gateway |
-| Checkout (monthly/annual) | app → Stripe Checkout | TODO | gateway, sandbox |
-| Membership dashboard (plan, status, renewal date, access) | app | TODO | gateway |
-| Coin balance + transaction history | app + member route | TODO | gateway |
-| Coin-pack purchase | app → Stripe Checkout | TODO | pack prices approval (packs are drafts) |
+| Staging app stack (staging proxy instance + staging webhook receiver + internal API on loopback) | ops (`/root/audits/membership-staging-stack.md`) | **DONE** 2026-10-26 (API 8792, proxy 8797, app 8798; loopback, fixtures only, no GHL/Stripe) | gateway |
+| Plan comparison (4 tiers, monthly/annual) | app, Membership view (`gaia-membership2.js`) | **DONE** (PR view #306) | gateway |
+| Checkout (monthly/annual) | app → Stripe Checkout | UI DONE (#306); real redirect waits for the sandbox key | gateway, sandbox |
+| Membership dashboard (plan, status, renewal date, access) | app | UI DONE (#306); a live plan not yet shown on staging (no subscriptions) | gateway |
+| Coin balance + transaction history | app + member route | **DONE** (#305 + #306) | gateway |
+| Coin-pack purchase | app → Stripe Checkout | UI shows "coming soon" until packs exist | pack prices approval (packs are drafts) |
 | Upgrade / downgrade | Stripe subscription update + app | TODO | proration decision |
-| Billing history + invoices | payment_ledger + Stripe hosted invoice links | TODO | |
+| Billing history + invoices | payment_ledger + Stripe hosted invoice links | history DONE (#306); invoice links with the portal | |
 | Payment methods | Stripe Customer Portal session (recommended; card data never touches Gaia Healers) | TODO | portal configuration in Stripe |
-| Cancellation (period end, date shown) | adapter `cancelAtPeriodEnd` | backend DONE, UI TODO | |
-| Legacy status + controlled migration | billing-guard + migration-offers | backend DONE, UI TODO | migration targets per tier (decision) |
+| Cancellation (period end, date shown) | adapter `cancelAtPeriodEnd` | **DONE** (UI #306; staging proof needs a subscription) | |
+| Legacy status + controlled migration | billing-guard + migration-offers | **DONE** (UI #306, accept proven on staging) | migration targets per tier (decision) |
 | Billing support + error handling | app | TODO | support contact decision |
 
 ## Phase 3: Administration and finance (Control Center)

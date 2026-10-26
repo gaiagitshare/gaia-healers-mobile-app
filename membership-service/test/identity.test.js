@@ -36,3 +36,17 @@ test('emails are normalized; bad references are rejected', { skip: SKIP }, async
     await assert.rejects(resolveOrCreatePerson(pool, { platform: 'myspace', kind: 'contact', externalId: '1' }), (e) => e.code === 'INVALID_INPUT');
   } finally { await pool.end(); }
 });
+
+test('concurrent links of the same identity to the same person all succeed (no false conflict)', { skip: SKIP }, async () => {
+  const pool = await freshPool();
+  try {
+    const { personId } = await resolveOrCreatePerson(pool, { platform: 'email', kind: 'address', externalId: 'race@example.invalid' });
+    const ref = { platform: 'stripe', kind: 'customer', externalId: 'cus_fixture_race' };
+    for (let round = 0; round < 5; round++) {
+      await pool.query("DELETE FROM person_identities WHERE platform = 'stripe'");
+      const out = await Promise.all(Array.from({ length: 6 }, () => linkIdentity(pool, personId, ref, { linkedBy: 'test' })));
+      assert.equal(out.filter((o) => o.linked).length, 1);
+      assert.ok(out.every((o) => o.linked || o.alreadyLinked));
+    }
+  } finally { await pool.end(); }
+});

@@ -106,6 +106,15 @@ function assertOwnTags(tags, prefix) {
  *   benefitMap: validated grants.js map; when given, mapped tag changes are recorded as expected grants
  * -> { status: 'synced' | 'no_contact' | 'dead_letter', contactId?, addTags, removeTags, fieldUpdates, unmappedFields, reason? }
  */
+/** Grants for tags we still want that GHL has not confirmed yet. */
+async function pendingGrantsFor(db, contactId, desiredTags) {
+  if (!desiredTags.length) return 0;
+  const r = await db.query(
+    `SELECT count(*)::int AS n FROM ghl_expected_grants WHERE contact_id = $1 AND action = 'grant' AND status = 'pending' AND via_tag = ANY($2)`,
+    [contactId, desiredTags.map((t) => t.toLowerCase())]);
+  return r.rows[0].n;
+}
+
 export async function syncPersonToGhl({ pool, ghl, deadLetters = pgDeadLetterStore(pool), prefix = DEFAULT_TAG_PREFIX, fieldIds = {}, fieldResolver = null, benefitMap = null, legacyStatuses, now = new Date() }, personId) {
   const desired = await desiredForPerson(pool, personId, { prefix, now, legacyStatuses });
   const ids = await identitiesOf(pool, personId);
@@ -142,15 +151,29 @@ export async function syncPersonToGhl({ pool, ghl, deadLetters = pgDeadLetterSto
     const ids = fieldResolver ? (await fieldResolver.resolve()).fieldIds : fieldIds;
     const diff = diffGhlState(contact, desired, { prefix, fieldIds: ids });
     assertOwnTags([...diff.addTags, ...diff.removeTags], prefix);
+    // Grant new -> confirm -> revoke old: access is never removed before its
+    // replacement is confirmed by GHL, so a member is never left without access
+    // during an upgrade, downgrade or legacy migration.
     if (diff.fieldUpdates.length) { await ghl.updateCustomFields(contact.id, diff.fieldUpdates); applied.push('fields'); }
-    if (diff.removeTags.length) { await ghl.removeTags(contact.id, diff.removeTags); applied.push('remove_tags'); }
     if (diff.addTags.length) { await ghl.addTags(contact.id, diff.addTags); applied.push('add_tags'); }
     if (benefitMap) {
-      const expected = expectedGrantsFor(diff, benefitMap);
-      if (expected.length) await recordExpectedGrants(pool, { personId, contactId: contact.id, expected, now });
+      const grants = expectedGrantsFor({ addTags: diff.addTags }, benefitMap);
+      if (grants.length) await recordExpectedGrants(pool, { personId, contactId: contact.id, expected: grants, now });
+    }
+    const waiting = benefitMap ? await pendingGrantsFor(pool, contact.id, desired.tags || []) : 0;
+    let deferredRemoveTags = [];
+    if (diff.removeTags.length && waiting > 0) {
+      deferredRemoveTags = diff.removeTags;                      // next run removes them once GHL confirms the new grants
+    } else if (diff.removeTags.length) {
+      await ghl.removeTags(contact.id, diff.removeTags); applied.push('remove_tags');
+      if (benefitMap) {
+        const revokes = expectedGrantsFor({ removeTags: diff.removeTags }, benefitMap);
+        if (revokes.length) await recordExpectedGrants(pool, { personId, contactId: contact.id, expected: revokes, now });
+      }
     }
     await deadLetters.resolveOpen(personId, 'ghl-sync');
-    return { status: 'synced', contactId: contact.id, ...diff, desired };
+    const removed = deferredRemoveTags.length ? [] : diff.removeTags;
+    return { status: deferredRemoveTags.length ? 'synced_revoke_deferred' : 'synced', contactId: contact.id, ...diff, removeTags: removed, deferredRemoveTags, desired };
   } catch (e) {
     if (!e?.code) throw e;
     const reason = applied.length ? 'partial_apply' : reasonFor(e);

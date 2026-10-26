@@ -79,6 +79,7 @@ export async function fakeStripe({ livemode = false, lists = {} } = {}) {
       const s = db.subscriptions.get(m[1]);
       if (!s) return err(404, 'invalid_request_error', 'resource_missing');
       if (f.cancel_at_period_end === 'true') { s.cancel_at_period_end = true; s.cancel_at = s.items.data[0].current_period_end; }
+      if (f.trial_end) s.trial_end = Number(f.trial_end);
       return { json: s };
     }
     if (r.method === 'GET' && (m = r.path.match(/^\/v1\/(invoices|charges|refunds|disputes)$/))) {

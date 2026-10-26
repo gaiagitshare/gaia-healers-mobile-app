@@ -139,7 +139,7 @@ test('sync never adds or removes a non-gaia-m: tag, across legacy and tier chang
   } finally { await srv.close(); await pool.end(); }
 });
 
-test('safe transitions: fields, then remove old tags, then add new; idempotent; never both tiers', { skip: SKIP }, async () => {
+test('grant new -> confirm -> revoke old: fields, add new, then remove old; idempotent; one tier at the end', { skip: SKIP }, async () => {
   const pool = await freshPool();
   const srv = await fakeGhl({ contacts: [{ id: 'gt_2', email: 'gt_2@example.invalid', tags: ['ahc-gold-active'] }] });
   try {
@@ -153,12 +153,13 @@ test('safe transitions: fields, then remove old tags, then add new; idempotent; 
     srv.requests.length = 0;
     const down = await syncPersonToGhl({ ...deps, now: AFTER_IC }, pid);                // downgrade to standard
     assert.equal(down.status, 'synced');
-    assert.deepEqual(srv.requests.map((r) => r.method + ' ' + r.path), ['GET /contacts/gt_2', 'PUT /contacts/gt_2', 'DELETE /contacts/gt_2/tags', 'POST /contacts/gt_2/tags'],
-      'fields (access_until) first, then remove, then add');
-    assert.ok(srv.requests[2].json.tags.includes(`${P}tier:inner_circle`));
+    assert.deepEqual(srv.requests.map((r) => r.method + ' ' + r.path), ['GET /contacts/gt_2', 'PUT /contacts/gt_2', 'POST /contacts/gt_2/tags', 'DELETE /contacts/gt_2/tags'],
+      'fields first, then the NEW tags, then the old ones are removed');
+    assert.ok(srv.requests[3].json.tags.includes(`${P}tier:inner_circle`));
     const tags = srv.db.get('gt_2').tags;
     assert.ok(tags.includes(`${P}tier:standard`) && !tags.includes(`${P}tier:inner_circle`));
-    assert.equal(tags.filter((t) => t.startsWith(`${P}tier:`)).length, 1, 'exactly one tier tag');
+    assert.equal(tags.filter((t) => t.startsWith(`${P}tier:`)).length, 1, 'exactly one tier tag at the end');
+    assert.ok(tags.includes('ahc-gold-active'), 'existing GHL tags are never touched');
 
     srv.requests.length = 0;
     const again = await syncPersonToGhl({ ...deps, now: AFTER_IC }, pid);
@@ -167,7 +168,37 @@ test('safe transitions: fields, then remove old tags, then add new; idempotent; 
   } finally { await srv.close(); await pool.end(); }
 });
 
-test('partial failure: dead letter partial_apply, never both tiers, a re-run resumes and resolves it', { skip: SKIP }, async () => {
+test('old access is revoked only after GHL confirms the new grant', { skip: SKIP }, async () => {
+  const pool = await freshPool();
+  const srv = await fakeGhl({ contacts: [{ id: 'gt_4', email: 'gt_4@example.invalid', tags: [] }] });
+  try {
+    const pid = await person(pool, 'gt_4');
+    await subscribe(pool, pid, 'professional', '2026-12-31');
+    await subscribe(pool, pid, 'standard', '2027-06-30');
+    const benefitMap = { 'crm.ghl_subaccount': { type: 'offer', ghlId: 'offer-fixture-pro', viaTag: `${P}benefit:crm.ghl_subaccount` },
+      'courses.core': { type: 'offer', ghlId: 'offer-fixture-core', viaTag: `${P}benefit:courses.core` } };
+    const deps = { pool, ghl: client(srv), fieldIds: FIELD_IDS, benefitMap };
+    await syncPersonToGhl({ ...deps, now: NOW }, pid);
+    await recordGrantConfirmation(pool, { contactId: 'gt_4', type: 'offer', ghlId: 'offer-fixture-core', granted: true });
+    await recordGrantConfirmation(pool, { contactId: 'gt_4', type: 'offer', ghlId: 'offer-fixture-pro', granted: true });
+    // Professional ends; Standard remains. A NEW benefit tag for the remaining plan would need confirmation first:
+    // simulate one by expecting a pending grant on a still-desired tag.
+    await pool.query(`INSERT INTO ghl_expected_grants (person_id, contact_id, entitlement_key, grant_type, ghl_id, via_tag, action, map_version, expected_at)
+                      VALUES ($1, 'gt_4', 'courses.core', 'offer', 'offer-fixture-core-v2', $2, 'grant', 1, now())`, [pid, `${P}benefit:courses.core`]);
+    const r = await syncPersonToGhl({ ...deps, now: AFTER_IC }, pid);
+    assert.equal(r.status, 'synced_revoke_deferred');
+    assert.ok(r.deferredRemoveTags.includes(`${P}benefit:crm.ghl_subaccount`));
+    assert.ok(srv.db.get('gt_4').tags.includes(`${P}benefit:crm.ghl_subaccount`), 'old access kept while the new grant is unconfirmed');
+    await recordGrantConfirmation(pool, { contactId: 'gt_4', type: 'offer', ghlId: 'offer-fixture-core-v2', granted: true });
+    const r2 = await syncPersonToGhl({ ...deps, now: AFTER_IC }, pid);
+    assert.equal(r2.status, 'synced');
+    assert.ok(!srv.db.get('gt_4').tags.includes(`${P}benefit:crm.ghl_subaccount`), 'revoked once the new grant is confirmed');
+    const revokes = (await pool.query("SELECT count(*)::int n FROM ghl_expected_grants WHERE contact_id = 'gt_4' AND action = 'revoke'")).rows[0].n;
+    assert.equal(revokes, 1, 'the revoke is tracked for confirmation too');
+  } finally { await srv.close(); await pool.end(); }
+});
+
+test('partial failure: access is never lost; dead letter partial_apply; a re-run resumes and resolves it', { skip: SKIP }, async () => {
   const pool = await freshPool();
   const srv = await fakeGhl({ contacts: [{ id: 'gt_3', email: 'gt_3@example.invalid', tags: ['ahc-gold-cancel'] }] });
   try {
@@ -179,32 +210,32 @@ test('partial failure: dead letter partial_apply, never both tiers, a re-run res
     await syncPersonToGhl({ pool, ghl: good, fieldIds: FIELD_IDS, now: NOW }, pid);
 
     const down = () => { throw new MembershipError('PROVIDER_UNAVAILABLE', 'ghl down (fixture)'); };
-    // 1. the ADD fails after fields + removal succeeded
-    const r1 = await syncPersonToGhl({ pool, ghl: { ...good, addTags: down }, fieldIds: FIELD_IDS, now: AFTER_IC }, pid);
+    // 1. the REMOVE fails after fields + the new tags succeeded: both tiers for a moment, never none
+    const r1 = await syncPersonToGhl({ pool, ghl: { ...good, removeTags: down }, fieldIds: FIELD_IDS, now: AFTER_IC }, pid);
     assert.deepEqual([r1.status, r1.reason], ['dead_letter', 'partial_apply']);
     let open = await store.listOpen();
-    assert.deepEqual([open.length, open[0].reason, open[0].details.applied], [1, 'partial_apply', ['fields', 'remove_tags']]);
-    let tierTags = srv.db.get('gt_3').tags.filter((t) => t.startsWith(`${P}tier:`));
-    assert.deepEqual(tierTags, [], 'old tier removed, new one not yet added: never both');
+    assert.deepEqual([open.length, open[0].reason, open[0].details.applied], [1, 'partial_apply', ['fields', 'add_tags']]);
+    let tierTags = srv.db.get('gt_3').tags.filter((t) => t.startsWith(`${P}tier:`)).sort();
+    assert.deepEqual(tierTags, [`${P}tier:inner_circle`, `${P}tier:standard`], 'new access granted, old not yet revoked: never without access');
 
-    // 2. resume: only the missing tags are added, the dead letter resolves
+    // 2. resume: only the removal is left, the dead letter resolves
     srv.requests.length = 0;
     const r2 = await syncPersonToGhl({ pool, ghl: good, fieldIds: FIELD_IDS, now: AFTER_IC }, pid);
     assert.equal(r2.status, 'synced');
-    assert.deepEqual(r2.removeTags, []);
-    assert.ok(r2.addTags.includes(`${P}tier:standard`));
-    assert.deepEqual(srv.requests.map((r) => r.method + ' ' + r.path), ['GET /contacts/gt_3', 'POST /contacts/gt_3/tags']);
+    assert.deepEqual(r2.addTags, []);
+    assert.ok(r2.removeTags.includes(`${P}tier:inner_circle`));
+    assert.deepEqual(srv.requests.map((r) => r.method + ' ' + r.path), ['GET /contacts/gt_3', 'DELETE /contacts/gt_3/tags']);
     assert.equal((await store.listOpen()).length, 0);
     tierTags = srv.db.get('gt_3').tags.filter((t) => t.startsWith(`${P}tier:`));
     assert.deepEqual(tierTags, [`${P}tier:standard`]);
 
-    // 3. the REMOVE fails: nothing is added, so the contact still has only the old tier
+    // 3. the ADD fails: nothing is removed, so the contact keeps its old access
     const pid2 = await person(pool, 'gt_3b');
     srv.db.set('gt_3b', { id: 'gt_3b', email: 'gt_3b@example.invalid', tags: [`${P}tier:professional`, `${P}status:active`], customFields: [], additionalEmails: [] });
     await subscribe(pool, pid2, 'standard', '2027-06-30');
-    let added = 0;
-    const r3 = await syncPersonToGhl({ pool, ghl: { ...good, removeTags: down, addTags: async () => { added++; } }, fieldIds: {}, now: NOW }, pid2);
-    assert.deepEqual([r3.status, r3.reason, added], ['dead_letter', 'provider_unavailable', 0], 'nothing written before the failure -> plain reason; add never attempted');
+    let removed = 0;
+    const r3 = await syncPersonToGhl({ pool, ghl: { ...good, addTags: down, removeTags: async () => { removed++; } }, fieldIds: {}, now: NOW }, pid2);
+    assert.deepEqual([r3.status, r3.reason, removed], ['dead_letter', 'provider_unavailable', 0], 'remove never attempted before the new access exists');
     assert.deepEqual(srv.db.get('gt_3b').tags.filter((t) => t.startsWith(`${P}tier:`)), [`${P}tier:professional`]);
     assert.equal((await syncPersonToGhl({ pool, ghl: good, fieldIds: {}, now: NOW }, pid2)).status, 'synced');
     assert.deepEqual(srv.db.get('gt_3b').tags.filter((t) => t.startsWith(`${P}tier:`)), [`${P}tier:standard`]);

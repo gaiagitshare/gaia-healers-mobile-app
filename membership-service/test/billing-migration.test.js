@@ -11,7 +11,7 @@ import { fakeStripe, fetchVia, noSleep } from './_providers-fakes.js';
 import { createStripeClient } from '../src/providers/stripe/client.js';
 import { createCheckoutSession, createMigrationCheckoutSession } from '../src/providers/stripe/adapter.js';
 import { checkoutEligibility } from '../src/billing-guard.js';
-import { createOffer, acceptOffer, confirmLegacyCancelled, pendingLegacyCancellations, withdrawOffer } from '../src/migration-offers.js';
+import { createOffer, acceptOffer, confirmLegacyCancelled, pendingLegacyCancellations, withdrawOffer, verifyLegacyCancellations, authorizeException, enforceMigrationBillingGate, migrationPolicy } from '../src/migration-offers.js';
 import { seedCatalog, currentVersion } from '../src/plans.js';
 import { resolveOrCreatePerson, linkIdentity } from '../src/identity.js';
 import { createSubscription } from '../src/subscriptions.js';
@@ -124,7 +124,7 @@ test('Gaia-side duplicates: same plan is already_subscribed, another tier is a p
   } finally { await close(); }
 });
 
-test('legacy -> new tier: offer, accept, checkout billing only after paid-through + 2 months, staff confirm the GHL cancellation', { skip: SKIP }, async () => {
+test('legacy -> new tier: offer, accept, billing only after paid-through (no sweetener by default), completion only when the cancellation is verified', { skip: SKIP }, async () => {
   const { pool, srv, deps, close } = await setup();
   try {
     const m = await member(pool);
@@ -142,9 +142,9 @@ test('legacy -> new tier: offer, accept, checkout billing only after paid-throug
 
     const s = await createMigrationCheckoutSession(deps, offer.id, { ...URLS, idempotencyKey: 'req-mig-2', now: NOW });
     assert.equal(s.status, 'ok');
-    assert.equal(s.billingStartsAt.toISOString(), '2027-02-20T00:00:00.000Z', 'legacy paid through Dec 20, plus 2 months free');
+    assert.equal(s.billingStartsAt.toISOString(), '2026-12-20T00:00:00.000Z', 'legacy paid through Dec 20; the sweetener is off by default');
     const form = srv.db.sessions.get(s.sessionId).form;
-    assert.equal(Number(form['subscription_data[trial_end]']), Math.floor(Date.parse('2027-02-20T00:00:00Z') / 1000));
+    assert.equal(Number(form['subscription_data[trial_end]']), Math.floor(Date.parse('2026-12-20T00:00:00Z') / 1000));
     assert.equal(form['subscription_data[metadata][gaia_migration_offer_id]'], offer.id);
 
     // Stripe reports the new subscription (trialing until billing starts).
@@ -153,7 +153,7 @@ test('legacy -> new tier: offer, accept, checkout billing only after paid-throug
     const customer = (await pool.query("SELECT external_id FROM person_identities WHERE person_id = $1 AND platform = 'stripe'", [m.personId])).rows[0].external_id;
     const T = Math.floor(NOW.getTime() / 1000);
     const event = { id: 'evt_mig_1', object: 'event', type: 'customer.subscription.created', created: T, livemode: false,
-      data: { object: { id: 'sub_mig_1', customer, status: 'trialing', trial_end: Math.floor(Date.parse('2027-02-20T00:00:00Z') / 1000),
+      data: { object: { id: 'sub_mig_1', customer, status: 'trialing', trial_end: Math.floor(Date.parse('2026-12-20T00:00:00Z') / 1000),
         metadata: { gaia_migration_offer_id: offer.id }, items: { data: [{ price: { id: priceRef }, current_period_start: T, current_period_end: T + 81 * 86400 }] } } } };
     const raw = JSON.stringify(event);
     await ingestStripeWebhook(pool, { rawBody: raw, signatureHeader: signForTest(SECRET, raw, T), secrets: [SECRET], now: NOW.getTime() });
@@ -162,17 +162,32 @@ test('legacy -> new tier: offer, accept, checkout billing only after paid-throug
     assert.equal(o1.status, 'subscribed');
     assert.equal((await pool.query('SELECT source FROM subscriptions WHERE id = $1', [o1.subscription_id])).rows[0].source, 'migration_offer');
 
-    // Nobody confirmed the GHL cancellation: alerts before billing starts, urgent after.
+    // Nobody reported the GHL cancellation: alert before billing would start.
     const alerts = [];
-    assert.deepEqual(await pendingLegacyCancellations(pool, { now: new Date('2027-01-01T00:00:00Z'), alert: (a) => alerts.push(a) }), { pending: 1, alerted: 0 });
-    await pendingLegacyCancellations(pool, { now: new Date('2027-02-15T00:00:00Z'), alert: (a) => alerts.push(a) });
-    await pendingLegacyCancellations(pool, { now: new Date('2027-02-21T00:00:00Z'), alert: (a) => alerts.push(a) });
-    assert.deepEqual(alerts.map((a) => a.kind), ['legacy_cancel_due', 'double_billing_possible']);
+    await pendingLegacyCancellations(pool, { now: new Date('2026-12-15T00:00:00Z'), alert: (a) => alerts.push(a) });
+    assert.deepEqual(alerts.map((a) => a.kind), ['legacy_cancel_due']);
+    // Billing gate: 3 days before billing, still unverified -> the trial is extended, not charged.
+    srv.db.subscriptions.set('sub_mig_1', { id: 'sub_mig_1', status: 'trialing', items: { data: [{ current_period_end: T + 19 * 86400 }] } });
+    const deps2 = { pool, stripe: client(srv) };
+    assert.deepEqual(await enforceMigrationBillingGate(deps2, { now: new Date('2026-12-18T00:00:00Z') }), { due: 1, held: 1 });
+    const hold = srv.requests.filter((r) => r.method === 'POST' && r.path === '/v1/subscriptions/sub_mig_1').pop();
+    assert.equal(Number(hold.form.trial_end), Math.floor(Date.parse('2026-12-27T00:00:00Z') / 1000), 'held 7 days past the planned start');
+    assert.equal((await pool.query("SELECT trial_end FROM subscriptions WHERE provider_subscription_id = 'sub_mig_1'")).rows[0].trial_end.toISOString(), '2026-12-27T00:00:00.000Z', 'local access follows the held trial');
     assert.equal((await pool.query('SELECT reported_status FROM legacy_memberships WHERE id = $1', [silver.id])).rows[0].reported_status, 'active', 'code never touched the legacy membership');
 
+    // Staff report the hand-made cancellation: NOT complete yet (GHL still shows it active).
     await confirmLegacyCancelled(pool, offer.id, 'staff-fixture');
-    assert.equal((await pool.query('SELECT status FROM migration_offers WHERE id = $1', [offer.id])).rows[0].status, 'completed');
-    assert.deepEqual(await pendingLegacyCancellations(pool, { now: new Date('2027-02-21T00:00:00Z') }), { pending: 0, alerted: 0 });
+    assert.equal((await pool.query('SELECT status FROM migration_offers WHERE id = $1', [offer.id])).rows[0].status, 'cancel_reported');
+    assert.deepEqual(await verifyLegacyCancellations(pool), { checked: 1, verified: 0 }, 'the mirror still shows it active');
+    assert.equal((await enforceMigrationBillingGate(deps2, { now: new Date('2026-12-25T00:00:00Z') })).held, 1, 'still held');
+
+    // The next complete reader pass sees GHL report it cancelled -> verified -> completed; no more holds.
+    await pool.query("UPDATE legacy_memberships SET reported_status = 'canceled' WHERE id = $1", [silver.id]);
+    assert.deepEqual(await verifyLegacyCancellations(pool), { checked: 1, verified: 1 });
+    const done = (await pool.query('SELECT status, legacy_cancel_verified_at, billing_holds FROM migration_offers WHERE id = $1', [offer.id])).rows[0];
+    assert.equal(done.status, 'completed'); assert.ok(done.legacy_cancel_verified_at); assert.equal(done.billing_holds, 2);
+    assert.deepEqual(await enforceMigrationBillingGate(deps2, { now: new Date('2027-01-02T00:00:00Z') }), { due: 0, held: 0 });
+    assert.deepEqual(await pendingLegacyCancellations(pool, { now: new Date('2027-01-02T00:00:00Z') }), { pending: 0, alerted: 0 });
     assert.ok(srv.requests.every((r) => r.path.startsWith('/v1/')), 'only Stripe (fake) was called; GHL never');
   } finally { await close(); }
 });
@@ -202,5 +217,64 @@ test('migration offers are refused for anything under review, ended, or with an 
     assert.equal(r.status, 'migration_required');
     assert.equal(r.legacy[0].tier, 'diamond');
     await withdrawOffer(pool, od.id, 'staff');
+  } finally { await close(); }
+});
+
+test('sweetener is a policy, off by default; offers cannot override it', { skip: SKIP }, async () => {
+  const { pool, close } = await setup();
+  try {
+    assert.deepEqual(migrationPolicy({}), { sweetenerMonths: 0 });
+    assert.deepEqual(migrationPolicy({ MEMBERSHIP_MIGRATION_SWEETENER_MONTHS: '2' }), { sweetenerMonths: 2 });
+    assert.throws(() => migrationPolicy({ MEMBERSHIP_MIGRATION_SWEETENER_MONTHS: '24' }), (e) => e.code === 'INVALID_INPUT');
+    const m = await member(pool);
+    const l = await legacy(pool, { personId: m.personId });
+    const target = (await currentVersion(pool, 'standard')).id;
+    await assert.rejects(createOffer(pool, { legacyMembershipId: l.id, targetPlanVersionId: target, targetInterval: 'month', sweetenerMonths: 2 }, 'staff', { policy: { sweetenerMonths: 0 } }), (e) => e.code === 'FORBIDDEN');
+    const o = await createOffer(pool, { legacyMembershipId: l.id, targetPlanVersionId: target, targetInterval: 'month' }, 'staff', { policy: { sweetenerMonths: 2 } });
+    assert.equal(o.sweetener_months, 2, 'only when the owner turns it on');
+  } finally { await close(); }
+});
+
+test('authorized exception: a named admin and a written reason complete the migration; anything less is refused', { skip: SKIP }, async () => {
+  const { pool, deps, close } = await setup();
+  try {
+    const m = await member(pool);
+    const l = await legacy(pool, { personId: m.personId, provider: 'paypal' });
+    const o = await createOffer(pool, { legacyMembershipId: l.id, targetPlanVersionId: (await currentVersion(pool, 'standard')).id, targetInterval: 'month' }, 'staff');
+    await assert.rejects(authorizeException(pool, o.id, { authorizedBy: 'owner-fixture', reason: 'short' }), (e) => e.code === 'INVALID_INPUT');
+    await assert.rejects(authorizeException(pool, o.id, { reason: 'PayPal agreement cancelled at PayPal directly' }), (e) => e.code === 'INVALID_INPUT');
+    await assert.rejects(authorizeException(pool, o.id, { authorizedBy: 'owner-fixture', reason: 'PayPal agreement cancelled at PayPal directly' }), (e) => e.code === 'CONFLICT', 'only once a new subscription exists');
+    await acceptOffer(pool, o.id, m.personId);
+    await createMigrationCheckoutSession(deps, o.id, { ...URLS, idempotencyKey: 'req-exc-1', now: NOW });
+    await pool.query(`INSERT INTO subscriptions (person_id, plan_version_id, billing_interval, status, provider, provider_subscription_id, source)
+                      VALUES ($1, $2, 'month', 'trialing', 'stripe', 'sub_exc_1', 'migration_offer')`, [m.personId, (await currentVersion(pool, 'standard')).id]);
+    await pool.query("UPDATE migration_offers SET status = 'subscribed', subscription_id = (SELECT id FROM subscriptions WHERE provider_subscription_id = 'sub_exc_1') WHERE id = $1", [o.id]);
+    await authorizeException(pool, o.id, { authorizedBy: 'owner-fixture', reason: 'PayPal agreement cancelled at PayPal directly' });
+    const r = (await pool.query('SELECT status, exception_authorized_by, legacy_cancel_verified_at FROM migration_offers WHERE id = $1', [o.id])).rows[0];
+    assert.deepEqual([r.status, r.exception_authorized_by, r.legacy_cancel_verified_at], ['completed', 'owner-fixture', null]);
+    assert.equal((await pool.query("SELECT count(*)::int n FROM audit_logs WHERE action = 'migration_offer.completed' AND actor_id = 'owner-fixture'")).rows[0].n, 1);
+  } finally { await close(); }
+});
+
+test('billing gate: an ambiguous legacy membership keeps billing held; a subscription already charging raises an urgent alert', { skip: SKIP }, async () => {
+  const { pool, srv, deps, close } = await setup();
+  try {
+    const m = await member(pool);
+    const l = await legacy(pool, { personId: m.personId });
+    const o = await createOffer(pool, { legacyMembershipId: l.id, targetPlanVersionId: (await currentVersion(pool, 'standard')).id, targetInterval: 'month' }, 'staff');
+    await acceptOffer(pool, o.id, m.personId);
+    await createMigrationCheckoutSession(deps, o.id, { ...URLS, idempotencyKey: 'req-gate-1', now: NOW });
+    const sid = (await pool.query(`INSERT INTO subscriptions (person_id, plan_version_id, billing_interval, status, provider, provider_subscription_id, source)
+                      VALUES ($1, $2, 'month', 'trialing', 'stripe', 'sub_gate_1', 'migration_offer') RETURNING id`, [m.personId, (await currentVersion(pool, 'standard')).id])).rows[0].id;
+    await pool.query("UPDATE migration_offers SET status = 'cancel_reported', legacy_cancel_confirmed_by = 'staff', legacy_cancel_confirmed_at = now(), subscription_id = $2 WHERE id = $1", [o.id, sid]);
+    srv.db.subscriptions.set('sub_gate_1', { id: 'sub_gate_1', status: 'trialing', items: { data: [{ current_period_end: 0 }] } });
+    await pool.query("UPDATE legacy_memberships SET reported_status = 'canceled', review_state = 'needs_review', review_reasons = '{contact_rekeyed}' WHERE id = $1", [l.id]);
+    assert.deepEqual(await verifyLegacyCancellations(pool), { checked: 1, verified: 0 }, 'ended but under review: not verified');
+    assert.equal((await enforceMigrationBillingGate({ pool, stripe: deps.stripe }, { now: new Date('2026-12-19T00:00:00Z') })).held, 1);
+    await pool.query("UPDATE subscriptions SET status = 'active' WHERE id = $1", [sid]);
+    const alerts = [];
+    await enforceMigrationBillingGate({ pool, stripe: deps.stripe }, { now: new Date('2026-12-30T00:00:00Z'), alert: (a) => alerts.push(a) });
+    assert.deepEqual(alerts.map((a) => a.kind), ['billing_started_unverified']);
+    assert.equal(srv.requests.filter((r) => r.path === '/v1/subscriptions/sub_gate_1').length, 1, 'never edits a subscription that is already charging');
   } finally { await close(); }
 });

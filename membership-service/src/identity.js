@@ -63,7 +63,12 @@ export async function linkIdentity(pool, personId, ref, { linkedBy, evidence = {
       `INSERT INTO person_identities (person_id, platform, kind, external_id, verified_at, linked_by, evidence) VALUES ($1, $2, $3, $4, $5, $6, $7)
        ON CONFLICT (platform, kind, external_id) DO NOTHING`,
       [personId, r.platform, r.kind, r.externalId, verified ? new Date() : null, linkedBy, JSON.stringify(evidence)]);
-    if (!ins.rowCount) fail('CONFLICT', 'this external identity was just linked to another person');
+    if (!ins.rowCount) {
+      // A concurrent link won the race (ON CONFLICT waited for it to commit): same person is fine, anyone else is a conflict.
+      const now = await findPerson(c, r);
+      if (now && now.id === personId) return { linked: false, alreadyLinked: true };
+      fail('CONFLICT', 'this external identity was just linked to another person');
+    }
     await audit(c, { actorId: linkedBy, action: 'identity.link', entityType: 'person', entityId: personId, after: { platform: r.platform, kind: r.kind } });
     return { linked: true, alreadyLinked: false };
   });

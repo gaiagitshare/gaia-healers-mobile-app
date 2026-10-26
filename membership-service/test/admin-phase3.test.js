@@ -197,6 +197,34 @@ test('execute / retry: approve is not execute; explicit retry only; replay retur
   } finally { await s.close(); }
 });
 
+test('retries close 72 hours after the approval: refused, audited, and the request stays not executed', { skip: SKIP }, async () => {
+  const stripe = switchableStripe();
+  const s = await adminStack({ stripe: stripe.client, operators: { finance: 'finance', finance2: 'finance', finance3: 'finance' } });
+  try {
+    await s.signIn('finance', 'finance2', 'finance3');
+    const pid = await fixturePerson(s.pool, 'retry.window@example.invalid');
+    const ledger = await chargeRow(s.pool, pid);
+    const id = (await s.as('finance').act('payment.refund', { ledgerId: ledger, amountCents: 500 }, { reason: 'duplicate charge on 26 Oct' })).json.request.id;
+    const ap = await s.as('finance2').post(`/v1/admin/requests/${id}/approve`, { note: NOTE });
+    assert.equal(ap.json.status, 'approved_not_executed');
+    const until = new Date(ap.json.request.retryUntil);
+    assert.equal(until.getTime() - new Date(ap.json.request.decidedAt).getTime(), 72 * 3600 * 1000, 'the window is 72 h from the approval');
+    stripe.connected = true;
+    s.advance(72 * 3600 * 1000 + 1000);
+    await s.signIn('finance3');
+    const view = (await s.as('finance3').get('/v1/admin/requests?status=retryable')).json.items.find((x) => x.id === id);
+    assert.equal(view?.canExecute ?? false, false, 'the UI no longer offers Execute again');
+    const late = await s.as('finance3').post(`/v1/admin/requests/${id}/execute`, { reason: 'billing is connected now', requestId: 'exec-late-0001' });
+    assert.deepEqual([late.status, late.json.code], [409, 'CONFLICT']);
+    assert.match(late.json.message, /72-hour retry window closed/);
+    assert.equal(stripe.calls.length, 0, 'nothing reached Stripe');
+    const attempts = (await s.pool.query('SELECT attempt_no, outcome FROM admin_action_attempts WHERE request_id = $1 ORDER BY attempt_no', [id])).rows;
+    assert.deepEqual(attempts, [{ attempt_no: 1, outcome: 'not_executed' }], 'no new attempt was recorded');
+    const denied = (await s.pool.query("SELECT reason, after FROM audit_logs WHERE entity_id = $1 AND action = 'admin.denied' ORDER BY id DESC LIMIT 1", [id])).rows[0];
+    assert.deepEqual([denied.reason, denied.after.why], ['billing is connected now', 'retry_window_closed']);
+  } finally { await s.close(); }
+});
+
 test('every admin audit row carries its reason; read models name people and operators; environment and money source', { skip: SKIP }, async () => {
   const s = await adminStack({ operators: { support: 'support', finance: 'finance', finance2: 'finance', owner: 'owner', owner2: 'owner' } });
   s.env.MEMBERSHIP_ENV = 'staging';

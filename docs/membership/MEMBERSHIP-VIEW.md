@@ -112,6 +112,26 @@ Staging data created for the run (fixtures only):
 - `legacy_memberships` row `fixture-sub-legacy-silver` for contact `fixture-silver-monthly`. Its `last_seen_at` equals the existing mirror maximum, so the mirror-freshness check did not change. The 34 mirrored rows were not touched.
 - one `migration_offers` row (Standard monthly, `offered_by staging-view-test`), which the run left `accepted`.
 
+## Plan change on real staging (2026-10-26, WebP)
+
+Same setup as above (staging app 8798, proxy 8797, API + DB, Playwright Chromium, every non-loopback host blocked,
+fixture sessions, the one onboarding stub). Migration 0013 applied as the schema owner. Stripe is not connected on staging.
+Fixture data added (fixtures only, actor `staging-planchange-test`): Standard monthly Stripe-style subscription rows for
+fixture-no-membership (pilot) and fixture-free (not a pilot), a trialing `migration_offer` subscription for
+fixture-silver-monthly (who keeps a live legacy row), and for the pilot member this cycle's allowance plus a 250-coin goodwill credit.
+
+| File | Shows |
+|---|---|
+| `pc-01-pilot-dashboard-staging-1280.webp` | "STAGING / TEST MODE" marker (from `/plans` `environment=staging`, `stripeMode=none`), dashboard with Change plan |
+| `pc-02-pilot-upgrade-billing-not-connected-1280.webp` | Switch to Professional → real `change-preview` → 503 `PROVIDER_UNAVAILABLE` → "Billing isn't connected in this environment" |
+| `pc-03-pilot-annual-switch-preview-390.webp` | Annual → Switch to annual billing → real preview (200, `interval_switch`) → "Your plan changes to Standard (annual) on {period end}; you keep Standard until then" |
+| `pc-04-pilot-switch-billing-not-connected-390.webp` | Schedule the change → real `change` → 503 `PROVIDER_UNAVAILABLE` → billing notice; no `subscription_changes` row written |
+| `pc-05-nonpilot-not-open-yet-1280.webp` | fixture-free (not a pilot) → preview 200 `not_available` / `pilot_only` → "Not open yet" |
+| `pc-06-pilot-coins-goodwill-390.webp` | Goodwill as its own tile, "They never expire", spend order Monthly, Goodwill, Purchased, Earlier |
+
+Also checked: the legacy fixture shows no change buttons ("Your account team can move you") and the gateway answers
+`change-preview` and `change` with 200 `migration_required`. No page errors; the only blocked host was Google Fonts.
+
 ## Pending owner decisions
 
 1. **Coin pack prices.** `coinPacks` is empty, so the view says "Coin packs are coming soon". Packs appear without a code change once they are active.

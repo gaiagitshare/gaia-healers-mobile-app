@@ -343,7 +343,7 @@
       ? 'You’ll be charged ' + money(p.amountDueNowCents, p.currency) + ' today and get ' + toName + ' right after payment. Your renewal date stays the same.'
       : 'Your plan changes to ' + toLabel + ' on ' + date(p.effectiveAt) + '; you keep ' + fromName + ' until then. Nothing is charged today and nothing is refunded.';
     const yes = window.GaiaNotice && window.GaiaNotice.confirm
-      ? await window.GaiaNotice.confirm(ask, { detail, confirmLabel: now ? 'Pay and upgrade' : 'Schedule the change', cancelLabel: 'Keep my current plan' })
+      ? await window.GaiaNotice.confirm(ask, { detail, confirmLabel: now ? 'Pay and upgrade' : 'Schedule the change', cancelLabel: 'Not now' })
       : window.confirm(ask + '\n' + detail);
     if (!yes) { pendingIds.delete(action); render(); return; }
     state.busy = action; render();
@@ -522,7 +522,7 @@
     return section('mine', 'My membership', banner + changeBanner
       + '<div class="g-card g-m2__card"><dl class="g-m2__dl">' + rows.filter((r) => r[1]).map((r) => '<div><dt>' + esc(r[0]) + '</dt><dd>' + esc(r[1]) + '</dd></div>').join('') + '</dl>'
       + (access.length ? '<p class="g-m2__sub">Included now</p><ul class="g-m2__chips">' + access.map((a) => '<li class="g-badge">' + esc(a) + '</li>').join('') + '</ul>' : '')
-      + '<div class="g-m2__row">' + (m.hasAccess && !m.pendingChange && !m.cancel_at && m.source !== 'legacy_import' ? btn('Change plan', 'data-m2-change', 'secondary') : '')
+      + '<div class="g-m2__row">' + (m.hasAccess && !m.pendingChange && !m.cancel_at && m.source !== 'legacy_import' && !legacyLive().length ? btn('Change plan', 'data-m2-change', 'secondary') : '')
       + (canCancel ? btn('Cancel membership', 'data-m2-cancel="' + esc(m.id) + '"', 'ghost', state.busy === 'cancel') : '') + '</div>'
       + '</div>');
   }
@@ -579,7 +579,7 @@
           const net = Object.values(i.byBalance || {}).reduce((s, v) => s + Number(v || 0), 0);
           return '<li><span class="g-m2__list-main">' + esc(words(i.reason || i.kind)) + '</span><span class="g-m2__list-meta">' + esc(shortDate(i.at)) + '</span><span class="g-m2__list-amt' + (net < 0 ? ' is-neg' : '') + '">' + esc((net > 0 ? '+' : '') + num(net)) + '</span></li>';
         }).join('') + '</ul>';
-    return section('coins', 'Coins', '<div class="g-card g-m2__card"><div class="g-m2__tiles">'
+    return section('coins', 'Coins', '<div class="g-card g-m2__card"><div class="g-m2__tiles' + (w.goodwill ? ' g-m2__tiles--4' : '') + '">'
       + tile('Monthly', w.granted) + (w.goodwill ? tile('Goodwill', w.goodwill) : '') + tile('Purchased', w.purchased) + tile('Earlier', w.legacy) + '</div>'
       + (w.goodwill ? '<p class="g-card__meta">Goodwill coins are a gift from the Gaia Healers team. They never expire.</p>' : '')
       + (Array.isArray(w.spendOrder) && w.spendOrder.length ? '<p class="g-card__meta">Coins are used in this order: ' + esc(w.spendOrder.map((k) => BUCKET_TEXT[k] || words(k)).join(', ')) + '.</p>' : '')

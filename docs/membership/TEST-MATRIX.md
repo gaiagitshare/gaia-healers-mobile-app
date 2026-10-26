@@ -10,7 +10,7 @@ Status as of **26 Oct 2026**. Membership 2.0 is built next to production. GHL, S
 - `MS` = `membership-service/test/`
 - `SP` = `staging-proxy/test/`
 - `FE` = `tests/` (frontend, `node --test tests/*.test.cjs`)
-- `VIEW` = `tests/membership2-view.test.cjs` on `feat/membership2-view` (#306). The runner's `--branches` mode runs it.
+- `VIEW` = `tests/membership2-view.test.cjs`, the member view (#306). It has been in this stack since the restack (85c10f3) and runs in the frontend suite. `--branches` still runs the view branch on its own.
 
 **Environments**
 - **LPG**: local throwaway Postgres (the runner). Stripe and GHL are loopback fakes or not connected.
@@ -40,9 +40,8 @@ Status as of **26 Oct 2026**. Membership 2.0 is built next to production. GHL, S
 | **A3** | GHL admin setup (5 `gaia_membership_*` fields, tag workflows, offer ids) and approval for GHL writes | real tags, course grants and the CRM sync |
 | **A4** | The backup private-key holder runs the off-site decrypt-and-restore on their own machine. The key never comes to the server. | the off-site recovery proof |
 | **A5** | Coin-pack prices (packs are drafts) | real coin-pack checkout |
-| **A6** | The proration rule for upgrades and downgrades | the change-plan API and UI |
+| **A6** | ~~The proration rule~~ decided 26 Oct (INTEGRATIONS.md); the change-plan API is not built yet | (CP-CHG-01 is now TODO) |
 | **A7** | Approval to deploy the security batch (#286–#290, #292, #294) | the live CSRF, rate-limit and session hardening on production |
-| **A8** | Phase 3 work in progress (another agent): operator first-login password change, migration 0012 | the AD-PWD rows |
 | **A9** | Gaia Practitioners: partner contract confirmation and a sandbox | PERM-PART-02 |
 
 ## Customer portal (member view)
@@ -50,14 +49,14 @@ Status as of **26 Oct 2026**. Membership 2.0 is built next to production. GHL, S
 | ID | Scenario | Expected result | Automated test / procedure | Env | Status | Evidence |
 |---|---|---|---|---|---|---|
 | CP-PLAN-01 | Plans are public; other routes need a session | `GET /plans` 200 with 4 tiers at the decided prices and coins; `/me` 401 | MS member-gateway › plans are public; everything else needs the member session | LPG | PASS | run |
-| CP-PLAN-02 | Catalogue values come from the API only | no prices, coins or tier names in the view source | VIEW › no hard-coded prices…; › no tier names or tier logic…; SP membership-frontend-guard (APP_FILES) | UNIT | PASS | run (`--branches`) |
+| CP-PLAN-02 | Catalogue values come from the API only | no prices, coins or tier names in the view source | VIEW › no hard-coded prices…; › no tier names or tier logic…; SP membership-frontend-guard (APP_FILES) | UNIT | PASS | run |
 | CP-PLAN-03 | Monthly/annual toggle, "N months free" derived from the API | yearly prices shown, figure computed from `prices` | manual: staging app `?view=membership`, screenshots 01–03 | STG | PASS (26 Oct) | view-ev |
 | CP-PLAN-04 | Catalogue rules (4 tiers, immutable versions, legacy never sold) | see the tests | MS plans › all 4 tests | LPG | PASS | run |
 | CP-CHK-01 | Pilot member starts checkout, Stripe not connected | 503 `PROVIDER_UNAVAILABLE`; the same requestId gives the same answer; no Stripe customer created | MS e2e-parallel-flows › pilot member reaches the billing step…; MS member-gateway › coin and billing history… | LPG | PASS | run |
 | CP-CHK-02 | Pilot member on staging sees "Billing isn't connected" | real POST answers 503; Try again re-sends the same requestId | manual: staging screenshots 06/07 | STG | PASS (26 Oct) | view-ev |
 | CP-CHK-03 | Non-pilot member at INTERNAL_PILOT | `/me availability.newMembership=false` (`pilot_only`); checkout 200 `not_available`/`pilot_only`; the view sends no POST | MS e2e-parallel-flows › non-pilot member at INTERNAL_PILOT…; staging screenshot 04 | LPG, STG | PASS | run, view-ev |
 | CP-CHK-04 | Real checkout redirect to Stripe and return `?checkout=done` | Stripe Checkout URL (https), return toast, subscription active | `cli/staging-standard-pilot.js start/verify` | SBX | BLOCKED (A1) | |
-| CP-CHK-05 | Every write sends a requestId and keeps it for a retry | one `postJson()`, `m2-` + UUID, same id after a 5xx | VIEW › every write is a JSON POST with credentials and a requestId… | UNIT | PASS | run (`--branches`) |
+| CP-CHK-05 | Every write sends a requestId and keeps it for a retry | one `postJson()`, `m2-` + UUID, same id after a 5xx | VIEW › every write is a JSON POST with credentials and a requestId… | UNIT | PASS | run |
 | CP-CHK-06 | Return URLs only on allowed origins (no open redirect) | `INVALID_INPUT` for other origins | MS providers-stripe › checkout session carries Gaia metadata…; `member-routes.js checkReturnUrl` | LPG | PASS | run |
 | CP-DASH-01 | Signed-in member: account created once, overview with availability | one person; contact and email linked once | MS member-gateway › signed-in member: account is created once… | LPG | PASS | run |
 | CP-DASH-02 | Dashboard with a live plan (status, renewal date, access) | plan card from `/me membership[]` | manual on staging after A1 (staging has no subscriptions) | STG/SBX | BLOCKED (A1) | |
@@ -72,14 +71,14 @@ Status as of **26 Oct 2026**. Membership 2.0 is built next to production. GHL, S
 | CP-LEG-01 | A legacy Silver member sees no buy button and gets `migration_required` | `legacy[]` state `active`; checkout `migration_required` at every stage, pilot or not; Stripe never reached | MS e2e-parallel-flows › legacy Silver member…; MS member-gateway › legacy members are shown their legacy membership…; VIEW › legacy members never get a buy button…; staging screenshot 08 | LPG, STG | PASS | run, view-ev |
 | CP-LEG-02 | Legacy row under review | state `under_review`; checkout `review_required` | MS e2e-parallel-flows › legacy member under review… | LPG | PASS | run |
 | CP-LEG-03 | Accept a migration offer, then continue to checkout | accept 200 `accepted`; checkout 503 without Stripe | staging screenshot 09 | STG | PASS (26 Oct) | view-ev |
-| CP-ERR-01 | Plain-language copy for every server answer | every status has copy | VIEW › every server answer has plain-language copy | UNIT | PASS | run (`--branches`) |
+| CP-ERR-01 | Plain-language copy for every server answer | every status has copy | VIEW › every server answer has plain-language copy | UNIT | PASS | run |
 | CP-ERR-02 | Membership service down | gateway 503 `PROVIDER_UNAVAILABLE` within 2 s (refused) or within the 8 s bound (silent); the app shows its error state | MS e2e-parallel-flows › membership service down…; drill (d) | LPG, STG | PASS | run, [service-down](drills/2026-10-26-service-down.md) |
 | CP-ERR-03 | Visitor (no session) | plans and a Sign in prompt, no 401 noise | manual staging run (26 Oct) | STG | PASS (26 Oct) | view-ev |
 | CP-OFF-01 | Gateway OFF: every `/api/membership2/*` is 404 | falls through; the service is never touched | MS member-gateway › gateway OFF…; SP membership2-gateway-off › every membership2 path is a plain 404… | LPG, UNIT | PASS | run |
 | CP-OFF-02 | Gateway OFF: the app hides the area | `?view=membership` lands on Store; entry slots hidden; only the probe request | VIEW › hidden unless the feature probe succeeds…; drill (c) | UNIT, STG | PASS | run, [kill-switch](drills/2026-10-26-gateway-kill-switch.md) |
-| CP-OFF-03 | The view adds no assistant prompt tokens | not in `GaiaAssistGuide.screens` | VIEW › the view is not in the assistant screen map… | UNIT | PASS | run (`--branches`) |
-| CP-A11Y-01 | Accessibility basics | live region, labelled sections, focus, `aria-pressed` | VIEW › accessibility basics… | UNIT | PASS | run (`--branches`) |
-| CP-CHG-01 | Upgrade or downgrade | change-plan API | not built (the view explains that Support handles it) | | BLOCKED (A6) | |
+| CP-OFF-03 | The view adds no assistant prompt tokens | not in `GaiaAssistGuide.screens` | VIEW › the view is not in the assistant screen map… | UNIT | PASS | run |
+| CP-A11Y-01 | Accessibility basics | live region, labelled sections, focus, `aria-pressed` | VIEW › accessibility basics… | UNIT | PASS | run |
+| CP-CHG-01 | Upgrade or downgrade | upgrade `always_invoice` + `pending_if_incomplete`, the higher tier only after payment; downgrades at period end, no refund (owner decision 26 Oct) | not built (the view explains that Support handles it) | | TODO (implement the decided rule) | INTEGRATIONS.md |
 
 ## Administration (Control Center)
 
@@ -91,7 +90,7 @@ Status as of **26 Oct 2026**. Membership 2.0 is built next to production. GHL, S
 | AD-SIGN-03 | Uniform failure | every failure is `invalid_login` | MS admin › sign-in: uniform invalid_login…; FE control-center-membership2 › sign-in: generic error… | LPG, UNIT | PASS | run |
 | AD-LOCK-01 | Lockout | 5 failures lock 15 min; the UI shows the lockout on 429 | MS admin › sign-in…lockout…; FE control-center-membership2 › sign-in: generic error on failure, lockout on 429 | LPG | PASS | run |
 | AD-SESS-01 | Session limits | 30 min idle, 8 h absolute, logout revokes, a disabled operator is signed out | MS admin › sessions… | LPG | PASS | run |
-| AD-PWD-01 | First-login password change required | restricted session until changed; `password_change_required` | in progress on `feat/membership2-admin` (Phase 3, not in this stack) | LPG | BLOCKED (A8) | |
+| AD-PWD-01 | First-login password change required | restricted session until changed; `password_change_required`; still audited and rate-limited | MS admin-phase3 › initial password must be changed…; › login: the session of an operator who must change the password…; MS admin-gateway › first sign-in through the gateway…; FE control-center-membership2 › first sign-in: a must-change-password session… | LPG, UNIT | PASS | run, cc-ev |
 | AD-RBAC-01 | Every action × every role matches the contract | matrix in CONTROL-CENTER.md §2 | MS admin › RBAC: every action, every role… | LPG | PASS | run |
 | AD-RBAC-02 | Admin routes need an `admin:operate` client | member clients refused | MS admin › the admin routes need an admin:operate client… | LPG | PASS | run |
 | AD-RBAC-03 | The UI draws only permitted actions; launch is read-only unless owner | | FE control-center-membership2 › only actions in /me.permissions are drawn; › launch is read-only unless owner… | UNIT | PASS | run |
@@ -102,13 +101,16 @@ Status as of **26 Oct 2026**. Membership 2.0 is built next to production. GHL, S
 | AD-EXEC-02 | Stripe actions without Stripe | `approved_not_executed`/`PROVIDER_UNAVAILABLE`, never faked, never re-executed | MS admin › Stripe actions without Stripe…; FE control-center-membership2 › PROVIDER_UNAVAILABLE (503) is a final answer… | LPG, UNIT | PASS | run |
 | AD-EXEC-03 | Stripe actions with a test-mode client | refund and immediate cancel call the adapter once | MS admin › Stripe actions with a (test-mode) Stripe client… (fake) | LPG | PASS | run |
 | AD-EXEC-04 | Real refund or immediate cancel against Stripe | refund booked by the webhook | staging after A1 | SBX | BLOCKED (A1) | |
+| AD-EXEC-06 | Explicit execute / retry | approve is not execute; explicit retry only; replay returns the first result; executed is final (409); no background retry | MS admin-phase3 › execute / retry… | LPG | PASS | run |
 | AD-EXEC-05 | UI retry semantics | a network error or 5xx reuses the requestId; a 4xx starts a new one | FE control-center-membership2 › network error and 5xx reuse the same requestId and body… | UNIT | PASS | run |
 | AD-AUD-01 | Audit is append-only; every write is audited | UPDATE/DELETE refused | MS migrations › ledgers and the audit log are append-only; MS admin › direct actions… | LPG | PASS | run |
+| AD-AUD-02 | Every admin audit row carries its reason; read models name people, not ids | | MS admin-phase3 › every admin audit row carries its reason…; FE control-center-membership2 › names, not ids… | LPG, UNIT | PASS | run |
 | AD-READ-01 | Read models are bounded and paginated; health and overview answer | limit ≤ 200, cursors | MS admin › read models are bounded and paginated… | LPG | PASS | run |
 | AD-LAUNCH-01 | Launch above INTERNAL_PILOT from the Control Center | owner requests, a second owner approves, the ceiling still caps it | MS admin › launch stage above INTERNAL_PILOT… | LPG | PASS | run |
 | AD-GW-01 | Admin gateway OFF | every `/api/admin/membership2*` path is 404, signed in or not | SP membership2-admin-gateway-off; MS admin-gateway › admin gateway OFF…; drill (c) | UNIT, STG | PASS | run, [kill-switch](drills/2026-10-26-gateway-kill-switch.md) |
 | AD-GW-02 | Admin gateway ON | console sign-in **and** operator cookie; status probe; token never in the body | SP membership2-admin-gateway-on (2 tests); MS admin-gateway › status probe, login cookie… | UNIT, LPG | PASS | run |
 | AD-UI-01 | Probe-gated area | probe 404/401/network error hides it; nothing else requested | FE control-center-membership2 › probe 404 → hidden…; › probe 401… | UNIT | PASS | run |
+| AD-UI-03 | Environment banner, money-source badges, accessible sidebar | the banner comes from the server; nothing is guessed | FE control-center-membership2 › STAGING / TEST MODE banner…; › money source badges…; › sidebar: real buttons… | UNIT | PASS | run |
 | AD-UI-02 | Staging Control Center walkthrough | sign-in, overview, requests, launch | staging run (26 Oct) | STG | PASS (26 Oct) | cc-ev |
 
 ## Payments
@@ -138,6 +140,8 @@ Status as of **26 Oct 2026**. Membership 2.0 is built next to production. GHL, S
 | PAY-REC-01 | Daily reconciliation | zero diff when clean, alerts once, overlap, incomplete fetch, cap | MS providers-stripe-daily-reconcile (all 8); MS providers-stripe › reconciliation… (3) | LPG | PASS | run |
 | PAY-REC-02 | Coin-pack reconciliation | | MS providers-stripe-coinpack-reconcile (all 6) | LPG | PASS | run |
 | PAY-REC-03 | Real reconciliation run | 8 requests | `reconcile-daily.js --run` | SBX | BLOCKED (A1) | |
+| PAY-SETUP-01 | Stripe setup planner (`stripe-setup` CLI): webhook event list, portal settings, catalogue plan, refusals, adopt-not-edit, never live | dry run by default; secret to a 0600 file, never printed; conflicts reported, never edited | MS providers-stripe-setup (all 9, fake) | LPG | PASS (fake) | run |
+| PAY-SETUP-02 | Real Stripe setup run (products, prices, webhook, portal) | | `stripe-setup --run` with a test key and a ledger budget | SBX | BLOCKED (A1) | |
 | PAY-HTTP-01 | HTTP client: bounded retries, no leaked bodies | | MS providers-http (all 6); MS providers-stripe › 5xx retries reuse the same idempotency key… | LPG | PASS | run |
 | PAY-MISC-01 | Edge cases from the review | see the tests | MS review-regressions › an invoice paid after cancellation…; › invoices of non-Gaia Stripe subscriptions…; › first seen past_due…; › upgrade on the Stripe item…; › active subscription whose renewal never arrived… | LPG | PASS | run |
 | PAY-SBX-01 | Sandbox runner safety | dry run by default; scenario limits; budget ledger; cleanup only of its own objects | MS providers-stripe-sandbox (all 10); MS providers-stripe-sandbox-lifecycle (all 12, fake) | LPG | PASS | run |
@@ -148,6 +152,7 @@ Status as of **26 Oct 2026**. Membership 2.0 is built next to production. GHL, S
 |---|---|---|---|---|---|---|
 | COIN-GRANT-01 | Monthly allowance | once per cycle; the largest plan wins; annual plans grant monthly; a lapse expires leftovers | MS coins › monthly allowance resets…; MS jobs › monthly allowance…; MS jobs › cycle dates clamp… | LPG | PASS | run |
 | COIN-GOOD-01 | Goodwill ≤ 500 (support) and > 500 (finance + second finance, max 10 000) | direct vs dual | MS admin › direct actions: support goodwill <= 500…; MS admin › RBAC… | LPG | PASS | run |
+| COIN-GOOD-02 | Goodwill is its own bucket: never clawed back, spent after granted and before purchased; the 500 boundary is exact | | MS admin-phase3 › goodwill is its own bucket…; › the 500-coin support limit holds exactly at the boundary; FE control-center-membership2 › goodwill shows as its own wallet bucket | LPG, UNIT | PASS | run |
 | COIN-BUY-01 | Coin pack credited once, even when replayed | | MS coin-packs › a paid coin pack credits purchased coins… | LPG | PASS | run |
 | COIN-BUY-02 | Only Gaia packs at the package price | | MS coin-packs › only Gaia packs at the package price… | LPG | PASS | run |
 | COIN-HOLD-01 | Quote, hold, capture | price set server-side; no double charge; idempotent | MS api › quote -> hold -> capture…; MS coins › quote shows the dollar equivalent | LPG | PASS | run |
@@ -174,6 +179,7 @@ Status as of **26 Oct 2026**. Membership 2.0 is built next to production. GHL, S
 | LEG-MIG-04 | Authorized exception | a named admin and a reason; anything less refused | MS billing-migration › authorized exception… | LPG | PASS | run |
 | LEG-SWT-01 | The incentive (sweetener) stays disabled | off by default; offers cannot override it | MS billing-migration › sweetener is a policy, off by default… | LPG | PASS | run |
 | LEG-GHL-01 | GHL tag sync: `gaia-m:` only, never `ahc-*`, grant before revoke | | MS providers-ghl-tags (all 11); MS providers-ghl (all 10) | LPG | PASS (fakes) | run |
+| LEG-GHL-03 | GHL setup spec and a dry-run diff from the legacy mirror | 5 allowlisted fields; `gaia-m:` tags only, no `ahc-*`; no GHL client on the report path; writes nothing | MS providers-ghl-setup (all 5) | LPG | PASS | run |
 | LEG-GHL-02 | Real GHL writes (tags, fields, course grants) | | not run | GHL | BLOCKED (A3) | |
 | LEG-CUR-01 | The current production membership keeps working (resolver, GHL sync, ordering, webhooks, fixtures, admin API) | unchanged | SP membership-contract (31), membership-pipeline (23), membership-admin-api (21), membership-events (20), membership-ordering (17), membership-ghl-adapter (17), membership-admin-ops (14), membership-product-registry (14), membership-integration (11), membership-webhook-auth (9), membership-fixture-gate (8), membership-fixture-enabled (8), membership-security-rules (6), membership-public-catalogue, membership-frontend-guard | UNIT | PASS | run |
 
@@ -212,6 +218,7 @@ Status as of **26 Oct 2026**. Membership 2.0 is built next to production. GHL, S
 | SEC-CSRF-02 | Member writes: JSON body, requestId format | | MS member-gateway › signed-in member… (`INVALID_INPUT` without a requestId); gateway `body()` content type check | LPG | PASS | run |
 | SEC-CSRF-03 | Production CSRF hardening (security batch) | | PR #288 tests; runbook | prod | BLOCKED (A7) | |
 | SEC-RL-01 | Operator login rate limit per IP | 429 `RATE_LIMITED` after 10 / 15 min | MS admin-gateway › writes… login is rate-limited per IP | LPG | PASS | run |
+| SEC-RL-02 | A spoofed X-Forwarded-For / CF-Connecting-IP cannot reset the operator sign-in limit | | SP membership2-admin-gateway-ip › a spoofed X-Forwarded-For… | UNIT | PASS | run |
 | SEC-SESS-01 | Operator sessions expire; console sign-in still required | | MS admin › sessions…; FE control-center-membership2 › AUTH_REQUIRED mid-session…; › a console 401… | LPG, UNIT | PASS | run |
 | SEC-SEC-01 | No secrets in the frontend; the operator token never reaches JS | | FE control-center-membership2 › it only talks to the same-origin gateway, and holds no secret; MS admin-gateway › status probe, login cookie (token never in the body)… | UNIT, LPG | PASS | run |
 | SEC-SEC-02 | CLIs and runners never print keys or URLs | | MS staging-webhook-server › the CLI refuses…never prints…; MS providers-stripe-daily-reconcile › CLI --run…key never printed; FE membership-test-runner › runner: postgres is never pulled… | LPG | PASS | run |
@@ -262,7 +269,7 @@ Status as of **26 Oct 2026**. Membership 2.0 is built next to production. GHL, S
 
 | ID | Scenario | Expected result | Automated test / procedure | Env | Status | Evidence |
 |---|---|---|---|---|---|---|
-| BR-01 | Customer copy says "Gaia Healers" in the member view | | VIEW › customer copy says "Gaia Healers"… | UNIT | PASS | run (`--branches`) |
+| BR-01 | Customer copy says "Gaia Healers" in the member view | | VIEW › customer copy says "Gaia Healers"… | UNIT | PASS | run |
 | BR-02 | Control Center branding and the billing-off sentence | | FE control-center-membership2 › branding and the billing-off sentence are exact | UNIT | PASS | run |
 | BR-03 | Whole-site guard against bare "Gaia" | | `tests/brand-consistency.test.cjs` on #304 (4 pass, run at 062daf9 on 26 Oct; not in this stack) | UNIT | PASS (on #304) | #304 |
 | BR-04 | Owner wording decisions from #304 | | owner | | TODO (owner) | #304 |
@@ -279,27 +286,26 @@ Status as of **26 Oct 2026**. Membership 2.0 is built next to production. GHL, S
 5. **The gateway timeout is fixed at 8 s** on every route (`membership2-gateway.js` line 57). It is bounded, but long for GETs.
 6. **A kill switch cannot be a drop-in `Environment=`.** Systemd applies `EnvironmentFile=` after it, so the env file wins. Use a second `EnvironmentFile` in a drop-in instead ([drill (c)](drills/2026-10-26-gateway-kill-switch.md)). This matters for the production runbook.
 7. **Docs are out of date:**
-   - MEMBERSHIP-VIEW.md (#306), "Known API ordering point", says checkout answers `PROVIDER_UNAVAILABLE` before the guard and the gate. The current code (`needStripe()` is now a lazy stub) answers the guard and the gate first. CP-LEG-01 and CP-CHK-03 prove it.
+   - [MEMBERSHIP-VIEW.md](MEMBERSHIP-VIEW.md), "Known API ordering point", says checkout answers `PROVIDER_UNAVAILABLE` before the guard and the gate. The current code (`needStripe()` is now a lazy stub) answers the guard and the gate first. CP-LEG-01 and CP-CHK-03 prove it.
    - CONTROL-CENTER.md §5 describes the new 404 behaviour only. Production's old router answers 401 to a signed-out caller (PI-03).
-   - `membership-staging-stack.md` (ops) still says migrations 0001–0010; staging is now at 0012.
 8. **Backups are never test-decrypted on the server.** The restore drill restores a fresh plaintext dump. Decrypting the encrypted artifact is A4 (key holder only). This is by design.
 
 ## Totals (26 Oct 2026)
 
 | Status | Rows |
 |---|---|
-| PASS | 138 |
+| PASS | 146 |
 | FAIL | 0 |
-| BLOCKED | 20 |
-| TODO | 4 |
-| **All** | 162 |
+| BLOCKED | 19 |
+| TODO | 5 |
+| **All** | 170 |
 
 `PASS (fake)` means proven against loopback fakes only. The same scenario against real Stripe has its own BLOCKED row.
 
 ## Test inventory: every test mapped to a row
 
 Generated from the test sources on 26 Oct 2026. Counts per suite come from the runner.
-- The **staging-proxy** suite has 99 files. Only the files that concern membership are listed here. The rest (assistant, academy, onboarding, practitioners and so on) are general regression. They count in the runner totals, and must stay green for any proxy change.
+- The **staging-proxy** suite has 100 files. Only the files that concern membership are listed here. The rest (assistant, academy, onboarding, practitioners and so on) are general regression. They count in the runner totals, and must stay green for any proxy change.
 - The other **frontend** files are general regression too.
 
 ### membership-service (`MS`, real Postgres)
@@ -311,6 +317,13 @@ Generated from the test sources on 26 Oct 2026. Counts per suite come from the r
 | admin-gateway | status probe, login cookie (token never in the body), admin cookie + operator cookie required | AD-GW-02, SEC-SEC-01 |
 | admin-gateway | writes: JSON only, Control Center origin only; login is rate-limited per IP | SEC-CSRF-01, SEC-RL-01 |
 | admin-gateway | dual approval end to end through the gateway: request, refused self-approval, second operator executes | AD-DUAL-01 |
+| admin-gateway | first sign-in through the gateway: restricted until the password is changed; /password needs the operator cookie and the origin | AD-PWD-01 |
+| admin-phase3 | goodwill is its own bucket: never clawed back by a refund, spent after granted and before purchased, shown separately | COIN-GOOD-02, COIN-GOOD-01 |
+| admin-phase3 | the 500-coin support limit holds exactly at the boundary | COIN-GOOD-02, COIN-GOOD-01 |
+| admin-phase3 | initial password must be changed: restricted session until POST /v1/admin/password succeeds | AD-PWD-01 |
+| admin-phase3 | execute / retry: approve is not execute; explicit retry only; replay returns the first result; executed is final (409); no background retry | AD-EXEC-06 |
+| admin-phase3 | every admin audit row carries its reason; read models name people and operators; environment and money source | AD-AUD-02 |
+| admin-phase3 | login: the session of an operator who must change the password is still fully audited and rate-limited by the account lock | AD-PWD-01 |
 | admin | crypto primitives: RFC 6238 vector, scrypt verify, AES-GCM bound to the operator id | AD-SIGN-01 |
 | admin | TOTP window: +-1 step accepted, 2 steps refused, a used step never accepted again | AD-SIGN-02 |
 | admin | sign-in: uniform invalid_login, lockout after 5 failures for 15 min, sessions hashed | AD-SIGN-03, AD-LOCK-01 |
@@ -405,6 +418,11 @@ Generated from the test sources on 26 Oct 2026. Counts per suite come from the r
 | providers-ghl-legacy | pagination has a hard page cap; an incomplete pass or an error writes nothing and keeps last_seen_at | LEG-MIR-02 |
 | providers-ghl-legacy | read-only legacy report: counts by tier, provider and status; review list; stale suspects; freshness | LEG-MIR-02 |
 | providers-ghl-legacy | config drift check: configured price ids that GHL no longer lists are reported | LEG-MIR-02 |
+| providers-ghl-setup | spec: exactly the five allowlisted fields; every listed value passes the field check | LEG-GHL-03 |
+| providers-ghl-setup | spec: every tag is gaia-m: and lowercase; legacy tags only for silver/gold/diamond; no ahc-* | LEG-GHL-03 |
+| providers-ghl-setup | the report path has no GHL client and no network transport | LEG-GHL-03 |
+| providers-ghl-setup | --spec needs no database; the diff refuses a non-loopback database | LEG-GHL-03 |
+| providers-ghl-setup | dry-run diff from the legacy mirror: legacy tags for live mapped rows, hold for unknown, nothing for unmapped / ended; writes nothing | LEG-GHL-03 |
 | providers-ghl-tags | legacy tiers become gaia-m:legacy:<tier> only; unknown status is held, never removed | LEG-GHL-01 |
 | providers-ghl-tags | custom fields are resolved BY KEY; missing and duplicate keys are reported, never created | LEG-GHL-01 |
 | providers-ghl-tags | benefit map: validated, gaia-m: viaTag only, expectations follow tag changes | LEG-GHL-01 |
@@ -481,6 +499,15 @@ Generated from the test sources on 26 Oct 2026. Counts per suite come from the r
 | providers-stripe-sandbox | the cap holds mid-run: a retry consumes budget, the request past the cap throws, leftovers are listed by id | PAY-SBX-01 |
 | providers-stripe-sandbox | the runner refuses to reach the network: real Stripe is unreachable from tests | PAY-SBX-01 |
 | providers-stripe-sandbox | total budget across runs: the planned smoke test fits 25; one more run is refused before sending; crashes stay counted | PAY-SBX-01 |
+| providers-stripe-setup | the webhook event list is exactly the pipeline handler table | PAY-SETUP-01 |
+| providers-stripe-setup | plan: seed catalog = 3 paid tiers x 2 intervals; 3 requests per price + 1 per product; webhook 2; portal 2 | PAY-SETUP-01 |
+| providers-stripe-setup | portal configuration: card update, invoices, cancel at period end ON; plan switching and profile edits OFF | PAY-SETUP-01 |
+| providers-stripe-setup | dry run is the default: sends nothing, prints the plan, the events and the count | PAY-SETUP-01 |
+| providers-stripe-setup | --run refusals: no or live key, no --max-requests, too small a cap, no ledger budget, no secret file, missing URLs | PAY-SETUP-01 |
+| providers-stripe-setup | --run webhook + portal: creates both once, secret to a 0600 file and never printed; second run adopts, sends no POST | PAY-SETUP-01 |
+| providers-stripe-setup | --run conflicts are reported, never edited: other events on the same URL, a portal that allows plan switching | PAY-SETUP-01 |
+| providers-stripe-setup | --run catalog from the database: 3 products, 6 prices with lookup keys, refs recorded; a re-run plans 0 catalog requests | PAY-SETUP-01 |
+| providers-stripe-setup | the CLI never enables live mode and has no live flag | PAY-SETUP-01 |
 | providers-stripe | live keys are refused unless allowLive is passed explicitly; junk keys are refused | PAY-KEY-01 |
 | providers-stripe | form encoding matches Stripe bracket notation | PAY-CHK-02 |
 | providers-stripe | every POST needs an idempotency key; a reused key with other params is CONFLICT | PAY-CHK-02 |
@@ -528,6 +555,7 @@ Generated from the test sources on 26 Oct 2026. Counts per suite come from the r
 
 | File | Test | Row(s) |
 |---|---|---|
+| membership2-admin-gateway-ip | a spoofed X-Forwarded-For / CF-Connecting-IP does not reset the operator sign-in limit | SEC-RL-02 |
 | membership2-admin-gateway-off | every admin membership2 path is a plain 404 while the admin gateway is off (signed out and signed in) | AD-GW-01, PI-07 |
 | membership2-admin-gateway-on | ON: admin cookie required; status probe; writes need the Control Center origin and JSON | AD-GW-02, SEC-SEC-01 |
 | membership2-admin-gateway-on | ON: the Event Manager bearer (how production signs in) is accepted exactly like the admin cookie; operator cookie still required | AD-GW-02 |
@@ -580,6 +608,12 @@ Generated from the test sources on 26 Oct 2026. Counts per suite come from the r
 | control-center-membership2 | PROVIDER_UNAVAILABLE (503) is a final answer, not a retry | AD-EXEC-02 |
 | control-center-membership2 | API text is rendered as text, never as markup | SEC-ESC-01 |
 | control-center-membership2 | money and coins format | AD-UI-01 |
+| control-center-membership2 | first sign-in: a must-change-password session sees only the password screen; the change is checked before sending | AD-PWD-01 |
+| control-center-membership2 | STAGING / TEST MODE banner comes from the server: shown unless production with live Stripe | AD-UI-03 |
+| control-center-membership2 | money source badges are labels for the server-side source, never guessed | AD-UI-03 |
+| control-center-membership2 | names, not ids: requests show the member email; audit shows operator names, entity labels and the reason column | AD-AUD-02 |
+| control-center-membership2 | goodwill shows as its own wallet bucket | COIN-GOOD-02 |
+| control-center-membership2 | sidebar: real buttons with aria-current; "live from GHL" is not claimed for Membership 2.0 | AD-UI-03 |
 | membership-test-runner | runner: postgres is never pulled, bound to loopback only, data in tmpfs, random password | SEC-SEC-02, SEC-NET-01 |
 | membership-test-runner | runner: the container and the temporary worktree are removed on every exit (trap) | SEC-SEC-02, SEC-NET-01 |
 | membership-test-runner | runner: nothing reaches the network beyond loopback (offline npm, no fetch, no pull, preload on every node) | SEC-NET-01 |
@@ -593,20 +627,20 @@ Generated from the test sources on 26 Oct 2026. Counts per suite come from the r
 | event-admin-boundary | event data in the shell is displayed, never computed or written | PI-09 |
 | event-admin-boundary | the architecture is written down where a developer will find it | PI-09 |
 
-### member view (`VIEW`, `feat/membership2-view`)
+### member view (`VIEW`, `tests/membership2-view.test.cjs`)
 
 | File | Test | Row(s) |
 |---|---|---|
-| tests/membership2-view | no hard-coded prices, coin amounts or "months free" figures | CP-PLAN-02 |
-| tests/membership2-view | no tier names or tier logic: plans, labels and benefits come from the API | CP-PLAN-02 |
-| tests/membership2-view | every write is a JSON POST with credentials and a requestId reused on retry | CP-CHK-05 |
-| tests/membership2-view | hidden unless the feature probe succeeds; production routing falls back to the Store | CP-OFF-02 |
-| tests/membership2-view | the view is not in the assistant screen map (no prompt tokens added) | CP-OFF-03 |
-| tests/membership2-view | customer copy says "Gaia Healers", never a bare "Gaia" | BR-01 |
-| tests/membership2-view | no card-entry fields; payment details stay with Stripe | CP-BILL-01 |
-| tests/membership2-view | every server answer has plain-language copy | CP-ERR-01 |
-| tests/membership2-view | legacy members never get a buy button; return states toast and refresh | CP-LEG-01 |
-| tests/membership2-view | accessibility basics: live region, labelled sections, focusable notice, pressed toggle | CP-A11Y-01 |
+| membership2-view | no hard-coded prices, coin amounts or "months free" figures | CP-PLAN-02 |
+| membership2-view | no tier names or tier logic: plans, labels and benefits come from the API | CP-PLAN-02 |
+| membership2-view | every write is a JSON POST with credentials and a requestId reused on retry | CP-CHK-05 |
+| membership2-view | hidden unless the feature probe succeeds; production routing falls back to the Store | CP-OFF-02 |
+| membership2-view | the view is not in the assistant screen map (no prompt tokens added) | CP-OFF-03 |
+| membership2-view | customer copy says "Gaia Healers", never a bare "Gaia" | BR-01 |
+| membership2-view | no card-entry fields; payment details stay with Stripe | CP-BILL-01 |
+| membership2-view | every server answer has plain-language copy | CP-ERR-01 |
+| membership2-view | legacy members never get a buy button; return states toast and refresh | CP-LEG-01 |
+| membership2-view | accessibility basics: live region, labelled sections, focusable notice, pressed toggle | CP-A11Y-01 |
 
 ### staging-proxy: current production membership (file level, row LEG-CUR-01)
 

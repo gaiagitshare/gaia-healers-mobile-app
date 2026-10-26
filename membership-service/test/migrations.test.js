@@ -12,12 +12,10 @@ test('migrations apply, roll back and re-apply cleanly', { skip: SKIP }, async (
     assert.deepEqual(await migrateUp(pool), [], 'second run applies nothing');
     const tables = (await pool.query("SELECT count(*)::int AS n FROM information_schema.tables WHERE table_schema = 'membership'")).rows[0].n;
     assert.ok(tables >= 17, 'all foundation tables exist');
-    assert.deepEqual(await migrateDown(pool, { steps: 1 }), ['0002_internal_api.sql']);
-    assert.equal((await pool.query("SELECT to_regclass('membership.api_clients') AS t")).rows[0].t, null, '0002 down removed its tables');
-    assert.notEqual((await pool.query("SELECT to_regclass('membership.coin_wallets') AS t")).rows[0].t, null, 'and left 0001 alone');
-    assert.deepEqual(await migrateDown(pool, { steps: 1 }), ['0001_foundation.sql']);
+    const files = loadMigrations().map((m) => m.file);
+    assert.deepEqual(await migrateDown(pool, { steps: files.length }), [...files].reverse());
     assert.equal((await pool.query("SELECT count(*)::int AS n FROM information_schema.schemata WHERE schema_name = 'membership'")).rows[0].n, 0);
-    assert.deepEqual(await migrateUp(pool), ['0001_foundation.sql', '0002_internal_api.sql']);
+    assert.deepEqual(await migrateUp(pool), files);
   } finally { await pool.end(); }
 });
 

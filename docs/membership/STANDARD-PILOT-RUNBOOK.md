@@ -1,82 +1,79 @@
 # First real sandbox run: one Gaia Standard membership (Stripe TEST mode, staging)
 
+No fakes. Fictional staging member only. Test-mode credentials only. Production billing, GHL, customer records and the Event Manager are not touched.
+
 The runs in this document are real: the Stripe test-mode API, real Stripe webhooks, and the real staging database. No fakes are involved. Test mode moves no money. **Nothing here runs until the owner approves it.**
 
-## Budget: 14 of 25 Stripe API requests (ledger-enforced)
+## Budget: 12 application requests (ledger-enforced) + 3 booked for the Stripe CLI = 15 of 25
 
-Ledger: `/root/.config/gaia-stripe-sandbox-budget.json`, budget 25. Each step reserves its full count before sending anything. The reservation is never refunded, and the budget cannot be raised. Automatic retries are off, so no request is sent that wasn't counted.
+**Application calls.** The ledger guarantees these. Each step reserves its full count before sending anything, its cap equals that count at the fetch layer, and automatic retries are off.
 
-| Step | Stripe requests | What |
+| Step | Stripe API requests | What |
 |---|---|---|
-| `listener` | 3 (reserve) | the Stripe CLI's own calls (webhook session); booked before the CLI starts |
-| `start` | 6 | product check, product create, price lookup, price create (first run only), customer create, Checkout Session create |
-| (payment) | 0 API | the tester pays on Stripe's hosted page with `4242 4242 4242 4242`, any future date, any CVC |
+| `whoami` | 1 | `GET /v1/account`: the key's account must equal `EXPECTED_STRIPE_ACCOUNT_ID` |
+| `start` | 6 | product check, product create, price lookup, price create (first run), customer create, Checkout Session create |
+| payment | 0 | the tester pays on Stripe's hosted page (browser, not our key) |
+| webhooks | 0 | the receiver, processor, handlers and coin/entitlement jobs make **no** Stripe calls (checked in code: no Stripe client in that path) |
 | `verify` | 4 | reconciliation: one page each of invoices, charges, refunds, disputes |
-| `cancel` | 1 | cancel the test subscription |
-| **Total** | **14** | **11 left in the budget for one retry of a failed step, after diagnosis** |
+| `cancel` | 1 | `cancel_at_period_end=true` on the subscription |
+| `status` | 0 | database only |
+| **Application total** | **12** | |
 
-`node src/cli/staging-standard-pilot.js plan` prints these counts from the live staging state. It sends nothing. Ran 26 Oct 2026: 14, fits.
+**Stripe CLI calls.** These are outside the application, and the ledger **cannot** enforce them. When `stripe listen` starts it authenticates and opens a webhook session: about 1–2 HTTPS requests, plus one long-lived websocket. Events arriving over the websocket are not API requests. A network drop can make it reconnect, which adds session requests our code cannot cap. They are booked as a **reserve of 3** (`listener` step) for accounting. Keep the listener short-lived: start it right before `start` and stop it right after `cancel`. Stripe Dashboard → Developers → Logs shows every request the key made, so the owner can audit the real count afterwards.
 
 ## Minimum restricted key (`rk_test_…`) for this scenario
 
-| Resource | Access | Used by |
-|---|---|---|
-| Products | Write | product check + create |
-| Prices | Write | price lookup + create |
-| Customers | Write | customer create |
-| Checkout Sessions | Write | session create |
-| Subscriptions | Write | cancel |
-| Invoices | Read | reconciliation |
-| Charges | Read | reconciliation (refunds and disputes expand their charge) |
-| Refunds | Read | reconciliation |
-| Disputes | Read | reconciliation |
-| Webhook / CLI access for `stripe listen` | see below | the listener |
+- **Write:** Products, Prices, Customers, Checkout Sessions, Subscriptions.
+- **Read:** Invoices, Charges, Refunds, Disputes.
+- **Account details (Read)**, for `whoami`. If the Dashboard offers no such permission for restricted keys, `whoami` fails cleanly (1 request). `start` then checks the created price id against `EXPECTED_STRIPE_ACCOUNT_FRAGMENT` before any customer or checkout exists.
+- The `stripe listen` permission is not documented. Try this key first; if it is refused, run `stripe login` inside the container (the CLI's own restricted key). A full `sk_test_` key only if both fail, after approval.
 
-Not needed for this scenario: PaymentIntents, PaymentMethods, Test clocks and Events (the full 14-scenario plan needs them later).
+## Correct Gaia Stripe account
 
-**`stripe listen` with a restricted key.** Stripe's docs say the CLI accepts any key via `--api-key` or `STRIPE_API_KEY`, but they don't name the permission `listen` needs. The order to try:
+- The owner puts the account id shown in the Stripe Dashboard (Settings → Business → Account details, `acct_…`; not a secret) into the staging env file as `EXPECTED_STRIPE_ACCOUNT_ID`.
+- `whoami` refuses to continue on a mismatch, and `start` refuses until `whoami` has passed.
+- **Same account as GHL?** All live GHL tier prices share one account-specific id fragment. If the owner decides the sandbox must be the GHL-connected account, also set `EXPECTED_STRIPE_ACCOUNT_FRAGMENT` (ask me for the value; it is not a secret). The first created price must then carry it, or the run stops before any customer or checkout.
 
-1. Run the same `rk_test_` with the listener. A missing permission fails immediately (inside the 3 reserved requests).
-2. If that is refused, run `stripe login` inside the container. The owner approves it in the browser, and Stripe creates the CLI's own **restricted** keys (90-day). No full secret key is required.
-3. A full `sk_test_` key only if both fail, after approval.
+## Cancellation = our entitlement policy
 
-## Stripe CLI without installing anything on the server
+`cancel` sets **cancel at period end** (spec §15, click-to-cancel). The member keeps Standard access until the paid period ends, and the step prints that exact date. Stripe then sends `customer.subscription.updated` with `cancel_at`. At the period end Stripe ends the subscription (`customer.subscription.deleted`): access stops, no renewal is billed, and the next allowance run expires the granted coins. Nothing is charged after the cancel.
 
-Use the official Docker image as a throwaway container. Nothing is installed on the host and no volume is mounted. The key comes from the existing 0600 env file, and the container is removed on exit. **Pulling the image needs approval:** it comes from Docker Hub `stripe/stripe-cli`, pinned to a release tag and recorded by digest when pulled.
+## Stripe CLI: throwaway, isolated container (validated 26 Oct, image NOT pulled)
+
+`membership-service/scripts/stripe-cli-listener.sh`, pinned to `stripe/stripe-cli:v1.53.1` (released 7 Oct 2026; newer releases are under 2 weeks old):
+- `--pull=never`, so it never fetches by itself;
+- read-only root filesystem, tmpfs for scratch, all capabilities dropped, `no-new-privileges`, 128 MB, 64 processes;
+- no host mounts; `--rm`;
+- host networking only to reach the loopback receiver;
+- the key comes from the 0600 env file through an anonymous pipe;
+- the webhook secret is written into the env file and never printed.
+
+`validate` proved all of this with a local image, and proved the Stripe image is not fetched implicitly.
+
+## Exact commands (no credentials shown; run only after approval)
 
 ```bash
-# 1. print the webhook signing secret for this listener (put it into STRIPE_TEST_WEBHOOK_SECRET in the staging env file)
-docker run --rm --network host --env-file <(grep '^STRIPE_TEST_SECRET_KEY=' /root/.config/gaia-membership-staging.env | sed 's/^STRIPE_TEST_SECRET_KEY=/STRIPE_API_KEY=/') \
-  stripe/stripe-cli:<pinned-tag> listen --print-secret
-# 2. forward events to the loopback receiver
-docker run --rm --name gaia-stripe-cli --network host --env-file <(…same…) stripe/stripe-cli:<pinned-tag> listen \
-  --forward-to http://127.0.0.1:8791/v1/webhooks/stripe \
-  --events customer.subscription.created,customer.subscription.updated,customer.subscription.deleted,invoice.paid,invoice.payment_failed
-# afterwards: docker rmi stripe/stripe-cli:<pinned-tag>
+cd /root/gaia-membership-staging-src/membership-service
+# 0. owner adds to /root/.config/gaia-membership-staging.env:  STRIPE_TEST_SECRET_KEY=rk_test_…  EXPECTED_STRIPE_ACCOUNT_ID=acct_…
+P='node src/cli/staging-standard-pilot.js'; E='set -a; . /root/.config/gaia-membership-staging.env; set +a'
+bash -c "$E; $P plan"                                     # sends nothing; prints the counts, budget left, account settings
+# 1. listener (after approval to pull):
+docker pull stripe/stripe-cli:v1.53.1 && docker image inspect stripe/stripe-cli:v1.53.1 --format '{{index .RepoDigests 0}}'   # record the digest
+bash -c "$E; $P listener --run"                           # books the 3-request CLI reserve
+scripts/stripe-cli-listener.sh start                      # captures the webhook secret into the env file (not shown)
+bash -c "$E; nohup node src/cli/staging-webhook-server.js >/var/log/gaia-staging-webhooks.log 2>&1 &"   # loopback receiver, staging DB only
+# 2. account check and checkout
+bash -c "$E; $P whoami --run"                             # 1 request; must match EXPECTED_STRIPE_ACCOUNT_ID
+bash -c "$E; $P start --run"                              # 6 requests; prints the Checkout URL
+#    tester: open the URL, pay with 4242 4242 4242 4242, any future expiry, any CVC
+bash -c "$E; $P status"                                   # 0 requests; wait until the subscription shows active
+# 3. verify and cancel
+bash -c "$E; $P verify --run"                             # 4 requests; activation, $47 charge, 500 coins, entitlements, 0 mismatches
+bash -c "$E; $P cancel --run"                             # 1 request; cancel at period end, access-end date printed
+bash -c "$E; $P status"                                   # cancel date set, access still on
+# 4. tear down
+scripts/stripe-cli-listener.sh stop; pkill -f staging-webhook-server.js; scripts/stripe-cli-listener.sh remove-image
 ```
-
-`--network host` is only so the container can reach the loopback receiver. The receiver binds 127.0.0.1, uses the staging database only, refuses live events, and verifies every signature.
-
-## Steps (each needs the owner's go)
-
-0. Put `STRIPE_TEST_SECRET_KEY` into `/root/.config/gaia-membership-staging.env`. If the legacy mirror is older than 36 h (`plan` shows its age), refresh it with the read-only legacy import (about 20 GHL GETs). The duplicate-billing guard refuses otherwise.
-1. `node src/cli/staging-standard-pilot.js listener --run`, which books the 3. Then start the CLI container (above). Put the printed `whsec_` into `STRIPE_TEST_WEBHOOK_SECRET` and start the receiver: `node src/cli/staging-webhook-server.js`.
-2. `node src/cli/staging-standard-pilot.js start --run`. It:
-   - seeds the plan catalog (database only);
-   - creates the fictional member (`pilot-standard-<stamp>@example.invalid`);
-   - checks the guard;
-   - prints the **Checkout URL**.
-3. The tester opens the URL and pays with `4242 4242 4242 4242`. Stripe sends `customer.subscription.created` and `invoice.paid`. The receiver verifies, stores and processes them, and the membership becomes active in staging.
-4. `node src/cli/staging-standard-pilot.js verify --run`. Pass criteria:
-   - the membership is active on Standard;
-   - exactly one $47.00 USD charge is in the payment ledger;
-   - 500 coins are granted (by the monthly allowance job);
-   - Standard entitlements are on and Professional-only ones are off;
-   - reconciliation shows 0 mismatches.
-5. `node src/cli/staging-standard-pilot.js cancel --run`. The `customer.subscription.deleted` webhook then ends it in staging.
-6. Stop the CLI container and the receiver, and remove the image.
-
-All steps print ids and statuses only. The member's email and the keys are never printed.
 
 ## Off-site decrypt-and-restore test (for the private-key holder)
 

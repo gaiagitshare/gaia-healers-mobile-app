@@ -103,10 +103,10 @@ const PERSON = {
   j: {
     // The real shape: top-level sections, and `person` is only the person row.
     ok: true, person: { id: 'P1', status: 'active' },
-    identities: [{ platform: 'email', kind: 'email', external_id: 'p@example.test' }], wallet: { granted_balance: 100 }, coinTransactions: [],
-      subscriptions: [{ id: 's1', status: 'active', planKey: 'standard', billingInterval: 'month', currentPeriodEnd: '2026-11-26T00:00:00Z' }],
-      payments: [{ id: 7, entry_type: 'charge', amount_cents: 4700, occurred_at: '2026-10-26T10:00:00Z' }],
-      legacy: [], offers: [], notes: [{ body: '<img src=x onerror=alert(1)>', created_at: '2026-10-26T10:00:00Z' }], audit: [],
+    identities: [{ platform: 'email', kind: 'email', external_id: 'p@example.test' }], wallet: { granted: { coins: 100, usd: '$1.00' }, purchased: { coins: 0, usd: '$0.00' }, legacy: { coins: 0, usd: '$0.00' }, total: { coins: 100, usd: '$1.00' } }, coinTransactions: [],
+      subscriptions: [{ id: 's1', status: 'active', plan_key: 'standard', plan_name: 'Standard', billing_interval: 'month', current_period_end: '2026-11-26T00:00:00Z', cancel_at: null, events: [] }],
+      payments: [{ id: 7, provider: 'stripe', provider_object_type: 'charge', entry_type: 'charge', amount_cents: 4700, currency: 'USD', occurred_at: '2026-10-26T10:00:00Z' }],
+      legacy: [], offers: [], pilot: false, notes: [{ body: '<img src=x onerror=alert(1)>', created_at: '2026-10-26T10:00:00Z' }], audit: [],
   },
 };
 async function signedIn(perms, role, extra = {}) {
@@ -201,7 +201,7 @@ test('sign-in: generic error on failure, lockout on 429', async () => {
   let n = 0;
   const h = load({
     'GET /api/admin/membership2/status': { status: 200, j: { enabled: true, signedIn: false } },
-    'POST /api/admin/membership2/login': () => (++n === 1 ? { status: 401, j: { ok: false, code: 'invalid_login' } } : { status: 429, j: { ok: false, code: 'RATE_LIMITED' } }),
+    'POST /api/admin/membership2/login': () => (++n === 1 ? { status: 401, j: { ok: false, code: 'AUTH_REQUIRED', error: 'invalid_login' } } : { status: 429, j: { ok: false, code: 'RATE_LIMITED' } }),
   });
   await h.M2.probe();
   const box = h.dom.doc.createElement('div'); h.dom.doc.body.appendChild(box);
@@ -216,6 +216,35 @@ test('sign-in: generic error on failure, lockout on 429', async () => {
   // A bad code never leaves the page.
   h.dom.byId('m2code').value = '12ab'; form.dispatch('submit'); await settle();
   assert.equal(h.calls.filter((c) => c.url.endsWith('/login')).length, 2);
+});
+
+test('a console 401 (admin_auth_required) goes to the console sign-in, not the operator one', async () => {
+  const h = load({
+    'GET /api/admin/membership2/status': { status: 200, j: { enabled: true, signedIn: true } },
+    'GET /api/admin/membership2/me': ME([], 'viewer'),
+    'GET /api/admin/membership2/overview': { status: 401, j: { ok: false, code: 'AUTH_REQUIRED', reason: 'admin_auth_required' } },
+  });
+  let expired = 0;
+  h.M2.init({ adminExpired: () => { expired++; } });
+  await h.M2.probe();
+  const box = h.dom.doc.createElement('div'); h.dom.doc.body.appendChild(box);
+  h.M2.mount(box); await settle();
+  assert.equal(expired, 1);
+});
+
+test('a note is its own reason: no separate reason field, 10 characters minimum', async () => {
+  const h = await signedIn(['note.add'], 'support', { 'POST /api/admin/membership2/actions': { status: 200, j: { ok: true, status: 'executed' } } });
+  await openPersonTab(h, 'notes');
+  button(h.dom, 'Add note').click(); await settle();
+  assert.equal(h.dom.byId('m2f-reason'), null, 'no reason box for a note');
+  const body = h.dom.byId('m2f-body');
+  const form = h.dom.all(h.dom.doc.body).find((n) => n.getAttribute('role') === 'dialog').childNodes[0];
+  body.value = 'short'; form.dispatch('submit'); await settle();
+  assert.equal(actionCalls(h).length, 0);
+  body.value = 'Called member, all fine'; form.dispatch('submit'); await settle();
+  const c = actionCalls(h)[0].body;
+  assert.equal(c.reason, 'Called member, all fine');
+  assert.deepEqual(c.params, { personId: 'P1', body: 'Called member, all fine' });
 });
 
 test('AUTH_REQUIRED mid-session returns to sign-in and says why', async () => {
@@ -234,13 +263,14 @@ test('only actions in /me.permissions are drawn', async () => {
   const some = await signedIn(['coins.credit', 'subscription.cancel_period_end', 'note.add'], 'support');
   await openPersonTab(some, 'coins'); assert.ok(button(some.dom, 'Credit coins'));
   assert.match(text(some.dom), /p@example\.test/, 'person header uses the email identity');
+  assert.match(text(some.dom), /100 coins \(\$1\.00\)/, 'wallet balances are {coins, usd} objects');
   await openPersonTab(some, 'payments'); assert.ok(!button(some.dom, 'Refund'), 'support cannot refund');
   await openPersonTab(some, 'subscriptions');
   assert.ok(button(some.dom, 'Cancel at period end')); assert.ok(!button(some.dom, 'Cancel now'));
 });
 
 test('launch is read-only unless owner, even if a permission key slipped through', async () => {
-  const launch = { 'GET /api/admin/membership2/launch': { status: 200, j: { ok: true, state: { stage: 'INTERNAL_PILOT', effective: 'INTERNAL_PILOT' }, history: [], pilots: [{ person_id: 'P9', added_at: '2026-10-26T10:00:00Z' }] } } };
+  const launch = { 'GET /api/admin/membership2/launch': { status: 200, j: { ok: true, state: { stored: 'INTERNAL_PILOT', ceiling: 'INTERNAL_PILOT', effective: 'INTERNAL_PILOT', limitedCap: 0 }, history: [], pilots: [{ person_id: 'P9', added_at: '2026-10-26T10:00:00Z' }] } } };
   const fin = await signedIn(['launch.set', 'pilot.add', 'pilot.remove'], 'finance', launch);
   fin.M2._test.state.screen = 'launch'; fin.M2.mount(fin.M2._test.state.box); await settle();
   assert.ok(!button(fin.dom, 'Change stage') && !button(fin.dom, 'Remove'));

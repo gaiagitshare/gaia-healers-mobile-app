@@ -80,7 +80,7 @@ test('the GHL client is structurally read-only towards billing', async () => {
   const srv = await fakeGhl();
   try {
     const c = ghlClient(srv);
-    assert.deepEqual(Object.keys(c).sort(), ['addTags', 'findContactsByEmail', 'getContact', 'removeTags', 'updateCustomFields']);
+    assert.deepEqual(Object.keys(c).sort(), ['addTags', 'findContactsByEmail', 'getContact', 'getLocationCustomFields', 'removeTags', 'updateCustomFields']);
     await assert.rejects(c.getContact('../payments/orders'), (e) => e.code === 'INVALID_INPUT');
     assert.equal(srv.requests.length, 0);
   } finally { await srv.close(); }

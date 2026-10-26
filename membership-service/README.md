@@ -80,6 +80,28 @@ only counted; the provider stays the billing truth).
 - **Backups**: the nightly encrypted backup must add a `pg_dump` of this
   database before it holds anything real (gate below).
 
+## Architecture C: legacy GHL memberships (CRM-only GHL)
+
+Legacy Silver / Gold / Diamond stay billed by GHL (Stripe and PayPal behind GHL)
+until a member chooses to migrate; new tiers are sold through direct Stripe
+Billing. GHL is the CRM: Gaia writes `gaia-m:` tags and GHL workflows grant or
+revoke course offers and community groups from them. All of it is mock-tested
+against loopback fakes; nothing calls the live GHL.
+
+| Module | Guarantees (tested) |
+|---|---|
+| `providers/ghl/legacy-config.js` | GHL price ids per legacy tier (shape of `staging-proxy/membership/config.js`); tier ONLY by price id: mapped / unmapped / ambiguous; status classes live / ended / unknown |
+| `providers/ghl/legacy-reader.js` | GET-only reader (`/payments/subscriptions`, `/payments/transactions`, `/products/{id}/price`; any other method or path refused before a request); offset pagination with a hard page cap; one pass upserts `legacy_memberships`: verbatim `reported_status`, provider, amount, interval, `last_payment_at` (newest successful, not fully refunded), `paid_through_estimate`, `person_id` via `person_identities` (ghl, contact); `last_seen_at` = pass time on a COMPLETE pass only; an incomplete pass (cap or error) writes nothing; rows never deleted; `checkLegacyConfig()` reports configured price ids GHL no longer lists |
+| `providers/ghl/legacy-rules.js` | `stale_suspected` after interval + grace (configurable) without a successful payment: a review flag only, never canceled / inactive / ended, never an access change; review reasons: `unknown_status`, `unmapped_price`, `ambiguous_price`, `missing_contact`, `contact_rekeyed`, `multiple_live_legacy`, `stale_suspected`, `paypal_no_recent_payment`, `unknown_provider`, `not_seen_in_complete_pass` (re-key and not-seen are sticky until a human marks the row reviewed) |
+| `providers/ghl/legacy-report.js` | read-only report: counts by tier, provider, status, mapping; review list; stale suspects; freshness |
+| `providers/ghl/desired-state.js`, `sync.js` | `gaia-m:legacy:<tier>` while GHL reports a mapped legacy subscription live (never `gaia-m:tier:*`); an unknown status HOLDS the tag; only `gaia-m:` tags are ever sent (`ahc-*` untouched); order: fields, remove old tags, add new; a half-applied change is a `partial_apply` dead letter and the next run resumes from the contact's current tags |
+| `providers/ghl/field-ids.js` | the five `gaia_membership_*` field ids resolved by key (`GET /locations/{id}/customFields`), TTL cache, missing and duplicate keys reported, never created |
+| `providers/ghl/grants.js` | entitlement key -> `{ type: offer|community, ghlId, viaTag }` (versioned, empty until GHL admin setup); expected grants recorded on tag changes; `recordGrantConfirmation()` from the Course Access mirror webhooks; `findUnconfirmedGrants()` alerts once per unconfirmed expectation |
+| `providers/ghl/reconcile.js` | desired `gaia-m:` tags vs tags on linked contacts: missing / extra, foreign tags counted and ignored; report-only by default, `mode: 'apply'` re-syncs drifted people |
+
+Migration `0005_ghl_legacy_sync.sql` adds `legacy_reader_runs` (append-only),
+`ghl_expected_grants`, and the `partial_apply` dead-letter reason.
+
 ## Not activated, and the gate for each
 
 | Capability | Blocked until |
@@ -91,4 +113,6 @@ only counted; the provider stays the billing truth).
 | GHL paid subaccounts | GHL usage-billing model decided (D6) |
 | Partner data / coin carry-over | partner confirms the contract (`docs/membership/PARTNER-INTEGRATION-REQUEST.md`) and N-4 (provenance rule) |
 | Legacy subscriber import | D7 / N-6 classification; legacy versions created from real terms |
+| Legacy GHL reader on a schedule | a token scoped to read payments; first live pass within the 40-GET budget and owner sign-off |
+| GHL benefit grants (`BENEFIT_GRANTS`) | GHL admin creates the 5 `gaia_membership_*` fields, the free offers / groups and the tag-triggered Grant/Revoke workflows, and the ahc-* grants are retired per tier |
 | Device-buyer 6-month Standard promotion | modelled as a `promotion` trial; the existing funnel promises (terms shown at purchase) must be listed first |

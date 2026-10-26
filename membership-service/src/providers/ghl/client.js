@@ -7,7 +7,8 @@
  * query then an EXACT email match against the main and additional emails.
  *
  * Read-only towards GHL billing, structurally: the client only knows five
- * contact routes, and any other path (payments, subscriptions, invoices,
+ * contact routes plus one GET of the location's custom-field definitions
+ * (field ids are resolved by key, never created), and any other path (payments, subscriptions, invoices,
  * orders, products, prices, …) is refused before a request is built. This
  * adapter can never create, change or cancel a GHL subscription.
  */
@@ -24,6 +25,7 @@ const ROUTES = [
   ['PUT', new RegExp(`^/contacts/${ID}$`)],
   ['POST', new RegExp(`^/contacts/${ID}/tags$`)],
   ['DELETE', new RegExp(`^/contacts/${ID}/tags$`)],
+  ['GET', new RegExp(`^/locations/${ID}/customFields$`)],
 ];
 
 export function guardGhlPath(method, path) {
@@ -61,6 +63,12 @@ export function createGhlClient({ token, locationId, fetch, baseUrl = GHL_API_BA
         if (normEmail(c?.email) === e || extra.includes(e)) out.push({ ...c, id: c.id || hit.id });
       }
       return out;
+    },
+
+    /** Field DEFINITIONS of this location (id, name, fieldKey). Read-only; there is no create path. */
+    async getLocationCustomFields() {
+      const r = await request('GET', `/locations/${contactId(locationId)}/customFields`);
+      return Array.isArray(r?.customFields) ? r.customFields : [];
     },
 
     async addTags(id, tags) { if (tags.length) await request('POST', `/contacts/${contactId(id)}/tags`, { json: { tags } }); },

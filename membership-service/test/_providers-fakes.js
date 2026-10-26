@@ -106,12 +106,14 @@ export async function fakeStripe({ livemode = false, lists = {} } = {}) {
   return { ...srv, db };
 }
 
-/** Fake GHL contacts API. contacts: [{ id, email, additionalEmails, tags, customFields: [{ id, value }] }] */
-export async function fakeGhl({ contacts = [] } = {}) {
+/** Fake GHL contacts API. contacts: [{ id, email, additionalEmails, tags, customFields: [{ id, value }] }]
+ * fieldDefinitions: location custom-field definitions served at GET /locations/{id}/customFields. */
+export async function fakeGhl({ contacts = [], fieldDefinitions = [] } = {}) {
   const db = new Map(contacts.map((c) => [c.id, structuredClone({ tags: [], customFields: [], additionalEmails: [], ...c })]));
   const srv = await fakeServer((r) => {
     if (!/^Bearer /.test(r.headers.authorization || '') || r.headers.version !== '2021-07-28') return { status: 401, json: { message: 'unauthorized' } };
     let m;
+    if (r.method === 'GET' && /^\/locations\/[^/]+\/customFields$/.test(r.path)) return { json: { customFields: fieldDefinitions } };
     if (r.method === 'POST' && r.path === '/contacts/search') {
       const q = String(r.json?.query || '').toLowerCase();
       // fuzzy, like GHL: substring of the local part also matches
@@ -142,6 +144,34 @@ export async function fakeGhl({ contacts = [] } = {}) {
     return { status: 404, json: { message: 'unknown route' } };
   });
   return { ...srv, db };
+}
+
+/**
+ * Fake GHL payments (read side). Offset pagination like GHL (`limit`, `offset`,
+ * `totalCount`). Anything but GET is answered 405 and logged, so a test can
+ * prove the reader never sent one.
+ *   subscriptions / transactions: arrays of GHL-shaped objects
+ *   prices: { [productId]: [{ _id, ... }] }
+ */
+export async function fakeGhlPayments({ subscriptions = [], transactions = [], prices = {} } = {}) {
+  const state = { subscriptions, transactions, prices };
+  const page = (all, q) => {
+    const limit = Number(q.get('limit') || 100); const offset = Number(q.get('offset') || 0);
+    return { json: { data: all.slice(offset, offset + limit), totalCount: all.length } };
+  };
+  const srv = await fakeServer((r) => {
+    if (!/^Bearer /.test(r.headers.authorization || '') || r.headers.version !== '2021-07-28') return { status: 401, json: { message: 'unauthorized' } };
+    if (r.method !== 'GET') return { status: 405, json: { message: 'read-only fake' } };
+    if (r.path === '/payments/subscriptions') return page(state.subscriptions, r.query);
+    if (r.path === '/payments/transactions') {
+      const since = r.query.get('startAt') ? new Date(r.query.get('startAt')) : null;
+      return page(state.transactions.filter((t) => !since || new Date(t.createdAt) >= since), r.query);
+    }
+    const m = r.path.match(/^\/products\/([^/]+)\/price$/);
+    if (m) return state.prices[m[1]] ? { json: { prices: state.prices[m[1]], total: state.prices[m[1]].length } } : { status: 404, json: { message: 'not found' } };
+    return { status: 404, json: { message: 'unknown route' } };
+  });
+  return { ...srv, state };
 }
 
 /**

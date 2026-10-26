@@ -14,6 +14,10 @@
  *     (enumerations, plan keys, dates). The input is the entitlement
  *     evaluation only — no profile, scan, survey or other wellness data can
  *     reach a marketing field, because there is no path for it;
+ *   - legacy GHL-billed tiers (architecture C) appear ONLY as
+ *     `<prefix>legacy:<tier>`, never as `<prefix>tier:*`. A legacy row whose
+ *     GHL status is unknown is HELD: its tag is neither added nor removed, so
+ *     an odd status string can never take access away;
  *   - pure: no I/O, deterministic output order.
  */
 import { TIERS } from '../../catalog.js';
@@ -26,6 +30,7 @@ export const DEFAULT_TAG_PREFIX = 'gaia-m:';
 export const MIRRORED_ENTITLEMENT_PREFIXES = Object.freeze(['community.', 'courses.', 'certification.', 'listing.', 'support.', 'perk.', 'crm.']);
 
 const PLAN_KEY = /^[a-z][a-z0-9_]{1,59}$/;
+const LEGACY_TIER = /^[a-z][a-z0-9_]{1,39}$/;
 const STATUSES = ['none', 'trialing', 'active', 'past_due'];
 
 /** The only custom fields this adapter writes, each with a value check. */
@@ -47,11 +52,12 @@ export function checkPrefix(prefix) {
 const day = (d) => (d ? new Date(d).toISOString().slice(0, 10) : '');
 
 /**
- * desiredGhlState({ entitlements, plans }, { prefix, ranks, cancelScheduled })
+ * desiredGhlState({ entitlements, plans }, { prefix, ranks, cancelScheduled, legacy })
  *   evaluation: the output of entitlements.computeEntitlements / evaluate()
- * -> { tags: string[], fields: { [key]: string } }
+ *   legacy: { live: ['silver'], hold: ['gold'] } from legacy_memberships (mapped rows only)
+ * -> { tags: string[], holdTags: string[], fields: { [key]: string } }
  */
-export function desiredGhlState(evaluation, { prefix = DEFAULT_TAG_PREFIX, ranks = DEFAULT_RANKS, cancelScheduled = false } = {}) {
+export function desiredGhlState(evaluation, { prefix = DEFAULT_TAG_PREFIX, ranks = DEFAULT_RANKS, cancelScheduled = false, legacy = {} } = {}) {
   checkPrefix(prefix);
   const plans = (evaluation?.plans || []).filter((p) => PLAN_KEY.test(String(p.planKey || '')) && STATUSES.includes(p.status));
   const ranked = [...plans].sort((a, b) => ((ranks[b.planKey] ?? 0) - (ranks[a.planKey] ?? 0)) || a.planKey.localeCompare(b.planKey));
@@ -67,6 +73,9 @@ export function desiredGhlState(evaluation, { prefix = DEFAULT_TAG_PREFIX, ranks
     if (!/^[a-z][a-z0-9_.]{1,79}$/.test(key) || e?.value === false || e?.value == null) continue;
     tags.add(`${prefix}benefit:${key}`);
   }
+  const legacyTag = (t) => { if (!LEGACY_TIER.test(String(t))) fail('INVALID_INPUT', 'invalid legacy tier'); return `${prefix}legacy:${t}`; };
+  for (const t of legacy.live || []) tags.add(legacyTag(t));
+  const holdTags = [...new Set((legacy.hold || []).map(legacyTag))].filter((t) => !tags.has(t)).sort();
 
   const accessUntil = top?.accessUntil ? day(top.accessUntil) : '';
   const fields = {
@@ -77,7 +86,7 @@ export function desiredGhlState(evaluation, { prefix = DEFAULT_TAG_PREFIX, ranks
     gaia_membership_cancel_scheduled: top && cancelScheduled ? 'yes' : 'no',
   };
   for (const [k, v] of Object.entries(fields)) if (!FIELD_SPECS[k](v)) fail('INVALID_INPUT', `GHL field ${k} has an invalid value`);
-  return { tags: [...tags].sort(), fields };
+  return { tags: [...tags].sort(), holdTags, fields };
 }
 
 const norm = (t) => String(t || '').trim().toLowerCase();
@@ -93,7 +102,8 @@ export function diffGhlState(contact, desired, { prefix = DEFAULT_TAG_PREFIX, fi
   const have = new Set((contact?.tags || []).map(norm));
   const want = new Set(desired.tags.map(norm));
   const addTags = [...want].filter((t) => !have.has(t)).sort();
-  const removeTags = [...have].filter((t) => t.startsWith(prefix) && !want.has(t)).sort();
+  const hold = new Set((desired.holdTags || []).map(norm));
+  const removeTags = [...have].filter((t) => t.startsWith(prefix) && !want.has(t) && !hold.has(t)).sort();
   const current = new Map((contact?.customFields || []).map((f) => [String(f.id), f.value ?? f.field_value ?? '']));
   const fieldUpdates = [];
   const unmappedFields = [];

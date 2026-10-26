@@ -46,6 +46,7 @@ import { allowSpend, callerKey, guardSubject, spendKindFor, ASSIST_MAX_PROMPT_CH
 import { deadline, idleWatch } from './provider-timeouts.js';
 import { SAFETY_FIRST, detectCrisis, crisisReply } from './assist-safety.js';
 import { createMarkerFilter } from './assist-markers.js';
+import { clientIp } from './client-ip.js';
 import { normalizeMembership } from './membership/ledger.js';
 import {
   fixturesAvailable, fixtureKeyMatches, fixtureAccessGranted,
@@ -1460,7 +1461,7 @@ function academyLessonInManifest(manifest, courseId, lessonId) {
   return null;
 }
 async function academyVideoUnavailable(req, res, origin) {
-  const ip = firstNonEmptyString(req.headers['cf-connecting-ip'], String(req.headers['x-forwarded-for'] || '').split(',')[0], req.socket?.remoteAddress, 'unknown');
+  const ip = clientIp(req);
   const now = Date.now();
   const hits = (_academyVideoReportHits.get(ip) || []).filter((t) => now - t < ACADEMY_VIDEO_REPORT_WINDOW_MS);
   if (hits.length >= ACADEMY_VIDEO_REPORT_MAX_PER_WINDOW) {
@@ -3136,7 +3137,7 @@ async function quizLead(req, res, origin) {
   const chakra = String(body.chakra || '').trim().toLowerCase().replace(/[^a-z-]/g, '').slice(0, 20);
   const tool = String(body.tool || 'chakra-balance').trim().toLowerCase().replace(/[^a-z0-9-]/g, '').slice(0, 40);
   const name = String(body.name || '').trim().slice(0, 80);
-  const ip = firstNonEmptyString(req.headers['cf-connecting-ip'], String(req.headers['x-forwarded-for'] || '').split(',')[0], req.socket && req.socket.remoteAddress, 'unknown');
+  const ip = clientIp(req);
   const rlKey = crypto.createHash('sha256').update(ip + '|' + email).digest('hex');
   const cutoff = Date.now() - 15 * 60 * 1000;
   const hits = (QUIZ_LEAD_REQUESTS.get(rlKey) || []).filter((t) => t > cutoff);
@@ -5257,7 +5258,7 @@ async function authMagicLinkRequest(req, res, origin) {
     return;
   }
 
-  const requestIp = firstNonEmptyString(req.headers['cf-connecting-ip'], String(req.headers['x-forwarded-for'] || '').split(',')[0], req.socket?.remoteAddress, 'unknown');
+  const requestIp = clientIp(req);
   const rateKey = crypto.createHash('sha256').update(`${requestIp}|${email}`).digest('hex');
   const cutoff = Date.now() - (15 * 60 * 1000);
   const attempts = (MAGIC_LINK_REQUESTS.get(rateKey) || []).filter((time) => time > cutoff);
@@ -5381,7 +5382,7 @@ async function authJoin(req, res, origin) {
 
   // Joining writes to GHL and sends an email, so bound it per ip+email exactly
   // like the sign-in request (shares the same store, distinct key prefix).
-  const requestIp = firstNonEmptyString(req.headers['cf-connecting-ip'], String(req.headers['x-forwarded-for'] || '').split(',')[0], req.socket?.remoteAddress, 'unknown');
+  const requestIp = clientIp(req);
   const rateKey = crypto.createHash('sha256').update(`join|${requestIp}|${email}`).digest('hex');
   const cutoff = Date.now() - (15 * 60 * 1000);
   const attempts = (MAGIC_LINK_REQUESTS.get(rateKey) || []).filter((t) => t > cutoff);
@@ -7801,8 +7802,8 @@ server.listen(PORT, HOST, () => {
 // closeAllConnections() matters as much as close(): close() stops new
 // connections but waits on established keep-alive sockets, and undici (the
 // fetch tests use) holds those open, so close() alone never calls back.
-// X-Real-IP is set by nginx from the connection; the first X-Forwarded-For
-// entry is whatever the caller sent (nginx appends), so it is not used.
+// The caller as nginx saw it (X-Real-IP from a loopback peer only; see
+// client-ip.js), grouped by /64 for IPv6 like the spend guard.
 function requestIpOf(req) {
   return callerKey(req);
 }

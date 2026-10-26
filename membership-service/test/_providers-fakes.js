@@ -37,7 +37,7 @@ const err = (status, type, code, message = code) => ({ status, json: { error: { 
 
 /** Fake Stripe (test mode). opts.livemode makes every object claim live mode. */
 export async function fakeStripe({ livemode = false, lists = {} } = {}) {
-  const db = { customers: new Map(), products: new Map(), prices: new Map(), sessions: new Map(), subscriptions: new Map() };
+  const db = { customers: new Map(), products: new Map(), prices: new Map(), sessions: new Map(), subscriptions: new Map(), invoices: new Map(), schedules: new Map(), changes: [], payOutcome: 'ok' };
   const idem = new Map();
   let n = 0;
   const id = (p) => `${p}_fake_${++n}`;
@@ -75,12 +75,65 @@ export async function fakeStripe({ livemode = false, lists = {} } = {}) {
         metadata: meta(f), expires_at: 1900000000, livemode };
       db.sessions.set(s.id, { ...s, form: f }); return { json: s };
     }
+    if (r.method === 'GET' && (m = r.path.match(/^\/v1\/subscriptions\/([^/]+)$/))) {
+      const s = db.subscriptions.get(m[1]);
+      return s ? { json: s } : err(404, 'invalid_request_error', 'resource_missing');
+    }
     if (r.method === 'POST' && (m = r.path.match(/^\/v1\/subscriptions\/(.+)$/))) {
       const s = db.subscriptions.get(m[1]);
       if (!s) return err(404, 'invalid_request_error', 'resource_missing');
       if (f.cancel_at_period_end === 'true') { s.cancel_at_period_end = true; s.cancel_at = s.items.data[0].current_period_end; }
       if (f.trial_end) s.trial_end = Number(f.trial_end);
-      return { json: s };
+      if (f['items[0][price]']) {
+        // Plan change. With pending_if_incomplete the item changes only once the prorated invoice is paid (db.payOutcome).
+        const item = s.items.data.find((i) => i.id === f['items[0][id]']); const price = db.prices.get(f['items[0][price]']);
+        if (!item || !price) return err(400, 'invalid_request_error', 'parameter_invalid');
+        db.changes.push({ subscription: s.id, form: f });
+        if (f.proration_behavior === 'always_invoice') {
+          const amount = Math.max(0, Math.round((price.unit_amount - (item.price.unit_amount || 0)) / 2));
+          const paid = db.payOutcome === 'ok';
+          const inv = { id: id('in'), object: 'invoice', status: paid ? 'paid' : 'open', amount_due: amount, currency: 'usd', billing_reason: 'subscription_update',
+            subscription: s.id, customer: s.customer, hosted_invoice_url: paid ? null : `https://invoice.stripe.invalid/i/${n}`, livemode,
+            lines: { data: [{ price: { id: price.id }, amount }, { price: { id: item.price.id }, amount: -amount }] } };
+          db.invoices.set(inv.id, inv); s.latest_invoice = inv.id;
+          if (paid || f.payment_behavior !== 'pending_if_incomplete') { item.price = price; s.pending_update = null; }
+          else s.pending_update = { expires_at: 1900000000, subscription_items: [{ id: item.id, price }] };
+        } else item.price = price;
+      }
+      const exp = Object.entries(f).filter(([k]) => k.startsWith('expand[')).map(([, v]) => v);
+      return { json: { ...s, latest_invoice: exp.includes('latest_invoice') && s.latest_invoice ? db.invoices.get(s.latest_invoice) : s.latest_invoice } };
+    }
+    if (r.method === 'POST' && r.path === '/v1/invoices/create_preview') {
+      const s = db.subscriptions.get(f.subscription); const price = db.prices.get(f['subscription_details[items][0][price]']);
+      if (!s || !price || f.customer !== s.customer) return err(400, 'invalid_request_error', 'parameter_invalid');
+      const item = s.items.data[0];
+      return { json: { object: 'invoice', id: null, amount_due: Math.max(0, Math.round((price.unit_amount - (item.price.unit_amount || 0)) / 2)), currency: 'usd', livemode } };
+    }
+    if (r.method === 'POST' && r.path === '/v1/subscription_schedules') {
+      const s = db.subscriptions.get(f.from_subscription);
+      if (!s) return err(400, 'invalid_request_error', 'resource_missing');
+      if (s.schedule) return err(400, 'invalid_request_error', 'subscription_schedule_exists');
+      const it = s.items.data[0];
+      const sch = { id: id('sub_sched'), object: 'subscription_schedule', status: 'active', subscription: s.id, end_behavior: 'release', livemode,
+        phases: [{ start_date: it.current_period_start, end_date: it.current_period_end, items: [{ price: it.price.id, quantity: 1 }] }] };
+      s.schedule = sch.id; db.schedules.set(sch.id, sch); return { json: sch };
+    }
+    if (r.method === 'POST' && (m = r.path.match(/^\/v1\/subscription_schedules\/([^/]+)(\/release)?$/))) {
+      const sch = db.schedules.get(m[1]);
+      if (!sch) return err(404, 'invalid_request_error', 'resource_missing');
+      if (m[2]) {
+        if (sch.status !== 'active') return err(400, 'invalid_request_error', 'schedule_not_active');
+        sch.status = 'released'; sch.released_subscription = sch.subscription; db.subscriptions.get(sch.subscription).schedule = null; return { json: sch };
+      }
+      const phases = [];
+      for (let i = 0; f[`phases[${i}][items][0][price]`]; i++) {
+        phases.push({ start_date: Number(f[`phases[${i}][start_date]`]) || null, end_date: Number(f[`phases[${i}][end_date]`]) || null,
+          iterations: Number(f[`phases[${i}][iterations]`]) || null, proration_behavior: f[`phases[${i}][proration_behavior]`],
+          items: [{ price: f[`phases[${i}][items][0][price]`], quantity: Number(f[`phases[${i}][items][0][quantity]`] || 1) }] });
+      }
+      if (phases[0] && phases[0].start_date !== sch.phases[0].start_date) return err(400, 'invalid_request_error', 'phase_start_mismatch');
+      Object.assign(sch, { phases, end_behavior: f.end_behavior, proration_behavior: f.proration_behavior, metadata: meta(f) });
+      return { json: sch };
     }
     if (r.method === 'GET' && (m = r.path.match(/^\/v1\/(invoices|charges|refunds|disputes)$/))) {
       const all = (lists[m[1]] || []).map((o) => ({ livemode, ...o }));

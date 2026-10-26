@@ -20,7 +20,7 @@ const PERIOD = 30 * 86400;
 export async function fakeSandboxStripe({ clockPollsUntilReady = 1, clockNeverReady = false } = {}) {
   const db = {
     customers: new Map(), products: new Map(), prices: new Map(), pms: new Map(), subscriptions: new Map(), intents: new Map(), charges: new Map(),
-    refunds: new Map(), invoices: new Map(), clocks: new Map(), sessions: new Map(), events: [], prorations: [],
+    refunds: new Map(), invoices: new Map(), clocks: new Map(), sessions: new Map(), schedules: new Map(), events: [], prorations: [],
   };
   const idem = new Map();
   let n = 0;
@@ -52,6 +52,12 @@ export async function fakeSandboxStripe({ clockPollsUntilReady = 1, clockNeverRe
     emit('invoice.paid', inv);
     return true;
   };
+  /** Unused share of the old price credited, the new price's share charged, from the proration date to the period end. */
+  const prorated = (from, to, at, s) => {
+    const t = Number(at) || nowFor(s.customer);
+    const left = Math.max(0, Math.min(1, (s.current_period_end - t) / (s.current_period_end - s.current_period_start)));
+    return Math.max(0, Math.round((to.unit_amount - from.unit_amount) * left));
+  };
   const subView = (s, exp) => ({ ...s, latest_invoice: exp.includes('latest_invoice') ? db.invoices.get(s.latest_invoice) : s.latest_invoice });
 
   /** What Stripe does while a clock moves to `to`: bill every period end crossed. */
@@ -61,6 +67,10 @@ export async function fakeSandboxStripe({ clockPollsUntilReady = 1, clockNeverRe
       while (['active', 'past_due'].includes(s.status) && s.current_period_end <= to) {
         if (s.cancel_at_period_end) { s.status = 'canceled'; s.canceled_at = s.current_period_end; emit('customer.subscription.deleted', s); break; }
         clock.frozen_time = s.current_period_end;
+        const sch = s.schedule && db.schedules.get(s.schedule);
+        if (sch && sch.status === 'active' && sch.phases[1] && sch.phases[0].end_date <= s.current_period_end) {
+          s.items.data[0].price = db.prices.get(sch.phases[1].items[0].price); sch.current_phase = 1;
+        }
         s.current_period_start = s.current_period_end; s.current_period_end += PERIOD;
         const inv = newInvoice(s, 'subscription_cycle');
         s.status = attempt(inv, s.default_payment_method) ? 'active' : 'past_due';
@@ -149,11 +159,44 @@ export async function fakeSandboxStripe({ clockPollsUntilReady = 1, clockNeverRe
           const item = s.items.data.find((x) => x.id === f['items[0][id]']); const price = db.prices.get(f['items[0][price]']);
           if (!item || !price) return err(400, 'invalid_request_error', 'parameter_invalid');
           if (f.proration_behavior !== 'none') db.prorations.push({ subscription: s.id, from: item.price.id, to: price.id });
-          if (f.proration_behavior === 'always_invoice') { item.price = price; newInvoice(s, 'subscription_update'); } else item.price = price;
+          if (f.proration_behavior === 'always_invoice') {
+            // The prorated difference, invoiced and charged now. pending_if_incomplete: the item changes only if it is paid.
+            const inv = base({ id: id('in'), object: 'invoice', status: 'open', paid: false, attempt_count: 0, amount_due: prorated(item.price, price, f.proration_date, s), amount_paid: 0, currency: 'usd',
+              customer: s.customer, subscription: s.id, billing_reason: 'subscription_update' }, nowFor(s.customer));
+            db.invoices.set(inv.id, inv); s.latest_invoice = inv.id;
+            const ok = attempt(inv, s.default_payment_method);
+            if (ok || f.payment_behavior !== 'pending_if_incomplete') { item.price = price; s.pending_update = null; }
+            else s.pending_update = { expires_at: nowFor(s.customer) + 23 * 3600, subscription_items: [{ id: item.id, price: price.id }] };
+          } else item.price = price;
         }
         emit('customer.subscription.updated', s);
         return { json: subView(s, expand(f)) };
       }
+    }
+    if (r.method === 'POST' && r.path === '/v1/invoices/create_preview') {
+      const s = db.subscriptions.get(f.subscription); const price = db.prices.get(f['subscription_details[items][0][price]']);
+      if (!s || !price || f.customer !== s.customer) return err(400, 'invalid_request_error', 'parameter_invalid');
+      return { json: base({ object: 'invoice', id: null, amount_due: prorated(s.items.data[0].price, price, f['subscription_details[proration_date]'], s), currency: 'usd' }) };
+    }
+    if (r.method === 'POST' && r.path === '/v1/subscription_schedules') {
+      const s = db.subscriptions.get(f.from_subscription);
+      if (!s) return err(400, 'invalid_request_error', 'resource_missing');
+      if (s.schedule) return err(400, 'invalid_request_error', 'subscription_schedule_exists');
+      const sch = base({ id: id('sub_sched'), object: 'subscription_schedule', status: 'active', subscription: s.id, end_behavior: 'release', current_phase: 0,
+        phases: [{ start_date: s.current_period_start, end_date: s.current_period_end, items: [{ price: s.items.data[0].price.id, quantity: 1 }] }] });
+      s.schedule = sch.id; db.schedules.set(sch.id, sch); return { json: sch };
+    }
+    if (r.method === 'POST' && (m = r.path.match(/^\/v1\/subscription_schedules\/([^/]+)(\/release)?$/))) {
+      const sch = db.schedules.get(m[1]); if (!sch) return err(404, 'invalid_request_error', 'resource_missing');
+      if (m[2]) { if (sch.status !== 'active') return err(400, 'invalid_request_error', 'schedule_not_active'); sch.status = 'released'; db.subscriptions.get(sch.subscription).schedule = null; return { json: sch }; }
+      const phases = [];
+      for (let i = 0; f[`phases[${i}][items][0][price]`]; i++) {
+        if (!db.prices.has(f[`phases[${i}][items][0][price]`])) return err(400, 'invalid_request_error', 'resource_missing');
+        phases.push({ start_date: Number(f[`phases[${i}][start_date]`]) || null, end_date: Number(f[`phases[${i}][end_date]`]) || null, iterations: Number(f[`phases[${i}][iterations]`]) || null,
+          items: [{ price: f[`phases[${i}][items][0][price]`], quantity: 1 }] });
+      }
+      if (!phases.length || phases[0].start_date !== sch.phases[0].start_date) return err(400, 'invalid_request_error', 'parameter_invalid');
+      Object.assign(sch, { phases, end_behavior: f.end_behavior || sch.end_behavior }); return { json: sch };
     }
     if (r.method === 'POST' && (m = r.path.match(/^\/v1\/invoices\/([^/]+)\/pay$/))) {
       const inv = db.invoices.get(m[1]); if (!inv) return err(404, 'invalid_request_error', 'resource_missing');

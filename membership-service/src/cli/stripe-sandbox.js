@@ -32,7 +32,11 @@
  *   DUNNING     test clock: renewal fails (pm_card_chargeCustomerFail), past_due, paid with a good card
  *   CANCEL_END  test clock: cancel_at_period_end, then past the period end it is canceled
  *   CANCEL_NOW  immediate cancellation
- *   CHANGE      upgrade then downgrade (item price change, proration_behavior=none)
+ *   CHANGE_UP   upgrade: invoice preview, always_invoice + pending_if_incomplete paid at once;
+ *               then a failing card: the update stays pending, the item keeps its price
+ *   CHANGE_DOWN downgrade at the period end on a test clock: subscription schedule, no
+ *               proration; past the period end the renewal is billed at the lower price
+ *   CHANGE_SWITCH monthly -> annual scheduled at the period end, then cancelled (released)
  *   3DS         pm_card_authenticationRequired: the subscription stays incomplete
  *   EVENTS      one page of recent events (ids and types) to pick from for a resend
  * Stripe cannot be made to retry a webhook; resends are done with the Dashboard
@@ -65,6 +69,8 @@ export const CLOCK_POLL_DELAYS_MS = Object.freeze([2000, 3000, 5000, 8000, 12000
 export const EVENTS_PAGE_LIMIT = 20;
 const STANDARD_CENTS = 4700;
 const PREMIUM_CENTS = 9700;
+const TOP_CENTS = 29700;
+const STANDARD_YEAR_CENTS = 47000;
 const enc = encodeURIComponent;
 const realSleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const idOf = (x) => (x && typeof x === 'object' ? x.id : x);
@@ -76,7 +82,7 @@ async function productAndPrices(ctx, sc, prices = [{ step: 'price', amount: STAN
   ctx.track('product', product.id);
   const out = [];
   for (const p of prices) {
-    const price = await ctx.post(sc, p.step, '/v1/prices', { product: product.id, currency: 'usd', unit_amount: p.amount, recurring: { interval: 'month', interval_count: 1 }, metadata: ctx.meta(sc) });
+    const price = await ctx.post(sc, p.step, '/v1/prices', { product: product.id, currency: 'usd', unit_amount: p.amount, recurring: { interval: p.interval || 'month', interval_count: 1 }, metadata: ctx.meta(sc) });
     ctx.track('price', price.id);
     out.push(price);
   }
@@ -275,23 +281,78 @@ export const SCENARIOS = Object.freeze({
       ctx.expect(sc, c.status === 'canceled', 'canceled immediately');
     } },
 
-  CHANGE: { title: 'upgrade then downgrade (item price change, proration_behavior=none)', planned: 6 + 1 + 1 + 4,
+  // The plan-change rules of providers/stripe/plan-change.js (owner decision 2026-10-26), Stripe side.
+  CHANGE_UP: { title: 'upgrade: preview, always_invoice + pending_if_incomplete paid now; a failing card leaves the update pending', planned: 7 + 1 + 1 + 1 + 1 + 1 + 5,
     run: async (ctx) => {
-      const sc = 'CHANGE';
-      const { sub, prices: [standard, premium] } = await subscriptionSetup(ctx, sc, { prices: [{ step: 'price', amount: STANDARD_CENTS }, { step: 'price-premium', amount: PREMIUM_CENTS }] });
+      const sc = 'CHANGE_UP';
+      const { sub, customer, prices: [, premium, top] } = await subscriptionSetup(ctx, sc, { prices: [
+        { step: 'price', amount: STANDARD_CENTS }, { step: 'price-premium', amount: PREMIUM_CENTS }, { step: 'price-top', amount: TOP_CENTS }] });
       const item = sub.items?.data?.[0]?.id;
-      ctx.expect(sc, !!item, 'the subscription has one item');
       if (!item) throw scenarioError('NO_SUBSCRIPTION_ITEM');
+      const prorationDate = Math.floor(Date.now() / 1000);
+      const pv = await ctx.post(sc, 'preview', '/v1/invoices/create_preview', { customer: customer.id, subscription: sub.id,
+        subscription_details: { items: [{ id: item, price: premium.id, quantity: 1 }], proration_behavior: 'always_invoice', proration_date: prorationDate } });
+      ctx.log(sc, `preview amount_due=${pv.amount_due} currency=${pv.currency}`);
+      ctx.expect(sc, Number.isInteger(pv.amount_due) && pv.amount_due > 0, 'the preview shows a prorated amount due now');
+      const up = await ctx.post(sc, 'upgrade', `/v1/subscriptions/${enc(sub.id)}`, { items: [{ id: item, price: premium.id, quantity: 1 }],
+        proration_behavior: 'always_invoice', payment_behavior: 'pending_if_incomplete', proration_date: prorationDate, expand: ['latest_invoice'] });
+      const inv = invoiceOf(up);
+      ctx.log(sc, `upgrade: subscription ${up.id} status=${up.status} price=${idOf(up.items?.data?.[0]?.price)} pending_update=${up.pending_update ? 'yes' : 'no'} invoice=${inv?.id} invoice_status=${inv?.status} billing_reason=${inv?.billing_reason} amount_paid=${inv?.amount_paid}`);
+      ctx.expect(sc, idOf(up.items?.data?.[0]?.price) === premium.id && !up.pending_update && up.status === 'active', 'paid: the item is on the higher price, nothing pending');
+      ctx.expect(sc, inv?.status === 'paid' && inv?.billing_reason === 'subscription_update', 'the prorated invoice was charged at once (always_invoice)');
+      ctx.expect(sc, inv?.amount_paid === pv.amount_due, 'the amount charged equals the preview (same proration date)');
+      const bad = await ctx.post(sc, 'attach-fail', '/v1/payment_methods/pm_card_chargeCustomerFail/attach', { customer: customer.id });
+      await ctx.post(sc, 'use-failing-card', `/v1/subscriptions/${enc(sub.id)}`, { default_payment_method: bad.id });
+      const up2 = await ctx.post(sc, 'upgrade-fails', `/v1/subscriptions/${enc(sub.id)}`, { items: [{ id: item, price: top.id, quantity: 1 }],
+        proration_behavior: 'always_invoice', payment_behavior: 'pending_if_incomplete', expand: ['latest_invoice'] });
+      const inv2 = invoiceOf(up2);
+      ctx.log(sc, `upgrade-fails: subscription ${up2.id} status=${up2.status} price=${idOf(up2.items?.data?.[0]?.price)} pending_update=${up2.pending_update ? 'yes' : 'no'} invoice_status=${inv2?.status}`);
+      ctx.expect(sc, !!up2.pending_update && idOf(up2.items?.data?.[0]?.price) === premium.id, 'payment failed: the update is pending, the item keeps the current price');
+      ctx.expect(sc, up2.status === 'active' && inv2?.status === 'open', 'the subscription stays active; the prorated invoice is open (Stripe lets the pending update expire)');
+    } },
+
+  CHANGE_DOWN: { title: 'downgrade at the period end (test clock): schedule, no proration, the renewal bills the lower price', planned: 1 + 6 + 2 + 1 + CLOCK_MAX_POLLS + 1 + 4, polls: CLOCK_MAX_POLLS,
+    run: async (ctx) => {
+      const sc = 'CHANGE_DOWN';
+      const clock = await createClock(ctx, sc);
+      const { sub, prices: [premium, standard] } = await subscriptionSetup(ctx, sc, { clock, prices: [{ step: 'price-premium', amount: PREMIUM_CENTS }, { step: 'price', amount: STANDARD_CENTS }] });
       const first = idOf(sub.latest_invoice);
-      const change = async (step, price) => {
-        const r = await ctx.post(sc, step, `/v1/subscriptions/${enc(sub.id)}`, { items: [{ id: item, price: price.id }], proration_behavior: 'none' });
-        const now = r.items?.data?.[0]?.price;
-        ctx.log(sc, `${step}: subscription ${r.id} status=${r.status} price=${idOf(now)} latest_invoice=${idOf(r.latest_invoice)}`);
-        ctx.expect(sc, idOf(now) === price.id && r.status === 'active', `${step}: the item is on the new price and the subscription is active`);
-        ctx.expect(sc, idOf(r.latest_invoice) === first, `${step}: no invoice was created (proration off, same billing cycle)`);
-      };
-      await change('upgrade', premium);
-      await change('downgrade', standard);
+      const sch = await ctx.post(sc, 'schedule', '/v1/subscription_schedules', { from_subscription: sub.id });
+      const ph0 = sch.phases?.[0];
+      ctx.expect(sc, !!ph0?.start_date && !!ph0?.end_date, 'the schedule starts from the current phase');
+      if (!ph0) throw scenarioError('NO_SCHEDULE_PHASE');
+      const upd = await ctx.post(sc, 'phases', `/v1/subscription_schedules/${enc(sch.id)}`, { end_behavior: 'release', proration_behavior: 'none',
+        phases: [{ items: [{ price: premium.id, quantity: 1 }], start_date: ph0.start_date, end_date: ph0.end_date, proration_behavior: 'none' },
+          { items: [{ price: standard.id, quantity: 1 }], iterations: 1, proration_behavior: 'none' }], metadata: ctx.meta(sc) });
+      ctx.log(sc, `schedule ${upd.id} status=${upd.status} phases=${upd.phases?.length} switch_at=${upd.phases?.[0]?.end_date}`);
+      ctx.expect(sc, idOf(upd.phases?.[1]?.items?.[0]?.price) === standard.id && upd.phases?.[0]?.end_date === ph0.end_date, 'the lower price starts at the period end');
+      await advanceClock(ctx, sc, clock);
+      const s = await getSubscription(ctx, sub);
+      const inv = invoiceOf(s);
+      ctx.log(sc, `subscription ${s.id} status=${s.status} price=${idOf(s.items?.data?.[0]?.price)} latest_invoice=${inv?.id} invoice_status=${inv?.status} amount_paid=${inv?.amount_paid} billing_reason=${inv?.billing_reason}`);
+      ctx.expect(sc, idOf(s.items?.data?.[0]?.price) === standard.id && s.status === 'active', 'past the period end the subscription is on the lower price');
+      ctx.expect(sc, !!inv && inv.id !== first && inv.status === 'paid' && inv.amount_paid === STANDARD_CENTS, 'the renewal invoice is paid at the lower price (no proration, no refund)');
+    } },
+
+  CHANGE_SWITCH: { title: 'monthly -> annual scheduled at the period end, then cancelled: the schedule is released, nothing changes', planned: 6 + 2 + 1 + 1 + 4,
+    run: async (ctx) => {
+      const sc = 'CHANGE_SWITCH';
+      const { sub, prices: [month, year] } = await subscriptionSetup(ctx, sc, { prices: [{ step: 'price', amount: STANDARD_CENTS }, { step: 'price-year', amount: STANDARD_YEAR_CENTS, interval: 'year' }] });
+      const first = idOf(sub.latest_invoice);
+      const sch = await ctx.post(sc, 'schedule', '/v1/subscription_schedules', { from_subscription: sub.id });
+      const ph0 = sch.phases?.[0];
+      if (!ph0) throw scenarioError('NO_SCHEDULE_PHASE');
+      const upd = await ctx.post(sc, 'phases', `/v1/subscription_schedules/${enc(sch.id)}`, { end_behavior: 'release', proration_behavior: 'none',
+        phases: [{ items: [{ price: month.id, quantity: 1 }], start_date: ph0.start_date, end_date: ph0.end_date, proration_behavior: 'none' },
+          { items: [{ price: year.id, quantity: 1 }], iterations: 1, proration_behavior: 'none' }], metadata: ctx.meta(sc) });
+      ctx.expect(sc, idOf(upd.phases?.[1]?.items?.[0]?.price) === year.id, 'the annual price is scheduled for the period end');
+      const rel = await ctx.post(sc, 'release', `/v1/subscription_schedules/${enc(sch.id)}/release`, {});
+      ctx.log(sc, `schedule ${rel.id} status=${rel.status}`);
+      ctx.expect(sc, rel.status === 'released', 'cancelled: the schedule is released');
+      const s = await getSubscription(ctx, sub);
+      ctx.log(sc, `subscription ${s.id} status=${s.status} price=${idOf(s.items?.data?.[0]?.price)} schedule=${idOf(s.schedule) ?? 'none'} latest_invoice=${idOf(s.latest_invoice)}`);
+      ctx.expect(sc, idOf(s.items?.data?.[0]?.price) === month.id && !s.schedule && s.status === 'active', 'the member stays on the monthly price, no schedule');
+      ctx.expect(sc, idOf(s.latest_invoice) === first, 'nothing was invoiced');
     } },
 
   '3DS': { title: '3DS required (pm_card_authenticationRequired): the subscription stays incomplete', planned: 5 + 3,
@@ -318,6 +379,7 @@ export const MANUAL = Object.freeze({
   D: 'automated as DUNNING (test clock)',
   F: 'disputes arrive asynchronously',
   G: 'Stripe cannot be made to retry; list events with EVENTS, then resend with the Dashboard or `stripe events resend` (STRIPE-SANDBOX-ACCESS.md)',
+  CHANGE: 'split into CHANGE_UP, CHANGE_DOWN and CHANGE_SWITCH (owner proration decision 2026-10-26)',
   K: 'GHL sandbox', L: 'partner sandbox', M: 'partner sandbox', N: 'cross-provider',
 });
 

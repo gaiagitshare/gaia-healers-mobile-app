@@ -17,6 +17,9 @@
  *   POST /v1/persons/:id/coin-checkout       (+Idempotency-Key)  member:write
  *   POST /v1/persons/:id/subscriptions/:sid/cancel-preview       member:read
  *   POST /v1/persons/:id/subscriptions/:sid/cancel  (+Idempotency-Key) member:write
+ *   POST /v1/persons/:id/subscriptions/:sid/change-preview       member:read   { planKey, interval }
+ *   POST /v1/persons/:id/subscriptions/:sid/change  (+Idempotency-Key) member:write  { planKey, interval, prorationDate? }
+ *   POST /v1/persons/:id/subscriptions/:sid/change/cancel (+Idempotency-Key) member:write
  *   POST /v1/persons/:id/migration-offers/:oid/accept            member:write
  *   POST /v1/persons/:id/migration-offers/:oid/checkout (+Idempotency-Key) member:write
  */
@@ -30,7 +33,10 @@ import { legacyRowsFor, legacyBlock } from '../billing-guard.js';
 import { acceptOffer } from '../migration-offers.js';
 import { launchState, newBillingAllowed } from '../launch.js';
 import { nextCycleStart } from '../jobs/allowance.js';
-import { createCheckoutSession, createCoinPackCheckout, createMigrationCheckoutSession, cancelAtPeriodEnd } from '../providers/stripe/adapter.js';
+import { createCheckoutSession, createCoinPackCheckout, createMigrationCheckoutSession, cancelAtPeriodEnd,
+  previewPlanChange, changePlan, cancelScheduledChange } from '../providers/stripe/adapter.js';
+import { changeView, planNames, PENDING_STATUSES } from '../plan-changes.js';
+import { environmentOf } from './admin-routes.js';
 
 const UUID = '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}';
 const R = (re) => new RegExp(`^${re.replace(/:uuid/g, `(${UUID})`)}$`);
@@ -42,6 +48,9 @@ const ROUTES = {
   coinCheckout: R('/v1/persons/:uuid/coin-checkout'),
   cancelPreview: R('/v1/persons/:uuid/subscriptions/:uuid/cancel-preview'),
   cancel: R('/v1/persons/:uuid/subscriptions/:uuid/cancel'),
+  changePreview: R('/v1/persons/:uuid/subscriptions/:uuid/change-preview'),
+  change: R('/v1/persons/:uuid/subscriptions/:uuid/change'),
+  changeCancel: R('/v1/persons/:uuid/subscriptions/:uuid/change/cancel'),
   offerAccept: R('/v1/persons/:uuid/migration-offers/:uuid/accept'),
   offerCheckout: R('/v1/persons/:uuid/migration-offers/:uuid/checkout'),
 };
@@ -107,7 +116,8 @@ export async function memberRoute(ctx) {
         WHERE p.owner_type = 'gaia' AND p.status = 'active' ORDER BY p.rank`)).rows;
     const defs = Object.fromEntries((await pool.query('SELECT key, description FROM entitlement_definitions WHERE owner_practitioner_id IS NULL')).rows.map((r) => [r.key, r.description]));
     const packs = (await pool.query("SELECT key, coins, bonus_coins, price_cents, currency FROM coin_packages WHERE status = 'active' ORDER BY coins")).rows;
-    return [200, { ok: true, currency: 'USD', plans: rows.map((r) => ({ key: r.key, name: r.name, rank: r.rank, monthlyCoins: r.monthly_coin_grant, prices: r.prices,
+    // environment / stripeMode: the same helper as the admin /environment, so the app can show a staging / test-mode banner.
+    return [200, { ok: true, currency: 'USD', ...environmentOf(env, stripe), plans: rows.map((r) => ({ key: r.key, name: r.name, rank: r.rank, monthlyCoins: r.monthly_coin_grant, prices: r.prices,
       benefits: r.benefits.map((k) => ({ key: k, label: defs[k] || k })) })), coinPacks: packs }];
   }
 
@@ -126,11 +136,14 @@ export async function memberRoute(ctx) {
                                         FROM migration_offers o JOIN plan_versions v ON v.id = o.target_plan_version_id JOIN plans p ON p.id = v.plan_id
                                         JOIN legacy_memberships l ON l.id = o.legacy_membership_id
                                        WHERE o.person_id = $1 AND o.status NOT IN ('withdrawn', 'declined') ORDER BY o.offered_at DESC`, [id])).rows;
+    const changes = (await pool.query('SELECT * FROM subscription_changes WHERE person_id = $1 AND status = ANY($2)', [id, PENDING_STATUSES])).rows;
+    const names = await planNames(pool, changes.map((c) => c.to_plan_version_id));
+    const pendingOf = (subId) => changeView(changes.find((c) => c.subscription_id === subId), names);
     const launch = await launchState(pool, { env });
     const canBuy = await newBillingAllowed(pool, id, { env, purpose: 'subscription' });
     const canBuyCoins = await newBillingAllowed(pool, id, { env, purpose: 'coins' });
     return [200, { ok: true,
-      membership: subs.map((s) => ({ ...s, hasAccess: grantsAccess(s, now) })),
+      membership: subs.map((s) => ({ ...s, hasAccess: grantsAccess(s, now), pendingChange: pendingOf(s.id) })),
       access: Object.entries(ent.entitlements).filter(([, v]) => isEntitled(v)).map(([k, v]) => ({ key: k, value: v.value })),
       wallet, legacy, migrationOffers: offers,
       availability: { stage: launch.effective, newMembership: canBuy.allowed, newMembershipReason: canBuy.reason, coinPacks: canBuyCoins.allowed, coinPacksReason: canBuyCoins.reason } }];
@@ -191,6 +204,28 @@ export async function memberRoute(ctx) {
     const key = idempotencyKey(req);
     const r = await cancelAtPeriodEnd({ pool, stripe: needStripe() }, m[2], { idempotencyKey: key, actor: { actorType: 'person', actorId: id, requestId: actor.requestId } });
     return [200, { ok: true, ...r }];
+  }
+
+  if (req.method === 'POST' && (m = ROUTES.changePreview.exec(p))) {
+    requireScope(client, 'member:read'); const id = await person(m[1]); await ownSubscription(pool, id, m[2]);
+    const b = await readJson(req);
+    const r = await previewPlanChange({ pool, stripe: needStripe(), env }, id, m[2], { planKey: String(b.planKey || ''), interval: String(b.interval || ''), now });
+    return [200, { ok: r.status === 'ok', ...r }];
+  }
+
+  if (req.method === 'POST' && (m = ROUTES.change.exec(p))) {
+    requireScope(client, 'member:write'); const id = await person(m[1]); await ownSubscription(pool, id, m[2]);
+    const key = idempotencyKey(req); const b = await readJson(req);
+    const r = await changePlan({ pool, stripe: needStripe(), env }, id, m[2], { planKey: String(b.planKey || ''), interval: String(b.interval || ''),
+      prorationDate: b.prorationDate ?? undefined, idempotencyKey: key, now, actor: { actorType: 'person', actorId: id, requestId: actor.requestId } });
+    return [r.status === 'ok' && !r.replayed ? 201 : 200, { ok: r.status === 'ok', ...r }];
+  }
+
+  if (req.method === 'POST' && (m = ROUTES.changeCancel.exec(p))) {
+    requireScope(client, 'member:write'); const id = await person(m[1]); await ownSubscription(pool, id, m[2]);
+    const key = idempotencyKey(req);
+    const r = await cancelScheduledChange({ pool, stripe: needStripe() }, id, m[2], { idempotencyKey: key, now, actor: { actorType: 'person', actorId: id, requestId: actor.requestId } });
+    return [200, { ok: r.status === 'ok', ...r }];
   }
 
   if (req.method === 'POST' && (m = ROUTES.offerAccept.exec(p))) {

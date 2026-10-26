@@ -35,9 +35,11 @@ prices, coin amounts, tier rules or "months free" figures are in the source
 | Annual price, "N months free", per-month equivalent | computed from `prices.year` and `prices.month` (`round((12·month − year) / month)`) |
 | Choose plan | `POST /checkout {planKey, interval, requestId}` → `location.assign(url)` (https only) |
 | My membership | `GET /me` `membership[]` (status, plan, interval, renewal `current_period_end`, `cancel_at` banner, trial end) and `access[]` (labels from the plan benefits) |
-| Coins | `/me` `wallet.{granted,purchased,legacy,total}.{coins,usd}`, `nextGrantAt`; history `GET /me/coins` `items[]` (net = sum of `byBalance`) |
+| Coins | `/me` `wallet.{granted,goodwill,purchased,legacy,total}.{coins,usd}`, `spendOrder`, `nextGrantAt`; goodwill is its own tile ("never expire") when the API sends it, and the spend order is listed in its words; history `GET /me/coins` `items[]` (net = sum of `byBalance`) |
 | Coin packs | `/plans` `coinPacks[]` → `POST /coins/checkout {packKey, requestId}`; empty → "Coin packs are coming soon." |
-| Change plan | no API yet: explains that Gaia Healers Support handles plan changes while they are finalised, with the support link. Nothing is faked. |
+| Change plan | "Change plan" points at the plan list. With a live plan, each card offers "Switch to {plan}" (or "Switch to annual / monthly billing" on the current plan) for the selected interval → `POST /subscriptions/:id/change-preview {planKey, interval}` → `GaiaNotice.confirm` in plain words from the answer: `timing=after_payment`: "You'll be charged {amountDueNowCents} today and get {plan} right after payment"; `period_end`: "Your plan changes to {plan} on {effectiveAt}; you keep {current} until then" → `POST /subscriptions/:id/change {planKey, interval, prorationDate, requestId}` → outcome `scheduled` / `processing` / `payment_required` notice + refresh. The view never decides upgrade vs downgrade. |
+| Pending change | `/me membership[].pendingChange`: `scheduled` → "Plan change scheduled" banner + **Keep my current plan** (`POST /subscriptions/:id/change/cancel {requestId}`); `pending_payment` with `paymentRequired` → "Payment required" banner + Complete payment (https `paymentUrl` only); otherwise "on its way". Change buttons are hidden while a change is pending. |
+| Environment | `/plans` `environment` + `stripeMode`: anything except `production` with `live` shows a small "STAGING / TEST MODE" marker above the title. |
 | Billing history | `GET /me/billing` `items[]` (date, what, type, amount). Invoices and payment methods: "managed securely by Stripe" note only. No card form. |
 | Cancellation | `POST /subscriptions/:id/cancel-preview` → `GaiaNotice.confirm` with the exact `accessEndsAt` → `POST /subscriptions/:id/cancel {requestId}` → banner + refresh |
 | Legacy membership | `/me legacy[]` with state `active`/`under_review`: tier, "billed through your existing plan", paid-through date. No buy buttons ("Your account team can move you"). |
@@ -60,7 +62,12 @@ A visitor sees the plans, a Sign in prompt and no 401s.
 | `availability.newMembership === false` (`pilot_only`, `migration_not_open`, `membership2_off`, `limited_cap_reached`) | "Not open yet" (also a hint above the plans). No POST is sent. |
 | `legacy_member_use_migration` / `migration_required` | "You already have a Gaia Healers {Tier} membership, billed through your existing plan. Your Gaia Healers account team can move you…" |
 | `review_required` | "A quick check first… Nothing has been charged." |
-| `change_plan_required`, `existing_customer` | "Plan changes are handled by Gaia Healers Support" |
+| `change_plan_required`, `existing_customer` | "Change your plan below" (points at the plan list) |
+| `change_pending` | "A plan change is already waiting" |
+| `not_changeable` (`cancel_scheduled` / other) | "Your cancellation is scheduled" / "This plan can't be changed right now" |
+| `preview_expired` | "Please check the amount again" |
+| `no_pending_change`, `not_cancellable` | "Nothing to cancel" / "This change is waiting for payment" |
+| `SERVICE_UNAVAILABLE` (gateway: the membership service is unreachable, timed out or failed) | "Membership is temporarily unavailable" + Try again + support (never the billing message) |
 | `already_subscribed` | "You already have this plan" |
 | `PROVIDER_UNAVAILABLE` | "Billing isn't connected in this environment. Checkout is temporarily unavailable, so nothing has been charged." + Try again + Contact Gaia Healers Support |
 | 401 | "Please sign in" + Sign in |
@@ -108,21 +115,12 @@ Staging data created for the run (fixtures only):
 ## Pending owner decisions
 
 1. **Coin pack prices.** `coinPacks` is empty, so the view says "Coin packs are coming soon". Packs appear without a code change once they are active.
-2. **Plan changes and proration.** There is no API yet, so "Change plan" explains that Gaia Healers Support handles it. When a change-plan endpoint exists, wire it to the same button.
+2. **Plan changes and proration.** Decided 2026-10-26 and built (upgrade after payment, downgrade / interval switch at the period end). Copy review of the confirm and banner wording is still open.
 3. **Stripe Customer Portal.** Invoices and payment methods only show a "managed securely by Stripe" note. A portal link is one button once it is approved.
 4. **Copy review.** The "Preview" kicker and the "Not open yet" / "account team can move you" wording.
 
-## Known API ordering point (for the gateway / service owner)
-
-`POST /checkout` calls `needStripe()` before the duplicate-billing guard and
-the launch gate. In an environment without Stripe, every member therefore gets
-`PROVIDER_UNAVAILABLE`, even one who is not a pilot member or who has a legacy
-membership. The view does not depend on this ordering: it uses
-`/me availability` and `legacy[]` first and never POSTs for those members.
-With Stripe connected, the guard answers first, as designed.
-
 ## Tests
 
-- `tests/membership2-view.test.cjs` (10 static contracts). It checks: no prices or tier logic; one POST path that always sends a requestId and keeps it for a retry; hidden until the probe succeeds; not in the assistant screen map; "Gaia Healers" copy; no card fields; copy for every server status; legacy members get no buy buttons; accessibility hooks.
+- `tests/membership2-view.test.cjs` (13 static contracts; plan change, goodwill and the staging marker added 2026-10-26). It checks: no prices or tier logic; one POST path that always sends a requestId and keeps it for a retry; hidden until the probe succeeds; not in the assistant screen map; "Gaia Healers" copy; no card fields; copy for every server status; legacy members get no buy buttons; accessibility hooks.
 - `staging-proxy/test/membership-frontend-guard.test.js`: `gaia-membership2.js` was added to `APP_FILES`, so the no-tier-regex / no-tier-test guards cover it.
 - `staging-proxy/test/member-readings-ai-boundary.test.js`: the `pageContext` pattern was updated for the one added line that reports `membership` as `store`. The assertion is otherwise the same: only the screen and an item id are sent. On a mismatch, node's assert diffs the whole of `gaia-ui.js`, which looked like a hang rather than a failure.

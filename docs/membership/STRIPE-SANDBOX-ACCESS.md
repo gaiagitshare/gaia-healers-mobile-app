@@ -40,7 +40,9 @@ runner asks Stripe to embed that object in the response, which needs Read on it.
 | DUNNING failed renewal, retry | 20 | as A, plus Test clocks W, **Invoices W** (`POST /v1/invoices/{id}/pay`) |
 | CANCEL_END cancel at period end on a test clock | 17 | as A, plus Test clocks W |
 | CANCEL_NOW immediate cancel | 9 | as A |
-| CHANGE upgrade / downgrade, proration off | 12 | as A |
+| CHANGE_UP upgrade (always_invoice, pending_if_incomplete, failing card) | 17 | as A, plus Invoices W (preview) |
+| CHANGE_DOWN downgrade at the period end (test clock, schedule) | 20 | as RENEW, plus Subscription schedules W |
+| CHANGE_SWITCH interval switch scheduled, then released | 14 | as A, plus Subscription schedules W |
 | 3DS authentication required | 8 | as A |
 | EVENTS list recent events | 1 | Events R |
 
@@ -53,14 +55,15 @@ runner asks Stripe to embed that object in the response, which needs Read on it.
 | Prices | Write | as Products |
 | PaymentMethods | Write | attaching test cards (`pm_card_visa`, `pm_card_chargeCustomerFail`, `pm_card_authenticationRequired`) |
 | Subscriptions | Write | create, update (cancel flag, card, price change), delete (CANCEL_NOW) |
+| Subscription schedules | Write | CHANGE_DOWN, CHANGE_SWITCH (create from the subscription, set phases, release); the app's period-end plan changes |
 | Checkout Sessions | Write | CHECKOUT (create, expire) |
 | PaymentIntents | **Write** | B, E, I create and confirm one-time payments |
-| Invoices | **Write** | DUNNING retries the open invoice; Read alone is enough without DUNNING |
+| Invoices | **Write** | DUNNING retries the open invoice; CHANGE_UP and the app's upgrade preview call `POST /v1/invoices/create_preview` |
 | Charges | Read | E, I (expand), J |
 | Refunds | Write | E; J reads them |
 | Disputes | Read | J |
 | Events | Read | EVENTS |
-| Test clocks | Write | RENEW, DUNNING, CANCEL_END (create, advance, poll, delete) |
+| Test clocks | Write | RENEW, DUNNING, CANCEL_END, CHANGE_DOWN (create, advance, poll, delete) |
 
 Differences from the first draft of this list, so nobody is surprised:
 PaymentIntents must be **Write**, not Read (B, E and I create payment intents);

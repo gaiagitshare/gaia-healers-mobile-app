@@ -92,14 +92,51 @@ test('no card-entry fields; payment details stay with Stripe', () => {
 
 test('every server answer has plain-language copy', () => {
   for (const s of ['migration_required', 'review_required', 'change_plan_required', 'already_subscribed', 'not_available',
-    'PROVIDER_UNAVAILABLE', 'pilot_only', 'legacy_member_use_migration', 'existing_customer', 'coins_need_membership2']) {
+    'PROVIDER_UNAVAILABLE', 'pilot_only', 'legacy_member_use_migration', 'existing_customer', 'coins_need_membership2', 'no_subscription']) {
     assert.ok(code.includes(`'${s}'`), s);
   }
   assert.match(code, /Not open yet/);
   assert.match(code, /Billing isn’t connected in this environment|Billing isn\\u2019t connected in this environment/);
   assert.match(code, /Coin packs are coming soon/);
-  assert.match(code, /handled by Gaia Healers Support/, 'plan changes: support, no fake API');
-  assert.doesNotMatch(code, /\/change-plan|\/subscriptions\/[^']*\/change/, 'no invented plan-change endpoint');
+  assert.doesNotMatch(code, /\/change-plan/, 'only the gateway\'s plan-change routes');
+  for (const st of ['change_pending', 'not_changeable', 'preview_expired', 'no_pending_change', 'not_cancellable', 'SERVICE_UNAVAILABLE']) assert.ok(code.includes(`'${st}'`), st);
+  assert.match(code, /Membership is temporarily unavailable/, 'an outage has its own copy, not the billing one');
+  const i = code.indexOf("if (b.code === 'SERVICE_UNAVAILABLE')");
+  assert.ok(i > 0 && i < code.indexOf("if (b.code === 'PROVIDER_UNAVAILABLE')"));
+});
+
+test('plan change: the server decides; preview in plain words, then confirm; pending change banner with "Keep my current plan"', () => {
+  const i = code.indexOf('async function changePlanTo');
+  const body = code.slice(i, code.indexOf('async function keepCurrentPlan'));
+  assert.ok(i > 0);
+  assert.ok(body.indexOf("'/change-preview'") < body.indexOf("'/change',"), 'preview first, then the change');
+  assert.match(body, /p\.timing === 'after_payment'/, 'timing comes from the preview answer');
+  assert.match(body, /You’ll be charged ' \+ money\(p\.amountDueNowCents, p\.currency\) \+ ' today and get ' \+ toName \+ ' right after payment/);
+  assert.match(body, /Your plan changes to ' \+ toLabel \+ ' on ' \+ date\(p\.effectiveAt\) \+ '; you keep ' \+ fromName \+ ' until then/);
+  assert.match(body, /GaiaNotice\.confirm\(ask/);
+  assert.match(body, /prorationDate: p\.prorationDate/, 'the charged amount is the previewed one');
+  assert.match(body, /if \(!yes\) \{ pendingIds\.delete\(action\)/);
+  for (const o of ["'scheduled'", "'payment_required'"]) assert.ok(body.includes(o), o);
+  assert.match(code, /'\/change\/cancel'/);
+  assert.match(code, /Keep my current plan/);
+  assert.match(code, /Plan change scheduled/);
+  assert.match(code, /Payment required/);
+  assert.match(code, /c\.paymentUrl && \/\^https:/, 'only an https payment link is shown');
+  assert.match(code, /live\.source === 'legacy_import'/, 'imported legacy subscriptions get no change buttons');
+  assert.doesNotMatch(body, /\.rank|amountDueNowCents\s*[<>]/, 'no upgrade/downgrade decision in the view');
+});
+
+test('wallet shows goodwill as its own never-expiring line and the spend order from the API', () => {
+  assert.match(code, /w\.goodwill \? tile\('Goodwill', w\.goodwill\)/);
+  assert.match(code, /They never expire/);
+  assert.match(code, /w\.spendOrder\.map/);
+});
+
+test('staging / test-mode banner: from /plans environment + stripeMode; nothing for production with live Stripe', () => {
+  assert.match(code, /state\.env = typeof r\.body\.environment === 'string'/);
+  assert.match(code, /e\.environment === 'production' && e\.stripeMode === 'live'\)\) return ''/);
+  assert.match(code, /STAGING \/ TEST MODE/);
+  assert.match(code, /envBannerHtml\(\) \+ '<div class="g-page__head">/);
 });
 
 test('legacy members never get a buy button; return states toast and refresh', () => {

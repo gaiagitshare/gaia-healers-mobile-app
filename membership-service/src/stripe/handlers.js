@@ -14,13 +14,18 @@
  *     amount or name (its invoices are ignored too, not retried);
  *   - money is always booked, even when the status change it implies is not
  *     allowed (e.g. a final invoice paid after a cancellation);
- *   - a plan change on the Stripe item (upgrade / downgrade) moves the local
- *     subscription to the mapped plan version, with a history row.
+ *   - a plan change on the Stripe item moves the local subscription to the
+ *     mapped plan version, with a history row; EXCEPT a Gaia upgrade waiting for
+ *     its prorated invoice, which only invoice.paid applies (plan-changes.js);
+ *   - a scheduled downgrade / interval switch is marked applied when the renewal
+ *     moves the item to its price; an unpaid upgrade's pending update expiring, or
+ *     a schedule released elsewhere, ends the change without touching access.
  */
 import { createSubscriptionInTx, transitionInTx, canTransition } from '../subscriptions.js';
 import { creditPurchase, clawbackPurchased } from '../coins.js';
 import { fail } from '../errors.js';
 import { linkSubscriptionInTx } from '../migration-offers.js';
+import { pendingChangeFor, applyUpgradeInTx, markScheduledAppliedInTx, endChangeInTx, upgradeForInvoice } from '../plan-changes.js';
 
 const STATUS = {
   incomplete: 'incomplete', incomplete_expired: 'expired', trialing: 'trialing', active: 'active',
@@ -78,9 +83,16 @@ async function subscriptionChanged(c, event, row) {
   }
   if (ref && (ref.plan_version_id !== local.plan_version_id || ref.billing_interval !== local.billing_interval)
       && !(local.provider_state_at && at < new Date(local.provider_state_at))) {
-    await c.query('UPDATE subscriptions SET plan_version_id = $2, billing_interval = $3, updated_at = $4 WHERE id = $1', [local.id, ref.plan_version_id, ref.billing_interval, at]);
-    await c.query("INSERT INTO subscription_events (subscription_id, from_status, to_status, reason, webhook_event_id, details, occurred_at) VALUES ($1, $2, $2, 'plan_changed', $3, $4, $5)",
-      [local.id, local.status, row.id, JSON.stringify({ fromPlanVersion: local.plan_version_id, toPlanVersion: ref.plan_version_id, interval: ref.billing_interval }), at]);
+    const pending = await pendingChangeFor(c, local.id);
+    const toTarget = pending && pending.to_plan_version_id === ref.plan_version_id && pending.to_interval === ref.billing_interval;
+    // A Gaia upgrade waiting for its prorated invoice: the higher tier is granted by invoice.paid only, never here.
+    if (!(toTarget && pending.timing === 'after_payment')) {
+      await c.query('UPDATE subscriptions SET plan_version_id = $2, billing_interval = $3, updated_at = $4 WHERE id = $1', [local.id, ref.plan_version_id, ref.billing_interval, at]);
+      await c.query("INSERT INTO subscription_events (subscription_id, from_status, to_status, reason, webhook_event_id, details, occurred_at) VALUES ($1, $2, $2, 'plan_changed', $3, $4, $5)",
+        [local.id, local.status, row.id, JSON.stringify({ fromPlanVersion: local.plan_version_id, toPlanVersion: ref.plan_version_id, interval: ref.billing_interval, ...(toTarget ? { changeId: pending.id } : {}) }), at]);
+      // The renewal of a scheduled downgrade / interval switch.
+      if (toTarget && pending.status === 'scheduled') await markScheduledAppliedInTx(c, pending, { at, webhookEventId: row.id });
+    }
   }
   if (local.status !== to && !canTransition(local.status, to)) return 'ignored';   // e.g. a stale "active" after a final cancel
   await transitionInTx(c, local.id, to, {
@@ -112,6 +124,11 @@ async function invoicePaid(c, event, row) {
   if (!local && !personId) return 'ignored';
   await ledger(c, { personId, objectType: 'invoice', objectId: inv.id, entryType: 'charge', amount: inv.amount_paid, currency: inv.currency,
     subscriptionId: local?.id, webhookEventId: row.id, livemode: event.livemode === true, occurredAt: ts(inv.status_transitions?.paid_at) || ts(event.created) });
+  // The prorated invoice of a Gaia upgrade: only now does the member get the higher tier (and its coins).
+  if (local && inv.billing_reason === 'subscription_update') {
+    const change = await upgradeForInvoice(c, local.id, inv.id, linePriceIds(inv), event.livemode);
+    if (change) await applyUpgradeInTx(c, change, { at: ts(event.created), webhookEventId: row.id });
+  }
   if (local && local.status !== 'active' && canTransition(local.status, 'active')) {
     const line = inv.lines?.data?.[0]?.period;
     await transitionInTx(c, local.id, 'active', { reason: 'stripe:invoice.paid', now: ts(event.created), providerStateAt: ts(event.created),
@@ -129,9 +146,41 @@ async function invoiceFailed(c, event, row) {
     if (!(await invoiceIsOurs(c, inv, event.livemode))) return 'ignored';
     throw new RetryLater('invoice for a subscription not recorded yet');
   }
+  // The prorated invoice of an upgrade (pending_if_incomplete): Stripe keeps the subscription as it was, so do we.
+  // The member stays on the current tier and sees "payment required"; the pending update expires on its own.
+  if (inv.billing_reason === 'subscription_update') {
+    const u = await c.query(`UPDATE subscription_changes SET payment_required = true, updated_at = $2
+                              WHERE subscription_id = $1 AND timing = 'after_payment' AND status IN ('requested', 'pending_payment') AND (provider_invoice_id IS NULL OR provider_invoice_id = $3)`,
+      [local.id, ts(event.created), inv.id]);
+    return u.rowCount ? 'processed' : 'ignored';
+  }
   // A declined first payment leaves it incomplete (no access either way); paused / ended ones are not dunned.
   if (!canTransition(local.status, 'past_due') || local.status === 'incomplete') return 'ignored';
   await transitionInTx(c, local.id, 'past_due', { reason: 'stripe:invoice.payment_failed', now: ts(event.created), providerStateAt: ts(event.created), webhookEventId: row.id });
+  return 'processed';
+}
+
+/** Stripe dropped an upgrade that was never paid (pending_if_incomplete): the member stays on the current tier. */
+async function pendingUpdateExpired(c, event, row) {
+  const local = await localSubscription(c, event.data.object.id);
+  if (!local) return 'ignored';
+  const ch = (await c.query("SELECT * FROM subscription_changes WHERE subscription_id = $1 AND timing = 'after_payment' AND status IN ('requested', 'pending_payment')", [local.id])).rows[0];
+  if (!ch) return 'ignored';
+  await endChangeInTx(c, ch, { status: 'expired', reason: 'payment_not_completed', at: ts(event.created), webhookEventId: row.id });
+  return 'processed';
+}
+
+/** A schedule released or canceled at Stripe (not by Gaia's own cancel, which ends the change first). */
+async function scheduleEnded(c, event, row) {
+  const sch = event.data.object;
+  const ch = (await c.query("SELECT * FROM subscription_changes WHERE provider_schedule_id = $1 AND status = 'scheduled'", [sch.id])).rows[0];
+  if (!ch) return 'ignored';
+  const local = (await c.query('SELECT plan_version_id, billing_interval FROM subscriptions WHERE id = $1', [ch.subscription_id])).rows[0];
+  if (local.plan_version_id === ch.to_plan_version_id && local.billing_interval === ch.to_interval) {
+    await markScheduledAppliedInTx(c, ch, { at: ts(event.created), webhookEventId: row.id });
+  } else {
+    await endChangeInTx(c, ch, { status: 'canceled', reason: event.type === 'subscription_schedule.canceled' ? 'schedule_canceled_at_stripe' : 'schedule_released_at_stripe', at: ts(event.created), webhookEventId: row.id });
+  }
   return 'processed';
 }
 
@@ -225,6 +274,10 @@ export const stripeHandlers = Object.freeze({
   'customer.subscription.deleted': subscriptionChanged,
   'customer.subscription.paused': subscriptionChanged,
   'customer.subscription.resumed': subscriptionChanged,
+  'customer.subscription.pending_update_applied': subscriptionChanged,
+  'customer.subscription.pending_update_expired': pendingUpdateExpired,
+  'subscription_schedule.released': scheduleEnded,
+  'subscription_schedule.canceled': scheduleEnded,
   'invoice.paid': invoicePaid,
   'payment_intent.succeeded': coinPackPaid,
   'invoice.payment_failed': invoiceFailed,

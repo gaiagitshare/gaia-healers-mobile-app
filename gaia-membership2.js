@@ -44,6 +44,7 @@
   const state = {
     available: null,          // null = probing, true = gateway answers, false = off
     plans: null, coinPacks: [], currency: 'USD',
+    env: null,                // { environment, stripeMode } from /plans: drives the staging / test-mode banner
     me: null, coins: null, billing: null,
     auth: null,               // null until the app shell reports the session (gaia:auth), then true / false / 'unavailable'
     signedOut: false, loadError: null, loading: false,
@@ -120,6 +121,7 @@
     incomplete: 'Waiting for payment', canceled: 'Cancelled', cancelled: 'Cancelled', ended: 'Ended', expired: 'Ended',
   };
   const INTERVAL_TEXT = { month: 'Monthly', year: 'Annual', none: '' };
+  const BUCKET_TEXT = { granted: 'Monthly', goodwill: 'Goodwill', purchased: 'Purchased', legacy: 'Earlier' };
 
   const planName = (key) => (state.plans || []).find((p) => p.key === key)?.name || titleWord(key);
   const benefitLabels = () => {
@@ -143,8 +145,9 @@
   }
 
   const NOT_OPEN = { tone: 'info', title: 'Not open yet', body: 'New Gaia Healers memberships are not open to everyone yet. Nothing has been charged. We will let you know as soon as you can join.' };
-  const CHANGE_PLAN = { tone: 'info', title: 'Plan changes are handled by Gaia Healers Support', body: 'While plan changes are being finalised, Gaia Healers Support moves you between plans so you are never billed twice. Contact us and we will take care of it.', support: true };
+  const CHANGE_PLAN = { tone: 'info', title: 'Change your plan below', body: 'You already have a Gaia Healers membership. Pick another plan or billing period in the plan list to see exactly what changes and when.' };
   const BILLING_OFF = { tone: 'warn', title: 'Billing isn’t connected in this environment', body: 'Checkout is temporarily unavailable, so nothing has been charged. Please try again later.', retry: true, support: true };
+  const SERVICE_DOWN = { tone: 'warn', title: 'Membership is temporarily unavailable', body: 'Please try again shortly. Nothing has been charged or changed.', retry: true, support: true };
 
   function reasonNotice(reason) {
     switch (reason) {
@@ -154,6 +157,8 @@
         return { tone: 'info', title: 'You already have a membership', body: 'You already have a ' + legacyTierName() + ', billed through your existing plan. Your Gaia Healers account team can move you to the new plans without double billing.', support: true };
       case 'existing_customer':
         return CHANGE_PLAN;
+      case 'no_subscription':
+        return { tone: 'info', title: 'No plan to change yet', body: 'Choose a plan first; you can change it any time after.' };
       case 'coins_need_membership2':
         return { tone: 'info', title: 'Coin packs come with a membership', body: 'Coin packs are available once you have a Gaia Healers Membership 2.0 plan.' };
       default:
@@ -166,6 +171,7 @@
     const b = r.body || {};
     if (r.status === 0) return { tone: 'error', title: 'Can’t reach Gaia Healers', body: 'Check your connection and try again. Nothing has been charged.', retry: true, support: true };
     if (r.status === 401) return { tone: 'info', title: 'Please sign in', body: 'Sign in to your Gaia Healers account to continue.', signIn: true };
+    if (b.code === 'SERVICE_UNAVAILABLE') return SERVICE_DOWN;
     if (b.code === 'PROVIDER_UNAVAILABLE') return BILLING_OFF;
     if (b.ok && b.url) return null;
     switch (b.status) {
@@ -177,6 +183,20 @@
         return CHANGE_PLAN;
       case 'already_subscribed':
         return { tone: 'info', title: 'You already have this plan', body: 'This plan is already active on your account.' };
+      case 'change_pending':
+        return { tone: 'info', title: 'A plan change is already waiting', body: 'Your membership already has a plan change on the way. You can keep your current plan from My membership, then choose again.' };
+      case 'not_changeable':
+        return b.reason === 'cancel_scheduled'
+          ? { tone: 'info', title: 'Your cancellation is scheduled', body: 'Plans can’t be changed while a cancellation is scheduled. Contact us if you’d like to stay on a different plan.', support: true }
+          : { tone: 'info', title: 'This plan can’t be changed right now', body: 'Your membership needs to be active to change plans. Nothing has been charged.', support: true };
+      case 'preview_expired':
+        return { tone: 'info', title: 'Please check the amount again', body: 'The price shown has expired. Choose the plan again to see the current amount. Nothing has been charged.' };
+      case 'no_pending_change':
+        return { tone: 'info', title: 'Nothing to cancel', body: 'There is no scheduled plan change on your membership.' };
+      case 'not_cancellable':
+        return { tone: 'info', title: 'This change is waiting for payment', body: 'An upgrade waiting for payment can’t be cancelled here. If the payment isn’t completed, it lapses on its own and your plan stays as it is.' };
+      case 'failed':
+        return { tone: 'error', title: 'The plan change didn’t go through', body: 'Nothing has changed on your membership. Please try again or contact us.', support: true };
       case 'not_available':
         return reasonNotice(b.reason);
       default: break;
@@ -197,6 +217,7 @@
           state.plans = r.body.plans.slice().sort((a, b) => (a.rank ?? 0) - (b.rank ?? 0));
           state.coinPacks = Array.isArray(r.body.coinPacks) ? r.body.coinPacks : [];
           state.currency = r.body.currency || 'USD';
+          state.env = typeof r.body.environment === 'string' ? { environment: r.body.environment, stripeMode: String(r.body.stripeMode || '') } : null;
         }
         return ok;
       });
@@ -220,7 +241,7 @@
       state.coins = coins.status === 200 ? (coins.body.items || []) : null;
       state.billing = billing.status === 200 ? (billing.body.items || []) : null;
     } else {
-      state.loadError = me.status === 0 ? 'network' : 'server';
+      state.loadError = me.status === 0 ? 'network' : (me.body && me.body.code === 'SERVICE_UNAVAILABLE' ? 'service' : 'server');
     }
     state.loading = false;
     render();
@@ -293,6 +314,74 @@
     setNotice(noticeFor(r) || { tone: 'error', title: 'Something went wrong', body: 'Your membership was not cancelled. Please try again.', support: true });
   }
 
+  /**
+   * Plan change: the server decides what kind of change it is and when it applies.
+   * 1. change-preview -> plain-language confirm with the server's amount and date;
+   * 2. change {planKey, interval, prorationDate, requestId} -> outcome notice and a refresh.
+   */
+  async function changePlanTo(planKey, interval) {
+    if (state.busy) return;
+    const live = liveMembership();
+    if (!live) return;
+    const action = 'change:' + planKey + ':' + interval;
+    const base = '/subscriptions/' + encodeURIComponent(live.id);
+    state.busy = action; state.notice = null; render();
+    const pv = await postJson(base + '/change-preview', 'change-preview:' + planKey + ':' + interval, { planKey, interval });
+    state.busy = '';
+    if (pv.status !== 200 || !pv.body || pv.body.status !== 'ok') {
+      const n = noticeFor(pv) || { tone: 'error', title: 'Something went wrong', body: 'We couldn’t check this change. Nothing has changed.', support: true };
+      setNotice({ ...n, retryAction: n.retry ? { change: [planKey, interval] } : null });
+      return;
+    }
+    const p = pv.body;
+    const toName = (p.to && p.to.planName) || planName(planKey);
+    const fromName = (p.from && p.from.planName) || live.plan_name;
+    const toLabel = toName + (p.to && p.from && p.to.interval !== p.from.interval ? ' (' + (INTERVAL_TEXT[p.to.interval] || '').toLowerCase() + ')' : '');
+    const now = p.timing === 'after_payment';
+    const ask = now ? 'Upgrade to ' + toLabel + '?' : 'Change to ' + toLabel + '?';
+    const detail = now
+      ? 'You’ll be charged ' + money(p.amountDueNowCents, p.currency) + ' today and get ' + toName + ' right after payment. Your renewal date stays the same.'
+      : 'Your plan changes to ' + toLabel + ' on ' + date(p.effectiveAt) + '; you keep ' + fromName + ' until then. Nothing is charged today and nothing is refunded.';
+    const yes = window.GaiaNotice && window.GaiaNotice.confirm
+      ? await window.GaiaNotice.confirm(ask, { detail, confirmLabel: now ? 'Pay and upgrade' : 'Schedule the change', cancelLabel: 'Keep my current plan' })
+      : window.confirm(ask + '\n' + detail);
+    if (!yes) { pendingIds.delete(action); render(); return; }
+    state.busy = action; render();
+    const r = await postJson(base + '/change', action, { planKey, interval, ...(p.prorationDate ? { prorationDate: p.prorationDate } : {}) });
+    state.busy = '';
+    if ((r.status === 200 || r.status === 201) && r.body && r.body.status === 'ok') {
+      const c = r.body.change || {};
+      state.notice = r.body.outcome === 'scheduled'
+        ? { tone: 'ok', title: 'Plan change scheduled', body: 'Your plan changes to ' + toLabel + ' on ' + date(c.effectiveAt || p.effectiveAt) + '. You keep ' + fromName + ' until then.' }
+        : r.body.outcome === 'payment_required'
+          ? { tone: 'warn', title: 'Payment required', body: 'Your bank needs one more step before the upgrade. You keep ' + fromName + ' until the payment is complete; if it isn’t, nothing changes.' }
+          : { tone: 'ok', title: 'Thank you', body: 'Your payment is being confirmed. ' + toName + ' appears here right after, usually within a minute.' };
+      await loadMember(); focusNotice(); return;
+    }
+    const n = noticeFor(r) || { tone: 'error', title: 'Something went wrong', body: 'Your plan was not changed. Please try again.', support: true };
+    setNotice({ ...n, retryAction: n.retry ? { change: [planKey, interval] } : null });
+  }
+
+  async function keepCurrentPlan(subId) {
+    if (state.busy) return;
+    const m = memberships().find((x) => x.id === subId);
+    const ask = 'Keep your ' + (m ? m.plan_name + ' ' : '') + 'plan?';
+    const detail = 'The scheduled change is cancelled. Your membership continues as it is today.';
+    const yes = window.GaiaNotice && window.GaiaNotice.confirm
+      ? await window.GaiaNotice.confirm(ask, { detail, confirmLabel: 'Keep my current plan', cancelLabel: 'Go back' })
+      : window.confirm(ask + '\n' + detail);
+    if (!yes) return;
+    state.busy = 'keep:' + subId; state.notice = null; render();
+    const r = await postJson('/subscriptions/' + encodeURIComponent(subId) + '/change/cancel', 'keep:' + subId);
+    state.busy = '';
+    if (r.status === 200 && r.body && r.body.status === 'ok') {
+      state.notice = { tone: 'ok', title: 'You’re keeping your current plan', body: 'The scheduled change was cancelled. Nothing else changes.' };
+      await loadMember(); focusNotice(); return;
+    }
+    const n = noticeFor(r) || { tone: 'error', title: 'Something went wrong', body: 'The scheduled change is still in place. Please try again.', support: true };
+    setNotice({ ...n, retryAction: n.retry ? { keep: subId } : null });
+  }
+
   async function acceptOffer(offerId) {
     if (state.busy) return;
     state.busy = 'accept:' + offerId; state.notice = null; render();
@@ -359,12 +448,18 @@
   function planAction(plan) {
     const prices = plan.prices || {};
     const live = liveMembership();
-    if (live && live.plan_key === plan.key) return '<p class="g-m2__plan-state">Your current plan</p>';
+    if (live && live.plan_key === plan.key && (live.billing_interval === state.interval || prices[state.interval] == null)) return '<p class="g-m2__plan-state">Your current plan</p>';
     if (prices[state.interval] == null) return prices.none != null ? '<p class="g-m2__plan-state">No payment needed</p>' : '';
     if (state.signedOut) return btn('Sign in to choose', 'data-m2-signin', 'secondary');
     if (!state.me) return '';
     if (legacyLive().length) return '<p class="g-m2__plan-state">Your account team can move you</p>';
-    if (live) return btn('Change plan', 'data-m2-change', 'secondary');
+    if (live) {
+      if (live.source === 'legacy_import') return '<p class="g-m2__plan-state">Your account team can move you</p>';
+      if (live.pendingChange) return '<p class="g-m2__plan-state">A plan change is waiting</p>';
+      const same = live.plan_key === plan.key;
+      const label = same ? (state.interval === 'year' ? 'Switch to annual billing' : 'Switch to monthly billing') : 'Switch to ' + plan.name;
+      return btn(label, 'data-m2-change-to="' + esc(plan.key) + '" aria-label="' + esc(label + ', ' + (state.interval === 'year' ? 'annual' : 'monthly') + ' billing') + '"', 'secondary', state.busy === 'change:' + plan.key + ':' + state.interval);
+    }
     const key = 'checkout:' + plan.key + ':' + state.interval;
     return btn('Choose ' + plan.name, 'data-m2-choose="' + esc(plan.key) + '" aria-label="Choose the ' + esc(plan.name) + ' plan, ' + (state.interval === 'year' ? 'annual' : 'monthly') + ' billing"', 'primary', state.busy === key);
   }
@@ -423,12 +518,31 @@
     const banner = m.cancel_at
       ? '<div class="g-ann g-ann--warn g-m2__banner" role="status"><span class="g-ann__title">Cancellation scheduled</span><span class="g-ann__body">Your ' + esc(m.plan_name) + ' membership ends on ' + esc(date(m.cancel_at)) + '. You keep access until then and won’t be charged again.</span></div>' : '';
     const canCancel = m.hasAccess && !m.cancel_at && ['active', 'trialing', 'past_due'].includes(m.status);
-    return section('mine', 'My membership', banner
+    const changeBanner = pendingChangeHtml(m);
+    return section('mine', 'My membership', banner + changeBanner
       + '<div class="g-card g-m2__card"><dl class="g-m2__dl">' + rows.filter((r) => r[1]).map((r) => '<div><dt>' + esc(r[0]) + '</dt><dd>' + esc(r[1]) + '</dd></div>').join('') + '</dl>'
       + (access.length ? '<p class="g-m2__sub">Included now</p><ul class="g-m2__chips">' + access.map((a) => '<li class="g-badge">' + esc(a) + '</li>').join('') + '</ul>' : '')
-      + '<div class="g-m2__row">' + (m.hasAccess ? btn('Change plan', 'data-m2-change', 'secondary') : '')
+      + '<div class="g-m2__row">' + (m.hasAccess && !m.pendingChange && !m.cancel_at && m.source !== 'legacy_import' ? btn('Change plan', 'data-m2-change', 'secondary') : '')
       + (canCancel ? btn('Cancel membership', 'data-m2-cancel="' + esc(m.id) + '"', 'ghost', state.busy === 'cancel') : '') + '</div>'
       + '</div>');
+  }
+
+  /** The pending plan change, in plain words from the server's answer (/me membership[].pendingChange). */
+  function pendingChangeHtml(m) {
+    const c = m.pendingChange;
+    if (!c) return '';
+    const to = (c.toPlanName || planName(c.toPlan)) + ((c.toInterval && c.toInterval !== m.billing_interval) ? ' (' + (INTERVAL_TEXT[c.toInterval] || words(c.toInterval)).toLowerCase() + ')' : '');
+    const banner = (tone, title, body, actions) => '<div class="g-ann g-ann--' + tone + ' g-m2__banner" role="status"><span class="g-ann__title">' + esc(title) + '</span><span class="g-ann__body">' + esc(body) + '</span>'
+      + (actions ? '<span class="g-m2__notice-actions">' + actions + '</span>' : '') + '</div>';
+    if (c.status === 'scheduled') {
+      return banner('info', 'Plan change scheduled', 'Your plan changes to ' + to + ' on ' + date(c.effectiveAt) + '. You keep ' + m.plan_name + ' until then. Nothing is charged before that date.',
+        btn('Keep my current plan', 'data-m2-keep="' + esc(m.id) + '"', 'secondary', state.busy === 'keep:' + m.id));
+    }
+    if (c.status === 'pending_payment' && c.paymentRequired) {
+      const pay = c.paymentUrl && /^https:\/\//.test(c.paymentUrl) ? '<a class="g-btn g-btn--primary g-btn--sm" href="' + esc(c.paymentUrl) + '" target="_blank" rel="noopener">Complete payment</a>' : '';
+      return banner('warn', 'Payment required', 'Your upgrade to ' + to + ' starts right after payment. Until then you keep ' + m.plan_name + '. If the payment isn’t completed, nothing changes.', pay + supportLink());
+    }
+    return banner('info', 'Your plan change is on its way', 'Your upgrade to ' + to + ' is being confirmed. It appears here as soon as the payment is confirmed; you keep ' + m.plan_name + ' until then.', btn('Refresh', 'data-m2-reload', 'ghost'));
   }
 
   function legacyHtml() {
@@ -466,7 +580,9 @@
           return '<li><span class="g-m2__list-main">' + esc(words(i.reason || i.kind)) + '</span><span class="g-m2__list-meta">' + esc(shortDate(i.at)) + '</span><span class="g-m2__list-amt' + (net < 0 ? ' is-neg' : '') + '">' + esc((net > 0 ? '+' : '') + num(net)) + '</span></li>';
         }).join('') + '</ul>';
     return section('coins', 'Coins', '<div class="g-card g-m2__card"><div class="g-m2__tiles">'
-      + tile('Monthly', w.granted) + tile('Purchased', w.purchased) + tile('Earlier', w.legacy) + '</div>'
+      + tile('Monthly', w.granted) + (w.goodwill ? tile('Goodwill', w.goodwill) : '') + tile('Purchased', w.purchased) + tile('Earlier', w.legacy) + '</div>'
+      + (w.goodwill ? '<p class="g-card__meta">Goodwill coins are a gift from the Gaia Healers team. They never expire.</p>' : '')
+      + (Array.isArray(w.spendOrder) && w.spendOrder.length ? '<p class="g-card__meta">Coins are used in this order: ' + esc(w.spendOrder.map((k) => BUCKET_TEXT[k] || words(k)).join(', ')) + '.</p>' : '')
       + '<p class="g-m2__total">Total: <strong>' + esc(num(w.total && w.total.coins)) + ' coins</strong> (' + esc((w.total && w.total.usd) || '') + ')</p>'
       + (w.nextGrantAt ? '<p class="g-card__meta">Next monthly coins: ' + esc(date(w.nextGrantAt)) + '</p>' : '')
       + '<p class="g-m2__sub">History</p>' + hist + '</div>');
@@ -493,9 +609,17 @@
       + '<p class="g-m2__secure"><i class="ph ph-lock-simple" aria-hidden="true"></i> Invoices and payment methods are managed securely by Stripe. Gaia Healers never sees or stores your card details.</p></div>');
   }
 
+  /** Anything but production with live Stripe (as /plans reports it) gets a small test-mode marker. */
+  function envBannerHtml() {
+    const e = state.env;
+    if (!e || (e.environment === 'production' && e.stripeMode === 'live')) return '';
+    return '<p class="g-m2__env" role="note" data-m2-env><strong>' + esc(e.environment === 'production' ? 'TEST MODE' : 'STAGING / TEST MODE') + '</strong> '
+      + esc(e.stripeMode === 'live' ? 'This is not the live app.' : 'Payments here are not real.') + '</p>';
+  }
+
   function errorHtml() {
     if (!state.loadError) return '';
-    return '<div class="g-ann g-ann--warn g-m2__notice" role="alert"><span class="g-ann__title">' + (state.loadError === 'network' ? 'Can’t reach Gaia Healers' : 'Your membership couldn’t load') + '</span>'
+    return '<div class="g-ann g-ann--warn g-m2__notice" role="alert"><span class="g-ann__title">' + (state.loadError === 'network' ? 'Can’t reach Gaia Healers' : state.loadError === 'service' ? 'Membership is temporarily unavailable' : 'Your membership couldn’t load') + '</span>'
       + '<span class="g-ann__body">Please try again. If it keeps happening, our support team can help.</span>'
       + '<span class="g-m2__notice-actions">' + btn('Try again', 'data-m2-reload', 'secondary') + supportLink() + '</span></div>';
   }
@@ -506,7 +630,7 @@
     const active = document.activeElement;
     const keep = active && el.contains(active) ? (active.getAttribute('data-m2-interval') ? '[data-m2-interval="' + active.getAttribute('data-m2-interval') + '"]' : null) : null;
     el.setAttribute('aria-busy', String(state.loading));
-    el.innerHTML = '<div class="g-page__head"><p class="g-page__kicker">Preview</p>'
+    el.innerHTML = envBannerHtml() + '<div class="g-page__head"><p class="g-page__kicker">Preview</p>'
       + '<h1 class="g-page__title">Gaia Healers Membership 2.0</h1>'
       + '<p class="g-page__sub">Compare plans, see your coins and manage your membership in one place.</p></div>'
       + '<div class="g-m2__live" role="status" aria-live="polite">' + (state.loading ? 'Loading your membership…' : '') + '</div>'
@@ -514,6 +638,17 @@
       + dashboardHtml() + legacyHtml() + plansHtml() + coinsHtml() + packsHtml() + billingHtml()
       + '<p class="g-m2__foot">Questions about your membership? ' + supportLink() + '</p>';
     if (keep) el.querySelector(keep)?.focus();
+  }
+
+  /** "Change plan": the choices are the plan list (plan + Monthly / Annual toggle). */
+  function showChoices() {
+    state.notice = CHANGE_PLAN; render();
+    window.requestAnimationFrame(() => {
+      const h = document.getElementById('m2-h-plans');
+      if (h && h.scrollIntoView) h.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      const first = document.querySelector('[data-m2-change-to], [data-m2-interval]');
+      if (first && first.focus) first.focus({ preventScroll: true });
+    });
   }
 
   function onClick(e) {
@@ -526,14 +661,18 @@
     else if (d.m2Cancel) cancelMembership(d.m2Cancel);
     else if (d.m2Accept) acceptOffer(d.m2Accept);
     else if (d.m2Migrate) runCheckout('migrate:' + d.m2Migrate, '/migration/' + encodeURIComponent(d.m2Migrate) + '/checkout', {});
-    else if (t.hasAttribute('data-m2-change')) setNotice(CHANGE_PLAN);
+    else if (d.m2ChangeTo) changePlanTo(d.m2ChangeTo, state.interval);
+    else if (d.m2Keep) keepCurrentPlan(d.m2Keep);
+    else if (t.hasAttribute('data-m2-change')) showChoices();
     else if (t.hasAttribute('data-m2-signin')) window.GaiaAuth?.open?.();
     else if (t.hasAttribute('data-m2-reload')) loadMember();
     else if (t.hasAttribute('data-m2-dismiss')) { state.notice = null; render(); }
     else if (t.hasAttribute('data-m2-retry')) {
       const ra = state.notice && state.notice.retryAction;
       state.notice = null;
-      if (ra) runCheckout(ra.action, ra.path, ra.payload); else render();
+      if (ra && ra.change) changePlanTo(ra.change[0], ra.change[1]);
+      else if (ra && ra.keep) keepCurrentPlan(ra.keep);
+      else if (ra) runCheckout(ra.action, ra.path, ra.payload); else render();
     }
   }
 

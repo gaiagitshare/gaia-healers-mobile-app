@@ -96,3 +96,30 @@ export async function checkoutEligibility(db, personId, planVersionId, { now = n
   if (importedLegacy.length && !offer) return { status: 'migration_required', legacy: importedLegacy.map((s) => ({ subscriptionId: s.id })) };
   return offer ? { status: 'ok', migrationOfferId: offer.id } : { status: 'ok' };
 }
+
+/**
+ * May the live Gaia subscription `subscription` (a row with plan_id, status, source,
+ * provider, owner_type, cancel_at) of `personId` move to another plan? The plan-change
+ * counterpart of checkoutEligibility: the same "never billed twice, unknown is never
+ * inactive" rules, answered as a status, never a side effect.
+ *
+ *   ok                    nothing else is billing this person
+ *   migration_required    a legacy subscription (imported) or a live GHL legacy membership:
+ *                         legacy members never change plan, they migrate
+ *   review_required       the legacy mirror is missing / out of date, a legacy row needs a
+ *                         human, or more than one live Gaia subscription exists
+ */
+export async function planChangeEligibility(db, personId, subscription, { now = new Date(), mirrorMaxAgeMs = DEFAULT_MIRROR_MAX_AGE_MS } = {}) {
+  if (subscription.source === 'legacy_import') return { status: 'migration_required', reasons: ['legacy_subscription'] };
+  const others = (await db.query(
+    `SELECT s.id FROM subscriptions s JOIN plan_versions v ON v.id = s.plan_version_id JOIN plans p ON p.id = v.plan_id
+      WHERE s.person_id = $1 AND s.id <> $2 AND s.status = ANY($3) AND p.owner_type = 'gaia'`, [personId, subscription.id, GAIA_LIVE_STATUSES])).rows;
+  if (others.length) return { status: 'review_required', reasons: ['multiple_live_subscriptions'] };
+  const mirror = await mirrorState(db, now, mirrorMaxAgeMs);
+  if (mirror) return { status: 'review_required', reasons: [mirror] };
+  const blocks = (await legacyRowsFor(db, personId)).map(legacyBlock).filter(Boolean);
+  const review = blocks.filter((b) => b.kind === 'review_required');
+  if (review.length) return { status: 'review_required', reasons: [...new Set(review.flatMap((b) => b.reasons))], legacy: review };
+  if (blocks.length) return { status: 'migration_required', legacy: blocks };
+  return { status: 'ok' };
+}

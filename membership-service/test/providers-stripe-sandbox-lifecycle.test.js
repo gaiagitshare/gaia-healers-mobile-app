@@ -12,7 +12,7 @@ import { fakeSandboxStripe } from './_stripe-sandbox-fake.js';
 import { main, SCENARIOS, DEFAULT_MAX_REQUESTS, CLOCK_MAX_POLLS } from '../src/cli/stripe-sandbox.js';
 
 const KEY = 'rk_test_fixture_' + 'z'.repeat(16);
-const LIFECYCLE = ['CHECKOUT', 'RENEW', 'DUNNING', 'CANCEL_END', 'CANCEL_NOW', 'CHANGE', '3DS', 'EVENTS'];
+const LIFECYCLE = ['CHECKOUT', 'RENEW', 'DUNNING', 'CANCEL_END', 'CANCEL_NOW', 'CHANGE_UP', 'CHANGE_DOWN', 'CHANGE_SWITCH', '3DS', 'EVENTS'];
 
 function harness(srv, { env = { STRIPE_TEST_SECRET_KEY: KEY }, sleeps = [] } = {}) {
   const lines = [];
@@ -32,7 +32,7 @@ test('every scenario fits the cap on its own; the cap is still 25', () => {
   assert.equal(DEFAULT_MAX_REQUESTS, 25);
   for (const [id, s] of Object.entries(SCENARIOS)) assert.ok(Number.isInteger(s.planned) && s.planned >= 1 && s.planned <= DEFAULT_MAX_REQUESTS, `${id} planned ${s.planned}`);
   assert.deepEqual(Object.fromEntries(LIFECYCLE.map((id) => [id, SCENARIOS[id].planned])),
-    { CHECKOUT: 8, RENEW: 16, DUNNING: 20, CANCEL_END: 17, CANCEL_NOW: 9, CHANGE: 12, '3DS': 8, EVENTS: 1 });
+    { CHECKOUT: 8, RENEW: 16, DUNNING: 20, CANCEL_END: 17, CANCEL_NOW: 9, CHANGE_UP: 17, CHANGE_DOWN: 20, CHANGE_SWITCH: 14, '3DS': 8, EVENTS: 1 });
 });
 
 test('dry run of every lifecycle scenario: plan printed with counts, nothing sent', async () => {
@@ -119,15 +119,51 @@ test('CANCEL_END: canceled after the period end, no renewal invoice', async () =
   } finally { await r.close(); }
 });
 
-test('CHANGE: proration_behavior=none on both changes, no proration recorded, no new invoice', async () => {
-  const r = await runOne('CHANGE');
+test('CHANGE_UP: preview then always_invoice + pending_if_incomplete, charged the previewed amount; a failing card leaves the update pending', async () => {
+  const r = await runOne('CHANGE_UP');
   try {
-    const changes = r.srv.requests.filter((q) => q.method === 'POST' && /^\/v1\/subscriptions\/sub_/.test(q.path));
-    assert.equal(changes.length, 2);
-    assert.ok(changes.every((q) => q.form.proration_behavior === 'none' && /^si_sbx_/.test(q.form['items[0][id]'])));
-    assert.equal(r.srv.db.prorations.length, 0);
-    assert.equal(r.srv.db.invoices.size, 1, 'only the first invoice');
+    const ups = r.srv.requests.filter((q) => q.method === 'POST' && /^\/v1\/subscriptions\/sub_/.test(q.path) && q.form['items[0][price]']);
+    assert.equal(ups.length, 2);
+    assert.ok(ups.every((q) => q.form.proration_behavior === 'always_invoice' && q.form.payment_behavior === 'pending_if_incomplete' && /^si_sbx_/.test(q.form['items[0][id]'])));
+    const pv = r.srv.requests.find((q) => q.path === '/v1/invoices/create_preview');
+    assert.equal(pv.form['subscription_details[proration_behavior]'], 'always_invoice');
+    assert.equal(pv.form['subscription_details[proration_date]'], ups[0].form.proration_date, 'the change uses the preview\'s proration date');
+    const upd = [...r.srv.db.invoices.values()].filter((i) => i.billing_reason === 'subscription_update');
+    assert.deepEqual(upd.map((i) => i.status), ['paid', 'open']);
+    assert.match(r.h.text(), /\[CHANGE_UP\] ok {3}payment failed: the update is pending, the item keeps the current price/);
   } finally { await r.close(); }
+});
+
+test('CHANGE_DOWN: a schedule from the subscription switches to the lower price at the renewal, no proration', async () => {
+  const r = await runOne('CHANGE_DOWN');
+  try {
+    const ph = r.srv.requests.find((q) => q.method === 'POST' && /^\/v1\/subscription_schedules\/[^/]+$/.test(q.path));
+    assert.deepEqual([ph.form.end_behavior, ph.form.proration_behavior, ph.form['phases[1][iterations]'], ph.form['phases[1][proration_behavior]']], ['release', 'none', '1', 'none']);
+    assert.equal(r.srv.db.prorations.length, 0, 'no proration');
+    assert.ok(![...r.srv.db.invoices.values()].some((i) => i.billing_reason === 'subscription_update'), 'nothing invoiced now');
+    assert.deepEqual([...r.srv.db.invoices.values()].filter((i) => i.billing_reason === 'subscription_cycle').map((i) => i.amount_paid), [4700]);
+  } finally { await r.close(); }
+});
+
+test('CHANGE_SWITCH: an annual switch scheduled, then released: monthly price kept, nothing invoiced', async () => {
+  const r = await runOne('CHANGE_SWITCH');
+  try {
+    const yearly = r.srv.requests.find((q) => q.path === '/v1/prices' && q.form['recurring[interval]'] === 'year');
+    assert.ok(yearly);
+    assert.equal(r.srv.requests.filter((q) => /\/release$/.test(q.path)).length, 1);
+    assert.equal([...r.srv.db.schedules.values()][0].status, 'released');
+    assert.equal(r.srv.db.invoices.size, 1);
+  } finally { await r.close(); }
+});
+
+test('the old CHANGE id is refused with a pointer to the split scenarios', async () => {
+  const srv = await fakeSandboxStripe();
+  try {
+    const h = harness(srv);
+    assert.equal(await h.run(['--scenario', 'CHANGE', '--run']), 2);
+    assert.match(h.text(), /CHANGE_UP, CHANGE_DOWN and CHANGE_SWITCH/);
+    assert.equal(srv.requests.length, 0);
+  } finally { await srv.close(); }
 });
 
 test('3DS: allow_incomplete, the subscription is incomplete and its invoice open', async () => {
@@ -166,7 +202,7 @@ test('a clock that never becomes ready: bounded polls, scenario fails, the cap h
 });
 
 test('the worst case is exactly the plan: slow clocks use every planned poll and never exceed the plan', async () => {
-  for (const id of ['RENEW', 'DUNNING', 'CANCEL_END']) {
+  for (const id of ['RENEW', 'DUNNING', 'CANCEL_END', 'CHANGE_DOWN']) {
     const r = await runOne(id, { clockPollsUntilReady: CLOCK_MAX_POLLS });
     try {
       assert.equal(r.code, 0, r.h.text());

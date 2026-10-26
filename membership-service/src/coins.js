@@ -167,6 +167,19 @@ export async function creditGoodwill(db, { personId, coins, idempotencyKey, requ
     (c, wallet, op) => move(c, wallet, op.id, 'goodwill', coins, 'adjustment'));
 }
 
+/**
+ * Plan upgrade, paid mid-cycle (plan-changes.js): the difference between the new
+ * and the old plan's monthly allowance, credited to the `granted` bucket once per
+ * change. It is part of this cycle's allowance, so it expires with it at the next
+ * reset like any granted coin. Booked as an `adjustment` row (not a `grant`), so it
+ * is never mistaken for a cycle reset by hold releases (returnable()).
+ */
+export async function creditUpgradeAllowance(db, { personId, coins, changeId, actor = 'system' }) {
+  if (!changeId) fail('INVALID_INPUT', 'changeId is required');
+  return operation(db, { personId, kind: 'adjustment', idempotencyKey: 'upgrade-allowance:' + changeId, coins, reason: 'plan_upgrade_allowance', relatedType: 'subscription_change', relatedId: changeId, actor },
+    (c, wallet, op) => move(c, wallet, op.id, 'granted', coins, 'adjustment'));
+}
+
 /** Open coin-refund review items (unrecovered refunded value), oldest first. */
 export async function openRefundReviews(db, { limit = 100 } = {}) {
   return (await db.query("SELECT * FROM coin_refund_reviews WHERE status = 'open' ORDER BY created_at LIMIT $1", [limit])).rows;

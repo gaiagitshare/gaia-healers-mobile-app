@@ -72,7 +72,7 @@ Status as of **26 Oct 2026**. Membership 2.0 is built next to production. GHL, S
 | CP-LEG-02 | Legacy row under review | state `under_review`; checkout `review_required` | MS e2e-parallel-flows › legacy member under review… | LPG | PASS | run |
 | CP-LEG-03 | Accept a migration offer, then continue to checkout | accept 200 `accepted`; checkout 503 without Stripe | staging screenshot 09 | STG | PASS (26 Oct) | view-ev |
 | CP-ERR-01 | Plain-language copy for every server answer | every status has copy | VIEW › every server answer has plain-language copy | UNIT | PASS | run |
-| CP-ERR-02 | Membership service down | gateway 503 `PROVIDER_UNAVAILABLE` within 2 s (refused) or within the 8 s bound (silent); the app shows its error state | MS e2e-parallel-flows › membership service down…; drill (d) | LPG, STG | PASS | run, [service-down](drills/2026-10-26-service-down.md) |
+| CP-ERR-02 | Membership service down | gateway 503 `SERVICE_UNAVAILABLE` (its own code since 2026-10-26, never the billing one) within 2 s (refused), within 4 s for reads and 8 s for writes (silent); the app shows "Membership is temporarily unavailable" + Try again | MS e2e-parallel-flows › membership service down…; drill (d) | LPG, STG | PASS | run, [service-down](drills/2026-10-26-service-down.md) |
 | CP-ERR-03 | Visitor (no session) | plans and a Sign in prompt, no 401 noise | manual staging run (26 Oct) | STG | PASS (26 Oct) | view-ev |
 | CP-OFF-01 | Gateway OFF: every `/api/membership2/*` is 404 | falls through; the service is never touched | MS member-gateway › gateway OFF…; SP membership2-gateway-off › every membership2 path is a plain 404… | LPG, UNIT | PASS | run |
 | CP-OFF-02 | Gateway OFF: the app hides the area | `?view=membership` lands on Store; entry slots hidden; only the probe request | VIEW › hidden unless the feature probe succeeds…; drill (c) | UNIT, STG | PASS | run, [kill-switch](drills/2026-10-26-gateway-kill-switch.md) |
@@ -284,7 +284,7 @@ Status as of **26 Oct 2026**. Membership 2.0 is built next to production. GHL, S
 4. **`launch.js show` reports the wrong ceiling** (`src/cli/launch.js` line 21: `launchState(pool)` reads `process.env`). The staging CLI env file has no `MEMBERSHIP2_STAGE_CEILING`; the API unit sets it in `Environment=`. So `show` prints "ceiling OFF, EFFECTIVE OFF" while the API is effectively INTERNAL_PILOT.
    - Suggestion: print both, with a warning when the ceiling is unset, or read the ceiling from the API's health.
 5. **A service outage and "billing not connected" share one answer** (`staging-proxy/membership2-gateway.js` lines 60–61 and 89 use `PROVIDER_UNAVAILABLE`). The member view's copy for that code says "Billing isn't connected in this environment…". See [drill (d)](drills/2026-10-26-service-down.md).
-6. **The gateway timeout is fixed at 8 s** on every route (`membership2-gateway.js` line 57). It is bounded, but long for GETs.
+6. **The gateway timeout was fixed at 8 s** on every route. Fixed 2026-10-26 (planchange branch): 4 s for GETs, 8 s for writes; an outage answers `SERVICE_UNAVAILABLE`.
 7. **A kill switch cannot be a drop-in `Environment=`.** Systemd applies `EnvironmentFile=` after it, so the env file wins. Use a second `EnvironmentFile` in a drop-in instead ([drill (c)](drills/2026-10-26-gateway-kill-switch.md)). This matters for the production runbook.
 8. **Docs are out of date:**
    - [MEMBERSHIP-VIEW.md](MEMBERSHIP-VIEW.md), "Known API ordering point", says checkout answers `PROVIDER_UNAVAILABLE` before the guard and the gate. The current code (`needStripe()` is now a lazy stub) answers the guard and the gate first. CP-LEG-01 and CP-CHK-03 prove it.
@@ -369,7 +369,7 @@ Generated from the test sources on 26 Oct 2026. Counts per suite come from the r
 | e2e-parallel-flows | pilot member reaches the billing step: 503 PROVIDER_UNAVAILABLE, and the same requestId answers the same way | CP-CHK-01, LF-PIL-01 |
 | e2e-parallel-flows | non-pilot member at INTERNAL_PILOT: availability false (pilot_only), checkout not_available pilot_only, no Stripe | CP-CHK-03, LF-PIL-01 |
 | e2e-parallel-flows | launch ceiling env overrides the DB stage end to end (DB says ALL_NEW_CUSTOMERS) | LF-CEIL-02, LF-LIM-01, LF-ALL-01 |
-| e2e-parallel-flows | membership service down: the gateway answers 503 PROVIDER_UNAVAILABLE quickly (refused port) and within its 8 s bound (silent service) | CP-ERR-02, RB-SVC-01 |
+| e2e-parallel-flows | membership service down: the gateway answers 503 SERVICE_UNAVAILABLE (never the billing code) quickly (refused port), within 4 s for reads and 8 s for writes (silent service) | CP-ERR-02, RB-SVC-01 |
 | e2e-pilot | A. new member: signup to cancellation, every step through the real services | PAY-CHK-01, CP-CAN-01 (end-to-end, loopback Stripe fake) |
 | e2e-pilot | B. legacy Silver member migrates to Professional without double billing or losing access | LEG-MIG-01 |
 | entitlements | holding two plans never duplicates a benefit; numbers take the max, not the sum | PERM-ENT-01 |

@@ -129,3 +129,41 @@ test('coin and billing history, and a member can only touch their own subscripti
     assert.equal(r.status, 404, "someone else's subscription is not found");
   } finally { await s.close(); }
 });
+
+test('plan changes through the gateway (no Stripe here): the pilot member reaches "billing not connected", others are refused first', { skip: SKIP }, async () => {
+  const s = await stack({ stage: 'INTERNAL_PILOT' });
+  try {
+    const plans = (await s.call('GET', '/api/membership2/plans')).json;
+    assert.deepEqual([plans.environment, plans.stripeMode], ['unset', 'none'], 'the same environment helper as the admin /environment');
+    await s.call('GET', '/api/membership2/me');
+    const pid = (await s.pool.query("SELECT person_id FROM person_identities WHERE external_id = 'ghl-contact-fixture-gw1'")).rows[0].person_id;
+    await loadMirror(s.pool);
+    const v = (await s.pool.query("SELECT v.id FROM plan_versions v JOIN plans p ON p.id = v.plan_id WHERE p.key = 'professional'")).rows[0].id;
+    const end = new Date(Date.now() + 20 * 86400000);
+    const sub = (await s.pool.query(`INSERT INTO subscriptions (person_id, plan_version_id, billing_interval, status, provider, provider_subscription_id, current_period_start, current_period_end)
+                                     VALUES ($1, $2, 'month', 'active', 'stripe', 'sub_fixture_gw_pc', now() - interval '10 days', $3) RETURNING id`, [pid, v, end])).rows[0].id;
+    const P = `/api/membership2/subscriptions/${sub}`;
+    const np = await s.call('POST', `${P}/change-preview`, { planKey: 'inner_circle', interval: 'month' });
+    assert.deepEqual([np.status, np.json.status, np.json.reason], [200, 'not_available', 'pilot_only'], 'not a pilot member: the launch gate answers');
+    await addPilotMember(s.pool, pid, {}, admin);
+    const up = await s.call('POST', `${P}/change-preview`, { planKey: 'inner_circle', interval: 'month' });
+    assert.deepEqual([up.status, up.json.code], [503, 'PROVIDER_UNAVAILABLE'], 'an upgrade preview needs Stripe');
+    const down = await s.call('POST', `${P}/change-preview`, { planKey: 'standard', interval: 'month' });
+    assert.deepEqual([down.status, down.json.kind, down.json.amountDueNowCents, +new Date(down.json.effectiveAt)], [200, 'downgrade', 0, +end]);
+    const ch = await s.call('POST', `${P}/change`, { planKey: 'standard', interval: 'month', requestId: 'req-gw-change1' });
+    assert.deepEqual([ch.status, ch.json.code], [503, 'PROVIDER_UNAVAILABLE']);
+    assert.equal((await s.pool.query('SELECT count(*)::int n FROM subscription_changes')).rows[0].n, 0, 'nothing half-written');
+    assert.equal((await s.call('POST', `${P}/change`, { planKey: 'standard', interval: 'month' })).json.code, 'INVALID_INPUT', 'a request id is required');
+    assert.equal((await s.call('POST', `${P}/change/cancel`, { requestId: 'req-gw-keep01' })).json.status, 'no_pending_change');
+    const me = (await s.call('GET', '/api/membership2/me')).json;
+    assert.equal(me.membership[0].pendingChange, null);
+    // A legacy member (live GHL membership) is told to migrate, before any billing step.
+    await s.pool.query(`INSERT INTO legacy_memberships (external_subscription_id, external_contact_id, payment_provider, mapping, tier, reported_status, paid_through_estimate, last_seen_at)
+                        VALUES ('ghl-sub-fixture-gwpc', 'ghl-contact-fixture-gw1', 'paypal', 'mapped', 'silver', 'active', '2026-12-20', now())`);
+    const leg = await s.call('POST', `${P}/change`, { planKey: 'standard', interval: 'month', requestId: 'req-gw-change2' });
+    assert.deepEqual([leg.status, leg.json.status], [200, 'migration_required']);
+    const other = (await s.pool.query('INSERT INTO persons DEFAULT VALUES RETURNING id')).rows[0].id;
+    const os = (await s.pool.query(`INSERT INTO subscriptions (person_id, plan_version_id, billing_interval, status, provider, provider_subscription_id) VALUES ($1, $2, 'month', 'active', 'stripe', 'sub_fixture_gw_pc2') RETURNING id`, [other, v])).rows[0].id;
+    assert.equal((await s.call('POST', `/api/membership2/subscriptions/${os}/change-preview`, { planKey: 'standard', interval: 'month' })).status, 404);
+  } finally { await s.close(); }
+});

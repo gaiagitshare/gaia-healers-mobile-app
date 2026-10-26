@@ -79,7 +79,7 @@ const noFetch = async () => { throw new Error('dry run must not send'); };
 
 test('the webhook event list is exactly the pipeline handler table', () => {
   assert.deepEqual([...WEBHOOK_EVENTS].sort(), Object.keys(stripeHandlers).sort());
-  assert.equal(WEBHOOK_EVENTS.length, 14);
+  assert.equal(WEBHOOK_EVENTS.length, 18);
 });
 
 test('plan: seed catalog = 3 paid tiers x 2 intervals; 3 requests per price + 1 per product; webhook 2; portal 2', () => {

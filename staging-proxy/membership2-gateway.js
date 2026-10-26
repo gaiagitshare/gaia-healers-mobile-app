@@ -19,6 +19,9 @@
  *   POST /api/membership2/coins/checkout              { packKey, requestId }
  *   POST /api/membership2/subscriptions/:id/cancel-preview
  *   POST /api/membership2/subscriptions/:id/cancel    { requestId }
+ *   POST /api/membership2/subscriptions/:id/change-preview  { planKey, interval }
+ *   POST /api/membership2/subscriptions/:id/change    { planKey, interval, prorationDate?, requestId }
+ *   POST /api/membership2/subscriptions/:id/change/cancel   { requestId }   (keep the current plan)
  *   POST /api/membership2/migration/:id/accept
  *   POST /api/membership2/migration/:id/checkout      { requestId }
  */
@@ -27,10 +30,22 @@ const UUID = '([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})';
 const RE = {
   cancelPreview: new RegExp(`^/api/membership2/subscriptions/${UUID}/cancel-preview$`),
   cancel: new RegExp(`^/api/membership2/subscriptions/${UUID}/cancel$`),
+  changePreview: new RegExp(`^/api/membership2/subscriptions/${UUID}/change-preview$`),
+  change: new RegExp(`^/api/membership2/subscriptions/${UUID}/change$`),
+  changeCancel: new RegExp(`^/api/membership2/subscriptions/${UUID}/change/cancel$`),
   offerAccept: new RegExp(`^/api/membership2/migration/${UUID}/accept$`),
   offerCheckout: new RegExp(`^/api/membership2/migration/${UUID}/checkout$`),
 };
 const PERSON_TTL_MS = 5 * 60 * 1000;
+/** Reads fail fast; writes (which may wait on Stripe inside the service) get longer. */
+export const GET_TIMEOUT_MS = 4000;
+export const WRITE_TIMEOUT_MS = 8000;
+/**
+ * The membership service is unreachable, timed out or failed. Its own code, so the app
+ * never shows "billing isn't connected" (PROVIDER_UNAVAILABLE, a real service answer)
+ * during an outage.
+ */
+const SERVICE_DOWN = () => ({ status: 503, body: { ok: false, code: 'SERVICE_UNAVAILABLE', message: 'Membership is temporarily unavailable, please try again shortly' } });
 const REQUEST_ID = /^[A-Za-z0-9_-]{8,64}$/;
 
 /** Gateway configuration from the environment. Fails closed: anything missing or unsafe = off. */
@@ -54,11 +69,13 @@ export function createMembership2Gateway({ env = process.env, fetch = globalThis
     if (body !== undefined) headers['content-type'] = 'application/json';
     if (idempotencyKey) headers['idempotency-key'] = idempotencyKey;
     try {
-      const r = await fetch(cfg.base + path, { method, headers, body: body === undefined ? undefined : JSON.stringify(body), signal: AbortSignal.timeout(8000) });
-      const j = await r.json().catch(() => ({}));
+      const r = await fetch(cfg.base + path, { method, headers, body: body === undefined ? undefined : JSON.stringify(body), signal: AbortSignal.timeout(method === 'GET' ? GET_TIMEOUT_MS : WRITE_TIMEOUT_MS) });
+      const j = await r.json().catch(() => null);
+      // The service failed (not a business answer): an outage, never "billing not connected".
+      if (!j || typeof j !== 'object' || (r.status >= 500 && j.code !== 'PROVIDER_UNAVAILABLE')) return SERVICE_DOWN();
       return { status: r.status, body: j };
     } catch {
-      return { status: 503, body: { ok: false, code: 'PROVIDER_UNAVAILABLE', message: 'membership service unavailable' } };
+      return SERVICE_DOWN();                                        // unreachable or timed out
     }
   }
 
@@ -86,7 +103,7 @@ export function createMembership2Gateway({ env = process.env, fetch = globalThis
     const member = requireSessionMember(req, res, origin);
     if (!member) return true;                                         // 401 already sent
     const personId = await personFor(member);
-    if (!personId) return reply({ status: 503, body: { ok: false, code: 'PROVIDER_UNAVAILABLE', message: 'membership account unavailable' } });
+    if (!personId) return reply(SERVICE_DOWN());
     const P = `/v1/persons/${personId}`;
     const body = async () => {
       const ct = String(req.headers['content-type'] || '');
@@ -119,6 +136,23 @@ export function createMembership2Gateway({ env = process.env, fetch = globalThis
       const b = await body(); const k = keyFor(b, 'cancel');
       if (!k) return bad('JSON body with requestId is required');
       return reply(await call('POST', `${P}/subscriptions/${m[1]}/cancel`, { idempotencyKey: k, body: {} }));
+    }
+    if (req.method === 'POST' && (m = RE.changePreview.exec(url.pathname))) {
+      const b = await body();
+      if (!b) return bad('JSON body with planKey and interval is required');
+      return reply(await call('POST', `${P}/subscriptions/${m[1]}/change-preview`, { body: { planKey: String(b.planKey || ''), interval: String(b.interval || '') } }));
+    }
+    if (req.method === 'POST' && (m = RE.change.exec(url.pathname))) {
+      const b = await body(); const k = keyFor(b, 'change');
+      if (!k) return bad('JSON body with planKey, interval and requestId is required');
+      const pd = Number(b.prorationDate);
+      return reply(await call('POST', `${P}/subscriptions/${m[1]}/change`, { idempotencyKey: k,
+        body: { planKey: String(b.planKey || ''), interval: String(b.interval || ''), ...(Number.isSafeInteger(pd) && pd > 0 ? { prorationDate: pd } : {}) } }));
+    }
+    if (req.method === 'POST' && (m = RE.changeCancel.exec(url.pathname))) {
+      const b = await body(); const k = keyFor(b, 'keepplan');
+      if (!k) return bad('JSON body with requestId is required');
+      return reply(await call('POST', `${P}/subscriptions/${m[1]}/change/cancel`, { idempotencyKey: k, body: {} }));
     }
     if (req.method === 'POST' && (m = RE.offerAccept.exec(url.pathname))) return reply(await call('POST', `${P}/migration-offers/${m[1]}/accept`, { body: {} }));
     if (req.method === 'POST' && (m = RE.offerCheckout.exec(url.pathname))) {

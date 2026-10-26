@@ -77,7 +77,10 @@ export async function removePilotMember(pool, personId, actor) {
   });
 }
 
-/** May this person start NEW Membership 2.0 billing (checkout / coin pack) right now? Fails closed. */
+/**
+ * May this person start NEW Membership 2.0 billing (checkout / coin pack / plan change) right now? Fails closed.
+ * purpose: 'subscription' | 'coins' | 'plan_change' (an existing Membership 2.0 subscription moves to another plan).
+ */
 export async function newBillingAllowed(db, personId, { env = process.env, purpose = 'subscription' } = {}) {
   try {
     const st = await launchState(db, { env });
@@ -90,6 +93,8 @@ export async function newBillingAllowed(db, personId, { env = process.env, purpo
     if (legacy.length) return { allowed: false, reason: 'legacy_member_use_migration', stage: st.effective };
     const hasSub = (await db.query(`SELECT 1 FROM subscriptions s JOIN plan_versions v ON v.id = s.plan_version_id JOIN plans p ON p.id = v.plan_id
                                      WHERE s.person_id = $1 AND p.owner_type = 'gaia' LIMIT 1`, [personId])).rowCount > 0;
+    // A plan change moves an existing Membership 2.0 subscription; it is not a new customer, so the LIMITED cap does not apply.
+    if (purpose === 'plan_change') return hasSub ? { allowed: true, reason: 'membership2_customer', stage: st.effective } : { allowed: false, reason: 'no_subscription', stage: st.effective };
     if (purpose === 'subscription' && hasSub) return { allowed: false, reason: 'existing_customer', stage: st.effective };
     if (purpose === 'coins' && !hasSub) return { allowed: false, reason: 'coins_need_membership2', stage: st.effective };
     if (purpose === 'coins') return { allowed: true, reason: 'membership2_customer', stage: st.effective };

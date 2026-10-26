@@ -23,6 +23,7 @@ import { scheduleCancel, transition } from '../../subscriptions.js';
 import { checkoutEligibility } from '../../billing-guard.js';
 import { newBillingAllowed } from '../../launch.js';
 import { billingStartsAt, markCheckoutStarted } from '../../migration-offers.js';
+import * as planChange from './plan-change.js';
 
 const ACTOR = { actorType: 'system', actorId: 'stripe-adapter' };
 
@@ -341,3 +342,13 @@ export async function refundPayment({ pool, stripe }, ledgerId, { amountCents, i
   if (!r?.id || !/^re_/.test(r.id)) fail('PROVIDER_UNAVAILABLE', 'stripe returned no refund');
   return { refundId: r.id, status: r.status, amountCents: r.amount, currency: String(r.currency || l.currency).toUpperCase() };
 }
+
+/**
+ * Plan changes (upgrade after payment; downgrade / interval switch at the period end).
+ * Rules and Stripe request counts: plan-change.js. The target Stripe price is ensured
+ * the same way as for checkout (ensureProductAndPrice).
+ */
+const withPrice = (deps) => ({ ...deps, ensurePrice: (id) => ensureProductAndPrice(deps, id) });
+export const previewPlanChange = (deps, ...args) => planChange.previewPlanChange(withPrice(deps), ...args);
+export const changePlan = (deps, ...args) => planChange.changePlan(withPrice(deps), ...args);
+export const cancelScheduledChange = (deps, ...args) => planChange.cancelScheduledChange(deps, ...args);

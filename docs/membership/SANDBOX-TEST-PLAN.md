@@ -51,7 +51,9 @@ keys unless `allowLive: true` is passed, and nothing passes it.
   | DUNNING | row D: test clock, `pm_card_chargeCustomerFail` renewal fails → `past_due` → paid with a good card → `active` | 20 |
   | CANCEL_END | test clock: past the period end the subscription is `canceled`, no renewal invoice | 17 |
   | CANCEL_NOW | immediate cancellation | 9 |
-  | CHANGE | upgrade then downgrade, `proration_behavior=none`, no new invoice | 12 |
+  | CHANGE_UP | upgrade: invoice preview, `always_invoice` + `pending_if_incomplete` charged the previewed amount; then a failing card leaves the update pending (item keeps its price) | 17 |
+  | CHANGE_DOWN | downgrade at the period end on a test clock: subscription schedule, no proration; the renewal bills the lower price | 20 |
+  | CHANGE_SWITCH | monthly → annual scheduled at the period end, then released ("Keep my current plan"): nothing invoiced | 14 |
   | 3DS | row C, Stripe side: `pm_card_authenticationRequired` → subscription `incomplete` | 8 |
   | EVENTS | row G helper: one page (≤ 20) of event ids/types to pick for a resend | 1 |
 

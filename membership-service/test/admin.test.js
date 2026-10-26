@@ -356,7 +356,7 @@ test('read models are bounded and paginated; health and overview answer', { skip
     assert.ok(a2.items[0].id < a1.items[1].id);
     assert.equal((await s.as('viewer').get('/v1/admin/audit?cursor=!!')).json.code, 'INVALID_INPUT');
     const h = (await s.as('viewer').get('/v1/admin/health')).json;
-    assert.deepEqual([h.db, h.migrationsVersion, h.stripeConnected], [true, '0012', false]);
+    assert.deepEqual([h.db, h.migrationsVersion, h.stripeConnected], [true, '0013', false]);
     const o = (await s.as('viewer').get('/v1/admin/overview')).json;
     assert.deepEqual([o.mrrCents, o.pendingRequests, o.launch.effective], [0, 0, 'OFF']);
     assert.ok(Array.isArray((await s.as('viewer').get('/v1/admin/plans')).json.plans));

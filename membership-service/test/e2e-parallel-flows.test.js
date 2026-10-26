@@ -155,18 +155,18 @@ test('launch ceiling env overrides the DB stage end to end (DB says ALL_NEW_CUST
   } finally { await s.close(); }
 });
 
-test('membership service down: the gateway answers 503 PROVIDER_UNAVAILABLE quickly (refused port) and within its 8 s bound (silent service)', { skip: SKIP }, async () => {
+test('membership service down: the gateway answers 503 SERVICE_UNAVAILABLE (never the billing code) quickly (refused port), within 4 s for reads and 8 s for writes (silent service)', { skip: SKIP }, async () => {
   // A closed port: connection refused.
   const probe = net.createServer(); await new Promise((r) => probe.listen(0, '127.0.0.1', r));
   const closed = probe.address().port; await new Promise((r) => probe.close(r));
   let s = await stack({ serviceUrl: `http://127.0.0.1:${closed}` });
   try {
     const plans = await s.call('GET', '/api/membership2/plans');
-    assert.deepEqual([plans.status, plans.json.code], [503, 'PROVIDER_UNAVAILABLE']);
+    assert.deepEqual([plans.status, plans.json.code], [503, 'SERVICE_UNAVAILABLE']);
     assert.ok(plans.ms < 2000, `refused answered in ${plans.ms} ms`);
     s.as(member(7));
     const me = await s.call('GET', '/api/membership2/me');
-    assert.deepEqual([me.status, me.json.code], [503, 'PROVIDER_UNAVAILABLE']);
+    assert.deepEqual([me.status, me.json.code], [503, 'SERVICE_UNAVAILABLE']);
   } finally { await s.close(); }
   // A service that accepts and never answers: bounded by the gateway timeout.
   const sockets = new Set();
@@ -174,7 +174,11 @@ test('membership service down: the gateway answers 503 PROVIDER_UNAVAILABLE quic
   s = await stack({ serviceUrl: `http://127.0.0.1:${silent.address().port}` });
   try {
     const plans = await s.call('GET', '/api/membership2/plans');
-    assert.deepEqual([plans.status, plans.json.code], [503, 'PROVIDER_UNAVAILABLE']);
-    assert.ok(plans.ms >= 7000 && plans.ms < 12000, `silent service answered in ${plans.ms} ms`);
+    assert.deepEqual([plans.status, plans.json.code], [503, 'SERVICE_UNAVAILABLE']);
+    assert.ok(plans.ms >= 3500 && plans.ms < 7000, `silent service answered a read in ${plans.ms} ms`);
+    s.as(member(8));
+    const co = await s.checkout('req-e2e-silent-1');
+    assert.deepEqual([co.status, co.json.code], [503, 'SERVICE_UNAVAILABLE']);
+    assert.ok(co.ms >= 7000 && co.ms < 12000, `silent service answered a write in ${co.ms} ms`);
   } finally { for (const x of sockets) x.destroy(); await new Promise((r) => silent.close(r)); await s.close(); }
 });

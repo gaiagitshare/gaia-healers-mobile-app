@@ -72,3 +72,8 @@
 .g-m2__more summary{cursor:pointer;font-size:13px;font-weight:600;color:var(--g-accent);padding:4px 0;border-radius:var(--g-r-sm)}
 .g-m2__more summary:focus-visible{outline:none;box-shadow:var(--g-focus)}
 .g-m2__more[open] summary{margin-bottom:6px}
+.g-m2__tiles--4{grid-template-columns:repeat(2,1fr)}
+@media (min-width:700px){.g-m2__tiles--4{grid-template-columns:repeat(4,1fr)}}
+.g-m2__env{margin:0;align-self:flex-start;font:600 11px/1.3 var(--g-font-mono);letter-spacing:.06em;color:var(--g-text-muted);border:1px dashed var(--g-line);border-radius:var(--g-r-sm);padding:4px 8px}
+.g-m2__env strong{color:var(--g-text)}
+.g-m2__banner .g-m2__notice-actions{margin-top:var(--g-s1,6px)}

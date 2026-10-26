@@ -131,7 +131,7 @@ endpoint by URL, portal configuration by metadata).
 - Adapter, webhook pipeline, handlers, daily and coin-pack reconciliation, duplicate-billing guard, migration offers, launch flags, Control Center refund and cancel: see `membership-service/README.md` and the MASTER-PLAN Phase 1 rows.
 - **New:** `src/providers/stripe/setup.js` and `src/cli/stripe-setup.js` plan the account setup:
   - the catalog from the published plan versions;
-  - the webhook endpoint with the exact event list of `src/stripe/handlers.js`, 14 events;
+  - the webhook endpoint with the exact event list of `src/stripe/handlers.js`, 18 events (14 + the plan-change events `customer.subscription.pending_update_applied`, `customer.subscription.pending_update_expired`, `subscription_schedule.released`, `subscription_schedule.canceled`);
   - the Customer Portal configuration.
 
   Tested in `test/providers-stripe-setup.test.js`:
@@ -485,9 +485,23 @@ Nothing in the app creates portal sessions yet. That step (`POST /v1/billing_por
 
 ## 6. Owner decision: proration on upgrade and downgrade
 
-**DECIDED 2026-10-26 (owner): the recommendation below is adopted.** Upgrades use `always_invoice` with `pending_if_incomplete`, and the higher tier is granted only after payment. Downgrades and annual/monthly switches happen at period end, with no proration and no refund. Not implemented yet; plan switching stays off until it is built and tested.
+**DECIDED 2026-10-26 (owner): the recommendation below is adopted.** Upgrades use `always_invoice` with `pending_if_incomplete`, and the higher tier is granted only after payment. Downgrades and annual/monthly switches happen at period end, with no proration and no refund.
 
-Today the code always uses `proration_behavior: 'none'` (the sandbox CHANGE scenario and migration holds). The portal keeps plan switching off.
+**BUILT 2026-10-26** (branch `feat/membership2-planchange`; loopback-tested, not yet run against the Stripe sandbox). **The Customer Portal keeps plan switching OFF: the app handles plan changes**, so every change goes through the guard, the launch gate and the webhook rules below.
+
+| | Upgrade (higher tier, same interval) | Downgrade, or any annual ↔ monthly switch |
+|---|---|---|
+| Stripe call | item update, `proration_behavior=always_invoice`, `payment_behavior=pending_if_incomplete`, the preview's `proration_date` | a subscription schedule from the subscription: phase 1 = current price until the period end, phase 2 = new price (`iterations=1`), `proration_behavior=none`, `end_behavior=release` |
+| Preview | Stripe `POST /v1/invoices/create_preview`; without Stripe: `PROVIDER_UNAVAILABLE` | local: $0 now, effective at the period end |
+| Access | higher tier, entitlements and this cycle's coin allowance difference **only** when the verified `invoice.paid` webhook for the prorated invoice arrives; a `customer.subscription.updated` with the new price before it is ignored | the member keeps the paid tier; the renewal's `customer.subscription.updated` applies the new plan |
+| Payment fails / 3DS | the member stays on the current tier and sees "payment required" (hosted invoice link); a failed prorated invoice never puts the subscription `past_due`; `pending_update_expired` ends the change | n/a (no charge now) |
+| Cancel | not offered (the pending update expires on its own) | "Keep my current plan" releases the schedule |
+
+Why a Stripe subscription schedule rather than a Gaia-side change at renewal: Stripe switches the price atomically with the renewal invoice, so no Gaia timer has to win a race against Stripe's invoice creation (a late job would charge the old price), and an interval switch keeps the billing date (an immediate price update to another interval resets the billing cycle and charges at once). The existing, ordered and idempotent `customer.subscription.updated` handler applies it.
+
+Rules that still hold: one pending change per subscription (unique index); only Gaia-owned Stripe subscriptions that match Stripe (customer, single item, recorded price); legacy members (imported subscriptions or a live GHL membership) get `migration_required`; the legacy-mirror / duplicate-billing rules (`planChangeEligibility`); the launch gate (`newBillingAllowed`, purpose `plan_change`); every Stripe POST keyed from the Gaia change row; `subscription_changes` + `subscription_events` + audit rows with reasons. Migration `0013_plan_changes.sql`. Code: `providers/stripe/plan-change.js`, `plan-changes.js`, `stripe/handlers.js`.
+
+Sandbox: the old CHANGE scenario (proration off) is replaced by CHANGE_UP (17 requests), CHANGE_DOWN (20) and CHANGE_SWITCH (14); not run yet (needs the sandbox key and budget). The webhook endpoint now needs 18 events (stripe-setup plans them).
 
 | Option | What the member sees | For | Against |
 |---|---|---|---|
@@ -500,7 +514,7 @@ Today the code always uses `proration_behavior: 'none'` (the sandbox CHANGE scen
 - **Downgrades:** take effect **at period end**, with no refund and no proration. A subscription schedule, or a Gaia-side scheduled change, switches the price at renewal, and the member keeps the paid tier until then.
 - **Annual ↔ monthly switches:** handled as a downgrade, at period end.
 
-This needs a small adapter change and the CHANGE sandbox scenario re-run before the portal's plan switching is turned on. Until the owner decides, plan switching stays off and changes go through support.
+Before production: run CHANGE_UP, CHANGE_DOWN and CHANGE_SWITCH in the sandbox. The portal's own plan switching stays off either way.
 
 ## 7. Activation summary (which approval unlocks what)
 

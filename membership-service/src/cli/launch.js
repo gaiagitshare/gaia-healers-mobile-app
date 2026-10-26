@@ -21,4 +21,6 @@ try {
   const st = await launchState(pool);
   const pilots = (await pool.query('SELECT count(*)::int n FROM pilot_members WHERE removed_at IS NULL')).rows[0].n;
   console.log(`stored ${st.stored} | environment ceiling ${st.ceiling} | EFFECTIVE ${st.effective} | limited cap ${st.limitedCap} | pilot members ${pilots}`);
+  // The ceiling is read from THIS process's environment; the running API has its own (systemd unit).
+  if (!String(process.env.MEMBERSHIP2_STAGE_CEILING || '').trim()) console.error('note: MEMBERSHIP2_STAGE_CEILING is not set in this shell, so EFFECTIVE assumes OFF; the running API uses the ceiling from its own unit environment and may differ.');
 } catch (e) { console.error(e.message); process.exitCode = 2; } finally { await pool.end(); }

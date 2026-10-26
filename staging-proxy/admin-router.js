@@ -1310,11 +1310,17 @@ async function handle(req, res, url, deps) {
   // Admin = the Control Center password cookie, or an Event login whose user is a platform admin.
   let authedMemo = null;
   const authed = async () => (authedMemo ??= Boolean(adminCookieFromReq(req, deps)) || await eventAdminFromReq(req));
+  // Door / check-in staff sign in to this shell too (it embeds the Event Manager:
+  // "Admin -> Events" is their official entry point). Their session stays valid
+  // here so the device keeps working, but as role 'event_staff': the shell shows
+  // Events only, and every admin route below still requires a platform admin.
   const need = () => { sendJson(res, 401, { ok: false, reason: 'admin_auth_required' }, origin); };
 
   // --- session / login / logout (public) ---
   if (p === '/api/admin/session' && method === 'GET') {
-    return sendJson(res, 200, { ok: true, authed: await authed(), configured: adminConfigured() }, origin);
+    const isAdmin = await authed();
+    const staff = !isAdmin && Boolean(verifyEventBearer(req));
+    return sendJson(res, 200, { ok: true, authed: isAdmin || staff, role: isAdmin ? 'admin' : (staff ? 'event_staff' : null), configured: adminConfigured() }, origin);
   }
   if (p === '/api/admin/login' && method === 'POST') {
     if (!adminConfigured()) return sendJson(res, 200, { ok: false, reason: 'not_configured' }, origin);

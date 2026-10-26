@@ -64,7 +64,10 @@ const fresh = () => { admin._resetEventAdminCacheForTest(); calls.length = 0; ev
 test('door / check-in staff token: NOT a Control Center admin (the defect)', async () => {
   fresh();
   const t = jwt({ sub: '2', exp: soon() });
-  assert.equal((await call('/api/admin/session', { bearer: t })).data.authed, false);
+  // The desk stays signed in to the shell (its official entry to Events), as event_staff only.
+  const session = (await call('/api/admin/session', { bearer: t })).data;
+  assert.equal(session.authed, true, 'registered desk devices keep their session');
+  assert.equal(session.role, 'event_staff');
   assert.equal((await call('/api/admin/events', { bearer: t })).status, 401);
   assert.equal((await call('/api/admin/membership/schema', { bearer: t })).status, 401, 'membership admin API is behind the same gate');
   assert.equal((await call('/api/admin/contacts', { bearer: t })).status, 401, 'contact export is refused');
@@ -78,7 +81,8 @@ test('an event organiser (per-event role, not platform admin) is not a Control C
 test('a platform admin keeps access through the Event login; the answer is cached', async () => {
   fresh();
   const t = jwt({ sub: '1', exp: soon() });
-  assert.equal((await call('/api/admin/session', { bearer: t })).data.authed, true);
+  const s1 = (await call('/api/admin/session', { bearer: t })).data;
+  assert.equal(s1.authed, true); assert.equal(s1.role, 'admin');
   assert.notEqual((await call('/api/admin/events', { bearer: t })).status, 401);
   assert.equal(calls.length, 1, 'one Event Manager lookup, then the 60-second cache');
   assert.match(calls[0], /^\/identity\/staff\/1\/control-center$/);
@@ -130,4 +134,12 @@ test('the gate uses the role check, never the signature check alone', () => {
   assert.doesNotMatch(src, /adminCookieFromReq\(req, deps\) \|\| verifyEventBearer\(req\)/);
   assert.match(src, /await eventAdminFromReq\(req\)/);
   assert.match(src, /if \(!\(await authed\(\)\)\) return need\(\);/);
+});
+
+test('session: an invalid token is neither admin nor staff', async () => {
+  fresh();
+  const s = (await call('/api/admin/session', { bearer: jwt({ sub: '2', exp: soon() }, 'wrong-key-' + 'q'.repeat(30)) })).data;
+  assert.equal(s.authed, false); assert.equal(s.role, null);
+  const none = (await call('/api/admin/session')).data;
+  assert.equal(none.authed, false);
 });

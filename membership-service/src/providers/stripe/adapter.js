@@ -26,8 +26,9 @@ import { billingStartsAt, markCheckoutStarted } from '../../migration-offers.js'
 
 const ACTOR = { actorType: 'system', actorId: 'stripe-adapter' };
 
-const productIdFor = (planKey) => `gaia_plan_${planKey}`;
-const lookupKeyFor = (p) => `gaia_${p.plan_key}_v${p.version}_${p.billing_interval}_${p.currency.toLowerCase()}`;
+/** Deterministic Stripe ids, shared with the setup planner (cli/stripe-setup.js). */
+export const productIdFor = (planKey) => `gaia_plan_${planKey}`;
+export const lookupKeyFor = (p) => `gaia_${p.plan_key}_v${p.version}_${p.billing_interval}_${p.currency.toLowerCase()}`;
 
 function checkUrl(u, what) {
   let url;

@@ -372,3 +372,94 @@ test('money and coins format', () => {
   assert.equal(coinsText(500), '500 coins ($5.00)');
   assert.equal(money(-250), '−$2.50 (-250 coins)');
 });
+
+// ---------------- Phase 3 owner decisions ----------------
+test('first sign-in: a must-change-password session sees only the password screen; the change is checked before sending', async () => {
+  let sent = null;
+  const h = load({
+    'GET /api/admin/membership2/status': { status: 200, j: { enabled: true, signedIn: true, mustChangePassword: true, environment: 'staging', stripeMode: 'none' } },
+    'GET /api/admin/membership2/me': { status: 200, j: { ok: true, operator: { id: 'op-9', displayName: 'New Fictional', role: 'finance', mustChangePassword: true }, mustChangePassword: true, permissions: [] } },
+    'POST /api/admin/membership2/password': (b) => { sent = b; return { status: 200, j: { ok: true, changed: true } }; },
+  });
+  await h.M2.probe();
+  const box = h.dom.doc.createElement('div'); h.dom.doc.body.appendChild(box);
+  h.M2.mount(box); await settle();
+  assert.match(text(h.dom), /Choose your own password/);
+  assert.ok(!h.dom.byId('m2s-panel'), 'no area until the password is changed');
+  const form = h.dom.all(box).find((n) => n.tagName === 'FORM');
+  h.dom.byId('m2pwcur').value = 'initial-password-x'; h.dom.byId('m2pwnew').value = 'short'; h.dom.byId('m2pwagain').value = 'short';
+  form.dispatch('submit'); await settle();
+  assert.equal(sent, null); assert.match(text(h.dom), /at least 12 characters/);
+  h.dom.byId('m2pwcur').value = 'initial-password-x'; h.dom.byId('m2pwnew').value = 'a-new-long-passphrase'; h.dom.byId('m2pwagain').value = 'a-new-long-passphras';
+  form.dispatch('submit'); await settle();
+  assert.equal(sent, null); assert.match(text(h.dom), /do not match/);
+  h.dom.byId('m2pwcur').value = 'initial-password-x'; h.dom.byId('m2pwnew').value = 'a-new-long-passphrase'; h.dom.byId('m2pwagain').value = 'a-new-long-passphrase';
+  form.dispatch('submit'); await settle();
+  assert.deepEqual(sent, { currentPassword: 'initial-password-x', newPassword: 'a-new-long-passphrase' });
+});
+
+test('STAGING / TEST MODE banner comes from the server: shown unless production with live Stripe', async () => {
+  const h = load({ 'GET /api/admin/membership2/status': { status: 200, j: { enabled: true, signedIn: false, environment: 'staging', stripeMode: 'none' } } });
+  assert.equal(h.M2.banner(), null, 'nothing before the probe');
+  await h.M2.probe();
+  assert.match(h.M2.banner(), /^STAGING \/ TEST MODE — environment: staging · Stripe not connected/);
+  const S = h.M2._test.state;
+  S.env = { environment: 'production', stripeMode: 'test' }; assert.match(h.M2.banner(), /^TEST MODE/);
+  S.env = { environment: 'production', stripeMode: 'live' }; assert.equal(h.M2.banner(), null);
+  const g = strip(read('admin/gadmin.js'));
+  assert.match(g, /M2 && M2\.banner\(\) \? '    <div class="envbanner" role="status">' \+ esc\(M2\.banner\(\)\)/, 'the console shell draws it, escaped');
+});
+
+test('money source badges are labels for the server-side source, never guessed', () => {
+  const { badge } = load({}).M2._test;
+  assert.equal(badge('stripe_confirmed').textContent, 'Stripe-confirmed');
+  assert.equal(badge('test_fixture').textContent, 'Test fixture');
+  assert.equal(badge('not_executed').textContent, 'Not executed (billing not connected)');
+  assert.equal(badge(undefined), null);
+  assert.ok(!/provider_object_id\s*\.\s*(startsWith|match)|\/\^(ch|in|re)_/.test(CODE), 'the UI does not infer the source from ids');
+});
+
+test('names, not ids: requests show the member email; audit shows operator names, entity labels and the reason column', async () => {
+  const extra = {
+    'GET /api/admin/membership2/requests': { status: 200, j: { ok: true, items: [
+      { id: 'r9', action: 'payment.refund', status: 'approved_not_executed', dual: true, params: { ledgerId: 7, amountCents: 100 }, reason: 'duplicate charge refund', requestedBy: { id: 'op-2', displayName: 'Ben Fictional' },
+        decidedBy: { id: 'op-3', displayName: 'Cy Fictional' }, subject: { personId: 'P1', email: 'member@example.test' }, money: 'not_executed', attempts: 1, canExecute: true, own: false, requiredRole: 'finance', executeRole: 'finance',
+        lastAttempt: { outcome: 'not_executed', code: 'PROVIDER_UNAVAILABLE', executedBy: { displayName: 'Cy Fictional' } } },
+    ] } },
+    'GET /api/admin/membership2/audit': { status: 200, j: { ok: true, items: [
+      { id: 1, occurred_at: '2026-10-26T10:00:00Z', actor_type: 'admin', actor_id: 'operator:op-2', actor_name: 'Ben Fictional', action: 'launch.pilot_add', entity_type: 'person', entity_id: 'P1', entity_label: 'member@example.test', reason: 'internal pilot tester' },
+    ] } },
+    'POST /api/admin/membership2/requests/r9/execute': (b) => ({ status: 200, j: { ok: true, status: 'approved_not_executed', echo: b } }),
+  };
+  const h = await signedIn([], 'finance', extra);
+  h.M2._test.state.screen = 'requests'; h.M2.mount(h.M2._test.state.box); await settle();
+  let t = text(h.dom);
+  assert.match(t, /member@example\.test/); assert.match(t, /Cy Fictional/); assert.match(t, /Not executed \(billing not connected\)/);
+  button(h.dom, 'Execute again').click(); await settle();
+  h.dom.byId('m2f-reason').value = 'billing is connected now';
+  const form = h.dom.all(h.dom.all(h.dom.doc.body).find((n) => n.getAttribute('role') === 'dialog')).find((n) => n.tagName === 'FORM');
+  form.dispatch('submit'); await settle();
+  const ex = h.calls.find((c) => c.url.endsWith('/requests/r9/execute'));
+  assert.equal(ex.body.reason, 'billing is connected now'); assert.match(ex.body.requestId, /^cc_[0-9a-f]{32}$/);
+  h.M2._test.state.screen = 'audit'; h.M2.mount(h.M2._test.state.box); await settle();
+  t = text(h.dom);
+  assert.match(t, /Ben Fictional \(admin\)/); assert.match(t, /person member@example\.test/); assert.match(t, /internal pilot tester/);
+  assert.ok(!/operator:op-2/.test(t), 'no raw operator id when a name exists');
+});
+
+test('goodwill shows as its own wallet bucket', async () => {
+  const P = JSON.parse(JSON.stringify(PERSON));
+  P.j.wallet = { granted: { coins: 10 }, goodwill: { coins: 200 }, purchased: { coins: 5 }, legacy: { coins: 0 }, total: { coins: 215 }, spendOrder: ['granted', 'goodwill', 'purchased', 'legacy'] };
+  const h = await signedIn([], 'viewer', { 'GET /api/admin/membership2/persons/P1': P });
+  await openPersonTab(h, 'coins');
+  const t = text(h.dom);
+  assert.match(t, /goodwill \(never expires\)/); assert.match(t, /200 coins/); assert.match(t, /granted → goodwill → purchased → legacy/);
+});
+
+test('sidebar: real buttons with aria-current; "live from GHL" is not claimed for Membership 2.0', () => {
+  const g = read('admin/gadmin.js');
+  assert.match(g, /<button type="button" class="nav__item nav__item--btn ' \+ \(view === id \? 'is-active' : ''\) \+ '" data-nav="' \+ id \+ '"' \+ \(view === id \? ' aria-current="page"' : ''\)/);
+  assert.ok(!/<div class="nav__item/.test(g), 'no div pretending to be a button');
+  assert.match(g, /view === 'membership2' \? 'Gaia Healers &middot; Membership 2\.0 database' : 'Gaia Healers &middot; live from GHL'/);
+  assert.match(read('admin/gadmin.css'), /\.side \.nav__item:focus-visible\{outline:2px solid/);
+});

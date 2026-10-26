@@ -27,6 +27,16 @@
   var REASON_MIN = 10;
   var STAGES = ['OFF', 'INTERNAL_PILOT', 'LIMITED_NEW_CUSTOMERS', 'ALL_NEW_CUSTOMERS'];
   var BILLING_OFF = 'Approved, but billing is not connected in this environment; nothing was charged or refunded.';
+  var PASSWORD_MIN = 12;
+  // Where a money record came from. The server decides it from the record itself
+  // (a verified Stripe webhook or a Stripe API answer with a Stripe id); this UI only labels it.
+  var SOURCE_BADGE = {
+    stripe_confirmed: ['Stripe-confirmed', 'm2-badge--ok'],
+    test_fixture: ['Test fixture', 'm2-badge--test'],
+    not_executed: ['Not executed (billing not connected)', 'm2-badge--warn'],
+    pending: ['Waiting for approval', 'm2-badge--warn'],
+    unconfirmed: ['Executed, no Stripe id', 'm2-badge--warn']
+  };
   var SCREENS = [
     ['overview', 'Overview'], ['members', 'Members'], ['payments', 'Payments'], ['coins', 'Coins'],
     ['legacy', 'Legacy & migration'], ['requests', 'Requests'], ['reconciliation', 'Reconciliation'],
@@ -50,7 +60,8 @@
   var S = {
     enabled: false,      // the probe answered 200
     signedIn: false,
-    me: null,            // { operator, permissions, idleExpiresAt }
+    me: null,            // { operator, permissions, idleExpiresAt, mustChangePassword }
+    env: null,           // { environment, stripeMode } from the server (status probe and /me)
     screen: 'overview',
     personId: null, personTab: 'identities',
     signinMsg: '',
@@ -125,6 +136,22 @@
     (window.crypto || window.msCrypto).getRandomValues(b);
     return 'cc_' + Array.prototype.map.call(b, function (x) { return ('0' + x.toString(16)).slice(-2); }).join('');
   }
+  function badge(source) {
+    var b = SOURCE_BADGE[source]; if (!b) return null;
+    return el('span', { class: 'm2-badge ' + b[1], text: b[0] });
+  }
+  // A member is shown by email, else GHL contact id, else the person id.
+  function personLabel(id, email, contactId) { return email || contactId || id || '—'; }
+  function operatorLabel(name, id) { return name || (id ? String(id).replace(/^operator:/, 'operator ') : '—'); }
+  // STAGING / TEST MODE: whenever the server is not production, or Stripe is not live.
+  function envBanner() {
+    var e = S.env; if (!e) return null;
+    var env = e.environment || 'unknown', stripe = e.stripeMode || 'unknown';
+    if (env === 'production' && stripe === 'live') return null;
+    var stripeText = stripe === 'live' ? 'Stripe live' : stripe === 'test' ? 'Stripe test mode: no real money moves' : 'Stripe not connected: no money moves';
+    return (env === 'production' ? 'TEST MODE' : 'STAGING / TEST MODE') + ' — environment: ' + env + ' · ' + stripeText;
+  }
+  function setEnv(j) { if (j && (j.environment || j.stripeMode)) S.env = { environment: j.environment, stripeMode: j.stripeMode }; }
   function can(action) { return !!(S.me && Array.isArray(S.me.permissions) && S.me.permissions.indexOf(action) >= 0); }
   function role() { return (S.me && S.me.operator && S.me.operator.role) || ''; }
   function isOwner() { return role() === 'owner'; }
@@ -177,14 +204,16 @@
       .then(function (r) {
         clearTimeout(t);
         if (r.status !== 200) return false;
-        return r.json().then(function (j) { S.enabled = !!(j && j.enabled); S.signedIn = !!(j && j.signedIn); return S.enabled; });
+        return r.json().then(function (j) { S.enabled = !!(j && j.enabled); S.signedIn = !!(j && j.signedIn); setEnv(j); return S.enabled; });
       })
       .catch(function () { clearTimeout(t); return false; });
   }
   function loadMe() {
     return call('GET', '/me').then(function (res) {
       if (res.status === 200 && res.j && res.j.operator) {
-        S.me = { operator: res.j.operator, permissions: res.j.permissions || [], idleExpiresAt: res.j.idleExpiresAt, expiresAt: res.j.expiresAt };
+        S.me = { operator: res.j.operator, permissions: res.j.permissions || [], idleExpiresAt: res.j.idleExpiresAt, expiresAt: res.j.expiresAt,
+          mustChangePassword: res.j.mustChangePassword === true || (res.j.operator && res.j.operator.mustChangePassword === true) };
+        setEnv(res.j);
         S.signedIn = true;
         var ms = res.j.idleExpiresAt ? new Date(res.j.idleExpiresAt).getTime() - Date.now() : 0;
         S.idleMs = ms > 60000 ? ms : 30 * 60000;
@@ -220,6 +249,7 @@
     if (!mounted()) return;
     clear(S.box);
     if (!S.signedIn || !S.me) return S.box.appendChild(signinView());
+    if (S.me.mustChangePassword) return S.box.appendChild(passwordView());
     S.box.appendChild(areaView());
   }
 
@@ -271,6 +301,50 @@
         el('h1', { id: 'm2signin-h', text: 'Gaia Healers Control Center' }),
         el('p', { text: 'Membership 2.0 needs your own operator sign-in, in addition to the console password.' }),
         form, msg
+      ])
+    ]);
+  }
+
+  // ================= first sign-in: change the initial password =================
+  function passwordView() {
+    var msg = el('div', { class: 'login__err', id: 'm2pwerr', role: 'alert', 'aria-live': 'assertive' });
+    var cur = el('input', { id: 'm2pwcur', type: 'password', autocomplete: 'current-password', required: true });
+    var nw = el('input', { id: 'm2pwnew', type: 'password', autocomplete: 'new-password', required: true, minlength: String(PASSWORD_MIN), 'aria-describedby': 'm2pwhint' });
+    var again = el('input', { id: 'm2pwagain', type: 'password', autocomplete: 'new-password', required: true });
+    var btn = el('button', { class: 'btn btn--primary btn--full', type: 'submit', text: 'Change password' });
+    var form = el('form', { class: 'm2-signin', novalidate: true, 'aria-labelledby': 'm2pw-h' }, [
+      field('m2pwcur', 'Current (initial) password', cur),
+      field('m2pwnew', 'New password', nw),
+      el('div', { class: 'm2-hint', id: 'm2pwhint', text: 'At least ' + PASSWORD_MIN + ' characters, different from the initial one.' }),
+      field('m2pwagain', 'New password again', again),
+      btn
+    ]);
+    form.addEventListener('submit', function (e) {
+      e.preventDefault();
+      msg.textContent = '';
+      if (!cur.value) { msg.textContent = 'Enter your current password.'; cur.focus(); return; }
+      if (nw.value.length < PASSWORD_MIN) { msg.textContent = 'The new password needs at least ' + PASSWORD_MIN + ' characters.'; nw.focus(); return; }
+      if (nw.value === cur.value) { msg.textContent = 'The new password must be different from the current one.'; nw.focus(); return; }
+      if (nw.value !== again.value) { msg.textContent = 'The two new passwords do not match.'; again.focus(); return; }
+      btn.disabled = true; btn.textContent = 'Changing…';
+      call('POST', '/password', { currentPassword: cur.value, newPassword: nw.value }).then(function (res) {
+        btn.disabled = false; btn.textContent = 'Change password';
+        cur.value = ''; nw.value = ''; again.value = '';
+        if (handledAuth(res)) return;
+        if (res.status === 200 && res.j.changed) { bridge.toast('Password changed.'); return loadMe().then(function () { paint(); }); }
+        if (res.status === 429 || (res.j && res.j.code === 'RATE_LIMITED')) { msg.textContent = 'Too many attempts. Wait a few minutes and try again.'; return; }
+        if (res.network || res.status >= 500) { msg.textContent = 'Could not reach the server. Try again.'; return; }
+        msg.textContent = 'Not changed: ' + plain((res.j && res.j.message) || 'refused') + '.';
+        cur.focus();
+      });
+    });
+    setTimeout(function () { if (document.body.contains(cur)) cur.focus(); }, 30);
+    return el('div', { class: 'm2 m2-signwrap' }, [
+      el('div', { class: 'login__card m2-signcard' }, [
+        el('h1', { id: 'm2pw-h', text: 'Choose your own password' }),
+        el('p', { text: 'This is your first sign-in (or your password was reset). Change the initial password before you can use the Membership 2.0 area.' }),
+        form, msg,
+        el('button', { class: 'btn btn--ghost btn--sm', type: 'button', text: 'Sign out', onclick: function () { signOut(false); } })
       ])
     ]);
   }
@@ -369,6 +443,7 @@
     promise.then(function (d) { if (d == null) return; clear(box); draw(d); }, function (res) { clear(box).appendChild(note(loadErr(res), 'm2-note--err')); });
   }
   function personLink(id, label) {
+    // Callers pass the email (else contact id) from the read model; the id is the last resort.
     if (!id) return '—';
     return el('button', { class: 'm2-link', type: 'button', text: label || String(id), onclick: function () { openPerson(id); } });
   }
@@ -527,7 +602,7 @@
   }
 
   // ================= action specs =================
-  function personName(p) { return p ? (p.email || p.personId) : 'this member'; }
+  function personName(p) { return p ? (p.email || p.contactId || p.personId) : 'this member'; }
 
   function actNote(person, done) {
     openAction({
@@ -546,6 +621,7 @@
         if (!(k > 0)) return ['Enter how many coins to add to ' + personName(person) + '’s wallet.'];
         return ['Adds ' + coinsText(k) + ' to ' + personName(person) + '’s wallet as a goodwill credit.',
           k > 500 ? 'Above 500 coins: this is sent for approval and is credited only after a second finance operator approves.' : 'It is credited immediately.',
+          'Goodwill coins are kept apart from the monthly allowance: they never expire and a payment refund never takes them back.',
           'No money is charged or paid out.'];
       },
       validate: function (v) { var k = Number(v.coins); return (Number.isInteger(k) && k >= 1 && k <= 10000) ? null : 'Coins must be a whole number from 1 to 10,000.'; },
@@ -662,25 +738,36 @@
       done: done
     });
   }
-  function describeParams(action, p) {
+  function describeParams(action, p, subject) {
     p = p || {};
-    if (action === 'coins.credit') return coinsText(p.coins) + ' to person ' + plain(p.personId);
-    if (action === 'payment.refund') return money(p.amountCents) + ' from payment ' + plain(p.ledgerId);
-    if (/^subscription\./.test(action)) return 'subscription ' + plain(p.subscriptionId);
+    var who = subject ? personLabel(subject.personId, subject.email, subject.contactId) : null;
+    if (action === 'coins.credit') return coinsText(p.coins) + ' to ' + (who || 'person ' + plain(p.personId));
+    if (action === 'payment.refund') return money(p.amountCents) + ' from payment ' + plain(p.ledgerId) + (who ? ' (' + who + ')' : '');
+    if (/^subscription\./.test(action)) return 'subscription ' + plain(p.subscriptionId) + (who ? ' (' + who + ')' : '');
+    if (/^pilot\./.test(action) && who) return who;
     if (action === 'launch.set') return 'stage → ' + plain(p.stage) + (p.limitedCap ? ' (limit ' + fmtInt(p.limitedCap) + ')' : '') + (p.approvalRef ? ', approval ' + p.approvalRef : '');
     return Object.keys(p).map(function (k) { return k + ': ' + plain(p[k]); }).join(' · ') || '—';
   }
   function decide(req, verb, done) {
     var label = ACTION_LABELS[req.action] || req.action;
     var path = '/requests/' + encodeURIComponent(req.id) + '/' + verb;
+    var what = describeParams(req.action, req.params, req.subject);
     var lines = {
-      approve: ['You approve: ' + label + ' — ' + describeParams(req.action, req.params) + '.', 'It runs as soon as you confirm.'],
-      reject: ['You reject: ' + label + ' — ' + describeParams(req.action, req.params) + '.', 'The request is closed and nothing happens.'],
-      cancel: ['You withdraw your own request: ' + label + '.', 'Nothing happens.']
+      approve: ['You approve: ' + label + ' — ' + what + '.', 'It runs as soon as you confirm. Your reason is stored with the approval.'],
+      reject: ['You reject: ' + label + ' — ' + what + '.', 'The request is closed and nothing happens.'],
+      cancel: ['You withdraw your own request: ' + label + '.', 'Nothing happens.'],
+      execute: ['You run this approved request again: ' + label + ' — ' + what + '.', 'Attempt ' + ((req.attempts || 1) + 1) + '. It runs once, now; if it fails again it is recorded and nothing retries by itself.']
     }[verb];
+    if (verb === 'execute') {
+      return openAction({
+        action: 'request.execute', title: 'Execute again', confirm: 'Execute now', reasonLabel: 'Reason for running it again',
+        lines: function () { return lines; },
+        send: function (body) { return call('POST', path, { reason: body.reason, requestId: body.requestId }); }, done: done
+      });
+    }
     openAction({
       action: 'request.' + verb, title: { approve: 'Approve request', reject: 'Reject request', cancel: 'Cancel my request' }[verb],
-      confirm: { approve: 'Approve', reject: 'Reject', cancel: 'Cancel request' }[verb], reasonLabel: 'Reason',
+      confirm: { approve: 'Approve', reject: 'Reject', cancel: 'Cancel request' }[verb], reasonLabel: verb === 'cancel' ? 'Reason' : 'Reason for your decision',
       lines: function () { return lines; },
       send: function (body) { return call('POST', path, { note: body.reason, requestId: body.requestId }); }, done: done
     });
@@ -692,7 +779,7 @@
     into(box, get('/overview'), function (o) {
       var launch = o.launch || {}, last = o.lastReconciliation;
       box.appendChild(el('div', { class: 'm2-stats' }, [
-        stat('MRR (Gaia-owned)', money(o.mrrCents)),
+        stat('MRR (Gaia Healers-owned)', money(o.mrrCents)),
         stat('Coins outstanding', coinsText(o.coinsOutstanding)),
         stat('Pending requests', fmtInt(o.pendingRequests)),
         stat('Open refund reviews', fmtInt(o.openRefundReviews)),
@@ -788,10 +875,12 @@
     } else if (tab === 'entitlements') add(autoTable(list(p, 'entitlements'), 'Entitlements'));
     else if (tab === 'coins') {
       var w = p.wallet || {};
-      var bal = el('div', { class: 'm2-stats' }, ['total', 'granted', 'purchased', 'legacy'].filter(function (k) { return w[k]; }).map(function (k) { return stat(k, coinsText(w[k].coins)); }));
+      var labels = { total: 'total', granted: 'granted (monthly, expires)', goodwill: 'goodwill (never expires)', purchased: 'purchased', legacy: 'legacy' };
+      var bal = el('div', { class: 'm2-stats' }, ['total', 'granted', 'goodwill', 'purchased', 'legacy'].filter(function (k) { return w[k]; }).map(function (k) { return stat(labels[k], coinsText(w[k].coins)); }));
       if (w.nextGrantAt) bal.appendChild(stat('next monthly grant', fmtWhen(w.nextGrantAt)));
-      add(card('Wallet', [bal], can('coins.credit') ? [actBtn('Credit coins', function () { actCredit(person, reload); })] : []));
-      add(card('Last 50 coin transactions', [autoTable(list(p, 'coinTransactions'), 'Coin transactions')]));
+      var order = Array.isArray(w.spendOrder) ? note('Coins are spent in this order: ' + w.spendOrder.join(' → ') + '.') : null;
+      add(card('Wallet', [bal, order], can('coins.credit') ? [actBtn('Credit coins', function () { actCredit(person, reload); })] : []));
+      add(card('Last 50 coin transactions', [coinTable(list(p, 'coinTransactions'), false)]));
     } else if (tab === 'payments') add(paymentsTable(list(p, 'payments'), reload));
     else if (tab === 'legacy') {
       add(note('Legacy GHL/PayPal memberships are read-only here: nothing in this area changes them.'));
@@ -812,7 +901,7 @@
     else if (tab === 'notes') {
       var notes = list(p, 'notes');
       add(card('Notes', [notes.length ? el('ul', { class: 'm2-notes' }, notes.map(function (n) {
-        return el('li', {}, [el('div', { class: 'm2-sub', text: fmtWhen(n.created_at) + ' · ' + plain(n.operator_name || n.operator_id) }), el('div', { text: plain(n.body) })]);
+        return el('li', {}, [el('div', { class: 'm2-sub', text: fmtWhen(n.created_at) + ' · ' + operatorLabel(n.operator_name, n.operator_id) }), el('div', { text: plain(n.body) })]);
       })) : note('No notes yet.')], can('note.add') ? [actBtn('Add note', function () { actNote(person, reload); })] : []));
     } else if (tab === 'audit') add(auditTable(list(p, 'audit')));
   }
@@ -823,7 +912,8 @@
       ['Type', function (r) { return plain(r.entry_type); }],
       ['Amount', function (r) { return money(r.amount_cents); }],
       ['Provider', function (r) { return plain(r.provider); }],
-      ['Person', function (r) { var pid = r.person_id; return pid ? personLink(pid) : '—'; }],
+      ['Source', function (r) { return badge(r.source) || '—'; }],
+      ['Person', function (r) { var pid = r.person_id; return pid ? personLink(pid, personLabel(pid, r.person_email, r.person_contact_id)) : '—'; }],
       ['Actions', function (r) {
         // payment.refund needs a Stripe charge row (charge or invoice object).
         var charge = r.provider === 'stripe' && r.entry_type === 'charge' && num(r.amount_cents) > 0;
@@ -834,7 +924,7 @@
   function offersTable(rows, reload) {
     return table(rows, [
       ['Offered', function (o) { return fmtWhen(o.offered_at); }],
-      ['Person', function (o) { var pid = o.person_id; return pid ? personLink(pid) : '—'; }],
+      ['Person', function (o) { var pid = o.person_id; return pid ? personLink(pid, personLabel(pid, o.person_email, o.person_contact_id)) : '—'; }],
       ['Target', function (o) { return (o.from_tier ? plain(o.from_tier) + ' → ' : '') + plain(o.target_plan) + ' / ' + plain(o.target_interval); }],
       ['Status', function (o) { return plain(o.status); }],
       ['Billing starts', function (o) { return fmtWhen(o.billing_starts_at); }],
@@ -850,11 +940,25 @@
   function auditTable(rows) {
     return table(rows, [
       ['When', function (r) { return fmtWhen(r.occurred_at); }],
-      ['Actor', function (r) { return plain(r.actor_id) + ' (' + plain(r.actor_type) + ')'; }],
+      ['Actor', function (r) { return (r.actor_name || plain(r.actor_id)) + ' (' + plain(r.actor_type) + ')'; }],
       ['Action', function (r) { return plain(r.action); }],
-      ['Entity', function (r) { return plain(r.entity_type) + ' ' + plain(r.entity_id); }],
-      ['Reason', function (r) { return plain((r.after && r.after.reason) || (r.before && r.before.reason)); }]
+      ['Entity', function (r) { return plain(r.entity_type) + ' ' + (r.entity_label || plain(r.entity_id)); }],
+      ['Reason', function (r) { return plain(r.reason || (r.after && r.after.reason) || (r.before && r.before.reason)); }]
     ], 'Audit log');
+  }
+
+  function coinTable(rows, withPerson) {
+    var cols = [
+      ['When', function (r) { return fmtWhen(r.created_at); }],
+      ['Bucket', function (r) { return plain(r.balance_type); }],
+      ['Change', function (r) { var d = num(r.delta_coins); return d == null ? '—' : (d > 0 ? '+' : '') + fmtInt(d); }],
+      ['Balance after', function (r) { return fmtInt(r.balance_after); }],
+      ['What', function (r) { return plain(r.kind) + ' · ' + plain(r.operation_reason || r.reason); }],
+      ['Source', function (r) { return badge(r.source) || '—'; }],
+      ['By', function (r) { return operatorLabel(r.actor_name, r.actor); }]
+    ];
+    if (withPerson) cols.splice(1, 0, ['Person', function (r) { return r.person_id ? personLink(r.person_id, personLabel(r.person_id, r.person_email, r.person_contact_id)) : '—'; }]);
+    return table(rows, cols, 'Coin transactions');
   }
 
   function screenPayments(panel) {
@@ -885,7 +989,7 @@
       into(reviews, get('/refund-reviews?status=open'), function (d) {
         reviews.appendChild(table(list(d, 'items'), [
           ['Opened', function (r) { return fmtWhen(r.created_at); }],
-          ['Person', function (r) { return personLink(r.person_id); }],
+          ['Person', function (r) { return personLink(r.person_id, personLabel(r.person_id, r.person_email, r.person_contact_id)); }],
           ['Refunded', function (r) { return coinsText(r.coins_refunded); }],
           ['Not recovered', function (r) { return coinsText(r.coins_unrecovered, r.value_cents_unrecovered); }],
           ['Actions', function (r) { return can('refund_review.resolve') ? actBtn('Resolve', function () { actResolveReview(r, loadReviews); }) : '—'; }]
@@ -896,8 +1000,8 @@
     function load(cursor) {
       var holder = el('div', {}); tx.appendChild(holder);
       into(holder, get('/coins' + qs({ limit: 50, cursor: cursor })), function (d) {
-        if (!cursor) { clear(totals); var t = d.totals || {}; totals.appendChild(el('div', { class: 'm2-stats' }, [stat('wallets', fmtInt(t.wallets)), stat('granted', coinsText(t.granted)), stat('purchased', coinsText(t.purchased)), stat('legacy', coinsText(t.legacy))])); }
-        holder.appendChild(autoTable(list(d, 'items'), 'Coin transactions'));
+        if (!cursor) { clear(totals); var t = d.totals || {}; totals.appendChild(el('div', { class: 'm2-stats' }, [stat('wallets', fmtInt(t.wallets)), stat('granted', coinsText(t.granted)), stat('goodwill', coinsText(t.goodwill)), stat('purchased', coinsText(t.purchased)), stat('legacy', coinsText(t.legacy))])); }
+        holder.appendChild(coinTable(list(d, 'items'), true));
         moreButton(tx, d.next, load);
       });
     }
@@ -916,7 +1020,7 @@
         var f = d.freshness || {};
         leg.appendChild(note('Mirror last seen ' + fmtWhen(f.lastSeenAt) + (f.ageSeconds != null ? ' (' + Math.round(f.ageSeconds / 3600) + ' h ago)' : '') + ' · ' + fmtInt(d.total) + ' rows' + (f.lastRun ? ' · last reader run ' + fmtWhen(f.lastRun.started_at) + (f.lastRun.complete ? '' : ' (incomplete)') : '')));
         leg.appendChild(table(list(d, 'items'), [
-          ['Person', function (r) { var pid = r.person_id; return pid ? personLink(pid) : plain(r.external_contact_id); }],
+          ['Person', function (r) { var pid = r.person_id; return pid ? personLink(pid, personLabel(pid, r.person_email, r.external_contact_id)) : plain(r.external_contact_id); }],
           ['Tier', function (r) { return plain(r.tier); }],
           ['Mapping', function (r) { return plain(r.mapping); }],
           ['Status (GHL)', function (r) { return plain(r.reported_status); }],
@@ -932,7 +1036,32 @@
   }
 
   function screenRequests(panel) {
-    var box = el('div', {}); panel.appendChild(box);
+    var box = el('div', {}), again = el('div', {});
+    panel.appendChild(card('Waiting for a decision', [box]));
+    panel.appendChild(card('Approved but not executed, or failed', [note('These ran once and did not complete. Nothing retries by itself: an operator with the finance role (or the approver role, if higher) can run one again, with a reason. A request that was executed can never run again.'), again]));
+    function loadAgain() {
+      into(again, get('/requests?status=retryable'), function (d) {
+        var rows = list(d, 'items').filter(function (r) { return r.status === 'failed' || r.status === 'approved_not_executed'; });
+        if (!rows.length) { again.appendChild(note('Nothing to run again.')); return; }
+        rows.forEach(function (r) {
+          var by = r.requestedBy || {}, dec = r.decidedBy || {}, last = r.lastAttempt || {};
+          var acts = el('div', { class: 'm2-acts' });
+          if (r.canExecute) acts.appendChild(actBtn('Execute again', function () { decide(r, 'execute', loadAgain); }));
+          else acts.appendChild(el('span', { class: 'm2-sub', text: r.own && r.dual ? 'Your own request: a second operator runs it again.' : 'Needs the ' + plain(r.executeRole || 'finance') + ' role to run again.' }));
+          again.appendChild(el('article', { class: 'm2-card m2-req' }, [
+            el('h3', {}, [ACTION_LABELS[r.action] || plain(r.action), ' ', badge(r.money) || el('span', { class: 'm2-badge m2-badge--warn', text: r.status === 'failed' ? 'Failed' : 'Not executed (billing not connected)' })]),
+            el('div', { class: 'm2-req__what', text: describeParams(r.action, r.params, r.subject) }),
+            el('dl', { class: 'm2-kv' }, [
+              el('dt', { text: 'Requested by' }), el('dd', { text: plain(by.displayName || by.id) }),
+              el('dt', { text: 'Approved by' }), el('dd', { text: r.dual ? plain(dec.displayName || dec.id) : '— (direct action)' }),
+              el('dt', { text: 'Why' }), el('dd', { text: plain(r.reason) }),
+              el('dt', { text: 'Attempts' }), el('dd', { text: fmtInt(r.attempts) + (last.outcome ? ' · last: ' + plain(last.outcome) + (last.code ? ' (' + last.code + ')' : '') + ' by ' + plain(last.executedBy && last.executedBy.displayName) + ', ' + fmtWhen(last.finishedAt || last.startedAt) : '') })
+            ]),
+            acts
+          ]));
+        });
+      });
+    }
     function load() {
       into(box, get('/requests?status=pending'), function (d) {
         var rows = list(d, 'items');
@@ -953,8 +1082,9 @@
           }
           box.appendChild(el('article', { class: 'm2-card m2-req' }, [
             el('h3', { text: ACTION_LABELS[r.action] || plain(r.action) }),
-            el('div', { class: 'm2-req__what', text: describeParams(r.action, r.params) }),
+            el('div', { class: 'm2-req__what', text: describeParams(r.action, r.params, r.subject) }),
             el('dl', { class: 'm2-kv' }, [
+              r.subject ? el('dt', { text: 'Member' }) : null, r.subject ? el('dd', { text: personLabel(r.subject.personId, r.subject.email, r.subject.contactId) }) : null,
               el('dt', { text: 'Requested by' }), el('dd', { text: who + (mine ? ' (you)' : '') }),
               el('dt', { text: 'Why' }), el('dd', { text: plain(r.reason) }),
               el('dt', { text: 'Requested' }), el('dd', { text: fmtWhen(r.requestedAt) }),
@@ -966,7 +1096,7 @@
         });
       });
     }
-    load();
+    load(); loadAgain();
   }
 
   function screenReconciliation(panel) {
@@ -998,6 +1128,7 @@
     panel.appendChild(card('Dead letters and failed webhooks', [dl]));
     into(h, get('/health'), function (d) {
       var x = d;
+      setEnv(x);
       if (x.stripeConnected === false) h.appendChild(note('Stripe is not connected in this environment: refunds and immediate cancellations end as “approved, not executed”.', 'm2-note--warn'));
       h.appendChild(kv(x));
     });
@@ -1026,17 +1157,17 @@
         box.appendChild(card('History', [table(list(d, 'history'), [
           ['When', function (r) { return fmtWhen(r.changed_at); }],
           ['From → to', function (r) { return plain(r.from_stage) + ' → ' + plain(r.to_stage); }],
-          ['By', function (r) { return plain(r.changed_by); }],
+          ['By', function (r) { return operatorLabel(r.changed_by_name, r.changed_by); }],
           ['Approval', function (r) { return plain(r.approval_ref); }],
           ['Reason', function (r) { return plain(r.reason); }]
         ], 'Launch history')]));
         var pilots = list(d, 'pilots');
         var pHead = owner && can('pilot.add') ? [actBtn('Add pilot member', function () { actPilot(true, null, null, load); })] : [];
         box.appendChild(card('Pilot list', [table(pilots, [
-          ['Person', function (r) { var pid = r.person_id; return personLink(pid); }],
+          ['Person', function (r) { var pid = r.person_id; return personLink(pid, personLabel(pid, r.person_email, r.person_contact_id)); }],
           ['Added', function (r) { return fmtWhen(r.added_at); }],
-          ['Added by', function (r) { return plain(r.added_by); }],
-          ['Actions', function (r) { var pid = r.person_id; return owner && can('pilot.remove') ? actBtn('Remove', function () { actPilot(false, pid, pid, load); }, true) : '—'; }]
+          ['Added by', function (r) { return operatorLabel(r.added_by_name, r.added_by); }],
+          ['Actions', function (r) { var pid = r.person_id; return owner && can('pilot.remove') ? actBtn('Remove', function () { actPilot(false, pid, personLabel(pid, r.person_email, r.person_contact_id), load); }, true) : '—'; }]
         ], 'Pilot list')], pHead));
       });
     }
@@ -1048,9 +1179,11 @@
     init: function (b) { bridge = Object.assign(bridge, b || {}); },
     probe: probe,
     enabled: function () { return S.enabled; },
+    // The STAGING / TEST MODE text for the console shell (null in production with live Stripe).
+    banner: function () { return S.enabled ? envBanner() : null; },
     mount: mount,
     signOut: signOut,
     // exposed for tests/control-center-membership2.test.cjs
-    _test: { outcome: outcome, retryable: retryable, money: money, coinsText: coinsText, newRequestId: newRequestId, openAction: openAction, state: S, el: el }
+    _test: { outcome: outcome, retryable: retryable, money: money, coinsText: coinsText, newRequestId: newRequestId, openAction: openAction, state: S, el: el, envBanner: envBanner, badge: badge }
   };
 })();

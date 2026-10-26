@@ -117,7 +117,8 @@
   function shell() {
     function item(id, label, icon, ext) {
       if (ext) return '<a class="nav__item" href="' + ext + '" target="_blank" rel="noopener">' + svg(icon, 'nav__ico') + label + '<span class="nav__ext">' + svg('ext') + '</span></a>';
-      return '<div class="nav__item ' + (view === id ? 'is-active' : '') + '" data-nav="' + id + '">' + svg(icon, 'nav__ico') + label + '</div>';
+      // Real buttons: Tab reaches them, Enter and Space activate them, and the current section is announced.
+      return '<button type="button" class="nav__item nav__item--btn ' + (view === id ? 'is-active' : '') + '" data-nav="' + id + '"' + (view === id ? ' aria-current="page"' : '') + '>' + svg(icon, 'nav__ico') + label + '</button>';
     }
     var titles = {
       contacts: ['Contacts', 'Search, filter by tag, and edit any contact’s tags & survey answers'],
@@ -143,15 +144,17 @@
       + item('membership', 'Membership', 'member')
       + item('events', 'Events', 'event')
       + item('system', 'System Map', 'system')
-      + (M2 && M2.enabled() ? '<button type="button" class="nav__item nav__item--btn ' + (view === 'membership2' ? 'is-active' : '') + '" data-nav="membership2">' + svg('lock', 'nav__ico') + 'Membership 2.0</button>' : '')
+      + (M2 && M2.enabled() ? item('membership2', 'Membership 2.0', 'lock') : '')
       + '    <div class="nav__sp"></div>'
-      + '    <button class="nav__item alertbtn" id="alertbtn">' + svg('lock', 'nav__ico')
+      + '    <button type="button" class="nav__item alertbtn" id="alertbtn">' + svg('lock', 'nav__ico')
       + '<span>System Alerts</span><span class="alertbtn__n" id="alertn"></span></button>'
-      + '    <div class="nav__item" id="changepw">' + svg('lock', 'nav__ico') + 'Change password</div>'
-      + '    <div class="nav__item" id="logout">' + svg('logout', 'nav__ico') + 'Sign out</div>'
-      + '    <div class="side__foot">Gaia Healers &middot; live from GHL</div>'
+      + '    <button type="button" class="nav__item nav__item--btn" id="changepw">' + svg('lock', 'nav__ico') + 'Change password</button>'
+      + '    <button type="button" class="nav__item nav__item--btn" id="logout">' + svg('logout', 'nav__ico') + 'Sign out</button>'
+      // Contacts and Membership really are read live from GHL; the Membership 2.0 area is not (its own database).
+      + '    <div class="side__foot">' + (view === 'membership2' ? 'Gaia Healers &middot; Membership 2.0 database' : 'Gaia Healers &middot; live from GHL') + '</div>'
       + '  </aside>'
       + '  <main class="main">'
+      + (M2 && M2.banner() ? '    <div class="envbanner" role="status">' + esc(M2.banner()) + '</div>' : '')
       + '    <div class="top"><div><h2>' + esc(t[0]) + '</h2><div class="sub">' + esc(t[1]) + '</div></div><div class="top__spacer"></div><div id="topright"></div></div>'
       + '    <div class="content" id="content"></div>'
       + '  </main>'

@@ -81,7 +81,6 @@
     return n;
   }
   function clear(n) { while (n && n.firstChild) n.removeChild(n.firstChild); return n; }
-  function pick(o) { if (!o) return null; for (var i = 1; i < arguments.length; i++) { var v = o[arguments[i]]; if (v != null && v !== '') return v; } return null; }
   function list(o) { for (var i = 1; i < arguments.length; i++) { var v = o && o[arguments[i]]; if (Array.isArray(v)) return v; } return []; }
   function num(v) { return v == null || v === '' || isNaN(Number(v)) ? null : Number(v); }
   function fmtInt(v) { v = num(v); return v == null ? '—' : v.toLocaleString('en-US'); }
@@ -141,12 +140,12 @@
       return r.json().catch(function () { return {}; }).then(function (j) { return { status: r.status, j: j || {}, network: false }; });
     }, function () { return { status: 0, j: {}, network: true }; });
   }
-  // A 401 is either our operator session ending (AUTH_REQUIRED) or the
-  // shared-password session ending underneath us. Each goes back to its own sign-in.
+  // A 401 is either the console sign-in ending underneath us (reason
+  // 'admin_auth_required') or our operator session ending. Each goes back to its own sign-in.
   function handledAuth(res) {
     if (res.status !== 401) return false;
-    if (res.j && res.j.code === 'AUTH_REQUIRED') signedOut('Your operator session has ended (signed out elsewhere, expired, or idle for too long). Sign in again.');
-    else bridge.adminExpired('Your session expired — sign in again.');
+    if (res.j && res.j.reason === 'admin_auth_required') bridge.adminExpired('Your session expired — sign in again.');
+    else signedOut('Your operator session has ended (signed out elsewhere, expired, or idle for too long). Sign in again.');
     return true;
   }
   function touch() {
@@ -185,7 +184,7 @@
   function loadMe() {
     return call('GET', '/me').then(function (res) {
       if (res.status === 200 && res.j && res.j.operator) {
-        S.me = { operator: res.j.operator, permissions: res.j.permissions || [], idleExpiresAt: res.j.idleExpiresAt };
+        S.me = { operator: res.j.operator, permissions: res.j.permissions || [], idleExpiresAt: res.j.idleExpiresAt, expiresAt: res.j.expiresAt };
         S.signedIn = true;
         var ms = res.j.idleExpiresAt ? new Date(res.j.idleExpiresAt).getTime() - Date.now() : 0;
         S.idleMs = ms > 60000 ? ms : 30 * 60000;
@@ -254,7 +253,7 @@
           S.signinMsg = '';
           return loadMe().then(function (ok) { if (!ok) msg.textContent = 'Signed in, but your operator profile could not be loaded. Try again.'; else paint(); });
         }
-        if (res.status === 401 && !(res.j && res.j.code)) { bridge.adminExpired('Your session expired — sign in again.'); return; }
+        if (res.status === 401 && res.j && res.j.reason === 'admin_auth_required') { bridge.adminExpired('Your session expired — sign in again.'); return; }
         if (res.status === 429 || (res.j && res.j.code === 'RATE_LIMITED')) {
           var mins = res.j && res.j.retryAfterSeconds ? Math.ceil(res.j.retryAfterSeconds / 60) : 15;
           msg.textContent = 'Too many failed sign-ins. Sign-in is locked for about ' + mins + ' minute' + (mins === 1 ? '' : 's') + '. Try again later.';
@@ -437,7 +436,9 @@
       inp.addEventListener('input', drawLines); inp.addEventListener('change', drawLines);
       fieldsBox.appendChild(el('div', { class: 'm2-field' }, [el('label', { for: id, text: f.label }), inp, f.hint ? el('div', { class: 'm2-hint', id: id + '-h', text: f.hint }) : null]));
     });
+    // note.add is the one action whose own text is the reason (contract section 4).
     var reason = el('textarea', { id: 'm2f-reason', rows: '3', required: true, 'aria-describedby': 'm2f-reason-h' });
+    var reasonOf = spec.reasonFrom ? function () { return (inputs[spec.reasonFrom].value || '').trim(); } : function () { return reason.value.trim(); };
     var reasonHint = el('div', { class: 'm2-hint', id: 'm2f-reason-h', text: 'Required, at least ' + REASON_MIN + ' characters. It is stored in the audit log with your name.' });
     var msg = el('div', { class: 'm2-dlg__msg', role: 'status', 'aria-live': 'polite' });
     var ok = el('button', { class: 'btn btn--primary', type: 'submit', text: spec.confirm || 'Confirm' });
@@ -448,7 +449,7 @@
       conseq,
       spec.dual ? note('This needs a second approver (' + spec.dual + ' role). It is sent for approval and nothing happens until they approve.', 'm2-note--warn') : null,
       fieldsBox,
-      el('div', { class: 'm2-field' }, [el('label', { for: 'm2f-reason', text: spec.reasonLabel || 'Reason' }), reason, reasonHint]),
+      spec.reasonFrom ? null : el('div', { class: 'm2-field' }, [el('label', { for: 'm2f-reason', text: spec.reasonLabel || 'Reason' }), reason, reasonHint]),
       msg,
       el('div', { class: 'm2-dlg__btns' }, [cancel, ok])
     ]);
@@ -473,8 +474,8 @@
       msg.textContent = ''; msg.className = 'm2-dlg__msg';
       var body = sentBody;
       if (!body) {
-        var r = reason.value.trim();
-        if (r.length < REASON_MIN) { msg.textContent = 'Write a reason of at least ' + REASON_MIN + ' characters.'; msg.className = 'm2-dlg__msg is-err'; reason.focus(); return; }
+        var r = reasonOf();
+        if (r.length < REASON_MIN) { msg.textContent = spec.reasonFrom ? 'Write at least ' + REASON_MIN + ' characters.' : 'Write a reason of at least ' + REASON_MIN + ' characters.'; msg.className = 'm2-dlg__msg is-err'; (spec.reasonFrom ? inputs[spec.reasonFrom] : reason).focus(); return; }
         var problem = spec.validate ? spec.validate(values()) : null;
         if (problem) { msg.textContent = problem; msg.className = 'm2-dlg__msg is-err'; return; }
         body = { action: spec.action, params: spec.params ? spec.params(values()) : {}, reason: r, requestId: requestId };
@@ -526,15 +527,14 @@
   }
 
   // ================= action specs =================
-  function personName(p) { return p ? (pick(p, 'email', 'primaryEmail') || (list(p, 'emails')[0]) || pick(p, 'personId', 'id')) : 'this member'; }
+  function personName(p) { return p ? (p.email || p.personId) : 'this member'; }
 
   function actNote(person, done) {
     openAction({
-      action: 'note.add', title: 'Add a note', confirm: 'Add note',
-      fields: [{ name: 'body', label: 'Note', type: 'textarea' }],
+      action: 'note.add', title: 'Add a note', confirm: 'Add note', reasonFrom: 'body',
+      fields: [{ name: 'body', label: 'Note', type: 'textarea', hint: 'At least ' + REASON_MIN + ' characters. The note is its own reason in the audit log.' }],
       lines: function () { return ['A note is added to ' + personName(person) + '. Notes are permanent and cannot be edited or deleted.', 'Nothing else changes for the member.']; },
-      validate: function (v) { return v.body.trim() ? null : 'Write the note.'; },
-      params: function (v) { return { personId: pick(person, 'personId', 'id'), body: v.body.trim() }; }, done: done
+      params: function (v) { return { personId: person.personId, body: v.body.trim() }; }, done: done
     });
   }
   function actCredit(person, done) {
@@ -549,46 +549,46 @@
           'No money is charged or paid out.'];
       },
       validate: function (v) { var k = Number(v.coins); return (Number.isInteger(k) && k >= 1 && k <= 10000) ? null : 'Coins must be a whole number from 1 to 10,000.'; },
-      params: function (v) { return { personId: pick(person, 'personId', 'id'), coins: Number(v.coins) }; }, done: done
+      params: function (v) { return { personId: person.personId, coins: Number(v.coins) }; }, done: done
     });
   }
-  function subLabel(s) { return (pick(s, 'planName', 'plan_name', 'planKey', 'plan_key', 'plan') || 'subscription') + ' (' + (pick(s, 'billingInterval', 'billing_interval', 'interval') || '—') + ')'; }
+  function subLabel(s) { return (s.plan_name || s.plan_key || 'subscription') + ' (' + (s.billing_interval || '—') + ')'; }
   function actCancelEnd(s, person, done) {
-    var end = pick(s, 'currentPeriodEnd', 'current_period_end');
+    var end = s.current_period_end;
     openAction({
       action: 'subscription.cancel_period_end', title: 'Cancel at period end', confirm: 'Cancel at period end',
       lines: function () { return ['The ' + subLabel(s) + ' for ' + personName(person) + ' stops renewing.', 'The member keeps access until ' + (end ? fmtWhen(end) : 'the end of the current period (date not reported)') + '. Nothing is refunded.']; },
-      params: function () { return { subscriptionId: pick(s, 'id', 'subscriptionId') }; }, done: done
+      params: function () { return { subscriptionId: s.id }; }, done: done
     });
   }
   function actCancelNow(s, person, done) {
     openAction({
       action: 'subscription.cancel_now', title: 'Cancel immediately', confirm: 'Send for approval', dual: 'finance',
-      lines: function () { return ['The ' + subLabel(s) + ' for ' + personName(person) + ' ends at the moment it is approved: access and billing stop then, not at period end' + (pick(s, 'currentPeriodEnd', 'current_period_end') ? ' (' + fmtWhen(pick(s, 'currentPeriodEnd', 'current_period_end')) + ')' : '') + '.', 'This action does not refund anything; a refund is a separate request.']; },
-      params: function () { return { subscriptionId: pick(s, 'id', 'subscriptionId') }; }, done: done
+      lines: function () { return ['The ' + subLabel(s) + ' for ' + personName(person) + ' ends at the moment it is approved: access and billing stop then, not at period end' + (s.current_period_end ? ' (' + fmtWhen(s.current_period_end) + ')' : '') + '.', 'This action does not refund anything; a refund is a separate request.']; },
+      params: function () { return { subscriptionId: s.id }; }, done: done
     });
   }
   function actRefund(p, done) {
-    var full = Math.abs(num(pick(p, 'amountCents', 'amount_cents')) || 0);
+    var full = Math.abs(num(p.amount_cents) || 0);
     openAction({
       action: 'payment.refund', title: 'Refund a payment', confirm: 'Send for approval', dual: 'finance',
       fields: [{ name: 'dollars', label: 'Amount to refund in $', type: 'number', min: 0.01, max: (full / 100).toFixed(2), step: '0.01', value: (full / 100).toFixed(2), hint: 'Full amount is ' + money(full) + '. Lower it for a partial refund.' }],
       lines: function (v) {
         var c = Math.round(Number(v.dollars) * 100);
-        return ['Refunds ' + (c > 0 ? money(c) : '—') + ' of the ' + money(full) + ' payment from ' + fmtWhen(pick(p, 'occurredAt', 'occurred_at')) + ' to the original card, through Stripe.',
+        return ['Refunds ' + (c > 0 ? money(c) : '—') + ' of the ' + money(full) + ' payment from ' + fmtWhen(p.occurred_at) + ' to the original card, through Stripe.',
           'The money leaves only after a second finance operator approves. If coins were bought with it, unspent coins are taken back.'];
       },
       validate: function (v) { var c = Math.round(Number(v.dollars) * 100); return (c >= 1 && c <= full) ? null : 'The amount must be between $0.01 and ' + dollars(full) + '.'; },
-      params: function (v) { return { ledgerId: pick(p, 'id', 'ledgerId'), amountCents: Math.round(Number(v.dollars) * 100) }; }, done: done
+      params: function (v) { return { ledgerId: p.id, amountCents: Math.round(Number(v.dollars) * 100) }; }, done: done
     });
   }
   function actResolveReview(r, done) {
     openAction({
       action: 'refund_review.resolve', title: 'Resolve a coin refund review', confirm: 'Resolve',
       fields: [{ name: 'resolution', label: 'Resolution (what was decided)', type: 'textarea' }],
-      lines: function () { return ['Marks this review resolved: ' + coinsText(pick(r, 'coinsUnrecovered', 'coins_unrecovered'), pick(r, 'valueCentsUnrecovered', 'value_cents_unrecovered')) + ' could not be taken back after a refund.', 'No coins or money move; this records the decision.']; },
+      lines: function () { return ['Marks this review resolved: ' + coinsText(r.coins_unrecovered, r.value_cents_unrecovered) + ' could not be taken back after a refund.', 'No coins or money move; this records the decision.']; },
       validate: function (v) { return v.resolution.trim().length >= 5 ? null : 'Write the resolution (at least 5 characters).'; },
-      params: function (v) { return { reviewId: pick(r, 'id', 'reviewId'), resolution: v.resolution.trim() }; }, done: done
+      params: function (v) { return { reviewId: r.id, resolution: v.resolution.trim() }; }, done: done
     });
   }
   function actOfferCreate(person, legacy, done) {
@@ -598,15 +598,15 @@
         { name: 'plan', label: 'Target plan', type: 'select', options: [['standard', 'Standard'], ['professional', 'Professional'], ['inner_circle', 'Inner Circle']] },
         { name: 'interval', label: 'Billing interval', type: 'select', options: [['month', 'Monthly'], ['year', 'Yearly']] }
       ],
-      lines: function (v) { return ['Invites ' + personName(person) + ' to move from their legacy ' + (pick(legacy, 'tier') || '') + ' membership to ' + v.plan + ' (' + v.interval + ').', 'It is an invitation only: nothing is charged and the legacy GHL/PayPal subscription is not touched.']; },
-      params: function (v) { return { personId: pick(person, 'personId', 'id'), legacyMembershipId: pick(legacy, 'id'), targetPlanKey: v.plan, interval: v.interval }; }, done: done
+      lines: function (v) { return ['Invites ' + personName(person) + ' to move from their legacy ' + (legacy.tier || '') + ' membership to ' + v.plan + ' (' + v.interval + ').', 'It is an invitation only: nothing is charged and the legacy GHL/PayPal subscription is not touched.']; },
+      params: function (v) { return { personId: person.personId, legacyMembershipId: legacy.id, targetPlanKey: v.plan, interval: v.interval }; }, done: done
     });
   }
   function actOfferWithdraw(o, done) {
     openAction({
       action: 'offer.withdraw', title: 'Withdraw a migration offer', confirm: 'Withdraw',
-      lines: function () { return ['The open offer (' + plain(pick(o, 'status')) + ') is withdrawn and the member can no longer accept it.', 'Nothing is charged; the legacy subscription is not touched.']; },
-      params: function () { return { offerId: pick(o, 'id', 'offerId') }; }, done: done
+      lines: function () { return ['The open offer (' + plain(o.status) + ') is withdrawn and the member can no longer accept it.', 'Nothing is charged; the legacy subscription is not touched.']; },
+      params: function () { return { offerId: o.id }; }, done: done
     });
   }
   function actConfirmLegacy(o, done) {
@@ -615,14 +615,14 @@
       fields: [{ name: 'evidence', label: 'Evidence (what you saw in GHL/PayPal, with date)', type: 'textarea' }],
       lines: function () { return ['Records that the old GHL/PayPal subscription was cancelled by hand, and completes the migration.', 'This does not cancel anything itself: do the cancellation in GHL/PayPal first.']; },
       validate: function (v) { return v.evidence.trim().length >= 10 ? null : 'Describe the evidence (at least 10 characters).'; },
-      params: function (v) { return { offerId: pick(o, 'id', 'offerId'), evidence: v.evidence.trim() }; }, done: done
+      params: function (v) { return { offerId: o.id, evidence: v.evidence.trim() }; }, done: done
     });
   }
   function actException(o, done) {
     openAction({
       action: 'migration.authorize_exception', title: 'Authorize a migration exception', confirm: 'Send for approval', dual: 'owner',
       lines: function () { return ['Lets this migration offer go ahead even though a safeguard stopped it.', 'It runs only after an owner approves.']; },
-      params: function () { return { offerId: pick(o, 'id', 'offerId') }; }, done: done
+      params: function () { return { offerId: o.id }; }, done: done
     });
   }
   function actPilot(add, personId, label, done) {
@@ -689,20 +689,21 @@
   // ================= screens =================
   function screenOverview(panel) {
     var box = el('div', {}); panel.appendChild(box);
-    into(box, get('/overview'), function (d) {
-      var o = d.overview || d;
-      var tiles = el('div', { class: 'm2-stats' });
-      Object.keys(o).forEach(function (k) {
-        var v = o[k];
-        if (k === 'ok' || v == null || typeof v === 'object') return;
-        tiles.appendChild(stat(k.replace(/_/g, ' ').replace(/([a-z])([A-Z])/g, '$1 $2'), /(Cents|_cents)$/.test(k) ? money(v) : (typeof v === 'number' ? fmtInt(v) : plain(v))));
-      });
-      box.appendChild(tiles);
-      Object.keys(o).forEach(function (k) {
-        var v = o[k];
-        if (!v || typeof v !== 'object') return;
-        box.appendChild(card(k.replace(/([a-z])([A-Z])/g, '$1 $2'), [Array.isArray(v) ? autoTable(v, k) : kv(v)]));
-      });
+    into(box, get('/overview'), function (o) {
+      var launch = o.launch || {}, last = o.lastReconciliation;
+      box.appendChild(el('div', { class: 'm2-stats' }, [
+        stat('MRR (Gaia-owned)', money(o.mrrCents)),
+        stat('Coins outstanding', coinsText(o.coinsOutstanding)),
+        stat('Pending requests', fmtInt(o.pendingRequests)),
+        stat('Open refund reviews', fmtInt(o.openRefundReviews)),
+        stat('Open alerts', fmtInt(o.openAlerts)),
+        stat('Launch stage', plain(launch.effective) + (launch.stored && launch.stored !== launch.effective ? ' (stored ' + launch.stored + ')' : ''))
+      ]));
+      box.appendChild(card('Members by plan and status', [table(list(o, 'members'), [
+        ['Plan', function (r) { return plain(r.plan); }], ['Status', function (r) { return plain(r.status); }], ['Members', function (r) { return fmtInt(r.n); }]
+      ], 'Members by plan and status')]));
+      box.appendChild(card('Legacy memberships by state', [kv(o.legacyByState || {})]));
+      box.appendChild(card('Last reconciliation', [last ? kv(last) : note('No reconciliation run yet.')]));
     });
   }
 
@@ -746,10 +747,10 @@
     function draw() {
       into(box, get('/persons/' + encodeURIComponent(id)), function (d) {
         // The detail answers with top-level sections; d.person is only the person row.
-        var p = d.identities ? d : (d.person || d);
-        var emails = list(p, 'emails').length ? list(p, 'emails') : list(p, 'identities').filter(function (x) { return x.platform === 'email' || x.kind === 'email'; }).map(function (x) { return pick(x, 'external_id', 'externalId', 'email', 'value'); }).filter(Boolean);
+        var p = d;
+        var emails = list(p, 'identities').filter(function (x) { return x.platform === 'email'; }).map(function (x) { return x.external_id; }).filter(Boolean);
         var personObj = { personId: id, email: emails[0] };
-        var pilot = !!pick(p, 'pilot', 'isPilot', 'pilotMember');
+        var pilot = p.pilot === true;
         var head = el('div', { class: 'm2-person__hd' }, [
           el('h3', { text: emails[0] || id }),
           el('div', { class: 'm2-sub', text: 'Person ' + id + (pilot ? ' · on the pilot list' : '') })
@@ -773,13 +774,13 @@
         ['Plan', function (s) { return subLabel(s); }],
         ['Status', function (s) { return plain(s.status); }],
         ['Provider', function (s) { return plain(s.provider); }],
-        ['Period end', function (s) { return fmtWhen(pick(s, 'currentPeriodEnd', 'current_period_end')); }],
-        ['Cancels at', function (s) { return fmtWhen(pick(s, 'cancelAt', 'cancel_at')); }],
+        ['Period end', function (s) { return fmtWhen(s.current_period_end); }],
+        ['Cancels at', function (s) { return fmtWhen(s.cancel_at); }],
         ['Events', function (s) { return fmtInt(list(s, 'events').length); }],
         ['Actions', function (s) {
           var live = /^(active|trialing|past_due)$/.test(String(s.status || ''));
           var w = el('div', { class: 'm2-acts' });
-          if (live && !pick(s, 'cancelAt', 'cancel_at') && can('subscription.cancel_period_end')) w.appendChild(actBtn('Cancel at period end', function () { actCancelEnd(s, person, reload); }));
+          if (live && !s.cancel_at && can('subscription.cancel_period_end')) w.appendChild(actBtn('Cancel at period end', function () { actCancelEnd(s, person, reload); }));
           if (live && can('subscription.cancel_now')) w.appendChild(actBtn('Cancel now', function () { actCancelNow(s, person, reload); }, true));
           return w.childNodes.length ? w : '—';
         }]
@@ -787,22 +788,23 @@
     } else if (tab === 'entitlements') add(autoTable(list(p, 'entitlements'), 'Entitlements'));
     else if (tab === 'coins') {
       var w = p.wallet || {};
-      var bal = el('div', { class: 'm2-stats' }, Object.keys(w).filter(function (k) { return typeof w[k] === 'number'; }).map(function (k) { return stat(k.replace(/_/g, ' '), coinsText(w[k])); }));
+      var bal = el('div', { class: 'm2-stats' }, ['total', 'granted', 'purchased', 'legacy'].filter(function (k) { return w[k]; }).map(function (k) { return stat(k, coinsText(w[k].coins)); }));
+      if (w.nextGrantAt) bal.appendChild(stat('next monthly grant', fmtWhen(w.nextGrantAt)));
       add(card('Wallet', [bal], can('coins.credit') ? [actBtn('Credit coins', function () { actCredit(person, reload); })] : []));
-      add(card('Last 50 coin transactions', [autoTable(list(p, 'coinTransactions', 'coin_transactions', 'transactions'), 'Coin transactions')]));
+      add(card('Last 50 coin transactions', [autoTable(list(p, 'coinTransactions'), 'Coin transactions')]));
     } else if (tab === 'payments') add(paymentsTable(list(p, 'payments'), reload));
     else if (tab === 'legacy') {
       add(note('Legacy GHL/PayPal memberships are read-only here: nothing in this area changes them.'));
       var offers = list(p, 'offers');
       add(table(list(p, 'legacy'), [
         ['Tier', function (r) { return plain(r.tier); }],
-        ['Status (GHL)', function (r) { return plain(pick(r, 'reportedStatus', 'reported_status')); }],
-        ['Provider', function (r) { return plain(pick(r, 'paymentProvider', 'payment_provider')); }],
-        ['Amount', function (r) { return money(pick(r, 'amountCents', 'amount_cents')); }],
-        ['Paid through (est.)', function (r) { return fmtWhen(pick(r, 'paidThroughEstimate', 'paid_through_estimate')); }],
-        ['Review', function (r) { return plain(pick(r, 'reviewState', 'review_state')); }],
+        ['Status (GHL)', function (r) { return plain(r.reported_status); }],
+        ['Provider', function (r) { return plain(r.payment_provider); }],
+        ['Amount', function (r) { return money(r.amount_cents); }],
+        ['Paid through (est.)', function (r) { return fmtWhen(r.paid_through_estimate); }],
+        ['Review', function (r) { return plain(r.review_state); }],
         ['Actions', function (r) {
-          var open = offers.some(function (o) { return pick(o, 'legacyMembershipId', 'legacy_membership_id') === r.id && /^(offered|accepted|checkout_started|subscribed)$/.test(o.status); });
+          var open = offers.some(function (o) { return o.legacy_membership_id === r.id && /^(offered|accepted|checkout_started|subscribed)$/.test(o.status); });
           return (!open && can('offer.create')) ? actBtn('Create offer', function () { actOfferCreate(person, r, reload); }) : '—';
         }]
       ], 'Legacy memberships'));
@@ -810,31 +812,32 @@
     else if (tab === 'notes') {
       var notes = list(p, 'notes');
       add(card('Notes', [notes.length ? el('ul', { class: 'm2-notes' }, notes.map(function (n) {
-        return el('li', {}, [el('div', { class: 'm2-sub', text: fmtWhen(pick(n, 'createdAt', 'created_at')) + ' · ' + plain(pick(n, 'operatorName', 'operator_name', 'operatorEmail', 'operatorId', 'operator_id')) }), el('div', { text: plain(n.body) })]);
+        return el('li', {}, [el('div', { class: 'm2-sub', text: fmtWhen(n.created_at) + ' · ' + plain(n.operator_name || n.operator_id) }), el('div', { text: plain(n.body) })]);
       })) : note('No notes yet.')], can('note.add') ? [actBtn('Add note', function () { actNote(person, reload); })] : []));
-    } else if (tab === 'audit') add(auditTable(list(p, 'audit', 'auditLogs')));
+    } else if (tab === 'audit') add(auditTable(list(p, 'audit')));
   }
 
   function paymentsTable(rows, reload) {
     return table(rows, [
-      ['When', function (r) { return fmtWhen(pick(r, 'occurredAt', 'occurred_at')); }],
-      ['Type', function (r) { return plain(pick(r, 'entryType', 'entry_type', 'type')); }],
-      ['Amount', function (r) { return money(pick(r, 'amountCents', 'amount_cents'), pick(r, 'coins')); }],
+      ['When', function (r) { return fmtWhen(r.occurred_at); }],
+      ['Type', function (r) { return plain(r.entry_type); }],
+      ['Amount', function (r) { return money(r.amount_cents); }],
       ['Provider', function (r) { return plain(r.provider); }],
-      ['Person', function (r) { var pid = pick(r, 'personId', 'person_id'); return pid ? personLink(pid) : '—'; }],
+      ['Person', function (r) { var pid = r.person_id; return pid ? personLink(pid) : '—'; }],
       ['Actions', function (r) {
-        var charge = pick(r, 'entryType', 'entry_type', 'type') === 'charge' && num(pick(r, 'amountCents', 'amount_cents')) > 0;
+        // payment.refund needs a Stripe charge row (charge or invoice object).
+        var charge = r.provider === 'stripe' && r.entry_type === 'charge' && num(r.amount_cents) > 0;
         return charge && can('payment.refund') ? actBtn('Refund', function () { actRefund(r, reload); }, true) : '—';
       }]
     ], 'Payments');
   }
   function offersTable(rows, reload) {
     return table(rows, [
-      ['Offered', function (o) { return fmtWhen(pick(o, 'offeredAt', 'offered_at')); }],
-      ['Person', function (o) { var pid = pick(o, 'personId', 'person_id'); return pid ? personLink(pid) : '—'; }],
-      ['Target', function (o) { return plain(pick(o, 'targetPlanKey', 'target_plan', 'target_plan_key', 'targetPlan')) + ' / ' + plain(pick(o, 'targetInterval', 'target_interval', 'interval')); }],
+      ['Offered', function (o) { return fmtWhen(o.offered_at); }],
+      ['Person', function (o) { var pid = o.person_id; return pid ? personLink(pid) : '—'; }],
+      ['Target', function (o) { return (o.from_tier ? plain(o.from_tier) + ' → ' : '') + plain(o.target_plan) + ' / ' + plain(o.target_interval); }],
       ['Status', function (o) { return plain(o.status); }],
-      ['Billing starts', function (o) { return fmtWhen(pick(o, 'billingStartsAt', 'billing_starts_at')); }],
+      ['Billing starts', function (o) { return fmtWhen(o.billing_starts_at); }],
       ['Actions', function (o) {
         var w = el('div', { class: 'm2-acts' }), st = String(o.status || '');
         if (/^(offered|accepted)$/.test(st) && can('offer.withdraw')) w.appendChild(actBtn('Withdraw', function () { actOfferWithdraw(o, reload); }));
@@ -846,11 +849,11 @@
   }
   function auditTable(rows) {
     return table(rows, [
-      ['When', function (r) { return fmtWhen(pick(r, 'occurredAt', 'occurred_at')); }],
-      ['Actor', function (r) { return plain(pick(r, 'actorName', 'actorEmail', 'actorId', 'actor_id')) + ' (' + plain(pick(r, 'actorType', 'actor_type')) + ')'; }],
+      ['When', function (r) { return fmtWhen(r.occurred_at); }],
+      ['Actor', function (r) { return plain(r.actor_id) + ' (' + plain(r.actor_type) + ')'; }],
       ['Action', function (r) { return plain(r.action); }],
-      ['Entity', function (r) { return plain(pick(r, 'entityType', 'entity_type')) + ' ' + plain(pick(r, 'entityId', 'entity_id')); }],
-      ['Reason', function (r) { return plain(pick(r, 'reason')); }]
+      ['Entity', function (r) { return plain(r.entity_type) + ' ' + plain(r.entity_id); }],
+      ['Reason', function (r) { return plain((r.after && r.after.reason) || (r.before && r.before.reason)); }]
     ], 'Audit log');
   }
 
@@ -865,7 +868,7 @@
     function load(cursor) {
       var holder = el('div', {}); out.appendChild(holder);
       into(holder, get('/payments' + qs({ from: from.value, to: to.value, type: type.value, limit: 50, cursor: cursor })), function (d) {
-        holder.appendChild(paymentsTable(list(d, 'items', 'payments', 'rows'), function () { clear(out); load(null); }));
+        holder.appendChild(paymentsTable(list(d, 'items'), function () { clear(out); load(null); }));
         moreButton(out, d.next, load);
       });
     }
@@ -880,11 +883,11 @@
     panel.appendChild(card('Coin transactions', [tx]));
     function loadReviews() {
       into(reviews, get('/refund-reviews?status=open'), function (d) {
-        reviews.appendChild(table(list(d, 'items', 'reviews', 'rows'), [
-          ['Opened', function (r) { return fmtWhen(pick(r, 'createdAt', 'created_at')); }],
-          ['Person', function (r) { return personLink(pick(r, 'personId', 'person_id')); }],
-          ['Refunded', function (r) { return coinsText(pick(r, 'coinsRefunded', 'coins_refunded')); }],
-          ['Not recovered', function (r) { return coinsText(pick(r, 'coinsUnrecovered', 'coins_unrecovered'), pick(r, 'valueCentsUnrecovered', 'value_cents_unrecovered')); }],
+        reviews.appendChild(table(list(d, 'items'), [
+          ['Opened', function (r) { return fmtWhen(r.created_at); }],
+          ['Person', function (r) { return personLink(r.person_id); }],
+          ['Refunded', function (r) { return coinsText(r.coins_refunded); }],
+          ['Not recovered', function (r) { return coinsText(r.coins_unrecovered, r.value_cents_unrecovered); }],
           ['Actions', function (r) { return can('refund_review.resolve') ? actBtn('Resolve', function () { actResolveReview(r, loadReviews); }) : '—'; }]
         ], 'Open refund reviews'));
       });
@@ -893,8 +896,8 @@
     function load(cursor) {
       var holder = el('div', {}); tx.appendChild(holder);
       into(holder, get('/coins' + qs({ limit: 50, cursor: cursor })), function (d) {
-        if (!cursor) { clear(totals); var t = d.totals || d.walletTotals || {}; totals.appendChild(el('div', { class: 'm2-stats' }, Object.keys(t).map(function (k) { return stat(k.replace(/_/g, ' '), typeof t[k] === 'number' ? coinsText(t[k]) : plain(t[k])); }))); }
-        holder.appendChild(autoTable(list(d, 'items', 'transactions', 'rows'), 'Coin transactions'));
+        if (!cursor) { clear(totals); var t = d.totals || {}; totals.appendChild(el('div', { class: 'm2-stats' }, [stat('wallets', fmtInt(t.wallets)), stat('granted', coinsText(t.granted)), stat('purchased', coinsText(t.purchased)), stat('legacy', coinsText(t.legacy))])); }
+        holder.appendChild(autoTable(list(d, 'items'), 'Coin transactions'));
         moreButton(tx, d.next, load);
       });
     }
@@ -902,7 +905,7 @@
   }
 
   function screenLegacy(panel) {
-    var state = el('select', { id: 'm2ls' }, [['', 'All'], ['needs_review', 'Needs review'], ['unmapped', 'Unmapped'], ['ambiguous', 'Ambiguous'], ['stale', 'Stale suspected']].map(function (o) { return el('option', { value: o[0], text: o[1] }); }));
+    var state = el('select', { id: 'm2ls' }, [['', 'All'], ['active', 'Active (migration possible)'], ['under_review', 'Under review'], ['ended', 'Ended']].map(function (o) { return el('option', { value: o[0], text: o[1] }); }));
     var ostat = el('select', { id: 'm2os' }, [['', 'All'], ['offered', 'Offered'], ['accepted', 'Accepted'], ['checkout_started', 'Checkout started'], ['subscribed', 'Subscribed'], ['completed', 'Completed'], ['withdrawn', 'Withdrawn'], ['declined', 'Declined']].map(function (o) { return el('option', { value: o[0], text: o[1] }); }));
     var leg = el('div', {}), off = el('div', {});
     panel.appendChild(note('Legacy GHL/PayPal memberships are read-only here: nothing in this area changes a GHL or PayPal subscription.'));
@@ -910,20 +913,20 @@
     panel.appendChild(card('Migration offers', [el('div', { class: 'm2-filters' }, [field('m2os', 'Status', ostat)]), off]));
     function loadLeg() {
       into(leg, get('/legacy' + qs({ state: state.value, limit: 100 })), function (d) {
-        var fresh = pick(d, 'freshness', 'mirrorAge', 'lastSyncAt');
-        if (fresh) leg.appendChild(note('Mirror freshness: ' + (typeof fresh === 'object' ? plain(fresh) : cell('lastSyncAt', fresh))));
-        leg.appendChild(table(list(d, 'items', 'rows', 'legacy'), [
-          ['Person', function (r) { var pid = pick(r, 'personId', 'person_id'); return pid ? personLink(pid) : plain(pick(r, 'externalContactId', 'external_contact_id')); }],
+        var f = d.freshness || {};
+        leg.appendChild(note('Mirror last seen ' + fmtWhen(f.lastSeenAt) + (f.ageSeconds != null ? ' (' + Math.round(f.ageSeconds / 3600) + ' h ago)' : '') + ' · ' + fmtInt(d.total) + ' rows' + (f.lastRun ? ' · last reader run ' + fmtWhen(f.lastRun.started_at) + (f.lastRun.complete ? '' : ' (incomplete)') : '')));
+        leg.appendChild(table(list(d, 'items'), [
+          ['Person', function (r) { var pid = r.person_id; return pid ? personLink(pid) : plain(r.external_contact_id); }],
           ['Tier', function (r) { return plain(r.tier); }],
           ['Mapping', function (r) { return plain(r.mapping); }],
-          ['Status (GHL)', function (r) { return plain(pick(r, 'reportedStatus', 'reported_status')); }],
-          ['Amount', function (r) { return money(pick(r, 'amountCents', 'amount_cents')); }],
-          ['Last payment', function (r) { return fmtWhen(pick(r, 'lastPaymentAt', 'last_payment_at')); }],
-          ['Review', function (r) { return plain(pick(r, 'reviewState', 'review_state')) + (pick(r, 'staleSuspected', 'stale_suspected') ? ' · stale?' : ''); }]
+          ['Status (GHL)', function (r) { return plain(r.reported_status); }],
+          ['Amount', function (r) { return money(r.amount_cents); }],
+          ['Last payment', function (r) { return fmtWhen(r.last_payment_at); }],
+          ['State', function (r) { return plain(r.state) + ' · review ' + plain(r.review_state) + (r.stale_suspected ? ' · stale?' : ''); }]
         ], 'Legacy memberships'));
       });
     }
-    function loadOff() { into(off, get('/migration-offers' + qs({ status: ostat.value })), function (d) { off.appendChild(offersTable(list(d, 'items', 'offers', 'rows'), loadOff)); }); }
+    function loadOff() { into(off, get('/migration-offers' + qs({ status: ostat.value })), function (d) { off.appendChild(offersTable(list(d, 'items'), loadOff)); }); }
     state.addEventListener('change', loadLeg); ostat.addEventListener('change', loadOff);
     loadLeg(); loadOff();
   }
@@ -932,10 +935,10 @@
     var box = el('div', {}); panel.appendChild(box);
     function load() {
       into(box, get('/requests?status=pending'), function (d) {
-        var rows = list(d, 'items', 'requests', 'rows');
+        var rows = list(d, 'items');
         if (!rows.length) { box.appendChild(note('No pending requests.')); return; }
         rows.forEach(function (r) {
-          var by = r.requestedBy && typeof r.requestedBy === 'object' ? r.requestedBy : { id: pick(r, 'requestedBy', 'requested_by') };
+          var by = r.requestedBy || {};
           var mine = r.own === true || (!!myId() && by.id === myId());
           var who = plain(by.displayName || by.email || by.id);
           var acts = el('div', { class: 'm2-acts' });
@@ -946,7 +949,7 @@
             acts.appendChild(actBtn('Approve', function () { decide(r, 'approve', load); }));
             acts.appendChild(actBtn('Reject', function () { decide(r, 'reject', load); }, true));
           } else {
-            acts.appendChild(el('span', { class: 'm2-sub', text: 'Needs an approver with the ' + plain(pick(r, 'requiredRole', 'required_role')) + ' role.' }));
+            acts.appendChild(el('span', { class: 'm2-sub', text: 'Needs an approver with the ' + plain(r.requiredRole) + ' role.' }));
           }
           box.appendChild(el('article', { class: 'm2-card m2-req' }, [
             el('h3', { text: ACTION_LABELS[r.action] || plain(r.action) }),
@@ -954,9 +957,9 @@
             el('dl', { class: 'm2-kv' }, [
               el('dt', { text: 'Requested by' }), el('dd', { text: who + (mine ? ' (you)' : '') }),
               el('dt', { text: 'Why' }), el('dd', { text: plain(r.reason) }),
-              el('dt', { text: 'Requested' }), el('dd', { text: fmtWhen(pick(r, 'requestedAt', 'createdAt', 'created_at')) }),
-              el('dt', { text: 'Expires' }), el('dd', { text: fmtWhen(pick(r, 'expiresAt', 'expires_at')) }),
-              el('dt', { text: 'Approver role' }), el('dd', { text: plain(pick(r, 'requiredRole', 'required_role')) })
+              el('dt', { text: 'Requested' }), el('dd', { text: fmtWhen(r.requestedAt) }),
+              el('dt', { text: 'Expires' }), el('dd', { text: fmtWhen(r.expiresAt) }),
+              el('dt', { text: 'Approver role' }), el('dd', { text: plain(r.requiredRole) })
             ]),
             acts
           ]));
@@ -969,8 +972,8 @@
   function screenReconciliation(panel) {
     var box = el('div', {}); panel.appendChild(box);
     into(box, get('/reconciliation'), function (d) {
-      box.appendChild(card('Open alerts', [autoTable(list(d, 'alerts', 'openAlerts'), 'Open alerts')]));
-      box.appendChild(card('Last 30 daily runs', [autoTable(list(d, 'runs', 'items'), 'Daily runs')]));
+      box.appendChild(card('Open alerts', [autoTable(list(d, 'openAlerts'), 'Open alerts')]));
+      box.appendChild(card('Last 30 daily runs', [autoTable(list(d, 'runs'), 'Daily runs')]));
     });
   }
 
@@ -981,7 +984,7 @@
     function load(cursor) {
       var holder = el('div', {}); out.appendChild(holder);
       into(holder, get('/audit' + qs({ entityType: et.value.trim(), entityId: ei.value.trim(), actorId: ai.value.trim(), limit: 50, cursor: cursor })), function (d) {
-        holder.appendChild(auditTable(list(d, 'items', 'rows', 'audit')));
+        holder.appendChild(auditTable(list(d, 'items')));
         moreButton(out, d.next, load);
       });
     }
@@ -994,8 +997,8 @@
     panel.appendChild(card('Service health', [h]));
     panel.appendChild(card('Dead letters and failed webhooks', [dl]));
     into(h, get('/health'), function (d) {
-      var x = d.health || d;
-      if (x.stripeConnected === false || x.stripe_connected === false) h.appendChild(note('Stripe is not connected in this environment: refunds and immediate cancellations end as “approved, not executed”.', 'm2-note--warn'));
+      var x = d;
+      if (x.stripeConnected === false) h.appendChild(note('Stripe is not connected in this environment: refunds and immediate cancellations end as “approved, not executed”.', 'm2-note--warn'));
       h.appendChild(kv(x));
     });
     into(dl, get('/dead-letters'), function (d) {
@@ -1008,32 +1011,32 @@
     var box = el('div', {}); panel.appendChild(box);
     function load() {
       into(box, get('/launch'), function (d) {
-        var st = d.state || d.launch || d;
-        var current = pick(st, 'stage', 'stored');
+        var st = d.state || {};
+        var current = st.stored;
         var owner = isOwner();
         var head = [];
         if (owner && can('launch.set')) head.push(actBtn('Change stage', function () { actStage(current, load); }));
         box.appendChild(card('Launch stage', [
           el('div', { class: 'm2-stats' }, [
-            stat('Stored stage', plain(current)), stat('Effective', plain(pick(st, 'effective'))),
-            stat('Ceiling', plain(pick(st, 'ceiling'))), stat('Limit', fmtInt(pick(st, 'limitedCap', 'limited_cap')))
+            stat('Stored stage', plain(current)), stat('Effective', plain(st.effective)),
+            stat('Ceiling', plain(st.ceiling)), stat('Limit', fmtInt(st.limitedCap))
           ]),
           owner ? null : note('Read-only: only an owner can change the stage or the pilot list.')
         ], head));
         box.appendChild(card('History', [table(list(d, 'history'), [
-          ['When', function (r) { return fmtWhen(pick(r, 'changedAt', 'changed_at', 'createdAt', 'created_at')); }],
-          ['From → to', function (r) { return plain(pick(r, 'fromStage', 'from_stage')) + ' → ' + plain(pick(r, 'toStage', 'to_stage')); }],
-          ['By', function (r) { return plain(pick(r, 'changedByName', 'changedBy', 'changed_by')); }],
-          ['Approval', function (r) { return plain(pick(r, 'approvalRef', 'approval_ref')); }],
+          ['When', function (r) { return fmtWhen(r.changed_at); }],
+          ['From → to', function (r) { return plain(r.from_stage) + ' → ' + plain(r.to_stage); }],
+          ['By', function (r) { return plain(r.changed_by); }],
+          ['Approval', function (r) { return plain(r.approval_ref); }],
           ['Reason', function (r) { return plain(r.reason); }]
         ], 'Launch history')]));
-        var pilots = list(d, 'pilots', 'pilot', 'pilotList');
+        var pilots = list(d, 'pilots');
         var pHead = owner && can('pilot.add') ? [actBtn('Add pilot member', function () { actPilot(true, null, null, load); })] : [];
         box.appendChild(card('Pilot list', [table(pilots, [
-          ['Person', function (r) { var pid = pick(r, 'personId', 'person_id'); return personLink(pid, pick(r, 'email') || pid); }],
-          ['Added', function (r) { return fmtWhen(pick(r, 'addedAt', 'added_at', 'createdAt', 'created_at')); }],
-          ['Added by', function (r) { return plain(pick(r, 'addedByName', 'addedBy', 'added_by')); }],
-          ['Actions', function (r) { var pid = pick(r, 'personId', 'person_id'); return owner && can('pilot.remove') ? actBtn('Remove', function () { actPilot(false, pid, pick(r, 'email') || pid, load); }, true) : '—'; }]
+          ['Person', function (r) { var pid = r.person_id; return personLink(pid); }],
+          ['Added', function (r) { return fmtWhen(r.added_at); }],
+          ['Added by', function (r) { return plain(r.added_by); }],
+          ['Actions', function (r) { var pid = r.person_id; return owner && can('pilot.remove') ? actBtn('Remove', function () { actPilot(false, pid, pid, load); }, true) : '—'; }]
         ], 'Pilot list')], pHead));
       });
     }

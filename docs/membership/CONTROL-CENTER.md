@@ -205,3 +205,33 @@ Phase 3 polish (2026-10-26):
 - Sidebar: every item is a real `<button>` (Tab, Enter, Space), visible focus ring, `aria-current="page"` on the current
   section; mouse behaviour unchanged. The sidebar footer keeps "live from GHL" for the console sections that really read GHL
   (Contacts, Membership) and reads "Membership 2.0 database" while the Membership 2.0 area is open.
+
+## 7. Repeatable evidence (`scripts/control-center-evidence.cjs`)
+
+Screenshots of the Membership 2.0 area on the loopback staging stack, written as WebP (1280 px and 390 px) to
+`docs/membership/control-center-evidence/` (keep the folder near 1.2 MB).
+
+```bash
+node scripts/control-center-evidence.cjs --dry-run                       # the plan and the write count; sends nothing
+node scripts/control-center-evidence.cjs --env-file <operators env file> # the evidence run (6 writes)
+node scripts/control-center-evidence.cjs --env-file <file> --rotate-initial-passwords   # first sign-in: 3 writes
+```
+
+- **Loopback only.** `--base` (default `http://127.0.0.1:8799`, the staging Control Center) must be an `http://` loopback URL,
+  otherwise the script refuses. Every browser request to any other host is aborted (fonts included).
+- **Hard write cap.** A write is any non-GET request to `/api/admin/membership2/*` except login / logout. The plan is printed
+  first; a plan above the cap (default **6**) refuses with exit 2, and a write past the cap at run time is aborted and fails the
+  run. `--max-writes N` raises the cap for one run only, after approval.
+- **Credentials** come only from the env file given with `--env-file` (`GAIA_ADMIN_PASSWORD`,
+  `OPERATOR_{OWNER,FINANCE,SUPPORT}_{EMAIL,PASSWORD,TOTP_SECRET}`) and are never printed. `--rotate-initial-passwords` changes
+  each fixture operator's initial password through the first-sign-in screen and rewrites only the three `*_PASSWORD` lines of
+  that file in place (0600).
+- **Fixture data only:** one fixture member (`--person`, must end in `.invalid`), small amounts. Evidence-run writes: support
+  +50 goodwill (executed); support +600 (refused: finance needed); finance +600 (sent for approval, left pending); finance
+  $1.00 refund request; owner approves it (billing not connected: not executed); owner runs it again (still not executed).
+- Needs Playwright (`PLAYWRIGHT_PATH`, default `/root/.viewport-shots/node_modules/playwright`). No paid API is called.
+
+Last run: 2026-10-26 on staging after migration 0012 (6 of 6 writes, 40 screenshots, ~1.1 MB), after the three fixture
+operators changed their initial passwords (3 writes). One CSS line (the 390 px banner now clears the floating menu button) was
+fixed after the run; the 390 px shots still show the banner under the button. Audit rows written before migration 0012 have no
+`reason` column value (their reason, where there was one, is in `after.reason`); rows are append-only and were not rewritten.

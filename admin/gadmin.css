@@ -528,7 +528,7 @@ button.nav__item--btn:focus-visible,.m2 :focus-visible,.m2-dlg :focus-visible{ou
 }
 /* STAGING / TEST MODE (driven by the membership server's environment and Stripe mode). */
 .envbanner{margin:12px 28px 0;padding:10px 14px;border-radius:10px;border:2px solid var(--amber,#e0a63a);background:rgba(240,180,60,.16);color:var(--text);font-weight:700;font-size:13.5px;letter-spacing:.02em}
-@media (max-width:760px){.envbanner{margin:12px 16px 0}}
+@media (max-width:760px){.envbanner{margin:12px 16px 0 62px}}   /* clears the floating menu button */
 /* Sidebar: keyboard focus is visible on every item (buttons since Phase 3). */
 .side .nav__item:focus-visible{outline:2px solid var(--green);outline-offset:2px}
 button.nav__item{color:var(--muted)}

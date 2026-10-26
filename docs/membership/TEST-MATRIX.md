@@ -41,7 +41,7 @@ Status as of **26 Oct 2026**. Membership 2.0 is built next to production. GHL, S
 | **A4** | The backup private-key holder runs the off-site decrypt-and-restore on their own machine. The key never comes to the server. | the off-site recovery proof |
 | **A5** | Coin-pack prices (packs are drafts) | real coin-pack checkout |
 | **A6** | ~~The proration rule~~ decided 26 Oct (INTEGRATIONS.md); the change-plan API is not built yet | (CP-CHG-01 is now TODO) |
-| **A7** | Approval to deploy the security batch (#286–#290, #292, #294) | the live CSRF, rate-limit and session hardening on production |
+| **A7** | Approval to deploy (and merge) the security batch (#286–#290, #292, #294) | the live CSRF, rate-limit and session hardening on production; SEC-RL-02 needs #287 in the proxy |
 | **A9** | Gaia Practitioners: partner contract confirmation and a sandbox | PERM-PART-02 |
 
 ## Customer portal (member view)
@@ -218,7 +218,7 @@ Status as of **26 Oct 2026**. Membership 2.0 is built next to production. GHL, S
 | SEC-CSRF-02 | Member writes: JSON body, requestId format | | MS member-gateway › signed-in member… (`INVALID_INPUT` without a requestId); gateway `body()` content type check | LPG | PASS | run |
 | SEC-CSRF-03 | Production CSRF hardening (security batch) | | PR #288 tests; runbook | prod | BLOCKED (A7) | |
 | SEC-RL-01 | Operator login rate limit per IP | 429 `RATE_LIMITED` after 10 / 15 min | MS admin-gateway › writes… login is rate-limited per IP | LPG | PASS | run |
-| SEC-RL-02 | A spoofed X-Forwarded-For / CF-Connecting-IP cannot reset the operator sign-in limit | | SP membership2-admin-gateway-ip › a spoofed X-Forwarded-For… | UNIT | PASS | run |
+| SEC-RL-02 | A spoofed X-Forwarded-For / CF-Connecting-IP cannot reset the operator sign-in limit | | SP membership2-admin-gateway-ip › a spoofed X-Forwarded-For… (skips until the trusted-client-IP fix from the security batch, #287, is in the proxy) | UNIT | BLOCKED (A7) | run (skipped) |
 | SEC-SESS-01 | Operator sessions expire; console sign-in still required | | MS admin › sessions…; FE control-center-membership2 › AUTH_REQUIRED mid-session…; › a console 401… | LPG, UNIT | PASS | run |
 | SEC-SEC-01 | No secrets in the frontend; the operator token never reaches JS | | FE control-center-membership2 › it only talks to the same-origin gateway, and holds no secret; MS admin-gateway › status probe, login cookie (token never in the body)… | UNIT, LPG | PASS | run |
 | SEC-SEC-02 | CLIs and runners never print keys or URLs | | MS staging-webhook-server › the CLI refuses…never prints…; MS providers-stripe-daily-reconcile › CLI --run…key never printed; FE membership-test-runner › runner: postgres is never pulled… | LPG | PASS | run |
@@ -295,9 +295,9 @@ Status as of **26 Oct 2026**. Membership 2.0 is built next to production. GHL, S
 
 | Status | Rows |
 |---|---|
-| PASS | 146 |
+| PASS | 145 |
 | FAIL | 0 |
-| BLOCKED | 19 |
+| BLOCKED | 20 |
 | TODO | 5 |
 | **All** | 170 |
 

@@ -118,11 +118,6 @@ function buildMagicNonceCookie(nonce) {
     `Max-Age=${AUTH_MAGIC_LINK_TTL_SECONDS}`,
   ].join('; ');
 }
-function constantTimeEqualString(a, b) {
-  const left = crypto.createHash('sha256').update(String(a)).digest();
-  const right = crypto.createHash('sha256').update(String(b)).digest();
-  return crypto.timingSafeEqual(left, right) && String(a).length === String(b).length;
-}
 const AUTH_ALLOW_DEBUG_LINKS = process.env.AUTH_ALLOW_DEBUG_LINKS === 'true';
 const AUTH_ALLOW_UNVERIFIED_EMAIL_MAGIC_LINK = process.env.AUTH_ALLOW_UNVERIFIED_EMAIL_MAGIC_LINK === 'true';
 const AUTH_EMBED_SHARED_SECRET = process.env.AUTH_EMBED_SHARED_SECRET || process.env.APP_PROXY_SHARED_SECRET || '';
@@ -5578,7 +5573,7 @@ async function authMagicLinkConsume(req, res, origin, url) {
     const pending = MAGIC_LINK_POLLS.get(payload.pollId);
     const nonce = readMagicNonce(req);
     const sameDevice = Boolean(nonce && pending.nonceHash
-      && constantTimeEqualString(magicNonceHash(nonce), pending.nonceHash));
+      && safeSecretEqual(magicNonceHash(nonce), pending.nonceHash));
     pending.member = payload.member;
     pending.exp = Date.now() + MAGIC_LINK_POLL_TTL_MS;
     if (sameDevice) {
@@ -5629,7 +5624,7 @@ async function authMagicLinkConfirm(req, res, origin) {
     return;
   }
   pending.confirmAttempts = (pending.confirmAttempts || 0) + 1;
-  const matches = code.length === pending.confirmCode.length && constantTimeEqualString(code, pending.confirmCode);
+  const matches = code.length === pending.confirmCode.length && safeSecretEqual(code, pending.confirmCode);
   if (!matches) {
     const left = MAGIC_LINK_CONFIRM_MAX_ATTEMPTS - pending.confirmAttempts;
     if (left <= 0) {

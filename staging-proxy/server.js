@@ -5,6 +5,7 @@ const assistGuide = globalThis.GaiaAssistGuide;
 import { createOnboardingStore } from './onboarding-store.js';
 import http from 'node:http';
 import crypto from 'node:crypto';
+import { safeEqual } from './safe-equal.js';
 import fs from 'node:fs';
 import path from 'node:path';
 import { URL } from 'node:url';
@@ -514,10 +515,10 @@ let _coursesCache = null;
 let _memberEntitlementsCache = null;
 let _memberEntitlementsMtimeMs = 0;
 
+// Constant time over SHA-256 digests (safe-equal.js); an empty expected secret
+// never matches. Every caller already refuses an unset secret before this.
 function safeSecretEqual(left, right) {
-  const a = Buffer.from(String(left || ''), 'utf8');
-  const b = Buffer.from(String(right || ''), 'utf8');
-  return a.length === b.length && crypto.timingSafeEqual(a, b);
+  return safeEqual(left, right);
 }
 
 function ensureCoursesDataDir() {
@@ -1167,7 +1168,7 @@ async function academySync(req, res, origin) {
   let qSecret = ''; try { qSecret = new URL(req.url, 'http://x').searchParams.get('secret') || ''; } catch (e) {}
   const supplied = String(req.headers['x-academy-secret'] || qSecret || '').trim();
   if (!expected || expected.length < 16) { sendJson(res, 503, { ok: false, error: 'sync_not_configured' }, origin); return; }
-  if (supplied.length !== expected.length || !crypto.timingSafeEqual(Buffer.from(supplied), Buffer.from(expected))) {
+  if (!safeEqual(supplied, expected)) {
     sendJson(res, 401, { ok: false, error: 'unauthorized' }, origin); return;
   }
   let body;
@@ -1299,7 +1300,7 @@ async function academyWebhook(req, res, origin) {
   const expected = String(process.env.ACADEMY_SYNC_SECRET || '').trim();
   let qSecret = ''; try { qSecret = new URL(req.url, 'http://x').searchParams.get('secret') || ''; } catch (e) {}
   const supplied = String(req.headers['x-academy-secret'] || qSecret || '').trim();
-  if (!expected || supplied.length !== expected.length || !crypto.timingSafeEqual(Buffer.from(supplied), Buffer.from(expected))) {
+  if (!expected || !safeEqual(supplied, expected)) {
     sendJson(res, 401, { ok: false, error: 'unauthorized' }, origin); return;
   }
   let body; try { body = await readJsonBody(req, 256 * 1024); } catch (e) { sendJson(res, 400, { ok: false, error: 'bad_json' }, origin); return; }
@@ -2494,9 +2495,7 @@ function readSignedToken(token) {
   if (!token || !String(token).includes('.')) return null;
   const [body, sig] = String(token).split('.', 2);
   const expected = crypto.createHmac('sha256', authSessionSecret()).update(body).digest('base64url');
-  const left = Buffer.from(sig || '', 'utf8');
-  const right = Buffer.from(expected, 'utf8');
-  if (left.length !== right.length || !crypto.timingSafeEqual(left, right)) return null;
+  if (!safeEqual(sig || '', expected)) return null;
   try {
     const payload = JSON.parse(base64UrlDecode(body));
     if (payload.exp && Date.now() > Number(payload.exp)) return null;
@@ -2855,8 +2854,7 @@ async function handleGhlPaymentWebhook(req, res, origin) {
   try { qSecret = new URL(req.url, 'http://localhost').searchParams.get('secret') || ''; } catch (e) { /* noop */ }
   const supplied = String(req.headers['x-gaia-secret'] || qSecret || '');
   if (!expected || !SVC) { sendJson(res, 503, { ok: false, error: 'webhook_not_configured' }, origin); return; }
-  const a = Buffer.from(supplied); const b = Buffer.from(expected);
-  if (a.length !== b.length || !crypto.timingSafeEqual(a, b)) {
+  if (!safeEqual(supplied, expected)) {
     console.warn(JSON.stringify({ evt: 'smart_webhook', outcome: 'forbidden_bad_secret' }));
     sendJson(res, 403, { ok: false, error: 'invalid_secret' }, origin); return;
   }
@@ -6964,7 +6962,7 @@ const server = http.createServer(async (req, res) => {
     if (req.method === 'GET' && url.pathname === '/api/event/ghl-sales') {
       const svc = (process.env.IDENTITY_SERVICE_TOKEN || '').trim();
       const auth = String(req.headers.authorization || '').replace(/^Bearer\s+/i, '').trim();
-      if (!svc || auth !== svc) { sendJson(res, 401, { ok: false, error: 'unauthorized' }, origin); return; }
+      if (!svc || !safeEqual(auth, svc)) { sendJson(res, 401, { ok: false, error: 'unauthorized' }, origin); return; }
       const wantedRaw = String(url.searchParams.get('product_id') || '').trim();
       if (!wantedRaw) { sendJson(res, 400, { ok: false, error: 'product_id required' }, origin); return; }
       const wanted = new Set(wantedRaw.split(',').map((x) => x.trim()).filter(Boolean));
@@ -6987,7 +6985,7 @@ const server = http.createServer(async (req, res) => {
     if (req.method === 'POST' && url.pathname === '/api/event/notify') {
       const svc = (process.env.IDENTITY_SERVICE_TOKEN || '').trim();
       const auth = String(req.headers.authorization || '').replace(/^Bearer\s+/i, '').trim();
-      if (!svc || auth !== svc) { sendJson(res, 401, { ok: false, error: 'unauthorized' }, origin); return; }
+      if (!svc || !safeEqual(auth, svc)) { sendJson(res, 401, { ok: false, error: 'unauthorized' }, origin); return; }
       const body = await readJsonBody(req, 512 * 1024).catch(() => ({}));
       const contactId = String(body.contactId || '').trim();
       const subject = String(body.subject || '').trim();

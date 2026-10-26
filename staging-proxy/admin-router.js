@@ -15,6 +15,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
+import { safeEqual } from './safe-equal.js';
 import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import * as membershipAdmin from './membership/admin-api.js';
@@ -56,10 +57,7 @@ function adminConfigured() { return Boolean(String(process.env.GAIA_ADMIN_PASSWO
 function passwordOk(input) {
   const secret = String(process.env.GAIA_ADMIN_PASSWORD || '');
   if (!secret) return false;
-  const a = Buffer.from(String(input || ''), 'utf8');
-  const b = Buffer.from(secret, 'utf8');
-  if (a.length !== b.length) return false;
-  return crypto.timingSafeEqual(a, b);
+  return safeEqual(String(input || ''), secret);
 }
 
 // ---------- login throttle (per client IP) ----------

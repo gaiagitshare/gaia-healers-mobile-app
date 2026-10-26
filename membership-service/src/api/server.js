@@ -26,6 +26,7 @@ import { captureDebit, releaseDebit, walletView } from '../coins.js';
 import { findPerson } from '../identity.js';
 import { nextCycleStart } from '../jobs/allowance.js';
 import { grantsAccess } from '../subscriptions.js';
+import { memberRoute } from './member-routes.js';
 import { isEntitled } from '../entitlements.js';
 
 const MAX_BODY = 16 * 1024;
@@ -51,7 +52,7 @@ function idempotencyKey(req) {
 
 const opView = (op, extra = {}) => ({ operationId: op.id, status: op.status, coins: op.coins, holdExpiresAt: op.hold_expires_at, ...extra });
 
-export function createApiHandler(pool, { clock = () => new Date() } = {}) {
+export function createApiHandler(pool, { clock = () => new Date(), stripe = null, env = {} } = {}) {
   async function route(req, url, requestId) {
     const now = clock();
     if (req.method === 'GET' && url.pathname === '/v1/health') return [200, { ok: true }];
@@ -115,6 +116,8 @@ export function createApiHandler(pool, { clock = () => new Date() } = {}) {
         const r = action === 'capture' ? await captureDebit(pool, opId, actor) : await releaseDebit(pool, opId, actor);
         return [200, { ok: true, replayed: r.replayed, hold: opView(r.operation) }];
       }
+      const mr = await memberRoute({ pool, client, actor, req, url, now, stripe, env, readJson, idempotencyKey });
+      if (mr) return mr;
       fail('NOT_FOUND', 'no such route');
     } catch (e) {
       if (e instanceof MembershipError && (e.code === 'FORBIDDEN' || e.code === 'NOT_FOUND') && url.pathname !== '/v1/health') {

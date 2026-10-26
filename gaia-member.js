@@ -875,7 +875,7 @@ body.gaia-booking-open{overflow:hidden;}
       prefRow('Soft chime on her hello', 'avatar_hello_chime', Boolean(prefsNow.avatar_hello_chime), 'On', 'Off'),
     ])));
 
-    box.innerHTML = cards.join('');
+    box.innerHTML = betaLink('you') + cards.join('');
     // The person's badge card sits at the top of their account: the thing they
     // just created by scanning their badge is the first thing they see here.
     box.insertAdjacentHTML('afterbegin', '<div data-badgecard-host></div>');
@@ -1425,9 +1425,11 @@ body.gaia-booking-open{overflow:hidden;}
 
   // Store "Membership" tab. Products live in the "Shop" tab (gaia-store.js);
   // personal entitlements (orders, bookings) move to Profile in its redesign.
+  // "Try the Membership 2.0 beta" card; empty unless gaia-beta-link.js has its switch on.
+  function betaLink(where) { try { return (window.GaiaBetaLink && window.GaiaBetaLink.html(where)) || ''; } catch (_) { return ''; } }
   function renderStore() {
     const box = el('store-memberships'); if (!box) return;
-    box.innerHTML = membershipCards();
+    box.innerHTML = betaLink('store') + membershipCards();
   }
 
   function render() {

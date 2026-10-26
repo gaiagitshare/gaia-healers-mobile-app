@@ -62,3 +62,6 @@ gaia-healers-visual-assets.zip
 
 # Review artefacts (screenshots, recordings, transcripts) stay off the published site.
 /output
+
+# GitHub Pages build output (scripts/pages-build.mjs)
+/_site/

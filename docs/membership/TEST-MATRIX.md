@@ -257,7 +257,7 @@ Status as of **26 Oct 2026**. Membership 2.0 is built next to production. GHL, S
 | RB-MIG-01 | All migrations down and up on an empty DB; edited migrations refused | | MS migrations › migrations apply, roll back and re-apply cleanly; › an applied migration that is edited… | LPG | PASS | run |
 | RB-MIG-02 | 0009+ down/up on a DB with data | 0001–0008 data untouched; launch back at OFF; pilot list empty (rebuild by hand) | MS migrations-rollback-launch › 0009+ roll back and re-apply… | LPG | PASS | run |
 | RB-MIG-03 | 0011, 0010, 0009 one step at a time | | MS migrations-rollback-launch › each of 0011, 0010, 0009… | LPG | PASS | run |
-| RB-MIG-04 | 0011/0010 down while clients still hold the newer scopes | refused atomically (even for a revoked client); the runbook strips the scopes first | MS migrations-rollback-launch › 0011 / 0010 down are refused atomically… | LPG | PASS (finding: runbook step needed) | run |
+| RB-MIG-04 | 0011/0010 down while clients still hold the newer scopes | refused atomically (even for a revoked client); the runbook strips the scopes first; code is rolled back with the schema (findings 1–2) | MS migrations-rollback-launch › 0011 / 0010 down are refused atomically… | LPG | PASS (finding: runbook step needed) | run |
 | RB-FLAG-01 | Launch back to OFF on staging | instant; checkout `membership2_off` | drill (b) | STG | PASS | launch-rollback |
 | RB-GW-01 | Member gateway kill switch on staging | 404; app hides the area; restore works | drill (c) | STG | PASS | kill-switch |
 | RB-GW-02 | Admin gateway kill switch on staging | 404; Control Center hides the area; restore works | drill (c) | STG | PASS | kill-switch |
@@ -279,16 +279,17 @@ Status as of **26 Oct 2026**. Membership 2.0 is built next to production. GHL, S
 1. **0010 / 0011 rollback refused while api_clients hold the newer scopes** (`migrations/0010_member_scopes.sql` and `0011_operators.sql`, the `-- down` sections). The down sections re-add the tighter `api_clients_scopes_check`. On any DB with the proxy's member client or the admin client, a revoked one included (staging has 2), the down fails. It fails atomically and safely, but it does fail.
    - **Runbook step:** strip `member:*` / `admin:operate` from those rows, or delete them, before rolling back. Test: RB-MIG-04.
    - The applied files are checksummed, so they cannot be edited now. A later migration could make the down tolerant instead.
-2. **Rolling back 0009 loses the launch history and the pilot list.** Re-applying it starts at OFF, which fails closed. The pilot list must then be rebuilt by hand. Test: RB-MIG-02.
-3. **`launch.js show` reports the wrong ceiling** (`src/cli/launch.js` line 21: `launchState(pool)` reads `process.env`). The staging CLI env file has no `MEMBERSHIP2_STAGE_CEILING`; the API unit sets it in `Environment=`. So `show` prints "ceiling OFF, EFFECTIVE OFF" while the API is effectively INTERNAL_PILOT.
+2. **Code and schema roll back together.** After `0012` down, the current code fails on every audited write: `audit.js` writes `audit_logs.reason`, which 0012 adds. The rollback test hit this on the restacked stack. The runbook order is therefore: **flag OFF → gateways off → code back to the matching commit → migrations down**, never migrations alone.
+3. **Rolling back 0009 loses the launch history and the pilot list.** Re-applying it starts at OFF, which fails closed. The pilot list must then be rebuilt by hand. Test: RB-MIG-02.
+4. **`launch.js show` reports the wrong ceiling** (`src/cli/launch.js` line 21: `launchState(pool)` reads `process.env`). The staging CLI env file has no `MEMBERSHIP2_STAGE_CEILING`; the API unit sets it in `Environment=`. So `show` prints "ceiling OFF, EFFECTIVE OFF" while the API is effectively INTERNAL_PILOT.
    - Suggestion: print both, with a warning when the ceiling is unset, or read the ceiling from the API's health.
-4. **A service outage and "billing not connected" share one answer** (`staging-proxy/membership2-gateway.js` lines 60–61 and 89 use `PROVIDER_UNAVAILABLE`). The member view's copy for that code says "Billing isn't connected in this environment…". See [drill (d)](drills/2026-10-26-service-down.md).
-5. **The gateway timeout is fixed at 8 s** on every route (`membership2-gateway.js` line 57). It is bounded, but long for GETs.
-6. **A kill switch cannot be a drop-in `Environment=`.** Systemd applies `EnvironmentFile=` after it, so the env file wins. Use a second `EnvironmentFile` in a drop-in instead ([drill (c)](drills/2026-10-26-gateway-kill-switch.md)). This matters for the production runbook.
-7. **Docs are out of date:**
+5. **A service outage and "billing not connected" share one answer** (`staging-proxy/membership2-gateway.js` lines 60–61 and 89 use `PROVIDER_UNAVAILABLE`). The member view's copy for that code says "Billing isn't connected in this environment…". See [drill (d)](drills/2026-10-26-service-down.md).
+6. **The gateway timeout is fixed at 8 s** on every route (`membership2-gateway.js` line 57). It is bounded, but long for GETs.
+7. **A kill switch cannot be a drop-in `Environment=`.** Systemd applies `EnvironmentFile=` after it, so the env file wins. Use a second `EnvironmentFile` in a drop-in instead ([drill (c)](drills/2026-10-26-gateway-kill-switch.md)). This matters for the production runbook.
+8. **Docs are out of date:**
    - [MEMBERSHIP-VIEW.md](MEMBERSHIP-VIEW.md), "Known API ordering point", says checkout answers `PROVIDER_UNAVAILABLE` before the guard and the gate. The current code (`needStripe()` is now a lazy stub) answers the guard and the gate first. CP-LEG-01 and CP-CHK-03 prove it.
    - CONTROL-CENTER.md §5 describes the new 404 behaviour only. Production's old router answers 401 to a signed-out caller (PI-03).
-8. **Backups are never test-decrypted on the server.** The restore drill restores a fresh plaintext dump. Decrypting the encrypted artifact is A4 (key holder only). This is by design.
+9. **Backups are never test-decrypted on the server.** The restore drill restores a fresh plaintext dump. Decrypting the encrypted artifact is A4 (key holder only). This is by design.
 
 ## Totals (26 Oct 2026)
 

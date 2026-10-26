@@ -80,11 +80,14 @@ test('0011 / 0010 down are refused atomically while a client still holds admin:o
   const pool = await freshPool();
   try {
     const later = loadMigrations().filter((m) => m.id >= '0009');
-    const above11 = later.filter((m) => m.id > '0011').length;     // e.g. 0012, rolled back first
-    if (above11) await migrateDown(pool, { steps: above11 });
+    // Clients are created with the current code on the full schema (as on staging), then later migrations are peeled off.
+    // Rolling back past a migration also means running the code of that time: the current code writes columns
+    // (e.g. audit_logs.reason from 0012) that an older schema does not have.
     const adminClient = await createClient(pool, { name: 'gaia-healers-proxy-admin', scopes: ['admin:operate'] }, 'owner-fixture');
     const memberClient = await createClient(pool, { name: 'gaia-healers-proxy', scopes: ['identity:write', 'member:read', 'member:write'] }, 'owner-fixture');
     await revokeClient(pool, adminClient.id, 'owner-fixture');
+    const above11 = later.filter((m) => m.id > '0011').length;     // e.g. 0012, rolled back first
+    if (above11) await migrateDown(pool, { steps: above11 });
     const ids = await applied(pool);
     await assert.rejects(migrateDown(pool, { steps: 1 }), /0011_operators\.sql \(down\).*check constraint/);
     assert.deepEqual(await applied(pool), ids, 'nothing recorded as rolled back');

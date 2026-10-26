@@ -148,3 +148,29 @@ test('the runner refuses to reach the network: real Stripe is unreachable from t
   assert.equal(code, 1, 'scenario fails: api.stripe.com is denied by the test network guard');
   assert.match(lines.join('\n'), /Stripe requests made: [0-9]+ of cap 25/);
 });
+
+test('total budget across runs: the planned smoke test fits 25; one more run is refused before sending; crashes stay counted', async () => {
+  const fsMod = await import('node:fs'); const os = await import('node:os'); const path = await import('node:path');
+  const dir = fsMod.mkdtempSync(path.join(os.tmpdir(), 'sbx-budget-'));
+  const ledger = path.join(dir, 'budget.json');
+  const srv = await fakeSandboxStripe();
+  try {
+    const B = ['--total-budget', '25', '--budget-ledger', ledger];
+    const h1 = harness(srv);
+    assert.equal(await h1.run(['--scenario', 'A,I,EVENTS', '--run', ...B]), 0, h1.text());
+    const h2 = harness(srv);
+    assert.equal(await h2.run(['--scenario', 'CHECKOUT', '--run', ...B]), 0, h2.text());
+    const state = JSON.parse(fsMod.readFileSync(ledger, 'utf8'));
+    const planned = SCENARIOS.A.planned + SCENARIOS.I.planned + SCENARIOS.EVENTS.planned + SCENARIOS.CHECKOUT.planned;
+    assert.equal(state.used, planned); assert.ok(planned <= 25);
+    assert.ok(srv.requests.length <= state.used, 'never more sent than reserved');
+    const before = srv.requests.length;
+    const h3 = harness(srv);
+    assert.equal(await h3.run(['--scenario', 'CANCEL_NOW', '--run', ...B]), 2, '20 used + 9 planned > 25');
+    assert.match(h3.text(), /exceeds the total budget of 25/);
+    assert.equal(srv.requests.length, before, 'refused before any request');
+    const h4 = harness(srv);
+    assert.equal(await h4.run(['--scenario', 'I', '--run', '--total-budget', '50', '--budget-ledger', ledger]), 2, 'budget cannot be raised from the command line');
+    assert.equal((fsMod.statSync(ledger).mode & 0o777), 0o600);
+  } finally { await srv.close(); fsMod.rmSync(dir, { recursive: true, force: true }); }
+});

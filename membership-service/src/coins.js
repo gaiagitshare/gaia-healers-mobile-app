@@ -146,6 +146,21 @@ export async function clawbackPurchased(db, { personId, coins, idempotencyKey, r
   });
 }
 
+/** Open coin-refund review items (unrecovered refunded value), oldest first. */
+export async function openRefundReviews(db, { limit = 100 } = {}) {
+  return (await db.query("SELECT * FROM coin_refund_reviews WHERE status = 'open' ORDER BY created_at LIMIT $1", [limit])).rows;
+}
+
+export async function resolveRefundReview(db, id, { by, resolution }) {
+  if (!by || typeof resolution !== 'string' || resolution.trim().length < 5) fail('INVALID_INPUT', 'by and a written resolution are required');
+  return inTransaction(db, async (c) => {
+    const r = await c.query("UPDATE coin_refund_reviews SET status = 'resolved', resolved_by = $2, resolution = $3, resolved_at = now() WHERE id = $1 AND status = 'open' RETURNING id", [id, by, resolution.trim()]);
+    if (!r.rowCount) fail('CONFLICT', 'review not open');
+    await audit(c, { actorType: 'admin', actorId: by, action: 'coins.refund_review_resolved', entityType: 'coin_refund_review', entityId: id, after: { resolution: resolution.trim() } });
+    return true;
+  });
+}
+
 /** Migration opening balance (spec §11). Exists for a future approved import; nothing calls it on real data. */
 export async function openingBalance(pool, { personId, coins, bucket, sourceRef, actor }) {
   if (bucket !== 'purchased' && bucket !== 'legacy') fail('INVALID_INPUT', 'opening balances go to purchased or legacy');

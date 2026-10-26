@@ -45,6 +45,7 @@
  */
 import crypto from 'node:crypto';
 import { parseArgs } from 'node:util';
+import fs from 'node:fs';
 import { pathToFileURL } from 'node:url';
 import { createStripeClient, keyMode, STRIPE_API_BASE } from '../providers/stripe/client.js';
 import { createRequestCap } from '../providers/request-cap.js';
@@ -332,6 +333,7 @@ export async function main(argv = process.argv.slice(2), {
   try {
     a = parseArgs({ args: argv, strict: true, options: {
       scenario: { type: 'string' }, run: { type: 'boolean', default: false }, 'dry-run': { type: 'boolean', default: false }, 'max-requests': { type: 'string' },
+      'total-budget': { type: 'string' }, 'budget-ledger': { type: 'string' },
     } }).values;
   } catch (e) { err(`[${LABEL}] ${e.message}`); return 2; }
   const dryRun = a['dry-run'] || !a.run;
@@ -352,6 +354,24 @@ export async function main(argv = process.argv.slice(2), {
   out(`[${LABEL}] planned Stripe test-mode requests: ${planned} | cap: ${max}`);
   if (planned > max) { err(`[${LABEL}] REFUSED: ${planned} planned requests exceed the cap of ${max}. Run fewer scenarios; raise --max-requests for one run only after approval.`); return 2; }
 
+  // Optional budget across runs (the owner's "25 requests in total for the first smoke test"): a ledger file
+  // records every request actually made; a run whose plan would take the total past the budget is refused.
+  let ledger = null;
+  if (a['total-budget'] !== undefined || a['budget-ledger'] !== undefined) {
+    const total = Number(a['total-budget']);
+    if (!a['budget-ledger'] || !Number.isInteger(total) || total < 1) { err(`[${LABEL}] REFUSED: --total-budget N and --budget-ledger <file> go together.`); return 2; }
+    let state = { budget: total, used: 0, runs: [] };
+    try { state = JSON.parse(fs.readFileSync(a['budget-ledger'], 'utf8')); } catch (e) { if (e.code !== 'ENOENT') { err(`[${LABEL}] REFUSED: budget ledger unreadable.`); return 2; } }
+    if (state.budget !== total) { err(`[${LABEL}] REFUSED: ledger budget is ${state.budget}; it cannot be changed from the command line (new budget = new ledger, after approval).`); return 2; }
+    out(`[${LABEL}] total budget: ${state.used} of ${total} used; this run plans ${planned}`);
+    if (state.used + planned > total) { err(`[${LABEL}] REFUSED: ${state.used} used + ${planned} planned exceeds the total budget of ${total}.`); return 2; }
+    ledger = { file: a['budget-ledger'], state };
+  }
+  const saveLedger = () => {
+    fs.writeFileSync(ledger.file + '.tmp', JSON.stringify(ledger.state, null, 1), { mode: 0o600 });
+    fs.renameSync(ledger.file + '.tmp', ledger.file);
+  };
+
   // Key: test mode only, checked even for a dry run if one is set. Never echoed.
   const key = env.STRIPE_TEST_SECRET_KEY;
   if (key !== undefined && !(TEST_KEY.test(key) && keyMode(key) === 'test')) {
@@ -361,8 +381,14 @@ export async function main(argv = process.argv.slice(2), {
   if (dryRun) { out(`[${LABEL}] dry run: nothing sent. Pass --run to execute against Stripe test mode.`); return 0; }
   if (!key) { err(`[${LABEL}] REFUSED: STRIPE_TEST_SECRET_KEY is not set.`); return 2; }
 
-  const cap = createRequestCap({ label: LABEL, max, fetch });
+  const cap = createRequestCap({ label: LABEL, max: ledger ? Math.min(max, planned) : max, fetch });
   cap.assertPlan(planned);
+  if (ledger) {
+    // Reserve the whole plan BEFORE sending anything: even a crash mid-run can never take the total past the budget.
+    ledger.state.used += planned;
+    ledger.state.runs.push({ runId, scenarios: ids, reserved: planned, requests: null, at: new Date(now()).toISOString() });
+    saveLedger();
+  }
   const stripe = createStripeClient({ apiKey: key, fetch: cap.fetch, baseUrl, retry: { maxRetries: 1 }, ...(sleep ? { sleep } : {}) });
   if (stripe.livemode !== false) { err(`[${LABEL}] REFUSED: not a test-mode client.`); return 2; }
 
@@ -419,6 +445,11 @@ export async function main(argv = process.argv.slice(2), {
   }
   if (left.length) out(`[${LABEL}] left behind in test mode (clean up by hand): ${left.map((o) => `${o.type} ${o.id}`).join(', ')}`);
   out(`[${LABEL}] Stripe requests made: ${cap.used()} of cap ${cap.max}${cap.refused() ? ` (${cap.refused()} refused by the cap)` : ''}`);
+  if (ledger) {
+    ledger.state.runs[ledger.state.runs.length - 1].requests = cap.used();   // the reservation stays: conservative, never refunded
+    saveLedger();
+    out(`[${LABEL}] total budget: ${ledger.state.used} of ${ledger.state.budget} reserved (${cap.used()} sent this run)`);
+  }
   if (code) return code;
   if (cap.refused()) { err(`[${LABEL}] STOPPED: request cap reached (${cap.max}) during cleanup; nothing past the cap was sent.`); return 2; }
   if (failures.length) { out(`[${LABEL}] FAILED: ${failures.join('; ')}`); return 1; }

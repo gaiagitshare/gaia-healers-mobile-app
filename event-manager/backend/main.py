@@ -8486,6 +8486,21 @@ def payment_exceptions(grace_hours: int = 6, db: Session = Depends(get_db),
     }
 
 
+@app.get("/identity/staff/{user_id}/control-center")
+def staff_control_center_access(user_id: int, db: Session = Depends(get_db), _: bool = Depends(require_service_token)):
+    """May this staff account act as a Gaia Control Center administrator?
+
+    The Control Center (the Gaia proxy) accepts an Event Manager login as its
+    single sign-on, but a valid signature only proves WHO someone is, not what
+    they may do. Door and check-in staff hold real logins too, so the proxy
+    asks here, server to server, before treating a token as an administrator.
+    Only the platform owner flag (User.is_admin) grants it -- never a per-event
+    role. Answers yes/no only: no email, no name, no roles list.
+    """
+    user = db.query(models.User).filter(models.User.id == user_id).first()
+    return {"user_id": user_id, "control_center_admin": bool(user is not None and user.is_admin)}
+
+
 @app.get("/identity/system-summary")
 def system_summary(db: Session = Depends(get_db), _: bool = Depends(require_service_token)):
     """Counts for the System Map. Every figure is a live COUNT(*), not a cache."""

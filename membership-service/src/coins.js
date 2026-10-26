@@ -123,6 +123,29 @@ export async function creditPurchase(pool, { personId, coins, idempotencyKey, pa
     (c, wallet, op) => move(c, wallet, op.id, 'purchased', coins, 'purchase'));
 }
 
+/**
+ * Take back purchased coins after a coin-pack refund: as many of `coins` as are
+ * still unspent in the purchased bucket, never below zero. Coins already spent
+ * are reported as `shortfall` (a support decision, never a negative balance).
+ */
+export async function clawbackPurchased(db, { personId, coins, idempotencyKey, relatedId, actor = 'system' }) {
+  posInt(coins, 'coins'); checkKey(idempotencyKey);
+  return inTransaction(db, async (c) => {
+    const w = (await c.query('SELECT id, purchased_balance FROM coin_wallets WHERE person_id = $1 FOR UPDATE', [personId])).rows[0];
+    if (!w) return { clawedBack: 0, shortfall: coins, replayed: false };
+    const prior = (await c.query('SELECT coins FROM coin_operations WHERE wallet_id = $1 AND idempotency_key = $2', [w.id, idempotencyKey])).rows[0];
+    if (prior) return { clawedBack: prior.coins, shortfall: coins - prior.coins, replayed: true };
+    const take = Math.min(coins, w.purchased_balance);
+    if (take <= 0) {
+      await audit(c, { ...toActor(actor), action: 'coins.clawback_shortfall', entityType: 'coin_wallet', entityId: w.id, after: { requested: coins, clawedBack: 0, relatedId } });
+      return { clawedBack: 0, shortfall: coins, replayed: false };
+    }
+    const r = await operation(c, { personId, kind: 'adjustment', idempotencyKey, coins: take, reason: 'coin_pack_refunded', relatedType: 'payment', relatedId, actor },
+      async (c2, wallet, op) => { await move(c2, wallet, op.id, 'purchased', -take, 'adjustment'); return { shortfall: coins - take }; });
+    return { clawedBack: take, shortfall: coins - take, replayed: false, operation: r.operation };
+  });
+}
+
 /** Migration opening balance (spec §11). Exists for a future approved import; nothing calls it on real data. */
 export async function openingBalance(pool, { personId, coins, bucket, sourceRef, actor }) {
   if (bucket !== 'purchased' && bucket !== 'legacy') fail('INVALID_INPUT', 'opening balances go to purchased or legacy');

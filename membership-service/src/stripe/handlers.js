@@ -18,6 +18,8 @@
  *     subscription to the mapped plan version, with a history row.
  */
 import { createSubscriptionInTx, transitionInTx, canTransition } from '../subscriptions.js';
+import { creditPurchase, clawbackPurchased } from '../coins.js';
+import { fail } from '../errors.js';
 
 const STATUS = {
   incomplete: 'incomplete', incomplete_expired: 'expired', trialing: 'trialing', active: 'active',
@@ -130,11 +132,49 @@ async function invoiceFailed(c, event, row) {
   return 'processed';
 }
 
-async function bookRefund(c, r, { personId = null, currency, event, row }) {
+async function bookRefund(c, r, { personId = null, currency, event, row, chargeId = null }) {
   if (r.status && r.status !== 'succeeded') return false;        // pending / failed refunds move no money
-  await ledger(c, { personId, objectType: 'refund', objectId: r.id, entryType: 'refund', amount: -Math.abs(r.amount), currency: r.currency || currency,
+  const charge = r.charge || chargeId;
+  const pack = charge ? (await c.query(
+    `SELECT o.coins, o.related_entity_id, w.person_id, l.amount_cents FROM coin_operations o JOIN coin_wallets w ON w.id = o.wallet_id
+       JOIN payment_ledger l ON l.coin_operation_id = o.id AND l.entry_type = 'charge'
+      WHERE o.kind = 'purchase' AND o.related_entity_type = 'payment' AND o.related_entity_id = $1`, [charge])).rows[0] : null;
+  await ledger(c, { personId: personId || pack?.person_id || null, objectType: 'refund', objectId: r.id, entryType: 'refund', amount: -Math.abs(r.amount), currency: r.currency || currency,
     webhookEventId: row.id, livemode: event.livemode === true, occurredAt: ts(r.created) || ts(event.created) });
+  if (pack) {
+    // Refund of a coin pack: take back the refunded share of its coins, as far as they are unspent.
+    const coins = Math.min(pack.coins, Math.ceil(pack.coins * Math.abs(r.amount) / Math.max(1, pack.amount_cents)));
+    if (coins > 0) await clawbackPurchased(c, { personId: pack.person_id, coins, idempotencyKey: 'stripe-refund:' + r.id, relatedId: r.id, actor: { actorType: 'provider', actorId: 'stripe' } });
+  }
   return true;
+}
+
+/**
+ * Coin pack paid (spec §4): credit the purchased balance and book the charge in
+ * ONE transaction. Only for PaymentIntents our checkout created (metadata), only
+ * once the money arrived (payment_intent.succeeded, so delayed methods wait), and
+ * only if the amount paid equals the pack price; anything else is refused for a human.
+ */
+async function coinPackPaid(c, event, row) {
+  const pi = event.data.object;
+  const md = pi.metadata || {};
+  if (!md.gaia_coin_package_id) return 'ignored';                // not a Gaia coin pack (subscriptions arrive as invoices)
+  const pack = (await c.query('SELECT id, key, coins, bonus_coins, price_cents, currency FROM coin_packages WHERE id = $1', [md.gaia_coin_package_id])).rows[0];
+  if (!pack) fail('INVALID_INPUT', 'unknown coin package');
+  const person = (await c.query('SELECT id FROM persons WHERE id = $1', [md.gaia_person_id])).rows[0];
+  if (!person) fail('INVALID_INPUT', 'unknown person on coin pack payment');
+  const coins = Number(md.gaia_coins);
+  if (!Number.isSafeInteger(coins) || coins !== pack.coins + pack.bonus_coins) fail('INVALID_INPUT', 'coin count does not match the package');
+  if (pi.amount_received !== pack.price_cents || String(pi.currency).toUpperCase() !== pack.currency) fail('INVALID_INPUT', 'amount paid does not match the package price');
+  const chargeId = typeof pi.latest_charge === 'string' ? pi.latest_charge : pi.latest_charge?.id;
+  if (!chargeId) throw new RetryLater('payment intent has no charge yet');
+  const credit = await creditPurchase(c, { personId: person.id, coins, idempotencyKey: 'stripe-pi:' + pi.id, paymentRef: chargeId, actor: { actorType: 'provider', actorId: 'stripe' } });
+  await c.query(
+    `INSERT INTO payment_ledger (person_id, provider, provider_object_type, provider_object_id, entry_type, amount_cents, currency, coin_operation_id, webhook_event_id, livemode, occurred_at)
+     VALUES ($1, 'stripe', 'charge', $2, 'charge', $3, $4, $5, $6, $7, $8)
+     ON CONFLICT (provider, provider_object_type, provider_object_id, entry_type) DO NOTHING`,
+    [person.id, chargeId, pi.amount_received, pack.currency, credit.operation.id, row.id, event.livemode === true, ts(event.created)]);
+  return 'processed';
 }
 
 /** Older API versions embed refunds in the charge; newer ones send refund.* events (handled below). */
@@ -142,7 +182,7 @@ async function chargeRefunded(c, event, row) {
   const ch = event.data.object;
   const personId = await personForCustomer(c, ch.customer);
   let booked = 0;
-  for (const r of ch.refunds?.data || []) if (await bookRefund(c, r, { personId, currency: ch.currency, event, row })) booked++;
+  for (const r of ch.refunds?.data || []) if (await bookRefund(c, r, { personId, currency: ch.currency, event, row, chargeId: ch.id })) booked++;
   return booked ? 'processed' : 'ignored';
 }
 
@@ -174,6 +214,7 @@ export const stripeHandlers = Object.freeze({
   'customer.subscription.paused': subscriptionChanged,
   'customer.subscription.resumed': subscriptionChanged,
   'invoice.paid': invoicePaid,
+  'payment_intent.succeeded': coinPackPaid,
   'invoice.payment_failed': invoiceFailed,
   'charge.refunded': chargeRefunded,
   'refund.created': refundEvent,

@@ -170,10 +170,13 @@ test('a price cannot be added to a version while it is being published', { skip:
       await a.query('BEGIN'); await a.query('SELECT id FROM plan_versions WHERE id = $1 FOR UPDATE', [d.id]);
       await a.query("UPDATE plan_versions SET status = 'published', published_at = now() WHERE id = $1", [d.id]);
       await b.query('BEGIN');
-      const ins = b.query("INSERT INTO plan_version_prices (plan_version_id, billing_interval, amount_cents) VALUES ($1, 'year', 1)", [d.id]);
+      // Settle the outcome at once so the rejection is never "unhandled" while we commit.
+      const ins = b.query("INSERT INTO plan_version_prices (plan_version_id, billing_interval, amount_cents) VALUES ($1, 'year', 1)", [d.id])
+        .then(() => null, (e) => e);
       await new Promise((r) => setTimeout(r, 200));
       await a.query('COMMIT');
-      await assert.rejects(ins, /cannot change/);
+      const err = await ins;
+      assert.match(String(err && err.message), /cannot change/);
       await b.query('ROLLBACK');
     } finally { a.release(); b.release(); }
     assert.equal((await pool.query("SELECT count(*)::int n FROM plan_version_prices WHERE plan_version_id = $1 AND billing_interval = 'year'", [d.id])).rows[0].n, 0);

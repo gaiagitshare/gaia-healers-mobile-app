@@ -23,10 +23,11 @@ keys unless `allowLive: true` is passed, and nothing passes it.
 ## 2. Prerequisites
 
 - **Stripe**: test-mode access to the Gaia Stripe account (topology question P-Q2
-  answered); a test restricted key (`rk_test_…`) with write on Customers, Products,
-  Prices, Checkout Sessions, Subscriptions and read on Invoices, Charges, Refunds,
-  Disputes; a test webhook endpoint and its `whsec_…` secret; Stripe CLI for
-  `stripe trigger` / `stripe listen` (test mode only).
+  answered); a test restricted key (`rk_test_…`) and a test webhook secret
+  (`whsec_…`). The exact per-scenario permissions, the account decision, where
+  the secrets go and the webhook delivery options are in
+  [`STRIPE-SANDBOX-ACCESS.md`](STRIPE-SANDBOX-ACCESS.md). Stripe CLI for
+  `stripe trigger` / `stripe listen` / `stripe events resend` (test mode only).
 - **Database**: a throwaway Postgres (`scripts/test-db.sh up`), migrated, catalog
   seeded (`seedCatalog`); one coin pack set `active` for scenario I only.
 - **GHL**: sandbox location id, contacts-scoped token, the five `gaia_membership_*`
@@ -34,11 +35,32 @@ keys unless `allowLive: true` is passed, and nothing passes it.
 - **Partner**: sandbox base URL (https), service token, webhook secret, and a
   sandbox practitioner with ≥2 subscriptions and a coin history spanning ≥2 pages.
 - Secrets are injected at run time and never committed, logged or printed.
-- Stripe runner: `membership-service/src/cli/stripe-sandbox.js` automates A, B, E, H, I, J
-  (Stripe side only; webhook-driven ledger checks still need `stripe listen`). Dry run by
-  default, test keys only, hard cap 25 requests per run at the fetch layer
-  (`src/providers/request-cap.js`, same contract as `paid-call-guard.mjs`), cleanup of its own
-  objects. C, D, F, G and K–N stay manual.
+- Stripe runner: `membership-service/src/cli/stripe-sandbox.js` automates, Stripe side only
+  (max requests per scenario, cleanup included):
+
+  | id | covers | max requests |
+  |---|---|---|
+  | A | initial payment (subscription, 4242) | 8 |
+  | B | declined card | 3 |
+  | E | refunds (partial, duplicate request, rest) | 6 |
+  | H | cancel-at-period-end flag | 9 |
+  | I | coin pack one-time charge (no invoice) | 3 |
+  | J | reconciliation fetch over the run | 4 |
+  | CHECKOUT | hosted checkout session created with Gaia metadata, then expired (paying it needs a browser) | 8 |
+  | RENEW | test clock: one period later the renewal invoice is paid | 16 |
+  | DUNNING | row D: test clock, `pm_card_chargeCustomerFail` renewal fails → `past_due` → paid with a good card → `active` | 20 |
+  | CANCEL_END | test clock: past the period end the subscription is `canceled`, no renewal invoice | 17 |
+  | CANCEL_NOW | immediate cancellation | 9 |
+  | CHANGE | upgrade then downgrade, `proration_behavior=none`, no new invoice | 12 |
+  | 3DS | row C, Stripe side: `pm_card_authenticationRequired` → subscription `incomplete` | 8 |
+  | EVENTS | row G helper: one page (≤ 20) of event ids/types to pick for a resend | 1 |
+
+  Dry run by default, test keys only, hard cap 25 requests per run at the fetch layer
+  (`src/providers/request-cap.js`, same contract as `paid-call-guard.mjs`), at most 3 scenarios
+  per run (DUNNING runs alone), cleanup of its own objects (test clocks are deleted, which removes
+  their customers). Webhook-driven ledger checks need a delivery path and
+  `src/cli/staging-webhook-server.js` (STRIPE-SANDBOX-ACCESS.md §5). Still manual: the 3DS browser
+  challenge (C), disputes (F), resends (G, via Dashboard or `stripe events resend`), K–N.
 
 ## 3. Scenarios (mapped to spec §15 QA gates)
 

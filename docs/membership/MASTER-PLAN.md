@@ -22,8 +22,9 @@ Last updated: 26 Oct 2026.
 8. #301 safeguards + grant-first + pilot
 9. #302 refund reviews, budget ledger, real Standard runner
 10. #303 launch flags
+11. member gateway (this PR, stacked on #303)
 
-**Separate PRs:** security batch #286–#290, #292, #294 (awaiting deployment approval); #297 GHL webhook secret; branding PR (in progress).
+**Separate PRs:** security batch #286–#290, #292, #294 (awaiting deployment approval); #297 GHL webhook secret; #304 branding.
 
 ## Phase 1: Backend completion
 
@@ -59,7 +60,7 @@ Existing assets to reuse:
 
 | Feature | Component | Status | Dependencies |
 |---|---|---|---|
-| Member gateway `/api/membership2/*` (session → person, flag-gated, origin-checked) | staging-proxy router + membership-service member routes | TODO (next) | #303 |
+| Member gateway `/api/membership2/*` (session → person, flag-gated, origin-checked; OFF by default) | staging-proxy/membership2-gateway.js + membership-service api/member-routes.js | **DONE** (PR gateway) | real gateway + API + Postgres tests; proxy boot test (404 when off) |
 | Staging app stack (staging proxy instance + staging webhook receiver + internal API on loopback) | ops | TODO | gateway |
 | Plan comparison (4 tiers, monthly/annual) | app, Membership view | TODO | gateway |
 | Checkout (monthly/annual) | app → Stripe Checkout | TODO | gateway, sandbox |
@@ -113,9 +114,9 @@ Existing assets to reuse:
 
 | Item | Status |
 |---|---|
-| Audit + classification of "Gaia" occurrences, replacements, all languages | IN PROGRESS (branding PR) |
-| Automated guard test against regressions | IN PROGRESS |
-| Before/after evidence in the readiness report | IN PROGRESS |
+| Audit + classification of "Gaia" occurrences, replacements (English only: no translation files exist) | DONE (#304), owner decisions listed in the PR |
+| Automated guard test against regressions | DONE (#304 tests/brand-consistency.test.cjs) |
+| Before/after evidence in the readiness report | DONE (#304 docs/BRANDING-AUDIT.md, 12 screenshots) |
 
 ## Decisions and access outstanding
 

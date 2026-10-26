@@ -64,7 +64,7 @@ function assertMode(obj, livemode) {
 
 /**
  * createStripeClient({ apiKey, fetch, baseUrl?, apiVersion?, allowLive?, retry?, sleep? })
- * returns { livemode, get(path, query), post(path, params, { idempotencyKey }) }
+ * returns { livemode, get(path, query), post(path, params, { idempotencyKey }), del(path) }
  */
 export function createStripeClient({ apiKey, fetch, baseUrl = STRIPE_API_BASE, apiVersion, allowLive = false, retry, sleep, random } = {}) {
   const mode = keyMode(apiKey);
@@ -91,5 +91,7 @@ export function createStripeClient({ apiKey, fetch, baseUrl = STRIPE_API_BASE, a
       }
       return assertMode(await request('POST', path, { form: encodeForm(params || {}), idempotencyKey }), livemode);
     },
+    // DELETE is idempotent on Stripe's side (deleting twice is a 404), so it carries no key.
+    async del(path) { return assertMode(await request('DELETE', path), livemode); },
   });
 }

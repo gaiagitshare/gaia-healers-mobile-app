@@ -86,6 +86,62 @@ mirror of what GHL reports (filled by the legacy reader in `providers/ghl/`).
   subscription starts billing, and urgently once both could be charging.
   Code never cancels, pauses or edits a GHL / PayPal subscription, price, tag or
   course access.
+## Daily reconciliation and the Stripe sandbox runner (not scheduled, not run)
+
+Both scripts can call Stripe, so both carry a hard request cap
+(`src/providers/request-cap.js`: the plan is checked against the cap before the
+first request and refused above it, never trimmed; the request that would
+exceed the cap throws at the fetch layer, retries included). Both default to a
+dry run.
+
+| script | default plan | cap | notes |
+|---|---|---|---|
+| `src/cli/reconcile-daily.js` | 8 requests (4 lists x 2 pages) | 8 (`--max-requests`) | previous UTC day + 6 h backward overlap; `--run` to execute; `STRIPE_RECONCILE_KEY` (test key; live refused unless `--allow-live`), `MEMBERSHIP_DATABASE_URL`; exit 0 clean, 1 mismatches or incomplete fetch, 2 refused, 3 failed |
+| `src/cli/stripe-sandbox.js` | per scenario: A 8, B 3, E 6, H 9, I 3, J 4 (cleanup included) | 25 per run (`--max-requests`) | Stripe **test mode only** (`STRIPE_TEST_SECRET_KEY` = `sk_test_`/`rk_test_`, anything else refused); `--scenario A[,E,I]` required, at most 3; `--run` to execute; fictional `@example.invalid` customers; deletes its customers and archives its prices/products; prints ids and statuses only |
+
+**Daily job** (`src/providers/stripe/daily-reconcile.js`): fetches Stripe objects
+created from `dayStart - overlap` to `dayEnd`, compares them with
+`payment_ledger` (`reconcile.js`), and runs the coin-pack check
+`membership.coin_purchase_ledger_mismatches(dayStart, dayEnd)` (migration 0006:
+every Stripe `purchase` coin operation has exactly one ledger charge row for the
+same charge, and every ledger charge row points at exactly one purchase).
+"Missing in Stripe" is judged only for ledger rows dated inside the day and only
+when every page was fetched. Every run is a new append-only
+`reconciliation_runs` + `reconciliation_daily_runs` row; each mismatch is one
+open `reconciliation_alerts` row, so a re-run (or the next day's overlap) bumps
+`seen_count` instead of alerting again. `alert()` is pluggable (the CLI writes
+one `ALERT {…}` line to stderr: ids, kinds and amounts only) and an alert is
+marked notified only after `alert()` returns, so a failed alert is re-sent by
+the next run. A person closes an alert with `resolveReconciliationAlert`; if
+the mismatch comes back it opens a new one.
+
+**Proposed timer: NOT installed.** Install it only after the owner approves a
+production database and a Stripe key. If approved, it would look like this:
+
+```ini
+# /etc/systemd/system/gaia-membership-reconcile.service
+[Unit]
+Description=Gaia membership: daily Stripe reconciliation (previous UTC day)
+[Service]
+Type=oneshot
+WorkingDirectory=/opt/gaia/membership-service
+EnvironmentFile=/etc/gaia/membership-reconcile.env   # STRIPE_RECONCILE_KEY, MEMBERSHIP_DATABASE_URL (root-only, 0600)
+ExecStart=/usr/bin/node src/cli/reconcile-daily.js --run
+# no Restart=: a failed run waits for the next day (exit 1/2/3 shows as failed in systemctl)
+
+# /etc/systemd/system/gaia-membership-reconcile.timer
+[Unit]
+Description=Daily Stripe reconciliation at 03:15 UTC
+[Timer]
+OnCalendar=*-*-* 03:15:00 UTC
+Persistent=true
+RandomizedDelaySec=300
+[Install]
+WantedBy=timers.target
+```
+
+One run a day, at most 8 Stripe requests (the cap), no retry loop beyond
+`http.js`'s bounded retries, which count against the same cap.
 
 ## Reused, not rebuilt
 

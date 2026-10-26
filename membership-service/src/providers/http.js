@@ -74,6 +74,7 @@ export function createHttpClient({ provider, baseUrl, fetch, headers = {}, retry
         res = await fetch(url, { method, headers: h, body, signal: AbortSignal.timeout(cfg.timeoutMs) });
       } catch (e) {
         if (String(e?.message || '').includes('TEST NETWORK DENY')) throw e;   // never retry a test-guard refusal
+        if (e?.requestCapExceeded === true) throw e;                          // nor a request-cap refusal (request-cap.js)
         lastStatus = 0;
         if (attempt < cfg.maxRetries) { await sleep(backoffDelay(attempt, cfg, null, random)); continue; }
         throw providerError('PROVIDER_UNAVAILABLE', `${provider} unreachable`, { provider, status: 0, attempts: attempt + 1 });

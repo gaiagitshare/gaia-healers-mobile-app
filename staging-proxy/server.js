@@ -375,6 +375,36 @@ export function isCrossSiteMemberWrite(req) {
   return !own.includes(from);
 }
 
+const ADMIN_COOKIE_NAME = process.env.GAIA_ADMIN_COOKIE || 'gaia_admin';
+
+/**
+ * Why an admin write must be refused, or '' to let it through.
+ *
+ * The Control Center cookie (gaia_admin) is SameSite=None, so a browser sends
+ * it on requests from ANY site, and readJsonBody parses a text/plain body as
+ * JSON — a form or fetch on another site could otherwise publish events, edit
+ * tags or change memberships as the signed-in operator. A cookie-authenticated
+ * write must therefore come from one of our own pages (Origin, else Referer)
+ * and carry a JSON body. A request with an Authorization header is not
+ * cookie-authenticated: a cross-site page cannot attach one without a CORS
+ * preflight, which only our allowed origins pass. Reads are untouched.
+ */
+export function crossSiteAdminWriteReason(req) {
+  if (!['POST', 'PUT', 'PATCH', 'DELETE'].includes(req.method)) return '';
+  if (String(req.headers.authorization || '').trim()) return ''; // bearer (Event Manager SSO)
+  const cookie = String(req.headers.cookie || '');
+  if (!cookie.split(/;\s*/).some((c) => c.startsWith(`${ADMIN_COOKIE_NAME}=`))) return ''; // no admin cookie, nothing to forge
+  const from = requestSourceOrigin(req);
+  const host = String(req.headers.host || '').split(',')[0].trim();
+  const own = [`https://${host}`, `http://${host}`, PROXY_PUBLIC_URL, ...ALLOWED_ORIGINS];
+  if (!from || !own.includes(from)) return 'admin_origin_not_allowed';
+  const length = Number(req.headers['content-length'] || 0);
+  const hasBody = length > 0 || Boolean(req.headers['transfer-encoding']);
+  const type = String(req.headers['content-type'] || '').split(';')[0].trim().toLowerCase();
+  if (hasBody && type !== 'application/json') return 'admin_json_required';
+  return '';
+}
+
 function sendJson(res, status, data, origin, extraHeaders = {}) {
   res.writeHead(status, {
     'Content-Type': 'application/json; charset=utf-8',
@@ -7194,6 +7224,17 @@ const server = http.createServer(async (req, res) => {
       return;
     }
     if (url.pathname.startsWith('/api/admin/')) {
+      const refused = crossSiteAdminWriteReason(req);
+      if (refused) {
+        console.warn('[Gaia] cross-site admin write refused', { path: url.pathname, reason: refused, from: requestSourceOrigin(req) });
+        sendJson(res, 403, {
+          ok: false, reason: refused,
+          error: refused === 'admin_json_required'
+            ? 'Control Center writes must send a JSON body (Content-Type: application/json).'
+            : 'This Control Center request did not come from a Gaia Healers page.',
+        }, origin);
+        return;
+      }
       await adminRouter.handle(req, res, url, {
         origin, sendJson, readJsonBody, signTokenPayload, readSignedToken,
         parseCookies, ghlGet, ghlConfig, ghlHeaders,

@@ -173,6 +173,7 @@ Clarifications (backend, 2026-10-26):
   IP per 15 min (together) → 429 `RATE_LIMITED`. The IP is `adminRouter.clientIp`; **merge PR #287 (trusted client IP) before
   this branch** so that it no longer reads `X-Forwarded-For` / `CF-Connecting-IP` (D4).
 - Off = every `/api/admin/membership2*` path answers the normal unknown-admin-route 404 (`{ok:false, reason:'unknown_admin_route'}`), signed in or not.
+  Note: today's production proxy (which predates the console-auth refactor) answers **401** to a signed-out caller for any `/api/admin/*` path, this one included; signed in, it is the 404. The Control Center hides the area on either answer (Phase 5 isolation check, 2026-10-26).
 - Without a valid console sign-in: 401 `AUTH_REQUIRED` (`reason:'admin_auth_required'`); without the operator cookie: 401 `AUTH_REQUIRED`.
 - Paths mirror the internal API 1:1 under `/api/admin/membership2/` (e.g. `POST /api/admin/membership2/login`,
   `GET /api/admin/membership2/persons/:id`). Login sets the cookie and never returns the token to JS.

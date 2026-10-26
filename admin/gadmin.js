@@ -6,6 +6,9 @@
   var drawerEl = document.getElementById('drawer');
   var scrimEl = document.getElementById('scrim');
   var toastEl = document.getElementById('toast');
+  // Membership 2.0 lives in gadmin-membership2.js. It is default-off: the menu
+  // item exists only after its /status probe answers 200 (see boot()).
+  var M2 = window.GaiaMembership2 || null;
 
   // ---- tiny helpers ----
   function h(html) { var t = document.createElement('template'); t.innerHTML = html.trim(); return t.content.firstChild; }
@@ -108,6 +111,7 @@
     else if (view === 'membership') mountMembership();
     else if (view === 'events') mountEvents();
     else if (view === 'system') mountSystem();
+    else if (view === 'membership2' && M2) M2.mount(document.getElementById('content'));
   }
 
   function shell() {
@@ -120,7 +124,8 @@
       surveys: ['Surveys', 'The onboarding questions and how the answers branch'],
       membership: ['Membership', 'Members by tier and status — Diamond, Gold, Silver'],
       events: ['Events', 'Your Event Manager — right inside the admin'],
-      system: ['System Map', 'How the whole Gaia Healers system fits together — live']
+      system: ['System Map', 'How the whole Gaia Healers system fits together — live'],
+      membership2: ['Membership 2.0', 'Gaia Healers Control Center — operator area (own sign-in)']
     };
     var t = titles[view] || ['', ''];
     return ''
@@ -138,6 +143,7 @@
       + item('membership', 'Membership', 'member')
       + item('events', 'Events', 'event')
       + item('system', 'System Map', 'system')
+      + (M2 && M2.enabled() ? '<button type="button" class="nav__item nav__item--btn ' + (view === 'membership2' ? 'is-active' : '') + '" data-nav="membership2">' + svg('lock', 'nav__ico') + 'Membership 2.0</button>' : '')
       + '    <div class="nav__sp"></div>'
       + '    <button class="nav__item alertbtn" id="alertbtn">' + svg('lock', 'nav__ico')
       + '<span>System Alerts</span><span class="alertbtn__n" id="alertn"></span></button>'
@@ -1222,7 +1228,7 @@
   }
 
   // ================= AUTH =================
-  function doLogout() { setToken(''); location.hash = ''; loginScreen(''); }
+  function doLogout() { if (M2) M2.signOut(true); setToken(''); location.hash = ''; loginScreen(''); }
 
   function loginScreen(msg) {
     root.innerHTML = ''
@@ -1295,6 +1301,11 @@
   }
 
   // ================= BOOT =================
+  if (M2) M2.init({
+    authHeaders: function () { return TOKEN ? { Authorization: 'Bearer ' + TOKEN } : {}; },
+    toast: toast,
+    adminExpired: function (msg) { setToken(''); loginScreen(msg); }
+  });
   function boot() {
     var hash = location.hash || '';
     if (hash.indexOf('#set=') === 0) { return setPasswordScreen(hash.slice(5)); }
@@ -1302,8 +1313,9 @@
     api('/session').then(function (d) {
       if (d && d.__401) return;
       if (d && d.authed) {
-        var initial = (location.hash || '').replace('#', ''); if (VIEWS.indexOf(initial) >= 0) view = initial;
-        render();
+        var start = function () { var initial = (location.hash || '').replace('#', ''); if (VIEWS.indexOf(initial) >= 0) view = initial; render(); };
+        if (M2) M2.probe().then(function (on) { if (on && VIEWS.indexOf('membership2') < 0) VIEWS.push('membership2'); start(); });
+        else start();
       } else { setToken(''); loginScreen(''); }
     }).catch(function () { loginScreen('Cannot reach the server.'); });
   }

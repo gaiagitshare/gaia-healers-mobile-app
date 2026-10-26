@@ -80,7 +80,7 @@ test('an unknown error code is refused', async () => {
 
 test('one client is throttled after twenty reports a minute', async () => {
   let last;
-  for (let i = 0; i < 25; i++) last = await post({ courseId: 'c-hx', lessonId: 'hx-1', code: 100 }, { 'x-forwarded-for': '203.0.113.9' });
+  for (let i = 0; i < 25; i++) last = await post({ courseId: 'c-hx', lessonId: 'hx-1', code: 100 }, { 'x-real-ip': '203.0.113.9' });
   assert.equal(last.status, 429);
   assert.equal(last.retry, '60');
 });

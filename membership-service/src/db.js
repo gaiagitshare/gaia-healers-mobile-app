@@ -41,3 +41,8 @@ export async function withTransaction(pool, fn, { retries = 3 } = {}) {
     }
   }
 }
+
+/** Run fn inside the caller's open transaction (a checked-out client) or a new one (a pool). */
+export function inTransaction(poolOrClient, fn) {
+  return typeof poolOrClient.release === 'function' ? fn(poolOrClient) : withTransaction(poolOrClient, fn);
+}

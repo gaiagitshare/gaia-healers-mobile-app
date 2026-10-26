@@ -154,3 +154,79 @@ test('accessibility basics: live region, labelled sections, focusable notice, pr
   assert.match(code, /GaiaNotice\.confirm\(ask, \{ detail/, 'cancellation confirms with the exact access-end date');
   assert.match(read('gaia-membership2.css'), /:focus-visible/);
 });
+
+/* ── per-plan access panel ─────────────────────────────────────────────────
+ * accessPanel() is pure; it is lifted out of the view and run against plans
+ * shaped exactly like /api/membership2/plans, built from the catalog (the
+ * source of truth, membership-service/src/catalog.js), so the test needs no
+ * copy of any tier's benefits. */
+const panelSrc = (() => {
+  const i = src.indexOf('function accessPanel(');
+  const j = src.indexOf('// end accessPanel', i);
+  assert.ok(i > 0 && j > i, 'accessPanel is a standalone function');
+  return src.slice(i, j);
+})();
+const accessPanel = new Function(panelSrc + '\nreturn accessPanel;')();
+async function catalogPlans() {
+  const { TIERS, ENTITLEMENTS } = await import(path.join(__dirname, '..', 'membership-service', 'src', 'catalog.js'));
+  const label = Object.fromEntries(ENTITLEMENTS.map(([k, , l]) => [k, l]));
+  const tiers = [...TIERS].sort((a, b) => a.rank - b.rank);   // the gateway orders plans by rank
+  const plans = tiers.map((t) => ({ key: t.key, name: t.name, monthlyCoins: t.coins, prices: t.prices,
+    benefits: Object.entries(t.entitlements).filter(([, v]) => v !== false).map(([k]) => ({ key: k, label: label[k] })) }));
+  const access = (t) => Object.entries(t.entitlements).filter(([, v]) => v !== false).map(([key, value]) => ({ key, value }));
+  return { tiers, plans, access };
+}
+
+test('access panel: built only from the API (/plans benefits, /me access), no catalogue copy in the view', () => {
+  assert.match(code, /accessPanel\(state\.plans, state\.me && state\.me\.access, currentKey\)/);
+  assert.match(code, /Included in your plan/);
+  assert.match(code, /Not in your plan/);
+  assert.match(code, /Unlocks with ' \+ esc\(g\.name\)/, 'grouped by the unlocking plan');
+  assert.match(code, /Unlocks with ' \+ esc\(b\.unlocksWith\)/, 'and each item is tagged');
+  assert.match(code, /You have everything Gaia Healers membership includes\./);
+  assert.match(code, /Compare plans to upgrade/);
+  assert.match(code, /aria-labelledby="m2-acc-in"/, 'the lists are labelled');
+  assert.match(code, /ph-lock-simple/, 'locked items carry an icon and text, not colour alone');
+  assert.doesNotMatch(panelSrc, /\b(free|standard|professional|inner[_ ]circle|certification|software\.|courses\.)\b/i, 'no tier or benefit names in the logic');
+  assert.doesNotMatch(code, /g-m2__chips/, 'the flat "Included now" chips are gone');
+});
+
+test('access panel: every tier sees exactly its catalog benefits, and each missing one unlocks with the lowest tier that has it', async () => {
+  const { tiers, plans, access } = await catalogPlans();
+  for (const [i, t] of tiers.entries()) {
+    const hasPlan = Object.keys(t.prices).some((k) => k !== 'none');
+    const a = accessPanel(plans, hasPlan ? access(t) : [], hasPlan ? t.key : null);
+    assert.equal(a.current.key, t.key, `${t.key}: current plan`);
+    const want = Object.entries(t.entitlements).filter(([, v]) => v !== false).map(([k]) => k).sort();
+    assert.deepEqual(a.included.map((b) => b.key).sort(), want, `${t.key}: included = its catalog entitlements`);
+    const higher = tiers.slice(i + 1);
+    const missing = [...new Set(higher.flatMap((h) => Object.keys(h.entitlements)))].filter((k) => !(k in t.entitlements)).sort();
+    assert.deepEqual(a.locked.map((b) => b.key).sort(), missing, `${t.key}: locked = higher tiers' benefits it lacks`);
+    for (const b of a.locked) {
+      const lowest = higher.find((h) => b.key in h.entitlements);
+      assert.equal(b.unlocksWith, lowest.name, `${t.key}: ${b.key} unlocks with ${lowest.name}`);
+    }
+  }
+});
+
+test('access panel: Inner Circle has nothing locked; a member without a plan gets the free plan; the discount reads with its value', async () => {
+  const { tiers, plans, access } = await catalogPlans();
+  const top = tiers[tiers.length - 1];
+  const a = accessPanel(plans, access(top), top.key);
+  assert.equal(a.locked.length, 0); assert.equal(a.everything, true);
+  const none = accessPanel(plans, [], null);
+  assert.equal(none.hasPlan, false); assert.equal(none.current.key, tiers[0].key);
+  assert.deepEqual(none.included.map((b) => b.key).sort(), Object.keys(tiers[0].entitlements).sort());
+  assert.ok(none.locked.every((b) => b.unlocksWith !== tiers[0].name));
+  const pct = tiers.find((t) => Object.values(t.entitlements).some((v) => typeof v === 'number'));
+  const [k, v] = Object.entries(pct.entitlements).find(([, x]) => typeof x === 'number');
+  const item = accessPanel(plans, access(pct), pct.key).included.find((b) => b.key === k);
+  assert.equal(item.label, `${v}% off certifications`);
+});
+
+test('plan cards: current plan marked, and each card says what it adds to the one before (API order)', () => {
+  assert.match(code, /Everything in ' \+ esc\(prev\.name\) \+ ', plus:/);
+  assert.match(code, /const prev = i > 0 \? plans\[i - 1\] : null;/);
+  assert.match(code, /'<span class="g-badge g-badge--on">Your plan<\/span>'/);
+  assert.match(code, /Your current plan stays as it is until you choose to move\./, 'legacy members keep their plan');
+});

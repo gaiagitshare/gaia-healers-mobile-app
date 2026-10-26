@@ -6,7 +6,7 @@ import './_providers-deny-network.mjs';
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { freshPool, SKIP, actor } from './_db.js';
+import { openLaunch, freshPool, SKIP, actor } from './_db.js';
 import { fakeStripe, fetchVia, noSleep } from './_providers-fakes.js';
 import { createStripeClient } from '../src/providers/stripe/client.js';
 import { createCheckoutSession, createMigrationCheckoutSession } from '../src/providers/stripe/adapter.js';
@@ -51,9 +51,10 @@ async function legacy(pool, { contact = null, personId = null, tier = 'silver', 
 async function setup() {
   const pool = await freshPool();
   await seedCatalog(pool);
+  await openLaunch(pool);
   await legacy(pool, { status: 'canceled', tier: 'gold' });     // someone else's ended row: the mirror is loaded
   const srv = await fakeStripe();
-  return { pool, srv, deps: { pool, stripe: client(srv) }, close: async () => { await srv.close(); await pool.end(); } };
+  return { pool, srv, deps: { pool, stripe: client(srv), env: process.env }, close: async () => { await srv.close(); await pool.end(); } };
 }
 const checkoutCalls = (srv) => srv.requests.filter((r) => r.path === '/v1/checkout/sessions').length;
 
@@ -101,6 +102,7 @@ test('without a loaded, recent legacy mirror nobody can be told "nothing paid el
   const pool = await freshPool();
   try {
     await seedCatalog(pool);
+    await openLaunch(pool);
     const m = await member(pool);
     const v = (await currentVersion(pool, 'standard')).id;
     assert.deepEqual((await checkoutEligibility(pool, m.personId, v, { now: NOW })).reasons, ['legacy_mirror_not_loaded']);
@@ -168,7 +170,7 @@ test('legacy -> new tier: offer, accept, billing only after paid-through (no swe
     assert.deepEqual(alerts.map((a) => a.kind), ['legacy_cancel_due']);
     // Billing gate: 3 days before billing, still unverified -> the trial is extended, not charged.
     srv.db.subscriptions.set('sub_mig_1', { id: 'sub_mig_1', status: 'trialing', items: { data: [{ current_period_end: T + 19 * 86400 }] } });
-    const deps2 = { pool, stripe: client(srv) };
+    const deps2 = { pool, stripe: client(srv), env: process.env };
     assert.deepEqual(await enforceMigrationBillingGate(deps2, { now: new Date('2026-12-18T00:00:00Z') }), { due: 1, held: 1 });
     const hold = srv.requests.filter((r) => r.method === 'POST' && r.path === '/v1/subscriptions/sub_mig_1').pop();
     assert.equal(Number(hold.form.trial_end), Math.floor(Date.parse('2026-12-27T00:00:00Z') / 1000), 'held 7 days past the planned start');

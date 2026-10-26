@@ -34,3 +34,12 @@ export const actor = { actorType: 'admin', actorId: 'test-admin' };
 export async function person(pool) {
   return (await pool.query('INSERT INTO persons DEFAULT VALUES RETURNING id')).rows[0].id;
 }
+
+/**
+ * Open the Membership 2.0 launch flag for a test (production default is OFF).
+ * Sets the stored stage (with an approval reference) and this process's environment ceiling.
+ */
+export async function openLaunch(pool, stage = 'ALL_NEW_CUSTOMERS') {
+  process.env.MEMBERSHIP2_STAGE_CEILING = stage;
+  await pool.query("UPDATE membership.launch_state SET stage = $1, approval_ref = 'TEST-GO', reason = 'test fixture', changed_by = 'test' WHERE id", [stage]);
+}

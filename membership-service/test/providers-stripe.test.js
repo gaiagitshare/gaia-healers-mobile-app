@@ -5,7 +5,7 @@ import './_providers-deny-network.mjs';
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { freshPool, SKIP, actor } from './_db.js';
+import { openLaunch, freshPool, SKIP, actor } from './_db.js';
 import { fakeStripe, fakeServer, fetchVia, noSleep } from './_providers-fakes.js';
 import { createStripeClient, encodeForm, keyMode } from '../src/providers/stripe/client.js';
 import { ensureCustomer, ensureProductAndPrice, createCheckoutSession, createCoinPackCheckout, cancelAtPeriodEnd } from '../src/providers/stripe/adapter.js';
@@ -82,7 +82,7 @@ test('ensureCustomer creates once, links the identity, and is idempotent under c
   const pool = await freshPool();
   const srv = await fakeStripe();
   try {
-    const deps = { pool, stripe: client(srv) };
+    const deps = { pool, stripe: client(srv), env: process.env };
     const pid = await newPerson(pool, 'cust@example.invalid');
     const results = await Promise.all([ensureCustomer(deps, pid), ensureCustomer(deps, pid), ensureCustomer(deps, pid)]);
     assert.equal(new Set(results.map((r) => r.customerId)).size, 1);
@@ -102,7 +102,8 @@ test('ensureProductAndPrice: one product per plan, one price per version price, 
   const srv = await fakeStripe();
   try {
     await seedCatalog(pool);
-    const deps = { pool, stripe: client(srv) };
+    await openLaunch(pool);
+    const deps = { pool, stripe: client(srv), env: process.env };
     const m = await priceIdOf(pool, 'standard', 'month');
     const y = await priceIdOf(pool, 'standard', 'year');
     const a = await ensureProductAndPrice(deps, m);
@@ -138,7 +139,8 @@ test('ensureProductAndPrice adopts an exactly matching price found by lookup key
   const srv = await fakeStripe();
   try {
     await seedCatalog(pool);
-    const deps = { pool, stripe: client(srv) };
+    await openLaunch(pool);
+    const deps = { pool, stripe: client(srv), env: process.env };
     const m = await priceIdOf(pool, 'professional', 'month');
     const first = await ensureProductAndPrice(deps, m);
     await pool.query('TRUNCATE provider_price_refs');            // simulate a crash after the Stripe call, before the insert
@@ -161,7 +163,8 @@ test('checkout session carries Gaia metadata; legacy, duplicate-plan and bad-inp
   const srv = await fakeStripe();
   try {
     await seedCatalog(pool);
-    const deps = { pool, stripe: client(srv) };
+    await openLaunch(pool);
+    const deps = { pool, stripe: client(srv), env: process.env };
     const pid = await newPerson(pool, 'buyer@example.invalid');
     const m = await priceIdOf(pool, 'standard', 'month');
     await seedLegacyMirror(pool);                                   // the guard needs a loaded legacy mirror
@@ -197,11 +200,16 @@ test('coin pack checkout: draft packs are not sold; an active pack is a one-time
   const srv = await fakeStripe();
   try {
     await seedCatalog(pool);
-    const deps = { pool, stripe: client(srv) };
+    await openLaunch(pool);
+    const deps = { pool, stripe: client(srv), env: process.env };
     const pid = await newPerson(pool, 'coins@example.invalid');
     await assert.rejects(createCoinPackCheckout(deps, pid, 'starter', { ...URLS, idempotencyKey: 'req-coins-1' }), (e) => e.code === 'PLAN_ARCHIVED');
     assert.equal(srv.requests.length, 0, 'refused before any Stripe call');
     await pool.query("UPDATE coin_packages SET status = 'active' WHERE key = 'regular'");
+    const closed = await createCoinPackCheckout(deps, pid, 'regular', { ...URLS, idempotencyKey: 'req-coins-x' });
+    assert.deepEqual([closed.status, closed.reason], ['not_available', 'coins_need_membership2'], 'coin packs are for Membership 2.0 members');
+    assert.equal(srv.requests.length, 0, 'still no Stripe call');
+    await createSubscription(pool, { personId: pid, planVersionId: (await currentVersion(pool, 'standard')).id, interval: 'month', status: 'active' }, actor);
     const s = await createCoinPackCheckout(deps, pid, 'regular', { ...URLS, idempotencyKey: 'req-coins-2' });
     assert.equal(s.coins, 1200);
     const f = srv.db.sessions.get(s.sessionId).form;
@@ -218,7 +226,8 @@ test('cancelAtPeriodEnd sets cancel_at_period_end on Stripe and schedules the sa
   const srv = await fakeStripe();
   try {
     await seedCatalog(pool);
-    const deps = { pool, stripe: client(srv) };
+    await openLaunch(pool);
+    const deps = { pool, stripe: client(srv), env: process.env };
     const pid = await newPerson(pool, 'cancel@example.invalid');
     const v = await currentVersion(pool, 'standard');
     const end = Math.floor(Date.parse('2027-01-01T00:00:00Z') / 1000);
@@ -288,7 +297,7 @@ test('reconcileStripe pages through the fake API, records the run, alerts only o
     for (const i of invoices) await ledgerRow(pool, pid, 'invoice', i.id, 'charge', 4700, '2026-12-01T01:00:00Z');
     const alerts = [];
     const window = { from: new Date('2026-12-01T00:00:00Z'), to: new Date('2026-12-02T00:00:00Z') };
-    const r = await reconcileStripe({ pool, stripe: client(srv) }, { ...window, alert: async (x) => alerts.push(x) });
+    const r = await reconcileStripe({ pool, stripe: client(srv), env: process.env }, { ...window, alert: async (x) => alerts.push(x) });
     assert.equal(r.checked, 150);
     assert.deepEqual(r.mismatches, []);
     assert.equal(r.complete, true);
@@ -298,14 +307,14 @@ test('reconcileStripe pages through the fake API, records the run, alerts only o
     assert.equal(srv.requests.length, 5, '2 invoice pages + charges + refunds + disputes');
 
     invoices.push({ id: 'in_new', status: 'paid', amount_paid: 9700, currency: 'usd', customer: 'cus_rec_2', created: T('2026-12-01T02:00:00Z') });
-    const r2 = await reconcileStripe({ pool, stripe: client(srv) }, { ...window, alert: async (x) => alerts.push(x) });
+    const r2 = await reconcileStripe({ pool, stripe: client(srv), env: process.env }, { ...window, alert: async (x) => alerts.push(x) });
     assert.equal(r2.mismatches.length, 1);
     assert.equal(alerts.length, 1);
     const runs = (await pool.query('SELECT mismatch_count, complete, livemode FROM reconciliation_runs ORDER BY created_at')).rows;
     assert.deepEqual(runs.map((x) => x.mismatch_count), [0, 1]);
     await assert.rejects(pool.query('DELETE FROM reconciliation_runs'), /append-only/);
 
-    const r3 = await reconcileStripe({ pool, stripe: client(srv) }, { ...window, maxPages: 1, alert: async (x) => alerts.push(x) });
+    const r3 = await reconcileStripe({ pool, stripe: client(srv), env: process.env }, { ...window, maxPages: 1, alert: async (x) => alerts.push(x) });
     assert.equal(r3.complete, false, 'page cap reached: reported incomplete, never silently treated as complete');
     assert.equal(alerts.length, 2);
   } finally { await srv.close(); await pool.end(); }

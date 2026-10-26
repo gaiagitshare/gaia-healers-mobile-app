@@ -485,6 +485,8 @@ Nothing in the app creates portal sessions yet. That step (`POST /v1/billing_por
 
 ## 6. Owner decision: proration on upgrade and downgrade
 
+**DECIDED 2026-10-26 (owner): the recommendation below is adopted.** Upgrades use `always_invoice` with `pending_if_incomplete`, and the higher tier is granted only after payment. Downgrades and annual/monthly switches happen at period end, with no proration and no refund. Not implemented yet; plan switching stays off until it is built and tested.
+
 Today the code always uses `proration_behavior: 'none'` (the sandbox CHANGE scenario and migration holds). The portal keeps plan switching off.
 
 | Option | What the member sees | For | Against |
@@ -493,7 +495,7 @@ Today the code always uses `proration_behavior: 'none'` (the sandbox CHANGE scen
 | `create_prorations` | The difference is added to the **next** invoice (credit for unused time, charge for the new plan's remainder) | fair; no extra charge mid-cycle | access is granted before payment; the next invoice is larger and confusing; a failed next invoice must be handled |
 | `always_invoice` | The prorated difference is **invoiced and charged immediately** | pay before access; clean audit trail per change; fewest grant-before-payment risks | a mid-cycle charge can fail (3DS, decline) and needs a "payment required" state; small charges and receipts |
 
-**Recommendation for the owner to weigh:**
+**Recommendation (adopted 2026-10-26):**
 - **Upgrades:** `always_invoice`, with `payment_behavior=pending_if_incomplete`, so the higher tier (and its coins) is granted only after the prorated charge succeeds.
 - **Downgrades:** take effect **at period end**, with no refund and no proration. A subscription schedule, or a Gaia-side scheduled change, switches the price at renewal, and the member keeps the paid tier until then.
 - **Annual ↔ monthly switches:** handled as a downgrade, at period end.

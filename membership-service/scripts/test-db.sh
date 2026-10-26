@@ -2,7 +2,7 @@
 # Throwaway PostgreSQL for the membership tests: loopback only, data in tmpfs,
 # removed on "down". Never point the tests at a real database.
 set -e
-NAME=gaia-membership-testdb
+NAME=${MEMBERSHIP_TEST_PG_NAME:-gaia-membership-testdb}
 PORT=${MEMBERSHIP_TEST_PG_PORT:-55432}
 case "$1" in
   up)

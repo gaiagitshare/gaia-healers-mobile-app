@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * Start the internal membership API (loopback only).
- *   MEMBERSHIP_DATABASE_URL=… [STRIPE_TEST_SECRET_KEY=rk_test_…] [MEMBERSHIP2_STAGE_CEILING=…]
+ *   MEMBERSHIP_DATABASE_URL=… [STRIPE_TEST_SECRET_KEY=rk_test_…] [MEMBERSHIP2_STAGE_CEILING=…] [MEMBERSHIP_OPERATOR_KEY=<32 bytes base64>]
  *   [MEMBERSHIP2_RETURN_ORIGINS=https://gaiahealers.app] node src/cli/api-server.js [--port 8792]
  * - binds 127.0.0.1 only (no host option); the proxy reaches it over loopback with its client token;
  * - Stripe: test-mode keys only; without a key, checkout/cancel answer PROVIDER_UNAVAILABLE;

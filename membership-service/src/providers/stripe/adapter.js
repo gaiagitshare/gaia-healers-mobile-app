@@ -19,7 +19,7 @@ import { withTransaction } from '../../db.js';
 import { audit } from '../../audit.js';
 import { fail } from '../../errors.js';
 import { linkIdentity, identitiesOf } from '../../identity.js';
-import { scheduleCancel } from '../../subscriptions.js';
+import { scheduleCancel, transition } from '../../subscriptions.js';
 import { checkoutEligibility } from '../../billing-guard.js';
 import { newBillingAllowed } from '../../launch.js';
 import { billingStartsAt, markCheckoutStarted } from '../../migration-offers.js';
@@ -292,4 +292,51 @@ export async function cancelAtPeriodEnd({ pool, stripe }, subscriptionId, { idem
   const accessEndsAt = new Date(endSec * 1000);
   await scheduleCancel(pool, s.id, { accessEndsAt }, actor);
   return { accessEndsAt, cancelAtPeriodEnd: r.cancel_at_period_end === true };
+}
+
+/**
+ * Immediate cancellation (Control Center, two-person rule). Stripe first
+ * (DELETE /v1/subscriptions/:id ends it now, no proration refund), then the
+ * local subscription moves to canceled. Without a Stripe client the caller's
+ * stub throws PROVIDER_UNAVAILABLE before anything changes.
+ */
+export async function cancelNow({ pool, stripe }, subscriptionId, { actor = ACTOR, now = new Date() } = {}) {
+  const s = (await pool.query('SELECT id, status, provider, provider_subscription_id FROM subscriptions WHERE id = $1', [subscriptionId])).rows[0];
+  if (!s) fail('NOT_FOUND', 'subscription not found');
+  if (s.provider !== 'stripe') fail('CONFLICT', 'not a Stripe subscription');
+  if (s.status === 'canceled' || s.status === 'expired') fail('CONFLICT', 'subscription already ended');
+  const r = await stripe.del(`/v1/subscriptions/${encodeURIComponent(s.provider_subscription_id)}`);
+  if (r?.id !== s.provider_subscription_id) fail('PROVIDER_UNAVAILABLE', 'stripe answered for a different subscription');
+  if (r.status !== 'canceled') fail('PROVIDER_UNAVAILABLE', 'stripe did not report the subscription canceled');
+  const t = await transition(pool, s.id, 'canceled', { reason: 'admin_cancel_now', now }, actor);
+  return { canceledAt: now, from: t.from, providerStatus: r.status };
+}
+
+/**
+ * Refund a Stripe charge recorded in payment_ledger (full or partial). Only a
+ * Stripe `charge` row (a coin pack) or `invoice` row (a membership payment).
+ * The refund row in payment_ledger is booked by the refund webhook, as every
+ * other money movement is; this returns Stripe's refund id and status.
+ * Idempotent per Control Center request (`idempotencyKey`).
+ */
+export async function refundPayment({ pool, stripe }, ledgerId, { amountCents, idempotencyKey, reason = 'requested_by_customer' } = {}) {
+  checkKey(idempotencyKey);
+  const l = (await pool.query('SELECT id, provider, provider_object_type, provider_object_id, entry_type, amount_cents, currency, livemode FROM payment_ledger WHERE id = $1', [ledgerId])).rows[0];
+  if (!l) fail('NOT_FOUND', 'payment not found');
+  if (l.provider !== 'stripe' || l.entry_type !== 'charge') fail('CONFLICT', 'only a Stripe charge can be refunded here');
+  if (!Number.isSafeInteger(amountCents) || amountCents <= 0 || amountCents > l.amount_cents) fail('INVALID_INPUT', 'amountCents must be between 1 and the charged amount');
+  if (l.livemode !== stripe.livemode) fail('FORBIDDEN', 'payment mode does not match the Stripe client mode');
+  let target;
+  if (l.provider_object_type === 'charge') target = { charge: l.provider_object_id };
+  else if (l.provider_object_type === 'invoice') {
+    const inv = await stripe.get(`/v1/invoices/${encodeURIComponent(l.provider_object_id)}`);
+    const pi = typeof inv?.payment_intent === 'string' ? inv.payment_intent : inv?.payment_intent?.id;
+    const ch = typeof inv?.charge === 'string' ? inv.charge : inv?.charge?.id;
+    if (ch) target = { charge: ch }; else if (pi) target = { payment_intent: pi };
+    else fail('CONFLICT', 'stripe reports no payment on this invoice');
+  } else fail('CONFLICT', 'unsupported payment object');
+  const r = await stripe.post('/v1/refunds', { ...target, amount: amountCents, reason, metadata: { gaia_ledger_id: String(l.id) } },
+    { idempotencyKey: `gaia-admin-refund-${idempotencyKey}` });
+  if (!r?.id || !/^re_/.test(r.id)) fail('PROVIDER_UNAVAILABLE', 'stripe returned no refund');
+  return { refundId: r.id, status: r.status, amountCents: r.amount, currency: String(r.currency || l.currency).toUpperCase() };
 }

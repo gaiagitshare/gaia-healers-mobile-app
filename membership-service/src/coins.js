@@ -146,6 +146,21 @@ export async function clawbackPurchased(db, { personId, coins, idempotencyKey, r
   });
 }
 
+/**
+ * Goodwill credit from a named Control Center operator (spec §4 support). Goes to
+ * the purchased bucket (never expires) as an `adjustment`, so it is not a
+ * Stripe purchase and never counts in the coin-pack ledger check. Bounded
+ * here as well as in the permission matrix (max 10 000 per operation).
+ */
+export const GOODWILL_MAX_COINS = 10000;
+export async function creditGoodwill(db, { personId, coins, idempotencyKey, requestRef, actor }) {
+  posInt(coins, 'coins');
+  if (coins > GOODWILL_MAX_COINS) fail('INVALID_INPUT', `a goodwill credit is at most ${GOODWILL_MAX_COINS} coins`);
+  if (!actor || !requestRef) fail('INVALID_INPUT', 'actor and requestRef are required');
+  return operation(db, { personId, kind: 'adjustment', idempotencyKey, coins, reason: 'goodwill_credit', relatedType: 'admin_action_request', relatedId: requestRef, actor },
+    (c, wallet, op) => move(c, wallet, op.id, 'purchased', coins, 'adjustment'));
+}
+
 /** Open coin-refund review items (unrecovered refunded value), oldest first. */
 export async function openRefundReviews(db, { limit = 100 } = {}) {
   return (await db.query("SELECT * FROM coin_refund_reviews WHERE status = 'open' ORDER BY created_at LIMIT $1", [limit])).rows;

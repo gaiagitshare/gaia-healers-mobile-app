@@ -4,6 +4,7 @@
  */
 export const CODES = Object.freeze({
   UNAUTHORIZED: 401,
+  AUTH_REQUIRED: 401,
   FORBIDDEN: 403,
   NOT_FOUND: 404,
   CONFLICT: 409,
@@ -14,6 +15,7 @@ export const CODES = Object.freeze({
   INSUFFICIENT_COINS: 402,
   INVALID_INPUT: 400,
   PROVIDER_UNAVAILABLE: 503,
+  RATE_LIMITED: 429,
 });
 
 export class MembershipError extends Error {

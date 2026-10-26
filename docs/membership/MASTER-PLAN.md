@@ -78,10 +78,14 @@ Existing assets to reuse:
 
 | Feature | Status | Dependencies |
 |---|---|---|
-| Membership 2.0 area in the Control Center (members, subscriptions, plans, payments, invoices, coins, refunds, migrations, reconciliation, audit, system health) | TODO | gateway `/api/admin/membership2/*` |
-| Role-based permissions + financial authorization (two roles at least: support, finance) | NEEDS APPROVAL | individual admin identities: the shared admin password must be replaced or supplemented (audit S6) |
-| Audit history view | backend DONE (append-only audit_logs), UI TODO | |
-| Launch-flag control (view; changes need approval reference) | backend + CLI DONE, UI TODO | |
+| Membership 2.0 area in the Control Center (members, subscriptions, plans, payments, invoices, coins, refunds, migrations, reconciliation, audit, system health) | backend **DONE** (PR admin: `/v1/admin/*` + proxy `/api/admin/membership2/*`, OFF by default, staging verified); UI IN PROGRESS (#307) | contract `docs/membership/CONTROL-CENTER.md` |
+| Role-based permissions + financial authorization (viewer < support < finance < owner; two-person rule) | backend **DONE** (named operators, scrypt + TOTP, hashed sessions 8 h / 30 min idle, lockout, dual approval 72 h, audit) | operators are created by the owner with `src/cli/operators.js` |
+| Audit history view | backend DONE (append-only audit_logs, `/v1/admin/audit`), UI #307 | |
+| Launch-flag control (view; changes need approval reference) | backend + CLI DONE; Control Center action `launch.set` (above INTERNAL_PILOT: dual, owner); UI #307 | |
+| Stripe refund / immediate cancel from the Control Center | adapter DONE (test mode); ends `approved_not_executed` until Stripe is connected | Stripe sandbox key |
+
+Owner decisions (confirmed 2026-10-26): goodwill credits above **500 coins** need finance and a second finance approver (max 10 000);
+**migration exceptions** need an **owner** as the second approver.
 
 ## Phase 4: Real integrations
 

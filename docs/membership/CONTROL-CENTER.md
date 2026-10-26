@@ -43,20 +43,24 @@ requests are cancelled; the env ceiling (`MEMBERSHIP2_STAGE_CEILING`) still caps
 ## 3. Data (migration 0011_operators.sql)
 
 - `operators` (id uuid, email unique lower, display_name, role CHECK in the 4 roles,
-  password_scrypt, totp_secret_enc (AES-GCM with `MEMBERSHIP_OPERATOR_KEY`), status active|disabled,
-  failed_logins, locked_until, created_by, created_at, last_login_at).
+  password_scrypt, totp_secret_enc (AES-GCM with `MEMBERSHIP_OPERATOR_KEY`, bound to the operator id), status active|disabled,
+  failed_logins, locked_until, created_by, created_at, last_login_at; also `totp_last_step` (a code is never accepted twice),
+  `updated_at`, `disabled_at`).
 - `operator_sessions` (token_sha256 PK, operator_id, created_at, last_seen_at, expires_at, revoked_at, ip_hash, ua_hash).
 - `admin_action_requests` (id, action, params jsonb, reason, requested_by, required_role,
   status pending|approved|rejected|cancelled|expired|executed|failed, decided_by, decided_at,
-  decision_note, executed_at, result jsonb, idempotency_key unique, expires_at);
-  CHECK decided_by <> requested_by.
+  decision_note, executed_at, result jsonb, idempotency_key unique, expires_at; also `dual`, `created_at`,
+  `decision_key` unique (the approver's optional requestId));
+  CHECK decided_by <> requested_by. Direct actions are rows too (dual=false), so every write has one replayable record.
+  "approved_not_executed" is stored as status `approved` with `result.outcome = 'approved_not_executed'`; the API shows it as that status.
 - `person_notes` (id, person_id, operator_id, body, created_at) append-only.
 - `api_clients` scope CHECK adds `admin:operate` (the proxy's admin client).
 
 ## 4. Internal API (membership service, loopback, client scope `admin:operate`)
 
 Operator auth is header-based: the proxy forwards `X-Operator-Session: <opaque token>`.
-All responses `{ ok, ... }`; errors `{ ok:false, code, message }` with codes
+All responses `{ ok, ... }`; errors `{ ok:false, code, message }` (plus `requiredRole` on FORBIDDEN,
+`error:'invalid_login'` on a failed sign-in, `request:{id,status}` when a direct action failed) with codes
 `AUTH_REQUIRED` 401, `FORBIDDEN` 403 (body has `requiredRole`), `NOT_FOUND`, `INVALID_INPUT`,
 `CONFLICT`, `PROVIDER_UNAVAILABLE` 503, `RATE_LIMITED` 429.
 
@@ -94,13 +98,35 @@ Action keys (`action`): `note.add`, `offer.create {personId, legacyMembershipId,
 `pilot.add {personId}`, `pilot.remove {personId}`, `launch.set {stage, limitedCap?, approvalRef?}`.
 `requestId` (8–64 `[A-Za-z0-9_-]`) is the idempotency key: a replay returns the first result.
 
+Clarifications (backend, 2026-10-26):
+- `requestId` is scoped to the operator; the same requestId with a different action, params or reason is `CONFLICT`.
+- Every write needs `reason` ≥ 10 characters. **Exception: `note.add`** (via `/actions` or `/persons/:id/notes`):
+  the note body is the reason, so a note must be ≥ 10 characters; `params: {personId, body}`.
+- approve / reject accept `{note?, requestId?}`; `requestId` (same format) makes the decision idempotent for that
+  approver (a replay returns the first outcome; reusing it for another request is `CONFLICT`).
+- approve answers `ok:true` with `status` = `executed` | `failed` (with `result.code`) | `approved_not_executed`.
+  A request is executed at most once; a failed or not-executed request is never retried automatically.
+- A direct action that fails answers its error code (e.g. `PROVIDER_UNAVAILABLE` 503 for a Stripe action without
+  Stripe) and is recorded as `failed` (or approved_not_executed); its replay returns the same error.
+- Login: every failure (unknown email, wrong password, wrong / reused code, locked, disabled) is 401 `AUTH_REQUIRED`
+  with `error:'invalid_login'`. TOTP is RFC 6238 SHA-1, 30 s, 6 digits, ±1 step.
+- `GET /v1/admin/me` also returns `expiresAt` (absolute). Read models take `limit` (default 50, max 200) and
+  return `next` (opaque cursor) where the contract lists `cursor`.
+- Goodwill coins (`coins.credit`) go to the purchased bucket as an `adjustment` (never expire, not a Stripe purchase).
+- `payment.refund` needs a Stripe `charge` ledger row (`charge` or `invoice` object) and amountCents ≤ the charge;
+  the refund is booked in `payment_ledger` by the refund webhook, not by the action.
+
 ## 5. Proxy gateway: `/api/admin/membership2/*`
 
 - OFF unless `MEMBERSHIP2_ADMIN=on` plus the same loopback `MEMBERSHIP_SERVICE_URL` and a
   dedicated `MEMBERSHIP_ADMIN_SERVICE_TOKEN` (`admin:operate` only). Off = every path 404.
-- Requires the existing Control Center admin cookie **and** the operator cookie
+- Requires the existing Control Center sign-in — exactly what `admin-router.js` accepts (`consoleAuthed`: the
+  `gaia_admin` cookie **or** the Event Manager bearer used by production) — **and** the operator cookie
   `gaia_operator` (HttpOnly, Secure, SameSite=Strict, Path=/api/admin/membership2).
-- Writes: JSON only, Origin must be the Control Center origin, login rate-limited per IP.
+- Writes: JSON only; Origin (else Referer) must be the proxy's own origin, `PROXY_PUBLIC_URL`, `ALLOWED_ORIGINS`,
+  or `MEMBERSHIP2_ADMIN_ORIGINS` (comma-separated; staging: `http://127.0.0.1:8799`). Login: 10 attempts per IP per 15 min → 429 `RATE_LIMITED`.
+- Off = every `/api/admin/membership2*` path answers the normal unknown-admin-route 404 (`{ok:false, reason:'unknown_admin_route'}`), signed in or not.
+- Without a valid console sign-in: 401 `AUTH_REQUIRED` (`reason:'admin_auth_required'`); without the operator cookie: 401 `AUTH_REQUIRED`.
 - Paths mirror the internal API 1:1 under `/api/admin/membership2/` (e.g. `POST /api/admin/membership2/login`,
   `GET /api/admin/membership2/persons/:id`). Login sets the cookie and never returns the token to JS.
 - `GET /api/admin/membership2/status` (admin cookie only) → `{enabled:true, signedIn:bool}`; the UI probes it.

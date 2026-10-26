@@ -27,6 +27,7 @@ import { findPerson } from '../identity.js';
 import { nextCycleStart } from '../jobs/allowance.js';
 import { grantsAccess } from '../subscriptions.js';
 import { memberRoute } from './member-routes.js';
+import { adminRoute } from './admin-routes.js';
 import { isEntitled } from '../entitlements.js';
 
 const MAX_BODY = 16 * 1024;
@@ -116,6 +117,8 @@ export function createApiHandler(pool, { clock = () => new Date(), stripe = null
         const r = action === 'capture' ? await captureDebit(pool, opId, actor) : await releaseDebit(pool, opId, actor);
         return [200, { ok: true, replayed: r.replayed, hold: opView(r.operation) }];
       }
+      const ar = await adminRoute({ pool, client, actor, req, url, now, stripe, env, readJson });
+      if (ar) return ar;
       const mr = await memberRoute({ pool, client, actor, req, url, now, stripe, env, readJson, idempotencyKey });
       if (mr) return mr;
       fail('NOT_FOUND', 'no such route');
@@ -134,7 +137,7 @@ export function createApiHandler(pool, { clock = () => new Date(), stripe = null
       const [status, body] = await route(req, url, requestId);
       send(res, status, body, requestId);
     } catch (e) {
-      if (e instanceof MembershipError) return send(res, e.status, { ok: false, code: e.code, message: e.message }, requestId);
+      if (e instanceof MembershipError) return send(res, e.status, { ok: false, code: e.code, message: e.message, ...(e.expose || {}) }, requestId);
       console.error('[membership-api]', requestId, e.code || '', e.message);
       send(res, 500, { ok: false, code: 'INTERNAL', message: 'internal error' }, requestId);
     }

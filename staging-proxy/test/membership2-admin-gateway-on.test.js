@@ -36,7 +36,7 @@ test('ON: admin cookie required; status probe; writes need the Control Center or
   const login = await fetch(`${base}/api/admin/login`, { method: 'POST', headers: { 'content-type': 'application/json', origin: base }, body: JSON.stringify({ password: process.env.GAIA_ADMIN_PASSWORD }) });
   const cookie = String(login.headers.get('set-cookie')).split(';')[0];
   const st = await fetch(`${base}/api/admin/membership2/status`, { headers: { cookie } });
-  assert.deepEqual([st.status, await st.json()], [200, { ok: true, enabled: true, signedIn: false }]);
+  assert.deepEqual([st.status, await st.json()], [200, { ok: true, enabled: true, signedIn: false, mustChangePassword: false, environment: 'unknown', stripeMode: 'unknown' }]);
   assert.equal((await fetch(`${base}/api/admin/membership2/me`, { headers: { cookie } })).status, 401, 'no operator cookie');
   const evil = await fetch(`${base}/api/admin/membership2/login`, { method: 'POST', headers: { cookie, origin: 'https://evil.example', 'content-type': 'application/json' }, body: '{}' });
   assert.equal(evil.status, 403);

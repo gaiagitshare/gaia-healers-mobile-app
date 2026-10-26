@@ -28,7 +28,7 @@ export async function adminStack({ stripe = null, operators = ROLES_FIXTURE } = 
   const { token } = await createClient(pool, { name: 'gaia-healers-admin-test', scopes: ['admin:operate'] }, 'owner-fixture');
   const ops = {};
   for (const [name, role] of Object.entries(operators)) {
-    const r = await createOperator(pool, { email: `${name}.fixture@example.invalid`, displayName: `${name} fixture`, role, password: PASSWORD }, 'test-owner', { env });
+    const r = await createOperator(pool, { email: `${name}.fixture@example.invalid`, displayName: `${name} fixture`, role, password: PASSWORD, mustChangePassword: false }, 'test-owner', { env });
     ops[name] = { id: r.id, email: r.email, role, secret: secretOf(r.otpauthUri) };
   }
   const call = async (method, path, { body, session, raw } = {}) => {

@@ -8,12 +8,12 @@
  * (limit <= 200) and keyset-paginated with an opaque `cursor`. Writes go through
  * admin-actions.js (reason, idempotent requestId, audit with the operator id).
  */
-import { fail } from '../errors.js';
+import { fail, MembershipError } from '../errors.js';
 import { requireScope } from '../access.js';
-import { login, logout, authenticateOperator, operatorView } from '../operators.js';
-import { ACTIONS, permissionsFor, submitAction, decide, cancelRequest, requestView, expireOverdue } from '../admin-actions.js';
+import { login, logout, authenticateOperator, operatorView, changePassword } from '../operators.js';
+import { ACTIONS, permissionsFor, submitAction, decide, cancelRequest, requestView, expireOverdue, executeRequest, requestRows } from '../admin-actions.js';
 import { evaluate, isEntitled } from '../entitlements.js';
-import { walletView } from '../coins.js';
+import { walletView, WALLET_TOTAL_SQL } from '../coins.js';
 import { legacyBlock } from '../billing-guard.js';
 import { launchState } from '../launch.js';
 import { grantsAccess } from '../subscriptions.js';
@@ -21,7 +21,27 @@ import { grantsAccess } from '../subscriptions.js';
 const UUID = '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}';
 const PERSON = new RegExp(`^/v1/admin/persons/(${UUID})$`);
 const NOTES = new RegExp(`^/v1/admin/persons/(${UUID})/notes$`);
-const REQ = /^\/v1\/admin\/requests\/([0-9a-f-]{36})\/(approve|reject|cancel)$/;
+const REQ = /^\/v1\/admin\/requests\/([0-9a-f-]{36})\/(approve|reject|cancel|execute)$/;
+/** Paths a restricted session (initial password not yet changed) may call. */
+const RESTRICTED_OK = new Set(['/v1/admin/me', '/v1/admin/logout', '/v1/admin/password']);
+
+/** environment from MEMBERSHIP_ENV (staging | production; anything else reads as unset), stripeMode none | test | live. */
+export function environmentOf(env, stripe) {
+  const e = String(env?.MEMBERSHIP_ENV || '').trim().toLowerCase();
+  return { environment: ['staging', 'production'].includes(e) ? e : 'unset', stripeMode: !stripe ? 'none' : (stripe.livemode === true ? 'live' : 'test') };
+}
+
+// Names, not ids: the email (else GHL contact id) of a person column, the display name of an 'operator:<uuid>' actor column.
+const EMAIL_OF = (col) => `(SELECT i.external_id FROM person_identities i WHERE i.person_id = ${col} AND i.platform = 'email' ORDER BY i.created_at LIMIT 1)`;
+const CONTACT_OF = (col) => `(SELECT i.external_id FROM person_identities i WHERE i.person_id = ${col} AND i.platform = 'ghl' ORDER BY i.created_at LIMIT 1)`;
+const OPERATOR_NAME_OF = (col) => `(SELECT x.display_name FROM operators x WHERE 'operator:' || x.id::text = ${col})`;
+const PERSON_COLS = (col, as = 'person') => `${EMAIL_OF(col)} AS ${as}_email, ${CONTACT_OF(col)} AS ${as}_contact_id`;
+/**
+ * Where a money record came from, from the record only:
+ *   stripe_confirmed: written by a verified Stripe webhook (webhook_event_id set) for a Stripe object id;
+ *   test_fixture: anything else (a simulated provider, or a row inserted without a webhook, e.g. a staging fixture).
+ */
+const LEDGER_SOURCE = (l) => `CASE WHEN ${l}.provider = 'stripe' AND ${l}.webhook_event_id IS NOT NULL AND ${l}.provider_object_id ~ '^(in|ch|re|pi|py|dp|du|cs)_[A-Za-z0-9_]+$' THEN 'stripe_confirmed' ELSE 'test_fixture' END`;
 export const MAX_LIMIT = 200;
 
 const limitOf = (url, def = 50) => Math.min(Math.max(Number.parseInt(url.searchParams.get('limit'), 10) || def, 1), MAX_LIMIT);
@@ -35,6 +55,20 @@ function dec(url) {
 const page = (rows, limit, keyOf) => ({ items: rows.slice(0, limit), next: rows.length > limit ? enc(keyOf(rows[limit - 1])) : null });
 const legacyState = (row) => { const b = legacyBlock(row); return !b ? 'ended' : (b.kind === 'migration_required' ? 'active' : 'under_review'); };
 const iso = (s, what) => { if (!s) return null; const d = new Date(s); if (Number.isNaN(d.getTime())) fail('INVALID_INPUT', what + ' must be a date'); return d; };
+
+/**
+ * A coin operation's money source: a `purchase` is stripe_confirmed only when a
+ * Stripe payment_ledger row written by a verified webhook points at it; any other
+ * purchase is a test fixture. Grants, goodwill, debits are not money (null).
+ */
+const COIN_SOURCE = (o) => `CASE WHEN ${o}.kind <> 'purchase' THEN NULL
+  WHEN EXISTS (SELECT 1 FROM payment_ledger pl WHERE pl.coin_operation_id = ${o}.id AND pl.provider = 'stripe' AND pl.webhook_event_id IS NOT NULL) THEN 'stripe_confirmed'
+  ELSE 'test_fixture' END`;
+/** Audit rows with the reason and names: the operator's display name, the person's email for person rows. */
+const AUDIT_COLS = `a.id, a.occurred_at, a.actor_type, a.actor_id, ${OPERATOR_NAME_OF('a.actor_id')} AS actor_name, a.action, a.entity_type, a.entity_id,
+  CASE WHEN a.entity_type = 'person' AND a.entity_id ~ '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' THEN ${EMAIL_OF('a.entity_id::uuid')}
+       WHEN a.entity_type = 'operator' THEN (SELECT x.display_name FROM operators x WHERE x.id::text = a.entity_id) END AS entity_label,
+  a.reason, a.before, a.after, a.request_id`;
 
 /** Returns [status, body] for /v1/admin/* or null. */
 export async function adminRoute(ctx) {
@@ -54,14 +88,25 @@ export async function adminRoute(ctx) {
     return [200, { ok: true, ...r }];
   }
 
+  if (M === 'GET' && p === '/v1/admin/environment') return [200, { ok: true, ...environmentOf(env, stripe) }];
+
   const auth = await authenticateOperator(pool, req.headers['x-operator-session'], now);
   const op = auth.operator;
+  // Initial (or reset) password not changed yet: only change it, see who you are, or sign out.
+  if (auth.restricted && !RESTRICTED_OK.has(p)) {
+    throw Object.assign(new MembershipError('FORBIDDEN', 'change your initial password first'), { expose: { reason: 'password_change_required', mustChangePassword: true } });
+  }
   const unavailable = () => fail('PROVIDER_UNAVAILABLE', 'billing is not connected in this environment');
   const actx = { pool, stripe: stripe || { livemode: false, get: unavailable, post: unavailable, del: unavailable }, env, now, requestId };
   let m;
 
   if (M === 'POST' && p === '/v1/admin/logout') { await logout(pool, auth, requestId); return [200, { ok: true }]; }
-  if (M === 'GET' && p === '/v1/admin/me') return [200, { ok: true, operator: operatorView(op), permissions: permissionsFor(op), idleExpiresAt: auth.idleExpiresAt, expiresAt: auth.expiresAt }];
+  if (M === 'GET' && p === '/v1/admin/me') return [200, { ok: true, operator: operatorView(op), mustChangePassword: auth.restricted, permissions: auth.restricted ? [] : permissionsFor(op),
+    idleExpiresAt: auth.idleExpiresAt, expiresAt: auth.expiresAt, ...environmentOf(env, stripe) }];
+  if (M === 'POST' && p === '/v1/admin/password') {
+    const b = await readJson(req);
+    return [200, { ok: true, ...(await changePassword(pool, auth, { currentPassword: b.currentPassword, newPassword: b.newPassword }, { now, requestId })) }];
+  }
 
   // ---------- writes ----------
   if (M === 'POST' && p === '/v1/admin/actions') return [200, { ok: true, ...(await submitAction(actx, op, await readJson(req))) }];
@@ -73,7 +118,8 @@ export async function adminRoute(ctx) {
   }
   if (M === 'POST' && (m = REQ.exec(p))) {
     const b = await readJson(req);
-    if (m[2] === 'cancel') return [200, { ok: true, ...(await cancelRequest(actx, op, m[1])) }];
+    if (m[2] === 'cancel') return [200, { ok: true, ...(await cancelRequest(actx, op, m[1], b.note ?? null)) }];
+    if (m[2] === 'execute') return [200, { ok: true, ...(await executeRequest(actx, op, m[1], { reason: b.reason, requestId: b.requestId })) }];
     return [200, { ok: true, ...(await decide(actx, op, m[1], m[2], b.note, b.requestId ?? null)) }];
   }
 
@@ -87,24 +133,26 @@ export async function adminRoute(ctx) {
     const limit = limitOf(url); const c = dec(url); const from = iso(url.searchParams.get('from'), 'from'); const to = iso(url.searchParams.get('to'), 'to');
     const type = url.searchParams.get('type') || null;
     const rows = (await pool.query(
-      `SELECT id, person_id, provider, provider_object_type, provider_object_id, entry_type, amount_cents, currency, subscription_id, coin_operation_id, livemode, occurred_at, recorded_at
-         FROM payment_ledger WHERE ($1::bigint IS NULL OR id < $1) AND ($2::timestamptz IS NULL OR occurred_at >= $2) AND ($3::timestamptz IS NULL OR occurred_at < $3)
-          AND ($4::text IS NULL OR entry_type = $4) ORDER BY id DESC LIMIT $5`, [c ? c[0] : null, from, to, type, limit + 1])).rows;
+      `SELECT l.id, l.person_id, ${PERSON_COLS('l.person_id')}, l.provider, l.provider_object_type, l.provider_object_id, l.entry_type, l.amount_cents, l.currency, l.subscription_id,
+              l.coin_operation_id, l.livemode, l.webhook_event_id IS NOT NULL AS from_webhook, ${LEDGER_SOURCE('l')} AS source, l.occurred_at, l.recorded_at
+         FROM payment_ledger l WHERE ($1::bigint IS NULL OR id < $1) AND ($2::timestamptz IS NULL OR occurred_at >= $2) AND ($3::timestamptz IS NULL OR occurred_at < $3)
+          AND ($4::text IS NULL OR entry_type = $4) ORDER BY l.id DESC LIMIT $5`, [c ? c[0] : null, from, to, type, limit + 1])).rows;
     return [200, { ok: true, ...page(rows, limit, (r) => [r.id]) }];
   }
   if (p === '/v1/admin/coins') {
     const limit = limitOf(url); const c = dec(url);
     const rows = (await pool.query(
-      `SELECT t.id, w.person_id, t.operation_id, o.kind, o.reason AS operation_reason, t.balance_type, t.delta_coins, t.balance_after, t.reason, t.created_at, o.actor
+      `SELECT t.id, w.person_id, ${PERSON_COLS('w.person_id')}, t.operation_id, o.kind, o.reason AS operation_reason, t.balance_type, t.delta_coins, t.balance_after, t.reason, t.created_at,
+              o.actor, ${OPERATOR_NAME_OF('o.actor')} AS actor_name, ${COIN_SOURCE('o')} AS source
          FROM coin_transactions t JOIN coin_wallets w ON w.id = t.wallet_id JOIN coin_operations o ON o.id = t.operation_id
         WHERE ($1::bigint IS NULL OR t.id < $1) ORDER BY t.id DESC LIMIT $2`, [c ? c[0] : null, limit + 1])).rows;
-    const totals = (await pool.query(`SELECT count(*)::int wallets, COALESCE(sum(granted_balance), 0)::bigint granted, COALESCE(sum(purchased_balance), 0)::bigint purchased,
-                                             COALESCE(sum(legacy_balance), 0)::bigint legacy FROM coin_wallets`)).rows[0];
+    const totals = (await pool.query(`SELECT count(*)::int wallets, COALESCE(sum(granted_balance), 0)::bigint granted, COALESCE(sum(goodwill_balance), 0)::bigint goodwill,
+                                             COALESCE(sum(purchased_balance), 0)::bigint purchased, COALESCE(sum(legacy_balance), 0)::bigint legacy FROM coin_wallets`)).rows[0];
     return [200, { ok: true, totals, ...page(rows, limit, (r) => [r.id]) }];
   }
   if (p === '/v1/admin/legacy') {
     const limit = limitOf(url); const state = url.searchParams.get('state');
-    const rows = (await pool.query(`SELECT id, person_id, external_contact_id, payment_provider, tier, mapping, reported_status, amount_cents, currency, billing_interval,
+    const rows = (await pool.query(`SELECT id, person_id, ${EMAIL_OF('legacy_memberships.person_id')} AS person_email, external_contact_id, payment_provider, tier, mapping, reported_status, amount_cents, currency, billing_interval,
                                            last_payment_at, paid_through_estimate, stale_suspected, review_state, review_reasons, first_seen_at, last_seen_at
                                       FROM legacy_memberships ORDER BY last_seen_at DESC NULLS LAST, id LIMIT 2000`)).rows
       .map((r) => ({ ...r, state: legacyState(r) })).filter((r) => !state || r.state === state);
@@ -114,9 +162,10 @@ export async function adminRoute(ctx) {
   }
   if (p === '/v1/admin/migration-offers') {
     const st = url.searchParams.get('status');
-    const rows = (await pool.query(`SELECT o.id, o.person_id, o.legacy_membership_id, l.tier AS from_tier, l.payment_provider, pl.key AS target_plan, o.target_interval, o.status, o.sweetener_months,
+    const rows = (await pool.query(`SELECT o.id, o.person_id, ${PERSON_COLS('o.person_id')}, o.legacy_membership_id, l.tier AS from_tier, l.payment_provider, pl.key AS target_plan, o.target_interval, o.status, o.sweetener_months,
                                            o.billing_starts_at, o.subscription_id, o.offered_by, o.offered_at, o.accepted_at, o.legacy_cancel_confirmed_by, o.legacy_cancel_confirmed_at,
-                                           o.legacy_cancel_verified_at, o.exception_authorized_by, o.exception_at, o.updated_at
+                                           o.legacy_cancel_verified_at, o.exception_authorized_by, o.exception_at, o.updated_at,
+                                           ${OPERATOR_NAME_OF('o.offered_by')} AS offered_by_name
                                       FROM migration_offers o JOIN legacy_memberships l ON l.id = o.legacy_membership_id JOIN plan_versions v ON v.id = o.target_plan_version_id JOIN plans pl ON pl.id = v.plan_id
                                      WHERE ($1::text IS NULL OR o.status = $1) ORDER BY o.offered_at DESC LIMIT $2`, [st, limitOf(url)])).rows;
     return [200, { ok: true, items: rows }];
@@ -131,8 +180,8 @@ export async function adminRoute(ctx) {
   }
   if (p === '/v1/admin/refund-reviews') {
     const st = url.searchParams.get('status') || 'open';
-    const rows = (await pool.query(`SELECT id, person_id, provider, refund_ref, charge_ref, coins_refunded, coins_recovered, coins_unrecovered, value_cents_unrecovered, currency, status,
-                                           resolved_by, resolution, created_at, resolved_at FROM coin_refund_reviews WHERE ($1 = 'all' OR status = $1) ORDER BY created_at LIMIT $2`, [st, limitOf(url)])).rows;
+    const rows = (await pool.query(`SELECT id, person_id, ${PERSON_COLS('coin_refund_reviews.person_id')}, provider, refund_ref, charge_ref, coins_refunded, coins_recovered, coins_unrecovered, value_cents_unrecovered, currency, status,
+                                           resolved_by, ${OPERATOR_NAME_OF('coin_refund_reviews.resolved_by')} AS resolved_by_name, resolution, created_at, resolved_at FROM coin_refund_reviews WHERE ($1 = 'all' OR status = $1) ORDER BY created_at LIMIT $2`, [st, limitOf(url)])).rows;
     return [200, { ok: true, items: rows }];
   }
   if (p === '/v1/admin/dead-letters') {
@@ -144,27 +193,30 @@ export async function adminRoute(ctx) {
   }
   if (p === '/v1/admin/audit') {
     const limit = limitOf(url); const c = dec(url);
-    const rows = (await pool.query(`SELECT id, occurred_at, actor_type, actor_id, action, entity_type, entity_id, before, after, request_id FROM audit_logs
+    const rows = (await pool.query(`SELECT ${AUDIT_COLS} FROM audit_logs a
                                      WHERE ($1::bigint IS NULL OR id < $1) AND ($2::text IS NULL OR entity_type = $2) AND ($3::text IS NULL OR entity_id = $3) AND ($4::text IS NULL OR actor_id = $4)
-                                     ORDER BY id DESC LIMIT $5`,
+                                     ORDER BY a.id DESC LIMIT $5`,
     [c ? c[0] : null, url.searchParams.get('entityType'), url.searchParams.get('entityId'), url.searchParams.get('actorId'), limit + 1])).rows;
     return [200, { ok: true, ...page(rows, limit, (r) => [r.id]) }];
   }
-  if (p === '/v1/admin/health') return [200, { ok: true, ...(await health(pool, now, Boolean(stripe))) }];
+  if (p === '/v1/admin/health') return [200, { ok: true, ...(await health(pool, now, Boolean(stripe))), ...environmentOf(env, stripe) }];
   if (p === '/v1/admin/launch') {
     const state = await launchState(pool, { env });
-    const history = (await pool.query('SELECT from_stage, to_stage, limited_cap, changed_by, approval_ref, reason, changed_at FROM launch_history ORDER BY id DESC LIMIT 50')).rows;
-    const pilots = (await pool.query('SELECT person_id, added_by, note, added_at FROM pilot_members WHERE removed_at IS NULL ORDER BY added_at DESC LIMIT 200')).rows;
+    const history = (await pool.query(`SELECT from_stage, to_stage, limited_cap, changed_by, ${OPERATOR_NAME_OF('changed_by')} AS changed_by_name, approval_ref, reason, changed_at
+                                         FROM launch_history ORDER BY id DESC LIMIT 50`)).rows;
+    const pilots = (await pool.query(`SELECT person_id, ${PERSON_COLS('person_id')}, added_by, ${OPERATOR_NAME_OF('added_by')} AS added_by_name, note, added_at
+                                        FROM pilot_members WHERE removed_at IS NULL ORDER BY added_at DESC LIMIT 200`)).rows;
     return [200, { ok: true, state, history, pilots }];
   }
   if (p === '/v1/admin/requests') {
     await expireOverdue(pool, now);
     const st = url.searchParams.get('status');
     const limit = limitOf(url); const c = dec(url);
-    const rows = (await pool.query(`SELECT r.*, a.display_name AS requester_name, d.display_name AS decider_name FROM admin_action_requests r
-                                      JOIN operators a ON a.id = r.requested_by LEFT JOIN operators d ON d.id = r.decided_by
-                                     WHERE ($1::text IS NULL OR r.status = $1) AND ($2::timestamptz IS NULL OR (r.created_at, r.id) < ($2, $3::uuid))
-                                     ORDER BY r.created_at DESC, r.id DESC LIMIT $4`, [st, c ? c[0] : null, c ? c[1] : null, limit + 1])).rows;
+    // status=approved_not_executed and status=retryable are views over the stored statuses.
+    const stSql = st === 'approved_not_executed' ? "r.status = 'approved' AND r.result->>'outcome' = 'approved_not_executed'"
+      : st === 'retryable' ? "(r.status = 'failed' OR (r.status = 'approved' AND r.result->>'outcome' = 'approved_not_executed'))" : '($1::text IS NULL OR r.status = $1)';
+    const rows = await requestRows(pool, `${stSql} AND ($1::text IS NULL OR true) AND ($2::timestamptz IS NULL OR (r.created_at, r.id) < ($2, $3::uuid))`,
+      [st, c ? c[0] : null, c ? c[1] : null, limit + 1], 'ORDER BY r.created_at DESC, r.id DESC LIMIT $4');
     const pg = page(rows, limit, (r) => [r.created_at, r.id]);
     return [200, { ok: true, items: pg.items.map((r) => requestView(r, op)), next: pg.next, actions: Object.keys(ACTIONS) }];
   }
@@ -178,7 +230,7 @@ async function overview(pool, env, now) {
                                    FROM subscriptions s JOIN plan_versions v ON v.id = s.plan_version_id JOIN plans p ON p.id = v.plan_id
                                    JOIN plan_version_prices pr ON pr.plan_version_id = v.id AND pr.billing_interval = s.billing_interval
                                   WHERE p.owner_type = 'gaia' AND s.provider IN ('stripe', 'manual') AND s.source <> 'legacy_import' AND s.status IN ('active', 'past_due')`)).rows[0].cents;
-  const coins = (await pool.query('SELECT COALESCE(sum(granted_balance + purchased_balance + legacy_balance), 0)::bigint n FROM coin_wallets')).rows[0].n;
+  const coins = (await pool.query(`SELECT COALESCE(sum(${WALLET_TOTAL_SQL}), 0)::bigint n FROM coin_wallets`)).rows[0].n;
   const count = async (sql) => (await pool.query(sql)).rows[0].n;
   const legacy = {};
   for (const r of (await pool.query('SELECT * FROM legacy_memberships LIMIT 5000')).rows) { const s = legacyState(r); legacy[s] = (legacy[s] || 0) + 1; }
@@ -209,7 +261,7 @@ async function searchPersons(pool, url, now) {
   const subs = (await pool.query(`SELECT s.person_id, p.key, s.status, s.trial_end, s.current_period_end, s.grace_until, s.cancel_at, s.ended_at, s.created_at FROM subscriptions s
                                     JOIN plan_versions v ON v.id = s.plan_version_id JOIN plans p ON p.id = v.plan_id WHERE s.person_id = ANY($1) AND p.owner_type = 'gaia' ORDER BY s.created_at DESC`, [list])).rows;
   const legacy = (await pool.query('SELECT * FROM legacy_memberships WHERE person_id = ANY($1)', [list])).rows;
-  const wallets = (await pool.query('SELECT person_id, granted_balance + purchased_balance + legacy_balance AS total FROM coin_wallets WHERE person_id = ANY($1)', [list])).rows;
+  const wallets = (await pool.query(`SELECT person_id, ${WALLET_TOTAL_SQL} AS total FROM coin_wallets WHERE person_id = ANY($1)`, [list])).rows;
   return {
     items: list.map((id) => {
       const s = subs.find((x) => x.person_id === id && grantsAccess(x, now)) || subs.find((x) => x.person_id === id);
@@ -236,9 +288,11 @@ async function personDetail(pool, id, now) {
                                                     FROM (SELECT * FROM subscription_events WHERE subscription_id = s.id ORDER BY id DESC LIMIT 50) e), '[]') AS events
                                    FROM subscriptions s JOIN plan_versions v ON v.id = s.plan_version_id JOIN plans p ON p.id = v.plan_id WHERE s.person_id = $1 ORDER BY s.created_at DESC LIMIT 50`);
   const ent = await evaluate(pool, id, now);
-  const coinTx = await q(`SELECT t.id, o.kind, o.reason AS operation_reason, t.balance_type, t.delta_coins, t.balance_after, t.reason, t.created_at, o.actor
+  const coinTx = await q(`SELECT t.id, o.kind, o.reason AS operation_reason, t.balance_type, t.delta_coins, t.balance_after, t.reason, t.created_at, o.actor,
+                                 ${OPERATOR_NAME_OF('o.actor')} AS actor_name, ${COIN_SOURCE('o')} AS source
                             FROM coin_transactions t JOIN coin_wallets w ON w.id = t.wallet_id JOIN coin_operations o ON o.id = t.operation_id WHERE w.person_id = $1 ORDER BY t.id DESC LIMIT 50`);
-  const offers = await q(`SELECT o.id, o.status, o.legacy_membership_id, pl.key AS target_plan, o.target_interval, o.billing_starts_at, o.offered_by, o.offered_at, o.updated_at
+  const offers = await q(`SELECT o.id, o.person_id, o.status, o.legacy_membership_id, pl.key AS target_plan, o.target_interval, o.billing_starts_at, o.offered_by,
+                                 ${OPERATOR_NAME_OF('o.offered_by')} AS offered_by_name, o.offered_at, o.updated_at
                             FROM migration_offers o JOIN plan_versions v ON v.id = o.target_plan_version_id JOIN plans pl ON pl.id = v.plan_id WHERE o.person_id = $1 ORDER BY o.offered_at DESC`);
   const related = [id, ...subscriptions.map((s) => s.id), ...offers.map((o) => o.id)];
   return {
@@ -248,14 +302,15 @@ async function personDetail(pool, id, now) {
     entitlements: Object.entries(ent.entitlements).filter(([, v]) => isEntitled(v)).map(([k, v]) => ({ key: k, value: v.value })),
     grants: await q('SELECT id, entitlement_key, value, source, starts_at, ends_at, revoked_at, granted_by FROM entitlement_grants WHERE person_id = $1 ORDER BY created_at DESC LIMIT 50'),
     wallet: await walletView(pool, id), coinTransactions: coinTx,
-    payments: await q(`SELECT id, provider, provider_object_type, provider_object_id, entry_type, amount_cents, currency, subscription_id, coin_operation_id, occurred_at
-                         FROM payment_ledger WHERE person_id = $1 ORDER BY occurred_at DESC LIMIT 50`),
+    payments: await q(`SELECT l.id, l.person_id, l.provider, l.provider_object_type, l.provider_object_id, l.entry_type, l.amount_cents, l.currency, l.subscription_id, l.coin_operation_id,
+                              l.livemode, l.webhook_event_id IS NOT NULL AS from_webhook, ${LEDGER_SOURCE('l')} AS source, l.occurred_at
+                         FROM payment_ledger l WHERE l.person_id = $1 ORDER BY l.occurred_at DESC LIMIT 50`),
     legacy: (await q('SELECT * FROM legacy_memberships WHERE person_id = $1 ORDER BY first_seen_at')).map((r) => ({ ...r, state: legacyState(r) })),
     offers,
     pilot: (await q('SELECT 1 FROM pilot_members WHERE person_id = $1 AND removed_at IS NULL')).length > 0,
     notes: await q(`SELECT n.id, n.body, n.created_at, o.id AS operator_id, o.display_name AS operator_name FROM person_notes n JOIN operators o ON o.id = n.operator_id
                      WHERE n.person_id = $1 ORDER BY n.id DESC LIMIT 100`),
-    audit: await q(`SELECT id, occurred_at, actor_type, actor_id, action, entity_type, entity_id, after FROM audit_logs WHERE entity_id = ANY($1) ORDER BY id DESC LIMIT 50`, [related]),
+    audit: await q(`SELECT ${AUDIT_COLS} FROM audit_logs a WHERE a.entity_id = ANY($1) ORDER BY a.id DESC LIMIT 50`, [related]),
   };
 }
 

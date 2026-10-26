@@ -11,14 +11,23 @@
  * (HttpOnly, Secure, SameSite=Strict, Path=/api/admin/membership2), which holds
  * the operator session token. The token is set by /login and never returned
  * to JavaScript; the service token never leaves this process. Writes must be
- * JSON from the Control Center origin; /login is rate-limited per IP.
+ * JSON from the Control Center origin; /login and /password are rate-limited per
+ * IP. The IP is deps.clientIp (adminRouter.clientIp): once the trusted-client-IP
+ * fix (PR #287, staging-proxy/client-ip.js) is merged, that helper ignores
+ * X-Forwarded-For / CF-Connecting-IP and trusts X-Real-IP only from loopback
+ * (nginx), so this limit cannot be reset by rotating headers. Merge #287 first.
+ *
+ * /status (admin cookie only) also reports the server's environment and Stripe
+ * mode, so the Control Center can show a STAGING / TEST MODE banner before any
+ * operator signs in; /password changes the operator's own password (the only
+ * write a restricted, must-change-password session may make).
  * Roles, the two-person rule and audit are enforced by the membership service.
  */
 
 export const OPERATOR_COOKIE = 'gaia_operator';
 const PREFIX = '/api/admin/membership2';
 const LOGIN_WINDOW_MS = 15 * 60 * 1000;
-const LOGIN_MAX = 10;                       // attempts per IP per window (the service also locks an account after 5 failures)
+const LOGIN_MAX = 10;                       // attempts per IP per window, /login and /password together (the service also locks an account after 5 failures)
 const PATH_RE = /^\/api\/admin\/membership2\/[a-z0-9-]+(?:\/[a-z0-9-]+){0,3}$/;
 const SESSION_RE = /^gop_[A-Za-z0-9_-]{43}$/;
 
@@ -76,7 +85,10 @@ export function createMembership2AdminGateway({ env = process.env, fetch = globa
 
     if (sub === 'status' && req.method === 'GET') {
       const me = session ? await call('GET', '/v1/admin/me', { session }) : null;
-      return reply(200, { ok: true, enabled: true, signedIn: Boolean(me && me.status === 200) });
+      const envr = await call('GET', '/v1/admin/environment');
+      const e = envr.status === 200 ? envr.body : {};
+      return reply(200, { ok: true, enabled: true, signedIn: Boolean(me && me.status === 200), mustChangePassword: Boolean(me && me.status === 200 && me.body?.mustChangePassword),
+        environment: typeof e.environment === 'string' ? e.environment : 'unknown', stripeMode: typeof e.stripeMode === 'string' ? e.stripeMode : 'unknown' });
     }
 
     let body;
@@ -104,6 +116,12 @@ export function createMembership2AdminGateway({ env = process.env, fetch = globa
       return reply(200, { ok: true }, { 'Set-Cookie': cookie('', 0) });
     }
     if (!session) return reply(401, { ok: false, code: 'AUTH_REQUIRED', message: 'operator sign-in required' });
+    if (sub === 'password' && req.method === 'POST') {
+      const wait = limited(deps.clientIp(req));
+      if (wait) return reply(429, { ok: false, code: 'RATE_LIMITED', message: 'too many attempts', retryAfterSeconds: wait }, { 'Retry-After': String(wait) });
+      const r = await call('POST', '/v1/admin/password', { session, body: { currentPassword: String(body.currentPassword || ''), newPassword: String(body.newPassword || '') } });
+      return reply(r.status, r.body, r.status === 401 ? { 'Set-Cookie': cookie('', 0) } : undefined);
+    }
     const r = await call(req.method, `/v1/admin/${sub}${url.search}`, { session, body });
     return reply(r.status, r.body, r.status === 401 ? { 'Set-Cookie': cookie('', 0) } : undefined);
   }

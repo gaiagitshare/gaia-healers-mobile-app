@@ -65,7 +65,7 @@ test('status probe, login cookie (token never in the body), admin cookie + opera
   const g = await gatewayStack();
   try {
     assert.equal((await g.call('GET', '/api/admin/membership2/status', { admin: false })).status, 401, 'Control Center sign-in first');
-    assert.deepEqual((await g.call('GET', '/api/admin/membership2/status')).json, { ok: true, enabled: true, signedIn: false });
+    assert.deepEqual((await g.call('GET', '/api/admin/membership2/status')).json, { ok: true, enabled: true, signedIn: false, mustChangePassword: false, environment: 'unset', stripeMode: 'none' });
     const r = await g.signIn('support');
     assert.equal(r.json.session, undefined, 'the operator token never reaches JavaScript');
     assert.ok(!JSON.stringify(r.json).includes(g.jar.support));
@@ -110,13 +110,35 @@ test('dual approval end to end through the gateway: request, refused self-approv
     const r = await g.call('POST', '/api/admin/membership2/actions', { who: 'finance', body: { action: 'coins.credit', params: { personId: pid, coins: 1500 }, reason: 'courtesy credit after billing error', requestId: 'gw-dual-0001' } });
     assert.equal(r.json.status, 'pending');
     const id = r.json.request.id;
-    assert.equal((await g.call('POST', `/api/admin/membership2/requests/${id}/approve`, { who: 'finance', body: {} })).status, 403);
+    assert.equal((await g.call('POST', `/api/admin/membership2/requests/${id}/approve`, { who: 'finance', body: { note: 'approving my own request' } })).status, 403);
     const list = await g.call('GET', '/api/admin/membership2/requests?status=pending', { who: 'finance2' });
     assert.equal(list.json.items[0].canApprove, true);
-    const a = await g.call('POST', `/api/admin/membership2/requests/${id}/approve`, { who: 'finance2', body: { note: 'ok' } });
+    const a = await g.call('POST', `/api/admin/membership2/requests/${id}/approve`, { who: 'finance2', body: { note: 'checked with the member' } });
     assert.deepEqual([a.status, a.json.status], [200, 'executed']);
     const person = await g.call('GET', `/api/admin/membership2/persons/${pid}`, { who: 'finance' });
-    assert.equal(person.json.wallet.purchased.coins, 1500);
+    assert.equal(person.json.wallet.goodwill.coins, 1500);
     assert.equal((await g.call('GET', '/api/admin/membership2/nope/../../v1/health', { who: 'finance' })).status, 404);
+  } finally { await g.close(); }
+});
+
+test('first sign-in through the gateway: restricted until the password is changed; /password needs the operator cookie and the origin', { skip: SKIP }, async () => {
+  const g = await gatewayStack();
+  try {
+    const { createOperator } = await import('../src/operators.js');
+    const { secretOf } = await import('./_admin.js');
+    const c = await createOperator(g.s.pool, { email: 'first.fixture@example.invalid', displayName: 'First Fixture', role: 'support' }, 'test-owner', { env: g.s.env });
+    const r = await g.call('POST', '/api/admin/membership2/login', { body: { email: c.email, password: c.password, totp: codeAt(secretOf(c.otpauthUri), g.s.clock.t) } });
+    assert.deepEqual([r.status, r.json.operator.mustChangePassword], [200, true]);
+    g.jar.first = /gaia_operator=([^;]+)/.exec(r.setCookie)[1];
+    assert.equal((await g.call('GET', '/api/admin/membership2/status', { who: 'first' })).json.mustChangePassword, true);
+    const blocked = await g.call('GET', '/api/admin/membership2/overview', { who: 'first' });
+    assert.deepEqual([blocked.status, blocked.json.reason], [403, 'password_change_required']);
+    const body = { currentPassword: c.password, newPassword: 'first-fixture-new-passphrase' };
+    assert.equal((await g.call('POST', '/api/admin/membership2/password', { body })).status, 401, 'no operator cookie');
+    assert.equal((await g.call('POST', '/api/admin/membership2/password', { who: 'first', body, origin: 'https://evil.example' })).status, 403);
+    const ok = await g.call('POST', '/api/admin/membership2/password', { who: 'first', body });
+    assert.deepEqual([ok.status, ok.json.changed], [200, true]);
+    assert.equal((await g.call('GET', '/api/admin/membership2/overview', { who: 'first' })).status, 200);
+    assert.equal((await g.call('GET', '/api/admin/membership2/status', { who: 'first' })).json.mustChangePassword, false);
   } finally { await g.close(); }
 });

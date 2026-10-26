@@ -1,9 +1,11 @@
 /**
  * Coin wallet (spec §4, §9; audit H).
  *
- * Buckets: granted (monthly allowance, reset each cycle), purchased (never
- * expires), legacy (migrated, unproven provenance; never expires).
- * Spend order: granted -> purchased -> legacy.
+ * Buckets: granted (monthly allowance, reset each cycle), goodwill (operator
+ * credits; never expire, never clawed back by a payment refund), purchased
+ * (never expires), legacy (migrated, unproven provenance; never expires).
+ * Spend order: granted -> goodwill -> purchased -> legacy. This is the owner's
+ * default (2026-10-26) and can be changed here (SPEND_ORDER) without a migration.
  *
  * Every write:
  *   - locks the wallet row (SELECT ... FOR UPDATE), so concurrent debits
@@ -27,15 +29,17 @@ import { audit } from './audit.js';
 import { fail, MembershipError } from './errors.js';
 import { COIN_CENTS } from './catalog.js';
 
-const SPEND_ORDER = ['granted', 'purchased', 'legacy'];
-const COLUMN = { granted: 'granted_balance', purchased: 'purchased_balance', legacy: 'legacy_balance' };
+export const SPEND_ORDER = Object.freeze(['granted', 'goodwill', 'purchased', 'legacy']);
+const COLUMN = { granted: 'granted_balance', goodwill: 'goodwill_balance', purchased: 'purchased_balance', legacy: 'legacy_balance' };
+/** SQL for a wallet's total (every bucket). */
+export const WALLET_TOTAL_SQL = '(granted_balance + goodwill_balance + purchased_balance + legacy_balance)';
 export const DEFAULT_HOLD_SECONDS = 15 * 60;
 
 const posInt = (n, what) => { if (!Number.isSafeInteger(n) || n <= 0) fail('INVALID_INPUT', what + ' must be a positive integer'); return n; };
 const checkKey = (k) => { if (typeof k !== 'string' || k.length < 8 || k.length > 200) fail('INVALID_INPUT', 'idempotencyKey must be 8-200 characters'); return k; };
 /** Actor: 'system', a person id string, or { actorType, actorId, requestId } from the API layer. */
 export function toActor(actor = 'system') {
-  if (actor && typeof actor === 'object') return { actorType: actor.actorType || 'system', actorId: String(actor.actorId || 'system'), requestId: actor.requestId || null };
+  if (actor && typeof actor === 'object') return { actorType: actor.actorType || 'system', actorId: String(actor.actorId || 'system'), requestId: actor.requestId || null, ...(actor.reason ? { reason: actor.reason } : {}) };
   return { actorType: actor === 'system' ? 'system' : 'person', actorId: String(actor), requestId: null };
 }
 const hashOf = (o) => crypto.createHash('sha256').update(JSON.stringify(o)).digest('hex');
@@ -148,9 +152,11 @@ export async function clawbackPurchased(db, { personId, coins, idempotencyKey, r
 
 /**
  * Goodwill credit from a named Control Center operator (spec §4 support). Goes to
- * the purchased bucket (never expires) as an `adjustment`, so it is not a
- * Stripe purchase and never counts in the coin-pack ledger check. Bounded
- * here as well as in the permission matrix (max 10 000 per operation).
+ * its own `goodwill` bucket as an `adjustment` (owner decision 2026-10-26): it
+ * never expires, it is not a Stripe purchase (never in the coin-pack ledger
+ * check) and a payment refund can never take it back (clawbackPurchased reads
+ * only `purchased`). Bounded here as well as in the permission matrix (max
+ * 10 000 per operation).
  */
 export const GOODWILL_MAX_COINS = 10000;
 export async function creditGoodwill(db, { personId, coins, idempotencyKey, requestRef, actor }) {
@@ -158,7 +164,7 @@ export async function creditGoodwill(db, { personId, coins, idempotencyKey, requ
   if (coins > GOODWILL_MAX_COINS) fail('INVALID_INPUT', `a goodwill credit is at most ${GOODWILL_MAX_COINS} coins`);
   if (!actor || !requestRef) fail('INVALID_INPUT', 'actor and requestRef are required');
   return operation(db, { personId, kind: 'adjustment', idempotencyKey, coins, reason: 'goodwill_credit', relatedType: 'admin_action_request', relatedId: requestRef, actor },
-    (c, wallet, op) => move(c, wallet, op.id, 'purchased', coins, 'adjustment'));
+    (c, wallet, op) => move(c, wallet, op.id, 'goodwill', coins, 'adjustment'));
 }
 
 /** Open coin-refund review items (unrecovered refunded value), oldest first. */
@@ -302,10 +308,11 @@ export async function expireGranted(db, { personId, cycleKey, actor = 'system' }
 /** Wallet screen data (spec §4 UX): both balances with dollar equivalents and the next grant date. */
 export async function walletView(db, personId, { nextGrantAt = null } = {}) {
   const w = (await db.query('SELECT * FROM coin_wallets WHERE person_id = $1', [personId])).rows[0]
-    || { granted_balance: 0, purchased_balance: 0, legacy_balance: 0, granted_reset_at: null };
+    || { granted_balance: 0, goodwill_balance: 0, purchased_balance: 0, legacy_balance: 0, granted_reset_at: null };
   const b = (coins) => ({ coins, usd: formatUsd(coinsToCents(coins)) });
-  const total = w.granted_balance + w.purchased_balance + w.legacy_balance;
-  return { granted: b(w.granted_balance), purchased: b(w.purchased_balance), legacy: b(w.legacy_balance), total: b(total), lastGrantAt: w.granted_reset_at, nextGrantAt };
+  const total = w.granted_balance + w.goodwill_balance + w.purchased_balance + w.legacy_balance;
+  return { granted: b(w.granted_balance), goodwill: b(w.goodwill_balance), purchased: b(w.purchased_balance), legacy: b(w.legacy_balance), total: b(total),
+    spendOrder: [...SPEND_ORDER], lastGrantAt: w.granted_reset_at, nextGrantAt };
 }
 
 /** "This analysis costs 40 coins (≈ $0.40)" — the quote shown before any AI job runs. */

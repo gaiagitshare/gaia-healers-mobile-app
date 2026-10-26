@@ -68,11 +68,16 @@ only counted; the provider stays the billing truth).
 
 Contract: `docs/membership/CONTROL-CENTER.md`. Migration `0011_operators.sql` adds `operators`,
 `operator_sessions`, `admin_action_requests`, `person_notes` (append-only) and the `admin:operate` client scope.
+Migration `0012_admin_phase3_decisions.sql` (owner decisions, 2026-10-26) adds the `goodwill` coin bucket,
+`operators.must_change_password`, `audit_logs.reason` and `admin_action_attempts` (one row per execution attempt).
 
 | Module | Guarantees (tested) |
 |---|---|
 | `src/operators.js` | scrypt passwords (constant-time compare; an unknown email still costs one scrypt); RFC 6238 TOTP (±1 step, a step never accepted twice); TOTP secret AES-256-GCM encrypted with `MEMBERSHIP_OPERATOR_KEY` (32 bytes base64, bound to the operator id); sessions stored as SHA-256, 8 h absolute, 30 min idle; 5 failures lock 15 min; every failure is the same `invalid_login`; disable / role change / TOTP reset revoke sessions; disable cancels the operator's pending requests |
 | `src/admin-actions.js` | permission matrix for the 13 action keys; every write is one `admin_action_requests` row keyed by the operator's `requestId` (replay = first result); reason ≥ 10 chars; dual actions: requester ≠ approver (also a DB CHECK), approver role checked, 72 h expiry, one conditional UPDATE so a request executes at most once, failures recorded; Stripe actions without Stripe end `approved_not_executed` (`PROVIDER_UNAVAILABLE`) |
+| `src/admin-actions.js` `executeRequest` | explicit execute / retry (`POST /v1/admin/requests/:id/execute`, finance+, reason + requestId) of a failed or approved-but-not-executed request; never automatic; one attempt row per call (unique attempt key, at most one running and one executed per request, finished attempts immutable); an executed request is CONFLICT |
+| `src/coins.js` goodwill | own bucket, never expires, never clawed back by a payment refund; spend order granted → goodwill → purchased → legacy (`SPEND_ORDER`, owner default) |
+| `src/audit.js` | `reason` on every audit row written while an admin action is requested, decided or executed (domain rows included, via `withAuditReason`) |
 | `src/api/admin-routes.js` | `/v1/admin/*` for an `admin:operate` platform client + `X-Operator-Session`; read models bounded (limit ≤ 200) with keyset cursors; no payloads or secrets in responses or logs |
 | `providers/stripe/adapter.js` `refundPayment`, `cancelNow` | test mode only (the client refuses live keys); refund idempotency key `gaia-admin-refund-<request id>`; the refund is booked by the webhook |
 | `staging-proxy/membership2-admin-gateway.js` | OFF unless `MEMBERSHIP2_ADMIN=on` + loopback `MEMBERSHIP_SERVICE_URL` + `MEMBERSHIP_ADMIN_SERVICE_TOKEN`; console sign-in (cookie or Event bearer, the admin router's own check) **and** the `gaia_operator` cookie; JSON + origin on writes (`MEMBERSHIP2_ADMIN_ORIGINS`); login rate-limited per IP; the operator token never reaches JavaScript |
@@ -81,10 +86,12 @@ Operators (owner only; `MEMBERSHIP_DATABASE_URL` + `MEMBERSHIP_OPERATOR_KEY`):
 
 ```bash
 node src/cli/operators.js create --email a@example.invalid --name "A" --role support --actor <owner> [--secrets-file <new 0600 file>]
-node src/cli/operators.js list|disable|set-role|reset-totp --operator <email|id> [--role r] --actor <owner>
+node src/cli/operators.js list|disable|set-role|reset-totp|reset-password --operator <email|id> [--role r] --actor <owner>
 ```
 
-`create` and `reset-totp` show the initial password / otpauth URI **once**. The API server reads
+`create`, `reset-totp` and `reset-password` show the initial password / otpauth URI **once**. After `create` or
+`reset-password` the operator must change the password at the next sign-in (the session is restricted to
+`POST /v1/admin/password`, `/me` and `/logout` until then). The API server reads
 `MEMBERSHIP_OPERATOR_KEY` from its environment; without it, operator sign-in answers `PROVIDER_UNAVAILABLE`.
 
 ## Duplicate-billing guard and legacy migration (architecture C)

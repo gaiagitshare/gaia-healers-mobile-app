@@ -106,7 +106,7 @@ async function ensureProduct(stripe, p) {
   } catch (e) {
     if (e.code !== 'NOT_FOUND') throw e;
   }
-  return stripe.post('/v1/products', { id, name: `Gaia ${p.plan_name}`, metadata: { gaia_plan_key: p.plan_key } },
+  return stripe.post('/v1/products', { id, name: `Gaia Healers ${p.plan_name}`, metadata: { gaia_plan_key: p.plan_key } },
     { idempotencyKey: `gaia-product-${p.plan_key}` });
 }
 
@@ -264,7 +264,7 @@ export async function createCoinPackCheckout({ pool, stripe, env = {} }, personI
     mode: 'payment',
     customer: customerId,
     client_reference_id: personId,
-    line_items: [{ quantity: 1, price_data: { currency: pack.currency.toLowerCase(), unit_amount: pack.price_cents, product_data: { name: `Gaia coins: ${coins}`, metadata: { gaia_coin_package_key: pack.key } } } }],
+    line_items: [{ quantity: 1, price_data: { currency: pack.currency.toLowerCase(), unit_amount: pack.price_cents, product_data: { name: `Gaia Healers coins: ${coins}`, metadata: { gaia_coin_package_key: pack.key } } } }],
     success_url: success,
     cancel_url: cancel,
     metadata,

@@ -13,6 +13,10 @@
  *     email, wrong password, wrong code, locked, disabled) is the same
  *     `invalid_login` answer.
  *
+ *   - the initial password (and a CLI password reset) sets must_change_password:
+ *     until the operator chooses a new one, a sign-in gives a RESTRICTED session
+ *     that may only call POST /v1/admin/password, /me and /logout.
+ *
  * Operators are created and managed only by the owner with src/cli/operators.js.
  * Nothing here logs an email, a password, a code or a token.
  */
@@ -29,6 +33,8 @@ export const MAX_FAILED_LOGINS = 5;
 export const LOCK_MS = 15 * 60 * 1000;
 export const TOTP_STEP_S = 30;
 export const TOTP_WINDOW = 1;
+export const PASSWORD_MIN = 12;
+export const PASSWORD_MAX = 200;
 const SCRYPT = { N: 32768, r: 8, p: 1, keylen: 32, maxmem: 64 * 1024 * 1024 };
 const ISSUER = 'Gaia Healers Control Center';
 
@@ -47,7 +53,7 @@ const needKey = (env) => operatorKey(env) || fail('PROVIDER_UNAVAILABLE', 'opera
 
 // ---------- scrypt ----------
 export function hashPassword(password) {
-  if (typeof password !== 'string' || password.length < 12 || password.length > 200) fail('INVALID_INPUT', 'password must be 12-200 characters');
+  if (typeof password !== 'string' || password.length < PASSWORD_MIN || password.length > PASSWORD_MAX) fail('INVALID_INPUT', `password must be ${PASSWORD_MIN}-${PASSWORD_MAX} characters`);
   const salt = crypto.randomBytes(16);
   const h = crypto.scryptSync(password, salt, SCRYPT.keylen, SCRYPT);
   return `scrypt$${SCRYPT.N}$${SCRYPT.r}$${SCRYPT.p}$${salt.toString('base64')}$${h.toString('base64')}`;
@@ -143,8 +149,12 @@ const normEmail = (e) => {
 };
 const checkRole = (r) => { if (!ROLES.includes(r)) fail('INVALID_INPUT', 'role must be one of ' + ROLES.join(', ')); return r; };
 
-/** Returns the initial password and the otpauth URI ONCE; neither is stored in clear. */
-export async function createOperator(pool, { email, displayName, role, password = generatePassword() }, actor, { env }) {
+/**
+ * Returns the initial password and the otpauth URI ONCE; neither is stored in clear.
+ * The operator must change that password at first sign-in. `mustChangePassword: false`
+ * exists only for the test fixtures (the CLI never passes it).
+ */
+export async function createOperator(pool, { email, displayName, role, password = generatePassword(), mustChangePassword = true }, actor, { env }) {
   const key = needKey(env); const who = cliActor(actor);
   email = normEmail(email); checkRole(role);
   if (typeof displayName !== 'string' || !displayName.trim() || displayName.length > 120) fail('INVALID_INPUT', 'a display name is required');
@@ -153,10 +163,10 @@ export async function createOperator(pool, { email, displayName, role, password 
   const passwordHash = hashPassword(password);
   return withTransaction(pool, async (c) => {
     try {
-      await c.query(`INSERT INTO operators (id, email, display_name, role, password_scrypt, totp_secret_enc, created_by) VALUES ($1, $2, $3, $4, $5, $6, $7)`,
-        [id, email, displayName.trim(), role, passwordHash, encryptSecret(key, id, secret), who.actorId]);
+      await c.query(`INSERT INTO operators (id, email, display_name, role, password_scrypt, totp_secret_enc, created_by, must_change_password) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+        [id, email, displayName.trim(), role, passwordHash, encryptSecret(key, id, secret), who.actorId, mustChangePassword !== false]);
     } catch (e) { if (e.code === '23505') fail('CONFLICT', 'an operator with this email exists'); throw e; }
-    await audit(c, { ...who, action: 'operator.create', entityType: 'operator', entityId: id, after: { role } });
+    await audit(c, { ...who, action: 'operator.create', entityType: 'operator', entityId: id, after: { role, mustChangePassword: mustChangePassword !== false } });
     return { id, email, role, password, otpauthUri: otpauthUri(email, base32Encode(secret)) };
   });
 }
@@ -168,7 +178,7 @@ async function byRef(c, ref) {
 }
 
 export async function listOperators(db) {
-  return (await db.query(`SELECT id, email, display_name, role, status, (locked_until IS NOT NULL AND locked_until > now()) AS locked, last_login_at, created_at
+  return (await db.query(`SELECT id, email, display_name, role, status, (locked_until IS NOT NULL AND locked_until > now()) AS locked, must_change_password, last_login_at, created_at
                             FROM operators ORDER BY created_at`)).rows;
 }
 
@@ -216,11 +226,24 @@ export async function resetOperatorTotp(pool, ref, actor, { env }) {
   });
 }
 
+/** CLI password reset: a new initial password (shown once), must change at next sign-in, sessions revoked, lock cleared. */
+export async function resetOperatorPassword(pool, ref, actor, { password = generatePassword() } = {}) {
+  const who = cliActor(actor);
+  const hash = hashPassword(password);
+  return withTransaction(pool, async (c) => {
+    const op = await byRef(c, ref);
+    await c.query('UPDATE operators SET password_scrypt = $2, must_change_password = true, failed_logins = 0, locked_until = NULL, updated_at = now() WHERE id = $1', [op.id, hash]);
+    const sessions = await revokeSessions(c, op.id);
+    await audit(c, { ...who, action: 'operator.reset_password', entityType: 'operator', entityId: op.id, after: { sessionsRevoked: sessions, mustChangePassword: true } });
+    return { id: op.id, password };
+  });
+}
+
 // ---------- sign-in ----------
 const invalidLogin = () => { throw Object.assign(new MembershipError('AUTH_REQUIRED', 'invalid_login'), { expose: { error: 'invalid_login' } }); };
 const hashMeta = (key, v) => (v ? crypto.createHmac('sha256', key).update(String(v)).digest('hex').slice(0, 32) : null);
 
-export const operatorView = (op) => ({ id: op.id, email: op.email, displayName: op.display_name, role: op.role });
+export const operatorView = (op) => ({ id: op.id, email: op.email, displayName: op.display_name, role: op.role, mustChangePassword: op.must_change_password === true });
 
 export async function login(pool, { email, password, totp }, { env, now = new Date(), ip = null, ua = null, requestId = null }) {
   const key = needKey(env);
@@ -267,11 +290,12 @@ export async function authenticateOperator(db, token, now = new Date()) {
        FROM operators o
       WHERE s.token_sha256 = $1 AND o.id = s.operator_id AND s.revoked_at IS NULL AND o.status = 'active'
         AND s.expires_at > $2 AND s.last_seen_at + make_interval(secs => $3) > $2
-      RETURNING s.token_sha256, s.expires_at, s.last_seen_at, o.id, o.email, o.display_name, o.role, o.status`,
+      RETURNING s.token_sha256, s.expires_at, s.last_seen_at, o.id, o.email, o.display_name, o.role, o.status, o.must_change_password`,
     [sha(token), now, SESSION_IDLE_MS / 1000])).rows[0];
   if (!r) fail('AUTH_REQUIRED', 'operator sign-in required');
   const idle = new Date(Math.min(new Date(r.last_seen_at).getTime() + SESSION_IDLE_MS, new Date(r.expires_at).getTime()));
-  return { operator: { id: r.id, email: r.email, display_name: r.display_name, role: r.role, status: r.status }, tokenHash: r.token_sha256, idleExpiresAt: idle, expiresAt: r.expires_at };
+  return { operator: { id: r.id, email: r.email, display_name: r.display_name, role: r.role, status: r.status, must_change_password: r.must_change_password },
+    restricted: r.must_change_password === true, tokenHash: r.token_sha256, idleExpiresAt: idle, expiresAt: r.expires_at };
 }
 
 export async function logout(pool, auth, requestId) {
@@ -279,4 +303,38 @@ export async function logout(pool, auth, requestId) {
     await c.query('UPDATE operator_sessions SET revoked_at = now() WHERE token_sha256 = $1 AND revoked_at IS NULL', [auth.tokenHash]);
     await audit(c, { ...operatorActor(auth.operator, requestId), action: 'operator.logout', entityType: 'operator', entityId: auth.operator.id });
   });
+}
+
+/**
+ * POST /v1/admin/password { currentPassword, newPassword }. The new password is
+ * 12-200 characters and differs from the current one; stored as scrypt. Clears
+ * must_change_password and revokes every OTHER session of the operator. A wrong
+ * current password counts as a failed sign-in: the 5th locks the account and
+ * revokes its sessions (this one too).
+ */
+export async function changePassword(pool, auth, { currentPassword, newPassword }, { now = new Date(), requestId = null } = {}) {
+  if (typeof newPassword !== 'string' || newPassword.length < PASSWORD_MIN || newPassword.length > PASSWORD_MAX) fail('INVALID_INPUT', `the new password must be ${PASSWORD_MIN}-${PASSWORD_MAX} characters`);
+  if (newPassword === currentPassword) fail('INVALID_INPUT', 'the new password must differ from the current one');
+  const hash = hashPassword(newPassword);
+  const r = await withTransaction(pool, async (c) => {
+    const op = (await c.query('SELECT * FROM operators WHERE id = $1 FOR UPDATE', [auth.operator.id])).rows[0];
+    if (!op || op.status !== 'active') fail('AUTH_REQUIRED', 'operator sign-in required');
+    const who = operatorActor(op, requestId);
+    if (!verifyPassword(currentPassword, op.password_scrypt)) {
+      const n = op.failed_logins + 1;
+      if (n >= MAX_FAILED_LOGINS) {
+        await c.query('UPDATE operators SET failed_logins = 0, locked_until = $2, updated_at = now() WHERE id = $1', [op.id, new Date(now.getTime() + LOCK_MS)]);
+        await revokeSessions(c, op.id);
+      } else await c.query('UPDATE operators SET failed_logins = $2, updated_at = now() WHERE id = $1', [op.id, n]);
+      await audit(c, { ...who, action: 'operator.password_change_failed', entityType: 'operator', entityId: op.id, after: { locked: n >= MAX_FAILED_LOGINS } });
+      return { failed: true };
+    }
+    if (verifyPassword(newPassword, op.password_scrypt)) fail('INVALID_INPUT', 'the new password must differ from the current one');
+    await c.query('UPDATE operators SET password_scrypt = $2, must_change_password = false, password_changed_at = $3, failed_logins = 0, updated_at = now() WHERE id = $1', [op.id, hash, now]);
+    const others = (await c.query('UPDATE operator_sessions SET revoked_at = now() WHERE operator_id = $1 AND revoked_at IS NULL AND token_sha256 <> $2', [op.id, auth.tokenHash])).rowCount;
+    await audit(c, { ...who, action: 'operator.password_change', entityType: 'operator', entityId: op.id, after: { otherSessionsRevoked: others, wasRequired: op.must_change_password } });
+    return { ok: true };
+  });
+  if (r.failed) fail('INVALID_INPUT', 'the current password is not correct');
+  return { changed: true };
 }

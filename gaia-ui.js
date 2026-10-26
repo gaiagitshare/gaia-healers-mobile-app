@@ -1305,7 +1305,13 @@
       const view = String(value || 'today').toLowerCase();
       if (view === 'home') return 'today';
       if (view === 'journey') return 'profile'; // Journey retired; its rollup lives in You
-      return APP_VIEWS.has(view) ? view : 'today';
+      if (APP_VIEWS.has(view)) return view;
+      // Membership 2.0 preview: a shell-only view, deliberately NOT in the
+      // assistant's screen map (so it adds nothing to any prompt). It exists
+      // only after gaia-membership2.js's feature probe saw the gateway answer;
+      // otherwise the link lands on the existing Store > Membership tab.
+      if (view === 'membership') return window.GaiaMembership2?.available?.() === true ? 'membership' : 'store';
+      return 'today';
     }
 
     function routeFromUrl() {
@@ -1324,6 +1330,8 @@
         tab = 'check';
       } else if (view === 'community' && !tab) {
         tab = 'discussion';
+      } else if (rawView === 'membership' && view === 'store') {
+        tab = 'membership';
       }
       // The event id is part of the route: boot and popstate must preserve it,
       // or a direct link to an event silently becomes the events hub.
@@ -1368,6 +1376,7 @@
         inbox: 'Inbox',
         profile: 'You',
         store: 'Store',
+        membership: 'Membership',
         admin: 'Admin',
       };
       document.title = `${labels[view] || 'Gaia'} · Gaia Healers`;
@@ -2889,7 +2898,7 @@
     const assistHistory = [];
     const declinedPrompts = new Set();
     const measure = (event, action) => document.dispatchEvent(new CustomEvent('gaia:analytics', {detail:{event, ...(action?{action:action.type}:{}), screen:pageContext().screen}}));
-    const pageContext = () => { const screen=window.GaiaAppShell?.currentView?.() || 'today'; return window.GaiaAssistGuide.context(window.GaiaJourney?.context || {screen, itemId:screen==='store'?window.GaiaStore?.currentItem?.() || '':screen==='events'?new URLSearchParams(location.search).get('event') || String(window.GaiaMember?.event?.id || '').replace(/^event-/, ''):''}); };
+    const pageContext = () => { const view=window.GaiaAppShell?.currentView?.() || 'today'; const screen=view==='membership'?'store':view; return window.GaiaAssistGuide.context(window.GaiaJourney?.context || {screen, itemId:screen==='store'?window.GaiaStore?.currentItem?.() || '':screen==='events'?new URLSearchParams(location.search).get('event') || String(window.GaiaMember?.event?.id || '').replace(/^event-/, ''):''}); };
     const rememberTurn = (role, content) => {
       assistHistory.push({ role, content });
       if (assistHistory.length > 8) assistHistory.shift();

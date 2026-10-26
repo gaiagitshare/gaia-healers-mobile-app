@@ -84,6 +84,42 @@ function cleanupMagicPolls(now) {
   for (const [id, entry] of MAGIC_LINK_POLLS) { if (entry.exp <= now) MAGIC_LINK_POLLS.delete(id); }
   if (MAGIC_LINK_POLLS.size > 20000) MAGIC_LINK_POLLS.clear();
 }
+// Device binding for the poll (audit S4). A pollId alone must not be enough to
+// receive a session: anyone can submit a victim's email and keep the pollId.
+// The requesting browser gets a random nonce in an HttpOnly cookie; a click from
+// a browser carrying that nonce completes the poll as before. A click from any
+// other browser (another device, or an iOS installed PWA vs Safari, which have
+// separate cookie jars) still signs THAT browser in, but the poll completes only
+// after the clicker types the short code shown on the requesting screen. An
+// attacker who requested the link sees the code on their own device only.
+const MAGIC_LINK_NONCE_COOKIE = 'gaia_ml_nonce';
+const MAGIC_LINK_CONFIRM_MAX_ATTEMPTS = 5;
+function readMagicNonce(req) {
+  const value = String(parseCookies(req.headers.cookie || '')[MAGIC_LINK_NONCE_COOKIE] || '');
+  return /^[A-Za-z0-9_-]{32,64}$/.test(value) ? value : '';
+}
+function magicNonceHash(nonce) {
+  return crypto.createHash('sha256').update(`gaia-ml-nonce|${nonce}`).digest('hex');
+}
+// SameSite=None to match the session cookie: the app also runs inside the GHL
+// iframe (a different site), where a Lax cookie would never be stored. The
+// nonce is only ever compared, never trusted on its own, so cross-site sending
+// grants nothing. Scoped to the magic-link endpoints.
+function buildMagicNonceCookie(nonce) {
+  return [
+    `${MAGIC_LINK_NONCE_COOKIE}=${nonce}`,
+    'Path=/api/auth/magic-link',
+    'HttpOnly',
+    'SameSite=None',
+    'Secure',
+    `Max-Age=${AUTH_MAGIC_LINK_TTL_SECONDS}`,
+  ].join('; ');
+}
+function constantTimeEqualString(a, b) {
+  const left = crypto.createHash('sha256').update(String(a)).digest();
+  const right = crypto.createHash('sha256').update(String(b)).digest();
+  return crypto.timingSafeEqual(left, right) && String(a).length === String(b).length;
+}
 const AUTH_ALLOW_DEBUG_LINKS = process.env.AUTH_ALLOW_DEBUG_LINKS === 'true';
 const AUTH_ALLOW_UNVERIFIED_EMAIL_MAGIC_LINK = process.env.AUTH_ALLOW_UNVERIFIED_EMAIL_MAGIC_LINK === 'true';
 const AUTH_EMBED_SHARED_SECRET = process.env.AUTH_EMBED_SHARED_SECRET || process.env.APP_PROXY_SHARED_SECRET || '';
@@ -2456,7 +2492,11 @@ function parseCookies(cookieHeader = '') {
 
 function cookieForRequest(req) {
   const cookies = parseCookies(req.headers.cookie || '');
-  return readSignedToken(cookies[AUTH_SESSION_COOKIE] || '');
+  const payload = readSignedToken(cookies[AUTH_SESSION_COOKIE] || '');
+  // Sessions never carry a `type`; magic-link, oauth-state and confirm tickets
+  // all do. A signed one-time token must not be replayable as a session cookie.
+  if (payload && payload.type) return null;
+  return payload;
 }
 
 function requestIsSecure(req) {
@@ -3250,8 +3290,11 @@ function authMagicLinkStart(_req, res) {
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Signing in · Gaia Healers</title>
 <style>body{margin:0;min-height:100vh;display:grid;place-items:center;background:#f7faf5;color:#173323;font:16px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}.card{width:min(88vw,420px);padding:32px;border-radius:22px;background:#fff;box-shadow:0 18px 55px rgba(22,61,36,.12);text-align:center}h1{font-size:24px;margin:0 0 10px}p{color:#65756b;margin:0}.dot{display:inline-block;width:10px;height:10px;margin:0 3px;border-radius:50%;background:#5cb82e;animation:p 1s infinite alternate}.dot:nth-child(2){animation-delay:.2s}.dot:nth-child(3){animation-delay:.4s}@keyframes p{to{opacity:.25;transform:translateY(-4px)}}a{color:#2f7d32}</style>
-</head><body><main class="card"><h1 id="title">Signing you in</h1><p id="status">Verifying your Gaia Healers membership…</p><p id="loader" aria-hidden="true" style="margin-top:20px"><span class="dot"></span><span class="dot"></span><span class="dot"></span></p></main>
-<script nonce="${nonce}">(async()=>{const fallback=${fallback};const status=document.getElementById('status');const title=document.getElementById('title');const loader=document.getElementById('loader');const fragment=new URLSearchParams(location.hash.slice(1));const token=fragment.get('gaia_magic')||'';history.replaceState({},'',location.pathname);if(!token){title.textContent='Sign-in link unavailable';status.innerHTML='Return to <a href="'+fallback+'">Gaia Healers</a> and request a new link.';loader.hidden=true;return}try{const response=await fetch('/api/auth/magic-link/consume',{method:'POST',headers:{'Content-Type':'application/json','Accept':'application/json'},credentials:'include',body:JSON.stringify({token})});const data=await response.json();if(!response.ok||!data.authenticated)throw new Error(data.error||'This link could not be verified.');status.textContent='Verified. Opening your Gaia Healers…';location.replace(data.returnTo||fallback)}catch(error){title.textContent='Please request a new link';status.textContent=error.message||'This sign-in link is invalid or expired.';loader.hidden=true;}})();</script></body></html>`;
+</head><body><main class="card"><h1 id="title">Signing you in</h1><p id="status">Verifying your Gaia Healers membership…</p><p id="loader" aria-hidden="true" style="margin-top:20px"><span class="dot"></span><span class="dot"></span><span class="dot"></span></p><form id="confirm" hidden style="margin-top:18px"><label for="code" style="display:block;color:#173323;font-weight:600;margin-bottom:8px">Code from your other screen</label><input id="code" inputmode="numeric" autocomplete="one-time-code" maxlength="6" pattern="[0-9]*" style="width:9em;font:600 24px/1.2 ui-monospace,monospace;letter-spacing:.2em;text-align:center;padding:10px;border:1px solid #c9d6cc;border-radius:12px"><div style="margin-top:12px"><button id="confirmBtn" type="submit" style="font-weight:600;font-size:16px;padding:12px 20px;border:0;border-radius:999px;background:#2f7d32;color:#fff">Confirm</button></div><p id="confirmMsg" role="status" style="margin-top:12px"></p><p style="margin-top:12px;font-size:13px">Only enter a code you can see on your own screen right now. Never enter a code someone sent you.</p><p style="margin-top:14px"><a id="continue" href="#">Continue in this browser instead</a></p></form></main>
+
+<script nonce="${nonce}">(async()=>{const fallback=${fallback};const status=document.getElementById('status');const title=document.getElementById('title');const loader=document.getElementById('loader');const fragment=new URLSearchParams(location.hash.slice(1));const token=fragment.get('gaia_magic')||'';history.replaceState({},'',location.pathname);if(!token){title.textContent='Sign-in link unavailable';status.innerHTML='Return to <a href="'+fallback+'">Gaia Healers</a> and request a new link.';loader.hidden=true;return}let data;try{const response=await fetch('/api/auth/magic-link/consume',{method:'POST',headers:{'Content-Type':'application/json','Accept':'application/json'},credentials:'include',body:JSON.stringify({token})});data=await response.json();if(!response.ok||!data.authenticated)throw new Error(data.error||'This link could not be verified.')}catch(error){title.textContent='Please request a new link';status.textContent=error.message||'This sign-in link is invalid or expired.';loader.hidden=true;return}const next=data.returnTo||fallback;if(!data.confirmRequired||!data.confirmTicket){status.textContent='Verified. Opening your Gaia Healers…';location.replace(next);return}
+/* Opened in a different browser from the one that asked for the link: this browser is signed in, the waiting screen needs its code typed here. */
+loader.hidden=true;title.textContent='You are signed in here';status.textContent='Waiting on another screen (for example the installed app)? Type the 6-digit code it shows to sign that screen in too.';const form=document.getElementById('confirm');const input=document.getElementById('code');const btn=document.getElementById('confirmBtn');const msg=document.getElementById('confirmMsg');const cont=document.getElementById('continue');cont.href=next;form.hidden=false;input.focus();form.addEventListener('submit',async(e)=>{e.preventDefault();const code=(input.value||'').replace(/\\D/g,'');if(code.length!==6){msg.textContent='Enter the 6-digit code.';return}btn.disabled=true;msg.textContent='Checking…';try{const r=await fetch('/api/auth/magic-link/confirm',{method:'POST',headers:{'Content-Type':'application/json','Accept':'application/json'},credentials:'include',body:JSON.stringify({ticket:data.confirmTicket,code})});const d=await r.json().catch(()=>({}));if(r.ok&&d.confirmed){title.textContent='All set';status.textContent='Your other screen will finish signing in within a few seconds.';input.disabled=true;btn.hidden=true;msg.textContent='';cont.textContent='Open Gaia Healers here';return}msg.textContent=d.error||'That code could not be confirmed.';if(d.code==='too_many_attempts'||d.code==='expired'||d.code==='invalid_ticket'){input.disabled=true;btn.hidden=true;return}btn.disabled=false;input.select()}catch(_){msg.textContent='Could not reach Gaia Healers. Please try again.';btn.disabled=false}})})();</script></body></html>`;
   res.writeHead(200, {
     'Content-Type': 'text/html; charset=utf-8',
     'Cache-Control': 'no-store',
@@ -5270,14 +5313,30 @@ async function authMagicLinkRequest(req, res, origin) {
   // Always mint a pollId (member or not) so the response cannot be used to
   // enumerate members: a non-member's poll simply never verifies.
   const pollId = crypto.randomBytes(24).toString('base64url');
+  // One nonce per browser: a Resend reuses it, so every link this browser asked
+  // for still recognises it.
+  const deviceNonce = readMagicNonce(req) || crypto.randomBytes(24).toString('base64url');
+  const confirmCode = String(crypto.randomInt(0, 1000000)).padStart(6, '0');
   cleanupMagicPolls(Date.now());
-  MAGIC_LINK_POLLS.set(pollId, { verified: false, member: null, exp: Date.now() + MAGIC_LINK_POLL_TTL_MS });
+  MAGIC_LINK_POLLS.set(pollId, {
+    verified: false,
+    member: null,
+    exp: Date.now() + MAGIC_LINK_POLL_TTL_MS,
+    nonceHash: magicNonceHash(deviceNonce),
+    confirmCode,
+    confirmAttempts: 0,
+    awaitingCode: false,
+  });
+  const nonceHeaders = { 'Set-Cookie': buildMagicNonceCookie(deviceNonce) };
   const genericResponse = {
     ok: true,
     delivery: 'email-if-member',
     message: 'If this email belongs to a Gaia Healers member, a secure sign-in link will arrive shortly.',
     expiresInSeconds: AUTH_MAGIC_LINK_TTL_SECONDS,
     pollId,
+    // Shown on the waiting screen; typed on the device that opens the link if
+    // that is a different browser. Returned for members and non-members alike.
+    confirmCode,
   };
 
   // Every sign-in attempt is recorded. The response is deliberately identical
@@ -5300,7 +5359,7 @@ async function authMagicLinkRequest(req, res, origin) {
   if (!member) {
     // Do not reveal whether an email exists in GHL.
     logOutcome('no_member_for_email');
-    sendJson(res, 200, genericResponse, origin);
+    sendJson(res, 200, genericResponse, origin, nonceHeaders);
     return;
   }
 
@@ -5326,7 +5385,7 @@ async function authMagicLinkRequest(req, res, origin) {
     });
     if (sent.ok) {
       logOutcome('sent', { contactId: member.contactId, messageId: sent.messageId || null });
-      sendJson(res, 200, genericResponse, origin);
+      sendJson(res, 200, genericResponse, origin, nonceHeaders);
       return;
     }
     if (!AUTH_ALLOW_DEBUG_LINKS) {
@@ -5336,7 +5395,7 @@ async function authMagicLinkRequest(req, res, origin) {
         status: sent.status || null,
         detail: sent.detail || null,
       });
-      sendJson(res, 200, genericResponse, origin);
+      sendJson(res, 200, genericResponse, origin, nonceHeaders);
       return;
     }
   }
@@ -5348,14 +5407,16 @@ async function authMagicLinkRequest(req, res, origin) {
       authUrl: consumeUrl,
       member: { email: member.email, displayName: member.displayName },
       expiresInSeconds: AUTH_MAGIC_LINK_TTL_SECONDS,
-    }, origin);
+      pollId,
+      confirmCode,
+    }, origin, nonceHeaders);
     return;
   }
 
   // A member with no contact id cannot be emailed at all — worth naming
   // distinctly, because it is a data problem rather than a delivery one.
   logOutcome('no_contact_to_email', { contactId: member.contactId || null });
-  sendJson(res, 200, genericResponse, origin);
+  sendJson(res, 200, genericResponse, origin, nonceHeaders);
 }
 
 // In-app Join. Records a brand-new person in GHL (contacts.upsert — dedupes by
@@ -5429,7 +5490,12 @@ async function authMagicLinkPoll(req, res, origin, url) {
   cleanupMagicPolls(Date.now());
   const pending = pollId ? MAGIC_LINK_POLLS.get(pollId) : null;
   if (!pending) { sendJson(res, 200, { ok: true, authenticated: false, status: 'unknown' }, origin); return; }
-  if (!pending.verified || !pending.member) { sendJson(res, 200, { ok: true, authenticated: false, status: 'pending' }, origin); return; }
+  if (!pending.verified || !pending.member) {
+    // awaiting_code: the link was opened in another browser, which now has to
+    // enter the code this screen shows. Older clients just keep polling.
+    sendJson(res, 200, { ok: true, authenticated: false, status: pending.awaitingCode ? 'awaiting_code' : 'pending' }, origin);
+    return;
+  }
   // The link was opened (email proven). Mint the session on THIS request so the
   // HttpOnly cookie lands in the caller's context (the installed PWA), not the
   // browser tab the email link happened to open. Single-use.
@@ -5466,13 +5532,27 @@ async function authMagicLinkConsume(req, res, origin, url) {
     return;
   }
   CONSUMED_MAGIC_LINKS.set(tokenHash, Number(payload.exp) || (now + AUTH_MAGIC_LINK_TTL_SECONDS * 1000));
-  // Bridge to the polling PWA: this proves the email was opened, so any app
-  // polling on this pollId may now mint its own session (in its own context).
+  // Bridge to the polling screen. Opening the link proves the mailbox; it does
+  // not prove the polling screen belongs to the mailbox owner. So the poll
+  // completes at once only when this browser carries the requester's nonce;
+  // otherwise it waits for the requester's code (authMagicLinkConfirm).
+  let confirmTicket = '';
   if (payload.pollId && MAGIC_LINK_POLLS.has(payload.pollId)) {
     const pending = MAGIC_LINK_POLLS.get(payload.pollId);
-    pending.verified = true;
+    const nonce = readMagicNonce(req);
+    const sameDevice = Boolean(nonce && pending.nonceHash
+      && constantTimeEqualString(magicNonceHash(nonce), pending.nonceHash));
     pending.member = payload.member;
     pending.exp = Date.now() + MAGIC_LINK_POLL_TTL_MS;
+    if (sameDevice) {
+      pending.verified = true;
+      pending.awaitingCode = false;
+    } else if (pending.confirmCode) {
+      pending.awaitingCode = true;
+      // Only this clicking browser receives the ticket, so the requester (who
+      // knows the code) cannot confirm on the clicker's behalf.
+      confirmTicket = signTokenPayload({ type: 'magic-link-confirm', pollId: payload.pollId, iat: Date.now(), exp: pending.exp });
+    }
   }
   // They opened a link delivered to that mailbox, which is exactly what
   // verifying an email means.
@@ -5487,10 +5567,45 @@ async function authMagicLinkConsume(req, res, origin, url) {
       member: session.member,
       expiresAt: session.exp,
       returnTo: safeReturnUrl(payload.returnTo),
+      ...(confirmTicket ? { confirmRequired: true, confirmTicket } : {}),
     }, origin, sessionCookie);
   } else {
     sendRedirect(res, safeReturnUrl(payload.returnTo || url.searchParams.get('returnTo')), origin, sessionCookie);
   }
+}
+
+// The browser that opened the link (but is not the requesting browser) types
+// the code the requesting screen shows. Needs the ticket only that clicking
+// browser received; a few attempts per poll, then the poll is dropped.
+async function authMagicLinkConfirm(req, res, origin) {
+  const body = await readJsonBody(req).catch(() => ({}));
+  const ticket = readSignedToken(String(body.ticket || '').trim());
+  const code = String(body.code || '').replace(/\D/g, '').slice(0, 12);
+  if (!ticket || ticket.type !== 'magic-link-confirm' || !ticket.pollId) {
+    sendJson(res, 400, { ok: false, confirmed: false, code: 'invalid_ticket', error: 'This confirmation has expired. Request a new sign-in link.' }, origin);
+    return;
+  }
+  cleanupMagicPolls(Date.now());
+  const pending = MAGIC_LINK_POLLS.get(String(ticket.pollId));
+  if (!pending || !pending.awaitingCode || !pending.member || !pending.confirmCode) {
+    sendJson(res, 410, { ok: false, confirmed: false, code: 'expired', error: 'This confirmation has expired. Request a new sign-in link.' }, origin);
+    return;
+  }
+  pending.confirmAttempts = (pending.confirmAttempts || 0) + 1;
+  const matches = code.length === pending.confirmCode.length && constantTimeEqualString(code, pending.confirmCode);
+  if (!matches) {
+    const left = MAGIC_LINK_CONFIRM_MAX_ATTEMPTS - pending.confirmAttempts;
+    if (left <= 0) {
+      MAGIC_LINK_POLLS.delete(String(ticket.pollId));
+      sendJson(res, 429, { ok: false, confirmed: false, code: 'too_many_attempts', error: 'Too many wrong codes. Request a new sign-in link on the other screen.' }, origin);
+      return;
+    }
+    sendJson(res, 401, { ok: false, confirmed: false, code: 'wrong_code', attemptsLeft: left, error: 'That code does not match. Check the code on the other screen.' }, origin);
+    return;
+  }
+  pending.verified = true;
+  pending.awaitingCode = false;
+  sendJson(res, 200, { ok: true, confirmed: true }, origin);
 }
 
 // ── OAuth / OIDC: Sign in with Google and Sign in with Apple ─────────────────
@@ -7152,6 +7267,10 @@ const server = http.createServer(async (req, res) => {
     }
     if (req.method === 'GET' && url.pathname === '/api/auth/magic-link/start') {
       authMagicLinkStart(req, res);
+      return;
+    }
+    if (req.method === 'POST' && url.pathname === '/api/auth/magic-link/confirm') {
+      await authMagicLinkConfirm(req, res, origin);
       return;
     }
     if ((req.method === 'GET' || req.method === 'POST') && url.pathname === '/api/auth/magic-link/consume') {

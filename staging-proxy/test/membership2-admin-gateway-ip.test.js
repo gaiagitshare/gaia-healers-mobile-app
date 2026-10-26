@@ -41,7 +41,7 @@ test('a spoofed X-Forwarded-For / CF-Connecting-IP does not reset the operator s
   const login = await fetch(`${base}/api/admin/login`, { method: 'POST', headers: { 'content-type': 'application/json', origin: base }, body: JSON.stringify({ password: process.env.GAIA_ADMIN_PASSWORD }) });
   const cookie = String(login.headers.get('set-cookie')).split(';')[0];
   const attempt = (i) => fetch(`${base}/api/admin/membership2/login`, { method: 'POST',
-    headers: { cookie, origin: base, 'content-type': 'application/json', 'x-forwarded-for': `198.51.100.${i}`, 'cf-connecting-ip': `203.0.113.${i}` },
+    headers: { cookie, origin: base.replace('http:', 'https:'), 'content-type': 'application/json', 'x-forwarded-for': `198.51.100.${i}`, 'cf-connecting-ip': `203.0.113.${i}` },
     body: JSON.stringify({ email: 'nobody@example.invalid', password: 'x', totp: '123456' }) });
   const statuses = [];
   for (let i = 1; i <= 11; i++) statuses.push((await attempt(i)).status);

@@ -8,7 +8,7 @@ import { withTransaction } from './db.js';
 import { audit } from './audit.js';
 import { fail } from './errors.js';
 
-export const SCOPES = ['identity:read', 'subscriptions:read', 'entitlements:read', 'wallet:read', 'coins:quote', 'coins:debit'];
+export const SCOPES = ['identity:read', 'identity:write', 'subscriptions:read', 'entitlements:read', 'wallet:read', 'coins:quote', 'coins:debit', 'member:read', 'member:write'];
 export const TENANT_SCOPES = ['subscriptions:read', 'entitlements:read'];
 const sha = (t) => crypto.createHash('sha256').update(t).digest('hex');
 

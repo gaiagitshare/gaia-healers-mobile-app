@@ -12,7 +12,7 @@ services:
       - event-data:/app/data
     environment:
       - DATABASE_URL=sqlite:///./data/event.db
-      - SECRET_KEY=your-secret-key-change-in-production
+      - SECRET_KEY=${SECRET_KEY:?set SECRET_KEY (32+ characters) in the environment}
     restart: unless-stopped
 
   frontend:

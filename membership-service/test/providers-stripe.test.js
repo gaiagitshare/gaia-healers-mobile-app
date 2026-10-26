@@ -150,6 +150,12 @@ test('ensureProductAndPrice adopts an exactly matching price found by lookup key
   } finally { await srv.close(); await pool.end(); }
 });
 
+/** One ended legacy row for someone else: the mirror counts as loaded and fresh. */
+async function seedLegacyMirror(pool) {
+  await pool.query(`INSERT INTO legacy_memberships (external_subscription_id, payment_provider, mapping, reported_status, last_seen_at)
+                    VALUES ('ghl-sub-fixture-mirror', 'stripe', 'mapped', 'canceled', now())`);
+}
+
 test('checkout session carries Gaia metadata; legacy, duplicate-plan and bad-input cases are refused', { skip: SKIP }, async () => {
   const pool = await freshPool();
   const srv = await fakeStripe();
@@ -158,7 +164,9 @@ test('checkout session carries Gaia metadata; legacy, duplicate-plan and bad-inp
     const deps = { pool, stripe: client(srv) };
     const pid = await newPerson(pool, 'buyer@example.invalid');
     const m = await priceIdOf(pool, 'standard', 'month');
+    await seedLegacyMirror(pool);                                   // the guard needs a loaded legacy mirror
     const s = await createCheckoutSession(deps, pid, m, { ...URLS, idempotencyKey: 'req-checkout-1' });
+    assert.equal(s.status, 'ok');
     assert.match(s.sessionId, /^cs_test_/);
     const f = srv.db.sessions.get(s.sessionId).form;
     const v = await currentVersion(pool, 'standard');
@@ -174,7 +182,7 @@ test('checkout session carries Gaia metadata; legacy, duplicate-plan and bad-inp
     await assert.rejects(createCheckoutSession(deps, pid, m, { ...URLS, successUrl: 'javascript:alert(1)', idempotencyKey: 'req-checkout-2' }), (e) => e.code === 'INVALID_INPUT');
 
     await createSubscription(pool, { personId: pid, planVersionId: v.id, interval: 'month', status: 'active' }, actor);
-    await assert.rejects(createCheckoutSession(deps, pid, m, { ...URLS, idempotencyKey: 'req-checkout-3' }), (e) => e.code === 'CONFLICT', 'already holds this plan');
+    assert.equal((await createCheckoutSession(deps, pid, m, { ...URLS, idempotencyKey: 'req-checkout-3' })).status, 'already_subscribed');
 
     const planId = (await pool.query("SELECT id FROM plans WHERE key = 'professional'")).rows[0].id;
     const legacy = await createDraftVersion(pool, planId, { prices: { month: 9700 }, isLegacy: true }, actor);

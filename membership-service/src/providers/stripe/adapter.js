@@ -20,9 +20,10 @@ import { audit } from '../../audit.js';
 import { fail } from '../../errors.js';
 import { linkIdentity, identitiesOf } from '../../identity.js';
 import { scheduleCancel } from '../../subscriptions.js';
+import { checkoutEligibility } from '../../billing-guard.js';
+import { billingStartsAt, markCheckoutStarted } from '../../migration-offers.js';
 
 const ACTOR = { actorType: 'system', actorId: 'stripe-adapter' };
-const LIVE_SUB_STATUSES = ['incomplete', 'trialing', 'active', 'past_due', 'paused'];
 
 const productIdFor = (planKey) => `gaia_plan_${planKey}`;
 const lookupKeyFor = (p) => `gaia_${p.plan_key}_v${p.version}_${p.billing_interval}_${p.currency.toLowerCase()}`;
@@ -114,12 +115,17 @@ async function ensureProduct(stripe, p) {
  * adopted only if it matches exactly (amount, currency, interval, metadata),
  * otherwise CONFLICT — never edited, never re-pointed.
  */
-export async function ensureProductAndPrice({ pool, stripe }, planVersionPriceId) {
-  const p = await priceRow(pool, planVersionPriceId);
+/** Refuses anything Gaia may not sell through Stripe, before any other check or call. */
+function assertSellable(p) {
   if (p.owner_type !== 'gaia') fail('FORBIDDEN', 'practitioner-owned plans are not billed through Gaia Stripe yet (D5)');
   if (p.version_status !== 'published') fail('PLAN_ARCHIVED', 'only a published plan version gets a Stripe price');
   if (p.is_legacy) fail('FORBIDDEN', 'legacy plan versions are never sold');
   if (p.amount_cents <= 0) fail('INVALID_INPUT', 'free prices are not billed through Stripe');
+}
+
+export async function ensureProductAndPrice({ pool, stripe }, planVersionPriceId) {
+  const p = await priceRow(pool, planVersionPriceId);
+  assertSellable(p);
 
   const have = await existingRef(pool, p.id, stripe.livemode);
   if (have) return { priceId: have, created: false };
@@ -160,20 +166,31 @@ export async function ensureProductAndPrice({ pool, stripe }, planVersionPriceId
  * (published, not legacy); a person who already holds a live subscription on
  * the same plan is refused (upgrade/downgrade is a different flow).
  */
-export async function createCheckoutSession({ pool, stripe }, personId, planVersionPriceId, { successUrl, cancelUrl, idempotencyKey } = {}) {
+/**
+ * Stripe Checkout for a new Gaia subscription. The duplicate-billing guard runs
+ * first (billing-guard.js): anyone already paying for a membership - a live GHL
+ * legacy membership of ANY tier, another Gaia tier, or anything unknown - gets a
+ * status back instead of a second recurring charge, and Stripe is not called.
+ *
+ * Returns { status: 'ok', sessionId, url, ... } or { status: 'migration_required' |
+ * 'review_required' | 'change_plan_required' | 'already_subscribed', ... }.
+ */
+export async function createCheckoutSession({ pool, stripe, guard = {} }, personId, planVersionPriceId, { successUrl, cancelUrl, idempotencyKey, now = new Date() } = {}) {
   checkKey(idempotencyKey);
   const success = checkUrl(successUrl, 'successUrl');
   const cancel = checkUrl(cancelUrl, 'cancelUrl');
   await activePerson(pool, personId);
   const p = await priceRow(pool, planVersionPriceId);
-  const dup = (await pool.query(
-    `SELECT s.id FROM subscriptions s JOIN plan_versions v ON v.id = s.plan_version_id
-      WHERE s.person_id = $1 AND v.plan_id = (SELECT plan_id FROM plan_versions WHERE id = $2) AND s.status = ANY($3) LIMIT 1`,
-    [personId, p.plan_version_id, LIVE_SUB_STATUSES])).rows[0];
-  if (dup) fail('CONFLICT', 'person already holds this plan', { subscriptionId: dup.id });
-  const { priceId } = await ensureProductAndPrice({ pool, stripe }, planVersionPriceId);
+  assertSellable(p);
+  const eligible = await checkoutEligibility(pool, personId, p.plan_version_id, { now, ...guard });
+  if (eligible.status !== 'ok') return eligible;
+  return startSession({ pool, stripe }, personId, p, { success, cancel, idempotencyKey });
+}
+
+async function startSession({ pool, stripe }, personId, p, { success, cancel, idempotencyKey, extraMetadata = {}, trialEnd = null }) {
+  const { priceId } = await ensureProductAndPrice({ pool, stripe }, p.id);
   const { customerId } = await ensureCustomer({ pool, stripe }, personId);
-  const metadata = { gaia_person_id: personId, gaia_plan_version_id: p.plan_version_id, gaia_plan_version_price_id: p.id };
+  const metadata = { gaia_person_id: personId, gaia_plan_version_id: p.plan_version_id, gaia_plan_version_price_id: p.id, ...extraMetadata };
   const recurring = p.billing_interval !== 'none';
   const s = await stripe.post('/v1/checkout/sessions', {
     mode: recurring ? 'subscription' : 'payment',
@@ -183,10 +200,38 @@ export async function createCheckoutSession({ pool, stripe }, personId, planVers
     success_url: success,
     cancel_url: cancel,
     metadata,
-    ...(recurring ? { subscription_data: { metadata } } : { payment_intent_data: { metadata } }),
+    ...(recurring ? { subscription_data: { metadata, ...(trialEnd ? { trial_end: Math.floor(trialEnd.getTime() / 1000) } : {}) } } : { payment_intent_data: { metadata } }),
   }, { idempotencyKey: `gaia-checkout-${idempotencyKey}` });
   if (!s?.id || !s.url) fail('PROVIDER_UNAVAILABLE', 'stripe returned no checkout session');
-  return { sessionId: s.id, url: s.url, expiresAt: s.expires_at ? new Date(s.expires_at * 1000) : null, customerId, priceId };
+  return { status: 'ok', sessionId: s.id, url: s.url, expiresAt: s.expires_at ? new Date(s.expires_at * 1000) : null, customerId, priceId };
+}
+
+/**
+ * Checkout for an ACCEPTED migration offer (migration-offers.js). The new
+ * subscription is created with a trial ending when the legacy membership is paid
+ * through plus the sweetener, so the member is never charged twice for the same
+ * period. GHL is not touched: staff cancel the legacy subscription by hand.
+ */
+export async function createMigrationCheckoutSession({ pool, stripe, guard = {} }, offerId, { successUrl, cancelUrl, idempotencyKey, now = new Date() } = {}) {
+  checkKey(idempotencyKey);
+  const success = checkUrl(successUrl, 'successUrl');
+  const cancel = checkUrl(cancelUrl, 'cancelUrl');
+  const o = (await pool.query('SELECT * FROM migration_offers WHERE id = $1', [offerId])).rows[0];
+  if (!o) fail('NOT_FOUND', 'offer not found');
+  await activePerson(pool, o.person_id);
+  const priceId = (await pool.query('SELECT id FROM plan_version_prices WHERE plan_version_id = $1 AND billing_interval = $2', [o.target_plan_version_id, o.target_interval])).rows[0]?.id;
+  if (!priceId) fail('NOT_FOUND', 'target price not found');
+  const p = await priceRow(pool, priceId);
+  assertSellable(p);
+  const eligible = await checkoutEligibility(pool, o.person_id, p.plan_version_id, { now, ...guard, migrationOfferId: o.id });
+  if (eligible.status !== 'ok') return eligible;
+  const legacy = (await pool.query('SELECT * FROM legacy_memberships WHERE id = $1', [o.legacy_membership_id])).rows[0];
+  const starts = billingStartsAt(legacy, o, now);
+  if (!starts) return { status: 'review_required', reasons: ['legacy_paid_through_unknown'] };
+  const session = await startSession({ pool, stripe }, o.person_id, p, { success, cancel, idempotencyKey, trialEnd: starts,
+    extraMetadata: { gaia_migration_offer_id: o.id, gaia_legacy_membership_id: o.legacy_membership_id } });
+  await markCheckoutStarted(pool, o.id, starts);
+  return { ...session, billingStartsAt: starts };
 }
 
 /**

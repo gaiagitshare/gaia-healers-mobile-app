@@ -64,6 +64,28 @@ monthly allowance (once per cycle, largest plan wins, annual plans grant
 monthly, leftovers expire on lapse), stale-hold release, and grace / trial /
 scheduled-cancel closing for Gaia-owned subscriptions (provider-owned ones are
 only counted; the provider stays the billing truth).
+## Duplicate-billing guard and legacy migration (architecture C)
+
+Legacy Silver / Gold / Diamond memberships stay billed by GHL (Stripe or PayPal
+behind it) until a member chooses to move. `legacy_memberships` is a read-only
+mirror of what GHL reports (filled by the legacy reader in `providers/ghl/`).
+
+- `src/billing-guard.js` `checkoutEligibility()` runs before every new Stripe
+  subscription checkout and returns a status, never a side effect:
+  `ok`, `already_subscribed`, `change_plan_required` (another Gaia tier),
+  `migration_required` (a live GHL membership of any tier),
+  or `review_required` (unmapped or ambiguous price, unknown status, no recent
+  payment, a needs-review flag, or a legacy mirror that is empty or older than 36 h).
+  Unknown is never treated as inactive; only a GHL-reported end clears a row.
+  Stripe is not called when the answer is not `ok`.
+- `src/migration-offers.js`: offer → accept → `createMigrationCheckoutSession`
+  (a trial until the legacy membership is paid through, plus 2 months free;
+  an unknown paid-through date means review, never a guess) → Stripe reports the
+  subscription (linked by metadata) → staff cancel GHL **by hand** and
+  `confirmLegacyCancelled`. `pendingLegacyCancellations()` alerts before the new
+  subscription starts billing, and urgently once both could be charging.
+  Code never cancels, pauses or edits a GHL / PayPal subscription, price, tag or
+  course access.
 
 ## Reused, not rebuilt
 

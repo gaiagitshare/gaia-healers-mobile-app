@@ -32,12 +32,14 @@ test('a subscription moves through its lifecycle with full history', { skip: SKI
     const pd = await transition(pool, id, 'past_due', { reason: 'payment_failed', now: new Date(t0.getTime() + 30 * day), graceDays: 5 });
     assert.equal(new Date(pd.subscription.grace_until).getTime(), t0.getTime() + 35 * day, 'configurable grace period');
     const again = await transition(pool, id, 'past_due', { reason: 'retry_failed', now: new Date(t0.getTime() + 32 * day), graceDays: 5 });
-    assert.equal(new Date(again.subscription.grace_until).getTime(), t0.getTime() + 35 * day, 'a second failure does not extend grace');
+    assert.equal(again.noop, true);
+    const g = (await pool.query('SELECT grace_until FROM subscriptions WHERE id = $1', [id])).rows[0].grace_until;
+    assert.equal(new Date(g).getTime(), t0.getTime() + 35 * day, 'a second failure does not extend grace');
     await transition(pool, id, 'active', { reason: 'retry_paid', now: new Date(t0.getTime() + 33 * day) });
     await transition(pool, id, 'canceled', { reason: 'user_canceled' });
     await assert.rejects(transition(pool, id, 'active', {}), (e) => e.code === 'INVALID_TRANSITION');
     const hist = (await pool.query('SELECT from_status, to_status FROM subscription_events WHERE subscription_id = $1 ORDER BY id', [id])).rows;
-    assert.deepEqual(hist.map((h) => `${h.from_status}>${h.to_status}`), ['null>incomplete', 'incomplete>active', 'active>past_due', 'past_due>past_due', 'past_due>active', 'active>canceled']);
+    assert.deepEqual(hist.map((h) => `${h.from_status}>${h.to_status}`), ['null>incomplete', 'incomplete>active', 'active>past_due', 'past_due>active', 'active>canceled'], 'a repeated failure adds no history row');
   } finally { await pool.end(); }
 });
 

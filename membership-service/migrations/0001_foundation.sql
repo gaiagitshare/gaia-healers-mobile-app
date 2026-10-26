@@ -48,11 +48,18 @@ CREATE TABLE person_identities (
 CREATE INDEX person_identities_person ON person_identities (person_id);
 
 -- Plans -----------------------------------------------------------------------
+-- Tenant isolation for benefits: a Gaia key (owner NULL) can only be granted by a
+-- Gaia plan; a practitioner's own key ('practice.*', owned by that practitioner)
+-- only by that practitioner's plans. A practitioner plan can never grant Gaia
+-- software, courses or perks.
 CREATE TABLE entitlement_definitions (
-  key         text PRIMARY KEY CHECK (key ~ '^[a-z][a-z0-9_.]{1,79}$'),
-  kind        text NOT NULL CHECK (kind IN ('feature', 'module', 'course_access', 'certification', 'support', 'community', 'listing', 'perk', 'discount')),
-  description text NOT NULL,
-  created_at  timestamptz NOT NULL DEFAULT now()
+  key                   text PRIMARY KEY CHECK (key ~ '^[a-z][a-z0-9_.]{1,79}$'),
+  kind                  text NOT NULL CHECK (kind IN ('feature', 'module', 'course_access', 'certification', 'support', 'community', 'listing', 'perk', 'discount', 'practice')),
+  description           text NOT NULL,
+  owner_practitioner_id uuid REFERENCES persons(id),
+  created_at            timestamptz NOT NULL DEFAULT now(),
+  CHECK ((owner_practitioner_id IS NOT NULL) = (key LIKE 'practice.%')),
+  CHECK ((owner_practitioner_id IS NOT NULL) = (kind = 'practice'))
 );
 
 CREATE TABLE plans (
@@ -120,10 +127,13 @@ BEGIN
     IF OLD.status <> 'draft' THEN RAISE EXCEPTION 'published plan version % cannot be deleted', OLD.id USING ERRCODE = 'restrict_violation'; END IF;
     RETURN OLD;
   END IF;
-  IF OLD.status = 'draft' THEN RETURN NEW; END IF;
+  IF (NEW.id, NEW.plan_id, NEW.version, NEW.created_at) IS DISTINCT FROM (OLD.id, OLD.plan_id, OLD.version, OLD.created_at) THEN
+    RAISE EXCEPTION 'plan version identity cannot change' USING ERRCODE = 'restrict_violation';
+  END IF;
+  IF OLD.status = 'draft' AND NEW.status IN ('draft', 'published') THEN RETURN NEW; END IF;
   IF OLD.status = 'published' AND NEW.status = 'retired'
-     AND (NEW.plan_id, NEW.version, NEW.is_legacy, NEW.monthly_coin_grant, NEW.terms, NEW.published_at)
-         IS NOT DISTINCT FROM (OLD.plan_id, OLD.version, OLD.is_legacy, OLD.monthly_coin_grant, OLD.terms, OLD.published_at)
+     AND (NEW.is_legacy, NEW.monthly_coin_grant, NEW.terms, NEW.published_at)
+         IS NOT DISTINCT FROM (OLD.is_legacy, OLD.monthly_coin_grant, OLD.terms, OLD.published_at)
   THEN RETURN NEW; END IF;
   RAISE EXCEPTION 'plan version % is % and immutable', OLD.id, OLD.status USING ERRCODE = 'restrict_violation';
 END $$;
@@ -133,8 +143,9 @@ CREATE TRIGGER plan_versions_immutable BEFORE UPDATE OR DELETE ON plan_versions
 CREATE FUNCTION membership.guard_plan_version_child() RETURNS trigger LANGUAGE plpgsql AS $$
 DECLARE st text;
 BEGIN
+  -- FOR SHARE: waits for a concurrent publish to commit, then sees 'published'.
   SELECT status INTO st FROM membership.plan_versions
-   WHERE id = CASE WHEN TG_OP = 'INSERT' THEN NEW.plan_version_id ELSE OLD.plan_version_id END;
+   WHERE id = CASE WHEN TG_OP = 'INSERT' THEN NEW.plan_version_id ELSE OLD.plan_version_id END FOR SHARE;
   IF st <> 'draft' THEN
     RAISE EXCEPTION '% of a % plan version cannot change', TG_TABLE_NAME, st USING ERRCODE = 'restrict_violation';
   END IF;
@@ -147,6 +158,19 @@ CREATE TRIGGER plan_version_prices_immutable BEFORE INSERT OR UPDATE OR DELETE O
   FOR EACH ROW EXECUTE FUNCTION membership.guard_plan_version_child();
 CREATE TRIGGER plan_version_entitlements_immutable BEFORE INSERT OR UPDATE OR DELETE ON plan_version_entitlements
   FOR EACH ROW EXECUTE FUNCTION membership.guard_plan_version_child();
+
+CREATE FUNCTION membership.guard_entitlement_tenant() RETURNS trigger LANGUAGE plpgsql AS $$
+DECLARE plan_owner uuid; key_owner uuid;
+BEGIN
+  SELECT p.practitioner_id INTO plan_owner FROM membership.plan_versions v JOIN membership.plans p ON p.id = v.plan_id WHERE v.id = NEW.plan_version_id;
+  SELECT owner_practitioner_id INTO key_owner FROM membership.entitlement_definitions WHERE key = NEW.entitlement_key;
+  IF plan_owner IS DISTINCT FROM key_owner THEN
+    RAISE EXCEPTION 'benefit % belongs to another tenant than this plan', NEW.entitlement_key USING ERRCODE = 'restrict_violation';
+  END IF;
+  RETURN NEW;
+END $$;
+CREATE TRIGGER plan_version_entitlements_tenant BEFORE INSERT OR UPDATE ON plan_version_entitlements
+  FOR EACH ROW EXECUTE FUNCTION membership.guard_entitlement_tenant();
 
 -- Subscriptions ---------------------------------------------------------------
 CREATE TABLE subscriptions (
@@ -313,7 +337,7 @@ CREATE TABLE payment_ledger (
   provider_object_id   text NOT NULL,
   entry_type           text NOT NULL CHECK (entry_type IN ('charge', 'refund', 'dispute', 'dispute_reversal', 'fee', 'adjustment')),
   amount_cents         bigint NOT NULL,
-  currency             char(3) NOT NULL,
+  currency             char(3) NOT NULL CHECK (currency ~ '^[A-Z]{3}$'),
   subscription_id      uuid REFERENCES subscriptions(id),
   coin_operation_id    uuid REFERENCES coin_operations(id),
   webhook_event_id     uuid REFERENCES webhook_events(id),

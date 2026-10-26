@@ -64,3 +64,20 @@ test('legacy versions are only assigned by an explicit legacy import', { skip: S
     assert.ok(await createSubscription(pool, { personId: p, planVersionId: legacy.id, interval: 'month', source: 'legacy_import', status: 'active' }, actor));
   } finally { await pool.end(); }
 });
+
+test('tenant isolation of benefits: practitioner plans grant only their own practice.* keys', { skip: SKIP }, async () => {
+  const pool = await freshPool();
+  try {
+    await seedCatalog(pool);
+    const { createPlan } = await import('../src/plans.js');
+    const pracA = await person(pool), pracB = await person(pool);
+    await pool.query("INSERT INTO entitlement_definitions (key, kind, description, owner_practitioner_id) VALUES ('practice.a.sessions', 'practice', 'A sessions', $1)", [pracA]);
+    const planA = await createPlan(pool, { key: 'prac_a_plan', name: 'A', ownerType: 'practitioner', practitionerId: pracA }, actor);
+    const planB = await createPlan(pool, { key: 'prac_b_plan', name: 'B', ownerType: 'practitioner', practitionerId: pracB }, actor);
+    assert.ok(await createDraftVersion(pool, planA, { prices: { month: 2500 }, entitlements: { 'practice.a.sessions': 4 } }, actor));
+    await assert.rejects(createDraftVersion(pool, planA, { prices: { month: 2500 }, entitlements: { 'software.scan_analysis': true } }, actor), /another tenant/, 'no Gaia software via a practitioner plan');
+    await assert.rejects(createDraftVersion(pool, planB, { prices: { month: 2500 }, entitlements: { 'practice.a.sessions': 1 } }, actor), /another tenant/, "B cannot grant A's benefit");
+    const gaia = (await pool.query("SELECT id FROM plans WHERE key = 'standard'")).rows[0].id;
+    await assert.rejects(createDraftVersion(pool, gaia, { prices: { month: 4700 }, entitlements: { 'practice.a.sessions': 1 } }, actor), /another tenant/);
+  } finally { await pool.end(); }
+});

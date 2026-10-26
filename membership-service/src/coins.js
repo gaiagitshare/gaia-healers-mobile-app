@@ -24,7 +24,7 @@
 import crypto from 'node:crypto';
 import { withTransaction } from './db.js';
 import { audit } from './audit.js';
-import { fail } from './errors.js';
+import { fail, MembershipError } from './errors.js';
 import { COIN_CENTS } from './catalog.js';
 
 const SPEND_ORDER = ['granted', 'purchased', 'legacy'];
@@ -61,7 +61,12 @@ async function move(c, wallet, operationId, type, delta, reason) {
  * Shared idempotent operation wrapper. `apply(c, wallet, op)` writes the rows.
  * Returns { operation, replayed }.
  */
-async function operation(pool, { personId, walletId, kind, idempotencyKey, coins, reason, relatedType = null, relatedId = null, refundsOperation = null,
+async function operation(pool, args, apply) {
+  try { return await operationTx(pool, args, apply); }
+  catch (e) { if (e.code === '23505') throw new MembershipError('CONFLICT', 'conflicting coin operation'); throw e; }
+}
+
+async function operationTx(pool, { personId, walletId, kind, idempotencyKey, coins, reason, relatedType = null, relatedId = null, refundsOperation = null,
   status = 'completed', holdExpiresAt = null, actor = 'system' }, apply) {
   checkKey(idempotencyKey); posInt(coins, 'coins');
   const requestHash = hashOf({ kind, coins, reason, relatedType, relatedId, refundsOperation });
@@ -71,6 +76,8 @@ async function operation(pool, { personId, walletId, kind, idempotencyKey, coins
     const prior = (await c.query('SELECT * FROM coin_operations WHERE wallet_id = $1 AND idempotency_key = $2', [wallet.id, idempotencyKey])).rows[0];
     if (prior) {
       if (prior.request_hash !== requestHash) fail('CONFLICT', 'idempotency key reused for a different request');
+      // A released hold must not look like a successful charge to a retrying job.
+      if (prior.kind === 'debit' && prior.status === 'released') fail('CONFLICT', 'this hold was released; use a new idempotency key for a new job');
       return { operation: prior, replayed: true };
     }
     const op = (await c.query(
@@ -94,6 +101,7 @@ async function operation(pool, { personId, walletId, kind, idempotencyKey, coins
 export async function grantAllowance(pool, { personId, coins, cycleKey, resetAt = new Date(), actor = 'system' }) {
   return operation(pool, { personId, kind: 'grant', idempotencyKey: 'grant:' + cycleKey, coins, reason: 'monthly_allowance', relatedType: 'cycle', relatedId: cycleKey, actor },
     async (c, wallet, op) => {
+      if (wallet.granted_reset_at && new Date(resetAt) < new Date(wallet.granted_reset_at)) fail('CONFLICT', 'an allowance for a later cycle was already granted');
       const expired = wallet.granted_balance;
       if (expired > 0) await move(c, wallet, op.id, 'granted', -expired, 'grant_expiry');
       await move(c, wallet, op.id, 'granted', coins, 'grant');
@@ -115,6 +123,23 @@ export async function openingBalance(pool, { personId, coins, bucket, sourceRef,
   if (!sourceRef || !actor) fail('INVALID_INPUT', 'sourceRef and actor are required');
   return operation(pool, { personId, kind: 'migration_opening_balance', idempotencyKey: 'opening:' + sourceRef, coins, reason: 'migration_' + bucket, relatedType: 'migration', relatedId: sourceRef, actor },
     (c, wallet, op) => move(c, wallet, op.id, bucket, coins, 'migration_opening_balance'));
+}
+
+/**
+ * Granted coins taken by a debit return only if no allowance reset happened
+ * after it (decided by ledger order, not clocks). Otherwise they would come back
+ * into a newer cycle — and must never become perpetual purchased coins.
+ */
+async function returnable(c, walletId, operationId) {
+  const rows = (await c.query("SELECT id, balance_type, delta_coins FROM coin_transactions WHERE operation_id = $1 AND reason = 'debit_hold'", [operationId])).rows;
+  const holdTx = Math.max(0, ...rows.map((r) => r.id));
+  const reset = (await c.query("SELECT 1 FROM coin_transactions WHERE wallet_id = $1 AND id > $2 AND balance_type = 'granted' AND reason IN ('grant', 'grant_expiry') LIMIT 1", [walletId, holdTx])).rowCount > 0;
+  const back = [], forfeited = { coins: 0 };
+  for (const r of rows) {
+    if (r.balance_type === 'granted' && reset) forfeited.coins += -r.delta_coins;
+    else back.push(r);
+  }
+  return { back, forfeited: forfeited.coins };
 }
 
 function plan(wallet, coins) {
@@ -147,13 +172,15 @@ async function settle(pool, operationId, to) {
     if (op.kind !== 'debit') fail('CONFLICT', 'not a debit');
     if (op.status === to) return { operation: op, replayed: true };
     if (op.status !== 'held') fail('CONFLICT', `debit is already ${op.status}`);
+    let forfeited = 0;
     if (to === 'released') {
-      const rows = (await c.query("SELECT balance_type, delta_coins FROM coin_transactions WHERE operation_id = $1 AND reason = 'debit_hold'", [op.id])).rows;
-      for (const r of rows) await move(c, wallet, op.id, r.balance_type, -r.delta_coins, 'hold_release');
+      const r = await returnable(c, wallet.id, op.id);
+      for (const t of r.back) await move(c, wallet, op.id, t.balance_type, -t.delta_coins, 'hold_release');
+      forfeited = r.forfeited;
     }
     const u = (await c.query('UPDATE coin_operations SET status = $2, settled_at = now() WHERE id = $1 RETURNING *', [op.id, to])).rows[0];
-    await audit(c, { action: 'coins.debit_' + to, entityType: 'coin_operation', entityId: op.id });
-    return { operation: u, replayed: false };
+    await audit(c, { action: 'coins.debit_' + to, entityType: 'coin_operation', entityId: op.id, after: forfeited ? { forfeitedGrantedCoins: forfeited } : null });
+    return { operation: u, replayed: false, forfeitedGrantedCoins: forfeited };
   });
 }
 
@@ -172,9 +199,8 @@ export async function debitNow(pool, args) {
 
 /**
  * Refund a captured debit (e.g. a support decision). Coins return to their
- * original buckets; the granted part is returned only if the allowance has not
- * been reset since (it would have expired anyway; never converted to perpetual
- * purchased coins).
+ * original buckets; the granted part only if no allowance reset happened since
+ * (see returnable()).
  */
 export async function refundDebit(pool, { operationId, idempotencyKey, reason, actor }) {
   if (!reason || !actor) fail('INVALID_INPUT', 'reason and actor are required');
@@ -184,12 +210,8 @@ export async function refundDebit(pool, { operationId, idempotencyKey, reason, a
     async (c, wallet, op) => {
       const cur = (await c.query('SELECT status, created_at FROM coin_operations WHERE id = $1', [orig.id])).rows[0];
       if (cur.status !== 'captured') fail('CONFLICT', 'only a captured debit can be refunded');
-      const rows = (await c.query("SELECT balance_type, delta_coins FROM coin_transactions WHERE operation_id = $1 AND reason = 'debit_hold'", [orig.id])).rows;
-      let forfeited = 0;
-      for (const r of rows) {
-        if (r.balance_type === 'granted' && wallet.granted_reset_at && new Date(wallet.granted_reset_at) > new Date(cur.created_at)) { forfeited += -r.delta_coins; continue; }
-        await move(c, wallet, op.id, r.balance_type, -r.delta_coins, 'refund');
-      }
+      const { back, forfeited } = await returnable(c, wallet.id, orig.id);
+      for (const r of back) await move(c, wallet, op.id, r.balance_type, -r.delta_coins, 'refund');
       return { forfeitedGrantedCoins: forfeited };
     });
 }

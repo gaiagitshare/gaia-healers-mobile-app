@@ -1,8 +1,8 @@
 /**
  * Minimal migration runner: migrations/NNNN_name.sql, each with a `-- up` and a
  * `-- down` section, applied in order inside one transaction each, under an
- * advisory lock. An applied migration whose file later changes is refused
- * (checksum), so history cannot be rewritten silently.
+ * advisory lock. An applied migration whose file later changes (up or down) is
+ * refused (checksum), so history cannot be rewritten silently.
  */
 import fs from 'node:fs';
 import path from 'node:path';
@@ -17,7 +17,7 @@ export function loadMigrations(dir = DIR) {
     const text = fs.readFileSync(path.join(dir, file), 'utf8');
     const m = text.match(/^-- up\s*$([\s\S]*?)^-- down\s*$([\s\S]*)$/m);
     if (!m) throw new Error(file + ': needs "-- up" and "-- down" sections');
-    return { id: file.slice(0, 4), file, up: m[1], down: m[2], checksum: crypto.createHash('sha256').update(m[1]).digest('hex') };
+    return { id: file.slice(0, 4), file, up: m[1], down: m[2], checksum: crypto.createHash('sha256').update(m[1] + '\n-- down\n' + m[2]).digest('hex') };
   });
 }
 

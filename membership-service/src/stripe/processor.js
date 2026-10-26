@@ -9,6 +9,7 @@
  */
 import { withTransaction } from '../db.js';
 import { audit } from '../audit.js';
+import { MembershipError } from '../errors.js';
 
 export const DEFAULT_MAX_ATTEMPTS = 8;
 const LEASE_MS = 10 * 60 * 1000;
@@ -39,7 +40,9 @@ export async function processPending(pool, { handlers, provider = 'stripe', now 
       });
       summary[outcome]++;
     } catch (e) {
-      const dead = row.attempts >= maxAttempts;
+      // A business-rule refusal will not change on retry: park it for a human at once.
+      const permanent = e instanceof MembershipError && e.code !== 'PROVIDER_UNAVAILABLE';
+      const dead = permanent || row.attempts >= maxAttempts;
       const delayMs = Math.min(2 ** row.attempts * 30000, 6 * 3600 * 1000);
       await pool.query('UPDATE webhook_events SET status = $2, last_error = $3, next_attempt_at = $4 WHERE id = $1',
         [row.id, dead ? 'dead' : 'failed', String(e.code ? `${e.code}: ${e.message}` : e.message).slice(0, 500), new Date(now.getTime() + delayMs)]);
@@ -49,9 +52,16 @@ export async function processPending(pool, { handlers, provider = 'stripe', now 
   return summary;
 }
 
+/** Events needing a human: dead letters, newest first (for an ops alert / admin view). */
+export async function deadLetters(db, { provider = 'stripe', limit = 50 } = {}) {
+  return (await db.query("SELECT id, event_id, event_type, attempts, last_error, received_at FROM webhook_events WHERE provider = $1 AND status = 'dead' ORDER BY received_at DESC LIMIT $2", [provider, limit])).rows;
+}
+
 export async function replay(pool, webhookEventId, actor) {
   return withTransaction(pool, async (c) => {
-    const r = await c.query("UPDATE webhook_events SET status = 'received', next_attempt_at = now(), attempts = 0 WHERE id = $1 RETURNING event_id", [webhookEventId]);
+    // Never while a worker holds it, or it could run twice at once.
+    const r = await c.query(`UPDATE webhook_events SET status = 'received', next_attempt_at = now(), attempts = 0
+                              WHERE id = $1 AND status IN ('processed', 'ignored', 'failed', 'dead') RETURNING event_id`, [webhookEventId]);
     if (!r.rowCount) return false;
     await audit(c, { ...actor, action: 'webhook.replay', entityType: 'webhook_event', entityId: webhookEventId });
     return true;

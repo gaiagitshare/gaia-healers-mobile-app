@@ -109,7 +109,8 @@ test('an invoice that arrives before its subscription is retried, then applied',
   const pool = await freshPool();
   try {
     await setup(pool);
-    await send(pool, evt('invoice.paid', { id: 'in_early', subscription: 'sub_fixture_1', customer: 'cus_fixture_1', amount_paid: 4700, currency: 'usd' }, T + 5));
+    await send(pool, evt('invoice.paid', { id: 'in_early', subscription: 'sub_fixture_1', customer: 'cus_fixture_1', amount_paid: 4700, currency: 'usd',
+      lines: { data: [{ price: { id: 'price_fixture_standard_m' } }] } }, T + 5));
     assert.deepEqual(await run(pool), { processed: 0, ignored: 0, failed: 1, dead: 0 });
     await send(pool, evt('customer.subscription.created', stripeSub('incomplete'), T));
     await run(pool, new Date(NOW + 3600 * 1000));
@@ -125,7 +126,7 @@ test('unknown prices are ignored (never mapped by amount); poison events go dead
     await send(pool, evt('customer.subscription.created', { ...stripeSub('active'), id: 'sub_other', items: { data: [{ price: { id: 'price_not_ours' } }] } }));
     assert.equal((await run(pool)).ignored, 1);
     assert.equal((await pool.query('SELECT count(*)::int n FROM subscriptions')).rows[0].n, 0);
-    await send(pool, evt('invoice.payment_failed', { id: 'in_orphan', subscription: 'sub_never_created' }));
+    await send(pool, evt('invoice.payment_failed', { id: 'in_orphan', subscription: 'sub_never_created', lines: { data: [{ price: { id: 'price_fixture_standard_m' } }] } }));
     let now = NOW;
     for (let i = 0; i < 3; i++) { now += 24 * 3600 * 1000; await processPending(pool, { handlers: stripeHandlers, now: new Date(now), maxAttempts: 3 }); }
     const r = (await pool.query("SELECT status, attempts, last_error FROM webhook_events WHERE event_type = 'invoice.payment_failed'")).rows[0];

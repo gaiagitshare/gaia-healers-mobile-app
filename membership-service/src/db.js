@@ -8,13 +8,19 @@
  */
 import pg from 'pg';
 
-pg.types.setTypeParser(20, (v) => (v === null ? null : Number(v)));   // bigint -> number (coins/cents stay far below 2^53)
+// bigint -> number for THIS pool only (never the process-wide pg default), and
+// refuse rather than round a value beyond 2^53 (coins and cents stay far below).
+const types = {
+  getTypeParser(oid, format) {
+    if (oid === 20) return (v) => { if (v === null) return null; const n = Number(v); if (!Number.isSafeInteger(n)) throw new Error('bigint out of safe range'); return n; };
+    return pg.types.getTypeParser(oid, format);
+  },
+};
 
 export function createPool(connectionString = process.env.MEMBERSHIP_DATABASE_URL, opts = {}) {
   if (!connectionString) throw new Error('MEMBERSHIP_DATABASE_URL is not set');
-  const pool = new pg.Pool({ connectionString, max: opts.max ?? 10, application_name: 'gaia-membership' });
-  pool.on('connect', (c) => c.query('SET search_path = membership, public; SET TIME ZONE \'UTC\''));
-  return pool;
+  return new pg.Pool({ connectionString, max: opts.max ?? 10, application_name: 'gaia-membership', types,
+    options: '-c search_path=membership,public -c TimeZone=UTC' });
 }
 
 /** Run fn(client) in a transaction; retries serialization failures / deadlocks a bounded number of times. */

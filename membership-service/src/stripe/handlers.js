@@ -11,9 +11,13 @@
  *     (platform 'stripe', kind 'customer');
  *   - plan: the Stripe price must be in provider_price_refs. An unknown price
  *     is not a Gaia membership price and the event is ignored, never mapped by
- *     amount or name.
+ *     amount or name (its invoices are ignored too, not retried);
+ *   - money is always booked, even when the status change it implies is not
+ *     allowed (e.g. a final invoice paid after a cancellation);
+ *   - a plan change on the Stripe item (upgrade / downgrade) moves the local
+ *     subscription to the mapped plan version, with a history row.
  */
-import { createSubscriptionInTx, transitionInTx } from '../subscriptions.js';
+import { createSubscriptionInTx, transitionInTx, canTransition } from '../subscriptions.js';
 
 const STATUS = {
   incomplete: 'incomplete', incomplete_expired: 'expired', trialing: 'trialing', active: 'active',
@@ -37,7 +41,7 @@ async function priceRef(c, priceId, livemode) {
 }
 
 async function localSubscription(c, stripeSubId) {
-  return (await c.query("SELECT id, status, person_id FROM subscriptions WHERE provider = 'stripe' AND provider_subscription_id = $1", [stripeSubId])).rows[0] || null;
+  return (await c.query("SELECT id, status, person_id, plan_version_id, billing_interval, provider_state_at FROM subscriptions WHERE provider = 'stripe' AND provider_subscription_id = $1", [stripeSubId])).rows[0] || null;
 }
 
 async function ledger(c, row) {
@@ -56,35 +60,54 @@ async function subscriptionChanged(c, event, row) {
   const at = ts(event.created);
   const item = s.items?.data?.[0];
   const period = { periodStart: ts(item?.current_period_start ?? s.current_period_start), periodEnd: ts(item?.current_period_end ?? s.current_period_end) };
+  const ref = item?.price?.id ? await priceRef(c, item.price.id, event.livemode) : null;
   let local = await localSubscription(c, s.id);
   if (!local) {
-    const ref = item?.price?.id ? await priceRef(c, item.price.id, event.livemode) : null;
     if (!ref) return 'ignored';                                   // not a Gaia membership price
     const personId = await personForCustomer(c, s.customer);
     if (!personId) throw new RetryLater('stripe customer not linked to a person yet');
-    const initial = ['incomplete', 'trialing', 'active'].includes(to) ? to : 'incomplete';
-    const id = await createSubscriptionInTx(c, { personId, planVersionId: ref.plan_version_id, interval: ref.billing_interval, provider: 'stripe',
-      providerSubscriptionId: s.id, status: initial, trialEnd: ts(s.trial_end), ...period, providerStateAt: at });
-    if (initial === to) return 'processed';
-    local = { id };
+    await createSubscriptionInTx(c, { personId, planVersionId: ref.plan_version_id, interval: ref.billing_interval, provider: 'stripe',
+      providerSubscriptionId: s.id, status: to, trialEnd: ts(s.trial_end), ...period, providerStateAt: at },
+      { actorType: 'provider', actorId: 'stripe' }, { observedFromProvider: true });
+    return 'processed';
   }
-  const r = await transitionInTx(c, local.id, to, {
+  if (ref && (ref.plan_version_id !== local.plan_version_id || ref.billing_interval !== local.billing_interval)
+      && !(local.provider_state_at && at < new Date(local.provider_state_at))) {
+    await c.query('UPDATE subscriptions SET plan_version_id = $2, billing_interval = $3, updated_at = $4 WHERE id = $1', [local.id, ref.plan_version_id, ref.billing_interval, at]);
+    await c.query("INSERT INTO subscription_events (subscription_id, from_status, to_status, reason, webhook_event_id, details, occurred_at) VALUES ($1, $2, $2, 'plan_changed', $3, $4, $5)",
+      [local.id, local.status, row.id, JSON.stringify({ fromPlanVersion: local.plan_version_id, toPlanVersion: ref.plan_version_id, interval: ref.billing_interval }), at]);
+  }
+  if (local.status !== to && !canTransition(local.status, to)) return 'ignored';   // e.g. a stale "active" after a final cancel
+  await transitionInTx(c, local.id, to, {
     reason: 'stripe:' + event.type, now: at, providerStateAt: at, ...period,
     cancelAt: s.cancel_at ? ts(s.cancel_at) : null, webhookEventId: row.id,
   });
-  return r.applied || r.stale ? 'processed' : 'ignored';
+  return 'processed';
+}
+
+/** Price ids on an invoice's lines, across Stripe API versions. */
+function linePriceIds(inv) {
+  return (inv.lines?.data || []).map((l) => l.price?.id || l.pricing?.price_details?.price || l.plan?.id).filter(Boolean);
+}
+
+async function invoiceIsOurs(c, inv, livemode) {
+  for (const id of linePriceIds(inv)) if (await priceRef(c, id, livemode)) return true;
+  return false;
 }
 
 async function invoicePaid(c, event, row) {
   const inv = event.data.object;
   const subId = inv.subscription || inv.parent?.subscription_details?.subscription;
   const local = subId ? await localSubscription(c, subId) : null;
-  if (subId && !local) throw new RetryLater('invoice for a subscription not recorded yet');
+  if (subId && !local) {
+    if (!(await invoiceIsOurs(c, inv, event.livemode))) return 'ignored';      // not a Gaia membership subscription
+    throw new RetryLater('invoice for a subscription not recorded yet');
+  }
   const personId = local?.person_id || await personForCustomer(c, inv.customer);
   if (!local && !personId) return 'ignored';
   await ledger(c, { personId, objectType: 'invoice', objectId: inv.id, entryType: 'charge', amount: inv.amount_paid, currency: inv.currency,
     subscriptionId: local?.id, webhookEventId: row.id, livemode: event.livemode === true, occurredAt: ts(inv.status_transitions?.paid_at) || ts(event.created) });
-  if (local && local.status !== 'active') {
+  if (local && local.status !== 'active' && canTransition(local.status, 'active')) {
     const line = inv.lines?.data?.[0]?.period;
     await transitionInTx(c, local.id, 'active', { reason: 'stripe:invoice.paid', now: ts(event.created), providerStateAt: ts(event.created),
       periodStart: ts(line?.start), periodEnd: ts(line?.end), webhookEventId: row.id });
@@ -97,21 +120,35 @@ async function invoiceFailed(c, event, row) {
   const subId = inv.subscription || inv.parent?.subscription_details?.subscription;
   if (!subId) return 'ignored';
   const local = await localSubscription(c, subId);
-  if (!local) throw new RetryLater('invoice for a subscription not recorded yet');
-  if (local.status === 'canceled' || local.status === 'expired') return 'ignored';
+  if (!local) {
+    if (!(await invoiceIsOurs(c, inv, event.livemode))) return 'ignored';
+    throw new RetryLater('invoice for a subscription not recorded yet');
+  }
+  // A declined first payment leaves it incomplete (no access either way); paused / ended ones are not dunned.
+  if (!canTransition(local.status, 'past_due') || local.status === 'incomplete') return 'ignored';
   await transitionInTx(c, local.id, 'past_due', { reason: 'stripe:invoice.payment_failed', now: ts(event.created), providerStateAt: ts(event.created), webhookEventId: row.id });
   return 'processed';
 }
 
+async function bookRefund(c, r, { personId = null, currency, event, row }) {
+  if (r.status && r.status !== 'succeeded') return false;        // pending / failed refunds move no money
+  await ledger(c, { personId, objectType: 'refund', objectId: r.id, entryType: 'refund', amount: -Math.abs(r.amount), currency: r.currency || currency,
+    webhookEventId: row.id, livemode: event.livemode === true, occurredAt: ts(r.created) || ts(event.created) });
+  return true;
+}
+
+/** Older API versions embed refunds in the charge; newer ones send refund.* events (handled below). */
 async function chargeRefunded(c, event, row) {
   const ch = event.data.object;
   const personId = await personForCustomer(c, ch.customer);
-  const refunds = ch.refunds?.data || [];
-  for (const r of refunds) {
-    await ledger(c, { personId, objectType: 'refund', objectId: r.id, entryType: 'refund', amount: -Math.abs(r.amount), currency: r.currency || ch.currency,
-      webhookEventId: row.id, livemode: event.livemode === true, occurredAt: ts(r.created) || ts(event.created) });
-  }
-  return refunds.length ? 'processed' : 'ignored';
+  let booked = 0;
+  for (const r of ch.refunds?.data || []) if (await bookRefund(c, r, { personId, currency: ch.currency, event, row })) booked++;
+  return booked ? 'processed' : 'ignored';
+}
+
+async function refundEvent(c, event, row) {
+  const r = event.data.object;
+  return (await bookRefund(c, r, { currency: r.currency, event, row })) ? 'processed' : 'ignored';
 }
 
 async function dispute(c, event, row) {
@@ -139,6 +176,9 @@ export const stripeHandlers = Object.freeze({
   'invoice.paid': invoicePaid,
   'invoice.payment_failed': invoiceFailed,
   'charge.refunded': chargeRefunded,
+  'refund.created': refundEvent,
+  'refund.updated': refundEvent,
+  'charge.refund.updated': refundEvent,
   'charge.dispute.created': dispute,
   'charge.dispute.closed': dispute,
 });

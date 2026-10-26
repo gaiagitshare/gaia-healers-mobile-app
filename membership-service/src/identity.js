@@ -59,9 +59,11 @@ export async function linkIdentity(pool, personId, ref, { linkedBy, evidence = {
     const p = (await c.query('SELECT status FROM persons WHERE id = $1 FOR UPDATE', [personId])).rows[0];
     if (!p) fail('NOT_FOUND', 'person not found');
     if (p.status === 'merged') fail('CONFLICT', 'person was merged');
-    await c.query(
-      `INSERT INTO person_identities (person_id, platform, kind, external_id, verified_at, linked_by, evidence) VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+    const ins = await c.query(
+      `INSERT INTO person_identities (person_id, platform, kind, external_id, verified_at, linked_by, evidence) VALUES ($1, $2, $3, $4, $5, $6, $7)
+       ON CONFLICT (platform, kind, external_id) DO NOTHING`,
       [personId, r.platform, r.kind, r.externalId, verified ? new Date() : null, linkedBy, JSON.stringify(evidence)]);
+    if (!ins.rowCount) fail('CONFLICT', 'this external identity was just linked to another person');
     await audit(c, { actorId: linkedBy, action: 'identity.link', entityType: 'person', entityId: personId, after: { platform: r.platform, kind: r.kind } });
     return { linked: true, alreadyLinked: false };
   });

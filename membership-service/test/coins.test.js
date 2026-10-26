@@ -95,7 +95,7 @@ test('a failed AI job nets zero; captured jobs can be refunded once; stale holds
     const c = await debitNow(pool, { personId: p, coins: 80, idempotencyKey: 'job-fixture-0006', reason: 'ai' });
     await refundDebit(pool, { operationId: c.operation.id, idempotencyKey: 'refund-fixture-0001', reason: 'support', actor: 'test-admin' });
     assert.deepEqual(await bal(pool, p), { g: 50, pu: 100, l: 0 });
-    await assert.rejects(refundDebit(pool, { operationId: c.operation.id, idempotencyKey: 'refund-fixture-0002', reason: 'support', actor: 'test-admin' }), /duplicate key|CONFLICT/);
+    await assert.rejects(refundDebit(pool, { operationId: c.operation.id, idempotencyKey: 'refund-fixture-0002', reason: 'support', actor: 'test-admin' }), (e) => e.code === 'CONFLICT');
 
     const t0 = new Date();
     await holdDebit(pool, { personId: p, coins: 10, idempotencyKey: 'job-fixture-0007', reason: 'ai', holdSeconds: 60, now: t0 });

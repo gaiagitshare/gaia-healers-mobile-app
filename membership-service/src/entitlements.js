@@ -12,10 +12,20 @@
  */
 import { grantsAccess } from './subscriptions.js';
 
+/** Combine one benefit from two sources: false/absent loses, numbers take the max, a number beats a bare true. Symmetric. */
 function merge(a, b) {
+  if (a === false || a == null) return b;
+  if (b === false || b == null) return a;
   if (typeof a === 'number' && typeof b === 'number') return Math.max(a, b);
-  if (a === true || b === true) return a === true && typeof b === 'number' ? b : (typeof a === 'number' ? a : true);
-  return b ?? a;
+  if (typeof a === 'number') return a;
+  if (typeof b === 'number') return b;
+  return a;
+}
+
+/** A benefit is granted when its value is true or a positive number. */
+export function isEntitled(entry) {
+  const v = entry && typeof entry === 'object' && 'value' in entry ? entry.value : entry;
+  return v === true || (typeof v === 'number' && v > 0) || (v !== null && typeof v === 'object');
 }
 
 export function computeEntitlements({ subscriptions = [], grants = [] }, now = new Date()) {
@@ -54,5 +64,5 @@ export async function evaluate(db, personId, now = new Date()) {
 
 export async function hasEntitlement(db, personId, key, now = new Date()) {
   const { entitlements } = await evaluate(db, personId, now);
-  return Boolean(entitlements[key]);
+  return isEntitled(entitlements[key]);
 }

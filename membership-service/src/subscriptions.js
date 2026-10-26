@@ -27,6 +27,9 @@ export const TRANSITIONS = Object.freeze({
 });
 
 export const DEFAULT_GRACE_DAYS = 7;   // configurable per call; spec says "configurable grace period"
+/** An `active` subscription past its period end (renewal never recorded) keeps access this long, then not. */
+export const PERIOD_END_LEEWAY_MS = 3 * 86400000;
+const TERMINAL = new Set(['canceled', 'expired']);
 
 export function canTransition(from, to) {
   return (TRANSITIONS[from] || []).includes(to);
@@ -36,8 +39,8 @@ export function canTransition(from, to) {
 export function grantsAccess(s, now = new Date()) {
   const t = now.getTime();
   if (s.cancel_at && new Date(s.cancel_at).getTime() <= t) return false;
-  if (s.status === 'active') return true;
-  if (s.status === 'trialing') return !s.trial_end || new Date(s.trial_end).getTime() > t;
+  if (s.status === 'active') return !s.current_period_end || new Date(s.current_period_end).getTime() + PERIOD_END_LEEWAY_MS > t;
+  if (s.status === 'trialing') return Boolean(s.trial_end) && new Date(s.trial_end).getTime() > t;
   if (s.status === 'past_due') return Boolean(s.grace_until) && new Date(s.grace_until).getTime() > t;
   return false;
 }
@@ -54,8 +57,11 @@ export async function createSubscription(pool, {
 export async function createSubscriptionInTx(c, {
   personId, planVersionId, interval, provider = 'simulated', providerSubscriptionId = null,
   status = 'incomplete', source = 'new', trialEnd = null, periodStart = null, periodEnd = null, providerStateAt = null,
-}, actor = { actorType: 'provider', actorId: provider }) {
-  if (!['incomplete', 'trialing', 'active'].includes(status)) fail('INVALID_INPUT', 'a subscription starts incomplete, trialing or active');
+}, actor = { actorType: 'provider', actorId: provider }, { observedFromProvider = false } = {}) {
+  // Gaia-created subscriptions start incomplete / trialing / active. One first seen
+  // at a provider is recorded in whatever state the provider reports.
+  const allowed = observedFromProvider ? Object.keys(TRANSITIONS) : ['incomplete', 'trialing', 'active'];
+  if (!allowed.includes(status)) fail('INVALID_INPUT', 'a subscription starts incomplete, trialing or active');
   {
     const v = (await c.query('SELECT status, is_legacy FROM plan_versions WHERE id = $1', [planVersionId])).rows[0];
     if (!v) fail('NOT_FOUND', 'plan version not found');
@@ -94,6 +100,10 @@ export async function transitionInTx(c, subscriptionId, to, opts = {}, actor = {
     if (providerStateAt && s.provider_state_at && new Date(providerStateAt) < new Date(s.provider_state_at)) {
       return { applied: false, stale: true, from: s.status, to };
     }
+    // Same state again (a replayed or same-second duplicate event): nothing to do, no history row.
+    const samePeriod = (periodEnd == null || +new Date(periodEnd) === +new Date(s.current_period_end))
+      && (cancelAt === undefined || +new Date(cancelAt || 0) === +new Date(s.cancel_at || 0));
+    if (to === s.status && (TERMINAL.has(to) || samePeriod)) return { applied: false, noop: true, from: s.status, to };
     if (!canTransition(s.status, to)) fail('INVALID_TRANSITION', `cannot move a ${s.status} subscription to ${to}`, { from: s.status, to });
     const grace = to === 'past_due'
       ? (s.status === 'past_due' && s.grace_until ? s.grace_until : new Date(now.getTime() + graceDays * 86400000))

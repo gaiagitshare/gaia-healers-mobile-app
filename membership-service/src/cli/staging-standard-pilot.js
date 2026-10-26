@@ -37,6 +37,7 @@ import { checkoutEligibility } from '../billing-guard.js';
 import { evaluate } from '../entitlements.js';
 import { walletView } from '../coins.js';
 import { runMonthlyAllowance } from '../jobs/allowance.js';
+import { launchState, addPilotMember } from '../launch.js';
 
 const LABEL = 'standard-pilot';
 export const BUDGET = 25;
@@ -95,6 +96,8 @@ export async function main(argv = process.argv.slice(2), { env = process.env, fe
       out(`[${LABEL}] plus Stripe CLI listener (outside the application, NOT enforceable by the ledger, booked as a reserve): ${CLI_LISTENER_RESERVE}  => total booked ${total}`);
       out(`[${LABEL}] expected account: ${env.EXPECTED_STRIPE_ACCOUNT_ID ? 'set' : 'NOT SET (whoami and start refuse without EXPECTED_STRIPE_ACCOUNT_ID)'}; GHL account fragment check: ${env.EXPECTED_STRIPE_ACCOUNT_FRAGMENT ? 'set' : 'not set'}`);
       out(`[${LABEL}] budget ledger: ${ledger.used} of ${ledger.budget} used; ${ledger.remaining()} left; ${total <= ledger.remaining() ? 'fits' : 'DOES NOT FIT'}`);
+      const ls = await launchState(pool, { env });
+      out(`[${LABEL}] launch flag: stored ${ls.stored}, ceiling ${ls.ceiling}, EFFECTIVE ${ls.effective}${ls.effective === 'OFF' ? ' (start refuses: set staging to INTERNAL_PILOT first)' : ''}`);
       out(`[${LABEL}] dry run: nothing sent${step !== 'plan' ? ' (pass --run to execute this step)' : ''}`);
       return total <= ledger.remaining() ? 0 : 2;
     }
@@ -108,6 +111,11 @@ export async function main(argv = process.argv.slice(2), { env = process.env, fe
     if (!/^(sk|rk)_test_[A-Za-z0-9]{10,}$/.test(String(key || ''))) { out(`[${LABEL}] REFUSED: STRIPE_TEST_SECRET_KEY must be a test-mode key`); return 2; }
     if (!/^acct_[A-Za-z0-9]{8,}$/.test(String(env.EXPECTED_STRIPE_ACCOUNT_ID || ''))) { out(`[${LABEL}] REFUSED: set EXPECTED_STRIPE_ACCOUNT_ID (the acct_… shown in the Gaia Stripe dashboard)`); return 2; }
     if (step === 'start' && !state.accountVerified && !env.EXPECTED_STRIPE_ACCOUNT_FRAGMENT) { out(`[${LABEL}] REFUSED: run whoami first (or set EXPECTED_STRIPE_ACCOUNT_FRAGMENT if the key cannot read the account)`); return 2; }
+    // Pre-flight (database only) so a refused step never consumes budget.
+    if (step === 'start' && (await launchState(pool, { env })).effective === 'OFF') { out(`[${LABEL}] REFUSED: Membership 2.0 is OFF in staging (launch flag) - nothing sent, no budget used`); return 2; }
+    if (step === 'start' && state.sessionId) { out(`[${LABEL}] REFUSED: a checkout already exists for this pilot (${state.sessionId})`); return 2; }
+    if (step === 'verify' && !state.personId) { out(`[${LABEL}] REFUSED: run start first`); return 2; }
+    if (step === 'cancel' && !state.subscriptionId) { out(`[${LABEL}] REFUSED: run verify first`); return 2; }
     const planned = p[step];
     const reservation = ledger.reserve(`${LABEL}:${step}`, planned);
     const cap = createRequestCap({ label: LABEL, max: Math.max(1, planned), fetch });
@@ -128,6 +136,7 @@ export async function main(argv = process.argv.slice(2), { env = process.env, fe
       }
       if (step === 'start') {
         if (state.sessionId) { out(`[${LABEL}] REFUSED: a checkout already exists for this pilot (${state.sessionId})`); return 2; }
+        if ((await launchState(pool, { env })).effective === 'OFF') { out(`[${LABEL}] REFUSED: Membership 2.0 is OFF in staging (launch flag) - nothing sent`); return 2; }
         await seedCatalog(pool);
         const stamp = new Date().toISOString().replace(/\D/g, '').slice(0, 14);
         const { personId } = await resolveOrCreatePerson(pool, { platform: 'email', kind: 'address', externalId: `pilot-standard-${stamp}@example.invalid` }, { linkedBy: LABEL });
@@ -141,9 +150,10 @@ export async function main(argv = process.argv.slice(2), { env = process.env, fe
           if (!pid.includes(env.EXPECTED_STRIPE_ACCOUNT_FRAGMENT)) { out(`[${LABEL}] STOPPED: price ${pid} is not in the expected Stripe account; no customer or checkout created`); return 2; }
           out(`[${LABEL}] price ${pid} carries the expected account fragment`);
         }
+        await addPilotMember(pool, personId, { note: 'staging Standard pilot (fictional)' }, { actorType: 'admin', actorId: env.MEMBERSHIP_ADMIN_ACTOR || 'staging-pilot-runner' });
         const g = await checkoutEligibility(pool, personId, pv.id);
         if (g.status !== 'ok') { out(`[${LABEL}] guard: ${g.status} ${JSON.stringify(g.reasons || [])} - nothing sent`); return 2; }
-        const s = await createCheckoutSession({ pool, stripe }, personId, priceId, {
+        const s = await createCheckoutSession({ pool, stripe, env }, personId, priceId, {
           successUrl: 'https://gaiahealers.app/?pilot=standard-ok', cancelUrl: 'https://gaiahealers.app/?pilot=standard-cancel', idempotencyKey: `pilot-standard-${stamp}` });
         if (s.status !== 'ok') { out(`[${LABEL}] checkout: ${s.status}`); return 2; }
         writeState(stateFile, { personId, sessionId: s.sessionId, customerId: s.customerId, priceId: s.priceId, startedAt: new Date().toISOString() });

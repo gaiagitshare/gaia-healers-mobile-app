@@ -16,7 +16,7 @@ import './_providers-deny-network.mjs';
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { freshPool, SKIP } from './_db.js';
+import { openLaunch, freshPool, SKIP } from './_db.js';
 import { fakeStripe, fakeGhl, fetchVia, noSleep } from './_providers-fakes.js';
 import { createStripeClient } from '../src/providers/stripe/client.js';
 import { createCheckoutSession, createMigrationCheckoutSession } from '../src/providers/stripe/adapter.js';
@@ -52,6 +52,7 @@ const BENEFITS = {
 async function world() {
   const pool = await freshPool();
   await seedCatalog(pool);
+  await openLaunch(pool);
   await pool.query(`INSERT INTO legacy_memberships (external_subscription_id, payment_provider, mapping, reported_status, last_seen_at)
                     VALUES ('ghl-sub-fixture-other', 'stripe', 'mapped', 'canceled', '2026-12-01T09:00:00Z')`);   // mirror loaded and fresh at the pilot's clock
   const stripeSrv = await fakeStripe();
@@ -91,7 +92,7 @@ test('A. new member: signup to cancellation, every step through the real service
 
     // Checkout (guard says ok: nothing paid elsewhere).
     const t0 = D('2026-12-01T10:00:00Z');
-    const co = await createCheckoutSession({ pool, stripe: w.stripe }, ava, await priceIdOf(pool, 'standard', 'month'), { ...URLS, idempotencyKey: 'pilot-ava-checkout', now: t0 });
+    const co = await createCheckoutSession({ pool, stripe: w.stripe, env: process.env }, ava, await priceIdOf(pool, 'standard', 'month'), { ...URLS, idempotencyKey: 'pilot-ava-checkout', now: t0 });
     assert.equal(co.status, 'ok');
     const refs = await stripeRefs(pool, ava);
     const std = await refs.price('standard');
@@ -178,12 +179,12 @@ test('B. legacy Silver member migrates to Professional without double billing or
     const t0 = D('2026-12-01T10:00:00Z');
 
     // A normal checkout is refused: he already pays through GHL.
-    assert.equal((await createCheckoutSession({ pool, stripe: w.stripe }, leo, await priceIdOf(pool, 'professional', 'month'), { ...URLS, idempotencyKey: 'pilot-leo-0', now: t0 })).status, 'migration_required');
+    assert.equal((await createCheckoutSession({ pool, stripe: w.stripe, env: process.env }, leo, await priceIdOf(pool, 'professional', 'month'), { ...URLS, idempotencyKey: 'pilot-leo-0', now: t0 })).status, 'migration_required');
 
     // Offer (no sweetener by default) -> accept -> migration checkout.
     const offer = await createOffer(pool, { legacyMembershipId: legacy, targetPlanVersionId: (await currentVersion(pool, 'professional')).id, targetInterval: 'month' }, 'staff-pilot');
     await acceptOffer(pool, offer.id, leo);
-    const co = await createMigrationCheckoutSession({ pool, stripe: w.stripe }, offer.id, { ...URLS, idempotencyKey: 'pilot-leo-1', now: t0 });
+    const co = await createMigrationCheckoutSession({ pool, stripe: w.stripe, env: process.env }, offer.id, { ...URLS, idempotencyKey: 'pilot-leo-1', now: t0 });
     assert.equal(co.status, 'ok');
     assert.equal(co.billingStartsAt.toISOString(), paidThrough.toISOString(), 'no charge while the legacy membership is paid');
 
@@ -201,7 +202,7 @@ test('B. legacy Silver member migrates to Professional without double billing or
     assert.ok(tags1.includes('ahc-silver-active'), 'existing course access untouched');
 
     // Billing gate: staff have not reported the cancellation -> trial extended, no charge.
-    assert.equal((await enforceMigrationBillingGate({ pool, stripe: w.stripe }, { now: D('2026-12-18T00:00:00Z') })).held, 1);
+    assert.equal((await enforceMigrationBillingGate({ pool, stripe: w.stripe, env: process.env }, { now: D('2026-12-18T00:00:00Z') })).held, 1);
     await confirmLegacyCancelled(pool, offer.id, 'staff-pilot');
     // The read-only mirror sees GHL report the PayPal subscription cancelled -> verified -> completed.
     await pool.query("UPDATE legacy_memberships SET reported_status = 'canceled' WHERE id = $1", [legacy]);

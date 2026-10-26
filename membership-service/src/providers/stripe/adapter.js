@@ -21,6 +21,7 @@ import { fail } from '../../errors.js';
 import { linkIdentity, identitiesOf } from '../../identity.js';
 import { scheduleCancel } from '../../subscriptions.js';
 import { checkoutEligibility } from '../../billing-guard.js';
+import { newBillingAllowed } from '../../launch.js';
 import { billingStartsAt, markCheckoutStarted } from '../../migration-offers.js';
 
 const ACTOR = { actorType: 'system', actorId: 'stripe-adapter' };
@@ -175,7 +176,7 @@ export async function ensureProductAndPrice({ pool, stripe }, planVersionPriceId
  * Returns { status: 'ok', sessionId, url, ... } or { status: 'migration_required' |
  * 'review_required' | 'change_plan_required' | 'already_subscribed', ... }.
  */
-export async function createCheckoutSession({ pool, stripe, guard = {} }, personId, planVersionPriceId, { successUrl, cancelUrl, idempotencyKey, now = new Date() } = {}) {
+export async function createCheckoutSession({ pool, stripe, guard = {}, env = {} }, personId, planVersionPriceId, { successUrl, cancelUrl, idempotencyKey, now = new Date() } = {}) {
   checkKey(idempotencyKey);
   const success = checkUrl(successUrl, 'successUrl');
   const cancel = checkUrl(cancelUrl, 'cancelUrl');
@@ -183,7 +184,9 @@ export async function createCheckoutSession({ pool, stripe, guard = {} }, person
   const p = await priceRow(pool, planVersionPriceId);
   assertSellable(p);
   const eligible = await checkoutEligibility(pool, personId, p.plan_version_id, { now, ...guard });
-  if (eligible.status !== 'ok') return eligible;
+  if (eligible.status !== 'ok') return eligible;                                                   // duplicate-billing guard first (most specific answer)
+  const gate = await newBillingAllowed(pool, personId, { env, purpose: 'subscription' });
+  if (!gate.allowed) return { status: 'not_available', reason: gate.reason, stage: gate.stage };   // then the launch flag: nothing is sent to Stripe
   return startSession({ pool, stripe }, personId, p, { success, cancel, idempotencyKey });
 }
 
@@ -212,13 +215,18 @@ async function startSession({ pool, stripe }, personId, p, { success, cancel, id
  * through plus the sweetener, so the member is never charged twice for the same
  * period. GHL is not touched: staff cancel the legacy subscription by hand.
  */
-export async function createMigrationCheckoutSession({ pool, stripe, guard = {} }, offerId, { successUrl, cancelUrl, idempotencyKey, now = new Date() } = {}) {
+export async function createMigrationCheckoutSession({ pool, stripe, guard = {}, env = {} }, offerId, { successUrl, cancelUrl, idempotencyKey, now = new Date() } = {}) {
   checkKey(idempotencyKey);
   const success = checkUrl(successUrl, 'successUrl');
   const cancel = checkUrl(cancelUrl, 'cancelUrl');
   const o = (await pool.query('SELECT * FROM migration_offers WHERE id = $1', [offerId])).rows[0];
   if (!o) fail('NOT_FOUND', 'offer not found');
   await activePerson(pool, o.person_id);
+  // Migrations follow the launch flag too: pilot members while piloting, everyone only at ALL_NEW_CUSTOMERS.
+  const { launchState } = await import('../../launch.js');
+  const st = await launchState(pool, { env });
+  const pilot = (await pool.query('SELECT 1 FROM pilot_members WHERE person_id = $1 AND removed_at IS NULL', [o.person_id])).rowCount > 0;
+  if (st.effective === 'OFF' || (!pilot && st.effective !== 'ALL_NEW_CUSTOMERS')) return { status: 'not_available', reason: st.effective === 'OFF' ? 'membership2_off' : 'migration_not_open', stage: st.effective };
   const priceId = (await pool.query('SELECT id FROM plan_version_prices WHERE plan_version_id = $1 AND billing_interval = $2', [o.target_plan_version_id, o.target_interval])).rows[0]?.id;
   if (!priceId) fail('NOT_FOUND', 'target price not found');
   const p = await priceRow(pool, priceId);
@@ -239,7 +247,7 @@ export async function createMigrationCheckoutSession({ pool, stripe, guard = {} 
  * (the v2.5 packs seed as drafts: their prices are "indicative"). Coins are
  * credited by the webhook path, never here.
  */
-export async function createCoinPackCheckout({ pool, stripe }, personId, packageKey, { successUrl, cancelUrl, idempotencyKey } = {}) {
+export async function createCoinPackCheckout({ pool, stripe, env = {} }, personId, packageKey, { successUrl, cancelUrl, idempotencyKey } = {}) {
   checkKey(idempotencyKey);
   const success = checkUrl(successUrl, 'successUrl');
   const cancel = checkUrl(cancelUrl, 'cancelUrl');
@@ -247,6 +255,8 @@ export async function createCoinPackCheckout({ pool, stripe }, personId, package
   const pack = (await pool.query('SELECT * FROM coin_packages WHERE key = $1', [packageKey])).rows[0];
   if (!pack) fail('NOT_FOUND', 'coin package not found');
   if (pack.status !== 'active') fail('PLAN_ARCHIVED', `coin package is ${pack.status}, not on sale`);
+  const gate = await newBillingAllowed(pool, personId, { env, purpose: 'coins' });
+  if (!gate.allowed) return { status: 'not_available', reason: gate.reason, stage: gate.stage };   // launch flag: nothing sent to Stripe
   const { customerId } = await ensureCustomer({ pool, stripe }, personId);
   const coins = pack.coins + pack.bonus_coins;
   const metadata = { gaia_person_id: personId, gaia_coin_package_id: pack.id, gaia_coin_package_key: pack.key, gaia_coins: String(coins) };

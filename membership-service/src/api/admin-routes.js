@@ -218,7 +218,7 @@ export async function adminRoute(ctx) {
     const rows = await requestRows(pool, `${stSql} AND ($1::text IS NULL OR true) AND ($2::timestamptz IS NULL OR (r.created_at, r.id) < ($2, $3::uuid))`,
       [st, c ? c[0] : null, c ? c[1] : null, limit + 1], 'ORDER BY r.created_at DESC, r.id DESC LIMIT $4');
     const pg = page(rows, limit, (r) => [r.created_at, r.id]);
-    return [200, { ok: true, items: pg.items.map((r) => requestView(r, op)), next: pg.next, actions: Object.keys(ACTIONS) }];
+    return [200, { ok: true, items: pg.items.map((r) => requestView(r, op, now)), next: pg.next, actions: Object.keys(ACTIONS) }];
   }
   fail('NOT_FOUND', 'no such route');
 }

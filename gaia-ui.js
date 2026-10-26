@@ -363,7 +363,8 @@
             statusEl.classList.add('is-sent');
             statusEl.innerHTML = '<strong class="gaia-auth-modal__sent-title">\u2713 Sign-in link sent</strong>'
               + '<span class="gaia-auth-modal__sent-body">We just emailed a one-tap sign-in link to <strong>' + safeEmail + '</strong>. Open it on this device to sign in automatically.</span>'
-              + '<span class="gaia-auth-modal__sent-hint">No email within a minute? Check your <strong>spam</strong> or <strong>promotions</strong> folder — the link is good for 15 minutes.</span>';
+              + '<span class="gaia-auth-modal__sent-hint">No email within a minute? Check your <strong>spam</strong> or <strong>promotions</strong> folder — the link is good for 15 minutes.</span>'
+              + magicConfirmCodeHtml(payload.confirmCode);
             submitBtn.textContent = 'Resend link';
             if (payload.pollId) startMagicPolling(payload.pollId, statusEl, modal);
           }
@@ -467,6 +468,18 @@
       if (signOutBtn) signOutBtn.hidden = !session.authenticated;
     }
 
+    // Device binding (audit S4): if the emailed link opens in a different
+    // browser (e.g. Safari instead of this installed app), that browser asks for
+    // this code before this screen is signed in. Digits only, so safe to inline.
+    function magicConfirmCodeHtml(code) {
+      const digits = String(code || '').replace(/\D/g, '');
+      if (digits.length !== 6) return '';
+      return '<span class="gaia-auth-modal__sent-code" data-magic-confirm-code>'
+        + 'If the link opens in another browser or device, enter this code there: '
+        + '<strong style="font-family:ui-monospace,monospace;letter-spacing:.15em;font-size:1.15em">' + digits.slice(0, 3) + ' ' + digits.slice(3) + '</strong>'
+        + '</span>';
+    }
+
     let magicPollTimer = null;
     function stopMagicPolling() { if (magicPollTimer) { clearInterval(magicPollTimer); magicPollTimer = null; } }
     // Installed-PWA sign-in bridge: after requesting a magic link, poll the
@@ -486,6 +499,12 @@
             if (statusEl) statusEl.textContent = 'Signed in! Loading your account…';
             await refreshSession();
             try { if (modalEl) modalEl.hidden = true; } catch (e) {}
+          } else if (d && d.status === 'awaiting_code') {
+            const codeEl = modalEl && modalEl.querySelector('[data-magic-confirm-code]');
+            if (codeEl && !codeEl.dataset.prompted) {
+              codeEl.dataset.prompted = '1';
+              codeEl.insertAdjacentHTML('afterbegin', '<strong>Link opened in another browser.</strong> ');
+            }
           } else if (d && d.status === 'unknown') {
             stopMagicPolling();
           }

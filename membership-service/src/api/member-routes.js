@@ -79,7 +79,9 @@ async function ownSubscription(db, personId, subId) {
 export async function memberRoute(ctx) {
   const { pool, client, actor, req, url, now, stripe, env, readJson, idempotencyKey } = ctx;
   const p = url.pathname; let m;
-  const needStripe = () => { if (!stripe) fail('PROVIDER_UNAVAILABLE', 'billing is not connected in this environment'); return stripe; };
+  // Without a Stripe client the guard and launch gate still answer first; only an actual Stripe call fails.
+  const unavailable = () => fail('PROVIDER_UNAVAILABLE', 'billing is not connected in this environment');
+  const needStripe = () => stripe || { livemode: false, get: unavailable, post: unavailable };
   const person = async (id) => { platformOnly(client); await assertPersonVisible(pool, client, id); return id; };
 
   if (req.method === 'POST' && p === '/v1/identities/ensure') {

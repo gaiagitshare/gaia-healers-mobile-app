@@ -19,6 +19,9 @@ import { createMembership2Gateway, membership2Config } from '../../staging-proxy
 
 const MEMBER = { contactId: 'ghl-contact-fixture-gw1', email: 'gateway.member@example.invalid', name: 'Fixture Member', source: 'magic-link' };
 const admin = { actorType: 'admin', actorId: 'owner-fixture' };
+// A loaded, recent legacy mirror (someone else's row): without one the duplicate-billing guard answers review_required first.
+const loadMirror = (pool) => pool.query(`INSERT INTO legacy_memberships (external_subscription_id, external_contact_id, payment_provider, mapping, tier, reported_status, paid_through_estimate, last_seen_at)
+                                         VALUES ('ghl-sub-fixture-other', 'ghl-contact-fixture-other', 'paypal', 'mapped', 'gold', 'active', '2026-12-20', now())`);
 
 async function stack({ stage = 'OFF', session = MEMBER } = {}) {
   const pool = await freshPool();
@@ -83,9 +86,11 @@ test('signed-in member: account is created once, overview shows availability; la
     assert.deepEqual([me.json.availability.stage, me.json.availability.newMembership], ['OFF', false]);
     await s.call('GET', '/api/membership2/me');
     assert.equal((await s.pool.query("SELECT count(*)::int n FROM person_identities WHERE external_id IN ('ghl-contact-fixture-gw1', 'gateway.member@example.invalid')")).rows[0].n, 2, 'one person, contact + email linked once');
+    const held = await s.call('POST', '/api/membership2/checkout', { planKey: 'standard', interval: 'month', requestId: 'req-gw-0000' });
+    assert.deepEqual([held.json.status, held.json.reasons], ['review_required', ['legacy_mirror_not_loaded']], 'the duplicate-billing guard answers first');
+    await loadMirror(s.pool);
     const co = await s.call('POST', '/api/membership2/checkout', { planKey: 'standard', interval: 'month', requestId: 'req-gw-0001' });
-    assert.equal(co.status, 503, 'with no billing connected the service says so');
-    assert.equal(co.json.code, 'PROVIDER_UNAVAILABLE');
+    assert.deepEqual([co.status, co.json.status, co.json.reason], [200, 'not_available', 'membership2_off'], 'the launch gate answers before the missing billing connection');
     assert.equal((await s.call('POST', '/api/membership2/checkout', { planKey: 'standard', interval: 'month' })).json.code, 'INVALID_INPUT', 'a request id is required');
   } finally { await s.close(); }
 });
@@ -98,6 +103,8 @@ test('legacy members are shown their legacy membership and never offered a secon
     const me = (await s.call('GET', '/api/membership2/me')).json;
     assert.deepEqual(me.legacy.map((l) => [l.tier, l.provider, l.state]), [['silver', 'paypal', 'active']]);
     const pid = (await s.pool.query("SELECT person_id FROM person_identities WHERE external_id = 'ghl-contact-fixture-gw1'")).rows[0].person_id;
+    const dup = (await s.call('POST', '/api/membership2/checkout', { planKey: 'standard', interval: 'month', requestId: 'req-gw-legacy1' })).json;
+    assert.notEqual(dup.status, 'ok'); assert.notEqual(dup.code, 'PROVIDER_UNAVAILABLE', 'the duplicate-billing guard answers a paying legacy member even without Stripe');
     await addPilotMember(s.pool, pid, {}, admin);
     assert.equal((await s.call('GET', '/api/membership2/me')).json.availability.newMembershipReason, 'pilot_member');
   } finally { await s.close(); }
@@ -112,6 +119,9 @@ test('coin and billing history, and a member can only touch their own subscripti
     const coins = (await s.call('GET', '/api/membership2/me/coins')).json;
     assert.deepEqual(coins.items.map((i) => [i.kind, i.coins]), [['grant', 500]]);
     assert.deepEqual((await s.call('GET', '/api/membership2/me/billing')).json.items, []);
+    await addPilotMember(s.pool, pid, {}, admin); await loadMirror(s.pool);
+    const co = await s.call('POST', '/api/membership2/checkout', { planKey: 'standard', interval: 'month', requestId: 'req-gw-pilot1' });
+    assert.deepEqual([co.status, co.json.code], [503, 'PROVIDER_UNAVAILABLE'], 'an allowed pilot member reaches the billing step, which is not connected here');
     const other = (await s.pool.query('INSERT INTO persons DEFAULT VALUES RETURNING id')).rows[0].id;
     const v = (await s.pool.query("SELECT v.id FROM plan_versions v JOIN plans p ON p.id = v.plan_id WHERE p.key = 'standard'")).rows[0].id;
     const sub = (await s.pool.query(`INSERT INTO subscriptions (person_id, plan_version_id, billing_interval, status, provider, provider_subscription_id) VALUES ($1, $2, 'month', 'active', 'stripe', 'sub_fixture_gw_other') RETURNING id`, [other, v])).rows[0].id;

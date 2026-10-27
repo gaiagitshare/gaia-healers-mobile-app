@@ -124,11 +124,43 @@
   const BUCKET_TEXT = { granted: 'Monthly', goodwill: 'Goodwill', purchased: 'Purchased', legacy: 'Earlier' };
 
   const planName = (key) => (state.plans || []).find((p) => p.key === key)?.name || titleWord(key);
-  const benefitLabels = () => {
-    const map = {};
-    (state.plans || []).forEach((p) => (p.benefits || []).forEach((b) => { map[b.key] = b.label; }));
-    return map;
-  };
+
+  /**
+   * Per-plan access, from API data only: `plans` is /plans (the gateway returns them in tier order, lowest first),
+   * `access` is /me access ([{ key, value }]) and `currentKey` the member's live plan (null: no plan, so the
+   * no-payment plan is theirs). Returns what is included, and every benefit of the plans after theirs that they lack,
+   * tagged with the first (lowest) plan that includes it. Pure: no state, no DOM (tests run it on its own).
+   */
+  function accessPanel(plans, access, currentKey) {
+    const list = Array.isArray(plans) ? plans : [];
+    const labels = {};
+    const order = {};   // first appearance in tier order: base benefits first, then what each plan adds
+    list.forEach((p) => (p.benefits || []).forEach((b) => { labels[b.key] = b.label; if (!(b.key in order)) order[b.key] = Object.keys(order).length; }));
+    const pretty = (key) => String(key || '').replace(/[_:.-]+/g, ' ').trim().replace(/^\w/, (c) => c.toUpperCase());
+    // A benefit with a number (a discount) reads with its value: "Percent off certifications" + 20 -> "20% off certifications".
+    const withValue = (label, value) => (typeof value === 'number'
+      ? (/^percent off /i.test(label) ? value + '% off ' + label.replace(/^percent off /i, '') : label + ': ' + value) : label);
+    let at = currentKey ? list.findIndex((p) => p.key === currentKey) : -1;
+    const hasPlan = at >= 0;
+    if (!hasPlan) at = list.findIndex((p) => p.prices && p.prices.none != null);
+    if (at < 0) at = 0;
+    const current = list[at] || null;
+    const given = hasPlan
+      ? (Array.isArray(access) ? access : []).filter((a) => a && a.value !== false && a.value != null)
+      : ((current && current.benefits) || []).map((b) => ({ key: b.key, value: true }));
+    const have = new Set(given.map((a) => a.key));
+    const included = given.map((a) => ({ key: a.key, label: withValue(labels[a.key] || pretty(a.key), a.value) }))
+      .sort((x, y) => (order[x.key] ?? 1e9) - (order[y.key] ?? 1e9));
+    const locked = [];
+    const seen = new Set();
+    list.slice(at + 1).forEach((p) => (p.benefits || []).forEach((b) => {
+      if (have.has(b.key) || seen.has(b.key)) return;
+      seen.add(b.key);
+      locked.push({ key: b.key, label: b.label, unlocksWith: p.name, planKey: p.key });
+    }));
+    return { current, hasPlan, included, locked, everything: locked.length === 0 };
+  }
+  // end accessPanel
 
   /* ── derived views of API data (no decisions) ────────────────────────── */
 
@@ -136,6 +168,48 @@
   const liveMembership = () => memberships().find((m) => m.hasAccess) || null;
   const legacyLive = () => ((state.me && state.me.legacy) || []).filter((l) => l.state === 'active' || l.state === 'under_review');
   const openOffers = () => ((state.me && state.me.migrationOffers) || []).filter((o) => ['offered', 'accepted', 'checkout_started'].includes(o.status));
+
+  /** Cents per coin, read from the wallet's own coins/usd pairs (the API's rate); null when no bucket shows it. */
+  function coinCents() {
+    const w = state.me && state.me.wallet;
+    if (!w) return null;
+    for (const b of Object.values(w)) {
+      if (b && typeof b === 'object' && Number(b.coins) > 0 && typeof b.usd === 'string') {
+        const usd = Number(b.usd.replace(/[^0-9.]/g, ''));
+        if (Number.isFinite(usd)) return (usd * 100) / Number(b.coins);
+      }
+    }
+    return null;
+  }
+
+  /** "Included in your plan" / "Not in your plan" for the member's plan (or the no-payment plan when they have none). */
+  function accessHtml(currentKey) {
+    const a = accessPanel(state.plans, state.me && state.me.access, currentKey);
+    if (!a.current) return '';
+    const coins = Number(a.current.monthlyCoins) || 0;
+    const rate = coinCents();
+    const coinItem = coins > 0
+      ? '<li class="g-m2__acc-item"><i class="ph ph-coins" aria-hidden="true"></i><span>' + esc(num(coins) + ' coins every month')
+        + (rate != null ? ' <span class="g-m2__acc-usd">(' + esc(money(Math.round(coins * rate))) + ' in value)</span>' : '') + '</span></li>' : '';
+    const inc = '<section class="g-m2__acc g-m2__acc--in" aria-labelledby="m2-acc-in">'
+      + '<h3 class="g-m2__acc-h" id="m2-acc-in">Included in your plan <span class="g-m2__acc-plan">' + esc(a.current.name) + '</span></h3>'
+      + '<ul class="g-m2__acc-list" aria-labelledby="m2-acc-in">' + coinItem
+      + a.included.map((b) => '<li class="g-m2__acc-item"><i class="ph ph-check-circle" aria-hidden="true"></i><span>' + esc(b.label) + '</span></li>').join('') + '</ul></section>';
+    if (a.everything) {
+      return '<div class="g-m2__access">' + inc + '<section class="g-m2__acc g-m2__acc--all" aria-labelledby="m2-acc-out"><h3 class="g-m2__acc-h" id="m2-acc-out">Not in your plan</h3>'
+        + '<p class="g-m2__acc-done"><i class="ph ph-seal-check" aria-hidden="true"></i> You have everything Gaia Healers membership includes.</p></section></div>';
+    }
+    const groups = [];
+    a.locked.forEach((b) => { const g = groups.find((x) => x.name === b.unlocksWith); if (g) g.items.push(b); else groups.push({ name: b.unlocksWith, items: [b] }); });
+    const out = '<section class="g-m2__acc g-m2__acc--out" aria-labelledby="m2-acc-out">'
+      + '<h3 class="g-m2__acc-h" id="m2-acc-out">Not in your plan</h3>'
+      + groups.map((g, gi) => '<h4 class="g-m2__acc-tier" id="m2-acc-g' + gi + '">Unlocks with ' + esc(g.name) + '</h4>'
+        + '<ul class="g-m2__acc-list g-m2__acc-list--locked" aria-labelledby="m2-acc-g' + gi + '">'
+        + g.items.map((b) => '<li class="g-m2__acc-item is-locked"><i class="ph ph-lock-simple" aria-hidden="true"></i><span>' + esc(b.label)
+          + ' <span class="g-m2__acc-tag">Unlocks with ' + esc(b.unlocksWith) + '</span></span></li>').join('') + '</ul>').join('')
+      + '<div class="g-m2__row">' + btn('Compare plans to upgrade', 'data-m2-upgrade', 'primary') + '</div></section>';
+    return '<div class="g-m2__access">' + inc + out + '</div>';
+  }
 
   /* ── copy for server answers ─────────────────────────────────────────── */
 
@@ -479,13 +553,18 @@
     const avail = state.me && state.me.availability;
     const head = (avail && avail.newMembership === false && !live && !legacyLive().length)
       ? '<p class="g-m2__hint"><i class="ph ph-info" aria-hidden="true"></i> ' + esc(reasonNotice(avail.newMembershipReason).title) + ': you can compare plans now; joining opens later.</p>' : '';
-    const cards = plans.map((p) => {
-      const current = live && live.plan_key === p.key;
+    const noPlan = state.me && !live && !legacyLive().length;
+    const cards = plans.map((p, i) => {
+      const current = live ? live.plan_key === p.key : Boolean(noPlan && p.prices && p.prices.none != null);
+      const prev = i > 0 ? plans[i - 1] : null;
+      const prevKeys = new Set(((prev && prev.benefits) || []).map((b) => b.key));
+      const adds = prev ? (p.benefits || []).filter((b) => !prevKeys.has(b.key)) : (p.benefits || []);
       return '<article class="g-card g-m2__plan' + (current ? ' is-current' : '') + '" aria-label="' + esc(p.name) + (current ? ' (your plan)' : '') + '">'
         + '<header class="g-m2__plan-head"><h3 class="g-m2__plan-name">' + esc(p.name) + '</h3>' + (current ? '<span class="g-badge g-badge--on">Your plan</span>' : '') + '</header>'
         + priceBlock(p)
         + (Number(p.monthlyCoins) > 0 ? '<p class="g-m2__coins"><i class="ph ph-coins" aria-hidden="true"></i> ' + esc(num(p.monthlyCoins)) + ' coins every month</p>' : '')
-        + benefitsHtml(p.benefits || [])
+        + (prev ? '<p class="g-m2__adds">Everything in ' + esc(prev.name) + ', plus:</p>' : '')
+        + benefitsHtml(adds)
         + '<div class="g-m2__plan-act">' + planAction(p) + '</div>'
         + '</article>';
     }).join('');
@@ -502,7 +581,7 @@
     if (!m) {
       if (legacyLive().length) return '';            // the legacy section below is their membership
       return section('mine', 'My membership', '<div class="g-card g-m2__card"><p class="g-m2__lead">You don’t have a Gaia Healers Membership 2.0 plan yet.</p>'
-        + '<p class="g-card__meta">Compare the plans below to see what each one includes.</p></div>');
+        + '<p class="g-card__meta">Compare the plans below to see what each one includes.</p>' + accessHtml(null) + '</div>');
     }
     const status = STATUS_TEXT[m.status] || words(m.status);
     const rows = [
@@ -513,15 +592,13 @@
     if (m.cancel_at) rows.push(['Access ends', date(m.cancel_at)]);
     else if (m.status === 'trialing' && m.trial_end) rows.push(['Trial ends', date(m.trial_end)]);
     else if (m.current_period_end && m.hasAccess) rows.push(['Renews on', date(m.current_period_end)]);
-    const labels = benefitLabels();
-    const access = ((state.me && state.me.access) || []).map((a) => labels[a.key] || words(a.key));
     const banner = m.cancel_at
       ? '<div class="g-ann g-ann--warn g-m2__banner" role="status"><span class="g-ann__title">Cancellation scheduled</span><span class="g-ann__body">Your ' + esc(m.plan_name) + ' membership ends on ' + esc(date(m.cancel_at)) + '. You keep access until then and won’t be charged again.</span></div>' : '';
     const canCancel = m.hasAccess && !m.cancel_at && ['active', 'trialing', 'past_due'].includes(m.status);
     const changeBanner = pendingChangeHtml(m);
     return section('mine', 'My membership', banner + changeBanner
       + '<div class="g-card g-m2__card"><dl class="g-m2__dl">' + rows.filter((r) => r[1]).map((r) => '<div><dt>' + esc(r[0]) + '</dt><dd>' + esc(r[1]) + '</dd></div>').join('') + '</dl>'
-      + (access.length ? '<p class="g-m2__sub">Included now</p><ul class="g-m2__chips">' + access.map((a) => '<li class="g-badge">' + esc(a) + '</li>').join('') + '</ul>' : '')
+      + (m.hasAccess ? accessHtml(m.plan_key) : '')
       + '<div class="g-m2__row">' + (m.hasAccess && !m.pendingChange && !m.cancel_at && m.source !== 'legacy_import' && !legacyLive().length ? btn('Change plan', 'data-m2-change', 'secondary') : '')
       + (canCancel ? btn('Cancel membership', 'data-m2-cancel="' + esc(m.id) + '"', 'ghost', state.busy === 'cancel') : '') + '</div>'
       + '</div>');
@@ -554,6 +631,7 @@
       + '<p>Billed through your existing plan' + (l.paidThrough ? ', paid through ' + esc(date(l.paidThrough)) : '') + '.</p>'
       + (l.state === 'under_review' ? '<p class="g-card__meta">Our team is checking this membership. Nothing changes for you in the meantime.</p>' : '')
       + '<p class="g-card__meta">You don’t need to buy a new plan. Your Gaia Healers account team can move you to the new plans without double billing.</p>'
+      + '<p class="g-card__meta">Your current plan stays as it is until you choose to move.</p>'
       + '</div>').join('');
     const offerCards = offers.map((o) => {
       const target = planName(o.target_plan) + ' (' + (INTERVAL_TEXT[o.target_interval] || words(o.target_interval)).toLowerCase() + ')';
@@ -640,6 +718,16 @@
     if (keep) el.querySelector(keep)?.focus();
   }
 
+  /** "Compare plans to upgrade": to the plan list, focus on its first choice. */
+  function showPlans() {
+    window.requestAnimationFrame(() => {
+      const h = document.getElementById('m2-h-plans');
+      if (h && h.scrollIntoView) h.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      const first = document.querySelector('[data-m2-choose], [data-m2-change-to], [data-m2-interval]');
+      if (first && first.focus) first.focus({ preventScroll: true });
+    });
+  }
+
   /** "Change plan": the choices are the plan list (plan + Monthly / Annual toggle). */
   function showChoices() {
     state.notice = CHANGE_PLAN; render();
@@ -657,6 +745,7 @@
     const d = t.dataset;
     if (d.m2Interval) { state.interval = d.m2Interval; render(); }
     else if (d.m2Choose) choosePlan(d.m2Choose, state.interval);
+    else if (t.hasAttribute('data-m2-upgrade')) showPlans();
     else if (d.m2Pack) buyPack(d.m2Pack);
     else if (d.m2Cancel) cancelMembership(d.m2Cancel);
     else if (d.m2Accept) acceptOffer(d.m2Accept);

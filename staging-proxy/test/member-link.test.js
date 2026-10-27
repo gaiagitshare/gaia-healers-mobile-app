@@ -191,7 +191,7 @@ test('the member stops sharing: local revoke first, partner told, readings gone'
 test('the practitioner can revoke from their side with the link secret', async () => {
   const code = await call('/api/practitioners/member-link/code', { method: 'POST', headers: { cookie: session('member-C') }, body: {} });
   await call('/api/practitioners/member-link/redeem', { method: 'POST', headers: { authorization: `Bearer ${LINK_SECRET}` }, body: { code: code.json.code, customer_id: 'cust-C', practitioner_id: 'prac-9' } });
-  const rv = await call('/api/practitioners/member-link/revoke', { method: 'POST', headers: { authorization: `Bearer ${LINK_SECRET}` }, body: { customer_id: 'cust-C' } });
+  const rv = await call('/api/practitioners/member-link/revoke', { method: 'POST', headers: { authorization: `Bearer ${LINK_SECRET}` }, body: { gaia_member_id: 'member-C', customer_id: 'cust-C', practitioner_id: 'prac-9' } });
   assert.equal(rv.status, 200); assert.equal(rv.json.revoked, true);
   assert.equal((await call('/api/practitioners/member-link/status', { headers: { cookie: session('member-C') } })).json.status, 'revoked');
 });
@@ -429,4 +429,18 @@ test("linkDayCounts: today's events and the standing totals, counts only", () =>
   assert.deepEqual(t, { day: new Date().toISOString().slice(0, 10), codes_issued: 1, links_confirmed: 1, readings_opened: 1, links_revoked: 1, confirmed: 0, revoked: 1 });
   assert.equal(ml.linkDayCounts({ file: f, now: Date.parse('2020-01-01T00:00:00Z') }).links_confirmed, 0, 'another day: nothing');
   assert.ok(!JSON.stringify(t).includes('m13'));
+});
+
+test('partner revoke requires the agreed tuple and ignores obsolete link notifications', async () => {
+  const code = await call('/api/practitioners/member-link/code', { method: 'POST', headers: { cookie: session('member-tuple') }, body: {} });
+  const redeemed = await call('/api/practitioners/member-link/redeem', { method: 'POST', headers: { authorization: `Bearer ${LINK_SECRET}` }, body: { code: code.json.code, customer_id: 'customer-new', practitioner_id: 'practitioner-new' } });
+  const headers = { authorization: `Bearer ${LINK_SECRET}` };
+  assert.equal((await call('/api/practitioners/member-link/revoke', { method: 'POST', headers, body: { gaia_member_id: 'member-tuple' } })).status, 400);
+  const tuple = { gaia_member_id: 'member-tuple', customer_id: 'customer-new', practitioner_id: 'practitioner-new' };
+  const stale = await call('/api/practitioners/member-link/revoke', { method: 'POST', headers, body: { ...tuple, customer_id: 'customer-old' } });
+  assert.equal(stale.json.revoked, false); assert.equal(stale.json.status, 'link_mismatch');
+  assert.equal((await call('/api/practitioners/member-link/revoke', { method: 'POST', headers, body: { ...tuple, practitioner_id: 'practitioner-old' } })).json.revoked, false);
+  assert.equal((await call('/api/practitioners/member-link/revoke', { method: 'POST', headers, body: { ...tuple, link_id: 'obsolete-link-generation' } })).json.revoked, false);
+  assert.equal(ml.linkFor('member-tuple').status, 'confirmed');
+  assert.equal((await call('/api/practitioners/member-link/revoke', { method: 'POST', headers, body: { ...tuple, link_id: redeemed.json.link_id } })).json.revoked, true);
 });

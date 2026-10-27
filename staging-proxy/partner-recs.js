@@ -32,7 +32,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { mcpCall, unwrapMcp } from './practitioners-oauth.js';
-import { memberToken, memberBackend, linkFor } from './member-link.js';
+import { memberToken, memberBackend, linkFor, memberLinkScope, onMemberLinkChange } from './member-link.js';
 
 export const PARTNER_HOSTS = Object.freeze({
   staging: ['staging.gaiapractitioners.com'],
@@ -137,6 +137,11 @@ function writeCache(c) {
   } catch { /* the cache is an optimisation */ }
 }
 
+onMemberLinkChange((id) => {
+  const cache = readCache();
+  if (cache.members?.[id]) { delete cache.members[id]; writeCache(cache); }
+});
+
 /**
  * The member's approved items. Fresh within 10 minutes: from the cache. A
  * successful read REPLACES the list (so a revoked or no-longer-approved item
@@ -149,20 +154,25 @@ export async function approvedForMember(cfg0, memberId, { env = process.env, fet
   if (!gate.enabled) return { items: [], state: 'disabled', reason: gate.reason };
   const id = String(memberId || '').trim();
   if (!id || !(linkFile ? linkFor(id, linkFile) : linkFor(id))) return { items: [], state: 'not_linked' };
+  const scope = memberLinkScope(cfg0, id, { env, file: linkFile });
+  const current = () => memberLinkScope(cfg0, id, { env, file: linkFile }) === scope;
   const cache = readCache(); cache.members = cache.members || {};
-  const prev = cache.members[id];
+  const prev = cache.members[id]?.scope === scope ? cache.members[id] : null;
   if (prev && prev.ok_at && now - prev.ok_at < TTL_MS) return { items: prev.items || [], state: 'fresh' };
   try {
     const cfg = { ...cfg0, mcpUrl: `${memberBackend(cfg0, env)}/api/member-mcp` };
-    const token = await memberToken(cfg0, id, { env, fetchImpl, now });
+    const token = await memberToken(cfg0, id, { env, fetchImpl, now, file: linkFile });
     const data = unwrapMcp(await mcpCall(cfg, token, 'get_my_recommendations', {}, fetchImpl));
+    if (!current()) return { items: [], state: 'link_changed' };
     const { items, dropped } = shapeApproved(data, gate.hosts);
-    cache.members[id] = { ok_at: now, items };
-    writeCache(cache);
+    const latest = readCache(); latest.members = latest.members || {};
+    latest.members[id] = { ok_at: now, items, scope };
+    writeCache(latest);
     log('approved recommendations read', { items: items.length, dropped });
     return { items, state: 'ok' };
   } catch (e) {
     log('approved recommendations unavailable', { code: e?.code || 'error' });
+    if (!current()) return { items: [], state: 'link_changed' };
     if (prev && prev.ok_at && now - prev.ok_at < STALE_MAX_MS) return { items: prev.items || [], state: 'stale' };
     return { items: [], state: 'unavailable' };
   }

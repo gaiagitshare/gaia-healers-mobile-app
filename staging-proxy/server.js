@@ -7475,7 +7475,7 @@ const server = http.createServer(async (req, res) => {
         // for arguments that make no sense, 409 when the practitioner simply has
         // not connected yet -- each one is a different thing for the page to say.
         const status = { forbidden: 403, unknown_tool: 404, client_tool: 400,
-                         bad_args: 400, not_connected: 409, needs_reconnect: 409,
+                         bad_args: 400, not_connected: 409, needs_reconnect: 409, connection_changed: 409,
                          upstream_unavailable: 504 }[code] || 502;
         if (status >= 500) {
           console.error('[Gaia Assist] tool failed', { name, code, error: String(e.message || e).slice(0, 160) });
@@ -7620,7 +7620,11 @@ const server = http.createServer(async (req, res) => {
             console.log('[Gaia Practitioners] member link confirmed', { member: out.gaia_member_id, practitioner: String(body?.practitioner_id || '') });
             sendJson(res, 200, { ok: true, ...out }, origin);
           } else {
-            const out = revokeLink({ memberId: body?.gaia_member_id, customer_id: body?.customer_id }, 'practitioner');
+            if (![body?.gaia_member_id, body?.customer_id, body?.practitioner_id].every((v) => typeof v === 'string' || typeof v === 'number')
+              || ![body.gaia_member_id, body.customer_id, body.practitioner_id].every((v) => String(v).trim())) {
+              sendJson(res, 400, { ok: false, error: 'bad_args' }, origin); return;
+            }
+            const out = revokeLink({ memberId: body.gaia_member_id, customer_id: body.customer_id, practitioner_id: body.practitioner_id, link_id: body.link_id }, 'practitioner');
             console.log('[Gaia Practitioners] member link revoked by practitioner', { revoked: out.revoked });
             sendJson(res, 200, { ok: true, ...out }, origin);
           }

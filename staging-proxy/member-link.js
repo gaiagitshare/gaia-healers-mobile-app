@@ -9,8 +9,8 @@ import { readingSeries, recentAverage } from './reading-history.js';
  *      consent (HIPAA authorization); the moment is recorded.
  *   2. The member reads the code to their PRACTITIONER, who enters it in the
  *      practitioner dashboard. Their server redeems it against us with the
- *      server credential. A code is 8 unambiguous characters, lives 15
- *      minutes, works once. A typo can only fail, never link the wrong person.
+ *      server credential. A code is 8 unambiguous characters, lives 24
+ *      hours, works once. A typo can only fail, never link the wrong person.
  *   3. Either side can unlink at any time.
  *   4. Reads are member-only tools on their MCP that answer for ONE member
  *      through a confirmed link -- no listing, no search.
@@ -34,6 +34,20 @@ export const CODE_LENGTH = 8;
 // No 0/O/1/I/L: a code is read aloud and typed by somebody else.
 const ALPHABET = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
 const AUDIT_MAX = 5000;
+const linkListeners = new Set();
+export function onMemberLinkChange(listener) { linkListeners.add(listener); return () => linkListeners.delete(listener); }
+function invalidateMemberLink(memberId, file) {
+  _memberTokens.delete(String(memberId));
+  for (const listener of linkListeners) { try { listener(String(memberId), file); } catch { /* caches must not block revocation */ } }
+}
+export function linkFingerprint(link) {
+  return link ? crypto.createHash('sha256').update(JSON.stringify([link.link_id || '', link.customer_id, link.practitioner_id, link.linked_at, link.consent_at])).digest('hex') : null;
+}
+export function memberLinkScope(cfg, memberId, { env = process.env, file = LINK_FILE } = {}) {
+  const link = linkFor(memberId, file);
+  return link ? JSON.stringify([path.resolve(file), memberBackend(cfg, env), cfg?.environment || '', linkFingerprint(link)]) : null;
+}
+
 
 export function memberReadingsEnabled(env = process.env) {
   return env.GAIA_MEMBER_READINGS_ENABLED === 'true';
@@ -96,26 +110,32 @@ export function redeemCode(rawCode, { customer_id, practitioner_id, practitioner
   delete store.codes[code];                                   // single use, whatever happens next
   if (store.links[row.memberId]?.status === 'confirmed') { save(store, file); throw Object.assign(new Error('already linked'), { code: 'already_linked' }); }
   store.links[row.memberId] = {
-    status: 'confirmed', customer_id: customerId, practitioner_id: practitionerId,
+    status: 'confirmed', link_id: crypto.randomUUID(), customer_id: customerId, practitioner_id: practitionerId,
     practitioner_name: String(practitioner_name || '').slice(0, 80),
     consent_at: row.createdAt, linked_at: new Date(now).toISOString(),
   };
   audit(store, 'link_confirmed', { memberId: row.memberId, customer_id: customerId, practitioner_id: practitionerId });
   save(store, file);
-  return { gaia_member_id: row.memberId, status: 'confirmed', linked_at: store.links[row.memberId].linked_at };
+  invalidateMemberLink(row.memberId, file);
+  return { gaia_member_id: row.memberId, status: 'confirmed', linked_at: store.links[row.memberId].linked_at, link_id: store.links[row.memberId].link_id };
 }
 
 /** Unlink by member (the app) or by customer (their server). Idempotent. */
-export function revokeLink({ memberId = '', customer_id = '' } = {}, by = 'member', { now = Date.now(), file = LINK_FILE } = {}) {
+export function revokeLink({ memberId = '', customer_id = '', practitioner_id = '', link_id = '' } = {}, by = 'member', { now = Date.now(), file = LINK_FILE } = {}) {
   const store = load(file);
   let id = String(memberId || '').trim();
   if (!id && customer_id) id = Object.keys(store.links).find((m) => store.links[m].customer_id === String(customer_id)) || '';
   const link = id ? store.links[id] : null;
   if (!link || link.status !== 'confirmed') return { revoked: false, status: link ? link.status : 'none' };
+  const supplied = (value) => value !== '' && value !== undefined && value !== null;
+  if ((supplied(customer_id) && String(customer_id) !== String(link.customer_id))
+    || (supplied(practitioner_id) && String(practitioner_id) !== String(link.practitioner_id))
+    || (supplied(link_id) && String(link_id) !== String(link.link_id))) return { revoked: false, status: 'link_mismatch' };
   store.links[id] = { ...link, status: 'revoked', revoked_at: new Date(now).toISOString(), revoked_by: by === 'practitioner' ? 'practitioner' : 'member' };
   audit(store, 'link_revoked', { memberId: id, customer_id: link.customer_id, by: store.links[id].revoked_by });
   save(store, file);
-  return { revoked: true, status: 'revoked', customer_id: link.customer_id, practitioner_id: link.practitioner_id };
+  invalidateMemberLink(id, file);
+  return { revoked: true, status: 'revoked', link_id: link.link_id, customer_id: link.customer_id, practitioner_id: link.practitioner_id };
 }
 
 /** What the member may see about their own link. Never the code store. */
@@ -167,21 +187,24 @@ export const LATEST_CHECK_TTL_MS = 6 * 60 * 60 * 1000;
 export async function refreshLatest(cfg0, memberId, { env = process.env, fetchImpl = fetch, file = LINK_FILE, now = Date.now() } = {}) {
   const link = linkFor(memberId, file);
   if (!link) return null;
+  const fingerprint = linkFingerprint(link);
   const checked = Date.parse(link.latest_checked_at || '') || 0;
   if (now - checked < LATEST_CHECK_TTL_MS) return link.latest_scanned_at || null;
   try {
     const viaKey = Boolean(memberApiKey(env));
     const cfg = viaKey ? { ...cfg0, mcpUrl: `${memberBackend(cfg0, env)}/api/member-mcp` } : cfg0;
-    const token = viaKey ? await memberToken(cfg0, memberId, { env, fetchImpl }) : await serverAccessToken(cfg0, env, fetchImpl);
+    const token = viaKey ? await memberToken(cfg0, memberId, { env, fetchImpl, file }) : await serverAccessToken(cfg0, env, fetchImpl);
     const names = await memberToolNames(cfg, token, fetchImpl);
     const has = (n) => names.size === 0 || names.has(n);
     const [tool, args] = has('get_my_latest_scan') ? ['get_my_latest_scan', {}] : has('get_member_scan') ? ['get_member_scan', { gaia_member_id: memberId, which: 'latest' }] : ['get_customer_scan', { customerId: link.customer_id }];
     const out = unwrapMcp(await mcpCall(cfg, token, tool, args, fetchImpl));
     const scan = out?.scan || (Array.isArray(out?.scans) ? [...out.scans].sort((a, b) => String(b.scanned_at || '').localeCompare(String(a.scanned_at || '')))[0] : out);
     const d = String(scan?.scanned_at || '').slice(0, 10);
+    if (linkFingerprint(linkFor(memberId, file)) !== fingerprint) return null;
     rememberLatest(memberId, d, { now, file });
     return d || link.latest_scanned_at || null;
   } catch {
+    if (linkFingerprint(linkFor(memberId, file)) !== fingerprint) return null;
     rememberLatest(memberId, '', { now, file });   // tried; try again in six hours
     return link.latest_scanned_at || null;
   }
@@ -271,14 +294,17 @@ async function backendCall(cfg, method, pathname, { env = process.env, fetchImpl
   return json;
 }
 /** A one-member, one-hour token from their backend; cached until shortly before expiry. */
-export async function memberToken(cfg, memberId, { env = process.env, fetchImpl = fetch, now = Date.now() } = {}) {
+export async function memberToken(cfg, memberId, { env = process.env, fetchImpl = fetch, now = Date.now(), file = LINK_FILE } = {}) {
+  const scope = memberLinkScope(cfg, memberId, { env, file });
+  if (!scope) throw Object.assign(new Error('member_not_linked'), { code: 'member_not_linked' });
   const hit = _memberTokens.get(memberId);
-  if (hit && hit.exp > now + 60_000) return hit.value;
+  if (hit && hit.scope === scope && hit.exp > now + 60_000) return hit.value;
   const j = await backendCall(cfg, 'POST', '/api/gaia/member-token', { env, fetchImpl, body: { gaiaMemberId: memberId } });
+  if (memberLinkScope(cfg, memberId, { env, file }) !== scope) throw Object.assign(new Error('link_changed'), { code: 'link_changed', status: 409 });
   const value = j?.token || j?.access_token || j?.memberToken;
   if (!value) throw Object.assign(new Error('no token in response'), { code: 'upstream_unavailable' });
   const ttl = Math.max(60, Number(j.expires_in || j.expiresIn || 3600)) * 1000;
-  _memberTokens.set(memberId, { value, exp: now + ttl });
+  _memberTokens.set(memberId, { value, exp: now + ttl, scope });
   return value;
 }
 /** Their record of the link, for reconciling ours. */
@@ -332,10 +358,11 @@ const practitionerNote = (o) => {
   return null;
 };
 
-const PARTNER_ERRORS = { member_not_linked: 404, link_pending: 409, link_revoked: 410, forbidden_scope: 403 };
+const PARTNER_ERRORS = { link_changed: 409, member_not_linked: 404, link_pending: 409, link_revoked: 410, forbidden_scope: 403 };
 function partnerError(e) {
   const code = String(e?.body?.code || e?.code || '');
   if (PARTNER_ERRORS[code]) return Object.assign(new Error(code), { code, status: PARTNER_ERRORS[code] });
+  if (e?.status === 401 || e?.status === 403 || e?.code === 401) return Object.assign(new Error('forbidden_scope'), { code: 'forbidden_scope', status: 403 });
   if (e?.status === 429) return Object.assign(new Error('rate_limited'), { code: 'rate_limited', status: 429 });
   return Object.assign(new Error('readings_unavailable'), { code: e?.code === 'not_configured' ? 'not_configured' : 'readings_unavailable', status: 503 });
 }
@@ -360,13 +387,16 @@ async function memberToolNames(cfg, token, fetchImpl) {
 export async function memberReadings(cfg0, memberId, { env = process.env, fetchImpl = fetch, file = LINK_FILE } = {}) {
   const link = linkFor(memberId, file);
   if (!link) throw Object.assign(new Error('member_not_linked'), { code: 'member_not_linked', status: 404 });
+  const fingerprint = linkFingerprint(link);
+  const assertCurrentLink = () => { if (linkFingerprint(linkFor(memberId, file)) !== fingerprint) throw Object.assign(new Error('link_changed'), { code: 'link_changed', status: 409 }); };
   const viaKey = Boolean(memberApiKey(env));
   const cfg = viaKey ? { ...cfg0, mcpUrl: `${memberBackend(cfg0, env)}/api/member-mcp` } : cfg0;
   let token;
-  try { token = viaKey ? await memberToken(cfg0, memberId, { env, fetchImpl }) : await serverAccessToken(cfg0, env, fetchImpl); } catch (e) { throw partnerError(e); }
+  try { token = viaKey ? await memberToken(cfg0, memberId, { env, fetchImpl, file }) : await serverAccessToken(cfg0, env, fetchImpl); } catch (e) { assertCurrentLink(); throw partnerError(e); }
+  assertCurrentLink();
   const names = await memberToolNames(cfg, token, fetchImpl);
   const has = (n) => names.size === 0 || names.has(n);
-  const call = async (tool, args) => { try { return unwrapMcp(await mcpCall(cfg, token, tool, args, fetchImpl)); } catch (e) { throw partnerError(e); } };
+  const call = async (tool, args) => { try { assertCurrentLink(); const value = unwrapMcp(await mcpCall(cfg, token, tool, args, fetchImpl)); assertCurrentLink(); return value; } catch (e) { assertCurrentLink(); throw partnerError(e); } };
   const scoped = { gaia_member_id: memberId };
   const byCustomer = { customerId: link.customer_id };
   // Three vocabularies, in order of preference: theirs as built on staging
@@ -374,13 +404,21 @@ export async function memberReadings(cfg0, memberId, { env = process.env, fetchI
   // practitioner-named tools scoped by the member token.
   const pick = (mine, ours, theirs, args) =>
     (has(mine) ? call(mine, args.mine) : has(ours) ? call(ours, args.ours) : call(theirs, args.theirs));
+  const errors = {};
+  const part = (name, promise) => promise.catch((e) => {
+    if (['member_not_linked', 'link_pending', 'link_revoked', 'forbidden_scope', 'link_changed'].includes(e.code)) throw e;
+    errors[name] = e.code || 'readings_unavailable'; return null;
+  });
+  const fileTool = has('list_my_shared_files') ? 'list_my_shared_files' : has('get_member_files') ? 'get_member_files' : 'get_customer_files';
   const [customer, scan, trend, compare, files] = await Promise.all([
-    pick('get_my_profile', 'get_member_customer', 'get_customer', { mine: {}, ours: scoped, theirs: byCustomer }).catch((e) => (e.code === 'member_not_linked' ? Promise.reject(e) : null)),
-    pick('get_my_latest_scan', 'get_member_scan', 'get_customer_scan', { mine: {}, ours: { ...scoped, which: 'latest' }, theirs: byCustomer }).catch((e) => (e.code === 'member_not_linked' ? Promise.reject(e) : null)),
-    pick('get_my_scan_trend', 'get_member_scan_trend', 'get_scan_trend', { mine: {}, ours: { ...scoped, window: '90d' }, theirs: { ...byCustomer, summary_only: true } }).catch(() => null),
-    pick('get_my_before_after', 'compare_member_before_after', 'compare_protocol_before_after', { mine: {}, ours: scoped, theirs: { ...byCustomer, limit: 2 } }).catch(() => null),
-    pick('list_my_shared_files', 'get_member_files', 'get_customer_files', { mine: {}, ours: scoped, theirs: byCustomer }).catch(() => null),
+    part('profile', pick('get_my_profile', 'get_member_customer', 'get_customer', { mine: {}, ours: scoped, theirs: byCustomer })),
+    part('latest', pick('get_my_latest_scan', 'get_member_scan', 'get_customer_scan', { mine: {}, ours: { ...scoped, which: 'latest' }, theirs: byCustomer })),
+    part('trend', pick('get_my_scan_trend', 'get_member_scan_trend', 'get_scan_trend', { mine: {}, ours: { ...scoped, window: '90d' }, theirs: { ...byCustomer, summary_only: true } })),
+    part('comparison', pick('get_my_before_after', 'compare_member_before_after', 'compare_protocol_before_after', { mine: {}, ours: scoped, theirs: { ...byCustomer, limit: 2 } })),
+    part('files', call(fileTool, fileTool === 'list_my_shared_files' ? {} : fileTool === 'get_member_files' ? scoped : byCustomer)),
   ]);
+  assertCurrentLink();
+  if (Object.keys(errors).length === 5) throw Object.assign(new Error('readings_unavailable'), { code: 'readings_unavailable', status: 503 });
   // get_customer_scan answers with the whole history; take the newest.
   const latestOf = (s) => {
     if (!s) return null;
@@ -420,9 +458,12 @@ export async function memberReadings(cfg0, memberId, { env = process.env, fetchI
   // A small series for a sparkline: newest 24 dated points with numbers.
   const series = readingSeries(trend?.points || [], 24);
   const practitionerName = prac.name || link.practitioner_name || 'your practitioner';
+  const summary = readingSummary({ latest: latestView, trend: trendView, comparisons, practitionerName });
+  if (!latestView && (errors.latest || errors.trend)) summary.headline = 'Your reading could not be loaded';
   return {
+    partial: Object.keys(errors).length > 0, errors,
     practitioner: { id: String(prac.id ?? link.practitioner_id), name: prac.name || link.practitioner_name || '', specialty: prac.specialty || '', location: [prac.city, prac.state].filter(Boolean).join(', ') },
-    summary: readingSummary({ latest: latestView, trend: trendView, comparisons, practitionerName }),
+    summary,
     recheck_after_days: recheckAfterDays(env),
     series,
     average_recent: recentAverage(series),
@@ -431,7 +472,7 @@ export async function memberReadings(cfg0, memberId, { env = process.env, fetchI
     latest: latestView,
     trend: trendView,
     comparisons,
-    files: (files?.files || []).filter((f) => f?.shareable !== false).slice(0, 20).map((f) => ({ id: String(f.id ?? ''), name: f.name || f.filename || f.original_name || 'document', uploaded_at: String(f.uploaded_at || f.created_at || f.uploadedAt || '').slice(0, 10), url: f.download_url || f.url || null, first: readFirst(f) }))
+    files: (Array.isArray(files?.files) ? files.files : []).filter((f) => f && (f.shareable === true || (fileTool === 'list_my_shared_files' && f.shareable === undefined))).slice(0, 20).map((f) => ({ id: String(f.id ?? ''), name: f.name || f.filename || f.original_name || 'document', uploaded_at: String(f.uploaded_at || f.created_at || f.uploadedAt || '').slice(0, 10), url: safeFileUrl(f.download_url || f.url), first: readFirst(f) }))
       .sort((a, b) => Number(b.first) - Number(a.first)),
   };
 }
@@ -442,6 +483,10 @@ export async function memberReadings(cfg0, memberId, { env = process.env, fetchI
  * now read only by partner-recs.js, for display on the member's Personal
  * Path, and never reach an AI provider.
  */
+
+export function safeFileUrl(value) {
+  try { const u = new URL(value); return u.protocol === 'https:' && !u.username && !u.password ? u.href : null; } catch { return null; }
+}
 
 /** "Read this first": a document the practitioner pinned, in any of the spellings their side might use. */
 export const readFirst = (f) => Boolean(f?.read_first || f?.readFirst || f?.pinned || f?.featured || f?.primary
@@ -506,6 +551,7 @@ export function readingSummary({ latest, trend, comparisons = [], practitionerNa
 
 /** Best effort: tell their server the member stopped sharing. Local revoke never waits on it. */
 export async function notifyPartnerUnlink(cfg, { memberId, customerId }, { env = process.env, fetchImpl = fetch } = {}) {
+  _memberTokens.delete(String(memberId));
   try {
     if (memberApiKey(env)) { await backendCall(cfg, 'DELETE', `/api/gaia/member-links/${encodeURIComponent(memberId)}`, { env, fetchImpl }); _memberTokens.delete(memberId); return true; }
     const token = await serverAccessToken(cfg, env, fetchImpl);

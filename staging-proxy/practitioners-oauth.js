@@ -183,7 +183,7 @@ export function writeTokens(all, file = TOKEN_FILE) {
 
 export function saveToken(contactId, row, file = TOKEN_FILE) {
   const all = readTokens(file);
-  all[String(contactId)] = row;
+  all[String(contactId)] = { ...row, connection_id: row.connection_id || crypto.randomUUID() };
   writeTokens(all, file);
   return row;
 }
@@ -394,10 +394,18 @@ export async function validAccessToken(cfg, contactId, { file = TOKEN_FILE, fetc
     throw Object.assign(new Error('token expired and no refresh token held'), { code: 'needs_reconnect' });
   }
 
-  if (refreshing.has(key)) return refreshing.get(key);
+  const refreshKey = `${file}:${key}:${row.connection_id || row.refresh_token}`;
+  const stillCurrent = () => {
+    const current = tokenFor(key, file);
+    return current && current.connection_id === row.connection_id
+      && current.refresh_token === row.refresh_token && current.access_token === row.access_token;
+  };
+  const changed = () => Object.assign(new Error('connection changed; retry with the current account'), { code: 'connection_changed' });
+  if (refreshing.has(refreshKey)) return refreshing.get(refreshKey);
   const work = (async () => {
     try {
       const fresh = await refreshAccess(cfg, row.refresh_token, fetchImpl);
+      if (!stillCurrent()) throw changed();
       saveToken(key, {
         ...row,
         access_token: fresh.access_token,
@@ -413,6 +421,7 @@ export async function validAccessToken(cfg, contactId, { file = TOKEN_FILE, fetc
       // A refusal means the chain is done: the stored token is spent and no new
       // one arrived. Say so plainly rather than leaving a dead token in place
       // for every later call to rediscover.
+      if (!stillCurrent()) throw changed();
       if (e.status === 400 || e.status === 401) {
         saveToken(key, { ...row, access_token: '', refresh_token: '', needs_reconnect: true,
                          broken_at: new Date().toISOString(), broke_because: String(e.message).slice(0, 160) }, file);
@@ -420,10 +429,10 @@ export async function validAccessToken(cfg, contactId, { file = TOKEN_FILE, fetc
       }
       throw e;                      // a network blip is not a broken chain
     } finally {
-      refreshing.delete(key);
+      refreshing.delete(refreshKey);
     }
   })();
-  refreshing.set(key, work);
+  refreshing.set(refreshKey, work);
   return work;
 }
 
@@ -476,7 +485,11 @@ async function mcpAttempt(cfg, accessToken, name, args, fetchImpl) {
   // It used to fall through: a 503 left json as {}, the handler saw no scans
   // and told the practitioner their client had none on file. A wrong answer
   // about a client's readings is worse than a card that says it could not load.
-  if (!r.ok) throw mcpFailure(name, { status: r.status, detail: text.trim().slice(0, 120) });
+  if (!r.ok) {
+    const failure = mcpFailure(name, { status: r.status, detail: text.trim().slice(0, 120) });
+    try { failure.body = JSON.parse(text); } catch { /* no structured partner code */ }
+    throw failure;
+  }
 
   let json = {};
   try { json = JSON.parse(text); } catch {
@@ -484,8 +497,17 @@ async function mcpAttempt(cfg, accessToken, name, args, fetchImpl) {
     const last = text.trim().split('\n').filter((l) => l.startsWith('data:')).pop();
     if (last) { try { json = JSON.parse(last.slice(5).trim()); } catch { /* fall through */ } }
   }
-  if (json.error) throw new Error(`${name}: ${json.error.message || JSON.stringify(json.error)}`);
-  return json.result ?? json;
+  if (json.error) throw Object.assign(new Error(`${name}: ${json.error.message || 'partner error'}`), {
+    code: json.error.data?.code || json.error.code || 'upstream_unavailable', body: json.error.data,
+  });
+  const result = json.result ?? json;
+  if (result?.isError) {
+    const detail = unwrapMcp(result);
+    throw Object.assign(new Error(`${name}: partner tool failed`), {
+      code: detail?.code || detail?.error || 'upstream_unavailable', body: typeof detail === 'object' ? detail : undefined,
+    });
+  }
+  return result;
 }
 
 export async function mcpCall(cfg, accessToken, name, args = {}, fetchImpl = fetch) {

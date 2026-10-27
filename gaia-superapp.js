@@ -973,6 +973,7 @@
     return ev ? '<section class="g-home2__upcoming" aria-label="Upcoming"><p class="g-super-kicker">Upcoming</p>' + ev + '</section>' : '';
   }
   window.addEventListener('gaia:readings-loaded', () => { if (memberState().authed && document.querySelector('.g-home2')) renderHome(); });
+  window.addEventListener('gaia:readings-status', () => { if (document.querySelector('.g-home2')) renderHome(); });
   document.addEventListener('click', (e) => {
     const open = e.target.closest('[data-open-readings]');
     if (open) {

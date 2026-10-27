@@ -17,7 +17,7 @@ staging tools are pending.
   Errors: `404 code_invalid`, `410 code_expired`, `409 already_linked`, `401`.
 - **Unlink from either side:** member → Gaia revokes locally first, then calls
   their `unlink_customer_member { customer_id }`; practitioner → their server
-  calls `POST …/member-link/revoke { customer_id }`.
+  calls `POST …/member-link/revoke { gaia_member_id, customer_id, practitioner_id, link_id? }`.
 - **BAA:** until a BAA-covered AI provider serves those turns, Gaia's existing
   practitioner scan tools no longer narrate values (the Practice card shows
   them; the model is told only that the reading is on screen), and the
@@ -167,3 +167,28 @@ shown as "readings unavailable right now", never as a wrong result.
 
 We'll build the Gaia side (screen, tools, tests) in parallel against fixtures;
 our estimate is about a week once your staging tools exist.
+
+## Connection lifecycle hardening (October 2026)
+
+- Redemption also returns an opaque `link_id`. Revoke notifications must include
+  the complete member/customer/practitioner tuple; missing fields return `400
+  bad_args`. A tuple that no longer matches is an idempotent no-op (`revoked:
+  false`). Send `link_id` as well to reject delayed revokes after a new link to
+  the same customer and practitioner; the tuple alone cannot distinguish those
+  generations.
+- Member tokens and recommendation caches belong to a particular link and
+  backend environment. Relinking or revoking invalidates both. An in-flight
+  response from an obsolete link cannot populate the new link's cache.
+- OAuth refreshes cannot restore a disconnected connection or overwrite a
+  replacement. An obsolete refresh returns `connection_changed` (HTTP 409).
+- Complete upstream reading failure returns `503 readings_unavailable`. Partial
+  results include `partial: true` and section errors so the UI can offer retry.
+  Failure to fetch a latest reading is not evidence that no reading exists.
+- General file lists require a boolean `shareable: true`; the explicitly
+  shared-only tool may omit that flag. File links must be HTTPS and cannot
+  contain embedded credentials.
+- The frontend clears reading and summary state on identity changes and ignores
+  late responses from the previous account.
+
+These changes do not enable production partner services or change deployment
+configuration. Tests use fictional members and local mock services.

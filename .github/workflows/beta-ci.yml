@@ -1,10 +1,10 @@
 name: Isolated beta CI
 on:
   pull_request:
-    paths: ['beta/**', 'staging-proxy/personal-path.js', '.github/workflows/beta-ci.yml']
+    paths: ['beta/**', 'staging-proxy/personal-path.js', 'membership-service/src/catalog.js', '.github/workflows/beta-ci.yml']
   push:
     branches: [main]
-    paths: ['beta/**', 'staging-proxy/personal-path.js', '.github/workflows/beta-ci.yml']
+    paths: ['beta/**', 'staging-proxy/personal-path.js', 'membership-service/src/catalog.js', '.github/workflows/beta-ci.yml']
 permissions:
   contents: read
 jobs:

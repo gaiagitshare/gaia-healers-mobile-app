@@ -52,3 +52,9 @@ test('Personal Path uses real course progress and persists dismissals within one
  pathEvent(s,{key:item.key,event:'recommendation_dismissed'});assert(!workspacePath(s).items.some(x=>x.key===item.key));
  assert(!workspacePath(seed()).items.some(x=>x.key===item.key));
 });
+
+test('beta pricing, benefits and coin rules cannot drift from the service catalog',async()=>{
+ const canonical=await import('../../membership-service/src/catalog.js');
+ const beta=await import('../beta-catalog.mjs');
+ for(const key of ['TIERS','ENTITLEMENTS','COIN_PACKAGES','COIN_CENTS'])assert.deepEqual(beta[key],canonical[key],key);
+});

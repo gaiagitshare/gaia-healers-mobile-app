@@ -1,0 +1,329 @@
+# Gaia Practitioners read-only partner API -- PROPOSED, NOT CONFIRMED.
+#
+# Machine-readable form of docs/membership/PARTNER-INTEGRATION-REQUEST.md.
+# The validators in membership-service/src/partner/contract.js and
+# membership-service/src/providers/practitioners/adapter.js must agree with the
+# schemas below (required fields and enums); test/providers-openapi.test.js
+# fails if they drift. Every field is a request until the partner confirms it.
+openapi: 3.1.0
+info:
+  title: Gaia Practitioners partner API (proposed)
+  version: 0.1.0-proposed
+  description: "Read-only, server-to-server. Gaia Healers never writes to the partner database, coin system or billing. Status: contract proposed, not confirmed."
+servers:
+  - url: https://partner.example.invalid
+    description: "Placeholder; the partner supplies sandbox and production hosts."
+security:
+  - serviceToken: []
+paths:
+  /v1/practitioners/{id}:
+    get:
+      operationId: getPractitioner
+      parameters:
+        - $ref: "#/components/parameters/AccountId"
+      responses:
+        "200":
+          description: The practitioner account.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PractitionerIdentity"
+        "401":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+        "429":
+          $ref: "#/components/responses/Error"
+  /v1/practitioners/{id}/subscriptions:
+    get:
+      operationId: listSubscriptions
+      parameters:
+        - $ref: "#/components/parameters/AccountId"
+        - $ref: "#/components/parameters/Cursor"
+        - $ref: "#/components/parameters/Limit"
+      responses:
+        "200":
+          description: One page of subscriptions.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SubscriptionPage"
+        "404":
+          $ref: "#/components/responses/Error"
+        "429":
+          $ref: "#/components/responses/Error"
+  /v1/practitioners/{id}/coins:
+    get:
+      operationId: getCoinLedger
+      description: "Balance plus the FULL transaction history, paged. The balance must be identical on every page and equal the sum of all transactions."
+      parameters:
+        - $ref: "#/components/parameters/AccountId"
+        - $ref: "#/components/parameters/Cursor"
+        - $ref: "#/components/parameters/Limit"
+      responses:
+        "200":
+          description: One page of coin transactions with the balance.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CoinLedgerPage"
+        "404":
+          $ref: "#/components/responses/Error"
+        "429":
+          $ref: "#/components/responses/Error"
+  /v1/practitioners/{id}/entitlements:
+    get:
+      operationId: listModuleEntitlements
+      parameters:
+        - $ref: "#/components/parameters/AccountId"
+        - $ref: "#/components/parameters/Cursor"
+        - $ref: "#/components/parameters/Limit"
+      responses:
+        "200":
+          description: One page of active module entitlements and their source.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EntitlementPage"
+        "404":
+          $ref: "#/components/responses/Error"
+webhooks:
+  partnerEvent:
+    post:
+      operationId: partnerEvent
+      description: "Signed with header Gaia-Partner-Signature t=<unix>,v1=<hex HMAC-SHA256(secret, t + '.' + raw body)>. 5-minute tolerance; the event id is unique (duplicates are acknowledged once)."
+      parameters:
+        - name: Gaia-Partner-Signature
+          in: header
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/WebhookEvent"
+      responses:
+        "200":
+          description: Accepted or duplicate.
+        "400":
+          description: Bad signature, unknown type or invalid data.
+        "409":
+          description: Event id reused with a different body.
+components:
+  securitySchemes:
+    serviceToken:
+      type: http
+      scheme: bearer
+      description: "Service token issued by the partner to Gaia Healers; server to server only."
+  parameters:
+    AccountId:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: string
+        pattern: "^[A-Za-z0-9_-]{1,200}$"
+    Cursor:
+      name: cursor
+      in: query
+      required: false
+      schema:
+        type: string
+        maxLength: 500
+    Limit:
+      name: limit
+      in: query
+      required: false
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 100
+  responses:
+    Error:
+      description: Error.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+  schemas:
+    Error:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: object
+          required: [code, message]
+          properties:
+            code:
+              type: string
+            message:
+              type: string
+    PractitionerIdentity:
+      type: object
+      required: [practitioner_account_id, status]
+      properties:
+        practitioner_account_id:
+          type: string
+          minLength: 1
+          maxLength: 200
+        status:
+          type: string
+          enum: [active, pending, suspended, closed]
+        email:
+          type: string
+          minLength: 1
+          maxLength: 200
+        gaia_contact_id:
+          type: [string, "null"]
+          maxLength: 200
+    Subscription:
+      type: object
+      required: [subscription_id, practitioner_account_id, plan_code, status, price_cents, currency, interval, current_period_end, billing_owner, billing_provider, modules]
+      properties:
+        subscription_id:
+          type: string
+          minLength: 1
+          maxLength: 200
+        practitioner_account_id:
+          type: string
+          minLength: 1
+          maxLength: 200
+        plan_code:
+          type: string
+          minLength: 1
+          maxLength: 200
+        status:
+          type: string
+          enum: [trialing, active, past_due, paused, canceled, expired]
+        price_cents:
+          type: integer
+          minimum: 0
+        currency:
+          type: string
+          pattern: "^[A-Z]{3}$"
+        interval:
+          type: string
+          enum: [month, year]
+        current_period_end:
+          type: string
+          format: date-time
+        billing_owner:
+          type: string
+          enum: [partner, gaia, none]
+        billing_provider:
+          type: [string, "null"]
+          maxLength: 200
+        modules:
+          type: array
+          items:
+            type: string
+            minLength: 1
+            maxLength: 200
+    CoinBalance:
+      type: object
+      required: [practitioner_account_id, coins, as_of]
+      properties:
+        practitioner_account_id:
+          type: string
+          minLength: 1
+          maxLength: 200
+        coins:
+          type: integer
+        as_of:
+          type: string
+          format: date-time
+    CoinTransaction:
+      type: object
+      required: [transaction_id, delta_coins, source, created_at]
+      description: "payment_ref is REQUIRED when source is purchase (a purchase must name its payment)."
+      properties:
+        transaction_id:
+          type: string
+          minLength: 1
+          maxLength: 200
+        delta_coins:
+          type: integer
+          not:
+            const: 0
+        source:
+          type: string
+          enum: [purchase, grant, promotion, compensation, refund, adjustment, spend, unknown]
+        payment_ref:
+          type: string
+          minLength: 1
+          maxLength: 200
+        created_at:
+          type: string
+          format: date-time
+    ModuleEntitlement:
+      type: object
+      required: [module, source]
+      properties:
+        module:
+          type: string
+          minLength: 1
+          maxLength: 200
+        source:
+          type: string
+          enum: [subscription, grant, promotion, trial, legacy]
+        subscription_id:
+          type: [string, "null"]
+        ends_at:
+          type: [string, "null"]
+          format: date-time
+    SubscriptionPage:
+      type: object
+      required: [data, next_cursor]
+      properties:
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/Subscription"
+        next_cursor:
+          type: [string, "null"]
+          maxLength: 500
+    CoinLedgerPage:
+      type: object
+      required: [balance, data, next_cursor]
+      properties:
+        balance:
+          $ref: "#/components/schemas/CoinBalance"
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/CoinTransaction"
+        next_cursor:
+          type: [string, "null"]
+          maxLength: 500
+    EntitlementPage:
+      type: object
+      required: [data, next_cursor]
+      properties:
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/ModuleEntitlement"
+        next_cursor:
+          type: [string, "null"]
+          maxLength: 500
+    WebhookEvent:
+      type: object
+      required: [id, type, created, data]
+      properties:
+        id:
+          type: string
+          pattern: "^[A-Za-z0-9_-]{8,200}$"
+        type:
+          type: string
+          enum: [subscription.updated, coins.changed, practitioner.status_changed]
+        created:
+          type: integer
+          minimum: 1
+        data:
+          type: object
+          required: [object]
+          properties:
+            object:
+              description: "Subscription for subscription.updated, PractitionerIdentity for practitioner.status_changed, { practitioner_account_id } for coins.changed."

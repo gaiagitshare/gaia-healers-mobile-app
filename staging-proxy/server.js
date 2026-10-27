@@ -35,6 +35,8 @@ import { attachQwenVoiceRelay, qwenRouting, issueQwenTicket, qwenVoiceConfig, vo
 import { normalizeUsage, recordUsage, recordFailure } from './assist-usage.js';
 import { toolDeclarationsFor, clientToolNames, slowToolNames, runTool, modelView, readMcp } from './assist-tools.js';
 import { createPathRoutes } from './path-routes.js';
+import { createMembership2Gateway } from './membership2-gateway.js';
+import { createMembership2AdminGateway } from './membership2-admin-gateway.js';
 import { approvedForMember, partnerRecsGate } from './partner-recs.js';
 import { getPrefs, setPrefs } from './member-prefs.js';
 import { memberReadingsEnabled, memberAllowed, mintCode, redeemCode, revokeLink, linkStatus, linkFor, partnerAuthorized, memberReadings, notifyPartnerUnlink, rememberLatest, markSeen, refreshLatest, linksForPractitioner, recheckAfterDays, memberForPractitionerClient } from './member-link.js';
@@ -4394,6 +4396,10 @@ async function pathPlanLevel(req, member) {
   return ['active', 'trialing', 'past_due'].includes(ms.status) && ms.key ? String(ms.key) : 'free';
 }
 { const g = partnerRecsGate(process.env, practitionersConfig().environment); console.log('[Gaia Path] partner approved recommendations:', g.enabled ? `ON (${g.mode})` : `off (${g.reason})`); }
+const membership2Gateway = createMembership2Gateway({ env: process.env });
+console.log(`[membership2] member gateway ${membership2Gateway.config.enabled ? 'ON' : 'off (' + membership2Gateway.config.reason + ')'}`);
+const membership2AdminGateway = createMembership2AdminGateway({ env: process.env });
+console.log(`[membership2] admin gateway ${membership2AdminGateway.config.enabled ? 'ON' : 'off (' + membership2AdminGateway.config.reason + ')'}`);
 const pathRoutes = createPathRoutes({
   requireSessionMember: (...a) => requireSessionMember(...a), sendJson, readJsonBody, linkState, tokenFor, memberReadingsEnabled, memberAllowed, linkStatus,
   recheckAfterDays, memberForPractitionerClient, loadAcademyManifest, loadAcademyProgress, academyOwnedIdsForRequest, academyCourseOwned,
@@ -7193,6 +7199,17 @@ const server = http.createServer(async (req, res) => {
       sendJson(res, 200, boot, origin);
       return;
     }
+    // Control Center Membership 2.0 area: OFF unless MEMBERSHIP2_ADMIN=on; while off every path is the unknown-admin-route 404.
+    if (url.pathname === '/api/admin/membership2' || url.pathname.startsWith('/api/admin/membership2/')) {
+      const handled = await membership2AdminGateway.handle(req, res, url, {
+        origin, sendJson, readJsonBody, parseCookies,
+        isAdmin: (r) => adminRouter.consoleAuthed(r, { parseCookies, readSignedToken }),   // same check as the rest of /api/admin (cookie or Event bearer)
+        ownOrigins: (r) => { const host = String(r.headers.host || '').split(',')[0].trim(); return [`https://${host}`, PROXY_PUBLIC_URL, ...ALLOWED_ORIGINS]; },
+        clientIp: (r) => adminRouter.clientIp(r),
+      });
+      if (!handled) sendJson(res, 404, { ok: false, reason: 'unknown_admin_route' }, origin);
+      return;
+    }
     if (url.pathname.startsWith('/api/admin/')) {
       await adminRouter.handle(req, res, url, {
         origin, sendJson, readJsonBody, signTokenPayload, readSignedToken,
@@ -7280,6 +7297,8 @@ const server = http.createServer(async (req, res) => {
       sendJson(res, 200, { ok: true, product: detail }, origin);
       return;
     }
+    // Gaia Healers Membership 2.0 member gateway: OFF unless MEMBERSHIP2_GATEWAY=on (falls through to 404).
+    if (url.pathname.startsWith('/api/membership2/') && await membership2Gateway.handle(req, res, url, { origin, sendJson, readJsonBody, requireSessionMember })) return;
     if (req.method === 'GET' && url.pathname === '/api/membership/plans') {
       // Served from the policy an operator edits, so the Store and the Control
       // Center can never disagree about what a plan costs or promises.

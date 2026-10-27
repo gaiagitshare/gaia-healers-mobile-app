@@ -13,7 +13,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { appTest, readApp } from './_app-present.js';
 
-const APP_FILES = ['gaia-member.js', 'gaia-membership-ui.js', 'gaia-ui.js', 'gaia-superapp.js'];
+const APP_FILES = ['gaia-member.js', 'gaia-membership-ui.js', 'gaia-membership2.js', 'gaia-ui.js', 'gaia-superapp.js'];
 const read = (file) => readApp(file);
 
 /* Comments are stripped before scanning: a guard that trips over its own

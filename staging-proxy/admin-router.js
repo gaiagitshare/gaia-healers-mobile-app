@@ -1272,7 +1272,7 @@ async function handle(req, res, url, deps) {
   const { origin, sendJson } = deps;
   const p = url.pathname.replace(/\/+$/, '') || url.pathname;
   const method = req.method;
-  const authed = () => Boolean(adminCookieFromReq(req, deps) || verifyEventBearer(req));
+  const authed = () => consoleAuthed(req, deps);
   const need = () => { sendJson(res, 401, { ok: false, reason: 'admin_auth_required' }, origin); };
 
   // --- session / login / logout (public) ---
@@ -1463,4 +1463,11 @@ async function handle(req, res, url, deps) {
   return sendJson(res, 404, { ok: false, reason: 'unknown_admin_route' }, origin);
 }
 
-export { handle, publishedAnnouncements, publishedEvents, alertExtras };
+/**
+ * The Control Center sign-in check, in one place: the gaia_admin cookie OR an
+ * Event Manager bearer (single sign-on). Used by handle() and by the
+ * Membership 2.0 admin gateway, so both accept exactly the same sessions.
+ */
+function consoleAuthed(req, deps) { return Boolean(adminCookieFromReq(req, deps) || verifyEventBearer(req)); }
+
+export { handle, publishedAnnouncements, publishedEvents, alertExtras, consoleAuthed, clientIp };

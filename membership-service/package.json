@@ -1,0 +1,19 @@
+{
+  "name": "gaia-membership-service",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Gaia membership foundation: plans, subscriptions, entitlements, coin wallets, payment ledger, webhooks, identity. Not wired to production.",
+  "scripts": {
+    "migrate": "node src/cli/migrate.js",
+    "test": "node --test --test-concurrency=1 test/*.test.js",
+    "testdb:up": "sh scripts/test-db.sh up",
+    "testdb:down": "sh scripts/test-db.sh down"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "pg": "^8.23.1"
+  }
+}

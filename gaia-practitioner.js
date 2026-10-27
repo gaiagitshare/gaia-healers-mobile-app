@@ -187,6 +187,7 @@
       exchange_failed: 'Gaia Practitioners did not accept the sign-in. Please try again in a moment.',
       not_practitioner: 'That Gaia Practitioners account is not a practitioner account.',
       unverified: 'We could not read your practitioner profile. Please try again.',
+      partner_terms_required: 'Gaia Practitioners needs you to accept its AI data-sharing terms first: open your Gaia Practitioners dashboard, go to MCP Connection, accept, then try again.',
       account_not_active: 'That Gaia Practitioners account is not active. Please contact Gaia Practitioners.',
     };
     // What the last connect attempt brought back, if the page was just returned to.
@@ -229,7 +230,7 @@
       if (status.state === 'unverified') {
         paint(`<div class="gaia-empty">
           ${lastAttempt()}
-          <p class="gaia-empty__text">Your account is connected, but we could not read your practitioner profile.</p>
+          <p class="gaia-empty__text">${status.reason === 'partner_terms_required' ? esc(REASONS.partner_terms_required) : 'Your account is connected, but we could not read your practitioner profile.'}</p>
           ${status.practitioner_email ? `<p class="g-prac__muted">Connected as ${esc(status.practitioner_email)}</p>` : ''}
           <a class="g-btn g-btn--primary g-btn--sm" href="${esc(proxyBase())}/api/practitioners/connect">Try again</a>
           <button type="button" class="g-btn g-btn--ghost g-btn--sm" data-prac-action="disconnect">Disconnect</button>
@@ -468,7 +469,9 @@
       const cta = card.querySelector('.g-prac__card-cta');
       if (cta) cta.textContent = 'Hide';
       if (payload && payload.error) {
-        body.innerHTML = empty(payload.error === 'upstream_unavailable'
+        body.innerHTML = empty(payload.error === 'partner_terms_required'
+          ? REASONS.partner_terms_required
+          : payload.error === 'upstream_unavailable'
           ? 'Bio-Well did not answer. Try again.'
           : 'Could not load that just now.', { action: `retry-${kind}`, label: 'Try again' });
         return;

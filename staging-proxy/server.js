@@ -7686,7 +7686,7 @@ const server = http.createServer(async (req, res) => {
         // for arguments that make no sense, 409 when the practitioner simply has
         // not connected yet -- each one is a different thing for the page to say.
         const status = { forbidden: 403, unknown_tool: 404, client_tool: 400,
-                         bad_args: 400, not_connected: 409, needs_reconnect: 409, connection_changed: 409,
+                         bad_args: 400, not_connected: 409, needs_reconnect: 409, connection_changed: 409, partner_terms_required: 409,
                          upstream_unavailable: 504 }[code] || 502;
         if (status >= 500) {
           console.error('[Gaia Assist] tool failed', { name, code, error: String(e.message || e).slice(0, 160) });
@@ -7800,7 +7800,7 @@ const server = http.createServer(async (req, res) => {
             .then(() => console.log('[Gaia Practitioners] GHL practitioner tag mirrored', { contact: member.contactId }))
             .catch((e) => console.warn('[Gaia Practitioners] GHL tag mirror failed (not blocking)', { error: String(e?.message || e).slice(0, 100) }));
         }
-        sendRedirect(res, back(verdict.verified === true, verdict.verified === false ? (verdict.reason === 'account_not_active' ? 'account_not_active' : 'not_practitioner') : (verdict.verified === null ? 'unverified' : '')), origin);
+        sendRedirect(res, back(verdict.verified === true, verdict.verified === false ? (verdict.reason === 'account_not_active' ? 'account_not_active' : 'not_practitioner') : (verdict.verified === null ? (verdict.reason === 'partner_terms_required' ? 'partner_terms_required' : 'unverified') : '')), origin);
       } catch (e) {
         console.error('[Gaia Practitioners] connect failed', { error: String(e.message || e).slice(0, 200) });
         sendRedirect(res, back(false, 'exchange_failed'), origin);

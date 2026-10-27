@@ -233,6 +233,7 @@ export const VERIFICATION_VERSION = 3;
 const ALLOWED_PROFILE_STATUSES = new Set(['active', 'pending']);
 export const INACTIVE_STATUSES = new Set(['suspended', 'disabled', 'inactive', 'rejected', 'banned', 'deleted', 'blocked', 'archived']);
 export function verifyPractitioner(who) {
+  if (who?.terms_required) return { verified: null, reason: 'partner_terms_required' };
   if (!who || who.raw_ok === false) return { verified: null, reason: 'profile_unreadable' };
   if (who.profile_source !== PROFILE_SOURCE) return { verified: null, reason: 'profile_unreadable' };
   if (who.profile_role && who.profile_role !== 'practitioner') return { verified: false, reason: 'no_practitioner_profile' };
@@ -456,6 +457,20 @@ function mcpFailure(name, { timedOut = false, status = 0, detail = '' } = {}) {
   });
 }
 
+/*
+ * Gaia Practitioners gates its MCP behind AI data-sharing terms that the
+ * practitioner accepts in their own dashboard (MCP Connection). Until they do,
+ * every call answers JSON-RPC -32001 with that instruction (seen on staging,
+ * 27 Oct 2026). It is not an outage and not a broken token: the connection is
+ * fine, only the practitioner can clear it, so it is reported as its own state.
+ */
+export const PARTNER_TERMS_MESSAGE = 'Accept the AI data-sharing terms in your Gaia Practitioners dashboard (MCP Connection) first.';
+export function partnerTermsRequired(error) {
+  if (!error || typeof error !== 'object') return false;
+  if (['terms_required', 'ai_terms_required', 'terms_not_accepted'].includes(String(error.data?.code || ''))) return true;
+  return error.code === -32001 && /data[- ]sharing terms|accept the ai/i.test(String(error.message || ''));
+}
+
 async function mcpAttempt(cfg, accessToken, name, args, fetchImpl) {
   let r;
   try {
@@ -497,9 +512,12 @@ async function mcpAttempt(cfg, accessToken, name, args, fetchImpl) {
     const last = text.trim().split('\n').filter((l) => l.startsWith('data:')).pop();
     if (last) { try { json = JSON.parse(last.slice(5).trim()); } catch { /* fall through */ } }
   }
-  if (json.error) throw Object.assign(new Error(`${name}: ${json.error.message || 'partner error'}`), {
-    code: json.error.data?.code || json.error.code || 'upstream_unavailable', body: json.error.data,
-  });
+  if (json.error) {
+    if (partnerTermsRequired(json.error)) throw Object.assign(new Error(`${name}: ${PARTNER_TERMS_MESSAGE}`), { code: 'partner_terms_required', status: 409 });
+    throw Object.assign(new Error(`${name}: ${json.error.message || 'partner error'}`), {
+      code: json.error.data?.code || json.error.code || 'upstream_unavailable', body: json.error.data,
+    });
+  }
   const result = json.result ?? json;
   if (result?.isError) {
     const detail = unwrapMcp(result);
@@ -589,6 +607,7 @@ export async function resolveProfile(cfg, accessToken, fetchImpl = fetch) {
     // A token that cannot read its own profile is still a token; record that we
     // could not confirm who it belongs to rather than inventing an identity.
     return { practitioner_name: '', practitioner_email: '', practitioner_id: '', profile_role: '', profile_status: '', raw_ok: false,
+             ...(e?.code === 'partner_terms_required' ? { terms_required: true } : {}),
              note: String(e.message || e).slice(0, 140) };
   }
 }

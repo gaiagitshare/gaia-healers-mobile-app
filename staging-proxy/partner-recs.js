@@ -176,11 +176,11 @@ export async function approvedForMember(cfg0, memberId, { env = process.env, fet
     // Authorization refusal is not an outage: never serve formerly approved
     // content after the provider has withdrawn access.
     if ([401, 403, 404, 410].includes(e?.status) ||
-        ['forbidden_scope', 'member_not_linked', 'link_revoked', 'link_pending'].includes(e?.code)) {
+        ['partner_terms_required', 'forbidden_scope', 'member_not_linked', 'link_revoked', 'link_pending'].includes(e?.code)) {
       invalidateMemberToken(id);
       const latest = readCache();
       if (latest.members?.[id]?.scope === scope) { delete latest.members[id]; writeCache(latest); }
-      return { items: [], state: 'access_denied' };
+      return { items: [], state: e?.code === 'partner_terms_required' ? 'partner_terms_required' : 'access_denied' };
     }
     if (prev && prev.ok_at && now - prev.ok_at < STALE_MAX_MS) return { items: prev.items || [], state: 'stale' };
     return { items: [], state: 'unavailable' };

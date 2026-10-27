@@ -471,6 +471,7 @@
       watchSeen(root);
       return;
     }
+    if (r.body.error === 'partner_terms_required') { root.innerHTML = note('Your practitioner needs to review the AI data-sharing terms in their Gaia Practitioners dashboard (MCP Connection). Your existing link is saved.', { id: 'refresh', label: 'Check again' }); return; }
     if (r.body.error === 'member_not_linked' || r.body.error === 'link_revoked') { root.innerHTML = consentCard({ ...status, linked: false }); return; }
     root.innerHTML = note('Your readings are not available right now. Please try again in a moment.', { id: 'refresh', label: 'Try again' });
   }

@@ -185,3 +185,26 @@ test('provider authorization refusal purges recommendations instead of using sta
     assert.deepEqual(offline.items,[]);
   }
 });
+
+const termsReply = () => json({ error: { code: -32001, message: 'Accept the AI data-sharing terms in your Gaia Practitioners dashboard (MCP Connection) first.' } });
+test('member discovery consent denial stops before requesting any readings', async () => {
+  const f = fixture(); let discoveries = 0;
+  await assert.rejects(ml.memberReadings(cfg, f.id, { env, file: f.file, fetchImpl: async url => {
+    if (url.endsWith('/member-token')) return tokenReply();
+    discoveries++; return termsReply();
+  } }), e => e.code === 'partner_terms_required' && e.status === 409);
+  assert.equal(discoveries, 1); assert(ml.linkFor(f.id, f.file));
+});
+test('member tool consent denial cannot become partial or empty successful readings', async () => {
+  const f = fixture();
+  await assert.rejects(ml.memberReadings(cfg, f.id, { env, file: f.file, fetchImpl: partner(() => termsReply()) }), e => e.code === 'partner_terms_required' && e.status === 409);
+});
+test('consent denial purges cached recommendations and cannot serve stale items', async () => {
+  const f = fixture(), now = Date.now();
+  const first = await approvedForMember(cfg, f.id, { env, linkFile: f.file, now, fetchImpl: async url => url.endsWith('/member-token') ? tokenReply() : result(recommendation('allowed')) });
+  assert.equal(first.items.length, 1);
+  const denied = await approvedForMember(cfg, f.id, { env, linkFile: f.file, now: now + 11*60_000, fetchImpl: async () => termsReply() });
+  assert.equal(denied.state, 'partner_terms_required'); assert.deepEqual(denied.items, []);
+  const offline = await approvedForMember(cfg, f.id, { env, linkFile: f.file, now: now + 12*60_000, fetchImpl: async () => { throw Error('offline'); } });
+  assert.deepEqual(offline.items, []);
+});

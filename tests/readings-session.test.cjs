@@ -7,7 +7,7 @@ const path = require('node:path');
 const vm = require('node:vm');
 const source = fs.readFileSync(path.join(__dirname, '../gaia-my-readings.js'), 'utf8');
 const tick = async () => { for (let i = 0; i < 5; i++) await new Promise(resolve => setImmediate(resolve)); };
-function fixture({ pauseStatus = false, pauseReadings = false, partial = false } = {}) {
+function fixture({ termsRequired = false, pauseStatus = false, pauseReadings = false, partial = false } = {}) {
   const handlers = new Map(), calls = [], rootHandlers = {};  let person = 'A', finishStatus, finishReadings;
   const root = { hidden: false, innerHTML: '', offsetParent: null, classList: { add() {}, remove() {}, toggle() {} }, addEventListener(type, fn) { rootHandlers[type] = fn; }, querySelector: () => null, querySelectorAll: () => [] };
   const share = { ...root };
@@ -25,6 +25,7 @@ function fixture({ pauseStatus = false, pauseReadings = false, partial = false }
     }
     if (url.endsWith('/api/member/prefs')) return response({ ok: true, prefs: {} });
     if (url.endsWith('/my-readings')) {
+      if (termsRequired) return new Response(JSON.stringify({ error: 'partner_terms_required' }), { status: 409 });
       const body = { ok: true, partial, latest: { scanned_at: '2026-10-01', energy: 54, stress: 2, chakras: [] }, summary: { headline: 'Private reading for A', lines: [] }, practitioner: { name: 'Practitioner A' }, files: [], series: [], comparisons: [] };
       if (pauseReadings && owner === 'A') return new Promise(resolve => { finishReadings = () => resolve(response(body)); });
       return response(body);
@@ -65,4 +66,10 @@ test('mounting twice does not register duplicate per-person listeners', async ()
   f.window.GaiaNotice = { confirm: () => new Promise(resolve => { confirm = resolve; }) };
   const pending = f.click('unlink'); f.auth('B'); await tick(); confirm(true); await pending;
   assert(!f.calls.some(c => c.url.endsWith('/member-link/unlink')));
+});
+
+test('consent denial explains the dashboard action without discarding the member link', async () => {
+  const f = fixture({ termsRequired: true }); await tick();
+  assert(f.root.innerHTML.includes('MCP Connection')); assert(f.root.innerHTML.includes('existing link is saved'));
+  assert.equal(f.api.latest(), null); assert.equal(f.api.status().linked, true);
 });

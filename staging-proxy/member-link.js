@@ -23,7 +23,7 @@ import crypto from 'crypto';
 import { safeEqual } from './safe-equal.js';
 import fs from 'fs';
 import path from 'path';
-import { mcpCall, unwrapMcp } from './practitioners-oauth.js';
+import { mcpCall, unwrapMcp, partnerTermsRequired } from './practitioners-oauth.js';
 
 export const LINK_FILE = process.env.GAIA_MEMBER_LINK_FILE || '/root/gaia-staging-proxy/data/member-links.json';
 // 24 hours, at the partner's request (4 Oct): a member who is not in the
@@ -359,7 +359,7 @@ const practitionerNote = (o) => {
   return null;
 };
 
-const PARTNER_ERRORS = { link_changed: 409, member_not_linked: 404, link_pending: 409, link_revoked: 410, forbidden_scope: 403 };
+const PARTNER_ERRORS = { partner_terms_required: 409, link_changed: 409, member_not_linked: 404, link_pending: 409, link_revoked: 410, forbidden_scope: 403 };
 function partnerError(e) {
   const code = String(e?.body?.code || e?.code || '');
   if (PARTNER_ERRORS[code]) return Object.assign(new Error(code), { code, status: PARTNER_ERRORS[code] });
@@ -374,8 +374,9 @@ async function memberToolNames(cfg, token, fetchImpl) {
     const r = await fetchImpl(cfg.mcpUrl, { method: 'POST', headers: { 'Content-Type': 'application/json', Accept: 'application/json', Authorization: `Bearer ${token}` },
       body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/list', params: {} }), signal: AbortSignal.timeout(15000) });
     const j = await r.json();
+    if (partnerTermsRequired(j?.error)) throw Object.assign(new Error('partner_terms_required'), { code: 'partner_terms_required', status: 409 });
     return new Set((j?.result?.tools || j?.tools || []).map((t) => t?.name).filter(Boolean));
-  } catch { return new Set(); }
+  } catch (e) { if (e?.code === 'partner_terms_required') throw e; return new Set(); }
 }
 
 /**
@@ -407,7 +408,7 @@ export async function memberReadings(cfg0, memberId, { env = process.env, fetchI
     (has(mine) ? call(mine, args.mine) : has(ours) ? call(ours, args.ours) : call(theirs, args.theirs));
   const errors = {};
   const part = (name, promise) => promise.catch((e) => {
-    if (['member_not_linked', 'link_pending', 'link_revoked', 'forbidden_scope', 'link_changed'].includes(e.code)) throw e;
+    if (['partner_terms_required', 'member_not_linked', 'link_pending', 'link_revoked', 'forbidden_scope', 'link_changed'].includes(e.code)) throw e;
     errors[name] = e.code || 'readings_unavailable'; return null;
   });
   const fileTool = has('list_my_shared_files') ? 'list_my_shared_files' : has('get_member_files') ? 'get_member_files' : 'get_customer_files';

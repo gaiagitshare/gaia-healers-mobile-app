@@ -172,3 +172,16 @@ test('a failed latest read is not described as a successfully empty history', as
   const r = await ml.memberReadings(cfg, f.id, { env, file: f.file, fetchImpl: partner(name => name === 'get_my_latest_scan' ? json({ error: { code: 'unavailable' } }) : result({})) });
   assert.equal(r.partial, true); assert.equal(r.summary.headline, 'Your reading could not be loaded');
 });
+
+
+test('provider authorization refusal purges recommendations instead of using stale content', async () => {
+  for (const status of [401, 403, 404, 410]) {
+    const f = fixture(), now = Date.now();
+    const first = await approvedForMember(cfg, f.id, {env,linkFile:f.file,now,fetchImpl:async url => url.endsWith('/member-token') ? tokenReply() : result(recommendation('allowed'))});
+    assert.equal(first.items.length, 1);
+    const denied = await approvedForMember(cfg, f.id, {env,linkFile:f.file,now:now+11*60_000,fetchImpl:async () => json({error:'forbidden_scope'},status)});
+    assert.equal(denied.state,'access_denied'); assert.deepEqual(denied.items,[]);
+    const offline = await approvedForMember(cfg, f.id, {env,linkFile:f.file,now:now+12*60_000,fetchImpl:async () => {throw Error('offline');}});
+    assert.deepEqual(offline.items,[]);
+  }
+});

@@ -32,7 +32,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { mcpCall, unwrapMcp } from './practitioners-oauth.js';
-import { memberToken, memberBackend, linkFor, memberLinkScope, onMemberLinkChange } from './member-link.js';
+import { invalidateMemberToken, memberToken, memberBackend, linkFor, memberLinkScope, onMemberLinkChange } from './member-link.js';
 
 export const PARTNER_HOSTS = Object.freeze({
   staging: ['staging.gaiapractitioners.com'],
@@ -173,6 +173,15 @@ export async function approvedForMember(cfg0, memberId, { env = process.env, fet
   } catch (e) {
     log('approved recommendations unavailable', { code: e?.code || 'error' });
     if (!current()) return { items: [], state: 'link_changed' };
+    // Authorization refusal is not an outage: never serve formerly approved
+    // content after the provider has withdrawn access.
+    if ([401, 403, 404, 410].includes(e?.status) ||
+        ['forbidden_scope', 'member_not_linked', 'link_revoked', 'link_pending'].includes(e?.code)) {
+      invalidateMemberToken(id);
+      const latest = readCache();
+      if (latest.members?.[id]?.scope === scope) { delete latest.members[id]; writeCache(latest); }
+      return { items: [], state: 'access_denied' };
+    }
     if (prev && prev.ok_at && now - prev.ok_at < STALE_MAX_MS) return { items: prev.items || [], state: 'stale' };
     return { items: [], state: 'unavailable' };
   }

@@ -480,7 +480,7 @@ async function mcpAttempt(cfg, accessToken, name, args, fetchImpl) {
   }
 
   const text = await r.text();
-  if (r.status === 401) throw Object.assign(new Error('practitioner token rejected'), { code: 401 });
+  if (r.status === 401) throw Object.assign(new Error('practitioner token rejected'), { code: 401, status: 401 });
   // Anything else that is not a success has to FAIL rather than fall through.
   // It used to fall through: a 503 left json as {}, the handler saw no scans
   // and told the practitioner their client had none on file. A wrong answer

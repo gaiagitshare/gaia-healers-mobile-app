@@ -280,6 +280,7 @@ export function memberBackend(cfg, env = process.env) {
 const memberApiKey = (env = process.env) => String(env.GAIA_PRACTITIONERS_MEMBER_API_KEY || '').trim();
 
 const _memberTokens = new Map();   // gaia_member_id -> { value, exp }
+export function invalidateMemberToken(memberId) { _memberTokens.delete(String(memberId)); }
 export function _resetServerTokenForTest() { _serverToken = null; _memberTokens.clear(); }
 async function backendCall(cfg, method, pathname, { env = process.env, fetchImpl = fetch, body } = {}) {
   const key = memberApiKey(env);

@@ -1,39 +1,64 @@
 name: Deploy static prototype to GitHub Pages
 
+# Publishes ONLY the member-app frontend. scripts/pages-build.mjs copies an
+# explicit allowlist into _site/ and scripts/pages-check.mjs fails the run if
+# _site/ holds backend source, docs, tests, env/backup files, or if a page
+# references a local file that was not copied. Pull requests run the same
+# build + check without deploying.
+
 on:
   push:
     branches:
       - main
+  pull_request:
   workflow_dispatch:
 
 permissions:
   contents: read
-  pages: write
-  id-token: write
-  actions: read
-
-concurrency:
-  group: pages
-  cancel-in-progress: false
 
 jobs:
-  deploy:
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
+  build:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Build frontend-only artifact
+        run: node scripts/pages-build.mjs _site
+
+      - name: Check artifact (denylist + every local reference resolves)
+        run: node scripts/pages-check.mjs _site
+
       - name: Configure Pages
+        if: github.event_name != 'pull_request'
         uses: actions/configure-pages@v5
 
       - name: Upload artifact
+        if: github.event_name != 'pull_request'
         uses: actions/upload-pages-artifact@v3
         with:
-          path: .
+          path: _site
 
+  deploy:
+    needs: build
+    if: github.event_name != 'pull_request'
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+      actions: read
+    concurrency:
+      group: pages
+      cancel-in-progress: false
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    runs-on: ubuntu-latest
+    steps:
       - name: Deploy to GitHub Pages
         id: deployment
         uses: actions/deploy-pages@v4

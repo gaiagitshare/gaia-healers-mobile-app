@@ -27,6 +27,8 @@ test("Gaia's member context carries only that readings exist / a new one is wait
 
 test('what the page sends with a Gaia message is the screen and an item id, not page text', () => {
   const ui = readApp('gaia-ui.js');
-  assert.match(ui, /const pageContext = \(\) => \{ const screen=window\.GaiaAppShell\?\.currentView\?\.\(\) \|\| 'today'; return window\.GaiaAssistGuide\.context\(window\.GaiaJourney\?\.context \|\| \{screen, itemId:/);
+  // The Membership 2.0 preview view is reported as 'store' (where Membership lives): it is
+  // deliberately not in the assistant's screen map, so it adds no prompt tokens.
+  assert.match(ui, /const pageContext = \(\) => \{ const view=window\.GaiaAppShell\?\.currentView\?\.\(\) \|\| 'today'; const screen=view==='membership'\?'store':view; return window\.GaiaAssistGuide\.context\(window\.GaiaJourney\?\.context \|\| \{screen, itemId:/);
   assert.doesNotMatch(readApp('gaia-my-readings.js'), /api\/assist\/(chat|voice|tool)/);
 });

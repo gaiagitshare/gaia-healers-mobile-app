@@ -30,7 +30,7 @@
   const esc = (v) => String(v ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   const proxyBase = () => (window.GaiaApi && window.GaiaApi.base && window.GaiaApi.base()) || (window.GaiaConfig && window.GaiaConfig.proxyBase) || window.GAIA_PROXY_BASE || 'https://api.gaiahealers.app';
   const api = async (path, opts = {}) => {
-    const res = await fetch(`${proxyBase()}${path}`, { credentials: 'include', headers: { Accept: 'application/json', ...(opts.body ? { 'Content-Type': 'application/json' } : {}) }, method: opts.method || 'GET', body: opts.body ? JSON.stringify(opts.body) : undefined });
+    const res = await fetch(`${proxyBase()}${path}`, { credentials: 'include', headers: { Accept: 'application/json', ...(opts.body ? { 'Content-Type': 'application/json' } : {}) }, signal: opts.signal, method: opts.method || 'GET', body: opts.body ? JSON.stringify(opts.body) : undefined });
     const body = await res.json().catch(() => ({}));
     return { ok: res.ok && body.ok !== false, status: res.status, body };
   };
@@ -406,8 +406,41 @@
       </div></article>`;
   }
   let lastSummary = null, lastReadings = null, lastStatus = null, expanded = false, lastPrefs = {};
+  let memberId = '', authKnown = false, generation = 0, renderNumber = 0, pendingRead = null, mountedRoot = null;
+  const identity = (m) => String(m?.contactId || m?.memberId || m?.id || '');
+  function clearReadings(root) {
+    generation += 1; pendingRead?.abort(); pendingRead = null;
+    lastSummary = null; lastReadings = null; lastStatus = null; lastPrefs = {}; expanded = false;
+    seenObserver?.disconnect(); seenObserver = null; seenFor = null;
+    if (root) { root.hidden = true; root.innerHTML = ''; }
+    const share = document.getElementById('member-data-sharing');
+    if (share) { share.hidden = true; share.innerHTML = ''; }
+    setTodayLink({ linked: false, fresh: false, scannedAt: null });
+    window.dispatchEvent(new CustomEvent('gaia:readings-status', { detail: { linked: false, new_reading: false, latest_scanned_at: null } }));
+  }
+  function changeMember(next) {
+    if (next === memberId) return;
+    memberId = next; clearReadings(mountedRoot);
+  }
+  function onAuth(event) {
+    authKnown = true;
+    changeMember(event.detail?.authenticated ? identity(event.detail.member) : '');
+    if (mountedRoot && memberId) render(mountedRoot).catch(() => {});
+  }
+  document.addEventListener('gaia:auth', onAuth);
+  window.addEventListener('gaia:signed-out', () => { authKnown = true; memberId = ''; clearReadings(mountedRoot); });
   async function render(root) {
-    const [st, pf] = await Promise.all([api('/api/practitioners/member-link/status'), api('/api/member/prefs').catch(() => ({ ok: false, body: {} }))]);
+    if (!memberId) { clearReadings(root); return; }
+    pendingRead?.abort();
+    const controller = new AbortController(); pendingRead = controller;
+    const owner = memberId, epoch = generation, run = ++renderNumber;
+    const current = () => !controller.signal.aborted && owner === memberId && epoch === generation && run === renderNumber;
+    const request = (url) => api(url, { signal: controller.signal });
+    let st, pf;
+    try {
+      [st, pf] = await Promise.all([request('/api/practitioners/member-link/status'), request('/api/member/prefs').catch(() => ({ ok: false, body: {} }))]);
+    } catch { if (current()) { root.hidden = false; root.innerHTML = note('Your readings are not available right now. Please try again in a moment.', { id: 'refresh', label: 'Try again' }); } return; }
+    if (!current()) return;
     const prefs = (pf.ok && pf.body.prefs) || {};
     const share = document.getElementById('member-data-sharing');
     if (!st.ok) { root.hidden = true; lastStatus = null; if (share) { share.hidden = true; share.innerHTML = ''; } setTodayLink({ linked: false, fresh: false }); return; }             // not signed in, or feature off (404)
@@ -420,10 +453,13 @@
     setTodayLink({ linked: Boolean(status.linked), fresh: Boolean(status.new_reading), scannedAt: status.latest_scanned_at || null });
     if (!status.linked) { root.innerHTML = consentCard(status); return; }
     root.innerHTML = note('Loading your readings… this fetches live from Bio-Well and can take about 20 seconds.');
-    const r = await api('/api/practitioners/my-readings');
+    let r;
+    try { r = await request('/api/practitioners/my-readings'); }
+    catch { if (current()) root.innerHTML = note('Your readings are not available right now. Please try again in a moment.', { id: 'refresh', label: 'Try again' }); return; }
+    if (!current()) return;
     if (r.ok) {
       lastSummary = r.body.summary || null; lastReadings = r.body; lastPrefs = prefs;
-      root.innerHTML = expanded ? readingsCard(r.body, status, prefs) : foldedCard(r.body);
+      root.innerHTML = (r.body.partial ? note('Some sections could not be loaded. Refresh to try again.', { id: 'refresh', label: 'Refresh' }) : '') + (expanded ? readingsCard(r.body, status, prefs) : foldedCard(r.body));
       window.dispatchEvent(new CustomEvent('gaia:readings-loaded', { detail: { scanned_at: r.body.latest?.scanned_at || null } }));
       // The link record may hold no practitioner name (their redeem call sends
       // none); once the readings are in, the sharing card can say who.
@@ -435,6 +471,7 @@
       watchSeen(root);
       return;
     }
+    if (r.body.error === 'partner_terms_required') { root.innerHTML = note('Your practitioner needs to review the AI data-sharing terms in their Gaia Practitioners dashboard (MCP Connection). Your existing link is saved.', { id: 'refresh', label: 'Check again' }); return; }
     if (r.body.error === 'member_not_linked' || r.body.error === 'link_revoked') { root.innerHTML = consentCard({ ...status, linked: false }); return; }
     root.innerHTML = note('Your readings are not available right now. Please try again in a moment.', { id: 'refresh', label: 'Try again' });
   }
@@ -467,10 +504,18 @@
   async function mount() {
     const root = document.getElementById('member-readings');
     if (!root) return;
+    if (mountedRoot === root) return;
+    mountedRoot = root;
+    if (!authKnown) {
+      const state = window.GaiaMember;
+      memberId = state?.authed ? identity(state.data?.profile?.profile) : '';
+    }
     const onClick = async (e) => {
       const btn = e.target.closest('[data-readings-action]');
       if (!btn) return;
       const action = btn.getAttribute('data-readings-action');
+      const owner = memberId, epoch = generation;
+      const current = () => owner && owner === memberId && epoch === generation;
       btn.disabled = true;
       try {
         if (action === 'image') {
@@ -512,13 +557,15 @@
         }
         if (action === 'code') {
           const out = await api('/api/practitioners/member-link/code', { method: 'POST', body: {} });
+          if (!current()) return;
           root.innerHTML = out.ok ? codeCard(out.body) : note(out.body.error === 'already_linked' ? 'You are already sharing with a practitioner.' : 'Could not create a code right now.', { id: 'refresh', label: 'Try again' });
           return;
         }
         if (action === 'unlink') {
           const ok = window.GaiaNotice?.confirm ? await window.GaiaNotice.confirm('Stop sharing your readings with your practitioner?') : window.confirm('Stop sharing your readings with your practitioner?');
-          if (!ok) return;
+          if (!ok || !current()) return;
           await api('/api/practitioners/member-link/unlink', { method: 'POST', body: {} });
+          if (!current()) return;
         }
         await render(root);
       } finally { btn.disabled = false; }
@@ -533,7 +580,7 @@
     }, true);
     let pendingReveal = false;
     window.addEventListener('gaia:open-readings', () => { if (!reveal(root)) pendingReveal = true; });
-    window.addEventListener('gaia:signed-out', () => { root.hidden = true; root.innerHTML = ''; const share = document.getElementById('member-data-sharing'); if (share) { share.hidden = true; share.innerHTML = ''; } setTodayLink({ linked: false, fresh: false }); });
+
 
     try { if (new URLSearchParams(location.search).get('section') === 'readings') pendingReveal = true; } catch { /* ignore */ }
     await render(root);
@@ -589,7 +636,7 @@
     if (ex) steps.push({ el: ex, open: ex, compact: true, text: `What each figure is. What your numbers mean for you is a question for ${who}.` });
     return steps;
   }
-  const latest = () => (lastReadings && lastReadings.latest ? { latest: lastReadings.latest, summary: lastReadings.summary || null, average: lastReadings.average_recent || null, practitioner: lastReadings.practitioner?.name || '' } : null);
-  window.GaiaMyReadings = { mount, render, reveal, latest, ageOf, guide, recheckLine, status: () => (lastStatus ? { linked: Boolean(lastStatus.linked), new_reading: Boolean(lastStatus.new_reading), latest_scanned_at: lastStatus.latest_scanned_at || null, code_active: Boolean(lastStatus.code_active) } : {}) };
+  const latest = () => (memberId && lastReadings && lastReadings.latest ? { latest: lastReadings.latest, summary: lastReadings.summary || null, average: lastReadings.average_recent || null, practitioner: lastReadings.practitioner?.name || '' } : null);
+  window.GaiaMyReadings = { mount, render, reveal, latest, ageOf, guide, recheckLine, status: () => (memberId && lastStatus ? { linked: Boolean(lastStatus.linked), new_reading: Boolean(lastStatus.new_reading), latest_scanned_at: lastStatus.latest_scanned_at || null, code_active: Boolean(lastStatus.code_active) } : {}) };
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', mount); else mount();
 })();

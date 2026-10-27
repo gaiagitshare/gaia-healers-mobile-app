@@ -235,7 +235,9 @@ test('approved partner recommendations: only the session member\'s own, as path 
   assert.equal((await call('POST', '/api/member/path/event', 'member-b', { event: 'recommendation_opened', key: pr[0].key, surface: 'you', title: 'Chakra balancing session', summary: 'SENTINEL_SUMMARY' })).status, 200);
   const last = fs.readFileSync(process.env.GAIA_PATH_EVENTS_FILE, 'utf8').trim().split('\n').pop();
   assert.match(last, /"item_id":"PR"/); assert.match(last, /"source":"partner_approved"/);
-  assert.doesNotMatch(last, /SENTINEL|Chakra|Calming|shop|:31:|service:7/, 'no partner content, ids or links in analytics');
+  const { t, ...eventFields } = JSON.parse(last);
+  assert.equal(typeof t, 'string');
+  assert.doesNotMatch(JSON.stringify(eventFields), /SENTINEL|Chakra|Calming|shop|:31:|service:7/, 'no partner content, ids or links in analytics (timestamps are metadata)');
   const line = await routes.assistPathLine({}, { contactId: 'member-b' }, { appointments: [] });
   assert.doesNotMatch(line, /SENTINEL|Chakra|Calming|gentle|Sam Rivera|gaiapractitioners/, 'Gaia gets a generic line only');
   PARTNER['member-b'] = { items: [] };

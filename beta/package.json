@@ -1,0 +1,9 @@
+{
+  "name": "gaia-isolated-beta",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "BETA_ACADEMY_MANIFEST=./test-fixtures/academy-manifest.json node --test beta-tests/*.test.mjs",
+    "check": "node --check beta-server.mjs"
+  }
+}

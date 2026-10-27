@@ -71,7 +71,7 @@ test('the server: connect has no GHL gate, the callback verifies and mirrors, st
   assert.match(callback, /const verdict = verifyPractitioner\(who\);/);
   assert.match(callback, /verified: verdict\.verified,\n\s+verification_version: VERIFICATION_VERSION,\n\s+verify_reason: verdict\.reason,/);
   assert.match(callback, /if \(verdict\.verified === true\) \{\n\s+ghlPost\(`\/contacts\/\$\{encodeURIComponent\(member\.contactId\)\}\/tags`, \{ tags: \['gaiapractitioner'\] \}\)/, 'the GHL tag is mirrored after verification, best effort');
-  assert.match(callback, /back\(verdict\.verified === true, verdict\.verified === false \? \(verdict\.reason === 'account_not_active' \? 'account_not_active' : 'not_practitioner'\) : \(verdict\.verified === null \? 'unverified' : ''\)\)/, 'an unverified or inactive account is reported as a failure, with its reason');
+  assert.match(callback, /back\(verdict\.verified === true, verdict\.verified === false \? \(verdict\.reason === 'account_not_active' \? 'account_not_active' : 'not_practitioner'\) : \(verdict\.verified === null \? \(verdict\.reason === 'partner_terms_required' \? 'partner_terms_required' : 'unverified'\) : ''\)\)/, 'an unverified or inactive account is reported as a failure, with its reason');
   assert.match(srv, /\.\.\.connectionStatus\(member\.contactId\),\n\s+\.\.\.linkState\(member\.contactId\),/, '/status carries the one state');
   assert.match(srv, /const isPractitioner = await practitionerAuthorization\(member\.contactId/, 'shared authorization policy');
 });

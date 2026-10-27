@@ -183,7 +183,7 @@ export function writeTokens(all, file = TOKEN_FILE) {
 
 export function saveToken(contactId, row, file = TOKEN_FILE) {
   const all = readTokens(file);
-  all[String(contactId)] = row;
+  all[String(contactId)] = { ...row, connection_id: row.connection_id || crypto.randomUUID() };
   writeTokens(all, file);
   return row;
 }
@@ -233,6 +233,7 @@ export const VERIFICATION_VERSION = 3;
 const ALLOWED_PROFILE_STATUSES = new Set(['active', 'pending']);
 export const INACTIVE_STATUSES = new Set(['suspended', 'disabled', 'inactive', 'rejected', 'banned', 'deleted', 'blocked', 'archived']);
 export function verifyPractitioner(who) {
+  if (who?.terms_required) return { verified: null, reason: 'partner_terms_required' };
   if (!who || who.raw_ok === false) return { verified: null, reason: 'profile_unreadable' };
   if (who.profile_source !== PROFILE_SOURCE) return { verified: null, reason: 'profile_unreadable' };
   if (who.profile_role && who.profile_role !== 'practitioner') return { verified: false, reason: 'no_practitioner_profile' };
@@ -394,10 +395,18 @@ export async function validAccessToken(cfg, contactId, { file = TOKEN_FILE, fetc
     throw Object.assign(new Error('token expired and no refresh token held'), { code: 'needs_reconnect' });
   }
 
-  if (refreshing.has(key)) return refreshing.get(key);
+  const refreshKey = `${file}:${key}:${row.connection_id || row.refresh_token}`;
+  const stillCurrent = () => {
+    const current = tokenFor(key, file);
+    return current && current.connection_id === row.connection_id
+      && current.refresh_token === row.refresh_token && current.access_token === row.access_token;
+  };
+  const changed = () => Object.assign(new Error('connection changed; retry with the current account'), { code: 'connection_changed' });
+  if (refreshing.has(refreshKey)) return refreshing.get(refreshKey);
   const work = (async () => {
     try {
       const fresh = await refreshAccess(cfg, row.refresh_token, fetchImpl);
+      if (!stillCurrent()) throw changed();
       saveToken(key, {
         ...row,
         access_token: fresh.access_token,
@@ -413,6 +422,7 @@ export async function validAccessToken(cfg, contactId, { file = TOKEN_FILE, fetc
       // A refusal means the chain is done: the stored token is spent and no new
       // one arrived. Say so plainly rather than leaving a dead token in place
       // for every later call to rediscover.
+      if (!stillCurrent()) throw changed();
       if (e.status === 400 || e.status === 401) {
         saveToken(key, { ...row, access_token: '', refresh_token: '', needs_reconnect: true,
                          broken_at: new Date().toISOString(), broke_because: String(e.message).slice(0, 160) }, file);
@@ -420,10 +430,10 @@ export async function validAccessToken(cfg, contactId, { file = TOKEN_FILE, fetc
       }
       throw e;                      // a network blip is not a broken chain
     } finally {
-      refreshing.delete(key);
+      refreshing.delete(refreshKey);
     }
   })();
-  refreshing.set(key, work);
+  refreshing.set(refreshKey, work);
   return work;
 }
 
@@ -445,6 +455,20 @@ function mcpFailure(name, { timedOut = false, status = 0, detail = '' } = {}) {
     // retry is for. A 4xx is an answer about the request itself.
     retryable: !timedOut && (status === 0 || status === 429 || status >= 500),
   });
+}
+
+/*
+ * Gaia Practitioners gates its MCP behind AI data-sharing terms that the
+ * practitioner accepts in their own dashboard (MCP Connection). Until they do,
+ * every call answers JSON-RPC -32001 with that instruction (seen on staging,
+ * 27 Oct 2026). It is not an outage and not a broken token: the connection is
+ * fine, only the practitioner can clear it, so it is reported as its own state.
+ */
+export const PARTNER_TERMS_MESSAGE = 'Accept the AI data-sharing terms in your Gaia Practitioners dashboard (MCP Connection) first.';
+export function partnerTermsRequired(error) {
+  if (!error || typeof error !== 'object') return false;
+  if (['terms_required', 'ai_terms_required', 'terms_not_accepted'].includes(String(error.data?.code || ''))) return true;
+  return error.code === -32001 && /data[- ]sharing terms|accept the ai/i.test(String(error.message || ''));
 }
 
 async function mcpAttempt(cfg, accessToken, name, args, fetchImpl) {
@@ -471,12 +495,16 @@ async function mcpAttempt(cfg, accessToken, name, args, fetchImpl) {
   }
 
   const text = await r.text();
-  if (r.status === 401) throw Object.assign(new Error('practitioner token rejected'), { code: 401 });
+  if (r.status === 401) throw Object.assign(new Error('practitioner token rejected'), { code: 401, status: 401 });
   // Anything else that is not a success has to FAIL rather than fall through.
   // It used to fall through: a 503 left json as {}, the handler saw no scans
   // and told the practitioner their client had none on file. A wrong answer
   // about a client's readings is worse than a card that says it could not load.
-  if (!r.ok) throw mcpFailure(name, { status: r.status, detail: text.trim().slice(0, 120) });
+  if (!r.ok) {
+    const failure = mcpFailure(name, { status: r.status, detail: text.trim().slice(0, 120) });
+    try { failure.body = JSON.parse(text); } catch { /* no structured partner code */ }
+    throw failure;
+  }
 
   let json = {};
   try { json = JSON.parse(text); } catch {
@@ -484,8 +512,20 @@ async function mcpAttempt(cfg, accessToken, name, args, fetchImpl) {
     const last = text.trim().split('\n').filter((l) => l.startsWith('data:')).pop();
     if (last) { try { json = JSON.parse(last.slice(5).trim()); } catch { /* fall through */ } }
   }
-  if (json.error) throw new Error(`${name}: ${json.error.message || JSON.stringify(json.error)}`);
-  return json.result ?? json;
+  if (json.error) {
+    if (partnerTermsRequired(json.error)) throw Object.assign(new Error(`${name}: ${PARTNER_TERMS_MESSAGE}`), { code: 'partner_terms_required', status: 409 });
+    throw Object.assign(new Error(`${name}: ${json.error.message || 'partner error'}`), {
+      code: json.error.data?.code || json.error.code || 'upstream_unavailable', body: json.error.data,
+    });
+  }
+  const result = json.result ?? json;
+  if (result?.isError) {
+    const detail = unwrapMcp(result);
+    throw Object.assign(new Error(`${name}: partner tool failed`), {
+      code: detail?.code || detail?.error || 'upstream_unavailable', body: typeof detail === 'object' ? detail : undefined,
+    });
+  }
+  return result;
 }
 
 export async function mcpCall(cfg, accessToken, name, args = {}, fetchImpl = fetch) {
@@ -567,6 +607,7 @@ export async function resolveProfile(cfg, accessToken, fetchImpl = fetch) {
     // A token that cannot read its own profile is still a token; record that we
     // could not confirm who it belongs to rather than inventing an identity.
     return { practitioner_name: '', practitioner_email: '', practitioner_id: '', profile_role: '', profile_status: '', raw_ok: false,
+             ...(e?.code === 'partner_terms_required' ? { terms_required: true } : {}),
              note: String(e.message || e).slice(0, 140) };
   }
 }

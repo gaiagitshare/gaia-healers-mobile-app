@@ -78,6 +78,7 @@
   <link rel="stylesheet" href="gaia-guest-home.css?v=20261005g" />
   <link rel="stylesheet" href="gaia-assist-v3.css?v=20260928c" />
   <link rel="stylesheet" href="gaia-shell.css?v=20261006v" />
+  <link rel="stylesheet" href="gaia-membership2.css?v=20261026c" />
   <link rel="stylesheet" href="vendor/leaflet/leaflet.css?v=1.9.4" />
   <link rel="stylesheet" href="vendor/leaflet/MarkerCluster.css?v=1.5.3" />
   <link rel="stylesheet" href="vendor/leaflet/MarkerCluster.Default.css?v=1.5.3" />
@@ -404,6 +405,7 @@
         <div id="member-path" class="g-page-sec" aria-label="Your Gaia Path" hidden></div>
         <div id="member-readings" class="g-page-sec" aria-label="My readings" hidden></div>
         <div id="member-me" class="g-page-sec" role="tabpanel" aria-label="You"></div>
+        <div id="m2-entry-you" hidden></div>
         <!-- Your data and sharing: one place for what is shared with whom, how to
              stop, and how to bring hidden cards back. Rendered by gaia-my-readings.js. -->
         <div id="member-data-sharing" class="g-page-sec" aria-label="Your data and sharing" hidden></div>
@@ -436,7 +438,20 @@
         <div id="store-products" class="g-store-panel" role="tabpanel" aria-label="Shop"></div>
         <!-- Membership panel: real tiers (gaia-member.js) -->
         <div id="store-memberships" class="g-store-panel" role="tabpanel" aria-label="Membership" hidden></div>
+        <!-- Membership 2.0 preview entry: filled by gaia-membership2.js only when its feature probe succeeds -->
+        <div id="m2-entry-store" hidden></div>
       </main>
+    </section>
+
+    <!-- MEMBERSHIP 2.0 (preview) — rendered by gaia-membership2.js from /api/membership2/*.
+         Unreachable unless the gateway answers; ?view=membership otherwise opens Store > Membership. -->
+    <section class="gaia-screen" data-screen="membership" aria-label="Gaia Healers Membership">
+      <header class="g-topbar">
+        <button type="button" class="g-topbar__nav" data-app-nav-btn aria-label="Home"><i class="ph ph-house" aria-hidden="true"></i></button>
+        <a href="home.html?view=today" class="g-topbar__brand g-topbar__brand--stack"><img src="assets/gaia-mark.svg" alt="" /><span>Gaia Healers</span></a>
+        <div class="g-topbar__actions gaia-header-actions" data-gaia-header-actions></div>
+      </header>
+      <main class="gaia-main g-page g-m2" id="m2-root" aria-busy="true"></main>
     </section>
 
     <!-- Admin is NOT part of the public app. It lives on a separate,
@@ -460,8 +475,9 @@
   <script defer src="gaia-cosmic.js?v=20261004z"></script>
   <script defer src="gaia-toolkit.js?v=20260907d"></script>
   <script defer src="gaia-store.js?v=20261005a"></script>
+  <script defer src="gaia-membership2.js?v=20261026c"></script>
   <script defer src="staging-proxy/assist-guide.js?v=20261004a"></script>
-  <script defer src="gaia-ui.js?v=20261005g"></script>
+  <script defer src="gaia-ui.js?v=20261026m"></script>
   <script defer src="gaia-superapp.js?v=20261006t"></script>
   <script defer src="vendor/leaflet/leaflet.js?v=1.9.4"></script>
   <script defer src="vendor/leaflet/markercluster.js?v=1.5.3"></script>

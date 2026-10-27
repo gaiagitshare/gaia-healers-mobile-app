@@ -21,6 +21,7 @@ import os
 import re
 import json
 import uuid
+import hmac
 import secrets
 import hashlib
 from dotenv import load_dotenv
@@ -366,7 +367,16 @@ def _ensure_public_tokens():
 _ensure_public_tokens()
 
 # Security setup
-SECRET_KEY = os.getenv("SECRET_KEY", "your-secret-key-change-in-production")
+# Never sign tokens with a published default: this repository is public, so any
+# fallback string here is known to everyone and would let anyone forge staff or
+# admin tokens. Missing, too short or a known default -> a random per-process key
+# (sign-ins then last until the next restart, but can never be forged) and a loud
+# log line. The live .env sets a proper key, so this changes nothing there.
+_PUBLISHED_DEFAULT_KEYS = {"", "your-secret-key-change-in-production"}
+SECRET_KEY = os.getenv("SECRET_KEY", "").strip()
+if SECRET_KEY in _PUBLISHED_DEFAULT_KEYS or len(SECRET_KEY) < 32:
+    print("SECURITY: SECRET_KEY is missing, too short or a published default; using a random per-process key. Set SECRET_KEY in backend/.env.")
+    SECRET_KEY = secrets.token_urlsafe(48)
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", "1440"))
 # No default source page: auto-sync only runs for URLs an operator configures.
@@ -5577,6 +5587,20 @@ def delete_announcement(announcement_id: int, db: Session = Depends(get_db),
 
 REGISTRATION_WEBHOOK_SECRET = os.getenv("REGISTRATION_WEBHOOK_SECRET", "").strip()
 
+
+def _secret_equal(supplied, expected) -> bool:
+    """Constant-time comparison of a supplied secret with the configured one.
+
+    Compares UTF-8 bytes, so a non-ASCII header is a clean mismatch rather than
+    the TypeError `compare_digest` raises for non-ASCII str. An empty or
+    missing expected secret never matches.
+    """
+    if not expected:
+        return False
+    given = supplied if isinstance(supplied, (bytes, bytearray)) else str(supplied or "").encode("utf-8")
+    want = expected if isinstance(expected, (bytes, bytearray)) else str(expected).encode("utf-8")
+    return hmac.compare_digest(given, want)
+
 # GHL sends different shapes depending on which trigger fires, so accept the
 # common spellings rather than demanding one exact schema.
 _FIELD_ALIASES = {
@@ -5789,7 +5813,7 @@ async def registration_webhook(request: FastAPIRequest, db: Session = Depends(ge
         or request.query_params.get("secret")
         or ""
     )
-    if not secrets.compare_digest(supplied, REGISTRATION_WEBHOOK_SECRET):
+    if not _secret_equal(supplied, REGISTRATION_WEBHOOK_SECRET):
         raise HTTPException(status_code=403, detail="Invalid secret")
 
     try:
@@ -5918,7 +5942,7 @@ def require_service_token(request: FastAPIRequest):
         raise HTTPException(status_code=503, detail="Identity service is not configured")
     header = request.headers.get("authorization") or ""
     supplied = header[7:].strip() if header.lower().startswith("bearer ") else ""
-    if not secrets.compare_digest(supplied, IDENTITY_SERVICE_TOKEN):
+    if not _secret_equal(supplied, IDENTITY_SERVICE_TOKEN):
         raise HTTPException(status_code=403, detail="Invalid service token")
     return True
 

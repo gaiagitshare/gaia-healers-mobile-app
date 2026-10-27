@@ -5,6 +5,7 @@ const assistGuide = globalThis.GaiaAssistGuide;
 import { createOnboardingStore } from './onboarding-store.js';
 import http from 'node:http';
 import crypto from 'node:crypto';
+import { safeEqual } from './safe-equal.js';
 import fs from 'node:fs';
 import path from 'node:path';
 import { URL } from 'node:url';
@@ -31,10 +32,13 @@ import {
   googleAuthUrl, appleAuthUrl, providerConfig as oauthProviderConfig, OAUTH_ENDPOINTS,
 } from './membership/oauth-core.js';
 import { classifyMembershipEvent, membershipFromEvent } from './membership/events.js';
+import { createSecretFamily, recordSecretAuth } from './ghl-webhook-secret.js';
 import { attachQwenVoiceRelay, qwenRouting, issueQwenTicket, qwenVoiceConfig, voiceBootLine } from './qwen-voice-relay.js';
 import { normalizeUsage, recordUsage, recordFailure } from './assist-usage.js';
 import { toolDeclarationsFor, clientToolNames, slowToolNames, runTool, modelView, readMcp } from './assist-tools.js';
 import { createPathRoutes } from './path-routes.js';
+import { createMembership2Gateway } from './membership2-gateway.js';
+import { createMembership2AdminGateway } from './membership2-admin-gateway.js';
 import { approvedForMember, partnerRecsGate } from './partner-recs.js';
 import { getPrefs, setPrefs } from './member-prefs.js';
 import { memberReadingsEnabled, memberAllowed, mintCode, redeemCode, revokeLink, linkStatus, linkFor, partnerAuthorized, memberReadings, notifyPartnerUnlink, rememberLatest, markSeen, refreshLatest, linksForPractitioner, recheckAfterDays, memberForPractitionerClient } from './member-link.js';
@@ -44,6 +48,7 @@ import { allowSpend, callerKey, guardSubject, spendKindFor, ASSIST_MAX_PROMPT_CH
 import { deadline, idleWatch } from './provider-timeouts.js';
 import { SAFETY_FIRST, detectCrisis, crisisReply } from './assist-safety.js';
 import { createMarkerFilter } from './assist-markers.js';
+import { clientIp } from './client-ip.js';
 import { normalizeMembership } from './membership/ledger.js';
 import {
   fixturesAvailable, fixtureKeyMatches, fixtureAccessGranted,
@@ -83,6 +88,37 @@ const MAGIC_LINK_POLL_TTL_MS = 10 * 60 * 1000;
 function cleanupMagicPolls(now) {
   for (const [id, entry] of MAGIC_LINK_POLLS) { if (entry.exp <= now) MAGIC_LINK_POLLS.delete(id); }
   if (MAGIC_LINK_POLLS.size > 20000) MAGIC_LINK_POLLS.clear();
+}
+// Device binding for the poll (audit S4). A pollId alone must not be enough to
+// receive a session: anyone can submit a victim's email and keep the pollId.
+// The requesting browser gets a random nonce in an HttpOnly cookie; a click from
+// a browser carrying that nonce completes the poll as before. A click from any
+// other browser (another device, or an iOS installed PWA vs Safari, which have
+// separate cookie jars) still signs THAT browser in, but the poll completes only
+// after the clicker types the short code shown on the requesting screen. An
+// attacker who requested the link sees the code on their own device only.
+const MAGIC_LINK_NONCE_COOKIE = 'gaia_ml_nonce';
+const MAGIC_LINK_CONFIRM_MAX_ATTEMPTS = 5;
+function readMagicNonce(req) {
+  const value = String(parseCookies(req.headers.cookie || '')[MAGIC_LINK_NONCE_COOKIE] || '');
+  return /^[A-Za-z0-9_-]{32,64}$/.test(value) ? value : '';
+}
+function magicNonceHash(nonce) {
+  return crypto.createHash('sha256').update(`gaia-ml-nonce|${nonce}`).digest('hex');
+}
+// SameSite=None to match the session cookie: the app also runs inside the GHL
+// iframe (a different site), where a Lax cookie would never be stored. The
+// nonce is only ever compared, never trusted on its own, so cross-site sending
+// grants nothing. Scoped to the magic-link endpoints.
+function buildMagicNonceCookie(nonce) {
+  return [
+    `${MAGIC_LINK_NONCE_COOKIE}=${nonce}`,
+    'Path=/api/auth/magic-link',
+    'HttpOnly',
+    'SameSite=None',
+    'Secure',
+    `Max-Age=${AUTH_MAGIC_LINK_TTL_SECONDS}`,
+  ].join('; ');
 }
 const AUTH_ALLOW_DEBUG_LINKS = process.env.AUTH_ALLOW_DEBUG_LINKS === 'true';
 const AUTH_ALLOW_UNVERIFIED_EMAIL_MAGIC_LINK = process.env.AUTH_ALLOW_UNVERIFIED_EMAIL_MAGIC_LINK === 'true';
@@ -375,6 +411,36 @@ export function isCrossSiteMemberWrite(req) {
   return !own.includes(from);
 }
 
+const ADMIN_COOKIE_NAME = process.env.GAIA_ADMIN_COOKIE || 'gaia_admin';
+
+/**
+ * Why an admin write must be refused, or '' to let it through.
+ *
+ * The Control Center cookie (gaia_admin) is SameSite=None, so a browser sends
+ * it on requests from ANY site, and readJsonBody parses a text/plain body as
+ * JSON — a form or fetch on another site could otherwise publish events, edit
+ * tags or change memberships as the signed-in operator. A cookie-authenticated
+ * write must therefore come from one of our own pages (Origin, else Referer)
+ * and carry a JSON body. A request with an Authorization header is not
+ * cookie-authenticated: a cross-site page cannot attach one without a CORS
+ * preflight, which only our allowed origins pass. Reads are untouched.
+ */
+export function crossSiteAdminWriteReason(req) {
+  if (!['POST', 'PUT', 'PATCH', 'DELETE'].includes(req.method)) return '';
+  if (String(req.headers.authorization || '').trim()) return ''; // bearer (Event Manager SSO)
+  const cookie = String(req.headers.cookie || '');
+  if (!cookie.split(/;\s*/).some((c) => c.startsWith(`${ADMIN_COOKIE_NAME}=`))) return ''; // no admin cookie, nothing to forge
+  const from = requestSourceOrigin(req);
+  const host = String(req.headers.host || '').split(',')[0].trim();
+  const own = [`https://${host}`, `http://${host}`, PROXY_PUBLIC_URL, ...ALLOWED_ORIGINS];
+  if (!from || !own.includes(from)) return 'admin_origin_not_allowed';
+  const length = Number(req.headers['content-length'] || 0);
+  const hasBody = length > 0 || Boolean(req.headers['transfer-encoding']);
+  const type = String(req.headers['content-type'] || '').split(';')[0].trim().toLowerCase();
+  if (hasBody && type !== 'application/json') return 'admin_json_required';
+  return '';
+}
+
 function sendJson(res, status, data, origin, extraHeaders = {}) {
   res.writeHead(status, {
     'Content-Type': 'application/json; charset=utf-8',
@@ -450,10 +516,47 @@ let _coursesCache = null;
 let _memberEntitlementsCache = null;
 let _memberEntitlementsMtimeMs = 0;
 
+// Constant time over SHA-256 digests (safe-equal.js); an empty expected secret
+// never matches. Every caller already refuses an unset secret before this.
 function safeSecretEqual(left, right) {
-  const a = Buffer.from(String(left || ''), 'utf8');
-  const b = Buffer.from(String(right || ''), 'utf8');
-  return a.length === b.length && crypto.timingSafeEqual(a, b);
+  return safeEqual(left, right);
+}
+
+// Dedicated secrets per GHL webhook family (docs/GHL-WEBHOOK-SECRET.md).
+// Unset -> exactly the old fallback. Set -> the dedicated secret, plus the old
+// fallback only while <NAME>_TRANSITION_UNTIL is in the future.
+const ghlWorkflowAuth = createSecretFamily({
+  dedicated: process.env.GHL_WORKFLOW_WEBHOOK_SECRET,
+  legacyCheck: (v) => COURSES_SYNC_SECRET.length >= 32 && safeSecretEqual(v, COURSES_SYNC_SECRET),
+  transitionUntil: process.env.GHL_WORKFLOW_WEBHOOK_SECRET_TRANSITION_UNTIL,
+  compare: safeSecretEqual,
+});
+const ghlBackfillAuth = createSecretFamily({
+  dedicated: process.env.GHL_BACKFILL_SECRET,
+  legacyCheck: (v) => ghlWorkflowAuth.check(v) !== '',
+  transitionUntil: process.env.GHL_BACKFILL_SECRET_TRANSITION_UNTIL,
+  compare: safeSecretEqual,
+});
+for (const [name, fam] of [['GHL_WORKFLOW_WEBHOOK_SECRET', ghlWorkflowAuth], ['GHL_BACKFILL_SECRET', ghlBackfillAuth]]) {
+  if (fam.invalidTransition) console.warn(`[Gaia Webhooks] ${name}_TRANSITION_UNTIL is not a valid date; the fallback secret is NOT accepted.`);
+  if (fam.configured && !fam.usable) console.warn(`[Gaia Webhooks] ${name} is shorter than 32 characters and is ignored.`);
+}
+/** Which secret authenticated a request, by family and route. Never the value. */
+function checkGhlSecret(family, route, supplied) {
+  const fam = family === 'backfill' ? ghlBackfillAuth : ghlWorkflowAuth;
+  const result = fam.check(supplied);
+  if (result) {
+    try { writeJsonAtomic(WEBHOOK_TELEMETRY_FILE, recordSecretAuth(readWebhookTelemetry(), family, route, result)); }
+    catch (_) { /* telemetry must never break auth */ }
+  }
+  return result;
+}
+function ghlSecretAuthStatus() {
+  const counts = readWebhookTelemetry().secret_auth || {};
+  return {
+    workflow: { ...ghlWorkflowAuth.describe(), ...(counts.workflow || { dedicated: 0, fallback: 0, byRoute: {} }) },
+    backfill: { ...ghlBackfillAuth.describe(), ...(counts.backfill || { dedicated: 0, fallback: 0, byRoute: {} }) },
+  };
 }
 
 function ensureCoursesDataDir() {
@@ -1103,7 +1206,7 @@ async function academySync(req, res, origin) {
   let qSecret = ''; try { qSecret = new URL(req.url, 'http://x').searchParams.get('secret') || ''; } catch (e) {}
   const supplied = String(req.headers['x-academy-secret'] || qSecret || '').trim();
   if (!expected || expected.length < 16) { sendJson(res, 503, { ok: false, error: 'sync_not_configured' }, origin); return; }
-  if (supplied.length !== expected.length || !crypto.timingSafeEqual(Buffer.from(supplied), Buffer.from(expected))) {
+  if (!safeEqual(supplied, expected)) {
     sendJson(res, 401, { ok: false, error: 'unauthorized' }, origin); return;
   }
   let body;
@@ -1235,7 +1338,7 @@ async function academyWebhook(req, res, origin) {
   const expected = String(process.env.ACADEMY_SYNC_SECRET || '').trim();
   let qSecret = ''; try { qSecret = new URL(req.url, 'http://x').searchParams.get('secret') || ''; } catch (e) {}
   const supplied = String(req.headers['x-academy-secret'] || qSecret || '').trim();
-  if (!expected || supplied.length !== expected.length || !crypto.timingSafeEqual(Buffer.from(supplied), Buffer.from(expected))) {
+  if (!expected || !safeEqual(supplied, expected)) {
     sendJson(res, 401, { ok: false, error: 'unauthorized' }, origin); return;
   }
   let body; try { body = await readJsonBody(req, 256 * 1024); } catch (e) { sendJson(res, 400, { ok: false, error: 'bad_json' }, origin); return; }
@@ -1458,7 +1561,7 @@ function academyLessonInManifest(manifest, courseId, lessonId) {
   return null;
 }
 async function academyVideoUnavailable(req, res, origin) {
-  const ip = firstNonEmptyString(req.headers['cf-connecting-ip'], String(req.headers['x-forwarded-for'] || '').split(',')[0], req.socket?.remoteAddress, 'unknown');
+  const ip = clientIp(req);
   const now = Date.now();
   const hits = (_academyVideoReportHits.get(ip) || []).filter((t) => now - t < ACADEMY_VIDEO_REPORT_WINDOW_MS);
   if (hits.length >= ACADEMY_VIDEO_REPORT_MAX_PER_WINDOW) {
@@ -1525,7 +1628,7 @@ function memberWebhookAuthorized(req, rawBody) {
   }
 
   const suppliedSecret = String(req.headers['x-webhook-secret'] || req.headers['x-sync-secret'] || '').trim();
-  if (GHL_WORKFLOW_WEBHOOK_SECRET.length >= 32 && safeSecretEqual(suppliedSecret, GHL_WORKFLOW_WEBHOOK_SECRET)) {
+  if (checkGhlSecret('workflow', 'member-access', suppliedSecret)) {
     return 'workflow-secret';
   }
   return '';
@@ -2197,7 +2300,7 @@ function backfillAuthorized(req) {
   // This route is for a trusted server-side import only, never a browser.
   if (req.headers.origin || req.headers['sec-fetch-site']) return false;
   const supplied = String(req.headers['x-backfill-secret'] || req.headers['x-webhook-secret'] || '').trim();
-  return GHL_BACKFILL_SECRET.length >= 32 && safeSecretEqual(supplied, GHL_BACKFILL_SECRET);
+  return checkGhlSecret('backfill', 'member-backfill', supplied) !== '';
 }
 
 function normalizedBackfillResources(items, resourceType, snapshotAt) {
@@ -2430,9 +2533,7 @@ function readSignedToken(token) {
   if (!token || !String(token).includes('.')) return null;
   const [body, sig] = String(token).split('.', 2);
   const expected = crypto.createHmac('sha256', authSessionSecret()).update(body).digest('base64url');
-  const left = Buffer.from(sig || '', 'utf8');
-  const right = Buffer.from(expected, 'utf8');
-  if (left.length !== right.length || !crypto.timingSafeEqual(left, right)) return null;
+  if (!safeEqual(sig || '', expected)) return null;
   try {
     const payload = JSON.parse(base64UrlDecode(body));
     if (payload.exp && Date.now() > Number(payload.exp)) return null;
@@ -2456,7 +2557,11 @@ function parseCookies(cookieHeader = '') {
 
 function cookieForRequest(req) {
   const cookies = parseCookies(req.headers.cookie || '');
-  return readSignedToken(cookies[AUTH_SESSION_COOKIE] || '');
+  const payload = readSignedToken(cookies[AUTH_SESSION_COOKIE] || '');
+  // Sessions never carry a `type`; magic-link, oauth-state and confirm tickets
+  // all do. A signed one-time token must not be replayable as a session cookie.
+  if (payload && payload.type) return null;
+  return payload;
 }
 
 function requestIsSecure(req) {
@@ -2787,8 +2892,7 @@ async function handleGhlPaymentWebhook(req, res, origin) {
   try { qSecret = new URL(req.url, 'http://localhost').searchParams.get('secret') || ''; } catch (e) { /* noop */ }
   const supplied = String(req.headers['x-gaia-secret'] || qSecret || '');
   if (!expected || !SVC) { sendJson(res, 503, { ok: false, error: 'webhook_not_configured' }, origin); return; }
-  const a = Buffer.from(supplied); const b = Buffer.from(expected);
-  if (a.length !== b.length || !crypto.timingSafeEqual(a, b)) {
+  if (!safeEqual(supplied, expected)) {
     console.warn(JSON.stringify({ evt: 'smart_webhook', outcome: 'forbidden_bad_secret' }));
     sendJson(res, 403, { ok: false, error: 'invalid_secret' }, origin); return;
   }
@@ -3134,7 +3238,7 @@ async function quizLead(req, res, origin) {
   const chakra = String(body.chakra || '').trim().toLowerCase().replace(/[^a-z-]/g, '').slice(0, 20);
   const tool = String(body.tool || 'chakra-balance').trim().toLowerCase().replace(/[^a-z0-9-]/g, '').slice(0, 40);
   const name = String(body.name || '').trim().slice(0, 80);
-  const ip = firstNonEmptyString(req.headers['cf-connecting-ip'], String(req.headers['x-forwarded-for'] || '').split(',')[0], req.socket && req.socket.remoteAddress, 'unknown');
+  const ip = clientIp(req);
   const rlKey = crypto.createHash('sha256').update(ip + '|' + email).digest('hex');
   const cutoff = Date.now() - 15 * 60 * 1000;
   const hits = (QUIZ_LEAD_REQUESTS.get(rlKey) || []).filter((t) => t > cutoff);
@@ -3250,8 +3354,11 @@ function authMagicLinkStart(_req, res) {
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Signing in · Gaia Healers</title>
 <style>body{margin:0;min-height:100vh;display:grid;place-items:center;background:#f7faf5;color:#173323;font:16px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}.card{width:min(88vw,420px);padding:32px;border-radius:22px;background:#fff;box-shadow:0 18px 55px rgba(22,61,36,.12);text-align:center}h1{font-size:24px;margin:0 0 10px}p{color:#65756b;margin:0}.dot{display:inline-block;width:10px;height:10px;margin:0 3px;border-radius:50%;background:#5cb82e;animation:p 1s infinite alternate}.dot:nth-child(2){animation-delay:.2s}.dot:nth-child(3){animation-delay:.4s}@keyframes p{to{opacity:.25;transform:translateY(-4px)}}a{color:#2f7d32}</style>
-</head><body><main class="card"><h1 id="title">Signing you in</h1><p id="status">Verifying your Gaia Healers membership…</p><p id="loader" aria-hidden="true" style="margin-top:20px"><span class="dot"></span><span class="dot"></span><span class="dot"></span></p></main>
-<script nonce="${nonce}">(async()=>{const fallback=${fallback};const status=document.getElementById('status');const title=document.getElementById('title');const loader=document.getElementById('loader');const fragment=new URLSearchParams(location.hash.slice(1));const token=fragment.get('gaia_magic')||'';history.replaceState({},'',location.pathname);if(!token){title.textContent='Sign-in link unavailable';status.innerHTML='Return to <a href="'+fallback+'">Gaia Healers</a> and request a new link.';loader.hidden=true;return}try{const response=await fetch('/api/auth/magic-link/consume',{method:'POST',headers:{'Content-Type':'application/json','Accept':'application/json'},credentials:'include',body:JSON.stringify({token})});const data=await response.json();if(!response.ok||!data.authenticated)throw new Error(data.error||'This link could not be verified.');status.textContent='Verified. Opening your Gaia Healers…';location.replace(data.returnTo||fallback)}catch(error){title.textContent='Please request a new link';status.textContent=error.message||'This sign-in link is invalid or expired.';loader.hidden=true;}})();</script></body></html>`;
+</head><body><main class="card"><h1 id="title">Signing you in</h1><p id="status">Verifying your Gaia Healers membership…</p><p id="loader" aria-hidden="true" style="margin-top:20px"><span class="dot"></span><span class="dot"></span><span class="dot"></span></p><form id="confirm" hidden style="margin-top:18px"><label for="code" style="display:block;color:#173323;font-weight:600;margin-bottom:8px">Code from your other screen</label><input id="code" inputmode="numeric" autocomplete="one-time-code" maxlength="6" pattern="[0-9]*" style="width:9em;font:600 24px/1.2 ui-monospace,monospace;letter-spacing:.2em;text-align:center;padding:10px;border:1px solid #c9d6cc;border-radius:12px"><div style="margin-top:12px"><button id="confirmBtn" type="submit" style="font-weight:600;font-size:16px;padding:12px 20px;border:0;border-radius:999px;background:#2f7d32;color:#fff">Confirm</button></div><p id="confirmMsg" role="status" style="margin-top:12px"></p><p style="margin-top:12px;font-size:13px">Only enter a code you can see on your own screen right now. Never enter a code someone sent you.</p><p style="margin-top:14px"><a id="continue" href="#">Continue in this browser instead</a></p></form></main>
+
+<script nonce="${nonce}">(async()=>{const fallback=${fallback};const status=document.getElementById('status');const title=document.getElementById('title');const loader=document.getElementById('loader');const fragment=new URLSearchParams(location.hash.slice(1));const token=fragment.get('gaia_magic')||'';history.replaceState({},'',location.pathname);if(!token){title.textContent='Sign-in link unavailable';status.innerHTML='Return to <a href="'+fallback+'">Gaia Healers</a> and request a new link.';loader.hidden=true;return}let data;try{const response=await fetch('/api/auth/magic-link/consume',{method:'POST',headers:{'Content-Type':'application/json','Accept':'application/json'},credentials:'include',body:JSON.stringify({token})});data=await response.json();if(!response.ok||!data.authenticated)throw new Error(data.error||'This link could not be verified.')}catch(error){title.textContent='Please request a new link';status.textContent=error.message||'This sign-in link is invalid or expired.';loader.hidden=true;return}const next=data.returnTo||fallback;if(!data.confirmRequired||!data.confirmTicket){status.textContent='Verified. Opening your Gaia Healers…';location.replace(next);return}
+/* Opened in a different browser from the one that asked for the link: this browser is signed in, the waiting screen needs its code typed here. */
+loader.hidden=true;title.textContent='You are signed in here';status.textContent='Waiting on another screen (for example the installed app)? Type the 6-digit code it shows to sign that screen in too.';const form=document.getElementById('confirm');const input=document.getElementById('code');const btn=document.getElementById('confirmBtn');const msg=document.getElementById('confirmMsg');const cont=document.getElementById('continue');cont.href=next;form.hidden=false;input.focus();form.addEventListener('submit',async(e)=>{e.preventDefault();const code=(input.value||'').replace(/\\D/g,'');if(code.length!==6){msg.textContent='Enter the 6-digit code.';return}btn.disabled=true;msg.textContent='Checking…';try{const r=await fetch('/api/auth/magic-link/confirm',{method:'POST',headers:{'Content-Type':'application/json','Accept':'application/json'},credentials:'include',body:JSON.stringify({ticket:data.confirmTicket,code})});const d=await r.json().catch(()=>({}));if(r.ok&&d.confirmed){title.textContent='All set';status.textContent='Your other screen will finish signing in within a few seconds.';input.disabled=true;btn.hidden=true;msg.textContent='';cont.textContent='Open Gaia Healers here';return}msg.textContent=d.error||'That code could not be confirmed.';if(d.code==='too_many_attempts'||d.code==='expired'||d.code==='invalid_ticket'){input.disabled=true;btn.hidden=true;return}btn.disabled=false;input.select()}catch(_){msg.textContent='Could not reach Gaia Healers. Please try again.';btn.disabled=false}})})();</script></body></html>`;
   res.writeHead(200, {
     'Content-Type': 'text/html; charset=utf-8',
     'Cache-Control': 'no-store',
@@ -4394,6 +4501,10 @@ async function pathPlanLevel(req, member) {
   return ['active', 'trialing', 'past_due'].includes(ms.status) && ms.key ? String(ms.key) : 'free';
 }
 { const g = partnerRecsGate(process.env, practitionersConfig().environment); console.log('[Gaia Path] partner approved recommendations:', g.enabled ? `ON (${g.mode})` : `off (${g.reason})`); }
+const membership2Gateway = createMembership2Gateway({ env: process.env });
+console.log(`[membership2] member gateway ${membership2Gateway.config.enabled ? 'ON' : 'off (' + membership2Gateway.config.reason + ')'}`);
+const membership2AdminGateway = createMembership2AdminGateway({ env: process.env });
+console.log(`[membership2] admin gateway ${membership2AdminGateway.config.enabled ? 'ON' : 'off (' + membership2AdminGateway.config.reason + ')'}`);
 const pathRoutes = createPathRoutes({
   requireSessionMember: (...a) => requireSessionMember(...a), sendJson, readJsonBody, linkState, tokenFor, memberReadingsEnabled, memberAllowed, linkStatus,
   recheckAfterDays, memberForPractitionerClient, loadAcademyManifest, loadAcademyProgress, academyOwnedIdsForRequest, academyCourseOwned,
@@ -5251,7 +5362,7 @@ async function authMagicLinkRequest(req, res, origin) {
     return;
   }
 
-  const requestIp = firstNonEmptyString(req.headers['cf-connecting-ip'], String(req.headers['x-forwarded-for'] || '').split(',')[0], req.socket?.remoteAddress, 'unknown');
+  const requestIp = clientIp(req);
   const rateKey = crypto.createHash('sha256').update(`${requestIp}|${email}`).digest('hex');
   const cutoff = Date.now() - (15 * 60 * 1000);
   const attempts = (MAGIC_LINK_REQUESTS.get(rateKey) || []).filter((time) => time > cutoff);
@@ -5270,14 +5381,30 @@ async function authMagicLinkRequest(req, res, origin) {
   // Always mint a pollId (member or not) so the response cannot be used to
   // enumerate members: a non-member's poll simply never verifies.
   const pollId = crypto.randomBytes(24).toString('base64url');
+  // One nonce per browser: a Resend reuses it, so every link this browser asked
+  // for still recognises it.
+  const deviceNonce = readMagicNonce(req) || crypto.randomBytes(24).toString('base64url');
+  const confirmCode = String(crypto.randomInt(0, 1000000)).padStart(6, '0');
   cleanupMagicPolls(Date.now());
-  MAGIC_LINK_POLLS.set(pollId, { verified: false, member: null, exp: Date.now() + MAGIC_LINK_POLL_TTL_MS });
+  MAGIC_LINK_POLLS.set(pollId, {
+    verified: false,
+    member: null,
+    exp: Date.now() + MAGIC_LINK_POLL_TTL_MS,
+    nonceHash: magicNonceHash(deviceNonce),
+    confirmCode,
+    confirmAttempts: 0,
+    awaitingCode: false,
+  });
+  const nonceHeaders = { 'Set-Cookie': buildMagicNonceCookie(deviceNonce) };
   const genericResponse = {
     ok: true,
     delivery: 'email-if-member',
     message: 'If this email belongs to a Gaia Healers member, a secure sign-in link will arrive shortly.',
     expiresInSeconds: AUTH_MAGIC_LINK_TTL_SECONDS,
     pollId,
+    // Shown on the waiting screen; typed on the device that opens the link if
+    // that is a different browser. Returned for members and non-members alike.
+    confirmCode,
   };
 
   // Every sign-in attempt is recorded. The response is deliberately identical
@@ -5300,7 +5427,7 @@ async function authMagicLinkRequest(req, res, origin) {
   if (!member) {
     // Do not reveal whether an email exists in GHL.
     logOutcome('no_member_for_email');
-    sendJson(res, 200, genericResponse, origin);
+    sendJson(res, 200, genericResponse, origin, nonceHeaders);
     return;
   }
 
@@ -5326,7 +5453,7 @@ async function authMagicLinkRequest(req, res, origin) {
     });
     if (sent.ok) {
       logOutcome('sent', { contactId: member.contactId, messageId: sent.messageId || null });
-      sendJson(res, 200, genericResponse, origin);
+      sendJson(res, 200, genericResponse, origin, nonceHeaders);
       return;
     }
     if (!AUTH_ALLOW_DEBUG_LINKS) {
@@ -5336,7 +5463,7 @@ async function authMagicLinkRequest(req, res, origin) {
         status: sent.status || null,
         detail: sent.detail || null,
       });
-      sendJson(res, 200, genericResponse, origin);
+      sendJson(res, 200, genericResponse, origin, nonceHeaders);
       return;
     }
   }
@@ -5348,14 +5475,16 @@ async function authMagicLinkRequest(req, res, origin) {
       authUrl: consumeUrl,
       member: { email: member.email, displayName: member.displayName },
       expiresInSeconds: AUTH_MAGIC_LINK_TTL_SECONDS,
-    }, origin);
+      pollId,
+      confirmCode,
+    }, origin, nonceHeaders);
     return;
   }
 
   // A member with no contact id cannot be emailed at all — worth naming
   // distinctly, because it is a data problem rather than a delivery one.
   logOutcome('no_contact_to_email', { contactId: member.contactId || null });
-  sendJson(res, 200, genericResponse, origin);
+  sendJson(res, 200, genericResponse, origin, nonceHeaders);
 }
 
 // In-app Join. Records a brand-new person in GHL (contacts.upsert — dedupes by
@@ -5375,7 +5504,7 @@ async function authJoin(req, res, origin) {
 
   // Joining writes to GHL and sends an email, so bound it per ip+email exactly
   // like the sign-in request (shares the same store, distinct key prefix).
-  const requestIp = firstNonEmptyString(req.headers['cf-connecting-ip'], String(req.headers['x-forwarded-for'] || '').split(',')[0], req.socket?.remoteAddress, 'unknown');
+  const requestIp = clientIp(req);
   const rateKey = crypto.createHash('sha256').update(`join|${requestIp}|${email}`).digest('hex');
   const cutoff = Date.now() - (15 * 60 * 1000);
   const attempts = (MAGIC_LINK_REQUESTS.get(rateKey) || []).filter((t) => t > cutoff);
@@ -5429,7 +5558,12 @@ async function authMagicLinkPoll(req, res, origin, url) {
   cleanupMagicPolls(Date.now());
   const pending = pollId ? MAGIC_LINK_POLLS.get(pollId) : null;
   if (!pending) { sendJson(res, 200, { ok: true, authenticated: false, status: 'unknown' }, origin); return; }
-  if (!pending.verified || !pending.member) { sendJson(res, 200, { ok: true, authenticated: false, status: 'pending' }, origin); return; }
+  if (!pending.verified || !pending.member) {
+    // awaiting_code: the link was opened in another browser, which now has to
+    // enter the code this screen shows. Older clients just keep polling.
+    sendJson(res, 200, { ok: true, authenticated: false, status: pending.awaitingCode ? 'awaiting_code' : 'pending' }, origin);
+    return;
+  }
   // The link was opened (email proven). Mint the session on THIS request so the
   // HttpOnly cookie lands in the caller's context (the installed PWA), not the
   // browser tab the email link happened to open. Single-use.
@@ -5466,13 +5600,27 @@ async function authMagicLinkConsume(req, res, origin, url) {
     return;
   }
   CONSUMED_MAGIC_LINKS.set(tokenHash, Number(payload.exp) || (now + AUTH_MAGIC_LINK_TTL_SECONDS * 1000));
-  // Bridge to the polling PWA: this proves the email was opened, so any app
-  // polling on this pollId may now mint its own session (in its own context).
+  // Bridge to the polling screen. Opening the link proves the mailbox; it does
+  // not prove the polling screen belongs to the mailbox owner. So the poll
+  // completes at once only when this browser carries the requester's nonce;
+  // otherwise it waits for the requester's code (authMagicLinkConfirm).
+  let confirmTicket = '';
   if (payload.pollId && MAGIC_LINK_POLLS.has(payload.pollId)) {
     const pending = MAGIC_LINK_POLLS.get(payload.pollId);
-    pending.verified = true;
+    const nonce = readMagicNonce(req);
+    const sameDevice = Boolean(nonce && pending.nonceHash
+      && safeSecretEqual(magicNonceHash(nonce), pending.nonceHash));
     pending.member = payload.member;
     pending.exp = Date.now() + MAGIC_LINK_POLL_TTL_MS;
+    if (sameDevice) {
+      pending.verified = true;
+      pending.awaitingCode = false;
+    } else if (pending.confirmCode) {
+      pending.awaitingCode = true;
+      // Only this clicking browser receives the ticket, so the requester (who
+      // knows the code) cannot confirm on the clicker's behalf.
+      confirmTicket = signTokenPayload({ type: 'magic-link-confirm', pollId: payload.pollId, iat: Date.now(), exp: pending.exp });
+    }
   }
   // They opened a link delivered to that mailbox, which is exactly what
   // verifying an email means.
@@ -5487,10 +5635,45 @@ async function authMagicLinkConsume(req, res, origin, url) {
       member: session.member,
       expiresAt: session.exp,
       returnTo: safeReturnUrl(payload.returnTo),
+      ...(confirmTicket ? { confirmRequired: true, confirmTicket } : {}),
     }, origin, sessionCookie);
   } else {
     sendRedirect(res, safeReturnUrl(payload.returnTo || url.searchParams.get('returnTo')), origin, sessionCookie);
   }
+}
+
+// The browser that opened the link (but is not the requesting browser) types
+// the code the requesting screen shows. Needs the ticket only that clicking
+// browser received; a few attempts per poll, then the poll is dropped.
+async function authMagicLinkConfirm(req, res, origin) {
+  const body = await readJsonBody(req).catch(() => ({}));
+  const ticket = readSignedToken(String(body.ticket || '').trim());
+  const code = String(body.code || '').replace(/\D/g, '').slice(0, 12);
+  if (!ticket || ticket.type !== 'magic-link-confirm' || !ticket.pollId) {
+    sendJson(res, 400, { ok: false, confirmed: false, code: 'invalid_ticket', error: 'This confirmation has expired. Request a new sign-in link.' }, origin);
+    return;
+  }
+  cleanupMagicPolls(Date.now());
+  const pending = MAGIC_LINK_POLLS.get(String(ticket.pollId));
+  if (!pending || !pending.awaitingCode || !pending.member || !pending.confirmCode) {
+    sendJson(res, 410, { ok: false, confirmed: false, code: 'expired', error: 'This confirmation has expired. Request a new sign-in link.' }, origin);
+    return;
+  }
+  pending.confirmAttempts = (pending.confirmAttempts || 0) + 1;
+  const matches = code.length === pending.confirmCode.length && safeSecretEqual(code, pending.confirmCode);
+  if (!matches) {
+    const left = MAGIC_LINK_CONFIRM_MAX_ATTEMPTS - pending.confirmAttempts;
+    if (left <= 0) {
+      MAGIC_LINK_POLLS.delete(String(ticket.pollId));
+      sendJson(res, 429, { ok: false, confirmed: false, code: 'too_many_attempts', error: 'Too many wrong codes. Request a new sign-in link on the other screen.' }, origin);
+      return;
+    }
+    sendJson(res, 401, { ok: false, confirmed: false, code: 'wrong_code', attemptsLeft: left, error: 'That code does not match. Check the code on the other screen.' }, origin);
+    return;
+  }
+  pending.verified = true;
+  pending.awaitingCode = false;
+  sendJson(res, 200, { ok: true, confirmed: true }, origin);
 }
 
 // ── OAuth / OIDC: Sign in with Google and Sign in with Apple ─────────────────
@@ -6644,11 +6827,11 @@ const server = http.createServer(async (req, res) => {
     }
     if (req.method === 'GET' && url.pathname === '/api/entitlement-review') {
       const sec = String(req.headers['x-webhook-secret'] || url.searchParams.get('secret') || '').trim();
-      if (!(GHL_WORKFLOW_WEBHOOK_SECRET.length>=32 && safeSecretEqual(sec, GHL_WORKFLOW_WEBHOOK_SECRET))) { sendJson(res,403,{ok:false,error:'forbidden'},origin); return; }
+      if (!checkGhlSecret('workflow', 'entitlement-review', sec)) { sendJson(res,403,{ok:false,error:'forbidden'},origin); return; }
       const reg = loadProductRegistry(); let rev={items:{}}; try { rev=JSON.parse(fs.readFileSync(PAYMENT_REVIEW_FILE,'utf8')); } catch(_){}
       const counts={}; for (const p of Object.values(reg.products||{})) counts[p.classification]=(counts[p.classification]||0)+1;
       const reviewRequired = Object.entries(reg.products||{}).filter(([,p])=>p.classification==='REVIEW_REQUIRED').map(([id,p])=>({product_id:id,name:p.name,orders:p.orders,note:p.note}));
-      sendJson(res,200,{ok:true,summary:counts,review_required:reviewRequired,recent_unclassified_payments:Object.values(rev.items||{})},origin); return;
+      sendJson(res,200,{ok:true,summary:counts,review_required:reviewRequired,recent_unclassified_payments:Object.values(rev.items||{}),secret_auth:ghlSecretAuthStatus()},origin); return;
     }
     if (req.method === 'GET' && url.pathname === '/api/courses') {
       await coursesList(req, res, origin);
@@ -6817,7 +7000,7 @@ const server = http.createServer(async (req, res) => {
     if (req.method === 'GET' && url.pathname === '/api/event/ghl-sales') {
       const svc = (process.env.IDENTITY_SERVICE_TOKEN || '').trim();
       const auth = String(req.headers.authorization || '').replace(/^Bearer\s+/i, '').trim();
-      if (!svc || auth !== svc) { sendJson(res, 401, { ok: false, error: 'unauthorized' }, origin); return; }
+      if (!svc || !safeEqual(auth, svc)) { sendJson(res, 401, { ok: false, error: 'unauthorized' }, origin); return; }
       const wantedRaw = String(url.searchParams.get('product_id') || '').trim();
       if (!wantedRaw) { sendJson(res, 400, { ok: false, error: 'product_id required' }, origin); return; }
       const wanted = new Set(wantedRaw.split(',').map((x) => x.trim()).filter(Boolean));
@@ -6840,7 +7023,7 @@ const server = http.createServer(async (req, res) => {
     if (req.method === 'POST' && url.pathname === '/api/event/notify') {
       const svc = (process.env.IDENTITY_SERVICE_TOKEN || '').trim();
       const auth = String(req.headers.authorization || '').replace(/^Bearer\s+/i, '').trim();
-      if (!svc || auth !== svc) { sendJson(res, 401, { ok: false, error: 'unauthorized' }, origin); return; }
+      if (!svc || !safeEqual(auth, svc)) { sendJson(res, 401, { ok: false, error: 'unauthorized' }, origin); return; }
       const body = await readJsonBody(req, 512 * 1024).catch(() => ({}));
       const contactId = String(body.contactId || '').trim();
       const subject = String(body.subject || '').trim();
@@ -7154,6 +7337,10 @@ const server = http.createServer(async (req, res) => {
       authMagicLinkStart(req, res);
       return;
     }
+    if (req.method === 'POST' && url.pathname === '/api/auth/magic-link/confirm') {
+      await authMagicLinkConfirm(req, res, origin);
+      return;
+    }
     if ((req.method === 'GET' || req.method === 'POST') && url.pathname === '/api/auth/magic-link/consume') {
       await authMagicLinkConsume(req, res, origin, url);
       return;
@@ -7193,7 +7380,29 @@ const server = http.createServer(async (req, res) => {
       sendJson(res, 200, boot, origin);
       return;
     }
+    // Control Center Membership 2.0 area: OFF unless MEMBERSHIP2_ADMIN=on; while off every path is the unknown-admin-route 404.
+    if (url.pathname === '/api/admin/membership2' || url.pathname.startsWith('/api/admin/membership2/')) {
+      const handled = await membership2AdminGateway.handle(req, res, url, {
+        origin, sendJson, readJsonBody, parseCookies,
+        isAdmin: (r) => adminRouter.consoleAuthed(r, { parseCookies, readSignedToken }),   // same check as the rest of /api/admin (cookie or Event bearer)
+        ownOrigins: (r) => { const host = String(r.headers.host || '').split(',')[0].trim(); return [`https://${host}`, PROXY_PUBLIC_URL, ...ALLOWED_ORIGINS]; },
+        clientIp: (r) => adminRouter.clientIp(r),
+      });
+      if (!handled) sendJson(res, 404, { ok: false, reason: 'unknown_admin_route' }, origin);
+      return;
+    }
     if (url.pathname.startsWith('/api/admin/')) {
+      const refused = crossSiteAdminWriteReason(req);
+      if (refused) {
+        console.warn('[Gaia] cross-site admin write refused', { path: url.pathname, reason: refused, from: requestSourceOrigin(req) });
+        sendJson(res, 403, {
+          ok: false, reason: refused,
+          error: refused === 'admin_json_required'
+            ? 'Control Center writes must send a JSON body (Content-Type: application/json).'
+            : 'This Control Center request did not come from a Gaia Healers page.',
+        }, origin);
+        return;
+      }
       await adminRouter.handle(req, res, url, {
         origin, sendJson, readJsonBody, signTokenPayload, readSignedToken,
         parseCookies, ghlGet, ghlConfig, ghlHeaders,
@@ -7280,6 +7489,8 @@ const server = http.createServer(async (req, res) => {
       sendJson(res, 200, { ok: true, product: detail }, origin);
       return;
     }
+    // Gaia Healers Membership 2.0 member gateway: OFF unless MEMBERSHIP2_GATEWAY=on (falls through to 404).
+    if (url.pathname.startsWith('/api/membership2/') && await membership2Gateway.handle(req, res, url, { origin, sendJson, readJsonBody, requireSessionMember })) return;
     if (req.method === 'GET' && url.pathname === '/api/membership/plans') {
       // Served from the policy an operator edits, so the Store and the Control
       // Center can never disagree about what a plan costs or promises.
@@ -7475,7 +7686,7 @@ const server = http.createServer(async (req, res) => {
         // for arguments that make no sense, 409 when the practitioner simply has
         // not connected yet -- each one is a different thing for the page to say.
         const status = { forbidden: 403, unknown_tool: 404, client_tool: 400,
-                         bad_args: 400, not_connected: 409, needs_reconnect: 409,
+                         bad_args: 400, not_connected: 409, needs_reconnect: 409, connection_changed: 409, partner_terms_required: 409,
                          upstream_unavailable: 504 }[code] || 502;
         if (status >= 500) {
           console.error('[Gaia Assist] tool failed', { name, code, error: String(e.message || e).slice(0, 160) });
@@ -7589,7 +7800,7 @@ const server = http.createServer(async (req, res) => {
             .then(() => console.log('[Gaia Practitioners] GHL practitioner tag mirrored', { contact: member.contactId }))
             .catch((e) => console.warn('[Gaia Practitioners] GHL tag mirror failed (not blocking)', { error: String(e?.message || e).slice(0, 100) }));
         }
-        sendRedirect(res, back(verdict.verified === true, verdict.verified === false ? (verdict.reason === 'account_not_active' ? 'account_not_active' : 'not_practitioner') : (verdict.verified === null ? 'unverified' : '')), origin);
+        sendRedirect(res, back(verdict.verified === true, verdict.verified === false ? (verdict.reason === 'account_not_active' ? 'account_not_active' : 'not_practitioner') : (verdict.verified === null ? (verdict.reason === 'partner_terms_required' ? 'partner_terms_required' : 'unverified') : '')), origin);
       } catch (e) {
         console.error('[Gaia Practitioners] connect failed', { error: String(e.message || e).slice(0, 200) });
         sendRedirect(res, back(false, 'exchange_failed'), origin);
@@ -7620,7 +7831,11 @@ const server = http.createServer(async (req, res) => {
             console.log('[Gaia Practitioners] member link confirmed', { member: out.gaia_member_id, practitioner: String(body?.practitioner_id || '') });
             sendJson(res, 200, { ok: true, ...out }, origin);
           } else {
-            const out = revokeLink({ memberId: body?.gaia_member_id, customer_id: body?.customer_id }, 'practitioner');
+            if (![body?.gaia_member_id, body?.customer_id, body?.practitioner_id].every((v) => typeof v === 'string' || typeof v === 'number')
+              || ![body.gaia_member_id, body.customer_id, body.practitioner_id].every((v) => String(v).trim())) {
+              sendJson(res, 400, { ok: false, error: 'bad_args' }, origin); return;
+            }
+            const out = revokeLink({ memberId: body.gaia_member_id, customer_id: body.customer_id, practitioner_id: body.practitioner_id, link_id: body.link_id }, 'practitioner');
             console.log('[Gaia Practitioners] member link revoked by practitioner', { revoked: out.revoked });
             sendJson(res, 200, { ok: true, ...out }, origin);
           }
@@ -7778,8 +7993,8 @@ server.listen(PORT, HOST, () => {
 // closeAllConnections() matters as much as close(): close() stops new
 // connections but waits on established keep-alive sockets, and undici (the
 // fetch tests use) holds those open, so close() alone never calls back.
-// X-Real-IP is set by nginx from the connection; the first X-Forwarded-For
-// entry is whatever the caller sent (nginx appends), so it is not used.
+// The caller as nginx saw it (X-Real-IP from a loopback peer only; see
+// client-ip.js), grouped by /64 for IPv6 like the spend guard.
 function requestIpOf(req) {
   return callerKey(req);
 }

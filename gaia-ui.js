@@ -363,7 +363,8 @@
             statusEl.classList.add('is-sent');
             statusEl.innerHTML = '<strong class="gaia-auth-modal__sent-title">\u2713 Sign-in link sent</strong>'
               + '<span class="gaia-auth-modal__sent-body">We just emailed a one-tap sign-in link to <strong>' + safeEmail + '</strong>. Open it on this device to sign in automatically.</span>'
-              + '<span class="gaia-auth-modal__sent-hint">No email within a minute? Check your <strong>spam</strong> or <strong>promotions</strong> folder — the link is good for 15 minutes.</span>';
+              + '<span class="gaia-auth-modal__sent-hint">No email within a minute? Check your <strong>spam</strong> or <strong>promotions</strong> folder — the link is good for 15 minutes.</span>'
+              + magicConfirmCodeHtml(payload.confirmCode);
             submitBtn.textContent = 'Resend link';
             if (payload.pollId) startMagicPolling(payload.pollId, statusEl, modal);
           }
@@ -467,6 +468,18 @@
       if (signOutBtn) signOutBtn.hidden = !session.authenticated;
     }
 
+    // Device binding (audit S4): if the emailed link opens in a different
+    // browser (e.g. Safari instead of this installed app), that browser asks for
+    // this code before this screen is signed in. Digits only, so safe to inline.
+    function magicConfirmCodeHtml(code) {
+      const digits = String(code || '').replace(/\D/g, '');
+      if (digits.length !== 6) return '';
+      return '<span class="gaia-auth-modal__sent-code" data-magic-confirm-code>'
+        + 'If the link opens in another browser or device, enter this code there: '
+        + '<strong style="font-family:ui-monospace,monospace;letter-spacing:.15em;font-size:1.15em">' + digits.slice(0, 3) + ' ' + digits.slice(3) + '</strong>'
+        + '</span>';
+    }
+
     let magicPollTimer = null;
     function stopMagicPolling() { if (magicPollTimer) { clearInterval(magicPollTimer); magicPollTimer = null; } }
     // Installed-PWA sign-in bridge: after requesting a magic link, poll the
@@ -486,6 +499,12 @@
             if (statusEl) statusEl.textContent = 'Signed in! Loading your account…';
             await refreshSession();
             try { if (modalEl) modalEl.hidden = true; } catch (e) {}
+          } else if (d && d.status === 'awaiting_code') {
+            const codeEl = modalEl && modalEl.querySelector('[data-magic-confirm-code]');
+            if (codeEl && !codeEl.dataset.prompted) {
+              codeEl.dataset.prompted = '1';
+              codeEl.insertAdjacentHTML('afterbegin', '<strong>Link opened in another browser.</strong> ');
+            }
           } else if (d && d.status === 'unknown') {
             stopMagicPolling();
           }
@@ -1305,7 +1324,13 @@
       const view = String(value || 'today').toLowerCase();
       if (view === 'home') return 'today';
       if (view === 'journey') return 'profile'; // Journey retired; its rollup lives in You
-      return APP_VIEWS.has(view) ? view : 'today';
+      if (APP_VIEWS.has(view)) return view;
+      // Membership 2.0 preview: a shell-only view, deliberately NOT in the
+      // assistant's screen map (so it adds nothing to any prompt). It exists
+      // only after gaia-membership2.js's feature probe saw the gateway answer;
+      // otherwise the link lands on the existing Store > Membership tab.
+      if (view === 'membership') return window.GaiaMembership2?.available?.() === true ? 'membership' : 'store';
+      return 'today';
     }
 
     function routeFromUrl() {
@@ -1324,6 +1349,8 @@
         tab = 'check';
       } else if (view === 'community' && !tab) {
         tab = 'discussion';
+      } else if (rawView === 'membership' && view === 'store') {
+        tab = 'membership';
       }
       // The event id is part of the route: boot and popstate must preserve it,
       // or a direct link to an event silently becomes the events hub.
@@ -1368,6 +1395,7 @@
         inbox: 'Inbox',
         profile: 'You',
         store: 'Store',
+        membership: 'Membership',
         admin: 'Admin',
       };
       document.title = `${labels[view] || 'Gaia'} · Gaia Healers`;
@@ -2889,7 +2917,7 @@
     const assistHistory = [];
     const declinedPrompts = new Set();
     const measure = (event, action) => document.dispatchEvent(new CustomEvent('gaia:analytics', {detail:{event, ...(action?{action:action.type}:{}), screen:pageContext().screen}}));
-    const pageContext = () => { const screen=window.GaiaAppShell?.currentView?.() || 'today'; return window.GaiaAssistGuide.context(window.GaiaJourney?.context || {screen, itemId:screen==='store'?window.GaiaStore?.currentItem?.() || '':screen==='events'?new URLSearchParams(location.search).get('event') || String(window.GaiaMember?.event?.id || '').replace(/^event-/, ''):''}); };
+    const pageContext = () => { const view=window.GaiaAppShell?.currentView?.() || 'today'; const screen=view==='membership'?'store':view; return window.GaiaAssistGuide.context(window.GaiaJourney?.context || {screen, itemId:screen==='store'?window.GaiaStore?.currentItem?.() || '':screen==='events'?new URLSearchParams(location.search).get('event') || String(window.GaiaMember?.event?.id || '').replace(/^event-/, ''):''}); };
     const rememberTurn = (role, content) => {
       assistHistory.push({ role, content });
       if (assistHistory.length > 8) assistHistory.shift();

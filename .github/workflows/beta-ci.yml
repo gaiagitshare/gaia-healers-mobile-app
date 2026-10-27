@@ -1,0 +1,21 @@
+name: Isolated beta CI
+on:
+  pull_request:
+    paths: ['beta/**', 'staging-proxy/personal-path.js', 'membership-service/src/catalog.js', '.github/workflows/beta-ci.yml']
+  push:
+    branches: [main]
+    paths: ['beta/**', 'staging-proxy/personal-path.js', 'membership-service/src/catalog.js', '.github/workflows/beta-ci.yml']
+permissions:
+  contents: read
+jobs:
+  beta:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - run: npm --prefix beta test
+      - name: Parse beta runtime and frontend
+        run: |
+          for source in beta/*.mjs beta/*.js; do node --check "$source"; done

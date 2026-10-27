@@ -15,6 +15,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
+import { safeEqual } from './safe-equal.js';
 import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import * as membershipAdmin from './membership/admin-api.js';
@@ -23,6 +24,7 @@ import { linkDayCounts, memberReadingsEnabled } from './member-link.js';
 import { loadMergeState } from './membership/contact-merges.js';
 import * as ghlAdapter from './membership/adapters/ghl-membership.js';
 import * as membershipConfig from './membership/config.js';
+import { clientIp } from './client-ip.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -55,10 +57,7 @@ function adminConfigured() { return Boolean(String(process.env.GAIA_ADMIN_PASSWO
 function passwordOk(input) {
   const secret = String(process.env.GAIA_ADMIN_PASSWORD || '');
   if (!secret) return false;
-  const a = Buffer.from(String(input || ''), 'utf8');
-  const b = Buffer.from(secret, 'utf8');
-  if (a.length !== b.length) return false;
-  return crypto.timingSafeEqual(a, b);
+  return safeEqual(String(input || ''), secret);
 }
 
 // ---------- login throttle (per client IP) ----------
@@ -66,10 +65,7 @@ const LOGIN_WINDOW_MS = 15 * 60 * 1000; // 15m
 const LOGIN_MAX_ATTEMPTS = 8;           // failures per window before lockout
 const loginAttempts = new Map();        // ip -> { count, firstAt }
 
-function clientIp(req) {
-  const fwd = String(req.headers['x-forwarded-for'] || '').split(',')[0].trim();
-  return String(req.headers['cf-connecting-ip'] || '').trim() || fwd || req.socket?.remoteAddress || 'unknown';
-}
+// clientIp: X-Real-IP only from a loopback peer (nginx); see client-ip.js.
 
 function loginBlockedFor(ip) {
   const rec = loginAttempts.get(ip);
@@ -1272,7 +1268,7 @@ async function handle(req, res, url, deps) {
   const { origin, sendJson } = deps;
   const p = url.pathname.replace(/\/+$/, '') || url.pathname;
   const method = req.method;
-  const authed = () => Boolean(adminCookieFromReq(req, deps) || verifyEventBearer(req));
+  const authed = () => consoleAuthed(req, deps);
   const need = () => { sendJson(res, 401, { ok: false, reason: 'admin_auth_required' }, origin); };
 
   // --- session / login / logout (public) ---
@@ -1463,4 +1459,11 @@ async function handle(req, res, url, deps) {
   return sendJson(res, 404, { ok: false, reason: 'unknown_admin_route' }, origin);
 }
 
-export { handle, publishedAnnouncements, publishedEvents, alertExtras };
+/**
+ * The Control Center sign-in check, in one place: the gaia_admin cookie OR an
+ * Event Manager bearer (single sign-on). Used by handle() and by the
+ * Membership 2.0 admin gateway, so both accept exactly the same sessions.
+ */
+function consoleAuthed(req, deps) { return Boolean(adminCookieFromReq(req, deps) || verifyEventBearer(req)); }
+
+export { handle, publishedAnnouncements, publishedEvents, alertExtras, consoleAuthed, clientIp };

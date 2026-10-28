@@ -16,12 +16,16 @@
  *   node event-mirror.mjs [--since-days=14] [--dry-run]
  */
 import fs from 'node:fs';
+import { shopifyConfig, shopifyMappings, syncShopifyOrders } from './shopify-orders.mjs';
 
-const env = Object.fromEntries(fs.readFileSync('/root/gaia-staging-proxy/.env', 'utf8').split('\n')
+// Overridable for the end-to-end integration test (a fake GHL, a copy of the
+// Event Manager); production reads the live proxy's .env as before.
+const ENV_FILE = process.env.EVENT_MIRROR_ENV_FILE || '/root/gaia-staging-proxy/.env';
+const env = Object.fromEntries(fs.readFileSync(ENV_FILE, 'utf8').split('\n')
   .filter((l) => l.includes('=') && !l.trim().startsWith('#'))
   .map((l) => { const i = l.indexOf('='); return [l.slice(0, i).trim(), l.slice(i + 1).trim().replace(/^["']|["']$/g, '')]; }));
 const LOC = env.GHL_LOCATION_ID;
-const GHL = 'https://services.leadconnectorhq.com';
+const GHL = (process.env.EVENT_MIRROR_GHL_BASE || 'https://services.leadconnectorhq.com').replace(/\/+$/, '');
 const GH = { Authorization: `Bearer ${env.GHL_API_TOKEN}`, Version: '2021-07-28', Accept: 'application/json' };
 const EM = (env.EVENT_MANAGER_BASE_URL || 'http://127.0.0.1:8002').replace(/\/+$/, '');
 const SVC = env.IDENTITY_SERVICE_TOKEN;
@@ -276,6 +280,23 @@ for (const t of reversed) {
     reason: 'ghl_reconcile', actor: 'mirror' });
 }
 
+// ── 4. Shopify orders (backstop for the Shopify webhook) ────────────────────
+// Only when the store is connected (SHOPIFY_STORE_DOMAIN + SHOPIFY_ADMIN_TOKEN).
+{
+  const shop = shopifyConfig({ ...env, ...process.env });
+  if (shop.enabled && !DRY) {
+    try {
+      stats.shopify = await syncShopifyOrders({ cfg: shop, since, byPid: shopifyMappings(maps), em, log });
+      stats.errors += stats.shopify.errors || 0;
+    } catch (e) {
+      stats.shopify = { error: String((e && e.message) || e).slice(0, 200) };
+      stats.errors++;
+    }
+  } else {
+    stats.shopify = shop.enabled ? 'dry_run' : 'not_configured';
+  }
+}
+
 // Re-judge what is already on file before finishing. A ticket issued at the
 // door, a mapping added in Map & Reconcile, a refund landing -- any of those
 // changes whether a stored payment still needs attention, without the payment
@@ -287,6 +308,29 @@ try {
 } catch (e) { /* monitoring must never break a reconciliation */ }
 
 log({ phase: 'done', ...stats });
+
+// What this run found, for the health checks (admin-router alertExtras):
+// orders the webhook missed and this pass had to reconcile, and paid orders
+// that could not be placed on anybody. Written last, so a run that died midway
+// leaves the previous status in place.
+if (!DRY) {
+  try {
+    const out = process.env.EVENT_MIRROR_STATUS_FILE || '/root/gaia-staging-proxy/data/event-mirror-status.json';
+    let prev = {};
+    try { prev = JSON.parse(fs.readFileSync(out, 'utf8')) || {}; } catch (_) { prev = {}; }
+    const nowIso = new Date().toISOString();
+    // A miss stays visible after a quiet run: the health check reads these, not
+    // just the latest run's counts.
+    const missed = stats.reconciled > 0
+      ? { last_missed_at: nowIso, last_missed_count: stats.reconciled }
+      : { last_missed_at: prev.last_missed_at || null, last_missed_count: prev.last_missed_count || 0 };
+    const unplaced = stats.no_email_unplaced > 0
+      ? { last_unplaced_at: nowIso, last_unplaced_count: stats.no_email_unplaced }
+      : { last_unplaced_at: prev.last_unplaced_at || null, last_unplaced_count: prev.last_unplaced_count || 0 };
+    fs.writeFileSync(out + '.tmp', JSON.stringify({ at: nowIso, since, ...stats, ...missed, ...unplaced }, null, 1));
+    fs.renameSync(out + '.tmp', out);
+  } catch (e) { log({ phase: 'status_write_failed', error: String(e && e.message).slice(0, 160) }); }
+}
 
 // Exit non-zero when anything failed.
 //

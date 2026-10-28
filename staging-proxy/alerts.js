@@ -233,7 +233,8 @@ export function detect(health, extra = {}) {
   if (es) {
     const HOURS = (iso) => (iso ? (Date.now() - Date.parse(iso + (/Z|[+-]\d\d:?\d\d$/.test(iso) ? '' : 'Z'))) / 3600000 : Infinity);
     const label = { vendor_sync: 'Exhibitors', speaker_sync: 'Speakers', session_sync: 'Schedule (sheet)',
-      people_sync: 'Volunteers & guests', agenda_page_sync: 'Schedule (agenda page)', speaker_page_sync: 'Speakers (event page)' };
+      people_sync: 'Volunteers & guests', agenda_page_sync: 'Schedule (agenda page)', speaker_page_sync: 'Speakers (event page)',
+      exhibitor_page_sync: 'Exhibitors & sponsors (event page)', exhibitor_package_sync: 'Exhibitor packages (GHL)' };
     for (const [name, m] of Object.entries(es.mirrors || {})) {
       if (m.conflicts) {
         add({ key: `event-source:conflicts:${name}`, severity: 'warning', subsystem: 'Events',
@@ -292,6 +293,19 @@ export function detect(health, extra = {}) {
         title: 'The event page no longer reads as a speaker line-up',
         why: 'Its layout changed, so the speaker mirror applies nothing rather than guess. The app keeps the speakers it has.',
         evidence: sp.problems.slice(0, 3).join(' · '), affected: null });
+    }
+    const xp = es.exhibitorPage;
+    if (xp && !xp.synced && xp.changed_at && xp.changed_at > (xp.first_seen_at || '')) {
+      add({ key: 'event-source:exhibitor-page-drift', severity: 'warning', subsystem: 'Events',
+        title: 'The exhibitors or sponsors on the event page changed; the app was not updated',
+        why: 'The "Meet Our Exhibitors" block on the public Elevate page is edited in GHL and nothing carries it into the app while the exhibitor-page mirror is off. Turn EXHIBITOR_PAGE_SYNC on.',
+        evidence: `changed ${xp.changed_at} · ${xp.rows} exhibitors, ${xp.sponsors} sponsors on the page`, affected: null });
+    }
+    if (xp && xp.problems && xp.problems.length) {
+      add({ key: 'event-source:exhibitor-page-unreadable', severity: 'warning', subsystem: 'Events',
+        title: 'The event page no longer reads as an exhibitor line-up',
+        why: 'Its "Meet Our Exhibitors" block changed shape, so the exhibitor mirror applies nothing rather than guess. The app keeps the exhibitors and sponsors it has.',
+        evidence: xp.problems.slice(0, 3).join(' · '), affected: null });
     }
     if ((es.shopifyElevate || []).length) {
       add({ key: 'event-source:shopify-elevate', severity: 'warning', subsystem: 'Payments',

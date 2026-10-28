@@ -16,12 +16,13 @@ import { detect } from '../alerts.js';
 
 const iso = (hoursAgo) => new Date(Date.now() - hoursAgo * 3600000).toISOString().slice(0, 19);
 
-function fixture({ sheet = {}, agenda = null, speakers = null, mirror = null, catalog = null } = {}) {
+function fixture({ sheet = {}, agenda = null, speakers = null, exhibitors = null, mirror = null, catalog = null } = {}) {
   const ev = fs.mkdtempSync(path.join(os.tmpdir(), 'evsrc-ev-'));
   const px = fs.mkdtempSync(path.join(os.tmpdir(), 'evsrc-px-'));
   fs.writeFileSync(path.join(ev, 'sheet-sync-status.json'), JSON.stringify(sheet));
   if (agenda) fs.writeFileSync(path.join(ev, 'agenda-page-watch.json'), JSON.stringify(agenda));
   if (speakers) fs.writeFileSync(path.join(ev, 'speaker-page-watch.json'), JSON.stringify(speakers));
+  if (exhibitors) fs.writeFileSync(path.join(ev, 'exhibitor-page-watch.json'), JSON.stringify(exhibitors));
   if (mirror) fs.writeFileSync(path.join(px, 'event-mirror-status.json'), JSON.stringify(mirror));
   if (catalog) fs.writeFileSync(path.join(px, 'store-catalog.json'), JSON.stringify(catalog));
   return { eventDataDir: ev, proxyDataDir: px, loadLedger: () => ({ contacts: {} }),
@@ -90,4 +91,16 @@ test('the speaker line-up on the event page drifting, or no longer readable, is 
   assert.deepEqual(await keys(synced), []);
   const broken = fixture({ speakers: { synced: true, changed_at: iso(2), first_seen_at: iso(48), rows: 0, problems: ['only 0 speaker cards found'] } });
   assert.deepEqual(await keys(broken), ['event-source:speaker-page-unreadable']);
+});
+
+test('the exhibitors and sponsors on the event page drifting, or no longer readable, is raised', async () => {
+  const drift = fixture({ exhibitors: { synced: false, changed_at: iso(2), first_seen_at: iso(48), rows: 21, sponsors: 8, problems: [] } });
+  assert.deepEqual(await keys(drift), ['event-source:exhibitor-page-drift']);
+  const synced = fixture({ exhibitors: { synced: true, changed_at: iso(2), first_seen_at: iso(48), rows: 21, sponsors: 8, problems: [] } });
+  assert.deepEqual(await keys(synced), []);
+  const broken = fixture({ exhibitors: { synced: true, changed_at: iso(2), first_seen_at: iso(48), rows: 0, sponsors: 0,
+    problems: ['the exhibitor block (exh-section) is not on the page'] } });
+  assert.deepEqual(await keys(broken), ['event-source:exhibitor-page-unreadable']);
+  const stale = fixture({ sheet: { exhibitor_page_sync: { ok: false, exit: 1, last_success: iso(5) } } });
+  assert.deepEqual(await keys(stale), ['event-source:stale:exhibitor_page_sync']);
 });

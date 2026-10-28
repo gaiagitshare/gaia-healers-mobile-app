@@ -33,7 +33,7 @@ test('a healthy picture raises nothing', async () => {
   const deps = fixture({
     sheet: { vendor_sync: { ok: true, exit: 0, last_success: iso(0.3) }, speaker_sync: { ok: true, exit: 0, last_success: iso(0.3) } },
     agenda: { synced: true, changed_at: iso(1), first_seen_at: iso(50), rows: 46, problems: [] },
-    mirror: { at: iso(0.1), reconciled: 0, no_email_unplaced: 0 },
+    mirror: { at: iso(0.1), reconciled: 0, no_email_unplaced: 0, last_missed_at: iso(30) },
     catalog: { products: { a: { title: 'Bio-Well 3.0', available: true } } },
   });
   assert.deepEqual(await keys(deps), []);
@@ -53,10 +53,14 @@ test('one source failing for hours while the others run is stale on its own', as
 });
 
 test('the recovery pass catching webhook misses, and paid orders on nobody', async () => {
-  const deps = fixture({ mirror: { at: iso(0.1), reconciled: 2, no_email_unplaced: 1 } });
+  const deps = fixture({ mirror: { at: iso(0.1), reconciled: 0, no_email_unplaced: 1, last_missed_at: iso(3), last_missed_count: 2 } });
   const k = await keys(deps);
-  assert.ok(k.includes('event-source:webhook-missed'));
+  assert.ok(k.includes('event-source:webhook-missed'), 'a miss 3 hours ago is still raised after a quiet run');
   assert.ok(k.includes('event-source:order-unplaced'));
+  const old = fixture({ mirror: { at: iso(0.1), reconciled: 0, no_email_unplaced: 0, last_missed_at: iso(30) } });
+  assert.deepEqual(await keys(old), [], 'a miss older than a day has cleared');
+  const silent = fixture({ mirror: { at: iso(3), reconciled: 0, no_email_unplaced: 0 } });
+  assert.deepEqual(await keys(silent), ['event-source:order-mirror-silent']);
 });
 
 test('the agenda page changed while nothing carries it into the app', async () => {

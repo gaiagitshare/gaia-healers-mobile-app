@@ -249,17 +249,23 @@ export function detect(health, extra = {}) {
       }
     }
     const om = es.orderMirror;
-    if (om && om.reconciled > 0) {
+    if (om && HOURS(om.last_missed_at) <= 24) {
       add({ key: 'event-source:webhook-missed', severity: 'warning', subsystem: 'Events',
-        title: `The GHL webhook missed ${om.reconciled} ticket order(s); the 15-minute recovery recorded them`,
+        title: `The GHL webhook missed ${om.last_missed_count} ticket order(s) in the last 24 hours; the 15-minute recovery recorded them`,
         why: 'Nothing was lost, but the real-time webhook is not delivering every order. Check the GHL workflow that posts to /api/webhooks/ghl-payment.',
-        evidence: `recovery run ${om.at}`, affected: null });
+        evidence: `last miss caught ${om.last_missed_at}`, affected: null });
     }
     if (om && om.no_email_unplaced > 0) {
       add({ key: 'event-source:order-unplaced', severity: 'critical', subsystem: 'Payments',
         title: `${om.no_email_unplaced} paid ticket order(s) could not be placed on anybody`,
         why: 'The order has no email and its GHL contact holds no ticket. Event Manager -> Review Queue -> "Paid, but on nobody\'s badge" links it in one tap.',
         evidence: `recovery run ${om.at}`, affected: null });
+    }
+    if (om && HOURS(om.at) > 1) {
+      add({ key: 'event-source:order-mirror-silent', severity: 'warning', subsystem: 'Events',
+        title: 'The order recovery pass has not reported for over an hour',
+        why: 'It runs every 15 minutes and writes its status at the end of every successful run.',
+        evidence: `last report ${om.at}`, affected: null });
     }
     const ag = es.agenda;
     if (ag && !ag.synced && ag.changed_at && ag.changed_at > (ag.first_seen_at || '')) {

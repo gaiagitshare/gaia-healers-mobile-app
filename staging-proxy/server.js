@@ -22,6 +22,7 @@ import { syncCatalog, storeView, diffMessages, emptyCatalog, productDetail } fro
 import { audit as recordAudit } from './membership/audit-log.js';
 import { loadMergeState, saveMergeState, scanForMerges } from './membership/contact-merges.js';
 import { lineAmounts } from './order-lines.mjs';
+import { shopifyConfig, verifyShopifyHmac, processShopifyOrder, shopifyMappings } from './shopify-orders.mjs';
 import { loadPolicy as loadMembershipPolicy, loadRegistry as loadMembershipRegistry, loadModel as loadCommerceModel } from './membership/admin-api.js';
 import {
   resourceKey, eventTimestamp, eventSequence, decideOrder, watermark,
@@ -2389,6 +2390,45 @@ async function readJsonBody(req, maxBytes = 1024 * 1024) {
   }
   if (!chunks.length) return {};
   return JSON.parse(Buffer.concat(chunks).toString('utf8'));
+}
+
+// Shopify orders (orders/paid, orders/updated, refunds/create) -> Event
+// Manager, real time. The 15-minute backstop in event-mirror.mjs re-reads the
+// same orders, so a missed or failed delivery is caught there.
+async function handleShopifyOrderWebhook(req, res, origin) {
+  const cfg = shopifyConfig();
+  const log = (o) => { try { console.log(JSON.stringify({ evt: 'shopify_webhook', ...o })); } catch (_) { /* noop */ } };
+  if (!cfg.secret) { sendJson(res, 503, { ok: false, error: 'webhook_not_configured' }, origin); return; }
+  let raw = '';
+  try { raw = await readRawBody(req, 512 * 1024); } catch (_) { sendJson(res, 413, { ok: false }, origin); return; }
+  if (!verifyShopifyHmac(raw, req.headers['x-shopify-hmac-sha256'], cfg.secret)) {
+    log({ outcome: 'forbidden_bad_hmac' });
+    sendJson(res, 401, { ok: false, error: 'invalid_signature' }, origin); return;
+  }
+  let order = null;
+  try { order = JSON.parse(raw); } catch (_) { sendJson(res, 400, { ok: false, error: 'bad_json' }, origin); return; }
+  // refunds/create sends the refund, not the order: let the backstop pick it up.
+  if (!order || !order.line_items) { log({ outcome: 'not_an_order', topic: req.headers['x-shopify-topic'] || null });
+    sendJson(res, 202, { ok: true, deferred: true }, origin); return; }
+  const EMBASE = (process.env.EVENT_MANAGER_BASE_URL || '').replace(/\/+$/, '');
+  const SVC = (process.env.IDENTITY_SERVICE_TOKEN || '').trim();
+  const em = async (path, body) => {
+    const r = await fetch(EMBASE + path, { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${SVC}` }, body: JSON.stringify(body) });
+    let j = null; try { j = await r.json(); } catch (_) { j = null; }
+    return { status: r.status, j };
+  };
+  try {
+    const mr = await fetch(EMBASE + '/identity/ticket-mappings', { headers: { Authorization: `Bearer ${SVC}` } });
+    if (!mr.ok) throw new Error(`ticket-mappings ${mr.status}`);
+    const out = await processShopifyOrder(order, shopifyMappings(await mr.json()), em);
+    log({ outcome: 'processed', topic: req.headers['x-shopify-topic'] || null, ...out });
+    // 200 even with errors: Shopify retries non-2xx for 48h, but the backstop
+    // already re-reads every order, so a retry storm buys nothing.
+    sendJson(res, 200, { ok: true, ...out }, origin);
+  } catch (e) {
+    log({ outcome: 'failed', error: String((e && e.message) || e).slice(0, 160) });
+    sendJson(res, 502, { ok: false, error: 'event_manager_unreachable' }, origin);   // Shopify retries
+  }
 }
 
 async function readRawBody(req, maxBytes = 128 * 1024) {
@@ -6708,6 +6748,10 @@ const server = http.createServer(async (req, res) => {
     }
     if (req.method === 'POST' && url.pathname === '/api/webhooks/ghl-payment') {
       await handleGhlPaymentWebhook(req, res, origin);
+      return;
+    }
+    if (req.method === 'POST' && url.pathname === '/api/webhooks/shopify-order') {
+      await handleShopifyOrderWebhook(req, res, origin);
       return;
     }
     if (req.method === 'GET' && url.pathname === '/api/events/mine') {

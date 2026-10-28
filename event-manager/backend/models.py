@@ -449,6 +449,46 @@ class Sponsor(Base):
 
     event = relationship("Event", back_populates="sponsors")
 
+    # The category the event website shows ("Title Sponsors", "Premium
+    # Sponsors", "Gifted to You By"); tier stays the sort/rotation key.
+    CATEGORY = {"headline": "Title Sponsor", "gold": "Premium Sponsor", "silver": "Sponsor",
+                "partner": "Gifted to You By"}
+
+    @property
+    def category(self):
+        return self.CATEGORY.get((self.tier or "partner").lower(), "Sponsor")
+
+
+class SiteItem(Base):
+    """Content mirrored from the event website (tickets, exhibitor packages,
+    FAQ, hotel) by tools/event_site_sync.py. The website is the source: nobody
+    edits these in the app, and an item that leaves the page is switched off,
+    never deleted."""
+    __tablename__ = "site_items"
+    __table_args__ = (UniqueConstraint("event_id", "kind", "key"),)
+
+    id = Column(Integer, primary_key=True, index=True)
+    event_id = Column(Integer, ForeignKey("events.id"), index=True)
+    kind = Column(String, index=True)        # ticket | package | faq | hotel | note
+    key = Column(String)
+    title = Column(String)
+    subtitle = Column(String)
+    badge = Column(String)
+    price = Column(String)                   # as the page shows it: "$3,500"
+    regular_price = Column(String)
+    body = Column(Text)
+    perks = Column(Text)                     # JSON list of strings
+    availability = Column(String)            # "4 Spots Remaining"
+    status = Column(String)                  # available | filled
+    url = Column(String)                     # the official purchase / booking link
+    button = Column(String)
+    image_url = Column(String)
+    sort_order = Column(Integer, default=0)
+    source_url = Column(String)
+    is_active = Column(Boolean, default=True)
+    synced_at = Column(DateTime, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
 
 class Announcement(Base):
     """A short message pushed to the live page during the event — room changes,

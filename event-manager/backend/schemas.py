@@ -677,6 +677,7 @@ class SponsorPublic(BaseModel):
     id: int
     name: str
     tier: str = "partner"
+    category: Optional[str] = None       # "Title Sponsor" | "Premium Sponsor" | "Gifted to You By"
     logo_url: Optional[str] = None
     website: Optional[str] = None
     blurb: Optional[str] = None

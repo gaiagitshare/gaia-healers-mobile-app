@@ -9904,6 +9904,32 @@ def identity_announcements(event_id: int, payload: schemas.IdentityLookup,
                        "ticket_type_id": ticket_type_id, "is_checked_in": is_checked_in}}
 
 
+@app.get("/public/events/{event_id}/site")
+def get_public_site(event_id: int, db: Session = Depends(get_db)):
+    """What the event website itself says -- ticket options, exhibitor packages,
+    FAQ, the official hotel -- mirrored by tools/event_site_sync.py. Every
+    purchase link points at the official GHL checkout; the app never sells."""
+    _published_event_or_404(event_id, db)
+    rows = db.query(models.SiteItem).filter(models.SiteItem.event_id == event_id,
+                                            models.SiteItem.is_active == True).order_by(  # noqa: E712
+        models.SiteItem.kind, models.SiteItem.sort_order, models.SiteItem.id).all()
+    out = {"tickets": [], "packages": [], "faq": [], "hotel": [], "notes": [], "synced_at": None}
+    plural = {"ticket": "tickets", "package": "packages", "faq": "faq", "hotel": "hotel", "note": "notes"}
+    for r in rows:
+        try:
+            perks = json.loads(r.perks) if r.perks else []
+        except ValueError:
+            perks = []
+        item = {"key": r.key, "title": r.title, "subtitle": r.subtitle, "badge": r.badge, "price": r.price,
+                "regular_price": r.regular_price, "body": r.body, "perks": perks, "availability": r.availability,
+                "status": r.status, "url": r.url, "button": r.button, "image_url": r.image_url,
+                "source_url": r.source_url}
+        out.setdefault(plural.get(r.kind, r.kind), []).append(item)
+        if r.synced_at and (out["synced_at"] is None or r.synced_at.isoformat() > out["synced_at"]):
+            out["synced_at"] = r.synced_at.isoformat()
+    return out
+
+
 @app.get("/public/events/{event_id}/sponsors", response_model=List[schemas.SponsorPublic])
 def get_public_sponsors(event_id: int, db: Session = Depends(get_db)):
     _published_event_or_404(event_id, db)

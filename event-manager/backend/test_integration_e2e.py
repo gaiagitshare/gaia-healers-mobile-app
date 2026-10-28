@@ -281,6 +281,33 @@ try:
     st, html = http("GET", BASE + "/public/events/1/embed/agenda")
     check(st == 200 and "Sonic Frequency Therapy (E2E edit)" in html, "an edit on the page reaches the website embed", st)
 
+    print("\n== F8b Event website (tickets, packages, FAQ, hotel) + exhibitor block -> Event Manager -> app ==")
+    pkgpage = os.path.join(HERE, "fixtures", "exhibitors-and-speakers-page-2026-10-28.html")
+    wenv = dict(os.environ, DATABASE_URL="sqlite:///" + DB, VENDOR_SYNC_DATA=WORK, EXHIBITOR_PAGE_PUBLISH="1")
+    r = subprocess.run([sys.executable, os.path.join(HERE, "tools", "event_site_sync.py"), "--apply", epage, pkgpage],
+                       env=wenv, capture_output=True, text=True)
+    st, body = http("GET", BASE + "/public/events/1/site")
+    site0 = json.loads(body) if st == 200 else {}
+    check(r.returncode == 0 and len(site0.get("tickets", [])) == 4 and len(site0.get("packages", [])) == 4
+          and len(site0.get("faq", [])) == 12 and len(site0.get("hotel", [])) == 1,
+          "tickets, packages, FAQ and hotel reach the Event Manager", (r.returncode, {k: len(v) for k, v in site0.items() if isinstance(v, list)}))
+    edited = open(pkgpage, encoding="utf-8").read().replace('<span class="ph-pkg-price">$3,500</span>', '<span class="ph-pkg-price">$3,700</span>', 1)
+    pk2 = os.path.join(WORK, "packages2.html"); open(pk2, "w", encoding="utf-8").write(edited)
+    subprocess.run([sys.executable, os.path.join(HERE, "tools", "event_site_sync.py"), "--apply", epage, pk2], env=wenv, capture_output=True, text=True)
+    r = subprocess.run([sys.executable, os.path.join(HERE, "tools", "exhibitor_page_sync.py"), "--apply", epage], env=wenv, capture_output=True, text=True)
+    st, body = http("GET", PROXY_BASE + "/api/events/1")
+    app = json.loads(body) if st == 200 else {}
+    pk = {p["title"]: p for p in (app.get("site") or {}).get("packages", [])}
+    check(st == 200 and pk.get("The Ambassador", {}).get("price") == "$3,700", "a price changed on the website reaches the app feed", (st, pk.get("The Ambassador")))
+    tk = (app.get("site") or {}).get("tickets", [])
+    check(len(tk) == 4 and all(t.get("url", "").startswith("https://") and "gaiahealers.com" in t["url"] for t in tk),
+          "the app's ticket buttons carry an official GHL checkout link", [t.get("url") for t in tk])
+    cats = {sp.get("name"): sp.get("category") for sp in app.get("sponsors", [])}
+    check(r.returncode == 0 and cats.get("LifeWave") == "Premium Sponsor" and cats.get("Manta Sleep") == "Gifted to You By",
+          "sponsors from the website's exhibitor block reach the app with their website category", cats)
+    names = {e.get("company_name") for e in app.get("exhibitors", [])}
+    check("Rapid Release" in names, "the app shows exhibitors under the website's names", sorted(names)[:6])
+
     print("\n== F9  Event Manager -> app feed ==")
     st, body = http("GET", PROXY_BASE + "/api/events")
     check(st == 200 and "Elevate" in body, "the app's events feed serves the event from the Event Manager", (st, body[:200]))

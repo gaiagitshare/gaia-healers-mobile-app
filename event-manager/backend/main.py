@@ -4941,19 +4941,28 @@ def _embed_plain(x, schema):
     return schema.model_validate(x, from_attributes=True).model_dump()
 
 
-def _embed_page(title, body):
+# The pages that frame these are not all alike: the elevate pages are light
+# (cream ground, dark ink, purple accent), the agenda page is dark. ?theme=light
+# matches the former; the default stays dark.
+EMBED_THEMES = {
+    "dark": ":root{--ink:#F5EDD8;--muted:rgba(245,237,216,.62);--gold:#C9A84C;--line:rgba(201,168,76,.18);--bg:transparent;--card:transparent}",
+    "light": ":root{--ink:#1d1d2b;--muted:rgba(29,29,43,.62);--gold:#9b6fc9;--line:rgba(29,29,43,.12);--bg:transparent;--card:#ffffff}",
+}
+
+
+def _embed_page(title, body, theme="dark"):
     h = badge_card._h
     return ("<!doctype html><html lang='en'><head><meta charset='utf-8'>"
             "<meta name='viewport' content='width=device-width,initial-scale=1'>"
             "<title>%s</title><style>"
-            ":root{--ink:#F5EDD8;--muted:rgba(245,237,216,.62);--gold:#C9A84C;--line:rgba(201,168,76,.18);--bg:transparent}"
+            + EMBED_THEMES.get(theme, EMBED_THEMES["dark"]).replace("%", "%%") +
             "body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.5 system-ui,-apple-system,Segoe UI,sans-serif}"
             "h2{font-size:13px;letter-spacing:.16em;text-transform:uppercase;color:var(--gold);margin:22px 0 8px}"
             ".row{display:flex;gap:14px;padding:12px 0;border-bottom:1px solid var(--line)}"
             ".t{flex:0 0 132px;color:var(--gold);font-variant-numeric:tabular-nums;font-size:13px}"
             ".n{font-weight:600}.m{color:var(--muted);font-size:13px}"
             ".grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:14px}"
-            ".card{border:1px solid var(--line);border-radius:6px;padding:12px}"
+            ".card{border:1px solid var(--line);border-radius:6px;padding:12px;background:var(--card)}"
             ".card img{width:100%%;aspect-ratio:1;object-fit:cover;border-radius:4px;background:rgba(201,168,76,.08)}"
             ".logo img{aspect-ratio:3/2;object-fit:contain;background:#fff}"
             "a{color:var(--gold)}@media(max-width:520px){.row{flex-direction:column;gap:2px}.t{flex:none}}"
@@ -4963,7 +4972,7 @@ def _embed_page(title, body):
 
 
 @app.get("/public/events/{event_id}/embed/{kind}", response_class=HTMLResponse)
-def public_embed(event_id: int, kind: str, db: Session = Depends(get_db)):
+def public_embed(event_id: int, kind: str, theme: str = "dark", db: Session = Depends(get_db)):
     if kind not in EMBED_KINDS:
         raise HTTPException(status_code=404, detail="Unknown embed")
     h = badge_card._h
@@ -4999,7 +5008,7 @@ def public_embed(event_id: int, kind: str, db: Session = Depends(get_db)):
                 h(x.get("company_name")), h(("Booth " + x["booth_number"]) if x.get("booth_number") else (x.get("category") or "")))
             for x in ex) if ex else "<p class='m'>Exhibitors will appear here soon.</p>"
         title = "Exhibitors"
-    return HTMLResponse(_embed_page(title, body), headers={
+    return HTMLResponse(_embed_page(title, body, theme if theme in EMBED_THEMES else "dark"), headers={
         "Cache-Control": "public, max-age=300",
         "Content-Security-Policy": "frame-ancestors " + EMBED_FRAME_ANCESTORS})
 

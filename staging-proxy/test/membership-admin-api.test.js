@@ -64,7 +64,8 @@ async function call(pathname, { method = 'GET', body, headers = {} } = {}) {
 }
 
 const admin = (pathname, options = {}) => call(pathname, {
-  ...options, headers: { ...(options.headers || {}), cookie: adminCookie },
+  // a browser names our own origin on every write; cross-site cookie writes are refused
+  ...options, headers: { origin: `http://127.0.0.1:${PORT}`, ...(options.headers || {}), cookie: adminCookie },
 });
 
 const base64url = (value) => Buffer.from(value, 'utf8').toString('base64url');

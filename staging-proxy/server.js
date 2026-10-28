@@ -4816,7 +4816,7 @@ async function eventsList(req, res, origin, url) {
 }
 
 async function eventDetail(req, res, origin, eventId) {
-  const [event, agenda, speakers, exhibitors, sponsors, announcements, venueMap, info, resources] = await Promise.all([
+  const [event, agenda, speakers, exhibitors, sponsors, announcements, venueMap, info, resources, site] = await Promise.all([
     eventManagerGet(`/public/events/${eventId}`),
     eventManagerGet(`/public/events/${eventId}/agenda`),
     eventManagerGet(`/public/events/${eventId}/speakers`),
@@ -4826,6 +4826,7 @@ async function eventDetail(req, res, origin, eventId) {
     eventManagerGet(`/public/events/${eventId}/map`),
     eventManagerGet(`/public/events/${eventId}/info`),
     eventManagerGet(`/public/events/${eventId}/resources`),
+    eventManagerGet(`/public/events/${eventId}/site`),
   ]);
   if (!event) {
     sendJson(res, 404, { ok: false, error: 'event_not_found' }, origin);
@@ -4844,6 +4845,13 @@ async function eventDetail(req, res, origin, eventId) {
     info: (info && Array.isArray(info.items)) ? info.items : [],
     // Downloadable files / links the organiser published.
     resources: Array.isArray(resources) ? resources : [],
+    // What the event website itself says (ticket options, exhibitor packages,
+    // FAQ, official hotel), mirrored by the Event Manager. Purchase links are
+    // the official GHL checkouts; the app never sells.
+    site: site && typeof site === 'object' && !Array.isArray(site)
+      ? { tickets: site.tickets || [], packages: site.packages || [], faq: site.faq || [],
+        hotel: site.hotel || [], notes: site.notes || [], synced_at: site.synced_at || null }
+      : { tickets: [], packages: [], faq: [], hotel: [], notes: [], synced_at: null },
     // Absent (not empty) when the organiser has not built a map, so the app
     // can skip the tab entirely rather than show a blank floor plan.
     map: venueMap && (venueMap.map_image_url || (venueMap.places || []).length)

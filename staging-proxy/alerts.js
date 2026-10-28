@@ -234,7 +234,8 @@ export function detect(health, extra = {}) {
     const HOURS = (iso) => (iso ? (Date.now() - Date.parse(iso + (/Z|[+-]\d\d:?\d\d$/.test(iso) ? '' : 'Z'))) / 3600000 : Infinity);
     const label = { vendor_sync: 'Exhibitors', speaker_sync: 'Speakers', session_sync: 'Schedule (sheet)',
       people_sync: 'Volunteers & guests', agenda_page_sync: 'Schedule (agenda page)', speaker_page_sync: 'Speakers (event page)',
-      exhibitor_page_sync: 'Exhibitors & sponsors (event page)', exhibitor_package_sync: 'Exhibitor packages (GHL)' };
+      exhibitor_page_sync: 'Exhibitors & sponsors (event page)', exhibitor_package_sync: 'Exhibitor packages (GHL)',
+      event_site_sync: 'Event website content (tickets, packages, FAQ, hotel)' };
     for (const [name, m] of Object.entries(es.mirrors || {})) {
       if (m.conflicts) {
         add({ key: `event-source:conflicts:${name}`, severity: 'warning', subsystem: 'Events',
@@ -306,6 +307,19 @@ export function detect(health, extra = {}) {
         title: 'The event page no longer reads as an exhibitor line-up',
         why: 'Its "Meet Our Exhibitors" block changed shape, so the exhibitor mirror applies nothing rather than guess. The app keeps the exhibitors and sponsors it has.',
         evidence: xp.problems.slice(0, 3).join(' · '), affected: null });
+    }
+    const ws = es.eventSite;
+    if (ws && !ws.synced && ws.changed_at && ws.changed_at > (ws.first_seen_at || '') && !(ws.problems || []).length) {
+      add({ key: 'event-source:event-site-drift', severity: 'warning', subsystem: 'Events',
+        title: 'Tickets, packages, FAQ or hotel on the event website changed; the app was not updated',
+        why: 'The Elevate pages are edited in GHL and nothing carries them into the app while the website-content mirror is off. Turn EVENT_SITE_SYNC on.',
+        evidence: `changed ${ws.changed_at} · ${ws.rows} items on the pages`, affected: null });
+    }
+    if (ws && ws.problems && ws.problems.length) {
+      add({ key: 'event-source:event-site-unreadable', severity: 'warning', subsystem: 'Events',
+        title: 'An event website page no longer reads as tickets, packages or FAQ',
+        why: 'Its layout changed, so the website-content mirror applies nothing for that page rather than guess. The app keeps what it had.',
+        evidence: ws.problems.slice(0, 3).join(' · '), affected: null });
     }
     if ((es.shopifyElevate || []).length) {
       add({ key: 'event-source:shopify-elevate', severity: 'warning', subsystem: 'Payments',

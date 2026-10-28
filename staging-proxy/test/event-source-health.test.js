@@ -16,13 +16,14 @@ import { detect } from '../alerts.js';
 
 const iso = (hoursAgo) => new Date(Date.now() - hoursAgo * 3600000).toISOString().slice(0, 19);
 
-function fixture({ sheet = {}, agenda = null, speakers = null, exhibitors = null, mirror = null, catalog = null } = {}) {
+function fixture({ sheet = {}, agenda = null, speakers = null, exhibitors = null, site = null, mirror = null, catalog = null } = {}) {
   const ev = fs.mkdtempSync(path.join(os.tmpdir(), 'evsrc-ev-'));
   const px = fs.mkdtempSync(path.join(os.tmpdir(), 'evsrc-px-'));
   fs.writeFileSync(path.join(ev, 'sheet-sync-status.json'), JSON.stringify(sheet));
   if (agenda) fs.writeFileSync(path.join(ev, 'agenda-page-watch.json'), JSON.stringify(agenda));
   if (speakers) fs.writeFileSync(path.join(ev, 'speaker-page-watch.json'), JSON.stringify(speakers));
   if (exhibitors) fs.writeFileSync(path.join(ev, 'exhibitor-page-watch.json'), JSON.stringify(exhibitors));
+  if (site) fs.writeFileSync(path.join(ev, 'event-site-watch.json'), JSON.stringify(site));
   if (mirror) fs.writeFileSync(path.join(px, 'event-mirror-status.json'), JSON.stringify(mirror));
   if (catalog) fs.writeFileSync(path.join(px, 'store-catalog.json'), JSON.stringify(catalog));
   return { eventDataDir: ev, proxyDataDir: px, loadLedger: () => ({ contacts: {} }),
@@ -103,4 +104,14 @@ test('the exhibitors and sponsors on the event page drifting, or no longer reada
   assert.deepEqual(await keys(broken), ['event-source:exhibitor-page-unreadable']);
   const stale = fixture({ sheet: { exhibitor_page_sync: { ok: false, exit: 1, last_success: iso(5) } } });
   assert.deepEqual(await keys(stale), ['event-source:stale:exhibitor_page_sync']);
+});
+
+test('tickets, packages, FAQ or hotel on the website drifting, or unreadable, is raised', async () => {
+  const drift = fixture({ site: { synced: false, changed_at: iso(2), first_seen_at: iso(48), rows: 22, problems: [] } });
+  assert.deepEqual(await keys(drift), ['event-source:event-site-drift']);
+  const synced = fixture({ site: { synced: true, changed_at: iso(2), first_seen_at: iso(48), rows: 22, problems: [] } });
+  assert.deepEqual(await keys(synced), []);
+  const broken = fixture({ site: { synced: false, changed_at: iso(2), first_seen_at: iso(48), rows: 5,
+    problems: ['packages page: only 0 package(s) found; the page layout may have changed'] } });
+  assert.deepEqual(await keys(broken), ['event-source:event-site-unreadable']);
 });

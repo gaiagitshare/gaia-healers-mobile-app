@@ -168,17 +168,147 @@
       + '</section>';
   }
 
+  // The categories the event website itself uses. The Event Manager sends
+  // `category`; the tier map is only for an older payload without it.
+  const SPONSOR_CATEGORY = { headline: 'Title Sponsor', gold: 'Premium Sponsor', silver: 'Sponsor', partner: 'Gifted to You By' };
+  const SPONSOR_GROUPS = [
+    ['Title Sponsor', 'Title Sponsors'], ['Premium Sponsor', 'Premium Sponsors'],
+    ['Sponsor', 'Sponsors'], ['Gifted to You By', 'Gifted to You By'],
+  ];
+  function sponsorCategory(sponsor) {
+    return sponsor.category || SPONSOR_CATEGORY[String(sponsor.tier || 'partner').toLowerCase()] || 'Sponsor';
+  }
+  function sponsorTile(sponsor) {
+    const inner = (sponsor.logo_url ? '<img src="' + esc(sponsor.logo_url) + '" alt="' + esc(sponsor.name) + '" loading="lazy" />' : '')
+      + '<span><strong>' + esc(sponsor.name) + '</strong><em>' + esc(sponsorCategory(sponsor)) + '</em></span>';
+    return sponsor.website
+      ? '<a class="g-live-sponsor" href="' + esc(sponsor.website) + '" target="_blank" rel="noopener noreferrer">' + inner + '</a>'
+      : '<div class="g-live-sponsor">' + inner + '</div>';
+  }
+
   function sponsorsSection(detail) {
     const sponsors = Array.isArray(detail?.sponsors) ? detail.sponsors : [];
     if (!sponsors.length) return '';
+    // Grouped exactly as the event website groups them, in the same order.
+    const groups = SPONSOR_GROUPS.map(([cat, heading]) => {
+      const list = sponsors.filter((sp) => sponsorCategory(sp) === cat);
+      if (!list.length) return '';
+      // "Gifted to you by: in the VIP & Speaker welcome bags." -> the note under the heading.
+      const note = cat === 'Gifted to You By'
+        ? String((list.find((sp) => sp.blurb) || {}).blurb || '').replace(/^gifted to you by:\s*/i, '') : '';
+      return '<div class="g-sponsor-group"><h3>' + esc(heading) + '</h3>'
+        + (note ? '<p class="g-sponsor-group__note">' + esc(note) + '</p>' : '')
+        + '<div class="g-live-sponsor-row">' + list.map(sponsorTile).join('') + '</div></div>';
+    }).join('');
     return '<section class="g-super-list"><div class="g-super-section-head"><div><p class="g-super-kicker">Made possible by</p><h2>Sponsors</h2></div></div>'
-      + '<div class="g-live-sponsor-row">' + sponsors.map((sponsor) => {
-        const inner = (sponsor.logo_url ? '<img src="' + esc(sponsor.logo_url) + '" alt="' + esc(sponsor.name) + '" loading="lazy" />' : '')
-          + '<span><strong>' + esc(sponsor.name) + '</strong><em>' + esc(sponsor.tier || 'partner') + '</em></span>';
-        return sponsor.website
-          ? '<a class="g-live-sponsor" href="' + esc(sponsor.website) + '" target="_blank" rel="noopener noreferrer">' + inner + '</a>'
-          : '<div class="g-live-sponsor">' + inner + '</div>';
-      }).join('') + '</div></section>';
+      + groups + '</section>';
+  }
+
+  // ---- What the event website says: tickets, exhibitor packages, hotel ------
+  // Mirrored by the Event Manager from the official pages. Every button opens
+  // the OFFICIAL purchase page; the app never takes a payment itself.
+  function siteOf(detail) {
+    const site = detail && detail.site;
+    return site && typeof site === 'object' ? site : {};
+  }
+  function officialButton(url, label, primary) {
+    if (!url) return '';
+    return '<a class="g-btn ' + (primary ? 'g-btn--primary' : 'g-btn--ghost') + ' g-offer__btn" href="' + esc(url)
+      + '" target="_blank" rel="noopener noreferrer">' + esc(label || 'Open') + ' ' + icon('arrow-up-right') + '</a>';
+  }
+  function perksList(perks) {
+    return Array.isArray(perks) && perks.length
+      ? '<ul class="g-offer__perks">' + perks.map((perk) => '<li>' + esc(perk) + '</li>').join('') + '</ul>' : '';
+  }
+  function sourceLine(site, url) {
+    return '<p class="g-offer__source">' + icon('arrow-square-out') + ' Purchases open the official Gaia Healers checkout'
+      + (url ? ' · <a href="' + esc(url) + '" target="_blank" rel="noopener noreferrer">see the full page</a>' : '') + '</p>';
+  }
+
+  function ticketsSection(detail) {
+    const site = siteOf(detail);
+    const tickets = Array.isArray(site.tickets) ? site.tickets : [];
+    if (!tickets.length) return '';
+    return '<section class="g-super-list"><div class="g-super-section-head"><div><p class="g-super-kicker">Choose your access</p><h2>Tickets</h2>'
+      + '<p class="g-super-count">' + tickets.length + ' options</p></div></div>'
+      + '<div class="g-offer-grid">' + tickets.map((t) => '<article class="g-offer' + (t.badge ? ' g-offer--featured' : '') + '">'
+        + (t.badge ? '<span class="g-offer__badge">' + esc(t.badge) + '</span>' : '')
+        + '<h3>' + esc(t.title) + '</h3>'
+        + (t.price ? '<p class="g-offer__price">' + esc(t.price) + '</p>' : '')
+        + (t.body ? '<p class="g-offer__desc">' + esc(t.body) + '</p>' : '')
+        + perksList(t.perks)
+        + officialButton(t.url, t.button || 'Get this pass', Boolean(t.badge))
+        + '</article>').join('') + '</div>'
+      + sourceLine(site, tickets[0] && tickets[0].source_url) + '</section>';
+  }
+
+  function exhibitSection(detail) {
+    const site = siteOf(detail);
+    const packages = Array.isArray(site.packages) ? site.packages : [];
+    if (!packages.length) return '';
+    const terms = (site.notes || []).find((n) => n.key === 'package-terms');
+    const pageUrl = packages[0] && packages[0].source_url;
+    return '<section class="g-super-list"><div class="g-super-section-head"><div><p class="g-super-kicker">Exhibit, speak, sponsor</p>'
+      + '<h2>Become an Exhibitor</h2><p class="g-super-count">Partnership packages for ' + esc(detail?.event?.name || 'this event') + '</p></div></div>'
+      + '<div class="g-offer-grid">' + packages.map((pkg) => {
+        const filled = pkg.status === 'filled';
+        return '<article class="g-offer g-offer--package' + (filled ? ' is-filled' : '') + '">'
+          + (pkg.image_url ? '<img class="g-offer__img" src="' + esc(pkg.image_url) + '" alt="" loading="lazy" decoding="async">' : '')
+          + (pkg.subtitle ? '<span class="g-offer__tag">' + esc(pkg.subtitle) + '</span>' : '')
+          + '<h3>' + esc(pkg.title) + '</h3>'
+          + '<p class="g-offer__price">' + (pkg.regular_price ? '<s>' + esc(pkg.regular_price) + '</s> ' : '')
+          + esc(pkg.price || '') + (pkg.badge ? ' <span class="g-offer__badge g-offer__badge--inline">' + esc(pkg.badge) + '</span>' : '') + '</p>'
+          + (pkg.availability ? '<p class="g-offer__avail">' + esc(pkg.availability) + '</p>' : '')
+          + perksList(pkg.perks)
+          + (filled ? '<span class="g-offer__filled">This package has been filled</span>'
+            : officialButton(pkg.url, pkg.button || 'Claim package', true))
+          + '</article>';
+      }).join('') + '</div>'
+      + (terms ? '<p class="g-offer__terms">' + esc(terms.body) + '</p>' : '')
+      + sourceLine(site, pageUrl) + '</section>';
+  }
+
+  function hotelBlock(detail) {
+    const hotel = (siteOf(detail).hotel || [])[0];
+    if (!hotel) return '';
+    return '<section class="g-super-list"><div class="g-super-section-head"><div><p class="g-super-kicker">' + esc(hotel.badge || 'Where to stay')
+      + '</p><h2>' + esc(hotel.title) + '</h2>' + (hotel.subtitle ? '<p class="g-super-count">' + esc(hotel.subtitle) + '</p>' : '')
+      + '</div></div><div class="g-offer g-offer--hotel">'
+      + (hotel.body ? hotel.body.split(/\n{2,}/).map((p) => '<p class="g-offer__desc">' + esc(p) + '</p>').join('') : '')
+      + officialButton(hotel.url, hotel.button || 'Reserve your room', true) + '</div></section>';
+  }
+
+  // Type-to-filter for any list marked [data-filter]: rows carry their own
+  // search text, so filtering never depends on how a row is marked up.
+  function filterBox(id, label, placeholder) {
+    return '<div class="g-dir-search"><label class="g-sr-only" for="' + id + '">' + esc(label) + '</label>'
+      + '<input class="g-input" type="search" id="' + id + '" data-filter-q autocomplete="off" placeholder="'
+      + esc(placeholder) + '" enterkeyhint="search"></div>';
+  }
+  function bindFilters(root) {
+    root.querySelectorAll('[data-filter]').forEach((sec) => {
+      const input = sec.querySelector('[data-filter-q]');
+      if (!input) return;
+      const rows = Array.prototype.slice.call(sec.querySelectorAll('[data-filter-row]'));
+      const groups = Array.prototype.slice.call(sec.querySelectorAll('[data-filter-group]'));
+      const count = sec.querySelector('[data-filter-count]');
+      const none = sec.querySelector('[data-filter-none]');
+      const noun = (count && count.getAttribute('data-noun')) || 'items';
+      const apply = () => {
+        const q = input.value.trim().toLowerCase();
+        let shown = 0;
+        rows.forEach((row) => {
+          const hit = !q || (row.getAttribute('data-filter-key') || '').indexOf(q) !== -1;
+          row.hidden = !hit;
+          if (hit) shown += 1;
+        });
+        groups.forEach((g) => { g.hidden = !g.querySelector('[data-filter-row]:not([hidden])'); });
+        if (none) none.hidden = shown !== 0;
+        if (count) count.textContent = (q ? shown + ' of ' : '') + rows.length + ' ' + noun;
+      };
+      input.addEventListener('input', apply);
+      input.addEventListener('search', apply);
+    });
   }
 
   function loadEventDetail(id) {
@@ -354,13 +484,7 @@
 
     const sponsors = (live.sponsors || []).length
       ? '<div class="g-live-sponsors"><p class="g-super-kicker">With thanks to our sponsors</p><div class="g-live-sponsor-row">'
-        + live.sponsors.map((sponsor) => {
-          const inner = (sponsor.logo_url ? '<img src="' + esc(sponsor.logo_url) + '" alt="' + esc(sponsor.name) + '" loading="lazy" />' : '')
-            + '<span><strong>' + esc(sponsor.name) + '</strong><em>' + esc(sponsor.tier || 'partner') + '</em></span>';
-          return sponsor.website
-            ? '<a class="g-live-sponsor" href="' + esc(sponsor.website) + '" target="_blank" rel="noopener noreferrer">' + inner + '</a>'
-            : '<div class="g-live-sponsor">' + inner + '</div>';
-        }).join('') + '</div></div>'
+        + live.sponsors.map(sponsorTile).join('') + '</div></div>'
       : '';
 
     return '<section class="g-live-panel"><div class="g-live-head"><span class="g-live-dot" aria-hidden="true"></span>'
@@ -403,8 +527,12 @@
     // A ticket holder's own picks come before the full programme: by the second
     // morning that shorter list is the only one anybody opens.
     const mine = window.GaiaMySchedule ? window.GaiaMySchedule.panelHtml(detail?.event?.timezone) : '';
-    return mine + '<section class="g-event-timeline"><p class="g-super-kicker">Published schedule' + zone + '</p><h2>Agenda</h2>'
-      + days.map((day) => '<div class="g-event-day"><h3>' + esc(day.label || day.date) + '</h3>'
+    const total = days.reduce((n, day) => n + (day.sessions || []).length, 0);
+    return mine + '<section class="g-event-timeline" data-filter><p class="g-super-kicker">Published schedule' + zone + '</p><h2>Agenda</h2>'
+      + '<p class="g-super-count" data-filter-count data-noun="sessions">' + total + ' sessions</p>'
+      + (total > 8 ? filterBox('g-agenda-q', 'Search the agenda', 'Search sessions, speakers or rooms') : '')
+      + '<p class="g-empty" data-filter-none hidden>No session matches that search.</p>'
+      + days.map((day) => '<div class="g-event-day" data-filter-group><h3>' + esc(day.label || day.date) + '</h3>'
         + (day.sessions || []).map((session) => {
           const when = [sessionTime(session.start_time), sessionTime(session.end_time)].filter(Boolean).join(' – ');
           const meta = [session.room, session.track].filter(Boolean).join(' · ');
@@ -416,7 +544,8 @@
           // Register appears only on sessions that take registrations, and only
           // for ticket holders — the same rule as the save star.
           const reg = window.GaiaMySchedule ? window.GaiaMySchedule.registerButtonHtml(session) : '';
-          return '<div class="g-event-timeline__item"><time>' + esc(when) + '</time><div><strong>' + esc(session.title) + '</strong>'
+          const key = esc([session.title, who, meta, session.description].filter(Boolean).join(' ').toLowerCase());
+          return '<div class="g-event-timeline__item" data-filter-row data-filter-key="' + key + '"><time>' + esc(when) + '</time><div><strong>' + esc(session.title) + '</strong>'
             + (who ? '<span>' + esc(who) + '</span>' : '')
             + (meta ? '<span>' + esc(meta) + '</span>' : '')
             + (session.description ? '<span>' + esc(session.description) + '</span>' : '')
@@ -477,8 +606,10 @@
     // at three columns on a laptop the whole line-up is one glance instead of
     // a scroll. The bio is clamped so one long paragraph cannot set the height
     // of every card beside it.
-    return '<section class="g-super-list"><div class="g-super-section-head"><div><p class="g-super-kicker">Who is speaking</p><h2>Speakers</h2>'
-      + '<p class="g-super-count">' + speakers.length + (speakers.length === 1 ? ' speaker' : ' speakers') + '</p></div></div>'
+    return '<section class="g-super-list" data-filter><div class="g-super-section-head"><div><p class="g-super-kicker">Who is speaking</p><h2>Speakers</h2>'
+      + '<p class="g-super-count" data-filter-count data-noun="speakers">' + speakers.length + (speakers.length === 1 ? ' speaker' : ' speakers') + '</p></div></div>'
+      + (speakers.length > 6 ? filterBox('g-spk-q', 'Search speakers by name or topic', 'Search by name or topic') : '')
+      + '<p class="g-empty" data-filter-none hidden>No speaker matches that search.</p>'
       + '<div class="g-speaker-grid">'
       + speakers.map((speaker) => {
           const lead = speaker.photo_url
@@ -486,7 +617,8 @@
             : '<span class="g-speaker__photo g-speaker__photo--none">' + icon('microphone-stage') + '</span>';
           const meta = esc([speaker.role, speaker.company].filter(Boolean).join(' \u00b7 '));
           const bio = speaker.bio ? '<p class="g-speaker__bio">' + esc(speaker.bio) + '</p>' : '';
-          return '<article class="g-speaker">' + lead
+          const key = esc([speaker.name, speaker.role, speaker.company].filter(Boolean).join(' ').toLowerCase());
+          return '<article class="g-speaker" data-filter-row data-filter-key="' + key + '">' + lead
             + '<div class="g-speaker__text"><h3>' + esc(speaker.name) + '</h3>'
             + (meta ? '<p class="g-speaker__meta">' + meta + '</p>' : '') + bio + '</div></article>';
         }).join('')
@@ -562,9 +694,14 @@
         : '<div class="g-vendor" data-dir-row data-dir-key="' + key + '">' + inner + '</div>';
     }).join('');
 
+    // The way in for a company that wants a stand: the official packages.
+    const exhibitCta = siteOf(detail).packages && siteOf(detail).packages.length
+      ? '<div class="g-offer-cta"><span>Want a stand at this event?</span>'
+        + '<button type="button" class="g-btn g-btn--ghost g-btn--sm" data-event-tab="exhibit">See exhibitor packages '
+        + icon('arrow-right') + '</button></div>' : '';
     return head + search + '<div class="g-vendors">' + cards + '</div>'
       + '<p class="g-empty" data-dir-none hidden>Nothing matches that. Try part of a company name, '
-      + 'or a booth number.</p></section>';
+      + 'or a booth number.</p>' + exhibitCta + '</section>';
   }
 
   // Filtering happens in the DOM rather than through a re-render, so the caret
@@ -1184,8 +1321,8 @@
   // Nothing about any particular event is written here.
   const eventUI = { tab: 'overview', past: null, pastLoading: false, live: {} };
   const EVENT_TABS = [
-    ['overview', 'Overview'], ['agenda', 'Agenda'], ['speakers', 'Speakers'],
-    ['exhibitors', 'Exhibitors'], ['map', 'Map'], ['people', 'People'],
+    ['overview', 'Overview'], ['tickets', 'Tickets'], ['agenda', 'Agenda'], ['speakers', 'Speakers'],
+    ['exhibitors', 'Exhibitors'], ['exhibit', 'Exhibit with us'], ['map', 'Map'], ['people', 'People'],
     ['sponsors', 'Sponsors'], ['community', 'Community'], ['updates', 'Updates'], ['info', 'Info'],
   ];
 
@@ -1438,9 +1575,15 @@
   // FAQ / help / event-info cards, grouped and shown as an accordion so the
   // screen stays short until a question is opened. Native <details> = no JS.
   function infoSection(detail) {
-    const items = Array.isArray(detail && detail.info) ? detail.info : [];
+    const siteFaq = Array.isArray(siteOf(detail).faq) ? siteOf(detail).faq : [];
+    // The event website's FAQ is the FAQ. Questions entered only in the Event
+    // Manager are shown when the website has none, never beside it, so two
+    // answers to one question can not disagree on the same screen.
+    const items = (Array.isArray(detail && detail.info) ? detail.info : [])
+      .filter((it) => !(siteFaq.length && it.section === 'faq'))
+      .concat(siteFaq.map((q) => ({ section: 'faq', title: q.title, body: q.body })));
     const resources = Array.isArray(detail && detail.resources) ? detail.resources : [];
-    if (!items.length && !resources.length) return '';
+    if (!items.length && !resources.length && !hotelBlock(detail)) return '';
     const resBlock = resources.length
       ? '<section class="g-super-list"><div class="g-super-section-head"><div><p class="g-super-kicker">Downloads</p><h2>Resources</h2></div></div><div class="g-info-list">'
         + resources.map((r) => '<a class="g-resource" href="' + esc(r.url || '#') + '" target="_blank" rel="noopener noreferrer"><span class="g-resource__body"><strong>' + esc(r.title || '') + '</strong>' + (r.description ? '<em>' + esc(r.description) + '</em>' : '') + '</span><span class="g-resource__go" aria-hidden="true">' + icon('arrow-up-right') + '</span></a>').join('')
@@ -1460,11 +1603,13 @@
           + '</summary><div class="g-info-item__body">' + esc(it.body || '') + '</div></details>').join('')
         + '</div></section>';
     };
-    return resBlock + ['info', 'faq', 'help'].map(block).join('');
+    return hotelBlock(detail) + resBlock + ['info', 'faq', 'help'].map(block).join('');
   }
 
   function eventTabPanel(tab, detail, live) {
     if (tab === 'agenda') return agendaSection(detail);
+    if (tab === 'tickets') return ticketsSection(detail);
+    if (tab === 'exhibit') return exhibitSection(detail);
     if (tab === 'map') return mapSection(detail);
     if (tab === 'people') return window.GaiaPeople ? window.GaiaPeople.panelHtml() : '';
     if (tab === 'speakers') return speakersSection(detail);
@@ -1479,6 +1624,8 @@
   function tabHasContent(tab, detail) {
     if (tab === 'overview') return true;
     if (tab === 'agenda') return Boolean(detail?.agenda?.days?.length);
+    if (tab === 'tickets') return Boolean(siteOf(detail).tickets?.length);
+    if (tab === 'exhibit') return Boolean(siteOf(detail).packages?.length);
     if (tab === 'speakers') return Boolean(detail?.speakers?.length);
     if (tab === 'exhibitors') return Boolean(detail?.exhibitors?.length);
     if (tab === 'map') return Boolean(detail?.map);
@@ -1486,7 +1633,8 @@
     if (tab === 'sponsors') return Boolean(detail?.sponsors?.length);
     if (tab === 'community') return true;
     if (tab === 'updates') return Boolean((detail?.announcements?.length) || (eventUpdates.data && eventUpdates.data.length));
-    if (tab === 'info') return Boolean((detail?.info?.length) || (detail?.resources?.length));
+    if (tab === 'info') return Boolean((detail?.info?.length) || (detail?.resources?.length)
+      || siteOf(detail).faq?.length || siteOf(detail).hotel?.length);
     return false;
   }
 
@@ -1873,6 +2021,7 @@
     });
     injectMyTicket(root, eventId);
     if (eventUI.tab === 'exhibitors') bindDirectory(root);
+    bindFilters(root);
     if (eventUI.tab === 'community') { bindCommunity(root, eventId); ensureFeed(eventId); } else { stopFeedPolling(); }
     bind(root);
   }

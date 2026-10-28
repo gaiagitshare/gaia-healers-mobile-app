@@ -1018,7 +1018,7 @@ function readEventSources(deps) {
   const evData = (deps && deps.eventDataDir) || process.env.EVENT_DATA_DIR || '/root/event/backend/data';
   const proxyData = (deps && deps.proxyDataDir) || process.env.PROXY_DATA_DIR || '/root/gaia-staging-proxy/data';
   const read = (p) => { try { return JSON.parse(fs.readFileSync(p, 'utf8')); } catch (_) { return null; } };
-  const out = { mirrors: {}, agenda: null, speakerPage: null, exhibitorPage: null, orderMirror: null, shopifyElevate: [] };
+  const out = { mirrors: {}, agenda: null, speakerPage: null, exhibitorPage: null, eventSite: null, orderMirror: null, shopifyElevate: [] };
   const st = read(path.join(evData, 'sheet-sync-status.json')) || {};
   for (const [name, rec] of Object.entries(st)) {
     out.mirrors[name] = { ok: !!rec.ok, exit: rec.exit, conflicts: rec.conflicts || null,
@@ -1027,6 +1027,7 @@ function readEventSources(deps) {
   out.agenda = read(path.join(evData, 'agenda-page-watch.json'));
   out.speakerPage = read(path.join(evData, 'speaker-page-watch.json'));
   out.exhibitorPage = read(path.join(evData, 'exhibitor-page-watch.json'));
+  out.eventSite = read(path.join(evData, 'event-site-watch.json'));
   out.orderMirror = read(path.join(proxyData, 'event-mirror-status.json'));
   // The store catalogue is already synced daily from the public Shopify feed.
   const cat = read(path.join(proxyData, 'store-catalog.json'));

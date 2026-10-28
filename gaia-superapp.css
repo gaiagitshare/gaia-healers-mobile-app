@@ -525,8 +525,38 @@ body.gaia-v2 .gaia-chakra-map__list-item, body.gaia-v2 .gaia-chakra-map--screen 
 .g-speaker__meta { margin: 3px 0 0; color: var(--super-accent); font-size: 12px; font-weight: 600; }
 .g-speaker__bio { margin: 7px 0 0; color: var(--super-muted); font-size: 13px; line-height: 1.55; display: -webkit-box; -webkit-line-clamp: 4; -webkit-box-orient: vertical; overflow: hidden; }
 
+/* Sponsors, grouped the way the event website groups them. */
+.g-sponsor-group + .g-sponsor-group { margin-top: 18px; }
+.g-sponsor-group h3 { margin: 0; font-size: 12px; font-weight: 800; letter-spacing: .12em; text-transform: uppercase; color: var(--super-accent); }
+.g-sponsor-group__note { margin: 4px 0 0; color: var(--super-muted); font-size: 12px; }
+
+/* Tickets, exhibitor packages, hotel: what the event website offers, with the
+   official checkout one tap away. */
+.g-offer-grid { display: grid; grid-template-columns: 1fr; gap: 12px; }
+.g-offer { position: relative; display: flex; flex-direction: column; gap: 8px; min-width: 0; padding: 16px; border: 1px solid var(--super-line); border-radius: 18px; background: var(--super-panel); }
+.g-offer--featured { border-color: var(--super-accent); }
+.g-offer h3 { margin: 0; font-size: 17px; font-weight: 700; line-height: 1.25; }
+.g-offer__img { width: 100%; aspect-ratio: 16 / 9; object-fit: cover; border-radius: 12px; background: var(--super-panel-2); }
+.g-offer__tag { color: var(--super-muted); font-size: 11px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; }
+.g-offer__badge { align-self: flex-start; padding: 3px 9px; border-radius: 999px; background: var(--super-accent); color: var(--g-on-accent, #0B1408); font-size: 10px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; }
+.g-offer__badge--inline { display: inline-block; vertical-align: middle; margin-left: 6px; }
+.g-offer__price { margin: 0; font-size: 22px; font-weight: 800; }
+.g-offer__price s { color: var(--super-muted); font-size: 14px; font-weight: 600; }
+.g-offer__desc { margin: 0; color: var(--super-muted); font-size: 13px; line-height: 1.55; }
+.g-offer__avail { margin: 0; color: var(--super-accent); font-size: 12px; font-weight: 700; }
+.g-offer__perks { margin: 0; padding-left: 18px; display: grid; gap: 4px; font-size: 13px; line-height: 1.45; }
+.g-offer__btn { margin-top: auto; align-self: stretch; justify-content: center; }
+.g-offer__filled { margin-top: auto; padding: 10px; border: 1px dashed var(--super-line); border-radius: 999px; text-align: center; color: var(--super-muted); font-size: 11px; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; }
+.g-offer.is-filled { opacity: .7; }
+.g-offer__terms { margin: 12px 0 0; color: var(--super-muted); font-size: 12px; }
+.g-offer__source { margin: 10px 0 0; color: var(--super-muted); font-size: 12px; }
+.g-offer__source a { color: inherit; }
+.g-offer-cta { margin-top: 16px; display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px; padding: 14px 16px; border: 1px solid var(--super-line); border-radius: 16px; }
+.g-offer-cta span { font-weight: 600; }
+
 @media (min-width: 720px) {
   .g-event-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .g-offer-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .g-event-card { grid-template-columns: 132px minmax(0, 1fr); }
   .g-event-card__art img { width: 132px; min-height: 132px; }
   .g-event-overview dl { grid-template-columns: repeat(3, minmax(0, 1fr)); }
@@ -539,6 +569,7 @@ body.gaia-v2 .gaia-chakra-map__list-item, body.gaia-v2 .gaia-chakra-map--screen 
 
 @media (min-width: 1080px) {
   .g-speaker-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .g-offer-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
 }
 
 /* ── Membership: Member Pass, My Access, Included, Next Level ──────────────

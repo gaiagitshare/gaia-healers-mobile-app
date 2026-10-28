@@ -159,8 +159,8 @@ function EventDetail({ section }) {
                             <Typography variant="h6">Visibility</Typography>
                             <Typography variant="body2" color="textSecondary">
                                 {event.is_published
-                                    ? 'Published — members see this event in the Gaia app.'
-                                    : 'Draft — hidden from the Gaia app until you publish it.'}
+                                    ? 'Published — members see this event in the Gaia Healers app.'
+                                    : 'Draft — hidden from the Gaia Healers app until you publish it.'}
                             </Typography>
                         </Box>
                         <Box display="flex" gap={2} alignItems="center" flexWrap="wrap">
@@ -282,7 +282,7 @@ function EventDetail({ section }) {
                                         value={event.hero_image_url || ''}
                                         onChange={(e) => setEvent({ ...event, hero_image_url: e.target.value })}
                                         margin="normal"
-                                        helperText="Shown at the top of this event in the Gaia app."
+                                        helperText="Shown at the top of this event in the Gaia Healers app."
                                     />
                                     <TextField
                                         fullWidth

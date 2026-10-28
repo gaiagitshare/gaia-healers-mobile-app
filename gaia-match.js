@@ -118,8 +118,8 @@
   }
   function shareResult() {
     const url = 'https://gaiahealers.app/home.html?view=wellness&tool=match';
-    const text = 'Our Gaia Energy Match is ' + SCORE + '%. Find yours:';
-    if (navigator.share) { navigator.share({ title: 'Gaia Energy Match', text, url }).catch(() => {}); return; }
+    const text = 'Our Gaia Healers Energy Match is ' + SCORE + '%. Find yours:';
+    if (navigator.share) { navigator.share({ title: 'Gaia Healers Energy Match', text, url }).catch(() => {}); return; }
     try { navigator.clipboard.writeText(text + ' ' + url); } catch (_) { /* ignore */ }
   }
 

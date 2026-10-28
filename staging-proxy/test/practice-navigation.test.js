@@ -145,7 +145,7 @@ test('the other roles are left exactly as they were', () => {
   new Function('globalThis', src)(sandbox);
   const { statePolicy } = sandbox.GaiaAssistGuide;
   assert.equal(statePolicy('member'),
-    'COMPLETED MEMBER: help them use their verified access and preferences; do not offer the Gaia test again.');
+    'COMPLETED MEMBER: help them use their verified access and preferences; do not offer the Gaia Healers test again.');
   assert.match(statePolicy('visitor'), /^VISITOR: account and previous completion are unknown\./);
   for (const state of ['member', 'visitor', 'onboarding', 'unavailable']) {
     assert.ok(!/practitioner_ tool/.test(statePolicy(state)),

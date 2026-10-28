@@ -46,7 +46,7 @@
       + '<p class="g-card__meta">' + esc(r.body) + '</p>'
       + '<div class="g-moon__crystal">'
       +   '<p>' + esc(r.crystal) + '</p>'
-      +   '<a class="g-btn ' + (nearFull ? 'g-btn--primary' : 'g-btn--secondary') + ' g-btn--sm" href="' + esc(crystalUrl) + '" target="_blank" rel="noopener noreferrer">' + (nearFull ? 'Charge your crystals →' : 'Explore Gaia crystals →') + '</a>'
+      +   '<a class="g-btn ' + (nearFull ? 'g-btn--primary' : 'g-btn--secondary') + ' g-btn--sm" href="' + esc(crystalUrl) + '" target="_blank" rel="noopener noreferrer">' + (nearFull ? 'Charge your crystals →' : 'Explore Gaia Healers crystals →') + '</a>'
       + '</div>'
       + (countdown ? '<p class="g-moon__next">' + esc(countdown) + '</p>' : '')
       + '</article>';

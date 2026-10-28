@@ -655,10 +655,10 @@
     return '<section class="gg-hero"><div class="gg-hero__copy">'
       + '<p class="gg-hero__greet">' + esc(dayGreeting) + ' <span aria-hidden="true">·</span> ' + esc(day) + '</p>'
       + '<h1>Understand your energy. <span>Find what supports you.</span></h1>'
-      + '<p class="gg-hero__lede">Check in with yourself, explore free Gaia tools, and discover your next step.</p>'
+      + '<p class="gg-hero__lede">Check in with yourself, explore free Gaia Healers tools, and discover your next step.</p>'
       + '<div class="gg-hero__actions">'
       + '<a class="g-btn g-btn--primary gg-cta" href="home.html?view=wellness&tab=check">' + icon('sparkle') + ' Check my energy ' + icon('arrow-right', 'gg-cta__arrow') + '</a>'
-      + '<a class="g-btn g-btn--secondary gg-cta-quiet" href="#gg-explore" data-gg-explore>Explore Gaia</a></div>'
+      + '<a class="g-btn g-btn--secondary gg-cta-quiet" href="#gg-explore" data-gg-explore>Explore Gaia Healers</a></div>'
       + '<p class="gg-hero__note">' + icon('check-circle') + ' Free — no account needed to start</p></div>'
       + '<div class="gg-hero__art"><picture>'
       + '<source media="(min-width: 1060px)" type="image/webp" srcset="assets/gaia-hero-moon.webp" />'
@@ -827,7 +827,7 @@
     const tiers = ['Free', 'Silver', 'Gold', 'Diamond'];
     return '<section class="g-upgrade">'
       + '<div class="g-upgrade__aura" aria-hidden="true"></div>'
-      + '<p class="g-upgrade__kicker">Gaia 2.0 Membership</p>'
+      + '<p class="g-upgrade__kicker">Gaia Healers 2.0 Membership</p>'
       + '<h2 class="g-upgrade__title">Unlock your full practice</h2>'
       + '<p class="g-upgrade__lede">Certifications, practitioner communities, a directory listing, and the CRM tools that grow your practice — start free, upgrade any time.</p>'
       + '<div class="g-upgrade__tiers">'
@@ -910,7 +910,7 @@
       // How am I doing -> what next -> what is happening for me.
       + stateHero()
       + forYou()
-      + '<section class="g-home2__gaia" aria-label="Your Gaia"><p class="g-super-kicker">Your Gaia</p><div class="g-home2__rows">' + rows + '</div></section>'
+      + '<section class="g-home2__gaia" aria-label="Your Gaia Healers"><p class="g-super-kicker">Your Gaia Healers</p><div class="g-home2__rows">' + rows + '</div></section>'
       + bookActions()
       + upcoming()
       + membershipStrip()
@@ -1030,7 +1030,7 @@
     if (m) {
       return '<a class="g-home2__plan" href="home.html?view=profile"><span class="g-home2__plan-copy"><strong>' + esc(m.label || m.key || 'Member') + ' member</strong><small>Your pass, access and billing live in You.</small></span><span class="g-home2__plan-cta">Manage ' + icon('caret-right') + '</span></a>';
     }
-    return '<a class="g-home2__plan" href="home.html?view=store&tab=membership"><span class="g-home2__plan-copy"><strong>Gaia 2.0 membership</strong><small>Certifications, practitioner communities, a directory listing, CRM tools. Start free, upgrade any time.</small></span><span class="g-home2__plan-cta">See plans ' + icon('caret-right') + '</span></a>';
+    return '<a class="g-home2__plan" href="home.html?view=store&tab=membership"><span class="g-home2__plan-copy"><strong>Gaia Healers 2.0 membership</strong><small>Certifications, practitioner communities, a directory listing, CRM tools. Start free, upgrade any time.</small></span><span class="g-home2__plan-cta">See plans ' + icon('caret-right') + '</span></a>';
   }
 
   /**

@@ -186,10 +186,10 @@
       <label class="gpath-rec__f"><span>Recommendation</span><select data-gpath-res>
         <option value="">Choose…</option>
         ${(o.services || []).length ? `<optgroup label="Your services">${o.services.map(opt).join('')}</optgroup>` : ''}
-        ${(o.resources || []).length ? `<optgroup label="Gaia resources">${o.resources.map(opt).join('')}</optgroup>` : ''}
+        ${(o.resources || []).length ? `<optgroup label="Gaia Healers resources">${o.resources.map(opt).join('')}</optgroup>` : ''}
       </select></label>
-      ${!(o.resources || []).length ? '<p class="g-prac__muted">Gaia resources appear here once they are approved for recommending.</p>' : ''}
-      <label class="gpath-rec__f"><span>Member-facing reason <em>(they and Gaia may see this)</em></span><textarea rows="2" maxlength="${esc(o.limits.reason)}" data-gpath-reason>${esc(o.default_reason)}</textarea></label>
+      ${!(o.resources || []).length ? '<p class="g-prac__muted">Gaia Healers resources appear here once they are approved for recommending.</p>' : ''}
+      <label class="gpath-rec__f"><span>Member-facing reason <em>(they and Gaia Healers may see this)</em></span><textarea rows="2" maxlength="${esc(o.limits.reason)}" data-gpath-reason>${esc(o.default_reason)}</textarea></label>
       <label class="gpath-rec__f"><span>Optional note to them <em>(plain text, no links)</em></span><textarea rows="2" maxlength="${esc(o.limits.note)}" data-gpath-note placeholder="e.g. Twice a day before our next session."></textarea></label>
       <div class="g-card__actions"><button type="button" class="g-btn g-btn--secondary g-btn--sm" data-gpath-preview>Preview for member</button><button type="button" class="g-btn g-btn--primary g-btn--sm" data-gpath-confirm disabled>Confirm recommendation</button></div>
       <p class="gpath-rec__msg" aria-live="polite" data-gpath-msg></p>

@@ -16,7 +16,7 @@
   function needBirthDate() {
     return '<article class="g-card g-cosmic"><p class="g-card__label">Cosmic Map</p>'
       + '<p class="g-quiz__title">Reveal your cosmic map</p>'
-      + '<p class="g-card__meta">Add your birth date and Gaia maps your chakra, sun sign and the stones that match your energy.</p>'
+      + '<p class="g-card__meta">Add your birth date and Gaia Healers maps your chakra, sun sign and the stones that match your energy.</p>'
       + '<div class="g-card__actions"><a class="g-btn g-btn--primary g-btn--sm" href="home.html?view=wellness&tab=check">Add my birth date →</a></div></article>';
   }
 

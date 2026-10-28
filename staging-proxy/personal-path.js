@@ -119,7 +119,7 @@ export function lockFor(resource, entry, signals) {
 
 const RULES = {
   'P-ONBOARD': (s) => (s.onboarding?.required ? [{ key: 'P-ONBOARD', priority: 100, stage: 'start_now',
-    title: 'Finish your Gaia setup', reason: 'A few questions so Gaia can open the rest of the app for you.',
+    title: 'Finish your Gaia Healers setup', reason: 'A few questions so Gaia Healers can open the rest of the app for you.',
     action: { kind: 'onboarding', label: 'Continue setup' } }] : []),
 
   'P-NEW': (s) => (s.readings?.linked && s.readings.new_reading && s.readings.latest_scanned_at ? [{ key: `P-NEW:${s.readings.latest_scanned_at}`, priority: 80, stage: 'start_now',

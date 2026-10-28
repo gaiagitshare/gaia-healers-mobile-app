@@ -106,7 +106,7 @@
       return new Map((j.clients || []).map((c) => [String(c.customer_id), c]));
     } catch (_) { return new Map(); }
   }
-  const sharesTag = (l) => (l ? `<span class="g-prac__tag g-prac__tag--shares" title="This client asked to see their own readings in the Gaia app">Sees their readings${l.opened ? '' : ' · not opened yet'}</span>` : '');
+  const sharesTag = (l) => (l ? `<span class="g-prac__tag g-prac__tag--shares" title="This client asked to see their own readings in the Gaia Healers app">Sees their readings${l.opened ? '' : ' · not opened yet'}</span>` : '');
   async function connection() {
     try {
       const res = await fetch(`${proxyBase()}/api/practitioners/status`,
@@ -200,7 +200,7 @@
     }
     async function showGate(status) {
       if (status.signedOut) {
-        paint(empty('Your Gaia session has expired. Sign in again to open your practice.', { action: 'signin', label: 'Sign in' }));
+        paint(empty('Your Gaia Healers session has expired. Sign in again to open your practice.', { action: 'signin', label: 'Sign in' }));
         return;
       }
       if (status.available === false && !status.offline) {
@@ -208,7 +208,7 @@
         return;
       }
       if (status.offline) {
-        paint(empty('Could not reach Gaia right now. Check your connection and try again.',
+        paint(empty('Could not reach Gaia Healers right now. Check your connection and try again.',
           { action: 'retry', label: 'Try again' }));
         return;
       }
@@ -220,7 +220,7 @@
           ${lastAttempt()}
           <p class="gaia-empty__text">${inactive ? 'Your Gaia Practitioners account is not active. Contact Gaia Practitioners to restore access, or connect a different account.' : 'The Gaia Practitioners account you connected is not a practitioner account.'}</p>
           ${status.practitioner_email ? `<p class="g-prac__muted">Connected as ${esc(status.practitioner_email)}</p>` : ''}
-          <p class="g-prac__muted">${inactive ? 'Your Gaia member account is still available in You.' : 'If you practise with Gaia, sign in with your practitioner account. If you are a client, your readings are under You.'}</p>
+          <p class="g-prac__muted">${inactive ? 'Your Gaia Healers member account is still available in You.' : 'If you practise with Gaia Healers, sign in with your practitioner account. If you are a client, your readings are under You.'}</p>
           <a class="g-btn g-btn--primary g-btn--sm" href="${esc(proxyBase())}/api/practitioners/connect">Connect a different account</a>
           <button type="button" class="g-btn g-btn--ghost g-btn--sm" data-prac-action="disconnect">Disconnect</button>
         </div>`);
@@ -249,7 +249,7 @@
       paint(`<div class="gaia-empty">
         ${lastAttempt()}
         <p class="gaia-empty__text">Connect your Gaia Practitioners account to see your clients here.</p>
-        <p class="g-prac__muted">Your Gaia login stays as it is. This links your practitioner account to it.</p>
+        <p class="g-prac__muted">Your Gaia Healers login stays as it is. This links your practitioner account to it.</p>
         <a class="g-btn g-btn--primary g-btn--sm" href="${esc(proxyBase())}/api/practitioners/connect">Connect</a>
       </div>`);
     }
@@ -318,7 +318,7 @@
         if (openClient !== null || !m.size) return;
         const opened = [...m.values()].filter((l) => l.opened).length;
         const sec = root.querySelector('[data-prac-clients-sec] .g-prac__h');
-        if (sec) sec.insertAdjacentHTML('afterend', `<p class="g-prac__muted" data-prac-linked-count>${m.size} client${m.size === 1 ? '' : 's'} can see their own readings in the Gaia app · ${opened} ${opened === 1 ? 'has' : 'have'} opened them</p>`);
+        if (sec) sec.insertAdjacentHTML('afterend', `<p class="g-prac__muted" data-prac-linked-count>${m.size} client${m.size === 1 ? '' : 's'} can see their own readings in the Gaia Healers app · ${opened} ${opened === 1 ? 'has' : 'have'} opened them</p>`);
       });
 
       // Three independent fast calls. One failing must not blank the other two.
@@ -414,7 +414,7 @@
                <p class="g-prac__muted">${[c.email, c.phone, c.city].filter(Boolean).map(esc).join(' · ')}</p>
                <p class="g-prac__muted">${[c.sex, c.date_of_birth ? `born ${esc(c.date_of_birth)}` : ''].filter(Boolean).join(' · ')}
                  ${c.has_biowell ? '<span class="g-prac__tag">Bio-Well linked</span>' : ''}</p>
-               ${l ? `<p class="g-prac__shares">Also a Gaia member: they can see this reading too, in their own app${l.opened ? (l.opened_latest ? ' · they have opened the latest one' : ' · they have opened an earlier one') : ' · not opened yet'}.</p>` : ''}
+               ${l ? `<p class="g-prac__shares">Also a Gaia Healers member: they can see this reading too, in their own app${l.opened ? (l.opened_latest ? ' · they have opened the latest one' : ' · they have opened an earlier one') : ' · not opened yet'}.</p>` : ''}
              </div>`;
       }).catch(() => { head.innerHTML = empty('Could not load this client.'); });
 

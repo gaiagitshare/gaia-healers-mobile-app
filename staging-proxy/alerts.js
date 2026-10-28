@@ -57,8 +57,8 @@ export function detect(health, extra = {}) {
     add({ key: 'academy-access:drift', severity: 'warning', subsystem: 'Course access',
       title: 'The app\'s course access has drifted from GHL',
       why: missing.length
-        ? 'GHL counts more members on a course than the app has grants for: people who were given the course in GHL are not seeing it here. The access-granted workflow webhook is not reaching Gaia, or is being rejected — check the workflow in GHL and the rejections below.'
-        : 'The app holds more course grants than GHL counts members: access removed in GHL is still open here. The access-removed workflow webhook is not reaching Gaia.',
+        ? 'GHL counts more members on a course than the app has grants for: people who were given the course in GHL are not seeing it here. The access-granted workflow webhook is not reaching Gaia Healers, or is being rejected — check the workflow in GHL and the rejections below.'
+        : 'The app holds more course grants than GHL counts members: access removed in GHL is still open here. The access-removed workflow webhook is not reaching Gaia Healers.',
       evidence: ad.drifted.map((r) => `${r.title}: GHL ${r.ghl} · app ${r.ledger} (${r.gap > 0 ? '+' : ''}${r.gap})`).join(' · ')
         + (byKey.course_webhook ? ` · webhook last accepted ${byKey.course_webhook.lastAcceptedAt || 'never'}` : ''),
       affected: null });
@@ -87,21 +87,21 @@ export function detect(health, extra = {}) {
     if (cw.state === 'auth_failure') {
       add({ key: 'course-webhook:auth', severity: 'critical', subsystem: 'Course access',
         title: 'Course webhook authentication is failing',
-        why: 'A delivery reached Gaia but its signature or shared secret did not verify, so nothing was granted. A real buyer would not receive their course.',
+        why: 'A delivery reached Gaia Healers but its signature or shared secret did not verify, so nothing was granted. A real buyer would not receive their course.',
         evidence: `last rejection ${cw.lastRejectedAt || 'unknown'} · reason ${cw.lastRejectionReason || 'unrecorded'}`,
         affected: null });
     }
     if (cw.state === 'mapping_failure') {
       add({ key: 'course-webhook:unknown-resource', severity: 'critical', subsystem: 'Course access',
         title: 'A purchased course could not be resolved',
-        why: 'An authenticated delivery named a course or product Gaia does not recognise, so no access was granted. The catalogue or the offer mapping is behind.',
+        why: 'An authenticated delivery named a course or product Gaia Healers does not recognise, so no access was granted. The catalogue or the offer mapping is behind.',
         evidence: `last rejection ${cw.lastRejectedAt || 'unknown'} · reason ${cw.lastRejectionReason || 'unrecorded'}`,
         affected: null });
     }
     if (cw.state === 'identity_failure') {
       add({ key: 'course-webhook:unresolved-contact', severity: 'critical', subsystem: 'Course access',
-        title: 'A course was bought by somebody Gaia could not identify',
-        why: 'The course was valid but no contact could be resolved safely, so nothing was granted. Gaia will not guess who a purchase belongs to.',
+        title: 'A course was bought by somebody Gaia Healers could not identify',
+        why: 'The course was valid but no contact could be resolved safely, so nothing was granted. Gaia Healers will not guess who a purchase belongs to.',
         evidence: `last rejection ${cw.lastRejectedAt || 'unknown'}`,
         affected: null });
     }
@@ -156,7 +156,7 @@ export function detect(health, extra = {}) {
         : 'Paid subscription with no membership record',
       why: unmapped
         ? `They are paying for "${m.productName || 'a product'}", which is not one of the four canonical tiers, so no membership is created. That is correct unless this product is supposed to grant one — which is a mapping decision, not a reconciliation fault.`
-        : `An active subscription exists in GHL billing and the ledger holds ${m.heldStatus ? `a ${m.heldStatus} membership` : 'no membership'} for that person. They may be paying without access. Gaia does not grant it automatically — the evidence needs a human.`,
+        : `An active subscription exists in GHL billing and the ledger holds ${m.heldStatus ? `a ${m.heldStatus} membership` : 'no membership'} for that person. They may be paying without access. Gaia Healers does not grant it automatically — the evidence needs a human.`,
       evidence: `subscription ${m.subscriptionId || 'unknown'} · status ${m.status || '?'}`
         + (m.amount != null ? ` · ${m.amount}` : '')
         + (m.productName ? ` · ${m.productName}` : ''),
@@ -344,13 +344,13 @@ export function detect(health, extra = {}) {
         affected: null });
     } else if (fb.state === 'degraded') {
       add({ key: 'backup:no-offsite', severity: 'critical', subsystem: 'Backups',
-        title: 'No Gaia backup leaves this server',
+        title: 'No Gaia Healers backup leaves this server',
         why: 'A complete archive is built and verified daily, but it is stored only on the machine it protects. Losing the server loses the event database, the entitlement ledger and every secret with it.',
         evidence: `encryption ${fb.encryptionConfigured ? 'configured' : 'NOT configured'} · off-site ${fb.offsiteConfigured ? 'configured' : 'NOT configured'} · newest local archive ${fb.localNewest || 'none'}`,
         affected: null });
     } else if (fb.state === 'stale') {
       add({ key: 'backup:stale', severity: 'warning', subsystem: 'Backups',
-        title: 'No fresh off-site Gaia backup',
+        title: 'No fresh off-site Gaia Healers backup',
         why: 'The daily backup has not produced a verified off-site copy within its cadence. Yesterday is still protected; today is not.',
         evidence: `last verified off-site copy ${fb.lastSuccessAt || 'never'} · last attempt ${fb.lastAttemptAt || 'unknown'}`,
         affected: null });
@@ -379,7 +379,7 @@ export function detect(health, extra = {}) {
     if (pay.unmatched > 0) {
       add({ key: 'payments:unmatched', severity: 'warning', subsystem: 'Payments',
         title: `${pay.unmatched} payment${pay.unmatched === 1 ? '' : 's'} could not be matched to a product`,
-        why: 'A provider event arrived that Gaia could not resolve to a mapped product, so it reconciled to nothing.',
+        why: 'A provider event arrived that Gaia Healers could not resolve to a mapped product, so it reconciled to nothing.',
         evidence: `unmatched payment events: ${pay.unmatched}`,
         affected: null });
     }
@@ -499,7 +499,7 @@ export function renderNotification(incident, kind) {
   ];
   if (incident.affected && incident.affected.label) lines.push(`Affected: ${incident.affected.label}`);
   if (kind === 'resolved') lines.push(`Resolved: ${when}`);
-  lines.push('', 'Open Gaia Admin → System Alerts for the full picture.');
-  const subject = `[Gaia ${head}] ${incident.title}`.slice(0, 160);
+  lines.push('', 'Open Gaia Healers Admin → System Alerts for the full picture.');
+  const subject = `[Gaia Healers ${head}] ${incident.title}`.slice(0, 160);
   return { subject, text: lines.join('\n'), html: lines.map((l) => (l ? `<p>${l}</p>` : '')).join('') };
 }

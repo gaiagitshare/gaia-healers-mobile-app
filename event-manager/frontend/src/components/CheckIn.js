@@ -106,7 +106,7 @@ function CheckIn({ timezone: timezoneProp }) {
           attendance_type: 'paid', door_payment_status: 'none' },
         { key: 'pay_at_door', needs: 'register_paying_walk_in',
           label: 'Paying at the door',
-          hint: 'Recorded as a Gaia door payment. Nothing is written to GHL — take the money on your usual till.',
+          hint: 'Recorded as a Gaia Healers door payment. Nothing is written to GHL — take the money on your usual till.',
           attendance_type: 'paid', door_payment_status: 'collected' },
         { key: 'complimentary', needs: 'register_free_badge',
           label: 'Complimentary / guest',
@@ -2051,7 +2051,7 @@ function CheckIn({ timezone: timezoneProp }) {
                                 )}
                                 <Alert severity="info" icon={false} sx={{ py: 0.5 }}>
                                     {passPaid
-                                        ? 'Recorded in Gaia and reported with the door\u2019s takings. Take the money on your usual till \u2014 nothing is written to GHL.'
+                                        ? 'Recorded in Gaia Healers and reported with the door\u2019s takings. Take the money on your usual till \u2014 nothing is written to GHL.'
                                         : 'Recorded as a complimentary change. Nothing is written to GHL.'}
                                 </Alert>
                             </>

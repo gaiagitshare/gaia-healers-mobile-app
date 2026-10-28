@@ -4965,9 +4965,15 @@ def _embed_page(title, body, theme="dark"):
             ".card{border:1px solid var(--line);border-radius:6px;padding:12px;background:var(--card)}"
             ".card img{width:100%%;aspect-ratio:1;object-fit:cover;border-radius:4px;background:rgba(201,168,76,.08)}"
             ".logo img{aspect-ratio:3/2;object-fit:contain;background:#fff}"
-            "a{color:var(--gold)}@media(max-width:520px){.row{flex-direction:column;gap:2px}.t{flex:none}}"
+            "a{color:var(--gold)}@media(max-width:520px){.row{flex-direction:column;gap:2px}.t{flex:none}"
+            ".grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}.card{padding:8px}.card .n{font-size:14px}}"
             "</style></head><body>%s"
             "<p class='m' style='margin-top:18px'>Updated automatically from the Gaia Healers event platform.</p>"
+            # Tell the host page our height so its iframe can fit the content
+            # (the host snippet listens for {gaiaEmbed, height}).
+            "<script>(function(){function s(){parent.postMessage({gaiaEmbed:location.pathname,"
+            "height:Math.ceil(document.body.getBoundingClientRect().height)+24},'*')}addEventListener('load',s);"
+            "if(window.ResizeObserver)new ResizeObserver(s).observe(document.body);s()})()</script>"
             "</body></html>") % (h(title), body)
 
 

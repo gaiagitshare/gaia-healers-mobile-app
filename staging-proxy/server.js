@@ -32,6 +32,7 @@ import {
   googleAuthUrl, appleAuthUrl, providerConfig as oauthProviderConfig, OAUTH_ENDPOINTS,
 } from './membership/oauth-core.js';
 import { classifyMembershipEvent, membershipFromEvent } from './membership/events.js';
+import { createSecretFamily, recordSecretAuth } from './ghl-webhook-secret.js';
 import { attachQwenVoiceRelay, qwenRouting, issueQwenTicket, qwenVoiceConfig, voiceBootLine } from './qwen-voice-relay.js';
 import { normalizeUsage, recordUsage, recordFailure } from './assist-usage.js';
 import { toolDeclarationsFor, clientToolNames, slowToolNames, runTool, modelView, readMcp } from './assist-tools.js';
@@ -455,6 +456,43 @@ function safeSecretEqual(left, right) {
   const a = Buffer.from(String(left || ''), 'utf8');
   const b = Buffer.from(String(right || ''), 'utf8');
   return a.length === b.length && crypto.timingSafeEqual(a, b);
+}
+
+// Dedicated secrets per GHL webhook family (docs/GHL-WEBHOOK-SECRET.md).
+// Unset -> exactly the old fallback. Set -> the dedicated secret, plus the old
+// fallback only while <NAME>_TRANSITION_UNTIL is in the future.
+const ghlWorkflowAuth = createSecretFamily({
+  dedicated: process.env.GHL_WORKFLOW_WEBHOOK_SECRET,
+  legacyCheck: (v) => COURSES_SYNC_SECRET.length >= 32 && safeSecretEqual(v, COURSES_SYNC_SECRET),
+  transitionUntil: process.env.GHL_WORKFLOW_WEBHOOK_SECRET_TRANSITION_UNTIL,
+  compare: safeSecretEqual,
+});
+const ghlBackfillAuth = createSecretFamily({
+  dedicated: process.env.GHL_BACKFILL_SECRET,
+  legacyCheck: (v) => ghlWorkflowAuth.check(v) !== '',
+  transitionUntil: process.env.GHL_BACKFILL_SECRET_TRANSITION_UNTIL,
+  compare: safeSecretEqual,
+});
+for (const [name, fam] of [['GHL_WORKFLOW_WEBHOOK_SECRET', ghlWorkflowAuth], ['GHL_BACKFILL_SECRET', ghlBackfillAuth]]) {
+  if (fam.invalidTransition) console.warn(`[Gaia Webhooks] ${name}_TRANSITION_UNTIL is not a valid date; the fallback secret is NOT accepted.`);
+  if (fam.configured && !fam.usable) console.warn(`[Gaia Webhooks] ${name} is shorter than 32 characters and is ignored.`);
+}
+/** Which secret authenticated a request, by family and route. Never the value. */
+function checkGhlSecret(family, route, supplied) {
+  const fam = family === 'backfill' ? ghlBackfillAuth : ghlWorkflowAuth;
+  const result = fam.check(supplied);
+  if (result) {
+    try { writeJsonAtomic(WEBHOOK_TELEMETRY_FILE, recordSecretAuth(readWebhookTelemetry(), family, route, result)); }
+    catch (_) { /* telemetry must never break auth */ }
+  }
+  return result;
+}
+function ghlSecretAuthStatus() {
+  const counts = readWebhookTelemetry().secret_auth || {};
+  return {
+    workflow: { ...ghlWorkflowAuth.describe(), ...(counts.workflow || { dedicated: 0, fallback: 0, byRoute: {} }) },
+    backfill: { ...ghlBackfillAuth.describe(), ...(counts.backfill || { dedicated: 0, fallback: 0, byRoute: {} }) },
+  };
 }
 
 function ensureCoursesDataDir() {
@@ -1526,7 +1564,7 @@ function memberWebhookAuthorized(req, rawBody) {
   }
 
   const suppliedSecret = String(req.headers['x-webhook-secret'] || req.headers['x-sync-secret'] || '').trim();
-  if (GHL_WORKFLOW_WEBHOOK_SECRET.length >= 32 && safeSecretEqual(suppliedSecret, GHL_WORKFLOW_WEBHOOK_SECRET)) {
+  if (checkGhlSecret('workflow', 'member-access', suppliedSecret)) {
     return 'workflow-secret';
   }
   return '';
@@ -2198,7 +2236,7 @@ function backfillAuthorized(req) {
   // This route is for a trusted server-side import only, never a browser.
   if (req.headers.origin || req.headers['sec-fetch-site']) return false;
   const supplied = String(req.headers['x-backfill-secret'] || req.headers['x-webhook-secret'] || '').trim();
-  return GHL_BACKFILL_SECRET.length >= 32 && safeSecretEqual(supplied, GHL_BACKFILL_SECRET);
+  return checkGhlSecret('backfill', 'member-backfill', supplied) !== '';
 }
 
 function normalizedBackfillResources(items, resourceType, snapshotAt) {
@@ -6684,11 +6722,11 @@ const server = http.createServer(async (req, res) => {
     }
     if (req.method === 'GET' && url.pathname === '/api/entitlement-review') {
       const sec = String(req.headers['x-webhook-secret'] || url.searchParams.get('secret') || '').trim();
-      if (!(GHL_WORKFLOW_WEBHOOK_SECRET.length>=32 && safeSecretEqual(sec, GHL_WORKFLOW_WEBHOOK_SECRET))) { sendJson(res,403,{ok:false,error:'forbidden'},origin); return; }
+      if (!checkGhlSecret('workflow', 'entitlement-review', sec)) { sendJson(res,403,{ok:false,error:'forbidden'},origin); return; }
       const reg = loadProductRegistry(); let rev={items:{}}; try { rev=JSON.parse(fs.readFileSync(PAYMENT_REVIEW_FILE,'utf8')); } catch(_){}
       const counts={}; for (const p of Object.values(reg.products||{})) counts[p.classification]=(counts[p.classification]||0)+1;
       const reviewRequired = Object.entries(reg.products||{}).filter(([,p])=>p.classification==='REVIEW_REQUIRED').map(([id,p])=>({product_id:id,name:p.name,orders:p.orders,note:p.note}));
-      sendJson(res,200,{ok:true,summary:counts,review_required:reviewRequired,recent_unclassified_payments:Object.values(rev.items||{})},origin); return;
+      sendJson(res,200,{ok:true,summary:counts,review_required:reviewRequired,recent_unclassified_payments:Object.values(rev.items||{}),secret_auth:ghlSecretAuthStatus()},origin); return;
     }
     if (req.method === 'GET' && url.pathname === '/api/courses') {
       await coursesList(req, res, origin);

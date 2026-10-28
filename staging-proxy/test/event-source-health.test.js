@@ -16,11 +16,12 @@ import { detect } from '../alerts.js';
 
 const iso = (hoursAgo) => new Date(Date.now() - hoursAgo * 3600000).toISOString().slice(0, 19);
 
-function fixture({ sheet = {}, agenda = null, mirror = null, catalog = null } = {}) {
+function fixture({ sheet = {}, agenda = null, speakers = null, mirror = null, catalog = null } = {}) {
   const ev = fs.mkdtempSync(path.join(os.tmpdir(), 'evsrc-ev-'));
   const px = fs.mkdtempSync(path.join(os.tmpdir(), 'evsrc-px-'));
   fs.writeFileSync(path.join(ev, 'sheet-sync-status.json'), JSON.stringify(sheet));
   if (agenda) fs.writeFileSync(path.join(ev, 'agenda-page-watch.json'), JSON.stringify(agenda));
+  if (speakers) fs.writeFileSync(path.join(ev, 'speaker-page-watch.json'), JSON.stringify(speakers));
   if (mirror) fs.writeFileSync(path.join(px, 'event-mirror-status.json'), JSON.stringify(mirror));
   if (catalog) fs.writeFileSync(path.join(px, 'store-catalog.json'), JSON.stringify(catalog));
   return { eventDataDir: ev, proxyDataDir: px, loadLedger: () => ({ contacts: {} }),
@@ -80,4 +81,13 @@ test('Shopify selling Elevate tickets is raised; unavailable ones are not', asyn
   const extra = await alertExtras(deps);
   assert.deepEqual(extra.eventSources.shopifyElevate, ['Gaia Healers Elevate 2026 VIP']);
   assert.deepEqual(await keys(deps), ['event-source:shopify-elevate']);
+});
+
+test('the speaker line-up on the event page drifting, or no longer readable, is raised', async () => {
+  const drift = fixture({ speakers: { synced: false, changed_at: iso(2), first_seen_at: iso(48), rows: 16, problems: [] } });
+  assert.deepEqual(await keys(drift), ['event-source:speaker-page-drift']);
+  const synced = fixture({ speakers: { synced: true, changed_at: iso(2), first_seen_at: iso(48), rows: 16, problems: [] } });
+  assert.deepEqual(await keys(synced), []);
+  const broken = fixture({ speakers: { synced: true, changed_at: iso(2), first_seen_at: iso(48), rows: 0, problems: ['only 0 speaker cards found'] } });
+  assert.deepEqual(await keys(broken), ['event-source:speaker-page-unreadable']);
 });

@@ -233,7 +233,7 @@ export function detect(health, extra = {}) {
   if (es) {
     const HOURS = (iso) => (iso ? (Date.now() - Date.parse(iso + (/Z|[+-]\d\d:?\d\d$/.test(iso) ? '' : 'Z'))) / 3600000 : Infinity);
     const label = { vendor_sync: 'Exhibitors', speaker_sync: 'Speakers', session_sync: 'Schedule (sheet)',
-      people_sync: 'Volunteers & guests', agenda_page_sync: 'Schedule (agenda page)' };
+      people_sync: 'Volunteers & guests', agenda_page_sync: 'Schedule (agenda page)', speaker_page_sync: 'Speakers (event page)' };
     for (const [name, m] of Object.entries(es.mirrors || {})) {
       if (m.conflicts) {
         add({ key: `event-source:conflicts:${name}`, severity: 'warning', subsystem: 'Events',
@@ -279,6 +279,19 @@ export function detect(health, extra = {}) {
         title: 'The public agenda page no longer reads as a schedule',
         why: 'Its layout changed, so the agenda mirror applies nothing rather than guess. The app keeps the last good schedule.',
         evidence: ag.problems.slice(0, 3).join(' · '), affected: null });
+    }
+    const sp = es.speakerPage;
+    if (sp && !sp.synced && sp.changed_at && sp.changed_at > (sp.first_seen_at || '')) {
+      add({ key: 'event-source:speaker-page-drift', severity: 'warning', subsystem: 'Events',
+        title: 'The speaker line-up on the event page changed; the app was not updated',
+        why: 'Speaker cards on the public Elevate page are edited by hand and nothing carries them into the app while the speaker-page mirror is off. Turn SPEAKER_PAGE_SYNC on.',
+        evidence: `changed ${sp.changed_at} · ${sp.rows} cards on the page`, affected: null });
+    }
+    if (sp && sp.problems && sp.problems.length) {
+      add({ key: 'event-source:speaker-page-unreadable', severity: 'warning', subsystem: 'Events',
+        title: 'The event page no longer reads as a speaker line-up',
+        why: 'Its layout changed, so the speaker mirror applies nothing rather than guess. The app keeps the speakers it has.',
+        evidence: sp.problems.slice(0, 3).join(' · '), affected: null });
     }
     if ((es.shopifyElevate || []).length) {
       add({ key: 'event-source:shopify-elevate', severity: 'warning', subsystem: 'Payments',

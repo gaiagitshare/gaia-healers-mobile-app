@@ -1278,7 +1278,10 @@ async function surveyMap(surveyId) {
   return { ok: true, survey: { id, name }, questions: [...new Set(questions)], rules };
 }
 
-// Accept an Event-admin bearer JWT (same accounts as /event) for single sign-on.
+// An Event Manager login (same accounts as /event) is the Control Center's
+// single sign-on. verifyEventBearer proves WHO it is (signature, expiry,
+// subject); it says nothing about what they may do. Door and check-in staff
+// hold real Event logins too, so a valid token alone must never be admin.
 function verifyEventBearer(req) {
   var secret = String(process.env.EVENT_JWT_SECRET || '').trim();
   if (!secret) return null;
@@ -1298,16 +1301,56 @@ function verifyEventBearer(req) {
   } catch (e) { return null; }
 }
 
+/**
+ * Is this Event login a Control Center administrator? Asked of the Event
+ * Manager, which owns staff roles, over its service-only identity API (not
+ * reachable from the internet). Only the platform owner flag counts, never a
+ * per-event role such as check-in staff. Fails closed: no token, no service
+ * token, Event Manager down or an unexpected answer all mean "not admin".
+ * Answers are kept 60 seconds, so a demotion takes effect within a minute.
+ */
+const EVENT_ADMIN_TTL_MS = 60 * 1000;
+const eventAdminCache = new Map();   // user id -> { admin, at }
+async function eventAdminFromReq(req) {
+  const payload = verifyEventBearer(req);
+  if (!payload) return false;
+  const sub = String(payload.sub);
+  if (!/^\d{1,12}$/.test(sub)) return false;          // Event user ids are integers
+  const hit = eventAdminCache.get(sub);
+  if (hit && Date.now() - hit.at < EVENT_ADMIN_TTL_MS) return hit.admin;
+  const svc = String(process.env.IDENTITY_SERVICE_TOKEN || '').trim();
+  if (!svc) return false;
+  const base = String(process.env.EVENT_MANAGER_INTERNAL_URL || 'http://127.0.0.1:8002').replace(/\/+$/, '');
+  try {
+    const r = await fetch(base + '/identity/staff/' + encodeURIComponent(sub) + '/control-center',
+      { headers: { Authorization: 'Bearer ' + svc }, signal: AbortSignal.timeout(5000) });
+    if (!r.ok) return false;                            // not cached: a hiccup must not lock anyone out for a minute
+    const j = await r.json();
+    const admin = j && String(j.user_id) === sub && j.control_center_admin === true;
+    eventAdminCache.set(sub, { admin, at: Date.now() });
+    return admin;
+  } catch (e) { return false; }
+}
+export function _resetEventAdminCacheForTest() { eventAdminCache.clear(); }
+
 async function handle(req, res, url, deps) {
   const { origin, sendJson } = deps;
   const p = url.pathname.replace(/\/+$/, '') || url.pathname;
   const method = req.method;
-  const authed = () => Boolean(adminCookieFromReq(req, deps) || verifyEventBearer(req));
+  // Admin = the Control Center password cookie, or an Event login whose user is a platform admin.
+  let authedMemo = null;
+  const authed = async () => (authedMemo ??= Boolean(adminCookieFromReq(req, deps)) || await eventAdminFromReq(req));
+  // Door / check-in staff sign in to this shell too (it embeds the Event Manager:
+  // "Admin -> Events" is their official entry point). Their session stays valid
+  // here so the device keeps working, but as role 'event_staff': the shell shows
+  // Events only, and every admin route below still requires a platform admin.
   const need = () => { sendJson(res, 401, { ok: false, reason: 'admin_auth_required' }, origin); };
 
   // --- session / login / logout (public) ---
   if (p === '/api/admin/session' && method === 'GET') {
-    return sendJson(res, 200, { ok: true, authed: authed(), configured: adminConfigured() }, origin);
+    const isAdmin = await authed();
+    const staff = !isAdmin && Boolean(verifyEventBearer(req));
+    return sendJson(res, 200, { ok: true, authed: isAdmin || staff, role: isAdmin ? 'admin' : (staff ? 'event_staff' : null), configured: adminConfigured() }, origin);
   }
   if (p === '/api/admin/login' && method === 'POST') {
     if (!adminConfigured()) return sendJson(res, 200, { ok: false, reason: 'not_configured' }, origin);
@@ -1332,7 +1375,7 @@ async function handle(req, res, url, deps) {
   }
 
   // --- everything below requires admin auth ---
-  if (!authed()) return need();
+  if (!(await authed())) return need();
 
   // Membership Admin — plans, members, entitlements, policy and audit.
   // Delegated whole so the membership rules live with the membership modules.

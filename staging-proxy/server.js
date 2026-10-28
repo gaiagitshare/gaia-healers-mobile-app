@@ -9,6 +9,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { URL } from 'node:url';
 import * as adminRouter from './admin-router.js';
+import { createCheckoutLinkResolver, fetchPageText } from './checkout-links.js';
 import * as wellnessRouter from './wellness-router.js';
 import * as directoryRouter from './directory-router.js';
 import * as eventIdentity from './membership/event-identity.js';
@@ -4815,6 +4816,12 @@ async function eventsList(req, res, origin, url) {
   }, origin);
 }
 
+// The website's ticket buttons can point at a GHL preview of the checkout; the
+// app opens the published address of the same page instead (checkout-links.js).
+const checkoutLinks = createCheckoutLinkResolver({
+  ghlGet: (p, q) => ghlGet(p, q, 15000), locationId: () => ghlConfig().locationId, fetchPage: fetchPageText,
+});
+
 async function eventDetail(req, res, origin, eventId) {
   const [event, agenda, speakers, exhibitors, sponsors, announcements, venueMap, info, resources, site] = await Promise.all([
     eventManagerGet(`/public/events/${eventId}`),
@@ -4848,10 +4855,10 @@ async function eventDetail(req, res, origin, eventId) {
     // What the event website itself says (ticket options, exhibitor packages,
     // FAQ, official hotel), mirrored by the Event Manager. Purchase links are
     // the official GHL checkouts; the app never sells.
-    site: site && typeof site === 'object' && !Array.isArray(site)
+    site: await checkoutLinks.correctSiteWithin(site && typeof site === 'object' && !Array.isArray(site)
       ? { tickets: site.tickets || [], packages: site.packages || [], faq: site.faq || [],
         hotel: site.hotel || [], notes: site.notes || [], synced_at: site.synced_at || null }
-      : { tickets: [], packages: [], faq: [], hotel: [], notes: [], synced_at: null },
+      : { tickets: [], packages: [], faq: [], hotel: [], notes: [], synced_at: null }, 4000),
     // Absent (not empty) when the organiser has not built a map, so the app
     // can skip the tab entirely rather than show a blank floor plan.
     map: venueMap && (venueMap.map_image_url || (venueMap.places || []).length)

@@ -1,0 +1,24 @@
+name: App tests
+
+# The app (GitHub Pages) deploys on every push to main without running these.
+# This runs them on pull requests and on main so a broken screen is visible
+# before and after it ships. It does not gate the Pages deploy.
+on:
+  push:
+    branches: [main]
+    paths: ["*.js", "*.css", "*.html", "tests/**", ".github/workflows/app-tests.yml"]
+  pull_request:
+    paths: ["*.js", "*.css", "*.html", "tests/**", ".github/workflows/app-tests.yml"]
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - run: node --test tests/

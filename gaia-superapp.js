@@ -1411,6 +1411,22 @@
   }
 
   // Where it is and what to book, as links rather than as facts to copy out.
+  // The two things most people come to an upcoming event page to do. Each opens
+  // the app's own tab, whose buttons lead to the official GHL checkout -- the
+  // app never takes a payment, so these never skip that page.
+  function eventShortcuts(detail, phase) {
+    if (phase === 'past') return '';
+    const items = [];
+    if (tabHasContent('tickets', detail)) items.push(['ticket', 'Get Tickets', 'Passes and prices', 'tickets']);
+    if (tabHasContent('exhibit', detail)) items.push(['storefront', 'Become an Exhibitor', 'Packages and availability', 'exhibit']);
+    if (!items.length) return '';
+    return '<div class="g-ev-shortcuts">' + items.map(([ico, title, note, tab], i) =>
+      '<button type="button" class="g-ev-shortcut' + (i === 0 ? ' is-primary' : '') + '" data-event-tab="' + tab + '">'
+      + '<span class="g-ev-link__icon">' + icon(ico) + '</span>'
+      + '<span class="g-ev-link__text"><strong>' + esc(title) + '</strong><em>' + esc(note) + '</em></span>'
+      + '<span class="g-ev-link__go" aria-hidden="true">' + icon('arrow-right') + '</span></button>').join('') + '</div>';
+  }
+
   function eventQuickLinks(item, detail) {
     const links = [];
     if (item.venue) {
@@ -1940,7 +1956,10 @@
       + '<dl><div><dt>Dates</dt><dd>' + esc(humanDates(item) || 'To be announced') + '</dd></div>'
       + '<div><dt>Venue</dt><dd>' + esc(item.venue || 'To be announced') + '</dd></div>'
       + (item.timezone ? '<div><dt>Local time</dt><dd>' + esc(String(item.timezone).replace(/_/g, ' ')) + '</dd></div>' : '')
-      + '</dl>' + eventQuickLinks(item, detail) + registrationCta(item) + '</section>';
+      + '</dl>' + eventShortcuts(detail, phase) + eventQuickLinks(item, detail)
+      // The website's own ticket options, when the Tickets tab has them, are
+      // the way to buy; the single registration link stays for events without.
+      + (phase !== 'past' && tabHasContent('tickets', detail) ? '' : registrationCta(item)) + '</section>';
 
     // Marked seen BEFORE the tab bar is built: the dot is computed from the
     // same stored value, and marking afterwards leaves a stale dot standing
@@ -2147,6 +2166,13 @@
   }
 
   window.GaiaSuperApp = { render };
+  // Pure HTML builders for the event page, for tests/events-ui.test.cjs. Each
+  // takes the /api/events/:id payload and returns markup; none touches the DOM.
+  window.GaiaEventSections = Object.freeze({
+    tickets: ticketsSection, exhibit: exhibitSection, sponsors: sponsorsSection, info: infoSection,
+    speakers: speakersSection, agenda: agendaSection, exhibitors: directorySection,
+    shortcuts: eventShortcuts, hasTab: tabHasContent, tabs: EVENT_TABS,
+  });
   document.addEventListener('DOMContentLoaded', render);
   document.addEventListener('gaia:member', render);
   document.addEventListener('gaia:event', render);

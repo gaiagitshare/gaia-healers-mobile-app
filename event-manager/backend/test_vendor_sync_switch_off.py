@@ -78,7 +78,7 @@ try:
         dry = subprocess.run([sys.executable, os.path.join(HERE, "tools", "vendor_sync.py"), sheet_csv],
                              env=env, capture_output=True, text=True, timeout=120)
         r = db.execute("SELECT can_scan_leads, is_published FROM exhibitors WHERE id=?", (victim["id"],)).fetchone()
-        check(dry.returncode == 0 and "Switched OFF" in dry.stdout and victim["company_name"] in dry.stdout,
+        check(dry.returncode in (0, 3) and "Switched OFF" in dry.stdout and victim["company_name"] in dry.stdout,
               "a dry run reports the switch-off", dry.stdout[-800:] + dry.stderr[-400:])
         check((r["can_scan_leads"], r["is_published"]) == (1, 1), "and writes nothing", tuple(r))
 
@@ -88,7 +88,7 @@ try:
 
     db2 = sqlite3.connect(db_path); db2.row_factory = sqlite3.Row
     r = db2.execute("SELECT stage, can_scan_leads, is_published FROM exhibitors WHERE id=?", (victim["id"],)).fetchone()
-    check(app.returncode == 0 and r["stage"] == "not_attending" and r["can_scan_leads"] == 0 and r["is_published"] == 0,
+    check(app.returncode in (0, 3) and r["stage"] == "not_attending" and r["can_scan_leads"] == 0 and r["is_published"] == 0,
           "--apply: the dropped stand is not attending, its scanner off, out of the directory",
           (app.returncode, tuple(r) if r else None, app.stderr[-400:]))
     entry = [json.loads(l) for l in log_lines if '"switch_off"' in l]

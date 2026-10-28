@@ -54,7 +54,9 @@ shared = {o: evs for o, evs in order_owner.items() if len(evs) > 1}
 check("no GHL order_id spans multiple events", not shared,
       "%d shared: %s" % (len(shared), list(shared.items())[:3]))
 
-# 4. an order may appear only once inside a given event
+# 4. an order LINE may appear only once inside a given event. One checkout can
+#    hold several tickets (26 Oct 2026: VIP + Three Day in one order), each its
+#    own line and, since 28 Oct, its own seat -- so the key is order + product.
 dupes = 0
 for ev in per_event:
     seen = set()
@@ -62,7 +64,7 @@ for ev in per_event:
         try: d = json.loads(cd or "{}")
         except Exception: d = {}
         for e in (d.get("entitlements") or []):
-            k = (ev, e.get("order_id"))
+            k = (ev, e.get("order_id"), e.get("product_id") or e.get("ticket_type_id"), e.get("addon_code"))
             if e.get("order_id"):
                 if k in seen: dupes += 1
                 seen.add(k)

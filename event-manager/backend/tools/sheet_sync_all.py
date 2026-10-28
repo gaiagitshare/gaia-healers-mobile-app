@@ -28,7 +28,9 @@ HERE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 TOOLS = os.environ.get("SHEET_SYNC_TOOLS_DIR") or os.path.join(HERE, "tools")   # a test points this at stand-ins
 DATA = os.environ.get("VENDOR_SYNC_DATA") or os.path.join(HERE, "data")
 STATUS = os.path.join(DATA, "sheet-sync-status.json")
-MIRRORS = [m for m in os.environ.get("SHEET_SYNC_MIRRORS", "vendor_sync,speaker_sync,session_sync,people_sync").split(",") if m]
+# agenda_page_sync is a no-op unless AGENDA_PAGE_SYNC=1 (see that tool).
+MIRRORS = [m for m in os.environ.get("SHEET_SYNC_MIRRORS",
+                                     "vendor_sync,speaker_sync,session_sync,people_sync,agenda_page_sync").split(",") if m]
 PER_TOOL_TIMEOUT = int(os.environ.get("SHEET_SYNC_TOOL_TIMEOUT", "240"))
 APPLY = "--apply" in sys.argv
 
@@ -55,15 +57,21 @@ def main():
         except Exception as e:                       # noqa: BLE001 - a launcher problem is still a failure to report
             code, out = 127, "could not start: %s" % e
         rec = dict(status.get(name) or {})
-        rec.update({"ok": code == 0, "exit": code, "seconds": round(time.time() - started, 1),
+        # Exit 3 = the mirror applied what it safely could and found rows it
+        # would not guess about (e.g. one company on two sheet rows). That is a
+        # successful sync with a warning, not a failure: the clean rows are live.
+        conflicts = [l for l in out.splitlines() if l.startswith("CONFLICTS:")]
+        rec.update({"ok": code in (0, 3), "exit": code, "seconds": round(time.time() - started, 1),
                     "last_run": now(), "applied": APPLY,
+                    "conflicts": conflicts[-1][len("CONFLICTS:"):].strip() if (code == 3 and conflicts) else None,
                     "tail": "\n".join(out.strip().splitlines()[-6:])[-1200:]})
-        if code == 0:
+        if code in (0, 3):
             rec["last_success"] = rec["last_run"]
         else:
             failed.append(name)
         status[name] = rec
-        print("%-14s %s (exit %d, %.1fs)" % (name, "ok" if code == 0 else "FAILED", code, rec["seconds"]))
+        print("%-14s %s (exit %d, %.1fs)" % (name, "ok" if code == 0 else ("ok, CONFLICTS" if code == 3 else "FAILED"),
+                                              code, rec["seconds"]))
         if code != 0:
             print("    " + rec["tail"].replace("\n", "\n    "))
     tmp = STATUS + ".tmp"

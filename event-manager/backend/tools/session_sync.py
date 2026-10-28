@@ -30,7 +30,7 @@ HERE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 _DBURL = os.environ.get("DATABASE_URL", "")
 DB = (_DBURL.split("sqlite:///", 1)[1] if _DBURL.startswith("sqlite:///")
       else os.path.join(HERE, "event.db"))
-DATA = os.path.join(HERE, "data")
+DATA = os.environ.get("VENDOR_SYNC_DATA") or os.path.join(HERE, "data")   # tests write elsewhere
 LOG = os.path.join(DATA, "session-sync.log")
 LATEST = os.path.join(DATA, "session-sync-latest.md")
 EVENT = int(os.environ.get("SESSION_SHEET_EVENT", os.environ.get("VENDOR_SHEET_EVENT", "1")))
@@ -160,7 +160,11 @@ def main():
             for i, (rec, want) in enumerate(creates):
                 fields = dict(want)
                 fields.update({"event_id": EVENT, "external_id": rec["external_id"],
-                               "sort_order": rec["row"], "created_at": now, "updated_at": now})
+                               "sort_order": rec["row"], "created_at": now, "updated_at": now,
+                               # Explicit, never NULL: the public agenda's schema
+                               # rejects a NULL flag, and one such row took the
+                               # whole agenda (app + website) down with a 500.
+                               "is_featured": 0, "requires_registration": 0, "needs_workshop_pass": 0})
                 db.execute("INSERT INTO sessions (%s) VALUES (%s)" % (", ".join(fields), ", ".join("?" * len(fields))),
                            list(fields.values()))
                 log.write(json.dumps({"at": now, "op": "create", "title": rec["title"], "fields": fields}, default=str) + "\n")

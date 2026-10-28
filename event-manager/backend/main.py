@@ -4920,6 +4920,90 @@ def vendor_delete_product(token: str, product_id: int, db: Session = Depends(get
     return {"ok": True}
 
 
+# --- Website embeds ----------------------------------------------------------
+# The event's public pages (elevate.gaiahealers.com, built in GoHighLevel) were
+# hand-written HTML: a speaker added or a talk moved here never reached them, and
+# on 28 Oct 2026 the website, the app and this database disagreed on speakers,
+# exhibitors and the schedule. These pages render the SAME public data the app
+# shows, as plain HTML a GHL "custom code" block can frame:
+#
+#   <iframe src="https://api.gaiahealers.app/event-api/public/events/1/embed/agenda"
+#           style="width:100%;border:0;min-height:900px" loading="lazy"></iframe>
+#
+# No script, no login, five-minute cache, framed only by Gaia's own sites.
+EMBED_FRAME_ANCESTORS = ("'self' https://gaiahealers.com https://*.gaiahealers.com https://gaiahealers.app "
+                         "https://*.leadconnectorhq.com https://*.msgsndr.com")
+EMBED_KINDS = ("agenda", "speakers", "exhibitors")
+
+
+def _embed_plain(x, schema):
+    """What the public API would serialise for this object, as plain data."""
+    return schema.model_validate(x, from_attributes=True).model_dump()
+
+
+def _embed_page(title, body):
+    h = badge_card._h
+    return ("<!doctype html><html lang='en'><head><meta charset='utf-8'>"
+            "<meta name='viewport' content='width=device-width,initial-scale=1'>"
+            "<title>%s</title><style>"
+            ":root{--ink:#F5EDD8;--muted:rgba(245,237,216,.62);--gold:#C9A84C;--line:rgba(201,168,76,.18);--bg:transparent}"
+            "body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.5 system-ui,-apple-system,Segoe UI,sans-serif}"
+            "h2{font-size:13px;letter-spacing:.16em;text-transform:uppercase;color:var(--gold);margin:22px 0 8px}"
+            ".row{display:flex;gap:14px;padding:12px 0;border-bottom:1px solid var(--line)}"
+            ".t{flex:0 0 132px;color:var(--gold);font-variant-numeric:tabular-nums;font-size:13px}"
+            ".n{font-weight:600}.m{color:var(--muted);font-size:13px}"
+            ".grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:14px}"
+            ".card{border:1px solid var(--line);border-radius:6px;padding:12px}"
+            ".card img{width:100%%;aspect-ratio:1;object-fit:cover;border-radius:4px;background:rgba(201,168,76,.08)}"
+            ".logo img{aspect-ratio:3/2;object-fit:contain;background:#fff}"
+            "a{color:var(--gold)}@media(max-width:520px){.row{flex-direction:column;gap:2px}.t{flex:none}}"
+            "</style></head><body>%s"
+            "<p class='m' style='margin-top:18px'>Updated automatically from the Gaia Healers event platform.</p>"
+            "</body></html>") % (h(title), body)
+
+
+@app.get("/public/events/{event_id}/embed/{kind}", response_class=HTMLResponse)
+def public_embed(event_id: int, kind: str, db: Session = Depends(get_db)):
+    if kind not in EMBED_KINDS:
+        raise HTTPException(status_code=404, detail="Unknown embed")
+    h = badge_card._h
+    if kind == "agenda":
+        ag = _embed_plain(get_public_agenda(event_id, db), schemas.Agenda)
+        parts = []
+        for d in ag.get("days") or []:
+            parts.append("<h2>%s</h2>" % h(d.get("label") or d.get("date")))
+            for se in d.get("sessions") or []:
+                st, en = se.get("start_time"), se.get("end_time")
+                st = datetime.fromisoformat(str(st)) if isinstance(st, str) and st else st
+                en = datetime.fromisoformat(str(en)) if isinstance(en, str) and en else en
+                when = ("%s%s" % (st.strftime("%-I:%M %p") if st else "", (" – " + en.strftime("%-I:%M %p")) if en else ""))
+                who = ", ".join(sp.get("name") for sp in (se.get("speakers") or []) if sp.get("name"))
+                parts.append("<div class='row'><div class='t'>%s</div><div><div class='n'>%s</div>%s%s</div></div>" % (
+                    h(when), h(se.get("title")), ("<div class='m'>%s</div>" % h(who)) if who else "",
+                    ("<div class='m'>%s</div>" % h(se.get("room"))) if se.get("room") else ""))
+        body = "".join(parts) or "<p class='m'>The schedule will appear here soon.</p>"
+        title = "Agenda"
+    elif kind == "speakers":
+        sp = [_embed_plain(x, schemas.SpeakerPublic) for x in get_public_speakers(event_id, db)]
+        body = "<div class='grid'>%s</div>" % "".join(
+            "<div class='card'>%s<div class='n'>%s</div><div class='m'>%s</div></div>" % (
+                ("<img src='%s' alt='' loading='lazy'>" % h(x.get("photo_url"))) if x.get("photo_url") else "",
+                h(x.get("name")), h(" · ".join(v for v in (x.get("role"), x.get("company")) if v)))
+            for x in sp) if sp else "<p class='m'>Speakers will appear here soon.</p>"
+        title = "Speakers"
+    else:
+        ex = [_embed_plain(x, schemas.ExhibitorPublic) for x in get_public_exhibitors(event_id, db)]
+        body = "<div class='grid'>%s</div>" % "".join(
+            "<div class='card logo'>%s<div class='n'>%s</div><div class='m'>%s</div></div>" % (
+                ("<img src='%s' alt='' loading='lazy'>" % h(x.get("logo_url"))) if x.get("logo_url") else "",
+                h(x.get("company_name")), h(("Booth " + x["booth_number"]) if x.get("booth_number") else (x.get("category") or "")))
+            for x in ex) if ex else "<p class='m'>Exhibitors will appear here soon.</p>"
+        title = "Exhibitors"
+    return HTMLResponse(_embed_page(title, body), headers={
+        "Cache-Control": "public, max-age=300",
+        "Content-Security-Policy": "frame-ancestors " + EMBED_FRAME_ANCESTORS})
+
+
 @app.get("/public/events/{event_id}/exhibitors", response_model=List[schemas.ExhibitorPublic])
 def get_public_exhibitors(
     event_id: int,

@@ -126,14 +126,28 @@ def main():
     # the same file, and a busy moment is exactly when the sheet matters.
     db = sqlite3.connect(DB, timeout=30); db.row_factory = sqlite3.Row
     cols = {r[1] for r in db.execute("PRAGMA table_info(exhibitors)")}
-    for col, ddl in (("contact_name", "VARCHAR"), ("sheet_notes", "TEXT"), ("sheet_synced_at", "DATETIME")):
+    for col, ddl in (("contact_name", "VARCHAR"), ("sheet_notes", "TEXT"), ("sheet_synced_at", "DATETIME"),
+                     ("sheet_row", "INTEGER")):
         if col not in cols: db.execute("ALTER TABLE exhibitors ADD COLUMN %s %s" % (col, ddl))
     rows = db.execute("SELECT * FROM exhibitors WHERE event_id=?", (EVENT,)).fetchall()
     by_name = {vs.norm_name(r["company_name"]): r for r in rows}
     seen, changes, creates, report, offs = set(), [], [], [], []
 
+    # Two rows with the same company name make the sheet ambiguous: matching
+    # both against one exhibitor flipped Bio-Well (row 25 confirmed, row 43
+    # "others") between stages every run from 6 to 28 Oct 2026 -- 1,042 writes,
+    # and every flip to "other" took it out of the directory. Neither row is
+    # applied until the sheet is fixed; the report names them and the run exits
+    # 3 ("applied, with conflicts") so the monitoring raises it.
+    by_key = {}
+    for rec in sheet:
+        by_key.setdefault(vs.norm_name(rec["company"]), []).append(rec)
+    dupes = {k: recs for k, recs in by_key.items() if len(recs) > 1}
+
     for rec in sheet:
         key = vs.norm_name(rec["company"]); seen.add(key)
+        if key in dupes:
+            continue
         want = desired(rec)
         r = by_name.get(key)
         if r is None:
@@ -185,6 +199,12 @@ def main():
         lines.append("## In the Event Manager but not in the sheet (left untouched)")
         for r in gone: lines.append("- %s (id %d, %s)" % (r["company_name"], r["id"], r["stage"]))
         lines.append("")
+    if dupes:
+        lines.append("## Same company on more than one row — NOT applied until the sheet is fixed")
+        for k, recs in dupes.items():
+            lines.append("- **%s**: %s" % (recs[0]["company"], "; ".join(
+                "row %d (%s, booth %s)" % (r["row"], r["stage"], r.get("booth") or "—") for r in recs)))
+        lines.append("")
     issues = [(rec["row"], rec["company"], i) for rec in sheet for i in rec["issues"]]
     issues += [(rec["row"], rec["company"], n) for rec in sheet for n in [vs.booth_note(rec)] if n]
     if issues:
@@ -215,14 +235,21 @@ def main():
                                       "because": {"stage": diff.get("stage", r["stage"]),
                                                   "payment_status": diff.get("payment_status", r["payment_status"])}},
                                      default=str) + "\n")
-            for rec in sheet:   # a clean row still gets its sync stamp
-                r = by_name.get(vs.norm_name(rec["company"]))
-                if r is not None: db.execute("UPDATE exhibitors SET sheet_synced_at=? WHERE id=?", (now, r["id"]))
+            for rec in sheet:   # a clean row still gets its sync stamp, and its row number
+                key = vs.norm_name(rec["company"])
+                r = by_name.get(key)
+                if r is not None and key not in dupes:
+                    db.execute("UPDATE exhibitors SET sheet_synced_at=?, sheet_row=? WHERE id=?", (now, rec["row"], r["id"]))
         db.commit()
     out = "\n".join(lines)
     with open(LATEST, "w") as f: f.write(out + "\n")
     print(out)
+    if dupes:
+        print("CONFLICTS: %d duplicate company name(s) in the sheet: %s" % (
+            len(dupes), ", ".join(recs[0]["company"] for recs in dupes.values())))
+        return 3
+    return 0
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())

@@ -21,6 +21,7 @@ import { membershipPlans } from './membership/plans.js';
 import { syncCatalog, storeView, diffMessages, emptyCatalog, productDetail } from './membership/store-catalog.js';
 import { audit as recordAudit } from './membership/audit-log.js';
 import { loadMergeState, saveMergeState, scanForMerges } from './membership/contact-merges.js';
+import { lineAmounts } from './order-lines.mjs';
 import { loadPolicy as loadMembershipPolicy, loadRegistry as loadMembershipRegistry, loadModel as loadCommerceModel } from './membership/admin-api.js';
 import {
   resourceKey, eventTimestamp, eventSequence, decideOrder, watermark,
@@ -2821,6 +2822,7 @@ async function handleGhlPaymentWebhook(req, res, origin) {
     let productNames = [];
     let lineQty = new Map();
     let orderAmount = null;
+    let perLine = new Map();   // productId -> this line's share of the charge
     let snap = {};
     if (isInvoice && invoiceId) {
       const inv = await _swGhlGetRetry(`/invoices/${encodeURIComponent(invoiceId)}`, { altId: LOC, altType: 'location' });
@@ -2830,6 +2832,7 @@ async function handleGhlPaymentWebhook(req, res, origin) {
       productNames = items.map((it) => it.name).filter(Boolean);
       for (const it of items) lineQty.set(String(it.productId || ''), Math.max(1, Number(it.qty != null ? it.qty : (it.quantity != null ? it.quantity : 1))));
       orderAmount = body_.amountPaid != null ? body_.amountPaid : (body_.total != null ? body_.total : null);
+      perLine = lineAmounts(items, orderAmount);
       const cd = body_.contactDetails || {};
       snap = { email: cd.email, firstName: String(cd.name || '').split(' ')[0],
                lastName: String(cd.name || '').split(' ').slice(1).join(' '), phone: cd.phoneNo };
@@ -2842,6 +2845,7 @@ async function handleGhlPaymentWebhook(req, res, origin) {
       productNames = items.map((it) => (it.product && it.product.name) || it.name).filter(Boolean);
       for (const it of items) lineQty.set(String((it.product && it.product._id) || it.productId || ''), Math.max(1, Number(it.qty != null ? it.qty : (it.quantity != null ? it.quantity : 1))));
       orderAmount = (order && order.amount) || null;
+      perLine = lineAmounts(items, orderAmount);
       snap = (order && order.contactSnapshot) || {};
     }
     const email = String(tx.contactEmail || snap.email || body.email || '').trim().toLowerCase();
@@ -2870,7 +2874,10 @@ async function handleGhlPaymentWebhook(req, res, origin) {
     for (const m of maps) if (m.provider === 'ghl' && EVENT_TYPES.has(m.entitlement_type || 'EVENT_TICKET')) byPid.set(m.external_product_id, m);
     let targets = productIds.map((pid) => ({ pid, m: byPid.get(pid) })).filter((x) => x.m);
     // Preserve appropriate pass: apply base mappings first, upgrades last (upgrade wins).
-    targets.sort((x, y) => (x.m.is_upgrade ? 1 : 0) - (y.m.is_upgrade ? 1 : 0));
+    // Base before upgrade; among base tickets the bigger line first, so the buyer
+    // keeps the main ticket and a second one in the same checkout is a seat.
+    targets.sort((x, y) => ((x.m.is_upgrade ? 1 : 0) - (y.m.is_upgrade ? 1 : 0))
+      || ((perLine.get(String(y.pid)) || 0) - (perLine.get(String(x.pid)) || 0)));
 
     if (!targets.length) {
       log({ outcome: 'no_mapped_product', order_id: orderId, product_ids: productIds });
@@ -2911,7 +2918,7 @@ async function handleGhlPaymentWebhook(req, res, origin) {
         const payload = invoiceId
           ? {
             event_id: t.m.event_id, email, invoice_id: invoiceId, transaction_id: txId,
-            contact_id: contactId, product_id: t.pid, amount: orderAmount, quantity: qty,
+            contact_id: contactId, product_id: t.pid, amount: perLine.has(String(t.pid)) ? perLine.get(String(t.pid)) : orderAmount, quantity: qty,
             status: 'paid', first_name: first, last_name: last, phone,
             issued_at: String(tx.createdAt || '').slice(0, 19) || null,
           }
@@ -2919,7 +2926,7 @@ async function handleGhlPaymentWebhook(req, res, origin) {
             event_id: t.m.event_id, email, ticket_type_id: t.m.ticket_type_id,
             first_name: first, last_name: last, phone,
             contact_id: contactId, order_id: orderId || txId, is_upgrade: !!t.m.is_upgrade,
-            product_id: t.pid, quantity: qty, amount: orderAmount,
+            product_id: t.pid, quantity: qty, amount: perLine.has(String(t.pid)) ? perLine.get(String(t.pid)) : orderAmount,
             purchased_at: String(tx.createdAt || '').slice(0, 19) || null,
           };
         const er = await fetch(`${EMBASE}${endpoint}`, {

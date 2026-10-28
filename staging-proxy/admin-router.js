@@ -1014,8 +1014,38 @@ async function pipelineHealth(deps) {
  * exist. Both compare two stores, so both live here rather than inside a health
  * component about a single service.
  */
+function readEventSources(deps) {
+  const evData = (deps && deps.eventDataDir) || process.env.EVENT_DATA_DIR || '/root/event/backend/data';
+  const proxyData = (deps && deps.proxyDataDir) || process.env.PROXY_DATA_DIR || '/root/gaia-staging-proxy/data';
+  const read = (p) => { try { return JSON.parse(fs.readFileSync(p, 'utf8')); } catch (_) { return null; } };
+  const out = { mirrors: {}, agenda: null, orderMirror: null, shopifyElevate: [] };
+  const st = read(path.join(evData, 'sheet-sync-status.json')) || {};
+  for (const [name, rec] of Object.entries(st)) {
+    out.mirrors[name] = { ok: !!rec.ok, exit: rec.exit, conflicts: rec.conflicts || null,
+      lastRun: rec.last_run || null, lastSuccess: rec.last_success || null };
+  }
+  out.agenda = read(path.join(evData, 'agenda-page-watch.json'));
+  out.orderMirror = read(path.join(proxyData, 'event-mirror-status.json'));
+  // The store catalogue is already synced daily from the public Shopify feed.
+  const cat = read(path.join(proxyData, 'store-catalog.json'));
+  const prods = (cat && cat.products) || [];
+  for (const prod of (Array.isArray(prods) ? prods : Object.values(prods))) {
+    const title = String(prod.title || prod.name || '');
+    if (!/elevate/i.test(title)) continue;
+    const available = prod.available !== false && prod.availableForSale !== false;
+    if (available) out.shopifyElevate.push(title.slice(0, 80));
+  }
+  return out;
+}
+
 async function alertExtras(deps) {
-  const extra = { membershipExceptions: [], payments: null, memberLinks: null, contactMerges: null };
+  const extra = { membershipExceptions: [], payments: null, memberLinks: null, contactMerges: null,
+    eventSources: null };
+  // Per-source sync health for the event (28 Oct 2026). The job-level checks
+  // only say whether a 30-minute run exited 0; these say which SOURCE is stale,
+  // in conflict, drifting, or selling tickets nothing records. Files only --
+  // no network call per sweep.
+  try { extra.eventSources = readEventSources(deps); } catch (_) { extra.eventSources = null; }
   // GHL merged contacts whose access still sits on the deleted id. Counted
   // from the scan's own file -- no GHL call per sweep.
   try {

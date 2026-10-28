@@ -16,6 +16,7 @@
  *   node event-mirror.mjs [--since-days=14] [--dry-run]
  */
 import fs from 'node:fs';
+import { lineAmounts } from './order-lines.mjs';
 
 const env = Object.fromEntries(fs.readFileSync('/root/gaia-staging-proxy/.env', 'utf8').split('\n')
   .filter((l) => l.includes('=') && !l.trim().startsWith('#'))
@@ -155,7 +156,12 @@ for (const o of orders) {
       amount: o.amount, paid_at: String(o.createdAt).slice(0, 10) });
     continue;
   }
-  for (const m of hits.sort((a, b) => (a.is_upgrade ? 1 : 0) - (b.is_upgrade ? 1 : 0))) {
+  // Each line carries its own share of the charge, and base tickets go first,
+  // biggest first, so the buyer keeps the main ticket and a second ticket in the
+  // same checkout becomes a seat to name at the door.
+  const perLine = lineAmounts(items, o.amount);
+  for (const m of hits.sort((a, b) => ((a.is_upgrade ? 1 : 0) - (b.is_upgrade ? 1 : 0))
+      || ((perLine.get(b.external_product_id) || 0) - (perLine.get(a.external_product_id) || 0)))) {
     if (DRY) { stats.reconciled++; continue; }
     const nm = String(o.contactName || '').split(' ');
     // The line for THIS product carries the quantity, which is the only field
@@ -168,7 +174,8 @@ for (const o of orders) {
       // Recorded so the ledger can be classified later without guessing: the
       // immutable product id, the seat count, the money, and WHEN GHL took it
       // (not when Gaia happened to reconcile it).
-      product_id: m.external_product_id, quantity: qty, amount: o.amount,
+      product_id: m.external_product_id, quantity: qty,
+      amount: perLine.has(m.external_product_id) ? perLine.get(m.external_product_id) : o.amount,
       // Full timestamp, not a date: minutes are what separate a duplicate
       // charge from a second seat bought the same afternoon.
       purchased_at: String(o.createdAt || '').slice(0, 19) || null,
@@ -191,6 +198,7 @@ for (const iv of invoices) {
   let email = String(cd.email || '').toLowerCase();
   const full = await ghl(`/invoices/${iv._id}?altId=${LOC}&altType=location`);
   const items = (full && (full.invoiceItems || (full.invoice && full.invoice.invoiceItems))) || iv.invoiceItems || [];
+  const invLines = lineAmounts(items, iv.amountPaid);
   for (const it of items) {
     const m = byPid.get(String(it.productId || ''));
     if (!m) continue;                       // not a ticket; invoices sell many things
@@ -203,7 +211,8 @@ for (const iv of invoices) {
     const nm = String(cd.name || '').split(' ');
     const { status, j } = await em('/identity/reconcile-invoice', {
       event_id: m.event_id, email, invoice_id: iv._id, contact_id: cd.id,
-      product_id: it.productId, price_id: it.priceId, amount: iv.amountPaid,
+      product_id: it.productId, price_id: it.priceId,
+      amount: invLines.has(String(it.productId || '')) ? invLines.get(String(it.productId || '')) : iv.amountPaid,
       quantity: Number(it.qty || it.quantity || 1), status: iv.status,
       first_name: nm[0] || '', last_name: nm.slice(1).join(' '), phone: cd.phoneNo,
       issued_at: when });
@@ -287,6 +296,18 @@ try {
 } catch (e) { /* monitoring must never break a reconciliation */ }
 
 log({ phase: 'done', ...stats });
+
+// What this run found, for the health checks (admin-router alertExtras):
+// orders the webhook missed and this pass had to reconcile, and paid orders
+// that could not be placed on anybody. Written last, so a run that died midway
+// leaves the previous status in place.
+if (!DRY) {
+  try {
+    const out = process.env.EVENT_MIRROR_STATUS_FILE || '/root/gaia-staging-proxy/data/event-mirror-status.json';
+    fs.writeFileSync(out + '.tmp', JSON.stringify({ at: new Date().toISOString(), since, ...stats }, null, 1));
+    fs.renameSync(out + '.tmp', out);
+  } catch (e) { log({ phase: 'status_write_failed', error: String(e && e.message).slice(0, 160) }); }
+}
 
 // Exit non-zero when anything failed.
 //

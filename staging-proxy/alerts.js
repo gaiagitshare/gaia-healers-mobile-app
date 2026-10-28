@@ -228,6 +228,60 @@ export function detect(health, extra = {}) {
     }
   }
 
+  // ── Event data sources, one by one (28 Oct 2026) ─────────────────────────
+  const es = extra.eventSources;
+  if (es) {
+    const HOURS = (iso) => (iso ? (Date.now() - Date.parse(iso + (/Z|[+-]\d\d:?\d\d$/.test(iso) ? '' : 'Z'))) / 3600000 : Infinity);
+    const label = { vendor_sync: 'Exhibitors', speaker_sync: 'Speakers', session_sync: 'Schedule (sheet)',
+      people_sync: 'Volunteers & guests', agenda_page_sync: 'Schedule (agenda page)' };
+    for (const [name, m] of Object.entries(es.mirrors || {})) {
+      if (m.conflicts) {
+        add({ key: `event-source:conflicts:${name}`, severity: 'warning', subsystem: 'Events',
+          title: `${label[name] || name}: the planning sheet has rows it will not guess about`,
+          why: 'The sync applied every clean row and left these alone, because the sheet is ambiguous (e.g. one company on two rows). Fix the sheet; the next run picks it up.',
+          evidence: String(m.conflicts).slice(0, 300), affected: null });
+      }
+      if (HOURS(m.lastSuccess) > 2) {
+        add({ key: `event-source:stale:${name}`, severity: 'warning', subsystem: 'Events',
+          title: `${label[name] || name} have not synced for over 2 hours`,
+          why: 'This part of the planning-sheet sync keeps failing while the others run, so its changes are not reaching the app.',
+          evidence: `last success ${m.lastSuccess || 'never'} · last exit ${m.exit}`, affected: null });
+      }
+    }
+    const om = es.orderMirror;
+    if (om && om.reconciled > 0) {
+      add({ key: 'event-source:webhook-missed', severity: 'warning', subsystem: 'Events',
+        title: `The GHL webhook missed ${om.reconciled} ticket order(s); the 15-minute recovery recorded them`,
+        why: 'Nothing was lost, but the real-time webhook is not delivering every order. Check the GHL workflow that posts to /api/webhooks/ghl-payment.',
+        evidence: `recovery run ${om.at}`, affected: null });
+    }
+    if (om && om.no_email_unplaced > 0) {
+      add({ key: 'event-source:order-unplaced', severity: 'critical', subsystem: 'Payments',
+        title: `${om.no_email_unplaced} paid ticket order(s) could not be placed on anybody`,
+        why: 'The order has no email and its GHL contact holds no ticket. Event Manager -> Review Queue -> "Paid, but on nobody\'s badge" links it in one tap.',
+        evidence: `recovery run ${om.at}`, affected: null });
+    }
+    const ag = es.agenda;
+    if (ag && !ag.synced && ag.changed_at && ag.changed_at > (ag.first_seen_at || '')) {
+      add({ key: 'event-source:agenda-drift', severity: 'warning', subsystem: 'Events',
+        title: 'The public agenda page changed; the app\'s schedule was not updated',
+        why: 'elevate.gaiahealers.com/agenda is edited by hand and nothing carries it into the app while the agenda mirror is off. Turn AGENDA_PAGE_SYNC on, or update the schedule at its source.',
+        evidence: `changed ${ag.changed_at} · ${ag.rows} rows on the page`, affected: null });
+    }
+    if (ag && ag.problems && ag.problems.length) {
+      add({ key: 'event-source:agenda-unreadable', severity: 'warning', subsystem: 'Events',
+        title: 'The public agenda page no longer reads as a schedule',
+        why: 'Its layout changed, so the agenda mirror applies nothing rather than guess. The app keeps the last good schedule.',
+        evidence: ag.problems.slice(0, 3).join(' · '), affected: null });
+    }
+    if ((es.shopifyElevate || []).length) {
+      add({ key: 'event-source:shopify-elevate', severity: 'warning', subsystem: 'Payments',
+        title: `Shopify is selling ${es.shopifyElevate.length} Elevate ticket product(s) that nothing records`,
+        why: 'gaiahealers.com (Shopify) has Elevate tickets on sale, but no integration reads Shopify orders: a buyer there gets no badge. Connect Shopify orders or unpublish these products.',
+        evidence: es.shopifyElevate.join(' · ').slice(0, 300), affected: null });
+    }
+  }
+
   // ── Event backup ─────────────────────────────────────────────────────────
   const eb = byKey.event_backup;
   if (eb) {

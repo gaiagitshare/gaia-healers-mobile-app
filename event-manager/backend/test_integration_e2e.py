@@ -248,6 +248,23 @@ try:
     check(r.returncode == 0 and c.execute("SELECT count(*) FROM speakers WHERE name='Zz E2e Speaker'").fetchone()[0] == 1,
           "a new sheet speaker reaches the Event Manager", (r.returncode, r.stdout[-300:], r.stderr[-300:]))
 
+    print("\n== F7b Speaker page -> Event Manager -> public speakers + website ==")
+    epage = os.path.join(HERE, "fixtures", "event-page-2026-10-28.html")
+    senv = dict(os.environ, DATABASE_URL="sqlite:///" + DB, VENDOR_SYNC_DATA=WORK, SPEAKER_PAGE_PUBLISH="1")
+    r = subprocess.run([sys.executable, os.path.join(HERE, "tools", "speaker_page_sync.py"), "--apply", epage], env=senv, capture_output=True, text=True)
+    st, body = http("GET", BASE + "/public/events/1/speakers")
+    names = [x["name"] for x in json.loads(body)] if st == 200 else []
+    check(r.returncode == 0 and "Martha Carlin" in names and "Dr. Davis" in names, "speakers on the page are published to the public API", (r.returncode, names))
+    html = open(epage, encoding="utf-8").read().replace("Preventive Cardiology", "Preventive Cardiology (E2E)")
+    i = html.find('<div class="spk-card">')
+    html = html[:i] + ('<div class="spk-card"><div class="spk-img"><img src="https://example.invalid/e2e.png" alt=""></div>'
+                       '<div class="spk-info"><div class="spk-name">Zz E2e Keynote</div><div class="spk-topic">Flows</div>'
+                       '<p class="spk-bio">Added.</p></div></div>') + html[i:]
+    ep2 = os.path.join(WORK, "event2.html"); open(ep2, "w", encoding="utf-8").write(html)
+    subprocess.run([sys.executable, os.path.join(HERE, "tools", "speaker_page_sync.py"), "--apply", ep2], env=senv, capture_output=True, text=True)
+    st, emb = http("GET", BASE + "/public/events/1/embed/speakers")
+    check(st == 200 and "Zz E2e Keynote" in emb, "a speaker added to the page reaches the website embed", st)
+
     print("\n== F8  Agenda page -> Event Manager -> public agenda + website ==")
     page = os.path.join(HERE, "fixtures", "agenda-page-2026-10-28.html")
     aenv = dict(os.environ, DATABASE_URL="sqlite:///" + DB, VENDOR_SYNC_DATA=WORK, AGENDA_PAGE_PUBLISH="1")
@@ -255,6 +272,9 @@ try:
     st, body = http("GET", BASE + "/public/events/1/agenda")
     days = json.loads(body).get("days") if st == 200 else None
     check(r.returncode == 0 and days and len(days) == 3, "the agenda reaches the public agenda (3 days)", (r.returncode, st, body[:200]))
+    c = sqlite3.connect(DB)
+    leaders = [n for (n,) in c.execute("SELECT name FROM speakers WHERE name IN ('Master Masaji','Tiffany Cagwin','Jai Karter')")]
+    check(len(leaders) == 3, "workshop leaders named only on the agenda become speakers", leaders)
     edited = open(page, encoding="utf-8").read().replace("Sonic Frequency Therapy", "Sonic Frequency Therapy (E2E edit)")
     page2 = os.path.join(WORK, "page2.html"); open(page2, "w", encoding="utf-8").write(edited)
     subprocess.run([sys.executable, os.path.join(HERE, "tools", "agenda_page_sync.py"), "--apply", page2], env=aenv, capture_output=True, text=True)

@@ -115,6 +115,7 @@ def main():
     byext = {r["external_id"]: r for r in rows if r["external_id"]}
     speakers = {ss.norm_name(r["name"]): r["id"] for r in db.execute("SELECT id, name FROM speakers WHERE event_id=?", (EVENT,))}
     creates, changes, links, seen = [], [], [], set()
+    new_speakers = {}   # session leaders the Event Manager does not know yet -> photo
     for i, row in enumerate(page):
         want = want_of(row)
         seen.add(row["key"])
@@ -129,7 +130,13 @@ def main():
             # "Dr. Nima Farshid, PhD, DNM" on the page is "Dr. Nima Farshid" here:
             # credentials after the first comma are not part of the name.
             key = ss.match(ss.norm_name(row["speaker"].split(",")[0]), speakers)
+            if key is None:
+                last = (ss.norm_name(row["speaker"].split(",")[0]).split() or [""])[-1]
+                solo = [k for k in speakers if " " not in k and k == last]
+                key = solo[0] if len(solo) == 1 else None
             links.append((row["key"], row["speaker"], speakers.get(key) if key else None))
+            if key is None and row["speaker"] not in new_speakers:
+                new_speakers[row["speaker"]] = row.get("photo")
     dropped = [r for r in rows if (r["external_id"] or "").startswith("page:") and r["external_id"] not in seen]
 
     L.append("Agenda page · %d rows · in the app from this page: %d · to add: %d · to update: %d · gone from the page: %d · %s"
@@ -154,10 +161,9 @@ def main():
         for r in dropped:
             L.append("- %s" % r["title"])
         L.append("")
-    unknown = sorted({n for _, n, sid in links if sid is None})
-    if unknown:
-        L.append("## Speakers on the agenda who are not in the Event Manager")
-        for n in unknown:
+    if new_speakers:
+        L.append("## Session leaders added as speakers (from the agenda)")
+        for n in sorted(new_speakers):
             L.append("- %s" % n)
         L.append("")
 
@@ -185,6 +191,13 @@ def main():
                 if int(r["is_published"] or 0):
                     db.execute("UPDATE sessions SET is_published=0, updated_at=? WHERE id=?", (now, r["id"]))
                     log.write(json.dumps({"at": now, "op": "unpublish", "id": r["id"], "title": r["title"]}) + "\n")
+            for name, photo in sorted(new_speakers.items()):
+                cur = db.execute("INSERT INTO speakers (event_id, name, photo_url, links, sort_order, is_published, is_featured, created_at) "
+                                 "VALUES (?, ?, ?, ?, 0, ?, 0, ?)", (EVENT, name, photo, json.dumps({"source": "elevate-agenda"}),
+                                                                     1 if PUBLISH else 0, now))
+                log.write(json.dumps({"at": now, "op": "create_speaker", "name": name}) + "\n")
+                sid = cur.lastrowid
+                links[:] = [(e, n, sid if (n == name and spid is None) else spid) for e, n, spid in links]
             db.commit()
             ids = {r["external_id"]: r["id"] for r in db.execute("SELECT id, external_id FROM sessions WHERE event_id=?", (EVENT,))
                    if r["external_id"]}

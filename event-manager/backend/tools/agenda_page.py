@@ -159,7 +159,7 @@ def parse(page_html):
             for d in days:
                 out.append({"key": "page:%s:workshop:%s" % (d, _slug(name)), "day": d, "kind": "workshop",
                             "title": name, "speaker": speaker, "start": start, "end": end,
-                            "room": room or "Workshops", "description": detail})
+                            "room": room or "Workshops", "description": detail, "photo": r.get("photo")})
             continue
         day = {"ag-fri": "fri", "ag-sat": "sat", "ag-workshops": "sun"}.get(panel)
         if not day:
@@ -171,7 +171,8 @@ def parse(page_html):
             base = "page:%s:talk:%s" % (day, _slug(speaker or title))
             n = counters[base] = counters.get(base, 0) + 1
             out.append({"key": base + ("" if n == 1 else ":%d" % n), "day": day, "kind": "talk", "title": title,
-                        "speaker": speaker, "start": start, "end": end, "room": "Main Stage", "description": None})
+                        "speaker": speaker, "start": start, "end": end, "room": "Main Stage", "description": None,
+                        "photo": r.get("photo")})
         elif r.get("ag-workshop-name"):
             name = _clean(r.get("ag-workshop-name"))
             detail = _clean(r.get("ag-workshop-detail"))

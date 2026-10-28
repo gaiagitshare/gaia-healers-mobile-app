@@ -63,7 +63,9 @@ try:
     # it safely could and reported rows it would not guess about (today's sheet
     # may hold a duplicate company -- Bio-Well, 28 Oct 2026).
     import re as _re
-    n_mirrors = len([m for m in __import__("os").environ.get("SHEET_SYNC_MIRRORS", "vendor_sync,speaker_sync,session_sync,people_sync,agenda_page_sync").split(",") if m])
+    sys.path.insert(0, os.path.join(HERE, "tools"))
+    import sheet_sync_all as _runner          # the runner's own list, so this never drifts
+    n_mirrors = len(_runner.MIRRORS)
     check(real.returncode == 0 and len(_re.findall(r" ok(, CONFLICTS)? \(exit [03]", real.stdout)) == n_mirrors,
           "the real mirrors run clean as a dry run on a copy", real.stdout[-800:])
 finally:

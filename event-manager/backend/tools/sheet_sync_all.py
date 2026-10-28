@@ -28,9 +28,11 @@ HERE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 TOOLS = os.environ.get("SHEET_SYNC_TOOLS_DIR") or os.path.join(HERE, "tools")   # a test points this at stand-ins
 DATA = os.environ.get("VENDOR_SYNC_DATA") or os.path.join(HERE, "data")
 STATUS = os.path.join(DATA, "sheet-sync-status.json")
-# agenda_page_sync is a no-op unless AGENDA_PAGE_SYNC=1 (see that tool).
+# The two page mirrors are no-ops (they only watch the pages) unless
+# SPEAKER_PAGE_SYNC=1 / AGENDA_PAGE_SYNC=1. Speakers run before the agenda so
+# sessions link to speakers that already exist.
 MIRRORS = [m for m in os.environ.get("SHEET_SYNC_MIRRORS",
-                                     "vendor_sync,speaker_sync,session_sync,people_sync,agenda_page_sync").split(",") if m]
+                                     "vendor_sync,speaker_sync,session_sync,people_sync,speaker_page_sync,agenda_page_sync").split(",") if m]
 PER_TOOL_TIMEOUT = int(os.environ.get("SHEET_SYNC_TOOL_TIMEOUT", "240"))
 APPLY = "--apply" in sys.argv
 

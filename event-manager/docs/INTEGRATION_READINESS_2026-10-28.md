@@ -1,96 +1,74 @@
-# Elevate 2026 — integration readiness (28 Oct 2026)
+# Elevate 2026 — integration readiness (28 Oct 2026, final for this phase)
 
-Scope: connections only — whether each source is reachable, synchronised,
-monitored and proven end to end. No record-level data review (that is the next
-phase). Production is untouched; everything new is on staging branches:
-Event Manager `staging/integrations` (worktree /root/event-staging), proxy
-`staging/event-integrations` (checkout /root/gaia-healers-mobile-app-1).
+Connections only. No record-level review (duplicates, amounts, badges and
+historical corrections belong to the next phase). Nothing in this phase changed
+GHL, Shopify, the planning sheet or the website.
 
 ## The ecosystem
 
 ```
-ORIGINAL SOURCES                 INTEGRATION                         CENTRAL                 DESTINATIONS
-GHL checkouts (Stripe/PayPal) ─► webhook (real time) + 15-min pull ─┐
-Shopify gaiahealers.com ───────► webhook (real time) + 15-min pull ─┤
-Planning sheet: Vendors ───────► 30-min pull ───────────────────────┤
-Planning sheet: Speakers ──────► 30-min pull ───────────────────────┼─► EVENT MANAGER ─┬─► gaiahealers.app (Events tab, live reads)
-Planning sheet: Volunteers ────► 30-min pull ───────────────────────┤   (event.db)     ├─► public API /event-api/public/*
-Agenda page (elevate…/agenda) ─► 30-min pull (or sheet Schedule tab)┘                  └─► website embeds (iframes on elevate pages)
-Door sales / staff (desk) ─────► direct in the Event Manager ─────────────────────────────┘
-                           Monitoring: per-source status files → proxy health → System Alerts
+SOURCE (owner edits here)                     INTEGRATION                                CENTRAL          DESTINATIONS
+GHL checkouts (Stripe / PayPal) ────────────► webhook, real time + 15-min recovery ─┐
+Shopify gaiahealers.com (5 Elevate products) ► webhook, real time + 15-min backstop ┤
+Planning sheet · Vendors ───────────────────► every 30 min ────────────────────────┤
+Planning sheet · Speakers / Volunteers ─────► every 30 min ────────────────────────┼─► EVENT ─────┬─► gaiahealers.app (Events tab)
+Event page · speaker cards ─────────────────► every 30 min ────────────────────────┤   MANAGER    ├─► public API /event-api/public/*
+Agenda page · sessions + workshop leaders ──► every 30 min ────────────────────────┘              └─► website embeds (exhibitors)
+Door / desk (walk-ins, staff) ──────────────► direct in the Event Manager
+Monitoring: per-source status files → proxy health → System Alerts → (ALERT_CONTACT_ID) email
 ```
 
-## Who owns what
+Ownership: purchases = GHL / Shopify · exhibitor commercial facts = sheet,
+exhibitor profile = Event Manager · speaker line-up, bios, photos = event page
+(filled into empty fields only; anything set in the app wins) · schedule and
+workshop leaders = agenda page · volunteers/guests = sheet. The agenda page and
+the speaker cards are SOURCES, so they stay as they are; the exhibitor embed is
+the one that belongs on the website.
 
-| Data | Owner (edit here) | Flows to |
-|---|---|---|
-| Ticket purchases, refunds | GHL (and Shopify if kept) | Event Manager |
-| Exhibitor commercial facts (stage, booth, package, contact, payment) | Planning sheet, Vendors tab | Event Manager → directory, website |
-| Exhibitor profile (logo, text, category, publish, scanner) | Event Manager | directory, website |
-| Who speaks, company | Planning sheet, Speakers tab | Event Manager |
-| Speaker bio, photo, title | Event Manager | app, website |
-| Schedule | **Decision needed:** agenda page *or* sheet Schedule tab | Event Manager → app, website |
-| Volunteers & guests | Planning sheet | Event Manager (badges) |
-| Event details, FAQ, policies | Event Manager | app (website copy is hand-written today) |
+## Status
 
-## Readiness
+### A. Fully operational in production
+| Source → Destination | Method | Frequency | Last successful sync (28 Oct, UTC) | Monitoring |
+|---|---|---|---|---|
+| GHL checkout → Event Manager | webhook (shared secret; wrong secret 403) | real time | last sale 26 Oct 03:17; 29 deliveries on file | webhook-miss alert (24 h) |
+| GHL API → Event Manager (orders, invoices, refunds, attempts) | scheduled pull, 5 retries/call | every 15 min | 12:24 (0 errors) | failure, stale, silent alerts |
+| Planning sheet Vendors → Event Manager | scheduled pull, 3 retries | every 30 min | 12:08 (ok; Bio-Well conflict flagged, not applied) | conflict, stale alerts |
+| Planning sheet Speakers → Event Manager | scheduled pull | every 30 min | 12:08 | stale alert |
+| Planning sheet Volunteers/Guests → Event Manager | scheduled pull | every 30 min | 12:08 | stale alert |
+| Event Manager → gaiahealers.app | live API reads | real time | live | — |
+| Event Manager → public API + embed pages | live, 5-min cache | real time | live (embeds 200, frame policy set) | — |
+| Agenda page watch | scheduled fetch | every 30 min | 12:08 (46 rows) | drift, unreadable alerts |
 
-Legend: 🟢 connected, synchronised, verified · 🟡 connected but not fully automated or verified · 🔴 disconnected, broken or missing.
-"Today" = production now. "After approval" = staging build, proven end to end, waiting for go-ahead.
-
-| Source → Destination | Mode / frequency | Today | Last successful sync (today) | Monitoring | After approval |
-|---|---|---|---|---|---|
-| GHL checkout → Event Manager (webhook) | real time | 🟢 27 deliveries / 14 d; auth enforced (no secret → 403) | 26 Oct 03:17 UTC (last sale) | reconcile log; misses now counted | 🟢 + per-line amounts; miss alert (24 h window) |
-| GHL API → Event Manager (recovery pass) | every 15 min, 5 retries per call | 🟢 1,283 runs / 14 d, 3 failed + recovered | 28 Oct 10:59 UTC | job alert (failed / stale) | 🟢 + status file, "silent" alert |
-| GHL refunds → Event Manager | every 15 min | 🟢 any age since 25 Oct | 28 Oct | via recovery pass | 🟢 |
-| **Shopify orders → Event Manager** | — | 🔴 no credential; 5 Elevate products on sale | never | none | 🟡 connector built (webhook + 15-min backstop), proven with test orders; needs store token |
-| Planning sheet Vendors → Event Manager | every 30 min, 3 retries | 🟡 live, but one duplicated name flips an exhibitor every run, no alert | 28 Oct 11:05 UTC | job alert only | 🟢 duplicates reported not applied, conflict alert |
-| Planning sheet Speakers → Event Manager | every 30 min | 🟢 (who/company; bio & photo are app-owned) | 28 Oct 11:05 UTC | job alert | 🟢 + per-source staleness |
-| Planning sheet Volunteers/Guests → Event Manager | every 30 min | 🟢 | 28 Oct 11:06 UTC | job alert | 🟢 |
-| **Schedule → Event Manager** | — | 🔴 no Schedule tab; app shows 0 sessions | never | none | 🟡 agenda-page mirror built (46 rows), off until source decided; drift alert |
-| Event Manager → app (gaiahealers.app) | real-time reads | 🟢 | live | — | 🟢 |
-| **Event Manager → website (elevate pages)** | — | 🔴 pages hand-written in GHL | never | — | 🟡 embeds built (agenda, speakers, exhibitors; 5-min cache); need pasting into the GHL pages |
-| Monitoring → people | — | 🔴 alerts visible in Admin only (`ALERT_CONTACT_ID` unset) | — | — | 🔴 until a contact is set |
-| Legacy: "Sync Gaia Pages" page import, `/webhooks/registration`, `/api/admin/events` | — | 🔴 dead | never | — | remove (not done) |
-
-## Proof (staging, controlled test records — no real service touched)
-
-`backend/test_integration_e2e.py` runs the real proxy, the real sync scripts and
-a copy of the Event Manager against fake GHL and Shopify servers. All 10 flows pass:
-
-| Flow | Result |
+### B. Implemented, verified on staging, not yet enabled in production
+| Integration | What turning it on takes |
 |---|---|
-| F1 GHL purchase → webhook → Event Manager; wrong secret refused | ✅ |
-| F2 Purchase the webhook never delivered → 15-min pass records it, status written | ✅ |
-| F3 GHL outage → pass fails loudly (unit marked failed) → next pass catches up | ✅ |
-| F4 Shopify order → signed webhook → Event Manager; unsigned refused | ✅ |
-| F5 Shopify order → 15-min backstop | ✅ |
-| F6 Sheet: new exhibitor created; changed booth → public directory → website embed | ✅ |
-| F7 Sheet: new speaker → Event Manager | ✅ |
-| F8 Agenda page → public agenda (3 days) → website embed; an edit propagates | ✅ |
-| F9 Event Manager → app events feed | ✅ |
-| F10 Webhook gap raises an alert | ✅ |
+| Agenda page → Event Manager (46 sessions, workshop leaders created and linked) | deploy `staging/page-sync` + `AGENDA_PAGE_SYNC=1`, `AGENDA_PAGE_PUBLISH=1` |
+| Event page speaker cards → Event Manager (fills Carlin, Roth, Baider, Dr. Davis; no duplicates) | deploy `staging/page-sync` + `SPEAKER_PAGE_SYNC=1`, `SPEAKER_PAGE_PUBLISH=1` |
+| Speaker-page watch alerts | merge proxy `staging/speaker-page-watch` |
+| Exhibitor embed on the website | add a custom-code block to the GHL "Gaia Healers Elevate Conference" page (funnel ICib74xvODPEJQHFYWOv); GHL's API cannot edit page content, so this is done in the GHL builder |
 
-Also: per-source unit tests (Shopify 7, source health 6, agenda mirror 16,
-vendor duplicates, sheet runner); proxy suite 1,157 pass / 0 fail.
+Staging proof: two full 30-minute cycles with both page mirrors on — cycle 1
+applied (46 sessions, 4 speaker profiles, 4 workshop leaders), cycle 2 changed
+nothing; every mirror recorded its last success.
 
-Bugs found and fixed on the way (staging): an imported session with an empty
-"featured" flag took the whole public agenda down with a 500 (the sheet's
-Schedule importer had the same latent bug); replay-time corrections to tickets
-were silently never saved.
+### C. Awaiting credentials or configuration
+| Integration | Exact requirement |
+|---|---|
+| Shopify orders → Event Manager (connector live, inert) | In Shopify admin of store `1f57dd.myshopify.com`: an app with Admin API scope `read_orders`; give its Admin API access token (`SHOPIFY_ADMIN_TOKEN`). Create webhooks **Order payment** and **Order update** (JSON) to `https://api.gaiahealers.app/api/webhooks/shopify-order` and give the signing secret (`SHOPIFY_WEBHOOK_SECRET`). Confirm the ticket each product grants — proposed: VIP 10561859911967 → VIP Pass; 3-Day Exhibitor Hall & Speaker Room 10561873346847 → Three Day Event Pass; Fri 10602917396767 → Friday Exhibit Hall; Sat 10602917953823 → Saturday Exhibit Hall; Sun 10602918314271 → Sunday Exhibit Hall. No credential exists today on the server, in any config, or in GHL (GHL has never received a Shopify order). |
+| Alerts → a person | `ALERT_CONTACT_ID`. No admin notification is configured anywhere. Proposed: contact `zdO2cv7MWnUifIzsIviE` ("babak Jalali", the GHL account admin Babi Jalali). |
 
-## What needs Babak
+### D. Broken or missing
+| Item | Note |
+|---|---|
+| Keynote designation | No source marks keynotes (not the page, the agenda or the sheet). The app has an `is_featured` flag; somebody has to say who. |
+| Legacy "Sync Gaia Pages" importer, `/webhooks/registration`, `/api/admin/events` | Dead paths; harmless; remove later. |
 
-1. **Approve production deploy** of both staging branches. The Event Manager
-   branch also carries the per-line ticket split parked from the data work;
-   it can ship or be held back separately.
-2. **Shopify:** decide keep or unpublish the 5 Elevate products. If kept: store
-   domain, an Admin API token with `read_orders`, a webhook secret, the webhook
-   (orders/paid, orders/updated) pointed at `https://api.gaiahealers.app/api/webhooks/shopify-order`,
-   and which ticket each product grants.
-3. **Schedule source:** the agenda page (turn on `AGENDA_PAGE_SYNC=1`, and
-   `AGENDA_PAGE_PUBLISH=1` to show it) or a Schedule tab in the planning sheet.
-4. **Website:** paste the three iframe snippets into the GHL elevate pages so
-   speakers, exhibitors and agenda follow the Event Manager.
-5. **Alerts:** set `ALERT_CONTACT_ID` (who gets notified).
-6. **Sheet:** delete the duplicate Bio-Well row (row 43).
+## End-to-end proof (staging, controlled test records)
+`backend/test_integration_e2e.py` — real proxy, real sync scripts, a copy of
+the Event Manager, fake GHL and Shopify. 11 flows, 23 checks, all pass:
+GHL webhook (and wrong secret refused) · GHL recovery pass · GHL outage fails
+loudly then catches up · Shopify signed webhook (unsigned refused) · Shopify
+backstop · sheet exhibitor added + booth changed → directory → website embed ·
+sheet speaker added · event-page speaker added → public API → embed · agenda →
+public agenda (3 days) + leaders created + edit reaches embed · app feed ·
+webhook gap raises an alert. Proxy suite 1,153 pass / 0 fail.

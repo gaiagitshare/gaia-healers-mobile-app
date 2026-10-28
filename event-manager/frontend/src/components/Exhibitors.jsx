@@ -55,6 +55,7 @@ import BulkToolbar, { useBulkSelection, SelectAllCheckbox } from './BulkToolbar'
 // aligned" stand sit one stray click from the attendee directory.
 export const STAGES = [
     { key: 'confirmed', label: 'Confirmed', note: 'Paid or ours. These are the stands at the event.' },
+    { key: 'purchased', label: 'Bought online', note: 'Paid for a package through the website. Confirm the company name and booth, then move to Confirmed.' },
     { key: 'waiting', label: 'Waiting to confirm', note: 'In conversation. Promote them when they pay.' },
     { key: 'unsure', label: 'Not sure yet', note: 'Contacted, no answer either way.' },
     { key: 'other', label: 'Others', note: 'Our own tables and anything that does not fit a package.' },

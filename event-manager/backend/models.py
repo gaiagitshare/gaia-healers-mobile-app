@@ -312,6 +312,11 @@ class Exhibitor(Base):
     contact_name = Column(String)
     sheet_notes = Column(Text)
     sheet_synced_at = Column(DateTime, nullable=True)
+    # The name the public event page shows (GHL is the source of truth for what
+    # attendees see; the sheet's company_name stays the internal key the sheet
+    # sync matches on). Set by tools/exhibitor_page_sync.py.
+    site_name = Column(String)
+    site_synced_at = Column(DateTime, nullable=True)
     # PUBLIC contact, taken from the company's own website — separate from
     # contact_email/contact_phone above, which is the person who booked the
     # booth and is frequently their personal mobile. A directory that published

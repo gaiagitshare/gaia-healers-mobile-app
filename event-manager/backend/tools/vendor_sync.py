@@ -131,6 +131,14 @@ def main():
         if col not in cols: db.execute("ALTER TABLE exhibitors ADD COLUMN %s %s" % (col, ddl))
     rows = db.execute("SELECT * FROM exhibitors WHERE event_id=?", (EVENT,)).fetchall()
     by_name = {vs.norm_name(r["company_name"]): r for r in rows}
+    # An exhibitor package bought online arrives before the sheet knows the
+    # company (tools/exhibitor_package_sync.py files it as stage "purchased",
+    # named after the buyer). When the sheet lists that buyer's email, the sheet
+    # row IS that stand: adopt it rather than creating a second one.
+    purchased, adopted_ids = {}, set()
+    for r in rows:
+        if (r["stage"] or "") == "purchased" and (r["contact_email"] or "").strip():
+            purchased.setdefault(r["contact_email"].strip().lower(), r)
     seen, changes, creates, report, offs = set(), [], [], [], []
 
     # Two rows with the same company name make the sheet ambiguous: matching
@@ -150,9 +158,15 @@ def main():
             continue
         want = desired(rec)
         r = by_name.get(key)
+        adopted = False
+        if r is None and want.get("contact_email") and want["contact_email"] in purchased:
+            r, adopted = purchased.pop(want["contact_email"]), True
+            by_name[key] = r; adopted_ids.add(r["id"])
         if r is None:
             creates.append((rec, want)); continue
         diff = {f: v for f, v in want.items() if v not in (None, "") and not same(f, r[f], v)}
+        if adopted:
+            diff["company_name"] = rec["company"]
         # One deliberate exception to "a blank cell never blanks a value": a
         # booth cell the sheet has emptied or filled with a placeholder means
         # this stand has no booth yet, and a stale number on the floor plan is
@@ -170,7 +184,7 @@ def main():
         if off:
             offs.append((r, diff, off))
 
-    gone = [r for r in rows if vs.norm_name(r["company_name"]) not in seen]
+    gone = [r for r in rows if vs.norm_name(r["company_name"]) not in seen and r["id"] not in adopted_ids]
 
     lines = ["# Exhibitor sheet sync — %s (%s)" % (started.strftime("%Y-%m-%d %H:%M UTC"), "APPLIED" if APPLY else "dry run"), ""]
     lines.append("Sheet rows: %d · matched: %d · to create: %d · to update: %d · switched off: %d · in Event Manager but not in sheet: %d" % (

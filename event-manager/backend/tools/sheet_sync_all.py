@@ -32,7 +32,7 @@ STATUS = os.path.join(DATA, "sheet-sync-status.json")
 # SPEAKER_PAGE_SYNC=1 / AGENDA_PAGE_SYNC=1. Speakers run before the agenda so
 # sessions link to speakers that already exist.
 MIRRORS = [m for m in os.environ.get("SHEET_SYNC_MIRRORS",
-                                     "vendor_sync,speaker_sync,session_sync,people_sync,speaker_page_sync,agenda_page_sync").split(",") if m]
+                                     "vendor_sync,speaker_sync,session_sync,people_sync,speaker_page_sync,agenda_page_sync,exhibitor_page_sync,exhibitor_package_sync").split(",") if m]
 PER_TOOL_TIMEOUT = int(os.environ.get("SHEET_SYNC_TOOL_TIMEOUT", "240"))
 APPLY = "--apply" in sys.argv
 

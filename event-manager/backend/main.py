@@ -97,7 +97,8 @@ def _ensure_event_columns():
                        ("logo_on_dark", "BOOLEAN DEFAULT 0"), ("tables", "INTEGER"),
                        ("setup_token_hash", "VARCHAR"), ("setup_sent_at", "DATETIME"),
                        ("setup_expires_at", "DATETIME"), ("activated_at", "DATETIME"),
-                       ("contact_name", "VARCHAR"), ("sheet_notes", "TEXT"), ("sheet_synced_at", "DATETIME")):
+                       ("contact_name", "VARCHAR"), ("sheet_notes", "TEXT"), ("sheet_synced_at", "DATETIME"),
+                       ("site_name", "VARCHAR"), ("site_synced_at", "DATETIME")):
         if _ex and _col not in _ex:
             stmts.append("ALTER TABLE exhibitors ADD COLUMN %s %s" % (_col, _ddl))
     if "door_test_mode" not in cols:
@@ -5044,7 +5045,11 @@ def get_public_exhibitors(
         # they need no permission. contact_* is whoever booked the booth --
         # often a personal mobile -- and appears only if that person asked.
         out.append({
-            "id": r.id, "company_name": r.company_name, "booth_number": r.booth_number,
+            # The public page's name for them when it has one ("Rapid Release",
+            # not the sheet's "Rapids Release Therapy"): attendees see what the
+            # event website shows.
+            "id": r.id, "company_name": getattr(r, "site_name", None) or r.company_name,
+            "booth_number": r.booth_number,
             "description": r.description, "logo_url": r.logo_url, "website": r.website,
             "category": r.category, "tagline": getattr(r, "tagline", None),
             "address": getattr(r, "address", None),

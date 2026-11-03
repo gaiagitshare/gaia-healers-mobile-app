@@ -1125,6 +1125,20 @@ body{overscroll-behavior-y:none;-webkit-tap-highlight-color:transparent}
 .g-map__pin.is-active .g-map__name{color:#07100b;background:var(--g-accent,#A8E063);
   border-color:transparent}
 .g-map__pin.is-active .g-map__glyph{transform:scale(1.35)}
+/* Booths: a quiet ring over the table number printed on the plan. */
+.g-map__pin--booth{transform:translate(-50%,-50%);justify-content:center;min-width:34px;min-height:34px;padding:0}
+.g-map__ring{width:26px;height:26px;border-radius:50%;border:2px solid rgba(168,224,99,.55);background:rgba(168,224,99,.12)}
+.g-map__pin--booth.is-active .g-map__ring{border-color:var(--g-accent,#A8E063);background:rgba(168,224,99,.35);
+  box-shadow:0 0 0 6px rgba(168,224,99,.25)}
+.g-map__plan{background:#fff;width:100%;max-width:720px;align-self:center}
+.g-map__num{display:inline-grid;place-items:center;min-width:28px;height:28px;padding:0 6px;border-radius:8px;
+  background:rgba(168,224,99,.16);color:var(--g-accent,#A8E063);font-weight:800;font-size:.85rem}
+.g-map__card{display:flex;flex-direction:column;gap:8px;padding:14px;border-radius:16px;
+  border:1px solid rgba(168,224,99,.35);background:rgba(168,224,99,.06)}
+.g-map__card p{margin:0;font-size:.88rem;color:rgba(255,255,255,.75)}
+.g-map__card-head{display:flex;align-items:center;gap:10px}
+.g-map__card .g-btn{align-self:flex-start}
+.g-map__row[hidden]{display:none}
 .g-map__legend{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:8px}
 .g-map__row{display:flex;align-items:center;gap:10px;text-align:left;cursor:pointer;
   min-height:52px;padding:10px 12px;border-radius:14px;

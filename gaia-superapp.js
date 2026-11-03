@@ -568,10 +568,24 @@
     const places = Array.isArray(venue.places) ? venue.places : [];
     const exhibitorsById = {};
     (detail.exhibitors || []).forEach((v) => { exhibitorsById[v.id] = v; });
+    // A booth is a table already numbered on the floor plan, so it gets a quiet
+    // tap target over that number rather than a glyph that would hide it -- 33
+    // emoji over 33 printed numbers is noise. Only tables with a stand on them
+    // are interactive; the server links each booth to whoever the planning
+    // sheet puts on it.
+    const isBooth = (place) => place.kind === 'booth';
+    const visible = places.filter((place) => !isBooth(place) || exhibitorsById[place.exhibitor_id]);
+    const boothNo = (place) => Number((String(place.name).match(/\d+/) || [0])[0]);
+    const ordered = visible.slice().sort((a, b) => (isBooth(a) && isBooth(b) ? boothNo(a) - boothNo(b) : 0));
 
-    const pins = places.map((place) => {
+    const pins = visible.map((place) => {
       const exhibitor = place.exhibitor_id ? exhibitorsById[place.exhibitor_id] : null;
       const label = place.name + (exhibitor ? ' · ' + exhibitor.company_name : '');
+      if (isBooth(place)) {
+        return '<button type="button" class="g-map__pin g-map__pin--booth" style="left:' + Number(place.x)
+          + '%;top:' + Number(place.y) + '%" data-map-place="' + esc(place.id) + '"'
+          + ' aria-label="' + esc(label) + '"><span class="g-map__ring" aria-hidden="true"></span></button>';
+      }
       return '<button type="button" class="g-map__pin" style="left:' + Number(place.x)
         + '%;top:' + Number(place.y) + '%" data-map-place="' + esc(place.id) + '"'
         + ' aria-label="' + esc(label) + '">'
@@ -580,23 +594,48 @@
         + '</button>';
     }).join('');
 
-    const legend = places.map((place) => {
+    const legend = ordered.map((place) => {
       const exhibitor = place.exhibitor_id ? exhibitorsById[place.exhibitor_id] : null;
-      return '<button type="button" class="g-map__row" data-map-place="' + esc(place.id) + '">'
-        + '<span class="g-map__glyph">' + (PLACE_GLYPHS[place.kind] || PLACE_GLYPHS.other) + '</span>'
-        + '<span><strong>' + esc(place.name) + '</strong>'
-        + (exhibitor ? '<em>' + esc(exhibitor.company_name) + '</em>'
+      return '<button type="button" class="g-map__row" data-map-place="' + esc(place.id) + '"'
+        + ' data-map-key="' + esc((place.name + ' ' + (exhibitor ? exhibitor.company_name : '')).toLowerCase()) + '">'
+        + (isBooth(place)
+          ? '<span class="g-map__num">' + esc(String(boothNo(place))) + '</span>'
+          : '<span class="g-map__glyph">' + (PLACE_GLYPHS[place.kind] || PLACE_GLYPHS.other) + '</span>')
+        + '<span><strong>' + esc(exhibitor ? exhibitor.company_name : place.name) + '</strong>'
+        + (exhibitor ? '<em>' + esc(place.name) + (exhibitor.tagline ? ' · ' + esc(exhibitor.tagline) : '') + '</em>'
           : (place.description ? '<em>' + esc(place.description) + '</em>' : ''))
         + '</span></button>';
     }).join('');
 
-    return '<section class="g-map"><p class="g-super-kicker">Find your way</p><h2>Venue map</h2>'
+    return '<section class="g-map" data-map><p class="g-super-kicker">Find your way</p><h2>Exhibit hall map</h2>'
+      + '<p class="g-super-sub">Tap a table to see who is there, or find a company below.</p>'
       + (venue.map_image_url
-        ? '<div class="g-map__plan"><img src="' + esc(venue.map_image_url) + '" alt="Venue floor plan" />' + pins + '</div>'
+        ? '<div class="g-map__plan"><img src="' + esc(venue.map_image_url) + '" alt="Exhibit hall floor plan with numbered tables" />' + pins + '</div>'
         // No plan image yet: the list of places still answers the question.
         : '')
-      + (legend ? '<div class="g-map__legend">' + legend + '</div>' : '')
+      + '<div class="g-map__card" data-map-card hidden></div>'
+      + (legend ? (visible.length > 8
+        ? '<div class="g-dir-search"><label class="g-sr-only" for="g-map-q">Find a company or booth</label>'
+          + '<input class="g-input" type="search" id="g-map-q" data-map-q autocomplete="off" placeholder="Find a company or booth" enterkeyhint="search"></div>'
+        : '') + '<div class="g-map__legend">' + legend + '</div>' : '')
       + '</section>';
+  }
+
+  // The stand behind a booth pin, as a small card under the plan: what they do
+  // and a way to their own page -- the answer to "who is at table 12?".
+  function mapCardHtml(detail, placeId) {
+    const place = (detail?.map?.places || []).find((p) => String(p.id) === String(placeId));
+    if (!place) return '';
+    const exhibitor = (detail.exhibitors || []).find((v) => v.id === place.exhibitor_id);
+    if (!exhibitor) return '<strong>' + esc(place.name) + '</strong>' + (place.description ? '<p>' + esc(place.description) + '</p>' : '');
+    const base = (window.GAIA_APP_URLS && window.GAIA_APP_URLS.production
+      && window.GAIA_APP_URLS.production.proxy) || '';
+    const blurb = exhibitor.tagline || exhibitor.description || '';
+    return '<span class="g-map__card-head"><span class="g-map__num">' + esc(String((String(place.name).match(/\d+/) || [''])[0])) + '</span>'
+      + '<strong>' + esc(exhibitor.company_name) + '</strong></span>'
+      + (blurb ? '<p>' + esc(blurb) + '</p>' : '')
+      + (base ? '<a class="g-btn g-btn--secondary g-btn--sm" href="' + esc(base + '/v/' + exhibitor.id)
+        + '" target="_blank" rel="noopener noreferrer">See their stand page</a>' : '');
   }
 
   function speakersSection(detail) {
@@ -636,7 +675,11 @@
       + '<p class="g-super-kicker">Exhibit hall</p><h2>Exhibitor directory</h2>'
       + '<p class="g-super-sub" data-dir-count>' + rows.length
       + (rows.length === 1 ? ' stand' : ' stands') + '</p>'
-      + '</div></div>';
+      + '</div>'
+      // Where the stands are: the floor plan with every table linked to its stand.
+      + (detail?.map ? '<button type="button" class="g-btn g-btn--secondary g-btn--sm" data-event-tab="map">'
+        + icon('map-trifold') + ' See the exhibit hall map</button>' : '')
+      + '</div>';
 
     if (!rows.length) {
       return head + '<p class="g-empty">No stands are listed yet. They appear here as each one '
@@ -2028,14 +2071,26 @@
     if (window.GaiaPeople && eventUI.tab === 'people') window.GaiaPeople.bind(root, eventId, render);
     // Tapping a legend row (or a pin) highlights that pin and scrolls it into
     // view — the closest a flat plan gets to "take me there".
+    const mapCard = root.querySelector('[data-map-card]');
     root.querySelectorAll('[data-map-place]').forEach((el) => {
       el.addEventListener('click', () => {
         const id = el.dataset.mapPlace;
         root.querySelectorAll('.g-map__pin').forEach((pin) => {
           pin.classList.toggle('is-active', pin.dataset.mapPlace === id);
         });
+        if (mapCard) {
+          mapCard.innerHTML = mapCardHtml(detail, id);
+          mapCard.hidden = !mapCard.innerHTML;
+        }
         const pin = root.querySelector('.g-map__pin[data-map-place="' + id + '"]');
         if (pin) pin.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'center' });
+      });
+    });
+    const mapQ = root.querySelector('[data-map-q]');
+    if (mapQ) mapQ.addEventListener('input', () => {
+      const q = mapQ.value.trim().toLowerCase();
+      root.querySelectorAll('.g-map__row').forEach((row) => {
+        row.hidden = Boolean(q) && !row.dataset.mapKey.includes(q);
       });
     });
     injectMyTicket(root, eventId);

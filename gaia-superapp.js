@@ -698,6 +698,10 @@
       + ' placeholder="Search by name or booth" enterkeyhint="search">'
       + '</div>';
 
+    // Stands with a table on the floor plan: tapping one shows it there, with
+    // its short summary and the way to its own page.
+    const onMap = new Set(((detail?.map?.places) || []).filter((p) => p.kind === 'booth' && p.exhibitor_id)
+      .map((p) => p.exhibitor_id));
     const cards = rows.map((vendor) => {
       const booth = vendor.booth_number ? String(vendor.booth_number).replace(/\.0$/, '') : '';
       const meta = [
@@ -730,6 +734,11 @@
       // the DOM, so filtering never depends on how the row happens to be marked
       // up and a rename cannot quietly break search.
       const key = esc((name + ' ' + booth).toLowerCase());
+      if (onMap.has(vendor.id)) {
+        return '<button type="button" class="g-vendor" data-dir-row data-dir-key="' + key + '" data-dir-stand="'
+          + esc(vendor.id) + '" aria-label="' + esc(name + (booth ? ', booth ' + booth : '') + ': show on the map') + '">'
+          + inner + icon('map-pin') + '</button>';
+      }
       return base
         ? '<a class="g-vendor" data-dir-row data-dir-key="' + key + '" href="'
           + esc(base + '/v/' + vendor.id) + '" target="_blank" rel="noopener noreferrer">'
@@ -2041,6 +2050,13 @@
       tabStrip.scrollLeft = Math.max(0, selectedTab.offsetLeft - (tabStrip.clientWidth - selectedTab.offsetWidth) / 2);
     }
 
+    root.querySelectorAll('[data-dir-stand]').forEach((button) => {
+      button.addEventListener('click', () => {
+        eventUI.tab = 'map';
+        eventUI.mapFocus = Number(button.getAttribute('data-dir-stand'));
+        render();
+      });
+    });
     root.querySelectorAll('[data-event-tab]').forEach((button) => {
       button.addEventListener('click', () => {
         eventUI.tab = button.getAttribute('data-event-tab');
@@ -2086,6 +2102,13 @@
         if (pin) pin.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'center' });
       });
     });
+    if (eventUI.mapFocus && eventUI.tab === 'map') {
+      const focus = eventUI.mapFocus; eventUI.mapFocus = null;
+      const place = ((detail?.map?.places) || []).filter((p) => p.kind === 'booth' && p.exhibitor_id === focus)
+        .sort((a, b) => Number((a.name.match(/\d+/) || [0])[0]) - Number((b.name.match(/\d+/) || [0])[0]))[0];
+      const pin = place && root.querySelector('.g-map__pin[data-map-place="' + place.id + '"]');
+      if (pin) pin.click();
+    }
     const mapQ = root.querySelector('[data-map-q]');
     if (mapQ) mapQ.addEventListener('input', () => {
       const q = mapQ.value.trim().toLowerCase();

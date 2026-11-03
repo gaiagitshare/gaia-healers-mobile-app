@@ -565,6 +565,9 @@
   function mapSection(detail) {
     const venue = detail?.map;
     if (!venue) return '';
+    // The interactive hall (gaia-exhibit-map.js) when this event has a drawn
+    // layout; otherwise the plan image with its places, as before.
+    if (window.GaiaExhibitMap && window.GaiaExhibitMap.supports(detail)) return window.GaiaExhibitMap.html(detail);
     const places = Array.isArray(venue.places) ? venue.places : [];
     const exhibitorsById = {};
     (detail.exhibitors || []).forEach((v) => { exhibitorsById[v.id] = v; });
@@ -1967,6 +1970,11 @@
     if (eventUI._tabUrlFor !== eventId) {
       eventUI._tabUrlFor = eventId;
       try { const _t = new URLSearchParams(window.location.search).get('tab'); if (_t) eventUI.tab = _t; } catch (e) {}
+      // A shared exhibitor link (?stand=ID) opens the map on that stand.
+      try {
+        const _s = Number(new URLSearchParams(window.location.search).get('stand'));
+        if (_s) { eventUI.tab = 'map'; eventUI.mapFocus = _s; }
+      } catch (e) {}
     }
     // A ticket holder's saved sessions. Non-holders get a null result and the
     // agenda simply renders without save controls.
@@ -2102,6 +2110,10 @@
         if (pin) pin.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'center' });
       });
     });
+    if (eventUI.tab === 'map' && window.GaiaExhibitMap && window.GaiaExhibitMap.supports(detail)) {
+      if (eventUI.mapFocus) { window.GaiaExhibitMap.select(eventId, eventUI.mapFocus); eventUI.mapFocus = null; }
+      window.GaiaExhibitMap.bind(root, detail, eventId);
+    }
     if (eventUI.mapFocus && eventUI.tab === 'map') {
       const focus = eventUI.mapFocus; eventUI.mapFocus = null;
       const place = ((detail?.map?.places) || []).filter((p) => p.kind === 'booth' && p.exhibitor_id === focus)

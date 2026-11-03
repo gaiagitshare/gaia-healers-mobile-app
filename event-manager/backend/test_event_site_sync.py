@@ -60,13 +60,17 @@ def site():
 def write(name, html):
     p = os.path.join(work, name); open(p, "w", encoding="utf-8").write(html); return p
 
+# The copy may already hold the website's rows (the sync is live since 28 Oct),
+# so "nothing written" means "exactly what the copy had", not "empty".
+baseline = rows()
+
 print("\n== 1) off by default ==")
 r = subprocess.run([sys.executable, TOOL], env=dict(base, EVENT_SITE_WATCH="0"), capture_output=True, text=True)
-check(r.returncode == 0 and rows() == [], "without EVENT_SITE_SYNC=1 and no pages given, nothing is written")
+check(r.returncode == 0 and rows() == baseline, "without EVENT_SITE_SYNC=1 and no pages given, nothing is written")
 
 print("\n== 2) dry run ==")
 r = run()
-check(r.returncode == 0 and "faq 12 · hotel 1 · note 1 · package 4 · ticket 4" in r.stdout and rows() == [],
+check(r.returncode == 0 and "faq 12 · hotel 1 · note 1 · package 4 · ticket 4" in r.stdout and rows() == baseline,
       "4 tickets, 4 packages, 12 FAQ, 1 hotel reported; nothing written", r.stdout[:300])
 
 print("\n== 3) apply; the public endpoint ==")

@@ -374,3 +374,12 @@ export const announceToEvent = (eventId, body, authorName) => api.post(`/events/
 export const suspendMember = (eventId, memberKey, authorName) => api.post(`/events/${eventId}/community/suspend`, { member_key: memberKey, author_name: authorName });
 export const unsuspendMember = (eventId, memberKey) => api.post(`/events/${eventId}/community/unsuspend`, { member_key: memberKey });
 export const getCommunityBans = (eventId) => api.get(`/events/${eventId}/community/bans`);
+
+// Official ticket email: delivery dashboard (sending itself is the server job).
+export const getTicketDeliverySummary = (eventId) => api.get(`/events/${eventId}/ticket-delivery/summary`);
+export const getTicketDeliveryOrders = (eventId, params = {}) => api.get(`/events/${eventId}/ticket-delivery/orders`, { params });
+export const getTicketDeliveryOrder = (eventId, orderId) => api.get(`/events/${eventId}/ticket-delivery/orders/${encodeURIComponent(orderId)}`);
+export const resendTicketEmail = (eventId, orderId, reason) => api.post(`/events/${eventId}/ticket-delivery/orders/${encodeURIComponent(orderId)}/resend`, { reason });
+export const pauseTicketDelivery = (eventId, reason) => api.post(`/events/${eventId}/ticket-delivery/pause`, { reason });
+export const resumeTicketDelivery = (eventId, reason) => api.post(`/events/${eventId}/ticket-delivery/resume`, { reason });
+export const getTicketDeliveryAudit = (eventId) => api.get(`/events/${eventId}/ticket-delivery/audit`);

@@ -22,9 +22,21 @@ warnings.filterwarnings("ignore", category=DeprecationWarning)
 from datetime import datetime, timedelta
 import requests
 
-BASE = "https://api.gaiahealers.app"
-DB = "/root/event/backend/event.db"
-API_ROOT = BASE + "/event-api/vendor-setup/"
+# Runs against a COPY of the live database served by a private API (testbed),
+# never the live database or the public API. It used to write its throwaway
+# stands into production on every deploy run (found 3 Nov 2026).
+import os
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import testbed
+BASE, DB = testbed.start()
+API_ROOT = BASE + "/vendor-setup/"
+UPLOADED = []
+
+
+def served_path(url):
+    """The image URL the API hands back is its PUBLIC address; read it from the testbed."""
+    marker = "/public/exhibitors/media/"
+    return BASE + marker + url.split(marker, 1)[1] if marker in url else url
 
 fails = []
 def check(ok, label, detail=""):
@@ -93,14 +105,15 @@ try:
 
     up = requests.post(A + "/images", files={"file": ("l.png", io.BytesIO(PNG), "image/png")}, timeout=30)
     check(up.ok and up.json().get("url"), "an image uploads", (up.status_code, up.text[:100]))
-    url = up.json()["url"]
+    url = up.json()["url"]; UPLOADED.append(url)
     check(requests.post(A, json={"logo_url": url}, timeout=25).ok, "the logo saves on its own")
     check(row(A_ID)["logo_url"] == url, "and lands on the row")
-    served = requests.get(BASE + url if url.startswith("/") else url, timeout=25)
+    served = requests.get(served_path(url), timeout=25)
     check(served.ok and served.headers.get("content-type", "").startswith("image/"),
           "and the file is actually served back", served.status_code)
 
     up2 = requests.post(A + "/images", files={"file": ("p.png", io.BytesIO(PNG), "image/png")}, timeout=30)
+    UPLOADED.append(up2.json().get("url", ""))
     ph = requests.post(A + "/photos", json={"url": up2.json()["url"]}, timeout=25)
     check(ph.ok, "a photo is added", (ph.status_code, ph.text[:100]))
     pid = ph.json().get("id")
@@ -155,6 +168,13 @@ finally:
         db.execute("delete from exhibitor_products where exhibitor_id=?", (eid,))
         db.execute("delete from exhibitors where id=?", (eid,))
     left = db.execute("select count(*) from exhibitors where company_name like 'ZZ SELFTEST%'").fetchone()[0]
+    # The uploads land in the shared media folder; take the test's own files back out.
+    media_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "uploads", "exhibitors")
+    for u in UPLOADED:
+        name = (u or "").rsplit("/", 1)[-1]
+        if name:
+            try: os.remove(os.path.join(media_dir, name))
+            except OSError: pass
     db.close()
     print("\n(throwaway stands removed: %d left behind)" % left)
 

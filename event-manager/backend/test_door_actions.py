@@ -199,7 +199,9 @@ check(main._ticket_status(after) == "revoked",
       "the TICKET is untouched \u2014 still revoked tomorrow", main._ticket_status(after))
 
 _, logs = call("GET", "/events/%d/scan-logs?limit=10" % EVENT, None, ADMIN)
-ov = [l for l in (logs or {}).get("items", []) if l.get("result") == "OVERRIDE"]
+# Only this seat's: the live event already holds a real OVERRIDE row (the
+# production smoke test of 3 Nov 2026), and the copy carries it.
+ov = [l for l in (logs or {}).get("items", []) if l.get("result") == "OVERRIDE" and l.get("attendee_id") == SEAT_ID]
 check(len(ov) == 1, "the override has its own row in the scan history", len(ov))
 _reason = (ov[0].get("reason") or "") if ov else ""
 check("was:" in _reason and "receipt" in _reason,

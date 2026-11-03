@@ -52,13 +52,17 @@ try:
         c = sqlite3.connect(db_path); c.row_factory = sqlite3.Row
         return {r["external_id"]: dict(r) for r in c.execute("SELECT * FROM sessions WHERE external_id LIKE 'page:%'")}
 
+    # The copy may already hold the page's rows (the mirror is live since 28 Oct),
+    # so "nothing written" means "exactly what the copy had", not "empty".
+    baseline = sessions()
+
     print("\n== 1) off by default ==")
     r = run("--apply")
-    check(r.returncode == 0 and "off" in r.stdout and not sessions(), "nothing happens without AGENDA_PAGE_SYNC=1", r.stdout[-200:])
+    check(r.returncode == 0 and "off" in r.stdout and sessions() == baseline, "nothing happens without AGENDA_PAGE_SYNC=1", r.stdout[-200:])
 
     print("\n== 2) dry run ==")
     r = run(page=PAGE)
-    check(r.returncode == 0 and "46 rows" in r.stdout and not sessions(), "46 rows reported, nothing written", r.stdout[:300] + r.stderr[-300:])
+    check(r.returncode == 0 and "46 rows" in r.stdout and sessions() == baseline, "46 rows reported, nothing written", r.stdout[:300] + r.stderr[-300:])
 
     print("\n== 3) apply ==")
     r = run("--apply", page=PAGE)

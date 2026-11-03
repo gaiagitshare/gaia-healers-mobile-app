@@ -12214,6 +12214,213 @@ def public_post_media(filename: str):
     return FileResponse(path, headers={"Cache-Control": "public, max-age=31536000, immutable"})
 
 
+
+# ---------------------------------------------------------------------------
+# Official ticket email: the delivery dashboard (3 Nov 2026).
+#
+# The sending itself is the job in tools/ticket_autodeliver.py; this API only
+# READS the shared delivery history and records what an organiser asks for:
+# a pause, a resume, a resend with its reason. A resend is queued for the job,
+# which re-checks the order before anything goes out. Live automatic sending
+# is switched on only on the server, never from here. Every action is audited.
+# ---------------------------------------------------------------------------
+from ticket_delivery import state as _td_state  # noqa: E402
+
+
+@app.get("/internal/ticket-delivery/tickets")
+def _td_ticket_texts(ids: str, request: FastAPIRequest, db: Session = Depends(get_db)):
+    """What the ticket email says each pass is and includes (service token)."""
+    require_service_token(request)
+    out = {}
+    for raw in ids.split(",")[:50]:
+        a = db.query(models.Attendee).filter(models.Attendee.id == int(raw)).first() if raw.strip().isdigit() else None
+        if a is not None:
+            out[a.id] = {"current_pass": _pass_display(db, a), "pass_includes": _pass_includes(db, a),
+                         "active": _ticket_active(a)}
+    return out
+
+
+def _td_open(event_id, db, current_user, write=False):
+    _get_event_or_404(event_id, db)
+    authz.require_cap(db, current_user, event_id, "attendee.export")
+    if write:
+        authz.require_cap(db, current_user, event_id, "attendee.write")
+    return _td_state.DeliveryState()
+
+
+def _td_who(user):
+    return "admin:%s" % (getattr(user, "email", None) or getattr(user, "id", "?"))
+
+
+def _td_rows(s, db, event_id):
+    """One row per order: what was sent and what GHL says, or why it is held."""
+    rows = {}
+    for r in s.db.execute("select order_id,recipient,state,attempt_count,message_id,result,updated_at,provider_status,provider_checked_at,ticket_ids "
+                          "from order_ticket_delivery where event_id=?", (event_id,)):
+        rows[r[0]] = {"order_id": r[0], "recipient": r[1], "state": r[2], "attempts": r[3], "message_id": r[4], "result": r[5],
+                      "updated_at": r[6], "provider_status": r[7], "provider_checked_at": r[8], "ticket_ids": r[9] or "",
+                      "classification": None, "reasons": "", "source": "sent"}
+    for r in s.db.execute("select order_id,source,classification,reasons,recipient,buyer_name,ticket_ids,categories,paid_at,last_checked,shadow_would_send_at "
+                          "from delivery_candidates where event_id=?", (event_id,)):
+        row = rows.setdefault(r[0], {"order_id": r[0], "state": None, "recipient": r[4], "ticket_ids": r[6] or "", "provider_status": None, "attempts": 0})
+        row.update({"source": r[1], "classification": r[2], "reasons": r[3] or "", "buyer_name": r[5], "categories": r[7], "paid_at": r[8],
+                    "last_checked": r[9], "shadow_would_send_at": r[10]})
+        row["recipient"] = row.get("recipient") or r[4]
+    ids = {int(t) for row in rows.values() for t in str(row.get("ticket_ids") or "").split(";") if t.strip().isdigit()}
+    people = {a.id: a for a in db.query(models.Attendee).filter(models.Attendee.id.in_(ids)).all()} if ids else {}
+    for row in rows.values():
+        tix = [people.get(int(t)) for t in str(row.get("ticket_ids") or "").split(";") if t.strip().isdigit()]
+        tix = [a for a in tix if a is not None]
+        if not row.get("buyer_name") and tix:
+            row["buyer_name"] = " ".join(x for x in [tix[0].first_name or "", tix[0].last_name or ""] if x).strip()
+        row["tickets"] = [{"id": a.id, "name": " ".join(x for x in [a.first_name or "", a.last_name or ""] if x).strip(),
+                           "pass": _pass_display(db, a), "active": _ticket_active(a)} for a in tix]
+        p = (row.get("provider_status") or "").lower()
+        if row.get("state") == "accepted":
+            row["bucket"] = ("bounced" if p in ("bounced", "complained") else "failed" if p in _td_state.BAD_PROVIDER
+                             else "delivered" if p in ("delivered", "opened", "clicked") else "pending")
+        elif row.get("state") in ("rejected", "unknown", "sending"):
+            row["bucket"] = "failed"
+        elif row.get("classification") == "GREEN":
+            row["bucket"] = "awaiting_delivery"
+        elif row.get("classification") in ("YELLOW", "RED"):
+            row["bucket"] = "review"
+        else:
+            row["bucket"] = "other"
+    return list(rows.values())
+
+
+@app.get("/events/{event_id}/ticket-delivery/summary")
+def ticket_delivery_summary(event_id: int, db: Session = Depends(get_db),
+                            current_user: models.User = Depends(get_current_user)):
+    s = _td_open(event_id, db, current_user)
+    try:
+        rows = _td_rows(s, db, event_id)
+        counts = {}
+        for r in rows:
+            counts[r["bucket"]] = counts.get(r["bucket"], 0) + 1
+        last = s.get("last_run")
+        return {"mode": s.mode(), "mode_before_pause": s.get("mode_before_pause"), "auto_cutoff": s.get("auto_cutoff"),
+                "live_template_approved": bool(s.get("approved_template_sha")),
+                "last_run": json.loads(last) if last else None, "counts": counts,
+                "pending_resends": s.db.execute("select count(*) from resend_requests where event_id=? and state='pending'", (event_id,)).fetchone()[0]}
+    finally:
+        s.close()
+
+
+@app.get("/events/{event_id}/ticket-delivery/orders")
+def ticket_delivery_orders(event_id: int, q: str = "", bucket: str = "", limit: int = 500,
+                           db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
+    s = _td_open(event_id, db, current_user)
+    try:
+        rows = _td_rows(s, db, event_id)
+    finally:
+        s.close()
+    if bucket:
+        rows = [r for r in rows if r["bucket"] in set(bucket.split(","))]
+    if q.strip():
+        needle = q.strip().lower()
+        def hay(r):
+            return " ".join([r["order_id"], str(r.get("recipient") or ""), str(r.get("buyer_name") or ""), str(r.get("ticket_ids") or "")]
+                            + [t["name"] for t in r["tickets"]] + ["#%s" % t["id"] for t in r["tickets"]]).lower()
+        rows = [r for r in rows if needle in hay(r) or needle.lstrip("#") in str(r.get("ticket_ids") or "").split(";")]
+    rows.sort(key=lambda r: str(r.get("updated_at") or r.get("last_checked") or ""), reverse=True)
+    return {"rows": rows[:max(1, min(limit, 2000))], "total": len(rows)}
+
+
+@app.get("/events/{event_id}/ticket-delivery/orders/{order_id}")
+def ticket_delivery_order(event_id: int, order_id: str, db: Session = Depends(get_db),
+                          current_user: models.User = Depends(get_current_user)):
+    s = _td_open(event_id, db, current_user)
+    try:
+        row = next((r for r in _td_rows(s, db, event_id) if r["order_id"] == order_id), None)
+        attempts = [dict(zip(["kind", "state", "recipient", "message_id", "result", "reason", "at", "actor"], r)) for r in
+                    s.db.execute("select kind,state,recipient,message_id,result,reason,at,actor from delivery_attempts where event_id=? and order_id=? order by id", (event_id, order_id))]
+        resends = [dict(zip(["id", "reason", "requested_by", "requested_at", "state", "result", "processed_at"], r)) for r in
+                   s.db.execute("select id,reason,requested_by,requested_at,state,result,processed_at from resend_requests where event_id=? and order_id=? order by id", (event_id, order_id))]
+        audit = [dict(zip(["at", "actor", "action", "reason"], r)) for r in
+                 s.db.execute("select at,actor,action,reason from delivery_admin_audit where event_id=? and order_id=? order by id", (event_id, order_id))]
+    finally:
+        s.close()
+    if row is None and not attempts:
+        raise HTTPException(status_code=404, detail="No delivery record for this order")
+    return {"order": row, "attempts": attempts, "resends": resends, "audit": audit}
+
+
+@app.post("/events/{event_id}/ticket-delivery/orders/{order_id}/resend")
+def ticket_delivery_resend(event_id: int, order_id: str, body: dict, db: Session = Depends(get_db),
+                           current_user: models.User = Depends(get_current_user)):
+    reason = str((body or {}).get("reason") or "").strip()
+    if len(reason) < 5:
+        raise HTTPException(status_code=422, detail="A reason is required (at least a few words)")
+    s = _td_open(event_id, db, current_user, write=True)
+    try:
+        r = s.delivered(event_id, order_id)
+        if not r or r[0] not in ("accepted", "delivered"):
+            raise HTTPException(status_code=409, detail="Only an email that was already accepted can be resent. "
+                                                        "An unsent or uncertain order needs review first.")
+        if s.db.execute("select 1 from resend_requests where event_id=? and order_id=? and state='pending'", (event_id, order_id)).fetchone():
+            raise HTTPException(status_code=409, detail="A resend for this order is already waiting")
+        who = _td_who(current_user)
+        s.db.execute("insert into resend_requests(event_id,order_id,reason,requested_by,requested_at) values(?,?,?,?,?)",
+                     (event_id, order_id, reason, who, _td_state.now()))
+        s.audit(who, "resend_requested", event_id, order_id, reason)
+        return {"queued": True, "mode": s.mode(),
+                "note": "Paused: it will go out when sending is resumed." if s.mode() == "paused" else
+                        "It is re-checked and sent within about 2 minutes."}
+    finally:
+        s.close()
+
+
+@app.post("/events/{event_id}/ticket-delivery/pause")
+def ticket_delivery_pause(event_id: int, body: dict, db: Session = Depends(get_db),
+                          current_user: models.User = Depends(get_current_user)):
+    """Emergency stop: nothing is sent -- automatic, resend or bulk -- until resumed."""
+    s = _td_open(event_id, db, current_user, write=True)
+    try:
+        before = s.mode()
+        who = _td_who(current_user)
+        if before != "paused":
+            s.put("mode_before_pause", before, who)
+        s.put("mode", "paused", who)
+        s.audit(who, "pause", event_id, None, str((body or {}).get("reason") or "").strip() or "(no reason given)", {"from": before})
+        return {"mode": "paused"}
+    finally:
+        s.close()
+
+
+@app.post("/events/{event_id}/ticket-delivery/resume")
+def ticket_delivery_resume(event_id: int, body: dict, db: Session = Depends(get_db),
+                           current_user: models.User = Depends(get_current_user)):
+    """Back to the mode that was running before the pause (shadow if none)."""
+    reason = str((body or {}).get("reason") or "").strip()
+    if len(reason) < 5:
+        raise HTTPException(status_code=422, detail="A reason is required to resume sending")
+    s = _td_open(event_id, db, current_user, write=True)
+    try:
+        if s.mode() != "paused":
+            return {"mode": s.mode()}
+        to = s.get("mode_before_pause") or "shadow"
+        if to == "live" and not s.get("approved_template_sha"):
+            to = "shadow"
+        who = _td_who(current_user)
+        s.put("mode", to, who)
+        s.audit(who, "resume", event_id, None, reason, {"to": to})
+        return {"mode": to}
+    finally:
+        s.close()
+
+
+@app.get("/events/{event_id}/ticket-delivery/audit")
+def ticket_delivery_audit(event_id: int, db: Session = Depends(get_db),
+                          current_user: models.User = Depends(get_current_user)):
+    s = _td_open(event_id, db, current_user)
+    try:
+        return [dict(zip(["at", "actor", "action", "order_id", "reason", "detail"], r)) for r in
+                s.db.execute("select at,actor,action,order_id,reason,detail from delivery_admin_audit where event_id=? or event_id is null order by id desc limit 300", (event_id,))]
+    finally:
+        s.close()
+
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="127.0.0.1", port=8002)

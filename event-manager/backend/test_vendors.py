@@ -211,9 +211,18 @@ check(not held, "the two stands with no listing yet are still not in the directo
 # The floor for being in the directory is WORDS. A stand with no description
 # is a blank card an attendee cannot act on; a missing logo is a gap to chase,
 # not a reason to hide somebody who paid, so it is not asserted here.
-_wordless = sql("SELECT company_name FROM exhibitors WHERE event_id=1 AND is_published=1"
+# Since 28 Oct the public Elevate page also publishes the stands it shows
+# (tools/exhibitor_page_sync.py; GHL is the source of truth), so a wordless
+# stand the PAGE put in the directory is the organiser's data to fill in, not a
+# code fault: it is printed as a warning on every run rather than hidden. Any
+# other published wordless stand is still a failure.
+_wordless = sql("SELECT company_name, site_synced_at IS NOT NULL FROM exhibitors WHERE event_id=1 AND is_published=1"
                 " AND COALESCE(description,'')='' AND company_name NOT LIKE 'ZZ %'")
-check(not _wordless, "and no published stand is a blank card", _wordless)
+for _n, _from_page in _wordless:
+    if _from_page:
+        print("  WARN  DATA: %r is in the directory (published from the event page) with no description;"
+              " the organiser should add one" % _n)
+check(not [n for n, fp in _wordless if not fp], "and no published stand is a blank card", _wordless)
 
 # ── 8. the setup link lets a stand write its own listing ──────────────────
 st, link = call("POST", "/exhibitors/%d/activation-link" % VID, None, ADMIN)
@@ -272,9 +281,16 @@ check(st == 404,
 # The sheet keeps maybes and refusals in the same list, separated by a heading.
 # That is the right shape, because a maybe becomes confirmed the day they pay --
 # but only a confirmed stand should ever reach the attendee directory.
+# Two kinds of row are not one-per-sheet-row: a package bought online arrives
+# as stage "purchased" before the sheet knows the company (the sheet adopts it
+# by email later), and a company the sheet lists twice (Bio-Well) is one stand.
 counts = dict(sql("SELECT stage, COUNT(*) FROM exhibitors WHERE event_id=1"
                   " AND company_name NOT LIKE 'ZZ %' GROUP BY stage"))
-check(sum(counts.values()) == len(_sheet), "the whole vendor board is in the system (%d rows in the sheet)" % len(_sheet), counts)
+_purchased = counts.pop("purchased", 0)
+_sheet_cos = {_vs.norm_name(r["company"]) for r in _sheet}
+check(sum(counts.values()) == len(_sheet_cos),
+      "the whole vendor board is in the system (%d companies in the sheet; %d bought online, not yet in it)"
+      % (len(_sheet_cos), _purchased), counts)
 check(counts.get("confirmed") == len(_sheet_conf), "%d of them are confirmed" % len(_sheet_conf), counts.get("confirmed"))
 check(counts.get("not_aligned", 0) > 0 and counts.get("next_year", 0) > 0,
       "including the ones deliberately not invited, and next year's", counts)

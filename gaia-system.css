@@ -1139,6 +1139,8 @@ body{overscroll-behavior-y:none;-webkit-tap-highlight-color:transparent}
 .g-map__card-head{display:flex;align-items:center;gap:10px}
 .g-map__card .g-btn{align-self:flex-start}
 .g-map__row[hidden]{display:none}
+button.g-vendor{width:100%;font:inherit;color:inherit;text-align:left;cursor:pointer}
+button.g-vendor .g-vendor__text{flex:1}
 .g-map__legend{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:8px}
 .g-map__row{display:flex;align-items:center;gap:10px;text-align:left;cursor:pointer;
   min-height:52px;padding:10px 12px;border-radius:14px;

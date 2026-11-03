@@ -206,21 +206,19 @@ check(_listed_no_scan > 0, "and being in the directory still does not carry a sc
 # either would put a blank card in the hall directory. That is what this
 # guards, and it guards the reason rather than the ids: a held-back stand
 # becomes publishable by being filled in, not by someone flipping a flag.
-held = sql("SELECT id, company_name FROM exhibitors WHERE id IN (18, 20) AND is_published=1")
-check(not held, "the two stands with no listing yet are still not in the directory", held)
-# The floor for being in the directory is WORDS. A stand with no description
-# is a blank card an attendee cannot act on; a missing logo is a gap to chase,
-# not a reason to hide somebody who paid, so it is not asserted here.
-# Since 28 Oct the public Elevate page also publishes the stands it shows
-# (tools/exhibitor_page_sync.py; GHL is the source of truth), so a wordless
-# stand the PAGE put in the directory is the organiser's data to fill in, not a
-# code fault: it is printed as a warning on every run rather than hidden. Any
-# other published wordless stand is still a failure.
+# 3 Nov 2026 (Babak): every CONFIRMED stand is listed, with name and booth at
+# least -- the exhibit-hall map now links each booth to its stand, so a stand
+# with a booth is something an attendee can act on ("Bio-Well, table 21").
+# That replaced the September hold on 18 and 20. The floor is still WORDS OR A
+# PLACE: a published stand with neither description nor booth is a blank card.
+_unconfirmed = sql("SELECT company_name FROM exhibitors WHERE event_id=1 AND is_published=1 AND stage!='confirmed'"
+                   " AND site_synced_at IS NULL AND company_name NOT LIKE 'ZZ %'")
+check(not _unconfirmed, "only confirmed stands are listed (unless the event page lists them)", _unconfirmed)
 _wordless = sql("SELECT company_name, site_synced_at IS NOT NULL FROM exhibitors WHERE event_id=1 AND is_published=1"
-                " AND COALESCE(description,'')='' AND company_name NOT LIKE 'ZZ %'")
+                " AND COALESCE(description,'')='' AND COALESCE(booth_number,'')='' AND company_name NOT LIKE 'ZZ %'")
 for _n, _from_page in _wordless:
     if _from_page:
-        print("  WARN  DATA: %r is in the directory (published from the event page) with no description;"
+        print("  WARN  DATA: %r is in the directory (published from the event page) with no description or booth;"
               " the organiser should add one" % _n)
 check(not [n for n, fp in _wordless if not fp], "and no published stand is a blank card", _wordless)
 

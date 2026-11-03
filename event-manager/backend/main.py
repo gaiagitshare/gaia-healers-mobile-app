@@ -6635,11 +6635,37 @@ def get_public_map(event_id: int, db: Session = Depends(get_db)):
         models.VenuePlace.event_id == event_id,
         models.VenuePlace.is_published == True,
     ).order_by(models.VenuePlace.sort_order.asc(), models.VenuePlace.name.asc()).all()
+    payload = [_place_payload(p) for p in places]
+    # A booth pin named "Booth 12" belongs to whoever the planning sheet puts on
+    # booth 12 -- resolved here, at read time, from the exhibitor's booth number
+    # (which the sheet sync keeps current). Moving a company in the sheet moves
+    # it on the map; nobody edits pins. An explicit exhibitor_id still wins.
+    by_booth = _booth_owners(db, event_id)
+    for row in payload:
+        if row["kind"] == "booth" and not row["exhibitor_id"]:
+            m = re.match(r"^\s*booth\s*#?\s*(\d+)\s*$", row["name"], re.I)
+            owners = by_booth.get(int(m.group(1)), []) if m else []
+            if len(owners) == 1:          # two claims on one table: leave it unassigned, never guess
+                row["exhibitor_id"] = owners[0]
     return {
         "event_id": event.id,
         "map_image_url": event.map_image_url or "",
-        "places": [_place_payload(p) for p in places],
+        "places": payload,
     }
+
+
+def _booth_owners(db, event_id: int) -> dict:
+    """{table number: [published exhibitor ids]} from booth numbers such as
+    "12", "#12", "2 & 3" or "14 (maybe #15 also)". Only the first number of a
+    "maybe" note counts: a tentative second table is not a claim."""
+    out = {}
+    for ex in db.query(models.Exhibitor).filter(models.Exhibitor.event_id == event_id,
+                                                models.Exhibitor.is_published == True).all():
+        text = str(ex.booth_number or "")
+        firm = re.split(r"maybe|\(|\?", text, maxsplit=1, flags=re.I)[0]
+        for n in {int(x) for x in re.findall(r"\d+", firm)}:
+            out.setdefault(n, []).append(ex.id)
+    return out
 
 
 @app.get("/events/{event_id}/places")

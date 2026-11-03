@@ -676,7 +676,21 @@
       paint();
       bindGestures();
       applySearch();
-      if (st.pending != null) { const p = st.pending; st.pending = null; openProfile(p, { fly: true, scroll: true }); }
+      if (st.pending != null) {
+        const p = st.pending;
+        st.pending = null;
+        openProfile(p, { fly: true, scroll: true });
+        // Opening the Events screen scrolls the window to the top (smoothly, on
+        // a desktop), which can land after this. A shared link should end on
+        // the map, so bring it back once the screen has settled.
+        setTimeout(() => {
+          const r = mapEl.getBoundingClientRect();
+          if (document.contains(mapEl) && (r.top > window.innerHeight * 0.6 || r.bottom < 0)) {
+            mapEl.scrollIntoView({ behavior: reduced() ? 'auto' : 'smooth', block: desktop() ? 'center' : 'start' });
+            setTimeout(() => focusBooths(m.booths[p]), reduced() ? 0 : 450);
+          }
+        }, 1100);
+      }
       else if (st.selected != null && m.byId[st.selected]) openProfile(st.selected, { fly: false, focusTitle: false });
     });
 

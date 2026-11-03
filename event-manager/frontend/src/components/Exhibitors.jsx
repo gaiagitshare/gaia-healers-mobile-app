@@ -915,7 +915,13 @@ function MediaManager({ exhibitorId, photos, products, onChanged }) {
 
 function ExhibitorDialog({ row, saving, onClose, onSave, onMediaChanged }) {
     const [f, setF] = useState({});
-    useEffect(() => { setF(row ? { ...row } : {}); }, [row]);
+    useEffect(() => {
+        if (!row) { setF({}); return; }
+        // social_links is stored as a JSON list; the form edits it as lines.
+        let links = [];
+        try { links = row.social_links ? JSON.parse(row.social_links) : []; } catch (e) { links = []; }
+        setF({ ...row, social_links_text: (Array.isArray(links) ? links : []).join('\n') });
+    }, [row]);
     if (!row) return null;
     const set = (k) => (e) => setF({ ...f, [k]: e.target.value });
     const field = (label, key, extra = {}) => (
@@ -964,8 +970,14 @@ function ExhibitorDialog({ row, saving, onClose, onSave, onMediaChanged }) {
                     {field('Logo URL', 'logo_url')}
                     {toggle('logo_on_dark', 'Logo needs a dark tile',
                             'For white artwork that would disappear on a white card.')}
+                    {field('Social links', 'social_links_text', {
+                        multiline: true, rows: 2, placeholder: 'https://instagram.com/…',
+                        helperText: 'One https link per line — their own public profiles. Shown on their profile.',
+                    })}
                     {toggle('is_published', 'In the attendee directory',
                             'Attendees can find this stand in the app.')}
+                    {toggle('is_featured', 'Featured',
+                            'Shown in the Featured strip above the exhibit-hall map. Your choice — never automatic.')}
 
                     {row.isNew ? (
                         <Alert severity="info" variant="outlined">
@@ -1038,6 +1050,10 @@ function ExhibitorDialog({ row, saving, onClose, onSave, onMediaChanged }) {
                         body.payment_status = f.payment_status || 'unpaid';
                         body.show_contact_publicly = !!f.show_contact_publicly;
                         body.logo_on_dark = !!f.logo_on_dark;
+                        body.is_featured = !!f.is_featured;
+                        if (f.social_links_text !== undefined) {
+                            body.social_links = String(f.social_links_text || '').split(/\s+/).filter((u) => /^https:\/\//.test(u));
+                        }
                         body.can_scan_leads = !!f.can_scan_leads;
                         // A new stand goes into the directory unless said otherwise;
                         // an existing one keeps whatever the switch shows.

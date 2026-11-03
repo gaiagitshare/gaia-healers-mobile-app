@@ -332,6 +332,12 @@ class Exhibitor(Base):
     # disappears on a white background — measured once at import rather than
     # guessed per render.
     logo_on_dark = Column(Boolean, default=False)
+    # Optional, shown on the stand's public profile (3 Nov 2026). social_links is
+    # a list of URLs the company publishes itself (JSON text); is_featured is an
+    # organiser's explicit choice for the "Featured" strip -- never inferred
+    # from what a stand paid.
+    social_links = Column(Text, nullable=True)
+    is_featured = Column(Boolean, default=False)
     # Vendor self-setup. An organiser sends a link; the stand fills in its own
     # description, logo and links, and publishes itself.
     #

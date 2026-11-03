@@ -361,6 +361,8 @@ class ExhibitorUpdate(BaseModel):
     show_contact_publicly: Optional[bool] = None
     contact_name: Optional[str] = None
     sheet_notes: Optional[str] = None
+    social_links: Optional[List[str]] = None      # the company's own public profiles
+    is_featured: Optional[bool] = None            # organiser's choice, never inferred
 
 class Exhibitor(ExhibitorBase):
     id: int
@@ -377,6 +379,8 @@ class Exhibitor(ExhibitorBase):
     # Admin-facing only (ExhibitorPublic below never carries it): whether this
     # stand's scanner link actually works.
     can_scan_leads: bool = False
+    social_links: Optional[str] = None            # stored JSON list; the public feed cleans it
+    is_featured: Optional[bool] = False
     stage: Optional[str] = "confirmed"
     public_email: Optional[str] = None
     public_phone: Optional[str] = None
@@ -441,6 +445,8 @@ class ExhibitorPublic(BaseModel):
     contact_phone: Optional[str] = None
     photos: List[ExhibitorPhoto] = []
     products: List[ExhibitorProduct] = []
+    social_links: List[str] = []
+    is_featured: bool = False
 
     class Config:
         from_attributes = True

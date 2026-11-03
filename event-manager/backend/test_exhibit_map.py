@@ -37,7 +37,7 @@ def http(method, path, body=None):
 c = sqlite3.connect(DB)
 # Free table numbers far above the real hall, so real stands never interfere.
 def stand(name, booth, published=1):
-    cur = c.execute("insert into exhibitors(event_id,company_name,booth_number,is_published,stage,access_token) values(1,?,?,?,'confirmed',?)",
+    cur = c.execute("insert into exhibitors(event_id,company_name,booth_number,is_published,stage,access_token,created_at,sort_order,can_scan_leads,logo_on_dark,show_contact_publicly,contact_email) values(1,?,?,?,'confirmed',?,datetime('now'),0,0,0,0,'')",
                     (name, booth, published, os.urandom(8).hex()))
     c.commit(); return cur.lastrowid
 a = stand("ZZ Map A", "901")
@@ -70,6 +70,19 @@ L = linked()
 check(L["Booth 908"] == a and L["Booth 901"] is None, "moving a stand in the sheet moves it on the map")
 c.execute("update exhibitors set is_published=1 where id=?", (h,)); c.commit()
 check(linked()["Booth 907"] == h, "publishing a stand puts it on its table")
+
+# Optional profile fields (3 Nov 2026): social links and Featured.
+def public(eid):
+    st, rows = http("GET", "/public/events/1/exhibitors")
+    return next(r for r in rows if r["id"] == eid)
+check(public(a)["social_links"] == [] and public(a)["is_featured"] is False, "new fields default to empty / not featured")
+st, _ = http("PUT", "/exhibitors/%d" % a, {"social_links": ["https://instagram.com/zzmap", "javascript:alert(1)", "http://plain.example", "https://x.com/zz"], "is_featured": True})
+check(st == 200, "an organiser can set them", (st, _))
+pa = public(a)
+check(pa["social_links"] == ["https://instagram.com/zzmap", "https://x.com/zz"], "only https links reach attendees", pa["social_links"])
+check(pa["is_featured"] is True, "Featured is the organiser's explicit choice")
+st, _ = http("PUT", "/exhibitors/%d" % a, {"social_links": []})
+check(public(a)["social_links"] == [], "and can be cleared")
 
 print("\n%s" % ("ALL PASSED" if not fails else "%d FAILED" % fails))
 sys.exit(1 if fails else 0)

@@ -230,6 +230,8 @@ def _ensure_event_columns():
     # Columns added to other tables after their first creation.
     for table, column, ddl in (
         ("speakers", "is_featured", "ALTER TABLE speakers ADD COLUMN is_featured BOOLEAN"),
+        ("exhibitors", "social_links", "ALTER TABLE exhibitors ADD COLUMN social_links TEXT"),
+        ("exhibitors", "is_featured", "ALTER TABLE exhibitors ADD COLUMN is_featured BOOLEAN DEFAULT 0"),
         ("sessions", "is_featured", "ALTER TABLE sessions ADD COLUMN is_featured BOOLEAN"),
         ("speakers", "sheet_notes", "ALTER TABLE speakers ADD COLUMN sheet_notes TEXT"),
         ("speakers", "sheet_synced_at", "ALTER TABLE speakers ADD COLUMN sheet_synced_at DATETIME"),
@@ -4414,6 +4416,8 @@ def update_exhibitor(
         raise HTTPException(status_code=404, detail="Exhibitor not found")
     authz.require_cap(db, current_user, exhibitor.event_id, "exhibitor.write")
     for field, value in changes.dict(exclude_unset=True).items():
+        if field == "social_links":
+            value = json.dumps(_social_links(json.dumps(value or []))) if value else None
         setattr(exhibitor, field, value)
     db.commit()
     db.refresh(exhibitor)
@@ -5148,8 +5152,20 @@ def get_public_exhibitors(
             "products": [{"id": pd.id, "name": pd.name, "description": pd.description,
                           "image_url": pd.image_url, "sort_order": pd.sort_order or 0}
                          for pd in r.products],
+            "social_links": _social_links(getattr(r, "social_links", None)),
+            "is_featured": bool(getattr(r, "is_featured", False)),
         })
     return out
+
+
+def _social_links(raw) -> list:
+    """The stored list, as plain https links only -- anything else is dropped
+    rather than shown to an attendee as a link."""
+    try:
+        items = json.loads(raw) if raw else []
+    except (TypeError, ValueError):
+        items = [x for x in re.split(r"[\s,]+", str(raw or "")) if x]
+    return [str(u).strip() for u in items if isinstance(u, str) and re.match(r"^https://[^\s]+$", u.strip())][:8]
 
 
 # ---------------------------------------------------------------------------

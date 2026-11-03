@@ -6,6 +6,8 @@ import {
     InputAdornment, MenuItem, Paper, Snackbar, Stack, TextField, Typography, useMediaQuery, useTheme,
 } from '@mui/material';
 import SearchIcon from '@mui/icons-material/Search';
+import PaymentHistory from './PaymentHistory';
+import PartnerGuestDialog from './PartnerGuestDialog';
 import ClearIcon from '@mui/icons-material/Clear';
 import HowToRegIcon from '@mui/icons-material/HowToReg';
 import PrintIcon from '@mui/icons-material/Print';
@@ -144,7 +146,8 @@ function CheckIn({ timezone: timezoneProp }) {
     const [station, setStation] = useState(() => { try { return localStorage.getItem(STATION_KEY) || ''; } catch (e) { return ''; } });
     const [labelSize, setLabelSize] = useState(savedLabelSize);
     // The label preview: check-in has ALREADY committed by the time this opens.
-    const [labelReq, setLabelReq] = useState(null);   // { attendee, checkedInNow, labelSize } → BadgeLabelDialog
+    const [labelReq, setLabelReq] = useState(null);
+    const [partnerOpen, setPartnerOpen] = useState(false);   // { attendee, checkedInNow, labelSize } → BadgeLabelDialog
     // ── Straight-through printing ──────────────────────────────────────────
     // A queue at the door is the whole reason the sticker exists, so the
     // default is: scan → admitted → sticker comes out of the B1, nothing
@@ -942,6 +945,8 @@ function CheckIn({ timezone: timezoneProp }) {
                         </Typography>
                     )}
 
+                    {card?.payment_history && <PaymentHistory history={card.payment_history} />}
+
                     {/* A seat whose name came off the buyer's order. This is the
                         single most likely correction of the weekend, so it says so
                         and puts the fix in the same place. */}
@@ -1445,6 +1450,10 @@ function CheckIn({ timezone: timezoneProp }) {
                                     sx={{ py: 1.5, fontSize: 16, fontWeight: 700 }}>
                                     {scanning ? 'Stop scanner' : 'Start QR scanner'}
                                 </Button>
+                                <Button fullWidth variant="outlined" startIcon={<GroupsIcon />} sx={{ mt: 1.5 }}
+                                    onClick={() => setPartnerOpen(true)}>
+                                    Add Collaborating Guest (Health &amp; Healing Expo)
+                                </Button>
 
                                 {scanning && (
                                     <Box sx={{ mt: 2 }}><div id="qr-reader" style={{ width: '100%' }}></div></Box>
@@ -1500,6 +1509,7 @@ function CheckIn({ timezone: timezoneProp }) {
                                         </Typography>
                                         <Stack direction="row" spacing={1} justifyContent="center">
                                             <Button variant="contained" size="small" startIcon={<PersonAddIcon />} onClick={openVisitor}>New visitor / walk-in</Button>
+                                            <Button variant="outlined" size="small" startIcon={<GroupsIcon />} onClick={() => setPartnerOpen(true)}>Collaborating guest</Button>
                                             <Button size="small" onClick={() => setQuery('')}>Clear</Button>
                                         </Stack>
                                     </Box>
@@ -1634,6 +1644,17 @@ function CheckIn({ timezone: timezoneProp }) {
 
 
             {/* Label preview. Check-in (if any) has already committed; this only prints. */}
+            <PartnerGuestDialog open={partnerOpen} eventId={eventId} onClose={() => setPartnerOpen(false)}
+                onCreated={async (a) => {
+                    setPartnerOpen(false);
+                    // Same door path as anyone else: admit through the atomic
+                    // check-in, then print their badge.
+                    try {
+                        const again = await authorizeScan(eventId, { qr_code: a.qr_code, access_type: 'EVENT_ENTRY' });
+                        const fresh = again.data;
+                        if (fresh?.attendee_id) printBadge(attendeeFromDecision(fresh), !!fresh.checked_in_now);
+                    } catch (e) { setQuery(a.email || ''); }
+                }} />
             <BadgeLabelDialog request={labelReq} eventId={eventId} station={station}
                 onClose={closeLabel} onRecorded={refreshSearch} notify={setFeedback} />
 

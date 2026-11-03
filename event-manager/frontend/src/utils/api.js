@@ -161,6 +161,8 @@ export const searchAttendees = (eventId, q) =>
 export const getMyCapabilities = (eventId) => api.get(`/events/${eventId}/my-capabilities`);
 export const walkInCheck = (eventId, data) => api.post(`/events/${eventId}/walk-in/check`, data);
 export const walkInCreate = (eventId, data) => api.post(`/events/${eventId}/walk-in`, data);
+// Health & Healing Expo visitor: free, exhibition-only Gaia badge (pass fixed by the server).
+export const partnerGuestCreate = (eventId, data) => api.post(`/events/${eventId}/partner-guest`, data);
 export const updateAttendee = (id, data) => api.put(`/attendees/${id}`, data);
 export const deleteAttendee = (id) => api.delete(`/attendees/${id}`);
 export const revokeAttendee = (id, reason) => api.post(`/attendees/${id}/revoke`, { reason });

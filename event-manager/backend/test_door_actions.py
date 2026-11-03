@@ -183,8 +183,12 @@ refusal = d.get("reason")
 st, out = override({"reason": "no"}, STAFF)
 check(st == 400, "an override with no real reason is refused", (st, out))
 
-st, o = override({"reason": "showed a receipt, organiser approved"}, STAFF)
-check(st == 200 and o.get("granted") is True, "with a reason, the door opens", (st, o))
+# A revoked ticket is a money decision (3 Nov 2026): door staff alone may not
+# let it in; an organiser or admin can, on the record.
+st, o = override({"reason": "showed a receipt"}, STAFF)
+check(st == 403, "door staff alone cannot override a revoked ticket", (st, o))
+st, o = override({"reason": "showed a receipt, organiser approved"}, ADMIN)
+check(st == 200 and o.get("granted") is True, "with a reason, an organiser opens the door", (st, o))
 check(o.get("result") == "OVERRIDE", "and says outright that it was overridden", o.get("result"))
 check(o.get("refused_reason") == refusal, "the refusal is kept, not overwritten", o.get("refused_reason"))
 check(o.get("checked_in") is True, "the person is checked in")
@@ -200,8 +204,8 @@ check(len(ov) == 1, "the override has its own row in the scan history", len(ov))
 _reason = (ov[0].get("reason") or "") if ov else ""
 check("was:" in _reason and "receipt" in _reason,
       "carrying both what the door said and what the human said", _reason[:140])
-check(ov and (ov[0].get("staff_user_id") == staff.id or ov[0].get("staff_email") == staff.email),
-      "against the person who made the call", ov[0] if ov else None)
+check(ov and ov[0].get("staff_user_id") not in (None, staff.id),
+      "against the person who made the call (the organiser, not the door staff)", ov[0] if ov else None)
 
 print("\nPUTTING IT BACK")
 st, _ = call("POST", "/attendees/%d/reinstate" % SEAT_ID, {"reason": "resolved"}, ADMIN)

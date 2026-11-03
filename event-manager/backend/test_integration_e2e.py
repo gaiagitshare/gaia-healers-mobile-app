@@ -308,6 +308,24 @@ try:
     names = {e.get("company_name") for e in app.get("exhibitors", [])}
     check("Rapid Release" in names, "the app shows exhibitors under the website's names", sorted(names)[:6])
 
+    print("\n== F8c Ticket link: works without login; refuses once revoked ==")
+    def status_of(url):
+        try:
+            with urllib.request.urlopen(url, timeout=60) as r: return r.status
+        except urllib.error.HTTPError as e: return e.code
+    c = sqlite3.connect(DB)
+    tid, tok = c.execute("SELECT id, public_token FROM attendees WHERE event_id=1 AND public_token IS NOT NULL "
+                         "AND coalesce(registration_status,'registered') NOT IN ('revoked','refunded','cancelled') LIMIT 1").fetchone()
+    st, page = http("GET", PROXY_BASE + "/ticket/" + tok)
+    st2 = status_of(PROXY_BASE + "/t/%s.png" % tok)
+    check(st == 200 and "/t/" in page and "no longer valid" not in page and st2 == 200,
+          "a valid ticket opens with its QR, no login", (st, st2))
+    c.execute("UPDATE attendees SET registration_status='revoked' WHERE id=?", (tid,)); c.commit()
+    st, page = http("GET", PROXY_BASE + "/ticket/" + tok)
+    st2 = status_of(PROXY_BASE + "/t/%s.png" % tok)
+    check(st == 404 and "/t/" not in page and st2 == 404,
+          "a revoked ticket's link and QR stop working (no usable code shown)", (st, st2))
+
     print("\n== F9  Event Manager -> app feed ==")
     st, body = http("GET", PROXY_BASE + "/api/events")
     check(st == 200 and "Elevate" in body, "the app's events feed serves the event from the Event Manager", (st, body[:200]))

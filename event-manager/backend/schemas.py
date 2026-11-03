@@ -1292,6 +1292,19 @@ class WalkInCheck(BaseModel):
     phone: Optional[str] = None
 
 
+class PartnerGuestCreate(BaseModel):
+    """A visitor holding a ticket to the collaborating event (Health & Healing
+    Expo). Staff checked their ticket by eye; we issue our own complimentary,
+    exhibition-only Gaia badge. No payment, no GHL order, no external QR."""
+    first_name: str
+    last_name: str = ""
+    email: str
+    phone: Optional[str] = None
+    partner_event: Optional[str] = "Health & Healing Expo"
+    partner_confirmation: Optional[str] = None
+    confirm_new: bool = False
+
+
 class WalkInCreate(BaseModel):
     """Someone registering at the door. Email is required: it is how we tell
     them apart from an existing member and how their claim link reaches them."""

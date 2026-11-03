@@ -1476,16 +1476,10 @@ def authorize_scan(event_id: int, payload: schemas.AuthorizeRequest,
                 "qr_code": payload.qr_code, "access_type": (payload.access_type or "EVENT_ENTRY").upper()}
     scan_at = payload.at if (ALLOW_SCAN_TIME_OVERRIDE and current_user.is_admin) else None
     dec = _authorize_decision(db, att, event, payload.access_type, scan_at)
-    checked_in_now = False
-    if dec.get("granted") and dec.get("access_type") == "EVENT_ENTRY":
-        if not att.is_checked_in:
-            att.is_checked_in = True
-            att.checked_in_at = datetime.utcnow()
-            checked_in_now = True
-            # The same scan that opens the door switches their card on. It is
-            # the same QR, so this costs the person nothing and needs no second
-            # step at a busy desk.
-            _activate_member_card(db, att)
+    dec, checked_in_now = _claim_initial_entry(db, att, event, dec, scan_at)
+    if checked_in_now:
+        # Only the transaction that won initial entry activates the card.
+        _activate_member_card(db, att)
     # A rehearsal scan says so in its own reason line, so the history cannot be
     # read later as though the door had really opened that day.
     _reason = dec.get("reason")
@@ -1537,12 +1531,26 @@ def override_admit(event_id: int, attendee_id: int, body: schemas.OverrideAdmit,
         raise HTTPException(status_code=400, detail="Say why this person is being let in")
     az = (body.access_type or "EVENT_ENTRY").upper()
     refused = _authorize_decision(db, att, event, az)
+    # Letting in a ticket that is refunded, cancelled or revoked is a decision
+    # about money, not about a queue: it needs the organiser's permission, not
+    # just door access.
+    status = (att.registration_status or "active").strip().lower()
+    if status in TICKET_BLOCKED_STATUSES:
+        authz.require_cap(db, current_user, event_id, "attendee.write")
     checked_in_now = False
-    if az == "EVENT_ENTRY" and not att.is_checked_in:
-        att.is_checked_in = True
-        att.checked_in_at = datetime.utcnow()
-        checked_in_now = True
-        _activate_member_card(db, att)
+    if az == "EVENT_ENTRY":
+        # Same single-winner rule as a scan: two devices overriding (or one
+        # scanning while another overrides) can never both record the first
+        # entry. The loser sees the existing check-in, never a second one.
+        changed = db.query(models.Attendee).filter(
+            models.Attendee.id == att.id, models.Attendee.event_id == event_id,
+            (models.Attendee.is_checked_in == False) | models.Attendee.is_checked_in.is_(None),  # noqa: E712
+        ).update({models.Attendee.is_checked_in: True,
+                  models.Attendee.checked_in_at: datetime.utcnow()}, synchronize_session=False)
+        db.refresh(att)
+        if changed == 1:
+            checked_in_now = True
+            _activate_member_card(db, att)
     _lifecycle_append(att, "door_override", actor=(current_user.email or "staff"),
                       reason=reason, zone=az, refused=refused.get("reason"),
                       would_have_been=refused.get("result"))
@@ -3107,6 +3115,49 @@ def _money_for(db, attendee):
             "attendance_type": attendee.attendance_type or None}
 
 
+def _payment_history_for_ticket(db, attendee):
+    """Read-only attempts for this ticket and its explicitly linked orders.
+
+    Never join by buyer email/name: a buyer can hold multiple legitimate tickets.
+    Exact source references include failed attempts that were not assigned an
+    attendee row. Same-event filtering prevents history leaking across events.
+    This history does not decide admission or change quantities/revenue.
+    """
+    cd = attendee.custom_data or {}
+    refs = {str(value) for value in (cd.get("order_id"), cd.get("invoice_id"),
+            cd.get("from_order"), attendee.acq_order_id) if value}
+    for ent in cd.get("entitlements") or []:
+        refs.update(str(ent[k]) for k in ("order_id", "invoice_id") if ent.get(k))
+    own = db.query(models.PaymentEvent).filter(
+        models.PaymentEvent.event_id == attendee.event_id,
+        models.PaymentEvent.attendee_id == attendee.id).all()
+    refs.update(p.ghl_entity_id for p in own if p.ghl_entity_id)
+    query = db.query(models.PaymentEvent).filter(
+        models.PaymentEvent.event_id == attendee.event_id)
+    match = models.PaymentEvent.attendee_id == attendee.id
+    if refs:
+        match = match | models.PaymentEvent.ghl_entity_id.in_(refs)
+    rows = query.filter(match).order_by(models.PaymentEvent.occurred_at,
+                                       models.PaymentEvent.id).all()
+    counts = {status: 0 for status in ("paid", "failed", "pending", "refunded", "partially_refunded")}
+    items = []
+    for pay in rows:
+        status = str(pay.status or "unknown").lower()
+        counts[status] = counts.get(status, 0) + 1
+        items.append({"id": pay.id, "status": status,
+                      "at": pay.occurred_at.isoformat() + "Z" if pay.occurred_at else None,
+                      "amount": float(pay.amount) if pay.amount is not None else None,
+                      "amount_refunded": float(pay.amount_refunded or 0),
+                      "currency": (pay.currency or "").upper(),
+                      "provider": pay.provider or "GHL",
+                      "order_suffix": (pay.ghl_entity_id or "")[-6:],
+                      "transaction_suffix": (pay.ghl_transaction_id or "")[-6:],
+                      "association": "ticket" if pay.attendee_id == attendee.id else "linked_order",
+                      "live_mode": pay.live_mode})
+    return {"items": items, "counts": counts,
+            "basis": "Recorded attempts for this ticket and explicitly linked orders; not an admission decision."}
+
+
 def _door_card(db, attendee, event, user=None):
     """The whole picture of one person, for the screen the door actually reads.
 
@@ -3138,6 +3189,7 @@ def _door_card(db, attendee, event, user=None):
                         "asked": attendee.consent_updated_at is not None},
             "party": _party_members(db, attendee),
             "money": _money_for(db, attendee),
+            "payment_history": _payment_history_for_ticket(db, attendee),
             "badge_print_count": int(attendee.badge_print_count or 0),
             # The pass they HOLD, which is what the desk's pass picker ranks
             # against. The stored column can lag a full-price purchase.
@@ -3284,6 +3336,36 @@ def _authorize_decision(db, attendee, event, access_type, at=None):
     return out
 
 
+def _claim_initial_entry(db, attendee, event, decision, at=None):
+    """Claim this ticket's first entry atomically; the caller commits its audit row.
+
+    A pre-check of is_checked_in is only a display decision. Two devices can
+    both observe False, so the database must choose the single winner. A
+    lifecycle change committed after authorization must also prevent admission.
+    Re-entry still uses the event's explicit policy and never resets the first
+    check-in timestamp. Both printed and digital credentials reach this row.
+    """
+    if not decision.get("granted") or decision.get("access_type") != "EVENT_ENTRY":
+        return decision, False
+    if attendee.is_checked_in:
+        return decision, False
+    changed = db.query(models.Attendee).filter(
+        models.Attendee.id == attendee.id,
+        models.Attendee.event_id == event.id,
+        (models.Attendee.is_checked_in == False) |  # noqa: E712
+        models.Attendee.is_checked_in.is_(None),
+        func.lower(func.trim(func.coalesce(models.Attendee.registration_status, "active")))
+            .notin_(TICKET_BLOCKED_STATUSES),
+    ).update({models.Attendee.is_checked_in: True,
+              models.Attendee.checked_in_at: datetime.utcnow()}, synchronize_session=False)
+    db.refresh(attendee)
+    if changed == 1:
+        return decision, True
+    # The winner or a revocation changed the row. Re-evaluate the current state
+    # instead of returning the earlier grant; explicit re-entry may still pass.
+    return _authorize_decision(db, attendee, event, "EVENT_ENTRY", at), False
+
+
 # Check-in endpoints
 @app.post("/events/{event_id}/checkin", response_model=schemas.CheckInResponse)
 def check_in_for_event(
@@ -3307,10 +3389,9 @@ def check_in_for_event(
                               reason="Badge not valid for this event", staff_user_id=current_user.id))
         db.commit()
         return schemas.CheckInResponse(success=False, message="This badge is not valid for this event")
-    decision = _authorize_decision(db, attendee, _get_event_or_404(event_id, db), "EVENT_ENTRY")
-    if decision.get("granted"):
-        attendee.is_checked_in = True
-        attendee.checked_in_at = datetime.utcnow()
+    event = _get_event_or_404(event_id, db)
+    decision = _authorize_decision(db, attendee, event, "EVENT_ENTRY")
+    decision, _checked_in_now = _claim_initial_entry(db, attendee, event, decision)
     db.add(models.ScanLog(event_id=event_id, attendee_id=attendee.id, qr_code=attendee.qr_code,
                           access_type="EVENT_ENTRY", result=decision.get("result"),
                           reason=decision.get("reason"), staff_user_id=current_user.id))
@@ -3333,9 +3414,7 @@ def check_in(
     authz.require_cap(db, current_user, attendee.event_id, "checkin.perform")
     event = _get_event_or_404(attendee.event_id, db)
     decision = _authorize_decision(db, attendee, event, "EVENT_ENTRY")
-    if decision.get("granted"):
-        attendee.is_checked_in = True
-        attendee.checked_in_at = datetime.utcnow()
+    decision, _checked_in_now = _claim_initial_entry(db, attendee, event, decision)
     db.add(models.ScanLog(event_id=attendee.event_id, attendee_id=attendee.id, qr_code=attendee.qr_code,
                           access_type="EVENT_ENTRY", result=decision.get("result"),
                           reason=decision.get("reason"), staff_user_id=current_user.id))
@@ -5379,6 +5458,105 @@ def walk_in_create(event_id: int, payload: schemas.WalkInCreate,
     return {"ok": True, "created": True, "already_registered": False,
             "reused_existing_card": bool(payload.link_token),
             "attendee": schemas.Attendee.from_orm(attendee),
+            "card_url": badge_card.card_url(card.public_token) if card else None}
+
+
+PARTNER_GUEST_SOURCE = "partner_guest"
+
+
+def _exhibit_only_pass(db, event_id):
+    """The event's all-days, exhibition-only pass: no conference, no workshops,
+    no VIP, not tied to one day. Chosen by what it grants, never by its name,
+    so a pass that opens anything more can never be handed out here."""
+    override = os.environ.get("PARTNER_GUEST_TICKET_TYPE_ID")
+    q = db.query(models.TicketType).filter(models.TicketType.event_id == event_id)
+    if override and override.isdigit():
+        tt = q.filter(models.TicketType.id == int(override)).first()
+    else:
+        cands = [t for t in q.all() if not t.grants_conference and not t.grants_workshops
+                 and not t.is_vip and not (t.valid_day or "").strip()]
+        cands.sort(key=lambda t: (0 if "general" in (t.name or "").lower() else 1, t.id))
+        tt = cands[0] if cands else None
+    if tt is None or tt.grants_conference or tt.grants_workshops or tt.is_vip:
+        raise HTTPException(status_code=409, detail="This event has no exhibition-only pass to give partner guests")
+    return tt
+
+
+@app.post("/events/{event_id}/partner-guest")
+def partner_guest_create(event_id: int, payload: schemas.PartnerGuestCreate,
+                         db: Session = Depends(get_db),
+                         current_user: models.User = Depends(get_current_user)):
+    """Add Collaborating Guest: a visitor holding a ticket to the partner event.
+
+    Staff look at their partner ticket; this issues a complimentary Gaia badge
+    for the exhibition halls only -- never conference, workshops or VIP. Desk
+    staff (checkin.perform) may do this, and ONLY this: the pass is fixed by the
+    server, so it cannot be used to give away anything else. No payment, no GHL
+    order, nothing sent to the partner. The record says which event, which
+    confirmation number, who issued it and when; badge, print and check-in are
+    the ordinary ones, so reprinting never adds an admission.
+    """
+    event = _get_event_or_404(event_id, db)
+    authz.require_cap(db, current_user, event_id, "checkin.perform")
+    _assert_event_writable(db, event, "register a partner guest for it")
+    email = (payload.email or "").strip().lower()
+    if not re.match(r"^[^@\s]+@[^@\s]+\.[^@\s]+$", email):
+        raise HTTPException(status_code=400, detail="A valid email is required")
+    first = (payload.first_name or "").strip()
+    if not first:
+        raise HTTPException(status_code=400, detail="A first name is required")
+    partner = (payload.partner_event or "Health & Healing Expo").strip()[:80]
+    conf = (payload.partner_confirmation or "").strip()[:80] or None
+
+    # Already here under this email (any kind of ticket): never a second record.
+    existing = db.query(models.Attendee).filter(
+        models.Attendee.event_id == event_id, func.lower(models.Attendee.email) == email).first()
+    if existing is None and conf:
+        # The same partner confirmation number already used today.
+        for a in db.query(models.Attendee).filter(models.Attendee.event_id == event_id,
+                                                  models.Attendee.registration_source == PARTNER_GUEST_SOURCE).all():
+            if ((a.custom_data or {}).get("partner_confirmation") or "").strip().lower() == conf.lower():
+                existing = a
+                break
+    if existing is not None:
+        attach_member_identity(db, existing)
+        db.commit(); db.refresh(existing)
+        existing.effective_access = _effective_access(db, existing)
+        _stamp_card_state(db, [existing])
+        return {"ok": True, "created": False, "already_registered": True,
+                "attendee": schemas.Attendee.from_orm(existing)}
+    matches = _walk_in_matches(db, event_id, email, payload.phone, first, payload.last_name)
+    if matches and not payload.confirm_new:
+        return {"ok": False, "reason": "possible_duplicate", "matches": matches}
+
+    tt = _exhibit_only_pass(db, event_id)
+    now = datetime.utcnow().isoformat()
+    actor = current_user.email or ("staff:%d" % current_user.id)
+    custom = {"source": PARTNER_GUEST_SOURCE, "partner_event": partner, "partner_confirmation": conf,
+              "registered_by": current_user.id, "registered_at": now,
+              "lifecycle": [{"ts": now, "action": "partner_guest_registered", "actor": actor,
+                             "partner_event": partner, "partner_confirmation": conf, "pass": tt.name}]}
+    attendee = models.Attendee(
+        event_id=event_id, email=email, first_name=first,
+        last_name=(payload.last_name or "").strip(),
+        phone=(payload.phone or "").strip() or None,
+        ticket_type_id=tt.id, custom_data=custom, registration_status="registered",
+        qr_code="ATT-%s" % uuid.uuid4().hex[:12].upper())
+    db.add(attendee)
+    db.flush()
+    attendee.registration_source = PARTNER_GUEST_SOURCE
+    attendee.attendance_type = "complimentary"
+    # Free by agreement with the partner event: never a door sale, never in the
+    # payment reconciliation queue.
+    attendee.door_payment_status = "waived"
+    attendee.door_payment_note = ("Collaborating event guest: %s%s" % (partner, (" #" + conf) if conf else ""))[:300]
+    card = attach_member_identity(db, attendee)
+    db.commit()
+    db.refresh(attendee)
+    attendee.effective_access = _effective_access(db, attendee)
+    _stamp_card_state(db, [attendee])
+    return {"ok": True, "created": True, "already_registered": False,
+            "attendee": schemas.Attendee.from_orm(attendee), "pass": tt.name,
             "card_url": badge_card.card_url(card.public_token) if card else None}
 
 
@@ -10703,7 +10881,7 @@ def _member_card_for_attendee(db, attendee, create=True):
     return card
 
 
-REGISTRATION_SOURCES = ("ghl_order", "ghl_invoice", "ghl_webhook", "walk_in", "admin", "import")
+REGISTRATION_SOURCES = ("ghl_order", "ghl_invoice", "ghl_webhook", "walk_in", "admin", "import", "partner_guest")
 ATTENDANCE_TYPES = ("paid", "complimentary", "staff", "speaker", "exhibitor")
 DOOR_PAYMENT_STATUS = ("none", "pending", "collected", "waived", "needs_review")
 DOOR_PAYMENT_METHODS = ("cash", "card_terminal", "payment_link", "other")
@@ -11991,8 +12169,19 @@ def undo_checkin(event_id: int, attendee_id: int, body: schemas.UndoCheckIn,
     if not a.is_checked_in:
         return {"ok": True, "already": True, "attendee": schemas.Attendee.from_orm(a)}
     was = a.checked_in_at.isoformat() if a.checked_in_at else "?"
-    a.is_checked_in = False
-    a.checked_in_at = None
+    # One undo per check-in: the row is only reset if it is still checked in at
+    # the moment of writing, so two staff pressing Undo record it once.
+    changed = db.query(models.Attendee).filter(
+        models.Attendee.id == a.id, models.Attendee.event_id == event_id,
+        models.Attendee.is_checked_in == True,  # noqa: E712
+    ).update({models.Attendee.is_checked_in: False, models.Attendee.checked_in_at: None},
+             synchronize_session=False)
+    db.refresh(a)
+    if changed != 1:
+        return {"ok": True, "already": True, "attendee": schemas.Attendee.from_orm(a)}
+    # The original check-in time stays on record in the lifecycle as well as
+    # in the UNDO scan row.
+    _lifecycle_append(a, "checkin_undone", actor=(current_user.email or "staff"), reason=reason, was=was)
     # The sticker state goes back too: the next real check-in must print a
     # fresh badge without anyone remembering to press Reprint. The print
     # history in badge_print_logs is untouched — the audit stays.

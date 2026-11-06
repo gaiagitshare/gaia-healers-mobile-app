@@ -17,6 +17,7 @@
  */
 import fs from 'node:fs';
 import { shopifyConfig, shopifyMappings, syncShopifyOrders } from './shopify-orders.mjs';
+import { indexMappings, lineText, pickMapping } from './ticket-mapping.mjs';
 
 // Overridable for the end-to-end integration test (a fake GHL, a copy of the
 // Event Manager); production reads the live proxy's .env as before.
@@ -88,16 +89,11 @@ const mapsRes = await fetch(`${EM}/identity/ticket-mappings`, { headers: { Autho
 // not look like a quiet day.
 if (!mapsRes.ok) { log({ phase: 'error', error: `ticket-mappings HTTP ${mapsRes.status}` }); process.exit(1); }
 const maps = await mapsRes.json();
-const byPid = new Map();
 // Same scope as the webhook: only EVENT mappings can mint an attendee. A
 // membership or course mapping shares the endpoint and must never become a seat.
 const EVENT_TYPES = new Set(["EVENT_TICKET", "EVENT_UPGRADE"]);
-for (const m of (maps.mappings || maps || [])) {
-  if (m.is_active === false) continue;
-  if (m.provider && m.provider !== "ghl") continue;
-  if (!EVENT_TYPES.has(m.entitlement_type || "EVENT_TICKET")) continue;
-  byPid.set(m.external_product_id, m);
-}
+const byPid = indexMappings(maps.mappings || maps || [], (m) => m.is_active !== false
+  && (!m.provider || m.provider === "ghl") && EVENT_TYPES.has(m.entitlement_type || "EVENT_TICKET"));
 log({ phase: 'start', since, dry_run: DRY, mapped_products: byPid.size });
 
 // `out_of_window` is a normal outcome, not a failure: a backfill reaching back
@@ -142,7 +138,9 @@ for (const o of orders) {
   const full = await ghl(`/payments/orders/${o._id}?altId=${LOC}&altType=location`);
   const items = ((full && (full.order || full)).items) || [];
   const pids = [...new Set(items.map((i) => (i.product && i.product._id) || i.productId).filter(Boolean))];
-  const hits = pids.map((p) => byPid.get(p)).filter(Boolean);
+  // The order LINE decides between a product's mappings, as in the webhook.
+  const hits = pids.map((p) => pickMapping(byPid.get(String(p)), items
+    .filter((i) => String((i.product && i.product._id) || i.productId) === String(p)).map(lineText).join(' '))).filter(Boolean);
   let email = String(o.contactEmail || '').toLowerCase();
   if (!email && hits.length) {
     stats.no_email++;
@@ -196,7 +194,7 @@ for (const iv of invoices) {
   const full = await ghl(`/invoices/${iv._id}?altId=${LOC}&altType=location`);
   const items = (full && (full.invoiceItems || (full.invoice && full.invoice.invoiceItems))) || iv.invoiceItems || [];
   for (const it of items) {
-    const m = byPid.get(String(it.productId || ''));
+    const m = pickMapping(byPid.get(String(it.productId || '')), lineText(it));
     if (!m) continue;                       // not a ticket; invoices sell many things
     if (!email) {
       stats.no_email++;

@@ -1,8 +1,9 @@
 // Ongoing ELEVATE reconciliation — recent window only, whitelist-only, idempotent,
 // retry-to-zero, never silently skips. Safe to run every few minutes on a timer.
 import fs from 'fs';
+import { indexMappings, lineText, pickMapping } from './ticket-mapping.mjs';
 const LOOKBACK_DAYS = Number(process.env.LOOKBACK_DAYS || 4);
-const env={}; for(const l of fs.readFileSync('/root/gaia-staging-proxy/.env','utf8').split('\n')){const m=l.match(/^([A-Z0-9_]+)=(.*)$/);if(m)env[m[1]]=m[2].trim();}
+const env={}; for(const l of fs.readFileSync(process.env.RECONCILE_ENV_FILE||'/root/gaia-staging-proxy/.env','utf8').split('\n')){const m=l.match(/^([A-Z0-9_]+)=(.*)$/);if(m)env[m[1]]=m[2].trim();}
 const base=(env.GHL_API_BASE_URL||'').replace(/\/+$/,''), token=(env.GHL_API_TOKEN||'').trim(), loc=(env.GHL_LOCATION_ID||'').trim(), version=(env.GHL_API_VERSION||'2021-07-28').trim();
 const EM=(env.EVENT_MANAGER_BASE_URL||'').replace(/\/+$/,''); const SVC=(env.IDENTITY_SERVICE_TOKEN||'').trim();
 const GH={Accept:'application/json',Authorization:`Bearer ${token}`,Version:version};
@@ -11,7 +12,7 @@ const stamp=()=>new Date().toISOString().slice(0,19).replace('T',' ');
 async function gget(p,tries=6){ for(let i=0;i<tries;i++){ try{ const r=await fetch(base+p,{headers:GH}); if(r.status===429||r.status>=500){await sleep(600*(i+1));continue;} if(!r.ok)return{__status:r.status}; return await r.json(); }catch(e){ await sleep(500*(i+1)); } } return {__failed:true}; }
 (async()=>{
   const mapRows=await (await fetch(EM+'/identity/ticket-mappings',{headers:{Authorization:`Bearer ${SVC}`}})).json();
-  const PMAP=new Map(); for(const m of mapRows) if(m.provider==='ghl' && ['EVENT_TICKET','EVENT_UPGRADE'].includes(m.entitlement_type||'EVENT_TICKET')) PMAP.set(m.external_product_id,m);
+  const PMAP=indexMappings(mapRows,(m)=>m.provider==='ghl' && ['EVENT_TICKET','EVENT_UPGRADE'].includes(m.entitlement_type||'EVENT_TICKET'));
   const cutoff=Date.now()-LOOKBACK_DAYS*86400000;
   // list orders (light), keep recent completed
   let offset=0,total=Infinity; const recent=[];
@@ -28,7 +29,7 @@ async function gget(p,tries=6){ for(let i=0;i<tries;i++){ try{ const r=await fet
   // whitelist upsert, VIP first
   const RANK={4:0,5:1,6:2,7:3}; const targets=[];
   for(const d of detail.values()){ if((d.status||d.paymentStatus)!=='completed')continue; const snap=d.contactSnapshot||{}; const email=(snap.email||'').toLowerCase();
-    for(const it of (d.items||[])){ const m=PMAP.get(it.product?._id||it.productId); if(m&&email) targets.push({m,email,snap,order:d.contactId,oid:d._id||d.id,contact:d.contactId}); } }
+    for(const it of (d.items||[])){ const m=pickMapping(PMAP.get(String(it.product?._id||it.productId)),lineText(it)); if(m&&email) targets.push({m,email,snap,order:d.contactId,oid:d._id||d.id,contact:d.contactId}); } }
   targets.sort((a,b)=>(RANK[a.m.ticket_type_id]??9)-(RANK[b.m.ticket_type_id]??9));
   let created=0,updated=0,failed=0;
   for(const t of targets){ try{ const r=await fetch(EM+'/identity/reconcile-attendee',{method:'POST',headers:{Authorization:`Bearer ${SVC}`,'Content-Type':'application/json'},
@@ -59,7 +60,7 @@ async function gget(p,tries=6){ for(let i=0;i<tries;i++){ try{ const r=await fet
       const email = (snap.email || t.contactEmail || '').toLowerCase(); if (!email) continue;
       const pids = [...new Set((order.items || []).map(it => (it.product && it.product._id) || it.productId).filter(Boolean))];
       for (const pid of pids) {
-        const m = PMAP.get(pid); if (!m) continue; refunded_seen++;
+        const m = (PMAP.get(String(pid)) || [])[0]; if (!m) continue; refunded_seen++;
         const full = (t.amountRefunded || 0) >= (t.amount || 0);
         try {
           const r = await fetch(EM + '/identity/refund-ticket', {

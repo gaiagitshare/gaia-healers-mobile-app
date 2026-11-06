@@ -1,6 +1,7 @@
 import { createMemberOnboardingGuard, protectedMemberPath } from './member-onboarding-guard.js';
 import { createOnboardingFunnel } from './onboarding-funnel.js';
 import './assist-guide.js';
+import { indexMappings, lineText, pickMapping } from './ticket-mapping.mjs';
 const assistGuide = globalThis.GaiaAssistGuide;
 import { createOnboardingStore } from './onboarding-store.js';
 import http from 'node:http';
@@ -2861,6 +2862,7 @@ async function handleGhlPaymentWebhook(req, res, origin) {
     let productIds = [];
     let productNames = [];
     let lineQty = new Map();
+    const lineWords = new Map();       // product id -> what the buyer's order line said
     let orderAmount = null;
     let snap = {};
     if (isInvoice && invoiceId) {
@@ -2869,6 +2871,7 @@ async function handleGhlPaymentWebhook(req, res, origin) {
       const items = body_.invoiceItems || [];
       productIds = [...new Set(items.map((it) => it.productId).filter(Boolean))];
       productNames = items.map((it) => it.name).filter(Boolean);
+      for (const it of items) lineWords.set(String(it.productId || ''), lineText(it));
       for (const it of items) lineQty.set(String(it.productId || ''), Math.max(1, Number(it.qty != null ? it.qty : (it.quantity != null ? it.quantity : 1))));
       orderAmount = body_.amountPaid != null ? body_.amountPaid : (body_.total != null ? body_.total : null);
       const cd = body_.contactDetails || {};
@@ -2881,6 +2884,7 @@ async function handleGhlPaymentWebhook(req, res, origin) {
       // Kept so an unmapped sale can be shown to staff as something they can
       // recognise, not just an opaque id.
       productNames = items.map((it) => (it.product && it.product.name) || it.name).filter(Boolean);
+      for (const it of items) lineWords.set(String((it.product && it.product._id) || it.productId || ''), lineText(it));
       for (const it of items) lineQty.set(String((it.product && it.product._id) || it.productId || ''), Math.max(1, Number(it.qty != null ? it.qty : (it.quantity != null ? it.quantity : 1))));
       orderAmount = (order && order.amount) || null;
       snap = (order && order.contactSnapshot) || {};
@@ -2906,10 +2910,9 @@ async function handleGhlPaymentWebhook(req, res, origin) {
       } catch (e) { maps = []; }
       if (!maps.length) await _swSleep(300 * (i + 1));
     }
-    const byPid = new Map();
     const EVENT_TYPES = new Set(['EVENT_TICKET', 'EVENT_UPGRADE']);
-    for (const m of maps) if (m.provider === 'ghl' && EVENT_TYPES.has(m.entitlement_type || 'EVENT_TICKET')) byPid.set(m.external_product_id, m);
-    let targets = productIds.map((pid) => ({ pid, m: byPid.get(pid) })).filter((x) => x.m);
+    const byPid = indexMappings(maps, (m) => m.provider === 'ghl' && EVENT_TYPES.has(m.entitlement_type || 'EVENT_TICKET'));
+    let targets = productIds.map((pid) => ({ pid, m: pickMapping(byPid.get(String(pid)), lineWords.get(String(pid))) })).filter((x) => x.m);
     // Preserve appropriate pass: apply base mappings first, upgrades last (upgrade wins).
     targets.sort((x, y) => (x.m.is_upgrade ? 1 : 0) - (y.m.is_upgrade ? 1 : 0));
 

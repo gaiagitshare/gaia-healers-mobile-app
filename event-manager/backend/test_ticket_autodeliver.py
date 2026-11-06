@@ -72,6 +72,9 @@ class FakeWorld:
         if path.startswith("/payments/transactions"):
             oid = path.split("entityId=")[1].split("&")[0]
             return {"data": self.tx.get(oid, [])}
+        if path.startswith("/contacts/?"):
+            q = path.split("query=")[1].split("&")[0].replace("%40", "@")
+            return {"contacts": [c for c in self.contacts.values() if c["email"] == q]}
         if path.startswith("/contacts/"):
             return {"contact": self.contacts[path.split("/")[2]]}
         if path.startswith("/conversations/messages/email/"):
@@ -233,6 +236,21 @@ k = len(W.sent)
 engine.run_cycle(W, S, em(), log=quiet)
 check(S.db.execute("select provider_status from order_ticket_delivery where order_id=?", (bounce,)).fetchone()[0] == "bounced"
       and any("BOUNCED" in s[1]["html"] for s in W.sent[k:] if s[0] == "ALERT-CONTACT"), "a bounce is recorded and alerted")
+
+print("\n== A transferred ticket goes to its current holder ==")
+moved_o, moved_e = purchase("moved2")
+holder_e, holder_c = "zz.auto.holder.%s@example.invalid" % STAMP, "c-zz-holder-%s" % STAMP
+tid = tickets_of(moved_o)[0][0]
+st_, out = http("POST", "/attendees/%d/transfer" % tid, {"first_name": "ZZ", "last_name": "Holder", "email": holder_e, "reason": "Test transfer"})
+assert st_ == 200, out
+cls_, why_, _o, _i = engine.classify(moved_o, em(), W, S)
+check(cls_ == "YELLOW" and "transferred_holder_has_no_single_ghl_contact" in why_, "no GHL contact for the holder: held, not sent to the buyer", (cls_, why_))
+W.contacts[holder_c] = {"id": holder_c, "email": holder_e, "firstName": "ZZ", "lastName": "Holder", "dnd": False}
+k = len(W.sent)
+engine.run_cycle(W, S, em(), log=quiet)
+got = [x for x in W.sent[k:] if x[1].get("subject", "").endswith(moved_o)]
+check(len(got) == 1 and got[0][0] == holder_c, "sent once, to the holder's contact, never the buyer's", [x[0] for x in got])
+check(S.db.execute("select recipient from order_ticket_delivery where order_id=?", (moved_o,)).fetchone()[0] == holder_e, "and the history names the holder")
 
 print("\n== Bulk sender vs automatic sender on the same order ==")
 race, _ = purchase("race")

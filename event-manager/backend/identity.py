@@ -89,23 +89,13 @@ def resolve_attendees(
                 func.lower(models.Attendee.email) == email
             ).all()
 
-            # One person, one ticket, per event. More than one row for the same
-            # email in the same event means the data is ambiguous — two sales,
-            # a bad import, a merge gone wrong — and we will not pick. The
-            # event is reported unresolved and an operator resolves it.
-            by_event: dict[int, list[models.Attendee]] = {}
+            # One email can hold several tickets at an event (6 Nov 2026): one
+            # bought, one transferred in, family on one address. All are theirs.
+            # The ticket they bought comes first, for callers that show one; a
+            # row ruled a duplicate is not a ticket and is left out.
+            rows = [a for a in rows if not (a.custom_data or {}).get("duplicate_of")]
+            rows.sort(key=lambda a: (bool((a.custom_data or {}).get("transfers")), a.id))
             for attendee in rows:
-                by_event.setdefault(attendee.event_id, []).append(attendee)
-
-            for event_id, group in by_event.items():
-                if len(group) > 1:
-                    report["unresolved"].append({
-                        "event_id": event_id,
-                        "reason": "duplicate_email_in_event",
-                        "count": len(group),
-                    })
-                    continue
-                attendee = group[0]
                 # Do not downgrade a contact_id match to an email one.
                 if attendee.id not in found:
                     found[attendee.id] = (attendee, "verified_email")

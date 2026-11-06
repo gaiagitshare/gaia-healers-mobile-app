@@ -61,9 +61,6 @@ st, _ = http("POST", "/attendees/%d/transfer" % t0["id"], dict(X, reason=""))
 check(st == 422, "a reason is required")
 st, _ = http("POST", "/attendees/%d/transfer" % t0["id"], dict(X, email="not-an-email"))
 check(st == 422, "a valid email is required")
-other, _, _ = buy("other", "zz.xfer.other.%s@example.invalid" % T)
-st, msg = http("POST", "/attendees/%d/transfer" % t0["id"], dict(X, email="zz.xfer.other.%s@example.invalid" % T))
-check(st == 409 and "already holds ticket" in str(msg), "someone who already holds a ticket is refused, and named", msg)
 
 print("\n== the transfer ==")
 st, out = http("POST", "/attendees/%d/transfer" % t0["id"], X)
@@ -84,18 +81,67 @@ st, pay = http("GET", "/events/1/payments?q=" + A)
 note = [x["transfer_note"] for x in pay["items"] if x["order_id"] == oid]
 check(note and "Transferred" in note[0] and A in note[0] and B in note[0], "the Payments screen explains the mismatch", note)
 
+print("\n== the payment stays with the ticket ==")
+def pay(ref):
+    return db().execute("select attendee_id,status,recon_state from payment_events where ghl_entity_id=?", (ref,)).fetchone()
+def sync(ref, email, cid_):
+    tx = {"_id": "tx-" + ref, "status": "succeeded", "amount": 99, "amountRefunded": 0, "currency": "USD", "liveMode": True, "entityType": "order",
+          "entityId": ref, "contactId": cid_, "contactEmail": email, "contactName": "ZZ", "createdAt": "2026-11-06T10:00:00.000Z", "updatedAt": "2026-11-06T10:00:00.000Z"}
+    return http("POST", "/identity/payments/sync", {"source": "mirror", "transactions": [{"transaction": tx, "order": {"status": "completed", "items": [{"productId": GA_PRODUCT, "name": "x"}], "amount": 99}}]}, SVC)
+st, _ = http("POST", "/identity/payments/reclassify", {"event_id": 1}, SVC)
+check(st == 200 and pay(oid) == (t0["id"], "paid", "healthy"), "a reclassify keeps it linked and healthy (the 6 Nov bug)", (st, pay(oid)))
+sync(oid, A, cid); http("POST", "/identity/payments/reclassify", {"event_id": 1}, SVC)
+check(pay(oid)[0] == t0["id"], "so does the mirror reading the same payment again", pay(oid))
+
 print("\n== it stays transferred ==")
 st, _ = http("POST", "/identity/reconcile-attendee", body, SVC)
 check(st == 200 and not row(A) and len(row(B)) == 1 and row(B)[0]["email"] == B, "replaying the same order makes no new ticket", (st, row(A)))
 b2 = buy("second", A, cid)
 check(len(row(A)) == 1 and row(A)[0]["id"] != t0["id"], "a NEW order from the original buyer gets its own ticket", row(A)[:1])
-st, _ = http("POST", "/attendees/%d/transfer" % t0["id"], dict(X, email=A))
-check(st == 409, "and the ticket cannot move back onto a held address")
 st, out = http("POST", "/identity/refund-ticket", {"event_id": 1, "email": A, "order_id": oid, "transaction_id": "tx-" + oid, "amount": 99, "status": "refunded"}, SVC)
 s = row(B)[0]["registration_status"]
 check(st == 200 and s in ("refunded", "revoked", "cancelled"), "a refund of the order still reaches the transferred ticket", (st, out, s))
 st, msg = http("POST", "/attendees/%d/transfer" % t0["id"], dict(X, email="zz.again.%s@example.invalid" % T))
 check(st == 409, "a refunded ticket cannot be transferred", msg)
+
+print("\n== several tickets on one email ==")
+S_, D_ = "zz.xfer.sandra.%s@example.invalid" % T, "zz.xfer.terry.%s@example.invalid" % T
+own_o, own_c, own_b = buy("sandra", S_)
+give_o, give_c, give_b = buy("terry", D_)
+own, give = row(S_)[0], row(D_)[0]
+before_n = db().execute("select count(*) from attendees").fetchone()[0]
+before_m = db().execute("select count(*),sum(amount) from payment_events").fetchone()
+st, out = http("POST", "/attendees/%d/transfer" % give["id"], {"first_name": "ZZ", "last_name": "sandra", "email": S_, "reason": "Terry gave it to Sandra"})
+check(st == 200, "a transfer to someone who already holds a ticket goes through", out)
+both = {r["id"]: r for r in row(S_)}
+check(set(both) == {own["id"], give["id"]} and not row(D_), "both tickets now sit on one email, nothing merged", list(both))
+check(both[own["id"]]["qr_code"] == own["qr_code"] and both[give["id"]]["qr_code"] == give["qr_code"] and own["qr_code"] != give["qr_code"], "each keeps its own id and QR code")
+check(json.loads(both[own["id"]]["custom_data"]).get("transfers") is None, "their own ticket is untouched")
+tr2 = json.loads(both[give["id"]]["custom_data"])["transfers"][-1]
+check(tr2["purchaser"]["email"] == D_ and tr2["payment_ids"] and tr2["holder_other_tickets"] == [own["id"]], "purchaser, payment and the holder's other ticket are recorded", tr2)
+http("POST", "/identity/payments/reclassify", {"event_id": 1}, SVC)
+check(pay(own_o)[:2] == (own["id"], "paid") and pay(give_o)[:2] == (give["id"], "paid"), "each payment stays on the ticket it bought", (pay(own_o), pay(give_o)))
+check(pay(own_o)[2] == "healthy" and pay(give_o)[2] == "healthy", "and neither reads as a problem", (pay(own_o), pay(give_o)))
+http("POST", "/identity/reconcile-attendee", own_b, SVC); http("POST", "/identity/reconcile-attendee", give_b, SVC)
+check(db().execute("select count(*) from attendees").fetchone()[0] == before_n, "replaying either order makes no new ticket")
+check(db().execute("select count(*),sum(amount) from payment_events").fetchone() == before_m, "a transfer adds no sale and no revenue")
+r1 = http("POST", "/events/1/authorize", {"qr_code": own["qr_code"], "access_type": "EVENT_ENTRY"})[1]
+r2 = http("POST", "/events/1/authorize", {"qr_code": give["qr_code"], "access_type": "EVENT_ENTRY"})[1]
+card = r2.get("door") or {}
+check([x["id"] for x in card.get("same_email_tickets", [])] == [own["id"]] and "Transferred" in card.get("transfer_note", ""), "the door card shows the other ticket and the transfer", card.get("same_email_tickets"))
+r3 = http("POST", "/events/1/authorize", {"qr_code": give["qr_code"], "access_type": "EVENT_ENTRY"})[1]
+check(r1.get("checked_in_now") and r2.get("checked_in_now"), "each QR admits its own person", (r1, r2))
+check(not r3.get("checked_in_now"), "and each admits only once", r3)
+st, ident = http("POST", "/identity/ticket", {"email": S_, "email_verified": True, "event_id": 1}, SVC)
+check(st == 200 and "duplicate_email_in_event" not in json.dumps(ident) and (ident or {}).get("ok") is not False, "the app still finds their ticket", ident)
+st, csvb = 0, ""
+req = urllib.request.Request(BASE + "/events/1/attendees/export", headers={"Authorization": "Bearer " + ADMIN})
+with urllib.request.urlopen(req, timeout=60) as r: csvb = r.read().decode()
+line = next((l for l in csvb.splitlines() if give["qr_code"] in l), "")
+check("purchased_by" in csvb.splitlines()[0] and D_ in line and ",yes," in line, "the export names the purchaser beside the holder", line[-200:])
+new_o, _, _ = buy("sandra2", S_, own_c)
+n = {r["id"] for r in row(S_)}
+check(give["id"] in n and own["id"] in n, "a later purchase never lands on the transferred ticket's payment", n)
 
 print("\n%s" % ("ALL PASSED" if not fails else "%d FAILED" % fails))
 sys.exit(1 if fails else 0)

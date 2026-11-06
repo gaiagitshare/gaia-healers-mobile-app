@@ -22,6 +22,7 @@ time against production.
 
 Run:  python3 /root/event/backend/test_day_pass_mapping.py
 """
+import json
 import sqlite3
 import sys
 
@@ -78,6 +79,14 @@ orphans = c.execute(
          from payment_events
         where event_id = ? and status = 'paid' and attendee_id is null""",
     (EVENT_ID,)).fetchall()
+# A payment behind a recorded ticket transfer is accounted for by that transfer
+# (its buyer's email no longer holds the ticket); test_ticket_transfer proves the
+# reclassifier keeps it linked.
+_moved = set()
+for (_cd,) in c.execute("select custom_data from attendees where event_id=? and custom_data like '%\"transfers\"%'", (EVENT_ID,)):
+    for _t in json.loads(_cd).get("transfers") or []:
+        _moved.update(_t.get("order_ids") or [])
+orphans = [o for o in orphans if c.execute("select ghl_entity_id from payment_events where id=?", (o[0],)).fetchone()[0] not in _moved]
 check("paid event payments with no attendee = 0", len(orphans) == 0,
       "; ".join("pe=%s %s" % (r["id"], r["buyer_email"]) for r in orphans[:5]))
 
@@ -125,6 +134,7 @@ check("no attendee is missing a ticket type",
 check("no attendee lacks a settled payment without a reason on the record",
       n("""select count(*) from attendees a where a.event_id=? and not exists
              (select 1 from payment_events p where p.attendee_id=a.id and p.status='paid')
+           and coalesce(a.custom_data,'') not like '%"transfers"%'
            and coalesce(a.attendance_type,'paid') not in
                ('complimentary','staff','speaker','exhibitor')
            and lower(coalesce(a.registration_status,'active')) not in
@@ -143,8 +153,14 @@ check("and every unpaid badge says what it is",
              and (a.ticket_type_id is null)""") == 0)
 check("no duplicate QR codes anywhere",
       c.execute("select count(*) from (select qr_code from attendees group by 1 having count(*)>1)").fetchone()[0] == 0)
-check("no duplicate attendee email within the event",
-      n("select count(*) from (select lower(email) from attendees where event_id=? group by 1 having count(*)>1)") == 0)
+# One email can hold several tickets (Babak, 6 Nov 2026): a transferred ticket on
+# top of a holder's own, or seats on a buyer's address. Two tickets on one email
+# that were each bought under it, with neither explained, is still a question.
+check("no unexplained repeat of an email within the event",
+      n("""select count(*) from (select lower(email) from attendees where event_id=?
+             and coalesce(custom_data,'') not like '%"transfers"%'
+             and coalesce(registration_source,'') not in ('rebuilt_seat','door_seat','reconciled_seat')
+             group by 1 having count(*)>1)""") == 0)
 
 print()
 if fails:

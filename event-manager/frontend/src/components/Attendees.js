@@ -289,8 +289,10 @@ function Attendees({ timezone }) {
     const statusChip = (attendee) => {
         const st = (attendee.registration_status || 'active').toLowerCase();
         if (st === 'refunded' || st === 'cancelled' || st === 'revoked') return <Chip size="small" color="error" label={LIFECYCLE_LABELS[st] || st} />;
-        if (attendee.is_checked_in) return <Chip size="small" color="success" label="Checked In" />;
-        return <Chip size="small" label={statusLabel(attendee)} />;
+        const xf = attendee.custom_data?.transfers?.[0];
+        const moved = xf ? <Chip size="small" variant="outlined" color="info" sx={{ ml: 0.5 }} label={`Transferred · bought by ${xf.purchaser?.name || xf.from?.name || '?'}`} /> : null;
+        if (attendee.is_checked_in) return <><Chip size="small" color="success" label="Checked In" />{moved}</>;
+        return <><Chip size="small" label={statusLabel(attendee)} />{moved}</>;
     };
 
     // The one place base + add-ons render together, straight from the resolver.

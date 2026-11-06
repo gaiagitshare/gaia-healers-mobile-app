@@ -953,6 +953,13 @@ function CheckIn({ timezone: timezoneProp }) {
                     {card?.transfer_note && (
                         <Alert severity="info" icon={false} sx={{ mt: 1, py: 0.5 }}>{card.transfer_note}</Alert>
                     )}
+                    {card?.same_email_tickets?.length > 0 && (
+                        <Alert severity="info" icon={false} sx={{ mt: 1, py: 0.5 }}>
+                            This is ticket #{card.attendee_id}. The same email also holds{' '}
+                            {card.same_email_tickets.map((t) => `#${t.id} (${t.pass}${t.checked_in ? ', checked in' : ''})`).join(', ')}.
+                            Each ticket has its own QR code and admits one person.
+                        </Alert>
+                    )}
                     {card?.needs_name_check && (
                         <Alert severity="warning" icon={false} sx={{ mt: 1, py: 0.5 }}>
                             <strong>Check this name.</strong> This seat was rebuilt from a paid order —

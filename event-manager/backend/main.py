@@ -1724,13 +1724,7 @@ def add_party_seat(event_id: int, attendee_id: int, body: schemas.AddPartySeat,
     # without inventing a mailbox that nobody reads.
     base, _, domain = (buyer.email or "").partition("@")
     email = (body.email or "").strip().lower()
-    if email:
-        clash = db.query(models.Attendee).filter(
-            models.Attendee.event_id == event_id,
-            func.lower(models.Attendee.email) == email).first()
-        if clash:
-            raise HTTPException(status_code=409, detail="%s is already on the roll for this event" % email)
-    else:
+    if not email:
         # Derived from the buyer's, and stepped until it is free: a seat that was
         # removed and re-added must not collide with the address it used to have.
         for n in range(party["size"] + 1, party["size"] + 40):
@@ -2825,7 +2819,60 @@ def _payment_claims(db, event_id):
                 claims[int(pid)] = a.id
             except (TypeError, ValueError):
                 continue
+    # A transferred ticket keeps the payments that bought it. Its buyer's email
+    # no longer holds it, so without this a reclassify read them as "money
+    # received, no attendee" (Christina Pardos's, 6 Nov 2026).
+    order_ticket = _transferred_orders(db, event_id)
+    if order_ticket:
+        for pid, ref in db.query(models.PaymentEvent.id, models.PaymentEvent.ghl_entity_id).filter(
+                models.PaymentEvent.event_id == event_id,
+                models.PaymentEvent.ghl_entity_id.in_(list(order_ticket))).all():
+            claims[pid] = order_ticket[ref]
     return claims
+
+
+def _transferred_orders(db, event_id):
+    """{order id: ticket id} for every order behind a transferred ticket."""
+    out = {}
+    for a in db.query(models.Attendee).filter(models.Attendee.event_id == event_id).all():
+        for t in (a.custom_data or {}).get("transfers") or []:
+            for ref in t.get("order_ids") or []:
+                out[ref] = a.id
+    return out
+
+
+def _ticket_orders(attendee):
+    """Every order this ticket came from."""
+    cd = attendee.custom_data or {}
+    refs = {cd.get("order_id"), attendee.acq_order_id}
+    refs |= {e.get("order_id") or e.get("invoice_id") for e in (cd.get("entitlements") or [])}
+    for t in cd.get("transfers") or []:
+        refs |= set(t.get("order_ids") or [])
+    return {r for r in refs if r}
+
+
+def _ticket_for_email(db, event_id, email, order_ref=None, is_upgrade=False):
+    """Which ticket does a purchase under this email belong to?
+
+    An email is not a ticket: one address can hold several (6 Nov 2026), its
+    owner's and any transferred to them. So the order decides first; then the
+    ticket they bought themselves. A ticket someone else bought and handed over
+    is not their purchase: a new order gets its own ticket, though an upgrade
+    can only apply to the ticket they hold.
+    """
+    rows = db.query(models.Attendee).filter(
+        models.Attendee.event_id == event_id,
+        func.lower(models.Attendee.email) == email).order_by(models.Attendee.id).all()
+    if not rows:
+        return None
+    if order_ref:
+        for a in rows:
+            if order_ref in _ticket_orders(a):
+                return a
+    own = [a for a in rows if not (a.custom_data or {}).get("transfers")]
+    if own:
+        return own[0]
+    return rows[0] if is_upgrade else None
 
 
 def _attendee_for_contact(db, event_id, contact_id):
@@ -2885,9 +2932,7 @@ def _attendee_for_payment(db, pe, claims=None):
         # contact that had a phone and no email; matching on email alone left
         # the money reading "paid, no ticket" for three days.
         return _attendee_for_contact(db, pe.event_id, pe.contact_id)
-    found = db.query(models.Attendee).filter(
-        models.Attendee.event_id == pe.event_id,
-        func.lower(models.Attendee.email) == pe.buyer_email).first()
+    found = _ticket_for_email(db, pe.event_id, pe.buyer_email, pe.ghl_entity_id)
     # A row ruled a duplicate keeps its email, so a payment made under that
     # address keeps landing on it -- and is then reported as "money received but
     # the ticket is not valid", about a person whose real badge is fine. Marie
@@ -3182,6 +3227,13 @@ def _door_card(db, attendee, event, user=None):
             "source": attendee.registration_source or None,
             "needs_name_check": bool(cd.get("needs_name_check")),
             "transfer_note": _transfer_note(attendee),
+            # One email can hold several tickets; each is its own admission.
+            "same_email_tickets": [
+                {"id": o.id, "pass": _pass_display(db, o), "checked_in": bool(o.is_checked_in), "active": _ticket_active(o)}
+                for o in db.query(models.Attendee).filter(
+                    models.Attendee.event_id == attendee.event_id, models.Attendee.id != attendee.id,
+                    func.lower(models.Attendee.email) == (attendee.email or "").strip().lower()).all()
+            ] if attendee.email else [],
             # A one-day add-on with no day chosen yet. The door refuses it until
             # one is picked, so the screen has to say so and offer the days.
             "event_days": _event_days(event),
@@ -6138,10 +6190,7 @@ async def registration_webhook(request: FastAPIRequest, db: Session = Depends(ge
         return {"ok": True, "created": False, "no_op": True, "reason": "mapping_event_missing",
                 "detail": "Mapping points to a missing event; nothing granted."}
 
-    existing = db.query(models.Attendee).filter(
-        models.Attendee.event_id == event.id,
-        func.lower(models.Attendee.email) == email,
-    ).first()
+    existing = _ticket_for_email(db, event.id, email, _pick(payload, "order_id"))
 
     custom = dict(existing.custom_data or {}) if existing else {}
     for key in ("pass_type", "contact_id", "order_id"):
@@ -7170,7 +7219,8 @@ def export_attendees(event_id: int, db: Session = Depends(get_db),
                      "gaia_badge_token", "gaia_wallet_link", "gaia_pass", "gaia_pass_includes",
                      "amount_paid", "currency", "amount_refunded", "paid_at",
                      "payment_provider", "payment_source", "funnel", "product_purchased",
-                     "door_payment_method", "door_payment_amount"])
+                     "door_payment_method", "door_payment_amount",
+                     "ticket_id", "purchased_by", "purchased_by_email", "transferred", "transfer_note"])
     for a in rows:
         _m = money.get(a.id)
         _eff = _effective_access(db, a)
@@ -7203,7 +7253,11 @@ def export_attendees(event_id: int, db: Session = Depends(get_db),
                          ("; ".join(_m["funnels"]) if _m else "") or (a.acq_funnel_name or ""),
                          ("; ".join(_m["products"]) if _m else "") or (a.acq_product_name or ""),
                          a.door_payment_method or "",
-                         ("%.2f" % a.door_payment_amount) if a.door_payment_amount else ""])
+                         ("%.2f" % a.door_payment_amount) if a.door_payment_amount else "",
+                         # The row is the current holder; these say who paid, so a
+                         # transferred ticket never reads as a second sale.
+                         a.id, _purchaser(a).get("name") or "", _purchaser(a).get("email") or "",
+                         "yes" if (a.custom_data or {}).get("transfers") else "", _transfer_note(a)])
     db.add(models.ExportAudit(event_id=event_id, user_id=current_user.id, kind="attendees", count=len(rows)))
     db.commit()
     return _Response(content=buf.getvalue(), media_type="text/csv",
@@ -9236,9 +9290,7 @@ def reconcile_invoice(payload: schemas.ReconcileInvoice, db: Session = Depends(g
         return {"ok": False, "reason": "product_not_mapped_to_this_event",
                 "product_id": payload.product_id}
     tt_id = mapping.ticket_type_id
-    existing = db.query(models.Attendee).filter(
-        models.Attendee.event_id == event.id,
-        func.lower(models.Attendee.email) == email).first()
+    existing = _ticket_for_email(db, event.id, email, payload.invoice_id, bool(mapping.is_upgrade))
     created = False
     if existing is None:
         existing = models.Attendee(
@@ -9338,9 +9390,7 @@ def reconcile_attendee(payload: schemas.ReconcileAttendee, db: Session = Depends
             email = _by_contact.email.strip().lower()
     if not email or "@" not in email:
         raise HTTPException(status_code=400, detail="A contact email is required")
-    existing = db.query(models.Attendee).filter(
-        models.Attendee.event_id == event.id,
-        func.lower(models.Attendee.email) == email).first()
+    existing = _ticket_for_email(db, event.id, email, payload.order_id, bool(payload.is_upgrade))
 
     # A transferred ticket left this address but its orders still name it. The
     # same order replayed belongs to the ticket it bought, not to a new one; a
@@ -9759,10 +9809,10 @@ def refund_ticket(payload: schemas.RefundTicket, db: Session = Depends(get_db),
     # supplied, so it returned whichever attendee happened to be first in the
     # table -- and a refunded $3,500 sponsorship revoked a stranger's ticket.
     if attendee is None and email:
-        q = db.query(models.Attendee).filter(func.lower(models.Attendee.email) == email)
         if payload.event_id:
-            q = q.filter(models.Attendee.event_id == payload.event_id)
-        attendee = q.first()
+            attendee = _ticket_for_email(db, payload.event_id, email, _ref_lookup)
+        else:
+            attendee = db.query(models.Attendee).filter(func.lower(models.Attendee.email) == email).first()
 
     if attendee is None:
         return {"ok": True, "matched": False, "reason": "no_attendee"}
@@ -9881,14 +9931,23 @@ def _ticket_transferred_from(db, event_id, email, order_id):
     return None
 
 
+def _purchaser(attendee) -> dict:
+    """Who paid for this ticket: the holder, unless it was transferred."""
+    ts = (attendee.custom_data or {}).get("transfers") or []
+    if ts:
+        return ts[0].get("purchaser") or ts[0].get("from") or {}
+    return {"name": " ".join(x for x in [attendee.first_name, attendee.last_name] if x), "email": attendee.email}
+
+
 def _transfer_note(attendee) -> str:
     """One line for anyone comparing purchases with attendees."""
     ts = (attendee.custom_data or {}).get("transfers") or []
     if not ts:
         return ""
     t = ts[-1]
+    buyer = t.get("purchaser") or t.get("from") or {}
     return "Transferred: bought by %s (%s), now held by %s (%s), %s. %s" % (
-        (t.get("from") or {}).get("name") or "?", (t.get("from") or {}).get("email") or "?",
+        buyer.get("name") or "?", buyer.get("email") or "?",
         (t.get("to") or {}).get("name") or "?", (t.get("to") or {}).get("email") or "?",
         str(t.get("at") or "")[:10], t.get("reason") or "")
 
@@ -9901,9 +9960,9 @@ def transfer_ticket(attendee_id: int, body: schemas.TicketTransfer, db: Session 
     The ticket (its pass, QR code and link) moves to the new holder. The payment
     stays linked and still names the buyer, the acq_* purchase facts are not
     touched, and the handover is written to the ticket so a purchase and an
-    attendee that do not match explain themselves. Refused if the new holder
-    already has a ticket here: one email is one person in this system, and two
-    tickets on one address is a decision, not a transfer.
+    attendee that do not match explain themselves. A new holder who already has a
+    ticket keeps it: this becomes an additional ticket on their address, with its
+    own id and QR code, checked in on its own.
     """
     att = db.query(models.Attendee).filter(models.Attendee.id == attendee_id).first()
     if not att:
@@ -9924,21 +9983,22 @@ def transfer_ticket(attendee_id: int, body: schemas.TicketTransfer, db: Session 
         raise HTTPException(status_code=409, detail="This ticket has already been used to check in")
     if (att.email or "").strip().lower() == email:
         raise HTTPException(status_code=409, detail="This ticket is already on that email")
-    other = db.query(models.Attendee).filter(models.Attendee.event_id == att.event_id,
-                                             func.lower(models.Attendee.email) == email).first()
-    if other is not None:
-        raise HTTPException(status_code=409, detail="%s already holds ticket #%d on that email" % (
-            " ".join(x for x in [other.first_name, other.last_name] if x) or email, other.id))
+    others = [o.id for o in db.query(models.Attendee).filter(
+        models.Attendee.event_id == att.event_id, models.Attendee.id != att.id,
+        func.lower(models.Attendee.email) == email).all()]
     cd = dict(att.custom_data or {})
-    orders = {cd.get("order_id"), att.acq_order_id}
-    orders |= {e.get("order_id") for e in (cd.get("entitlements") or [])}
-    orders |= {p.ghl_entity_id for p in db.query(models.PaymentEvent).filter(models.PaymentEvent.attendee_id == att.id).all()}
+    pays = db.query(models.PaymentEvent).filter(models.PaymentEvent.attendee_id == att.id).all()
+    orders = _ticket_orders(att) | {p.ghl_entity_id for p in pays}
     who = getattr(current_user, "email", None) or str(current_user.id)
     before = {"name": " ".join(x for x in [att.first_name, att.last_name] if x), "email": (att.email or "").strip().lower(),
               "phone": att.phone or "", "contact_id": cd.get("contact_id")}
     after = {"name": " ".join(x for x in [first, (body.last_name or "").strip()] if x), "email": email}
     entry = {"at": datetime.utcnow().isoformat(), "by": who, "reason": reason, "from": before, "to": after,
-             "order_ids": sorted(o for o in orders if o)}
+             "order_ids": sorted(o for o in orders if o), "payment_ids": sorted(p.id for p in pays),
+             "purchaser": ((cd.get("transfers") or [{}])[0].get("purchaser") or
+                           {"name": pays[0].buyer_name if pays else before["name"],
+                            "email": (pays[0].buyer_email if pays else before["email"])}),
+             "holder_other_tickets": others}
     cd["transfers"] = list(cd.get("transfers") or []) + [entry]
     cd["transferred"] = True
     # The buyer's GHL contact no longer identifies the holder; the purchase keeps

@@ -40,6 +40,7 @@ import sqlite3
 import sys
 import time
 import urllib.error
+import urllib.parse
 import urllib.request
 from datetime import datetime, timedelta, timezone
 
@@ -231,6 +232,19 @@ def classify(order_id, em, world, state, allow_delivered=False):
         red.append('ghl_transactions_not_clean')
     paid_at = _utc(o.get('createdAt'))
     contact_id = o.get('contactId') or (pays[0].get('contact_id'))
+    # A transferred ticket goes to its current holder, never to the buyer: the
+    # order's contact is whoever paid. One holder address, one GHL contact, or held.
+    holder = None
+    if len(f['tickets']) == 1 and f['tickets'][0]['cd'].get('transfers'):
+        holder = (f['tickets'][0].get('email') or '').strip().lower()
+        try:
+            found = world.ghl('/contacts/?locationId=%s&query=%s&limit=10' % (world.location, urllib.parse.quote(holder))).get('contacts', [])
+        except Exception as e:
+            return 'YELLOW', ['ghl_contact_unreachable:%s' % type(e).__name__], None, info
+        exact = [x for x in found if (x.get('email') or '').strip().lower() == holder]
+        if len(exact) != 1:
+            return 'YELLOW', ['transferred_holder_has_no_single_ghl_contact'], None, info
+        contact_id = exact[0]['id']
     try:
         c = world.ghl('/contacts/%s' % contact_id).get('contact', {})
     except Exception as e:
@@ -241,7 +255,7 @@ def classify(order_id, em, world, state, allow_delivered=False):
     info['buyer_name'] = ' '.join(x for x in [c.get('firstName') or '', c.get('lastName') or ''] if x).strip() or (o.get('contactName') or '')
     if not EMAIL_RE.match(recipient):
         yellow.append('no_valid_email')
-    elif placed_with and placed_with != recipient:
+    elif placed_with and placed_with != recipient and holder is None:
         yellow.append('buyer_email_changed_since_purchase')
     if c.get('dnd') or ((c.get('dndSettings') or {}).get('Email') or {}).get('status') == 'active':
         red.append('email_do_not_disturb')

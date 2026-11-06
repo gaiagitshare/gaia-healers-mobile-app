@@ -65,6 +65,9 @@ check(len(seats) >= 10, "the roll really does contain seats rebuilt from payment
 
 print("\nTHE SEATS CAN SAY WHICH PAYMENT BOUGHT THEM")
 claims = main._payment_claims(db, EVENT)
+# Transferred tickets claim their payments too; this section is about seats.
+_seat_ids = {s.id for s in seats}
+claims = {k: v for k, v in claims.items() if v in _seat_ids}
 print("     %d of %d seats carry a claim" % (len(claims), len(seats)))
 check(len(claims) == len(seats),
       "every rebuilt seat records the payment it was built from", (len(claims), len(seats)))

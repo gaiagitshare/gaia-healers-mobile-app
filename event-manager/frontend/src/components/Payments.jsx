@@ -244,6 +244,7 @@ function FeedTable({ rows, onOpen, loading }) {
                                 <TableCell>
                                     <Typography variant="body2" fontWeight={600} noWrap>{r.buyer || '—'}</Typography>
                                     <Typography variant="caption" noWrap display="block" sx={{ opacity: 0.75 }}>{r.email}</Typography>
+                                    {r.transfer_note && <Chip size="small" variant="outlined" color="info" label="Ticket transferred" sx={{ mt: 0.5 }} />}
                                 </TableCell>
                                 <TableCell><Typography variant="caption">{(r.products || []).join(', ') || '—'}</Typography></TableCell>
                                 <TableCell align="right" sx={{ fontVariantNumeric: 'tabular-nums' }}>{money(r.amount, r.currency)}</TableCell>

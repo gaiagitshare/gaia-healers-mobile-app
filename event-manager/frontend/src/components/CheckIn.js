@@ -950,6 +950,9 @@ function CheckIn({ timezone: timezoneProp }) {
                     {/* A seat whose name came off the buyer's order. This is the
                         single most likely correction of the weekend, so it says so
                         and puts the fix in the same place. */}
+                    {card?.transfer_note && (
+                        <Alert severity="info" icon={false} sx={{ mt: 1, py: 0.5 }}>{card.transfer_note}</Alert>
+                    )}
                     {card?.needs_name_check && (
                         <Alert severity="warning" icon={false} sx={{ mt: 1, py: 0.5 }}>
                             <strong>Check this name.</strong> This seat was rebuilt from a paid order —

@@ -348,6 +348,7 @@ function DetailDialog({ row, onClose }) {
                 <L k="Normalised status" v={row.status} />
                 <L k="Event" v={row.event_id || 'not an event product'} />
                 <L k="Attendee" v={row.attendee_id || 'none'} />
+                <L k="Ticket transfer" v={row.transfer_note || null} />
                 <L k="Verdict" v={`${row.recon_state} — ${row.reason}`} />
                 <L k="First seen" v={clock(row.first_seen)} />
                 <L k="Last checked" v={clock(row.last_checked)} />

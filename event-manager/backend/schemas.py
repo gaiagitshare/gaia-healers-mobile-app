@@ -1220,6 +1220,15 @@ class PaymentSyncIn(BaseModel):
     source: Optional[str] = "mirror"          # webhook | mirror
 
 
+class TicketTransfer(BaseModel):
+    """Hand a paid ticket to another person. The purchase does not change."""
+    first_name: str
+    last_name: Optional[str] = ""
+    email: str
+    phone: Optional[str] = ""
+    reason: str
+
+
 class DoorTestMode(BaseModel):
     enabled: bool = False
 

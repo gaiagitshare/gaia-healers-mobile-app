@@ -3181,6 +3181,7 @@ def _door_card(db, attendee, event, user=None):
             "attendance_type": attendee.attendance_type or None,
             "source": attendee.registration_source or None,
             "needs_name_check": bool(cd.get("needs_name_check")),
+            "transfer_note": _transfer_note(attendee),
             # A one-day add-on with no day chosen yet. The door refuses it until
             # one is picked, so the screen has to say so and offer the days.
             "event_days": _event_days(event),
@@ -8650,6 +8651,9 @@ def _pe_json(pe, db=None):
         "event_id": pe.event_id,
         "attendee_id": pe.attendee_id,
         "ticket": ("created" if pe.attendee_id else None),
+        # Why the ticket on this payment may name somebody else.
+        "transfer_note": (_transfer_note(db.get(models.Attendee, pe.attendee_id) or models.Attendee())
+                          if db is not None and pe.attendee_id else ""),
         "recon_state": pe.recon_state, "severity": pe.severity or 0,
         "reason": pe.recon_reason,
         "ingest_source": pe.ingest_source,
@@ -8697,7 +8701,7 @@ def event_payments(event_id: int,
         ])).lower()]
     total = len(rows)
     return {"event_id": event_id, "total": total,
-            "items": [_pe_json(r) for r in rows[:limit]]}
+            "items": [_pe_json(r, db) for r in rows[:limit]]}
 
 
 @app.get("/events/{event_id}/payments/summary")
@@ -8732,7 +8736,7 @@ def event_payments_attention(event_id: int, db: Session = Depends(get_db),
             "critical": sum(1 for r in rows if r.severity == 2),
             "warning": sum(1 for r in rows if r.severity == 1),
             "unmapped_event_sales": unmapped,
-            "items": [_pe_json(r) for r in rows[:100]]}
+            "items": [_pe_json(r, db) for r in rows[:100]]}
 
 
 @app.get("/events/{event_id}/payments/recovery")
@@ -9338,6 +9342,12 @@ def reconcile_attendee(payload: schemas.ReconcileAttendee, db: Session = Depends
         models.Attendee.event_id == event.id,
         func.lower(models.Attendee.email) == email).first()
 
+    # A transferred ticket left this address but its orders still name it. The
+    # same order replayed belongs to the ticket it bought, not to a new one; a
+    # NEW order from the original buyer is theirs and gets its own ticket.
+    if existing is None and payload.order_id:
+        existing = _ticket_transferred_from(db, event.id, email, payload.order_id)
+
     # A row that was ruled a duplicate keeps its email, so orders keep arriving
     # at it -- and every sync re-grants the purchase to somebody who is revoked
     # and whose badge nobody holds. Marie Moreau checked out twice under two
@@ -9860,6 +9870,89 @@ def refund_ticket(payload: schemas.RefundTicket, db: Session = Depends(get_db),
         pass
     return {"ok": True, "matched": True, "changed": True, "status": "refunded",
             "attendee_id": attendee.id, "qr_code": attendee.qr_code}
+
+
+def _ticket_transferred_from(db, event_id, email, order_id):
+    """The ticket this order paid for, if its buyer has since transferred it."""
+    for a in db.query(models.Attendee).filter(models.Attendee.event_id == event_id).all():
+        for t in (a.custom_data or {}).get("transfers") or []:
+            if (t.get("from") or {}).get("email") == email and order_id in (t.get("order_ids") or []):
+                return a
+    return None
+
+
+def _transfer_note(attendee) -> str:
+    """One line for anyone comparing purchases with attendees."""
+    ts = (attendee.custom_data or {}).get("transfers") or []
+    if not ts:
+        return ""
+    t = ts[-1]
+    return "Transferred: bought by %s (%s), now held by %s (%s), %s. %s" % (
+        (t.get("from") or {}).get("name") or "?", (t.get("from") or {}).get("email") or "?",
+        (t.get("to") or {}).get("name") or "?", (t.get("to") or {}).get("email") or "?",
+        str(t.get("at") or "")[:10], t.get("reason") or "")
+
+
+@app.post("/attendees/{attendee_id}/transfer", response_model=schemas.Attendee)
+def transfer_ticket(attendee_id: int, body: schemas.TicketTransfer, db: Session = Depends(get_db),
+                    current_user: models.User = Depends(get_current_user)):
+    """Give a paid ticket to somebody else, keeping the purchase exactly as it was.
+
+    The ticket (its pass, QR code and link) moves to the new holder. The payment
+    stays linked and still names the buyer, the acq_* purchase facts are not
+    touched, and the handover is written to the ticket so a purchase and an
+    attendee that do not match explain themselves. Refused if the new holder
+    already has a ticket here: one email is one person in this system, and two
+    tickets on one address is a decision, not a transfer.
+    """
+    att = db.query(models.Attendee).filter(models.Attendee.id == attendee_id).first()
+    if not att:
+        raise HTTPException(status_code=404, detail="Ticket not found")
+    authz.require_cap(db, current_user, att.event_id, "attendee.write")
+    event = _get_event_or_404(att.event_id, db)
+    _assert_event_writable(db, event, "transfer a ticket")
+    email = (body.email or "").strip().lower()
+    first = (body.first_name or "").strip()
+    reason = (body.reason or "").strip()
+    if not re.match(r"^[^@\s]+@[^@\s]+\.[^@\s]+$", email) or not first:
+        raise HTTPException(status_code=422, detail="The new holder needs a name and a valid email")
+    if len(reason) < 5:
+        raise HTTPException(status_code=422, detail="A reason is required")
+    if not _ticket_active(att):
+        raise HTTPException(status_code=409, detail="This ticket is %s, so it cannot be transferred" % _ticket_status(att))
+    if att.is_checked_in:
+        raise HTTPException(status_code=409, detail="This ticket has already been used to check in")
+    if (att.email or "").strip().lower() == email:
+        raise HTTPException(status_code=409, detail="This ticket is already on that email")
+    other = db.query(models.Attendee).filter(models.Attendee.event_id == att.event_id,
+                                             func.lower(models.Attendee.email) == email).first()
+    if other is not None:
+        raise HTTPException(status_code=409, detail="%s already holds ticket #%d on that email" % (
+            " ".join(x for x in [other.first_name, other.last_name] if x) or email, other.id))
+    cd = dict(att.custom_data or {})
+    orders = {cd.get("order_id"), att.acq_order_id}
+    orders |= {e.get("order_id") for e in (cd.get("entitlements") or [])}
+    orders |= {p.ghl_entity_id for p in db.query(models.PaymentEvent).filter(models.PaymentEvent.attendee_id == att.id).all()}
+    who = getattr(current_user, "email", None) or str(current_user.id)
+    before = {"name": " ".join(x for x in [att.first_name, att.last_name] if x), "email": (att.email or "").strip().lower(),
+              "phone": att.phone or "", "contact_id": cd.get("contact_id")}
+    after = {"name": " ".join(x for x in [first, (body.last_name or "").strip()] if x), "email": email}
+    entry = {"at": datetime.utcnow().isoformat(), "by": who, "reason": reason, "from": before, "to": after,
+             "order_ids": sorted(o for o in orders if o)}
+    cd["transfers"] = list(cd.get("transfers") or []) + [entry]
+    cd["transferred"] = True
+    # The buyer's GHL contact no longer identifies the holder; the purchase keeps
+    # it (acq_contact_id, the payment, the entry above).
+    cd.pop("contact_id", None)
+    cd.pop("needs_name_check", None)
+    att.custom_data = cd
+    att.first_name, att.last_name = first, (body.last_name or "").strip()
+    att.email, att.phone = email, (body.phone or "").strip()
+    _lifecycle_append(att, "ticket_transferred", actor=who, reason=reason, from_holder=before["name"],
+                      from_email=before["email"], to_holder=after["name"], to_email=email)
+    db.commit()
+    db.refresh(att)
+    return att
 
 
 @app.post("/attendees/{attendee_id}/revoke", response_model=schemas.Attendee)

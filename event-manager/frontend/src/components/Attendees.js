@@ -20,7 +20,7 @@ import { QRCodeSVG } from 'qrcode.react';
 import {
     getAttendees, getAttendee, getTicketCounts, createAttendee, updateAttendee, deleteAttendee,
     generateBadge, importAttendees, searchAttendees, getTicketTypes, exportAttendees,
-    revokeAttendee, reinstateAttendee, changePass, setAddonDay,
+    revokeAttendee, reinstateAttendee, changePass, setAddonDay, transferTicket,
     getAcquisitionReport, getDoorReport, getUnmappedSales, dismissUnmappedSale,
     getTicketMetrics, undoCheckIn, getEvent} from '../utils/api';
 import MapReconcile from './MapReconcile';
@@ -35,6 +35,7 @@ const LIFECYCLE_LABELS = {
     upgraded: 'Upgraded', refunded: 'Refunded', refund_recorded: 'Refund recorded',
     partial_refund: 'Partial refund', upgrade_refunded: 'Upgrade refunded',
     comp_upgrade: 'Complimentary upgrade', comp_downgrade: 'Complimentary downgrade',
+    ticket_transferred: 'Ticket transferred', pass_corrected: 'Pass corrected',
     revoked: 'Access revoked', reinstated: 'Reinstated', reactivated: 'Reactivated',
     cancelled: 'Cancelled', mapping_correction: 'Mapping correction applied',
 };
@@ -189,6 +190,18 @@ function Attendees({ timezone }) {
             await afterManage(data?.attendee || null);
         } catch (e) {
             setUndoNote(e?.response?.data?.detail || 'Could not undo that check-in.');
+        } finally { setManageBusy(false); }
+    };
+    const [xfer, setXfer] = useState({ first_name: '', last_name: '', email: '', phone: '', reason: '' });
+    const [xferError, setXferError] = useState('');
+    const doTransfer = async () => {
+        setManageBusy(true); setXferError('');
+        try {
+            const { data } = await transferTicket(manage.id, xfer);
+            setXfer({ first_name: '', last_name: '', email: '', phone: '', reason: '' });
+            await afterManage(data);
+        } catch (e) {
+            setXferError(e?.response?.data?.detail || 'The transfer did not go through');
         } finally { setManageBusy(false); }
     };
     const doRevoke = async () => { setManageBusy(true); try { const { data } = await revokeAttendee(manage.id, manageReason); await afterManage(data); } finally { setManageBusy(false); } };
@@ -1271,6 +1284,30 @@ function Attendees({ timezone }) {
                                     {manageBusy && <CircularProgress size={24} />}
                                 </Stack>
                                 <TextField size="small" label="Reason (recorded in history)" value={manageReason} onChange={(e) => setManageReason(e.target.value)} fullWidth sx={{ mt: 1 }} />
+                            </Box>
+
+                            <Divider />
+                            <Box>
+                                <Typography variant="subtitle2" gutterBottom>Transfer this ticket</Typography>
+                                {(manage.custom_data?.transfers || []).map((t, i) => (
+                                    <Alert key={i} severity="info" sx={{ mb: 1 }}>
+                                        Transferred {String(t.at || '').slice(0, 10)}: bought by {t.from?.name} ({t.from?.email}), now held by {t.to?.name} ({t.to?.email}). {t.reason}
+                                    </Alert>
+                                ))}
+                                <Typography variant="caption" color="text.secondary">
+                                    Moves the ticket, QR code and link to someone else. The payment stays with the original buyer.
+                                </Typography>
+                                <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1} sx={{ mt: 1 }}>
+                                    <TextField size="small" label="First name" value={xfer.first_name} onChange={(e) => setXfer({ ...xfer, first_name: e.target.value })} fullWidth />
+                                    <TextField size="small" label="Last name" value={xfer.last_name} onChange={(e) => setXfer({ ...xfer, last_name: e.target.value })} fullWidth />
+                                </Stack>
+                                <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1} sx={{ mt: 1 }}>
+                                    <TextField size="small" label="Email" value={xfer.email} onChange={(e) => setXfer({ ...xfer, email: e.target.value })} fullWidth />
+                                    <TextField size="small" label="Phone (optional)" value={xfer.phone} onChange={(e) => setXfer({ ...xfer, phone: e.target.value })} fullWidth />
+                                </Stack>
+                                <TextField size="small" label="Reason (kept with the ticket)" value={xfer.reason} onChange={(e) => setXfer({ ...xfer, reason: e.target.value })} fullWidth sx={{ mt: 1 }} />
+                                {xferError && <Alert severity="error" sx={{ mt: 1 }}>{xferError}</Alert>}
+                                <Button variant="outlined" sx={{ mt: 1 }} disabled={manageBusy || !xfer.first_name.trim() || !xfer.email.trim() || xfer.reason.trim().length < 5} onClick={doTransfer}>Transfer ticket</Button>
                             </Box>
 
                             <Divider />

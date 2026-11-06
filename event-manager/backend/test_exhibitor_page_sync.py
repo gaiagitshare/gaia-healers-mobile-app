@@ -87,7 +87,7 @@ check(all(v["company_name"] == e0[k]["company_name"] for k, v in e1.items()), "e
 
 print("\n== 4) the public API, the embed and the app feed show the page's names ==")
 pub = {x["company_name"] for x in get("/public/events/1/exhibitors")}
-check({"Rapid Release", "Eluumis", "Relax Saunas", "PulsePEMF"} <= pub and "Rapids Release Therapy" not in pub,
+check({"Rapid Release", "Relax Saunas", "PulsePEMF"} <= pub and "Rapids Release Therapy" not in pub,
       "public exhibitors use the page's names", sorted(pub)[:8])
 emb = urllib.request.urlopen(BASE + "/public/events/1/embed/exhibitors?nocache=1", timeout=20).read().decode()
 check("Rapid Release" in emb, "the website embed follows")
@@ -99,7 +99,7 @@ check(all(s1.get(n, {}).get("tier") == "partner" and "welcome bags" in (s1[n]["b
           for n in ("Manta Sleep", "David Protein", "Baja Gold Salt Co.")), "the three gift partners added", [s1.get(n) for n in ("Manta Sleep",)])
 check(s1["The Rasha"]["tier"] == "headline" and s1["BrainTap"]["tier"] == "headline" and s1["Eluumis"]["tier"] == "gold",
       "the existing four keep their page tiers")
-check(len(get("/public/events/1/sponsors")) == len(s1), "the public sponsor list carries them")
+check(len(get("/public/events/1/sponsors")) == sum(1 for v in s1.values() if v["is_published"]), "the public sponsor list carries them")
 
 print("\n== 6) a logo set in the app is kept ==")
 check(by_co["Zinzino"]["logo_url"] == "https://example.invalid/app-logo.png", "Zinzino's app logo was not replaced")
@@ -132,7 +132,56 @@ while 'class="exh-name">Zinzino' in html3:            # the strip repeats its se
 page3 = os.path.join(work, "page3.html"); open(page3, "w", encoding="utf-8").write(html3)
 r = run("--apply", page=page3, EXHIBITOR_PAGE_PUBLISH="1")
 zin = [v for v in exhibitors().values() if v["company_name"] == "Zinzino"][0]
-check("Zinzino" in r.stdout.split("not on the page")[-1] and zin["is_published"] == 1, "reported, still published", r.stdout[-300:])
+check("Zinzino" in r.stdout.split("Published here but not on the page")[-1].split("##")[0] and zin["is_published"] == 1, "reported, still published", r.stdout[-300:])
+
+print("\n== 9b) a sponsor that leaves the page ==")
+import re
+PUB = dict(EXHIBITOR_PAGE_PUBLISH="1", EXHIBITOR_PAGE_GONE_MINUTES="0")
+run("--apply", page=page2, **PUB)                     # every sponsor on the page is now seen
+full = open(page2, encoding="utf-8").read()
+def without(names, tag):
+    t = full
+    for n in names:
+        t, c = re.subn(r'<img\b[^>]*alt="%s"[^>]*>' % re.escape(n), "", t, flags=re.I)
+        assert c, n
+    out = os.path.join(work, tag + ".html"); open(out, "w", encoding="utf-8").write(t); return out
+sp = lambda n: sponsors()[n]
+gone = without(["LifeWave"], "gone")
+r = run("--apply", page=gone, **PUB)
+check(sp("LifeWave")["is_published"] == 1 and sp("LifeWave")["site_gone_since"], "first check: still shown, the absence is noted", r.stdout[-300:])
+r = run("--apply", page=gone, EXHIBITOR_PAGE_PUBLISH="1")
+check(sp("LifeWave")["is_published"] == 1, "a second check inside 20 minutes changes nothing")
+r = run(page=gone, **PUB)
+check(sp("LifeWave")["is_published"] == 1 and "hidden, not deleted" in r.stdout, "a dry run only reports it")
+r = run("--apply", page=gone, **PUB)
+check(sp("LifeWave")["is_published"] == 0 and sp("LifeWave")["site_hidden_at"], "second check: hidden, never deleted", r.stdout[-300:])
+check(not [x for x in get("/public/events/1/sponsors") if x["name"] == "LifeWave"], "and off the public list")
+r = run("--apply", page=page2, **PUB)
+check(sp("LifeWave")["is_published"] == 1 and not sp("LifeWave")["site_hidden_at"] and not sp("LifeWave")["site_gone_since"], "back on the page: shown again by itself", r.stdout[-300:])
+run("--apply", page=gone, **PUB); run("--apply", page=gone, **PUB)
+c = db(); c.execute("UPDATE sponsors SET is_published=1 WHERE name='LifeWave'"); c.commit()
+run("--apply", page=gone, **PUB); run("--apply", page=gone, **PUB)
+check(sp("LifeWave")["is_published"] == 1, "an organiser who puts it back by hand is not overruled")
+run("--apply", page=page2, **PUB)
+c = db(); c.execute("UPDATE sponsors SET is_published=0 WHERE name='LifeWave'"); c.commit()
+run("--apply", page=page2, **PUB)
+check(sp("LifeWave")["is_published"] == 0, "one an organiser hid stays hidden, even on the page")
+c = db(); c.execute("UPDATE sponsors SET is_published=1 WHERE name='LifeWave'")
+c.execute("INSERT INTO sponsors(event_id,name,tier,is_published,sort_order) VALUES(1,'ZZ Added By Hand','gold',1,0)"); c.commit()
+run("--apply", page=page2, **PUB); run("--apply", page=page2, **PUB)
+check(sp("ZZ Added By Hand")["is_published"] == 1, "a sponsor added by an organiser, never on the page, is left alone")
+run("--apply", page=gone); run("--apply", page=gone, EXHIBITOR_PAGE_GONE_MINUTES="0")
+check(sp("LifeWave")["is_published"] == 1, "without EXHIBITOR_PAGE_PUBLISH nothing is hidden")
+run("--apply", page=page2, **PUB)
+on_page = [n for n in sponsors() if sp(n)["site_seen_at"] and sp(n)["is_published"] and re.search(r'alt="%s"' % re.escape(n), full, re.I)]
+many = without(on_page[:4], "many")
+r = run("--apply", page=many, **PUB); run("--apply", page=many, **PUB)
+check(all(sp(n)["is_published"] == 1 for n in on_page[:4]) and "Too many sponsors" in r.stdout, "four gone at once: reported, nobody hidden", r.stdout[-300:])
+none_left = without(on_page, "none")
+r = run("--apply", page=none_left, **PUB); run("--apply", page=none_left, **PUB)
+check(all(sp(n)["is_published"] == 1 for n in on_page), "an empty sponsor block hides nobody", r.stdout[-300:])
+run("--apply", page=page2, **PUB)
+c = db(); c.execute("DELETE FROM sponsors WHERE name='ZZ Added By Hand'"); c.commit()
 
 print("\n== 10) a page that no longer parses ==")
 bad = os.path.join(work, "bad.html"); open(bad, "w").write("<html><body>Coming soon</body></html>")

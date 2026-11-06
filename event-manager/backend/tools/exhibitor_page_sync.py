@@ -27,7 +27,19 @@ minutes from sheet_sync_all.py). Rules:
   * sponsors follow the page: Title -> headline, Premium -> gold, Gifted to You
     By -> partner. Missing ones are created, empty logos filled, a tier that
     differs from the page is set to the page's;
-  * anything that leaves the page is reported, never unpublished or deleted;
+  * an EXHIBITOR that leaves the page is reported, never unpublished: the
+    planning sheet decides who exhibits;
+  * a SPONSOR that leaves the page is hidden, with EXHIBITOR_PAGE_PUBLISH=1 (3 Nov
+    2026 Babak's rule, after Eluumis stayed listed once it had gone). Never
+    deleted, and only when all of this holds:
+      - it came from the page (site_seen_at): one an organiser added stays;
+      - it was missing on two checks at least GONE_MINUTES apart, so an edit in
+        progress on the page cannot take anyone down;
+      - the page still lists sponsors, and no more than MAX_GONE (or half of the
+        list) left at once: that looks like a broken page, so it is reported;
+      - an organiser has not put it back by hand since the last hide (kept);
+    back on the page, a sponsor this sync hid returns by itself. One an organiser
+    hid is theirs and stays hidden;
   * if the block no longer parses (fewer than 5 exhibitors), nothing is applied.
 """
 import difflib, hashlib, html as _html, json, os, re, sqlite3, sys, urllib.request
@@ -48,6 +60,8 @@ ENABLED = os.environ.get("EXHIBITOR_PAGE_SYNC") == "1" or bool(SRC)
 PUBLISH = os.environ.get("EXHIBITOR_PAGE_PUBLISH") == "1"
 TIERS = (("title sponsors", "headline"), ("premium sponsors", "gold"), ("gifted to you by", "partner"))
 GIFT_BLURB = "Gifted to you by: in the VIP & Speaker welcome bags."
+GONE_MINUTES = int(os.environ.get("EXHIBITOR_PAGE_GONE_MINUTES", "20"))
+MAX_GONE = 3
 
 
 def _clean(s):
@@ -187,6 +201,10 @@ def main():
     for col, ddl in (("site_name", "VARCHAR"), ("site_synced_at", "DATETIME")):
         if col not in cols:
             db.execute("ALTER TABLE exhibitors ADD COLUMN %s %s" % (col, ddl))
+    sp_cols = {r[1] for r in db.execute("PRAGMA table_info(sponsors)")}
+    for col in ("site_seen_at", "site_gone_since", "site_hidden_at"):
+        if col not in sp_cols:
+            db.execute("ALTER TABLE sponsors ADD COLUMN %s DATETIME" % col)
     ex_rows = db.execute("SELECT * FROM exhibitors WHERE event_id=?", (EVENT,)).fetchall()
     sp_rows = db.execute("SELECT * FROM sponsors WHERE event_id=?", (EVENT,)).fetchall()
 
@@ -229,6 +247,20 @@ def main():
         if want:
             sp_set.append((r, want))
     sp_gone = [r for r in sp_rows if r["id"] not in sp_matched and int(r["is_published"] or 0)]
+    # Back on the page: this sync hid it, so this sync returns it.
+    sp_back = [r for r in sp_rows if r["id"] in sp_matched and r["site_hidden_at"] and not int(r["is_published"] or 0)]
+    sp_wait, sp_hide, sp_keep, sp_held = [], [], [], []
+    for r in sp_gone:
+        if not PUBLISH or not r["site_seen_at"] or r["site_hidden_at"]:
+            sp_keep.append(r)
+        elif r["site_gone_since"] and (started.replace(tzinfo=None) - datetime.fromisoformat(r["site_gone_since"])).total_seconds() >= GONE_MINUTES * 60:
+            sp_hide.append(r)
+        else:
+            sp_wait.append(r)
+    leaving = len(sp_wait) + len(sp_hide)
+    listed = sum(1 for r in sp_rows if int(r["is_published"] or 0))
+    if leaving and (not sponsors or leaving > MAX_GONE or leaving * 2 > listed):
+        sp_held, sp_wait, sp_hide = sp_wait + sp_hide, [], []
 
     L.append("Exhibitor block · exhibitors: %d (new %d, updated %d, to publish %d) · sponsors: %d (new %d, updated %d) · %s"
              % (len(exhibitors), len(ex_new), len(ex_set), len(ex_pub), len(sponsors), len(sp_new), len(sp_set),
@@ -254,8 +286,17 @@ def main():
         L += ["## New sponsors from the page"] + ["- %s (%s)" % (i["name"], i["tier"]) for i in sp_new] + [""]
     if sp_set:
         L += ["## Sponsors updated from the page"] + ["- %s: %s" % (r["name"], ", ".join(sorted(w))) for r, w in sp_set] + [""]
-    if sp_gone:
-        L += ["## Sponsors here but not on the page (left as they are)"] + ["- %s" % r["name"] for r in sp_gone] + [""]
+    if sp_back:
+        L += ["## Sponsors back on the page (shown again)"] + ["- %s" % r["name"] for r in sp_back] + [""]
+    if sp_hide:
+        L += ["## Sponsors gone from the page (hidden, not deleted)"] + ["- %s" % r["name"] for r in sp_hide] + [""]
+    if sp_wait:
+        L += ["## Sponsors missing from the page (hidden if still missing at a check %d+ minutes later)" % GONE_MINUTES] + [
+            "- %s" % r["name"] for r in sp_wait] + [""]
+    if sp_held:
+        L += ["## Too many sponsors missing at once: the page may be broken, nothing hidden"] + ["- %s" % r["name"] for r in sp_held] + [""]
+    if sp_keep:
+        L += ["## Sponsors here but not on the page (left as they are)"] + ["- %s" % r["name"] for r in sp_keep] + [""]
 
     if APPLY:
         now = datetime.now(timezone.utc).replace(tzinfo=None).isoformat()
@@ -279,13 +320,25 @@ def main():
             for it in sp_new:
                 f = {"event_id": EVENT, "name": it["name"], "tier": it["tier"], "logo_url": it["logo"],
                      "blurb": GIFT_BLURB if it["tier"] == "partner" else None, "sort_order": 0,
-                     "is_published": 1, "created_at": now}
+                     "is_published": 1, "created_at": now, "site_seen_at": now}
                 db.execute("INSERT INTO sponsors (%s) VALUES (%s)" % (", ".join(f), ", ".join("?" * len(f))), list(f.values()))
                 log.write(json.dumps({"at": now, "op": "create_sponsor", "name": it["name"], "tier": it["tier"]}) + "\n")
             for r, want in sp_set:
                 db.execute("UPDATE sponsors SET %s WHERE id=?" % ", ".join("%s=?" % k for k in want), list(want.values()) + [r["id"]])
                 log.write(json.dumps({"at": now, "op": "update_sponsor", "id": r["id"], "before": {k: r[k] for k in want},
                                       "after": want}) + "\n")
+            for r in sp_rows:
+                if r["id"] in sp_matched and (not r["site_seen_at"] or r["site_gone_since"] or r["site_hidden_at"]):
+                    db.execute("UPDATE sponsors SET site_seen_at=COALESCE(site_seen_at,?), site_gone_since=NULL, site_hidden_at=NULL WHERE id=?", (now, r["id"]))
+            for r in sp_back:
+                db.execute("UPDATE sponsors SET is_published=1 WHERE id=?", (r["id"],))
+                log.write(json.dumps({"at": now, "op": "show_sponsor", "id": r["id"], "name": r["name"], "because": "back on the page"}) + "\n")
+            for r in sp_wait:
+                if not r["site_gone_since"]:
+                    db.execute("UPDATE sponsors SET site_gone_since=? WHERE id=?", (now, r["id"]))
+            for r in sp_hide:
+                db.execute("UPDATE sponsors SET is_published=0, site_hidden_at=?, site_gone_since=NULL WHERE id=?", (now, r["id"]))
+                log.write(json.dumps({"at": now, "op": "hide_sponsor", "id": r["id"], "name": r["name"], "because": "gone from the page"}) + "\n")
         db.commit()
         watch(exhibitors, sponsors, problems, synced=True)
     out = "\n".join(L)

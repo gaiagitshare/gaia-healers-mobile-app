@@ -169,8 +169,11 @@ _spec = _ilu.spec_from_file_location("vendor_sheet", "/root/event/backend/tools/
 _vs = _ilu.module_from_spec(_spec); _spec.loader.exec_module(_vs)
 _sheet = _vs.parse(_vs.fetch_csv())
 _sheet_conf = [r for r in _sheet if r["stage"] == "confirmed"]
-real = sql("SELECT COUNT(*), SUM(amount_due), SUM(amount_paid) FROM exhibitors "
-           "WHERE event_id=1 AND stage='confirmed'")[0]
+# A stand the public page added (tools/exhibitor_page_sync.py) is confirmed but
+# is not a sheet row, so it is not counted against the sheet.
+_ON_SHEET = "COALESCE(sheet_notes,'') NOT LIKE 'Added from the public event page%'"
+real = sql("SELECT COUNT(*) FROM exhibitors WHERE event_id=1 AND stage='confirmed' AND " + _ON_SHEET)[0] + \
+       sql("SELECT SUM(amount_due), SUM(amount_paid) FROM exhibitors WHERE event_id=1")[0]
 _names = {r[0] for r in sql("SELECT company_name FROM exhibitors WHERE event_id=1 AND stage='confirmed'")}
 _missing = [r["company"] for r in _sheet_conf if not any(_vs.norm_name(r["company"]) == _vs.norm_name(n) for n in _names)]
 check(real[0] == len(_sheet_conf) and not _missing,
@@ -283,7 +286,7 @@ check(st == 404,
 # as stage "purchased" before the sheet knows the company (the sheet adopts it
 # by email later), and a company the sheet lists twice (Bio-Well) is one stand.
 counts = dict(sql("SELECT stage, COUNT(*) FROM exhibitors WHERE event_id=1"
-                  " AND company_name NOT LIKE 'ZZ %' GROUP BY stage"))
+                  " AND company_name NOT LIKE 'ZZ %' AND " + _ON_SHEET + " GROUP BY stage"))
 _purchased = counts.pop("purchased", 0)
 _sheet_cos = {_vs.norm_name(r["company"]) for r in _sheet}
 check(sum(counts.values()) == len(_sheet_cos),
@@ -293,14 +296,16 @@ check(counts.get("confirmed") == len(_sheet_conf), "%d of them are confirmed" % 
 check(counts.get("not_aligned", 0) > 0 and counts.get("next_year", 0) > 0,
       "including the ones deliberately not invited, and next year's", counts)
 
-money = sql("SELECT SUM(amount_due), SUM(amount_paid) FROM exhibitors "
-            "WHERE event_id=1 AND stage='confirmed'")[0]
+# A stand that cancels leaves the confirmed section, but what it booked and paid
+# stays on file (ELUMIIS, 4 Nov 2026): the totals are over every sheet stand.
+# Packages bought online (stage "purchased") are not part of the sheet's money.
+money = sql("SELECT SUM(amount_due), SUM(amount_paid) FROM exhibitors WHERE event_id=1 AND stage!='purchased'")[0]
 check(int(money[0]) == 111000 and int(money[1]) == 94500,
-      "the money belongs to the confirmed stands", money)
-pipeline_money = sql("SELECT COALESCE(SUM(amount_due),0) FROM exhibitors "
-                     "WHERE event_id=1 AND stage!='confirmed'")[0][0]
+      "the money stays on file, cancelled stands included", money)
+pipeline_money = sql("SELECT COALESCE(SUM(amount_due),0) FROM exhibitors WHERE event_id=1 AND stage!='confirmed'"
+                     " AND UPPER(COALESCE(payment_note,'')) NOT LIKE '%CANCELLED%'")[0][0]
 check(int(pipeline_money) == 0,
-      "a prospect has booked nothing, so it adds nothing to the total", pipeline_money)
+      "a prospect has booked nothing unless the sheet says it cancelled", pipeline_money)
 
 live = sql("SELECT COUNT(*) FROM exhibitors WHERE event_id=1 "
            "AND stage!='confirmed' AND (is_published=1 OR can_scan_leads=1)")[0][0]

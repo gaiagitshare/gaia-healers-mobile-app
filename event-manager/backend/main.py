@@ -8046,6 +8046,9 @@ def identity_ticket_mappings(db: Session = Depends(get_db), _: bool = Depends(re
              "addon_code": getattr(r, "addon_code", None),
                "valid_from": getattr(r, "valid_from", None),
                "valid_until": getattr(r, "valid_until", None),
+             # Which order-line wording this mapping claims; without it the proxy
+             # cannot tell a product's variants apart.
+             "product_name_match": getattr(r, "product_name_match", None),
              "label": r.label, "checkout_url": r.checkout_url} for r in rows]
 
 

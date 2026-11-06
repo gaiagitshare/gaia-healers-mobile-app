@@ -210,6 +210,75 @@ try:
     check(r.returncode == 0 and len(roll("zz-e2e-shop-backstop@example.invalid")) == 1, "the backstop recorded the Shopify order",
           (r.returncode, r.stdout[-400:], r.stderr[-300:]))
 
+    print("\n== F1b  The order line decides the pass, on every purchase path ==")
+    VARIANT, EXHIBIT = "69b463a14181e967e2fc2cfe", "69ffab66233a0d773296e989"
+    PLAIN = ("GENERAL ADMISSION (EXHIBIT HALL ONLY)", "GENERAL ADMISSION ")
+    PLUS = ("GENERAL ADMISSION + CONFERENCE", "GENERAL ADMISSION + CONFERENCE @ 249")
+    def line_order(oid, email, pid, line, amount=104.94):
+        o = ghl_order(oid, email, pid, "GENERAL ADMISSION (EXHIBIT HALL ONLY)", amount)
+        o["items"] = [{"name": line[0], "product": {"_id": pid, "name": "GENERAL ADMISSION (EXHIBIT HALL ONLY)"}, "qty": 1,
+                       "price": {"amount": 99, "name": line[1]}}]
+        GHL["orders"][oid] = o
+        return o
+    def webhook(oid):
+        return http("POST", PROXY_BASE + "/api/webhooks/ghl-payment", {"transaction_id": "tx-" + oid, "contact_id": "c-" + oid},
+                    headers={"x-gaia-secret": WEBHOOK_SECRET})[0]
+    def passes(email):
+        return [r[1] for r in roll(email)]
+    def tix(ids):
+        c = sqlite3.connect(DB); q = ",".join("?" * len(ids))
+        return c.execute("select id,ticket_type_id,qr_code,registration_status,json_extract(custom_data,'$.admin_tier') from attendees where id in (%s) order by id" % q, ids).fetchall()
+    line_order("var-web-plain", "zz-var-web-plain@example.invalid", VARIANT, PLAIN)
+    line_order("var-web-plus", "zz-var-web-plus@example.invalid", VARIANT, PLUS)
+    line_order("var-web-exh", "zz-var-web-exh@example.invalid", EXHIBIT, ("Elevate Conference 2026 (Exhibit Hall Only)", "Elevate Conference 2026 (Exhibit Hall Only) "))
+    for oid in ("var-web-plain", "var-web-plus", "var-web-exh"):
+        webhook(oid)
+    check(passes("zz-var-web-plain@example.invalid") == [8], "webhook: a $99 Exhibit Only line gets General Admission", passes("zz-var-web-plain@example.invalid"))
+    check(passes("zz-var-web-plus@example.invalid") == [7], "webhook: a + CONFERENCE line at the same price gets GA + Conference", passes("zz-var-web-plus@example.invalid"))
+    check(passes("zz-var-web-exh@example.invalid") == [8], "webhook: the other exhibit product gets General Admission", passes("zz-var-web-exh@example.invalid"))
+    line_order("var-mir-plain", "zz-var-mir-plain@example.invalid", VARIANT, PLAIN)
+    line_order("var-mir-plus", "zz-var-mir-plus@example.invalid", VARIANT, PLUS)
+    r = run_mirror()
+    check(r.returncode == 0 and passes("zz-var-mir-plain@example.invalid") == [8] and passes("zz-var-mir-plus@example.invalid") == [7],
+          "mirror: a missed webhook recovers to the right pass", (r.returncode, r.stdout[-300:]))
+    rec_env = os.path.join(WORK, "reconcile.env")
+    open(rec_env, "w").write("GHL_API_BASE_URL=%s\nGHL_API_TOKEN=e2e\nGHL_LOCATION_ID=LOC-E2E\nEVENT_MANAGER_BASE_URL=%s\nIDENTITY_SERVICE_TOKEN=%s\n" % (GHL_BASE, BASE, SVC))
+    def run_reconcile():
+        return subprocess.run(["node", os.path.join(PROXY, "reconcile-live.mjs")], env=dict(os.environ, RECONCILE_ENV_FILE=rec_env, LOOKBACK_DAYS="2"),
+                              capture_output=True, text=True, timeout=180)
+    line_order("var-rec-plain", "zz-var-rec-plain@example.invalid", VARIANT, PLAIN)
+    line_order("var-rec-plus", "zz-var-rec-plus@example.invalid", VARIANT, PLUS)
+    r = run_reconcile()
+    check(r.returncode == 0 and passes("zz-var-rec-plain@example.invalid") == [8] and passes("zz-var-rec-plus@example.invalid") == [7],
+          "reconciler: the minute-by-minute safety net too", (r.returncode, r.stdout[-300:], r.stderr[-200:]))
+    # Reprocessing: orders arrive again on every path. Nothing moves, nothing doubles.
+    n0 = sqlite3.connect(DB).execute("select count(*) from attendees").fetchone()[0]
+    for oid in ("var-web-plain", "var-web-plus", "var-mir-plain", "var-mir-plus", "var-rec-plain", "var-rec-plus"):
+        webhook(oid)
+    run_mirror(); run_reconcile()
+    check(sqlite3.connect(DB).execute("select count(*) from attendees").fetchone()[0] == n0, "reprocessing every order makes no new ticket")
+    check(passes("zz-var-web-plain@example.invalid") == [8] and passes("zz-var-web-plus@example.invalid") == [7], "and changes nobody's pass")
+    # Access already granted is honoured: replay the real orders behind the approved
+    # complimentary upgrades as plain lines, on every path.
+    c = sqlite3.connect(DB)
+    comps = [r[0] for r in c.execute("select id from attendees where id in (771,772,786,789,790,791) and ticket_type_id=7")]
+    check(len(comps) == 6 or len(comps) >= 3, "(the approved complimentary upgrades are in the copy)", comps)
+    before = tix(comps)
+    for tid, email, oid, cid in c.execute("select id,email,json_extract(custom_data,'$.order_id'),json_extract(custom_data,'$.contact_id') from attendees where id in (%s)" % ",".join(map(str, comps))).fetchall():
+        o = line_order(oid or ("var-comp-%d" % tid), email, VARIANT, PLAIN)
+        o["contactId"] = cid or o["contactId"]
+        webhook(o["_id"])
+    run_mirror(); run_reconcile()
+    check(tix(comps) == before, "replaying the complimentary orders on every path leaves their pass, QR and pin untouched", (before, tix(comps)))
+    n1 = sqlite3.connect(DB).execute("select count(*) from attendees").fetchone()[0]
+    check(n1 == n0, "and creates no duplicate", (n0, n1))
+    # Unpinned access is safe too: a ticket holding the conference, replayed as plain.
+    line_order("var-up", "zz-var-up@example.invalid", VARIANT, PLUS); webhook("var-up")
+    line_order("var-up", "zz-var-up@example.invalid", VARIANT, PLAIN); webhook("var-up"); run_mirror(); run_reconcile()
+    check(passes("zz-var-up@example.invalid") == [7], "an order replay never lowers a pass", passes("zz-var-up@example.invalid"))
+    for k in [k for k in GHL["orders"] if k.startswith("var-") or len(k) == 24]:
+        del GHL["orders"][k]
+
     print("\n== F6  Planning sheet -> exhibitors -> directory + website ==")
     rows = list(csv.reader(io.StringIO(vs.fetch_csv())))
     hi = next(i for i, r in enumerate(rows) if "Company Name" in [c.strip() for c in r])

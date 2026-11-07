@@ -10562,10 +10562,11 @@ def change_pass(attendee_id: int, payload: schemas.ChangePass,
                       method=((getattr(payload, "method", None) or "cash") if _paid else None),
                       reference=(getattr(payload, "reference", None) if _paid else None))
     db.commit(); db.refresh(attendee)
-    try:
-        _notify_ticket_change(db, attendee, tt)
-    except Exception:
-        pass
+    if getattr(payload, "notify", True) is not False:
+        try:
+            _notify_ticket_change(db, attendee, tt)
+        except Exception:
+            pass
     return attendee
 
 
@@ -12932,14 +12933,40 @@ def _td_bulk_preflight(body: dict, request: FastAPIRequest, db: Session = Depend
     orders = body.get("orders") or []
     delivered = {int(t) for t in (body.get("delivered_ticket_ids") or [])}
     holds = {int(k): str(v) for k, v in (body.get("holds") or {}).items()}
+    held_orders = body.get("held_orders") or {}
+    # Administrators' decisions in the Reconciliation Center win over the list
+    # file: a release there releases, a hold there holds.
+    for h in db.query(models.EmailHold).filter(models.EmailHold.event_id == event_id).all():
+        if h.state == "released":
+            holds.pop(int(h.attendee_id), None)   # order-level holds drop it in _bulk_check
+        elif h.state == "held":
+            holds[int(h.attendee_id)] = h.reason or "held by an administrator"
+    released = {int(h.attendee_id) for h in db.query(models.EmailHold).filter(
+        models.EmailHold.event_id == event_id, models.EmailHold.state == "released").all()}
+    out = _bulk_check(db, event_id, orders, delivered, holds, held_orders, body.get("auto_sender_cutoff"), released)
+    if body.get("record"):
+        # The sender's dry run records what it was asked to check, so the
+        # Reconciliation Center works from the same list and the same holds.
+        import reconcile
+        reconcile.import_bulk_list(db, event_id, orders, held_orders, actor="bulk check")
+        reconcile.run(db, event_id, actor="bulk check")
+        db.commit()
+    return out
+
+
+def _bulk_check(db, event_id, orders, delivered, holds, held_orders=None, auto_cutoff=None, released=()):
+    """The bulk-email rules, shared by the sender's gate and the Reconciliation
+    Center. Read-only."""
+    holds = dict(holds or {})
+    released = set(released or ())
     # Holds recorded per ORDER (the approved list's RED/YELLOW rows) cover
     # every ticket that order paid for.
-    for oid, why in (body.get("held_orders") or {}).items():
+    for oid, why in (held_orders or {}).items():
         for (aid,) in db.query(models.PaymentEvent.attendee_id).filter(
                 models.PaymentEvent.event_id == event_id, models.PaymentEvent.ghl_entity_id == oid,
                 models.PaymentEvent.attendee_id.isnot(None)).distinct():
-            holds.setdefault(int(aid), str(why))
-    auto_cutoff = body.get("auto_sender_cutoff")    # paid after this = the automatic sender's
+            if int(aid) not in released:
+                holds.setdefault(int(aid), str(why))
     critical, warnings = [], []
 
     def flag(level, code, **kw):
@@ -13052,7 +13079,6 @@ def _td_bulk_preflight(body: dict, request: FastAPIRequest, db: Session = Depend
                  detail="%d ticket(s) held, not emailed: %s" % (len(ids), why))
     if auto:
         flag("warning", "AUTO_SENDER", ticket_ids=sorted(auto), detail="paid after the cutoff: the automatic sender's")
-    db.rollback()
     return {"ok": not critical, "event_id": event_id, "critical": critical, "warnings": warnings,
             "summary": {"orders": len(orders), "tickets_in_send": len(in_send), "already_delivered": len(delivered),
                         "live_tickets": len(live), "held": len(held), "auto_sender": len(auto),
@@ -13240,6 +13266,437 @@ def ticket_delivery_audit(event_id: int, db: Session = Depends(get_db),
                 s.db.execute("select at,actor,action,order_id,reason,detail from delivery_admin_audit where event_id=? or event_id is null order by id desc limit 300", (event_id,))]
     finally:
         s.close()
+
+
+# ---------------------------------------------------------------------------
+# Ticket Reconciliation & Issue Resolution — the administrators' API (7 Nov 2026)
+#
+# reconcile.read to look, reconcile.resolve to act. Every action is written to
+# the issue's history with who, when, and the values before and after; the
+# ticket's own lifecycle is written by the endpoint the action goes through.
+# Nothing here sends an email or a notification, moves money, or touches the
+# bulk sender: the sender stays locked until the whole list passes its check
+# and the owner approves sending.
+# ---------------------------------------------------------------------------
+import reconcile as _rc  # noqa: E402
+import sys  # noqa: E402
+
+RECON_STATUSES = ("open", "in_review", "reviewed", "resolved", "dismissed")
+# Actions that change who holds a ticket, what it grants, or what the booking
+# is entitled to: these need confirm=true from the person clicking.
+RECON_SENSITIVE = {"issue_seat", "change_category", "fix_identity_email", "set_delivery_email", "release"}
+
+
+def _rc_issue_or_404(db, event_id, issue_id):
+    i = db.query(models.ReconIssue).filter(models.ReconIssue.id == issue_id,
+                                           models.ReconIssue.event_id == event_id).first()
+    if not i:
+        raise HTTPException(status_code=404, detail="Issue not found")
+    return i
+
+
+def _rc_actor(user):
+    return (getattr(user, "full_name", None) or getattr(user, "email", None) or "user %s" % getattr(user, "id", "?"))
+
+
+def _rc_row(i, users):
+    return {"id": i.id, "key": i.issue_key, "kind": i.kind, "kind_label": _rc.KINDS.get(i.kind, i.kind),
+            "priority": i.priority, "status": i.status, "title": i.title, "detected": bool(i.detected),
+            "attendee_ids": i.attendee_ids or [], "order_ids": i.order_ids or [],
+            "buyer_attendee_id": i.buyer_attendee_id,
+            "assigned_to": i.assigned_to, "assigned_name": users.get(i.assigned_to),
+            "first_seen_at": i.first_seen_at, "last_seen_at": i.last_seen_at, "updated_at": i.updated_at}
+
+
+def _rc_users(db):
+    return {u.id: (u.full_name or u.email) for u in db.query(models.User).all()}
+
+
+def _rc_admins(db, event_id):
+    out = []
+    for u in db.query(models.User).all():
+        if authz.can(db, u, event_id, "reconcile.resolve"):
+            out.append({"id": u.id, "name": u.full_name or u.email})
+    return out
+
+
+@app.get("/events/{event_id}/reconcile/summary")
+def recon_summary(event_id: int, db: Session = Depends(get_db),
+                  current_user: models.User = Depends(get_current_user)):
+    _get_event_or_404(event_id, db)
+    authz.require_cap(db, current_user, event_id, "reconcile.read")
+    rows = db.query(models.ReconIssue).filter(models.ReconIssue.event_id == event_id).all()
+    open_rows = [r for r in rows if r.status in _rc.OPEN_STATES]
+    by_p = {p: sum(1 for r in open_rows if r.priority == p) for p in ("critical", "high", "medium", "low")}
+    by_kind = {}
+    for r in open_rows:
+        by_kind[r.kind] = by_kind.get(r.kind, 0) + 1
+    by_status = {s: sum(1 for r in rows if r.status == s) for s in RECON_STATUSES}
+    bulk = _rc.bulk_status(db, event_id)
+    db.rollback()
+    last = db.query(func.max(models.ReconIssue.last_seen_at)).filter(models.ReconIssue.event_id == event_id).scalar()
+    return {"unresolved": len(open_rows), "by_priority": by_p, "by_kind": by_kind, "by_status": by_status,
+            "kinds": _rc.KINDS, "last_checked_at": last, "admins": _rc_admins(db, event_id),
+            "bulk_check": {"imported": bulk.get("imported", False), "ok": bool(bulk.get("ok")),
+                           "critical": len(bulk.get("critical") or []), "summary": bulk.get("summary") or {},
+                           "changed_since_list": bulk.get("changed_since_list", 0),
+                           "problems": [{"code": c["code"], "detail": c.get("detail"), "ticket_ids": (c.get("ticket_ids") or [])[:12]}
+                                        for c in (bulk.get("critical") or [])][:30],
+                           "sending": "locked"}}
+
+
+@app.post("/events/{event_id}/reconcile/run")
+def recon_run(event_id: int, db: Session = Depends(get_db),
+              current_user: models.User = Depends(get_current_user)):
+    """Run every check now. Reads tickets and payments; writes only issue records."""
+    _get_event_or_404(event_id, db)
+    authz.require_cap(db, current_user, event_id, "reconcile.read")
+    out = _rc.run(db, event_id, actor=_rc_actor(current_user))
+    db.commit()
+    return out
+
+
+@app.get("/events/{event_id}/reconcile/issues")
+def recon_issues(event_id: int, status: str = "unresolved", priority: str = "", kind: str = "",
+                 q: str = "", assigned: str = "", limit: int = 200, offset: int = 0,
+                 db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
+    _get_event_or_404(event_id, db)
+    authz.require_cap(db, current_user, event_id, "reconcile.read")
+    qry = db.query(models.ReconIssue).filter(models.ReconIssue.event_id == event_id)
+    if status == "unresolved":
+        qry = qry.filter(models.ReconIssue.status.in_(_rc.OPEN_STATES))
+    elif status and status != "all":
+        qry = qry.filter(models.ReconIssue.status == status)
+    if priority:
+        qry = qry.filter(models.ReconIssue.priority == priority)
+    if kind:
+        qry = qry.filter(models.ReconIssue.kind == kind)
+    if assigned == "me":
+        qry = qry.filter(models.ReconIssue.assigned_to == current_user.id)
+    elif assigned == "none":
+        qry = qry.filter(models.ReconIssue.assigned_to.is_(None))
+    elif assigned.isdigit():
+        qry = qry.filter(models.ReconIssue.assigned_to == int(assigned))
+    rows = qry.all()
+    term = (q or "").strip().lower().lstrip("#")
+    if term:
+        rows = [r for r in rows if term in (r.search_text or "") or term in (r.issue_key or "").lower()
+                or any(term == str(x) for x in (r.attendee_ids or [])) or any(term in str(o).lower() for o in (r.order_ids or []))]
+    rows.sort(key=lambda r: (_rc.PRIORITY_ORDER.get(r.priority, 9), 0 if r.status == "open" else 1, -(r.id or 0)))
+    users = _rc_users(db)
+    return {"total": len(rows), "rows": [_rc_row(r, users) for r in rows[offset:offset + min(limit, 500)]]}
+
+
+def _rc_actions_for(i, booking):
+    """What the screen offers for this issue (the server still checks each one)."""
+    acts = ["comment", "assign", "status", "fix_identity", "hold", "release", "rebuild_email", "set_delivery_email"]
+    if booking and booking.get("missing_seats"):
+        acts.append("issue_seat")
+    if i.kind in ("category_check", "manual_review", "incomplete_booking"):
+        acts.append("change_category")
+    if i.kind in ("possible_duplicate_payment", "incomplete_booking"):
+        acts.append("mark_duplicate")
+    return acts
+
+
+@app.get("/events/{event_id}/reconcile/issues/{issue_id}")
+def recon_issue_detail(event_id: int, issue_id: int, db: Session = Depends(get_db),
+                       current_user: models.User = Depends(get_current_user)):
+    event = _get_event_or_404(event_id, db)
+    authz.require_cap(db, current_user, event_id, "reconcile.read")
+    i = _rc_issue_or_404(db, event_id, issue_id)
+    idx = _rc.delivery_index(event_id)
+    delivered = _rc.delivered_ids(idx)
+    plan, holds = _rc.plan_state(db, event_id)
+    ids = list(i.attendee_ids or [])
+    booking = None
+    anchor_id = i.buyer_attendee_id or (ids[0] if ids else None)
+    anchor = db.query(models.Attendee).filter(models.Attendee.id == anchor_id).first() if anchor_id else None
+    if anchor is not None:
+        p = _party_members(db, anchor)
+        if p:
+            booking = {"buyer_ticket_id": p["buyer_attendee_id"], "buyer": p.get("buyer"),
+                       "paid_for": p.get("paid_for"), "issued": p.get("size"), "missing_seats": p.get("unnamed"),
+                       "possible_double_charges": p.get("possible_double_charges") or 0}
+            ids = sorted(set(ids) | {m["attendee_id"] for m in p["members"]})
+    tickets = []
+    for aid in ids:
+        a = db.query(models.Attendee).filter(models.Attendee.id == aid).first()
+        if a is not None:
+            t = _rc._ticket_brief(sys.modules[__name__], db, a, delivered, plan, holds)
+            t["phone"] = a.phone
+            t["needs_name_check"] = bool((a.custom_data or {}).get("needs_name_check"))
+            t["transferred"] = bool((a.custom_data or {}).get("transferred"))
+            t["delivery"] = idx.get(a.id)
+            pr = plan.get(a.id)
+            t["planned_email"] = {"recipient": pr.recipient, "key": pr.plan_key, "changed": bool(pr.changed_since_list)} if pr else None
+            h = holds.get(a.id)
+            t["hold"] = {"state": h.state, "reason": _rc.plain_reason(h.reason), "by": h.by, "at": h.at} if h else None
+            tickets.append(t)
+    pays = []
+    if ids or i.order_ids:
+        pq = db.query(models.PaymentEvent).filter(models.PaymentEvent.event_id == event_id)
+        conds = []
+        if ids:
+            conds.append(models.PaymentEvent.attendee_id.in_(ids))
+        if i.order_ids:
+            conds.append(models.PaymentEvent.ghl_entity_id.in_(list(i.order_ids)))
+        from sqlalchemy import or_
+        for pe in pq.filter(or_(*conds)).order_by(models.PaymentEvent.occurred_at).all():
+            pays.append({"id": pe.id, "order_id": pe.ghl_entity_id, "status": pe.status, "amount": pe.amount,
+                         "refunded": pe.amount_refunded, "currency": pe.currency, "at": pe.occurred_at,
+                         "products": pe.product_names or [], "buyer_name": pe.buyer_name, "buyer_email": pe.buyer_email,
+                         "ticket_id": pe.attendee_id})
+    tts = [{"id": t.id, "name": t.name} for t in db.query(models.TicketType).filter(models.TicketType.event_id == event_id).all()]
+    hist = db.query(models.ReconHistory).filter(models.ReconHistory.issue_id == i.id).order_by(models.ReconHistory.id).all()
+    users = _rc_users(db)
+    out = _rc_row(i, users)
+    out.update({"explanation": i.explanation, "recommendation": i.recommendation, "facts": i.facts or {},
+                "resolution": i.resolution, "resolved_at": i.resolved_at, "resolved_by": users.get(i.resolved_by),
+                "booking": booking, "tickets": tickets, "payments": pays, "ticket_types": tts,
+                "actions": _rc_actions_for(i, booking), "admins": _rc_admins(db, event_id),
+                "history": [{"at": h.at, "actor": h.actor, "kind": h.kind, "text": h.text, "before": h.before,
+                             "after": h.after} for h in hist]})
+    return out
+
+
+@app.post("/events/{event_id}/reconcile/issues/{issue_id}/comment")
+def recon_comment(event_id: int, issue_id: int, body: dict, db: Session = Depends(get_db),
+                  current_user: models.User = Depends(get_current_user)):
+    authz.require_cap(db, current_user, event_id, "reconcile.resolve")
+    i = _rc_issue_or_404(db, event_id, issue_id)
+    text_ = (body.get("text") or "").strip()
+    if len(text_) < 2:
+        raise HTTPException(status_code=400, detail="Write the note first")
+    _rc._hist(db, i, "comment", text_[:4000], actor=_rc_actor(current_user), user_id=current_user.id)
+    i.updated_at = datetime.utcnow()
+    db.commit()
+    return {"ok": True}
+
+
+@app.post("/events/{event_id}/reconcile/issues/{issue_id}/assign")
+def recon_assign(event_id: int, issue_id: int, body: dict, db: Session = Depends(get_db),
+                 current_user: models.User = Depends(get_current_user)):
+    authz.require_cap(db, current_user, event_id, "reconcile.resolve")
+    i = _rc_issue_or_404(db, event_id, issue_id)
+    uid = body.get("user_id")
+    if uid is not None:
+        u = db.query(models.User).filter(models.User.id == int(uid)).first()
+        if not u or not authz.can(db, u, event_id, "reconcile.resolve"):
+            raise HTTPException(status_code=400, detail="That person cannot resolve issues for this event")
+    users = _rc_users(db)
+    before = users.get(i.assigned_to)
+    i.assigned_to = int(uid) if uid is not None else None
+    if i.status == "open" and uid is not None:
+        i.status = "in_review"
+    _rc._hist(db, i, "assign", "Assigned to %s" % (users.get(i.assigned_to) or "nobody"), actor=_rc_actor(current_user),
+              user_id=current_user.id, before={"assigned": before}, after={"assigned": users.get(i.assigned_to)})
+    i.updated_at = datetime.utcnow()
+    db.commit()
+    return {"ok": True}
+
+
+@app.post("/events/{event_id}/reconcile/issues/{issue_id}/status")
+def recon_status(event_id: int, issue_id: int, body: dict, db: Session = Depends(get_db),
+                 current_user: models.User = Depends(get_current_user)):
+    """open / in_review / reviewed (looked at, kept as it is) / resolved / dismissed.
+    Anything but 'open' and 'in_review' needs a note saying why."""
+    authz.require_cap(db, current_user, event_id, "reconcile.resolve")
+    i = _rc_issue_or_404(db, event_id, issue_id)
+    st = (body.get("status") or "").strip()
+    note = (body.get("note") or "").strip()
+    if st not in RECON_STATUSES:
+        raise HTTPException(status_code=400, detail="Unknown status")
+    if st in ("reviewed", "resolved", "dismissed") and len(note) < 3:
+        raise HTTPException(status_code=400, detail="Add a note explaining the decision")
+    before = i.status
+    i.status = st
+    if st in ("resolved", "dismissed", "reviewed"):
+        i.resolved_by, i.resolved_at = current_user.id, datetime.utcnow()
+        i.resolution = ((i.resolution + "\n") if i.resolution else "") + "%s: %s" % (st, note)
+    if body.get("real_seat") is not None and i.kind == "possible_duplicate_payment":
+        f = dict(i.facts or {}); f["decision"] = "real_seat" if body.get("real_seat") else "duplicate"
+        i.facts = f
+    _rc._hist(db, i, "status", note or ("Marked %s" % st), actor=_rc_actor(current_user), user_id=current_user.id,
+              before={"status": before}, after={"status": st})
+    i.updated_at = datetime.utcnow()
+    db.commit()
+    # A 'resolved' that the checks still disagree with reopens on the next run.
+    rerun = _rc.run(db, event_id, actor="re-check after %s" % _rc_actor(current_user))
+    db.commit()
+    db.refresh(i)
+    return {"ok": True, "status": i.status, "recheck": rerun}
+
+
+class _RcFake:
+    """A request body for an endpoint called from here."""
+
+
+def _rc_duplicate_ok(db, event_id, buyer_id, body):
+    """No seat is issued against a suspected duplicate charge unless someone has
+    decided it was a real seat (on the duplicate-payment issue, or here)."""
+    dup = db.query(models.ReconIssue).filter(models.ReconIssue.event_id == event_id,
+                                             models.ReconIssue.issue_key == "duplicate-payment:%d" % buyer_id).first()
+    if dup is None or not dup.detected:
+        return True
+    if (dup.facts or {}).get("decision") == "real_seat":
+        return True
+    return bool(body.get("confirm_real_seat"))
+
+
+@app.post("/events/{event_id}/reconcile/issues/{issue_id}/action")
+def recon_action(event_id: int, issue_id: int, body: dict, db: Session = Depends(get_db),
+                 current_user: models.User = Depends(get_current_user)):
+    """One correction, through the endpoint the rest of the system uses for it."""
+    event = _get_event_or_404(event_id, db)
+    authz.require_cap(db, current_user, event_id, "reconcile.resolve")
+    i = _rc_issue_or_404(db, event_id, issue_id)
+    action = (body.get("action") or "").strip()
+    note = (body.get("note") or "").strip()
+    actor = _rc_actor(current_user)
+    allowed_ids = set(i.attendee_ids or [])
+    if i.buyer_attendee_id:
+        anchor = db.query(models.Attendee).filter(models.Attendee.id == i.buyer_attendee_id).first()
+        p = _party_members(db, anchor) if anchor else None
+        if p:
+            allowed_ids |= {m["attendee_id"] for m in p["members"]}
+    tid = body.get("ticket_id")
+    att = None
+    if tid is not None:
+        if int(tid) not in allowed_ids:
+            raise HTTPException(status_code=400, detail="That ticket is not part of this issue")
+        att = db.query(models.Attendee).filter(models.Attendee.id == int(tid), models.Attendee.event_id == event_id).first()
+        if att is None:
+            raise HTTPException(status_code=404, detail="Ticket not found")
+    sensitive = action in RECON_SENSITIVE or (action == "fix_identity" and body.get("email"))
+    if sensitive and body.get("confirm") is not True:
+        raise HTTPException(status_code=428, detail="This changes who holds a ticket, what it grants or where it is "
+                                                    "sent. Confirm to go ahead.")
+    if len(note) < 3:
+        raise HTTPException(status_code=400, detail="Add a short note explaining the decision")
+
+    def snap(a):
+        return {"ticket_id": a.id, "first_name": a.first_name, "last_name": a.last_name, "email": a.email,
+                "phone": a.phone, "ticket_type_id": a.ticket_type_id, "pass": _pass_display(db, a)}
+
+    before = after = None
+    result = {}
+    if action == "fix_identity":
+        if att is None:
+            raise HTTPException(status_code=400, detail="Choose the ticket to correct")
+        before = snap(att)
+        r = door_identity(event_id, att.id, schemas.DoorIdentity(
+            first_name=body.get("first_name"), last_name=body.get("last_name"), phone=body.get("phone"),
+            email=body.get("email"), reason="Reconciliation: %s" % note), db, current_user)
+        db.refresh(att); after = snap(att); result = {"changed": r.get("changed")}
+    elif action == "issue_seat":
+        if not i.buyer_attendee_id:
+            raise HTTPException(status_code=400, detail="This issue is not about a booking")
+        if not _rc_duplicate_ok(db, event_id, i.buyer_attendee_id, body):
+            raise HTTPException(status_code=409, detail="This booking has a suspected duplicate payment. Decide on the "
+                                                        "duplicate-payment issue first (or confirm this is a real, "
+                                                        "separately paid seat).")
+        if not (body.get("first_name") or "").strip():
+            raise HTTPException(status_code=400, detail="Enter the guest's first name (or 'Guest of' the buyer)")
+        r = add_party_seat(event_id, i.buyer_attendee_id, schemas.AddPartySeat(
+            first_name=body.get("first_name"), last_name=body.get("last_name") or "",
+            phone=body.get("phone"), email=body.get("email"), reason="Reconciliation: %s" % note), db, current_user)
+        seat = db.query(models.Attendee).filter(models.Attendee.id == r["attendee_id"]).first()
+        after = snap(seat); result = {"issued_ticket_id": seat.id}
+    elif action == "change_category":
+        if att is None:
+            raise HTTPException(status_code=400, detail="Choose the ticket to correct")
+        if len(note) < 10:
+            raise HTTPException(status_code=400, detail="Say which payment supports the new category")
+        before = snap(att)
+        cd = att.custom_data or {}
+        comp_lc = [l for l in (cd.get("lifecycle") or []) if l.get("action") in ("comp_upgrade",) and l.get("complimentary")]
+        target = db.query(models.TicketType).filter(models.TicketType.id == int(body.get("ticket_type_id") or 0),
+                                                    models.TicketType.event_id == event_id).first()
+        if target is None:
+            raise HTTPException(status_code=400, detail="Choose a pass of this event")
+        if comp_lc and body.get("allow_downgrade"):
+            raise HTTPException(status_code=409, detail="This ticket carries a recorded complimentary upgrade. It is "
+                                                        "kept; change it from Attendees if that decision is reversed.")
+        change_pass(att.id, schemas.ChangePass(ticket_type_id=target.id, reason="Reconciliation: %s" % note,
+                                               complimentary=False, allow_downgrade=bool(body.get("allow_downgrade")),
+                                               notify=False), db, current_user)
+        db.refresh(att); after = snap(att)
+    elif action == "mark_duplicate":
+        f = dict(i.facts or {}); f["marked_duplicate_for_review"] = True
+        before = {"status": i.status}
+        i.facts = f
+        if i.status == "open":
+            i.status = "in_review"
+        after = {"status": i.status, "marked_duplicate_for_review": True}
+        result = {"note": "Marked for review. No payment, refund or ticket was changed."}
+    elif action in ("hold", "release"):
+        targets = [int(x) for x in (body.get("ticket_ids") or ([att.id] if att else []))]
+        if not targets or not set(targets) <= allowed_ids:
+            raise HTTPException(status_code=400, detail="Choose tickets that belong to this issue")
+        before, after = {}, {}
+        for t in targets:
+            h = db.query(models.EmailHold).filter(models.EmailHold.event_id == event_id,
+                                                  models.EmailHold.attendee_id == t).first()
+            before[str(t)] = h.state if h else "none"
+            if h is None:
+                h = models.EmailHold(event_id=event_id, attendee_id=t)
+                db.add(h)
+            h.state = "held" if action == "hold" else "released"
+            h.reason, h.source, h.by, h.at = note, "admin", actor, datetime.utcnow()
+            after[str(t)] = h.state
+        result = {"note": "The email list itself is not sent from here."}
+    elif action in ("rebuild_email", "set_delivery_email"):
+        anchor_id = i.buyer_attendee_id or (att.id if att else None) or (sorted(allowed_ids)[0] if allowed_ids else None)
+        anchor = db.query(models.Attendee).filter(models.Attendee.id == anchor_id).first() if anchor_id else None
+        if anchor is None:
+            raise HTTPException(status_code=400, detail="Nothing to rebuild")
+        p = _party_members(db, anchor)
+        members = [db.query(models.Attendee).filter(models.Attendee.id == m["attendee_id"]).first() for m in p["members"]] if p else [anchor]
+        buyer = db.query(models.Attendee).filter(models.Attendee.id == p["buyer_attendee_id"]).first() if p else anchor
+        idx = _rc.delivery_index(event_id); delivered = _rc.delivered_ids(idx)
+        live = [m for m in members if m is not None and _ticket_active(m) and m.id not in delivered]
+        recipient = (body.get("email") or "").strip().lower() if action == "set_delivery_email" else None
+        if action == "set_delivery_email" and not re.match(r"^[^@\s]+@[^@\s]+\.[^@\s]+$", recipient or ""):
+            raise HTTPException(status_code=400, detail="Enter a valid email address")
+        key = "booking:%d" % buyer.id
+        old_rows = db.query(models.EmailPlan).filter(models.EmailPlan.event_id == event_id,
+                                                     models.EmailPlan.active == True).all()   # noqa: E712
+        ids_now = {m.id for m in live}
+        before = {r.plan_key: {"recipient": r.recipient, "tickets": r.ticket_ids} for r in old_rows
+                  if set(r.ticket_ids or []) & (ids_now | {m.id for m in members if m is not None})}
+        for r in old_rows:
+            if r.plan_key != key and set(r.ticket_ids or []) & ids_now:
+                r.ticket_ids = [x for x in (r.ticket_ids or []) if x not in ids_now]
+                r.active = bool(r.ticket_ids); r.changed_since_list = True
+                r.updated_by, r.updated_at = actor, datetime.utcnow()
+        row = db.query(models.EmailPlan).filter(models.EmailPlan.event_id == event_id, models.EmailPlan.plan_key == key).first()
+        if row is None:
+            row = models.EmailPlan(event_id=event_id, plan_key=key)
+            db.add(row)
+        prev = before.get(key, {})
+        row.recipient = recipient or (prev.get("recipient") if action == "rebuild_email" and prev else None) \
+            or _SEAT_TAG.sub("@", (buyer.email or "").strip().lower())
+        row.ticket_ids = sorted(ids_now)
+        row.order_ids = sorted({pe.ghl_entity_id for pe in db.query(models.PaymentEvent).filter(
+            models.PaymentEvent.attendee_id.in_([m.id for m in members if m is not None]),
+            models.PaymentEvent.status == "paid").all() if pe.ghl_entity_id})
+        row.source, row.changed_since_list, row.active = "admin_rebuild", True, bool(row.ticket_ids)
+        row.updated_by, row.updated_at = actor, datetime.utcnow()
+        after = {key: {"recipient": row.recipient, "tickets": row.ticket_ids}}
+        result = {"note": "The planned email now carries %d ticket(s) to %s. The bulk list must be rebuilt and "
+                          "approved again before anything is sent." % (len(row.ticket_ids), row.recipient)}
+    else:
+        raise HTTPException(status_code=400, detail="Unknown action")
+    _rc._hist(db, i, "action", "%s: %s" % (action.replace("_", " "), note), actor=actor, user_id=current_user.id,
+              before=before, after=after)
+    i.updated_at = datetime.utcnow()
+    db.commit()
+    rerun = _rc.run(db, event_id, actor="re-check after %s" % actor)
+    db.commit()
+    db.refresh(i)
+    return {"ok": True, "result": result, "status": i.status, "detected": bool(i.detected), "recheck": rerun}
+
 
 if __name__ == "__main__":
     import uvicorn

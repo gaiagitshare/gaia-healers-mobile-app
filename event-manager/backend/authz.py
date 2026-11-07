@@ -29,7 +29,11 @@ import models
 ORGANIZER = "organizer"
 CHECKIN_STAFF = "checkin_staff"
 EXHIBITOR_MANAGER = "exhibitor_manager"
-GRANTABLE_ROLES = {ORGANIZER, CHECKIN_STAFF, EXHIBITOR_MANAGER}
+# Ticket Reconciliation (7 Nov 2026): the people who clear ticket problems.
+# They may correct tickets and see what was paid, but not run the event,
+# export the roster or manage stands.
+RECONCILER = "reconciliation_admin"
+GRANTABLE_ROLES = {ORGANIZER, CHECKIN_STAFF, EXHIBITOR_MANAGER, RECONCILER}
 
 # What each role may do. Listed explicitly rather than derived from a hierarchy:
 # a hierarchy invites "staff is basically organizer minus a bit", and the minus
@@ -41,6 +45,7 @@ CAPABILITIES = {
         "checkin.perform",
         "exhibitor.read", "exhibitor.write", "exhibitor.grant_scanning",
         "lead.read", "analytics.read",
+        "reconcile.read", "reconcile.resolve",
     },
     CHECKIN_STAFF: {
         # Enough to work a door: find someone, admit them. Not enough to export
@@ -55,6 +60,10 @@ CAPABILITIES = {
     },
     EXHIBITOR_MANAGER: {
         "event.read", "exhibitor.read", "exhibitor.write", "lead.read",
+    },
+    RECONCILER: {
+        "event.read", "attendee.read", "attendee.write", "checkin.perform", "analytics.read",
+        "reconcile.read", "reconcile.resolve",
     },
 }
 

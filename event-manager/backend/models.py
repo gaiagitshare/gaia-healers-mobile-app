@@ -1297,3 +1297,93 @@ class PaymentEvent(Base):
     last_checked_at = Column(DateTime, default=datetime.utcnow)
     resolved_at = Column(DateTime, nullable=True)
     resolution = Column(String)
+
+
+# ---------------------------------------------------------------------------
+# Ticket Reconciliation & Issue Resolution (7 Nov 2026)
+#
+# Problems with tickets are found by code, not by reading spreadsheets: a
+# booking that paid for more seats than it holds, a payment on nobody's
+# ticket, a duplicate badge, a ticket missing from the email list. Each one is
+# a record an administrator can open, act on and close, with every step kept.
+# Nothing here is a payment or a ticket: correcting goes through the same
+# audited endpoints the desk uses, so their rules (paid quantity, no
+# downgrades, one seat at a time) still hold.
+# ---------------------------------------------------------------------------
+class ReconIssue(Base):
+    __tablename__ = "recon_issues"
+    __table_args__ = (UniqueConstraint("event_id", "issue_key", name="uq_recon_issue_key"),)
+    id = Column(Integer, primary_key=True, index=True)
+    event_id = Column(Integer, index=True)
+    issue_key = Column(String)            # stable identity, e.g. "booking:204"
+    kind = Column(String, index=True)
+    priority = Column(String)             # critical | high | medium | low
+    status = Column(String, default="open", index=True)   # open | in_review | reviewed | resolved | dismissed
+    title = Column(String)
+    explanation = Column(Text)
+    recommendation = Column(Text)
+    buyer_attendee_id = Column(Integer, nullable=True, index=True)
+    attendee_ids = Column(JSON, default=list)
+    order_ids = Column(JSON, default=list)
+    search_text = Column(Text)            # names, emails, order and ticket ids, lower-case
+    facts = Column(JSON, default=dict)
+    source = Column(String)               # detector | bulk_check
+    detected = Column(Boolean, default=True)   # still found by the last run
+    first_seen_at = Column(DateTime, default=datetime.utcnow)
+    last_seen_at = Column(DateTime, default=datetime.utcnow)
+    cleared_at = Column(DateTime, nullable=True)
+    assigned_to = Column(Integer, nullable=True)
+    resolved_by = Column(Integer, nullable=True)
+    resolved_at = Column(DateTime, nullable=True)
+    resolution = Column(Text, nullable=True)
+    updated_at = Column(DateTime, default=datetime.utcnow)
+
+
+class ReconHistory(Base):
+    """Append-only: never updated, never deleted."""
+    __tablename__ = "recon_history"
+    id = Column(Integer, primary_key=True, index=True)
+    issue_id = Column(Integer, index=True)
+    event_id = Column(Integer, index=True)
+    at = Column(DateTime, default=datetime.utcnow)
+    user_id = Column(Integer, nullable=True)
+    actor = Column(String)
+    kind = Column(String)                 # detected | updated | cleared | reopened | comment | assign | status | action
+    text = Column(Text)
+    before = Column(JSON, nullable=True)
+    after = Column(JSON, nullable=True)
+
+
+class EmailHold(Base):
+    """Whether a ticket may go in the bulk ticket email. A hold recorded by the
+    3 Nov review stays a hold until an administrator releases it."""
+    __tablename__ = "email_holds"
+    __table_args__ = (UniqueConstraint("event_id", "attendee_id", name="uq_email_hold"),)
+    id = Column(Integer, primary_key=True, index=True)
+    event_id = Column(Integer, index=True)
+    attendee_id = Column(Integer, index=True)
+    state = Column(String)                # held | released
+    reason = Column(Text)
+    source = Column(String)               # review_2026_11_03 | admin
+    by = Column(String)
+    at = Column(DateTime, default=datetime.utcnow)
+
+
+class EmailPlan(Base):
+    """One planned ticket email: who receives it and which tickets it carries.
+    Imported from the approved bulk list; an administrator's rebuild replaces a
+    booking's row and marks it as changed since that list, so the list itself
+    must be rebuilt (and approved again) before it can be sent."""
+    __tablename__ = "email_plan"
+    __table_args__ = (UniqueConstraint("event_id", "plan_key", name="uq_email_plan_key"),)
+    id = Column(Integer, primary_key=True, index=True)
+    event_id = Column(Integer, index=True)
+    plan_key = Column(String)             # the order id, or "booking:<buyer id>" after a rebuild
+    recipient = Column(String)
+    ticket_ids = Column(JSON, default=list)
+    order_ids = Column(JSON, default=list)
+    source = Column(String)               # approved_list | admin_rebuild
+    changed_since_list = Column(Boolean, default=False)
+    active = Column(Boolean, default=True)
+    updated_by = Column(String)
+    updated_at = Column(DateTime, default=datetime.utcnow)

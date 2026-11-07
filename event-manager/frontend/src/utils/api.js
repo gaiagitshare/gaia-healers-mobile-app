@@ -391,3 +391,13 @@ export const resendTicketEmail = (eventId, orderId, reason) => api.post(`/events
 export const pauseTicketDelivery = (eventId, reason) => api.post(`/events/${eventId}/ticket-delivery/pause`, { reason });
 export const resumeTicketDelivery = (eventId, reason) => api.post(`/events/${eventId}/ticket-delivery/resume`, { reason });
 export const getTicketDeliveryAudit = (eventId) => api.get(`/events/${eventId}/ticket-delivery/audit`);
+
+// Ticket Reconciliation & Issue Resolution (7 Nov 2026)
+export const getReconSummary = (eventId) => api.get(`/events/${eventId}/reconcile/summary`);
+export const runReconChecks = (eventId) => api.post(`/events/${eventId}/reconcile/run`);
+export const getReconIssues = (eventId, params) => api.get(`/events/${eventId}/reconcile/issues`, { params });
+export const getReconIssue = (eventId, id) => api.get(`/events/${eventId}/reconcile/issues/${id}`);
+export const reconComment = (eventId, id, text) => api.post(`/events/${eventId}/reconcile/issues/${id}/comment`, { text });
+export const reconAssign = (eventId, id, userId) => api.post(`/events/${eventId}/reconcile/issues/${id}/assign`, { user_id: userId });
+export const reconStatus = (eventId, id, data) => api.post(`/events/${eventId}/reconcile/issues/${id}/status`, data);
+export const reconAction = (eventId, id, data) => api.post(`/events/${eventId}/reconcile/issues/${id}/action`, data);

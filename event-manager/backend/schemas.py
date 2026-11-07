@@ -1026,6 +1026,9 @@ class ChangePass(BaseModel):
     method: Optional[str] = "cash"
     reference: Optional[str] = None
     label: Optional[str] = None
+    # The Reconciliation Center corrects quietly: a correction never messages
+    # the visitor (7 Nov 2026). Everything else keeps the push notification.
+    notify: Optional[bool] = True
     is_active: Optional[bool] = True
 
 class TicketMappingCreate(TicketMappingBase):

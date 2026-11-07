@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useParams } from 'react-router-dom';
+import { useParams, useSearchParams } from 'react-router-dom';
 import {
     Box, Typography, Button, Table, TableBody, TableCell, TableContainer,
     TableHead, TableRow, TableSortLabel, Paper, Dialog, DialogTitle, DialogContent, DialogActions,
@@ -57,7 +57,10 @@ function Attendees({ timezone }) {
     const [eventInfo, setEventInfo] = useState(null);
     const [importResult, setImportResult] = useState(null);
     const [importing, setImporting] = useState(false);
-    const [query, setQuery] = useState('');
+    // ?q= opens the list already searched -- the Reconciliation Center links
+    // straight to a booking this way.
+    const [searchParams] = useSearchParams();
+    const [query, setQuery] = useState(searchParams.get('q') || '');
     // Acquisition filters + the purchase/attribution detail panel.
     const [acqDialog, setAcqDialog] = useState(null);
     const [acqDetail, setAcqDetail] = useState(null);

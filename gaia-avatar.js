@@ -201,7 +201,7 @@
     'P-SHARE': 'Your Bio-Well readings are not shared with you here yet.',
     'P-SESSION': 'You have a confirmed session coming up this week.',
     'P-COURSE': 'You have started this course and it is not finished yet.',
-    'P-ONBOARD': 'Your Gaia setup is not finished yet.',
+    'P-ONBOARD': 'Your Gaia Healers setup is not finished yet.',
   };
   function pathWhy() {
     const it = pathItem; if (!it) return;

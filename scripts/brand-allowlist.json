@@ -1,0 +1,132 @@
+{
+  "about": "Intentional uses of \"Gaia\" in customer-facing copy that must NOT become \"Gaia Healers\". Read by scripts/brand-audit.mjs and enforced by tests/brand-consistency.test.cjs. Each pattern is a JavaScript regex; an occurrence is allowed only when a match of the pattern covers that very \"Gaia\". Keep patterns as narrow as the phrase they protect; prefer adding a phrase here over widening an existing one. Rule for the assistant: the AI assistant's product name is \"Gaia Assist\" and its character is addressed as \"Gaia\" (Ask Gaia, Talk to Gaia, Gaia is thinking…). The character keeps \"Gaia\"; every reference to the company, platform, app, website, account, profile, team or catalogue is \"Gaia Healers\".",
+  "ok": [
+    {
+      "pattern": "Gaia(&nbsp;|\\s)Healers?\\b",
+      "reason": "already the brand (\"Gaia Healer\" is the certified-person title)"
+    },
+    {
+      "pattern": "GAIA HEALERS",
+      "reason": "already the brand (all caps)"
+    }
+  ],
+  "keep": [
+    {
+      "pattern": "Gaia Practitioners\\b",
+      "reason": "Gaia Practitioners is the separate partner platform"
+    },
+    {
+      "pattern": "Gaia Assist\\b",
+      "reason": "Gaia Assist is the AI assistant's product name"
+    },
+    {
+      "pattern": "\\b(Ask|ask|Talk to|talk to|Type to|type to|Chat with|Hear|Tap|tap|Hold|Thinking with|conversation with|talking with|Suggested by|Guided by|path with) Gaia\\b",
+      "reason": "assistant character: the member addresses or hears Gaia"
+    },
+    {
+      "pattern": "Gaia (is|was) (thinking|speaking|listening|ready)",
+      "reason": "assistant character state"
+    },
+    {
+      "pattern": "Gaia (waits|suggests|can still answer)",
+      "reason": "assistant character behaviour"
+    },
+    {
+      "pattern": "Gaia voice\\b|local Gaia voice",
+      "reason": "the assistant character's voice"
+    },
+    {
+      "pattern": "Gaia['’]s idle animations|Gaia\\\\u2019s idle animations",
+      "reason": "the assistant character's avatar animations"
+    },
+    {
+      "pattern": "Hi, I\\\\?['’]m Gaia\\b",
+      "reason": "assistant character introduces itself"
+    },
+    {
+      "pattern": "You are Gaia, a warm wellness guide",
+      "reason": "assistant character persona (AI prompt)",
+      "files": "^staging-proxy/wellness-router\\.js$"
+    },
+    {
+      "pattern": "Gaia: tap for suggestions",
+      "reason": "assistant character avatar control label",
+      "files": "^gaia-avatar\\.js$"
+    },
+    {
+      "pattern": "aria-label=\"Gaia\"|gava-convo__name\">Gaia<",
+      "reason": "assistant character name in its own chat bubble",
+      "files": "^gaia-avatar\\.js$"
+    },
+    {
+      "pattern": "Gaia Avatar|Gaia, the character",
+      "reason": "assistant character preview page",
+      "files": "^gaia-avatar\\.html$"
+    },
+    {
+      "pattern": "^Gaia$",
+      "reason": "assistant name fallback (assistant.name || 'Gaia')",
+      "files": "^gaia-ui\\.js$"
+    },
+    {
+      "pattern": "^Gaia$",
+      "reason": "Gaia = the planet Earth in the sky-to-chakra spotlight (spotlight.name || 'Gaia')",
+      "files": "^gaia-wellness\\.js$"
+    },
+    {
+      "pattern": "how to use Gaia\\b",
+      "reason": "assistant mode chooser (voice or text with the Gaia character)",
+      "files": "^gaia-ui\\.js$"
+    },
+    {
+      "pattern": "Gaia [Pp]ath\\b",
+      "reason": "\"Gaia Path\" is the named personal-path feature (Discover My Gaia Path); owner may rename it"
+    },
+    {
+      "pattern": "Gaia Reset\\b",
+      "reason": "\"Gaia Reset\" is the named pulse breathing-reset feature; owner may rename it"
+    }
+  ],
+  "technical": [
+    {
+      "pattern": "GAIA PULSE DIAGNOSTIC SESSION",
+      "reason": "developer diagnostic export header, not member copy",
+      "files": "^gaia-pulse\\.js$"
+    },
+    {
+      "pattern": "Gaia App - ",
+      "reason": "GHL contact `source` attribution value; CRM workflows/filters may match it",
+      "files": "^staging-proxy/server\\.js$"
+    },
+    {
+      "pattern": "Gaia Guest",
+      "reason": "seed name of the GUEST ticket type in the Event Manager database (renaming is a data change, see audit)",
+      "files": "^event-manager/backend/tools/people_sync\\.py$"
+    },
+    {
+      "pattern": "GAIA (SESSION STATE|PROFILE CHOICES)|CURRENT GAIA PROFILE",
+      "reason": "machine section markers inside the AI context block (parsed/asserted, never shown)",
+      "files": "^staging-proxy/server\\.js$"
+    },
+    {
+      "pattern": "made Gaia speak in one ear",
+      "reason": "code comment inside the audio-worklet source template",
+      "files": "^gaia-realtime-voice\\.js$"
+    },
+    {
+      "pattern": "No canonical Gaia memberships mapped",
+      "reason": "ops CLI error thrown by the reconcile job",
+      "files": "^staging-proxy/membership-reconcile\\.mjs$"
+    },
+    {
+      "pattern": "Gaia must not duplicate or replace that authority",
+      "reason": "internal policy note on a commerce rule",
+      "files": "^staging-proxy/membership/commerce-catalogue\\.js$"
+    },
+    {
+      "pattern": "Finish your Gaia setup|Gaia's 9-week chakra programme",
+      "reason": "approved Personal Path catalogue entry: text changes go through tools/path-catalogue.mjs with owner approval (flagged in docs/BRANDING-AUDIT.md)",
+      "files": "^staging-proxy/path-catalogue\\.json$"
+    }
+  ]
+}

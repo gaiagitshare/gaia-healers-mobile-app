@@ -104,7 +104,7 @@ test('dismissed and completed items stay gone; a new scan is a new item', () => 
 test('required onboarding takes priority over everything', () => {
   const p = run({ onboarding: { required: true }, ...linked({ new_reading: true }) }, { practitionerRecs: [rec()] });
   assert.deepEqual(keys(p), ['P-ONBOARD']);
-  assert.equal(p.items[0].title, 'Finish your Gaia setup');
+  assert.equal(p.items[0].title, 'Finish your Gaia Healers setup');
 });
 
 test('catalogue: only approved, active, approved-at-this-version entries run or are selectable', () => {

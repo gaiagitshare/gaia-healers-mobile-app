@@ -631,9 +631,9 @@
             <div><p class="gaia-menu-sheet__kicker">Membership</p><h2 class="gaia-menu-sheet__title" id="gaia-membership-title">Unlock your Gaia Healers</h2></div>
             <button type="button" class="gaia-sheet-close" data-membership-close aria-label="Close membership">&times;</button>
           </div>
-          <p class="gaia-auth-modal__body">Gaia 2.0 offers Free, Silver, Gold, and Diamond paths for practitioners at every stage.</p>
+          <p class="gaia-auth-modal__body">Gaia Healers 2.0 offers Free, Silver, Gold, and Diamond paths for practitioners at every stage.</p>
           <nav class="gaia-menu-sheet__nav" aria-label="Membership actions">
-            <button type="button" class="gaia-menu-sheet__link" data-book-inline="https://join.gaiahealers.com/membership" data-book-title="Gaia 2.0 Membership">View membership options</button>
+            <button type="button" class="gaia-menu-sheet__link" data-book-inline="https://join.gaiahealers.com/membership" data-book-title="Gaia Healers 2.0 Membership">View membership options</button>
             <button type="button" class="gaia-menu-sheet__link" data-membership-signin>Already a member? Sign in</button>
             <button type="button" class="gaia-menu-sheet__link" data-membership-assist>Ask Gaia about membership</button>
           </nav>
@@ -644,7 +644,7 @@
       sheet.querySelector('[data-membership-signin]')?.addEventListener('click', () => { close(); window.GaiaAuth?.open?.(); });
       sheet.querySelector('[data-membership-assist]')?.addEventListener('click', () => {
         close();
-        window.dispatchEvent(new CustomEvent('gaia:open-assist', { detail: { prompt: 'Please explain the Free, Silver, Gold, and Diamond Gaia 2.0 membership paths and help me choose.', speak: false } }));
+        window.dispatchEvent(new CustomEvent('gaia:open-assist', { detail: { prompt: 'Please explain the Free, Silver, Gold, and Diamond Gaia Healers 2.0 membership paths and help me choose.', speak: false } }));
       });
       sheet.querySelector('[data-book-inline]')?.addEventListener('click', close);
       return sheet;
@@ -1370,7 +1370,7 @@
         store: 'Store',
         admin: 'Admin',
       };
-      document.title = `${labels[view] || 'Gaia'} · Gaia Healers`;
+      document.title = `${labels[view] ? labels[view] + ' · ' : ''}Gaia Healers`;
     }
 
     function showView(view, options = {}) {
@@ -3578,7 +3578,7 @@
         const path = tier === 'free' ? 'onboarding' : tier;
         return { label: tier === 'free' ? 'Join free' : `Choose ${tier[0].toUpperCase()}${tier.slice(1)}`, url: `https://join.gaiahealers.com/${path}` };
       }
-      if (/(become|join|start|sign\s*up|enroll|subscribe)[^.]{0,24}(member|membership)|(member|membership)[^.]{0,24}(become|join|start|sign\s*up|enroll|subscribe)/.test(t)) return { label: 'Join Gaia 2.0', url: 'https://join.gaiahealers.com/membership' };
+      if (/(become|join|start|sign\s*up|enroll|subscribe)[^.]{0,24}(member|membership)|(member|membership)[^.]{0,24}(become|join|start|sign\s*up|enroll|subscribe)/.test(t)) return { label: 'Join Gaia Healers 2.0', url: 'https://join.gaiahealers.com/membership' };
       if (/\b(coaching|coach)\b/.test(t)) return { label: 'Book wellness coaching', url: 'https://api.leadconnectorhq.com/widget/form/gVzfo7sRfbLnMzQqSnJL' };
       if (/discovery|free call|consult/.test(t)) return { label: 'Book a free discovery call', url: 'https://api.leadconnectorhq.com/widget/form/mgf6oviyhPwrLBi03gzq' };
       if (/\bdemo\b/.test(t)) return { label: 'Book a Bio-Well demo', url: 'https://api.leadconnectorhq.com/widget/bookings/bio-welldemo' };
@@ -3673,7 +3673,7 @@
       });routeBox.append(button);
       if(action.type==='start_path'){const note=document.createElement('p');note.textContent='Sign in or create an account to save your path. No paid subscription required.';routeBox.append(note);measure('gaia_assist_test_suggested',action);}
       if(action.type==='membership')measure('gaia_assist_membership_shown',action);
-      if(['start_path','membership'].includes(action.type)){const decline=document.createElement('button');decline.type='button';decline.className='gaia-assist__route-btn';decline.textContent='Not now';decline.addEventListener('click',()=>{declinedPrompts.add('discovery');routeBox.hidden=true;if(realtimeVoice?.isActive())realtimeVoice.sendText('No thanks. Please do not suggest the Gaia test or membership again in this conversation.');});routeBox.append(decline);}
+      if(['start_path','membership'].includes(action.type)){const decline=document.createElement('button');decline.type='button';decline.className='gaia-assist__route-btn';decline.textContent='Not now';decline.addEventListener('click',()=>{declinedPrompts.add('discovery');routeBox.hidden=true;if(realtimeVoice?.isActive())realtimeVoice.sendText('No thanks. Please do not suggest the Gaia Healers test or membership again in this conversation.');});routeBox.append(decline);}
     }
 
     function showRoute(text) {

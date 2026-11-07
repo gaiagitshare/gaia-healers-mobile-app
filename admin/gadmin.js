@@ -447,9 +447,9 @@
     box.innerHTML =
       (archived ? '<div class="scopebox__arch">Archived survey \u2014 shown for reference. It is not collecting responses.</div>' : '')
       + '<p class="scopebox__p"><b>This page shows the questions, not the answers.</b> '
-      + 'Gaia reads survey definitions from GHL and draws how they branch. Responses stay in GHL: '
+      + 'Gaia Healers reads survey definitions from GHL and draws how they branch. Responses stay in GHL: '
       + 'an individual\u2019s answers appear on their contact record under Contacts, and completion is '
-      + 'visible only where GHL sets a tag. Gaia holds no submission log, no timestamps and no '
+      + 'visible only where GHL sets a tag. Gaia Healers holds no submission log, no timestamps and no '
       + 'per-question reporting, so this page cannot say how many people answered a given question.</p>';
   }
 
@@ -651,7 +651,7 @@
     var warn = a.has_ambiguity
       ? '<div class="idwarn"><b>One contact, more than one attendee</b>'
         + '<p>This GHL contact carries several attendee records in the same event. That is correct for a '
-        + 'couple or a bought guest seat, and a duplicate if the same person checked out twice. Gaia does not '
+        + 'couple or a bought guest seat, and a duplicate if the same person checked out twice. Gaia Healers does not '
         + 'guess which — decide it here before the door does.</p></div>'
       : '';
     return warn + '<div class="crslist">' + a.attendees.map(function (x) {
@@ -977,20 +977,20 @@
   // What each component IS, in an operator's terms. The runtime facts come from
   // the health payload; this is the part a timestamp cannot tell you.
   var HMETA = {
-    entitlement_ledger:   { what: 'Gaia\u2019s own record of what each person holds \u2014 memberships and course access.',
-                            truth: 'Gaia (this is the source of truth)', how: 'Written by the webhook receiver and the reconcile sweep', rw: 'read/write' },
+    entitlement_ledger:   { what: 'Gaia Healers\u2019 own record of what each person holds \u2014 memberships and course access.',
+                            truth: 'Gaia Healers (this is the source of truth)', how: 'Written by the webhook receiver and the reconcile sweep', rw: 'read/write' },
     course_webhook:       { what: 'Receives course and community grants pushed by GHL workflows when something is sold.',
-                            truth: 'GHL (Gaia records the grant)', how: 'Pushed, live', rw: 'write into the ledger' },
+                            truth: 'GHL (Gaia Healers records the grant)', how: 'Pushed, live', rw: 'write into the ledger' },
     membership_reconcile: { what: 'Walks GHL subscriptions and reconciles them against the canonical billing map.',
                             truth: 'GHL billing', how: 'Scheduled sweep', rw: 'write into the ledger' },
     event_mirror:         { what: 'Catches GHL orders the event webhook missed and mirrors payments.',
                             truth: 'GHL orders and transactions', how: 'Scheduled, hourly', rw: 'write into the Event Manager' },
-    academy_sync:         { what: 'Refreshes the course catalogue Gaia validates grants against.',
-                            truth: 'GHL courses', how: 'Scheduled, daily', rw: 'write into Gaia\u2019s catalogue' },
+    academy_sync:         { what: 'Refreshes the course catalogue Gaia Healers validates grants against.',
+                            truth: 'GHL courses', how: 'Scheduled, daily', rw: 'write into Gaia Healers\u2019 catalogue' },
     event_backup:         { what: 'Snapshots the Event Manager database and keeps 30 days.',
                             truth: 'The Event Manager database', how: 'Scheduled, daily', rw: 'read-only snapshot' },
     ghl_api:              { what: 'The upstream CRM: contacts, tags, subscriptions, orders.',
-                            truth: 'GHL', how: 'Queried live on demand', rw: 'read-only from Gaia' },
+                            truth: 'GHL', how: 'Queried live on demand', rw: 'read-only from Gaia Healers' },
     event_manager:        { what: 'Attendees, exhibitors, check-in, badges and event payments.',
                             truth: 'The Event Manager (this is the source of truth)', how: 'Live API', rw: 'read/write \u2014 owned by Event Admin' },
   };
@@ -1192,7 +1192,7 @@
       + '<svg class="sysmap__edges"></svg>'
       + '<div class="smhub" id="smhub"><span class="smhub__k">Gaia Healers 2.0</span><b>' + n(d.members) + '</b><span class="smhub__l">total members</span></div>'
       + '<div class="smrow">' + tiers + payB + access + app + eventsB + entB + '</div>'
-      + '<div class="smfoot">GHL contacts &amp; tags · GHL/Stripe subscriptions · Gaia\u2019s Shopify and Academy catalogues · built ' + fmtDate(d.generatedAt) + ' \u00b7 cached 10 min</div>';
+      + '<div class="smfoot">GHL contacts &amp; tags · GHL/Stripe subscriptions · Gaia Healers\u2019 Shopify and Academy catalogues · built ' + fmtDate(d.generatedAt) + ' \u00b7 cached 10 min</div>';
     document.querySelectorAll('.smh[data-hk]').forEach(function (b) {
       b.onclick = function () {
         var c = (d.health && d.health.components || []).filter(function (x) { return x.key === b.dataset.hk; })[0];

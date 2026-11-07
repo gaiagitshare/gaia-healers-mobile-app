@@ -88,7 +88,7 @@ function Dashboard() {
         } catch (error) {
             setNotice({
                 severity: 'error',
-                message: error.response?.data?.detail || 'Could not sync Gaia pages.',
+                message: error.response?.data?.detail || 'Could not sync Gaia Healers pages.',
             });
         } finally {
             setSyncing(false);
@@ -136,7 +136,7 @@ function Dashboard() {
                     onClick={handleSync}
                     disabled={syncing}
                 >
-                    {syncing ? 'Syncing...' : 'Sync Gaia Pages'}
+                    {syncing ? 'Syncing...' : 'Sync Gaia Healers Pages'}
                 </Button>
             </Box>
 
@@ -232,7 +232,7 @@ function Dashboard() {
                     <StatCard
                         title="Website Sources"
                         value={stats?.source_count || 0}
-                        detail="Synced from Gaia/GHL pages"
+                        detail="Synced from Gaia Healers/GHL pages"
                         icon={<SyncIcon fontSize="large" />}
                         color="#4a7c59"
                         onClick={handleSync}

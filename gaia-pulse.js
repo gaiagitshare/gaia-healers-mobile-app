@@ -51,7 +51,7 @@
     const points = (readings || []).slice(0, 7).filter((r) => r && Number.isFinite(r.bpm));
     if (points.length < 2) {
       return '<div class="gp-trend"><div class="gp-trend__head"><strong>Your recent readings</strong></div>'
-        + '<p class="gp-trend__empty">This is your first saved reading on this device. Measure again another time and Gaia will chart how your pulse moves.</p></div>';
+        + '<p class="gp-trend__empty">This is your first saved reading on this device. Measure again another time and Gaia Healers will chart how your pulse moves.</p></div>';
     }
     const series = points.slice().reverse(); // oldest → newest
     const values = series.map((r) => r.bpm);
@@ -392,7 +392,7 @@
       + '<p class="gp-eyebrow">Camera unavailable</p>'
       + '<h2 class="gp-title">Can’t reach the camera here</h2>'
       + '<p class="gp-lead">' + (framed
-        ? 'This in-app view isn’t permitted to use the camera. Open Gaia in your browser for the camera reading — or tap your pulse below, it’s just as real.'
+        ? 'This in-app view isn’t permitted to use the camera. Open Gaia Healers in your browser for the camera reading — or tap your pulse below, it’s just as real.'
         : 'The camera didn’t respond or was blocked. Tap your pulse below — it’s just as real a measurement.') + '</p>'
       + '<div class="gp-actions">'
       + (framed ? '<a class="gp-btn" href="' + esc(topUrl) + '" target="_blank" rel="noopener"><i class="ph ph-arrow-square-out" aria-hidden="true"></i> Open in browser</a>' : '')
@@ -900,7 +900,7 @@
       : 'A higher pulse right now — a few slow breaths can help it settle.';
     const baselineDelta = baseline == null ? null : Math.round(bpm - baseline);
     const baselineText = baseline == null
-      ? 'Complete three readings on this device and Gaia will begin showing your personal pulse reference.'
+      ? 'Complete three readings on this device and Gaia Healers will begin showing your personal pulse reference.'
       : (Math.abs(baselineDelta) <= 3 ? 'Close to your recent device reference of ' + baseline + ' BPM.'
         : Math.abs(baselineDelta) + ' BPM ' + (baselineDelta > 0 ? 'above' : 'below') + ' your recent device reference of ' + baseline + ' BPM.');
     // A camera reading can read high from movement or hard pressure. Saying so
@@ -914,7 +914,7 @@
     const actionTitle = band === 'Activated' ? 'Reset, then see the difference'
       : band === 'Balanced' ? 'Keep the rhythm steady' : 'Protect this quiet moment';
     const actionCopy = band === 'Activated'
-      ? 'Take a 3-minute guided coherence-breathing break, then remeasure. Gaia will compare before and after on this device.'
+      ? 'Take a 3-minute guided coherence-breathing break, then remeasure. Gaia Healers will compare before and after on this device.'
       : band === 'Balanced' ? 'A short coherence-breathing break can help you carry this steadiness into what comes next.'
         : 'One quiet minute of paced breathing can help you stay connected to this calmer moment.';
     const resetMarkup = resetComparison ? '<div class="gp-reset-result"><strong>Your Gaia Reset</strong><span>'

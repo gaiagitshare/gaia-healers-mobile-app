@@ -630,7 +630,7 @@ async function handle(req, res, url, deps) {
           const shelf = byRegistry || byHint;
           return shelf
             ? { label: shelf.label, decidedBy: byRegistry ? 'registry' : 'title_hint' }
-            : { label: 'More from Gaia', decidedBy: 'none' };
+            : { label: 'More from Gaia Healers', decidedBy: 'none' };
         })(),
         mappingStatus: mapping?.canonical
           ? (mapping.confidence === 'confirmed' ? 'confirmed' : 'needs_review')

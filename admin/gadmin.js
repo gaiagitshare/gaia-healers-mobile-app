@@ -19,7 +19,14 @@
     var headers = Object.assign({ 'Content-Type': 'application/json' }, opts.headers || {});
     if (TOKEN) headers['Authorization'] = 'Bearer ' + TOKEN;
     return fetch(API + path, Object.assign({ credentials: 'same-origin' }, opts, { headers: headers }))
-      .then(function (r) { if (r.status === 401) { setToken(''); loginScreen('Your session expired — sign in again.'); return { ok: false, __401: true }; } return r.json().catch(function () { return {}; }); });
+      .then(function (r) {
+        // Door / check-in staff (role 'event_staff') are signed in for Events only:
+        // an admin route refusing them is expected and must never sign the device
+        // out -- that would also clear the embedded Event Manager's login.
+        if (r.status === 401 && ROLE === 'event_staff') return { ok: false, __401: true };
+        if (r.status === 401) { setToken(''); loginScreen('Your session expired — sign in again.'); return { ok: false, __401: true }; }
+        return r.json().catch(function () { return {}; });
+      });
   }
   function evPost(path, body, form) {
     var headers = form ? { 'Content-Type': 'application/x-www-form-urlencoded' } : { 'Content-Type': 'application/json' };
@@ -62,7 +69,11 @@
   // ================= STATE / ROUTER =================
   var view = 'contacts';
   var VIEWS = ['contacts', 'surveys', 'membership', 'events', 'system'];
-  function nav(v) { view = v; render(); location.hash = v; }
+  // 'admin' (Babak, Nima, Bita, or the Control Center password) or 'event_staff'
+  // (a door / check-in desk login): told by /api/admin/session, enforced by the server.
+  var ROLE = 'admin';
+  function allowed(v) { return ROLE !== 'event_staff' || v === 'events'; }
+  function nav(v) { if (!allowed(v)) v = 'events'; view = v; render(); location.hash = v; }
 
   // Back and Forward moved the hash and nothing else: the view only ever
   // changed when something called nav(), so the browser's own buttons left the
@@ -70,7 +81,7 @@
   // the change is what makes history mean anything here.
   window.addEventListener('hashchange', function () {
     var want = (location.hash || '').replace('#', '');
-    if (VIEWS.indexOf(want) < 0 || want === view) return;   // ignore noise and no-ops
+    if (VIEWS.indexOf(want) < 0 || want === view || !allowed(want)) return;   // ignore noise, no-ops and views this login may not open
     view = want;
     render();
   });
@@ -113,6 +124,7 @@
   function shell() {
     function item(id, label, icon, ext) {
       if (ext) return '<a class="nav__item" href="' + ext + '" target="_blank" rel="noopener">' + svg(icon, 'nav__ico') + label + '<span class="nav__ext">' + svg('ext') + '</span></a>';
+      if (!allowed(id)) return '';
       return '<div class="nav__item ' + (view === id ? 'is-active' : '') + '" data-nav="' + id + '">' + svg(icon, 'nav__ico') + label + '</div>';
     }
     var titles = {
@@ -139,8 +151,8 @@
       + item('events', 'Events', 'event')
       + item('system', 'System Map', 'system')
       + '    <div class="nav__sp"></div>'
-      + '    <button class="nav__item alertbtn" id="alertbtn">' + svg('lock', 'nav__ico')
-      + '<span>System Alerts</span><span class="alertbtn__n" id="alertn"></span></button>'
+      + (ROLE === 'event_staff' ? '' : '    <button class="nav__item alertbtn" id="alertbtn">' + svg('lock', 'nav__ico')
+      + '<span>System Alerts</span><span class="alertbtn__n" id="alertn"></span></button>')
       + '    <div class="nav__item" id="changepw">' + svg('lock', 'nav__ico') + 'Change password</div>'
       + '    <div class="nav__item" id="logout">' + svg('logout', 'nav__ico') + 'Sign out</div>'
       + '    <div class="side__foot">Gaia Healers &middot; live from GHL</div>'
@@ -1302,7 +1314,9 @@
     api('/session').then(function (d) {
       if (d && d.__401) return;
       if (d && d.authed) {
-        var initial = (location.hash || '').replace('#', ''); if (VIEWS.indexOf(initial) >= 0) view = initial;
+        ROLE = d.role === 'event_staff' ? 'event_staff' : 'admin';
+        if (!allowed(view)) view = 'events';
+        var initial = (location.hash || '').replace('#', ''); if (VIEWS.indexOf(initial) >= 0 && allowed(initial)) view = initial;
         render();
       } else { setToken(''); loginScreen(''); }
     }).catch(function () { loginScreen('Cannot reach the server.'); });

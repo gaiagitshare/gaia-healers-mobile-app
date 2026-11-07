@@ -26,7 +26,7 @@ const shell = shellRaw
   .join('\n');
 
 test('the Admin shell embeds the real Event Manager rather than reimplementing it', () => {
-  assert.match(shell, /<iframe[^>]*src="\/event\/"/, 'Events is an iframe onto /event/');
+  assert.match(shell, /<iframe[^>]*src="\/event\/(events\/current)?"/, 'Events is an iframe onto /event/ (opening the current event)');
   assert.match(shell, /localStorage\.setItem\('token'/, 'and it hands the iframe the same session (SSO)');
 });
 

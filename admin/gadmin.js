@@ -516,7 +516,9 @@
     try { var tk = TOKEN || localStorage.getItem('gha_token'); if (tk) localStorage.setItem('token', tk); } catch (e) {}
     var c = document.getElementById('content');
     c.classList.add('content--frame');
-    c.innerHTML = '<iframe class="eventframe" src="/event/" title="Event Manager"></iframe>';
+    // Events opens the current event straight away (7 Nov 2026); the full list,
+    // archived events included, is "All Events" inside the Event Manager.
+    c.innerHTML = '<iframe class="eventframe" src="/event/events/current" title="Event Manager"></iframe>';
   }
 
   // ================= MEMBERSHIP =================

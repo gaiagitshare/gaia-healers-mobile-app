@@ -4,8 +4,9 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
 from sqlalchemy import func, text
+from sqlalchemy.exc import IntegrityError
 from typing import List, Optional
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 from jose import JWTError, jwt
 from passlib.context import CryptContext
@@ -16,6 +17,7 @@ import threading
 import time
 import qrcode
 import io
+import logging
 import base64
 import os
 import re
@@ -48,6 +50,14 @@ load_dotenv()
 # is useful in isolated test environments, but a client-supplied date must not
 # be able to turn a one-day pass into access on another day.
 ALLOW_SCAN_TIME_OVERRIDE = os.getenv("ALLOW_SCAN_TIME_OVERRIDE", "").strip() == "1"
+
+# Startup schema work (create_all, the column back-fills and token back-fill
+# below) runs once per process. With several uvicorn workers those processes
+# start together, so they take turns under an exclusive file lock instead of
+# racing each other's ALTER TABLE statements.
+import fcntl as _fcntl
+_startup_lock = open(os.path.join(os.path.dirname(os.path.abspath(__file__)), ".startup.lock"), "w")
+_fcntl.flock(_startup_lock, _fcntl.LOCK_EX)
 
 # Create database tables
 Base.metadata.create_all(bind=engine)
@@ -98,7 +108,8 @@ def _ensure_event_columns():
                        ("setup_token_hash", "VARCHAR"), ("setup_sent_at", "DATETIME"),
                        ("setup_expires_at", "DATETIME"), ("activated_at", "DATETIME"),
                        ("contact_name", "VARCHAR"), ("sheet_notes", "TEXT"), ("sheet_synced_at", "DATETIME"),
-                       ("site_name", "VARCHAR"), ("site_synced_at", "DATETIME")):
+                       ("site_name", "VARCHAR"), ("site_synced_at", "DATETIME"),
+                       ("vendor_fields", "TEXT")):
         if _ex and _col not in _ex:
             stmts.append("ALTER TABLE exhibitors ADD COLUMN %s %s" % (_col, _ddl))
     if "door_test_mode" not in cols:
@@ -326,6 +337,11 @@ def _ensure_badge_columns():
     stmts.append("CREATE INDEX IF NOT EXISTS ix_attendees_public_token ON attendees (public_token)")
     stmts.append("CREATE INDEX IF NOT EXISTS ix_attendees_registration_source ON attendees (registration_source)")
     stmts.append("CREATE INDEX IF NOT EXISTS ix_attendees_attendance_type ON attendees (attendance_type)")
+    # One lead per stand per visitor. The scan endpoint used find-then-insert,
+    # and 50 representatives scanning one badge at once stored two rows
+    # (audit 7 Nov 2026). If duplicates already exist this statement fails and
+    # is reported below rather than deleting anybody's lead.
+    stmts.append("CREATE UNIQUE INDEX IF NOT EXISTS uq_leads_exhibitor_attendee ON leads (exhibitor_id, attendee_id)")
     with engine.begin() as conn:
         for stmt in stmts:
             try:
@@ -367,6 +383,7 @@ def _ensure_public_tokens():
 
 
 _ensure_public_tokens()
+_fcntl.flock(_startup_lock, _fcntl.LOCK_UN)
 
 # Security setup
 SECRET_KEY = os.getenv("SECRET_KEY", "your-secret-key-change-in-production")
@@ -408,6 +425,45 @@ app.add_middleware(
     allow_headers=["Authorization", "Content-Type"],
 )
 
+class _RedactCapabilityUrls(logging.Filter):
+    """Access-log lines carry full paths, and several paths ARE credentials:
+    badge-card tokens, stand setup links, scanner links, ?secret=. Keep the
+    route, drop the secret, so the journal cannot be used to replay them."""
+    _PATTERNS = [
+        (re.compile(r"(/(?:c|C|vendor|vendor-setup)/)[^/\s?\"]+"), r"\1<redacted>"),
+        (re.compile(r"(/scan/(?:leads|roster)/)(EXH-)?[^/\s?\"]+"), r"\1<redacted>"),
+        (re.compile(r"((?:secret|token|access_token)=)[^&\s\"]+", re.I), r"\1<redacted>"),
+    ]
+
+    def filter(self, record):
+        try:
+            if record.args:
+                args = tuple(self._scrub(a) if isinstance(a, str) else a for a in record.args)
+                record.args = args
+            if isinstance(record.msg, str):
+                record.msg = self._scrub(record.msg)
+        except Exception:
+            pass
+        return True
+
+    def _scrub(self, s):
+        for rx, sub in self._PATTERNS:
+            s = rx.sub(sub, s)
+        return s
+
+
+logging.getLogger("uvicorn.access").addFilter(_RedactCapabilityUrls())
+
+
+@app.get("/healthz")
+def healthz(db: Session = Depends(get_db)):
+    """Liveness for the watchdog: answers only when a request can still get a
+    thread AND a database connection, which is exactly what failed when the
+    pool deadlocked. No data, no auth."""
+    db.execute(text("SELECT 1"))
+    return {"ok": True}
+
+
 @app.on_event("startup")
 def start_event_auto_sync():
     if EVENT_AUTO_SYNC_URLS:
@@ -437,6 +493,9 @@ def get_current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(
         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
         user_id: str = payload.get("sub")
         if user_id is None:
+            raise credentials_exception
+        # A single-purpose token (the set-password link) is not a login.
+        if payload.get("purpose"):
             raise credentials_exception
     except JWTError:
         raise credentials_exception
@@ -1006,9 +1065,14 @@ def login(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depend
         )
     
     access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
-    access_token = create_access_token(
-        data={"sub": str(user.id)}, expires_delta=access_token_expires
-    )
+    # "adm" tells the member/CRM admin (the proxy, which shares this signing
+    # key for single sign-on) that this login belongs to an Event Manager
+    # administrator. Door staff and other roles get no claim, so their tokens
+    # no longer open that admin (audit 7 Nov 2026).
+    claims = {"sub": str(user.id)}
+    if user.is_admin:
+        claims["adm"] = True
+    access_token = create_access_token(data=claims, expires_delta=access_token_expires)
     return {"access_token": access_token, "token_type": "bearer", "user": user}
 
 
@@ -1494,6 +1558,13 @@ def authorize_scan(event_id: int, payload: schemas.AuthorizeRequest,
     db.commit()
     dec["checked_in"] = bool(att.is_checked_in)
     dec["checked_in_now"] = checked_in_now
+    # Per-day admission (approved 7 Nov 2026): with re-entry on, the door can
+    # still tell "first time in today" from "back again today". Counted after
+    # this scan's own row is in the log.
+    if dec.get("access_type") == "EVENT_ENTRY" and dec.get("granted") and not dec.get("rehearsal"):
+        _today_rows = _entries_on_day(db, att, event, dec.get("event_local_date"))
+        dec["entries_today"] = len(_today_rows)
+        dec["first_entry_today_at"] = _today_rows[0].created_at if _today_rows else None
     # The door prints the sticker straight off a successful scan; this is how
     # it knows a returning scan already has one and must not print another.
     dec["badge_print_count"] = int(att.badge_print_count or 0)
@@ -1801,6 +1872,113 @@ def set_door_test_mode(event_id: int, payload: schemas.DoorTestMode,
     event.door_test_mode = bool(payload.enabled)
     db.commit()
     return {"ok": True, "event_id": event_id, "door_test_mode": bool(event.door_test_mode)}
+
+
+def _rehearsal_checkins(db, event):
+    """Attendees checked in before the event's first day, in the event's own
+    timezone. The door refuses every badge before opening day unless rehearsal
+    is on, so a check-in dated before it can only be a practice scan -- and it
+    must not greet that visitor with "already checked in" on 20 Nov."""
+    if not event.start_date:
+        return []
+    first_day = event.start_date.date()
+    try:
+        from zoneinfo import ZoneInfo
+        tz = ZoneInfo(event.timezone or "UTC")
+    except Exception:
+        tz = None
+    rows = db.query(models.Attendee).filter(models.Attendee.event_id == event.id,
+                                            models.Attendee.is_checked_in == True).all()  # noqa: E712
+    out = []
+    for a in rows:
+        at = a.checked_in_at
+        if at is None:
+            out.append(a); continue
+        local = at.replace(tzinfo=timezone.utc).astimezone(tz).date() if tz else at.date()
+        if local < first_day:
+            out.append(a)
+    return out
+
+
+_ADMIT_RESULTS = ("GRANTED", "OVERRIDE")
+
+
+def _local_day(event, utc_dt):
+    """The event-timezone calendar date of a UTC timestamp, as YYYY-MM-DD."""
+    if utc_dt is None:
+        return None
+    try:
+        from zoneinfo import ZoneInfo
+        return utc_dt.replace(tzinfo=timezone.utc).astimezone(ZoneInfo(event.timezone or "UTC")).date().isoformat()
+    except Exception:
+        return utc_dt.date().isoformat()
+
+
+def _real_admission(log) -> bool:
+    """A scan row that let somebody in for real: an admitting EVENT_ENTRY that
+    was not a rehearsal practice scan."""
+    return ((log.access_type or "").upper() == "EVENT_ENTRY" and (log.result or "").upper() in _ADMIT_RESULTS
+            and not (log.reason or "").upper().startswith("REHEARSAL"))
+
+
+def _entries_on_day(db, attendee, event, day):
+    """This attendee's real admissions on one event day (event timezone), oldest first."""
+    rows = db.query(models.ScanLog).filter(models.ScanLog.event_id == event.id,
+                                           models.ScanLog.attendee_id == attendee.id).order_by(models.ScanLog.id).all()
+    return [r for r in rows if _real_admission(r) and _local_day(event, r.created_at) == day]
+
+
+@app.get("/events/{event_id}/daily-admissions")
+def daily_admissions(event_id: int, db: Session = Depends(get_db),
+                     current_user: models.User = Depends(get_current_user)):
+    """Admission per event day: how many different people came in, how many
+    entries that took, and how many were returns -- the per-day record a
+    three-day event with re-entry needs (approved 7 Nov 2026). Read only, from
+    the scan log; rehearsal scans are not attendance."""
+    event = _get_event_or_404(event_id, db)
+    authz.require_cap(db, current_user, event_id, "event.read")
+    days = {}
+    for r in db.query(models.ScanLog).filter(models.ScanLog.event_id == event_id,
+                                             models.ScanLog.attendee_id.isnot(None)).all():
+        if not _real_admission(r):
+            continue
+        d = _local_day(event, r.created_at)
+        slot = days.setdefault(d, {"people": set(), "entries": 0})
+        slot["people"].add(r.attendee_id)
+        slot["entries"] += 1
+    out = [{"day": d, "people": len(v["people"]), "entries": v["entries"],
+            "re_entries": v["entries"] - len(v["people"])} for d, v in sorted(days.items())]
+    return {"ok": True, "event_id": event_id, "timezone": event.timezone or "UTC",
+            "allow_reentry": bool(getattr(event, "allow_reentry", False)), "days": out}
+
+
+@app.get("/events/{event_id}/rehearsal-checkins")
+def rehearsal_checkins_preview(event_id: int, db: Session = Depends(get_db),
+                               current_user: models.User = Depends(get_current_user)):
+    """How many practice check-ins ending rehearsal would reset. Read only."""
+    event = _get_event_or_404(event_id, db)
+    authz.require_cap(db, current_user, event_id, "event.write")
+    rows = _rehearsal_checkins(db, event)
+    return {"ok": True, "count": len(rows), "door_test_mode": bool(event.door_test_mode),
+            "sample": [("%s %s" % (a.first_name or "", a.last_name or "")).strip() for a in rows[:10]]}
+
+
+@app.post("/events/{event_id}/rehearsal-reset")
+def rehearsal_reset(event_id: int, db: Session = Depends(get_db),
+                    current_user: models.User = Depends(get_current_user)):
+    """Undo every practice check-in (dated before the first event day), exactly
+    as Undo does one by one: entry, badge-print state and the activation the
+    scan caused are reset, and each reset is logged as an UNDO scan row and in
+    the attendee's lifecycle. Check-ins on event days are never touched."""
+    event = _get_event_or_404(event_id, db)
+    authz.require_cap(db, current_user, event_id, "event.write")
+    _assert_event_writable(db, event, "reset its rehearsal check-ins")
+    done = 0
+    for a in _rehearsal_checkins(db, event):
+        if _reset_entry(db, a, event_id, current_user, "Rehearsal reset before opening"):
+            done += 1
+    db.commit()
+    return {"ok": True, "reset": done}
 
 
 @app.post("/events/{event_id}/re-entry")
@@ -3506,13 +3684,20 @@ def get_exhibitors(
     exhibitors = db.query(models.Exhibitor).filter(
         models.Exhibitor.event_id == event_id
     ).all()
-    
+    counts = dict(db.query(models.Lead.exhibitor_id, func.count(models.Lead.id)).join(
+        models.Exhibitor, models.Exhibitor.id == models.Lead.exhibitor_id).filter(
+        models.Exhibitor.event_id == event_id).group_by(models.Lead.exhibitor_id).all())
+    # The scanner token is a credential: only a role that may grant scanning
+    # reads it back, here as on the single-stand route (audit 7 Nov 2026).
+    may_grant = authz.can(db, current_user, event_id, "exhibitor.grant_scanning")
+    out = []
     for exhibitor in exhibitors:
-        exhibitor.lead_count = db.query(models.Lead).filter(
-            models.Lead.exhibitor_id == exhibitor.id
-        ).count()
-    
-    return exhibitors
+        row = schemas.Exhibitor.model_validate(exhibitor, from_attributes=True)
+        row.lead_count = counts.get(exhibitor.id, 0)
+        if not may_grant:
+            row.access_token = None
+        out.append(row)
+    return out
 
 @app.post("/exhibitors", response_model=schemas.Exhibitor)
 def create_exhibitor(
@@ -3530,7 +3715,10 @@ def create_exhibitor(
     db.add(db_exhibitor)
     db.commit()
     db.refresh(db_exhibitor)
-    return db_exhibitor
+    row = schemas.Exhibitor.model_validate(db_exhibitor, from_attributes=True)
+    if not authz.can(db, current_user, db_exhibitor.event_id, "exhibitor.grant_scanning"):
+        row.access_token = None
+    return row
 
 @app.delete("/exhibitors/{exhibitor_id}")
 def delete_exhibitor(
@@ -3610,38 +3798,49 @@ def scan_qr_code(
             attendee=None,
         )
     
-    # Check if already scanned
-    existing_lead = db.query(models.Lead).filter(
+    # One lead per stand per visitor, decided by the database: the unique
+    # index on (exhibitor_id, attendee_id) makes a second insert fail instead of
+    # storing a duplicate when several representatives scan at once.
+    captured_now = False
+    lead = db.query(models.Lead).filter(
         models.Lead.exhibitor_id == exhibitor.id,
         models.Lead.attendee_id == attendee.id
     ).first()
-    
-    if existing_lead:
-        return schemas.QRScanResponse(
-            success=True,
-            message="Lead already captured",
-            attendee=dict(authz.lead_view(attendee), **authz.pass_for_scanner(db, attendee)),
-            lead_id=existing_lead.id
-        )
-
-    lead = models.Lead(
-        exhibitor_id=exhibitor.id,
-        attendee_id=attendee.id,
-        consent_snapshot=authz.consent_snapshot(attendee),
-    )
-    db.add(lead)
-    db.commit()
-
+    if lead is None:
+        try:
+            lead = models.Lead(exhibitor_id=exhibitor.id, attendee_id=attendee.id,
+                               consent_snapshot=authz.consent_snapshot(attendee))
+            db.add(lead)
+            db.commit()
+            captured_now = True
+        except IntegrityError:
+            db.rollback()
+            lead = db.query(models.Lead).filter(
+                models.Lead.exhibitor_id == exhibitor.id,
+                models.Lead.attendee_id == attendee.id).first()
+    else:
+        # A repeat scan is a new hand-over of the badge: what the visitor
+        # allows NOW is what this stand may hold from now on, in the scan
+        # response and in every list alike (one rule, audit 7 Nov 2026).
+        snap = authz.consent_snapshot(attendee)
+        if (lead.consent_snapshot or {}) != snap:
+            lead.consent_snapshot = snap
+            db.commit()
+    view = dict(authz.lead_public_view(lead) or {}, **authz.pass_for_scanner(db, attendee))
     return schemas.QRScanResponse(
         success=True,
-        message=f"Lead captured for {attendee.first_name} {attendee.last_name}",
-        attendee=dict(authz.lead_view(attendee), **authz.pass_for_scanner(db, attendee)),
-        lead_id=lead.id
+        message=(f"Lead captured for {attendee.first_name} {attendee.last_name}" if captured_now
+                 else "Lead already captured"),
+        attendee=view,
+        lead_id=lead.id if lead else None
     )
 
 @app.get("/scan/leads/{access_token}", response_model=List[schemas.LeadPublic])
 def get_public_exhibitor_leads(
     access_token: str,
+    response: Response,
+    limit: int = 50,
+    offset: int = 0,
     db: Session = Depends(get_db)
 ):
     """Return leads for the exhibitor scanner page without requiring admin login.
@@ -3654,9 +3853,13 @@ def get_public_exhibitor_leads(
     if not exhibitor:
         raise HTTPException(status_code=404, detail="Invalid access token")
 
-    leads = db.query(models.Lead).filter(
-        models.Lead.exhibitor_id == exhibitor.id
-    ).order_by(models.Lead.scanned_at.desc()).limit(50).all()
+    # Newest first, in pages; X-Total-Count says how many there are in all,
+    # so nothing silently falls off the end (it was capped at 50).
+    limit = max(1, min(int(limit or 50), 1000))
+    offset = max(0, int(offset or 0))
+    q = db.query(models.Lead).filter(models.Lead.exhibitor_id == exhibitor.id)
+    response.headers["X-Total-Count"] = str(q.count())
+    leads = q.order_by(models.Lead.scanned_at.desc(), models.Lead.id.desc()).offset(offset).limit(limit).all()
     return [
         {
             "id": lead.id, "exhibitor_id": lead.exhibitor_id,
@@ -3837,7 +4040,7 @@ def attendee_scans(event_id: int, attendee_id: int, db: Session = Depends(get_db
     }
 
 
-@app.get("/exhibitors/{exhibitor_id}/leads", response_model=List[schemas.Lead])
+@app.get("/exhibitors/{exhibitor_id}/leads", response_model=List[schemas.LeadPublic])
 def get_exhibitor_leads(
     exhibitor_id: int,
     db: Session = Depends(get_db),
@@ -3850,7 +4053,66 @@ def get_exhibitor_leads(
     leads = db.query(models.Lead).filter(
         models.Lead.exhibitor_id == exhibitor_id
     ).order_by(models.Lead.scanned_at.desc()).all()
-    return leads
+    # The same consent-filtered view the stand gets. It used to return the full
+    # attendee record -- QR code, badge token, payment and purchase data -- to
+    # anybody with lead.read (audit 7 Nov 2026).
+    return [_lead_row(db, l) for l in leads]
+
+
+def _lead_row(db, lead):
+    return {"id": lead.id, "exhibitor_id": lead.exhibitor_id, "attendee_id": lead.attendee_id,
+            "scanned_at": lead.scanned_at, "notes": lead.notes, "rating": lead.rating,
+            "attendee": (dict(authz.lead_public_view(lead) or {}, **authz.pass_for_scanner(db, lead.attendee))
+                         if lead.attendee is not None else None)}
+
+
+def _csv_cell(v):
+    """A spreadsheet must not run what a visitor typed: a leading = + - @ (or a
+    tab/CR) makes Excel and Sheets treat the cell as a formula."""
+    s = "" if v is None else str(v)
+    return ("'" + s) if s[:1] in ("=", "+", "-", "@", "\t", "\r") else s
+
+
+def _leads_csv(db, exhibitor):
+    import csv as _csv
+    buf = io.StringIO()
+    w = _csv.writer(buf)
+    w.writerow(["scanned_at_utc", "first_name", "last_name", "company", "job_title",
+                "email", "phone", "pass", "rating", "notes"])
+    leads = db.query(models.Lead).filter(models.Lead.exhibitor_id == exhibitor.id).order_by(
+        models.Lead.scanned_at.asc(), models.Lead.id.asc()).all()
+    for lead in leads:
+        row = _lead_row(db, lead)
+        a = row["attendee"] or {}
+        w.writerow([_csv_cell(x) for x in (
+            lead.scanned_at.isoformat(sep=" ", timespec="seconds") if lead.scanned_at else "",
+            a.get("first_name"), a.get("last_name"), a.get("company"), a.get("job_title"),
+            a.get("email"), a.get("phone"), a.get("pass_display"), lead.rating, lead.notes)])
+    safe = re.sub(r"[^A-Za-z0-9]+", "-", exhibitor.company_name or "stand").strip("-")[:40] or "stand"
+    return Response(content="\ufeff" + buf.getvalue(), media_type="text/csv; charset=utf-8",
+                    headers={"Content-Disposition": 'attachment; filename="leads-%s.csv"' % safe,
+                             "Cache-Control": "private, no-store"})
+
+
+@app.get("/exhibitors/{exhibitor_id}/leads/export.csv")
+def export_exhibitor_leads(exhibitor_id: int, db: Session = Depends(get_db),
+                           current_user: models.User = Depends(get_current_user)):
+    """Every lead of one stand as CSV, for the organiser. Consent-filtered."""
+    _exh = db.query(models.Exhibitor).filter(models.Exhibitor.id == exhibitor_id).first()
+    if not _exh:
+        raise HTTPException(status_code=404, detail="Exhibitor not found")
+    authz.require_cap(db, current_user, _exh.event_id, "lead.read")
+    return _leads_csv(db, _exh)
+
+
+@app.get("/scan/leads/{access_token}/export.csv")
+def export_stand_leads(access_token: str, db: Session = Depends(get_db)):
+    """Every lead this stand captured, as CSV, from its own scanner link. Only
+    its own leads; contact details only where the visitor allowed them."""
+    exhibitor = authz.exhibitor_for_token(db, access_token)
+    if not exhibitor:
+        raise HTTPException(status_code=404, detail="Invalid access token")
+    return _leads_csv(db, exhibitor)
 
 # Badge generation
 @app.get("/attendees/{attendee_id}/badge")
@@ -4468,16 +4730,38 @@ def update_exhibitor(
     if not exhibitor:
         raise HTTPException(status_code=404, detail="Exhibitor not found")
     authz.require_cap(db, current_user, exhibitor.event_id, "exhibitor.write")
-    for field, value in changes.dict(exclude_unset=True).items():
+    _changes = changes.dict(exclude_unset=True)
+    if "can_scan_leads" in _changes and bool(_changes["can_scan_leads"]) != bool(exhibitor.can_scan_leads):
+        # Who may scan attendees is a separate permission from editing a stand
+        # (audit 7 Nov 2026: exhibitor managers could switch it on).
+        authz.require_cap(db, current_user, exhibitor.event_id, "exhibitor.grant_scanning")
+    for field, value in _changes.items():
         if field == "social_links":
             value = json.dumps(_social_links(json.dumps(value or []))) if value else None
         setattr(exhibitor, field, value)
     db.commit()
     db.refresh(exhibitor)
-    exhibitor.lead_count = db.query(models.Lead).filter(
-        models.Lead.exhibitor_id == exhibitor.id
-    ).count()
-    return exhibitor
+    row = schemas.Exhibitor.model_validate(exhibitor, from_attributes=True)
+    row.lead_count = db.query(models.Lead).filter(models.Lead.exhibitor_id == exhibitor.id).count()
+    if not authz.can(db, current_user, exhibitor.event_id, "exhibitor.grant_scanning"):
+        row.access_token = None
+    return row
+
+
+@app.post("/exhibitors/{exhibitor_id}/rotate-scanner-token")
+def rotate_scanner_token(exhibitor_id: int, db: Session = Depends(get_db),
+                         current_user: models.User = Depends(get_current_user)):
+    """Issue the stand a new scanner link; the old one stops working at once.
+
+    For a lost or forwarded phone link. Leads already captured stay with the
+    stand -- they belong to the stand, not to the link."""
+    exhibitor = db.query(models.Exhibitor).filter(models.Exhibitor.id == exhibitor_id).first()
+    if not exhibitor:
+        raise HTTPException(status_code=404, detail="Exhibitor not found")
+    authz.require_cap(db, current_user, exhibitor.event_id, "exhibitor.grant_scanning")
+    exhibitor.access_token = "EXH-" + secrets.token_hex(12).upper()
+    db.commit()
+    return {"ok": True, "exhibitor_id": exhibitor.id, "access_token": exhibitor.access_token}
 
 
 # ---------------------------------------------------------------------------
@@ -4613,6 +4897,10 @@ def _vendor_for_setup_token(db, token):
         return None
     if ex.setup_expires_at and datetime.utcnow() > ex.setup_expires_at:
         return None
+    # A cancelled stand's link stops working at once (audit 7 Nov 2026): it
+    # used to keep editing and could even re-publish the stand.
+    if not authz.stand_may_set_up(ex):
+        return None
     return ex
 
 
@@ -4694,9 +4982,11 @@ def exhibitor_roster(access_token: str, db: Session = Depends(get_db)):
         raise HTTPException(status_code=404, detail="Not found")
     total = db.query(models.Attendee).filter(
         models.Attendee.event_id == exhibitor.event_id).count()
-    leads = db.query(models.Lead).filter(
-        models.Lead.exhibitor_id == exhibitor.id).order_by(
-        models.Lead.scanned_at.desc()).limit(200).all()
+    lead_q = db.query(models.Lead).filter(models.Lead.exhibitor_id == exhibitor.id)
+    captured = lead_q.count()
+    # The newest 200 for the screen; "captured" is the real total and the
+    # export has every lead (it used to report 200 when there were more).
+    leads = lead_q.order_by(models.Lead.scanned_at.desc(), models.Lead.id.desc()).limit(200).all()
     event = db.query(models.Event).filter(models.Event.id == exhibitor.event_id).first()
     return {
         "ok": True,
@@ -4704,7 +4994,8 @@ def exhibitor_roster(access_token: str, db: Session = Depends(get_db)):
         "event_name": event.name if event else "",
         "booth_number": exhibitor.booth_number,
         "attendees_total": total,
-        "captured": len(leads),
+        "captured": captured,
+        "shown": len(leads),
         "leads": [{
             "id": l.id, "scanned_at": l.scanned_at, "rating": l.rating,
             "notes": l.notes, "attendee": authz.lead_public_view(l),
@@ -4762,8 +5053,10 @@ def vendor_setup_save(token: str, payload: schemas.VendorSetup,
     ex = _vendor_for_setup_token(db, token)
     if not ex:
         raise HTTPException(status_code=404, detail="This setup link is not valid, or has expired.")
-    if payload.company_name is not None and payload.company_name.strip():
-        ex.company_name = payload.company_name.strip()[:120]
+    # The company name is not the stand's to change here: it is the key the
+    # planning sheet is matched on, and a rename made the next sheet sync file
+    # the stand a second time (audit 7 Nov 2026). It is shown read-only.
+    _vendor_set = set(json.loads(ex.vendor_fields or "[]"))
     if payload.tagline is not None:
         # One line under the name in the directory. Short on purpose: a tagline
         # that runs to three lines is a description in the wrong place.
@@ -4775,14 +5068,26 @@ def vendor_setup_save(token: str, payload: schemas.VendorSetup,
         if w and not w.startswith(("http://", "https://")):
             w = "https://" + w
         ex.website = w or None
+        _vendor_set.add("website")
     if payload.logo_url is not None:
         ex.logo_url = payload.logo_url.strip()[:400] or None
     if payload.contact_email is not None:
         ex.contact_email = payload.contact_email.strip()[:160]
+        _vendor_set.add("contact_email")
     if payload.contact_phone is not None:
         ex.contact_phone = payload.contact_phone.strip()[:40] or None
+        _vendor_set.add("contact_phone")
     if payload.show_contact_publicly is not None:
         ex.show_contact_publicly = bool(payload.show_contact_publicly)
+    # From now on the sheet sync leaves these fields to the stand.
+    ex.vendor_fields = json.dumps(sorted(_vendor_set)) if _vendor_set else ex.vendor_fields
+    if payload.publish and not authz.stand_is_live(ex):
+        # A stand that is not confirmed yet may prepare its listing; it goes
+        # into the directory when the organiser confirms it.
+        db.commit()
+        return {"ok": True, "company_name": ex.company_name, "is_published": False,
+                "activated": ex.activated_at is not None,
+                "message": "Saved. Your listing goes live once the organisers confirm your stand."}
     if payload.publish:
         # Finishing the form is what puts them in the directory. An organiser can
         # still take them out; they cannot grant themselves a scanner.
@@ -4816,6 +5121,21 @@ EXHIBITOR_MAX_PHOTOS = 12
 EXHIBITOR_MAX_PRODUCTS = 24
 
 
+def _image_kind(data: bytes):
+    """What the bytes are, whatever the browser claimed: the extension the
+    file is stored under. None for anything that is not one of the four
+    image formats we serve."""
+    if data[:8] == b"\x89PNG\r\n\x1a\n":
+        return ".png"
+    if data[:3] == b"\xff\xd8\xff":
+        return ".jpg"
+    if data[:6] in (b"GIF87a", b"GIF89a"):
+        return ".gif"
+    if data[:4] == b"RIFF" and data[8:12] == b"WEBP":
+        return ".webp"
+    return None
+
+
 async def _store_exhibitor_image(file: UploadFile) -> str:
     """Write one uploaded image and return the URL it will be served from.
 
@@ -4831,6 +5151,10 @@ async def _store_exhibitor_image(file: UploadFile) -> str:
         raise HTTPException(status_code=400, detail="That file was empty")
     if len(data) > EXHIBITOR_IMAGE_MAX_BYTES:
         raise HTTPException(status_code=413, detail="That image is too large (8MB maximum)")
+    # The stored type is what the bytes are, not what the upload said.
+    ext = _image_kind(data)
+    if not ext:
+        raise HTTPException(status_code=400, detail="That file is not a JPG, PNG, WEBP or GIF image")
     name = uuid.uuid4().hex + ext
     with open(os.path.join(EXHIBITOR_IMAGE_DIR, name), "wb") as fh:
         fh.write(data)
@@ -6030,8 +6354,12 @@ def _log_webhook_noop(reason, email, payload, product_id=None):
     """A registration webhook that resolves to NO entitlement must be loud and
     safe: log why and create nothing. Never a name/price/next-event guess."""
     try:
+        # The address is masked: journald keeps logs for weeks and anyone
+        # with shell access reads them (audit 7 Nov 2026).
+        _e = str(email or "")
+        _masked = (_e[:2] + "***@" + _e.split("@", 1)[1]) if "@" in _e else ("***" if _e else "")
         print(f"[registration_webhook] NO-OP reason={reason} product_id={product_id} "
-              f"email={email} source={(payload or {}).get('source')}", flush=True)
+              f"email={_masked} source={(payload or {}).get('source')}", flush=True)
     except Exception:
         pass
 
@@ -10929,6 +11257,9 @@ async def identity_post_image(event_id: int, request: FastAPIRequest,
         raise HTTPException(status_code=400, detail="Empty file")
     if len(data) > POST_IMAGE_MAX_BYTES:
         raise HTTPException(status_code=413, detail="Image is too large (max 5MB)")
+    ext = _image_kind(data)
+    if not ext:
+        raise HTTPException(status_code=400, detail="That file is not a JPG, PNG, WEBP or GIF image")
     name = uuid.uuid4().hex + ext
     with open(os.path.join(POST_IMAGE_DIR, name), "wb") as fh:
         fh.write(data)
@@ -10962,8 +11293,17 @@ def _rate_limited(key: str, limit: int = 120, window: int = 60) -> bool:
 
 
 def _client_ip(request: FastAPIRequest) -> str:
-    fwd = request.headers.get("x-forwarded-for") or ""
-    return (fwd.split(",")[0].strip() if fwd else (request.client.host if request.client else "?"))
+    """The address nginx actually saw. X-Real-IP is set by nginx itself; the
+    FIRST X-Forwarded-For entry is whatever the client chose to send, so
+    keying a rate limit on it let anybody rotate it and never be limited
+    (audit 7 Nov 2026). The last entry is the one nginx appended."""
+    real = (request.headers.get("x-real-ip") or "").strip()
+    if real:
+        return real
+    fwd = [p.strip() for p in (request.headers.get("x-forwarded-for") or "").split(",") if p.strip()]
+    if fwd:
+        return fwd[-1]
+    return request.client.host if request.client else "?"
 
 
 def _inferred_source(attendee):
@@ -12366,6 +12706,17 @@ def undo_checkin(event_id: int, attendee_id: int, body: schemas.UndoCheckIn,
         raise HTTPException(status_code=400, detail="A reason is required")
     if not a.is_checked_in:
         return {"ok": True, "already": True, "attendee": schemas.Attendee.from_orm(a)}
+    if not _reset_entry(db, a, event_id, current_user, reason):
+        return {"ok": True, "already": True, "attendee": schemas.Attendee.from_orm(a)}
+    db.commit()
+    db.refresh(a)
+    a.effective_access = _effective_access(db, a)
+    return {"ok": True, "already": False, "attendee": schemas.Attendee.from_orm(a)}
+
+
+def _reset_entry(db, a, event_id, current_user, reason):
+    """Reset one attendee's entry. Returns False if somebody else already did.
+    The caller commits."""
     was = a.checked_in_at.isoformat() if a.checked_in_at else "?"
     # One undo per check-in: the row is only reset if it is still checked in at
     # the moment of writing, so two staff pressing Undo record it once.
@@ -12376,7 +12727,7 @@ def undo_checkin(event_id: int, attendee_id: int, body: schemas.UndoCheckIn,
              synchronize_session=False)
     db.refresh(a)
     if changed != 1:
-        return {"ok": True, "already": True, "attendee": schemas.Attendee.from_orm(a)}
+        return False
     # The original check-in time stays on record in the lifecycle as well as
     # in the UNDO scan row.
     _lifecycle_append(a, "checkin_undone", actor=(current_user.email or "staff"), reason=reason, was=was)
@@ -12396,10 +12747,7 @@ def undo_checkin(event_id: int, attendee_id: int, body: schemas.UndoCheckIn,
     db.add(models.ScanLog(event_id=event_id, attendee_id=a.id, qr_code=a.qr_code, access_type="EVENT_ENTRY",
                           result="UNDO", reason=("Check-in undone (was %s): %s" % (was, reason))[:300],
                           staff_user_id=current_user.id))
-    db.commit()
-    db.refresh(a)
-    a.effective_access = _effective_access(db, a)
-    return {"ok": True, "already": False, "attendee": schemas.Attendee.from_orm(a)}
+    return True
 
 
 @app.get("/public/posts/media/{filename}")

@@ -367,18 +367,22 @@ class ExhibitorUpdate(BaseModel):
 class Exhibitor(ExhibitorBase):
     id: int
     event_id: int
-    access_token: str
-    created_at: datetime
+    # Optional: stands created by the sheet/package sync can have no scanner
+    # token yet, and the token is withheld from roles that may not grant
+    # scanning. A required str made the whole admin list fail (audit 7 Nov 2026).
+    access_token: Optional[str] = None
+    contact_email: Optional[str] = None
+    created_at: Optional[datetime] = None  # rows added by sheet/package sync can lack it (audit 7 Nov 2026)
     lead_count: Optional[int] = 0
     description: Optional[str] = None
     logo_url: Optional[str] = None
     website: Optional[str] = None
     category: Optional[str] = None
-    sort_order: int = 0
-    is_published: bool = False
+    sort_order: Optional[int] = 0
+    is_published: Optional[bool] = False
     # Admin-facing only (ExhibitorPublic below never carries it): whether this
     # stand's scanner link actually works.
-    can_scan_leads: bool = False
+    can_scan_leads: Optional[bool] = False
     social_links: Optional[str] = None            # stored JSON list; the public feed cleans it
     is_featured: Optional[bool] = False
     stage: Optional[str] = "confirmed"
@@ -396,7 +400,7 @@ class Exhibitor(ExhibitorBase):
     amount_due: Optional[float] = None
     amount_paid: Optional[float] = None
     payment_note: Optional[str] = None
-    show_contact_publicly: bool = False
+    show_contact_publicly: Optional[bool] = False
     photos: List[ExhibitorPhoto] = []
     products: List[ExhibitorProduct] = []
 

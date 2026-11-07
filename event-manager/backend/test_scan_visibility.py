@@ -111,24 +111,33 @@ if stand:
     who = (out or {}).get("attendee") or {}
     s = SessionLocal()
     a = s.query(models.Attendee).filter(models.Attendee.id == aid).first()
-    if not a.share_email_with_exhibitors:
+    if not (a.consent_updated_at and a.share_email_with_exhibitors):
         check(who.get("email") is None, "an email nobody agreed to share is still withheld", who.get("email"))
-    if not a.share_phone_with_exhibitors:
+    if not (a.consent_updated_at and a.share_phone_with_exhibitors):
         check(who.get("phone") is None, "and so is the phone number", who.get("phone"))
     check("consent" in who, "and the stand is told why a field is blank", who.get("consent"))
     s.close()
 
-print("\nSHARING IS ON, BECAUSE THE TICKET WAS SOLD ON IT")
+print("\nEMAIL AND PHONE ONLY WITH AN EXPLICIT YES (Babak, 7 Nov 2026)")
 if stand:
     _t, qr, aid = token_for("General Admission")
+    s = SessionLocal()
+    s.execute(text("UPDATE attendees SET consent_updated_at=NULL, share_email_with_exhibitors=1, "
+                   "share_phone_with_exhibitors=1 WHERE id=:i"), {"i": aid}); s.commit()
     st, out = call("POST", "/scan", {"access_token": stand["access_token"], "qr_code": qr})
     if (out or {}).get("lead_id"):
         made.add(out["lead_id"])
     who = (out or {}).get("attendee") or {}
-    s = SessionLocal()
+    check(who.get("email") is None and who.get("phone") is None,
+          "never asked: the default flags alone share no email or phone", (who.get("email"), who.get("phone")))
+    check(who.get("first_name") is not None, "name and company still go to the stand", sorted(who.keys()))
+    s.execute(text("UPDATE attendees SET consent_updated_at=CURRENT_TIMESTAMP WHERE id=:i"), {"i": aid}); s.commit()
+    st, out = call("POST", "/scan", {"access_token": stand["access_token"], "qr_code": qr})
+    who = (out or {}).get("attendee") or {}
     a = s.query(models.Attendee).filter(models.Attendee.id == aid).first()
+    s.refresh(a)
     check(who.get("email") == a.email and who.get("phone") == a.phone,
-          "a stand gets the real contact details", (who.get("email"), a.email))
+          "after an explicit yes, the stand gets the real contact details", (who.get("email"), a.email))
     check(who.get("consent") == {"email": True, "phone": True},
           "and is told the person agreed", who.get("consent"))
     s.close()

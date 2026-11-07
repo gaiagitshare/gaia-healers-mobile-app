@@ -7,7 +7,7 @@ import {
 import QrCodeScannerIcon from '@mui/icons-material/QrCodeScanner';
 import CloseIcon from '@mui/icons-material/Close';
 import { Html5QrcodeScanner } from 'html5-qrcode';
-import { getExhibitorRoster, scanQR, updatePublicLead } from '../utils/api';
+import { getExhibitorRoster, scanQR, updatePublicLead, standLeadsCsvUrl } from '../utils/api';
 
 /**
  * The stand's own screen: everyone at the event, and the ones they have met.
@@ -86,7 +86,10 @@ function ExhibitorScan() {
     }
 
     const leads = roster.leads || [];
-    const remaining = Math.max(0, (roster.attendees_total || 0) - leads.length);
+    // "captured" is the stand's real total; the screen lists the newest 200 and
+    // the CSV download has every one of them.
+    const captured = roster.captured ?? leads.length;
+    const remaining = Math.max(0, (roster.attendees_total || 0) - captured);
 
     return (
         <Box sx={{ maxWidth: 560, mx: 'auto', p: 2, pb: 8 }}>
@@ -97,7 +100,12 @@ function ExhibitorScan() {
                         {roster.event_name}{roster.booth_number ? ` · Booth ${roster.booth_number}` : ''}
                     </Typography>
                 </Box>
-                <Chip color="success" label={`${leads.length} captured`} />
+                <Stack direction="row" spacing={1} alignItems="center">
+                    <Chip color="success" label={`${captured} captured`} />
+                    {captured > 0 && (
+                        <Button size="small" href={standLeadsCsvUrl(token)} download>Download CSV</Button>
+                    )}
+                </Stack>
             </Stack>
 
             <Button fullWidth variant="contained" size="large" sx={{ mt: 2, py: 1.4, borderRadius: 99 }}
@@ -186,12 +194,22 @@ function LeadRow({ lead, token, onSaved }) {
     const [saving, setSaving] = useState(false);
     const name = [a.first_name, a.last_name].filter(Boolean).join(' ') || 'Attendee';
 
+    const [saveError, setSaveError] = useState('');
+
     const save = async () => {
         setSaving(true);
+        setSaveError('');
         try {
-            await updatePublicLead(lead.id, { access_token: token, notes: note, rating });
+            // updatePublicLead(leadId, accessToken, data). Passing the token
+            // inside the data object sent it as an object and every save was
+            // rejected (422), so notes typed at the stand were lost (audit
+            // 7 Nov 2026). An unset rating is 0 in the widget but must be sent
+            // as "no rating": the API accepts 1-5 only.
+            await updatePublicLead(lead.id, token, { notes: note, rating: rating >= 1 ? rating : null });
             setOpen(false);
             onSaved();
+        } catch (e) {
+            setSaveError('Not saved — check the connection and press Save again.');
         } finally { setSaving(false); }
     };
 
@@ -228,6 +246,7 @@ function LeadRow({ lead, token, onSaved }) {
                     <Button size="small" variant="contained" sx={{ mt: 1 }} disabled={saving} onClick={save}>
                         {saving ? 'Saving…' : 'Save'}
                     </Button>
+                    {saveError && <Alert severity="error" sx={{ mt: 1 }}>{saveError}</Alert>}
                 </Box>
             </Collapse>
         </Paper>

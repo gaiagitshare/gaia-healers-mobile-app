@@ -132,6 +132,11 @@ def _person_keys(attendee):
     return keys
 
 
+def _row_is_live(row) -> bool:
+    st = (getattr(row, "registration_status", None) or "registered").strip().lower()
+    return st not in ("refunded", "cancelled", "canceled", "revoked", "void", "withdrawn")
+
+
 def ensure_public_token(db, models, attendee, commit=True) -> str:
     """Give this attendee row a token, REUSING the person's existing one.
 
@@ -155,6 +160,13 @@ def ensure_public_token(db, models, attendee, commit=True) -> str:
                                              models.Attendee.id != attendee.id)
         for row in q.all():
             if keys & _person_keys(row):
+                # Two live tickets in the SAME event are two badges: sharing
+                # one token made the second ticket's printed badge open the
+                # first ticket at the door (audit 7 Nov 2026). The person's
+                # token still carries over from another year, and from a
+                # revoked ticket this one replaces.
+                if row.event_id == attendee.event_id and _row_is_live(row):
+                    continue
                 sibling_token = row.public_token
                 break
     token = sibling_token
@@ -1168,7 +1180,8 @@ def vendor_setup_html(ex, event_name, token):
         "<p class=\"sub\">%s</p>"
         "<form id=\"f\">"
         "<label><span>Company name</span>"
-        "<input type=\"text\" name=\"company_name\" value=\"%s\" maxlength=\"120\" required></label>"
+        "<input type=\"text\" name=\"company_name\" value=\"%s\" maxlength=\"120\" readonly aria-readonly=\"true\">"
+        "<small>To change how your name is listed, ask the organisers.</small></label>"
         "<div class=\"logo\">"        "<div class=\"logobox\" id=\"lgp\">%s</div>"        "<div class=\"logotxt\"><b>Your logo</b>"        "<small>Square works best. JPG, PNG, WEBP or GIF, up to 8MB.</small>"        "<input type=\"file\" id=\"lgf\" accept=\"image/*\" hidden>"        "<button type=\"button\" class=\"addbtn\" id=\"lgb\">%s</button>"        "<span class=\"msg\" id=\"lgm\" role=\"status\"></span></div>"        "</div>"
         "<label><span>Tagline</span>"        "<input type=\"text\" name=\"tagline\" value=\"%s\" maxlength=\"140\" placeholder=\"Six or seven words on what you do.\">"        "<small>Sits under your name in the directory.</small></label>"
         "<label><span>About your stand</span>"
@@ -1241,7 +1254,7 @@ def vendor_setup_html(ex, event_name, token):
         "p.show_contact_publicly=d.get('show_contact_publicly')==='on';"
         "try{var r=await fetch(%s,{method:'POST',headers:{'Content-Type':'application/json'},"
         "body:JSON.stringify(p)});var j=await r.json();"
-        "if(r.ok&&j.ok){m.className='msg ok';m.textContent='Saved. Your stand is live in the attendee directory.';}"
+        "if(r.ok&&j.ok){m.className='msg ok';m.textContent=j.message||'Saved. Your stand is live in the attendee directory.';}"
         "else{m.className='msg bad';m.textContent=(j&&j.detail)||'That did not save. Please try again.';}}"
         "catch(err){m.className='msg bad';m.textContent='No connection. Please try again.';}"
         "b.disabled=false;});})();</script>"

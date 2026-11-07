@@ -58,7 +58,7 @@ def make_stand(name, logo=None):
          logo_url, is_published, can_scan_leads, payment_status, stage,
          show_contact_publicly, created_at, setup_token_hash, setup_sent_at, setup_expires_at)
         values (1, ?, 'ZZ-TEST', 'zz@example.invalid', 'Testing', 'throwaway',
-                ?, 0, 0, 'unpaid', 'other', 0, ?, ?, ?, ?)""",
+                ?, 0, 0, 'unpaid', 'confirmed', 0, ?, ?, ?, ?)""",
         (name, logo, now.isoformat(), None, now.isoformat(), (now + timedelta(days=1)).isoformat()))
     eid = db.execute("select last_insert_rowid()").fetchone()[0]
     tok = secrets.token_urlsafe(24)

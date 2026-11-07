@@ -23,7 +23,7 @@ import RestoreIcon from '@mui/icons-material/Restore';
 import GroupsIcon from '@mui/icons-material/Groups';
 import TuneIcon from '@mui/icons-material/Tune';
 import { Html5QrcodeScanner } from 'html5-qrcode';
-import { authorizeScan, getScanLogs, searchAttendees, getEvents, walkInCreate, getTicketTypes, undoCheckIn, clearScanLogs, setDoorTestMode, getEvent, badgeLabelBlob, recordBadgePrint,
+import { authorizeScan, getScanLogs, searchAttendees, getEvents, walkInCreate, getTicketTypes, undoCheckIn, clearScanLogs, setDoorTestMode, getRehearsalCheckins, resetRehearsalCheckins, getEvent, badgeLabelBlob, recordBadgePrint,
     overrideAdmit, doorIdentity, addPartySeat, setReEntry as setDoorReEntry, changePass, revokeAttendee, reinstateAttendee,
     getMyCapabilities, getPrintReport, setSharing, setAddonDay, testLabelBlob } from '../utils/api';
 import { formatVenueTime, statusLabel, isFlaggedStatus } from '../utils/datetime';
@@ -392,14 +392,40 @@ function CheckIn({ timezone: timezoneProp }) {
     };
     const onScanError = () => {};
 
+    // Venue Wi-Fi drops. A scan whose answer never arrived may still have been
+    // admitted on the server, so it is never guessed: the door waits at most
+    // 8 s, asks once more, and if that second answer is "already checked in"
+    // from a moment ago, it was this scan that got them in.
+    const SCAN_TIMEOUT_MS = 8000;
+    const isNetworkError = (e) => !e?.response;
+    const justNow = (iso) => {
+        if (!iso) return false;
+        const t = Date.parse(/[zZ]|[+-]\d\d:?\d\d$/.test(iso) ? iso : iso + 'Z');
+        return Number.isFinite(t) && Math.abs(Date.now() - t) < 60000;
+    };
+    const authorizeWithRetry = async (payload) => {
+        try {
+            return { data: (await authorizeScan(eventId, payload, { timeout: SCAN_TIMEOUT_MS })).data, retried: false };
+        } catch (e) {
+            if (!isNetworkError(e)) throw e;
+            await new Promise((r) => setTimeout(r, 1000));
+            const again = (await authorizeScan(eventId, payload, { timeout: SCAN_TIMEOUT_MS })).data;
+            if (again && again.result === 'LIMITED' && payload.access_type === 'EVENT_ENTRY'
+                && again.checked_in && justNow(again.checked_in_at)) {
+                return { data: { ...again, result: 'GRANTED', granted: true, checked_in_now: true,
+                    reason: (again.effective_label || 'Admitted') + ' — admitted (confirmed after the connection dropped)' }, retried: true };
+            }
+            return { data: again, retried: true };
+        }
+    };
+
     const runScan = async (qrCode) => {
         setError(''); setResult(null);
         if (!eventId) { setError('Choose an event first — a scan always belongs to one event.'); return; }
         try {
-            const response = await authorizeScan(eventId, {
+            const { data: d } = await authorizeWithRetry({
                 qr_code: qrCode, access_type: accessType,
             });
-            const d = response.data;
             setResult(d); setAutoJob(null);
             // A fresh check-in always prints — once per check-in, so an undo
             // and a re-scan print again. An admitted re-scan of someone already
@@ -417,7 +443,15 @@ function CheckIn({ timezone: timezoneProp }) {
             // person steps up.
             setTimeout(() => { if (scannerRef.current && scanning) scannerRef.current.resume(); }, 2000);
         } catch (err) {
-            setError(err.response?.data?.detail || 'Scan failed');
+            if (isNetworkError(err)) {
+                setError('No connection — this visitor was NOT confirmed. Scan again when the connection is back, or find them in the list.');
+            } else {
+                setError(err.response?.data?.detail || 'Scan failed');
+            }
+            // Let the same badge be scanned again straight away, and bring the
+            // camera back: it used to stay paused after a failed request.
+            lastRead.current = { code: '', at: 0 };
+            setTimeout(() => { if (scannerRef.current && scanning) scannerRef.current.resume(); }, 1500);
         }
     };
 
@@ -884,7 +918,13 @@ function CheckIn({ timezone: timezoneProp }) {
         const headline = rehearsing
             ? (d.result === 'GRANTED' ? 'REHEARSAL — WOULD ADMIT' : 'REHEARSAL — WOULD REFUSE')
             : (HEADLINE[d.result] || d.result);
-        const reason = String(d.reason || '').replace(/^REHEARSAL\s*—\s*/i, '');
+        // Per-day admission: with re-entry on, say whether this is their first
+        // time in today or a return (first in at hh:mm), so a badge handed back
+        // over the barrier stands out.
+        const _n = Number(d.entries_today || 0);
+        const _first = d.first_entry_today_at ? new Date(/[zZ]|[+-]\d\d:?\d\d$/.test(d.first_entry_today_at) ? d.first_entry_today_at : d.first_entry_today_at + 'Z') : null;
+        const _today = _n > 1 ? ` · back again today (entry ${_n}${_first ? `, first in ${_first.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}` : ''})` : '';
+        const reason = String(d.reason || '').replace(/^REHEARSAL\s*—\s*/i, '') + _today;
         const addons = d.addons || [];
         const card = d.door || null;
         // One line for the money question. A comp and a door sale read
@@ -1389,6 +1429,21 @@ function CheckIn({ timezone: timezoneProp }) {
                                     onClick={async () => {
                                         setRehearsalBusy(true);
                                         try {
+                                            // Ending rehearsal: practice check-ins made before opening
+                                            // day would greet those visitors with "already checked in"
+                                            // on the real day. Offer to reset them first.
+                                            if (rehearsal) {
+                                                const p = await getRehearsalCheckins(eventId);
+                                                const n = p.data?.count || 0;
+                                                if (n > 0 && window.confirm(
+                                                    `${n} practice check-in${n === 1 ? '' : 's'} from rehearsal will be reset, `
+                                                    + 'so those visitors are admitted normally on opening day. '
+                                                    + 'Each reset is logged. Continue?')) {
+                                                    await resetRehearsalCheckins(eventId);
+                                                } else if (n > 0) {
+                                                    return;
+                                                }
+                                            }
                                             const r = await setDoorTestMode(eventId, !rehearsal);
                                             setRehearsal(Boolean(r.data?.door_test_mode));
                                         } catch (e) {

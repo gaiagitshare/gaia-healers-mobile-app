@@ -15,7 +15,7 @@ import {
 } from '@mui/icons-material';
 import {
     getExhibitors, createExhibitor, updateExhibitor, deleteExhibitor,
-    getExhibitorLeads, vendorActivationLink, getScanHistory,
+    getExhibitorLeads, vendorActivationLink, getScanHistory, exportExhibitorLeads, rotateScannerToken,
     uploadExhibitorImage, addExhibitorPhoto, deleteExhibitorPhoto,
     addExhibitorProduct, updateExhibitorProduct, deleteExhibitorProduct,
 } from '../utils/api';
@@ -172,8 +172,29 @@ export default function Exhibitors({ eventId, onCountChange }) {
     const showLeads = async (row) => {
         try {
             const l = await getExhibitorLeads(row.id);
-            setLeads({ company: row.company_name, items: l.data || [] });
+            setLeads({ id: row.id, company: row.company_name, items: l.data || [] });
         } catch (e) { setError('Could not load their leads.'); }
+    };
+
+    const downloadLeads = async (id, company) => {
+        try {
+            const r = await exportExhibitorLeads(id);
+            const url = URL.createObjectURL(r.data);
+            const a = document.createElement('a');
+            a.href = url; a.download = `leads-${(company || 'stand').replace(/[^A-Za-z0-9]+/g, '-')}.csv`;
+            document.body.appendChild(a); a.click(); a.remove();
+            setTimeout(() => URL.revokeObjectURL(url), 1000);
+        } catch (e) { setError(e?.response?.status === 403 ? 'You may not export leads.' : 'Could not download the leads.'); }
+    };
+
+    // A lost or forwarded scanner link: issue a new one; the old stops at once.
+    const newScannerLink = async (row) => {
+        if (!window.confirm(`Give ${row.company_name} a new scanner link? The current link stops working immediately. Their leads are kept.`)) return;
+        try {
+            const r = await rotateScannerToken(row.id);
+            copy(`${window.location.origin}/event/scan/${r.data.access_token}`, 'New scanner link');
+            load();
+        } catch (e) { setError(e?.response?.status === 403 ? 'Only an organiser can issue scanner links.' : 'Could not issue a new link.'); }
     };
 
     const setupLink = async (row) => {
@@ -467,6 +488,7 @@ export default function Exhibitors({ eventId, onCountChange }) {
                         {open && (view === 'roster'
                             ? <RosterCards rows={group} sel={sel} patch={patch} onEdit={setEditing}
                                            onLeads={showLeads} onSetup={setupLink} onDelete={remove}
+                                           onRotate={newScannerLink}
                                            copy={copy} scanUrl={scanUrl} />
                             : <CommercialTable rows={group} patch={patch} onEdit={setEditing}
                                                onLeads={showLeads} onSetup={setupLink} />)}
@@ -575,7 +597,12 @@ export default function Exhibitors({ eventId, onCountChange }) {
                         </Table>
                     )}
                 </DialogContent>
-                <DialogActions><Button onClick={() => setLeads(null)}>Close</Button></DialogActions>
+                <DialogActions>
+                    {leads?.items?.length > 0 && (
+                        <Button onClick={() => downloadLeads(leads.id, leads.company)}>Download CSV</Button>
+                    )}
+                    <Button onClick={() => setLeads(null)}>Close</Button>
+                </DialogActions>
             </Dialog>
 
             <Snackbar open={Boolean(toast)} autoHideDuration={2000}
@@ -606,7 +633,7 @@ function Figure({ value, label, color }) {
  * menu, which is also where Delete belongs: it should take a deliberate second
  * click, not sit under the thumb next to "List".
  */
-function RosterCards({ rows, sel, patch, onEdit, onLeads, onSetup, onDelete, copy, scanUrl }) {
+function RosterCards({ rows, sel, patch, onEdit, onLeads, onSetup, onDelete, onRotate, copy, scanUrl }) {
     const [menu, setMenu] = useState(null);
     const row = menu?.row;
     return (
@@ -683,9 +710,17 @@ function RosterCards({ rows, sel, patch, onEdit, onLeads, onSetup, onDelete, cop
             ))}
 
             <Menu open={Boolean(menu)} anchorEl={menu?.el} onClose={() => setMenu(null)}>
-                <MenuItem onClick={() => { copy(scanUrl(row), 'Scanner link'); setMenu(null); }}>
-                    <CopyIcon fontSize="small" style={{ marginRight: 8 }} /> Copy scanner link
-                </MenuItem>
+                {/* The scanner token is only sent to roles that may grant scanning. */}
+                {row?.access_token && (
+                    <MenuItem onClick={() => { copy(scanUrl(row), 'Scanner link'); setMenu(null); }}>
+                        <CopyIcon fontSize="small" style={{ marginRight: 8 }} /> Copy scanner link
+                    </MenuItem>
+                )}
+                {row?.access_token && (
+                    <MenuItem onClick={() => { onRotate(row); setMenu(null); }}>
+                        <CopyIcon fontSize="small" style={{ marginRight: 8 }} /> New scanner link
+                    </MenuItem>
+                )}
                 <MenuItem onClick={() => { onSetup(row); setMenu(null); }}>
                     <SendIcon fontSize="small" style={{ marginRight: 8 }} /> Send setup link
                 </MenuItem>

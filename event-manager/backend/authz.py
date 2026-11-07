@@ -133,6 +133,21 @@ def pass_for_scanner(db, attendee) -> dict:
         return {}
 
 
+def explicit_consent(attendee) -> tuple:
+    """(email_ok, phone_ok): what this visitor has EXPLICITLY agreed to share
+    with exhibitors.
+
+    Babak, 7 Nov 2026: name, company and job title may be shared with
+    appropriate notice; email and phone only with the visitor's explicit
+    consent. The share_* columns default to on for every ticket ever sold, so a
+    flag alone is not consent. Only a choice the visitor actually made -- which
+    stamps consent_updated_at (the door's sharing control, an admin edit on
+    their word) -- counts. Nothing in the database is rewritten for this."""
+    asked = getattr(attendee, "consent_updated_at", None) is not None
+    return (asked and bool(attendee.share_email_with_exhibitors),
+            asked and bool(attendee.share_phone_with_exhibitors))
+
+
 def lead_view(attendee: models.Attendee) -> dict:
     """The attendee, as an exhibitor is permitted to see them.
 
@@ -143,14 +158,12 @@ def lead_view(attendee: models.Attendee) -> dict:
     """
     view = {field: getattr(attendee, field, None) or "" for field in ALWAYS_SHARED}
     view["attendee_id"] = attendee.id
-    view["email"] = attendee.email if attendee.share_email_with_exhibitors else None
-    view["phone"] = attendee.phone if attendee.share_phone_with_exhibitors else None
+    email_ok, phone_ok = explicit_consent(attendee)
+    view["email"] = attendee.email if email_ok else None
+    view["phone"] = attendee.phone if phone_ok else None
     # Said out loud so an exhibitor understands why a field is blank, rather
     # than assuming the data is missing and chasing it another way.
-    view["consent"] = {
-        "email": bool(attendee.share_email_with_exhibitors),
-        "phone": bool(attendee.share_phone_with_exhibitors),
-    }
+    view["consent"] = {"email": email_ok, "phone": phone_ok}
     return view
 
 
@@ -169,8 +182,9 @@ def lead_public_view(lead) -> Optional[dict]:
     snap = getattr(lead, "consent_snapshot", None) or {}
     view = {field: getattr(attendee, field, None) or "" for field in ALWAYS_SHARED}
     view["attendee_id"] = attendee.id
-    email_ok = bool(snap.get("email")) and bool(attendee.share_email_with_exhibitors)
-    phone_ok = bool(snap.get("phone")) and bool(attendee.share_phone_with_exhibitors)
+    now_email, now_phone = explicit_consent(attendee)
+    email_ok = bool(snap.get("email")) and now_email
+    phone_ok = bool(snap.get("phone")) and now_phone
     view["email"] = attendee.email if email_ok else None
     view["phone"] = attendee.phone if phone_ok else None
     view["consent"] = {"email": email_ok, "phone": phone_ok}
@@ -184,10 +198,31 @@ def consent_snapshot(attendee: models.Attendee) -> dict:
     and the truthful record is what was agreed when the exchange happened — not
     what the attendee's settings say months afterwards.
     """
-    return {
-        "email": bool(attendee.share_email_with_exhibitors),
-        "phone": bool(attendee.share_phone_with_exhibitors),
-    }
+    email_ok, phone_ok = explicit_consent(attendee)
+    return {"email": email_ok, "phone": phone_ok}
+
+
+# Stand lifecycle, decided at request time (audit 7 Nov 2026). A stand whose
+# stage leaves "confirmed" -- cancelled, not attending, next year -- loses its
+# scanner and its directory listing the moment the stage changes, not at the
+# next sheet sync and not only when somebody remembers the separate switches.
+# Any stage that is not "out" may prepare its profile (a stand bought online
+# sits in "purchased" until the sheet adopts it; "waiting"/"unsure"/"other"
+# are still in conversation), but only a confirmed stand is listed or scans.
+STAND_LIVE_STAGES = ("confirmed",)
+STAND_CLOSED_STAGES = ("not_attending", "next_year", "not_aligned", "cancelled", "canceled")
+
+
+def stand_stage(exhibitor) -> str:
+    return ((getattr(exhibitor, "stage", None) or "confirmed").strip().lower())
+
+
+def stand_is_live(exhibitor) -> bool:
+    return stand_stage(exhibitor) in STAND_LIVE_STAGES
+
+
+def stand_may_set_up(exhibitor) -> bool:
+    return stand_stage(exhibitor) not in STAND_CLOSED_STAGES
 
 
 def exhibitor_for_token(db: Session, access_token: str) -> Optional[models.Exhibitor]:
@@ -203,6 +238,6 @@ def exhibitor_for_token(db: Session, access_token: str) -> Optional[models.Exhib
     exhibitor = db.query(models.Exhibitor).filter(
         models.Exhibitor.access_token == token
     ).first()
-    if not exhibitor or not exhibitor.can_scan_leads:
+    if not exhibitor or not exhibitor.can_scan_leads or not stand_is_live(exhibitor):
         return None
     return exhibitor

@@ -91,6 +91,19 @@ def desired(rec):
 
 
 SETTLED = ("paid", "comp")
+VENDOR_EDITABLE = ("contact_email", "contact_phone", "website")
+
+
+def vendor_owned(r):
+    """Which of the vendor-editable fields this stand has filled in itself."""
+    try:
+        raw = r["vendor_fields"]
+    except (IndexError, KeyError):
+        return ()
+    try:
+        return tuple(f for f in json.loads(raw or "[]") if f in VENDOR_EDITABLE)
+    except (TypeError, ValueError):
+        return ()
 
 
 def switch_offs(r, diff):
@@ -165,6 +178,10 @@ def main():
         if r is None:
             creates.append((rec, want)); continue
         diff = {f: v for f, v in want.items() if v not in (None, "") and not same(f, r[f], v)}
+        # Fields the stand has set itself through its setup link are the
+        # stand's from then on; the sheet no longer reverts them (audit 7 Nov 2026).
+        for f in vendor_owned(r):
+            diff.pop(f, None)
         if adopted:
             diff["company_name"] = rec["company"]
         # One deliberate exception to "a blank cell never blanks a value": a

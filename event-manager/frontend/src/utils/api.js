@@ -125,6 +125,8 @@ export const dismissUnmappedSale = (eventId, id) => api.post(`/events/${eventId}
 export const clearScanLogs = (eventId) => api.delete(`/events/${eventId}/scan-logs`);
 // Door rehearsal: waives ONLY the calendar window, for one event, deliberately.
 export const setDoorTestMode = (eventId, enabled) => api.post(`/events/${eventId}/door-test-mode`, { enabled });
+export const getRehearsalCheckins = (eventId) => api.get(`/events/${eventId}/rehearsal-checkins`);
+export const resetRehearsalCheckins = (eventId) => api.post(`/events/${eventId}/rehearsal-reset`);
 // Payment monitoring. Reads Gaia's mirror of GHL, never GHL directly.
 export const getPayments = (eventId, p = {}) => api.get(`/events/${eventId}/payments`, { params: p });
 export const getPaymentsSummary = (eventId) => api.get(`/events/${eventId}/payments/summary`);
@@ -176,7 +178,7 @@ export const checkIn = (qrCode) => api.post('/checkin', { qr_code: qrCode });
 // Event-scoped check-in. A door scanner belongs to one event, so this is what
 // every check-in screen uses: a badge from another event reads as not found
 // here rather than being admitted.
-export const authorizeScan = (eventId, data) => api.post(`/events/${eventId}/authorize`, data);
+export const authorizeScan = (eventId, data, config) => api.post(`/events/${eventId}/authorize`, data, config);
 export const getScanLogs = (eventId, limit = 100) =>
     api.get(`/events/${eventId}/scan-logs`, { params: { limit } });
 export const setAddonDay = (attendeeId, data) => api.post(`/attendees/${attendeeId}/addon-day`, data);
@@ -234,6 +236,11 @@ export const createExhibitor = (data) => api.post('/exhibitors', data);
 export const updateExhibitor = (id, data) => api.put(`/exhibitors/${id}`, data);
 export const deleteExhibitor = (id) => api.delete(`/exhibitors/${id}`);
 export const getExhibitorLeads = (exhibitorId) => api.get(`/exhibitors/${exhibitorId}/leads`);
+export const exportExhibitorLeads = (exhibitorId) =>
+    api.get(`/exhibitors/${exhibitorId}/leads/export.csv`, { responseType: 'blob' });
+export const rotateScannerToken = (exhibitorId) => api.post(`/exhibitors/${exhibitorId}/rotate-scanner-token`);
+// The stand's own CSV. A plain link: the scanner token in the path is the credential.
+export const standLeadsCsvUrl = (accessToken) => `${API_URL}/scan/leads/${encodeURIComponent(accessToken)}/export.csv`;
 // A fresh setup link for one stand. Issuing a new one retires the previous.
 export const vendorActivationLink = (id) => api.post(`/exhibitors/${id}/activation-link`);
 // A stand's pictures and its catalogue. The same rows the stand edits through

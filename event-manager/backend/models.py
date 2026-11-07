@@ -338,6 +338,11 @@ class Exhibitor(Base):
     # from what a stand paid.
     social_links = Column(Text, nullable=True)
     is_featured = Column(Boolean, default=False)
+    # JSON list of the fields the exhibitor has set themselves through their
+    # setup link (contact_email, contact_phone, website). The sheet sync leaves
+    # these alone from then on, so a vendor's own correction is not reverted
+    # at the next :05/:35 run (audit 7 Nov 2026).
+    vendor_fields = Column(Text, nullable=True)
     # Vendor self-setup. An organiser sends a link; the stand fills in its own
     # description, logo and links, and publishes itself.
     #
@@ -1040,11 +1045,9 @@ class EventPost(Base):
     like_count = Column(Integer, default=0)
     report_count = Column(Integer, default=0)
     created_at = Column(DateTime, default=datetime.utcnow, index=True)
-        # A GHL product id gets reused for next year's event. A mapping therefore
-    # only grants its ticket for orders placed inside its own sales window, so
-    # reusing a funnel cannot mix next year's buyers into this year's event.
-    valid_from = Column(String, nullable=True)
-    valid_until = Column(String, nullable=True)
+    # (A stray copy of TicketMapping's valid_from/valid_until used to sit here.
+    # event_posts has no such columns, so every feed read failed with
+    # "no such column" -- audit 7 Nov 2026.)
 
     event = relationship("Event")
 

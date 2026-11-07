@@ -18,14 +18,14 @@ import { allowSpend, callerKey, spendKindFor, guardConfig, _resetGuard } from '.
 const cfg = (over = {}) => ({ ...guardConfig({}), ...over });
 
 test('the caller is X-Real-IP, never the first X-Forwarded-For entry the caller wrote', () => {
-  const req = { headers: { 'x-real-ip': '203.0.113.7', 'x-forwarded-for': '1.2.3.4, 203.0.113.7' }, socket: {} };
+  const req = { headers: { 'x-real-ip': '203.0.113.7', 'x-forwarded-for': '1.2.3.4, 203.0.113.7' }, socket: { remoteAddress: '127.0.0.1' } };
   assert.equal(callerKey(req), '203.0.113.7');
 });
 
 test('an IPv6 /64 is one caller, however many addresses it rotates through', () => {
-  const a = callerKey({ headers: { 'x-real-ip': '2001:db8:aa:bb:1::1' }, socket: {} });
-  const b = callerKey({ headers: { 'x-real-ip': '2001:db8:aa:bb:ffff:eeee:dddd:cccc' }, socket: {} });
-  const c = callerKey({ headers: { 'x-real-ip': '2001:db8:aa:bc::1' }, socket: {} });
+  const a = callerKey({ headers: { 'x-real-ip': '2001:db8:aa:bb:1::1' }, socket: { remoteAddress: '127.0.0.1' } });
+  const b = callerKey({ headers: { 'x-real-ip': '2001:db8:aa:bb:ffff:eeee:dddd:cccc' }, socket: { remoteAddress: '127.0.0.1' } });
+  const c = callerKey({ headers: { 'x-real-ip': '2001:db8:aa:bc::1' }, socket: { remoteAddress: '127.0.0.1' } });
   assert.equal(a, b);
   assert.notEqual(a, c);
 });

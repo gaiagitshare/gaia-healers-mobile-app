@@ -1814,7 +1814,23 @@ def add_party_seat(event_id: int, attendee_id: int, body: schemas.AddPartySeat,
     if not party:
         raise HTTPException(status_code=409,
                             detail="This badge is not part of a multi-seat booking. Use Add visitor instead.")
+    # Two desks naming the last free seat of one booking at the same instant
+    # both read "1 unnamed" and both created a badge (Codex, 7 Nov 2026). Take
+    # the database write lock first -- a no-op write on the buyer's row, held
+    # until this request commits, across all workers -- and only then count
+    # again. The second desk waits, recounts, finds the booking full and is
+    # refused.
+    db.execute(text("UPDATE attendees SET id = id WHERE id = :b"), {"b": party["buyer_attendee_id"]})
+    db.expire_all()
+    anchor = db.query(models.Attendee).filter(models.Attendee.id == attendee_id,
+                                              models.Attendee.event_id == event_id).first()
+    party = _party_members(db, anchor) if anchor else None
+    if not party:
+        db.rollback()
+        raise HTTPException(status_code=409,
+                            detail="This badge is not part of a multi-seat booking. Use Add visitor instead.")
     if party["unnamed"] < 1:
+        db.rollback()
         raise HTTPException(status_code=409,
                             detail="This booking already has all %d badges it paid for. Anybody else is a walk-in."
                                    % party["paid_for"])
@@ -12881,6 +12897,167 @@ def _td_ticket_texts(ids: str, request: FastAPIRequest, db: Session = Depends(ge
             out[a.id] = {"current_pass": _pass_display(db, a), "pass_includes": _pass_includes(db, a),
                          "active": _ticket_active(a)}
     return out
+
+
+_SEAT_TAG = re.compile(r"\+seat\d+@")
+
+
+@app.post("/internal/ticket-delivery/preflight")
+def _td_bulk_preflight(body: dict, request: FastAPIRequest, db: Session = Depends(get_db)):
+    """Mandatory check of a bulk ticket-email list before anything is sent.
+
+    Read-only (service token). The sender posts the list it is about to send
+    plus what the delivery history says is already out; the answer says whether
+    sending may go ahead. Any CRITICAL finding blocks the send (7 Nov 2026):
+
+      DUPLICATE_BADGE   two live tickets of the event share one badge token
+      DUPLICATE_QR      two tickets share one QR code, or one ticket is in two
+                        emails, or a delivered ticket would be sent again
+      WRONG_HOLDER      the email goes to someone other than the ticket's
+                        current holder (a seat goes to its paying buyer), or
+                        the ticket is gone, revoked, in another event, or its
+                        QR/badge in the list is not the ticket's own
+      MISSING_TICKETS   a booking in the send would receive fewer tickets than
+                        it paid for (Babak: as many tickets as they bought, that
+                        many in the email), or a paid live ticket is in no
+                        email, not delivered, and not on the recorded hold list
+      CATEGORY_MISMATCH the pass type or pass text in the email is not what the
+                        ticket grants now
+    """
+    require_service_token(request)
+    event_id = int(body.get("event_id") or 0)
+    event = db.query(models.Event).filter(models.Event.id == event_id).first()
+    if not event:
+        raise HTTPException(status_code=404, detail="Event not found")
+    orders = body.get("orders") or []
+    delivered = {int(t) for t in (body.get("delivered_ticket_ids") or [])}
+    holds = {int(k): str(v) for k, v in (body.get("holds") or {}).items()}
+    # Holds recorded per ORDER (the approved list's RED/YELLOW rows) cover
+    # every ticket that order paid for.
+    for oid, why in (body.get("held_orders") or {}).items():
+        for (aid,) in db.query(models.PaymentEvent.attendee_id).filter(
+                models.PaymentEvent.event_id == event_id, models.PaymentEvent.ghl_entity_id == oid,
+                models.PaymentEvent.attendee_id.isnot(None)).distinct():
+            holds.setdefault(int(aid), str(why))
+    auto_cutoff = body.get("auto_sender_cutoff")    # paid after this = the automatic sender's
+    critical, warnings = [], []
+
+    def flag(level, code, **kw):
+        (critical if level == "critical" else warnings).append(dict(code=code, **kw))
+
+    rows = db.query(models.Attendee).filter(models.Attendee.event_id == event_id).all()
+    by_id = {a.id: a for a in rows}
+    live = [a for a in rows if _ticket_active(a)]
+    tok_count, qr_count = {}, {}
+    for a in live:
+        if a.public_token:
+            tok_count.setdefault(a.public_token, []).append(a.id)
+    for a in rows:
+        if a.qr_code:
+            qr_count.setdefault(a.qr_code, []).append(a.id)
+    for tok, ids in tok_count.items():
+        if len(ids) > 1:
+            flag("critical", "DUPLICATE_BADGE", ticket_ids=sorted(ids))
+    for qr, ids in qr_count.items():
+        if len(ids) > 1:
+            flag("critical", "DUPLICATE_QR", ticket_ids=sorted(ids))
+
+    in_send, seen_qr, seen_tok = {}, {}, {}
+    for o in orders:
+        oid = o.get("order_id")
+        recipient = (o.get("recipient") or "").strip().lower()
+        for t in (o.get("tickets") or []):
+            tid = int(t.get("ticket_id") or 0)
+            if tid in in_send:
+                flag("critical", "DUPLICATE_QR", ticket_ids=[tid], order_ids=[in_send[tid], oid], detail="ticket in two emails")
+                continue
+            in_send[tid] = oid
+            for seen, key, label in ((seen_qr, t.get("qr"), "QR code"), (seen_tok, t.get("token"), "badge token")):
+                if key and key in seen:
+                    flag("critical", "DUPLICATE_QR" if label == "QR code" else "DUPLICATE_BADGE",
+                         ticket_ids=[seen[key], tid], detail="same %s on two tickets in the send" % label)
+                elif key:
+                    seen[key] = tid
+            if tid in delivered:
+                flag("critical", "DUPLICATE_QR", ticket_ids=[tid], order_ids=[oid], detail="already delivered")
+            a = by_id.get(tid)
+            if a is None:
+                flag("critical", "WRONG_HOLDER", ticket_ids=[tid], order_ids=[oid], detail="ticket not in this event")
+                continue
+            if not _ticket_active(a):
+                flag("critical", "WRONG_HOLDER", ticket_ids=[tid], order_ids=[oid], detail="ticket is %s" % _ticket_status(a))
+            if (t.get("qr") or "") != (a.qr_code or "") or (t.get("token") or "") != (a.public_token or ""):
+                flag("critical", "WRONG_HOLDER", ticket_ids=[tid], order_ids=[oid], detail="QR or badge in the list is not the ticket's own")
+            holder = _SEAT_TAG.sub("@", (a.email or "").strip().lower())
+            buyer_id = int((a.custom_data or {}).get("bought_by_attendee") or 0)
+            if buyer_id and a.registration_source in PARTY_SEAT_SOURCES and by_id.get(buyer_id) is not None:
+                holder = (by_id[buyer_id].email or "").strip().lower()
+            if holder != recipient:
+                flag("critical", "WRONG_HOLDER", ticket_ids=[tid], order_ids=[oid], detail="recipient is not the current holder")
+            if t.get("ticket_type_id") is not None and int(t.get("ticket_type_id")) != int(a.ticket_type_id or 0):
+                flag("critical", "CATEGORY_MISMATCH", ticket_ids=[tid], order_ids=[oid], detail="pass type changed")
+            if t.get("current_pass") is not None and t.get("current_pass") != _pass_display(db, a):
+                flag("critical", "CATEGORY_MISMATCH", ticket_ids=[tid], order_ids=[oid], detail="pass text differs from what the ticket grants")
+            if t.get("pass_includes") is not None and t.get("pass_includes") != _pass_includes(db, a):
+                flag("critical", "CATEGORY_MISMATCH", ticket_ids=[tid], order_ids=[oid], detail="'includes' text differs")
+
+    # As many tickets as they bought: every booking that is in this send, or
+    # partly delivered, must end up with all of its paid seats in someone's inbox.
+    seen_party, bookings = set(), []
+    for a in live:
+        p = _party_members(db, a)
+        if not p:
+            continue
+        key = p["buyer_attendee_id"]
+        if key in seen_party:
+            continue
+        seen_party.add(key)
+        ids = [m["attendee_id"] for m in p["members"]]
+        sent = [i for i in ids if i in in_send or i in delivered]
+        if not sent:
+            continue
+        paid = int(p.get("paid_for") or len(ids))
+        bookings.append({"buyer_ticket_id": key, "paid_for": paid, "tickets_emailed": len(sent)})
+        if len(sent) < paid:
+            flag("critical", "MISSING_TICKETS", ticket_ids=sorted(ids), paid_for=paid, emailed=len(sent),
+                 not_issued=max(0, paid - len(ids)), issued_not_in_send=[i for i in ids if i not in sent],
+                 detail="booking paid for %d, its email(s) would carry %d" % (paid, len(sent)))
+
+    # Every paid live ticket is accounted for: in the send, delivered, on the
+    # recorded hold list, or the automatic sender's (paid after the cutoff).
+    paid_sources = ("ghl_order", "ghl_invoice", "ghl_webhook") + PARTY_SEAT_SOURCES
+    unaccounted, held, auto = [], [], []
+    for a in live:
+        if a.id in in_send or a.id in delivered:
+            continue
+        if (a.registration_source or "") not in paid_sources and (a.attendance_type or "paid") != "paid":
+            continue
+        if a.id in holds:
+            held.append(a.id); continue
+        if auto_cutoff:
+            first = db.query(func.min(models.PaymentEvent.first_seen_at)).filter(
+                models.PaymentEvent.attendee_id == a.id, models.PaymentEvent.status == "paid").scalar()
+            if first is not None and str(first) > str(auto_cutoff):
+                auto.append(a.id); continue
+        unaccounted.append(a.id)
+    if unaccounted:
+        flag("critical", "MISSING_TICKETS", ticket_ids=unaccounted,
+             detail="%d paid ticket(s) in no email, not delivered and not on the hold list" % len(unaccounted))
+    if held:
+        by_reason = {}
+        for i in held:
+            by_reason.setdefault(holds[i], []).append(i)
+        for why, ids in sorted(by_reason.items(), key=lambda kv: -len(kv[1])):
+            flag("warning", "HELD", ticket_ids=sorted(ids), reason=why,
+                 detail="%d ticket(s) held, not emailed: %s" % (len(ids), why))
+    if auto:
+        flag("warning", "AUTO_SENDER", ticket_ids=sorted(auto), detail="paid after the cutoff: the automatic sender's")
+    db.rollback()
+    return {"ok": not critical, "event_id": event_id, "critical": critical, "warnings": warnings,
+            "summary": {"orders": len(orders), "tickets_in_send": len(in_send), "already_delivered": len(delivered),
+                        "live_tickets": len(live), "held": len(held), "auto_sender": len(auto),
+                        "unaccounted": len(unaccounted), "multi_seat_bookings_in_send": len(bookings),
+                        "critical": len(critical), "warnings": len(warnings)}}
 
 
 def _td_open(event_id, db, current_user, write=False):

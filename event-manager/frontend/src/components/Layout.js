@@ -29,6 +29,7 @@ import {
 import {
     Dashboard as DashboardIcon,
     Event as EventIcon,
+    ListAlt as ListAltIcon,
     Menu as MenuIcon,
     QrCodeScanner as CheckInIcon,
     Payments as PaymentsIcon,
@@ -70,7 +71,9 @@ function Layout({ children, user, onLogout }) {
 
     const menuItems = [
         { text: 'Dashboard', icon: <DashboardIcon />, path: '/dashboard' },
-        { text: 'Events', icon: <EventIcon />, path: '/events' },
+        // Events goes straight into the current event; All Events is the list.
+        { text: 'Events', icon: <EventIcon />, path: '/events/current' },
+        { text: 'All Events', icon: <ListAltIcon />, path: '/events/all' },
         { text: 'Check-In', icon: <CheckInIcon />, path: '/checkin' },
         { text: 'Payments', icon: <PaymentsIcon />, path: '/payments' },
         { text: 'Entitlement Review', icon: <ReviewIcon />, path: '/entitlement-review' },
@@ -82,6 +85,13 @@ function Layout({ children, user, onLogout }) {
 
     const handleClose = () => {
         setAnchorEl(null);
+    };
+
+    // /events/<id> is "Events" (the event workspace); /events/all is "All Events".
+    const isSelected = (path) => {
+        const p = location.pathname;
+        if (path === '/events/current') return /^\/events\/(current|\d+)(\/|$)/.test(p);
+        return p === path || p.startsWith(path + '/');
     };
 
     const handleNavigate = (path) => {
@@ -97,7 +107,7 @@ function Layout({ children, user, onLogout }) {
                     {menuItems.map((item) => (
                         <ListItem key={item.text} disablePadding>
                             <ListItemButton
-                                selected={location.pathname === item.path || location.pathname.startsWith(item.path + '/')}
+                                selected={isSelected(item.path)}
                                 onClick={() => handleNavigate(item.path)}
                                 sx={{ minHeight: 48 }}
                             >
@@ -126,6 +136,7 @@ function Layout({ children, user, onLogout }) {
                         <IconButton
                             color="inherit"
                             edge="start"
+                            aria-label="Open menu"
                             onClick={() => setMobileOpen(true)}
                             sx={{ mr: 1 }}
                         >

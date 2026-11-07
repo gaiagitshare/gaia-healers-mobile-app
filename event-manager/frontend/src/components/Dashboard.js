@@ -108,14 +108,14 @@ function Dashboard() {
         if (primaryEvent) {
             navigate(`/events/${primaryEvent.id}/attendees`);
         } else {
-            navigate('/events');
+            navigate('/events/all');
         }
     };
     const goToPrimaryEvent = () => {
         if (primaryEvent) {
             navigate(`/events/${primaryEvent.id}`);
         } else {
-            navigate('/events');
+            navigate('/events/all');
         }
     };
 
@@ -156,7 +156,7 @@ function Dashboard() {
                         detail={`${stats?.total_events || 0} total events`}
                         icon={<EventIcon fontSize="large" />}
                         color="#2d5a3d"
-                        onClick={() => navigate('/events')}
+                        onClick={() => navigate('/events/all')}
                     />
                 </Grid>
                 <Grid item xs={12} sm={6} md={3}>
@@ -205,7 +205,7 @@ function Dashboard() {
                         detail={stats?.next_event ? `${stats.next_event.days_until} days until next` : 'No upcoming events'}
                         icon={<EventIcon fontSize="large" />}
                         color="#2d5a3d"
-                        onClick={() => navigate('/events')}
+                        onClick={() => navigate('/events/all')}
                     />
                 </Grid>
                 <Grid item xs={12} sm={6} md={3}>
@@ -215,7 +215,7 @@ function Dashboard() {
                         detail="Events currently in progress"
                         icon={<CheckInIcon fontSize="large" />}
                         color="#c9a227"
-                        onClick={() => navigate('/events')}
+                        onClick={() => navigate('/events/all')}
                     />
                 </Grid>
                 <Grid item xs={12} sm={6} md={3}>
@@ -225,7 +225,7 @@ function Dashboard() {
                         detail="Based on event end dates"
                         icon={<EventIcon fontSize="large" />}
                         color="#5a6b5a"
-                        onClick={() => navigate('/events')}
+                        onClick={() => navigate('/events/all')}
                     />
                 </Grid>
                 <Grid item xs={12} sm={6} md={3}>

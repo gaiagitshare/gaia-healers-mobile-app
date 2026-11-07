@@ -44,7 +44,20 @@ def call(method, path, body=None, headers=ADMIN):
 db = sqlite3.connect(DB, timeout=30)
 EV = 1
 DELIVERY = os.environ.get("TICKET_DELIVERY_DB") or os.path.join(HERE, "data", "ticket-delivery.db")
-dsha = hashlib.sha256(open(DELIVERY, "rb").read()).hexdigest() if os.path.exists(DELIVERY) else None
+def delivery_records():
+    """What was sent and every attempt -- not the whole file: on the live server
+    the automatic sender's shadow check updates its own bookkeeping every two
+    minutes, which is not a send."""
+    if not os.path.exists(DELIVERY):
+        return None
+    d = sqlite3.connect("file:%s?mode=ro" % DELIVERY, uri=True)
+    try:
+        return [d.execute("select * from order_ticket_delivery order by event_id, order_id").fetchall(),
+                d.execute("select * from delivery_attempts order by id").fetchall(),
+                d.execute("select * from resend_requests order by id").fetchall()]
+    finally:
+        d.close()
+dsha = delivery_records()
 pay_before = db.execute("select count(*), coalesce(sum(amount),0), group_concat(id||status||coalesce(attendee_id,'')) from payment_events").fetchone()
 tickets_before = db.execute("select count(*) from attendees").fetchone()[0]
 door = db.execute("select u.id from users u join event_roles r on r.user_id=u.id where r.role='checkin_staff' limit 1").fetchone()
@@ -180,8 +193,8 @@ dups = db.execute("select count(*) from (select public_token from attendees wher
                   "lower(coalesce(registration_status,'registered')) not in ('refunded','cancelled','canceled','revoked','void','withdrawn') "
                   "group by public_token having count(*)>1)").fetchone()[0]
 check(dups == 0, "no duplicate badge identities", dups)
-if dsha:
-    check(hashlib.sha256(open(DELIVERY, "rb").read()).hexdigest() == dsha, "the delivery history is untouched: nothing was sent", None)
+if dsha is not None:
+    check(delivery_records() == dsha, "the delivery history is untouched: nothing was sent", None)
 
 print("\n%d check(s) failed" % len(fails) if fails else "\nALL CHECKS PASSED")
 sys.exit(1 if fails else 0)

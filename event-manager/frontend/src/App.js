@@ -8,6 +8,7 @@ import EntitlementReview from './components/EntitlementReview';
 import VendorsRedirect from './components/VendorsRedirect';
 import Payments from './components/Payments';
 import Events from './components/Events';
+import CurrentEvent from './components/CurrentEvent';
 import EventDetail from './components/EventDetail';
 import Attendees from './components/Attendees';
 import CheckIn from './components/CheckIn';
@@ -136,7 +137,11 @@ function App() {
                             <Layout user={user} onLogout={handleLogout}>
                                 <Routes>
                                     <Route path="/dashboard" element={<Dashboard />} />
-                                    <Route path="/events" element={<Events />} />
+                                    {/* Events opens the current event; the full list (archived
+                                        included) is All Events. Old /events links keep working. */}
+                                    <Route path="/events" element={<Navigate to="/events/current" replace />} />
+                                    <Route path="/events/current" element={<CurrentEvent />} />
+                                    <Route path="/events/all" element={<Events />} />
                                     <Route path="/events/:id" element={<EventWorkspace />} />
                                     <Route path="/events/:id/:section" element={<EventWorkspace />} />
                                     

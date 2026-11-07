@@ -19,9 +19,9 @@ export default function VendorsRedirect() {
             .then((r) => {
                 if (!alive) return;
                 const first = (r.data || [])[0];
-                navigate(first ? `/events/${first.id}/exhibitors` : '/events', { replace: true });
+                navigate(first ? `/events/${first.id}/exhibitors` : '/events/all', { replace: true });
             })
-            .catch(() => { if (alive) navigate('/events', { replace: true }); });
+            .catch(() => { if (alive) navigate('/events/all', { replace: true }); });
         return () => { alive = false; };
     }, [navigate]);
     return (

@@ -1297,6 +1297,10 @@ function verifyEventBearer(req) {
     var payload = JSON.parse(Buffer.from(parts[1], 'base64url').toString('utf8'));
     if (payload.exp && Math.floor(Date.now() / 1000) > Number(payload.exp)) return null;
     if (!payload.sub) return null;
+    // Only an Event Manager ADMINISTRATOR's login opens this admin. Door staff
+    // and other event roles share the signing key but carry no "adm" claim,
+    // and single-purpose tokens (set-password links) are never a session.
+    if (payload.adm !== true || payload.purpose) return null;
     return payload;
   } catch (e) { return null; }
 }

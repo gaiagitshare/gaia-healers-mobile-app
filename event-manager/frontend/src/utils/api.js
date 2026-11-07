@@ -401,3 +401,19 @@ export const reconComment = (eventId, id, text) => api.post(`/events/${eventId}/
 export const reconAssign = (eventId, id, userId) => api.post(`/events/${eventId}/reconcile/issues/${id}/assign`, { user_id: userId });
 export const reconStatus = (eventId, id, data) => api.post(`/events/${eventId}/reconcile/issues/${id}/status`, data);
 export const reconAction = (eventId, id, data) => api.post(`/events/${eventId}/reconcile/issues/${id}/action`, data);
+
+// Volunteers (7 Nov 2026)
+export const getVolunteerOverview = (eventId) => api.get(`/events/${eventId}/volunteers/overview`);
+export const updateVolunteerProgram = (eventId, data) => api.put(`/events/${eventId}/volunteers/program`, data);
+export const addVolunteer = (eventId, data) => api.post(`/events/${eventId}/volunteers`, data);
+export const updateVolunteer = (eventId, id, data) => api.patch(`/events/${eventId}/volunteers/${id}`, data);
+export const addVolunteerShift = (eventId, data) => api.post(`/events/${eventId}/volunteer-shifts`, data);
+export const updateVolunteerShift = (eventId, id, data) => api.patch(`/events/${eventId}/volunteer-shifts/${id}`, data);
+export const assignVolunteer = (eventId, data) => api.post(`/events/${eventId}/volunteer-bookings`, data);
+export const updateVolunteerBooking = (eventId, id, data) => api.patch(`/events/${eventId}/volunteer-bookings/${id}`, data);
+export const exportVolunteers = (eventId) => api.get(`/events/${eventId}/volunteers/export.csv`, { responseType: 'blob' });
+export const getVolunteerPortal = (token) => api.get(`/volunteer/${token}`);
+export const requestVolunteerShift = (token, shiftId) => api.post(`/volunteer/${token}/request`, { shift_id: shiftId });
+export const cancelVolunteerShift = (token, bookingId) => api.post(`/volunteer/${token}/cancel`, { booking_id: bookingId });
+export const getVolunteerJoin = (joinToken) => api.get(`/volunteer-join/${joinToken}`);
+export const applyVolunteer = (joinToken, data) => api.post(`/volunteer-join/${joinToken}`, data);

@@ -9,6 +9,8 @@ import VendorsRedirect from './components/VendorsRedirect';
 import Payments from './components/Payments';
 import Events from './components/Events';
 import CurrentEvent from './components/CurrentEvent';
+import VolunteerPortal from './components/VolunteerPortal';
+import VolunteerJoin from './components/VolunteerJoin';
 import EventDetail from './components/EventDetail';
 import Attendees from './components/Attendees';
 import CheckIn from './components/CheckIn';
@@ -131,6 +133,9 @@ function App() {
                         user ? <Navigate to="/dashboard" /> : <Login onLogin={handleLogin} />
                     } />
                     <Route path="/scan/:token" element={<ExhibitorScan />} />
+                    {/* Volunteers: private links, no Event Manager login. */}
+                    <Route path="/volunteer/:token" element={<VolunteerPortal />} />
+                    <Route path="/volunteer-join/:joinToken" element={<VolunteerJoin />} />
                     <Route path="/register/:eventId" element={<PublicRegistration />} />
                     <Route path="/*" element={
                         user ? (

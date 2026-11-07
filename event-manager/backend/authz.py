@@ -33,7 +33,9 @@ EXHIBITOR_MANAGER = "exhibitor_manager"
 # They may correct tickets and see what was paid, but not run the event,
 # export the roster or manage stands.
 RECONCILER = "reconciliation_admin"
-GRANTABLE_ROLES = {ORGANIZER, CHECKIN_STAFF, EXHIBITOR_MANAGER, RECONCILER}
+# Volunteers (7 Nov 2026): runs the volunteer schedule and nothing else.
+VOLUNTEER_COORDINATOR = "volunteer_coordinator"
+GRANTABLE_ROLES = {ORGANIZER, CHECKIN_STAFF, EXHIBITOR_MANAGER, RECONCILER, VOLUNTEER_COORDINATOR}
 
 # What each role may do. Listed explicitly rather than derived from a hierarchy:
 # a hierarchy invites "staff is basically organizer minus a bit", and the minus
@@ -46,6 +48,7 @@ CAPABILITIES = {
         "exhibitor.read", "exhibitor.write", "exhibitor.grant_scanning",
         "lead.read", "analytics.read",
         "reconcile.read", "reconcile.resolve",
+        "volunteer.manage",
     },
     CHECKIN_STAFF: {
         # Enough to work a door: find someone, admit them. Not enough to export
@@ -61,6 +64,7 @@ CAPABILITIES = {
     EXHIBITOR_MANAGER: {
         "event.read", "exhibitor.read", "exhibitor.write", "lead.read",
     },
+    VOLUNTEER_COORDINATOR: {"event.read", "volunteer.manage"},
     RECONCILER: {
         "event.read", "attendee.read", "attendee.write", "checkin.perform", "analytics.read",
         "reconcile.read", "reconcile.resolve",

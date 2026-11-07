@@ -17,6 +17,7 @@ import TicketMappings from './TicketMappings';
 import ReviewQueue from './ReviewQueue';
 import TicketDelivery from './TicketDelivery';
 import Reconciliation from './Reconciliation';
+import Volunteers from './Volunteers';
 
 // One workspace per event. The sections are structural, not configured, so any
 // event — the first or the twentieth — gets all of them the moment it exists.
@@ -39,6 +40,7 @@ const SECTIONS = [
     ['review', 'Review Queue'],
     ['delivery', 'Ticket Emails'],
     ['reconcile', 'Ticket Reconciliation'],
+    ['volunteers', 'Volunteers'],
     ['live', 'Live'],
     ['checkin', 'Check-In'],
 ];
@@ -78,6 +80,7 @@ function EventWorkspace() {
             case 'review': return <ReviewQueue />;
             case 'delivery': return <TicketDelivery />;
             case 'reconcile': return <Reconciliation />;
+            case 'volunteers': return <Volunteers />;
             case 'checkin': return <CheckIn timezone={event?.timezone} />;
             default: return <EventDetail section="overview" />;
         }

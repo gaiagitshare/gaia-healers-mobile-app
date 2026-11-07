@@ -441,7 +441,7 @@ class _RedactCapabilityUrls(logging.Filter):
     badge-card tokens, stand setup links, scanner links, ?secret=. Keep the
     route, drop the secret, so the journal cannot be used to replay them."""
     _PATTERNS = [
-        (re.compile(r"(/(?:c|C|vendor|vendor-setup)/)[^/\s?\"]+"), r"\1<redacted>"),
+        (re.compile(r"(/(?:c|C|vendor|vendor-setup|volunteer|volunteer-join)/)[^/\s?\"]+"), r"\1<redacted>"),
         (re.compile(r"(/scan/(?:leads|roster)/)(EXH-)?[^/\s?\"]+"), r"\1<redacted>"),
         (re.compile(r"((?:secret|token|access_token)=)[^&\s\"]+", re.I), r"\1<redacted>"),
     ]
@@ -13697,6 +13697,11 @@ def recon_action(event_id: int, issue_id: int, body: dict, db: Session = Depends
     db.refresh(i)
     return {"ok": True, "result": result, "status": i.status, "detected": bool(i.detected), "recheck": rerun}
 
+
+
+# Volunteers (7 Nov 2026): see volunteers.py.
+import volunteers as _volunteers  # noqa: E402
+_volunteers.register(app, get_current_user, _rate_limited, _client_ip)
 
 if __name__ == "__main__":
     import uvicorn

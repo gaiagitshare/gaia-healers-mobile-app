@@ -1387,3 +1387,88 @@ class EmailPlan(Base):
     active = Column(Boolean, default=True)
     updated_by = Column(String)
     updated_at = Column(DateTime, default=datetime.utcnow)
+
+
+# ---------------------------------------------------------------------------
+# Volunteers (7 Nov 2026)
+#
+# Separate from tickets, payments, stands and GHL on purpose: a volunteer is
+# not an attendee, has no ticket, and reaches the system only through a private
+# link that can be revoked. Times are the event's local wall-clock time
+# ("09:00" on "2026-11-20" in America/New_York), stored as text so nothing is
+# ever shifted by a server or browser time zone.
+# ---------------------------------------------------------------------------
+class VolunteerProgram(Base):
+    __tablename__ = "volunteer_programs"
+    event_id = Column(Integer, primary_key=True)
+    title = Column(String)
+    intro = Column(Text)                  # welcome, reminders, dress code
+    join_token = Column(String, nullable=True, index=True)
+    join_open = Column(Boolean, default=True)
+    expected_per_day = Column(Integer, default=2)
+    updated_at = Column(DateTime, default=datetime.utcnow)
+
+
+class Volunteer(Base):
+    __tablename__ = "volunteers"
+    id = Column(Integer, primary_key=True, index=True)
+    event_id = Column(Integer, index=True)
+    first_name = Column(String)
+    last_name = Column(String)
+    email = Column(String, nullable=True)
+    phone = Column(String, nullable=True)
+    notes = Column(Text, nullable=True)   # admins only
+    status = Column(String, default="approved", index=True)   # pending | approved | rejected
+    token = Column(String, nullable=True, unique=True, index=True)
+    token_created_at = Column(DateTime, nullable=True)
+    source = Column(String)               # admin | join_form | signupgenius
+    needs_review = Column(Text, nullable=True)   # why an admin should look
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow)
+
+
+class VolunteerShift(Base):
+    __tablename__ = "volunteer_shifts"
+    id = Column(Integer, primary_key=True, index=True)
+    event_id = Column(Integer, index=True)
+    day = Column(String, index=True)      # YYYY-MM-DD, event local
+    start_time = Column(String)           # HH:MM, event local
+    end_time = Column(String)
+    lead_role = Column(Boolean, default=False)   # all-day lead (no overlap check)
+    role = Column(String)
+    location = Column(String, nullable=True)
+    description = Column(Text, nullable=True)
+    capacity = Column(Integer, default=1)
+    sort = Column(Integer, default=0)
+    template_key = Column(String, nullable=True, index=True)   # import identity
+    active = Column(Boolean, default=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+
+class VolunteerBooking(Base):
+    __tablename__ = "volunteer_bookings"
+    id = Column(Integer, primary_key=True, index=True)
+    event_id = Column(Integer, index=True)
+    shift_id = Column(Integer, index=True)
+    volunteer_id = Column(Integer, index=True)
+    status = Column(String, index=True)   # requested | confirmed | declined | cancelled
+    note = Column(Text, nullable=True)
+    created_by = Column(String)
+    decided_by = Column(String, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow)
+
+
+class VolunteerLog(Base):
+    """Every change, who made it, before and after. Append-only."""
+    __tablename__ = "volunteer_log"
+    id = Column(Integer, primary_key=True, index=True)
+    event_id = Column(Integer, index=True)
+    at = Column(DateTime, default=datetime.utcnow)
+    actor = Column(String)
+    action = Column(String)
+    volunteer_id = Column(Integer, nullable=True)
+    shift_id = Column(Integer, nullable=True)
+    booking_id = Column(Integer, nullable=True)
+    before = Column(JSON, nullable=True)
+    after = Column(JSON, nullable=True)

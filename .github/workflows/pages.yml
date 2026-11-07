@@ -29,10 +29,31 @@ jobs:
       - name: Configure Pages
         uses: actions/configure-pages@v5
 
+      # Publish the website, not the repository (approved by Babak 7 Nov 2026).
+      # The Event Manager and proxy SOURCE, internal docs, tests, ops scripts
+      # and agent notes stay in git but are no longer served at gaiahealers.app.
+      # The site loads exactly one file from staging-proxy/ (assist-guide.js,
+      # from home.html, index.html and sw.js), so that file is published.
+      - name: Stage the public site
+        run: |
+          set -euo pipefail
+          mkdir -p _site
+          rsync -a --delete \
+            --exclude '.git/' --exclude '.github/' --exclude '_site/' \
+            --exclude 'event-manager/' --exclude 'staging-proxy/' \
+            --exclude 'docs/' --exclude 'tests/' --exclude 'scripts/' --exclude 'ops/' \
+            --exclude 'AGENTS.md' --exclude 'CLAUDE.md' --exclude 'design-qa.md' \
+            ./ _site/
+          mkdir -p _site/staging-proxy
+          cp staging-proxy/assist-guide.js _site/staging-proxy/assist-guide.js
+          touch _site/.nojekyll
+          test -f _site/index.html && test -f _site/home.html && test -f _site/CNAME
+          echo "published files: $(find _site -type f | wc -l)"
+
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
         with:
-          path: .
+          path: _site
 
       - name: Deploy to GitHub Pages
         id: deployment

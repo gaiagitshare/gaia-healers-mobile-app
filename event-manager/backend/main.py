@@ -342,6 +342,17 @@ def _ensure_badge_columns():
     # (audit 7 Nov 2026). If duplicates already exist this statement fails and
     # is reported below rather than deleting anybody's lead.
     stmts.append("CREATE UNIQUE INDEX IF NOT EXISTS uq_leads_exhibitor_attendee ON leads (exhibitor_id, attendee_id)")
+    # Door retries (Codex, 7 Nov 2026): one row per device scan id, so a retry
+    # replays the original decision. NULL ids (older door builds) never clash.
+    try:
+        _sl = {c["name"] for c in inspector.get_columns("scan_logs")}
+    except Exception:
+        _sl = set()
+    if _sl and "request_id" not in _sl:
+        stmts.append("ALTER TABLE scan_logs ADD COLUMN request_id VARCHAR")
+    if _sl and "claimed_entry" not in _sl:
+        stmts.append("ALTER TABLE scan_logs ADD COLUMN claimed_entry BOOLEAN")
+    stmts.append("CREATE UNIQUE INDEX IF NOT EXISTS uq_scan_logs_request ON scan_logs (event_id, request_id)")
     with engine.begin() as conn:
         for stmt in stmts:
             try:
@@ -1541,6 +1552,10 @@ def authorize_scan(event_id: int, payload: schemas.AuthorizeRequest,
         return {"result": "DENIED", "granted": False, "reason": "This badge is not valid for this event",
                 "qr_code": payload.qr_code, "access_type": (payload.access_type or "EVENT_ENTRY").upper()}
     scan_at = payload.at if (ALLOW_SCAN_TIME_OVERRIDE and current_user.is_admin) else None
+    if payload.scan_id:
+        replay = _replay_scan(db, event, att, payload, current_user, scan_at)
+        if replay is not None:
+            return replay
     dec = _authorize_decision(db, att, event, payload.access_type, scan_at)
     dec, checked_in_now = _claim_initial_entry(db, att, event, dec, scan_at)
     if checked_in_now:
@@ -1554,10 +1569,28 @@ def authorize_scan(event_id: int, payload: schemas.AuthorizeRequest,
     db.add(models.ScanLog(event_id=event_id, attendee_id=att.id, qr_code=att.qr_code,
                           access_type=dec.get("access_type"), result=dec.get("result"),
                           reason=_reason, staff_user_id=current_user.id,
-                          session_id=payload.session_id))
-    db.commit()
+                          session_id=payload.session_id,
+                          request_id=payload.scan_id or None, claimed_entry=bool(checked_in_now)))
+    try:
+        db.commit()
+    except IntegrityError:
+        # The same device scan is already recorded: its first attempt, slow
+        # rather than lost, committed while this retry was deciding. Nothing of
+        # this attempt is kept; the door is told what that first attempt did.
+        db.rollback()
+        replay = _replay_scan(db, event, att, payload, current_user, scan_at) if payload.scan_id else None
+        if replay is not None:
+            return replay
+        raise
     dec["checked_in"] = bool(att.is_checked_in)
     dec["checked_in_now"] = checked_in_now
+    dec["scan_id"] = payload.scan_id or None
+    dec["replayed"] = False
+    return _decorate_decision(db, att, event, dec, current_user)
+
+
+def _decorate_decision(db, att, event, dec, current_user):
+    """What the door shows alongside a decision, fresh or replayed."""
     # Per-day admission (approved 7 Nov 2026): with re-entry on, the door can
     # still tell "first time in today" from "back again today". Counted after
     # this scan's own row is in the log.
@@ -3600,6 +3633,34 @@ def _claim_initial_entry(db, attendee, event, decision, at=None):
 
 
 # Check-in endpoints
+def _replay_scan(db, event, att, payload, current_user, scan_at=None):
+    """The decision already recorded for this device scan id, or None.
+
+    A door retries a scan whose response it never received. The retry must be
+    answered with what THAT scan did -- never inferred from "checked in a
+    moment ago", which is also true when a different device (or a copied QR)
+    got there first. Read-only: no new scan row, no claim, no card activation.
+    """
+    row = db.query(models.ScanLog).filter(models.ScanLog.event_id == event.id,
+                                          models.ScanLog.request_id == payload.scan_id).first()
+    if row is None:
+        return None
+    if row.staff_user_id != current_user.id or row.attendee_id != att.id:
+        raise HTTPException(status_code=409, detail="That scan id was already used for a different scan")
+    db.refresh(att)
+    dec = _authorize_decision(db, att, event, row.access_type or payload.access_type, scan_at)
+    granted = (row.result or "").upper() in ("GRANTED", "OVERRIDE")
+    reason = row.reason or dec.get("reason")
+    if dec.get("rehearsal") and reason and reason.startswith("REHEARSAL \u2014 "):
+        reason = reason[len("REHEARSAL \u2014 "):]
+    dec.update({"result": row.result, "granted": granted, "reason": reason,
+                "access_type": row.access_type or dec.get("access_type"),
+                "checked_in": bool(att.is_checked_in),
+                "checked_in_now": bool(row.claimed_entry),
+                "scan_id": payload.scan_id, "replayed": True})
+    return _decorate_decision(db, att, event, dec, current_user)
+
+
 @app.post("/events/{event_id}/checkin", response_model=schemas.CheckInResponse)
 def check_in_for_event(
     event_id: int,
@@ -5841,8 +5902,14 @@ def walk_in_create(event_id: int, payload: schemas.WalkInCreate,
     if payload.note:
         attendee.door_payment_note = str(payload.note)[:300]
     if payload.link_token:
-        # Reuse the existing card outright, so there is exactly one per person.
-        attendee.public_token = (payload.link_token or "").strip().upper()
+        # Reuse the existing card outright, so there is exactly one per person
+        # -- but never a badge another live ticket of this event already uses.
+        _link = (payload.link_token or "").strip().upper()
+        db.flush()
+        if badge_card.token_taken_in_event(db, models, _link, attendee.event_id, attendee.id):
+            db.rollback()
+            raise HTTPException(status_code=409, detail="That badge already belongs to another ticket at this event")
+        attendee.public_token = _link
     card = attach_member_identity(db, attendee)
     db.commit()
     db.refresh(attendee)
@@ -10330,6 +10397,17 @@ def transfer_ticket(attendee_id: int, body: schemas.TicketTransfer, db: Session 
                            {"name": pays[0].buyer_name if pays else before["name"],
                             "email": (pays[0].buyer_email if pays else before["email"])}),
              "holder_other_tickets": others}
+    # Consent belongs to the PERSON, not the ticket (Codex, 7 Nov 2026). The
+    # previous holder's yes to sharing email/phone with stands must not become
+    # the new holder's: the ticket goes back to "never asked" (the column
+    # defaults with no consent_updated_at, which explicit_consent reads as no).
+    # The previous choice is kept in the transfer record for the audit trail.
+    entry["sharing_reset"] = {"was_asked": att.consent_updated_at is not None,
+                              "email": bool(att.share_email_with_exhibitors),
+                              "phone": bool(att.share_phone_with_exhibitors)}
+    att.share_email_with_exhibitors = True
+    att.share_phone_with_exhibitors = True
+    att.consent_updated_at = None
     cd["transfers"] = list(cd.get("transfers") or []) + [entry]
     cd["transferred"] = True
     # The buyer's GHL contact no longer identifies the holder; the purchase keeps
@@ -11413,10 +11491,29 @@ def _member_card_for_attendee(db, attendee, create=True):
     if cid and not card.contact_id:
         card.contact_id = cid
     if card.public_token and not attendee.public_token:
-        attendee.public_token = card.public_token
+        _adopt_card_token(db, attendee, card)
     elif attendee.public_token and not card.public_token:
         card.public_token = attendee.public_token
     return card
+
+
+def _adopt_card_token(db, attendee, card):
+    """Give a ticket with no badge token the person's card token -- unless a
+    live ticket of the same event already carries it. Then this ticket is a
+    second badge for the same person and gets its own token; the card still
+    opens from it (a token with no card of its own resolves to the person's
+    card). Copying the card token unconditionally is how a second ticket for
+    the same person shared the first one's badge (Codex, 7 Nov 2026)."""
+    if attendee.public_token or not (card and card.public_token):
+        return attendee.public_token
+    try:
+        db.flush()
+    except Exception:
+        pass
+    if badge_card.token_taken_in_event(db, models, card.public_token, attendee.event_id, attendee.id):
+        return badge_card.ensure_public_token(db, models, attendee, commit=False)
+    attendee.public_token = card.public_token
+    return attendee.public_token
 
 
 REGISTRATION_SOURCES = ("ghl_order", "ghl_invoice", "ghl_webhook", "walk_in", "admin", "import", "partner_guest")
@@ -11480,7 +11577,7 @@ def attach_member_identity(db, attendee, commit=False):
         return None
     card = _member_card_for_attendee(db, attendee, create=True)
     if card and not attendee.public_token:
-        attendee.public_token = card.public_token
+        _adopt_card_token(db, attendee, card)
     _sync_participation(db, card)
     if commit:
         db.commit()
@@ -11719,7 +11816,7 @@ def _own_card(db, payload, create=False):
         else:
             for a in attendees:
                 if not a.public_token and card.public_token:
-                    a.public_token = card.public_token
+                    _adopt_card_token(db, a, card)
     if not card:
         return None, None, report
     _sync_participation(db, card)

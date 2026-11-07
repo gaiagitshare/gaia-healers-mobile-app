@@ -1095,6 +1095,11 @@ class ScanLog(Base):
     staff_user_id = Column(Integer, nullable=True)
     session_id = Column(Integer, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
+    # The door device's own id for ONE scan, resent unchanged on its network
+    # retry. With it the backend can say "that exact scan of yours admitted
+    # them" instead of the device guessing from timestamps (Codex, 7 Nov 2026).
+    request_id = Column(String, nullable=True)
+    claimed_entry = Column(Boolean, nullable=True)   # this scan won the first entry
 
 
 class BadgePrintLog(Base):

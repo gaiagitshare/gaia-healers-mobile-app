@@ -398,22 +398,26 @@ function CheckIn({ timezone: timezoneProp }) {
     // from a moment ago, it was this scan that got them in.
     const SCAN_TIMEOUT_MS = 8000;
     const isNetworkError = (e) => !e?.response;
-    const justNow = (iso) => {
-        if (!iso) return false;
-        const t = Date.parse(/[zZ]|[+-]\d\d:?\d\d$/.test(iso) ? iso : iso + 'Z');
-        return Number.isFinite(t) && Math.abs(Date.now() - t) < 60000;
+    // One id per physical scan, resent unchanged on the retry. The backend
+    // answers a repeated id with the decision it ALREADY made for that scan
+    // ("replayed"), so the door never has to guess. It used to turn "already
+    // checked in a moment ago" into an admission, which is also what a second
+    // device or a copied QR produces (Codex, 7 Nov 2026).
+    const newScanId = () => {
+        try { if (window.crypto?.randomUUID) return window.crypto.randomUUID().replace(/-/g, ''); } catch (e) { /* noop */ }
+        return (Date.now().toString(36) + Math.random().toString(36).slice(2) + Math.random().toString(36).slice(2)).slice(0, 32);
     };
     const authorizeWithRetry = async (payload) => {
+        const body = { ...payload, scan_id: payload.scan_id || newScanId() };
         try {
-            return { data: (await authorizeScan(eventId, payload, { timeout: SCAN_TIMEOUT_MS })).data, retried: false };
+            return { data: (await authorizeScan(eventId, body, { timeout: SCAN_TIMEOUT_MS })).data, retried: false };
         } catch (e) {
             if (!isNetworkError(e)) throw e;
             await new Promise((r) => setTimeout(r, 1000));
-            const again = (await authorizeScan(eventId, payload, { timeout: SCAN_TIMEOUT_MS })).data;
-            if (again && again.result === 'LIMITED' && payload.access_type === 'EVENT_ENTRY'
-                && again.checked_in && justNow(again.checked_in_at)) {
-                return { data: { ...again, result: 'GRANTED', granted: true, checked_in_now: true,
-                    reason: (again.effective_label || 'Admitted') + ' — admitted (confirmed after the connection dropped)' }, retried: true };
+            const again = (await authorizeScan(eventId, body, { timeout: SCAN_TIMEOUT_MS })).data;
+            // Only the backend's own record of THIS scan may say "admitted".
+            if (again && again.replayed && again.result === 'GRANTED' && again.scan_id === body.scan_id) {
+                return { data: { ...again, reason: (again.reason || 'Admitted') + ' — confirmed after the connection dropped' }, retried: true };
             }
             return { data: again, retried: true };
         }

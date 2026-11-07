@@ -137,6 +137,20 @@ def _row_is_live(row) -> bool:
     return st not in ("refunded", "cancelled", "canceled", "revoked", "void", "withdrawn")
 
 
+def token_taken_in_event(db, models, token, event_id, exclude_id=None) -> bool:
+    """True when a LIVE ticket of this event, other than exclude_id, already
+    carries this badge token. A badge token is resolved within one event, so
+    two live tickets sharing one would let either printed badge open the
+    other ticket at the door."""
+    if not token:
+        return False
+    q = db.query(models.Attendee).filter(models.Attendee.public_token == token,
+                                         models.Attendee.event_id == event_id)
+    if exclude_id is not None:
+        q = q.filter(models.Attendee.id != exclude_id)
+    return any(_row_is_live(r) for r in q.all())
+
+
 def ensure_public_token(db, models, attendee, commit=True) -> str:
     """Give this attendee row a token, REUSING the person's existing one.
 
@@ -164,8 +178,12 @@ def ensure_public_token(db, models, attendee, commit=True) -> str:
                 # one token made the second ticket's printed badge open the
                 # first ticket at the door (audit 7 Nov 2026). The person's
                 # token still carries over from another year, and from a
-                # revoked ticket this one replaces.
-                if row.event_id == attendee.event_id and _row_is_live(row):
+                # revoked ticket this one replaces -- but only while no live
+                # ticket at THIS event already carries it. Checking the
+                # sibling's own event was not enough: a returning visitor's
+                # first 2026 ticket takes last year's token, and the second
+                # then took it again from the 2025 row (Codex, 7 Nov 2026).
+                if token_taken_in_event(db, models, row.public_token, attendee.event_id, attendee.id):
                     continue
                 sibling_token = row.public_token
                 break

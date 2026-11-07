@@ -11,7 +11,7 @@
  * per request; the production ledger is never opened, let alone modified.
  */
 
-import crypto from 'node:crypto';
+import { safeEqual } from '../safe-equal.js';
 import { buildFixtures } from './fixtures.js';
 
 const flagOn = () => String(process.env.MEMBERSHIP_FIXTURES || '').trim() === '1';
@@ -26,9 +26,7 @@ export function fixturesAvailable() {
 export function fixtureKeyMatches(supplied) {
   const expected = fixtureKey();
   if (!fixturesAvailable()) return false;
-  const a = Buffer.from(String(supplied || ''), 'utf8');
-  const b = Buffer.from(expected, 'utf8');
-  return a.length === b.length && crypto.timingSafeEqual(a, b);
+  return safeEqual(String(supplied || ''), expected);
 }
 
 /**

@@ -20,6 +20,7 @@ import { readingSeries, recentAverage } from './reading-history.js';
  * consent/link/unlink audit, nothing clinical.
  */
 import crypto from 'crypto';
+import { safeEqual } from './safe-equal.js';
 import fs from 'fs';
 import path from 'path';
 import { mcpCall, unwrapMcp } from './practitioners-oauth.js';
@@ -237,8 +238,7 @@ export function partnerAuthorized(req, env = process.env) {
   const secret = String(env.GAIA_PRACTITIONERS_LINK_SECRET || '');
   const header = String(req.headers?.authorization || '');
   if (secret.length < 16 || !header.startsWith('Bearer ')) return false;
-  const given = Buffer.from(header.slice(7)); const want = Buffer.from(secret);
-  return given.length === want.length && crypto.timingSafeEqual(given, want);
+  return safeEqual(header.slice(7), secret);
 }
 
 // ── their backend, as agreed 4 Oct 2026 ───────────────────────────────────

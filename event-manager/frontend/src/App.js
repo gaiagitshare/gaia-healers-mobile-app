@@ -11,6 +11,7 @@ import Events from './components/Events';
 import CurrentEvent from './components/CurrentEvent';
 import VolunteerPortal from './components/VolunteerPortal';
 import VolunteerJoin from './components/VolunteerJoin';
+import VolunteerTeam from './components/VolunteerTeam';
 import EventDetail from './components/EventDetail';
 import Attendees from './components/Attendees';
 import CheckIn from './components/CheckIn';
@@ -136,6 +137,7 @@ function App() {
                     {/* Volunteers: private links, no Event Manager login. */}
                     <Route path="/volunteer/:token" element={<VolunteerPortal />} />
                     <Route path="/volunteer-join/:joinToken" element={<VolunteerJoin />} />
+                    <Route path="/volunteer-team/:teamToken" element={<VolunteerTeam />} />
                     <Route path="/register/:eventId" element={<PublicRegistration />} />
                     <Route path="/*" element={
                         user ? (

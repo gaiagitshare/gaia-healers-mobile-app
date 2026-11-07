@@ -1403,8 +1403,9 @@ class VolunteerProgram(Base):
     event_id = Column(Integer, primary_key=True)
     title = Column(String)
     intro = Column(Text)                  # welcome, reminders, dress code
-    join_token = Column(String, nullable=True, index=True)
+    join_token = Column(String, nullable=True, index=True)     # registration link for NEW volunteers
     join_open = Column(Boolean, default=True)
+    team_token = Column(String, nullable=True, index=True)     # read-only team schedule link
     expected_per_day = Column(Integer, default=2)
     updated_at = Column(DateTime, default=datetime.utcnow)
 
@@ -1421,8 +1422,17 @@ class Volunteer(Base):
     status = Column(String, default="approved", index=True)   # pending | approved | rejected
     token = Column(String, nullable=True, unique=True, index=True)
     token_created_at = Column(DateTime, nullable=True)
-    source = Column(String)               # admin | join_form | signupgenius
+    source = Column(String)               # admin | join_form | signupgenius | planning_sheet
     needs_review = Column(Text, nullable=True)   # why an admin should look
+    # Invitation (7 Nov 2026): not_sent | sent | opened | accepted | failed
+    invite_status = Column(String, default="not_sent")
+    invite_sent_at = Column(DateTime, nullable=True)
+    invite_message_id = Column(String, nullable=True)
+    invite_error = Column(String, nullable=True)
+    invite_checked_at = Column(DateTime, nullable=True)
+    ghl_contact_id = Column(String, nullable=True)   # found by exact email, never created
+    first_opened_at = Column(DateTime, nullable=True)   # = accepted
+    last_seen_at = Column(DateTime, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow)
 
@@ -1472,3 +1482,16 @@ class VolunteerLog(Base):
     booking_id = Column(Integer, nullable=True)
     before = Column(JSON, nullable=True)
     after = Column(JSON, nullable=True)
+
+
+class VolunteerAnnouncement(Base):
+    """A message to the volunteer team, shown in their portal. Never emailed."""
+    __tablename__ = "volunteer_announcements"
+    id = Column(Integer, primary_key=True, index=True)
+    event_id = Column(Integer, index=True)
+    title = Column(String)
+    body = Column(Text)
+    pinned = Column(Boolean, default=False)
+    active = Column(Boolean, default=True)
+    created_by = Column(String)
+    created_at = Column(DateTime, default=datetime.utcnow)

@@ -6,7 +6,8 @@ import {
 } from '@mui/material';
 import {
     getVolunteerOverview, updateVolunteerProgram, addVolunteer, updateVolunteer, addVolunteerShift,
-    updateVolunteerShift, assignVolunteer, updateVolunteerBooking, exportVolunteers,
+    updateVolunteerShift, assignVolunteer, updateVolunteerBooking, exportVolunteers, previewVolunteerInvites,
+    sendVolunteerInvites, refreshVolunteerInvites, addVolunteerAnnouncement, updateVolunteerAnnouncement,
 } from '../utils/api';
 import { byDay, dayLabel, shiftTime } from '../utils/volunteerTime';
 
@@ -21,6 +22,12 @@ import { byDay, dayLabel, shiftTime } from '../utils/volunteerTime';
 const err = (e) => { const d = e?.response?.data?.detail; return typeof d === 'string' ? d : (e?.message || 'Something went wrong'); };
 const linkFor = (token) => `${window.location.origin}/event/volunteer/${token}`;
 const joinLinkFor = (token) => `${window.location.origin}/event/volunteer-join/${token}`;
+const teamLinkFor = (token) => `${window.location.origin}/event/volunteer-team/${token}`;
+const INVITE = {
+    not_sent: ['Not invited', 'default'], sent: ['Invitation sent', 'info'], opened: ['Email opened', 'info'],
+    accepted: ['Opened their page', 'success'], failed: ['Could not send', 'error'],
+};
+const missingInfo = (v) => !v.email || !v.phone || !(v.last_name || '').trim();
 const STATUS_CHIP = { confirmed: ['Confirmed', 'success'], requested: ['Requested', 'warning'] };
 const V_CHIP = { approved: ['On the team', 'success'], pending: ['Waiting for approval', 'warning'], rejected: ['Not on the team', 'default'] };
 const EMPTY_SHIFT = { day: '2026-11-20', start_time: '09:00', end_time: '12:00', role: '', location: '', capacity: 1, description: '', lead_role: false };
@@ -36,6 +43,9 @@ export default function Volunteers() {
     const [dlg, setDlg] = useState(null);      // { kind, ... }
     const [form, setForm] = useState({});
     const [q, setQ] = useState('');
+    const [sel, setSel] = useState([]);
+    const [vfilter, setVfilter] = useState('all');
+    const [preview, setPreview] = useState(null);   // { ids, resend, data }
 
     const load = useCallback(() => getVolunteerOverview(id).then((r) => { setData(r.data); })
         .catch((e) => setError(err(e))), [id]);
@@ -48,7 +58,7 @@ export default function Volunteers() {
             .catch((e) => setError(err(e))).finally(() => setBusy(false));
     };
     const copy = (text, what) => {
-        const done = () => setNotice(`${what} copied. Send it yourself; nothing is emailed or texted.`);
+        const done = () => setNotice(`${what} copied.`);
         try { navigator.clipboard.writeText(text).then(done, () => window.prompt('Copy this link:', text)); } catch (e) { window.prompt('Copy this link:', text); }
     };
     const exportCsv = () => exportVolunteers(id).then((r) => {
@@ -56,6 +66,17 @@ export default function Volunteers() {
         a.href = url; a.download = 'volunteer-schedule.csv'; a.click(); URL.revokeObjectURL(url);
     }).catch((e) => setError(err(e)));
 
+    const openInvite = (ids, resend = false) => {
+        setBusy(true);
+        previewVolunteerInvites(id, { volunteer_ids: ids, resend }).then((r) => setPreview({ ids, resend, data: r.data }))
+            .catch((e) => setError(err(e))).finally(() => setBusy(false));
+    };
+    const doInvite = () => {
+        const p = preview;
+        run(sendVolunteerInvites(id, { volunteer_ids: p.ids, resend: p.resend, confirm_count: p.data.can_send, base_url: window.location.origin }),
+            (r) => `${r.data.sent} invitation(s) sent.${r.data.results.some((x) => !x.ok) ? ' Some could not be sent; see each volunteer.' : ''}`)
+            .then(() => { setPreview(null); setSel([]); });
+    };
     const vols = useMemo(() => data?.volunteers || [], [data]);
     const approved = vols.filter((v) => v.status === 'approved');
     const days = useMemo(() => byDay((data?.shifts || []).filter((s) => s.active)), [data]);
@@ -104,7 +125,7 @@ export default function Volunteers() {
                 <Box>
                     <Typography variant="h5">Volunteers</Typography>
                     <Typography variant="body2" color="text.secondary">
-                        The volunteer team and schedule. Volunteers use their own private link; nothing is emailed or texted from here.
+                        The volunteer team and schedule. Invitations are emailed only when you review and press Send. Nothing is ever texted.
                     </Typography>
                 </Box>
                 <Stack direction="row" spacing={1}>
@@ -125,11 +146,25 @@ export default function Volunteers() {
                 <Stat label="Understaffed shifts" value={st.understaffed} color={st.understaffed ? 'warning.main' : undefined} />
             </Stack>
 
+            <Paper variant="outlined" sx={{ p: 1.5, mb: 2 }} className="no-print">
+                <Typography variant="subtitle2" sx={{ mb: 0.5 }}>Invitations</Typography>
+                <Stack direction="row" sx={{ flexWrap: 'wrap', gap: 1 }}>
+                    {Object.entries(INVITE).map(([k, [label, color]]) => (
+                        <Chip key={k} color={color} variant={k === 'not_sent' ? 'outlined' : 'filled'} label={`${label}: ${data.onboarding?.[k] ?? 0}`}
+                              onClick={() => { setTab('volunteers'); setVfilter(k); }} />
+                    ))}
+                    <Button size="small" onClick={() => run(refreshVolunteerInvites(id), (r) => `Checked ${r.data.checked} sent invitation(s).`)}>Refresh status</Button>
+                </Stack>
+                {!data.program.sending_enabled && <Typography variant="caption" color="warning.main" display="block" sx={{ mt: 0.5 }}>
+                    Sending invitations by email is switched off until the owner approves it. Until then, use "Copy link".</Typography>}
+            </Paper>
+
             <Tabs value={tab} onChange={(e, v) => setTab(v)} variant="scrollable" sx={{ mb: 2 }} className="no-print">
                 <Tab value="overview" label={`To approve (${st.pending_volunteers + data.requests.length})`} />
                 <Tab value="schedule" label="Schedule" />
                 <Tab value="volunteers" label={`Volunteers (${vols.length})`} />
-                <Tab value="settings" label="Sign-up page" />
+                <Tab value="news" label={`Announcements (${(data.announcements || []).filter((a) => a.active).length})`} />
+                <Tab value="settings" label="Team & registration links" />
             </Tabs>
 
             {tab === 'overview' && (
@@ -189,25 +224,76 @@ export default function Volunteers() {
                 </Box>
             )}
 
-            {tab === 'volunteers' && (
-                <Box>
-                    <TextField size="small" fullWidth label="Search name, email or phone" value={q} onChange={(e) => setQ(e.target.value)} sx={{ mb: 1 }} />
-                    {filtered.map((v) => (
+            {tab === 'volunteers' && (() => {
+                const shown = filtered.filter((v) => vfilter === 'all' ? true : vfilter === 'missing' ? missingInfo(v)
+                    : (v.invite_status || 'not_sent') === vfilter && v.status === 'approved');
+                const all = shown.filter((v) => v.status === 'approved').map((v) => v.id);
+                return <Box>
+                    <Stack direction={narrow ? 'column' : 'row'} spacing={1} sx={{ mb: 1 }}>
+                        <TextField size="small" fullWidth label="Search name, email or phone" value={q} onChange={(e) => setQ(e.target.value)} />
+                        <TextField size="small" select label="Show" value={vfilter} onChange={(e) => setVfilter(e.target.value)} sx={{ minWidth: 200 }}>
+                            <MenuItem value="all">Everyone</MenuItem>
+                            <MenuItem value="missing">Missing email, phone or last name</MenuItem>
+                            {Object.entries(INVITE).map(([k, [l]]) => <MenuItem key={k} value={k}>{l}</MenuItem>)}
+                        </TextField>
+                    </Stack>
+                    <Stack direction="row" spacing={1} sx={{ mb: 1, alignItems: 'center', flexWrap: 'wrap', gap: 1 }}>
+                        <FormControlLabel control={<Checkbox checked={all.length > 0 && all.every((x) => sel.includes(x))}
+                            onChange={(e) => setSel(e.target.checked ? Array.from(new Set([...sel, ...all])) : sel.filter((x) => !all.includes(x)))} />} label="Select all shown" />
+                        <Button variant="contained" disabled={!sel.length || busy} onClick={() => openInvite(sel)}>Invite selected ({sel.length})</Button>
+                        <Button disabled={!sel.length || busy} onClick={() => openInvite(sel, true)}>Resend to selected</Button>
+                    </Stack>
+                    {shown.map((v) => (
                         <Paper key={v.id} variant="outlined" sx={{ p: 1.5, mb: 1 }}>
                             <Stack direction={narrow ? 'column' : 'row'} justifyContent="space-between" spacing={1}>
-                                <Box>
-                                    <Typography sx={{ fontWeight: 600 }}>{v.first_name} {v.last_name}{' '}
-                                        <Chip size="small" label={V_CHIP[v.status]?.[0]} color={V_CHIP[v.status]?.[1]} /></Typography>
-                                    <Typography variant="body2" color="text.secondary">
-                                        {[v.email, v.phone].filter(Boolean).join(' · ') || 'No contact details yet'} · {v.confirmed} confirmed, {v.requested} requested
-                                    </Typography>
-                                    {v.needs_review && <Typography variant="caption" color="warning.main">{v.needs_review}</Typography>}
-                                </Box>
+                                <Stack direction="row" spacing={1} sx={{ alignItems: 'flex-start' }}>
+                                    <Checkbox sx={{ p: 0.5 }} disabled={v.status !== 'approved'} checked={sel.includes(v.id)}
+                                              onChange={(e) => setSel(e.target.checked ? [...sel, v.id] : sel.filter((x) => x !== v.id))} />
+                                    <Box>
+                                        <Typography sx={{ fontWeight: 600 }}>{v.first_name} {v.last_name}{' '}
+                                            <Chip size="small" label={V_CHIP[v.status]?.[0]} color={V_CHIP[v.status]?.[1]} />{' '}
+                                            {v.status === 'approved' && <Chip size="small" variant="outlined" color={INVITE[v.invite_status || 'not_sent'][1]} label={INVITE[v.invite_status || 'not_sent'][0]} />}</Typography>
+                                        <Typography variant="body2" color="text.secondary">
+                                            {[v.email || 'no email', v.phone || 'no phone'].join(' · ')} · {v.confirmed} confirmed, {v.requested} requested
+                                        </Typography>
+                                        {v.invite_error && v.invite_status === 'failed' && <Typography variant="caption" color="error.main" display="block">Could not send: {v.invite_error}</Typography>}
+                                        {v.needs_review && <Typography variant="caption" color="warning.main" display="block">{v.needs_review}</Typography>}
+                                    </Box>
+                                </Stack>
                                 <Stack direction="row" spacing={0.5} sx={{ flexWrap: 'wrap', alignItems: 'flex-start' }}>
-                                    {v.token ? <Button size="small" variant="outlined" onClick={() => copy(linkFor(v.token), `${v.first_name}'s link`)}>Copy link</Button>
+                                    {v.status === 'approved' && v.token && (['sent', 'opened', 'accepted'].includes(v.invite_status)
+                                        ? <Button size="small" onClick={() => openInvite([v.id], true)}>Resend</Button>
+                                        : <Button size="small" variant="outlined" onClick={() => openInvite([v.id])}>Send invitation</Button>)}
+                                    {v.token && v.status === 'approved' ? <Button size="small" onClick={() => copy(linkFor(v.token), `${v.first_name}'s link`)}>Copy link</Button>
                                         : v.status !== 'rejected' && <Button size="small" onClick={() => run(updateVolunteer(id, v.id, { new_link: true }), 'New link made.')}>Make link</Button>}
-                                    <Button size="small" onClick={() => { setDlg({ kind: 'edit', vol: v }); setForm({ ...v }); }}>Edit</Button>
-                                    {v.status === 'pending' && <Button size="small" color="success" onClick={() => run(updateVolunteer(id, v.id, { status: 'approved' }), 'Approved.')}>Approve</Button>}
+                                    <Button size="small" onClick={() => { setDlg({ kind: 'edit', vol: v }); setForm({ ...v }); }}>{missingInfo(v) ? 'Complete info' : 'Edit'}</Button>
+                                    {v.status === 'pending' && <Button size="small" color="success" onClick={() => run(updateVolunteer(id, v.id, { status: 'approved' }), 'Approved. Send them their invitation when ready.')}>Approve</Button>}
+                                </Stack>
+                            </Stack>
+                        </Paper>
+                    ))}
+                    {!shown.length && <Alert severity="info">Nobody matches.</Alert>}
+                </Box>;
+            })()}
+
+            {tab === 'news' && (
+                <Box>
+                    <Paper variant="outlined" sx={{ p: 2, mb: 2 }}>
+                        <Typography variant="subtitle1" sx={{ mb: 1 }}>New announcement (shown in every volunteer's portal; never emailed)</Typography>
+                        <TextField fullWidth size="small" label="Title" sx={{ mb: 1 }} value={form.ann_title || ''} onChange={(e) => setForm((f) => ({ ...f, ann_title: e.target.value }))} />
+                        <TextField fullWidth multiline minRows={3} size="small" label="Message" sx={{ mb: 1 }} value={form.ann_body || ''} onChange={(e) => setForm((f) => ({ ...f, ann_body: e.target.value }))} />
+                        <FormControlLabel control={<Checkbox checked={Boolean(form.ann_pinned)} onChange={(e) => setForm((f) => ({ ...f, ann_pinned: e.target.checked }))} />} label="Pin to the top" />
+                        <Button variant="contained" disabled={busy || !(form.ann_title || '').trim()} onClick={() => run(addVolunteerAnnouncement(id, { title: form.ann_title, body: form.ann_body, pinned: Boolean(form.ann_pinned) }), 'Posted.')}>Post</Button>
+                    </Paper>
+                    {(data.announcements || []).map((a) => (
+                        <Paper key={a.id} variant="outlined" sx={{ p: 1.5, mb: 1, opacity: a.active ? 1 : 0.5 }}>
+                            <Stack direction="row" justifyContent="space-between">
+                                <Box><Typography sx={{ fontWeight: 600 }}>{a.pinned ? '📌 ' : ''}{a.title}{a.active ? '' : ' (hidden)'}</Typography>
+                                    <Typography variant="body2" sx={{ whiteSpace: 'pre-line' }}>{a.body}</Typography>
+                                    <Typography variant="caption" color="text.secondary">{a.created_by}</Typography></Box>
+                                <Stack direction="row" sx={{ alignItems: 'flex-start' }}>
+                                    <Button size="small" onClick={() => run(updateVolunteerAnnouncement(id, a.id, { pinned: !a.pinned }), 'Updated.')}>{a.pinned ? 'Unpin' : 'Pin'}</Button>
+                                    <Button size="small" color="inherit" onClick={() => run(updateVolunteerAnnouncement(id, a.id, { active: !a.active }), 'Updated.')}>{a.active ? 'Hide' : 'Show'}</Button>
                                 </Stack>
                             </Stack>
                         </Paper>
@@ -217,14 +303,22 @@ export default function Volunteers() {
 
             {tab === 'settings' && (
                 <Paper variant="outlined" sx={{ p: 2 }}>
-                    <Typography variant="subtitle1" sx={{ mb: 1 }}>General sign-up link (for new volunteers)</Typography>
+                    <Typography variant="subtitle1" sx={{ mb: 1 }}>Team link (for your volunteer group chat)</Typography>
                     <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
-                        Anyone with this link can ask to join the team. They wait as "Waiting for approval" until an admin approves them.
+                        Shows the whole team schedule and announcements, read-only. Requesting or cancelling shifts needs each volunteer's own
+                        invitation link; once they have opened it, this page offers "Open my volunteer page" on their phone.
+                    </Typography>
+                    <Stack direction={narrow ? 'column' : 'row'} spacing={1} sx={{ mb: 3 }}>
+                        {data.program.team_token && <Button variant="contained" onClick={() => copy(teamLinkFor(data.program.team_token), 'Team link')}>Copy team link</Button>}
+                    </Stack>
+                    <Typography variant="subtitle1" sx={{ mb: 1 }}>Registration link (for NEW volunteers)</Typography>
+                    <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
+                        New people fill in their details and wait under "To approve". They get no access until you approve them and send their invitation.
                     </Typography>
                     <Stack direction={narrow ? 'column' : 'row'} spacing={1} sx={{ mb: 2 }}>
-                        <FormControlLabel control={<Checkbox checked={data.program.join_open} onChange={(e) => run(updateVolunteerProgram(id, { join_open: e.target.checked }), e.target.checked ? 'Sign-up link is open.' : 'Sign-up link is closed.')} />} label="Open for new volunteers" />
-                        {data.program.join_token && <Button variant="outlined" onClick={() => copy(joinLinkFor(data.program.join_token), 'Sign-up link')}>Copy sign-up link</Button>}
-                        {data.program.join_token && <Button color="inherit" onClick={() => run(updateVolunteerProgram(id, { new_join_link: true }), 'A new sign-up link was made; the old one stopped working.')}>Make a new link</Button>}
+                        <FormControlLabel control={<Checkbox checked={data.program.join_open} onChange={(e) => run(updateVolunteerProgram(id, { join_open: e.target.checked }), e.target.checked ? 'Registration is open.' : 'Registration is closed.')} />} label="Registration open" />
+                        {data.program.join_token && <Button variant="outlined" onClick={() => copy(joinLinkFor(data.program.join_token), 'Registration link')}>Copy registration link</Button>}
+                        {data.program.join_token && <Button color="inherit" onClick={() => run(updateVolunteerProgram(id, { new_join_link: true }), 'A new registration link was made; the old one stopped working.')}>Make a new registration link</Button>}
                     </Stack>
                     <TextField fullWidth label="Title" sx={{ mb: 1 }} value={form.title ?? data.program.title ?? ''} onChange={(e) => setForm((f) => ({ ...f, title: e.target.value }))} />
                     <TextField fullWidth multiline minRows={10} label="Welcome, reminders and dress code (volunteers see this)" value={form.intro ?? data.program.intro ?? ''} onChange={(e) => setForm((f) => ({ ...f, intro: e.target.value }))} />
@@ -249,10 +343,14 @@ export default function Volunteers() {
                         {[['first_name', 'First name'], ['last_name', 'Last name'], ['email', 'Email'], ['phone', 'Phone'], ['notes', 'Notes (only admins see these)']].map(([k, l]) => (
                             <TextField key={k} fullWidth size="small" label={l} sx={{ mb: 1 }} value={form[k] || ''} onChange={(e) => setForm((f) => ({ ...f, [k]: e.target.value }))} />
                         ))}
-                        <Typography variant="caption" color="text.secondary">They are added to the team with their own private link, which you copy and send yourself.</Typography>
+                        <Typography variant="caption" color="text.secondary">They get their own private link. "Save & send invitation" shows who will receive the email before anything is sent.</Typography>
                     </DialogContent>
                     <DialogActions><Button onClick={() => setDlg(null)}>Cancel</Button>
-                        <Button variant="contained" disabled={busy || !(form.first_name || '').trim()} onClick={() => run(addVolunteer(id, form), (r) => { copy(linkFor(r.data.token), `${form.first_name}'s link`); return `${form.first_name} added; their link is copied.`; })}>Add</Button></DialogActions>
+                        <Button disabled={busy || !(form.first_name || '').trim()} onClick={() => run(addVolunteer(id, form), `${form.first_name} saved. Send the invitation when ready.`)}>Save</Button>
+                        <Button variant="contained" disabled={busy || !(form.first_name || '').trim() || !(form.email || '').trim()} onClick={() => {
+                            setBusy(true);
+                            addVolunteer(id, form).then((r) => { setDlg(null); load(); openInvite([r.data.id]); }).catch((e) => { setError(err(e)); setBusy(false); });
+                        }}>Save &amp; send invitation</Button></DialogActions>
                 </>}
                 {dlg?.kind === 'edit' && <>
                     <DialogTitle>{dlg.vol.first_name} {dlg.vol.last_name}</DialogTitle>
@@ -331,6 +429,25 @@ export default function Volunteers() {
                             const body = { day: form.day, start_time: form.start_time, end_time: form.end_time, role: form.role, location: form.location, capacity: form.capacity, description: form.description, lead_role: Boolean(form.lead_role) };
                             run(dlg.shift ? updateVolunteerShift(id, dlg.shift.id, body) : addVolunteerShift(id, body), 'Saved.');
                         }}>Save</Button>
+                    </DialogActions>
+                </>}
+            </Dialog>
+            <Dialog open={Boolean(preview)} onClose={() => !busy && setPreview(null)} fullWidth maxWidth="sm" fullScreen={narrow}>
+                {preview && <>
+                    <DialogTitle>{preview.resend ? 'Resend invitations' : 'Send invitations'}: review the recipients</DialogTitle>
+                    <DialogContent dividers>
+                        {!preview.data.sending_enabled && <Alert severity="warning" sx={{ mb: 1 }}>Sending by email is switched off until the owner approves it. Use "Copy link" for now.</Alert>}
+                        <Typography sx={{ mb: 1 }}><b>{preview.data.can_send}</b> will receive the invitation email:</Typography>
+                        {preview.data.recipients.filter((r) => r.can_send).map((r) => <Typography key={r.id} variant="body2">✓ {r.name} · {r.email}</Typography>)}
+                        {preview.data.recipients.some((r) => !r.can_send) && <>
+                            <Typography sx={{ mt: 2, mb: 0.5 }}>Not emailed (copy their link instead, or fix the reason):</Typography>
+                            {preview.data.recipients.filter((r) => !r.can_send).map((r) => <Typography key={r.id} variant="body2" color="text.secondary">✗ {r.name}: {r.reason}</Typography>)}
+                        </>}
+                    </DialogContent>
+                    <DialogActions>
+                        <Button onClick={() => setPreview(null)}>Cancel</Button>
+                        <Button variant="contained" disabled={busy || !preview.data.sending_enabled || !preview.data.can_send} onClick={doInvite}>
+                            Send {preview.data.can_send} invitation{preview.data.can_send === 1 ? '' : 's'}</Button>
                     </DialogActions>
                 </>}
             </Dialog>

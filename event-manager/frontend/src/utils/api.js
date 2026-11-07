@@ -417,3 +417,10 @@ export const requestVolunteerShift = (token, shiftId) => api.post(`/volunteer/${
 export const cancelVolunteerShift = (token, bookingId) => api.post(`/volunteer/${token}/cancel`, { booking_id: bookingId });
 export const getVolunteerJoin = (joinToken) => api.get(`/volunteer-join/${joinToken}`);
 export const applyVolunteer = (joinToken, data) => api.post(`/volunteer-join/${joinToken}`, data);
+export const previewVolunteerInvites = (eventId, data) => api.post(`/events/${eventId}/volunteers/invite-preview`, data);
+export const sendVolunteerInvites = (eventId, data) => api.post(`/events/${eventId}/volunteers/invite`, data);
+export const refreshVolunteerInvites = (eventId) => api.post(`/events/${eventId}/volunteers/invite-status-refresh`);
+export const addVolunteerAnnouncement = (eventId, data) => api.post(`/events/${eventId}/volunteer-announcements`, data);
+export const updateVolunteerAnnouncement = (eventId, id, data) => api.patch(`/events/${eventId}/volunteer-announcements/${id}`, data);
+export const getVolunteerTeam = (teamToken) => api.get(`/volunteer-team/${teamToken}`);
+export const updateVolunteerProfile = (token, data) => api.post(`/volunteer/${token}/profile`, data);

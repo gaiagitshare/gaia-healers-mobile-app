@@ -2,9 +2,9 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import {
     Alert, Box, Button, Chip, CircularProgress, Container, Dialog, DialogActions, DialogContent, DialogTitle,
-    Paper, Snackbar, Tab, Tabs, Typography,
+    Paper, Snackbar, Tab, Tabs, TextField, Typography,
 } from '@mui/material';
-import { getVolunteerPortal, requestVolunteerShift, cancelVolunteerShift } from '../utils/api';
+import { getVolunteerPortal, requestVolunteerShift, cancelVolunteerShift, updateVolunteerProfile } from '../utils/api';
 import { byDay, dayLabel, shiftTime } from '../utils/volunteerTime';
 
 /**
@@ -19,6 +19,11 @@ const MY_STATUS = {
     declined: ['Not confirmed: please pick another shift', 'default'],
 };
 
+// The personal link is remembered on this device once it has opened, so the
+// shared team page can offer "Open my volunteer page" without the email.
+const REMEMBER = 'gaia_volunteer_link';
+export const rememberedVolunteerToken = () => { try { return localStorage.getItem(REMEMBER) || ''; } catch (e) { return ''; } };
+
 export default function VolunteerPortal() {
     const { token } = useParams();
     const [data, setData] = useState(null);
@@ -31,7 +36,11 @@ export default function VolunteerPortal() {
 
     // A refresh never clears a message: it runs right after a refused join,
     // and wiping the reason there is how a volunteer would see nothing happen.
-    const load = useCallback(() => getVolunteerPortal(token).then((r) => { setData(r.data); })
+    const [profile, setProfile] = useState(null);
+    const load = useCallback(() => getVolunteerPortal(token).then((r) => {
+        setData(r.data);
+        try { localStorage.setItem(REMEMBER, token); } catch (e) { /* noop */ }
+    })
         .catch((e) => setError(err(e))), [token]);
     useEffect(() => { load(); }, [load]);
     useEffect(() => { const t = setInterval(load, 30000); return () => clearInterval(t); }, [load]);
@@ -108,10 +117,12 @@ export default function VolunteerPortal() {
             </Snackbar>
 
             <Box sx={{ position: 'sticky', top: 0, zIndex: 2, bgcolor: 'background.default', mt: 1 }}>
-                <Tabs value={tab} onChange={(e, v) => setTab(v)} variant="fullWidth">
+                <Tabs value={tab} onChange={(e, v) => setTab(v)} variant="scrollable" allowScrollButtonsMobile>
                     <Tab value="mine" label={`My Shifts (${active.length})`} />
                     <Tab value="available" label="Available" />
-                    <Tab value="all" label="Full Schedule" />
+                    <Tab value="all" label="Team Schedule" />
+                    <Tab value="news" label={`News${data.announcements.length ? ` (${data.announcements.length})` : ''}`} />
+                    <Tab value="profile" label="Profile" />
                 </Tabs>
             </Box>
 
@@ -141,6 +152,38 @@ export default function VolunteerPortal() {
                     );
                 })}
             </Box>
+
+            {tab === 'news' && <Box sx={{ mt: 2 }}>
+                {!data.announcements.length && <Alert severity="info">No announcements yet.</Alert>}
+                {data.announcements.map((a) => (
+                    <Paper key={a.id} variant="outlined" sx={{ p: 1.5, mb: 1 }}>
+                        <Typography sx={{ fontWeight: 700 }}>{a.pinned ? '📌 ' : ''}{a.title}</Typography>
+                        <Typography variant="body2" sx={{ whiteSpace: 'pre-line' }}>{a.body}</Typography>
+                    </Paper>
+                ))}
+                {data.program.intro && <Typography variant="body2" sx={{ whiteSpace: 'pre-line', mt: 2 }} color="text.secondary">{data.program.intro}</Typography>}
+            </Box>}
+
+            {tab === 'profile' && (() => {
+                const f = profile || { first_name: data.me.first_name || '', last_name: data.me.last_name || '', phone: data.me.phone || '' };
+                const set = (k) => (e) => setProfile({ ...f, [k]: e.target.value });
+                return (
+                    <Paper variant="outlined" sx={{ p: 2, mt: 2 }}>
+                        <TextField fullWidth label="First name" sx={{ mb: 1.5 }} value={f.first_name} onChange={set('first_name')} />
+                        <TextField fullWidth label="Last name" sx={{ mb: 1.5 }} value={f.last_name} onChange={set('last_name')} />
+                        <TextField fullWidth label="Mobile phone" type="tel" sx={{ mb: 1.5 }} value={f.phone} onChange={set('phone')} />
+                        <TextField fullWidth label="Email (ask the team to change it)" value={data.me.email || ''} disabled sx={{ mb: 1.5 }} />
+                        <Typography variant="caption" color="text.secondary" display="block" sx={{ mb: 1 }}>
+                            Only the volunteer team sees your phone and email. Other volunteers see your first name and last initial.
+                        </Typography>
+                        <Button variant="contained" disabled={busy === -1 || !profile} onClick={() => {
+                            setBusy(-1);
+                            updateVolunteerProfile(token, f).then(() => { setNotice('Saved.'); setProfile(null); return load(); })
+                                .catch((e) => setError(err(e))).finally(() => setBusy(0));
+                        }}>Save</Button>
+                    </Paper>
+                );
+            })()}
 
             <Dialog open={Boolean(ask)} onClose={() => setAsk(null)}>
                 <DialogTitle>Cancel this shift?</DialogTitle>

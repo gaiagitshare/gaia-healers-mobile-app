@@ -34,6 +34,7 @@ from sqlalchemy.orm import Session
 
 import authz
 import models
+import volunteer_invites as INV
 from database import get_db
 
 ACTIVE = ("requested", "confirmed")
@@ -158,6 +159,13 @@ def register(app, get_current_user, rate_limited, client_ip):
                                         expected_per_day=2, updated_at=_now())
             db.add(p)
             db.flush()
+        if p is not None and create:
+            # Two shared links: the read-only TEAM schedule for the group, and
+            # REGISTRATION for new people (open or closed by an admin).
+            if not p.join_token:
+                p.join_token = new_token()
+            if not getattr(p, "team_token", None):
+                p.team_token = new_token()
         return p
 
     def vol_or_404(db, event_id, vid):
@@ -179,6 +187,8 @@ def register(app, get_current_user, rate_limited, client_ip):
         v = db.query(models.Volunteer).filter(models.Volunteer.token == token).first()
         if not v or v.status == "rejected":
             raise HTTPException(status_code=404, detail="This link is not valid. Ask the volunteer team for a new one.")
+        if v.status != "approved":
+            raise HTTPException(status_code=403, detail="Thank you for signing up! The volunteer team will review it and send you your personal link.")
         return v
 
     def throttle(request, what):
@@ -189,6 +199,8 @@ def register(app, get_current_user, rate_limited, client_ip):
         return {"id": v.id, "first_name": v.first_name, "last_name": v.last_name, "email": v.email, "phone": v.phone,
                 "notes": v.notes, "status": v.status, "source": v.source, "needs_review": v.needs_review,
                 "has_link": bool(v.token), "token": v.token, "created_at": v.created_at,
+                "invite_status": v.invite_status or "not_sent", "invite_sent_at": v.invite_sent_at,
+                "invite_error": v.invite_error, "first_opened_at": v.first_opened_at, "last_seen_at": v.last_seen_at,
                 "confirmed": counts.get((v.id, "confirmed"), 0), "requested": counts.get((v.id, "requested"), 0)}
 
     # ── ADMIN ───────────────────────────────────────────────────────────────
@@ -221,7 +233,15 @@ def register(app, get_current_user, rate_limited, client_ip):
             models.VolunteerLog.id.desc()).limit(40).all()
         return {
             "program": {"title": p.title, "intro": p.intro, "join_open": bool(p.join_open), "join_token": p.join_token,
-                        "expected_per_day": p.expected_per_day},
+                        "team_token": p.team_token, "expected_per_day": p.expected_per_day,
+                        "sending_enabled": INV.enabled()},
+            "onboarding": {k: sum(1 for v in vols.values() if v.status == "approved" and (v.invite_status or "not_sent") == k)
+                           for k in ("not_sent", "sent", "opened", "accepted", "failed")},
+            "announcements": [{"id": a.id, "title": a.title, "body": a.body, "pinned": bool(a.pinned), "active": bool(a.active),
+                               "created_by": a.created_by, "created_at": a.created_at}
+                              for a in db.query(models.VolunteerAnnouncement).filter(
+                                  models.VolunteerAnnouncement.event_id == event_id).order_by(
+                                  models.VolunteerAnnouncement.id.desc()).all()],
             "stats": {"volunteers": sum(1 for v in vols.values() if v.status == "approved"),
                       "pending_volunteers": sum(1 for v in vols.values() if v.status == "pending"),
                       "shifts": len(live), "positions": sum(s["capacity"] for s in live),
@@ -246,7 +266,7 @@ def register(app, get_current_user, rate_limited, client_ip):
             p.expected_per_day = max(0, min(10, int(body.get("expected_per_day") or 0)))
         if "join_open" in body:
             p.join_open = bool(body.get("join_open"))
-        if body.get("new_join_link") or (p.join_open and not p.join_token):
+        if body.get("new_join_link") or not p.join_token:
             p.join_token = new_token()
         p.updated_at = _now()
         log(db, event_id, who(current_user), "program_updated", before=before,
@@ -286,6 +306,8 @@ def register(app, get_current_user, rate_limited, client_ip):
         v = vol_or_404(db, event_id, vid)
         before = {"first_name": v.first_name, "last_name": v.last_name, "email": v.email, "phone": v.phone,
                   "status": v.status, "has_link": bool(v.token)}
+        if "email" in body and (body.get("email") or "").strip().lower() != (v.email or ""):
+            v.ghl_contact_id = None     # a different address is a different contact
         for k in ("first_name", "last_name", "phone", "notes"):
             if k in body:
                 setattr(v, k, (body.get(k) or "").strip() or (None if k in ("phone", "notes") else ""))
@@ -315,8 +337,10 @@ def register(app, get_current_user, rate_limited, client_ip):
                 v.token = None
         if body.get("new_link"):
             v.token, v.token_created_at = new_token(), _now()
+            v.invite_status, v.invite_message_id, v.invite_error, v.first_opened_at = "not_sent", None, None, None
         if body.get("revoke_link"):
             v.token = None
+            v.invite_status, v.invite_message_id = "not_sent", None
         if "needs_review" in body and not body.get("needs_review"):
             v.needs_review = None
         v.updated_at = _now()
@@ -443,6 +467,125 @@ def register(app, get_current_user, rate_limited, client_ip):
         return PlainTextResponse(out.getvalue(), media_type="text/csv",
                                  headers={"Content-Disposition": "attachment; filename=volunteer-schedule.csv"})
 
+    # ── INVITATIONS (admin) ─────────────────────────────────────────────────
+    def invite_check(db, v, resend=False):
+        """(contact_id, None) if this person can be emailed now, else (None, why)."""
+        if v.status != "approved":
+            return None, "not approved yet"
+        if not v.token:
+            return None, "no personal link (make one first)"
+        if not v.email:
+            return None, "no email address"
+        if (v.invite_status or "not_sent") in ("sent", "opened", "accepted") and not resend:
+            return None, "already invited (use Resend)"
+        if v.ghl_contact_id:
+            return v.ghl_contact_id, None
+        cid, why = INV.find_contact(v.email)
+        if cid:
+            v.ghl_contact_id = cid
+        return cid, why
+
+    @app.post("/events/{event_id}/volunteers/invite-preview")
+    def invite_preview(event_id: int, body: dict, db: Session = Depends(get_db), current_user=Depends(get_current_user)):
+        """Who would receive the invitation, and who cannot be emailed and why. Sends nothing."""
+        admin_only(db, current_user, event_id)
+        ids = [int(x) for x in (body.get("volunteer_ids") or [])][:200]
+        out = []
+        for v in db.query(models.Volunteer).filter(models.Volunteer.event_id == event_id, models.Volunteer.id.in_(ids)).all():
+            cid, why = invite_check(db, v, resend=bool(body.get("resend")))
+            out.append({"id": v.id, "name": full_name(v), "email": v.email, "can_send": bool(cid), "reason": why,
+                        "invite_status": v.invite_status or "not_sent"})
+        db.commit()
+        return {"sending_enabled": INV.enabled(), "recipients": out,
+                "can_send": sum(1 for r in out if r["can_send"])}
+
+    @app.post("/events/{event_id}/volunteers/invite")
+    def invite_send(event_id: int, body: dict, db: Session = Depends(get_db), current_user=Depends(get_current_user)):
+        """Send (or resend) invitations to the reviewed recipients. The admin
+        confirms the exact number shown in the preview. Refused entirely while
+        sending is switched off."""
+        admin_only(db, current_user, event_id)
+        if not INV.enabled():
+            raise HTTPException(status_code=423, detail="Sending invitations is switched off until the owner approves it. "
+                                                        "You can copy each person's link instead.")
+        ids = [int(x) for x in (body.get("volunteer_ids") or [])][:100]
+        resend = bool(body.get("resend"))
+        vols = db.query(models.Volunteer).filter(models.Volunteer.event_id == event_id, models.Volunteer.id.in_(ids)).all()
+        ready = [(v,) + invite_check(db, v, resend) for v in vols]
+        sendable = [r for r in ready if r[1]]
+        if int(body.get("confirm_count") or -1) != len(sendable):
+            raise HTTPException(status_code=409, detail="The recipients changed since the preview. Review them again.")
+        ev = db.query(models.Event).filter(models.Event.id == event_id).first()
+        p = program(db, event_id)
+        base = (body.get("base_url") or "https://api.gaiahealers.app").rstrip("/")
+        if not re.match(r"^https://[a-z0-9.-]+$", base):
+            base = "https://api.gaiahealers.app"
+        results = []
+        for v, cid, why in ready:
+            if not cid:
+                results.append({"id": v.id, "name": full_name(v), "ok": False, "reason": why})
+                continue
+            subject, html = INV.render(v.first_name, "%s/event/volunteer/%s" % (base, v.token), ev.name if ev else "", p.title)
+            r = INV.send(cid, subject, html)
+            v.invite_sent_at, v.invite_checked_at = _now(), None
+            if r["ok"]:
+                v.invite_status = "accepted" if v.first_opened_at else "sent"
+                v.invite_message_id, v.invite_error = r["message_id"], None
+            else:
+                v.invite_status, v.invite_error = "failed", r["reason"]
+            log(db, event_id, who(current_user), "invitation_resent" if resend else "invitation_sent", volunteer_id=v.id,
+                after={"ok": r["ok"], "reason": r["reason"]})
+            db.commit()
+            results.append({"id": v.id, "name": full_name(v), "ok": r["ok"], "reason": r["reason"]})
+        return {"sent": sum(1 for r in results if r["ok"]), "results": results}
+
+    @app.post("/events/{event_id}/volunteers/invite-status-refresh")
+    def invite_refresh(event_id: int, db: Session = Depends(get_db), current_user=Depends(get_current_user)):
+        """Ask GHL what happened to sent invitations (delivered / opened / failed)."""
+        admin_only(db, current_user, event_id)
+        n = 0
+        for v in db.query(models.Volunteer).filter(models.Volunteer.event_id == event_id,
+                                                   models.Volunteer.invite_status.in_(("sent", "opened"))).limit(60).all():
+            st = INV.provider_status(v.invite_message_id)
+            v.invite_checked_at = _now()
+            if st == "opened" and v.invite_status == "sent":
+                v.invite_status = "opened"
+            elif st == "failed":
+                v.invite_status, v.invite_error = "failed", "the email bounced or was rejected"
+            n += 1
+        db.commit()
+        return {"checked": n}
+
+    @app.post("/events/{event_id}/volunteer-announcements")
+    def ann_add(event_id: int, body: dict, db: Session = Depends(get_db), current_user=Depends(get_current_user)):
+        admin_only(db, current_user, event_id)
+        title, text_ = (body.get("title") or "").strip()[:160], (body.get("body") or "").strip()[:5000]
+        if not title:
+            raise HTTPException(status_code=400, detail="Give the announcement a title")
+        a = models.VolunteerAnnouncement(event_id=event_id, title=title, body=text_, pinned=bool(body.get("pinned")),
+                                         active=True, created_by=who(current_user), created_at=_now())
+        db.add(a); db.flush()
+        log(db, event_id, who(current_user), "announcement_posted", after={"title": title})
+        db.commit()
+        return {"ok": True, "id": a.id}
+
+    @app.patch("/events/{event_id}/volunteer-announcements/{aid}")
+    def ann_edit(event_id: int, aid: int, body: dict, db: Session = Depends(get_db), current_user=Depends(get_current_user)):
+        admin_only(db, current_user, event_id)
+        a = db.query(models.VolunteerAnnouncement).filter(models.VolunteerAnnouncement.id == aid,
+                                                          models.VolunteerAnnouncement.event_id == event_id).first()
+        if not a:
+            raise HTTPException(status_code=404, detail="Announcement not found")
+        for k in ("title", "body"):
+            if k in body:
+                setattr(a, k, (body.get(k) or "").strip()[:5000])
+        for k in ("pinned", "active"):
+            if k in body:
+                setattr(a, k, bool(body.get(k)))
+        log(db, event_id, who(current_user), "announcement_updated", after={"title": a.title, "active": a.active})
+        db.commit()
+        return {"ok": True}
+
     # ── VOLUNTEER (private link) ────────────────────────────────────────────
     def portal_payload(db, v):
         p = program(db, v.event_id)
@@ -455,7 +598,13 @@ def register(app, get_current_user, rate_limited, client_ip):
         bookings = db.query(models.VolunteerBooking).filter(models.VolunteerBooking.event_id == v.event_id).all()
         mine = [b for b in bookings if b.volunteer_id == v.id and b.status != "cancelled"]
         by_shift = {s.id: s for s in shifts}
-        return {"me": {"first_name": v.first_name, "status": v.status},
+        anns = db.query(models.VolunteerAnnouncement).filter(models.VolunteerAnnouncement.event_id == v.event_id,
+                                                             models.VolunteerAnnouncement.active == True).order_by(   # noqa: E712
+            models.VolunteerAnnouncement.pinned.desc(), models.VolunteerAnnouncement.id.desc()).all()
+        return {"me": {"first_name": v.first_name, "last_name": v.last_name, "email": v.email, "phone": v.phone,
+                       "status": v.status},
+                "announcements": [{"id": a.id, "title": a.title, "body": a.body, "pinned": bool(a.pinned),
+                                   "created_at": a.created_at} for a in anns],
                 "event": {"name": ev.name if ev else "", "timezone": (ev.timezone if ev else None) or "America/New_York",
                           "location": getattr(ev, "location", None)},
                 "program": {"title": p.title, "intro": p.intro, "expected_per_day": p.expected_per_day},
@@ -468,9 +617,39 @@ def register(app, get_current_user, rate_limited, client_ip):
     def portal(token: str, request: Request, db: Session = Depends(get_db)):
         throttle(request, "view")
         v = by_token(db, token)
+        now = _now()
+        if not v.first_opened_at:
+            v.first_opened_at = now
+            v.invite_status = "accepted"
+            log(db, v.event_id, "volunteer: %s" % full_name(v), "opened_portal", volunteer_id=v.id)
+        v.last_seen_at = now
         out = portal_payload(db, v)
         db.commit()
         return out
+
+    @app.post("/volunteer/{token}/profile")
+    def portal_profile(token: str, body: dict, request: Request, db: Session = Depends(get_db)):
+        """A volunteer updates their own phone (and name spelling). Their email
+        is the team's record and only an admin changes it."""
+        throttle(request, "act")
+        v = by_token(db, token)
+        before = {"first_name": v.first_name, "last_name": v.last_name, "phone": v.phone}
+        if "phone" in body:
+            ph = (body.get("phone") or "").strip()[:40]
+            if not re.search(r"\d{6,}", re.sub(r"\D", "", ph) or ""):
+                raise HTTPException(status_code=400, detail="Please enter a phone number the team can text")
+            v.phone = ph
+        for k in ("first_name", "last_name"):
+            if k in body:
+                val = (body.get(k) or "").strip()[:80]
+                if k == "first_name" and not val:
+                    raise HTTPException(status_code=400, detail="Please enter your first name")
+                setattr(v, k, val)
+        v.updated_at = _now()
+        log(db, v.event_id, "volunteer: %s" % full_name(v), "profile_updated", volunteer_id=v.id, before=before,
+            after={"first_name": v.first_name, "last_name": v.last_name, "phone": v.phone})
+        db.commit()
+        return {"ok": True}
 
     @app.post("/volunteer/{token}/request")
     def portal_request(token: str, body: dict, request: Request, db: Session = Depends(get_db)):
@@ -520,10 +699,37 @@ def register(app, get_current_user, rate_limited, client_ip):
 
     @app.get("/volunteer-join/{join_token}")
     def join_info(join_token: str, request: Request, db: Session = Depends(get_db)):
+        """Registration for NEW volunteers (open or closed by an admin)."""
         throttle(request, "join")
         p = join_program(db, join_token)
         ev = db.query(models.Event).filter(models.Event.id == p.event_id).first()
         return {"open": bool(p.join_open), "title": p.title, "intro": p.intro, "event": ev.name if ev else ""}
+
+    @app.get("/volunteer-team/{team_token}")
+    def team_info(team_token: str, request: Request, db: Session = Depends(get_db)):
+        """The shared team link: the whole schedule (first name + last initial,
+        never contact details) and announcements. READ-ONLY: requesting or
+        cancelling a shift needs the volunteer's own invitation link."""
+        throttle(request, "team")
+        if not team_token or not TOKEN_RE.match(team_token):
+            raise HTTPException(status_code=404, detail="This team link is not valid.")
+        p = db.query(models.VolunteerProgram).filter(models.VolunteerProgram.team_token == team_token).first()
+        if not p:
+            raise HTTPException(status_code=404, detail="This team link is not valid.")
+        ev = db.query(models.Event).filter(models.Event.id == p.event_id).first()
+        vols = {x.id: x for x in db.query(models.Volunteer).filter(models.Volunteer.event_id == p.event_id).all()}
+        shifts = db.query(models.VolunteerShift).filter(models.VolunteerShift.event_id == p.event_id,
+                                                        models.VolunteerShift.active == True).order_by(   # noqa: E712
+            models.VolunteerShift.day, models.VolunteerShift.lead_role, models.VolunteerShift.start_time,
+            models.VolunteerShift.sort, models.VolunteerShift.id).all()
+        bookings = db.query(models.VolunteerBooking).filter(models.VolunteerBooking.event_id == p.event_id).all()
+        anns = db.query(models.VolunteerAnnouncement).filter(models.VolunteerAnnouncement.event_id == p.event_id,
+                                                             models.VolunteerAnnouncement.active == True).order_by(   # noqa: E712
+            models.VolunteerAnnouncement.pinned.desc(), models.VolunteerAnnouncement.id.desc()).all()
+        return {"title": p.title, "intro": p.intro, "event": ev.name if ev else "", "expected_per_day": p.expected_per_day,
+                "shifts": [shift_view(db, s, bookings, vols) for s in shifts],
+                "announcements": [{"id": a.id, "title": a.title, "body": a.body, "pinned": bool(a.pinned),
+                                   "created_at": a.created_at} for a in anns]}
 
     @app.post("/volunteer-join/{join_token}")
     def join_apply(join_token: str, body: dict, request: Request, db: Session = Depends(get_db)):
@@ -560,7 +766,8 @@ def register(app, get_current_user, rate_limited, client_ip):
         db.flush()
         log(db, p.event_id, "join form", "applied", volunteer_id=v.id, after={"name": full_name(v)})
         db.commit()
-        return {"ok": True, "token": v.token}
+        # No link yet: the team approves new volunteers first, then invites them.
+        return {"ok": True, "message": "Thank you for signing up! The volunteer team will review it and send you your personal link."}
 
 
 def _shift_dict(s):

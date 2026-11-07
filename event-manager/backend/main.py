@@ -353,6 +353,20 @@ def _ensure_badge_columns():
     if _sl and "claimed_entry" not in _sl:
         stmts.append("ALTER TABLE scan_logs ADD COLUMN claimed_entry BOOLEAN")
     stmts.append("CREATE UNIQUE INDEX IF NOT EXISTS uq_scan_logs_request ON scan_logs (event_id, request_id)")
+    # Volunteer invitations (7 Nov 2026). Additive columns on tables that
+    # already exist in production; new tables come from create_all.
+    for _tbl, _cols in (("volunteers", (("invite_status", "VARCHAR DEFAULT 'not_sent'"), ("invite_sent_at", "DATETIME"),
+                                         ("invite_message_id", "VARCHAR"), ("invite_error", "VARCHAR"),
+                                         ("invite_checked_at", "DATETIME"), ("ghl_contact_id", "VARCHAR"),
+                                         ("first_opened_at", "DATETIME"), ("last_seen_at", "DATETIME"))),
+                        ("volunteer_programs", (("team_token", "VARCHAR"),))):
+        try:
+            _have = {c["name"] for c in inspector.get_columns(_tbl)}
+        except Exception:
+            _have = set()
+        for _c, _ddl in _cols:
+            if _have and _c not in _have:
+                stmts.append("ALTER TABLE %s ADD COLUMN %s %s" % (_tbl, _c, _ddl))
     with engine.begin() as conn:
         for stmt in stmts:
             try:
@@ -441,7 +455,7 @@ class _RedactCapabilityUrls(logging.Filter):
     badge-card tokens, stand setup links, scanner links, ?secret=. Keep the
     route, drop the secret, so the journal cannot be used to replay them."""
     _PATTERNS = [
-        (re.compile(r"(/(?:c|C|vendor|vendor-setup|volunteer|volunteer-join)/)[^/\s?\"]+"), r"\1<redacted>"),
+        (re.compile(r"(/(?:c|C|vendor|vendor-setup|volunteer|volunteer-join|volunteer-team)/)[^/\s?\"]+"), r"\1<redacted>"),
         (re.compile(r"(/scan/(?:leads|roster)/)(EXH-)?[^/\s?\"]+"), r"\1<redacted>"),
         (re.compile(r"((?:secret|token|access_token)=)[^&\s\"]+", re.I), r"\1<redacted>"),
     ]

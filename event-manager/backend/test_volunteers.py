@@ -13,6 +13,8 @@ import json, os, secrets, sqlite3, subprocess, sys, threading, urllib.error, url
 
 HERE = "/root/event/backend"
 sys.path.insert(0, HERE)
+os.environ["VOLUNTEER_INVITES_FAKE"] = "1"            # never a real email from a test
+os.environ.pop("VOLUNTEER_INVITES_ENABLED", None)     # sending OFF, as in production today
 import testbed
 BASE, DB = testbed.start()
 import main                                                    # noqa: E402
@@ -59,8 +61,8 @@ check("shifts_added': 0" in r2 and "bookings_added': 0" in r2, "loading it again
 days = sorted({s["day"] for s in ov["shifts"]})
 check(days == ["2026-11-19", "2026-11-20", "2026-11-21", "2026-11-22"], "Thursday setup through Sunday", days)
 if os.path.exists(fixture):
-    imp = [p for s in ov["shifts"] for p in s["people"] if p["status"] == "confirmed"]
-    check(len(imp) == 2, "the existing SignUpGenius sign-ups come in as confirmed", imp)
+    imp = [p for s in ov["shifts"] for p in s["people"] if p["status"] == "confirmed" and p["name"] == "Zz Fixture"]
+    check(len(imp) == 2, "the existing SignUpGenius sign-ups come in as confirmed (whatever is already there)", imp)
     check(any(v["needs_review"] for v in ov["volunteers"]), "imported people without contact details are flagged for review", None)
 reg = next(s for s in ov["shifts"] if s["day"] == "2026-11-20" and s["role"] == "Registration" and s["start_time"] == "08:00")
 check(reg["start_time"] == "08:00" and reg["end_time"] == "11:00" and reg["capacity"] == 4,
@@ -75,7 +77,8 @@ def add(name):
 A, ta = add("Ann"); B, tb = add("Ben"); C, tc = add("Cleo")
 st, me = call("GET", "/volunteer/%s" % ta, headers={})
 check(st == 200 and me["me"]["first_name"] == "Ann" and len(me["shifts"]) == 61, "a private link opens that volunteer's schedule", st)
-check("example.invalid" not in json.dumps(me) and "+1000" not in json.dumps(me), "no email or phone of anybody appears on it", None)
+others = json.dumps({k: v for k, v in me.items() if k != "me"})
+check("example.invalid" not in others and "+1000" not in others, "nobody else's email or phone appears on it (only their own, in Profile)", None)
 st, _ = call("GET", "/volunteer/%s" % ("x" * 32), headers={})
 check(st == 404, "a made-up link opens nothing", st)
 
@@ -154,18 +157,53 @@ st, r = call("PATCH", "/events/%d/volunteers/%d" % (EV, C), {"status": "rejected
 check(st == 200 and r["released"] >= 1 and call("GET", "/volunteer/%s" % tc, headers={})[0] == 404,
       "removing a volunteer releases their places and switches off their link", r)
 
-print("\n== joining through the general link ==")
+print("\n== registration for new volunteers ==")
 st, r = call("PUT", "/events/%d/volunteers/program" % EV, {"join_open": False, "new_join_link": True})
 jt = r["join_token"]
-st, r = call("POST", "/volunteer-join/%s" % jt, {"first_name": "Dee", "last_name": "New", "email": "zz-dee-%s@example.invalid" % TAG, "phone": "1"}, headers={})
-check(st == 409, "a closed sign-up link takes nobody", st)
+st, r = call("POST", "/volunteer-join/%s" % jt, {"first_name": "Dee", "last_name": "New", "email": "zz-dee-%s@example.invalid" % TAG, "phone": "5551234567"}, headers={})
+check(st == 409, "closed registration takes nobody", st)
 call("PUT", "/events/%d/volunteers/program" % EV, {"join_open": True})
-st, r = call("POST", "/volunteer-join/%s" % jt, {"first_name": "Dee", "last_name": "New", "email": "zz-dee-%s@example.invalid" % TAG, "phone": "1"}, headers={})
-check(st == 200 and r.get("token"), "an open link: the new volunteer gets their own page straight away", (st, r))
-dee = db.execute("select status from volunteers where email=?", ("zz-dee-%s@example.invalid" % TAG,)).fetchone()
-check(dee and dee[0] == "pending", "and waits for approval", dee)
-st, r = call("POST", "/volunteer-join/%s" % jt, {"first_name": "Mallory", "last_name": "X", "email": "zz-ann-%s@example.invalid" % TAG.lower(), "phone": "1"}, headers={})
-check(st == 200 and not r.get("token") and r.get("duplicate"), "signing up with somebody else's email never hands out their link", r)
+st, r = call("POST", "/volunteer-join/%s" % jt, {"first_name": "Dee", "last_name": "New", "email": "zz-dee-%s@example.invalid" % TAG, "phone": "5551234567"}, headers={})
+check(st == 200 and not r.get("token") and "review" in (r.get("message") or ""), "registering gives a thank-you, not access", r)
+dee = db.execute("select id, status, token from volunteers where email=?", ("zz-dee-%s@example.invalid" % TAG,)).fetchone()
+check(dee and dee[1] == "pending", "the new volunteer waits for approval", dee)
+st, r = call("GET", "/volunteer/%s" % dee[2], headers={})
+check(st == 403 and "review" in str(r), "a pending volunteer's link does not open the portal yet", (st, r))
+st, r = call("POST", "/volunteer-join/%s" % jt, {"first_name": "Mallory", "last_name": "X", "email": "zz-ann-%s@example.invalid" % TAG.lower(), "phone": "5550000000"}, headers={})
+check(st == 200 and not r.get("token"), "registering with somebody else's email never hands out their link", r)
+call("PATCH", "/events/%d/volunteers/%d" % (EV, dee[0]), {"status": "approved"})
+check(call("GET", "/volunteer/%s" % dee[2], headers={})[0] == 200, "once approved, their personal link opens the portal", None)
+
+print("\n== the shared team link (read-only) ==")
+ov = call("GET", "/events/%d/volunteers/overview" % EV)[1]
+tt = ov["program"]["team_token"]
+check(tt and tt != jt, "the team link and the registration link are different links", None)
+st, tp = call("GET", "/volunteer-team/%s" % tt, headers={})
+check(st == 200 and len(tp["shifts"]) >= 61 and "team" not in tp, "the team link shows the whole schedule, no member list", st)
+check("example.invalid" not in json.dumps(tp) and "555" not in json.dumps(tp), "and no contact details", None)
+st, _ = call("POST", "/volunteer-join/%s/find" % jt, {"volunteer_id": A, "code": "0000"}, headers={})
+check(st in (404, 405), "there is no name + digits shortcut into anybody's page", st)
+st, _ = call("GET", "/volunteer-team/%s" % ("z" * 32), headers={})
+check(st == 404, "a made-up team link opens nothing", st)
+
+print("\n== profile and announcements ==")
+st, _ = call("POST", "/events/%d/volunteer-announcements" % EV, {"title": "Parking", "body": "Use the west garage.", "pinned": True})
+check(st == 200, "an admin posts an announcement", st)
+st, me = call("GET", "/volunteer/%s" % ta, headers={})
+check(any(a["title"] == "Parking" for a in me["announcements"]) and me["me"]["email"].startswith("zz-ann"), "the volunteer sees it, and their own details", None)
+check(any(a["title"] == "Parking" for a in call("GET", "/volunteer-team/%s" % tt, headers={})[1]["announcements"]), "so does the team link", None)
+st, _ = call("POST", "/volunteer/%s/profile" % ta, {"phone": "+1 555 222 3333", "email": "hacker@example.invalid"}, headers={})
+row = db.execute("select phone, email from volunteers where id=?", (A,)).fetchone()
+check(st == 200 and row[0] == "+1 555 222 3333" and row[1].startswith("zz-ann"), "a volunteer updates their phone; their email stays the team's record", row)
+
+print("\n== invitations (sending switched off) ==")
+st, pv = call("POST", "/events/%d/volunteers/invite-preview" % EV, {"volunteer_ids": [A, B], "resend": True})
+check(st == 200 and pv["sending_enabled"] is False and pv["can_send"] >= 1, "the preview lists who would receive it", pv)
+st, r = call("POST", "/events/%d/volunteers/invite" % EV, {"volunteer_ids": [A], "confirm_count": 1})
+check(st == 423, "while sending is switched off, nothing is sent", (st, r))
+check(db.execute("select invite_status from volunteers where id=?", (A,)).fetchone()[0] in ("not_sent", "accepted"), "and no status pretends otherwise", None)
+st, r = call("POST", "/events/%d/volunteers" % EV, {"first_name": "Dup", "email": "zz-ann-%s@example.invalid" % TAG})
+check(st == 409, "adding somebody already on the list is refused (no duplicates)", st)
 
 print("\n== volunteers reach nothing else ==")
 VTOK = {"Authorization": "Bearer " + ta}

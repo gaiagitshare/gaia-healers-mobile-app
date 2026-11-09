@@ -210,7 +210,7 @@ def main():
                     report["bookings_kept"] += 1
                     continue
                 try:
-                    V.check_can_hold(db, shift, vol)
+                    V.check_can_hold(db, shift, vol, allow_overlap=True)
                 except Exception as e:
                     why = "SignUpGenius shift '%s' on %s not placed: %s" % (label, day, getattr(e, "detail", e))
                     vol.needs_review = ((vol.needs_review + " ") if vol.needs_review else "") + why

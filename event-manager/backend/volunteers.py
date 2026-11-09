@@ -11,10 +11,9 @@ Rules, enforced here and nowhere else:
   * a shift never holds more active bookings (requested + confirmed) than its
     capacity -- the count happens under the database write lock, so two people
     cannot take the last place at the same moment;
-  * a volunteer cannot REQUEST two shifts whose times overlap (all-day lead
-    roles excepted); an admin may still assign, move or approve an overlapping
-    shift -- people sometimes sign up for both so they can start early -- and
-    gets a warning naming the other shift instead of a refusal;
+  * overlapping shifts are allowed (people sign up for both so they can start
+    early): requesting, assigning, moving or approving one succeeds and returns
+    a warning naming the other shift, shown to whoever did it;
   * a volunteer can request, and cancel, only their own shifts; only admins
     confirm, decline, assign, move or change anybody else's;
   * every change is logged with who made it, before and after.
@@ -677,15 +676,16 @@ def register(app, get_current_user, rate_limited, client_ip):
                                                    models.VolunteerShift.event_id == v.event_id).first()
         if not s:
             raise HTTPException(status_code=404, detail="Shift not found")
-        check_can_hold(db, s, v)
+        warnings = check_can_hold(db, s, v, allow_overlap=True)
         b = models.VolunteerBooking(event_id=v.event_id, shift_id=s.id, volunteer_id=v.id, status="requested",
                                     created_by="volunteer", created_at=_now(), updated_at=_now())
         db.add(b)
         db.flush()
         log(db, v.event_id, "volunteer: %s" % full_name(v), "requested", volunteer_id=v.id, shift_id=s.id, booking_id=b.id,
-            after={"status": "requested", "shift": "%s %s %s" % (s.day, s.start_time, s.role)})
+            after={"status": "requested", "shift": "%s %s %s" % (s.day, s.start_time, s.role),
+                   **({"overlap_warning": warnings} if warnings else {})})
         db.commit()
-        return {"ok": True, "booking_id": b.id, "status": "requested"}
+        return {"ok": True, "booking_id": b.id, "status": "requested", "warnings": warnings}
 
     @app.post("/volunteer/{token}/cancel")
     def portal_cancel(token: str, body: dict, request: Request, db: Session = Depends(get_db)):

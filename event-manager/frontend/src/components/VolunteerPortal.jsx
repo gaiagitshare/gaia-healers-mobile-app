@@ -30,6 +30,7 @@ export default function VolunteerPortal() {
     const [tab, setTab] = useState('mine');
     const [error, setError] = useState('');
     const [notice, setNotice] = useState('');
+    const [warned, setWarned] = useState(false);
     const [busy, setBusy] = useState(0);
     const [ask, setAsk] = useState(null);
     const [showIntro, setShowIntro] = useState(false);
@@ -57,13 +58,19 @@ export default function VolunteerPortal() {
     const join = (s) => {
         setBusy(s.id);
         requestVolunteerShift(token, s.id)
-            .then(() => { setNotice(`Requested: ${s.role}, ${dayLabel(s.day)}, ${shiftTime(s)}. Your place is held while the team confirms.`); return load(); })
+            .then((r) => {
+                const w = r?.data?.warnings || [];
+                setWarned(w.length > 0);
+                setNotice(`Requested: ${s.role}, ${dayLabel(s.day)}, ${shiftTime(s)}. Your place is held while the team confirms.`
+                    + (w.length ? ` Note: ${w.join(' ')}` : ''));
+                return load();
+            })
             .catch((e) => { setError(err(e)); load(); }).finally(() => setBusy(0));
     };
     const cancel = (b) => {
         setBusy(b.shift.id);
         cancelVolunteerShift(token, b.booking_id)
-            .then(() => { setNotice('Cancelled. Please also let Bita know.'); setAsk(null); return load(); })
+            .then(() => { setWarned(false); setNotice('Cancelled. Please also let Bita know.'); setAsk(null); return load(); })
             .catch((e) => setError(err(e))).finally(() => setBusy(0));
     };
     const active = data.my_bookings.filter((b) => b.status === 'requested' || b.status === 'confirmed');
@@ -110,8 +117,8 @@ export default function VolunteerPortal() {
             {/* Messages sit at the bottom of the screen, where a phone user who
                 just tapped "Join shift" halfway down the list can see them. */}
             <Snackbar open={Boolean(error || notice)} anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
-                      autoHideDuration={error ? 9000 : 6000} onClose={(e, why) => { if (why !== 'clickaway') { setError(''); setNotice(''); } }}>
-                <Alert severity={error ? 'error' : 'success'} variant="filled" onClose={() => { setError(''); setNotice(''); }} sx={{ width: '100%' }}>
+                      autoHideDuration={error || warned ? 9000 : 6000} onClose={(e, why) => { if (why !== 'clickaway') { setError(''); setNotice(''); setWarned(false); } }}>
+                <Alert severity={error ? 'error' : (warned ? 'warning' : 'success')} variant="filled" onClose={() => { setError(''); setNotice(''); setWarned(false); }} sx={{ width: '100%' }}>
                     {error || notice}
                 </Alert>
             </Snackbar>

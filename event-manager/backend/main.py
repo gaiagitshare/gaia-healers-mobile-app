@@ -2788,6 +2788,11 @@ def _effective_access(db, attendee):
             day_dates.add(str(_tt.valid_day)[:10])
         else:
             unrestricted = True
+    # A ticket added by hand (admin, walk-in) carries no purchase lines, only
+    # its pass. A one-day pass must still be a one-day pass (9 Nov 2026):
+    # without this a hand-added "Friday Exhibit Hall" opened every day.
+    if not base_ents and base is not None and getattr(base, "valid_day", None):
+        day_dates.add(str(base.valid_day)[:10])
     day_list = sorted(day_dates)
     # Name every day that was bought, so a two-day buyer does not read in Admin
     # or on the badge as though they hold one.
@@ -6875,6 +6880,22 @@ def _attendee_for_badge_token(db, token: str):
             or next((a for a in rows if _ticket_active(a)), None))
 
 
+import ticket_links as _ticket_links  # noqa: E402
+
+
+def _attendee_for_ticket_link(db, code):
+    """The ticket behind a PRIVATE ticket link (ticket e-mail, wallet link).
+    A public badge/card code is not a ticket link and resolves to nothing."""
+    a = _ticket_links.find(db, models, code, SECRET_KEY)
+    # A refunded, revoked or cancelled ticket's link shows no usable code,
+    # exactly as the badge-code lookup it replaces did.
+    return a if (a is not None and _ticket_active(a)) else None
+
+
+def ticket_link_code(attendee):
+    return _ticket_links.link_code(getattr(attendee, "qr_code", None), SECRET_KEY)
+
+
 @app.post("/identity/wallet/by-token")
 def identity_wallet_by_token(
     payload: schemas.WalletByToken,
@@ -6898,11 +6919,12 @@ def identity_wallet_by_token(
         return {"ok": False, "reason": "no_token"}
     if (store == "apple" and not wallet.apple_ready()) or (store == "google" and not wallet.google_ready()):
         return {"ok": False, "reason": "wallet_not_configured", "store": store}
-    if not db.query(models.Attendee).filter(
-            func.upper(models.Attendee.public_token) == token).first():
-        return {"ok": False, "reason": "unknown_token"}
-    attendee = _attendee_for_badge_token(db, token)
+    # Private ticket link only (9 Nov 2026): the public badge/card code no
+    # longer opens a ticket or its wallet pass.
+    attendee = _attendee_for_ticket_link(db, (payload.token or "").strip())
     if not attendee:
+        return {"ok": False, "reason": "unknown_token"}
+    if not _ticket_active(attendee):
         return {"ok": False, "reason": "ticket_not_valid"}
     event = db.query(models.Event).filter(models.Event.id == attendee.event_id).first()
     if not event:
@@ -6930,7 +6952,7 @@ def identity_ticket_by_token(token: str, db: Session = Depends(get_db),
     have never opened the app. The token is the one already on the badge and
     already accepted by the door scanner, so it is the right key for a link.
     """
-    attendee = _attendee_for_badge_token(db, token)
+    attendee = _attendee_for_ticket_link(db, token)
     if not attendee:
         return {"ok": False, "reason": "unknown_token"}
     event = db.query(models.Event).filter(models.Event.id == attendee.event_id).first()
@@ -6962,7 +6984,7 @@ def identity_badge_qr(token: str, db: Session = Depends(get_db),
     door has to be fetched from somewhere. It carries the same value the
     scanner reads off the printed sticker and nothing else.
     """
-    attendee = _attendee_for_badge_token(db, token)
+    attendee = _attendee_for_ticket_link(db, token)
     if not attendee:
         raise HTTPException(status_code=404, detail="Unknown ticket")
     qr = qrcode.QRCode(version=1, box_size=10, border=2)
@@ -10447,8 +10469,27 @@ def transfer_ticket(attendee_id: int, body: schemas.TicketTransfer, db: Session 
     att.custom_data = cd
     att.first_name, att.last_name = first, (body.last_name or "").strip()
     att.email, att.phone = email, (body.phone or "").strip()
+    # The badge/card code belongs to a PERSON (9 Nov 2026). Keeping it made the
+    # new holder's badge open the previous holder's card, editable by both.
+    # The ticket now takes the new holder's own code (theirs from another
+    # ticket, or a fresh one); the previous holder keeps their card. The entry
+    # QR (qr_code) is unchanged: issued ticket codes are not replaced.
+    old_token = att.public_token
+    att.public_token = None
+    db.flush()
+    badge_card.ensure_public_token(db, models, att, commit=False)
+    entry["badge_code_replaced"] = bool(old_token and old_token != att.public_token)
+    cd = dict(att.custom_data or {})
+    if cd.get("transfers"):
+        cd["transfers"][-1] = entry
+        att.custom_data = cd
+    try:
+        attach_member_identity(db, att)
+    except Exception as exc:
+        print("transfer: card attach skipped: %s" % exc, flush=True)
     _lifecycle_append(att, "ticket_transferred", actor=who, reason=reason, from_holder=before["name"],
-                      from_email=before["email"], to_holder=after["name"], to_email=email)
+                      from_email=before["email"], to_holder=after["name"], to_email=email,
+                      badge_code_changed=bool(old_token and old_token != att.public_token))
     db.commit()
     db.refresh(att)
     return att

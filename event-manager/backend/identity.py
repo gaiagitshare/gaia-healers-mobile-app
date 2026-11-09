@@ -15,6 +15,7 @@ unresolved person sees nothing rather than something plausible.
 """
 
 from datetime import datetime
+import re
 from typing import Optional
 
 from sqlalchemy import func
@@ -101,6 +102,25 @@ def resolve_attendees(
                     found[attendee.id] = (attendee, "verified_email")
             if any(a for a, e in found.values() if e == "verified_email"):
                 report["matched_by"].append("verified_email")
+
+    # 3. One GHL contact can be shared by a family (9 Nov 2026): matching by
+    #    contact alone showed one person the other's ticket and card. In any
+    #    event where a ticket carries the person's own VERIFIED email, only
+    #    those tickets are theirs; contact-only matches there belong to
+    #    somebody else on the same contact. Where no ticket carries their email
+    #    (an email changed since purchase), the contact match stands as before.
+    if email and email_verified and found:
+        # A party seat is stored under the buyer's address with a "+seatN" tag
+        # and stays with the buyer who paid for it.
+        def _own(a):
+            return re.sub(r"\+seat\d+@", "@", normalize_email(a.email)) == email
+        own_events = {a.event_id for a, _ in found.values() if _own(a)}
+        dropped = [aid for aid, (a, _) in found.items()
+                   if a.event_id in own_events and not _own(a)]
+        for aid in dropped:
+            found.pop(aid, None)
+        if dropped:
+            report["refused"].append("shared_contact_other_holder")
 
     attendees = [a for a, _ in found.values()]
     evidence = {a.id: e for a, e in found.values()}

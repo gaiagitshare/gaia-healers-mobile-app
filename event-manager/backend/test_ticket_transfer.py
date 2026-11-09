@@ -66,8 +66,10 @@ print("\n== the transfer ==")
 st, out = http("POST", "/attendees/%d/transfer" % t0["id"], X)
 check(st == 200, "it goes through", out)
 t1 = row(B)[0] if row(B) else {}
-check(t1.get("id") == t0["id"] and t1["qr_code"] == t0["qr_code"] and t1["public_token"] == t0["public_token"] and t1["ticket_type_id"] == GA,
-      "same ticket, QR, link and pass", t1)
+check(t1.get("id") == t0["id"] and t1["qr_code"] == t0["qr_code"] and t1["ticket_type_id"] == GA,
+      "same ticket, entry QR and pass", t1)
+check(t1["public_token"] and t1["public_token"] != t0["public_token"],
+      "the badge/card code is now the new holder's own (9 Nov 2026)", (t0["public_token"], t1["public_token"]))
 check(t1["first_name"] == "ZZ New" and not row(A), "the new holder has it; the old email holds nothing")
 check(t1["acq_order_id"] == t0["acq_order_id"] and t1["acq_contact_id"] == t0["acq_contact_id"], "the purchase facts are untouched")
 p = db().execute("select attendee_id,buyer_email,status from payment_events where ghl_entity_id=?", (oid,)).fetchone()

@@ -123,9 +123,16 @@ try:
     else:
         raise RuntimeError("test API never came up: " + proc.stderr.read().decode()[-500:])
 
+    # Wallet links use the PRIVATE ticket link (9 Nov 2026); the public badge
+    # code no longer opens a wallet pass.
+    sys.path.insert(0, HERE)
+    import ticket_links as _tl
+    live_row0 = next(r for r in sample_rows if r[1] in live_events)
     status, body = post("/identity/wallet/by-token", {"token": sample_token, "store": "google"})
+    check(status == 200 and body.get("ok") is False, "the public badge code does not open a wallet pass", (status, body))
+    status, body = post("/identity/wallet/by-token", {"token": _tl.link_code(live_row0[4], env_file["SECRET_KEY"]), "store": "google"})
     ok = status == 200 and isinstance(body, dict) and body.get("ok") is True
-    check(ok, "a badge token resolves to a Google save link", (status, body))
+    check(ok, "the private ticket link resolves to a Google save link", (status, body))
     if ok:
         from jose import jwt as jose_jwt
         claims = jose_jwt.get_unverified_claims(body["save_url"].rsplit("/", 1)[1])
@@ -141,9 +148,6 @@ try:
         check(body.get("event_name", "").find("2026") >= 0,
               "the reply names the event, so the page that opens can say which ticket", body.get("event_name"))
 
-    status, body = post("/identity/wallet/by-token", {"token": sample_token.lower(), "store": "google"})
-    check(status == 200 and body.get("ok") is True,
-          "typing the token in lower case still works -- it is read off a printed label", (status, body))
 
     status, body = post("/identity/wallet/by-token", {"token": "ZZZZZZZZ", "store": "google"})
     check(status == 200 and body.get("ok") is False and body.get("reason") == "unknown_token",

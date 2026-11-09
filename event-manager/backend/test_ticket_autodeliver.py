@@ -208,10 +208,12 @@ sends = W.customer_sends()
 check(len(sends) == 1 and sends[0][0] == W.orders[good]["contactId"], "exactly one email, to the buyer's own contact", (r2, S.db.execute("select classification,reasons from delivery_candidates where order_id=?", (good,)).fetchone()))
 html_ = sends[0][1]["html"] if sends else ""
 tk = tickets_of(good)[0]
-check(tk[3] in html_ and "/ticket/" + tk[4] in html_ and "/t/" + tk[4] + ".png" in html_, "the email carries this ticket's QR code and link")
+_lc = engine.ticket_link_code(tk[3])
+check(tk[3] in html_ and "/ticket/" + _lc in html_ and "/t/" + _lc + ".png" in html_ and "/ticket/" + tk[4] not in html_,
+      "the email carries this ticket's QR code and its PRIVATE link (never the public badge code)")
 check("General Admission" in html_ and "[TEST]" not in sends[0][1]["subject"], "the right pass is named; a real subject", sends[0][1]["subject"] if sends else "")
 check(sends and "ELEVATE 2026" in sends[0][1]["subject"], "the official subject")
-st_, png = W.fetch(engine.PUBLIC + "/t/" + tk[4] + ".png")
+st_, png = W.fetch(engine.PUBLIC + "/t/" + _lc + ".png")
 check(tk[3] in W.decode_qr(png), "the QR in the email opens/decodes to this ticket")
 for _ in range(3):
     engine.run_cycle(W, S, em(), log=quiet)

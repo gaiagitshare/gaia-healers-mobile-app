@@ -383,8 +383,13 @@ try:
             with urllib.request.urlopen(url, timeout=60) as r: return r.status
         except urllib.error.HTTPError as e: return e.code
     c = sqlite3.connect(DB)
-    tid, tok = c.execute("SELECT id, public_token FROM attendees WHERE event_id=1 AND public_token IS NOT NULL "
+    tid, tok = c.execute("SELECT id, qr_code FROM attendees WHERE event_id=1 AND public_token IS NOT NULL "
                          "AND coalesce(registration_status,'registered') NOT IN ('revoked','refunded','cancelled') LIMIT 1").fetchone()
+    # Ticket pages open by the PRIVATE ticket link (9 Nov 2026), never by the
+    # public badge/card code.
+    import ticket_links as _tl
+    badge_tok = c.execute("SELECT public_token FROM attendees WHERE id=?", (tid,)).fetchone()[0]
+    tok = _tl.link_code(tok, env["SECRET_KEY"])
     st, page = http("GET", PROXY_BASE + "/ticket/" + tok)
     st2 = status_of(PROXY_BASE + "/t/%s.png" % tok)
     check(st == 200 and "/t/" in page and "no longer valid" not in page and st2 == 200,

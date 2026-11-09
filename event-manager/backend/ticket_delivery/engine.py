@@ -151,6 +151,15 @@ class Live:
 # ---------------------------------------------------------------------------
 # What the Event Manager knows (read-only)
 # ---------------------------------------------------------------------------
+def ticket_link_code(qr_code):
+    """The private ticket-link code, computed with the Event Manager's secret."""
+    from dotenv import dotenv_values
+    sys.path.insert(0, HERE) if HERE not in sys.path else None
+    import ticket_links
+    secret = os.environ.get('SECRET_KEY') or dict(dotenv_values(os.path.join(HERE, '.env'))).get('SECRET_KEY')
+    return ticket_links.link_code(qr_code, secret)
+
+
 def em_connect(path=None):
     path = path or os.environ.get('TICKET_DELIVERY_EVENT_DB') or os.path.join(HERE, 'event.db')
     c = sqlite3.connect('file:%s?mode=ro' % path, uri=True, timeout=30)
@@ -309,7 +318,10 @@ def classify(order_id, em, world, state, allow_delivered=False):
         if r:
             yellow.append('ticket_already_emailed_with_another_order')
         if not red and a.get('qr_code') and a.get('public_token'):
-            link, qr_url = PUBLIC + '/ticket/' + a['public_token'], PUBLIC + '/t/' + a['public_token'] + '.png'
+            # Private ticket link (9 Nov 2026): keyed by the ticket's own entry
+            # code, never by the public badge/card code.
+            _code = ticket_link_code(a['qr_code'])
+            link, qr_url = PUBLIC + '/ticket/' + _code, PUBLIC + '/t/' + _code + '.png'
             try:
                 s1, png = world.fetch(qr_url)
                 s2, page = world.fetch(link)

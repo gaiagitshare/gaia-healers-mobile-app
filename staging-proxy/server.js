@@ -14,6 +14,7 @@ import { createCheckoutLinkResolver, fetchPageText } from './checkout-links.js';
 import * as wellnessRouter from './wellness-router.js';
 import * as directoryRouter from './directory-router.js';
 import * as eventIdentity from './membership/event-identity.js';
+import { createActivation } from './membership/member-activation.js';
 import * as reader from './membership/reader.js';
 import * as onboarding from './gaia-onboarding.js';
 import { migrateStore, migrateContactRecord } from './membership/ledger.js';
@@ -6656,6 +6657,18 @@ async function ghlSalesForProducts(wanted) {
 // identity module stays testable without a mail server.
 eventIdentity.setCardMailer(ghlSendEmail);
 
+// Profile activation + password sign-in (badge QR -> code -> password), 9 Nov 2026.
+let _memberActivation = null;
+function memberActivation() {
+  if (!_memberActivation) {
+    _memberActivation = createActivation({
+      readJsonBody, sendJson, buildSetCookie, signTokenPayload, createMemberSession,
+      resolveMemberRecord, normalizeMemberIdentity, ghlSendEmail, firstNonEmptyString,
+    });
+  }
+  return _memberActivation;
+}
+
 const server = http.createServer(async (req, res) => {
   const origin = req.headers.origin || '';
   if (req.method === 'OPTIONS') {
@@ -7194,6 +7207,9 @@ const server = http.createServer(async (req, res) => {
     }
     if (req.method === 'POST' && url.pathname === '/api/auth/logout') {
       await authLogout(req, res, origin);
+      return;
+    }
+    if (req.method === 'POST' && await memberActivation().handle(req, res, origin, url)) {
       return;
     }
     if (req.method === 'POST' && url.pathname === '/api/auth/magic-link/request') {

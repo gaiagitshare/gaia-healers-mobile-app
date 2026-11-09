@@ -1,0 +1,255 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <meta name="robots" content="noindex" />
+  <meta name="referrer" content="no-referrer" />
+  <title>Your Gaia profile · Gaia Healers</title>
+  <link rel="icon" href="favicon.ico" />
+  <style>
+    :root { --bg:#04070A; --card:#0C1117; --line:rgba(255,255,255,.15); --text:#fff; --muted:rgba(255,255,255,.72);
+            --accent:#B6F25C; --on-accent:#0B1408; --danger:#F08A74; }
+    * { box-sizing: border-box; }
+    html, body { margin:0; background:var(--bg); color:var(--text);
+      font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif; }
+    main { max-width:480px; margin:0 auto; padding:32px 20px 48px; min-height:100vh; }
+    .brand { font-size:16px; letter-spacing:.08em; text-transform:uppercase; color:var(--accent); margin:0 0 28px; font-weight:700; }
+    h1 { font-size:30px; line-height:1.2; margin:0 0 14px; }
+    p { font-size:20px; line-height:1.5; margin:0 0 20px; color:var(--muted); }
+    p strong { color:var(--text); }
+    label { display:block; font-size:19px; margin:0 0 10px; color:var(--text); }
+    input { width:100%; font-size:24px; padding:18px 16px; border-radius:14px; border:2px solid var(--line);
+      background:var(--card); color:var(--text); margin:0 0 18px; }
+    input:focus { outline:3px solid var(--accent); outline-offset:1px; border-color:transparent; }
+    input.code { font-size:34px; letter-spacing:.35em; text-align:center; font-variant-numeric:tabular-nums; }
+    button.primary { width:100%; font-size:22px; font-weight:700; padding:20px; border:0; border-radius:14px;
+      background:var(--accent); color:var(--on-accent); cursor:pointer; min-height:64px; }
+    button.primary:disabled { opacity:.55; }
+    button.link { background:none; border:0; color:var(--accent); font-size:19px; padding:14px 0; cursor:pointer;
+      text-decoration:underline; text-underline-offset:4px; display:block; text-align:left; min-height:48px; }
+    .msg { font-size:19px; min-height:1.5em; margin:14px 0 0; color:var(--muted); }
+    .msg.err { color:var(--danger); }
+    .show { display:flex; align-items:center; gap:10px; font-size:18px; color:var(--muted); margin:-6px 0 20px; }
+    .show input { width:26px; height:26px; margin:0; }
+    section[hidden] { display:none; }
+  </style>
+</head>
+<body>
+<main>
+  <p class="brand">Gaia Healers</p>
+
+  <section data-step="loading"><h1>One moment…</h1></section>
+
+  <section data-step="problem" hidden>
+    <h1>We need a hand</h1>
+    <p data-problem>We could not find this badge. Please ask the help desk.</p>
+  </section>
+
+  <section data-step="send" hidden>
+    <h1 data-hello>Welcome!</h1>
+    <p>Your Gaia profile is ready. Create a password once and it is yours.</p>
+    <p>We will email a 6-digit code to <strong data-masked></strong>.</p>
+    <button class="primary" data-send>Email me my code</button>
+    <button class="link" data-desk>I can't get email — I have a code from the help desk</button>
+    <p class="msg" data-msg role="status" aria-live="polite"></p>
+  </section>
+
+  <section data-step="code" hidden>
+    <h1>Enter your code</h1>
+    <p data-code-hint>Type the 6-digit code from your email.</p>
+    <form data-code-form>
+      <label for="code">6-digit code</label>
+      <input id="code" class="code" data-code inputmode="numeric" autocomplete="one-time-code" maxlength="6" pattern="[0-9]*" />
+      <button class="primary" type="submit">Continue</button>
+    </form>
+    <button class="link" data-resend>Send the code again</button>
+    <p class="msg" data-msg role="status" aria-live="polite"></p>
+  </section>
+
+  <section data-step="password" hidden>
+    <h1>Create your password</h1>
+    <p>At least 8 characters. Use something easy for you to remember.</p>
+    <form data-pw-form>
+      <label for="pw">New password</label>
+      <input id="pw" type="password" data-pw autocomplete="new-password" />
+      <label class="show"><input type="checkbox" data-showpw /> Show my password</label>
+      <button class="primary" type="submit">Save &amp; Enter Profile</button>
+    </form>
+    <p class="msg" data-msg role="status" aria-live="polite"></p>
+  </section>
+
+  <section data-step="login" hidden>
+    <h1 data-hello>Welcome back!</h1>
+    <p>Type your password to open your profile.</p>
+    <form data-login-form>
+      <label for="lpw">Password</label>
+      <input id="lpw" type="password" data-lpw autocomplete="current-password" />
+      <label class="show"><input type="checkbox" data-showlpw /> Show my password</label>
+      <button class="primary" type="submit">Enter Profile</button>
+    </form>
+    <button class="link" data-forgot-desk>Forgot it? Ask the help desk for a code</button>
+    <a class="link" data-forgot-email href="activate.html?mode=forgot" style="display:block;color:var(--accent);font-size:19px;padding:14px 0">Or email me a code to reset it</a>
+    <p class="msg" data-msg role="status" aria-live="polite"></p>
+  </section>
+
+  <section data-step="forgot" hidden>
+    <h1>Reset your password</h1>
+    <p>Type the email on your Gaia profile. We will send you a 6-digit code.</p>
+    <form data-forgot-form>
+      <label for="femail">Email</label>
+      <input id="femail" type="email" data-femail autocomplete="email" inputmode="email" />
+      <button class="primary" type="submit">Email me a code</button>
+    </form>
+    <p class="msg" data-msg role="status" aria-live="polite"></p>
+  </section>
+
+  <section data-step="reset" hidden>
+    <h1>Enter your code</h1>
+    <p>If that email has a Gaia profile, a code is on its way. Then choose a new password.</p>
+    <form data-reset-form>
+      <label for="rcode">6-digit code</label>
+      <input id="rcode" class="code" data-rcode inputmode="numeric" autocomplete="one-time-code" maxlength="6" pattern="[0-9]*" />
+      <label for="rpw">New password (at least 8 characters)</label>
+      <input id="rpw" type="password" data-rpw autocomplete="new-password" />
+      <button class="primary" type="submit">Save &amp; Enter Profile</button>
+    </form>
+    <p class="msg" data-msg role="status" aria-live="polite"></p>
+  </section>
+</main>
+<script src="gaia-app-urls.js"></script>
+<script>
+(function () {
+  'use strict';
+  const api = () => (window.GaiaApi ? window.GaiaApi.base() : 'https://api.gaiahealers.app');
+  const params = new URLSearchParams(location.search);
+  const token = String(params.get('card') || '').trim().toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 8);
+  // The badge code is not a secret, but keep the address bar clean anyway.
+  try { history.replaceState({}, '', location.pathname + (params.get('mode') === 'forgot' ? '?mode=forgot' : '')); } catch (_) {}
+  const state = { permit: '', viaDesk: false, email: '' };
+  const $ = (sel, root) => (root || document).querySelector(sel);
+
+  function show(step) {
+    document.querySelectorAll('section[data-step]').forEach((s) => { s.hidden = s.dataset.step !== step; });
+    const sec = $('section[data-step="' + step + '"]');
+    const first = sec && sec.querySelector('input:not([type=checkbox])');
+    if (first) setTimeout(() => first.focus(), 60);
+    return sec;
+  }
+  function say(step, text, isErr) {
+    const m = $('section[data-step="' + step + '"] [data-msg]');
+    if (m) { m.textContent = text || ''; m.classList.toggle('err', Boolean(isErr)); }
+  }
+  async function post(path, body) {
+    try {
+      const r = await fetch(api() + path, { method: 'POST', credentials: 'include',
+        headers: { 'Content-Type': 'application/json', Accept: 'application/json' }, body: JSON.stringify(body) });
+      const d = await r.json().catch(() => ({}));
+      if (r.status === 429 && !d.error) d.error = 'Too many tries. Please wait a few minutes or ask the help desk.';
+      return d;
+    } catch (_) { return { ok: false, error: 'We could not connect. Please check your internet and try again.' }; }
+  }
+  function enter() { location.replace('home.html?view=profile'); }
+  function busy(form, on) { form.querySelectorAll('button,input').forEach((el) => { el.disabled = on; }); }
+  function hello(name, fallback) { document.querySelectorAll('[data-hello]').forEach((h) => { h.textContent = name ? fallback.replace('!', ', ' + name + '!') : fallback; }); }
+
+  async function sendCode() {
+    const btn = $('[data-send]');
+    btn.disabled = true;
+    say('send', 'Sending your code…');
+    const d = await post('/api/activate/start', { token, send_code: true });
+    btn.disabled = false;
+    if (d.code_sent) { state.viaDesk = false; show('code'); $('[data-code-hint]').textContent = 'We sent a 6-digit code to ' + (d.email_masked || 'your email') + '. It may take a minute — check spam too.'; return; }
+    if (d.has_password) { hello(d.first_name, 'Welcome back!'); show('login'); return; }
+    say('send', d.error || 'We could not send the code. Please ask the help desk.', true);
+  }
+
+  function deskCode() {
+    state.viaDesk = true;
+    show('code');
+    $('[data-code-hint]').textContent = 'Type the 6-digit code the help desk gave you.';
+    $('[data-resend]').hidden = true;
+  }
+
+  async function begin() {
+    if (params.get('mode') === 'forgot' || !token) { show('forgot'); return; }
+    const d = await post('/api/activate/start', { token, send_code: false });
+    if (!d.first_name && d.ok === false) { show('problem'); $('[data-problem]').textContent = d.error || 'Please ask the help desk.'; return; }
+    if (d.has_password) { hello(d.first_name, 'Welcome back!'); show('login'); return; }
+    hello(d.first_name, 'Welcome!');
+    if (d.desk_only) { deskCode(); $('[data-code-hint]').textContent = 'Please ask the help desk for your 6-digit code, then type it here.'; return; }
+    $('[data-masked]').textContent = d.email_masked || 'your email';
+    show('send');
+  }
+
+  $('[data-send]').addEventListener('click', sendCode);
+  $('[data-desk]').addEventListener('click', deskCode);
+  $('[data-forgot-desk]').addEventListener('click', deskCode);
+  $('[data-resend]').addEventListener('click', async () => { show('send'); await sendCode(); });
+
+  $('[data-code-form]').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const code = $('[data-code]').value.replace(/\D/g, '');
+    if (code.length !== 6) { say('code', 'Please type all 6 numbers.', true); return; }
+    busy(e.target, true); say('code', 'Checking…');
+    const d = await post('/api/activate/verify', { token, code });
+    busy(e.target, false);
+    if (d.ok && d.permit) { state.permit = d.permit; $('[data-code]').value = ''; show('password'); return; }
+    say('code', d.error || 'That code did not work.', true);
+  });
+
+  $('[data-showpw]').addEventListener('change', (e) => { $('[data-pw]').type = e.target.checked ? 'text' : 'password'; });
+  $('[data-showlpw]').addEventListener('change', (e) => { $('[data-lpw]').type = e.target.checked ? 'text' : 'password'; });
+
+  $('[data-pw-form]').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const password = $('[data-pw]').value;
+    if (password.length < 8) { say('password', 'Please use at least 8 characters.', true); return; }
+    busy(e.target, true); say('password', 'Saving…');
+    const d = await post('/api/activate/complete', { token, permit: state.permit, password, via: state.viaDesk ? 'desk_code' : 'email_code' });
+    busy(e.target, false);
+    if (d.ok && d.authenticated) { say('password', 'Saved. Opening your profile…'); enter(); return; }
+    if (/new code/i.test(d.error || '')) { state.permit = ''; show('code'); }
+    say(state.permit ? 'password' : 'code', d.error || 'We could not save it. Please try again.', true);
+  });
+
+  $('[data-login-form]').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const password = $('[data-lpw]').value;
+    if (!password) { say('login', 'Please type your password.', true); return; }
+    busy(e.target, true); say('login', 'Opening…');
+    const d = await post('/api/activate/login', { token, password });
+    busy(e.target, false);
+    if (d.ok && d.authenticated) { enter(); return; }
+    say('login', d.error || 'That password is not right.', true);
+  });
+
+  $('[data-forgot-form]').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const email = $('[data-femail]').value.trim();
+    if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) { say('forgot', 'Please type your email.', true); return; }
+    busy(e.target, true);
+    await post('/api/auth/password/forgot', { email });
+    busy(e.target, false);
+    state.email = email;
+    show('reset');
+  });
+
+  $('[data-reset-form]').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const code = $('[data-rcode]').value.replace(/\D/g, '');
+    const password = $('[data-rpw]').value;
+    if (code.length !== 6) { say('reset', 'Please type all 6 numbers.', true); return; }
+    if (password.length < 8) { say('reset', 'Please use at least 8 characters.', true); return; }
+    busy(e.target, true); say('reset', 'Saving…');
+    const d = await post('/api/auth/password/reset', { email: state.email, code, password });
+    busy(e.target, false);
+    if (d.ok && d.authenticated) { enter(); return; }
+    say('reset', d.error || 'That code did not work.', true);
+  });
+
+  begin();
+})();
+</script>
+</body>
+</html>

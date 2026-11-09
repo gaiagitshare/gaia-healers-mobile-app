@@ -33,6 +33,16 @@
     .show { display:flex; align-items:center; gap:10px; font-size:18px; color:var(--muted); margin:-6px 0 20px; }
     .show input { width:26px; height:26px; margin:0; }
     section[hidden] { display:none; }
+    /* Event profile: the person's own things, one per card, large and plain. */
+    main.is-profile { max-width:640px; }
+    .ep-card { background:var(--card); border:1px solid var(--line); border-radius:18px; padding:20px 18px; margin:0 0 18px; }
+    .ep-card > h2 { font-size:22px; margin:0 0 12px; color:var(--text); }
+    .ep-card > p { font-size:18px; margin:0 0 6px; }
+    .ep-invite { border-color:rgba(182,242,92,.45); }
+    .ep-invite a.primary { display:block; text-align:center; text-decoration:none; width:100%; font-size:21px; font-weight:700; padding:18px;
+      border-radius:14px; background:var(--accent); color:var(--on-accent); min-height:60px; margin-top:8px; }
+    .ep-return { font-size:17px; color:var(--muted); line-height:1.5; }
+    .ep-who { font-size:17px; color:var(--muted); margin:-6px 0 22px; word-break:break-word; }
   </style>
 </head>
 <body>
@@ -93,6 +103,52 @@
     <p class="msg" data-msg role="status" aria-live="polite"></p>
   </section>
 
+  <section data-step="signin" hidden>
+    <h1>Sign in</h1>
+    <p>Use the email on your Gaia Healers profile and your password.</p>
+    <form data-signin-form>
+      <label for="semail">Email</label>
+      <input id="semail" type="email" data-semail autocomplete="email" inputmode="email" />
+      <label for="spw">Password</label>
+      <input id="spw" type="password" data-spw autocomplete="current-password" />
+      <button class="primary" type="submit">Enter Profile</button>
+    </form>
+    <a class="link" href="activate.html?mode=forgot" style="display:block;color:var(--accent);font-size:19px;padding:14px 0">Forgot your password?</a>
+    <p class="return-tip" style="font-size:17px">New here? Scan the QR code on your badge to create your password.</p>
+    <p class="msg" data-msg role="status" aria-live="polite"></p>
+  </section>
+
+  <section data-step="profile" hidden>
+    <h1 data-ep-hello>Your Gaia Healers profile</h1>
+    <p class="ep-who" data-ep-who></p>
+
+    <div class="ep-card">
+      <div data-badgecard-host></div>
+      <p data-ep-nobadge hidden><strong>Your badge</strong><br>Your badge will appear here.</p>
+    </div>
+
+    <div class="ep-card">
+      <h2>Your tickets</h2>
+      <div data-myevents-host></div>
+    </div>
+
+    <div class="ep-card">
+      <h2>Your Bio-Well readings</h2>
+      <div id="member-readings" hidden></div>
+      <p data-ep-noreadings hidden>Your Bio-Well readings will appear here after your practitioner shares them.</p>
+    </div>
+    <div id="member-data-sharing" hidden></div>
+
+    <div class="ep-card ep-invite">
+      <h2>Continue Your Gaia Healers Journey</h2>
+      <p>Discover your personalized wellness path, connect with the community and explore more Gaia Healers experiences.</p>
+      <a class="primary" href="home.html?view=today" data-ep-explore>Explore Gaia Healers</a>
+    </div>
+
+    <p class="ep-return"><strong>Coming back later?</strong> Scan the QR code on your badge, or save this page to your home screen. Your profile stays yours after the event.</p>
+    <button class="link" data-ep-signout>Sign out</button>
+  </section>
+
   <section data-step="forgot" hidden>
     <h1>Reset your password</h1>
     <p>Type the email on your Gaia Healers profile. We will send you a 6-digit code.</p>
@@ -149,7 +205,45 @@
       return d;
     } catch (_) { return { ok: false, error: 'We could not connect. Please check your internet and try again.' }; }
   }
-  function enter() { location.replace('home.html?view=profile'); }
+  async function getJson(path) {
+    try { const r = await fetch(api() + path, { credentials: 'include', headers: { Accept: 'application/json' }, cache: 'no-store' }); return await r.json().catch(() => ({})); }
+    catch (_) { return {}; }
+  }
+  // ── The event profile: the person's own badge, tickets and Bio-Well readings,
+  // drawn by the app's existing components and the same signed-in session.
+  // Nothing here asks for the Gaia Path questionnaire; the main app still does.
+  const STYLES = ['vendor/phosphor/phosphor.css', 'gaia-system.css', 'gaia-app-v3.css', 'gaia-app-v3-learn-connect.css', 'gaia-app-v3-shop-you.css', 'gaia-shell.css'];
+  const SCRIPTS = ['gaia-myevents.js', 'gaia-card.js', 'gaia-my-readings.js'];
+  const V = '20261109c';
+  function loadStyle(href) { return new Promise((ok) => { const l = document.createElement('link'); l.rel = 'stylesheet'; l.href = href + '?v=' + V; l.onload = l.onerror = ok; document.head.appendChild(l); }); }
+  function loadScript(src) { return new Promise((ok) => { const t = document.createElement('script'); t.src = src + '?v=' + V; t.onload = t.onerror = ok; document.body.appendChild(t); }); }
+  let profileShown = false;
+  async function enter(sess) {
+    if (profileShown) return;
+    profileShown = true;
+    const s = (sess && sess.authenticated) ? sess : await getJson('/api/auth/session');
+    if (!s.authenticated) { profileShown = false; show('signin'); return; }
+    const m = s.member || {};
+    const first = String(m.displayName || '').trim().split(/\s+/)[0];
+    $('[data-ep-hello]').textContent = first && !/^gaia$/i.test(first) ? 'Hello, ' + first : 'Your Gaia Healers profile';
+    $('[data-ep-who]').textContent = 'Your Gaia Healers profile' + (m.email ? ' · ' + m.email : '');
+    document.querySelector('main').classList.add('is-profile');
+    try { history.replaceState({}, '', location.pathname); } catch (_) {}
+    show('profile');
+    await Promise.all(STYLES.map(loadStyle));
+    for (const src of SCRIPTS) await loadScript(src);   // in order: the ticket sheet uses the badge card
+    try { await window.GaiaMyEvents?.render(); } catch (_) {}
+    try { await window.GaiaCard?.renderProfileHosts(); } catch (_) {}
+    const badge = $('[data-badgecard-host]');
+    $('[data-ep-nobadge]').hidden = Boolean(badge && badge.innerHTML.trim());
+    // My Readings mounts itself. It stays hidden when there is nothing the
+    // owner can see yet (not shared, not available, no own GHL contact).
+    const readings = document.getElementById('member-readings');
+    const empty = $('[data-ep-noreadings]');
+    const sync = () => { empty.hidden = Boolean(readings && !readings.hidden && readings.innerHTML.trim()); };
+    sync();
+    if (readings) new MutationObserver(sync).observe(readings, { attributes: true, childList: true });
+  }
   function busy(form, on) { form.querySelectorAll('button,input').forEach((el) => { el.disabled = on; }); }
   function hello(name, fallback) { document.querySelectorAll('[data-hello]').forEach((h) => { h.textContent = name ? fallback.replace('!', ', ' + name + '!') : fallback; }); }
 
@@ -172,7 +266,14 @@
   }
 
   async function begin() {
-    if (params.get('mode') === 'forgot' || !token) { show('forgot'); return; }
+    if (params.get('mode') === 'forgot') { show('forgot'); return; }
+    const sess = await getJson('/api/auth/session');
+    if (!token) { if (sess.authenticated) { enter(sess); } else { show('signin'); } return; }
+    if (sess.authenticated) {
+      // Their own badge, already signed in: no activation, no password.
+      const own = await getJson('/api/card/owner?token=' + encodeURIComponent(token));
+      if (own && own.owner) { enter(sess); return; }
+    }
     const d = await post('/api/activate/start', { token, send_code: false });
     if (!d.first_name && d.ok === false) { show('problem'); $('[data-problem]').textContent = d.error || 'Please ask the help desk.'; return; }
     if (d.has_password) { hello(d.first_name, 'Welcome back!'); show('login'); return; }
@@ -246,6 +347,23 @@
     busy(e.target, false);
     if (d.ok && d.authenticated) { enter(); return; }
     say('reset', d.error || 'That code did not work.', true);
+  });
+
+  $('[data-signin-form]').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const email = $('[data-semail]').value.trim();
+    const password = $('[data-spw]').value;
+    if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) { say('signin', 'Please type your email.', true); return; }
+    if (!password) { say('signin', 'Please type your password.', true); return; }
+    busy(e.target, true); say('signin', 'Opening…');
+    const d = await post('/api/auth/password/login', { email, password });
+    busy(e.target, false);
+    if (d.ok && d.authenticated) { $('[data-spw]').value = ''; enter(); return; }
+    say('signin', d.error || 'That email or password is not right.', true);
+  });
+  $('[data-ep-signout]').addEventListener('click', async () => {
+    await post('/api/auth/logout', {});
+    location.replace('activate.html');
   });
 
   begin();

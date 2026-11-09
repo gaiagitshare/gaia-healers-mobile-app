@@ -264,7 +264,7 @@
   function consentCard(status) {
     return card(`
       <p class="g-readings__lead">See your own Bio-Well readings here, shared by your practitioner.</p>
-      <p class="g-readings__muted">You ask for a code and give it to your practitioner. They enter it on their side and confirm it is you. You can stop sharing at any time. Your results are shown to you only; Gaia does not keep a copy.</p>
+      <p class="g-readings__muted">You ask for a code and give it to your practitioner. They enter it on their side and confirm it is you. You can stop sharing at any time. Your results are shown to you only; Gaia Healers does not keep a copy.</p>
       ${status.code_active ? `<p class="g-readings__muted">A code is already active until ${esc(when(status.code_expires_at))}.</p>` : ''}
       <div class="g-card__actions"><button type="button" class="g-btn g-btn--primary g-btn--sm" data-readings-action="code">${status.code_active ? 'Show a new code' : 'Share with my practitioner'}</button></div>`);
   }
@@ -285,7 +285,7 @@
         <div class="g-readings__explain-card"><strong>Stress</strong><span>A second figure Bio-Well's software reports from the same scan, shown on this card from 0 to 10, next to your own average.</span></div>
         <div class="g-readings__explain-card"><strong>Seven centres</strong><span>Bio-Well's software gives a value for each of seven centres, root to crown. The bars show those values side by side.</span></div>
       </div>
-      <p class="g-readings__muted">Gaia shows these figures and how they compare with your own earlier scans. What they mean for you is a question for your practitioner.</p>
+      <p class="g-readings__muted">Gaia Healers shows these figures and how they compare with your own earlier scans. What they mean for you is a question for your practitioner.</p>
     </details>`;
   }
   /** Folded: the In short block and one button. The whole card is one tap away, and Gaia's "open my readings" unfolds it. */
@@ -341,14 +341,14 @@
         <p class="g-readings__kicker">What ${esc(practitioner.name || 'your practitioner')} can see</p>
         <ul class="g-readings__lines">
           <li>The readings they recorded in Bio-Well. They always had these; sharing changed nothing on their side.</li>
-          <li>That you asked to see them in Gaia (since ${esc(when(r.linked_at))}) and whether you have opened the latest one.</li>
+          <li>That you asked to see them in Gaia Healers (since ${esc(when(r.linked_at))}) and whether you have opened the latest one.</li>
         </ul>
         <p class="g-readings__kicker">What they cannot see</p>
         <ul class="g-readings__lines">
-          <li>Anything else in your Gaia app: your daily energy checks, journal, messages, courses or bookings.</li>
-          <li>Your Gaia account itself. Their system knows you only as their client; Gaia never sends them your member details.</li>
+          <li>Anything else in your Gaia Healers app: your daily energy checks, journal, messages, courses or bookings.</li>
+          <li>Your Gaia Healers account itself. Their system knows you only as their client; Gaia Healers never sends them your member details.</li>
         </ul>
-        <p class="g-readings__muted">Gaia keeps no copy of the readings and no AI reads the values. Stop sharing below at any time; they are told the same minute.</p>
+        <p class="g-readings__muted">Gaia Healers keeps no copy of the readings and no AI reads the values. Stop sharing below at any time; they are told the same minute.</p>
       </div>
 
       ${summary.headline ? `<div class="g-readings__summary">
@@ -399,7 +399,7 @@
         <div class="g-row"><span>Daily energy, journal, messages, courses, bookings</span><span class="g-row__meta">only you</span></div>
         <div class="g-row"><span>Gaia Assist</span><span class="g-row__meta">never reads your reading values</span></div>
       </div>
-      ${status.linked ? `<p class="g-readings__muted">${esc(who)} sees the readings they recorded, that you asked to see them in Gaia, and whether you opened the latest one. Nothing else in your app. Gaia keeps no copy.</p>` : '<p class="g-readings__muted">Sharing starts only when you ask for a code in My readings and your practitioner confirms it is you.</p>'}
+      ${status.linked ? `<p class="g-readings__muted">${esc(who)} sees the readings they recorded, that you asked to see them in Gaia Healers, and whether you opened the latest one. Nothing else in your app. Gaia Healers keeps no copy.</p>` : '<p class="g-readings__muted">Sharing starts only when you ask for a code in My readings and your practitioner confirms it is you.</p>'}
       <div class="g-card__actions">
         ${status.linked ? '<button type="button" class="g-btn g-btn--ghost g-btn--sm" data-readings-action="unlink">Stop sharing</button>' : '<button type="button" class="g-btn g-btn--secondary g-btn--sm" data-readings-action="goto">Open My readings</button>'}
         ${anyHidden ? '<button type="button" class="g-btn g-btn--ghost g-btn--sm" data-readings-action="reset-prefs">Show hidden cards again</button>' : ''}

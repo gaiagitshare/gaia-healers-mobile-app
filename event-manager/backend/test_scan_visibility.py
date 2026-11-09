@@ -29,7 +29,7 @@ BASE, _DB = testbed.start()
 db = sqlite3.connect("file:%s/event.db?mode=ro" % HERE, uri=True)
 db.row_factory = sqlite3.Row
 sys.path.insert(0, HERE)
-import main, models                                            # noqa: E402
+import main, authz, models                                            # noqa: E402
 from sqlalchemy import text                                    # noqa: E402
 from database import SessionLocal                              # noqa: E402
 
@@ -93,15 +93,11 @@ if stand:
         check(st == 200 and (out or {}).get("success") is True, "the scan works for %s" % pass_name, (st, out))
         if (out or {}).get("lead_id"):
             made.add(out["lead_id"])
-        check(bool(who.get("pass_display")), "  and hands the stand the pass", who.get("pass_display"))
-        check(bool(who.get("pass_includes")), "  with what it opens", who.get("pass_includes"))
-        # It must be the SAME words the door uses.
-        s = SessionLocal()
-        a = s.query(models.Attendee).filter(models.Attendee.id == aid).first()
-        check(who.get("pass_display") == main._pass_display(s, a),
-              "  matching the door exactly", (who.get("pass_display"), main._pass_display(s, a)))
-        s.close()
-        print("     %-32s -> %s" % (pass_name, who.get("pass_display")))
+        # Babak, 9 Nov 2026: stands get the person, never the ticket tier.
+        check(not who.get("pass_display") and not who.get("pass_includes") and "pass" not in who,
+              "  and the stand is NOT told the pass tier", sorted(who.keys()))
+        for k in ("qr_code", "public_token", "ticket_type_id", "custom_data", "amount_paid", "payment_status"):
+            check(k not in who, "  no %s in what the stand receives" % k)
 
     print("\n  -- and still only what the attendee agreed to share --")
     _t, qr, aid = token_for("General Admission")
@@ -111,14 +107,14 @@ if stand:
     who = (out or {}).get("attendee") or {}
     s = SessionLocal()
     a = s.query(models.Attendee).filter(models.Attendee.id == aid).first()
-    if not (a.consent_updated_at and a.share_email_with_exhibitors):
-        check(who.get("email") is None, "an email nobody agreed to share is still withheld", who.get("email"))
-    if not (a.consent_updated_at and a.share_phone_with_exhibitors):
-        check(who.get("phone") is None, "and so is the phone number", who.get("phone"))
+    if not a.share_email_with_exhibitors:
+        check(who.get("email") is None, "an email the person opted out of sharing is withheld", who.get("email"))
+    if not a.share_phone_with_exhibitors:
+        check(who.get("phone") is None, "and so is an opted-out phone number", who.get("phone"))
     check("consent" in who, "and the stand is told why a field is blank", who.get("consent"))
     s.close()
 
-print("\nEMAIL AND PHONE ONLY WITH AN EXPLICIT YES (Babak, 7 Nov 2026)")
+print("\nEMAIL AND PHONE FROM THE PURCHASE TERMS, NO QUESTION ASKED (Babak, 9 Nov 2026)")
 if stand:
     _t, qr, aid = token_for("General Admission")
     s = SessionLocal()
@@ -128,18 +124,14 @@ if stand:
     if (out or {}).get("lead_id"):
         made.add(out["lead_id"])
     who = (out or {}).get("attendee") or {}
-    check(who.get("email") is None and who.get("phone") is None,
-          "never asked: the default flags alone share no email or phone", (who.get("email"), who.get("phone")))
-    check(who.get("first_name") is not None, "name and company still go to the stand", sorted(who.keys()))
-    s.execute(text("UPDATE attendees SET consent_updated_at=CURRENT_TIMESTAMP WHERE id=:i"), {"i": aid}); s.commit()
-    st, out = call("POST", "/scan", {"access_token": stand["access_token"], "qr_code": qr})
-    who = (out or {}).get("attendee") or {}
     a = s.query(models.Attendee).filter(models.Attendee.id == aid).first()
     s.refresh(a)
-    check(who.get("email") == a.email and who.get("phone") == a.phone,
-          "after an explicit yes, the stand gets the real contact details", (who.get("email"), a.email))
+    own_email, own_phone = authz.own_contact(a)
+    check(who.get("email") == own_email and who.get("phone") == own_phone,
+          "never asked: the stand gets the person's own email and phone", (who.get("email"), own_email))
     check(who.get("consent") == {"email": True, "phone": True},
-          "and is told the person agreed", who.get("consent"))
+          "and is told they are shared", who.get("consent"))
+    check(who.get("first_name") is not None, "with name, company and job title", sorted(who.keys()))
     s.close()
 
     print("\n  -- but somebody can say no, and it sticks --")

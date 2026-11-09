@@ -134,6 +134,19 @@ function ExhibitorScan() {
                     action={<IconButton size="small" onClick={() => setJustScanned(null)}><CloseIcon fontSize="small" /></IconButton>}>
                     <strong>{justScanned.attendee?.first_name} {justScanned.attendee?.last_name}</strong>
                     {justScanned.message ? ` — ${justScanned.message}` : ' added to your leads.'}
+                    {/* What this stand may keep of the person: their own details, nothing about the ticket. */}
+                    {[justScanned.attendee?.job_title, justScanned.attendee?.company].filter(Boolean).length > 0 && (
+                        <div>{[justScanned.attendee?.job_title, justScanned.attendee?.company].filter(Boolean).join(' · ')}</div>
+                    )}
+                    {justScanned.attendee?.email && (
+                        <div><a style={{ color: "inherit", fontWeight: 600 }} href={`mailto:${justScanned.attendee.email}`}>{justScanned.attendee.email}</a></div>
+                    )}
+                    {justScanned.attendee?.phone && (
+                        <div><a style={{ color: "inherit", fontWeight: 600 }} href={`tel:${justScanned.attendee.phone}`}>{justScanned.attendee.phone}</a></div>
+                    )}
+                    {!justScanned.attendee?.email && !justScanned.attendee?.phone && (
+                        <div>No contact details shared.</div>
+                    )}
                 </Alert>
             )}
 

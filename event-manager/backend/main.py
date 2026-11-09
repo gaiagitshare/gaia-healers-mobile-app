@@ -3937,7 +3937,9 @@ def scan_qr_code(
         if (lead.consent_snapshot or {}) != snap:
             lead.consent_snapshot = snap
             db.commit()
-    view = dict(authz.lead_public_view(lead) or {}, **authz.pass_for_scanner(db, attendee))
+    # What the stand may see of THIS person: name, company, job title and their own
+    # email/phone unless they opted out. Never the ticket tier (Babak, 9 Nov 2026).
+    view = dict(authz.lead_public_view(lead) or {})
     return schemas.QRScanResponse(
         success=True,
         message=(f"Lead captured for {attendee.first_name} {attendee.last_name}" if captured_now
@@ -3976,10 +3978,8 @@ def get_public_exhibitor_leads(
             "id": lead.id, "exhibitor_id": lead.exhibitor_id,
             "attendee_id": lead.attendee_id, "scanned_at": lead.scanned_at,
             "notes": lead.notes, "rating": lead.rating,
-            # The stand they handed their badge to sees the pass; the public
-            # card page does not.
-            "attendee": (dict(authz.lead_public_view(lead) or {},
-                              **authz.pass_for_scanner(db, lead.attendee))
+            # Never the ticket tier: stands get the person, not the ticket (9 Nov 2026).
+            "attendee": (dict(authz.lead_public_view(lead) or {})
                          if lead.attendee is not None else None),
         }
         for lead in leads
@@ -4173,7 +4173,7 @@ def get_exhibitor_leads(
 def _lead_row(db, lead):
     return {"id": lead.id, "exhibitor_id": lead.exhibitor_id, "attendee_id": lead.attendee_id,
             "scanned_at": lead.scanned_at, "notes": lead.notes, "rating": lead.rating,
-            "attendee": (dict(authz.lead_public_view(lead) or {}, **authz.pass_for_scanner(db, lead.attendee))
+            "attendee": (dict(authz.lead_public_view(lead) or {})
                          if lead.attendee is not None else None)}
 
 
@@ -4189,7 +4189,7 @@ def _leads_csv(db, exhibitor):
     buf = io.StringIO()
     w = _csv.writer(buf)
     w.writerow(["scanned_at_utc", "first_name", "last_name", "company", "job_title",
-                "email", "phone", "pass", "rating", "notes"])
+                "email", "phone", "rating", "notes"])
     leads = db.query(models.Lead).filter(models.Lead.exhibitor_id == exhibitor.id).order_by(
         models.Lead.scanned_at.asc(), models.Lead.id.asc()).all()
     for lead in leads:
@@ -4198,7 +4198,7 @@ def _leads_csv(db, exhibitor):
         w.writerow([_csv_cell(x) for x in (
             lead.scanned_at.isoformat(sep=" ", timespec="seconds") if lead.scanned_at else "",
             a.get("first_name"), a.get("last_name"), a.get("company"), a.get("job_title"),
-            a.get("email"), a.get("phone"), a.get("pass_display"), lead.rating, lead.notes)])
+            a.get("email"), a.get("phone"), lead.rating, lead.notes)])
     safe = re.sub(r"[^A-Za-z0-9]+", "-", exhibitor.company_name or "stand").strip("-")[:40] or "stand"
     return Response(content="\ufeff" + buf.getvalue(), media_type="text/csv; charset=utf-8",
                     headers={"Content-Disposition": 'attachment; filename="leads-%s.csv"' % safe,

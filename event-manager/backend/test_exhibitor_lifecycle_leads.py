@@ -170,8 +170,8 @@ check(list_email is None, "a later withdrawal hides the email again everywhere",
 v3 = visitor(3, share=True)     # flags on by default, never asked
 st, out, _ = call("POST", "/scan", {"access_token": stok3, "qr_code": v3})
 a3 = out.get("attendee") or {}
-check(a3.get("email") is None and a3.get("phone") is None and a3.get("first_name") == "Zz",
-      "default flags without an explicit yes: name only, no email or phone", a3)
+check(bool(a3.get("email")) and a3.get("first_name") == "Zz" and a3.get("consent") == {"email": True, "phone": True},
+      "never asked: purchase terms share their own email and phone (Babak, 9 Nov 2026)", a3)
 
 print("\n== complete lists and a real total ==")
 sid4, stok4 = stand("ZZ Big Stand")
@@ -191,7 +191,8 @@ st, raw, hdr = call("GET", "/scan/leads/%s/export.csv" % stok3, raw=True)
 rows = list(csv.DictReader(io.StringIO(raw.decode("utf-8-sig"))))
 check(st == 200 and len(rows) == 3, "the stand downloads exactly its own 3 leads", (st, len(rows)))
 check(all(r["last_name"] in ("Visitor1", "Visitor2", "Visitor3") for r in rows), "no other stand's visitors in it", [r["last_name"] for r in rows])
-check(next(r for r in rows if r["last_name"] == "Visitor3")["email"] == "", "never-asked email is blank in the CSV", rows)
+check("@" in next(r for r in rows if r["last_name"] == "Visitor3")["email"], "never-asked email is in the CSV (purchase terms)", rows)
+check("pass" not in (rows[0].keys() if rows else []), "the CSV has no pass/ticket-tier column", list(rows[0].keys()) if rows else [])
 check(next(r for r in rows if r["last_name"] == "Visitor2")["email"] == "", "withdrawn email is blank in the CSV", rows)
 st, raw, _ = call("GET", "/scan/leads/%s/export.csv" % stok, raw=True)
 v0row = [r for r in csv.DictReader(io.StringIO(raw.decode("utf-8-sig"))) if r["last_name"] == "Visitor0"]

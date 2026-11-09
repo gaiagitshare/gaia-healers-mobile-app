@@ -205,13 +205,21 @@ row = db.execute("select consent_updated_at, share_email_with_exhibitors, share_
 check(row[0] is None, "the transfer returns the ticket to 'never asked'", row[:3])
 reset = (json.loads(row[3] or "{}").get("transfers") or [{}])[-1].get("sharing_reset")
 check(reset and reset.get("was_asked") is True, "the previous holder's choice is kept in the transfer record", reset)
-st, l2 = call("POST", "/scan", {"qr_code": t["qr_code"], "access_token": ex[0]}, headers={})
-at = l2.get("attendee") or {}
-check(not at.get("email") and not at.get("phone"), "the NEW holder's email and phone are NOT disclosed", (at.get("email"), at.get("phone")))
+old_email = (l1.get("attendee") or {}).get("email") or ""
+# Before the new holder hands over their badge, the stand that met the OLD holder
+# keeps the person it met: no new holder's name or contact, no old contact either.
 st, lst = call("GET", "/scan/leads/%s?limit=500" % ex[0], headers={})
 mine = [x for x in (lst if isinstance(lst, list) else []) if (x.get("attendee") or x).get("attendee_id") == t["id"]]
-check(not any(new_email in json.dumps(x) or "+10000000002" in json.dumps(x) for x in mine),
-      "the stand's lead list does not show the new holder's email or phone", len(mine))
+check(mine and not any(new_email in json.dumps(x) or "+10000000002" in json.dumps(x) or "New" == ((x.get("attendee") or {}).get("last_name")) for x in mine),
+      "after a transfer, a stand that only met the previous holder does not see the new holder", mine[:1])
+check(mine and not any(old_email and old_email in json.dumps(x) for x in mine),
+      "  nor the previous holder's contact any more", mine[:1])
+# The new holder hands their badge to the same stand: their OWN details, never the previous holder's.
+st, l2 = call("POST", "/scan", {"qr_code": t["qr_code"], "access_token": ex[0]}, headers={})
+at = l2.get("attendee") or {}
+check(at.get("email") == new_email and at.get("phone") == "+10000000002",
+      "the new holder's own email and phone go to the stand they hand their badge to", (at.get("email"), at.get("phone")))
+check(old_email and old_email not in json.dumps(l2), "never the previous holder's email", old_email)
 call("POST", "/events/%d/attendees/%d/sharing" % (EV, t["id"]), {"share_email": True, "share_phone": False, "reason": "new holder yes"})
 st, l3 = call("POST", "/scan", {"qr_code": t["qr_code"], "access_token": ex[0]}, headers={})
 at = l3.get("attendee") or {}

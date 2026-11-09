@@ -18,6 +18,7 @@ conference ticket is not agreement to have your phone number handed to every
 stand in the hall.
 """
 
+import re
 from typing import Optional
 
 from fastapi import HTTPException
@@ -127,38 +128,94 @@ def require_admin(user: models.User) -> None:
 ALWAYS_SHARED = ("first_name", "last_name", "company", "job_title")
 
 
-def pass_for_scanner(db, attendee) -> dict:
-    """What this badge holds, for somebody who has just scanned it.
-
-    Shown to a scanner and to nobody else. The public card page is reached by
-    anybody who opens the link -- the QR is worn all weekend and gets
-    photographed, forwarded and left on tables -- so what tier somebody bought
-    does not belong there. A stand the person chose to hand their badge to is a
-    different matter, and so is the door.
-
-    Imported lazily: authz is the module main imports, not the other way round.
-    """
-    try:
-        import main                                          # noqa: WPS433
-        return {"pass_display": main._pass_display(db, attendee),
-                "pass_includes": main._pass_includes(db, attendee)}
-    except Exception:
-        return {}
-
-
 def explicit_consent(attendee) -> tuple:
-    """(email_ok, phone_ok): what this visitor has EXPLICITLY agreed to share
-    with exhibitors.
+    """(email_ok, phone_ok): may stands that scan this badge see email / phone?
 
-    Babak, 7 Nov 2026: name, company and job title may be shared with
-    appropriate notice; email and phone only with the visitor's explicit
-    consent. The share_* columns default to on for every ticket ever sold, so a
-    flag alone is not consent. Only a choice the visitor actually made -- which
-    stamps consent_updated_at (the door's sharing control, an admin edit on
-    their word) -- counts. Nothing in the database is rewritten for this."""
-    asked = getattr(attendee, "consent_updated_at", None) is not None
-    return (asked and bool(attendee.share_email_with_exhibitors),
-            asked and bool(attendee.share_phone_with_exhibitors))
+    Babak, 9 Nov 2026 (supersedes 7 Nov): buyers accept the terms at purchase,
+    which permit sharing their details with the exhibitors whose stand they
+    hand their badge to. So the ticket's own sharing flags decide: they are on
+    from the purchase, and only an explicit opt-out (the door's sharing control
+    or an admin edit, which set a flag to off) turns them off. No question is
+    asked at check-in or in the profile for this. Which stand may see a person
+    at all is decided elsewhere: only a stand that scanned them holds a lead.
+    (Name kept for the callers; it now means "permitted", not "asked".)"""
+    return (bool(getattr(attendee, "share_email_with_exhibitors", True)),
+            bool(getattr(attendee, "share_phone_with_exhibitors", True)))
+
+
+_SEAT_ALIAS = re.compile(r"\+seat\d+@", re.I)
+
+
+def _norm_phone(p) -> str:
+    return re.sub(r"\D", "", str(p or ""))[-10:]
+
+
+def own_contact(attendee) -> tuple:
+    """(email, phone) that belong to THIS ticket's holder -- never the buyer's.
+
+    A guest ticket can carry somebody else's contact: a seat named under the
+    buyer's mailbox ("+seatN"), a seat linked to the buyer's own ticket, a
+    transferred ticket still on the purchaser's or a previous holder's
+    address, or several tickets on one shared address. In each case the stand
+    gets nothing rather than the purchaser's email or phone (Babak, 9 Nov
+    2026). Where the guest's own details are on file, they are used."""
+    email = (getattr(attendee, "email", None) or "").strip()
+    phone = (getattr(attendee, "phone", None) or "").strip()
+    cd = getattr(attendee, "custom_data", None) or {}
+    not_theirs_email, not_theirs_phone = set(), set()
+    # Previous holders and the purchaser of a transferred ticket.
+    for t in (cd.get("transfers") or []):
+        for who in (t.get("from") or {}, t.get("purchaser") or {}):
+            if who.get("email"):
+                not_theirs_email.add(str(who["email"]).strip().lower())
+            if who.get("phone"):
+                not_theirs_phone.add(_norm_phone(who["phone"]))
+    db = None
+    try:
+        from sqlalchemy.orm import object_session
+        db = object_session(attendee)
+    except Exception:
+        db = None
+    # A seat linked to the buyer's own ticket.
+    buyer_id = cd.get("bought_by_attendee")
+    if db is not None and buyer_id:
+        buyer = db.query(models.Attendee).filter(models.Attendee.id == buyer_id).first()
+        if buyer is not None and buyer.id != attendee.id:
+            if buyer.email:
+                not_theirs_email.add(buyer.email.strip().lower())
+            if buyer.phone:
+                not_theirs_phone.add(_norm_phone(buyer.phone))
+    if email and _SEAT_ALIAS.search(email):
+        email = ""                      # the buyer's mailbox with a seat tag
+    if email and email.lower() in not_theirs_email:
+        email = ""
+    if phone and _norm_phone(phone) in not_theirs_phone:
+        phone = ""
+    # One address on several live tickets at this event: it is a mailbox, not a
+    # person. Shown only on the ticket(s) whose holder is the purchaser of that
+    # address (the payment's buyer name); every other holder gets nothing.
+    if db is not None and email:
+        try:
+            from sqlalchemy import func as _f
+            others = db.query(models.Attendee).filter(
+                models.Attendee.event_id == attendee.event_id,
+                _f.lower(models.Attendee.email) == email.lower(),
+                models.Attendee.id != attendee.id).count()
+            if others:
+                buyers = {(n or "").strip().lower() for (n,) in db.query(models.PaymentEvent.buyer_name).filter(
+                    _f.lower(models.PaymentEvent.buyer_email) == email.lower()).all()}
+                holder = ("%s %s" % (attendee.first_name or "", attendee.last_name or "")).strip().lower()
+                if holder not in buyers:
+                    email = ""
+                    if phone and phone == (getattr(attendee, "phone", "") or "").strip():
+                        # Same mailbox, same household phone: not demonstrably theirs either.
+                        bphones = {_norm_phone(p) for (p,) in db.query(models.PaymentEvent.buyer_phone).filter(
+                            _f.lower(models.PaymentEvent.buyer_email) == attendee.email.lower()).all() if p}
+                        if _norm_phone(phone) in bphones:
+                            phone = ""
+        except Exception:
+            pass
+    return (email or None, phone or None)
 
 
 def lead_view(attendee: models.Attendee) -> dict:
@@ -172,8 +229,9 @@ def lead_view(attendee: models.Attendee) -> dict:
     view = {field: getattr(attendee, field, None) or "" for field in ALWAYS_SHARED}
     view["attendee_id"] = attendee.id
     email_ok, phone_ok = explicit_consent(attendee)
-    view["email"] = attendee.email if email_ok else None
-    view["phone"] = attendee.phone if phone_ok else None
+    own_email, own_phone = own_contact(attendee)
+    view["email"] = own_email if email_ok else None
+    view["phone"] = own_phone if phone_ok else None
     # Said out loud so an exhibitor understands why a field is blank, rather
     # than assuming the data is missing and chasing it another way.
     view["consent"] = {"email": email_ok, "phone": phone_ok}
@@ -198,10 +256,40 @@ def lead_public_view(lead) -> Optional[dict]:
     now_email, now_phone = explicit_consent(attendee)
     email_ok = bool(snap.get("email")) and now_email
     phone_ok = bool(snap.get("phone")) and now_phone
-    view["email"] = attendee.email if email_ok else None
-    view["phone"] = attendee.phone if phone_ok else None
+    # A lead is a person this stand met. If the ticket changed hands after the
+    # stand's last scan, the row now describes somebody the stand never met:
+    # keep the holder they did meet (from the transfer record) and no contact.
+    met = _holder_changed_since(attendee, snap.get("at") or getattr(lead, "scanned_at", None))
+    if met is not None:
+        first, _, last = (met.get("name") or "").partition(" ")
+        view.update({"first_name": first, "last_name": last, "company": "", "job_title": ""})
+        email_ok = phone_ok = False
+        view["holder_changed"] = True
+    own_email, own_phone = own_contact(attendee)
+    view["email"] = own_email if email_ok else None
+    view["phone"] = own_phone if phone_ok else None
     view["consent"] = {"email": email_ok, "phone": phone_ok}
     return view
+
+
+def _holder_changed_since(attendee, when):
+    """The transfer record's previous holder if the ticket changed hands after
+    `when` (a datetime or ISO string), else None."""
+    from datetime import datetime as _dt
+    if not when:
+        return None
+    try:
+        when = when if isinstance(when, _dt) else _dt.fromisoformat(str(when).replace("Z", ""))
+    except Exception:
+        return None
+    for t in ((getattr(attendee, "custom_data", None) or {}).get("transfers") or []):
+        try:
+            at = _dt.fromisoformat(str(t.get("at") or "").replace("Z", ""))
+        except Exception:
+            continue
+        if at > when:
+            return t.get("from") or {}
+    return None
 
 
 def consent_snapshot(attendee: models.Attendee) -> dict:
@@ -211,8 +299,10 @@ def consent_snapshot(attendee: models.Attendee) -> dict:
     and the truthful record is what was agreed when the exchange happened — not
     what the attendee's settings say months afterwards.
     """
+    from datetime import datetime as _dt
     email_ok, phone_ok = explicit_consent(attendee)
-    return {"email": email_ok, "phone": phone_ok}
+    # "at": when this hand-over happened, so a later change of holder is seen.
+    return {"email": email_ok, "phone": phone_ok, "at": _dt.utcnow().isoformat()}
 
 
 # Stand lifecycle, decided at request time (audit 7 Nov 2026). A stand whose

@@ -641,8 +641,19 @@
         + '" target="_blank" rel="noopener noreferrer">See their stand page</a>' : '');
   }
 
+  // Speakers in the order they take the stage: by their earliest session in
+  // the agenda. Anyone without a scheduled session keeps their place after
+  // those who have one.
+  function inScheduleOrder(list) {
+    const first = (speaker) => (speaker.sessions || []).map((x) => String(x.start_time || ''))
+      .filter(Boolean).sort()[0] || '';
+    return list.map((speaker, i) => ({ speaker, i, at: first(speaker) }))
+      .sort((a, b) => (a.at && b.at ? a.at.localeCompare(b.at) : a.at ? -1 : b.at ? 1 : 0) || a.i - b.i)
+      .map((row) => row.speaker);
+  }
+
   function speakersSection(detail) {
-    const speakers = Array.isArray(detail?.speakers) ? detail.speakers : [];
+    const speakers = inScheduleOrder(Array.isArray(detail?.speakers) ? detail.speakers : []);
     if (!speakers.length) return '';
     // Cards rather than a stack of rows: a speaker is a face and a claim, and
     // at three columns on a laptop the whole line-up is one glance instead of
@@ -1397,6 +1408,24 @@
     return Number.isFinite(ms) ? ms : null;
   };
 
+  // From the start of the event's first day until it ends, people are already
+  // there: tickets and the overview give way to what they need on the floor,
+  // and "Exhibit with us" is about next year. ?preview=eventday shows it early.
+  function isEventDay(item) {
+    try { if (new URLSearchParams(window.location.search).get('preview') === 'eventday') return true; } catch (e) {}
+    const raw = String(item?.startAt || '');
+    const m = raw.match(/^(\d{4}-\d{2}-\d{2})T[\d:.]+(Z|[+-]\d{2}:?\d{2})?$/);
+    const dayStart = m ? instant(m[1] + 'T00:00:00' + (m[2] || '')) : instant(raw);
+    const end = instant(item?.endAt);
+    const now = serverNow();
+    return Boolean(dayStart) && now >= dayStart && (!end || now <= end);
+  }
+  const EVENT_DAY_HIDDEN = ['overview', 'tickets'];
+  function nextEditionLabel(item) {
+    const year = Number(String(item?.startAt || '').slice(0, 4));
+    return year ? 'Exhibit with us ' + (year + 1) : 'Exhibit with us';
+  }
+
   function eventPhase(item) {
     const start = instant(item.startAt);
     const end = instant(item.endAt);
@@ -1998,8 +2027,11 @@
     }
 
     // Sections with nothing in them are not offered as tabs at all.
-    const tabs = EVENT_TABS.filter(([key]) => tabHasContent(key, detail));
-    if (!tabs.some(([key]) => key === eventUI.tab)) eventUI.tab = 'overview';
+    const eventDay = isEventDay(item);
+    const tabs = EVENT_TABS.filter(([key]) => tabHasContent(key, detail))
+      .filter(([key]) => !(eventDay && EVENT_DAY_HIDDEN.includes(key)))
+      .map(([key, label]) => (eventDay && key === 'exhibit' ? [key, nextEditionLabel(item)] : [key, label]));
+    if (!tabs.some(([key]) => key === eventUI.tab)) eventUI.tab = tabs.length ? tabs[0][0] : 'overview';
 
     const phase = eventPhase(item);
     const countdown = countdownLabel(item);

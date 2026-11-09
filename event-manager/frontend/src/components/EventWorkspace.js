@@ -18,6 +18,7 @@ import ReviewQueue from './ReviewQueue';
 import TicketDelivery from './TicketDelivery';
 import Reconciliation from './Reconciliation';
 import Volunteers from './Volunteers';
+import ShareQr from './ShareQr';
 
 // One workspace per event. The sections are structural, not configured, so any
 // event — the first or the twentieth — gets all of them the moment it exists.
@@ -33,6 +34,7 @@ const SECTIONS = [
     ['notify', 'Push Notifications'],
     ['info', 'FAQ & Info'],
     ['resources', 'Resources'],
+    ['share', 'Share & QR codes'],
     ['community', 'Community'],
     ['attendees', 'Attendees'],
     ['setup', 'Setup'],
@@ -80,6 +82,7 @@ function EventWorkspace() {
             case 'review': return <ReviewQueue />;
             case 'delivery': return <TicketDelivery />;
             case 'reconcile': return <Reconciliation />;
+            case 'share': return <ShareQr />;
             case 'volunteers': return <Volunteers />;
             case 'checkin': return <CheckIn timezone={event?.timezone} />;
             default: return <EventDetail section="overview" />;

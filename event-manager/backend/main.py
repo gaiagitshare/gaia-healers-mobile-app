@@ -13875,6 +13875,10 @@ def recon_action(event_id: int, issue_id: int, body: dict, db: Session = Depends
 import volunteers as _volunteers  # noqa: E402
 _volunteers.register(app, get_current_user, _rate_limited, _client_ip)
 
+# Share links and QR codes for the event's public pages (9 Nov 2026): see share_links.py.
+import share_links as _share_links  # noqa: E402
+_share_links.register(app, get_db, get_current_user, models, authz, APP_PUBLIC_BASE)
+
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="127.0.0.1", port=8002)

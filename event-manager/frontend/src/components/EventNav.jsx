@@ -30,7 +30,7 @@ export const NAV_GROUPS = [
     // Who is coming, who is through the door, and what they are saying.
     { label: 'People', keys: ['attendees', 'checkin', 'volunteers', 'review', 'reconcile', 'delivery', 'community'] },
     // Everything we push out to attendees, live or written ahead.
-    { label: 'Comms', keys: ['live', 'updates', 'notify', 'info', 'resources'] },
+    { label: 'Comms', keys: ['live', 'updates', 'notify', 'info', 'resources', 'share'] },
     // Wiring. Rarely touched during an event, and it should not sit next to the
     // controls that are.
     { label: 'Setup', keys: ['setup', 'mappings'] },

@@ -402,6 +402,9 @@ export const reconAssign = (eventId, id, userId) => api.post(`/events/${eventId}
 export const reconStatus = (eventId, id, data) => api.post(`/events/${eventId}/reconcile/issues/${id}/status`, data);
 export const reconAction = (eventId, id, data) => api.post(`/events/${eventId}/reconcile/issues/${id}/action`, data);
 export const getTicketLink = (eventId, attendeeId) => api.get(`/events/${eventId}/attendees/${attendeeId}/ticket-link`);
+export const getShareLinks = (eventId) => api.get(`/events/${eventId}/share-links`);
+// Public image URL (no sign-in needed): usable in <img> and as a download link.
+export const shareQrUrl = (eventId, query) => `${API_URL}/events/${eventId}/share-qr.png?${new URLSearchParams(query).toString()}`;
 export const reconBulkStatus = (eventId, data) => api.post(`/events/${eventId}/reconcile/issues/bulk-status`, data);
 
 // Volunteers (7 Nov 2026)

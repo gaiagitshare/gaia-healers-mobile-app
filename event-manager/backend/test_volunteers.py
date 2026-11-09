@@ -9,7 +9,7 @@ admin decides, volunteers change only their own shifts, links can be switched
 off, and volunteers can reach nothing else in the Event Manager.
 Run:  python3 /root/event/backend/test_volunteers.py
 """
-import json, os, secrets, sqlite3, subprocess, sys, threading, urllib.error, urllib.request
+import json, os, re, secrets, sqlite3, subprocess, sys, threading, urllib.error, urllib.request
 
 HERE = "/root/event/backend"
 sys.path.insert(0, HERE)
@@ -62,7 +62,11 @@ days = sorted({s["day"] for s in ov["shifts"]})
 check(days == ["2026-11-19", "2026-11-20", "2026-11-21", "2026-11-22"], "Thursday setup through Sunday", days)
 if os.path.exists(fixture):
     imp = [p for s in ov["shifts"] for p in s["people"] if p["status"] == "confirmed" and p["name"] == "Zz Fixture"]
-    check(len(imp) == 2, "the existing SignUpGenius sign-ups come in as confirmed (whatever is already there)", imp)
+    # Live data may already fill those shifts; then the sign-up is flagged, never squeezed in.
+    zf = next((v for v in ov["volunteers"] if (v.get("first_name"), v.get("last_name")) == ("Zz", "Fixture")), {})
+    flagged_full = len(set(re.findall(r"shift '([^']+)' on (\S+) not placed: this shift is full", (zf.get("needs_review") or "").lower())))
+    check(len(imp) + flagged_full == 2 and all(p["status"] == "confirmed" for p in imp),
+          "the existing SignUpGenius sign-ups come in as confirmed, or are flagged when the shift is already full", (imp, zf.get("needs_review")))
     check(any(v["needs_review"] for v in ov["volunteers"]), "imported people without contact details are flagged for review", None)
 reg = next(s for s in ov["shifts"] if s["day"] == "2026-11-20" and s["role"] == "Registration" and s["start_time"] == "08:00")
 check(reg["start_time"] == "08:00" and reg["end_time"] == "11:00" and reg["capacity"] == 4,
@@ -139,6 +143,11 @@ st, r = call("PATCH", "/events/%d/volunteer-bookings/%d" % (EV, ann_m), {"status
 check(st == 200 and r["status"] == "confirmed", "an admin approves a request", (st, r))
 st, r = call("PATCH", "/events/%d/volunteer-bookings/%d" % (EV, ann_m), {"move_to_shift_id": o})
 check(st == 200 and r["shift_id"] == o, "an admin moves Ann to another shift (nothing else of hers overlaps it)", (st, r))
+check(not r.get("warnings"), "no warning when nothing overlaps", r)
+st, r = call("POST", "/events/%d/volunteer-bookings" % EV, {"shift_id": m, "volunteer_id": A})
+check(st == 200 and r.get("warnings") and "overlap" in r["warnings"][0], "an admin CAN put Ann on 9-12 too: allowed with an overlap warning", (st, r))
+st, r = call("POST", "/events/%d/volunteer-bookings" % EV, {"shift_id": m, "volunteer_id": A})
+check(st == 409, "but still not on the same shift twice", (st, r))
 full1 = shift("2026-11-19", "10:00", "11:00", "Tiny", 1)
 call("POST", "/events/%d/volunteer-bookings" % EV, {"shift_id": full1, "volunteer_id": B})
 st, r = call("POST", "/events/%d/volunteer-bookings" % EV, {"shift_id": full1, "volunteer_id": C})

@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import {
     Alert, Box, Button, Checkbox, Chip, CircularProgress, Dialog, DialogActions, DialogContent, DialogTitle,
-    FormControlLabel, MenuItem, Paper, Stack, Tab, Tabs, TextField, Tooltip, Typography, useMediaQuery,
+    FormControlLabel, MenuItem, Paper, Snackbar, Stack, Tab, Tabs, TextField, Tooltip, Typography, useMediaQuery,
 } from '@mui/material';
 import {
     getVolunteerOverview, updateVolunteerProgram, addVolunteer, updateVolunteer, addVolunteerShift,
@@ -39,6 +39,7 @@ export default function Volunteers() {
     const [tab, setTab] = useState('overview');
     const [error, setError] = useState('');
     const [notice, setNotice] = useState('');
+    const [warn, setWarn] = useState('');
     const [busy, setBusy] = useState(false);
     const [dlg, setDlg] = useState(null);      // { kind, ... }
     const [form, setForm] = useState({});
@@ -54,7 +55,12 @@ export default function Volunteers() {
 
     const run = (job, ok) => {
         setBusy(true);
-        return job.then((r) => { if (ok) setNotice(typeof ok === 'function' ? ok(r) : ok); setDlg(null); setForm({}); return load(); })
+        return job.then((r) => {
+            if (ok) setNotice(typeof ok === 'function' ? ok(r) : ok);
+            const w = r?.data?.warnings;
+            setWarn(Array.isArray(w) && w.length ? `Done, but please check: ${w.join(' ')}` : '');
+            setDlg(null); setForm({}); return load();
+        })
             .catch((e) => setError(err(e))).finally(() => setBusy(false));
     };
     const copy = (text, what) => {
@@ -135,6 +141,9 @@ export default function Volunteers() {
                 </Stack>
             </Stack>
             {error && <Alert severity="error" onClose={() => setError('')} sx={{ mb: 1 }} className="no-print">{error}</Alert>}
+            <Snackbar open={!!warn} anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }} className="no-print">
+                <Alert severity="warning" variant="filled" onClose={() => setWarn('')} sx={{ maxWidth: 560 }}>{warn}</Alert>
+            </Snackbar>
             {notice && <Alert severity="success" onClose={() => setNotice('')} sx={{ mb: 1 }} className="no-print">{notice}</Alert>}
 
             <Stack direction="row" sx={{ flexWrap: 'wrap', gap: 1, mb: 2 }} className="no-print">

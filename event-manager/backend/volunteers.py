@@ -11,8 +11,10 @@ Rules, enforced here and nowhere else:
   * a shift never holds more active bookings (requested + confirmed) than its
     capacity -- the count happens under the database write lock, so two people
     cannot take the last place at the same moment;
-  * a volunteer never holds two active bookings whose times overlap (all-day
-    lead roles excepted);
+  * a volunteer cannot REQUEST two shifts whose times overlap (all-day lead
+    roles excepted); an admin may still assign, move or approve an overlapping
+    shift -- people sometimes sign up for both so they can start early -- and
+    gets a warning naming the other shift instead of a refusal;
   * a volunteer can request, and cancel, only their own shifts; only admins
     confirm, decline, assign, move or change anybody else's;
   * every change is logged with who made it, before and after.
@@ -95,9 +97,11 @@ def active_count(db, shift_id, exclude_booking=None):
     return q.count()
 
 
-def check_can_hold(db, shift, volunteer, exclude_booking=None):
+def check_can_hold(db, shift, volunteer, exclude_booking=None, allow_overlap=False):
     """Raise 409 unless this volunteer may hold a place on this shift now.
-    Call only after _write_lock()."""
+    With allow_overlap (admins), an overlap is returned as a warning instead.
+    Returns the list of warnings. Call only after _write_lock()."""
+    warnings = []
     if not shift.active:
         raise HTTPException(status_code=409, detail="This shift is no longer offered.")
     if volunteer.status == "rejected":
@@ -111,10 +115,15 @@ def check_can_hold(db, shift, volunteer, exclude_booking=None):
             raise HTTPException(status_code=409, detail="Already on this shift.")
         other = db.query(models.VolunteerShift).filter(models.VolunteerShift.id == b.shift_id).first()
         if other is not None and overlaps(shift, other):
-            raise HTTPException(status_code=409, detail="This overlaps another shift: %s %s-%s." % (
-                other.role, fmt_time(other.start_time), fmt_time(other.end_time)))
+            msg = "This overlaps another shift: %s %s-%s." % (
+                other.role, fmt_time(other.start_time), fmt_time(other.end_time))
+            if not allow_overlap:
+                raise HTTPException(status_code=409, detail=msg)
+            warnings.append("%s is also on %s %s-%s (%s); the times overlap." % (
+                full_name(volunteer), other.role, fmt_time(other.start_time), fmt_time(other.end_time), other.day))
     if active_count(db, shift.id, exclude_booking) >= int(shift.capacity or 0):
         raise HTTPException(status_code=409, detail="This shift is full.")
+    return warnings
 
 
 def fmt_time(hhmm):
@@ -376,7 +385,8 @@ def register(app, get_current_user, rate_limited, client_ip):
             s.active = bool(body.get("active"))
             if not s.active and taken:
                 raise HTTPException(status_code=409, detail="People hold this shift. Move or remove them first.")
-        # New times must not create an overlap for anybody already on it.
+        # New times may make someone on it overlap another shift: warn, don't block.
+        warnings = []
         if any(k in body for k in ("day", "start_time", "end_time", "lead_role")):
             for b in db.query(models.VolunteerBooking).filter(models.VolunteerBooking.shift_id == s.id,
                                                               models.VolunteerBooking.status.in_(ACTIVE)).all():
@@ -385,11 +395,13 @@ def register(app, get_current_user, rate_limited, client_ip):
                                                                   models.VolunteerBooking.id != b.id).all():
                     other = db.query(models.VolunteerShift).filter(models.VolunteerShift.id == o.shift_id).first()
                     if other is not None and overlaps(s, other):
-                        raise HTTPException(status_code=409, detail="The new time would make a volunteer on this shift "
-                                                                    "double-booked. Move them first.")
+                        pv = db.query(models.Volunteer).filter(models.Volunteer.id == b.volunteer_id).first()
+                        warnings.append("%s is also on %s %s-%s (%s); the times now overlap." % (
+                            full_name(pv) if pv else "A volunteer", other.role, fmt_time(other.start_time),
+                            fmt_time(other.end_time), other.day))
         log(db, event_id, who(current_user), "shift_updated", shift_id=s.id, before=before, after=_shift_dict(s))
         db.commit()
-        return {"ok": True}
+        return {"ok": True, "warnings": warnings}
 
     @app.post("/events/{event_id}/volunteer-bookings")
     def booking_assign(event_id: int, body: dict, db: Session = Depends(get_db), current_user=Depends(get_current_user)):
@@ -398,7 +410,7 @@ def register(app, get_current_user, rate_limited, client_ip):
         _write_lock(db)
         s = shift_or_404(db, event_id, int(body.get("shift_id") or 0))
         v = vol_or_404(db, event_id, int(body.get("volunteer_id") or 0))
-        check_can_hold(db, s, v)
+        warnings = check_can_hold(db, s, v, allow_overlap=True)
         if v.status == "pending":
             v.status = "approved"
         b = models.VolunteerBooking(event_id=event_id, shift_id=s.id, volunteer_id=v.id, status="confirmed",
@@ -407,9 +419,10 @@ def register(app, get_current_user, rate_limited, client_ip):
         db.add(b)
         db.flush()
         log(db, event_id, who(current_user), "assigned", volunteer_id=v.id, shift_id=s.id, booking_id=b.id,
-            after={"status": "confirmed", "volunteer": full_name(v), "shift": "%s %s %s" % (s.day, s.start_time, s.role)})
+            after={"status": "confirmed", "volunteer": full_name(v), "shift": "%s %s %s" % (s.day, s.start_time, s.role),
+                   **({"overlap_warning": warnings} if warnings else {})})
         db.commit()
-        return {"ok": True, "booking_id": b.id}
+        return {"ok": True, "booking_id": b.id, "warnings": warnings}
 
     @app.patch("/events/{event_id}/volunteer-bookings/{bid}")
     def booking_decide(event_id: int, bid: int, body: dict, db: Session = Depends(get_db),
@@ -423,11 +436,12 @@ def register(app, get_current_user, rate_limited, client_ip):
             raise HTTPException(status_code=404, detail="Request not found")
         v = vol_or_404(db, event_id, b.volunteer_id)
         before = {"status": b.status, "shift_id": b.shift_id, "note": b.note}
+        warnings = []
         if body.get("move_to_shift_id"):
             target = shift_or_404(db, event_id, int(body.get("move_to_shift_id")))
             if b.status not in ACTIVE:
                 raise HTTPException(status_code=409, detail="Only an active booking can be moved")
-            check_can_hold(db, target, v, exclude_booking=b.id)
+            warnings += check_can_hold(db, target, v, exclude_booking=b.id, allow_overlap=True)
             b.shift_id = target.id
             b.status = "confirmed"
         if body.get("status"):
@@ -435,7 +449,8 @@ def register(app, get_current_user, rate_limited, client_ip):
             if st not in STATUSES:
                 raise HTTPException(status_code=400, detail="Unknown status")
             if st in ACTIVE and b.status not in ACTIVE:
-                check_can_hold(db, shift_or_404(db, event_id, b.shift_id), v, exclude_booking=b.id)
+                warnings += check_can_hold(db, shift_or_404(db, event_id, b.shift_id), v, exclude_booking=b.id,
+                                           allow_overlap=True)
             b.status = st
             if st == "confirmed" and v.status == "pending":
                 v.status = "approved"
@@ -443,9 +458,10 @@ def register(app, get_current_user, rate_limited, client_ip):
             b.note = (body.get("note") or "").strip() or None
         b.decided_by, b.updated_at = who(current_user), _now()
         log(db, event_id, who(current_user), "booking_updated", volunteer_id=v.id, shift_id=b.shift_id, booking_id=b.id,
-            before=before, after={"status": b.status, "shift_id": b.shift_id, "note": b.note})
+            before=before, after={"status": b.status, "shift_id": b.shift_id, "note": b.note,
+                                  **({"overlap_warning": warnings} if warnings else {})})
         db.commit()
-        return {"ok": True, "status": b.status, "shift_id": b.shift_id}
+        return {"ok": True, "status": b.status, "shift_id": b.shift_id, "warnings": warnings}
 
     @app.get("/events/{event_id}/volunteers/export.csv")
     def vol_export(event_id: int, db: Session = Depends(get_db), current_user=Depends(get_current_user)):

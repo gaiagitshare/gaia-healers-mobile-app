@@ -237,7 +237,7 @@
           <form class="gaia-auth-modal__joinform" data-pw-form hidden>
             <input type="password" data-pw-input class="gaia-auth-modal__input" placeholder="Your password" autocomplete="current-password" aria-label="Password" />
             <button type="submit" class="g-btn g-btn--primary gaia-auth-modal__submit" data-pw-submit>Sign in</button>
-            <p class="gaia-auth-modal__status" data-pw-status role="status" aria-live="polite">Use the email above and your Gaia password.</p>
+            <p class="gaia-auth-modal__status" data-pw-status role="status" aria-live="polite">Use the email above and your Gaia Healers password.</p>
             <a class="gaia-auth-modal__joinalt" data-pw-forgot href="activate.html?mode=forgot">Forgot your password? →</a>
           </form>
           <p class="gaia-auth-modal__join">New to Gaia Healers? <button type="button" class="gaia-auth-modal__joinlink" data-join-toggle>Join free</button> — we’ll create your account and email your one-tap sign-in link.</p>

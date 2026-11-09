@@ -4,7 +4,7 @@
  * Badge QR -> 6-digit code -> create password -> signed in, into the SAME
  * member session the email link creates. There is no second account system:
  * the Event Manager keeps only a bcrypt hash against the person's existing
- * Gaia profile (member card), and everything else is the existing identity.
+ * Gaia Healers profile (member card), and everything else is the existing identity.
  *
  *   POST /api/activate/start     { token }                 -> what the badge page offers; sends the email code
  *   POST /api/activate/verify    { token, code }           -> { permit }   (email code or help-desk code)
@@ -188,7 +188,7 @@ export function createActivation(deps) {
         if (r.ok && r.code) await deliver(r.deliver_to, r.code, '', 'reset your Gaia Healers password');
       }
       // Same answer whether or not the address is known.
-      sendJson(res, 200, { ok: true, message: 'If that email has a Gaia profile, a code is on its way.' }, origin);
+      sendJson(res, 200, { ok: true, message: 'If that email has a Gaia Healers profile, a code is on its way.' }, origin);
       return true;
     }
     if (p === '/api/auth/password/reset') {

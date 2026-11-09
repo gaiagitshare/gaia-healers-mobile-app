@@ -346,7 +346,7 @@
         <p class="g-readings__kicker">What they cannot see</p>
         <ul class="g-readings__lines">
           <li>Anything else in your Gaia app: your daily energy checks, journal, messages, courses or bookings.</li>
-          <li>Your Gaia account itself. Their system knows you only as their client; Gaia never sends them your member details.</li>
+          <li>Your Gaia Healers account itself. Their system knows you only as their client; Gaia Healers never sends them your member details.</li>
         </ul>
         <p class="g-readings__muted">Gaia keeps no copy of the readings and no AI reads the values. Stop sharing below at any time; they are told the same minute.</p>
       </div>

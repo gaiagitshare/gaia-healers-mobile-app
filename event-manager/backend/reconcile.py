@@ -294,15 +294,20 @@ def detect(db, event_id):
         att = by_id.get(it.get("attendee_id"))
         add("review:%s:%s" % (it["kind"], it.get("ref") or it.get("attendee_id") or it.get("title")), kind, prio,
             it["title"] + (" — %s" % it["name"] if it.get("name") else ""), it.get("detail") or "",
-            {"payment_unplaced": "Find whose ticket this payment belongs to and place it there (Payments). Do not "
-                                 "issue a new ticket unless the buyer has none.",
-             "sale_unmapped": "Check the product sold. If it is an event ticket, map it in Ticket Mappings; the "
-                              "ticket is then created from the verified purchase.",
+            {"payment_unplaced": "Look at 'This person's tickets' below. If they already have a ticket, open "
+                                 "Review Queue and use Place to link this payment to it. Only give a new badge "
+                                 "if they have no ticket at all.",
+             "sale_unmapped": "Check the product sold. If the person already has a ticket (see below) or it is "
+                              "not an event ticket, Dismiss with a note. If it is an event ticket nobody has "
+                              "received, add the product in Setup > Ticket Mappings: the ticket is then created "
+                              "from the purchase by itself.",
              "charge_held": "Confirm with the buyer whether this was a second seat or a duplicate charge.",
              "name_to_confirm": "Ask the buyer who this ticket is for, then use 'Correct name & contact'.",
              "identity_review": "Decide which person this record belongs to.",
              "confirm_purchase": "Call the buyer to confirm the purchase.",
-             "payment_unsettled": "Wait for the payment to settle, or check it in GHL."}.get(it["kind"], ""),
+             "payment_unsettled": "A card payment that failed or has not settled yet: no money arrived, so no ticket "
+                                  "is owed for it. If the person already has a ticket (see below), Dismiss. If not, "
+                                  "Dismiss too, unless they say they paid another way; then check GHL."}.get(it["kind"], ""),
             attendees=[att] if att else [], orders=[str(it.get("ref") or "")] if it["kind"] in ("sale_unmapped", "payment_unplaced", "charge_held") else [],
             facts={"source": "review queue", "kind": it["kind"], "amount": it.get("amount"), "when": it.get("when"),
                    "name": it.get("name"), "email": it.get("email")})

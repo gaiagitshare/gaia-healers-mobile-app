@@ -2427,8 +2427,15 @@ def update_attendee(
     authz.require_cap(db, current_user, attendee.event_id, "attendee.write")
     
     changes = attendee_update.dict(exclude_unset=True)
+    # Every edit is kept in the ticket's own history: who changed what, from what.
+    diff = {k: {"from": getattr(attendee, k, None), "to": v} for k, v in changes.items()
+            if k != "custom_data" and getattr(attendee, k, None) != v}
     for key, value in changes.items():
         setattr(attendee, key, value)
+    if diff:
+        _lifecycle_append(attendee, "edited", actor=(current_user.email or "admin"),
+                          changes={k: {"from": str(d["from"]) if d["from"] is not None else None,
+                                       "to": str(d["to"]) if d["to"] is not None else None} for k, d in diff.items()})
     # A consent choice recorded here is the person's word: stamped so that a
     # later check-in or print does not switch sharing back on over it.
     if "share_email_with_exhibitors" in changes or "share_phone_with_exhibitors" in changes:
@@ -2448,7 +2455,15 @@ def delete_attendee(
     if not attendee:
         raise HTTPException(status_code=404, detail="Attendee not found")
     authz.require_cap(db, current_user, attendee.event_id, "attendee.write")
-    
+    # A real ticket is never erased: it was paid for, scanned or emailed, and
+    # deleting it would lose that trail. Revoke it instead (kept, audited, undoable).
+    paid = db.query(models.PaymentEvent).filter(models.PaymentEvent.attendee_id == attendee.id,
+                                                models.PaymentEvent.status.in_(list(payments.PAID))).count()
+    if attendee.is_checked_in or paid:
+        raise HTTPException(status_code=409, detail="This ticket %s, so it cannot be deleted. Use Manage ticket → "
+                                                    "Revoke instead: it stops the ticket working and keeps its history."
+                                                    % ("was checked in" if attendee.is_checked_in else "has a payment on it"))
+    logging.getLogger("event.audit").info("attendee deleted: id=%s event=%s by=%s", attendee.id, attendee.event_id, current_user.email)
     db.delete(attendee)
     db.commit()
     return {"message": "Attendee deleted"}
@@ -6894,6 +6909,26 @@ def _attendee_for_ticket_link(db, code):
 
 def ticket_link_code(attendee):
     return _ticket_links.link_code(getattr(attendee, "qr_code", None), SECRET_KEY)
+
+
+@app.get("/events/{event_id}/attendees/{attendee_id}/ticket-link")
+def admin_ticket_link(event_id: int, attendee_id: int, db: Session = Depends(get_db),
+                      current_user: models.User = Depends(get_current_user)):
+    """The private link to one person's ticket, for an admin to send by hand
+    (text, WhatsApp) when the email cannot reach them. Same link the ticket
+    email carries; a ticket that no longer works has none. Logged."""
+    authz.require_cap(db, current_user, event_id, "attendee.write")
+    a = db.query(models.Attendee).filter(models.Attendee.id == attendee_id, models.Attendee.event_id == event_id).first()
+    if a is None:
+        raise HTTPException(status_code=404, detail="Ticket not found")
+    if not _ticket_active(a):
+        raise HTTPException(status_code=409, detail="This ticket is %s, so it has no working link." % _ticket_status(a))
+    code = ticket_link_code(a)
+    if not code:
+        raise HTTPException(status_code=409, detail="This ticket has no entry code yet")
+    _lifecycle_append(a, "ticket_link_copied", actor=(current_user.email or "admin"))
+    db.commit()
+    return {"url": "https://api.gaiahealers.app/ticket/" + code}
 
 
 @app.post("/identity/wallet/by-token")
@@ -13363,6 +13398,33 @@ def _rc_row(i, users):
             "first_seen_at": i.first_seen_at, "last_seen_at": i.last_seen_at, "updated_at": i.updated_at}
 
 
+def _rc_ticket_index(db, event_id):
+    """email (lower) -> this event's tickets that still work, for 'does this person already have a ticket?'."""
+    idx = {}
+    for a in db.query(models.Attendee).filter(models.Attendee.event_id == event_id).all():
+        if not _ticket_active(a):
+            continue
+        for e in {(a.email or "").strip().lower(), _SEAT_TAG.sub("@", (a.email or "").strip().lower())}:
+            if e:
+                idx.setdefault(e, {})[a.id] = a
+    return idx
+
+
+def _rc_person_tickets(db, i, idx):
+    """Working tickets that belong to the person this issue is about: by the
+    issue's own tickets, and by the email on the payment or sale."""
+    found = {}
+    email = str((i.facts or {}).get("email") or "").strip().lower()
+    if email:
+        found.update(idx.get(email, {}))
+    for aid in (i.attendee_ids or []):
+        a = db.query(models.Attendee).filter(models.Attendee.id == aid).first()
+        if a is not None and _ticket_active(a):
+            found[a.id] = a
+    return [{"ticket_id": a.id, "name": ("%s %s" % (a.first_name or "", a.last_name or "")).strip(),
+             "pass": _pass_display(db, a), "checked_in": bool(a.is_checked_in)} for a in sorted(found.values(), key=lambda x: x.id)]
+
+
 def _rc_users(db):
     return {u.id: (u.full_name or u.email) for u in db.query(models.User).all()}
 
@@ -13439,7 +13501,47 @@ def recon_issues(event_id: int, status: str = "unresolved", priority: str = "", 
                 or any(term == str(x) for x in (r.attendee_ids or [])) or any(term in str(o).lower() for o in (r.order_ids or []))]
     rows.sort(key=lambda r: (_rc.PRIORITY_ORDER.get(r.priority, 9), 0 if r.status == "open" else 1, -(r.id or 0)))
     users = _rc_users(db)
-    return {"total": len(rows), "rows": [_rc_row(r, users) for r in rows[offset:offset + min(limit, 500)]]}
+    tix = _rc_ticket_index(db, event_id)
+    page = []
+    for r in rows[offset:offset + min(limit, 500)]:
+        row = _rc_row(r, users)
+        row["person_tickets"] = [t["ticket_id"] for t in _rc_person_tickets(db, r, tix)]
+        row["source_kind"] = (r.facts or {}).get("kind")
+        page.append(row)
+    return {"total": len(rows), "rows": page}
+
+
+@app.post("/events/{event_id}/reconcile/issues/bulk-status")
+def recon_bulk_status(event_id: int, body: dict, db: Session = Depends(get_db),
+                      current_user: models.User = Depends(get_current_user)):
+    """One decision for many issues at once (reviewed / dismissed / in review),
+    with one note. Only records the decision: no ticket, payment or email changes."""
+    _get_event_or_404(event_id, db)
+    authz.require_cap(db, current_user, event_id, "reconcile.resolve")
+    st = (body.get("status") or "").strip()
+    note = (body.get("note") or "").strip()
+    ids = [int(x) for x in (body.get("issue_ids") or [])][:500]
+    if st not in ("reviewed", "dismissed", "in_review"):
+        raise HTTPException(status_code=400, detail="Bulk decisions are: reviewed, dismissed or in review")
+    if st != "in_review" and len(note) < 3:
+        raise HTTPException(status_code=400, detail="Add a note explaining the decision")
+    if not ids:
+        raise HTTPException(status_code=400, detail="Choose the issues first")
+    rows = db.query(models.ReconIssue).filter(models.ReconIssue.event_id == event_id, models.ReconIssue.id.in_(ids)).all()
+    actor = _rc_actor(current_user)
+    for i in rows:
+        before = i.status
+        i.status = st
+        if st in ("reviewed", "dismissed"):
+            i.resolved_by, i.resolved_at = current_user.id, datetime.utcnow()
+            i.resolution = ((i.resolution + "\n") if i.resolution else "") + "%s (bulk): %s" % (st, note)
+        _rc._hist(db, i, "status", "%s (bulk, %d issues)" % (note or ("Marked %s" % st), len(rows)), actor=actor,
+                  user_id=current_user.id, before={"status": before}, after={"status": st})
+        i.updated_at = datetime.utcnow()
+    db.commit()
+    rerun = _rc.run(db, event_id, actor="re-check after %s (bulk)" % actor)
+    db.commit()
+    return {"ok": True, "updated": len(rows), "recheck": rerun}
 
 
 def _rc_actions_for(i, booking):
@@ -13506,6 +13608,7 @@ def recon_issue_detail(event_id: int, issue_id: int, db: Session = Depends(get_d
     hist = db.query(models.ReconHistory).filter(models.ReconHistory.issue_id == i.id).order_by(models.ReconHistory.id).all()
     users = _rc_users(db)
     out = _rc_row(i, users)
+    out["person_tickets"] = _rc_person_tickets(db, i, _rc_ticket_index(db, event_id))
     out.update({"explanation": i.explanation, "recommendation": i.recommendation, "facts": i.facts or {},
                 "resolution": i.resolution, "resolved_at": i.resolved_at, "resolved_by": users.get(i.resolved_by),
                 "booking": booking, "tickets": tickets, "payments": pays, "ticket_types": tts,
@@ -13636,6 +13739,44 @@ def recon_action(event_id: int, issue_id: int, body: dict, db: Session = Depends
 
     before = after = None
     result = {}
+
+    def rebuild(recipient=None):
+        anchor_id = i.buyer_attendee_id or (att.id if att else None) or (sorted(allowed_ids)[0] if allowed_ids else None)
+        anchor = db.query(models.Attendee).filter(models.Attendee.id == anchor_id).first() if anchor_id else None
+        if anchor is None:
+            raise HTTPException(status_code=400, detail="Nothing to rebuild")
+        p = _party_members(db, anchor)
+        members = [db.query(models.Attendee).filter(models.Attendee.id == m["attendee_id"]).first() for m in p["members"]] if p else [anchor]
+        buyer = db.query(models.Attendee).filter(models.Attendee.id == p["buyer_attendee_id"]).first() if p else anchor
+        idx = _rc.delivery_index(event_id); delivered = _rc.delivered_ids(idx)
+        live = [m for m in members if m is not None and _ticket_active(m) and m.id not in delivered]
+        key = "booking:%d" % buyer.id
+        old_rows = db.query(models.EmailPlan).filter(models.EmailPlan.event_id == event_id,
+                                                     models.EmailPlan.active == True).all()   # noqa: E712
+        ids_now = {m.id for m in live}
+        b = {r.plan_key: {"recipient": r.recipient, "tickets": r.ticket_ids} for r in old_rows
+             if set(r.ticket_ids or []) & (ids_now | {m.id for m in members if m is not None})}
+        for r in old_rows:
+            if r.plan_key != key and set(r.ticket_ids or []) & ids_now:
+                r.ticket_ids = [x for x in (r.ticket_ids or []) if x not in ids_now]
+                r.active = bool(r.ticket_ids); r.changed_since_list = True
+                r.updated_by, r.updated_at = actor, datetime.utcnow()
+        row = db.query(models.EmailPlan).filter(models.EmailPlan.event_id == event_id, models.EmailPlan.plan_key == key).first()
+        if row is None:
+            row = models.EmailPlan(event_id=event_id, plan_key=key)
+            db.add(row)
+        prev = b.get(key, {})
+        row.recipient = recipient or (prev.get("recipient") if prev else None) \
+            or _SEAT_TAG.sub("@", (buyer.email or "").strip().lower())
+        row.ticket_ids = sorted(ids_now)
+        row.order_ids = sorted({pe.ghl_entity_id for pe in db.query(models.PaymentEvent).filter(
+            models.PaymentEvent.attendee_id.in_([m.id for m in members if m is not None]),
+            models.PaymentEvent.status == "paid").all() if pe.ghl_entity_id})
+        row.source, row.changed_since_list, row.active = "admin_rebuild", True, bool(row.ticket_ids)
+        row.updated_by, row.updated_at = actor, datetime.utcnow()
+        return b, {key: {"recipient": row.recipient, "tickets": row.ticket_ids}}, \
+            "The planned email now carries %d ticket(s) to %s. Nothing was sent." % (len(row.ticket_ids), row.recipient)
+
     if action == "fix_identity":
         if att is None:
             raise HTTPException(status_code=400, detail="Choose the ticket to correct")
@@ -13644,6 +13785,11 @@ def recon_action(event_id: int, issue_id: int, body: dict, db: Session = Depends
             first_name=body.get("first_name"), last_name=body.get("last_name"), phone=body.get("phone"),
             email=body.get("email"), reason="Reconciliation: %s" % note), db, current_user)
         db.refresh(att); after = snap(att); result = {"changed": r.get("changed")}
+        if body.get("email"):
+            # The ticket's email changed, so its planned email follows it.
+            _b, _a, msg = rebuild()
+            after = {"ticket": after, "email_record": _a}
+            result["note"] = "Email record updated too. " + msg
     elif action == "issue_seat":
         if not i.buyer_attendee_id:
             raise HTTPException(status_code=400, detail="This issue is not about a booking")
@@ -13701,46 +13847,17 @@ def recon_action(event_id: int, issue_id: int, body: dict, db: Session = Depends
             h.reason, h.source, h.by, h.at = note, "admin", actor, datetime.utcnow()
             after[str(t)] = h.state
         result = {"note": "The email list itself is not sent from here."}
+        if action == "release":
+            db.flush()
+            _b, _a, msg = rebuild()
+            after = {"holds": after, "email_record": _a}
+            result = {"note": "Email record updated too. " + msg}
     elif action in ("rebuild_email", "set_delivery_email"):
-        anchor_id = i.buyer_attendee_id or (att.id if att else None) or (sorted(allowed_ids)[0] if allowed_ids else None)
-        anchor = db.query(models.Attendee).filter(models.Attendee.id == anchor_id).first() if anchor_id else None
-        if anchor is None:
-            raise HTTPException(status_code=400, detail="Nothing to rebuild")
-        p = _party_members(db, anchor)
-        members = [db.query(models.Attendee).filter(models.Attendee.id == m["attendee_id"]).first() for m in p["members"]] if p else [anchor]
-        buyer = db.query(models.Attendee).filter(models.Attendee.id == p["buyer_attendee_id"]).first() if p else anchor
-        idx = _rc.delivery_index(event_id); delivered = _rc.delivered_ids(idx)
-        live = [m for m in members if m is not None and _ticket_active(m) and m.id not in delivered]
         recipient = (body.get("email") or "").strip().lower() if action == "set_delivery_email" else None
         if action == "set_delivery_email" and not re.match(r"^[^@\s]+@[^@\s]+\.[^@\s]+$", recipient or ""):
             raise HTTPException(status_code=400, detail="Enter a valid email address")
-        key = "booking:%d" % buyer.id
-        old_rows = db.query(models.EmailPlan).filter(models.EmailPlan.event_id == event_id,
-                                                     models.EmailPlan.active == True).all()   # noqa: E712
-        ids_now = {m.id for m in live}
-        before = {r.plan_key: {"recipient": r.recipient, "tickets": r.ticket_ids} for r in old_rows
-                  if set(r.ticket_ids or []) & (ids_now | {m.id for m in members if m is not None})}
-        for r in old_rows:
-            if r.plan_key != key and set(r.ticket_ids or []) & ids_now:
-                r.ticket_ids = [x for x in (r.ticket_ids or []) if x not in ids_now]
-                r.active = bool(r.ticket_ids); r.changed_since_list = True
-                r.updated_by, r.updated_at = actor, datetime.utcnow()
-        row = db.query(models.EmailPlan).filter(models.EmailPlan.event_id == event_id, models.EmailPlan.plan_key == key).first()
-        if row is None:
-            row = models.EmailPlan(event_id=event_id, plan_key=key)
-            db.add(row)
-        prev = before.get(key, {})
-        row.recipient = recipient or (prev.get("recipient") if action == "rebuild_email" and prev else None) \
-            or _SEAT_TAG.sub("@", (buyer.email or "").strip().lower())
-        row.ticket_ids = sorted(ids_now)
-        row.order_ids = sorted({pe.ghl_entity_id for pe in db.query(models.PaymentEvent).filter(
-            models.PaymentEvent.attendee_id.in_([m.id for m in members if m is not None]),
-            models.PaymentEvent.status == "paid").all() if pe.ghl_entity_id})
-        row.source, row.changed_since_list, row.active = "admin_rebuild", True, bool(row.ticket_ids)
-        row.updated_by, row.updated_at = actor, datetime.utcnow()
-        after = {key: {"recipient": row.recipient, "tickets": row.ticket_ids}}
-        result = {"note": "The planned email now carries %d ticket(s) to %s. The bulk list must be rebuilt and "
-                          "approved again before anything is sent." % (len(row.ticket_ids), row.recipient)}
+        before, after, msg = rebuild(recipient)
+        result = {"note": msg + " The bulk list must be rebuilt and approved again before anything is sent."}
     else:
         raise HTTPException(status_code=400, detail="Unknown action")
     _rc._hist(db, i, "action", "%s: %s" % (action.replace("_", " "), note), actor=actor, user_id=current_user.id,

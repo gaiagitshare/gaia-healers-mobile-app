@@ -13,14 +13,14 @@ import {
     UploadFile as UploadFileIcon, Edit as EditIcon, Search as SearchIcon, Clear as ClearIcon,
     ManageAccounts as ManageIcon, OpenInNew as OpenInNewIcon,
     InfoOutlined as InfoOutlinedIcon, Undo as UndoIcon,
-    MoreVert as MoreVertIcon, FilterList as FilterListIcon,
+    MoreVert as MoreVertIcon, FilterList as FilterListIcon, Link as LinkIcon,
     ExpandMore as ExpandMoreIcon, ExpandLess as ExpandLessIcon,
 } from '@mui/icons-material';
 import { QRCodeSVG } from 'qrcode.react';
 import {
     getAttendees, getAttendee, getTicketCounts, createAttendee, updateAttendee, deleteAttendee,
     generateBadge, importAttendees, searchAttendees, getTicketTypes, exportAttendees,
-    revokeAttendee, reinstateAttendee, changePass, setAddonDay, transferTicket,
+    revokeAttendee, reinstateAttendee, changePass, setAddonDay, transferTicket, getTicketLink,
     getAcquisitionReport, getDoorReport, getUnmappedSales, dismissUnmappedSale,
     getTicketMetrics, undoCheckIn, getEvent} from '../utils/api';
 import MapReconcile from './MapReconcile';
@@ -245,7 +245,7 @@ function Attendees({ timezone }) {
     const handleDelete = async () => {
         const attendee = confirmDelete;
         try { await deleteAttendee(attendee.id); setConfirmDelete(null); setFeedback({ severity: 'success', message: `${displayName(attendee)} deleted.` }); await refreshCurrentView(); loadCounts(); }
-        catch (error) { setConfirmDelete(null); setFeedback({ severity: 'error', message: 'Could not delete that attendee.' }); }
+        catch (error) { setConfirmDelete(null); const d = error?.response?.data?.detail; setFeedback({ severity: 'error', message: typeof d === 'string' ? d : 'Could not delete that attendee.' }); }
     };
 
     const showQR = (attendee) => { setSelectedAttendee(attendee); setOpenQR(true); };
@@ -343,6 +343,17 @@ function Attendees({ timezone }) {
     );
 
     // The overflow itself, rendered once rather than per row.
+    // The ticket's private link, for sending by text when the email cannot reach them.
+    const copyTicketLink = async (a) => {
+        try {
+            const { data } = await getTicketLink(eventId, a.id);
+            try { await navigator.clipboard.writeText(data.url); setFeedback({ severity: 'success', message: `Ticket link for ${displayName(a)} copied. Send it only to this person: it opens their ticket.` }); }
+            catch (e) { window.prompt('Copy this ticket link (send it only to this person):', data.url); }
+        } catch (error) {
+            const d = error?.response?.data?.detail;
+            setFeedback({ severity: 'error', message: typeof d === 'string' ? d : 'Could not get the ticket link.' });
+        }
+    };
     const rowMenuItem = (icon, label, run, extra = {}) => (
         <MenuItem onClick={() => { const a = rowMenu?.attendee; setRowMenu(null); if (a) run(a); }} {...extra}>
             <ListItemIcon>{icon}</ListItemIcon>
@@ -1126,6 +1137,7 @@ function Attendees({ timezone }) {
                 anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
                 transformOrigin={{ vertical: 'top', horizontal: 'right' }}>
                 {rowMenuItem(<QrCodeIcon fontSize="small" />, 'Show QR code', showQR)}
+                {rowMenuItem(<LinkIcon fontSize="small" />, 'Copy ticket link (to text it)', copyTicketLink)}
                 {rowMenuItem(<InfoOutlinedIcon fontSize="small" />, 'Purchase & attribution', openAcq)}
                 {rowMenuItem(<EditIcon fontSize="small" />, 'Edit attendee', openEdit)}
                 {rowMenuItem(<BadgeIcon fontSize="small" />, 'Download badge', downloadBadge)}

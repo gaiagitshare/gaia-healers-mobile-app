@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { useParams } from 'react-router-dom';
+import { useNavigate, useParams } from 'react-router-dom';
 import {
     Box, Paper, Typography, Table, TableHead, TableBody, TableRow, TableCell, Chip, Stack, TextField,
     Button, Alert, CircularProgress, Dialog, DialogTitle, DialogContent, DialogActions, ToggleButton,
@@ -39,11 +39,40 @@ const MODE = {
     paused: ['PAUSED: nothing is being sent', 'error'],
 };
 const when = (iso) => (iso ? new Date(iso).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : '—');
-const words = (r) => String(r || '').split(';').filter(Boolean).map((x) => x.replace(/_/g, ' ')).join(', ');
+// What each hold reason means, in words an admin can act on.
+const REASON_WORDS = {
+    already_has_a_delivery_record: 'this ticket was already emailed before',
+    buyer_email_changed_since_purchase: 'the buyer\'s email changed since they bought; confirm the right address',
+    buyer_has_other_paid_orders: 'the buyer has other paid orders; check they are not the same seat',
+    email_do_not_disturb: 'the buyer turned email off in GHL; send the ticket link by text instead',
+    ghl_order_not_paid_live: 'GHL does not show this order as paid',
+    ghl_transactions_not_clean: 'the payment has a refund, failure or dispute in GHL',
+    no_ticket_issued: 'no ticket exists for this order yet',
+    no_ticket_product_in_order: 'nothing in this order is an event ticket',
+    no_valid_email: 'no usable email address',
+    pass_text_unavailable: 'the pass name could not be read',
+    payment_refunded_or_not_paid: 'refunded or not paid',
+    product_not_mapped_to_a_ticket: 'the product is not linked to a ticket type (Setup > Ticket Mappings)',
+    qr_image_does_not_decode_to_ticket: 'the QR picture does not match the ticket',
+    qr_or_link_check_failed: 'the ticket link or QR could not be checked; try again later',
+    several_seats_in_one_order: 'several seats in one order; check every guest has a ticket',
+    several_tickets_linked: 'several tickets are linked to this order',
+    test_mode_payment: 'a test payment, not a real one',
+    ticket_already_emailed_with_another_order: 'this ticket already went out with another order',
+    ticket_category_differs_from_purchase: 'the ticket\'s pass differs from what was bought',
+    ticket_email_differs_from_buyer: 'the ticket is in another person\'s name than the buyer',
+    ticket_has_no_qr_or_link: 'the ticket has no QR code yet',
+    ticket_link_does_not_open: 'the ticket link does not open',
+    ticket_not_active: 'the ticket is refunded, revoked or cancelled',
+    upgrade_order: 'an upgrade, not a new ticket',
+};
+const words = (r) => String(r || '').split(';').filter(Boolean)
+    .map((x) => REASON_WORDS[x.split(':')[0]] || x.replace(/_/g, ' ')).join('; ');
 const err = (e) => e?.response?.data?.detail || e?.message || 'Something went wrong';
 
 export default function TicketDelivery() {
     const { id } = useParams();
+    const navigate = useNavigate();
     const [summary, setSummary] = useState(null);
     const [rows, setRows] = useState([]);
     const [total, setTotal] = useState(0);
@@ -151,7 +180,9 @@ export default function TicketDelivery() {
                     <DialogContent dividers>
                         <Typography><b>{detail.order?.buyer_name}</b> · {detail.order?.recipient}</Typography>
                         {(detail.order?.tickets || []).map((t) => <Typography key={t.id} variant="body2">Ticket #{t.id}: {t.name || 'guest'} · {t.pass}{t.active ? '' : ' · NOT ACTIVE'}</Typography>)}
-                        {detail.order?.reasons && <Alert severity="warning" sx={{ mt: 1 }}>Held: {words(detail.order.reasons)}</Alert>}
+                        {detail.order?.reasons && <Alert severity="warning" sx={{ mt: 1 }}
+                            action={<Button color="inherit" size="small" onClick={() => navigate(`/events/${id}/reconcile?q=${encodeURIComponent(detail.order?.recipient || detail.order?.buyer_name || '')}`)}>Fix in Ticket Reconciliation</Button>}>
+                            Held: {words(detail.order.reasons)}. Fixes (correct email, issue a seat, release, copy the ticket link) are made in Ticket Reconciliation.</Alert>}
                         <Divider sx={{ my: 2 }} />
                         <Typography variant="subtitle2">Delivery history</Typography>
                         {detail.attempts.length ? detail.attempts.map((a, i) => (

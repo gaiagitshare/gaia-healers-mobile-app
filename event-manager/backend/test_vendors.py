@@ -174,6 +174,11 @@ _sheet_conf = [r for r in _sheet if r["stage"] == "confirmed"]
 _ON_SHEET = "COALESCE(sheet_notes,'') NOT LIKE 'Added from the public event page%'"
 real = sql("SELECT COUNT(*) FROM exhibitors WHERE event_id=1 AND stage='confirmed' AND " + _ON_SHEET)[0] + \
        sql("SELECT SUM(amount_due), SUM(amount_paid) FROM exhibitors WHERE event_id=1")[0]
+# ...unless the sheet has since listed it too: then it IS a sheet row.
+_page_added_on_sheet = [r[0] for r in sql("SELECT company_name FROM exhibitors WHERE event_id=1 AND stage='confirmed' AND NOT ("
+                                           + _ON_SHEET + ")")
+                        if any(_vs.norm_name(x["company"]) == _vs.norm_name(r[0]) for x in _sheet_conf)]
+real = (real[0] + len(_page_added_on_sheet),) + tuple(real[1:])
 _names = {r[0] for r in sql("SELECT company_name FROM exhibitors WHERE event_id=1 AND stage='confirmed'")}
 _missing = [r["company"] for r in _sheet_conf if not any(_vs.norm_name(r["company"]) == _vs.norm_name(n) for n in _names)]
 check(real[0] == len(_sheet_conf) and not _missing,
@@ -288,6 +293,8 @@ check(st == 404,
 counts = dict(sql("SELECT stage, COUNT(*) FROM exhibitors WHERE event_id=1"
                   " AND company_name NOT LIKE 'ZZ %' AND " + _ON_SHEET + " GROUP BY stage"))
 _purchased = counts.pop("purchased", 0)
+if _page_added_on_sheet:      # stands the public page added that the sheet now lists too
+    counts["confirmed"] = counts.get("confirmed", 0) + len(_page_added_on_sheet)
 _sheet_cos = {_vs.norm_name(r["company"]) for r in _sheet}
 check(sum(counts.values()) == len(_sheet_cos),
       "the whole vendor board is in the system (%d companies in the sheet; %d bought online, not yet in it)"

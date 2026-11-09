@@ -1,12 +1,12 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import {
     Alert, Box, Button, Checkbox, Chip, CircularProgress, Dialog, DialogActions, DialogContent, DialogTitle,
     Divider, FormControlLabel, MenuItem, Paper, Stack, Table, TableBody, TableCell, TableHead, TableRow,
     TextField, Typography, useMediaQuery,
 } from '@mui/material';
 import {
-    getReconSummary, runReconChecks, getReconIssues, getReconIssue, reconComment, reconAssign, reconStatus, reconAction,
+    getReconSummary, runReconChecks, getReconIssues, getReconIssue, reconComment, reconAssign, reconStatus, reconAction, reconBulkStatus, getTicketLink,
 } from '../utils/api';
 
 /**
@@ -48,6 +48,16 @@ const err = (e) => {
 };
 const money = (n, c) => (n == null ? '' : `${c && c !== 'USD' ? c + ' ' : '$'}${Number(n).toFixed(2)}`);
 
+const FACT_LABELS = { amount: 'Amount', when: 'When', name: 'Name on the payment', email: 'Email on the payment',
+    decision: 'Decision recorded', paid_for: 'Paid for', issued: 'Tickets issued' };
+const SOURCE_LABELS = { payment_unsettled: 'Card payment that failed or has not settled', payment_unplaced: 'Paid, but not on any ticket',
+    sale_unmapped: 'A sale whose product is not linked to a ticket type', confirm_purchase: 'Purchase to confirm by phone',
+    identity_review: 'Two records may be the same person', name_to_confirm: 'Guest name to confirm', charge_held: 'Possible second charge' };
+const showVal = (k, v) => (k === 'amount' ? money(v) : k === 'when' ? when(v) : typeof v === 'object' ? JSON.stringify(v) : String(v));
+const readable = (o) => (o && typeof o === 'object'
+    ? Object.entries(o).map(([k, v]) => `${k.replace(/_/g, ' ')}: ${v && typeof v === 'object' ? JSON.stringify(v) : v}`).join(' · ')
+    : String(o ?? ''));
+
 // The forms behind each correction. `sensitive` = asks the person to confirm.
 const ACTIONS = {
     issue_seat: {
@@ -61,7 +71,7 @@ const ACTIONS = {
     fix_identity: {
         label: 'Correct name & contact', perTicket: true,
         help: 'Fixes the name, phone or email on one ticket. Changing the email changes who the ticket belongs to, '
-            + 'so it needs confirmation.',
+            + 'so it needs confirmation; the planned ticket email then follows the new address by itself.',
         fields: [['first_name', 'First name'], ['last_name', 'Last name'], ['phone', 'Phone'], ['email', 'Email (changes the holder)']],
         confirm: 'I confirm this is the right person for this ticket.',
     },
@@ -84,8 +94,8 @@ const ACTIONS = {
     },
     release: {
         label: 'Release to email list', perTicket: true, sensitive: true,
-        help: 'Allows this ticket into the bulk ticket email. Nothing is sent now: the list still has to pass its check '
-            + 'and be approved before any email goes out.', fields: [],
+        help: 'Allows this ticket into the bulk ticket email and updates the booking\'s email record to match. Nothing is '
+            + 'sent now: the list still has to pass its check and be approved before any email goes out.', fields: [],
         confirm: 'I confirm this ticket may be emailed to its holder.',
     },
     rebuild_email: {
@@ -112,7 +122,10 @@ export default function Reconciliation() {
     const [summary, setSummary] = useState(null);
     const [rows, setRows] = useState([]);
     const [total, setTotal] = useState(0);
-    const [filters, setFilters] = useState({ status: 'unresolved', priority: '', kind: '', q: '', assigned: '' });
+    const [params] = useSearchParams();
+    const [filters, setFilters] = useState({ status: 'unresolved', priority: '', kind: '', q: params.get('q') || '', assigned: '' });
+    const [picked, setPicked] = useState(new Set());
+    const [bulkAsk, setBulkAsk] = useState(null);
     const [loading, setLoading] = useState(true);
     const [running, setRunning] = useState(false);
     const [error, setError] = useState('');
@@ -129,7 +142,7 @@ export default function Reconciliation() {
         setLoading(true);
         const params = Object.fromEntries(Object.entries(filters).filter(([, v]) => v));
         Promise.all([getReconSummary(id), getReconIssues(id, params)])
-            .then(([s, l]) => { setSummary(s.data); setRows(l.data.rows); setTotal(l.data.total); setError(''); })
+            .then(([s, l]) => { setSummary(s.data); setRows(l.data.rows); setTotal(l.data.total); setError(''); setPicked(new Set()); })
             .catch((e) => setError(err(e)))
             .finally(() => setLoading(false));
     }, [id, filters]);
@@ -168,10 +181,19 @@ export default function Reconciliation() {
 
     const submitStatus = () => {
         setBusy(true);
-        reconStatus(id, detail.id, { status: statusAsk.status, note, real_seat: statusAsk.real_seat })
+        reconStatus(id, detail.id, { status: statusAsk.status, note: (statusAsk.prefix || '') + note, real_seat: statusAsk.real_seat })
             .then((r) => { setNotice(`Marked ${STATUS_LABEL[r.data.status] || r.data.status}.`); setStatusAsk(null); setNote(''); refreshDetail(); })
             .catch((e) => setError(err(e))).finally(() => setBusy(false));
     };
+
+    const submitBulk = () => {
+        setBusy(true);
+        reconBulkStatus(id, { issue_ids: [...picked], status: bulkAsk.status, note })
+            .then((r) => { setNotice(`${r.data.updated} issue(s) marked ${STATUS_LABEL[bulkAsk.status]}. Nothing was issued, changed or emailed.`); setBulkAsk(null); setNote(''); load(); })
+            .catch((e) => setError(err(e))).finally(() => setBusy(false));
+    };
+    const toggle = (rid) => setPicked((p) => { const n = new Set(p); if (n.has(rid)) n.delete(rid); else n.add(rid); return n; });
+    const allPicked = rows.length > 0 && rows.every((r) => picked.has(r.id));
 
     const bulk = summary?.bulk_check;
     const actionsHere = useMemo(() => new Set(detail?.actions || []), [detail]);
@@ -236,10 +258,22 @@ export default function Reconciliation() {
                 </TextField>
             </Stack>
 
+            {picked.size > 0 && (
+                <Paper variant="outlined" sx={{ p: 1, mb: 1, display: 'flex', gap: 1, flexWrap: 'wrap', alignItems: 'center' }}>
+                    <Typography variant="body2" sx={{ mr: 1 }}><b>{picked.size}</b> selected</Typography>
+                    <Button size="small" variant="contained" onClick={() => { setBulkAsk({ status: 'dismissed', label: `Dismiss ${picked.size} issue(s): not a real problem` }); setNote(''); }}>Dismiss</Button>
+                    <Button size="small" variant="outlined" onClick={() => { setBulkAsk({ status: 'reviewed', label: `Mark ${picked.size} issue(s) reviewed: keep as is` }); setNote(''); }}>Mark reviewed</Button>
+                    <Button size="small" onClick={() => setPicked(new Set())}>Clear selection</Button>
+                    <Typography variant="caption" color="text.secondary">Only records the decision. No ticket, payment or email is changed.</Typography>
+                </Paper>
+            )}
             <Paper variant="outlined">
                 {loading ? <Box sx={{ p: 3, textAlign: 'center' }}><CircularProgress size={24} /></Box> : (
                     <Table size="small">
                         <TableHead><TableRow>
+                            <TableCell padding="checkbox"><Checkbox size="small" checked={allPicked} indeterminate={picked.size > 0 && !allPicked}
+                                inputProps={{ 'aria-label': 'Select all shown' }}
+                                onChange={() => setPicked(allPicked ? new Set() : new Set(rows.map((r) => r.id)))} /></TableCell>
                             <TableCell>Priority</TableCell>
                             <TableCell>Issue</TableCell>
                             {!narrow && <TableCell>Type</TableCell>}
@@ -248,15 +282,20 @@ export default function Reconciliation() {
                         </TableRow></TableHead>
                         <TableBody>
                             {rows.map((r) => (
-                                <TableRow key={r.id} hover sx={{ cursor: 'pointer' }} onClick={() => open(r.id)}>
+                                <TableRow key={r.id} hover sx={{ cursor: 'pointer' }} onClick={() => open(r.id)} selected={picked.has(r.id)}>
+                                    <TableCell padding="checkbox" onClick={(e) => e.stopPropagation()}>
+                                        <Checkbox size="small" checked={picked.has(r.id)} onChange={() => toggle(r.id)} inputProps={{ 'aria-label': `Select ${r.title}` }} /></TableCell>
                                     <TableCell><PriorityChip p={r.priority} /></TableCell>
-                                    <TableCell>{r.title}{!r.detected && <Chip size="small" label="no longer found" sx={{ ml: 1 }} />}</TableCell>
+                                    <TableCell>{r.title}{!r.detected && <Chip size="small" label="no longer found" sx={{ ml: 1 }} />}
+                                        {['manual_review', 'paid_without_ticket'].includes(r.kind) && (r.person_tickets?.length
+                                            ? <Chip size="small" color="success" variant="outlined" sx={{ ml: 1 }} label={`Has a ticket (#${r.person_tickets.join(', #')})`} />
+                                            : <Chip size="small" variant="outlined" sx={{ ml: 1 }} label="No ticket" />)}</TableCell>
                                     {!narrow && <TableCell>{r.kind_label}</TableCell>}
                                     <TableCell>{STATUS_LABEL[r.status] || r.status}</TableCell>
                                     {!narrow && <TableCell>{r.assigned_name || '—'}</TableCell>}
                                 </TableRow>
                             ))}
-                            {!rows.length && <TableRow><TableCell colSpan={5}>Nothing here. {filters.status === 'unresolved' ? 'No unresolved issues match.' : ''}</TableCell></TableRow>}
+                            {!rows.length && <TableRow><TableCell colSpan={6}>Nothing here. {filters.status === 'unresolved' ? 'No unresolved issues match.' : ''}</TableCell></TableRow>}
                         </TableBody>
                     </Table>
                 )}
@@ -278,6 +317,30 @@ export default function Reconciliation() {
                     <DialogContent dividers>
                         <Alert severity="info" sx={{ mb: 1 }}><b>Why this was flagged.</b> {detail.explanation}</Alert>
                         <Alert severity="success" icon={false} sx={{ mb: 2 }}><b>Recommended correction.</b> {detail.recommendation}</Alert>
+
+                        {Object.keys(detail.facts || {}).some((k) => FACT_LABELS[k]) && (
+                            <Paper variant="outlined" sx={{ p: 1.5, mb: 2 }}>
+                                <Typography variant="subtitle2">What the system found</Typography>
+                                {detail.facts.kind && <Typography variant="body2">{SOURCE_LABELS[detail.facts.kind] || detail.facts.kind}</Typography>}
+                                {Object.entries(detail.facts).filter(([k, v]) => FACT_LABELS[k] && v != null && v !== '').map(([k, v]) => (
+                                    <Typography key={k} variant="body2"><b>{FACT_LABELS[k]}:</b> {showVal(k, v)}</Typography>
+                                ))}
+                            </Paper>
+                        )}
+
+                        <Paper variant="outlined" sx={{ p: 1.5, mb: 2 }}>
+                            <Typography variant="subtitle2">This person's tickets</Typography>
+                            {detail.person_tickets?.length ? detail.person_tickets.map((t) => (
+                                <Typography key={t.ticket_id} variant="body2">#{t.ticket_id} · {t.name} · {t.pass}{t.checked_in ? ' · checked in' : ''}</Typography>
+                            )) : <Typography variant="body2">No working ticket found for this person (by this issue's tickets and the payment's email).</Typography>}
+                            {['manual_review', 'paid_without_ticket'].includes(detail.kind) && (
+                                <Stack direction="row" spacing={1} sx={{ mt: 1, flexWrap: 'wrap', gap: 1 }}>
+                                    {detail.facts?.kind === 'payment_unplaced' && <Button size="small" variant="outlined" onClick={() => navigate(`/events/${id}/review`)}>Open Review Queue to place the payment</Button>}
+                                    {detail.facts?.kind === 'sale_unmapped' && <Button size="small" variant="outlined" onClick={() => navigate(`/events/${id}/mappings`)}>Open Ticket Mappings</Button>}
+                                    <Button size="small" variant="outlined" onClick={() => navigate(`/events/${id}/attendees?q=${encodeURIComponent(detail.facts?.email || detail.facts?.name || '')}`)}>Search Attendees</Button>
+                                </Stack>
+                            )}
+                        </Paper>
 
                         {detail.booking && (
                             <Stack direction="row" spacing={1} sx={{ mb: 2, flexWrap: 'wrap', gap: 1 }}>
@@ -308,11 +371,15 @@ export default function Reconciliation() {
                                             </TableCell>
                                             <TableCell>{t.pass}</TableCell>
                                             <TableCell>{t.status}{t.checked_in ? ' · checked in' : ''}</TableCell>
-                                            <TableCell>{t.email_status}{t.planned_email?.changed ? ' (changed, list rebuild needed)' : ''}</TableCell>
+                                            <TableCell sx={{ minWidth: 220 }}>{t.email_status}{t.planned_email?.changed ? ' (changed, list rebuild needed)' : ''}</TableCell>
                                             <TableCell sx={{ whiteSpace: 'nowrap' }}>
                                                 {['fix_identity', 'change_category', t.hold?.state === 'held' ? 'release' : 'hold']
                                                     .filter((a) => actionsHere.has(a))
                                                     .map((a) => <Button key={a} size="small" onClick={() => { setAct({ action: a, ticket: t }); setForm({}); setNote(''); }}>{ACTIONS[a].label}</Button>)}
+                                                {t.status === 'active' || t.status === 'registered' || t.status === 'valid' ? <Button size="small" onClick={() => getTicketLink(id, t.ticket_id)
+                                                    .then((r) => navigator.clipboard.writeText(r.data.url).then(() => setNotice(`Ticket link for ${t.name} copied. Send it only to this person.`),
+                                                        () => window.prompt('Copy this ticket link (send it only to this person):', r.data.url)))
+                                                    .catch((x) => setError(err(x)))}>Copy ticket link</Button> : null}
                                                 <Button size="small" onClick={() => navigate(`/events/${id}/attendees?q=${encodeURIComponent(t.email || t.name)}`)}>Open in Attendees</Button>
                                             </TableCell>
                                         </TableRow>
@@ -364,13 +431,21 @@ export default function Reconciliation() {
                                 <MenuItem value="">Nobody</MenuItem>
                                 {detail.admins.map((a) => <MenuItem key={a.id} value={a.id}>{a.name}</MenuItem>)}
                             </TextField>
+                            {detail.tickets.some((t) => t.hold?.state === 'held') &&
+                                <Button color="warning" onClick={() => { setStatusAsk({ status: 'reviewed', label: 'Keep held: do not email this ticket', prefix: 'Kept held: ' }); setNote(''); }}>Keep held</Button>}
                             <Button onClick={() => { setStatusAsk({ status: 'reviewed', label: 'Reviewed: keep it as it is' }); setNote(''); }}>Mark reviewed</Button>
-                            <Button color="success" onClick={() => { setStatusAsk({ status: 'resolved', label: 'Resolved' }); setNote(''); }}>Mark resolved</Button>
+                            {detail.facts?.kind !== 'payment_unsettled' &&
+                                <Button color="success" onClick={() => { setStatusAsk({ status: 'resolved', label: 'Mark fixed (I fixed it here or in GHL)' }); setNote(''); }}>Mark fixed</Button>}
                             <Button color="inherit" onClick={() => { setStatusAsk({ status: 'dismissed', label: 'Dismiss (not a real problem)' }); setNote(''); }}>Dismiss</Button>
                             {!['open', 'in_review'].includes(detail.status) &&
                                 <Button onClick={() => { setStatusAsk({ status: 'open', label: 'Reopen' }); setNote(''); }}>Reopen</Button>}
                         </Stack>
 
+                        <Typography variant="caption" color="text.secondary" display="block" sx={{ mb: 1 }}>
+                            Decisions only record what you decided: no ticket is issued or changed and nothing is emailed. Use the buttons under
+                            "Fix it" and next to each ticket to change something. "Mark fixed" reopens by itself if the checks still find the problem;
+                            "Mark reviewed", "Keep held" and "Dismiss" stay closed.
+                        </Typography>
                         <Divider sx={{ my: 1 }} />
                         <Typography variant="subtitle2">Notes and history</Typography>
                         <Stack direction="row" spacing={1} sx={{ my: 1 }}>
@@ -385,7 +460,7 @@ export default function Reconciliation() {
                                 <Typography variant="body2">{h.text}</Typography>
                                 {(h.before || h.after) && (
                                     <Typography variant="caption" component="pre" sx={{ whiteSpace: 'pre-wrap', color: 'text.secondary', m: 0 }}>
-                                        {h.before ? `before: ${JSON.stringify(h.before)}\n` : ''}{h.after ? `after: ${JSON.stringify(h.after)}` : ''}
+                                        {h.before ? `Before: ${readable(h.before)}\n` : ''}{h.after ? `After: ${readable(h.after)}` : ''}
                                     </Typography>
                                 )}
                             </Box>
@@ -405,6 +480,9 @@ export default function Reconciliation() {
                         <DialogTitle>{spec.label}{act.ticket ? ` — ticket #${act.ticket.ticket_id} (${act.ticket.name})` : ''}</DialogTitle>
                         <DialogContent dividers>
                             <Typography variant="body2" sx={{ mb: 2 }}>{spec.help}</Typography>
+                            {act.action === 'release' && detail?.kind === 'email_suppressed' && <Alert severity="warning" sx={{ mb: 2 }}>
+                                This person turned email off in GHL (unsubscribed or do-not-disturb). Releasing does not override that: they will
+                                not be emailed. To get them their ticket, use "Copy ticket link" next to the ticket and text it to them, or the desk finds them by name.</Alert>}
                             {dupBooking && <Alert severity="error" sx={{ mb: 2 }}>This booking has a suspected duplicate payment. The seat is only
                                 issued if the duplicate-payment issue was reviewed as a real seat, or you tick the box below.</Alert>}
                             {spec.fields.map(([k, label, type]) => type === 'tt' ? (
@@ -439,6 +517,24 @@ export default function Reconciliation() {
                 })()}
             </Dialog>
 
+            {/* ── One decision for many ─────────────────────────────────── */}
+            <Dialog open={Boolean(bulkAsk)} onClose={() => !busy && setBulkAsk(null)} fullWidth maxWidth="sm">
+                {bulkAsk && <>
+                    <DialogTitle>{bulkAsk.label}</DialogTitle>
+                    <DialogContent dividers>
+                        <Typography variant="body2" sx={{ mb: 1 }}>The same note is saved on each issue. Example: "Card payment failed; buyer already has a ticket."</Typography>
+                        <TextField fullWidth multiline minRows={3} label="Note explaining the decision (required)" value={note} onChange={(e) => setNote(e.target.value)} />
+                        <Typography variant="caption" color="text.secondary" display="block" sx={{ mt: 1 }}>
+                            Only records the decision. No ticket, payment or email is changed.
+                        </Typography>
+                    </DialogContent>
+                    <DialogActions>
+                        <Button onClick={() => setBulkAsk(null)} disabled={busy}>Cancel</Button>
+                        <Button variant="contained" onClick={submitBulk} disabled={busy || note.trim().length < 3}>{busy ? 'Saving…' : 'Save'}</Button>
+                    </DialogActions>
+                </>}
+            </Dialog>
+
             {/* ── A decision ────────────────────────────────────────────── */}
             <Dialog open={Boolean(statusAsk)} onClose={() => !busy && setStatusAsk(null)} fullWidth maxWidth="sm">
                 {statusAsk && <>
@@ -446,7 +542,8 @@ export default function Reconciliation() {
                     <DialogContent dividers>
                         <TextField fullWidth multiline minRows={3} label="Note explaining the decision (required)" value={note} onChange={(e) => setNote(e.target.value)} />
                         <Typography variant="caption" color="text.secondary" display="block" sx={{ mt: 1 }}>
-                            The checks run again afterwards. If they still find the problem, a "resolved" issue reopens by itself.
+                            This records your decision only; no ticket, payment or email changes. The checks run again afterwards; a "fixed"
+                            issue that is still found reopens by itself.
                         </Typography>
                     </DialogContent>
                     <DialogActions>

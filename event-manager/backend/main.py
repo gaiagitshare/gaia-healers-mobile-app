@@ -13879,6 +13879,10 @@ _volunteers.register(app, get_current_user, _rate_limited, _client_ip)
 import share_links as _share_links  # noqa: E402
 _share_links.register(app, get_db, get_current_user, models, authz, APP_PUBLIC_BASE)
 
+# Profile activation and password sign-in (9 Nov 2026): see member_auth.py.
+import member_auth as _member_auth  # noqa: E402
+_member_auth.register(app, sys.modules[__name__])
+
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="127.0.0.1", port=8002)

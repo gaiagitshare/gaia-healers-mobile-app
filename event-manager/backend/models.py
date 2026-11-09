@@ -1495,3 +1495,20 @@ class VolunteerAnnouncement(Base):
     active = Column(Boolean, default=True)
     created_by = Column(String)
     created_at = Column(DateTime, default=datetime.utcnow)
+
+
+class MemberCredential(Base):
+    """A member's password for their EXISTING Gaia identity (9 Nov 2026).
+
+    Not a second account system: the person is still their member card and
+    GHL contact, and signing in yields the same member session the email link
+    does. One row per card; only a bcrypt hash is kept."""
+    __tablename__ = "member_credentials"
+    id = Column(Integer, primary_key=True, index=True)
+    card_id = Column(Integer, unique=True, index=True)
+    password_hash = Column(String)
+    set_at = Column(DateTime, default=datetime.utcnow)
+    set_via = Column(String)               # email_code | desk_code | reset
+    failed_count = Column(Integer, default=0)
+    locked_until = Column(DateTime, nullable=True)
+    last_login_at = Column(DateTime, nullable=True)

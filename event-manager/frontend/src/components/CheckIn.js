@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useParams } from 'react-router-dom';
 import {
-    Alert, Box, Button, Chip, CircularProgress,
+    Alert, Box, Button, Checkbox, Chip, CircularProgress,
     Dialog, DialogActions, DialogContent, DialogTitle, Divider, FormControlLabel, IconButton, Switch,
     InputAdornment, MenuItem, Paper, Snackbar, Stack, TextField, Typography, useMediaQuery, useTheme,
 } from '@mui/material';
@@ -25,7 +25,7 @@ import TuneIcon from '@mui/icons-material/Tune';
 import { Html5QrcodeScanner } from 'html5-qrcode';
 import { authorizeScan, getScanLogs, searchAttendees, getEvents, walkInCreate, getTicketTypes, undoCheckIn, clearScanLogs, setDoorTestMode, getRehearsalCheckins, resetRehearsalCheckins, getEvent, badgeLabelBlob, recordBadgePrint,
     overrideAdmit, doorIdentity, addPartySeat, setReEntry as setDoorReEntry, changePass, revokeAttendee, reinstateAttendee,
-    getMyCapabilities, getPrintReport, setSharing, setAddonDay, testLabelBlob } from '../utils/api';
+    getMyCapabilities, getPrintReport, setSharing, setAddonDay, testLabelBlob, issueActivationCode } from '../utils/api';
 import { formatVenueTime, statusLabel, isFlaggedStatus } from '../utils/datetime';
 import BadgeLabelDialog, { STATION_KEY, LABEL_SIZE_KEY, LABEL_ROLLS, savedLabelSize, rollShort, fullName, physicalCard,
     canPrintBluetooth, useB1, b1Connect, b1IsConnected, b1Enqueue, b1PrintBlob, b1Dpi, rollFitsB1, PRINTER_KEY, PRINTER_CHOICES, savedPrinter, CONNECT_TIMEOUT_HINT, logPrinter,
@@ -171,6 +171,8 @@ function CheckIn({ timezone: timezoneProp }) {
     const [autoJob, setAutoJob] = useState(null);
     const printedIds = useRef(new Set());                        // printed this session — a re-scan never prints twice
     const [undoTarget, setUndoTarget] = useState(null);
+    // Help-desk profile code: { attendee, confirmed, code, busy, error }.
+    const [codeFor, setCodeFor] = useState(null);
     // Somebody else on the same booking, tapped from the party block. Held here
     // rather than scanned straight away: a tap meant to find out who seat 3 is
     // must not be what checks seat 3 in.
@@ -897,6 +899,9 @@ function CheckIn({ timezone: timezoneProp }) {
                         {attendee.is_checked_in && (
                             <Button size="small" color="inherit" startIcon={<UndoIcon />} onClick={() => { setUndoTarget(attendee); setUndoReason(''); }}>Undo</Button>
                         )}
+                        <Button size="small" color="inherit" onClick={() => setCodeFor({ attendee, confirmed: false, code: '', busy: false, error: '' })}>
+                            Profile code
+                        </Button>
                     </Stack>
                 </Stack>
             </Paper>
@@ -1754,6 +1759,49 @@ function CheckIn({ timezone: timezoneProp }) {
                 </DialogActions>
             </Dialog>
 
+            {/* Help desk: a one-time code for the person to create their Gaia Healers password.
+                Staff confirm identity first; the code is shown once and never kept here. */}
+            <Dialog open={Boolean(codeFor)} onClose={() => setCodeFor(null)} maxWidth="xs" fullWidth>
+                <DialogTitle>Profile code{codeFor ? ` — ${fullName(codeFor.attendee)}` : ''}</DialogTitle>
+                <DialogContent>
+                    {codeFor && !codeFor.code && (
+                        <>
+                            <Typography sx={{ mb: 2 }}>
+                                Check who this is first (photo ID, or their name and email matching this ticket).
+                                Then read them the code. They type it after scanning their badge.
+                            </Typography>
+                            <FormControlLabel control={<Checkbox checked={codeFor.confirmed}
+                                onChange={(e) => setCodeFor({ ...codeFor, confirmed: e.target.checked })} />}
+                                label="I have checked this is the ticket holder" />
+                            {codeFor.error && <Alert severity="error" sx={{ mt: 1 }}>{codeFor.error}</Alert>}
+                        </>
+                    )}
+                    {codeFor && codeFor.code && (
+                        <Box sx={{ textAlign: 'center' }}>
+                            <Typography sx={{ fontSize: 44, fontWeight: 800, letterSpacing: '.3em', fontFamily: 'monospace' }}>{codeFor.code}</Typography>
+                            <Typography color="text.secondary">Works once · expires in {codeFor.minutes || 10} minutes.</Typography>
+                            <Typography color="text.secondary" sx={{ mt: 1 }}>
+                                {codeFor.hasPassword ? 'They already have a password — this lets them set a new one.' : 'They scan their badge, tap “I have a code from the help desk”, and type it.'}
+                            </Typography>
+                        </Box>
+                    )}
+                </DialogContent>
+                <DialogActions>
+                    <Button onClick={() => setCodeFor(null)}>{codeFor && codeFor.code ? 'Done' : 'Cancel'}</Button>
+                    {codeFor && !codeFor.code && (
+                        <Button variant="contained" disabled={!codeFor.confirmed || codeFor.busy} onClick={async () => {
+                            const target = codeFor;
+                            setCodeFor({ ...target, busy: true, error: '' });
+                            try {
+                                const r = await issueActivationCode(eventId, target.attendee.id);
+                                setCodeFor({ ...target, busy: false, code: r.data.code, minutes: r.data.minutes, hasPassword: r.data.has_password });
+                            } catch (e) {
+                                setCodeFor({ ...target, busy: false, error: (e.response && e.response.data && e.response.data.detail) || 'Could not create a code.' });
+                            }
+                        }}>{codeFor.busy ? 'Working…' : 'Get code'}</Button>
+                    )}
+                </DialogActions>
+            </Dialog>
             <Dialog open={Boolean(undoTarget)} onClose={() => setUndoTarget(null)}>
                 <DialogTitle>Undo check-in</DialogTitle>
                 <DialogContent>

@@ -506,6 +506,9 @@ def _initials(view):
 def render_card_html(view: dict, token: str, app_base: str = None) -> str:
     app_base = (app_base or APP_BASE).rstrip("/")
     claim_url = "%s/home.html?view=events&card=%s&claim=1" % (app_base, quote(token))
+    # Badge -> 6-digit code -> password -> profile (9 Nov 2026). The page it
+    # opens sends a code only to the email already on this profile.
+    activate_url = "%s/activate.html?card=%s" % (app_base, quote(token))
     connect_url = "%s/home.html?view=events&card=%s" % (app_base, quote(token))
     name = _h(view.get("name") or "Gaia Healers attendee")
     # With every event of theirs archived or removed, the card is still theirs;
@@ -563,9 +566,9 @@ def render_card_html(view: dict, token: str, app_base: str = None) -> str:
         body = ("<div class=\"card\"><span class=\"event\">%s</span>"
                 "<div class=\"avatar\">%s</div><h1>%s</h1>%s%s"
                 "<div class=\"actions\"><a class=\"btn btn--secondary\" href=\"%s\">Connect in the Gaia Healers app</a></div>"
-                "<div class=\"claim\" data-claim>Is this you, %s? <a href=\"%s\" data-claim-link>Sign in to set up your card</a> \u2014 "
-                "add your photo, company and city. The QR on your badge already points here; nothing gets reprinted.</div>"
-                "</div>" % (event, _h(_initials(view)), name, state, locked, _h(connect_url), first, _h(claim_url)))
+                "<div class=\"claim\" data-claim>Is this you, %s? <a href=\"%s\" data-claim-link>Create your password</a> \u2014 "
+                "your Gaia Healers profile is ready; one code from your email and you are in.</div>"
+                "</div>" % (event, _h(_initials(view)), name, state, locked, _h(connect_url), first, _h(activate_url)))
     else:
         avatar = ("<img src=\"%s\" alt=\"\">" % _h(view["photo_url"])) if view.get("photo_url") else _h(_initials(view))
         role = ""
@@ -629,11 +632,12 @@ def render_card_html(view: dict, token: str, app_base: str = None) -> str:
                 "<div class=\"avatar\">%s</div><h1>%s</h1>%s%s%s%s%s%s%s"
                 "<div class=\"actions\">%s<a class=\"btn %s\" href=\"%s.vcf\" download>%s Save contact</a>"
                 "<a class=\"btn btn--secondary\" href=\"%s\">Connect in the Gaia Healers app</a>"
-                "<a class=\"btn btn--ghost\" href=\"%s\" data-owner-edit hidden>Edit my card</a></div>%s%s%s</div>"
+                "<a class=\"btn btn--ghost\" href=\"%s\" data-owner-edit hidden>Edit my card</a></div>%s%s%s"
+                "<div class=\"claim\" data-claim>Is this your badge? <a href=\"%s\" data-claim-link>Sign in to your Gaia Healers profile</a></div></div>"
                 % (event, avatar, name, headline, role, city, tags, bio, services, pass_block, booking,
                    "btn--secondary" if booking else "btn--primary", _h(token),
                    _ICON["mail"].replace("currentColor", "#0B1408" if not booking else "currentColor"),
-                   _h(connect_url), _h(claim_url), links_html, locked_html, events_html))
+                   _h(connect_url), _h(claim_url), links_html, locked_html, events_html, _h(activate_url)))
 
     # Just the wordmark. The sentence that used to sit here explained the card to
     # someone who is already looking at it, and every line of that kind pushes
@@ -646,7 +650,7 @@ def render_card_html(view: dict, token: str, app_base: str = None) -> str:
     owner_js = ("<script>(function(){try{fetch(%s+'/api/card/owner?token='+encodeURIComponent(%s),{credentials:'include',headers:{Accept:'application/json'}})"
                 ".then(function(r){return r.json()}).then(function(d){if(!d||!d.ok)return;"
                 "var box=document.querySelector('[data-claim]'),link=document.querySelector('[data-claim-link]'),edit=document.querySelector('[data-owner-edit]');"
-                "if(d.owner){if(link){link.textContent='Set up your card';box.firstChild.textContent='This is your badge. ';}if(edit){edit.hidden=false;}}"
+                "if(d.owner){if(box&&link){box.firstChild.textContent='This is your badge. ';link.textContent='Open my Gaia Healers profile';box.lastChild&&box.lastChild!==link&&box.lastChild.nodeType===3&&(box.lastChild.textContent='');}if(edit){edit.hidden=false;}}"
                 "else if(d.authenticated&&box){box.remove();}}).catch(function(){});}catch(e){}})();</script>"
                 % (json.dumps(API_BASE), json.dumps(token)))
     return head + body + foot + owner_js + "</body></html>"

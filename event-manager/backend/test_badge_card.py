@@ -113,7 +113,7 @@ check(st == 200 and d.get("result") == "DENIED" and logged >= 1, "an unknown tok
 
 # 4 ── public card
 st, body, hdr = call("GET", "/c/" + tok, raw=True)
-check(st == 200 and b"Sign in to set up your card" in body and b"@" not in body.split(b"<body")[1].split(b"gaiahealers.app")[0], "unclaimed card renders the claim state and no email", st)
+check(st == 200 and b"Create your password" in body and b"activate.html?card=" in body and b"@" not in body.split(b"<body")[1].split(b"gaiahealers.app")[0], "unclaimed card renders the claim state and no email", st)
 st, body, _ = call("GET", "/c/" + tok + ".vcf", raw=True)
 check(st == 404, "no vCard until the card is public", st)
 st, body, _ = call("GET", "/c/NOTATOKEN", raw=True)
@@ -170,7 +170,7 @@ check(st == 200 and own2.get("owner") is False and "event_id" not in own2, "some
 st, own3, _ = call("POST", "/identity/card/owner", {"email": email, "email_verified": False, "event_id": EVENT, "token": tok}, SVC)
 check(st == 200 and own3.get("owner") is False, "an UNVERIFIED email cannot claim a badge", own3)
 st, body, _ = call("GET", "/c/" + tok, raw=True)
-check(st == 200 and b"data-claim-link" in body and b"Sign in to set up your card" in body and b"/api/card/owner" in body, "unclaimed page offers sign-in-to-set-up and asks the proxy who is looking", st)
+check(st == 200 and b"data-claim-link" in body and b"Create your password" in body and b"activate.html?card=" in body and b"/api/card/owner" in body, "unclaimed page offers sign-in-to-set-up and asks the proxy who is looking", st)
 st, d, hdr = call("GET", "/events/%d/attendees/search?q=%s" % (EVENT, urllib.request.quote(email)), token=ADMIN)
 check(st == 200 and d and d[0].get("card_state") in ("unclaimed", "private", "public") and (d[0].get("card_url") or "").endswith("/" + tok), "Admin rows carry the badge card link and its state", (d[0].get("card_state"), d[0].get("card_url")) if d else d)
 

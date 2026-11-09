@@ -206,6 +206,10 @@ export const getAttendeeScans = (eventId, attendeeId) =>
     api.get(`/events/${eventId}/attendees/${attendeeId}/scans`);
 export const recordBadgePrint = (eventId, attendeeId, data) =>
     api.post(`/events/${eventId}/attendees/${attendeeId}/badge-print`, data);
+// Help desk: a one-time 6-digit code so a person can create their Gaia password
+// (after staff have checked who they are). Never stored or logged in plain text.
+export const issueActivationCode = (eventId, attendeeId) =>
+    api.post(`/events/${eventId}/attendees/${attendeeId}/activation-code`);
 // What a door device's Bluetooth printer did (connect / print), with the driver's trace.
 export const reportPrinter = (eventId, data) => api.post(`/events/${eventId}/printer-log`, data);
 // One row per door desk: its printer, browser, status and last failure (dashboard).

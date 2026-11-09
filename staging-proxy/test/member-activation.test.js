@@ -193,9 +193,14 @@ test('repeated attempts from one place are rate limited', async () => {
   let last;
   for (let i = 0; i < 13; i += 1) last = await h.call('/api/activate/verify', { token: 'ABCD2345', code: '000000' }, '10.9.9.9');
   assert.equal(last.status, 429);
-  let start;
-  for (let i = 0; i < 6; i += 1) start = await h.call('/api/activate/start', { token: 'RPTSCAN2' }, '10.9.9.8');
-  assert.equal(start.status, 429, 'repeated badge scans are capped');
+  let look;
+  for (let i = 0; i < 20; i += 1) look = await h.call('/api/activate/start', { token: 'RPTSCAN2' }, '10.9.9.8');
+  assert.notEqual(look.status, 429, 'scanning or reloading a badge 20 times is never refused');
+  let ask;
+  for (let i = 0; i < 6; i += 1) ask = await h.call('/api/activate/start', { token: 'RPTSCAN2', send_code: true }, '10.9.9.8');
+  assert.equal(ask.status, 429, 'asking for a 6th code in 15 minutes is refused');
+  for (let i = 0; i < 61; i += 1) look = await h.call('/api/activate/start', { token: 'ENUMRTE2' }, '10.9.9.7');
+  assert.equal(look.status, 429, 'one badge looked up 61 times from one address is capped');
 });
 
 test('the module never logs', async () => {

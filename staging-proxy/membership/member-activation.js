@@ -21,7 +21,11 @@
 
 import crypto from 'node:crypto';
 
-const LIMITS = { start: [5, 15], verify: [12, 15], login: [10, 15], forgot: [5, 15] };   // [count, minutes]
+// [count, minutes] per address + badge/email. Looking a badge up (every scan or reload of the
+// page) is NOT asking for a code: it has its own generous limit, so a person who scans again
+// is never told "too many codes". Codes themselves are also capped by the Event Manager
+// (5 an hour per person).
+const LIMITS = { lookup: [60, 15], start: [5, 15], verify: [12, 15], login: [10, 15], forgot: [5, 15] };
 
 export function createActivation(deps) {
   const { readJsonBody, sendJson, buildSetCookie, signTokenPayload, createMemberSession,
@@ -140,7 +144,10 @@ export function createActivation(deps) {
     const email = String(body.email || '').trim().toLowerCase();
 
     if (p === '/api/activate/start') {
-      if (limited('start', req, token)) { sendJson(res, 429, { ok: false, error: say('too_many_codes') }, origin); return true; }
+      const asking = Boolean(body.send_code);
+      if (limited(asking ? 'start' : 'lookup', req, token)) {
+        sendJson(res, 429, { ok: false, error: asking ? say('too_many_codes') : 'Please wait a moment and try again.' }, origin); return true;
+      }
       const r = await em('/identity/activate/start', { token, send_code: Boolean(body.send_code) });
       if (!r.ok && !r.first_name) { sendJson(res, 200, { ok: false, error: say(r.reason) }, origin); return true; }
       let sent = false;

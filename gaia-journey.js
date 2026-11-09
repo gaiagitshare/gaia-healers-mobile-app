@@ -14,7 +14,7 @@
     // { state: 'complete', source: 'record' } when GHL is down and the member
     // already finished (the outage-safe gate). Both are answers, not failures.
     const answered = data.ok || (method === 'GET' && typeof data.state === 'string');
-    if (!r.ok || !answered) throw new Error(r.status === 401 ? 'Your session has expired. Sign out and sign in again.' : 'We couldn’t connect to your Gaia profile. Your choices are still here. Please try again.');
+    if (!r.ok || !answered) throw new Error(r.status === 401 ? 'Your session has expired. Sign out and sign in again.' : 'We couldn’t connect to your Gaia Healers profile. Your choices are still here. Please try again.');
     return data;
   }
   function path() { return state.schema.filter(s => !s.showIf || (state.answers.primary_interests || []).includes(s.showIf)); }
@@ -51,7 +51,7 @@
     if (overlay) return;
     lastFocus = document.activeElement;
     overlay = document.createElement('section'); overlay.className = 'gaia-journey';
-    overlay.setAttribute('role', 'dialog'); overlay.setAttribute('aria-modal', 'true'); overlay.setAttribute('aria-label', 'Your Gaia journey');
+    overlay.setAttribute('role', 'dialog'); overlay.setAttribute('aria-modal', 'true'); overlay.setAttribute('aria-label', 'Your Gaia Healers journey');
     document.body.appendChild(overlay); lock(true);
     if (!document.getElementById('gaia-journey-defs')) document.body.insertAdjacentHTML('beforeend', DEFS);
     overlay.addEventListener('keydown', e => {
@@ -170,7 +170,7 @@
     const kind = s.showIf ? kindOf(s.showIf) : '';
     const links = primary ? linksFor(s, state.selected) : [];
     const variant = primary ? 'journey-choices--paths' : s.options.length > 10 && s.options.every(o => o.label.length <= 24) ? 'journey-choices--many' : 'journey-choices--tiles';
-    return `<div class="journey-progress" role="progressbar" aria-label="Your Gaia journey" aria-valuemin="0" aria-valuemax="${route.length}" aria-valuenow="${index}"><ol class="journey-path" aria-hidden="true">${pathNodes()}</ol></div>
+    return `<div class="journey-progress" role="progressbar" aria-label="Your Gaia Healers journey" aria-valuemin="0" aria-valuemax="${route.length}" aria-valuenow="${index}"><ol class="journey-path" aria-hidden="true">${pathNodes()}</ol></div>
       <p class="journey-branch-notice ${branchStart ? 'journey-sr' : ''}" role="status">${esc(branchNotice)}</p>
       ${branchStart ? `<div class="journey-branch-intro journey-branch-intro--${kind}" aria-hidden="true"><span class="journey-branch-emblem"><i class="ph ph-${BRANCH_ICON[kind]}"></i><b></b><b></b></span><span><small>Now exploring</small><strong>${esc(s.showIf)}</strong></span><span class="journey-branch-sweep"></span></div><p class="journey-kicker journey-sr">${esc(s.showIf)}</p>` : `<p class="journey-kicker">${esc(groupOf(s))}</p>`}
       <h1 tabindex="-1">${esc(primary ? 'What calls to you?' : s.question)}</h1>
@@ -212,7 +212,7 @@
   function render() {
     if ((!state.authed && state.mode !== 'error') || state.mode === 'bypass') return;
     ensure();
-    const content = state.mode === 'question' ? questionMarkup() : state.mode === 'reveal' ? revealMarkup() : state.mode === 'intro' ? introMarkup() : `<p class="journey-kicker">Your Gaia profile</p><h1 tabindex="-1">${state.mode === 'loading' ? 'Finding your path…' : 'Let’s reconnect.'}</h1><p class="journey-subtitle" role="status">${esc(state.error || 'Checking your saved Gaia profile.')}</p>${state.mode === 'error' ? '<button class="journey-primary" data-retry>Try again →</button>' : ''}`;
+    const content = state.mode === 'question' ? questionMarkup() : state.mode === 'reveal' ? revealMarkup() : state.mode === 'intro' ? introMarkup() : `<p class="journey-kicker">Your Gaia Healers profile</p><h1 tabindex="-1">${state.mode === 'loading' ? 'Finding your path…' : 'Let’s reconnect.'}</h1><p class="journey-subtitle" role="status">${esc(state.error || 'Checking your saved Gaia Healers profile.')}</p>${state.mode === 'error' ? '<button class="journey-primary" data-retry>Try again →</button>' : ''}`;
     const scene = `${state.mode}:${state.step || ''}`;
     const enter = scene !== renderedScene;
     const departing = enter && !reduced() && overlay.querySelector('.journey-stage')?.cloneNode(true);
@@ -221,7 +221,7 @@
     overlay.dataset.branch = current()?.showIf || '';
     const ambientKind = current()?.showIf && state.mode === 'question' ? kindOf(current().showIf) : '';
     overlay.dataset.kind = ambientKind; overlay.dataset.mode = state.mode;
-    overlay.innerHTML = `<div class="journey-ambient journey-ambient--${ambientKind || 'core'}" aria-hidden="true"><span></span><span></span><svg viewBox="0 0 900 650" preserveAspectRatio="xMidYMid slice">${AMBIENT[ambientKind]}</svg></div><header class="journey-header"><img src="assets/gaia-mark.svg" alt="Gaia Healers"><span>Your Gaia journey</span><button type="button" data-logout class="journey-secondary">Sign out</button></header><div class="journey-stage ${enter ? 'journey-enter journey-enter--' + state.mode : ''} ${state.mode === 'intro' && Object.keys(state.answers).length ? 'journey-resume' : ''}" data-branch="${esc(current()?.showIf || '')}">${content}${state.mode === 'question' ? '<button type="button" class="journey-assist-link" data-assist>Answer with Gaia Assist ↗</button>' : ''}</div>`;
+    overlay.innerHTML = `<div class="journey-ambient journey-ambient--${ambientKind || 'core'}" aria-hidden="true"><span></span><span></span><svg viewBox="0 0 900 650" preserveAspectRatio="xMidYMid slice">${AMBIENT[ambientKind]}</svg></div><header class="journey-header"><img src="assets/gaia-mark.svg" alt="Gaia Healers"><span>Your Gaia Healers journey</span><button type="button" data-logout class="journey-secondary">Sign out</button></header><div class="journey-stage ${enter ? 'journey-enter journey-enter--' + state.mode : ''} ${state.mode === 'intro' && Object.keys(state.answers).length ? 'journey-resume' : ''}" data-branch="${esc(current()?.showIf || '')}">${content}${state.mode === 'question' ? '<button type="button" class="journey-assist-link" data-assist>Answer with Gaia Assist ↗</button>' : ''}</div>`;
     if (departing) {
       departing.querySelectorAll('h1').forEach(heading => { const echo = document.createElement('p'); echo.className = 'journey-departing-title'; echo.innerHTML = heading.innerHTML; heading.replaceWith(echo); });
       departing.querySelectorAll('*').forEach(node => { for (const attr of [...node.attributes]) if (attr.name.startsWith('data-')) node.removeAttribute(attr.name); });
@@ -332,7 +332,7 @@
   document.addEventListener('gaia:auth', e => {
     state.generation++; checkPromise = null; state.done = false;
     state.authed = !!e.detail?.authenticated;
-    if (e.detail?.unavailable) { state.mode = 'error'; state.error = 'We’re having trouble loading your Gaia profile. Reload to try again.'; render(); return; }
+    if (e.detail?.unavailable) { state.mode = 'error'; state.error = 'We’re having trouble loading your Gaia Healers profile. Reload to try again.'; render(); return; }
     state.answers = {}; state.selected = []; state.text = ''; state.busy = false;
     if (state.authed) { check(); overlay?.querySelector('h1')?.focus(); } else { state.mode = 'bypass'; lock(false); window.GaiaAppGuard?.set('visitor'); }
   });

@@ -233,6 +233,13 @@
             <button type="submit" class="g-btn g-btn--primary gaia-auth-modal__submit" data-auth-submit>Email me a sign-in link</button>
           </form>
           <p class="gaia-auth-modal__status" id="gaia-auth-status" data-auth-status role="status" aria-live="polite">Your link goes straight to your inbox.</p>
+          <p class="gaia-auth-modal__join"><button type="button" class="gaia-auth-modal__joinlink" data-pw-toggle>Sign in with a password instead</button></p>
+          <form class="gaia-auth-modal__joinform" data-pw-form hidden>
+            <input type="password" data-pw-input class="gaia-auth-modal__input" placeholder="Your password" autocomplete="current-password" aria-label="Password" />
+            <button type="submit" class="g-btn g-btn--primary gaia-auth-modal__submit" data-pw-submit>Sign in</button>
+            <p class="gaia-auth-modal__status" data-pw-status role="status" aria-live="polite">Use the email above and your Gaia Healers password.</p>
+            <a class="gaia-auth-modal__joinalt" data-pw-forgot href="activate.html?mode=forgot">Forgot your password? →</a>
+          </form>
           <p class="gaia-auth-modal__join">New to Gaia Healers? <button type="button" class="gaia-auth-modal__joinlink" data-join-toggle>Join free</button> — we’ll create your account and email your one-tap sign-in link.</p>
           <div class="gaia-auth-modal__joinform" data-join-form hidden>
             <input type="text" data-join-name class="gaia-auth-modal__input" placeholder="Your name" autocomplete="name" aria-label="Your name" />
@@ -319,6 +326,50 @@
       }
       joinSubmit?.addEventListener('click', submitJoin);
       joinEmail?.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); submitJoin(); } });
+      // Password sign-in (profile activation, Nov 2026). The email link above
+      // stays the default; this is the same member session, for people who set
+      // a password from their badge.
+      const pwToggle = modal.querySelector('[data-pw-toggle]');
+      const pwForm = modal.querySelector('[data-pw-form]');
+      const pwInput = modal.querySelector('[data-pw-input]');
+      const pwStatus = modal.querySelector('[data-pw-status]');
+      const pwSubmit = modal.querySelector('[data-pw-submit]');
+      pwToggle?.addEventListener('click', () => {
+        pwForm.hidden = !pwForm.hidden;
+        if (!pwForm.hidden) (emailInput.value ? pwInput : emailInput).focus();
+      });
+      pwForm?.addEventListener('submit', async (event) => {
+        event.preventDefault();
+        const email = (emailInput.value || '').trim();
+        if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) { pwStatus.textContent = 'Please type your email in the box above.'; emailInput.focus(); return; }
+        if (!pwInput.value) { pwStatus.textContent = 'Please type your password.'; pwInput.focus(); return; }
+        pwSubmit.disabled = true;
+        pwStatus.textContent = 'Signing you in…';
+        try {
+          const resp = await fetch(`${syncProxyBase()}/api/auth/password/login`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+            credentials: 'include',
+            body: JSON.stringify({ email, password: pwInput.value }),
+          });
+          const data = await resp.json().catch(() => ({}));
+          if (data.ok && data.authenticated) {
+            pwInput.value = '';
+            AUTH_STATE.authenticated = true;
+            AUTH_STATE.checked = true;
+            AUTH_STATE.member = data.member || null;
+            document.dispatchEvent(new CustomEvent('gaia:auth', { detail: { ...AUTH_STATE } }));
+            renderAuthUi();
+            closeModal();
+            return;
+          }
+          pwStatus.textContent = data.error || 'That email or password is not right.';
+        } catch (_) {
+          pwStatus.textContent = 'Could not reach the server. Please try again.';
+        } finally {
+          pwSubmit.disabled = false;
+        }
+      });
       const closeModal = () => {
         modal.hidden = true;
         authA11yRelease?.();

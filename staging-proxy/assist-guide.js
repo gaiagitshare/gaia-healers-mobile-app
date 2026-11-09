@@ -4,7 +4,7 @@
   const screens = Object.freeze({
     today: 'Home: the member dashboard (greeting, what is new, your access, next steps); the centre button of the bar',
     daily: 'Today: the day itself -- your daily energy check, today\u2019s sky, your readings shortcut, your next booking',
-    journey: 'Journey: personal Gaia journey',
+    journey: 'Journey: personal Gaia Healers journey',
     wellness: 'Energy: wellness tools',
     academy: 'Academy: member courses, more courses and library; access depends on actual member grants. Course videos PLAY in the app when available; portal-only courses open the education portal. Browse cards and open a course for details; never claim an enrolled course exists without verified grants',
     community: 'Community: available communities and education portal discussions',
@@ -89,9 +89,9 @@
     if (reviewed) return reviewed;
     if (declined.includes('discovery') && /where.*start|what.*test|don.t know/.test(q)) return 'I will leave those suggestions aside. You can browse the public Academy catalog, and I can help with a specific Gaia question when the answer service reconnects.';
     if (/medication/.test(q)) return 'Do not stop or change prescribed medication based on a wellness reading. Ask your prescriber or pharmacist about your concern.';
-    if (/diagnos|cure|cancer/.test(q)) return 'A Gaia profile or wellness-device reading cannot establish a diagnosis or a cure. A qualified clinician can assess symptoms and explain appropriate tests.';
+    if (/diagnos|cure|cancer/.test(q)) return 'A Gaia Healers profile or wellness-device reading cannot establish a diagnosis or a cure. A qualified clinician can assess symptoms and explain appropriate tests.';
     if (/flirt|love me|you.re cute/.test(q)) return 'I’m here as your Gaia guide. I can help with the platform and its services.';
-    if (state==='onboarding') return 'Your short Gaia profile helps personalize education, technology and community guidance. Your saved answers stay with your account; continue with the choices shown here.';
+    if (state==='onboarding') return 'Your short Gaia Healers profile helps personalize education, technology and community guidance. Your saved answers stay with your account; continue with the choices shown here.';
     if (/change.*(?:email|name|information)|paid|can.t access|cannot access|cancel|booking.*(?:missing|show)/.test(q)) return 'I can’t verify or change that account detail right now. Contact Gaia Support so the team can check your account; don’t share payment details here.';
     if (/where.*start|what.*test|don.t know/.test(q) && state==='visitor') return 'The Gaia Path is a short interests questionnaire about Living Beings, Environment and Water. Sign in or create an account to save it; it is not a medical assessment.';
     if (/membership|price|discount|join/.test(q)) return 'Shop → Membership shows the current plans and terms. Access depends on your account’s actual grants; I can’t confirm a price or discount from memory.';
